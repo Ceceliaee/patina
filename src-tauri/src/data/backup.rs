@@ -1,14 +1,14 @@
 use crate::data::repositories;
 use crate::data::sqlite_pool::wait_for_sqlite_pool;
-use crate::domain::backup::{BackupMeta, BackupPayload, BackupPreview};
+use crate::domain::backup::{
+    BackupMeta, BackupPayload, BackupPreview, CURRENT_BACKUP_SCHEMA_VERSION, CURRENT_BACKUP_VERSION,
+};
 use sqlx::{Pool, Sqlite};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, Runtime};
 
 const BACKUP_FILE_EXT: &str = "ttbackup.json";
-const CURRENT_BACKUP_VERSION: u32 = 1;
-const CURRENT_BACKUP_SCHEMA_VERSION: u32 = 3;
 
 fn default_backup_path<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
     let app_data_dir = app
@@ -16,7 +16,8 @@ fn default_backup_path<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String
         .app_data_dir()
         .map_err(|error| format!("failed to resolve app data dir: {error}"))?;
     let backup_dir = app_data_dir.join("backups");
-    fs::create_dir_all(&backup_dir).map_err(|error| format!("failed to create backup dir: {error}"))?;
+    fs::create_dir_all(&backup_dir)
+        .map_err(|error| format!("failed to create backup dir: {error}"))?;
 
     let timestamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
     Ok(backup_dir.join(format!("time-tracker-backup-{timestamp}.{BACKUP_FILE_EXT}")))
@@ -64,10 +65,10 @@ async fn load_backup_payload<R: Runtime>(app: &AppHandle<R>) -> Result<BackupPay
     let icon_cache = repositories::icon_cache::fetch_all_for_backup(&pool).await?;
 
     Ok(BackupPayload {
-        version: 1,
+        version: CURRENT_BACKUP_VERSION,
         meta: BackupMeta {
             exported_at_ms: now_ms(),
-            schema_version: 3,
+            schema_version: CURRENT_BACKUP_SCHEMA_VERSION,
             app_version: env!("CARGO_PKG_VERSION").to_string(),
         },
         sessions,
@@ -110,7 +111,9 @@ pub fn pick_backup_save_file(initial_path: Option<String>) -> Option<String> {
     }
     dialog = dialog.set_file_name(&backup_file_name());
 
-    dialog.save_file().map(|path| path.to_string_lossy().to_string())
+    dialog
+        .save_file()
+        .map(|path| path.to_string_lossy().to_string())
 }
 
 pub fn pick_backup_file(initial_path: Option<String>) -> Option<String> {
@@ -119,7 +122,9 @@ pub fn pick_backup_file(initial_path: Option<String>) -> Option<String> {
         dialog = dialog.set_directory(dir);
     }
 
-    dialog.pick_file().map(|path| path.to_string_lossy().to_string())
+    dialog
+        .pick_file()
+        .map(|path| path.to_string_lossy().to_string())
 }
 
 fn decode_backup_payload(raw_json: &str, source_path: &Path) -> Result<BackupPayload, String> {
@@ -131,47 +136,6 @@ fn decode_backup_payload(raw_json: &str, source_path: &Path) -> Result<BackupPay
     })?;
 
     Ok(payload)
-}
-
-fn evaluate_backup_compatibility(payload: &BackupPayload) -> (String, String, bool) {
-    if payload.version > CURRENT_BACKUP_VERSION {
-        return (
-            "incompatible".to_string(),
-            format!(
-                "备份格式版本 {} 高于当前支持的 {}，请升级应用后再恢复。",
-                payload.version, CURRENT_BACKUP_VERSION
-            ),
-            false,
-        );
-    }
-
-    if payload.version < CURRENT_BACKUP_VERSION {
-        return (
-            "legacy".to_string(),
-            format!(
-                "备份格式版本 {} 低于当前版本 {}，将按兼容模式尝试恢复。",
-                payload.version, CURRENT_BACKUP_VERSION
-            ),
-            true,
-        );
-    }
-
-    if payload.meta.schema_version > CURRENT_BACKUP_SCHEMA_VERSION {
-        return (
-            "incompatible".to_string(),
-            format!(
-                "备份 schema 版本 {} 高于当前支持的 {}，请升级应用后再恢复。",
-                payload.meta.schema_version, CURRENT_BACKUP_SCHEMA_VERSION
-            ),
-            false,
-        );
-    }
-
-    (
-        "compatible".to_string(),
-        "当前版本可直接恢复该备份。".to_string(),
-        true,
-    )
 }
 
 pub async fn export_backup(backup_path: Option<String>, app: AppHandle) -> Result<String, String> {
@@ -192,12 +156,16 @@ pub async fn restore_backup(backup_path: String, app: AppHandle) -> Result<(), S
         return Err("backup path cannot be empty".to_string());
     }
 
-    let raw_json = fs::read_to_string(&backup_path)
-        .map_err(|error| format!("failed to read backup file `{}`: {error}", backup_path.display()))?;
+    let raw_json = fs::read_to_string(&backup_path).map_err(|error| {
+        format!(
+            "failed to read backup file `{}`: {error}",
+            backup_path.display()
+        )
+    })?;
     let payload = decode_backup_payload(&raw_json, &backup_path)?;
-    let (_, compatibility_message, supported) = evaluate_backup_compatibility(&payload);
-    if !supported {
-        return Err(compatibility_message);
+    let compatibility = payload.compatibility();
+    if !compatibility.supported {
+        return Err(compatibility.message);
     }
 
     let pool = wait_for_sqlite_pool(&app).await?;
@@ -205,7 +173,10 @@ pub async fn restore_backup(backup_path: String, app: AppHandle) -> Result<(), S
     Ok(())
 }
 
-async fn restore_backup_payload(pool: &Pool<Sqlite>, payload: &BackupPayload) -> Result<(), String> {
+async fn restore_backup_payload(
+    pool: &Pool<Sqlite>,
+    payload: &BackupPayload,
+) -> Result<(), String> {
     let mut tx = pool
         .begin()
         .await
@@ -230,22 +201,15 @@ pub async fn preview_backup(backup_path: String) -> Result<BackupPreview, String
         return Err("backup path cannot be empty".to_string());
     }
 
-    let raw_json = fs::read_to_string(&backup_path)
-        .map_err(|error| format!("failed to read backup file `{}`: {error}", backup_path.display()))?;
+    let raw_json = fs::read_to_string(&backup_path).map_err(|error| {
+        format!(
+            "failed to read backup file `{}`: {error}",
+            backup_path.display()
+        )
+    })?;
     let payload = decode_backup_payload(&raw_json, &backup_path)?;
-    let (compatibility_level, compatibility_message, _) = evaluate_backup_compatibility(&payload);
 
-    Ok(BackupPreview {
-        version: payload.version,
-        exported_at_ms: payload.meta.exported_at_ms,
-        schema_version: payload.meta.schema_version,
-        app_version: payload.meta.app_version,
-        compatibility_level,
-        compatibility_message,
-        session_count: payload.sessions.len(),
-        setting_count: payload.settings.len(),
-        icon_cache_count: payload.icon_cache.len(),
-    })
+    Ok(payload.preview())
 }
 
 #[cfg(test)]
@@ -274,10 +238,12 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
-            sqlx::query("INSERT INTO settings (key, value) VALUES ('baseline_key', 'baseline_value')")
-                .execute(&pool)
-                .await
-                .unwrap();
+            sqlx::query(
+                "INSERT INTO settings (key, value) VALUES ('baseline_key', 'baseline_value')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
             sqlx::query(
                 "INSERT INTO icon_cache (exe_name, icon_base64, last_updated)\n                 VALUES ('baseline.exe', 'aWNvbg==', 1234)",
             )
@@ -325,22 +291,22 @@ mod tests {
                 "restore should fail in settings stage"
             );
 
-            let session_count: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM sessions WHERE exe_name = 'baseline.exe'",
-            )
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+            let session_count: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE exe_name = 'baseline.exe'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
             let setting_value: Option<String> =
                 sqlx::query_scalar("SELECT value FROM settings WHERE key = 'baseline_key' LIMIT 1")
                     .fetch_optional(&pool)
                     .await
                     .unwrap();
-            let icon_count: i64 =
-                sqlx::query_scalar("SELECT COUNT(*) FROM icon_cache WHERE exe_name = 'baseline.exe'")
-                    .fetch_one(&pool)
-                    .await
-                    .unwrap();
+            let icon_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM icon_cache WHERE exe_name = 'baseline.exe'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
             assert_eq!(session_count, 1, "original session should be preserved");
             assert_eq!(

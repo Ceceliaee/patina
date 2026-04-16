@@ -20,14 +20,12 @@ fn resolve_app_config_db_path(app_identifier: &str) -> Option<PathBuf> {
 
     #[cfg(target_os = "macos")]
     {
-        return env::var_os("HOME")
-            .map(PathBuf::from)
-            .map(|path| {
-                path.join("Library")
-                    .join("Application Support")
-                    .join(app_identifier)
-                    .join("timetracker.db")
-            });
+        return env::var_os("HOME").map(PathBuf::from).map(|path| {
+            path.join("Library")
+                .join("Application Support")
+                .join(app_identifier)
+                .join("timetracker.db")
+        });
     }
 
     #[cfg(all(unix, not(target_os = "macos")))]
@@ -121,7 +119,9 @@ pub async fn repair_legacy_migration_history(app_identifier: &str) -> Result<(),
             .bind(version)
             .execute(&pool)
             .await
-            .map_err(|error| format!("failed to repair sqlite migration metadata for v{version}: {error}"))?;
+            .map_err(|error| {
+                format!("failed to repair sqlite migration metadata for v{version}: {error}")
+            })?;
         repaired_versions.push(version);
     }
 

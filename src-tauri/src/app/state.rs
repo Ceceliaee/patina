@@ -1,4 +1,4 @@
-use crate::domain::settings::{CloseBehavior, DesktopBehaviorSettings, MinimizeBehavior};
+use crate::domain::settings::DesktopBehaviorSettings;
 use std::sync::Mutex;
 
 #[derive(Debug, Default)]
@@ -14,21 +14,19 @@ impl DesktopBehaviorState {
         }
     }
 
-    pub(crate) fn update_desktop(
+    pub(crate) fn update_desktop_from_raw(
         &self,
-        close_behavior: CloseBehavior,
-        minimize_behavior: MinimizeBehavior,
+        close_behavior: &str,
+        minimize_behavior: &str,
     ) -> DesktopBehaviorSettings {
         match self.inner.lock() {
             Ok(mut guard) => {
-                guard.close_behavior = close_behavior;
-                guard.minimize_behavior = minimize_behavior;
+                *guard = guard.with_raw_desktop_behavior(close_behavior, minimize_behavior);
                 *guard
             }
             Err(poisoned) => {
                 let mut guard = poisoned.into_inner();
-                guard.close_behavior = close_behavior;
-                guard.minimize_behavior = minimize_behavior;
+                *guard = guard.with_raw_desktop_behavior(close_behavior, minimize_behavior);
                 *guard
             }
         }
@@ -41,14 +39,26 @@ impl DesktopBehaviorState {
     ) -> DesktopBehaviorSettings {
         match self.inner.lock() {
             Ok(mut guard) => {
-                guard.launch_at_login = launch_at_login;
-                guard.start_minimized = start_minimized;
+                *guard = guard.with_launch_behavior(launch_at_login, start_minimized);
                 *guard
             }
             Err(poisoned) => {
                 let mut guard = poisoned.into_inner();
-                guard.launch_at_login = launch_at_login;
-                guard.start_minimized = start_minimized;
+                *guard = guard.with_launch_behavior(launch_at_login, start_minimized);
+                *guard
+            }
+        }
+    }
+
+    pub(crate) fn replace(&self, next: DesktopBehaviorSettings) -> DesktopBehaviorSettings {
+        match self.inner.lock() {
+            Ok(mut guard) => {
+                *guard = next;
+                *guard
+            }
+            Err(poisoned) => {
+                let mut guard = poisoned.into_inner();
+                *guard = next;
                 *guard
             }
         }

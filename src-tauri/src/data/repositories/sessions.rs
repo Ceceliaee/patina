@@ -92,7 +92,10 @@ pub async fn load_active_session(
     }))
 }
 
-pub async fn end_active_sessions(pool: &Pool<Sqlite>, raw_end_time: i64) -> Result<bool, sqlx::Error> {
+pub async fn end_active_sessions(
+    pool: &Pool<Sqlite>,
+    raw_end_time: i64,
+) -> Result<bool, sqlx::Error> {
     let active_sessions = sqlx::query(
         "SELECT id, start_time
          FROM sessions

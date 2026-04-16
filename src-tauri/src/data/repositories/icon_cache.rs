@@ -30,13 +30,15 @@ pub async fn insert_for_restore(
     icon_cache: &[BackupIconCache],
 ) -> Result<(), String> {
     for icon in icon_cache {
-        sqlx::query("INSERT INTO icon_cache (exe_name, icon_base64, last_updated) VALUES (?, ?, ?)")
-            .bind(&icon.exe_name)
-            .bind(&icon.icon_base64)
-            .bind(icon.last_updated)
-            .execute(&mut **tx)
-            .await
-            .map_err(|error| format!("failed to restore icon cache: {error}"))?;
+        sqlx::query(
+            "INSERT INTO icon_cache (exe_name, icon_base64, last_updated) VALUES (?, ?, ?)",
+        )
+        .bind(&icon.exe_name)
+        .bind(&icon.icon_base64)
+        .bind(icon.last_updated)
+        .execute(&mut **tx)
+        .await
+        .map_err(|error| format!("failed to restore icon cache: {error}"))?;
     }
 
     Ok(())

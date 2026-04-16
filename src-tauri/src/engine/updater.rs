@@ -6,7 +6,7 @@ use tokio::time::{sleep, Duration};
 
 use crate::data::repositories::update_state;
 use crate::data::sqlite_pool::wait_for_sqlite_pool;
-use crate::domain::update::{UpdateSnapshot, UpdateStatus};
+use crate::domain::update::UpdateSnapshot;
 
 const STARTUP_AUTO_CHECK_DELAYS_MS: [u64; 3] = [3_500, 15_000, 60_000];
 
@@ -38,18 +38,17 @@ impl UpdaterRuntimeState {
 
     fn set_checking(&self) {
         self.with_guard(|inner| {
-            inner.snapshot.status = UpdateStatus::Checking;
-            inner.snapshot.error_message = None;
+            inner.snapshot = inner.snapshot.clone().checking();
         });
     }
 
     fn set_available(&self, update: Update) -> UpdateSnapshot {
         self.with_guard(|inner| {
-            inner.snapshot.status = UpdateStatus::Available;
-            inner.snapshot.latest_version = Some(update.version.clone());
-            inner.snapshot.release_notes = update.body.clone();
-            inner.snapshot.release_date = update.date.map(|value| value.to_string());
-            inner.snapshot.error_message = None;
+            inner.snapshot = inner.snapshot.clone().available(
+                update.version.clone(),
+                update.body.clone(),
+                update.date.map(|value| value.to_string()),
+            );
             inner.pending_update = Some(update);
             inner.downloaded_bytes = None;
             inner.snapshot.clone()
@@ -58,11 +57,7 @@ impl UpdaterRuntimeState {
 
     fn set_up_to_date(&self) -> UpdateSnapshot {
         self.with_guard(|inner| {
-            inner.snapshot.status = UpdateStatus::UpToDate;
-            inner.snapshot.latest_version = None;
-            inner.snapshot.release_notes = None;
-            inner.snapshot.release_date = None;
-            inner.snapshot.error_message = None;
+            inner.snapshot = inner.snapshot.clone().up_to_date();
             inner.pending_update = None;
             inner.downloaded_bytes = None;
             inner.snapshot.clone()
@@ -71,23 +66,20 @@ impl UpdaterRuntimeState {
 
     fn set_error(&self, message: String) -> UpdateSnapshot {
         self.with_guard(|inner| {
-            inner.snapshot.status = UpdateStatus::Error;
-            inner.snapshot.error_message = Some(message);
+            inner.snapshot = inner.snapshot.clone().error(message);
             inner.snapshot.clone()
         })
     }
 
     fn set_downloading(&self) {
         self.with_guard(|inner| {
-            inner.snapshot.status = UpdateStatus::Downloading;
-            inner.snapshot.error_message = None;
+            inner.snapshot = inner.snapshot.clone().downloading();
         });
     }
 
     fn set_downloaded(&self, bytes: Vec<u8>) -> UpdateSnapshot {
         self.with_guard(|inner| {
-            inner.snapshot.status = UpdateStatus::Downloaded;
-            inner.snapshot.error_message = None;
+            inner.snapshot = inner.snapshot.clone().downloaded();
             inner.downloaded_bytes = Some(bytes);
             inner.snapshot.clone()
         })
@@ -95,8 +87,7 @@ impl UpdaterRuntimeState {
 
     fn set_installing(&self) {
         self.with_guard(|inner| {
-            inner.snapshot.status = UpdateStatus::Installing;
-            inner.snapshot.error_message = None;
+            inner.snapshot = inner.snapshot.clone().installing();
         });
     }
 

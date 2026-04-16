@@ -4,7 +4,8 @@ use sqlx::{Pool, Row, Sqlite};
 pub const TRACKER_LAST_HEARTBEAT_KEY: &str = "__tracker_last_heartbeat_ms";
 pub const TRACKER_LAST_SUCCESSFUL_SAMPLE_KEY: &str = "__tracker_last_successful_sample_ms";
 pub const TRACKER_LAST_STARTUP_SELF_HEAL_AT_KEY: &str = "__tracker_last_startup_self_heal_at_ms";
-pub const TRACKER_LAST_STARTUP_SELF_HEAL_SUMMARY_KEY: &str = "__tracker_last_startup_self_heal_summary";
+pub const TRACKER_LAST_STARTUP_SELF_HEAL_SUMMARY_KEY: &str =
+    "__tracker_last_startup_self_heal_summary";
 
 const TRACKING_PAUSED_KEY: &str = "tracking_paused";
 pub const APP_OVERRIDE_KEY_PREFIX: &str = "__app_override::";
@@ -158,7 +159,9 @@ mod tests {
         tauri::async_runtime::block_on(async {
             let pool = setup_test_db().await;
 
-            save_setting_value(&pool, "afk_timeout_secs", "999").await.unwrap();
+            save_setting_value(&pool, "afk_timeout_secs", "999")
+                .await
+                .unwrap();
 
             let fallback = load_idle_timeout_secs(&pool, 180).await.unwrap();
             assert_eq!(fallback, 180);

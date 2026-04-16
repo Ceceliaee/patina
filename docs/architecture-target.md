@@ -741,3 +741,12 @@ Rust `commands/*` 只做：
 - 如果某次任务触及 `src/lib/*`，优先判断能否顺手迁到更明确的 owner 层
 - 如果某次任务触及 tracking 核心链路，优先考虑是否应向 `engine/*` 拆分
 - 如果某次任务涉及边界归属不清，先按 [`issue-fix-boundary-guardrails.md`](./issue-fix-boundary-guardrails.md) 做分流，再决定是否直接实现
+> 维护期注记（2026-04-16）
+>
+> 本文件最初包含一轮迁移期的“架构体检 + 目标收敛”描述。自 2026-04-16 起，下列事项已经完成并应视为当前长期基线：
+> - 前端 `platform/` 已建立，`src/lib/` 与根层 `src/types/` 已退出。
+> - Rust `tracking` engine 已完成 `engine/tracking/*` 多模块拆分。
+> - Rust `domain/` 已承接 `tracking / settings / backup / update` 的稳定语义契约。
+> - Rust `lib.rs`、`commands/*` 与 `app/runtime.rs` 已完成一轮瘦身。
+>
+> 因此，下文 4.x、8.x、11.x 中仍以“待迁移 / 待拆分 / 待退出”表述的段落，应视为迁移期历史背景，而不是当前执行清单。当前执行基线以本注记、[`AGENTS.md`](../AGENTS.md)、[`architecture-migration-checklist.md`](./architecture-migration-checklist.md) 的已完成状态，以及仓库现状为准。

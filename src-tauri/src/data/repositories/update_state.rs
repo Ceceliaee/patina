@@ -36,9 +36,7 @@ mod tests {
             let pool = setup_test_db().await;
             assert_eq!(load_last_auto_check_day(&pool).await.unwrap(), None);
 
-            save_last_auto_check_day(&pool, "2026-04-13")
-                .await
-                .unwrap();
+            save_last_auto_check_day(&pool, "2026-04-13").await.unwrap();
             assert_eq!(
                 load_last_auto_check_day(&pool).await.unwrap(),
                 Some("2026-04-13".to_string())

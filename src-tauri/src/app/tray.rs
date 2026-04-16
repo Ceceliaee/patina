@@ -1,11 +1,9 @@
 use crate::app::runtime::now_ms;
-use crate::data::sqlite_pool::wait_for_sqlite_pool;
 use crate::app::state::DesktopBehaviorState;
 use crate::data::repositories::tracker_settings;
-use crate::domain::settings::{
-    CloseBehavior, DesktopBehaviorSettings, MinimizeBehavior,
-};
-use crate::engine::tracking_runtime;
+use crate::data::sqlite_pool::wait_for_sqlite_pool;
+use crate::domain::settings::{CloseBehavior, DesktopBehaviorSettings, MinimizeBehavior};
+use crate::engine::tracking::runtime as tracking_runtime;
 use tauri::{
     menu::{Menu, MenuEvent, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -26,7 +24,10 @@ pub(crate) fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-pub(crate) fn apply_tray_visibility<R: Runtime>(app: &AppHandle<R>, settings: DesktopBehaviorSettings) {
+pub(crate) fn apply_tray_visibility<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: DesktopBehaviorSettings,
+) {
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
         if let Err(error) = tray.set_visible(settings.should_keep_tray_visible()) {
             eprintln!("[tray] failed to apply visibility: {error}");

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   Trash2,
   Clock,
@@ -339,7 +338,7 @@ export default function Settings({
 
   const handleOpenReleaseNotes = async () => {
     try {
-      await openUrl("https://github.com/182376/time-tracking/releases");
+      await SettingsRuntimeAdapterService.openReleaseNotes();
     } catch (error) {
       console.error("open release notes failed", error);
       notify("无法打开更新说明链接。", "warning");
@@ -348,7 +347,7 @@ export default function Settings({
 
   const handleOpenFeedback = async () => {
     try {
-      await openUrl("https://github.com/182376/time-tracking/issues/new/choose");
+      await SettingsRuntimeAdapterService.openFeedback();
     } catch (error) {
       console.error("open feedback link failed", error);
       notify("无法打开反馈链接。", "warning");

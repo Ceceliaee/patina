@@ -65,13 +65,13 @@
 
 下面这些事项是当前尚未完成的关键迁移里程碑：
 
-- [ ] 前端已建立清晰的 `platform/` 外部边界层
+- [x] 前端已建立清晰的 `platform/` 外部边界层
 - [x] 前端根层 `src/types/` 已清空并退出长期架构
 - [x] 前端 `src/lib/` 已迁空并删除
-- [ ] 前端 `shared/lib/*` 已收敛为稳定共享能力，不再混放适配器
-- [ ] Rust `engine/tracking_runtime.rs` 已拆成多个清晰子模块
-- [ ] Rust `app/runtime.rs` 与 `lib.rs` 已进一步瘦身
-- [ ] Rust `domain/` 已从 DTO 集合进化为稳定语义层
+- [x] 前端 `shared/lib/*` 已收敛为稳定共享能力，不再混放适配器
+- [x] Rust tracking engine 已拆成 `engine/tracking/` 下的多个清晰子模块
+- [x] Rust `app/runtime.rs` 与 `lib.rs` 已进一步瘦身
+- [x] Rust `domain/` 已从 DTO 集合进化为稳定语义层
 
 如果只想快速判断当前处于哪一阶段，可以先看这一节。
 
@@ -328,30 +328,30 @@
 
 ### 12.1 抽离 transition 规则
 
-- [ ] 抽离窗口切换规划逻辑（如 transition planning / identity / trackable judgment）
-- [ ] 让 session 切换决策拥有更清晰的 engine owner 模块
-- [ ] 保持原有行为与测试语义不变
+- [x] 抽离窗口切换规划逻辑（如 transition planning / identity / trackable judgment）
+- [x] 让 session 切换决策拥有更清晰的 engine owner 模块
+- [x] 保持原有行为与测试语义不变
 
 ### 12.2 抽离 watchdog 逻辑
 
-- [ ] 抽离 tracker stall / watchdog seal 判断逻辑
-- [ ] 抽离 watchdog 相关状态和辅助函数
-- [ ] 确保 watchdog 逻辑不再和主循环实现混在同一大段中
+- [x] 抽离 tracker stall / watchdog seal 判断逻辑（`should_watchdog_seal` 已迁至 `engine/tracking_watchdog.rs`）
+- [x] 抽离 watchdog 相关状态和辅助函数（`RuntimeHealthState` 与 watchdog seal 辅助逻辑已迁至 `engine/tracking_watchdog.rs`）
+- [x] 确保 watchdog 逻辑不再和主循环实现混在同一大段中（watchdog 主循环已从 `tracking_runtime.rs` 迁出到独立模块）
 
 ### 12.3 抽离 startup self-heal
 
-- [ ] 抽离 tracker 初始化与 startup self-heal 逻辑
-- [ ] 让 initialization / repair 逻辑拥有单独 owner
+- [x] 抽离 tracker 初始化与 startup self-heal 逻辑（`initialize_tracker` 与 startup sealing / repair notes 已迁至 `engine/tracking_startup.rs`）
+- [x] 让 initialization / repair 逻辑拥有单独 owner（`resolve_startup_seal_time` 与 startup self-heal summary 持久化辅助逻辑由 `tracking_startup.rs` 承载）
 
 ### 12.4 抽离 metadata / icon 逻辑
 
-- [ ] 抽离应用名、图标、版本元数据提取逻辑
-- [ ] 确保 tracking 主链保留业务编排，而不是承载大量平台元数据细节
+- [x] 抽离应用名、图标、版本元数据提取逻辑（`map_app_name`、版本信息读取辅助函数、`ensure_icon_cache`、`resolve_icon_source_path` 已迁至 `engine/tracking_metadata.rs`）
+- [x] 确保 tracking 主链保留业务编排，而不是承载大量平台元数据细节（`tracking_runtime.rs` 仅保留 `start_session` 编排并调用 `tracking_metadata` 接口）
 
 ### 12.5 收口目录
 
-- [ ] 根据拆分结果引入 `engine/tracking/` 子模块结构
-- [ ] 更新 `engine/mod.rs`，让 tracking engine 以模块而非单文件存在
+- [x] 根据拆分结果引入 `engine/tracking/` 子模块结构（已落地 `tracking/mod.rs` + `runtime/transition/watchdog/startup/metadata`）
+- [x] 更新 `engine/mod.rs`，让 tracking engine 以模块而非单文件存在（已收口为 `pub mod tracking;`，外部引用迁移到 `engine::tracking::*`）
 
 完成本阶段后，`tracking_runtime.rs` 不应再是单个超厚核心文件。
 
@@ -365,20 +365,20 @@
 
 ### 13.1 tracking 领域语义
 
-- [ ] 重新审视 `domain/tracking.rs` 中哪些内容只是 DTO，哪些应该成为领域类型
-- [ ] 为 session identity、transition decision、tracking payload 建立更清晰的领域语义边界
-- [ ] 将 tracking 规则中稳定的不变量尽量表达在 domain 中，而不是散落在 engine 细节里
+- [x] 重新审视 `domain/tracking.rs` 中哪些内容只是 DTO，哪些应该成为领域类型（本轮已将 `WindowSessionIdentity` / `WindowTransitionDecision` 作为领域语义类型补齐方法，`TrackingDataChangedPayload` 保持契约 DTO 并补构造器）
+- [x] 为 session identity、transition decision、tracking payload 建立更清晰的领域语义边界（已落地 `from_window_fields`、`is_same_app`、`is_same_instance`、`has_mutation_plan`、`resolved_end_time`、`mutation_reason`、`TrackingDataChangedPayload::new`）
+- [x] 将 tracking 规则中稳定的不变量尽量表达在 domain 中，而不是散落在 engine 细节里（`should_track`、lifecycle utility process/window/title 判断、version-like token、likely system process 规则已迁入 `domain/tracking.rs`，并引入 `WindowTrackingCandidate`；`engine/tracking/transition.rs` 仅保留 `WindowInfo -> domain` 薄适配）
 
 ### 13.2 settings 领域语义
 
-- [ ] 重新审视 `domain/settings.rs` 的职责
-- [ ] 把稳定的设置语义、解析规则、不变量保留在 domain 层
-- [ ] 避免 settings 语义散落回 commands 或 app 层
+- [x] 重新审视 `domain/settings.rs` 的职责（已补齐 `DesktopBehaviorSettings` 的稳定语义 API：`with_desktop_behavior / with_launch_behavior / with_raw_desktop_behavior / from_storage_values`）
+- [x] 把稳定的设置语义、解析规则、不变量保留在 domain 层（close/minimize raw 解析、布尔解析、默认值合并、tray visibility 与 autostart minimized 规则均由 `domain/settings.rs` 承接，并补充单元测试覆盖）
+- [x] 避免 settings 语义散落回 commands 或 app 层（`commands/settings.rs` 改为调用 state 的 raw 更新入口；`app/state.rs` 统一通过 domain 方法更新；`data/repositories/app_settings.rs` 通过 domain 构造表达存储默认合并）
 
 ### 13.3 backup / update 契约
 
-- [ ] 重新审视 `domain/backup.rs` 与 `domain/update.rs` 的边界
-- [ ] 确保 backup / update 相关共享契约由 domain 承接，而不是落回 commands 或 data
+- [x] 重新审视 `domain/backup.rs` 与 `domain/update.rs` 的边界（`domain/backup.rs` 已承接 backup version/schema 常量、compatibility 判定与 preview 构造语义；`domain/update.rs` 已承接 `UpdateSnapshot` 状态转换语义方法）
+- [x] 确保 backup / update 相关共享契约由 domain 承接，而不是落回 commands 或 data（`data/backup.rs` 仅保留文件读写/JSON decode/DB restore-export 编排并调用 domain 契约；`engine/updater.rs` 保留 Tauri `Update` 与 bytes 状态，但 snapshot 字段变更通过 domain 方法表达）
 
 完成本阶段后，`domain/` 应开始成为“稳定语义中层”。
 
@@ -393,21 +393,21 @@
 
 ### 14.1 瘦身 `lib.rs`
 
-- [ ] 重新审视 `lib.rs` 中 builder 装配职责
-- [ ] 抽出可独立表达的 setup / registration 组装逻辑
-- [ ] 保证 `lib.rs` 主要保留“主装配入口”身份
+- [x] 重新审视 `lib.rs` 中 builder 装配职责
+- [x] 抽出可独立表达的 setup / registration 组装逻辑（已落地 `src-tauri/src/app/bootstrap.rs`，承接 builder setup、plugin registration、invoke handler registration 与 setup hooks 组装）
+- [x] 保证 `lib.rs` 主要保留“主装配入口”身份（当前 `lib.rs` 仅保留 context 获取、runtime 输入准备、sqlite legacy migration repair 与 bootstrap 调用）
 
 ### 14.2 瘦身 `app/runtime.rs`
 
-- [ ] 拆分 desktop behavior 同步逻辑
-- [ ] 拆分 updater 启动逻辑
-- [ ] 拆分 tracking runtime 启动与守护逻辑
-- [ ] 确保 `app/runtime.rs` 不再持续堆积第二层业务实现
+- [x] 拆分 desktop behavior 同步逻辑（已落地 `src-tauri/src/app/desktop_behavior.rs`，承接 `apply_autostart`、`sync_desktop_behavior_from_storage` 与 autostart 启动窗口处理）
+- [x] 拆分 updater 启动逻辑（已落地 `src-tauri/src/app/runtime_tasks.rs`，承接 startup auto-check task 启动）
+- [x] 拆分 tracking runtime 启动与守护逻辑（已落地 `src-tauri/src/app/runtime_tasks.rs`，承接 tracking runtime/watchdog restart loop）
+- [x] 确保 `app/runtime.rs` 不再持续堆积第二层业务实现（当前 `app/runtime.rs` 主要保留 setup 编排：power watcher、tray 初始化、desktop behavior sync 触发、updater/tracking task 启动）
 
 ### 14.3 保持 commands 薄
 
-- [ ] 复查 `commands/*` 是否有回胖迹象
-- [ ] 如果某个命令文件开始变厚，优先把逻辑迁回 `app / engine / data`
+- [x] 复查 `commands/*` 是否有回胖迹象（`commands/backup.rs` 存在 restore 后副作用串联，`commands/settings.rs` 存在 desktop behavior 状态+副作用编排；`commands/update.rs`、`commands/tracking.rs`、`commands/apps.rs` 当前保持薄）
+- [x] 如果某个命令文件开始变厚，优先把逻辑迁回 `app / engine / data`（新增 `app/backup.rs` 承接 restore 后刷新编排；`app/desktop_behavior.rs` 新增 command service 入口承接 settings 行为应用，`commands/*` 回归 IPC 边界适配）
 
 完成本阶段后，Rust entry 与 app 层应更接近最终装配形态。
 
@@ -421,22 +421,36 @@
 
 ### 15.1 前端收口检查
 
-- [ ] 确认新增前端代码默认已落在 `app / features / shared / platform`
-- [ ] 确认页面组件层不再直接依赖 DB 或平台细节
-- [ ] 确认 `shared/lib/*` 不再承担新的过渡职责
-- [ ] 确认前端已无 `src/lib/` 与根层 `src/types/`
+- [x] 确认新增前端代码默认已落在 `app / features / shared / platform`
+- [x] 确认页面组件层不再直接依赖 DB 或平台细节
+- [x] 确认 `shared/lib/*` 不再承担新的过渡职责
+- [x] 确认前端已无 `src/lib/` 与根层 `src/types/`
+
+完成说明（2026-04-16）：
+- 本轮通过目录与 import 扫描确认前端新增代码落点稳定在 `app / features / shared / platform`，无 `src/lib/*` 与根层 `src/types/*` 回流。
+- 页面组件层（`features/*/components`）未直接依赖 DB、Tauri 插件或平台细节；`Settings.tsx` 的外链打开已收口到 `settingsRuntimeAdapterService`，底层 `@tauri-apps/plugin-opener` 由 `src/platform/desktop/externalUrlGateway.ts` 承接，应用版本读取由 `src/platform/desktop/appInfoGateway.ts` 承接，SQLite 入口仅位于 `src/platform/persistence/sqlite.ts`。
+- `shared/lib/*` 当前以稳定共享能力为主；保留的 legacy 兼容壳（如 `historyReadModelService.ts`、`sessionReadRepository.ts`）仅做兼容与类型转发，本轮未新增过渡职责。
 
 ### 15.2 Rust 收口检查
 
-- [ ] 确认新增 Rust 核心逻辑默认进入 `engine / domain / data`
-- [ ] 确认 `commands/*` 与 `lib.rs` 没有重新变厚
-- [ ] 确认 tracking engine 已为多模块结构
-- [ ] 确认 `domain/` 已承接稳定语义契约
+- [x] 确认新增 Rust 核心逻辑默认进入 `engine / domain / data`
+- [x] 确认 `commands/*` 与 `lib.rs` 没有重新变厚
+- [x] 确认 tracking engine 已为多模块结构
+- [x] 确认 `domain/` 已承接稳定语义契约
+
+完成说明（2026-04-16）：
+- 本轮通过 `src-tauri/src/{app,commands,data,domain,engine,lib.rs}` 扫描确认：新增核心链路逻辑保持在 `engine / domain / data`，`commands/*` 维持 IPC 参数接收与转发职责，`lib.rs` 维持入口装配职责（context/runtime 输入准备 + bootstrap 调用），未出现回胖。
+- `engine/tracking/` 当前已稳定为多模块结构：`mod.rs` + `runtime.rs`、`transition.rs`、`watchdog.rs`、`startup.rs`、`metadata.rs`，`engine/mod.rs` 以 `pub mod tracking;` 暴露，不再是单文件 tracking runtime 形态。
+- `domain/` 已承接稳定语义契约：`tracking`（identity/decision/trackable 规则）、`settings`（desktop behavior 语义与解析规则）、`backup`（compatibility/preview 契约）、`update`（snapshot 状态迁移语义）均有对应测试覆盖。
 
 ### 15.3 文档收口检查
 
-- [ ] 回看 [`architecture-target.md`](./architecture-target.md)，确认文档描述与仓库现状一致
-- [ ] 如有必要，更新本清单为“维护期版本”，移除已无价值的历史迁移项
+- [x] 回看 [`architecture-target.md`](./architecture-target.md)，确认文档描述与仓库现状一致
+- [x] 如有必要，更新本清单为“维护期版本”，移除已无价值的历史迁移项
+
+完成说明（2026-04-16）：
+- 已在 [`architecture-target.md`](./architecture-target.md) 补充“维护期注记”，明确前端 `platform/`、前端 `src/lib/` / `src/types/` 退出、Rust tracking 多模块化、Rust `domain/` 语义层、Rust 入口瘦身等事项已成为当前长期基线；文档中仍保留的迁移期体检与优先级段落，统一视为历史背景，不再作为当前执行 backlog。
+- 本清单自本阶段起按“维护期版本”理解：阶段一到阶段十五保留为已完成迁移记录与边界审计依据，不再继续扩写新的历史迁移项；后续若出现新的结构性工作，应直接回到长期文档判断是否值得进入新的维护期执行单，而不是把本清单重新扩张成长期 backlog。
 
 ---
 

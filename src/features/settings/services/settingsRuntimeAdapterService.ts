@@ -1,4 +1,3 @@
-import { getVersion } from "@tauri-apps/api/app";
 import {
   clearSessionsBefore,
   loadSettings,
@@ -13,6 +12,8 @@ import {
   restoreBackup,
   type BackupPreview,
 } from "../../../platform/backup/backupRuntimeGateway";
+import { getAppVersion } from "../../../platform/desktop/appInfoGateway";
+import { openExternalUrl } from "../../../platform/desktop/externalUrlGateway";
 import { setIdleTimeout } from "../../../platform/runtime/trackingRuntimeGateway";
 import type { CleanupRange } from "../types";
 import {
@@ -37,6 +38,9 @@ export interface BackupRestorePreparation {
 
 type SettingsPatch = Partial<AppSettings>;
 
+const RELEASE_NOTES_URL = "https://github.com/182376/time-tracking/releases";
+const FEEDBACK_URL = "https://github.com/182376/time-tracking/issues/new/choose";
+
 function resolveCleanupCutoffTime(range: CleanupRange, nowMs: number): number {
   const date = new Date(nowMs);
   date.setDate(date.getDate() - range);
@@ -58,7 +62,7 @@ export class SettingsRuntimeAdapterService {
   static async loadBootstrap(): Promise<SettingsPageBootstrapData> {
     const [settings, appVersion] = await Promise.all([
       loadSettings(),
-      getVersion().catch(() => "unknown"),
+      getAppVersion().catch(() => "unknown"),
     ]);
 
     const bootstrap = {
@@ -128,6 +132,14 @@ export class SettingsRuntimeAdapterService {
 
   static async restoreBackup(path: string): Promise<void> {
     await restoreBackup(path);
+  }
+
+  static async openReleaseNotes(): Promise<void> {
+    await openExternalUrl(RELEASE_NOTES_URL);
+  }
+
+  static async openFeedback(): Promise<void> {
+    await openExternalUrl(FEEDBACK_URL);
   }
 
   static buildSettingsPatch(
