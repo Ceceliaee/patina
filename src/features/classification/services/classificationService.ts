@@ -3,13 +3,13 @@ import type { AppOverride } from "./ProcessMapper.ts";
 import {
   type AppCategory,
   type CustomAppCategory,
-} from "../config/categoryTokens";
-import * as classificationStore from "./classificationStore";
-import type { ObservedAppCandidate } from "./classificationStore";
+} from "../config/categoryTokens.ts";
+import * as classificationStore from "./classificationStore.ts";
+import type { ObservedAppCandidate } from "./classificationStore.ts";
 import {
   getClassificationBootstrapCache,
   setClassificationBootstrapCache,
-} from "./classificationBootstrapCache";
+} from "./classificationBootstrapCache.ts";
 import {
   buildClassificationDraftChangePlan,
   hasClassificationDraftChanges,
@@ -27,6 +27,20 @@ export interface ClassificationBootstrapData {
   loadedCustomCategories: CustomAppCategory[];
   loadedDeletedCategories: AppCategory[];
 }
+
+export interface ClassificationCommitDeps {
+  commitChangePlan: (changePlan: ReturnType<typeof buildClassificationDraftChangePlan>) => Promise<void>;
+  setUserOverrides: (overrides: ClassificationDraftState["overrides"]) => void;
+  setCategoryColorOverrides: (overrides: ClassificationDraftState["categoryColorOverrides"]) => void;
+  setDeletedCategories: (categories: AppCategory[]) => void;
+}
+
+const defaultClassificationCommitDeps: ClassificationCommitDeps = {
+  commitChangePlan: classificationStore.commitDraftChangePlan,
+  setUserOverrides: ProcessMapper.setUserOverrides,
+  setCategoryColorOverrides: ProcessMapper.setCategoryColorOverrides,
+  setDeletedCategories: ProcessMapper.setDeletedCategories,
+};
 
 export class ClassificationService {
   static async loadObservedAppCandidates(days: number = 30, limit: number = 120): Promise<ObservedAppCandidate[]> {
@@ -110,38 +124,22 @@ export class ClassificationService {
   }
 
   static async commitDraftChanges(saved: ClassificationDraftState, draft: ClassificationDraftState): Promise<void> {
-    const changePlan = buildClassificationDraftChangePlan(saved, draft);
-
-    for (const update of changePlan.overrideUpserts) {
-      await classificationStore.saveAppOverride(update.exeName, update.override);
-    }
-
-    for (const update of changePlan.categoryColorUpdates) {
-      await classificationStore.saveCategoryColorOverride(update.category, update.colorValue);
-    }
-
-    for (const category of changePlan.customCategoriesToAdd) {
-      await classificationStore.saveCustomCategory(category);
-      await classificationStore.saveDeletedCategory(category, false);
-    }
-
-    for (const category of changePlan.customCategoriesToRemove) {
-      await ProcessMapper.removeCategoryDefaultColorAssignment(category);
-      await classificationStore.deleteCustomCategory(category);
-      await classificationStore.saveDeletedCategory(category, false);
-      await classificationStore.saveCategoryColorOverride(category, null);
-    }
-
-    for (const update of changePlan.deletedCategoryUpdates) {
-      await classificationStore.saveDeletedCategory(update.category, update.deleted);
-    }
-
-    ProcessMapper.setUserOverrides(draft.overrides);
-    ProcessMapper.setCategoryColorOverrides(draft.categoryColorOverrides);
-    ProcessMapper.setDeletedCategories(changePlan.sanitizedDeletedCategories);
+    await commitDraftChangesWithDeps(saved, draft, defaultClassificationCommitDeps);
   }
 }
 
 export async function prewarmClassificationBootstrapCache(): Promise<ClassificationBootstrapData> {
   return ClassificationService.prewarmBootstrapCache();
+}
+
+export async function commitDraftChangesWithDeps(
+  saved: ClassificationDraftState,
+  draft: ClassificationDraftState,
+  deps: ClassificationCommitDeps,
+): Promise<void> {
+  const changePlan = buildClassificationDraftChangePlan(saved, draft);
+  await deps.commitChangePlan(changePlan);
+  deps.setUserOverrides(draft.overrides);
+  deps.setCategoryColorOverrides(draft.categoryColorOverrides);
+  deps.setDeletedCategories(changePlan.sanitizedDeletedCategories);
 }

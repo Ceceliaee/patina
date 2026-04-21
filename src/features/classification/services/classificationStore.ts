@@ -9,6 +9,7 @@ import {
   loadSettingRowsByKeyPrefix,
   upsertSettingValue,
 } from "../../../platform/persistence/classificationPersistence.ts";
+import { executeWriteTransaction, type SqlWriteOperation } from "../../../platform/persistence/sqlite.ts";
 import { ProcessMapper, type AppOverride } from "./ProcessMapper.ts";
 import {
   isAppCategory,
@@ -17,6 +18,7 @@ import {
   type CustomAppCategory,
 } from "../config/categoryTokens.ts";
 import { resolveCanonicalExecutable, shouldTrackProcess } from "./processNormalization.ts";
+import type { ClassificationDraftChangePlan } from "./classificationDraftState.ts";
 
 const APP_OVERRIDE_KEY_PREFIX = "__app_override::";
 const CATEGORY_COLOR_OVERRIDE_KEY_PREFIX = "__category_color_override::";
@@ -91,6 +93,30 @@ export async function saveAppOverride(exeName: string, override: AppOverride | n
   await upsertSettingValue(key, ProcessMapper.toOverrideStorageValue(override));
 }
 
+function buildSaveAppOverrideOperations(
+  exeName: string,
+  override: AppOverride | null,
+): SqlWriteOperation[] {
+  const canonicalExe = resolveCanonicalExecutable(exeName);
+  if (!canonicalExe) {
+    return [];
+  }
+
+  const key = `${APP_OVERRIDE_KEY_PREFIX}${canonicalExe}`;
+
+  if (!override || override.enabled === false) {
+    return [{
+      query: "DELETE FROM settings WHERE key = ?",
+      values: [key],
+    }];
+  }
+
+  return [{
+    query: "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    values: [key, ProcessMapper.toOverrideStorageValue(override)],
+  }];
+}
+
 export async function clearAllAppOverrides(): Promise<void> {
   await deleteSettingsByKeyPrefix(APP_OVERRIDE_KEY_PREFIX);
 }
@@ -126,6 +152,25 @@ export async function saveCategoryColorOverride(
   }
 
   await upsertSettingValue(key, normalizedColor);
+}
+
+function buildSaveCategoryColorOverrideOperations(
+  category: AppCategory,
+  colorValue: string | null,
+): SqlWriteOperation[] {
+  const key = `${CATEGORY_COLOR_OVERRIDE_KEY_PREFIX}${category}`;
+  const normalizedColor = normalizeHexColor(colorValue ?? undefined);
+  if (!normalizedColor) {
+    return [{
+      query: "DELETE FROM settings WHERE key = ?",
+      values: [key],
+    }];
+  }
+
+  return [{
+    query: "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    values: [key, normalizedColor],
+  }];
 }
 
 export async function clearAllCategoryColorOverrides(): Promise<void> {
@@ -185,10 +230,34 @@ export async function saveCustomCategory(category: CustomAppCategory): Promise<v
   await upsertSettingValue(key, String(Date.now()));
 }
 
+function buildSaveCustomCategoryOperations(category: CustomAppCategory): SqlWriteOperation[] {
+  return [{
+    query: "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    values: [`${CUSTOM_CATEGORY_KEY_PREFIX}${category}`, String(Date.now())],
+  }];
+}
+
 export async function deleteCustomCategory(category: CustomAppCategory): Promise<void> {
   await deleteSettingValue(`${CUSTOM_CATEGORY_KEY_PREFIX}${category}`);
   await deleteSettingValue(`${DELETED_CATEGORY_KEY_PREFIX}${category}`);
   await deleteSettingValue(`${CATEGORY_DEFAULT_COLOR_ASSIGNMENT_KEY_PREFIX}${category}`);
+}
+
+function buildDeleteCustomCategoryOperations(category: CustomAppCategory): SqlWriteOperation[] {
+  return [
+    {
+      query: "DELETE FROM settings WHERE key = ?",
+      values: [`${CUSTOM_CATEGORY_KEY_PREFIX}${category}`],
+    },
+    {
+      query: "DELETE FROM settings WHERE key = ?",
+      values: [`${DELETED_CATEGORY_KEY_PREFIX}${category}`],
+    },
+    {
+      query: "DELETE FROM settings WHERE key = ?",
+      values: [`${CATEGORY_DEFAULT_COLOR_ASSIGNMENT_KEY_PREFIX}${category}`],
+    },
+  ];
 }
 
 export async function loadDeletedCategories(): Promise<AppCategory[]> {
@@ -219,6 +288,65 @@ export async function saveDeletedCategory(category: AppCategory, deleted: boolea
   }
   await upsertSettingValue(key, String(Date.now()));
   await deleteSettingValue(`${CATEGORY_DEFAULT_COLOR_ASSIGNMENT_KEY_PREFIX}${category}`);
+}
+
+function buildSaveDeletedCategoryOperations(
+  category: AppCategory,
+  deleted: boolean,
+): SqlWriteOperation[] {
+  const key = `${DELETED_CATEGORY_KEY_PREFIX}${category}`;
+  if (!isPersistableDeletedCategory(category) || !deleted) {
+    return [{
+      query: "DELETE FROM settings WHERE key = ?",
+      values: [key],
+    }];
+  }
+
+  return [
+    {
+      query: "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      values: [key, String(Date.now())],
+    },
+    {
+      query: "DELETE FROM settings WHERE key = ?",
+      values: [`${CATEGORY_DEFAULT_COLOR_ASSIGNMENT_KEY_PREFIX}${category}`],
+    },
+  ];
+}
+
+export function buildCommitDraftChangePlanOperations(
+  changePlan: ClassificationDraftChangePlan,
+): SqlWriteOperation[] {
+  const operations: SqlWriteOperation[] = [];
+
+  for (const update of changePlan.overrideUpserts) {
+    operations.push(...buildSaveAppOverrideOperations(update.exeName, update.override));
+  }
+
+  for (const update of changePlan.categoryColorUpdates) {
+    operations.push(...buildSaveCategoryColorOverrideOperations(update.category, update.colorValue));
+  }
+
+  for (const category of changePlan.customCategoriesToAdd) {
+    operations.push(...buildSaveCustomCategoryOperations(category));
+    operations.push(...buildSaveDeletedCategoryOperations(category, false));
+  }
+
+  for (const category of changePlan.customCategoriesToRemove) {
+    operations.push(...buildDeleteCustomCategoryOperations(category));
+    operations.push(...buildSaveDeletedCategoryOperations(category, false));
+    operations.push(...buildSaveCategoryColorOverrideOperations(category, null));
+  }
+
+  for (const update of changePlan.deletedCategoryUpdates) {
+    operations.push(...buildSaveDeletedCategoryOperations(update.category, update.deleted));
+  }
+
+  return operations;
+}
+
+export async function commitDraftChangePlan(changePlan: ClassificationDraftChangePlan): Promise<void> {
+  await executeWriteTransaction(buildCommitDraftChangePlanOperations(changePlan));
 }
 
 export async function loadOtherCategoryCandidates(

@@ -111,6 +111,7 @@
 - `npm run test:update`
 - `npm run test:settings`
 - `npm run test:classification`
+- `npm run test:interaction`
 - `npm run build`
 
 默认完整质量门槛是：
@@ -138,6 +139,8 @@
 当前仓库已经有可复用示例：
 
 - `npm run perf:history-read-model`
+- `npm run perf:dashboard-read-model`
+- `npm run perf:startup-bootstrap`
 
 它不是唯一性能脚本，但代表默认口径：先固定场景，再做前后对照，而不是靠主观感觉宣称“更快了”。
 

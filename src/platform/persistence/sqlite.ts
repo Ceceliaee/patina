@@ -1,9 +1,15 @@
 import Database from "@tauri-apps/plugin-sql";
+import {
+  createSerializedJobRunner,
+  executeTransactionWithExecutor,
+  type SqlWriteOperation,
+} from "./sqliteTransactions.ts";
 
 // Low-level DB adapter only.
 // Read-model queries should live in shared read repositories.
 let dbInstance: Database | null = null;
 let dbInstancePromise: Promise<Database> | null = null;
+const runSerializedWrite = createSerializedJobRunner();
 
 export const getDB = async () => {
   try {
@@ -31,3 +37,21 @@ export const getDB = async () => {
     );
   }
 };
+
+export type { SqlWriteOperation } from "./sqliteTransactions.ts";
+
+export async function executeWrite(query: string, values?: unknown[]): Promise<void> {
+  await runSerializedWrite(async () => {
+    const db = await getDB();
+    await db.execute(query, values);
+  });
+}
+
+export async function executeWriteTransaction(
+  operations: readonly SqlWriteOperation[],
+): Promise<void> {
+  await runSerializedWrite(async () => {
+    const db = await getDB();
+    await executeTransactionWithExecutor(db, operations);
+  });
+}

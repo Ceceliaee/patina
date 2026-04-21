@@ -1,7 +1,9 @@
 import {
   clearSessionsBefore,
+  saveAppSettingsPatch,
   saveAppSetting,
   type AppSettings,
+  type AppSettingsPatch,
 } from "../../../platform/persistence/appSettingsStore.ts";
 import {
   exportBackup,
@@ -30,6 +32,16 @@ export interface BackupRestorePreparation {
 }
 
 type SettingsPatch = Partial<AppSettings>;
+export interface SettingsCommitResult {
+  persisted: boolean;
+  runtimeSync: "synced" | "failed" | "not-needed";
+  runtimeSyncErrors: string[];
+}
+
+interface SettingsCommitDeps {
+  persistPatch: (patch: SettingsPatch) => Promise<void>;
+  syncTimelineMergeGap: (seconds: number) => Promise<void>;
+}
 type ExportBackupDeps = {
   pickBackupSaveFile: (initialPath?: string) => Promise<string | null>;
   exportBackup: (path: string) => Promise<string>;
@@ -61,6 +73,11 @@ const exportBackupDeps: ExportBackupDeps = {
 const prepareBackupRestoreDeps: PrepareBackupRestoreDeps = {
   pickBackupFile,
   previewBackup,
+};
+
+const defaultSettingsCommitDeps: SettingsCommitDeps = {
+  persistPatch: saveAppSettingsPatch,
+  syncTimelineMergeGap: setAfkThreshold,
 };
 
 export async function exportBackupWithPickerWithDeps(
@@ -154,13 +171,44 @@ export class SettingsRuntimeAdapterService {
     return patch;
   }
 
-  static async commitSettingsPatch(patch: SettingsPatch): Promise<void> {
-    const entries = Object.entries(patch) as Array<[keyof AppSettings, AppSettings[keyof AppSettings]]>;
-    for (const [key, value] of entries) {
-      await saveAppSetting(key, value);
-      if (key === "timeline_merge_gap_secs") {
-        await setAfkThreshold(value as number);
-      }
+  static async commitSettingsPatch(patch: SettingsPatch): Promise<SettingsCommitResult> {
+    return commitSettingsPatchWithDeps(patch, defaultSettingsCommitDeps);
+  }
+}
+
+export async function commitSettingsPatchWithDeps(
+  patch: SettingsPatch,
+  deps: SettingsCommitDeps,
+): Promise<SettingsCommitResult> {
+  const entries = Object.entries(patch) as Array<[keyof AppSettings, AppSettings[keyof AppSettings]]>;
+  if (entries.length === 0) {
+    return {
+      persisted: true,
+      runtimeSync: "not-needed",
+      runtimeSyncErrors: [],
+    };
+  }
+
+  await deps.persistPatch(patch as AppSettingsPatch);
+
+  const runtimeSyncErrors: string[] = [];
+  const timelineMergeGapSecs = patch.timeline_merge_gap_secs;
+  const needsRuntimeSync = typeof timelineMergeGapSecs === "number";
+  if (needsRuntimeSync) {
+    try {
+      await deps.syncTimelineMergeGap(timelineMergeGapSecs);
+    } catch (error) {
+      runtimeSyncErrors.push(error instanceof Error ? error.message : String(error));
     }
   }
+
+  return {
+    persisted: true,
+    runtimeSync: !needsRuntimeSync
+      ? "not-needed"
+      : runtimeSyncErrors.length > 0
+        ? "failed"
+        : "synced",
+    runtimeSyncErrors,
+  };
 }

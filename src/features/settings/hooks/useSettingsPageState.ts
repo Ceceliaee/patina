@@ -11,6 +11,10 @@ import {
   runSettingsCleanupFlow,
 } from "../services/settingsPageActions.ts";
 import {
+  cancelSettingsPageState,
+  saveSettingsPageStateWithDeps,
+} from "./settingsPageStateInteractions.ts";
+import {
   DEFAULT_SETTINGS,
   type AppSettings,
 } from "../../../shared/settings/appSettings";
@@ -147,18 +151,36 @@ export function useSettingsPageState({
     if (saveStatus === "saving") return false;
     setSaveStatus("saving");
     try {
-      const patch = SettingsRuntimeAdapterService.buildSettingsPatch(savedSettings, draftSettings);
-      await SettingsRuntimeAdapterService.commitSettingsPatch(patch);
-      setSavedSettings(draftSettings);
-      setSettingsBootstrapCache({
-        settings: { ...draftSettings },
+      const result = await saveSettingsPageStateWithDeps({
+        savedSettings,
+        draftSettings,
         appVersion,
+        hasUnsavedChanges,
+        saveStatus,
+      }, {
+        buildPatch: SettingsRuntimeAdapterService.buildSettingsPatch,
+        commitPatch: SettingsRuntimeAdapterService.commitSettingsPatch,
       });
-      onSettingsChanged(draftSettings);
-      setSaveStatus("saved");
-      window.setTimeout(() => setSaveStatus("idle"), 1800);
-      notify(UI_TEXT.settings.saved, "success");
-      return true;
+      if (result.nextSavedSettings) {
+        setSavedSettings(result.nextSavedSettings);
+      }
+      if (result.nextDraftSettings) {
+        setDraftSettings(result.nextDraftSettings);
+      }
+      if (result.nextBootstrap) {
+        setSettingsBootstrapCache(result.nextBootstrap);
+        onSettingsChanged(result.nextBootstrap.settings);
+      }
+      setSaveStatus(result.nextSaveStatus);
+      if (result.nextSaveStatus === "saved") {
+        window.setTimeout(() => setSaveStatus("idle"), 1800);
+      }
+      if (result.toastKind === "runtime-sync-warning") {
+        notify("设置已保存，但部分运行时同步未完成。重启或下次刷新后会重新生效。", "warning");
+      } else {
+        notify(UI_TEXT.settings.saved, "success");
+      }
+      return result.accepted;
     } catch (error) {
       console.error("save settings failed", error);
       setSaveStatus("idle");
@@ -175,10 +197,16 @@ export function useSettingsPageState({
   }, [handleSave, onRegisterSaveHandler]);
 
   const handleCancel = useCallback(() => {
-    if (!savedSettings || !hasUnsavedChanges) return;
-    setDraftSettings(savedSettings);
-    setSaveStatus("idle");
-    notify(UI_TEXT.settings.cancelled, "info");
+    const result = cancelSettingsPageState({
+      savedSettings,
+      hasUnsavedChanges,
+    });
+    if (!result.cancelled || !result.nextDraftSettings) return;
+    setDraftSettings(result.nextDraftSettings);
+    setSaveStatus(result.nextSaveStatus);
+    if (result.toastKind === "cancelled") {
+      notify(UI_TEXT.settings.cancelled, "info");
+    }
   }, [hasUnsavedChanges, notify, savedSettings]);
 
   const handleCleanup = useCallback(async () => {

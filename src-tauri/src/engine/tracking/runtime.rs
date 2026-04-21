@@ -5,36 +5,39 @@ use super::session_timeout::{
     should_suspend_active_tracking,
 };
 use super::sustained_participation::{
-    apply_tracking_mode_window_state, load_sustained_participation_signals,
-    resolve_tracking_status_with_runtime, SustainedParticipationRuntimeState,
+    SustainedParticipationRuntimeState,
 };
 use super::{active_session, continuity, startup, transition, watchdog};
-use crate::data::repositories::{sessions, tracker_settings};
 use crate::data::sqlite_pool::wait_for_sqlite_pool;
 #[cfg(test)]
+use crate::data::repositories::{sessions, tracker_settings};
+#[cfg(test)]
 use crate::domain::tracking::TRACKING_REASON_TRACKING_PAUSED_SEALED;
-use crate::domain::tracking::{TrackingDataChangedPayload, TrackingStatusSnapshot};
+#[cfg(test)]
+use crate::domain::tracking::TrackingDataChangedPayload;
+use crate::domain::tracking::TrackingStatusSnapshot;
 use crate::platform::windows::foreground as tracker;
 use sqlx::{Pool, Sqlite};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Runtime};
-use tokio::task::spawn_blocking;
-use tokio::time::{sleep, timeout, Duration};
+use tokio::time::{sleep, Duration};
 
-const WINDOW_POLL_TIMEOUT_SECS: u64 = 3;
+#[path = "runtime/loop_state.rs"]
+mod loop_state;
+#[path = "runtime/power_lifecycle.rs"]
+mod power_lifecycle;
+#[path = "runtime/support.rs"]
+mod support;
+#[path = "runtime/window_polling.rs"]
+mod window_polling;
 
-struct TrackingLoopState {
-    continuity_window_secs: u64,
-    sustained_participation_secs: u64,
-    tracking_paused: bool,
-    tracked_window: tracker::WindowInfo,
-    tracking_status: TrackingStatusSnapshot,
-}
-
-pub struct CurrentTrackingSnapshotData {
-    pub window: tracker::WindowInfo,
-    pub status: TrackingStatusSnapshot,
-}
+use loop_state::{
+    load_tracking_loop_state, persist_tracker_runtime_timestamps, CurrentTrackingSnapshotData,
+};
+use power_lifecycle::apply_power_lifecycle_event;
+pub use support::emit_tracking_data_changed;
+use support::{log_tracker_error, now_ms};
+use window_polling::poll_active_window_with_timeout;
 
 pub async fn run<R: Runtime>(
     app: AppHandle<R>,
@@ -227,167 +230,6 @@ pub async fn handle_power_lifecycle_event<R: Runtime>(
     }
 
     Ok(())
-}
-
-async fn persist_tracker_runtime_timestamps(pool: &Pool<Sqlite>, now_ms: i64) {
-    for (setting_key, error_context) in [
-        (
-            tracker_settings::TRACKER_LAST_SUCCESSFUL_SAMPLE_KEY,
-            "sample timestamp",
-        ),
-        (tracker_settings::TRACKER_LAST_HEARTBEAT_KEY, "heartbeat"),
-    ] {
-        if let Err(error) =
-            tracker_settings::save_tracker_timestamp(pool, setting_key, now_ms).await
-        {
-            log_tracker_error(format!("failed to save tracker {error_context}: {error}"));
-        }
-    }
-}
-
-async fn load_tracking_loop_state(
-    pool: &Pool<Sqlite>,
-    window_info: &tracker::WindowInfo,
-    now_ms: i64,
-    previous_state: &SustainedParticipationRuntimeState,
-) -> (TrackingLoopState, SustainedParticipationRuntimeState) {
-    let continuity_window_secs =
-        match tracker_settings::load_timeline_merge_gap_secs(pool, 180).await {
-            Ok(value) => value,
-            Err(error) => {
-                log_tracker_error(format!("failed to load continuity window setting: {error}"));
-                180
-            }
-        };
-
-    let tracking_paused = match tracker_settings::load_tracking_paused_setting(pool).await {
-        Ok(value) => value,
-        Err(error) => {
-            log_tracker_error(format!("failed to load tracking pause setting: {error}"));
-            false
-        }
-    };
-
-    let sustained_participation_secs =
-        match tracker_settings::load_idle_timeout_secs(pool, 300).await {
-            Ok(value) => value,
-            Err(error) => {
-                log_tracker_error(format!(
-                    "failed to load sustained participation setting: {error}"
-                ));
-                300
-            }
-        };
-
-    let capture_window_title = match tracker_settings::load_capture_window_title_setting_for_app(
-        pool,
-        &window_info.exe_name,
-    )
-    .await
-    {
-        Ok(value) => value,
-        Err(error) => {
-            log_tracker_error(format!(
-                "failed to load app capture title setting for {}: {error}",
-                window_info.exe_name
-            ));
-            true
-        }
-    };
-
-    let mut tracked_window = window_info.clone();
-    if !capture_window_title {
-        tracked_window.title.clear();
-    }
-
-    let (system_media_signal, audio_signal) =
-        load_sustained_participation_signals(&tracked_window, tracking_paused).await;
-    let (tracking_status, next_sustained_participation_state) =
-        resolve_tracking_status_with_runtime(
-            &tracked_window.exe_name,
-            &tracked_window.process_path,
-            tracked_window.idle_time_ms,
-            tracked_window.is_afk,
-            continuity_window_secs,
-            sustained_participation_secs,
-            tracking_paused,
-            now_ms,
-            previous_state,
-            &system_media_signal,
-            &audio_signal,
-        );
-    let tracked_window = apply_tracking_mode_window_state(tracked_window, &tracking_status);
-
-    (
-        TrackingLoopState {
-            continuity_window_secs,
-            sustained_participation_secs,
-            tracking_paused,
-            tracked_window,
-            tracking_status,
-        },
-        next_sustained_participation_state,
-    )
-}
-
-async fn poll_active_window_with_timeout() -> Result<tracker::WindowInfo, String> {
-    match timeout(
-        Duration::from_secs(WINDOW_POLL_TIMEOUT_SECS),
-        spawn_blocking(tracker::get_active_window),
-    )
-    .await
-    {
-        Ok(Ok(window_info)) => Ok(window_info),
-        Ok(Err(error)) => Err(format!("active window poll task failed: {error}")),
-        Err(_) => Err(format!(
-            "active window poll timed out after {} seconds",
-            WINDOW_POLL_TIMEOUT_SECS
-        )),
-    }
-}
-
-async fn apply_power_lifecycle_event(
-    pool: &Pool<Sqlite>,
-    state: &str,
-    timestamp_ms: i64,
-) -> Result<Option<&'static str>, sqlx::Error> {
-    let should_end_active_session = matches!(state, "lock" | "suspend");
-
-    if !should_end_active_session {
-        return Ok(None);
-    }
-
-    if sessions::end_active_sessions(pool, timestamp_ms).await? {
-        return Ok(Some(match state {
-            "lock" => "session-ended-lock",
-            "suspend" => "session-ended-suspend",
-            _ => "session-ended-system",
-        }));
-    }
-
-    Ok(None)
-}
-
-fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as i64)
-        .unwrap_or_default()
-}
-
-pub fn emit_tracking_data_changed<R: Runtime>(
-    app: &AppHandle<R>,
-    reason: &str,
-    changed_at_ms: u64,
-) -> tauri::Result<()> {
-    app.emit(
-        "tracking-data-changed",
-        TrackingDataChangedPayload::new(reason, changed_at_ms),
-    )
-}
-
-fn log_tracker_error(message: impl AsRef<str>) {
-    eprintln!("[tracker] {}", message.as_ref());
 }
 
 #[cfg(test)]

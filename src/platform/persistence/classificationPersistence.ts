@@ -1,4 +1,4 @@
-import { getDB } from "./sqlite.ts";
+import { executeWrite, getDB } from "./sqlite.ts";
 
 export interface SettingKeyValueRow {
   key: string;
@@ -21,21 +21,18 @@ export interface ObservedSessionStatRow {
 }
 
 export async function upsertSettingValue(key: string, value: string): Promise<void> {
-  const db = await getDB();
-  await db.execute(
+  await executeWrite(
     "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
     [key, value],
   );
 }
 
 export async function deleteSettingValue(key: string): Promise<void> {
-  const db = await getDB();
-  await db.execute("DELETE FROM settings WHERE key = ?", [key]);
+  await executeWrite("DELETE FROM settings WHERE key = ?", [key]);
 }
 
 export async function deleteSettingsByKeyPrefix(keyPrefix: string): Promise<void> {
-  const db = await getDB();
-  await db.execute("DELETE FROM settings WHERE key LIKE ?", [`${keyPrefix}%`]);
+  await executeWrite("DELETE FROM settings WHERE key LIKE ?", [`${keyPrefix}%`]);
 }
 
 export async function loadSettingRowsByKeyPrefix(keyPrefix: string): Promise<SettingKeyValueRow[]> {
@@ -84,9 +81,8 @@ export async function deleteSessionsByExeNames(exeNames: string[]): Promise<void
   if (exeNames.length === 0) {
     return;
   }
-  const db = await getDB();
   const placeholders = buildInClausePlaceholders(exeNames);
-  await db.execute(
+  await executeWrite(
     `DELETE FROM sessions WHERE exe_name IN (${placeholders})`,
     exeNames,
   );
@@ -100,9 +96,8 @@ export async function deleteSessionsByExeNamesBetween(
   if (exeNames.length === 0) {
     return;
   }
-  const db = await getDB();
   const placeholders = buildInClausePlaceholders(exeNames);
-  await db.execute(
+  await executeWrite(
     `DELETE FROM sessions
      WHERE exe_name IN (${placeholders})
        AND start_time >= ?

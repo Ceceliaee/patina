@@ -24,6 +24,13 @@ import {
   filterAndSortCandidates,
 } from "./appMappingStateHelpers.ts";
 import {
+  cancelAppMappingNameEdit,
+  deleteObservedCandidateSessionsWithDeps,
+  saveAppMappingStateWithDeps,
+  startAppMappingNameEdit,
+  syncAppMappingNameDraft,
+} from "./appMappingInteractions.ts";
+import {
   buildCustomCategory,
   isCustomCategory,
   USER_ASSIGNABLE_CATEGORIES,
@@ -252,6 +259,7 @@ export function useAppMappingState({
         loadedDeletedCategories: [...savedState.deletedCategories],
       });
     }
+    return observed;
   }, [savedState]);
 
   const updateOverride = useCallback((exeName: string, nextOverride: AppOverride | null) => {
@@ -378,23 +386,20 @@ export function useAppMappingState({
     nextInputValue: string,
     normalizeInputDraft: boolean = false,
   ) => {
-    const draftRaw = nextInputValue.trim();
     const autoName = resolveAutoDisplayName(candidate);
-    const displayName = draftRaw && draftRaw !== autoName ? draftRaw : undefined;
-    const current = draftOverrides[candidate.exeName] ?? null;
-    const nextOverride = buildAppMappingOverride({
-      category: current?.category,
-      color: current?.color,
-      displayName,
-      track: current?.track !== false,
-      captureTitle: current?.captureTitle !== false,
-      updatedAt: current?.updatedAt,
+    setDraftState((current) => {
+      if (!current) return current;
+      const nextState = syncAppMappingNameDraft({
+        draftState: current,
+        nameDrafts,
+        nameEditSnapshots,
+        editingNameExe,
+        skipNextNameBlurExe: skipNextNameBlurExeRef.current,
+      }, candidate, nextInputValue, autoName, normalizeInputDraft);
+      setNameDrafts(nextState.nameDrafts);
+      skipNextNameBlurExeRef.current = nextState.skipNextNameBlurExe;
+      return nextState.draftState;
     });
-    updateOverride(candidate.exeName, nextOverride);
-    setNameDrafts((prev) => ({
-      ...prev,
-      [candidate.exeName]: normalizeInputDraft ? (displayName ?? autoName) : nextInputValue,
-    }));
   }, [draftOverrides, resolveAutoDisplayName, updateOverride]);
 
   const resolveDisplayNameFromOverride = useCallback((
@@ -418,36 +423,46 @@ export function useAppMappingState({
   }, [nameDrafts, resolveEffectiveDisplayName, syncNameDraftToPageDraft]);
 
   const handleNameEditCancel = useCallback((candidate: ObservedAppCandidate) => {
-    skipNextNameBlurExeRef.current = candidate.exeName;
     const snapshot = Object.prototype.hasOwnProperty.call(nameEditSnapshots, candidate.exeName)
       ? nameEditSnapshots[candidate.exeName]
       : (draftOverrides[candidate.exeName] ?? null);
-    updateOverride(candidate.exeName, snapshot);
-    setNameDrafts((prev) => ({
-      ...prev,
-      [candidate.exeName]: resolveDisplayNameFromOverride(candidate, snapshot),
-    }));
-    setNameEditSnapshots((prev) => {
-      const next = { ...prev };
-      delete next[candidate.exeName];
-      return next;
-    });
-    setEditingNameExe((prev) => (prev === candidate.exeName ? null : prev));
-  }, [draftOverrides, nameEditSnapshots, resolveDisplayNameFromOverride, updateOverride]);
+    const nextState = cancelAppMappingNameEdit({
+      draftState: draftState ?? savedState ?? {
+        overrides: {},
+        categoryColorOverrides: {},
+        customCategories: [],
+        deletedCategories: [],
+      },
+      nameDrafts,
+      nameEditSnapshots,
+      editingNameExe,
+      skipNextNameBlurExe: skipNextNameBlurExeRef.current,
+    }, candidate, resolveDisplayNameFromOverride(candidate, snapshot));
+    skipNextNameBlurExeRef.current = nextState.skipNextNameBlurExe;
+    setDraftState(nextState.draftState);
+    setNameDrafts(nextState.nameDrafts);
+    setNameEditSnapshots(nextState.nameEditSnapshots);
+    setEditingNameExe(nextState.editingNameExe);
+  }, [draftOverrides, draftState, editingNameExe, nameDrafts, nameEditSnapshots, resolveDisplayNameFromOverride, savedState]);
 
   const startNameEdit = useCallback((candidate: ObservedAppCandidate) => {
     const displayName = resolveEffectiveDisplayName(candidate);
-    skipNextNameBlurExeRef.current = null;
-    setNameEditSnapshots((prev) => ({
-      ...prev,
-      [candidate.exeName]: draftOverrides[candidate.exeName] ?? null,
-    }));
-    setEditingNameExe(candidate.exeName);
-    setNameDrafts((prev) => ({
-      ...prev,
-      [candidate.exeName]: prev[candidate.exeName] ?? displayName,
-    }));
-  }, [draftOverrides, resolveEffectiveDisplayName]);
+    const baseDraftState = draftState ?? savedState;
+    if (!baseDraftState) {
+      return;
+    }
+    const nextState = startAppMappingNameEdit({
+      draftState: baseDraftState,
+      nameDrafts,
+      nameEditSnapshots,
+      editingNameExe,
+      skipNextNameBlurExe: skipNextNameBlurExeRef.current,
+    }, candidate, displayName);
+    skipNextNameBlurExeRef.current = nextState.skipNextNameBlurExe;
+    setNameEditSnapshots(nextState.nameEditSnapshots);
+    setEditingNameExe(nextState.editingNameExe);
+    setNameDrafts(nextState.nameDrafts);
+  }, [draftState, editingNameExe, nameDrafts, nameEditSnapshots, resolveEffectiveDisplayName, savedState]);
 
   const handleResetAppOverride = useCallback((candidate: ObservedAppCandidate) => {
     updateOverride(candidate.exeName, null);
@@ -456,18 +471,22 @@ export function useAppMappingState({
 
   const handleDeleteAllSessions = useCallback(async (candidate: ObservedAppCandidate) => {
     const displayName = resolveEffectiveDisplayName(candidate);
-    const confirmed = await confirm({
-      title: UI_TEXT.mapping.deleteAppSessionsTitle,
-      description: UI_TEXT.mapping.deleteAppSessionsDetail(displayName),
-      confirmLabel: UI_TEXT.dialog.confirmDanger,
-      danger: true,
-    });
-    if (!confirmed) return;
     setDeletingSessionsExe(candidate.exeName);
     try {
-      await ClassificationService.deleteObservedAppSessions(candidate.exeName, "all");
-      await refreshCandidates();
-      onSessionsDeleted?.();
+      const result = await deleteObservedCandidateSessionsWithDeps(candidate, {
+        confirmDelete: () => confirm({
+          title: UI_TEXT.mapping.deleteAppSessionsTitle,
+          description: UI_TEXT.mapping.deleteAppSessionsDetail(displayName),
+          confirmLabel: UI_TEXT.dialog.confirmDanger,
+          danger: true,
+        }),
+        deleteObservedAppSessions: ClassificationService.deleteObservedAppSessions,
+        refreshCandidates,
+        onSessionsDeleted,
+      });
+      if (!result.deleted) {
+        return;
+      }
     } finally {
       setDeletingSessionsExe(null);
     }
@@ -506,22 +525,35 @@ export function useAppMappingState({
     setSaving(true);
     setSaveStatus("saving");
     try {
-      await ClassificationService.commitDraftChanges(savedState, draftState);
-      setSavedState(draftState);
-      setClassificationBootstrapCache({
-        observed: cloneObservedCandidates(candidates),
-        loadedOverrides: { ...draftState.overrides },
-        loadedCategoryColorOverrides: { ...draftState.categoryColorOverrides },
-        loadedCustomCategories: [...draftState.customCategories],
-        loadedDeletedCategories: [...draftState.deletedCategories],
+      const result = await saveAppMappingStateWithDeps({
+        savedState,
+        draftState,
+        candidates,
+        hasUnsavedChanges,
+        saving,
+      }, {
+        commitDraftChanges: ClassificationService.commitDraftChanges,
       });
-      setNameEditSnapshots({});
-      setEditingNameExe(null);
-      skipNextNameBlurExeRef.current = null;
-      onOverridesChanged?.();
-      setSaveStatus("saved");
-      window.setTimeout(() => setSaveStatus("idle"), 1800);
-      return true;
+      if (result.nextSavedState) {
+        setSavedState(result.nextSavedState);
+      }
+      if (result.nextDraftState) {
+        setDraftState(result.nextDraftState);
+      }
+      if (result.nextBootstrap) {
+        setClassificationBootstrapCache(result.nextBootstrap);
+      }
+      if (result.resetEditingState) {
+        setNameEditSnapshots({});
+        setEditingNameExe(null);
+        skipNextNameBlurExeRef.current = null;
+        onOverridesChanged?.();
+      }
+      setSaveStatus(result.nextSaveStatus);
+      if (result.nextSaveStatus === "saved") {
+        window.setTimeout(() => setSaveStatus("idle"), 1800);
+      }
+      return result.accepted;
     } catch (error) {
       console.error("save app mapping failed", error);
       setSaveStatus("idle");

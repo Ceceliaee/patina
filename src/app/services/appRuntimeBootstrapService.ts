@@ -2,18 +2,18 @@ import type {
   TrackerHealthSnapshot,
   TrackingStatusSnapshot,
   TrackingWindowSnapshot,
-} from "../../shared/types/tracking";
+} from "../../shared/types/tracking.ts";
 import type { AppSettings } from "./appSettingsRuntimeService.ts";
-import { resolveTrackerHealth } from "../../shared/types/tracking";
+import { resolveTrackerHealth } from "../../shared/types/tracking.ts";
 import {
   getCurrentTrackingSnapshot,
   setAfkThreshold,
-} from "../../platform/runtime/trackingRuntimeGateway";
+} from "../../platform/runtime/trackingRuntimeGateway.ts";
 import {
   loadCurrentAppSettings,
   loadTrackerHealthTimestampMs,
 } from "./appSettingsRuntimeService.ts";
-import { initializeProcessMapperRuntime } from "./processMapperRuntimeService";
+import { initializeProcessMapperRuntime } from "./processMapperRuntimeService.ts";
 
 export const TRACKER_HEARTBEAT_STALE_AFTER_MS = 8_000;
 
@@ -22,6 +22,14 @@ export interface AppRuntimeBootstrapSnapshot {
   activeWindow: TrackingWindowSnapshot | null;
   trackingStatus: TrackingStatusSnapshot;
   trackerHealth: TrackerHealthSnapshot;
+}
+
+interface AppRuntimeBootstrapDeps {
+  loadCurrentAppSettings: () => Promise<AppSettings>;
+  setAfkThreshold: (seconds: number) => Promise<void>;
+  initializeProcessMapperRuntime: () => Promise<void>;
+  getCurrentTrackingSnapshot: typeof getCurrentTrackingSnapshot;
+  loadTrackerHealthSnapshot: (nowMs?: number) => Promise<TrackerHealthSnapshot>;
 }
 
 const DEFAULT_TRACKING_STATUS: TrackingStatusSnapshot = {
@@ -64,6 +72,14 @@ const DEFAULT_TRACKING_STATUS: TrackingStatusSnapshot = {
   },
 };
 
+const appRuntimeBootstrapDeps: AppRuntimeBootstrapDeps = {
+  loadCurrentAppSettings,
+  setAfkThreshold,
+  initializeProcessMapperRuntime,
+  getCurrentTrackingSnapshot,
+  loadTrackerHealthSnapshot,
+};
+
 export async function loadTrackerHealthSnapshot(nowMs: number = Date.now()): Promise<TrackerHealthSnapshot> {
   try {
     const lastHeartbeatMs = await loadTrackerHealthTimestampMs();
@@ -75,14 +91,20 @@ export async function loadTrackerHealthSnapshot(nowMs: number = Date.now()): Pro
 }
 
 export async function loadAppRuntimeBootstrapSnapshot(): Promise<AppRuntimeBootstrapSnapshot> {
-  const settings = await loadCurrentAppSettings();
-  await setAfkThreshold(settings.timeline_merge_gap_secs).catch(console.warn);
+  return loadAppRuntimeBootstrapSnapshotWithDeps(appRuntimeBootstrapDeps);
+}
 
-  await initializeProcessMapperRuntime();
+export async function loadAppRuntimeBootstrapSnapshotWithDeps(
+  deps: AppRuntimeBootstrapDeps,
+): Promise<AppRuntimeBootstrapSnapshot> {
+  const settings = await deps.loadCurrentAppSettings();
+  await deps.setAfkThreshold(settings.timeline_merge_gap_secs).catch(console.warn);
+
+  await deps.initializeProcessMapperRuntime();
 
   const [trackingSnapshot, trackerHealth] = await Promise.all([
-    getCurrentTrackingSnapshot(),
-    loadTrackerHealthSnapshot(),
+    deps.getCurrentTrackingSnapshot(),
+    deps.loadTrackerHealthSnapshot(),
   ]);
 
   return {

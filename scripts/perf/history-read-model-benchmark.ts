@@ -1,9 +1,9 @@
-import { performance } from "node:perf_hooks";
 import { buildTimelineSessions } from "../../src/shared/lib/sessionReadCompiler.ts";
 import { compileForRange, materializeLiveSessions } from "../../src/shared/lib/readModelCore.ts";
 import { buildHistoryReadModel } from "../../src/features/history/services/historyReadModel.ts";
 import { resolveTrackerHealth } from "../../src/shared/types/tracking.ts";
 import type { HistorySession } from "../../src/shared/lib/sessionReadRepository.ts";
+import { measureBenchmark, printBenchmarkReport } from "./benchmarkUtils.ts";
 
 function makeSession(id: number, startTime: number, duration: number, exeName: string): HistorySession {
   return {
@@ -35,20 +35,6 @@ function buildSyntheticSessions(): HistorySession[] {
   return sessions;
 }
 
-function measure(label: string, run: () => void, iterations: number) {
-  const startedAt = performance.now();
-  for (let index = 0; index < iterations; index += 1) {
-    run();
-  }
-  const elapsedMs = performance.now() - startedAt;
-  return {
-    label,
-    iterations,
-    elapsedMs,
-    averageMs: elapsedMs / iterations,
-  };
-}
-
 const sessions = buildSyntheticSessions();
 const trackerHealth = resolveTrackerHealth(Date.now(), Date.now(), 8_000);
 const selectedDate = new Date(2026, 3, 18, 12, 0, 0, 0);
@@ -59,14 +45,14 @@ const iterations = 250;
 
 const liveSessions = materializeLiveSessions(sessions, trackerHealth, nowMs);
 
-const baseline = measure("baseline-double-compile", () => {
+const baseline = measureBenchmark("legacy-double-compile", iterations, 130, () => {
   const compiledSessions = compileForRange(liveSessions, { startMs: rangeStart, endMs: rangeEnd }, 0);
   const timelineSourceSessions = compileForRange(liveSessions, { startMs: rangeStart, endMs: rangeEnd }, 0);
   buildTimelineSessions(timelineSourceSessions, 180);
   void compiledSessions;
-}, iterations);
+});
 
-const optimized = measure("optimized-single-compile", () => {
+const optimized = measureBenchmark("current-history-read-model", iterations, 170, () => {
   buildHistoryReadModel({
     daySessions: sessions,
     weeklySessions: sessions,
@@ -76,14 +62,19 @@ const optimized = measure("optimized-single-compile", () => {
     minSessionSecs: 0,
     mergeThresholdSecs: 180,
   });
-}, iterations);
+});
 
 const improvementMs = baseline.averageMs - optimized.averageMs;
 const improvementRatio = baseline.averageMs === 0 ? 0 : improvementMs / baseline.averageMs;
 
-console.log(JSON.stringify({
-  baseline,
-  optimized,
-  improvementMs,
-  improvementRatio,
-}, null, 2));
+printBenchmarkReport({
+  benchmark: "history-read-model",
+  measuredAt: new Date().toISOString(),
+  measurements: [baseline, optimized],
+  metadata: {
+    sessionCount: sessions.length,
+    selectedDate: selectedDate.toISOString(),
+    improvementMs,
+    improvementRatio,
+  },
+});

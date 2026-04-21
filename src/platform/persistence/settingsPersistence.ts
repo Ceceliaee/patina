@@ -1,4 +1,4 @@
-import { getDB } from "./sqlite.ts";
+import { executeWrite, getDB } from "./sqlite.ts";
 
 export interface SettingRow {
   key: string;
@@ -6,8 +6,7 @@ export interface SettingRow {
 }
 
 export async function upsertSettingValue(key: string, value: string): Promise<void> {
-  const db = await getDB();
-  await db.execute(
+  await executeWrite(
     "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
     [key, value],
   );
@@ -34,13 +33,11 @@ export async function loadAllSettingRows(): Promise<SettingRow[]> {
 }
 
 export async function deleteSessionsBefore(cutoffTime: number): Promise<void> {
-  const db = await getDB();
-  await db.execute("DELETE FROM sessions WHERE start_time < ?", [cutoffTime]);
+  await executeWrite("DELETE FROM sessions WHERE start_time < ?", [cutoffTime]);
 }
 
 export async function clearAllSessionWindowTitles(): Promise<void> {
-  const db = await getDB();
-  await db.execute(
+  await executeWrite(
     "UPDATE sessions SET window_title = '' WHERE COALESCE(window_title, '') <> ''",
   );
 }

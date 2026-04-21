@@ -10,6 +10,10 @@ import {
 } from "../src/features/classification/hooks/appMappingStateHelpers.ts";
 import type { ObservedAppCandidate } from "../src/features/classification/services/classificationStore.ts";
 import {
+  type ClassificationCommitDeps,
+  commitDraftChangesWithDeps,
+} from "../src/features/classification/services/classificationService.ts";
+import {
   buildClassificationDraftChangePlan,
   cloneClassificationDraftState,
   hasClassificationDraftChanges,
@@ -260,6 +264,81 @@ await runTest("filterAndSortCandidates filters by category and sorts by resolved
     filtered.map((candidate) => candidate.exeName),
     ["notes.exe", "alpha.exe", "zeta.exe"],
   );
+});
+
+await runTest("commitDraftChangesWithDeps persists before syncing process mapper state", async () => {
+  const events: string[] = [];
+  const saved = buildDraftState();
+  const draft = buildDraftState({
+    overrides: {
+      "chrome.exe": {
+        enabled: true,
+        displayName: "Work Browser",
+      },
+    },
+    categoryColorOverrides: {
+      development: "#112233",
+    },
+    deletedCategories: ["music"],
+  });
+  const deps: ClassificationCommitDeps = {
+    commitChangePlan: async (changePlan) => {
+      events.push(`commit:${changePlan.overrideUpserts.length}:${changePlan.categoryColorUpdates.length}`);
+    },
+    setUserOverrides: () => {
+      events.push("sync:user");
+    },
+    setCategoryColorOverrides: () => {
+      events.push("sync:color");
+    },
+    setDeletedCategories: () => {
+      events.push("sync:deleted");
+    },
+  };
+
+  await commitDraftChangesWithDeps(saved, draft, deps);
+
+  assert.deepEqual(events, [
+    "commit:1:1",
+    "sync:user",
+    "sync:color",
+    "sync:deleted",
+  ]);
+});
+
+await runTest("commitDraftChangesWithDeps does not sync process mapper state when persistence fails", async () => {
+  const events: string[] = [];
+  const saved = buildDraftState();
+  const draft = buildDraftState({
+    overrides: {
+      "chrome.exe": {
+        enabled: true,
+        displayName: "Work Browser",
+      },
+    },
+  });
+  const deps: ClassificationCommitDeps = {
+    commitChangePlan: async () => {
+      events.push("commit");
+      throw new Error("sqlite busy");
+    },
+    setUserOverrides: () => {
+      events.push("sync:user");
+    },
+    setCategoryColorOverrides: () => {
+      events.push("sync:color");
+    },
+    setDeletedCategories: () => {
+      events.push("sync:deleted");
+    },
+  };
+
+  await assert.rejects(
+    commitDraftChangesWithDeps(saved, draft, deps),
+    /sqlite busy/,
+  );
+
+  assert.deepEqual(events, ["commit"]);
 });
 
 console.log(`Passed ${passed} classification draft state tests`);
