@@ -64,4 +64,7 @@ export async function measureAsyncBenchmark(
 
 export function printBenchmarkReport(report: BenchmarkReport) {
   console.log(JSON.stringify(report, null, 2));
+  if (report.measurements.some((measurement) => !measurement.withinBudget)) {
+    process.exitCode = 1;
+  }
 }

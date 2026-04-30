@@ -1,20 +1,22 @@
 import { useEffect, useState } from "react";
-import { getIconMap } from "../../platform/persistence/sessionReadRepository.ts";
+import { loadWidgetObjectIcon } from "../widget/widgetIconService.ts";
 
 export function useWidgetObjectIcon(objectIconKey: string | null) {
-  const [icons, setIcons] = useState<Record<string, string>>({});
+  const [icon, setIcon] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!objectIconKey || icons[objectIconKey]) {
+    if (!objectIconKey) {
+      setIcon(null);
       return;
     }
 
     let cancelled = false;
+    setIcon(null);
 
-    void getIconMap()
-      .then((nextIcons) => {
+    void loadWidgetObjectIcon(objectIconKey)
+      .then((nextIcon) => {
         if (!cancelled) {
-          setIcons(nextIcons);
+          setIcon(nextIcon);
         }
       })
       .catch((error) => {
@@ -26,7 +28,7 @@ export function useWidgetObjectIcon(objectIconKey: string | null) {
     return () => {
       cancelled = true;
     };
-  }, [icons, objectIconKey]);
+  }, [objectIconKey]);
 
-  return objectIconKey ? icons[objectIconKey] ?? null : null;
+  return objectIconKey ? icon : null;
 }

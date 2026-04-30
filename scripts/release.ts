@@ -1,6 +1,7 @@
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 
 const ROOT = process.cwd();
 const CHANGELOG_PATH = path.join(ROOT, "CHANGELOG.md");
@@ -10,9 +11,11 @@ const TAURI_CONFIG_PATH = path.join(ROOT, "src-tauri", "tauri.conf.json");
 const TAURI_DEV_CONFIG_PATH = path.join(ROOT, "src-tauri", "tauri.dev.conf.json");
 const TAURI_LOCAL_CONFIG_PATH = path.join(ROOT, "src-tauri", "tauri.local.conf.json");
 const CARGO_TOML_PATH = path.join(ROOT, "src-tauri", "Cargo.toml");
+const VERSION_POLICY_PATH = path.join(ROOT, "docs", "versioning-and-release-policy.md");
 
 const VERSION_PATTERN =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9A-Za-z-][0-9A-Za-z-]*))*))?$/;
+const VERSION_POLICY_CURRENT_CODE_VERSION_PATTERN = /(- 代码版本为 `)([^`]+)(`)/;
 
 function fail(message) {
   console.error(`release: ${message}`);
@@ -51,6 +54,43 @@ async function updateJsonVersion(filePath, version, updateLockRoot = false) {
   }
 
   await writeJson(filePath, json);
+}
+
+export function syncVersionPolicyCurrentCodeVersion(content, version) {
+  assertVersion(version);
+
+  if (!VERSION_POLICY_CURRENT_CODE_VERSION_PATTERN.test(content)) {
+    fail("could not find current code version in docs/versioning-and-release-policy.md");
+  }
+
+  return content.replace(
+    VERSION_POLICY_CURRENT_CODE_VERSION_PATTERN,
+    `$1${version}$3`,
+  );
+}
+
+export function readVersionPolicyCurrentCodeVersion(content) {
+  return VERSION_POLICY_CURRENT_CODE_VERSION_PATTERN.exec(content)?.[2] ?? null;
+}
+
+export function validateVersionPolicyCurrentCodeVersionText(content, version) {
+  const policyVersion = readVersionPolicyCurrentCodeVersion(content);
+
+  if (!policyVersion) {
+    return "docs/versioning-and-release-policy.md is missing current code version";
+  }
+
+  if (policyVersion !== version) {
+    return `docs/versioning-and-release-policy.md current code version is ${policyVersion}, expected ${version}`;
+  }
+
+  return null;
+}
+
+async function updateVersionPolicyCurrentCodeVersion(version) {
+  const versionPolicy = await readText(VERSION_POLICY_PATH);
+  const updatedVersionPolicy = syncVersionPolicyCurrentCodeVersion(versionPolicy, version);
+  await writeFile(VERSION_POLICY_PATH, updatedVersionPolicy, "utf8");
 }
 
 async function syncVersion(version) {
@@ -96,6 +136,7 @@ async function syncVersion(version) {
   );
 
   await writeFile(CARGO_TOML_PATH, updatedCargoToml, "utf8");
+  await updateVersionPolicyCurrentCodeVersion(version);
 }
 
 async function resolveTargetVersion(version) {
@@ -191,6 +232,7 @@ async function validateChangelog(version) {
   const parsed = await parseChangelog(version);
   assertFinalField("Release", parsed.release, parsed.version);
   assertFinalField("App note", parsed.appNote, parsed.version);
+  await validateVersionPolicyCurrentCodeVersion(parsed.version);
 
   if (parsed.release.length > 100) {
     fail(`CHANGELOG.md ${parsed.version} Release is too long; keep it short`);
@@ -198,6 +240,15 @@ async function validateChangelog(version) {
 
   if (parsed.appNote.length > 40) {
     fail(`CHANGELOG.md ${parsed.version} App note is too long; keep it lighter`);
+  }
+}
+
+async function validateVersionPolicyCurrentCodeVersion(version) {
+  const versionPolicy = await readText(VERSION_POLICY_PATH);
+  const error = validateVersionPolicyCurrentCodeVersionText(versionPolicy, version);
+
+  if (error) {
+    fail(error);
   }
 }
 
@@ -341,28 +392,34 @@ function help() {
 `);
 }
 
-const [command, ...args] = process.argv.slice(2);
+async function main() {
+  const [command, ...args] = process.argv.slice(2);
 
-switch (command) {
-  case "sync-version":
-    await syncVersion(args[0]);
-    break;
-  case "validate-changelog":
-    await validateChangelog(args[0]);
-    break;
-  case "print-release-notes":
-    await printReleaseNotes(args[0]);
-    break;
-  case "write-release-notes":
-    await writeReleaseNotes(args[0], args[1]);
-    break;
-  case "write-latest-json":
-    await writeLatestJson(args[0], args[1], args[2], args[3], args[4]);
-    break;
-  case "prepare-release-assets":
-    await prepareReleaseAssets(args[0], args[1], args[2], args[3], args[4]);
-    break;
-  default:
-    help();
-    process.exit(command ? 1 : 0);
+  switch (command) {
+    case "sync-version":
+      await syncVersion(args[0]);
+      break;
+    case "validate-changelog":
+      await validateChangelog(args[0]);
+      break;
+    case "print-release-notes":
+      await printReleaseNotes(args[0]);
+      break;
+    case "write-release-notes":
+      await writeReleaseNotes(args[0], args[1]);
+      break;
+    case "write-latest-json":
+      await writeLatestJson(args[0], args[1], args[2], args[3], args[4]);
+      break;
+    case "prepare-release-assets":
+      await prepareReleaseAssets(args[0], args[1], args[2], args[3], args[4]);
+      break;
+    default:
+      help();
+      process.exit(command ? 1 : 0);
+  }
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await main();
 }

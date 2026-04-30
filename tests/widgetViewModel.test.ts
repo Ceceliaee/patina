@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import {
+  loadWidgetObjectIconWithDeps,
+  resetWidgetIconCacheForTests,
+} from "../src/app/widget/widgetIconService.ts";
 import { buildWidgetViewModel, isWidgetSelfWindow } from "../src/app/widget/widgetViewModel.ts";
 import type { AppSettings } from "../src/shared/settings/appSettings.ts";
 import type {
@@ -205,6 +209,54 @@ await runTest("buildWidgetViewModel prioritizes stale tracker health as error", 
 await runTest("isWidgetSelfWindow detects widget chrome without matching real apps", () => {
   assert.equal(isWidgetSelfWindow(WIDGET_WINDOW), true);
   assert.equal(isWidgetSelfWindow(ACTIVE_WINDOW), false);
+});
+
+await runTest("loadWidgetObjectIconWithDeps returns null for missing icon keys", async () => {
+  resetWidgetIconCacheForTests();
+  const icon = await loadWidgetObjectIconWithDeps("missing.exe", {
+    getIconMap: async () => ({ "chrome.exe": "chrome-icon" }),
+  });
+
+  assert.equal(icon, null);
+});
+
+await runTest("loadWidgetObjectIconWithDeps reuses the icon map cache", async () => {
+  resetWidgetIconCacheForTests();
+  let loadCount = 0;
+  const deps = {
+    getIconMap: async () => {
+      loadCount += 1;
+      return {
+        "chrome.exe": "chrome-icon",
+        "cursor.exe": "cursor-icon",
+      };
+    },
+  };
+
+  assert.equal(await loadWidgetObjectIconWithDeps("chrome.exe", deps), "chrome-icon");
+  assert.equal(await loadWidgetObjectIconWithDeps("cursor.exe", deps), "cursor-icon");
+  assert.equal(loadCount, 1);
+});
+
+await runTest("loadWidgetObjectIconWithDeps retries after failed icon map load", async () => {
+  resetWidgetIconCacheForTests();
+  let loadCount = 0;
+  const deps = {
+    getIconMap: async () => {
+      loadCount += 1;
+      if (loadCount === 1) {
+        throw new Error("db busy");
+      }
+      return { "chrome.exe": "chrome-icon" };
+    },
+  };
+
+  await assert.rejects(
+    () => loadWidgetObjectIconWithDeps("chrome.exe", deps),
+    /db busy/,
+  );
+  assert.equal(await loadWidgetObjectIconWithDeps("chrome.exe", deps), "chrome-icon");
+  assert.equal(loadCount, 2);
 });
 
 console.log(`Passed ${passed} widget view model tests`);

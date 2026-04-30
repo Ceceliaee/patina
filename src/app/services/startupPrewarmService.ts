@@ -3,36 +3,75 @@ import {
 } from "../../features/settings/services/settingsBootstrapService.ts";
 import {
   prewarmClassificationBootstrapCache,
-} from "../../features/classification/services/classificationService";
+} from "../../features/classification/services/classificationService.ts";
 import {
   prewarmDashboardSnapshotCache,
-} from "../../features/dashboard/services/dashboardSnapshotCache";
+} from "../../features/dashboard/services/dashboardSnapshotCache.ts";
 import {
   prewarmHistorySnapshotCache,
-} from "../../features/history/services/historySnapshotCache";
+} from "../../features/history/services/historySnapshotCache.ts";
 
-export async function prewarmStartupBootstrapCaches(): Promise<void> {
-  const results = await Promise.allSettled([
-    prewarmSettingsBootstrapCache(),
-    prewarmClassificationBootstrapCache(),
-  ]);
+interface StartupPrewarmDeps {
+  prewarmSettingsBootstrapCache: () => Promise<unknown>;
+  prewarmClassificationBootstrapCache: () => Promise<unknown>;
+  prewarmDashboardSnapshotCache: (date: Date) => Promise<unknown>;
+  prewarmHistorySnapshotCache: (date: Date) => Promise<unknown>;
+  warn: (message: string, error: unknown) => void;
+}
 
+const startupPrewarmDeps: StartupPrewarmDeps = {
+  prewarmSettingsBootstrapCache,
+  prewarmClassificationBootstrapCache,
+  prewarmDashboardSnapshotCache,
+  prewarmHistorySnapshotCache,
+  warn: console.warn,
+};
+
+function warnRejectedPrewarm(
+  message: string,
+  results: PromiseSettledResult<unknown>[],
+  warn: StartupPrewarmDeps["warn"],
+) {
   for (const result of results) {
     if (result.status === "rejected") {
-      console.warn("Failed to prewarm startup bootstrap cache:", result.reason);
+      warn(message, result.reason);
     }
   }
 }
 
-export async function prewarmStartupSnapshotCaches(date: Date = new Date()): Promise<void> {
+export async function prewarmStartupBootstrapCachesWithDeps(
+  deps: Pick<
+    StartupPrewarmDeps,
+    "prewarmSettingsBootstrapCache" | "prewarmClassificationBootstrapCache" | "warn"
+  >,
+): Promise<void> {
   const results = await Promise.allSettled([
-    prewarmDashboardSnapshotCache(date),
-    prewarmHistorySnapshotCache(date),
+    deps.prewarmSettingsBootstrapCache(),
+    deps.prewarmClassificationBootstrapCache(),
   ]);
 
-  for (const result of results) {
-    if (result.status === "rejected") {
-      console.warn("Failed to prewarm startup snapshot cache:", result.reason);
-    }
-  }
+  warnRejectedPrewarm("Failed to prewarm startup bootstrap cache:", results, deps.warn);
+}
+
+export async function prewarmStartupBootstrapCaches(): Promise<void> {
+  return prewarmStartupBootstrapCachesWithDeps(startupPrewarmDeps);
+}
+
+export async function prewarmStartupSnapshotCachesWithDeps(
+  date: Date,
+  deps: Pick<
+    StartupPrewarmDeps,
+    "prewarmDashboardSnapshotCache" | "prewarmHistorySnapshotCache" | "warn"
+  >,
+): Promise<void> {
+  const results = await Promise.allSettled([
+    deps.prewarmDashboardSnapshotCache(date),
+    deps.prewarmHistorySnapshotCache(date),
+  ]);
+
+  warnRejectedPrewarm("Failed to prewarm startup snapshot cache:", results, deps.warn);
+}
+
+export async function prewarmStartupSnapshotCaches(date: Date = new Date()): Promise<void> {
+  return prewarmStartupSnapshotCachesWithDeps(date, startupPrewarmDeps);
 }

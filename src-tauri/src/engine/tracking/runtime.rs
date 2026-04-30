@@ -37,6 +37,9 @@ pub use support::emit_tracking_data_changed;
 use support::{log_tracker_error, now_ms};
 use window_polling::poll_active_window_with_timeout;
 
+// Owner ledger: run() owns runtime loop orchestration only. Polling,
+// loop-state loading, power lifecycle handling, and event support stay in the
+// sibling runtime/* modules so commands.rs and lib.rs remain thin IPC entrypoints.
 pub async fn run<R: Runtime>(
     app: AppHandle<R>,
     health_state: Arc<watchdog::RuntimeHealthState>,

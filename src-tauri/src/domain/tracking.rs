@@ -8,6 +8,9 @@ mod session_identity;
 pub use contracts::*;
 pub use session_identity::*;
 
+// Owner ledger: this file keeps stable tracking domain decisions. Contract
+// types live in tracking/contracts.rs; session identity lives in
+// tracking/session_identity.rs; runtime orchestration stays in engine/tracking.
 pub fn should_track(exe_name: &str) -> bool {
     let lower_name = exe_name.to_lowercase();
 

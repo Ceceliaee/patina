@@ -46,7 +46,7 @@ const iterations = 250;
 
 const liveSessions = materializeLiveSessions(sessions, trackerHealth, nowMs);
 
-const baseline = measureBenchmark("legacy-double-compile", iterations, 130, () => {
+const reference = measureBenchmark("compile-and-timeline-reference", iterations, 130, () => {
   const compiledSessions = compileForRange(liveSessions, { startMs: rangeStart, endMs: rangeEnd }, 0);
   const timelineSourceSessions = compileForRange(liveSessions, { startMs: rangeStart, endMs: rangeEnd }, 0);
   buildTimelineSessions(timelineSourceSessions, 180);
@@ -65,17 +65,17 @@ const optimized = measureBenchmark("current-history-read-model", iterations, 170
   });
 });
 
-const improvementMs = baseline.averageMs - optimized.averageMs;
-const improvementRatio = baseline.averageMs === 0 ? 0 : improvementMs / baseline.averageMs;
-
 printBenchmarkReport({
   benchmark: "history-read-model",
   measuredAt: new Date().toISOString(),
-  measurements: [baseline, optimized],
+  measurements: [reference, optimized],
   metadata: {
     sessionCount: sessions.length,
     selectedDate: selectedDate.toISOString(),
-    improvementMs,
-    improvementRatio,
+    comparisonNotes: [
+      "compile-and-timeline-reference measures only the old hot subpath shape.",
+      "current-history-read-model measures the full current read model, including weekly summaries, chart data, app summary, timeline, and diagnostics.",
+      "Treat these as budgeted reference measurements, not direct optimization deltas.",
+    ],
   },
 });
