@@ -63,6 +63,7 @@ export interface DataAppDayRow {
 }
 
 export interface DataAppTrendViewModel {
+  range: DataTrendRange;
   rangeLabel: string;
   appOptions: DataAppOption[];
   selectedApp: DataAppOption | null;
@@ -236,6 +237,17 @@ function buildAppDayRows(
   }));
 }
 
+function countActiveRanges(
+  sessions: ReturnType<typeof compileSessions>,
+  ranges: SessionRange[],
+) {
+  return ranges.reduce((count, range) => (
+    sessions.some((session) => getClippedSessionDuration(session, range.startMs, range.endMs) > 0)
+      ? count + 1
+      : count
+  ), 0);
+}
+
 function resolveAppKeyByStats(
   appName: string,
   exeName: string,
@@ -246,6 +258,25 @@ function resolveAppKeyByStats(
     || (session.displayName === appName && session.exeName === exeName)
     || session.displayName === appName
   ))?.appKey ?? exeName;
+}
+
+function groupSessionsByAppKey(sessions: ReturnType<typeof compileSessions>) {
+  const sessionsByAppKey = new Map<string, ReturnType<typeof compileSessions>>();
+
+  for (const session of sessions) {
+    const appSessions = sessionsByAppKey.get(session.appKey);
+    if (appSessions) {
+      appSessions.push(session);
+    } else {
+      sessionsByAppKey.set(session.appKey, [session]);
+    }
+  }
+
+  return sessionsByAppKey;
+}
+
+function getAppOptionIdentity(appName: string, exeName: string) {
+  return `${appName.trim().toLowerCase()}|${exeName.trim().toLowerCase()}`;
 }
 
 export function getDataTrendRangeLabel(range: DataTrendRange) {
@@ -303,31 +334,84 @@ export function buildDataAppTrendViewModel(
     endMs,
     minSessionSecs: 0,
   });
-  const dayRowsByApp = new Map<string, DataAppDayRow[]>();
+  const sessionsByAppKey = groupSessionsByAppKey(compiledSessions);
+  const activeDayCountsByAppKey = new Map<string, number>();
   const appStats = buildNormalizedAppStats(compiledSessions);
   const totalAppDuration = appStats.reduce((sum, item) => sum + item.totalDuration, 0);
-  const appOptions = appStats.map((item) => {
-    const appKey = resolveAppKeyByStats(item.appName, item.exeName, compiledSessions);
-    const appSessions = compiledSessions.filter((session) => session.appKey === appKey);
-    const dayRows = buildAppDayRows(appSessions, dayRanges);
-    dayRowsByApp.set(appKey, dayRows);
+  const mergedAppStats = new Map<string, {
+    appKey: string;
+    sourceAppKeys: string[];
+    appName: string;
+    exeName: string;
+    totalDuration: number;
+  }>();
 
-    return {
+  for (const item of appStats) {
+    const appKey = resolveAppKeyByStats(item.appName, item.exeName, compiledSessions);
+    const identity = getAppOptionIdentity(item.appName, item.exeName);
+    const existing = mergedAppStats.get(identity);
+
+    if (existing) {
+      existing.totalDuration += item.totalDuration;
+      if (!existing.sourceAppKeys.includes(appKey)) {
+        existing.sourceAppKeys.push(appKey);
+      }
+      continue;
+    }
+
+    mergedAppStats.set(identity, {
       appKey,
+      sourceAppKeys: [appKey],
+      appName: item.appName,
+      exeName: item.exeName,
+      totalDuration: item.totalDuration,
+    });
+  }
+
+  const mergedOptions = Array.from(mergedAppStats.values()).map((item) => {
+    const appSessions = item.sourceAppKeys.flatMap((appKey) => sessionsByAppKey.get(appKey) ?? []);
+    const activeDayCount = activeDayCountsByAppKey.get(item.appKey)
+      ?? countActiveRanges(appSessions, dayRanges);
+    activeDayCountsByAppKey.set(item.appKey, activeDayCount);
+    return {
+      appKey: item.appKey,
+      sourceAppKeys: item.sourceAppKeys,
       appName: item.appName,
       exeName: item.exeName,
       totalDuration: item.totalDuration,
       percentage: totalAppDuration > 0 ? (item.totalDuration / totalAppDuration) * 100 : 0,
       averageDuration: Math.round(item.totalDuration / averageDivisor),
-      activeDayCount: dayRows.filter((row) => row.duration > 0).length,
+      activeDayCount,
     };
-  });
-  const selectedApp = appOptions.find((item) => item.appKey === selectedAppKey) ?? appOptions[0] ?? null;
-  const selectedDayRows = selectedApp ? dayRowsByApp.get(selectedApp.appKey) ?? [] : [];
-  const chartRanges = shouldGroupByMonth ? getRecentMonthRanges(nowMs, 12) : dayRanges;
-  const selectedSessions = selectedApp
-    ? compiledSessions.filter((session) => session.appKey === selectedApp.appKey)
+  }).sort((a, b) => b.totalDuration - a.totalDuration);
+  const selectedMergedApp = mergedOptions.find((item) => (
+    item.appKey === selectedAppKey || item.sourceAppKeys.includes(selectedAppKey ?? "")
+  )) ?? mergedOptions[0] ?? null;
+  const selectedApp = selectedMergedApp
+    ? {
+      appKey: selectedMergedApp.appKey,
+      appName: selectedMergedApp.appName,
+      exeName: selectedMergedApp.exeName,
+      totalDuration: selectedMergedApp.totalDuration,
+      percentage: selectedMergedApp.percentage,
+      averageDuration: selectedMergedApp.averageDuration,
+      activeDayCount: selectedMergedApp.activeDayCount,
+    }
+    : null;
+  const appOptions = mergedOptions.map((item) => ({
+    appKey: item.appKey,
+    appName: item.appName,
+    exeName: item.exeName,
+    totalDuration: item.totalDuration,
+    percentage: item.percentage,
+    averageDuration: item.averageDuration,
+    activeDayCount: item.activeDayCount,
+  }));
+  const selectedSessions = selectedMergedApp
+    ? selectedMergedApp.sourceAppKeys.flatMap((appKey) => sessionsByAppKey.get(appKey) ?? [])
     : [];
+  const selectedDayRows = selectedApp ? buildAppDayRows(selectedSessions, dayRanges) : [];
+  const chartRanges = shouldGroupByMonth ? getRecentMonthRanges(nowMs, 12) : dayRanges;
   const chartData = chartRanges.map((rangeItem) => {
     const date = toDateKey(new Date(rangeItem.startMs));
     const duration = selectedSessions.reduce(
@@ -349,6 +433,7 @@ export function buildDataAppTrendViewModel(
   }, null);
 
   return {
+    range,
     rangeLabel: getDataTrendRangeLabel(range),
     appOptions,
     selectedApp,
@@ -368,6 +453,11 @@ async function resolveDefaultDataHeatmapDependencies(): Promise<DataHeatmapDepen
 }
 
 export function resetDataReadModelCacheForTests() {
+  heatmapSessionCache.clear();
+  earliestSessionStartTimeCache = undefined;
+}
+
+export function clearDataReadModelCache() {
   heatmapSessionCache.clear();
   earliestSessionStartTimeCache = undefined;
 }

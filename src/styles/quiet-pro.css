@@ -530,6 +530,10 @@
   height: 168px;
 }
 
+.data-chart-placeholder {
+  background: transparent;
+}
+
 @media (min-width: 1536px) and (min-height: 900px) {
   .data-trend-chart {
     height: 214px;
@@ -576,6 +580,10 @@
   height: 20px;
   width: 20px;
   object-fit: contain;
+}
+
+.data-app-selected-status-empty {
+  visibility: hidden;
 }
 
 .data-app-loading {
@@ -863,19 +871,27 @@
   display: flex;
   min-width: 0;
   align-items: flex-start;
+  contain: layout paint;
 }
 
 .data-heatmap-scroll {
   flex: 1 1 auto;
   min-width: 0;
   overflow-x: auto;
+  overflow-anchor: none;
   padding-bottom: 2px;
+}
+
+.data-heatmap-skeleton {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: calc(7 * var(--data-heatmap-cell-size) + 6 * var(--data-heatmap-cell-gap) + 21px);
 }
 
 .data-heatmap-months {
   display: grid;
   width: max-content;
-  grid-template-columns: 28px repeat(53, var(--data-heatmap-cell-size));
+  grid-template-columns: 28px repeat(var(--data-heatmap-week-count, 53), var(--data-heatmap-cell-size));
   gap: var(--data-heatmap-cell-gap);
   padding: 0 0 5px;
   color: var(--qp-text-tertiary);
@@ -943,12 +959,30 @@
   border-color: color-mix(in srgb, var(--qp-accent-default) 42%, var(--qp-border-subtle));
 }
 
-.data-heatmap-cell-future {
-  opacity: 0.36;
+.data-heatmap-cell-future,
+.data-heatmap-cell-outside {
+  border-color: transparent;
+  background: transparent;
 }
 
-.data-heatmap-cell-outside {
-  opacity: 0.22;
+.data-heatmap-tooltip-anchor-unavailable.qp-tooltip-anchor {
+  pointer-events: none;
+}
+
+.data-heatmap-loading-state .data-heatmap-cell,
+.data-heatmap-loading-state .data-heatmap-swatch {
+  background: var(--qp-bg-elevated);
+}
+
+.data-heatmap-loading-state .data-heatmap-cell-future,
+.data-heatmap-loading-state .data-heatmap-cell-outside {
+  border-color: transparent;
+  background: transparent;
+}
+
+.data-heatmap-loading-state .data-heatmap-months,
+.data-heatmap-loading-state .data-heatmap-weekdays {
+  opacity: 0.58;
 }
 
 .data-heatmap-header-actions {

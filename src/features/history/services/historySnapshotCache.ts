@@ -23,6 +23,10 @@ export function setHistorySnapshotCache(
   HISTORY_SNAPSHOT_CACHE.set(formatHistorySnapshotCacheKey(date, rollingDayCount), snapshot);
 }
 
+export function clearHistorySnapshotCache(): void {
+  HISTORY_SNAPSHOT_CACHE.clear();
+}
+
 export async function prewarmHistorySnapshotCache(
   date: Date = new Date(),
   rollingDayCount: number = 7,

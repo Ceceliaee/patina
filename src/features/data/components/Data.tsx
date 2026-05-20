@@ -1,4 +1,4 @@
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3, CalendarDays, ChevronLeft, ChevronRight, Clock3, Search } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import { UI_TEXT } from "../../../shared/copy/uiText.ts";
@@ -10,6 +10,8 @@ import {
   getDataTrendRangeLabel,
   getCachedDataHeatmapSessions,
   getCachedEarliestSessionStartTime,
+  type DataAppOption,
+  type DataAppTrendViewModel,
   type DataTrendRange,
   type HeatmapSelection,
   loadDataHeatmapSnapshot,
@@ -39,12 +41,36 @@ interface Props {
   mappingVersion?: number;
 }
 
-const HEATMAP_LOADING_HEIGHT = 104;
 const TREND_RANGE_OPTIONS: DataTrendRange[] = [7, 30, 365];
 
 function getAppInitial(appName: string) {
   const trimmed = appName.trim();
   return trimmed ? trimmed.charAt(0).toUpperCase() : "?";
+}
+
+function getDataAppOptionDisplayKey(app: DataAppOption) {
+  return `${app.appName.trim().toLowerCase().replace(/\s+/g, " ")}|${app.exeName.trim().toLowerCase()}`;
+}
+
+function dedupeDataAppOptions(options: DataAppOption[]) {
+  const merged = new Map<string, DataAppOption>();
+
+  for (const app of options) {
+    const key = getDataAppOptionDisplayKey(app);
+    const existing = merged.get(key);
+
+    if (!existing) {
+      merged.set(key, { ...app });
+      continue;
+    }
+
+    existing.totalDuration += app.totalDuration;
+    existing.percentage += app.percentage;
+    existing.averageDuration += app.averageDuration;
+    existing.activeDayCount = Math.max(existing.activeDayCount, app.activeDayCount);
+  }
+
+  return Array.from(merged.values()).sort((left, right) => right.totalDuration - left.totalDuration);
 }
 
 export default function Data({
@@ -77,8 +103,10 @@ export default function Data({
   const [yearSessions, setYearSessions] = useState<HistorySession[]>(
     () => initialCachedHeatmapSessions ?? [],
   );
+  const [yearSessionsView, setYearSessionsView] = useState<HeatmapSelection | null>(
+    initialCachedHeatmapSessions ? "recent" : null,
+  );
   const [heatmapLoading, setHeatmapLoading] = useState(!initialCachedHeatmapSessions);
-  const [hasFetchedHeatmapOnce, setHasFetchedHeatmapOnce] = useState(Boolean(initialCachedHeatmapSessions));
   const [nowMs, setNowMs] = useState(() => cachedSnapshot?.fetchedAtMs ?? Date.now());
   const [loading, setLoading] = useState(!cachedSnapshot);
   const [appLoading, setAppLoading] = useState(!cachedAppSnapshot);
@@ -87,9 +115,32 @@ export default function Data({
   const hasLoadedRef = useRef(new Set<DataTrendRange>(cachedSnapshot ? [selectedTrendRange] : []));
   const hasLoadedAppRef = useRef(new Set<DataTrendRange>(cachedAppSnapshot ? [selectedAppTrendRange] : []));
   const initialRefreshKeyRef = useRef(refreshKey);
+  const lastAppTrendViewModelRef = useRef<{
+    refreshKey: number;
+    viewModel: DataAppTrendViewModel;
+  } | null>(null);
   const hasFetchedOverviewOnceRef = useRef(Boolean(cachedSnapshot));
   const hasFetchedAppOnceRef = useRef(Boolean(cachedAppSnapshot));
   const hasFetchedHeatmapOnceRef = useRef(Boolean(initialCachedHeatmapSessions));
+  const snapshotLoadPromisesRef = useRef(new Map<string, Promise<HistorySnapshot>>());
+
+  const loadDataRangeSnapshot = useCallback((range: DataTrendRange) => {
+    const key = `${refreshKey}:${range}`;
+    const existingPromise = snapshotLoadPromisesRef.current.get(key);
+
+    if (existingPromise) {
+      return existingPromise;
+    }
+
+    const promise = loadHistorySnapshot(new Date(), range).finally(() => {
+      if (snapshotLoadPromisesRef.current.get(key) === promise) {
+        snapshotLoadPromisesRef.current.delete(key);
+      }
+    });
+
+    snapshotLoadPromisesRef.current.set(key, promise);
+    return promise;
+  }, [loadHistorySnapshot, refreshKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,7 +169,7 @@ export default function Data({
       }
 
       try {
-        const snapshot = await loadHistorySnapshot(new Date(), selectedTrendRange);
+        const snapshot = await loadDataRangeSnapshot(selectedTrendRange);
         if (cancelled) return;
         setHistorySnapshotCache(snapshot, new Date(), selectedTrendRange);
         setRawSnapshot(snapshot);
@@ -137,7 +188,7 @@ export default function Data({
     return () => {
       cancelled = true;
     };
-  }, [loadHistorySnapshot, refreshKey, selectedTrendRange]);
+  }, [loadDataRangeSnapshot, refreshKey, selectedTrendRange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -166,7 +217,7 @@ export default function Data({
       }
 
       try {
-        const snapshot = await loadHistorySnapshot(new Date(), selectedAppTrendRange);
+        const snapshot = await loadDataRangeSnapshot(selectedAppTrendRange);
         if (cancelled) return;
         setHistorySnapshotCache(snapshot, new Date(), selectedAppTrendRange);
         setRawAppSnapshot(snapshot);
@@ -185,7 +236,7 @@ export default function Data({
     return () => {
       cancelled = true;
     };
-  }, [loadHistorySnapshot, refreshKey, selectedAppTrendRange]);
+  }, [loadDataRangeSnapshot, refreshKey, selectedAppTrendRange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -195,11 +246,11 @@ export default function Data({
 
       if (cachedSessions) {
         setYearSessions(cachedSessions);
+        setYearSessionsView(selectedHeatmapView);
         hasFetchedHeatmapOnceRef.current = true;
-        setHasFetchedHeatmapOnce(true);
         setHeatmapLoading(false);
       } else {
-        setHeatmapLoading(!hasFetchedHeatmapOnceRef.current);
+        setHeatmapLoading(true);
       }
 
       try {
@@ -208,8 +259,8 @@ export default function Data({
 
         setEarliestStartTime(snapshot.earliestStartTime);
         setYearSessions(snapshot.sessions);
+        setYearSessionsView(selectedHeatmapView);
         hasFetchedHeatmapOnceRef.current = true;
-        setHasFetchedHeatmapOnce(true);
 
         if (snapshot.earliestStartTime) {
           const earliestYear = new Date(snapshot.earliestStartTime).getFullYear();
@@ -238,6 +289,14 @@ export default function Data({
     if (!rawAppSnapshot || rawAppSnapshotRange !== selectedAppTrendRange) return null;
     return buildDataAppTrendViewModel(rawAppSnapshot.weeklySessions, selectedAppTrendRange, nowMs, selectedAppKey);
   }, [mappingVersion, nowMs, rawAppSnapshot, rawAppSnapshotRange, selectedAppKey, selectedAppTrendRange]);
+  if (appTrendViewModel) {
+    lastAppTrendViewModelRef.current = { refreshKey, viewModel: appTrendViewModel };
+  }
+  const visibleAppTrendViewModel = appTrendViewModel
+    ?? (lastAppTrendViewModelRef.current?.refreshKey === refreshKey
+      ? lastAppTrendViewModelRef.current.viewModel
+      : null);
+  const selectedAppTrendApp = visibleAppTrendViewModel?.selectedApp;
 
   useEffect(() => {
     if (selectedAppKey !== null) return;
@@ -249,17 +308,25 @@ export default function Data({
   }, [appTrendViewModel?.selectedApp?.appKey, selectedAppKey]);
 
   const filteredAppOptions = useMemo(() => {
-    if (!appTrendViewModel) return [];
+    if (!visibleAppTrendViewModel) return [];
     const query = appSearchQuery.trim().toLowerCase();
-    if (!query) return appTrendViewModel.appOptions;
-    return appTrendViewModel.appOptions.filter((app) => (
+    const options = dedupeDataAppOptions(visibleAppTrendViewModel.appOptions);
+    if (!query) return options;
+    return options.filter((app) => (
       app.appName.toLowerCase().includes(query)
       || app.exeName.toLowerCase().includes(query)
     ));
-  }, [appSearchQuery, appTrendViewModel]);
+  }, [appSearchQuery, visibleAppTrendViewModel]);
   const heatmapRows = useMemo(() => (
     buildActivityHeatmap(yearSessions, selectedHeatmapView, nowMs)
   ), [nowMs, selectedHeatmapView, yearSessions]);
+  const heatmapPlaceholderRows = useMemo(() => (
+    buildActivityHeatmap([], selectedHeatmapView, nowMs)
+  ), [nowMs, selectedHeatmapView]);
+  const hasHeatmapRowsForSelectedView = yearSessionsView === selectedHeatmapView;
+  const shouldShowHeatmapSkeleton = heatmapLoading || !hasHeatmapRowsForSelectedView;
+  const visibleHeatmapRows = shouldShowHeatmapSkeleton ? heatmapPlaceholderRows : heatmapRows;
+  const selectedHeatmapViewKey = String(selectedHeatmapView);
   const yearOptions = useMemo(
     () => buildYearOptions(earliestStartTime, currentYear),
     [currentYear, earliestStartTime],
@@ -276,6 +343,7 @@ export default function Data({
     if (selectedHeatmapViewIndex < 0) return;
     const nextView = heatmapViewOptions[selectedHeatmapViewIndex + delta];
     if (nextView !== undefined) {
+      setHeatmapLoading(true);
       setSelectedHeatmapView(nextView);
     }
   };
@@ -360,14 +428,21 @@ export default function Data({
               </button>
             </div>
           </div>
-          {(loading && !hasFetchedOverviewOnce) || !trendViewModel ? (
-            <div className="data-trend-chart flex items-center justify-center text-[var(--qp-text-tertiary)] text-xs">
-              {UI_TEXT.history.loading}
-            </div>
-          ) : (
-            <div className="pt-4">
+          <div className="pt-4">
+            {(loading && !hasFetchedOverviewOnce) || !trendViewModel ? (
+              <div
+                className="data-trend-chart data-chart-placeholder flex items-center justify-center text-[var(--qp-text-tertiary)] text-xs"
+                aria-busy="true"
+              >
+                {UI_TEXT.history.loading}
+              </div>
+            ) : (
               <div className="data-trend-chart">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer
+                  width="100%"
+                  height="100%"
+                  initialDimension={{ width: 760, height: 168 }}
+                >
                 <AreaChart data={trendViewModel.chartData} margin={{ top: 8, right: 22, left: -18, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--qp-chart-grid)" />
                   <XAxis
@@ -405,8 +480,8 @@ export default function Data({
               </AreaChart>
                 </ResponsiveContainer>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         <div className="qp-panel p-5 data-heatmap-panel">
@@ -457,55 +532,67 @@ export default function Data({
             </div>
           </div>
 
-          {heatmapLoading && !hasFetchedHeatmapOnce ? (
-            <div
-              className="mt-5 flex items-center justify-center text-[var(--qp-text-tertiary)] text-xs"
-              style={{ height: HEATMAP_LOADING_HEIGHT }}
-            >
-              {UI_TEXT.history.loading}
-            </div>
-          ) : (
-            <div className="data-heatmap data-heatmap-calendar mt-5">
+          <div
+            className={`data-heatmap data-heatmap-calendar mt-5 ${heatmapLoading ? "data-heatmap-loading-state" : ""}`}
+            aria-busy={heatmapLoading}
+          >
               <div className="data-heatmap-content">
-                <div className="data-heatmap-scroll">
-                  <div className="data-heatmap-months" aria-hidden>
-                    <span />
-                    {heatmapRows.map((week) => (
-                      <span key={week.key}>{week.monthLabel}</span>
-                    ))}
-                  </div>
-                  <div className="data-heatmap-body" aria-label={UI_TEXT.data.activityHeatmap}>
-                    <div className="data-heatmap-weekdays" aria-hidden>
-                      {UI_TEXT.date.heatmapWeekdays.map((weekday, index) => (
-                        <span key={`${weekday}-${index}`}>{weekday}</span>
+                {shouldShowHeatmapSkeleton ? (
+                  <div
+                    className="data-heatmap-skeleton"
+                    aria-hidden
+                    style={{ "--data-heatmap-week-count": visibleHeatmapRows.length } as CSSProperties}
+                  />
+                ) : (
+                  <div
+                    className="data-heatmap-scroll"
+                    style={{ "--data-heatmap-week-count": visibleHeatmapRows.length } as CSSProperties}
+                  >
+                    <div className="data-heatmap-months" aria-hidden>
+                      <span />
+                      {visibleHeatmapRows.map((week) => (
+                        <span key={`${selectedHeatmapViewKey}:${week.key}`}>{week.monthLabel}</span>
                       ))}
                     </div>
-                    <div className="data-heatmap-weeks">
-                      {heatmapRows.map((week) => (
-                        <div key={week.key} className="data-heatmap-week">
-                          {week.cells.map((cell) => (
-                            <QuietTooltip
-                              key={cell.key}
-                              label={cell.label}
-                              placement="top"
-                              className="data-heatmap-tooltip-anchor"
-                            >
-                              <span
-                                className={`data-heatmap-cell ${
-                                  cell.isFuture ? "data-heatmap-cell-future" : ""
-                                } ${cell.isOutsideYear ? "data-heatmap-cell-outside" : ""}`}
-                                style={{ "--heatmap-intensity": cell.intensity } as CSSProperties}
-                              />
-                            </QuietTooltip>
-                          ))}
-                        </div>
-                      ))}
+                    <div className="data-heatmap-body" aria-label={UI_TEXT.data.activityHeatmap}>
+                      <div className="data-heatmap-weekdays" aria-hidden>
+                        {UI_TEXT.date.heatmapWeekdays.map((weekday, index) => (
+                          <span key={`${weekday}-${index}`}>{weekday}</span>
+                        ))}
+                      </div>
+                      <div className="data-heatmap-weeks">
+                        {visibleHeatmapRows.map((week) => (
+                          <div key={`${selectedHeatmapViewKey}:${week.key}`} className="data-heatmap-week">
+                            {week.cells.map((cell) => {
+                              const isFutureOutsideRecentRange = selectedHeatmapView === "recent" && cell.isFuture;
+                              const isUnavailable = isFutureOutsideRecentRange || cell.isOutsideYear;
+                              return (
+                                <QuietTooltip
+                                  key={`${selectedHeatmapViewKey}:${cell.key}`}
+                                  label={cell.label}
+                                  placement="top"
+                                  disabled={isUnavailable}
+                                  className={`data-heatmap-tooltip-anchor ${
+                                    isUnavailable ? "data-heatmap-tooltip-anchor-unavailable" : ""
+                                  }`}
+                                >
+                                  <span
+                                    className={`data-heatmap-cell ${
+                                      isFutureOutsideRecentRange ? "data-heatmap-cell-future" : ""
+                                    } ${cell.isOutsideYear ? "data-heatmap-cell-outside" : ""}`}
+                                    style={{ "--heatmap-intensity": cell.intensity } as CSSProperties}
+                                  />
+                                </QuietTooltip>
+                              );
+                            })}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
-          )}
         </div>
       </div>
 
@@ -517,16 +604,18 @@ export default function Data({
             </h3>
           </div>
           <div className="data-app-header-actions">
-            {appTrendViewModel?.selectedApp ? (
-              <div className="data-app-selected-status">
-                {icons[appTrendViewModel.selectedApp.exeName] ? (
+            {selectedAppTrendApp || !visibleAppTrendViewModel ? (
+              <div className={`data-app-selected-status ${selectedAppTrendApp ? "" : "data-app-selected-status-empty"}`}>
+                {selectedAppTrendApp && icons[selectedAppTrendApp.exeName] ? (
                   <img
-                    src={icons[appTrendViewModel.selectedApp.exeName]}
+                    src={icons[selectedAppTrendApp.exeName]}
                     alt=""
                     draggable={false}
                   />
+                ) : selectedAppTrendApp ? (
+                  getAppInitial(selectedAppTrendApp.appName)
                 ) : (
-                  getAppInitial(appTrendViewModel.selectedApp.appName)
+                  ""
                 )}
               </div>
             ) : null}
@@ -560,11 +649,11 @@ export default function Data({
           </div>
         </div>
 
-        {(appLoading && !hasFetchedAppOnce) || !appTrendViewModel ? (
+        {(appLoading && !hasFetchedAppOnce) || !visibleAppTrendViewModel ? (
           <div className="data-app-loading text-[var(--qp-text-tertiary)] text-xs">
             {UI_TEXT.history.loading}
           </div>
-        ) : appTrendViewModel.appOptions.length === 0 ? (
+        ) : visibleAppTrendViewModel.appOptions.length === 0 ? (
           <div className="data-app-loading text-[var(--qp-text-tertiary)] text-xs">
             {UI_TEXT.data.appTrendEmpty}
           </div>
@@ -586,7 +675,7 @@ export default function Data({
                     {UI_TEXT.data.appTrendNoMatch}
                   </div>
                 ) : filteredAppOptions.map((app) => {
-                  const isSelected = appTrendViewModel.selectedApp?.appKey === app.appKey;
+                  const isSelected = visibleAppTrendViewModel.selectedApp?.appKey === app.appKey;
                   return (
                     <button
                       key={app.appKey}
@@ -619,24 +708,28 @@ export default function Data({
               <div className="data-app-metric-strip">
                 <div className="data-app-metric">
                   <span>{UI_TEXT.data.appTrendTotal}</span>
-                  <strong>{formatDuration(appTrendViewModel.selectedApp?.totalDuration ?? 0)}</strong>
+                  <strong>{formatDuration(visibleAppTrendViewModel.selectedApp?.totalDuration ?? 0)}</strong>
                 </div>
                 <div className="data-app-metric">
-                  <span>{selectedAppTrendRange === 365 ? UI_TEXT.data.monthlyAverage : UI_TEXT.data.appTrendAverage}</span>
-                  <strong>{formatDuration(appTrendViewModel.selectedApp?.averageDuration ?? 0)}</strong>
+                  <span>{visibleAppTrendViewModel.range === 365 ? UI_TEXT.data.monthlyAverage : UI_TEXT.data.appTrendAverage}</span>
+                  <strong>{formatDuration(visibleAppTrendViewModel.selectedApp?.averageDuration ?? 0)}</strong>
                 </div>
                 <div className="data-app-metric">
                   <span>{UI_TEXT.data.appTrendActiveDays}</span>
-                  <strong>{appTrendViewModel.selectedApp?.activeDayCount ?? 0}</strong>
+                  <strong>{visibleAppTrendViewModel.selectedApp?.activeDayCount ?? 0}</strong>
                 </div>
                 <div className="data-app-metric">
                   <span>{UI_TEXT.data.appTrendPeakDay}</span>
-                  <strong>{appTrendViewModel.peakDay ? formatDuration(appTrendViewModel.peakDay.duration) : "-"}</strong>
+                  <strong>{visibleAppTrendViewModel.peakDay ? formatDuration(visibleAppTrendViewModel.peakDay.duration) : "-"}</strong>
                 </div>
               </div>
               <div className="data-app-chart">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={appTrendViewModel.chartData} margin={{ top: 10, right: 18, left: -20, bottom: 0 }}>
+                <ResponsiveContainer
+                  width="100%"
+                  height="100%"
+                  initialDimension={{ width: 620, height: 172 }}
+                >
+                  <AreaChart data={visibleAppTrendViewModel.chartData} margin={{ top: 10, right: 18, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--qp-border-subtle)" strokeOpacity={0.58} />
                     <XAxis
                       dataKey="label"
@@ -649,8 +742,8 @@ export default function Data({
                       tick={{ fontSize: 10, fill: "var(--qp-text-tertiary)" }}
                       axisLine={false}
                       tickLine={false}
-                      ticks={appTrendViewModel.chartAxis.ticks}
-                      domain={[0, appTrendViewModel.chartAxis.domainMax]}
+                      ticks={visibleAppTrendViewModel.chartAxis.ticks}
+                      domain={[0, visibleAppTrendViewModel.chartAxis.domainMax]}
                       tickFormatter={(value) => formatChartHours(Number(value))}
                     />
                     <QuietChartTooltip

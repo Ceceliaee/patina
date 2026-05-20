@@ -1,5 +1,4 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
-import { AnimatePresence } from "framer-motion";
 import { setUiTextLanguage, UI_TEXT } from "../shared/copy/uiText.ts";
 import AppSidebar from "./components/AppSidebar";
 import AppTitleBar from "./components/AppTitleBar";
@@ -24,6 +23,8 @@ import {
   prewarmStartupBootstrapCaches,
   prewarmStartupSnapshotCaches,
 } from "./services/startupPrewarmService";
+import { clearDataReadModelCache } from "../features/data/services/dataReadModel.ts";
+import { clearHistorySnapshotCache } from "../features/history/services/historySnapshotCache.ts";
 import { AppClassification } from "../shared/classification/appClassification.ts";
 import { useQuietDialogs } from "../shared/hooks/useQuietDialogs";
 import UpdateDialogProvider from "./providers/UpdateDialogProvider";
@@ -66,6 +67,7 @@ function AppShellContent() {
   const [settingsLanguagePreview, setSettingsLanguagePreview] = useState<AppLanguage | null>(null);
   const didPrewarmBootstrapCachesRef = useRef(false);
   const didPrewarmSnapshotCachesRef = useRef(false);
+  const didPreloadDataViewRef = useRef(false);
   const {
     activeWindow,
     trackingStatus,
@@ -113,6 +115,19 @@ function AppShellContent() {
     if (!classificationReady || didPrewarmSnapshotCachesRef.current) return;
     didPrewarmSnapshotCachesRef.current = true;
     void prewarmStartupSnapshotCaches(new Date());
+  }, [classificationReady]);
+
+  useEffect(() => {
+    if (!classificationReady || didPreloadDataViewRef.current) return undefined;
+    didPreloadDataViewRef.current = true;
+
+    const timer = window.setTimeout(() => {
+      void import("../features/data/components/Data");
+    }, 800);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
   }, [classificationReady]);
 
   useEffect(() => {
@@ -173,7 +188,6 @@ function AppShellContent() {
               </div>
             }
           >
-            <AnimatePresence mode="wait" initial={false}>
               {currentView === "dashboard" && (
                 <Dashboard
                   key="dashboard"
@@ -248,12 +262,13 @@ function AppShellContent() {
                     pushToast(UI_TEXT.app.mappingUpdated, "success");
                   }}
                   onSessionsDeleted={() => {
+                    clearHistorySnapshotCache();
+                    clearDataReadModelCache();
                     setReadModelRefreshState(applySessionDeletionReadModelRefresh);
                     pushToast(UI_TEXT.app.historyDeleted, "success");
                   }}
                 />
               )}
-            </AnimatePresence>
           </Suspense>
         </main>
       </div>

@@ -142,6 +142,30 @@ await runTest("app trend preserves explicit selected application", () => {
   assert.equal(rows.chartData.at(-1)?.duration, 60 * 60 * 1000);
 });
 
+await runTest("app trend merges duplicate display options", () => {
+  const nowMs = new Date(2026, 4, 8, 12, 0, 0).getTime();
+  const rows = buildDataAppTrendViewModel([
+    makeSession({
+      appName: "Antigravity",
+      exeName: "antigravity.exe",
+      startTime: new Date(2026, 4, 8, 10, 0, 0).getTime(),
+      endTime: new Date(2026, 4, 8, 10, 0, 22).getTime(),
+    }),
+    makeSession({
+      id: 2,
+      appName: "Antigravity",
+      exeName: "Antigravity.exe",
+      startTime: new Date(2026, 4, 8, 11, 0, 0).getTime(),
+      endTime: new Date(2026, 4, 8, 11, 0, 22).getTime(),
+    }),
+  ], 7, nowMs, null);
+
+  assert.equal(rows.appOptions.length, 1);
+  assert.equal(rows.selectedApp?.appName, "Antigravity");
+  assert.equal(rows.selectedApp?.totalDuration, 44 * 1000);
+  assert.equal(rows.chartData.at(-1)?.duration, 44 * 1000);
+});
+
 await runTest("yearly app trend averages by month", () => {
   const nowMs = new Date(2026, 4, 8, 12, 0, 0).getTime();
   const rows = buildDataAppTrendViewModel([
