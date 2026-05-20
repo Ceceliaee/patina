@@ -116,6 +116,8 @@ const NON_TRACKABLE_EXE_NAMES = new Set([
   "unins",
   "un_a.exe",
   "un_a",
+  "hrupdate.exe",
+  "hrupdate",
 ]);
 
 const READ_MODEL_BLOCKED_EXE_NAMES = new Set([

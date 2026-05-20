@@ -113,6 +113,7 @@ mod tests {
         assert!(!should_track("SearchHost.exe"));
         assert!(!should_track("obsidian-setup.exe"));
         assert!(!should_track("cursor-updater.exe"));
+        assert!(!should_track("hrupdate.exe"));
         assert!(!should_track("bscccloud-3.33.0.tmp"));
         assert!(should_track("ui32.exe"));
         assert!(should_track("wallpaper32.exe"));

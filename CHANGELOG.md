@@ -37,6 +37,35 @@ App note en: TBD.
 
 - 暂无。
 
+## [0.7.3] - 2026-05-20
+
+Release: 修复更新说明语言、应用记录噪音和任务管理器图标显示。
+
+App note: 修复更新说明、应用过滤和图标显示。
+App note en: Fixed update notes, app filtering, and icon display.
+
+### Added
+
+- 暂无。
+
+### Changed
+
+- 应用图标增加浅色底板，改善 Windows 任务管理器等小尺寸场景下的可读性。
+
+### Fixed
+
+- 修复应用内更新说明在中文界面仍可能显示英文的问题。
+- 屏蔽火绒升级程序 `hrupdate.exe`，避免它继续进入追踪和应用映射候选。
+- 修复 Data 页三个分析面板标题左边距不一致的问题。
+
+### Removed
+
+- 暂无。
+
+### Internal
+
+- 补充发布说明生成和进程过滤的回归测试。
+
 ## [0.7.2] - 2026-05-20
 
 Release: 修复数据页加载、热力图与应用趋势显示问题。

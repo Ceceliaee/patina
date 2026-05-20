@@ -40,10 +40,10 @@ function testStalePolicyVersionFailsValidation() {
   );
 }
 
-function testUpdaterNotesStaySingleLanguage() {
+function testUpdaterNotesKeepLocalizedVariants() {
   const sectionBody = [
-    "Release: 修复更新说明。",
-    "App note: 修复英文更新说明显示。",
+    "Release: Fixed release notes.",
+    "App note: Fixed Chinese release notes.",
     "App note en: Fixed English release notes.",
   ].join("\n");
 
@@ -52,15 +52,31 @@ function testUpdaterNotesStaySingleLanguage() {
     appNoteEn: fieldValue(sectionBody, "App note en"),
   });
 
-  assert.equal(notes, "Fixed English release notes.");
-  assert.equal(notes.includes("zh-CN:"), false);
-  assert.equal(notes.includes("en-US:"), false);
+  assert.equal(notes, [
+    "zh-CN: Fixed Chinese release notes.",
+    "en-US: Fixed English release notes.",
+  ].join("\n"));
+}
+
+function testUpdaterNotesFallsBackToAppNote() {
+  const sectionBody = [
+    "Release: Fixed release notes.",
+    "App note: Fixed release notes.",
+  ].join("\n");
+
+  const notes = renderUpdaterNotes({
+    appNote: fieldValue(sectionBody, "App note"),
+    appNoteEn: fieldValue(sectionBody, "App note en"),
+  });
+
+  assert.equal(notes, "Fixed release notes.");
 }
 
 testSyncsCurrentCodeVersion();
 testSupportsPrereleaseVersion();
 testMissingPolicyVersionIsNull();
 testStalePolicyVersionFailsValidation();
-testUpdaterNotesStaySingleLanguage();
+testUpdaterNotesKeepLocalizedVariants();
+testUpdaterNotesFallsBackToAppNote();
 
-console.log("Passed 5 release policy tests");
+console.log("Passed 6 release policy tests");

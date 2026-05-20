@@ -182,7 +182,14 @@ export function fieldValue(sectionBody, field) {
 }
 
 export function renderUpdaterNotes(parsed) {
-  return parsed.appNoteEn || parsed.appNote;
+  if (!parsed.appNoteEn) {
+    return parsed.appNote;
+  }
+
+  return [
+    `zh-CN: ${parsed.appNote}`,
+    `en-US: ${parsed.appNoteEn}`,
+  ].join("\n");
 }
 
 function assertFinalField(field, value, version) {

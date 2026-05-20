@@ -342,6 +342,7 @@ export function runProcessMapperTests() {
     assert.equal(shouldTrackProcess("obsidian-setup.exe"), false);
     assert.equal(shouldTrackProcess("cursor-installer.exe"), false);
     assert.equal(shouldTrackProcess("cursor-updater.exe"), false);
+    assert.equal(shouldTrackProcess("hrupdate.exe"), false);
     assert.equal(shouldTrackProcess("weixinupdate.exe", { appName: "WeChatUpdate" }), false);
     assert.equal(shouldTrackProcess("microsoftedgeupdate.exe", { appName: "Microsoft Edge Update" }), false);
     assert.equal(shouldTrackProcess("productupdate.exe", { appName: "Product Update" }), false);

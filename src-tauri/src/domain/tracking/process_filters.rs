@@ -29,6 +29,7 @@ pub fn should_track(exe_name: &str) -> bool {
             | "dwm.exe"
             | "ctfmon.exe"
             | "fontdrvhost.exe"
+            | "hrupdate.exe"
             | "securityhealthsystray.exe"
             | "smartscreen.exe"
             | "winlogon.exe"
