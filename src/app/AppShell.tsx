@@ -20,10 +20,9 @@ import {
   loadHistoryRuntimeSnapshot,
 } from "./services/readModelRuntimeService";
 import {
-  prewarmStartupBootstrapCaches,
-  prewarmSecondaryViewCaches,
-  prewarmStartupSnapshotCaches,
-} from "./services/startupPrewarmService";
+  scheduleStartupWarmupRefresh,
+  startStartupWarmup,
+} from "./services/startupWarmupService";
 import { clearDataReadModelCache } from "../features/data/services/dataReadModel.ts";
 import { clearHistorySnapshotCache } from "../features/history/services/historySnapshotCache.ts";
 import { AppClassification } from "../shared/classification/appClassification.ts";
@@ -36,7 +35,6 @@ import { useAppThemeMode } from "./hooks/useAppThemeMode.ts";
 import { saveMinSessionSecsSetting } from "./services/appSettingsRuntimeService.ts";
 import {
   createPreloadableViewComponent,
-  scheduleLazyViewChunkPreload,
 } from "./services/viewChunkPreloadService";
 
 const History = createPreloadableViewComponent("history");
@@ -70,10 +68,8 @@ function AppShellContent() {
   const [settingsThemeModePreview, setSettingsThemeModePreview] = useState<ThemeMode | null>(null);
   const [settingsColorSchemePreview, setSettingsColorSchemePreview] = useState<ColorSchemePreview | null>(null);
   const [settingsLanguagePreview, setSettingsLanguagePreview] = useState<AppLanguage | null>(null);
-  const didPrewarmBootstrapCachesRef = useRef(false);
-  const didPrewarmSnapshotCachesRef = useRef(false);
-  const didPrewarmSecondaryViewCachesRef = useRef(false);
-  const didPreloadLazyViewsRef = useRef(false);
+  const warmupRuntimeReadyResolveRef = useRef<(() => void) | null>(null);
+  const warmupRuntimeReadyPromiseRef = useRef<Promise<void> | null>(null);
   const {
     activeWindow,
     trackingStatus,
@@ -86,6 +82,11 @@ function AppShellContent() {
   const [syncedUiTextLanguage, setSyncedUiTextLanguage] = useState<AppLanguage>(appSettings.language);
   const uiTextLanguage = settingsLanguagePreview ?? appSettings.language;
   const uiText = getUiText(uiTextLanguage);
+  if (!warmupRuntimeReadyPromiseRef.current) {
+    warmupRuntimeReadyPromiseRef.current = new Promise((resolve) => {
+      warmupRuntimeReadyResolveRef.current = resolve;
+    });
+  }
 
   useEffect(() => {
     setUiTextLanguage(uiTextLanguage);
@@ -121,41 +122,24 @@ function AppShellContent() {
     : null;
 
   useEffect(() => {
-    if (didPrewarmBootstrapCachesRef.current) return;
-    didPrewarmBootstrapCachesRef.current = true;
-    void prewarmStartupBootstrapCaches();
-  }, []);
-
-  useEffect(() => {
-    if (!classificationReady || didPrewarmSnapshotCachesRef.current) return;
-    didPrewarmSnapshotCachesRef.current = true;
-    void prewarmStartupSnapshotCaches(new Date());
-  }, [classificationReady]);
-
-  useEffect(() => {
-    if (didPreloadLazyViewsRef.current) return undefined;
-    didPreloadLazyViewsRef.current = true;
-
-    return scheduleLazyViewChunkPreload({
-      views: ["history", "data", "mapping", "settings", "about"],
-      initialDelayMs: 1200,
-      staggerMs: 200,
-      idleTimeoutMs: 1500,
+    const controller = startStartupWarmup({
+      runtimeReady: warmupRuntimeReadyPromiseRef.current ?? Promise.resolve(),
     });
+    return controller.cancel;
   }, []);
 
   useEffect(() => {
-    if (!classificationReady || didPrewarmSecondaryViewCachesRef.current) return undefined;
-    didPrewarmSecondaryViewCachesRef.current = true;
+    if (!classificationReady) return;
 
-    const timer = window.setTimeout(() => {
-      void prewarmSecondaryViewCaches();
-    }, 2200);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
+    warmupRuntimeReadyResolveRef.current?.();
+    warmupRuntimeReadyResolveRef.current = null;
   }, [classificationReady]);
+
+  useEffect(() => {
+    if (!classificationReady || syncTick <= 0) return undefined;
+
+    return scheduleStartupWarmupRefresh();
+  }, [classificationReady, syncTick]);
 
   useEffect(() => {
     let disposed = false;

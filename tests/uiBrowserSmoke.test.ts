@@ -4,10 +4,12 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer, type Plugin } from "vite";
+import { COPY } from "../src/shared/copy/uiText.ts";
 
 const EXPECTED_NAV_LABELS = ["今天", "历史", "数据", "应用", "设置", "关于"] as const;
 const DASHBOARD_MARKERS = ["专注分布", "应用排行"] as const;
 const SETTINGS_MARKER = "主题模式";
+const APP_LOADING_VIEW = COPY["zh-CN"].app.loadingView;
 const DEFAULT_TIMEOUT_MS = 15_000;
 
 let passed = 0;
@@ -472,6 +474,28 @@ try {
         client!,
         sessionId,
         `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(label))} + ']')?.className.includes("qp-nav-item-active")`,
+      );
+    }
+  });
+
+  await runTest("warm primary navigation avoids app loading after startup warmup", async () => {
+    await delay(4_000);
+
+    for (const label of EXPECTED_NAV_LABELS.slice(1)) {
+      const clicked = await evaluate(client!, sessionId, `
+        (() => {
+          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(label))} + ']');
+          if (!node) return false;
+          node.click();
+          return true;
+        })()
+      `);
+      assert.equal(clicked, true, `missing navigation entry ${label}`);
+      await delay(50);
+      assert.equal(
+        await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString(APP_LOADING_VIEW)})`),
+        false,
+        `unexpected app loading view after clicking ${label}`,
       );
     }
   });

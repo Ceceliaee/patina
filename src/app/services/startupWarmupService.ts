@@ -1,0 +1,400 @@
+import {
+  prewarmClassificationBootstrapCache,
+} from "../../features/classification/services/classificationService.ts";
+import {
+  getDashboardSnapshotCache,
+} from "../../features/dashboard/services/dashboardSnapshotCache.ts";
+import {
+  prewarmRecentDataHeatmapCache,
+} from "../../features/data/services/dataReadModel.ts";
+import {
+  getHistorySnapshotCache,
+} from "../../features/history/services/historySnapshotCache.ts";
+import {
+  prewarmSettingsBootstrapCache,
+} from "../../features/settings/services/settingsBootstrapService.ts";
+import {
+  loadDashboardRuntimeSnapshot,
+  loadHistoryRuntimeSnapshot,
+} from "./readModelRuntimeService.ts";
+import {
+  preloadLazyViewChunk,
+  type PreloadableView,
+} from "./viewChunkPreloadService.ts";
+
+export type StartupWarmupTaskId =
+  | "view-chunks"
+  | "settings-bootstrap"
+  | "mapping-bootstrap"
+  | "dashboard-snapshot"
+  | "history-today-snapshot"
+  | "data-default-snapshot"
+  | "data-recent-heatmap"
+  | "about-bootstrap";
+
+export type StartupWarmupTaskStatus =
+  | "idle"
+  | "scheduled"
+  | "running"
+  | "fulfilled"
+  | "rejected"
+  | "cancelled"
+  | "skipped";
+
+export interface StartupWarmupTaskSnapshot {
+  durationMs: number | null;
+  errorMessage: string | null;
+  startedAtMs: number | null;
+  status: StartupWarmupTaskStatus;
+}
+
+export interface StartupWarmupSnapshot {
+  completedAtMs: number | null;
+  startedAtMs: number | null;
+  tasks: Record<StartupWarmupTaskId, StartupWarmupTaskSnapshot>;
+}
+
+export interface StartupWarmupController {
+  cancel: () => void;
+  ready: Promise<void>;
+  snapshot: () => StartupWarmupSnapshot;
+}
+
+export interface StartupWarmupOptions {
+  initialDelayMs?: number;
+  runtimeReady?: Promise<unknown>;
+  taskGapMs?: number;
+  views?: PreloadableView[];
+}
+
+type StartupWarmupScheduler = (
+  callback: () => void,
+  delayMs: number,
+) => () => void;
+
+interface StartupWarmupDeps {
+  getDashboardSnapshotCache: (date?: Date) => unknown | null;
+  getHistorySnapshotCache: (date?: Date, rollingDayCount?: number) => unknown | null;
+  loadDashboardRuntimeSnapshot: (date?: Date) => Promise<unknown>;
+  loadHistoryRuntimeSnapshot: (date: Date, rollingDayCount?: number) => Promise<unknown>;
+  preloadLazyViewChunk: (view: PreloadableView) => Promise<unknown>;
+  prewarmClassificationBootstrapCache: () => Promise<unknown>;
+  prewarmRecentDataHeatmapCache: () => Promise<unknown>;
+  prewarmSettingsBootstrapCache: () => Promise<unknown>;
+  scheduler: StartupWarmupScheduler;
+  nowMs: () => number;
+  warn: (message: string, error: unknown) => void;
+}
+
+const STARTUP_WARMUP_TASKS: StartupWarmupTaskId[] = [
+  "view-chunks",
+  "settings-bootstrap",
+  "mapping-bootstrap",
+  "dashboard-snapshot",
+  "history-today-snapshot",
+  "data-default-snapshot",
+  "data-recent-heatmap",
+  "about-bootstrap",
+];
+
+const DEFAULT_STARTUP_WARMUP_VIEWS: PreloadableView[] = [
+  "history",
+  "data",
+  "mapping",
+  "settings",
+  "about",
+];
+
+const DEFAULT_INITIAL_DELAY_MS = 1_000;
+const DEFAULT_TASK_GAP_MS = 250;
+const DEFAULT_REFRESH_DEBOUNCE_MS = 45_000;
+
+const defaultStartupWarmupDeps: StartupWarmupDeps = {
+  getDashboardSnapshotCache,
+  getHistorySnapshotCache,
+  loadDashboardRuntimeSnapshot,
+  loadHistoryRuntimeSnapshot,
+  preloadLazyViewChunk,
+  prewarmClassificationBootstrapCache,
+  prewarmRecentDataHeatmapCache,
+  prewarmSettingsBootstrapCache,
+  scheduler: (callback, delayMs) => {
+    const handle = globalThis.setTimeout(callback, delayMs);
+    return () => globalThis.clearTimeout(handle);
+  },
+  nowMs: () => Date.now(),
+  warn: console.warn,
+};
+
+let activeStartupWarmup: StartupWarmupController | null = null;
+let cancelScheduledRefresh: (() => void) | null = null;
+
+function createInitialTaskSnapshot(): Record<StartupWarmupTaskId, StartupWarmupTaskSnapshot> {
+  return Object.fromEntries(
+    STARTUP_WARMUP_TASKS.map((taskId) => [
+      taskId,
+      {
+        durationMs: null,
+        errorMessage: null,
+        startedAtMs: null,
+        status: "idle",
+      },
+    ]),
+  ) as Record<StartupWarmupTaskId, StartupWarmupTaskSnapshot>;
+}
+
+function cloneStartupWarmupSnapshot(snapshot: StartupWarmupSnapshot): StartupWarmupSnapshot {
+  return {
+    completedAtMs: snapshot.completedAtMs,
+    startedAtMs: snapshot.startedAtMs,
+    tasks: Object.fromEntries(
+      Object.entries(snapshot.tasks).map(([taskId, task]) => [
+        taskId,
+        { ...task },
+      ]),
+    ) as Record<StartupWarmupTaskId, StartupWarmupTaskSnapshot>,
+  };
+}
+
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function createDelay(
+  scheduler: StartupWarmupScheduler,
+  cancelled: () => boolean,
+) {
+  return (delayMs: number) => new Promise<void>((resolve) => {
+    if (cancelled() || delayMs <= 0) {
+      resolve();
+      return;
+    }
+
+    const cancel = scheduler(() => {
+      cancel();
+      resolve();
+    }, delayMs);
+  });
+}
+
+async function waitForRuntimeReady(
+  runtimeReady: Promise<unknown> | undefined,
+  cancelled: () => boolean,
+) {
+  if (!runtimeReady || cancelled()) {
+    return;
+  }
+
+  await runtimeReady.catch(() => undefined);
+}
+
+async function runStartupWarmupTask(
+  taskId: StartupWarmupTaskId,
+  task: () => Promise<"fulfilled" | "skipped" | void>,
+  snapshot: StartupWarmupSnapshot,
+  deps: StartupWarmupDeps,
+  cancelled: () => boolean,
+) {
+  const taskSnapshot = snapshot.tasks[taskId];
+  if (cancelled()) {
+    taskSnapshot.status = "cancelled";
+    return;
+  }
+
+  const startedAtMs = deps.nowMs();
+  taskSnapshot.status = "running";
+  taskSnapshot.startedAtMs = startedAtMs;
+  taskSnapshot.durationMs = null;
+  taskSnapshot.errorMessage = null;
+
+  try {
+    const result = await task();
+    if (cancelled()) {
+      taskSnapshot.status = "cancelled";
+      return;
+    }
+
+    taskSnapshot.status = result === "skipped" ? "skipped" : "fulfilled";
+  } catch (error) {
+    if (cancelled()) {
+      taskSnapshot.status = "cancelled";
+      return;
+    }
+
+    taskSnapshot.status = "rejected";
+    taskSnapshot.errorMessage = toErrorMessage(error);
+    deps.warn(`Startup warm-up task failed: ${taskId}`, error);
+  } finally {
+    taskSnapshot.durationMs = deps.nowMs() - startedAtMs;
+  }
+}
+
+export function startStartupWarmup(
+  options: StartupWarmupOptions = {},
+  deps: Partial<StartupWarmupDeps> = {},
+): StartupWarmupController {
+  if (activeStartupWarmup) {
+    return activeStartupWarmup;
+  }
+
+  const resolvedDeps: StartupWarmupDeps = {
+    ...defaultStartupWarmupDeps,
+    ...deps,
+  };
+  const initialDelayMs = options.initialDelayMs ?? DEFAULT_INITIAL_DELAY_MS;
+  const taskGapMs = options.taskGapMs ?? DEFAULT_TASK_GAP_MS;
+  const views = options.views ?? DEFAULT_STARTUP_WARMUP_VIEWS;
+  let cancelled = false;
+  const snapshot: StartupWarmupSnapshot = {
+    completedAtMs: null,
+    startedAtMs: resolvedDeps.nowMs(),
+    tasks: createInitialTaskSnapshot(),
+  };
+  const delay = createDelay(resolvedDeps.scheduler, () => cancelled);
+
+  const ready = (async () => {
+    await delay(initialDelayMs);
+
+    const runTask = async (
+      taskId: StartupWarmupTaskId,
+      task: () => Promise<"fulfilled" | "skipped" | void>,
+    ) => {
+      if (cancelled) {
+        snapshot.tasks[taskId].status = "cancelled";
+        return;
+      }
+
+      snapshot.tasks[taskId].status = "scheduled";
+      await delay(taskGapMs);
+      await runStartupWarmupTask(taskId, task, snapshot, resolvedDeps, () => cancelled);
+    };
+
+    await runTask("view-chunks", async () => {
+      for (const view of views) {
+        if (cancelled) return;
+        await resolvedDeps.preloadLazyViewChunk(view);
+      }
+    });
+
+    await runTask("settings-bootstrap", async () => {
+      await resolvedDeps.prewarmSettingsBootstrapCache();
+    });
+
+    await runTask("mapping-bootstrap", async () => {
+      await resolvedDeps.prewarmClassificationBootstrapCache();
+    });
+
+    await waitForRuntimeReady(options.runtimeReady, () => cancelled);
+
+    await runTask("dashboard-snapshot", async () => {
+      const date = new Date();
+      if (resolvedDeps.getDashboardSnapshotCache(date)) {
+        return "skipped";
+      }
+
+      await resolvedDeps.loadDashboardRuntimeSnapshot(date);
+    });
+
+    await runTask("history-today-snapshot", async () => {
+      const date = new Date();
+      if (resolvedDeps.getHistorySnapshotCache(date, 7)) {
+        return "skipped";
+      }
+
+      await resolvedDeps.loadHistoryRuntimeSnapshot(date, 7);
+    });
+
+    await runTask("data-default-snapshot", async () => {
+      const date = new Date();
+      if (resolvedDeps.getHistorySnapshotCache(date, 7)) {
+        return "skipped";
+      }
+
+      await resolvedDeps.loadHistoryRuntimeSnapshot(date, 7);
+    });
+
+    await runTask("data-recent-heatmap", async () => {
+      await resolvedDeps.prewarmRecentDataHeatmapCache();
+    });
+
+    await runTask("about-bootstrap", async () => {
+      await resolvedDeps.prewarmSettingsBootstrapCache();
+    });
+  })()
+    .catch((error) => {
+      if (!cancelled) {
+        resolvedDeps.warn("Startup warm-up failed", error);
+      }
+    })
+    .finally(() => {
+      snapshot.completedAtMs = resolvedDeps.nowMs();
+      activeStartupWarmup = null;
+    });
+
+  activeStartupWarmup = {
+    cancel: () => {
+      cancelled = true;
+      for (const taskId of STARTUP_WARMUP_TASKS) {
+        if (snapshot.tasks[taskId].status === "idle" || snapshot.tasks[taskId].status === "scheduled") {
+          snapshot.tasks[taskId].status = "cancelled";
+        }
+      }
+      activeStartupWarmup = null;
+    },
+    ready,
+    snapshot: () => cloneStartupWarmupSnapshot(snapshot),
+  };
+
+  return activeStartupWarmup;
+}
+
+export function scheduleStartupWarmupRefresh(
+  debounceMs: number = DEFAULT_REFRESH_DEBOUNCE_MS,
+  deps: Pick<
+    StartupWarmupDeps,
+    | "loadDashboardRuntimeSnapshot"
+    | "loadHistoryRuntimeSnapshot"
+    | "prewarmRecentDataHeatmapCache"
+    | "scheduler"
+    | "warn"
+  > = defaultStartupWarmupDeps,
+): () => void {
+  cancelScheduledRefresh?.();
+
+  let cancelled = false;
+  cancelScheduledRefresh = deps.scheduler(() => {
+    cancelScheduledRefresh = null;
+    if (cancelled) {
+      return;
+    }
+
+    void Promise.allSettled([
+      deps.loadDashboardRuntimeSnapshot(new Date()),
+      deps.loadHistoryRuntimeSnapshot(new Date(), 7),
+      deps.prewarmRecentDataHeatmapCache(),
+    ]).then((results) => {
+      for (const result of results) {
+        if (result.status === "rejected") {
+          deps.warn("Startup warm-up refresh failed", result.reason);
+        }
+      }
+    });
+  }, debounceMs);
+
+  return () => {
+    cancelled = true;
+    cancelScheduledRefresh?.();
+    cancelScheduledRefresh = null;
+  };
+}
+
+export function getStartupWarmupSnapshot(): StartupWarmupSnapshot | null {
+  return activeStartupWarmup?.snapshot() ?? null;
+}
+
+export function resetStartupWarmupForTests(): void {
+  activeStartupWarmup?.cancel();
+  activeStartupWarmup = null;
+  cancelScheduledRefresh?.();
+  cancelScheduledRefresh = null;
+}

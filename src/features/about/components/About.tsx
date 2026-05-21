@@ -5,7 +5,10 @@ import type { QuietToastTone } from "../../../shared/components/QuietToast";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
 import type { UpdateSnapshot } from "../../../shared/types/update";
 import AboutPanel from "./AboutPanel";
-import { loadSettingsPageBootstrap } from "../../settings/services/settingsBootstrapService.ts";
+import {
+  getSettingsPageBootstrapCache,
+  loadSettingsPageBootstrap,
+} from "../../settings/services/settingsBootstrapService.ts";
 import { SettingsRuntimeAdapterService } from "../../settings/services/settingsRuntimeAdapterService";
 
 interface Props {
@@ -31,8 +34,10 @@ export default function About({
   updateDialogOpen = false,
   onToast,
 }: Props) {
-  const [appVersion, setAppVersion] = useState(updateSnapshot?.currentVersion ?? "-");
-  const [loading, setLoading] = useState(!updateSnapshot?.currentVersion);
+  const cachedBootstrap = getSettingsPageBootstrapCache();
+  const initialVersion = updateSnapshot?.currentVersion ?? cachedBootstrap?.appVersion ?? "-";
+  const [appVersion, setAppVersion] = useState(initialVersion);
+  const [loading, setLoading] = useState(!updateSnapshot?.currentVersion && !cachedBootstrap?.appVersion);
 
   useEffect(() => {
     let cancelled = false;

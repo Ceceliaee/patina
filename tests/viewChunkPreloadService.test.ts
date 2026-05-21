@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  getPreloadableViewChunkStatus,
   preloadLazyViewChunk,
   readPreloadedViewComponent,
   resetPreloadableViewChunksForTests,
@@ -65,6 +66,14 @@ function createLoaders(
 async function flushPromises() {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
 }
 
 let passed = 0;
@@ -242,6 +251,57 @@ await runTest("preloaded components can be read synchronously", async () => {
 
   assert.equal(readPreloadedViewComponent("data"), TestView);
   assert.deepEqual(calls, ["data"]);
+});
+
+await runTest("pending preloads reuse the same chunk promise", async () => {
+  const calls: PreloadableView[] = [];
+  const loadedModule = { default: () => null };
+  const deferred = createDeferred<typeof loadedModule>();
+  const loaders = {
+    ...createLoaders(calls),
+    mapping: async () => {
+      calls.push("mapping");
+      return deferred.promise;
+    },
+  };
+
+  const first = preloadLazyViewChunk("mapping", { loaders });
+  const second = preloadLazyViewChunk("mapping", { loaders });
+
+  assert.equal(first, second);
+  assert.equal(getPreloadableViewChunkStatus("mapping"), "pending");
+
+  deferred.resolve(loadedModule);
+  await first;
+
+  assert.equal(getPreloadableViewChunkStatus("mapping"), "resolved");
+  assert.deepEqual(calls, ["mapping"]);
+});
+
+await runTest("failed preloads expose rejected status and can retry", async () => {
+  const calls: PreloadableView[] = [];
+  const TestView = () => null;
+  let shouldFail = true;
+  const loaders = {
+    ...createLoaders(calls),
+    about: async () => {
+      calls.push("about");
+      if (shouldFail) {
+        throw new Error("about failed");
+      }
+      return { default: TestView };
+    },
+  };
+
+  await assert.rejects(preloadLazyViewChunk("about", { loaders }), /about failed/);
+  assert.equal(getPreloadableViewChunkStatus("about"), "rejected");
+
+  shouldFail = false;
+  await preloadLazyViewChunk("about", { loaders });
+
+  assert.equal(getPreloadableViewChunkStatus("about"), "resolved");
+  assert.equal(readPreloadedViewComponent("about"), TestView);
+  assert.deepEqual(calls, ["about", "about"]);
 });
 
 console.log(`Passed ${passed} view chunk preload tests`);

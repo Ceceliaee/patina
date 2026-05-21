@@ -202,6 +202,10 @@ export function readPreloadedViewComponent(view: PreloadableView): ComponentType
   throw preloadLazyViewChunk(view);
 }
 
+export function getPreloadableViewChunkStatus(view: PreloadableView): ViewChunkStatus {
+  return getViewChunkRecord(view).status;
+}
+
 export function createPreloadableViewComponent(
   view: PreloadableView,
 ): ComponentType<Record<string, unknown>> {
