@@ -13,7 +13,6 @@
 ## [Unreleased]
 
 Release: 待定。
-
 App note: 待定。
 App note en: TBD.
 
@@ -37,6 +36,37 @@ App note en: TBD.
 
 - 暂无。
 
+## [0.8.0] - 2026-05-21
+
+Release: 提升托盘打开后的首次切页流畅度，并修复托盘与挂件的轻微闪烁问题。
+App note: 提升托盘打开后的切页流畅度，并减少托盘和挂件闪烁。
+App note en: Smoother tray opening and first view switching.
+
+### Added
+
+- 启动后会在后台分步预热 History、Data、App Mapping、Settings 和 About 的页面代码与默认首屏数据，让开机自启动后再从托盘打开时更接近热启动体验。
+- Data 页会预热默认 7 天数据和最近一年热力图缓存，减少首次进入数据页时的整页加载感。
+
+### Changed
+
+- 非首页页面的懒加载资源改为统一的后台 warm-up 队列管理，避免分散的预热 effect 互相错开或重复。
+- About 页会复用已预热的设置 bootstrap 信息，减少首次进入关于页时的加载状态。
+- README 增加主界面、历史、数据、应用映射、设置和关于页面截图，方便首次了解产品界面。
+
+### Fixed
+
+- 修复托盘左键打开主界面时可能闪出菜单小卡片的问题。
+- 移除桌面挂件展开区域的额外阴影，减少挂件附近出现矩形阴影的观感问题。
+- 修复页面 chunk 已经加载但首次点击仍可能短暂显示整页加载的问题。
+
+### Removed
+
+- 暂无。
+
+### Internal
+
+- 新增启动 warm-up 服务、预加载状态测试和真实浏览器 smoke 验收，覆盖后台预热后切页不显示 app 级 loading 的场景。
+- 归档 lazy view 预加载和启动后台 warm-up 的执行计划。
 ## [0.7.4] - 2026-05-20
 
 Release: 提升设置保存可靠性，并收窄挂件权限与应用安全边界。

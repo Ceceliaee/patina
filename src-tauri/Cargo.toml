@@ -1,6 +1,6 @@
 [package]
 name = "time_tracker"
-version = "0.7.4"
+version = "0.8.0"
 description = "Local-first Windows desktop time tracking"
 authors = ["Time Tracker maintainers"]
 license = "MIT"
