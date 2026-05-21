@@ -34,6 +34,28 @@ App note en: TBD.
 
 ### Internal
 
+- 暂无。
+
+## [0.8.1] - 2026-05-21
+
+Release: 收窄旧启动预热与测试辅助边界，提升发布前工程验证一致性。
+App note: 提升内部质量与发布验证稳定性。
+App note en: Improved internal quality and release verification stability.
+
+### Added
+
+- 暂无。
+
+### Changed
+
+- 暂无。
+
+### Fixed
+
+- 暂无。
+
+### Internal
+
 - 清理旧启动预热入口、重复 pause-sync 规则与测试专用共享层 helper，收窄生产代码边界并同步验证脚本。
 
 ## [0.8.0] - 2026-05-21

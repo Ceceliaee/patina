@@ -22,7 +22,7 @@
 
 截至当前仓库状态：
 
-- 代码版本为 `0.8.0`
+- 代码版本为 `0.8.1`
 - 稳定发布线处于 `0.6.x`
 - 仓库仍处于 `0.x` 阶段，但已经超过原型期
 - 默认通过推送 `vX.Y.Z` / `vX.Y.Z-prerelease` 版本 tag 自动触发 GitHub Actions 工作流 [prepare-release.yml](../.github/workflows/prepare-release.yml) 中的 `Publish Release` 流程；必要时也可手动触发该工作流
