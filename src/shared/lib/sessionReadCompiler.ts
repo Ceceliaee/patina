@@ -1,5 +1,5 @@
 import type { AppStat } from "../types/app";
-import type { DailySummary, HistorySession } from "../types/sessions";
+import type { DailySummary, HistorySession, TitleSampleDetail } from "../types/sessions";
 import { AppClassification } from "../classification/appClassification.ts";
 import { cleanWindowTitle } from "./windowTitleCleaner.ts";
 
@@ -22,12 +22,6 @@ export interface CompileSessionsOptions extends SessionRange {
   keepLatestLiveSession?: boolean;
 }
 
-export interface TitleSampleDetail {
-  title: string;
-  startTime: number;
-  endTime: number;
-}
-
 export interface CompiledSession extends HistorySession {
   // Stable grouping key for stats and timeline merges.
   appKey: string;
@@ -37,7 +31,7 @@ export interface CompiledSession extends HistorySession {
   displayName: string;
   displayTitle: string;
   titleSamples: string[];
-  titleSampleDetails: TitleSampleDetail[];
+  titleSampleDetails: Array<TitleSampleDetail & { endTime: number }>;
   sourceIds: number[];
   diagnosticCodes: SessionDiagnosticCode[];
   suspiciousDuration: number;
@@ -66,8 +60,8 @@ function normalizeTitle(title: string, displayName: string) {
 }
 
 function mergeTitleSampleDetails(
-  current: TitleSampleDetail[],
-  incoming: TitleSampleDetail[],
+  current: Array<TitleSampleDetail & { endTime: number }>,
+  incoming: Array<TitleSampleDetail & { endTime: number }>,
 ) {
   const merged = current.map((sample) => ({ ...sample }));
 
@@ -75,16 +69,16 @@ function mergeTitleSampleDetails(
     const title = sample.title.trim();
     if (!title) continue;
 
-    const existing = merged.find((candidate) => candidate.title === title);
-    if (existing) {
-      existing.startTime = Math.min(existing.startTime, sample.startTime);
-      existing.endTime = Math.max(existing.endTime, sample.endTime);
+    const previous = merged[merged.length - 1];
+    if (
+      previous
+      && previous.title === title
+    ) {
+      previous.endTime = Math.max(previous.endTime, sample.endTime);
       continue;
     }
 
-    if (merged.length < 6) {
-      merged.push({ ...sample, title });
-    }
+    merged.push({ ...sample, title });
   }
 
   return merged;
@@ -183,6 +177,24 @@ function prepareSession(
   const displayName = resolveCompiledDisplayName(session, appKey);
   const cleanedTitle = cleanWindowTitle(session.windowTitle, session.exeName);
   const normalizedTitle = normalizeTitle(cleanedTitle, displayName);
+  const rawTitleSamples = session.titleSampleDetails ?? [];
+  const titleSampleDetails = rawTitleSamples
+    .map((sample) => {
+      const cleanedSampleTitle = cleanWindowTitle(sample.title, session.exeName);
+      const title = normalizeTitle(cleanedSampleTitle, displayName);
+      const startTime = Math.max(session.startTime, sample.startTime);
+      const sampleEndTime = sample.endTime ?? rawEndTime;
+      const endTime = Math.min(rawEndTime, Math.max(startTime, sampleEndTime));
+      return { title, startTime, endTime };
+    })
+    .filter((sample) => sample.title && sample.endTime > sample.startTime)
+    .sort((a, b) => a.startTime - b.startTime);
+  const normalizedTitleSampleDetails = mergeTitleSampleDetails([], titleSampleDetails);
+  const fallbackTitleSampleDetails = normalizedTitle ? [{
+    title: normalizedTitle,
+    startTime: session.startTime,
+    endTime: rawEndTime,
+  }] : [];
 
   return {
     ...session,
@@ -194,12 +206,14 @@ function prepareSession(
     mergedCount: 1,
     displayName,
     displayTitle: normalizedTitle,
-    titleSamples: normalizedTitle ? [normalizedTitle] : [],
-    titleSampleDetails: normalizedTitle ? [{
-      title: normalizedTitle,
-      startTime: session.startTime,
-      endTime: rawEndTime,
-    }] : [],
+    titleSamples: titleSamplesFromDetails(
+      normalizedTitleSampleDetails.length > 0
+        ? normalizedTitleSampleDetails
+        : fallbackTitleSampleDetails,
+    ),
+    titleSampleDetails: normalizedTitleSampleDetails.length > 0
+      ? normalizedTitleSampleDetails
+      : fallbackTitleSampleDetails,
     sourceIds: [session.id],
     diagnosticCodes: [...(session.diagnosticCodes ?? [])],
     suspiciousDuration: Math.max(0, session.suspiciousDuration ?? 0),

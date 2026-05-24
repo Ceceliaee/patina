@@ -142,6 +142,7 @@ async fn table_has_columns(
 ) -> Result<bool, String> {
     let pragma = match table_name {
         "sessions" => "PRAGMA table_info(sessions)",
+        "session_title_samples" => "PRAGMA table_info(session_title_samples)",
         "settings" => "PRAGMA table_info(settings)",
         "icon_cache" => "PRAGMA table_info(icon_cache)",
         _ => {
@@ -169,19 +170,31 @@ async fn sessions_has_column(pool: &Pool<Sqlite>, column_name: &str) -> Result<b
 }
 
 async fn sessions_has_index(pool: &Pool<Sqlite>, index_name: &str) -> Result<bool, String> {
-    let rows = sqlx::query("PRAGMA index_list(sessions)")
+    table_has_index(pool, "sessions", index_name).await
+}
+
+async fn table_has_index(
+    pool: &Pool<Sqlite>,
+    table_name: &str,
+    index_name: &str,
+) -> Result<bool, String> {
+    let pragma = match table_name {
+        "sessions" => "PRAGMA index_list(sessions)",
+        "session_title_samples" => "PRAGMA index_list(session_title_samples)",
+        _ => return Err(format!("unsupported index inspection table `{table_name}`")),
+    };
+
+    let rows = sqlx::query(pragma)
         .fetch_all(pool)
         .await
-        .map_err(|error| format!("failed to inspect sessions indexes: {error}"))?;
+        .map_err(|error| format!("failed to inspect {table_name} indexes: {error}"))?;
 
     Ok(rows
         .iter()
         .any(|row| row.get::<String, _>("name") == index_name))
 }
 
-async fn ensure_sessions_continuity_group_start_time(
-    pool: &Pool<Sqlite>,
-) -> Result<bool, String> {
+async fn ensure_sessions_continuity_group_start_time(pool: &Pool<Sqlite>) -> Result<bool, String> {
     if sessions_has_column(pool, "continuity_group_start_time").await? {
         return Ok(false);
     }
@@ -195,7 +208,9 @@ async fn ensure_sessions_continuity_group_start_time(
         .execute(&mut *tx)
         .await
         .map_err(|error| {
-            format!("failed to add sessions.continuity_group_start_time during schema repair: {error}")
+            format!(
+                "failed to add sessions.continuity_group_start_time during schema repair: {error}"
+            )
         })?;
     sqlx::query(
         "UPDATE sessions
@@ -205,7 +220,9 @@ async fn ensure_sessions_continuity_group_start_time(
     .execute(&mut *tx)
     .await
     .map_err(|error| {
-        format!("failed to backfill sessions.continuity_group_start_time during schema repair: {error}")
+        format!(
+            "failed to backfill sessions.continuity_group_start_time during schema repair: {error}"
+        )
     })?;
 
     tx.commit()
@@ -259,6 +276,81 @@ async fn ensure_current_indexes(pool: &Pool<Sqlite>) -> Result<bool, String> {
     Ok(changed)
 }
 
+async fn ensure_session_title_samples_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let mut changed = false;
+
+    if !table_exists(pool, "session_title_samples").await? {
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS session_title_samples (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                start_time INTEGER NOT NULL,
+                end_time INTEGER,
+                FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
+            )",
+        )
+        .execute(pool)
+        .await
+        .map_err(|error| format!("failed to create session_title_samples table: {error}"))?;
+        changed = true;
+    }
+
+    if !table_has_index(
+        pool,
+        "session_title_samples",
+        "idx_session_title_samples_session_time",
+    )
+    .await?
+    {
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_session_title_samples_session_time
+             ON session_title_samples(session_id, start_time)",
+        )
+        .execute(pool)
+        .await
+        .map_err(|error| {
+            format!("failed to create session_title_samples session/time index: {error}")
+        })?;
+        changed = true;
+    }
+
+    if !table_has_index(
+        pool,
+        "session_title_samples",
+        "idx_session_title_samples_time",
+    )
+    .await?
+    {
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_session_title_samples_time
+             ON session_title_samples(start_time, end_time)",
+        )
+        .execute(pool)
+        .await
+        .map_err(|error| format!("failed to create session_title_samples time index: {error}"))?;
+        changed = true;
+    }
+
+    let inserted = sqlx::query(
+        "INSERT INTO session_title_samples (session_id, title, start_time, end_time)
+         SELECT id, TRIM(window_title), start_time, end_time
+         FROM sessions
+         WHERE TRIM(COALESCE(window_title, '')) <> ''
+           AND NOT EXISTS (
+             SELECT 1
+             FROM session_title_samples
+             WHERE session_title_samples.session_id = sessions.id
+           )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|error| format!("failed to backfill legacy title samples: {error}"))?
+    .rows_affected();
+
+    Ok(changed || inserted > 0)
+}
+
 async fn repair_legacy_schema_before_baseline_normalization(
     pool: &Pool<Sqlite>,
 ) -> Result<bool, String> {
@@ -267,6 +359,7 @@ async fn repair_legacy_schema_before_baseline_normalization(
     }
 
     let mut changed = ensure_sessions_continuity_group_start_time(pool).await?;
+    changed = ensure_session_title_samples_schema(pool).await? || changed;
 
     if has_current_baseline_schema(pool).await? {
         return Ok(changed);
@@ -318,6 +411,12 @@ async fn has_current_baseline_schema(pool: &Pool<Sqlite>) -> Result<bool, String
         ],
     )
     .await?;
+    let title_samples_ready = table_has_columns(
+        pool,
+        "session_title_samples",
+        &["id", "session_id", "title", "start_time", "end_time"],
+    )
+    .await?;
     let settings_ready = table_has_columns(pool, "settings", &["key", "value"]).await?;
     let icon_cache_ready = table_has_columns(
         pool,
@@ -327,12 +426,27 @@ async fn has_current_baseline_schema(pool: &Pool<Sqlite>) -> Result<bool, String
     .await?;
     let date_index_ready = sessions_has_index(pool, "idx_sessions_date").await?;
     let active_index_ready = sessions_has_index(pool, "idx_sessions_single_active").await?;
+    let title_sample_session_index_ready = table_has_index(
+        pool,
+        "session_title_samples",
+        "idx_session_title_samples_session_time",
+    )
+    .await?;
+    let title_sample_time_index_ready = table_has_index(
+        pool,
+        "session_title_samples",
+        "idx_session_title_samples_time",
+    )
+    .await?;
 
     Ok(sessions_ready
+        && title_samples_ready
         && settings_ready
         && icon_cache_ready
         && date_index_ready
-        && active_index_ready)
+        && active_index_ready
+        && title_sample_session_index_ready
+        && title_sample_time_index_ready)
 }
 
 async fn normalize_current_baseline_migration_history_for_pool(
@@ -680,6 +794,67 @@ mod tests {
             assert!(sessions_has_index(&pool, "idx_sessions_single_active")
                 .await
                 .unwrap());
+        });
+    }
+
+    #[test]
+    fn current_baseline_includes_title_samples_table_and_indexes() {
+        tauri::async_runtime::block_on(async {
+            let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+            pool.execute(schema::CURRENT_BASELINE_SCHEMA_SQL)
+                .await
+                .unwrap();
+
+            assert!(table_exists(&pool, "session_title_samples").await.unwrap());
+            assert!(table_has_index(
+                &pool,
+                "session_title_samples",
+                "idx_session_title_samples_session_time",
+            )
+            .await
+            .unwrap());
+            assert!(table_has_index(
+                &pool,
+                "session_title_samples",
+                "idx_session_title_samples_time",
+            )
+            .await
+            .unwrap());
+            assert!(has_current_baseline_schema(&pool).await.unwrap());
+        });
+    }
+
+    #[test]
+    fn legacy_schema_repair_creates_title_samples_and_backfills_once() {
+        tauri::async_runtime::block_on(async {
+            let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+            create_legacy_schema_without_continuity_column(&pool).await;
+            pool.execute(
+                "INSERT INTO sessions (id, app_name, exe_name, window_title, start_time, end_time, duration)
+                 VALUES (1, 'Editor', 'editor.exe', 'Doc', 100, 150, 50),
+                        (2, 'Browser', 'browser.exe', '', 200, 250, 50)",
+            )
+            .await
+            .unwrap();
+
+            assert!(repair_legacy_schema_before_baseline_normalization(&pool)
+                .await
+                .unwrap());
+            assert!(!repair_legacy_schema_before_baseline_normalization(&pool)
+                .await
+                .unwrap());
+
+            let samples: Vec<(i64, String, i64, Option<i64>)> = sqlx::query_as(
+                "SELECT session_id, title, start_time, end_time
+                 FROM session_title_samples
+                 ORDER BY id ASC",
+            )
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+
+            assert_eq!(samples, vec![(1, "Doc".to_string(), 100, Some(150))]);
+            assert!(has_current_baseline_schema(&pool).await.unwrap());
         });
     }
 

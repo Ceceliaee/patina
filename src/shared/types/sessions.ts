@@ -1,3 +1,9 @@
+export interface TitleSampleDetail {
+  title: string;
+  startTime: number;
+  endTime: number | null;
+}
+
 export interface HistorySession {
   id: number;
   appName: string;
@@ -7,6 +13,7 @@ export interface HistorySession {
   endTime: number | null;
   duration: number | null;
   continuityGroupStartTime: number | null;
+  titleSampleDetails?: TitleSampleDetail[];
 }
 
 export interface DailySummary {

@@ -688,37 +688,45 @@ export default function History({
                           <div className="text-[10px] font-semibold opacity-35 text-[var(--qp-text-secondary)]">{mapped.category[0].toUpperCase()}</div>
                         )}
                       </div>
-                      <div className="flex flex-1 min-w-0 items-center gap-1.5">
-                        <div className="min-w-0 truncate text-sm font-semibold text-[var(--qp-text-primary)]">
+                      <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                        <div className="flex min-w-0 flex-1 items-end gap-1.5">
+                          <div className="min-w-0 truncate text-sm font-semibold text-[var(--qp-text-primary)]">
                             {session.displayName}
+                          </div>
+                          <span className="inline-flex h-[18px] shrink-0 items-center gap-1 rounded-[5px] border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-panel)] px-1.5 text-[9px] font-semibold leading-none text-[var(--qp-text-tertiary)]">
+                            <span>
+                              {UI_TEXT.history.activitySegmentCount(session.mergedCount)}
+                            </span>
+                            <span aria-hidden="true">·</span>
+                            <span>
+                              {UI_TEXT.history.titleRowCount(titleSampleDetails.length)}
+                            </span>
+                          </span>
+                          {hasDetails && (
+                            <button
+                              type="button"
+                              onPointerDown={(event) => event.stopPropagation()}
+                              onClick={(event) => toggleTimelineSessionDetails(
+                                session.id,
+                                session.displayName,
+                                titleSampleDetails,
+                                event.currentTarget,
+                              )}
+                              aria-expanded={isExpanded}
+                              aria-label={UI_TEXT.accessibility.history.toggleActivityDetails(
+                                isExpanded,
+                                session.displayName,
+                              )}
+                              className="qp-button-secondary inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] p-0 text-[var(--qp-text-tertiary)]"
+                            >
+                              {isExpanded
+                                ? detailPlacement === "top"
+                                  ? <ChevronUp size={11} aria-hidden="true" />
+                                  : <ChevronDown size={11} aria-hidden="true" />
+                                : <ChevronRight size={11} aria-hidden="true" />}
+                            </button>
+                          )}
                         </div>
-                        <span className="inline-flex h-[18px] shrink-0 items-center rounded-[5px] border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-panel)] px-1.5 text-[9px] font-semibold leading-none text-[var(--qp-text-tertiary)]">
-                          {UI_TEXT.history.mergedCount(session.mergedCount)}
-                        </span>
-                        {hasDetails && (
-                          <button
-                            type="button"
-                            onPointerDown={(event) => event.stopPropagation()}
-                            onClick={(event) => toggleTimelineSessionDetails(
-                              session.id,
-                              session.displayName,
-                              titleSampleDetails,
-                              event.currentTarget,
-                            )}
-                            aria-expanded={isExpanded}
-                            aria-label={UI_TEXT.accessibility.history.toggleActivityDetails(
-                              isExpanded,
-                              session.displayName,
-                            )}
-                            className="qp-button-secondary inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] p-0 text-[var(--qp-text-tertiary)]"
-                          >
-                            {isExpanded
-                              ? detailPlacement === "top"
-                                ? <ChevronUp size={11} aria-hidden="true" />
-                                : <ChevronDown size={11} aria-hidden="true" />
-                              : <ChevronRight size={11} aria-hidden="true" />}
-                          </button>
-                        )}
                       </div>
                       <div className="text-right flex-shrink-0">
                         <div className="text-xs font-semibold text-[var(--qp-text-primary)] tabular-nums">{formatDuration(session.duration || 0)}</div>
@@ -746,6 +754,9 @@ export default function History({
                         top: timelineDetailsPopover.top,
                       }}
                     >
+                      <div className="history-activity-popover-title">
+                        {UI_TEXT.history.titleDetails}
+                      </div>
                       <div className="history-activity-popover-list">
                         {timelineDetailsPopover.titleSamples.map((sample, index) => (
                           <div

@@ -124,6 +124,7 @@ function buildPreview(overrides: Partial<BackupPreview> = {}): BackupPreview {
     restoreMessageArgs: [],
     restoreMessage: "Looks good",
     sessionCount: 42,
+    titleSampleCount: 12,
     settingCount: 10,
     iconCacheCount: 5,
     ...overrides,

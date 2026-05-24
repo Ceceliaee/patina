@@ -104,8 +104,10 @@ impl TrackingRuntimeDataStore {
         &self,
         exe_name: &str,
         window_title: &str,
+        timestamp_ms: i64,
     ) -> Result<bool, TrackingRuntimeDataError> {
-        sessions::refresh_active_session_metadata(&self.pool, exe_name, window_title).await
+        sessions::refresh_active_session_metadata(&self.pool, exe_name, window_title, timestamp_ms)
+            .await
     }
 
     pub async fn start_session(

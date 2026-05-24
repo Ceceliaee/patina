@@ -50,7 +50,7 @@ pub(crate) async fn apply_window_transition(
 
     if decision.should_refresh_metadata {
         did_mutate |= data
-            .refresh_active_session_metadata(&next_window.exe_name, &next_window.title)
+            .refresh_active_session_metadata(&next_window.exe_name, &next_window.title, now_ms)
             .await?;
     }
 

@@ -15,6 +15,15 @@ pub const CURRENT_BASELINE_SCHEMA_SQL: &str = "
         continuity_group_start_time INTEGER
     );
 
+    CREATE TABLE IF NOT EXISTS session_title_samples (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        start_time INTEGER NOT NULL,
+        end_time INTEGER,
+        FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
+    );
+
     UPDATE sessions
     SET end_time = start_time,
         duration = 0
@@ -36,6 +45,12 @@ pub const CURRENT_BASELINE_SCHEMA_SQL: &str = "
     CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_single_active
     ON sessions((1))
     WHERE end_time IS NULL;
+
+    CREATE INDEX IF NOT EXISTS idx_session_title_samples_session_time
+    ON session_title_samples(session_id, start_time);
+
+    CREATE INDEX IF NOT EXISTS idx_session_title_samples_time
+    ON session_title_samples(start_time, end_time);
 
     CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,

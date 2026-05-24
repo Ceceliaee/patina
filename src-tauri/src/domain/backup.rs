@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 pub const CURRENT_BACKUP_VERSION: u32 = 1;
-pub const CURRENT_BACKUP_SCHEMA_VERSION: u32 = 4;
+pub const CURRENT_BACKUP_SCHEMA_VERSION: u32 = 5;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BackupMeta {
@@ -24,6 +24,15 @@ pub struct BackupSession {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BackupTitleSample {
+    pub id: i64,
+    pub session_id: i64,
+    pub title: String,
+    pub start_time: i64,
+    pub end_time: Option<i64>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BackupSetting {
     pub key: String,
     pub value: String,
@@ -41,6 +50,8 @@ pub struct BackupPayload {
     pub version: u32,
     pub meta: BackupMeta,
     pub sessions: Vec<BackupSession>,
+    #[serde(default)]
+    pub title_samples: Vec<BackupTitleSample>,
     pub settings: Vec<BackupSetting>,
     pub icon_cache: Vec<BackupIconCache>,
 }
@@ -56,6 +67,7 @@ pub struct BackupPreview {
     pub restore_message_args: Vec<String>,
     pub restore_message: String,
     pub session_count: usize,
+    pub title_sample_count: usize,
     pub setting_count: usize,
     pub icon_cache_count: usize,
 }
@@ -130,6 +142,7 @@ impl BackupPayload {
             restore_message_args: restore_safety.message_args,
             restore_message: restore_safety.message,
             session_count: self.sessions.len(),
+            title_sample_count: self.title_samples.len(),
             setting_count: self.settings.len(),
             icon_cache_count: self.icon_cache.len(),
         }
@@ -140,7 +153,7 @@ impl BackupPayload {
 mod tests {
     use super::{
         BackupIconCache, BackupMeta, BackupPayload, BackupSession, BackupSetting,
-        CURRENT_BACKUP_SCHEMA_VERSION, CURRENT_BACKUP_VERSION,
+        BackupTitleSample, CURRENT_BACKUP_SCHEMA_VERSION, CURRENT_BACKUP_VERSION,
     };
 
     fn sample_payload(version: u32, schema_version: u32) -> BackupPayload {
@@ -160,6 +173,13 @@ mod tests {
                 end_time: Some(20),
                 duration: Some(10),
                 continuity_group_start_time: Some(10),
+            }],
+            title_samples: vec![BackupTitleSample {
+                id: 1,
+                session_id: 1,
+                title: "Window".to_string(),
+                start_time: 10,
+                end_time: Some(20),
             }],
             settings: vec![BackupSetting {
                 key: "k".to_string(),
@@ -218,6 +238,7 @@ mod tests {
         assert!(preview.restore_supported);
         assert_eq!(preview.restore_message_key, "backup.restore.supported");
         assert_eq!(preview.session_count, 2);
+        assert_eq!(preview.title_sample_count, 1);
         assert_eq!(preview.setting_count, 1);
         assert_eq!(preview.icon_cache_count, 1);
     }

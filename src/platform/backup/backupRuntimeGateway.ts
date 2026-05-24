@@ -10,6 +10,7 @@ interface RawBackupPreview {
   restore_message_args?: string[];
   restore_message: string;
   session_count: number;
+  title_sample_count: number;
   setting_count: number;
   icon_cache_count: number;
 }
@@ -24,6 +25,7 @@ export interface BackupPreview {
   restoreMessageArgs: string[];
   restoreMessage: string;
   sessionCount: number;
+  titleSampleCount: number;
   settingCount: number;
   iconCacheCount: number;
 }
@@ -43,6 +45,7 @@ function isRawBackupPreview(value: unknown): value is RawBackupPreview {
     && typeof record.restore_supported === "boolean"
     && typeof record.restore_message === "string"
     && typeof record.session_count === "number"
+    && typeof record.title_sample_count === "number"
     && typeof record.setting_count === "number"
     && typeof record.icon_cache_count === "number";
 }
@@ -58,6 +61,7 @@ function mapRawBackupPreview(raw: RawBackupPreview): BackupPreview {
     restoreMessageArgs: raw.restore_message_args ?? [],
     restoreMessage: raw.restore_message,
     sessionCount: raw.session_count,
+    titleSampleCount: raw.title_sample_count,
     settingCount: raw.setting_count,
     iconCacheCount: raw.icon_cache_count,
   };

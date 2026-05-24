@@ -1,6 +1,6 @@
 import { getDB } from "./sqlite.ts";
 import { AppClassification } from "../../shared/classification/appClassification.ts";
-import type { HistorySession } from "../../shared/types/sessions.ts";
+import type { HistorySession, TitleSampleDetail } from "../../shared/types/sessions.ts";
 
 interface RawHistorySessionRow {
   id: number;
@@ -13,7 +13,25 @@ interface RawHistorySessionRow {
   continuity_group_start_time: number | null;
 }
 
-function mapRawHistorySession(row: RawHistorySessionRow): HistorySession {
+interface RawTitleSampleRow {
+  session_id: number;
+  title: string;
+  start_time: number;
+  end_time: number | null;
+}
+
+function mapRawTitleSample(row: RawTitleSampleRow): TitleSampleDetail {
+  return {
+    title: row.title,
+    startTime: row.start_time,
+    endTime: row.end_time,
+  };
+}
+
+function mapRawHistorySession(
+  row: RawHistorySessionRow,
+  titleSampleDetails: TitleSampleDetail[] = [],
+): HistorySession {
   return {
     id: row.id,
     appName: row.app_name,
@@ -23,6 +41,7 @@ function mapRawHistorySession(row: RawHistorySessionRow): HistorySession {
     endTime: row.end_time,
     duration: row.duration,
     continuityGroupStartTime: row.continuity_group_start_time,
+    titleSampleDetails,
   };
 }
 
@@ -56,7 +75,34 @@ export async function getSessionsInRange(startMs: number, endMs: number): Promis
     [now, endMs, now, startMs],
   );
 
-  return rows.map(mapRawHistorySession);
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const samplesBySessionId = new Map<number, TitleSampleDetail[]>();
+  const sessionIds = rows.map((row) => row.id);
+  const batchSize = 900;
+  for (let index = 0; index < sessionIds.length; index += batchSize) {
+    const batchIds = sessionIds.slice(index, index + batchSize);
+    const placeholders = batchIds.map(() => "?").join(", ");
+    const sampleRows = await db.select<RawTitleSampleRow[]>(
+      `SELECT session_id, title, start_time, end_time
+       FROM session_title_samples
+       WHERE session_id IN (${placeholders})
+         AND start_time < ?
+         AND COALESCE(end_time, ?) > ?
+       ORDER BY session_id ASC, start_time ASC, id ASC`,
+      [...batchIds, endMs, now, startMs],
+    );
+
+    for (const sampleRow of sampleRows) {
+      const samples = samplesBySessionId.get(sampleRow.session_id) ?? [];
+      samples.push(mapRawTitleSample(sampleRow));
+      samplesBySessionId.set(sampleRow.session_id, samples);
+    }
+  }
+
+  return rows.map((row) => mapRawHistorySession(row, samplesBySessionId.get(row.id) ?? []));
 }
 
 export async function getEarliestSessionStartTime(): Promise<number | null> {

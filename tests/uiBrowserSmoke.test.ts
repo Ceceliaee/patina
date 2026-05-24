@@ -10,6 +10,7 @@ const EXPECTED_NAV_LABELS = ["今天", "历史", "数据", "应用", "设置", "
 const DASHBOARD_MARKERS = ["专注分布", "应用排行"] as const;
 const SETTINGS_MARKER = "主题模式";
 const APP_LOADING_VIEW = COPY["zh-CN"].app.loadingView;
+const HISTORY_TITLE_DETAIL_COUNT = 10;
 const DEFAULT_TIMEOUT_MS = 15_000;
 
 let passed = 0;
@@ -103,13 +104,76 @@ function tauriStubFor(path: string) {
 
   if (path === "@tauri-apps/plugin-sql") {
     return `
+      function smokeDayStart() {
+        const now = new Date();
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 9, 0, 0, 0).getTime();
+      }
+
+      function historySessionRows() {
+        const start = smokeDayStart();
+        return [
+          {
+            id: 901,
+            app_name: "Extremely Long Research Workbench Application Name",
+            exe_name: "deep-research-workbench.exe",
+            window_title: "Extremely detailed project brief",
+            start_time: start,
+            end_time: start + 20 * 60 * 1000,
+            duration: 20 * 60 * 1000,
+            continuity_group_start_time: start,
+          },
+          {
+            id: 902,
+            app_name: "Extremely Long Research Workbench Application Name",
+            exe_name: "deep-research-workbench.exe",
+            window_title: "Budget spreadsheet review",
+            start_time: start + 22 * 60 * 1000,
+            end_time: start + 42 * 60 * 1000,
+            duration: 20 * 60 * 1000,
+            continuity_group_start_time: start,
+          },
+        ];
+      }
+
+      function historyTitleSampleRows() {
+        const start = smokeDayStart();
+        return Array.from({ length: ${HISTORY_TITLE_DETAIL_COUNT} }, (_, index) => {
+          const sessionId = index < 5 ? 901 : 902;
+          const sessionOffset = index < 5 ? 0 : 22 * 60 * 1000;
+          const sampleIndex = index % 5;
+          const sampleStart = start + sessionOffset + sampleIndex * 4 * 60 * 1000;
+          return {
+            session_id: sessionId,
+            title: "Detailed document title " + (index + 1) + " for a very long research workflow",
+            start_time: sampleStart,
+            end_time: sampleStart + 4 * 60 * 1000,
+          };
+        });
+      }
+
       export default class Database {
         static async load() {
           return new Database();
         }
-        async select() {
+
+        async select(query) {
+          const normalizedQuery = String(query ?? "").toLowerCase();
+          if (normalizedQuery.includes("from settings")) {
+            const language = globalThis.__TIME_TRACKER_SMOKE_LANGUAGE;
+            return language ? [{ key: "language", value: language }] : [];
+          }
+          if (normalizedQuery.includes("min(start_time)")) {
+            return [{ earliest_start_time: historySessionRows()[0].start_time }];
+          }
+          if (normalizedQuery.includes("from session_title_samples")) {
+            return historyTitleSampleRows();
+          }
+          if (normalizedQuery.includes("from sessions")) {
+            return historySessionRows();
+          }
           return [];
         }
+
         async execute() {}
         async close() {}
       }
@@ -552,6 +616,104 @@ try {
     await waitForExpression(client!, sessionId, `
       document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
     `);
+  });
+
+  await runTest("history title details stay readable at narrow and default widths", async () => {
+    for (const width of [900, 1100]) {
+      await client!.command("Emulation.setDeviceMetricsOverride", {
+        width,
+        height: 760,
+        deviceScaleFactor: 1,
+        mobile: false,
+      }, sessionId);
+      const clicked = await evaluate(client!, sessionId, `
+        (() => {
+          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("历史"))} + ']');
+          if (!node) return false;
+          node.click();
+          return true;
+        })()
+      `);
+      assert.equal(clicked, true);
+      await waitForExpression(
+        client!,
+        sessionId,
+        `document.body.innerText.includes(${jsonString("标题 " + HISTORY_TITLE_DETAIL_COUNT)})`,
+      );
+      assert.equal(
+        await evaluate(client!, sessionId, `
+          document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
+        `),
+        true,
+        `History viewport overflowed at ${width}px`,
+      );
+    }
+
+    const opened = await evaluate(client!, sessionId, `
+      (() => {
+        const trigger = Array.from(document.querySelectorAll('button[aria-label]'))
+          .find((node) => node.getAttribute('aria-label')?.includes('标题详情'));
+        if (!trigger) return false;
+        trigger.click();
+        return true;
+      })()
+    `);
+    assert.equal(opened, true);
+    await waitForExpression(client!, sessionId, "Boolean(document.querySelector('.history-activity-popover'))");
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const list = document.querySelector('.history-activity-popover-list');
+          const popover = document.querySelector('.history-activity-popover');
+          return Boolean(
+            list
+            && popover
+            && list.children.length === ${HISTORY_TITLE_DETAIL_COUNT}
+            && popover.scrollHeight > popover.clientHeight
+          );
+        })()
+      `),
+      true,
+    );
+  });
+
+  await runTest("English history title chips do not crowd the duration column", async () => {
+    await client!.command("Page.addScriptToEvaluateOnNewDocument", {
+      source: "globalThis.__TIME_TRACKER_SMOKE_LANGUAGE = 'en-US';",
+    }, sessionId);
+    await client!.command("Emulation.setDeviceMetricsOverride", {
+      width: 900,
+      height: 760,
+      deviceScaleFactor: 1,
+      mobile: false,
+    }, sessionId);
+    await client!.command("Page.navigate", { url: appUrl }, sessionId);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.body.innerText.includes(${jsonString("Focus share")})`,
+    );
+
+    const clicked = await evaluate(client!, sessionId, `
+      (() => {
+        const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("History"))} + ']');
+        if (!node) return false;
+        node.click();
+        return true;
+      })()
+    `);
+    assert.equal(clicked, true);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.body.innerText.includes(${jsonString("Titles " + HISTORY_TITLE_DETAIL_COUNT)})`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
+      `),
+      true,
+    );
   });
 
   assert.deepEqual(consoleErrors, []);

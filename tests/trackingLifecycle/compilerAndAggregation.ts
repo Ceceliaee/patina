@@ -188,7 +188,7 @@ export function runCompilerAndAggregationTests() {
     assert.equal(timeline[0].duration, 120_000);
   });
 
-  runTest("timeline title details keep separate first and last times", () => {
+  runTest("timeline title details keep non-contiguous repeated titles separate", () => {
     const sessions: HistorySession[] = [
       makeSession({
         id: 1,
@@ -233,10 +233,161 @@ export function runCompilerAndAggregationTests() {
         endTime: sample.endTime,
       })),
       [
-        { title: "README.md", startTime: 0, endTime: 240_000 },
+        { title: "README.md", startTime: 0, endTime: 60_000 },
         { title: "Settings", startTime: 90_000, endTime: 150_000 },
+        { title: "README.md", startTime: 180_000, endTime: 240_000 },
       ],
     );
+  });
+
+  runTest("session title samples override legacy final window title", () => {
+    const sessions: HistorySession[] = [
+      makeSession({
+        id: 1,
+        exeName: "Chrome.exe",
+        appName: "Chrome",
+        windowTitle: "Final Page",
+        startTime: 0,
+        endTime: 90_000,
+        duration: 90_000,
+        titleSampleDetails: [
+          { title: "Page A", startTime: 0, endTime: 30_000 },
+          { title: "Page B", startTime: 30_000, endTime: 60_000 },
+          { title: "Page A", startTime: 60_000, endTime: 90_000 },
+        ],
+      }),
+    ];
+
+    const compiled = compileSessions(sessions, {
+      startMs: 0,
+      endMs: 90_000,
+      minSessionSecs: 0,
+    });
+
+    assert.deepEqual(
+      compiled[0].titleSampleDetails.map((sample) => sample.title),
+      ["Page A", "Page B", "Page A"],
+    );
+    assert.equal(compiled[0].displayTitle, "Page A +2");
+  });
+
+  runTest("adjacent matching title samples merge even across quiet gaps", () => {
+    const sessions: HistorySession[] = [
+      makeSession({
+        id: 1,
+        exeName: "EditorApp.exe",
+        appName: "Editor App",
+        windowTitle: "Doc",
+        startTime: 0,
+        endTime: 120_000,
+        duration: 120_000,
+        titleSampleDetails: [
+          { title: "Doc", startTime: 0, endTime: 30_000 },
+          { title: "Doc", startTime: 45_000, endTime: 60_000 },
+          { title: "Settings", startTime: 60_000, endTime: 90_000 },
+          { title: "Doc", startTime: 90_000, endTime: 120_000 },
+        ],
+      }),
+    ];
+
+    const compiled = compileSessions(sessions, {
+      startMs: 15_000,
+      endMs: 105_000,
+      minSessionSecs: 0,
+    });
+
+    assert.deepEqual(
+      compiled[0].titleSampleDetails.map((sample) => ({
+        title: sample.title,
+        startTime: sample.startTime,
+        endTime: sample.endTime,
+      })),
+      [
+        { title: "Doc", startTime: 15_000, endTime: 60_000 },
+        { title: "Settings", startTime: 60_000, endTime: 90_000 },
+        { title: "Doc", startTime: 90_000, endTime: 105_000 },
+      ],
+    );
+  });
+
+  runTest("same title repeated across adjacent same-app sessions collapses to one detail row", () => {
+    const sessions: HistorySession[] = [
+      makeSession({
+        id: 1,
+        exeName: "VSCodium.exe",
+        appName: "VSCodium",
+        windowTitle: "README.zh-CN.md - Time Tracking",
+        startTime: 0,
+        endTime: 120_000,
+        duration: 120_000,
+      }),
+      makeSession({
+        id: 2,
+        exeName: "VSCodium.exe",
+        appName: "VSCodium",
+        windowTitle: "README.zh-CN.md - Time Tracking",
+        startTime: 240_000,
+        endTime: 300_000,
+        duration: 60_000,
+      }),
+      makeSession({
+        id: 3,
+        exeName: "VSCodium.exe",
+        appName: "VSCodium",
+        windowTitle: "README.zh-CN.md - Time Tracking",
+        startTime: 300_000,
+        endTime: 360_000,
+        duration: 60_000,
+      }),
+    ];
+    const compiled = compileSessions(sessions, {
+      startMs: 0,
+      endMs: 400_000,
+      minSessionSecs: 0,
+    });
+    const timeline = buildTimelineSessions(compiled, 180);
+
+    assert.equal(timeline.length, 1);
+    assert.deepEqual(
+      timeline[0].titleSampleDetails.map((sample) => ({
+        title: sample.title,
+        startTime: sample.startTime,
+        endTime: sample.endTime,
+      })),
+      [
+        {
+          title: "README.zh-CN.md - Time Tracking",
+          startTime: 0,
+          endTime: 360_000,
+        },
+      ],
+    );
+  });
+
+  runTest("title sample details keep all stable rows for the scrollable popover", () => {
+    const samples = Array.from({ length: 8 }, (_, index) => ({
+      title: `Doc ${index + 1}`,
+      startTime: index * 10_000,
+      endTime: (index + 1) * 10_000,
+    }));
+    const compiled = compileSessions([
+      makeSession({
+        id: 1,
+        exeName: "EditorApp.exe",
+        appName: "Editor App",
+        startTime: 0,
+        endTime: 80_000,
+        duration: 80_000,
+        titleSampleDetails: samples,
+      }),
+    ], {
+      startMs: 0,
+      endMs: 80_000,
+      minSessionSecs: 0,
+    });
+
+    assert.equal(compiled[0].titleSampleDetails.length, 8);
+    assert.equal(compiled[0].titleSampleDetails[7].title, "Doc 8");
   });
 
   runTest("timeline grouping can follow persisted continuity anchors even when the visible interruption exceeds the merge threshold", () => {
@@ -301,6 +452,61 @@ export function runCompilerAndAggregationTests() {
 
     assert.equal(compiled.length, 1);
     assert.equal(compiled[0].duration, 20 * 60_000);
+  });
+
+  runTest("day compilation clips cross-day title samples to the selected date", () => {
+    const day = new Date(2026, 3, 4, 12, 0, 0, 0);
+    const range = getDayRange(day, new Date(2026, 3, 5, 0, 0, 0, 0).getTime());
+    const sessionStart = new Date(2026, 3, 3, 23, 50, 0, 0).getTime();
+    const sessionEnd = new Date(2026, 3, 4, 0, 20, 0, 0).getTime();
+    const sessions: HistorySession[] = [
+      makeSession({
+        id: 1,
+        exeName: "EditorApp.exe",
+        appName: "Editor App",
+        startTime: sessionStart,
+        endTime: sessionEnd,
+        duration: 30 * 60_000,
+        titleSampleDetails: [
+          {
+            title: "Before midnight",
+            startTime: sessionStart,
+            endTime: new Date(2026, 3, 4, 0, 5, 0, 0).getTime(),
+          },
+          {
+            title: "After midnight",
+            startTime: new Date(2026, 3, 4, 0, 5, 0, 0).getTime(),
+            endTime: sessionEnd,
+          },
+        ],
+      }),
+    ];
+
+    const compiled = compileSessions(sessions, {
+      startMs: range.startMs,
+      endMs: range.endMs,
+      minSessionSecs: 0,
+    });
+
+    assert.deepEqual(
+      compiled[0].titleSampleDetails.map((sample) => ({
+        title: sample.title,
+        startTime: sample.startTime,
+        endTime: sample.endTime,
+      })),
+      [
+        {
+          title: "Before midnight",
+          startTime: range.startMs,
+          endTime: new Date(2026, 3, 4, 0, 5, 0, 0).getTime(),
+        },
+        {
+          title: "After midnight",
+          startTime: new Date(2026, 3, 4, 0, 5, 0, 0).getTime(),
+          endTime: sessionEnd,
+        },
+      ],
+    );
   });
 
   runTest("daily summaries attribute cross-day activity to both days", () => {

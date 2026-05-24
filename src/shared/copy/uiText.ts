@@ -79,7 +79,7 @@ const ZH_CN_UI_TEXT = {
       decreaseMinDuration: "减少最短时长 1 分钟",
       increaseMinDuration: "增加最短时长 1 分钟",
       toggleActivityDetails: (expanded: boolean, appName: string) => (
-        `${expanded ? "收起" : "展开"} ${appName} 的活动详情`
+        `${expanded ? "收起" : "展开"} ${appName} 的标题详情`
       ),
     },
     settings: {
@@ -151,7 +151,9 @@ const ZH_CN_UI_TEXT = {
     timeline: "时间线",
     loading: "加载中...",
     emptyDay: "这一天暂无记录",
-    mergedCount: (count: number) => `${count} 段活动`,
+    activitySegmentCount: (count: number) => `活动 ${count}`,
+    titleRowCount: (count: number) => `标题 ${count}`,
+    titleDetails: "标题详情",
     untilNow: "至今",
   },
   data: {
@@ -297,7 +299,7 @@ const ZH_CN_UI_TEXT = {
     colorSchemeSaving: "保存中",
     dataSafetyTitle: "数据安全",
     backupRestoreTitle: "备份与恢复",
-    backupRestoreHint: "包含会话数据、设置项和图标缓存。恢复策略决定如何处理当前数据。",
+    backupRestoreHint: "包含会话数据、窗口标题明细、设置项和图标缓存。恢复策略决定如何处理当前数据。",
     backupExportTitle: "备份",
     backupExportHint: "备份当前数据快照",
     backupExporting: "备份中...",
@@ -556,7 +558,7 @@ const EN_US_UI_TEXT: UiText = {
       decreaseMinDuration: "Decrease minimum duration by 1 minute",
       increaseMinDuration: "Increase minimum duration by 1 minute",
       toggleActivityDetails: (expanded: boolean, appName: string) => (
-        `${expanded ? "Collapse" : "Expand"} activity details for ${appName}`
+        `${expanded ? "Collapse" : "Expand"} title details for ${appName}`
       ),
     },
     settings: {
@@ -628,7 +630,9 @@ const EN_US_UI_TEXT: UiText = {
     timeline: "Timeline",
     loading: "Loading...",
     emptyDay: "No records for this day",
-    mergedCount: (count: number) => `${count} activities`,
+    activitySegmentCount: (count: number) => `Act ${count}`,
+    titleRowCount: (count: number) => `Titles ${count}`,
+    titleDetails: "Title details",
     untilNow: "until now",
   },
   data: {
@@ -775,7 +779,7 @@ const EN_US_UI_TEXT: UiText = {
     colorSchemeSaving: "Saving",
     dataSafetyTitle: "Data safety",
     backupRestoreTitle: "Backup and restore",
-    backupRestoreHint: "Includes sessions, settings, and cached icons. The restore strategy decides how current data is handled.",
+    backupRestoreHint: "Includes sessions, window title details, settings, and cached icons. The restore strategy decides how current data is handled.",
     backupExportTitle: "Back up",
     backupExportHint: "Create a backup of current data",
     backupExporting: "Backing up...",

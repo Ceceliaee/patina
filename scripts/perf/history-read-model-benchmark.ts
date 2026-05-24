@@ -6,6 +6,18 @@ import type { HistorySession } from "../../src/shared/types/sessions.ts";
 import { measureBenchmark, printBenchmarkReport } from "./benchmarkUtils.ts";
 
 function makeSession(id: number, startTime: number, duration: number, exeName: string): HistorySession {
+  const titleStep = Math.max(1, Math.floor(duration / 4));
+  const titleSampleDetails = Array.from({ length: 4 }, (_, index) => {
+    const sampleStart = startTime + index * titleStep;
+    const sampleEnd = index === 3 ? startTime + duration : Math.min(startTime + duration, sampleStart + titleStep);
+    const repeatedTitle = index === 2 ? 1 : index;
+    return {
+      title: `${exeName} Document ${id}-${repeatedTitle}`,
+      startTime: sampleStart,
+      endTime: sampleEnd,
+    };
+  });
+
   return {
     id,
     appName: exeName.replace(/\.exe$/i, ""),
@@ -15,6 +27,7 @@ function makeSession(id: number, startTime: number, duration: number, exeName: s
     endTime: startTime + duration,
     duration,
     continuityGroupStartTime: startTime,
+    titleSampleDetails,
   };
 }
 
@@ -75,7 +88,9 @@ printBenchmarkReport({
     comparisonNotes: [
       "compile-and-timeline-reference measures only the old hot subpath shape.",
       "current-history-read-model measures the full current read model, including weekly summaries, chart data, app summary, timeline, and diagnostics.",
+      "The synthetic dataset includes four title samples per session to exercise the 1.1.0 title-detail path under a high-volume day.",
       "Treat these as budgeted reference measurements, not direct optimization deltas.",
     ],
+    titleSampleCount: sessions.reduce((sum, session) => sum + (session.titleSampleDetails?.length ?? 0), 0),
   },
 });

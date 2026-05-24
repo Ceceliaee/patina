@@ -733,6 +733,66 @@ mod tests {
 
             assert_eq!(reason, Some("session-metadata-refreshed"));
             assert_eq!(latest_title, "Window B");
+
+            let samples: Vec<(String, i64, Option<i64>)> = sqlx::query_as(
+                "SELECT title, start_time, end_time
+                 FROM session_title_samples
+                 ORDER BY id ASC",
+            )
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+            assert_eq!(
+                samples,
+                vec![
+                    ("Window A".to_string(), 1_000, Some(5_000)),
+                    ("Window B".to_string(), 5_000, None),
+                ]
+            );
+        });
+    }
+
+    #[test]
+    fn title_capture_disabled_closes_active_title_sample_without_starting_new_one() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            let data = data_store(&pool);
+            let original = make_window(&[("title", "Window A")]);
+            let hidden_title = make_window(&[("title", "")]);
+
+            assert!(active_session::start_session(&pool, &original, 1_000)
+                .await
+                .unwrap());
+
+            let reason = transition::apply_window_transition(
+                &data,
+                Some(&original),
+                &hidden_title,
+                5_000,
+                5_000,
+                active_session::start_session_for_transition,
+            )
+            .await
+            .unwrap();
+
+            let latest_title: String = sqlx::query_scalar(
+                "SELECT window_title FROM sessions WHERE end_time IS NULL LIMIT 1",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let samples: Vec<(String, i64, Option<i64>)> = sqlx::query_as(
+                "SELECT title, start_time, end_time
+                 FROM session_title_samples
+                 ORDER BY id ASC",
+            )
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+
+            assert_eq!(reason, Some("session-metadata-refreshed"));
+            assert_eq!(latest_title, "");
+            assert_eq!(samples, vec![("Window A".to_string(), 1_000, Some(5_000))]);
         });
     }
 
@@ -760,6 +820,13 @@ mod tests {
 
             assert_eq!(reason, Some("session-ended-lock"));
             assert_eq!(ended, Some((5_000, 4_000)));
+
+            let sample_end_time: Option<i64> =
+                sqlx::query_scalar("SELECT end_time FROM session_title_samples LIMIT 1")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(sample_end_time, Some(5_000));
         });
     }
 
