@@ -12,6 +12,7 @@ interface Props {
   className?: string;
   showTooltip?: boolean;
   tooltipPlacement?: QuietTooltipPlacement;
+  pressed?: boolean;
   onClick?: () => void;
 }
 
@@ -24,15 +25,17 @@ export default function QuietIconAction({
   className,
   showTooltip = true,
   tooltipPlacement = "top",
+  pressed,
   onClick,
 }: Props) {
   const button = (
     <button
       type="button"
       aria-label={ariaLabel ?? title}
+      aria-pressed={pressed}
       disabled={disabled}
       onClick={onClick}
-      className={`qp-icon-action qp-icon-action-${tone} ${className ?? ""}`.trim()}
+      className={`qp-icon-action qp-icon-action-${tone} ${pressed ? "qp-icon-action-pressed" : ""} ${className ?? ""}`.trim()}
     >
       {icon}
     </button>

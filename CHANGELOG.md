@@ -22,7 +22,7 @@ App note en: TBD.
 
 ### Changed
 
-- 暂无。
+- Dashboard“今日活动”和 History“当日活动”支持切换分类分层小时柱，便于查看每小时活动构成；所选模式会在页面之间同步，并在重新打开应用后保留（[#3](https://github.com/Ceceliaee/time-tracking/issues/3)、[#6](https://github.com/Ceceliaee/time-tracking/issues/6)）。
 
 ### Fixed
 

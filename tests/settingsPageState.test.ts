@@ -24,6 +24,7 @@ interface AppSettings {
   minimizeBehavior: "taskbar" | "widget";
   themeMode: "light" | "dark" | "system";
   language: "zh-CN" | "en-US";
+  hourlyActivityChartMode: "total" | "category";
   colorSchemeLight:
     | "default"
     | "absolutely"
@@ -99,6 +100,7 @@ const BASE_SETTINGS: AppSettings = {
   minimizeBehavior: "taskbar",
   themeMode: "light",
   language: "zh-CN",
+  hourlyActivityChartMode: "total",
   colorSchemeLight: "default",
   colorSchemeDark: "default",
   launchAtLogin: false,
@@ -308,6 +310,13 @@ await runTest("normalizeSettingsRecord accepts UI language and falls back to Chi
   assert.equal(normalizeSettingsRecord({ language: "en-US" }).language, "en-US");
   assert.equal(normalizeSettingsRecord({ language: "EN-us" }).language, "en-US");
   assert.equal(normalizeSettingsRecord({ language: "fr-FR" }).language, "zh-CN");
+});
+
+await runTest("normalizeSettingsRecord accepts hourly activity chart modes and falls back to total", () => {
+  assert.equal(normalizeSettingsRecord({ hourly_activity_chart_mode: "total" }).hourlyActivityChartMode, "total");
+  assert.equal(normalizeSettingsRecord({ hourly_activity_chart_mode: "category" }).hourlyActivityChartMode, "category");
+  assert.equal(normalizeSettingsRecord({ hourly_activity_chart_mode: "CATEGORY" }).hourlyActivityChartMode, "category");
+  assert.equal(normalizeSettingsRecord({ hourly_activity_chart_mode: "stacked" }).hourlyActivityChartMode, "total");
 });
 
 await runTest("normalizeSettingsRecord accepts color schemes and falls back to default", () => {

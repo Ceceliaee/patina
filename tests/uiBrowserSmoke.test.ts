@@ -69,7 +69,24 @@ function tauriStubFor(path: string) {
 
   if (path === "@tauri-apps/api/core") {
     return `
-      export async function invoke() {
+      const SETTINGS_STORAGE_KEY = "__time_tracker_smoke_settings";
+
+      function loadStoredSettings() {
+        try {
+          return JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) ?? "{}");
+        } catch {
+          return {};
+        }
+      }
+
+      export async function invoke(command, payload = {}) {
+        if (command === "cmd_commit_app_settings") {
+          const settings = loadStoredSettings();
+          for (const mutation of payload.mutations ?? []) {
+            settings[mutation.key] = mutation.value;
+          }
+          localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+        }
         return null;
       }
       export class Channel {
@@ -104,6 +121,16 @@ function tauriStubFor(path: string) {
 
   if (path === "@tauri-apps/plugin-sql") {
     return `
+      const SETTINGS_STORAGE_KEY = "__time_tracker_smoke_settings";
+
+      function loadStoredSettings() {
+        try {
+          return JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) ?? "{}");
+        } catch {
+          return {};
+        }
+      }
+
       function smokeSessionTiming() {
         const now = new Date();
         const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
@@ -122,6 +149,11 @@ function tauriStubFor(path: string) {
 
       function historySessionRows() {
         const timing = smokeSessionTiming();
+        const earlierEnd = timing.start;
+        const earlierStart = Math.max(
+          new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 0, 0, 0, 0).getTime(),
+          earlierEnd - 10 * 60 * 1000,
+        );
         return [
           {
             id: 901,
@@ -132,6 +164,16 @@ function tauriStubFor(path: string) {
             end_time: timing.end,
             duration: timing.duration,
             continuity_group_start_time: timing.start,
+          },
+          {
+            id: 902,
+            app_name: "Cursor",
+            exe_name: "cursor.exe",
+            window_title: "Implement chart mode",
+            start_time: earlierStart,
+            end_time: earlierEnd,
+            duration: Math.max(0, earlierEnd - earlierStart),
+            continuity_group_start_time: earlierStart,
           },
         ];
       }
@@ -160,8 +202,10 @@ function tauriStubFor(path: string) {
         async select(query) {
           const normalizedQuery = String(query ?? "").toLowerCase();
           if (normalizedQuery.includes("from settings")) {
+            const settings = loadStoredSettings();
             const language = globalThis.__TIME_TRACKER_SMOKE_LANGUAGE;
-            return language ? [{ key: "language", value: language }] : [];
+            if (language) settings.language = language;
+            return Object.entries(settings).map(([key, value]) => ({ key, value: String(value) }));
           }
           if (normalizedQuery.includes("min(start_time)")) {
             return [{ earliest_start_time: historySessionRows()[0].start_time }];
@@ -613,18 +657,311 @@ try {
   });
 
   await runTest("dashboard viewport has no horizontal overflow", async () => {
-    const clicked = await evaluate(client!, sessionId, `
-      (() => {
-        const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']');
-        if (!node) return false;
-        node.click();
-        return true;
-      })()
-    `);
-    assert.equal(clicked, true);
-    await waitForExpression(client!, sessionId, `
-      document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
-    `);
+    for (const width of [900, 1100, 1280]) {
+      await client!.command("Emulation.setDeviceMetricsOverride", {
+        width,
+        height: 820,
+        deviceScaleFactor: 1,
+        mobile: false,
+      }, sessionId);
+      const clicked = await evaluate(client!, sessionId, `
+        (() => {
+          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']');
+          if (!node) return false;
+          node.click();
+          return true;
+        })()
+      `);
+      assert.equal(clicked, true);
+      await waitForExpression(client!, sessionId, `
+        document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
+      `);
+    }
+  });
+
+  await runTest("dashboard hourly chart toggles category layers", async () => {
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const card = document.querySelector(".dashboard-pulse-card");
+          const icon = document.querySelector(".dashboard-pulse-mode-toggle svg");
+          if (!card || !icon) return false;
+          const cardRect = card.getBoundingClientRect();
+          const iconRect = icon.getBoundingClientRect();
+          const contentRight = cardRect.right - parseFloat(getComputedStyle(card).paddingRight);
+          return Math.abs(contentRight - iconRect.right) <= 1;
+        })()
+      `),
+      true,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const toggle = document.querySelector(".dashboard-pulse-mode-toggle");
+          if (!toggle || toggle.getAttribute("aria-pressed") !== "false") return false;
+          toggle.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".dashboard-pulse-mode-toggle")?.getAttribute("aria-pressed") === "true"`,
+    );
+    assert.equal(
+      await evaluate(
+        client!,
+        sessionId,
+        `document.querySelector(".dashboard-pulse-mode-toggle")?.getAttribute("aria-label")`,
+      ),
+      "显示总活动",
+    );
+    assert.equal(
+      await evaluate(
+        client!,
+        sessionId,
+        `document.querySelectorAll(".dashboard-pulse-chart .recharts-bar").length >= 2`,
+      ),
+      true,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const toggle = document.querySelector(".dashboard-pulse-mode-toggle");
+          if (!toggle) return false;
+          toggle.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".dashboard-pulse-mode-toggle")?.getAttribute("aria-pressed") === "false"`,
+    );
+    assert.equal(
+      await evaluate(
+        client!,
+        sessionId,
+        `document.querySelector(".dashboard-pulse-mode-toggle")?.getAttribute("aria-label")`,
+      ),
+      "按分类显示",
+    );
+  });
+
+  await runTest("dashboard hourly chart supports keyboard toggle and keeps category mode across views", async () => {
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const toggle = document.querySelector(".dashboard-pulse-mode-toggle");
+          if (!toggle) return false;
+          toggle.focus();
+          return document.activeElement === toggle;
+        })()
+      `),
+      true,
+    );
+    await client!.command("Input.dispatchKeyEvent", {
+      type: "keyDown",
+      key: "Enter",
+      code: "Enter",
+      text: "\r",
+      unmodifiedText: "\r",
+      windowsVirtualKeyCode: 13,
+      nativeVirtualKeyCode: 13,
+    }, sessionId);
+    await client!.command("Input.dispatchKeyEvent", {
+      type: "keyUp",
+      key: "Enter",
+      code: "Enter",
+      windowsVirtualKeyCode: 13,
+      nativeVirtualKeyCode: 13,
+    }, sessionId);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".dashboard-pulse-mode-toggle")?.getAttribute("aria-pressed") === "true"`,
+    );
+    await client!.command("Input.dispatchKeyEvent", {
+      type: "keyDown",
+      key: " ",
+      code: "Space",
+      text: " ",
+      unmodifiedText: " ",
+      windowsVirtualKeyCode: 32,
+      nativeVirtualKeyCode: 32,
+    }, sessionId);
+    await client!.command("Input.dispatchKeyEvent", {
+      type: "keyUp",
+      key: " ",
+      code: "Space",
+      windowsVirtualKeyCode: 32,
+      nativeVirtualKeyCode: 32,
+    }, sessionId);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".dashboard-pulse-mode-toggle")?.getAttribute("aria-pressed") === "false"`,
+    );
+    await client!.command("Input.dispatchKeyEvent", {
+      type: "keyDown",
+      key: "Enter",
+      code: "Enter",
+      text: "\r",
+      unmodifiedText: "\r",
+      windowsVirtualKeyCode: 13,
+      nativeVirtualKeyCode: 13,
+    }, sessionId);
+    await client!.command("Input.dispatchKeyEvent", {
+      type: "keyUp",
+      key: "Enter",
+      code: "Enter",
+      windowsVirtualKeyCode: 13,
+      nativeVirtualKeyCode: 13,
+    }, sessionId);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".dashboard-pulse-mode-toggle")?.getAttribute("aria-pressed") === "true"`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("历史"))} + ']');
+          if (!node) return false;
+          node.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".history-pulse-mode-toggle")?.getAttribute("aria-pressed") === "true"`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']');
+          if (!node) return false;
+          node.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".dashboard-pulse-mode-toggle")?.getAttribute("aria-pressed") === "true"`,
+    );
+  });
+
+  await runTest("history hourly chart toggles category layers", async () => {
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("历史"))} + ']');
+          if (!node) return false;
+          node.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(".history-pulse-mode-toggle"))`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const card = document.querySelector(".history-pulse-card");
+          const icon = document.querySelector(".history-pulse-mode-toggle svg");
+          if (!card || !icon) return false;
+          const cardRect = card.getBoundingClientRect();
+          const iconRect = icon.getBoundingClientRect();
+          const contentRight = cardRect.right - parseFloat(getComputedStyle(card).paddingRight);
+          return Math.abs(contentRight - iconRect.right) <= 1;
+        })()
+      `),
+      true,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const toggle = document.querySelector(".history-pulse-mode-toggle");
+          if (!toggle || toggle.getAttribute("aria-pressed") !== "true") return false;
+          toggle.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".history-pulse-mode-toggle")?.getAttribute("aria-pressed") === "false"`,
+    );
+    assert.equal(
+      await evaluate(
+        client!,
+        sessionId,
+        `document.querySelector(".history-pulse-mode-toggle")?.getAttribute("aria-label")`,
+      ),
+      "按分类显示",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const toggle = document.querySelector(".history-pulse-mode-toggle");
+          if (!toggle) return false;
+          toggle.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".history-pulse-mode-toggle")?.getAttribute("aria-pressed") === "true"`,
+    );
+    assert.equal(
+      await evaluate(
+        client!,
+        sessionId,
+        `document.querySelector(".history-pulse-mode-toggle")?.getAttribute("aria-label")`,
+      ),
+      "显示总活动",
+    );
+    assert.equal(
+      await evaluate(
+        client!,
+        sessionId,
+        `document.querySelectorAll(".history-pulse-chart .recharts-bar").length >= 2`,
+      ),
+      true,
+    );
+  });
+
+  await runTest("hourly category mode survives an app reload", async () => {
+    await waitForExpression(
+      client!,
+      sessionId,
+      `JSON.parse(localStorage.getItem("__time_tracker_smoke_settings") ?? "{}").hourly_activity_chart_mode === "category"`,
+    );
+    await client!.command("Page.navigate", { url: appUrl }, sessionId);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".dashboard-pulse-mode-toggle")?.getAttribute("aria-pressed") === "true"`,
+    );
   });
 
   await runTest("history title details stay readable at narrow and default widths", async () => {

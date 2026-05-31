@@ -1,14 +1,7 @@
 ﻿import { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  Bar,
-  BarChart,
-  XAxis,
-  YAxis,
-  ResponsiveContainer,
-} from "recharts";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, Minus, Plus } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, Layers3, Minus, Plus } from "lucide-react";
 import { type HistorySession } from "../../../shared/types/sessions";
 import { UI_TEXT } from "../../../shared/copy/uiText.ts";
 import {
@@ -23,7 +16,8 @@ import {
 } from "../services/historyReadModel";
 import type { TrackerHealthSnapshot } from "../../../shared/types/tracking";
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
-import QuietChartTooltip from "../../../shared/components/QuietChartTooltip";
+import HourlyActivityChart, { type HourlyActivityChartMode } from "../../../shared/charts/HourlyActivityChart";
+import QuietIconAction from "../../../shared/components/QuietIconAction";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
 import {
   getHistorySnapshotCache,
@@ -44,6 +38,8 @@ interface Props {
     dateKey: string;
     requestId: number;
   } | null;
+  hourlyActivityChartMode: HourlyActivityChartMode;
+  onHourlyActivityChartModeChange: (mode: HourlyActivityChartMode) => void;
 }
 
 const TIMELINE_MIN_SESSION_MINUTES_RANGE = { min: 1, max: 10 } as const;
@@ -162,6 +158,8 @@ export default function History({
   loadHistorySnapshot,
   mappingVersion = 0,
   selectedDateRequest = null,
+  hourlyActivityChartMode,
+  onHourlyActivityChartModeChange,
 }: Props) {
   const requestedInitialDate = selectedDateRequest ? parseLocalDateKey(selectedDateRequest.dateKey) : null;
   const initialDate = requestedInitialDate ?? new Date();
@@ -465,6 +463,7 @@ export default function History({
     timelineSessions,
     appSummary,
     hourlyActivity,
+    hourlyCategoryActivity,
   } = historyView;
 
   const minSessionMinutes = clampMinute(
@@ -595,32 +594,34 @@ export default function History({
       <div className="flex gap-4 md:gap-5 min-h-0 flex-1">
         <div className="w-5/12 flex flex-col gap-4 md:gap-5 min-h-0 history-left-column">
           <div className="qp-panel p-5 history-pulse-card">
-            <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">{UI_TEXT.history.dailyHourlyActivity}</h3>
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">{UI_TEXT.history.dailyHourlyActivity}</h3>
+              <QuietIconAction
+                icon={<Layers3 size={15} />}
+                title={hourlyActivityChartMode === "category"
+                  ? UI_TEXT.dashboard.showTotalHourlyActivity
+                  : UI_TEXT.dashboard.showHourlyActivityByCategory}
+                pressed={hourlyActivityChartMode === "category"}
+                className="hourly-chart-mode-toggle history-pulse-mode-toggle"
+                showTooltip={false}
+                onClick={() => onHourlyActivityChartModeChange(
+                  hourlyActivityChartMode === "category" ? "total" : "category",
+                )}
+              />
+            </div>
             {showInitialLoading ? (
               <div className="h-[120px] pt-3 flex items-center justify-center text-[var(--qp-text-tertiary)] text-xs">
                 {UI_TEXT.history.loading}
               </div>
             ) : (
               <div className="pt-3 history-pulse-chart">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={hourlyActivity} margin={{ top: 4, right: 15, left: 0, bottom: 0 }}>
-                    <XAxis
-                      dataKey="hour"
-                      tick={{ fontSize: 10, fill: "var(--qp-text-tertiary)" }}
-                      axisLine={false}
-                      tickLine={false}
-                      interval={5}
-                      tickMargin={8}
-                      padding={{ left: 10, right: 10 }}
-                    />
-                    <YAxis hide domain={[0, 60]} allowDataOverflow />
-                    <QuietChartTooltip
-                      cursor={{ fill: "var(--qp-chart-cursor)" }}
-                      formatter={(value) => [`${Math.round(Number(value))}m`, UI_TEXT.dashboard.activeMinutes]}
-                    />
-                    <Bar dataKey="minutes" fill="var(--qp-accent-default)" radius={[3, 3, 0, 0]} barSize={8} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <HourlyActivityChart
+                  mode={hourlyActivityChartMode}
+                  hourlyActivity={hourlyActivity}
+                  hourlyCategoryActivity={hourlyCategoryActivity}
+                  margin={{ top: 4, right: 15, left: 0, bottom: 0 }}
+                  padding={{ left: 10, right: 10 }}
+                />
               </div>
             )}
           </div>

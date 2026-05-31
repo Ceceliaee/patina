@@ -4,6 +4,7 @@ import {
   saveAppSetting,
   type AppSettings,
 } from "../../platform/persistence/appSettingsStore.ts";
+import type { HourlyActivityChartMode } from "../../shared/settings/appSettings.ts";
 import {
   onAppSettingsChanged,
   type AppSettingsChangedPayload,
@@ -32,4 +33,10 @@ export async function loadTrackerHealthTimestampMs(): Promise<number | null> {
 
 export async function saveMinSessionSecsSetting(nextValue: number): Promise<void> {
   await saveAppSetting("minSessionSecs", nextValue);
+}
+
+export async function saveHourlyActivityChartModeSetting(
+  nextValue: HourlyActivityChartMode,
+): Promise<void> {
+  await saveAppSetting("hourlyActivityChartMode", nextValue);
 }

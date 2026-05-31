@@ -6,7 +6,12 @@ import type { View } from "./types/view";
 import Dashboard from "../features/dashboard/components/Dashboard";
 import { watchCurrentWindowMaximized } from "../platform/desktop/windowControlGateway";
 import QuietToastStack from "../shared/components/QuietToastStack";
-import type { AppLanguage, AppSettings, ThemeMode } from "../shared/settings/appSettings.ts";
+import type {
+  AppLanguage,
+  AppSettings,
+  HourlyActivityChartMode,
+  ThemeMode,
+} from "../shared/settings/appSettings.ts";
 import type { ColorSchemePreview } from "../features/settings/types.ts";
 import { useDashboardStats } from "../features/dashboard/hooks/useDashboardStats";
 import { useWindowTracking } from "./hooks/useWindowTracking";
@@ -33,7 +38,10 @@ import { useAppShellNavigation } from "./hooks/useAppShellNavigation";
 import { useAppShellToasts } from "./hooks/useAppShellToasts";
 import { useAppShellUpdateEntry } from "./hooks/useAppShellUpdateEntry";
 import { useAppThemeMode } from "./hooks/useAppThemeMode.ts";
-import { saveMinSessionSecsSetting } from "./services/appSettingsRuntimeService.ts";
+import {
+  saveHourlyActivityChartModeSetting,
+  saveMinSessionSecsSetting,
+} from "./services/appSettingsRuntimeService.ts";
 import {
   createPreloadableViewComponent,
 } from "./services/viewChunkPreloadService";
@@ -209,6 +217,14 @@ function AppShellContent() {
     void saveMinSessionSecsSetting(nextValue).catch(console.warn);
   }, [setAppSettings]);
 
+  const handleHourlyActivityChartModeChange = useCallback((nextValue: HourlyActivityChartMode) => {
+    setAppSettings((current) => ({
+      ...current,
+      hourlyActivityChartMode: nextValue,
+    }));
+    void saveHourlyActivityChartModeSetting(nextValue).catch(console.warn);
+  }, [setAppSettings]);
+
   const openHistoryForDate = useCallback(async (dateKey: string) => {
     const targetDate = parseLocalDateKey(dateKey);
     if (!targetDate || startOfLocalDay(targetDate) > startOfLocalDay(new Date())) {
@@ -261,6 +277,8 @@ function AppShellContent() {
                   isTrackingActive={activeApp !== null}
                   activeAppName={activeApp?.name ?? null}
                   trackingPaused={appSettings.trackingPaused}
+                  hourlyActivityChartMode={appSettings.hourlyActivityChartMode}
+                  onHourlyActivityChartModeChange={handleHourlyActivityChartModeChange}
                 />
               )}
               {currentView === "history" && (
@@ -276,6 +294,8 @@ function AppShellContent() {
                   loadHistorySnapshot={loadHistoryRuntimeSnapshot}
                   mappingVersion={mappingVersion}
                   selectedDateRequest={historyDateRequest}
+                  hourlyActivityChartMode={appSettings.hourlyActivityChartMode}
+                  onHourlyActivityChartModeChange={handleHourlyActivityChartModeChange}
                 />
               )}
               {currentView === "data" && (

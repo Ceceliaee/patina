@@ -12,6 +12,7 @@ import {
   type AppSettings,
   type CloseBehavior,
   type ColorScheme,
+  type HourlyActivityChartMode,
   type MinimizeBehavior,
   type ThemeMode,
 } from "../../shared/settings/appSettings.ts";
@@ -38,6 +39,7 @@ type RawAppSettingsKey =
   | "minimize_behavior"
   | "theme_mode"
   | "language"
+  | "hourly_activity_chart_mode"
   | "color_scheme_light"
   | "color_scheme_dark"
   | "launch_at_login"
@@ -54,6 +56,7 @@ const APP_SETTINGS_RAW_KEYS: Record<keyof AppSettings, RawAppSettingsKey> = {
   minimizeBehavior: "minimize_behavior",
   themeMode: "theme_mode",
   language: "language",
+  hourlyActivityChartMode: "hourly_activity_chart_mode",
   colorSchemeLight: "color_scheme_light",
   colorSchemeDark: "color_scheme_dark",
   launchAtLogin: "launch_at_login",
@@ -115,6 +118,11 @@ function normalizeLanguage(value: string | undefined): AppLanguage {
   if (value === undefined) return DEFAULT_SETTINGS.language;
   const normalized = value.trim().toLowerCase();
   return normalized === "en-us" ? "en-US" : "zh-CN";
+}
+
+function normalizeHourlyActivityChartMode(value: string | undefined): HourlyActivityChartMode {
+  if (value === undefined) return DEFAULT_SETTINGS.hourlyActivityChartMode;
+  return value.trim().toLowerCase() === "category" ? "category" : "total";
 }
 
 const LIGHT_COLOR_SCHEMES = new Set<string>([
@@ -207,6 +215,7 @@ export function normalizeSettingsRecord(record: Record<string, string | undefine
     minimizeBehavior: normalizeMinimizeBehavior(record.minimize_behavior),
     themeMode: normalizeThemeMode(record.theme_mode),
     language: normalizeLanguage(record.language),
+    hourlyActivityChartMode: normalizeHourlyActivityChartMode(record.hourly_activity_chart_mode),
     colorSchemeLight: normalizeColorScheme(
       record.color_scheme_light ?? DEFAULT_SETTINGS.colorSchemeLight,
       LIGHT_COLOR_SCHEMES,

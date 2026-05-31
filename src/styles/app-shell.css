@@ -74,6 +74,36 @@
   color: var(--qp-text-secondary);
 }
 
+.qp-icon-action-pressed,
+.qp-icon-action-pressed:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--qp-accent-default) 38%, var(--qp-border-subtle));
+  background: var(--qp-accent-muted);
+  color: var(--qp-accent-default);
+}
+
+.hourly-chart-mode-toggle.qp-icon-action-pressed {
+  border-color: transparent;
+  background: transparent;
+  color: var(--qp-text-tertiary);
+}
+
+.hourly-chart-mode-toggle {
+  flex: 0 0 auto;
+  margin-right: -6px;
+}
+
+.hourly-chart-mode-toggle.qp-icon-action-neutral:hover:not(:disabled),
+.hourly-chart-mode-toggle.qp-icon-action-pressed:hover:not(:disabled) {
+  border-color: transparent;
+  background: transparent;
+  color: var(--qp-accent-default);
+}
+
+.qp-icon-action:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--qp-accent-default) 42%, transparent);
+  outline-offset: 2px;
+}
+
 .qp-icon-action-danger {
   color: var(--qp-danger);
 }

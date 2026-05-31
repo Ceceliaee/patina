@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import { buildDashboardReadModel } from "../src/features/dashboard/services/dashboardReadModel.ts";
 import { buildHistoryReadModel } from "../src/features/history/services/historyReadModel.ts";
 import { buildTopApplications } from "../src/features/dashboard/services/dashboardFormatting.ts";
+import {
+  buildHourlyActivity,
+  buildHourlyCategoryActivity,
+  limitHourlyCategoryActivity,
+} from "../src/shared/lib/hourlyActivityCompiler.ts";
 import { ProcessMapper } from "../src/shared/classification/processMapper.ts";
 import { resolveTrackerHealth } from "../src/shared/types/tracking.ts";
 import {
@@ -387,6 +392,222 @@ runTest("dashboard formatting replay honors display name overrides", () => {
   } finally {
     ProcessMapper.clearUserOverrides();
   }
+});
+
+runTest("hourly category compiler splits sessions across hours and preserves total minutes", () => {
+  const hourStart = new Date(2026, 0, 2, 9, 0, 0, 0).getTime();
+  const sessions = [
+    makeSession({
+      id: 1,
+      appName: "Cursor",
+      exeName: "cursor.exe",
+      startTime: hourStart + 50 * 60_000,
+      endTime: hourStart + 70 * 60_000,
+      duration: 20 * 60_000,
+    }),
+    makeSession({
+      id: 2,
+      appName: "Google Chrome",
+      exeName: "chrome.exe",
+      startTime: hourStart + 5 * 60_000,
+      endTime: hourStart + 20 * 60_000,
+      duration: 15 * 60_000,
+    }),
+  ];
+
+  const totalActivity = buildHourlyActivity(sessions);
+  const categoryActivity = buildHourlyCategoryActivity(sessions);
+  const nineOClock = categoryActivity.points[9];
+  const tenOClock = categoryActivity.points[10];
+  const nineOClockSegments = Object.values(nineOClock?.segmentDetails ?? {});
+  const tenOClockSegments = Object.values(tenOClock?.segmentDetails ?? {});
+
+  assert.equal(totalActivity[9]?.minutes, 25);
+  assert.equal(totalActivity[10]?.minutes, 10);
+  assert.equal(nineOClock?.minutes, 25);
+  assert.equal(tenOClock?.minutes, 10);
+  assert.equal(nineOClockSegments.find((item) => item.category === "development")?.minutes, 10);
+  assert.equal(nineOClockSegments.find((item) => item.category === "browser")?.minutes, 15);
+  assert.equal(tenOClockSegments.find((item) => item.category === "development")?.minutes, 10);
+  assert.equal(categoryActivity.points.length, 24);
+});
+
+runTest("hourly category compiler sorts each stacked hour by its own category duration", () => {
+  const hourStart = new Date(2026, 0, 2, 9, 0, 0, 0).getTime();
+  const categoryActivity = buildHourlyCategoryActivity([
+    makeSession({
+      id: 1,
+      appName: "Cursor",
+      exeName: "cursor.exe",
+      startTime: hourStart,
+      endTime: hourStart + 10 * 60_000,
+      duration: 10 * 60_000,
+    }),
+    makeSession({
+      id: 2,
+      appName: "Google Chrome",
+      exeName: "chrome.exe",
+      startTime: hourStart,
+      endTime: hourStart + 20 * 60_000,
+      duration: 20 * 60_000,
+    }),
+    makeSession({
+      id: 3,
+      appName: "Cursor",
+      exeName: "cursor.exe",
+      startTime: hourStart + 60 * 60_000,
+      endTime: hourStart + 90 * 60_000,
+      duration: 30 * 60_000,
+    }),
+    makeSession({
+      id: 4,
+      appName: "Google Chrome",
+      exeName: "chrome.exe",
+      startTime: hourStart + 60 * 60_000,
+      endTime: hourStart + 65 * 60_000,
+      duration: 5 * 60_000,
+    }),
+  ]);
+  const nineOClockSegments = Object.values(categoryActivity.points[9]?.segmentDetails ?? {});
+  const tenOClockSegments = Object.values(categoryActivity.points[10]?.segmentDetails ?? {});
+
+  assert.deepEqual(nineOClockSegments.map((item) => item.category), ["development", "browser"]);
+  assert.deepEqual(tenOClockSegments.map((item) => item.category), ["browser", "development"]);
+});
+
+runTest("hourly category compiler keeps remainder distinct from the real other category", () => {
+  const hourStart = new Date(2026, 0, 2, 9, 0, 0, 0).getTime();
+  const sessions = [
+    ["cursor.exe", "Cursor", 30],
+    ["chrome.exe", "Chrome", 25],
+    ["qq.exe", "QQ", 20],
+    ["spotify.exe", "Spotify", 15],
+    ["figma.exe", "Figma", 10],
+    ["winword.exe", "Word", 8],
+    ["mystery.exe", "Mystery", 9],
+    ["terminal.exe", "Terminal", 4],
+  ].map(([exeName, appName, minutes], index) => makeSession({
+    id: index + 1,
+    exeName: String(exeName),
+    appName: String(appName),
+    startTime: hourStart,
+    endTime: hourStart + Number(minutes) * 60_000,
+    duration: Number(minutes) * 60_000,
+  }));
+
+  const categoryActivity = buildHourlyCategoryActivity(sessions);
+  const visibleCategoryActivity = limitHourlyCategoryActivity(categoryActivity, 6);
+  const otherSeries = categoryActivity.series.find((item) => item.category === "other");
+  const nineOClock = visibleCategoryActivity.points[9];
+  const remainderSeries = Object.values(nineOClock?.segmentDetails ?? {}).find((item) => item.isRemainder);
+  const stackedTotal = Object.values(nineOClock?.segmentDetails ?? {}).reduce(
+    (total, item) => total + item.minutes,
+    0,
+  );
+
+  assert.equal(categoryActivity.series.length, 8);
+  assert.equal(otherSeries?.name, "未分类");
+  assert.equal(remainderSeries?.name, "其他");
+  assert.equal(remainderSeries?.category, null);
+  assert.equal(stackedTotal, nineOClock?.minutes);
+});
+
+runTest("hourly category compiler only adds remainder after the per-hour limit is exceeded", () => {
+  const hourStart = new Date(2026, 0, 2, 9, 0, 0, 0).getTime();
+  const sessions = [
+    ["cursor.exe", "Cursor", 30],
+    ["chrome.exe", "Chrome", 25],
+    ["qq.exe", "QQ", 20],
+    ["spotify.exe", "Spotify", 15],
+    ["figma.exe", "Figma", 10],
+  ].map(([exeName, appName, minutes], index) => makeSession({
+    id: index + 1,
+    exeName: String(exeName),
+    appName: String(appName),
+    startTime: hourStart,
+    endTime: hourStart + Number(minutes) * 60_000,
+    duration: Number(minutes) * 60_000,
+  }));
+  const categoryActivity = buildHourlyCategoryActivity(sessions);
+  const fourPlusRemainder = Object.values(
+    limitHourlyCategoryActivity(categoryActivity, 4).points[9]?.segmentDetails ?? {},
+  );
+  const sixWithoutRemainder = Object.values(
+    limitHourlyCategoryActivity(categoryActivity, 6).points[9]?.segmentDetails ?? {},
+  );
+
+  assert.equal(fourPlusRemainder.length, 5);
+  assert.equal(fourPlusRemainder.filter((item) => item.isRemainder).length, 1);
+  assert.equal(sixWithoutRemainder.length, 5);
+  assert.equal(sixWithoutRemainder.filter((item) => item.isRemainder).length, 0);
+});
+
+runTest("hourly category compiler honors category and category color overrides", () => {
+  const hourStart = new Date(2026, 0, 2, 9, 0, 0, 0).getTime();
+  ProcessMapper.setUserOverrides({
+    "mystery.exe": {
+      category: "design",
+      enabled: true,
+    },
+  });
+  ProcessMapper.setCategoryColorOverrides({
+    design: "#123456",
+  });
+
+  try {
+    const categoryActivity = buildHourlyCategoryActivity([
+      makeSession({
+        id: 1,
+        exeName: "mystery.exe",
+        appName: "Mystery",
+        startTime: hourStart,
+        endTime: hourStart + 10 * 60_000,
+        duration: 10 * 60_000,
+      }),
+    ]);
+    assert.equal(categoryActivity.series[0]?.category, "design");
+    assert.equal(categoryActivity.series[0]?.color, "#123456");
+  } finally {
+    ProcessMapper.clearUserOverrides();
+    ProcessMapper.clearCategoryColorOverrides();
+  }
+});
+
+runTest("dashboard and history replay produce matching hourly category activity", () => {
+  const hourStart = new Date(2026, 0, 2, 9, 0, 0, 0).getTime();
+  const nowMs = hourStart + 60 * 60_000;
+  const currentTrackerHealth = resolveTrackerHealth(nowMs, nowMs, 8_000);
+  const sessions = [
+    makeSession({
+      id: 1,
+      appName: "Cursor",
+      exeName: "cursor.exe",
+      startTime: hourStart,
+      endTime: hourStart + 20 * 60_000,
+      duration: 20 * 60_000,
+    }),
+    makeSession({
+      id: 2,
+      appName: "QQ",
+      exeName: "qq.exe",
+      startTime: hourStart + 20 * 60_000,
+      endTime: hourStart + 35 * 60_000,
+      duration: 15 * 60_000,
+    }),
+  ];
+
+  const dashboard = buildDashboardReadModel(sessions, currentTrackerHealth, nowMs);
+  const history = buildHistoryReadModel({
+    daySessions: sessions,
+    weeklySessions: sessions,
+    selectedDate: new Date(nowMs),
+    trackerHealth: currentTrackerHealth,
+    nowMs,
+    minSessionSecs: 0,
+    mergeThresholdSecs: 180,
+  });
+
+  assert.deepEqual(history.hourlyCategoryActivity, dashboard.hourlyCategoryActivity);
 });
 
 await harness.finish("tracking replay");

@@ -35,6 +35,7 @@ const BASE_SETTINGS: AppSettings = {
   minimizeBehavior: "taskbar",
   themeMode: "light",
   language: "zh-CN",
+  hourlyActivityChartMode: "total",
   colorSchemeLight: "default",
   colorSchemeDark: "default",
   launchAtLogin: false,

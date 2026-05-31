@@ -8,6 +8,7 @@ export interface ReleaseDefaultSettingsProfile {
   minimizeBehavior: "taskbar" | "widget";
   themeMode: "light" | "dark" | "system";
   language: "zh-CN" | "en-US";
+  hourlyActivityChartMode: "total" | "category";
   colorSchemeLight:
     | "default"
     | "absolutely"
@@ -68,6 +69,7 @@ export const RELEASE_DEFAULT_SETTINGS: ReleaseDefaultSettingsProfile = {
   minimizeBehavior: "widget",
   themeMode: "light",
   language: "zh-CN",
+  hourlyActivityChartMode: "total",
   colorSchemeLight: "default",
   colorSchemeDark: "default",
   launchAtLogin: true,

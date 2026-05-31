@@ -4,6 +4,7 @@ export type CloseBehavior = "exit" | "tray";
 export type MinimizeBehavior = "taskbar" | "widget";
 export type ThemeMode = "light" | "dark" | "system";
 export type AppLanguage = "zh-CN" | "en-US";
+export type HourlyActivityChartMode = "total" | "category";
 export type ColorScheme =
   | "default"
   | "absolutely"
@@ -44,6 +45,7 @@ export interface AppSettings {
   minimizeBehavior: MinimizeBehavior;
   themeMode: ThemeMode;
   language: AppLanguage;
+  hourlyActivityChartMode: HourlyActivityChartMode;
   colorSchemeLight: ColorScheme;
   colorSchemeDark: ColorScheme;
   launchAtLogin: boolean;

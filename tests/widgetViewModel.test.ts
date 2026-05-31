@@ -21,6 +21,7 @@ const BASE_SETTINGS: AppSettings = {
   minimizeBehavior: "widget",
   themeMode: "light",
   language: "zh-CN",
+  hourlyActivityChartMode: "total",
   colorSchemeLight: "default",
   colorSchemeDark: "default",
   launchAtLogin: true,

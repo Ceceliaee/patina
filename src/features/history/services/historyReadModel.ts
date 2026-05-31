@@ -11,8 +11,10 @@ import {
 } from "./historyFormatting.ts";
 import {
   buildHourlyActivity,
+  buildHourlyCategoryActivity,
   type HourlyActivityPoint,
-} from "../../dashboard/services/dashboardFormatting.ts";
+  type HourlyCategoryActivity,
+} from "../../../shared/lib/hourlyActivityCompiler.ts";
 import {
   buildAppSummary,
   buildDailySummaries,
@@ -45,6 +47,7 @@ export interface HistoryReadModel {
   chartData: HistoryChartPoint[];
   chartAxis: ReturnType<typeof buildChartAxis>;
   hourlyActivity: HourlyActivityPoint[];
+  hourlyCategoryActivity: HourlyCategoryActivity;
   diagnostics: ReadModelDiagnostics;
 }
 
@@ -128,6 +131,7 @@ export function buildHistoryReadModel(params: {
   ).slice().reverse();
   const appSummary = buildAppSummary(buildNormalizedAppStats(compiledSessions));
   const hourlyActivity = buildHourlyActivity(compiledSessions);
+  const hourlyCategoryActivity = buildHourlyCategoryActivity(compiledSessions);
   const weekly = buildDailySummaries(
     liveWeeklySessions,
     rollingRanges,
@@ -150,6 +154,7 @@ export function buildHistoryReadModel(params: {
     chartData,
     chartAxis: buildChartAxis(chartData),
     hourlyActivity,
+    hourlyCategoryActivity,
     diagnostics,
   };
 }

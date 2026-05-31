@@ -21,11 +21,19 @@ type TooltipFormatter = (
 ) => ReactNode | [ReactNode, ReactNode];
 
 type TooltipLabelFormatter = (label: ReactNode, payload: readonly TooltipPayloadEntry[]) => ReactNode;
+type TooltipColorFormatter = (
+  item: TooltipPayloadEntry,
+  index: number,
+  payload: readonly TooltipPayloadEntry[],
+) => string | undefined;
 
 interface Props {
   cursor?: unknown;
   formatter?: TooltipFormatter;
   labelFormatter?: TooltipLabelFormatter;
+  colorFormatter?: TooltipColorFormatter;
+  filterZeroValues?: boolean;
+  reverseItems?: boolean;
 }
 
 function formatTooltipItem(
@@ -64,7 +72,14 @@ function resolveTooltipLabel(
   return labelFormatter(label, payload);
 }
 
-export default function QuietChartTooltip({ cursor, formatter, labelFormatter }: Props) {
+export default function QuietChartTooltip({
+  cursor,
+  formatter,
+  labelFormatter,
+  colorFormatter,
+  filterZeroValues = false,
+  reverseItems = false,
+}: Props) {
   return (
     <Tooltip
       cursor={cursor as never}
@@ -78,7 +93,13 @@ export default function QuietChartTooltip({ cursor, formatter, labelFormatter }:
           return null;
         }
 
-        const resolvedLabel = resolveTooltipLabel(label, payload, labelFormatter);
+        const visiblePayload = payload
+          .filter((item) => !filterZeroValues || Number(item.value ?? 0) > 0);
+        if (visiblePayload.length === 0) {
+          return null;
+        }
+        const orderedPayload = reverseItems ? [...visiblePayload].reverse() : visiblePayload;
+        const resolvedLabel = resolveTooltipLabel(label, orderedPayload, labelFormatter);
 
         return (
           <div className="qp-chart-tooltip">
@@ -86,14 +107,16 @@ export default function QuietChartTooltip({ cursor, formatter, labelFormatter }:
               <div className="qp-chart-tooltip-label">{resolvedLabel}</div>
             ) : null}
             <ul className="qp-chart-tooltip-list">
-              {payload.map((item, index) => {
-                const { name, value } = formatTooltipItem(formatter, item, index, payload);
+              {orderedPayload.map((item, index) => {
+                const { name, value } = formatTooltipItem(formatter, item, index, orderedPayload);
                 return (
                   <li key={`${item.dataKey ?? item.name ?? "item"}-${index}`} className="qp-chart-tooltip-item">
                     <span className="qp-chart-tooltip-key">
                       <span
                         className="qp-chart-tooltip-dot"
-                        style={{ backgroundColor: item.color ?? "var(--qp-accent-default)" }}
+                        style={{ backgroundColor: colorFormatter?.(item, index, orderedPayload)
+                          ?? item.color
+                          ?? "var(--qp-accent-default)" }}
                       />
                       {name}
                     </span>

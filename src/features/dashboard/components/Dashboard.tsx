@@ -1,13 +1,14 @@
 ﻿import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
-import { Monitor, Minus, TrendingDown, TrendingUp } from "lucide-react";
-import { Cell, Pie, PieChart, ResponsiveContainer, BarChart, Bar, XAxis, YAxis } from "recharts";
+import { Layers3, Monitor, Minus, TrendingDown, TrendingUp } from "lucide-react";
+import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import { UI_TEXT } from "../../../shared/copy/uiText.ts";
 import { useIconThemeColors } from "../../../shared/hooks/useIconThemeColors";
 import { formatDashboardDuration } from "../services/dashboardFormatting";
 import type { DashboardReadModel } from "../services/dashboardReadModel";
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
-import QuietChartTooltip from "../../../shared/components/QuietChartTooltip";
+import HourlyActivityChart, { type HourlyActivityChartMode } from "../../../shared/charts/HourlyActivityChart";
+import QuietIconAction from "../../../shared/components/QuietIconAction";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
 
 interface Props {
@@ -17,6 +18,8 @@ interface Props {
   isTrackingActive: boolean;
   activeAppName: string | null;
   trackingPaused: boolean;
+  hourlyActivityChartMode: HourlyActivityChartMode;
+  onHourlyActivityChartModeChange: (mode: HourlyActivityChartMode) => void;
 }
 
 const FOCUS_CATEGORY_LIMIT = 4;
@@ -45,6 +48,8 @@ function buildFocusCategoryDist(categoryDist: DashboardReadModel["categoryDist"]
 export default function Dashboard({
   dashboard,
   icons,
+  hourlyActivityChartMode,
+  onHourlyActivityChartModeChange,
 }: Props) {
   const iconThemeColors = useIconThemeColors(icons);
   const {
@@ -52,6 +57,7 @@ export default function Dashboard({
     dayDeltaTrackedTime,
     topApplications,
     hourlyActivity,
+    hourlyCategoryActivity,
     categoryDist,
   } = dashboard;
   const dayDeltaDirection = dayDeltaTrackedTime > 0
@@ -162,29 +168,31 @@ export default function Dashboard({
           </div>
 
           <div className="qp-panel p-5 flex min-h-0 flex-col overflow-hidden dashboard-pulse-card">
-            <h3 className="text-[var(--qp-text-primary)] font-semibold text-sm mb-4">
-              {UI_TEXT.dashboard.hourlyActivity}
-            </h3>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="text-[var(--qp-text-primary)] font-semibold text-sm">
+                {UI_TEXT.dashboard.hourlyActivity}
+              </h3>
+              <QuietIconAction
+                icon={<Layers3 size={15} />}
+                title={hourlyActivityChartMode === "category"
+                  ? UI_TEXT.dashboard.showTotalHourlyActivity
+                  : UI_TEXT.dashboard.showHourlyActivityByCategory}
+                pressed={hourlyActivityChartMode === "category"}
+                className="hourly-chart-mode-toggle dashboard-pulse-mode-toggle"
+                showTooltip={false}
+                onClick={() => onHourlyActivityChartModeChange(
+                  hourlyActivityChartMode === "category" ? "total" : "category",
+                )}
+              />
+            </div>
             <div className="flex-1 min-h-[170px] dashboard-pulse-chart">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={hourlyActivity} margin={{ top: 6, right: 12, left: 10, bottom: 4 }}>
-                  <XAxis
-                    dataKey="hour"
-                    tick={{ fontSize: 10, fill: "var(--qp-text-tertiary)" }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickMargin={8}
-                    interval={5}
-                    padding={{ left: 12, right: 12 }}
-                  />
-                  <YAxis hide domain={[0, 60]} allowDataOverflow />
-                  <QuietChartTooltip
-                    cursor={{ fill: "var(--qp-chart-cursor)" }}
-                    formatter={(v) => [`${Math.round(Number(v))}m`, UI_TEXT.dashboard.activeMinutes]}
-                  />
-                  <Bar dataKey="minutes" fill="var(--qp-accent-default)" radius={[3, 3, 0, 0]} barSize={8} />
-                </BarChart>
-              </ResponsiveContainer>
+              <HourlyActivityChart
+                mode={hourlyActivityChartMode}
+                hourlyActivity={hourlyActivity}
+                hourlyCategoryActivity={hourlyCategoryActivity}
+                margin={{ top: 6, right: 12, left: 10, bottom: 4 }}
+                padding={{ left: 12, right: 12 }}
+              />
             </div>
           </div>
         </div>

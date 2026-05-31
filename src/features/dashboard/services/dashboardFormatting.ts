@@ -1,12 +1,6 @@
 import type { AppStat } from "../../../shared/types/app.ts";
-import type { HistorySession } from "../../../shared/types/sessions.ts";
 import type { AppCategory } from "../../../shared/classification/categoryTokens.ts";
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
-
-export interface HourlyActivityPoint {
-  hour: string;
-  minutes: number;
-}
 
 export interface CategoryDistItem {
   category: AppCategory;
@@ -58,36 +52,6 @@ export function buildTopApplications(stats: AppStat[]): TopApplicationItem[] {
       categoryInitial: mapped.category[0].toUpperCase(),
     };
   });
-}
-
-export function buildHourlyActivity(sessions: HistorySession[]): HourlyActivityPoint[] {
-  const hoursCount = new Array(24).fill(0);
-
-  for (const session of sessions) {
-    const start = new Date(session.startTime);
-    const end = session.endTime ? new Date(session.endTime) : new Date();
-
-    let hourPtr = start.getHours();
-    let currentPtr = start.getTime();
-
-    while (currentPtr < end.getTime()) {
-      const nextHour = new Date(currentPtr);
-      nextHour.setHours(hourPtr + 1, 0, 0, 0);
-
-      const segmentEnd = Math.min(end.getTime(), nextHour.getTime());
-      const durationMs = segmentEnd - currentPtr;
-
-      hoursCount[hourPtr] += durationMs / 60000;
-
-      currentPtr = segmentEnd;
-      hourPtr = (hourPtr + 1) % 24;
-    }
-  }
-
-  return hoursCount.map((minutes, h) => ({
-    hour: `${h.toString().padStart(2, "0")}:00`,
-    minutes: Math.round(minutes),
-  }));
 }
 
 export function buildCategoryDistribution(stats: AppStat[]): CategoryDistItem[] {

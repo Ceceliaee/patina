@@ -215,6 +215,7 @@ await runTest("app shell renders dashboard and primary navigation without Tauri 
   }
   assert.ok(html.includes("专注分布"));
   assert.ok(html.includes("应用排行"));
+  assert.ok(html.includes(`aria-label="按分类显示"`));
 });
 
 console.log(`Passed ${passed} UI smoke tests`);

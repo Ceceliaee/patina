@@ -7,13 +7,17 @@ import {
 } from "../../../platform/persistence/sessionReadRepository.ts";
 import {
   buildCategoryDistribution,
-  buildHourlyActivity,
   buildTopApplications,
   getTotalTrackedTime,
   type CategoryDistItem,
-  type HourlyActivityPoint,
   type TopApplicationItem,
 } from "./dashboardFormatting.ts";
+import {
+  buildHourlyActivity,
+  buildHourlyCategoryActivity,
+  type HourlyActivityPoint,
+  type HourlyCategoryActivity,
+} from "../../../shared/lib/hourlyActivityCompiler.ts";
 import {
   buildNormalizedAppStats,
   getDayRange,
@@ -47,6 +51,7 @@ export interface DashboardReadModel {
   dayDeltaTrackedTime: number;
   topApplications: TopApplicationItem[];
   hourlyActivity: HourlyActivityPoint[];
+  hourlyCategoryActivity: HourlyCategoryActivity;
   categoryDist: CategoryDistItem[];
   diagnostics: ReadModelDiagnostics;
 }
@@ -108,6 +113,7 @@ export function buildDashboardReadModel(
     dayDeltaTrackedTime: totalTrackedTime - yesterdayTrackedTime,
     topApplications: buildTopApplications(stats),
     hourlyActivity: buildHourlyActivity(compiledSessions),
+    hourlyCategoryActivity: buildHourlyCategoryActivity(compiledSessions),
     categoryDist: buildCategoryDistribution(stats),
     diagnostics,
   };
