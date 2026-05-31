@@ -1,10 +1,13 @@
-use crate::domain::settings::DesktopBehaviorSettings;
+use crate::domain::settings::{DesktopBehaviorSettings, LocalApiSettings};
 use sqlx::{Pool, Row, Sqlite};
 
 const CLOSE_BEHAVIOR_KEY: &str = "close_behavior";
 const MINIMIZE_BEHAVIOR_KEY: &str = "minimize_behavior";
 const LAUNCH_AT_LOGIN_KEY: &str = "launch_at_login";
 const START_MINIMIZED_KEY: &str = "start_minimized";
+const LOCAL_API_ENABLED_KEY: &str = "local_api_enabled";
+const LOCAL_API_PORT_KEY: &str = "local_api_port";
+const LOCAL_API_TOKEN_KEY: &str = "local_api_token";
 const MAX_APP_SETTING_VALUE_LEN: usize = 4096;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -122,7 +125,41 @@ fn is_allowed_app_setting_key(key: &str) -> bool {
             | "launch_at_login"
             | "start_minimized"
             | "onboarding_completed"
+            | "local_api_enabled"
+            | "local_api_port"
+            | "local_api_token"
     )
+}
+
+pub async fn load_local_api_settings(pool: &Pool<Sqlite>) -> Result<LocalApiSettings, sqlx::Error> {
+    let rows = sqlx::query("SELECT key, value FROM settings WHERE key IN (?, ?, ?)")
+        .bind(LOCAL_API_ENABLED_KEY)
+        .bind(LOCAL_API_PORT_KEY)
+        .bind(LOCAL_API_TOKEN_KEY)
+        .fetch_all(pool)
+        .await?;
+
+    let mut enabled: Option<String> = None;
+    let mut port: Option<String> = None;
+    let mut token: Option<String> = None;
+
+    for row in rows {
+        let key: String = row.get("key");
+        let value: String = row.get("value");
+
+        match key.as_str() {
+            LOCAL_API_ENABLED_KEY => enabled = Some(value),
+            LOCAL_API_PORT_KEY => port = Some(value),
+            LOCAL_API_TOKEN_KEY => token = Some(value),
+            _ => {}
+        }
+    }
+
+    Ok(LocalApiSettings::from_storage_values(
+        enabled.as_deref(),
+        port.as_deref(),
+        token.as_deref(),
+    ))
 }
 
 #[cfg(test)]

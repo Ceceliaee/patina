@@ -51,6 +51,9 @@ export interface AppSettings {
   launchAtLogin: boolean;
   startMinimized: boolean;
   onboardingCompleted: boolean;
+  localApiEnabled: boolean;
+  localApiPort: number;
+  localApiToken: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {

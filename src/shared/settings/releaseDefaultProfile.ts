@@ -57,6 +57,9 @@ export interface ReleaseDefaultSettingsProfile {
   launchAtLogin: boolean;
   startMinimized: boolean;
   onboardingCompleted: boolean;
+  localApiEnabled: boolean;
+  localApiPort: number;
+  localApiToken: string;
 }
 
 export const RELEASE_DEFAULT_SETTINGS: ReleaseDefaultSettingsProfile = {
@@ -75,4 +78,7 @@ export const RELEASE_DEFAULT_SETTINGS: ReleaseDefaultSettingsProfile = {
   launchAtLogin: true,
   startMinimized: true,
   onboardingCompleted: true,
+  localApiEnabled: false,
+  localApiPort: 17321,
+  localApiToken: "",
 };

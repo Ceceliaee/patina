@@ -86,6 +86,9 @@ interface AppSettings {
   launchAtLogin: boolean;
   startMinimized: boolean;
   onboardingCompleted: boolean;
+  localApiEnabled: boolean;
+  localApiPort: number;
+  localApiToken: string;
 }
 
 type CleanupRange = 180 | 90 | 60 | 30 | 15 | 7;
@@ -106,6 +109,9 @@ const BASE_SETTINGS: AppSettings = {
   launchAtLogin: false,
   startMinimized: false,
   onboardingCompleted: false,
+  localApiEnabled: false,
+  localApiPort: 17321,
+  localApiToken: "",
 };
 
 function buildSettings(overrides: Partial<AppSettings> = {}): AppSettings {
@@ -150,6 +156,9 @@ await runTest("buildSettingsPatch only keeps changed keys", () => {
     language: "en-US",
     colorSchemeLight: "linear",
     colorSchemeDark: "github",
+    localApiEnabled: true,
+    localApiPort: 18080,
+    localApiToken: "secret",
   });
 
   assert.deepEqual(SettingsRuntimeAdapterService.buildSettingsPatch(saved, draft), {
@@ -159,6 +168,9 @@ await runTest("buildSettingsPatch only keeps changed keys", () => {
     language: "en-US",
     colorSchemeLight: "linear",
     colorSchemeDark: "github",
+    localApiEnabled: true,
+    localApiPort: 18080,
+    localApiToken: "secret",
   });
 });
 
@@ -278,6 +290,25 @@ await runTest("normalizeSettingsRecord accepts current minimize behavior values"
   assert.equal(defaultSettings.colorSchemeLight, "default");
   assert.equal(defaultSettings.colorSchemeDark, "default");
   assert.equal(defaultSettings.minSessionSecs, 300);
+  assert.equal(defaultSettings.localApiEnabled, false);
+  assert.equal(defaultSettings.localApiPort, 17321);
+  assert.equal(defaultSettings.localApiToken, "");
+
+  const localApiSettings = normalizeSettingsRecord({
+    local_api_enabled: "1",
+    local_api_port: "18080",
+    local_api_token: "secret",
+  });
+  assert.equal(localApiSettings.localApiEnabled, true);
+  assert.equal(localApiSettings.localApiPort, 18080);
+  assert.equal(localApiSettings.localApiToken, "secret");
+
+  const invalidLocalApiSettings = normalizeSettingsRecord({
+    local_api_enabled: "no",
+    local_api_port: "80",
+  });
+  assert.equal(invalidLocalApiSettings.localApiEnabled, false);
+  assert.equal(invalidLocalApiSettings.localApiPort, 17321);
 
   const widgetSettings = normalizeSettingsRecord({
     minimize_behavior: "widget",
