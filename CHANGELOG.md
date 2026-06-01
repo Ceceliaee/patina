@@ -18,6 +18,32 @@ App note en: TBD.
 
 ### Added
 
+- 暂无。
+
+### Changed
+
+- 暂无。
+
+### Fixed
+
+- 暂无。
+
+### Removed
+
+- 暂无。
+
+### Internal
+
+- 暂无。
+
+## [1.3.0] - 2026-06-01
+
+Release: 新增本机接口与数据页历史范围选择，方便本地集成和回看更长时间段。
+App note: 新增本机接口和历史范围选择。
+App note en: Added Local API and custom history ranges.
+
+### Added
+
 - 数据页活动趋势与应用趋势的中间范围标签现在可以打开日历弹层，选择自然周、自然月、自然年或任意自定义历史区间（[#6](https://github.com/Ceceliaee/time-tracking/issues/6)）。
 - 设置页新增默认关闭的本机 WebSocket 接口，可通过 `127.0.0.1` 和 Token 鉴权向同机脚本或面板广播当前追踪状态（[#4](https://github.com/Ceceliaee/time-tracking/issues/4)）。
 

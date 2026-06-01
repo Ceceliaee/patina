@@ -22,7 +22,7 @@
 
 截至当前发布线：
 
-- 代码版本为 `1.2.0`
+- 代码版本为 `1.3.0`
 - 稳定发布线为 `1.x`
 - 仓库已进入公开稳定阶段，后续版本按标准 `SemVer` 管理
 - 默认通过推送 `vX.Y.Z` / `vX.Y.Z-prerelease` 版本 tag 自动触发 GitHub Actions 工作流 [prepare-release.yml](../.github/workflows/prepare-release.yml) 中的 `Publish Release` 流程；必要时也可手动触发该工作流
