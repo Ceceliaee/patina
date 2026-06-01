@@ -19,6 +19,7 @@ App note en: TBD.
 ### Added
 
 - 数据页活动趋势与应用趋势的中间范围标签现在可以打开日历弹层，选择自然周、自然月、自然年或任意自定义历史区间（[#6](https://github.com/Ceceliaee/time-tracking/issues/6)）。
+- 设置页新增默认关闭的本机 WebSocket 接口，可通过 `127.0.0.1` 和 Token 鉴权向同机脚本或面板广播当前追踪状态（[#4](https://github.com/Ceceliaee/time-tracking/issues/4)）。
 
 ### Changed
 

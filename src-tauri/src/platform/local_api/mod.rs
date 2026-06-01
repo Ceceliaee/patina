@@ -8,7 +8,7 @@ use std::pin::Pin;
 use std::sync::Mutex;
 use tauri::{AppHandle, Runtime};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, watch};
 use tokio::time::{timeout, Duration};
 use tokio_tungstenite::{
     accept_async,
@@ -16,6 +16,7 @@ use tokio_tungstenite::{
 };
 
 const LOCAL_API_AUTH_TIMEOUT_SECS: u64 = 5;
+const LOCAL_API_HANDSHAKE_TIMEOUT_SECS: u64 = 5;
 const LOCAL_API_BROADCAST_CAPACITY: usize = 256;
 pub const LOCAL_API_SETTINGS_CHANGED_EVENT: &str = "app-settings-changed";
 pub const LOCAL_API_ACTIVE_WINDOW_EVENT: &str = "active-window-changed";
@@ -40,6 +41,7 @@ impl<R: Runtime> Copy for LocalApiRuntimeDeps<R> {}
 pub struct LocalApiRuntimeState {
     inner: Mutex<LocalApiRuntimeInner>,
     event_tx: broadcast::Sender<String>,
+    shutdown_tx: watch::Sender<u64>,
 }
 
 #[derive(Debug, Default)]
@@ -51,9 +53,11 @@ struct LocalApiRuntimeInner {
 impl Default for LocalApiRuntimeState {
     fn default() -> Self {
         let (event_tx, _) = broadcast::channel(LOCAL_API_BROADCAST_CAPACITY);
+        let (shutdown_tx, _) = watch::channel(0);
         Self {
             inner: Mutex::new(LocalApiRuntimeInner::default()),
             event_tx,
+            shutdown_tx,
         }
     }
 }
@@ -67,19 +71,24 @@ impl LocalApiRuntimeState {
     ) {
         let mut inner = lock_inner(&self.inner);
         let previous_settings = inner.settings.clone();
-        let should_restart = previous_settings.enabled != settings.enabled
-            || previous_settings.port != settings.port
-            || (!settings.enabled && inner.server_task.is_some());
+        let should_restart =
+            should_restart_server(&previous_settings, &settings, inner.server_task.is_some());
 
         if should_restart {
             if let Some(task) = inner.server_task.take() {
                 task.abort();
             }
-            let _ = self.event_tx.send(close_message());
+            signal_shutdown(&self.shutdown_tx);
         }
 
         if settings.enabled && (should_restart || inner.server_task.is_none()) {
-            inner.server_task = spawn_server(app, self.event_tx.clone(), settings.clone(), deps);
+            inner.server_task = spawn_server(
+                app,
+                self.event_tx.clone(),
+                self.shutdown_tx.subscribe(),
+                settings.clone(),
+                deps,
+            );
         }
 
         inner.settings = settings;
@@ -90,9 +99,27 @@ impl LocalApiRuntimeState {
     }
 }
 
+fn should_restart_server(
+    previous_settings: &LocalApiSettings,
+    settings: &LocalApiSettings,
+    has_server_task: bool,
+) -> bool {
+    previous_settings.enabled != settings.enabled
+        || previous_settings.port != settings.port
+        || previous_settings.token != settings.token
+        || (!settings.enabled && has_server_task)
+}
+
+fn signal_shutdown(shutdown_tx: &watch::Sender<u64>) {
+    shutdown_tx.send_modify(|generation| {
+        *generation = generation.wrapping_add(1);
+    });
+}
+
 fn spawn_server<R: Runtime + 'static>(
     app: AppHandle<R>,
     event_tx: broadcast::Sender<String>,
+    mut shutdown_rx: watch::Receiver<u64>,
     settings: LocalApiSettings,
     deps: LocalApiRuntimeDeps<R>,
 ) -> Option<tauri::async_runtime::JoinHandle<()>> {
@@ -117,22 +144,38 @@ fn spawn_server<R: Runtime + 'static>(
         };
 
         loop {
-            let (stream, remote_addr) = match listener.accept().await {
-                Ok(next) => next,
-                Err(error) => {
-                    eprintln!("[local-api] accept failed: {error}");
-                    continue;
+            let (stream, remote_addr) = tokio::select! {
+                changed = shutdown_rx.changed() => {
+                    if changed.is_err() {
+                        eprintln!("[local-api] shutdown channel closed");
+                    }
+                    return;
+                }
+                next = listener.accept() => {
+                    match next {
+                        Ok(next) => next,
+                        Err(error) => {
+                            eprintln!("[local-api] accept failed: {error}");
+                            continue;
+                        }
+                    }
                 }
             };
             let client_app = app.clone();
             let client_event_tx = event_tx.clone();
-            let token = (deps.load_token)(app.clone())
-                .await
-                .unwrap_or_else(|| settings.token.clone());
+            let client_shutdown_rx = shutdown_rx.clone();
+            let fallback_token = settings.token.clone();
 
             tauri::async_runtime::spawn(async move {
-                if let Err(error) =
-                    handle_client(client_app, client_event_tx, token, stream, deps).await
+                if let Err(error) = handle_client(
+                    client_app,
+                    client_event_tx,
+                    client_shutdown_rx,
+                    fallback_token,
+                    stream,
+                    deps,
+                )
+                .await
                 {
                     eprintln!("[local-api] client {remote_addr} closed: {error}");
                 }
@@ -151,35 +194,66 @@ fn open_local_api_listener(port: u16) -> io::Result<(SocketAddr, StdTcpListener)
 async fn handle_client<R: Runtime>(
     app: AppHandle<R>,
     event_tx: broadcast::Sender<String>,
-    token: String,
+    mut shutdown_rx: watch::Receiver<u64>,
+    fallback_token: String,
     stream: TcpStream,
     deps: LocalApiRuntimeDeps<R>,
 ) -> Result<(), String> {
-    let ws_stream = accept_async(stream)
-        .await
-        .map_err(|error| format!("websocket handshake failed: {error}"))?;
-    let (mut sink, mut stream) = ws_stream.split();
+    let token = tokio::select! {
+        changed = shutdown_rx.changed() => {
+            return shutdown_result(changed);
+        }
+        token = (deps.load_token)(app.clone()) => {
+            token.unwrap_or(fallback_token)
+        }
+    };
 
-    if !authenticate_client(&mut sink, &mut stream, &token).await? {
+    let ws_stream = tokio::select! {
+        changed = shutdown_rx.changed() => {
+            return shutdown_result(changed);
+        }
+        handshake = timeout(
+            Duration::from_secs(LOCAL_API_HANDSHAKE_TIMEOUT_SECS),
+            accept_async(stream),
+        ) => {
+            handshake
+                .map_err(|_| "websocket handshake timed out".to_string())?
+                .map_err(|error| format!("websocket handshake failed: {error}"))?
+        }
+    };
+    let (mut sink, mut stream) = ws_stream.split();
+    let mut event_rx = event_tx.subscribe();
+
+    if !authenticate_client(&mut sink, &mut stream, &mut shutdown_rx, &token).await? {
         return Ok(());
     }
 
-    send_text(&mut sink, auth_ok_message()).await?;
-    if let Some(snapshot) = (deps.load_snapshot)(app).await {
-        send_text(&mut sink, snapshot).await?;
+    if !send_text_or_shutdown(&mut sink, &mut shutdown_rx, auth_ok_message()).await? {
+        return Ok(());
+    }
+    let snapshot = tokio::select! {
+        changed = shutdown_rx.changed() => {
+            return shutdown_result(changed);
+        }
+        snapshot = (deps.load_snapshot)(app) => snapshot,
+    };
+    if let Some(snapshot) = snapshot {
+        if !send_text_or_shutdown(&mut sink, &mut shutdown_rx, snapshot).await? {
+            return Ok(());
+        }
     }
 
-    let mut rx = event_tx.subscribe();
     loop {
         tokio::select! {
-            received = rx.recv() => {
+            changed = shutdown_rx.changed() => {
+                return shutdown_result(changed);
+            }
+            received = event_rx.recv() => {
                 match received {
                     Ok(message) => {
-                        if message == close_message() {
-                            let _ = sink.close().await;
+                        if !send_text_or_shutdown(&mut sink, &mut shutdown_rx, message).await? {
                             return Ok(());
                         }
-                        send_text(&mut sink, message).await?;
                     }
                     Err(broadcast::error::RecvError::Lagged(_)) => {}
                     Err(broadcast::error::RecvError::Closed) => return Ok(()),
@@ -200,6 +274,7 @@ async fn handle_client<R: Runtime>(
 async fn authenticate_client<S>(
     sink: &mut S,
     stream: &mut futures_util::stream::SplitStream<tokio_tungstenite::WebSocketStream<TcpStream>>,
+    shutdown_rx: &mut watch::Receiver<u64>,
     token: &str,
 ) -> Result<bool, String>
 where
@@ -209,12 +284,16 @@ where
         return Ok(true);
     }
 
-    let auth_message = match timeout(
-        Duration::from_secs(LOCAL_API_AUTH_TIMEOUT_SECS),
-        stream.next(),
-    )
-    .await
-    {
+    let auth_message = match tokio::select! {
+        changed = shutdown_rx.changed() => {
+            shutdown_result(changed)?;
+            return Ok(false);
+        }
+        message = timeout(
+            Duration::from_secs(LOCAL_API_AUTH_TIMEOUT_SECS),
+            stream.next(),
+        ) => message,
+    } {
         Ok(message) => message,
         Err(_) => {
             send_text(sink, auth_failed_message()).await?;
@@ -247,6 +326,26 @@ where
         .map_err(|error| format!("send failed: {error}"))
 }
 
+async fn send_text_or_shutdown<S>(
+    sink: &mut S,
+    shutdown_rx: &mut watch::Receiver<u64>,
+    text: String,
+) -> Result<bool, String>
+where
+    S: futures_util::Sink<Message, Error = WsError> + Unpin,
+{
+    tokio::select! {
+        changed = shutdown_rx.changed() => {
+            shutdown_result(changed)?;
+            Ok(false)
+        }
+        result = send_text(sink, text) => {
+            result?;
+            Ok(true)
+        }
+    }
+}
+
 fn parse_auth_token(message: &Message) -> Option<String> {
     let text = message.to_text().ok()?;
     let value: Value = serde_json::from_str(text).ok()?;
@@ -273,8 +372,11 @@ fn auth_failed_message() -> String {
     json!({ "type": "auth-failed" }).to_string()
 }
 
-fn close_message() -> String {
-    json!({ "type": "service-stopping" }).to_string()
+fn shutdown_result(changed: Result<(), watch::error::RecvError>) -> Result<(), String> {
+    match changed {
+        Ok(()) => Ok(()),
+        Err(error) => Err(format!("shutdown channel closed: {error}")),
+    }
 }
 
 fn lock_inner<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -308,5 +410,32 @@ mod tests {
 
         let (_address, recovered_listener) = open_local_api_listener(port).unwrap();
         assert_eq!(recovered_listener.local_addr().unwrap().port(), port);
+    }
+
+    #[test]
+    fn token_rotation_requires_server_restart() {
+        let previous = LocalApiSettings {
+            enabled: true,
+            port: 17_321,
+            token: "old-token".to_string(),
+        };
+        let next = LocalApiSettings {
+            token: "new-token".to_string(),
+            ..previous.clone()
+        };
+
+        assert!(should_restart_server(&previous, &next, true));
+    }
+
+    #[test]
+    fn shutdown_generation_notifies_existing_receivers() {
+        tauri::async_runtime::block_on(async {
+            let (shutdown_tx, mut shutdown_rx) = watch::channel(0);
+
+            signal_shutdown(&shutdown_tx);
+
+            shutdown_rx.changed().await.unwrap();
+            assert_eq!(*shutdown_rx.borrow(), 1);
+        });
     }
 }
