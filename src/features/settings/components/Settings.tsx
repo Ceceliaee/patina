@@ -11,6 +11,7 @@ import SettingsAppearancePanel from "./SettingsAppearancePanel";
 import SettingsDataSafetyPanel from "./SettingsDataSafetyPanel";
 import SettingsResidentPanel from "./SettingsResidentPanel";
 import SettingsTrackingPanel from "./SettingsTrackingPanel";
+import SettingsLocalApiPanel from "./SettingsLocalApiPanel";
 import { useSettingsPageState } from "../hooks/useSettingsPageState";
 
 export default function Settings({
@@ -201,6 +202,15 @@ export default function Settings({
             startMinimizedChecked={draftSettings.startMinimized}
             startMinimizedDisabled={!draftSettings.launchAtLogin}
             onStartMinimizedChange={(nextChecked) => handleChange("startMinimized", nextChecked)}
+          />
+
+          <SettingsLocalApiPanel
+            enabled={draftSettings.localApiEnabled}
+            port={draftSettings.localApiPort}
+            token={draftSettings.localApiToken}
+            onEnabledChange={(nextChecked) => handleChange("localApiEnabled", nextChecked)}
+            onPortChange={(nextPort) => handleChange("localApiPort", nextPort)}
+            onTokenChange={(nextToken) => handleChange("localApiToken", nextToken)}
           />
 
           <SettingsDataSafetyPanel

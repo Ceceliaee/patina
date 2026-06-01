@@ -25,11 +25,13 @@ tauri-plugin-autostart = "2"
 tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+futures-util = "0.3"
 windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse", "Win32_Graphics_Gdi", "Win32_UI_Shell", "Win32_UI_Shell_PropertiesSystem", "Win32_System_ProcessStatus", "Win32_System_SystemInformation", "Win32_System_Diagnostics_ToolHelp", "Win32_System_RemoteDesktop", "Win32_System_LibraryLoader", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_Storage_FileSystem", "Win32_Media_Audio", "Media", "Media_Control"] }
 image = "0.24"
 base64 = "0.22.1"
 chrono = "0.4.44"
-tokio = { version = "1.50.0", features = ["rt-multi-thread", "time"] }
+tokio = { version = "1.50.0", features = ["rt-multi-thread", "time", "net", "sync", "macros"] }
+tokio-tungstenite = "0.28"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
 rfd = "0.15.4"

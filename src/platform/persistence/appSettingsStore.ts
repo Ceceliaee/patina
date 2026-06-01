@@ -44,7 +44,10 @@ type RawAppSettingsKey =
   | "color_scheme_dark"
   | "launch_at_login"
   | "start_minimized"
-  | "onboarding_completed";
+  | "onboarding_completed"
+  | "local_api_enabled"
+  | "local_api_port"
+  | "local_api_token";
 
 const APP_SETTINGS_RAW_KEYS: Record<keyof AppSettings, RawAppSettingsKey> = {
   idleTimeoutSecs: "idle_timeout_secs",
@@ -62,12 +65,16 @@ const APP_SETTINGS_RAW_KEYS: Record<keyof AppSettings, RawAppSettingsKey> = {
   launchAtLogin: "launch_at_login",
   startMinimized: "start_minimized",
   onboardingCompleted: "onboarding_completed",
+  localApiEnabled: "local_api_enabled",
+  localApiPort: "local_api_port",
+  localApiToken: "local_api_token",
 };
 
 const IDLE_TIMEOUT_SECONDS_RANGE = { min: 300, max: 1800, step: 60 } as const;
 const TIMELINE_MERGE_GAP_SECONDS_RANGE = { min: 60, max: 300, step: 60 } as const;
 const REFRESH_INTERVAL_OPTIONS = [1, 3];
 const MIN_SESSION_SECONDS_RANGE = { min: 60, max: 600, step: 60 } as const;
+const LOCAL_API_PORT_RANGE = { min: 1024, max: 65535 } as const;
 function parseNumberSetting(value: string | undefined, fallback: number) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -86,6 +93,21 @@ function normalizeRangeStepValue(
   const parsed = parseNumberSetting(value, fallback);
   const clamped = Math.min(range.max, Math.max(range.min, parsed));
   return Math.round(clamped / range.step) * range.step;
+}
+
+function normalizeIntegerRangeValue(
+  value: string | undefined,
+  fallback: number,
+  range: { min: number; max: number },
+) {
+  const parsed = parseNumberSetting(value, fallback);
+  if (!Number.isInteger(parsed)) return fallback;
+  if (parsed < range.min || parsed > range.max) return fallback;
+  return parsed;
+}
+
+function normalizeLocalApiToken(value: string | undefined) {
+  return value?.trim() ?? DEFAULT_SETTINGS.localApiToken;
 }
 
 function parseBooleanSetting(value: string | undefined, fallback: boolean) {
@@ -189,6 +211,8 @@ function serializeSettingValue(value: PersistedSettingValue) {
 }
 
 export function normalizeSettingsRecord(record: Record<string, string | undefined>): AppSettings {
+  const localApiToken = normalizeLocalApiToken(record.local_api_token);
+
   return {
     idleTimeoutSecs: normalizeRangeStepValue(
       record.idle_timeout_secs,
@@ -230,6 +254,14 @@ export function normalizeSettingsRecord(record: Record<string, string | undefine
       record.onboarding_completed,
       DEFAULT_SETTINGS.onboardingCompleted,
     ),
+    localApiEnabled: parseBooleanSetting(record.local_api_enabled, DEFAULT_SETTINGS.localApiEnabled)
+      && localApiToken.length > 0,
+    localApiPort: normalizeIntegerRangeValue(
+      record.local_api_port,
+      DEFAULT_SETTINGS.localApiPort,
+      LOCAL_API_PORT_RANGE,
+    ),
+    localApiToken,
   };
 }
 

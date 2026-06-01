@@ -2,6 +2,10 @@ use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_LAUNCH_AT_LOGIN: bool = true;
 pub const DEFAULT_START_MINIMIZED: bool = true;
+pub const DEFAULT_LOCAL_API_ENABLED: bool = false;
+pub const DEFAULT_LOCAL_API_PORT: u16 = 17_321;
+pub const DEFAULT_LOCAL_API_TOKEN: &str = "";
+pub const LOCAL_API_PORT_MIN: u16 = 1024;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -25,6 +29,45 @@ pub struct DesktopBehaviorSettings {
     pub minimize_behavior: MinimizeBehavior,
     pub launch_at_login: bool,
     pub start_minimized: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LocalApiSettings {
+    pub enabled: bool,
+    pub port: u16,
+    pub token: String,
+}
+
+impl Default for LocalApiSettings {
+    fn default() -> Self {
+        Self {
+            enabled: DEFAULT_LOCAL_API_ENABLED,
+            port: DEFAULT_LOCAL_API_PORT,
+            token: DEFAULT_LOCAL_API_TOKEN.to_string(),
+        }
+    }
+}
+
+impl LocalApiSettings {
+    pub fn from_storage_values(
+        enabled: Option<&str>,
+        port: Option<&str>,
+        token: Option<&str>,
+    ) -> Self {
+        let token = token.unwrap_or(DEFAULT_LOCAL_API_TOKEN).trim().to_string();
+        let enabled = enabled
+            .map(|raw| parse_boolean_setting(raw, DEFAULT_LOCAL_API_ENABLED))
+            .unwrap_or(DEFAULT_LOCAL_API_ENABLED)
+            && !token.is_empty();
+
+        Self {
+            enabled,
+            port: port
+                .and_then(parse_local_api_port)
+                .unwrap_or(DEFAULT_LOCAL_API_PORT),
+            token,
+        }
+    }
 }
 
 impl Default for DesktopBehaviorSettings {
@@ -121,12 +164,19 @@ pub fn parse_boolean_setting(raw: &str, fallback: bool) -> bool {
     }
 }
 
+pub fn parse_local_api_port(raw: &str) -> Option<u16> {
+    let port = raw.trim().parse::<u16>().ok()?;
+    (LOCAL_API_PORT_MIN..=u16::MAX)
+        .contains(&port)
+        .then_some(port)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_boolean_setting, parse_close_behavior, parse_minimize_behavior, CloseBehavior,
-        DesktopBehaviorSettings, MinimizeBehavior, DEFAULT_LAUNCH_AT_LOGIN,
-        DEFAULT_START_MINIMIZED,
+        parse_boolean_setting, parse_close_behavior, parse_local_api_port, parse_minimize_behavior,
+        CloseBehavior, DesktopBehaviorSettings, LocalApiSettings, MinimizeBehavior,
+        DEFAULT_LAUNCH_AT_LOGIN, DEFAULT_LOCAL_API_PORT, DEFAULT_START_MINIMIZED,
     };
 
     #[test]
@@ -134,7 +184,10 @@ mod tests {
         assert_eq!(parse_close_behavior("tray"), CloseBehavior::Tray);
         assert_eq!(parse_close_behavior("unknown"), CloseBehavior::Exit);
         assert_eq!(parse_minimize_behavior("widget"), MinimizeBehavior::Widget);
-        assert_eq!(parse_minimize_behavior("taskbar"), MinimizeBehavior::Taskbar);
+        assert_eq!(
+            parse_minimize_behavior("taskbar"),
+            MinimizeBehavior::Taskbar
+        );
         assert_eq!(
             parse_minimize_behavior("anything-else"),
             MinimizeBehavior::Widget
@@ -149,6 +202,32 @@ mod tests {
         assert!(!parse_boolean_setting("off", true));
         assert!(parse_boolean_setting("invalid", true));
         assert!(!parse_boolean_setting("invalid", false));
+    }
+
+    #[test]
+    fn local_api_settings_parse_defaults_and_invalid_port() {
+        assert_eq!(
+            LocalApiSettings::from_storage_values(None, None, None),
+            LocalApiSettings::default()
+        );
+        assert_eq!(
+            LocalApiSettings::from_storage_values(Some("1"), Some("80"), Some("secret")),
+            LocalApiSettings {
+                enabled: true,
+                port: DEFAULT_LOCAL_API_PORT,
+                token: "secret".to_string(),
+            }
+        );
+        assert_eq!(
+            LocalApiSettings::from_storage_values(Some("1"), Some("18080"), Some("   ")),
+            LocalApiSettings {
+                enabled: false,
+                port: 18_080,
+                token: String::new(),
+            }
+        );
+        assert_eq!(parse_local_api_port("65535"), Some(65_535));
+        assert_eq!(parse_local_api_port("1023"), None);
     }
 
     #[test]

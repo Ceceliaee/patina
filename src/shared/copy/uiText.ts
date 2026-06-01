@@ -94,6 +94,7 @@ const ZH_CN_UI_TEXT = {
       toggleCloseToTray: "切换关闭到托盘",
       toggleLaunchAtLogin: "切换开机自启动",
       toggleStartMinimized: "切换启动时最小化",
+      toggleLocalApi: "切换本机接口",
       colorScheme: "配色方案",
     },
     color: {
@@ -293,6 +294,13 @@ const ZH_CN_UI_TEXT = {
     launchAtLoginHint: "开启后，系统登录时自动启动应用。",
     startMinimizedLabel: "启动时最小化",
     startMinimizedHint: "仅对自启动生效：启动时按当前最小化行为收起。",
+    localApiTitle: "本机接口",
+    localApiEnabledLabel: "WebSocket 服务",
+    localApiEnabledHint: "仅本机监听，供第三方脚本或面板读取当前追踪状态。",
+    localApiPortLabel: "端口",
+    localApiPortHint: "本机访问地址为 ws://127.0.0.1:[端口]。",
+    localApiTokenLabel: "Token",
+    localApiTokenHint: "开启时会自动生成 Token 作为鉴权信息",
     appearanceTitle: "外观",
     themeModeOptions: {
       light: "浅色",
@@ -590,6 +598,7 @@ const EN_US_UI_TEXT: UiText = {
       toggleCloseToTray: "Toggle close to tray",
       toggleLaunchAtLogin: "Toggle launch at login",
       toggleStartMinimized: "Toggle start minimized",
+      toggleLocalApi: "Toggle local API",
       colorScheme: "Color scheme",
     },
     color: {
@@ -790,6 +799,13 @@ const EN_US_UI_TEXT: UiText = {
     launchAtLoginHint: "Start the app automatically when Windows signs in.",
     startMinimizedLabel: "Start minimized",
     startMinimizedHint: "Only applies to launch at login. Starts with the current minimize behavior.",
+    localApiTitle: "Local API",
+    localApiEnabledLabel: "WebSocket service",
+    localApiEnabledHint: "Listens on 127.0.0.1 only for local scripts or dashboards to read tracking state.",
+    localApiPortLabel: "Port",
+    localApiPortHint: "Local address: ws://127.0.0.1:port.",
+    localApiTokenLabel: "Token",
+    localApiTokenHint: "A token is generated when enabled. Clients must send an auth message after connecting.",
     appearanceTitle: "Appearance",
     themeModeOptions: {
       light: "Light",

@@ -43,6 +43,7 @@ fn register_managed_state_and_plugins(
         .manage(DesktopBehaviorState::default())
         .manage(AppExitState::default())
         .manage(WidgetWindowLifecycleState::default())
+        .manage(crate::platform::local_api::LocalApiRuntimeState::default())
         .manage(UpdaterRuntimeState::new(app_version.to_string()))
         .plugin(
             tauri_plugin_autostart::Builder::new()
