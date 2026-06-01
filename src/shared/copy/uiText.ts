@@ -278,7 +278,7 @@ const ZH_CN_UI_TEXT = {
     localApiPortLabel: "端口",
     localApiPortHint: "本机访问地址为 ws://127.0.0.1:[端口]。",
     localApiTokenLabel: "Token",
-    localApiTokenHint: "开启时会自动生成 Token；客户端连接后需先发送 auth 消息。",
+    localApiTokenHint: "开启时会自动生成 Token 作为鉴权信息",
     appearanceTitle: "外观",
     themeModeOptions: {
       light: "浅色",
