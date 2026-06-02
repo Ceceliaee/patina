@@ -785,6 +785,11 @@ try {
       ),
       "显示总活动",
     );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll(".dashboard-pulse-chart .recharts-bar").length >= 2`,
+    );
     assert.equal(
       await evaluate(
         client!,
@@ -1006,6 +1011,11 @@ try {
         `document.querySelector(".history-pulse-mode-toggle")?.getAttribute("aria-label")`,
       ),
       "显示总活动",
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll(".history-pulse-chart .recharts-bar").length >= 2`,
     );
     assert.equal(
       await evaluate(
