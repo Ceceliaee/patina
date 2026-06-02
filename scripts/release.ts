@@ -16,6 +16,8 @@ const VERSION_POLICY_PATH = path.join(ROOT, "docs", "versioning-and-release-poli
 const VERSION_PATTERN =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9A-Za-z-][0-9A-Za-z-]*))*))?$/;
 const VERSION_POLICY_CURRENT_CODE_VERSION_PATTERN = /(- 代码版本为 `)([^`]+)(`)/;
+const GITHUB_UPDATER_ENDPOINT =
+  "https://github.com/Ceceliaee/time-tracking/releases/latest/download/latest.json";
 
 function fail(message) {
   console.error(`release: ${message}`);
@@ -54,6 +56,32 @@ async function updateJsonVersion(filePath, version, updateLockRoot = false) {
   }
 
   await writeJson(filePath, json);
+}
+
+function dedupeStrings(values) {
+  return [...new Set(values.filter((value) => typeof value === "string" && value.trim()).map((value) => value.trim()))];
+}
+
+export function buildUpdaterEndpoints(existingEndpoints = []) {
+  return dedupeStrings([
+    GITHUB_UPDATER_ENDPOINT,
+    ...existingEndpoints.filter((endpoint) => endpoint !== GITHUB_UPDATER_ENDPOINT),
+  ]);
+}
+
+function withUpdaterDefaults(config) {
+  return {
+    ...config,
+    plugins: {
+      ...config.plugins,
+      updater: {
+        ...config.plugins?.updater,
+        active: true,
+        dialog: false,
+        endpoints: buildUpdaterEndpoints(config.plugins?.updater?.endpoints ?? []),
+      },
+    },
+  };
 }
 
 export function syncVersionPolicyCurrentCodeVersion(content, version) {
@@ -99,28 +127,19 @@ async function syncVersion(version) {
   await updateJsonVersion(PACKAGE_JSON_PATH, version);
   await updateJsonVersion(PACKAGE_LOCK_PATH, version, true);
 
-  const tauriConfig = JSON.parse(await readText(TAURI_CONFIG_PATH));
+  const tauriConfig = withUpdaterDefaults(JSON.parse(await readText(TAURI_CONFIG_PATH)));
   tauriConfig.version = version;
   tauriConfig.bundle = {
     ...tauriConfig.bundle,
     createUpdaterArtifacts: true,
   };
-  tauriConfig.plugins = {
-    ...tauriConfig.plugins,
-    updater: {
-      ...tauriConfig.plugins?.updater,
-      active: true,
-      dialog: false,
-      endpoints: ["https://github.com/Ceceliaee/time-tracking/releases/latest/download/latest.json"],
-    },
-  };
   await writeJson(TAURI_CONFIG_PATH, tauriConfig);
 
-  const tauriDevConfig = JSON.parse(await readText(TAURI_DEV_CONFIG_PATH));
+  const tauriDevConfig = withUpdaterDefaults(JSON.parse(await readText(TAURI_DEV_CONFIG_PATH)));
   tauriDevConfig.version = version;
   await writeJson(TAURI_DEV_CONFIG_PATH, tauriDevConfig);
 
-  const tauriLocalConfig = JSON.parse(await readText(TAURI_LOCAL_CONFIG_PATH));
+  const tauriLocalConfig = withUpdaterDefaults(JSON.parse(await readText(TAURI_LOCAL_CONFIG_PATH)));
   tauriLocalConfig.version = version;
   await writeJson(TAURI_LOCAL_CONFIG_PATH, tauriLocalConfig);
 

@@ -22,7 +22,7 @@ App note en: TBD.
 
 ### Changed
 
-- 暂无。
+- 改进应用内更新链路，保留 GitHub Releases 作为主更新源，并支持 R2 备用更新镜像，降低 GitHub 链路偶发失败对自动更新的影响。Refs [#12](https://github.com/Ceceliaee/time-tracking/issues/12)
 
 ### Fixed
 

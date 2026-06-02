@@ -148,3 +148,121 @@ jobs:
           files: |
             dist-release/TimeTracker_${{ steps.release.outputs.version }}_x64-setup.exe
             dist-release/latest.json
+
+      - name: Check R2 mirror configuration
+        shell: pwsh
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
+        run: |
+          $required = @(
+            "R2_ACCOUNT_ID",
+            "R2_ACCESS_KEY_ID",
+            "R2_SECRET_ACCESS_KEY",
+            "R2_BUCKET",
+            "R2_PUBLIC_BASE_URL"
+          )
+          $missing = @()
+          foreach ($name in $required) {
+            if (-not [Environment]::GetEnvironmentVariable($name)) {
+              $missing += $name
+            }
+          }
+
+          if ($missing.Count -gt 0) {
+            "R2_MIRROR_ENABLED=false" >> $env:GITHUB_ENV
+            Write-Host "R2 mirror secrets are not fully configured; skipping R2 sync."
+            Write-Host "Missing: $($missing -join ', ')"
+          } else {
+            "R2_MIRROR_ENABLED=true" >> $env:GITHUB_ENV
+            Write-Host "R2 mirror is configured."
+          }
+
+      - name: Ensure AWS CLI for R2 sync
+        if: env.R2_MIRROR_ENABLED == 'true'
+        shell: pwsh
+        run: |
+          if (Get-Command aws -ErrorAction SilentlyContinue) {
+            aws --version
+            exit 0
+          }
+
+          choco install awscli -y --no-progress
+          aws --version
+
+      - name: Generate R2 updater manifest
+        if: env.R2_MIRROR_ENABLED == 'true'
+        shell: pwsh
+        env:
+          R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
+        run: |
+          New-Item -ItemType Directory -Force dist-release/r2 | Out-Null
+          $version = "${{ steps.release.outputs.version }}"
+          $installerName = "TimeTracker_${version}_x64-setup.exe"
+          $r2BaseUrl = $env:R2_PUBLIC_BASE_URL.TrimEnd("/")
+          $r2InstallerUrl = "$r2BaseUrl/releases/v$version/$installerName"
+          $githubLatest = Get-Content "dist-release/latest.json" -Raw | ConvertFrom-Json
+          $signature = $githubLatest.platforms.'windows-x86_64'.signature
+
+          if (-not $signature) {
+            throw "Could not read updater signature from dist-release/latest.json."
+          }
+
+          npm run release:latest -- $version $r2InstallerUrl $signature dist-release/r2/latest.json windows-x86_64
+
+      - name: Upload R2 updater mirror
+        if: env.R2_MIRROR_ENABLED == 'true'
+        shell: pwsh
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          $version = "${{ steps.release.outputs.version }}"
+          $installerName = "TimeTracker_${version}_x64-setup.exe"
+          $r2Endpoint = "https://$env:R2_ACCOUNT_ID.r2.cloudflarestorage.com"
+
+          aws s3 cp `
+            "dist-release/$installerName" `
+            "s3://$env:R2_BUCKET/releases/v$version/$installerName" `
+            --endpoint-url $r2Endpoint `
+            --content-type "application/octet-stream"
+
+          aws s3 cp `
+            "dist-release/r2/latest.json" `
+            "s3://$env:R2_BUCKET/latest.json" `
+            --endpoint-url $r2Endpoint `
+            --content-type "application/json" `
+            --cache-control "no-cache"
+
+      - name: Clean old R2 updater mirrors
+        if: env.R2_MIRROR_ENABLED == 'true'
+        shell: pwsh
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          $version = "${{ steps.release.outputs.version }}"
+          $currentPrefix = "releases/v$version/"
+          $r2Endpoint = "https://$env:R2_ACCOUNT_ID.r2.cloudflarestorage.com"
+          $objects = aws s3api list-objects-v2 `
+            --bucket $env:R2_BUCKET `
+            --prefix "releases/" `
+            --delimiter "/" `
+            --endpoint-url $r2Endpoint | ConvertFrom-Json
+
+          $prefixes = @($objects.CommonPrefixes | ForEach-Object { $_.Prefix })
+          foreach ($prefix in $prefixes) {
+            if ($prefix -and $prefix -ne $currentPrefix) {
+              Write-Host "Removing old R2 mirror prefix: $prefix"
+              aws s3 rm "s3://$env:R2_BUCKET/$prefix" --recursive --endpoint-url $r2Endpoint
+            }
+          }

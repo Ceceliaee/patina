@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  buildUpdaterEndpoints,
   fieldValue,
   readVersionPolicyCurrentCodeVersion,
   renderUpdaterNotes,
@@ -72,11 +73,25 @@ function testUpdaterNotesFallsBackToAppNote() {
   assert.equal(notes, "Fixed release notes.");
 }
 
+function testUpdaterEndpointsKeepGithubFirstAndPreserveMirrors() {
+  const endpoints = buildUpdaterEndpoints([
+    "https://pub-example.r2.dev/latest.json",
+    "https://github.com/Ceceliaee/time-tracking/releases/latest/download/latest.json",
+    "https://pub-example.r2.dev/latest.json",
+  ]);
+
+  assert.deepEqual(endpoints, [
+    "https://github.com/Ceceliaee/time-tracking/releases/latest/download/latest.json",
+    "https://pub-example.r2.dev/latest.json",
+  ]);
+}
+
 testSyncsCurrentCodeVersion();
 testSupportsPrereleaseVersion();
 testMissingPolicyVersionIsNull();
 testStalePolicyVersionFailsValidation();
 testUpdaterNotesKeepLocalizedVariants();
 testUpdaterNotesFallsBackToAppNote();
+testUpdaterEndpointsKeepGithubFirstAndPreserveMirrors();
 
-console.log("Passed 6 release policy tests");
+console.log("Passed 7 release policy tests");

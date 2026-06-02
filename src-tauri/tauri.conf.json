@@ -50,7 +50,8 @@
       "active": true,
       "dialog": false,
       "endpoints": [
-        "https://github.com/Ceceliaee/time-tracking/releases/latest/download/latest.json"
+        "https://github.com/Ceceliaee/time-tracking/releases/latest/download/latest.json",
+        "https://pub-ad4b539442124a3287529c9435f053ba.r2.dev/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ4ODMzNkI5M0Q3OTU2QkMKUldTOFZuazl1VGFEU0RDakI2UEF1SUlyNGxDVnZVRTl1TEFUK0Rmei9xZVlYR3R3SnprRXNCWVoK"
     }
