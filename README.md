@@ -158,7 +158,7 @@ Time Tracker is a personal, local-first open-source project. If it has been usef
 
 [<img src="https://storage.ko-fi.com/cdn/kofi2.png?v=3" height="36" alt="Buy me a coffee">](https://ko-fi.com/ceceliaee)
 
-<img src=".github/assets/support/wechat-reward.png" width="260" alt="WeChat reward code">
+<img src=".github/assets/support/wechat-reward.png" width="200" alt="WeChat reward code">
 
 Sponsorship helps sustain maintenance, but it does not affect feature priority, issue handling, the roadmap, or the product direction.
 
