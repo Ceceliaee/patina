@@ -5,6 +5,7 @@ use super::session_timeout::{
     should_suspend_active_tracking,
 };
 use super::sustained_participation::SustainedParticipationRuntimeState;
+use super::runtime_snapshot::{TrackingRuntimeSnapshot, TrackingRuntimeSnapshotState};
 use super::{active_session, continuity, startup, transition, watchdog};
 #[cfg(test)]
 use crate::data::repositories::{sessions, tracker_settings};
@@ -17,7 +18,7 @@ use crate::domain::tracking::TRACKING_REASON_TRACKING_PAUSED_SEALED;
 use crate::domain::tracking::{TrackingStatusSnapshot, TRACKING_REASON_STATUS_CHANGED};
 use crate::platform::windows::foreground as tracker;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Runtime};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::time::{sleep, Duration};
 
 #[path = "runtime/loop_state.rs"]
@@ -30,13 +31,13 @@ mod support;
 mod window_polling;
 
 use loop_state::{
-    load_tracking_loop_state, persist_tracker_runtime_timestamps, CurrentTrackingSnapshotData,
-    TrackerTimestampPersistState, TrackingSettingsCache,
+    load_tracking_loop_state, persist_tracker_runtime_timestamps, TrackerTimestampPersistState,
+    TrackingSettingsCache,
 };
 use power_lifecycle::apply_power_lifecycle_event;
 pub use support::emit_tracking_data_changed;
 use support::{log_tracker_error, now_ms};
-use window_polling::poll_active_window_with_timeout;
+use window_polling::{poll_active_window_with_timeout, WindowPollOutcome};
 
 // Owner ledger: run() owns runtime loop orchestration only. Polling,
 // loop-state loading, power lifecycle handling, and event support stay in the
@@ -60,10 +61,20 @@ pub async fn run<R: Runtime>(
     let mut settings_cache = TrackingSettingsCache::default();
 
     loop {
-        let window_info = poll_active_window_with_timeout().await?;
+        let poll_outcome = poll_active_window_with_timeout().await;
+        let window_info = poll_outcome.window.clone();
         let now_ms = now_ms();
-        health_state.note_successful_sample(now_ms);
-        persist_tracker_runtime_timestamps(&data, now_ms, &mut timestamp_persist_state).await;
+        health_state.note_heartbeat(now_ms);
+        if poll_outcome.is_successful_sample() {
+            health_state.note_successful_sample(now_ms);
+        }
+        persist_tracker_runtime_timestamps(
+            &data,
+            now_ms,
+            poll_outcome.is_successful_sample(),
+            &mut timestamp_persist_state,
+        )
+        .await;
         let (tracking_state, next_sustained_participation_state) = load_tracking_loop_state(
             &data,
             &window_info,
@@ -74,22 +85,13 @@ pub async fn run<R: Runtime>(
         .await;
         sustained_participation_state = next_sustained_participation_state;
         let tracked_window = tracking_state.tracked_window;
-        let continuity_group_start_time =
-            continuity::resolve_next_session_continuity_group_start_time(
-                pending_continuity.as_ref(),
-                &tracked_window,
-                now_ms,
-            );
-        let new_pending_continuity = continuity::load_pending_continuity(
-            &data,
-            last_window.as_ref(),
-            last_tracking_status.as_ref(),
+        update_runtime_snapshot_state(
+            &app,
             &tracked_window,
-            tracking_state.continuity_window_secs,
+            &tracking_state.tracking_status,
             now_ms,
-        )
-        .await;
-
+            &poll_outcome,
+        );
         if tracking_state.tracking_paused {
             match seal_active_sessions_for_tracking_pause(&data, now_ms).await {
                 Ok(Some(reason)) => {
@@ -107,6 +109,29 @@ pub async fn run<R: Runtime>(
             sleep(Duration::from_secs(1)).await;
             continue;
         }
+
+        if !poll_outcome.is_successful_sample() {
+            last_window = Some(tracked_window);
+            last_tracking_status = Some(tracking_state.tracking_status);
+            sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+
+        let continuity_group_start_time =
+            continuity::resolve_next_session_continuity_group_start_time(
+                pending_continuity.as_ref(),
+                &tracked_window,
+                now_ms,
+            );
+        let new_pending_continuity = continuity::load_pending_continuity(
+            &data,
+            last_window.as_ref(),
+            last_tracking_status.as_ref(),
+            &tracked_window,
+            tracking_state.continuity_window_secs,
+            now_ms,
+        )
+        .await;
 
         if should_seal_sustained_participation(
             last_window.as_ref(),
@@ -221,6 +246,24 @@ pub async fn run<R: Runtime>(
     }
 }
 
+fn update_runtime_snapshot_state<R: Runtime>(
+    app: &AppHandle<R>,
+    window: &tracker::WindowInfo,
+    status: &TrackingStatusSnapshot,
+    sampled_at_ms: i64,
+    poll_outcome: &WindowPollOutcome,
+) {
+    if let Some(state) = app.try_state::<TrackingRuntimeSnapshotState>() {
+        state.replace(TrackingRuntimeSnapshot {
+            window: window.clone(),
+            status: status.clone(),
+            sampled_at_ms,
+            probe_status: poll_outcome.probe_status,
+            degraded_reason: poll_outcome.degraded_reason.clone(),
+        });
+    }
+}
+
 fn should_emit_tracking_status_changed(
     previous: Option<&TrackingStatusSnapshot>,
     next: &TrackingStatusSnapshot,
@@ -237,26 +280,6 @@ fn should_emit_tracking_status_changed(
         || previous.sustained_participation_signal_source
             != next.sustained_participation_signal_source
         || previous.sustained_participation_reason != next.sustained_participation_reason
-}
-
-pub async fn load_current_tracking_snapshot(
-    data: &TrackingRuntimeDataStore,
-) -> Result<CurrentTrackingSnapshotData, String> {
-    let window_info = poll_active_window_with_timeout().await?;
-    let mut settings_cache = TrackingSettingsCache::default();
-    let (tracking_state, _) = load_tracking_loop_state(
-        data,
-        &window_info,
-        now_ms(),
-        &SustainedParticipationRuntimeState::default(),
-        &mut settings_cache,
-    )
-    .await;
-
-    Ok(CurrentTrackingSnapshotData {
-        window: tracking_state.tracked_window,
-        status: tracking_state.tracking_status,
-    })
 }
 
 pub async fn handle_power_lifecycle_event<R: Runtime>(

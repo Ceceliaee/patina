@@ -4,7 +4,10 @@ use crate::domain::tracking::{
     SustainedParticipationSignalSource, SystemMediaPlaybackType,
 };
 use crate::platform::windows::foreground::WindowInfo;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex, OnceLock,
+};
 use tokio::time::{sleep, timeout, Duration};
 use windows::Media::Control::{
     GlobalSystemMediaTransportControlsSession, GlobalSystemMediaTransportControlsSessionManager,
@@ -29,6 +32,11 @@ struct MediaSnapshot {
 #[derive(Debug)]
 struct MediaSignalSourceState {
     snapshot: Mutex<MediaSnapshot>,
+    probe_in_flight: Arc<AtomicBool>,
+}
+
+struct MediaProbeInFlightGuard {
+    probe_in_flight: Arc<AtomicBool>,
 }
 
 pub fn start_signal_source() {
@@ -63,6 +71,7 @@ impl MediaSignalSourceState {
                 freshness_deadline_ms: now_ms().saturating_add(MEDIA_SNAPSHOT_TTL_MS),
                 signal: SustainedParticipationSignalSnapshot::default(),
             }),
+            probe_in_flight: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -75,18 +84,37 @@ impl MediaSignalSourceState {
 
     async fn reconcile_once(&self) {
         let now_ms = now_ms();
+        if self.probe_in_flight.swap(true, Ordering::AcqRel) {
+            self.replace_snapshot(MediaSnapshot {
+                generated_at_ms: now_ms,
+                freshness_deadline_ms: now_ms.saturating_add(MEDIA_SNAPSHOT_TTL_MS),
+                signal: SustainedParticipationSignalSnapshot::default(),
+            });
+            return;
+        }
+
+        let probe_in_flight = self.probe_in_flight.clone();
+        let query = tauri::async_runtime::spawn(async move {
+            let _guard = MediaProbeInFlightGuard { probe_in_flight };
+            query_media_session_signal().await
+        });
+
         let signal = match timeout(
             Duration::from_secs(MEDIA_SESSION_QUERY_TIMEOUT_SECS),
-            query_media_session_signal(),
+            query,
         )
         .await
         {
-            Ok(Ok(Some(signal))) => signal,
-            Ok(Ok(None)) => SustainedParticipationSignalSnapshot::default(),
-            Ok(Err(error)) => {
+            Ok(Ok(Ok(Some(signal)))) => signal,
+            Ok(Ok(Ok(None))) => SustainedParticipationSignalSnapshot::default(),
+            Ok(Ok(Err(error))) => {
                 log_media_probe_error(format!(
                     "failed to reconcile system media sessions: {error}"
                 ));
+                SustainedParticipationSignalSnapshot::default()
+            }
+            Ok(Err(error)) => {
+                log_media_probe_error(format!("system media query task failed: {error}"));
                 SustainedParticipationSignalSnapshot::default()
             }
             Err(_) => {
@@ -97,12 +125,16 @@ impl MediaSignalSourceState {
             }
         };
 
-        if let Ok(mut snapshot) = self.snapshot.lock() {
-            *snapshot = MediaSnapshot {
-                generated_at_ms: now_ms,
-                freshness_deadline_ms: now_ms.saturating_add(MEDIA_SNAPSHOT_TTL_MS),
-                signal,
-            };
+        self.replace_snapshot(MediaSnapshot {
+            generated_at_ms: now_ms,
+            freshness_deadline_ms: now_ms.saturating_add(MEDIA_SNAPSHOT_TTL_MS),
+            signal,
+        });
+    }
+
+    fn replace_snapshot(&self, snapshot: MediaSnapshot) {
+        if let Ok(mut current) = self.snapshot.lock() {
+            *current = snapshot;
         }
     }
 
@@ -136,6 +168,12 @@ impl MediaSignalSourceState {
         }
 
         snapshot.signal
+    }
+}
+
+impl Drop for MediaProbeInFlightGuard {
+    fn drop(&mut self) {
+        self.probe_in_flight.store(false, Ordering::Release);
     }
 }
 

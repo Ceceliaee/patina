@@ -5,7 +5,12 @@ use crate::app::{
     state::{AppExitState, DesktopBehaviorState, WidgetWindowLifecycleState},
     tray,
 };
-use crate::engine::{tracking::watchdog::RuntimeHealthState, updater::UpdaterRuntimeState};
+use crate::engine::{
+    tracking::{
+        runtime_snapshot::TrackingRuntimeSnapshotState, watchdog::RuntimeHealthState,
+    },
+    updater::UpdaterRuntimeState,
+};
 use crate::{commands, data};
 
 pub struct BootstrapInput {
@@ -43,6 +48,7 @@ fn register_managed_state_and_plugins(
         .manage(DesktopBehaviorState::default())
         .manage(AppExitState::default())
         .manage(WidgetWindowLifecycleState::default())
+        .manage(TrackingRuntimeSnapshotState::default())
         .manage(crate::platform::local_api::LocalApiRuntimeState::default())
         .manage(UpdaterRuntimeState::new(app_version.to_string()))
         .plugin(

@@ -15,11 +15,17 @@ const TRACKER_STALL_SEAL_AFTER_MS: i64 = 8_000;
 
 #[derive(Debug, Default)]
 pub struct RuntimeHealthState {
+    last_heartbeat_ms: AtomicI64,
     last_successful_sample_ms: AtomicI64,
     last_watchdog_seal_sample_ms: AtomicI64,
 }
 
 impl RuntimeHealthState {
+    pub fn note_heartbeat(&self, timestamp_ms: i64) {
+        self.last_heartbeat_ms
+            .store(timestamp_ms, Ordering::Relaxed);
+    }
+
     pub fn note_successful_sample(&self, timestamp_ms: i64) {
         self.last_successful_sample_ms
             .store(timestamp_ms, Ordering::Relaxed);

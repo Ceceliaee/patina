@@ -97,7 +97,7 @@ export function runRuntimeEffectsTests() {
       changed_at_ms: "123",
     }), false);
 
-    assert.equal(isRawCurrentTrackingSnapshot({
+    const validCurrentTrackingSnapshot = {
       window: {
         hwnd: "0x100",
         root_owner_hwnd: "0x100",
@@ -148,7 +148,18 @@ export function runRuntimeEffectsTests() {
           },
         },
       },
+    };
+    assert.equal(isRawCurrentTrackingSnapshot(validCurrentTrackingSnapshot), true);
+    assert.equal(isRawCurrentTrackingSnapshot({
+      ...validCurrentTrackingSnapshot,
+      sampled_at_ms: 123,
+      probe_status: "timeout-fallback",
+      degraded_reason: "active window poll timed out after 3 seconds",
     }), true);
+    assert.equal(isRawCurrentTrackingSnapshot({
+      ...validCurrentTrackingSnapshot,
+      probe_status: "timeout",
+    }), false);
   });
 
   runTest("tracking data changed sealed reasons force refresh without pause setting sync", () => {

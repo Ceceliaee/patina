@@ -321,10 +321,6 @@ unsafe fn get_process_name_from_snapshot(process_id: u32) -> Option<String> {
     exe_name
 }
 
-pub fn get_current_active_window() -> WindowInfo {
-    get_active_window()
-}
-
 #[cfg(test)]
 mod tests {
     use super::{

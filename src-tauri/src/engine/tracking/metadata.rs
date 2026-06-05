@@ -1,10 +1,11 @@
 use crate::data::tracking_runtime::{TrackingRuntimeDataError, TrackingRuntimeDataStore};
 use crate::platform::windows::icon as icon_extractor;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
+use tokio::sync::Semaphore;
 use windows::core::PCWSTR;
 use windows::Win32::Storage::FileSystem::{
     GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW,
@@ -12,6 +13,7 @@ use windows::Win32::Storage::FileSystem::{
 
 const VERSION_INFO_NAME_KEYS: [&str; 3] = ["FileDescription", "ProductName", "CompanyName"];
 const ICON_NEGATIVE_CACHE_TTL_MS: i64 = 60 * 60 * 1000;
+const ICON_CACHE_CONCURRENCY_LIMIT: usize = 2;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -43,6 +45,14 @@ pub async fn ensure_icon_cache(
         return Ok(());
     }
 
+    let Some(_in_flight) = IconCacheInFlightGuard::try_start(exe_name) else {
+        return Ok(());
+    };
+
+    let Ok(_permit) = icon_cache_semaphore().clone().try_acquire_owned() else {
+        return Ok(());
+    };
+
     if data.is_icon_cached(exe_name).await? {
         return Ok(());
     }
@@ -70,6 +80,45 @@ pub async fn ensure_icon_cache(
     data.upsert_icon(exe_name, &base64_icon, now_ms()).await?;
 
     Ok(())
+}
+
+struct IconCacheInFlightGuard {
+    key: String,
+}
+
+impl IconCacheInFlightGuard {
+    fn try_start(exe_name: &str) -> Option<Self> {
+        let key = exe_name.trim().to_ascii_lowercase();
+        if key.is_empty() {
+            return None;
+        }
+
+        let mut in_flight = icon_cache_in_flight().lock().ok()?;
+        if !in_flight.insert(key.clone()) {
+            return None;
+        }
+
+        Some(Self { key })
+    }
+}
+
+impl Drop for IconCacheInFlightGuard {
+    fn drop(&mut self) {
+        if let Ok(mut in_flight) = icon_cache_in_flight().lock() {
+            in_flight.remove(&self.key);
+        }
+    }
+}
+
+fn icon_cache_in_flight() -> &'static Mutex<HashSet<String>> {
+    static ICON_CACHE_IN_FLIGHT: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    ICON_CACHE_IN_FLIGHT.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+fn icon_cache_semaphore() -> &'static Arc<Semaphore> {
+    static ICON_CACHE_SEMAPHORE: OnceLock<Arc<Semaphore>> = OnceLock::new();
+    ICON_CACHE_SEMAPHORE
+        .get_or_init(|| Arc::new(Semaphore::new(ICON_CACHE_CONCURRENCY_LIMIT)))
 }
 
 fn should_skip_window_icon_fallback(exe_name: &str, window_class: &str) -> bool {

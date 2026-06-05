@@ -84,9 +84,21 @@ export interface TrackingStatusSnapshot {
   sustainedParticipationDiagnostics: SustainedParticipationDiagnosticsSnapshot;
 }
 
+export type TrackingRuntimeProbeStatus =
+  | "ok"
+  | "timeout-fallback"
+  | "timeout-inactive"
+  | "backing-off-fallback"
+  | "backing-off-inactive"
+  | "task-failed-fallback"
+  | "task-failed-inactive";
+
 export interface CurrentTrackingSnapshot {
   window: TrackingWindowSnapshot;
   status: TrackingStatusSnapshot;
+  sampledAtMs?: number;
+  probeStatus?: TrackingRuntimeProbeStatus;
+  degradedReason?: string | null;
 }
 
 export interface TrackingDataChangedPayload {
@@ -318,7 +330,28 @@ export function isSustainedParticipationDiagnosticsSnapshot(
 export function isCurrentTrackingSnapshot(value: unknown): value is CurrentTrackingSnapshot {
   return isRecord(value)
     && isTrackingWindowSnapshot(value.window)
-    && isTrackingStatusSnapshot(value.status);
+    && isTrackingStatusSnapshot(value.status)
+    && (
+      value.sampledAtMs === undefined
+      || typeof value.sampledAtMs === "number"
+    )
+    && (
+      value.probeStatus === undefined
+      || isEnumValue(value.probeStatus, [
+        "ok",
+        "timeout-fallback",
+        "timeout-inactive",
+        "backing-off-fallback",
+        "backing-off-inactive",
+        "task-failed-fallback",
+        "task-failed-inactive",
+      ] as const)
+    )
+    && (
+      value.degradedReason === undefined
+      || value.degradedReason === null
+      || typeof value.degradedReason === "string"
+    );
 }
 
 export function isTrackingDataChangedPayload(value: unknown): value is TrackingDataChangedPayload {

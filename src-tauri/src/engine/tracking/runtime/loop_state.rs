@@ -25,14 +25,10 @@ pub(super) struct TrackingLoopState {
     pub tracking_status: TrackingStatusSnapshot,
 }
 
-pub struct CurrentTrackingSnapshotData {
-    pub window: tracker::WindowInfo,
-    pub status: TrackingStatusSnapshot,
-}
-
 #[derive(Debug, Default)]
 pub(super) struct TrackerTimestampPersistState {
-    last_persisted_at_ms: Option<i64>,
+    last_heartbeat_persisted_at_ms: Option<i64>,
+    last_successful_sample_persisted_at_ms: Option<i64>,
 }
 
 #[derive(Debug, Default)]
@@ -57,26 +53,37 @@ struct CachedCaptureWindowTitleSetting {
 pub(super) async fn persist_tracker_runtime_timestamps(
     data: &TrackingRuntimeDataStore,
     now_ms: i64,
+    did_successfully_sample_window: bool,
     state: &mut TrackerTimestampPersistState,
 ) {
-    if state
-        .last_persisted_at_ms
+    if !state
+        .last_heartbeat_persisted_at_ms
         .map(|last| now_ms.saturating_sub(last) < TRACKER_TIMESTAMP_PERSIST_INTERVAL_MS)
         .unwrap_or(false)
     {
-        return;
-    }
-
-    for (setting_key, error_context) in [
-        (TRACKER_LAST_SUCCESSFUL_SAMPLE_KEY, "sample timestamp"),
-        (TRACKER_LAST_HEARTBEAT_KEY, "heartbeat"),
-    ] {
-        if let Err(error) = data.save_tracker_timestamp(setting_key, now_ms).await {
-            log_tracker_error(format!("failed to save tracker {error_context}: {error}"));
+        if let Err(error) = data
+            .save_tracker_timestamp(TRACKER_LAST_HEARTBEAT_KEY, now_ms)
+            .await
+        {
+            log_tracker_error(format!("failed to save tracker heartbeat: {error}"));
         }
+        state.last_heartbeat_persisted_at_ms = Some(now_ms);
     }
 
-    state.last_persisted_at_ms = Some(now_ms);
+    if did_successfully_sample_window
+        && !state
+            .last_successful_sample_persisted_at_ms
+            .map(|last| now_ms.saturating_sub(last) < TRACKER_TIMESTAMP_PERSIST_INTERVAL_MS)
+            .unwrap_or(false)
+    {
+        if let Err(error) = data
+            .save_tracker_timestamp(TRACKER_LAST_SUCCESSFUL_SAMPLE_KEY, now_ms)
+            .await
+        {
+            log_tracker_error(format!("failed to save tracker sample timestamp: {error}"));
+        }
+        state.last_successful_sample_persisted_at_ms = Some(now_ms);
+    }
 }
 
 pub(super) async fn load_tracking_loop_state(

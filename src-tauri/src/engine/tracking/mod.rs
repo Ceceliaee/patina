@@ -2,6 +2,7 @@ pub mod active_session;
 pub mod continuity;
 pub mod metadata;
 pub mod runtime;
+pub mod runtime_snapshot;
 mod session_timeout;
 pub mod startup;
 mod sustained_participation;

@@ -11,6 +11,7 @@ import type {
   SustainedParticipationStatusReason,
   TrackingDataChangedPayload,
   TrackingStatusSnapshot,
+  TrackingRuntimeProbeStatus,
   TrackingWindowSnapshot,
 } from "../../shared/types/tracking.ts";
 
@@ -65,6 +66,9 @@ export interface RawTrackingStatusSnapshot {
 export interface RawCurrentTrackingSnapshot {
   window: RawTrackingWindowSnapshot;
   status: RawTrackingStatusSnapshot;
+  sampled_at_ms?: number;
+  probe_status?: TrackingRuntimeProbeStatus;
+  degraded_reason?: string | null;
 }
 
 export interface RawTrackingDataChangedPayload {
@@ -232,7 +236,28 @@ export function isRawSustainedParticipationDiagnosticsSnapshot(
 export function isRawCurrentTrackingSnapshot(value: unknown): value is RawCurrentTrackingSnapshot {
   return isRecord(value)
     && isRawTrackingWindowSnapshot(value.window)
-    && isRawTrackingStatusSnapshot(value.status);
+    && isRawTrackingStatusSnapshot(value.status)
+    && (
+      value.sampled_at_ms === undefined
+      || typeof value.sampled_at_ms === "number"
+    )
+    && (
+      value.probe_status === undefined
+      || isEnumValue(value.probe_status, [
+        "ok",
+        "timeout-fallback",
+        "timeout-inactive",
+        "backing-off-fallback",
+        "backing-off-inactive",
+        "task-failed-fallback",
+        "task-failed-inactive",
+      ] as const)
+    )
+    && (
+      value.degraded_reason === undefined
+      || value.degraded_reason === null
+      || typeof value.degraded_reason === "string"
+    );
 }
 
 export function isRawTrackingDataChangedPayload(value: unknown): value is RawTrackingDataChangedPayload {
@@ -317,6 +342,9 @@ export function mapRawCurrentTrackingSnapshot(
   return {
     window: mapRawTrackingWindowSnapshot(raw.window),
     status: mapRawTrackingStatusSnapshot(raw.status),
+    sampledAtMs: raw.sampled_at_ms,
+    probeStatus: raw.probe_status,
+    degradedReason: raw.degraded_reason,
   };
 }
 
