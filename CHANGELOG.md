@@ -36,6 +36,35 @@ App note en: TBD.
 
 - 暂无。
 
+## [1.4.2] - 2026-06-06
+
+Release: 提高长时间运行稳定性，减少前台探测卡住造成的异常占用。
+App note: 提高长期计时稳定性。
+App note en: Improved long-run tracking stability.
+
+### Added
+
+- 暂无。
+
+### Changed
+
+- 应用在后台停留较久后返回浏览类页面时会回到今天页，减少长时间挂起后继续展示旧页面状态的困惑。
+- 启动预热与页面缓存释放更稳定，减少长时间运行时不必要的后台资源占用。
+
+### Fixed
+
+- 修复前台窗口探测超时后仍可能持续创建后台探测任务的问题，降低线程、句柄和内存异常增长风险。Refs [#15](https://github.com/Ceceliaee/time-tracking/issues/15)
+- 前台探测卡住时改为有界恢复与缓存 fallback，短暂异常静默恢复，长期不可恢复时复用现有红色状态灯提示异常，避免把未知前台时间错误记入旧应用。Refs [#13](https://github.com/Ceceliaee/time-tracking/issues/13)、[#15](https://github.com/Ceceliaee/time-tracking/issues/15)
+
+### Removed
+
+- 暂无。
+
+### Internal
+
+- 补充前台探测运行时诊断字段、widget hard degraded 显示测试，以及完整 `check:full` 发布验证。
+- 归档前台探测自恢复执行方案。
+
 ## [1.4.1] - 2026-06-04
 
 Release: 改进数据页首屏响应与后台缓存释放。
