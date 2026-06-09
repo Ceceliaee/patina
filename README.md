@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="src-tauri/icons/128x128.png" width="72" height="72" alt="Time Tracker icon">
+<img src="src-tauri/icons/128x128.png" width="72" height="72" alt="Patina icon">
 
-# Time Tracker
+# Patina
 
 Local-first time tracking for Windows desktop work.
 
@@ -11,29 +11,29 @@ English · [简体中文](README.zh-CN.md)
 ![Platform](https://img.shields.io/badge/platform-Windows-4f6f8f)
 ![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%20v2-4f7f8f)
 ![Local first](https://img.shields.io/badge/data-local--first-5f7f68)
-[![Downloads](https://img.shields.io/github/downloads/Ceceliaee/time-tracking/total?label=downloads&color=b07a3a)](https://github.com/Ceceliaee/time-tracking/releases)
-[![Latest downloads](https://img.shields.io/github/downloads/Ceceliaee/time-tracking/latest/total?label=latest&color=8f6f4f)](https://github.com/Ceceliaee/time-tracking/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Ceceliaee/patina/total?label=downloads&color=b07a3a)](https://github.com/Ceceliaee/patina/releases)
+[![Latest downloads](https://img.shields.io/github/downloads/Ceceliaee/patina/latest/total?label=latest&color=8f6f4f)](https://github.com/Ceceliaee/patina/releases/latest)
 [![License](https://img.shields.io/badge/license-MIT-6f647a)](LICENSE)
 
 </div>
 
 
 <p align="center">
-Time Tracker records foreground apps and organizes them into today's overview, a timeline, and long-term trends.<br>
+Patina records foreground apps and organizes them into today's overview, a timeline, and long-term trends.<br>
 It is not a team timesheet system, but a quiet and trustworthy personal desktop time record.
 </p>
 
-![Time Tracker dashboard](.github/assets/readme/dashboard.png)
+![Patina dashboard](.github/assets/readme/dashboard.png)
 
 ## Download
 
 Prebuilt versions are published on GitHub Releases:
 
-- [Latest release page](https://github.com/Ceceliaee/time-tracking/releases/latest)
+- [Latest release page](https://github.com/Ceceliaee/patina/releases/latest)
 
 If you just want to use the app, open the latest release page and download the `.exe` installer.
 
-## Why Time Tracker
+## Why Patina
 
 - Automatic foreground app tracking without manually starting, pausing, or stopping timers.
 - AFK, lock, sleep, and crash recovery boundaries designed to keep records trustworthy.
@@ -72,7 +72,7 @@ If you just want to use the app, open the latest release page and download the `
 
 ## Reliability And Privacy
 
-Time tracking has long-term value only when the records are trustworthy. Time Tracker focuses on these boundaries:
+Time tracking has long-term value only when the records are trustworthy. Patina focuses on these boundaries:
 
 - **Native window tracking**: identifies the foreground window through Rust and the Windows API.
 - **AFK-aware timing**: idle time does not continue counting as effective activity.
@@ -84,7 +84,7 @@ Time tracking has long-term value only when the records are trustworthy. Time Tr
 
 ## Current Scope
 
-Time Tracker intentionally keeps its scope focused:
+Patina intentionally keeps its scope focused:
 
 - **Windows 10/11 first**
 - **Personal use first**
@@ -103,8 +103,8 @@ Team collaboration, account systems, cloud sync, mobile apps, broad multi-platfo
 ### Install Dependencies
 
 ```bash
-git clone https://github.com/Ceceliaee/time-tracking.git
-cd time-tracking
+git clone https://github.com/Ceceliaee/patina.git
+cd patina
 npm install
 ```
 
@@ -154,7 +154,7 @@ Historical execution plans and stage-specific documents are usually archived und
 
 ## Support
 
-Time Tracker is a personal, local-first open-source project. If it has been useful in your daily life or work, you can support ongoing maintenance in whichever way is convenient:
+Patina is a personal, local-first open-source project. If it has been useful in your daily life or work, you can support ongoing maintenance in whichever way is convenient:
 
 <div align="center">
   <a href="https://ko-fi.com/ceceliaee"><img src="https://storage.ko-fi.com/cdn/kofi2.png?v=3" height="36" alt="Buy me a coffee"></a>
@@ -166,8 +166,8 @@ Sponsorship helps sustain maintenance, but it does not affect feature priority, 
 
 ## Feedback
 
-- Releases: <https://github.com/Ceceliaee/time-tracking/releases>
-- Issues: <https://github.com/Ceceliaee/time-tracking/issues/new/choose>
+- Releases: <https://github.com/Ceceliaee/patina/releases>
+- Issues: <https://github.com/Ceceliaee/patina/issues/new/choose>
 
 ## License
 

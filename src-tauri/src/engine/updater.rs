@@ -10,8 +10,8 @@ use crate::domain::update::{UpdateErrorStage, UpdateSnapshot, UpdateStatus};
 
 const STARTUP_AUTO_CHECK_DELAYS_MS: [u64; 3] = [3_500, 15_000, 60_000];
 const UPDATE_SNAPSHOT_CHANGED_EVENT: &str = "update-snapshot-changed";
-const RELEASES_BASE_URL: &str = "https://github.com/Ceceliaee/time-tracking/releases";
-const LATEST_RELEASE_URL: &str = "https://github.com/Ceceliaee/time-tracking/releases/latest";
+const RELEASES_BASE_URL: &str = "https://github.com/Ceceliaee/patina/releases";
+const LATEST_RELEASE_URL: &str = "https://github.com/Ceceliaee/patina/releases/latest";
 
 #[derive(Clone)]
 pub struct UpdaterRuntimeState {

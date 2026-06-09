@@ -55,13 +55,13 @@ type PrepareBackupRestoreDeps = {
   previewBackup: (path: string) => Promise<BackupPreview>;
 };
 
-const RELEASE_NOTES_URL = "https://github.com/Ceceliaee/time-tracking/releases";
-const REPOSITORY_URL = "https://github.com/Ceceliaee/time-tracking";
-const FEEDBACK_URL = "https://github.com/Ceceliaee/time-tracking/issues/new/choose";
+const RELEASE_NOTES_URL = "https://github.com/Ceceliaee/patina/releases";
+const REPOSITORY_URL = "https://github.com/Ceceliaee/patina";
+const FEEDBACK_URL = "https://github.com/Ceceliaee/patina/issues/new/choose";
 const KOFI_SUPPORT_URL = "https://ko-fi.com/ceceliaee";
 const SUPPORT_README_URLS = {
-  "zh-CN": "https://github.com/Ceceliaee/time-tracking/blob/main/README.zh-CN.md#support",
-  "en-US": "https://github.com/Ceceliaee/time-tracking/blob/main/README.md#support",
+  "zh-CN": "https://github.com/Ceceliaee/patina/blob/main/README.zh-CN.md#support",
+  "en-US": "https://github.com/Ceceliaee/patina/blob/main/README.md#support",
 } as const;
 
 export function buildBackupPreviewSummary(preview: BackupPreview): string {

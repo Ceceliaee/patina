@@ -21,7 +21,7 @@ mod windows_credentials {
 
     pub fn save_webdav_password(username: &str, password: &str) -> Result<(), String> {
         let mut target = wide_null(WEBDAV_BACKUP_CREDENTIAL_TARGET);
-        let mut comment = wide_null("Time Tracker WebDAV backup credential");
+        let mut comment = wide_null("Patina WebDAV backup credential");
         let mut username = wide_null(username);
         let mut password_bytes = password.as_bytes().to_vec();
 

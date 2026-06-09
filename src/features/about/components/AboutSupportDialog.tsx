@@ -7,7 +7,7 @@ import { getUiTextLanguage, UI_TEXT } from "../../../shared/copy/uiText.ts";
 
 const SUPPORT_DIALOG_COPY = {
   "zh-CN": {
-    description: "如果 Time Tracker 对你有帮助，可以选择一种方式支持持续维护。",
+    description: "如果 Patina 对你有帮助，可以选择一种方式支持持续维护。",
     wechatTitle: "微信赞赏码",
     wechatHint: "使用微信扫一扫赞赏。",
     wechatAlt: "微信赞赏码",
@@ -16,7 +16,7 @@ const SUPPORT_DIALOG_COPY = {
     openKofi: "打开 Ko-fi",
   },
   "en-US": {
-    description: "If Time Tracker helps you, choose a way to support ongoing maintenance.",
+    description: "If Patina helps you, choose a way to support ongoing maintenance.",
     wechatTitle: "WeChat reward code",
     wechatHint: "Scan with WeChat to send a reward.",
     wechatAlt: "WeChat reward code",

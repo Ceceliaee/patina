@@ -181,7 +181,7 @@ pub(crate) fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
-        .tooltip("Time Tracker")
+        .tooltip("Patina")
         .show_menu_on_left_click(false);
 
     if let Some(icon) = app.default_window_icon().cloned() {

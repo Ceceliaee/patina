@@ -35,7 +35,7 @@ fn parse_base_url(raw: &str) -> Result<Url, String> {
 pub fn normalize_remote_dir(raw: &str) -> Result<String, String> {
     let trimmed = raw.trim();
     let candidate = if trimmed.is_empty() {
-        "/TimeTracker"
+        "/Patina"
     } else {
         trimmed
     };
@@ -241,17 +241,17 @@ mod tests {
 
     #[test]
     fn normalize_remote_dir_applies_default_and_slashes() {
-        assert_eq!(normalize_remote_dir("").unwrap(), "/TimeTracker");
+        assert_eq!(normalize_remote_dir("").unwrap(), "/Patina");
         assert_eq!(
-            normalize_remote_dir("TimeTracker/backups/").unwrap(),
-            "/TimeTracker/backups"
+            normalize_remote_dir("Patina/backups/").unwrap(),
+            "/Patina/backups"
         );
     }
 
     #[test]
     fn normalize_remote_dir_rejects_unsafe_segments() {
         assert!(normalize_remote_dir("../zotero").is_err());
-        assert!(normalize_remote_dir("TimeTracker\\backups").is_err());
-        assert!(normalize_remote_dir("TimeTracker/\n/backups").is_err());
+        assert!(normalize_remote_dir("Patina\\backups").is_err());
+        assert!(normalize_remote_dir("Patina/\n/backups").is_err());
     }
 }

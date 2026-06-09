@@ -9,9 +9,9 @@ body:
 
         感谢你提出建议。
 
-        Time Tracker is intentionally focused on personal, local-first Windows desktop time tracking. Please explain the user problem before proposing implementation details.
+        Patina is intentionally focused on personal, local-first Windows desktop time tracking. Please explain the user problem before proposing implementation details.
 
-        Time Tracker 有意聚焦个人、本地优先的 Windows 桌面时间追踪。请先说明用户问题，再提出实现方案。
+        Patina 有意聚焦个人、本地优先的 Windows 桌面时间追踪。请先说明用户问题，再提出实现方案。
 
   - type: checkboxes
     id: preflight

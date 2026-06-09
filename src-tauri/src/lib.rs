@@ -11,9 +11,9 @@ use std::sync::Arc;
 pub fn run() {
     #[cfg(debug_assertions)]
     let context = tauri::generate_context!("tauri.dev.conf.json");
-    #[cfg(all(not(debug_assertions), time_tracker_local_build))]
+    #[cfg(all(not(debug_assertions), patina_local_build))]
     let context = tauri::generate_context!("tauri.local.conf.json");
-    #[cfg(all(not(debug_assertions), not(time_tracker_local_build)))]
+    #[cfg(all(not(debug_assertions), not(patina_local_build)))]
     let context = if app::runtime::should_use_local_build_context() {
         tauri::generate_context!("tauri.local.conf.json")
     } else {

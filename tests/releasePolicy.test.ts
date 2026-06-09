@@ -76,12 +76,12 @@ function testUpdaterNotesFallsBackToAppNote() {
 function testUpdaterEndpointsKeepGithubFirstAndPreserveMirrors() {
   const endpoints = buildUpdaterEndpoints([
     "https://pub-example.r2.dev/latest.json",
-    "https://github.com/Ceceliaee/time-tracking/releases/latest/download/latest.json",
+    "https://github.com/Ceceliaee/patina/releases/latest/download/latest.json",
     "https://pub-example.r2.dev/latest.json",
   ]);
 
   assert.deepEqual(endpoints, [
-    "https://github.com/Ceceliaee/time-tracking/releases/latest/download/latest.json",
+    "https://github.com/Ceceliaee/patina/releases/latest/download/latest.json",
     "https://pub-example.r2.dev/latest.json",
   ]);
 }

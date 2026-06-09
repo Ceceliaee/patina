@@ -1,7 +1,8 @@
 import { loadAllSettingRows } from "./settingsPersistence.ts";
 import { executeWriteBatch, type SqlWriteOperation } from "./sqlite.ts";
 
-export const DEFAULT_WEBDAV_REMOTE_DIR = "/TimeTracker";
+export const DEFAULT_WEBDAV_REMOTE_DIR = "/Patina";
+const LEGACY_WEBDAV_REMOTE_DIR = "/TimeTracker";
 
 const WEBDAV_BACKUP_URL_KEY = "webdav_backup_url";
 const WEBDAV_BACKUP_USERNAME_KEY = "webdav_backup_username";
@@ -26,9 +27,10 @@ function normalizeRemoteDir(value: string | undefined): string {
   const trimmed = value?.trim();
   if (!trimmed) return DEFAULT_WEBDAV_REMOTE_DIR;
   const withLeadingSlash = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-  return withLeadingSlash.length > 1 && withLeadingSlash.endsWith("/")
+  const normalized = withLeadingSlash.length > 1 && withLeadingSlash.endsWith("/")
     ? withLeadingSlash.slice(0, -1)
     : withLeadingSlash;
+  return normalized === LEGACY_WEBDAV_REMOTE_DIR ? DEFAULT_WEBDAV_REMOTE_DIR : normalized;
 }
 
 function parseTimestamp(value: string | undefined): number | null {
@@ -50,10 +52,15 @@ export async function loadRemoteBackupConfig(): Promise<PersistedRemoteBackupCon
     return null;
   }
 
+  const remoteDir = normalizeRemoteDir(record[WEBDAV_BACKUP_REMOTE_DIR_KEY]);
+  if (record[WEBDAV_BACKUP_REMOTE_DIR_KEY] !== remoteDir) {
+    await executeWriteBatch([upsertSetting(WEBDAV_BACKUP_REMOTE_DIR_KEY, remoteDir)]);
+  }
+
   return {
     url,
     username,
-    remoteDir: normalizeRemoteDir(record[WEBDAV_BACKUP_REMOTE_DIR_KEY]),
+    remoteDir,
     lastBackupAtMs: parseTimestamp(record[WEBDAV_BACKUP_LAST_BACKUP_AT_MS_KEY]),
   };
 }

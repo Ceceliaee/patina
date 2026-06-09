@@ -118,9 +118,10 @@ export const DEFAULT_APP_MAPPINGS: Record<string, DefaultAppMapping> = {
   "fontdrvhost.exe": { name: "Usermode Font Driver Host", category: "system" },
   "wuauclt.exe": { name: "Windows Update AutoUpdate Client", category: "system" },
   "usoclient.exe": { name: "Update Session Orchestrator Client", category: "system" },
-  "time_tracker.exe": { name: "Time Tracker", category: "system" },
-  "time-tracker.exe": { name: "Time Tracker", category: "system" },
-  "timetracker.exe": { name: "Time Tracker", category: "system" },
+  "patina.exe": { name: "Patina", category: "system" },
+  "time_tracker.exe": { name: "Patina", category: "system" },
+  "time-tracker.exe": { name: "Patina", category: "system" },
+  "timetracker.exe": { name: "Patina", category: "system" },
   "uninstall.exe": { name: "卸载程序", category: "system" },
   "unins000.exe": { name: "卸载程序", category: "system" },
 };

@@ -754,7 +754,32 @@ await runTest("tools segmented mode preferences persist locally", () => {
     assert.equal(readToolsReminderMode(), "software");
     assert.equal(readToolsTimerMode(), "countdown");
     assert.equal(readToolsReminderFormMode(), "absolute");
+    assert.equal(window.localStorage.getItem("patina:tools-section"), "pomodoro");
+    assert.equal(window.localStorage.getItem("patina:tools-reminder-mode"), "software");
+    assert.equal(window.localStorage.getItem("patina:tools-timer-mode"), "countdown");
+    assert.equal(window.localStorage.getItem("patina:tools-reminder-form-mode"), "absolute");
+    assert.equal(window.localStorage.getItem("time-tracker:tools-section"), null);
 
+    window.localStorage.removeItem("patina:tools-section");
+    window.localStorage.removeItem("patina:tools-reminder-mode");
+    window.localStorage.removeItem("patina:tools-timer-mode");
+    window.localStorage.removeItem("patina:tools-reminder-form-mode");
+    window.localStorage.setItem("time-tracker:tools-section", "timer");
+    window.localStorage.setItem("time-tracker:tools-reminder-mode", "software");
+    window.localStorage.setItem("time-tracker:tools-timer-mode", "countdown");
+    window.localStorage.setItem("time-tracker:tools-reminder-form-mode", "absolute");
+
+    assert.equal(readToolsSection(), "timer");
+    assert.equal(readToolsReminderMode(), "software");
+    assert.equal(readToolsTimerMode(), "countdown");
+    assert.equal(readToolsReminderFormMode(), "absolute");
+    assert.equal(window.localStorage.getItem("patina:tools-section"), "timer");
+    assert.equal(window.localStorage.getItem("time-tracker:tools-section"), null);
+
+    window.localStorage.removeItem("patina:tools-section");
+    window.localStorage.removeItem("patina:tools-reminder-mode");
+    window.localStorage.removeItem("patina:tools-timer-mode");
+    window.localStorage.removeItem("patina:tools-reminder-form-mode");
     window.localStorage.setItem("time-tracker:tools-section", "timing");
     window.localStorage.setItem("time-tracker:tools-reminder-mode", "timer");
     window.localStorage.setItem("time-tracker:tools-timer-mode", "timer");

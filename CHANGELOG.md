@@ -18,10 +18,38 @@ App note en: TBD.
 
 ### Added
 
-- 新增 `Tools / 工具` 页面，提供提醒、正/倒计时和番茄钟三个轻量主动时间工具；工具状态可通过侧边栏低噪音入口返回。Refs [#14](https://github.com/Ceceliaee/time-tracking/issues/14)
+- 暂无。
 
 ### Changed
 
+- 暂无。
+
+### Fixed
+
+- 暂无。
+
+### Removed
+
+- 暂无。
+
+### Internal
+
+- 暂无。
+
+## [1.5.0] - 2026-06-09
+
+Release: 产品更名为 Patina，并新增轻量时间工具页面。
+App note: 软件已更名为 Patina，并新增提醒、计时器和番茄钟工具。
+App note en: The app is now Patina and adds reminders, timers, and Pomodoro tools.
+
+### Added
+
+- 新增 `Tools / 工具` 页面，提供提醒、正/倒计时和番茄钟三个轻量主动时间工具；工具状态可通过侧边栏低噪音入口返回。Refs [#14](https://github.com/Ceceliaee/patina/issues/14)
+
+### Changed
+
+- 产品显示名、仓库、发布标题、安装包名称和应用内链接从 `Time Tracker` 更新为 `Patina`，同时保留原 Tauri identifier 与 `timetracker.db`，保证旧版本升级连续性。
+- WebDAV 固定远端目录从 `/TimeTracker` 更新为 `/Patina`；旧远端备份会并入恢复列表，避免升级后看不到历史远端备份。
 - 工具到期提醒改为用户主动启动后的固定反馈；设置页和全局设置 schema 不再承载工具偏好，具体工具时长与操作留在 Tools 页面。
 
 ### Fixed
@@ -35,6 +63,7 @@ App note en: TBD.
 ### Internal
 
 - 新增工具页 SQLite 表、Rust runtime/IPC、前端 runtime gateway、备份恢复覆盖和 Tools smoke 验证，并将首包 bundle 预算校准到新入口后的实际范围。
+- 更新发布脚本、GitHub Actions、README、issue 模板和长期文档中的 Patina 命名规则。
 
 ## [1.4.3] - 2026-06-07
 

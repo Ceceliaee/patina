@@ -10,7 +10,7 @@ use tauri::{
 pub(crate) const WIDGET_WINDOW_LABEL: &str = "widget";
 pub(crate) const WIDGET_RUNTIME_COLLAPSED_EVENT: &str = "widget-runtime-collapsed";
 pub(crate) const WIDGET_RUNTIME_SHOWN_EVENT: &str = "widget-runtime-shown";
-const WIDGET_TITLE: &str = "Time Tracker Widget";
+const WIDGET_TITLE: &str = "Patina Widget";
 const WIDGET_EXPANDED_WIDTH_WITH_OBJECT: u32 = 228;
 const WIDGET_EXPANDED_WIDTH_COMPACT: u32 = 184;
 const WIDGET_EXPANDED_HEIGHT: u32 = 48;

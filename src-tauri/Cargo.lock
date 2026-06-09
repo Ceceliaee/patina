@@ -2970,6 +2970,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df94ce210e5bc13cb6651479fa48d14f601d9858cfe0467f43ae157023b938d3"
 
 [[package]]
+name = "patina"
+version = "1.5.0"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "crc32fast",
+ "futures-util",
+ "image",
+ "reqwest 0.12.28",
+ "rfd",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-autostart",
+ "tauri-plugin-notification",
+ "tauri-plugin-opener",
+ "tauri-plugin-single-instance",
+ "tauri-plugin-sql",
+ "tauri-plugin-updater",
+ "tauri-winrt-notification",
+ "tokio",
+ "tokio-tungstenite",
+ "windows 0.62.2",
+ "zip",
+]
+
+[[package]]
 name = "pem-rfc7468"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5338,35 +5367,6 @@ checksum = "2e70e4c5a0e0a8a4823ad65dfe1a6930e4f4d756dcd9dd7939022b5e8c501215"
 dependencies = [
  "num-conv",
  "time-core",
-]
-
-[[package]]
-name = "time_tracker"
-version = "1.4.3"
-dependencies = [
- "base64 0.22.1",
- "chrono",
- "crc32fast",
- "futures-util",
- "image",
- "reqwest 0.12.28",
- "rfd",
- "serde",
- "serde_json",
- "sqlx",
- "tauri",
- "tauri-build",
- "tauri-plugin-autostart",
- "tauri-plugin-notification",
- "tauri-plugin-opener",
- "tauri-plugin-single-instance",
- "tauri-plugin-sql",
- "tauri-plugin-updater",
- "tauri-winrt-notification",
- "tokio",
- "tokio-tungstenite",
- "windows 0.62.2",
- "zip",
 ]
 
 [[package]]

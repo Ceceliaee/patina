@@ -75,7 +75,7 @@ export default function AboutPanel({
             <img src={appIconUrl} alt="" draggable={false} />
           </div>
           <div className="about-center-title-row">
-            <h2>Time Tracker</h2>
+            <h2>Patina</h2>
             <span className="about-center-version-chip">{`v${appVersion}`}</span>
           </div>
           <p>{UI_TEXT.about.description}</p>

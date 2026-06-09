@@ -101,9 +101,9 @@ const UNTRACKED_WINDOW: TrackingWindowSnapshot = {
 
 const WIDGET_WINDOW: TrackingWindowSnapshot = {
   ...ACTIVE_WINDOW,
-  title: "Time Tracker Widget",
-  exeName: "time-tracker.exe",
-  processPath: "C:/Program Files/Time Tracker/time-tracker.exe",
+  title: "Patina Widget",
+  exeName: "patina.exe",
+  processPath: "C:/Program Files/Patina/patina.exe",
 };
 
 let passed = 0;

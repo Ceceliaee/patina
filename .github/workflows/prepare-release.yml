@@ -141,12 +141,12 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ steps.release.outputs.version }}
-          name: Time Tracker v${{ steps.release.outputs.version }}
+          name: Patina v${{ steps.release.outputs.version }}
           body_path: dist-release/release-notes.md
           draft: false
           prerelease: ${{ contains(steps.release.outputs.version, '-') }}
           files: |
-            dist-release/TimeTracker_${{ steps.release.outputs.version }}_x64-setup.exe
+            dist-release/Patina_${{ steps.release.outputs.version }}_x64-setup.exe
             dist-release/latest.json
 
       - name: Check R2 mirror configuration
@@ -201,7 +201,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force dist-release/r2 | Out-Null
           $version = "${{ steps.release.outputs.version }}"
-          $installerName = "TimeTracker_${version}_x64-setup.exe"
+          $installerName = "Patina_${version}_x64-setup.exe"
           $r2BaseUrl = $env:R2_PUBLIC_BASE_URL.TrimEnd("/")
           $r2InstallerUrl = "$r2BaseUrl/releases/v$version/$installerName"
           $githubLatest = Get-Content "dist-release/latest.json" -Raw | ConvertFrom-Json
@@ -224,7 +224,7 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: |
           $version = "${{ steps.release.outputs.version }}"
-          $installerName = "TimeTracker_${version}_x64-setup.exe"
+          $installerName = "Patina_${version}_x64-setup.exe"
           $r2Endpoint = "https://$env:R2_ACCOUNT_ID.r2.cloudflarestorage.com"
 
           aws s3 cp `

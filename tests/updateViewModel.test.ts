@@ -5,6 +5,12 @@ import {
   shouldOpenUpdateDialogForSnapshot,
   shouldShowSidebarUpdateEntry,
 } from "../src/features/update/services/updateViewModel.ts";
+import {
+  clearPendingUpdateRelaunchViewRestore,
+  consumePendingUpdateRelaunchView,
+  markPendingUpdateRelaunchViewRestore,
+  rememberLastActiveView,
+} from "../src/app/services/updateRelaunchViewStorage.ts";
 import { setUiTextLanguage } from "../src/shared/copy/uiText.ts";
 import type { UpdateSnapshot } from "../src/shared/types/update.ts";
 
@@ -19,13 +25,59 @@ function makeSnapshot(overrides: Partial<UpdateSnapshot> = {}): UpdateSnapshot {
     errorStage: null,
     downloadedBytes: null,
     totalBytes: null,
-    releasePageUrl: "https://github.com/Ceceliaee/time-tracking/releases",
+    releasePageUrl: "https://github.com/Ceceliaee/patina/releases",
     assetDownloadUrl: null,
     ...overrides,
   };
 }
 
 let passed = 0;
+
+class MemoryStorage {
+  private values = new Map<string, string>();
+
+  get length() {
+    return this.values.size;
+  }
+
+  clear() {
+    this.values.clear();
+  }
+
+  getItem(key: string) {
+    return this.values.get(key) ?? null;
+  }
+
+  key(index: number) {
+    return Array.from(this.values.keys())[index] ?? null;
+  }
+
+  removeItem(key: string) {
+    this.values.delete(key);
+  }
+
+  setItem(key: string, value: string) {
+    this.values.set(key, value);
+  }
+}
+
+function withWindowStorage(storage: MemoryStorage, fn: () => void) {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { localStorage: storage },
+  });
+
+  try {
+    fn();
+  } finally {
+    if (descriptor) {
+      Object.defineProperty(globalThis, "window", descriptor);
+    } else {
+      delete (globalThis as { window?: unknown }).window;
+    }
+  }
+}
 
 function runTest(name: string, fn: () => void) {
   fn();
@@ -76,7 +128,7 @@ runTest("check error falls back to release page", () => {
   const panel = buildUpdateStatusPanelModel(makeSnapshot({
     status: "error",
     errorStage: "check",
-    errorMessage: "failed to check updates: error sending request for url (https://github.com/Ceceliaee/time-tracking/releases/latest/download/latest.json)",
+    errorMessage: "failed to check updates: error sending request for url (https://github.com/Ceceliaee/patina/releases/latest/download/latest.json)",
   }), false, false);
 
   assert.equal(panel.statusTitle, "无法检查更新");
@@ -220,6 +272,27 @@ runTest("install error keeps retry install as primary action", () => {
   assert.equal(panel.primaryAction.label, "再次安装");
   assert.equal(panel.secondaryAction?.action, "open_download_url");
   assert.equal(shouldShowSidebarUpdateEntry(snapshot), false);
+});
+
+runTest("update relaunch view storage migrates legacy keys", () => {
+  withWindowStorage(new MemoryStorage(), () => {
+    window.localStorage.setItem("time-tracker:last-active-view", "data");
+    window.localStorage.setItem("time-tracker:pending-update-relaunch-view", "1");
+
+    assert.equal(consumePendingUpdateRelaunchView(), "data");
+    assert.equal(window.localStorage.getItem("patina:last-active-view"), "data");
+    assert.equal(window.localStorage.getItem("time-tracker:last-active-view"), null);
+    assert.equal(window.localStorage.getItem("patina:pending-update-relaunch-view"), null);
+    assert.equal(window.localStorage.getItem("time-tracker:pending-update-relaunch-view"), null);
+
+    rememberLastActiveView("settings");
+    markPendingUpdateRelaunchViewRestore();
+    assert.equal(window.localStorage.getItem("patina:last-active-view"), "settings");
+    assert.equal(window.localStorage.getItem("patina:pending-update-relaunch-view"), "1");
+
+    clearPendingUpdateRelaunchViewRestore();
+    assert.equal(window.localStorage.getItem("patina:pending-update-relaunch-view"), null);
+  });
 });
 
 console.log(`Passed ${passed} update view model tests`);

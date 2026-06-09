@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: "Contribution Guide / 贡献指南"
-    url: "https://github.com/Ceceliaee/time-tracking/blob/main/CONTRIBUTING.md"
+    url: "https://github.com/Ceceliaee/patina/blob/main/CONTRIBUTING.md"
     about: "Read the contribution and pull request workflow before implementing a change. / 开始实现改动前，请先阅读贡献与 Pull Request 协作流程。"

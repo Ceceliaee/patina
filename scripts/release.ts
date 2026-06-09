@@ -17,7 +17,7 @@ const VERSION_PATTERN =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9A-Za-z-][0-9A-Za-z-]*))*))?$/;
 const VERSION_POLICY_CURRENT_CODE_VERSION_PATTERN = /(- 代码版本为 `)([^`]+)(`)/;
 const GITHUB_UPDATER_ENDPOINT =
-  "https://github.com/Ceceliaee/time-tracking/releases/latest/download/latest.json";
+  "https://github.com/Ceceliaee/patina/releases/latest/download/latest.json";
 
 function fail(message) {
   console.error(`release: ${message}`);
@@ -405,7 +405,7 @@ async function prepareReleaseAssets(
     fail(`updater signature file is empty: ${signatureFilePath}`);
   }
 
-  const releaseInstallerName = `TimeTracker_${resolvedVersion}_x64-setup.exe`;
+  const releaseInstallerName = `Patina_${resolvedVersion}_x64-setup.exe`;
   const releaseInstallerPath = path.join(outputDir, releaseInstallerName);
   const tagName = `v${resolvedVersion}`;
   const encodedName = encodeURIComponent(releaseInstallerName);

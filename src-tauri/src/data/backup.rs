@@ -101,7 +101,7 @@ fn backup_file_name() -> String {
 }
 
 fn backup_file_name_for_timestamp(timestamp: &str) -> String {
-    format!("TimeTracker-backup-{timestamp}.{BACKUP_FILE_EXT}")
+    format!("Patina-backup-{timestamp}.{BACKUP_FILE_EXT}")
 }
 
 fn resolve_backup_path<R: Runtime>(
@@ -193,7 +193,7 @@ fn resolve_dialog_directory(initial_path: Option<String>) -> Option<PathBuf> {
 }
 
 pub fn pick_backup_save_file(initial_path: Option<String>) -> Option<String> {
-    let mut dialog = rfd::FileDialog::new().add_filter("Time Tracker backup", &["zip"]);
+    let mut dialog = rfd::FileDialog::new().add_filter("Patina backup", &["zip"]);
     if let Some(dir) = resolve_dialog_directory(initial_path) {
         dialog = dialog.set_directory(dir);
     }
@@ -205,7 +205,7 @@ pub fn pick_backup_save_file(initial_path: Option<String>) -> Option<String> {
 }
 
 pub fn pick_backup_file(initial_path: Option<String>) -> Option<String> {
-    let mut dialog = rfd::FileDialog::new().add_filter("Time Tracker backup", &["zip"]);
+    let mut dialog = rfd::FileDialog::new().add_filter("Patina backup", &["zip"]);
     if let Some(dir) = resolve_dialog_directory(initial_path) {
         dialog = dialog.set_directory(dir);
     }
@@ -661,13 +661,13 @@ fn read_backup_payload(backup_path: &Path) -> Result<BackupPayload, String> {
         }
 
         return Err(format!(
-            "backup archive `{}` is not a supported structured Time Tracker backup",
+            "backup archive `{}` is not a supported structured Patina backup",
             backup_path.display()
         ));
     }
 
     Err(format!(
-        "backup file `{}` is not a supported structured Time Tracker backup",
+        "backup file `{}` is not a supported structured Patina backup",
         backup_path.display()
     ))
 }
@@ -797,7 +797,7 @@ mod tests {
     fn backup_file_name_uses_timestamp_zip_format() {
         assert_eq!(
             backup_file_name_for_timestamp("20260515-213045"),
-            "TimeTracker-backup-20260515-213045.zip"
+            "Patina-backup-20260515-213045.zip"
         );
     }
 
@@ -1086,7 +1086,7 @@ mod tests {
 
         let error = read_backup_payload(&backup_path).unwrap_err();
         let _ = fs::remove_file(&backup_path);
-        assert!(error.contains("not a supported structured Time Tracker backup"));
+        assert!(error.contains("not a supported structured Patina backup"));
     }
 
     #[test]
@@ -1101,7 +1101,7 @@ mod tests {
 
         let error = read_backup_payload(&backup_path).unwrap_err();
         let _ = fs::remove_file(&backup_path);
-        assert!(error.contains("not a supported structured Time Tracker backup"));
+        assert!(error.contains("not a supported structured Patina backup"));
     }
 
     async fn setup_test_db() -> SqlitePool {

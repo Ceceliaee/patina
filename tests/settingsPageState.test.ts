@@ -397,8 +397,10 @@ await runTest("normalizeSettingsRecord accepts current minimize behavior values"
 });
 
 await runTest("remote backup settings normalize WebDAV directory and timestamps", () => {
-  assert.equal(remoteBackupSettingsInternals.normalizeRemoteDir(""), "/TimeTracker");
-  assert.equal(remoteBackupSettingsInternals.normalizeRemoteDir("TimeTracker/backups/"), "/TimeTracker/backups");
+  assert.equal(remoteBackupSettingsInternals.normalizeRemoteDir(""), "/Patina");
+  assert.equal(remoteBackupSettingsInternals.normalizeRemoteDir("/TimeTracker"), "/Patina");
+  assert.equal(remoteBackupSettingsInternals.normalizeRemoteDir("TimeTracker"), "/Patina");
+  assert.equal(remoteBackupSettingsInternals.normalizeRemoteDir("Patina/backups/"), "/Patina/backups");
   assert.equal(remoteBackupSettingsInternals.normalizeRemoteDir("/Custom/backups"), "/Custom/backups");
   assert.equal(remoteBackupSettingsInternals.parseTimestamp(undefined), null);
   assert.equal(remoteBackupSettingsInternals.parseTimestamp(""), null);

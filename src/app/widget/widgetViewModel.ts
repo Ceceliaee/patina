@@ -21,6 +21,8 @@ export interface WidgetViewModel {
 }
 
 const WIDGET_SELF_EXECUTABLES = new Set([
+  "patina.exe",
+  "patina",
   "time-tracker.exe",
   "time-tracker",
   "time_tracker.exe",
@@ -32,6 +34,7 @@ const WIDGET_SELF_EXECUTABLES = new Set([
 ]);
 
 const WIDGET_SELF_WINDOW_TITLES = new Set([
+  "Patina Widget",
   "Time Tracker Widget",
   "Time Tracking",
 ]);

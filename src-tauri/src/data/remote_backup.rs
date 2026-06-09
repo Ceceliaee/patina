@@ -11,7 +11,10 @@ use tauri::{AppHandle, Manager};
 
 const INDEX_FILE_NAME: &str = "backup-index.json";
 const INDEX_VERSION: u32 = 1;
-const INDEX_PRODUCT: &str = "Time Tracker";
+const INDEX_PRODUCT: &str = "Patina";
+const LEGACY_INDEX_PRODUCT: &str = "Time Tracker";
+const DEFAULT_REMOTE_DIR: &str = "/Patina";
+const LEGACY_REMOTE_DIR: &str = "/TimeTracker";
 const MAX_BACKUP_LIST_ITEMS: usize = 50;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -94,7 +97,7 @@ fn remote_backup_id() -> String {
 }
 
 fn remote_backup_file_name(id: &str) -> String {
-    format!("TimeTracker-backup-{id}.zip")
+    format!("Patina-backup-{id}.zip")
 }
 
 fn remote_path(remote_dir: &str, file_name: &str) -> String {
@@ -114,7 +117,7 @@ fn parse_index(raw: &str) -> Result<RemoteBackupIndex, String> {
             index.version
         ));
     }
-    if index.product != INDEX_PRODUCT {
+    if index.product != INDEX_PRODUCT && index.product != LEGACY_INDEX_PRODUCT {
         return Err("WebDAV backup index belongs to another product".to_string());
     }
     Ok(index)
@@ -134,6 +137,63 @@ async fn load_index(client: &WebDavClient, remote_dir: &str) -> Result<RemoteBac
         Some(raw) => parse_index(&raw),
         None => Ok(empty_index()),
     }
+}
+
+fn merge_legacy_entries(index: &mut RemoteBackupIndex, legacy: RemoteBackupIndex) -> bool {
+    let mut changed = false;
+    for entry in legacy.backups {
+        if index.backups.iter().any(|item| item.id == entry.id) {
+            continue;
+        }
+        index.backups.push(entry);
+        changed = true;
+    }
+
+    if changed {
+        index
+            .backups
+            .sort_by_key(|entry| Reverse(entry.created_at_ms));
+        index.updated_at_ms = now_ms();
+        index.product = INDEX_PRODUCT.to_string();
+    }
+
+    changed
+}
+
+async fn load_legacy_index(client: &WebDavClient) -> Result<Option<RemoteBackupIndex>, String> {
+    match client
+        .read_text_optional(&index_path(LEGACY_REMOTE_DIR))
+        .await?
+    {
+        Some(raw) => parse_index(&raw).map(Some),
+        None => Ok(None),
+    }
+}
+
+async fn load_index_with_legacy_merge(
+    client: &WebDavClient,
+    remote_dir: &str,
+) -> Result<RemoteBackupIndex, String> {
+    let mut index = load_index(client, remote_dir).await?;
+    if remote_dir != DEFAULT_REMOTE_DIR {
+        return Ok(index);
+    }
+
+    match load_legacy_index(client).await {
+        Ok(Some(legacy)) => {
+            if merge_legacy_entries(&mut index, legacy) {
+                if let Err(error) = save_index(client, remote_dir, &index).await {
+                    eprintln!("[webdav] failed to persist migrated legacy backup index: {error}");
+                }
+            }
+        }
+        Ok(_) => {}
+        Err(error) => {
+            eprintln!("[webdav] failed to inspect legacy backup index: {error}");
+        }
+    }
+
+    Ok(index)
 }
 
 async fn save_index(
@@ -260,7 +320,7 @@ pub async fn upload_webdav_backup(
     let _ = fs::remove_file(&local_path);
 
     let entry = build_entry(id, file_name, remote_path, size_bytes, &preview);
-    match load_index(&client, &config.remote_dir).await {
+    match load_index_with_legacy_merge(&client, &config.remote_dir).await {
         Ok(mut index) => {
             index.backups.retain(|item| item.id != entry.id);
             index.backups.insert(0, entry.clone());
@@ -287,7 +347,7 @@ pub async fn list_webdav_backups(
     config: WebDavBackupConfigDto,
 ) -> Result<Vec<RemoteBackupEntry>, String> {
     let (config, client) = webdav_client(config)?;
-    let mut index = load_index(&client, &config.remote_dir).await?;
+    let mut index = load_index_with_legacy_merge(&client, &config.remote_dir).await?;
     index
         .backups
         .sort_by_key(|entry| Reverse(entry.created_at_ms));
@@ -306,7 +366,7 @@ pub async fn download_webdav_backup(
     }
 
     let (config, client) = webdav_client(config)?;
-    let index = load_index(&client, &config.remote_dir).await?;
+    let index = load_index_with_legacy_merge(&client, &config.remote_dir).await?;
     let entry = index
         .backups
         .iter()
@@ -326,22 +386,73 @@ pub async fn download_webdav_backup(
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_index, remote_backup_file_name, remote_path};
+    use super::{
+        merge_legacy_entries, parse_index, remote_backup_file_name, remote_path, RemoteBackupEntry,
+        RemoteBackupIndex, INDEX_PRODUCT,
+    };
 
     #[test]
     fn remote_file_name_uses_zip_format() {
         assert_eq!(
             remote_backup_file_name("20260603-213000"),
-            "TimeTracker-backup-20260603-213000.zip"
+            "Patina-backup-20260603-213000.zip"
         );
     }
 
     #[test]
     fn remote_path_joins_normalized_dir_and_file() {
         assert_eq!(
-            remote_path("/TimeTracker/backups", "backup.zip"),
-            "/TimeTracker/backups/backup.zip"
+            remote_path("/Patina/backups", "backup.zip"),
+            "/Patina/backups/backup.zip"
         );
+    }
+
+    #[test]
+    fn parse_index_accepts_legacy_product() {
+        let raw = r#"{"version":1,"product":"Time Tracker","updatedAtMs":1,"backups":[]}"#;
+        assert!(parse_index(raw).is_ok());
+    }
+
+    #[test]
+    fn legacy_entries_merge_without_overwriting_current_entries() {
+        let duplicate = RemoteBackupEntry {
+            id: "same".to_string(),
+            file_name: "Patina-backup-same.zip".to_string(),
+            remote_path: "/Patina/Patina-backup-same.zip".to_string(),
+            created_at_ms: 2,
+            size_bytes: 10,
+            app_version: "1.0.0".to_string(),
+            backup_version: 1,
+            schema_version: 1,
+            session_count: 1,
+            title_sample_count: 0,
+            setting_count: 1,
+            icon_cache_count: 0,
+        };
+        let legacy = RemoteBackupEntry {
+            id: "legacy".to_string(),
+            file_name: "TimeTracker-backup-legacy.zip".to_string(),
+            remote_path: "/TimeTracker/TimeTracker-backup-legacy.zip".to_string(),
+            created_at_ms: 1,
+            ..duplicate.clone()
+        };
+        let mut index = RemoteBackupIndex {
+            version: 1,
+            product: INDEX_PRODUCT.to_string(),
+            updated_at_ms: 1,
+            backups: vec![duplicate.clone()],
+        };
+        let legacy_index = RemoteBackupIndex {
+            version: 1,
+            product: "Time Tracker".to_string(),
+            updated_at_ms: 1,
+            backups: vec![duplicate, legacy],
+        };
+
+        assert!(merge_legacy_entries(&mut index, legacy_index));
+        assert_eq!(index.backups.len(), 2);
+        assert!(index.backups.iter().any(|entry| entry.id == "legacy"));
+        assert_eq!(index.product, INDEX_PRODUCT);
     }
 
     #[test]

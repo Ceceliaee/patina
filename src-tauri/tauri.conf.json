@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Time Tracker",
-  "version": "1.4.3",
+  "productName": "Patina",
+  "version": "1.5.0",
   "identifier": "com.timetracker",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Time Tracker",
+        "title": "Patina",
         "width": 1100,
         "height": 736,
         "minWidth": 900,
@@ -50,7 +50,7 @@
       "active": true,
       "dialog": false,
       "endpoints": [
-        "https://github.com/Ceceliaee/time-tracking/releases/latest/download/latest.json",
+        "https://github.com/Ceceliaee/patina/releases/latest/download/latest.json",
         "https://pub-ad4b539442124a3287529c9435f053ba.r2.dev/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ4ODMzNkI5M0Q3OTU2QkMKUldTOFZuazl1VGFEU0RDakI2UEF1SUlyNGxDVnZVRTl1TEFUK0Rmei9xZVlYR3R3SnprRXNCWVoK"

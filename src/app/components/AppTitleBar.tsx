@@ -9,7 +9,7 @@ import {
 } from "../../platform/desktop/windowControlGateway";
 import { UI_TEXT } from "../../shared/copy/uiText";
 
-const APP_TITLE = "Time Tracker";
+const APP_TITLE = "Patina";
 
 type AppTitleBarProps = {
   isMaximized: boolean;

@@ -5,9 +5,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thank you for helping improve Time Tracker.
+        Thank you for helping improve Patina.
 
-        感谢你帮助改进 Time Tracker。
+        感谢你帮助改进 Patina。
 
         Before submitting, please search existing issues and remove sensitive information. Do not post window titles, local database contents, backup files, access tokens, or personal paths unless they have been safely redacted.
 
@@ -95,7 +95,7 @@ body:
   - type: input
     id: app-version
     attributes:
-      label: "Time Tracker Version / Time Tracker 版本"
+      label: "Patina Version / Patina 版本"
       description: "For example: 1.2.0. / 例如：1.2.0。"
       placeholder: "1.2.0"
     validations:
