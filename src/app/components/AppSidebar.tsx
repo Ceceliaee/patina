@@ -49,8 +49,6 @@ export default function AppSidebar({
         {navItems.map((item) => (
           <motion.button
             key={item.id}
-            whileTap={{ scale: 0.995 }}
-            transition={{ duration: 0.1, ease: "easeOut" }}
             onClick={() => onNavigate(item.id)}
             aria-label={item.label}
             className={`qp-nav-item h-10 w-full rounded-[10px] transition-colors relative flex items-center justify-center ${

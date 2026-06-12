@@ -1,9 +1,9 @@
 ﻿import { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, Layers3, Minus, Plus } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, Expand, Layers3, Minus, Plus, Tags } from "lucide-react";
 import { type HistorySession } from "../../../shared/types/sessions";
-import { UI_TEXT } from "../../../shared/copy/uiText.ts";
+import { getUiLocale, UI_TEXT } from "../../../shared/copy/uiText.ts";
 import {
   formatDuration,
   formatTime,
@@ -16,14 +16,22 @@ import {
 } from "../services/historyReadModel";
 import type { TrackerHealthSnapshot } from "../../../shared/types/tracking";
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
+import type { AppCategory } from "../../../shared/classification/categoryTokens.ts";
 import HourlyActivityChart from "../../../shared/charts/HourlyActivityChart";
+import HistoryHorizontalTimeline from "./HistoryHorizontalTimeline.tsx";
 import QuietIconAction from "../../../shared/components/QuietIconAction";
+import QuietDialog from "../../../shared/components/QuietDialog";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
+import QuietSegmentedFilter, { type QuietSegmentedFilterOption } from "../../../shared/components/QuietSegmentedFilter";
 import type { HourlyActivityChartMode } from "../../../shared/settings/appSettings.ts";
 import {
   getHistorySnapshotCache,
   setHistorySnapshotCache,
 } from "../services/historySnapshotCache";
+import {
+  buildHistoryTimelineViewModel,
+  type HistoryTimelineDisplayMode,
+} from "../services/historyTimelineViewModel.ts";
 
 interface Props {
   icons: Record<string, string>;
@@ -45,12 +53,71 @@ interface Props {
 }
 
 const TIMELINE_MIN_SESSION_MINUTES_RANGE = { min: 1, max: 10 } as const;
+type DayDistributionMode = "app" | "category";
+interface DayDistributionItem {
+  key: string;
+  label: string;
+  duration: number;
+  percentage: number;
+  color: string;
+  iconSrc?: string;
+  category?: AppCategory;
+}
+interface DaySummaryView {
+  activeDurationLabel: string;
+  activeSpanLabel: string;
+  peakHourLabel: string;
+}
 const clampMinute = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
 const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
 const addMonths = (date: Date, delta: number) => new Date(date.getFullYear(), date.getMonth() + delta, 1);
 const isSameDay = (left: Date, right: Date) => left.toDateString() === right.toDateString();
+const DAY_SUMMARY_EMPTY_MARK = "—";
 const formatCalendarMonth = (date: Date) => UI_TEXT.date.yearMonthLabel(date.getFullYear(), date.getMonth() + 1);
+const getHistoryTimelineModeActionLabel = (mode: HistoryTimelineDisplayMode) => {
+  const isEnglish = getUiLocale() === "en-US";
+  if (mode === "category") {
+    return isEnglish ? "Show by app" : "按应用显示";
+  }
+  return isEnglish ? "Show by category" : "按分类显示";
+};
+const getHistoryFeatureCopy = () => {
+  const isEnglish = getUiLocale() === "en-US";
+  return isEnglish
+    ? {
+      daySummary: "Day Summary",
+      activeDuration: "Active time",
+      activeSpan: "Active span",
+      peakHour: "Peak hour",
+      showHourlyActivityByCategory: "Show by category",
+      showTotalHourlyActivity: "Show total activity",
+      dayDistribution: "Day Distribution",
+      distributionByApp: "Apps",
+      distributionByCategory: "Categories",
+      timelineAxis: "Day Timeline",
+      openTimeline: "Open timeline",
+    }
+    : {
+      daySummary: "当日摘要",
+      activeDuration: "活跃时长",
+      activeSpan: "活跃跨度",
+      peakHour: "高峰时段",
+      showHourlyActivityByCategory: "按分类显示",
+      showTotalHourlyActivity: "显示总活动",
+      dayDistribution: "当日分布",
+      distributionByApp: "应用",
+      distributionByCategory: "分类",
+      timelineAxis: "时间轴",
+      openTimeline: "打开时间线",
+    };
+};
+const getHourlyActivityModeActionLabel = (mode: HourlyActivityChartMode) => {
+  const copy = getHistoryFeatureCopy();
+  return mode === "category"
+    ? copy.showTotalHourlyActivity
+    : copy.showHourlyActivityByCategory;
+};
 const formatHistoryDateCacheKey = (date: Date) => {
   const localDate = startOfDay(date);
   return [
@@ -80,7 +147,7 @@ function parseLocalDateKey(dateKey: string) {
   return date;
 }
 type TimelineDetailsPopover = {
-  sessionId: number;
+  sessionId: number | string;
   titleSamples: TimelineDetailTitle[];
   left: number;
   top: number;
@@ -193,10 +260,14 @@ export default function History({
   const [visibleDateKey, setVisibleDateKey] = useState(() => (
     initialCachedSnapshot ? formatHistoryDateCacheKey(initialDate) : null
   ));
+  const [timelineDialogOpen, setTimelineDialogOpen] = useState(false);
+  const [historyTimelineMode, setHistoryTimelineMode] = useState<HistoryTimelineDisplayMode>("app");
+  const [dayDistributionMode, setDayDistributionMode] = useState<DayDistributionMode>("app");
   const [timelineDetailsPopover, setTimelineDetailsPopover] = useState<TimelineDetailsPopover | null>(null);
   const timelineDetailsPopoverRef = useRef<HTMLDivElement | null>(null);
   const timelineDetailsTriggerRef = useRef<HTMLElement | null>(null);
   const hasLoadedRef = useRef(false);
+  const historyCopy = getHistoryFeatureCopy();
 
   useEffect(() => {
     if (!selectedDateRequest) return;
@@ -213,7 +284,7 @@ export default function History({
   }, [selectedDateRequest?.requestId]);
 
   const toggleTimelineSessionDetails = useCallback((
-    sessionId: number,
+    sessionId: number | string,
     appName: string,
     titleSamples: TimelineDetailTitle[],
     trigger: HTMLElement,
@@ -296,6 +367,11 @@ export default function History({
     updateTimelineDetailsPopoverPosition();
     return undefined;
   }, [timelineDetailsPopover, updateTimelineDetailsPopoverPosition]);
+
+  useEffect(() => {
+    timelineDetailsTriggerRef.current = null;
+    setTimelineDetailsPopover(null);
+  }, [selectedDate]);
 
   useEffect(() => {
     if (!refreshEnabled) return undefined;
@@ -479,11 +555,136 @@ export default function History({
     [mappingVersion, mergeThresholdSecs, minSessionSecs, nowMs, rawDaySessions, rawWeeklySessions, selectedDate, trackerHealth],
   );
   const {
+    compiledSessions,
     timelineSessions,
     appSummary,
     hourlyActivity,
     hourlyCategoryActivity,
   } = historyView;
+  const historyTimelineView = useMemo(
+    () => buildHistoryTimelineViewModel({
+      sessions: compiledSessions,
+      selectedDate,
+      nowMs,
+      mode: historyTimelineMode,
+      mergeThresholdSecs,
+    }),
+    [compiledSessions, historyTimelineMode, mergeThresholdSecs, nowMs, selectedDate],
+  );
+  const historyTimelinePlaceholderView = useMemo(
+    () => buildHistoryTimelineViewModel({
+      sessions: [],
+      selectedDate,
+      nowMs,
+      mode: historyTimelineMode,
+      mergeThresholdSecs,
+    }),
+    [historyTimelineMode, mergeThresholdSecs, nowMs, selectedDate],
+  );
+  const visibleHistoryTimelineView = showQuietPlaceholder
+    ? historyTimelinePlaceholderView
+    : historyTimelineView;
+  const dayDistributionOptions: QuietSegmentedFilterOption<DayDistributionMode>[] = [
+    { value: "app", label: historyCopy.distributionByApp },
+    { value: "category", label: historyCopy.distributionByCategory },
+  ];
+  const appDistributionItems = useMemo<DayDistributionItem[]>(
+    () => appSummary.map((app) => {
+      const mapped = AppClassification.mapApp(app.exeName, { appName: app.appName });
+      const overrideColor = AppClassification.getUserOverride(app.exeName)?.color;
+      const accentColor = overrideColor ?? iconThemeColors[app.exeName] ?? mapped.color;
+      const appName = app.appName.trim() || mapped.name;
+      return {
+        key: app.exeName,
+        label: appName,
+        duration: app.duration,
+        percentage: app.percentage,
+        color: accentColor,
+        iconSrc: icons[app.exeName],
+      };
+    }),
+    [appSummary, iconThemeColors, icons],
+  );
+  const categoryDistributionItems = useMemo<DayDistributionItem[]>(() => {
+    const summaries = new Map<AppCategory, Omit<DayDistributionItem, "key" | "percentage">>();
+    let totalDuration = 0;
+
+    for (const session of compiledSessions) {
+      const duration = Math.max(0, session.duration ?? 0);
+      if (duration <= 0) continue;
+
+      const mapped = AppClassification.mapApp(session.appKey, { appName: session.displayName });
+      const category = mapped.category;
+      const current = summaries.get(category);
+      totalDuration += duration;
+
+      if (current) {
+        current.duration += duration;
+        continue;
+      }
+
+      summaries.set(category, {
+        label: AppClassification.getCategoryLabel(category),
+        duration,
+        color: AppClassification.getCategoryColor(category),
+        category,
+      });
+    }
+
+    return Array.from(summaries.entries())
+      .map(([category, summary]) => ({
+        ...summary,
+        key: category,
+        percentage: totalDuration > 0 ? (summary.duration / totalDuration) * 100 : 0,
+      }))
+      .sort((left, right) => right.duration - left.duration || left.label.localeCompare(right.label));
+  }, [compiledSessions]);
+  const dayDistributionItems = dayDistributionMode === "category"
+    ? categoryDistributionItems
+    : appDistributionItems;
+  const daySummaryView = useMemo<DaySummaryView>(() => {
+    const activeDurationMs = compiledSessions.reduce(
+      (total, session) => total + Math.max(0, session.duration ?? 0),
+      0,
+    );
+    const activeSessions = compiledSessions.filter((session) => (session.duration ?? 0) > 0);
+    const firstStartTime = activeSessions.reduce<number | null>((earliest, session) => (
+      earliest === null ? session.startTime : Math.min(earliest, session.startTime)
+    ), null);
+    const lastEndTime = activeSessions.reduce<number | null>((latest, session) => {
+      const endTime = session.endTime ?? session.startTime + Math.max(0, session.duration ?? 0);
+      return latest === null ? endTime : Math.max(latest, endTime);
+    }, null);
+    const peakHour = hourlyActivity.reduce<{
+      hour: string;
+      minutes: number;
+      surroundingMinutes: number;
+    }>((peak, point, index) => {
+      const surroundingMinutes = (hourlyActivity[index - 1]?.minutes ?? 0)
+        + (hourlyActivity[index + 1]?.minutes ?? 0);
+      if (
+        point.minutes > peak.minutes
+        || (point.minutes === peak.minutes && surroundingMinutes > peak.surroundingMinutes)
+      ) {
+        return {
+          hour: point.hour,
+          minutes: point.minutes,
+          surroundingMinutes,
+        };
+      }
+      return peak;
+    }, { hour: "", minutes: 0, surroundingMinutes: -1 });
+
+    return {
+      activeDurationLabel: activeDurationMs > 0 ? formatDuration(activeDurationMs) : "0m",
+      activeSpanLabel: firstStartTime !== null && lastEndTime !== null
+        ? `${formatTime(firstStartTime)} - ${formatTime(lastEndTime)}`
+        : DAY_SUMMARY_EMPTY_MARK,
+      peakHourLabel: peakHour.minutes > 0
+        ? `${peakHour.hour} · ${formatDuration(peakHour.minutes * 60_000)}`
+        : DAY_SUMMARY_EMPTY_MARK,
+    };
+  }, [compiledSessions, hourlyActivity]);
 
   const minSessionMinutes = clampMinute(
     Math.max(1, Math.round(minSessionSecs / 60)),
@@ -500,6 +701,243 @@ export default function History({
     );
     onMinSessionSecsChange?.(clampedMinutes * 60);
   };
+  const toggleHistoryTimelineMode = () => {
+    setHistoryTimelineMode((mode) => (mode === "category" ? "app" : "category"));
+  };
+  const openTimelineDialog = () => {
+    timelineDetailsTriggerRef.current = null;
+    setTimelineDetailsPopover(null);
+    setTimelineDialogOpen(true);
+  };
+  const closeTimelineDialog = () => {
+    timelineDetailsTriggerRef.current = null;
+    setTimelineDetailsPopover(null);
+    setTimelineDialogOpen(false);
+  };
+  const renderTimelineModeAction = (className = "") => (
+    <QuietIconAction
+      icon={<Tags size={15} />}
+      title={getHistoryTimelineModeActionLabel(historyTimelineMode)}
+      ariaLabel={getHistoryTimelineModeActionLabel(historyTimelineMode)}
+      pressed={historyTimelineMode === "category"}
+      className={`history-timeline-mode-toggle history-horizontal-timeline-action ${className}`.trim()}
+      showTooltip={false}
+      onClick={toggleHistoryTimelineMode}
+    />
+  );
+  const timelineAxisActions = (
+    <>
+      {renderTimelineModeAction("history-horizontal-timeline-mode-toggle")}
+      <QuietIconAction
+        icon={<Expand size={15} />}
+        title={historyCopy.openTimeline}
+        ariaLabel={historyCopy.openTimeline}
+        className="history-horizontal-timeline-action history-timeline-open"
+        onClick={openTimelineDialog}
+      />
+    </>
+  );
+  const renderTimelineDurationControls = (className = "") => (
+    <div className={`flex max-w-[124px] items-center justify-end gap-1.5 ${className}`.trim()}>
+      <button
+        type="button"
+        onClick={() => updateMinSessionMinutes(minSessionMinutes - 1)}
+        disabled={!canDecreaseMinSession}
+        aria-label={UI_TEXT.accessibility.history.decreaseMinDuration}
+        className="qp-button-secondary inline-flex h-6 w-6 items-center justify-center rounded-[6px] p-0 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <Minus size={11} />
+      </button>
+      <span className="min-w-[62px] text-center text-xs font-medium tabular-nums text-[var(--qp-text-secondary)]">
+        {UI_TEXT.settings.minuteValue(minSessionMinutes)}
+      </span>
+      <button
+        type="button"
+        onClick={() => updateMinSessionMinutes(minSessionMinutes + 1)}
+        disabled={!canIncreaseMinSession}
+        aria-label={UI_TEXT.accessibility.history.increaseMinDuration}
+        className="qp-button-secondary inline-flex h-6 w-6 items-center justify-center rounded-[6px] p-0 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <Plus size={11} />
+      </button>
+    </div>
+  );
+  const renderTimelineList = (className = "") => {
+    if (loading) {
+      return <div className="flex-1" aria-hidden="true" />;
+    }
+
+    if (timelineSessions.length === 0) {
+      return (
+        <div className={`history-timeline-list-empty flex-1 flex items-center justify-center text-[var(--qp-text-tertiary)] text-sm ${className}`.trim()}>
+          {UI_TEXT.history.emptyDay}
+        </div>
+      );
+    }
+
+    return (
+      <div className={`history-timeline-list flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1 ${className}`.trim()}>
+        <AnimatePresence initial={false}>
+          {timelineSessions.map((session) => {
+            const mapped = AppClassification.mapApp(session.exeName, { appName: session.displayName });
+            const overrideColor = AppClassification.getUserOverride(session.exeName)?.color;
+            const accentColor = overrideColor ?? iconThemeColors[session.exeName] ?? mapped.color;
+            const titleSamples = session.titleSamples.length > 0
+              ? session.titleSamples
+              : (session.displayTitle ? [session.displayTitle] : []);
+            const titleSampleDetails = session.titleSampleDetails.length > 0
+              ? session.titleSampleDetails
+              : titleSamples.map((title) => ({
+                title,
+                startTime: session.startTime,
+                endTime: session.endTime,
+              }));
+            const hasDetails = titleSampleDetails.length > 0;
+            const isExpanded = timelineDetailsPopover?.sessionId === session.id;
+            const detailPlacement = isExpanded ? timelineDetailsPopover.placement : "bottom";
+
+            return (
+              <div
+                key={session.id}
+                className="flex items-center gap-3 p-3 border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-elevated)] rounded-[10px] hover:border-[var(--qp-border-strong)] hover:bg-[var(--qp-bg-panel)] transition-colors"
+              >
+                <div
+                  className="w-1 self-stretch rounded-full flex-shrink-0"
+                  style={{ backgroundColor: accentColor }}
+                />
+                <div className="w-8 h-8 rounded-[8px] bg-[var(--qp-bg-panel)] border border-[var(--qp-border-subtle)] flex items-center justify-center flex-shrink-0 overflow-hidden p-1.5">
+                  {icons[session.exeName] ? (
+                    <img src={icons[session.exeName]} className="w-full h-full object-contain" alt="" />
+                  ) : (
+                    <div className="text-[10px] font-semibold opacity-35 text-[var(--qp-text-secondary)]">{mapped.category[0].toUpperCase()}</div>
+                  )}
+                </div>
+                <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                  <div className="flex min-w-0 flex-1 items-end gap-1.5">
+                    <div className="min-w-0 truncate text-sm font-semibold text-[var(--qp-text-primary)]">
+                      {session.displayName}
+                    </div>
+                    <span className="inline-flex h-[18px] shrink-0 items-center gap-1 rounded-[5px] border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-panel)] px-1.5 text-[9px] font-semibold leading-none text-[var(--qp-text-tertiary)]">
+                      <span>
+                        {UI_TEXT.history.activitySegmentCount(session.mergedCount)}
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <span>
+                        {UI_TEXT.history.titleRowCount(titleSampleDetails.length)}
+                      </span>
+                    </span>
+                    {hasDetails && (
+                      <button
+                        type="button"
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onClick={(event) => toggleTimelineSessionDetails(
+                          session.id,
+                          session.displayName,
+                          titleSampleDetails,
+                          event.currentTarget,
+                        )}
+                        aria-expanded={isExpanded}
+                        aria-label={UI_TEXT.accessibility.history.toggleActivityDetails(
+                          isExpanded,
+                          session.displayName,
+                        )}
+                        className="qp-button-secondary inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] p-0 text-[var(--qp-text-tertiary)]"
+                      >
+                        {isExpanded
+                          ? detailPlacement === "top"
+                            ? <ChevronUp size={11} aria-hidden="true" />
+                            : <ChevronDown size={11} aria-hidden="true" />
+                          : <ChevronRight size={11} aria-hidden="true" />}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <div className="text-xs font-semibold text-[var(--qp-text-primary)] tabular-nums">{formatDuration(session.duration || 0)}</div>
+                  <div className="text-[10px] text-[var(--qp-text-tertiary)] mt-0.5 tabular-nums">
+                    {formatTime(session.startTime)}
+                    {session.endTime ? ` - ${formatTime(session.endTime)}` : ` ${UI_TEXT.history.untilNow}`}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </AnimatePresence>
+      </div>
+    );
+  };
+  const renderDayDistribution = () => (
+    <>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">{historyCopy.dayDistribution}</h3>
+        <QuietSegmentedFilter
+          value={dayDistributionMode}
+          options={dayDistributionOptions}
+          onChange={setDayDistributionMode}
+          className="history-day-distribution-mode-switch"
+        />
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-1 pt-2">
+        {showQuietPlaceholder ? (
+          <div className="h-24" aria-hidden="true" />
+        ) : dayDistributionItems.length === 0 ? (
+          <p className="text-[var(--qp-text-tertiary)] text-xs text-center mt-8">{UI_TEXT.history.noData}</p>
+        ) : (
+          <div className="space-y-4">
+            {dayDistributionItems.map((item) => (
+              <div key={item.key} className="space-y-1.5">
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="font-medium text-[var(--qp-text-secondary)] flex items-center gap-1.5 min-w-0">
+                    {item.iconSrc ? (
+                      <img src={item.iconSrc} className="w-3.5 h-3.5 object-contain" alt="" />
+                    ) : (
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: item.color }}
+                        aria-hidden="true"
+                      />
+                    )}
+                    <span className="truncate">{item.label}</span>
+                  </span>
+                  <span className="text-[var(--qp-text-tertiary)] tabular-nums">{formatDuration(item.duration)}</span>
+                </div>
+                <div className="h-1.5 bg-[var(--qp-track-muted)] rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${item.percentage}%` }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                    className="h-full rounded-full"
+                    style={{ backgroundColor: item.color }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+  const renderDaySummary = () => (
+    <div className="qp-panel p-5 history-day-summary-card">
+      <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">{historyCopy.daySummary}</h3>
+      <div className="history-day-summary-body">
+        <div className="history-day-summary-primary">
+          <span className="history-day-summary-label">{historyCopy.activeDuration}</span>
+          <strong className="history-day-summary-value">{daySummaryView.activeDurationLabel}</strong>
+        </div>
+        <div className="history-day-summary-details">
+          <div className="history-day-summary-detail">
+            <span>{historyCopy.activeSpan}</span>
+            <strong>{daySummaryView.activeSpanLabel}</strong>
+          </div>
+          <div className="history-day-summary-detail">
+            <span>{historyCopy.peakHour}</span>
+            <strong>{daySummaryView.peakHourLabel}</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="flex-1 min-h-0 flex flex-col gap-4 md:gap-5 h-full overflow-hidden">
@@ -610,16 +1048,26 @@ export default function History({
         )}
       />
 
+      <div className="qp-panel p-5 history-overview-timeline-card">
+        <HistoryHorizontalTimeline
+          viewModel={visibleHistoryTimelineView}
+          mode={historyTimelineMode}
+          iconThemeColors={iconThemeColors}
+          title={historyCopy.timelineAxis}
+          actions={showQuietPlaceholder ? null : timelineAxisActions}
+          showEmptyMessage={!showQuietPlaceholder}
+        />
+      </div>
+
       <div className="flex gap-4 md:gap-5 min-h-0 flex-1">
         <div className="w-5/12 flex flex-col gap-4 md:gap-5 min-h-0 history-left-column">
-          <div className="qp-panel p-5 history-pulse-card">
+          {renderDaySummary()}
+          <div className="qp-panel p-5 history-pulse-card history-pulse-card-primary">
             <div className="flex items-center justify-between gap-3">
               <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">{UI_TEXT.history.dailyHourlyActivity}</h3>
               <QuietIconAction
                 icon={<Layers3 size={15} />}
-                title={hourlyActivityChartMode === "category"
-                  ? UI_TEXT.dashboard.showTotalHourlyActivity
-                  : UI_TEXT.dashboard.showHourlyActivityByCategory}
+                title={getHourlyActivityModeActionLabel(hourlyActivityChartMode)}
                 pressed={hourlyActivityChartMode === "category"}
                 className="hourly-chart-mode-toggle history-pulse-mode-toggle"
                 showTooltip={false}
@@ -641,211 +1089,77 @@ export default function History({
                 />
               </div>
           </div>
-
-          <div className="qp-panel p-5 flex-1 min-h-0 flex flex-col history-app-distribution-card">
-            <div className="mb-4">
-              <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">{UI_TEXT.history.appDistribution}</h3>
-            </div>
-            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-1 pt-2">
-              {showQuietPlaceholder ? (
-                <div className="h-24" aria-hidden="true" />
-              ) : appSummary.length === 0 ? (
-                <p className="text-[var(--qp-text-tertiary)] text-xs text-center mt-8">{UI_TEXT.history.noData}</p>
-              ) : (
-                <div className="space-y-4">
-                  {appSummary.map((app) => {
-                    const mapped = AppClassification.mapApp(app.exeName, { appName: app.appName });
-                    const overrideColor = AppClassification.getUserOverride(app.exeName)?.color;
-                    const accentColor = overrideColor ?? iconThemeColors[app.exeName] ?? mapped.color;
-                    const appName = app.appName.trim() || mapped.name;
-                    return (
-                      <div key={app.exeName} className="space-y-1.5">
-                        <div className="flex justify-between text-xs mb-1">
-                          <span className="font-medium text-[var(--qp-text-secondary)] flex items-center gap-1.5 min-w-0">
-                            {icons[app.exeName] && <img src={icons[app.exeName]} className="w-3.5 h-3.5 object-contain" alt="" />}
-                            <span className="truncate">{appName}</span>
-                          </span>
-                          <span className="text-[var(--qp-text-tertiary)] tabular-nums">{formatDuration(app.duration)}</span>
-                        </div>
-                        <div className="h-1.5 bg-[var(--qp-track-muted)] rounded-full overflow-hidden">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${app.percentage}%` }}
-                            transition={{ duration: 0.2, ease: "easeOut" }}
-                            className="h-full rounded-full"
-                            style={{ backgroundColor: accentColor }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
         </div>
 
-        <div className="flex-1 qp-panel p-5 flex flex-col overflow-hidden min-h-0">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">{UI_TEXT.history.timeline}</h3>
-            <div className="flex max-w-[124px] items-center justify-end gap-1.5">
-              <button
-                type="button"
-                onClick={() => updateMinSessionMinutes(minSessionMinutes - 1)}
-                disabled={!canDecreaseMinSession}
-                aria-label={UI_TEXT.accessibility.history.decreaseMinDuration}
-                className="qp-button-secondary inline-flex h-6 w-6 items-center justify-center rounded-[6px] p-0 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Minus size={11} />
-              </button>
-              <span className="min-w-[62px] text-center text-xs font-medium tabular-nums text-[var(--qp-text-secondary)]">
-                {UI_TEXT.settings.minuteValue(minSessionMinutes)}
-              </span>
-              <button
-                type="button"
-                onClick={() => updateMinSessionMinutes(minSessionMinutes + 1)}
-                disabled={!canIncreaseMinSession}
-                aria-label={UI_TEXT.accessibility.history.increaseMinDuration}
-                className="qp-button-secondary inline-flex h-6 w-6 items-center justify-center rounded-[6px] p-0 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Plus size={11} />
-              </button>
-            </div>
-          </div>
-          {loading ? (
-            <div className="flex-1" aria-hidden="true" />
-          ) : timelineSessions.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center text-[var(--qp-text-tertiary)] text-sm">{UI_TEXT.history.emptyDay}</div>
-          ) : (
-            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1">
-              <AnimatePresence initial={false}>
-                {timelineSessions.map((session) => {
-                  const mapped = AppClassification.mapApp(session.exeName, { appName: session.displayName });
-                  const overrideColor = AppClassification.getUserOverride(session.exeName)?.color;
-                  const accentColor = overrideColor ?? iconThemeColors[session.exeName] ?? mapped.color;
-                  const titleSamples = session.titleSamples.length > 0
-                    ? session.titleSamples
-                    : (session.displayTitle ? [session.displayTitle] : []);
-                  const titleSampleDetails = session.titleSampleDetails.length > 0
-                    ? session.titleSampleDetails
-                    : titleSamples.map((title) => ({
-                      title,
-                      startTime: session.startTime,
-                      endTime: session.endTime,
-                  }));
-                  const hasDetails = titleSampleDetails.length > 0;
-                  const isExpanded = timelineDetailsPopover?.sessionId === session.id;
-                  const detailPlacement = isExpanded ? timelineDetailsPopover.placement : "bottom";
-
-                  return (
-                    <div
-                      key={session.id}
-                      className="flex items-center gap-3 p-3 border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-elevated)] rounded-[10px] hover:border-[var(--qp-border-strong)] hover:bg-[var(--qp-bg-panel)] transition-colors"
-                    >
-                      <div
-                        className="w-1 self-stretch rounded-full flex-shrink-0"
-                        style={{ backgroundColor: accentColor }}
-                      />
-                      <div className="w-8 h-8 rounded-[8px] bg-[var(--qp-bg-panel)] border border-[var(--qp-border-subtle)] flex items-center justify-center flex-shrink-0 overflow-hidden p-1.5">
-                        {icons[session.exeName] ? (
-                          <img src={icons[session.exeName]} className="w-full h-full object-contain" alt="" />
-                        ) : (
-                          <div className="text-[10px] font-semibold opacity-35 text-[var(--qp-text-secondary)]">{mapped.category[0].toUpperCase()}</div>
-                        )}
-                      </div>
-                      <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                        <div className="flex min-w-0 flex-1 items-end gap-1.5">
-                          <div className="min-w-0 truncate text-sm font-semibold text-[var(--qp-text-primary)]">
-                            {session.displayName}
-                          </div>
-                          <span className="inline-flex h-[18px] shrink-0 items-center gap-1 rounded-[5px] border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-panel)] px-1.5 text-[9px] font-semibold leading-none text-[var(--qp-text-tertiary)]">
-                            <span>
-                              {UI_TEXT.history.activitySegmentCount(session.mergedCount)}
-                            </span>
-                            <span aria-hidden="true">·</span>
-                            <span>
-                              {UI_TEXT.history.titleRowCount(titleSampleDetails.length)}
-                            </span>
-                          </span>
-                          {hasDetails && (
-                            <button
-                              type="button"
-                              onPointerDown={(event) => event.stopPropagation()}
-                              onClick={(event) => toggleTimelineSessionDetails(
-                                session.id,
-                                session.displayName,
-                                titleSampleDetails,
-                                event.currentTarget,
-                              )}
-                              aria-expanded={isExpanded}
-                              aria-label={UI_TEXT.accessibility.history.toggleActivityDetails(
-                                isExpanded,
-                                session.displayName,
-                              )}
-                              className="qp-button-secondary inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] p-0 text-[var(--qp-text-tertiary)]"
-                            >
-                              {isExpanded
-                                ? detailPlacement === "top"
-                                  ? <ChevronUp size={11} aria-hidden="true" />
-                                  : <ChevronDown size={11} aria-hidden="true" />
-                                : <ChevronRight size={11} aria-hidden="true" />}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <div className="text-xs font-semibold text-[var(--qp-text-primary)] tabular-nums">{formatDuration(session.duration || 0)}</div>
-                        <div className="text-[10px] text-[var(--qp-text-tertiary)] mt-0.5 tabular-nums">
-                          {formatTime(session.startTime)}
-                          {session.endTime ? ` - ${formatTime(session.endTime)}` : ` ${UI_TEXT.history.untilNow}`}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </AnimatePresence>
-              {createPortal((
-                <AnimatePresence>
-                  {timelineDetailsPopover && (
-                    <motion.div
-                      ref={timelineDetailsPopoverRef}
-                      initial={{ opacity: 0, y: -4, scale: 0.99 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -4, scale: 0.99 }}
-                      transition={{ duration: 0.12, ease: "easeOut" }}
-                      className={`history-activity-popover history-activity-popover-${timelineDetailsPopover.placement}`}
-                      style={{
-                        left: timelineDetailsPopover.left,
-                        top: timelineDetailsPopover.top,
-                      }}
-                    >
-                      <div className="history-activity-popover-title">
-                        {UI_TEXT.history.titleDetails}
-                      </div>
-                      <div className="history-activity-popover-list">
-                        {timelineDetailsPopover.titleSamples.map((sample, index) => (
-                          <div
-                            key={`${timelineDetailsPopover.sessionId}-${index}-${sample.title}`}
-                            className="history-activity-popover-item"
-                          >
-                            <span className="history-activity-popover-item-title">
-                              {sample.title}
-                            </span>
-                            <span className="history-activity-popover-item-time">
-                              {formatTime(sample.startTime)}
-                              {sample.endTime ? ` - ${formatTime(sample.endTime)}` : ` ${UI_TEXT.history.untilNow}`}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              ), document.body)}
-            </div>
-          )}
+        <div className="flex-1 qp-panel p-5 flex flex-col overflow-hidden min-h-0 history-app-distribution-card">
+          {renderDayDistribution()}
         </div>
       </div>
+
+      {createPortal((
+        <AnimatePresence>
+          {timelineDetailsPopover && (
+            <motion.div
+              ref={timelineDetailsPopoverRef}
+              initial={{ opacity: 0, y: -4, scale: 0.99 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -4, scale: 0.99 }}
+              transition={{ duration: 0.12, ease: "easeOut" }}
+              className={`history-activity-popover history-activity-popover-${timelineDetailsPopover.placement}`}
+              style={{
+                left: timelineDetailsPopover.left,
+                top: timelineDetailsPopover.top,
+              }}
+            >
+              <div className="history-activity-popover-title">
+                {UI_TEXT.history.titleDetails}
+              </div>
+              <div className="history-activity-popover-list">
+                {timelineDetailsPopover.titleSamples.map((sample, index) => (
+                  <div
+                    key={`${timelineDetailsPopover.sessionId}-${index}-${sample.title}`}
+                    className="history-activity-popover-item"
+                  >
+                    <span className="history-activity-popover-item-title">
+                      {sample.title}
+                    </span>
+                    <span className="history-activity-popover-item-time">
+                      {formatTime(sample.startTime)}
+                      {sample.endTime ? ` - ${formatTime(sample.endTime)}` : ` ${UI_TEXT.history.untilNow}`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      ), document.body)}
+
+      <QuietDialog
+        open={timelineDialogOpen}
+        title={UI_TEXT.history.timeline}
+        surfaceClassName="history-timeline-dialog-surface"
+        onClose={closeTimelineDialog}
+        actions={(
+          <button
+            type="button"
+            className="qp-button-secondary qp-dialog-action"
+            onClick={closeTimelineDialog}
+          >
+            {UI_TEXT.common.close}
+          </button>
+        )}
+      >
+        <div className="history-timeline-dialog-body">
+          <div className="history-timeline-dialog-toolbar">
+            <span className="history-timeline-dialog-meta">
+              {UI_TEXT.history.sessionCount(timelineSessions.length)}
+            </span>
+            {renderTimelineDurationControls("history-timeline-dialog-duration-controls")}
+          </div>
+          {renderTimelineList("history-timeline-dialog-list")}
+        </div>
+      </QuietDialog>
     </div>
   );
 }

@@ -22,7 +22,9 @@ App note en: TBD.
 
 ### Changed
 
-- 暂无。
+- 历史页新增当日摘要，将当天总活跃时长作为主信息，帮助在历史页直接理解当天整体使用量。Refs [#8](https://github.com/Ceceliaee/patina/issues/8)
+- 当日摘要补充活跃跨度和高峰时段，方便快速判断当天记录覆盖和使用峰值。
+- 历史页调整为上方横向时间轴、弹窗时间线列表、左侧当日活动和右侧当日分布的回看结构；当日分布支持在“应用 / 分类”之间切换，并与时间轴、当日活动柱图的显示模式保持独立。Refs [#6](https://github.com/Ceceliaee/patina/issues/6)
 
 ### Fixed
 

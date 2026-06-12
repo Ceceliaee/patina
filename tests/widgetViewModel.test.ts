@@ -106,6 +106,13 @@ const WIDGET_WINDOW: TrackingWindowSnapshot = {
   processPath: "C:/Program Files/Patina/patina.exe",
 };
 
+const PATINA_MAIN_WINDOW: TrackingWindowSnapshot = {
+  ...ACTIVE_WINDOW,
+  title: "Patina",
+  exeName: "patina.exe",
+  processPath: "C:/Program Files/Patina/patina.exe",
+};
+
 let passed = 0;
 
 async function runTest(name: string, fn: () => Promise<void> | void) {
@@ -269,6 +276,7 @@ await runTest("buildWidgetViewModel maps hard degraded probe to existing error l
 
 await runTest("isWidgetSelfWindow detects widget chrome without matching real apps", () => {
   assert.equal(isWidgetSelfWindow(WIDGET_WINDOW), true);
+  assert.equal(isWidgetSelfWindow(PATINA_MAIN_WINDOW), false);
   assert.equal(isWidgetSelfWindow(ACTIVE_WINDOW), false);
 });
 

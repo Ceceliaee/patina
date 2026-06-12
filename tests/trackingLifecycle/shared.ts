@@ -97,7 +97,7 @@ export type {
   TrackedWindow,
 };
 
-export const shouldTrack = (exeName: string) => !["patina.exe", "time_tracker.exe"].includes(exeName.toLowerCase());
+export const shouldTrack = (exeName: string) => AppClassification.shouldTrackApp(exeName);
 export const resolveCanonicalDisplayName = AppClassification.resolveCanonicalDisplayName;
 export const resolveCanonicalExecutable = AppClassification.resolveCanonicalExecutable;
 export const shouldTrackProcess = AppClassification.shouldTrackProcess;

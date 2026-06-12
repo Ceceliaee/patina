@@ -5,10 +5,11 @@ export type QuietTooltipPlacement = "top" | "right" | "bottom" | "left";
 
 interface Props {
   children: ReactNode;
-  label?: string | null;
+  label?: ReactNode | null;
   placement?: QuietTooltipPlacement;
   disabled?: boolean;
   className?: string;
+  tooltipClassName?: string;
 }
 
 interface TooltipPosition {
@@ -89,6 +90,7 @@ export default function QuietTooltip({
   placement = "top",
   disabled = false,
   className,
+  tooltipClassName,
 }: Props) {
   const anchorRef = useRef<HTMLSpanElement | null>(null);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
@@ -160,7 +162,7 @@ export default function QuietTooltip({
         <div
           ref={tooltipRef}
           role="tooltip"
-          className="qp-tooltip"
+          className={`qp-tooltip ${tooltipClassName ?? ""}`.trim()}
           style={{
             top: position ? `${position.top}px` : 0,
             left: position ? `${position.left}px` : 0,

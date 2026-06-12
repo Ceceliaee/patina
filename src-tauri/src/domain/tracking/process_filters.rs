@@ -5,10 +5,7 @@ pub fn should_track(exe_name: &str) -> bool {
 
     if matches!(
         lower_name.as_str(),
-        "patina.exe"
-            | "time_tracker.exe"
-            | "time-tracker.exe"
-            | "un.exe"
+        "un.exe"
             | "taskmgr.exe"
             | "regedit.exe"
             | "mmc.exe"

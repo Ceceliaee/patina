@@ -724,7 +724,7 @@
 
 .history-activity-popover {
   position: fixed;
-  z-index: 70;
+  z-index: 110;
   width: 284px;
   max-width: calc(100vw - 24px);
   max-height: min(260px, calc(100vh - 24px));

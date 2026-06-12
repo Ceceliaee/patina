@@ -557,11 +557,8 @@ mod tests {
                 ),
             ]);
             let widget = make_window(&[
-                ("exe_name", "time-tracker.exe"),
-                (
-                    "process_path",
-                    r"C:\Program Files\Time Tracker\time-tracker.exe",
-                ),
+                ("exe_name", "SearchHost.exe"),
+                ("process_path", r"C:\Windows\SystemApps\SearchHost.exe"),
             ]);
             let chat = make_window(&[
                 ("exe_name", "QQ.exe"),
@@ -680,11 +677,8 @@ mod tests {
                 ),
             ]);
             let widget = make_window(&[
-                ("exe_name", "time-tracker.exe"),
-                (
-                    "process_path",
-                    r"C:\Program Files\Time Tracker\time-tracker.exe",
-                ),
+                ("exe_name", "SearchHost.exe"),
+                ("process_path", r"C:\Windows\SystemApps\SearchHost.exe"),
             ]);
             let chat = make_window(&[
                 ("exe_name", "QQ.exe"),

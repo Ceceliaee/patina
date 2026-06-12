@@ -119,6 +119,9 @@ mod tests {
         assert!(should_track("wallpaper32.exe"));
         assert!(should_track("wallpaper64.exe"));
         assert!(should_track("wallpaperengine.exe"));
+        assert!(should_track("patina.exe"));
+        assert!(should_track("time_tracker.exe"));
+        assert!(should_track("time-tracker.exe"));
         assert!(should_track("geek.exe"));
         assert!(should_track("geek-uninstaller.exe"));
         assert!(should_track("bcuninstaller.exe"));

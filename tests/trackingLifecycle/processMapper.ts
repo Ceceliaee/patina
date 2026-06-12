@@ -102,6 +102,30 @@ export function runProcessMapperTests() {
     }
   });
 
+  runTest("Patina itself remains trackable and uses the Patina display name", () => {
+    ProcessMapper.clearUserOverrides();
+
+    for (
+      const exeName of [
+        "patina.exe",
+        "patina",
+        "time_tracker.exe",
+        "time_tracker",
+        "time-tracker.exe",
+        "time-tracker",
+        "timetracker.exe",
+        "timetracker",
+        "time tracker.exe",
+        "time tracker",
+      ]
+    ) {
+      assert.equal(shouldTrackProcess(exeName), true);
+      assert.equal(ProcessMapper.shouldTrack(exeName), true);
+      assert.equal(ProcessMapper.map(exeName).name, "Patina");
+      assert.equal(ProcessMapper.map(exeName).category, "other");
+    }
+  });
+
   runTest("process mapper can exclude an app from tracking via override", () => {
     ProcessMapper.clearUserOverrides();
     assert.equal(ProcessMapper.shouldTrack("QQ.exe"), true);
@@ -413,5 +437,8 @@ export function runProcessMapperTests() {
       windowTitle: "Alma",
     }), true);
     assert.equal(shouldTrackProcess("Antigravity.exe"), true);
+    assert.equal(shouldTrackProcess("patina.exe"), true);
+    assert.equal(shouldTrackProcess("time_tracker.exe"), true);
+    assert.equal(shouldTrackProcess("time-tracker.exe"), true);
   });
 }

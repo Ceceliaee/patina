@@ -100,16 +100,6 @@ const LIFECYCLE_METADATA_BUILD_TOKENS = new Set([
 
 const NON_TRACKABLE_EXE_NAMES = new Set([
   "",
-  "patina.exe",
-  "patina",
-  "time_tracker.exe",
-  "time_tracker",
-  "time-tracker.exe",
-  "time-tracker",
-  "timetracker.exe",
-  "timetracker",
-  "time tracker.exe",
-  "time tracker",
   "uninstall.exe",
   "uninstall",
   "unins000.exe",

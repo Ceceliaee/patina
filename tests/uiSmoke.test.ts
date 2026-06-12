@@ -341,9 +341,15 @@ await runTest("Data regular view avoids visible loading and skeleton branches", 
 
 await runTest("History regular view avoids visible loading copy", () => {
   const history = readUtf8("src/features/history/components/History.tsx");
+  const appCss = readUtf8("src/App.css");
 
   assert.doesNotMatch(history, /UI_TEXT\.history\.loading/);
   assert.doesNotMatch(history, /aria-busy/);
+  assert.match(history, /HistoryHorizontalTimeline/);
+  assert.match(history, /visibleHistoryTimelineView/);
+  assert.match(history, /showEmptyMessage=\{!showQuietPlaceholder\}/);
+  assert.doesNotMatch(history, /!\s*loading\s*&&\s*\(\s*<div className="qp-panel p-5 history-overview-timeline-card"/s);
+  assert.match(appCss, /styles\/features\/history\.css/);
 });
 
 await runTest("operation-oriented pages keep explicit busy feedback", () => {

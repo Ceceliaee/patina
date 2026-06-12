@@ -60,23 +60,8 @@ function filterTimelineSessionsForDisplay(
     return sessions;
   }
 
-  const latestLiveSession = sessions.reduce<TimelineSession | null>((latest, session) => {
-    if (!session.isLive) {
-      return latest;
-    }
-
-    if (!latest) {
-      return session;
-    }
-
-    const latestEnd = latest.endTime ?? latest.startTime;
-    const sessionEnd = session.endTime ?? session.startTime;
-    return sessionEnd >= latestEnd ? session : latest;
-  }, null);
-
   return sessions.filter((session) => (
     (session.duration ?? 0) >= minDurationMs
-    || (session.isLive && latestLiveSession === session)
   ));
 }
 

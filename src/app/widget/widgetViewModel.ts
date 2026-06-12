@@ -20,21 +20,7 @@ export interface WidgetViewModel {
   objectIconKey: string | null;
 }
 
-const WIDGET_SELF_EXECUTABLES = new Set([
-  "patina.exe",
-  "patina",
-  "time-tracker.exe",
-  "time-tracker",
-  "time_tracker.exe",
-  "time_tracker",
-  "timetracker.exe",
-  "timetracker",
-  "time tracker.exe",
-  "time tracker",
-]);
-
 const WIDGET_SELF_WINDOW_TITLES = new Set([
-  "Patina Widget",
   "Patina Widget",
   "Time Tracking",
 ]);
@@ -42,11 +28,6 @@ const WIDGET_SELF_WINDOW_TITLES = new Set([
 export function isWidgetSelfWindow(activeWindow: TrackingWindowSnapshot | null): boolean {
   if (!activeWindow) {
     return false;
-  }
-
-  const normalizedExeName = AppClassification.normalizeExecutable(activeWindow.exeName);
-  if (WIDGET_SELF_EXECUTABLES.has(normalizedExeName)) {
-    return true;
   }
 
   return WIDGET_SELF_WINDOW_TITLES.has(activeWindow.title.trim());

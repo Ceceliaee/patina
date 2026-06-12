@@ -163,10 +163,10 @@ export function runHistoryReadModelTests() {
     assert.equal(view.weekly.reduce((sum, item) => sum + item.totalDuration, 0), 40_000);
   });
 
-  runTest("history timeline keeps latest live session visible below min threshold and hides it once ended", () => {
+  runTest("history timeline applies min session threshold to live sessions", () => {
     const trackerHealth = makeHealthyTrackerHealth(200_000);
 
-    const liveView = buildHistoryView({
+    const shortLiveView = buildHistoryView({
       daySessions: [
         makeSession({
           id: 1,
@@ -182,18 +182,17 @@ export function runHistoryReadModelTests() {
       minSessionSecs: 180,
     });
 
-    assert.equal(liveView.timelineSessions.length, 1);
-    assert.equal(liveView.timelineSessions[0].duration, 5_000);
+    assert.equal(shortLiveView.timelineSessions.length, 0);
 
-    const endedView = buildHistoryView({
+    const longLiveView = buildHistoryView({
       daySessions: [
         makeSession({
           id: 1,
           exeName: "vscodium.exe",
           appName: "VSCodium",
-          startTime: 195_000,
-          endTime: 197_000,
-          duration: 2_000,
+          startTime: 0,
+          endTime: null,
+          duration: null,
         }),
       ],
       trackerHealth,
@@ -201,7 +200,8 @@ export function runHistoryReadModelTests() {
       minSessionSecs: 180,
     });
 
-    assert.equal(endedView.timelineSessions.length, 0);
+    assert.equal(longLiveView.timelineSessions.length, 1);
+    assert.equal(longLiveView.timelineSessions[0].duration, 200_000);
   });
 
   runTest("history timeline merged duration does not change with min session threshold", () => {

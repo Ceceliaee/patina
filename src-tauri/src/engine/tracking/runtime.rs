@@ -450,7 +450,9 @@ mod tests {
     fn lock_screen_processes_are_not_trackable() {
         assert!(!crate::domain::tracking::should_track("LockApp.exe"));
         assert!(!crate::domain::tracking::should_track("LogonUI.exe"));
-        assert!(!crate::domain::tracking::should_track("time-tracker.exe"));
+        assert!(crate::domain::tracking::should_track("time-tracker.exe"));
+        assert!(crate::domain::tracking::should_track("time_tracker.exe"));
+        assert!(crate::domain::tracking::should_track("patina.exe"));
         assert!(!crate::domain::tracking::should_track("un.exe"));
         assert!(!crate::domain::tracking::should_track("SearchHost.exe"));
         assert!(!crate::domain::tracking::should_track("ShellHost.exe"));
