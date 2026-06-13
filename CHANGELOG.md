@@ -38,28 +38,30 @@ App note en: TBD.
 
 ## [1.6.0] - 2026-06-13
 
-Release: 结束旧 Time Tracker 兼容窗口，并改进历史回看与搜索。
-App note: 1.5.2前版本请先装1.5.2完成迁移；本版升级历史回看与应用搜索。
-App note en: Pre-1.5.2 users: install 1.5.2 first to migrate local data. Includes History review and app search upgrades.
+Release: 结束旧 Time Tracker 兼容窗口，并改进历史回看、应用搜索与追踪稳定性。
+App note: 1.5.2 版本前的用户请先安装 1.5.2 完成本地数据迁移；本版优化历史回看、应用搜索与关于页体验。
+App note en: Pre-1.5.2 users: install 1.5.2 first to migrate local data. Improves History review, app search, and About.
 
 ### Added
 
-- 暂无。
+- 历史页新增横向时间轴，可按应用或分类快速扫描当天活动分布，并打开弹窗查看合并后的时间线片段。Refs [#6](https://github.com/Ceceliaee/patina/issues/6)
 
 ### Changed
 
-- 历史页新增当日摘要，将当天总活跃时长作为主信息，帮助在历史页直接理解当天整体使用量。Refs [#8](https://github.com/Ceceliaee/patina/issues/8)
-- 当日摘要补充活跃跨度和高峰时段，方便快速判断当天记录覆盖和使用峰值。
-- 历史页时间轴的“应用 / 分类”显示模式现在会在本地记住，重启或返回页面后沿用上次选择。
-- 应用页搜索框现在可同时搜索应用和分类名称，方便筛出某个分类下记录过的软件并继续整理或改名。Refs [#6](https://github.com/Ceceliaee/patina/issues/6)
-- 历史页调整为上方横向时间轴、弹窗时间线列表、左侧当日活动和右侧当日分布的回看结构；当日分布支持在“应用 / 分类”之间切换，并与时间轴、当日活动柱图的显示模式保持独立。Refs [#6](https://github.com/Ceceliaee/patina/issues/6)
 - 清理版本只使用 Patina 当前身份、`%APPDATA%\Patina` 和 `patina.db`；已经升级到 `1.5.2` 并成功启动过的用户，本地计时数据无需额外操作。
 - WebDAV 远程备份现在只使用当前 Patina credential target 和当前 Patina index 格式；已保存的 `/TimeTracker` 会被当作普通显式远端目录值，不再自动改写成 `/Patina`。
+- 历史页调整为弹窗时间线列表、左侧当日摘要与当日活动、右侧当日分布的回看结构；新增总活跃时长、活跃跨度和高峰时段，并记住“应用 / 分类”显示模式。Refs [#8](https://github.com/Ceceliaee/patina/issues/8)
+- 应用页搜索框现在可同时搜索应用和分类名称，方便筛出某个分类下记录过的软件并继续整理或改名。Refs [#6](https://github.com/Ceceliaee/patina/issues/6)
+- 追踪健康状态改为读取轻量运行时快照，并避免前端健康轮询重叠，降低后台健康检查对长期追踪的额外压力。
+- 关于页统一 GitHub Star、问题反馈和赞助入口的图标与颜色；更新面板的赞助入口改为打开应用内赞助弹窗。
+- Patina 自身进程现在会作为可记录应用保留，并统一显示为 Patina，避免被旧身份过滤规则当作系统噪音。
 
 ### Fixed
 
 - 修复历史页横向时间轴未按“活动保持时间”合并短空档两侧同一应用或分类分段的问题。
-- 修复数据页应用趋势搜索无匹配或清空搜索后，列表高度与选中状态可能不稳定的问题。
+- 修复数据页趋势图进入页面时可能闪动，以及应用趋势搜索无匹配或清空搜索后列表高度与选中状态可能不稳定的问题。
+- 修复小时活动分类堆叠柱图 tooltip 可能遮挡图表或随高度变化漂移的问题。
+- 修复会话读模型可能让目标时间范围外的会话进入编译流程，影响历史或数据统计边界的问题。
 - 修复工具页软件提醒允许输入未记录软件并创建无效规则的问题。
 - 修复 Windows 上按 `Win+D` 显示桌面后，Patina 主窗口可能无法从任务栏或托盘重新打开的问题。Refs [#18](https://github.com/Ceceliaee/patina/issues/18)
 
@@ -72,6 +74,10 @@ App note en: Pre-1.5.2 users: install 1.5.2 first to migrate local data. Include
 ### Internal
 
 - 完成旧身份兼容清理版本的版本号、发布说明和长期版本文档同步。
+- 将工具备份恢复读写逻辑从 Tools repository 拆出到独立模块，并补充 History timeline、追踪健康轮询和工具提醒表单回归测试。
+- 收紧 bundle budget 检查和 Vite 依赖扫描入口，避免构建产物被误识别为额外入口并提升发布前质量门槛稳定性。
+- 更新中英文 README 与长期文档，补齐工具页在当前信息架构中的位置、兼容清理边界和发布准备口径。
+- 发布脚本将应用内更新说明长度上限调整为中文 `60` 字、英文 `120` 字，方便在迁移提醒场景下保留必要上下文。
 
 ## [1.5.2] - 2026-06-10
 
