@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Patina 网页记录</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      body {
+        margin: 0;
+        min-width: 360px;
+        background: #f6f6f6;
+        color: #1d1d1f;
+      }
+      main {
+        box-sizing: border-box;
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 28px 20px;
+      }
+      h1 {
+        margin: 0 0 6px;
+        font-size: 20px;
+      }
+      p {
+        margin: 0;
+        color: #65676d;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      form {
+        display: grid;
+        gap: 16px;
+        margin-top: 22px;
+        padding: 18px;
+        border: 1px solid #dedfe3;
+        border-radius: 10px;
+        background: #fff;
+      }
+      label {
+        display: grid;
+        gap: 7px;
+        font-size: 13px;
+        font-weight: 650;
+      }
+      input[type="text"],
+      input[type="password"] {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 36px;
+        border: 1px solid #d7d8dd;
+        border-radius: 8px;
+        padding: 7px 10px;
+        font: inherit;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .switch {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+      button {
+        min-height: 34px;
+        border: 1px solid #cfd1d8;
+        border-radius: 8px;
+        background: #fff;
+        padding: 7px 12px;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 650;
+        cursor: pointer;
+      }
+      button.primary {
+        border-color: #2f63ad;
+        background: #2f63ad;
+        color: white;
+      }
+      #status {
+        min-height: 20px;
+        color: #2f63ad;
+        font-size: 12px;
+        font-weight: 650;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #202124;
+          color: #f1f3f4;
+        }
+        form,
+        button,
+        input[type="text"],
+        input[type="password"] {
+          background: #2b2d31;
+          color: #f1f3f4;
+          border-color: #45474d;
+        }
+        p {
+          color: #b6bac2;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Patina 网页记录</h1>
+      <p>在 Patina 设置页开启“网页记录”，复制端口和 Token 到这里。插件只把当前活动 tab 的 URL、标题和 favicon 发到本机 Patina。</p>
+      <form id="options-form">
+        <div class="row">
+          <label class="switch">
+            <input id="enabled" type="checkbox">
+            启用网页记录
+          </label>
+          <span id="status"></span>
+        </div>
+        <label>
+          端口
+          <input id="port" type="text" inputmode="numeric" spellcheck="false" autocomplete="off">
+        </label>
+        <label>
+          Token
+          <input id="token" type="password" spellcheck="false" autocomplete="off">
+        </label>
+        <div class="actions">
+          <button id="test" type="button">同步当前页</button>
+          <button class="primary" type="submit">保存</button>
+        </div>
+      </form>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

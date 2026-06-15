@@ -2,7 +2,8 @@ use crate::data::repositories;
 use crate::data::sqlite_pool::wait_for_sqlite_pool;
 use crate::domain::backup::{
     BackupIconCache, BackupMeta, BackupPayload, BackupPreview, BackupSession, BackupSetting,
-    BackupTitleSample, CURRENT_BACKUP_SCHEMA_VERSION, CURRENT_BACKUP_VERSION,
+    BackupTitleSample, BackupWebActivitySegment, CURRENT_BACKUP_SCHEMA_VERSION,
+    CURRENT_BACKUP_VERSION,
 };
 use crate::platform::app_paths;
 use crc32fast::Hasher;
@@ -24,6 +25,7 @@ const BACKUP_SESSIONS_ENTRY_NAME: &str = "data/sessions.json";
 const BACKUP_TITLE_SAMPLES_ENTRY_NAME: &str = "data/session_title_samples.json";
 const BACKUP_SETTINGS_ENTRY_NAME: &str = "data/settings.json";
 const BACKUP_ICON_CACHE_ENTRY_NAME: &str = "data/icon_cache.json";
+const BACKUP_WEB_ACTIVITY_SEGMENTS_ENTRY_NAME: &str = "data/web_activity_segments.json";
 const BACKUP_TOOL_REMINDERS_ENTRY_NAME: &str = "data/tool_reminders.json";
 const BACKUP_TOOL_TIMERS_ENTRY_NAME: &str = "data/tool_timers.json";
 const BACKUP_TOOL_TIMER_LAPS_ENTRY_NAME: &str = "data/tool_timer_laps.json";
@@ -49,6 +51,8 @@ struct BackupArchiveFiles {
     settings: String,
     icon_cache: String,
     #[serde(default)]
+    web_activity_segments: String,
+    #[serde(default)]
     tool_reminders: String,
     #[serde(default)]
     tool_timers: String,
@@ -67,6 +71,8 @@ struct BackupArchiveCounts {
     title_samples: usize,
     settings: usize,
     icon_cache: usize,
+    #[serde(default)]
+    web_activity_segments: usize,
     #[serde(default)]
     tool_reminders: usize,
     #[serde(default)]
@@ -138,6 +144,7 @@ async fn load_backup_payload<R: Runtime>(app: &AppHandle<R>) -> Result<BackupPay
     let title_samples = repositories::session_title_samples::fetch_all_for_backup(&pool).await?;
     let settings = repositories::settings::fetch_all_for_backup(&pool).await?;
     let icon_cache = repositories::icon_cache::fetch_all_for_backup(&pool).await?;
+    let web_activity_segments = repositories::web_activity::fetch_all_for_backup(&pool).await?;
     let tool_reminders = repositories::tools::fetch_all_reminders_for_backup(&pool).await?;
     let tool_timers = repositories::tools::fetch_all_timers_for_backup(&pool).await?;
     let tool_timer_laps = repositories::tools::fetch_all_timer_laps_for_backup(&pool).await?;
@@ -155,6 +162,7 @@ async fn load_backup_payload<R: Runtime>(app: &AppHandle<R>) -> Result<BackupPay
         title_samples,
         settings,
         icon_cache,
+        web_activity_segments,
         tool_reminders,
         tool_timers,
         tool_timer_laps,
@@ -233,6 +241,7 @@ fn build_backup_manifest(payload: &BackupPayload) -> BackupArchiveManifest {
             title_samples: BACKUP_TITLE_SAMPLES_ENTRY_NAME.to_string(),
             settings: BACKUP_SETTINGS_ENTRY_NAME.to_string(),
             icon_cache: BACKUP_ICON_CACHE_ENTRY_NAME.to_string(),
+            web_activity_segments: BACKUP_WEB_ACTIVITY_SEGMENTS_ENTRY_NAME.to_string(),
             tool_reminders: BACKUP_TOOL_REMINDERS_ENTRY_NAME.to_string(),
             tool_timers: BACKUP_TOOL_TIMERS_ENTRY_NAME.to_string(),
             tool_timer_laps: BACKUP_TOOL_TIMER_LAPS_ENTRY_NAME.to_string(),
@@ -244,6 +253,7 @@ fn build_backup_manifest(payload: &BackupPayload) -> BackupArchiveManifest {
             title_samples: payload.title_samples.len(),
             settings: payload.settings.len(),
             icon_cache: payload.icon_cache.len(),
+            web_activity_segments: payload.web_activity_segments.len(),
             tool_reminders: payload.tool_reminders.len(),
             tool_timers: payload.tool_timers.len(),
             tool_timer_laps: payload.tool_timer_laps.len(),
@@ -292,6 +302,8 @@ fn encode_backup_archive(payload: &BackupPayload) -> Result<Vec<u8>, String> {
     let title_samples = serialize_pretty(&payload.title_samples, "title samples")?;
     let settings = serialize_pretty(&payload.settings, "settings")?;
     let icon_cache = serialize_pretty(&payload.icon_cache, "icon cache")?;
+    let web_activity_segments =
+        serialize_pretty(&payload.web_activity_segments, "web activity segments")?;
     let tool_reminders = serialize_pretty(&payload.tool_reminders, "tool reminders")?;
     let tool_timers = serialize_pretty(&payload.tool_timers, "tool timers")?;
     let tool_timer_laps = serialize_pretty(&payload.tool_timer_laps, "tool timer laps")?;
@@ -313,6 +325,10 @@ fn encode_backup_archive(payload: &BackupPayload) -> Result<Vec<u8>, String> {
     checksum_files.insert(
         BACKUP_ICON_CACHE_ENTRY_NAME.to_string(),
         checksum(&icon_cache),
+    );
+    checksum_files.insert(
+        BACKUP_WEB_ACTIVITY_SEGMENTS_ENTRY_NAME.to_string(),
+        checksum(&web_activity_segments),
     );
     checksum_files.insert(
         BACKUP_TOOL_REMINDERS_ENTRY_NAME.to_string(),
@@ -360,6 +376,12 @@ fn encode_backup_archive(payload: &BackupPayload) -> Result<Vec<u8>, String> {
         &mut archive,
         BACKUP_ICON_CACHE_ENTRY_NAME,
         &icon_cache,
+        options,
+    )?;
+    zip_write_file(
+        &mut archive,
+        BACKUP_WEB_ACTIVITY_SEGMENTS_ENTRY_NAME,
+        &web_activity_segments,
         options,
     )?;
     zip_write_file(
@@ -568,12 +590,25 @@ fn decode_structured_backup_archive(
         BACKUP_TOOL_DAILY_STATS_ENTRY_NAME,
         backup_path,
     )?;
+    let web_activity_segments_json = read_optional_declared_zip_entry(
+        archive,
+        &manifest.files.web_activity_segments,
+        &checksums,
+        BACKUP_WEB_ACTIVITY_SEGMENTS_ENTRY_NAME,
+        backup_path,
+    )?;
     let mut checksum_entries = vec![
         (BACKUP_MANIFEST_ENTRY_NAME, manifest_json.as_str()),
         (BACKUP_SESSIONS_ENTRY_NAME, sessions_json.as_str()),
         (BACKUP_SETTINGS_ENTRY_NAME, settings_json.as_str()),
         (BACKUP_ICON_CACHE_ENTRY_NAME, icon_cache_json.as_str()),
     ];
+    if let Some(web_activity_segments_json) = web_activity_segments_json.as_deref() {
+        checksum_entries.push((
+            BACKUP_WEB_ACTIVITY_SEGMENTS_ENTRY_NAME,
+            web_activity_segments_json,
+        ));
+    }
     if let Some(title_samples_json) = title_samples_json.as_deref() {
         checksum_entries.push((BACKUP_TITLE_SAMPLES_ENTRY_NAME, title_samples_json));
     }
@@ -605,6 +640,12 @@ fn decode_structured_backup_archive(
     let settings = parse_json::<Vec<BackupSetting>>(&settings_json, backup_path, "settings")?;
     let icon_cache =
         parse_json::<Vec<BackupIconCache>>(&icon_cache_json, backup_path, "icon cache")?;
+    let web_activity_segments = web_activity_segments_json
+        .map(|json| {
+            parse_json::<Vec<BackupWebActivitySegment>>(&json, backup_path, "web activity segments")
+        })
+        .transpose()?
+        .unwrap_or_default();
     let tool_reminders = tool_reminders_json
         .map(|json| parse_json(&json, backup_path, "tool reminders"))
         .transpose()?
@@ -637,6 +678,7 @@ fn decode_structured_backup_archive(
         title_samples,
         settings,
         icon_cache,
+        web_activity_segments,
         tool_reminders,
         tool_timers,
         tool_timer_laps,
@@ -724,6 +766,7 @@ async fn restore_backup_payload(
             repositories::sessions::clear_for_restore(&mut tx).await?;
             repositories::settings::clear_for_restore(&mut tx).await?;
             repositories::icon_cache::clear_for_restore(&mut tx).await?;
+            repositories::web_activity::clear_for_restore(&mut tx).await?;
             repositories::tools::clear_for_restore(&mut tx).await?;
 
             repositories::sessions::insert_for_restore(&mut tx, &payload.sessions).await?;
@@ -738,6 +781,8 @@ async fn restore_backup_payload(
             .await?;
             repositories::settings::insert_for_restore(&mut tx, &payload.settings).await?;
             repositories::icon_cache::insert_for_restore(&mut tx, &payload.icon_cache).await?;
+            repositories::web_activity::insert_for_restore(&mut tx, &payload.web_activity_segments)
+                .await?;
             repositories::tools::insert_for_restore(
                 &mut tx,
                 &payload.tool_reminders,
@@ -762,6 +807,11 @@ async fn restore_backup_payload(
             repositories::settings::insert_missing_for_restore(&mut tx, &payload.settings).await?;
             repositories::icon_cache::insert_missing_for_restore(&mut tx, &payload.icon_cache)
                 .await?;
+            repositories::web_activity::insert_missing_for_restore(
+                &mut tx,
+                &payload.web_activity_segments,
+            )
+            .await?;
             repositories::tools::insert_missing_for_restore(
                 &mut tx,
                 &payload.tool_reminders,
@@ -841,6 +891,7 @@ mod tests {
                 icon_base64: "aWNvbg==".to_string(),
                 last_updated: Some(30),
             }],
+            web_activity_segments: Vec::new(),
             tool_reminders: Vec::new(),
             tool_timers: Vec::new(),
             tool_timer_laps: Vec::new(),
@@ -863,6 +914,7 @@ mod tests {
         assert!(zip.by_name(BACKUP_TITLE_SAMPLES_ENTRY_NAME).is_ok());
         assert!(zip.by_name(BACKUP_SETTINGS_ENTRY_NAME).is_ok());
         assert!(zip.by_name(BACKUP_ICON_CACHE_ENTRY_NAME).is_ok());
+        assert!(zip.by_name(BACKUP_WEB_ACTIVITY_SEGMENTS_ENTRY_NAME).is_ok());
         assert!(zip.by_name(BACKUP_CHECKSUMS_ENTRY_NAME).is_ok());
     }
 
@@ -901,6 +953,7 @@ mod tests {
                 icon_base64: "aWNvbg==".to_string(),
                 last_updated: Some(30),
             }],
+            web_activity_segments: Vec::new(),
             tool_reminders: Vec::new(),
             tool_timers: Vec::new(),
             tool_timer_laps: Vec::new(),
@@ -932,6 +985,7 @@ mod tests {
                 title_samples: String::new(),
                 settings: BACKUP_SETTINGS_ENTRY_NAME.to_string(),
                 icon_cache: BACKUP_ICON_CACHE_ENTRY_NAME.to_string(),
+                web_activity_segments: String::new(),
                 tool_reminders: String::new(),
                 tool_timers: String::new(),
                 tool_timer_laps: String::new(),
@@ -943,6 +997,7 @@ mod tests {
                 title_samples: 0,
                 settings: 0,
                 icon_cache: 0,
+                web_activity_segments: 0,
                 tool_reminders: 0,
                 tool_timers: 0,
                 tool_timer_laps: 0,
@@ -1016,6 +1071,7 @@ mod tests {
                 title_samples: String::new(),
                 settings: BACKUP_SETTINGS_ENTRY_NAME.to_string(),
                 icon_cache: BACKUP_ICON_CACHE_ENTRY_NAME.to_string(),
+                web_activity_segments: String::new(),
                 tool_reminders: String::new(),
                 tool_timers: String::new(),
                 tool_timer_laps: String::new(),
@@ -1027,6 +1083,7 @@ mod tests {
                 title_samples: 0,
                 settings: 0,
                 icon_cache: 0,
+                web_activity_segments: 0,
                 tool_reminders: 0,
                 tool_timers: 0,
                 tool_timer_laps: 0,
@@ -1101,6 +1158,7 @@ mod tests {
                 title_samples: BACKUP_TITLE_SAMPLES_ENTRY_NAME.to_string(),
                 settings: BACKUP_SETTINGS_ENTRY_NAME.to_string(),
                 icon_cache: BACKUP_ICON_CACHE_ENTRY_NAME.to_string(),
+                web_activity_segments: String::new(),
                 tool_reminders: String::new(),
                 tool_timers: String::new(),
                 tool_timer_laps: String::new(),
@@ -1112,6 +1170,7 @@ mod tests {
                 title_samples: 1,
                 settings: 0,
                 icon_cache: 0,
+                web_activity_segments: 0,
                 tool_reminders: 0,
                 tool_timers: 0,
                 tool_timer_laps: 0,
@@ -1210,6 +1269,9 @@ mod tests {
         pool.execute(db_schema::TOOLS_TABLES_SCHEMA_SQL)
             .await
             .unwrap();
+        pool.execute(db_schema::WEB_ACTIVITY_SCHEMA_SQL)
+            .await
+            .unwrap();
         pool
     }
 
@@ -1276,6 +1338,7 @@ mod tests {
                     icon_base64: "bmV3aWNvbg==".to_string(),
                     last_updated: Some(5678),
                 }],
+                web_activity_segments: Vec::new(),
                 tool_reminders: Vec::new(),
                 tool_timers: Vec::new(),
                 tool_timer_laps: Vec::new(),
@@ -1357,6 +1420,7 @@ mod tests {
                 ],
                 settings: Vec::new(),
                 icon_cache: Vec::new(),
+                web_activity_segments: Vec::new(),
                 tool_reminders: Vec::new(),
                 tool_timers: Vec::new(),
                 tool_timer_laps: Vec::new(),
@@ -1426,6 +1490,7 @@ mod tests {
                 ],
                 settings: Vec::new(),
                 icon_cache: Vec::new(),
+                web_activity_segments: Vec::new(),
                 tool_reminders: Vec::new(),
                 tool_timers: Vec::new(),
                 tool_timer_laps: Vec::new(),
@@ -1532,6 +1597,7 @@ mod tests {
                         last_updated: Some(3),
                     },
                 ],
+                web_activity_segments: Vec::new(),
                 tool_reminders: Vec::new(),
                 tool_timers: Vec::new(),
                 tool_timer_laps: Vec::new(),
@@ -1634,6 +1700,7 @@ mod tests {
                 }],
                 settings: Vec::new(),
                 icon_cache: Vec::new(),
+                web_activity_segments: Vec::new(),
                 tool_reminders: Vec::new(),
                 tool_timers: Vec::new(),
                 tool_timer_laps: Vec::new(),

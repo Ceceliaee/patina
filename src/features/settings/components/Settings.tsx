@@ -9,9 +9,9 @@ import type { SettingsPageProps } from "../types";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
 import SettingsAppearancePanel from "./SettingsAppearancePanel";
 import SettingsDataSafetyPanel from "./SettingsDataSafetyPanel";
+import SettingsInterfacePanel from "./SettingsInterfacePanel";
 import SettingsResidentPanel from "./SettingsResidentPanel";
 import SettingsTrackingPanel from "./SettingsTrackingPanel";
-import SettingsLocalApiPanel from "./SettingsLocalApiPanel";
 import { useSettingsPageState } from "../hooks/useSettingsPageState";
 
 export default function Settings({
@@ -211,13 +211,17 @@ export default function Settings({
             onStartMinimizedChange={(nextChecked) => handleChange("startMinimized", nextChecked)}
           />
 
-          <SettingsLocalApiPanel
-            enabled={draftSettings.localApiEnabled}
+          <SettingsInterfacePanel
+            localApiEnabled={draftSettings.localApiEnabled}
+            webActivityEnabled={draftSettings.webActivityEnabled}
             port={draftSettings.localApiPort}
-            token={draftSettings.localApiToken}
-            onEnabledChange={(nextChecked) => handleChange("localApiEnabled", nextChecked)}
+            localApiToken={draftSettings.localApiToken}
+            webActivityToken={draftSettings.webActivityToken}
+            onLocalApiEnabledChange={(nextChecked) => handleChange("localApiEnabled", nextChecked)}
+            onWebActivityEnabledChange={(nextChecked) => handleChange("webActivityEnabled", nextChecked)}
             onPortChange={(nextPort) => handleChange("localApiPort", nextPort)}
-            onTokenChange={(nextToken) => handleChange("localApiToken", nextToken)}
+            onLocalApiTokenChange={(nextToken) => handleChange("localApiToken", nextToken)}
+            onWebActivityTokenChange={(nextToken) => handleChange("webActivityToken", nextToken)}
           />
 
           <SettingsDataSafetyPanel

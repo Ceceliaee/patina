@@ -3,7 +3,7 @@ import type { HistoryTimelineDisplayMode } from "./historyTimelineViewModel.ts";
 const HISTORY_TIMELINE_MODE_KEY = "patina:history-timeline-mode";
 const HISTORY_DAY_DISTRIBUTION_MODE_KEY = "patina:history-day-distribution-mode";
 
-export type DayDistributionMode = "app" | "category";
+export type DayDistributionMode = "app" | "category" | "web";
 
 function getStorage(): Storage | null {
   if (typeof window === "undefined") return null;
@@ -11,7 +11,7 @@ function getStorage(): Storage | null {
 }
 
 function isDayDistributionMode(value: string | null): value is DayDistributionMode {
-  return value === "app" || value === "category";
+  return value === "app" || value === "category" || value === "web";
 }
 
 function isHistoryTimelineMode(value: string | null): value is HistoryTimelineDisplayMode {

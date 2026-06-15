@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
 import {
   cancelAppMappingNameEdit,
+  cancelWebDomainNameEdit,
   deleteObservedCandidateSessionsWithDeps,
   saveAppMappingStateWithDeps,
   startAppMappingNameEdit,
+  startWebDomainNameEdit,
   syncAppMappingNameDraft,
+  syncWebDomainNameDraft,
 } from "../src/features/classification/hooks/appMappingInteractions.ts";
+import {
+  readClassificationObjectMode,
+  rememberClassificationObjectMode,
+} from "../src/features/classification/services/classificationLayoutPreferenceStorage.ts";
 import {
   cancelSettingsPageState,
   saveSettingsPageStateWithDeps,
@@ -18,6 +25,7 @@ import {
   type WidgetWindowSize,
 } from "../src/app/widget/widgetWindowController.ts";
 import type { ObservedAppCandidate } from "../src/features/classification/services/classificationStore.ts";
+import type { ObservedWebDomainCandidate } from "../src/shared/types/webActivity.ts";
 import {
   cloneClassificationDraftState,
   hasClassificationDraftChanges,
@@ -45,6 +53,8 @@ const BASE_SETTINGS: AppSettings = {
   localApiEnabled: false,
   localApiPort: 17321,
   localApiToken: "",
+  webActivityEnabled: false,
+  webActivityToken: "",
 };
 
 function buildSettings(overrides: Partial<AppSettings> = {}): AppSettings {
@@ -57,6 +67,7 @@ function buildSettings(overrides: Partial<AppSettings> = {}): AppSettings {
 function buildDraftState(overrides: Partial<ClassificationDraftState> = {}): ClassificationDraftState {
   return {
     overrides: {},
+    webDomainOverrides: {},
     categoryColorOverrides: {},
     customCategories: [],
     deletedCategories: [],
@@ -74,6 +85,66 @@ function buildCandidate(
     totalDuration: 600,
     lastSeenMs: 1_714_000_000_000,
   };
+}
+
+function buildWebDomainCandidate(
+  normalizedDomain: string,
+  domain = normalizedDomain,
+): ObservedWebDomainCandidate {
+  return {
+    normalizedDomain,
+    domain,
+    faviconUrl: null,
+    title: null,
+    totalDuration: 600,
+    lastSeenMs: 1_714_000_000_000,
+  };
+}
+
+class MemoryStorage {
+  private values = new Map<string, string>();
+
+  get length() {
+    return this.values.size;
+  }
+
+  clear() {
+    this.values.clear();
+  }
+
+  getItem(key: string) {
+    return this.values.get(key) ?? null;
+  }
+
+  key(index: number) {
+    return Array.from(this.values.keys())[index] ?? null;
+  }
+
+  removeItem(key: string) {
+    this.values.delete(key);
+  }
+
+  setItem(key: string, value: string) {
+    this.values.set(key, value);
+  }
+}
+
+function withWindowStorage(storage: MemoryStorage, fn: () => void) {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { localStorage: storage },
+  });
+
+  try {
+    fn();
+  } finally {
+    if (descriptor) {
+      Object.defineProperty(globalThis, "window", descriptor);
+    } else {
+      delete (globalThis as { window?: unknown }).window;
+    }
+  }
 }
 
 class FakeScheduler {
@@ -232,6 +303,7 @@ await runTest("app mapping interaction helpers keep dirty state correct across e
     savedState,
     draftState: reEdited.draftState,
     candidates: [candidate],
+    webDomainCandidates: [],
     hasUnsavedChanges: true,
     saving: false,
   }, {
@@ -245,6 +317,7 @@ await runTest("app mapping interaction helpers keep dirty state correct across e
     savedState,
     draftState: reEdited.draftState,
     candidates: [candidate],
+    webDomainCandidates: [],
     hasUnsavedChanges: true,
     saving: false,
   }, {
@@ -275,6 +348,67 @@ await runTest("app mapping interaction helpers keep dirty state correct across e
   assert.equal(
     hasClassificationDraftChanges(savedState, reEdited.draftState),
     true,
+  );
+});
+
+await runTest("classification object mode preference persists apps and web", () => {
+  const storage = new MemoryStorage();
+  withWindowStorage(storage, () => {
+    assert.equal(readClassificationObjectMode(), "app");
+    rememberClassificationObjectMode("web");
+    assert.equal(readClassificationObjectMode(), "web");
+    assert.equal(storage.getItem("patina:classification-object-mode"), "web");
+
+    storage.setItem("patina:classification-object-mode", "category");
+    assert.equal(readClassificationObjectMode(), "app");
+  });
+});
+
+await runTest("web domain name edit mirrors app mapping edit semantics", () => {
+  const candidate = buildWebDomainCandidate("github.com");
+  const savedState = buildDraftState();
+
+  const started = startWebDomainNameEdit({
+    draftState: cloneClassificationDraftState(savedState),
+    webNameDrafts: {},
+    webNameEditSnapshots: {},
+    editingWebDomain: null,
+    skipNextWebNameBlurDomain: null,
+  }, candidate, "github.com");
+
+  assert.equal(started.editingWebDomain, "github.com");
+  assert.equal(started.webNameDrafts["github.com"], "github.com");
+
+  const edited = syncWebDomainNameDraft(
+    started,
+    candidate,
+    "GitHub",
+    "github.com",
+  );
+  assert.equal(
+    hasClassificationDraftChanges(savedState, edited.draftState),
+    true,
+  );
+
+  const cleared = syncWebDomainNameDraft(
+    edited,
+    candidate,
+    "   ",
+    "github.com",
+    true,
+  );
+  assert.equal(cleared.draftState.webDomainOverrides["github.com"], undefined);
+  assert.equal(cleared.webNameDrafts["github.com"], "github.com");
+
+  const cancelled = cancelWebDomainNameEdit(
+    edited,
+    candidate,
+    "github.com",
+  );
+  assert.equal(cancelled.editingWebDomain, null);
+  assert.equal(
+    hasClassificationDraftChanges(savedState, cancelled.draftState),
+    false,
   );
 });
 

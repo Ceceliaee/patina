@@ -55,6 +55,8 @@ export interface AppSettings {
   localApiEnabled: boolean;
   localApiPort: number;
   localApiToken: string;
+  webActivityEnabled: boolean;
+  webActivityToken: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {

@@ -61,6 +61,8 @@ export interface ReleaseDefaultSettingsProfile {
   localApiEnabled: boolean;
   localApiPort: number;
   localApiToken: string;
+  webActivityEnabled: boolean;
+  webActivityToken: string;
 }
 
 export const RELEASE_DEFAULT_SETTINGS: ReleaseDefaultSettingsProfile = {
@@ -83,4 +85,6 @@ export const RELEASE_DEFAULT_SETTINGS: ReleaseDefaultSettingsProfile = {
   localApiEnabled: false,
   localApiPort: 17321,
   localApiToken: "",
+  webActivityEnabled: false,
+  webActivityToken: "",
 };

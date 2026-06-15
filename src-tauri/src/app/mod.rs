@@ -7,4 +7,5 @@ pub mod runtime;
 pub mod runtime_tasks;
 pub mod state;
 pub mod tray;
+pub mod web_activity;
 pub mod widget;

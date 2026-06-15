@@ -18,11 +18,12 @@ App note en: TBD.
 
 ### Added
 
-- 暂无。
+- 新增可选网页记录第一版：可通过 Chrome / Chromium 插件把前台网页的域名、标题与时间写入 Patina，历史页支持网页排行与网页时间线详情。Refs [#6](https://github.com/Ceceliaee/patina/issues/6)
+- 新增网页记录设置、浏览器插件 token 鉴权与 Chrome MV3 插件源码；网页记录仅保存域名、标题与 favicon。
 
 ### Changed
 
-- 暂无。
+- “应用”页面调整为“分类”，并增加“应用 / 网页”切换，用于分别整理应用和网页域名的分类、颜色与记录规则。
 
 ### Fixed
 
@@ -35,6 +36,7 @@ App note en: TBD.
 ### Internal
 
 - 收口 GitHub Actions 发布 workflow：版本文件和 changelog 由发布准备提交承担，Actions 只从已有 tag 校验、构建和发布，避免自动生成 release commit。
+- 新增 `web_activity_segments` SQLite 迁移、网页活动 Rust engine、备份恢复清理覆盖、本机接口浏览器角色隔离，以及网页历史和分类回归测试。
 
 ## [1.6.0] - 2026-06-13
 

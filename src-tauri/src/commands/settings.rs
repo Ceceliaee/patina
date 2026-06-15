@@ -4,7 +4,8 @@ use crate::data::app_settings_service::commit_app_setting_mutations_with_recover
 use crate::data::classification_service::commit_classification_setting_mutations_with_recovery;
 use crate::data::repositories::app_settings::AppSettingMutation;
 use crate::data::repositories::classification_settings::ClassificationSettingMutation;
-use tauri::{AppHandle, State};
+use serde_json::json;
+use tauri::{AppHandle, Emitter, State};
 
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -88,7 +89,10 @@ pub async fn cmd_commit_app_settings(
         .map(AppSettingMutation::from)
         .collect::<Vec<_>>();
 
-    commit_app_setting_mutations_with_recovery(&app, &mutations).await
+    commit_app_setting_mutations_with_recovery(&app, &mutations).await?;
+    app.emit("app-settings-changed", json!({}))
+        .map_err(|error| format!("failed to emit settings refresh event: {error}"))?;
+    Ok(())
 }
 
 #[tauri::command]

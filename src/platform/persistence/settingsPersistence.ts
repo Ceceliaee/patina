@@ -38,6 +38,7 @@ export async function deleteSessionsBefore(cutoffTime: number): Promise<void> {
     [cutoffTime],
   );
   await executeWrite("DELETE FROM sessions WHERE start_time < ?", [cutoffTime]);
+  await executeWrite("DELETE FROM web_activity_segments WHERE start_time < ?", [cutoffTime]);
 }
 
 export async function clearAllSessionWindowTitles(): Promise<void> {

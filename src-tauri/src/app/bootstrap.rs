@@ -11,6 +11,7 @@ use crate::engine::{
     tools::ToolsRuntimeState,
     tracking::{runtime_snapshot::TrackingRuntimeSnapshotState, watchdog::RuntimeHealthState},
     updater::UpdaterRuntimeState,
+    web_activity::WebActivityRuntimeState,
 };
 use crate::{commands, data};
 use tauri::Manager;
@@ -60,6 +61,7 @@ fn register_managed_state_and_plugins(
         .manage(runtime_health)
         .manage(ToolsRuntimeState::default())
         .manage(crate::platform::local_api::LocalApiRuntimeState::default())
+        .manage(WebActivityRuntimeState::default())
         .manage(UpdaterRuntimeState::new(app_version.to_string()))
         .plugin(
             tauri_plugin_autostart::Builder::new()
@@ -117,6 +119,7 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::update::cmd_check_for_updates,
         commands::update::cmd_download_update,
         commands::update::cmd_install_update,
+        commands::web_activity::cmd_get_web_activity_bridge_snapshot,
         commands::backup::cmd_pick_backup_save_file,
         commands::backup::cmd_pick_backup_file,
         commands::backup::cmd_preview_backup,

@@ -49,7 +49,7 @@ export default function AboutSupportDialog({
     >
       <button
         type="button"
-        className="about-support-dialog-close"
+        className="qp-dialog-close-button about-support-dialog-close"
         aria-label={UI_TEXT.common.close}
         onClick={onClose}
       >

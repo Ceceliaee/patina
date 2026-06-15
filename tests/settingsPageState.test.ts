@@ -100,6 +100,8 @@ interface AppSettings {
   localApiEnabled: boolean;
   localApiPort: number;
   localApiToken: string;
+  webActivityEnabled: boolean;
+  webActivityToken: string;
 }
 
 type CleanupRange = 180 | 90 | 60 | 30 | 15 | 7;
@@ -124,6 +126,8 @@ const BASE_SETTINGS: AppSettings = {
   localApiEnabled: false,
   localApiPort: 17321,
   localApiToken: "",
+  webActivityEnabled: false,
+  webActivityToken: "",
 };
 
 function buildSettings(overrides: Partial<AppSettings> = {}): AppSettings {
@@ -137,7 +141,7 @@ function buildPreview(overrides: Partial<BackupPreview> = {}): BackupPreview {
   return {
     version: 2,
     exportedAtMs: 1_714_000_000_000,
-    schemaVersion: 7,
+    schemaVersion: 8,
     appVersion: "0.3.2",
     restoreSupported: true,
     restoreMessageKey: null,
@@ -145,6 +149,7 @@ function buildPreview(overrides: Partial<BackupPreview> = {}): BackupPreview {
     restoreMessage: "Looks good",
     sessionCount: 42,
     titleSampleCount: 12,
+    webActivitySegmentCount: 0,
     settingCount: 10,
     iconCacheCount: 5,
     toolReminderCount: 0,
@@ -589,7 +594,7 @@ await runTest("prepareBackupRestoreWithDeps builds a summary for compatible prev
   assert.equal(receivedInitialPath, "backup.db");
   assert.equal(preparation?.compatible, true);
   assert.equal(preparation?.path, "C:/tmp/backup.db");
-  assert.ok(preparation?.previewSummary.includes("Schema 7"));
+  assert.ok(preparation?.previewSummary.includes("Schema 8"));
   assert.ok(preparation?.previewSummary.includes("42"));
 });
 

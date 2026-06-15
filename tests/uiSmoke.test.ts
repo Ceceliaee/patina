@@ -18,7 +18,7 @@ const EXPECTED_NAV_LABELS = [
   "今天",
   "历史",
   "数据",
-  "应用",
+  "分类",
   "工具",
   "设置",
   "关于",
@@ -363,6 +363,22 @@ await runTest("operation-oriented pages keep explicit busy feedback", () => {
   assert.match(dataSafety, /backupExporting|backupRestoring/);
   assert.match(updateDialog, /UpdateProgressBar/);
   assert.match(updateDialog, /UI_TEXT\.update\.processing/);
+});
+
+await runTest("classification web domain colors prefer favicon theme colors", () => {
+  const mappingState = readUtf8("src/features/classification/hooks/useAppMappingState.ts");
+  const webActivityRepository = readUtf8("src/platform/persistence/webActivityRepository.ts");
+  const colorResolver = mappingState.slice(
+    mappingState.indexOf("const resolveWebDomainColor = useCallback"),
+    mappingState.indexOf("const resolveWebDomainEnabled = useCallback"),
+  );
+
+  assert.match(mappingState, /const webDomainIcons = useMemo/);
+  assert.match(mappingState, /candidate\.faviconUrl\?\.trim\(\)/);
+  assert.match(mappingState, /const webDomainIconThemeColors = useIconThemeColors\(webDomainIcons\)/);
+  assert.match(colorResolver, /const iconColor = webDomainIconThemeColors\[candidate\.normalizedDomain\]/);
+  assert.match(colorResolver, /if \(iconColor\) return iconColor;/);
+  assert.match(webActivityRepository, /ORDER BY CASE WHEN icon\.favicon_url LIKE 'data:%' THEN 0 ELSE 1 END/);
 });
 
 await runTest("app shell uses feature-owned Data prewarm and heavy cache lifecycle exits", () => {

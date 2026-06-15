@@ -6,8 +6,9 @@ use crate::engine::tracking::runtime_snapshot::{
     TrackingRuntimeProbeDiagnostics, TrackingRuntimeProbeStatus, TrackingRuntimeSnapshotState,
 };
 use crate::platform::local_api::{
-    self, LocalApiRuntimeDeps, LocalApiRuntimeState, LOCAL_API_ACTIVE_WINDOW_EVENT,
-    LOCAL_API_SETTINGS_CHANGED_EVENT, LOCAL_API_TRACKING_DATA_EVENT,
+    self, LocalApiAuthConfig, LocalApiHttpRequest, LocalApiHttpResponse, LocalApiRuntimeDeps,
+    LocalApiRuntimeState, LOCAL_API_ACTIVE_WINDOW_EVENT, LOCAL_API_SETTINGS_CHANGED_EVENT,
+    LOCAL_API_TRACKING_DATA_EVENT,
 };
 use crate::platform::windows::foreground::WindowInfo;
 use serde::Serialize;
@@ -64,6 +65,7 @@ fn register_event_forwarders<R: Runtime + 'static>(app: AppHandle<R>) {
             LOCAL_API_ACTIVE_WINDOW_EVENT,
             event.payload(),
         );
+        crate::app::web_activity::spawn_foreground_sync(active_window_app.clone());
     });
 
     let tracking_data_app = app.clone();
@@ -73,6 +75,7 @@ fn register_event_forwarders<R: Runtime + 'static>(app: AppHandle<R>) {
             LOCAL_API_TRACKING_DATA_EVENT,
             event.payload(),
         );
+        crate::app::web_activity::spawn_foreground_sync(tracking_data_app.clone());
     });
 }
 
@@ -82,8 +85,10 @@ fn update_runtime_state<R: Runtime + 'static>(app: AppHandle<R>, settings: Local
             app.clone(),
             settings,
             LocalApiRuntimeDeps {
-                load_token: load_current_token_boxed::<R>,
+                load_auth_config: load_current_auth_config_boxed::<R>,
                 load_snapshot: load_snapshot_message_boxed::<R>,
+                handle_inbound_message: handle_inbound_message_boxed::<R>,
+                handle_http_request: handle_http_request_boxed::<R>,
             },
         );
     }
@@ -107,17 +112,40 @@ async fn load_local_api_settings<R: Runtime>(
         .map_err(|error| format!("failed to load local api settings: {error}"))
 }
 
-async fn load_current_token<R: Runtime>(app: AppHandle<R>) -> Option<String> {
+async fn load_current_auth_config<R: Runtime>(app: AppHandle<R>) -> LocalApiAuthConfig {
     load_local_api_settings(&app)
         .await
         .ok()
-        .map(|settings| settings.token)
+        .map(|settings| LocalApiAuthConfig {
+            general_token: settings.token,
+            browser_bridge_token: settings.web_activity_token,
+        })
+        .unwrap_or_default()
 }
 
-fn load_current_token_boxed<R: Runtime + 'static>(
+fn load_current_auth_config_boxed<R: Runtime + 'static>(
     app: AppHandle<R>,
+) -> Pin<Box<dyn Future<Output = LocalApiAuthConfig> + Send>> {
+    Box::pin(load_current_auth_config(app))
+}
+
+fn handle_inbound_message_boxed<R: Runtime + 'static>(
+    app: AppHandle<R>,
+    role: crate::domain::web_activity::LocalApiClientRole,
+    raw_message: String,
 ) -> Pin<Box<dyn Future<Output = Option<String>> + Send>> {
-    Box::pin(load_current_token(app))
+    Box::pin(crate::app::web_activity::handle_local_api_message(
+        app,
+        role,
+        raw_message,
+    ))
+}
+
+fn handle_http_request_boxed<R: Runtime + 'static>(
+    app: AppHandle<R>,
+    request: LocalApiHttpRequest,
+) -> Pin<Box<dyn Future<Output = LocalApiHttpResponse> + Send>> {
+    Box::pin(crate::app::web_activity::handle_http_request(app, request))
 }
 
 async fn load_snapshot_message<R: Runtime>(app: AppHandle<R>) -> Option<String> {

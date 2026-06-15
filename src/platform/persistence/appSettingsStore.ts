@@ -48,7 +48,9 @@ type RawAppSettingsKey =
   | "onboarding_completed"
   | "local_api_enabled"
   | "local_api_port"
-  | "local_api_token";
+  | "local_api_token"
+  | "web_activity_enabled"
+  | "web_activity_token";
 
 const APP_SETTINGS_RAW_KEYS: Record<keyof AppSettings, RawAppSettingsKey> = {
   idleTimeoutSecs: "idle_timeout_secs",
@@ -70,6 +72,8 @@ const APP_SETTINGS_RAW_KEYS: Record<keyof AppSettings, RawAppSettingsKey> = {
   localApiEnabled: "local_api_enabled",
   localApiPort: "local_api_port",
   localApiToken: "local_api_token",
+  webActivityEnabled: "web_activity_enabled",
+  webActivityToken: "web_activity_token",
 };
 
 const IDLE_TIMEOUT_SECONDS_RANGE = { min: 300, max: 1800, step: 60 } as const;
@@ -110,6 +114,10 @@ function normalizeIntegerRangeValue(
 
 function normalizeLocalApiToken(value: string | undefined) {
   return value?.trim() ?? DEFAULT_SETTINGS.localApiToken;
+}
+
+function normalizeWebActivityToken(value: string | undefined) {
+  return value?.trim() ?? DEFAULT_SETTINGS.webActivityToken;
 }
 
 function parseBooleanSetting(value: string | undefined, fallback: boolean) {
@@ -214,6 +222,7 @@ function serializeSettingValue(value: PersistedSettingValue) {
 
 export function normalizeSettingsRecord(record: Record<string, string | undefined>): AppSettings {
   const localApiToken = normalizeLocalApiToken(record.local_api_token);
+  const webActivityToken = normalizeWebActivityToken(record.web_activity_token);
 
   return {
     idleTimeoutSecs: normalizeRangeStepValue(
@@ -268,6 +277,11 @@ export function normalizeSettingsRecord(record: Record<string, string | undefine
       LOCAL_API_PORT_RANGE,
     ),
     localApiToken,
+    webActivityEnabled: parseBooleanSetting(
+      record.web_activity_enabled,
+      DEFAULT_SETTINGS.webActivityEnabled,
+    ) && webActivityToken.length > 0,
+    webActivityToken,
   };
 }
 

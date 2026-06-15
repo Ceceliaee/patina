@@ -22,6 +22,7 @@ import {
 } from "../src/features/classification/services/legacyAutoClassificationMigration.ts";
 import {
   ClassificationService,
+  type ClassificationBootstrapDeps,
   type ClassificationCommitDeps,
   commitDraftChangesWithDeps,
   createClassificationCommitDeps,
@@ -39,6 +40,7 @@ import {
 function buildDraftState(overrides: Partial<ClassificationDraftState> = {}): ClassificationDraftState {
   return {
     overrides: {},
+    webDomainOverrides: {},
     categoryColorOverrides: {},
     customCategories: [],
     deletedCategories: [],
@@ -333,6 +335,7 @@ await runTest("buildClassificationDraftChangePlan captures state diffs", () => {
         displayName: "Chrome",
       },
     },
+    webDomainOverrides: {},
     categoryColorOverrides: {
       development: "#111111",
     },
@@ -374,6 +377,7 @@ await runTest("buildClassificationDraftChangePlan captures state diffs", () => {
         },
       },
     ],
+    webDomainOverrideUpserts: [],
     categoryColorUpdates: [
       {
         category: "development",
@@ -401,6 +405,7 @@ await runTest("createAppMappingDraftState clones bootstrap snapshots", () => {
         displayName: "Chrome",
       },
     },
+    loadedWebDomainOverrides: {},
     loadedCategoryColorOverrides: {
       development: "#111111",
     },
@@ -426,6 +431,7 @@ await runTest("createAppMappingDraftState clones bootstrap snapshots", () => {
         displayName: "Chrome",
       },
     },
+    webDomainOverrides: {},
     categoryColorOverrides: {
       development: "#111111",
     },
@@ -633,6 +639,49 @@ await runTest("classification bootstrap sync applies saved process mapper state"
   ProcessMapper.clearUserOverrides();
   ProcessMapper.clearCategoryColorOverrides();
   ProcessMapper.setDeletedCategories([]);
+});
+
+await runTest("classification bootstrap keeps app data when optional web reads fail", async () => {
+  const observed = [buildCandidate("vscodium.exe", "VSCodium")];
+  const deps: ClassificationBootstrapDeps = {
+    loadObservedAppCandidates: async () => observed,
+    loadObservedWebDomainCandidates: async () => {
+      throw new Error("no such table: web_activity_segments");
+    },
+    loadAppOverrides: async () => ({
+      "vscodium.exe": {
+        enabled: true,
+        category: "development",
+      },
+    }),
+    loadWebDomainOverrides: async () => {
+      throw new Error("web overrides unavailable");
+    },
+    loadCategoryColorOverrides: async () => ({
+      development: "#112233",
+    }),
+    loadCustomCategories: async () => [],
+    loadDeletedCategories: async () => ["music"],
+  };
+  const originalWarn = console.warn;
+  let warning = "";
+  console.warn = (message?: unknown) => {
+    warning = String(message ?? "");
+  };
+
+  try {
+    const bootstrap = await ClassificationService.loadClassificationBootstrap(deps);
+
+    assert.deepEqual(bootstrap.observed, observed);
+    assert.deepEqual(bootstrap.observedWebDomains, []);
+    assert.deepEqual(bootstrap.loadedWebDomainOverrides, {});
+    assert.equal(bootstrap.loadedOverrides["vscodium.exe"]?.category, "development");
+    assert.equal(bootstrap.loadedCategoryColorOverrides.development, "#112233");
+    assert.deepEqual(bootstrap.loadedDeletedCategories, ["music"]);
+    assert.match(warning, /Web domain classification data is unavailable/);
+  } finally {
+    console.warn = originalWarn;
+  }
 });
 
 await runTest("commitDraftChangesWithDeps does not sync process mapper state when persistence fails", async () => {

@@ -231,25 +231,6 @@
   position: absolute;
   top: 12px;
   right: 12px;
-  display: inline-flex;
-  width: 30px;
-  height: 30px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid transparent;
-  border-radius: var(--qp-radius-control);
-  color: var(--qp-text-tertiary);
-}
-
-.about-support-dialog-close:hover {
-  border-color: var(--qp-border-subtle);
-  background: var(--qp-bg-elevated);
-  color: var(--qp-text-primary);
-}
-
-.about-support-dialog-close:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--qp-accent-default) 42%, transparent);
-  outline-offset: 2px;
 }
 
 .about-support-dialog-body {

@@ -1,10 +1,15 @@
 import type { ObservedAppCandidate } from "../services/classificationStore.ts";
 import type { AppOverride } from "../services/classificationService.ts";
+import type { ObservedWebDomainCandidate, WebDomainOverride } from "../../../shared/types/webActivity.ts";
 import {
   cloneClassificationDraftState,
   type ClassificationDraftState,
 } from "../services/classificationDraftState.ts";
-import { buildAppMappingOverride, cloneObservedCandidates } from "./appMappingStateHelpers.ts";
+import {
+  buildAppMappingOverride,
+  buildWebDomainMappingOverride,
+  cloneObservedCandidates,
+} from "./appMappingStateHelpers.ts";
 
 type SaveStatus = "idle" | "saving" | "saved";
 
@@ -16,10 +21,19 @@ export interface AppMappingNameEditState {
   skipNextNameBlurExe: string | null;
 }
 
+export interface WebDomainNameEditState {
+  draftState: ClassificationDraftState;
+  webNameDrafts: Record<string, string>;
+  webNameEditSnapshots: Record<string, WebDomainOverride | null>;
+  editingWebDomain: string | null;
+  skipNextWebNameBlurDomain: string | null;
+}
+
 export interface AppMappingSaveFlowInput {
   savedState: ClassificationDraftState | null;
   draftState: ClassificationDraftState | null;
   candidates: ObservedAppCandidate[];
+  webDomainCandidates: ObservedWebDomainCandidate[];
   hasUnsavedChanges: boolean;
   saving: boolean;
 }
@@ -33,7 +47,9 @@ export interface AppMappingSaveFlowDeps {
 
 export interface AppMappingBootstrapSnapshot {
   observed: ObservedAppCandidate[];
+  observedWebDomains: ObservedWebDomainCandidate[];
   loadedOverrides: ClassificationDraftState["overrides"];
+  loadedWebDomainOverrides: ClassificationDraftState["webDomainOverrides"];
   loadedCategoryColorOverrides: ClassificationDraftState["categoryColorOverrides"];
   loadedCustomCategories: ClassificationDraftState["customCategories"];
   loadedDeletedCategories: ClassificationDraftState["deletedCategories"];
@@ -80,6 +96,24 @@ function withUpdatedOverride(
   };
 }
 
+function withUpdatedWebDomainOverride(
+  state: ClassificationDraftState,
+  normalizedDomain: string,
+  nextOverride: WebDomainOverride | null,
+): ClassificationDraftState {
+  const nextOverrides = { ...state.webDomainOverrides };
+  if (!nextOverride) {
+    delete nextOverrides[normalizedDomain];
+  } else {
+    nextOverrides[normalizedDomain] = nextOverride;
+  }
+
+  return {
+    ...state,
+    webDomainOverrides: nextOverrides,
+  };
+}
+
 export function startAppMappingNameEdit(
   state: AppMappingNameEditState,
   candidate: ObservedAppCandidate,
@@ -96,6 +130,26 @@ export function startAppMappingNameEdit(
     nameDrafts: {
       ...state.nameDrafts,
       [candidate.exeName]: state.nameDrafts[candidate.exeName] ?? displayName,
+    },
+  };
+}
+
+export function startWebDomainNameEdit(
+  state: WebDomainNameEditState,
+  candidate: ObservedWebDomainCandidate,
+  displayName: string,
+): WebDomainNameEditState {
+  return {
+    ...state,
+    editingWebDomain: candidate.normalizedDomain,
+    skipNextWebNameBlurDomain: null,
+    webNameEditSnapshots: {
+      ...state.webNameEditSnapshots,
+      [candidate.normalizedDomain]: state.draftState.webDomainOverrides[candidate.normalizedDomain] ?? null,
+    },
+    webNameDrafts: {
+      ...state.webNameDrafts,
+      [candidate.normalizedDomain]: state.webNameDrafts[candidate.normalizedDomain] ?? displayName,
     },
   };
 }
@@ -131,6 +185,36 @@ export function syncAppMappingNameDraft(
   };
 }
 
+export function syncWebDomainNameDraft(
+  state: WebDomainNameEditState,
+  candidate: ObservedWebDomainCandidate,
+  nextInputValue: string,
+  autoDisplayName: string,
+  normalizeInputDraft: boolean = false,
+): WebDomainNameEditState {
+  const current = state.draftState.webDomainOverrides[candidate.normalizedDomain] ?? null;
+  const trimmedDisplayName = nextInputValue.trim();
+  const displayName = trimmedDisplayName && trimmedDisplayName !== autoDisplayName
+    ? trimmedDisplayName
+    : undefined;
+  const nextOverride = buildWebDomainMappingOverride({
+    category: current?.category,
+    color: current?.color,
+    displayName,
+    enabled: current?.enabled !== false,
+    updatedAt: current?.updatedAt,
+  });
+
+  return {
+    ...state,
+    draftState: withUpdatedWebDomainOverride(state.draftState, candidate.normalizedDomain, nextOverride),
+    webNameDrafts: {
+      ...state.webNameDrafts,
+      [candidate.normalizedDomain]: normalizeInputDraft ? (displayName ?? autoDisplayName) : nextInputValue,
+    },
+  };
+}
+
 export function cancelAppMappingNameEdit(
   state: AppMappingNameEditState,
   candidate: ObservedAppCandidate,
@@ -153,6 +237,34 @@ export function cancelAppMappingNameEdit(
     nameEditSnapshots: nextNameEditSnapshots,
     editingNameExe: state.editingNameExe === candidate.exeName ? null : state.editingNameExe,
     skipNextNameBlurExe: candidate.exeName,
+  };
+}
+
+export function cancelWebDomainNameEdit(
+  state: WebDomainNameEditState,
+  candidate: ObservedWebDomainCandidate,
+  resolvedDisplayName: string,
+): WebDomainNameEditState {
+  const hasSnapshot = Object.prototype.hasOwnProperty.call(
+    state.webNameEditSnapshots,
+    candidate.normalizedDomain,
+  );
+  const snapshot = hasSnapshot
+    ? state.webNameEditSnapshots[candidate.normalizedDomain]
+    : (state.draftState.webDomainOverrides[candidate.normalizedDomain] ?? null);
+  const nextNameEditSnapshots = { ...state.webNameEditSnapshots };
+  delete nextNameEditSnapshots[candidate.normalizedDomain];
+
+  return {
+    ...state,
+    draftState: withUpdatedWebDomainOverride(state.draftState, candidate.normalizedDomain, snapshot),
+    webNameDrafts: {
+      ...state.webNameDrafts,
+      [candidate.normalizedDomain]: resolvedDisplayName,
+    },
+    webNameEditSnapshots: nextNameEditSnapshots,
+    editingWebDomain: state.editingWebDomain === candidate.normalizedDomain ? null : state.editingWebDomain,
+    skipNextWebNameBlurDomain: candidate.normalizedDomain,
   };
 }
 
@@ -210,7 +322,9 @@ export async function saveAppMappingStateWithDeps(
       nextDraftState,
       nextBootstrap: {
         observed: cloneObservedCandidates(input.candidates),
+        observedWebDomains: input.webDomainCandidates.map((candidate) => ({ ...candidate })),
         loadedOverrides: { ...nextDraftState.overrides },
+        loadedWebDomainOverrides: { ...nextDraftState.webDomainOverrides },
         loadedCategoryColorOverrides: { ...nextDraftState.categoryColorOverrides },
         loadedCustomCategories: [...nextDraftState.customCategories],
         loadedDeletedCategories: [...nextDraftState.deletedCategories],

@@ -6,6 +6,10 @@ import {
 } from "../../../shared/classification/categoryTokens.ts";
 import * as classificationStore from "./classificationStore.ts";
 import type { ObservedAppCandidate } from "./classificationStore.ts";
+import type {
+  ObservedWebDomainCandidate,
+  WebDomainOverride,
+} from "../../../shared/types/webActivity.ts";
 import {
   getClassificationBootstrapCache,
   setClassificationBootstrapCache,
@@ -22,7 +26,9 @@ export type { ClassificationDraftState } from "./classificationDraftState.ts";
 
 export interface ClassificationBootstrapData {
   observed: ObservedAppCandidate[];
+  observedWebDomains: ObservedWebDomainCandidate[];
   loadedOverrides: Record<string, AppOverride>;
+  loadedWebDomainOverrides: Record<string, WebDomainOverride>;
   loadedCategoryColorOverrides: Record<string, string>;
   loadedCustomCategories: CustomAppCategory[];
   loadedDeletedCategories: AppCategory[];
@@ -33,6 +39,16 @@ export interface ClassificationCommitDeps {
   setUserOverrides: (overrides: ClassificationDraftState["overrides"]) => void;
   setCategoryColorOverrides: (overrides: ClassificationDraftState["categoryColorOverrides"]) => void;
   setDeletedCategories: (categories: AppCategory[]) => void;
+}
+
+export interface ClassificationBootstrapDeps {
+  loadObservedAppCandidates: () => Promise<ObservedAppCandidate[]>;
+  loadObservedWebDomainCandidates: () => Promise<ObservedWebDomainCandidate[]>;
+  loadAppOverrides: () => Promise<Record<string, AppOverride>>;
+  loadWebDomainOverrides: () => Promise<Record<string, WebDomainOverride>>;
+  loadCategoryColorOverrides: () => Promise<Record<string, string>>;
+  loadCustomCategories: () => Promise<CustomAppCategory[]>;
+  loadDeletedCategories: () => Promise<AppCategory[]>;
 }
 
 export function createClassificationCommitDeps(
@@ -47,32 +63,77 @@ export function createClassificationCommitDeps(
 }
 
 const defaultClassificationCommitDeps: ClassificationCommitDeps = createClassificationCommitDeps();
+const defaultClassificationBootstrapDeps: ClassificationBootstrapDeps = {
+  loadObservedAppCandidates: () => ClassificationService.loadObservedAppCandidates(),
+  loadObservedWebDomainCandidates: () => ClassificationService.loadObservedWebDomainCandidates(),
+  loadAppOverrides: () => classificationStore.loadAppOverrides(),
+  loadWebDomainOverrides: () => classificationStore.loadWebDomainOverrides(),
+  loadCategoryColorOverrides: () => classificationStore.loadCategoryColorOverrides(),
+  loadCustomCategories: () => classificationStore.loadCustomCategories(),
+  loadDeletedCategories: () => classificationStore.loadDeletedCategories(),
+};
+
+let warnedWebClassificationFallback = false;
+
+async function loadOptionalWebClassificationData(
+  deps: ClassificationBootstrapDeps,
+): Promise<Pick<ClassificationBootstrapData, "observedWebDomains" | "loadedWebDomainOverrides">> {
+  try {
+    const [observedWebDomains, loadedWebDomainOverrides] = await Promise.all([
+      deps.loadObservedWebDomainCandidates(),
+      deps.loadWebDomainOverrides(),
+    ]);
+    return {
+      observedWebDomains,
+      loadedWebDomainOverrides,
+    };
+  } catch (error) {
+    if (!warnedWebClassificationFallback) {
+      warnedWebClassificationFallback = true;
+      console.warn("Web domain classification data is unavailable; continuing with app classification only.", error);
+    }
+    return {
+      observedWebDomains: [],
+      loadedWebDomainOverrides: {},
+    };
+  }
+}
 
 export class ClassificationService {
   static async loadObservedAppCandidates(days: number = 30, limit: number = 120): Promise<ObservedAppCandidate[]> {
     return classificationStore.loadObservedAppCandidates(days, limit);
   }
 
-  static async loadClassificationBootstrap(): Promise<ClassificationBootstrapData> {
+  static async loadObservedWebDomainCandidates(days: number = 30, limit: number = 120): Promise<ObservedWebDomainCandidate[]> {
+    return classificationStore.loadObservedWebDomainCandidates(days, limit);
+  }
+
+  static async loadClassificationBootstrap(
+    deps: ClassificationBootstrapDeps = defaultClassificationBootstrapDeps,
+  ): Promise<ClassificationBootstrapData> {
     const [
       observed,
       loadedOverrides,
       loadedCategoryColorOverrides,
       loadedCustomCategories,
       loadedDeletedCategories,
+      webClassificationData,
     ] = await Promise.all([
-      this.loadObservedAppCandidates(),
-      classificationStore.loadAppOverrides(),
-      classificationStore.loadCategoryColorOverrides(),
-      classificationStore.loadCustomCategories(),
-      classificationStore.loadDeletedCategories(),
+      deps.loadObservedAppCandidates(),
+      deps.loadAppOverrides(),
+      deps.loadCategoryColorOverrides(),
+      deps.loadCustomCategories(),
+      deps.loadDeletedCategories(),
+      loadOptionalWebClassificationData(deps),
     ]);
 
     const sanitizedDeletedCategories = sanitizeDeletedCategories(loadedDeletedCategories ?? []);
 
     const bootstrap = {
       observed,
+      observedWebDomains: webClassificationData.observedWebDomains,
       loadedOverrides,
+      loadedWebDomainOverrides: webClassificationData.loadedWebDomainOverrides,
       loadedCategoryColorOverrides: loadedCategoryColorOverrides ?? {},
       loadedCustomCategories,
       loadedDeletedCategories: sanitizedDeletedCategories,
@@ -129,6 +190,10 @@ export class ClassificationService {
 
   static async deleteObservedAppSessions(exeName: string, scope: "today" | "all" = "all") {
     await classificationStore.deleteObservedAppSessions(exeName, scope);
+  }
+
+  static async deleteObservedWebDomainHistory(normalizedDomain: string) {
+    await classificationStore.deleteObservedWebDomainHistory(normalizedDomain);
   }
 
   static hasDraftChanges(saved: ClassificationDraftState, draft: ClassificationDraftState): boolean {

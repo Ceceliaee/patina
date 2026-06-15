@@ -6,6 +6,8 @@ pub const TOOLS_TABLES_MIGRATION_VERSION: i64 = 2;
 pub const TOOLS_TABLES_MIGRATION_DESCRIPTION: &str = "create_tools_tables";
 pub const SOFTWARE_REMINDER_RULES_MIGRATION_VERSION: i64 = 3;
 pub const SOFTWARE_REMINDER_RULES_MIGRATION_DESCRIPTION: &str = "create_software_reminder_rules";
+pub const WEB_ACTIVITY_MIGRATION_VERSION: i64 = 4;
+pub const WEB_ACTIVITY_MIGRATION_DESCRIPTION: &str = "create_web_activity_segments";
 
 pub const CURRENT_BASELINE_SCHEMA_SQL: &str = "
     CREATE TABLE IF NOT EXISTS sessions (
@@ -165,6 +167,36 @@ pub const SOFTWARE_REMINDER_RULES_SCHEMA_SQL: &str = "
     ON tool_software_reminder_rules(disabled_at, app_name, exe_name);
 ";
 
+pub const WEB_ACTIVITY_SCHEMA_SQL: &str = "
+    CREATE TABLE IF NOT EXISTS web_activity_segments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        browser_client_id TEXT NOT NULL,
+        browser_kind TEXT NOT NULL,
+        browser_exe_name TEXT NOT NULL,
+        domain TEXT NOT NULL,
+        normalized_domain TEXT NOT NULL,
+        url TEXT,
+        title TEXT,
+        favicon_url TEXT,
+        start_time INTEGER NOT NULL,
+        end_time INTEGER,
+        duration INTEGER,
+        source TEXT NOT NULL DEFAULT 'browser-extension',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_web_activity_segments_time
+    ON web_activity_segments(start_time, end_time);
+
+    CREATE INDEX IF NOT EXISTS idx_web_activity_segments_domain_time
+    ON web_activity_segments(normalized_domain, start_time, end_time);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_web_activity_segments_single_active
+    ON web_activity_segments((1))
+    WHERE end_time IS NULL;
+";
+
 pub fn tracker_migrations() -> Vec<Migration> {
     vec![
         Migration {
@@ -183,6 +215,12 @@ pub fn tracker_migrations() -> Vec<Migration> {
             version: SOFTWARE_REMINDER_RULES_MIGRATION_VERSION,
             description: SOFTWARE_REMINDER_RULES_MIGRATION_DESCRIPTION,
             sql: SOFTWARE_REMINDER_RULES_SCHEMA_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: WEB_ACTIVITY_MIGRATION_VERSION,
+            description: WEB_ACTIVITY_MIGRATION_DESCRIPTION,
+            sql: WEB_ACTIVITY_SCHEMA_SQL,
             kind: MigrationKind::Up,
         },
     ]

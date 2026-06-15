@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 pub const CURRENT_BACKUP_VERSION: u32 = 1;
-pub const CURRENT_BACKUP_SCHEMA_VERSION: u32 = 7;
+pub const CURRENT_BACKUP_SCHEMA_VERSION: u32 = 8;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BackupMeta {
@@ -43,6 +43,25 @@ pub struct BackupIconCache {
     pub exe_name: String,
     pub icon_base64: String,
     pub last_updated: Option<i64>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BackupWebActivitySegment {
+    pub id: i64,
+    pub browser_client_id: String,
+    pub browser_kind: String,
+    pub browser_exe_name: String,
+    pub domain: String,
+    pub normalized_domain: String,
+    pub url: Option<String>,
+    pub title: Option<String>,
+    pub favicon_url: Option<String>,
+    pub start_time: i64,
+    pub end_time: Option<i64>,
+    pub duration: Option<i64>,
+    pub source: String,
+    pub created_at: i64,
+    pub updated_at: i64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -116,6 +135,8 @@ pub struct BackupPayload {
     pub settings: Vec<BackupSetting>,
     pub icon_cache: Vec<BackupIconCache>,
     #[serde(default)]
+    pub web_activity_segments: Vec<BackupWebActivitySegment>,
+    #[serde(default)]
     pub tool_reminders: Vec<BackupToolReminder>,
     #[serde(default)]
     pub tool_timers: Vec<BackupToolTimer>,
@@ -141,6 +162,7 @@ pub struct BackupPreview {
     pub title_sample_count: usize,
     pub setting_count: usize,
     pub icon_cache_count: usize,
+    pub web_activity_segment_count: usize,
     pub tool_reminder_count: usize,
     pub tool_timer_count: usize,
     pub tool_timer_lap_count: usize,
@@ -221,6 +243,7 @@ impl BackupPayload {
             title_sample_count: self.title_samples.len(),
             setting_count: self.settings.len(),
             icon_cache_count: self.icon_cache.len(),
+            web_activity_segment_count: self.web_activity_segments.len(),
             tool_reminder_count: self.tool_reminders.len(),
             tool_timer_count: self.tool_timers.len(),
             tool_timer_lap_count: self.tool_timer_laps.len(),
@@ -271,6 +294,7 @@ mod tests {
                 icon_base64: "aWNvbg==".to_string(),
                 last_updated: Some(30),
             }],
+            web_activity_segments: Vec::new(),
             tool_reminders: Vec::new(),
             tool_timers: Vec::new(),
             tool_timer_laps: Vec::new(),

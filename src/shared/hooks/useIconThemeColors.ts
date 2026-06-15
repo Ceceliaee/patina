@@ -7,10 +7,12 @@ function rgbToHex(r: number, g: number, b: number) {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
-function toDataUrl(icon: string) {
+const URL_SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:/i;
+
+function toImageSource(icon: string) {
   const trimmed = icon.trim();
   if (!trimmed) return "";
-  if (trimmed.startsWith("data:")) {
+  if (URL_SCHEME_PATTERN.test(trimmed)) {
     return trimmed;
   }
   return `data:image/png;base64,${trimmed}`;
@@ -22,15 +24,18 @@ function toBucketKey(r: number, g: number, b: number) {
 }
 
 async function extractDominantColor(iconData: string): Promise<string | null> {
-  const dataUrl = toDataUrl(iconData);
-  if (!dataUrl) return null;
+  const imageSource = toImageSource(iconData);
+  if (!imageSource) return null;
 
-  const cached = ICON_THEME_CACHE.get(dataUrl);
+  const cached = ICON_THEME_CACHE.get(imageSource);
   if (cached) return cached;
 
   const image = new Image();
   image.decoding = "async";
-  image.src = dataUrl;
+  if (/^https?:/i.test(imageSource)) {
+    image.crossOrigin = "anonymous";
+  }
+  image.src = imageSource;
   try {
     await image.decode();
   } catch {
@@ -44,8 +49,13 @@ async function extractDominantColor(iconData: string): Promise<string | null> {
   const context = canvas.getContext("2d", { willReadFrequently: true });
   if (!context) return null;
 
-  context.drawImage(image, 0, 0, size, size);
-  const { data } = context.getImageData(0, 0, size, size);
+  let data: Uint8ClampedArray;
+  try {
+    context.drawImage(image, 0, 0, size, size);
+    data = context.getImageData(0, 0, size, size).data;
+  } catch {
+    return null;
+  }
 
   const buckets = new Map<string, { count: number; r: number; g: number; b: number }>();
   for (let index = 0; index < data.length; index += 4) {
@@ -81,7 +91,7 @@ async function extractDominantColor(iconData: string): Promise<string | null> {
     Math.round(selected.g / selected.count),
     Math.round(selected.b / selected.count),
   );
-  ICON_THEME_CACHE.set(dataUrl, color);
+  ICON_THEME_CACHE.set(imageSource, color);
   return color;
 }
 

@@ -37,6 +37,7 @@ tokio-tungstenite = "0.28"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
+url = "2"
 rfd = "0.15.4"
 crc32fast = "1.4"
 zip = { version = "4.6.1", default-features = false }

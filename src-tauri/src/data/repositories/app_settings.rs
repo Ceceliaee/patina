@@ -1,4 +1,4 @@
-use crate::domain::settings::{DesktopBehaviorSettings, LocalApiSettings};
+use crate::domain::settings::{DesktopBehaviorSettings, LocalApiSettings, WebActivitySettings};
 use sqlx::{Pool, Row, Sqlite};
 
 const CLOSE_BEHAVIOR_KEY: &str = "close_behavior";
@@ -9,6 +9,8 @@ const BACKGROUND_OPTIMIZATION_KEY: &str = "background_optimization";
 const LOCAL_API_ENABLED_KEY: &str = "local_api_enabled";
 const LOCAL_API_PORT_KEY: &str = "local_api_port";
 const LOCAL_API_TOKEN_KEY: &str = "local_api_token";
+const WEB_ACTIVITY_ENABLED_KEY: &str = "web_activity_enabled";
+const WEB_ACTIVITY_TOKEN_KEY: &str = "web_activity_token";
 const MAX_APP_SETTING_VALUE_LEN: usize = 4096;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -136,20 +138,26 @@ fn is_allowed_app_setting_key(key: &str) -> bool {
             | "local_api_enabled"
             | "local_api_port"
             | "local_api_token"
+            | "web_activity_enabled"
+            | "web_activity_token"
     )
 }
 
 pub async fn load_local_api_settings(pool: &Pool<Sqlite>) -> Result<LocalApiSettings, sqlx::Error> {
-    let rows = sqlx::query("SELECT key, value FROM settings WHERE key IN (?, ?, ?)")
+    let rows = sqlx::query("SELECT key, value FROM settings WHERE key IN (?, ?, ?, ?, ?)")
         .bind(LOCAL_API_ENABLED_KEY)
         .bind(LOCAL_API_PORT_KEY)
         .bind(LOCAL_API_TOKEN_KEY)
+        .bind(WEB_ACTIVITY_ENABLED_KEY)
+        .bind(WEB_ACTIVITY_TOKEN_KEY)
         .fetch_all(pool)
         .await?;
 
     let mut enabled: Option<String> = None;
     let mut port: Option<String> = None;
     let mut token: Option<String> = None;
+    let mut web_activity_enabled: Option<String> = None;
+    let mut web_activity_token: Option<String> = None;
 
     for row in rows {
         let key: String = row.get("key");
@@ -159,6 +167,8 @@ pub async fn load_local_api_settings(pool: &Pool<Sqlite>) -> Result<LocalApiSett
             LOCAL_API_ENABLED_KEY => enabled = Some(value),
             LOCAL_API_PORT_KEY => port = Some(value),
             LOCAL_API_TOKEN_KEY => token = Some(value),
+            WEB_ACTIVITY_ENABLED_KEY => web_activity_enabled = Some(value),
+            WEB_ACTIVITY_TOKEN_KEY => web_activity_token = Some(value),
             _ => {}
         }
     }
@@ -166,6 +176,37 @@ pub async fn load_local_api_settings(pool: &Pool<Sqlite>) -> Result<LocalApiSett
     Ok(LocalApiSettings::from_storage_values(
         enabled.as_deref(),
         port.as_deref(),
+        token.as_deref(),
+        web_activity_enabled.as_deref(),
+        web_activity_token.as_deref(),
+    ))
+}
+
+pub async fn load_web_activity_settings(
+    pool: &Pool<Sqlite>,
+) -> Result<WebActivitySettings, sqlx::Error> {
+    let rows = sqlx::query("SELECT key, value FROM settings WHERE key IN (?, ?)")
+        .bind(WEB_ACTIVITY_ENABLED_KEY)
+        .bind(WEB_ACTIVITY_TOKEN_KEY)
+        .fetch_all(pool)
+        .await?;
+
+    let mut enabled: Option<String> = None;
+    let mut token: Option<String> = None;
+
+    for row in rows {
+        let key: String = row.get("key");
+        let value: String = row.get("value");
+
+        match key.as_str() {
+            WEB_ACTIVITY_ENABLED_KEY => enabled = Some(value),
+            WEB_ACTIVITY_TOKEN_KEY => token = Some(value),
+            _ => {}
+        }
+    }
+
+    Ok(WebActivitySettings::from_storage_values(
+        enabled.as_deref(),
         token.as_deref(),
     ))
 }

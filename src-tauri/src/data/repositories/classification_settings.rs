@@ -1,6 +1,7 @@
 use sqlx::{Pool, Sqlite};
 
 const APP_OVERRIDE_KEY_PREFIX: &str = "__app_override::";
+const WEB_DOMAIN_OVERRIDE_KEY_PREFIX: &str = "__web_domain_override::";
 const CATEGORY_COLOR_OVERRIDE_KEY_PREFIX: &str = "__category_color_override::";
 const CATEGORY_DEFAULT_COLOR_ASSIGNMENT_KEY_PREFIX: &str = "__category_default_color_assignment::";
 const CUSTOM_CATEGORY_KEY_PREFIX: &str = "__custom_category::";
@@ -74,10 +75,12 @@ fn validate_classification_setting_mutation(
             ));
         }
 
-        if mutation.key.starts_with(APP_OVERRIDE_KEY_PREFIX) {
+        if mutation.key.starts_with(APP_OVERRIDE_KEY_PREFIX)
+            || mutation.key.starts_with(WEB_DOMAIN_OVERRIDE_KEY_PREFIX)
+        {
             serde_json::from_str::<serde_json::Value>(value).map_err(|error| {
                 format!(
-                    "invalid app override value for key `{}`: {error}",
+                    "invalid classification override value for key `{}`: {error}",
                     mutation.key
                 )
             })?;
@@ -94,6 +97,7 @@ fn is_allowed_classification_setting_key(key: &str) -> bool {
 
     [
         APP_OVERRIDE_KEY_PREFIX,
+        WEB_DOMAIN_OVERRIDE_KEY_PREFIX,
         CATEGORY_COLOR_OVERRIDE_KEY_PREFIX,
         CATEGORY_DEFAULT_COLOR_ASSIGNMENT_KEY_PREFIX,
         CUSTOM_CATEGORY_KEY_PREFIX,

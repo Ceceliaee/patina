@@ -6,6 +6,8 @@ pub const DEFAULT_BACKGROUND_OPTIMIZATION: bool = false;
 pub const DEFAULT_LOCAL_API_ENABLED: bool = false;
 pub const DEFAULT_LOCAL_API_PORT: u16 = 17_321;
 pub const DEFAULT_LOCAL_API_TOKEN: &str = "";
+pub const DEFAULT_WEB_ACTIVITY_ENABLED: bool = false;
+pub const DEFAULT_WEB_ACTIVITY_TOKEN: &str = "";
 pub const LOCAL_API_PORT_MIN: u16 = 1024;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -36,7 +38,16 @@ pub struct DesktopBehaviorSettings {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LocalApiSettings {
     pub enabled: bool,
+    pub local_api_enabled: bool,
     pub port: u16,
+    pub token: String,
+    pub web_activity_enabled: bool,
+    pub web_activity_token: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WebActivitySettings {
+    pub enabled: bool,
     pub token: String,
 }
 
@@ -44,8 +55,20 @@ impl Default for LocalApiSettings {
     fn default() -> Self {
         Self {
             enabled: DEFAULT_LOCAL_API_ENABLED,
+            local_api_enabled: DEFAULT_LOCAL_API_ENABLED,
             port: DEFAULT_LOCAL_API_PORT,
             token: DEFAULT_LOCAL_API_TOKEN.to_string(),
+            web_activity_enabled: DEFAULT_WEB_ACTIVITY_ENABLED,
+            web_activity_token: DEFAULT_WEB_ACTIVITY_TOKEN.to_string(),
+        }
+    }
+}
+
+impl Default for WebActivitySettings {
+    fn default() -> Self {
+        Self {
+            enabled: DEFAULT_WEB_ACTIVITY_ENABLED,
+            token: DEFAULT_WEB_ACTIVITY_TOKEN.to_string(),
         }
     }
 }
@@ -55,20 +78,48 @@ impl LocalApiSettings {
         enabled: Option<&str>,
         port: Option<&str>,
         token: Option<&str>,
+        web_activity_enabled: Option<&str>,
+        web_activity_token: Option<&str>,
     ) -> Self {
         let token = token.unwrap_or(DEFAULT_LOCAL_API_TOKEN).trim().to_string();
-        let enabled = enabled
+        let local_api_enabled = enabled
             .map(|raw| parse_boolean_setting(raw, DEFAULT_LOCAL_API_ENABLED))
             .unwrap_or(DEFAULT_LOCAL_API_ENABLED)
             && !token.is_empty();
+        let web_activity_token = web_activity_token
+            .unwrap_or(DEFAULT_WEB_ACTIVITY_TOKEN)
+            .trim()
+            .to_string();
+        let web_activity_enabled = web_activity_enabled
+            .map(|raw| parse_boolean_setting(raw, DEFAULT_WEB_ACTIVITY_ENABLED))
+            .unwrap_or(DEFAULT_WEB_ACTIVITY_ENABLED)
+            && !web_activity_token.is_empty();
 
         Self {
-            enabled,
+            enabled: local_api_enabled || web_activity_enabled,
+            local_api_enabled,
             port: port
                 .and_then(parse_local_api_port)
                 .unwrap_or(DEFAULT_LOCAL_API_PORT),
             token,
+            web_activity_enabled,
+            web_activity_token,
         }
+    }
+}
+
+impl WebActivitySettings {
+    pub fn from_storage_values(enabled: Option<&str>, token: Option<&str>) -> Self {
+        let token = token
+            .unwrap_or(DEFAULT_WEB_ACTIVITY_TOKEN)
+            .trim()
+            .to_string();
+        let enabled = enabled
+            .map(|raw| parse_boolean_setting(raw, DEFAULT_WEB_ACTIVITY_ENABLED))
+            .unwrap_or(DEFAULT_WEB_ACTIVITY_ENABLED)
+            && !token.is_empty();
+
+        Self { enabled, token }
     }
 }
 
@@ -195,8 +246,8 @@ mod tests {
     use super::{
         parse_boolean_setting, parse_close_behavior, parse_local_api_port, parse_minimize_behavior,
         CloseBehavior, DesktopBehaviorSettings, LocalApiSettings, MinimizeBehavior,
-        DEFAULT_BACKGROUND_OPTIMIZATION, DEFAULT_LAUNCH_AT_LOGIN, DEFAULT_LOCAL_API_PORT,
-        DEFAULT_START_MINIMIZED,
+        WebActivitySettings, DEFAULT_BACKGROUND_OPTIMIZATION, DEFAULT_LAUNCH_AT_LOGIN,
+        DEFAULT_LOCAL_API_PORT, DEFAULT_START_MINIMIZED,
     };
 
     #[test]
@@ -227,27 +278,80 @@ mod tests {
     #[test]
     fn local_api_settings_parse_defaults_and_invalid_port() {
         assert_eq!(
-            LocalApiSettings::from_storage_values(None, None, None),
+            LocalApiSettings::from_storage_values(None, None, None, None, None),
             LocalApiSettings::default()
         );
         assert_eq!(
-            LocalApiSettings::from_storage_values(Some("1"), Some("80"), Some("secret")),
+            LocalApiSettings::from_storage_values(
+                Some("1"),
+                Some("80"),
+                Some("secret"),
+                None,
+                None
+            ),
             LocalApiSettings {
                 enabled: true,
+                local_api_enabled: true,
                 port: DEFAULT_LOCAL_API_PORT,
                 token: "secret".to_string(),
+                web_activity_enabled: false,
+                web_activity_token: String::new(),
             }
         );
         assert_eq!(
-            LocalApiSettings::from_storage_values(Some("1"), Some("18080"), Some("   ")),
+            LocalApiSettings::from_storage_values(
+                Some("1"),
+                Some("18080"),
+                Some("   "),
+                None,
+                None
+            ),
             LocalApiSettings {
                 enabled: false,
+                local_api_enabled: false,
                 port: 18_080,
                 token: String::new(),
+                web_activity_enabled: false,
+                web_activity_token: String::new(),
+            }
+        );
+        assert_eq!(
+            LocalApiSettings::from_storage_values(
+                None,
+                Some("18080"),
+                None,
+                Some("1"),
+                Some("web")
+            ),
+            LocalApiSettings {
+                enabled: true,
+                local_api_enabled: false,
+                port: 18_080,
+                token: String::new(),
+                web_activity_enabled: true,
+                web_activity_token: "web".to_string(),
             }
         );
         assert_eq!(parse_local_api_port("65535"), Some(65_535));
         assert_eq!(parse_local_api_port("1023"), None);
+    }
+
+    #[test]
+    fn web_activity_settings_require_a_token_to_enable() {
+        assert_eq!(
+            WebActivitySettings::from_storage_values(Some("1"), Some("   ")),
+            WebActivitySettings {
+                enabled: false,
+                token: String::new(),
+            }
+        );
+        assert_eq!(
+            WebActivitySettings::from_storage_values(Some("1"), Some("secret")),
+            WebActivitySettings {
+                enabled: true,
+                token: "secret".to_string(),
+            }
+        );
     }
 
     #[test]

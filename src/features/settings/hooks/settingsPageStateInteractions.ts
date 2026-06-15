@@ -47,10 +47,13 @@ export interface SettingsCancelFlowResult {
 
 function normalizeSettingsForSave(settings: AppSettings): AppSettings {
   const localApiToken = settings.localApiToken.trim();
+  const webActivityToken = settings.webActivityToken.trim();
   return {
     ...settings,
     localApiEnabled: settings.localApiEnabled && localApiToken.length > 0,
     localApiToken,
+    webActivityEnabled: settings.webActivityEnabled && webActivityToken.length > 0,
+    webActivityToken,
   };
 }
 

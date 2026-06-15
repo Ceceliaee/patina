@@ -1,8 +1,11 @@
 ﻿import { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import type { CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, Expand, Layers3, Minus, Plus, Tags } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, Expand, Globe2, Layers3, Minus, Plus, Tags, X } from "lucide-react";
 import { type HistorySession } from "../../../shared/types/sessions";
+import type { WebActivitySegment } from "../../../shared/types/webActivity.ts";
+import type { WebDomainOverride } from "../../../shared/types/webActivity.ts";
 import { getUiLocale, UI_TEXT } from "../../../shared/copy/uiText.ts";
 import {
   formatDuration,
@@ -39,6 +42,11 @@ import {
   rememberHistoryTimelineMode,
   type DayDistributionMode,
 } from "../services/historyLayoutPreferenceStorage.ts";
+import {
+  buildWebDomainDistribution,
+  buildWebTimelineItems,
+  type WebTimelineItem,
+} from "../services/historyWebActivityViewModel.ts";
 
 interface Props {
   icons: Record<string, string>;
@@ -63,11 +71,13 @@ const TIMELINE_MIN_SESSION_MINUTES_RANGE = { min: 1, max: 10 } as const;
 interface DayDistributionItem {
   key: string;
   label: string;
+  subtitle?: string;
   duration: number;
   percentage: number;
   color: string;
   iconSrc?: string;
   category?: AppCategory;
+  kind?: "app" | "category" | "web";
 }
 interface DaySummaryView {
   activeDurationLabel: string;
@@ -81,6 +91,12 @@ const addMonths = (date: Date, delta: number) => new Date(date.getFullYear(), da
 const isSameDay = (left: Date, right: Date) => left.toDateString() === right.toDateString();
 const DAY_SUMMARY_EMPTY_MARK = "—";
 const formatCalendarMonth = (date: Date) => UI_TEXT.date.yearMonthLabel(date.getFullYear(), date.getMonth() + 1);
+const formatDistributionPercentage = (percentage: number) => {
+  if (!Number.isFinite(percentage)) return "0%";
+
+  const boundedPercentage = Math.min(100, Math.max(0, percentage));
+  return `${Math.round(boundedPercentage)}%`;
+};
 const getHistoryTimelineModeActionLabel = (mode: HistoryTimelineDisplayMode) => {
   const isEnglish = getUiLocale() === "en-US";
   if (mode === "category") {
@@ -101,6 +117,9 @@ const getHistoryFeatureCopy = () => {
       dayDistribution: "Day Distribution",
       distributionByApp: "Apps",
       distributionByCategory: "Categories",
+      distributionByWeb: "Web",
+      timelineTabApp: "Apps",
+      timelineTabWeb: "Web",
       timelineAxis: "Day Timeline",
       openTimeline: "Open timeline",
     }
@@ -114,6 +133,9 @@ const getHistoryFeatureCopy = () => {
       dayDistribution: "当日分布",
       distributionByApp: "应用",
       distributionByCategory: "分类",
+      distributionByWeb: "网页",
+      timelineTabApp: "应用",
+      timelineTabWeb: "网页",
       timelineAxis: "时间轴",
       openTimeline: "打开时间线",
     };
@@ -168,6 +190,7 @@ type TimelineDetailTitle = {
   startTime: number;
   endTime: number | null;
 };
+type TimelineDialogMode = "app" | "web";
 
 function cleanTimelineDetailTitle(sample: TimelineDetailTitle, appName: string): TimelineDetailTitle {
   const normalizedTitle = sample.title.trim();
@@ -261,12 +284,34 @@ export default function History({
   const [rawWeeklySessions, setRawWeeklySessions] = useState<HistorySession[]>(
     () => initialCachedSnapshot?.weeklySessions ?? [],
   );
+  const [rawDayWebSegments, setRawDayWebSegments] = useState<WebActivitySegment[]>(
+    () => initialCachedSnapshot?.dayWebSegments ?? [],
+  );
+  const [webDomainOverrides, setWebDomainOverrides] = useState<Record<string, WebDomainOverride>>(
+    () => initialCachedSnapshot?.webDomainOverrides ?? {},
+  );
+  const webDomainIcons = useMemo(() => {
+    const next: Record<string, string> = {};
+    for (const segment of rawDayWebSegments) {
+      const faviconUrl = segment.faviconUrl?.trim();
+      if (!faviconUrl) continue;
+
+      const current = next[segment.normalizedDomain];
+      if (!current || faviconUrl.startsWith("data:")) {
+        next[segment.normalizedDomain] = faviconUrl;
+      }
+    }
+    return next;
+  }, [rawDayWebSegments]);
+  const webDomainIconThemeColors = useIconThemeColors(webDomainIcons);
   const [nowMs, setNowMs] = useState(() => initialCachedSnapshot?.fetchedAtMs ?? Date.now());
   const [loading, setLoading] = useState(!initialCachedSnapshot);
   const [visibleDateKey, setVisibleDateKey] = useState(() => (
     initialCachedSnapshot ? formatHistoryDateCacheKey(initialDate) : null
   ));
   const [timelineDialogOpen, setTimelineDialogOpen] = useState(false);
+  const [timelineDialogMode, setTimelineDialogMode] = useState<TimelineDialogMode>("app");
+  const [timelineDialogSyncedHeight, setTimelineDialogSyncedHeight] = useState<number | null>(null);
   const [historyTimelineMode, setHistoryTimelineMode] = useState<HistoryTimelineDisplayMode>(
     readHistoryTimelineMode,
   );
@@ -274,6 +319,7 @@ export default function History({
     readHistoryDayDistributionMode,
   );
   const [timelineDetailsPopover, setTimelineDetailsPopover] = useState<TimelineDetailsPopover | null>(null);
+  const timelineDialogBodyRef = useRef<HTMLDivElement | null>(null);
   const timelineDetailsPopoverRef = useRef<HTMLDivElement | null>(null);
   const timelineDetailsTriggerRef = useRef<HTMLElement | null>(null);
   const hasLoadedRef = useRef(false);
@@ -394,12 +440,16 @@ export default function History({
     if (cachedSnapshot) {
       setRawDaySessions(cachedSnapshot.daySessions);
       setRawWeeklySessions(cachedSnapshot.weeklySessions);
+      setRawDayWebSegments(cachedSnapshot.dayWebSegments);
+      setWebDomainOverrides(cachedSnapshot.webDomainOverrides);
       setNowMs(cachedSnapshot.fetchedAtMs);
       setVisibleDateKey(requestDateKey);
       setLoading(false);
     } else if (visibleDateKey !== requestDateKey) {
       setRawDaySessions([]);
       setRawWeeklySessions([]);
+      setRawDayWebSegments([]);
+      setWebDomainOverrides({});
       setVisibleDateKey(null);
     }
 
@@ -416,6 +466,8 @@ export default function History({
 
         setRawDaySessions(snapshot.daySessions);
         setRawWeeklySessions(snapshot.weeklySessions);
+        setRawDayWebSegments(snapshot.dayWebSegments);
+        setWebDomainOverrides(snapshot.webDomainOverrides);
         setNowMs(snapshot.fetchedAtMs);
         setVisibleDateKey(requestDateKey);
         hasLoadedRef.current = true;
@@ -434,7 +486,8 @@ export default function History({
 
   useEffect(() => {
     const hasLiveSession = rawDaySessions.some((session) => session.endTime === null)
-      || rawWeeklySessions.some((session) => session.endTime === null);
+      || rawWeeklySessions.some((session) => session.endTime === null)
+      || rawDayWebSegments.some((segment) => segment.endTime === null);
 
     if (!refreshEnabled || !hasLiveSession || trackerHealth.status !== "healthy") {
       return;
@@ -449,7 +502,7 @@ export default function History({
     return () => {
       window.clearInterval(timer);
     };
-  }, [rawDaySessions, rawWeeklySessions, refreshEnabled, refreshIntervalSecs, trackerHealth.status]);
+  }, [rawDaySessions, rawWeeklySessions, rawDayWebSegments, refreshEnabled, refreshIntervalSecs, trackerHealth.status]);
 
   const changeDate = (delta: number) => {
     const nextDate = new Date(selectedDate);
@@ -594,10 +647,13 @@ export default function History({
   const visibleHistoryTimelineView = showQuietPlaceholder
     ? historyTimelinePlaceholderView
     : historyTimelineView;
-  const dayDistributionOptions: QuietSegmentedFilterOption<DayDistributionMode>[] = [
-    { value: "app", label: historyCopy.distributionByApp },
-    { value: "category", label: historyCopy.distributionByCategory },
-  ];
+  const selectedDayRange = useMemo(() => {
+    const startMs = startOfDay(selectedDate).getTime();
+    return {
+      startMs,
+      endMs: startMs + 24 * 60 * 60 * 1000,
+    };
+  }, [selectedDate]);
   const appDistributionItems = useMemo<DayDistributionItem[]>(
     () => appSummary.map((app) => {
       const mapped = AppClassification.mapApp(app.exeName, { appName: app.appName });
@@ -611,6 +667,7 @@ export default function History({
         percentage: app.percentage,
         color: accentColor,
         iconSrc: icons[app.exeName],
+        kind: "app",
       };
     }),
     [appSummary, iconThemeColors, icons],
@@ -638,6 +695,7 @@ export default function History({
         duration,
         color: AppClassification.getCategoryColor(category),
         category,
+        kind: "category",
       });
     }
 
@@ -649,9 +707,56 @@ export default function History({
       }))
       .sort((left, right) => right.duration - left.duration || left.label.localeCompare(right.label));
   }, [compiledSessions]);
-  const dayDistributionItems = dayDistributionMode === "category"
-    ? categoryDistributionItems
-    : appDistributionItems;
+  const webDistributionItems = useMemo<DayDistributionItem[]>(
+    () => buildWebDomainDistribution(
+      rawDayWebSegments,
+      selectedDayRange,
+      nowMs,
+      webDomainOverrides,
+      webDomainIconThemeColors,
+    )
+      .map((item) => ({
+        key: item.key,
+        label: item.label,
+        duration: item.duration,
+        percentage: item.percentage,
+        color: item.color,
+        iconSrc: item.faviconUrl ?? undefined,
+        category: item.category,
+        kind: "web" as const,
+      })),
+    [nowMs, rawDayWebSegments, selectedDayRange, webDomainIconThemeColors, webDomainOverrides],
+  );
+  const webTimelineItems = useMemo(
+    () => buildWebTimelineItems(
+      rawDayWebSegments,
+      selectedDayRange,
+      nowMs,
+      webDomainOverrides,
+      webDomainIconThemeColors,
+      mergeThresholdSecs,
+      minSessionSecs,
+    ),
+    [
+      mergeThresholdSecs,
+      minSessionSecs,
+      nowMs,
+      rawDayWebSegments,
+      selectedDayRange,
+      webDomainIconThemeColors,
+      webDomainOverrides,
+    ],
+  );
+  const dayDistributionOptions: QuietSegmentedFilterOption<DayDistributionMode>[] = [
+    { value: "app", label: historyCopy.distributionByApp },
+    { value: "category", label: historyCopy.distributionByCategory },
+    { value: "web", label: historyCopy.distributionByWeb },
+  ];
+  const dayDistributionItems = dayDistributionMode === "web"
+    ? webDistributionItems
+    : dayDistributionMode === "category"
+      ? categoryDistributionItems
+      : appDistributionItems;
   const daySummaryView = useMemo<DaySummaryView>(() => {
     const activeDurationMs = compiledSessions.reduce(
       (total, session) => total + Math.max(0, session.duration ?? 0),
@@ -728,6 +833,34 @@ export default function History({
     setTimelineDetailsPopover(null);
     setTimelineDialogOpen(false);
   };
+  useEffect(() => {
+    if (timelineDialogOpen) return;
+    setTimelineDialogSyncedHeight(null);
+  }, [timelineDialogOpen]);
+
+  useLayoutEffect(() => {
+    if (!timelineDialogOpen) return;
+    const body = timelineDialogBodyRef.current;
+    if (!body) return;
+
+    const measuredHeight = Math.ceil(body.getBoundingClientRect().height);
+    if (measuredHeight <= 0) return;
+
+    setTimelineDialogSyncedHeight((current) => (
+      current === null || measuredHeight > current ? measuredHeight : current
+    ));
+  }, [
+    loading,
+    minSessionMinutes,
+    timelineDialogMode,
+    timelineDialogOpen,
+    timelineSessions.length,
+    webTimelineItems.length,
+  ]);
+
+  const timelineDialogBodyStyle = timelineDialogSyncedHeight === null
+    ? undefined
+    : ({ minHeight: `${timelineDialogSyncedHeight}px` } satisfies CSSProperties);
   const handleDayDistributionModeChange = (mode: DayDistributionMode) => {
     setDayDistributionMode(mode);
     rememberHistoryDayDistributionMode(mode);
@@ -780,6 +913,18 @@ export default function History({
       </button>
     </div>
   );
+  const timelineDialogModeOptions: QuietSegmentedFilterOption<TimelineDialogMode>[] = [
+    { value: "app", label: historyCopy.timelineTabApp },
+    { value: "web", label: historyCopy.timelineTabWeb },
+  ];
+  const getWebTimelineItemAriaLabel = (item: WebTimelineItem) => {
+    const timeLabel = `${formatTime(item.startTime)} - ${item.endTime ? formatTime(item.endTime) : UI_TEXT.history.untilNow}`;
+    const durationLabel = formatDuration(item.duration);
+    if (getUiLocale() === "en-US") {
+      return `${item.label}, ${item.title ?? "Untitled page"}, ${timeLabel}, ${durationLabel}`;
+    }
+    return `${item.label}，${item.title ?? "无标题网页"}，${timeLabel}，${durationLabel}`;
+  };
   const renderTimelineList = (className = "") => {
     if (loading) {
       return <div className="flex-1" aria-hidden="true" />;
@@ -884,6 +1029,65 @@ export default function History({
       </div>
     );
   };
+  const renderWebTimelineList = (className = "") => {
+    if (loading) {
+      return <div className="flex-1" aria-hidden="true" />;
+    }
+
+    if (webTimelineItems.length === 0) {
+      return (
+        <div className={`history-timeline-list-empty flex-1 flex items-center justify-center text-[var(--qp-text-tertiary)] text-sm ${className}`.trim()}>
+          {UI_TEXT.history.emptyDay}
+        </div>
+      );
+    }
+
+    return (
+      <div className={`history-timeline-list flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1 ${className}`.trim()}>
+        <AnimatePresence initial={false}>
+          {webTimelineItems.map((item) => (
+            <div
+              key={item.id}
+              tabIndex={0}
+              aria-label={getWebTimelineItemAriaLabel(item)}
+              className="flex items-center gap-3 p-3 border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-elevated)] rounded-[10px] hover:border-[var(--qp-border-strong)] hover:bg-[var(--qp-bg-panel)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--qp-focus-ring)] transition-colors"
+            >
+              <div
+                className="w-1 self-stretch rounded-full flex-shrink-0"
+                style={{ backgroundColor: item.color }}
+              />
+              <div className="w-8 h-8 rounded-[8px] bg-[var(--qp-bg-panel)] border border-[var(--qp-border-subtle)] flex items-center justify-center flex-shrink-0 overflow-hidden p-1.5">
+                {item.faviconUrl ? (
+                  <img src={item.faviconUrl} className="w-full h-full object-contain" alt="" />
+                ) : (
+                  <Globe2 size={15} className="text-[var(--qp-text-tertiary)]" aria-hidden="true" />
+                )}
+              </div>
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold text-[var(--qp-text-primary)]">
+                    {item.label}
+                  </div>
+                  <div className="mt-0.5 truncate text-[11px] text-[var(--qp-text-tertiary)]">
+                    {item.title || item.url || item.domain}
+                  </div>
+                </div>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <div className="text-xs font-semibold text-[var(--qp-text-primary)] tabular-nums">
+                  {formatDuration(item.duration || 0)}
+                </div>
+                <div className="text-[10px] text-[var(--qp-text-tertiary)] mt-0.5 tabular-nums">
+                  {formatTime(item.startTime)}
+                  {item.endTime ? ` - ${formatTime(item.endTime)}` : ` ${UI_TEXT.history.untilNow}`}
+                </div>
+              </div>
+            </div>
+          ))}
+        </AnimatePresence>
+      </div>
+    );
+  };
   const renderDayDistribution = () => (
     <>
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -892,7 +1096,7 @@ export default function History({
           value={dayDistributionMode}
           options={dayDistributionOptions}
           onChange={handleDayDistributionModeChange}
-          className="history-day-distribution-mode-switch"
+          className="qp-segmented-filter-compact history-day-distribution-mode-switch"
         />
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-1 pt-2">
@@ -904,10 +1108,12 @@ export default function History({
           <div className="space-y-4">
             {dayDistributionItems.map((item) => (
               <div key={item.key} className="space-y-1.5">
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="font-medium text-[var(--qp-text-secondary)] flex items-center gap-1.5 min-w-0">
+                <div className="mb-1 flex items-center justify-between gap-3">
+                  <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium leading-[1.2] text-[var(--qp-text-secondary)]">
                     {item.iconSrc ? (
-                      <img src={item.iconSrc} className="w-3.5 h-3.5 object-contain" alt="" />
+                      <img src={item.iconSrc} className="h-3.5 w-3.5 shrink-0 object-contain" alt="" />
+                    ) : item.kind === "web" ? (
+                      <Globe2 size={14} className="shrink-0 text-[var(--qp-text-tertiary)]" aria-hidden="true" />
                     ) : (
                       <span
                         className="h-2.5 w-2.5 shrink-0 rounded-full"
@@ -915,9 +1121,19 @@ export default function History({
                         aria-hidden="true"
                       />
                     )}
-                    <span className="truncate">{item.label}</span>
+                    <span className="min-w-0 leading-[1.2]">
+                      <span className="block truncate text-xs font-medium leading-[1.2]">{item.label}</span>
+                      {item.subtitle && (
+                        <span className="mt-0.5 block truncate text-[10px] font-normal text-[var(--qp-text-tertiary)]">
+                          {item.subtitle}
+                        </span>
+                      )}
+                    </span>
                   </span>
-                  <span className="text-[var(--qp-text-tertiary)] tabular-nums">{formatDuration(item.duration)}</span>
+                  <span className="shrink-0 text-xs font-medium leading-[1.2] text-[var(--qp-text-tertiary)] tabular-nums">
+                    <span>{formatDuration(item.duration)}</span>
+                    <span className="font-normal opacity-70"> · {formatDistributionPercentage(item.percentage)}</span>
+                  </span>
                 </div>
                 <div className="h-1.5 bg-[var(--qp-track-muted)] rounded-full overflow-hidden">
                   <motion.div
@@ -1158,24 +1374,39 @@ export default function History({
         title={UI_TEXT.history.timeline}
         surfaceClassName="history-timeline-dialog-surface"
         onClose={closeTimelineDialog}
-        actions={(
-          <button
-            type="button"
-            className="qp-button-secondary qp-dialog-action"
-            onClick={closeTimelineDialog}
-          >
-            {UI_TEXT.common.close}
-          </button>
-        )}
       >
-        <div className="history-timeline-dialog-body">
+        <button
+          type="button"
+          className="qp-dialog-close-button history-timeline-dialog-close"
+          aria-label={UI_TEXT.common.close}
+          onClick={closeTimelineDialog}
+        >
+          <X size={16} aria-hidden />
+        </button>
+        <div
+          ref={timelineDialogBodyRef}
+          className="history-timeline-dialog-body"
+          style={timelineDialogBodyStyle}
+        >
           <div className="history-timeline-dialog-toolbar">
-            <span className="history-timeline-dialog-meta">
-              {UI_TEXT.history.sessionCount(timelineSessions.length)}
-            </span>
+            <div className="flex min-w-0 items-center gap-3">
+              <QuietSegmentedFilter
+                value={timelineDialogMode}
+                options={timelineDialogModeOptions}
+                onChange={setTimelineDialogMode}
+                className="qp-segmented-filter-compact history-timeline-dialog-mode-switch"
+              />
+              <span className="history-timeline-dialog-meta">
+                {UI_TEXT.history.sessionCount(
+                  timelineDialogMode === "web" ? webTimelineItems.length : timelineSessions.length,
+                )}
+              </span>
+            </div>
             {renderTimelineDurationControls("history-timeline-dialog-duration-controls")}
           </div>
-          {renderTimelineList("history-timeline-dialog-list")}
+          {timelineDialogMode === "web"
+            ? renderWebTimelineList("history-timeline-dialog-list")
+            : renderTimelineList("history-timeline-dialog-list")}
         </div>
       </QuietDialog>
     </div>

@@ -54,6 +54,7 @@ pub fn setup(
     audio::start_signal_source();
     media::start_signal_source();
     crate::app::local_api::start(app.handle().clone());
+    crate::app::web_activity::spawn_startup_repair(app.handle().clone());
 
     let app_handle = app.handle().clone();
     main_window::ensure_main_window_with_initial_visibility(&app_handle, !launched_by_autostart)

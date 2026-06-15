@@ -10,6 +10,10 @@ import {
   upsertSettingValue,
 } from "../../../platform/persistence/classificationPersistence.ts";
 import {
+  deleteWebActivitySegmentsByDomain,
+  loadObservedWebDomainStats,
+} from "../../../platform/persistence/webActivityRepository.ts";
+import {
   commitClassificationSettingMutations,
   type ClassificationSettingMutation,
 } from "../../../platform/persistence/classificationSettingsGateway.ts";
@@ -17,19 +21,26 @@ import { ProcessMapper, type AppOverride } from "../../../shared/classification/
 import {
   isAppCategory,
   isCustomCategory,
+  USER_ASSIGNABLE_CATEGORIES,
   type AppCategory,
   type CustomAppCategory,
 } from "../../../shared/classification/categoryTokens.ts";
 import { resolveCanonicalExecutable, shouldTrackProcess } from "../../../shared/classification/processNormalization.ts";
 import type { ClassificationDraftChangePlan } from "./classificationDraftState.ts";
 import { buildLegacyAutoClassificationOverrides } from "./legacyAutoClassificationMigration.ts";
+import type {
+  ObservedWebDomainCandidate,
+  WebDomainOverride,
+} from "../../../shared/types/webActivity.ts";
 
 const APP_OVERRIDE_KEY_PREFIX = "__app_override::";
+const WEB_DOMAIN_OVERRIDE_KEY_PREFIX = "__web_domain_override::";
 const LEGACY_AUTO_CLASSIFICATION_MIGRATION_KEY = "__classification_manual_confirmation_migration::v1";
 const CATEGORY_COLOR_OVERRIDE_KEY_PREFIX = "__category_color_override::";
 const CATEGORY_DEFAULT_COLOR_ASSIGNMENT_KEY_PREFIX = "__category_default_color_assignment::";
 const CUSTOM_CATEGORY_KEY_PREFIX = "__custom_category::";
 const DELETED_CATEGORY_KEY_PREFIX = "__deleted_category::";
+const USER_ASSIGNABLE_CATEGORY_SET = new Set<string>(USER_ASSIGNABLE_CATEGORIES);
 
 export interface ObservedAppCandidate {
   exeName: string;
@@ -37,6 +48,8 @@ export interface ObservedAppCandidate {
   totalDuration: number;
   lastSeenMs: number;
 }
+
+export type { ObservedWebDomainCandidate };
 
 type DeleteAppSessionScope = "today" | "all";
 
@@ -65,6 +78,64 @@ function normalizeHexColor(colorValue: string | undefined): string | null {
     return null;
   }
   return normalized.toUpperCase();
+}
+
+function normalizeWebDomainKey(value: string): string | null {
+  const normalized = value.trim().trimEnd().replace(/\.$/, "").toLocaleLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  return normalized;
+}
+
+function normalizeWebDomainOverride(override: WebDomainOverride | null | undefined): WebDomainOverride | null {
+  if (!override) return null;
+  const normalized: WebDomainOverride = {};
+  if (override.category && (isCustomCategory(override.category) || USER_ASSIGNABLE_CATEGORY_SET.has(override.category))) {
+    normalized.category = override.category;
+  }
+  if (override.displayName?.trim()) {
+    normalized.displayName = override.displayName.trim();
+  }
+  const color = normalizeHexColor(override.color);
+  if (color) {
+    normalized.color = color;
+  }
+  if (override.enabled === false) {
+    normalized.enabled = false;
+  }
+  if (typeof override.updatedAt === "number" && Number.isFinite(override.updatedAt)) {
+    normalized.updatedAt = override.updatedAt;
+  }
+
+  const hasMeaningfulValue = Boolean(
+    normalized.category
+    || normalized.displayName
+    || normalized.color
+    || normalized.enabled === false,
+  );
+
+  return hasMeaningfulValue ? normalized : null;
+}
+
+function parseWebDomainOverrideStorageValue(rawValue: string): WebDomainOverride | null {
+  if (!rawValue.trim()) return null;
+  try {
+    const parsed = JSON.parse(rawValue) as WebDomainOverride;
+    return normalizeWebDomainOverride(parsed);
+  } catch {
+    return null;
+  }
+}
+
+function toWebDomainOverrideStorageValue(override: WebDomainOverride): string {
+  return JSON.stringify({
+    category: override.category ?? null,
+    displayName: override.displayName ?? null,
+    color: normalizeHexColor(override.color) ?? null,
+    enabled: override.enabled !== false,
+    updatedAt: override.updatedAt ?? Date.now(),
+  });
 }
 
 function buildLoadedAppOverrides(rows: readonly { key: string; value: string }[]): {
@@ -137,6 +208,25 @@ export async function loadAppOverrides(): Promise<Record<string, AppOverride>> {
   return overrides;
 }
 
+export async function loadWebDomainOverrides(): Promise<Record<string, WebDomainOverride>> {
+  const rows = await loadSettingRowsByKeyPrefix(WEB_DOMAIN_OVERRIDE_KEY_PREFIX);
+
+  const overrides: Record<string, WebDomainOverride> = {};
+  for (const row of rows) {
+    const normalizedDomain = normalizeWebDomainKey(row.key.slice(WEB_DOMAIN_OVERRIDE_KEY_PREFIX.length));
+    if (!normalizedDomain) {
+      continue;
+    }
+    const override = parseWebDomainOverrideStorageValue(row.value);
+    if (!override) {
+      continue;
+    }
+    overrides[normalizedDomain] = override;
+  }
+
+  return overrides;
+}
+
 export function buildAppOverrideTransition(
   key: string,
   value: string,
@@ -205,6 +295,30 @@ function buildSaveAppOverrideMutations(
   return [{
     key,
     value: ProcessMapper.toOverrideStorageValue(override),
+  }];
+}
+
+function buildSaveWebDomainOverrideMutations(
+  normalizedDomain: string,
+  override: WebDomainOverride | null,
+): ClassificationSettingMutation[] {
+  const domainKey = normalizeWebDomainKey(normalizedDomain);
+  if (!domainKey) {
+    return [];
+  }
+
+  const key = `${WEB_DOMAIN_OVERRIDE_KEY_PREFIX}${domainKey}`;
+  const normalizedOverride = normalizeWebDomainOverride(override);
+  if (!normalizedOverride) {
+    return [{
+      key,
+      value: null,
+    }];
+  }
+
+  return [{
+    key,
+    value: toWebDomainOverrideStorageValue(normalizedOverride),
   }];
 }
 
@@ -406,6 +520,10 @@ export function buildCommitDraftChangePlanSettingMutations(
     mutations.push(...buildSaveAppOverrideMutations(update.exeName, update.override));
   }
 
+  for (const update of changePlan.webDomainOverrideUpserts) {
+    mutations.push(...buildSaveWebDomainOverrideMutations(update.normalizedDomain, update.override));
+  }
+
   for (const update of changePlan.categoryColorUpdates) {
     mutations.push(...buildSaveCategoryColorOverrideMutations(update.category, update.colorValue));
   }
@@ -477,6 +595,21 @@ export async function loadObservedAppCandidates(
   return Array.from(merged.values())
     .sort((a, b) => b.lastSeenMs - a.lastSeenMs || b.totalDuration - a.totalDuration)
     .slice(0, Math.max(1, limit));
+}
+
+export async function loadObservedWebDomainCandidates(
+  days: number = 30,
+  limit: number = 120,
+): Promise<ObservedWebDomainCandidate[]> {
+  return loadObservedWebDomainStats(days, limit);
+}
+
+export async function deleteObservedWebDomainHistory(normalizedDomain: string): Promise<void> {
+  const domainKey = normalizeWebDomainKey(normalizedDomain);
+  if (!domainKey) {
+    return;
+  }
+  await deleteWebActivitySegmentsByDomain(domainKey);
 }
 
 export async function deleteObservedAppSessions(

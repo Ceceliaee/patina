@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { createServer, type Plugin } from "vite";
 import { COPY } from "../src/shared/copy/uiText.ts";
 
-const EXPECTED_NAV_LABELS = ["今天", "历史", "数据", "应用", "工具", "设置", "关于"] as const;
+const EXPECTED_NAV_LABELS = ["今天", "历史", "数据", "分类", "工具", "设置", "关于"] as const;
 const DASHBOARD_MARKERS = ["专注分布", "应用排行"] as const;
 const TOOLS_TEXT = COPY["zh-CN"].tools;
 const SETTINGS_MARKER = "主题模式";
@@ -1454,7 +1454,7 @@ try {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("应用"))} + ']');
+          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("分类"))} + ']');
           if (!node) return false;
           node.click();
           return true;
@@ -2086,7 +2086,7 @@ try {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const closeButton = document.querySelector(".history-timeline-dialog-surface .qp-dialog-action");
+          const closeButton = document.querySelector(".history-timeline-dialog-surface .history-timeline-dialog-close");
           if (!closeButton) return false;
           closeButton.click();
           return true;
@@ -2179,7 +2179,7 @@ try {
       assert.equal(
         await evaluate(client!, sessionId, `
           (() => {
-            const closeButton = document.querySelector(".history-timeline-dialog-surface .qp-dialog-action");
+            const closeButton = document.querySelector(".history-timeline-dialog-surface .history-timeline-dialog-close");
             if (!closeButton) return false;
             closeButton.click();
             return true;
@@ -2250,7 +2250,7 @@ try {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const closeButton = document.querySelector(".history-timeline-dialog-surface .qp-dialog-action");
+          const closeButton = document.querySelector(".history-timeline-dialog-surface .history-timeline-dialog-close");
           if (!closeButton) return false;
           closeButton.click();
           return true;
@@ -2620,7 +2620,7 @@ try {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const closeButton = document.querySelector(".history-timeline-dialog-surface .qp-dialog-action");
+          const closeButton = document.querySelector(".history-timeline-dialog-surface .history-timeline-dialog-close");
           if (!closeButton) return false;
           closeButton.click();
           return true;

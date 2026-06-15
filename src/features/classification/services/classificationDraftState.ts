@@ -5,9 +5,11 @@ import {
   type CustomAppCategory,
 } from "../../../shared/classification/categoryTokens.ts";
 import type { AppOverride } from "../../../shared/classification/processMapper.ts";
+import type { WebDomainOverride } from "../../../shared/types/webActivity.ts";
 
 export interface ClassificationDraftState {
   overrides: Record<string, AppOverride>;
+  webDomainOverrides: Record<string, WebDomainOverride>;
   categoryColorOverrides: Record<string, string>;
   customCategories: CustomAppCategory[];
   deletedCategories: AppCategory[];
@@ -15,6 +17,7 @@ export interface ClassificationDraftState {
 
 export interface ClassificationDraftChangePlan {
   overrideUpserts: Array<{ exeName: string; override: AppOverride | null }>;
+  webDomainOverrideUpserts: Array<{ normalizedDomain: string; override: WebDomainOverride | null }>;
   categoryColorUpdates: Array<{ category: AppCategory; colorValue: string | null }>;
   customCategoriesToAdd: CustomAppCategory[];
   customCategoriesToRemove: CustomAppCategory[];
@@ -41,9 +44,14 @@ export function cloneClassificationDraftState(state: ClassificationDraftState): 
   for (const [exeName, override] of Object.entries(state.overrides)) {
     overrides[exeName] = { ...override };
   }
+  const webDomainOverrides: Record<string, WebDomainOverride> = {};
+  for (const [normalizedDomain, override] of Object.entries(state.webDomainOverrides ?? {})) {
+    webDomainOverrides[normalizedDomain] = { ...override };
+  }
 
   return {
     overrides,
+    webDomainOverrides,
     categoryColorOverrides: { ...state.categoryColorOverrides },
     customCategories: [...state.customCategories],
     deletedCategories: [...state.deletedCategories],
@@ -81,6 +89,25 @@ export function normalizeClassificationOverride(
   return hasMeaningfulValue ? next : null;
 }
 
+export function normalizeWebDomainOverride(
+  override: WebDomainOverride | null | undefined,
+): WebDomainOverride | null {
+  if (!override) return null;
+  const next: WebDomainOverride = {};
+  if (override.category) next.category = override.category;
+  if (override.displayName?.trim()) next.displayName = override.displayName.trim();
+  if (override.color) next.color = override.color;
+  if (override.enabled === false) next.enabled = false;
+  if (typeof override.updatedAt === "number") next.updatedAt = override.updatedAt;
+  const hasMeaningfulValue = Boolean(
+    next.category
+    || next.displayName
+    || next.color
+    || next.enabled === false,
+  );
+  return hasMeaningfulValue ? next : null;
+}
+
 export function areClassificationOverridesEqual(
   left: AppOverride | null,
   right: AppOverride | null,
@@ -94,6 +121,20 @@ export function areClassificationOverridesEqual(
     && normalizedLeft.color === normalizedRight.color
     && normalizedLeft.track === normalizedRight.track
     && normalizedLeft.captureTitle === normalizedRight.captureTitle;
+}
+
+export function areWebDomainOverridesEqual(
+  left: WebDomainOverride | null,
+  right: WebDomainOverride | null,
+): boolean {
+  const normalizedLeft = normalizeWebDomainOverride(left);
+  const normalizedRight = normalizeWebDomainOverride(right);
+  if (!normalizedLeft && !normalizedRight) return true;
+  if (!normalizedLeft || !normalizedRight) return false;
+  return normalizedLeft.category === normalizedRight.category
+    && normalizedLeft.displayName === normalizedRight.displayName
+    && normalizedLeft.color === normalizedRight.color
+    && normalizedLeft.enabled === normalizedRight.enabled;
 }
 
 export function hasClassificationDraftChanges(
@@ -122,6 +163,18 @@ export function hasClassificationDraftChanges(
     }
   }
 
+  const normalizedDomains = new Set([
+    ...Object.keys(saved.webDomainOverrides ?? {}),
+    ...Object.keys(draft.webDomainOverrides ?? {}),
+  ]);
+  for (const normalizedDomain of normalizedDomains) {
+    const savedOverride = saved.webDomainOverrides?.[normalizedDomain] ?? null;
+    const draftOverride = draft.webDomainOverrides?.[normalizedDomain] ?? null;
+    if (!areWebDomainOverridesEqual(savedOverride, draftOverride)) {
+      return true;
+    }
+  }
+
   return false;
 }
 
@@ -144,6 +197,20 @@ export function buildClassificationDraftChangePlan(
       continue;
     }
     overrideUpserts.push({ exeName, override: draftOverride });
+  }
+
+  const webDomainKeys = new Set([
+    ...Object.keys(saved.webDomainOverrides ?? {}),
+    ...Object.keys(draft.webDomainOverrides ?? {}),
+  ]);
+  const webDomainOverrideUpserts: ClassificationDraftChangePlan["webDomainOverrideUpserts"] = [];
+  for (const normalizedDomain of webDomainKeys) {
+    const savedOverride = saved.webDomainOverrides?.[normalizedDomain] ?? null;
+    const draftOverride = draft.webDomainOverrides?.[normalizedDomain] ?? null;
+    if (areWebDomainOverridesEqual(savedOverride, draftOverride)) {
+      continue;
+    }
+    webDomainOverrideUpserts.push({ normalizedDomain, override: draftOverride });
   }
 
   const categoryColorUpdates: ClassificationDraftChangePlan["categoryColorUpdates"] = [];
@@ -183,6 +250,7 @@ export function buildClassificationDraftChangePlan(
 
   return {
     overrideUpserts,
+    webDomainOverrideUpserts,
     categoryColorUpdates,
     customCategoriesToAdd,
     customCategoriesToRemove,

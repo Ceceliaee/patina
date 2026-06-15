@@ -76,37 +76,6 @@
   white-space: nowrap;
 }
 
-.history-day-distribution-mode-switch {
-  flex: 0 0 auto;
-  gap: 2px;
-  border: 1px solid color-mix(in srgb, var(--qp-border-subtle) 72%, transparent);
-  border-radius: var(--qp-radius-control);
-  background: color-mix(in srgb, var(--qp-bg-elevated) 58%, transparent);
-  padding: 2px;
-}
-
-.history-day-distribution-mode-switch .qp-segmented-filter-item {
-  min-height: 22px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  padding: 3px 8px;
-  font-size: 11px;
-  font-weight: 650;
-  line-height: 1;
-  color: var(--qp-text-tertiary);
-}
-
-.history-day-distribution-mode-switch .qp-segmented-filter-item:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--qp-bg-panel) 72%, transparent);
-  color: var(--qp-text-secondary);
-}
-
-.history-day-distribution-mode-switch .qp-segmented-filter-item-selected {
-  background: var(--qp-bg-panel);
-  color: var(--qp-text-secondary);
-}
-
 .history-horizontal-timeline {
   display: grid;
   flex: 0 0 auto;
@@ -454,7 +423,22 @@
 }
 
 .history-timeline-dialog-surface {
+  position: relative;
   width: min(760px, calc(100vw - 48px));
+}
+
+.history-timeline-dialog-surface .qp-dialog-header {
+  padding-right: 36px;
+}
+
+.history-timeline-dialog-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.history-timeline-dialog-surface .qp-dialog-body {
+  min-height: 0;
 }
 
 .history-timeline-dialog-body {

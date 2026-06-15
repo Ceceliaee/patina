@@ -195,6 +195,7 @@ async fn table_has_columns(
         "tool_pomodoro_runs" => "PRAGMA table_info(tool_pomodoro_runs)",
         "tool_daily_stats" => "PRAGMA table_info(tool_daily_stats)",
         "tool_software_reminder_rules" => "PRAGMA table_info(tool_software_reminder_rules)",
+        "web_activity_segments" => "PRAGMA table_info(web_activity_segments)",
         _ => {
             return Err(format!(
                 "unsupported schema inspection table `{table_name}`"
@@ -237,6 +238,7 @@ async fn table_has_index(
         "tool_pomodoro_runs" => "PRAGMA index_list(tool_pomodoro_runs)",
         "tool_daily_stats" => "PRAGMA index_list(tool_daily_stats)",
         "tool_software_reminder_rules" => "PRAGMA index_list(tool_software_reminder_rules)",
+        "web_activity_segments" => "PRAGMA index_list(web_activity_segments)",
         _ => return Err(format!("unsupported index inspection table `{table_name}`")),
     };
 
@@ -652,6 +654,55 @@ async fn has_software_reminder_rules_schema(pool: &Pool<Sqlite>) -> Result<bool,
         && sessions_exe_usage_index_ready)
 }
 
+async fn has_web_activity_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    if !table_exists(pool, "web_activity_segments").await? {
+        return Ok(false);
+    }
+
+    let segments_ready = table_has_columns(
+        pool,
+        "web_activity_segments",
+        &[
+            "id",
+            "browser_client_id",
+            "browser_kind",
+            "browser_exe_name",
+            "domain",
+            "normalized_domain",
+            "url",
+            "title",
+            "favicon_url",
+            "start_time",
+            "end_time",
+            "duration",
+            "source",
+            "created_at",
+            "updated_at",
+        ],
+    )
+    .await?;
+    let time_index_ready = table_has_index(
+        pool,
+        "web_activity_segments",
+        "idx_web_activity_segments_time",
+    )
+    .await?;
+    let domain_time_index_ready = table_has_index(
+        pool,
+        "web_activity_segments",
+        "idx_web_activity_segments_domain_time",
+    )
+    .await?;
+    let single_active_index_ready = table_has_index(
+        pool,
+        "web_activity_segments",
+        "idx_web_activity_segments_single_active",
+    )
+    .await?;
+
+    Ok(segments_ready && time_index_ready && domain_time_index_ready && single_active_index_ready)
+}
+
 async fn normalize_current_baseline_migration_history_for_pool(
     pool: &Pool<Sqlite>,
 ) -> Result<bool, String> {
@@ -668,6 +719,8 @@ async fn normalize_current_baseline_migration_history_for_pool(
         expected.truncate(1);
     } else if !has_software_reminder_rules_schema(pool).await? {
         expected.truncate(2);
+    } else if !has_web_activity_schema(pool).await? {
+        expected.truncate(3);
     }
     if expected.is_empty() {
         return Ok(false);
@@ -796,6 +849,16 @@ mod tests {
     }
 
     #[test]
+    fn web_activity_schema_creates_complete_table() {
+        tauri::async_runtime::block_on(async {
+            let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+            pool.execute(schema::WEB_ACTIVITY_SCHEMA_SQL).await.unwrap();
+
+            assert!(has_web_activity_schema(&pool).await.unwrap());
+        });
+    }
+
+    #[test]
     fn current_schema_history_is_normalized_to_single_baseline_row() {
         tauri::async_runtime::block_on(async {
             let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
@@ -900,7 +963,8 @@ mod tests {
                 .fetch_all(&pool)
                 .await
                 .unwrap();
-            let expected = expected_migration_metadata();
+            let mut expected = expected_migration_metadata();
+            expected.truncate(3);
 
             assert_eq!(rows.len(), expected.len());
             for (version, description, checksum) in expected {
@@ -910,6 +974,56 @@ mod tests {
                         && row.get::<Vec<u8>, _>("checksum") == checksum
                 }));
             }
+        });
+    }
+
+    #[test]
+    fn current_schema_history_does_not_mark_missing_web_activity_schema_as_applied() {
+        tauri::async_runtime::block_on(async {
+            let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+            pool.execute(schema::CURRENT_BASELINE_SCHEMA_SQL)
+                .await
+                .unwrap();
+            pool.execute(schema::TOOLS_TABLES_SCHEMA_SQL).await.unwrap();
+            pool.execute(schema::SOFTWARE_REMINDER_RULES_SCHEMA_SQL)
+                .await
+                .unwrap();
+            create_sqlx_migrations_table(&pool).await;
+            pool.execute(
+                "INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time)
+                 VALUES (1, 'old_v1', 1, x'01', 0),
+                        (2, 'old_v2', 1, x'02', 0),
+                        (3, 'old_v3', 1, x'03', 0),
+                        (4, 'old_v4_without_table', 1, x'04', 0)",
+            )
+            .await
+            .unwrap();
+
+            let normalized = normalize_current_baseline_migration_history_for_pool(&pool)
+                .await
+                .unwrap();
+
+            assert!(normalized);
+            assert!(!has_web_activity_schema(&pool).await.unwrap());
+
+            let rows = sqlx::query("SELECT version, description, checksum FROM _sqlx_migrations")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+            let mut expected = expected_migration_metadata();
+            expected.truncate(3);
+
+            assert_eq!(rows.len(), expected.len());
+            for (version, description, checksum) in expected {
+                assert!(rows.iter().any(|row| {
+                    row.get::<i64, _>("version") == version
+                        && row.get::<String, _>("description") == description
+                        && row.get::<Vec<u8>, _>("checksum") == checksum
+                }));
+            }
+
+            run_current_migrations(&pool).await.unwrap();
+            assert!(has_web_activity_schema(&pool).await.unwrap());
         });
     }
 

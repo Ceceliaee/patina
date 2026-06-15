@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "Patina Web Activity Bridge",
+  "description": "Send active tab domain and title to local Patina when web recording is enabled.",
+  "version": "0.1.0",
+  "permissions": [
+    "alarms",
+    "favicon",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' http://127.0.0.1:* http://localhost:*"
+  },
+  "icons": {
+    "32": "icons/icon-32.png",
+    "64": "icons/icon-64.png",
+    "128": "icons/icon-128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_page": "options.html",
+  "action": {
+    "default_title": "Patina",
+    "default_icon": {
+      "32": "icons/icon-32.png",
+      "64": "icons/icon-64.png",
+      "128": "icons/icon-128.png"
+    },
+    "default_popup": "popup.html"
+  }
+}

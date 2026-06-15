@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { RefreshCw, Save, Search, Sparkles, SlidersHorizontal } from "lucide-react";
 import { UI_TEXT } from "../../../shared/copy/uiText.ts";
 import QuietDialog from "../../../shared/components/QuietDialog";
@@ -5,8 +6,14 @@ import QuietPageHeader from "../../../shared/components/QuietPageHeader";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
 import CategoryColorControls from "./CategoryColorControls";
 import AppMappingCandidateCard from "./AppMappingCandidateCard";
+import WebDomainMappingCard from "./WebDomainMappingCard";
 import { useAppMappingState } from "../hooks/useAppMappingState";
 import type { CandidateFilter } from "../types";
+import {
+  readClassificationObjectMode,
+  rememberClassificationObjectMode,
+  type MappingObjectMode,
+} from "../services/classificationLayoutPreferenceStorage.ts";
 
 interface Props {
   icons: Record<string, string>;
@@ -17,6 +24,7 @@ interface Props {
 }
 
 export default function AppMapping(props: Props) {
+  const [objectMode, setObjectMode] = useState<MappingObjectMode>(readClassificationObjectMode);
   const filterOptions: Array<{ value: CandidateFilter; label: string }> = [
     { value: "all", label: UI_TEXT.mapping.filters.all },
     { value: "other", label: UI_TEXT.mapping.filters.other },
@@ -32,12 +40,14 @@ export default function AppMapping(props: Props) {
     searchQuery,
     setSearchQuery,
     counts,
+    webDomainCounts,
     saveStatus,
     saving,
     hasUnsavedChanges,
     handleCancel,
     handleSave,
     filteredCandidates,
+    filteredWebDomainCandidates,
     showCategoryDialog,
     setShowCategoryDialog,
     colorFormat,
@@ -52,19 +62,33 @@ export default function AppMapping(props: Props) {
     resolveMappedCategory,
     resolveTrackingEnabled,
     resolveTitleCaptureEnabled,
+    resolveWebDomainDisplayName,
+    resolveWebDomainColor,
+    resolveWebDomainCategory,
+    resolveWebDomainEnabled,
     deletingSessionsExe,
     editingNameExe,
     nameDrafts,
+    editingWebDomain,
+    webNameDrafts,
     draftOverrides,
     syncNameDraftToPageDraft,
     handleNameBlur,
     handleNameEditCancel,
     startNameEdit,
+    syncWebNameDraftToPageDraft,
+    handleWebNameBlur,
+    handleWebNameEditCancel,
+    startWebNameEdit,
     handleColorAssign,
     handleCategoryAssign,
+    handleWebDomainColorAssign,
+    handleWebDomainCategoryAssign,
+    handleWebDomainTrackingToggle,
     handleTitleCaptureToggle,
     handleTrackingToggle,
     handleDeleteAllSessions,
+    handleDeleteWebDomainHistory,
     applyCategoryColor,
   } = useAppMappingState(props);
 
@@ -76,6 +100,19 @@ export default function AppMapping(props: Props) {
       </div>
     );
   }
+
+  const activeCounts = objectMode === "web" ? webDomainCounts : counts;
+  const objectModeOptions = [
+    { value: "app" as const, label: UI_TEXT.mapping.objectModeApp },
+    { value: "web" as const, label: UI_TEXT.mapping.objectModeWeb },
+  ];
+  const searchPlaceholder = objectMode === "web"
+    ? UI_TEXT.mapping.webSearchPlaceholder
+    : UI_TEXT.mapping.appSearchPlaceholder;
+  const handleObjectModeChange = (mode: MappingObjectMode) => {
+    setObjectMode(mode);
+    rememberClassificationObjectMode(mode);
+  };
 
   return (
     <div className="flex h-full min-w-0 flex-col gap-4 md:gap-5 overflow-hidden">
@@ -135,10 +172,10 @@ export default function AppMapping(props: Props) {
               onChange={setFilter}
               options={filterOptions.map((item) => {
                 const count = item.value === "all"
-                  ? counts.all
+                  ? activeCounts.all
                   : item.value === "other"
-                    ? counts.other
-                    : counts.classified;
+                    ? activeCounts.other
+                    : activeCounts.classified;
                 return {
                   value: item.value,
                   label: `${item.label} (${count})`,
@@ -150,24 +187,87 @@ export default function AppMapping(props: Props) {
               <input
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder={UI_TEXT.mapping.searchPlaceholder}
-                aria-label={UI_TEXT.mapping.searchPlaceholder}
+                placeholder={searchPlaceholder}
+                aria-label={searchPlaceholder}
               />
             </label>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowCategoryDialog(true)}
-            className="qp-button-secondary inline-flex items-center gap-2 rounded-[8px] px-3 py-2 text-xs font-semibold"
-          >
-            <SlidersHorizontal size={14} />
-            {UI_TEXT.mapping.categoryControl}
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <QuietSegmentedFilter
+              value={objectMode}
+              onChange={handleObjectModeChange}
+              options={objectModeOptions}
+              className="qp-segmented-filter-compact"
+            />
+            <button
+              type="button"
+              onClick={() => setShowCategoryDialog(true)}
+              className="qp-button-secondary inline-flex items-center gap-2 rounded-[8px] px-3 py-2 text-xs font-semibold"
+            >
+              <SlidersHorizontal size={14} />
+              {UI_TEXT.mapping.categoryControl}
+            </button>
+          </div>
         </div>
       </section>
 
       <div className="qp-panel flex-1 min-h-0 p-4">
-        {filteredCandidates.length === 0 ? (
+        {objectMode === "web" ? (
+          filteredWebDomainCandidates.length === 0 ? (
+            <div className="h-full flex items-center justify-center text-sm text-[var(--qp-text-tertiary)]">
+              {UI_TEXT.mapping.webEmptyState}
+            </div>
+          ) : (
+            <div className="h-full overflow-y-auto custom-scrollbar pr-1">
+              <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
+                {filteredWebDomainCandidates.map((candidate) => {
+                  const displayName = resolveWebDomainDisplayName(candidate);
+                  const displayColor = resolveWebDomainColor(candidate);
+                  const assignedCategory = resolveWebDomainCategory(candidate);
+                  const recordingEnabled = resolveWebDomainEnabled(candidate);
+                  const isBusy = saving || deletingSessionsExe === candidate.normalizedDomain;
+                  const isEditingName = editingWebDomain === candidate.normalizedDomain;
+                  const inputValue = webNameDrafts[candidate.normalizedDomain] ?? displayName;
+                  const hasManualColor = Boolean(draftState.webDomainOverrides[candidate.normalizedDomain]?.color);
+
+                  return (
+                    <WebDomainMappingCard
+                      key={candidate.normalizedDomain}
+                      candidate={candidate}
+                      displayName={displayName}
+                      displayColor={displayColor}
+                      assignedCategory={assignedCategory}
+                      recordingEnabled={recordingEnabled}
+                      isBusy={isBusy}
+                      isEditingName={isEditingName}
+                      inputValue={inputValue}
+                      hasManualColor={hasManualColor}
+                      colorFormat={colorFormat}
+                      categoryOptions={candidateCategoryOptions}
+                      onNameDraftChange={(nextValue) => syncWebNameDraftToPageDraft(candidate, nextValue)}
+                      onNameBlur={() => {
+                        handleWebNameBlur(candidate);
+                      }}
+                      onNameEditCancel={() => {
+                        handleWebNameEditCancel(candidate);
+                      }}
+                      onStartNameEdit={() => {
+                        startWebNameEdit(candidate);
+                      }}
+                      onColorAssign={(nextColor) => handleWebDomainColorAssign(candidate, nextColor)}
+                      onColorFormatChange={setColorFormat}
+                      onCategoryAssign={(value) => handleWebDomainCategoryAssign(candidate, value)}
+                      onToggleRecording={() => handleWebDomainTrackingToggle(candidate, !recordingEnabled)}
+                      onDeleteHistory={() => {
+                        void handleDeleteWebDomainHistory(candidate);
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          )
+        ) : filteredCandidates.length === 0 ? (
           <div className="h-full flex items-center justify-center text-sm text-[var(--qp-text-tertiary)]">
             {UI_TEXT.mapping.emptyState}
           </div>

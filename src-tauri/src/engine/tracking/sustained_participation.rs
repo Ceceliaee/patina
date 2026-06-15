@@ -531,7 +531,6 @@ mod tests {
             last_signal_source: Some(SustainedParticipationSignalSource::SystemMedia),
             last_kind: Some(SustainedParticipationKind::Audio),
             transient_miss_count: 3,
-            ..SustainedParticipationRuntimeState::default()
         };
 
         let (status, _) = resolve_status_for_test(
