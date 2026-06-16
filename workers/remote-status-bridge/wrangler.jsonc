@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "patina-remote-status-bridge",
+  "main": "src/index.js",
+  "compatibility_date": "2026-06-17",
+  "vars": {
+    "REMOTE_STATUS_BRIDGE_TOKEN": "change-me"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

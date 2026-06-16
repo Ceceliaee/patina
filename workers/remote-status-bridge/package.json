@@ -1,0 +1,21 @@
+{
+  "name": "patina-remote-status-bridge-worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "wrangler check"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  },
+  "cloudflare": {
+    "bindings": {
+      "REMOTE_STATUS_BRIDGE_TOKEN": {
+        "description": "Set this to the same connection token configured in Patina Settings -> Services -> Remote status bridge."
+      }
+    }
+  }
+}
