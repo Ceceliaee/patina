@@ -13,11 +13,18 @@ type SettingsInterfacePanelProps = {
   port: number;
   localApiToken: string;
   webActivityToken: string;
+  remoteStatusBridgeEnabled: boolean;
+  remoteStatusBridgeUrl: string;
+  remoteStatusBridgeToken: string;
+  remoteStatusBridgeMachineId: string;
   onLocalApiEnabledChange: (nextChecked: boolean) => void;
   onWebActivityEnabledChange: (nextChecked: boolean) => void;
   onPortChange: (nextPort: number) => void;
   onLocalApiTokenChange: (nextToken: string) => void;
   onWebActivityTokenChange: (nextToken: string) => void;
+  onRemoteStatusBridgeEnabledChange: (nextChecked: boolean) => void;
+  onRemoteStatusBridgeUrlChange: (nextUrl: string) => void;
+  onRemoteStatusBridgeTokenChange: (nextToken: string) => void;
 };
 
 type TokenFieldProps = {
@@ -47,6 +54,16 @@ type PortFieldProps = {
   disabled: boolean;
   onChange: (nextValue: string) => void;
   onCommit: () => void;
+};
+
+type TextFieldProps = {
+  id: string;
+  value: string;
+  disabled: boolean;
+  readOnly?: boolean;
+  spellCheck?: boolean;
+  onChange?: (nextValue: string) => void;
+  onCommit?: () => void;
 };
 
 type InterfaceInlineFieldProps = {
@@ -173,6 +190,31 @@ function PortField({
   );
 }
 
+function TextField({
+  id,
+  value,
+  disabled,
+  readOnly = false,
+  spellCheck = false,
+  onChange,
+  onCommit,
+}: TextFieldProps) {
+  return (
+    <input
+      id={id}
+      type="text"
+      value={value}
+      onChange={onChange ? (event) => onChange(event.target.value) : undefined}
+      onBlur={onCommit}
+      className="qp-input h-[34px] w-full"
+      disabled={disabled}
+      readOnly={readOnly}
+      autoComplete="off"
+      spellCheck={spellCheck}
+    />
+  );
+}
+
 function InterfaceInlineField({
   htmlFor,
   icon,
@@ -199,16 +241,24 @@ export default function SettingsInterfacePanel({
   port,
   localApiToken,
   webActivityToken,
+  remoteStatusBridgeEnabled,
+  remoteStatusBridgeUrl,
+  remoteStatusBridgeToken,
+  remoteStatusBridgeMachineId,
   onLocalApiEnabledChange,
   onWebActivityEnabledChange,
   onPortChange,
   onLocalApiTokenChange,
   onWebActivityTokenChange,
+  onRemoteStatusBridgeEnabledChange,
+  onRemoteStatusBridgeUrlChange,
+  onRemoteStatusBridgeTokenChange,
 }: SettingsInterfacePanelProps) {
   const [localApiPortDraft, setLocalApiPortDraft] = useState(String(port));
   const [webActivityPortDraft, setWebActivityPortDraft] = useState(String(port));
   const [localApiTokenVisible, setLocalApiTokenVisible] = useState(false);
   const [webActivityTokenVisible, setWebActivityTokenVisible] = useState(false);
+  const [remoteStatusBridgeTokenVisible, setRemoteStatusBridgeTokenVisible] = useState(false);
   const localApiEndpointDraft = `${LOCAL_API_ENDPOINT_PREFIX}${localApiPortDraft}`;
 
   useEffect(() => {
@@ -228,6 +278,12 @@ export default function SettingsInterfacePanel({
       onWebActivityTokenChange(createLocalApiToken());
     }
     onWebActivityEnabledChange(nextChecked);
+  };
+  const handleRemoteStatusBridgeEnabledChange = (nextChecked: boolean) => {
+    if (nextChecked && remoteStatusBridgeToken.trim().length === 0) {
+      onRemoteStatusBridgeTokenChange(createLocalApiToken());
+    }
+    onRemoteStatusBridgeEnabledChange(nextChecked);
   };
   const handleEndpointChange = (nextValue: string, prefix: string) => {
     if (!nextValue.startsWith(prefix)) return;
@@ -253,6 +309,74 @@ export default function SettingsInterfacePanel({
       </div>
 
       <div className="space-y-5">
+        <QuietSubpanel>
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-[var(--qp-text-primary)]">
+                {UI_TEXT.settings.remoteStatusBridgeTitle}
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-[var(--qp-text-secondary)]">
+                {UI_TEXT.settings.remoteStatusBridgeEnabledHint}
+              </p>
+            </div>
+            <QuietSwitch
+              checked={remoteStatusBridgeEnabled}
+              onChange={handleRemoteStatusBridgeEnabledChange}
+              ariaLabel={UI_TEXT.accessibility.settings.toggleRemoteStatusBridge}
+            />
+          </div>
+
+          <div className={INTERFACE_FIELD_GRID_CLASS}>
+            <InterfaceInlineField
+              htmlFor="settings-remote-status-bridge-url"
+              icon={<Link2 size={14} className="text-[var(--qp-text-tertiary)]" />}
+              title={UI_TEXT.settings.remoteStatusBridgeUrlLabel}
+            >
+              <TextField
+                id="settings-remote-status-bridge-url"
+                value={remoteStatusBridgeUrl}
+                disabled={!remoteStatusBridgeEnabled}
+                spellCheck={false}
+                onChange={onRemoteStatusBridgeUrlChange}
+              />
+            </InterfaceInlineField>
+
+            <InterfaceInlineField
+              htmlFor="settings-remote-status-bridge-token"
+              icon={<KeyRound size={14} className="text-[var(--qp-text-tertiary)]" />}
+              title={UI_TEXT.settings.remoteStatusBridgeTokenLabel}
+            >
+              <TokenField
+                id="settings-remote-status-bridge-token"
+                value={remoteStatusBridgeToken}
+                visible={remoteStatusBridgeTokenVisible}
+                disabled={!remoteStatusBridgeEnabled}
+                onChange={onRemoteStatusBridgeTokenChange}
+                onGenerate={() => {
+                  onRemoteStatusBridgeTokenChange(createLocalApiToken());
+                  setRemoteStatusBridgeTokenVisible(true);
+                }}
+                onToggleVisible={() => setRemoteStatusBridgeTokenVisible((current) => !current)}
+                showLabel={UI_TEXT.accessibility.settings.showLocalApiToken}
+                hideLabel={UI_TEXT.accessibility.settings.hideLocalApiToken}
+              />
+            </InterfaceInlineField>
+
+            <InterfaceInlineField
+              htmlFor="settings-remote-status-bridge-machine-id"
+              icon={<Server size={14} className="text-[var(--qp-text-tertiary)]" />}
+              title={UI_TEXT.settings.remoteStatusBridgeMachineIdLabel}
+            >
+              <TextField
+                id="settings-remote-status-bridge-machine-id"
+                value={remoteStatusBridgeMachineId}
+                disabled={false}
+                readOnly
+              />
+            </InterfaceInlineField>
+          </div>
+        </QuietSubpanel>
+
         <QuietSubpanel>
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">

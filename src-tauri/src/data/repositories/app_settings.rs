@@ -1,4 +1,6 @@
-use crate::domain::settings::{DesktopBehaviorSettings, LocalApiSettings, WebActivitySettings};
+use crate::domain::settings::{
+    DesktopBehaviorSettings, LocalApiSettings, RemoteStatusBridgeSettings, WebActivitySettings,
+};
 use sqlx::{Pool, Row, Sqlite};
 
 const CLOSE_BEHAVIOR_KEY: &str = "close_behavior";
@@ -11,6 +13,10 @@ const LOCAL_API_PORT_KEY: &str = "local_api_port";
 const LOCAL_API_TOKEN_KEY: &str = "local_api_token";
 const WEB_ACTIVITY_ENABLED_KEY: &str = "web_activity_enabled";
 const WEB_ACTIVITY_TOKEN_KEY: &str = "web_activity_token";
+const REMOTE_STATUS_BRIDGE_ENABLED_KEY: &str = "remote_status_bridge_enabled";
+const REMOTE_STATUS_BRIDGE_URL_KEY: &str = "remote_status_bridge_url";
+const REMOTE_STATUS_BRIDGE_TOKEN_KEY: &str = "remote_status_bridge_token";
+const REMOTE_STATUS_BRIDGE_MACHINE_ID_KEY: &str = "remote_status_bridge_machine_id";
 const MAX_APP_SETTING_VALUE_LEN: usize = 4096;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -140,6 +146,10 @@ fn is_allowed_app_setting_key(key: &str) -> bool {
             | "local_api_token"
             | "web_activity_enabled"
             | "web_activity_token"
+            | "remote_status_bridge_enabled"
+            | "remote_status_bridge_url"
+            | "remote_status_bridge_token"
+            | "remote_status_bridge_machine_id"
     )
 }
 
@@ -208,6 +218,43 @@ pub async fn load_web_activity_settings(
     Ok(WebActivitySettings::from_storage_values(
         enabled.as_deref(),
         token.as_deref(),
+    ))
+}
+
+pub async fn load_remote_status_bridge_settings(
+    pool: &Pool<Sqlite>,
+) -> Result<RemoteStatusBridgeSettings, sqlx::Error> {
+    let rows = sqlx::query("SELECT key, value FROM settings WHERE key IN (?, ?, ?, ?)")
+        .bind(REMOTE_STATUS_BRIDGE_ENABLED_KEY)
+        .bind(REMOTE_STATUS_BRIDGE_URL_KEY)
+        .bind(REMOTE_STATUS_BRIDGE_TOKEN_KEY)
+        .bind(REMOTE_STATUS_BRIDGE_MACHINE_ID_KEY)
+        .fetch_all(pool)
+        .await?;
+
+    let mut enabled: Option<String> = None;
+    let mut url: Option<String> = None;
+    let mut token: Option<String> = None;
+    let mut machine_id: Option<String> = None;
+
+    for row in rows {
+        let key: String = row.get("key");
+        let value: String = row.get("value");
+
+        match key.as_str() {
+            REMOTE_STATUS_BRIDGE_ENABLED_KEY => enabled = Some(value),
+            REMOTE_STATUS_BRIDGE_URL_KEY => url = Some(value),
+            REMOTE_STATUS_BRIDGE_TOKEN_KEY => token = Some(value),
+            REMOTE_STATUS_BRIDGE_MACHINE_ID_KEY => machine_id = Some(value),
+            _ => {}
+        }
+    }
+
+    Ok(RemoteStatusBridgeSettings::from_storage_values(
+        enabled.as_deref(),
+        url.as_deref(),
+        token.as_deref(),
+        machine_id.as_deref(),
     ))
 }
 
@@ -320,6 +367,43 @@ mod tests {
                 load_setting(&pool, "__tracker_last_heartbeat_ms").await,
                 None
             );
+        });
+    }
+
+    #[test]
+    fn remote_status_bridge_settings_loads_new_keys() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+
+            commit_app_setting_mutations(
+                &pool,
+                &[
+                    AppSettingMutation {
+                        key: "remote_status_bridge_enabled".to_string(),
+                        value: "1".to_string(),
+                    },
+                    AppSettingMutation {
+                        key: "remote_status_bridge_url".to_string(),
+                        value: "wss://worker.example/ws".to_string(),
+                    },
+                    AppSettingMutation {
+                        key: "remote_status_bridge_token".to_string(),
+                        value: "secret".to_string(),
+                    },
+                    AppSettingMutation {
+                        key: "remote_status_bridge_machine_id".to_string(),
+                        value: "machine-1".to_string(),
+                    },
+                ],
+            )
+            .await
+            .unwrap();
+
+            let settings = load_remote_status_bridge_settings(&pool).await.unwrap();
+            assert!(settings.enabled);
+            assert_eq!(settings.url, "wss://worker.example/ws");
+            assert_eq!(settings.token, "secret");
+            assert_eq!(settings.machine_id, "machine-1");
         });
     }
 }

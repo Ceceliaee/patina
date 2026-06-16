@@ -8,6 +8,10 @@ pub const DEFAULT_LOCAL_API_PORT: u16 = 12_345;
 pub const DEFAULT_LOCAL_API_TOKEN: &str = "";
 pub const DEFAULT_WEB_ACTIVITY_ENABLED: bool = false;
 pub const DEFAULT_WEB_ACTIVITY_TOKEN: &str = "";
+pub const DEFAULT_REMOTE_STATUS_BRIDGE_ENABLED: bool = false;
+pub const DEFAULT_REMOTE_STATUS_BRIDGE_URL: &str = "";
+pub const DEFAULT_REMOTE_STATUS_BRIDGE_TOKEN: &str = "";
+pub const DEFAULT_REMOTE_STATUS_BRIDGE_MACHINE_ID: &str = "";
 pub const LOCAL_API_PORT_MIN: u16 = 1024;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -51,6 +55,14 @@ pub struct WebActivitySettings {
     pub token: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemoteStatusBridgeSettings {
+    pub enabled: bool,
+    pub url: String,
+    pub token: String,
+    pub machine_id: String,
+}
+
 impl Default for LocalApiSettings {
     fn default() -> Self {
         Self {
@@ -69,6 +81,17 @@ impl Default for WebActivitySettings {
         Self {
             enabled: DEFAULT_WEB_ACTIVITY_ENABLED,
             token: DEFAULT_WEB_ACTIVITY_TOKEN.to_string(),
+        }
+    }
+}
+
+impl Default for RemoteStatusBridgeSettings {
+    fn default() -> Self {
+        Self {
+            enabled: DEFAULT_REMOTE_STATUS_BRIDGE_ENABLED,
+            url: DEFAULT_REMOTE_STATUS_BRIDGE_URL.to_string(),
+            token: DEFAULT_REMOTE_STATUS_BRIDGE_TOKEN.to_string(),
+            machine_id: DEFAULT_REMOTE_STATUS_BRIDGE_MACHINE_ID.to_string(),
         }
     }
 }
@@ -120,6 +143,40 @@ impl WebActivitySettings {
             && !token.is_empty();
 
         Self { enabled, token }
+    }
+}
+
+impl RemoteStatusBridgeSettings {
+    pub fn from_storage_values(
+        enabled: Option<&str>,
+        url: Option<&str>,
+        token: Option<&str>,
+        machine_id: Option<&str>,
+    ) -> Self {
+        let url = url
+            .unwrap_or(DEFAULT_REMOTE_STATUS_BRIDGE_URL)
+            .trim()
+            .to_string();
+        let token = token
+            .unwrap_or(DEFAULT_REMOTE_STATUS_BRIDGE_TOKEN)
+            .trim()
+            .to_string();
+        let machine_id = machine_id
+            .unwrap_or(DEFAULT_REMOTE_STATUS_BRIDGE_MACHINE_ID)
+            .trim()
+            .to_string();
+        let enabled = enabled
+            .map(|raw| parse_boolean_setting(raw, DEFAULT_REMOTE_STATUS_BRIDGE_ENABLED))
+            .unwrap_or(DEFAULT_REMOTE_STATUS_BRIDGE_ENABLED)
+            && !url.is_empty()
+            && !token.is_empty();
+
+        Self {
+            enabled,
+            url,
+            token,
+            machine_id,
+        }
     }
 }
 
@@ -246,8 +303,8 @@ mod tests {
     use super::{
         parse_boolean_setting, parse_close_behavior, parse_local_api_port, parse_minimize_behavior,
         CloseBehavior, DesktopBehaviorSettings, LocalApiSettings, MinimizeBehavior,
-        WebActivitySettings, DEFAULT_BACKGROUND_OPTIMIZATION, DEFAULT_LAUNCH_AT_LOGIN,
-        DEFAULT_LOCAL_API_PORT, DEFAULT_START_MINIMIZED,
+        RemoteStatusBridgeSettings, WebActivitySettings, DEFAULT_BACKGROUND_OPTIMIZATION,
+        DEFAULT_LAUNCH_AT_LOGIN, DEFAULT_LOCAL_API_PORT, DEFAULT_START_MINIMIZED,
     };
 
     #[test]
@@ -350,6 +407,33 @@ mod tests {
             WebActivitySettings {
                 enabled: true,
                 token: "secret".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn remote_status_bridge_requires_url_and_token_to_enable() {
+        assert_eq!(
+            RemoteStatusBridgeSettings::from_storage_values(Some("1"), Some(""), Some("secret"), Some("machine")),
+            RemoteStatusBridgeSettings {
+                enabled: false,
+                url: String::new(),
+                token: "secret".to_string(),
+                machine_id: "machine".to_string(),
+            }
+        );
+        assert_eq!(
+            RemoteStatusBridgeSettings::from_storage_values(
+                Some("1"),
+                Some("wss://worker.example/ws"),
+                Some("secret"),
+                Some("machine"),
+            ),
+            RemoteStatusBridgeSettings {
+                enabled: true,
+                url: "wss://worker.example/ws".to_string(),
+                token: "secret".to_string(),
+                machine_id: "machine".to_string(),
             }
         );
     }

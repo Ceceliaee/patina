@@ -102,6 +102,10 @@ interface AppSettings {
   localApiToken: string;
   webActivityEnabled: boolean;
   webActivityToken: string;
+  remoteStatusBridgeEnabled: boolean;
+  remoteStatusBridgeUrl: string;
+  remoteStatusBridgeToken: string;
+  remoteStatusBridgeMachineId: string;
 }
 
 type CleanupRange = 180 | 90 | 60 | 30 | 15 | 7;
@@ -128,6 +132,10 @@ const BASE_SETTINGS: AppSettings = {
   localApiToken: "",
   webActivityEnabled: false,
   webActivityToken: "",
+  remoteStatusBridgeEnabled: false,
+  remoteStatusBridgeUrl: "",
+  remoteStatusBridgeToken: "",
+  remoteStatusBridgeMachineId: "",
 };
 
 function buildSettings(overrides: Partial<AppSettings> = {}): AppSettings {
@@ -358,6 +366,10 @@ await runTest("normalizeSettingsRecord accepts current minimize behavior values"
   assert.equal(defaultSettings.localApiEnabled, false);
   assert.equal(defaultSettings.localApiPort, 12345);
   assert.equal(defaultSettings.localApiToken, "");
+  assert.equal(defaultSettings.remoteStatusBridgeEnabled, false);
+  assert.equal(defaultSettings.remoteStatusBridgeUrl, "");
+  assert.equal(defaultSettings.remoteStatusBridgeToken, "");
+  assert.equal(defaultSettings.remoteStatusBridgeMachineId, "");
   const localApiSettings = normalizeSettingsRecord({
     local_api_enabled: "1",
     local_api_port: "18080",
@@ -380,6 +392,24 @@ await runTest("normalizeSettingsRecord accepts current minimize behavior values"
   });
   assert.equal(missingTokenSettings.localApiEnabled, false);
   assert.equal(missingTokenSettings.localApiToken, "");
+
+  const remoteBridgeSettings = normalizeSettingsRecord({
+    remote_status_bridge_enabled: "1",
+    remote_status_bridge_url: "wss://worker.example/ws",
+    remote_status_bridge_token: "secret",
+    remote_status_bridge_machine_id: "machine-1",
+  });
+  assert.equal(remoteBridgeSettings.remoteStatusBridgeEnabled, true);
+  assert.equal(remoteBridgeSettings.remoteStatusBridgeUrl, "wss://worker.example/ws");
+  assert.equal(remoteBridgeSettings.remoteStatusBridgeToken, "secret");
+  assert.equal(remoteBridgeSettings.remoteStatusBridgeMachineId, "machine-1");
+
+  const remoteBridgeMissingToken = normalizeSettingsRecord({
+    remote_status_bridge_enabled: "1",
+    remote_status_bridge_url: "wss://worker.example/ws",
+    remote_status_bridge_token: "   ",
+  });
+  assert.equal(remoteBridgeMissingToken.remoteStatusBridgeEnabled, false);
 
   const widgetSettings = normalizeSettingsRecord({
     minimize_behavior: "widget",

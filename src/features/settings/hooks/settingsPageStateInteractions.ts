@@ -48,12 +48,23 @@ export interface SettingsCancelFlowResult {
 function normalizeSettingsForSave(settings: AppSettings): AppSettings {
   const localApiToken = settings.localApiToken.trim();
   const webActivityToken = settings.webActivityToken.trim();
+  const remoteStatusBridgeToken = settings.remoteStatusBridgeToken.trim();
+  const remoteStatusBridgeUrl = settings.remoteStatusBridgeUrl.trim();
+  const remoteStatusBridgeMachineId = settings.remoteStatusBridgeMachineId.trim();
   return {
     ...settings,
     localApiEnabled: settings.localApiEnabled && localApiToken.length > 0,
     localApiToken,
     webActivityEnabled: settings.webActivityEnabled && webActivityToken.length > 0,
     webActivityToken,
+    remoteStatusBridgeEnabled: (
+      settings.remoteStatusBridgeEnabled
+      && remoteStatusBridgeToken.length > 0
+      && remoteStatusBridgeUrl.length > 0
+    ),
+    remoteStatusBridgeUrl,
+    remoteStatusBridgeToken,
+    remoteStatusBridgeMachineId,
   };
 }
 

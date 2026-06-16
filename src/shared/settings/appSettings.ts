@@ -57,6 +57,10 @@ export interface AppSettings {
   localApiToken: string;
   webActivityEnabled: boolean;
   webActivityToken: string;
+  remoteStatusBridgeEnabled: boolean;
+  remoteStatusBridgeUrl: string;
+  remoteStatusBridgeToken: string;
+  remoteStatusBridgeMachineId: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {

@@ -63,6 +63,10 @@ export interface ReleaseDefaultSettingsProfile {
   localApiToken: string;
   webActivityEnabled: boolean;
   webActivityToken: string;
+  remoteStatusBridgeEnabled: boolean;
+  remoteStatusBridgeUrl: string;
+  remoteStatusBridgeToken: string;
+  remoteStatusBridgeMachineId: string;
 }
 
 export const RELEASE_DEFAULT_SETTINGS: ReleaseDefaultSettingsProfile = {
@@ -87,4 +91,8 @@ export const RELEASE_DEFAULT_SETTINGS: ReleaseDefaultSettingsProfile = {
   localApiToken: "",
   webActivityEnabled: false,
   webActivityToken: "",
+  remoteStatusBridgeEnabled: false,
+  remoteStatusBridgeUrl: "",
+  remoteStatusBridgeToken: "",
+  remoteStatusBridgeMachineId: "",
 };

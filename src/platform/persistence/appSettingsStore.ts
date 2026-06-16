@@ -50,7 +50,11 @@ type RawAppSettingsKey =
   | "local_api_port"
   | "local_api_token"
   | "web_activity_enabled"
-  | "web_activity_token";
+  | "web_activity_token"
+  | "remote_status_bridge_enabled"
+  | "remote_status_bridge_url"
+  | "remote_status_bridge_token"
+  | "remote_status_bridge_machine_id";
 
 const APP_SETTINGS_RAW_KEYS: Record<keyof AppSettings, RawAppSettingsKey> = {
   idleTimeoutSecs: "idle_timeout_secs",
@@ -74,6 +78,10 @@ const APP_SETTINGS_RAW_KEYS: Record<keyof AppSettings, RawAppSettingsKey> = {
   localApiToken: "local_api_token",
   webActivityEnabled: "web_activity_enabled",
   webActivityToken: "web_activity_token",
+  remoteStatusBridgeEnabled: "remote_status_bridge_enabled",
+  remoteStatusBridgeUrl: "remote_status_bridge_url",
+  remoteStatusBridgeToken: "remote_status_bridge_token",
+  remoteStatusBridgeMachineId: "remote_status_bridge_machine_id",
 };
 
 const IDLE_TIMEOUT_SECONDS_RANGE = { min: 300, max: 1800, step: 60 } as const;
@@ -118,6 +126,18 @@ function normalizeLocalApiToken(value: string | undefined) {
 
 function normalizeWebActivityToken(value: string | undefined) {
   return value?.trim() ?? DEFAULT_SETTINGS.webActivityToken;
+}
+
+function normalizeRemoteStatusBridgeToken(value: string | undefined) {
+  return value?.trim() ?? DEFAULT_SETTINGS.remoteStatusBridgeToken;
+}
+
+function normalizeRemoteStatusBridgeUrl(value: string | undefined) {
+  return value?.trim() ?? DEFAULT_SETTINGS.remoteStatusBridgeUrl;
+}
+
+function normalizeRemoteStatusBridgeMachineId(value: string | undefined) {
+  return value?.trim() ?? DEFAULT_SETTINGS.remoteStatusBridgeMachineId;
 }
 
 function parseBooleanSetting(value: string | undefined, fallback: boolean) {
@@ -223,6 +243,15 @@ function serializeSettingValue(value: PersistedSettingValue) {
 export function normalizeSettingsRecord(record: Record<string, string | undefined>): AppSettings {
   const localApiToken = normalizeLocalApiToken(record.local_api_token);
   const webActivityToken = normalizeWebActivityToken(record.web_activity_token);
+  const remoteStatusBridgeToken = normalizeRemoteStatusBridgeToken(
+    record.remote_status_bridge_token,
+  );
+  const remoteStatusBridgeUrl = normalizeRemoteStatusBridgeUrl(
+    record.remote_status_bridge_url,
+  );
+  const remoteStatusBridgeMachineId = normalizeRemoteStatusBridgeMachineId(
+    record.remote_status_bridge_machine_id,
+  );
 
   return {
     idleTimeoutSecs: normalizeRangeStepValue(
@@ -282,6 +311,13 @@ export function normalizeSettingsRecord(record: Record<string, string | undefine
       DEFAULT_SETTINGS.webActivityEnabled,
     ) && webActivityToken.length > 0,
     webActivityToken,
+    remoteStatusBridgeEnabled: parseBooleanSetting(
+      record.remote_status_bridge_enabled,
+      DEFAULT_SETTINGS.remoteStatusBridgeEnabled,
+    ) && remoteStatusBridgeToken.length > 0 && remoteStatusBridgeUrl.length > 0,
+    remoteStatusBridgeUrl,
+    remoteStatusBridgeToken,
+    remoteStatusBridgeMachineId,
   };
 }
 

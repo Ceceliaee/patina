@@ -55,6 +55,10 @@ const BASE_SETTINGS: AppSettings = {
   localApiToken: "",
   webActivityEnabled: false,
   webActivityToken: "",
+  remoteStatusBridgeEnabled: false,
+  remoteStatusBridgeUrl: "",
+  remoteStatusBridgeToken: "",
+  remoteStatusBridgeMachineId: "",
 };
 
 function buildSettings(overrides: Partial<AppSettings> = {}): AppSettings {
