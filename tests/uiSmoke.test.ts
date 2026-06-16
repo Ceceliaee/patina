@@ -395,8 +395,18 @@ await runTest("classification web domain colors prefer favicon theme colors", ()
   assert.match(colorResolver, /const iconColor = webDomainIconThemeColors\[candidate\.normalizedDomain\]/);
   assert.match(colorResolver, /if \(iconColor\) return iconColor;/);
   assert.doesNotMatch(iconThemeColors, /darkPixelMode/);
-  assert.match(iconThemeColors, /brightness > 245/);
-  assert.doesNotMatch(iconThemeColors, /brightness\s*<\s*\d+/);
+  assert.doesNotMatch(iconThemeColors, /const\s+[A-Z_]*VERSION\s*=/);
+  assert.match(iconThemeColors, /ICON_SAMPLE_SIZE = 48/);
+  assert.match(iconThemeColors, /NEAR_WHITE_BRIGHTNESS_MIN = 235/);
+  assert.match(iconThemeColors, /NEAR_WHITE_CHROMA_MAX = 20/);
+  assert.match(iconThemeColors, /BACKGROUND_RAMP_BRIGHTNESS_MIN = 210/);
+  assert.match(iconThemeColors, /isBackgroundRampColor/);
+  assert.match(iconThemeColors, /DOMINANT_BACKGROUND_MIN_SHARE = 0\.45/);
+  assert.match(iconThemeColors, /DOMINANT_BACKGROUND_MIN_CANVAS_SHARE = 0\.25/);
+  assert.match(iconThemeColors, /detectDominantLightBackground/);
+  assert.match(iconThemeColors, /EDGE_DARK_PROTECTION_BRIGHTNESS = 120/);
+  assert.match(iconThemeColors, /BUCKET_SIZE = 24/);
+  assert.match(iconThemeColors, /fallbackThemeColor/);
   assert.match(webActivityRepository, /ORDER BY CASE WHEN icon\.favicon_url LIKE 'data:%' THEN 0 ELSE 1 END/);
 });
 
