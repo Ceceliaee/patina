@@ -1,6 +1,48 @@
 import { useEffect, useState } from "react";
 
 const ICON_THEME_CACHE = new Map<string, string>();
+const ICON_SAMPLE_SIZE = 48;
+const ALPHA_MIN = 48;
+const NEAR_WHITE_BRIGHTNESS_MIN = 235;
+const NEAR_WHITE_CHROMA_MAX = 20;
+const EDGE_WIDTH = 3;
+const EDGE_BACKGROUND_BRIGHTNESS_MIN = 190;
+const EDGE_BACKGROUND_SATURATION_MAX = 0.3;
+const EDGE_BACKGROUND_DISTANCE_MAX = 28;
+const EDGE_BACKGROUND_MIN_SHARE = 0.35;
+const EDGE_DARK_PROTECTION_BRIGHTNESS = 120;
+const BACKGROUND_RAMP_BRIGHTNESS_MIN = 210;
+const BACKGROUND_RAMP_SATURATION_MAX = 0.18;
+const BACKGROUND_RAMP_DISTANCE_MAX = 72;
+const DOMINANT_BACKGROUND_BRIGHTNESS_MIN = 190;
+const DOMINANT_BACKGROUND_SATURATION_MAX = 0.22;
+const DOMINANT_BACKGROUND_MIN_SHARE = 0.45;
+const DOMINANT_BACKGROUND_MIN_CANVAS_SHARE = 0.25;
+const BUCKET_SIZE = 24;
+const FALLBACK_PALETTE = [
+  "#3B82F6",
+  "#10B981",
+  "#F59E0B",
+  "#EF4444",
+  "#8B5CF6",
+  "#EC4899",
+  "#14B8A6",
+  "#64748B",
+];
+
+type Rgb = {
+  r: number;
+  g: number;
+  b: number;
+};
+
+type ColorBucket = {
+  weight: number;
+  rSum: number;
+  gSum: number;
+  bSum: number;
+  count: number;
+};
 
 function rgbToHex(r: number, g: number, b: number) {
   const toHex = (value: number) => value.toString(16).padStart(2, "0");
@@ -19,32 +61,108 @@ function toImageSource(icon: string) {
 }
 
 function toBucketKey(r: number, g: number, b: number) {
-  const bucket = (value: number) => Math.floor(value / 32);
+  const bucket = (value: number) => Math.floor(value / BUCKET_SIZE);
   return `${bucket(r)}-${bucket(g)}-${bucket(b)}`;
 }
 
-function chooseDominantColor(data: Uint8ClampedArray) {
-  const buckets = new Map<string, { count: number; r: number; g: number; b: number }>();
-  for (let index = 0; index < data.length; index += 4) {
-    const r = data[index];
-    const g = data[index + 1];
-    const b = data[index + 2];
-    const a = data[index + 3];
-    if (a < 48) continue;
+function colorBrightness({ r, g, b }: Rgb) {
+  return (r + g + b) / 3;
+}
 
-    const brightness = (r + g + b) / 3;
-    if (brightness > 245) continue;
+function colorChroma({ r, g, b }: Rgb) {
+  return Math.max(r, g, b) - Math.min(r, g, b);
+}
 
-    const key = toBucketKey(r, g, b);
-    const existing = buckets.get(key) ?? { count: 0, r: 0, g: 0, b: 0 };
-    existing.count += 1;
-    existing.r += r;
-    existing.g += g;
-    existing.b += b;
-    buckets.set(key, existing);
+function colorSaturation({ r, g, b }: Rgb) {
+  const max = Math.max(r, g, b);
+  if (max === 0) return 0;
+  return (max - Math.min(r, g, b)) / max;
+}
+
+function colorDistance(left: Rgb, right: Rgb) {
+  const dr = left.r - right.r;
+  const dg = left.g - right.g;
+  const db = left.b - right.b;
+  return Math.sqrt((dr * dr) + (dg * dg) + (db * db));
+}
+
+function pixelOffset(x: number, y: number, size: number) {
+  return ((y * size) + x) * 4;
+}
+
+function isNearWhiteOrGray(color: Rgb) {
+  return colorBrightness(color) > NEAR_WHITE_BRIGHTNESS_MIN
+    && colorChroma(color) < NEAR_WHITE_CHROMA_MAX;
+}
+
+function isLightNeutralBackgroundLike(color: Rgb) {
+  return colorBrightness(color) > DOMINANT_BACKGROUND_BRIGHTNESS_MIN
+    && colorSaturation(color) < DOMINANT_BACKGROUND_SATURATION_MAX;
+}
+
+function isEdgePixel(x: number, y: number, size: number) {
+  return x < EDGE_WIDTH
+    || y < EDGE_WIDTH
+    || x >= size - EDGE_WIDTH
+    || y >= size - EDGE_WIDTH;
+}
+
+function centerWeightForPixel(x: number, y: number, size: number) {
+  const center = (size - 1) / 2;
+  if (center <= 0) return 1;
+
+  const dx = (x - center) / center;
+  const dy = (y - center) / center;
+  const normalizedDistance = Math.min(1, Math.sqrt((dx * dx) + (dy * dy)) / Math.SQRT2);
+  return 1.2 - (0.4 * normalizedDistance);
+}
+
+function addBucketPixel(
+  buckets: Map<string, ColorBucket>,
+  color: Rgb,
+  weight: number,
+) {
+  const key = toBucketKey(color.r, color.g, color.b);
+  const existing = buckets.get(key) ?? { weight: 0, rSum: 0, gSum: 0, bSum: 0, count: 0 };
+  existing.weight += weight;
+  existing.rSum += color.r * weight;
+  existing.gSum += color.g * weight;
+  existing.bSum += color.b * weight;
+  existing.count += 1;
+  buckets.set(key, existing);
+}
+
+function averageBucketColor(bucket: ColorBucket): Rgb {
+  return {
+    r: Math.round(bucket.rSum / bucket.weight),
+    g: Math.round(bucket.gSum / bucket.weight),
+    b: Math.round(bucket.bSum / bucket.weight),
+  };
+}
+
+function detectLightEdgeBackground(data: Uint8ClampedArray, size: number): Rgb | null {
+  const buckets = new Map<string, ColorBucket>();
+  let edgePixelCount = 0;
+
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      if (!isEdgePixel(x, y, size)) continue;
+
+      const offset = pixelOffset(x, y, size);
+      const a = data[offset + 3];
+      if (a < ALPHA_MIN) continue;
+
+      const color = {
+        r: data[offset],
+        g: data[offset + 1],
+        b: data[offset + 2],
+      };
+      edgePixelCount += 1;
+      addBucketPixel(buckets, color, 1);
+    }
   }
 
-  let selected: { count: number; r: number; g: number; b: number } | null = null;
+  let selected: ColorBucket | null = null;
   for (const bucket of buckets.values()) {
     if (!selected || bucket.count > selected.count) {
       selected = bucket;
@@ -52,12 +170,135 @@ function chooseDominantColor(data: Uint8ClampedArray) {
   }
 
   if (!selected) return null;
+  if (selected.count / edgePixelCount < EDGE_BACKGROUND_MIN_SHARE) return null;
 
-  return rgbToHex(
-    Math.round(selected.r / selected.count),
-    Math.round(selected.g / selected.count),
-    Math.round(selected.b / selected.count),
-  );
+  const edgeColor = averageBucketColor(selected);
+  const edgeBrightness = colorBrightness(edgeColor);
+  if (edgeBrightness < EDGE_DARK_PROTECTION_BRIGHTNESS) return null;
+  if (
+    edgeBrightness > EDGE_BACKGROUND_BRIGHTNESS_MIN
+    && colorSaturation(edgeColor) < EDGE_BACKGROUND_SATURATION_MAX
+  ) {
+    return edgeColor;
+  }
+
+  return null;
+}
+
+function detectDominantLightBackground(data: Uint8ClampedArray, size: number): Rgb | null {
+  const buckets = new Map<string, ColorBucket>();
+  let opaquePixelCount = 0;
+
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const offset = pixelOffset(x, y, size);
+      const a = data[offset + 3];
+      if (a < ALPHA_MIN) continue;
+
+      const color = {
+        r: data[offset],
+        g: data[offset + 1],
+        b: data[offset + 2],
+      };
+      opaquePixelCount += 1;
+      addBucketPixel(buckets, color, 1);
+    }
+  }
+
+  let selected: ColorBucket | null = null;
+  for (const bucket of buckets.values()) {
+    if (!selected || bucket.count > selected.count) {
+      selected = bucket;
+    }
+  }
+
+  if (!selected || opaquePixelCount === 0) return null;
+  if (selected.count / opaquePixelCount < DOMINANT_BACKGROUND_MIN_SHARE) return null;
+  if (selected.count / (size * size) < DOMINANT_BACKGROUND_MIN_CANVAS_SHARE) return null;
+
+  const color = averageBucketColor(selected);
+  if (colorBrightness(color) < EDGE_DARK_PROTECTION_BRIGHTNESS) return null;
+  if (isLightNeutralBackgroundLike(color)) {
+    return color;
+  }
+
+  return null;
+}
+
+function isBackgroundColor(color: Rgb, backgrounds: Rgb[]) {
+  return backgrounds.some((background) => (
+    colorDistance(color, background) <= EDGE_BACKGROUND_DISTANCE_MAX
+  ));
+}
+
+function isBackgroundRampColor(color: Rgb, backgrounds: Rgb[]) {
+  if (
+    colorBrightness(color) <= BACKGROUND_RAMP_BRIGHTNESS_MIN
+    || colorSaturation(color) >= BACKGROUND_RAMP_SATURATION_MAX
+  ) {
+    return false;
+  }
+
+  return backgrounds.some((background) => (
+    isLightNeutralBackgroundLike(background)
+    && colorDistance(color, background) <= BACKGROUND_RAMP_DISTANCE_MAX
+  ));
+}
+
+function selectPrimaryBucket(buckets: Map<string, ColorBucket>, backgrounds: Rgb[]) {
+  let selected: ColorBucket | null = null;
+  for (const bucket of buckets.values()) {
+    const color = averageBucketColor(bucket);
+    if (isBackgroundColor(color, backgrounds)) continue;
+    if (!selected || bucket.weight > selected.weight) {
+      selected = bucket;
+    }
+  }
+  return selected;
+}
+
+function chooseDominantColor(data: Uint8ClampedArray, size: number) {
+  if (size <= 0 || data.length < size * size * 4) return null;
+
+  const backgrounds = [
+    detectLightEdgeBackground(data, size),
+    detectDominantLightBackground(data, size),
+  ].filter((background): background is Rgb => background !== null);
+  const buckets = new Map<string, ColorBucket>();
+
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const offset = pixelOffset(x, y, size);
+      const color = {
+        r: data[offset],
+        g: data[offset + 1],
+        b: data[offset + 2],
+      };
+      const a = data[offset + 3];
+      if (a < ALPHA_MIN) continue;
+      if (isNearWhiteOrGray(color)) continue;
+      if (isBackgroundRampColor(color, backgrounds)) continue;
+      if (isBackgroundColor(color, backgrounds)) continue;
+
+      const alphaWeight = a / 255;
+      const pixelWeight = alphaWeight * centerWeightForPixel(x, y, size);
+      addBucketPixel(buckets, color, pixelWeight);
+    }
+  }
+
+  const selected = selectPrimaryBucket(buckets, backgrounds);
+  if (!selected) return null;
+
+  const color = averageBucketColor(selected);
+  return rgbToHex(color.r, color.g, color.b);
+}
+
+function fallbackThemeColor(identifier: string) {
+  let hash = 0;
+  for (const char of identifier.trim().toLowerCase()) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  }
+  return FALLBACK_PALETTE[hash % FALLBACK_PALETTE.length];
 }
 
 async function extractDominantColor(iconData: string): Promise<string | null> {
@@ -80,7 +321,7 @@ async function extractDominantColor(iconData: string): Promise<string | null> {
   }
 
   const canvas = document.createElement("canvas");
-  const size = 24;
+  const size = ICON_SAMPLE_SIZE;
   canvas.width = size;
   canvas.height = size;
   const context = canvas.getContext("2d", { willReadFrequently: true });
@@ -88,13 +329,23 @@ async function extractDominantColor(iconData: string): Promise<string | null> {
 
   let data: Uint8ClampedArray;
   try {
-    context.drawImage(image, 0, 0, size, size);
+    const imageWidth = image.naturalWidth || image.width;
+    const imageHeight = image.naturalHeight || image.height;
+    if (imageWidth <= 0 || imageHeight <= 0) return null;
+
+    const scale = Math.min(size / imageWidth, size / imageHeight);
+    const width = imageWidth * scale;
+    const height = imageHeight * scale;
+    const x = (size - width) / 2;
+    const y = (size - height) / 2;
+    context.clearRect(0, 0, size, size);
+    context.drawImage(image, x, y, width, height);
     data = context.getImageData(0, 0, size, size).data;
   } catch {
     return null;
   }
 
-  const color = chooseDominantColor(data);
+  const color = chooseDominantColor(data, size);
   if (!color) return null;
 
   ICON_THEME_CACHE.set(imageSource, color);
@@ -116,10 +367,9 @@ export function useIconThemeColors(icons: Record<string, string>) {
 
       const resolved: Record<string, string> = {};
       await Promise.all(entries.map(async ([exeName, icon]) => {
+        if (!icon.trim()) return;
         const color = await extractDominantColor(icon);
-        if (color) {
-          resolved[exeName] = color;
-        }
+        resolved[exeName] = color ?? fallbackThemeColor(exeName);
       }));
 
       if (!cancelled) {
@@ -136,3 +386,10 @@ export function useIconThemeColors(icons: Record<string, string>) {
 
   return colors;
 }
+
+export const __iconThemeColorInternals = {
+  chooseDominantColor,
+  detectDominantLightBackground,
+  detectLightEdgeBackground,
+  fallbackThemeColor,
+};
