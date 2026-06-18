@@ -207,7 +207,6 @@ export default function AppMapping(props: Props) {
                 value={effectiveObjectMode}
                 onChange={handleObjectModeChange}
                 options={objectModeOptions}
-                className="qp-segmented-filter-compact"
               />
             )}
             <button

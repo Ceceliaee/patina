@@ -14,6 +14,7 @@ import {
   type DataAppTrendViewModel,
   type DataTrendViewModel,
   type AggregateSessionRecord,
+  type HeatmapWeek,
   type HeatmapSelection,
   loadDataHeatmapSnapshot,
 } from "../services/dataReadModel.ts";
@@ -26,6 +27,7 @@ import {
 import { prewarmDataFirstScreen } from "../services/dataFirstScreenPrewarm.ts";
 import QuietChartTooltip from "../../../shared/components/QuietChartTooltip";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
+import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
 import QuietTooltip from "../../../shared/components/QuietTooltip";
 import type { TrackerHealthSnapshot } from "../../../shared/types/tracking";
 import {
@@ -90,8 +92,10 @@ function filterDataAppOptionsForQuery(options: DataAppOption[], query: string) {
 }
 
 const DATA_TREND_X_AXIS_MIN_TICK_GAP = 24;
+const HEATMAP_WEEKDAY_COUNT = 7;
 type DataChartDimension = { width: number; height: number };
 type DataChartDimensionKey = "overviewTrend" | "appTrend";
+type HeatmapGranularity = "daily" | "weekly";
 const dataChartDimensionCache: Partial<Record<DataChartDimensionKey, DataChartDimension>> = {};
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
@@ -116,6 +120,48 @@ function getOverviewTrendChartInitialDimension(): DataChartDimension {
   const height = viewport.width >= 1536 && viewport.height >= 900 ? 214 : viewport.width <= 900 ? 140 : 168;
 
   return { width, height };
+}
+
+function formatHeatmapShortDate(dateKey: string) {
+  return dateKey.slice(5).replace("-", "/");
+}
+
+function buildWeeklyHeatmapCells(rows: HeatmapWeek[]) {
+  const weeklyCells = rows.map((week) => {
+    const inRangeCells = week.cells.filter((cell) => !cell.isOutsideYear);
+    const visibleCells = inRangeCells.filter((cell) => !cell.isFuture);
+    const duration = visibleCells.reduce((total, cell) => total + cell.duration, 0);
+    const labelCells = visibleCells.length > 0
+      ? visibleCells
+      : inRangeCells.length > 0
+        ? inRangeCells
+        : week.cells;
+    const firstCell = labelCells[0];
+    const lastCell = labelCells[labelCells.length - 1];
+    const dateLabel = firstCell && lastCell
+      ? `${formatHeatmapShortDate(firstCell.date)} - ${formatHeatmapShortDate(lastCell.date)}`
+      : week.key;
+    const isOutsideYear = inRangeCells.length === 0;
+    const isFuture = !isOutsideYear && visibleCells.length === 0;
+
+    return {
+      key: week.key,
+      duration,
+      intensity: 0,
+      isFuture,
+      isOutsideYear,
+      label: `${dateLabel} · ${isFuture ? UI_TEXT.data.notStarted : formatDuration(duration)}`,
+    };
+  });
+  const maxDuration = Math.max(1, ...weeklyCells.map((cell) => cell.duration));
+
+  return weeklyCells.map((cell) => ({
+    ...cell,
+    activeRows: cell.duration <= 0 || cell.isFuture || cell.isOutsideYear
+      ? 0
+      : Math.max(1, Math.ceil((cell.duration / maxDuration) * HEATMAP_WEEKDAY_COUNT)),
+    intensity: cell.duration <= 0 || cell.isFuture || cell.isOutsideYear ? 0 : 0.88,
+  }));
 }
 
 function getAppTrendChartInitialDimension(): DataChartDimension {
@@ -202,6 +248,7 @@ export default function Data({
     loadSnapshot: loadDataTrendSnapshot,
   });
   const [selectedHeatmapView, setSelectedHeatmapView] = useState<HeatmapSelection>("recent");
+  const [heatmapGranularity, setHeatmapGranularity] = useState<HeatmapGranularity>("daily");
   const [earliestStartTime, setEarliestStartTime] = useState<number | null>(
     getCachedEarliestSessionStartTime() ?? null,
   );
@@ -440,6 +487,18 @@ export default function Data({
       : canUseBootstrapHeatmap
     ? bootstrapHeatmapRows!
         : heatmapPlaceholderRows;
+  const weeklyHeatmapCells = useMemo(
+    () => buildWeeklyHeatmapCells(visibleHeatmapRows),
+    [visibleHeatmapRows],
+  );
+  const weeklyHeatmapCellsByKey = useMemo(
+    () => new Map(weeklyHeatmapCells.map((cell) => [cell.key, cell])),
+    [weeklyHeatmapCells],
+  );
+  const heatmapGranularityOptions = useMemo<Array<{ value: HeatmapGranularity; label: string }>>(() => [
+    { value: "daily", label: UI_TEXT.data.heatmapDaily },
+    { value: "weekly", label: UI_TEXT.data.heatmapWeekly },
+  ], [uiLanguage]);
   const selectedHeatmapViewKey = String(selectedHeatmapView);
   const yearOptions = useMemo(
     () => buildYearOptions(earliestStartTime, currentYear),
@@ -657,15 +716,12 @@ export default function Data({
               </p>
             </div>
             <div className="data-heatmap-header-actions">
-              <div className="hidden items-center gap-1.5 text-[10px] font-medium text-[var(--qp-text-tertiary)] sm:flex">
-                <span>{UI_TEXT.data.less}</span>
-                <span className="data-heatmap-swatch data-heatmap-level-0" />
-                <span className="data-heatmap-swatch data-heatmap-level-1" />
-                <span className="data-heatmap-swatch data-heatmap-level-2" />
-                <span className="data-heatmap-swatch data-heatmap-level-3" />
-                <span className="data-heatmap-swatch data-heatmap-level-4" />
-                <span>{UI_TEXT.data.more}</span>
-              </div>
+              <QuietSegmentedFilter
+                value={heatmapGranularity}
+                options={heatmapGranularityOptions}
+                onChange={setHeatmapGranularity}
+                className="data-heatmap-granularity"
+              />
               <div className="data-heatmap-range-control" aria-label={UI_TEXT.accessibility.data.heatmapRange}>
                 <button
                   type="button"
@@ -717,40 +773,65 @@ export default function Data({
                         ))}
                       </div>
                       <div className="data-heatmap-weeks">
-                        {visibleHeatmapRows.map((week) => (
-                          <div key={`${selectedHeatmapViewKey}:${week.key}`} className="data-heatmap-week">
-                            {week.cells.map((cell) => {
-                              const isUnavailable = cell.isFuture || cell.isOutsideYear;
-                              const canOpenHistoryDate = !isUnavailable && Boolean(onOpenHistoryDate);
-                              return (
-                                <QuietTooltip
-                                  key={`${selectedHeatmapViewKey}:${cell.key}`}
-                                  label={cell.label}
-                                  placement="top"
-                                  disabled={isUnavailable}
-                                  className={`data-heatmap-tooltip-anchor ${
-                                    isUnavailable ? "data-heatmap-tooltip-anchor-unavailable" : ""
-                                  }`}
-                                >
-                                  <span
-                                    className={`data-heatmap-cell ${
-                                      canOpenHistoryDate ? "data-heatmap-cell-openable" : ""
-                                    } ${
-                                      cell.isFuture ? "data-heatmap-cell-future" : ""
-                                    } ${cell.isOutsideYear ? "data-heatmap-cell-outside" : ""}`}
-                                    onDoubleClick={() => {
-                                      if (canOpenHistoryDate) {
-                                        onOpenHistoryDate?.(cell.date);
-                                      }
-                                    }}
-                                    data-history-date={canOpenHistoryDate ? cell.date : undefined}
-                                    style={{ "--heatmap-intensity": cell.intensity } as CSSProperties}
-                                  />
-                                </QuietTooltip>
-                              );
-                            })}
-                          </div>
-                        ))}
+                        {visibleHeatmapRows.map((week) => {
+                          const weeklyCell = weeklyHeatmapCellsByKey.get(week.key);
+                          return (
+                            <div key={`${selectedHeatmapViewKey}:${week.key}`} className="data-heatmap-week">
+                              {week.cells.map((cell, cellIndex) => {
+                                const hideRecentDailyFutureCell = heatmapGranularity === "daily"
+                                  && selectedHeatmapView === "recent"
+                                  && cell.isFuture;
+                                if (hideRecentDailyFutureCell) {
+                                  return null;
+                                }
+
+                                const isDailyFutureCell = heatmapGranularity === "daily" && cell.isFuture;
+                                const isUnavailable = isDailyFutureCell || cell.isOutsideYear;
+                                const canOpenHistoryDate = !cell.isFuture && !cell.isOutsideYear && Boolean(onOpenHistoryDate);
+                                const tooltipLabel = heatmapGranularity === "weekly"
+                                  ? weeklyCell?.label ?? cell.label
+                                  : cell.label;
+                                const isWeeklyFutureCell = heatmapGranularity === "weekly"
+                                  && Boolean(weeklyCell?.isFuture);
+                                const tooltipDisabled = heatmapGranularity === "weekly"
+                                  ? cell.isOutsideYear || isWeeklyFutureCell
+                                  : isUnavailable;
+                                const isWeeklyFilledCell = heatmapGranularity === "weekly"
+                                  && !cell.isOutsideYear
+                                  && cellIndex >= HEATMAP_WEEKDAY_COUNT - (weeklyCell?.activeRows ?? 0);
+                                const heatmapIntensity = heatmapGranularity === "weekly"
+                                  ? isWeeklyFilledCell ? weeklyCell?.intensity ?? 0 : 0
+                                  : cell.intensity;
+                                return (
+                                  <QuietTooltip
+                                    key={`${selectedHeatmapViewKey}:${cell.key}`}
+                                    label={tooltipLabel}
+                                    placement="top"
+                                    disabled={tooltipDisabled}
+                                    className={`data-heatmap-tooltip-anchor ${
+                                      tooltipDisabled ? "data-heatmap-tooltip-anchor-unavailable" : ""
+                                    }`}
+                                  >
+                                    <span
+                                      className={`data-heatmap-cell ${
+                                        canOpenHistoryDate ? "data-heatmap-cell-openable" : ""
+                                      } ${
+                                        isDailyFutureCell || isWeeklyFutureCell ? "data-heatmap-cell-future" : ""
+                                      } ${cell.isOutsideYear ? "data-heatmap-cell-outside" : ""}`}
+                                      onDoubleClick={() => {
+                                        if (canOpenHistoryDate) {
+                                          onOpenHistoryDate?.(cell.date);
+                                        }
+                                      }}
+                                      data-history-date={canOpenHistoryDate ? cell.date : undefined}
+                                      style={{ "--heatmap-intensity": heatmapIntensity } as CSSProperties}
+                                    />
+                                  </QuietTooltip>
+                                );
+                              })}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>

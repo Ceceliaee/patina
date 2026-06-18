@@ -280,34 +280,83 @@ runTest("category legend groups sessions by category duration", () => {
   }
 });
 
-runTest("short segments stay non-negative and sorted by time", () => {
+runTest("timeline hides merged segments under thirty seconds", () => {
   const dayStart = new Date(2026, 0, 2, 0, 0, 0, 0).getTime();
+  const firstMinuteStart = dayStart + 9 * 60 * 60_000 + 33 * 60_000;
+  const secondMinuteStart = firstMinuteStart + 60_000;
   const viewModel = buildHistoryTimelineViewModel({
     sessions: [
       makeCompiledSession({
-        id: 2,
-        startTime: dayStart + 12 * 60 * 60_000,
-        endTime: dayStart + 12 * 60 * 60_000 + 500,
-        duration: 500,
+        id: 1,
+        startTime: firstMinuteStart + 40_000,
+        endTime: firstMinuteStart + 55_000,
+        duration: 15_000,
       }),
       makeCompiledSession({
-        id: 1,
-        startTime: dayStart + 9 * 60 * 60_000,
-        endTime: dayStart + 9 * 60 * 60_000 + 500,
-        duration: 500,
+        id: 2,
+        startTime: secondMinuteStart + 5_000,
+        endTime: secondMinuteStart + 19_000,
+        duration: 14_000,
       }),
     ],
     selectedDate: new Date(2026, 0, 2),
     nowMs: new Date(2026, 0, 3).getTime(),
     mode: "app",
+    mergeThresholdSecs: 60,
   });
 
-  assert.equal(viewModel.segments.length, 2);
-  assert.ok((viewModel.segments[0]?.widthRatio ?? -1) > 0);
-  assert.deepEqual(
-    viewModel.segments.map((segment) => segment.sourceSessionId),
-    [1, 2],
-  );
+  assert.equal(viewModel.segments.length, 0);
+  assert.equal(viewModel.legendItems.length, 0);
+});
+
+runTest("timeline keeps merged segments at thirty seconds", () => {
+  const dayStart = new Date(2026, 0, 2, 0, 0, 0, 0).getTime();
+  const firstMinuteStart = dayStart + 9 * 60 * 60_000 + 33 * 60_000;
+  const secondMinuteStart = firstMinuteStart + 60_000;
+  const viewModel = buildHistoryTimelineViewModel({
+    sessions: [
+      makeCompiledSession({
+        id: 1,
+        startTime: firstMinuteStart + 40_000,
+        endTime: firstMinuteStart + 55_000,
+        duration: 15_000,
+      }),
+      makeCompiledSession({
+        id: 2,
+        startTime: secondMinuteStart + 5_000,
+        endTime: secondMinuteStart + 20_000,
+        duration: 15_000,
+      }),
+    ],
+    selectedDate: new Date(2026, 0, 2),
+    nowMs: new Date(2026, 0, 3).getTime(),
+    mode: "app",
+    mergeThresholdSecs: 60,
+  });
+
+  assert.equal(viewModel.segments.length, 1);
+  assert.equal(viewModel.segments[0]?.startTime, firstMinuteStart + 40_000);
+  assert.equal(viewModel.segments[0]?.endTime, secondMinuteStart + 20_000);
+  assert.equal(viewModel.segments[0]?.duration, 30_000);
+});
+
+runTest("timeline hides tiny midnight carryover after clipping", () => {
+  const selectedDate = new Date(2026, 0, 2);
+  const dayStart = new Date(2026, 0, 2, 0, 0, 0, 0).getTime();
+  const sessionStart = new Date(2026, 0, 1, 23, 59, 55, 0).getTime();
+  const sessionEnd = new Date(2026, 0, 2, 0, 0, 5, 0).getTime();
+  const viewModel = buildHistoryTimelineViewModel({
+    sessions: [makeCompiledSession({
+      startTime: sessionStart,
+      endTime: sessionEnd,
+      duration: sessionEnd - sessionStart,
+    })],
+    selectedDate,
+    nowMs: new Date(2026, 0, 3).getTime(),
+    mode: "app",
+  });
+
+  assert.equal(viewModel.segments.length, 0);
 });
 
 runTest("timeline merges continuous dominant minutes for the same app", () => {
@@ -353,8 +402,8 @@ runTest("timeline merges continuous dominant minutes for the same app", () => {
 
   assert.equal(viewModel.segments.length, 1);
   assert.equal(viewModel.segments[0]?.startTime, dayStart + 9 * 60 * 60_000);
-  assert.equal(viewModel.segments[0]?.endTime, dayStart + 9 * 60 * 60_000 + 180_000);
-  assert.equal(viewModel.segments[0]?.duration, 180_000);
+  assert.equal(viewModel.segments[0]?.endTime, dayStart + 9 * 60 * 60_000 + 150_000);
+  assert.equal(viewModel.segments[0]?.duration, 120_000);
   assert.deepEqual(
     viewModel.segments[0]?.titleSamples,
     ["File A", "File B"],
@@ -459,7 +508,7 @@ runTest("timeline merges the same app across a short empty gap", () => {
   assert.deepEqual(
     viewModel.segments.map((segment) => [segment.startTime, segment.endTime]),
     [
-      [firstMinuteStart, secondMinuteStart + 60_000],
+      [firstMinuteStart + 10_000, secondMinuteStart + 50_000],
     ],
   );
 });
@@ -605,8 +654,8 @@ runTest("timeline keeps the same app split when the empty gap exceeds the merge 
   assert.deepEqual(
     viewModel.segments.map((segment) => [segment.startTime, segment.endTime]),
     [
-      [firstMinuteStart, firstMinuteStart + 60_000],
-      [secondMinuteStart, secondMinuteStart + 60_000],
+      [firstMinuteStart + 10_000, firstMinuteStart + 50_000],
+      [secondMinuteStart + 10_000, secondMinuteStart + 50_000],
     ],
   );
 });

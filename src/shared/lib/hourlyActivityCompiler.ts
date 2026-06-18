@@ -49,6 +49,14 @@ export function getHourlyCategorySlotDataKey(index: number) {
   return `${HOURLY_CATEGORY_SLOT_PREFIX}${index}`;
 }
 
+function formatHourlyDisplayMinutes(minutes: number) {
+  if (!Number.isFinite(minutes) || minutes < 1) {
+    return 0;
+  }
+
+  return Math.round(minutes);
+}
+
 function forEachHourlySessionSegment(
   session: HistorySession,
   visit: (hourIndex: number, durationMs: number) => void,
@@ -80,7 +88,7 @@ export function buildHourlyActivity(sessions: HistorySession[]): HourlyActivityP
 
   return hoursCount.map((minutes, hourIndex) => ({
     hour: `${hourIndex.toString().padStart(2, "0")}:00`,
-    minutes: Math.round(minutes),
+    minutes: formatHourlyDisplayMinutes(minutes),
   }));
 }
 
@@ -158,15 +166,20 @@ export function buildHourlyCategoryActivity(
       }))
       .filter(({ minutes }) => minutes > 0)
       .sort((left, right) => left.minutes - right.minutes);
-    point.minutes = Math.round(point.minutes);
+    point.minutes = formatHourlyDisplayMinutes(point.minutes);
     let remainingMinutes = point.minutes;
+    let visibleSlotIndex = 0;
 
     for (const [index, { item, minutes }] of activeSegments.entries()) {
       const roundedValue = index === activeSegments.length - 1
         ? remainingMinutes
         : Math.min(remainingMinutes, Math.round(minutes));
-      const slotDataKey = getHourlyCategorySlotDataKey(index);
-      point[slotDataKey] = roundedValue > 0 ? roundedValue : null;
+      if (roundedValue <= 0) {
+        continue;
+      }
+      const slotDataKey = getHourlyCategorySlotDataKey(visibleSlotIndex);
+      visibleSlotIndex += 1;
+      point[slotDataKey] = roundedValue;
       point.segmentDetails[slotDataKey] = {
         category: item.category,
         name: item.name,

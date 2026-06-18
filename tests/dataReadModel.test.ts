@@ -126,6 +126,19 @@ await runTest("activity heatmap keeps empty ranges renderable", () => {
   assert.equal(visibleDay?.intensity, 0);
 });
 
+await runTest("activity heatmap labels sub-second durations as zero minutes", () => {
+  const nowMs = new Date(2026, 0, 3, 12, 0, 0).getTime();
+  const rows = buildActivityHeatmap([
+    makeSession({
+      startTime: new Date(2026, 0, 2, 9, 0, 0, 0).getTime(),
+      endTime: new Date(2026, 0, 2, 9, 0, 0, 999).getTime(),
+    }),
+  ], 2026, nowMs);
+
+  assert.equal(findCell(rows, "2026-01-01")?.label, "01/01 · 0m");
+  assert.equal(findCell(rows, "2026-01-02")?.label, "01/02 · 0m");
+});
+
 await runTest("year options include every year from current back to earliest activity", () => {
   assert.deepEqual(
     buildYearOptions(new Date(2024, 6, 1).getTime(), 2026),

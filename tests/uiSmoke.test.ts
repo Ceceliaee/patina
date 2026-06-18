@@ -337,6 +337,13 @@ await runTest("Data regular view avoids visible loading and skeleton branches", 
   assert.doesNotMatch(data, /UI_TEXT\.history\.loading/);
   assert.doesNotMatch(data, /data-heatmap-skeleton/);
   assert.doesNotMatch(data, /aria-busy/);
+  assert.doesNotMatch(data, /UI_TEXT\.data\.less/);
+  assert.doesNotMatch(data, /UI_TEXT\.data\.more/);
+  assert.match(data, /data-heatmap-granularity/);
+  assert.match(data, /hideRecentDailyFutureCell/);
+  assert.match(data, /isDailyFutureCell/);
+  assert.match(data, /isWeeklyFutureCell/);
+  assert.match(data, /selectedHeatmapView === "recent"/);
 });
 
 await runTest("History regular view avoids visible loading copy", () => {

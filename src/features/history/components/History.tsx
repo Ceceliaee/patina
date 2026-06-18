@@ -91,6 +91,7 @@ const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(
 const addMonths = (date: Date, delta: number) => new Date(date.getFullYear(), date.getMonth() + delta, 1);
 const isSameDay = (left: Date, right: Date) => left.toDateString() === right.toDateString();
 const DAY_SUMMARY_EMPTY_MARK = "—";
+const DAY_SUMMARY_MIN_SPAN_SESSION_MS = 60_000;
 const formatCalendarMonth = (date: Date) => UI_TEXT.date.yearMonthLabel(date.getFullYear(), date.getMonth() + 1);
 const formatDistributionPercentage = (percentage: number) => {
   if (!Number.isFinite(percentage)) return "0%";
@@ -796,10 +797,14 @@ export default function History({
       0,
     );
     const activeSessions = compiledSessions.filter((session) => (session.duration ?? 0) > 0);
-    const firstStartTime = activeSessions.reduce<number | null>((earliest, session) => (
+    const significantSessions = activeSessions.filter((session) => (
+      (session.duration ?? 0) >= DAY_SUMMARY_MIN_SPAN_SESSION_MS
+    ));
+    const spanSessions = significantSessions.length > 0 ? significantSessions : activeSessions;
+    const firstStartTime = spanSessions.reduce<number | null>((earliest, session) => (
       earliest === null ? session.startTime : Math.min(earliest, session.startTime)
     ), null);
-    const lastEndTime = activeSessions.reduce<number | null>((latest, session) => {
+    const lastEndTime = spanSessions.reduce<number | null>((latest, session) => {
       const endTime = session.endTime ?? session.startTime + Math.max(0, session.duration ?? 0);
       return latest === null ? endTime : Math.max(latest, endTime);
     }, null);
@@ -1134,7 +1139,7 @@ export default function History({
           value={effectiveDayDistributionMode}
           options={dayDistributionOptions}
           onChange={handleDayDistributionModeChange}
-          className="qp-segmented-filter-compact history-day-distribution-mode-switch"
+          className="history-day-distribution-mode-switch"
         />
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-1 pt-2">
@@ -1433,7 +1438,7 @@ export default function History({
                   value={effectiveTimelineDialogMode}
                   options={timelineDialogModeOptions}
                   onChange={setTimelineDialogMode}
-                  className="qp-segmented-filter-compact history-timeline-dialog-mode-switch"
+                  className="history-timeline-dialog-mode-switch"
                 />
               )}
               <span className="history-timeline-dialog-meta">

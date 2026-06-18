@@ -8,7 +8,7 @@
     "build": "tsc && vite build",
     "test": "node --experimental-strip-types --experimental-specifier-resolution=node tests/trackingLifecycle.test.ts",
     "test:replay": "node --experimental-strip-types --experimental-specifier-resolution=node tests/trackingReplay.test.ts",
-    "test:history-timeline": "node --experimental-strip-types --experimental-specifier-resolution=node tests/historyTimelineViewModel.test.ts && node --experimental-strip-types --experimental-specifier-resolution=node tests/historyWebActivityViewModel.test.ts && node --experimental-strip-types --experimental-specifier-resolution=node tests/historyReadModel.test.ts",
+    "test:history-timeline": "node --experimental-strip-types --experimental-specifier-resolution=node tests/historyTimelineViewModel.test.ts && node --experimental-strip-types --experimental-specifier-resolution=node tests/historyWebActivityViewModel.test.ts && node --experimental-strip-types --experimental-specifier-resolution=node tests/historyReadModel.test.ts && node --experimental-strip-types --experimental-specifier-resolution=node tests/historyFormatting.test.ts",
     "test:update": "node --experimental-strip-types --experimental-specifier-resolution=node tests/updateViewModel.test.ts",
     "test:settings": "node --experimental-strip-types --experimental-specifier-resolution=node tests/settingsPageState.test.ts",
     "test:widget": "node --experimental-strip-types --experimental-specifier-resolution=node tests/widgetViewModel.test.ts",

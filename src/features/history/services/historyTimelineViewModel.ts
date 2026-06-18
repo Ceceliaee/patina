@@ -4,6 +4,8 @@ import type { CompiledSession } from "../../../shared/lib/sessionReadCompiler.ts
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MINUTE_MS = 60 * 1000;
+const MINUTE_BOUNDARY_SNAP_MS = 1_000;
+const MIN_VISIBLE_TIMELINE_SEGMENT_MS = 30_000;
 
 export type HistoryTimelineDisplayMode = "app" | "category";
 
@@ -259,6 +261,8 @@ interface MinuteTimelineItem {
 interface MinuteTimelineBucket {
   startTime: number;
   endTime: number;
+  activeStartTime: number | null;
+  activeEndTime: number | null;
   items: Map<string, MinuteTimelineItem>;
 }
 
@@ -279,10 +283,16 @@ function getOrCreateMinuteBucket(
   const bucket = {
     startTime: minuteStart,
     endTime: Math.min(minuteStart + MINUTE_MS, visibleEndMs),
+    activeStartTime: null,
+    activeEndTime: null,
     items: new Map<string, MinuteTimelineItem>(),
   };
   buckets.set(minuteStart, bucket);
   return bucket;
+}
+
+function snapToMinuteBoundary(value: number, boundary: number) {
+  return Math.abs(value - boundary) <= MINUTE_BOUNDARY_SNAP_MS ? boundary : value;
 }
 
 function addSegmentOverlapToMinuteBucket(
@@ -295,6 +305,15 @@ function addSegmentOverlapToMinuteBucket(
   const key = resolveTimelineKey(segment, mode);
   const existing = bucket.items.get(key);
   const titleSampleDetails = clipSegmentTitleSampleDetails(segment, overlapStart, overlapEnd);
+  const visibleOverlapStart = snapToMinuteBoundary(overlapStart, bucket.startTime);
+  const visibleOverlapEnd = snapToMinuteBoundary(overlapEnd, bucket.endTime);
+
+  bucket.activeStartTime = bucket.activeStartTime === null
+    ? visibleOverlapStart
+    : Math.min(bucket.activeStartTime, visibleOverlapStart);
+  bucket.activeEndTime = bucket.activeEndTime === null
+    ? visibleOverlapEnd
+    : Math.max(bucket.activeEndTime, visibleOverlapEnd);
 
   if (existing) {
     existing.duration += overlapEnd - overlapStart;
@@ -372,7 +391,9 @@ function buildMinuteSegment(
   mode: HistoryTimelineDisplayMode,
 ) {
   const dominant = selectDominantMinuteItem(bucket);
-  if (!dominant) {
+  const startTime = bucket.activeStartTime ?? bucket.startTime;
+  const endTime = bucket.activeEndTime ?? bucket.endTime;
+  if (!dominant || endTime <= startTime) {
     return null;
   }
 
@@ -385,8 +406,8 @@ function buildMinuteSegment(
     ))
     .map((item) => getItemLabel(item, mode));
   const titleSamples = dominant.titleSampleDetails.map((sample) => sample.title);
-  const startRatio = clampRatio((bucket.startTime - dayStartMs) / DAY_MS);
-  const endRatio = clampRatio((bucket.endTime - dayStartMs) / DAY_MS);
+  const startRatio = clampRatio((startTime - dayStartMs) / DAY_MS);
+  const endRatio = clampRatio((endTime - dayStartMs) / DAY_MS);
 
   return {
     id: `${dominant.key}-${bucket.startTime}-${bucket.endTime}`,
@@ -398,9 +419,9 @@ function buildMinuteSegment(
     displayTitle: dominant.displayTitle,
     category: dominant.category,
     categoryLabel: dominant.categoryLabel,
-    startTime: bucket.startTime,
-    endTime: bucket.endTime,
-    duration: bucket.endTime - bucket.startTime,
+    startTime,
+    endTime,
+    duration: dominant.duration,
     startRatio,
     endRatio,
     widthRatio: Math.max(0, endRatio - startRatio),
@@ -436,6 +457,10 @@ function mergeContiguousDominantMinuteSegments(
   return merged;
 }
 
+function keepVisibleTimelineSegments(segments: HistoryTimelineSegment[]) {
+  return segments.filter((segment) => segment.duration >= MIN_VISIBLE_TIMELINE_SEGMENT_MS);
+}
+
 function buildDominantMinuteSegments(
   segments: HistoryTimelineSegment[],
   dayStartMs: number,
@@ -447,7 +472,9 @@ function buildDominantMinuteSegments(
     .map((bucket) => buildMinuteSegment(bucket, dayStartMs, mode))
     .filter((segment): segment is HistoryTimelineSegment => Boolean(segment));
 
-  return mergeContiguousDominantMinuteSegments(minuteSegments, mergeThresholdMs);
+  return keepVisibleTimelineSegments(
+    mergeContiguousDominantMinuteSegments(minuteSegments, mergeThresholdMs),
+  );
 }
 
 function buildLegendItems(

@@ -16,11 +16,15 @@ export function formatDuration(ms: number) {
   if (hours > 0) return `${hours}h ${minutes}m`;
   if (totalMinutes > 0) return `${minutes}m`;
   if (totalSeconds > 0) return `${totalSeconds}s`;
-  return "<1s";
+  return "0m";
 }
 
 export function formatTime(ts: number) {
-  return new Date(ts).toLocaleTimeString(getUiLocale(), { hour: "2-digit", minute: "2-digit" });
+  return new Date(ts).toLocaleTimeString(getUiLocale(), {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
 }
 
 export function formatDateLabel(date: Date) {

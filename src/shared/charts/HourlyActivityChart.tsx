@@ -156,10 +156,10 @@ export default function HourlyActivityChart({
         <YAxis hide domain={[0, 60]} allowDataOverflow />
         <QuietChartTooltip
           cursor={{ fill: "var(--qp-chart-cursor)" }}
-          filterZeroValues={categoryMode}
+          filterZeroValues
           reverseItems={categoryMode}
-          verticalPlacement={categoryMode ? "fixed-bottom" : "default"}
-          fixedBottomY={categoryMode ? tooltipBottomY : undefined}
+          verticalPlacement="fixed-bottom"
+          fixedBottomY={tooltipBottomY}
           colorFormatter={(item) => categoryMode ? getTooltipSegment(item)?.color : undefined}
           labelFormatter={(label, payload) => {
             if (!categoryMode) return label;

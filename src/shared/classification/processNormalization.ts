@@ -100,6 +100,8 @@ const LIFECYCLE_METADATA_BUILD_TOKENS = new Set([
 
 const NON_TRACKABLE_EXE_NAMES = new Set([
   "",
+  "msiexec.exe",
+  "msiexec",
   "uninstall.exe",
   "uninstall",
   "unins000.exe",
@@ -278,6 +280,21 @@ function normalizeLifecycleMetadataIdentity(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
+function isContextualBlockedProcess(
+  exeName: string,
+  appName: string | undefined,
+  windowTitle: string | undefined,
+) {
+  const normalized = normalizeExecutable(exeName);
+  if (normalized !== "launcher.exe" && normalized !== "launcher") {
+    return false;
+  }
+
+  return [appName, windowTitle].some((value) => (
+    normalizeLifecycleMetadataIdentity(value ?? "") === "wallpaperenginelauncher"
+  ));
+}
+
 function hasMatchingCompactLifecycleMetadata(stem: string, values: Array<string | undefined>) {
   const parts = resolveCompactLifecycleParts(stem);
   if (!parts) {
@@ -452,6 +469,10 @@ export function shouldTrackProcess(
   }
 
   if (isLifecycleMetadataRecord(exeName, options.appName, options.windowTitle)) {
+    return false;
+  }
+
+  if (isContextualBlockedProcess(exeName, options.appName, options.windowTitle)) {
     return false;
   }
 

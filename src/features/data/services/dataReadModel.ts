@@ -160,7 +160,7 @@ function formatDuration(durationMs: number) {
   if (hours > 0) return `${hours}h ${minutes}m`;
   if (totalMinutes > 0) return `${minutes}m`;
   if (totalSeconds > 0) return `${totalSeconds}s`;
-  return "<1s";
+  return "0m";
 }
 
 function formatHeatmapMonthLabel(date: Date) {

@@ -440,6 +440,34 @@ runTest("hourly category compiler splits sessions across hours and preserves tot
   }
 });
 
+runTest("hourly compilers suppress sub-minute hour slivers", () => {
+  const hourStart = new Date(2026, 0, 2, 0, 0, 0, 0).getTime();
+  ProcessMapper.setUserOverrides({
+    "cursor.exe": { category: "development", enabled: true },
+  });
+  const sessions = [
+    makeSession({
+      id: 1,
+      appName: "Cursor",
+      exeName: "cursor.exe",
+      startTime: hourStart,
+      endTime: hourStart + 30_000,
+      duration: 30_000,
+    }),
+  ];
+
+  try {
+    const totalActivity = buildHourlyActivity(sessions);
+    const categoryActivity = buildHourlyCategoryActivity(sessions);
+
+    assert.equal(totalActivity[0]?.minutes, 0);
+    assert.equal(categoryActivity.points[0]?.minutes, 0);
+    assert.equal(Object.keys(categoryActivity.points[0]?.segmentDetails ?? {}).length, 0);
+  } finally {
+    ProcessMapper.clearUserOverrides();
+  }
+});
+
 runTest("hourly category compiler sorts each stacked hour by its own category duration", () => {
   const hourStart = new Date(2026, 0, 2, 9, 0, 0, 0).getTime();
   ProcessMapper.setUserOverrides({

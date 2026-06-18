@@ -127,6 +127,10 @@ function getTimelineMetrics(variant: Props["variant"], viewportWidth: number) {
   return null;
 }
 
+function formatTimelineTime(timeMs: number, viewModel: HistoryTimelineViewModel) {
+  return timeMs === viewModel.dayEndMs ? "24:00" : formatTime(timeMs);
+}
+
 export default function HistoryHorizontalTimeline({
   viewModel,
   mode,
@@ -286,9 +290,10 @@ export default function HistoryHorizontalTimeline({
               <span
                 key={segment.id}
                 tabIndex={0}
-                aria-label={`${copy.ariaLabel} ${label} ${formatTime(
+                aria-label={`${copy.ariaLabel} ${label} ${formatTimelineTime(
                   segment.startTime,
-                )} - ${formatTime(segment.endTime)} ${formatDuration(segment.duration)}`}
+                  viewModel,
+                )} - ${formatTimelineTime(segment.endTime, viewModel)} ${formatDuration(segment.duration)}`}
                 className="history-horizontal-timeline-segment"
                 style={segmentStyle}
                 onPointerEnter={() => setTooltipSegmentId(segment.id)}
@@ -311,9 +316,9 @@ export default function HistoryHorizontalTimeline({
                 </span>
               </div>
               <div className="history-horizontal-timeline-tooltip-time">
-                {formatTime(tooltipSegment.startTime)}
+                {formatTimelineTime(tooltipSegment.startTime, viewModel)}
                 {" - "}
-                {formatTime(tooltipSegment.endTime)}
+                {formatTimelineTime(tooltipSegment.endTime, viewModel)}
                 <span aria-hidden="true"> · </span>
                 {formatDuration(tooltipSegment.duration)}
               </div>

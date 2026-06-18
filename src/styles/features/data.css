@@ -2,6 +2,10 @@
   cursor: pointer;
 }
 
+.data-heatmap-granularity.qp-segmented-filter-compact {
+  flex-wrap: nowrap;
+}
+
 .data-range-picker {
   position: fixed;
   z-index: 80;

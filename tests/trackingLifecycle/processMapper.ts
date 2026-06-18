@@ -404,6 +404,8 @@ export function runProcessMapperTests() {
     assert.equal(shouldTrackProcess("unins000.exe"), false);
     assert.equal(shouldTrackProcess("un_A.exe"), false);
     assert.equal(shouldTrackProcess("un_a"), false);
+    assert.equal(shouldTrackProcess("msiexec.exe"), false);
+    assert.equal(ProcessMapper.shouldTrack("msiexec.exe"), false);
     assert.equal(shouldTrackProcess("obsidian-setup.exe"), false);
     assert.equal(shouldTrackProcess("cursor-installer.exe"), false);
     assert.equal(shouldTrackProcess("cursor-updater.exe"), false);
@@ -435,6 +437,12 @@ export function runProcessMapperTests() {
     assert.equal(shouldTrackProcess("alma-0.0.750-win-x64.exe", {
       appName: "AI Provider Management Desktop App",
       windowTitle: "Alma",
+    }), true);
+    assert.equal(shouldTrackProcess("launcher.exe", {
+      appName: "Wallpaper Engine Launcher",
+    }), false);
+    assert.equal(shouldTrackProcess("launcher.exe", {
+      appName: "Game Launcher",
     }), true);
     assert.equal(shouldTrackProcess("Antigravity.exe"), true);
     assert.equal(shouldTrackProcess("patina.exe"), true);
