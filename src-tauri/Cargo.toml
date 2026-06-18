@@ -33,7 +33,7 @@ image = "0.24"
 base64 = "0.22.1"
 chrono = "0.4.44"
 tokio = { version = "1.50.0", features = ["rt-multi-thread", "time", "net", "sync", "macros"] }
-tokio-tungstenite = "0.28"
+tokio-tungstenite = { version = "0.28", features = ["rustls-tls-native-roots"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }

@@ -14,7 +14,7 @@
   "cloudflare": {
     "bindings": {
       "REMOTE_STATUS_BRIDGE_TOKEN": {
-        "description": "Set this to the same connection token configured in Patina Settings -> Services -> Remote status bridge."
+        "description": "Set this to the same access token configured in Patina Settings -> Services -> Remote push."
       }
     }
   }

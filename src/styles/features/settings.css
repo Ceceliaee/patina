@@ -160,6 +160,10 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
+.settings-interface-field {
+  padding: 10px;
+}
+
 .settings-token-action-button {
   position: absolute;
   top: 50%;

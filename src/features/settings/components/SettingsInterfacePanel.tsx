@@ -1,4 +1,4 @@
-import { Dices, EthernetPort, Eye, EyeOff, KeyRound, Link2, Server } from "lucide-react";
+import { Dices, EthernetPort, Eye, EyeOff, Fingerprint, KeyRound, Link2, Server } from "lucide-react";
 import type { ReactNode, SyntheticEvent } from "react";
 import { useEffect, useState } from "react";
 import QuietActionRow from "../../../shared/components/QuietActionRow";
@@ -66,11 +66,23 @@ type TextFieldProps = {
   onCommit?: () => void;
 };
 
+type RevealableTextFieldProps = {
+  id: string;
+  value: string;
+  visible: boolean;
+  disabled: boolean;
+  readOnly?: boolean;
+  showLabel: string;
+  hideLabel: string;
+  onToggleVisible: () => void;
+};
+
 type InterfaceInlineFieldProps = {
   htmlFor: string;
   icon: ReactNode;
   title: string;
   children: ReactNode;
+  className?: string;
 };
 
 const LOCAL_API_PORT_MIN = 1024;
@@ -213,14 +225,55 @@ function TextField({
   );
 }
 
+function RevealableTextField({
+  id,
+  value,
+  visible,
+  disabled,
+  readOnly = false,
+  showLabel,
+  hideLabel,
+  onToggleVisible,
+}: RevealableTextFieldProps) {
+  return (
+    <div className="relative w-full">
+      <input
+        id={id}
+        type={visible ? "text" : "password"}
+        value={value}
+        className="qp-input h-[34px] w-full pr-10"
+        disabled={disabled}
+        readOnly={readOnly}
+        autoComplete="off"
+        spellCheck={false}
+      />
+      <button
+        type="button"
+        className="settings-token-action-button settings-token-visibility-button"
+        disabled={disabled}
+        aria-label={visible ? hideLabel : showLabel}
+        onClick={onToggleVisible}
+      >
+        {visible ? <EyeOff size={14} /> : <Eye size={14} />}
+      </button>
+    </div>
+  );
+}
+
 function InterfaceInlineField({
   htmlFor,
   icon,
   title,
   children,
+  className,
 }: InterfaceInlineFieldProps) {
+  const rowClassName = [
+    "settings-interface-field grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2.5 gap-y-2",
+    className,
+  ].filter(Boolean).join(" ");
+
   return (
-    <QuietActionRow className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2.5 gap-y-2">
+    <QuietActionRow className={rowClassName}>
       <label
         htmlFor={htmlFor}
         className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-sm font-semibold text-[var(--qp-text-primary)]"
@@ -257,6 +310,7 @@ export default function SettingsInterfacePanel({
   const [localApiTokenVisible, setLocalApiTokenVisible] = useState(false);
   const [webActivityTokenVisible, setWebActivityTokenVisible] = useState(false);
   const [remoteStatusBridgeTokenVisible, setRemoteStatusBridgeTokenVisible] = useState(false);
+  const [remoteStatusBridgeMachineIdVisible, setRemoteStatusBridgeMachineIdVisible] = useState(false);
   const localApiEndpointDraft = `${LOCAL_API_ENDPOINT_PREFIX}${localApiPortDraft}`;
 
   useEffect(() => {
@@ -324,44 +378,46 @@ export default function SettingsInterfacePanel({
             />
           </div>
 
-          <div className={INTERFACE_FIELD_GRID_CLASS}>
-            <InterfaceInlineField
-              htmlFor="settings-web-activity-address"
-              icon={<EthernetPort size={14} className="text-[var(--qp-text-tertiary)]" />}
-              title={UI_TEXT.settings.webActivityAddressLabel}
-            >
-              <PortField
-                id="settings-web-activity-address"
-                value={webActivityPortDraft}
-                disabled={!webActivityEnabled}
-                onChange={(nextValue) => {
-                  if (PORT_DRAFT_PATTERN.test(nextValue)) setWebActivityPortDraft(nextValue);
-                }}
-                onCommit={() => commitPortDraft(webActivityPortDraft, setWebActivityPortDraft)}
-              />
-            </InterfaceInlineField>
+          {webActivityEnabled ? (
+            <div className={INTERFACE_FIELD_GRID_CLASS}>
+              <InterfaceInlineField
+                htmlFor="settings-web-activity-address"
+                icon={<EthernetPort size={14} className="text-[var(--qp-text-tertiary)]" />}
+                title={UI_TEXT.settings.webActivityAddressLabel}
+              >
+                <PortField
+                  id="settings-web-activity-address"
+                  value={webActivityPortDraft}
+                  disabled={!webActivityEnabled}
+                  onChange={(nextValue) => {
+                    if (PORT_DRAFT_PATTERN.test(nextValue)) setWebActivityPortDraft(nextValue);
+                  }}
+                  onCommit={() => commitPortDraft(webActivityPortDraft, setWebActivityPortDraft)}
+                />
+              </InterfaceInlineField>
 
-            <InterfaceInlineField
-              htmlFor="settings-web-activity-token"
-              icon={<KeyRound size={14} className="text-[var(--qp-text-tertiary)]" />}
-              title={UI_TEXT.settings.webActivityTokenLabel}
-            >
-              <TokenField
-                id="settings-web-activity-token"
-                value={webActivityToken}
-                visible={webActivityTokenVisible}
-                disabled={!webActivityEnabled}
-                onChange={onWebActivityTokenChange}
-                onGenerate={() => {
-                  onWebActivityTokenChange(createLocalApiToken());
-                  setWebActivityTokenVisible(true);
-                }}
-                onToggleVisible={() => setWebActivityTokenVisible((current) => !current)}
-                showLabel={UI_TEXT.accessibility.settings.showLocalApiToken}
-                hideLabel={UI_TEXT.accessibility.settings.hideLocalApiToken}
-              />
-            </InterfaceInlineField>
-          </div>
+              <InterfaceInlineField
+                htmlFor="settings-web-activity-token"
+                icon={<KeyRound size={14} className="text-[var(--qp-text-tertiary)]" />}
+                title={UI_TEXT.settings.webActivityTokenLabel}
+              >
+                <TokenField
+                  id="settings-web-activity-token"
+                  value={webActivityToken}
+                  visible={webActivityTokenVisible}
+                  disabled={!webActivityEnabled}
+                  onChange={onWebActivityTokenChange}
+                  onGenerate={() => {
+                    onWebActivityTokenChange(createLocalApiToken());
+                    setWebActivityTokenVisible(true);
+                  }}
+                  onToggleVisible={() => setWebActivityTokenVisible((current) => !current)}
+                  showLabel={UI_TEXT.accessibility.settings.showLocalApiToken}
+                  hideLabel={UI_TEXT.accessibility.settings.hideLocalApiToken}
+                />
+              </InterfaceInlineField>
+            </div>
+          ) : null}
         </QuietSubpanel>
 
         <QuietSubpanel>
@@ -381,46 +437,48 @@ export default function SettingsInterfacePanel({
             />
           </div>
 
-          <div className={INTERFACE_FIELD_GRID_CLASS}>
-            <InterfaceInlineField
-              htmlFor="settings-local-api-address"
-              icon={<Link2 size={14} className="text-[var(--qp-text-tertiary)]" />}
-              title={UI_TEXT.settings.localApiPortLabel}
-            >
-              <EndpointField
-                id="settings-local-api-address"
-                prefix={LOCAL_API_ENDPOINT_PREFIX}
-                value={localApiEndpointDraft}
-                disabled={!localApiEnabled}
-                onChange={(nextValue) => {
-                  const nextDraft = handleEndpointChange(nextValue, LOCAL_API_ENDPOINT_PREFIX);
-                  if (nextDraft !== undefined) setLocalApiPortDraft(nextDraft);
-                }}
-                onCommit={() => commitPortDraft(localApiPortDraft, setLocalApiPortDraft)}
-              />
-            </InterfaceInlineField>
+          {localApiEnabled ? (
+            <div className={INTERFACE_FIELD_GRID_CLASS}>
+              <InterfaceInlineField
+                htmlFor="settings-local-api-address"
+                icon={<Link2 size={14} className="text-[var(--qp-text-tertiary)]" />}
+                title={UI_TEXT.settings.localApiPortLabel}
+              >
+                <EndpointField
+                  id="settings-local-api-address"
+                  prefix={LOCAL_API_ENDPOINT_PREFIX}
+                  value={localApiEndpointDraft}
+                  disabled={!localApiEnabled}
+                  onChange={(nextValue) => {
+                    const nextDraft = handleEndpointChange(nextValue, LOCAL_API_ENDPOINT_PREFIX);
+                    if (nextDraft !== undefined) setLocalApiPortDraft(nextDraft);
+                  }}
+                  onCommit={() => commitPortDraft(localApiPortDraft, setLocalApiPortDraft)}
+                />
+              </InterfaceInlineField>
 
-            <InterfaceInlineField
-              htmlFor="settings-local-api-token"
-              icon={<KeyRound size={14} className="text-[var(--qp-text-tertiary)]" />}
-              title={UI_TEXT.settings.localApiTokenLabel}
-            >
-              <TokenField
-                id="settings-local-api-token"
-                value={localApiToken}
-                visible={localApiTokenVisible}
-                disabled={!localApiEnabled}
-                onChange={onLocalApiTokenChange}
-                onGenerate={() => {
-                  onLocalApiTokenChange(createLocalApiToken());
-                  setLocalApiTokenVisible(true);
-                }}
-                onToggleVisible={() => setLocalApiTokenVisible((current) => !current)}
-                showLabel={UI_TEXT.accessibility.settings.showLocalApiToken}
-                hideLabel={UI_TEXT.accessibility.settings.hideLocalApiToken}
-              />
-            </InterfaceInlineField>
-          </div>
+              <InterfaceInlineField
+                htmlFor="settings-local-api-token"
+                icon={<KeyRound size={14} className="text-[var(--qp-text-tertiary)]" />}
+                title={UI_TEXT.settings.localApiTokenLabel}
+              >
+                <TokenField
+                  id="settings-local-api-token"
+                  value={localApiToken}
+                  visible={localApiTokenVisible}
+                  disabled={!localApiEnabled}
+                  onChange={onLocalApiTokenChange}
+                  onGenerate={() => {
+                    onLocalApiTokenChange(createLocalApiToken());
+                    setLocalApiTokenVisible(true);
+                  }}
+                  onToggleVisible={() => setLocalApiTokenVisible((current) => !current)}
+                  showLabel={UI_TEXT.accessibility.settings.showLocalApiToken}
+                  hideLabel={UI_TEXT.accessibility.settings.hideLocalApiToken}
+                />
+              </InterfaceInlineField>
+            </div>
+          ) : null}
         </QuietSubpanel>
 
         <QuietSubpanel>
@@ -440,55 +498,62 @@ export default function SettingsInterfacePanel({
             />
           </div>
 
-          <div className={INTERFACE_FIELD_GRID_CLASS}>
-            <InterfaceInlineField
-              htmlFor="settings-remote-status-bridge-url"
-              icon={<Link2 size={14} className="text-[var(--qp-text-tertiary)]" />}
-              title={UI_TEXT.settings.remoteStatusBridgeUrlLabel}
-            >
-              <TextField
-                id="settings-remote-status-bridge-url"
-                value={remoteStatusBridgeUrl}
-                disabled={!remoteStatusBridgeEnabled}
-                spellCheck={false}
-                onChange={onRemoteStatusBridgeUrlChange}
-              />
-            </InterfaceInlineField>
+          {remoteStatusBridgeEnabled ? (
+            <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,4fr)_minmax(0,6fr)]">
+              <InterfaceInlineField
+                htmlFor="settings-remote-status-bridge-url"
+                icon={<Link2 size={14} className="text-[var(--qp-text-tertiary)]" />}
+                title={UI_TEXT.settings.remoteStatusBridgeUrlLabel}
+                className="lg:col-span-2"
+              >
+                <TextField
+                  id="settings-remote-status-bridge-url"
+                  value={remoteStatusBridgeUrl}
+                  disabled={!remoteStatusBridgeEnabled}
+                  spellCheck={false}
+                  onChange={onRemoteStatusBridgeUrlChange}
+                />
+              </InterfaceInlineField>
 
-            <InterfaceInlineField
-              htmlFor="settings-remote-status-bridge-token"
-              icon={<KeyRound size={14} className="text-[var(--qp-text-tertiary)]" />}
-              title={UI_TEXT.settings.remoteStatusBridgeTokenLabel}
-            >
-              <TokenField
-                id="settings-remote-status-bridge-token"
-                value={remoteStatusBridgeToken}
-                visible={remoteStatusBridgeTokenVisible}
-                disabled={!remoteStatusBridgeEnabled}
-                onChange={onRemoteStatusBridgeTokenChange}
-                onGenerate={() => {
-                  onRemoteStatusBridgeTokenChange(createLocalApiToken());
-                  setRemoteStatusBridgeTokenVisible(true);
-                }}
-                onToggleVisible={() => setRemoteStatusBridgeTokenVisible((current) => !current)}
-                showLabel={UI_TEXT.accessibility.settings.showLocalApiToken}
-                hideLabel={UI_TEXT.accessibility.settings.hideLocalApiToken}
-              />
-            </InterfaceInlineField>
+              <InterfaceInlineField
+                htmlFor="settings-remote-status-bridge-machine-id"
+                icon={<Fingerprint size={14} className="text-[var(--qp-text-tertiary)]" />}
+                title={UI_TEXT.settings.remoteStatusBridgeMachineIdLabel}
+              >
+                <RevealableTextField
+                  id="settings-remote-status-bridge-machine-id"
+                  value={remoteStatusBridgeMachineId}
+                  visible={remoteStatusBridgeMachineIdVisible}
+                  disabled={!remoteStatusBridgeEnabled}
+                  readOnly
+                  onToggleVisible={() => setRemoteStatusBridgeMachineIdVisible((current) => !current)}
+                  showLabel={UI_TEXT.accessibility.settings.showRemoteMachineId}
+                  hideLabel={UI_TEXT.accessibility.settings.hideRemoteMachineId}
+                />
+              </InterfaceInlineField>
 
-            <InterfaceInlineField
-              htmlFor="settings-remote-status-bridge-machine-id"
-              icon={<Server size={14} className="text-[var(--qp-text-tertiary)]" />}
-              title={UI_TEXT.settings.remoteStatusBridgeMachineIdLabel}
-            >
-              <TextField
-                id="settings-remote-status-bridge-machine-id"
-                value={remoteStatusBridgeMachineId}
-                disabled={false}
-                readOnly
-              />
-            </InterfaceInlineField>
-          </div>
+              <InterfaceInlineField
+                htmlFor="settings-remote-status-bridge-token"
+                icon={<KeyRound size={14} className="text-[var(--qp-text-tertiary)]" />}
+                title={UI_TEXT.settings.remoteStatusBridgeTokenLabel}
+              >
+                <TokenField
+                  id="settings-remote-status-bridge-token"
+                  value={remoteStatusBridgeToken}
+                  visible={remoteStatusBridgeTokenVisible}
+                  disabled={!remoteStatusBridgeEnabled}
+                  onChange={onRemoteStatusBridgeTokenChange}
+                  onGenerate={() => {
+                    onRemoteStatusBridgeTokenChange(createLocalApiToken());
+                    setRemoteStatusBridgeTokenVisible(true);
+                  }}
+                  onToggleVisible={() => setRemoteStatusBridgeTokenVisible((current) => !current)}
+                  showLabel={UI_TEXT.accessibility.settings.showLocalApiToken}
+                  hideLabel={UI_TEXT.accessibility.settings.hideLocalApiToken}
+                />
+              </InterfaceInlineField>
+            </div>
+          ) : null}
         </QuietSubpanel>
       </div>
     </section>

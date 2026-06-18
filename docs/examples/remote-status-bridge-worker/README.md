@@ -13,8 +13,8 @@ It receives Patina `snapshot` messages over WebSocket and keeps the latest state
 
 1. Deploy this Worker.
 2. Set `REMOTE_STATUS_BRIDGE_TOKEN` to a random value.
-3. In Patina, set the Worker URL to `wss://<your-worker-host>/ws`.
-4. In Patina, set the connection token to the same value.
+3. In Patina, set the Endpoint URL to `wss://<your-worker-host>/ws`.
+4. In Patina, set the access token to the same value.
 
 ## Local Development
 
