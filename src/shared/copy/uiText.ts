@@ -411,7 +411,7 @@ const ZH_CN_UI_TEXT = {
         details: [
           "打开一个 http/https 网页。",
           "等待 Patina Web Sync 自动同步当前页。",
-          "如需立即重试，可在扩展弹窗中点击「同步当前页」。",
+          "如需立即同步一次，可在扩展弹窗中点击「同步当前页」。",
         ],
       },
     ],
@@ -1192,7 +1192,7 @@ const EN_US_UI_TEXT: UiText = {
         details: [
           "Open an http/https webpage.",
           "Wait for Patina Web Sync to automatically sync the current page.",
-          "To retry immediately, click Sync current page in the extension popup.",
+          "To sync once immediately, click Sync current page in the extension popup.",
         ],
       },
     ],
