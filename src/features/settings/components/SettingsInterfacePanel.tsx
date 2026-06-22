@@ -1,14 +1,17 @@
-import { Dices, EthernetPort, Eye, EyeOff, Fingerprint, KeyRound, Link2, Server } from "lucide-react";
+import { Dices, EthernetPort, Eye, EyeOff, Fingerprint, KeyRound, Link2, Server, X } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import QuietActionRow from "../../../shared/components/QuietActionRow";
+import QuietDialog from "../../../shared/components/QuietDialog";
 import QuietSubpanel from "../../../shared/components/QuietSubpanel";
 import QuietSwitch from "../../../shared/components/QuietSwitch";
 import { UI_TEXT } from "../../../shared/copy/uiText.ts";
+import { SettingsRuntimeAdapterService } from "../services/settingsRuntimeAdapterService.ts";
 import { createSettingsToken } from "../services/settingsTokenService.ts";
 
 type SettingsInterfacePanelProps = {
   webActivityEnabled: boolean;
+  showWebActivityHelp: boolean;
   port: number;
   webActivityToken: string;
   remoteStatusBridgeEnabled: boolean;
@@ -71,6 +74,9 @@ type InterfaceInlineFieldProps = {
   children: ReactNode;
   className?: string;
 };
+
+type WebActivityHelpDetail = (typeof UI_TEXT.settings.webActivityHelpSteps)[number]["details"][number];
+type WebActivityHelpCopiedField = "port" | "token";
 
 const WEB_ACTIVITY_PORT_MIN = 1024;
 const WEB_ACTIVITY_PORT_MAX = 65535;
@@ -237,8 +243,35 @@ function InterfaceInlineField({
   );
 }
 
+function WebActivityHelpDetailItem({ detail }: { detail: WebActivityHelpDetail }) {
+  if (typeof detail === "string") {
+    return <>{detail}</>;
+  }
+
+  return (
+    <>
+      <span>{detail.text}</span>
+      <span className="settings-web-activity-help-link-row">
+        {detail.links.map((link) => (
+          <a
+            key={link.href}
+            href={link.href}
+            onClick={(event) => {
+              event.preventDefault();
+              void SettingsRuntimeAdapterService.openWebActivityHelpLink(link.href);
+            }}
+          >
+            {link.label}
+          </a>
+        ))}
+      </span>
+    </>
+  );
+}
+
 export default function SettingsInterfacePanel({
   webActivityEnabled,
+  showWebActivityHelp,
   port,
   webActivityToken,
   remoteStatusBridgeEnabled,
@@ -254,12 +287,21 @@ export default function SettingsInterfacePanel({
 }: SettingsInterfacePanelProps) {
   const [webActivityPortDraft, setWebActivityPortDraft] = useState(String(port));
   const [webActivityTokenVisible, setWebActivityTokenVisible] = useState(false);
+  const [webActivityHelpOpen, setWebActivityHelpOpen] = useState(false);
+  const [copiedWebActivityHelpField, setCopiedWebActivityHelpField] = useState<WebActivityHelpCopiedField | null>(null);
+  const webActivityHelpCopyResetTimer = useRef<number | null>(null);
   const [remoteStatusBridgeTokenVisible, setRemoteStatusBridgeTokenVisible] = useState(false);
   const [remoteStatusBridgeMachineIdVisible, setRemoteStatusBridgeMachineIdVisible] = useState(false);
 
   useEffect(() => {
     setWebActivityPortDraft(String(port));
   }, [port]);
+
+  useEffect(() => () => {
+    if (webActivityHelpCopyResetTimer.current !== null) {
+      window.clearTimeout(webActivityHelpCopyResetTimer.current);
+    }
+  }, []);
 
   const handleWebActivityEnabledChange = (nextChecked: boolean) => {
     if (nextChecked && webActivityToken.trim().length === 0) {
@@ -283,148 +325,240 @@ export default function SettingsInterfacePanel({
       setDraft(String(port));
     }
   };
+
+  const copyWebActivityHelpValue = (field: WebActivityHelpCopiedField, value: string) => {
+    const copyValue = value.trim();
+    if (!copyValue) return;
+
+    void SettingsRuntimeAdapterService.copyWebActivityHelpValue(copyValue).then(() => {
+      setCopiedWebActivityHelpField(field);
+      if (webActivityHelpCopyResetTimer.current !== null) {
+        window.clearTimeout(webActivityHelpCopyResetTimer.current);
+      }
+      webActivityHelpCopyResetTimer.current = window.setTimeout(() => {
+        setCopiedWebActivityHelpField((currentField) => (currentField === field ? null : currentField));
+        webActivityHelpCopyResetTimer.current = null;
+      }, 1400);
+    }).catch(() => {});
+  };
+
   return (
-    <section className="qp-panel p-5 md:p-6">
-      <div className="mb-5 flex items-center gap-2.5 border-b border-[var(--qp-border-subtle)] pb-2">
-        <Server size={16} className="text-[var(--qp-accent-default)]" />
-        <h2 className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.servicesTitle}</h2>
-      </div>
+    <>
+      <section className="qp-panel p-5 md:p-6">
+        <div className="mb-5 flex items-center gap-2.5 border-b border-[var(--qp-border-subtle)] pb-2">
+          <Server size={16} className="text-[var(--qp-accent-default)]" />
+          <h2 className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.servicesTitle}</h2>
+        </div>
 
-      <div className="space-y-5">
-        <QuietSubpanel>
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-[var(--qp-text-primary)]">
-                {UI_TEXT.settings.webActivityTitle}
-              </p>
-              <p className="mt-1 text-sm leading-relaxed text-[var(--qp-text-secondary)]">
-                {UI_TEXT.settings.webActivityEnabledHint}
-              </p>
+        <div className="space-y-5">
+          <QuietSubpanel className="settings-web-activity-subpanel">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="settings-web-activity-title-row flex min-w-0 flex-wrap items-center gap-2">
+                  <p className="text-sm font-semibold text-[var(--qp-text-primary)]">
+                    {UI_TEXT.settings.webActivityTitle}
+                  </p>
+                  {showWebActivityHelp && (
+                    <button
+                      type="button"
+                      className="settings-inline-help-button"
+                      aria-label={UI_TEXT.accessibility.settings.openWebActivityHelp}
+                      onClick={() => setWebActivityHelpOpen(true)}
+                    >
+                      <span>{UI_TEXT.settings.webActivityHelpAction}</span>
+                    </button>
+                  )}
+                </div>
+                <p className="mt-1 text-sm leading-relaxed text-[var(--qp-text-secondary)]">
+                  {UI_TEXT.settings.webActivityEnabledHint}
+                </p>
+              </div>
+              <QuietSwitch
+                checked={webActivityEnabled}
+                onChange={handleWebActivityEnabledChange}
+                ariaLabel={UI_TEXT.accessibility.settings.toggleWebActivity}
+              />
             </div>
-            <QuietSwitch
-              checked={webActivityEnabled}
-              onChange={handleWebActivityEnabledChange}
-              ariaLabel={UI_TEXT.accessibility.settings.toggleWebActivity}
-            />
-          </div>
 
-          {webActivityEnabled ? (
-            <div className={INTERFACE_FIELD_GRID_CLASS}>
-              <InterfaceInlineField
-                htmlFor="settings-web-activity-address"
-                icon={<EthernetPort size={14} className="text-[var(--qp-text-tertiary)]" />}
-                title={UI_TEXT.settings.webActivityAddressLabel}
-              >
-                <PortField
-                  id="settings-web-activity-address"
-                  value={webActivityPortDraft}
-                  disabled={!webActivityEnabled}
-                  onChange={(nextValue) => {
-                    if (PORT_DRAFT_PATTERN.test(nextValue)) setWebActivityPortDraft(nextValue);
-                  }}
-                  onCommit={() => commitPortDraft(webActivityPortDraft, setWebActivityPortDraft)}
-                />
-              </InterfaceInlineField>
+            {webActivityEnabled ? (
+              <div className={INTERFACE_FIELD_GRID_CLASS}>
+                <InterfaceInlineField
+                  htmlFor="settings-web-activity-address"
+                  icon={<EthernetPort size={14} className="text-[var(--qp-text-tertiary)]" />}
+                  title={UI_TEXT.settings.webActivityAddressLabel}
+                >
+                  <PortField
+                    id="settings-web-activity-address"
+                    value={webActivityPortDraft}
+                    disabled={!webActivityEnabled}
+                    onChange={(nextValue) => {
+                      if (PORT_DRAFT_PATTERN.test(nextValue)) setWebActivityPortDraft(nextValue);
+                    }}
+                    onCommit={() => commitPortDraft(webActivityPortDraft, setWebActivityPortDraft)}
+                  />
+                </InterfaceInlineField>
 
-              <InterfaceInlineField
-                htmlFor="settings-web-activity-token"
-                icon={<KeyRound size={14} className="text-[var(--qp-text-tertiary)]" />}
-                title={UI_TEXT.settings.webActivityTokenLabel}
-              >
-                <TokenField
-                  id="settings-web-activity-token"
-                  value={webActivityToken}
-                  visible={webActivityTokenVisible}
-                  disabled={!webActivityEnabled}
-                  onChange={onWebActivityTokenChange}
-                  onGenerate={() => {
-                    onWebActivityTokenChange(createSettingsToken());
-                    setWebActivityTokenVisible(true);
-                  }}
-                  onToggleVisible={() => setWebActivityTokenVisible((current) => !current)}
-                  showLabel={UI_TEXT.accessibility.settings.showServiceToken}
-                  hideLabel={UI_TEXT.accessibility.settings.hideServiceToken}
-                />
-              </InterfaceInlineField>
+                <InterfaceInlineField
+                  htmlFor="settings-web-activity-token"
+                  icon={<KeyRound size={14} className="text-[var(--qp-text-tertiary)]" />}
+                  title={UI_TEXT.settings.webActivityTokenLabel}
+                >
+                  <TokenField
+                    id="settings-web-activity-token"
+                    value={webActivityToken}
+                    visible={webActivityTokenVisible}
+                    disabled={!webActivityEnabled}
+                    onChange={onWebActivityTokenChange}
+                    onGenerate={() => {
+                      onWebActivityTokenChange(createSettingsToken());
+                      setWebActivityTokenVisible(true);
+                    }}
+                    onToggleVisible={() => setWebActivityTokenVisible((current) => !current)}
+                    showLabel={UI_TEXT.accessibility.settings.showServiceToken}
+                    hideLabel={UI_TEXT.accessibility.settings.hideServiceToken}
+                  />
+                </InterfaceInlineField>
+              </div>
+            ) : null}
+          </QuietSubpanel>
+
+          <QuietSubpanel>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-[var(--qp-text-primary)]">
+                  {UI_TEXT.settings.remoteStatusBridgeTitle}
+                </p>
+                <p className="mt-1 text-sm leading-relaxed text-[var(--qp-text-secondary)]">
+                  {UI_TEXT.settings.remoteStatusBridgeEnabledHint}
+                </p>
+              </div>
+              <QuietSwitch
+                checked={remoteStatusBridgeEnabled}
+                onChange={handleRemoteStatusBridgeEnabledChange}
+                ariaLabel={UI_TEXT.accessibility.settings.toggleRemoteStatusBridge}
+              />
             </div>
-          ) : null}
-        </QuietSubpanel>
 
-        <QuietSubpanel>
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-[var(--qp-text-primary)]">
-                {UI_TEXT.settings.remoteStatusBridgeTitle}
-              </p>
-              <p className="mt-1 text-sm leading-relaxed text-[var(--qp-text-secondary)]">
-                {UI_TEXT.settings.remoteStatusBridgeEnabledHint}
-              </p>
-            </div>
-            <QuietSwitch
-              checked={remoteStatusBridgeEnabled}
-              onChange={handleRemoteStatusBridgeEnabledChange}
-              ariaLabel={UI_TEXT.accessibility.settings.toggleRemoteStatusBridge}
-            />
-          </div>
+            {remoteStatusBridgeEnabled ? (
+              <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,4fr)_minmax(0,6fr)]">
+                <InterfaceInlineField
+                  htmlFor="settings-remote-status-bridge-url"
+                  icon={<Link2 size={14} className="text-[var(--qp-text-tertiary)]" />}
+                  title={UI_TEXT.settings.remoteStatusBridgeUrlLabel}
+                  className="lg:col-span-2"
+                >
+                  <TextField
+                    id="settings-remote-status-bridge-url"
+                    value={remoteStatusBridgeUrl}
+                    disabled={!remoteStatusBridgeEnabled}
+                    spellCheck={false}
+                    onChange={onRemoteStatusBridgeUrlChange}
+                  />
+                </InterfaceInlineField>
 
-          {remoteStatusBridgeEnabled ? (
-            <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,4fr)_minmax(0,6fr)]">
-              <InterfaceInlineField
-                htmlFor="settings-remote-status-bridge-url"
-                icon={<Link2 size={14} className="text-[var(--qp-text-tertiary)]" />}
-                title={UI_TEXT.settings.remoteStatusBridgeUrlLabel}
-                className="lg:col-span-2"
-              >
-                <TextField
-                  id="settings-remote-status-bridge-url"
-                  value={remoteStatusBridgeUrl}
-                  disabled={!remoteStatusBridgeEnabled}
-                  spellCheck={false}
-                  onChange={onRemoteStatusBridgeUrlChange}
-                />
-              </InterfaceInlineField>
+                <InterfaceInlineField
+                  htmlFor="settings-remote-status-bridge-machine-id"
+                  icon={<Fingerprint size={14} className="text-[var(--qp-text-tertiary)]" />}
+                  title={UI_TEXT.settings.remoteStatusBridgeMachineIdLabel}
+                >
+                  <RevealableTextField
+                    id="settings-remote-status-bridge-machine-id"
+                    value={remoteStatusBridgeMachineId}
+                    visible={remoteStatusBridgeMachineIdVisible}
+                    disabled={!remoteStatusBridgeEnabled}
+                    readOnly
+                    onToggleVisible={() => setRemoteStatusBridgeMachineIdVisible((current) => !current)}
+                    showLabel={UI_TEXT.accessibility.settings.showRemoteMachineId}
+                    hideLabel={UI_TEXT.accessibility.settings.hideRemoteMachineId}
+                  />
+                </InterfaceInlineField>
 
-              <InterfaceInlineField
-                htmlFor="settings-remote-status-bridge-machine-id"
-                icon={<Fingerprint size={14} className="text-[var(--qp-text-tertiary)]" />}
-                title={UI_TEXT.settings.remoteStatusBridgeMachineIdLabel}
-              >
-                <RevealableTextField
-                  id="settings-remote-status-bridge-machine-id"
-                  value={remoteStatusBridgeMachineId}
-                  visible={remoteStatusBridgeMachineIdVisible}
-                  disabled={!remoteStatusBridgeEnabled}
-                  readOnly
-                  onToggleVisible={() => setRemoteStatusBridgeMachineIdVisible((current) => !current)}
-                  showLabel={UI_TEXT.accessibility.settings.showRemoteMachineId}
-                  hideLabel={UI_TEXT.accessibility.settings.hideRemoteMachineId}
-                />
-              </InterfaceInlineField>
+                <InterfaceInlineField
+                  htmlFor="settings-remote-status-bridge-token"
+                  icon={<KeyRound size={14} className="text-[var(--qp-text-tertiary)]" />}
+                  title={UI_TEXT.settings.remoteStatusBridgeTokenLabel}
+                >
+                  <TokenField
+                    id="settings-remote-status-bridge-token"
+                    value={remoteStatusBridgeToken}
+                    visible={remoteStatusBridgeTokenVisible}
+                    disabled={!remoteStatusBridgeEnabled}
+                    onChange={onRemoteStatusBridgeTokenChange}
+                    onGenerate={() => {
+                      onRemoteStatusBridgeTokenChange(createSettingsToken());
+                      setRemoteStatusBridgeTokenVisible(true);
+                    }}
+                    onToggleVisible={() => setRemoteStatusBridgeTokenVisible((current) => !current)}
+                    showLabel={UI_TEXT.accessibility.settings.showServiceToken}
+                    hideLabel={UI_TEXT.accessibility.settings.hideServiceToken}
+                  />
+                </InterfaceInlineField>
+              </div>
+            ) : null}
+          </QuietSubpanel>
+        </div>
+      </section>
 
-              <InterfaceInlineField
-                htmlFor="settings-remote-status-bridge-token"
-                icon={<KeyRound size={14} className="text-[var(--qp-text-tertiary)]" />}
-                title={UI_TEXT.settings.remoteStatusBridgeTokenLabel}
-              >
-                <TokenField
-                  id="settings-remote-status-bridge-token"
-                  value={remoteStatusBridgeToken}
-                  visible={remoteStatusBridgeTokenVisible}
-                  disabled={!remoteStatusBridgeEnabled}
-                  onChange={onRemoteStatusBridgeTokenChange}
-                  onGenerate={() => {
-                    onRemoteStatusBridgeTokenChange(createSettingsToken());
-                    setRemoteStatusBridgeTokenVisible(true);
-                  }}
-                  onToggleVisible={() => setRemoteStatusBridgeTokenVisible((current) => !current)}
-                  showLabel={UI_TEXT.accessibility.settings.showServiceToken}
-                  hideLabel={UI_TEXT.accessibility.settings.hideServiceToken}
-                />
-              </InterfaceInlineField>
-            </div>
-          ) : null}
-        </QuietSubpanel>
-      </div>
-    </section>
+      <QuietDialog
+        open={webActivityHelpOpen}
+        title={UI_TEXT.settings.webActivityHelpTitle}
+        description={UI_TEXT.settings.webActivityHelpDescription}
+        onClose={() => setWebActivityHelpOpen(false)}
+        surfaceClassName="settings-web-activity-help-dialog"
+      >
+        <button
+          type="button"
+          className="qp-dialog-close-button settings-web-activity-help-close"
+          aria-label={UI_TEXT.common.close}
+          onClick={() => setWebActivityHelpOpen(false)}
+        >
+          <X size={16} aria-hidden />
+        </button>
+        <ol className="settings-web-activity-help-list">
+          {UI_TEXT.settings.webActivityHelpSteps.map((step, index) => (
+            <li key={step.title}>
+              <div className="settings-web-activity-help-step-copy">
+                <div className="settings-web-activity-help-step-heading">
+                  <span className="settings-web-activity-help-step-index">{index + 1}</span>
+                  <strong>{step.title}</strong>
+                </div>
+                <p className="settings-web-activity-help-step-description">{step.description}</p>
+                <ul className="settings-web-activity-help-detail-list">
+                  {step.details.map((detail, detailIndex) => (
+                    <li key={typeof detail === "string" ? detail : detail.text}>
+                      <WebActivityHelpDetailItem detail={detail} />
+                      {index === 0 && detailIndex === step.details.length - 1 ? (
+                        <span className="settings-web-activity-help-copy-row">
+                          <button
+                            type="button"
+                            aria-label={UI_TEXT.accessibility.settings.copyWebActivityPort}
+                            onClick={() => copyWebActivityHelpValue("port", String(port))}
+                          >
+                            {copiedWebActivityHelpField === "port"
+                              ? UI_TEXT.settings.webActivityHelpCopiedAction
+                              : UI_TEXT.settings.webActivityHelpCopyPortAction}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={webActivityToken.trim().length === 0}
+                            aria-label={UI_TEXT.accessibility.settings.copyWebActivityToken}
+                            onClick={() => copyWebActivityHelpValue("token", webActivityToken)}
+                          >
+                            {copiedWebActivityHelpField === "token"
+                              ? UI_TEXT.settings.webActivityHelpCopiedAction
+                              : UI_TEXT.settings.webActivityHelpCopyTokenAction}
+                          </button>
+                        </span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </li>
+          ))}
+        </ol>
+        <p className="settings-web-activity-help-note">{UI_TEXT.settings.webActivityHelpNote}</p>
+      </QuietDialog>
+    </>
   );
 }

@@ -29,6 +29,14 @@ pub struct WebActivityRuntimeState {
 }
 
 impl WebActivityRuntimeState {
+    pub fn reset_client(&self) {
+        let mut guard = match self.inner.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        *guard = WebActivityClientSnapshot::default();
+    }
+
     pub fn observe_active_tab(&self, payload: &BrowserActiveTabPayload, now_ms: i64) {
         self.update_client(
             Some(sanitize_browser_client_id(
@@ -236,5 +244,40 @@ mod tests {
 
         assert!(snapshot.connected);
         assert_eq!(snapshot.browser_kind.as_deref(), Some("chrome"));
+    }
+
+    #[test]
+    fn reset_client_clears_recent_bridge_connection() {
+        let state = WebActivityRuntimeState::default();
+        state.observe_active_tab(
+            &BrowserActiveTabPayload {
+                browser_client_id: Some("client".into()),
+                browser_kind: Some("chrome".into()),
+                extension_version: Some("0.1.0".into()),
+                tab_id: Some(1),
+                window_id: Some(1),
+                url: Some("https://example.com".into()),
+                title: Some("Example".into()),
+                fav_icon_url: None,
+                incognito: Some(false),
+                captured_at_ms: Some(1_000),
+                event_reason: Some("activated".into()),
+            },
+            1_000,
+        );
+
+        state.reset_client();
+
+        let snapshot = state.snapshot(
+            &WebActivitySettings {
+                enabled: true,
+                token: "secret".into(),
+            },
+            2_000,
+        );
+
+        assert!(!snapshot.connected);
+        assert_eq!(snapshot.browser_client_id, None);
+        assert_eq!(snapshot.last_activity_at_ms, None);
     }
 }

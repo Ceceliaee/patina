@@ -376,12 +376,14 @@ await runTest("settings leaves web activity connection status to the extension",
   const extensionBackground = readUtf8("extensions/chromium/background.js");
   const webActivityDomain = readUtf8("src-tauri/src/domain/web_activity.rs");
   const bridgeGateway = readUtf8("src/platform/runtime/webActivityBridgeGateway.ts");
+  const settings = readUtf8("src/features/settings/components/Settings.tsx");
   const settingsInterface = readUtf8("src/features/settings/components/SettingsInterfacePanel.tsx");
   const extensionPopup = readUtf8("extensions/chromium/popup.js");
 
   assert.doesNotMatch(extensionBackground, /statusLabel|extensionStatusLabel/);
   assert.doesNotMatch(webActivityDomain, /status_label|sanitize_status_label/);
   assert.doesNotMatch(bridgeGateway, /statusLabel/);
+  assert.doesNotMatch(settings, /platform\/runtime\/webActivityBridgeGateway/);
   assert.doesNotMatch(settingsInterface, /bridgeSnapshot|formatBridgeStatus|webActivityStatus/);
   assert.match(extensionPopup, /function statusView\(settings,\s*text\)/);
 });
@@ -389,9 +391,11 @@ await runTest("settings leaves web activity connection status to the extension",
 await runTest("settings services only expose web sync and remote push controls", () => {
   const settings = readUtf8("src/features/settings/components/Settings.tsx");
   const settingsInterface = readUtf8("src/features/settings/components/SettingsInterfacePanel.tsx");
+  const settingsStyles = readUtf8("src/styles/features/settings.css");
   const appSettings = readUtf8("src/shared/settings/appSettings.ts");
   const appSettingsStore = readUtf8("src/platform/persistence/appSettingsStore.ts");
   const bridgeRuntime = readUtf8("src-tauri/src/platform/web_activity_bridge.rs");
+  const uiText = readUtf8("src/shared/copy/uiText.ts");
   const combined = [
     settings,
     settingsInterface,
@@ -410,6 +414,19 @@ await runTest("settings services only expose web sync and remote push controls",
     assert.ok(!combined.includes(name), `unexpected retired setting name: ${name}`);
   }
   assert.match(settingsInterface, /UI_TEXT\.settings\.servicesTitle/);
+  assert.match(settingsInterface, /QuietDialog/);
+  assert.match(settingsInterface, /settings-web-activity-subpanel/);
+  assert.match(settingsInterface, /settings-web-activity-title-row/);
+  assert.match(settingsInterface, /settings-inline-help-button/);
+  assert.match(settingsInterface, /UI_TEXT\.accessibility\.settings\.openWebActivityHelp/);
+  assert.match(settingsInterface, /UI_TEXT\.settings\.webActivityHelpTitle/);
+  assert.match(settingsStyles, /\.settings-web-activity-title-row \{\s*min-height: 20px;/);
+  assert.match(settingsStyles, /\.settings-inline-help-button \{\s*display: inline-flex;\s*height: 18px;/);
+  assert.match(uiText, /webActivityHelpAction/);
+  assert.match(uiText, /webActivityHelpSteps/);
+  assert.match(uiText, /Patina Web Sync 启用并连接成功后：\\n• 自动同步当前活动标签页的网站地址、标题和网站图标。/);
+  assert.doesNotMatch(uiText, /浏览器内部页面不会写入网页记录/);
+  assert.doesNotMatch(uiText, /浏览历史库/);
   assert.match(settings, /draftSettings\.webActivityPort/);
   assert.match(appSettingsStore, /webActivityPort: "web_activity_port"/);
   assert.doesNotMatch(bridgeRuntime, /tungstenite|accept_async|Message::Text|browser-bridge/);

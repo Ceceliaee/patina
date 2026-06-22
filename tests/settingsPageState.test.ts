@@ -22,6 +22,9 @@ import {
 import {
   createSettingsToken,
 } from "../src/features/settings/services/settingsTokenService.ts";
+import {
+  shouldShowWebActivityHelp,
+} from "../src/features/settings/services/webActivitySetupState.ts";
 
 interface AppSettings {
   idleTimeoutSecs: number;
@@ -569,6 +572,55 @@ await runTest("settings token generation creates hex tokens", () => {
     return bytes;
   });
   assert.equal(token, "0a".repeat(24));
+});
+
+await runTest("web activity help visibility follows setup state", () => {
+  const baseInput = {
+    draftEnabled: true,
+    draftPort: 12345,
+    draftToken: "secret",
+    savedEnabled: true,
+    savedPort: 12345,
+    savedToken: "secret",
+    snapshot: {
+      enabled: true,
+      connected: true,
+    },
+  };
+
+  assert.equal(shouldShowWebActivityHelp({
+    ...baseInput,
+    draftEnabled: false,
+  }), false);
+  assert.equal(shouldShowWebActivityHelp({
+    ...baseInput,
+    snapshot: null,
+  }), true);
+  assert.equal(shouldShowWebActivityHelp(baseInput), false);
+  assert.equal(shouldShowWebActivityHelp({
+    ...baseInput,
+    snapshot: {
+      enabled: false,
+      connected: true,
+    },
+  }), true);
+  assert.equal(shouldShowWebActivityHelp({
+    ...baseInput,
+    draftToken: "   ",
+  }), true);
+  assert.equal(shouldShowWebActivityHelp({
+    ...baseInput,
+    draftToken: "next-secret",
+  }), true);
+  assert.equal(shouldShowWebActivityHelp({
+    ...baseInput,
+    draftPort: 12346,
+  }), true);
+  assert.equal(shouldShowWebActivityHelp({
+    ...baseInput,
+    draftToken: "  secret  ",
+    savedToken: "secret",
+  }), false);
 });
 
 await runTest("runSettingsCleanupFlow executes confirmed cleanup and reloads", async () => {

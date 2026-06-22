@@ -83,7 +83,7 @@ impl WebActivityBridgeRuntimeState {
         app: AppHandle<R>,
         settings: WebActivityBridgeSettings,
         deps: WebActivityBridgeRuntimeDeps<R>,
-    ) {
+    ) -> bool {
         let mut inner = lock_inner(&self.inner);
         let previous_settings = inner.settings.clone();
         let should_restart =
@@ -102,6 +102,11 @@ impl WebActivityBridgeRuntimeState {
         }
 
         inner.settings = settings;
+        should_restart
+    }
+
+    pub fn current_settings(&self) -> WebActivityBridgeSettings {
+        lock_inner(&self.inner).settings.clone()
     }
 }
 

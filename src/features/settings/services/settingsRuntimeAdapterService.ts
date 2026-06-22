@@ -14,9 +14,14 @@ import {
   type BackupRestoreStrategy,
   type BackupPreview,
 } from "../../../platform/backup/backupRuntimeGateway.ts";
+import { copyTextToClipboard } from "../../../platform/desktop/clipboardGateway.ts";
 import { openExternalUrl } from "../../../platform/desktop/externalUrlGateway.ts";
 import { emitAppSettingsChanged } from "../../../platform/runtime/appSettingsEventGateway.ts";
 import { setAfkThreshold } from "../../../platform/runtime/trackingRuntimeGateway.ts";
+import {
+  getWebActivityBridgeSnapshot,
+  type WebActivityBridgeSnapshot,
+} from "../../../platform/runtime/webActivityBridgeGateway.ts";
 import { getUiLocale, UI_TEXT } from "../../../shared/copy/uiText.ts";
 import type { CleanupRange } from "../types.ts";
 import {
@@ -25,6 +30,7 @@ import {
 } from "./sessionCleanupPolicy.ts";
 
 export type { BackupPreview, BackupRestoreStrategy } from "../../../platform/backup/backupRuntimeGateway.ts";
+export type { WebActivityBridgeSnapshot } from "../../../platform/runtime/webActivityBridgeGateway.ts";
 
 export interface BackupRestorePreparation {
   path: string;
@@ -59,6 +65,7 @@ const RELEASE_NOTES_URL = "https://github.com/Ceceliaee/patina/releases";
 const REPOSITORY_URL = "https://github.com/Ceceliaee/patina";
 const FEEDBACK_URL = "https://github.com/Ceceliaee/patina/issues/new/choose";
 const KOFI_SUPPORT_URL = "https://ko-fi.com/ceceliaee";
+const WEB_ACTIVITY_HELP_LINKS = new Set(["https://github.com/Ceceliaee/patina/releases/latest"]);
 
 export function buildBackupPreviewSummary(preview: BackupPreview): string {
   const exportedAt = new Date(preview.exportedAtMs).toLocaleString(getUiLocale());
@@ -169,6 +176,22 @@ export class SettingsRuntimeAdapterService {
 
   static async openKofiSupport(): Promise<void> {
     await openExternalUrl(KOFI_SUPPORT_URL);
+  }
+
+  static async openWebActivityHelpLink(url: string): Promise<void> {
+    if (!WEB_ACTIVITY_HELP_LINKS.has(url)) {
+      throw new Error("Unsupported web activity help link");
+    }
+
+    await openExternalUrl(url);
+  }
+
+  static async copyWebActivityHelpValue(value: string): Promise<void> {
+    await copyTextToClipboard(value);
+  }
+
+  static async getWebActivityBridgeSnapshot(): Promise<WebActivityBridgeSnapshot> {
+    return getWebActivityBridgeSnapshot();
   }
 
   static buildSettingsPatch(

@@ -13,6 +13,7 @@ import SettingsInterfacePanel from "./SettingsInterfacePanel";
 import SettingsResidentPanel from "./SettingsResidentPanel";
 import SettingsTrackingPanel from "./SettingsTrackingPanel";
 import { useSettingsPageState } from "../hooks/useSettingsPageState";
+import { useWebActivitySetupState } from "../hooks/useWebActivitySetupState";
 
 export default function Settings({
   onSettingsChanged,
@@ -61,6 +62,10 @@ export default function Settings({
     onDirtyChange,
     onToast,
     onRegisterSaveHandler,
+  });
+  const { showWebActivityHelp } = useWebActivitySetupState({
+    savedSettings,
+    draftSettings,
   });
 
   useEffect(() => {
@@ -213,6 +218,7 @@ export default function Settings({
 
           <SettingsInterfacePanel
             webActivityEnabled={draftSettings.webActivityEnabled}
+            showWebActivityHelp={showWebActivityHelp}
             port={draftSettings.webActivityPort}
             webActivityToken={draftSettings.webActivityToken}
             remoteStatusBridgeEnabled={draftSettings.remoteStatusBridgeEnabled}

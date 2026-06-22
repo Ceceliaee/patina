@@ -1,6 +1,7 @@
 use crate::data::repositories::app_settings;
 use crate::data::sqlite_pool::wait_for_sqlite_pool;
 use crate::domain::settings::WebActivityBridgeSettings;
+use crate::engine::web_activity::WebActivityRuntimeState;
 use crate::platform::web_activity_bridge::{
     WebActivityBridgeHttpRequest, WebActivityBridgeHttpResponse, WebActivityBridgeRuntimeDeps,
     WebActivityBridgeRuntimeState, WEB_ACTIVITY_BRIDGE_ACTIVE_WINDOW_EVENT,
@@ -59,13 +60,18 @@ fn update_runtime_state<R: Runtime + 'static>(
     settings: WebActivityBridgeSettings,
 ) {
     if let Some(state) = app.try_state::<WebActivityBridgeRuntimeState>() {
-        state.update(
+        let bridge_restarted = state.update(
             app.clone(),
             settings,
             WebActivityBridgeRuntimeDeps {
                 handle_http_request: handle_http_request_boxed::<R>,
             },
         );
+        if bridge_restarted {
+            if let Some(web_activity_state) = app.try_state::<WebActivityRuntimeState>() {
+                web_activity_state.reset_client();
+            }
+        }
     }
 }
 

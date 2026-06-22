@@ -1,15 +1,16 @@
 use crate::data::repositories::app_settings;
 use crate::data::sqlite_pool::wait_for_sqlite_pool;
+use crate::domain::settings::WebActivitySettings;
 use crate::domain::tracking::TrackingDataChangedPayload;
 use crate::domain::web_activity::{BrowserActiveTabPayload, WEB_ACTIVITY_CHANGED_REASON};
 use crate::engine::web_activity::{
     record_active_tab, seal_active_segment, seal_if_tracking_inactive, WebActivityRuntimeState,
 };
 use crate::platform::web_activity_bridge::{
-    WebActivityBridgeHttpRequest, WebActivityBridgeHttpResponse,
+    WebActivityBridgeHttpRequest, WebActivityBridgeHttpResponse, WebActivityBridgeRuntimeState,
 };
 use serde_json::json;
-use tauri::{AppHandle, Emitter, Runtime, State};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
 pub async fn handle_http_request<R: Runtime>(
     app: AppHandle<R>,
@@ -146,9 +147,27 @@ pub async fn get_bridge_snapshot<R: Runtime>(
     state: State<'_, WebActivityRuntimeState>,
 ) -> Result<crate::domain::web_activity::WebActivityBridgeSnapshot, String> {
     let pool = wait_for_sqlite_pool(&app).await?;
-    let settings = app_settings::load_web_activity_settings(&pool)
+    let bridge_settings = app_settings::load_web_activity_bridge_settings(&pool)
         .await
         .map_err(|error| format!("failed to load web activity settings: {error}"))?;
+    let settings = WebActivitySettings {
+        enabled: bridge_settings.enabled,
+        token: bridge_settings.token.clone(),
+    };
+    let bridge_runtime_current = app
+        .try_state::<WebActivityBridgeRuntimeState>()
+        .map(|bridge_state| bridge_state.current_settings());
+    if bridge_runtime_current.as_ref() != Some(&bridge_settings) {
+        return Ok(crate::domain::web_activity::WebActivityBridgeSnapshot {
+            enabled: settings.enabled,
+            connected: false,
+            browser_client_id: None,
+            browser_kind: None,
+            extension_version: None,
+            last_activity_at_ms: None,
+        });
+    }
+
     Ok(state.snapshot(&settings, crate::app::runtime::now_ms() as i64))
 }
 
