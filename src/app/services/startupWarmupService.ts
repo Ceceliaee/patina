@@ -414,10 +414,6 @@ export function scheduleStartupWarmupRefresh(
   };
 }
 
-export function getStartupWarmupSnapshot(): StartupWarmupSnapshot | null {
-  return activeStartupWarmup?.snapshot() ?? null;
-}
-
 export function resetStartupWarmupForTests(): void {
   activeStartupWarmup?.cancel();
   activeStartupWarmup = null;

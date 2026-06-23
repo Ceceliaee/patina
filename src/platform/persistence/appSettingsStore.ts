@@ -1,6 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
-  clearAllSessionWindowTitles,
   deleteSessionsBefore,
   loadAllSettingRows,
   loadSettingTimestamp,
@@ -345,10 +344,6 @@ export async function clearSessionsBefore(cutoffTime: number): Promise<void> {
   await deleteSessionsBefore(cutoffTime);
 }
 
-export async function clearAllWindowTitles(): Promise<void> {
-  await clearAllSessionWindowTitles();
-}
-
 export async function loadTrackerHealthTimestamp(): Promise<number | null> {
   const lastSampleMs = await loadSettingTimestamp(TRACKER_LAST_SUCCESSFUL_SAMPLE_KEY);
   if (lastSampleMs !== null) {
@@ -356,12 +351,6 @@ export async function loadTrackerHealthTimestamp(): Promise<number | null> {
   }
 
   return loadSettingTimestamp(TRACKER_LAST_HEARTBEAT_KEY);
-}
-
-export async function saveTrackerHeartbeat(timestampMs: number): Promise<void> {
-  await saveSettingEntries({
-    [TRACKER_LAST_HEARTBEAT_KEY]: timestampMs,
-  });
 }
 
 async function saveSettingEntries(

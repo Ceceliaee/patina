@@ -77,5 +77,3 @@ export async function executeWriteBatch(
     });
   });
 }
-
-export const executeWriteTransaction = executeWriteBatch;

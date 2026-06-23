@@ -1,4 +1,4 @@
-import { loadDashboardSnapshot, type DashboardSnapshot } from "./dashboardReadModel.ts";
+import type { DashboardSnapshot } from "./dashboardReadModel.ts";
 
 const DASHBOARD_SNAPSHOT_CACHE_LIMIT = 3;
 const DASHBOARD_SNAPSHOT_CACHE = new Map<string, DashboardSnapshot>();
@@ -37,10 +37,4 @@ export function clearDashboardSnapshotCache(): void {
 
 export function getDashboardSnapshotCacheSizeForTests(): number {
   return DASHBOARD_SNAPSHOT_CACHE.size;
-}
-
-export async function prewarmDashboardSnapshotCache(date: Date = new Date()): Promise<DashboardSnapshot> {
-  const snapshot = await loadDashboardSnapshot(date);
-  setDashboardSnapshotCache(snapshot, date);
-  return snapshot;
 }

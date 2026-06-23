@@ -11,7 +11,7 @@ import type {
   HeatmapWeek,
 } from "./dataReadModel.ts";
 
-export const DATA_BOOTSTRAP_SNAPSHOT_MAX_BYTES = 256 * 1024;
+const DATA_BOOTSTRAP_SNAPSHOT_MAX_BYTES = 256 * 1024;
 
 export interface DataBootstrapSnapshot {
   createdAtMs: number;
@@ -65,10 +65,6 @@ function isValidBootstrapSnapshot(value: unknown): value is DataBootstrapSnapsho
 
 export function getCachedDataBootstrapSnapshot(): DataBootstrapSnapshot | null {
   return cachedSnapshot;
-}
-
-export function setCachedDataBootstrapSnapshot(snapshot: DataBootstrapSnapshot | null): void {
-  cachedSnapshot = snapshot;
 }
 
 export async function loadPersistedDataBootstrapSnapshot(

@@ -27,7 +27,7 @@ interface RawResourceDiagnosticsSnapshot {
   icon_result_cache: RawIconResultCacheStats;
 }
 
-export interface ResourceDiagnosticsSnapshot {
+interface ResourceDiagnosticsSnapshot {
   webviewWindowCount: number;
   webviewWindowLabels: string[];
   processResources: {
@@ -121,7 +121,7 @@ function mapRawResourceDiagnostics(raw: RawResourceDiagnosticsSnapshot): Resourc
   };
 }
 
-export async function loadResourceDiagnostics(): Promise<ResourceDiagnosticsSnapshot> {
+async function loadResourceDiagnostics(): Promise<ResourceDiagnosticsSnapshot> {
   const payload = await invoke<unknown>("cmd_get_resource_diagnostics");
   if (!isRawResourceDiagnostics(payload)) {
     throw new Error("Invalid resource diagnostics payload");

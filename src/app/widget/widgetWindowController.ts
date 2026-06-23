@@ -6,7 +6,7 @@ import type {
   WidgetWindowSize,
 } from "../../platform/desktop/widgetRuntimeGateway.ts";
 
-export interface WidgetWindowControllerDeps {
+interface WidgetWindowControllerDeps {
   loadPlacement: () => Promise<WidgetPlacement | null>;
   persistExpanded: (expanded: boolean, showObjectSlot: boolean) => Promise<void>;
   applyLayout: (
@@ -32,7 +32,7 @@ export const DEFAULT_WIDGET_PLACEMENT: WidgetPlacement = {
   anchorY: 0.28,
 };
 
-export const DRAG_SETTLE_MS = 40;
+const DRAG_SETTLE_MS = 40;
 export const COLLAPSE_ANIMATION_MS = 120;
 
 export function clampWidgetAnchorY(anchorY: number) {
@@ -43,7 +43,7 @@ export function clampWidgetAnchorY(anchorY: number) {
   return Math.max(0, Math.min(1, anchorY));
 }
 
-export function resolveWidgetPlacementFromWindowRect(
+function resolveWidgetPlacementFromWindowRect(
   monitor: WidgetMonitorLike,
   position: WidgetWindowPosition,
   size: WidgetWindowSize,

@@ -19,12 +19,6 @@ import {
   DEFAULT_WIDGET_PLACEMENT,
 } from "./widgetWindowController.ts";
 
-export const WIDGET_EXPANDED_WIDTH_WITH_OBJECT = 228;
-export const WIDGET_EXPANDED_WIDTH_COMPACT = 184;
-export const WIDGET_EXPANDED_HEIGHT = 48;
-export const WIDGET_COLLAPSED_WIDTH = 64;
-export const WIDGET_COLLAPSED_HEIGHT = 48;
-
 interface WidgetWindowStateOptions {
   onCollapsedDragSettled?: () => void;
   onRuntimeCollapsed?: () => void;

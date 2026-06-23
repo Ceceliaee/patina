@@ -8,14 +8,14 @@ import {
   saveCategoryDefaultColorAssignment,
 } from "../../features/classification/services/classificationStore.ts";
 
-export interface ProcessMapperRuntimeSnapshot {
+interface ProcessMapperRuntimeSnapshot {
   overrides: Record<string, AppOverride>;
   categoryColorOverrides: Record<string, string>;
   categoryDefaultColorAssignments: Record<string, string>;
   deletedCategories: AppCategory[];
 }
 
-export async function loadProcessMapperRuntimeSnapshot(): Promise<ProcessMapperRuntimeSnapshot> {
+async function loadProcessMapperRuntimeSnapshot(): Promise<ProcessMapperRuntimeSnapshot> {
   const [
     overrides,
     categoryColorOverrides,
@@ -36,7 +36,7 @@ export async function loadProcessMapperRuntimeSnapshot(): Promise<ProcessMapperR
   };
 }
 
-export function applyProcessMapperRuntimeSnapshot(snapshot: ProcessMapperRuntimeSnapshot): void {
+function applyProcessMapperRuntimeSnapshot(snapshot: ProcessMapperRuntimeSnapshot): void {
   ProcessMapper.setUserOverrides(snapshot.overrides);
   ProcessMapper.setCategoryColorOverrides(snapshot.categoryColorOverrides);
   ProcessMapper.setCategoryDefaultColorAssignments(snapshot.categoryDefaultColorAssignments);

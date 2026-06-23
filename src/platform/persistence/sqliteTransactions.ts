@@ -31,8 +31,6 @@ export async function executeWriteBatchWithExecutor(
   }
 }
 
-export const executeTransactionWithExecutor = executeWriteBatchWithExecutor;
-
 export function createSerializedJobRunner() {
   let tail = Promise.resolve();
 
