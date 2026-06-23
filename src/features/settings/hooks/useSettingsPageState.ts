@@ -25,7 +25,7 @@ import type {
 } from "../services/settingsRuntimeAdapterService.ts";
 import { useRemoteBackupState } from "./useRemoteBackupState.ts";
 import { getStorageSettingsCopy } from "../copy/storageSettingsCopy.ts";
-import { toEbwebviewCachePath } from "../../../platform/storage/storagePathDisplay.ts";
+import { toEbwebviewCachePath } from "../services/storagePathDisplay.ts";
 
 const buildCleanupOptions = (): Array<{ value: CleanupRange; label: string }> => [
   { value: 180, label: UI_TEXT.settings.cleanupRangeLabels[180] },

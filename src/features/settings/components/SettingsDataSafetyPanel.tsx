@@ -24,7 +24,7 @@ import type { RemoteBackupEntry, RemoteBackupState } from "../hooks/useRemoteBac
 import { getStorageSettingsCopy } from "../copy/storageSettingsCopy.ts";
 import SettingsRemoteBackupPanel from "./SettingsRemoteBackupPanel";
 import SettingsStepperSlider from "./SettingsStepperSlider";
-import { toEbwebviewCachePath } from "../../../platform/storage/storagePathDisplay.ts";
+import { toEbwebviewCachePath } from "../services/storagePathDisplay.ts";
 
 type CleanupOption = { value: CleanupRange; label: string };
 
