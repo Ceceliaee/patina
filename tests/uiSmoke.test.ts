@@ -333,16 +333,17 @@ await runTest("app shell keeps History and Data snapshot loaders on their owning
 
 await runTest("Data regular view avoids visible loading and skeleton branches", () => {
   const data = readUtf8("src/features/data/components/Data.tsx");
+  const heatmapPanel = readUtf8("src/features/data/components/DataHeatmapPanel.tsx");
 
   assert.doesNotMatch(data, /UI_TEXT\.history\.loading/);
   assert.doesNotMatch(data, /data-heatmap-skeleton/);
   assert.doesNotMatch(data, /aria-busy/);
-  assert.doesNotMatch(data, /UI_TEXT\.data\.less/);
-  assert.doesNotMatch(data, /UI_TEXT\.data\.more/);
-  assert.match(data, /data-heatmap-granularity/);
-  assert.match(data, /hideRecentDailyFutureCell/);
-  assert.match(data, /isDailyFutureCell/);
-  assert.match(data, /isWeeklyFutureCell/);
+  assert.doesNotMatch(heatmapPanel, /UI_TEXT\.data\.less/);
+  assert.doesNotMatch(heatmapPanel, /UI_TEXT\.data\.more/);
+  assert.match(heatmapPanel, /data-heatmap-granularity/);
+  assert.match(heatmapPanel, /hideRecentDailyFutureCell/);
+  assert.match(heatmapPanel, /isDailyFutureCell/);
+  assert.match(heatmapPanel, /isWeeklyFutureCell/);
   assert.match(data, /selectedHeatmapView === "recent"/);
 });
 
@@ -480,6 +481,7 @@ await runTest("web activity views are gated by saved web sync setting", () => {
   const history = readUtf8("src/features/history/components/History.tsx");
   const mapping = readUtf8("src/features/classification/components/AppMapping.tsx");
   const mappingState = readUtf8("src/features/classification/hooks/useAppMappingState.ts");
+  const mappingDerivedState = readUtf8("src/features/classification/hooks/useAppMappingDerivedState.ts");
   const historyBranch = shell.slice(shell.indexOf("<History"), shell.indexOf("<Data"));
   const mappingBranch = shell.slice(shell.indexOf("<AppMapping"), shell.indexOf("</Suspense>"));
 
@@ -495,24 +497,25 @@ await runTest("web activity views are gated by saved web sync setting", () => {
   assert.match(mapping, /const effectiveObjectMode = webActivityEnabled \? objectMode : "app"/);
   assert.match(mapping, /webActivityEnabled && \(/);
   assert.match(mappingState, /webActivityEnabled = false/);
-  assert.match(mappingState, /if \(!webActivityEnabled\) return \{\}/);
-  assert.match(mappingState, /if \(!webActivityEnabled\) return \[\]/);
-  assert.match(mappingState, /if \(!webActivityEnabled\) return \{ all: 0, other: 0, classified: 0 \}/);
+  assert.match(mappingDerivedState, /if \(!webActivityEnabled\) return \{\}/);
+  assert.match(mappingDerivedState, /if \(!webActivityEnabled\) return \[\]/);
+  assert.match(mappingDerivedState, /if \(!webActivityEnabled\) return \{ all: 0, other: 0, classified: 0 \}/);
 });
 
 await runTest("classification web domain colors prefer favicon theme colors", () => {
   const mappingState = readUtf8("src/features/classification/hooks/useAppMappingState.ts");
+  const mappingDerivedState = readUtf8("src/features/classification/hooks/useAppMappingDerivedState.ts");
   const iconThemeColors = readUtf8("src/shared/hooks/useIconThemeColors.ts");
   const webActivityRepository = readUtf8("src/platform/persistence/webActivityRepository.ts");
-  const colorResolver = mappingState.slice(
-    mappingState.indexOf("const resolveWebDomainColor = useCallback"),
-    mappingState.indexOf("const resolveWebDomainEnabled = useCallback"),
+  const colorResolver = mappingDerivedState.slice(
+    mappingDerivedState.indexOf("const resolveWebDomainColor = useCallback"),
+    mappingDerivedState.indexOf("const resolveWebDomainEnabled = useCallback"),
   );
 
-  assert.match(mappingState, /const webDomainIcons = useMemo/);
-  assert.match(mappingState, /candidate\.faviconUrl\?\.trim\(\)/);
+  assert.match(mappingDerivedState, /const webDomainIcons = useMemo/);
+  assert.match(mappingDerivedState, /candidate\.faviconUrl\?\.trim\(\)/);
   assert.match(mappingState, /const iconThemeColors = useIconThemeColors\(icons\)/);
-  assert.match(mappingState, /const webDomainIconThemeColors = useIconThemeColors\(webDomainIcons\)/);
+  assert.match(mappingDerivedState, /const webDomainIconThemeColors = useIconThemeColors\(webDomainIcons\)/);
   assert.match(colorResolver, /const iconColor = webDomainIconThemeColors\[candidate\.normalizedDomain\]/);
   assert.match(colorResolver, /if \(iconColor\) return iconColor;/);
   assert.doesNotMatch(iconThemeColors, /darkPixelMode/);
