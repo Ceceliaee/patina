@@ -1,10 +1,10 @@
 const ZH_CN_APP_COPY = {
   app: {
     loadingView: "正在加载界面...",
-    mappingUpdated: "应用映射已更新。",
-    historyDeleted: "应用历史已删除。",
-    unsavedConfirmTitle: "保存未保存修改",
-    unsavedConfirmBody: "当前页面有未保存更改。保存后将自动切换到目标页面。",
+    mappingUpdated: "分类规则已更新。",
+    historyDeleted: "应用记录已删除。",
+    unsavedConfirmTitle: "保存更改",
+    unsavedConfirmBody: "当前页面有未保存更改，保存后再切换页面。",
     unsavedConfirmSave: "保存",
   },
 };
@@ -12,8 +12,8 @@ const ZH_CN_APP_COPY = {
 const EN_US_APP_COPY = {
   app: {
     loadingView: "Loading view...",
-    mappingUpdated: "App settings updated.",
-    historyDeleted: "App history deleted.",
+    mappingUpdated: "Classification rules updated.",
+    historyDeleted: "App records deleted.",
     unsavedConfirmTitle: "Save changes",
     unsavedConfirmBody: "This page has unsaved changes. Save before switching pages.",
     unsavedConfirmSave: "Save",

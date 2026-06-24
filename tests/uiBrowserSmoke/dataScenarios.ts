@@ -79,7 +79,7 @@ export async function runDataScenarios(context: BrowserSmokeContext) {
       await evaluate(client!, sessionId, `
         (() => {
           const apply = Array.from(document.querySelectorAll(".data-range-picker-footer button"))
-            .find((node) => node.textContent?.trim() === "应用");
+            .find((node) => node.textContent?.trim() === "确定");
           if (!apply) return false;
           apply.click();
           return true;
@@ -225,7 +225,7 @@ export async function runDataScenarios(context: BrowserSmokeContext) {
       await evaluate(client!, sessionId, `
         (() => {
           const apply = Array.from(document.querySelectorAll(".data-range-picker-footer button"))
-            .find((node) => node.textContent?.trim() === "应用");
+            .find((node) => node.textContent?.trim() === "确定");
           if (!apply) return false;
           apply.click();
           return true;

@@ -1,7 +1,7 @@
 const ZH_CN_DASHBOARD_COPY = {
   dashboard: {
     title: "今天",
-    subtitle: "查看今天的使用概览",
+    subtitle: "查看今日活动概览",
     tracking: (activeAppName: string) => `正在追踪：${activeAppName}`,
     trackingPaused: "追踪已暂停",
     idle: "空闲",
@@ -19,7 +19,7 @@ const ZH_CN_DASHBOARD_COPY = {
     showTotalHourlyActivity: "显示总活动",
     topApps: "应用排行",
     topAppsBadge: (count: number) => `前 ${count} 项`,
-    emptyState: "暂无今日记录",
+    emptyState: "今天暂无记录",
     sharePrefix: "占比",
   },
   hourlyActivityChart: {
@@ -31,7 +31,7 @@ const ZH_CN_DASHBOARD_COPY = {
 const EN_US_DASHBOARD_COPY = {
   dashboard: {
     title: "Today",
-    subtitle: "Review today's usage overview",
+    subtitle: "View today's activity",
     tracking: (activeAppName: string) => `Tracking: ${activeAppName}`,
     trackingPaused: "Tracking paused",
     idle: "Idle",

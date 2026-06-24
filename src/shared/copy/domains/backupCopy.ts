@@ -4,9 +4,9 @@ const ZH_CN_BACKUP_COPY = {
     schemaLabel: (schemaVersion: number) => `Schema ${schemaVersion}`,
     exportedAt: (value: string) => `导出时间：${value}`,
     appVersion: (version: string) => `应用版本：${version}`,
-    restoreSafety: (message: string) => `恢复提示：${message}`,
+    restoreSafety: (message: string) => `恢复状态：${message}`,
     itemCounts: (sessionCount: number, settingCount: number, iconCacheCount: number) => (
-      `会话数：${sessionCount}，设置项：${settingCount}，图标缓存：${iconCacheCount}`
+      `活动记录：${sessionCount}，设置：${settingCount}，图标缓存：${iconCacheCount}`
     ),
   },
 };
@@ -19,7 +19,7 @@ const EN_US_BACKUP_COPY = {
     appVersion: (version: string) => `App version: ${version}`,
     restoreSafety: (message: string) => `Restore status: ${message}`,
     itemCounts: (sessionCount: number, settingCount: number, iconCacheCount: number) => (
-      `Sessions: ${sessionCount}, settings: ${settingCount}, cached icons: ${iconCacheCount}`
+      `Activity records: ${sessionCount}, settings: ${settingCount}, cached icons: ${iconCacheCount}`
     ),
   },
 };

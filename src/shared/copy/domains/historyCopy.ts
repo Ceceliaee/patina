@@ -1,7 +1,8 @@
 const ZH_CN_HISTORY_COPY = {
   history: {
     title: "历史",
-    sessionCount: (count: number) => `${count} 段会话`,
+    subtitle: "回看当日活动记录",
+    sessionCount: (count: number) => `${count} 条记录`,
     pastSevenDays: "近 7 天",
     dailyHourlyActivity: "当日活动",
     appDistribution: "应用分布",
@@ -47,7 +48,8 @@ const ZH_CN_HISTORY_COPY = {
 const EN_US_HISTORY_COPY = {
   history: {
     title: "History",
-    sessionCount: (count: number) => `${count} sessions`,
+    subtitle: "Review daily records",
+    sessionCount: (count: number) => `${count} records`,
     pastSevenDays: "Last 7 days",
     dailyHourlyActivity: "Daily Activity",
     appDistribution: "App Distribution",

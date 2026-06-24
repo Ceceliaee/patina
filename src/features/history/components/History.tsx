@@ -8,7 +8,6 @@ import { UI_TEXT } from "../../../shared/copy/index.ts";
 import {
   formatDuration,
   formatTime,
-  formatDateLabel,
 } from "../services/historyFormatting";
 import { useIconThemeColors } from "../../../shared/hooks/useIconThemeColors";
 import {
@@ -1066,7 +1065,7 @@ export default function History({
       <QuietPageHeader
         icon={<Clock size={18} />}
         title={UI_TEXT.history.title}
-        subtitle={`${formatDateLabel(selectedDate)} · ${UI_TEXT.history.sessionCount(timelineSessions.length)}`}
+        subtitle={UI_TEXT.history.subtitle}
         rightSlot={(
           <HistoryDateNavigator
             datePickerRef={datePickerRef}

@@ -158,7 +158,7 @@ await runTest("buildWidgetViewModel distinguishes sustained participation tracki
   );
 
   assert.equal(viewModel.statusTone, "tracking-sustained");
-  assert.equal(viewModel.statusLabel, "\u6301\u7eed\u53c2\u4e0e");
+  assert.equal(viewModel.statusLabel, "\u6301\u7eed\u8bb0\u5f55");
   assert.equal(viewModel.showObjectSlot, true);
   assert.equal(viewModel.objectIconKey, "chrome.exe");
 });
@@ -180,7 +180,7 @@ await runTest("buildWidgetViewModel keeps sustained participation active after g
   );
 
   assert.equal(viewModel.statusTone, "tracking-sustained");
-  assert.equal(viewModel.statusLabel, "\u6301\u7eed\u53c2\u4e0e");
+  assert.equal(viewModel.statusLabel, "\u6301\u7eed\u8bb0\u5f55");
   assert.equal(viewModel.showObjectSlot, true);
   assert.equal(viewModel.objectIconKey, "chrome.exe");
 });
@@ -231,8 +231,8 @@ await runTest("buildWidgetViewModel hides untracked foreground apps behind idle 
 
   assert.equal(viewModel.statusTone, "idle");
   assert.equal(viewModel.statusLabel, "\u7a7a\u95f2");
-  assert.equal(viewModel.appName, "\u5f53\u524d\u5e94\u7528\u4e0d\u8ffd\u8e2a");
-  assert.equal(viewModel.helperText, "\u5f53\u524d\u7a97\u53e3\u4e0d\u4f1a\u8fdb\u5165\u8bb0\u5f55");
+  assert.equal(viewModel.appName, "\u5f53\u524d\u5e94\u7528\u672a\u8ffd\u8e2a");
+  assert.equal(viewModel.helperText, "\u5f53\u524d\u7a97\u53e3\u4e0d\u5199\u5165\u8bb0\u5f55");
   assert.equal(viewModel.showObjectSlot, false);
 });
 
@@ -274,7 +274,7 @@ await runTest("buildWidgetViewModel maps hard degraded probe to existing error l
 
   assert.equal(viewModel.statusTone, "error");
   assert.equal(viewModel.statusLabel, "\u5f02\u5e38");
-  assert.equal(viewModel.helperText, "\u8ffd\u8e2a\u72b6\u6001\u6682\u65f6\u672a\u540c\u6b65");
+  assert.equal(viewModel.helperText, "\u8ffd\u8e2a\u72b6\u6001\u6682\u672a\u540c\u6b65");
   assert.equal(viewModel.showObjectSlot, false);
 });
 

@@ -132,7 +132,7 @@ runTest("check error falls back to release page", () => {
   }), false, false);
 
   assert.equal(panel.statusTitle, "无法检查更新");
-  assert.equal(panel.statusDetail, "无法访问更新清单。当前网络可能无法连接 GitHub，你可以稍后重试，或手动下载。");
+  assert.equal(panel.statusDetail, "无法访问更新清单。当前网络可能无法连接 GitHub，可稍后重试或手动下载。");
   assert.equal(panel.statusDetail?.includes("failed to check updates"), false);
   assert.equal(panel.statusDetail?.includes("github.com"), false);
   assert.equal(panel.primaryAction.action, "open_release_page");
