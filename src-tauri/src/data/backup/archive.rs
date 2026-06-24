@@ -84,8 +84,6 @@ pub(super) struct BackupArchiveChecksums {
     pub(super) files: BTreeMap<String, String>,
 }
 
-
-
 fn build_backup_manifest(payload: &BackupPayload) -> BackupArchiveManifest {
     BackupArchiveManifest {
         format: BACKUP_FORMAT.to_string(),

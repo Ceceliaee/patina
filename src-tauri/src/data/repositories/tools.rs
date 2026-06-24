@@ -18,8 +18,7 @@ pub use backup_restore::{
 use read::{
     fetch_active_software_reminder_rules_tx, fetch_latest_pomodoro, fetch_latest_timer,
     fetch_pomodoro_by_id, fetch_reminder_by_id, fetch_software_reminder_rule_by_id,
-    fetch_software_usage_ms_today_tx, fetch_timer_by_id, map_reminder_row,
-    map_timer_lap_row,
+    fetch_software_usage_ms_today_tx, fetch_timer_by_id, map_reminder_row, map_timer_lap_row,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -44,7 +44,10 @@ pub async fn fetch_tools_snapshot(
     })
 }
 
-pub(super) async fn fetch_reminder_by_id(pool: &Pool<Sqlite>, id: i64) -> Result<ToolReminder, String> {
+pub(super) async fn fetch_reminder_by_id(
+    pool: &Pool<Sqlite>,
+    id: i64,
+) -> Result<ToolReminder, String> {
     sqlx::query(
         "SELECT id, label, scheduled_at, created_at, status, fired_at, cancelled_at
          FROM tool_reminders
@@ -232,7 +235,10 @@ pub(super) async fn fetch_latest_timer(pool: &Pool<Sqlite>) -> Result<Option<Too
     .map(|row| row.map(map_timer_row))
 }
 
-pub(super) async fn fetch_timer_laps(pool: &Pool<Sqlite>, timer_id: i64) -> Result<Vec<ToolTimerLap>, String> {
+pub(super) async fn fetch_timer_laps(
+    pool: &Pool<Sqlite>,
+    timer_id: i64,
+) -> Result<Vec<ToolTimerLap>, String> {
     let rows = sqlx::query(
         "SELECT id, timer_id, lap_index, started_at, ended_at, duration_ms
          FROM tool_timer_laps
@@ -247,9 +253,10 @@ pub(super) async fn fetch_timer_laps(pool: &Pool<Sqlite>, timer_id: i64) -> Resu
     Ok(rows.into_iter().map(map_timer_lap_row).collect())
 }
 
-
-
-pub(super) async fn fetch_pomodoro_by_id(pool: &Pool<Sqlite>, id: i64) -> Result<ToolPomodoroRun, String> {
+pub(super) async fn fetch_pomodoro_by_id(
+    pool: &Pool<Sqlite>,
+    id: i64,
+) -> Result<ToolPomodoroRun, String> {
     sqlx::query(
         "SELECT id, phase, status, cycle_index, focus_ms, short_break_ms, long_break_ms,
                 long_break_every, phase_started_at, phase_paused_at, phase_remaining_ms,
@@ -264,7 +271,9 @@ pub(super) async fn fetch_pomodoro_by_id(pool: &Pool<Sqlite>, id: i64) -> Result
     .map(map_pomodoro_row)
 }
 
-pub(super) async fn fetch_latest_pomodoro(pool: &Pool<Sqlite>) -> Result<Option<ToolPomodoroRun>, String> {
+pub(super) async fn fetch_latest_pomodoro(
+    pool: &Pool<Sqlite>,
+) -> Result<Option<ToolPomodoroRun>, String> {
     sqlx::query(
         "SELECT id, phase, status, cycle_index, focus_ms, short_break_ms, long_break_ms,
                 long_break_every, phase_started_at, phase_paused_at, phase_remaining_ms,
@@ -292,8 +301,6 @@ async fn fetch_daily_pomodoro_count(pool: &Pool<Sqlite>, date_key: &str) -> Resu
     .map_err(|error| format!("failed to read tool daily stats: {error}"))
     .map(|value| value.unwrap_or(0))
 }
-
-
 
 pub(super) fn map_reminder_row(row: sqlx::sqlite::SqliteRow) -> ToolReminder {
     let status: String = row.get("status");
