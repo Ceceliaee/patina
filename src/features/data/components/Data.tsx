@@ -594,7 +594,7 @@ export default function Data({
         />
       </div>
 
-      <div className="qp-panel p-5 md:p-6 data-app-panel">
+      <div className="qp-panel p-5 data-app-panel">
         <div className="data-app-panel-header">
           <div>
             <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">
@@ -624,7 +624,36 @@ export default function Data({
         </div>
 
         {!visibleAppTrendViewModel ? (
-          <div className="data-app-loading text-[var(--qp-text-tertiary)] text-xs" aria-hidden="true" />
+          <div className="data-app-grid invisible pointer-events-none select-none" aria-hidden="true">
+            <div className="data-app-sidebar">
+              <div className="data-app-search" />
+              <div className="data-app-list data-app-trend-list" />
+            </div>
+            <div className="data-app-chart-column">
+              <div className="data-app-metric-strip">
+                <div className="data-app-metric">
+                  <span>-</span>
+                  <strong>-</strong>
+                </div>
+                <div className="data-app-metric">
+                  <span>-</span>
+                  <strong>-</strong>
+                </div>
+                <div className="data-app-metric">
+                  <span>-</span>
+                  <strong>-</strong>
+                </div>
+                <div className="data-app-metric">
+                  <span>-</span>
+                  <strong>-</strong>
+                </div>
+              </div>
+              <div
+                ref={appTrendChart.chartRef}
+                className="data-app-chart data-chart-placeholder"
+              />
+            </div>
+          </div>
         ) : visibleAppTrendViewModel.appOptions.length === 0 ? (
           <div className="data-app-loading text-[var(--qp-text-tertiary)] text-xs">
             {UI_TEXT.data.appTrendEmpty}

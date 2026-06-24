@@ -44,7 +44,7 @@ export default function DataTrendPanel({
   onMouseLeave,
 }: DataTrendPanelProps) {
   return (
-    <div className="qp-panel p-5 md:p-6 data-trend-panel">
+    <div className="qp-panel p-5 data-trend-panel">
       <div className="data-trend-header">
         <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">
           {UI_TEXT.data.activityTrend}
@@ -68,18 +68,18 @@ export default function DataTrendPanel({
         />
       </div>
       <div className="pt-4">
-        {!viewModel ? (
-          <div
-            className="data-trend-chart data-chart-placeholder flex items-center justify-center text-[var(--qp-text-tertiary)] text-xs"
-            aria-hidden="true"
-          />
-        ) : (
-          <div
-            ref={chartRef}
-            className={`data-trend-chart ${canOpenHistory ? "data-chart-openable" : ""}`}
-            onMouseDownCapture={onMouseDownCapture}
-            onDoubleClickCapture={onDoubleClickCapture}
-          >
+        <div
+          ref={chartRef}
+          className={`data-trend-chart ${
+            viewModel
+              ? canOpenHistory ? "data-chart-openable" : ""
+              : "data-chart-placeholder flex items-center justify-center text-[var(--qp-text-tertiary)] text-xs"
+          }`}
+          onMouseDownCapture={viewModel ? onMouseDownCapture : undefined}
+          onDoubleClickCapture={viewModel ? onDoubleClickCapture : undefined}
+          aria-hidden={viewModel ? undefined : true}
+        >
+          {viewModel ? (
             <ResponsiveContainer
               width="100%"
               height="100%"
@@ -127,8 +127,8 @@ export default function DataTrendPanel({
                 />
               </AreaChart>
             </ResponsiveContainer>
-          </div>
-        )}
+          ) : null}
+        </div>
       </div>
     </div>
   );

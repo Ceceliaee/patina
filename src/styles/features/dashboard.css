@@ -10,6 +10,14 @@
   overflow: hidden;
 }
 
+.dashboard-card-header {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .dashboard-focus-card {
   container-type: inline-size;
   display: flex;
@@ -24,6 +32,7 @@
   gap: 1rem;
   flex: 1;
   align-content: center;
+  margin-top: 18px;
 }
 
 .dashboard-focus-chart {
@@ -98,7 +107,6 @@
 @media (max-height: 900px) {
   .dashboard-focus-card {
     flex-basis: clamp(250px, 32vh, 320px);
-    padding: 1.1rem;
   }
 
   .dashboard-focus-chart {

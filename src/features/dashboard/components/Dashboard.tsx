@@ -109,9 +109,11 @@ export default function Dashboard({
         <div className="w-5/12 flex flex-col gap-4 md:gap-5 min-h-0 dashboard-left-column">
           <div
             ref={focusCardRef}
-            className="qp-panel p-5 md:p-6 relative overflow-hidden shrink-0 min-h-[250px] dashboard-focus-card"
+            className="qp-panel p-5 relative overflow-hidden shrink-0 min-h-[250px] dashboard-focus-card"
           >
-            <h3 className="w-full text-[var(--qp-text-primary)] font-semibold text-sm mb-4">{UI_TEXT.dashboard.focusShare}</h3>
+            <div className="dashboard-card-header">
+              <h3 className="text-[var(--qp-text-primary)] font-semibold text-sm">{UI_TEXT.dashboard.focusShare}</h3>
+            </div>
             <div className="dashboard-focus-layout">
               <div className="relative w-full h-[185px] dashboard-focus-chart">
                 <ResponsiveContainer width="100%" height="100%">
@@ -170,7 +172,7 @@ export default function Dashboard({
           </div>
 
           <div className="qp-panel p-5 flex min-h-0 flex-col overflow-hidden dashboard-pulse-card">
-            <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="dashboard-card-header">
               <h3 className="text-[var(--qp-text-primary)] font-semibold text-sm">
                 {UI_TEXT.dashboard.hourlyActivity}
               </h3>
@@ -187,7 +189,7 @@ export default function Dashboard({
                 )}
               />
             </div>
-            <div className="flex-1 min-h-[170px] dashboard-pulse-chart">
+            <div className="flex-1 min-h-[170px] pt-3 dashboard-pulse-chart">
               <HourlyActivityChart
                 mode={hourlyActivityChartMode}
                 hourlyActivity={hourlyActivity}
@@ -199,9 +201,9 @@ export default function Dashboard({
           </div>
         </div>
 
-        <div className="flex-1 qp-panel p-5 md:p-6 flex flex-col overflow-hidden min-h-0">
-          <header className="flex justify-between items-center mb-5">
-            <h3 className="font-semibold text-[var(--qp-text-primary)] text-base">{UI_TEXT.dashboard.topApps}</h3>
+        <div className="flex-1 qp-panel p-5 flex flex-col overflow-hidden min-h-0">
+          <header className="dashboard-card-header mb-4">
+            <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">{UI_TEXT.dashboard.topApps}</h3>
             <div className="qp-chip px-2.5 py-1 text-[10px] font-semibold text-[var(--qp-text-secondary)]">
               {UI_TEXT.dashboard.topAppsBadge(topApplications.length)}
             </div>

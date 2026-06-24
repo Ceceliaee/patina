@@ -86,7 +86,7 @@ export default function DataHeatmapPanel({
   );
 
   return (
-    <div className="qp-panel p-5 md:p-6 data-heatmap-panel">
+    <div className="qp-panel p-5 data-heatmap-panel">
       <div className="data-heatmap-panel-header">
         <div>
           <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">{UI_TEXT.data.activityHeatmap}</h3>
