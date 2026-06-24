@@ -58,6 +58,7 @@ export default function CategoryColorControls({
 
                 <QuietIconAction
                   icon={<RotateCcw size={13} />}
+                  className="qp-icon-action-dimmed"
                   onClick={() => onApplyColor(category, null)}
                   title={UI_TEXT.mapping.restoreDefaultColor}
                 />

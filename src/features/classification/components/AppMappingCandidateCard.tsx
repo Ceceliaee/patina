@@ -20,7 +20,6 @@ interface AppMappingCandidateCardProps {
   isBusy: boolean;
   isEditingName: boolean;
   inputValue: string;
-  hasManualColor: boolean;
   colorFormat: ColorDisplayFormat;
   categoryOptions: Array<{ value: string; label: string }>;
   onNameDraftChange: (nextValue: string) => void;
@@ -46,7 +45,6 @@ export default function AppMappingCandidateCard({
   isBusy,
   isEditingName,
   inputValue,
-  hasManualColor,
   colorFormat,
   categoryOptions,
   onNameDraftChange,
@@ -146,7 +144,7 @@ export default function AppMappingCandidateCard({
               <QuietIconAction
                 icon={<RotateCcw size={13} />}
                 disabled={isBusy}
-                className={!hasManualColor ? "qp-icon-action-dimmed" : undefined}
+                className="qp-icon-action-dimmed"
                 onClick={() => onColorAssign(null)}
                 title={UI_TEXT.mapping.restoreDefaultColor}
               />

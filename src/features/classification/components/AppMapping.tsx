@@ -73,7 +73,6 @@ export default function AppMapping(props: Props) {
     nameDrafts,
     editingWebDomain,
     webNameDrafts,
-    draftOverrides,
     syncNameDraftToPageDraft,
     handleNameBlur,
     handleNameEditCancel,
@@ -238,7 +237,6 @@ export default function AppMapping(props: Props) {
                   const isBusy = saving || deletingSessionsExe === candidate.normalizedDomain;
                   const isEditingName = editingWebDomain === candidate.normalizedDomain;
                   const inputValue = webNameDrafts[candidate.normalizedDomain] ?? displayName;
-                  const hasManualColor = Boolean(draftState.webDomainOverrides[candidate.normalizedDomain]?.color);
 
                   return (
                     <WebDomainMappingCard
@@ -251,7 +249,6 @@ export default function AppMapping(props: Props) {
                       isBusy={isBusy}
                       isEditingName={isEditingName}
                       inputValue={inputValue}
-                      hasManualColor={hasManualColor}
                       colorFormat={colorFormat}
                       categoryOptions={candidateCategoryOptions}
                       onNameDraftChange={(nextValue) => syncWebNameDraftToPageDraft(candidate, nextValue)}
@@ -293,7 +290,6 @@ export default function AppMapping(props: Props) {
                 const isBusy = saving || deletingSessionsExe === candidate.exeName;
                 const isEditingName = editingNameExe === candidate.exeName;
                 const inputValue = nameDrafts[candidate.exeName] ?? displayName;
-                const hasManualColor = Boolean(draftOverrides[candidate.exeName]?.color);
 
                 return (
                   <AppMappingCandidateCard
@@ -308,7 +304,6 @@ export default function AppMapping(props: Props) {
                     isBusy={isBusy}
                     isEditingName={isEditingName}
                     inputValue={inputValue}
-                    hasManualColor={hasManualColor}
                     colorFormat={colorFormat}
                     categoryOptions={candidateCategoryOptions}
                     onNameDraftChange={(nextValue) => syncNameDraftToPageDraft(candidate, nextValue)}
