@@ -18,19 +18,34 @@ App note en: TBD.
 
 ### Added
 
-- 历史页新增独立时间轴缩放弹窗，首装默认 `24h`，之后记住上次选择的缩放倍率，并支持 `24h / 12h / 8h / 4h / 1h` 离散缩放、同一时段展开和时间窗口平移，便于细看短会话与高频切换。Refs [#6](https://github.com/Ceceliaee/patina/issues/6)
-- 设置页新增网页同步使用说明弹窗，可直接复制端口和 Token，并按下载扩展、加载本地扩展、填写扩展设置和开始同步引导用户完成 Patina Web Sync 配置。Refs [#6](https://github.com/Ceceliaee/patina/issues/6)
-- 设置页新增本机目录管理，可查看安装目录、数据目录和 WebView 缓存大小，打开对应目录，并安排下次启动迁移数据目录、迁移缓存目录、恢复默认目录或清理缓存。Refs [#20](https://github.com/Ceceliaee/patina/issues/20)
-
 ### Changed
-
-- 时间轴缩放弹窗的空态文案改为时间段语义，避免缩放窗口没有记录时误提示整天没有记录。Refs [#6](https://github.com/Ceceliaee/patina/issues/6)
-- 网页同步说明文案补充本地连接信息、扩展选项入口、隐私边界和无痕窗口行为，减少手动安装 Chromium 扩展时的来回确认。
 
 ### Fixed
 
-- 修复网页同步关闭时，历史页当日分布无法保留“分类”视图、会被强制回到“应用”的问题。
-- 修复全局提示在重复触发时缺少稳定标识，可能导致同类提示不易复用或替换的问题。
+### Removed
+
+### Internal
+
+## [1.8.0] - 2026-06-24
+
+Release: 新增历史时间轴缩放、网页同步向导和本机目录管理，并打磨核心页面文案与布局。
+App note: 新增时间轴缩放、网页同步向导和本机目录管理，核心页面更清晰。
+App note en: Adds timeline zoom, web sync guidance, and local directory management, with clearer core pages.
+
+### Added
+
+- 历史页新增独立时间轴缩放弹窗，首装默认 `24h`，之后记住上次选择的缩放倍率，并支持 `24h / 12h / 8h / 4h / 1h` 离散缩放、同一时段展开和时间窗口平移，便于细看短会话与高频切换。Refs [#6](https://github.com/Ceceliaee/patina/issues/6)
+- 设置页新增网页同步向导和本机目录管理，可引导完成 Patina Web Sync 配置，并查看、打开、迁移或清理安装目录、数据目录和 WebView 缓存。Refs [#6](https://github.com/Ceceliaee/patina/issues/6), [#20](https://github.com/Ceceliaee/patina/issues/20)
+
+### Changed
+
+- 核心页面文案、设置说明和 Quiet Pro 卡片间距进一步统一；数据趋势和应用趋势进入页面时预先稳定图表尺寸，减少首次打开时的跳动。
+- 托盘右键菜单简化为打开主界面、暂停或恢复追踪、退出应用，追踪项会根据当前状态动态显示。
+- 时间线显示分钟改为历史页时间线弹窗内的局部控制，设置页不再暴露全局最短时长设置。Refs [#6](https://github.com/Ceceliaee/patina/issues/6)
+
+### Fixed
+
+- 修复网页同步关闭时，历史页当日分布无法保留“分类”视图的问题，并稳定重复触发时的全局提示复用。
 
 ### Removed
 
