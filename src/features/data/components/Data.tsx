@@ -1,4 +1,4 @@
-import { type MouseEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type MouseEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BarChart3, Search, Loader2 } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
@@ -185,13 +185,17 @@ export default function Data({
   const today = new Date();
   const currentYear = today.getFullYear();
   const [selectedTrendRange, setSelectedTrendRange] = useState<DataTrendRangeSelection>({ kind: "rolling", days: 7 });
-  const [isTransitionCompleted, setIsTransitionCompleted] = useState(false);
+  const [renderStage, setRenderStage] = useState(0);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsTransitionCompleted(true);
-    }, 400); // Match 400ms view transition
-    return () => clearTimeout(timer);
+    const timer1 = setTimeout(() => setRenderStage(1), 100); // Stage 1: Trend Chart
+    const timer2 = setTimeout(() => setRenderStage(2), 250); // Stage 2: Heatmap
+    const timer3 = setTimeout(() => setRenderStage(3), 400); // Stage 3: App details
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      clearTimeout(timer3);
+    };
   }, []);
 
   const [selectedAppTrendRange, setSelectedAppTrendRange] = useState<DataTrendRangeSelection>({ kind: "rolling", days: 7 });
@@ -468,14 +472,14 @@ export default function Data({
   const canSelectOlderHeatmapView = selectedHeatmapViewIndex >= 0
     && selectedHeatmapViewIndex < heatmapViewOptions.length - 1;
   const canSelectNewerHeatmapView = selectedHeatmapViewIndex > 0;
-  const selectAdjacentHeatmapView = (delta: number) => {
+  const selectAdjacentHeatmapView = useCallback((delta: number) => {
     if (selectedHeatmapViewIndex < 0) return;
     const nextView = heatmapViewOptions[selectedHeatmapViewIndex + delta];
     if (nextView !== undefined) {
       setHeatmapLoading(true);
       setSelectedHeatmapView(nextView);
     }
-  };
+  }, [selectedHeatmapViewIndex, heatmapViewOptions]);
   const selectedHeatmapViewLabel = selectedHeatmapView === "recent"
     ? UI_TEXT.data.recentYear
     : String(selectedHeatmapView);
@@ -483,49 +487,43 @@ export default function Data({
   const canOpenAppTrendHistory = visibleAppTrendViewModel?.granularity === "day"
     && !appTrendSelectionHiddenBySearch
     && Boolean(onOpenHistoryDate);
-  const handleTrendMouseMove = (event: unknown) => {
+  const handleTrendMouseMove = useCallback((event: unknown) => {
     activeTrendDateRef.current = canOpenTrendHistory && visibleTrendViewModel
       ? resolveTrendDateFromChartEvent(event, visibleTrendViewModel.chartData)
       : null;
-  };
-  const handleTrendDoubleClick = () => {
-    const dateKey = activeTrendDateRef.current;
-    if (dateKey && canOpenTrendHistory) {
-      onOpenHistoryDate?.(dateKey);
-    }
-  };
-  const handleAppTrendMouseMove = (event: unknown) => {
+  }, [canOpenTrendHistory, visibleTrendViewModel]);
+  const handleAppTrendMouseMove = useCallback((event: unknown) => {
     activeAppTrendDateRef.current = canOpenAppTrendHistory
       ? resolveTrendDateFromChartEvent(event, appTrendChartData)
       : null;
-  };
-  const handleAppTrendDoubleClick = () => {
-    const dateKey = activeAppTrendDateRef.current;
-    if (dateKey && canOpenAppTrendHistory) {
-      onOpenHistoryDate?.(dateKey);
-    }
-  };
-  const preventChartTextSelection = (event: MouseEvent<HTMLDivElement>, canOpenHistory: boolean) => {
+  }, [canOpenAppTrendHistory, appTrendChartData]);
+  const preventChartTextSelection = useCallback((event: MouseEvent<HTMLDivElement>, canOpenHistory: boolean) => {
     if (canOpenHistory && event.detail > 1) {
       event.preventDefault();
     }
-  };
-  const handleTrendDoubleClickCapture = (event: MouseEvent<HTMLDivElement>) => {
+  }, []);
+  const handleTrendDoubleClickCapture = useCallback((event: MouseEvent<HTMLDivElement>) => {
     if (!canOpenTrendHistory) {
       return;
     }
 
     event.preventDefault();
-    handleTrendDoubleClick();
-  };
-  const handleAppTrendDoubleClickCapture = (event: MouseEvent<HTMLDivElement>) => {
+    const dateKey = activeTrendDateRef.current;
+    if (dateKey) {
+      onOpenHistoryDate?.(dateKey);
+    }
+  }, [canOpenTrendHistory, onOpenHistoryDate]);
+  const handleAppTrendDoubleClickCapture = useCallback((event: MouseEvent<HTMLDivElement>) => {
     if (!canOpenAppTrendHistory) {
       return;
     }
 
     event.preventDefault();
-    handleAppTrendDoubleClick();
-  };
+    const dateKey = activeAppTrendDateRef.current;
+    if (dateKey) {
+      onOpenHistoryDate?.(dateKey);
+    }
+  }, [canOpenAppTrendHistory, onOpenHistoryDate]);
 
   useEffect(() => {
     if (!trendViewModel || !appTrendViewModel) return;
@@ -573,7 +571,7 @@ export default function Data({
         <div className="data-overview-grid">
           <DataTrendPanel
             selection={selectedTrendRange}
-            viewModel={isTransitionCompleted ? visibleTrendViewModel : null}
+            viewModel={renderStage >= 1 ? visibleTrendViewModel : null}
             chartRef={overviewTrendChart.chartRef}
             initialDimension={overviewTrendChart.initialDimension}
             canOpenHistory={canOpenTrendHistory}
@@ -600,7 +598,7 @@ export default function Data({
             onGranularityChange={setHeatmapGranularity}
             onSelectAdjacentHeatmapView={selectAdjacentHeatmapView}
             onOpenHistoryDate={onOpenHistoryDate}
-            loading={heatmapLoading || !isTransitionCompleted}
+            loading={heatmapLoading || renderStage < 2}
           />
         </div>
 
@@ -633,7 +631,7 @@ export default function Data({
             </div>
           </div>
 
-          {!visibleAppTrendViewModel || !isTransitionCompleted ? (
+          {!visibleAppTrendViewModel || renderStage < 3 ? (
             <div className="relative">
               <div className="flex items-center justify-center" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
                 <Loader2 size={18} className="qp-spin text-[var(--qp-text-tertiary)]" />

@@ -1,4 +1,4 @@
-import { type CSSProperties, useMemo } from "react";
+import { memo, type CSSProperties, useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
@@ -67,7 +67,7 @@ function buildWeeklyHeatmapCells(rows: HeatmapWeek[]) {
   }));
 }
 
-export default function DataHeatmapPanel({
+const DataHeatmapPanel = memo(function DataHeatmapPanel({
   selectedHeatmapView,
   selectedHeatmapViewKey,
   selectedHeatmapViewLabel,
@@ -220,4 +220,6 @@ export default function DataHeatmapPanel({
       </div>
     </div>
   );
-}
+});
+
+export default DataHeatmapPanel;

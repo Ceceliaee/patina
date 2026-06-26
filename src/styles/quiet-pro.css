@@ -561,15 +561,22 @@
   background: transparent;
 }
 
-.qp-nav-item:hover {
+.qp-nav-item:hover:not(.qp-nav-item-active) {
   background: color-mix(in srgb, var(--qp-bg-elevated) 82%, white);
   border-color: var(--qp-border-subtle);
 }
 
 .qp-nav-item-active {
-  background: var(--qp-accent-muted);
-  border-color: color-mix(in srgb, var(--qp-accent-default) 25%, var(--qp-border-subtle));
   color: var(--qp-accent-default);
+}
+
+.qp-nav-item-bg-slider {
+  background: var(--qp-accent-muted);
+  border: 1px solid color-mix(in srgb, var(--qp-accent-default) 25%, var(--qp-border-subtle));
+}
+
+.qp-nav-item-indicator-slider {
+  background: var(--qp-accent-default);
 }
 
 .qp-button-primary {
