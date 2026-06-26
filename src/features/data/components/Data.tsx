@@ -1,5 +1,5 @@
-import { type MouseEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, Search } from "lucide-react";
+import { type MouseEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { BarChart3, Search, Loader2 } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import type { AppLanguage } from "../../../shared/settings/appSettings.ts";
@@ -185,6 +185,19 @@ export default function Data({
   const today = new Date();
   const currentYear = today.getFullYear();
   const [selectedTrendRange, setSelectedTrendRange] = useState<DataTrendRangeSelection>({ kind: "rolling", days: 7 });
+  const [renderStage, setRenderStage] = useState(0);
+
+  useEffect(() => {
+    const timer1 = setTimeout(() => setRenderStage(1), 100); // Stage 1: Trend Chart
+    const timer2 = setTimeout(() => setRenderStage(2), 250); // Stage 2: Heatmap
+    const timer3 = setTimeout(() => setRenderStage(3), 400); // Stage 3: App details
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      clearTimeout(timer3);
+    };
+  }, []);
+
   const [selectedAppTrendRange, setSelectedAppTrendRange] = useState<DataTrendRangeSelection>({ kind: "rolling", days: 7 });
   const [selectedAppKey, setSelectedAppKey] = useState<string | null>(null);
   const [appSearchQuery, setAppSearchQuery] = useState("");
@@ -459,14 +472,14 @@ export default function Data({
   const canSelectOlderHeatmapView = selectedHeatmapViewIndex >= 0
     && selectedHeatmapViewIndex < heatmapViewOptions.length - 1;
   const canSelectNewerHeatmapView = selectedHeatmapViewIndex > 0;
-  const selectAdjacentHeatmapView = (delta: number) => {
+  const selectAdjacentHeatmapView = useCallback((delta: number) => {
     if (selectedHeatmapViewIndex < 0) return;
     const nextView = heatmapViewOptions[selectedHeatmapViewIndex + delta];
     if (nextView !== undefined) {
       setHeatmapLoading(true);
       setSelectedHeatmapView(nextView);
     }
-  };
+  }, [selectedHeatmapViewIndex, heatmapViewOptions]);
   const selectedHeatmapViewLabel = selectedHeatmapView === "recent"
     ? UI_TEXT.data.recentYear
     : String(selectedHeatmapView);
@@ -474,49 +487,43 @@ export default function Data({
   const canOpenAppTrendHistory = visibleAppTrendViewModel?.granularity === "day"
     && !appTrendSelectionHiddenBySearch
     && Boolean(onOpenHistoryDate);
-  const handleTrendMouseMove = (event: unknown) => {
+  const handleTrendMouseMove = useCallback((event: unknown) => {
     activeTrendDateRef.current = canOpenTrendHistory && visibleTrendViewModel
       ? resolveTrendDateFromChartEvent(event, visibleTrendViewModel.chartData)
       : null;
-  };
-  const handleTrendDoubleClick = () => {
-    const dateKey = activeTrendDateRef.current;
-    if (dateKey && canOpenTrendHistory) {
-      onOpenHistoryDate?.(dateKey);
-    }
-  };
-  const handleAppTrendMouseMove = (event: unknown) => {
+  }, [canOpenTrendHistory, visibleTrendViewModel]);
+  const handleAppTrendMouseMove = useCallback((event: unknown) => {
     activeAppTrendDateRef.current = canOpenAppTrendHistory
       ? resolveTrendDateFromChartEvent(event, appTrendChartData)
       : null;
-  };
-  const handleAppTrendDoubleClick = () => {
-    const dateKey = activeAppTrendDateRef.current;
-    if (dateKey && canOpenAppTrendHistory) {
-      onOpenHistoryDate?.(dateKey);
-    }
-  };
-  const preventChartTextSelection = (event: MouseEvent<HTMLDivElement>, canOpenHistory: boolean) => {
+  }, [canOpenAppTrendHistory, appTrendChartData]);
+  const preventChartTextSelection = useCallback((event: MouseEvent<HTMLDivElement>, canOpenHistory: boolean) => {
     if (canOpenHistory && event.detail > 1) {
       event.preventDefault();
     }
-  };
-  const handleTrendDoubleClickCapture = (event: MouseEvent<HTMLDivElement>) => {
+  }, []);
+  const handleTrendDoubleClickCapture = useCallback((event: MouseEvent<HTMLDivElement>) => {
     if (!canOpenTrendHistory) {
       return;
     }
 
     event.preventDefault();
-    handleTrendDoubleClick();
-  };
-  const handleAppTrendDoubleClickCapture = (event: MouseEvent<HTMLDivElement>) => {
+    const dateKey = activeTrendDateRef.current;
+    if (dateKey) {
+      onOpenHistoryDate?.(dateKey);
+    }
+  }, [canOpenTrendHistory, onOpenHistoryDate]);
+  const handleAppTrendDoubleClickCapture = useCallback((event: MouseEvent<HTMLDivElement>) => {
     if (!canOpenAppTrendHistory) {
       return;
     }
 
     event.preventDefault();
-    handleAppTrendDoubleClick();
-  };
+    const dateKey = activeAppTrendDateRef.current;
+    if (dateKey) {
+      onOpenHistoryDate?.(dateKey);
+    }
+  }, [canOpenAppTrendHistory, onOpenHistoryDate]);
 
   useEffect(() => {
     if (!trendViewModel || !appTrendViewModel) return;
@@ -561,236 +568,241 @@ export default function Data({
       />
 
       <div className="data-dashboard-grid">
-      <div className="data-overview-grid">
-        <DataTrendPanel
-          selection={selectedTrendRange}
-          viewModel={visibleTrendViewModel}
-          chartRef={overviewTrendChart.chartRef}
-          initialDimension={overviewTrendChart.initialDimension}
-          canOpenHistory={canOpenTrendHistory}
-          onSelectionChange={setSelectedTrendRange}
-          onMouseDownCapture={(event) => {
-            preventChartTextSelection(event, canOpenTrendHistory);
-          }}
-          onDoubleClickCapture={handleTrendDoubleClickCapture}
-          onMouseMove={handleTrendMouseMove}
-          onMouseLeave={() => {
-            activeTrendDateRef.current = null;
-          }}
-        />
+        <div className="data-overview-grid">
+          <DataTrendPanel
+            selection={selectedTrendRange}
+            viewModel={renderStage >= 1 ? visibleTrendViewModel : null}
+            chartRef={overviewTrendChart.chartRef}
+            initialDimension={overviewTrendChart.initialDimension}
+            canOpenHistory={canOpenTrendHistory}
+            onSelectionChange={setSelectedTrendRange}
+            onMouseDownCapture={(event) => {
+              preventChartTextSelection(event, canOpenTrendHistory);
+            }}
+            onDoubleClickCapture={handleTrendDoubleClickCapture}
+            onMouseMove={handleTrendMouseMove}
+            onMouseLeave={() => {
+              activeTrendDateRef.current = null;
+            }}
+          />
 
-        <DataHeatmapPanel
-          selectedHeatmapView={selectedHeatmapView}
-          selectedHeatmapViewKey={selectedHeatmapViewKey}
-          selectedHeatmapViewLabel={selectedHeatmapViewLabel}
-          rows={visibleHeatmapRows}
-          granularity={heatmapGranularity}
-          granularityOptions={heatmapGranularityOptions}
-          canSelectOlderHeatmapView={canSelectOlderHeatmapView}
-          canSelectNewerHeatmapView={canSelectNewerHeatmapView}
-          onGranularityChange={setHeatmapGranularity}
-          onSelectAdjacentHeatmapView={selectAdjacentHeatmapView}
-          onOpenHistoryDate={onOpenHistoryDate}
-        />
-      </div>
-
-      <div className="qp-panel p-5 data-app-panel">
-        <div className="data-app-panel-header">
-          <div>
-            <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">
-              {UI_TEXT.data.appTrend}
-            </h3>
-          </div>
-          <div className="data-app-header-actions">
-            <div className={`data-app-selected-status ${selectedAppTrendApp ? "" : "data-app-selected-status-empty"}`}>
-              {selectedAppTrendApp && icons[selectedAppTrendApp.exeName] ? (
-                <img
-                  src={icons[selectedAppTrendApp.exeName]}
-                  alt=""
-                  draggable={false}
-                />
-              ) : selectedAppTrendApp ? (
-                getAppInitial(selectedAppTrendApp.appName)
-              ) : (
-                ""
-              )}
-            </div>
-            <DataTrendRangeControl
-              ariaLabel={UI_TEXT.accessibility.data.appTrendRange}
-              selection={selectedAppTrendRange}
-              onChange={setSelectedAppTrendRange}
-            />
-          </div>
+          <DataHeatmapPanel
+            selectedHeatmapView={selectedHeatmapView}
+            selectedHeatmapViewKey={selectedHeatmapViewKey}
+            selectedHeatmapViewLabel={selectedHeatmapViewLabel}
+            rows={visibleHeatmapRows}
+            granularity={heatmapGranularity}
+            granularityOptions={heatmapGranularityOptions}
+            canSelectOlderHeatmapView={canSelectOlderHeatmapView}
+            canSelectNewerHeatmapView={canSelectNewerHeatmapView}
+            onGranularityChange={setHeatmapGranularity}
+            onSelectAdjacentHeatmapView={selectAdjacentHeatmapView}
+            onOpenHistoryDate={onOpenHistoryDate}
+            loading={heatmapLoading || renderStage < 2}
+          />
         </div>
 
-        {!visibleAppTrendViewModel ? (
-          <div className="data-app-grid invisible pointer-events-none select-none" aria-hidden="true">
-            <div className="data-app-sidebar">
-              <div className="data-app-search" />
-              <div className="data-app-list data-app-trend-list" />
+        <div className="qp-panel p-5 data-app-panel relative">
+          <div className="data-app-panel-header">
+            <div>
+              <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">
+                {UI_TEXT.data.appTrend}
+              </h3>
             </div>
-            <div className="data-app-chart-column">
-              <div className="data-app-metric-strip">
-                <div className="data-app-metric">
-                  <span>-</span>
-                  <strong>-</strong>
-                </div>
-                <div className="data-app-metric">
-                  <span>-</span>
-                  <strong>-</strong>
-                </div>
-                <div className="data-app-metric">
-                  <span>-</span>
-                  <strong>-</strong>
-                </div>
-                <div className="data-app-metric">
-                  <span>-</span>
-                  <strong>-</strong>
-                </div>
+            <div className="data-app-header-actions">
+              <div className={`data-app-selected-status ${selectedAppTrendApp ? "" : "data-app-selected-status-empty"}`}>
+                {selectedAppTrendApp && icons[selectedAppTrendApp.exeName] ? (
+                  <img
+                    src={icons[selectedAppTrendApp.exeName]}
+                    alt=""
+                    draggable={false}
+                  />
+                ) : selectedAppTrendApp ? (
+                  getAppInitial(selectedAppTrendApp.appName)
+                ) : (
+                  ""
+                )}
               </div>
-              <div
-                ref={appTrendChart.chartRef}
-                className="data-app-chart data-chart-placeholder"
+              <DataTrendRangeControl
+                ariaLabel={UI_TEXT.accessibility.data.appTrendRange}
+                selection={selectedAppTrendRange}
+                onChange={setSelectedAppTrendRange}
               />
             </div>
           </div>
-        ) : visibleAppTrendViewModel.appOptions.length === 0 ? (
-          <div className="data-app-loading text-[var(--qp-text-tertiary)] text-xs">
-            {UI_TEXT.data.appTrendEmpty}
-          </div>
-        ) : (
-          <div className="data-app-grid">
-            <div className="data-app-sidebar">
-              <label className="data-app-search">
-                <Search size={14} aria-hidden />
-                <input
-                  value={appSearchQuery}
-                  onChange={(event) => handleAppSearchQueryChange(event.target.value)}
-                  placeholder={UI_TEXT.data.appSearchPlaceholder}
-                  aria-label={UI_TEXT.data.appSearchPlaceholder}
-                />
-              </label>
-              <div
-                key={hasAppSearchQuery ? "searching" : "all"}
-                ref={appListRef}
-                className="data-app-list data-app-trend-list"
-                aria-label={UI_TEXT.data.appTrendAppList}
-              >
-                {filteredAppOptions.length === 0 ? (
-                  <div className="data-app-empty text-[var(--qp-text-tertiary)] text-xs">
-                    {UI_TEXT.data.appTrendNoMatch}
+
+          {!visibleAppTrendViewModel || renderStage < 3 ? (
+            <div className="relative">
+              <div className="flex items-center justify-center" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
+                <Loader2 size={18} className="qp-spin text-[var(--qp-text-tertiary)]" />
+              </div>
+              <div className="data-app-grid invisible pointer-events-none select-none" aria-hidden="true">
+                <div className="data-app-sidebar">
+                  <div className="data-app-search" />
+                  <div className="data-app-list data-app-trend-list" />
+                </div>
+                <div className="data-app-chart-column">
+                  <div className="data-app-metric-strip">
+                    <div className="data-app-metric">
+                      <span>-</span>
+                      <strong>-</strong>
+                    </div>
+                    <div className="data-app-metric">
+                      <span>-</span>
+                      <strong>-</strong>
+                    </div>
+                    <div className="data-app-metric">
+                      <span>-</span>
+                      <strong>-</strong>
+                    </div>
+                    <div className="data-app-metric">
+                      <span>-</span>
+                      <strong>-</strong>
+                    </div>
                   </div>
-                ) : filteredAppOptions.map((app) => {
-                  const isSelected = selectedAppTrendApp?.appKey === app.appKey;
-                  return (
-                    <button
-                      key={app.appKey}
-                      type="button"
-                      className={`data-app-option ${isSelected ? "data-app-option-selected" : ""}`}
-                      onClick={() => setSelectedAppKey(app.appKey)}
-                      aria-pressed={isSelected}
-                    >
-                      <span className="data-app-option-icon" aria-hidden>
-                        {icons[app.exeName] ? (
-                          <img src={icons[app.exeName]} alt="" draggable={false} />
-                        ) : (
-                          getAppInitial(app.appName)
-                        )}
-                      </span>
-                      <span className="data-app-option-main">
-                        <span className="data-app-option-name">{app.appName}</span>
-                        <span className="data-app-option-meta">{Math.round(app.percentage)}% · {app.exeName}</span>
-                      </span>
-                      <span className="data-app-option-duration">
-                        {formatDuration(app.totalDuration)}
-                      </span>
-                    </button>
-                  );
-                })}
+                  <div
+                    ref={appTrendChart.chartRef}
+                    className="data-app-chart data-chart-placeholder"
+                  />
+                </div>
               </div>
             </div>
-
-            <div className="data-app-chart-column">
-              <div className="data-app-metric-strip">
-                <div className="data-app-metric">
-                  <span>{UI_TEXT.data.appTrendTotal}</span>
-                  <strong>{formatDuration(selectedAppTrendApp?.totalDuration ?? 0)}</strong>
-                </div>
-                <div className="data-app-metric">
-                  <span>{visibleAppTrendViewModel.granularity === "month" ? UI_TEXT.data.monthlyAverage : UI_TEXT.data.appTrendAverage}</span>
-                  <strong>{formatDuration(selectedAppTrendApp?.averageDuration ?? 0)}</strong>
-                </div>
-                <div className="data-app-metric">
-                  <span>{UI_TEXT.data.appTrendActiveDays}</span>
-                  <strong>{selectedAppTrendApp?.activeDayCount ?? 0}</strong>
-                </div>
-                <div className="data-app-metric">
-                  <span>{UI_TEXT.data.appTrendPeakDay}</span>
-                  <strong>{appTrendPeakDay ? formatDuration(appTrendPeakDay.duration) : "-"}</strong>
-                </div>
-              </div>
-              <div
-                ref={appTrendChart.chartRef}
-                className={`data-app-chart ${canOpenAppTrendHistory ? "data-chart-openable" : ""}`}
-                onMouseDownCapture={(event) => {
-                  preventChartTextSelection(event, canOpenAppTrendHistory);
-                }}
-                onDoubleClickCapture={handleAppTrendDoubleClickCapture}
-              >
-                <ResponsiveContainer
-                  width="100%"
-                  height="100%"
-                  initialDimension={appTrendChart.initialDimension}
+          ) : visibleAppTrendViewModel.appOptions.length === 0 ? (
+            <div className="data-app-loading text-[var(--qp-text-tertiary)] text-xs">
+              {UI_TEXT.data.appTrendEmpty}
+            </div>
+          ) : (
+            <div className="data-app-grid qp-content-fade-in">
+              <div className="data-app-sidebar">
+                <label className="data-app-search">
+                  <Search size={14} aria-hidden />
+                  <input
+                    value={appSearchQuery}
+                    onChange={(event) => handleAppSearchQueryChange(event.target.value)}
+                    placeholder={UI_TEXT.data.appSearchPlaceholder}
+                    aria-label={UI_TEXT.data.appSearchPlaceholder}
+                  />
+                </label>
+                <div
+                  key={hasAppSearchQuery ? "searching" : "all"}
+                  ref={appListRef}
+                  className="data-app-list data-app-trend-list"
+                  aria-label={UI_TEXT.data.appTrendAppList}
                 >
-                  <AreaChart
-                    data={appTrendChartData}
-                    margin={{ top: 10, right: 18, left: -20, bottom: 0 }}
-                    onMouseMove={handleAppTrendMouseMove}
-                    onMouseLeave={() => {
-                      activeAppTrendDateRef.current = null;
-                    }}
+                  {filteredAppOptions.length === 0 ? (
+                    <div className="data-app-empty text-[var(--qp-text-tertiary)] text-xs">
+                      {UI_TEXT.data.appTrendNoMatch}
+                    </div>
+                  ) : filteredAppOptions.map((app) => {
+                    const isSelected = selectedAppTrendApp?.appKey === app.appKey;
+                    return (
+                      <button
+                        key={app.appKey}
+                        type="button"
+                        className={`data-app-option ${isSelected ? "data-app-option-selected" : ""}`}
+                        onClick={() => setSelectedAppKey(app.appKey)}
+                        aria-pressed={isSelected}
+                      >
+                        <span className="data-app-option-icon" aria-hidden>
+                          {icons[app.exeName] ? (
+                            <img src={icons[app.exeName]} alt="" draggable={false} />
+                          ) : (
+                            getAppInitial(app.appName)
+                          )}
+                        </span>
+                        <span className="data-app-option-main">
+                          <span className="data-app-option-name">{app.appName}</span>
+                          <span className="data-app-option-meta">{Math.round(app.percentage)}% · {app.exeName}</span>
+                        </span>
+                        <span className="data-app-option-duration">
+                          {formatDuration(app.totalDuration)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="data-app-chart-column">
+                <div className="data-app-metric-strip">
+                  <div className="data-app-metric">
+                    <span>{UI_TEXT.data.appTrendTotal}</span>
+                    <strong>{formatDuration(selectedAppTrendApp?.totalDuration ?? 0)}</strong>
+                  </div>
+                  <div className="data-app-metric">
+                    <span>{visibleAppTrendViewModel.granularity === "month" ? UI_TEXT.data.monthlyAverage : UI_TEXT.data.appTrendAverage}</span>
+                    <strong>{formatDuration(selectedAppTrendApp?.averageDuration ?? 0)}</strong>
+                  </div>
+                  <div className="data-app-metric">
+                    <span>{UI_TEXT.data.appTrendActiveDays}</span>
+                    <strong>{selectedAppTrendApp?.activeDayCount ?? 0}</strong>
+                  </div>
+                  <div className="data-app-metric">
+                    <span>{UI_TEXT.data.appTrendPeakDay}</span>
+                    <strong>{appTrendPeakDay ? formatDuration(appTrendPeakDay.duration) : "-"}</strong>
+                  </div>
+                </div>
+                <div
+                  ref={appTrendChart.chartRef}
+                  className={`data-app-chart qp-content-fade-in ${canOpenAppTrendHistory ? "data-chart-openable" : ""}`}
+                  onMouseDownCapture={(event) => {
+                    preventChartTextSelection(event, canOpenAppTrendHistory);
+                  }}
+                  onDoubleClickCapture={handleAppTrendDoubleClickCapture}
+                >
+                  <ResponsiveContainer
+                    width="100%"
+                    height="100%"
+                    initialDimension={appTrendChart.initialDimension}
                   >
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--qp-border-subtle)" strokeOpacity={0.58} />
-                    <XAxis
-                      dataKey="label"
-                      tick={{ fontSize: 10, fill: "var(--qp-text-tertiary)" }}
-                      axisLine={false}
-                      tickLine={false}
-                      interval="preserveStartEnd"
-                      minTickGap={DATA_TREND_X_AXIS_MIN_TICK_GAP}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 10, fill: "var(--qp-text-tertiary)" }}
-                      axisLine={false}
-                      tickLine={false}
-                      ticks={appTrendChartAxis.ticks}
-                      domain={[0, appTrendChartAxis.domainMax]}
-                      tickFormatter={(value) => formatChartHours(Number(value))}
-                    />
-                    <QuietChartTooltip
-                      formatter={(value) => [
-                        formatDuration(Number(value) * 3600000),
-                        UI_TEXT.data.appTrendUsage,
-                      ]}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="hours"
-                      stroke="var(--qp-accent-default)"
-                      strokeWidth={2}
-                      fill="var(--qp-accent-default)"
-                      fillOpacity={0.1}
-                      dot={{ fill: "var(--qp-accent-default)", r: 2.5 }}
-                      isAnimationActive={false}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+                    <AreaChart
+                      data={appTrendChartData}
+                      margin={{ top: 10, right: 18, left: -20, bottom: 0 }}
+                      onMouseMove={handleAppTrendMouseMove}
+                      onMouseLeave={() => {
+                        activeAppTrendDateRef.current = null;
+                      }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--qp-border-subtle)" strokeOpacity={0.58} />
+                      <XAxis
+                        dataKey="label"
+                        tick={{ fontSize: 10, fill: "var(--qp-text-tertiary)" }}
+                        axisLine={false}
+                        tickLine={false}
+                        interval="preserveStartEnd"
+                        minTickGap={DATA_TREND_X_AXIS_MIN_TICK_GAP}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 10, fill: "var(--qp-text-tertiary)" }}
+                        axisLine={false}
+                        tickLine={false}
+                        ticks={appTrendChartAxis.ticks}
+                        domain={[0, appTrendChartAxis.domainMax]}
+                        tickFormatter={(value) => formatChartHours(Number(value))}
+                      />
+                      <QuietChartTooltip
+                        formatter={(value) => [
+                          formatDuration(Number(value) * 3600000),
+                          UI_TEXT.data.appTrendUsage,
+                        ]}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="hours"
+                        stroke="var(--qp-accent-default)"
+                        strokeWidth={2}
+                        fill="var(--qp-accent-default)"
+                        fillOpacity={0.1}
+                        dot={{ fill: "var(--qp-accent-default)", r: 2.5 }}
+                        isAnimationActive={false}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </div>
-
-          </div>
-        )}
-      </div>
+          )}
+        </div>
       </div>
     </div>
   );

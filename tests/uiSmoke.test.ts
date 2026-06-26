@@ -136,6 +136,7 @@ function createMotionStub() {
     "exit",
     "initial",
     "layout",
+    "layoutId",
     "transition",
     "variants",
     "whileHover",
