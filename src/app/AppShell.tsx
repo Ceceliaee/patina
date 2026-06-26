@@ -404,6 +404,10 @@ function AppShellContent() {
               </div>
             }
           >
+            <div
+              key={currentView}
+              className="qp-view-container flex-1 min-h-0 flex flex-col h-full overflow-hidden"
+            >
               {currentView === "dashboard" && (
                 <Dashboard
                   key="dashboard"
@@ -514,6 +518,7 @@ function AppShellContent() {
                   webActivityEnabled={appSettings.webActivityEnabled}
                 />
               )}
+            </div>
           </Suspense>
         </main>
       </div>
