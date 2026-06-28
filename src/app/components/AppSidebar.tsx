@@ -46,23 +46,51 @@ export default function AppSidebar({
       </div>
 
       <nav className="flex flex-col gap-2.5 mt-1 w-full px-2">
-        {navItems.map((item) => (
-          <motion.button
-            key={item.id}
-            onClick={() => onNavigate(item.id)}
-            aria-label={item.label}
-            className={`qp-nav-item h-10 w-full rounded-[10px] transition-colors relative flex items-center justify-center ${
-              currentView === item.id
-                ? "qp-nav-item-active"
-                : "text-[var(--qp-text-tertiary)] hover:text-[var(--qp-text-secondary)]"
-            }`}
-          >
-            <item.icon size={18} strokeWidth={2.15} />
-            {currentView === item.id && (
-              <div className="absolute left-[-1px] top-[9px] w-[2px] h-[22px] rounded-full bg-[var(--qp-accent-default)]" />
-            )}
-          </motion.button>
-        ))}
+        {navItems.map((item) => {
+          const isActive = currentView === item.id;
+          return (
+            <motion.button
+              key={item.id}
+              onClick={() => onNavigate(item.id)}
+              aria-label={item.label}
+              className={`qp-nav-item h-10 w-full rounded-[10px] transition-colors relative flex items-center justify-center ${
+                isActive
+                  ? "qp-nav-item-active"
+                  : "text-[var(--qp-text-tertiary)] hover:text-[var(--qp-text-secondary)]"
+              }`}
+            >
+              {/* Sliding background highlight */}
+              {isActive && (
+                <motion.div
+                  layoutId="active-nav-bg"
+                  className="absolute inset-0 rounded-[10px] qp-nav-item-bg-slider pointer-events-none z-0"
+                  transition={{
+                    type: "spring",
+                    stiffness: 380,
+                    damping: 30,
+                  }}
+                />
+              )}
+
+              {/* Sliding vertical indicator pill */}
+              {isActive && (
+                <motion.div
+                  layoutId="active-nav-indicator"
+                  className="absolute left-[3px] top-[9px] w-[3px] h-[22px] rounded-full qp-nav-item-indicator-slider z-10 pointer-events-none"
+                  transition={{
+                    type: "spring",
+                    stiffness: 350,
+                    damping: 25,
+                  }}
+                />
+              )}
+
+              <span className="relative z-10 flex items-center justify-center">
+                <item.icon size={18} strokeWidth={2.15} />
+              </span>
+            </motion.button>
+          );
+        })}
       </nav>
 
       <div className="mt-auto flex w-full flex-col items-center gap-2 px-2">

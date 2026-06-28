@@ -1,4 +1,4 @@
-import { type CSSProperties, useMemo } from "react";
+import { memo, type CSSProperties, useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
@@ -22,6 +22,7 @@ interface DataHeatmapPanelProps {
   onGranularityChange: (granularity: HeatmapGranularity) => void;
   onSelectAdjacentHeatmapView: (delta: number) => void;
   onOpenHistoryDate?: (dateKey: string) => void;
+  loading?: boolean;
 }
 
 function formatHeatmapShortDate(dateKey: string) {
@@ -66,7 +67,7 @@ function buildWeeklyHeatmapCells(rows: HeatmapWeek[]) {
   }));
 }
 
-export default function DataHeatmapPanel({
+const DataHeatmapPanel = memo(function DataHeatmapPanel({
   selectedHeatmapView,
   selectedHeatmapViewKey,
   selectedHeatmapViewLabel,
@@ -78,6 +79,7 @@ export default function DataHeatmapPanel({
   onGranularityChange,
   onSelectAdjacentHeatmapView,
   onOpenHistoryDate,
+  loading = false,
 }: DataHeatmapPanelProps) {
   const weeklyHeatmapCells = useMemo(() => buildWeeklyHeatmapCells(rows), [rows]);
   const weeklyHeatmapCellsByKey = useMemo(
@@ -134,7 +136,9 @@ export default function DataHeatmapPanel({
       <div className="data-heatmap data-heatmap-calendar mt-5">
         <div className="data-heatmap-content">
           <div
-            className="data-heatmap-scroll"
+            className={`data-heatmap-scroll ${rows.length > 0 ? "qp-content-fade-in" : ""} ${
+              loading ? "data-heatmap-loading-state" : ""
+            }`}
             style={{ "--data-heatmap-week-count": rows.length } as CSSProperties}
           >
             <div className="data-heatmap-months" aria-hidden>
@@ -216,4 +220,6 @@ export default function DataHeatmapPanel({
       </div>
     </div>
   );
-}
+});
+
+export default DataHeatmapPanel;
