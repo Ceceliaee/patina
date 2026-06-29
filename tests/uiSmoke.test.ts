@@ -537,6 +537,13 @@ await runTest("classification web domain colors prefer favicon theme colors", ()
   assert.match(webActivityRepository, /LEFT JOIN web_favicon_cache AS favicon_cache/);
 });
 
+await runTest("app icon cache lookup is case-insensitive for Windows executable names", () => {
+  const sessionReadRepository = readUtf8("src/platform/persistence/sessionReadRepository.ts");
+
+  assert.match(sessionReadRepository, /caseInsensitiveBatchKeys = batchKeys\.map/);
+  assert.match(sessionReadRepository, /WHERE LOWER\(exe_name\) IN/);
+});
+
 await runTest("app shell uses feature-owned Data prewarm and heavy cache lifecycle exits", () => {
   const shell = readUtf8("src/app/AppShell.tsx");
 

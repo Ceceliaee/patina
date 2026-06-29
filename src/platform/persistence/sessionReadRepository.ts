@@ -148,10 +148,11 @@ export async function getIconsForExecutables(exeNames: string[]): Promise<Record
   const db = await getDB();
   for (let index = 0; index < lookupKeys.length; index += ICON_QUERY_BATCH_SIZE) {
     const batchKeys = lookupKeys.slice(index, index + ICON_QUERY_BATCH_SIZE);
+    const caseInsensitiveBatchKeys = batchKeys.map((key) => key.toLowerCase());
     const placeholders = batchKeys.map(() => "?").join(", ");
     const rows = await db.select<RawIconCacheRow[]>(
-      `SELECT exe_name, icon_base64 FROM icon_cache WHERE exe_name IN (${placeholders})`,
-      batchKeys,
+      `SELECT exe_name, icon_base64 FROM icon_cache WHERE LOWER(exe_name) IN (${placeholders})`,
+      caseInsensitiveBatchKeys,
     );
 
     for (const row of rows) {
