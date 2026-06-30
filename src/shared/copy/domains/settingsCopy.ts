@@ -89,10 +89,10 @@ const ZH_CN_SETTINGS_COPY = {
       },
       {
         title: "安装浏览器扩展",
-        description: "在 Chrome / Edge 等 Chromium 系浏览器中加载解压后的扩展文件夹。",
+        description: "按浏览器系选择对应的 Patina Web Sync 扩展包。",
         details: [
           {
-            text: "下载 Patina Web Sync 扩展包：patina-chromium-extension-v...zip。",
+            text: "从下载页获取扩展包。",
             links: [
               {
                 label: "打开下载页",
@@ -100,12 +100,24 @@ const ZH_CN_SETTINGS_COPY = {
               },
             ],
           },
-          "解压这个 zip，得到 patina-chromium-extension-v... 文件夹。",
-          "在浏览器地址栏输入 chrome://extensions/ 或 edge://extensions/，打开扩展管理页。",
-          "开启「开发者模式」。",
-          "点击「加载已解压的扩展程序」或「加载解压缩的扩展」。",
-          "选择包含 manifest.json 的扩展文件夹。",
-          "不要选择 zip 文件，也不要选择它的上一级目录。",
+          {
+            text: "Chromium 系：",
+            children: [
+              "使用 patina-chromium-extension-v...zip。",
+              "解压后得到 patina-chromium-extension-v... 文件夹。",
+              "在地址栏输入 chrome://extensions/ 或 edge://extensions/，开启「开发者模式」，点击「加载已解压的扩展程序」或「加载解压缩的扩展」。",
+              "不要选择 zip 文件，也不要选择它的上一级目录。",
+            ],
+          },
+          {
+            text: "Firefox 系：",
+            children: [
+              "使用 patina-firefox-extension-v...xpi。",
+              "在 Firefox 地址栏输入 about:addons，打开「附加组件和主题」。",
+              "点击齿轮按钮，选择「从文件安装附加组件」。",
+              "选择下载的 .xpi 文件，并在提示中点击「添加」。",
+            ],
+          },
         ],
       },
       {
@@ -352,10 +364,10 @@ const EN_US_SETTINGS_COPY = {
       },
       {
         title: "Install the browser extension",
-        description: "Load the extracted extension folder in Chrome, Edge, or another Chromium-based browser.",
+        description: "Choose the Patina Web Sync extension package for your browser family.",
         details: [
           {
-            text: "Download the Patina Web Sync extension package: patina-chromium-extension-v...zip.",
+            text: "Download the extension packages from the releases page.",
             links: [
               {
                 label: "Open downloads",
@@ -363,12 +375,24 @@ const EN_US_SETTINGS_COPY = {
               },
             ],
           },
-          "Extract the zip to get the patina-chromium-extension-v... folder.",
-          "Enter chrome://extensions/ or edge://extensions/ in the browser address bar to open extension management.",
-          "Enable Developer mode.",
-          "Click Load unpacked or Load extracted extension.",
-          "Select the extension folder that contains manifest.json.",
-          "Do not select the zip file or its parent folder.",
+          {
+            text: "Chromium-based browsers:",
+            children: [
+              "Use patina-chromium-extension-v...zip.",
+              "Extract it to get the patina-chromium-extension-v... folder.",
+              "Enter chrome://extensions/ or edge://extensions/, enable Developer mode, then click Load unpacked or Load extracted extension.",
+              "Do not select the zip file or its parent folder.",
+            ],
+          },
+          {
+            text: "Firefox-based browsers:",
+            children: [
+              "Use patina-firefox-extension-v...xpi.",
+              "Enter about:addons in Firefox to open Add-ons and Themes.",
+              "Click the cog button, then choose Install Add-on From File.",
+              "Select the downloaded .xpi file, then click Add when prompted.",
+            ],
+          },
         ],
       },
       {

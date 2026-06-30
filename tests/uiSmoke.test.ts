@@ -429,6 +429,7 @@ await runTest("settings leaves web activity connection status to the extension",
 await runTest("settings services only expose web sync and remote push controls", () => {
   const settings = readUtf8("src/features/settings/components/Settings.tsx");
   const settingsInterface = readUtf8("src/features/settings/components/SettingsInterfacePanel.tsx");
+  const settingsDataSafety = readUtf8("src/features/settings/components/SettingsDataSafetyPanel.tsx");
   const settingsStyles = readUtf8("src/styles/features/settings.css");
   const appSettings = readUtf8("src/shared/settings/appSettings.ts");
   const appSettingsStore = readUtf8("src/platform/persistence/appSettingsStore.ts");
@@ -460,8 +461,19 @@ await runTest("settings services only expose web sync and remote push controls",
   assert.match(settingsInterface, /UI_TEXT\.settings\.webActivityHelpTitle/);
   assert.match(settingsStyles, /\.settings-web-activity-title-row \{\s*min-height: 20px;/);
   assert.match(settingsStyles, /\.settings-inline-help-button \{\s*display: inline-flex;\s*height: 18px;/);
+  assert.match(settingsDataSafety, /StoragePathPlaceholderRow/);
+  assert.match(settingsDataSafety, /actions=\{\[/);
+  assert.match(settingsDataSafety, /showTooltip=\{false\}/);
+  assert.match(settingsDataSafety, /aria-busy=\{!storageSnapshot\}/);
+  assert.match(settingsStyles, /\.settings-storage-path-row-placeholder/);
+  assert.doesNotMatch(settingsStyles, /\.settings-storage-path-placeholder-action/);
   assert.match(settingsCopy, /webActivityHelpAction/);
   assert.match(settingsCopy, /webActivityHelpSteps/);
+  assert.match(settingsCopy, /patina-chromium-extension-v\.\.\.zip/);
+  assert.match(settingsCopy, /patina-firefox-extension-v\.\.\.xpi/);
+  assert.match(settingsCopy, /about:addons/);
+  assert.doesNotMatch(settingsCopy, /patina-firefox-extension-v\.\.\.zip/);
+  assert.doesNotMatch(settingsCopy, /about:debugging#\/runtime\/this-firefox/);
   assert.match(settingsCopy, /Patina Web Sync 启用并连接成功后：\\n• 自动同步当前活动标签页的网站地址、标题和网站图标。/);
   assert.doesNotMatch(settingsCopy, /浏览器内部页面不会写入网页记录/);
   assert.doesNotMatch(settingsCopy, /浏览历史库/);

@@ -121,6 +121,41 @@ function StoragePathRow({
   );
 }
 
+type StoragePathPlaceholderAction = {
+  icon: ReactNode;
+  title: string;
+};
+
+function StoragePathPlaceholderRow({
+  title,
+  actions,
+}: {
+  title: string;
+  actions: StoragePathPlaceholderAction[];
+}) {
+  return (
+    <div className="settings-storage-path-row settings-storage-path-row-placeholder" aria-busy="true">
+      <div className="min-w-0">
+        <div className="settings-storage-path-heading">
+          <p>{title}</p>
+          <span className="settings-storage-path-placeholder-meta" />
+        </div>
+      </div>
+      <div className="settings-storage-path-actions">
+        {actions.map((action, index) => (
+          <QuietIconAction
+            key={`${action.title}-${index}`}
+            icon={action.icon}
+            title={action.title}
+            disabled
+            showTooltip={false}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsDataSafetyPanel({
   cleanupRange,
   cleanupOptions,
@@ -366,50 +401,77 @@ export default function SettingsDataSafetyPanel({
               ) : null}
             </div>
 
-            {storageSnapshot ? (
-              <div className="settings-storage-path-list">
-                <StoragePathRow
-                  title={storageText.installDirectoryLabel}
-                  meta={installRootSizeText}
-                  onOpen={() => void onOpenStorageDirectory(storageSnapshot.paths.installDir)}
-                />
-                <StoragePathRow
-                  title={storageText.webviewCacheDirectoryLabel}
-                  meta={cacheRootSizeText}
-                  extraActions={(
-                    <QuietIconAction
-                      icon={<BrushCleaning size={14} />}
-                      title={webviewCache?.pendingClear ? storageText.webviewCacheClearPending : storageText.webviewCacheClearTitle}
-                      disabled={busy || webviewCache?.pendingClear}
-                      onClick={() => setCacheClearDialogOpen(true)}
-                    />
-                  )}
-                  onChangePath={!isCustomWebviewRoot ? () => void onChooseCacheDirectory() : undefined}
-                  onRestoreDefault={isCustomWebviewRoot ? () => void onRestoreDefaultCacheDirectory() : undefined}
-                  changeDisabled={busy}
-                  restoreDisabled={busy}
-                  onOpen={() => void onOpenStorageDirectory(webviewCachePath)}
-                />
-                <StoragePathRow
-                  title={storageText.dataDirectoryLabel}
-                  meta={dataRootSizeText}
-                  extraActions={(
-                    <QuietIconAction
-                      icon={<Trash2 size={14} />}
-                      title={UI_TEXT.settings.cleanupTitle}
-                      tone="danger"
-                      disabled={busy || isCleaning}
-                      onClick={() => setHistoryCleanupDialogOpen(true)}
-                    />
-                  )}
-                  onChangePath={!isCustomDataRoot ? () => void onChooseDataDirectory() : undefined}
-                  onRestoreDefault={isCustomDataRoot ? () => void onRestoreDefaultDataDirectory() : undefined}
-                  changeDisabled={busy}
-                  restoreDisabled={busy}
-                  onOpen={() => void onOpenStorageDirectory(storageSnapshot.paths.dataRoot)}
-                />
-              </div>
-            ) : null}
+            <div className="settings-storage-path-list" aria-busy={!storageSnapshot}>
+              {storageSnapshot ? (
+                <>
+                  <StoragePathRow
+                    title={storageText.installDirectoryLabel}
+                    meta={installRootSizeText}
+                    onOpen={() => void onOpenStorageDirectory(storageSnapshot.paths.installDir)}
+                  />
+                  <StoragePathRow
+                    title={storageText.webviewCacheDirectoryLabel}
+                    meta={cacheRootSizeText}
+                    extraActions={(
+                      <QuietIconAction
+                        icon={<BrushCleaning size={14} />}
+                        title={webviewCache?.pendingClear ? storageText.webviewCacheClearPending : storageText.webviewCacheClearTitle}
+                        disabled={busy || webviewCache?.pendingClear}
+                        onClick={() => setCacheClearDialogOpen(true)}
+                      />
+                    )}
+                    onChangePath={!isCustomWebviewRoot ? () => void onChooseCacheDirectory() : undefined}
+                    onRestoreDefault={isCustomWebviewRoot ? () => void onRestoreDefaultCacheDirectory() : undefined}
+                    changeDisabled={busy}
+                    restoreDisabled={busy}
+                    onOpen={() => void onOpenStorageDirectory(webviewCachePath)}
+                  />
+                  <StoragePathRow
+                    title={storageText.dataDirectoryLabel}
+                    meta={dataRootSizeText}
+                    extraActions={(
+                      <QuietIconAction
+                        icon={<Trash2 size={14} />}
+                        title={UI_TEXT.settings.cleanupTitle}
+                        tone="danger"
+                        disabled={busy || isCleaning}
+                        onClick={() => setHistoryCleanupDialogOpen(true)}
+                      />
+                    )}
+                    onChangePath={!isCustomDataRoot ? () => void onChooseDataDirectory() : undefined}
+                    onRestoreDefault={isCustomDataRoot ? () => void onRestoreDefaultDataDirectory() : undefined}
+                    changeDisabled={busy}
+                    restoreDisabled={busy}
+                    onOpen={() => void onOpenStorageDirectory(storageSnapshot.paths.dataRoot)}
+                  />
+                </>
+              ) : (
+                <>
+                  <StoragePathPlaceholderRow
+                    title={storageText.installDirectoryLabel}
+                    actions={[
+                      { icon: <FolderOpen size={14} />, title: storageText.openDirectoryAction },
+                    ]}
+                  />
+                  <StoragePathPlaceholderRow
+                    title={storageText.webviewCacheDirectoryLabel}
+                    actions={[
+                      { icon: <BrushCleaning size={14} />, title: storageText.webviewCacheClearTitle },
+                      { icon: <FolderOpen size={14} />, title: storageText.openDirectoryAction },
+                      { icon: <FolderPen size={14} />, title: storageText.changePathAction },
+                    ]}
+                  />
+                  <StoragePathPlaceholderRow
+                    title={storageText.dataDirectoryLabel}
+                    actions={[
+                      { icon: <Trash2 size={14} />, title: UI_TEXT.settings.cleanupTitle },
+                      { icon: <FolderOpen size={14} />, title: storageText.openDirectoryAction },
+                      { icon: <FolderPen size={14} />, title: storageText.changePathAction },
+                    ]}
+                  />
+                </>
+              )}
+            </div>
 
           </QuietSubpanel>
         </div>

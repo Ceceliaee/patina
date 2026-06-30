@@ -143,6 +143,26 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       true,
     );
     assert.equal(
+      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("patina-chromium-extension-v...zip")})`),
+      true,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("patina-firefox-extension-v...zip")})`),
+      false,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("patina-firefox-extension-v...xpi")})`),
+      true,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("about:addons")})`),
+      true,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("about:debugging#/runtime/this-firefox")})`),
+      false,
+    );
+    assert.equal(
       await evaluate(client!, sessionId, `Boolean(document.querySelector('a[href="chrome://extensions/"]'))`),
       false,
     );

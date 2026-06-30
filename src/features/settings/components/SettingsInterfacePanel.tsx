@@ -248,11 +248,26 @@ function WebActivityHelpDetailItem({ detail }: { detail: WebActivityHelpDetail }
     return <>{detail}</>;
   }
 
+  const children = "children" in detail ? detail.children : undefined;
+  if (Array.isArray(children)) {
+    return (
+      <>
+        <span>{detail.text}</span>
+        <ul className="settings-web-activity-help-subdetail-list">
+          {children.map((child) => (
+            <li key={child}>{child}</li>
+          ))}
+        </ul>
+      </>
+    );
+  }
+
+  const links = "links" in detail ? (detail.links ?? []) : [];
   return (
     <>
       <span>{detail.text}</span>
       <span className="settings-web-activity-help-link-row">
-        {detail.links.map((link) => (
+        {links.map((link) => (
           <a
             key={link.href}
             href={link.href}
