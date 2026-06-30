@@ -500,7 +500,7 @@ await runTest("web activity views are gated by saved web sync setting", () => {
   assert.match(mappingState, /webActivityEnabled = false/);
   assert.match(mappingDerivedState, /if \(!webActivityEnabled\) return \{\}/);
   assert.match(mappingDerivedState, /if \(!webActivityEnabled\) return \[\]/);
-  assert.match(mappingDerivedState, /if \(!webActivityEnabled\) return \{ all: 0, other: 0, classified: 0 \}/);
+  assert.match(mappingDerivedState, /if \(!webActivityEnabled\) return \{ all: 0, other: 0, classified: 0, excluded: 0 \}/);
 });
 
 await runTest("classification web domain colors prefer favicon theme colors", () => {
