@@ -18,7 +18,12 @@ App note en: TBD.
 
 ### Added
 
+- 新增 Firefox 系 Patina Web Sync 扩展，并允许 Firefox、Zen、Floorp、Iceweasel 前台窗口写入网页活动；正式发布使用 Mozilla `unlisted` 签名 `.xpi` 自分发。Refs [#29](https://github.com/Ceceliaee/patina/issues/29)
+
 ### Changed
+
+- Chromium 系网页同步白名单改为明确候选集，并补充 Thorium、Cent Browser、Catsxp 与新版 360 极速浏览器 X。
+- 发布检查和 GitHub Release workflow 现在校验两套浏览器扩展，发布 Chromium zip，并签名上传 Firefox `.xpi`。
 
 ### Fixed
 

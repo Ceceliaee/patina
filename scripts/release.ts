@@ -472,7 +472,13 @@ export function renderReleaseNotes(parsed) {
     lines.push("### 主要变化", "", ...visibleBullets, "");
   }
 
-  lines.push("### 下载", "", "- Windows 安装包：请下载本页面附件中的 `.exe` 安装包。", "");
+  lines.push(
+    "### 下载",
+    "",
+    "- Windows 安装包：请下载本页面附件中的 `.exe` 安装包。",
+    "- 浏览器扩展包：Chromium 系下载 `patina-chromium-extension-v...zip`，Firefox 系下载 `patina-firefox-extension-v...xpi`。",
+    "",
+  );
 
   return lines.join("\n");
 }

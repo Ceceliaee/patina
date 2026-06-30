@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   buildUpdaterEndpoints,
   fieldValue,
@@ -146,6 +147,25 @@ function testReleaseNotesIncludeAllVisibleBullets() {
   assert.match(notes, /- Change 8/);
 }
 
+function testReleaseNotesMentionBrowserExtensionPackages() {
+  const notes = renderReleaseNotes({
+    release: "Ready.",
+    bullets: [],
+  });
+
+  assert.match(notes, /patina-chromium-extension-v\.\.\.zip/);
+  assert.match(notes, /patina-firefox-extension-v\.\.\.xpi/);
+  assert.doesNotMatch(notes, /patina-firefox-extension-v\.\.\.zip/);
+}
+
+function testReleaseWorkflowPublishesFirefoxXpi() {
+  const workflow = readFileSync(".github/workflows/prepare-release.yml", "utf8");
+
+  assert.match(workflow, /npm run extension:firefox:sign/);
+  assert.match(workflow, /patina-firefox-extension-v\$\(\$extensionManifest\.version\)\.xpi/);
+  assert.doesNotMatch(workflow, /patina-firefox-extension-v\$\(\$extensionManifest\.version\)\.zip/);
+}
+
 function testVersionFilesValidationPassesWhenAllVersionsMatch() {
   assert.deepEqual(validateReleaseVersionFilesText(versionFileFixture(), "1.6.0"), []);
 }
@@ -235,6 +255,8 @@ testUpdaterNotesKeepLocalizedVariants();
 testUpdaterNotesFallsBackToAppNote();
 testUpdaterEndpointsKeepGithubFirstAndPreserveMirrors();
 testReleaseNotesIncludeAllVisibleBullets();
+testReleaseNotesMentionBrowserExtensionPackages();
+testReleaseWorkflowPublishesFirefoxXpi();
 testVersionFilesValidationPassesWhenAllVersionsMatch();
 testVersionFilesValidationCatchesPackageJsonMismatch();
 testVersionFilesValidationCatchesPackageLockRootMismatch();
@@ -244,4 +266,4 @@ testVersionFilesValidationCatchesPolicyMismatch();
 testVersionFilesValidationCatchesMissingChangelogSection();
 testVersionFilesValidationRejectsInvalidVersion();
 
-console.log("Passed 16 release policy tests");
+console.log("Passed 18 release policy tests");

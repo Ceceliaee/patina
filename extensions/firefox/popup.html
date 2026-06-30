@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Patina Web Sync</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f6f7f9;
+        --panel: #ffffff;
+        --panel-subtle: #f1f2f4;
+        --border: #d9dbe1;
+        --border-strong: #c5cad3;
+        --text: #1d1f24;
+        --text-secondary: #5f646f;
+        --text-tertiary: #858b96;
+        --accent: #2f63ad;
+        --accent-soft: #e8f0fb;
+        --success: #2f855a;
+        --danger: #b83232;
+      }
+
+      body {
+        box-sizing: border-box;
+        width: 320px;
+        margin: 0;
+        padding: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: var(--text);
+        background: var(--bg);
+      }
+
+      .popup-shell {
+        box-sizing: border-box;
+        display: grid;
+        gap: 12px;
+        padding: 14px;
+      }
+
+      .popup-header,
+      .tab-card {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--panel);
+      }
+
+      .popup-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px;
+      }
+
+      .brand {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 9px;
+      }
+
+      .brand img {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 15px;
+        line-height: 1.2;
+      }
+
+      .label,
+      #tab-url {
+        color: var(--text-tertiary);
+        font-size: 11px;
+      }
+
+      .status-badge {
+        max-width: 96px;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 4px 8px;
+        background: var(--panel-subtle);
+        color: var(--text-secondary);
+        font-size: 11px;
+        font-weight: 700;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .status-badge[data-tone="success"] {
+        border-color: color-mix(in srgb, var(--success) 32%, var(--border));
+        background: color-mix(in srgb, var(--success) 10%, var(--panel));
+        color: var(--success);
+      }
+
+      .status-badge[data-tone="danger"] {
+        border-color: color-mix(in srgb, var(--danger) 30%, var(--border));
+        background: color-mix(in srgb, var(--danger) 8%, var(--panel));
+        color: var(--danger);
+      }
+
+      .tab-card {
+        padding: 12px;
+      }
+
+      .tab-card {
+        display: grid;
+        gap: 4px;
+      }
+
+      #tab-title {
+        overflow: hidden;
+        color: var(--text);
+        font-size: 13px;
+        line-height: 1.35;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      #tab-url {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 92px;
+        gap: 8px;
+      }
+
+      button {
+        min-height: 36px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--panel);
+        color: var(--text);
+        font: inherit;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      button:hover {
+        border-color: var(--border-strong);
+        background: var(--panel-subtle);
+      }
+
+      button.primary {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: white;
+      }
+
+      button.primary:hover {
+        background: color-mix(in srgb, var(--accent) 92%, black);
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #1f2023;
+          --panel: #292b2f;
+          --panel-subtle: #30333a;
+          --border: #42464f;
+          --border-strong: #565b66;
+          --text: #f2f4f7;
+          --text-secondary: #c6cbd3;
+          --text-tertiary: #9299a5;
+          --accent: #8aaee6;
+          --accent-soft: #273348;
+          --success: #8bd0a5;
+          --danger: #ee9a9a;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="popup-shell">
+      <header class="popup-header">
+        <div class="brand">
+          <img src="icons/icon-64.png" srcset="icons/icon-64.png 1x, icons/icon-128.png 2x" alt="">
+          <div>
+            <h1>Patina Web Sync</h1>
+          </div>
+        </div>
+        <span id="status-badge" class="status-badge" data-tone="neutral">读取中</span>
+      </header>
+
+      <section class="tab-card">
+        <span id="tab-label" class="label">当前网页</span>
+        <strong id="tab-title">读取中...</strong>
+        <span id="tab-url"></span>
+      </section>
+
+      <div class="actions">
+        <button id="send-tab" class="primary" type="button">同步当前页</button>
+        <button id="options" type="button">设置</button>
+      </div>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
