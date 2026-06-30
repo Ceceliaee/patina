@@ -103,17 +103,18 @@ const ZH_CN_SETTINGS_COPY = {
           {
             text: "Chromium 系：",
             children: [
-              "使用 patina-chromium-extension-v...zip。",
+              "下载 patina-chromium-extension-v...zip。",
               "解压后得到 patina-chromium-extension-v... 文件夹。",
-              "在地址栏输入 chrome://extensions/ 或 edge://extensions/，开启「开发者模式」，点击「加载已解压的扩展程序」或「加载解压缩的扩展」。",
-              "不要选择 zip 文件，也不要选择它的上一级目录。",
+              "在地址栏输入 chrome://extensions/ 或 edge://extensions/，开启「开发者模式」。",
+              "点击「加载已解压的扩展程序」或「加载解压缩的扩展」。",
+              "选择解压得到的 patina-chromium-extension-v... 文件夹（包含 manifest.json）。",
             ],
           },
           {
             text: "Firefox 系：",
             children: [
-              "使用 patina-firefox-extension-v...xpi。",
-              "在 Firefox 地址栏输入 about:addons，打开「附加组件和主题」。",
+              "下载 patina-firefox-extension-v...xpi。",
+              "在地址栏输入 about:addons，进入附加组件管理器。",
               "点击齿轮按钮，选择「从文件安装附加组件」。",
               "选择下载的 .xpi 文件，并在提示中点击「添加」。",
             ],
@@ -378,17 +379,18 @@ const EN_US_SETTINGS_COPY = {
           {
             text: "Chromium-based browsers:",
             children: [
-              "Use patina-chromium-extension-v...zip.",
+              "Download patina-chromium-extension-v...zip.",
               "Extract it to get the patina-chromium-extension-v... folder.",
-              "Enter chrome://extensions/ or edge://extensions/, enable Developer mode, then click Load unpacked or Load extracted extension.",
-              "Do not select the zip file or its parent folder.",
+              "Enter chrome://extensions/ or edge://extensions/, then enable Developer mode.",
+              "Click Load unpacked or Load extracted extension.",
+              "Select the extracted patina-chromium-extension-v... folder that contains manifest.json.",
             ],
           },
           {
             text: "Firefox-based browsers:",
             children: [
-              "Use patina-firefox-extension-v...xpi.",
-              "Enter about:addons in Firefox to open Add-ons and Themes.",
+              "Download patina-firefox-extension-v...xpi.",
+              "Enter about:addons in the address bar to open the add-ons manager.",
               "Click the cog button, then choose Install Add-on From File.",
               "Select the downloaded .xpi file, then click Add when prompted.",
             ],

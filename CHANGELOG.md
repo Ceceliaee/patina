@@ -18,18 +18,42 @@ App note en: TBD.
 
 ### Added
 
-- 新增 Firefox 系 Patina Web Sync 扩展，并允许 Firefox、Zen、Floorp、Iceweasel 前台窗口写入网页活动；正式发布使用 Mozilla `unlisted` 签名 `.xpi` 自分发。Refs [#29](https://github.com/Ceceliaee/patina/issues/29)
-
 ### Changed
-
-- Chromium 系网页同步白名单改为明确候选集，并补充 Thorium、Cent Browser、Catsxp 与新版 360 极速浏览器 X。
-- 发布检查和 GitHub Release workflow 现在校验两套浏览器扩展，发布 Chromium zip，并签名上传 Firefox `.xpi`。
 
 ### Fixed
 
 ### Removed
 
 ### Internal
+
+## [1.9.0] - 2026-06-30
+
+Release: 新增 Firefox 系网页同步扩展，并改进分类管理、数据/历史响应和资源占用。
+App note: 新增 Firefox 系网页同步扩展，分类管理和数据回看更顺手。
+App note en: Adds Firefox-family web sync, with smoother classification and Data/History views.
+
+### Added
+
+- 新增 Firefox 系 Patina Web Sync 扩展，并允许 Firefox、Zen、Floorp、Iceweasel 前台窗口写入网页活动；正式发布使用 Mozilla `unlisted` 签名 `.xpi` 自分发。Refs [#29](https://github.com/Ceceliaee/patina/issues/29)
+- 分类页支持重命名自定义分类、同名合并，并新增独立“已排除”筛选，管理应用和网页规则更清楚。
+
+### Changed
+
+- Chromium 系网页同步白名单改为明确候选集，并补充 Thorium、Cent Browser、Catsxp 与新版 360 极速浏览器 X。
+- 数据页和历史页优化读模型、预热和图标加载，减少打开页面、切换视图和查看长时间范围时的等待。
+- 工具运行时、追踪暂停状态和图标 / favicon 缓存改为更按需的唤醒与复用，降低后台资源占用。
+
+### Fixed
+
+- 修复 Windows 可执行名大小写不一致时，应用图标可能缺失或重复加载的问题。
+- 设置页网页同步说明细化 Chromium / Firefox 系安装步骤，并稳定本机目录加载前的禁用按钮占位。
+
+### Removed
+
+### Internal
+
+- 发布检查和 GitHub Release workflow 现在校验两套浏览器扩展，发布 Chromium zip，并签名上传 Firefox `.xpi`。
+- 更新中英文 README 与页面截图，跟随当前 Dashboard、History、Data、Classification、Settings、Tools 和 About 界面。
 
 ## [1.8.0] - 2026-06-24
 

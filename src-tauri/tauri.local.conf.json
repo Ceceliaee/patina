@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Patina Local",
   "mainBinaryName": "PatinaLocal",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "identifier": "com.ceceliaee.patina.local",
   "build": {
     "beforeBuildCommand": "npm run build",

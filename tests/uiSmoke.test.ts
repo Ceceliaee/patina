@@ -470,6 +470,7 @@ await runTest("settings services only expose web sync and remote push controls",
   assert.match(settingsCopy, /webActivityHelpAction/);
   assert.match(settingsCopy, /webActivityHelpSteps/);
   assert.match(settingsCopy, /patina-chromium-extension-v\.\.\.zip/);
+  assert.match(settingsCopy, /manifest\.json/);
   assert.match(settingsCopy, /patina-firefox-extension-v\.\.\.xpi/);
   assert.match(settingsCopy, /about:addons/);
   assert.doesNotMatch(settingsCopy, /patina-firefox-extension-v\.\.\.zip/);

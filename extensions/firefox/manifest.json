@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Patina Web Sync",
   "description": "Sync the active webpage to the Patina desktop app for local-first time tracking.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "permissions": [
     "alarms",
     "storage",
