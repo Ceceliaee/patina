@@ -15,7 +15,7 @@
     "test:classification": "node --experimental-strip-types --experimental-specifier-resolution=node tests/classificationDraftState.test.ts",
     "test:icon-colors": "node --experimental-strip-types --experimental-specifier-resolution=node tests/iconThemeColors.test.ts",
     "test:dashboard-icons": "node --experimental-strip-types --experimental-specifier-resolution=node tests/dashboardIconRuntimeCache.test.ts",
-    "test:data": "node --experimental-strip-types --experimental-specifier-resolution=node tests/dataReadModel.test.ts && node --experimental-strip-types --experimental-specifier-resolution=node tests/dataFirstPaintScheduler.test.ts",
+    "test:data": "node --experimental-strip-types --experimental-specifier-resolution=node tests/dataReadModel.test.ts && node --experimental-strip-types --experimental-specifier-resolution=node tests/dataFirstPaintScheduler.test.ts && node --experimental-strip-types --experimental-specifier-resolution=node tests/dataAppSearch.test.ts",
     "test:data-range": "node --experimental-strip-types --experimental-specifier-resolution=node tests/dataTrendRange.test.ts",
     "test:data-chart": "node --experimental-strip-types --experimental-specifier-resolution=node tests/dataChartInteraction.test.ts",
     "test:persistence": "node --experimental-strip-types --experimental-specifier-resolution=node tests/persistenceTransaction.test.ts",
