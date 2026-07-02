@@ -1,10 +1,14 @@
-import { type CSSProperties, useMemo } from "react";
+import {
+  type CSSProperties,
+  useMemo,
+  useRef,
+} from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
-import QuietTooltip from "../../../shared/components/QuietTooltip";
 import { formatDuration } from "../../history/services/historyFormatting";
 import type { HeatmapSelection, HeatmapWeek } from "../services/dataReadModel.ts";
+import DataHeatmapTooltip from "./DataHeatmapTooltip.tsx";
 
 export type HeatmapGranularity = "daily" | "weekly";
 
@@ -79,6 +83,7 @@ export default function DataHeatmapPanel({
   onSelectAdjacentHeatmapView,
   onOpenHistoryDate,
 }: DataHeatmapPanelProps) {
+  const heatmapWeeksRef = useRef<HTMLDivElement | null>(null);
   const weeklyHeatmapCells = useMemo(() => buildWeeklyHeatmapCells(rows), [rows]);
   const weeklyHeatmapCellsByKey = useMemo(
     () => new Map(weeklyHeatmapCells.map((cell) => [cell.key, cell])),
@@ -149,7 +154,10 @@ export default function DataHeatmapPanel({
                   <span key={`${weekday}-${index}`}>{weekday}</span>
                 ))}
               </div>
-              <div className="data-heatmap-weeks">
+              <div
+                ref={heatmapWeeksRef}
+                className="data-heatmap-weeks"
+              >
                 {rows.map((week) => {
                   const weeklyCell = weeklyHeatmapCellsByKey.get(week.key);
                   return (
@@ -180,30 +188,22 @@ export default function DataHeatmapPanel({
                           ? isWeeklyFilledCell ? weeklyCell?.intensity ?? 0 : 0
                           : cell.intensity;
                         return (
-                          <QuietTooltip
+                          <span
                             key={`${selectedHeatmapViewKey}:${cell.key}`}
-                            label={tooltipLabel}
-                            placement="top"
-                            disabled={tooltipDisabled}
-                            className={`data-heatmap-tooltip-anchor ${
-                              tooltipDisabled ? "data-heatmap-tooltip-anchor-unavailable" : ""
-                            }`}
-                          >
-                            <span
-                              className={`data-heatmap-cell ${
-                                canOpenHistoryDate ? "data-heatmap-cell-openable" : ""
-                              } ${
-                                isDailyFutureCell || isWeeklyFutureCell ? "data-heatmap-cell-future" : ""
-                              } ${cell.isOutsideYear ? "data-heatmap-cell-outside" : ""}`}
-                              onDoubleClick={() => {
-                                if (canOpenHistoryDate) {
-                                  onOpenHistoryDate?.(cell.date);
-                                }
-                              }}
-                              data-history-date={canOpenHistoryDate ? cell.date : undefined}
-                              style={{ "--heatmap-intensity": heatmapIntensity } as CSSProperties}
-                            />
-                          </QuietTooltip>
+                            className={`data-heatmap-cell ${
+                              canOpenHistoryDate ? "data-heatmap-cell-openable" : ""
+                            } ${
+                              isDailyFutureCell || isWeeklyFutureCell ? "data-heatmap-cell-future" : ""
+                            } ${cell.isOutsideYear ? "data-heatmap-cell-outside" : ""}`}
+                            onDoubleClick={() => {
+                              if (canOpenHistoryDate) {
+                                onOpenHistoryDate?.(cell.date);
+                              }
+                            }}
+                            data-heatmap-tooltip={tooltipDisabled ? undefined : tooltipLabel}
+                            data-history-date={canOpenHistoryDate ? cell.date : undefined}
+                            style={{ "--heatmap-intensity": heatmapIntensity } as CSSProperties}
+                          />
                         );
                       })}
                     </div>
@@ -214,6 +214,12 @@ export default function DataHeatmapPanel({
           </div>
         </div>
       </div>
+      <DataHeatmapTooltip
+        containerRef={heatmapWeeksRef}
+        granularity={granularity}
+        rows={rows}
+        selectedHeatmapViewKey={selectedHeatmapViewKey}
+      />
     </div>
   );
 }

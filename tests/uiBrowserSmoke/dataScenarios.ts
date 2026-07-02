@@ -236,6 +236,80 @@ export async function runDataScenarios(context: BrowserSmokeContext) {
     await waitForExpression(client!, sessionId, `document.querySelectorAll(".data-trend-range-trigger")[1]?.textContent?.trim() === "1天"`);
   });
 
+  await runTest("data heatmap shows one delegated tooltip on hover", async () => {
+    await client!.command("Emulation.setDeviceMetricsOverride", {
+      width: 1280,
+      height: 820,
+      deviceScaleFactor: 1,
+      mobile: false,
+    }, sessionId);
+    const openedData = await evaluate(client!, sessionId, `
+      (() => {
+        const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("数据"))} + ']');
+        if (!node) return false;
+        node.click();
+        return true;
+      })()
+    `);
+    assert.equal(openedData, true);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("数据"))} + ']')?.className.includes("qp-nav-item-active")`,
+    );
+    const yesterdayKey = await evaluate(client!, sessionId, `
+      (() => {
+        const date = new Date();
+        date.setDate(date.getDate() - 1);
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        return year + "-" + month + "-" + day;
+      })()
+    `) as string;
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('[data-history-date=' + ${jsonString(JSON.stringify(yesterdayKey))} + '][data-heatmap-tooltip]'))`,
+      45_000,
+    );
+    const tooltipLabel = await evaluate(client!, sessionId, `
+      (() => {
+        const cell = document.querySelector('[data-history-date=' + ${jsonString(JSON.stringify(yesterdayKey))} + '][data-heatmap-tooltip]');
+        if (!cell) return "";
+        const label = cell.getAttribute("data-heatmap-tooltip") ?? "";
+        cell.dispatchEvent(new PointerEvent("pointerover", {
+          bubbles: true,
+          cancelable: true,
+          pointerType: "mouse",
+        }));
+        return label;
+      })()
+    `) as string;
+    assert.ok(tooltipLabel);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll('.qp-tooltip[role="tooltip"]').length === 1 && document.querySelector('.qp-tooltip[role="tooltip"]')?.textContent === ${jsonString(tooltipLabel)}`,
+    );
+    await evaluate(client!, sessionId, `
+      (() => {
+        const cell = document.querySelector('[data-history-date=' + ${jsonString(JSON.stringify(yesterdayKey))} + '][data-heatmap-tooltip]');
+        cell?.dispatchEvent(new PointerEvent("pointerout", {
+          bubbles: true,
+          cancelable: true,
+          pointerType: "mouse",
+          relatedTarget: document.body,
+        }));
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll('.qp-tooltip[role="tooltip"]').length === 0`,
+    );
+  });
+
   await runTest("data heatmap opens the selected day in history", async () => {
     await client!.command("Emulation.setDeviceMetricsOverride", {
       width: 1280,

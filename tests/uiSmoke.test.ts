@@ -344,6 +344,8 @@ await runTest("Data regular view avoids visible loading and skeleton branches", 
   assert.match(heatmapPanel, /hideRecentDailyFutureCell/);
   assert.match(heatmapPanel, /isDailyFutureCell/);
   assert.match(heatmapPanel, /isWeeklyFutureCell/);
+  assert.doesNotMatch(heatmapPanel, /QuietTooltip/);
+  assert.match(heatmapPanel, /data-heatmap-tooltip/);
   assert.match(data, /selectedHeatmapView === "recent"/);
 });
 

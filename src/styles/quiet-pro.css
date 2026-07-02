@@ -1299,12 +1299,6 @@
   );
 }
 
-.data-heatmap-tooltip-anchor.qp-tooltip-anchor {
-  display: block;
-  height: var(--data-heatmap-cell-size);
-  width: var(--data-heatmap-cell-size);
-}
-
 .data-heatmap-cell {
   display: block;
   height: var(--data-heatmap-cell-size);
@@ -1330,10 +1324,6 @@
 .data-heatmap-cell-outside {
   border-color: transparent;
   background: transparent;
-}
-
-.data-heatmap-tooltip-anchor-unavailable.qp-tooltip-anchor {
-  pointer-events: none;
 }
 
 .data-heatmap-loading-state .data-heatmap-cell,
