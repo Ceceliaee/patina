@@ -347,6 +347,10 @@ await runTest("Data regular view avoids visible loading and skeleton branches", 
   assert.doesNotMatch(heatmapPanel, /QuietTooltip/);
   assert.match(heatmapPanel, /data-heatmap-tooltip/);
   assert.match(data, /selectedHeatmapView === "recent"/);
+  assert.match(data, /freshReadModelsReady/);
+  assert.match(data, /shouldDeferRuntimeReadModels/);
+  assert.match(data, /shouldDeferHeatmapRows/);
+  assert.match(data, /EMPTY_DATA_APP_TREND_POINTS/);
 });
 
 await runTest("History regular view avoids visible loading copy", () => {

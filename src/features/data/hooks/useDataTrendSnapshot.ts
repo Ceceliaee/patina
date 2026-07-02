@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useState } from "react";
 import {
   getCachedDataTrendSnapshot,
   type DataTrendSnapshot,
@@ -17,6 +17,19 @@ interface UseDataTrendSnapshotParams {
   refreshKey: number;
   loadSnapshot: (selection: DataTrendRangeSelection, nowMs?: number) => Promise<DataTrendSnapshot>;
   deferCachedRefresh?: boolean;
+}
+
+function areDataTrendSnapshotsEquivalent(
+  left: DataTrendSnapshot | null,
+  right: DataTrendSnapshot,
+): boolean {
+  return Boolean(
+    left
+    && left.fetchedAtMs === right.fetchedAtMs
+    && left.range.cacheKey === right.range.cacheKey
+    && left.sessions === right.sessions
+    && left.icons === right.icons,
+  );
 }
 
 export function useDataTrendSnapshot({
@@ -39,8 +52,10 @@ export function useDataTrendSnapshot({
     const nextRange = resolveDataTrendRange(selection, nextNowMs);
     const nextCached = getCachedDataTrendSnapshot(nextRange);
     if (nextCached) {
-      setSnapshot(nextCached);
-      setNowMs(nextCached.fetchedAtMs);
+      setSnapshot((current) => (
+        areDataTrendSnapshotsEquivalent(current, nextCached) ? current : nextCached
+      ));
+      setNowMs((current) => current === nextCached.fetchedAtMs ? current : nextCached.fetchedAtMs);
       setHasFetchedOnce(true);
       setLoading(false);
     } else {
@@ -50,9 +65,11 @@ export function useDataTrendSnapshot({
     const loadFreshSnapshot = () => {
       void loadSnapshot(selection, nextNowMs).then((nextSnapshot) => {
         if (cancelled) return;
-        setSnapshot(nextSnapshot);
-        setNowMs(nextSnapshot.fetchedAtMs);
-        setHasFetchedOnce(true);
+        startTransition(() => {
+          setSnapshot(nextSnapshot);
+          setNowMs(nextSnapshot.fetchedAtMs);
+          setHasFetchedOnce(true);
+        });
       }).finally(() => {
         if (!cancelled) setLoading(false);
       });

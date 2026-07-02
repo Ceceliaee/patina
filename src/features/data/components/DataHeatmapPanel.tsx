@@ -1,4 +1,5 @@
 import {
+  memo,
   type CSSProperties,
   useMemo,
   useRef,
@@ -70,7 +71,7 @@ function buildWeeklyHeatmapCells(rows: HeatmapWeek[]) {
   }));
 }
 
-export default function DataHeatmapPanel({
+function DataHeatmapPanel({
   selectedHeatmapView,
   selectedHeatmapViewKey,
   selectedHeatmapViewLabel,
@@ -223,3 +224,5 @@ export default function DataHeatmapPanel({
     </div>
   );
 }
+
+export default memo(DataHeatmapPanel);

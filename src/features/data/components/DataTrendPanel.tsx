@@ -1,4 +1,4 @@
-import type { MouseEvent, RefObject } from "react";
+import { memo, type MouseEvent, type RefObject } from "react";
 import { CalendarDays, Clock3 } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
@@ -31,7 +31,7 @@ interface DataTrendPanelProps {
   onMouseLeave: () => void;
 }
 
-export default function DataTrendPanel({
+function DataTrendPanel({
   selection,
   viewModel,
   chartRef,
@@ -133,3 +133,5 @@ export default function DataTrendPanel({
     </div>
   );
 }
+
+export default memo(DataTrendPanel);
