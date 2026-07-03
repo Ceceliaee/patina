@@ -139,10 +139,31 @@
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
+  animation: tools-section-pane-enter 340ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .tools-section-pane-hidden {
   display: none;
+}
+
+.qp-dynamic-effects-off .tools-section-pane {
+  animation: none;
+}
+
+@keyframes tools-section-pane-enter {
+  from {
+    opacity: 0.82;
+    transform: translate3d(0, 4px, 0) scale(0.998);
+  }
+
+  62% {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
 }
 
 .tools-loading {
