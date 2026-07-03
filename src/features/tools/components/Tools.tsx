@@ -1,5 +1,5 @@
 import { AlarmClock, BellRing, RefreshCw, Timer, ToolCase } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader.tsx";
 import type { QuietToastTone } from "../../../shared/components/QuietToast.tsx";
 import { UI_TEXT, type UiText } from "../../../shared/copy/index.ts";
@@ -25,6 +25,8 @@ interface ToolsProps {
   onToast?: (message: string, tone?: QuietToastTone) => void;
   uiText?: UiText;
 }
+
+type ToolsSectionRailStyle = CSSProperties & { "--tools-active-section-index"?: number };
 
 function normalizeToolsSection(target: ToolsOpenTarget): ToolsSection {
   if (target.section === "timing") {
@@ -138,6 +140,10 @@ export default function Tools({
       title: UI_TEXT.tools.pomodoroTitle,
     },
   ];
+  const activeSectionIndex = sections.findIndex((section) => section.id === activeSection);
+  const sectionRailStyle: ToolsSectionRailStyle = {
+    "--tools-active-section-index": Math.max(0, activeSectionIndex),
+  };
 
   return (
     <div className="tools-page">
@@ -160,7 +166,11 @@ export default function Tools({
           <aside
             className="tools-section-rail tools-section-rail-shell"
             aria-label={UI_TEXT.tools.title}
+            style={sectionRailStyle}
           >
+            {activeSectionIndex >= 0 ? (
+              <span className="tools-section-active-bg" aria-hidden="true" />
+            ) : null}
             {sections.map((section) => {
               const Icon = section.icon;
               const selected = activeSection === section.id;
