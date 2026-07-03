@@ -134,6 +134,7 @@ fn is_allowed_app_setting_key(key: &str) -> bool {
             | "theme_mode"
             | "language"
             | "hourly_activity_chart_mode"
+            | "dynamic_effects"
             | "color_scheme_light"
             | "color_scheme_dark"
             | "launch_at_login"
@@ -292,6 +293,10 @@ mod tests {
                         key: "hourly_activity_chart_mode".to_string(),
                         value: "category".to_string(),
                     },
+                    AppSettingMutation {
+                        key: "dynamic_effects".to_string(),
+                        value: "0".to_string(),
+                    },
                 ],
             )
             .await
@@ -308,6 +313,10 @@ mod tests {
             assert_eq!(
                 load_setting(&pool, "hourly_activity_chart_mode").await,
                 Some("category".to_string())
+            );
+            assert_eq!(
+                load_setting(&pool, "dynamic_effects").await,
+                Some("0".to_string())
             );
         });
     }

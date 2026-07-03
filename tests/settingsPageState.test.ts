@@ -37,6 +37,7 @@ interface AppSettings {
   themeMode: "light" | "dark" | "system";
   language: "zh-CN" | "en-US";
   hourlyActivityChartMode: "total" | "category";
+  dynamicEffects: boolean;
   colorSchemeLight:
     | "default"
     | "absolutely"
@@ -121,6 +122,7 @@ const BASE_SETTINGS: AppSettings = {
   themeMode: "light",
   language: "zh-CN",
   hourlyActivityChartMode: "total",
+  dynamicEffects: true,
   colorSchemeLight: "default",
   colorSchemeDark: "default",
   launchAtLogin: false,
@@ -184,6 +186,7 @@ await runTest("buildSettingsPatch only keeps changed keys", () => {
     language: "en-US",
     colorSchemeLight: "linear",
     colorSchemeDark: "github",
+    dynamicEffects: false,
     webActivityEnabled: true,
     webActivityPort: 18080,
     webActivityToken: "secret",
@@ -197,6 +200,7 @@ await runTest("buildSettingsPatch only keeps changed keys", () => {
     language: "en-US",
     colorSchemeLight: "linear",
     colorSchemeDark: "github",
+    dynamicEffects: false,
     webActivityEnabled: true,
     webActivityPort: 18080,
     webActivityToken: "secret",
@@ -403,6 +407,7 @@ await runTest("normalizeSettingsRecord accepts current minimize behavior values"
   assert.equal(defaultSettings.backgroundOptimization, false);
   assert.equal(defaultSettings.themeMode, "light");
   assert.equal(defaultSettings.language, "zh-CN");
+  assert.equal(defaultSettings.dynamicEffects, true);
   assert.equal(defaultSettings.colorSchemeLight, "default");
   assert.equal(defaultSettings.colorSchemeDark, "default");
   assert.equal(defaultSettings.minSessionSecs, 300);
@@ -514,6 +519,13 @@ await runTest("normalizeSettingsRecord accepts hourly activity chart modes and f
   assert.equal(normalizeSettingsRecord({ hourly_activity_chart_mode: "category" }).hourlyActivityChartMode, "category");
   assert.equal(normalizeSettingsRecord({ hourly_activity_chart_mode: "CATEGORY" }).hourlyActivityChartMode, "category");
   assert.equal(normalizeSettingsRecord({ hourly_activity_chart_mode: "stacked" }).hourlyActivityChartMode, "total");
+});
+
+await runTest("normalizeSettingsRecord accepts dynamic effects and falls back to on", () => {
+  assert.equal(normalizeSettingsRecord({ dynamic_effects: "1" }).dynamicEffects, true);
+  assert.equal(normalizeSettingsRecord({ dynamic_effects: "0" }).dynamicEffects, false);
+  assert.equal(normalizeSettingsRecord({ dynamic_effects: "off" }).dynamicEffects, false);
+  assert.equal(normalizeSettingsRecord({ dynamic_effects: "broken" }).dynamicEffects, true);
 });
 
 await runTest("normalizeSettingsRecord accepts color schemes and falls back to default", () => {

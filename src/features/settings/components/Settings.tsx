@@ -186,6 +186,8 @@ export default function Settings({
             onColorSchemeLightChange={(nextColorScheme) => handleChange("colorSchemeLight", nextColorScheme)}
             colorSchemeDark={draftSettings.colorSchemeDark}
             onColorSchemeDarkChange={(nextColorScheme) => handleChange("colorSchemeDark", nextColorScheme)}
+            dynamicEffects={draftSettings.dynamicEffects}
+            onDynamicEffectsChange={(nextChecked) => handleChange("dynamicEffects", nextChecked)}
             onConfirmColorSchemeChange={handleSaveColorScheme}
             colorSchemeConfirming={saveStatus === "saving"}
           />

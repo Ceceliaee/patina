@@ -44,6 +44,7 @@ const BASE_SETTINGS: AppSettings = {
   themeMode: "light",
   language: "zh-CN",
   hourlyActivityChartMode: "total",
+  dynamicEffects: true,
   colorSchemeLight: "default",
   colorSchemeDark: "default",
   launchAtLogin: false,

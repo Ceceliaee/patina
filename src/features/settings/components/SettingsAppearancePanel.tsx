@@ -2,6 +2,7 @@ import { ChevronRight, Palette } from "lucide-react";
 import { useState } from "react";
 import QuietDialog from "../../../shared/components/QuietDialog";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
+import QuietSwitch from "../../../shared/components/QuietSwitch";
 import type { AppLanguage, ColorScheme, ThemeMode } from "../../../shared/settings/appSettings.ts";
 import {
   COLOR_SCHEME_OPTIONS,
@@ -18,6 +19,8 @@ type SettingsAppearancePanelProps = {
   onColorSchemeLightChange: (nextColorScheme: ColorScheme) => void;
   colorSchemeDark: ColorScheme;
   onColorSchemeDarkChange: (nextColorScheme: ColorScheme) => void;
+  dynamicEffects: boolean;
+  onDynamicEffectsChange: (nextChecked: boolean) => void;
   onConfirmColorSchemeChange: (library: ThemeLibrary) => Promise<boolean>;
   colorSchemeConfirming: boolean;
 };
@@ -31,6 +34,8 @@ export default function SettingsAppearancePanel({
   onColorSchemeLightChange,
   colorSchemeDark,
   onColorSchemeDarkChange,
+  dynamicEffects,
+  onDynamicEffectsChange,
   onConfirmColorSchemeChange,
   colorSchemeConfirming,
 }: SettingsAppearancePanelProps) {
@@ -140,6 +145,25 @@ export default function SettingsAppearancePanel({
               <ChevronRight size={14} aria-hidden="true" />
             </button>
           ))}
+        </div>
+      </div>
+
+      <div className="mt-5 grid grid-cols-1 items-start gap-3 md:grid-cols-[minmax(0,1fr)_236px] md:gap-4">
+        <div>
+          <label className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--qp-text-tertiary)]">
+            {UI_TEXT.settings.dynamicEffectsLabel}
+          </label>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--qp-text-secondary)]">
+            {UI_TEXT.settings.dynamicEffectsHint}
+          </p>
+        </div>
+
+        <div className="md:self-end md:justify-self-end">
+          <QuietSwitch
+            checked={dynamicEffects}
+            ariaLabel={UI_TEXT.settings.dynamicEffectsLabel}
+            onChange={onDynamicEffectsChange}
+          />
         </div>
       </div>
 

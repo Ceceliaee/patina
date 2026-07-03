@@ -992,6 +992,13 @@ body[data-window-label="widget"] {
   animation: qp-view-fade-in var(--qp-view-transition-duration, var(--qp-motion-view-duration)) var(--qp-motion-ease) both;
 }
 
+.qp-dynamic-effects-off .qp-view-container,
+.qp-dynamic-effects-off .qp-nav-active-bg,
+.qp-dynamic-effects-off .qp-nav-active-indicator {
+  animation: none;
+  transition: none;
+}
+
 @keyframes qp-view-fade-in {
   from {
     opacity: 0;

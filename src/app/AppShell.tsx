@@ -186,6 +186,7 @@ function AppShellContent() {
   const [syncedUiTextLanguage, setSyncedUiTextLanguage] = useState<AppLanguage>(appSettings.language);
   const uiTextLanguage = settingsLanguagePreview ?? appSettings.language;
   const uiText = getUiText(uiTextLanguage);
+  const dynamicEffects = appSettings.dynamicEffects;
   if (!warmupRuntimeReadyPromiseRef.current) {
     warmupRuntimeReadyPromiseRef.current = new Promise((resolve) => {
       warmupRuntimeReadyResolveRef.current = resolve;
@@ -513,7 +514,13 @@ function AppShellContent() {
   }, []);
 
   return (
-    <div className={isWindowMaximized ? "qp-app-frame qp-app-frame-maximized" : "qp-app-frame"}>
+    <div
+      className={[
+        "qp-app-frame",
+        isWindowMaximized ? "qp-app-frame-maximized" : "",
+        dynamicEffects ? "" : "qp-dynamic-effects-off",
+      ].filter(Boolean).join(" ")}
+    >
       <AppTitleBar isMaximized={isWindowMaximized} />
 
       <div className="qp-shell flex-1 min-h-0 p-4 md:p-5 lg:p-6 flex gap-4 md:gap-5 lg:gap-6 overflow-hidden">

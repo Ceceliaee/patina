@@ -39,6 +39,7 @@ type RawAppSettingsKey =
   | "theme_mode"
   | "language"
   | "hourly_activity_chart_mode"
+  | "dynamic_effects"
   | "color_scheme_light"
   | "color_scheme_dark"
   | "launch_at_login"
@@ -64,6 +65,7 @@ const APP_SETTINGS_RAW_KEYS: Record<keyof AppSettings, RawAppSettingsKey> = {
   themeMode: "theme_mode",
   language: "language",
   hourlyActivityChartMode: "hourly_activity_chart_mode",
+  dynamicEffects: "dynamic_effects",
   colorSchemeLight: "color_scheme_light",
   colorSchemeDark: "color_scheme_dark",
   launchAtLogin: "launch_at_login",
@@ -270,6 +272,7 @@ export function normalizeSettingsRecord(record: Record<string, string | undefine
     themeMode: normalizeThemeMode(record.theme_mode),
     language: normalizeLanguage(record.language),
     hourlyActivityChartMode: normalizeHourlyActivityChartMode(record.hourly_activity_chart_mode),
+    dynamicEffects: parseBooleanSetting(record.dynamic_effects, DEFAULT_SETTINGS.dynamicEffects),
     colorSchemeLight: normalizeColorScheme(
       record.color_scheme_light ?? DEFAULT_SETTINGS.colorSchemeLight,
       LIGHT_COLOR_SCHEMES,

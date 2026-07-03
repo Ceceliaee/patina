@@ -46,6 +46,7 @@ export interface AppSettings {
   themeMode: ThemeMode;
   language: AppLanguage;
   hourlyActivityChartMode: HourlyActivityChartMode;
+  dynamicEffects: boolean;
   colorSchemeLight: ColorScheme;
   colorSchemeDark: ColorScheme;
   launchAtLogin: boolean;
