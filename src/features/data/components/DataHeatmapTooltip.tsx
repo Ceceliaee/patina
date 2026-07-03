@@ -132,7 +132,7 @@ export default function DataHeatmapTooltip({
     hideTooltip();
   }, [containerRef, hideTooltip]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) {
       return undefined;
