@@ -185,12 +185,11 @@ await runTest("startup warmup runs default tasks in a stable order", async () =>
     "mapping-bootstrap",
     "data-bootstrap-snapshot-cache",
     "dashboard-snapshot",
-    "history-snapshot",
     "tools-snapshot",
     "settings-bootstrap",
   ]);
   assert.deepEqual(warnings, []);
-  assert.equal(controller.snapshot().tasks["history-today-snapshot"].status, "fulfilled");
+  assert.equal(controller.snapshot().tasks["history-today-snapshot"].status, "skipped");
 });
 
 await runTest("startup warmup preloads Tools chunk and runtime snapshot by default", async () => {
@@ -271,7 +270,31 @@ await runTest("startup warmup waits for runtime readiness before runtime tasks",
   await controller.ready;
 
   assert.ok(events.includes("dashboard-snapshot"));
-  assert.ok(events.includes("history-snapshot"));
+  assert.equal(events.includes("history-snapshot"), false);
+});
+
+await runTest("hidden autostart warmup skips chunks and heavy read models", async () => {
+  const events: string[] = [];
+  const runtimeReady = createDeferred();
+  const controller = startStartupWarmup({
+    initialDelayMs: 0,
+    mode: "hidden-autostart",
+    runtimeReady: runtimeReady.promise,
+    taskGapMs: 0,
+  }, {
+    ...createWarmupDeps(events),
+    warn: () => {
+      throw new Error("unexpected warning");
+    },
+  });
+
+  await controller.ready;
+
+  assert.deepEqual(events, []);
+  assert.equal(controller.snapshot().tasks["view-chunks"].status, "skipped");
+  assert.equal(controller.snapshot().tasks["dashboard-snapshot"].status, "skipped");
+  assert.equal(controller.snapshot().tasks["history-today-snapshot"].status, "skipped");
+  assert.equal(controller.snapshot().tasks["tools-runtime-snapshot"].status, "skipped");
 });
 
 await runTest("startup warmup exposes scheduling and cancels queued work", async () => {
@@ -376,20 +399,20 @@ await runTest("startup warmup refresh can skip invisible page refreshes", async 
 });
 
 await runTest("dashboard snapshot cache keeps a small LRU set", () => {
-  for (let day = 1; day <= 4; day += 1) {
+  for (let day = 1; day <= 2; day += 1) {
     setDashboardSnapshotCache(
       makeDashboardSnapshot(day),
       new Date(2026, 0, day),
     );
   }
 
-  assert.equal(getDashboardSnapshotCacheSizeForTests(), 3);
+  assert.equal(getDashboardSnapshotCacheSizeForTests(), 1);
   assert.equal(getDashboardSnapshotCache(new Date(2026, 0, 1)), null);
-  assert.equal(getDashboardSnapshotCache(new Date(2026, 0, 4))?.fetchedAtMs, 4);
+  assert.equal(getDashboardSnapshotCache(new Date(2026, 0, 2))?.fetchedAtMs, 2);
 });
 
 await runTest("history snapshot cache keeps a bounded LRU set", () => {
-  for (let day = 1; day <= 15; day += 1) {
+  for (let day = 1; day <= 8; day += 1) {
     setHistorySnapshotCache(
       makeHistorySnapshot(day),
       new Date(2026, 0, day),
@@ -397,9 +420,9 @@ await runTest("history snapshot cache keeps a bounded LRU set", () => {
     );
   }
 
-  assert.equal(getHistorySnapshotCacheSizeForTests(), 14);
+  assert.equal(getHistorySnapshotCacheSizeForTests(), 7);
   assert.equal(getHistorySnapshotCache(new Date(2026, 0, 1), 7), null);
-  assert.equal(getHistorySnapshotCache(new Date(2026, 0, 15), 7)?.fetchedAtMs, 15);
+  assert.equal(getHistorySnapshotCache(new Date(2026, 0, 8), 7)?.fetchedAtMs, 8);
 });
 
 console.log(`Passed ${passed} startup warmup tests`);

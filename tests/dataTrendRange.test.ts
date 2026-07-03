@@ -126,7 +126,7 @@ await runTest("trend snapshot cache keeps a small LRU set", async () => {
     getSessionSummariesInRange: async () => [],
   };
 
-  for (let day = 1; day <= 5; day += 1) {
+  for (let day = 1; day <= 3; day += 1) {
     await loadDataTrendSnapshot({
       kind: "custom",
       startDateKey: `2026-05-0${day}`,
@@ -134,7 +134,7 @@ await runTest("trend snapshot cache keeps a small LRU set", async () => {
     }, nowMs, deps);
   }
 
-  assert.equal(getDataTrendSnapshotCacheSizeForTests(), 4);
+  assert.equal(getDataTrendSnapshotCacheSizeForTests(), 2);
 });
 
 console.log(`Passed ${passed} data trend range tests`);

@@ -4,7 +4,7 @@ import {
   type HistorySnapshotDeps,
 } from "./historyReadModel.ts";
 
-const HISTORY_SNAPSHOT_CACHE_LIMIT = 14;
+const HISTORY_SNAPSHOT_CACHE_LIMIT = 7;
 const HISTORY_SNAPSHOT_CACHE = new Map<string, HistorySnapshot>();
 const HISTORY_SNAPSHOT_PROMISES = new Map<string, Promise<HistorySnapshot>>();
 
@@ -50,6 +50,14 @@ export function clearHistorySnapshotCache(): void {
 
 export function getHistorySnapshotCacheSizeForTests(): number {
   return HISTORY_SNAPSHOT_CACHE.size;
+}
+
+export function getHistorySnapshotCacheStats() {
+  return {
+    entries: HISTORY_SNAPSHOT_CACHE.size,
+    limit: HISTORY_SNAPSHOT_CACHE_LIMIT,
+    pendingEntries: HISTORY_SNAPSHOT_PROMISES.size,
+  };
 }
 
 export async function loadHistorySnapshotWithCache(

@@ -7,11 +7,11 @@ import {
   isCurrentWindowVisibleAndFocused,
   resolveCurrentAppWindowLabel,
 } from "./platform/desktop/widgetRuntimeGateway";
-import { installDevelopmentResourceDiagnostics } from "./platform/desktop/resourceDiagnosticsRuntimeGateway";
+import { installAppDevelopmentResourceDiagnostics } from "./app/services/resourceDiagnosticsService.ts";
 
 const CURRENT_WINDOW_LABEL = resolveCurrentAppWindowLabel();
 
-installDevelopmentResourceDiagnostics();
+installAppDevelopmentResourceDiagnostics();
 
 if (typeof document !== "undefined") {
   document.documentElement.dataset.windowLabel = CURRENT_WINDOW_LABEL;

@@ -64,8 +64,14 @@ export interface StartupWarmupController {
   snapshot: () => StartupWarmupSnapshot;
 }
 
+export type StartupWarmupMode =
+  | "hidden-autostart"
+  | "visible-start"
+  | "foreground-open";
+
 export interface StartupWarmupOptions {
   initialDelayMs?: number;
+  mode?: StartupWarmupMode;
   runtimeReady?: Promise<unknown>;
   taskGapMs?: number;
   views?: PreloadableView[];
@@ -90,6 +96,17 @@ interface StartupWarmupDeps {
   scheduler: StartupWarmupScheduler;
   nowMs: () => number;
   warn: (message: string, error: unknown) => void;
+}
+
+interface StartupWarmupTaskPolicy {
+  aboutBootstrap: boolean;
+  dashboardSnapshot: boolean;
+  dataBootstrapSnapshotCache: boolean;
+  historyTodaySnapshot: boolean;
+  mappingBootstrap: boolean;
+  settingsBootstrap: boolean;
+  toolsRuntimeSnapshot: boolean;
+  viewChunks: boolean;
 }
 
 export interface StartupWarmupRefreshOptions {
@@ -143,6 +160,32 @@ const defaultStartupWarmupDeps: StartupWarmupDeps = {
 
 let activeStartupWarmup: StartupWarmupController | null = null;
 let cancelScheduledRefresh: (() => void) | null = null;
+
+function resolveStartupWarmupTaskPolicy(mode: StartupWarmupMode): StartupWarmupTaskPolicy {
+  if (mode === "hidden-autostart") {
+    return {
+      aboutBootstrap: false,
+      dashboardSnapshot: false,
+      dataBootstrapSnapshotCache: false,
+      historyTodaySnapshot: false,
+      mappingBootstrap: false,
+      settingsBootstrap: false,
+      toolsRuntimeSnapshot: false,
+      viewChunks: false,
+    };
+  }
+
+  return {
+    aboutBootstrap: true,
+    dashboardSnapshot: true,
+    dataBootstrapSnapshotCache: true,
+    historyTodaySnapshot: false,
+    mappingBootstrap: true,
+    settingsBootstrap: true,
+    toolsRuntimeSnapshot: true,
+    viewChunks: true,
+  };
+}
 
 function createInitialTaskSnapshot(): Record<StartupWarmupTaskId, StartupWarmupTaskSnapshot> {
   return Object.fromEntries(
@@ -257,6 +300,8 @@ export function startStartupWarmup(
     ...deps,
   };
   const initialDelayMs = options.initialDelayMs ?? DEFAULT_INITIAL_DELAY_MS;
+  const mode = options.mode ?? "visible-start";
+  const taskPolicy = resolveStartupWarmupTaskPolicy(mode);
   const taskGapMs = options.taskGapMs ?? DEFAULT_TASK_GAP_MS;
   const views = options.views ?? DEFAULT_STARTUP_WARMUP_VIEWS;
   let cancelled = false;
@@ -285,6 +330,10 @@ export function startStartupWarmup(
     };
 
     await runTask("view-chunks", async () => {
+      if (!taskPolicy.viewChunks) {
+        return "skipped";
+      }
+
       for (const view of views) {
         if (cancelled) return;
         await resolvedDeps.preloadLazyViewChunk(view);
@@ -292,21 +341,43 @@ export function startStartupWarmup(
     });
 
     await runTask("settings-bootstrap", async () => {
+      if (!taskPolicy.settingsBootstrap) {
+        return "skipped";
+      }
+
       await resolvedDeps.prewarmSettingsBootstrapCache();
     });
 
     await runTask("mapping-bootstrap", async () => {
+      if (!taskPolicy.mappingBootstrap) {
+        return "skipped";
+      }
+
       await resolvedDeps.prewarmClassificationBootstrapCache();
     });
 
     await runTask("data-bootstrap-snapshot-cache", async () => {
+      if (!taskPolicy.dataBootstrapSnapshotCache) {
+        return "skipped";
+      }
+
       const snapshot = await resolvedDeps.loadPersistedDataBootstrapSnapshot();
       return snapshot ? "fulfilled" : "skipped";
     });
 
-    await waitForRuntimeReady(options.runtimeReady, () => cancelled);
+    if (
+      taskPolicy.dashboardSnapshot
+      || taskPolicy.historyTodaySnapshot
+      || taskPolicy.toolsRuntimeSnapshot
+    ) {
+      await waitForRuntimeReady(options.runtimeReady, () => cancelled);
+    }
 
     await runTask("dashboard-snapshot", async () => {
+      if (!taskPolicy.dashboardSnapshot) {
+        return "skipped";
+      }
+
       const date = new Date();
       if (resolvedDeps.getDashboardSnapshotCache(date)) {
         return "skipped";
@@ -316,6 +387,10 @@ export function startStartupWarmup(
     });
 
     await runTask("history-today-snapshot", async () => {
+      if (!taskPolicy.historyTodaySnapshot) {
+        return "skipped";
+      }
+
       const date = new Date();
       if (resolvedDeps.getHistorySnapshotCache(date, 7)) {
         return "skipped";
@@ -325,10 +400,18 @@ export function startStartupWarmup(
     });
 
     await runTask("tools-runtime-snapshot", async () => {
+      if (!taskPolicy.toolsRuntimeSnapshot) {
+        return "skipped";
+      }
+
       await resolvedDeps.prewarmToolsRuntimeSnapshot();
     });
 
     await runTask("about-bootstrap", async () => {
+      if (!taskPolicy.aboutBootstrap) {
+        return "skipped";
+      }
+
       await resolvedDeps.prewarmSettingsBootstrapCache();
     });
   })()

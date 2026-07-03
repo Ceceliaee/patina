@@ -5,6 +5,7 @@ use crate::domain::tools::{
     ToolsRuntimeSnapshot,
 };
 use chrono::Local;
+use serde::Serialize;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::Notify;
@@ -19,10 +20,17 @@ const TOOLS_RUNTIME_IDLE_WAKE_MS: i64 = 60_000;
 const TOOLS_RUNTIME_ACTIVE_MAX_WAKE_MS: i64 = 60_000;
 const TOOLS_RUNTIME_SOFTWARE_REMINDER_WAKE_MS: i64 = 10_000;
 const TOOLS_RUNTIME_ERROR_WAKE_MS: u64 = 5_000;
+const TOOLS_ALERT_LIMIT: usize = 32;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct ToolsTickOutcome {
     state_changed: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ToolAlertQueueStats {
+    pub entries: usize,
+    pub limit: usize,
 }
 
 impl ToolsTickOutcome {
@@ -84,6 +92,18 @@ impl ToolsRuntimeState {
         }
     }
 
+    fn alert_stats(&self) -> ToolAlertQueueStats {
+        let entries = match self.alerts.lock() {
+            Ok(guard) => guard.len(),
+            Err(poisoned) => poisoned.into_inner().len(),
+        };
+
+        ToolAlertQueueStats {
+            entries,
+            limit: TOOLS_ALERT_LIMIT,
+        }
+    }
+
     fn dismiss_alert(&self, alert_id: &str) {
         match self.alerts.lock() {
             Ok(mut guard) => guard.retain(|alert| alert.id != alert_id),
@@ -116,6 +136,10 @@ fn push_unique_alert(alerts: &mut Vec<ToolAlert>, alert: ToolAlert) {
     }
 
     alerts.push(alert);
+    if alerts.len() > TOOLS_ALERT_LIMIT {
+        let overflow = alerts.len().saturating_sub(TOOLS_ALERT_LIMIT);
+        alerts.drain(0..overflow);
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -177,6 +201,15 @@ pub fn dismiss_alert<R: Runtime>(app: &AppHandle<R>, alert_id: &str) {
     if let Some(state) = app.try_state::<ToolsRuntimeState>() {
         state.dismiss_alert(alert_id);
     }
+}
+
+pub fn alert_queue_stats<R: Runtime>(app: &AppHandle<R>) -> ToolAlertQueueStats {
+    app.try_state::<ToolsRuntimeState>()
+        .map(|state| state.alert_stats())
+        .unwrap_or(ToolAlertQueueStats {
+            entries: 0,
+            limit: TOOLS_ALERT_LIMIT,
+        })
 }
 
 pub fn notify_tools_runtime<R: Runtime>(app: &AppHandle<R>) {
@@ -728,6 +761,35 @@ mod tests {
 
         state.dismiss_alert("reminder:1");
         assert!(state.alerts().is_empty());
+    }
+
+    #[test]
+    fn tool_alerts_keep_a_hard_queue_limit() {
+        let state = ToolsRuntimeState::default();
+
+        for index in 0..(TOOLS_ALERT_LIMIT + 1) {
+            state.push_alert(ToolAlert {
+                id: format!("reminder:{index}"),
+                kind: ToolAlertKind::Reminder,
+                title: "提醒".to_string(),
+                body: "时间到了".to_string(),
+                occurred_at: index as i64,
+            });
+        }
+
+        let alerts = state.alerts();
+        assert_eq!(alerts.len(), TOOLS_ALERT_LIMIT);
+        assert_eq!(
+            alerts.first().map(|alert| alert.id.as_str()),
+            Some("reminder:1")
+        );
+        assert_eq!(
+            state.alert_stats(),
+            ToolAlertQueueStats {
+                entries: TOOLS_ALERT_LIMIT,
+                limit: TOOLS_ALERT_LIMIT,
+            }
+        );
     }
 
     #[test]

@@ -20,7 +20,7 @@ export interface DataTrendSnapshotDependencies {
 
 const snapshotCache = new Map<string, DataTrendSnapshot>();
 const sessionPromises = new Map<string, Promise<AggregateSessionRecord[]>>();
-const DATA_TREND_SNAPSHOT_CACHE_LIMIT = 4;
+const DATA_TREND_SNAPSHOT_CACHE_LIMIT = 2;
 
 function collectDataIconExecutables(sessions: AggregateSessionRecord[]): string[] {
   const seen = new Set<string>();
@@ -98,4 +98,12 @@ export function prewarmDefaultDataTrendSnapshot(nowMs: number = Date.now()) {
 
 export function getDataTrendSnapshotCacheSizeForTests(): number {
   return snapshotCache.size;
+}
+
+export function getDataTrendSnapshotCacheStats() {
+  return {
+    entries: snapshotCache.size,
+    limit: DATA_TREND_SNAPSHOT_CACHE_LIMIT,
+    pendingEntries: sessionPromises.size,
+  };
 }

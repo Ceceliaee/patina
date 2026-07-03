@@ -1,3 +1,6 @@
+use serde::Serialize;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use tauri::{AppHandle, Emitter, Runtime};
@@ -12,6 +15,8 @@ const STARTUP_AUTO_CHECK_DELAYS_MS: [u64; 3] = [3_500, 15_000, 60_000];
 const UPDATE_SNAPSHOT_CHANGED_EVENT: &str = "update-snapshot-changed";
 const RELEASES_BASE_URL: &str = "https://github.com/Ceceliaee/patina/releases";
 const LATEST_RELEASE_URL: &str = "https://github.com/Ceceliaee/patina/releases/latest";
+const UPDATE_PACKAGE_DIR_NAME: &str = "update-packages";
+const UPDATE_PACKAGE_FILE_PREFIX: &str = "patina-update-";
 
 #[derive(Clone)]
 pub struct UpdaterRuntimeState {
@@ -21,7 +26,20 @@ pub struct UpdaterRuntimeState {
 struct UpdaterStateInner {
     snapshot: UpdateSnapshot,
     pending_update: Option<Update>,
-    downloaded_bytes: Option<Vec<u8>>,
+    downloaded_package: Option<DownloadedUpdatePackage>,
+}
+
+#[derive(Clone, Debug)]
+struct DownloadedUpdatePackage {
+    path: PathBuf,
+    size_bytes: u64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct UpdaterRetainedPackageStats {
+    pub retained: bool,
+    pub storage: Option<&'static str>,
+    pub size_bytes: Option<u64>,
 }
 
 impl UpdaterRuntimeState {
@@ -31,7 +49,7 @@ impl UpdaterRuntimeState {
                 snapshot: UpdateSnapshot::idle(current_version)
                     .with_fallback_urls(Some(latest_release_page_url()), None),
                 pending_update: None,
-                downloaded_bytes: None,
+                downloaded_package: None,
             })),
         }
     }
@@ -61,7 +79,7 @@ impl UpdaterRuntimeState {
                 )
                 .with_fallback_urls(release_page_url.clone(), asset_download_url.clone());
             inner.pending_update = Some(update);
-            inner.downloaded_bytes = None;
+            clear_downloaded_package(inner);
             inner.snapshot.clone()
         })
     }
@@ -74,7 +92,7 @@ impl UpdaterRuntimeState {
                 .up_to_date()
                 .with_fallback_urls(Some(latest_release_page_url()), None);
             inner.pending_update = None;
-            inner.downloaded_bytes = None;
+            clear_downloaded_package(inner);
             inner.snapshot.clone()
         })
     }
@@ -107,10 +125,11 @@ impl UpdaterRuntimeState {
         })
     }
 
-    fn set_downloaded(&self, bytes: Vec<u8>) -> UpdateSnapshot {
+    fn set_downloaded(&self, package: DownloadedUpdatePackage) -> UpdateSnapshot {
         self.with_guard(|inner| {
-            inner.snapshot = inner.snapshot.clone().downloaded(bytes.len() as u64);
-            inner.downloaded_bytes = Some(bytes);
+            clear_downloaded_package(inner);
+            inner.snapshot = inner.snapshot.clone().downloaded(package.size_bytes);
+            inner.downloaded_package = Some(package);
             inner.snapshot.clone()
         })
     }
@@ -132,14 +151,41 @@ impl UpdaterRuntimeState {
         });
     }
 
-    fn take_downloaded_bytes(&self) -> Option<Vec<u8>> {
-        self.with_guard(|inner| inner.downloaded_bytes.take())
+    fn take_downloaded_package(&self) -> Option<DownloadedUpdatePackage> {
+        self.with_guard(|inner| inner.downloaded_package.take())
     }
 
-    fn set_downloaded_bytes(&self, bytes: Vec<u8>) {
+    fn set_downloaded_package(&self, package: DownloadedUpdatePackage) {
         self.with_guard(|inner| {
-            inner.downloaded_bytes = Some(bytes);
+            inner.downloaded_package = Some(package);
         });
+    }
+
+    fn downloaded_package_path(&self) -> Option<PathBuf> {
+        self.with_guard(|inner| {
+            inner
+                .downloaded_package
+                .as_ref()
+                .map(|package| package.path.clone())
+        })
+    }
+
+    pub fn retained_package_stats(&self) -> UpdaterRetainedPackageStats {
+        self.with_guard(|inner| {
+            if let Some(package) = inner.downloaded_package.as_ref() {
+                return UpdaterRetainedPackageStats {
+                    retained: true,
+                    storage: Some("file"),
+                    size_bytes: Some(package.size_bytes),
+                };
+            }
+
+            UpdaterRetainedPackageStats {
+                retained: false,
+                storage: None,
+                size_bytes: None,
+            }
+        })
     }
 
     fn with_guard<T>(&self, f: impl FnOnce(&mut UpdaterStateInner) -> T) -> T {
@@ -149,6 +195,23 @@ impl UpdaterRuntimeState {
                 let mut guard = poisoned.into_inner();
                 f(&mut guard)
             }
+        }
+    }
+}
+
+fn clear_downloaded_package(inner: &mut UpdaterStateInner) {
+    if let Some(package) = inner.downloaded_package.take() {
+        remove_downloaded_package_file(&package);
+    }
+}
+
+fn remove_downloaded_package_file(package: &DownloadedUpdatePackage) {
+    if let Err(error) = fs::remove_file(&package.path) {
+        if error.kind() != std::io::ErrorKind::NotFound {
+            eprintln!(
+                "[updater] failed to remove cached update package {}: {error}",
+                package.path.display()
+            );
         }
     }
 }
@@ -176,6 +239,8 @@ pub async fn check_for_updates<R: Runtime>(
     state: &UpdaterRuntimeState,
     silent: bool,
 ) -> Result<UpdateSnapshot, String> {
+    cleanup_stale_update_packages(app, state.downloaded_package_path().as_deref());
+
     let silent_context = if silent {
         let pool = wait_for_sqlite_pool(app).await?;
         let today = update_state::current_local_day();
@@ -307,7 +372,16 @@ pub async fn download_pending<R: Runtime>(
 
     match download_result {
         Ok(bytes) => {
-            let snapshot = state.set_downloaded(bytes);
+            cleanup_stale_update_packages(app, state.downloaded_package_path().as_deref());
+            let package = match write_update_package_to_temp_file(app, &update.version, bytes) {
+                Ok(package) => package,
+                Err(error) => {
+                    let snapshot = state.set_error(UpdateErrorStage::Download, error);
+                    emit_update_snapshot_changed(app, &snapshot);
+                    return Ok(snapshot);
+                }
+            };
+            let snapshot = state.set_downloaded(package);
             emit_update_snapshot_changed(app, &snapshot);
             Ok(snapshot)
         }
@@ -334,13 +408,25 @@ pub async fn install_downloaded<R: Runtime>(
         emit_update_snapshot_changed(app, &snapshot);
         return Ok(snapshot);
     };
-    let Some(downloaded_bytes) = state.take_downloaded_bytes() else {
+    let Some(downloaded_package) = state.take_downloaded_package() else {
         let snapshot = state.set_error(
             UpdateErrorStage::Install,
             "update package has not been downloaded".to_string(),
         );
         emit_update_snapshot_changed(app, &snapshot);
         return Ok(snapshot);
+    };
+    let downloaded_bytes = match fs::read(&downloaded_package.path) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            state.set_pending_update(update);
+            let snapshot = state.set_error(
+                UpdateErrorStage::Install,
+                format!("failed to read downloaded update package: {error}"),
+            );
+            emit_update_snapshot_changed(app, &snapshot);
+            return Ok(snapshot);
+        }
     };
 
     let post_install_reopen_pool = match wait_for_sqlite_pool(app).await {
@@ -362,6 +448,7 @@ pub async fn install_downloaded<R: Runtime>(
 
     match install_result {
         Ok(()) => {
+            remove_downloaded_package_file(&downloaded_package);
             state.set_pending_update(update);
             let snapshot = state.snapshot();
             emit_update_snapshot_changed(app, &snapshot);
@@ -369,7 +456,7 @@ pub async fn install_downloaded<R: Runtime>(
         }
         Err(error) => {
             state.set_pending_update(update);
-            state.set_downloaded_bytes(downloaded_bytes);
+            state.set_downloaded_package(downloaded_package);
             if let Some(pool) = post_install_reopen_pool.as_ref() {
                 if let Err(clear_error) =
                     update_state::clear_post_install_reopen_main_window(pool).await
@@ -386,5 +473,171 @@ pub async fn install_downloaded<R: Runtime>(
             emit_update_snapshot_changed(app, &snapshot);
             Ok(snapshot)
         }
+    }
+}
+
+fn update_package_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
+    Ok(crate::platform::app_paths::product_roaming_data_dir(app)?.join(UPDATE_PACKAGE_DIR_NAME))
+}
+
+fn write_update_package_to_temp_file<R: Runtime>(
+    app: &AppHandle<R>,
+    version: &str,
+    bytes: Vec<u8>,
+) -> Result<DownloadedUpdatePackage, String> {
+    let dir = update_package_dir(app)?;
+    write_update_package_to_dir(&dir, version, bytes)
+}
+
+fn write_update_package_to_dir(
+    dir: &Path,
+    version: &str,
+    bytes: Vec<u8>,
+) -> Result<DownloadedUpdatePackage, String> {
+    fs::create_dir_all(dir).map_err(|error| {
+        format!(
+            "failed to create update package cache directory {}: {error}",
+            dir.display()
+        )
+    })?;
+    let size_bytes = bytes.len() as u64;
+    let file_name = format!(
+        "{UPDATE_PACKAGE_FILE_PREFIX}{}-{}-{}.bin",
+        std::process::id(),
+        now_ms(),
+        sanitize_update_package_version(version),
+    );
+    let path = dir.join(file_name);
+
+    fs::write(&path, &bytes).map_err(|error| {
+        format!(
+            "failed to write downloaded update package {}: {error}",
+            path.display()
+        )
+    })?;
+
+    Ok(DownloadedUpdatePackage { path, size_bytes })
+}
+
+fn cleanup_stale_update_packages<R: Runtime>(
+    app: &AppHandle<R>,
+    active_package_path: Option<&Path>,
+) {
+    let Ok(dir) = update_package_dir(app) else {
+        return;
+    };
+    cleanup_stale_update_packages_in_dir(&dir, active_package_path);
+}
+
+fn cleanup_stale_update_packages_in_dir(dir: &Path, active_package_path: Option<&Path>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let is_active = active_package_path
+            .map(|active_path| active_path == path.as_path())
+            .unwrap_or(false);
+        if is_active {
+            continue;
+        }
+        let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        if !file_name.starts_with(UPDATE_PACKAGE_FILE_PREFIX) {
+            continue;
+        }
+        if let Err(error) = fs::remove_file(&path) {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                eprintln!(
+                    "[updater] failed to remove stale update package {}: {error}",
+                    path.display()
+                );
+            }
+        }
+    }
+}
+
+fn sanitize_update_package_version(version: &str) -> String {
+    let sanitized = version
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_') {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    let trimmed = sanitized.trim_matches('_');
+    if trimmed.is_empty() {
+        "unknown".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as i64)
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        cleanup_stale_update_packages_in_dir, sanitize_update_package_version,
+        write_update_package_to_dir, UPDATE_PACKAGE_FILE_PREFIX,
+    };
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn temp_dir(label: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "patina-updater-test-{}-{label}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&path);
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    #[test]
+    fn update_package_versions_are_safe_file_name_parts() {
+        assert_eq!(sanitize_update_package_version("1.8.2"), "1.8.2");
+        assert_eq!(sanitize_update_package_version(" 1/8/2 "), "1_8_2");
+        assert_eq!(sanitize_update_package_version(""), "unknown");
+    }
+
+    #[test]
+    fn update_package_download_is_written_to_file() {
+        let dir = temp_dir("write");
+        let package = write_update_package_to_dir(&dir, "1.8.2", vec![1, 2, 3, 4]).unwrap();
+
+        assert_eq!(package.size_bytes, 4);
+        assert!(package.path.exists());
+        assert_eq!(fs::read(&package.path).unwrap(), vec![1, 2, 3, 4]);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stale_update_package_cleanup_keeps_active_package_only() {
+        let dir = temp_dir("cleanup");
+        let active = write_update_package_to_dir(&dir, "1.8.2", vec![1]).unwrap();
+        let stale = dir.join(format!("{UPDATE_PACKAGE_FILE_PREFIX}stale.bin"));
+        let unrelated = dir.join("notes.txt");
+        fs::write(&stale, [2]).unwrap();
+        fs::write(&unrelated, [3]).unwrap();
+
+        cleanup_stale_update_packages_in_dir(&dir, Some(&active.path));
+
+        assert!(active.path.exists());
+        assert!(!stale.exists());
+        assert!(unrelated.exists());
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

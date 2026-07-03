@@ -57,7 +57,11 @@ import {
   preloadLazyViewChunk,
   type PreloadableView,
 } from "./services/viewChunkPreloadService";
-import { watchCurrentWindowForegroundState, watchCurrentWindowMaximized } from "../platform/desktop/windowControlGateway";
+import {
+  readCurrentWindowForegroundState,
+  watchCurrentWindowForegroundState,
+  watchCurrentWindowMaximized,
+} from "../platform/desktop/windowControlGateway";
 import ToolsSidebarStatusEntry from "../features/tools/components/ToolsSidebarStatusEntry.tsx";
 import ToolAlertDialog from "../features/tools/components/ToolAlertDialog.tsx";
 import type { ToolsOpenTarget } from "../features/tools/types.ts";
@@ -232,10 +236,32 @@ function AppShellContent() {
   }, []);
 
   useEffect(() => {
-    const controller = startStartupWarmup({
-      runtimeReady: warmupRuntimeReadyPromiseRef.current ?? Promise.resolve(),
-    });
-    return controller.cancel;
+    let active = true;
+    let cancelWarmup: (() => void) | null = null;
+    const startWarmup = (foregroundLike: boolean) => {
+      if (!active) return;
+
+      const controller = startStartupWarmup({
+        mode: foregroundLike ? "visible-start" : "hidden-autostart",
+        runtimeReady: warmupRuntimeReadyPromiseRef.current ?? Promise.resolve(),
+      });
+      cancelWarmup = controller.cancel;
+      if (!active) {
+        controller.cancel();
+      }
+    };
+
+    void readCurrentWindowForegroundState()
+      .then((state) => startWarmup(state.foregroundLike))
+      .catch((error) => {
+        console.warn("read foreground state for startup warmup failed", error);
+        startWarmup(true);
+      });
+
+    return () => {
+      active = false;
+      cancelWarmup?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -374,7 +400,7 @@ function AppShellContent() {
   }, [isForegroundReady, resetToDashboardAfterLongBackground]);
 
   useEffect(() => {
-    if (isForegroundReady) return undefined;
+    if (isForegroundReady || !appSettings.backgroundOptimization) return undefined;
 
     const timer = window.setTimeout(() => {
       if (document.visibilityState !== "hidden" && isWindowForegroundLike) return;
@@ -391,7 +417,7 @@ function AppShellContent() {
     return () => {
       window.clearTimeout(timer);
     };
-  }, [isForegroundReady, isWindowForegroundLike]);
+  }, [appSettings.backgroundOptimization, isForegroundReady, isWindowForegroundLike]);
 
   const handleMinSessionSecsChange = useCallback((nextValue: number) => {
     setAppSettings((current) => ({

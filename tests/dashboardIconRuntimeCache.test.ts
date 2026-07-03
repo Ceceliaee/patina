@@ -5,6 +5,9 @@ import {
   loadDashboardIconsForExecutables,
   resetDashboardIconRuntimeCacheForTests,
 } from "../src/features/dashboard/services/dashboardIconRuntimeCache.ts";
+import {
+  getAppIconRuntimeCacheStats,
+} from "../src/platform/persistence/appIconRuntimeCache.ts";
 
 let passed = 0;
 
@@ -72,6 +75,30 @@ await runTest("dashboard icon missing detector respects caller-owned icon maps",
     getRetryableMissingDashboardIconExecutables(["Missing.exe"], {}, 1_000),
     ["Missing.exe"],
   );
+});
+
+await runTest("dashboard icon runtime cache keeps bounded icon and retry entries", async () => {
+  await loadDashboardIconsForExecutables(
+    Array.from({ length: 300 }, (_, index) => `Found${index}.exe`),
+    {
+      nowMs: () => 1_000,
+      loadIcons: async (exeNames) => Object.fromEntries(
+        exeNames.map((exeName) => [exeName.toLowerCase(), `icon:${exeName}`]),
+      ),
+    },
+  );
+
+  assert.equal(getAppIconRuntimeCacheStats().entries, 256);
+
+  await loadDashboardIconsForExecutables(
+    Array.from({ length: 300 }, (_, index) => `Missing${index}.exe`),
+    {
+      nowMs: () => 2_000,
+      loadIcons: async () => ({}),
+    },
+  );
+
+  assert.equal(getAppIconRuntimeCacheStats().missingRetryEntries, 256);
 });
 
 console.log(`Passed ${passed} dashboard icon runtime cache tests`);

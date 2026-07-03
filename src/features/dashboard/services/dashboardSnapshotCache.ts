@@ -1,6 +1,6 @@
 import type { DashboardSnapshot } from "./dashboardReadModel.ts";
 
-const DASHBOARD_SNAPSHOT_CACHE_LIMIT = 3;
+const DASHBOARD_SNAPSHOT_CACHE_LIMIT = 1;
 const DASHBOARD_SNAPSHOT_CACHE = new Map<string, DashboardSnapshot>();
 
 function formatDashboardSnapshotCacheKey(date: Date): string {
@@ -37,4 +37,11 @@ export function clearDashboardSnapshotCache(): void {
 
 export function getDashboardSnapshotCacheSizeForTests(): number {
   return DASHBOARD_SNAPSHOT_CACHE.size;
+}
+
+export function getDashboardSnapshotCacheStats() {
+  return {
+    entries: DASHBOARD_SNAPSHOT_CACHE.size,
+    limit: DASHBOARD_SNAPSHOT_CACHE_LIMIT,
+  };
 }

@@ -874,6 +874,15 @@ export function getDataHeatmapSessionCacheSizeForTests(): number {
   return heatmapSessionCache.size;
 }
 
+export function getDataHeatmapSessionCacheStats() {
+  return {
+    entries: heatmapSessionCache.size,
+    limit: HEATMAP_SESSION_CACHE_LIMIT,
+    pendingEntries: heatmapSnapshotPromises.size,
+    earliestSessionStartTimeCached: earliestSessionStartTimeCache !== undefined,
+  };
+}
+
 export async function prewarmRecentDataHeatmapCache(
   nowMs: number = Date.now(),
   deps?: DataHeatmapDependencies,

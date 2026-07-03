@@ -4,14 +4,17 @@ use std::future::Future;
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener as StdTcpListener};
 use std::pin::Pin;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Runtime};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::watch;
+use tokio::time::{timeout, Duration};
 
 const WEB_ACTIVITY_BRIDGE_HTTP_BODY_MAX_BYTES: usize = 64 * 1024;
 const WEB_ACTIVITY_BRIDGE_HTTP_HEADER_MAX_BYTES: usize = 16 * 1024;
+const WEB_ACTIVITY_BRIDGE_MAX_ACTIVE_CLIENTS: usize = 8;
+const WEB_ACTIVITY_BRIDGE_CLIENT_TIMEOUT_MS: u64 = 10_000;
 pub const WEB_ACTIVITY_BRIDGE_SETTINGS_CHANGED_EVENT: &str = "app-settings-changed";
 pub const WEB_ACTIVITY_BRIDGE_ACTIVE_WINDOW_EVENT: &str = "active-window-changed";
 pub const WEB_ACTIVITY_BRIDGE_TRACKING_DATA_EVENT: &str = "tracking-data-changed";
@@ -59,6 +62,7 @@ impl<R: Runtime> Copy for WebActivityBridgeRuntimeDeps<R> {}
 pub struct WebActivityBridgeRuntimeState {
     inner: Mutex<WebActivityBridgeRuntimeInner>,
     shutdown_tx: watch::Sender<u64>,
+    client_tracker: Arc<WebActivityClientTracker>,
 }
 
 #[derive(Debug, Default)]
@@ -67,12 +71,38 @@ struct WebActivityBridgeRuntimeInner {
     server_task: Option<tauri::async_runtime::JoinHandle<()>>,
 }
 
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct WebActivityBridgeConnectionStats {
+    pub active_clients: usize,
+    pub active_client_limit: usize,
+    pub rejected_clients: u64,
+    pub timed_out_clients: u64,
+    pub request_timeout_ms: u64,
+}
+
+#[derive(Debug, Default)]
+struct WebActivityClientStats {
+    active_clients: usize,
+    rejected_clients: u64,
+    timed_out_clients: u64,
+}
+
+#[derive(Debug, Default)]
+struct WebActivityClientTracker {
+    stats: Mutex<WebActivityClientStats>,
+}
+
+struct WebActivityClientGuard {
+    tracker: Arc<WebActivityClientTracker>,
+}
+
 impl Default for WebActivityBridgeRuntimeState {
     fn default() -> Self {
         let (shutdown_tx, _) = watch::channel(0);
         Self {
             inner: Mutex::new(WebActivityBridgeRuntimeInner::default()),
             shutdown_tx,
+            client_tracker: Arc::new(WebActivityClientTracker::default()),
         }
     }
 }
@@ -97,8 +127,13 @@ impl WebActivityBridgeRuntimeState {
         }
 
         if settings.enabled && (should_restart || inner.server_task.is_none()) {
-            inner.server_task =
-                spawn_server(app, self.shutdown_tx.subscribe(), settings.clone(), deps);
+            inner.server_task = spawn_server(
+                app,
+                self.shutdown_tx.subscribe(),
+                settings.clone(),
+                deps,
+                Arc::clone(&self.client_tracker),
+            );
         }
 
         inner.settings = settings;
@@ -107,6 +142,58 @@ impl WebActivityBridgeRuntimeState {
 
     pub fn current_settings(&self) -> WebActivityBridgeSettings {
         lock_inner(&self.inner).settings.clone()
+    }
+
+    pub fn connection_stats(&self) -> WebActivityBridgeConnectionStats {
+        self.client_tracker.stats()
+    }
+}
+
+pub fn inactive_connection_stats() -> WebActivityBridgeConnectionStats {
+    WebActivityBridgeConnectionStats {
+        active_clients: 0,
+        active_client_limit: WEB_ACTIVITY_BRIDGE_MAX_ACTIVE_CLIENTS,
+        rejected_clients: 0,
+        timed_out_clients: 0,
+        request_timeout_ms: WEB_ACTIVITY_BRIDGE_CLIENT_TIMEOUT_MS,
+    }
+}
+
+impl WebActivityClientTracker {
+    fn try_start(self: &Arc<Self>) -> Option<WebActivityClientGuard> {
+        let mut stats = lock_inner(&self.stats);
+        if stats.active_clients >= WEB_ACTIVITY_BRIDGE_MAX_ACTIVE_CLIENTS {
+            stats.rejected_clients = stats.rejected_clients.saturating_add(1);
+            return None;
+        }
+
+        stats.active_clients += 1;
+        Some(WebActivityClientGuard {
+            tracker: Arc::clone(self),
+        })
+    }
+
+    fn mark_timeout(&self) {
+        let mut stats = lock_inner(&self.stats);
+        stats.timed_out_clients = stats.timed_out_clients.saturating_add(1);
+    }
+
+    fn stats(&self) -> WebActivityBridgeConnectionStats {
+        let stats = lock_inner(&self.stats);
+        WebActivityBridgeConnectionStats {
+            active_clients: stats.active_clients,
+            active_client_limit: WEB_ACTIVITY_BRIDGE_MAX_ACTIVE_CLIENTS,
+            rejected_clients: stats.rejected_clients,
+            timed_out_clients: stats.timed_out_clients,
+            request_timeout_ms: WEB_ACTIVITY_BRIDGE_CLIENT_TIMEOUT_MS,
+        }
+    }
+}
+
+impl Drop for WebActivityClientGuard {
+    fn drop(&mut self) {
+        let mut stats = lock_inner(&self.tracker.stats);
+        stats.active_clients = stats.active_clients.saturating_sub(1);
     }
 }
 
@@ -132,6 +219,7 @@ fn spawn_server<R: Runtime + 'static>(
     mut shutdown_rx: watch::Receiver<u64>,
     settings: WebActivityBridgeSettings,
     deps: WebActivityBridgeRuntimeDeps<R>,
+    client_tracker: Arc<WebActivityClientTracker>,
 ) -> Option<tauri::async_runtime::JoinHandle<()>> {
     let (address, std_listener) = match open_web_activity_bridge_listener(settings.port) {
         Ok(listener) => listener,
@@ -173,12 +261,40 @@ fn spawn_server<R: Runtime + 'static>(
             };
             let client_app = app.clone();
             let client_shutdown_rx = shutdown_rx.clone();
+            let client_tracker = Arc::clone(&client_tracker);
 
             tauri::async_runtime::spawn(async move {
-                if let Err(error) =
-                    handle_client(client_app, client_shutdown_rx, stream, deps).await
+                let Some(_client_guard) = client_tracker.try_start() else {
+                    let mut stream = stream;
+                    let _ = write_http_response(
+                        &mut stream,
+                        WebActivityBridgeHttpResponse::json(
+                            429,
+                            json!({
+                                "ok": false,
+                                "message": "too many active clients",
+                            }),
+                        ),
+                    )
+                    .await;
+                    eprintln!("[web-activity-bridge] client {remote_addr} rejected: too many active clients");
+                    return;
+                };
+
+                match timeout(
+                    Duration::from_millis(WEB_ACTIVITY_BRIDGE_CLIENT_TIMEOUT_MS),
+                    handle_client(client_app, client_shutdown_rx, stream, deps),
+                )
+                .await
                 {
-                    eprintln!("[web-activity-bridge] client {remote_addr} closed: {error}");
+                    Ok(Ok(())) => {}
+                    Ok(Err(error)) => {
+                        eprintln!("[web-activity-bridge] client {remote_addr} closed: {error}");
+                    }
+                    Err(_) => {
+                        client_tracker.mark_timeout();
+                        eprintln!("[web-activity-bridge] client {remote_addr} timed out");
+                    }
                 }
             });
         }
@@ -325,6 +441,7 @@ async fn write_http_response(
         404 => "Not Found",
         405 => "Method Not Allowed",
         409 => "Conflict",
+        429 => "Too Many Requests",
         500 => "Internal Server Error",
         _ => "OK",
     };
@@ -414,5 +531,48 @@ mod tests {
             shutdown_rx.changed().await.unwrap();
             assert_eq!(*shutdown_rx.borrow(), 1);
         });
+    }
+
+    #[test]
+    fn client_tracker_enforces_active_client_limit_and_releases_guards() {
+        let tracker = Arc::new(WebActivityClientTracker::default());
+        let mut guards = Vec::new();
+
+        for _ in 0..WEB_ACTIVITY_BRIDGE_MAX_ACTIVE_CLIENTS {
+            guards.push(
+                tracker
+                    .try_start()
+                    .expect("client slot should be available"),
+            );
+        }
+
+        assert_eq!(
+            tracker.stats().active_clients,
+            WEB_ACTIVITY_BRIDGE_MAX_ACTIVE_CLIENTS
+        );
+        assert!(tracker.try_start().is_none());
+        assert_eq!(tracker.stats().rejected_clients, 1);
+
+        guards.pop();
+
+        assert_eq!(
+            tracker.stats().active_clients,
+            WEB_ACTIVITY_BRIDGE_MAX_ACTIVE_CLIENTS - 1
+        );
+        assert!(tracker.try_start().is_some());
+    }
+
+    #[test]
+    fn client_tracker_counts_timeouts() {
+        let tracker = WebActivityClientTracker::default();
+
+        tracker.mark_timeout();
+        tracker.mark_timeout();
+
+        assert_eq!(tracker.stats().timed_out_clients, 2);
+        assert_eq!(
+            tracker.stats().request_timeout_ms,
+            WEB_ACTIVITY_BRIDGE_CLIENT_TIMEOUT_MS
+        );
     }
 }

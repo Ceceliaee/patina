@@ -15,6 +15,7 @@ use std::collections::HashMap;
 
 const TRACKER_TIMESTAMP_PERSIST_INTERVAL_MS: i64 = 3_000;
 const TRACKING_SETTINGS_CACHE_TTL_MS: i64 = 5_000;
+const CAPTURE_WINDOW_TITLE_CACHE_LIMIT: usize = 256;
 const TRACKING_PAUSE_VERIFY_INTERVAL_MS: i64 = 60_000;
 const DEFAULT_CONTINUITY_WINDOW_SECS: u64 = 180;
 const DEFAULT_SUSTAINED_PARTICIPATION_SECS: u64 = 900;
@@ -49,6 +50,7 @@ struct CachedTrackingSettings {
 #[derive(Clone, Copy, Debug)]
 struct CachedCaptureWindowTitleSetting {
     loaded_at_ms: i64,
+    last_accessed_at_ms: i64,
     capture_window_title: bool,
 }
 
@@ -194,9 +196,11 @@ impl TrackingSettingsCache {
         exe_name: &str,
         now_ms: i64,
     ) -> bool {
-        let exe_key = exe_name.to_ascii_lowercase();
-        if let Some(cached) = self.capture_window_title_by_exe.get(&exe_key) {
+        let exe_key = exe_name.trim().to_ascii_lowercase();
+        self.cleanup_capture_window_title_cache(now_ms);
+        if let Some(cached) = self.capture_window_title_by_exe.get_mut(&exe_key) {
             if now_ms.saturating_sub(cached.loaded_at_ms) < TRACKING_SETTINGS_CACHE_TTL_MS {
+                cached.last_accessed_at_ms = now_ms;
                 return cached.capture_window_title;
             }
         }
@@ -221,10 +225,30 @@ impl TrackingSettingsCache {
             exe_key,
             CachedCaptureWindowTitleSetting {
                 loaded_at_ms: now_ms,
+                last_accessed_at_ms: now_ms,
                 capture_window_title,
             },
         );
+        self.cleanup_capture_window_title_cache(now_ms);
         capture_window_title
+    }
+
+    fn cleanup_capture_window_title_cache(&mut self, now_ms: i64) {
+        self.capture_window_title_by_exe.retain(|_, cached| {
+            now_ms.saturating_sub(cached.loaded_at_ms) < TRACKING_SETTINGS_CACHE_TTL_MS
+        });
+
+        while self.capture_window_title_by_exe.len() > CAPTURE_WINDOW_TITLE_CACHE_LIMIT {
+            let Some(oldest_key) = self
+                .capture_window_title_by_exe
+                .iter()
+                .min_by_key(|(_, cached)| cached.last_accessed_at_ms)
+                .map(|(key, _)| key.clone())
+            else {
+                break;
+            };
+            self.capture_window_title_by_exe.remove(&oldest_key);
+        }
     }
 }
 
@@ -304,6 +328,62 @@ mod tests {
                 .unwrap();
             assert!(load_tracking_paused(&data, &pause_state, 62_000).await);
             assert!(!load_tracking_paused(&data, &pause_state, 122_000).await);
+        });
+    }
+
+    #[test]
+    fn capture_window_title_cache_expires_entries() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            let data = TrackingRuntimeDataStore::new(pool);
+            let mut cache = TrackingSettingsCache::default();
+
+            assert!(
+                cache
+                    .load_capture_window_title_setting(&data, "Code.exe", 1_000)
+                    .await
+            );
+            assert_eq!(cache.capture_window_title_by_exe.len(), 1);
+
+            assert!(
+                cache
+                    .load_capture_window_title_setting(&data, "Code.exe", 7_000)
+                    .await
+            );
+
+            assert_eq!(cache.capture_window_title_by_exe.len(), 1);
+            assert_eq!(
+                cache
+                    .capture_window_title_by_exe
+                    .get("code.exe")
+                    .map(|cached| cached.loaded_at_ms),
+                Some(7_000)
+            );
+        });
+    }
+
+    #[test]
+    fn capture_window_title_cache_keeps_a_hard_entry_limit() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            let data = TrackingRuntimeDataStore::new(pool);
+            let mut cache = TrackingSettingsCache::default();
+
+            for index in 0..(CAPTURE_WINDOW_TITLE_CACHE_LIMIT + 1) {
+                cache
+                    .load_capture_window_title_setting(
+                        &data,
+                        &format!("App{index}.exe"),
+                        1_000 + index as i64,
+                    )
+                    .await;
+            }
+
+            assert_eq!(
+                cache.capture_window_title_by_exe.len(),
+                CAPTURE_WINDOW_TITLE_CACHE_LIMIT
+            );
+            assert!(!cache.capture_window_title_by_exe.contains_key("app0.exe"));
         });
     }
 }
