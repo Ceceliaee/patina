@@ -38,9 +38,38 @@ const buildCleanupOptions = (): Array<{ value: CleanupRange; label: string }> =>
 const IDLE_TIMEOUT_MINUTES_RANGE = { min: 5, max: 30 } as const;
 const TIMELINE_MERGE_GAP_MINUTES_RANGE = { min: 1, max: 5 } as const;
 
+let cachedStorageSnapshot: StorageSnapshot | null = null;
+let hasCheckedInitialStorageSnapshot = false;
+let pendingInitialStorageSnapshot: Promise<StorageSnapshot | null> | null = null;
+
 const clampMinute = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const secondsToMinute = (seconds: number, min: number, max: number) =>
   clampMinute(Math.round(seconds / 60), min, max);
+
+const loadInitialStorageSnapshotOnce = () => {
+  if (cachedStorageSnapshot) {
+    return Promise.resolve(cachedStorageSnapshot);
+  }
+  if (hasCheckedInitialStorageSnapshot) {
+    return Promise.resolve(null);
+  }
+  if (!pendingInitialStorageSnapshot) {
+    hasCheckedInitialStorageSnapshot = true;
+    pendingInitialStorageSnapshot = SettingsRuntimeAdapterService.getStorageSnapshot()
+      .then((snapshot) => {
+        cachedStorageSnapshot = snapshot;
+        return snapshot;
+      })
+      .catch((error) => {
+        console.error("load initial storage snapshot failed", error);
+        return null;
+      })
+      .finally(() => {
+        pendingInitialStorageSnapshot = null;
+      });
+  }
+  return pendingInitialStorageSnapshot;
+};
 
 export interface UseSettingsPageStateOptions {
   onSettingsChanged: (settings: AppSettings) => void;
@@ -76,7 +105,7 @@ export function useSettingsPageState({
   const [pendingRestorePreparation, setPendingRestorePreparation] = useState<BackupRestorePreparation | null>(null);
   const [isExportingBackup, setIsExportingBackup] = useState(false);
   const [isRestoringBackup, setIsRestoringBackup] = useState(false);
-  const [storageSnapshot, setStorageSnapshot] = useState<StorageSnapshot | null>(null);
+  const [storageSnapshot, setStorageSnapshot] = useState<StorageSnapshot | null>(() => cachedStorageSnapshot);
   const [isStorageBusy, setIsStorageBusy] = useState(false);
   const [appVersion, setAppVersion] = useState(() => initialBootstrap?.appVersion ?? "-");
   const hasUnsavedChangesRef = useRef(false);
@@ -95,15 +124,50 @@ export function useSettingsPageState({
 
   const refreshStorageSnapshot = useCallback(async () => {
     try {
-      setStorageSnapshot(await SettingsRuntimeAdapterService.getStorageSnapshot());
+      const nextSnapshot = await SettingsRuntimeAdapterService.getStorageSnapshot();
+      cachedStorageSnapshot = nextSnapshot;
+      hasCheckedInitialStorageSnapshot = true;
+      setStorageSnapshot(nextSnapshot);
+      return true;
     } catch (error) {
       console.error("load storage snapshot failed", error);
+      return false;
     }
   }, []);
 
+  const handleRefreshStorageSnapshot = useCallback(async () => {
+    if (isStorageBusy) return;
+    setIsStorageBusy(true);
+    try {
+      const refreshed = await refreshStorageSnapshot();
+      if (!refreshed) {
+        notify(UI_TEXT.settings.storage.storageSnapshotRefreshFailed, "warning");
+      }
+    } finally {
+      setIsStorageBusy(false);
+    }
+  }, [isStorageBusy, notify, refreshStorageSnapshot]);
+
   useEffect(() => {
-    void refreshStorageSnapshot();
-  }, [refreshStorageSnapshot]);
+    if (storageSnapshot) return;
+    if (hasCheckedInitialStorageSnapshot && !pendingInitialStorageSnapshot && !cachedStorageSnapshot) return;
+    let cancelled = false;
+    setIsStorageBusy(true);
+    void loadInitialStorageSnapshotOnce()
+      .then((snapshot) => {
+        if (!cancelled && snapshot) {
+          setStorageSnapshot(snapshot);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsStorageBusy(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [storageSnapshot]);
 
   useEffect(() => {
     let cancelled = false;
@@ -562,6 +626,7 @@ export function useSettingsPageState({
     remoteBackup,
     storageSnapshot,
     isStorageBusy,
+    handleRefreshStorageSnapshot,
     handleScheduleWebviewCacheClear,
     handleChooseDataDirectory,
     handleChooseCacheDirectory,

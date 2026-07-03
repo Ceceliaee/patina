@@ -51,6 +51,7 @@ export default function Settings({
     remoteBackup,
     storageSnapshot,
     isStorageBusy,
+    handleRefreshStorageSnapshot,
     handleScheduleWebviewCacheClear,
     handleChooseDataDirectory,
     handleChooseCacheDirectory,
@@ -249,6 +250,7 @@ export default function Settings({
             remoteBackup={remoteBackup}
             storageSnapshot={storageSnapshot}
             isStorageBusy={isStorageBusy}
+            onRefreshStorageSnapshot={handleRefreshStorageSnapshot}
             onScheduleWebviewCacheClear={handleScheduleWebviewCacheClear}
             onChooseDataDirectory={handleChooseDataDirectory}
             onChooseCacheDirectory={handleChooseCacheDirectory}

@@ -421,6 +421,7 @@ await runTest("settings leaves web activity connection status to the extension",
   const webActivityDomain = readUtf8("src-tauri/src/domain/web_activity.rs");
   const bridgeGateway = readUtf8("src/platform/runtime/webActivityBridgeGateway.ts");
   const settings = readUtf8("src/features/settings/components/Settings.tsx");
+  const settingsState = readUtf8("src/features/settings/hooks/useSettingsPageState.ts");
   const settingsInterface = readUtf8("src/features/settings/components/SettingsInterfacePanel.tsx");
   const extensionPopup = readUtf8("extensions/chromium/popup.js");
 
@@ -434,6 +435,7 @@ await runTest("settings leaves web activity connection status to the extension",
 
 await runTest("settings services only expose web sync and remote push controls", () => {
   const settings = readUtf8("src/features/settings/components/Settings.tsx");
+  const settingsState = readUtf8("src/features/settings/hooks/useSettingsPageState.ts");
   const settingsInterface = readUtf8("src/features/settings/components/SettingsInterfacePanel.tsx");
   const settingsDataSafety = readUtf8("src/features/settings/components/SettingsDataSafetyPanel.tsx");
   const settingsStyles = readUtf8("src/styles/features/settings.css");
@@ -468,13 +470,28 @@ await runTest("settings services only expose web sync and remote push controls",
   assert.match(settingsStyles, /\.settings-web-activity-title-row \{\s*min-height: 20px;/);
   assert.match(settingsStyles, /\.settings-inline-help-button \{\s*display: inline-flex;\s*height: 18px;/);
   assert.match(settingsDataSafety, /StoragePathPlaceholderRow/);
+  assert.match(settingsDataSafety, /settings-storage-path-placeholder-meta" aria-hidden="true"/);
   assert.match(settingsDataSafety, /actions=\{\[/);
   assert.match(settingsDataSafety, /showTooltip=\{false\}/);
-  assert.match(settingsDataSafety, /aria-busy=\{!storageSnapshot\}/);
+  assert.doesNotMatch(settingsDataSafety, /storageSnapshotUnchecked/);
+  assert.match(settingsDataSafety, /storageSnapshotRefreshAction/);
+  assert.match(settingsDataSafety, /aria-busy=\{isStorageBusy\}/);
+  assert.doesNotMatch(settingsDataSafety, /aria-busy=\{!storageSnapshot\}/);
+  assert.match(settingsState, /handleRefreshStorageSnapshot/);
+  assert.match(settingsState, /let cachedStorageSnapshot: StorageSnapshot \| null = null/);
+  assert.match(settingsState, /const loadInitialStorageSnapshotOnce = \(\) =>/);
+  assert.match(settingsState, /useState<StorageSnapshot \| null>\(\(\) => cachedStorageSnapshot\)/);
+  assert.match(settingsState, /void loadInitialStorageSnapshotOnce\(\)/);
+  assert.match(settingsState, /cachedStorageSnapshot = nextSnapshot/);
+  assert.doesNotMatch(settingsState, /void refreshStorageSnapshot\(\);\s*\}, \[refreshStorageSnapshot\]\)/);
+  assert.match(settingsState, /await refreshStorageSnapshot\(\);\s*notify\(storageText\.webviewCacheClearScheduled/);
+  assert.match(settingsState, /await refreshStorageSnapshot\(\);\s*notify\(storageText\.storageMigrationScheduled/);
+  assert.match(settingsState, /await refreshStorageSnapshot\(\);\s*notify\(storageText\.storageMigrationCancelled/);
   assert.match(settingsStyles, /\.settings-storage-path-row-placeholder/);
   assert.doesNotMatch(settingsStyles, /\.settings-storage-path-placeholder-action/);
   assert.match(settingsCopy, /webActivityHelpAction/);
   assert.match(settingsCopy, /webActivityHelpSteps/);
+  assert.doesNotMatch(settingsCopy, /storageSnapshotUnchecked/);
   assert.match(settingsCopy, /patina-chromium-extension-v\.\.\.zip/);
   assert.match(settingsCopy, /manifest\.json/);
   assert.match(settingsCopy, /patina-firefox-extension-v\.\.\.xpi/);
@@ -576,7 +593,10 @@ await runTest("app shell uses feature-owned Data prewarm and heavy cache lifecyc
 
 await runTest("app shell uses feature-owned page cache lifecycle exits", () => {
   const shell = readUtf8("src/app/AppShell.tsx");
-  const cleanupEffect = shell.slice(shell.indexOf("if (isForegroundReady) return undefined;"), shell.indexOf("const handleMinSessionSecsChange"));
+  const cleanupEffect = shell.slice(
+    shell.indexOf("if (isForegroundReady || !appSettings.backgroundOptimization) return undefined;"),
+    shell.indexOf("const handleMinSessionSecsChange"),
+  );
 
   assert.match(shell, /clearDashboardSnapshotCache/);
   assert.match(shell, /clearHistorySnapshotCache/);
@@ -587,6 +607,7 @@ await runTest("app shell uses feature-owned page cache lifecycle exits", () => {
   assert.match(cleanupEffect, /clearHistorySnapshotCache/);
   assert.match(cleanupEffect, /clearDataHeavyCaches/);
   assert.match(cleanupEffect, /clearToolsPageCaches/);
+  assert.match(cleanupEffect, /appSettings\.backgroundOptimization/);
   assert.doesNotMatch(shell, /DASHBOARD_SNAPSHOT_CACHE/);
   assert.doesNotMatch(shell, /HISTORY_SNAPSHOT_CACHE/);
 });

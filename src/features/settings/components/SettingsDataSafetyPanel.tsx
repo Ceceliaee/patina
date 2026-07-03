@@ -44,6 +44,7 @@ type SettingsDataSafetyPanelProps = {
   remoteBackup: RemoteBackupState;
   storageSnapshot: StorageSnapshot | null;
   isStorageBusy: boolean;
+  onRefreshStorageSnapshot: () => Promise<void> | void;
   onScheduleWebviewCacheClear: () => Promise<void> | void;
   onChooseDataDirectory: () => Promise<void> | void;
   onChooseCacheDirectory: () => Promise<void> | void;
@@ -134,11 +135,11 @@ function StoragePathPlaceholderRow({
   actions: StoragePathPlaceholderAction[];
 }) {
   return (
-    <div className="settings-storage-path-row settings-storage-path-row-placeholder" aria-busy="true">
+    <div className="settings-storage-path-row settings-storage-path-row-placeholder">
       <div className="min-w-0">
         <div className="settings-storage-path-heading">
           <p>{title}</p>
-          <span className="settings-storage-path-placeholder-meta" />
+          <span className="settings-storage-path-placeholder-meta" aria-hidden="true" />
         </div>
       </div>
       <div className="settings-storage-path-actions">
@@ -173,6 +174,7 @@ export default function SettingsDataSafetyPanel({
   remoteBackup,
   storageSnapshot,
   isStorageBusy,
+  onRefreshStorageSnapshot,
   onScheduleWebviewCacheClear,
   onChooseDataDirectory,
   onChooseCacheDirectory,
@@ -399,9 +401,17 @@ export default function SettingsDataSafetyPanel({
                   />
                 </div>
               ) : null}
+              <div className="settings-local-paths-actions">
+                <QuietIconAction
+                  icon={<RefreshCw size={14} className={isStorageBusy ? "animate-spin" : undefined} />}
+                  title={storageText.storageSnapshotRefreshAction}
+                  disabled={busy}
+                  onClick={() => void onRefreshStorageSnapshot()}
+                />
+              </div>
             </div>
 
-            <div className="settings-storage-path-list" aria-busy={!storageSnapshot}>
+            <div className="settings-storage-path-list" aria-busy={isStorageBusy}>
               {storageSnapshot ? (
                 <>
                   <StoragePathRow
