@@ -26,6 +26,8 @@ App note en: TBD.
 
 ### Internal
 
+- Patina Web Sync 扩展源码与发布流程迁出到独立公开 companion 仓库，Patina 主应用发布链不再打包浏览器扩展附件。
+
 ## [1.8.1] - 2026-06-30
 
 Release: 新增 Firefox 系网页同步扩展，并改进分类管理、数据/历史响应和资源占用。

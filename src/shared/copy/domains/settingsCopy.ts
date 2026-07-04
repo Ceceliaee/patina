@@ -89,14 +89,14 @@ const ZH_CN_SETTINGS_COPY = {
       },
       {
         title: "安装浏览器扩展",
-        description: "按浏览器系选择对应的 Patina Web Sync 扩展包。",
+        description: "从 Patina Web Sync 发布页获取对应浏览器系的扩展包。",
         details: [
           {
-            text: "从下载页获取扩展包。",
+            text: "从 Patina Web Sync 发布页获取扩展包。",
             links: [
               {
                 label: "打开下载页",
-                href: "https://github.com/Ceceliaee/patina/releases/latest",
+                href: "https://github.com/Ceceliaee/patina-web-sync/releases/latest",
               },
             ],
           },
@@ -370,14 +370,14 @@ const EN_US_SETTINGS_COPY = {
       },
       {
         title: "Install the browser extension",
-        description: "Choose the Patina Web Sync extension package for your browser family.",
+        description: "Download the extension package for your browser family from Patina Web Sync releases.",
         details: [
           {
-            text: "Download the extension packages from the releases page.",
+            text: "Download the extension packages from the Patina Web Sync releases page.",
             links: [
               {
                 label: "Open downloads",
-                href: "https://github.com/Ceceliaee/patina/releases/latest",
+                href: "https://github.com/Ceceliaee/patina-web-sync/releases/latest",
               },
             ],
           },

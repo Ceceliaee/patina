@@ -42,7 +42,7 @@ Prebuilt versions are published on GitHub Releases:
 
 Open the release page, download the Windows installer, and run it. Patina currently targets Windows 10/11 desktop use.
 
-The Patina Web Sync browser extension is optional and is used to identify webpage titles in browsers.
+The optional [Patina Web Sync](https://github.com/Ceceliaee/patina-web-sync) browser extension is published separately and is used to identify webpage titles in browsers.
 
 ## Core Features
 

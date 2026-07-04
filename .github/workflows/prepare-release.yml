@@ -132,40 +132,6 @@ jobs:
           $version = "${{ steps.release.outputs.version }}"
           npm run release:prepare-assets -- $version src-tauri/target/release/bundle dist-release ${{ github.repository }} windows-x86_64
 
-      - name: Package Chromium extension
-        shell: pwsh
-        run: |
-          npm run extension:chromium:package
-          $extensionManifest = Get-Content "extensions/chromium/manifest.json" -Raw | ConvertFrom-Json
-          $extensionAsset = "patina-chromium-extension-v$($extensionManifest.version).zip"
-          Copy-Item `
-            "dist/extensions/chromium/$extensionAsset" `
-            "dist-release/$extensionAsset" `
-            -Force
-          "CHROMIUM_EXTENSION_ASSET=$extensionAsset" >> $env:GITHUB_ENV
-
-      - name: Sign Firefox extension
-        shell: pwsh
-        env:
-          WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
-          WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
-        run: |
-          if (-not $env:WEB_EXT_API_KEY) {
-            throw "Missing AMO_JWT_ISSUER secret for Firefox extension signing."
-          }
-          if (-not $env:WEB_EXT_API_SECRET) {
-            throw "Missing AMO_JWT_SECRET secret for Firefox extension signing."
-          }
-
-          npm run extension:firefox:sign
-          $extensionManifest = Get-Content "extensions/firefox/manifest.json" -Raw | ConvertFrom-Json
-          $extensionAsset = "patina-firefox-extension-v$($extensionManifest.version).xpi"
-          Copy-Item `
-            "dist/extensions/firefox/$extensionAsset" `
-            "dist-release/$extensionAsset" `
-            -Force
-          "FIREFOX_EXTENSION_ASSET=$extensionAsset" >> $env:GITHUB_ENV
-
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3
         with:
@@ -176,8 +142,6 @@ jobs:
           prerelease: ${{ contains(steps.release.outputs.version, '-') }}
           files: |
             dist-release/Patina_${{ steps.release.outputs.version }}_x64-setup.exe
-            dist-release/${{ env.CHROMIUM_EXTENSION_ASSET }}
-            dist-release/${{ env.FIREFOX_EXTENSION_ASSET }}
             dist-release/latest.json
 
       - name: Check R2 mirror configuration

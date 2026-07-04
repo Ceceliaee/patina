@@ -448,20 +448,18 @@ await runTest("settings appearance keeps dynamic effects as the fourth option", 
 });
 
 await runTest("settings leaves web activity connection status to the extension", () => {
-  const extensionBackground = readUtf8("extensions/chromium/background.js");
   const webActivityDomain = readUtf8("src-tauri/src/domain/web_activity.rs");
   const bridgeGateway = readUtf8("src/platform/runtime/webActivityBridgeGateway.ts");
   const settings = readUtf8("src/features/settings/components/Settings.tsx");
-  const settingsState = readUtf8("src/features/settings/hooks/useSettingsPageState.ts");
   const settingsInterface = readUtf8("src/features/settings/components/SettingsInterfacePanel.tsx");
-  const extensionPopup = readUtf8("extensions/chromium/popup.js");
+  const protocol = readUtf8("docs/web-activity-protocol.md");
 
-  assert.doesNotMatch(extensionBackground, /statusLabel|extensionStatusLabel/);
   assert.doesNotMatch(webActivityDomain, /status_label|sanitize_status_label/);
   assert.doesNotMatch(bridgeGateway, /statusLabel/);
   assert.doesNotMatch(settings, /platform\/runtime\/webActivityBridgeGateway/);
   assert.doesNotMatch(settingsInterface, /bridgeSnapshot|formatBridgeStatus|webActivityStatus/);
-  assert.match(extensionPopup, /function statusView\(settings,\s*text\)/);
+  assert.match(protocol, /Patina Web Sync` owns the browser extension clients/);
+  assert.match(protocol, /patina-web-sync/);
 });
 
 await runTest("settings services only expose web sync and remote push controls", () => {
@@ -522,6 +520,7 @@ await runTest("settings services only expose web sync and remote push controls",
   assert.doesNotMatch(settingsStyles, /\.settings-storage-path-placeholder-action/);
   assert.match(settingsCopy, /webActivityHelpAction/);
   assert.match(settingsCopy, /webActivityHelpSteps/);
+  assert.match(settingsCopy, /patina-web-sync\/releases\/latest/);
   assert.doesNotMatch(settingsCopy, /storageSnapshotUnchecked/);
   assert.match(settingsCopy, /patina-chromium-extension-v\.\.\.zip/);
   assert.match(settingsCopy, /manifest\.json/);

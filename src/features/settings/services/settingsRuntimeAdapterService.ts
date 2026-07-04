@@ -83,7 +83,7 @@ const RELEASE_NOTES_URL = "https://github.com/Ceceliaee/patina/releases";
 const REPOSITORY_URL = "https://github.com/Ceceliaee/patina";
 const FEEDBACK_URL = "https://github.com/Ceceliaee/patina/issues/new/choose";
 const KOFI_SUPPORT_URL = "https://ko-fi.com/ceceliaee";
-const WEB_ACTIVITY_HELP_LINKS = new Set(["https://github.com/Ceceliaee/patina/releases/latest"]);
+const WEB_ACTIVITY_HELP_LINKS = new Set(["https://github.com/Ceceliaee/patina-web-sync/releases/latest"]);
 
 export function buildBackupPreviewSummary(preview: BackupPreview): string {
   const exportedAt = new Date(preview.exportedAtMs).toLocaleString(getUiLocale());

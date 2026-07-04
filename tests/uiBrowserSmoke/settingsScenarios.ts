@@ -119,7 +119,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       false,
     );
     assert.equal(
-      await evaluate(client!, sessionId, `Boolean(document.querySelector('a[href="https://github.com/Ceceliaee/patina/releases/latest"]'))`),
+      await evaluate(client!, sessionId, `Boolean(document.querySelector('a[href="https://github.com/Ceceliaee/patina-web-sync/releases/latest"]'))`),
       true,
     );
     assert.equal(

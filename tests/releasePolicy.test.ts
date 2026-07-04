@@ -147,23 +147,26 @@ function testReleaseNotesIncludeAllVisibleBullets() {
   assert.match(notes, /- Change 8/);
 }
 
-function testReleaseNotesMentionBrowserExtensionPackages() {
+function testReleaseNotesOnlyMentionPatinaInstaller() {
   const notes = renderReleaseNotes({
     release: "Ready.",
     bullets: [],
   });
 
-  assert.match(notes, /patina-chromium-extension-v\.\.\.zip/);
-  assert.match(notes, /patina-firefox-extension-v\.\.\.xpi/);
-  assert.doesNotMatch(notes, /patina-firefox-extension-v\.\.\.zip/);
+  assert.match(notes, /Windows 安装包/);
+  assert.doesNotMatch(notes, /patina-chromium-extension/);
+  assert.doesNotMatch(notes, /patina-firefox-extension/);
 }
 
-function testReleaseWorkflowPublishesFirefoxXpi() {
+function testReleaseWorkflowDoesNotPublishBrowserExtensionAssets() {
   const workflow = readFileSync(".github/workflows/prepare-release.yml", "utf8");
 
-  assert.match(workflow, /npm run extension:firefox:sign/);
-  assert.match(workflow, /patina-firefox-extension-v\$\(\$extensionManifest\.version\)\.xpi/);
-  assert.doesNotMatch(workflow, /patina-firefox-extension-v\$\(\$extensionManifest\.version\)\.zip/);
+  assert.doesNotMatch(workflow, /npm run extension:chromium:package/);
+  assert.doesNotMatch(workflow, /npm run extension:firefox:sign/);
+  assert.doesNotMatch(workflow, /CHROMIUM_EXTENSION_ASSET|FIREFOX_EXTENSION_ASSET/);
+  assert.doesNotMatch(workflow, /patina-chromium-extension|patina-firefox-extension/);
+  assert.match(workflow, /dist-release\/Patina_\$\{\{ steps\.release\.outputs\.version \}\}_x64-setup\.exe/);
+  assert.match(workflow, /dist-release\/latest\.json/);
 }
 
 function testVersionFilesValidationPassesWhenAllVersionsMatch() {
@@ -255,8 +258,8 @@ testUpdaterNotesKeepLocalizedVariants();
 testUpdaterNotesFallsBackToAppNote();
 testUpdaterEndpointsKeepGithubFirstAndPreserveMirrors();
 testReleaseNotesIncludeAllVisibleBullets();
-testReleaseNotesMentionBrowserExtensionPackages();
-testReleaseWorkflowPublishesFirefoxXpi();
+testReleaseNotesOnlyMentionPatinaInstaller();
+testReleaseWorkflowDoesNotPublishBrowserExtensionAssets();
 testVersionFilesValidationPassesWhenAllVersionsMatch();
 testVersionFilesValidationCatchesPackageJsonMismatch();
 testVersionFilesValidationCatchesPackageLockRootMismatch();

@@ -40,13 +40,6 @@
     "check:rust": "npm run check:rust-boundaries && cargo check --manifest-path src-tauri/Cargo.toml --quiet && cargo test --manifest-path src-tauri/Cargo.toml --quiet && npm run check:rust:clippy",
     "check:full": "npm run check && npm run check:rust",
     "check": "npm run check:types && npm run check:naming && npm run check:architecture && npm run check:hotspots && npm run check:frontend",
-    "extension:chromium:check": "node --experimental-strip-types scripts/chromium-extension.ts check",
-    "extension:chromium:build": "node --experimental-strip-types scripts/chromium-extension.ts build",
-    "extension:chromium:package": "node --experimental-strip-types scripts/chromium-extension.ts package",
-    "extension:firefox:check": "node --experimental-strip-types scripts/firefox-extension.ts check",
-    "extension:firefox:build": "node --experimental-strip-types scripts/firefox-extension.ts build",
-    "extension:firefox:package": "node --experimental-strip-types scripts/firefox-extension.ts package",
-    "extension:firefox:sign": "node --experimental-strip-types scripts/firefox-extension.ts sign",
     "perf:history-read-model": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/perf/history-read-model-benchmark.ts",
     "perf:dashboard-read-model": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/perf/dashboard-read-model-benchmark.ts",
     "perf:data-read-model": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/perf/data-read-model-benchmark.ts",
@@ -59,7 +52,7 @@
     "release:notes": "node --experimental-strip-types scripts/release.ts print-release-notes",
     "release:latest": "node --experimental-strip-types scripts/release.ts write-latest-json",
     "release:prepare-assets": "node --experimental-strip-types scripts/release.ts prepare-release-assets",
-    "release:check": "npm run check:full && npm run extension:chromium:check && npm run extension:firefox:check && npm run release:validate-changelog",
+    "release:check": "npm run check:full && npm run release:validate-changelog",
     "preview": "vite preview",
     "tauri": "tauri"
   },
@@ -81,7 +74,6 @@
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4",
-    "web-ext": "^10.4.0"
+    "vite": "^7.0.4"
   }
 }

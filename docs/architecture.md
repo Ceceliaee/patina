@@ -89,7 +89,7 @@ Rust 拥有运行时主链和写侧副作用；前端拥有 UI、交互编排和
 
 ## 4. 系统边界与所有权
 
-当前系统存在 3 条明确协作通道：
+当前系统存在 3 条明确协作通道，以及 1 条外部伴生扩展边界：
 
 ### 4.1 Rust 运行时通道
 
@@ -134,7 +134,19 @@ IPC 契约应保持稳定、可解析、可测试。
 - `features/settings/*` 只保留 settings 页面的保存、cleanup、backup、restore 与外链打开等 feature 私有流程
 - 涉及运行时写侧、数据写侧和平台副作用的操作，优先迁往 Rust command
 
-### 4.4 命名与跨层协议
+### 4.4 浏览器扩展伴生边界
+
+`Patina Web Sync` 浏览器扩展是 `Patina` 的外部 companion，不属于主仓库内的前端 feature、Rust runtime 或发布产物。
+
+边界规则如下：
+
+- `Patina` 拥有本机 HTTP 接收端、token 校验、网页活动写入、备份恢复、清理历史、History / Classification 读模型和 Settings 配置说明
+- `Patina Web Sync` 独立仓库拥有 Chromium / Firefox 扩展源码、manifest 版本、商店素材、Firefox AMO 签名和扩展 release asset
+- 两者通过 [`web-activity-protocol.md`](./web-activity-protocol.md) 定义的本机协议协作
+- 不把浏览器扩展源码、构建脚本或商店发布流程重新放回 `Patina` 主仓库
+- 不为了扩展分发把 `Patina` 主应用发布流程重新绑定到扩展版本号
+
+### 4.5 命名与跨层协议
 
 命名规范优先服务边界清晰，而不是追求所有层表面一致。
 
