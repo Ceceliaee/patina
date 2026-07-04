@@ -33,7 +33,7 @@ export default function HistoryTimelineDetailsPopover({
     popover ? (
         <div
           ref={popoverRef}
-          className={`history-activity-popover history-activity-popover-${popover.placement}`}
+          className={`history-activity-popover qp-motion-popover-enter history-activity-popover-${popover.placement}`}
           style={{
             left: popover.left,
             top: popover.top,

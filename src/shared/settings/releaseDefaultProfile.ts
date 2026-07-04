@@ -79,7 +79,7 @@ export const RELEASE_DEFAULT_SETTINGS: ReleaseDefaultSettingsProfile = {
   themeMode: "light",
   language: "zh-CN",
   hourlyActivityChartMode: "total",
-  dynamicEffects: true,
+  dynamicEffects: false,
   colorSchemeLight: "default",
   colorSchemeDark: "default",
   launchAtLogin: true,

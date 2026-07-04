@@ -76,10 +76,7 @@
 
   --qp-motion-fast: 120ms;
   --qp-motion-base: 180ms;
-  --qp-motion-spring-duration: 250ms;
-  --qp-motion-view-duration: 220ms;
   --qp-motion-ease: cubic-bezier(0.2, 0, 0, 1);
-  --qp-motion-ease-spring: cubic-bezier(0.25, 1.25, 0.4, 1);
 
   --qp-widget-height: 48px;
   --qp-widget-expanded-width: 228px;
@@ -107,14 +104,6 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-.qp-dynamic-effects-off {
-  --qp-motion-fast: 0ms;
-  --qp-motion-base: 0ms;
-  --qp-motion-spring-duration: 0ms;
-  --qp-motion-view-duration: 0ms;
-  --qp-widget-tray-motion: 0ms;
 }
 
 :root[data-theme="dark"] {

@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { getUiText, setUiTextLanguage } from "../shared/copy/index.ts";
 import AppSidebar from "./components/AppSidebar";
 import AppTitleBar from "./components/AppTitleBar";
@@ -47,6 +47,7 @@ import { useAppShellNavigation } from "./hooks/useAppShellNavigation";
 import { useAppShellToasts } from "./hooks/useAppShellToasts";
 import { useAppShellUpdateEntry } from "./hooks/useAppShellUpdateEntry";
 import { useAppThemeMode } from "./hooks/useAppThemeMode.ts";
+import { useQuietMotionPreference } from "../shared/motion/useQuietMotionPreference.ts";
 import {
   saveHourlyActivityChartModeSetting,
   saveMinSessionSecsSetting,
@@ -135,10 +136,10 @@ function AppShellContent() {
   const [toolsInitialTarget, setToolsInitialTarget] = useState<ToolsOpenTarget | null>(null);
   const [renderedView, setRenderedView] = useState<View>("dashboard");
   const prevViewIndexRef = useRef(0);
-  const [viewTransitionStyle, setViewTransitionStyle] = useState<React.CSSProperties>({
+  const [viewTransitionStyle, setViewTransitionStyle] = useState<CSSProperties>({
     "--qp-view-transition-offset": "12px",
     "--qp-view-transition-duration": "220ms",
-  } as React.CSSProperties);
+  } as CSSProperties);
 
   const changeRenderedView = useCallback((nextView: View) => {
     const prevIndex = prevViewIndexRef.current;
@@ -148,19 +149,13 @@ function AppShellContent() {
       const diff = nextIndex - prevIndex;
       const direction = diff > 0 ? 1 : -1;
       const absDiff = Math.abs(diff);
-
-      // Distance scales slightly with tabs crossed: 1 tab = 10px, 2 tabs = 14px, 3+ tabs = 18px
       const offsetVal = 6 + Math.min(3, absDiff) * 4;
-      const offsetStr = `${direction * offsetVal}px`;
-
-      // Duration accelerates as more tabs are crossed to represent momentum: 1 tab = 220ms, 2 tabs = 200ms, 3+ tabs = 170ms
       const durationVal = Math.max(170, 230 - absDiff * 15);
-      const durationStr = `${durationVal}ms`;
 
       setViewTransitionStyle({
-        "--qp-view-transition-offset": offsetStr,
-        "--qp-view-transition-duration": durationStr,
-      } as React.CSSProperties);
+        "--qp-view-transition-offset": `${direction * offsetVal}px`,
+        "--qp-view-transition-duration": `${durationVal}ms`,
+      } as CSSProperties);
 
       prevViewIndexRef.current = nextIndex;
     }
@@ -187,6 +182,7 @@ function AppShellContent() {
   const uiTextLanguage = settingsLanguagePreview ?? appSettings.language;
   const uiText = getUiText(uiTextLanguage);
   const dynamicEffects = appSettings.dynamicEffects;
+  const quietMotionMode = useQuietMotionPreference(dynamicEffects);
   if (!warmupRuntimeReadyPromiseRef.current) {
     warmupRuntimeReadyPromiseRef.current = new Promise((resolve) => {
       warmupRuntimeReadyResolveRef.current = resolve;
@@ -196,11 +192,11 @@ function AppShellContent() {
   useEffect(() => {
     if (typeof document === "undefined") return undefined;
 
-    document.documentElement.classList.toggle("qp-dynamic-effects-off", !dynamicEffects);
+    document.documentElement.dataset.qpMotion = quietMotionMode;
     return () => {
-      document.documentElement.classList.remove("qp-dynamic-effects-off");
+      delete document.documentElement.dataset.qpMotion;
     };
-  }, [dynamicEffects]);
+  }, [quietMotionMode]);
 
   useEffect(() => {
     setUiTextLanguage(uiTextLanguage);
@@ -524,10 +520,10 @@ function AppShellContent() {
 
   return (
     <div
+      data-qp-motion={quietMotionMode}
       className={[
         "qp-app-frame",
         isWindowMaximized ? "qp-app-frame-maximized" : "",
-        dynamicEffects ? "" : "qp-dynamic-effects-off",
       ].filter(Boolean).join(" ")}
     >
       <AppTitleBar isMaximized={isWindowMaximized} />
@@ -555,7 +551,7 @@ function AppShellContent() {
             <div
               key={renderedView}
               style={viewTransitionStyle}
-              className="qp-view-container flex-1 min-h-0 flex flex-col h-full overflow-hidden"
+              className="qp-view-container qp-motion-view-enter flex-1 min-h-0 flex flex-col h-full overflow-hidden"
             >
               {renderedView === "dashboard" && (
                 <Dashboard

@@ -44,7 +44,7 @@ export default function HistoryCalendarPopover({
     open ? (
         <div
           ref={popoverRef}
-          className="history-calendar-popover"
+          className="history-calendar-popover qp-motion-popover-enter"
           style={{
             left: position.left,
             top: position.top,

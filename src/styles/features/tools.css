@@ -54,8 +54,7 @@
   border: 1px solid color-mix(in srgb, var(--qp-accent-default) 34%, var(--qp-border-subtle));
   border-radius: var(--qp-radius-control);
   background: var(--qp-accent-muted);
-  transform: translate3d(0, calc(var(--tools-active-section-index) * 48px), 0);
-  transition: transform var(--qp-motion-spring-duration) var(--qp-motion-ease-spring);
+  transform: translateY(calc(var(--tools-active-section-index) * 48px));
 }
 
 .tools-section-tab {
@@ -135,7 +134,6 @@
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
-  animation: tools-horizontal-pane-enter var(--qp-motion-view-duration) var(--qp-motion-ease) both;
 }
 
 .tools-section-pane-hidden {
@@ -149,23 +147,10 @@
   flex: 1 1 auto;
   flex-direction: column;
   gap: 16px;
-  animation: tools-horizontal-pane-enter var(--qp-motion-view-duration) var(--qp-motion-ease) both;
 }
 
 .tools-mode-pane[data-tools-reminder-mode] .tools-mode-content-pane {
   gap: 12px;
-}
-
-@keyframes tools-horizontal-pane-enter {
-  from {
-    opacity: 0;
-    transform: translate3d(8px, 0, 0);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
 }
 
 .tools-loading {

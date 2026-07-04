@@ -407,7 +407,7 @@ await runTest("normalizeSettingsRecord accepts current minimize behavior values"
   assert.equal(defaultSettings.backgroundOptimization, false);
   assert.equal(defaultSettings.themeMode, "light");
   assert.equal(defaultSettings.language, "zh-CN");
-  assert.equal(defaultSettings.dynamicEffects, true);
+  assert.equal(defaultSettings.dynamicEffects, false);
   assert.equal(defaultSettings.colorSchemeLight, "default");
   assert.equal(defaultSettings.colorSchemeDark, "default");
   assert.equal(defaultSettings.minSessionSecs, 300);
@@ -521,11 +521,11 @@ await runTest("normalizeSettingsRecord accepts hourly activity chart modes and f
   assert.equal(normalizeSettingsRecord({ hourly_activity_chart_mode: "stacked" }).hourlyActivityChartMode, "total");
 });
 
-await runTest("normalizeSettingsRecord accepts dynamic effects and falls back to on", () => {
+await runTest("normalizeSettingsRecord accepts dynamic effects and falls back to off", () => {
   assert.equal(normalizeSettingsRecord({ dynamic_effects: "1" }).dynamicEffects, true);
   assert.equal(normalizeSettingsRecord({ dynamic_effects: "0" }).dynamicEffects, false);
   assert.equal(normalizeSettingsRecord({ dynamic_effects: "off" }).dynamicEffects, false);
-  assert.equal(normalizeSettingsRecord({ dynamic_effects: "broken" }).dynamicEffects, true);
+  assert.equal(normalizeSettingsRecord({ dynamic_effects: "broken" }).dynamicEffects, false);
 });
 
 await runTest("normalizeSettingsRecord accepts color schemes and falls back to default", () => {

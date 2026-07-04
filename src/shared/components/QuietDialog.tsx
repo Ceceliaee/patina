@@ -36,7 +36,7 @@ export default function QuietDialog({
 
   const dialog = open ? (
         <div
-          className="qp-dialog-backdrop"
+          className="qp-dialog-backdrop qp-motion-overlay-enter"
           onMouseDown={(event) => {
             if (!closeOnBackdrop) return;
             if (event.target === event.currentTarget) {
@@ -48,7 +48,7 @@ export default function QuietDialog({
             role="dialog"
             aria-modal="true"
             aria-label={title}
-            className={`qp-dialog-surface ${surfaceClassName ?? ""}`}
+            className={`qp-dialog-surface qp-motion-overlay-enter ${surfaceClassName ?? ""}`}
           >
             <header className="qp-dialog-header">
               <h3 className="qp-dialog-title">{title}</h3>

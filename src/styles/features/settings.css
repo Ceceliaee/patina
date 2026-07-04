@@ -197,21 +197,32 @@
   line-height: 1.25;
 }
 
+.settings-beta-badge,
 .settings-local-paths-beta {
+  --settings-beta-badge-font-size: 10px;
+  --settings-beta-badge-height: 18px;
+  --settings-beta-badge-padding-x: 6px;
+
   display: inline-flex;
-  height: 18px;
+  height: var(--settings-beta-badge-height);
   flex: 0 0 auto;
   align-items: center;
   border: 1px solid var(--qp-border-subtle);
   border-radius: var(--qp-radius-chip);
   background: var(--qp-bg-elevated);
-  padding: 0 6px;
+  padding: 0 var(--settings-beta-badge-padding-x);
   color: var(--qp-text-tertiary);
-  font-size: 10px;
+  font-size: var(--settings-beta-badge-font-size);
   font-weight: 700;
   letter-spacing: 0;
   line-height: 1;
   text-transform: uppercase;
+}
+
+.settings-beta-badge-small {
+  --settings-beta-badge-font-size: 8px;
+  --settings-beta-badge-height: 14px;
+  --settings-beta-badge-padding-x: 4px;
 }
 
 .settings-local-paths-message-action {

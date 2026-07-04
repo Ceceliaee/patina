@@ -6,6 +6,6 @@
 @import "./styles/features/dashboard.css";
 @import "./styles/features/history.css";
 @import "./styles/features/data.css";
-@import "./styles/features/classification.css";
 @import "./styles/features/about.css";
 @import "./styles/features/tools.css";
+@import "./styles/motion.css";

@@ -289,10 +289,6 @@
   box-shadow: var(--qp-shadow-toast);
 }
 
-.qp-toast-entry {
-  animation: qp-fade-in var(--qp-motion-fast) var(--qp-motion-ease) both;
-}
-
 .qp-toast-content {
   display: flex;
   align-items: flex-start;
@@ -987,47 +983,11 @@ body[data-window-label="widget"] {
   }
 }
 
-.qp-view-container {
-  will-change: transform, opacity;
-  animation: qp-view-fade-in var(--qp-view-transition-duration, var(--qp-motion-view-duration)) var(--qp-motion-ease) both;
-}
-
-.qp-dynamic-effects-off .qp-view-container {
-  animation: none;
-  will-change: auto;
-}
-
-@keyframes qp-view-fade-in {
-  from {
-    opacity: 0;
-    transform: translate3d(0, var(--qp-view-transition-offset, 12px), 0);
-  }
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-}
-
-.qp-content-fade-in {
-  animation: qp-fade-in var(--qp-motion-base) var(--qp-motion-ease) both;
-}
-
-@keyframes qp-fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
+:root[data-qp-motion="reduced"] *,
+:root[data-qp-motion="reduced"] *::before,
+:root[data-qp-motion="reduced"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }

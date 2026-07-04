@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import ts from "typescript";
 import { COPY } from "../src/shared/copy/index.ts";
+import { resolveQuietMotionMode } from "../src/shared/motion/quietMotion.ts";
 
 const EXPECTED_VIEWS = [
   "dashboard",
@@ -128,48 +129,6 @@ function tauriStubFor(path: string) {
   throw new Error(`Missing Tauri smoke stub for ${path}`);
 }
 
-function createMotionStub() {
-  const React = require("react") as typeof import("react");
-  const cache = new Map<string | symbol, unknown>();
-  const ignoredMotionProps = new Set([
-    "animate",
-    "exit",
-    "initial",
-    "layout",
-    "layoutId",
-    "transition",
-    "variants",
-    "whileHover",
-    "whileTap",
-  ]);
-
-  const motion = new Proxy({}, {
-    get(_target, prop) {
-      if (prop === "__esModule") return false;
-      if (cache.has(prop)) return cache.get(prop);
-      const tag = String(prop);
-      const Component = React.forwardRef((props: Record<string, unknown>, ref) => {
-        const domProps: Record<string, unknown> = {};
-        for (const [key, value] of Object.entries(props)) {
-          if (!ignoredMotionProps.has(key)) {
-            domProps[key] = value;
-          }
-        }
-        return React.createElement(tag, { ...domProps, ref });
-      });
-      cache.set(prop, Component);
-      return Component;
-    },
-  });
-
-  return {
-    AnimatePresence: ({ children }: { children?: unknown }) => (
-      React.createElement(React.Fragment, null, children)
-    ),
-    motion,
-  };
-}
-
 function createRechartsStub() {
   const React = require("react") as typeof import("react");
   const Container = ({ children }: { children?: unknown }) => (
@@ -255,9 +214,6 @@ function installSmokeRenderHooks() {
     if (request.startsWith("@tauri-apps/")) {
       return tauriStubFor(request);
     }
-    if (request === "framer-motion") {
-      return createMotionStub();
-    }
     if (request === "lucide-react") {
       return createLucideStub();
     }
@@ -312,6 +268,27 @@ await runTest("app shell declares every primary desktop view", () => {
     assert.match(shell, new RegExp(`renderedView === "${view}"`));
     assert.match(sidebar, new RegExp(`id: "${view}" as View`));
   }
+  assert.match(shell, /useQuietMotionPreference/);
+  assert.match(shell, /data-qp-motion=\{quietMotionMode\}/);
+  assert.match(shell, /VIEW_ORDER/);
+  assert.match(shell, /viewTransitionStyle/);
+  assert.match(shell, /qp-view-transition-offset/);
+  assert.doesNotMatch(shell, /qp-dynamic-effects-off/);
+});
+
+await runTest("motion preference treats enhanced motion as an explicit app opt-in", () => {
+  assert.equal(resolveQuietMotionMode({
+    enhancedMotionEnabled: true,
+    prefersReducedMotion: true,
+  }), "enhanced");
+  assert.equal(resolveQuietMotionMode({
+    enhancedMotionEnabled: false,
+    prefersReducedMotion: true,
+  }), "reduced");
+  assert.equal(resolveQuietMotionMode({
+    enhancedMotionEnabled: false,
+    prefersReducedMotion: false,
+  }), "baseline");
 });
 
 await runTest("Chinese and English copy packages keep the same key structure", () => {
@@ -344,6 +321,9 @@ await runTest("Data regular view avoids visible loading and skeleton branches", 
   assert.doesNotMatch(data, /renderStage/);
   assert.doesNotMatch(trendPanel, /Loader2|qp-spin/);
   assert.doesNotMatch(appTrendPanel, /Loader2|qp-spin/);
+  assert.match(trendPanel, /qp-content-fade-in/);
+  assert.match(appTrendPanel, /qp-content-fade-in/);
+  assert.match(heatmapPanel, /qp-content-fade-in|data-heatmap-loading-state|loading\?: boolean/);
   assert.doesNotMatch(heatmapPanel, /UI_TEXT\.data\.less/);
   assert.doesNotMatch(heatmapPanel, /UI_TEXT\.data\.more/);
   assert.match(heatmapPanel, /data-heatmap-granularity/);
@@ -420,6 +400,22 @@ await runTest("operation-oriented pages keep explicit busy feedback", () => {
   assert.match(dataSafety, /backupExporting|backupRestoring/);
   assert.match(updateDialog, /UpdateProgressBar/);
   assert.match(updateDialog, /UI_TEXT\.update\.processing/);
+});
+
+await runTest("settings appearance keeps dynamic effects as the fourth option", () => {
+  const appearance = readUtf8("src/features/settings/components/SettingsAppearancePanel.tsx");
+  const themeModeIndex = appearance.indexOf("UI_TEXT.settings.themeModeLabel");
+  const colorSchemeIndex = appearance.indexOf("UI_TEXT.settings.colorSchemeLabel");
+  const languageIndex = appearance.indexOf("UI_TEXT.settings.languageLabel");
+  const dynamicEffectsIndex = appearance.indexOf("UI_TEXT.settings.dynamicEffectsLabel");
+
+  assert.ok(themeModeIndex >= 0);
+  assert.ok(colorSchemeIndex > themeModeIndex);
+  assert.ok(languageIndex > colorSchemeIndex);
+  assert.ok(dynamicEffectsIndex > languageIndex);
+  assert.match(appearance, /settings-beta-badge/);
+  assert.match(appearance, /settings-beta-badge-small/);
+  assert.match(appearance, /UI_TEXT\.settings\.betaLabel/);
 });
 
 await runTest("settings leaves web activity connection status to the extension", () => {
