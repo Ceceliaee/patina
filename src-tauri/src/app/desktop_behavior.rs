@@ -1,8 +1,7 @@
 use crate::app::state::DesktopBehaviorState;
 use crate::app::tray::{apply_tray_visibility, show_main_window, MAIN_WINDOW_LABEL};
 use crate::app::widget;
-use crate::data::repositories::{app_settings, update_state};
-use crate::data::sqlite_pool::wait_for_sqlite_pool;
+use crate::data::app_settings_service;
 use crate::domain::settings::MinimizeBehavior;
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_autostart::ManagerExt as AutostartManagerExt;
@@ -70,23 +69,17 @@ pub(crate) async fn sync_desktop_behavior_from_storage<R: Runtime>(
     app: AppHandle<R>,
     launched_by_autostart: bool,
 ) -> Result<(), String> {
-    let pool = wait_for_sqlite_pool(&app).await?;
-    let loaded = app_settings::load_desktop_behavior_settings(&pool)
-        .await
-        .map_err(|error| format!("failed to load desktop behavior settings: {error}"))?;
-    let should_reopen_main_window = update_state::take_post_install_reopen_main_window(&pool)
-        .await
-        .map_err(|error| format!("failed to load post-install reopen intent: {error}"))?;
+    let startup_state = app_settings_service::load_desktop_behavior_startup_state(&app).await?;
 
     let state = app.state::<DesktopBehaviorState>();
-    let next = state.replace(loaded);
+    let next = state.replace(startup_state.settings);
 
     if let Err(error) = apply_autostart(&app, next.launch_at_login) {
         eprintln!("[tray] failed to apply autostart setting: {error}");
     }
     apply_tray_visibility(&app, next);
 
-    if should_reopen_main_window {
+    if startup_state.should_reopen_main_window {
         show_main_window(&app);
     } else if launched_by_autostart {
         if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {

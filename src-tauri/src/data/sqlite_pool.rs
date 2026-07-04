@@ -6,6 +6,7 @@ use sqlx::migrate::{Migration as SqlxMigration, MigrationSource, MigrationType, 
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Pool, Row, Sqlite};
 use std::fs::create_dir_all;
+use std::future::Future;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_sql::{DbInstances, DbPool, MigrationKind};
@@ -101,6 +102,29 @@ pub async fn reopen_sqlite_pool<R: Runtime>(app: &AppHandle<R>) -> Result<Pool<S
     register_sqlite_pool(app, next_pool.clone()).await?;
 
     Ok(next_pool)
+}
+
+pub async fn run_recoverable_sqlite_write<R, F, Fut>(
+    app: &AppHandle<R>,
+    context: &'static str,
+    write: F,
+) -> Result<(), String>
+where
+    R: Runtime,
+    F: Fn(Pool<Sqlite>) -> Fut,
+    Fut: Future<Output = Result<(), String>>,
+{
+    let pool = wait_for_sqlite_pool(app).await?;
+    match write(pool).await {
+        Ok(()) => Ok(()),
+        Err(error) if is_recoverable_sqlite_error(&error) => {
+            let reopened_pool = reopen_sqlite_pool(app).await?;
+            write(reopened_pool)
+                .await
+                .map_err(|error| format!("{context}: {error}"))
+        }
+        Err(error) => Err(format!("{context}: {error}")),
+    }
 }
 
 async fn register_sqlite_pool<R: Runtime>(

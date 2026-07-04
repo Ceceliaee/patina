@@ -78,6 +78,10 @@ export async function getWidgetPlacement(): Promise<WidgetPlacement | null> {
   return parseWidgetPlacement(payload);
 }
 
+export async function getWidgetIcon(exeName: string): Promise<string | null> {
+  return invoke<string | null>("cmd_get_widget_icon", { exeName });
+}
+
 export async function setWidgetPlacement(side: WidgetSide, anchorY: number): Promise<void> {
   await invoke("cmd_set_widget_placement", {
     side,

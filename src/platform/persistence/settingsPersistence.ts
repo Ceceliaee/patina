@@ -1,15 +1,12 @@
-import { executeWrite, getDB } from "./sqlite.ts";
+import {
+  clearAllSessionWindowTitles as clearAllSessionWindowTitlesViaCommand,
+  deleteSessionsBefore as deleteSessionsBeforeViaCommand,
+} from "./persistenceWriteRuntimeGateway.ts";
+import { getDB } from "./sqlite.ts";
 
 export interface SettingRow {
   key: string;
   value: string;
-}
-
-export async function upsertSettingValue(key: string, value: string): Promise<void> {
-  await executeWrite(
-    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-    [key, value],
-  );
 }
 
 export async function loadSettingTimestamp(key: string): Promise<number | null> {
@@ -33,17 +30,9 @@ export async function loadAllSettingRows(): Promise<SettingRow[]> {
 }
 
 export async function deleteSessionsBefore(cutoffTime: number): Promise<void> {
-  await executeWrite(
-    "DELETE FROM session_title_samples WHERE session_id IN (SELECT id FROM sessions WHERE start_time < ?)",
-    [cutoffTime],
-  );
-  await executeWrite("DELETE FROM sessions WHERE start_time < ?", [cutoffTime]);
-  await executeWrite("DELETE FROM web_activity_segments WHERE start_time < ?", [cutoffTime]);
+  await deleteSessionsBeforeViaCommand(cutoffTime);
 }
 
 export async function clearAllSessionWindowTitles(): Promise<void> {
-  await executeWrite("DELETE FROM session_title_samples");
-  await executeWrite(
-    "UPDATE sessions SET window_title = '' WHERE COALESCE(window_title, '') <> ''",
-  );
+  await clearAllSessionWindowTitlesViaCommand();
 }

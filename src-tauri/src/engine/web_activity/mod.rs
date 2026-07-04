@@ -2,6 +2,7 @@ use crate::data::repositories::web_activity::{
     end_active_segment, load_domain_recording_enabled, upsert_active_segment,
     WebActivitySegmentInput,
 };
+use crate::data::{app_settings_service, sqlite_pool::wait_for_sqlite_pool};
 use crate::domain::settings::WebActivitySettings;
 use crate::domain::web_activity::{
     is_supported_browser_exe, sanitize_active_tab_payload, sanitize_browser_client_id,
@@ -11,7 +12,7 @@ use crate::domain::web_activity::{
 use crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshotState;
 use sqlx::{Pool, Sqlite};
 use std::sync::Mutex;
-use tauri::{Manager, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 
 const BROWSER_BRIDGE_CONNECTED_WINDOW_MS: i64 = 30_000;
 
@@ -141,6 +142,38 @@ pub async fn record_active_tab<R: Runtime>(
     upsert_active_segment(pool, &input, now_ms)
         .await
         .map_err(|error| format!("failed to save web activity: {error}"))
+}
+
+pub async fn load_runtime_settings<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<WebActivitySettings, String> {
+    app_settings_service::load_web_activity_settings(app).await
+}
+
+pub async fn record_active_tab_for_app<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &WebActivitySettings,
+    payload: BrowserActiveTabPayload,
+    now_ms: i64,
+) -> Result<bool, String> {
+    let pool = wait_for_sqlite_pool(app).await?;
+    record_active_tab(app, &pool, settings, payload, now_ms).await
+}
+
+pub async fn seal_active_segment_for_app<R: Runtime>(
+    app: &AppHandle<R>,
+    now_ms: i64,
+) -> Result<bool, String> {
+    let pool = wait_for_sqlite_pool(app).await?;
+    seal_active_segment(&pool, now_ms).await
+}
+
+pub async fn seal_if_tracking_inactive_for_app<R: Runtime>(
+    app: &AppHandle<R>,
+    now_ms: i64,
+) -> Result<bool, String> {
+    let pool = wait_for_sqlite_pool(app).await?;
+    seal_if_tracking_inactive(app, &pool, now_ms).await
 }
 
 pub async fn seal_if_tracking_inactive<R: Runtime>(

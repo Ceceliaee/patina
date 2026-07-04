@@ -1,10 +1,10 @@
-use crate::data::repositories::app_settings;
-use crate::data::sqlite_pool::wait_for_sqlite_pool;
+use crate::data::app_settings_service;
 use crate::domain::settings::WebActivitySettings;
 use crate::domain::tracking::TrackingDataChangedPayload;
 use crate::domain::web_activity::{BrowserActiveTabPayload, WEB_ACTIVITY_CHANGED_REASON};
 use crate::engine::web_activity::{
-    record_active_tab, seal_active_segment, seal_if_tracking_inactive, WebActivityRuntimeState,
+    load_runtime_settings, record_active_tab_for_app, seal_active_segment_for_app,
+    seal_if_tracking_inactive_for_app, WebActivityRuntimeState,
 };
 use crate::platform::web_activity_bridge::{
     WebActivityBridgeHttpRequest, WebActivityBridgeHttpResponse, WebActivityBridgeRuntimeState,
@@ -34,13 +34,7 @@ pub async fn handle_http_request<R: Runtime>(
     }
 
     let now_ms = crate::app::runtime::now_ms() as i64;
-    let pool = match wait_for_sqlite_pool(&app).await {
-        Ok(pool) => pool,
-        Err(error) => {
-            return web_activity_http_response(500, false, "storage-unavailable", &error);
-        }
-    };
-    let settings = match app_settings::load_web_activity_settings(&pool).await {
+    let settings = match load_runtime_settings(&app).await {
         Ok(settings) => settings,
         Err(error) => {
             return web_activity_http_response(
@@ -63,7 +57,7 @@ pub async fn handle_http_request<R: Runtime>(
     }
 
     if !settings.enabled {
-        let _ = seal_active_segment(&pool, now_ms).await;
+        let _ = seal_active_segment_for_app(&app, now_ms).await;
         return WebActivityBridgeHttpResponse::json(
             409,
             json!({
@@ -88,7 +82,7 @@ pub async fn handle_http_request<R: Runtime>(
         }
     };
 
-    match record_active_tab(&app, &pool, &settings, payload, now_ms).await {
+    match record_active_tab_for_app(&app, &settings, payload, now_ms).await {
         Ok(changed) => {
             if changed {
                 emit_web_activity_changed(&app, now_ms);
@@ -118,14 +112,7 @@ pub fn spawn_foreground_sync<R: Runtime + 'static>(app: AppHandle<R>) {
 pub fn spawn_startup_repair<R: Runtime + 'static>(app: AppHandle<R>) {
     tauri::async_runtime::spawn(async move {
         let now_ms = crate::app::runtime::now_ms() as i64;
-        let pool = match wait_for_sqlite_pool(&app).await {
-            Ok(pool) => pool,
-            Err(error) => {
-                eprintln!("[web-activity] failed to load sqlite pool for startup repair: {error}");
-                return;
-            }
-        };
-        match seal_active_segment(&pool, now_ms).await {
+        match seal_active_segment_for_app(&app, now_ms).await {
             Ok(true) => emit_web_activity_changed(&app, now_ms),
             Ok(false) => {}
             Err(error) => eprintln!("[web-activity] failed to repair active segment: {error}"),
@@ -134,9 +121,8 @@ pub fn spawn_startup_repair<R: Runtime + 'static>(app: AppHandle<R>) {
 }
 
 pub async fn sync_foreground_state<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
-    let pool = wait_for_sqlite_pool(&app).await?;
     let now_ms = crate::app::runtime::now_ms() as i64;
-    if seal_if_tracking_inactive(&app, &pool, now_ms).await? {
+    if seal_if_tracking_inactive_for_app(&app, now_ms).await? {
         emit_web_activity_changed(&app, now_ms);
     }
     Ok(())
@@ -146,10 +132,7 @@ pub async fn get_bridge_snapshot<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, WebActivityRuntimeState>,
 ) -> Result<crate::domain::web_activity::WebActivityBridgeSnapshot, String> {
-    let pool = wait_for_sqlite_pool(&app).await?;
-    let bridge_settings = app_settings::load_web_activity_bridge_settings(&pool)
-        .await
-        .map_err(|error| format!("failed to load web activity settings: {error}"))?;
+    let bridge_settings = app_settings_service::load_web_activity_bridge_settings(&app).await?;
     let settings = WebActivitySettings {
         enabled: bridge_settings.enabled,
         token: bridge_settings.token.clone(),

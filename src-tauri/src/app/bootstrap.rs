@@ -154,6 +154,18 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::storage::cmd_get_webview_cache_snapshot,
         commands::storage::cmd_open_storage_directory,
         commands::persistence::cmd_reopen_sqlite_pool,
+        commands::persistence::cmd_delete_sessions_before,
+        commands::persistence::cmd_clear_all_session_window_titles,
+        commands::persistence::cmd_delete_sessions_by_exe_names,
+        commands::persistence::cmd_delete_sessions_by_exe_names_between,
+        commands::persistence::cmd_delete_web_activity_segments_before,
+        commands::persistence::cmd_delete_web_activity_segments_by_domain,
+        commands::persistence::cmd_save_remote_backup_settings,
+        commands::persistence::cmd_save_remote_backup_remote_dir,
+        commands::persistence::cmd_save_remote_backup_last_backup_at,
+        commands::persistence::cmd_clear_remote_backup_settings,
+        commands::persistence::cmd_save_data_bootstrap_snapshot_payload,
+        commands::persistence::cmd_clear_data_bootstrap_snapshot_payload,
         commands::diagnostics::cmd_get_resource_diagnostics
     ])
 }

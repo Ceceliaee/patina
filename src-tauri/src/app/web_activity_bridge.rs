@@ -1,5 +1,4 @@
-use crate::data::repositories::app_settings;
-use crate::data::sqlite_pool::wait_for_sqlite_pool;
+use crate::data::app_settings_service;
 use crate::domain::settings::WebActivityBridgeSettings;
 use crate::engine::web_activity::WebActivityRuntimeState;
 use crate::platform::web_activity_bridge::{
@@ -78,10 +77,7 @@ fn update_runtime_state<R: Runtime + 'static>(
 async fn load_web_activity_bridge_settings<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<WebActivityBridgeSettings, String> {
-    let pool = wait_for_sqlite_pool(app).await?;
-    app_settings::load_web_activity_bridge_settings(&pool)
-        .await
-        .map_err(|error| format!("failed to load web activity bridge settings: {error}"))
+    app_settings_service::load_web_activity_bridge_settings(app).await
 }
 
 fn handle_http_request_boxed<R: Runtime + 'static>(

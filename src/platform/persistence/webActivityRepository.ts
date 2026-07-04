@@ -1,4 +1,8 @@
-import { getDB, executeWrite } from "./sqlite.ts";
+import {
+  deleteWebActivitySegmentsBefore as deleteWebActivitySegmentsBeforeViaCommand,
+  deleteWebActivitySegmentsByDomain as deleteWebActivitySegmentsByDomainViaCommand,
+} from "./persistenceWriteRuntimeGateway.ts";
+import { getDB } from "./sqlite.ts";
 import type {
   ObservedWebDomainCandidate,
   WebActivitySegment,
@@ -116,14 +120,11 @@ export async function getWebActivitySegmentsInRange(
 }
 
 export async function deleteWebActivitySegmentsBefore(cutoffTime: number): Promise<void> {
-  await executeWrite("DELETE FROM web_activity_segments WHERE start_time < ?", [cutoffTime]);
+  await deleteWebActivitySegmentsBeforeViaCommand(cutoffTime);
 }
 
 export async function deleteWebActivitySegmentsByDomain(normalizedDomain: string): Promise<void> {
-  await executeWrite(
-    "DELETE FROM web_activity_segments WHERE normalized_domain = ?",
-    [normalizedDomain],
-  );
+  await deleteWebActivitySegmentsByDomainViaCommand(normalizedDomain);
 }
 
 export async function loadObservedWebDomainStats(

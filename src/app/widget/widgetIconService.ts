@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { getWidgetIcon } from "../../platform/desktop/widgetRuntimeGateway.ts";
 import { AppClassification } from "../../shared/classification/appClassification.ts";
 
 interface WidgetIconServiceDeps {
@@ -6,7 +6,7 @@ interface WidgetIconServiceDeps {
 }
 
 const widgetIconServiceDeps: WidgetIconServiceDeps = {
-  getIcon: loadWidgetIconFromRuntime,
+  getIcon: getWidgetIcon,
 };
 
 const MAX_WIDGET_ICON_CACHE_ENTRIES = 16;
@@ -27,10 +27,6 @@ function rememberIcon(key: string, icon: string | null) {
     }
     iconCache.delete(oldestKey);
   }
-}
-
-async function loadWidgetIconFromRuntime(exeName: string): Promise<string | null> {
-  return invoke<string | null>("cmd_get_widget_icon", { exeName });
 }
 
 async function loadWidgetIcon(key: string, deps: WidgetIconServiceDeps) {

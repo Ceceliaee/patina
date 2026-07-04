@@ -2,13 +2,11 @@ use crate::app::main_window;
 use crate::app::runtime::now_ms;
 use crate::app::state::{AppExitState, DesktopBehaviorState};
 use crate::app::widget;
-use crate::data::repositories::tracker_settings;
-use crate::data::sqlite_pool::wait_for_sqlite_pool;
+use crate::data::tracking_pause_service;
 use crate::domain::settings::{CloseBehavior, DesktopBehaviorSettings};
 use crate::engine::tracking::{
     pause_state::TrackingPauseRuntimeState, runtime as tracking_runtime,
 };
-use sqlx::{Pool, Sqlite};
 use tauri::{
     menu::{Menu, MenuEvent, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -55,12 +53,9 @@ pub(crate) fn apply_tray_visibility<R: Runtime>(
 }
 
 pub(crate) async fn toggle_tracking_paused<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
-    let pool = wait_for_sqlite_pool(&app).await?;
-    let (tracking_paused, reason) = toggle_tracking_paused_in_pool(&pool)
-        .await
-        .map_err(|error| format!("failed to toggle tracking pause setting: {error}"))?;
+    let change = tracking_pause_service::toggle_tracking_pause_setting(&app).await?;
 
-    apply_tracking_pause_setting_change(&app, tracking_paused, reason)
+    apply_tracking_pause_setting_change(&app, change.tracking_paused, change.reason)
 }
 
 pub(crate) fn apply_tracking_pause_setting_change<R: Runtime>(
@@ -78,29 +73,8 @@ pub(crate) fn apply_tracking_pause_setting_change<R: Runtime>(
     Ok(())
 }
 
-pub(crate) async fn toggle_tracking_paused_in_pool(
-    pool: &Pool<Sqlite>,
-) -> Result<(bool, &'static str), sqlx::Error> {
-    let current = tracker_settings::load_tracking_paused_setting(pool).await?;
-    let next = !current;
-
-    tracker_settings::save_tracking_paused_setting(pool, next).await?;
-
-    let reason = if next {
-        "tracking-paused"
-    } else {
-        "tracking-resumed"
-    };
-
-    Ok((next, reason))
-}
-
 pub(crate) fn tracking_pause_event_reason(tracking_paused: bool) -> &'static str {
-    if tracking_paused {
-        "tracking-paused"
-    } else {
-        "tracking-resumed"
-    }
+    tracking_pause_service::tracking_pause_event_reason(tracking_paused)
 }
 
 fn update_tracking_pause_runtime_state<R: Runtime>(app: &AppHandle<R>, tracking_paused: bool) {
@@ -194,16 +168,12 @@ pub(crate) fn handle_window_event<R: Runtime>(window: &Window<R>, event: &Window
 }
 
 pub(crate) fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
-    let tracking_paused = tauri::async_runtime::block_on(async {
-        let pool = wait_for_sqlite_pool(app).await?;
-        tracker_settings::load_tracking_paused_setting(&pool)
-            .await
-            .map_err(|error| error.to_string())
-    })
-    .unwrap_or_else(|error| {
-        eprintln!("[tray] failed to initialize tracking pause menu label: {error}");
-        false
-    });
+    let tracking_paused =
+        tauri::async_runtime::block_on(tracking_pause_service::load_tracking_pause_setting(app))
+            .unwrap_or_else(|error| {
+                eprintln!("[tray] failed to initialize tracking pause menu label: {error}");
+                false
+            });
     update_tracking_pause_runtime_state(app, tracking_paused);
 
     let menu = build_tray_menu(app, tracking_paused)?;
@@ -252,42 +222,6 @@ fn build_tray_menu<R: Runtime>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::schema as db_schema;
-    use sqlx::{Executor, SqlitePool};
-
-    async fn setup_test_db() -> SqlitePool {
-        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        pool.execute(db_schema::CURRENT_BASELINE_SCHEMA_SQL)
-            .await
-            .unwrap();
-        pool
-    }
-
-    #[test]
-    fn toggle_tracking_paused_in_pool_flips_setting_and_reason() {
-        tauri::async_runtime::block_on(async {
-            let pool = setup_test_db().await;
-
-            let (first_paused, first_reason) = toggle_tracking_paused_in_pool(&pool).await.unwrap();
-            let first_value = tracker_settings::load_tracking_paused_setting(&pool)
-                .await
-                .unwrap();
-            let (second_paused, second_reason) =
-                toggle_tracking_paused_in_pool(&pool).await.unwrap();
-            let second_value = tracker_settings::load_tracking_paused_setting(&pool)
-                .await
-                .unwrap();
-
-            assert_eq!(first_reason, "tracking-paused");
-            assert!(first_paused);
-            assert!(first_value);
-            assert_eq!(second_reason, "tracking-resumed");
-            assert!(!second_paused);
-            assert!(!second_value);
-            assert_eq!(tracking_pause_event_reason(true), "tracking-paused");
-            assert_eq!(tracking_pause_event_reason(false), "tracking-resumed");
-        });
-    }
 
     #[test]
     fn tracking_pause_menu_label_matches_next_available_action() {

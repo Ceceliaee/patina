@@ -1,4 +1,8 @@
-import { executeWrite, getDB } from "./sqlite.ts";
+import {
+  clearDataBootstrapSnapshotPayload as clearDataBootstrapSnapshotPayloadViaCommand,
+  saveDataBootstrapSnapshotPayload as saveDataBootstrapSnapshotPayloadViaCommand,
+} from "./persistenceWriteRuntimeGateway.ts";
+import { getDB } from "./sqlite.ts";
 
 const DATA_BOOTSTRAP_SNAPSHOT_KEY = "data.bootstrap_snapshot";
 
@@ -13,12 +17,9 @@ export async function loadDataBootstrapSnapshotPayload(): Promise<string | null>
 }
 
 export async function saveDataBootstrapSnapshotPayload(payload: string): Promise<void> {
-  await executeWrite(
-    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-    [DATA_BOOTSTRAP_SNAPSHOT_KEY, payload],
-  );
+  await saveDataBootstrapSnapshotPayloadViaCommand(payload);
 }
 
 export async function clearDataBootstrapSnapshotPayload(): Promise<void> {
-  await executeWrite("DELETE FROM settings WHERE key = ?", [DATA_BOOTSTRAP_SNAPSHOT_KEY]);
+  await clearDataBootstrapSnapshotPayloadViaCommand();
 }

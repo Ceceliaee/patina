@@ -29,12 +29,6 @@
       "args": {
         "db": "sqlite:patina.db"
       }
-    },
-    {
-      "identifier": "sql:allow-execute",
-      "args": {
-        "db": "sqlite:patina.db"
-      }
     }
   ]
 }

@@ -1,4 +1,9 @@
-import { executeWrite, getDB } from "./sqlite.ts";
+import { commitClassificationSettingMutations } from "./classificationSettingsGateway.ts";
+import {
+  deleteSessionsByExeNames as deleteSessionsByExeNamesViaCommand,
+  deleteSessionsByExeNamesBetween as deleteSessionsByExeNamesBetweenViaCommand,
+} from "./persistenceWriteRuntimeGateway.ts";
+import { getDB } from "./sqlite.ts";
 
 export interface SettingKeyValueRow {
   key: string;
@@ -32,14 +37,11 @@ export interface ObservedSessionStatRow {
 }
 
 export async function upsertSettingValue(key: string, value: string): Promise<void> {
-  await executeWrite(
-    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-    [key, value],
-  );
+  await commitClassificationSettingMutations([{ key, value }]);
 }
 
 export async function deleteSettingValue(key: string): Promise<void> {
-  await executeWrite("DELETE FROM settings WHERE key = ?", [key]);
+  await commitClassificationSettingMutations([{ key, value: null }]);
 }
 
 export async function loadSettingValue(key: string): Promise<string | null> {
@@ -98,19 +100,11 @@ export async function loadObservedSessionStats(
   }));
 }
 
-function buildInClausePlaceholders(values: readonly string[]): string {
-  return values.map(() => "?").join(", ");
-}
-
 export async function deleteSessionsByExeNames(exeNames: string[]): Promise<void> {
   if (exeNames.length === 0) {
     return;
   }
-  const placeholders = buildInClausePlaceholders(exeNames);
-  await executeWrite(
-    `DELETE FROM sessions WHERE exe_name IN (${placeholders})`,
-    exeNames,
-  );
+  await deleteSessionsByExeNamesViaCommand(exeNames);
 }
 
 export async function deleteSessionsByExeNamesBetween(
@@ -121,12 +115,5 @@ export async function deleteSessionsByExeNamesBetween(
   if (exeNames.length === 0) {
     return;
   }
-  const placeholders = buildInClausePlaceholders(exeNames);
-  await executeWrite(
-    `DELETE FROM sessions
-     WHERE exe_name IN (${placeholders})
-       AND start_time >= ?
-       AND start_time < ?`,
-    [...exeNames, startTime, endTime],
-  );
+  await deleteSessionsByExeNamesBetweenViaCommand(exeNames, startTime, endTime);
 }
