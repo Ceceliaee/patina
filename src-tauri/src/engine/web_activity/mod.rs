@@ -10,7 +10,7 @@ use crate::domain::web_activity::{
     WebActivityBridgeSnapshot,
 };
 use crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshotState;
-use sqlx::{Pool, Sqlite};
+use sqlx::{Pool, Row, Sqlite};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, Runtime};
 
@@ -122,6 +122,11 @@ pub async fn record_active_tab<R: Runtime>(
         return seal_active_segment(pool, now_ms).await;
     }
 
+    // Check domain blacklist
+    if is_blacklisted_domain(app, &sanitized.normalized_domain).await {
+        return seal_active_segment(pool, now_ms).await;
+    }
+
     let Some(snapshot) = app
         .try_state::<TrackingRuntimeSnapshotState>()
         .and_then(|state| state.snapshot())
@@ -139,6 +144,20 @@ pub async fn record_active_tab<R: Runtime>(
         sanitized,
         snapshot.window.exe_name.trim().to_ascii_lowercase(),
     );
+
+    // Apply privacy mode: strip url, title, favicon before storing
+    let privacy = app_settings_service::load_privacy_settings(app).await.unwrap_or_default();
+    let input = if privacy.privacy_mode {
+        WebActivitySegmentInput {
+            url: None,
+            title: None,
+            favicon_url: None,
+            ..input
+        }
+    } else {
+        input
+    };
+
     upsert_active_segment(pool, &input, now_ms)
         .await
         .map_err(|error| format!("failed to save web activity: {error}"))
@@ -202,6 +221,28 @@ pub async fn seal_active_segment(pool: &Pool<Sqlite>, now_ms: i64) -> Result<boo
     end_active_segment(pool, now_ms)
         .await
         .map_err(|error| format!("failed to seal web activity: {error}"))
+}
+
+/// Check if a domain is in the blacklist (stored as JSON array in settings)
+async fn is_blacklisted_domain<R: Runtime>(app: &AppHandle<R>, domain: &str) -> bool {
+    let pool = match wait_for_sqlite_pool(app).await {
+        Ok(p) => p,
+        Err(_) => return false,
+    };
+    let row = sqlx::query("SELECT value FROM settings WHERE key = 'blacklisted_domains'")
+        .fetch_optional(&pool)
+        .await
+        .ok()
+        .flatten();
+    let raw = row.map(|r| r.get::<String, _>("value"));
+    let Some(raw) = raw else { return false };
+    if raw.is_empty() { return false; }
+    let domains: Vec<String> = match serde_json::from_str(&raw) {
+        Ok(d) => d,
+        Err(_) => return false,
+    };
+    let lower = domain.to_lowercase();
+    domains.iter().any(|d| d.to_lowercase() == lower)
 }
 
 #[cfg(test)]
