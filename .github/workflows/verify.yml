@@ -7,7 +7,28 @@ on:
       - main
 
 jobs:
-  verify:
+  frontend:
+    name: Frontend quality gate
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run frontend quality gate
+        run: npm run check
+
+  rust:
+    name: Rust quality gate
     runs-on: windows-latest
 
     steps:
@@ -26,5 +47,5 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run full quality gate
-        run: npm run check:full
+      - name: Run Rust quality gate
+        run: npm run check:rust
