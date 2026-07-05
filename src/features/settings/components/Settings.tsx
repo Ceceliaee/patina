@@ -8,12 +8,9 @@ import { UI_TEXT } from "../../../shared/copy/index.ts";
 import type { SettingsPageProps } from "../types";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
 import SettingsAppearancePanel from "./SettingsAppearancePanel";
-import SettingsDataSafetyPanel from "./SettingsDataSafetyPanel";
-import SettingsInterfacePanel from "./SettingsInterfacePanel";
 import SettingsResidentPanel from "./SettingsResidentPanel";
 import SettingsTrackingPanel from "./SettingsTrackingPanel";
 import { useSettingsPageState } from "../hooks/useSettingsPageState";
-import { useWebActivitySetupState } from "../hooks/useWebActivitySetupState";
 
 export default function Settings({
   onSettingsChanged,
@@ -36,34 +33,12 @@ export default function Settings({
     handleSave,
     handleSaveColorScheme,
     handleChange,
-    cleanupRange,
-    setCleanupRange,
-    restoreStrategy,
-    setRestoreStrategy,
-    isCleaning,
-    isExportingBackup,
-    isRestoringBackup,
-    handleCleanup,
-    handleExportBackup,
-    handlePrepareRestoreBackup,
-    handleRestoreBackup,
-    clearPendingRestoreBackup,
-    remoteBackup,
-    storageSnapshot,
-    isStorageBusy,
-    handleRefreshStorageSnapshot,
-    handleScheduleWebviewCacheClear,
-    handleChooseDataDirectory,
-    handleChooseCacheDirectory,
-    handleRestoreDefaultDataDirectory,
-    handleRestoreDefaultCacheDirectory,
-    handleCancelPendingStorageMigration,
-    handleOpenStorageDirectory,
     idleTimeoutMinutes,
     timelineMergeGapMinutes,
-    cleanupOptions,
+    sustainedParticipationGraceWindowSecs,
     idleTimeoutMinutesRange,
     timelineMergeGapMinutesRange,
+    sustainedParticipationGraceWindowSecsRange,
   } = useSettingsPageState({
     onSettingsChanged,
     onColorSchemeSaved,
@@ -71,11 +46,6 @@ export default function Settings({
     onToast,
     onRegisterSaveHandler,
   });
-  const { showWebActivityHelp } = useWebActivitySetupState({
-    savedSettings,
-    draftSettings,
-  });
-
   useEffect(() => {
     if (!draftSettings) return;
     onThemeModePreview?.(draftSettings.themeMode);
@@ -173,6 +143,14 @@ export default function Settings({
               maxMinutes: idleTimeoutMinutesRange.max,
               onMinutesChange: (nextMinutes) => handleChange("idleTimeoutSecs", nextMinutes * 60),
             }}
+            sustainedParticipationGraceWindowControl={{
+              label: UI_TEXT.settings.sustainedParticipationGraceWindowLabel,
+              hint: UI_TEXT.settings.sustainedParticipationGraceWindowHint,
+              seconds: sustainedParticipationGraceWindowSecs,
+              minSeconds: sustainedParticipationGraceWindowSecsRange.min,
+              maxSeconds: sustainedParticipationGraceWindowSecsRange.max,
+              onSecondsChange: (nextSeconds) => handleChange("sustainedParticipationGraceWindowSecs", nextSeconds),
+            }}
             trackingPaused={draftSettings.trackingPaused}
             onTrackingPausedChange={(nextChecked) => handleChange("trackingPaused", nextChecked)}
           />
@@ -216,50 +194,6 @@ export default function Settings({
             startMinimizedChecked={draftSettings.startMinimized}
             startMinimizedDisabled={!draftSettings.launchAtLogin}
             onStartMinimizedChange={(nextChecked) => handleChange("startMinimized", nextChecked)}
-          />
-
-          <SettingsInterfacePanel
-            webActivityEnabled={draftSettings.webActivityEnabled}
-            showWebActivityHelp={showWebActivityHelp}
-            port={draftSettings.webActivityPort}
-            webActivityToken={draftSettings.webActivityToken}
-            remoteStatusBridgeEnabled={draftSettings.remoteStatusBridgeEnabled}
-            remoteStatusBridgeUrl={draftSettings.remoteStatusBridgeUrl}
-            remoteStatusBridgeToken={draftSettings.remoteStatusBridgeToken}
-            remoteStatusBridgeMachineId={draftSettings.remoteStatusBridgeMachineId}
-            onWebActivityEnabledChange={(nextChecked) => handleChange("webActivityEnabled", nextChecked)}
-            onPortChange={(nextPort) => handleChange("webActivityPort", nextPort)}
-            onWebActivityTokenChange={(nextToken) => handleChange("webActivityToken", nextToken)}
-            onRemoteStatusBridgeEnabledChange={(nextChecked) => handleChange("remoteStatusBridgeEnabled", nextChecked)}
-            onRemoteStatusBridgeUrlChange={(nextUrl) => handleChange("remoteStatusBridgeUrl", nextUrl)}
-            onRemoteStatusBridgeTokenChange={(nextToken) => handleChange("remoteStatusBridgeToken", nextToken)}
-          />
-
-          <SettingsDataSafetyPanel
-            cleanupRange={cleanupRange}
-            cleanupOptions={cleanupOptions}
-            restoreStrategy={restoreStrategy}
-            isCleaning={isCleaning}
-            isExportingBackup={isExportingBackup}
-            isRestoringBackup={isRestoringBackup}
-            onCleanupRangeChange={setCleanupRange}
-            onRestoreStrategyChange={setRestoreStrategy}
-            onCleanup={handleCleanup}
-            onExportBackup={() => void handleExportBackup()}
-            onPrepareRestoreBackup={handlePrepareRestoreBackup}
-            onRestoreBackup={handleRestoreBackup}
-            onClearPendingRestoreBackup={clearPendingRestoreBackup}
-            remoteBackup={remoteBackup}
-            storageSnapshot={storageSnapshot}
-            isStorageBusy={isStorageBusy}
-            onRefreshStorageSnapshot={handleRefreshStorageSnapshot}
-            onScheduleWebviewCacheClear={handleScheduleWebviewCacheClear}
-            onChooseDataDirectory={handleChooseDataDirectory}
-            onChooseCacheDirectory={handleChooseCacheDirectory}
-            onRestoreDefaultDataDirectory={handleRestoreDefaultDataDirectory}
-            onRestoreDefaultCacheDirectory={handleRestoreDefaultCacheDirectory}
-            onCancelPendingStorageMigration={handleCancelPendingStorageMigration}
-            onOpenStorageDirectory={handleOpenStorageDirectory}
           />
         </div>
       </div>

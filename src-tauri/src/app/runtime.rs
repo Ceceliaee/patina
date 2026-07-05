@@ -2,7 +2,7 @@ use crate::app::desktop_behavior;
 use crate::app::main_window;
 use crate::app::runtime_tasks;
 use crate::app::state::DesktopBehaviorState;
-use crate::app::tray::{apply_tray_visibility, setup_tray, MAIN_WINDOW_LABEL};
+use crate::app::tray::{apply_tray_visibility, setup_tray};
 use crate::engine::tracking::watchdog::RuntimeHealthState;
 use crate::platform::windows::{audio, media, power};
 #[cfg(any(test, all(not(debug_assertions), not(patina_local_build))))]
@@ -62,16 +62,14 @@ pub fn setup(
     crate::app::web_activity::spawn_startup_repair(app.handle().clone());
 
     let app_handle = app.handle().clone();
-    main_window::ensure_main_window_with_initial_visibility(&app_handle, !launched_by_autostart)
+    main_window::ensure_main_window_with_initial_visibility(&app_handle, false)
         .map_err(std::io::Error::other)?;
     setup_tray(&app_handle)?;
     let desktop_behavior = app_handle.state::<DesktopBehaviorState>().snapshot();
     apply_tray_visibility(&app_handle, desktop_behavior);
 
-    if launched_by_autostart {
-        if let Some(window) = app_handle.get_webview_window(MAIN_WINDOW_LABEL) {
-            let _ = window.hide();
-        }
+    if !launched_by_autostart {
+        main_window::request_initial_show(&app_handle);
     }
 
     desktop_behavior::spawn_sync_from_storage(app.handle().clone(), launched_by_autostart);

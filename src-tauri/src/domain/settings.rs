@@ -10,6 +10,7 @@ pub const DEFAULT_REMOTE_STATUS_BRIDGE_ENABLED: bool = false;
 pub const DEFAULT_REMOTE_STATUS_BRIDGE_URL: &str = "";
 pub const DEFAULT_REMOTE_STATUS_BRIDGE_TOKEN: &str = "";
 pub const DEFAULT_REMOTE_STATUS_BRIDGE_MACHINE_ID: &str = "";
+pub const DEFAULT_PRIVACY_MODE: bool = false;
 pub const WEB_ACTIVITY_PORT_MIN: u16 = 1024;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -56,6 +57,11 @@ pub struct RemoteStatusBridgeSettings {
     pub url: String,
     pub token: String,
     pub machine_id: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PrivacySettings {
+    pub privacy_mode: bool,
 }
 
 impl Default for WebActivityBridgeSettings {
@@ -125,6 +131,24 @@ impl WebActivitySettings {
             && !token.is_empty();
 
         Self { enabled, token }
+    }
+}
+
+impl Default for PrivacySettings {
+    fn default() -> Self {
+        Self {
+            privacy_mode: DEFAULT_PRIVACY_MODE,
+        }
+    }
+}
+
+impl PrivacySettings {
+    pub fn from_storage_values(privacy_mode: Option<&str>) -> Self {
+        Self {
+            privacy_mode: privacy_mode
+                .map(|raw| parse_boolean_setting(raw, DEFAULT_PRIVACY_MODE))
+                .unwrap_or(DEFAULT_PRIVACY_MODE),
+        }
     }
 }
 

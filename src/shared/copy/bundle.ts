@@ -10,10 +10,12 @@ import { dateTimeCopy } from "./domains/dateTimeCopy.ts";
 import { dialogCopy } from "./domains/dialogCopy.ts";
 import { historyCopy } from "./domains/historyCopy.ts";
 import { mappingCopy } from "./domains/mappingCopy.ts";
+import { servicesCopy } from "./domains/servicesCopy.ts";
 import { settingsCopy } from "./domains/settingsCopy.ts";
 import { toastCopy } from "./domains/toastCopy.ts";
 import { toolsCopy } from "./domains/toolsCopy.ts";
 import { updateCopy } from "./domains/updateCopy.ts";
+import { exportCopy } from "./domains/exportCopy.ts";
 import { widgetCopy } from "./domains/widgetCopy.ts";
 import type { UiLanguage, WidenCopyValue } from "./types.ts";
 
@@ -30,6 +32,8 @@ export const ZH_CN_UI_TEXT = {
   ...dialogCopy["zh-CN"],
   ...historyCopy["zh-CN"],
   ...mappingCopy["zh-CN"],
+  ...exportCopy["zh-CN"],
+  ...servicesCopy["zh-CN"],
   ...settingsCopy["zh-CN"],
   ...toastCopy["zh-CN"],
   ...toolsCopy["zh-CN"],
@@ -50,6 +54,8 @@ const EN_US_UI_TEXT = {
   ...dialogCopy["en-US"],
   ...historyCopy["en-US"],
   ...mappingCopy["en-US"],
+  ...exportCopy["en-US"],
+  ...servicesCopy["en-US"],
   ...settingsCopy["en-US"],
   ...toastCopy["en-US"],
   ...toolsCopy["en-US"],

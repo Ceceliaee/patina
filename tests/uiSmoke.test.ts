@@ -531,7 +531,7 @@ await runTest("settings services only expose web sync and remote push controls",
   assert.match(settingsCopy, /Patina Web Sync 启用并连接成功后：\\n• 自动同步当前活动标签页的网站地址、标题和网站图标。/);
   assert.doesNotMatch(settingsCopy, /浏览器内部页面不会写入网页记录/);
   assert.doesNotMatch(settingsCopy, /浏览历史库/);
-  assert.match(settings, /draftSettings\.webActivityPort/);
+  assert.match(settingsInterface, /\bport: number\b/);
   assert.match(appSettingsStore, /webActivityPort: "web_activity_port"/);
   assert.doesNotMatch(bridgeRuntime, /tungstenite|accept_async|Message::Text|browser-bridge/);
 
@@ -824,15 +824,15 @@ await runTest("app shell keeps long background navigation persistent", () => {
   const mainWindow = readUtf8("src-tauri/src/app/main_window.rs");
   const widgetWindow = readUtf8("src-tauri/src/app/widget.rs");
 
-  assert.match(policy, /LONG_BACKGROUND_DELAY_MS = 3 \* 60 \* 1000/);
+  assert.match(policy, /LONG_BACKGROUND_DELAY_MS = 5 \* 60 \* 1000/);
   assert.match(mainWindow, /MAIN_WINDOW_DESTROY_AFTER_BACKGROUND_SECS: u64 = 3 \* 60/);
   assert.match(widgetWindow, /WIDGET_DESTROY_AFTER_IDLE_SECS: u64 = 3 \* 60/);
   assert.doesNotMatch(shell, /15 \* 60 \* 1000/);
   assert.doesNotMatch(shell, /10 \* 60 \* 1000/);
   assert.match(shell, /const BACKGROUND_CACHE_RELEASE_DELAY_MS = LONG_BACKGROUND_DELAY_MS/);
-  assert.doesNotMatch(shell, /resetToDashboardAfterLongBackground/);
-  assert.doesNotMatch(shell, /backgroundEnteredAtMsRef/);
-  assert.doesNotMatch(navigation, /shouldReturnHomeAfterBackground/);
+  assert.match(shell, /resetToDashboardAfterLongBackground/);
+  assert.match(shell, /backgroundEnteredAtMsRef/);
+  assert.match(navigation, /shouldReturnHomeAfterBackground/);
 });
 
 await runTest("Dashboard first snapshot load is not gated by foreground refresh", () => {

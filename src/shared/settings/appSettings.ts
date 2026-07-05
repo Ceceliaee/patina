@@ -40,6 +40,7 @@ export interface AppSettings {
   timelineMergeGapSecs: number;
   refreshIntervalSecs: number;
   minSessionSecs: number;
+  sustainedParticipationGraceWindowSecs: number;
   trackingPaused: boolean;
   closeBehavior: CloseBehavior;
   minimizeBehavior: MinimizeBehavior;
@@ -60,6 +61,10 @@ export interface AppSettings {
   remoteStatusBridgeUrl: string;
   remoteStatusBridgeToken: string;
   remoteStatusBridgeMachineId: string;
+  privacyMode: boolean;
+  blacklistedApps: string;
+  blacklistedDomains: string;
+  customScanDirs: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {

@@ -37,6 +37,7 @@ const buildCleanupOptions = (): Array<{ value: CleanupRange; label: string }> =>
 
 const IDLE_TIMEOUT_MINUTES_RANGE = { min: 5, max: 30 } as const;
 const TIMELINE_MERGE_GAP_MINUTES_RANGE = { min: 1, max: 5 } as const;
+const GRACE_WINDOW_SECONDS_RANGE = { min: 3, max: 60, step: 3 } as const;
 
 let cachedStorageSnapshot: StorageSnapshot | null = null;
 let hasCheckedInitialStorageSnapshot = false;
@@ -599,6 +600,9 @@ export function useSettingsPageState({
       TIMELINE_MERGE_GAP_MINUTES_RANGE.max,
     )
     : TIMELINE_MERGE_GAP_MINUTES_RANGE.min;
+  const sustainedParticipationGraceWindowSecs = draftSettings
+    ? draftSettings.sustainedParticipationGraceWindowSecs
+    : GRACE_WINDOW_SECONDS_RANGE.min;
   return {
     dialogs,
     loading,
@@ -638,8 +642,10 @@ export function useSettingsPageState({
     handleOpenFeedback,
     idleTimeoutMinutes,
     timelineMergeGapMinutes,
+    sustainedParticipationGraceWindowSecs,
     cleanupOptions,
     idleTimeoutMinutesRange: IDLE_TIMEOUT_MINUTES_RANGE,
     timelineMergeGapMinutesRange: TIMELINE_MERGE_GAP_MINUTES_RANGE,
+    sustainedParticipationGraceWindowSecsRange: GRACE_WINDOW_SECONDS_RANGE,
   };
 }

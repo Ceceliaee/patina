@@ -66,13 +66,19 @@ export interface ReleaseDefaultSettingsProfile {
   remoteStatusBridgeUrl: string;
   remoteStatusBridgeToken: string;
   remoteStatusBridgeMachineId: string;
+  sustainedParticipationGraceWindowSecs: number;
+  privacyMode: boolean;
+  blacklistedApps: string;
+  blacklistedDomains: string;
+  customScanDirs: string;
 }
 
 export const RELEASE_DEFAULT_SETTINGS: ReleaseDefaultSettingsProfile = {
   idleTimeoutSecs: 900,
-  timelineMergeGapSecs: 180,
+  timelineMergeGapSecs: 300,
   refreshIntervalSecs: 2,
-  minSessionSecs: 300,
+  minSessionSecs: 60,
+  sustainedParticipationGraceWindowSecs: 12,
   trackingPaused: false,
   closeBehavior: "tray",
   minimizeBehavior: "widget",
@@ -93,4 +99,8 @@ export const RELEASE_DEFAULT_SETTINGS: ReleaseDefaultSettingsProfile = {
   remoteStatusBridgeUrl: "",
   remoteStatusBridgeToken: "",
   remoteStatusBridgeMachineId: "",
+  privacyMode: false,
+  blacklistedApps: "",
+  blacklistedDomains: "",
+  customScanDirs: "",
 };

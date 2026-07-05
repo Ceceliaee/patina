@@ -107,6 +107,11 @@ interface AppSettings {
   remoteStatusBridgeUrl: string;
   remoteStatusBridgeToken: string;
   remoteStatusBridgeMachineId: string;
+  sustainedParticipationGraceWindowSecs: number;
+  privacyMode: boolean;
+  blacklistedApps: string;
+  blacklistedDomains: string;
+  customScanDirs: string;
 }
 
 type CleanupRange = 180 | 90 | 60 | 30 | 15 | 7;
@@ -136,6 +141,11 @@ const BASE_SETTINGS: AppSettings = {
   remoteStatusBridgeUrl: "",
   remoteStatusBridgeToken: "",
   remoteStatusBridgeMachineId: "",
+  sustainedParticipationGraceWindowSecs: 900,
+  privacyMode: false,
+  blacklistedApps: "[]",
+  blacklistedDomains: "[]",
+  customScanDirs: "[]",
 };
 
 function buildSettings(overrides: Partial<AppSettings> = {}): AppSettings {
@@ -409,7 +419,7 @@ await runTest("normalizeSettingsRecord accepts current minimize behavior values"
   assert.equal(defaultSettings.dynamicEffects, false);
   assert.equal(defaultSettings.colorSchemeLight, "default");
   assert.equal(defaultSettings.colorSchemeDark, "default");
-  assert.equal(defaultSettings.minSessionSecs, 300);
+  assert.equal(defaultSettings.minSessionSecs, 60);
   assert.equal(defaultSettings.webActivityEnabled, false);
   assert.equal(defaultSettings.webActivityPort, 12345);
   assert.equal(defaultSettings.webActivityToken, "");
