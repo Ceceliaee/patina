@@ -13,9 +13,19 @@ type MinuteControlProps = {
   onMinutesChange: (nextMinutes: number) => void;
 };
 
+type SecondControlProps = {
+  label: string;
+  hint: ReactNode;
+  seconds: number;
+  minSeconds: number;
+  maxSeconds: number;
+  onSecondsChange: (nextSeconds: number) => void;
+};
+
 type SettingsTrackingPanelProps = {
   idleTimeoutControl: MinuteControlProps;
   timelineMergeGapControl: MinuteControlProps;
+  sustainedParticipationGraceWindowControl: SecondControlProps;
   trackingPaused: boolean;
   onTrackingPausedChange: (nextChecked: boolean) => void;
 };
@@ -74,9 +84,39 @@ function TrackingMinuteField({
   );
 }
 
+function TrackingSecondField({
+  label,
+  hint,
+  seconds,
+  minSeconds,
+  maxSeconds,
+  onSecondsChange,
+}: SecondControlProps) {
+  return (
+    <div>
+      <label className="text-[11px] font-semibold text-[var(--qp-text-tertiary)] uppercase tracking-[0.06em]">{label}</label>
+      <div className="mt-2 grid grid-cols-1 items-start gap-3 md:grid-cols-[minmax(0,1fr)_minmax(240px,260px)] md:gap-4">
+        <p className="text-sm text-[var(--qp-text-secondary)] leading-relaxed">{hint}</p>
+        <SettingsStepperSlider
+          ariaLabel={label}
+          value={seconds}
+          min={minSeconds}
+          max={maxSeconds}
+          step={3}
+          displayValue={`${seconds}s`}
+          decreaseAriaLabel={`Decrease ${label}`}
+          increaseAriaLabel={`Increase ${label}`}
+          onChange={onSecondsChange}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsTrackingPanel({
   idleTimeoutControl,
   timelineMergeGapControl,
+  sustainedParticipationGraceWindowControl,
   trackingPaused,
   onTrackingPausedChange,
 }: SettingsTrackingPanelProps) {
@@ -90,6 +130,7 @@ export default function SettingsTrackingPanel({
       <div className="mt-5 space-y-5">
         <TrackingMinuteField {...timelineMergeGapControl} />
         <TrackingMinuteField {...idleTimeoutControl} />
+        <TrackingSecondField {...sustainedParticipationGraceWindowControl} />
 
         <div>
           <label className="text-[11px] font-semibold text-[var(--qp-text-tertiary)] uppercase tracking-[0.06em]">

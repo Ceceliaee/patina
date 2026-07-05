@@ -21,6 +21,10 @@ export function setUiTextLanguage(language: UiLanguage): void {
 
 export const UI_TEXT: UiText = new Proxy({} as UiText, {
   get(_target, prop: keyof UiText) {
-    return COPY[activeUiLanguage][prop];
+    const value = COPY[activeUiLanguage][prop];
+    if (value === undefined) {
+      console.warn(`[UI_TEXT] Missing key "${String(prop)}" in locale "${activeUiLanguage}"`);
+    }
+    return value;
   },
 });

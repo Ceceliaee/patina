@@ -32,6 +32,7 @@ type RawAppSettingsKey =
   | "timeline_merge_gap_secs"
   | "refresh_interval_secs"
   | "min_session_secs"
+  | "sustained_participation_grace_window_secs"
   | "tracking_paused"
   | "close_behavior"
   | "minimize_behavior"
@@ -51,13 +52,18 @@ type RawAppSettingsKey =
   | "remote_status_bridge_enabled"
   | "remote_status_bridge_url"
   | "remote_status_bridge_token"
-  | "remote_status_bridge_machine_id";
+  | "remote_status_bridge_machine_id"
+  | "privacy_mode"
+  | "blacklisted_apps"
+  | "blacklisted_domains"
+  | "custom_scan_dirs";
 
 const APP_SETTINGS_RAW_KEYS: Record<keyof AppSettings, RawAppSettingsKey> = {
   idleTimeoutSecs: "idle_timeout_secs",
   timelineMergeGapSecs: "timeline_merge_gap_secs",
   refreshIntervalSecs: "refresh_interval_secs",
   minSessionSecs: "min_session_secs",
+  sustainedParticipationGraceWindowSecs: "sustained_participation_grace_window_secs",
   trackingPaused: "tracking_paused",
   closeBehavior: "close_behavior",
   minimizeBehavior: "minimize_behavior",
@@ -78,6 +84,10 @@ const APP_SETTINGS_RAW_KEYS: Record<keyof AppSettings, RawAppSettingsKey> = {
   remoteStatusBridgeUrl: "remote_status_bridge_url",
   remoteStatusBridgeToken: "remote_status_bridge_token",
   remoteStatusBridgeMachineId: "remote_status_bridge_machine_id",
+  privacyMode: "privacy_mode",
+  blacklistedApps: "blacklisted_apps",
+  blacklistedDomains: "blacklisted_domains",
+  customScanDirs: "custom_scan_dirs",
 };
 
 const IDLE_TIMEOUT_SECONDS_RANGE = { min: 300, max: 1800, step: 60 } as const;
@@ -307,6 +317,18 @@ export function normalizeSettingsRecord(record: Record<string, string | undefine
     remoteStatusBridgeUrl,
     remoteStatusBridgeToken,
     remoteStatusBridgeMachineId,
+    sustainedParticipationGraceWindowSecs:
+      record.sustained_participation_grace_window_secs
+        ? normalizeRangeStepValue(
+            record.sustained_participation_grace_window_secs,
+            DEFAULT_SETTINGS.sustainedParticipationGraceWindowSecs,
+            { min: 0, max: 300, step: 1 },
+          )
+        : DEFAULT_SETTINGS.sustainedParticipationGraceWindowSecs,
+    privacyMode: parseBooleanSetting(record.privacy_mode, DEFAULT_SETTINGS.privacyMode),
+    blacklistedApps: record.blacklisted_apps ?? DEFAULT_SETTINGS.blacklistedApps,
+    blacklistedDomains: record.blacklisted_domains ?? DEFAULT_SETTINGS.blacklistedDomains,
+    customScanDirs: record.custom_scan_dirs ?? DEFAULT_SETTINGS.customScanDirs,
   };
 }
 

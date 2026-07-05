@@ -13,7 +13,9 @@ function isView(value: string | null): value is View {
     || value === "history"
     || value === "data"
     || value === "mapping"
+    || value === "services"
     || value === "tools"
+    || value === "export"
     || value === "settings"
     || value === "about";
 }

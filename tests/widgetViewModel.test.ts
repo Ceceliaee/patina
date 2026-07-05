@@ -37,6 +37,11 @@ const BASE_SETTINGS: AppSettings = {
   remoteStatusBridgeUrl: "",
   remoteStatusBridgeToken: "",
   remoteStatusBridgeMachineId: "",
+  sustainedParticipationGraceWindowSecs: 900,
+  privacyMode: false,
+  blacklistedApps: "[]",
+  blacklistedDomains: "[]",
+  customScanDirs: "[]",
 };
 
 const BASE_TRACKING_STATUS: TrackingStatusSnapshot = {

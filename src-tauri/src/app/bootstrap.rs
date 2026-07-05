@@ -92,6 +92,13 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::settings::cmd_set_background_optimization,
         commands::settings::cmd_commit_app_settings,
         commands::settings::cmd_commit_classification_settings,
+        commands::classification::cmd_auto_classify_apps,
+        commands::classification::cmd_scan_directory_for_exes,
+        commands::export::cmd_export_data_to_parquet,
+        commands::export::cmd_pick_parquet_save_file,
+        commands::export::cmd_get_parquet_export_fields,
+        commands::export::cmd_pick_export_save_file,
+        commands::export::cmd_export_data,
         commands::tools::cmd_get_tools_snapshot,
         commands::tools::cmd_get_tool_alerts,
         commands::tools::cmd_dismiss_tool_alert,
@@ -121,6 +128,7 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::widget::cmd_show_widget_window,
         commands::widget::cmd_is_primary_mouse_button_down,
         commands::window::cmd_minimize_main_window,
+        commands::window::cmd_frontend_ready,
         commands::update::cmd_get_update_snapshot,
         commands::update::cmd_check_for_updates,
         commands::update::cmd_download_update,
@@ -166,7 +174,7 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::persistence::cmd_clear_remote_backup_settings,
         commands::persistence::cmd_save_data_bootstrap_snapshot_payload,
         commands::persistence::cmd_clear_data_bootstrap_snapshot_payload,
-        commands::diagnostics::cmd_get_resource_diagnostics
+        commands::diagnostics::cmd_get_resource_diagnostics,
     ])
 }
 

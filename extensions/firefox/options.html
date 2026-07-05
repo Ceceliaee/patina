@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Patina Web Sync</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f5f6f8;
+        --panel: #ffffff;
+        --panel-subtle: #f0f1f4;
+        --border: #d9dbe1;
+        --border-strong: #c5cad3;
+        --text: #1d1f24;
+        --text-secondary: #5f646f;
+        --text-tertiary: #858b96;
+        --accent: #2f63ad;
+        --success: #2f855a;
+        --danger: #b83232;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      body {
+        margin: 0;
+        min-width: 360px;
+        background: var(--bg);
+        color: var(--text);
+      }
+      main {
+        box-sizing: border-box;
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 32px 20px;
+      }
+
+      .page-header,
+      form,
+      .note {
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: var(--panel);
+      }
+
+      .page-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px;
+      }
+
+      .brand {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .brand img {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+      }
+
+      .page-header-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-left: auto;
+      }
+
+      .language-control {
+        position: relative;
+      }
+
+      .header-icon-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        min-height: 32px;
+        height: 32px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--panel);
+        color: var(--text-tertiary);
+        padding: 0;
+      }
+
+      .header-icon-button:hover {
+        border-color: var(--border-strong);
+        background: var(--panel-subtle);
+        color: var(--text-secondary);
+      }
+
+      .header-icon-button svg {
+        width: 16px;
+        height: 16px;
+        fill: none;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 2;
+      }
+
+      .language-menu {
+        position: absolute;
+        z-index: 10;
+        top: calc(100% + 8px);
+        left: 50%;
+        display: grid;
+        width: 96px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--panel);
+        padding: 5px;
+        box-shadow: 0 10px 24px color-mix(in srgb, var(--text) 10%, transparent);
+        transform: translateX(-50%);
+      }
+
+      .language-menu[hidden] {
+        display: none;
+      }
+
+      .language-menu button {
+        display: flex;
+        justify-content: center;
+        min-height: 30px;
+        border: 0;
+        border-radius: 7px;
+        background: transparent;
+        color: var(--text-secondary);
+        padding: 5px 8px;
+        text-align: center;
+        font-weight: 600;
+      }
+
+      .language-menu button:hover,
+      .language-menu button[aria-checked="true"] {
+        background: var(--panel-subtle);
+        color: var(--text);
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 21px;
+        line-height: 1.2;
+      }
+      p {
+        margin: 0;
+        color: var(--text-secondary);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      form {
+        display: grid;
+        gap: 18px;
+        margin-top: 18px;
+        padding: 18px;
+      }
+
+      .service-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 18px;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 16px;
+      }
+
+      .service-title {
+        margin: 0 0 4px;
+        font-size: 16px;
+        line-height: 1.3;
+      }
+
+      .fields {
+        display: grid;
+        grid-template-columns: minmax(140px, 0.72fr) minmax(220px, 1.28fr);
+        gap: 14px;
+      }
+
+      label {
+        display: grid;
+        gap: 7px;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      input[type="text"],
+      input[type="password"] {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 38px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--panel);
+        color: var(--text);
+        padding: 8px 10px;
+        font: inherit;
+      }
+
+      input:focus {
+        border-color: var(--accent);
+        outline: 2px solid color-mix(in srgb, var(--accent) 24%, transparent);
+        outline-offset: 1px;
+      }
+
+      .token-input {
+        position: relative;
+      }
+
+      .token-input input {
+        padding-right: 42px;
+      }
+
+      .token-visibility-button {
+        position: absolute;
+        top: 50%;
+        right: 6px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        min-height: 28px;
+        height: 28px;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--text-tertiary);
+        padding: 0;
+        transform: translateY(-50%);
+      }
+
+      .token-visibility-button:hover {
+        background: var(--panel-subtle);
+        color: var(--text-secondary);
+      }
+
+      .token-visibility-button svg {
+        width: 14px;
+        height: 14px;
+        fill: none;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 2;
+      }
+
+      .token-visibility-button .icon-eye-off,
+      .token-visibility-button[data-visible="true"] .icon-eye {
+        display: none;
+      }
+
+      .token-visibility-button[data-visible="true"] .icon-eye-off {
+        display: block;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
+      button {
+        min-height: 36px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--panel);
+        color: var(--text);
+        padding: 7px 13px;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      button:hover {
+        border-color: var(--border-strong);
+        background: var(--panel-subtle);
+      }
+
+      button.primary {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: white;
+      }
+
+      button.primary:hover {
+        background: color-mix(in srgb, var(--accent) 92%, black);
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+
+      #status {
+        display: inline-flex;
+        align-items: center;
+        margin-left: auto;
+        min-height: 24px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--panel-subtle);
+        padding: 2px 9px;
+        color: var(--text-secondary);
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      #status:empty {
+        display: none;
+      }
+
+      #status[data-tone="success"] {
+        border-color: color-mix(in srgb, var(--success) 32%, var(--border));
+        background: color-mix(in srgb, var(--success) 10%, var(--panel));
+        color: var(--success);
+      }
+
+      #status[data-tone="danger"] {
+        border-color: color-mix(in srgb, var(--danger) 30%, var(--border));
+        background: color-mix(in srgb, var(--danger) 8%, var(--panel));
+        color: var(--danger);
+      }
+
+      .note {
+        margin-top: 14px;
+        padding: 14px 16px;
+      }
+
+      .note strong {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 13px;
+      }
+
+      @media (max-width: 560px) {
+        .page-header,
+        .service-row {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .fields {
+          grid-template-columns: 1fr;
+        }
+
+        .page-header-actions {
+          align-self: flex-end;
+        }
+
+        .actions {
+          justify-content: stretch;
+        }
+
+        .actions button {
+          flex: 1;
+        }
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #1f2023;
+          --panel: #292b2f;
+          --panel-subtle: #30333a;
+          --border: #42464f;
+          --border-strong: #565b66;
+          --text: #f2f4f7;
+          --text-secondary: #c6cbd3;
+          --text-tertiary: #9299a5;
+          --accent: #8aaee6;
+          --success: #8bd0a5;
+          --danger: #ee9a9a;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header class="page-header">
+        <div class="brand">
+          <img src="icons/icon-64.png" srcset="icons/icon-64.png 1x, icons/icon-128.png 2x" alt="">
+          <div>
+            <h1>Patina Web Sync</h1>
+            <p data-i18n="headerDescription">把当前活动网页同步到本机 Patina，用于补全桌面时间记录。</p>
+          </div>
+        </div>
+        <div class="page-header-actions">
+          <div class="language-control">
+            <button id="language-button" class="header-icon-button" type="button" aria-label="Languages" aria-haspopup="menu" aria-expanded="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M2 5h12"></path>
+                <path d="M7 2h1"></path>
+                <path d="M5 8l6 6"></path>
+                <path d="M4 14l6-6 2-3"></path>
+                <path d="M22 22l-5-10-5 10"></path>
+                <path d="M14 18h6"></path>
+              </svg>
+            </button>
+            <div id="language-menu" class="language-menu" role="menu" hidden>
+              <button type="button" role="menuitemradio" data-language-option="zh-CN">简体中文</button>
+              <button type="button" role="menuitemradio" data-language-option="en">English</button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <form id="options-form">
+        <div class="service-row">
+          <div>
+            <h2 class="service-title" data-i18n="serviceTitle">网页同步</h2>
+          </div>
+          <span id="status" data-tone="neutral" aria-live="polite"></span>
+        </div>
+
+        <div class="fields">
+          <label>
+            <span data-i18n="portLabel">端口</span>
+            <input id="port" type="text" inputmode="numeric" spellcheck="false" autocomplete="off">
+          </label>
+          <label>
+            <span>Token</span>
+            <span class="token-input">
+              <input id="token" type="password" spellcheck="false" autocomplete="off">
+              <button id="toggle-token" class="token-visibility-button" type="button" aria-label="显示 Token" aria-pressed="false">
+                <svg class="icon-eye" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+                <svg class="icon-eye-off" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M10.73 5.08A10.8 10.8 0 0 1 12 5c7 0 10 7 10 7a13.2 13.2 0 0 1-1.67 2.68"></path>
+                  <path d="M6.61 6.61A13.5 13.5 0 0 0 2 12s3 7 10 7a9.7 9.7 0 0 0 5.39-1.61"></path>
+                  <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"></path>
+                  <path d="M2 2l20 20"></path>
+                </svg>
+              </button>
+            </span>
+          </label>
+        </div>
+
+        <div class="actions">
+          <button id="test" type="button" data-i18n="syncButton">同步当前页</button>
+          <button class="primary" type="submit" data-i18n="saveButton">保存</button>
+        </div>
+      </form>
+
+      <section class="note">
+        <strong data-i18n="syncContentTitle">同步内容</strong>
+        <p data-i18n="syncContentText">同步当前活动网页的网址、标题和网站图标。</p>
+      </section>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

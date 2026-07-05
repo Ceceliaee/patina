@@ -60,6 +60,8 @@ function createLoaders(
     mapping: buildLoader("mapping"),
     data: buildLoader("data"),
     tools: buildLoader("tools"),
+    services: buildLoader("services"),
+    export: buildLoader("export"),
     about: buildLoader("about"),
   };
 }
@@ -215,15 +217,15 @@ await runTest("defaults preload the core lazy view chunks", async () => {
     },
   });
 
-  assert.equal(scheduler.tasks[0].delayMs, 1200);
+  assert.equal(scheduler.tasks[0].delayMs, 400);
   assert.equal(scheduler.tasks[0].idleTimeoutMs, 1500);
 
-  for (let index = 0; index < 6; index += 1) {
+  for (let index = 0; index < 8; index += 1) {
     scheduler.runNext();
     await flushPromises();
   }
 
-  assert.deepEqual(calls, ["history", "data", "tools", "mapping", "settings", "about"]);
+  assert.deepEqual(calls, ["history", "data", "tools", "mapping", "services", "export", "settings", "about"]);
   assert.equal(scheduler.tasks.length, 0);
 });
 

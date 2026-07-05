@@ -1,6 +1,6 @@
 use crate::domain::settings::{
-    DesktopBehaviorSettings, RemoteStatusBridgeSettings, WebActivityBridgeSettings,
-    WebActivitySettings,
+    DesktopBehaviorSettings, PrivacySettings, RemoteStatusBridgeSettings,
+    WebActivityBridgeSettings, WebActivitySettings,
 };
 use sqlx::{Pool, Row, Sqlite};
 
@@ -16,6 +16,7 @@ const REMOTE_STATUS_BRIDGE_ENABLED_KEY: &str = "remote_status_bridge_enabled";
 const REMOTE_STATUS_BRIDGE_URL_KEY: &str = "remote_status_bridge_url";
 const REMOTE_STATUS_BRIDGE_TOKEN_KEY: &str = "remote_status_bridge_token";
 const REMOTE_STATUS_BRIDGE_MACHINE_ID_KEY: &str = "remote_status_bridge_machine_id";
+const PRIVACY_MODE_KEY: &str = "privacy_mode";
 const MAX_APP_SETTING_VALUE_LEN: usize = 4096;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -148,6 +149,10 @@ fn is_allowed_app_setting_key(key: &str) -> bool {
             | "remote_status_bridge_url"
             | "remote_status_bridge_token"
             | "remote_status_bridge_machine_id"
+            | "privacy_mode"
+            | "blacklisted_apps"
+            | "blacklisted_domains"
+            | "custom_scan_dirs"
     )
 }
 
@@ -248,6 +253,19 @@ pub async fn load_remote_status_bridge_settings(
         token.as_deref(),
         machine_id.as_deref(),
     ))
+}
+
+pub async fn load_privacy_settings(
+    pool: &Pool<Sqlite>,
+) -> Result<PrivacySettings, sqlx::Error> {
+    let row = sqlx::query("SELECT value FROM settings WHERE key = ?")
+        .bind(PRIVACY_MODE_KEY)
+        .fetch_optional(pool)
+        .await?;
+
+    let privacy_mode = row.map(|r| r.get::<String, _>("value"));
+
+    Ok(PrivacySettings::from_storage_values(privacy_mode.as_deref()))
 }
 
 #[cfg(test)]

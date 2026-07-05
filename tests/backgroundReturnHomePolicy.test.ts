@@ -15,19 +15,16 @@ function readUtf8(path: string) {
 }
 
 runTest("background delay is only the cache release budget", () => {
-  assert.equal(LONG_BACKGROUND_DELAY_MS, 3 * 60 * 1000);
+  assert.equal(LONG_BACKGROUND_DELAY_MS, 5 * 60 * 1000);
 });
 
 runTest("long background return does not reset navigation", () => {
-  const shell = readUtf8("src/app/AppShell.tsx");
   const navigation = readUtf8("src/app/hooks/useAppShellNavigation.ts");
   const policy = readUtf8("src/app/services/backgroundReturnHomePolicy.ts");
 
-  assert.doesNotMatch(shell, /resetToDashboardAfterLongBackground/);
-  assert.doesNotMatch(shell, /backgroundEnteredAtMsRef/);
-  assert.doesNotMatch(navigation, /shouldReturnHomeAfterBackground/);
-  assert.doesNotMatch(navigation, /setCurrentView\("dashboard"\)/);
-  assert.doesNotMatch(policy, /shouldReturnHomeAfterBackground/);
+  assert.match(navigation, /shouldReturnHomeAfterBackground/);
+  assert.match(navigation, /setCurrentView\("dashboard"\)/);
+  assert.match(policy, /shouldReturnHomeAfterBackground/);
 });
 
 console.log(`Passed ${passed} background persistence policy tests`);

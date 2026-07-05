@@ -106,8 +106,10 @@ impl TrackingRuntimeDataStore {
         window_title: &str,
         timestamp_ms: i64,
     ) -> Result<bool, TrackingRuntimeDataError> {
-        sessions::refresh_active_session_metadata(&self.pool, exe_name, window_title, timestamp_ms)
-            .await
+        let did_refresh =
+            sessions::refresh_active_session_metadata(&self.pool, exe_name, window_title, timestamp_ms)
+                .await?;
+        Ok(did_refresh)
     }
 
     pub async fn start_session(
@@ -140,5 +142,21 @@ impl TrackingRuntimeDataStore {
         last_updated: i64,
     ) -> Result<(), TrackingRuntimeDataError> {
         icon_cache::upsert_icon(&self.pool, exe_name, icon_base64, last_updated).await
+    }
+
+    pub async fn is_app_blacklisted(&self, exe_name: &str) -> Result<bool, TrackingRuntimeDataError> {
+        let raw: Option<String> = sqlx::query_scalar(
+            "SELECT value FROM settings WHERE key = 'blacklisted_apps'",
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some(raw) = raw else { return Ok(false) };
+        if raw.is_empty() { return Ok(false) }
+        let apps: Vec<String> = match serde_json::from_str(&raw) {
+            Ok(a) => a,
+            Err(_) => return Ok(false),
+        };
+        let lower = exe_name.trim().to_lowercase();
+        Ok(apps.iter().any(|a| a.to_lowercase() == lower))
     }
 }

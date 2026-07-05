@@ -71,6 +71,15 @@ pub async fn run<R: Runtime>(
         if poll_outcome.is_successful_sample() {
             health_state.note_successful_sample(now_ms);
         }
+
+        // Skip tracking for blacklisted apps
+        if data.is_app_blacklisted(&window_info.exe_name).await.unwrap_or(false) {
+            let _ = data.end_active_sessions(now_ms).await;
+            last_window = None;
+            last_tracking_status = None;
+            continue;
+        }
+
         persist_tracker_runtime_timestamps(
             &data,
             now_ms,

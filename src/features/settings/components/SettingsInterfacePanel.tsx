@@ -8,22 +8,32 @@ import QuietSwitch from "../../../shared/components/QuietSwitch";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import { SettingsRuntimeAdapterService } from "../services/settingsRuntimeAdapterService.ts";
 import { createSettingsToken } from "../services/settingsTokenService.ts";
+import SettingsBlacklistPanel from "./SettingsBlacklistPanel";
+import SettingsScanDirsPanel from "./SettingsScanDirsPanel";
 
 type SettingsInterfacePanelProps = {
   webActivityEnabled: boolean;
   showWebActivityHelp: boolean;
   port: number;
   webActivityToken: string;
+  privacyMode: boolean;
   remoteStatusBridgeEnabled: boolean;
   remoteStatusBridgeUrl: string;
   remoteStatusBridgeToken: string;
   remoteStatusBridgeMachineId: string;
+  blacklistedApps: string;
+  blacklistedDomains: string;
+  customScanDirs: string;
   onWebActivityEnabledChange: (nextChecked: boolean) => void;
   onPortChange: (nextPort: number) => void;
   onWebActivityTokenChange: (nextToken: string) => void;
+  onPrivacyModeChange: (nextChecked: boolean) => void;
   onRemoteStatusBridgeEnabledChange: (nextChecked: boolean) => void;
   onRemoteStatusBridgeUrlChange: (nextUrl: string) => void;
   onRemoteStatusBridgeTokenChange: (nextToken: string) => void;
+  onBlacklistedAppsChange: (val: string) => void;
+  onBlacklistedDomainsChange: (val: string) => void;
+  onCustomScanDirsChange: (val: string) => void;
 };
 
 type TokenFieldProps = {
@@ -299,12 +309,20 @@ export default function SettingsInterfacePanel({
   remoteStatusBridgeUrl,
   remoteStatusBridgeToken,
   remoteStatusBridgeMachineId,
+  privacyMode,
+  blacklistedApps,
+  blacklistedDomains,
+  customScanDirs,
   onWebActivityEnabledChange,
   onPortChange,
   onWebActivityTokenChange,
+  onPrivacyModeChange,
   onRemoteStatusBridgeEnabledChange,
   onRemoteStatusBridgeUrlChange,
   onRemoteStatusBridgeTokenChange,
+  onBlacklistedAppsChange,
+  onBlacklistedDomainsChange,
+  onCustomScanDirsChange,
 }: SettingsInterfacePanelProps) {
   const [webActivityPortDraft, setWebActivityPortDraft] = useState(String(port));
   const [webActivityTokenVisible, setWebActivityTokenVisible] = useState(false);
@@ -442,6 +460,36 @@ export default function SettingsInterfacePanel({
               </div>
             ) : null}
           </QuietSubpanel>
+
+          <QuietSubpanel>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-[var(--qp-text-primary)]">
+                  {UI_TEXT.settings.privacyModeTitle}
+                </p>
+                <p className="mt-1 text-sm leading-relaxed text-[var(--qp-text-secondary)]">
+                  {UI_TEXT.settings.privacyModeHint}
+                </p>
+              </div>
+              <QuietSwitch
+                checked={privacyMode}
+                onChange={onPrivacyModeChange}
+                ariaLabel={UI_TEXT.accessibility.settings.togglePrivacyMode}
+              />
+            </div>
+          </QuietSubpanel>
+
+          <SettingsBlacklistPanel
+            blacklistedApps={blacklistedApps}
+            blacklistedDomains={blacklistedDomains}
+            onBlacklistedAppsChange={onBlacklistedAppsChange}
+            onBlacklistedDomainsChange={onBlacklistedDomainsChange}
+          />
+
+          <SettingsScanDirsPanel
+            customScanDirs={customScanDirs}
+            onCustomScanDirsChange={onCustomScanDirsChange}
+          />
 
           <QuietSubpanel>
             <div className="flex items-start justify-between gap-4">

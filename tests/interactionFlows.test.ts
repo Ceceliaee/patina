@@ -58,6 +58,11 @@ const BASE_SETTINGS: AppSettings = {
   remoteStatusBridgeUrl: "",
   remoteStatusBridgeToken: "",
   remoteStatusBridgeMachineId: "",
+  sustainedParticipationGraceWindowSecs: 900,
+  privacyMode: false,
+  blacklistedApps: "[]",
+  blacklistedDomains: "[]",
+  customScanDirs: "[]",
 };
 
 function buildSettings(overrides: Partial<AppSettings> = {}): AppSettings {

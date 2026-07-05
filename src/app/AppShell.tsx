@@ -58,11 +58,8 @@ import {
   preloadLazyViewChunk,
   type PreloadableView,
 } from "./services/viewChunkPreloadService";
-import {
-  readCurrentWindowForegroundState,
-  watchCurrentWindowForegroundState,
-  watchCurrentWindowMaximized,
-} from "../platform/desktop/windowControlGateway";
+import { readCurrentWindowForegroundState } from "../platform/desktop/windowControlGateway";
+import { useWindowState } from "./hooks/useWindowState";
 import ToolsSidebarStatusEntry from "../features/tools/components/ToolsSidebarStatusEntry.tsx";
 import ToolAlertDialog from "../features/tools/components/ToolAlertDialog.tsx";
 import type { ToolsOpenTarget } from "../features/tools/types.ts";
@@ -79,14 +76,18 @@ const Data = createPreloadableViewComponent("data");
 const Settings = createPreloadableViewComponent("settings");
 const About = createPreloadableViewComponent("about");
 const AppMapping = createPreloadableViewComponent("mapping");
+const Services = createPreloadableViewComponent("services");
 const Tools = createPreloadableViewComponent("tools");
+const Export = createPreloadableViewComponent("export");
 
 function getPreloadableNavigationView(view: View): PreloadableView | null {
   switch (view) {
     case "about":
     case "data":
+    case "export":
     case "history":
     case "mapping":
+    case "services":
     case "settings":
     case "tools":
       return view;
@@ -100,7 +101,7 @@ type HistoryDateRequest = {
   requestId: number;
 };
 
-const VIEW_ORDER: View[] = ["dashboard", "history", "data", "mapping", "tools", "settings", "about"];
+const VIEW_ORDER: View[] = ["dashboard", "history", "data", "mapping", "services", "tools", "export", "settings", "about"];
 
 export default function AppShell() {
   return (
@@ -118,19 +119,16 @@ function AppShellContent() {
     handleNavigate,
     registerSettingsSaveHandler,
     registerMappingSaveHandler,
+    resetToDashboardAfterLongBackground,
     setSettingsDirty,
     setMappingDirty,
   } = useAppShellNavigation({ confirm });
   const { toasts, pushToast } = useAppShellToasts();
   const [readModelRefreshState, setReadModelRefreshState] = useState(INITIAL_READ_MODEL_REFRESH_STATE);
-  const [isWindowMaximized, setIsWindowMaximized] = useState(false);
+  const { isWindowMaximized, isWindowForegroundLike, isForegroundReady } = useWindowState();
   const [settingsThemeModePreview, setSettingsThemeModePreview] = useState<ThemeMode | null>(null);
   const [settingsColorSchemePreview, setSettingsColorSchemePreview] = useState<ColorSchemePreview | null>(null);
   const [settingsLanguagePreview, setSettingsLanguagePreview] = useState<AppLanguage | null>(null);
-  const [isDocumentVisible, setIsDocumentVisible] = useState(() => (
-    typeof document === "undefined" ? true : document.visibilityState !== "hidden"
-  ));
-  const [isWindowForegroundLike, setIsWindowForegroundLike] = useState(true);
   const [historyDateRequest, setHistoryDateRequest] = useState<HistoryDateRequest | null>(null);
   const [toolsInitialTarget, setToolsInitialTarget] = useState<ToolsOpenTarget | null>(null);
   const [renderedView, setRenderedView] = useState<View>("dashboard");
@@ -162,10 +160,11 @@ function AppShellContent() {
     setRenderedView(nextView);
   }, []);
 
+  const backgroundEnteredAtMsRef = useRef<number | null>(null);
   const renderedViewRequestRef = useRef(0);
+  const wasForegroundReadyRef = useRef<boolean | null>(null);
   const warmupRuntimeReadyResolveRef = useRef<(() => void) | null>(null);
   const warmupRuntimeReadyPromiseRef = useRef<Promise<void> | null>(null);
-  const isForegroundReady = isDocumentVisible && isWindowForegroundLike;
   const {
     activeWindow,
     trackingStatus,
@@ -321,78 +320,6 @@ function AppShellContent() {
   }, [classificationReady, isDashboardRefreshEnabled, isDataRefreshEnabled, isHistoryRefreshEnabled, syncTick]);
 
   useEffect(() => {
-    if (typeof document === "undefined") return undefined;
-
-    const syncDocumentVisibility = () => {
-      setIsDocumentVisible(document.visibilityState !== "hidden");
-    };
-
-    syncDocumentVisibility();
-    document.addEventListener("visibilitychange", syncDocumentVisibility);
-    return () => {
-      document.removeEventListener("visibilitychange", syncDocumentVisibility);
-    };
-  }, []);
-
-  useEffect(() => {
-    let disposed = false;
-    let unlisten: (() => void) | null = null;
-
-    void watchCurrentWindowMaximized((maximized) => {
-      if (!disposed) {
-        setIsWindowMaximized(maximized);
-      }
-    })
-      .then((nextUnlisten) => {
-        if (disposed) {
-          nextUnlisten();
-          return;
-        }
-
-        unlisten = nextUnlisten;
-      })
-      .catch((error) => {
-        console.warn("watch current window maximized state failed", error);
-      });
-
-    return () => {
-      disposed = true;
-      if (unlisten) {
-        unlisten();
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    let disposed = false;
-    let unlisten: (() => void) | null = null;
-
-    void watchCurrentWindowForegroundState((state) => {
-      if (!disposed) {
-        setIsWindowForegroundLike(state.foregroundLike);
-      }
-    })
-      .then((nextUnlisten) => {
-        if (disposed) {
-          nextUnlisten();
-          return;
-        }
-
-        unlisten = nextUnlisten;
-      })
-      .catch((error) => {
-        console.warn("watch current window foreground state failed", error);
-      });
-
-    return () => {
-      disposed = true;
-      if (unlisten) {
-        unlisten();
-      }
-    };
-  }, []);
-
-  useEffect(() => {
     if (!classificationReady || !isForegroundReady) return undefined;
 
     const timer = window.setTimeout(() => {
@@ -409,6 +336,34 @@ function AppShellContent() {
       window.clearTimeout(timer);
     };
   }, [classificationReady, isForegroundReady, mappingVersion, uiTextLanguage]);
+
+  useEffect(() => {
+    const wasForegroundReady = wasForegroundReadyRef.current;
+    wasForegroundReadyRef.current = isForegroundReady;
+
+    if (wasForegroundReady === null) {
+      if (!isForegroundReady) {
+        backgroundEnteredAtMsRef.current = Date.now();
+      }
+      return;
+    }
+
+    if (wasForegroundReady && !isForegroundReady) {
+      backgroundEnteredAtMsRef.current = Date.now();
+      return;
+    }
+
+    if (!wasForegroundReady && isForegroundReady) {
+      const backgroundEnteredAtMs = backgroundEnteredAtMsRef.current;
+      backgroundEnteredAtMsRef.current = null;
+      if (backgroundEnteredAtMs === null) return;
+
+      const backgroundDurationMs = Date.now() - backgroundEnteredAtMs;
+      if (resetToDashboardAfterLongBackground(backgroundDurationMs)) {
+        setHistoryDateRequest(null);
+      }
+    }
+  }, [isForegroundReady, resetToDashboardAfterLongBackground]);
 
   useEffect(() => {
     if (isForegroundReady || !appSettings.backgroundOptimization) return undefined;
@@ -576,6 +531,12 @@ function AppShellContent() {
                   uiText={uiText}
                 />
               )}
+              {renderedView === "export" && (
+                <Export
+                  key="export"
+                  onToast={pushToast}
+                />
+              )}
               {renderedView === "settings" && (
                 <Settings
                   key="settings"
@@ -630,6 +591,12 @@ function AppShellContent() {
                     pushToast(uiText.app.historyDeleted, "success");
                   }}
                   webActivityEnabled={appSettings.webActivityEnabled}
+                  onToast={pushToast}
+                />
+              )}
+              {renderedView === "services" && (
+                <Services
+                  key="services"
                 />
               )}
             </div>
