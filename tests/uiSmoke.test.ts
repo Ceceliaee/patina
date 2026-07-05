@@ -825,7 +825,7 @@ await runTest("app shell keeps long background navigation persistent", () => {
   const widgetWindow = readUtf8("src-tauri/src/app/widget.rs");
 
   assert.match(policy, /LONG_BACKGROUND_DELAY_MS = 5 \* 60 \* 1000/);
-  assert.match(mainWindow, /MAIN_WINDOW_DESTROY_AFTER_BACKGROUND_SECS: u64 = 3 \* 60/);
+  assert.match(mainWindow, /MAIN_WINDOW_DESTROY_AFTER_BACKGROUND_SECS: u64 = 5 \* 60/);
   assert.match(widgetWindow, /WIDGET_DESTROY_AFTER_IDLE_SECS: u64 = 3 \* 60/);
   assert.doesNotMatch(shell, /15 \* 60 \* 1000/);
   assert.doesNotMatch(shell, /10 \* 60 \* 1000/);

@@ -6,7 +6,7 @@ use crate::data::sqlite_pool::{
     is_recoverable_sqlite_error, reopen_sqlite_pool, wait_for_sqlite_pool,
 };
 use crate::domain::settings::{
-    DesktopBehaviorSettings, WebActivityBridgeSettings, WebActivitySettings,
+    DesktopBehaviorSettings, PrivacySettings, WebActivityBridgeSettings, WebActivitySettings,
 };
 use tauri::{AppHandle, Runtime};
 
@@ -63,4 +63,13 @@ pub async fn load_web_activity_bridge_settings<R: Runtime>(
     app_settings::load_web_activity_bridge_settings(&pool)
         .await
         .map_err(|error| format!("failed to load web activity bridge settings: {error}"))
+}
+
+pub async fn load_privacy_settings<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<PrivacySettings, String> {
+    let pool = wait_for_sqlite_pool(app).await?;
+    app_settings::load_privacy_settings(&pool)
+        .await
+        .map_err(|error| format!("failed to load privacy settings: {error}"))
 }
