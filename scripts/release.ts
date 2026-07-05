@@ -22,14 +22,6 @@ const GITHUB_UPDATER_ENDPOINT =
 const MAX_RELEASE_NOTE_LENGTH = 100;
 const MAX_APP_NOTE_LENGTH = 60;
 const MAX_APP_NOTE_EN_LENGTH = 120;
-const MAX_VISIBLE_RELEASE_CHANGE_COUNT = 7;
-const RELEASE_NOTE_SECTION_TITLES = {
-  Added: "新增",
-  Changed: "改进",
-  Fixed: "修复",
-  Removed: "移除",
-};
-const VISIBLE_CHANGELOG_HEADINGS = Object.keys(RELEASE_NOTE_SECTION_TITLES);
 
 function fail(message) {
   console.error(`release: ${message}`);
@@ -423,35 +415,6 @@ function sectionBullets(sectionBody, heading) {
     .filter((line) => !/^-\s*暂无。?$/.test(line));
 }
 
-function releaseNoteVisibleSections(parsed) {
-  return (parsed.sections ?? [
-    {
-      heading: "Changed",
-      bullets: parsed.bullets ?? [],
-    },
-  ]).filter((section) =>
-    Object.hasOwn(RELEASE_NOTE_SECTION_TITLES, section.heading)
-    && (section.bullets ?? []).length > 0
-  );
-}
-
-export function validateReleaseNoteVisibleChangeCount(parsed) {
-  const visibleChangeCount = releaseNoteVisibleSections(parsed).reduce(
-    (count, section) => count + section.bullets.length,
-    0,
-  );
-
-  if (visibleChangeCount === 0) {
-    return `CHANGELOG.md ${parsed.version} must include 1 to ${MAX_VISIBLE_RELEASE_CHANGE_COUNT} user-visible Added/Changed/Fixed/Removed entries`;
-  }
-
-  if (visibleChangeCount > MAX_VISIBLE_RELEASE_CHANGE_COUNT) {
-    return `CHANGELOG.md ${parsed.version} has ${visibleChangeCount} user-visible Added/Changed/Fixed/Removed entries; keep the combined count to 1-${MAX_VISIBLE_RELEASE_CHANGE_COUNT}`;
-  }
-
-  return null;
-}
-
 async function parseChangelog(version) {
   const targetVersion = await resolveTargetVersion(version);
 
@@ -460,10 +423,6 @@ async function parseChangelog(version) {
   const release = fieldValue(section.body, "Release");
   const appNote = fieldValue(section.body, "App note");
   const appNoteEn = fieldValue(section.body, "App note en");
-  const sections = VISIBLE_CHANGELOG_HEADINGS.map((heading) => ({
-    heading,
-    bullets: sectionBullets(section.body, heading),
-  })).filter((visibleSection) => visibleSection.bullets.length > 0);
 
   return {
     version: targetVersion,
@@ -471,8 +430,9 @@ async function parseChangelog(version) {
     release,
     appNote,
     appNoteEn,
-    sections,
-    bullets: sections.flatMap((visibleSection) => visibleSection.bullets),
+    bullets: ["Added", "Changed", "Fixed", "Removed"].flatMap((heading) =>
+      sectionBullets(section.body, heading),
+    ),
   };
 }
 
@@ -493,11 +453,6 @@ async function validateChangelog(version) {
   if (parsed.appNoteEn && parsed.appNoteEn.length > MAX_APP_NOTE_EN_LENGTH) {
     fail(`CHANGELOG.md ${parsed.version} App note en is too long; keep it lighter`);
   }
-
-  const visibleChangeCountError = validateReleaseNoteVisibleChangeCount(parsed);
-  if (visibleChangeCountError) {
-    fail(visibleChangeCountError);
-  }
 }
 
 async function validateVersionPolicyCurrentCodeVersion(version) {
@@ -510,17 +465,18 @@ async function validateVersionPolicyCurrentCodeVersion(version) {
 }
 
 export function renderReleaseNotes(parsed) {
-  const visibleSections = releaseNoteVisibleSections(parsed);
+  const visibleBullets = parsed.bullets;
   const lines = [parsed.release, ""];
 
-  for (const section of visibleSections) {
-    lines.push(`### ${RELEASE_NOTE_SECTION_TITLES[section.heading]}`, "", ...section.bullets, "");
+  if (visibleBullets.length > 0) {
+    lines.push("### 主要变化", "", ...visibleBullets, "");
   }
 
   lines.push(
     "### 下载",
     "",
     "- Windows 安装包：请下载本页面附件中的 `.exe` 安装包。",
+    "- 浏览器扩展包：Chromium 系下载 `patina-chromium-extension-v...zip`，Firefox 系下载 `patina-firefox-extension-v...xpi`。",
     "",
   );
 

@@ -1,5 +1,7 @@
 pub mod apps;
 pub mod backup;
+pub mod classification;
+pub mod export;
 pub mod diagnostics;
 pub mod persistence;
 pub mod settings;
