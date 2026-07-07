@@ -3,6 +3,18 @@ import { DurableObject } from "cloudflare:workers";
 const BRIDGE_OBJECT_NAME = "default";
 const HEARTBEAT_OFFLINE_AFTER_MS = 180_000;
 const MACHINES_STORAGE_KEY = "machines";
+const STATE_CORS_HEADERS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET, OPTIONS",
+  "access-control-allow-headers": "Content-Type",
+};
+
+export default {
+  fetch(request, env) {
+    const bridge = env.REMOTE_STATUS_BRIDGE.getByName(BRIDGE_OBJECT_NAME);
+    return bridge.fetch(request);
+  },
+};
 
 export class RemoteStatusBridge extends DurableObject {
   constructor(ctx, env) {
@@ -24,6 +36,13 @@ export class RemoteStatusBridge extends DurableObject {
     }
 
     if (url.pathname === "/state") {
+      if (request.method === "OPTIONS") {
+        return new Response(null, {
+          status: 204,
+          headers: STATE_CORS_HEADERS,
+        });
+      }
+
       return jsonResponse(this.buildState());
     }
 
@@ -160,6 +179,7 @@ function jsonResponse(payload) {
     headers: {
       "content-type": "application/json; charset=utf-8",
       "cache-control": "no-store",
+      ...STATE_CORS_HEADERS,
     },
   });
 }
