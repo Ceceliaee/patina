@@ -190,7 +190,7 @@ Sponsorship helps sustain maintenance, but it does not affect feature priority, 
 
 ## Star History
 
-<a href="https://www.star-history.com/?repos=Ceceliaee%2Fpatina">
+<a href="https://www.star-history.com/?repos=Ceceliaee%2Fpatina&type=date&legend=top-left">
  <picture>
    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Ceceliaee/patina&type=date&theme=dark&legend=top-left" />
    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Ceceliaee/patina&type=date&legend=top-left" />
