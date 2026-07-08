@@ -51,8 +51,10 @@ export default function QuietDialog({
             className={`qp-dialog-surface qp-motion-overlay-enter ${surfaceClassName ?? ""}`}
           >
             <header className="qp-dialog-header">
-              <h3 className="qp-dialog-title">{title}</h3>
-              {description && <p className="qp-dialog-description">{description}</p>}
+              <div className="qp-dialog-heading">
+                <h3 className="qp-dialog-title">{title}</h3>
+                {description && <p className="qp-dialog-description">{description}</p>}
+              </div>
             </header>
             {children && <div className="qp-dialog-body">{children}</div>}
             {actions && <footer className="qp-dialog-actions">{actions}</footer>}

@@ -640,6 +640,22 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
+      `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']'))`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']');
+          if (!node) return false;
+          node.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
       `document.querySelector(".dashboard-pulse-mode-toggle")?.getAttribute("aria-pressed") === "true"`,
     );
   });

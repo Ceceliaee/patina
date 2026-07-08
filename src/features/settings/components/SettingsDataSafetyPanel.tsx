@@ -41,6 +41,7 @@ type SettingsDataSafetyPanelProps = {
   onPrepareRestoreBackup: () => Promise<boolean | void>;
   onRestoreBackup: (restoreStrategy: BackupRestoreStrategy) => void;
   onClearPendingRestoreBackup: () => void;
+  onOpenDataExport: () => void;
   remoteBackup: RemoteBackupState;
   storageSnapshot: StorageSnapshot | null;
   isStorageBusy: boolean;
@@ -171,6 +172,7 @@ export default function SettingsDataSafetyPanel({
   onPrepareRestoreBackup,
   onRestoreBackup,
   onClearPendingRestoreBackup,
+  onOpenDataExport,
   remoteBackup,
   storageSnapshot,
   isStorageBusy,
@@ -317,6 +319,28 @@ export default function SettingsDataSafetyPanel({
         </div>
 
         <div className="space-y-5">
+          <QuietSubpanel>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-[var(--qp-text-primary)]">
+                  <span>{UI_TEXT.settings.dataExportTitle}</span>
+                  <span className="settings-beta-badge">{UI_TEXT.settings.betaLabel}</span>
+                </p>
+                <p className="mt-1 text-sm leading-relaxed text-[var(--qp-text-secondary)]">
+                  {UI_TEXT.settings.dataExportHint}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onOpenDataExport}
+                disabled={busy}
+                className="qp-button-secondary h-8 shrink-0 px-3 text-xs font-semibold text-[var(--qp-text-secondary)] disabled:opacity-50"
+              >
+                {UI_TEXT.settings.dataExportAction}
+              </button>
+            </div>
+          </QuietSubpanel>
+
           <QuietSubpanel>
             <div>
               <p className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.backupRestoreTitle}</p>

@@ -25,7 +25,6 @@ export default function HistoryTimelineDialogDateControls({
       <button
         type="button"
         onClick={() => onChangeDate(-1)}
-        title={UI_TEXT.accessibility.history.previousDay(previousDateLabel)}
         aria-label={UI_TEXT.accessibility.history.previousDay(previousDateLabel)}
         className="qp-button-secondary inline-flex h-6 w-6 items-center justify-center rounded-[6px] p-0 history-timeline-dialog-date-button history-timeline-dialog-date-previous disabled:cursor-not-allowed disabled:opacity-50"
       >
@@ -38,7 +37,6 @@ export default function HistoryTimelineDialogDateControls({
         type="button"
         onClick={() => onChangeDate(1)}
         disabled={isToday}
-        title={UI_TEXT.accessibility.history.nextDay(nextDateLabel)}
         aria-label={UI_TEXT.accessibility.history.nextDay(nextDateLabel)}
         className="qp-button-secondary inline-flex h-6 w-6 items-center justify-center rounded-[6px] p-0 history-timeline-dialog-date-button history-timeline-dialog-date-next disabled:cursor-not-allowed disabled:opacity-50"
       >

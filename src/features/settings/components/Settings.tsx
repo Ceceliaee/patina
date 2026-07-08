@@ -3,14 +3,14 @@ import {
   RefreshCw,
   Settings2,
 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import type { SettingsPageProps } from "../types";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
 import SettingsAppearancePanel from "./SettingsAppearancePanel";
 import SettingsDataSafetyPanel from "./SettingsDataSafetyPanel";
 import SettingsInterfacePanel from "./SettingsInterfacePanel";
-import Export from "../../export/components/Export.tsx";
+import SettingsDataExportDialog from "./SettingsDataExportDialog.tsx";
 import SettingsResidentPanel from "./SettingsResidentPanel";
 import SettingsTrackingPanel from "./SettingsTrackingPanel";
 import { useSettingsPageState } from "../hooks/useSettingsPageState";
@@ -26,6 +26,7 @@ export default function Settings({
   onColorSchemePreview,
   onLanguagePreview,
 }: SettingsPageProps) {
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const {
     dialogs,
     loading,
@@ -247,6 +248,7 @@ export default function Settings({
             onRestoreStrategyChange={setRestoreStrategy}
             onCleanup={handleCleanup}
             onExportBackup={() => void handleExportBackup()}
+            onOpenDataExport={() => setExportDialogOpen(true)}
             onPrepareRestoreBackup={handlePrepareRestoreBackup}
             onRestoreBackup={handleRestoreBackup}
             onClearPendingRestoreBackup={clearPendingRestoreBackup}
@@ -262,10 +264,14 @@ export default function Settings({
             onCancelPendingStorageMigration={handleCancelPendingStorageMigration}
             onOpenStorageDirectory={handleOpenStorageDirectory}
           />
-
-          <Export embedded onToast={onToast} />
         </div>
       </div>
+
+      <SettingsDataExportDialog
+        open={exportDialogOpen}
+        onClose={() => setExportDialogOpen(false)}
+        onToast={onToast}
+      />
     </div>
   );
 }

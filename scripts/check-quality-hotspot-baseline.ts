@@ -7,7 +7,8 @@ interface HotspotBudget {
 }
 
 const HOTSPOT_BUDGETS: HotspotBudget[] = [
-  { path: "src/styles/quiet-pro.css", owner: "Quiet Pro design system", maxLines: 1866 },
+  // Includes shared Quiet Pro controls that previously lived in unowned feature/shared CSS.
+  { path: "src/styles/quiet-pro.css", owner: "Quiet Pro design system", maxLines: 2008 },
   { path: "src/styles/tokens.css", owner: "Quiet Pro design tokens", maxLines: 1491 },
   { path: "src-tauri/src/data/sqlite_pool.rs", owner: "Rust data/sqlite pool", maxLines: 1488 },
   { path: "src-tauri/src/data/storage_migration.rs", owner: "Rust data/storage migration", maxLines: 1426 },

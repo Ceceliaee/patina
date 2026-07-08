@@ -36,7 +36,7 @@ export async function runDataScenarios(context: BrowserSmokeContext) {
       `),
       true,
     );
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector(".data-range-picker"))`);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector(".qp-range-picker"))`);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
@@ -78,7 +78,7 @@ export async function runDataScenarios(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const apply = Array.from(document.querySelectorAll(".data-range-picker-footer button"))
+          const apply = Array.from(document.querySelectorAll(".qp-range-picker-footer button"))
             .find((node) => node.textContent?.trim() === "确定");
           if (!apply) return false;
           apply.click();
@@ -112,7 +112,7 @@ export async function runDataScenarios(context: BrowserSmokeContext) {
       `),
       true,
     );
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector(".data-range-picker"))`);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector(".qp-range-picker"))`);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
@@ -192,7 +192,7 @@ export async function runDataScenarios(context: BrowserSmokeContext) {
     );
     await waitForExpression(client!, sessionId, `/^\\d{4}年$/.test(document.querySelector('.data-trend-range-trigger[aria-expanded="true"]')?.textContent?.trim() ?? "")`);
     await evaluate(client!, sessionId, `document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));`);
-    await waitForExpression(client!, sessionId, `!document.querySelector(".data-range-picker")`);
+    await waitForExpression(client!, sessionId, `!document.querySelector(".qp-range-picker")`);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
@@ -204,7 +204,7 @@ export async function runDataScenarios(context: BrowserSmokeContext) {
       `),
       true,
     );
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector(".data-range-picker"))`);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector(".qp-range-picker"))`);
     for (let clickIndex = 0; clickIndex < 2; clickIndex += 1) {
       assert.equal(
         await evaluate(client!, sessionId, `
@@ -224,7 +224,7 @@ export async function runDataScenarios(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const apply = Array.from(document.querySelectorAll(".data-range-picker-footer button"))
+          const apply = Array.from(document.querySelectorAll(".qp-range-picker-footer button"))
             .find((node) => node.textContent?.trim() === "确定");
           if (!apply) return false;
           apply.click();

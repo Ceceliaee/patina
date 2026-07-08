@@ -647,3 +647,396 @@
   cursor: not-allowed;
   opacity: 0.4;
 }
+
+.settings-data-export-dialog-surface {
+  width: min(760px, calc(100vw - 40px));
+}
+
+.settings-data-export-dialog-surface .qp-dialog-body {
+  max-height: min(560px, calc(100vh - 176px));
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+.settings-data-export-dialog-body {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-data-export-section {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--qp-border-subtle);
+  border-radius: var(--qp-radius-chip);
+  background: var(--qp-bg-panel);
+  padding: 12px;
+}
+
+.settings-data-export-section-header {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-data-export-section-title {
+  margin: 0;
+  color: var(--qp-text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.settings-data-export-section-hint {
+  margin: 2px 0 0;
+  color: var(--qp-text-tertiary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.settings-data-export-format-section .settings-data-export-section-header {
+  align-items: center;
+}
+
+.settings-data-export-format-segmented {
+  flex: 0 0 auto;
+}
+
+.settings-data-export-range-control {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+}
+
+.settings-data-export-range-arrow {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--qp-text-secondary);
+}
+
+.settings-data-export-range-arrow:hover:not(:disabled) {
+  color: var(--qp-text-primary);
+}
+
+.settings-data-export-range-arrow:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
+.settings-data-export-range-label {
+  display: inline-flex;
+  min-width: 68px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  color: var(--qp-text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.settings-data-export-range-trigger {
+  cursor: pointer;
+}
+
+.settings-data-export-result {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-data-export-result-success {
+  color: var(--qp-success);
+}
+
+.settings-data-export-result-danger {
+  color: var(--qp-danger);
+}
+
+.settings-data-export-field-dialog {
+  width: min(760px, calc(100vw - 40px));
+}
+
+.settings-data-export-field-dialog .qp-dialog-body {
+  max-height: min(430px, calc(100vh - 260px));
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+.settings-data-export-field-dialog .qp-dialog-actions {
+  align-items: center;
+}
+
+.settings-data-export-field-dialog-actions-spacer {
+  flex: 1 1 auto;
+}
+
+.settings-data-export-field-dialog-body {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-data-export-field-summary {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  justify-self: end;
+  gap: 8px;
+  border: 1px solid var(--qp-border-subtle);
+  border-radius: var(--qp-radius-chip);
+  background: var(--qp-bg-elevated);
+  padding: 4px 8px;
+  color: var(--qp-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.settings-data-export-field-summary-danger {
+  color: var(--qp-danger);
+}
+
+.settings-data-export-field-summary strong {
+  font-weight: 700;
+}
+
+.settings-data-export-field-group {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--qp-border-subtle);
+  border-radius: var(--qp-radius-chip);
+  background: var(--qp-bg-panel);
+  padding: 9px 10px 10px;
+}
+
+.settings-data-export-field-group-collapsed {
+  gap: 0;
+}
+
+.settings-data-export-field-group-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.settings-data-export-field-group-header p {
+  margin: 0;
+  color: var(--qp-text-primary);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.3;
+}
+
+.settings-data-export-field-group-header span {
+  display: block;
+  margin-top: 2px;
+  color: var(--qp-text-tertiary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.settings-data-export-field-group-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.settings-data-export-field-group-actions .qp-tooltip-anchor {
+  width: 26px;
+}
+
+.settings-data-export-field-group-action {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--qp-border-subtle);
+  border-radius: var(--qp-radius-control);
+  background: var(--qp-bg-elevated);
+  color: var(--qp-text-secondary);
+  transition:
+    border-color var(--qp-motion-fast) var(--qp-motion-ease),
+    background-color var(--qp-motion-fast) var(--qp-motion-ease),
+    color var(--qp-motion-fast) var(--qp-motion-ease),
+    opacity var(--qp-motion-fast) var(--qp-motion-ease);
+}
+
+.settings-data-export-field-group-action:hover:not(:disabled) {
+  border-color: var(--qp-border-strong);
+  background: var(--qp-bg-panel);
+  color: var(--qp-text-primary);
+}
+
+.settings-data-export-field-group-action:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--qp-accent-default) 42%, transparent);
+  outline-offset: 1px;
+}
+
+.settings-data-export-field-group-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.settings-data-export-field-list {
+  display: grid;
+  gap: 5px;
+}
+
+.settings-data-export-field-row {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 36px;
+  grid-template-columns: 24px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--qp-border-subtle);
+  border-radius: var(--qp-radius-chip);
+  background: var(--qp-bg-elevated);
+  padding: 5px 9px;
+  transition:
+    border-color var(--qp-motion-fast) var(--qp-motion-ease),
+    background-color var(--qp-motion-fast) var(--qp-motion-ease),
+    opacity var(--qp-motion-fast) var(--qp-motion-ease);
+}
+
+.settings-data-export-field-row-selected {
+  border-color: color-mix(in srgb, var(--qp-accent-default) 24%, var(--qp-border-subtle));
+  background: color-mix(in srgb, var(--qp-accent-muted) 46%, var(--qp-bg-elevated));
+}
+
+.settings-data-export-field-row-dragging {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--qp-accent-default) 36%, var(--qp-border-subtle));
+  background: var(--qp-bg-panel);
+  opacity: 0.42;
+}
+
+.settings-data-export-field-row-drop-before::before,
+.settings-data-export-field-row-drop-after::after {
+  position: absolute;
+  right: 10px;
+  left: 10px;
+  z-index: 2;
+  height: 0;
+  border-top: 2px dashed var(--qp-accent-default);
+  background: transparent;
+  content: "";
+}
+
+.settings-data-export-field-row-drop-before::before {
+  top: -3px;
+}
+
+.settings-data-export-field-row-drop-after::after {
+  bottom: -3px;
+}
+
+.settings-data-export-field-drag-preview {
+  position: fixed;
+  z-index: 140;
+  pointer-events: none;
+  box-shadow: var(--qp-shadow-overlay);
+  opacity: 0.98;
+}
+
+.settings-data-export-field-drag-preview,
+.settings-data-export-field-drag-preview.settings-data-export-field-row-selected {
+  border-color: color-mix(in srgb, var(--qp-accent-default) 40%, var(--qp-border-subtle));
+  background: var(--qp-bg-elevated);
+}
+
+.settings-data-export-field-drag-handle-preview {
+  cursor: grabbing;
+}
+
+.settings-data-export-field-copy-preview {
+  cursor: grabbing;
+}
+
+.settings-data-export-field-drag-handle {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--qp-text-secondary);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.settings-data-export-field-drag-handle:hover {
+  color: var(--qp-text-primary);
+}
+
+.settings-data-export-field-drag-handle:active {
+  color: var(--qp-accent-default);
+  cursor: grabbing;
+}
+
+.settings-data-export-field-drag-handle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--qp-accent-default) 42%, transparent);
+  outline-offset: 1px;
+}
+
+.settings-data-export-field-copy {
+  display: block;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-data-export-field-line {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.settings-data-export-field-line strong {
+  flex: 0 0 auto;
+  color: var(--qp-text-primary);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.3;
+}
+
+.settings-data-export-field-line span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--qp-text-tertiary);
+  font-size: 11px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+}
+
+.settings-data-export-field-check-input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--qp-accent-default);
+  justify-self: center;
+}
+
+.settings-data-export-field-check-input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--qp-accent-default) 42%, transparent);
+  outline-offset: 1px;
+}
