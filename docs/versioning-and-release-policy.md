@@ -230,6 +230,7 @@ App note: 一句话概括应用内更新提示要显示的变化。
 - 准备正式版本时，必须先对比最近一个已发布 tag 或 release 提交之后的完整范围，例如 `git log vX.Y.Z..HEAD` 与 `git diff --stat vX.Y.Z..HEAD`；changelog 应总结这一整段时间的最终结果，而不是只总结最后一轮局部改动
 - 优先写用户能感知到的结果，不先写实现手段、模块名或重构过程
 - 如果条目修复了 GitHub issue，必须在对应 `Fixed` 条目中带上 issue 编号或链接，例如 `[#1](https://github.com/Ceceliaee/patina/issues/1)`，方便从发布说明追溯到问题上下文
+- changelog 的追踪引用只关联具体 GitHub issue 或 pull request，不关联 GitHub Project、项目看板或 Project item；如果没有对应 issue 或 pull request，则不为凑引用而误链、补建或关联看板
 - 一条尽量只表达一个结果，避免把多个层次不同的变化揉成一条长句
 - `Added` 只写新增能力或新增入口，不把“补了支持逻辑”误写成新增功能
 - `Changed` 只写用户可感知的行为调整、体验变化或默认值变化

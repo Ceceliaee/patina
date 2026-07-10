@@ -22,6 +22,9 @@ App note en: TBD.
 
 ### Fixed
 
+- 修复升级或冷启动加载分类配置时可能清理当前版本暂时无法识别的分类设置键，避免已有分类配置被破坏；新增旧版数据库升级与重复冷启动回归。Refs [#37](https://github.com/Ceceliaee/patina/issues/37)
+- 修复有效的当前格式 Patina 备份被常见压缩软件重新压缩为 Deflated 后无法识别的问题；备份结构、内容校验和版本校验保持不变。Refs [#38](https://github.com/Ceceliaee/patina/issues/38)
+
 ### Removed
 
 ### Internal
