@@ -74,10 +74,8 @@ fn get_icon_base64_uncached(exe_path: &str) -> Option<String> {
 
         let hicon = if let Some(icon_large) = icon_large.as_ref() {
             icon_large.raw()
-        } else if let Some(icon_small) = icon_small.as_ref() {
-            icon_small.raw()
         } else {
-            return None;
+            icon_small.as_ref()?.raw()
         };
 
         hicon_to_base64(hicon)
