@@ -5,6 +5,41 @@ import { evaluate, jsonString, waitForExpression } from "./browserHarness.ts";
 export async function runClassificationScenarios(context: BrowserSmokeContext) {
   const { client, sessionId, runTest } = context;
 
+  await runTest("classification cold start preserves unknown upgrade settings", async () => {
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const storageKey = "__time_tracker_smoke_settings";
+          const unknownKey = "__deleted_category::future-category";
+          const settings = JSON.parse(localStorage.getItem(storageKey) ?? "{}");
+          settings[unknownKey] = "legacy-marker";
+          localStorage.setItem(storageKey, JSON.stringify(settings));
+          location.reload();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("分类"))} + ']'))`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const storageKey = "__time_tracker_smoke_settings";
+          const unknownKey = "__deleted_category::future-category";
+          const settings = JSON.parse(localStorage.getItem(storageKey) ?? "{}");
+          const mutations = globalThis.__TIME_TRACKER_CLASSIFICATION_MUTATIONS ?? [];
+          return settings[unknownKey] === "legacy-marker"
+            && !mutations.some((mutation) => mutation.key === unknownKey && mutation.value === null);
+        })()
+      `),
+      true,
+    );
+  });
+
   await runTest("app mapping only offers explicit manual categories", async () => {
     assert.equal(
       await evaluate(client!, sessionId, `

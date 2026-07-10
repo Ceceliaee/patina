@@ -578,11 +578,16 @@ function buildDeleteCategoryDefinitionMutations(category: ExtendedAppCategory): 
 export async function loadDeletedCategories(): Promise<AppCategory[]> {
   const rows = await loadSettingKeysByKeyPrefix(DELETED_CATEGORY_KEY_PREFIX);
 
+  return parsePersistedDeletedCategories(rows);
+}
+
+export function parsePersistedDeletedCategories(
+  rows: readonly { key: string }[],
+): AppCategory[] {
   const categories = new Set<AppCategory>();
   for (const row of rows) {
     const category = row.key.slice(DELETED_CATEGORY_KEY_PREFIX.length);
     if (!isPersistableDeletedCategory(category)) {
-      await deleteSettingValue(row.key);
       continue;
     }
     categories.add(category);

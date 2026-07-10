@@ -64,6 +64,7 @@ function tauriStubFor(path: string) {
   if (path === "@tauri-apps/api/core") {
     return `
       const SETTINGS_STORAGE_KEY = "__time_tracker_smoke_settings";
+      globalThis.__TIME_TRACKER_CLASSIFICATION_MUTATIONS ??= [];
 
       function loadStoredSettings() {
         try {
@@ -128,6 +129,18 @@ function tauriStubFor(path: string) {
           const settings = loadStoredSettings();
           for (const mutation of payload.mutations ?? []) {
             settings[mutation.key] = mutation.value;
+          }
+          localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+        }
+        if (command === "cmd_commit_classification_settings") {
+          const settings = loadStoredSettings();
+          for (const mutation of payload.mutations ?? []) {
+            globalThis.__TIME_TRACKER_CLASSIFICATION_MUTATIONS.push(mutation);
+            if (mutation.value === null) {
+              delete settings[mutation.key];
+            } else {
+              settings[mutation.key] = mutation.value;
+            }
           }
           localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
         }
@@ -253,13 +266,18 @@ function tauriStubFor(path: string) {
           return new Database();
         }
 
-        async select(query) {
+        async select(query, params = []) {
           const normalizedQuery = String(query ?? "").toLowerCase();
           if (normalizedQuery.includes("from settings")) {
             const settings = loadStoredSettings();
             const language = globalThis.__TIME_TRACKER_SMOKE_LANGUAGE;
             if (language) settings.language = language;
-            return Object.entries(settings).map(([key, value]) => ({ key, value: String(value) }));
+            const keyPrefix = normalizedQuery.includes("key like")
+              ? String(params[0] ?? "").replace(/%$/, "")
+              : "";
+            return Object.entries(settings)
+              .filter(([key]) => !keyPrefix || key.startsWith(keyPrefix))
+              .map(([key, value]) => ({ key, value: String(value) }));
           }
           if (normalizedQuery.includes("min(start_time)")) {
             return [{ earliest_start_time: historySessionRows()[0].start_time }];

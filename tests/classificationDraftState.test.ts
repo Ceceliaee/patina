@@ -18,6 +18,7 @@ import {
 import {
   buildAppOverrideTransition,
   buildLegacyAutoClassificationMigrationMutations,
+  parsePersistedDeletedCategories,
   type ObservedAppCandidate,
 } from "../src/features/classification/services/classificationStore.ts";
 import {
@@ -437,6 +438,42 @@ await runTest("app override transition restores truncated modern category ids wh
       }),
     },
   ]);
+});
+
+await runTest("restored modern category ids remain stable on the next cold start", () => {
+  const category = "custom:category_76fe3862f1e4493badcafe1234567890" as const;
+  const firstTransition = buildAppOverrideTransition(
+    "__app_override::notepad.exe",
+    JSON.stringify({
+      category: "custom:category_76fe3862f1e",
+      enabled: true,
+      updatedAt: 123,
+    }),
+    [category],
+  );
+  const repairedValue = firstTransition.mutations[0]?.value;
+
+  assert.ok(repairedValue);
+  const secondTransition = buildAppOverrideTransition(
+    "__app_override::notepad.exe",
+    repairedValue,
+    [category],
+  );
+
+  assert.equal(secondTransition.override?.category, category);
+  assert.deepEqual(secondTransition.mutations, []);
+});
+
+await runTest("upgrade reads ignore unknown deleted-category keys without treating them as current categories", () => {
+  const categories = parsePersistedDeletedCategories([
+    { key: "__deleted_category::development" },
+    { key: "__deleted_category::system" },
+    { key: "__deleted_category::other" },
+    { key: "__deleted_category::custom:category_future" },
+    { key: "__deleted_category::future-category" },
+  ]);
+
+  assert.deepEqual(categories, ["development"]);
 });
 
 await runTest("app override transition leaves ambiguous truncated modern category ids unchanged", () => {

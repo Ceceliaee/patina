@@ -11,3 +11,6 @@ pub mod storage_migration;
 pub mod tracking_pause_service;
 pub mod tracking_runtime;
 pub mod user_data_maintenance;
+
+#[cfg(test)]
+mod sqlite_pool_upgrade_tests;
