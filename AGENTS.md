@@ -91,6 +91,10 @@ These instructions apply to all UI work unless the user gives an explicit task-s
 - This is a personal repository. When the user asks to push changes to the repository, default to committing the confirmed scope and pushing directly to `origin/main`.
 - When the user says to push to the repository without specifying a narrower scope, treat it as a request to include all current uncommitted changes, split them into logical commits for easier review, and then push those commits to `origin/main`.
 - Keep grouped commits reviewable: each commit should have a focused subject and contain related files only, unless the user explicitly asks for a single commit.
+- Before creating a commit, inspect the staged scope with `git diff --cached --stat` and `git diff --cached --numstat`.
+- If one staged commit exceeds 1,000 changed lines of manually maintained content (additions plus deletions) or touches more than 25 files, stop and split it into coherent, reviewable commits. Do not create the oversized commit unless the user explicitly approves it after receiving an explanation of why it is not reasonably divisible.
+- Lockfiles, generated files, snapshots, bulk assets, and mechanical migration output may be excluded from the manually maintained line count, but should be isolated in a separate commit when practical. Do not satisfy the limit by arbitrarily splitting files; split by behavior, owner, or independently reviewable stage, and keep each commit buildable or verifiable where practical.
+- A single Project item may produce multiple commits; do not compress an entire Project item into one oversized commit.
 - Do not create a branch or pull request unless the user explicitly asks for one.
 - Do not use issue-closing keywords such as `Closes`, `Fixes`, or `Resolves` in commits, changelog entries, pull request descriptions, or GitHub comments unless the user explicitly asks to close the issue.
 - When a change relates to an issue, reference it without changing its state, for example with `Refs #3` or a Markdown issue link.

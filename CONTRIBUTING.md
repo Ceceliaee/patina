@@ -160,6 +160,30 @@ Common prefixes:
 - `chore:` for maintenance work;
 - `release:` for release preparation.
 
+Before creating a commit, inspect the staged scope:
+
+```bash
+git diff --cached --stat
+git diff --cached --numstat
+```
+
+Commit reviewability rules:
+
+- More than 1,000 changed lines of manually maintained content, counting
+  additions and deletions, triggers mandatory split review.
+- Touching more than 25 files also triggers mandatory split review.
+- Split by behavior, owner, or independently reviewable stage by default.
+- If the change is genuinely indivisible, explain why and obtain explicit
+  maintainer approval before keeping it as one oversized commit.
+- Lockfiles, generated files, snapshots, bulk assets, and mechanical migration
+  output may be excluded from the manually maintained line count.
+- Isolate excluded generated or mechanical changes in a separate commit when
+  practical.
+- Do not satisfy the limit by arbitrarily splitting files.
+- Keep each commit buildable or independently verifiable where practical.
+- One Project item may produce multiple commits and should not be compressed
+  into one oversized commit.
+
 Do not use issue-closing keywords such as `Closes`, `Fixes`, or `Resolves`
 unless the maintainer explicitly asks to close the issue. Reference related
 issues with:
@@ -573,6 +597,7 @@ Before requesting review:
 - [ ] I read the relevant active project documents.
 - [ ] My branch started from a recent `main`.
 - [ ] The pull request solves one coherent problem.
+- [ ] The commits are reviewable; oversized changes were split coherently or explicitly approved with an indivisibility explanation.
 - [ ] I removed unrelated refactors and formatting churn.
 - [ ] I placed new behavior under the correct owner.
 - [ ] I added tests for the risk-bearing behavior.
@@ -749,6 +774,25 @@ docs: add pull request contribution guide
 - `test:`：仅测试改动；
 - `chore:`：维护性工作；
 - `release:`：发布准备。
+
+创建 commit 前，先检查暂存区范围：
+
+```bash
+git diff --cached --stat
+git diff --cached --numstat
+```
+
+commit 可审查性规则：
+
+- 手工维护内容的变更超过 1000 行（新增行与删除行之和）时，必须进行拆分复核。
+- 涉及超过 25 个文件时，也必须进行拆分复核。
+- 默认按行为、owner 或可以独立审查的阶段拆成多个连贯 commit。
+- 确实无法合理拆分时，应先解释不可拆分原因，并获得维护者明确确认后，才保留为一个超大 commit。
+- lockfile、生成文件、快照、批量资源和机械 migration 输出可以不计入手工维护行数。
+- 在可行时，应把排除计数的生成或机械变更单独提交。
+- 不要为了满足数字限制而按文件随意切块。
+- 每个 commit 在可行时应能够独立构建或验证。
+- 一个 Project item 可以对应多个 commit，不应把整个工作项压缩成一个超大 commit。
 
 除非维护者明确要求关闭 issue，否则不要使用 `Closes`、`Fixes` 或 `Resolves`
 等自动关闭关键词。引用相关 issue 时请使用：
@@ -1138,6 +1182,7 @@ Review 时应按以下顺序检查：
 - [ ] 我阅读了相关的有效项目文档。
 - [ ] 我的分支从近期 `main` 创建。
 - [ ] Pull Request 只解决一个完整、连贯的问题。
+- [ ] commit 保持可审查；超大变更已经按逻辑拆分，或已说明不可拆分原因并获得明确确认。
 - [ ] 我删除了无关重构和格式化噪音。
 - [ ] 我把新增行为放在正确的 owner 下。
 - [ ] 我为承担风险的行为补充了测试。

@@ -67,6 +67,7 @@ Write `N/A` if the change has no visible UI impact.
 
 - [ ] I read the relevant active project documents under `docs/`.
 - [ ] This pull request solves one coherent problem and excludes unrelated cleanup.
+- [ ] The commits are reviewable; oversized changes were split coherently or explicitly approved with an indivisibility explanation.
 - [ ] New behavior is placed under the correct owner and does not bypass architecture boundaries.
 - [ ] I rebased onto the latest `main`, or confirmed that the branch is compatible with it.
 - [ ] I documented security behavior for any local or network interface.
