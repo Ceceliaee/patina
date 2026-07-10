@@ -6,7 +6,7 @@ Issue：Refs [#37](https://github.com/Ceceliaee/patina/issues/37)
 
 执行方案：[`project-1-classification-upgrade-preservation-adversarial-review-execution-plan-2026-07-10.md`](./project-1-classification-upgrade-preservation-adversarial-review-execution-plan-2026-07-10.md)
 
-状态：实现与验证已完成，文档已归档；Project 外部状态待同步
+状态：实现与验证已完成，文档已归档；Project #1 已同步为 `Done`
 
 ## 1. 完成勾选与最终范围裁决
 
@@ -27,7 +27,7 @@ Issue：Refs [#37](https://github.com/Ceceliaee/patina/issues/37)
 - [x] `CHANGELOG.md` 已在 `Unreleased / Fixed` 记录用户结果并关联 Issue #37。
 - [x] 未修改版本号、未触碰生产数据目录、未关闭或修改 GitHub Issue #37。
 - [x] 执行单与完成记录均位于 `docs/archive/`。
-- [ ] Project #1 更新为 `Done`：最终核对时公开页面显示 `Next`，待单独执行外部同步。
+- [x] Project #1 已更新为 `Done`：看板复核为 `In progress 0 / Done 1`，`Next` 保持 3 项。
 
 ## 2. 安装包矩阵裁决
 
@@ -65,7 +65,7 @@ Issue：Refs [#37](https://github.com/Ceceliaee/patina/issues/37)
 - [x] 未知和歧义数据保持原样。
 - [x] 第二次启动不会再次改写。
 - [x] `npm run check:full` 真实完整通过。
-- [ ] Project 状态仍待外部同步后才能回答为 `Done`。
+- [x] Project 状态已同步为 `Done`，且未改变其他卡片状态或手动顺序。
 
 ## 5. 根因结论
 
@@ -95,9 +95,9 @@ Issue：Refs [#37](https://github.com/Ceceliaee/patina/issues/37)
 
 ## 8. Project 收尾
 
-- Project #1 当前公开状态：`Next`。
-- `Next` 补位状态：公开看板当前已有 3 项 `Next`，未擅自改动其他卡片。
-- 完成后状态：本地实现与验证完成；仅剩将本项更新为 `Done` 并重新核对最多三个 `Next`。
+- Project #1 当前公开状态：`Done`。
+- `Next` 补位状态：公开看板仍有 3 项 `Next`，无需补位，未改动其他卡片。
+- 完成后状态：本地实现、验证、文档归档和 Project 外部状态同步均已完成。
 - 正式发布后清理：待发布后执行。
 
 ## 9. 完成定义
@@ -110,4 +110,4 @@ Issue：Refs [#37](https://github.com/Ceceliaee/patina/issues/37)
 4. raw persistence、effective semantics、UI consumers 和 cold restart 四个层次都通过。
 5. 修复对未知数据保守，对确定数据无损，对重复启动幂等。
 6. 完整质量门、旧库双启动和隔离浏览器冷启动通过；安装包矩阵已按根因证据裁定为不适用。
-7. Changelog、执行方案和完成记录归档完成；Project 状态外部同步被单独保留为未勾选项。
+7. Changelog、执行方案和完成记录归档完成；Project #1 已同步为 `Done`，`Next` 队列保持 3 项。

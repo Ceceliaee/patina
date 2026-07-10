@@ -4,7 +4,7 @@ Project：[`Patina Development Queue #1`](https://github.com/users/Ceceliaee/pro
 
 Issue：Refs [#37](https://github.com/Ceceliaee/patina/issues/37)
 
-状态：实现与验证已完成，文档已归档；Project 外部状态待 GitHub 登录恢复后同步
+状态：实现与验证已完成，文档已归档；Project #1 已同步为 `Done`
 
 文档类型：How-to / 执行指南
 
