@@ -268,6 +268,7 @@ await runTest("app shell declares every primary desktop view", () => {
   const viewType = readUtf8("src/app/types/view.ts");
   const shell = readUtf8("src/app/AppShell.tsx");
   const sidebar = readUtf8("src/app/components/AppSidebar.tsx");
+  const motionCss = readUtf8("src/styles/motion.css");
 
   for (const view of EXPECTED_VIEWS) {
     assert.match(viewType, new RegExp(`"${view}"`));
@@ -276,17 +277,19 @@ await runTest("app shell declares every primary desktop view", () => {
   }
   assert.match(shell, /useQuietMotionPreference/);
   assert.match(shell, /data-qp-motion=\{quietMotionMode\}/);
-  assert.match(shell, /VIEW_ORDER/);
-  assert.match(shell, /viewTransitionStyle/);
-  assert.match(shell, /qp-view-transition-offset/);
+  assert.doesNotMatch(shell, /VIEW_ORDER/);
+  assert.doesNotMatch(shell, /viewTransitionStyle/);
+  assert.match(motionCss, /--qp-motion-enhanced-nav-bounce-ease/);
+  assert.doesNotMatch(shell, /qp-main-view-enter/);
+  assert.doesNotMatch(shell, /qp-motion-view-enter/);
   assert.doesNotMatch(shell, /qp-dynamic-effects-off/);
 });
 
-await runTest("motion preference treats enhanced motion as an explicit app opt-in", () => {
+await runTest("motion preference keeps reduced motion above enhanced motion", () => {
   assert.equal(resolveQuietMotionMode({
     enhancedMotionEnabled: true,
     prefersReducedMotion: true,
-  }), "enhanced");
+  }), "reduced");
   assert.equal(resolveQuietMotionMode({
     enhancedMotionEnabled: false,
     prefersReducedMotion: true,
@@ -327,9 +330,10 @@ await runTest("Data regular view avoids visible loading and skeleton branches", 
   assert.doesNotMatch(data, /renderStage/);
   assert.doesNotMatch(trendPanel, /Loader2|qp-spin/);
   assert.doesNotMatch(appTrendPanel, /Loader2|qp-spin/);
-  assert.match(trendPanel, /qp-content-fade-in/);
-  assert.match(appTrendPanel, /qp-content-fade-in/);
-  assert.match(heatmapPanel, /qp-content-fade-in|data-heatmap-loading-state|loading\?: boolean/);
+  assert.doesNotMatch(trendPanel, /qp-content-fade-in/);
+  assert.doesNotMatch(appTrendPanel, /qp-content-fade-in/);
+  assert.doesNotMatch(heatmapPanel, /qp-content-fade-in/);
+  assert.match(heatmapPanel, /data-heatmap-loading-state|loading\?: boolean/);
   assert.doesNotMatch(heatmapPanel, /UI_TEXT\.data\.less/);
   assert.doesNotMatch(heatmapPanel, /UI_TEXT\.data\.more/);
   assert.match(heatmapPanel, /data-heatmap-granularity/);

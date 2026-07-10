@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { getUiText, setUiTextLanguage } from "../shared/copy/index.ts";
 import AppSidebar from "./components/AppSidebar";
 import AppTitleBar from "./components/AppTitleBar";
@@ -100,8 +100,6 @@ type HistoryDateRequest = {
   requestId: number;
 };
 
-const VIEW_ORDER: View[] = ["dashboard", "history", "data", "mapping", "tools", "settings", "about"];
-
 export default function AppShell() {
   return (
     <UpdateDialogProvider>
@@ -134,33 +132,6 @@ function AppShellContent() {
   const [historyDateRequest, setHistoryDateRequest] = useState<HistoryDateRequest | null>(null);
   const [toolsInitialTarget, setToolsInitialTarget] = useState<ToolsOpenTarget | null>(null);
   const [renderedView, setRenderedView] = useState<View>("dashboard");
-  const prevViewIndexRef = useRef(0);
-  const [viewTransitionStyle, setViewTransitionStyle] = useState<CSSProperties>({
-    "--qp-view-transition-offset": "12px",
-    "--qp-view-transition-duration": "220ms",
-  } as CSSProperties);
-
-  const changeRenderedView = useCallback((nextView: View) => {
-    const prevIndex = prevViewIndexRef.current;
-    const nextIndex = VIEW_ORDER.indexOf(nextView);
-
-    if (prevIndex !== nextIndex && nextIndex !== -1) {
-      const diff = nextIndex - prevIndex;
-      const direction = diff > 0 ? 1 : -1;
-      const absDiff = Math.abs(diff);
-      const offsetVal = 6 + Math.min(3, absDiff) * 4;
-      const durationVal = Math.max(170, 230 - absDiff * 15);
-
-      setViewTransitionStyle({
-        "--qp-view-transition-offset": `${direction * offsetVal}px`,
-        "--qp-view-transition-duration": `${durationVal}ms`,
-      } as CSSProperties);
-
-      prevViewIndexRef.current = nextIndex;
-    }
-
-    setRenderedView(nextView);
-  }, []);
 
   const renderedViewRequestRef = useRef(0);
   const warmupRuntimeReadyResolveRef = useRef<(() => void) | null>(null);
@@ -206,12 +177,12 @@ function AppShellContent() {
     const requestId = renderedViewRequestRef.current;
 
     if (!preloadableView) {
-      changeRenderedView(currentView);
+      setRenderedView(currentView);
       return undefined;
     }
 
     if (getPreloadableViewChunkStatus(preloadableView) === "resolved") {
-      changeRenderedView(currentView);
+      setRenderedView(currentView);
       return undefined;
     }
 
@@ -219,20 +190,20 @@ function AppShellContent() {
     void preloadLazyViewChunk(preloadableView)
       .then(() => {
         if (!cancelled && renderedViewRequestRef.current === requestId) {
-          changeRenderedView(currentView);
+          setRenderedView(currentView);
         }
       })
       .catch((error) => {
         console.warn(`Failed to preload ${preloadableView} view before navigation`, error);
         if (!cancelled && renderedViewRequestRef.current === requestId) {
-          changeRenderedView(currentView);
+          setRenderedView(currentView);
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [currentView, changeRenderedView]);
+  }, [currentView]);
 
   useAppThemeMode(
     settingsThemeModePreview ?? appSettings.themeMode,
@@ -519,8 +490,7 @@ function AppShellContent() {
           >
             <div
               key={renderedView}
-              style={viewTransitionStyle}
-              className="qp-view-container qp-motion-view-enter flex-1 min-h-0 flex flex-col h-full overflow-hidden"
+              className="qp-view-container flex-1 min-h-0 flex flex-col h-full overflow-hidden"
             >
               {renderedView === "dashboard" && (
                 <Dashboard

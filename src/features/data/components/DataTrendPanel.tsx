@@ -72,7 +72,7 @@ function DataTrendPanel({
           ref={chartRef}
           className={`data-trend-chart ${
             viewModel
-              ? canOpenHistory ? "data-chart-openable qp-content-fade-in" : "qp-content-fade-in"
+              ? canOpenHistory ? "data-chart-openable" : ""
               : "data-chart-placeholder flex items-center justify-center text-[var(--qp-text-tertiary)] text-xs"
           }`}
           onMouseDownCapture={viewModel ? onMouseDownCapture : undefined}

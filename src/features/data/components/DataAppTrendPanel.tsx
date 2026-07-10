@@ -138,7 +138,7 @@ function DataAppTrendPanel({
           {UI_TEXT.data.appTrendEmpty}
         </div>
       ) : (
-        <div className="data-app-grid qp-content-fade-in">
+        <div className="data-app-grid">
           <div className="data-app-sidebar">
             <label className="data-app-search">
               <Search size={14} aria-hidden />
@@ -210,7 +210,7 @@ function DataAppTrendPanel({
             </div>
             <div
               ref={chartRef}
-              className={`data-app-chart qp-content-fade-in ${canOpenHistory ? "data-chart-openable" : ""}`}
+              className={`data-app-chart ${canOpenHistory ? "data-chart-openable" : ""}`}
               onMouseDownCapture={onMouseDownCapture}
               onDoubleClickCapture={onDoubleClickCapture}
             >

@@ -1,21 +1,15 @@
 :root {
-  --qp-motion-enhanced-view-duration: 220ms;
-  --qp-motion-enhanced-overlay-duration: 120ms;
-  --qp-motion-enhanced-nav-bg-duration: 180ms;
-  --qp-motion-enhanced-nav-indicator-duration: 250ms;
-  --qp-motion-enhanced-spring-ease: cubic-bezier(0.25, 1.25, 0.4, 1);
+  --qp-motion-enhanced-overlay-duration: 100ms;
+  --qp-motion-enhanced-nav-bg-duration: 260ms;
+  --qp-motion-enhanced-nav-indicator-duration: 320ms;
+  --qp-motion-enhanced-pane-duration: 150ms;
+  --qp-motion-enhanced-nav-bounce-ease: cubic-bezier(0.2, 1.28, 0.34, 1);
 }
 
-.qp-motion-view-enter,
 .qp-motion-overlay-enter,
 .qp-motion-popover-enter,
 .qp-toast-entry {
   animation: none;
-}
-
-[data-qp-motion="enhanced"] .qp-motion-view-enter {
-  will-change: transform, opacity;
-  animation: qp-view-fade-in var(--qp-view-transition-duration, var(--qp-motion-enhanced-view-duration)) var(--qp-motion-ease) both;
 }
 
 [data-qp-motion="enhanced"] .qp-motion-overlay-enter,
@@ -24,14 +18,10 @@
   animation: qp-motion-fade-in var(--qp-motion-enhanced-overlay-duration) var(--qp-motion-ease) both;
 }
 
-[data-qp-motion="enhanced"] .qp-content-fade-in {
-  animation: qp-content-fade-in var(--qp-motion-fast) var(--qp-motion-ease) both;
-}
-
 [data-qp-motion="enhanced"] .tools-section-pane,
 [data-qp-motion="enhanced"] .tools-mode-content-pane,
 [data-qp-motion="enhanced"] .qp-classification-object-pane {
-  animation: qp-horizontal-pane-enter var(--qp-motion-enhanced-view-duration) var(--qp-motion-ease) both;
+  animation: qp-horizontal-pane-enter var(--qp-motion-enhanced-pane-duration) var(--qp-motion-ease) both;
 }
 
 [data-qp-motion="enhanced"] .data-heatmap-loading-state .data-heatmap-cell,
@@ -53,24 +43,22 @@
 
 [data-qp-motion="enhanced"] .qp-nav-active-bg {
   transform: translate3d(0, calc(var(--qp-active-nav-index) * 3.125rem), 0);
-  transition: transform var(--qp-motion-enhanced-nav-bg-duration) var(--qp-motion-ease);
+  transition: transform var(--qp-motion-enhanced-nav-bg-duration) var(--qp-motion-enhanced-nav-bounce-ease);
 }
 
 [data-qp-motion="enhanced"] .qp-nav-active-indicator {
   transform: translate3d(0, calc(var(--qp-active-nav-index) * 3.125rem), 0);
-  transition: transform var(--qp-motion-enhanced-nav-indicator-duration) var(--qp-motion-enhanced-spring-ease);
+  transition: transform var(--qp-motion-enhanced-nav-indicator-duration) var(--qp-motion-enhanced-nav-bounce-ease);
 }
 
 [data-qp-motion="enhanced"] .tools-section-active-bg {
   transform: translate3d(0, calc(var(--tools-active-section-index) * 48px), 0);
-  transition: transform var(--qp-motion-enhanced-nav-indicator-duration) var(--qp-motion-enhanced-spring-ease);
+  transition: transform var(--qp-motion-enhanced-nav-indicator-duration) var(--qp-motion-enhanced-nav-bounce-ease);
 }
 
-:root[data-qp-motion="reduced"] .qp-motion-view-enter,
 :root[data-qp-motion="reduced"] .qp-motion-overlay-enter,
 :root[data-qp-motion="reduced"] .qp-motion-popover-enter,
 :root[data-qp-motion="reduced"] .qp-toast-entry,
-:root[data-qp-motion="reduced"] .qp-content-fade-in,
 :root[data-qp-motion="reduced"] .tools-section-pane,
 :root[data-qp-motion="reduced"] .tools-mode-content-pane,
 :root[data-qp-motion="reduced"] .qp-classification-object-pane,
@@ -95,34 +83,10 @@
   }
 }
 
-@keyframes qp-view-fade-in {
-  from {
-    opacity: 0;
-    transform: translate3d(0, var(--qp-view-transition-offset, 12px), 0);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-}
-
-@keyframes qp-content-fade-in {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 2px, 0);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-}
-
 @keyframes qp-horizontal-pane-enter {
   from {
     opacity: 0;
-    transform: translate3d(8px, 0, 0);
+    transform: translate3d(4px, 0, 0);
   }
 
   to {
