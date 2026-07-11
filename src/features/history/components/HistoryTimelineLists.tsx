@@ -41,10 +41,16 @@ interface HistoryWebTimelineListProps {
   ) => void;
 }
 
+const PREVIEW_SCREENSHOT_COUNT = 5;
+
 function SessionScreenshotThumbnails({ screenshots }: { screenshots: ScreenshotEntry[] }) {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [fullImage, setFullImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+
+  const displayScreenshots = showAll ? screenshots : screenshots.slice(0, PREVIEW_SCREENSHOT_COUNT);
+  const hasMore = screenshots.length > PREVIEW_SCREENSHOT_COUNT;
 
   const handleClick = useCallback(async (s: ScreenshotEntry) => {
     if (expandedId === s.id) {
@@ -66,42 +72,67 @@ function SessionScreenshotThumbnails({ screenshots }: { screenshots: ScreenshotE
   }, [expandedId]);
 
   return (
-    <div className="flex flex-wrap gap-1 mt-2">
-      {screenshots.map((s) => (
-        <div key={s.id} className="flex flex-col">
+    <div className="mt-2">
+      <div className="flex flex-wrap gap-1">
+        {displayScreenshots.map((s) => (
+          <div key={s.id} className="flex flex-col">
+            <button
+              type="button"
+              className={`shrink-0 rounded overflow-hidden border-2 transition-colours ${
+                expandedId === s.id
+                  ? "border-[var(--qp-accent)]"
+                  : "border-transparent hover:border-[var(--qp-border)]"
+              }`}
+              onClick={() => handleClick(s)}
+              title={new Date(s.capturedAt).toLocaleTimeString()}
+            >
+              <img
+                src={`data:image/webp;base64,${s.thumbnailBase64}`}
+                alt={`Screenshot at ${new Date(s.capturedAt).toLocaleTimeString()}`}
+                className="block"
+                style={{ width: "100px", height: "auto", aspectRatio: `${s.width}/${s.height}` }}
+              />
+            </button>
+            {expandedId === s.id && (
+              <div className="mt-1 relative rounded overflow-hidden border border-[var(--qp-border)] bg-black/5 max-w-[320px] z-10">
+                {loading && (
+                  <div className="text-[10px] text-[var(--qp-text-tertiary)] p-2">Loading...</div>
+                )}
+                {fullImage && (
+                  <img
+                    src={`data:image/webp;base64,${fullImage}`}
+                    alt="Screenshot full view"
+                    className="w-full h-auto max-h-[40vh] object-contain"
+                  />
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+        {hasMore && !showAll && (
           <button
             type="button"
-            className={`shrink-0 rounded overflow-hidden border-2 transition-colours ${
-              expandedId === s.id
-                ? "border-[var(--qp-accent)]"
-                : "border-transparent hover:border-[var(--qp-border)]"
-            }`}
-            onClick={() => handleClick(s)}
-            title={new Date(s.capturedAt).toLocaleTimeString()}
+            className="shrink-0 w-[100px] rounded border border-[var(--qp-border)] bg-[var(--qp-bg-panel)] hover:bg-[var(--qp-bg-elevated)] transition-colours text-[10px] text-[var(--qp-text-secondary)] font-medium flex items-center justify-center"
+            onClick={() => setShowAll(true)}
+            style={{ aspectRatio: "16/9" }}
           >
-            <img
-              src={`data:image/webp;base64,${s.thumbnailBase64}`}
-              alt={`Screenshot at ${new Date(s.capturedAt).toLocaleTimeString()}`}
-              className="block"
-              style={{ width: "100px", height: "auto", aspectRatio: `${s.width}/${s.height}` }}
-            />
+            +{screenshots.length - PREVIEW_SCREENSHOT_COUNT} more
           </button>
-          {expandedId === s.id && (
-            <div className="mt-1 relative rounded overflow-hidden border border-[var(--qp-border)] bg-black/5 max-w-[320px]">
-              {loading && (
-                <div className="text-[10px] text-[var(--qp-text-tertiary)] p-2">Loading...</div>
-              )}
-              {fullImage && (
-                <img
-                  src={`data:image/webp;base64,${fullImage}`}
-                  alt="Screenshot full view"
-                  className="w-full h-auto max-h-[40vh] object-contain"
-                />
-              )}
-            </div>
-          )}
-        </div>
-      ))}
+        )}
+      </div>
+      {hasMore && showAll && (
+        <button
+          type="button"
+          className="mt-1 text-[10px] text-[var(--qp-text-tertiary)] hover:text-[var(--qp-text-secondary)] transition-colours"
+          onClick={() => {
+            setShowAll(false);
+            setExpandedId(null);
+            setFullImage(null);
+          }}
+        >
+          Show fewer
+        </button>
+      )}
     </div>
   );
 }
