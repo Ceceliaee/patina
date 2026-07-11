@@ -57,7 +57,7 @@ const ZH_CN_SETTINGS_COPY = {
     trackingPausedLabel: "暂停追踪",
     trackingPausedHint: "暂停后不再写入新记录，恢复后继续追踪。",
     screenshotsEnabledLabel: "工作截图",
-    screenshotsEnabledHint: "每 60 秒自动截图并保留在时间线中。截图仅保存在本地。",
+    screenshotsEnabledHint: "自动截图并保留在时间线中。截图仅保存在本地。",
     screenshotIntervalLabel: "截图间隔",
     screenshotIntervalHint: "设置自动截图的时间间隔，更短的间隔会占用更多存储空间。",
     screenshotIntervalPreset1m: "1 分钟",
