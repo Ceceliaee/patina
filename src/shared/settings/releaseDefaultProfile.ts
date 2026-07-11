@@ -66,6 +66,7 @@ export interface ReleaseDefaultSettingsProfile {
   remoteStatusBridgeUrl: string;
   remoteStatusBridgeToken: string;
   remoteStatusBridgeMachineId: string;
+  screenshotsEnabled: boolean;
 }
 
 export const RELEASE_DEFAULT_SETTINGS: ReleaseDefaultSettingsProfile = {
@@ -93,4 +94,5 @@ export const RELEASE_DEFAULT_SETTINGS: ReleaseDefaultSettingsProfile = {
   remoteStatusBridgeUrl: "",
   remoteStatusBridgeToken: "",
   remoteStatusBridgeMachineId: "",
+  screenshotsEnabled: true,
 };

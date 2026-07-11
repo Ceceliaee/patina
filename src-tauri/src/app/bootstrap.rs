@@ -168,6 +168,12 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::persistence::cmd_clear_remote_backup_settings,
         commands::persistence::cmd_save_data_bootstrap_snapshot_payload,
         commands::persistence::cmd_clear_data_bootstrap_snapshot_payload,
+        commands::screenshots::cmd_get_screenshot_settings,
+        commands::screenshots::cmd_set_screenshot_settings,
+        commands::screenshots::cmd_query_screenshots,
+        commands::screenshots::cmd_get_screenshot_data,
+        commands::screenshots::cmd_get_screenshot_file_path,
+        commands::screenshots::cmd_reveal_screenshot_in_folder,
         commands::diagnostics::cmd_get_resource_diagnostics,
     ])
 }

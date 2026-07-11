@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import QuietSwitch from "../../../shared/components/QuietSwitch";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import SettingsStepperSlider from "./SettingsStepperSlider";
+import SettingsScreenshotPanel from "./SettingsScreenshotPanel";
+import type { ScreenshotSettings } from "../services/screenshotSettingsService.ts";
 
 type MinuteControlProps = {
   label: string;
@@ -18,6 +20,10 @@ type SettingsTrackingPanelProps = {
   timelineMergeGapControl: MinuteControlProps;
   trackingPaused: boolean;
   onTrackingPausedChange: (nextChecked: boolean) => void;
+  screenshotsEnabled: boolean;
+  onScreenshotsEnabledChange: (nextChecked: boolean) => void;
+  screenshotSettings: ScreenshotSettings;
+  onScreenshotSettingsChange: (next: Partial<ScreenshotSettings>) => void;
 };
 
 type MinuteStepperSliderProps = {
@@ -79,35 +85,64 @@ export default function SettingsTrackingPanel({
   timelineMergeGapControl,
   trackingPaused,
   onTrackingPausedChange,
+  screenshotsEnabled,
+  onScreenshotsEnabledChange,
+  screenshotSettings,
+  onScreenshotSettingsChange,
 }: SettingsTrackingPanelProps) {
   return (
-    <section className="qp-panel min-h-[240px] p-5 md:p-6">
-      <div className="flex items-center gap-2.5 pb-2 border-b border-[var(--qp-border-subtle)]">
-        <MousePointerClick size={16} className="text-[var(--qp-accent-default)]" />
-        <h2 className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.trackingPanelTitle}</h2>
-      </div>
+    <>
+      <section className="qp-panel min-h-[240px] p-5 md:p-6">
+        <div className="flex items-center gap-2.5 pb-2 border-b border-[var(--qp-border-subtle)]">
+          <MousePointerClick size={16} className="text-[var(--qp-accent-default)]" />
+          <h2 className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.trackingPanelTitle}</h2>
+        </div>
 
-      <div className="mt-5 space-y-5">
-        <TrackingMinuteField {...timelineMergeGapControl} />
-        <TrackingMinuteField {...idleTimeoutControl} />
+        <div className="mt-5 space-y-5">
+          <TrackingMinuteField {...timelineMergeGapControl} />
+          <TrackingMinuteField {...idleTimeoutControl} />
 
-        <div>
-          <label className="text-[11px] font-semibold text-[var(--qp-text-tertiary)] uppercase tracking-[0.06em]">
-            {UI_TEXT.settings.trackingPausedLabel}
-          </label>
-          <div className="mt-2 flex items-start justify-between gap-4">
-            <p className="text-sm text-[var(--qp-text-secondary)] leading-relaxed">
-              {UI_TEXT.settings.trackingPausedHint}
-            </p>
-            <QuietSwitch
-              checked={trackingPaused}
-              onChange={onTrackingPausedChange}
-              ariaLabel={UI_TEXT.accessibility.settings.toggleTrackingPaused}
-              tone="warning"
-            />
+          <div>
+            <label className="text-[11px] font-semibold text-[var(--qp-text-tertiary)] uppercase tracking-[0.06em]">
+              {UI_TEXT.settings.trackingPausedLabel}
+            </label>
+            <div className="mt-2 flex items-start justify-between gap-4">
+              <p className="text-sm text-[var(--qp-text-secondary)] leading-relaxed">
+                {UI_TEXT.settings.trackingPausedHint}
+              </p>
+              <QuietSwitch
+                checked={trackingPaused}
+                onChange={onTrackingPausedChange}
+                ariaLabel={UI_TEXT.accessibility.settings.toggleTrackingPaused}
+                tone="warning"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[11px] font-semibold text-[var(--qp-text-tertiary)] uppercase tracking-[0.06em]">
+              {UI_TEXT.settings.screenshotsEnabledLabel}
+            </label>
+            <div className="mt-2 flex items-start justify-between gap-4">
+              <p className="text-sm text-[var(--qp-text-secondary)] leading-relaxed">
+                {UI_TEXT.settings.screenshotsEnabledHint}
+              </p>
+              <QuietSwitch
+                checked={screenshotsEnabled}
+                onChange={onScreenshotsEnabledChange}
+                ariaLabel={UI_TEXT.accessibility.settings.toggleScreenshots}
+              />
+            </div>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
+
+      {screenshotsEnabled && (
+        <SettingsScreenshotPanel
+          settings={screenshotSettings}
+          onChange={onScreenshotSettingsChange}
+        />
+      )}
+    </>
   );
 }

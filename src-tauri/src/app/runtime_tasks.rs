@@ -1,3 +1,4 @@
+use crate::engine::screenshots as screenshots_runtime;
 use crate::engine::tools as tools_runtime;
 use crate::engine::tracking::{runtime as tracking_runtime, watchdog as tracking_watchdog};
 use crate::engine::updater::{self, UpdaterRuntimeState};
@@ -81,6 +82,14 @@ pub(crate) fn spawn_tools_runtime_restart_loop<R: Runtime + 'static>(app: AppHan
             }
 
             break;
+        }
+    });
+}
+
+pub(crate) fn spawn_screenshots_runtime<R: Runtime + 'static>(app: AppHandle<R>) {
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = screenshots_runtime::run(app.clone()).await {
+            eprintln!("[screenshots] runtime stopped: {e}");
         }
     });
 }

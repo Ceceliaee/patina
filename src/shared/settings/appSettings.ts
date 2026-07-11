@@ -60,6 +60,7 @@ export interface AppSettings {
   remoteStatusBridgeUrl: string;
   remoteStatusBridgeToken: string;
   remoteStatusBridgeMachineId: string;
+  screenshotsEnabled: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {

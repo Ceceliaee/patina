@@ -1040,3 +1040,77 @@
   outline: 2px solid color-mix(in srgb, var(--qp-accent-default) 42%, transparent);
   outline-offset: 1px;
 }
+
+.settings-screenshot-panel .qp-panel {
+  margin-top: -12px;
+}
+
+.settings-screenshot-warning {
+  padding: 8px 10px;
+  border-radius: var(--qp-radius-control);
+  background: color-mix(in srgb, var(--qp-warning) 8%, var(--qp-bg-panel));
+  border: 1px solid color-mix(in srgb, var(--qp-warning) 20%, transparent);
+  font-size: 11px;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--qp-warning) 80%, var(--qp-text-secondary));
+}
+
+.settings-screenshot-segmented {
+  flex-shrink: 0;
+}
+
+.settings-screenshot-custom-interval,
+.settings-screenshot-custom-retention {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-screenshot-custom-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-screenshot-custom-label {
+  font-size: 11px;
+  color: var(--qp-text-tertiary);
+  font-weight: 500;
+}
+
+.settings-screenshot-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.settings-screenshot-custom-input {
+  width: 72px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.settings-screenshot-custom-unit {
+  font-size: 12px;
+  color: var(--qp-text-tertiary);
+  font-weight: 500;
+}
+
+.settings-screenshot-quick-options {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-screenshot-quick-label {
+  font-size: 10px;
+  color: var(--qp-text-tertiary);
+}
+
+.settings-screenshot-quick-buttons {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}

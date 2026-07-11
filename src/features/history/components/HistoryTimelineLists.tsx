@@ -1,4 +1,5 @@
-import { ChevronDown, ChevronRight, ChevronUp, Globe2 } from "lucide-react";
+﻿import { ChevronDown, ChevronRight, ChevronUp, Globe2 } from "lucide-react";
+import { useCallback, useState } from "react";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import { formatDuration, formatTime } from "../services/historyFormatting.ts";
@@ -8,6 +9,8 @@ import type {
   HistoryTimelineDetailsPopoverState,
   TimelineDetailTitle,
 } from "./HistoryTimelineDetailsPopover.tsx";
+import type { ScreenshotEntry } from "../services/historyScreenshots.ts";
+import { getScreenshotData } from "../services/historyScreenshots.ts";
 
 interface HistoryTimelineListProps {
   loading: boolean;
@@ -22,6 +25,7 @@ interface HistoryTimelineListProps {
     titleSampleDetails: TimelineDetailTitle[],
     trigger: HTMLElement,
   ) => void;
+  screenshotsBySessionId: Record<number, ScreenshotEntry[]>;
 }
 
 interface HistoryWebTimelineListProps {
@@ -37,6 +41,71 @@ interface HistoryWebTimelineListProps {
   ) => void;
 }
 
+function SessionScreenshotThumbnails({ screenshots }: { screenshots: ScreenshotEntry[] }) {
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [fullImage, setFullImage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleClick = useCallback(async (s: ScreenshotEntry) => {
+    if (expandedId === s.id) {
+      setExpandedId(null);
+      setFullImage(null);
+      return;
+    }
+    setExpandedId(s.id);
+    setFullImage(null);
+    setLoading(true);
+    try {
+      const data = await getScreenshotData(s.id);
+      setFullImage(data);
+    } catch {
+      setExpandedId(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [expandedId]);
+
+  return (
+    <div className="flex flex-wrap gap-1 mt-2">
+      {screenshots.map((s) => (
+        <div key={s.id} className="flex flex-col">
+          <button
+            type="button"
+            className={`shrink-0 rounded overflow-hidden border-2 transition-colours ${
+              expandedId === s.id
+                ? "border-[var(--qp-accent)]"
+                : "border-transparent hover:border-[var(--qp-border)]"
+            }`}
+            onClick={() => handleClick(s)}
+            title={new Date(s.capturedAt).toLocaleTimeString()}
+          >
+            <img
+              src={`data:image/webp;base64,${s.thumbnailBase64}`}
+              alt={`Screenshot at ${new Date(s.capturedAt).toLocaleTimeString()}`}
+              className="block"
+              style={{ width: "100px", height: "auto", aspectRatio: `${s.width}/${s.height}` }}
+            />
+          </button>
+          {expandedId === s.id && (
+            <div className="mt-1 relative rounded overflow-hidden border border-[var(--qp-border)] bg-black/5 max-w-[320px]">
+              {loading && (
+                <div className="text-[10px] text-[var(--qp-text-tertiary)] p-2">Loading...</div>
+              )}
+              {fullImage && (
+                <img
+                  src={`data:image/webp;base64,${fullImage}`}
+                  alt="Screenshot full view"
+                  className="w-full h-auto max-h-[40vh] object-contain"
+                />
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function HistoryTimelineList({
   loading,
   timelineSessions,
@@ -45,6 +114,7 @@ export function HistoryTimelineList({
   detailsPopover,
   className = "",
   onToggleSessionDetails,
+  screenshotsBySessionId,
 }: HistoryTimelineListProps) {
   if (loading) {
     return <div className="flex-1" aria-hidden="true" />;
@@ -77,69 +147,74 @@ export function HistoryTimelineList({
           const hasDetails = titleSampleDetails.length > 0;
           const isExpanded = detailsPopover?.sessionId === session.id;
           const detailPlacement = isExpanded && detailsPopover ? detailsPopover.placement : "bottom";
+          const sessionScreenshots = session.sourceIds.flatMap((id) => screenshotsBySessionId[id] || []);
+          const hasScreenshots = sessionScreenshots.length > 0;
 
           return (
             <div
               key={session.id}
-              className="flex items-center gap-3 p-3 border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-elevated)] rounded-[10px] hover:border-[var(--qp-border-strong)] hover:bg-[var(--qp-bg-panel)] transition-colors"
+              className="flex items-start gap-3 p-3 border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-elevated)] rounded-[10px] hover:border-[var(--qp-border-strong)] hover:bg-[var(--qp-bg-panel)] transition-colors"
             >
               <div
-                className="w-1 self-stretch rounded-full flex-shrink-0"
+                className="w-1 self-stretch rounded-full flex-shrink-0 mt-0.5"
                 style={{ backgroundColor: accentColor }}
               />
-              <div className="w-8 h-8 rounded-[8px] bg-[var(--qp-bg-panel)] border border-[var(--qp-border-subtle)] flex items-center justify-center flex-shrink-0 overflow-hidden p-1.5">
+              <div className="w-8 h-8 rounded-[8px] bg-[var(--qp-bg-panel)] border border-[var(--qp-border-subtle)] flex items-center justify-center flex-shrink-0 overflow-hidden p-1.5 mt-0.5">
                 {icons[session.exeName] ? (
                   <img src={icons[session.exeName]} className="w-full h-full object-contain" alt="" />
                 ) : (
                   <div className="text-[10px] font-semibold opacity-35 text-[var(--qp-text-secondary)]">{mapped.category[0].toUpperCase()}</div>
                 )}
               </div>
-              <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                <div className="flex min-w-0 flex-1 items-end gap-1.5">
-                  <div className="min-w-0 truncate text-sm font-semibold text-[var(--qp-text-primary)]">
-                    {session.displayName}
+              <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <div className="flex min-w-0 flex-1 items-end gap-1.5">
+                    <div className="min-w-0 truncate text-sm font-semibold text-[var(--qp-text-primary)]">
+                      {session.displayName}
+                    </div>
+                    <span className="inline-flex h-[18px] shrink-0 items-center gap-1 rounded-[5px] border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-panel)] px-1.5 text-[9px] font-semibold leading-none text-[var(--qp-text-tertiary)]">
+                      <span>
+                        {UI_TEXT.history.activitySegmentCount(session.mergedCount)}
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <span>
+                        {UI_TEXT.history.titleRowCount(titleSampleDetails.length)}
+                      </span>
+                    </span>
+                    {hasDetails && (
+                      <button
+                        type="button"
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onClick={(event) => onToggleSessionDetails(
+                          session.id,
+                          session.displayName,
+                          titleSampleDetails,
+                          event.currentTarget,
+                        )}
+                        aria-expanded={isExpanded}
+                        aria-label={UI_TEXT.accessibility.history.toggleActivityDetails(
+                          isExpanded,
+                          session.displayName,
+                        )}
+                        className="qp-button-secondary inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] p-0 text-[var(--qp-text-tertiary)]"
+                      >
+                        {isExpanded
+                          ? detailPlacement === "top"
+                            ? <ChevronUp size={11} aria-hidden="true" />
+                            : <ChevronDown size={11} aria-hidden="true" />
+                          : <ChevronRight size={11} aria-hidden="true" />}
+                      </button>
+                    )}
                   </div>
-                  <span className="inline-flex h-[18px] shrink-0 items-center gap-1 rounded-[5px] border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-panel)] px-1.5 text-[9px] font-semibold leading-none text-[var(--qp-text-tertiary)]">
-                    <span>
-                      {UI_TEXT.history.activitySegmentCount(session.mergedCount)}
-                    </span>
-                    <span aria-hidden="true">·</span>
-                    <span>
-                      {UI_TEXT.history.titleRowCount(titleSampleDetails.length)}
-                    </span>
-                  </span>
-                  {hasDetails && (
-                    <button
-                      type="button"
-                      onPointerDown={(event) => event.stopPropagation()}
-                      onClick={(event) => onToggleSessionDetails(
-                        session.id,
-                        session.displayName,
-                        titleSampleDetails,
-                        event.currentTarget,
-                      )}
-                      aria-expanded={isExpanded}
-                      aria-label={UI_TEXT.accessibility.history.toggleActivityDetails(
-                        isExpanded,
-                        session.displayName,
-                      )}
-                      className="qp-button-secondary inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] p-0 text-[var(--qp-text-tertiary)]"
-                    >
-                      {isExpanded
-                        ? detailPlacement === "top"
-                          ? <ChevronUp size={11} aria-hidden="true" />
-                          : <ChevronDown size={11} aria-hidden="true" />
-                        : <ChevronRight size={11} aria-hidden="true" />}
-                    </button>
-                  )}
                 </div>
-              </div>
-              <div className="text-right flex-shrink-0">
                 <div className="text-xs font-semibold text-[var(--qp-text-primary)] tabular-nums">{formatDuration(session.duration || 0)}</div>
                 <div className="text-[10px] text-[var(--qp-text-tertiary)] mt-0.5 tabular-nums">
                   {formatTime(session.startTime)}
                   {session.endTime ? ` - ${formatTime(session.endTime)}` : ` ${UI_TEXT.history.untilNow}`}
                 </div>
+                {hasScreenshots && (
+                  <SessionScreenshotThumbnails screenshots={sessionScreenshots} />
+                )}
               </div>
             </div>
           );
