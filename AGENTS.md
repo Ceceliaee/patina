@@ -72,6 +72,14 @@ These instructions apply to all UI work unless the user gives an explicit task-s
 - Do not quietly expand the product toward team SaaS, cloud-first workflows, mobile-first usage, or gamified productivity unless the user explicitly changes product direction.
 - When multiple directions compete, prefer correctness, data safety, and high-frequency core flows before expansion work.
 
+## GitHub Project Active Maintenance
+
+- When the current request clearly maps to an existing Project item, proactively read the live Project before implementation even if the user does not separately mention Project maintenance.
+- Once the maintainer authorizes work on a Project item, update its real Project status throughout the same task: move it to `In progress` before implementation, to `Blocked` when an unmet dependency or external wait appears, and to `Done` only after implementation and validation complete.
+- After every start, completion, block, or unblock event, recompute the `Next` window according to `docs/roadmap-and-prioritization.md`; normal status transitions and queue refill do not require repeated confirmation.
+- Verify that each live Project mutation actually succeeded. A local checklist, archived plan, commentary update, commit, push, Issue state, or Pull Request state is not a substitute for updating the Project.
+- Proactive maintenance does not authorize structural Project changes. Adding, deleting, merging, splitting, manually reordering, or expanding items still requires the preview and confirmation defined in `docs/roadmap-and-prioritization.md`.
+
 ## Stable-Period Fixing
 
 - In the stable period, fix problems by deciding owner first and implementation second.
