@@ -75,10 +75,12 @@ These instructions apply to all UI work unless the user gives an explicit task-s
 ## GitHub Project Active Maintenance
 
 - When the current request clearly maps to an existing Project item, proactively read the live Project before implementation even if the user does not separately mention Project maintenance.
-- Once the maintainer authorizes work on a Project item, update its real Project status throughout the same task: move it to `In progress` before implementation, to `Blocked` when an unmet dependency or external wait appears, and to `Done` only after implementation and validation complete.
-- After every start, completion, block, or unblock event, recompute the `Next` window according to `docs/roadmap-and-prioritization.md`; normal status transitions and queue refill do not require repeated confirmation.
-- Verify that each live Project mutation actually succeeded. A local checklist, archived plan, commentary update, commit, push, Issue state, or Pull Request state is not a substitute for updating the Project.
-- Proactive maintenance does not authorize structural Project changes. Adding, deleting, merging, splitting, manually reordering, or expanding items still requires the preview and confirmation defined in `docs/roadmap-and-prioritization.md`.
+- For a newly approved item, create one complete draft item at the bottom of the Project, fill its long-form scope and fields, set its confirmed initial status, verify the live result, and report the recommended manual position. Do not move or reorder it after creation.
+- During implementation of an existing item, do not mutate its Project status on the maintainer's behalf. Tell the maintainer exactly which item should move from its current status to `In progress`, `Blocked`, `Done`, `Next`, or `Queued`, and explain the triggering event.
+- After every start, completion, block, or unblock event, recompute the `Next` window according to `docs/roadmap-and-prioritization.md` and report all required drag operations together. The maintainer performs the actual status changes in the Project `Board` view.
+- Status dragging is a non-blocking collaboration action: continue authorized implementation while the maintainer updates the Board, then re-read the live Project at the next relevant checkpoint or after the maintainer says the drag is complete.
+- If the live Project still differs from the reported status plan, say so explicitly. A local checklist, archived plan, commentary update, commit, push, Issue state, or Pull Request state is not a substitute for the maintainer's live Project update.
+- Proactive maintenance does not authorize structural Project changes. Adding, deleting, merging, splitting, or expanding items still requires the preview and confirmation defined in `docs/roadmap-and-prioritization.md`; manual ordering remains the maintainer's responsibility.
 
 ## Stable-Period Fixing
 
