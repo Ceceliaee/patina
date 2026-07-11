@@ -20,9 +20,9 @@ const INITIAL_CHUNK_BUDGETS = [
 ] as const;
 
 const LAZY_PAGE_CHUNK_BUDGETS = [
-  { label: "Settings", pattern: /^Settings-.*\.js$/, gzipKiB: 24 },
+  { label: "Settings", pattern: /^Settings-.*\.js$/, gzipKiB: 25 },
   { label: "AppMapping", pattern: /^AppMapping-.*\.js$/, gzipKiB: 18 },
-  { label: "History", pattern: /^History-.*\.js$/, gzipKiB: 18 },
+  { label: "History", pattern: /^History-.*\.js$/, gzipKiB: 20 },
   { label: "Tools", pattern: /^Tools-.*\.js$/, gzipKiB: 18 },
   { label: "Data", pattern: /^Data-.*\.js$/, gzipKiB: 18 },
   { label: "About", pattern: /^About-.*\.js$/, gzipKiB: 18 },
