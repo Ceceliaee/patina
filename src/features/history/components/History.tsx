@@ -75,9 +75,7 @@ import HistoryHourlyActivityPanel from "./HistoryHourlyActivityPanel.tsx";
 import HistoryDateNavigator from "./HistoryDateNavigator.tsx";
 import HistoryTimelineDialogDateControls from "./HistoryTimelineDialogDateControls.tsx";
 import HistoryAppTimeline from "./HistoryAppTimeline.tsx";
-import { buildHistoryAppTimelineViewModel } from "../services/historyAppTimelineViewModel.ts";
-import { queryScreenshots } from "../services/historyScreenshots.ts";
-import type { ScreenshotEntry } from "../services/historyScreenshots.ts";
+import { useHistoryScreenshots } from "../hooks/useHistoryScreenshots.ts";
 
 interface Props {
   icons: Record<string, string>;
@@ -274,9 +272,6 @@ export default function History({
   const [timelineDialogView, setTimelineDialogView] = useState<TimelineDialogView>("list");
   const [timelineDialogSyncedHeight, setTimelineDialogSyncedHeight] = useState<number | null>(null);
   const [timelineZoomDialogOpen, setTimelineZoomDialogOpen] = useState(false);
-  const [dayScreenshots, setDayScreenshots] = useState<ScreenshotEntry[]>([]);
-  const [appTimelineZoomLevel, setAppTimelineZoomLevel] = useState(1);
-  const [appTimelineViewportStartRatio, setAppTimelineViewportStartRatio] = useState(0);
   const [timelineZoomHours, setTimelineZoomHours] = useState<HistoryTimelineZoomHours>(
     readHistoryTimelineZoomHours,
   );
@@ -563,25 +558,6 @@ export default function History({
   }, [calendarOpen]);
 
   useEffect(() => {
-    const start = new Date(selectedDate);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(selectedDate);
-    end.setHours(23, 59, 59, 999);
-    queryScreenshots(start.getTime(), end.getTime())
-      .then(setDayScreenshots)
-      .catch(() => setDayScreenshots([]));
-  }, [selectedDate]);
-
-  const screenshotsBySessionId: Record<number, ScreenshotEntry[]> = useMemo(() => {
-    const map: Record<number, ScreenshotEntry[]> = {};
-    for (const s of dayScreenshots) {
-      if (s.sessionId == null) continue;
-      (map[s.sessionId] ??= []).push(s);
-    }
-    return map;
-  }, [dayScreenshots]);
-
-  useEffect(() => {
     if (!timelineDetailsPopover) return;
 
     const handlePointerDown = (event: PointerEvent) => {
@@ -819,28 +795,19 @@ export default function History({
       webDomainOverrides,
     ],
   );
-  const appTimelineView = useMemo(
-    () => buildHistoryAppTimelineViewModel({
-      sessions: compiledSessions,
-      selectedDate,
-      nowMs,
-      mergeThresholdSecs,
-      iconThemeColors,
-      zoomLevel: appTimelineZoomLevel,
-      viewportStartRatio: appTimelineViewportStartRatio,
-    }),
-    [compiledSessions, iconThemeColors, mergeThresholdSecs, nowMs, selectedDate, appTimelineZoomLevel, appTimelineViewportStartRatio],
-  );
 
-  const handleAppTimelineZoomChange = useCallback((zoomLevel: number, viewportStartRatio: number) => {
-    setAppTimelineZoomLevel(zoomLevel);
-    setAppTimelineViewportStartRatio(viewportStartRatio);
-  }, []);
-
-  useEffect(() => {
-    setAppTimelineZoomLevel(1);
-    setAppTimelineViewportStartRatio(0);
-  }, [selectedDate]);
+  const {
+    dayScreenshots,
+    screenshotsBySessionId,
+    appTimelineView,
+    handleAppTimelineZoomChange,
+  } = useHistoryScreenshots({
+    selectedDate,
+    compiledSessions,
+    nowMs,
+    mergeThresholdSecs,
+    iconThemeColors,
+  });
 
   const effectiveDayDistributionMode = resolveEffectiveDayDistributionMode(
     dayDistributionMode,
