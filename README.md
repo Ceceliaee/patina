@@ -177,8 +177,8 @@ Use GitHub Issues for bugs and feedback that needs follow-up, or scan the QR cod
 <div align="center">
   <a href="https://github.com/Ceceliaee/patina/issues/new/choose">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset=".github/assets/feedback/github-issues-button-white.svg">
-      <img src=".github/assets/feedback/github-issues-button-black.svg" height="36" alt="GitHub Issues">
+      <source media="(prefers-color-scheme: dark)" srcset=".github/assets/feedback/github-issues-button-dark.svg">
+      <img src=".github/assets/feedback/github-issues-button-light.svg" height="36" alt="GitHub Issues">
     </picture>
   </a>
   <br><br>
@@ -195,7 +195,10 @@ Patina is a personal, local-first open-source project. If it has been useful in 
 <div align="center">
   <a href="https://ko-fi.com/ceceliaee"><img src="https://storage.ko-fi.com/cdn/kofi2.png?v=3" height="36" alt="Buy me a coffee"></a>
   <br><br>
-  <img src=".github/assets/support/wechat-reward.png" width="200" alt="WeChat reward code">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/support/wechat-reward-dark.png">
+    <img src=".github/assets/support/wechat-reward-light.png" width="200" alt="WeChat reward code">
+  </picture>
 </div>
 
 Sponsorship helps sustain maintenance, but it does not affect feature priority, issue handling, the roadmap, or the product direction.

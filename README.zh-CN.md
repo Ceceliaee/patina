@@ -177,8 +177,8 @@ src-tauri/target/release/bundle/
 <div align="center">
   <a href="https://github.com/Ceceliaee/patina/issues/new/choose">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset=".github/assets/feedback/github-issues-button-white.svg">
-      <img src=".github/assets/feedback/github-issues-button-black.svg" height="36" alt="GitHub Issues">
+      <source media="(prefers-color-scheme: dark)" srcset=".github/assets/feedback/github-issues-button-dark.svg">
+      <img src=".github/assets/feedback/github-issues-button-light.svg" height="36" alt="GitHub Issues">
     </picture>
   </a>
   <br><br>
@@ -195,7 +195,10 @@ Patina 是一个个人维护的、本地优先开源项目。如果它对你的�
 <div align="center">
   <a href="https://ko-fi.com/ceceliaee"><img src="https://storage.ko-fi.com/cdn/kofi2.png?v=3" height="36" alt="Buy me a coffee"></a>
   <br><br>
-  <img src=".github/assets/support/wechat-reward.png" width="200" alt="微信赞赏码">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/support/wechat-reward-dark.png">
+    <img src=".github/assets/support/wechat-reward-light.png" width="200" alt="微信赞赏码">
+  </picture>
 </div>
 
 赞助会帮助项目持续维护，但不会影响功能优先级、问题处理方式、路线图或产品方向。
