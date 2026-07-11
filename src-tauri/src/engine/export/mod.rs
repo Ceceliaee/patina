@@ -179,7 +179,7 @@ mod tests {
         .bind("chrome.exe")
         .bind("example.com")
         .bind("example.com")
-        .bind("https://example.com")
+        .bind("https://example.com/path?q=export-me#fragment")
         .bind(title)
         .bind(None::<String>)
         .bind(start_time)
@@ -218,7 +218,13 @@ mod tests {
         insert_web(&pool, "  @HYPERLINK(\"x\")", 1_500, 1_600).await;
 
         let path = output_path("csv");
-        let fields = field_list(&["record_type", "app_name", "window_title", "page_title"]);
+        let fields = field_list(&[
+            "record_type",
+            "app_name",
+            "window_title",
+            "url",
+            "page_title",
+        ]);
         let row_count = csv_exporter::export_to_csv(
             &pool,
             path.to_str().expect("temp path should be utf-8"),
@@ -236,6 +242,7 @@ mod tests {
         assert!(csv.contains("'=cmd"));
         assert!(csv.contains("'+SUM(1,1)"));
         assert!(csv.contains("'  @HYPERLINK"));
+        assert!(csv.contains("https://example.com/path?q=export-me#fragment"));
         assert!(csv.contains("AfterOverlap"));
         assert!(!csv.contains("Outside"));
     }

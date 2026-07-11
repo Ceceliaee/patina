@@ -133,7 +133,7 @@ pub fn sanitize_active_tab_payload(
         browser_kind: sanitize_browser_kind(payload.browser_kind.as_deref()),
         domain,
         normalized_domain,
-        url: None,
+        url: Some(raw_url.to_string()),
         title: sanitize_optional_text(payload.title.as_deref(), MAX_TITLE_CHARS),
         favicon_url: sanitize_optional_text(payload.fav_icon_url.as_deref(), MAX_FAVICON_URL_CHARS),
     }))
@@ -185,7 +185,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn active_tab_sanitizer_extracts_domain_without_full_url_by_default() {
+    fn active_tab_sanitizer_preserves_full_url_for_export() {
         let sanitized = sanitize_active_tab_payload(BrowserActiveTabPayload {
             browser_client_id: Some("client-1".into()),
             browser_kind: Some("Chrome".into()),
@@ -204,7 +204,10 @@ mod tests {
 
         assert_eq!(sanitized.normalized_domain, "github.com");
         assert_eq!(sanitized.browser_kind, "chrome");
-        assert_eq!(sanitized.url, None);
+        assert_eq!(
+            sanitized.url.as_deref(),
+            Some("https://GitHub.com/Ceceliaee/patina/issues/6")
+        );
         assert_eq!(sanitized.title.as_deref(), Some("Issue #6"));
     }
 

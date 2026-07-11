@@ -48,7 +48,7 @@ The browser extension sends a JSON object using camelCase fields:
 }
 ```
 
-Patina currently stores domain-level web activity by default. Full page URL is not persisted by the default sanitizer.
+Patina stores the complete page URL locally for the export `url` / “URL 地址” field. The same URL is also parsed into domain and normalized-domain fields for classification and statistics.
 
 ## 5. Ignored Or Rejected Inputs
 
