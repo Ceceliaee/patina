@@ -147,6 +147,18 @@ export function createToolsRuntimeGateway(deps: ToolsRuntimeGatewayDeps) {
     resetPomodoro(): Promise<ToolsRuntimeSnapshot> {
       return invokeToolsSnapshot("cmd_reset_pomodoro");
     },
+
+    setReminderSnoozeMinutes(minutes: number): Promise<ToolsRuntimeSnapshot> {
+      return invokeToolsSnapshot("cmd_set_reminder_snooze_minutes", { minutes });
+    },
+
+    setPomodoroSnoozeMinutes(minutes: number): Promise<ToolsRuntimeSnapshot> {
+      return invokeToolsSnapshot("cmd_set_pomodoro_snooze_minutes", { minutes });
+    },
+
+    setCountdownSnoozeMinutes(minutes: number): Promise<ToolsRuntimeSnapshot> {
+      return invokeToolsSnapshot("cmd_set_countdown_snooze_minutes", { minutes });
+    },
   };
 }
 
@@ -174,3 +186,6 @@ export const pausePomodoro = defaultToolsRuntimeGateway.pausePomodoro;
 export const resumePomodoro = defaultToolsRuntimeGateway.resumePomodoro;
 export const skipPomodoroPhase = defaultToolsRuntimeGateway.skipPomodoroPhase;
 export const resetPomodoro = defaultToolsRuntimeGateway.resetPomodoro;
+export const setReminderSnoozeMinutes = defaultToolsRuntimeGateway.setReminderSnoozeMinutes;
+export const setPomodoroSnoozeMinutes = defaultToolsRuntimeGateway.setPomodoroSnoozeMinutes;
+export const setCountdownSnoozeMinutes = defaultToolsRuntimeGateway.setCountdownSnoozeMinutes;

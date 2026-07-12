@@ -58,6 +58,8 @@ const BASE_SETTINGS: AppSettings = {
   remoteStatusBridgeUrl: "",
   remoteStatusBridgeToken: "",
   remoteStatusBridgeMachineId: "",
+  enableSystemNotifications: true,
+  enableInAppNotifications: true,
 };
 
 function buildSettings(overrides: Partial<AppSettings> = {}): AppSettings {

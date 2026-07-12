@@ -166,3 +166,27 @@ pub async fn cmd_skip_pomodoro_phase(app: AppHandle) -> Result<ToolsRuntimeSnaps
 pub async fn cmd_reset_pomodoro(app: AppHandle) -> Result<ToolsRuntimeSnapshot, String> {
     tools::reset_pomodoro(&app).await
 }
+
+#[tauri::command]
+pub async fn cmd_set_reminder_snooze_minutes(
+    minutes: i64,
+    app: AppHandle,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    tools::set_reminder_snooze_minutes(&app, minutes).await
+}
+
+#[tauri::command]
+pub async fn cmd_set_pomodoro_snooze_minutes(
+    minutes: i64,
+    app: AppHandle,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    tools::set_pomodoro_snooze_minutes(&app, minutes).await
+}
+
+#[tauri::command]
+pub async fn cmd_set_countdown_snooze_minutes(
+    minutes: i64,
+    app: AppHandle,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    tools::set_countdown_snooze_minutes(&app, minutes).await
+}

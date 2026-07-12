@@ -3,7 +3,7 @@ import {
   RefreshCw,
   Settings2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import type { SettingsPageProps } from "../types";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
@@ -12,9 +12,12 @@ import SettingsDataSafetyPanel from "./SettingsDataSafetyPanel";
 import SettingsInterfacePanel from "./SettingsInterfacePanel";
 import SettingsDataExportDialog from "./SettingsDataExportDialog.tsx";
 import SettingsResidentPanel from "./SettingsResidentPanel";
+import SettingsToolsPanel from "./SettingsToolsPanel";
 import SettingsTrackingPanel from "./SettingsTrackingPanel";
 import { useSettingsPageState } from "../hooks/useSettingsPageState";
 import { useWebActivitySetupState } from "../hooks/useWebActivitySetupState";
+import { ToolsRuntimeService } from "../../tools/services/toolsRuntimeService.ts";
+import type { ToolRuntimeSettings } from "../../../shared/types/tools.ts";
 
 export default function Settings({
   onSettingsChanged,
@@ -78,6 +81,71 @@ export default function Settings({
     draftSettings,
   });
 
+  const [toolSettings, setToolSettings] = useState<ToolRuntimeSettings | null>(null);
+  const [savedToolSettings, setSavedToolSettings] = useState<ToolRuntimeSettings | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    ToolsRuntimeService.getToolsSnapshot()
+      .then((snapshot) => {
+        if (cancelled) return;
+        setToolSettings(snapshot.settings);
+        setSavedToolSettings(snapshot.settings);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const hasToolSettingsUnsavedChanges = (() => {
+    if (!toolSettings || !savedToolSettings) return false;
+    return (
+      toolSettings.reminderSnoozeMinutes !== savedToolSettings.reminderSnoozeMinutes ||
+      toolSettings.pomodoroSnoozeMinutes !== savedToolSettings.pomodoroSnoozeMinutes ||
+      toolSettings.countdownSnoozeMinutes !== savedToolSettings.countdownSnoozeMinutes
+    );
+  })();
+
+  const overallHasUnsavedChanges = hasUnsavedChanges || hasToolSettingsUnsavedChanges;
+
+  const handleToolSettingsChange = useCallback((next: Partial<ToolRuntimeSettings>) => {
+    setToolSettings((current) => {
+      if (!current) return current;
+      return { ...current, ...next };
+    });
+  }, []);
+
+  const saveToolSettings = useCallback(async (): Promise<boolean> => {
+    if (!toolSettings || !hasToolSettingsUnsavedChanges) return true;
+    try {
+      await ToolsRuntimeService.setReminderSnoozeMinutes(toolSettings.reminderSnoozeMinutes);
+      await ToolsRuntimeService.setPomodoroSnoozeMinutes(toolSettings.pomodoroSnoozeMinutes);
+      const finalSnapshot = await ToolsRuntimeService.setCountdownSnoozeMinutes(toolSettings.countdownSnoozeMinutes);
+      setSavedToolSettings(finalSnapshot.settings);
+      setToolSettings(finalSnapshot.settings);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [toolSettings, hasToolSettingsUnsavedChanges]);
+
+  const cancelToolSettings = useCallback(() => {
+    if (savedToolSettings) {
+      setToolSettings(savedToolSettings);
+    }
+  }, [savedToolSettings]);
+
+  const handleSaveAll = useCallback(async () => {
+    const appSettingsOk = await handleSave();
+    const toolSettingsOk = await saveToolSettings();
+    return appSettingsOk && toolSettingsOk;
+  }, [handleSave, saveToolSettings]);
+
+  const handleCancelAll = useCallback(() => {
+    handleCancel();
+    cancelToolSettings();
+  }, [handleCancel, cancelToolSettings]);
   useEffect(() => {
     if (!draftSettings) return;
     onThemeModePreview?.(draftSettings.themeMode);
@@ -114,7 +182,7 @@ export default function Settings({
           <div className="flex items-center gap-2.5">
             <div
               className={`qp-status ${
-                saveStatus !== "saving" && hasUnsavedChanges ? "qp-status-danger" : ""
+                saveStatus !== "saving" && overallHasUnsavedChanges ? "qp-status-danger" : ""
               } flex px-3 py-1.5 rounded-[8px] items-center text-xs font-semibold`}
             >
               {saveStatus === "saving" && (
@@ -123,31 +191,31 @@ export default function Settings({
                   {UI_TEXT.settings.saving}
                 </span>
               )}
-              {saveStatus === "saved" && !hasUnsavedChanges && (
+              {saveStatus === "saved" && !overallHasUnsavedChanges && (
                 <span className="text-[var(--qp-success)] flex items-center gap-1.5">
                   <Save size={14} />
                   {UI_TEXT.settings.saved}
                 </span>
               )}
-              {saveStatus !== "saving" && hasUnsavedChanges && (
+              {saveStatus !== "saving" && overallHasUnsavedChanges && (
                 <span>{UI_TEXT.settings.unsaved}</span>
               )}
-              {saveStatus === "idle" && !hasUnsavedChanges && (
+              {saveStatus === "idle" && !overallHasUnsavedChanges && (
                 <span className="text-[var(--qp-text-tertiary)]">{UI_TEXT.settings.idle}</span>
               )}
             </div>
             <button
               type="button"
-              onClick={handleCancel}
-              disabled={!hasUnsavedChanges || saveStatus === "saving"}
+              onClick={handleCancelAll}
+              disabled={!overallHasUnsavedChanges || saveStatus === "saving"}
               className="qp-button-secondary rounded-[8px] px-2.5 py-1.5 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-50"
             >
               {UI_TEXT.settings.cancel}
             </button>
             <button
               type="button"
-              onClick={() => void handleSave()}
-              disabled={!hasUnsavedChanges || saveStatus === "saving"}
+              onClick={() => void handleSaveAll()}
+              disabled={!overallHasUnsavedChanges || saveStatus === "saving"}
               className="qp-button-primary rounded-[8px] px-2.5 py-1.5 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saveStatus === "saving" ? UI_TEXT.settings.saving : UI_TEXT.settings.save}
@@ -229,13 +297,28 @@ export default function Settings({
             remoteStatusBridgeUrl={draftSettings.remoteStatusBridgeUrl}
             remoteStatusBridgeToken={draftSettings.remoteStatusBridgeToken}
             remoteStatusBridgeMachineId={draftSettings.remoteStatusBridgeMachineId}
+            enableSystemNotifications={draftSettings.enableSystemNotifications}
+            enableInAppNotifications={draftSettings.enableInAppNotifications}
             onWebActivityEnabledChange={(nextChecked) => handleChange("webActivityEnabled", nextChecked)}
             onPortChange={(nextPort) => handleChange("webActivityPort", nextPort)}
             onWebActivityTokenChange={(nextToken) => handleChange("webActivityToken", nextToken)}
             onRemoteStatusBridgeEnabledChange={(nextChecked) => handleChange("remoteStatusBridgeEnabled", nextChecked)}
             onRemoteStatusBridgeUrlChange={(nextUrl) => handleChange("remoteStatusBridgeUrl", nextUrl)}
             onRemoteStatusBridgeTokenChange={(nextToken) => handleChange("remoteStatusBridgeToken", nextToken)}
+            onEnableSystemNotificationsChange={(nextChecked) => handleChange("enableSystemNotifications", nextChecked)}
+            onEnableInAppNotificationsChange={(nextChecked) => handleChange("enableInAppNotifications", nextChecked)}
           />
+
+          {toolSettings && (
+            <SettingsToolsPanel
+              reminderSnoozeMinutes={toolSettings.reminderSnoozeMinutes}
+              pomodoroSnoozeMinutes={toolSettings.pomodoroSnoozeMinutes}
+              countdownSnoozeMinutes={toolSettings.countdownSnoozeMinutes}
+              onReminderSnoozeMinutesChange={(nextMinutes) => handleToolSettingsChange({ reminderSnoozeMinutes: nextMinutes })}
+              onPomodoroSnoozeMinutesChange={(nextMinutes) => handleToolSettingsChange({ pomodoroSnoozeMinutes: nextMinutes })}
+              onCountdownSnoozeMinutesChange={(nextMinutes) => handleToolSettingsChange({ countdownSnoozeMinutes: nextMinutes })}
+            />
+          )}
 
           <SettingsDataSafetyPanel
             cleanupRange={cleanupRange}

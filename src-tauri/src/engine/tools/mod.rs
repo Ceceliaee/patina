@@ -6,6 +6,7 @@ use crate::domain::tools::{
 };
 use chrono::Local;
 use serde::Serialize;
+use sqlx::Row;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::Notify;
@@ -348,11 +349,46 @@ pub async fn skip_pomodoro_phase<R: Runtime>(
     refresh_snapshot_after_tool_change(app).await
 }
 
+pub async fn skip_and_start_pomodoro_phase<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    let pool = wait_for_sqlite_pool(app).await?;
+    repositories::tools::skip_and_start_pomodoro_phase(&pool, &date_key(), now_ms()).await?;
+    refresh_snapshot_after_tool_change(app).await
+}
+
 pub async fn reset_pomodoro<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<ToolsRuntimeSnapshot, String> {
     let pool = wait_for_sqlite_pool(app).await?;
     repositories::tools::reset_pomodoro(&pool, now_ms()).await?;
+    refresh_snapshot_after_tool_change(app).await
+}
+
+pub async fn set_reminder_snooze_minutes<R: Runtime>(
+    app: &AppHandle<R>,
+    minutes: i64,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    let pool = wait_for_sqlite_pool(app).await?;
+    repositories::tools::set_tool_reminder_snooze_minutes(&pool, minutes).await?;
+    refresh_snapshot_after_tool_change(app).await
+}
+
+pub async fn set_pomodoro_snooze_minutes<R: Runtime>(
+    app: &AppHandle<R>,
+    minutes: i64,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    let pool = wait_for_sqlite_pool(app).await?;
+    repositories::tools::set_tool_pomodoro_snooze_minutes(&pool, minutes).await?;
+    refresh_snapshot_after_tool_change(app).await
+}
+
+pub async fn set_countdown_snooze_minutes<R: Runtime>(
+    app: &AppHandle<R>,
+    minutes: i64,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    let pool = wait_for_sqlite_pool(app).await?;
+    repositories::tools::set_tool_countdown_snooze_minutes(&pool, minutes).await?;
     refresh_snapshot_after_tool_change(app).await
 }
 
@@ -387,6 +423,26 @@ async fn tick_and_refresh_if_changed<R: Runtime + 'static>(
     Ok(())
 }
 
+async fn enable_system_notifications(pool: &sqlx::Pool<sqlx::Sqlite>) -> bool {
+    let Ok(Some(row)) = sqlx::query("SELECT value FROM settings WHERE key = 'enable_system_notifications'")
+        .fetch_optional(pool).await
+    else {
+        return true;
+    };
+    let value: String = row.get("value");
+    matches!(value.as_str(), "1" | "true" | "yes" | "on")
+}
+
+async fn enable_in_app_notifications(pool: &sqlx::Pool<sqlx::Sqlite>) -> bool {
+    let Ok(Some(row)) = sqlx::query("SELECT value FROM settings WHERE key = 'enable_in_app_notifications'")
+        .fetch_optional(pool).await
+    else {
+        return true;
+    };
+    let value: String = row.get("value");
+    matches!(value.as_str(), "1" | "true" | "yes" | "on")
+}
+
 async fn tick_and_notify<R: Runtime + 'static>(
     app: &AppHandle<R>,
     pool: &sqlx::Pool<sqlx::Sqlite>,
@@ -401,6 +457,7 @@ async fn tick_and_notify<R: Runtime + 'static>(
     for reminder in fired_reminders {
         send_tool_alert(
             app,
+            pool,
             ToolAlert {
                 id: format!("reminder:{}", reminder.id),
                 kind: ToolAlertKind::Reminder,
@@ -412,7 +469,7 @@ async fn tick_and_notify<R: Runtime + 'static>(
                 },
                 occurred_at: reminder.fired_at.unwrap_or(now),
             },
-        );
+        ).await;
     }
 
     let current_date_key = date_key();
@@ -439,6 +496,7 @@ async fn tick_and_notify<R: Runtime + 'static>(
         };
         send_tool_alert(
             app,
+            pool,
             ToolAlert {
                 id: format!(
                     "software-reminder:{}:{}",
@@ -449,13 +507,14 @@ async fn tick_and_notify<R: Runtime + 'static>(
                 body,
                 occurred_at: now,
             },
-        );
+        ).await;
     }
 
     if let Some(completed_timer) = repositories::tools::complete_due_countdown(pool, now).await? {
         outcome.mark_changed();
         send_tool_alert(
             app,
+            pool,
             ToolAlert {
                 id: format!("countdown:{}", completed_timer.timer_id),
                 kind: ToolAlertKind::Countdown,
@@ -465,7 +524,7 @@ async fn tick_and_notify<R: Runtime + 'static>(
                     .unwrap_or_else(|| "倒计时已完成".to_string()),
                 occurred_at: now,
             },
-        );
+        ).await;
     }
 
     if let Some(completed_phase) =
@@ -476,13 +535,18 @@ async fn tick_and_notify<R: Runtime + 'static>(
             PomodoroPhase::Focus => "专注结束",
             PomodoroPhase::ShortBreak | PomodoroPhase::LongBreak => "休息结束",
         };
-        let body = match completed_phase.next_phase {
-            PomodoroPhase::Focus => "下一阶段：专注",
-            PomodoroPhase::ShortBreak => "下一阶段：短休息",
-            PomodoroPhase::LongBreak => "下一阶段：长休息",
+        let next_phase_text = match completed_phase.next_phase {
+            PomodoroPhase::Focus => "专注",
+            PomodoroPhase::ShortBreak => "短休息",
+            PomodoroPhase::LongBreak => "长休息",
         };
+        let body = format!(
+            "已完成 {} 个专注 · 下一阶段：{}",
+            completed_phase.completed_focus_count, next_phase_text
+        );
         send_tool_alert(
             app,
+            pool,
             ToolAlert {
                 id: format!(
                     "pomodoro:{}:{}:{}",
@@ -492,10 +556,10 @@ async fn tick_and_notify<R: Runtime + 'static>(
                 ),
                 kind: ToolAlertKind::Pomodoro,
                 title: title.to_string(),
-                body: body.to_string(),
+                body,
                 occurred_at: now,
             },
-        );
+        ).await;
     }
 
     Ok(outcome)
@@ -522,7 +586,7 @@ async fn refresh_snapshot<R: Runtime>(app: &AppHandle<R>) -> Result<ToolsRuntime
     Ok(snapshot)
 }
 
-async fn refresh_snapshot_after_tool_change<R: Runtime>(
+pub(crate) async fn refresh_snapshot_after_tool_change<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<ToolsRuntimeSnapshot, String> {
     let snapshot = refresh_snapshot(app).await?;
@@ -530,19 +594,43 @@ async fn refresh_snapshot_after_tool_change<R: Runtime>(
     Ok(snapshot)
 }
 
-fn send_tool_alert<R: Runtime + 'static>(app: &AppHandle<R>, alert: ToolAlert) {
-    if let Some(state) = app.try_state::<ToolsRuntimeState>() {
-        state.push_alert(alert.clone());
+async fn send_tool_alert<R: Runtime + 'static>(
+    app: &AppHandle<R>,
+    pool: &sqlx::Pool<sqlx::Sqlite>,
+    alert: ToolAlert,
+) {
+    let enable_sys_notif = enable_system_notifications(pool).await;
+    let enable_in_app = enable_in_app_notifications(pool).await;
+    let settings = crate::data::repositories::tools::load_tool_runtime_settings(pool)
+        .await
+        .ok();
+
+    let snooze_minutes = match alert.kind {
+        ToolAlertKind::Reminder => settings.as_ref().map(|s| s.reminder_snooze_minutes).unwrap_or(10),
+        ToolAlertKind::Pomodoro => settings.as_ref().map(|s| s.pomodoro_snooze_minutes).unwrap_or(10),
+        ToolAlertKind::Countdown => settings.as_ref().map(|s| s.countdown_snooze_minutes).unwrap_or(5),
+        _ => 10,
+    };
+
+    if enable_in_app {
+        if let Some(state) = app.try_state::<ToolsRuntimeState>() {
+            state.push_alert(alert.clone());
+        }
     }
 
-    crate::app::main_window::show_main_window(app);
+    if enable_sys_notif {
+        if let Err(error) = notification::send(app, alert.kind, &alert.title, &alert.body, &alert.id, snooze_minutes) {
+            eprintln!("[tools] failed to send system notification: {error}");
+        }
+    }
 
-    if let Err(error) = app.emit(TOOLS_ALERT_EVENT, &alert) {
-        eprintln!(
-            "[tools] failed to emit tool alert, falling back to system notification: {error}"
-        );
-        if let Err(error) = notification::send(app, &alert.title, &alert.body) {
-            eprintln!("[tools] failed to send fallback notification: {error}");
+    if enable_in_app {
+        crate::app::main_window::show_main_window(app);
+
+        if let Err(error) = app.emit(TOOLS_ALERT_EVENT, &alert) {
+            eprintln!(
+                "[tools] failed to emit tool alert: {error}"
+            );
         }
     }
 }

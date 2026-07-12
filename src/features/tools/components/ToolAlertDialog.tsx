@@ -1,5 +1,5 @@
 import { AlarmClock, BellRing, TimerReset } from "lucide-react";
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import QuietDialog from "../../../shared/components/QuietDialog.tsx";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import type { ToolAlert } from "../../../shared/types/tools.ts";
@@ -24,12 +24,81 @@ function alertIcon(alert: ToolAlert): ReactNode {
 export default function ToolAlertDialog() {
   const { activeAlert, dismissActiveAlert } = useToolAlerts();
   const [pausingPomodoro, setPausingPomodoro] = useState(false);
+  const [snoozing, setSnoozing] = useState(false);
+  const [snoozeMinutes, setSnoozeMinutes] = useState<number | null>(null);
   const title = activeAlert?.title.trim() || UI_TEXT.tools.notificationStatus;
   const message = activeAlert?.body.trim() || UI_TEXT.tools.defaultReminderLabel;
   const occurredAtLabel = activeAlert
     ? UI_TEXT.tools.alertOccurredAt(formatAlertTime(activeAlert.occurredAt))
     : "";
   const canPausePomodoro = activeAlert?.kind === "pomodoro";
+  const canSnooze = activeAlert?.kind === "reminder" || activeAlert?.kind === "pomodoro" || activeAlert?.kind === "countdown";
+
+  useEffect(() => {
+    if (!activeAlert || !canSnooze) {
+      setSnoozeMinutes(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const snapshot = await ToolsRuntimeService.getToolsSnapshot();
+        if (cancelled) return;
+        if (activeAlert.kind === "reminder") {
+          setSnoozeMinutes(snapshot.settings.reminderSnoozeMinutes || 10);
+        } else if (activeAlert.kind === "pomodoro") {
+          setSnoozeMinutes(snapshot.settings.pomodoroSnoozeMinutes || 10);
+        } else if (activeAlert.kind === "countdown") {
+          setSnoozeMinutes(snapshot.settings.countdownSnoozeMinutes || 5);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeAlert, canSnooze]);
+
+  const handleSnooze = useCallback(async () => {
+    if (!activeAlert || snoozing) return;
+
+    setSnoozing(true);
+    try {
+      if (activeAlert.kind === "reminder") {
+        const snapshot = await ToolsRuntimeService.getToolsSnapshot();
+        const snoozeMinutes = snapshot.settings.reminderSnoozeMinutes || 10;
+        const now = Date.now();
+        const snoozeUntil = now + snoozeMinutes * 60 * 1000;
+        await ToolsRuntimeService.createReminder({
+          label: activeAlert.body || activeAlert.title || "时间到了",
+          scheduledAt: snoozeUntil,
+        });
+      } else if (activeAlert.kind === "pomodoro") {
+        const snapshot = await ToolsRuntimeService.getToolsSnapshot();
+        const snoozeMinutes = snapshot.settings.pomodoroSnoozeMinutes || 10;
+        const now = Date.now();
+        const snoozeUntil = now + snoozeMinutes * 60 * 1000;
+        await ToolsRuntimeService.createReminder({
+          label: activeAlert.title || "番茄钟",
+          scheduledAt: snoozeUntil,
+        });
+      } else if (activeAlert.kind === "countdown") {
+        const snapshot = await ToolsRuntimeService.getToolsSnapshot();
+        const snoozeMinutes = snapshot.settings.countdownSnoozeMinutes || 5;
+        await ToolsRuntimeService.startTimer({
+          mode: "countdown",
+          durationMs: Math.max(1, snoozeMinutes) * 60_000,
+        });
+      }
+      dismissActiveAlert();
+    } catch (error) {
+      console.warn("snooze from alert failed", error);
+    } finally {
+      setSnoozing(false);
+    }
+  }, [activeAlert, dismissActiveAlert, snoozing]);
+
   const handlePausePomodoro = useCallback(async () => {
     if (activeAlert?.kind !== "pomodoro" || pausingPomodoro) return;
 
@@ -53,6 +122,20 @@ export default function ToolAlertDialog() {
       surfaceClassName="tools-alert-dialog-surface"
       actions={(
         <>
+          {canSnooze && (
+            <button
+              type="button"
+              className="qp-button-secondary qp-dialog-action disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => void handleSnooze()}
+              disabled={snoozing}
+            >
+              {snoozing
+                ? UI_TEXT.tools.alertSnoozing
+                : snoozeMinutes
+                  ? UI_TEXT.tools.alertSnoozeMinutes(snoozeMinutes)
+                  : UI_TEXT.tools.alertSnooze}
+            </button>
+          )}
           {canPausePomodoro && (
             <button
               type="button"

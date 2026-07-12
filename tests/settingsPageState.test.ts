@@ -107,6 +107,8 @@ interface AppSettings {
   remoteStatusBridgeUrl: string;
   remoteStatusBridgeToken: string;
   remoteStatusBridgeMachineId: string;
+  enableSystemNotifications: boolean;
+  enableInAppNotifications: boolean;
 }
 
 type CleanupRange = 180 | 90 | 60 | 30 | 15 | 7;
@@ -136,6 +138,8 @@ const BASE_SETTINGS: AppSettings = {
   remoteStatusBridgeUrl: "",
   remoteStatusBridgeToken: "",
   remoteStatusBridgeMachineId: "",
+  enableSystemNotifications: true,
+  enableInAppNotifications: true,
 };
 
 function buildSettings(overrides: Partial<AppSettings> = {}): AppSettings {

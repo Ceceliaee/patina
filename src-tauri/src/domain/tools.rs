@@ -5,6 +5,9 @@ pub const DEFAULT_POMODORO_FOCUS_MINUTES: i64 = 25;
 pub const DEFAULT_POMODORO_SHORT_BREAK_MINUTES: i64 = 5;
 pub const DEFAULT_POMODORO_LONG_BREAK_MINUTES: i64 = 15;
 pub const DEFAULT_POMODORO_LONG_BREAK_EVERY: i64 = 4;
+pub const DEFAULT_REMINDER_SNOOZE_MINUTES: i64 = 10;
+pub const DEFAULT_POMODORO_SNOOZE_MINUTES: i64 = 5;
+pub const DEFAULT_COUNTDOWN_SNOOZE_MINUTES: i64 = 5;
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -155,6 +158,9 @@ pub struct ToolRuntimeSettings {
     pub pomodoro_short_break_minutes: i64,
     pub pomodoro_long_break_minutes: i64,
     pub pomodoro_long_break_every: i64,
+    pub reminder_snooze_minutes: i64,
+    pub pomodoro_snooze_minutes: i64,
+    pub countdown_snooze_minutes: i64,
 }
 
 impl Default for ToolRuntimeSettings {
@@ -165,6 +171,9 @@ impl Default for ToolRuntimeSettings {
             pomodoro_short_break_minutes: DEFAULT_POMODORO_SHORT_BREAK_MINUTES,
             pomodoro_long_break_minutes: DEFAULT_POMODORO_LONG_BREAK_MINUTES,
             pomodoro_long_break_every: DEFAULT_POMODORO_LONG_BREAK_EVERY,
+            reminder_snooze_minutes: DEFAULT_REMINDER_SNOOZE_MINUTES,
+            pomodoro_snooze_minutes: DEFAULT_POMODORO_SNOOZE_MINUTES,
+            countdown_snooze_minutes: DEFAULT_COUNTDOWN_SNOOZE_MINUTES,
         }
     }
 }

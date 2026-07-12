@@ -69,6 +69,9 @@ function rawSnapshot(overrides: Record<string, unknown> = {}) {
       pomodoro_short_break_minutes: 5,
       pomodoro_long_break_minutes: 15,
       pomodoro_long_break_every: 4,
+      reminder_snooze_minutes: 10,
+      pomodoro_snooze_minutes: 10,
+      countdown_snooze_minutes: 5,
     },
     reminders: [
       {
@@ -111,6 +114,9 @@ function snapshot(overrides: Partial<ToolsRuntimeSnapshot> = {}): ToolsRuntimeSn
       pomodoroShortBreakMinutes: 5,
       pomodoroLongBreakMinutes: 15,
       pomodoroLongBreakEvery: 4,
+      reminderSnoozeMinutes: 10,
+      pomodoroSnoozeMinutes: 10,
+      countdownSnoozeMinutes: 5,
     },
     reminders: [],
     softwareReminderRules: [],

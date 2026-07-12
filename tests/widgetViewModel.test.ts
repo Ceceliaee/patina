@@ -37,6 +37,8 @@ const BASE_SETTINGS: AppSettings = {
   remoteStatusBridgeUrl: "",
   remoteStatusBridgeToken: "",
   remoteStatusBridgeMachineId: "",
+  enableSystemNotifications: true,
+  enableInAppNotifications: true,
 };
 
 const BASE_TRACKING_STATUS: TrackingStatusSnapshot = {

@@ -2,7 +2,7 @@ use crate::domain::tools::{
     PomodoroPhase, PomodoroStatus, ReminderStatus, TimerMode, TimerStatus, ToolPomodoroRun,
     ToolReminder, ToolRuntimeSettings, ToolSoftwareReminderRule, ToolTimer, ToolTimerLap,
 };
-use sqlx::{Pool, Sqlite, Transaction};
+use sqlx::{Pool, Row, Sqlite, Transaction};
 
 mod backup_restore;
 mod read;
@@ -44,10 +44,97 @@ pub struct SoftwareReminderNotification {
     pub message: String,
 }
 
+const REMINDER_SNOOZE_MINUTES_KEY: &str = "tool_reminder_snooze_minutes";
+const POMODORO_SNOOZE_MINUTES_KEY: &str = "tool_pomodoro_snooze_minutes";
+const COUNTDOWN_SNOOZE_MINUTES_KEY: &str = "tool_countdown_snooze_minutes";
+
 pub async fn load_tool_runtime_settings(
-    _pool: &Pool<Sqlite>,
+    pool: &Pool<Sqlite>,
 ) -> Result<ToolRuntimeSettings, sqlx::Error> {
-    Ok(ToolRuntimeSettings::default())
+    let mut settings = ToolRuntimeSettings::default();
+
+    let rows = sqlx::query("SELECT key, value FROM settings WHERE key IN (?, ?, ?)")
+        .bind(REMINDER_SNOOZE_MINUTES_KEY)
+        .bind(POMODORO_SNOOZE_MINUTES_KEY)
+        .bind(COUNTDOWN_SNOOZE_MINUTES_KEY)
+        .fetch_all(pool)
+        .await?;
+
+    for row in rows {
+        let key: String = row.get("key");
+        let value: String = row.get("value");
+        match key.as_str() {
+            REMINDER_SNOOZE_MINUTES_KEY => {
+                if let Ok(minutes) = value.parse::<i64>() {
+                    settings.reminder_snooze_minutes = minutes.clamp(0, 60);
+                }
+            }
+            POMODORO_SNOOZE_MINUTES_KEY => {
+                if let Ok(minutes) = value.parse::<i64>() {
+                    settings.pomodoro_snooze_minutes = minutes.clamp(0, 60);
+                }
+            }
+            COUNTDOWN_SNOOZE_MINUTES_KEY => {
+                if let Ok(minutes) = value.parse::<i64>() {
+                    settings.countdown_snooze_minutes = minutes.clamp(0, 60);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Ok(settings)
+}
+
+pub async fn set_tool_reminder_snooze_minutes(
+    pool: &Pool<Sqlite>,
+    minutes: i64,
+) -> Result<(), String> {
+    let minutes = minutes.clamp(0, 60);
+    sqlx::query(
+        "INSERT INTO settings (key, value) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    )
+    .bind(REMINDER_SNOOZE_MINUTES_KEY)
+    .bind(minutes.to_string())
+    .execute(pool)
+    .await
+    .map_err(|error| format!("failed to set reminder snooze minutes: {error}"))?;
+    Ok(())
+}
+
+pub async fn set_tool_pomodoro_snooze_minutes(
+    pool: &Pool<Sqlite>,
+    minutes: i64,
+) -> Result<(), String> {
+    let minutes = minutes.clamp(0, 60);
+    sqlx::query(
+        "INSERT INTO settings (key, value) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    )
+    .bind(POMODORO_SNOOZE_MINUTES_KEY)
+    .bind(minutes.to_string())
+    .execute(pool)
+    .await
+    .map_err(|error| format!("failed to set pomodoro snooze minutes: {error}"))?;
+    Ok(())
+}
+
+pub async fn set_tool_countdown_snooze_minutes(
+    pool: &Pool<Sqlite>,
+    minutes: i64,
+) -> Result<(), String> {
+    let minutes = minutes.clamp(0, 60);
+    sqlx::query(
+        "INSERT INTO settings (key, value) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    )
+    .bind(COUNTDOWN_SNOOZE_MINUTES_KEY)
+    .bind(minutes.to_string())
+    .execute(pool)
+    .await
+    .map_err(|error| format!("failed to set countdown snooze minutes: {error}"))?;
+    Ok(())
 }
 
 pub async fn create_reminder(
@@ -582,6 +669,14 @@ pub async fn skip_pomodoro_phase(
     now_ms: i64,
 ) -> Result<Option<CompletedPomodoroNotification>, String> {
     advance_pomodoro_phase(pool, date_key, now_ms, false, false).await
+}
+
+pub async fn skip_and_start_pomodoro_phase(
+    pool: &Pool<Sqlite>,
+    date_key: &str,
+    now_ms: i64,
+) -> Result<Option<CompletedPomodoroNotification>, String> {
+    advance_pomodoro_phase(pool, date_key, now_ms, false, true).await
 }
 
 pub async fn complete_due_pomodoro_phase(

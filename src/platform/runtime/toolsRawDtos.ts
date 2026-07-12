@@ -23,6 +23,9 @@ interface RawToolRuntimeSettings {
   pomodoro_short_break_minutes: number;
   pomodoro_long_break_minutes: number;
   pomodoro_long_break_every: number;
+  reminder_snooze_minutes: number;
+  pomodoro_snooze_minutes: number;
+  countdown_snooze_minutes: number;
 }
 
 interface RawToolReminder {
@@ -140,7 +143,10 @@ function isRawToolRuntimeSettings(value: unknown): value is RawToolRuntimeSettin
     && isNumber(value.pomodoro_focus_minutes)
     && isNumber(value.pomodoro_short_break_minutes)
     && isNumber(value.pomodoro_long_break_minutes)
-    && isNumber(value.pomodoro_long_break_every);
+    && isNumber(value.pomodoro_long_break_every)
+    && isNumber(value.reminder_snooze_minutes)
+    && isNumber(value.pomodoro_snooze_minutes)
+    && isNumber(value.countdown_snooze_minutes);
 }
 
 function isRawToolReminder(value: unknown): value is RawToolReminder {
@@ -242,6 +248,9 @@ function mapToolRuntimeSettings(raw: RawToolRuntimeSettings): ToolRuntimeSetting
     pomodoroShortBreakMinutes: raw.pomodoro_short_break_minutes,
     pomodoroLongBreakMinutes: raw.pomodoro_long_break_minutes,
     pomodoroLongBreakEvery: raw.pomodoro_long_break_every,
+    reminderSnoozeMinutes: raw.reminder_snooze_minutes,
+    pomodoroSnoozeMinutes: raw.pomodoro_snooze_minutes,
+    countdownSnoozeMinutes: raw.countdown_snooze_minutes,
   };
 }
 

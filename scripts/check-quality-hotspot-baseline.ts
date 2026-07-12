@@ -15,7 +15,7 @@ const HOTSPOT_BUDGETS: HotspotBudget[] = [
   { path: "src/features/history/components/History.tsx", owner: "history feature UI", maxLines: 1282 },
   { path: "src-tauri/src/engine/tracking/runtime.rs", owner: "Rust tracking engine", maxLines: 1272 },
   { path: "src-tauri/src/data/backup.rs", owner: "Rust data/backup", maxLines: 1114 },
-  { path: "src-tauri/src/data/repositories/tools.rs", owner: "Rust tools repository", maxLines: 1083 },
+  { path: "src-tauri/src/data/repositories/tools.rs", owner: "Rust tools repository", maxLines: 1160 },
   { path: "src/features/data/services/dataReadModel.ts", owner: "data feature read model", maxLines: 922 },
   { path: "src/app/AppShell.tsx", owner: "frontend app shell", maxLines: 692 },
 ];

@@ -11,6 +11,9 @@ export interface ToolRuntimeSettings {
   pomodoroShortBreakMinutes: number;
   pomodoroLongBreakMinutes: number;
   pomodoroLongBreakEvery: number;
+  reminderSnoozeMinutes: number;
+  pomodoroSnoozeMinutes: number;
+  countdownSnoozeMinutes: number;
 }
 
 export interface ToolReminder {
