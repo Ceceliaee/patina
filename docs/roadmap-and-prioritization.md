@@ -297,6 +297,10 @@
 
 GitHub 新版 Project 只能归属于个人账号或组织，不能由仓库直接拥有。因此这个 Project 归属于 `Ceceliaee`，同时通过仓库关联出现在 `Ceceliaee/patina` 的 Projects 页面；这两个入口指向同一个 Project，不是两份队列。
 
+Codex 读取、核对或维护 GitHub Project 时，一律使用浏览器控制插件打开 Project 页面，并以浏览器登录态下读取到的 live Project 结果作为当前事实来源。不得使用本机 `gh` CLI 或 GitHub 连接器插件读取、核对或维护 Project；`gh` 仍可用于仓库、提交、发布等不涉及 Project 的 GitHub 操作。
+
+这里的“浏览器插件”特指浏览器控制插件，不是 GitHub 连接器插件。如果浏览器控制插件尚未连接或页面未登录，应明确报告缺少的条件，并请维护者完成浏览器连接或登录。聊天记录、本地计划、commit、截图缓存或旧的 Project 结果都不能代替浏览器中当前可见的 live Project。
+
 它不是所有渠道反馈的收集箱，也不是原始反馈档案。无论反馈来自 GitHub、B 站、抖音还是其他渠道，只有维护者已经明确表示“想做”的事项，才进入 Project。
 
 ## 13.1 Project 的内容边界
