@@ -149,6 +149,9 @@ fn is_allowed_app_setting_key(key: &str) -> bool {
             | "remote_status_bridge_url"
             | "remote_status_bridge_token"
             | "remote_status_bridge_machine_id"
+            | "enable_system_notifications"
+            | "enable_in_app_notifications"
+            | "screenshots_enabled"
     )
 }
 
