@@ -64,8 +64,38 @@ export const DATA_EXPORT_PROTOCOL_FIELDS = [
 
 export type DataExportProtocolField = (typeof DATA_EXPORT_PROTOCOL_FIELDS)[number];
 
-export async function pickExportSaveFile(format: string, initialPath?: string): Promise<string | null> {
-  return invoke<string | null>(PICK_EXPORT_FILE_COMMAND, { format, initialPath: initialPath ?? null });
+export const DATA_EXPORT_PROTOCOL_FIELD_GROUPS = {
+  activity: ["record_type", "start_time", "end_time", "duration_ms", "duration_minutes", "local_date", "weekday", "start_hour"],
+  apps: ["app_name", "exe_name", "window_title", "session_id", "continuity_group_start_time"],
+  web: ["domain", "normalized_domain", "url", "page_title", "web_segment_id", "browser_client_id", "browser_kind", "browser_exe_name", "favicon_url", "web_source"],
+  classification: ["category", "category_id", "category_color"],
+  analysis: ["local_week", "local_month"],
+  audit: ["source_key", "source_name", "created_at", "updated_at"],
+} as const satisfies Record<string, readonly DataExportProtocolField[]>;
+
+export const DATA_EXPORT_PROTOCOL_DEFAULT_FIELDS_BY_FORMAT = {
+  csv: [...DEFAULT_DATA_EXPORT_PROTOCOL_FIELDS],
+  sqlite: [...DATA_EXPORT_PROTOCOL_FIELDS],
+  parquet: [...DEFAULT_DATA_EXPORT_PROTOCOL_FIELDS, ...ANALYSIS_DATA_EXPORT_PROTOCOL_FIELDS],
+  markdown: ["start_time", "end_time", "duration_minutes", "record_type", "source_name", "category", "window_title", "page_title", "url"],
+} as const satisfies Record<string, readonly DataExportProtocolField[]>;
+
+export function isDataExportProtocolField(value: string): value is DataExportProtocolField {
+  return (DATA_EXPORT_PROTOCOL_FIELDS as readonly string[]).includes(value);
+}
+
+export async function pickExportSaveFile(
+  format: string,
+  startDate: string,
+  endDate: string,
+  initialPath?: string,
+): Promise<string | null> {
+  return invoke<string | null>(PICK_EXPORT_FILE_COMMAND, {
+    format,
+    startDate,
+    endDate,
+    initialPath: initialPath ?? null,
+  });
 }
 
 export async function exportData(request: ExportDataRequest): Promise<ExportDataResult> {

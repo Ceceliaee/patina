@@ -134,6 +134,35 @@ pub fn resolve_export_fields(
     Ok(ordered)
 }
 
+pub fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
+    fn normalized(path: &Path) -> Option<PathBuf> {
+        if let Ok(canonical) = std::fs::canonicalize(path) {
+            return Some(canonical);
+        }
+        let file_name = path.file_name()?;
+        let parent = path
+            .parent()
+            .filter(|value| !value.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        std::fs::canonicalize(parent)
+            .ok()
+            .map(|value| value.join(file_name))
+    }
+
+    let (Some(left), Some(right)) = (normalized(left), normalized(right)) else {
+        return false;
+    };
+    #[cfg(windows)]
+    {
+        left.to_string_lossy()
+            .eq_ignore_ascii_case(&right.to_string_lossy())
+    }
+    #[cfg(not(windows))]
+    {
+        left == right
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ResolvedExportCategory {
     pub id: String,
@@ -236,6 +265,9 @@ pub async fn load_export_classification(
 }
 
 impl ExportClassification {
+    pub fn language(&self) -> &str {
+        &self.language
+    }
     pub fn resolve_session_category(&self, exe_name: &str) -> ResolvedExportCategory {
         let canonical = canonical_exe(exe_name);
         let raw_category = self
@@ -556,6 +588,15 @@ mod tests {
             resolve_export_fields(Some(&fields)).unwrap(),
             vec!["url", "record_type"]
         );
+    }
+
+    #[test]
+    fn output_path_guard_recognizes_the_same_existing_file() {
+        let path =
+            std::env::temp_dir().join(format!("patina-export-source-{}.db", std::process::id()));
+        std::fs::write(&path, b"source").unwrap();
+        assert!(paths_refer_to_same_file(&path, &path));
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]

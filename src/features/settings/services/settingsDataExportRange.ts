@@ -10,7 +10,7 @@ import {
   startOfLocalDay,
 } from "../../../shared/lib/localDate.ts";
 
-export type ExportFormat = "csv" | "sqlite" | "parquet";
+export type ExportFormat = "csv" | "sqlite" | "parquet" | "markdown";
 export type ExportRangeMode = "day" | "week" | "month" | "year";
 export type ExportRangePickerMode = Exclude<ExportRangeMode, "day"> | "custom";
 export type ExportRangeSelection = QuietDateRangePickerSelection;

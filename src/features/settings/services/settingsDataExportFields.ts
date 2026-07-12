@@ -2,6 +2,8 @@ import {
   ADVANCED_DATA_EXPORT_PROTOCOL_FIELDS,
   ANALYSIS_DATA_EXPORT_PROTOCOL_FIELDS,
   DATA_EXPORT_PROTOCOL_FIELDS,
+  DATA_EXPORT_PROTOCOL_FIELD_GROUPS,
+  DATA_EXPORT_PROTOCOL_DEFAULT_FIELDS_BY_FORMAT,
   DEFAULT_DATA_EXPORT_PROTOCOL_FIELDS,
   type DataExportProtocolField,
 } from "../../../platform/persistence/dataExportGateway.ts";
@@ -13,7 +15,7 @@ export const SETTINGS_DATA_EXPORT_FIELD_KEYS = DATA_EXPORT_PROTOCOL_FIELDS;
 
 export type SettingsDataExportFieldKey = DataExportProtocolField;
 
-export type SettingsDataExportFieldGroupId = "default" | "analysis" | "advanced";
+export type SettingsDataExportFieldGroupId = "activity" | "apps" | "web" | "classification" | "analysis" | "audit";
 
 export interface SettingsDataExportFieldGroup {
   id: SettingsDataExportFieldGroupId;
@@ -22,18 +24,32 @@ export interface SettingsDataExportFieldGroup {
 
 export const SETTINGS_DATA_EXPORT_FIELD_GROUPS: SettingsDataExportFieldGroup[] = [
   {
-    id: "default",
-    fields: DEFAULT_SETTINGS_DATA_EXPORT_FIELDS,
+    id: "activity",
+    fields: DATA_EXPORT_PROTOCOL_FIELD_GROUPS.activity,
+  },
+  {
+    id: "apps",
+    fields: DATA_EXPORT_PROTOCOL_FIELD_GROUPS.apps,
+  },
+  {
+    id: "web",
+    fields: DATA_EXPORT_PROTOCOL_FIELD_GROUPS.web,
+  },
+  {
+    id: "classification",
+    fields: DATA_EXPORT_PROTOCOL_FIELD_GROUPS.classification,
   },
   {
     id: "analysis",
-    fields: ANALYSIS_SETTINGS_DATA_EXPORT_FIELDS,
+    fields: DATA_EXPORT_PROTOCOL_FIELD_GROUPS.analysis,
   },
   {
-    id: "advanced",
-    fields: ADVANCED_SETTINGS_DATA_EXPORT_FIELDS,
+    id: "audit",
+    fields: DATA_EXPORT_PROTOCOL_FIELD_GROUPS.audit,
   },
 ];
+
+export const SETTINGS_DATA_EXPORT_DEFAULT_FIELDS_BY_FORMAT = DATA_EXPORT_PROTOCOL_DEFAULT_FIELDS_BY_FORMAT;
 
 export function createDefaultSettingsDataExportFields(): SettingsDataExportFieldKey[] {
   return [...DEFAULT_SETTINGS_DATA_EXPORT_FIELDS];

@@ -1,5 +1,6 @@
 pub mod common;
 pub mod csv_exporter;
+pub mod markdown_exporter;
 pub mod parquet_exporter;
 pub mod sqlite_exporter;
 
@@ -19,6 +20,11 @@ pub struct ExportDataRequest {
 
 pub async fn export_data(app: &AppHandle, request: ExportDataRequest) -> Result<u64, String> {
     common::validate_time_range(request.start_time, request.end_time)?;
+    let database_path = crate::data::sqlite_pool::resolve_product_db_path(app)?;
+    if common::paths_refer_to_same_file(std::path::Path::new(&request.output_path), &database_path)
+    {
+        return Err("export path cannot overwrite the Patina database".to_string());
+    }
     let pool = wait_for_sqlite_pool(app).await?;
     let selected_fields = request.selected_fields.as_deref();
 
@@ -53,13 +59,23 @@ pub async fn export_data(app: &AppHandle, request: ExportDataRequest) -> Result<
             )
             .await
         }
+        "markdown" => {
+            markdown_exporter::export_to_markdown(
+                &pool,
+                &request.output_path,
+                request.start_time,
+                request.end_time,
+                selected_fields,
+            )
+            .await
+        }
         _ => Err(format!("unsupported export format: {}", request.format)),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{csv_exporter, parquet_exporter, sqlite_exporter};
+    use super::{csv_exporter, markdown_exporter, parquet_exporter, sqlite_exporter};
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
     use sqlx::{Pool, Row, Sqlite};
@@ -394,5 +410,138 @@ mod tests {
 
         assert!(error.contains("select at least one export field"));
         assert!(!path.exists());
+    }
+
+    #[tokio::test]
+    async fn markdown_export_is_readable_and_escapes_special_text() {
+        let pool = source_pool().await;
+        insert_session(&pool, "Editor", "Plan | review\\notes\nnext", 1_000, 1_500).await;
+        insert_web(&pool, "Page", 1_500, 2_000).await;
+        let path = output_path("md");
+        let fields = vec![
+            "start_time".to_string(),
+            "source_name".to_string(),
+            "window_title".to_string(),
+            "page_title".to_string(),
+        ];
+        let count = markdown_exporter::export_to_markdown(
+            &pool,
+            path.to_str().unwrap(),
+            Some(1_000),
+            Some(2_001),
+            Some(&fields),
+        )
+        .await
+        .unwrap();
+        let markdown = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(count, 2);
+        assert!(markdown.starts_with("# Patina 活动记录"));
+        assert!(markdown.contains("| 开始时间 | 来源名称 | 窗口标题 | 页面标题 |"));
+        assert!(markdown.contains("Plan \\| review\\\\notes next"));
+        assert!(markdown.contains("—"));
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn markdown_empty_range_writes_a_valid_zero_record_document() {
+        let pool = source_pool().await;
+        let path = output_path("md");
+        let count = markdown_exporter::export_to_markdown(
+            &pool,
+            path.to_str().unwrap(),
+            Some(9_000),
+            Some(10_000),
+            None,
+        )
+        .await
+        .unwrap();
+        let markdown = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(count, 0);
+        assert!(markdown.contains("记录数量：0"));
+        assert!(markdown.contains("所选范围内没有活动记录。"));
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn all_four_formats_share_the_same_range_and_row_count() {
+        let pool = source_pool().await;
+        insert_session(&pool, "Editor", "Plan", 1_000, 2_000).await;
+        insert_web(&pool, "Issue", 2_000, 3_000).await;
+        insert_session(&pool, "Outside", "Later", 9_000, 10_000).await;
+        let fields = field_list(&["record_type", "start_time", "duration_ms"]);
+        let csv_path = output_path("csv");
+        let sqlite_path = output_path("sqlite");
+        let parquet_path = output_path("parquet");
+        let markdown_path = output_path("md");
+
+        let csv_count = csv_exporter::export_to_csv(
+            &pool,
+            csv_path.to_str().unwrap(),
+            Some(1_500),
+            Some(3_001),
+            Some(&fields),
+        )
+        .await
+        .unwrap();
+        let sqlite_count = sqlite_exporter::export_to_sqlite(
+            &pool,
+            sqlite_path.to_str().unwrap(),
+            Some(1_500),
+            Some(3_001),
+            Some(&fields),
+        )
+        .await
+        .unwrap();
+        let parquet_count = parquet_exporter::export_to_parquet(
+            &pool,
+            parquet_path.to_str().unwrap(),
+            Some(&fields),
+            Some(1_500),
+            Some(3_001),
+        )
+        .await
+        .unwrap();
+        let markdown_count = markdown_exporter::export_to_markdown(
+            &pool,
+            markdown_path.to_str().unwrap(),
+            Some(1_500),
+            Some(3_001),
+            Some(&fields),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            (csv_count, sqlite_count, parquet_count, markdown_count),
+            (2, 2, 2, 2)
+        );
+        for path in [csv_path, sqlite_path, parquet_path, markdown_path] {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    #[tokio::test]
+    async fn markdown_uses_english_labels_when_the_app_language_is_english() {
+        let pool = source_pool().await;
+        sqlx::query("INSERT INTO settings (key, value) VALUES ('language', 'en-US')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        insert_session(&pool, "Editor", "Plan", 1_000, 2_000).await;
+        let path = output_path("md");
+        let fields = field_list(&["start_time", "duration_ms"]);
+        markdown_exporter::export_to_markdown(
+            &pool,
+            path.to_str().unwrap(),
+            None,
+            None,
+            Some(&fields),
+        )
+        .await
+        .unwrap();
+        let markdown = std::fs::read_to_string(&path).unwrap();
+        assert!(markdown.starts_with("# Patina Activity Records"));
+        assert!(markdown.contains("| Start Time | Duration (ms) |"));
+        let _ = std::fs::remove_file(path);
     }
 }

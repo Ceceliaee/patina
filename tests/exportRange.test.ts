@@ -6,10 +6,17 @@ import {
 } from "../src/features/settings/services/settingsDataExportRange.ts";
 import {
   readExportFormat,
+  readExportFields,
+  normalizeExportFields,
   readExportRangeMode,
   rememberExportFormat,
+  rememberExportFields,
   rememberExportRangeMode,
 } from "../src/features/settings/services/settingsDataExportPreferences.ts";
+import {
+  SETTINGS_DATA_EXPORT_DEFAULT_FIELDS_BY_FORMAT,
+  SETTINGS_DATA_EXPORT_FIELD_KEYS,
+} from "../src/features/settings/services/settingsDataExportFields.ts";
 
 let passed = 0;
 
@@ -92,6 +99,32 @@ await runTest("export preferences default to month and csv, then persist valid c
   rememberExportFormat("parquet");
   assert.equal(readExportRangeMode(), "week");
   assert.equal(readExportFormat(), "parquet");
+});
+
+await runTest("export field preferences stay independent per format", () => {
+  rememberExportFields("csv", ["record_type", "start_time"]);
+  rememberExportFields("markdown", ["source_name", "duration_minutes"]);
+  assert.deepEqual(
+    readExportFields("csv", SETTINGS_DATA_EXPORT_DEFAULT_FIELDS_BY_FORMAT.csv),
+    ["record_type", "start_time"],
+  );
+  assert.deepEqual(
+    readExportFields("markdown", SETTINGS_DATA_EXPORT_DEFAULT_FIELDS_BY_FORMAT.markdown),
+    ["duration_minutes", "source_name"],
+  );
+});
+
+await runTest("export field preferences remove unknown and duplicate fields and enforce canonical order", () => {
+  assert.deepEqual(
+    normalizeExportFields(["start_time", "unknown", "start_time", "category"], SETTINGS_DATA_EXPORT_DEFAULT_FIELDS_BY_FORMAT.csv),
+    ["category", "start_time"],
+  );
+  assert.deepEqual(
+    normalizeExportFields([], SETTINGS_DATA_EXPORT_DEFAULT_FIELDS_BY_FORMAT.markdown),
+    SETTINGS_DATA_EXPORT_FIELD_KEYS.filter((field) => (
+      SETTINGS_DATA_EXPORT_DEFAULT_FIELDS_BY_FORMAT.markdown as readonly string[]
+    ).includes(field)),
+  );
 });
 
 console.log(`Passed ${passed} export range tests`);
