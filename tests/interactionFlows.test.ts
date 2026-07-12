@@ -59,6 +59,7 @@ const BASE_SETTINGS: AppSettings = {
   remoteStatusBridgeUrl: "",
   remoteStatusBridgeToken: "",
   remoteStatusBridgeMachineId: "",
+  screenshotsEnabled: false,
 };
 
 function buildSettings(overrides: Partial<AppSettings> = {}): AppSettings {

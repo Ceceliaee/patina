@@ -38,6 +38,7 @@ const BASE_SETTINGS: AppSettings = {
   remoteStatusBridgeUrl: "",
   remoteStatusBridgeToken: "",
   remoteStatusBridgeMachineId: "",
+  screenshotsEnabled: false,
 };
 
 const BASE_TRACKING_STATUS: TrackingStatusSnapshot = {

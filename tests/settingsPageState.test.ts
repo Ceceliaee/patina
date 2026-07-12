@@ -110,6 +110,7 @@ interface AppSettings {
   remoteStatusBridgeUrl: string;
   remoteStatusBridgeToken: string;
   remoteStatusBridgeMachineId: string;
+  screenshotsEnabled: boolean;
 }
 
 type CleanupRange = 180 | 90 | 60 | 30 | 15 | 7;
@@ -140,6 +141,7 @@ const BASE_SETTINGS: AppSettings = {
   remoteStatusBridgeUrl: "",
   remoteStatusBridgeToken: "",
   remoteStatusBridgeMachineId: "",
+  screenshotsEnabled: false,
 };
 
 function buildSettings(overrides: Partial<AppSettings> = {}): AppSettings {

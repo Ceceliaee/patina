@@ -91,6 +91,28 @@ function tauriStubFor(path: string) {
             lastActivityAtMs: null,
           };
         }
+        if (command === "cmd_get_screenshot_settings") {
+          return {
+            enabled: false,
+            intervalSecs: 300,
+            retentionDays: 7,
+          };
+        }
+        if (command === "cmd_set_screenshot_settings") {
+          return null;
+        }
+        if (command === "cmd_query_screenshots") {
+          return [];
+        }
+        if (command === "cmd_get_screenshot_data") {
+          return "";
+        }
+        if (command === "cmd_get_screenshot_file_path") {
+          return "";
+        }
+        if (command === "cmd_reveal_screenshot_in_folder") {
+          return null;
+        }
         if (command === "cmd_get_storage_snapshot") {
           return {
             paths: {

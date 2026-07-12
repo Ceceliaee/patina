@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import type { CSSProperties, WheelEvent } from "react";
-import { Clock, Expand, Minus, Plus, Tags, X, ZoomIn } from "lucide-react";
+import { Clock, Expand, Minus, Plus, Tags, X, ZoomIn, LayoutList, LayoutGrid } from "lucide-react";
 import { type HistorySession } from "../../../shared/types/sessions";
 import type { WebActivitySegment } from "../../../shared/types/webActivity.ts";
 import type { WebDomainOverride } from "../../../shared/types/webActivity.ts";
@@ -74,6 +74,10 @@ import {
 import HistoryHourlyActivityPanel from "./HistoryHourlyActivityPanel.tsx";
 import HistoryDateNavigator from "./HistoryDateNavigator.tsx";
 import HistoryTimelineDialogDateControls from "./HistoryTimelineDialogDateControls.tsx";
+import HistoryAppTimeline from "./HistoryAppTimeline.tsx";
+import { buildHistoryAppTimelineViewModel } from "../services/historyAppTimelineViewModel.ts";
+import { queryScreenshots } from "../services/historyScreenshots.ts";
+import type { ScreenshotEntry } from "../services/historyScreenshots.ts";
 
 interface Props {
   icons: Record<string, string>;
@@ -119,6 +123,7 @@ const formatHistoryDateCacheKey = (date: Date) => {
   return formatLocalDateKey(startOfDay(date));
 };
 type TimelineDialogMode = "app" | "web";
+type TimelineDialogView = "list" | "appTimeline";
 type TimelineZoomOptionValue = `${HistoryTimelineZoomHours}`;
 
 function cleanTimelineDetailTitle(sample: TimelineDetailTitle, appName: string): TimelineDetailTitle {
@@ -266,8 +271,12 @@ export default function History({
   ));
   const [timelineDialogOpen, setTimelineDialogOpen] = useState(false);
   const [timelineDialogMode, setTimelineDialogMode] = useState<TimelineDialogMode>("app");
+  const [timelineDialogView, setTimelineDialogView] = useState<TimelineDialogView>("list");
   const [timelineDialogSyncedHeight, setTimelineDialogSyncedHeight] = useState<number | null>(null);
   const [timelineZoomDialogOpen, setTimelineZoomDialogOpen] = useState(false);
+  const [dayScreenshots, setDayScreenshots] = useState<ScreenshotEntry[]>([]);
+  const [appTimelineZoomLevel, setAppTimelineZoomLevel] = useState(1);
+  const [appTimelineViewportStartRatio, setAppTimelineViewportStartRatio] = useState(0);
   const [timelineZoomHours, setTimelineZoomHours] = useState<HistoryTimelineZoomHours>(
     readHistoryTimelineZoomHours,
   );
@@ -554,6 +563,25 @@ export default function History({
   }, [calendarOpen]);
 
   useEffect(() => {
+    const start = new Date(selectedDate);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(selectedDate);
+    end.setHours(23, 59, 59, 999);
+    queryScreenshots(start.getTime(), end.getTime())
+      .then(setDayScreenshots)
+      .catch(() => setDayScreenshots([]));
+  }, [selectedDate]);
+
+  const screenshotsBySessionId: Record<number, ScreenshotEntry[]> = useMemo(() => {
+    const map: Record<number, ScreenshotEntry[]> = {};
+    for (const s of dayScreenshots) {
+      if (s.sessionId == null) continue;
+      (map[s.sessionId] ??= []).push(s);
+    }
+    return map;
+  }, [dayScreenshots]);
+
+  useEffect(() => {
     if (!timelineDetailsPopover) return;
 
     const handlePointerDown = (event: PointerEvent) => {
@@ -791,6 +819,29 @@ export default function History({
       webDomainOverrides,
     ],
   );
+  const appTimelineView = useMemo(
+    () => buildHistoryAppTimelineViewModel({
+      sessions: compiledSessions,
+      selectedDate,
+      nowMs,
+      mergeThresholdSecs,
+      iconThemeColors,
+      zoomLevel: appTimelineZoomLevel,
+      viewportStartRatio: appTimelineViewportStartRatio,
+    }),
+    [compiledSessions, iconThemeColors, mergeThresholdSecs, nowMs, selectedDate, appTimelineZoomLevel, appTimelineViewportStartRatio],
+  );
+
+  const handleAppTimelineZoomChange = useCallback((zoomLevel: number, viewportStartRatio: number) => {
+    setAppTimelineZoomLevel(zoomLevel);
+    setAppTimelineViewportStartRatio(viewportStartRatio);
+  }, []);
+
+  useEffect(() => {
+    setAppTimelineZoomLevel(1);
+    setAppTimelineViewportStartRatio(0);
+  }, [selectedDate]);
+
   const effectiveDayDistributionMode = resolveEffectiveDayDistributionMode(
     dayDistributionMode,
     webActivityEnabled,
@@ -1096,6 +1147,7 @@ export default function History({
       detailsPopover={timelineDetailsPopover}
       className={className}
       onToggleSessionDetails={toggleTimelineSessionDetails}
+      screenshotsBySessionId={screenshotsBySessionId}
     />
   );
   const renderWebTimelineList = (className = "") => (
@@ -1212,10 +1264,34 @@ export default function History({
                   className="history-timeline-dialog-mode-switch"
                 />
               )}
+              {effectiveTimelineDialogMode === "app" && (
+                <div className="flex items-center gap-0.5 rounded-[8px] bg-[var(--qp-control-bg)] p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setTimelineDialogView("list")}
+                    className={`qp-icon-button rounded-[6px] ${timelineDialogView === "list" ? "bg-[var(--qp-bg-panel)] shadow-sm" : ""}`}
+                    title="列表视图"
+                    aria-label="列表视图"
+                  >
+                    <LayoutList size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTimelineDialogView("appTimeline")}
+                    className={`qp-icon-button rounded-[6px] ${timelineDialogView === "appTimeline" ? "bg-[var(--qp-bg-panel)] shadow-sm" : ""}`}
+                    title="应用时间轴"
+                    aria-label="应用时间轴视图"
+                  >
+                    <LayoutGrid size={13} />
+                  </button>
+                </div>
+              )}
               <span className="history-timeline-dialog-meta">
-                {UI_TEXT.history.sessionCount(
-                  effectiveTimelineDialogMode === "web" ? webTimelineItems.length : timelineSessions.length,
-                )}
+                {effectiveTimelineDialogMode === "web"
+                  ? UI_TEXT.history.sessionCount(webTimelineItems.length)
+                  : timelineDialogView === "list"
+                    ? UI_TEXT.history.sessionCount(timelineSessions.length)
+                    : UI_TEXT.history.sessionCount(appTimelineView.appItems.length)}
               </span>
             </div>
             <HistoryTimelineDialogDateControls
@@ -1225,12 +1301,28 @@ export default function History({
               className="history-timeline-dialog-date-controls"
             />
             <div className="history-timeline-dialog-actions">
-              {renderTimelineDurationControls("history-timeline-dialog-duration-controls")}
+              {effectiveTimelineDialogMode === "app" && timelineDialogView === "list" && (
+                renderTimelineDurationControls("history-timeline-dialog-duration-controls")
+              )}
             </div>
           </div>
           {effectiveTimelineDialogMode === "web"
             ? renderWebTimelineList("history-timeline-dialog-list")
-            : renderTimelineList("history-timeline-dialog-list")}
+            : timelineDialogView === "list"
+              ? renderTimelineList("history-timeline-dialog-list")
+              : (
+                <div className="history-timeline-dialog-list h-full">
+                  <HistoryAppTimeline
+                    viewModel={appTimelineView}
+                    icons={historyIcons}
+                    screenshots={dayScreenshots}
+                    onZoomChange={handleAppTimelineZoomChange}
+                    onSegmentClick={(segment, appItem) => {
+                      console.log("Segment clicked:", segment, appItem);
+                    }}
+                  />
+                </div>
+              )}
         </div>
       </QuietDialog>
 

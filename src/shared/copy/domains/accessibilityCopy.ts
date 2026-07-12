@@ -48,6 +48,7 @@ const ZH_CN_ACCESSIBILITY_COPY = {
     },
     settings: {
       toggleTrackingPaused: "切换暂停追踪",
+      toggleScreenshots: "切换工作截图",
       toggleGlobalTitle: "切换全局标题",
       toggleMinimizeToWidget: "切换最小化到挂件",
       toggleCloseToTray: "切换关闭到托盘",
@@ -144,6 +145,7 @@ const EN_US_ACCESSIBILITY_COPY = {
     },
     settings: {
       toggleTrackingPaused: "Toggle pause tracking",
+      toggleScreenshots: "Toggle work screenshots",
       toggleGlobalTitle: "Toggle global titles",
       toggleMinimizeToWidget: "Toggle minimize to widget",
       toggleCloseToTray: "Toggle close to tray",

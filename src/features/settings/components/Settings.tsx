@@ -3,7 +3,7 @@ import {
   RefreshCw,
   Settings2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import type { SettingsPageProps } from "../types";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
@@ -15,6 +15,11 @@ import SettingsResidentPanel from "./SettingsResidentPanel";
 import SettingsTrackingPanel from "./SettingsTrackingPanel";
 import { useSettingsPageState } from "../hooks/useSettingsPageState";
 import { useWebActivitySetupState } from "../hooks/useWebActivitySetupState";
+import {
+  getScreenshotSettings,
+  setScreenshotSettings,
+  type ScreenshotSettings,
+} from "../services/screenshotSettingsService.ts";
 
 export default function Settings({
   onSettingsChanged,
@@ -77,6 +82,75 @@ export default function Settings({
     draftSettings,
   });
 
+  const [screenshotSettings, setScreenshotSettingsState] = useState<ScreenshotSettings | null>(null);
+  const [savedScreenshotSettings, setSavedScreenshotSettings] = useState<ScreenshotSettings | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getScreenshotSettings()
+      .then((settings) => {
+        if (cancelled) return;
+        setScreenshotSettingsState(settings);
+        setSavedScreenshotSettings(settings);
+        handleChange("screenshotsEnabled", settings.enabled);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [handleChange]);
+
+  const hasScreenshotUnsavedChanges = (() => {
+    if (!screenshotSettings || !savedScreenshotSettings) return false;
+    return (
+      screenshotSettings.enabled !== savedScreenshotSettings.enabled ||
+      screenshotSettings.intervalSecs !== savedScreenshotSettings.intervalSecs ||
+      screenshotSettings.retentionDays !== savedScreenshotSettings.retentionDays
+    );
+  })();
+
+  const overallHasUnsavedChanges = hasUnsavedChanges || hasScreenshotUnsavedChanges;
+
+  const handleScreenshotSettingsChange = useCallback((next: Partial<ScreenshotSettings>) => {
+    setScreenshotSettingsState((current) => {
+      if (!current) return current;
+      return { ...current, ...next };
+    });
+  }, []);
+
+  const handleScreenshotEnabledChange = useCallback((enabled: boolean) => {
+    handleChange("screenshotsEnabled", enabled);
+    handleScreenshotSettingsChange({ enabled });
+  }, [handleChange, handleScreenshotSettingsChange]);
+
+  const saveScreenshotSettings = useCallback(async (): Promise<boolean> => {
+    if (!screenshotSettings) return true;
+    try {
+      await setScreenshotSettings(screenshotSettings);
+      setSavedScreenshotSettings(screenshotSettings);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [screenshotSettings]);
+
+  const cancelScreenshotSettings = useCallback(() => {
+    if (savedScreenshotSettings) {
+      setScreenshotSettingsState(savedScreenshotSettings);
+    }
+  }, [savedScreenshotSettings]);
+
+  const handleSaveAll = useCallback(async () => {
+    const appSettingsOk = await handleSave();
+    const screenshotOk = await saveScreenshotSettings();
+    return appSettingsOk && screenshotOk;
+  }, [handleSave, saveScreenshotSettings]);
+
+  const handleCancelAll = useCallback(() => {
+    handleCancel();
+    cancelScreenshotSettings();
+  }, [handleCancel, cancelScreenshotSettings]);
+
   useEffect(() => {
     if (!draftSettings) return;
     onThemeModePreview?.(draftSettings.themeMode);
@@ -113,7 +187,7 @@ export default function Settings({
           <div className="flex items-center gap-2.5">
             <div
               className={`qp-status ${
-                saveStatus !== "saving" && hasUnsavedChanges ? "qp-status-danger" : ""
+                saveStatus !== "saving" && overallHasUnsavedChanges ? "qp-status-danger" : ""
               } flex px-3 py-1.5 rounded-[8px] items-center text-xs font-semibold`}
             >
               {saveStatus === "saving" && (
@@ -122,31 +196,31 @@ export default function Settings({
                   {UI_TEXT.settings.saving}
                 </span>
               )}
-              {saveStatus === "saved" && !hasUnsavedChanges && (
+              {saveStatus === "saved" && !overallHasUnsavedChanges && (
                 <span className="text-[var(--qp-success)] flex items-center gap-1.5">
                   <Save size={14} />
                   {UI_TEXT.settings.saved}
                 </span>
               )}
-              {saveStatus !== "saving" && hasUnsavedChanges && (
+              {saveStatus !== "saving" && overallHasUnsavedChanges && (
                 <span>{UI_TEXT.settings.unsaved}</span>
               )}
-              {saveStatus === "idle" && !hasUnsavedChanges && (
+              {saveStatus === "idle" && !overallHasUnsavedChanges && (
                 <span className="text-[var(--qp-text-tertiary)]">{UI_TEXT.settings.idle}</span>
               )}
             </div>
             <button
               type="button"
-              onClick={handleCancel}
-              disabled={!hasUnsavedChanges || saveStatus === "saving"}
+              onClick={handleCancelAll}
+              disabled={!overallHasUnsavedChanges || saveStatus === "saving"}
               className="qp-button-secondary rounded-[8px] px-2.5 py-1.5 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-50"
             >
               {UI_TEXT.settings.cancel}
             </button>
             <button
               type="button"
-              onClick={() => void handleSave()}
-              disabled={!hasUnsavedChanges || saveStatus === "saving"}
+              onClick={() => void handleSaveAll()}
+              disabled={!overallHasUnsavedChanges || saveStatus === "saving"}
               className="qp-button-primary rounded-[8px] px-2.5 py-1.5 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saveStatus === "saving" ? UI_TEXT.settings.saving : UI_TEXT.settings.save}
@@ -176,6 +250,10 @@ export default function Settings({
             }}
             trackingPaused={draftSettings.trackingPaused}
             onTrackingPausedChange={(nextChecked) => handleChange("trackingPaused", nextChecked)}
+            screenshotsEnabled={draftSettings.screenshotsEnabled}
+            onScreenshotsEnabledChange={handleScreenshotEnabledChange}
+            screenshotSettings={screenshotSettings ?? { enabled: false, intervalSecs: 60, retentionDays: 7 }}
+            onScreenshotSettingsChange={handleScreenshotSettingsChange}
             titleRecordingEnabled={draftSettings.titleRecordingEnabled}
             onTitleRecordingEnabledChange={(nextChecked) => handleChange("titleRecordingEnabled", nextChecked)}
           />

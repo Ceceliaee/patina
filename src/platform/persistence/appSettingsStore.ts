@@ -52,7 +52,8 @@ type RawAppSettingsKey =
   | "remote_status_bridge_enabled"
   | "remote_status_bridge_url"
   | "remote_status_bridge_token"
-  | "remote_status_bridge_machine_id";
+  | "remote_status_bridge_machine_id"
+  | "screenshots_enabled";
 
 const APP_SETTINGS_RAW_KEYS: Record<keyof AppSettings, RawAppSettingsKey> = {
   idleTimeoutSecs: "idle_timeout_secs",
@@ -80,6 +81,7 @@ const APP_SETTINGS_RAW_KEYS: Record<keyof AppSettings, RawAppSettingsKey> = {
   remoteStatusBridgeUrl: "remote_status_bridge_url",
   remoteStatusBridgeToken: "remote_status_bridge_token",
   remoteStatusBridgeMachineId: "remote_status_bridge_machine_id",
+  screenshotsEnabled: "screenshots_enabled",
 };
 
 const IDLE_TIMEOUT_SECONDS_RANGE = { min: 300, max: 1800, step: 60 } as const;
@@ -313,6 +315,10 @@ export function normalizeSettingsRecord(record: Record<string, string | undefine
     remoteStatusBridgeUrl,
     remoteStatusBridgeToken,
     remoteStatusBridgeMachineId,
+    screenshotsEnabled: parseBooleanSetting(
+      record.screenshots_enabled,
+      DEFAULT_SETTINGS.screenshotsEnabled,
+    ),
   };
 }
 

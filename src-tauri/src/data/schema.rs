@@ -10,6 +10,8 @@ pub const WEB_ACTIVITY_MIGRATION_VERSION: i64 = 4;
 pub const WEB_ACTIVITY_MIGRATION_DESCRIPTION: &str = "create_web_activity_segments";
 pub const WEB_FAVICON_CACHE_MIGRATION_VERSION: i64 = 5;
 pub const WEB_FAVICON_CACHE_MIGRATION_DESCRIPTION: &str = "create_web_favicon_cache";
+pub const SCREENSHOTS_MIGRATION_VERSION: i64 = 6;
+pub const SCREENSHOTS_MIGRATION_DESCRIPTION: &str = "create_screenshots";
 
 pub const CURRENT_BASELINE_SCHEMA_SQL: &str = "
     CREATE TABLE IF NOT EXISTS sessions (
@@ -249,6 +251,24 @@ pub const WEB_FAVICON_CACHE_SCHEMA_SQL: &str = "
     WHERE web_favicon_cache.favicon_url <> excluded.favicon_url;
 ";
 
+pub const SCREENSHOTS_SCHEMA_SQL: &str = "
+    CREATE TABLE IF NOT EXISTS screenshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        file_path TEXT NOT NULL,
+        captured_at INTEGER NOT NULL,
+        width INTEGER NOT NULL,
+        height INTEGER NOT NULL,
+        thumbnail_base64 TEXT NOT NULL,
+        session_id INTEGER REFERENCES sessions(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_screenshots_captured_at
+    ON screenshots(captured_at);
+
+    CREATE INDEX IF NOT EXISTS idx_screenshots_session_id
+    ON screenshots(session_id);
+";
+
 pub fn tracker_migrations() -> Vec<Migration> {
     vec![
         Migration {
@@ -279,6 +299,12 @@ pub fn tracker_migrations() -> Vec<Migration> {
             version: WEB_FAVICON_CACHE_MIGRATION_VERSION,
             description: WEB_FAVICON_CACHE_MIGRATION_DESCRIPTION,
             sql: WEB_FAVICON_CACHE_SCHEMA_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: SCREENSHOTS_MIGRATION_VERSION,
+            description: SCREENSHOTS_MIGRATION_DESCRIPTION,
+            sql: SCREENSHOTS_SCHEMA_SQL,
             kind: MigrationKind::Up,
         },
     ]

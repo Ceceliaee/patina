@@ -1,4 +1,4 @@
-/* Quiet Pro skeleton primitives for upcoming phased migration */
+﻿/* Quiet Pro skeleton primitives for upcoming phased migration */
 .qp-app-frame {
   display: flex;
   height: 100vh;
@@ -496,6 +496,34 @@
   border: 1px solid var(--qp-border-subtle);
   background: var(--qp-bg-elevated);
   color: var(--qp-text-secondary);
+  transition: all 120ms ease;
+  cursor: pointer;
+}
+
+.qp-chip:hover:not(:disabled) {
+  border-color: var(--qp-border);
+  color: var(--qp-text-primary);
+  background: color-mix(in srgb, var(--qp-bg-elevated) 88%, white);
+}
+
+.qp-chip:active:not(:disabled) {
+  background: var(--qp-control-bg);
+}
+
+.qp-chip:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--qp-accent-default) 58%, white);
+  outline-offset: 1px;
+}
+
+.qp-chip.is-active {
+  border-color: var(--qp-accent-default);
+  background: var(--qp-accent-muted);
+  color: var(--qp-accent-default);
+}
+
+.qp-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .qp-status {
