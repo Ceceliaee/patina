@@ -244,38 +244,27 @@ const ZH_CN_SETTINGS_COPY = {
       dataDirectoryLabel: "数据目录",
       webviewCacheDirectoryLabel: "缓存目录",
       openDirectoryAction: "打开目录",
-      storageMigrationPendingTitle: "迁移将在下次启动前执行",
-      storageMigrationPendingHint: (dataPath: string | null, cachePath: string | null) => [
-        dataPath ? `数据目录迁移到：${dataPath}` : null,
-        cachePath ? `缓存目录迁移到：${cachePath}` : null,
-      ].filter(Boolean).join("\n"),
-      storageMigrationCancelAction: "取消迁移",
+      restartAndApplyAction: "重启并应用",
       storageDataMigrationConfirmTitle: "更改数据目录",
       storageDataMigrationConfirmDetail: (currentDataRoot: string, targetDataRoot: string) => (
-        `当前目录：${currentDataRoot}\n目标目录：${targetDataRoot}\n\nPatina 会在下次启动时迁移数据目录：\n- 本次运行中不会移动数据文件。\n- 下次启动时，Patina 会将当前数据复制到目标目录。\n- 迁移完成前，请不要删除或移动当前目录和目标目录。\n- 迁移成功后，默认目录只保留必要的锚点文件。`
+        `当前目录：${currentDataRoot}\n目标目录：${targetDataRoot}\n\nPatina 将保存当前记录并重新启动，然后把数据迁移到目标目录。迁移完成前，请不要删除或移动当前目录和目标目录。`
       ),
       storageCacheMigrationConfirmTitle: "更改缓存目录",
       storageCacheMigrationConfirmDetail: (currentWebviewRoot: string, targetWebviewRoot: string) => (
-        `当前缓存：${currentWebviewRoot}\n目标缓存：${targetWebviewRoot}\n\nPatina 会在下次启动时更改缓存目录：\n- 本次运行中不会更改缓存目录。\n- 下次启动时，Patina 会使用目标缓存目录。\n- 更改完成前，请不要删除或移动目标目录。\n- 更改成功后，默认目录只保留必要的锚点文件。`
+        `当前缓存：${currentWebviewRoot}\n目标缓存：${targetWebviewRoot}\n\nPatina 将保存当前记录并重新启动，然后使用目标缓存目录。完成前，请不要删除或移动目标目录。`
       ),
       storageMigrationConfirmAction: "确认更改",
       storageRestoreDefaultDataConfirmDetail: (currentDataRoot: string, defaultDataRoot: string) => (
-        `当前数据：${currentDataRoot}\n默认数据：${defaultDataRoot}\n\nPatina 会在下次启动时迁移数据目录：\n- 本次运行中不会移动数据文件。\n- 下次启动时，Patina 会将当前数据复制到默认目录。\n- 迁移完成前，请不要删除或移动当前目录和默认目录。\n- 迁移成功后，自定义目录会被删除，清理其中的数据文件。`
+        `当前数据：${currentDataRoot}\n默认数据：${defaultDataRoot}\n\nPatina 将保存当前记录并重新启动，然后把数据迁移到默认目录。迁移完成前，请不要删除或移动当前目录和默认目录。`
       ),
       storageRestoreDefaultCacheConfirmDetail: (currentWebviewRoot: string, defaultWebviewRoot: string) => (
-        `当前缓存：${currentWebviewRoot}\n默认缓存：${defaultWebviewRoot}\n\nPatina 会在下次启动时更改缓存目录：\n- 本次运行中不会更改缓存目录。\n- 下次启动时，Patina 会使用默认缓存目录。\n- 更改完成前，请不要删除或移动默认目录。\n- 更改成功后，自定义目录会被删除，清理其中的缓存文件。`
+        `当前缓存：${currentWebviewRoot}\n默认缓存：${defaultWebviewRoot}\n\nPatina 将保存当前记录并重新启动，然后恢复默认缓存目录。完成前，请不要删除或移动默认目录。`
       ),
       webviewCacheClearTitle: "清理缓存",
-      webviewCacheClearPending: "已安排在下次启动前清理。",
-      webviewCacheClearAction: "下次启动清理",
-      webviewCacheClearConfirmTitle: "清理缓存",
-      webviewCacheClearConfirmDetail: "下次启动创建窗口前，清理可重新生成的缓存。",
-      webviewCacheClearScheduled: "已安排下次启动前清理缓存。",
-      webviewCacheClearFailed: "无法安排缓存清理。",
-      storageMigrationScheduled: "迁移已安排，下次启动前执行。",
-      storageMigrationFailed: "无法安排迁移，请检查目标目录。",
-      storageMigrationCancelled: "已取消待执行迁移。",
-      storageMigrationCancelFailed: "无法取消迁移。",
+      webviewCacheClearConfirmTitle: "重启并清理缓存？",
+      webviewCacheClearConfirmDetail: "Patina 将保存当前记录并重新启动，在创建窗口前清理可重新生成的 WebView 缓存。",
+      webviewCacheClearFailed: "无法准备缓存清理，请重试。",
+      storageMigrationFailed: "无法准备重启，请检查目标目录。",
       storageOpenDirectoryFailed: "无法打开该目录。",
     },
   },
@@ -527,38 +516,27 @@ const EN_US_SETTINGS_COPY = {
       dataDirectoryLabel: "Data folder",
       webviewCacheDirectoryLabel: "Cache folder",
       openDirectoryAction: "Open folder",
-      storageMigrationPendingTitle: "Migration runs before next launch",
-      storageMigrationPendingHint: (dataPath: string | null, cachePath: string | null) => [
-        dataPath ? `Data folder moves to: ${dataPath}` : null,
-        cachePath ? `Cache folder moves to: ${cachePath}` : null,
-      ].filter(Boolean).join("\n"),
-      storageMigrationCancelAction: "Cancel migration",
+      restartAndApplyAction: "Restart and apply",
       storageDataMigrationConfirmTitle: "Change data folder",
       storageDataMigrationConfirmDetail: (currentDataRoot: string, targetDataRoot: string) => (
-        `Current folder: ${currentDataRoot}\nTarget folder: ${targetDataRoot}\n\nPatina will migrate the data folder before the next launch:\n- No data files move during this run.\n- On the next launch, Patina copies the current data to the target folder.\n- Until migration finishes, do not delete or move the current or target folder.\n- After migration succeeds, the default folder only keeps the required anchor files.`
+        `Current folder: ${currentDataRoot}\nTarget folder: ${targetDataRoot}\n\nPatina will save the current record, restart, and migrate the data to the target folder. Do not move or delete either folder until migration finishes.`
       ),
       storageCacheMigrationConfirmTitle: "Change cache folder",
       storageCacheMigrationConfirmDetail: (currentWebviewRoot: string, targetWebviewRoot: string) => (
-        `Current cache: ${currentWebviewRoot}\nTarget cache: ${targetWebviewRoot}\n\nPatina will change the cache folder before the next launch:\n- The cache folder will not change during this run.\n- On the next launch, Patina uses the target cache folder.\n- Until the change finishes, do not delete or move the target folder.\n- After the change succeeds, the default folder only keeps the required anchor files.`
+        `Current cache: ${currentWebviewRoot}\nTarget cache: ${targetWebviewRoot}\n\nPatina will save the current record, restart, and use the target cache folder. Do not move or delete the target folder until this finishes.`
       ),
       storageMigrationConfirmAction: "Confirm change",
       storageRestoreDefaultDataConfirmDetail: (currentDataRoot: string, defaultDataRoot: string) => (
-        `Current data: ${currentDataRoot}\nDefault data: ${defaultDataRoot}\n\nPatina will migrate the data folder before the next launch:\n- No data files move during this run.\n- On the next launch, Patina copies the current data to the default folder.\n- Until migration finishes, do not delete or move the current or default folder.\n- After migration succeeds, the custom folder is removed and its data files are cleaned.`
+        `Current data: ${currentDataRoot}\nDefault data: ${defaultDataRoot}\n\nPatina will save the current record, restart, and migrate the data to the default folder. Do not move or delete either folder until migration finishes.`
       ),
       storageRestoreDefaultCacheConfirmDetail: (currentWebviewRoot: string, defaultWebviewRoot: string) => (
-        `Current cache: ${currentWebviewRoot}\nDefault cache: ${defaultWebviewRoot}\n\nPatina will change the cache folder before the next launch:\n- The cache folder will not change during this run.\n- On the next launch, Patina uses the default cache folder.\n- Until the change finishes, do not delete or move the default folder.\n- After the change succeeds, the custom folder is removed and its cache files are cleaned.`
+        `Current cache: ${currentWebviewRoot}\nDefault cache: ${defaultWebviewRoot}\n\nPatina will save the current record, restart, and restore the default cache folder. Do not move or delete the default folder until this finishes.`
       ),
       webviewCacheClearTitle: "Clear cache",
-      webviewCacheClearPending: "Scheduled to clear before the next launch.",
-      webviewCacheClearAction: "Clear next launch",
-      webviewCacheClearConfirmTitle: "Clear cache",
-      webviewCacheClearConfirmDetail: "Before the next window starts, Patina clears regenerable cache.",
-      webviewCacheClearScheduled: "Cache cleanup scheduled for next launch.",
-      webviewCacheClearFailed: "Could not schedule cache cleanup.",
-      storageMigrationScheduled: "Migration scheduled for next launch.",
-      storageMigrationFailed: "Could not schedule migration. Check the target.",
-      storageMigrationCancelled: "Pending migration cancelled.",
-      storageMigrationCancelFailed: "Could not cancel migration.",
+      webviewCacheClearConfirmTitle: "Restart and clear cache?",
+      webviewCacheClearConfirmDetail: "Patina will save the current record, restart, and clear regenerable WebView cache before creating the window.",
+      webviewCacheClearFailed: "Could not prepare cache cleanup. Try again.",
+      storageMigrationFailed: "Could not prepare the restart. Check the target folder.",
       storageOpenDirectoryFailed: "Could not open that folder.",
     },
   },

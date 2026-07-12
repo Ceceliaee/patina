@@ -28,23 +28,12 @@ export interface WebviewCacheSnapshot {
   ebwebviewPath: string;
   totalSizeBytes: number;
   reclaimableSizeBytes: number;
-  pendingClear: boolean;
   lastTrimAtMs: number | null;
   entries: WebviewCacheEntrySnapshot[];
 }
 
 export interface StorageMaintenanceSnapshot {
   lastError: string | null;
-  lastMigrationStatus: string | null;
-}
-
-export interface StoragePendingMigrationSnapshot {
-  id: string;
-  sourceDataRoot: string;
-  targetDataRoot: string;
-  targetWebviewRoot: string;
-  createdAtMs: number;
-  state: string;
 }
 
 export interface StorageSnapshot {
@@ -52,7 +41,6 @@ export interface StorageSnapshot {
   sizes: StorageSizeSnapshot;
   webviewCache: WebviewCacheSnapshot;
   maintenance: StorageMaintenanceSnapshot;
-  pendingMigration: StoragePendingMigrationSnapshot | null;
 }
 
 export interface StorageMigrationPreview {
@@ -90,28 +78,24 @@ export async function previewRestoreDefaultWebviewCacheMigration(): Promise<Stor
   return invoke<StorageMigrationPreview>("cmd_preview_restore_default_webview_cache_migration");
 }
 
-export async function scheduleStorageMigration(targetDataRoot: string): Promise<StorageMigrationPreview> {
-  return invoke<StorageMigrationPreview>("cmd_schedule_storage_migration", { targetDataRoot });
+export async function restartAndApplyStorageMigration(targetDataRoot: string): Promise<void> {
+  await invoke("cmd_restart_and_apply_storage_migration", { targetDataRoot });
 }
 
-export async function scheduleWebviewCacheMigration(targetWebviewRoot: string): Promise<StorageMigrationPreview> {
-  return invoke<StorageMigrationPreview>("cmd_schedule_webview_cache_migration", { targetWebviewRoot });
+export async function restartAndApplyWebviewCacheMigration(targetWebviewRoot: string): Promise<void> {
+  await invoke("cmd_restart_and_apply_webview_cache_migration", { targetWebviewRoot });
 }
 
-export async function scheduleRestoreDefaultStorageMigration(): Promise<StorageMigrationPreview> {
-  return invoke<StorageMigrationPreview>("cmd_schedule_restore_default_storage_migration");
+export async function restartAndApplyRestoreDefaultStorageMigration(): Promise<void> {
+  await invoke("cmd_restart_and_apply_restore_default_storage_migration");
 }
 
-export async function scheduleRestoreDefaultWebviewCacheMigration(): Promise<StorageMigrationPreview> {
-  return invoke<StorageMigrationPreview>("cmd_schedule_restore_default_webview_cache_migration");
+export async function restartAndApplyRestoreDefaultWebviewCacheMigration(): Promise<void> {
+  await invoke("cmd_restart_and_apply_restore_default_webview_cache_migration");
 }
 
-export async function cancelPendingStorageMigration(): Promise<void> {
-  await invoke("cmd_cancel_pending_storage_migration");
-}
-
-export async function scheduleWebviewCacheClear(): Promise<WebviewCacheSnapshot> {
-  return invoke<WebviewCacheSnapshot>("cmd_schedule_webview_cache_clear");
+export async function restartAndClearWebviewCache(): Promise<void> {
+  await invoke("cmd_restart_and_clear_webview_cache");
 }
 
 export async function openStorageDirectory(path: string): Promise<void> {

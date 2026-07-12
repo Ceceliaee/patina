@@ -17,7 +17,6 @@ import {
 import { copyTextToClipboard } from "../../../platform/desktop/clipboardGateway.ts";
 import { openExternalUrl } from "../../../platform/desktop/externalUrlGateway.ts";
 import {
-  cancelPendingStorageMigration,
   getStorageSnapshot,
   openStorageDirectory,
   pickStorageDirectory,
@@ -25,11 +24,11 @@ import {
   previewRestoreDefaultWebviewCacheMigration,
   previewStorageMigration,
   previewWebviewCacheMigration,
-  scheduleRestoreDefaultWebviewCacheMigration,
-  scheduleRestoreDefaultStorageMigration,
-  scheduleStorageMigration,
-  scheduleWebviewCacheMigration,
-  scheduleWebviewCacheClear,
+  restartAndApplyRestoreDefaultWebviewCacheMigration,
+  restartAndApplyRestoreDefaultStorageMigration,
+  restartAndApplyStorageMigration,
+  restartAndApplyWebviewCacheMigration,
+  restartAndClearWebviewCache,
   type StorageMigrationPreview,
   type StorageSnapshot,
 } from "../../../platform/storage/storageRuntimeGateway.ts";
@@ -232,28 +231,24 @@ export class SettingsRuntimeAdapterService {
     return previewRestoreDefaultWebviewCacheMigration();
   }
 
-  static async scheduleStorageMigration(path: string): Promise<StorageMigrationPreview> {
-    return scheduleStorageMigration(path);
+  static async restartAndApplyStorageMigration(path: string): Promise<void> {
+    await restartAndApplyStorageMigration(path);
   }
 
-  static async scheduleWebviewCacheMigration(path: string): Promise<StorageMigrationPreview> {
-    return scheduleWebviewCacheMigration(path);
+  static async restartAndApplyWebviewCacheMigration(path: string): Promise<void> {
+    await restartAndApplyWebviewCacheMigration(path);
   }
 
-  static async scheduleRestoreDefaultStorageMigration(): Promise<StorageMigrationPreview> {
-    return scheduleRestoreDefaultStorageMigration();
+  static async restartAndApplyRestoreDefaultStorageMigration(): Promise<void> {
+    await restartAndApplyRestoreDefaultStorageMigration();
   }
 
-  static async scheduleRestoreDefaultWebviewCacheMigration(): Promise<StorageMigrationPreview> {
-    return scheduleRestoreDefaultWebviewCacheMigration();
+  static async restartAndApplyRestoreDefaultWebviewCacheMigration(): Promise<void> {
+    await restartAndApplyRestoreDefaultWebviewCacheMigration();
   }
 
-  static async cancelPendingStorageMigration(): Promise<void> {
-    await cancelPendingStorageMigration();
-  }
-
-  static async scheduleWebviewCacheClear(): Promise<void> {
-    await scheduleWebviewCacheClear();
+  static async restartAndClearWebviewCache(): Promise<void> {
+    await restartAndClearWebviewCache();
   }
 
   static async openStorageDirectory(path: string): Promise<void> {

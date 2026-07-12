@@ -114,15 +114,12 @@ function tauriStubFor(path: string) {
               ebwebviewPath: "C:\\\\Smoke\\\\PatinaWebView\\\\EBWebView",
               totalSizeBytes: 0,
               reclaimableSizeBytes: 0,
-              pendingClear: false,
               lastTrimAtMs: null,
               entries: [],
             },
             maintenance: {
               lastError: null,
-              lastMigrationStatus: null,
             },
-            pendingMigration: null,
           };
         }
         if (command === "cmd_commit_app_settings") {

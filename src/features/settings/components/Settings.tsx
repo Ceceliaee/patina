@@ -59,7 +59,6 @@ export default function Settings({
     handleChooseCacheDirectory,
     handleRestoreDefaultDataDirectory,
     handleRestoreDefaultCacheDirectory,
-    handleCancelPendingStorageMigration,
     handleOpenStorageDirectory,
     idleTimeoutMinutes,
     timelineMergeGapMinutes,
@@ -261,7 +260,6 @@ export default function Settings({
             onChooseCacheDirectory={handleChooseCacheDirectory}
             onRestoreDefaultDataDirectory={handleRestoreDefaultDataDirectory}
             onRestoreDefaultCacheDirectory={handleRestoreDefaultCacheDirectory}
-            onCancelPendingStorageMigration={handleCancelPendingStorageMigration}
             onOpenStorageDirectory={handleOpenStorageDirectory}
           />
         </div>

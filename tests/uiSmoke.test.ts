@@ -517,9 +517,14 @@ await runTest("settings services only expose web sync and remote push controls",
   assert.match(settingsState, /void loadInitialStorageSnapshotOnce\(\)/);
   assert.match(settingsState, /cachedStorageSnapshot = nextSnapshot/);
   assert.doesNotMatch(settingsState, /void refreshStorageSnapshot\(\);\s*\}, \[refreshStorageSnapshot\]\)/);
-  assert.match(settingsState, /await refreshStorageSnapshot\(\);\s*notify\(storageText\.webviewCacheClearScheduled/);
-  assert.match(settingsState, /await refreshStorageSnapshot\(\);\s*notify\(storageText\.storageMigrationScheduled/);
-  assert.match(settingsState, /await refreshStorageSnapshot\(\);\s*notify\(storageText\.storageMigrationCancelled/);
+  assert.match(settingsState, /restartAndClearWebviewCache\(\)/);
+  assert.match(settingsState, /restartAndApplyStorageMigration\(selectedPath\)/);
+  assert.match(settingsState, /restartAndApplyWebviewCacheMigration\(selectedPath\)/);
+  assert.doesNotMatch(settingsState, /scheduleStorageMigration|cancelPendingStorageMigration/);
+  assert.match(settingsDataSafety, /restartAndApplyAction/);
+  assert.doesNotMatch(settingsDataSafety, /pendingMigration|pendingClear|稍后重启/);
+  assert.match(settingsCopy, /restartAndApplyAction: "重启并应用"/);
+  assert.doesNotMatch(settingsCopy, /下次启动|稍后重启|next launch|Restart later/);
   assert.match(settingsStyles, /\.settings-storage-path-row-placeholder/);
   assert.doesNotMatch(settingsStyles, /\.settings-storage-path-placeholder-action/);
   assert.match(settingsCopy, /webActivityHelpAction/);

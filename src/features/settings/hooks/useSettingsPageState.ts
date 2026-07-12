@@ -412,9 +412,7 @@ export function useSettingsPageState({
 
     setIsStorageBusy(true);
     try {
-      await SettingsRuntimeAdapterService.scheduleWebviewCacheClear();
-      await refreshStorageSnapshot();
-      notify(storageText.webviewCacheClearScheduled, "success");
+      await SettingsRuntimeAdapterService.restartAndClearWebviewCache();
     } catch (error) {
       console.error("schedule WebView cache clear failed", error);
       notify(storageText.webviewCacheClearFailed, "warning");
@@ -439,13 +437,11 @@ export function useSettingsPageState({
           preview.currentDataRoot,
           preview.targetDataRoot,
         ),
-        confirmLabel: storageText.storageMigrationConfirmAction,
+        confirmLabel: storageText.restartAndApplyAction,
       });
       if (!confirmed) return;
 
-      await SettingsRuntimeAdapterService.scheduleStorageMigration(selectedPath);
-      await refreshStorageSnapshot();
-      notify(storageText.storageMigrationScheduled, "success");
+      await SettingsRuntimeAdapterService.restartAndApplyStorageMigration(selectedPath);
     } catch (error) {
       console.error("schedule data directory migration failed", error);
       notify(storageText.storageMigrationFailed, "warning");
@@ -470,13 +466,11 @@ export function useSettingsPageState({
           toEbwebviewCachePath(preview.currentWebviewRoot),
           toEbwebviewCachePath(preview.targetWebviewRoot),
         ),
-        confirmLabel: storageText.storageMigrationConfirmAction,
+        confirmLabel: storageText.restartAndApplyAction,
       });
       if (!confirmed) return;
 
-      await SettingsRuntimeAdapterService.scheduleWebviewCacheMigration(selectedPath);
-      await refreshStorageSnapshot();
-      notify(storageText.storageMigrationScheduled, "success");
+      await SettingsRuntimeAdapterService.restartAndApplyWebviewCacheMigration(selectedPath);
     } catch (error) {
       console.error("schedule cache directory migration failed", error);
       notify(storageText.storageMigrationFailed, "warning");
@@ -498,13 +492,11 @@ export function useSettingsPageState({
           preview.currentDataRoot,
           preview.targetDataRoot,
         ),
-        confirmLabel: storageText.restoreDefaultPathAction,
+        confirmLabel: storageText.restartAndApplyAction,
       });
       if (!confirmed) return;
 
-      await SettingsRuntimeAdapterService.scheduleRestoreDefaultStorageMigration();
-      await refreshStorageSnapshot();
-      notify(storageText.storageMigrationScheduled, "success");
+      await SettingsRuntimeAdapterService.restartAndApplyRestoreDefaultStorageMigration();
     } catch (error) {
       console.error("schedule restore default data directory failed", error);
       notify(storageText.storageMigrationFailed, "warning");
@@ -526,13 +518,11 @@ export function useSettingsPageState({
           toEbwebviewCachePath(preview.currentWebviewRoot),
           toEbwebviewCachePath(preview.targetWebviewRoot),
         ),
-        confirmLabel: storageText.restoreDefaultPathAction,
+        confirmLabel: storageText.restartAndApplyAction,
       });
       if (!confirmed) return;
 
-      await SettingsRuntimeAdapterService.scheduleRestoreDefaultWebviewCacheMigration();
-      await refreshStorageSnapshot();
-      notify(storageText.storageMigrationScheduled, "success");
+      await SettingsRuntimeAdapterService.restartAndApplyRestoreDefaultWebviewCacheMigration();
     } catch (error) {
       console.error("schedule restore default cache directory failed", error);
       notify(storageText.storageMigrationFailed, "warning");
@@ -540,22 +530,6 @@ export function useSettingsPageState({
       setIsStorageBusy(false);
     }
   }, [confirm, isStorageBusy, notify, refreshStorageSnapshot, storageSnapshot?.paths.isCustomWebviewRoot]);
-
-  const handleCancelPendingStorageMigration = useCallback(async () => {
-    if (isStorageBusy) return;
-    const storageText = UI_TEXT.settings.storage;
-    setIsStorageBusy(true);
-    try {
-      await SettingsRuntimeAdapterService.cancelPendingStorageMigration();
-      await refreshStorageSnapshot();
-      notify(storageText.storageMigrationCancelled, "info");
-    } catch (error) {
-      console.error("cancel pending storage migration failed", error);
-      notify(storageText.storageMigrationCancelFailed, "warning");
-    } finally {
-      setIsStorageBusy(false);
-    }
-  }, [isStorageBusy, notify, refreshStorageSnapshot]);
 
   const handleOpenStorageDirectory = useCallback(async (path: string) => {
     const storageText = UI_TEXT.settings.storage;
@@ -632,7 +606,6 @@ export function useSettingsPageState({
     handleChooseCacheDirectory,
     handleRestoreDefaultDataDirectory,
     handleRestoreDefaultCacheDirectory,
-    handleCancelPendingStorageMigration,
     handleOpenStorageDirectory,
     handleOpenReleaseNotes,
     handleOpenFeedback,

@@ -5,7 +5,6 @@ import {
   FolderPen,
   FileArchive,
   FolderOpen,
-  MessageCircleWarning,
   RefreshCw,
   RotateCcw,
   Trash2,
@@ -51,20 +50,11 @@ type SettingsDataSafetyPanelProps = {
   onChooseCacheDirectory: () => Promise<void> | void;
   onRestoreDefaultDataDirectory: () => Promise<void> | void;
   onRestoreDefaultCacheDirectory: () => Promise<void> | void;
-  onCancelPendingStorageMigration: () => Promise<void> | void;
   onOpenStorageDirectory: (path: string) => Promise<void> | void;
 };
 
 function formatDirectorySize(bytes: number): string {
   return `${Math.max(0, Math.round(bytes / 1048576))} MB`;
-}
-
-function normalizeStoragePathKey(path: string): string {
-  return path.trim().replace(/[\\/]+$/, "").replace(/\\/g, "/").toLowerCase();
-}
-
-function sameStoragePath(left: string, right: string): boolean {
-  return normalizeStoragePathKey(left) === normalizeStoragePathKey(right);
 }
 
 function StoragePathRow({
@@ -182,7 +172,6 @@ export default function SettingsDataSafetyPanel({
   onChooseCacheDirectory,
   onRestoreDefaultDataDirectory,
   onRestoreDefaultCacheDirectory,
-  onCancelPendingStorageMigration,
   onOpenStorageDirectory,
 }: SettingsDataSafetyPanelProps) {
   const [strategyDialogOpen, setStrategyDialogOpen] = useState(false);
@@ -192,7 +181,6 @@ export default function SettingsDataSafetyPanel({
   const [restoreSourceDialogOpen, setRestoreSourceDialogOpen] = useState(false);
   const [cacheClearDialogOpen, setCacheClearDialogOpen] = useState(false);
   const [historyCleanupDialogOpen, setHistoryCleanupDialogOpen] = useState(false);
-  const [migrationStatusDialogOpen, setMigrationStatusDialogOpen] = useState(false);
   const hasRemoteBackupTarget = Boolean(remoteBackup.config && remoteBackup.hasSecret);
   const restoreStrategyOptions: Array<{ value: BackupRestoreStrategy; label: string }> = [
     { value: "merge", label: UI_TEXT.settings.restoreStrategyOptions.merge },
@@ -213,19 +201,6 @@ export default function SettingsDataSafetyPanel({
   const cacheRootSizeText = formatDirectorySize(webviewCache?.totalSizeBytes ?? 0);
   const isCustomDataRoot = Boolean(storageSnapshot?.paths.isCustomDataRoot);
   const isCustomWebviewRoot = Boolean(storageSnapshot?.paths.isCustomWebviewRoot);
-  const pendingMigration = storageSnapshot?.pendingMigration ?? null;
-  const pendingTargetDataRoot = pendingMigration && !sameStoragePath(
-    pendingMigration.sourceDataRoot,
-    pendingMigration.targetDataRoot,
-  )
-    ? pendingMigration.targetDataRoot
-    : null;
-  const pendingTargetWebviewRoot = pendingMigration && storageSnapshot && !sameStoragePath(
-    storageSnapshot.paths.webviewRoot,
-    pendingMigration.targetWebviewRoot,
-  )
-    ? toEbwebviewCachePath(pendingMigration.targetWebviewRoot)
-    : null;
   const cleanupSliderOptions = [...cleanupOptions].sort((left, right) => left.value - right.value);
   const cleanupRangeIndex = Math.max(
     0,
@@ -295,7 +270,7 @@ export default function SettingsDataSafetyPanel({
     onClearPendingRestoreBackup();
   };
 
-  const scheduleWebviewCacheClearFromDialog = () => {
+  const restartAndClearWebviewCacheFromDialog = () => {
     setCacheClearDialogOpen(false);
     void onScheduleWebviewCacheClear();
   };
@@ -305,10 +280,6 @@ export default function SettingsDataSafetyPanel({
     onCleanup();
   };
 
-  const cancelPendingStorageMigrationFromDialog = () => {
-    setMigrationStatusDialogOpen(false);
-    void onCancelPendingStorageMigration();
-  };
 
   return (
     <>
@@ -414,17 +385,6 @@ export default function SettingsDataSafetyPanel({
                 </p>
                 <p className="mt-1 text-sm leading-relaxed text-[var(--qp-text-secondary)]">{storageText.storageDirectorySummary}</p>
               </div>
-              {pendingMigration ? (
-                <div className="settings-local-paths-actions">
-                  <QuietIconAction
-                    icon={<MessageCircleWarning size={14} />}
-                    title={storageText.storageMigrationPendingTitle}
-                    pressed={migrationStatusDialogOpen}
-                    className="settings-local-paths-message-action"
-                    onClick={() => setMigrationStatusDialogOpen(true)}
-                  />
-                </div>
-              ) : null}
               <div className="settings-local-paths-actions">
                 <QuietIconAction
                   icon={<RefreshCw size={14} className={isStorageBusy ? "animate-spin" : undefined} />}
@@ -449,8 +409,8 @@ export default function SettingsDataSafetyPanel({
                     extraActions={(
                       <QuietIconAction
                         icon={<BrushCleaning size={14} />}
-                        title={webviewCache?.pendingClear ? storageText.webviewCacheClearPending : storageText.webviewCacheClearTitle}
-                        disabled={busy || webviewCache?.pendingClear}
+                        title={storageText.webviewCacheClearTitle}
+                        disabled={busy}
                         onClick={() => setCacheClearDialogOpen(true)}
                       />
                     )}
@@ -510,37 +470,6 @@ export default function SettingsDataSafetyPanel({
           </QuietSubpanel>
         </div>
       </section>
-
-      <QuietDialog
-        open={migrationStatusDialogOpen && Boolean(pendingMigration)}
-        title={storageText.storageMigrationPendingTitle}
-        description={storageText.storageMigrationPendingHint(
-          pendingTargetDataRoot,
-          pendingTargetWebviewRoot,
-        )}
-        onClose={() => setMigrationStatusDialogOpen(false)}
-        closeOnBackdrop={!busy}
-        actions={(
-          <>
-            <button
-              type="button"
-              onClick={() => setMigrationStatusDialogOpen(false)}
-              disabled={busy}
-              className="qp-button-secondary h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none disabled:opacity-50"
-            >
-              {UI_TEXT.common.close}
-            </button>
-            <button
-              type="button"
-              onClick={cancelPendingStorageMigrationFromDialog}
-              disabled={busy}
-              className="qp-button-secondary h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none text-[var(--qp-text-secondary)] disabled:opacity-50"
-            >
-              {storageText.storageMigrationCancelAction}
-            </button>
-          </>
-        )}
-      />
 
       <QuietDialog
         open={historyCleanupDialogOpen}
@@ -604,11 +533,11 @@ export default function SettingsDataSafetyPanel({
             </button>
             <button
               type="button"
-              onClick={scheduleWebviewCacheClearFromDialog}
-              disabled={busy || webviewCache?.pendingClear}
+              onClick={restartAndClearWebviewCacheFromDialog}
+              disabled={busy}
               className="qp-button-primary h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none disabled:opacity-50"
             >
-              {storageText.webviewCacheClearAction}
+              {storageText.restartAndApplyAction}
             </button>
           </>
         )}
