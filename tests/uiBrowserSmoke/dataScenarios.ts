@@ -273,36 +273,43 @@ export async function runDataScenarios(context: BrowserSmokeContext) {
       `Boolean(document.querySelector('[data-history-date=' + ${jsonString(JSON.stringify(yesterdayKey))} + '][data-heatmap-tooltip]'))`,
       45_000,
     );
-    const tooltipLabel = await evaluate(client!, sessionId, `
+    const tooltipTarget = await evaluate(client!, sessionId, `
       (() => {
         const cell = document.querySelector('[data-history-date=' + ${jsonString(JSON.stringify(yesterdayKey))} + '][data-heatmap-tooltip]');
-        if (!cell) return "";
+        if (!cell) return null;
         const label = cell.getAttribute("data-heatmap-tooltip") ?? "";
-        cell.dispatchEvent(new PointerEvent("pointerover", {
-          bubbles: true,
-          cancelable: true,
-          pointerType: "mouse",
-        }));
-        return label;
+        const rect = cell.getBoundingClientRect();
+        return { label, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
       })()
-    `) as string;
-    assert.ok(tooltipLabel);
+    `) as { label: string; x: number; y: number } | null;
+    assert.ok(tooltipTarget?.label);
+    await client!.command("Input.dispatchMouseEvent", {
+      type: "mouseMoved",
+      x: tooltipTarget.x,
+      y: tooltipTarget.y,
+    }, sessionId);
     await waitForExpression(
       client!,
       sessionId,
-      `document.querySelectorAll('.qp-tooltip[role="tooltip"]').length === 1 && document.querySelector('.qp-tooltip[role="tooltip"]')?.textContent === ${jsonString(tooltipLabel)}`,
-    );
-    await evaluate(client!, sessionId, `
-      (() => {
+      `(() => {
+        const tooltips = document.querySelectorAll('.qp-tooltip[role="tooltip"]');
+        if (tooltips.length === 1 && tooltips[0]?.textContent === ${jsonString(tooltipTarget.label)}) {
+          return true;
+        }
         const cell = document.querySelector('[data-history-date=' + ${jsonString(JSON.stringify(yesterdayKey))} + '][data-heatmap-tooltip]');
-        cell?.dispatchEvent(new PointerEvent("pointerout", {
+        cell?.dispatchEvent(new PointerEvent("pointerover", {
           bubbles: true,
           cancelable: true,
           pointerType: "mouse",
-          relatedTarget: document.body,
         }));
-      })()
-    `);
+        return false;
+      })()`,
+    );
+    await client!.command("Input.dispatchMouseEvent", {
+      type: "mouseMoved",
+      x: 1,
+      y: 1,
+    }, sessionId);
     await waitForExpression(
       client!,
       sessionId,
