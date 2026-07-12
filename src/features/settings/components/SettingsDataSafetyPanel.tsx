@@ -291,8 +291,8 @@ export default function SettingsDataSafetyPanel({
 
         <div className="space-y-5">
           <QuietSubpanel>
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
+            <div className="settings-data-export-entry flex items-end justify-between gap-4">
+              <div className="settings-data-export-entry-copy min-w-0">
                 <p className="flex items-center gap-1.5 text-sm font-semibold text-[var(--qp-text-primary)]">
                   <span>{UI_TEXT.settings.dataExportTitle}</span>
                   <span className="settings-beta-badge">{UI_TEXT.settings.betaLabel}</span>
@@ -305,7 +305,7 @@ export default function SettingsDataSafetyPanel({
                 type="button"
                 onClick={onOpenDataExport}
                 disabled={busy}
-                className="qp-button-secondary h-8 shrink-0 px-3 text-xs font-semibold text-[var(--qp-text-secondary)] disabled:opacity-50"
+                className="settings-data-export-entry-action qp-button-secondary h-8 shrink-0 px-3 text-xs font-semibold text-[var(--qp-text-secondary)] disabled:opacity-50"
               >
                 {UI_TEXT.settings.dataExportAction}
               </button>

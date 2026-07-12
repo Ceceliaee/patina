@@ -5,12 +5,14 @@ interface QuietDialogProps {
   open: boolean;
   title: string;
   description?: string;
+  headerAside?: ReactNode;
   actions?: ReactNode;
   onClose: () => void;
   children?: ReactNode;
   closeOnBackdrop?: boolean;
   surfaceClassName?: string;
   initialFocusRef?: RefObject<HTMLElement | null>;
+  initialFocus?: "first" | "surface";
 }
 
 const FOCUSABLE_SELECTOR = [
@@ -36,12 +38,14 @@ export default function QuietDialog({
   open,
   title,
   description,
+  headerAside,
   actions,
   onClose,
   children,
   closeOnBackdrop = true,
   surfaceClassName,
   initialFocusRef,
+  initialFocus = "first",
 }: QuietDialogProps) {
   const surfaceRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -55,7 +59,8 @@ export default function QuietDialog({
     const frame = window.requestAnimationFrame(() => {
       const surface = surfaceRef.current;
       if (!surface) return;
-      const initialTarget = initialFocusRef?.current ?? getFocusableElements(surface)[0] ?? surface;
+      const initialTarget = initialFocusRef?.current
+        ?? (initialFocus === "surface" ? surface : getFocusableElements(surface)[0] ?? surface);
       initialTarget.focus();
     });
 
@@ -94,7 +99,7 @@ export default function QuietDialog({
         previouslyFocused.focus();
       }
     };
-  }, [initialFocusRef, open]);
+  }, [initialFocus, initialFocusRef, open]);
 
   const dialog = open ? (
         <div
@@ -115,10 +120,11 @@ export default function QuietDialog({
             className={`qp-dialog-surface qp-motion-overlay-enter ${surfaceClassName ?? ""}`}
           >
             <header className="qp-dialog-header">
-              <div className="qp-dialog-heading">
-                <h3 className="qp-dialog-title">{title}</h3>
-                {description && <p className="qp-dialog-description">{description}</p>}
-              </div>
+            <div className="qp-dialog-heading">
+              <h3 className="qp-dialog-title">{title}</h3>
+              {description && <p className="qp-dialog-description">{description}</p>}
+            </div>
+            {headerAside ? <div className="qp-dialog-header-aside">{headerAside}</div> : null}
             </header>
             {children && <div className="qp-dialog-body">{children}</div>}
             {actions && <footer className="qp-dialog-actions">{actions}</footer>}
