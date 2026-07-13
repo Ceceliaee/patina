@@ -232,21 +232,26 @@ function testReleaseWorkflowSplitsQualityGatesBeforePublish() {
   assert.match(workflow, /^  frontend:/m);
   assert.match(workflow, /^  rust:/m);
   assert.match(workflow, /^  build:/m);
-  assert.match(workflow, /^  release-assets:/m);
-  assert.match(workflow, /^  github-release:/m);
-  assert.match(workflow, /^  r2-config:/m);
-  assert.match(workflow, /^  r2-upload:/m);
-  assert.match(workflow, /^  r2-clean:/m);
+  assert.match(workflow, /^  publish:/m);
+  assert.match(workflow, /^  r2:/m);
+  assert.doesNotMatch(workflow, /^  release-assets:/m);
+  assert.doesNotMatch(workflow, /^  github-release:/m);
+  assert.doesNotMatch(workflow, /^  r2-config:/m);
+  assert.doesNotMatch(workflow, /^  r2-upload:/m);
+  assert.doesNotMatch(workflow, /^  r2-clean:/m);
   assert.match(workflow, /needs: \[resolve, version-files, changelog, release-notes, frontend, rust\]/);
-  assert.match(workflow, /needs: \[resolve, build\]/);
-  assert.match(workflow, /needs: \[resolve, release-notes, release-assets\]/);
-  assert.match(workflow, /needs: \[resolve, github-release\]/);
-  assert.match(workflow, /needs: \[resolve, release-assets, r2-config\]/);
-  assert.match(workflow, /needs: \[resolve, r2-config, r2-upload\]/);
+  assert.match(workflow, /needs: \[resolve, release-notes, build\]/);
+  assert.match(workflow, /needs: \[resolve, publish\]/);
+  assert.match(workflow, /if: steps\.r2\.outputs\.enabled == 'true'/);
   assert.match(workflow, /run: npm run check$/m);
   assert.match(workflow, /run: npm run check:rust$/m);
   assert.match(workflow, /uses: actions\/upload-artifact@v4/);
   assert.match(workflow, /uses: actions\/download-artifact@v4/);
+  assert.match(workflow, /name: Prepare release assets/);
+  assert.match(workflow, /name: Publish GitHub Release/);
+  assert.match(workflow, /name: Check R2 mirror configuration/);
+  assert.match(workflow, /name: Upload R2 updater mirror/);
+  assert.match(workflow, /name: Clean old R2 updater mirrors/);
   assert.doesNotMatch(workflow, /run: npm run release:check/);
 }
 

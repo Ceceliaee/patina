@@ -373,10 +373,9 @@ Firefox AMO 签名不属于 Patina 主应用发布流程；它由 `patina-web-sy
 5. 将准备发布所需提交推送到远端，提交信息推荐使用 `chore: prepare vX.Y.Z release`。
 6. 只有在用户明确进入发布动作时，才推送对应的 `vX.Y.Z` 版本 tag，自动触发 GitHub Actions 的 `Publish Release` 工作流。
 7. 工作流 checkout 到 tag 对应 commit，并校验版本文件、changelog 和长期版本文档与 tag 版本一致。
-8. 由工作流生成 release notes、构建安装包与 GitHub 版 `latest.json`。
-9. 由工作流发布 GitHub Release，附件至少包含 Windows 安装包与 `latest.json`。
-10. 如果 R2 镜像 secrets 已配置，由工作流生成 R2 版 `latest.json`、上传当前版本安装包和 `latest.json`，并清理旧 R2 镜像；R2 不上传浏览器扩展包。
-11. 由工作流更新 updater 通道。
+8. `publish` job 下载 release notes 与 Tauri bundle，在同一个 runner 中生成安装包和 GitHub 版 `latest.json`、保存 release assets artifact，并发布 GitHub Release。
+9. GitHub Release 成功后，单一 `r2` job 检查镜像 secrets；配置完整时依次生成 R2 版 `latest.json`、上传当前版本安装包和 `latest.json`、清理旧 R2 镜像，未配置时安全跳过同步。R2 不上传浏览器扩展包。
+10. R2 同步失败不撤销或覆盖已经成立的 GitHub Release 主发布事实；应用 updater 继续优先使用 GitHub endpoint。
 
 如果只是把版本号、changelog、发布脚本或 release 说明准备好并推到 `main`，提交信息应避免让人误以为已经发布完成。推荐使用能表达准备状态的提交信息，例如 `chore: prepare vX.Y.Z release`。默认不再使用 GitHub Actions 自动生成 `release: vX.Y.Z` 版本提交。
 

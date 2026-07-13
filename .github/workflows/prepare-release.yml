@@ -245,10 +245,10 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  release-assets:
-    name: Prepare release assets
+  publish:
+    name: Publish GitHub Release
     runs-on: windows-latest
-    needs: [resolve, build]
+    needs: [resolve, release-notes, build]
 
     steps:
       - name: Checkout release tag
@@ -268,6 +268,12 @@ jobs:
           name: tauri-bundle
           path: src-tauri/target/release/bundle/nsis
 
+      - name: Download release notes
+        uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+          path: dist-release
+
       - name: Prepare release assets
         shell: pwsh
         run: |
@@ -285,24 +291,6 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  github-release:
-    name: Publish GitHub Release
-    runs-on: windows-latest
-    needs: [resolve, release-notes, release-assets]
-
-    steps:
-      - name: Download release notes
-        uses: actions/download-artifact@v4
-        with:
-          name: release-notes
-          path: dist-release
-
-      - name: Download release assets
-        uses: actions/download-artifact@v4
-        with:
-          name: release-assets
-          path: dist-release
-
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3
         with:
@@ -315,12 +303,10 @@ jobs:
             dist-release/Patina_${{ needs.resolve.outputs.version }}_x64-setup.exe
             dist-release/latest.json
 
-  r2-config:
-    name: Check R2 mirror configuration
+  r2:
+    name: Sync R2 updater mirror
     runs-on: windows-latest
-    needs: [resolve, github-release]
-    outputs:
-      enabled: ${{ steps.r2.outputs.enabled }}
+    needs: [resolve, publish]
 
     steps:
       - name: Check R2 mirror configuration
@@ -356,31 +342,28 @@ jobs:
             Write-Host "R2 mirror is configured."
           }
 
-  r2-upload:
-    name: Upload R2 updater mirror
-    runs-on: windows-latest
-    needs: [resolve, release-assets, r2-config]
-    if: needs.r2-config.outputs.enabled == 'true'
-
-    steps:
       - name: Checkout release tag
+        if: steps.r2.outputs.enabled == 'true'
         uses: actions/checkout@v6
         with:
           ref: ${{ needs.resolve.outputs.tag }}
           fetch-depth: 0
 
       - name: Set up Node
+        if: steps.r2.outputs.enabled == 'true'
         uses: actions/setup-node@v6
         with:
           node-version: 22
 
       - name: Download release assets
+        if: steps.r2.outputs.enabled == 'true'
         uses: actions/download-artifact@v4
         with:
           name: release-assets
           path: dist-release
 
       - name: Ensure AWS CLI for R2 sync
+        if: steps.r2.outputs.enabled == 'true'
         shell: pwsh
         run: |
           if (Get-Command aws -ErrorAction SilentlyContinue) {
@@ -392,6 +375,7 @@ jobs:
           aws --version
 
       - name: Generate R2 updater manifest
+        if: steps.r2.outputs.enabled == 'true'
         shell: pwsh
         env:
           R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
@@ -411,6 +395,7 @@ jobs:
           npm run release:latest -- $version $r2InstallerUrl $signature dist-release/r2/latest.json windows-x86_64
 
       - name: Upload R2 updater mirror
+        if: steps.r2.outputs.enabled == 'true'
         shell: pwsh
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -436,25 +421,8 @@ jobs:
             --content-type "application/json" `
             --cache-control "no-cache"
 
-  r2-clean:
-    name: Clean old R2 updater mirrors
-    runs-on: windows-latest
-    needs: [resolve, r2-config, r2-upload]
-    if: needs.r2-config.outputs.enabled == 'true'
-
-    steps:
-      - name: Ensure AWS CLI for R2 sync
-        shell: pwsh
-        run: |
-          if (Get-Command aws -ErrorAction SilentlyContinue) {
-            aws --version
-            exit 0
-          }
-
-          choco install awscli -y --no-progress
-          aws --version
-
       - name: Clean old R2 updater mirrors
+        if: steps.r2.outputs.enabled == 'true'
         shell: pwsh
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
