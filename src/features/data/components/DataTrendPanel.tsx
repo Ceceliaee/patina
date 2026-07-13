@@ -8,7 +8,7 @@ import {
   formatDuration,
 } from "../../history/services/historyFormatting";
 import type { DataTrendRangeSelection } from "../services/dataTrendRange.ts";
-import type { DataTrendViewModel, DataTrendAggregateContext } from "../services/dataReadModel.ts";
+import { isBrowserApp, type DataTrendViewModel, type DataTrendAggregateContext } from "../services/dataReadModel.ts";
 import { useDistinctChartColors } from "../hooks/useChartColors.ts";
 import DataTrendRangeControl from "./DataTrendRangeControl.tsx";
 import DataTrendDetailPanel from "./DataTrendDetailPanel.tsx";
@@ -48,20 +48,64 @@ interface ExpandedMetricLabels {
   web: string | null;
 }
 
-function buildExpandedMetricLabels(viewModel: DataTrendViewModel): ExpandedMetricLabels {
-  return {
-    total: formatDuration(viewModel.totalDuration),
-    app: viewModel.totalAppDuration != null ? formatDuration(viewModel.totalAppDuration) : null,
-    web: viewModel.totalWebDuration != null ? formatDuration(viewModel.totalWebDuration) : null,
-  };
+function buildExpandedMetricLabels(
+  viewModel: DataTrendViewModel,
+  aggregateContext: DataTrendAggregateContext | null,
+  webSegments: WebActivitySegment[],
+): ExpandedMetricLabels {
+  const total = formatDuration(viewModel.totalDuration);
+
+  let app: string | null = null;
+  if (aggregateContext?.aggregate.appBuckets.size) {
+    const appMs = Array.from(aggregateContext.aggregate.appBuckets.values())
+      .filter((bucket) => !isBrowserApp(bucket.appKey))
+      .reduce((sum, bucket) => sum + bucket.totalDuration, 0);
+    app = formatDuration(appMs);
+  }
+
+  let web: string | null = null;
+  if (aggregateContext && webSegments.length > 0) {
+    const { startMs, endMs } = aggregateContext.range;
+    const nowMs = Date.now();
+    const webMs = webSegments.reduce((sum, seg) => {
+      const start = Math.max(startMs, seg.startTime);
+      const end = Math.min(endMs, seg.endTime ?? nowMs);
+      return sum + Math.max(0, end - start);
+    }, 0);
+    web = formatDuration(webMs);
+  }
+
+  return { total, app, web };
 }
 
-function buildExpandedAvgLabels(viewModel: DataTrendViewModel): ExpandedMetricLabels {
-  return {
-    total: formatDuration(viewModel.averageDuration),
-    app: viewModel.averageAppDuration != null ? formatDuration(viewModel.averageAppDuration) : null,
-    web: viewModel.averageWebDuration != null ? formatDuration(viewModel.averageWebDuration) : null,
-  };
+function buildExpandedAvgLabels(
+  viewModel: DataTrendViewModel,
+  aggregateContext: DataTrendAggregateContext | null,
+  webSegments: WebActivitySegment[],
+): ExpandedMetricLabels {
+  const total = formatDuration(viewModel.averageDuration);
+
+  let app: string | null = null;
+  if (aggregateContext?.aggregate.appBuckets.size) {
+    const appMs = Array.from(aggregateContext.aggregate.appBuckets.values())
+      .filter((bucket) => !isBrowserApp(bucket.appKey))
+      .reduce((sum, bucket) => sum + bucket.totalDuration, 0);
+    app = formatDuration(Math.round(appMs / viewModel.averageDivisor));
+  }
+
+  let web: string | null = null;
+  if (aggregateContext && webSegments.length > 0) {
+    const { startMs, endMs } = aggregateContext.range;
+    const nowMs = Date.now();
+    const webMs = webSegments.reduce((sum, seg) => {
+      const start = Math.max(startMs, seg.startTime);
+      const end = Math.min(endMs, seg.endTime ?? nowMs);
+      return sum + Math.max(0, end - start);
+    }, 0);
+    web = formatDuration(Math.round(webMs / viewModel.averageDivisor));
+  }
+
+  return { total, app, web };
 }
 
 function DataTrendPanel({
@@ -112,12 +156,12 @@ function DataTrendPanel({
   const chartColors = useDistinctChartColors();
 
   const expandedTotals = useMemo(
-    () => viewModel ? buildExpandedMetricLabels(viewModel) : COLLAPSED_AVG_LABEL,
-    [viewModel?.totalDuration, viewModel?.totalAppDuration, viewModel?.totalWebDuration],
+    () => viewModel ? buildExpandedMetricLabels(viewModel, aggregateContext, webSegments) : COLLAPSED_AVG_LABEL,
+    [viewModel, aggregateContext, webSegments],
   );
   const expandedAverages = useMemo(
-    () => viewModel ? buildExpandedAvgLabels(viewModel) : COLLAPSED_AVG_LABEL,
-    [viewModel?.averageDuration, viewModel?.averageAppDuration, viewModel?.averageWebDuration],
+    () => viewModel ? buildExpandedAvgLabels(viewModel, aggregateContext, webSegments) : COLLAPSED_AVG_LABEL,
+    [viewModel, aggregateContext, webSegments],
   );
 
   const tooltipValueFormatter = useCallback((value: number | string, name: string) => {
