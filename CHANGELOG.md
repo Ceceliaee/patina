@@ -26,6 +26,28 @@ App note en: TBD.
 
 ### Internal
 
+## [1.8.4] - 2026-07-13
+
+Release: 修复 v1.8.3 引入的存储操作重启卡住、窗口恢复异常及缓存目录切换后页面状态丢失。
+App note: 修复 v1.8.3 中存储操作重启卡住，并确保重启后回到原页面。
+App note en: Fixes a v1.8.3 regression that could hang storage-action restarts or lose the previous page.
+
+### Added
+
+### Changed
+
+### Fixed
+
+- 修复 v1.8.3 中清理 WebView 缓存、更改缓存目录或数据目录后，“重启并应用”可能卡住、停留在任务栏或没有回到可见主窗口的问题。
+- 修复更改缓存目录后重启到默认首页的问题；迁移缓存目录时会保留恢复原页面所需的持久化 WebView 状态，同时不迁移可重新生成的缓存。
+
+### Removed
+
+### Internal
+
+- 存储重启改用可从 IPC 正常返回的重启请求，并统一复用主窗口显示、取消最小化、前台激活和焦点恢复路径。
+- 为存储重启、自动启动边界、窗口恢复及 WebView 持久化状态迁移补充回归测试。
+
 ## [1.8.3] - 2026-07-13
 
 Release: 新增四格式活动记录导出与标题记录控制，并改进存储操作、排除规则和后台资源占用。
