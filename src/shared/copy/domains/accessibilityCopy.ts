@@ -15,6 +15,8 @@ const ZH_CN_ACCESSIBILITY_COPY = {
     },
     data: {
       trendSummary: "趋势摘要",
+      expandAppWeb: "展开应用与网页统计",
+      collapseAppWeb: "收起应用与网页统计",
       trendRange: "选择趋势范围",
       shorterTrendRange: "缩短趋势范围",
       longerTrendRange: "扩大趋势范围",
@@ -111,6 +113,8 @@ const EN_US_ACCESSIBILITY_COPY = {
     },
     data: {
       trendSummary: "Trend summary",
+      expandAppWeb: "Expand app & web stats",
+      collapseAppWeb: "Collapse app & web stats",
       trendRange: "Select trend range",
       shorterTrendRange: "Shorten trend range",
       longerTrendRange: "Expand trend range",
