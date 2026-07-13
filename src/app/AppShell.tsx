@@ -535,6 +535,7 @@ function AppShellContent() {
                   mappingVersion={mappingVersion}
                   onOpenHistoryDate={openHistoryForDate}
                   uiLanguage={uiTextLanguage}
+                  webActivityEnabled={appSettings.webActivityEnabled}
                 />
               )}
               {renderedView === "tools" && (
