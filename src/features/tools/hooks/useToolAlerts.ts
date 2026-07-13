@@ -51,21 +51,25 @@ export function useToolAlerts() {
     };
   }, []);
 
+  const dismissAlert = useCallback((alertId: string) => {
+    setAlerts((current) => current.filter((a) => a.id !== alertId));
+    void ToolsRuntimeService.dismissToolAlert(alertId).catch((error) => {
+      console.warn("dismiss tool alert failed", error);
+    });
+  }, []);
+
   const activeAlert = alerts[0] ?? null;
 
   const dismissActiveAlert = useCallback(() => {
     if (!activeAlert) return;
-
-    const alertId = activeAlert.id;
-    setAlerts((current) => current.filter((alert) => alert.id !== alertId));
-    void ToolsRuntimeService.dismissToolAlert(alertId).catch((error) => {
-      console.warn("dismiss tool alert failed", error);
-    });
-  }, [activeAlert]);
+    dismissAlert(activeAlert.id);
+  }, [activeAlert, dismissAlert]);
 
   return useMemo(() => ({
+    alerts,
     activeAlert,
+    dismissAlert,
     dismissActiveAlert,
     pendingCount: alerts.length,
-  }), [activeAlert, alerts.length, dismissActiveAlert]);
+  }), [alerts, activeAlert, dismissAlert, dismissActiveAlert, alerts.length]);
 }
