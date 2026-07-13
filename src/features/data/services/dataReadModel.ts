@@ -1,6 +1,7 @@
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import type { SessionRange } from "../../../shared/lib/sessionReadCompiler.ts";
 import { getUiLocale, UI_TEXT } from "../../../shared/copy/index.ts";
+
 import {
   getEarliestSessionStartTime,
   getSessionSummariesInRange,
@@ -23,6 +24,13 @@ import {
 import { formatDuration } from "../../../shared/lib/durationFormatting.ts";
 import { pickPreferredAppName } from "../../../shared/lib/displayNameScoring.ts";
 
+const BROWSER_BASE_NAMES = new Set([
+  "chrome.exe", "msedge.exe", "brave.exe", "opera.exe",
+  "vivaldi.exe", "arc.exe", "chromium.exe", "360chromex.exe",
+  "thorium.exe", "centbrowser.exe", "catsxp.exe",
+  "firefox.exe", "zen.exe", "floorp.exe", "iceweasel.exe",
+]);
+
 export type { AggregateSessionRecord };
 
 export type DataTrendRange = DataRollingTrendRange;
@@ -31,6 +39,8 @@ export interface DataTrendPoint {
   label: string;
   date: string | null;
   hours: number;
+  appHours?: number;
+  webHours?: number;
 }
 
 export interface DataTrendMetricLabels {
@@ -45,7 +55,11 @@ export interface DataTrendViewModel {
   rangeDays: number;
   granularity: "day" | "month";
   totalDuration: number;
+  totalAppDuration?: number;
+  totalWebDuration?: number;
   averageDuration: number;
+  averageAppDuration?: number;
+  averageWebDuration?: number;
   averageDivisor: number;
   chartData: DataTrendPoint[];
   chartAxis: {
@@ -169,7 +183,30 @@ interface MergedDataAppDurationBucket extends DataAppDurationBucket {
   sourceAppKeys: string[];
 }
 
-function formatHeatmapDateLabel(dateKey: string) {
+function isBrowserApp(appKey: string): boolean {
+  if (BROWSER_BASE_NAMES.has(appKey)) return true;
+  const override = AppClassification.getUserOverride(appKey);
+  return override?.category === "browser";
+}
+
+export { isBrowserApp };
+
+function computeWebDurationByPeriodKey(
+  appBuckets: Map<string, DataAppDurationBucket>,
+  shouldGroupByMonth: boolean,
+): Map<string, number> {
+  const webDurations = new Map<string, number>();
+  for (const [appKey, bucket] of appBuckets) {
+    if (!isBrowserApp(appKey)) continue;
+    const durations = shouldGroupByMonth ? bucket.monthDurations : bucket.dayDurations;
+    for (const [periodKey, duration] of durations) {
+      webDurations.set(periodKey, (webDurations.get(periodKey) ?? 0) + duration);
+    }
+  }
+  return webDurations;
+}
+
+export function formatHeatmapDateLabel(dateKey: string) {
   const date = new Date(`${dateKey}T00:00:00`);
   return date.toLocaleDateString(getUiLocale(), { month: "2-digit", day: "2-digit" });
 }
@@ -178,7 +215,7 @@ function formatHeatmapMonthLabel(date: Date) {
   return UI_TEXT.date.monthLabel(date.getMonth() + 1);
 }
 
-function buildChartAxis(points: DataTrendPoint[]) {
+export function buildChartAxis(points: DataTrendPoint[]) {
   const maxHours = Math.max(0, ...points.map((point) => point.hours));
   const intervalCount = 3;
   const rawStep = Math.max(1, maxHours / intervalCount);
@@ -546,11 +583,25 @@ export function buildDataTrendViewModelFromAggregate(
   });
   const totalDuration = summaries.reduce((sum, item) => sum + item.totalDuration, 0);
   const averageDivisor = Math.max(1, shouldGroupByMonth ? summaries.length : dayRanges.length);
-  const chartData = summaries.map((item) => ({
-    label: shouldGroupByMonth ? formatMonthLabel(item.date.slice(0, 7)) : item.date.slice(5),
-    date: shouldGroupByMonth ? null : item.date,
-    hours: Math.max(0, item.totalDuration) / 3600000,
-  }));
+  const webDurationByPeriodKey = aggregate.appBuckets.size > 0
+    ? computeWebDurationByPeriodKey(aggregate.appBuckets, shouldGroupByMonth)
+    : null;
+  const chartData = summaries.map((item) => {
+    const periodKey = shouldGroupByMonth ? item.date.slice(0, 7) : item.date;
+    const webMs = webDurationByPeriodKey?.get(periodKey) ?? 0;
+    const appMs = Math.max(0, item.totalDuration - webMs);
+    return {
+      label: shouldGroupByMonth ? formatMonthLabel(item.date.slice(0, 7)) : item.date.slice(5),
+      date: shouldGroupByMonth ? null : item.date,
+      hours: Math.max(0, item.totalDuration) / 3600000,
+      appHours: Math.max(0, appMs) / 3600000,
+      webHours: Math.max(0, webMs) / 3600000,
+    };
+  });
+  const totalAppDuration = chartData.reduce((sum, point) => sum + (point.appHours ?? 0) * 3600000, 0);
+  const totalWebDuration = chartData.reduce((sum, point) => sum + (point.webHours ?? 0) * 3600000, 0);
+  const averageAppDuration = Math.round(totalAppDuration / averageDivisor);
+  const averageWebDuration = Math.round(totalWebDuration / averageDivisor);
   const rangeLabel = range.label;
 
   return {
@@ -559,7 +610,11 @@ export function buildDataTrendViewModelFromAggregate(
     rangeDays: range.dayCount,
     granularity: shouldGroupByMonth ? "month" : "day",
     totalDuration,
+    totalAppDuration,
+    totalWebDuration,
     averageDuration: Math.round(totalDuration / averageDivisor),
+    averageAppDuration,
+    averageWebDuration,
     averageDivisor,
     chartData,
     chartAxis: buildChartAxis(chartData),
@@ -577,7 +632,7 @@ export function buildDataTrendViewModel(
   nowMs: number,
 ): DataTrendViewModel {
   return buildDataTrendViewModelFromAggregate(
-    buildDataTrendAggregateContext(sessions, selection, nowMs, { includeAppBuckets: false }),
+    buildDataTrendAggregateContext(sessions, selection, nowMs, { includeAppBuckets: true }),
   );
 }
 
