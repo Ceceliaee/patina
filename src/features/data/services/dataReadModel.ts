@@ -192,6 +192,21 @@ function isBrowserApp(appKey: string): boolean {
 
 export { isBrowserApp };
 
+function computeBrowserDurationByPeriodKey(
+  appBuckets: Map<string, DataAppDurationBucket>,
+  shouldGroupByMonth: boolean,
+): Map<string, number> {
+  const browserDurations = new Map<string, number>();
+  for (const [appKey, bucket] of appBuckets) {
+    if (!isBrowserApp(appKey)) continue;
+    const durations = shouldGroupByMonth ? bucket.monthDurations : bucket.dayDurations;
+    for (const [periodKey, duration] of durations) {
+      browserDurations.set(periodKey, (browserDurations.get(periodKey) ?? 0) + duration);
+    }
+  }
+  return browserDurations;
+}
+
 function computeWebDurationByPeriodKey(
   webSegments: WebActivitySegment[],
   rangeStartMs: number,
@@ -592,13 +607,17 @@ export function buildDataTrendViewModelFromAggregate(
   });
   const totalDuration = summaries.reduce((sum, item) => sum + item.totalDuration, 0);
   const averageDivisor = Math.max(1, shouldGroupByMonth ? summaries.length : dayRanges.length);
+  const browserDurationByPeriodKey = aggregate.appBuckets.size > 0
+    ? computeBrowserDurationByPeriodKey(aggregate.appBuckets, shouldGroupByMonth)
+    : null;
   const webDurationByPeriodKey = webSegments.length > 0
     ? computeWebDurationByPeriodKey(webSegments, range.startMs, range.endMs, nowMs, shouldGroupByMonth)
     : null;
   const chartData = summaries.map((item) => {
     const periodKey = shouldGroupByMonth ? item.date.slice(0, 7) : item.date;
+    const browserMs = browserDurationByPeriodKey?.get(periodKey) ?? 0;
     const webMs = webDurationByPeriodKey?.get(periodKey) ?? 0;
-    const appMs = Math.max(0, item.totalDuration - webMs);
+    const appMs = Math.max(0, item.totalDuration - browserMs);
     return {
       label: shouldGroupByMonth ? formatMonthLabel(item.date.slice(0, 7)) : item.date.slice(5),
       date: shouldGroupByMonth ? null : item.date,
@@ -739,18 +758,6 @@ export function buildDataAppTrendViewModel(
     buildDataTrendAggregateContext(sessions, selection, nowMs),
     selectedAppKey,
   );
-}
-
-export function buildDataTrendViewModelsFromAggregate(
-  context: DataTrendAggregateContext,
-  selectedAppKey: string | null,
-  webSegments: WebActivitySegment[] = [],
-  nowMs: number = Date.now(),
-) {
-  return {
-    overviewTrendViewModel: buildDataTrendViewModelFromAggregate(context, webSegments, nowMs),
-    appTrendViewModel: buildDataAppTrendViewModelFromAggregate(context, selectedAppKey),
-  };
 }
 
 async function resolveDefaultDataHeatmapDependencies(): Promise<DataHeatmapDependencies> {
