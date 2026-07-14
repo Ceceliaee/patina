@@ -8,7 +8,7 @@ import {
   formatDuration,
 } from "../../history/services/historyFormatting";
 import type { DataTrendRangeSelection } from "../services/dataTrendRange.ts";
-import { isBrowserApp, type DataTrendViewModel, type DataTrendAggregateContext } from "../services/dataReadModel.ts";
+import { type DataTrendViewModel, type DataTrendAggregateContext } from "../services/dataReadModel.ts";
 import { useDistinctChartColors } from "../hooks/useChartColors.ts";
 import DataTrendRangeControl from "./DataTrendRangeControl.tsx";
 import DataTrendDetailPanel from "./DataTrendDetailPanel.tsx";
@@ -56,11 +56,8 @@ function buildExpandedMetricLabels(
   const total = formatDuration(viewModel.totalDuration);
 
   let app: string | null = null;
-  if (aggregateContext?.aggregate.appBuckets.size) {
-    const appMs = Array.from(aggregateContext.aggregate.appBuckets.values())
-      .filter((bucket) => !isBrowserApp(bucket.appKey))
-      .reduce((sum, bucket) => sum + bucket.totalDuration, 0);
-    app = formatDuration(appMs);
+  if (viewModel.totalAppDuration != null) {
+    app = formatDuration(viewModel.totalAppDuration);
   }
 
   let web: string | null = null;
@@ -86,11 +83,8 @@ function buildExpandedAvgLabels(
   const total = formatDuration(viewModel.averageDuration);
 
   let app: string | null = null;
-  if (aggregateContext?.aggregate.appBuckets.size) {
-    const appMs = Array.from(aggregateContext.aggregate.appBuckets.values())
-      .filter((bucket) => !isBrowserApp(bucket.appKey))
-      .reduce((sum, bucket) => sum + bucket.totalDuration, 0);
-    app = formatDuration(Math.round(appMs / viewModel.averageDivisor));
+  if (viewModel.averageAppDuration != null) {
+    app = formatDuration(viewModel.averageAppDuration);
   }
 
   let web: string | null = null;

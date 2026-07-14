@@ -1,6 +1,7 @@
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import type { SessionRange } from "../../../shared/lib/sessionReadCompiler.ts";
 import { getUiLocale, UI_TEXT } from "../../../shared/copy/index.ts";
+import type { WebActivitySegment } from "../../../shared/types/webActivity.ts";
 
 import {
   getEarliestSessionStartTime,
@@ -192,16 +193,22 @@ function isBrowserApp(appKey: string): boolean {
 export { isBrowserApp };
 
 function computeWebDurationByPeriodKey(
-  appBuckets: Map<string, DataAppDurationBucket>,
+  webSegments: WebActivitySegment[],
+  rangeStartMs: number,
+  rangeEndMs: number,
+  nowMs: number,
   shouldGroupByMonth: boolean,
 ): Map<string, number> {
   const webDurations = new Map<string, number>();
-  for (const [appKey, bucket] of appBuckets) {
-    if (!isBrowserApp(appKey)) continue;
-    const durations = shouldGroupByMonth ? bucket.monthDurations : bucket.dayDurations;
-    for (const [periodKey, duration] of durations) {
-      webDurations.set(periodKey, (webDurations.get(periodKey) ?? 0) + duration);
-    }
+  for (const segment of webSegments) {
+    const start = Math.max(rangeStartMs, segment.startTime);
+    const end = Math.min(rangeEndMs, segment.endTime ?? nowMs);
+    const duration = Math.max(0, end - start);
+    if (duration <= 0) continue;
+
+    const dayKey = toDateKey(new Date(start));
+    const periodKey = shouldGroupByMonth ? dayKey.slice(0, 7) : dayKey;
+    webDurations.set(periodKey, (webDurations.get(periodKey) ?? 0) + duration);
   }
   return webDurations;
 }
@@ -567,6 +574,8 @@ export function buildDataTrendAggregateContext(
 
 export function buildDataTrendViewModelFromAggregate(
   context: DataTrendAggregateContext,
+  webSegments: WebActivitySegment[] = [],
+  nowMs: number = Date.now(),
 ): DataTrendViewModel {
   const { aggregate, dayRanges, monthRanges, range } = context;
   const shouldGroupByMonth = range.granularity === "month";
@@ -583,8 +592,8 @@ export function buildDataTrendViewModelFromAggregate(
   });
   const totalDuration = summaries.reduce((sum, item) => sum + item.totalDuration, 0);
   const averageDivisor = Math.max(1, shouldGroupByMonth ? summaries.length : dayRanges.length);
-  const webDurationByPeriodKey = aggregate.appBuckets.size > 0
-    ? computeWebDurationByPeriodKey(aggregate.appBuckets, shouldGroupByMonth)
+  const webDurationByPeriodKey = webSegments.length > 0
+    ? computeWebDurationByPeriodKey(webSegments, range.startMs, range.endMs, nowMs, shouldGroupByMonth)
     : null;
   const chartData = summaries.map((item) => {
     const periodKey = shouldGroupByMonth ? item.date.slice(0, 7) : item.date;
@@ -630,9 +639,12 @@ export function buildDataTrendViewModel(
   sessions: AggregateSessionRecord[],
   selection: DataTrendRange | ResolvedDataTrendRange,
   nowMs: number,
+  webSegments: WebActivitySegment[] = [],
 ): DataTrendViewModel {
   return buildDataTrendViewModelFromAggregate(
     buildDataTrendAggregateContext(sessions, selection, nowMs, { includeAppBuckets: true }),
+    webSegments,
+    nowMs,
   );
 }
 
@@ -732,9 +744,11 @@ export function buildDataAppTrendViewModel(
 export function buildDataTrendViewModelsFromAggregate(
   context: DataTrendAggregateContext,
   selectedAppKey: string | null,
+  webSegments: WebActivitySegment[] = [],
+  nowMs: number = Date.now(),
 ) {
   return {
-    overviewTrendViewModel: buildDataTrendViewModelFromAggregate(context),
+    overviewTrendViewModel: buildDataTrendViewModelFromAggregate(context, webSegments, nowMs),
     appTrendViewModel: buildDataAppTrendViewModelFromAggregate(context, selectedAppKey),
   };
 }

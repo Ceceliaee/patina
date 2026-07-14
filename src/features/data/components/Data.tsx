@@ -366,12 +366,14 @@ export default function Data({
       overviewTrendSnapshotForViewModel.sessions,
       overviewTrendSnapshotForViewModel.range,
       overviewTrend.nowMs,
+      webSegments,
     );
   }, [
     mappingVersion,
     overviewTrend.nowMs,
     overviewTrendSnapshotForViewModel,
     uiLanguage,
+    webSegments,
   ]);
   if (trendViewModel) {
     lastTrendViewModelRef.current = {
