@@ -73,6 +73,8 @@ function buildExpandedMetricLabels(
       return sum + Math.max(0, end - start);
     }, 0);
     web = formatDuration(webMs);
+  } else if (viewModel.totalWebDuration != null) {
+    web = formatDuration(viewModel.totalWebDuration);
   }
 
   return { total, app, web };
@@ -103,6 +105,8 @@ function buildExpandedAvgLabels(
       return sum + Math.max(0, end - start);
     }, 0);
     web = formatDuration(Math.round(webMs / viewModel.averageDivisor));
+  } else if (viewModel.averageWebDuration != null) {
+    web = formatDuration(viewModel.averageWebDuration);
   }
 
   return { total, app, web };

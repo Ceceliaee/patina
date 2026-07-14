@@ -239,8 +239,13 @@ function DataTrendDetailPanel({
       ) : (
         <div className="data-app-detail-content">
           {mode === "app" ? (
-            <div className="data-app-browser-hint">{UI_TEXT.data.appTrendBrowserHint}</div>
-          ) : null}
+            <>
+              <div className="data-app-browser-hint">{UI_TEXT.data.appTrendBrowserHint}</div>
+              <div className="data-app-browser-hint">{UI_TEXT.data.trendRoundingHint}</div>
+            </>
+          ) : (
+            <div className="data-app-browser-hint">{UI_TEXT.data.trendRoundingHint}</div>
+          )}
           <div className="data-app-grid">
           <div className="data-app-sidebar">
             <label className="data-app-search">
