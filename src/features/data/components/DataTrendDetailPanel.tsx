@@ -237,7 +237,11 @@ function DataTrendDetailPanel({
           {UI_TEXT.data.appTrendEmpty}
         </div>
       ) : (
-        <div className="data-app-grid">
+        <div className="data-app-detail-content">
+          {mode === "app" ? (
+            <div className="data-app-browser-hint">{UI_TEXT.data.appTrendBrowserHint}</div>
+          ) : null}
+          <div className="data-app-grid">
           <div className="data-app-sidebar">
             <label className="data-app-search">
               <Search size={14} aria-hidden />
@@ -400,6 +404,7 @@ function DataTrendDetailPanel({
                 </AreaChart>
               </ResponsiveContainer>
             </div>
+          </div>
           </div>
         </div>
       )}

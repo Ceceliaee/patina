@@ -1108,12 +1108,22 @@
   justify-content: center;
 }
 
+.data-app-detail-content {
+  margin-top: 16px;
+}
+
+.data-app-browser-hint {
+  font-size: 11px;
+  color: var(--qp-text-tertiary);
+  padding: 6px 0 10px 0;
+  line-height: 1.4;
+}
+
 .data-app-grid {
   display: grid;
   grid-template-columns: minmax(220px, 28%) minmax(0, 1fr);
   gap: 18px;
   min-width: 0;
-  margin-top: 16px;
 }
 
 .data-app-sidebar,
