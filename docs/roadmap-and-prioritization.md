@@ -287,15 +287,11 @@
 
 ---
 
-## 13. 公开开发队列与长期协作方式
+## 13. 维护者开发队列与长期协作方式
 
-`Patina` 使用公开的 GitHub Project 维护经过筛选的实际开发队列。
+`Patina` 使用 GitHub Project 维护经过筛选的实际开发队列。该队列是维护者工作台，不作为外部贡献者必须可见的公开入口。
 
-这个 Project 是本文优先级规则的执行层：本文解释为什么这样排序，Project 展示当前实际准备先做什么、后做什么。
-
-当前公开队列是 [`Patina Development Queue`](https://github.com/users/Ceceliaee/projects/1)，并已关联到 [`Ceceliaee/patina` 仓库的 Projects 页面](https://github.com/Ceceliaee/patina/projects)。
-
-GitHub 新版 Project 只能归属于个人账号或组织，不能由仓库直接拥有。因此这个 Project 归属于 `Ceceliaee`，同时通过仓库关联出现在 `Ceceliaee/patina` 的 Projects 页面；这两个入口指向同一个 Project，不是两份队列。
+这个 Project 是本文优先级规则的执行层：本文解释为什么这样排序，Project 展示维护者当前实际准备先做什么、后做什么。
 
 Codex 读取、核对或维护 GitHub Project 时，一律使用浏览器控制插件打开 Project 页面，并以浏览器登录态下读取到的 live Project 结果作为当前事实来源。不得使用本机 `gh` CLI 或 GitHub 连接器插件读取、核对或维护 Project；`gh` 仍可用于仓库、提交、发布等不涉及 Project 的 GitHub 操作。
 
