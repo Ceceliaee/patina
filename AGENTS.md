@@ -103,6 +103,7 @@ These instructions apply to all UI work unless the user gives an explicit task-s
 - Keep grouped commits reviewable: each commit should have a focused subject and contain related files only, unless the user explicitly asks for a single commit.
 - Before creating a commit, inspect the staged scope with `git diff --cached --stat` and `git diff --cached --numstat`.
 - If one staged commit exceeds 1,000 changed lines of manually maintained content (additions plus deletions) or touches more than 25 files, stop and split it into coherent, reviewable commits. Do not create the oversized commit unless the user explicitly approves it after receiving an explanation of why it is not reasonably divisible.
+- Documentation files are exempt from the 1,000-line manually maintained content limit. Keep documentation commits thematically coherent and reviewable, but do not split a single document or documentation set merely to satisfy a line-count threshold.
 - Lockfiles, generated files, snapshots, bulk assets, and mechanical migration output may be excluded from the manually maintained line count, but should be isolated in a separate commit when practical. Do not satisfy the limit by arbitrarily splitting files; split by behavior, owner, or independently reviewable stage, and keep each commit buildable or verifiable where practical.
 - A single Project item may produce multiple commits; do not compress an entire Project item into one oversized commit.
 - Do not create a branch or pull request unless the user explicitly asks for one.

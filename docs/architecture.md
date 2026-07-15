@@ -134,6 +134,14 @@ IPC 契约应保持稳定、可解析、可测试。
 - `features/settings/*` 只保留 settings 页面的保存、cleanup、backup、restore 与外链打开等 feature 私有流程
 - 涉及运行时写侧、数据写侧和平台副作用的操作，优先迁往 Rust command
 
+备份与恢复沿用同一 owner 规则：
+
+- SQLite 快照容器、manifest、摘要、格式识别和恢复编排归 `data/backup/*`
+- 数据库文件切换、WAL checkpoint、pool 重开和中断恢复归 `data/sqlite_pool/*`
+- 合并去重由各数据域 repository 持有，不能把表级 SQL 上提到 command、app 或前端
+- `commands/backup.rs` 与 `app/backup.rs` 只承担参数边界和恢复后的薄协调
+- 冻结的旧格式 reader 是带丢弃窗口的兼容壳，不得成为新增数据域的长期 owner
+
 ### 4.4 浏览器扩展伴生边界
 
 `Patina Web Sync` 浏览器扩展是 `Patina` 的外部 companion，不属于主仓库内的前端 feature、Rust runtime 或发布产物。
