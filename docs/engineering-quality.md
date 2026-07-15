@@ -111,7 +111,7 @@ PR 范围的长期定义是：
 换言之，功能相关不等于范围正确。只有同时满足下面条件的改动才算在范围内：
 
 - 对应已接受的 issue、Project item，或维护者明确接受的 scope。
-- 外部 PR 已由维护者添加 `intake/accepted-scope`，作为范围获准的机器可读证据。
+- PR 模板完整写清 Scope Boundary、Owner Check、Risk Review 和 Validation。
 - 每个改动文件都是解决该问题所必需。
 - 每个用户可见行为都已经写入 scope 或验收条件。
 - 代码落在真实 owner 下，并符合 [`architecture.md`](./architecture.md) 的边界。
@@ -141,16 +141,18 @@ PR 默认分为四类：
 - 维护者预计需要重写核心实现超过 30%。
 - PR 的主要价值只是证明某个功能可以做，而不是提供可维护代码。
 
-外部 PR 的范围批准必须来自维护者可控、可审计的仓库状态。`intake/accepted-scope` 是唯一机器可读的范围批准证据；PR 正文、评论、关联 issue 和作者自述只能解释范围，不能自行授权。
+外部 PR 的范围必须有可审计上下文：已接受的 issue、Project item，或维护者明确接受的 scope。PR 正文、评论、关联 issue 和作者自述只能解释范围，不能绕过准入门禁。
 
-自动准入门禁的例外同样必须来自维护者可控、可审计的仓库状态。当前只允许两类软例外：
+自动准入门禁不使用 label 作为放行机制。当前硬门槛是：
 
-- `intake-exception/size`：维护者确认该 PR 的体量不可合理拆分时，可放过 `oversized-manual-diff` 和 `too-many-manual-files`。
-- `intake-exception/tests`：维护者确认当前验证方式足以覆盖风险时，可放过 `risk-path-without-tests`。
+- 触发 `oversized-manual-diff` 或 `too-many-manual-files` 时，作者必须按行为、owner 或可独立验证阶段拆分 PR。
+- 触发 `risk-path-without-tests` 时，作者必须补充匹配风险域的专项测试，或由维护者另开维护者拥有的后续工作处理。
 
-这些 label 被添加或移除时，PR intake workflow 必须重跑。例外 label 不授予 accepted scope；错误 owner、退休目录回流、未归属 shared styles、硬编码 Quiet Pro 样式、未完成 contributor checklist 等硬门禁不能通过例外 label 放行。
+错误 owner、退休目录回流、未归属 shared styles、硬编码 Quiet Pro 样式、未完成 contributor checklist 等硬门禁不能通过评论、PR 正文或 label 放行。
 
-PR intake 是独立于普通代码验证的准入 workflow。它需要三点 base/head PR diff、PR 正文、作者关联身份和当前 label 状态才能给出有效判断；本地 `npm run check` 不应假装替代这个门禁。workflow 必须 checkout 可信 base revision，只读取 PR head，不执行贡献者修改后的门禁脚本或 package scripts。脚本自身由 `test:pr-intake` 覆盖，真正的 PR 准入在 GitHub Actions 的 `PR Intake` workflow 中执行。
+PR intake 是独立于普通代码验证的准入 workflow。它需要三点 base/head PR diff 和 PR 正文才能给出有效判断；本地 `npm run check` 不应假装替代这个门禁。workflow 必须 checkout 可信 base revision，只读取 PR head，不执行贡献者修改后的门禁脚本或 package scripts。脚本自身由 `test:pr-intake` 覆盖，真正的 PR 准入在 GitHub Actions 的 `PR Intake` workflow 中执行。普通 `Verify` workflow 只应在 `PR Intake` 成功后验证外部 PR；`main` push 仍可直接验证。
+
+GitHub 可能仍要求维护者批准首次外部贡献者的 Actions。这个平台级批准只允许 workflow 启动，不等于 scope 批准，也不能绕过准入门禁。
 
 Draft PR 暂不运行准入 job；标记为 ready for review 后，必须满足当前模板与全部准入规则。
 

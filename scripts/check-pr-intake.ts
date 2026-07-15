@@ -3,8 +3,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  evaluateMaintainerScopeApproval, evaluatePullRequestBody,
-  EXCEPTION_RULES, FEATURE_STYLE_OWNER_PREFIXES, INTAKE_EXCEPTION_LABELS,
+  evaluatePullRequestBody,
+  FEATURE_STYLE_OWNER_PREFIXES,
   isUiImplementationPath, KNOWN_FEATURE_OWNERS,
   MAX_MANUAL_FILES, MAX_MANUAL_LINES,
   QUALITY_GATE_PATH_PATTERNS, RISK_AREAS,
@@ -18,11 +18,9 @@ interface IntakeInput {
   changedFiles: ChangedFile[];
   pullRequestBody?: string;
   requirePullRequestBody?: boolean;
-  requireMaintainerScopeApproval?: boolean;
   addedLinesByFile?: Record<string, string[]>;
   registeredTypeScriptTests?: string[];
   registeredRustTests?: string[];
-  labels?: string[];
 }
 
 interface CliOptions {
@@ -30,9 +28,6 @@ interface CliOptions {
   head?: string;
   bodyFile?: string;
   bodyEnv?: string;
-  labelsJson?: string;
-  labelsEnv?: string;
-  authorAssociationEnv?: string;
   prCreatedAtEnv?: string;
   templateRequiredAfter?: string;
   requirePullRequestBody: boolean;
@@ -84,24 +79,6 @@ function parseArgs(argv: string[]): CliOptions {
 
     if (arg === "--body-env" && next) {
       options.bodyEnv = next;
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--labels-json" && next) {
-      options.labelsJson = next;
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--labels-env" && next) {
-      options.labelsEnv = next;
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--author-association-env" && next) {
-      options.authorAssociationEnv = next;
       index += 1;
       continue;
     }
@@ -378,7 +355,7 @@ function evaluateDiffSize(changedFiles: ChangedFile[]): IntakeFailure[] {
     failures.push({
       rule: "oversized-manual-diff",
       message: "Diff is too large for one review.",
-      detail: `Manual content changed: ${manualLines} lines. Limit: ${MAX_MANUAL_LINES} lines unless a maintainer applies ${INTAKE_EXCEPTION_LABELS.size}.`,
+      detail: `Manual content changed: ${manualLines} lines. Limit: ${MAX_MANUAL_LINES} lines. Split the pull request by behavior, owner, or independently verifiable stage before requesting review.`,
     });
   }
 
@@ -386,7 +363,7 @@ function evaluateDiffSize(changedFiles: ChangedFile[]): IntakeFailure[] {
     failures.push({
       rule: "too-many-manual-files",
       message: "Pull request touches too many manually maintained files.",
-      detail: `Manual files changed: ${manualFiles.length}. Limit: ${MAX_MANUAL_FILES} files unless a maintainer applies ${INTAKE_EXCEPTION_LABELS.size}.`,
+      detail: `Manual files changed: ${manualFiles.length}. Limit: ${MAX_MANUAL_FILES} files. Split the pull request by behavior, owner, or independently verifiable stage before requesting review.`,
     });
   }
 
@@ -684,26 +661,10 @@ function evaluateRiskCoverage(
     detail: uncovered
       .map(([area, files]) => {
         const paths = files.map((file) => file.path).slice(0, 6).join(", ");
-        return `${area.label}: ${paths}. Add ${area.testExamples}, or ask the maintainer whether ${INTAKE_EXCEPTION_LABELS.tests} is appropriate.`;
+        return `${area.label}: ${paths}. Add ${area.testExamples} before requesting review.`;
       })
       .join("\n"),
   }];
-}
-
-function normalizeLabel(label: string) {
-  return label.trim().toLowerCase();
-}
-
-function hasExceptionLabel(labels: string[] | undefined, label: string) {
-  const normalizedLabels = new Set((labels ?? []).map(normalizeLabel));
-  return normalizedLabels.has(normalizeLabel(label));
-}
-
-function applyMaintainerExceptions(failures: IntakeFailure[], labels: string[] | undefined) {
-  return failures.filter((failure) => {
-    const exceptionLabel = EXCEPTION_RULES[failure.rule];
-    return !exceptionLabel || !hasExceptionLabel(labels, exceptionLabel);
-  });
 }
 
 function evaluateStaticTreeRules(): IntakeFailure[] {
@@ -730,7 +691,6 @@ export function runPrIntakeCheck(input: IntakeInput): IntakeFailure[] {
       input.requirePullRequestBody ?? false,
       input.changedFiles,
     ),
-    ...evaluateMaintainerScopeApproval(input.requireMaintainerScopeApproval ?? false, input.labels),
     ...evaluateDiffSize(input.changedFiles),
     ...evaluateOwnerAndPathRules(input.changedFiles),
     ...evaluateQualityGateOwnership(input.changedFiles),
@@ -746,7 +706,7 @@ export function runPrIntakeCheck(input: IntakeInput): IntakeFailure[] {
     ),
   ];
 
-  return applyMaintainerExceptions(failures, input.labels);
+  return failures;
 }
 
 function readPullRequestBody(options: CliOptions) {
@@ -759,60 +719,6 @@ function readPullRequestBody(options: CliOptions) {
   }
 
   return undefined;
-}
-
-function parseLabelsText(labelsText: string | undefined): string[] {
-  if (!labelsText?.trim()) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(labelsText);
-    if (Array.isArray(parsed)) {
-      return parsed
-        .map((item) => {
-          if (typeof item === "string") {
-            return item;
-          }
-
-          if (item && typeof item === "object" && "name" in item && typeof item.name === "string") {
-            return item.name;
-          }
-
-          return "";
-        })
-        .map((label) => label.trim())
-        .filter(Boolean);
-    }
-  } catch {
-    return labelsText
-      .split(",")
-      .map((label) => label.trim())
-      .filter(Boolean);
-  }
-
-  return [];
-}
-
-function readLabels(options: CliOptions) {
-  if (options.labelsJson) {
-    return parseLabelsText(options.labelsJson);
-  }
-
-  if (options.labelsEnv) {
-    return parseLabelsText(process.env[options.labelsEnv]);
-  }
-
-  return [];
-}
-
-function requiresMaintainerScopeApproval(options: CliOptions) {
-  if (!options.authorAssociationEnv) {
-    return false;
-  }
-
-  const association = (process.env[options.authorAssociationEnv] ?? "").trim().toUpperCase();
-  return !new Set(["OWNER", "MEMBER", "COLLABORATOR"]).has(association);
 }
 
 function shouldRequirePullRequestTemplate(options: CliOptions) {
@@ -897,7 +803,6 @@ function runSelfTest() {
       deletions: 0,
     }],
     addedLinesByFile: {},
-    labels: [],
   });
 
   if (failures.length > 0) {
@@ -921,7 +826,6 @@ function runSelfTest() {
     addedLinesByFile: {
       "src/features/export/components/Export.tsx": ["const style = { borderRadius: 16, color: '#fff' };"],
     },
-    labels: [],
   }).map((failure) => failure.rule);
 
   const expectedRules = [
@@ -953,9 +857,7 @@ function main() {
   const changedFiles = loadChangedFiles(options.base, options.head);
   const addedLinesByFile = loadAddedLines(options.base, options.head, changedFiles);
   const pullRequestBody = readPullRequestBody(options);
-  const labels = readLabels(options);
   const requirePullRequestBody = shouldRequirePullRequestTemplate(options);
-  const requireMaintainerScopeApproval = requiresMaintainerScopeApproval(options);
   const registeredTypeScriptTests = loadRegisteredTypeScriptTests(options.head);
   const registeredRustTests = loadRegisteredRustTests(options.head, changedFiles);
   const failures = runPrIntakeCheck({
@@ -963,10 +865,8 @@ function main() {
     addedLinesByFile,
     pullRequestBody,
     requirePullRequestBody,
-    requireMaintainerScopeApproval,
     registeredTypeScriptTests,
     registeredRustTests,
-    labels,
   }).concat(
     options.base && options.head
       ? findValidationChainRegressions(

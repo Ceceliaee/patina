@@ -66,29 +66,12 @@ function testValidFocusedPrPasses() {
   }), []);
 }
 
-function testExternalPrRequiresMaintainerScopeLabel() {
-  assert.ok(ruleNames({
-    pullRequestBody: VALID_BODY,
-    requirePullRequestBody: true,
-    requireMaintainerScopeApproval: true,
-    changedFiles: [],
-  }).includes("missing-maintainer-scope-approval"));
-
+function testAcceptedScopeDoesNotRequireMaintainerLabel() {
   assert.deepEqual(ruleNames({
     pullRequestBody: VALID_BODY,
     requirePullRequestBody: true,
-    requireMaintainerScopeApproval: true,
     changedFiles: [],
-    labels: ["intake/accepted-scope"],
   }), []);
-
-  assert.ok(ruleNames({
-    pullRequestBody: VALID_BODY,
-    requirePullRequestBody: true,
-    requireMaintainerScopeApproval: true,
-    changedFiles: [],
-    labels: ["intake-exception/size", "intake-exception/tests"],
-  }).includes("missing-maintainer-scope-approval"));
 }
 
 function testMissingAcceptedScopeFails() {
@@ -437,33 +420,7 @@ function testInlineRustTestSatisfiesRiskCoverage() {
   }), []);
 }
 
-function testSizeExceptionLabelBypassesSizeRules() {
-  assert.deepEqual(ruleNames({
-    pullRequestBody: VALID_BODY,
-    requirePullRequestBody: true,
-    changedFiles: [changedFile({
-      path: "src/features/about/components/AboutPanel.tsx",
-      additions: 800,
-      deletions: 250,
-    })],
-    labels: ["intake-exception/size"],
-  }), []);
-}
-
-function testTestsExceptionLabelBypassesRiskCoverageRule() {
-  assert.deepEqual(ruleNames({
-    pullRequestBody: VALID_BODY,
-    requirePullRequestBody: true,
-    changedFiles: [changedFile({
-      path: "src-tauri/src/engine/export/csv_exporter.rs",
-      additions: 20,
-      deletions: 0,
-    })],
-    labels: ["intake-exception/tests"],
-  }), []);
-}
-
-function testExceptionLabelsDoNotBypassHardRules() {
+function testHardRulesRemainFailures() {
   const rules = ruleNames({
     pullRequestBody: VALID_BODY,
     requirePullRequestBody: true,
@@ -478,8 +435,6 @@ function testExceptionLabelsDoNotBypassHardRules() {
         "const style = { borderRadius: 16, color: '#fff' };",
       ],
     },
-    requireMaintainerScopeApproval: true,
-    labels: ["intake/accepted-scope", "intake-exception/size", "intake-exception/tests"],
   });
 
   assert.ok(rules.includes("suspicious-new-feature-owner"));
@@ -583,8 +538,19 @@ function testWorkflowRunsTrustedBaseGate() {
   assert.match(workflow, /node-version: 22/);
   assert.match(workflow, /permissions:\s*\r?\n\s+contents: read/);
   assert.match(workflow, /cancel-in-progress: true/);
+  assert.doesNotMatch(workflow, /\b(?:labeled|unlabeled)\b/);
+  assert.doesNotMatch(workflow, /labels-env|PR_LABELS_JSON/);
   assert.doesNotMatch(workflow, /npm ci/);
   assert.doesNotMatch(workflow, /--head HEAD(?:\s|$)/m);
+}
+
+function testVerifyRunsAfterSuccessfulIntake() {
+  const workflow = readFileSync(".github/workflows/verify.yml", "utf8");
+  assert.doesNotMatch(workflow, /^\s+pull_request:\s*$/m);
+  assert.match(workflow, /workflow_run:\s*\r?\n\s+workflows:\s*\r?\n\s+- PR Intake/);
+  assert.match(workflow, /github\.event\.workflow_run\.conclusion == 'success'/);
+  assert.match(workflow, /refs\/pull\/\$\{\{ github\.event\.workflow_run\.pull_requests\[0\]\.number \}\}\/head/);
+  assert.match(workflow, /workflow_dispatch:/);
 }
 
 function testValidationChainCanGrowButCannotBeWeakened() {
@@ -629,7 +595,7 @@ function testLegacyPrTemplateCanBeSkipped() {
 }
 
 testValidFocusedPrPasses();
-testExternalPrRequiresMaintainerScopeLabel();
+testAcceptedScopeDoesNotRequireMaintainerLabel();
 testMissingAcceptedScopeFails();
 testUncheckedContributorChecklistFails();
 testIncompleteTemplateFieldsFail();
@@ -645,16 +611,15 @@ testDataReadModelRiskRequiresDataTests();
 testScreenshotEngineRiskRequiresRustScreenshotTests();
 testUnregisteredRustTestModuleDoesNotSatisfyRiskCoverage();
 testInlineRustTestSatisfiesRiskCoverage();
-testSizeExceptionLabelBypassesSizeRules();
-testTestsExceptionLabelBypassesRiskCoverageRule();
-testExceptionLabelsDoNotBypassHardRules();
+testHardRulesRemainFailures();
 testStyleGateCatchesHardcodedColorAndBorder();
 testQualityGateFilesAreMaintainerOwned();
 testEncodingAndHardcodedCopyFail();
 testFeatureSpecificSelectorsCannotGrowQuietProCss();
 testEstablishedFeatureStyleOwnerCanAddItsStylesheet();
 testWorkflowRunsTrustedBaseGate();
+testVerifyRunsAfterSuccessfulIntake();
 testValidationChainCanGrowButCannotBeWeakened();
 testLegacyPrTemplateCanBeSkipped();
 
-console.log("Passed 28 PR intake gate tests");
+console.log("Passed 27 PR intake gate tests");

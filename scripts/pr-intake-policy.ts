@@ -1,21 +1,6 @@
 export const MAX_MANUAL_LINES = 1_000;
 export const MAX_MANUAL_FILES = 25;
 
-export const INTAKE_EXCEPTION_LABELS = {
-  size: "intake-exception/size",
-  tests: "intake-exception/tests",
-} as const;
-
-export const INTAKE_APPROVAL_LABELS = {
-  acceptedScope: "intake/accepted-scope",
-} as const;
-
-export const EXCEPTION_RULES: Record<string, string> = {
-  "oversized-manual-diff": INTAKE_EXCEPTION_LABELS.size,
-  "too-many-manual-files": INTAKE_EXCEPTION_LABELS.size,
-  "risk-path-without-tests": INTAKE_EXCEPTION_LABELS.tests,
-};
-
 export const KNOWN_FEATURE_OWNERS = new Set([
   "about",
   "classification",
@@ -251,7 +236,7 @@ export function evaluatePullRequestBody(
     failures.push({
       rule: "missing-accepted-scope",
       message: "Missing accepted scope.",
-      detail: "Add a concrete #issue reference or URL under Accepted Scope. External PRs also require the maintainer-applied scope label.",
+      detail: "Add a concrete #issue reference or URL under Accepted Scope before requesting review.",
     });
   }
 
@@ -285,18 +270,8 @@ export function evaluatePullRequestBody(
     failures.push({
       rule: "unchecked-contributor-checklist",
       message: "Contributor Checklist still has unchecked items.",
-      detail: "Complete the checklist before requesting review. Maintainer exceptions are tracked with repository labels, not PR text.",
+      detail: "Complete the checklist before requesting review.",
     });
   }
   return failures;
-}
-
-export function evaluateMaintainerScopeApproval(required: boolean, labels: string[] | undefined) {
-  const normalized = new Set((labels ?? []).map((label) => label.trim().toLowerCase()));
-  if (!required || normalized.has(INTAKE_APPROVAL_LABELS.acceptedScope)) return [];
-  return [{
-    rule: "missing-maintainer-scope-approval",
-    message: "The proposed scope has not been accepted by a maintainer.",
-    detail: `Discuss the change in an Issue first. A maintainer will apply ${INTAKE_APPROVAL_LABELS.acceptedScope} when the problem, boundary, and acceptance criteria are agreed. PR body text cannot grant this approval.`,
-  }];
 }

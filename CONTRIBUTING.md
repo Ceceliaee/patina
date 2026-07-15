@@ -114,8 +114,7 @@ fit the owning area's architecture, UI system, and validation expectations.
 Before requesting review, confirm:
 
 - the change is linked to an accepted issue, Project item, or explicit
-  maintainer-approved scope, and an external pull request has the
-  maintainer-applied `intake/accepted-scope` label;
+  maintainer-approved scope;
 - the pull request solves one coherent problem only;
 - every changed file is necessary for that problem;
 - new behavior is placed under the real owner, not the easiest temporary
@@ -147,24 +146,23 @@ save time for both sides: fix the scope, split, owner placement, UI, or tests
 first, then request review again.
 
 For external pull requests, accepted scope is authorization, not self-reporting.
-Only the maintainer-applied `intake/accepted-scope` label proves that the problem,
-boundary, and acceptance criteria were agreed before implementation. PR body
-text, comments, linked issues, and author claims provide context but cannot grant
-that approval.
+It must be traceable to an accepted issue, Project item, or explicit
+maintainer-approved scope. PR body text, comments, linked issues, and author
+claims provide context but cannot bypass the intake gate.
 
-Automated intake exceptions are also maintainer-controlled GitHub labels.
-`intake-exception/size` may bypass only the size rules when the change is not
-reasonably splittable. `intake-exception/tests` may bypass only the focused test
-rule when the maintainer accepts the validation evidence. These exception labels
-do not grant scope approval. Wrong owner placement, retired directories, unowned
-shared styles, hardcoded Quiet Pro escapes, and incomplete contributor checklist
-items remain hard failures.
+Automated intake has no label-based bypass. Oversized pull requests must be
+split by behavior, owner, or independently verifiable stage. Risk-bearing
+changes must include focused tests that match the changed risk area, or be
+handled by an explicit maintainer-owned follow-up outside the external pull
+request. Wrong owner placement, retired directories, unowned shared styles,
+hardcoded Quiet Pro escapes, and incomplete contributor checklist items remain
+hard failures.
 
 The intake gate runs in its own `PR Intake` workflow because it needs pull
-request-only context: the three-dot base/head PR diff, PR body, author association,
-and current labels. The workflow checks out the trusted base revision and inspects
-the pull request head without executing contributor-modified gate code or package
-scripts. Focused tests
+request-only context: the three-dot base/head PR diff and PR body. The workflow
+checks out the trusted base revision and inspects the pull request head without
+executing contributor-modified gate code or package scripts. Normal `Verify`
+checks run for pull requests only after `PR Intake` succeeds. Focused tests
 are matched by risk area. For example, export implementation changes need
 `tests/export*` or Rust export tests; settings persistence changes need
 settings or persistence tests. A TypeScript test counts only when it is reachable
@@ -174,6 +172,10 @@ must be Cargo-discoverable or referenced by the crate's module tree; inline Rust
 tests must add an actual test function. Deleting old assertions or
 editing a broad smoke test without adding positive coverage for the changed risk
 area does not satisfy the gate.
+
+GitHub may still ask a maintainer to approve Actions for first-time external
+contributors. That approval only allows workflows to start; it is not scope
+approval and does not bypass intake.
 
 Draft pull requests do not run the intake job. Complete the template and obtain
 scope approval before marking the pull request ready for review.
@@ -271,9 +273,8 @@ Commit reviewability rules:
   additions and deletions, triggers mandatory split review.
 - Touching more than 25 files also triggers mandatory split review.
 - Split by behavior, owner, or independently reviewable stage by default.
-- If the change is genuinely indivisible in a pull request, explain why and
-  wait for the maintainer to apply `intake-exception/size` before treating the
-  intake size gate as passed.
+- If the change is genuinely indivisible, discuss the scope before
+  implementation; otherwise expect the intake size gate to require splitting.
 - Lockfiles, generated files, snapshots, bulk assets, and mechanical migration
   output may be excluded from the manually maintained line count.
 - Isolate excluded generated or mechanical changes in a separate commit when
@@ -715,13 +716,13 @@ Before requesting review:
 - [ ] The pull request is linked to an accepted issue, Project item, or explicit maintainer-approved scope.
 - [ ] The pull request solves one coherent problem.
 - [ ] Every changed file is necessary for that accepted problem.
-- [ ] The commits are reviewable; oversized changes were split coherently or have a maintainer-applied `intake-exception/size` label.
+- [ ] The commits are reviewable; oversized changes were split coherently.
 - [ ] I removed unrelated refactors and formatting churn.
 - [ ] I placed new behavior under the correct owner.
 - [ ] I did not add standalone CSS or hardcoded visual styles outside the design system.
 - [ ] I did not change quality gate scripts, CI workflows, bundle budgets, or hotspot budgets unless the maintainer explicitly requested that maintenance work.
 - [ ] User-facing copy is owned by the relevant copy domain, not hardcoded inline in JSX.
-- [ ] I added tests for the risk-bearing behavior or have a maintainer-applied `intake-exception/tests` label.
+- [ ] I added focused tests for the risk-bearing behavior.
 - [ ] I ran `npm run check`.
 - [ ] I ran `npm run check:full` if Rust, tracking, SQLite, runtime, or
       architecture boundaries changed.
@@ -845,8 +846,7 @@ Pull Request 只有先通过项目准入门禁，才算准备好进入维护者 
 
 请求 review 前，请确认：
 
-- 改动关联了已接受的 issue、Project item，或维护者明确确认的 scope；外部 PR 还必须有
-  维护者添加的 `intake/accepted-scope` label；
+- 改动关联了已接受的 issue、Project item，或维护者明确确认的 scope；
 - Pull Request 只解决一个完整、连贯的问题；
 - 每个改动文件都是解决该问题所必需；
 - 新行为放在真实 owner 下，而不是临时放在最方便的目录；
@@ -869,25 +869,27 @@ Pull Request，不构成可合并贡献。它会被标记为 `Needs Author Chang
 维护者可以在第一轮 review 时停在准入门禁。这样做是为了节省双方时间：请先修正
 scope、拆分、owner、UI 或测试，再重新请求 review。
 
-对于外部 PR，已接受范围是一项授权，而不是作者自述。只有维护者添加的
-`intake/accepted-scope` label 才能证明问题、边界和验收条件已经确认。PR 正文、评论、
-关联 issue 和作者声明只能提供上下文，不能自行获得批准。
+对于外部 PR，已接受范围是一项授权，而不是作者自述。它必须能追溯到已接受的 issue、
+Project item，或维护者明确确认的 scope。PR 正文、评论、关联 issue 和作者声明只能提供
+上下文，不能绕过准入门禁。
 
-自动准入例外同样只认维护者控制的 GitHub label。
-`intake-exception/size` 只可放过体量规则，用于维护者确认该改动不可合理拆分的情况。
-`intake-exception/tests` 只可放过专项测试规则，用于维护者确认当前验证证据足够的情况。
-例外 label 不代表范围已批准。owner 错误、退休目录回流、未归属 shared styles、Quiet Pro
-硬编码逃逸、未完成 contributor checklist 等仍然是硬失败。
+自动准入没有基于 label 的放行机制。超大 PR 必须按行为、owner 或可独立验证阶段拆分。
+涉及风险的改动必须包含匹配风险域的专项测试，或由维护者另开维护者拥有的后续工作处理。
+owner 错误、退休目录回流、未归属 shared styles、Quiet Pro 硬编码逃逸、未完成
+contributor checklist 等仍然是硬失败。
 
 准入门禁运行在独立的 `PR Intake` workflow 中，因为它需要 Pull Request 专属上下文：
-三点 base/head PR diff、PR 正文、作者关联身份和当前 label 状态。workflow checkout 可信的
-base revision，只读取 PR head，不执行贡献者修改过的门禁代码或 package scripts。专项测试
-按风险域匹配。例如导出实现改动需要
+三点 base/head PR diff 和 PR 正文。workflow checkout 可信的 base revision，只读取 PR
+head，不执行贡献者修改过的门禁代码或 package scripts。普通 `Verify` workflow 只在
+`PR Intake` 成功后验证外部 PR。专项测试按风险域匹配。例如导出实现改动需要
 `tests/export*` 或 Rust export 测试；settings persistence 改动需要 settings 或
 persistence 测试。TypeScript 测试只有接入仓库正常的 `npm run check` 验证链才算覆盖。
 独立 Rust 测试文件必须能被 Cargo 自动发现或被 crate module tree 引用；内联 Rust 测试
 必须实际新增测试函数。无关或未注册的测试文件不能满足风险门禁。只删除旧断言，或只修改宽泛 smoke 测试而没有
 为对应风险域增加正向覆盖，也不能算通过。
+
+GitHub 仍可能要求维护者先批准首次外部贡献者的 Actions。这个批准只允许 workflow 开始运行，
+不是 scope 批准，也不会绕过准入门禁。
 
 Draft PR 不运行准入 job。请先完成模板并获得范围批准，再将 PR 标记为 ready for review。
 
@@ -982,8 +984,7 @@ commit 可审查性规则：
 - 手工维护内容的变更超过 1000 行（新增行与删除行之和）时，必须进行拆分复核。
 - 涉及超过 25 个文件时，也必须进行拆分复核。
 - 默认按行为、owner 或可以独立审查的阶段拆成多个连贯 commit。
-- Pull Request 确实无法合理拆分时，应先解释不可拆分原因，并等待维护者添加
-  `intake-exception/size`，再把体量门禁视为已通过。
+- Pull Request 确实无法合理拆分时，应在实现前讨论清楚 scope；否则体量门禁会要求拆分。
 - lockfile、生成文件、快照、批量资源和机械 migration 输出可以不计入手工维护行数。
 - 在可行时，应把排除计数的生成或机械变更单独提交。
 - 不要为了满足数字限制而按文件随意切块。
@@ -1397,13 +1398,13 @@ Review 时应按以下顺序检查：
 - [ ] Pull Request 关联了已接受的 issue、Project item，或维护者明确确认的 scope。
 - [ ] Pull Request 只解决一个完整、连贯的问题。
 - [ ] 每个改动文件都是解决该已接受问题所必需。
-- [ ] commit 保持可审查；超大变更已经按逻辑拆分，或已有维护者添加的 `intake-exception/size` label。
+- [ ] commit 保持可审查；超大变更已经按逻辑拆分。
 - [ ] 我删除了无关重构和格式化噪音。
 - [ ] 我把新增行为放在正确的 owner 下。
 - [ ] 我没有在设计系统之外新增独立 CSS 或硬编码视觉样式。
 - [ ] 除非维护者明确要求，我没有修改质量门禁脚本、CI workflow、bundle budget 或 hotspot budget。
 - [ ] 用户可见文案由对应 copy domain 管理，没有写成 JSX 内联字面量。
-- [ ] 我为承担风险的行为补充了测试，或已有维护者添加的 `intake-exception/tests` label。
+- [ ] 我为承担风险的行为补充了匹配风险域的专项测试。
 - [ ] 我运行了 `npm run check`。
 - [ ] 如果修改 Rust、tracking、SQLite、runtime 或架构边界，我运行了 `npm run check:full`。
 - [ ] 对于可见 UI 改动，我提供了截图。
@@ -1419,7 +1420,7 @@ Review 时应按以下顺序检查：
 - [ ] diff 有清楚的 owner，不包含无关修改。
 - [ ] 优先检查了 tracking、数据安全、隐私和安全风险。
 - [ ] 失败状态可见、可恢复。
-- [ ] 新增风险有专项测试覆盖，或已有维护者添加的 `intake-exception/tests` label。
+- [ ] 新增风险有专项测试覆盖。
 - [ ] 必需验证已通过。
 - [ ] 分支与最新 `main` 兼容。
 - [ ] 阻塞性问题已经在合并前修复。

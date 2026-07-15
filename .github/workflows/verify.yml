@@ -1,25 +1,56 @@
 name: Verify
 
 on:
-  pull_request:
   push:
     branches:
       - main
+  workflow_run:
+    workflows:
+      - PR Intake
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to verify after maintainer review
+        required: false
+        type: string
+
+permissions:
+  contents: read
 
 jobs:
   frontend:
     name: Frontend quality gate
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request') ||
+      (github.event_name == 'workflow_dispatch' && inputs.pr_number != '')
     runs-on: windows-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout push revision
+        if: github.event_name == 'push'
         uses: actions/checkout@v4
+
+      - name: Checkout pull request revision
+        if: github.event_name == 'workflow_run'
+        uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ github.event.workflow_run.pull_requests[0].number }}/head
+
+      - name: Checkout manually selected pull request revision
+        if: github.event_name == 'workflow_dispatch' && inputs.pr_number != ''
+        uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ inputs.pr_number }}/head
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - name: Install dependencies
         run: npm ci
@@ -29,17 +60,35 @@ jobs:
 
   rust:
     name: Rust quality gate
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request') ||
+      (github.event_name == 'workflow_dispatch' && inputs.pr_number != '')
     runs-on: windows-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout push revision
+        if: github.event_name == 'push'
         uses: actions/checkout@v4
+
+      - name: Checkout pull request revision
+        if: github.event_name == 'workflow_run'
+        uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ github.event.workflow_run.pull_requests[0].number }}/head
+
+      - name: Checkout manually selected pull request revision
+        if: github.event_name == 'workflow_dispatch' && inputs.pr_number != ''
+        uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ inputs.pr_number }}/head
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable

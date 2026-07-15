@@ -12,8 +12,7 @@ Refs #
 
 <!--
 Link the accepted issue, Project item, or maintainer-approved scope.
-External pull requests require the maintainer-applied `intake/accepted-scope`
-label. PR text or comments cannot grant scope approval.
+The automated intake gate checks this section before normal verification runs.
 -->
 
 - Linked issue / Project item / maintainer approval:
@@ -93,15 +92,15 @@ Write `N/A` if the change has no visible UI impact.
 ## Contributor Checklist
 
 - [ ] I read the relevant active project documents under `docs/`.
-- [ ] This pull request is linked to the Issue or Project item where its scope was agreed; external PRs also have the maintainer-applied `intake/accepted-scope` label.
+- [ ] This pull request is linked to the Issue or Project item where its scope was agreed, or to an explicit maintainer-approved scope.
 - [ ] This pull request solves one coherent problem and excludes unrelated cleanup.
 - [ ] Every changed file is necessary for the accepted problem.
-- [ ] The commits are reviewable; oversized changes were split coherently or have a maintainer-applied `intake-exception/size` label.
+- [ ] The commits are reviewable; oversized changes were split coherently by behavior, owner, or independently verifiable stage.
 - [ ] New behavior is placed under the correct owner and does not bypass architecture boundaries.
 - [ ] I did not add standalone CSS or hardcoded visual styles outside the design system.
 - [ ] I did not weaken package validation scripts or change quality gate scripts, CI workflows, bundle budgets, or hotspot budgets unless the maintainer explicitly requested that maintenance work.
 - [ ] User-facing copy is owned by the relevant copy domain, not hardcoded inline in JSX.
-- [ ] Risk-bearing behavior has focused tests or has a maintainer-applied `intake-exception/tests` label.
+- [ ] Risk-bearing behavior has focused tests that match the changed risk area.
 - [ ] I rebased onto the latest `main`, or confirmed that the branch is compatible with it.
 - [ ] I documented security behavior for any local or network interface.
 - [ ] I used `Refs #N` instead of an issue-closing keyword unless explicitly requested.

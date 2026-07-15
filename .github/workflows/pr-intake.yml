@@ -8,8 +8,6 @@ on:
       - synchronize
       - reopened
       - ready_for_review
-      - labeled
-      - unlabeled
 
 permissions:
   contents: read
@@ -51,14 +49,10 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BODY: ${{ github.event.pull_request.body }}
-          PR_LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
-          PR_AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
         shell: bash
         run: >-
           node --experimental-strip-types scripts/check-pr-intake.ts
           --base "${BASE_SHA}"
           --head "${HEAD_SHA}"
           --body-env PR_BODY
-          --labels-env PR_LABELS_JSON
-          --author-association-env PR_AUTHOR_ASSOCIATION
           --require-pr-body
