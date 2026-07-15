@@ -74,20 +74,15 @@ function makeBootstrapSnapshot(overrides: Partial<DataBootstrapSnapshot> = {}): 
       endTime: new Date(2026, 4, 8, 10, 0, 0).getTime(),
     }),
   ];
-  const overviewRange = 7;
-  const appRange = 7;
-  const overviewTrendViewModel = buildDataTrendViewModel(sessions, overviewRange, nowMs);
-  const appTrendViewModel = buildDataAppTrendViewModel(sessions, appRange, nowMs, null);
+  const overviewTrendViewModel = buildDataTrendViewModel(sessions, 7, nowMs);
 
   return {
     createdAtMs: nowMs,
     overviewRangeCacheKey: "rolling:7:2026-05-02:2026-05-08",
-    appRangeCacheKey: "rolling:7:2026-05-02:2026-05-08",
     heatmapSelection: "recent",
     mappingVersion: 0,
     uiLanguage: "zh-CN",
     overviewTrendViewModel,
-    appTrendViewModel,
     heatmapRows: buildActivityHeatmap(sessions, "recent", nowMs),
     earliestStartTime: sessions[0].startTime,
     ...overrides,
@@ -673,7 +668,6 @@ await runTest("data first screen prewarm saves a bootstrap snapshot", async () =
 
   assert.equal(snapshot?.mappingVersion, 3);
   assert.equal(savedSnapshot?.overviewTrendViewModel.totalDuration, 60 * 60 * 1000);
-  assert.equal(savedSnapshot?.appTrendViewModel.selectedApp?.appName, "Cursor");
   assert.ok(savedSnapshot?.heatmapRows.length);
 });
 
