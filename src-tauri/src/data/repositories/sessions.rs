@@ -83,13 +83,12 @@ pub async fn insert_missing_for_restore(
              WHERE NOT EXISTS (
                SELECT 1
                FROM sessions
-               WHERE app_name = ?
-                 AND exe_name = ?
-                 AND COALESCE(window_title, '') = COALESCE(?, '')
+               WHERE LOWER(exe_name) = LOWER(?)
                  AND start_time = ?
-                 AND COALESCE(end_time, -1) = COALESCE(?, -1)
-                 AND COALESCE(duration, -1) = COALESCE(?, -1)
-             )",
+             )
+               AND (? IS NOT NULL OR NOT EXISTS (
+                 SELECT 1 FROM sessions WHERE end_time IS NULL
+               ))",
         )
         .bind(&session.app_name)
         .bind(&session.exe_name)
@@ -102,12 +101,9 @@ pub async fn insert_missing_for_restore(
                 .continuity_group_start_time
                 .unwrap_or(session.start_time),
         )
-        .bind(&session.app_name)
         .bind(&session.exe_name)
-        .bind(&session.window_title)
         .bind(session.start_time)
         .bind(session.end_time)
-        .bind(session.duration)
         .execute(&mut **tx)
         .await
         .map_err(|error| format!("failed to merge restore sessions: {error}"))?;
@@ -126,21 +122,13 @@ pub async fn resolve_restore_session_id_map(
         let restored_id: Option<i64> = sqlx::query_scalar(
             "SELECT id
              FROM sessions
-             WHERE app_name = ?
-               AND exe_name = ?
-               AND COALESCE(window_title, '') = COALESCE(?, '')
+             WHERE LOWER(exe_name) = LOWER(?)
                AND start_time = ?
-               AND COALESCE(end_time, -1) = COALESCE(?, -1)
-               AND COALESCE(duration, -1) = COALESCE(?, -1)
              ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, id ASC
              LIMIT 1",
         )
-        .bind(&session.app_name)
         .bind(&session.exe_name)
-        .bind(&session.window_title)
         .bind(session.start_time)
-        .bind(session.end_time)
-        .bind(session.duration)
         .bind(session.id)
         .fetch_optional(&mut **tx)
         .await
@@ -496,6 +484,51 @@ mod exclusion_tests {
                     .unwrap();
             assert_eq!(session_end, Some(3_000));
             assert_eq!(title_end, Some(3_000));
+        });
+    }
+
+    #[test]
+    fn merge_keeps_current_evolved_and_active_sessions() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            sqlx::query(
+                "INSERT INTO sessions (app_name, exe_name, window_title, start_time, end_time, duration)
+                 VALUES ('App', 'app.exe', 'Current', 100, 300, 200),
+                        ('Live', 'live.exe', 'Current live', 400, NULL, NULL)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            let backup = vec![
+                BackupSession {
+                    id: 10,
+                    app_name: "App".into(),
+                    exe_name: "app.exe".into(),
+                    window_title: Some("Old".into()),
+                    start_time: 100,
+                    end_time: Some(200),
+                    duration: Some(100),
+                    continuity_group_start_time: Some(100),
+                },
+                BackupSession {
+                    id: 11,
+                    app_name: "Other".into(),
+                    exe_name: "other.exe".into(),
+                    window_title: Some("Backup live".into()),
+                    start_time: 500,
+                    end_time: None,
+                    duration: None,
+                    continuity_group_start_time: Some(500),
+                },
+            ];
+            let mut tx = pool.begin().await.unwrap();
+            insert_missing_for_restore(&mut tx, &backup).await.unwrap();
+            tx.commit().await.unwrap();
+            let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            assert_eq!(count, 2);
         });
     }
 }

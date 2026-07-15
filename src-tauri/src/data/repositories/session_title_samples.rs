@@ -86,7 +86,6 @@ pub async fn insert_missing_for_restore(
                  WHERE session_id = ?
                    AND title = ?
                    AND start_time = ?
-                   AND COALESCE(end_time, -1) = COALESCE(?, -1)
                )",
         )
         .bind(restored_session_id)
@@ -96,7 +95,6 @@ pub async fn insert_missing_for_restore(
         .bind(restored_session_id)
         .bind(title)
         .bind(sample.start_time)
-        .bind(sample.end_time)
         .execute(&mut **tx)
         .await
         .map_err(|error| format!("failed to merge restore title samples: {error}"))?;

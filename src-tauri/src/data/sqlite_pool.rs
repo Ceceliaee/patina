@@ -13,6 +13,10 @@ use tauri_plugin_sql::{DbInstances, DbPool, MigrationKind};
 use tokio::time::{sleep, Duration};
 
 pub const SQLITE_DB_NAME: &str = "sqlite:patina.db";
+mod maintenance;
+mod restore;
+pub(crate) use maintenance::{acquire_sqlite_maintenance, checkpoint_sqlite_pool};
+pub(crate) use restore::replace_product_db_from_candidate;
 
 #[derive(Debug)]
 struct InlineMigrationList(Vec<tauri_plugin_sql::Migration>);
@@ -37,7 +41,7 @@ impl MigrationSource<'static> for InlineMigrationList {
     }
 }
 
-fn expected_migration_metadata() -> Vec<(i64, &'static str, Vec<u8>)> {
+pub(crate) fn expected_migration_metadata() -> Vec<(i64, &'static str, Vec<u8>)> {
     schema::tracker_migrations()
         .into_iter()
         .map(|migration| {
@@ -96,6 +100,13 @@ pub fn is_recoverable_sqlite_error(error: &str) -> bool {
 }
 
 pub async fn reopen_sqlite_pool<R: Runtime>(app: &AppHandle<R>) -> Result<Pool<Sqlite>, String> {
+    let _maintenance = acquire_sqlite_maintenance().await;
+    reopen_sqlite_pool_unlocked(app).await
+}
+
+async fn reopen_sqlite_pool_unlocked<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<Pool<Sqlite>, String> {
     let db_path = resolve_product_db_path(app)?;
     let next_pool = open_single_connection_sqlite_pool(&db_path, true).await?;
 
@@ -155,6 +166,7 @@ async fn register_sqlite_pool<R: Runtime>(
 
 pub async fn initialize_app_sqlite<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let db_path = resolve_product_db_path(app)?;
+    restore::recover_interrupted_db_restore(&db_path)?;
     let pool = open_single_connection_sqlite_pool(&db_path, true).await?;
 
     prepare_pool_schema(&pool, &db_path).await?;

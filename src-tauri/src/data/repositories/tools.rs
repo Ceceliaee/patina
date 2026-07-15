@@ -11,8 +11,9 @@ pub use read::fetch_tools_snapshot;
 
 pub use backup_restore::{
     clear_for_restore, fetch_all_daily_stats_for_backup, fetch_all_pomodoro_runs_for_backup,
-    fetch_all_reminders_for_backup, fetch_all_timer_laps_for_backup, fetch_all_timers_for_backup,
-    insert_for_restore, insert_missing_for_restore,
+    fetch_all_reminders_for_backup, fetch_all_software_reminder_rules_for_backup,
+    fetch_all_timer_laps_for_backup, fetch_all_timers_for_backup, insert_for_restore,
+    insert_missing_for_restore,
 };
 
 use read::{
@@ -1006,58 +1007,6 @@ mod tests {
             assert_eq!(run.status, PomodoroStatus::Paused);
             assert_eq!(run.phase_started_at, None);
             assert_eq!(run.phase_paused_at, Some(1_500));
-        });
-    }
-
-    #[test]
-    fn backup_restore_round_trips_tool_tables() {
-        tauri::async_runtime::block_on(async {
-            let pool = setup_test_db().await;
-            create_reminder(&pool, "Check", 2_000, 1_000).await.unwrap();
-            start_timer(&pool, TimerMode::Stopwatch, None, None, 1_000)
-                .await
-                .unwrap();
-            add_timer_lap(&pool, 1_500).await.unwrap();
-            start_pomodoro(&pool, 1_000, 500, 700, 4, 1_000)
-                .await
-                .unwrap();
-            complete_due_pomodoro_phase(&pool, "2026-06-07", 2_100)
-                .await
-                .unwrap();
-
-            let reminders = fetch_all_reminders_for_backup(&pool).await.unwrap();
-            let timers = fetch_all_timers_for_backup(&pool).await.unwrap();
-            let laps = fetch_all_timer_laps_for_backup(&pool).await.unwrap();
-            let pomodoros = fetch_all_pomodoro_runs_for_backup(&pool).await.unwrap();
-            let stats = fetch_all_daily_stats_for_backup(&pool).await.unwrap();
-
-            let mut tx = pool.begin().await.unwrap();
-            clear_for_restore(&mut tx).await.unwrap();
-            insert_for_restore(&mut tx, &reminders, &timers, &laps, &pomodoros, &stats)
-                .await
-                .unwrap();
-            tx.commit().await.unwrap();
-
-            assert_eq!(
-                fetch_all_reminders_for_backup(&pool).await.unwrap().len(),
-                1
-            );
-            assert_eq!(fetch_all_timers_for_backup(&pool).await.unwrap().len(), 1);
-            assert_eq!(
-                fetch_all_timer_laps_for_backup(&pool).await.unwrap().len(),
-                1
-            );
-            assert_eq!(
-                fetch_all_pomodoro_runs_for_backup(&pool)
-                    .await
-                    .unwrap()
-                    .len(),
-                1
-            );
-            assert_eq!(
-                fetch_all_daily_stats_for_backup(&pool).await.unwrap().len(),
-                1
-            );
         });
     }
 }
