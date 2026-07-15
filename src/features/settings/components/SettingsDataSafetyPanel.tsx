@@ -23,7 +23,7 @@ import type { BackupRestoreStrategy } from "../services/settingsRuntimeAdapterSe
 import type { StorageSnapshot } from "../services/settingsRuntimeAdapterService.ts";
 import type { RemoteBackupEntry, RemoteBackupState } from "../hooks/useRemoteBackupState.ts";
 import SettingsRemoteBackupPanel from "./SettingsRemoteBackupPanel";
-import SettingsStepperSlider from "./SettingsStepperSlider";
+import QuietStepperSlider from "../../../shared/components/QuietStepperSlider.tsx";
 import { toEbwebviewCachePath } from "../services/storagePathDisplay.ts";
 
 type CleanupOption = { value: CleanupRange; label: string };
@@ -524,7 +524,7 @@ export default function SettingsDataSafetyPanel({
       >
         <div className="settings-history-cleanup-range">
           <span>{UI_TEXT.settings.cleanupRangeLabel}</span>
-          <SettingsStepperSlider
+          <QuietStepperSlider
             ariaLabel={UI_TEXT.settings.cleanupRangeLabel}
             value={cleanupRangeIndex}
             min={0}

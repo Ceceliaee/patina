@@ -1,7 +1,7 @@
 import { Minus, Plus } from "lucide-react";
 import type { ReactNode } from "react";
 
-type SettingsStepperSliderProps = {
+interface QuietStepperSliderProps {
   ariaLabel: string;
   value: number;
   min: number;
@@ -10,13 +10,16 @@ type SettingsStepperSliderProps = {
   decreaseAriaLabel: string;
   increaseAriaLabel: string;
   step?: number;
+  integerButtons?: boolean;
   className?: string;
   onChange: (nextValue: number) => void;
-};
+}
 
-const clampValue = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+const clampValue = (value: number, min: number, max: number) => (
+  Math.min(max, Math.max(min, value))
+);
 
-export default function SettingsStepperSlider({
+export default function QuietStepperSlider({
   ariaLabel,
   value,
   min,
@@ -25,13 +28,17 @@ export default function SettingsStepperSlider({
   decreaseAriaLabel,
   increaseAriaLabel,
   step = 1,
+  integerButtons = false,
   className,
   onChange,
-}: SettingsStepperSliderProps) {
+}: QuietStepperSliderProps) {
   const safeValue = clampValue(value, min, max);
   const canDecrease = safeValue > min;
   const canIncrease = safeValue < max;
   const updateValue = (nextValue: number) => onChange(clampValue(nextValue, min, max));
+  const getButtonValue = (direction: -1 | 1) => integerButtons
+    ? direction > 0 ? Math.floor(safeValue) + 1 : Math.ceil(safeValue) - 1
+    : safeValue + direction * step;
   const sliderProgress = max > min ? ((safeValue - min) / (max - min)) * 100 : 0;
 
   return (
@@ -39,7 +46,7 @@ export default function SettingsStepperSlider({
       <div className="contents">
         <button
           type="button"
-          onClick={() => updateValue(safeValue - step)}
+          onClick={() => updateValue(getButtonValue(-1))}
           disabled={!canDecrease}
           aria-label={decreaseAriaLabel}
           className="qp-button-secondary order-1 inline-flex h-6 w-6 items-center justify-center rounded-[6px] p-0 disabled:cursor-not-allowed disabled:opacity-50"
@@ -67,7 +74,7 @@ export default function SettingsStepperSlider({
 
         <button
           type="button"
-          onClick={() => updateValue(safeValue + step)}
+          onClick={() => updateValue(getButtonValue(1))}
           disabled={!canIncrease}
           aria-label={increaseAriaLabel}
           className="qp-button-secondary order-4 inline-flex h-6 w-6 items-center justify-center rounded-[6px] p-0 disabled:cursor-not-allowed disabled:opacity-50"

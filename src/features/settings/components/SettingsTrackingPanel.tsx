@@ -2,7 +2,7 @@ import { MousePointerClick } from "lucide-react";
 import type { ReactNode } from "react";
 import QuietSwitch from "../../../shared/components/QuietSwitch";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
-import SettingsStepperSlider from "./SettingsStepperSlider";
+import QuietStepperSlider from "../../../shared/components/QuietStepperSlider.tsx";
 
 type MinuteControlProps = {
   label: string;
@@ -38,7 +38,7 @@ function MinuteStepperSlider({
   onMinutesChange,
 }: MinuteStepperSliderProps) {
   return (
-    <SettingsStepperSlider
+    <QuietStepperSlider
       ariaLabel={ariaLabel}
       value={minutes}
       min={minMinutes}
