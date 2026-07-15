@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
+import QuietTooltip from "./QuietTooltip";
 
 export interface QuietSegmentedFilterOption<T extends string> {
   value: T;
   label: ReactNode;
+  tooltip?: ReactNode;
   ariaLabel?: string;
   disabled?: boolean;
 }
@@ -30,7 +32,7 @@ export default function QuietSegmentedFilter<T extends string>({
     <div className={`qp-segmented-filter ${variantClassName} ${className ?? ""}`.trim()}>
       {options.map((option) => {
         const selected = option.value === value;
-        return (
+        const button = (
           <button
             key={option.value}
             type="button"
@@ -43,6 +45,21 @@ export default function QuietSegmentedFilter<T extends string>({
             {option.label}
           </button>
         );
+
+        if (option.tooltip) {
+          return (
+            <QuietTooltip
+              key={option.value}
+              label={option.tooltip}
+              placement="top"
+              disabled={option.disabled}
+            >
+              {button}
+            </QuietTooltip>
+          );
+        }
+
+        return button;
       })}
     </div>
   );

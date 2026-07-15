@@ -89,13 +89,22 @@ const WEB_ACTIVITY_HELP_LINKS = new Set(["https://github.com/Ceceliaee/patina-we
 
 export function buildBackupPreviewSummary(preview: BackupPreview): string {
   const exportedAt = new Date(preview.exportedAtMs).toLocaleString(getUiLocale());
+  const restoreMessage = localizeBackupRestoreMessage(preview);
   return [
-    `${UI_TEXT.backup.versionLabel(preview.version)}（${UI_TEXT.backup.schemaLabel(preview.schemaVersion)}）`,
+    UI_TEXT.backup.formatLabel(preview.formatKind),
     UI_TEXT.backup.exportedAt(exportedAt),
     UI_TEXT.backup.appVersion(preview.appVersion),
-    UI_TEXT.backup.restoreSafety(preview.restoreMessage),
+    UI_TEXT.backup.restoreSafety(restoreMessage),
     UI_TEXT.backup.itemCounts(preview.sessionCount, preview.settingCount, preview.iconCacheCount),
   ].join("\n");
+}
+
+export function localizeBackupRestoreMessage(preview: BackupPreview): string {
+  return UI_TEXT.backup.restoreMessage(
+    preview.restoreMessageKey,
+    preview.restoreMessageArgs,
+    preview.restoreMessage,
+  );
 }
 
 const exportBackupDeps: ExportBackupDeps = {
@@ -142,7 +151,7 @@ export async function prepareBackupRestoreWithDeps(
       preview,
       previewSummary: "",
       compatible: false,
-      incompatibilityMessage: preview.restoreMessage,
+      incompatibilityMessage: localizeBackupRestoreMessage(preview),
     };
   }
 

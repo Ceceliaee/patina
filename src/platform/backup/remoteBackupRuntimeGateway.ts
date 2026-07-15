@@ -14,6 +14,7 @@ interface RawRemoteBackupEntry {
   createdAtMs: number;
   sizeBytes: number;
   appVersion: string;
+  formatKind?: "sqlite_snapshot" | "legacy_structured";
   backupVersion: number;
   schemaVersion: number;
   sessionCount: number;
@@ -40,6 +41,7 @@ export interface RemoteBackupEntry {
   createdAtMs: number;
   sizeBytes: number;
   appVersion: string;
+  formatKind: "sqlite_snapshot" | "legacy_structured";
   backupVersion: number;
   schemaVersion: number;
   sessionCount: number;
@@ -71,6 +73,7 @@ function isRawRemoteBackupEntry(value: unknown): value is RawRemoteBackupEntry {
     && typeof value.createdAtMs === "number"
     && typeof value.sizeBytes === "number"
     && typeof value.appVersion === "string"
+    && (value.formatKind === undefined || value.formatKind === "sqlite_snapshot" || value.formatKind === "legacy_structured")
     && typeof value.backupVersion === "number"
     && typeof value.schemaVersion === "number"
     && typeof value.sessionCount === "number"
@@ -87,6 +90,7 @@ function mapRemoteBackupEntry(raw: RawRemoteBackupEntry): RemoteBackupEntry {
     createdAtMs: raw.createdAtMs,
     sizeBytes: raw.sizeBytes,
     appVersion: raw.appVersion,
+    formatKind: raw.formatKind ?? "legacy_structured",
     backupVersion: raw.backupVersion,
     schemaVersion: raw.schemaVersion,
     sessionCount: raw.sessionCount,
@@ -166,4 +170,8 @@ export async function downloadWebDavBackup(
 ): Promise<RemoteBackupDownloadResult> {
   const result = await invoke<unknown>("cmd_download_webdav_backup", { config, id });
   return parseDownloadResult(result);
+}
+
+export async function deleteRemoteBackupTemp(path: string): Promise<void> {
+  await invoke("cmd_delete_remote_backup_temp", { path });
 }

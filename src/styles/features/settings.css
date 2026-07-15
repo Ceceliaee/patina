@@ -4,6 +4,41 @@
   gap: 8px;
 }
 
+.settings-restore-help {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  padding: 0;
+  color: var(--qp-text-tertiary);
+  cursor: help;
+  transition:
+    color var(--qp-motion-fast) var(--qp-motion-ease),
+    background-color var(--qp-motion-fast) var(--qp-motion-ease);
+}
+
+.settings-restore-help:hover,
+.settings-restore-help:focus-visible {
+  background: var(--qp-bg-elevated);
+  color: var(--qp-text-secondary);
+}
+
+.settings-restore-help:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--qp-accent-default) 42%, transparent);
+  outline-offset: 2px;
+}
+
+.qp-tooltip.settings-restore-help-tooltip {
+  max-width: min(280px, calc(100vw - 16px));
+  white-space: pre-line;
+  font-weight: 550;
+  line-height: 1.5;
+}
+
 .settings-color-scheme-option {
   display: inline-flex;
   min-height: 58px;

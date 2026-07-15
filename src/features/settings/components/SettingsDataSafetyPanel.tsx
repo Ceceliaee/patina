@@ -5,6 +5,7 @@ import {
   FolderPen,
   FileArchive,
   FolderOpen,
+  CircleHelp,
   RefreshCw,
   RotateCcw,
   Trash2,
@@ -16,6 +17,7 @@ import QuietActionRow from "../../../shared/components/QuietActionRow";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
 import QuietDialog from "../../../shared/components/QuietDialog";
 import QuietIconAction from "../../../shared/components/QuietIconAction";
+import QuietTooltip from "../../../shared/components/QuietTooltip";
 import type { CleanupRange } from "../types";
 import type { BackupRestoreStrategy } from "../services/settingsRuntimeAdapterService.ts";
 import type { StorageSnapshot } from "../services/settingsRuntimeAdapterService.ts";
@@ -182,9 +184,17 @@ export default function SettingsDataSafetyPanel({
   const [cacheClearDialogOpen, setCacheClearDialogOpen] = useState(false);
   const [historyCleanupDialogOpen, setHistoryCleanupDialogOpen] = useState(false);
   const hasRemoteBackupTarget = Boolean(remoteBackup.config && remoteBackup.hasSecret);
-  const restoreStrategyOptions: Array<{ value: BackupRestoreStrategy; label: string }> = [
-    { value: "merge", label: UI_TEXT.settings.restoreStrategyOptions.merge },
-    { value: "replace", label: UI_TEXT.settings.restoreStrategyOptions.replace },
+  const restoreStrategyOptions: Array<{ value: BackupRestoreStrategy; label: string; tooltip: string }> = [
+    {
+      value: "merge",
+      label: UI_TEXT.settings.restoreStrategyOptions.merge,
+      tooltip: UI_TEXT.settings.restoreStrategyOptionHints.merge,
+    },
+    {
+      value: "replace",
+      label: UI_TEXT.settings.restoreStrategyOptions.replace,
+      tooltip: UI_TEXT.settings.restoreStrategyOptionHints.replace,
+    },
   ];
   const busy = isExportingBackup
     || isRestoringBackup
@@ -353,6 +363,19 @@ export default function SettingsDataSafetyPanel({
                       <p className="text-sm font-semibold text-[var(--qp-text-primary)]">
                         {UI_TEXT.settings.backupRestoreActionTitle}
                       </p>
+                      <QuietTooltip
+                        label={UI_TEXT.settings.backupRestoreActionHelp}
+                        placement="top"
+                        tooltipClassName="settings-restore-help-tooltip"
+                      >
+                        <button
+                          type="button"
+                          className="settings-restore-help"
+                          aria-label={UI_TEXT.settings.backupRestoreActionHelp}
+                        >
+                          <CircleHelp size={13} aria-hidden="true" />
+                        </button>
+                      </QuietTooltip>
                     </div>
                     <p className="mt-1 text-xs leading-relaxed text-[var(--qp-text-tertiary)]">
                       {UI_TEXT.settings.backupRestoreActionHint}
@@ -647,6 +670,7 @@ export default function SettingsDataSafetyPanel({
         description={UI_TEXT.settings.restoreStrategyHint}
         onClose={closeStrategyDialog}
         closeOnBackdrop={!isRestoringBackup}
+        initialFocus="surface"
         actions={(
           <>
             <button

@@ -3,6 +3,7 @@ import type { QuietToastTone } from "../../../shared/components/QuietToast";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import {
   deleteWebDavBackupSecret,
+  deleteRemoteBackupTemp,
   downloadWebDavBackup,
   hasWebDavBackupSecret,
   listWebDavBackups,
@@ -22,7 +23,10 @@ import {
   type PersistedRemoteBackupConfig,
 } from "../../../platform/persistence/remoteBackupSettingsStore.ts";
 import type { BackupRestoreStrategy } from "../services/settingsRuntimeAdapterService.ts";
-import { buildBackupPreviewSummary } from "../services/settingsRuntimeAdapterService.ts";
+import {
+  buildBackupPreviewSummary,
+  localizeBackupRestoreMessage,
+} from "../services/settingsRuntimeAdapterService.ts";
 
 type ConfirmFn = (options: {
   title: string;
@@ -305,10 +309,15 @@ export function useRemoteBackupState({
   const restoreEntry = useCallback(async (entry: RemoteBackupEntry, restoreStrategy: BackupRestoreStrategy) => {
     if (!config || isDownloading) return;
     setIsDownloading(true);
+    let downloadedPath: string | null = null;
     try {
       const download = await downloadWebDavBackup(toRuntimeConfig(config), entry.id);
+      downloadedPath = download.path;
       if (!download.preview.restoreSupported) {
-        notify(UI_TEXT.toast.backupIncompatible(download.preview.restoreMessage), "warning");
+        notify(
+          UI_TEXT.toast.backupIncompatible(localizeBackupRestoreMessage(download.preview)),
+          "warning",
+        );
         return;
       }
       const accepted = await confirm({
@@ -323,12 +332,26 @@ export function useRemoteBackupState({
       });
       if (!accepted) return;
       await restoreBackup(download.path, restoreStrategy);
-      notify(UI_TEXT.toast.backupRestoreSuccess, "success");
+      await deleteRemoteBackupTemp(download.path);
+      downloadedPath = null;
+      notify(
+        download.preview.formatKind === "legacy_structured"
+          ? UI_TEXT.toast.legacyBackupRestoreSuccess
+          : UI_TEXT.toast.backupRestoreSuccess,
+        "success",
+      );
       reload();
     } catch (error) {
       console.error("restore WebDAV backup failed", error);
       notify(UI_TEXT.toast.webDavDownloadFailed, "warning");
     } finally {
+      if (downloadedPath) {
+        try {
+          await deleteRemoteBackupTemp(downloadedPath);
+        } catch (cleanupError) {
+          console.error("cleanup WebDAV backup temp failed", cleanupError);
+        }
+      }
       setIsDownloading(false);
     }
   }, [config, confirm, isDownloading, notify, reload, restoreBackup]);

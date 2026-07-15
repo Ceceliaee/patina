@@ -186,7 +186,12 @@ export async function commitPreparedBackupRestoreFlow(options: BackupRestoreComm
   options.onExecutionStart?.();
   try {
     await options.restoreBackup(options.preparation.path, options.restoreStrategy);
-    options.notify(UI_TEXT.toast.backupRestoreSuccess, "success");
+    options.notify(
+      options.preparation.preview.formatKind === "legacy_structured"
+        ? UI_TEXT.toast.legacyBackupRestoreSuccess
+        : UI_TEXT.toast.backupRestoreSuccess,
+      "success",
+    );
     options.reload();
     return true;
   } catch (error) {

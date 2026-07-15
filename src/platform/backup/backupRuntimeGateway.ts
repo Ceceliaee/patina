@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 interface RawBackupPreview {
+  format_kind?: "sqlite_snapshot" | "legacy_structured";
   version: number;
   exported_at_ms: number;
   schema_version: number;
@@ -18,9 +19,11 @@ interface RawBackupPreview {
   tool_timer_lap_count?: number;
   tool_pomodoro_run_count?: number;
   tool_daily_stats_count?: number;
+  tool_software_reminder_rule_count?: number;
 }
 
 export interface BackupPreview {
+  formatKind: "sqlite_snapshot" | "legacy_structured";
   version: number;
   exportedAtMs: number;
   schemaVersion: number;
@@ -38,6 +41,7 @@ export interface BackupPreview {
   toolTimerLapCount: number;
   toolPomodoroRunCount: number;
   toolDailyStatsCount: number;
+  toolSoftwareReminderRuleCount: number;
 }
 
 export type BackupRestoreStrategy = "replace" | "merge";
@@ -48,7 +52,10 @@ function isRawBackupPreview(value: unknown): value is RawBackupPreview {
   }
 
   const record = value as Record<string, unknown>;
-  return typeof record.version === "number"
+  return (record.format_kind === undefined
+      || record.format_kind === "sqlite_snapshot"
+      || record.format_kind === "legacy_structured")
+    && typeof record.version === "number"
     && typeof record.exported_at_ms === "number"
     && typeof record.schema_version === "number"
     && typeof record.app_version === "string"
@@ -62,11 +69,13 @@ function isRawBackupPreview(value: unknown): value is RawBackupPreview {
     && (record.tool_timer_count === undefined || typeof record.tool_timer_count === "number")
     && (record.tool_timer_lap_count === undefined || typeof record.tool_timer_lap_count === "number")
     && (record.tool_pomodoro_run_count === undefined || typeof record.tool_pomodoro_run_count === "number")
-    && (record.tool_daily_stats_count === undefined || typeof record.tool_daily_stats_count === "number");
+    && (record.tool_daily_stats_count === undefined || typeof record.tool_daily_stats_count === "number")
+    && (record.tool_software_reminder_rule_count === undefined || typeof record.tool_software_reminder_rule_count === "number");
 }
 
 function mapRawBackupPreview(raw: RawBackupPreview): BackupPreview {
   return {
+    formatKind: raw.format_kind ?? "legacy_structured",
     version: raw.version,
     exportedAtMs: raw.exported_at_ms,
     schemaVersion: raw.schema_version,
@@ -84,6 +93,7 @@ function mapRawBackupPreview(raw: RawBackupPreview): BackupPreview {
     toolTimerLapCount: raw.tool_timer_lap_count ?? 0,
     toolPomodoroRunCount: raw.tool_pomodoro_run_count ?? 0,
     toolDailyStatsCount: raw.tool_daily_stats_count ?? 0,
+    toolSoftwareReminderRuleCount: raw.tool_software_reminder_rule_count ?? 0,
   };
 }
 
