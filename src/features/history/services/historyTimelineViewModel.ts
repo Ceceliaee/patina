@@ -10,14 +10,15 @@ const MINUTE_BOUNDARY_SNAP_MS = 1_000;
 const MIN_VISIBLE_TIMELINE_SEGMENT_MS = 30_000;
 
 export type HistoryTimelineDisplayMode = "app" | "category";
-export const HISTORY_TIMELINE_ZOOM_OPTIONS = [24, 12, 8, 4, 1] as const;
-export type HistoryTimelineZoomHours = typeof HISTORY_TIMELINE_ZOOM_OPTIONS[number];
-export const DEFAULT_HISTORY_TIMELINE_ZOOM_HOURS: HistoryTimelineZoomHours = 24;
+export type HistoryTimelineZoomHours = number;
+export const DEFAULT_HISTORY_TIMELINE_ZOOM_HOURS: HistoryTimelineZoomHours = 4;
+export const MIN_HISTORY_TIMELINE_VIEWPORT_DURATION_MS = HOUR_MS;
+export const MAX_HISTORY_TIMELINE_VIEWPORT_DURATION_MS = DAY_MS;
 
 export interface HistoryTimelineViewport {
   startMs: number;
   endMs: number;
-  zoomHours: HistoryTimelineZoomHours;
+  durationMs: number;
 }
 
 export interface HistoryTimelineAxisTick {
@@ -60,8 +61,19 @@ export interface HistoryTimelineLegendItem {
   exeName: string;
 }
 
+export interface HistoryTimelineLane {
+  key: string;
+  label: string;
+  duration: number;
+  appKey: string;
+  exeName: string;
+  category: AppCategory;
+  segments: HistoryTimelineSegment[];
+}
+
 export interface HistoryTimelineViewModel {
   segments: HistoryTimelineSegment[];
+  lanes: HistoryTimelineLane[];
   legendItems: HistoryTimelineLegendItem[];
   axisTicks: HistoryTimelineAxisTick[];
   dayStartMs: number;
@@ -69,7 +81,7 @@ export interface HistoryTimelineViewModel {
   viewportStartMs: number;
   viewportEndMs: number;
   viewportDurationMs: number;
-  zoomHours: HistoryTimelineZoomHours;
+  zoomHours: number;
   visibleEndMs: number;
   visibleEndRatio: number;
 }
@@ -103,27 +115,43 @@ function clampNumber(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-export function getHistoryTimelineZoomDurationMs(zoomHours: HistoryTimelineZoomHours) {
-  return Math.min(DAY_MS, Math.max(HOUR_MS, zoomHours * HOUR_MS));
+export function getHistoryTimelineZoomDurationMs(zoomHours: number) {
+  if (!Number.isFinite(zoomHours)) {
+    return MAX_HISTORY_TIMELINE_VIEWPORT_DURATION_MS;
+  }
+
+  return clampNumber(
+    zoomHours * HOUR_MS,
+    MIN_HISTORY_TIMELINE_VIEWPORT_DURATION_MS,
+    MAX_HISTORY_TIMELINE_VIEWPORT_DURATION_MS,
+  );
 }
 
 export function normalizeHistoryTimelineViewport({
   selectedDate,
-  zoomHours,
+  requestedDurationMs,
   requestedStartMs,
 }: {
   selectedDate: Date;
-  zoomHours: HistoryTimelineZoomHours;
+  requestedDurationMs?: number | null;
   requestedStartMs?: number | null;
 }): HistoryTimelineViewport {
   const { dayStartMs, dayEndMs } = getFullDayRange(selectedDate);
-  const durationMs = getHistoryTimelineZoomDurationMs(zoomHours);
+  const safeRequestedDurationMs = typeof requestedDurationMs === "number"
+    && Number.isFinite(requestedDurationMs)
+    ? requestedDurationMs
+    : MAX_HISTORY_TIMELINE_VIEWPORT_DURATION_MS;
+  const durationMs = clampNumber(
+    safeRequestedDurationMs,
+    MIN_HISTORY_TIMELINE_VIEWPORT_DURATION_MS,
+    dayEndMs - dayStartMs,
+  );
 
-  if (zoomHours === 24 || durationMs >= DAY_MS) {
+  if (durationMs >= dayEndMs - dayStartMs) {
     return {
       startMs: dayStartMs,
       endMs: dayEndMs,
-      zoomHours: 24,
+      durationMs: dayEndMs - dayStartMs,
     };
   }
 
@@ -136,7 +164,7 @@ export function normalizeHistoryTimelineViewport({
   return {
     startMs,
     endMs: startMs + durationMs,
-    zoomHours,
+    durationMs,
   };
 }
 
@@ -159,23 +187,85 @@ export function snapHistoryTimelineFocusToNearestHalfHour({
 
 export function normalizeHistoryTimelineViewportAroundFocus({
   selectedDate,
-  zoomHours,
+  durationMs,
   focusTimeMs,
 }: {
   selectedDate: Date;
-  zoomHours: HistoryTimelineZoomHours;
+  durationMs: number;
   focusTimeMs: number;
 }) {
   const focusMs = snapHistoryTimelineFocusToNearestHalfHour({
     selectedDate,
     requestedTimeMs: focusTimeMs,
   });
-  const durationMs = getHistoryTimelineZoomDurationMs(zoomHours);
+  return normalizeHistoryTimelineViewport({
+    selectedDate,
+    requestedDurationMs: durationMs,
+    requestedStartMs: focusMs - durationMs / 2,
+  });
+}
+
+export function zoomHistoryTimelineViewportAroundAnchor({
+  selectedDate,
+  viewport,
+  anchorRatio,
+  requestedDurationMs,
+}: {
+  selectedDate: Date;
+  viewport: HistoryTimelineViewport;
+  anchorRatio: number;
+  requestedDurationMs: number;
+}) {
+  const safeAnchorRatio = clampRatio(anchorRatio);
+  const anchorTimeMs = viewport.startMs + safeAnchorRatio * viewport.durationMs;
+  const durationMs = clampNumber(
+    Number.isFinite(requestedDurationMs) ? requestedDurationMs : viewport.durationMs,
+    MIN_HISTORY_TIMELINE_VIEWPORT_DURATION_MS,
+    MAX_HISTORY_TIMELINE_VIEWPORT_DURATION_MS,
+  );
 
   return normalizeHistoryTimelineViewport({
     selectedDate,
-    zoomHours,
-    requestedStartMs: focusMs - durationMs / 2,
+    requestedDurationMs: durationMs,
+    requestedStartMs: anchorTimeMs - safeAnchorRatio * durationMs,
+  });
+}
+
+export function panHistoryTimelineViewport({
+  selectedDate,
+  viewport,
+  deltaMs,
+}: {
+  selectedDate: Date;
+  viewport: HistoryTimelineViewport;
+  deltaMs: number;
+}) {
+  return normalizeHistoryTimelineViewport({
+    selectedDate,
+    requestedDurationMs: viewport.durationMs,
+    requestedStartMs: viewport.startMs + (Number.isFinite(deltaMs) ? deltaMs : 0),
+  });
+}
+
+export function panHistoryTimelineViewportByPixels({
+  selectedDate,
+  viewport,
+  deltaPx,
+  trackWidthPx,
+}: {
+  selectedDate: Date;
+  viewport: HistoryTimelineViewport;
+  deltaPx: number;
+  trackWidthPx: number;
+}) {
+  if (!Number.isFinite(deltaPx) || !Number.isFinite(trackWidthPx) || trackWidthPx <= 0) {
+    return viewport;
+  }
+
+  return panHistoryTimelineViewport({
+    selectedDate,
+    viewport,
+    deltaMs: -(deltaPx / trackWidthPx) * viewport.durationMs,
   });
 }
 
@@ -188,41 +278,67 @@ function formatAxisLabel(timeMs: number, dayEndMs: number) {
   return `${String(time.getHours()).padStart(2, "0")}:${String(time.getMinutes()).padStart(2, "0")}`;
 }
 
-function getAxisIntervalMs(zoomHours: HistoryTimelineZoomHours) {
-  switch (zoomHours) {
-    case 1:
-      return 15 * MINUTE_MS;
-    case 4:
-      return HOUR_MS;
-    case 8:
-      return 2 * HOUR_MS;
-    case 12:
-      return 3 * HOUR_MS;
-    case 24:
-    default:
-      return 6 * HOUR_MS;
-  }
+const HISTORY_TIMELINE_AXIS_INTERVALS_MS = [
+  5 * MINUTE_MS,
+  10 * MINUTE_MS,
+  15 * MINUTE_MS,
+  30 * MINUTE_MS,
+  HOUR_MS,
+  2 * HOUR_MS,
+  3 * HOUR_MS,
+  6 * HOUR_MS,
+] as const;
+const HISTORY_TIMELINE_MIN_EDGE_TICK_GAP_RATIO = 0.05;
+
+function getAxisIntervalMs(durationMs: number) {
+  const targetIntervalMs = durationMs / 4;
+  return HISTORY_TIMELINE_AXIS_INTERVALS_MS.find((intervalMs) => intervalMs >= targetIntervalMs)
+    ?? HISTORY_TIMELINE_AXIS_INTERVALS_MS[HISTORY_TIMELINE_AXIS_INTERVALS_MS.length - 1];
 }
 
 function buildAxisTicks(
   viewport: HistoryTimelineViewport,
+  dayStartMs: number,
   dayEndMs: number,
 ): HistoryTimelineAxisTick[] {
-  const viewportDurationMs = Math.max(1, viewport.endMs - viewport.startMs);
-  const intervalMs = getAxisIntervalMs(viewport.zoomHours);
-  const ticks: HistoryTimelineAxisTick[] = [];
+  const viewportDurationMs = Math.max(1, viewport.durationMs);
+  const intervalMs = getAxisIntervalMs(viewportDurationMs);
+  const ticks: HistoryTimelineAxisTick[] = [{
+    label: formatAxisLabel(viewport.startMs, dayEndMs),
+    ratio: 0,
+  }];
+  const firstAlignedTickMs = dayStartMs
+    + Math.ceil((viewport.startMs - dayStartMs) / intervalMs) * intervalMs;
 
-  for (let timeMs = viewport.startMs; timeMs < viewport.endMs; timeMs += intervalMs) {
+  for (
+    let timeMs = firstAlignedTickMs;
+    timeMs < viewport.endMs;
+    timeMs += intervalMs
+  ) {
+    if (timeMs <= viewport.startMs) continue;
+    const ratio = clampRatio((timeMs - viewport.startMs) / viewportDurationMs);
+    if (
+      ratio < HISTORY_TIMELINE_MIN_EDGE_TICK_GAP_RATIO
+      || 1 - ratio < HISTORY_TIMELINE_MIN_EDGE_TICK_GAP_RATIO
+    ) {
+      continue;
+    }
     ticks.push({
       label: formatAxisLabel(timeMs, dayEndMs),
-      ratio: clampRatio((timeMs - viewport.startMs) / viewportDurationMs),
+      ratio,
     });
   }
 
+  const endLabel = formatAxisLabel(viewport.endMs, dayEndMs);
   const lastTick = ticks[ticks.length - 1];
-  if (!lastTick || lastTick.ratio < 1) {
+  if (lastTick?.label === endLabel) {
+    ticks[ticks.length - 1] = {
+      label: endLabel,
+      ratio: 1,
+    };
+  } else if (!lastTick || lastTick.ratio < 1) {
     ticks.push({
-      label: formatAxisLabel(viewport.endMs, dayEndMs),
+      label: endLabel,
       ratio: 1,
     });
   }
@@ -654,6 +770,39 @@ function buildLegendItems(
     .sort((a, b) => b.duration - a.duration);
 }
 
+function buildTimelineLanes(
+  segments: HistoryTimelineSegment[],
+  mode: HistoryTimelineDisplayMode,
+): HistoryTimelineLane[] {
+  const lanes = new Map<string, HistoryTimelineLane>();
+
+  for (const segment of segments) {
+    const key = mode === "category" ? segment.category : segment.appKey;
+    const existing = lanes.get(key);
+    if (existing) {
+      existing.duration += segment.duration;
+      existing.segments.push(segment);
+      continue;
+    }
+
+    lanes.set(key, {
+      key,
+      label: mode === "category" ? segment.categoryLabel : segment.displayName,
+      duration: segment.duration,
+      appKey: segment.appKey,
+      exeName: segment.exeName,
+      category: segment.category,
+      segments: [segment],
+    });
+  }
+
+  return Array.from(lanes.values()).sort((left, right) => (
+    right.duration - left.duration
+    || left.label.localeCompare(right.label)
+    || left.key.localeCompare(right.key)
+  ));
+}
+
 export function buildHistoryTimelineViewModel({
   sessions,
   selectedDate,
@@ -665,7 +814,7 @@ export function buildHistoryTimelineViewModel({
   const { dayStartMs, dayEndMs } = getFullDayRange(selectedDate);
   const viewport = requestedViewport ?? normalizeHistoryTimelineViewport({
     selectedDate,
-    zoomHours: 24,
+    requestedDurationMs: MAX_HISTORY_TIMELINE_VIEWPORT_DURATION_MS,
     requestedStartMs: dayStartMs,
   });
   const visibleEndMs = resolveVisibleEndMs(selectedDate, nowMs, dayStartMs, dayEndMs);
@@ -682,18 +831,19 @@ export function buildHistoryTimelineViewModel({
     mode,
     mergeThresholdMs,
   );
-  const viewportDurationMs = Math.max(1, viewport.endMs - viewport.startMs);
+  const viewportDurationMs = Math.max(1, viewport.durationMs);
 
   return {
     segments,
+    lanes: buildTimelineLanes(segments, mode),
     legendItems: buildLegendItems(segments, mode),
-    axisTicks: buildAxisTicks(viewport, dayEndMs),
+    axisTicks: buildAxisTicks(viewport, dayStartMs, dayEndMs),
     dayStartMs,
     dayEndMs,
     viewportStartMs: viewport.startMs,
     viewportEndMs: viewport.endMs,
     viewportDurationMs,
-    zoomHours: viewport.zoomHours,
+    zoomHours: viewportDurationMs / HOUR_MS,
     visibleEndMs,
     visibleEndRatio: clampRatio((visibleEndMs - dayStartMs) / DAY_MS),
   };

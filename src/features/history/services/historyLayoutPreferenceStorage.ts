@@ -1,8 +1,6 @@
 import {
   DEFAULT_HISTORY_TIMELINE_ZOOM_HOURS,
-  HISTORY_TIMELINE_ZOOM_OPTIONS,
   type HistoryTimelineDisplayMode,
-  type HistoryTimelineZoomHours,
 } from "./historyTimelineViewModel.ts";
 
 const HISTORY_TIMELINE_MODE_KEY = "patina:history-timeline-mode";
@@ -13,7 +11,11 @@ export type DayDistributionMode = "app" | "category" | "web";
 
 function getStorage(): Storage | null {
   if (typeof window === "undefined") return null;
-  return window.localStorage;
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
 }
 
 function isDayDistributionMode(value: string | null): value is DayDistributionMode {
@@ -24,11 +26,11 @@ function isHistoryTimelineMode(value: string | null): value is HistoryTimelineDi
   return value === "app" || value === "category";
 }
 
-function parseHistoryTimelineZoomHours(value: string | null): HistoryTimelineZoomHours | null {
+function parseHistoryTimelineZoomHours(value: string | null): number | null {
+  if (value === null || value.trim() === "") return null;
   const numericValue = Number(value);
-  if (!Number.isFinite(numericValue)) return null;
-  return HISTORY_TIMELINE_ZOOM_OPTIONS.includes(numericValue as HistoryTimelineZoomHours)
-    ? numericValue as HistoryTimelineZoomHours
+  return Number.isFinite(numericValue) && numericValue >= 1 && numericValue <= 24
+    ? numericValue
     : null;
 }
 
@@ -55,7 +57,7 @@ export function rememberHistoryTimelineMode(mode: HistoryTimelineDisplayMode) {
   }
 }
 
-export function readHistoryTimelineZoomHours(): HistoryTimelineZoomHours {
+export function readHistoryTimelineZoomHours(): number {
   const storage = getStorage();
   if (!storage) return DEFAULT_HISTORY_TIMELINE_ZOOM_HOURS;
 
@@ -67,12 +69,12 @@ export function readHistoryTimelineZoomHours(): HistoryTimelineZoomHours {
   }
 }
 
-export function rememberHistoryTimelineZoomHours(zoomHours: HistoryTimelineZoomHours) {
+export function rememberHistoryTimelineZoomHours(zoomHours: number) {
   const storage = getStorage();
-  if (!storage) return;
+  if (!storage || !Number.isFinite(zoomHours) || zoomHours < 1 || zoomHours > 24) return;
 
   try {
-    storage.setItem(HISTORY_TIMELINE_ZOOM_HOURS_KEY, String(zoomHours));
+    storage.setItem(HISTORY_TIMELINE_ZOOM_HOURS_KEY, String(Number(zoomHours.toFixed(4))));
   } catch {
     // History layout preferences are best-effort; never block the interaction.
   }
