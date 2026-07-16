@@ -194,6 +194,8 @@ export default function History({
   webActivityEnabled = false,
 }: Props) {
   const requestedInitialDate = selectedDateRequest ? parseLocalDateKey(selectedDateRequest.dateKey) : null;
+  const selectedDateRequestId = selectedDateRequest?.requestId ?? null;
+  const selectedDateRequestDateKey = selectedDateRequest?.dateKey ?? null;
   const initialDate = requestedInitialDate ?? new Date();
   const initialCachedSnapshot = getHistorySnapshotCache(initialDate);
   const datePickerRef = useRef<HTMLDivElement | null>(null);
@@ -265,9 +267,9 @@ export default function History({
   const webDomainIconThemeColors = useIconThemeColors(webDomainIcons);
   const [nowMs, setNowMs] = useState(() => initialCachedSnapshot?.fetchedAtMs ?? Date.now());
   const [loading, setLoading] = useState(!initialCachedSnapshot);
-  const [visibleDateKey, setVisibleDateKey] = useState(() => (
+  const visibleDateKeyRef = useRef<string | null>(
     initialCachedSnapshot ? formatHistoryDateCacheKey(initialDate) : null
-  ));
+  );
   const [timelineDialogOpen, setTimelineDialogOpen] = useState(false);
   const [timelineDialogMode, setTimelineDialogMode] = useState<TimelineDialogMode>("app");
   const [timelineDialogSyncedHeight, setTimelineDialogSyncedHeight] = useState<number | null>(null);
@@ -315,8 +317,8 @@ export default function History({
   }, [timelineDialogMode, webActivityEnabled]);
 
   useEffect(() => {
-    if (!selectedDateRequest) return;
-    const nextDate = parseLocalDateKey(selectedDateRequest.dateKey);
+    if (selectedDateRequestId === null || !selectedDateRequestDateKey) return;
+    const nextDate = parseLocalDateKey(selectedDateRequestDateKey);
     if (!nextDate || startOfDay(nextDate) > startOfDay(new Date())) {
       return;
     }
@@ -326,7 +328,7 @@ export default function History({
     setCalendarOpen(false);
     timelineDetailsTriggerRef.current = null;
     setTimelineDetailsPopover(null);
-  }, [selectedDateRequest?.requestId]);
+  }, [selectedDateRequestDateKey, selectedDateRequestId]);
 
   const toggleTimelineSessionDetails = useCallback((
     sessionId: number | string,
@@ -435,16 +437,16 @@ export default function History({
       setWebDomainFavicons(cachedSnapshot.webDomainFavicons);
       setWebDomainOverrides(cachedSnapshot.webDomainOverrides);
       setNowMs(cachedSnapshot.fetchedAtMs);
-      setVisibleDateKey(requestDateKey);
+      visibleDateKeyRef.current = requestDateKey;
       setLoading(false);
-    } else if (visibleDateKey !== requestDateKey) {
+    } else if (visibleDateKeyRef.current !== requestDateKey) {
       setRawDaySessions([]);
       setRawWeeklySessions([]);
       setSnapshotIcons({});
       setRawDayWebSegments([]);
       setWebDomainFavicons({});
       setWebDomainOverrides({});
-      setVisibleDateKey(null);
+      visibleDateKeyRef.current = null;
     }
 
     if (!cachedSnapshot) {
@@ -465,7 +467,7 @@ export default function History({
         setWebDomainFavicons(snapshot.webDomainFavicons);
         setWebDomainOverrides(snapshot.webDomainOverrides);
         setNowMs(snapshot.fetchedAtMs);
-        setVisibleDateKey(requestDateKey);
+        visibleDateKeyRef.current = requestDateKey;
         hasLoadedRef.current = true;
       } finally {
         if (!cancelled) {
@@ -603,7 +605,7 @@ export default function History({
   const isToday = selectedDate.toDateString() === today.toDateString();
   const showQuietPlaceholder = loading;
   const historyView = useMemo(
-    () => buildHistoryReadModel({
+    () => (void mappingVersion, buildHistoryReadModel({
       daySessions: rawDaySessions,
       weeklySessions: rawWeeklySessions,
       selectedDate,
@@ -611,7 +613,7 @@ export default function History({
       trackerHealth,
       minSessionSecs,
       mergeThresholdSecs,
-    }),
+    })),
     [mappingVersion, mergeThresholdSecs, minSessionSecs, nowMs, rawDaySessions, rawWeeklySessions, selectedDate, trackerHealth],
   );
   const {
