@@ -1,5 +1,6 @@
 import { AlarmClock, FastForward, Pause, Play, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import QuietButton from "../../../shared/components/QuietButton.tsx";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import type { StartPomodoroInput, ToolsRuntimeSnapshot } from "../../../shared/types/tools.ts";
 import type { PomodoroViewModel } from "../types.ts";
@@ -126,66 +127,68 @@ export default function PomodoroToolPanel({
 
         <div className="tools-action-row tools-pomodoro-actions">
           {!hasStarted || run?.status === "idle" || run?.status === "completed" ? (
-            <button
-              type="button"
+            <QuietButton
+              tone="primary"
               disabled={controlsDisabled || !startInput}
               onClick={() => {
                 if (!startInput) return;
                 void onStartPomodoro(startInput);
               }}
               aria-label={UI_TEXT.accessibility.tools.startPomodoro}
-              className="qp-button-primary tools-action-button"
+              busy={busyAction === "start-pomodoro"}
+              className="tools-action-button"
             >
               <Play size={14} />
               {UI_TEXT.tools.start}
-            </button>
+            </QuietButton>
           ) : null}
           {isRunning ? (
-            <button
-              type="button"
+            <QuietButton
               disabled={controlsDisabled}
               onClick={() => void onPausePomodoro()}
               aria-label={UI_TEXT.accessibility.tools.pausePomodoro}
-              className="qp-button-secondary tools-action-button"
+              busy={busyAction === "pause-pomodoro"}
+              className="tools-action-button"
             >
               <Pause size={14} />
               {UI_TEXT.tools.pause}
-            </button>
+            </QuietButton>
           ) : null}
           {isPaused ? (
-            <button
-              type="button"
+            <QuietButton
+              tone="primary"
               disabled={controlsDisabled}
               onClick={() => void onResumePomodoro()}
               aria-label={UI_TEXT.accessibility.tools.resumePomodoro}
-              className="qp-button-primary tools-action-button"
+              busy={busyAction === "resume-pomodoro"}
+              className="tools-action-button"
             >
               <Play size={14} />
               {UI_TEXT.tools.resume}
-            </button>
+            </QuietButton>
           ) : null}
           {hasStarted ? (
             <>
-              <button
-                type="button"
+              <QuietButton
                 disabled={controlsDisabled}
                 onClick={() => void onSkipPomodoroPhase()}
                 aria-label={UI_TEXT.accessibility.tools.skipPomodoroPhase}
-                className="qp-button-secondary tools-action-button"
+                busy={busyAction === "skip-pomodoro-phase"}
+                className="tools-action-button"
               >
                 <FastForward size={14} />
                 {UI_TEXT.tools.skipPhase}
-              </button>
-              <button
-                type="button"
+              </QuietButton>
+              <QuietButton
                 disabled={controlsDisabled}
                 onClick={() => void onResetPomodoro()}
                 aria-label={UI_TEXT.accessibility.tools.resetPomodoro}
-                className="qp-button-secondary tools-action-button"
+                busy={busyAction === "reset-pomodoro"}
+                className="tools-action-button"
               >
                 <RotateCcw size={14} />
                 {UI_TEXT.tools.reset}
-              </button>
+              </QuietButton>
             </>
           ) : null}
         </div>

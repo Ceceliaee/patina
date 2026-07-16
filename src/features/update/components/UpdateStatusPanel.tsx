@@ -1,4 +1,5 @@
 import { RefreshCw } from "lucide-react";
+import QuietButton from "../../../shared/components/QuietButton";
 import type { UpdateSnapshot } from "../../../shared/types/update";
 import {
   buildUpdateStatusPanelModel,
@@ -72,23 +73,23 @@ export default function UpdateStatusPanel({
   const actions = (
     <div className="flex flex-wrap items-center justify-end gap-2">
       {viewModel.secondaryAction ? (
-        <button
-          type="button"
+        <QuietButton
           onClick={() => handleAction(viewModel.secondaryAction!)}
           disabled={viewModel.secondaryAction.disabled}
-          className="qp-button-secondary inline-flex min-h-[34px] items-center gap-1.5 rounded-[8px] px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex min-h-[34px] items-center gap-1.5 rounded-[8px] px-3 py-2 text-xs font-semibold"
         >
           {renderActionLabel(viewModel.secondaryAction)}
-        </button>
+        </QuietButton>
       ) : null}
-      <button
-        type="button"
+      <QuietButton
+        tone="primary"
         onClick={() => handleAction(viewModel.primaryAction)}
         disabled={viewModel.primaryAction.disabled}
-        className="qp-button-primary inline-flex min-h-[34px] items-center gap-1.5 rounded-[8px] px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+        busy={viewModel.primaryAction.loading}
+        className="inline-flex min-h-[34px] items-center gap-1.5 rounded-[8px] px-3 py-2 text-xs font-semibold"
       >
         {renderActionLabel(viewModel.primaryAction)}
-      </button>
+      </QuietButton>
     </div>
   );
 

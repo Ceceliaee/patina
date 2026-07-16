@@ -1,4 +1,5 @@
 import QuietDialog from "../../../shared/components/QuietDialog";
+import QuietButton, { type QuietButtonTone } from "../../../shared/components/QuietButton";
 import type { UpdateSnapshot } from "../../../shared/types/update";
 import {
   buildUpdateConfirmDialogModel,
@@ -18,9 +19,8 @@ interface UpdateConfirmDialogProps {
   onOpenAssetDownload: () => void;
 }
 
-function buildButtonClass(action: UpdateActionModel): string {
-  const base = "qp-dialog-action disabled:cursor-not-allowed disabled:opacity-50";
-  return action.emphasis === "secondary" ? `qp-button-secondary ${base}` : `qp-button-primary ${base}`;
+function resolveButtonTone(action: UpdateActionModel): QuietButtonTone {
+  return action.emphasis === "secondary" ? "secondary" : "primary";
 }
 
 export default function UpdateConfirmDialog({
@@ -59,34 +59,34 @@ export default function UpdateConfirmDialog({
       onClose={onClose}
       actions={(
         <>
-          <button
-            type="button"
+          <QuietButton
             onClick={onClose}
-            className="qp-button-secondary qp-dialog-action"
+            className="qp-dialog-action"
           >
             {UI_TEXT.update.later}
-          </button>
+          </QuietButton>
           {viewModel.secondaryAction ? (
-            <button
-              type="button"
+            <QuietButton
+              tone={resolveButtonTone(viewModel.secondaryAction)}
               onClick={() => handleAction(viewModel.secondaryAction)}
               disabled={viewModel.secondaryAction.disabled}
-              className={buildButtonClass(viewModel.secondaryAction)}
+              className="qp-dialog-action"
             >
               {viewModel.secondaryAction.label}
-            </button>
+            </QuietButton>
           ) : null}
           {viewModel.primaryAction ? (
-            <button
-              type="button"
+            <QuietButton
+              tone={resolveButtonTone(viewModel.primaryAction)}
               onClick={() => handleAction(viewModel.primaryAction)}
               disabled={installing || viewModel.primaryAction.disabled}
-              className={buildButtonClass(viewModel.primaryAction)}
+              busy={installing && viewModel.primaryAction.action === "open_confirm"}
+              className="qp-dialog-action"
             >
               {installing && viewModel.primaryAction.action === "open_confirm"
                 ? UI_TEXT.update.processing
                 : viewModel.primaryAction.label}
-            </button>
+            </QuietButton>
           ) : null}
         </>
       )}

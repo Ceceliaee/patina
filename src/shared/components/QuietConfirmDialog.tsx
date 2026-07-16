@@ -1,4 +1,5 @@
 import QuietDialog from "./QuietDialog";
+import QuietButton from "./QuietButton";
 import { UI_TEXT } from "../copy/index.ts";
 
 interface QuietConfirmDialogProps {
@@ -34,21 +35,21 @@ export default function QuietConfirmDialog({
       onClose={onCancel}
       actions={(
         <>
-          <button
-            type="button"
+          <QuietButton
             onClick={onCancel}
-            className="qp-button-secondary qp-dialog-action"
+            className="qp-dialog-action"
           >
             {cancelLabel}
-          </button>
-          <button
-            type="button"
+          </QuietButton>
+          <QuietButton
+            tone={danger ? "danger" : "primary"}
             onClick={onConfirm}
-            disabled={confirmDisabled || confirmLoading}
-            className={`qp-dialog-action ${danger ? "qp-button-danger" : "qp-button-primary"} disabled:opacity-50 disabled:cursor-not-allowed`}
+            disabled={confirmDisabled}
+            busy={confirmLoading}
+            className="qp-dialog-action"
           >
             {confirmLoading ? UI_TEXT.common.processing : confirmLabel}
-          </button>
+          </QuietButton>
         </>
       )}
     />

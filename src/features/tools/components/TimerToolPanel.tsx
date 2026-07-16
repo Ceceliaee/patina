@@ -1,6 +1,7 @@
 import { Flag, Pause, Play, RotateCcw, Timer } from "lucide-react";
 import { useEffect, useState } from "react";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter.tsx";
+import QuietButton from "../../../shared/components/QuietButton.tsx";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import type { TimerMode, ToolsRuntimeSnapshot } from "../../../shared/types/tools.ts";
 import { formatHms } from "../services/toolsViewModel.ts";
@@ -133,8 +134,8 @@ export default function TimerToolPanel({
 
             <div className="tools-action-row tools-timer-action-row">
               {viewModel.status === "idle" || viewModel.status === "completed" ? (
-                <button
-                  type="button"
+                <QuietButton
+                  tone="primary"
                   disabled={starting || !canStartTimer}
                   onClick={() => {
                     const durationMinutes = effectiveMode === "countdown"
@@ -145,59 +146,61 @@ export default function TimerToolPanel({
                     void onStartTimer(effectiveMode, durationMinutes, label.trim() || undefined);
                   }}
                   aria-label={UI_TEXT.accessibility.tools.startTimer}
-                  className="qp-button-primary tools-action-button"
+                  busy={starting}
+                  className="tools-action-button"
                 >
                   <Play size={14} />
                   {UI_TEXT.tools.start}
-                </button>
+                </QuietButton>
               ) : null}
               {viewModel.status === "running" ? (
                 <>
-                  <button
-                    type="button"
+                  <QuietButton
                     disabled={busyAction === "pause-timer"}
                     onClick={() => void onPauseTimer()}
                     aria-label={UI_TEXT.accessibility.tools.pauseTimer}
-                    className="qp-button-secondary tools-action-button"
+                    busy={busyAction === "pause-timer"}
+                    className="tools-action-button"
                   >
                     <Pause size={14} />
                     {UI_TEXT.tools.pause}
-                  </button>
-                  <button
-                    type="button"
+                  </QuietButton>
+                  <QuietButton
                     disabled={busyAction === "add-timer-lap"}
                     onClick={() => void onAddTimerLap()}
                     aria-label={UI_TEXT.accessibility.tools.addTimerLap}
-                    className="qp-button-secondary tools-action-button"
+                    busy={busyAction === "add-timer-lap"}
+                    className="tools-action-button"
                   >
                     <Flag size={14} />
                     {UI_TEXT.tools.lap}
-                  </button>
+                  </QuietButton>
                 </>
               ) : null}
               {viewModel.status === "paused" ? (
-                <button
-                  type="button"
+                <QuietButton
+                  tone="primary"
                   disabled={busyAction === "resume-timer"}
                   onClick={() => void onResumeTimer()}
                   aria-label={UI_TEXT.accessibility.tools.resumeTimer}
-                  className="qp-button-primary tools-action-button"
+                  busy={busyAction === "resume-timer"}
+                  className="tools-action-button"
                 >
                   <Play size={14} />
                   {UI_TEXT.tools.resume}
-                </button>
+                </QuietButton>
               ) : null}
               {viewModel.status !== "idle" ? (
-                <button
-                  type="button"
+                <QuietButton
                   disabled={busyAction === "reset-timer"}
                   onClick={() => void handleResetTimer()}
                   aria-label={UI_TEXT.accessibility.tools.resetTimer}
-                  className="qp-button-secondary tools-action-button"
+                  busy={busyAction === "reset-timer"}
+                  className="tools-action-button"
                 >
                   <RotateCcw size={14} />
                   {UI_TEXT.tools.reset}
-                </button>
+                </QuietButton>
               ) : null}
             </div>
           </div>

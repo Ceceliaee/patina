@@ -4,6 +4,7 @@ import QuietDateRangePicker, {
   type QuietDateRangePickerSelection,
 } from "../../../shared/components/QuietDateRangePicker.tsx";
 import QuietDialog from "../../../shared/components/QuietDialog.tsx";
+import QuietButton from "../../../shared/components/QuietButton.tsx";
 import QuietRangeControl from "../../../shared/components/QuietRangeControl.tsx";
 import type { QuietToastTone } from "../../../shared/components/QuietToast.tsx";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
@@ -271,19 +272,19 @@ export default function SettingsDataExportDialog({ open, onClose, onToast }: Pro
         surfaceClassName="settings-data-export-dialog-surface"
         actions={(
           <>
-            <button
-              type="button"
+            <QuietButton
               onClick={onClose}
               disabled={exporting}
-              className="qp-button-secondary h-8 min-h-0 px-3 text-xs font-semibold leading-none disabled:opacity-50"
+              className="h-8 min-h-0 px-3 text-xs font-semibold leading-none"
             >
               {UI_TEXT.common.cancel}
-            </button>
-            <button
-              type="button"
+            </QuietButton>
+            <QuietButton
+              tone="primary"
               onClick={() => void handleExport()}
               disabled={exporting || selectedFields.length === 0 || Boolean(timeRangeErrorMessage)}
-              className="qp-button-primary h-8 min-h-0 px-3 text-xs font-semibold leading-none disabled:opacity-50 inline-flex items-center gap-1.5"
+              busy={exporting}
+              className="h-8 min-h-0 px-3 text-xs font-semibold leading-none inline-flex items-center gap-1.5"
             >
               {exporting ? (
                 <>
@@ -293,7 +294,7 @@ export default function SettingsDataExportDialog({ open, onClose, onToast }: Pro
               ) : (
                 UI_TEXT.export.exportAction
               )}
-            </button>
+            </QuietButton>
           </>
         )}
       >
@@ -360,14 +361,13 @@ export default function SettingsDataExportDialog({ open, onClose, onToast }: Pro
                   {UI_TEXT.export.configFieldsCount(selectedFields.length, SETTINGS_DATA_EXPORT_FIELD_KEYS.length)}
                 </p>
               </div>
-              <button
-                type="button"
+              <QuietButton
                 onClick={() => setShowFieldConfig(true)}
                 disabled={exporting}
-                className="qp-button-secondary h-8 min-h-0 px-3 text-xs font-semibold leading-none inline-flex items-center gap-1.5 disabled:opacity-50"
+                className="h-8 min-h-0 px-3 text-xs font-semibold leading-none inline-flex items-center gap-1.5"
               >
                 {UI_TEXT.export.configFields}
-              </button>
+              </QuietButton>
             </div>
             {selectedFields.length === 0 ? <p className="settings-data-export-result settings-data-export-result-danger">{UI_TEXT.export.configFieldsEmpty}</p> : null}
           </section>

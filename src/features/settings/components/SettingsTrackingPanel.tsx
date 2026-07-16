@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import QuietSwitch from "../../../shared/components/QuietSwitch";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import QuietStepperSlider from "../../../shared/components/QuietStepperSlider.tsx";
+import SettingsPanelHeader from "./SettingsPanelHeader";
 
 type MinuteControlProps = {
   label: string;
@@ -86,10 +87,10 @@ export default function SettingsTrackingPanel({
 }: SettingsTrackingPanelProps) {
   return (
     <section className="qp-panel min-h-[240px] p-5 md:p-6">
-      <div className="flex items-center gap-2.5 pb-2 border-b border-[var(--qp-border-subtle)]">
-        <MousePointerClick size={16} className="text-[var(--qp-accent-default)]" />
-        <h2 className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.trackingPanelTitle}</h2>
-      </div>
+      <SettingsPanelHeader
+        icon={<MousePointerClick size={16} className="text-[var(--qp-accent-default)]" />}
+        title={UI_TEXT.settings.trackingPanelTitle}
+      />
 
       <div className="mt-5 space-y-5">
         <TrackingMinuteField {...timelineMergeGapControl} />

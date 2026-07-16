@@ -1,4 +1,5 @@
 import QuietDialog from "./QuietDialog";
+import QuietButton from "./QuietButton";
 
 interface QuietPromptDialogProps {
   open: boolean;
@@ -35,21 +36,20 @@ export default function QuietPromptDialog({
       onClose={onCancel}
       actions={(
         <>
-          <button
-            type="button"
+          <QuietButton
             onClick={onCancel}
-            className="qp-button-secondary qp-dialog-action"
+            className="qp-dialog-action"
           >
             {cancelLabel}
-          </button>
-          <button
-            type="button"
+          </QuietButton>
+          <QuietButton
+            tone="primary"
             onClick={onConfirm}
             disabled={confirmDisabled}
-            className="qp-button-primary qp-dialog-action disabled:opacity-50 disabled:cursor-not-allowed"
+            className="qp-dialog-action"
           >
             {confirmLabel}
-          </button>
+          </QuietButton>
         </>
       )}
     >

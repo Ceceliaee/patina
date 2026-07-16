@@ -8,6 +8,7 @@ import {
   type CSSProperties,
 } from "react";
 import QuietDatePicker from "../../../shared/components/QuietDatePicker.tsx";
+import QuietButton from "../../../shared/components/QuietButton.tsx";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter.tsx";
 import QuietTimePicker from "../../../shared/components/QuietTimePicker.tsx";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
@@ -301,16 +302,17 @@ function SoftwareReminderPanel({
           </label>
 
           <div className="tools-form-actions tools-software-form-actions">
-            <button
-              type="button"
+            <QuietButton
+              tone="primary"
               disabled={creating}
               onClick={() => void handleCreateRule()}
               aria-label={UI_TEXT.accessibility.tools.createReminder}
-              className="qp-button-primary tools-action-button"
+              busy={creating}
+              className="tools-action-button"
             >
               <Plus size={14} />
               {UI_TEXT.tools.createReminder}
-            </button>
+            </QuietButton>
           </div>
 
           {validationMessage ? (
@@ -535,16 +537,17 @@ export default function ReminderToolPanel({
                 )}
 
                 <div className="tools-form-actions">
-                  <button
-                    type="button"
+                  <QuietButton
+                    tone="primary"
                     disabled={creating || !canCreateReminder}
                     onClick={() => void handleCreate()}
                     aria-label={UI_TEXT.accessibility.tools.createReminder}
-                    className="qp-button-primary tools-action-button"
+                    busy={creating}
+                    className="tools-action-button"
                   >
                     <Plus size={14} />
                     {UI_TEXT.tools.createReminder}
-                  </button>
+                  </QuietButton>
                 </div>
               </div>
             </div>

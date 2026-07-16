@@ -574,7 +574,7 @@
   color: #ffffff;
 }
 
-.qp-button-primary:hover {
+.qp-button-primary:hover:not(:disabled) {
   background: color-mix(in srgb, var(--qp-accent-default) 92%, black);
 }
 
@@ -585,7 +585,7 @@
   color: var(--qp-text-secondary);
 }
 
-.qp-button-secondary:hover {
+.qp-button-secondary:hover:not(:disabled) {
   border-color: var(--qp-border-strong);
   color: var(--qp-text-primary);
 }
@@ -641,7 +641,7 @@
   color: #ffffff;
 }
 
-.qp-button-danger:hover {
+.qp-button-danger:hover:not(:disabled) {
   background: color-mix(in srgb, var(--qp-danger) 88%, black);
 }
 

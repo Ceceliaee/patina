@@ -1,6 +1,7 @@
 import { CheckSquare, ChevronDown, ChevronUp, RotateCcw, Square } from "lucide-react";
 import { useEffect, useState } from "react";
 import QuietDialog from "../../../shared/components/QuietDialog.tsx";
+import QuietButton from "../../../shared/components/QuietButton.tsx";
 import QuietTooltip from "../../../shared/components/QuietTooltip.tsx";
 import type { UI_TEXT } from "../../../shared/copy/index.ts";
 import {
@@ -138,21 +139,20 @@ export default function SettingsDataExportFieldConfigDialog({ open, selectedFiel
         actions={(
           <>
             <div className="settings-data-export-field-dialog-actions-spacer" />
-            <button
-              type="button"
+            <QuietButton
               onClick={onClose}
-              className="qp-button-secondary h-8 min-h-0 px-3 text-xs font-semibold leading-none"
+              className="h-8 min-h-0 px-3 text-xs font-semibold leading-none"
             >
               {uiText.dialog.cancel}
-            </button>
-            <button
-              type="button"
+            </QuietButton>
+            <QuietButton
+              tone="primary"
               onClick={confirm}
               disabled={selectedCount === 0}
-              className="qp-button-primary h-8 min-h-0 px-3 text-xs font-semibold leading-none disabled:opacity-50"
+              className="h-8 min-h-0 px-3 text-xs font-semibold leading-none"
             >
               {uiText.dialog.confirm}
-            </button>
+            </QuietButton>
           </>
         )}
       >

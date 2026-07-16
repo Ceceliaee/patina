@@ -1,5 +1,6 @@
 import { MonitorCog } from "lucide-react";
 import QuietSwitch from "../../../shared/components/QuietSwitch";
+import SettingsPanelHeader from "./SettingsPanelHeader";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 
 type SettingsResidentPanelProps = {
@@ -31,10 +32,10 @@ export default function SettingsResidentPanel({
 }: SettingsResidentPanelProps) {
   return (
     <section className="qp-panel min-h-[220px] p-5 md:p-6">
-      <div className="flex items-center gap-2.5 border-b border-[var(--qp-border-subtle)] pb-2">
-        <MonitorCog size={16} className="text-[var(--qp-accent-default)]" />
-        <h2 className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.residentTitle}</h2>
-      </div>
+      <SettingsPanelHeader
+        icon={<MonitorCog size={16} className="text-[var(--qp-accent-default)]" />}
+        title={UI_TEXT.settings.residentTitle}
+      />
 
       <div className="mt-5 space-y-5">
         <div>

@@ -1,8 +1,10 @@
 import { ChevronRight, Palette } from "lucide-react";
 import { useState } from "react";
 import QuietDialog from "../../../shared/components/QuietDialog";
+import QuietButton from "../../../shared/components/QuietButton";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
 import QuietSwitch from "../../../shared/components/QuietSwitch";
+import SettingsPanelHeader from "./SettingsPanelHeader";
 import type { AppLanguage, ColorScheme, ThemeMode } from "../../../shared/settings/appSettings.ts";
 import {
   COLOR_SCHEME_OPTIONS,
@@ -96,10 +98,10 @@ export default function SettingsAppearancePanel({
 
   return (
     <section className="qp-panel p-5 md:p-6">
-      <div className="flex items-center gap-2.5 border-b border-[var(--qp-border-subtle)] pb-2">
-        <Palette size={16} className="text-[var(--qp-accent-default)]" />
-        <h2 className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.appearanceTitle}</h2>
-      </div>
+      <SettingsPanelHeader
+        icon={<Palette size={16} className="text-[var(--qp-accent-default)]" />}
+        title={UI_TEXT.settings.appearanceTitle}
+      />
 
       <div className="mt-5 grid grid-cols-1 items-start gap-3 md:grid-cols-[minmax(0,1fr)_236px] md:gap-4">
         <div>
@@ -194,22 +196,21 @@ export default function SettingsAppearancePanel({
         surfaceClassName="qp-theme-dialog-surface"
         actions={(
           <>
-            <button
-              type="button"
+            <QuietButton
               onClick={closeColorSchemeDialog}
-              className="qp-button-secondary qp-dialog-action"
+              className="qp-dialog-action"
               disabled={colorSchemeConfirming}
             >
               {UI_TEXT.common.cancel}
-            </button>
-            <button
-              type="button"
+            </QuietButton>
+            <QuietButton
+              tone="primary"
               onClick={() => void handleConfirmColorScheme()}
-              className="qp-button-primary qp-dialog-action"
-              disabled={colorSchemeConfirming}
+              busy={colorSchemeConfirming}
+              className="qp-dialog-action"
             >
               {colorSchemeConfirming ? UI_TEXT.settings.colorSchemeSaving : UI_TEXT.common.confirm}
-            </button>
+            </QuietButton>
           </>
         )}
       >

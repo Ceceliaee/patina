@@ -16,6 +16,7 @@ import QuietSubpanel from "../../../shared/components/QuietSubpanel";
 import QuietActionRow from "../../../shared/components/QuietActionRow";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
 import QuietDialog from "../../../shared/components/QuietDialog";
+import QuietButton from "../../../shared/components/QuietButton";
 import QuietIconAction from "../../../shared/components/QuietIconAction";
 import QuietTooltip from "../../../shared/components/QuietTooltip";
 import type { CleanupRange } from "../types";
@@ -24,6 +25,7 @@ import type { StorageSnapshot } from "../services/settingsRuntimeAdapterService.
 import type { RemoteBackupEntry, RemoteBackupState } from "../hooks/useRemoteBackupState.ts";
 import SettingsRemoteBackupPanel from "./SettingsRemoteBackupPanel";
 import QuietStepperSlider from "../../../shared/components/QuietStepperSlider.tsx";
+import SettingsPanelHeader from "./SettingsPanelHeader";
 import { toEbwebviewCachePath } from "../services/storagePathDisplay.ts";
 
 type CleanupOption = { value: CleanupRange; label: string };
@@ -294,10 +296,11 @@ export default function SettingsDataSafetyPanel({
   return (
     <>
       <section className="qp-panel p-5 md:p-6">
-        <div className="mb-5 flex items-center gap-2.5 border-b border-[var(--qp-border-subtle)] pb-2">
-          <Database size={16} className="text-[var(--qp-accent-default)]" />
-          <h2 className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.dataSafetyTitle}</h2>
-        </div>
+        <SettingsPanelHeader
+          icon={<Database size={16} className="text-[var(--qp-accent-default)]" />}
+          title={UI_TEXT.settings.dataSafetyTitle}
+          className="mb-5"
+        />
 
         <div className="space-y-5">
           <QuietSubpanel>
@@ -311,14 +314,13 @@ export default function SettingsDataSafetyPanel({
                   {UI_TEXT.settings.dataExportHint}
                 </p>
               </div>
-              <button
-                type="button"
+              <QuietButton
                 onClick={onOpenDataExport}
                 disabled={busy}
-                className="settings-data-export-entry-action qp-button-secondary h-8 shrink-0 px-3 text-xs font-semibold text-[var(--qp-text-secondary)] disabled:opacity-50"
+                className="settings-data-export-entry-action h-8 shrink-0 px-3 text-xs font-semibold text-[var(--qp-text-secondary)]"
               >
                 {UI_TEXT.settings.dataExportAction}
-              </button>
+              </QuietButton>
             </div>
           </QuietSubpanel>
 
@@ -344,14 +346,14 @@ export default function SettingsDataSafetyPanel({
                       {UI_TEXT.settings.backupExportHint}
                     </p>
                   </div>
-                  <button
-                    type="button"
+                  <QuietButton
                     onClick={handleBackupAction}
                     disabled={busy}
-                    className="qp-button-secondary h-8 shrink-0 rounded-[8px] px-3 text-xs font-semibold text-[var(--qp-text-secondary)] disabled:opacity-50"
+                    busy={isExportingBackup || remoteBackup.isUploading}
+                    className="h-8 shrink-0 rounded-[8px] px-3 text-xs font-semibold text-[var(--qp-text-secondary)]"
                   >
                     {isExportingBackup || remoteBackup.isUploading ? UI_TEXT.settings.backupExporting : UI_TEXT.settings.backupExportAction}
-                  </button>
+                  </QuietButton>
                 </div>
               </QuietActionRow>
 
@@ -381,14 +383,14 @@ export default function SettingsDataSafetyPanel({
                       {UI_TEXT.settings.backupRestoreActionHint}
                     </p>
                   </div>
-                  <button
-                    type="button"
+                  <QuietButton
                     onClick={handleRestoreAction}
                     disabled={busy}
-                    className="qp-button-secondary h-8 shrink-0 rounded-[8px] px-3 text-xs font-semibold text-[var(--qp-text-secondary)] disabled:opacity-50"
+                    busy={isRestoringBackup || remoteBackup.isListing || remoteBackup.isDownloading}
+                    className="h-8 shrink-0 rounded-[8px] px-3 text-xs font-semibold text-[var(--qp-text-secondary)]"
                   >
                     {isRestoringBackup || remoteBackup.isListing || remoteBackup.isDownloading ? UI_TEXT.settings.backupRestoring : UI_TEXT.settings.backupRestoreAction}
-                  </button>
+                  </QuietButton>
                 </div>
               </QuietActionRow>
             </div>
@@ -503,14 +505,13 @@ export default function SettingsDataSafetyPanel({
         surfaceClassName="settings-history-cleanup-dialog"
         actions={(
           <>
-            <button
-              type="button"
+            <QuietButton
               onClick={() => setHistoryCleanupDialogOpen(false)}
               disabled={isCleaning}
-              className="qp-button-secondary h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none disabled:opacity-50"
+              className="h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none"
             >
               {UI_TEXT.common.cancel}
-            </button>
+            </QuietButton>
             <QuietDangerAction
               onClick={cleanupHistoryFromDialog}
               disabled={isCleaning}
@@ -546,22 +547,21 @@ export default function SettingsDataSafetyPanel({
         closeOnBackdrop={!busy}
         actions={(
           <>
-            <button
-              type="button"
+            <QuietButton
               onClick={() => setCacheClearDialogOpen(false)}
               disabled={busy}
-              className="qp-button-secondary h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none disabled:opacity-50"
+              className="h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none"
             >
               {UI_TEXT.common.cancel}
-            </button>
-            <button
-              type="button"
+            </QuietButton>
+            <QuietButton
+              tone="primary"
               onClick={restartAndClearWebviewCacheFromDialog}
               disabled={busy}
-              className="qp-button-primary h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none disabled:opacity-50"
+              className="h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none"
             >
               {storageText.restartAndApplyAction}
-            </button>
+            </QuietButton>
           </>
         )}
       />
@@ -573,14 +573,13 @@ export default function SettingsDataSafetyPanel({
         onClose={() => setBackupTargetDialogOpen(false)}
         closeOnBackdrop={!busy}
         actions={(
-          <button
-            type="button"
+          <QuietButton
             onClick={() => setBackupTargetDialogOpen(false)}
             disabled={busy}
-            className="qp-button-secondary h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none disabled:opacity-50"
+            className="h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none"
           >
             {UI_TEXT.common.cancel}
-          </button>
+          </QuietButton>
         )}
       >
         <div className="grid gap-3 md:grid-cols-2">
@@ -622,14 +621,13 @@ export default function SettingsDataSafetyPanel({
         onClose={() => setRestoreSourceDialogOpen(false)}
         closeOnBackdrop={!busy}
         actions={(
-          <button
-            type="button"
+          <QuietButton
             onClick={() => setRestoreSourceDialogOpen(false)}
             disabled={busy}
-            className="qp-button-secondary h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none disabled:opacity-50"
+            className="h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none"
           >
             {UI_TEXT.common.cancel}
-          </button>
+          </QuietButton>
         )}
       >
         <div className="grid gap-3 md:grid-cols-2">
@@ -673,24 +671,24 @@ export default function SettingsDataSafetyPanel({
         initialFocus="surface"
         actions={(
           <>
-            <button
-              type="button"
+            <QuietButton
               onClick={closeStrategyDialog}
               disabled={isRestoringBackup}
-              className="qp-button-secondary h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none disabled:opacity-50"
+              className="h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none"
             >
               {UI_TEXT.common.cancel}
-            </button>
-            <button
-              type="button"
+            </QuietButton>
+            <QuietButton
+              tone="primary"
               onClick={() => {
                 confirmRestoreStrategy();
               }}
               disabled={busy}
-              className="qp-button-primary h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none disabled:opacity-50"
+              busy={isRestoringBackup || remoteBackup.isListing}
+              className="h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none"
             >
               {isRestoringBackup || remoteBackup.isListing ? UI_TEXT.settings.backupRestoring : UI_TEXT.settings.backupRestoreAction}
-            </button>
+            </QuietButton>
           </>
         )}
       >

@@ -1,6 +1,7 @@
 import { AlarmClock, BellRing, TimerReset } from "lucide-react";
 import { useCallback, useState, type ReactNode } from "react";
 import QuietDialog from "../../../shared/components/QuietDialog.tsx";
+import QuietButton from "../../../shared/components/QuietButton.tsx";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import type { ToolAlert } from "../../../shared/types/tools.ts";
 import { useToolAlerts } from "../hooks/useToolAlerts.ts";
@@ -54,22 +55,21 @@ export default function ToolAlertDialog() {
       actions={(
         <>
           {canPausePomodoro && (
-            <button
-              type="button"
-              className="qp-button-secondary qp-dialog-action disabled:cursor-not-allowed disabled:opacity-50"
+            <QuietButton
+              className="qp-dialog-action"
               onClick={() => void handlePausePomodoro()}
-              disabled={pausingPomodoro}
+              busy={pausingPomodoro}
             >
               {pausingPomodoro ? UI_TEXT.tools.alertPausingPomodoro : UI_TEXT.tools.alertPausePomodoro}
-            </button>
+            </QuietButton>
           )}
-          <button
-            type="button"
-            className="qp-button-primary qp-dialog-action"
+          <QuietButton
+            tone="primary"
+            className="qp-dialog-action"
             onClick={dismissActiveAlert}
           >
             {UI_TEXT.tools.alertDismiss}
-          </button>
+          </QuietButton>
         </>
       )}
     >

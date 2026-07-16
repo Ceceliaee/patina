@@ -5,6 +5,7 @@ import QuietActionRow from "../../../shared/components/QuietActionRow";
 import QuietDialog from "../../../shared/components/QuietDialog";
 import QuietSubpanel from "../../../shared/components/QuietSubpanel";
 import QuietSwitch from "../../../shared/components/QuietSwitch";
+import SettingsPanelHeader from "./SettingsPanelHeader";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import { SettingsRuntimeAdapterService } from "../services/settingsRuntimeAdapterService.ts";
 import { createSettingsToken } from "../services/settingsTokenService.ts";
@@ -366,10 +367,11 @@ export default function SettingsInterfacePanel({
   return (
     <>
       <section className="qp-panel p-5 md:p-6">
-        <div className="mb-5 flex items-center gap-2.5 border-b border-[var(--qp-border-subtle)] pb-2">
-          <Server size={16} className="text-[var(--qp-accent-default)]" />
-          <h2 className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.servicesTitle}</h2>
-        </div>
+        <SettingsPanelHeader
+          icon={<Server size={16} className="text-[var(--qp-accent-default)]" />}
+          title={UI_TEXT.settings.servicesTitle}
+          className="mb-5"
+        />
 
         <div className="space-y-5">
           <QuietSubpanel className="settings-web-activity-subpanel">

@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ListX, RefreshCw, Save, Search, Sparkles, SlidersHorizontal } from "lucide-react";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import QuietDialog from "../../../shared/components/QuietDialog";
+import QuietButton from "../../../shared/components/QuietButton";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
 import CategoryColorControls from "./CategoryColorControls";
@@ -165,22 +166,22 @@ export default function AppMapping(props: Props) {
                 <span className="text-[var(--qp-text-tertiary)]">{UI_TEXT.mapping.idle}</span>
               )}
             </div>
-            <button
-              type="button"
+            <QuietButton
               onClick={handleCancel}
               disabled={!hasUnsavedChanges || saving}
-              className="qp-button-secondary rounded-[8px] px-2.5 py-1.5 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-[8px] px-2.5 py-1.5 text-[11px] font-semibold"
             >
               {UI_TEXT.mapping.cancel}
-            </button>
-            <button
-              type="button"
+            </QuietButton>
+            <QuietButton
+              tone="primary"
               onClick={() => void handleSave()}
               disabled={!hasUnsavedChanges || saving}
-              className="qp-button-primary rounded-[8px] px-2.5 py-1.5 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+              busy={saving}
+              className="rounded-[8px] px-2.5 py-1.5 text-[11px] font-semibold"
             >
               {saving ? UI_TEXT.mapping.saving : UI_TEXT.mapping.save}
-            </button>
+            </QuietButton>
           </div>
         )}
       />
@@ -222,14 +223,13 @@ export default function AppMapping(props: Props) {
                 options={objectModeOptions}
               />
             )}
-            <button
-              type="button"
+            <QuietButton
               onClick={() => setShowCategoryDialog(true)}
-              className="qp-button-secondary inline-flex items-center gap-2 rounded-[8px] px-3 py-2 text-xs font-semibold"
+              className="inline-flex items-center gap-2 rounded-[8px] px-3 py-2 text-xs font-semibold"
             >
               <SlidersHorizontal size={14} />
               {UI_TEXT.mapping.categoryControl}
-            </button>
+            </QuietButton>
           </div>
         </div>
       </section>
@@ -363,20 +363,19 @@ export default function AppMapping(props: Props) {
         surfaceClassName="qp-category-dialog-surface"
         actions={(
           <>
-            <button
-              type="button"
+            <QuietButton
               onClick={() => setShowCategoryDialog(false)}
-              className="qp-button-secondary qp-dialog-action"
+              className="qp-dialog-action"
             >
               {UI_TEXT.common.close}
-            </button>
-            <button
-              type="button"
+            </QuietButton>
+            <QuietButton
+              tone="primary"
               onClick={() => void handleCreateCategory()}
-              className="qp-button-primary qp-dialog-action"
+              className="qp-dialog-action"
             >
               {UI_TEXT.mapping.createCategoryAction}
-            </button>
+            </QuietButton>
           </>
         )}
       >

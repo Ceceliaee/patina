@@ -2,6 +2,7 @@ import { Cloud, Eye, EyeOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import QuietActionRow from "../../../shared/components/QuietActionRow";
 import QuietDialog from "../../../shared/components/QuietDialog";
+import QuietButton from "../../../shared/components/QuietButton";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import type { RemoteBackupEntry, RemoteBackupState, RemoteBackupFormDraft } from "../hooks/useRemoteBackupState.ts";
 import { DEFAULT_WEBDAV_REMOTE_DIR } from "../hooks/useRemoteBackupState.ts";
@@ -60,14 +61,13 @@ function RemoteBackupEntryRow({
             {UI_TEXT.backup.itemCounts(entry.sessionCount, entry.settingCount, entry.iconCacheCount)}
           </p>
         </div>
-        <button
-          type="button"
+        <QuietButton
           onClick={onRestore}
           disabled={disabled}
-          className="qp-button-secondary h-8 shrink-0 rounded-[8px] px-3 text-xs font-semibold disabled:opacity-50"
+          className="h-8 shrink-0 rounded-[8px] px-3 text-xs font-semibold"
         >
           {UI_TEXT.settings.webDavRestoreSelected}
-        </button>
+        </QuietButton>
       </div>
     </QuietActionRow>
   );
@@ -157,32 +157,30 @@ export default function SettingsRemoteBackupPanel({
 
           <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
             {configured && (
-              <button
-                type="button"
+              <QuietButton
                 onClick={() => void remoteBackup.testConfig()}
                 disabled={busy || !canUseRemote}
-                className="qp-button-secondary h-8 shrink-0 rounded-[8px] px-3 text-xs font-semibold text-[var(--qp-text-secondary)] disabled:opacity-50"
+                busy={remoteBackup.isTesting}
+                className="h-8 shrink-0 rounded-[8px] px-3 text-xs font-semibold text-[var(--qp-text-secondary)]"
               >
                 {remoteBackup.isTesting ? UI_TEXT.settings.webDavTesting : UI_TEXT.settings.webDavTestConnection}
-              </button>
+              </QuietButton>
             )}
-            <button
-              type="button"
+            <QuietButton
               onClick={remoteBackup.openConfigDialog}
               disabled={busy}
-              className="qp-button-secondary h-8 shrink-0 rounded-[8px] px-3 text-xs font-semibold text-[var(--qp-text-secondary)] disabled:opacity-50"
+              className="h-8 shrink-0 rounded-[8px] px-3 text-xs font-semibold text-[var(--qp-text-secondary)]"
             >
               {configured ? UI_TEXT.settings.webDavEdit : UI_TEXT.settings.webDavConfigure}
-            </button>
+            </QuietButton>
             {configured && (
-              <button
-                type="button"
+              <QuietButton
                 onClick={() => void remoteBackup.deleteConfig()}
                 disabled={busy}
-                className="qp-button-secondary h-8 shrink-0 rounded-[8px] px-3 text-xs font-semibold text-[var(--qp-danger)] disabled:opacity-50"
+                className="h-8 shrink-0 rounded-[8px] px-3 text-xs font-semibold text-[var(--qp-danger)]"
               >
                 {UI_TEXT.settings.webDavDeleteAction}
-              </button>
+              </QuietButton>
             )}
           </div>
         </div>
@@ -196,30 +194,30 @@ export default function SettingsRemoteBackupPanel({
         closeOnBackdrop={!busy}
         actions={(
           <>
-            <button
-              type="button"
+            <QuietButton
               onClick={remoteBackup.closeConfigDialog}
               disabled={busy}
-              className="qp-button-secondary h-8 rounded-[8px] px-3 text-xs font-semibold disabled:opacity-50"
+              className="h-8 rounded-[8px] px-3 text-xs font-semibold"
             >
               {UI_TEXT.common.cancel}
-            </button>
-            <button
-              type="button"
+            </QuietButton>
+            <QuietButton
               onClick={() => void remoteBackup.testConfig(draft)}
               disabled={busy}
-              className="qp-button-secondary h-8 rounded-[8px] px-3 text-xs font-semibold disabled:opacity-50"
+              busy={remoteBackup.isTesting}
+              className="h-8 rounded-[8px] px-3 text-xs font-semibold"
             >
               {remoteBackup.isTesting ? UI_TEXT.settings.webDavTesting : UI_TEXT.settings.webDavTestConnection}
-            </button>
-            <button
-              type="button"
+            </QuietButton>
+            <QuietButton
+              tone="primary"
               onClick={() => void remoteBackup.saveConfig(draft)}
               disabled={busy}
-              className="qp-button-primary h-8 rounded-[8px] px-3 text-xs font-semibold disabled:opacity-50"
+              busy={remoteBackup.isSaving}
+              className="h-8 rounded-[8px] px-3 text-xs font-semibold"
             >
               {remoteBackup.isSaving ? UI_TEXT.common.saving : UI_TEXT.common.save}
-            </button>
+            </QuietButton>
           </>
         )}
       >
@@ -282,14 +280,13 @@ export default function SettingsRemoteBackupPanel({
         onClose={remoteBackup.closeRestoreDialog}
         closeOnBackdrop={!remoteBackup.isDownloading}
         actions={(
-          <button
-            type="button"
+          <QuietButton
             onClick={remoteBackup.closeRestoreDialog}
             disabled={remoteBackup.isDownloading}
-            className="qp-button-secondary h-8 rounded-[8px] px-3 text-xs font-semibold disabled:opacity-50"
+            className="h-8 rounded-[8px] px-3 text-xs font-semibold"
           >
             {UI_TEXT.common.close}
-          </button>
+          </QuietButton>
         )}
       >
         <div className="grid max-h-[420px] gap-3 overflow-y-auto pr-1">

@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import type { SettingsPageProps } from "../types";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
+import QuietButton from "../../../shared/components/QuietButton";
 import SettingsAppearancePanel from "./SettingsAppearancePanel";
 import SettingsDataSafetyPanel from "./SettingsDataSafetyPanel";
 import SettingsInterfacePanel from "./SettingsInterfacePanel";
@@ -135,22 +136,22 @@ export default function Settings({
                 <span className="text-[var(--qp-text-tertiary)]">{UI_TEXT.settings.idle}</span>
               )}
             </div>
-            <button
-              type="button"
+            <QuietButton
               onClick={handleCancel}
               disabled={!hasUnsavedChanges || saveStatus === "saving"}
-              className="qp-button-secondary rounded-[8px] px-2.5 py-1.5 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-[8px] px-2.5 py-1.5 text-[11px] font-semibold"
             >
               {UI_TEXT.settings.cancel}
-            </button>
-            <button
-              type="button"
+            </QuietButton>
+            <QuietButton
+              tone="primary"
               onClick={() => void handleSave()}
               disabled={!hasUnsavedChanges || saveStatus === "saving"}
-              className="qp-button-primary rounded-[8px] px-2.5 py-1.5 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+              busy={saveStatus === "saving"}
+              className="rounded-[8px] px-2.5 py-1.5 text-[11px] font-semibold"
             >
               {saveStatus === "saving" ? UI_TEXT.settings.saving : UI_TEXT.settings.save}
-            </button>
+            </QuietButton>
           </div>
         )}
       />
