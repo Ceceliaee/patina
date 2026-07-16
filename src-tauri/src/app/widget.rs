@@ -1,4 +1,5 @@
 use crate::app::state::WidgetWindowLifecycleState;
+use crate::data::widget_store::SqliteWidgetPlacementStore;
 use crate::domain::widget::{WidgetPlacement, WidgetSide};
 use crate::engine::widget as widget_engine;
 use crate::platform::storage_paths;
@@ -20,6 +21,21 @@ const WIDGET_COLLAPSED_HEIGHT: u32 = 48;
 const WIDGET_COLLAPSED_VISIBLE_WIDTH: u32 = 64;
 const WIDGET_DESTROY_AFTER_IDLE_SECS: u64 = 3 * 60;
 
+pub(crate) async fn load_widget_placement<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<WidgetPlacement, String> {
+    let store = SqliteWidgetPlacementStore::from_app(app).await?;
+    widget_engine::load_widget_placement(&store).await
+}
+
+pub(crate) async fn save_widget_placement<R: Runtime>(
+    app: &AppHandle<R>,
+    placement: WidgetPlacement,
+) -> Result<(), String> {
+    let store = SqliteWidgetPlacementStore::from_app(app).await?;
+    widget_engine::save_widget_placement(&store, placement).await
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct WidgetWindowBounds {
     x: i32,
@@ -32,7 +48,7 @@ pub(crate) async fn show_widget_window<R: Runtime + 'static>(
     app: &AppHandle<R>,
     preferred_monitor: Option<Monitor>,
 ) -> Result<(), String> {
-    let placement = widget_engine::load_widget_placement(app).await?;
+    let placement = load_widget_placement(app).await?;
     apply_widget_layout_internal(app, preferred_monitor, placement, false, false, false).await
 }
 
@@ -47,7 +63,7 @@ pub(crate) async fn apply_widget_layout<R: Runtime + 'static>(
         return Ok(());
     }
 
-    widget_engine::save_widget_placement(app, placement).await?;
+    save_widget_placement(app, placement).await?;
     apply_widget_layout_internal(app, None, placement, expanded, expanded, show_object_slot).await
 }
 
@@ -56,7 +72,7 @@ pub(crate) async fn set_widget_window_expanded<R: Runtime + 'static>(
     expanded: bool,
     show_object_slot: bool,
 ) -> Result<(), String> {
-    let placement = widget_engine::load_widget_placement(app).await?;
+    let placement = load_widget_placement(app).await?;
     apply_widget_layout_internal(app, None, placement, expanded, expanded, show_object_slot).await
 }
 

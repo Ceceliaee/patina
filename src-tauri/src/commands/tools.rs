@@ -1,6 +1,7 @@
+use crate::app::tools;
 use crate::domain::tools::{TimerMode, ToolAlert, ToolsRuntimeSnapshot};
 use crate::engine::tools::{
-    self, CreateSoftwareReminderRuleRequest, StartPomodoroRequest, StartTimerRequest,
+    CreateSoftwareReminderRuleRequest, StartPomodoroRequest, StartTimerRequest,
 };
 use serde::Deserialize;
 use tauri::AppHandle;

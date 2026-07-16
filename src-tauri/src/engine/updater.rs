@@ -1,15 +1,15 @@
 use serde::Serialize;
 use std::fs;
+use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_updater::{Update, UpdaterExt};
 use tokio::time::{sleep, Duration};
 
-use crate::app::state::AppRestartState;
-use crate::data::repositories::update_state;
-use crate::data::sqlite_pool::wait_for_sqlite_pool;
+use crate::domain::lifecycle::AppRestartState;
 use crate::domain::update::{UpdateErrorStage, UpdateSnapshot, UpdateStatus};
 
 const STARTUP_AUTO_CHECK_DELAYS_MS: [u64; 3] = [3_500, 15_000, 60_000];
@@ -18,6 +18,15 @@ const RELEASES_BASE_URL: &str = "https://github.com/Ceceliaee/patina/releases";
 const LATEST_RELEASE_URL: &str = "https://github.com/Ceceliaee/patina/releases/latest";
 const UPDATE_PACKAGE_DIR_NAME: &str = "update-packages";
 const UPDATE_PACKAGE_FILE_PREFIX: &str = "patina-update-";
+
+pub type UpdateStoreFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, String>> + Send + 'a>>;
+
+pub trait UpdateStateStore: Send + Sync {
+    fn load_last_auto_check_day(&self) -> UpdateStoreFuture<'_, Option<String>>;
+    fn save_last_auto_check_day<'a>(&'a self, day: &'a str) -> UpdateStoreFuture<'a, ()>;
+    fn request_post_install_reopen(&self) -> UpdateStoreFuture<'_, ()>;
+    fn clear_post_install_reopen(&self) -> UpdateStoreFuture<'_, ()>;
+}
 
 #[derive(Clone)]
 pub struct UpdaterRuntimeState {
@@ -238,20 +247,21 @@ fn emit_update_snapshot_changed<R: Runtime>(app: &AppHandle<R>, snapshot: &Updat
 pub async fn check_for_updates<R: Runtime>(
     app: &AppHandle<R>,
     state: &UpdaterRuntimeState,
+    store: &impl UpdateStateStore,
     silent: bool,
 ) -> Result<UpdateSnapshot, String> {
     cleanup_stale_update_packages(app, state.downloaded_package_path().as_deref());
 
     let silent_context = if silent {
-        let pool = wait_for_sqlite_pool(app).await?;
-        let today = update_state::current_local_day();
-        let last_day = update_state::load_last_auto_check_day(&pool)
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        let last_day = store
+            .load_last_auto_check_day()
             .await
             .map_err(|error| format!("failed to read auto update check state: {error}"))?;
         if last_day.as_deref() == Some(today.as_str()) {
             return Ok(state.snapshot());
         }
-        Some((pool, today))
+        Some(today)
     } else {
         None
     };
@@ -288,8 +298,8 @@ pub async fn check_for_updates<R: Runtime>(
         None => state.set_up_to_date(),
     };
 
-    if let Some((pool, today)) = silent_context {
-        if let Err(error) = update_state::save_last_auto_check_day(&pool, &today).await {
+    if let Some(today) = silent_context {
+        if let Err(error) = store.save_last_auto_check_day(&today).await {
             eprintln!("[updater] failed to persist auto update check state: {error}");
         }
     }
@@ -298,11 +308,15 @@ pub async fn check_for_updates<R: Runtime>(
     Ok(snapshot)
 }
 
-pub async fn run_startup_auto_check<R: Runtime>(app: AppHandle<R>, state: UpdaterRuntimeState) {
+pub async fn run_startup_auto_check<R: Runtime>(
+    app: AppHandle<R>,
+    state: UpdaterRuntimeState,
+    store: impl UpdateStateStore,
+) {
     for (attempt, delay_ms) in STARTUP_AUTO_CHECK_DELAYS_MS.iter().enumerate() {
         sleep(Duration::from_millis(*delay_ms)).await;
 
-        match check_for_updates(&app, &state, true).await {
+        match check_for_updates(&app, &state, &store, true).await {
             Ok(snapshot) => {
                 if snapshot.status != UpdateStatus::Error {
                     return;
@@ -400,6 +414,7 @@ pub async fn download_pending<R: Runtime>(
 pub async fn install_downloaded<R: Runtime>(
     app: &AppHandle<R>,
     state: &UpdaterRuntimeState,
+    store: &impl UpdateStateStore,
 ) -> Result<UpdateSnapshot, String> {
     let Some(update) = state.pending_update() else {
         let snapshot = state.set_error(
@@ -442,16 +457,11 @@ pub async fn install_downloaded<R: Runtime>(
         return Ok(snapshot);
     }
 
-    let post_install_reopen_pool = match wait_for_sqlite_pool(app).await {
-        Ok(pool) => {
-            if let Err(error) = update_state::request_post_install_reopen_main_window(&pool).await {
-                eprintln!("[updater] failed to persist post-install reopen intent: {error}");
-            }
-            Some(pool)
-        }
+    let post_install_reopen_persisted = match store.request_post_install_reopen().await {
+        Ok(()) => true,
         Err(error) => {
-            eprintln!("[updater] failed to load sqlite pool for reopen intent: {error}");
-            None
+            eprintln!("[updater] failed to persist post-install reopen intent: {error}");
+            false
         }
     };
 
@@ -471,10 +481,8 @@ pub async fn install_downloaded<R: Runtime>(
             restart_state.cancel_request();
             state.set_pending_update(update);
             state.set_downloaded_package(downloaded_package);
-            if let Some(pool) = post_install_reopen_pool.as_ref() {
-                if let Err(clear_error) =
-                    update_state::clear_post_install_reopen_main_window(pool).await
-                {
+            if post_install_reopen_persisted {
+                if let Err(clear_error) = store.clear_post_install_reopen().await {
                     eprintln!(
                         "[updater] failed to clear post-install reopen intent after install error: {clear_error}"
                     );

@@ -1,17 +1,16 @@
-use crate::data::repositories;
-use crate::data::sqlite_pool::wait_for_sqlite_pool;
 use crate::domain::tools::{
-    PomodoroPhase, PomodoroStatus, TimerMode, TimerStatus, ToolAlert, ToolAlertKind,
+    CompletedPomodoroNotification, CompletedTimerNotification, PomodoroPhase, PomodoroStatus,
+    SoftwareReminderNotification, TimerMode, TimerStatus, ToolAlert, ToolAlertKind, ToolReminder,
     ToolsRuntimeSnapshot,
 };
 use chrono::Local;
 use serde::Serialize;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::Notify;
 use tokio::time::{sleep, Duration};
-
-mod notification;
 
 pub const TOOLS_RUNTIME_CHANGED_EVENT: &str = "tools-runtime-changed";
 pub const TOOLS_ALERT_EVENT: &str = "tools-alert";
@@ -31,22 +30,6 @@ struct ToolsTickOutcome {
 pub struct ToolAlertQueueStats {
     pub entries: usize,
     pub limit: usize,
-}
-
-impl ToolsTickOutcome {
-    fn changed() -> Self {
-        Self {
-            state_changed: true,
-        }
-    }
-
-    fn mark_changed(&mut self) {
-        self.state_changed = true;
-    }
-
-    fn merge(&mut self, next: Self) {
-        self.state_changed |= next.state_changed;
-    }
 }
 
 #[derive(Debug, Default)]
@@ -165,12 +148,69 @@ pub struct CreateSoftwareReminderRuleRequest {
     pub message: String,
 }
 
-pub async fn run<R: Runtime + 'static>(app: AppHandle<R>) -> Result<(), String> {
-    wait_for_sqlite_pool(&app).await?;
-    recover_after_startup(&app).await?;
+#[derive(Clone, Debug)]
+pub enum ToolsMutation {
+    CreateReminder { label: String, scheduled_at: i64 },
+    CancelReminder { reminder_id: i64 },
+    CreateSoftwareReminderRule(CreateSoftwareReminderRuleRequest),
+    DisableSoftwareReminderRule { rule_id: i64 },
+    StartTimer(StartTimerRequest),
+    PauseTimer,
+    ResumeTimer,
+    ResetTimer,
+    AddTimerLap,
+    StartPomodoro(StartPomodoroRequest),
+    PausePomodoro,
+    ResumePomodoro,
+    SkipPomodoroPhase,
+    ResetPomodoro,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct ToolsTickEvents {
+    pub reminders: Vec<ToolReminder>,
+    pub software_reminders: Vec<SoftwareReminderNotification>,
+    pub completed_timer: Option<CompletedTimerNotification>,
+    pub completed_pomodoro: Option<CompletedPomodoroNotification>,
+    pub state_changed: bool,
+}
+
+pub type ToolsStoreFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, String>> + Send + 'a>>;
+
+pub trait ToolsStore: Send + Sync {
+    fn apply_mutation(
+        &self,
+        mutation: ToolsMutation,
+        now_ms: i64,
+        date_key: String,
+    ) -> ToolsStoreFuture<'_, ()>;
+    fn recover_after_startup(
+        &self,
+        now_ms: i64,
+        date_key: String,
+        day_start_ms: i64,
+    ) -> ToolsStoreFuture<'_, ToolsTickEvents>;
+    fn tick(
+        &self,
+        now_ms: i64,
+        date_key: String,
+        day_start_ms: i64,
+    ) -> ToolsStoreFuture<'_, ToolsTickEvents>;
+    fn fetch_snapshot(
+        &self,
+        now_ms: i64,
+        date_key: String,
+    ) -> ToolsStoreFuture<'_, ToolsRuntimeSnapshot>;
+}
+
+pub async fn run<R: Runtime + 'static>(
+    app: AppHandle<R>,
+    store: impl ToolsStore,
+) -> Result<(), String> {
+    recover_after_startup(&app, &store).await?;
 
     loop {
-        if let Err(error) = tick_and_refresh_if_changed(&app).await {
+        if let Err(error) = tick_and_refresh_if_changed(&app, &store).await {
             eprintln!("[tools] runtime tick failed: {error}");
             wait_for_next_tools_wake(&app, Duration::from_millis(TOOLS_RUNTIME_ERROR_WAKE_MS))
                 .await;
@@ -187,8 +227,11 @@ pub async fn run<R: Runtime + 'static>(app: AppHandle<R>) -> Result<(), String> 
     }
 }
 
-pub async fn get_snapshot<R: Runtime>(app: &AppHandle<R>) -> Result<ToolsRuntimeSnapshot, String> {
-    load_snapshot(app).await
+pub async fn get_snapshot<R: Runtime>(
+    app: &AppHandle<R>,
+    store: &impl ToolsStore,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    load_snapshot(app, store).await
 }
 
 pub fn get_alerts<R: Runtime>(app: &AppHandle<R>) -> Vec<ToolAlert> {
@@ -220,6 +263,7 @@ pub fn notify_tools_runtime<R: Runtime>(app: &AppHandle<R>) {
 
 pub async fn create_reminder<R: Runtime>(
     app: &AppHandle<R>,
+    store: &impl ToolsStore,
     label: String,
     scheduled_at: i64,
 ) -> Result<ToolsRuntimeSnapshot, String> {
@@ -227,133 +271,130 @@ pub async fn create_reminder<R: Runtime>(
     if scheduled_at <= now_ms {
         return Err("reminder time must be in the future".to_string());
     }
-    let pool = wait_for_sqlite_pool(app).await?;
-    repositories::tools::create_reminder(&pool, &label, scheduled_at, now_ms).await?;
-    refresh_snapshot_after_tool_change(app).await
+    apply_mutation_and_refresh(
+        app,
+        store,
+        ToolsMutation::CreateReminder {
+            label,
+            scheduled_at,
+        },
+        now_ms,
+    )
+    .await
 }
 
 pub async fn cancel_reminder<R: Runtime>(
     app: &AppHandle<R>,
+    store: &impl ToolsStore,
     reminder_id: i64,
 ) -> Result<ToolsRuntimeSnapshot, String> {
-    let pool = wait_for_sqlite_pool(app).await?;
-    repositories::tools::cancel_reminder(&pool, reminder_id, now_ms()).await?;
-    refresh_snapshot_after_tool_change(app).await
+    apply_mutation_and_refresh(
+        app,
+        store,
+        ToolsMutation::CancelReminder { reminder_id },
+        now_ms(),
+    )
+    .await
 }
 
 pub async fn create_software_reminder_rule<R: Runtime>(
     app: &AppHandle<R>,
+    store: &impl ToolsStore,
     request: CreateSoftwareReminderRuleRequest,
 ) -> Result<ToolsRuntimeSnapshot, String> {
-    let pool = wait_for_sqlite_pool(app).await?;
-    repositories::tools::create_software_reminder_rule(
-        &pool,
-        &request.app_name,
-        request.exe_name.as_deref(),
-        request.limit_ms,
-        &request.message,
+    apply_mutation_and_refresh(
+        app,
+        store,
+        ToolsMutation::CreateSoftwareReminderRule(request),
         now_ms(),
     )
-    .await?;
-    refresh_snapshot_after_tool_change(app).await
+    .await
 }
 
 pub async fn disable_software_reminder_rule<R: Runtime>(
     app: &AppHandle<R>,
+    store: &impl ToolsStore,
     rule_id: i64,
 ) -> Result<ToolsRuntimeSnapshot, String> {
-    let pool = wait_for_sqlite_pool(app).await?;
-    repositories::tools::disable_software_reminder_rule(&pool, rule_id, now_ms()).await?;
-    refresh_snapshot_after_tool_change(app).await
+    apply_mutation_and_refresh(
+        app,
+        store,
+        ToolsMutation::DisableSoftwareReminderRule { rule_id },
+        now_ms(),
+    )
+    .await
 }
 
 pub async fn start_timer<R: Runtime>(
     app: &AppHandle<R>,
+    store: &impl ToolsStore,
     request: StartTimerRequest,
 ) -> Result<ToolsRuntimeSnapshot, String> {
-    let pool = wait_for_sqlite_pool(app).await?;
-    repositories::tools::start_timer(
-        &pool,
-        request.mode,
-        request.duration_ms,
-        request.label.as_deref(),
-        now_ms(),
-    )
-    .await?;
-    refresh_snapshot_after_tool_change(app).await
+    apply_mutation_and_refresh(app, store, ToolsMutation::StartTimer(request), now_ms()).await
 }
 
-pub async fn pause_timer<R: Runtime>(app: &AppHandle<R>) -> Result<ToolsRuntimeSnapshot, String> {
-    let pool = wait_for_sqlite_pool(app).await?;
-    repositories::tools::pause_timer(&pool, now_ms()).await?;
-    refresh_snapshot_after_tool_change(app).await
+pub async fn pause_timer<R: Runtime>(
+    app: &AppHandle<R>,
+    store: &impl ToolsStore,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    apply_mutation_and_refresh(app, store, ToolsMutation::PauseTimer, now_ms()).await
 }
 
-pub async fn resume_timer<R: Runtime>(app: &AppHandle<R>) -> Result<ToolsRuntimeSnapshot, String> {
-    let pool = wait_for_sqlite_pool(app).await?;
-    repositories::tools::resume_timer(&pool, now_ms()).await?;
-    refresh_snapshot_after_tool_change(app).await
+pub async fn resume_timer<R: Runtime>(
+    app: &AppHandle<R>,
+    store: &impl ToolsStore,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    apply_mutation_and_refresh(app, store, ToolsMutation::ResumeTimer, now_ms()).await
 }
 
-pub async fn reset_timer<R: Runtime>(app: &AppHandle<R>) -> Result<ToolsRuntimeSnapshot, String> {
-    let pool = wait_for_sqlite_pool(app).await?;
-    repositories::tools::reset_timer(&pool, now_ms()).await?;
-    refresh_snapshot_after_tool_change(app).await
+pub async fn reset_timer<R: Runtime>(
+    app: &AppHandle<R>,
+    store: &impl ToolsStore,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    apply_mutation_and_refresh(app, store, ToolsMutation::ResetTimer, now_ms()).await
 }
 
-pub async fn add_timer_lap<R: Runtime>(app: &AppHandle<R>) -> Result<ToolsRuntimeSnapshot, String> {
-    let pool = wait_for_sqlite_pool(app).await?;
-    repositories::tools::add_timer_lap(&pool, now_ms()).await?;
-    refresh_snapshot_after_tool_change(app).await
+pub async fn add_timer_lap<R: Runtime>(
+    app: &AppHandle<R>,
+    store: &impl ToolsStore,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    apply_mutation_and_refresh(app, store, ToolsMutation::AddTimerLap, now_ms()).await
 }
 
 pub async fn start_pomodoro<R: Runtime>(
     app: &AppHandle<R>,
+    store: &impl ToolsStore,
     request: StartPomodoroRequest,
 ) -> Result<ToolsRuntimeSnapshot, String> {
-    let pool = wait_for_sqlite_pool(app).await?;
-    repositories::tools::start_pomodoro(
-        &pool,
-        request.focus_ms,
-        request.short_break_ms,
-        request.long_break_ms,
-        request.long_break_every,
-        now_ms(),
-    )
-    .await?;
-    refresh_snapshot_after_tool_change(app).await
+    apply_mutation_and_refresh(app, store, ToolsMutation::StartPomodoro(request), now_ms()).await
 }
 
 pub async fn pause_pomodoro<R: Runtime>(
     app: &AppHandle<R>,
+    store: &impl ToolsStore,
 ) -> Result<ToolsRuntimeSnapshot, String> {
-    let pool = wait_for_sqlite_pool(app).await?;
-    repositories::tools::pause_pomodoro(&pool, now_ms()).await?;
-    refresh_snapshot_after_tool_change(app).await
+    apply_mutation_and_refresh(app, store, ToolsMutation::PausePomodoro, now_ms()).await
 }
 
 pub async fn resume_pomodoro<R: Runtime>(
     app: &AppHandle<R>,
+    store: &impl ToolsStore,
 ) -> Result<ToolsRuntimeSnapshot, String> {
-    let pool = wait_for_sqlite_pool(app).await?;
-    repositories::tools::resume_pomodoro(&pool, now_ms()).await?;
-    refresh_snapshot_after_tool_change(app).await
+    apply_mutation_and_refresh(app, store, ToolsMutation::ResumePomodoro, now_ms()).await
 }
 
 pub async fn skip_pomodoro_phase<R: Runtime>(
     app: &AppHandle<R>,
+    store: &impl ToolsStore,
 ) -> Result<ToolsRuntimeSnapshot, String> {
-    let pool = wait_for_sqlite_pool(app).await?;
-    repositories::tools::skip_pomodoro_phase(&pool, &date_key(), now_ms()).await?;
-    refresh_snapshot_after_tool_change(app).await
+    apply_mutation_and_refresh(app, store, ToolsMutation::SkipPomodoroPhase, now_ms()).await
 }
 
 pub async fn reset_pomodoro<R: Runtime>(
     app: &AppHandle<R>,
+    store: &impl ToolsStore,
 ) -> Result<ToolsRuntimeSnapshot, String> {
-    let pool = wait_for_sqlite_pool(app).await?;
-    repositories::tools::reset_pomodoro(&pool, now_ms()).await?;
-    refresh_snapshot_after_tool_change(app).await
+    apply_mutation_and_refresh(app, store, ToolsMutation::ResetPomodoro, now_ms()).await
 }
 
 async fn wait_for_next_tools_wake<R: Runtime>(app: &AppHandle<R>, delay: Duration) {
@@ -367,37 +408,52 @@ async fn wait_for_next_tools_wake<R: Runtime>(app: &AppHandle<R>, delay: Duratio
     }
 }
 
-async fn recover_after_startup<R: Runtime + 'static>(app: &AppHandle<R>) -> Result<(), String> {
-    let pool = wait_for_sqlite_pool(app).await?;
+async fn recover_after_startup<R: Runtime + 'static>(
+    app: &AppHandle<R>,
+    store: &impl ToolsStore,
+) -> Result<(), String> {
     let now = now_ms();
-    repositories::tools::pause_running_stopwatch_after_restart(&pool, now).await?;
-    tick_and_notify(app, &pool, now).await?;
-    refresh_snapshot(app).await?;
+    let events = store
+        .recover_after_startup(now, date_key(), day_start_ms())
+        .await?;
+    notify_tick_events(app, events, now);
+    refresh_snapshot(app, store).await?;
     Ok(())
 }
 
 async fn tick_and_refresh_if_changed<R: Runtime + 'static>(
     app: &AppHandle<R>,
+    store: &impl ToolsStore,
 ) -> Result<(), String> {
-    let pool = wait_for_sqlite_pool(app).await?;
-    let outcome = tick_and_notify(app, &pool, now_ms()).await?;
+    let outcome = tick_and_notify(app, store, now_ms()).await?;
     if outcome.state_changed {
-        refresh_snapshot(app).await?;
+        refresh_snapshot(app, store).await?;
     }
     Ok(())
 }
 
 async fn tick_and_notify<R: Runtime + 'static>(
     app: &AppHandle<R>,
-    pool: &sqlx::Pool<sqlx::Sqlite>,
+    store: &impl ToolsStore,
     now: i64,
 ) -> Result<ToolsTickOutcome, String> {
-    let mut outcome = ToolsTickOutcome::default();
+    let events = store.tick(now, date_key(), day_start_ms()).await?;
+    let changed = events.state_changed;
+    notify_tick_events(app, events, now);
+    Ok(ToolsTickOutcome {
+        state_changed: changed,
+    })
+}
 
-    let fired_reminders = repositories::tools::fire_due_reminders(pool, now).await?;
-    if !fired_reminders.is_empty() {
-        outcome.merge(ToolsTickOutcome::changed());
-    }
+fn notify_tick_events<R: Runtime + 'static>(app: &AppHandle<R>, events: ToolsTickEvents, now: i64) {
+    let ToolsTickEvents {
+        reminders: fired_reminders,
+        software_reminders: fired_software_reminders,
+        completed_timer,
+        completed_pomodoro,
+        ..
+    } = events;
+
     for reminder in fired_reminders {
         send_tool_alert(
             app,
@@ -416,16 +472,6 @@ async fn tick_and_notify<R: Runtime + 'static>(
     }
 
     let current_date_key = date_key();
-    let fired_software_reminders = repositories::tools::fire_due_software_reminders(
-        pool,
-        &current_date_key,
-        day_start_ms(),
-        now,
-    )
-    .await?;
-    if !fired_software_reminders.is_empty() {
-        outcome.mark_changed();
-    }
     for reminder in fired_software_reminders {
         let limit_minutes = (reminder.limit_ms / 60_000).max(1);
         let usage_minutes = (reminder.usage_ms / 60_000).max(limit_minutes);
@@ -452,8 +498,7 @@ async fn tick_and_notify<R: Runtime + 'static>(
         );
     }
 
-    if let Some(completed_timer) = repositories::tools::complete_due_countdown(pool, now).await? {
-        outcome.mark_changed();
+    if let Some(completed_timer) = completed_timer {
         send_tool_alert(
             app,
             ToolAlert {
@@ -468,10 +513,7 @@ async fn tick_and_notify<R: Runtime + 'static>(
         );
     }
 
-    if let Some(completed_phase) =
-        repositories::tools::complete_due_pomodoro_phase(pool, &date_key(), now).await?
-    {
-        outcome.mark_changed();
+    if let Some(completed_phase) = completed_pomodoro {
         let title = match completed_phase.completed_phase {
             PomodoroPhase::Focus => "专注结束",
             PomodoroPhase::ShortBreak | PomodoroPhase::LongBreak => "休息结束",
@@ -497,13 +539,13 @@ async fn tick_and_notify<R: Runtime + 'static>(
             },
         );
     }
-
-    Ok(outcome)
 }
 
-async fn load_snapshot<R: Runtime>(app: &AppHandle<R>) -> Result<ToolsRuntimeSnapshot, String> {
-    let pool = wait_for_sqlite_pool(app).await?;
-    let snapshot = repositories::tools::fetch_tools_snapshot(&pool, now_ms(), &date_key()).await?;
+async fn load_snapshot<R: Runtime>(
+    app: &AppHandle<R>,
+    store: &impl ToolsStore,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    let snapshot = store.fetch_snapshot(now_ms(), date_key()).await?;
 
     if let Some(state) = app.try_state::<ToolsRuntimeState>() {
         state.replace(snapshot.clone());
@@ -512,8 +554,11 @@ async fn load_snapshot<R: Runtime>(app: &AppHandle<R>) -> Result<ToolsRuntimeSna
     Ok(snapshot)
 }
 
-async fn refresh_snapshot<R: Runtime>(app: &AppHandle<R>) -> Result<ToolsRuntimeSnapshot, String> {
-    let snapshot = load_snapshot(app).await?;
+async fn refresh_snapshot<R: Runtime>(
+    app: &AppHandle<R>,
+    store: &impl ToolsStore,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    let snapshot = load_snapshot(app, store).await?;
 
     if let Err(error) = app.emit(TOOLS_RUNTIME_CHANGED_EVENT, &snapshot) {
         eprintln!("[tools] failed to emit tools snapshot: {error}");
@@ -524,10 +569,21 @@ async fn refresh_snapshot<R: Runtime>(app: &AppHandle<R>) -> Result<ToolsRuntime
 
 async fn refresh_snapshot_after_tool_change<R: Runtime>(
     app: &AppHandle<R>,
+    store: &impl ToolsStore,
 ) -> Result<ToolsRuntimeSnapshot, String> {
-    let snapshot = refresh_snapshot(app).await?;
+    let snapshot = refresh_snapshot(app, store).await?;
     notify_tools_runtime(app);
     Ok(snapshot)
+}
+
+async fn apply_mutation_and_refresh<R: Runtime>(
+    app: &AppHandle<R>,
+    store: &impl ToolsStore,
+    mutation: ToolsMutation,
+    now: i64,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    store.apply_mutation(mutation, now, date_key()).await?;
+    refresh_snapshot_after_tool_change(app, store).await
 }
 
 fn send_tool_alert<R: Runtime + 'static>(app: &AppHandle<R>, alert: ToolAlert) {
@@ -535,15 +591,8 @@ fn send_tool_alert<R: Runtime + 'static>(app: &AppHandle<R>, alert: ToolAlert) {
         state.push_alert(alert.clone());
     }
 
-    crate::app::main_window::show_main_window(app);
-
     if let Err(error) = app.emit(TOOLS_ALERT_EVENT, &alert) {
-        eprintln!(
-            "[tools] failed to emit tool alert, falling back to system notification: {error}"
-        );
-        if let Err(error) = notification::send(app, &alert.title, &alert.body) {
-            eprintln!("[tools] failed to send fallback notification: {error}");
-        }
+        eprintln!("[tools] failed to emit tool alert: {error}");
     }
 }
 
@@ -676,18 +725,14 @@ mod tests {
     }
 
     #[test]
-    fn tools_tick_outcome_merges_state_changes() {
-        let mut outcome = ToolsTickOutcome::default();
-        assert!(!outcome.state_changed);
-
-        outcome.merge(ToolsTickOutcome::default());
-        assert!(!outcome.state_changed);
-
-        outcome.merge(ToolsTickOutcome::changed());
-        assert!(outcome.state_changed);
-
-        outcome.mark_changed();
-        assert!(outcome.state_changed);
+    fn tools_tick_outcome_preserves_store_change_signal() {
+        assert!(!ToolsTickOutcome::default().state_changed);
+        assert!(
+            ToolsTickOutcome {
+                state_changed: true,
+            }
+            .state_changed
+        );
     }
 
     #[test]

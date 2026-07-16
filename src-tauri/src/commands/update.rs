@@ -1,7 +1,8 @@
 use tauri::{AppHandle, State};
 
+use crate::app::updater;
 use crate::domain::update::UpdateSnapshot;
-use crate::engine::updater::{self, UpdaterRuntimeState};
+use crate::engine::updater::UpdaterRuntimeState;
 
 #[tauri::command]
 pub fn cmd_get_update_snapshot(update_state: State<'_, UpdaterRuntimeState>) -> UpdateSnapshot {
