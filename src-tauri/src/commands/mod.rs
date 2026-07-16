@@ -1,6 +1,6 @@
-pub mod apps;
 pub mod backup;
 pub mod diagnostics;
+pub mod error;
 pub mod export;
 pub mod persistence;
 pub mod settings;

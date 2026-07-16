@@ -1,5 +1,6 @@
-use crate::app::state::{AppExitState, AppRestartState};
+use crate::app::state::AppExitState;
 use crate::data::{storage_migration, storage_restart};
+use crate::domain::lifecycle::AppRestartState;
 use crate::domain::storage::{
     StorageMaintenanceSnapshot, StorageMigrationPreview, StorageMigrationRequest,
     StoragePathSnapshot, StorageSnapshot, WebviewCacheMigrationRequest,
@@ -20,13 +21,6 @@ pub async fn cmd_get_storage_snapshot<R: Runtime>(
     app: AppHandle<R>,
 ) -> Result<StorageSnapshot, String> {
     storage_snapshot(&app)
-}
-
-#[tauri::command]
-pub async fn cmd_get_webview_cache_snapshot<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<crate::domain::storage::WebviewCacheSnapshot, String> {
-    webview_cache::webview_cache_snapshot(&app)
 }
 
 #[tauri::command]

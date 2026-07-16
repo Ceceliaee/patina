@@ -1,5 +1,6 @@
 use crate::app::state::DesktopBehaviorState;
 use crate::app::{desktop_behavior, tray};
+use crate::commands::error::CommandErrorDto;
 use crate::data::app_settings_service::commit_app_setting_mutations_with_recovery;
 use crate::data::classification_service::commit_classification_setting_mutations_with_recovery;
 use crate::data::repositories::app_settings::AppSettingMutation;
@@ -85,7 +86,7 @@ pub fn cmd_set_background_optimization(
 pub async fn cmd_commit_app_settings(
     mutations: Vec<AppSettingMutationDto>,
     app: AppHandle,
-) -> Result<(), String> {
+) -> Result<(), CommandErrorDto> {
     let mutations = mutations
         .into_iter()
         .map(AppSettingMutation::from)
@@ -107,19 +108,30 @@ pub async fn cmd_commit_app_settings(
         None
     };
 
-    commit_app_setting_mutations_with_recovery(&app, &mutations).await?;
+    commit_app_setting_mutations_with_recovery(&app, &mutations)
+        .await
+        .map_err(CommandErrorDto::from)?;
     if let Some(tracking_paused) = tracking_pause_setting {
         tray::apply_tracking_pause_setting_change(
             &app,
             tracking_paused,
             tray::tracking_pause_event_reason(tracking_paused),
-        )?;
+        )
+        .map_err(|error| CommandErrorDto::new("SETTINGS_APPLY_FAILED", error, false))?;
     }
     if let Some(enabled) = title_recording_setting {
-        tray::apply_title_recording_setting_change(&app, enabled).await?;
+        tray::apply_title_recording_setting_change(&app, enabled)
+            .await
+            .map_err(|error| CommandErrorDto::new("SETTINGS_APPLY_FAILED", error, false))?;
     }
     app.emit("app-settings-changed", json!({}))
-        .map_err(|error| format!("failed to emit settings refresh event: {error}"))?;
+        .map_err(|error| {
+            CommandErrorDto::new(
+                "SETTINGS_EVENT_FAILED",
+                format!("failed to emit settings refresh event: {error}"),
+                false,
+            )
+        })?;
     Ok(())
 }
 
@@ -127,12 +139,16 @@ pub async fn cmd_commit_app_settings(
 pub async fn cmd_commit_classification_settings(
     mutations: Vec<ClassificationSettingMutationDto>,
     app: AppHandle,
-) -> Result<(), String> {
+) -> Result<(), CommandErrorDto> {
     let mutations = mutations
         .into_iter()
         .map(ClassificationSettingMutation::from)
         .collect::<Vec<_>>();
 
-    let outcome = commit_classification_setting_mutations_with_recovery(&app, &mutations).await?;
-    crate::app::classification::apply_recording_policy_changes(&app, &outcome).await
+    let outcome = commit_classification_setting_mutations_with_recovery(&app, &mutations)
+        .await
+        .map_err(CommandErrorDto::from)?;
+    crate::app::classification::apply_recording_policy_changes(&app, &outcome)
+        .await
+        .map_err(|error| CommandErrorDto::new("CLASSIFICATION_APPLY_FAILED", error, false))
 }

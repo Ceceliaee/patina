@@ -1,16 +1,46 @@
 use crate::data::app_settings_service;
+use crate::data::web_activity_store::SqliteWebActivityStore;
 use crate::domain::settings::WebActivitySettings;
 use crate::domain::tracking::TrackingDataChangedPayload;
 use crate::domain::web_activity::{BrowserActiveTabPayload, WEB_ACTIVITY_CHANGED_REASON};
-use crate::engine::web_activity::{
-    load_runtime_settings, record_active_tab_for_app, seal_active_segment_for_app,
-    seal_if_tracking_inactive_for_app, WebActivityRuntimeState,
-};
+use crate::engine::web_activity::{self as web_activity_engine, WebActivityRuntimeState};
 use crate::platform::web_activity_bridge::{
     WebActivityBridgeHttpRequest, WebActivityBridgeHttpResponse, WebActivityBridgeRuntimeState,
 };
 use serde_json::json;
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
+
+async fn load_runtime_settings<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<WebActivitySettings, String> {
+    app_settings_service::load_web_activity_settings(app).await
+}
+
+async fn record_active_tab_for_app<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &WebActivitySettings,
+    payload: BrowserActiveTabPayload,
+    now_ms: i64,
+) -> Result<bool, String> {
+    let store = SqliteWebActivityStore::from_app(app).await?;
+    web_activity_engine::record_active_tab(app, &store, settings, payload, now_ms).await
+}
+
+pub(crate) async fn seal_active_segment_for_app<R: Runtime>(
+    app: &AppHandle<R>,
+    now_ms: i64,
+) -> Result<bool, String> {
+    let store = SqliteWebActivityStore::from_app(app).await?;
+    web_activity_engine::seal_active_segment(&store, now_ms).await
+}
+
+async fn seal_if_tracking_inactive_for_app<R: Runtime>(
+    app: &AppHandle<R>,
+    now_ms: i64,
+) -> Result<bool, String> {
+    let store = SqliteWebActivityStore::from_app(app).await?;
+    web_activity_engine::seal_if_tracking_inactive(app, &store, now_ms).await
+}
 
 pub async fn handle_http_request<R: Runtime>(
     app: AppHandle<R>,

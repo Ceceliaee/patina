@@ -1,21 +1,37 @@
-use crate::data::repositories::web_activity::{
-    end_active_segment, load_domain_recording_enabled, load_domain_title_recording_enabled,
-    upsert_active_segment, WebActivitySegmentInput,
-};
-use crate::data::{app_settings_service, sqlite_pool::wait_for_sqlite_pool};
 use crate::domain::settings::WebActivitySettings;
 use crate::domain::web_activity::{
     is_supported_browser_exe, sanitize_active_tab_payload, sanitize_browser_client_id,
     sanitize_browser_kind, sanitize_extension_version, BrowserActiveTabPayload,
-    WebActivityBridgeSnapshot,
+    WebActivityBridgeSnapshot, WebActivitySegmentInput,
 };
 use crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshotState;
 use crate::engine::tracking::title_state::TitleRecordingRuntimeState;
-use sqlx::{Pool, Sqlite};
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{Manager, Runtime};
 
 const BROWSER_BRIDGE_CONNECTED_WINDOW_MS: i64 = 30_000;
+
+pub type WebActivityStoreFuture<'a, T> =
+    Pin<Box<dyn Future<Output = Result<T, String>> + Send + 'a>>;
+
+pub trait WebActivityStore: Send + Sync {
+    fn load_domain_recording_enabled<'a>(
+        &'a self,
+        normalized_domain: &'a str,
+    ) -> WebActivityStoreFuture<'a, bool>;
+    fn load_domain_title_recording_enabled<'a>(
+        &'a self,
+        normalized_domain: &'a str,
+    ) -> WebActivityStoreFuture<'a, bool>;
+    fn upsert_active_segment<'a>(
+        &'a self,
+        input: &'a WebActivitySegmentInput,
+        now_ms: i64,
+    ) -> WebActivityStoreFuture<'a, bool>;
+    fn seal_active_segment(&self, now_ms: i64) -> WebActivityStoreFuture<'_, bool>;
+}
 
 #[derive(Clone, Debug, Default)]
 struct WebActivityClientSnapshot {
@@ -100,7 +116,7 @@ impl WebActivityRuntimeState {
 
 pub async fn record_active_tab<R: Runtime>(
     app: &tauri::AppHandle<R>,
-    pool: &Pool<Sqlite>,
+    store: &impl WebActivityStore,
     settings: &WebActivitySettings,
     payload: BrowserActiveTabPayload,
     now_ms: i64,
@@ -110,27 +126,28 @@ pub async fn record_active_tab<R: Runtime>(
     }
 
     if !settings.enabled {
-        return seal_active_segment(pool, now_ms).await;
+        return seal_active_segment(store, now_ms).await;
     }
 
     let Some(mut sanitized) = sanitize_active_tab_payload(payload)? else {
-        return seal_active_segment(pool, now_ms).await;
+        return seal_active_segment(store, now_ms).await;
     };
-    if !load_domain_recording_enabled(pool, &sanitized.normalized_domain)
+    if !store
+        .load_domain_recording_enabled(&sanitized.normalized_domain)
         .await
         .map_err(|error| format!("failed to load web domain override: {error}"))?
     {
-        return seal_active_segment(pool, now_ms).await;
+        return seal_active_segment(store, now_ms).await;
     }
 
     let global_title_enabled = app
         .try_state::<TitleRecordingRuntimeState>()
         .map(|state| state.is_enabled())
         .unwrap_or(true);
-    let domain_title_enabled =
-        load_domain_title_recording_enabled(pool, &sanitized.normalized_domain)
-            .await
-            .map_err(|error| format!("failed to load web domain title override: {error}"))?;
+    let domain_title_enabled = store
+        .load_domain_title_recording_enabled(&sanitized.normalized_domain)
+        .await
+        .map_err(|error| format!("failed to load web domain title override: {error}"))?;
     if !global_title_enabled || !domain_title_enabled {
         sanitized.title = None;
     }
@@ -139,59 +156,28 @@ pub async fn record_active_tab<R: Runtime>(
         .try_state::<TrackingRuntimeSnapshotState>()
         .and_then(|state| state.snapshot())
     else {
-        return seal_active_segment(pool, now_ms).await;
+        return seal_active_segment(store, now_ms).await;
     };
     if !snapshot.status.is_tracking_active
         || snapshot.window.is_afk
         || !is_supported_browser_exe(&snapshot.window.exe_name)
     {
-        return seal_active_segment(pool, now_ms).await;
+        return seal_active_segment(store, now_ms).await;
     }
 
     let input = WebActivitySegmentInput::from_sanitized(
         sanitized,
         snapshot.window.exe_name.trim().to_ascii_lowercase(),
     );
-    upsert_active_segment(pool, &input, now_ms)
+    store
+        .upsert_active_segment(&input, now_ms)
         .await
         .map_err(|error| format!("failed to save web activity: {error}"))
 }
 
-pub async fn load_runtime_settings<R: Runtime>(
-    app: &AppHandle<R>,
-) -> Result<WebActivitySettings, String> {
-    app_settings_service::load_web_activity_settings(app).await
-}
-
-pub async fn record_active_tab_for_app<R: Runtime>(
-    app: &AppHandle<R>,
-    settings: &WebActivitySettings,
-    payload: BrowserActiveTabPayload,
-    now_ms: i64,
-) -> Result<bool, String> {
-    let pool = wait_for_sqlite_pool(app).await?;
-    record_active_tab(app, &pool, settings, payload, now_ms).await
-}
-
-pub async fn seal_active_segment_for_app<R: Runtime>(
-    app: &AppHandle<R>,
-    now_ms: i64,
-) -> Result<bool, String> {
-    let pool = wait_for_sqlite_pool(app).await?;
-    seal_active_segment(&pool, now_ms).await
-}
-
-pub async fn seal_if_tracking_inactive_for_app<R: Runtime>(
-    app: &AppHandle<R>,
-    now_ms: i64,
-) -> Result<bool, String> {
-    let pool = wait_for_sqlite_pool(app).await?;
-    seal_if_tracking_inactive(app, &pool, now_ms).await
-}
-
 pub async fn seal_if_tracking_inactive<R: Runtime>(
     app: &tauri::AppHandle<R>,
-    pool: &Pool<Sqlite>,
+    store: &impl WebActivityStore,
     now_ms: i64,
 ) -> Result<bool, String> {
     let should_seal = app
@@ -205,14 +191,18 @@ pub async fn seal_if_tracking_inactive<R: Runtime>(
         .unwrap_or(true);
 
     if should_seal {
-        return seal_active_segment(pool, now_ms).await;
+        return seal_active_segment(store, now_ms).await;
     }
 
     Ok(false)
 }
 
-pub async fn seal_active_segment(pool: &Pool<Sqlite>, now_ms: i64) -> Result<bool, String> {
-    end_active_segment(pool, now_ms)
+pub async fn seal_active_segment(
+    store: &impl WebActivityStore,
+    now_ms: i64,
+) -> Result<bool, String> {
+    store
+        .seal_active_segment(now_ms)
         .await
         .map_err(|error| format!("failed to seal web activity: {error}"))
 }
@@ -220,7 +210,9 @@ pub async fn seal_active_segment(pool: &Pool<Sqlite>, now_ms: i64) -> Result<boo
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::repositories::web_activity::upsert_active_segment;
     use crate::data::schema as db_schema;
+    use crate::data::web_activity_store::SqliteWebActivityStore;
     use sqlx::{Executor, SqlitePool};
 
     async fn setup_test_db() -> SqlitePool {
@@ -249,7 +241,8 @@ mod tests {
                 favicon_url: None,
             };
             upsert_active_segment(&pool, &input, 1_000).await.unwrap();
-            assert!(seal_active_segment(&pool, 2_000).await.unwrap());
+            let store = SqliteWebActivityStore::new(pool.clone());
+            assert!(seal_active_segment(&store, 2_000).await.unwrap());
 
             let duration: Option<i64> =
                 sqlx::query_scalar("SELECT duration FROM web_activity_segments LIMIT 1")
