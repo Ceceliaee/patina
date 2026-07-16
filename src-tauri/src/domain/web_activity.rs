@@ -61,6 +61,33 @@ pub struct SanitizedWebActivityInput {
     pub favicon_url: Option<String>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WebActivitySegmentInput {
+    pub browser_client_id: String,
+    pub browser_kind: String,
+    pub browser_exe_name: String,
+    pub domain: String,
+    pub normalized_domain: String,
+    pub url: Option<String>,
+    pub title: Option<String>,
+    pub favicon_url: Option<String>,
+}
+
+impl WebActivitySegmentInput {
+    pub fn from_sanitized(input: SanitizedWebActivityInput, browser_exe_name: String) -> Self {
+        Self {
+            browser_client_id: input.browser_client_id,
+            browser_kind: input.browser_kind,
+            browser_exe_name,
+            domain: input.domain,
+            normalized_domain: input.normalized_domain,
+            url: input.url,
+            title: input.title,
+            favicon_url: input.favicon_url,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WebActivityBridgeSnapshot {

@@ -1,4 +1,5 @@
 pub mod backup;
+pub mod lifecycle;
 pub mod settings;
 pub mod storage;
 pub mod tools;

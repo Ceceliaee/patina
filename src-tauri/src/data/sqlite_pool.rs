@@ -1,4 +1,5 @@
 use crate::data::schema;
+use crate::data::sqlite_error::SqliteOperationError;
 use crate::platform::storage_paths;
 use futures_util::future::BoxFuture;
 use sqlx::error::BoxDynError;
@@ -89,16 +90,6 @@ pub(crate) async fn open_single_connection_sqlite_pool(
         .map_err(|error| format!("failed to open sqlite db `{}`: {error}", db_path.display()))
 }
 
-pub fn is_recoverable_sqlite_error(error: &str) -> bool {
-    let normalized = error.to_ascii_lowercase();
-    normalized.contains("database is locked")
-        || normalized.contains("database is busy")
-        || normalized.contains("sqlite_busy")
-        || normalized.contains("sqlite_locked")
-        || normalized.contains("pool closed")
-        || normalized.contains("pooltimedout")
-}
-
 pub async fn reopen_sqlite_pool<R: Runtime>(app: &AppHandle<R>) -> Result<Pool<Sqlite>, String> {
     let _maintenance = acquire_sqlite_maintenance().await;
     reopen_sqlite_pool_unlocked(app).await
@@ -119,22 +110,24 @@ pub async fn run_recoverable_sqlite_write<R, F, Fut>(
     app: &AppHandle<R>,
     context: &'static str,
     write: F,
-) -> Result<(), String>
+) -> Result<(), SqliteOperationError>
 where
     R: Runtime,
     F: Fn(Pool<Sqlite>) -> Fut,
-    Fut: Future<Output = Result<(), String>>,
+    Fut: Future<Output = Result<(), SqliteOperationError>>,
 {
-    let pool = wait_for_sqlite_pool(app).await?;
+    let pool = wait_for_sqlite_pool(app)
+        .await
+        .map_err(|error| SqliteOperationError::operation_failed(context, error))?;
     match write(pool).await {
         Ok(()) => Ok(()),
-        Err(error) if is_recoverable_sqlite_error(&error) => {
-            let reopened_pool = reopen_sqlite_pool(app).await?;
-            write(reopened_pool)
-                .await
-                .map_err(|error| format!("{context}: {error}"))
+        Err(error) if error.retryable() => {
+            let reopened_pool = reopen_sqlite_pool(app).await.map_err(|reopen_error| {
+                SqliteOperationError::operation_failed(context, reopen_error)
+            })?;
+            write(reopened_pool).await
         }
-        Err(error) => Err(format!("{context}: {error}")),
+        Err(error) => Err(error),
     }
 }
 

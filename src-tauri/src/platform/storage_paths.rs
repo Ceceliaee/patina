@@ -43,6 +43,24 @@ impl StoragePaths {
 }
 
 pub fn default_storage_paths<R: Runtime>(app: &AppHandle<R>) -> Result<StoragePaths, String> {
+    #[cfg(debug_assertions)]
+    if std::env::var("PATINA_E2E").as_deref() == Ok("1") {
+        let root = std::env::var_os("PATINA_E2E_DATA_ROOT")
+            .map(PathBuf::from)
+            .ok_or_else(|| "PATINA_E2E_DATA_ROOT is required when PATINA_E2E=1".to_string())?;
+        if !root.is_absolute() {
+            return Err("PATINA_E2E_DATA_ROOT must be absolute".to_string());
+        }
+        return Ok(StoragePaths::from_roots(
+            root.join("anchors"),
+            root.join("anchors"),
+            root.join("data"),
+            root.join("webview"),
+            false,
+            false,
+        ));
+    }
+
     let data_anchor_dir = storage_anchor::data_anchor_dir(app)?;
     let cache_anchor_dir = storage_anchor::cache_anchor_dir(app)?;
     Ok(StoragePaths::from_roots(

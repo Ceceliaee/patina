@@ -1,3 +1,4 @@
+use crate::data::sqlite_error::SqliteOperationError;
 use crate::data::sqlite_pool::run_recoverable_sqlite_write;
 use sqlx::{Pool, Sqlite};
 use tauri::{AppHandle, Runtime};
@@ -5,7 +6,7 @@ use tauri::{AppHandle, Runtime};
 pub async fn delete_sessions_before<R: Runtime>(
     app: &AppHandle<R>,
     cutoff_time: i64,
-) -> Result<(), String> {
+) -> Result<(), SqliteOperationError> {
     run_recoverable_sqlite_write(
         app,
         "failed to delete historical activity",
@@ -14,7 +15,9 @@ pub async fn delete_sessions_before<R: Runtime>(
     .await
 }
 
-pub async fn clear_all_session_window_titles<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+pub async fn clear_all_session_window_titles<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<(), SqliteOperationError> {
     run_recoverable_sqlite_write(
         app,
         "failed to clear session window titles",
@@ -26,7 +29,7 @@ pub async fn clear_all_session_window_titles<R: Runtime>(app: &AppHandle<R>) -> 
 pub async fn delete_sessions_by_exe_names<R: Runtime>(
     app: &AppHandle<R>,
     exe_names: Vec<String>,
-) -> Result<(), String> {
+) -> Result<(), SqliteOperationError> {
     let exe_names = non_empty_values(exe_names);
     if exe_names.is_empty() {
         return Ok(());
@@ -48,7 +51,7 @@ pub async fn delete_sessions_by_exe_names_between<R: Runtime>(
     exe_names: Vec<String>,
     start_time: i64,
     end_time: i64,
-) -> Result<(), String> {
+) -> Result<(), SqliteOperationError> {
     let exe_names = non_empty_values(exe_names);
     if exe_names.is_empty() {
         return Ok(());
@@ -73,7 +76,7 @@ pub async fn delete_sessions_by_exe_names_between<R: Runtime>(
 pub async fn delete_web_activity_segments_before<R: Runtime>(
     app: &AppHandle<R>,
     cutoff_time: i64,
-) -> Result<(), String> {
+) -> Result<(), SqliteOperationError> {
     run_recoverable_sqlite_write(app, "failed to delete web activity", move |pool| async move {
         delete_web_activity_segments_before_in_pool(&pool, cutoff_time).await
     })
@@ -83,7 +86,7 @@ pub async fn delete_web_activity_segments_before<R: Runtime>(
 pub async fn delete_web_activity_segments_by_domain<R: Runtime>(
     app: &AppHandle<R>,
     normalized_domain: String,
-) -> Result<(), String> {
+) -> Result<(), SqliteOperationError> {
     let normalized_domain = normalized_domain.trim().to_ascii_lowercase();
     if normalized_domain.is_empty() {
         return Ok(());
@@ -100,7 +103,9 @@ pub async fn delete_web_activity_segments_by_domain<R: Runtime>(
                     .execute(&pool)
                     .await
                     .map(|_| ())
-                    .map_err(|error| error.to_string())
+                    .map_err(|error| {
+                        SqliteOperationError::from_sqlx("delete web activity by domain", error)
+                    })
             }
         },
     )
@@ -123,11 +128,10 @@ fn in_clause_placeholders(value_count: usize) -> String {
 async fn delete_sessions_before_in_pool(
     pool: &Pool<Sqlite>,
     cutoff_time: i64,
-) -> Result<(), String> {
-    let mut tx = pool
-        .begin()
-        .await
-        .map_err(|error| format!("failed to start historical activity cleanup: {error}"))?;
+) -> Result<(), SqliteOperationError> {
+    let mut tx = pool.begin().await.map_err(|error| {
+        SqliteOperationError::from_sqlx("start historical activity cleanup", error)
+    })?;
 
     sqlx::query(
         "DELETE FROM session_title_samples WHERE session_id IN (SELECT id FROM sessions WHERE start_time < ?)",
@@ -135,47 +139,51 @@ async fn delete_sessions_before_in_pool(
     .bind(cutoff_time)
     .execute(&mut *tx)
     .await
-    .map_err(|error| format!("failed to delete title samples: {error}"))?;
+    .map_err(|error| SqliteOperationError::from_sqlx("delete historical title samples", error))?;
     sqlx::query("DELETE FROM sessions WHERE start_time < ?")
         .bind(cutoff_time)
         .execute(&mut *tx)
         .await
-        .map_err(|error| format!("failed to delete sessions: {error}"))?;
+        .map_err(|error| SqliteOperationError::from_sqlx("delete historical sessions", error))?;
     sqlx::query("DELETE FROM web_activity_segments WHERE start_time < ?")
         .bind(cutoff_time)
         .execute(&mut *tx)
         .await
-        .map_err(|error| format!("failed to delete web activity: {error}"))?;
+        .map_err(|error| {
+            SqliteOperationError::from_sqlx("delete historical web activity", error)
+        })?;
 
-    tx.commit()
-        .await
-        .map_err(|error| format!("failed to commit historical activity cleanup: {error}"))
+    tx.commit().await.map_err(|error| {
+        SqliteOperationError::from_sqlx("commit historical activity cleanup", error)
+    })
 }
 
-async fn clear_all_session_window_titles_in_pool(pool: &Pool<Sqlite>) -> Result<(), String> {
+async fn clear_all_session_window_titles_in_pool(
+    pool: &Pool<Sqlite>,
+) -> Result<(), SqliteOperationError> {
     let mut tx = pool
         .begin()
         .await
-        .map_err(|error| format!("failed to start title cleanup: {error}"))?;
+        .map_err(|error| SqliteOperationError::from_sqlx("start title cleanup", error))?;
 
     sqlx::query("DELETE FROM session_title_samples")
         .execute(&mut *tx)
         .await
-        .map_err(|error| format!("failed to delete title samples: {error}"))?;
+        .map_err(|error| SqliteOperationError::from_sqlx("delete title samples", error))?;
     sqlx::query("UPDATE sessions SET window_title = '' WHERE COALESCE(window_title, '') <> ''")
         .execute(&mut *tx)
         .await
-        .map_err(|error| format!("failed to clear session window titles: {error}"))?;
+        .map_err(|error| SqliteOperationError::from_sqlx("clear session window titles", error))?;
 
     tx.commit()
         .await
-        .map_err(|error| format!("failed to commit title cleanup: {error}"))
+        .map_err(|error| SqliteOperationError::from_sqlx("commit title cleanup", error))
 }
 
 async fn delete_sessions_by_exe_names_in_pool(
     pool: &Pool<Sqlite>,
     exe_names: &[String],
-) -> Result<(), String> {
+) -> Result<(), SqliteOperationError> {
     let query = format!(
         "DELETE FROM sessions WHERE exe_name IN ({})",
         in_clause_placeholders(exe_names.len()),
@@ -189,7 +197,7 @@ async fn delete_sessions_by_exe_names_in_pool(
         .execute(pool)
         .await
         .map(|_| ())
-        .map_err(|error| error.to_string())
+        .map_err(|error| SqliteOperationError::from_sqlx("delete sessions by executable", error))
 }
 
 async fn delete_sessions_by_exe_names_between_in_pool(
@@ -197,7 +205,7 @@ async fn delete_sessions_by_exe_names_between_in_pool(
     exe_names: &[String],
     start_time: i64,
     end_time: i64,
-) -> Result<(), String> {
+) -> Result<(), SqliteOperationError> {
     let query = format!(
         "DELETE FROM sessions WHERE exe_name IN ({}) AND start_time >= ? AND start_time < ?",
         in_clause_placeholders(exe_names.len()),
@@ -213,19 +221,23 @@ async fn delete_sessions_by_exe_names_between_in_pool(
         .execute(pool)
         .await
         .map(|_| ())
-        .map_err(|error| error.to_string())
+        .map_err(|error| {
+            SqliteOperationError::from_sqlx("delete sessions by executable range", error)
+        })
 }
 
 async fn delete_web_activity_segments_before_in_pool(
     pool: &Pool<Sqlite>,
     cutoff_time: i64,
-) -> Result<(), String> {
+) -> Result<(), SqliteOperationError> {
     sqlx::query("DELETE FROM web_activity_segments WHERE start_time < ?")
         .bind(cutoff_time)
         .execute(pool)
         .await
         .map(|_| ())
-        .map_err(|error| error.to_string())
+        .map_err(|error| {
+            SqliteOperationError::from_sqlx("delete web activity before cutoff", error)
+        })
 }
 
 #[cfg(test)]

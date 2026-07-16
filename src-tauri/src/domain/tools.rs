@@ -264,6 +264,29 @@ pub struct ToolPomodoroRun {
     pub updated_at: i64,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CompletedTimerNotification {
+    pub timer_id: i64,
+    pub label: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CompletedPomodoroNotification {
+    pub run_id: i64,
+    pub completed_phase: PomodoroPhase,
+    pub next_phase: PomodoroPhase,
+    pub completed_focus_count: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SoftwareReminderNotification {
+    pub rule_id: i64,
+    pub app_name: String,
+    pub limit_ms: i64,
+    pub usage_ms: i64,
+    pub message: String,
+}
+
 impl ToolPomodoroRun {
     pub fn phase_duration_ms(&self) -> i64 {
         match self.phase {
