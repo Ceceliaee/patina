@@ -1,9 +1,9 @@
 use super::support::log_tracker_error;
-use crate::data::tracking_runtime::TrackingRuntimeDataStore;
 use crate::domain::tracking::TRACKING_REASON_APP_EXCLUDED_SEALED;
+use crate::engine::tracking::ports::TrackingDataStore;
 
 pub(super) async fn seal_excluded_app_session(
-    data: &TrackingRuntimeDataStore,
+    data: &dyn TrackingDataStore,
     exe_name: &str,
     now_ms: i64,
 ) -> Option<&'static str> {

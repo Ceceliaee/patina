@@ -2,8 +2,8 @@ use crate::app::main_window;
 use crate::app::runtime::now_ms;
 use crate::app::state::{AppExitState, DesktopBehaviorState};
 use crate::app::widget;
+use crate::data::app_settings_service::{self, AppSettingMutation};
 use crate::data::tracking_pause_service;
-use crate::data::{app_settings_service, repositories::app_settings::AppSettingMutation};
 use crate::domain::settings::{CloseBehavior, DesktopBehaviorSettings};
 use crate::engine::tracking::{
     pause_state::TrackingPauseRuntimeState, runtime as tracking_runtime,
@@ -124,7 +124,8 @@ pub(crate) async fn toggle_title_recording<R: Runtime>(app: AppHandle<R>) -> Res
             value: if next { "1".into() } else { "0".into() },
         }],
     )
-    .await?;
+    .await
+    .map_err(|error| error.to_string())?;
     apply_title_recording_setting_change(&app, next).await
 }
 
@@ -143,7 +144,7 @@ pub(crate) async fn apply_title_recording_setting_change<R: Runtime>(
         }
     }
     if let Err(error) =
-        crate::engine::web_activity::seal_active_segment_for_app(app, changed_at_ms).await
+        crate::app::web_activity::seal_active_segment_for_app(app, changed_at_ms).await
     {
         eprintln!("[tray] failed to seal web title boundary: {error}");
     }

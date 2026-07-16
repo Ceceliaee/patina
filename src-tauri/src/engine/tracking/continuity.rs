@@ -1,5 +1,5 @@
+use super::ports::TrackingDataStore;
 use super::transition;
-use crate::data::tracking_runtime::TrackingRuntimeDataStore;
 use crate::domain::tracking::TrackingStatusSnapshot;
 use crate::platform::windows::foreground as tracker;
 
@@ -11,7 +11,7 @@ pub(crate) struct PendingContinuity {
 }
 
 pub(crate) async fn load_pending_continuity(
-    data: &TrackingRuntimeDataStore,
+    data: &dyn TrackingDataStore,
     previous_window: Option<&tracker::WindowInfo>,
     previous_tracking_status: Option<&TrackingStatusSnapshot>,
     current_window: &tracker::WindowInfo,

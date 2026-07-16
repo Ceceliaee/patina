@@ -1,4 +1,3 @@
-use crate::engine::tracking::runtime as tracking_runtime;
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
 use std::thread;
@@ -136,20 +135,6 @@ fn emit_power_event(state: &str) {
             source: POWER_EVENT_SOURCE.to_string(),
         };
         let _ = app_handle.emit("power-lifecycle-changed", &event);
-        let app_handle = app_handle.clone();
-        let event_state = event.state.clone();
-        let timestamp_ms = event.timestamp_ms as i64;
-        tauri::async_runtime::spawn(async move {
-            if let Err(error) = tracking_runtime::handle_power_lifecycle_event(
-                app_handle,
-                &event_state,
-                timestamp_ms,
-            )
-            .await
-            {
-                eprintln!("[tracker] power lifecycle handling failed: {error}");
-            }
-        });
     }
 }
 

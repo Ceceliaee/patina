@@ -1,4 +1,5 @@
 use super::pause_state::TrackingPauseRuntimeState;
+use super::ports::{SharedTrackingDataStore, TrackingDataStore};
 use super::runtime_snapshot::{TrackingRuntimeSnapshot, TrackingRuntimeSnapshotState};
 use super::session_timeout::{
     seal_active_sessions_for_continuity_timeout,
@@ -11,8 +12,6 @@ use super::title_state::TitleRecordingRuntimeState;
 use super::{active_session, continuity, startup, transition, watchdog};
 #[cfg(test)]
 use crate::data::repositories::{sessions, tracker_settings};
-use crate::data::sqlite_pool::wait_for_sqlite_pool;
-use crate::data::tracking_runtime::TrackingRuntimeDataStore;
 #[cfg(test)]
 use crate::domain::tracking::TrackingDataChangedPayload;
 #[cfg(test)]
@@ -49,20 +48,19 @@ use window_polling::{poll_active_window_with_timeout, WindowPollOutcome};
 pub async fn run<R: Runtime>(
     app: AppHandle<R>,
     health_state: Arc<watchdog::RuntimeHealthState>,
+    data: SharedTrackingDataStore,
 ) -> Result<(), String> {
-    let pool = wait_for_sqlite_pool(&app).await?;
-    let data = TrackingRuntimeDataStore::new(pool);
-    startup::initialize_tracker(&app, &data)
+    startup::initialize_tracker(&app, data.as_ref())
         .await
         .map_err(|error| format!("tracker initialization failed: {error}"))?;
     let pause_state = app.state::<TrackingPauseRuntimeState>();
     let title_state = app.state::<TitleRecordingRuntimeState>();
-    if let Err(error) = pause_state.initialize(&data).await {
+    if let Err(error) = pause_state.initialize(data.as_ref(), now_ms()).await {
         log_tracker_error(format!(
             "failed to initialize tracking pause state: {error}"
         ));
     }
-    if let Err(error) = title_state.initialize(&data).await {
+    if let Err(error) = title_state.initialize(data.as_ref()).await {
         log_tracker_error(format!(
             "failed to initialize title recording state: {error}"
         ));
@@ -85,14 +83,14 @@ pub async fn run<R: Runtime>(
             health_state.note_successful_sample(now_ms);
         }
         persist_tracker_runtime_timestamps(
-            &data,
+            data.as_ref(),
             now_ms,
             poll_outcome.is_successful_sample(),
             &mut timestamp_persist_state,
         )
         .await;
         let (tracking_state, next_sustained_participation_state) = load_tracking_loop_state(
-            &data,
+            data.as_ref(),
             &pause_state,
             &title_state,
             &window_info,
@@ -111,7 +109,7 @@ pub async fn run<R: Runtime>(
             &poll_outcome,
         );
         if tracking_state.tracking_paused {
-            match seal_active_sessions_for_tracking_pause(&data, now_ms).await {
+            match seal_active_sessions_for_tracking_pause(data.as_ref(), now_ms).await {
                 Ok(Some(reason)) => {
                     let _ = emit_tracking_data_changed(&app, reason, now_ms as u64);
                 }
@@ -129,8 +127,12 @@ pub async fn run<R: Runtime>(
         }
 
         if !tracking_state.app_tracking_enabled {
-            if let Some(reason) =
-                exclusion::seal_excluded_app_session(&data, &tracked_window.exe_name, now_ms).await
+            if let Some(reason) = exclusion::seal_excluded_app_session(
+                data.as_ref(),
+                &tracked_window.exe_name,
+                now_ms,
+            )
+            .await
             {
                 let _ = emit_tracking_data_changed(&app, reason, now_ms as u64);
             }
@@ -156,7 +158,7 @@ pub async fn run<R: Runtime>(
                 now_ms,
             );
         let new_pending_continuity = continuity::load_pending_continuity(
-            &data,
+            data.as_ref(),
             last_window.as_ref(),
             last_tracking_status.as_ref(),
             &tracked_window,
@@ -172,7 +174,7 @@ pub async fn run<R: Runtime>(
             &tracking_state.tracking_status,
         ) {
             match seal_active_sessions_for_passive_participation_timeout(
-                &data,
+                data.as_ref(),
                 &tracked_window,
                 now_ms,
                 tracking_state.sustained_participation_secs,
@@ -203,7 +205,7 @@ pub async fn run<R: Runtime>(
             &tracking_state.tracking_status,
         ) {
             match seal_active_sessions_for_continuity_timeout(
-                &data,
+                data.as_ref(),
                 &tracked_window,
                 now_ms,
                 tracking_state.continuity_window_secs,
@@ -236,7 +238,7 @@ pub async fn run<R: Runtime>(
 
         let mut did_emit_tracking_data_changed = false;
         match transition::apply_window_transition_with_title_policy(
-            &data,
+            data.as_ref(),
             last_window.as_ref(),
             &tracked_window,
             now_ms,
@@ -318,12 +320,11 @@ fn should_emit_tracking_status_changed(
 
 pub async fn handle_power_lifecycle_event<R: Runtime>(
     app: AppHandle<R>,
+    data: &dyn TrackingDataStore,
     state: &str,
     timestamp_ms: i64,
 ) -> Result<(), String> {
-    let pool = wait_for_sqlite_pool(&app).await?;
-    let data = TrackingRuntimeDataStore::new(pool);
-    let reason = apply_power_lifecycle_event(&data, state, timestamp_ms)
+    let reason = apply_power_lifecycle_event(data, state, timestamp_ms)
         .await
         .map_err(|error| format!("power lifecycle transition failed: {error}"))?;
 
@@ -338,6 +339,7 @@ pub async fn handle_power_lifecycle_event<R: Runtime>(
 mod tests {
     use super::*;
     use crate::data::schema as db_schema;
+    use crate::data::tracking_runtime::TrackingRuntimeDataStore;
     use serde_json::json;
     use sqlx::{Executor, SqlitePool};
 

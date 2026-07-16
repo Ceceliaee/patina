@@ -2,6 +2,7 @@ pub mod active_session;
 pub mod continuity;
 pub mod metadata;
 pub mod pause_state;
+pub mod ports;
 pub mod runtime;
 pub mod runtime_snapshot;
 mod session_timeout;

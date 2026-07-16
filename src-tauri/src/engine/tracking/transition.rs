@@ -1,4 +1,4 @@
-use crate::data::tracking_runtime::{TrackingRuntimeDataError, TrackingRuntimeDataStore};
+use super::ports::{TrackingDataError, TrackingDataStore};
 use crate::domain::tracking::{
     self, WindowSessionIdentity, WindowTrackingCandidate, WindowTransitionDecision,
 };
@@ -6,24 +6,23 @@ use crate::platform::windows::foreground as tracker;
 use std::future::Future;
 use std::pin::Pin;
 
-pub(crate) type StartSessionFn = for<'a> fn(
-    data: &'a TrackingRuntimeDataStore,
-    window: &'a tracker::WindowInfo,
-    start_time: i64,
-    continuity_group_start_time: i64,
-) -> Pin<
-    Box<dyn Future<Output = Result<bool, TrackingRuntimeDataError>> + Send + 'a>,
->;
+pub(crate) type StartSessionFn =
+    for<'a> fn(
+        data: &'a dyn TrackingDataStore,
+        window: &'a tracker::WindowInfo,
+        start_time: i64,
+        continuity_group_start_time: i64,
+    ) -> Pin<Box<dyn Future<Output = Result<bool, TrackingDataError>> + Send + 'a>>;
 
 #[cfg(test)]
 pub(crate) async fn apply_window_transition(
-    data: &TrackingRuntimeDataStore,
+    data: &dyn TrackingDataStore,
     previous_window: Option<&tracker::WindowInfo>,
     next_window: &tracker::WindowInfo,
     now_ms: i64,
     next_continuity_group_start_time: i64,
     start_session: StartSessionFn,
-) -> Result<Option<&'static str>, TrackingRuntimeDataError> {
+) -> Result<Option<&'static str>, TrackingDataError> {
     apply_window_transition_with_title_policy(
         data,
         previous_window,
@@ -37,14 +36,14 @@ pub(crate) async fn apply_window_transition(
 }
 
 pub(crate) async fn apply_window_transition_with_title_policy(
-    data: &TrackingRuntimeDataStore,
+    data: &dyn TrackingDataStore,
     previous_window: Option<&tracker::WindowInfo>,
     next_window: &tracker::WindowInfo,
     now_ms: i64,
     next_continuity_group_start_time: i64,
     capture_window_title: bool,
     start_session: StartSessionFn,
-) -> Result<Option<&'static str>, TrackingRuntimeDataError> {
+) -> Result<Option<&'static str>, TrackingDataError> {
     let decision = plan_window_transition(previous_window, next_window, now_ms);
     if !decision.has_mutation_plan() {
         return recover_missing_active_session(
@@ -93,12 +92,12 @@ pub(crate) async fn apply_window_transition_with_title_policy(
 }
 
 pub(crate) async fn recover_missing_active_session(
-    data: &TrackingRuntimeDataStore,
+    data: &dyn TrackingDataStore,
     window: &tracker::WindowInfo,
     now_ms: i64,
     continuity_group_start_time: i64,
     start_session: StartSessionFn,
-) -> Result<Option<&'static str>, TrackingRuntimeDataError> {
+) -> Result<Option<&'static str>, TrackingDataError> {
     if !is_trackable_window(Some(window)) {
         return Ok(None);
     }
@@ -199,6 +198,7 @@ fn to_tracking_candidate(window: &tracker::WindowInfo) -> WindowTrackingCandidat
 mod title_policy_tests {
     use super::*;
     use crate::data::schema as db_schema;
+    use crate::data::tracking_runtime::TrackingRuntimeDataStore;
     use sqlx::{Executor, Row, SqlitePool};
 
     #[test]

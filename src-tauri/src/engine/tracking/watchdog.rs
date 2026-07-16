@@ -1,6 +1,5 @@
-use crate::data::sqlite_pool::wait_for_sqlite_pool;
-use crate::data::tracking_runtime::TrackingRuntimeDataStore;
 use crate::domain::tracking::TRACKING_REASON_WATCHDOG_SEALED;
+use crate::engine::tracking::ports::{SharedTrackingDataStore, TrackingDataStore};
 use std::sync::{
     atomic::{AtomicI64, Ordering},
     Arc,
@@ -70,10 +69,8 @@ impl RuntimeHealthState {
 pub async fn watch<R: Runtime>(
     app: AppHandle<R>,
     health_state: Arc<RuntimeHealthState>,
+    data: SharedTrackingDataStore,
 ) -> Result<(), String> {
-    let pool = wait_for_sqlite_pool(&app).await?;
-    let data = TrackingRuntimeDataStore::new(pool);
-
     loop {
         let now_ms = now_ms();
         let last_successful_sample_ms = health_state.last_successful_sample_ms();
@@ -86,7 +83,7 @@ pub async fn watch<R: Runtime>(
         ) {
             seal_stale_session(
                 &app,
-                &data,
+                data.as_ref(),
                 &health_state,
                 last_successful_sample_ms.unwrap_or_default(),
             )
@@ -99,7 +96,7 @@ pub async fn watch<R: Runtime>(
 
 async fn seal_stale_session<R: Runtime>(
     app: &AppHandle<R>,
-    data: &TrackingRuntimeDataStore,
+    data: &dyn TrackingDataStore,
     health_state: &RuntimeHealthState,
     sample_time_ms: i64,
 ) {

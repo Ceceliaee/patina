@@ -1,3 +1,4 @@
+use super::ports::{TrackingDataError, TrackingDataStore};
 use std::sync::Mutex;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -14,10 +15,11 @@ pub struct TrackingPauseRuntimeState {
 impl TrackingPauseRuntimeState {
     pub async fn initialize(
         &self,
-        data: &crate::data::tracking_runtime::TrackingRuntimeDataStore,
-    ) -> Result<(), crate::data::tracking_runtime::TrackingRuntimeDataError> {
+        data: &dyn TrackingDataStore,
+        now_ms: i64,
+    ) -> Result<(), TrackingDataError> {
         let paused = data.load_tracking_paused_setting().await?;
-        self.set_verified(paused, crate::app::runtime::now_ms() as i64);
+        self.set_verified(paused, now_ms);
         Ok(())
     }
 

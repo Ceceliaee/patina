@@ -1,5 +1,5 @@
+use super::ports::{TrackingDataError, TrackingDataStore};
 use super::transition;
-use crate::data::tracking_runtime::{TrackingRuntimeDataError, TrackingRuntimeDataStore};
 use crate::domain::tracking::{
     SustainedParticipationState, TrackingStatusSnapshot, WindowSessionIdentity,
     TRACKING_REASON_CONTINUITY_WINDOW_SEALED, TRACKING_REASON_PASSIVE_PARTICIPATION_SEALED,
@@ -8,9 +8,9 @@ use crate::domain::tracking::{
 use crate::platform::windows::foreground as tracker;
 
 pub(super) async fn seal_active_sessions_for_tracking_pause(
-    data: &TrackingRuntimeDataStore,
+    data: &dyn TrackingDataStore,
     timestamp_ms: i64,
-) -> Result<Option<&'static str>, TrackingRuntimeDataError> {
+) -> Result<Option<&'static str>, TrackingDataError> {
     if data.end_active_sessions(timestamp_ms).await? {
         return Ok(Some(TRACKING_REASON_TRACKING_PAUSED_SEALED));
     }
@@ -19,11 +19,11 @@ pub(super) async fn seal_active_sessions_for_tracking_pause(
 }
 
 pub(super) async fn seal_active_sessions_for_continuity_timeout(
-    data: &TrackingRuntimeDataStore,
+    data: &dyn TrackingDataStore,
     window: &tracker::WindowInfo,
     now_ms: i64,
     continuity_window_secs: u64,
-) -> Result<Option<&'static str>, TrackingRuntimeDataError> {
+) -> Result<Option<&'static str>, TrackingDataError> {
     if !has_exceeded_continuity_window(window, continuity_window_secs) {
         return Ok(None);
     }
@@ -39,11 +39,11 @@ pub(super) async fn seal_active_sessions_for_continuity_timeout(
 }
 
 pub(super) async fn seal_active_sessions_for_passive_participation_timeout(
-    data: &TrackingRuntimeDataStore,
+    data: &dyn TrackingDataStore,
     window: &tracker::WindowInfo,
     now_ms: i64,
     sustained_participation_secs: u64,
-) -> Result<Option<&'static str>, TrackingRuntimeDataError> {
+) -> Result<Option<&'static str>, TrackingDataError> {
     if !has_exceeded_sustained_participation_window(window, sustained_participation_secs) {
         return Ok(None);
     }

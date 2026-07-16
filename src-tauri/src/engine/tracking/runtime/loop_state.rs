@@ -4,12 +4,11 @@ use super::super::sustained_participation::{
     SustainedParticipationStatusInput,
 };
 use super::support::log_tracker_error;
-use crate::data::repositories::tracker_settings::{
-    TRACKER_LAST_HEARTBEAT_KEY, TRACKER_LAST_SUCCESSFUL_SAMPLE_KEY,
-};
-use crate::data::tracking_runtime::TrackingRuntimeDataStore;
 use crate::domain::tracking::TrackingStatusSnapshot;
 use crate::engine::tracking::pause_state::TrackingPauseRuntimeState;
+use crate::engine::tracking::ports::{
+    TrackingDataStore, TRACKER_LAST_HEARTBEAT_KEY, TRACKER_LAST_SUCCESSFUL_SAMPLE_KEY,
+};
 use crate::engine::tracking::title_state::TitleRecordingRuntimeState;
 use crate::platform::windows::foreground as tracker;
 use std::collections::HashMap;
@@ -59,7 +58,7 @@ struct CachedCaptureWindowTitleSetting {
 }
 
 pub(super) async fn persist_tracker_runtime_timestamps(
-    data: &TrackingRuntimeDataStore,
+    data: &dyn TrackingDataStore,
     now_ms: i64,
     did_successfully_sample_window: bool,
     state: &mut TrackerTimestampPersistState,
@@ -95,7 +94,7 @@ pub(super) async fn persist_tracker_runtime_timestamps(
 }
 
 pub(super) async fn load_tracking_loop_state(
-    data: &TrackingRuntimeDataStore,
+    data: &dyn TrackingDataStore,
     pause_state: &TrackingPauseRuntimeState,
     title_state: &TitleRecordingRuntimeState,
     window_info: &tracker::WindowInfo,
@@ -170,7 +169,7 @@ pub(super) async fn load_tracking_loop_state(
 impl TrackingSettingsCache {
     async fn load_tracking_settings(
         &mut self,
-        data: &TrackingRuntimeDataStore,
+        data: &dyn TrackingDataStore,
         now_ms: i64,
     ) -> CachedTrackingSettings {
         if let Some(settings) = self.settings {
@@ -218,7 +217,7 @@ impl TrackingSettingsCache {
 
     async fn load_capture_window_title_setting(
         &mut self,
-        data: &TrackingRuntimeDataStore,
+        data: &dyn TrackingDataStore,
         exe_name: &str,
         now_ms: i64,
         override_generation: u64,
@@ -284,7 +283,7 @@ impl TrackingSettingsCache {
 }
 
 async fn load_tracking_paused(
-    data: &TrackingRuntimeDataStore,
+    data: &dyn TrackingDataStore,
     pause_state: &TrackingPauseRuntimeState,
     now_ms: i64,
 ) -> bool {
@@ -315,6 +314,7 @@ mod tests {
     use super::*;
     use crate::data::repositories::tracker_settings;
     use crate::data::schema as db_schema;
+    use crate::data::tracking_runtime::TrackingRuntimeDataStore;
     use sqlx::{Executor, SqlitePool};
 
     async fn setup_test_db() -> SqlitePool {

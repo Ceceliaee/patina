@@ -3,11 +3,11 @@ use std::sync::Arc;
 use crate::app::{
     runtime,
     state::{
-        AppExitState, AppRestartState, DesktopBehaviorState, MainWindowLifecycleState,
-        WidgetWindowLifecycleState,
+        AppExitState, DesktopBehaviorState, MainWindowLifecycleState, WidgetWindowLifecycleState,
     },
     tray,
 };
+use crate::domain::lifecycle::AppRestartState;
 use crate::engine::{
     tools::{ToolsRuntimeState, ToolsRuntimeWakeState},
     tracking::{
@@ -85,7 +85,6 @@ fn register_managed_state_and_plugins(
 
 fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
     builder.invoke_handler(tauri::generate_handler![
-        commands::apps::get_icon,
         commands::tracking::get_current_active_window,
         commands::tracking::get_current_tracking_snapshot,
         commands::tracking::cmd_get_tracker_health_snapshot,
@@ -114,7 +113,6 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::tools::cmd_resume_pomodoro,
         commands::tools::cmd_skip_pomodoro_phase,
         commands::tools::cmd_reset_pomodoro,
-        commands::widget::cmd_get_widget_icon_map,
         commands::widget::cmd_get_widget_icon,
         commands::widget::cmd_get_widget_placement,
         commands::widget::cmd_set_widget_placement,
@@ -123,7 +121,6 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::widget::cmd_show_main_window,
         commands::widget::cmd_hide_widget_window,
         commands::widget::cmd_toggle_tracking_paused,
-        commands::widget::cmd_show_widget_window,
         commands::widget::cmd_is_primary_mouse_button_down,
         commands::window::cmd_minimize_main_window,
         commands::update::cmd_get_update_snapshot,
@@ -156,9 +153,7 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::storage::cmd_restart_and_apply_restore_default_storage_migration,
         commands::storage::cmd_restart_and_apply_restore_default_webview_cache_migration,
         commands::storage::cmd_restart_and_clear_webview_cache,
-        commands::storage::cmd_get_webview_cache_snapshot,
         commands::storage::cmd_open_storage_directory,
-        commands::persistence::cmd_reopen_sqlite_pool,
         commands::persistence::cmd_delete_sessions_before,
         commands::persistence::cmd_clear_all_session_window_titles,
         commands::persistence::cmd_delete_sessions_by_exe_names,

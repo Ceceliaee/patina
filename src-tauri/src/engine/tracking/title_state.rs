@@ -1,3 +1,4 @@
+use super::ports::{TrackingDataError, TrackingDataStore};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tokio::sync::{Mutex, MutexGuard};
 
@@ -19,10 +20,7 @@ impl Default for TitleRecordingRuntimeState {
 }
 
 impl TitleRecordingRuntimeState {
-    pub async fn initialize(
-        &self,
-        data: &crate::data::tracking_runtime::TrackingRuntimeDataStore,
-    ) -> Result<(), crate::data::tracking_runtime::TrackingRuntimeDataError> {
+    pub async fn initialize(&self, data: &dyn TrackingDataStore) -> Result<(), TrackingDataError> {
         self.set_enabled(data.load_title_recording_enabled().await?);
         Ok(())
     }

@@ -51,15 +51,17 @@ pub fn setup(
     launched_by_autostart: bool,
     should_reopen_main_window: bool,
 ) -> tauri::Result<()> {
-    tauri::async_runtime::block_on(crate::engine::remote_status_bridge::ensure_machine_id(
+    tauri::async_runtime::block_on(crate::app::remote_status_bridge::ensure_machine_id(
         &app.handle().clone(),
     ))
     .map_err(std::io::Error::other)?;
+    crate::app::tracking::register_power_lifecycle_handler(app);
+    crate::app::tools::register_alert_handler(app);
     power::start(app.handle().clone());
     audio::start_signal_source();
     media::start_signal_source();
     crate::app::web_activity_bridge::start(app.handle().clone());
-    crate::engine::remote_status_bridge::start(app.handle().clone());
+    crate::app::remote_status_bridge::start(app.handle().clone());
     crate::app::web_activity::spawn_startup_repair(app.handle().clone());
 
     let app_handle = app.handle().clone();

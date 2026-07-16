@@ -1,6 +1,7 @@
-use crate::engine::tools as tools_runtime;
+use crate::app::tools as tools_runtime;
+use crate::app::updater;
 use crate::engine::tracking::{runtime as tracking_runtime, watchdog as tracking_watchdog};
-use crate::engine::updater::{self, UpdaterRuntimeState};
+use crate::engine::updater::UpdaterRuntimeState;
 use std::sync::Arc;
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::time::{sleep, Duration};
@@ -25,7 +26,17 @@ pub(crate) fn spawn_tracking_runtime_restart_loop<R: Runtime + 'static>(
     tauri::async_runtime::spawn(async move {
         let mut retry_delay = RestartBackoff::new();
         loop {
-            if let Err(error) = tracking_runtime::run(app.clone(), runtime_health.clone()).await {
+            let data = match crate::data::tracking_runtime::shared_from_app(&app).await {
+                Ok(data) => data,
+                Err(error) => {
+                    eprintln!("[tracker] tracking data store unavailable: {error}");
+                    sleep(retry_delay.next_delay()).await;
+                    continue;
+                }
+            };
+            if let Err(error) =
+                tracking_runtime::run(app.clone(), runtime_health.clone(), data).await
+            {
                 eprintln!("[tracker] tracking runtime stopped: {error}");
                 let delay = retry_delay.next_delay();
                 eprintln!(
@@ -48,7 +59,16 @@ pub(crate) fn spawn_tracking_watchdog_restart_loop<R: Runtime + 'static>(
     tauri::async_runtime::spawn(async move {
         let mut retry_delay = RestartBackoff::new();
         loop {
-            if let Err(error) = tracking_watchdog::watch(app.clone(), runtime_health.clone()).await
+            let data = match crate::data::tracking_runtime::shared_from_app(&app).await {
+                Ok(data) => data,
+                Err(error) => {
+                    eprintln!("[tracker] watchdog data store unavailable: {error}");
+                    sleep(retry_delay.next_delay()).await;
+                    continue;
+                }
+            };
+            if let Err(error) =
+                tracking_watchdog::watch(app.clone(), runtime_health.clone(), data).await
             {
                 eprintln!("[tracker] watchdog stopped: {error}");
                 let delay = retry_delay.next_delay();

@@ -1,4 +1,4 @@
-use crate::data::tracking_runtime::{TrackingRuntimeDataError, TrackingRuntimeDataStore};
+use super::ports::{TrackingDataError, TrackingDataStore};
 use crate::domain::tracking::{TrackingDataChangedPayload, TRACKING_REASON_STARTUP_SEALED};
 use crate::platform::windows::foreground as tracker;
 use tauri::{AppHandle, Emitter, Runtime};
@@ -7,8 +7,8 @@ const DEFAULT_AFK_THRESHOLD_SECS: u64 = 180;
 
 pub async fn initialize_tracker<R: Runtime>(
     app: &AppHandle<R>,
-    data: &TrackingRuntimeDataStore,
-) -> Result<(), TrackingRuntimeDataError> {
+    data: &dyn TrackingDataStore,
+) -> Result<(), TrackingDataError> {
     let afk_threshold_secs = data
         .load_timeline_merge_gap_secs(DEFAULT_AFK_THRESHOLD_SECS)
         .await?;
@@ -24,9 +24,9 @@ pub async fn initialize_tracker<R: Runtime>(
 }
 
 async fn record_normalized_closed_duration(
-    data: &TrackingRuntimeDataStore,
+    data: &dyn TrackingDataStore,
     repair_notes: &mut Vec<String>,
-) -> Result<(), TrackingRuntimeDataError> {
+) -> Result<(), TrackingDataError> {
     let normalized_rows = data.normalize_closed_session_durations().await?;
     if normalized_rows > 0 {
         repair_notes.push(format!("normalized_closed_duration={normalized_rows}"));
@@ -37,9 +37,9 @@ async fn record_normalized_closed_duration(
 
 async fn seal_startup_active_session_if_needed<R: Runtime>(
     app: &AppHandle<R>,
-    data: &TrackingRuntimeDataStore,
+    data: &dyn TrackingDataStore,
     repair_notes: &mut Vec<String>,
-) -> Result<(), TrackingRuntimeDataError> {
+) -> Result<(), TrackingDataError> {
     if let Some(end_time) = seal_startup_active_session(data, now_ms()).await? {
         repair_notes.push("sealed_active_session".to_string());
         let _ = emit_tracking_data_changed(app, TRACKING_REASON_STARTUP_SEALED, end_time as u64);
@@ -49,9 +49,9 @@ async fn seal_startup_active_session_if_needed<R: Runtime>(
 }
 
 pub(crate) async fn seal_startup_active_session(
-    data: &TrackingRuntimeDataStore,
+    data: &dyn TrackingDataStore,
     now_ms: i64,
-) -> Result<Option<i64>, TrackingRuntimeDataError> {
+) -> Result<Option<i64>, TrackingDataError> {
     let Some(existing_session) = data.load_active_session().await? else {
         return Ok(None);
     };
@@ -68,9 +68,9 @@ pub(crate) async fn seal_startup_active_session(
 }
 
 async fn persist_startup_self_heal_if_needed(
-    data: &TrackingRuntimeDataStore,
+    data: &dyn TrackingDataStore,
     repair_notes: &[String],
-) -> Result<(), TrackingRuntimeDataError> {
+) -> Result<(), TrackingDataError> {
     if repair_notes.is_empty() {
         return Ok(());
     }
