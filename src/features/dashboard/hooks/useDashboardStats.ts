@@ -108,6 +108,8 @@ export function useDashboardStats(
       nowMs,
       classificationReady ? rawYesterdaySessions : [],
     ),
+    // The read model reads module-level classification mappings; this token is its explicit invalidation signal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [classificationReady, mappingVersion, nowMs, rawSessions, rawYesterdaySessions, trackerHealth],
   );
 

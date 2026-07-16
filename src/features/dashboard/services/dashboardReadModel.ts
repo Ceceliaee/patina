@@ -57,6 +57,20 @@ export interface DashboardReadModel {
   diagnostics: ReadModelDiagnostics;
 }
 
+interface DashboardSnapshotDependencies {
+  now: () => number;
+  getHistoryByDate: typeof getHistoryByDate;
+  loadIcons: typeof loadDashboardIconsForExecutables;
+  getCachedIcons: typeof getDashboardIconRuntimeCacheSnapshot;
+}
+
+const DASHBOARD_SNAPSHOT_DEPENDENCIES: DashboardSnapshotDependencies = {
+  now: Date.now,
+  getHistoryByDate,
+  loadIcons: loadDashboardIconsForExecutables,
+  getCachedIcons: getDashboardIconRuntimeCacheSnapshot,
+};
+
 function collectDashboardIconExecutables(...sessionGroups: HistorySession[][]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -74,34 +88,48 @@ function collectDashboardIconExecutables(...sessionGroups: HistorySession[][]): 
   return result;
 }
 
-export async function loadDashboardSnapshot(date: Date = new Date()): Promise<DashboardSnapshot> {
+export async function loadDashboardSnapshotWithDeps(
+  date: Date,
+  deps: DashboardSnapshotDependencies,
+): Promise<DashboardSnapshot> {
   const yesterday = new Date(date);
   yesterday.setDate(yesterday.getDate() - 1);
   const [sessions, yesterdaySessions] = await Promise.all([
-    getHistoryByDate(date),
-    getHistoryByDate(yesterday),
+    deps.getHistoryByDate(date),
+    deps.getHistoryByDate(yesterday),
   ]);
-  const icons = await loadDashboardIconsForExecutables(
+  const icons = await deps.loadIcons(
     collectDashboardIconExecutables(sessions),
   );
 
   return {
-    fetchedAtMs: Date.now(),
+    fetchedAtMs: deps.now(),
     icons,
     sessions,
     yesterdaySessions,
   };
 }
 
-export async function loadIconSnapshot(exeNames: string[] = []): Promise<IconSnapshot> {
+export async function loadDashboardSnapshot(date: Date = new Date()): Promise<DashboardSnapshot> {
+  return loadDashboardSnapshotWithDeps(date, DASHBOARD_SNAPSHOT_DEPENDENCIES);
+}
+
+export async function loadIconSnapshotWithDeps(
+  exeNames: string[],
+  deps: Pick<DashboardSnapshotDependencies, "now" | "loadIcons" | "getCachedIcons">,
+): Promise<IconSnapshot> {
   const icons = exeNames.length > 0
-    ? await loadDashboardIconsForExecutables(exeNames)
-    : getDashboardIconRuntimeCacheSnapshot();
+    ? await deps.loadIcons(exeNames)
+    : deps.getCachedIcons();
 
   return {
-    fetchedAtMs: Date.now(),
+    fetchedAtMs: deps.now(),
     icons,
   };
+}
+
+export async function loadIconSnapshot(exeNames: string[] = []): Promise<IconSnapshot> {
+  return loadIconSnapshotWithDeps(exeNames, DASHBOARD_SNAPSHOT_DEPENDENCIES);
 }
 
 export function buildDashboardReadModel(

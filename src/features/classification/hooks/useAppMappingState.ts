@@ -170,12 +170,27 @@ export function useAppMappingState({
     };
   }, []);
 
-  const draftOverrides = draftState?.overrides ?? {};
-  const draftWebDomainOverrides = draftState?.webDomainOverrides ?? {};
-  const draftCategoryColorOverrides = draftState?.categoryColorOverrides ?? {};
-  const draftCategoryLabelOverrides = draftState?.categoryLabelOverrides ?? {};
-  const draftPersistedCategoryIds = draftState?.persistedCategoryIds ?? [];
-  const draftDeletedCategories = draftState?.deletedCategories ?? [];
+  const draftOverrides = useMemo(() => draftState?.overrides ?? {}, [draftState?.overrides]);
+  const draftWebDomainOverrides = useMemo(
+    () => draftState?.webDomainOverrides ?? {},
+    [draftState?.webDomainOverrides],
+  );
+  const draftCategoryColorOverrides = useMemo(
+    () => draftState?.categoryColorOverrides ?? {},
+    [draftState?.categoryColorOverrides],
+  );
+  const draftCategoryLabelOverrides = useMemo(
+    () => draftState?.categoryLabelOverrides ?? {},
+    [draftState?.categoryLabelOverrides],
+  );
+  const draftPersistedCategoryIds = useMemo(
+    () => draftState?.persistedCategoryIds ?? [],
+    [draftState?.persistedCategoryIds],
+  );
+  const draftDeletedCategories = useMemo(
+    () => draftState?.deletedCategories ?? [],
+    [draftState?.deletedCategories],
+  );
 
   const hasUnsavedChanges = (() => {
     if (!savedState || !draftState) return false;
@@ -468,7 +483,7 @@ export function useAppMappingState({
       skipNextNameBlurExeRef.current = nextState.skipNextNameBlurExe;
       return nextState.draftState;
     });
-  }, [draftOverrides, resolveAutoDisplayName, updateOverride]);
+  }, [editingNameExe, nameDrafts, nameEditSnapshots, resolveAutoDisplayName]);
 
   const syncWebNameDraftToPageDraft = useCallback((
     candidate: ObservedWebDomainCandidate,

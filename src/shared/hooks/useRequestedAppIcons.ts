@@ -82,7 +82,7 @@ export function useRequestedAppIcons({
     return () => {
       cancelled = true;
     };
-  }, [enabled, loadIcons, requestKey]);
+  }, [enabled, loadIcons, requestedExeNames, requestKey]);
 
   return useMemo(() => ({
     ...baseIcons,

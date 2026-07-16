@@ -342,6 +342,8 @@ export default function Data({
       overviewRange,
       overviewTrend.nowMs,
     );
+  // Data aggregators read module-level locale/mapping state; these tokens explicitly invalidate that cache.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     appTrendSnapshotForViewModel,
     mappingVersion,
@@ -360,6 +362,8 @@ export default function Data({
       overviewTrendSnapshotForViewModel.range,
       overviewTrend.nowMs,
     );
+  // Data view models read module-level locale/mapping state; these tokens explicitly invalidate that cache.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     mappingVersion,
     overviewTrend.nowMs,
@@ -392,6 +396,8 @@ export default function Data({
       appTrend.nowMs,
       selectedAppKey,
     );
+  // App trend view models read module-level locale/mapping state; these tokens explicitly invalidate that cache.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     appTrend.nowMs,
     appTrendSnapshotForViewModel,
@@ -448,7 +454,7 @@ export default function Data({
   const dedupedAppOptions = useMemo(() => {
     if (!visibleAppTrendViewModel) return EMPTY_DATA_APP_OPTIONS;
     return dedupeDataAppOptions(visibleAppTrendViewModel.appOptions);
-  }, [visibleAppTrendViewModel?.appOptions]);
+  }, [visibleAppTrendViewModel]);
   const filteredAppOptions = useMemo(() => (
     filterDataAppOptionsForQuery(dedupedAppOptions, appSearchQuery)
   ), [appSearchQuery, dedupedAppOptions]);
@@ -466,7 +472,7 @@ export default function Data({
       return visibleAppTrendViewModel.chartData.map((point) => ({ ...point, duration: 0, hours: 0 }));
     }
     return visibleAppTrendViewModel?.chartData ?? EMPTY_DATA_APP_TREND_POINTS;
-  }, [appTrendSelectionHiddenBySearch, visibleAppTrendViewModel?.chartData]);
+  }, [appTrendSelectionHiddenBySearch, visibleAppTrendViewModel]);
   const appTrendChartAxis = useMemo(() => (
     appTrendSelectionHiddenBySearch
       ? DEFAULT_DATA_APP_CHART_AXIS
@@ -551,6 +557,8 @@ export default function Data({
   const heatmapGranularityOptions = useMemo<Array<{ value: HeatmapGranularity; label: string }>>(() => [
     { value: "daily", label: UI_TEXT.data.heatmapDaily },
     { value: "weekly", label: UI_TEXT.data.heatmapWeekly },
+  // UI_TEXT is module state; uiLanguage is its explicit invalidation signal.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [uiLanguage]);
   const selectedHeatmapViewKey = String(selectedHeatmapView);
   const yearOptions = useMemo(

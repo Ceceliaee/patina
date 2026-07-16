@@ -388,8 +388,8 @@ export default function AppMapping(props: Props) {
             getCategoryColor={resolveCategoryColor}
             onColorFormatChange={setColorFormat}
             onApplyColor={applyCategoryColor}
-            onRenameCategory={handleRenameCategory}
-            onDeleteCategory={handleDeleteCategory}
+            onRenameCategory={(category) => { void handleRenameCategory(category); }}
+            onDeleteCategory={(category) => { void handleDeleteCategory(category); }}
           />
         </div>
       </QuietDialog>

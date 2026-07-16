@@ -309,7 +309,6 @@ export function useAppMappingDerivedState({
     searchQuery,
     resolveWebDomainCategory,
     resolveWebDomainEnabled,
-    resolveWebDomainTitleCaptureEnabled,
     resolveCategoryLabel,
     resolveWebDomainSortDisplayName,
     webActivityEnabled,

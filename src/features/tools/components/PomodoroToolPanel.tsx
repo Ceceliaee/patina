@@ -67,6 +67,7 @@ export default function PomodoroToolPanel({
       restoreDefaultDurations();
     }
   }, [
+    run,
     run?.id,
     run?.status,
     restoreDefaultDurations,

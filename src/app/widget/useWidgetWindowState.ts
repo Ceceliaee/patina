@@ -91,7 +91,7 @@ export function useWidgetWindowState(
     onWarning: (message, error) => {
       console.warn(message, error);
     },
-  }), []);
+  }), [showObjectSlot]);
 
   useEffect(() => {
     let cancelled = false;
