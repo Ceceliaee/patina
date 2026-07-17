@@ -4,6 +4,22 @@ import { delay, evaluate, jsonString, waitForExpression } from "./browserHarness
 
 export async function runClassificationScenarios(context: BrowserSmokeContext) {
   const { client, sessionId, runTest } = context;
+  const pressArrowDown = async () => {
+    await client!.command("Input.dispatchKeyEvent", {
+      type: "keyDown",
+      key: "ArrowDown",
+      code: "ArrowDown",
+      windowsVirtualKeyCode: 40,
+      nativeVirtualKeyCode: 40,
+    }, sessionId);
+    await client!.command("Input.dispatchKeyEvent", {
+      type: "keyUp",
+      key: "ArrowDown",
+      code: "ArrowDown",
+      windowsVirtualKeyCode: 40,
+      nativeVirtualKeyCode: 40,
+    }, sessionId);
+  };
 
   await runTest("classification cold navigation never renders page loading copy", async () => {
     assert.equal(
@@ -430,13 +446,26 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
           const trigger = document.querySelector('.qp-select-trigger');
           if (!trigger) return false;
           trigger.focus();
-          trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
           return true;
         })()
       `),
       true,
     );
-    await waitForExpression(client!, sessionId, `document.activeElement?.classList.contains('qp-select-menu')`);
+    await pressArrowDown();
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('.qp-select-menu'))`,
+      undefined,
+      "select should open from ArrowDown",
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.activeElement?.classList.contains('qp-select-menu')`,
+      undefined,
+      "select menu should receive focus after ArrowDown",
+    );
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
@@ -500,13 +529,19 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
           if (!(next instanceof HTMLElement)) return false;
           next.dataset.selectTabTarget = 'true';
           trigger.focus();
-          trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
           return true;
         })()
       `),
       true,
     );
-    await waitForExpression(client!, sessionId, `document.activeElement?.classList.contains('qp-select-menu')`);
+    await pressArrowDown();
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.activeElement?.classList.contains('qp-select-menu')`,
+      undefined,
+      "select menu should receive focus before Tab navigation",
+    );
     await evaluate(client!, sessionId, `
       document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
     `);

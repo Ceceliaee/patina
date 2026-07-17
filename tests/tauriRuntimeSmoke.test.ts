@@ -11,9 +11,10 @@ import {
   waitFor,
 } from "./uiBrowserSmoke/browserHarness.ts";
 
-// Hosted Windows runners can spend more than five minutes on the isolated cold
-// Rust build. Keep enough of the 10-minute job budget for process and data cleanup.
-const STARTUP_TIMEOUT_MS = 420_000;
+// Keep cold compilation separate from actual WebView startup so a slow hosted
+// runner cannot consume the runtime readiness budget before Patina launches.
+const COLD_BUILD_TIMEOUT_MS = 480_000;
+const WEBVIEW_STARTUP_TIMEOUT_MS = 30_000;
 const RUNTIME_TARGET_DIR = join(process.cwd(), "src-tauri", "target", "runtime-smoke");
 async function reservePort() {
   return new Promise<number>((resolve, reject) => {
@@ -107,6 +108,8 @@ const root = mkdtempSync(join(tmpdir(), "patina-tauri-e2e-"));
 assertIsolatedTempPath(root, "patina-tauri-e2e-");
 const frontendUrl = `http://127.0.0.1:${frontendPort}`;
 const logs: string[] = [];
+let appLaunchObserved = false;
+let appLogTail = "";
 let appProcess: ChildProcess | null = null;
 let viteServer: ViteDevServer | null = null;
 let client: CdpConnection | null = null;
@@ -164,13 +167,33 @@ try {
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
-  appProcess.stdout?.on("data", (chunk) => logs.push(String(chunk)));
-  appProcess.stderr?.on("data", (chunk) => logs.push(String(chunk)));
+  const captureAppLog = (chunk: unknown) => {
+    const text = String(chunk);
+    logs.push(text);
+    appLogTail = `${appLogTail}${text}`.slice(-4_096);
+    if (/Running[\s\S]*patina\.exe/i.test(appLogTail)) {
+      appLaunchObserved = true;
+    }
+  };
+  appProcess.stdout?.on("data", captureAppLog);
+  appProcess.stderr?.on("data", captureAppLog);
+
+  await waitFor(
+    "Tauri cold build and process launch",
+    () => {
+      if (appLaunchObserved) return true;
+      if (appProcess && appProcess.exitCode !== null) {
+        throw new Error(`Tauri dev exited before launching Patina (exit ${appProcess.exitCode})`);
+      }
+      return null;
+    },
+    COLD_BUILD_TIMEOUT_MS,
+  );
 
   const target = await waitFor(
     "Patina main WebView CDP target",
     () => findMainTarget(devtoolsPort),
-    STARTUP_TIMEOUT_MS,
+    WEBVIEW_STARTUP_TIMEOUT_MS,
   );
   assert.ok(
     target.url?.startsWith(frontendUrl),

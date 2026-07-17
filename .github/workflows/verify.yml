@@ -122,7 +122,7 @@ jobs:
       github.event.workflow_run.event == 'pull_request') ||
       (github.event_name == 'workflow_dispatch' && inputs.pr_number != '')
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
 
     steps:
       - name: Checkout push revision
