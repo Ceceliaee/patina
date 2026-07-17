@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
-import { AlertCircle, CheckCircle2, Info } from "lucide-react";
-
-export type QuietToastTone = "success" | "warning" | "info";
+import { AlertCircle, CheckCircle2, CircleX, Info } from "lucide-react";
+import type { QuietToastTone } from "../types/toast";
 
 interface Props {
   message: string;
@@ -23,6 +22,13 @@ function resolveToastTone(tone: QuietToastTone): { icon: ReactNode; className: s
     };
   }
 
+  if (tone === "error") {
+    return {
+      icon: <CircleX size={14} className="text-[var(--qp-danger)]" />,
+      className: "qp-toast-error",
+    };
+  }
+
   return {
     icon: <Info size={14} className="text-[var(--qp-accent-default)]" />,
     className: "qp-toast-info",
@@ -32,7 +38,11 @@ function resolveToastTone(tone: QuietToastTone): { icon: ReactNode; className: s
 export default function QuietToast({ message, tone }: Props) {
   const toneMeta = resolveToastTone(tone);
   return (
-    <div className={`qp-toast ${toneMeta.className}`}>
+    <div
+      role={tone === "error" ? "alert" : "status"}
+      aria-atomic="true"
+      className={`qp-toast ${toneMeta.className}`}
+    >
       <div className="qp-toast-content">
         <span className="qp-toast-icon">{toneMeta.icon}</span>
         <span className="qp-toast-message">{message}</span>

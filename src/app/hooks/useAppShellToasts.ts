@@ -1,33 +1,36 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { QuietToastTone } from "../../shared/components/QuietToast";
-import type { QuietToastItem } from "../../shared/components/QuietToastStack";
+import type { QuietToastItem, QuietToastTone } from "../../shared/types/toast";
+import {
+  createToastQueueRuntime,
+  type ToastQueueRuntime,
+} from "../services/toastQueueRuntime";
 
 const TOAST_AUTO_DISMISS_MS = 3200;
+const TOAST_MAX_VISIBLE = 3;
 
 export function useAppShellToasts() {
   const [toasts, setToasts] = useState<QuietToastItem[]>([]);
-  const toastTimerIdsRef = useRef<number[]>([]);
-  const nextToastIdRef = useRef(0);
+  const runtimeRef = useRef<ToastQueueRuntime | null>(null);
 
   const pushToast = useCallback((message: string, tone: QuietToastTone = "info") => {
-    const id = nextToastIdRef.current;
-    nextToastIdRef.current += 1;
-    setToasts((current) => [...current, { id, message, tone }]);
-
-    const timerId = window.setTimeout(() => {
-      setToasts((current) => current.filter((toast) => toast.id !== id));
-      toastTimerIdsRef.current = toastTimerIdsRef.current.filter((existingId) => existingId !== timerId);
-    }, TOAST_AUTO_DISMISS_MS);
-
-    toastTimerIdsRef.current.push(timerId);
+    runtimeRef.current?.push(message, tone);
   }, []);
 
   useEffect(() => {
+    const runtime = createToastQueueRuntime({
+      dismissAfterMs: TOAST_AUTO_DISMISS_MS,
+      maxVisible: TOAST_MAX_VISIBLE,
+      scheduler: {
+        schedule: (callback, delayMs) => window.setTimeout(callback, delayMs),
+        cancel: (timerId) => window.clearTimeout(timerId),
+      },
+      onChange: setToasts,
+    });
+    runtimeRef.current = runtime;
+
     return () => {
-      toastTimerIdsRef.current.forEach((timerId) => {
-        window.clearTimeout(timerId);
-      });
-      toastTimerIdsRef.current = [];
+      if (runtimeRef.current === runtime) runtimeRef.current = null;
+      runtime.dispose();
     };
   }, []);
 
