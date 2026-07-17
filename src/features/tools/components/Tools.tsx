@@ -1,7 +1,8 @@
 import { AlarmClock, BellRing, RefreshCw, Timer, ToolCase } from "lucide-react";
 import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
+import QuietBadge from "../../../shared/components/QuietBadge.tsx";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader.tsx";
-import type { QuietToastTone } from "../../../shared/components/QuietToast.tsx";
+import type { QuietToastTone } from "../../../shared/types/toast.ts";
 import { UI_TEXT, type UiText } from "../../../shared/copy/index.ts";
 import { useRequestedAppIcons } from "../../../shared/hooks/useRequestedAppIcons.ts";
 import type { TimerMode } from "../../../shared/types/tools.ts";
@@ -64,7 +65,7 @@ export default function Tools({
   );
   const [selectedTimerMode, setSelectedTimerMode] = useState<TimerMode>(readToolsTimerMode);
   const handleError = useCallback((message: string) => {
-    onToast?.(message, "warning");
+    onToast?.(message, "error");
   }, [onToast]);
   const state = useToolsPageState({
     activeSection,
@@ -150,7 +151,7 @@ export default function Tools({
       <QuietPageHeader
         icon={<ToolCase size={18} />}
         title={UI_TEXT.tools.title}
-        titleSuffix={<span className="qp-page-header-beta">{UI_TEXT.tools.beta}</span>}
+        titleSuffix={<QuietBadge variant="beta">{UI_TEXT.tools.beta}</QuietBadge>}
         subtitle={UI_TEXT.tools.subtitle}
       />
 

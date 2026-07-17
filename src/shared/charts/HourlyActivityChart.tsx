@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Bar, BarChart, Rectangle, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import type { BarShapeProps } from "recharts";
 import { UI_TEXT } from "../copy/index.ts";
@@ -97,13 +97,13 @@ export default function HourlyActivityChart({
   const stackedDataKeys = Array.from({ length: stackedDataKeyCount }, (_, index) =>
     getHourlyCategorySlotDataKey(index),
   );
-  const getTooltipSegment = (item: { dataKey?: string | number; payload?: unknown }) => {
+  const getTooltipSegment = (item: { dataKey?: unknown; payload?: unknown }) => {
     const dataKey = String(item.dataKey ?? "");
     const point = item.payload as HourlyCategoryActivityPoint | undefined;
     return point?.segmentDetails[dataKey] as HourlyCategoryActivitySegment | undefined;
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
     let frameId: number | undefined;

@@ -129,6 +129,7 @@ export default function PomodoroToolPanel({
           {!hasStarted || run?.status === "idle" || run?.status === "completed" ? (
             <QuietButton
               tone="primary"
+              size="large"
               disabled={controlsDisabled || !startInput}
               onClick={() => {
                 if (!startInput) return;
@@ -144,6 +145,7 @@ export default function PomodoroToolPanel({
           ) : null}
           {isRunning ? (
             <QuietButton
+              size="large"
               disabled={controlsDisabled}
               onClick={() => void onPausePomodoro()}
               aria-label={UI_TEXT.accessibility.tools.pausePomodoro}
@@ -157,6 +159,7 @@ export default function PomodoroToolPanel({
           {isPaused ? (
             <QuietButton
               tone="primary"
+              size="large"
               disabled={controlsDisabled}
               onClick={() => void onResumePomodoro()}
               aria-label={UI_TEXT.accessibility.tools.resumePomodoro}
@@ -170,6 +173,7 @@ export default function PomodoroToolPanel({
           {hasStarted ? (
             <>
               <QuietButton
+                size="large"
                 disabled={controlsDisabled}
                 onClick={() => void onSkipPomodoroPhase()}
                 aria-label={UI_TEXT.accessibility.tools.skipPomodoroPhase}
@@ -180,6 +184,7 @@ export default function PomodoroToolPanel({
                 {UI_TEXT.tools.skipPhase}
               </QuietButton>
               <QuietButton
+                size="large"
                 disabled={controlsDisabled}
                 onClick={() => void onResetPomodoro()}
                 aria-label={UI_TEXT.accessibility.tools.resetPomodoro}

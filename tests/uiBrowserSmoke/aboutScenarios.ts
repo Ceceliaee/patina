@@ -37,6 +37,7 @@ export async function runAboutScenarios(context: BrowserSmokeContext) {
           profileJustifyItems: getComputedStyle(profile).justifyItems,
           actionDisplay: getComputedStyle(actions[0]).display,
           actionMinHeight: parseFloat(getComputedStyle(actions[0]).minHeight),
+          actionBorderRadius: getComputedStyle(actions[0]).borderRadius,
           actionsStayInOneRow: actionRects.every((rect) => Math.abs(rect.top - firstActionRect.top) < 2),
           updatePaddingTop: parseFloat(getComputedStyle(update).paddingTop),
         };
@@ -46,6 +47,7 @@ export async function runAboutScenarios(context: BrowserSmokeContext) {
       profileJustifyItems: string;
       actionDisplay: string;
       actionMinHeight: number;
+      actionBorderRadius: string;
       actionsStayInOneRow: boolean;
       updatePaddingTop: number;
     } | null;
@@ -54,7 +56,8 @@ export async function runAboutScenarios(context: BrowserSmokeContext) {
     assert.equal(layout.panelDisplay, "grid");
     assert.equal(layout.profileJustifyItems, "center");
     assert.equal(["flex", "inline-flex"].includes(layout.actionDisplay), true);
-    assert.equal(layout.actionMinHeight >= 32, true);
+    assert.equal(layout.actionMinHeight, 30);
+    assert.equal(layout.actionBorderRadius, "8px");
     assert.equal(layout.actionsStayInOneRow, true);
     assert.equal(layout.updatePaddingTop > 0, true);
   });

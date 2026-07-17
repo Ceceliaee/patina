@@ -74,19 +74,19 @@ export default function UpdateStatusPanel({
     <div className="flex flex-wrap items-center justify-end gap-2">
       {viewModel.secondaryAction ? (
         <QuietButton
+          size="regular"
           onClick={() => handleAction(viewModel.secondaryAction!)}
           disabled={viewModel.secondaryAction.disabled}
-          className="inline-flex min-h-[34px] items-center gap-1.5 rounded-[8px] px-3 py-2 text-xs font-semibold"
         >
           {renderActionLabel(viewModel.secondaryAction)}
         </QuietButton>
       ) : null}
       <QuietButton
         tone="primary"
+        size="regular"
         onClick={() => handleAction(viewModel.primaryAction)}
         disabled={viewModel.primaryAction.disabled}
         busy={viewModel.primaryAction.loading}
-        className="inline-flex min-h-[34px] items-center gap-1.5 rounded-[8px] px-3 py-2 text-xs font-semibold"
       >
         {renderActionLabel(viewModel.primaryAction)}
       </QuietButton>

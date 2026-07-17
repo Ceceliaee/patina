@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import QuietDialog from "../../../shared/components/QuietDialog";
 import QuietButton, { type QuietButtonTone } from "../../../shared/components/QuietButton";
 import type { UpdateSnapshot } from "../../../shared/types/update";
@@ -33,6 +34,7 @@ export default function UpdateConfirmDialog({
   onOpenReleasePage,
   onOpenAssetDownload,
 }: UpdateConfirmDialogProps) {
+  const laterButtonRef = useRef<HTMLButtonElement>(null);
   const viewModel = buildUpdateConfirmDialogModel(snapshot);
 
   const handleAction = (action: UpdateActionModel | null) => {
@@ -57,9 +59,12 @@ export default function UpdateConfirmDialog({
       open={open}
       title={viewModel.title}
       onClose={onClose}
+      initialFocusRef={laterButtonRef}
       actions={(
         <>
           <QuietButton
+            ref={laterButtonRef}
+            size="large"
             onClick={onClose}
             className="qp-dialog-action"
           >
@@ -68,6 +73,7 @@ export default function UpdateConfirmDialog({
           {viewModel.secondaryAction ? (
             <QuietButton
               tone={resolveButtonTone(viewModel.secondaryAction)}
+              size="large"
               onClick={() => handleAction(viewModel.secondaryAction)}
               disabled={viewModel.secondaryAction.disabled}
               className="qp-dialog-action"
@@ -78,6 +84,7 @@ export default function UpdateConfirmDialog({
           {viewModel.primaryAction ? (
             <QuietButton
               tone={resolveButtonTone(viewModel.primaryAction)}
+              size="large"
               onClick={() => handleAction(viewModel.primaryAction)}
               disabled={installing || viewModel.primaryAction.disabled}
               busy={installing && viewModel.primaryAction.action === "open_confirm"}

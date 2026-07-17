@@ -142,14 +142,14 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       "missing date picker trigger",
     );
     await waitForExpression(client!, sessionId, `document.activeElement?.classList.contains('qp-calendar-day')`);
-    const initialFocusedDate = await evaluate(client!, sessionId, `document.activeElement?.getAttribute('data-date-picker-key')`);
+    const initialFocusedDate = await evaluate(client!, sessionId, `document.activeElement?.getAttribute('data-calendar-date')`);
     await evaluate(client!, sessionId, `
       document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
     `);
     await waitForExpression(
       client!,
       sessionId,
-      `document.activeElement?.classList.contains('qp-calendar-day') && document.activeElement?.getAttribute('data-date-picker-key') !== ${jsonString(String(initialFocusedDate))}`,
+      `document.activeElement?.classList.contains('qp-calendar-day') && document.activeElement?.getAttribute('data-calendar-date') !== ${jsonString(String(initialFocusedDate))}`,
     );
     assert.equal(
       await evaluate(client!, sessionId, `document.querySelectorAll('.qp-calendar-day[tabindex="0"]').length`),

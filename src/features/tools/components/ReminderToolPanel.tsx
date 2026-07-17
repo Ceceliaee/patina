@@ -1,4 +1,4 @@
-import { BellRing, Plus, Search, X } from "lucide-react";
+import { BellRing, Plus, X } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -10,6 +10,7 @@ import {
 import QuietDatePicker from "../../../shared/components/QuietDatePicker.tsx";
 import QuietButton from "../../../shared/components/QuietButton.tsx";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter.tsx";
+import QuietSearchField from "../../../shared/components/QuietSearchField.tsx";
 import QuietTimePicker from "../../../shared/components/QuietTimePicker.tsx";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import type { ToolSoftwareReminderAppCandidate } from "../../../shared/types/tools.ts";
@@ -227,18 +228,15 @@ function SoftwareReminderPanel({
         <div className="tools-reminder-form tools-software-reminder-form">
           <div ref={searchFieldRef} className="tools-form-field tools-software-search-field">
             <span>{UI_TEXT.tools.softwareReminderAppLabel}</span>
-            <label className="data-app-search tools-software-app-search">
-              <Search size={14} aria-hidden />
-              <input
-                type="text"
-                value={softwareName}
-                onFocus={() => setSearchFocused(true)}
-                onBlur={() => setSearchFocused(false)}
-                onChange={(event) => handleSoftwareNameChange(event.target.value)}
-                placeholder={UI_TEXT.tools.softwareReminderAppPlaceholder}
-                aria-label={UI_TEXT.tools.softwareReminderAppPlaceholder}
-              />
-            </label>
+            <QuietSearchField
+              className="tools-software-app-search"
+              value={softwareName}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
+              onChange={(event) => handleSoftwareNameChange(event.target.value)}
+              placeholder={UI_TEXT.tools.softwareReminderAppPlaceholder}
+              aria-label={UI_TEXT.tools.softwareReminderAppPlaceholder}
+            />
             {searchFocused && visibleCandidates.length > 0 && candidateListStyle ? (
               <div
                 className="tools-software-candidate-list data-app-list"
@@ -304,6 +302,7 @@ function SoftwareReminderPanel({
           <div className="tools-form-actions tools-software-form-actions">
             <QuietButton
               tone="primary"
+              size="large"
               disabled={creating}
               onClick={() => void handleCreateRule()}
               aria-label={UI_TEXT.accessibility.tools.createReminder}
@@ -539,6 +538,7 @@ export default function ReminderToolPanel({
                 <div className="tools-form-actions">
                   <QuietButton
                     tone="primary"
+                    size="large"
                     disabled={creating || !canCreateReminder}
                     onClick={() => void handleCreate()}
                     aria-label={UI_TEXT.accessibility.tools.createReminder}

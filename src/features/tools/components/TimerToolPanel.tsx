@@ -136,6 +136,7 @@ export default function TimerToolPanel({
               {viewModel.status === "idle" || viewModel.status === "completed" ? (
                 <QuietButton
                   tone="primary"
+                  size="large"
                   disabled={starting || !canStartTimer}
                   onClick={() => {
                     const durationMinutes = effectiveMode === "countdown"
@@ -156,6 +157,7 @@ export default function TimerToolPanel({
               {viewModel.status === "running" ? (
                 <>
                   <QuietButton
+                    size="large"
                     disabled={busyAction === "pause-timer"}
                     onClick={() => void onPauseTimer()}
                     aria-label={UI_TEXT.accessibility.tools.pauseTimer}
@@ -166,6 +168,7 @@ export default function TimerToolPanel({
                     {UI_TEXT.tools.pause}
                   </QuietButton>
                   <QuietButton
+                    size="large"
                     disabled={busyAction === "add-timer-lap"}
                     onClick={() => void onAddTimerLap()}
                     aria-label={UI_TEXT.accessibility.tools.addTimerLap}
@@ -180,6 +183,7 @@ export default function TimerToolPanel({
               {viewModel.status === "paused" ? (
                 <QuietButton
                   tone="primary"
+                  size="large"
                   disabled={busyAction === "resume-timer"}
                   onClick={() => void onResumeTimer()}
                   aria-label={UI_TEXT.accessibility.tools.resumeTimer}
@@ -192,6 +196,7 @@ export default function TimerToolPanel({
               ) : null}
               {viewModel.status !== "idle" ? (
                 <QuietButton
+                  size="large"
                   disabled={busyAction === "reset-timer"}
                   onClick={() => void handleResetTimer()}
                   aria-label={UI_TEXT.accessibility.tools.resetTimer}

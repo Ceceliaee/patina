@@ -6,6 +6,7 @@ import {
 import type { ReactNode } from "react";
 import appIconUrl from "../../../../src-tauri/icons/icon.png";
 import type { UpdateSnapshot } from "../../../shared/types/update";
+import QuietButton from "../../../shared/components/QuietButton";
 import UpdateStatusPanel from "../../update/components/UpdateStatusPanel";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 
@@ -37,8 +38,8 @@ function AboutLinkButton({
   onClick,
 }: AboutLinkButtonProps) {
   return (
-    <button
-      type="button"
+    <QuietButton
+      size="compact"
       className="about-pill-action"
       onClick={onClick}
     >
@@ -46,7 +47,7 @@ function AboutLinkButton({
         {icon}
       </span>
       <span className="about-pill-label">{label}</span>
-    </button>
+    </QuietButton>
   );
 }
 

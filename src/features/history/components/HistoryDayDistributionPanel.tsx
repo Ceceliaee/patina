@@ -23,6 +23,7 @@ interface HistoryDayDistributionPanelProps {
   modeOptions: QuietSegmentedFilterOption<DayDistributionMode>[];
   items: HistoryDayDistributionItem[];
   showQuietPlaceholder: boolean;
+  placeholderMessage: string;
   onModeChange: (mode: DayDistributionMode) => void;
 }
 
@@ -39,6 +40,7 @@ export default function HistoryDayDistributionPanel({
   modeOptions,
   items,
   showQuietPlaceholder,
+  placeholderMessage,
   onModeChange,
 }: HistoryDayDistributionPanelProps) {
   return (
@@ -54,7 +56,12 @@ export default function HistoryDayDistributionPanel({
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-1 pt-2">
         {showQuietPlaceholder ? (
-          <div className="h-24" aria-hidden="true" />
+          <p
+            className="text-[var(--qp-text-tertiary)] text-xs text-center mt-8"
+            role="status"
+          >
+            {placeholderMessage}
+          </p>
         ) : items.length === 0 ? (
           <p className="text-[var(--qp-text-tertiary)] text-xs text-center mt-8">{UI_TEXT.history.noData}</p>
         ) : (

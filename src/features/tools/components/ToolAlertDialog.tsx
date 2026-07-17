@@ -1,5 +1,5 @@
 import { AlarmClock, BellRing, TimerReset } from "lucide-react";
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 import QuietDialog from "../../../shared/components/QuietDialog.tsx";
 import QuietButton from "../../../shared/components/QuietButton.tsx";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
@@ -23,6 +23,8 @@ function alertIcon(alert: ToolAlert): ReactNode {
 }
 
 export default function ToolAlertDialog() {
+  const pauseButtonRef = useRef<HTMLButtonElement>(null);
+  const dismissButtonRef = useRef<HTMLButtonElement>(null);
   const { activeAlert, dismissActiveAlert } = useToolAlerts();
   const [pausingPomodoro, setPausingPomodoro] = useState(false);
   const title = activeAlert?.title.trim() || UI_TEXT.tools.notificationStatus;
@@ -51,11 +53,14 @@ export default function ToolAlertDialog() {
       title={title}
       closeOnBackdrop={false}
       onClose={dismissActiveAlert}
+      initialFocusRef={canPausePomodoro ? pauseButtonRef : dismissButtonRef}
       surfaceClassName="tools-alert-dialog-surface"
       actions={(
         <>
           {canPausePomodoro && (
             <QuietButton
+              ref={pauseButtonRef}
+              size="large"
               className="qp-dialog-action"
               onClick={() => void handlePausePomodoro()}
               busy={pausingPomodoro}
@@ -64,7 +69,9 @@ export default function ToolAlertDialog() {
             </QuietButton>
           )}
           <QuietButton
+            ref={dismissButtonRef}
             tone="primary"
+            size="large"
             className="qp-dialog-action"
             onClick={dismissActiveAlert}
           >

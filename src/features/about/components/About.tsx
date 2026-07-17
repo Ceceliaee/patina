@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Info, RefreshCw } from "lucide-react";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
-import type { QuietToastTone } from "../../../shared/components/QuietToast";
+import type { QuietToastTone } from "../../../shared/types/toast";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
 import type { UpdateSnapshot } from "../../../shared/types/update";
 import AboutPanel from "./AboutPanel";
@@ -74,7 +74,7 @@ export default function About({
       await SettingsRuntimeAdapterService.openReleaseNotes();
     } catch (error) {
       console.error("open release notes failed", error);
-      notify(UI_TEXT.toast.releaseNotesOpenFailed, "warning");
+      notify(UI_TEXT.toast.releaseNotesOpenFailed, "error");
     }
   }, [notify]);
 
@@ -83,7 +83,7 @@ export default function About({
       await SettingsRuntimeAdapterService.openRepository();
     } catch (error) {
       console.error("open repository link failed", error);
-      notify(UI_TEXT.toast.repositoryOpenFailed, "warning");
+      notify(UI_TEXT.toast.repositoryOpenFailed, "error");
     }
   }, [notify]);
 
@@ -93,7 +93,7 @@ export default function About({
       return true;
     } catch (error) {
       console.error("open feedback link failed", error);
-      notify(UI_TEXT.toast.feedbackOpenFailed, "warning");
+      notify(UI_TEXT.toast.feedbackOpenFailed, "error");
       return false;
     }
   }, [notify]);
@@ -103,7 +103,7 @@ export default function About({
       await SettingsRuntimeAdapterService.openKofiSupport();
     } catch (error) {
       console.error("open Ko-fi support link failed", error);
-      notify(UI_TEXT.toast.supportOpenFailed, "warning");
+      notify(UI_TEXT.toast.supportOpenFailed, "error");
     }
   }, [notify]);
 
