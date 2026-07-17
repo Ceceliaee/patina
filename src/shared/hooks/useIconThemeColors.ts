@@ -1,6 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+export interface IconThemeColorPersistence {
+  read: (iconSource: string) => string | null;
+  remember: (iconSource: string, color: string) => void;
+}
+
+const NO_ICON_THEME_COLOR_PERSISTENCE: IconThemeColorPersistence = {
+  read: () => null,
+  remember: () => undefined,
+};
+
+let iconThemeColorPersistence = NO_ICON_THEME_COLOR_PERSISTENCE;
 
 const ICON_THEME_CACHE = new Map<string, string>();
+const ICON_THEME_FALLBACK_CACHE = new Map<string, Map<string, string>>();
+const ICON_THEME_IN_FLIGHT = new Map<string, Promise<string | null>>();
 const ICON_SAMPLE_SIZE = 48;
 const ALPHA_MIN = 48;
 const NEAR_WHITE_BRIGHTNESS_MIN = 235;
@@ -301,6 +315,41 @@ function fallbackThemeColor(identifier: string) {
   return FALLBACK_PALETTE[hash % FALLBACK_PALETTE.length];
 }
 
+function normalizeThemeColorIdentifier(identifier: string) {
+  return identifier.trim().toLowerCase();
+}
+
+function readCachedThemeColor(identifier: string, iconData: string): string | null {
+  const imageSource = toImageSource(iconData);
+  if (!imageSource) return null;
+
+  const extractedColor = ICON_THEME_CACHE.get(imageSource);
+  if (extractedColor) return extractedColor;
+
+  try {
+    const persistedColor = iconThemeColorPersistence.read(imageSource);
+    if (persistedColor) {
+      ICON_THEME_CACHE.set(imageSource, persistedColor);
+      return persistedColor;
+    }
+  } catch {
+    // Persistence is an optional optimization; extraction remains the source of truth.
+  }
+
+  return ICON_THEME_FALLBACK_CACHE
+    .get(imageSource)
+    ?.get(normalizeThemeColorIdentifier(identifier)) ?? null;
+}
+
+function readCachedThemeColors(icons: Record<string, string>): Record<string, string> {
+  const colors: Record<string, string> = {};
+  for (const [identifier, iconData] of Object.entries(icons)) {
+    const color = readCachedThemeColor(identifier, iconData);
+    if (color) colors[identifier] = color;
+  }
+  return colors;
+}
+
 async function extractDominantColor(iconData: string): Promise<string | null> {
   const imageSource = toImageSource(iconData);
   if (!imageSource) return null;
@@ -352,32 +401,83 @@ async function extractDominantColor(iconData: string): Promise<string | null> {
   return color;
 }
 
+async function resolveThemeColor(
+  identifier: string,
+  iconData: string,
+  extractor: (value: string) => Promise<string | null> = extractDominantColor,
+): Promise<string | null> {
+  const imageSource = toImageSource(iconData);
+  if (!imageSource) return null;
+
+  const cachedColor = readCachedThemeColor(identifier, iconData);
+  if (cachedColor) return cachedColor;
+
+  let pending = ICON_THEME_IN_FLIGHT.get(imageSource);
+  if (!pending) {
+    const created = Promise.resolve()
+      .then(() => extractor(iconData))
+      .catch(() => null)
+      .then((color) => {
+        if (color) ICON_THEME_CACHE.set(imageSource, color);
+        return color;
+      })
+      .finally(() => {
+        if (ICON_THEME_IN_FLIGHT.get(imageSource) === created) {
+          ICON_THEME_IN_FLIGHT.delete(imageSource);
+        }
+      });
+    ICON_THEME_IN_FLIGHT.set(imageSource, created);
+    pending = created;
+  }
+
+  const extractedColor = await pending;
+  if (extractedColor) {
+    try {
+      iconThemeColorPersistence.remember(imageSource, extractedColor);
+    } catch {
+      // Persistence is an optional optimization; the in-memory result is still valid.
+    }
+    return extractedColor;
+  }
+
+  const fallbackColor = fallbackThemeColor(identifier);
+  const sourceFallbacks = ICON_THEME_FALLBACK_CACHE.get(imageSource) ?? new Map<string, string>();
+  sourceFallbacks.set(normalizeThemeColorIdentifier(identifier), fallbackColor);
+  ICON_THEME_FALLBACK_CACHE.set(imageSource, sourceFallbacks);
+  return fallbackColor;
+}
+
+function resetThemeColorCaches() {
+  ICON_THEME_CACHE.clear();
+  ICON_THEME_FALLBACK_CACHE.clear();
+  ICON_THEME_IN_FLIGHT.clear();
+}
+
+export function configureIconThemeColorPersistence(
+  persistence: IconThemeColorPersistence | null,
+): void {
+  iconThemeColorPersistence = persistence ?? NO_ICON_THEME_COLOR_PERSISTENCE;
+}
+
 export function useIconThemeColors(icons: Record<string, string>) {
-  const [colors, setColors] = useState<Record<string, string>>({});
+  const [cacheRevision, setCacheRevision] = useState(0);
+  const colors = useMemo(() => {
+    void cacheRevision;
+    return readCachedThemeColors(icons);
+  }, [cacheRevision, icons]);
 
   useEffect(() => {
+    const unresolvedEntries = Object.entries(icons).filter(([identifier, iconData]) => (
+      Boolean(toImageSource(iconData)) && !readCachedThemeColor(identifier, iconData)
+    ));
+    if (unresolvedEntries.length === 0) return undefined;
+
     let cancelled = false;
-
-    const resolveColors = async () => {
-      const entries = Object.entries(icons);
-      if (entries.length === 0) {
-        setColors({});
-        return;
-      }
-
-      const resolved: Record<string, string> = {};
-      await Promise.all(entries.map(async ([exeName, icon]) => {
-        if (!icon.trim()) return;
-        const color = await extractDominantColor(icon);
-        resolved[exeName] = color ?? fallbackThemeColor(exeName);
-      }));
-
-      if (!cancelled) {
-        setColors(resolved);
-      }
-    };
-
-    void resolveColors();
+    void Promise.all(unresolvedEntries.map(([identifier, iconData]) => (
+      resolveThemeColor(identifier, iconData)
+    ))).then(() => {
+      if (!cancelled) setCacheRevision((current) => current + 1);
+    });
 
     return () => {
       cancelled = true;
@@ -392,4 +492,7 @@ export const __iconThemeColorInternals = {
   detectDominantLightBackground,
   detectLightEdgeBackground,
   fallbackThemeColor,
+  readCachedThemeColors,
+  resetThemeColorCaches,
+  resolveThemeColor,
 };

@@ -27,6 +27,7 @@ import {
 } from "../src/features/classification/services/legacyAutoClassificationMigration.ts";
 import {
   ClassificationService,
+  type ClassificationBootstrapData,
   type ClassificationBootstrapDeps,
   type ClassificationCommitDeps,
   commitDraftChangesWithDeps,
@@ -41,6 +42,10 @@ import {
   sanitizeDeletedCategories,
   type ClassificationDraftState,
 } from "../src/features/classification/services/classificationDraftState.ts";
+import {
+  getClassificationBootstrapCache,
+  setClassificationBootstrapCache,
+} from "../src/features/classification/services/classificationBootstrapCache.ts";
 
 function buildDraftState(overrides: Partial<ClassificationDraftState> = {}): ClassificationDraftState {
   return {
@@ -970,6 +975,113 @@ await runTest("classification bootstrap keeps app data when optional web reads f
   } finally {
     console.warn = originalWarn;
   }
+});
+
+await runTest("classification bootstrap shares one in-flight read across warmup and page mount", async () => {
+  let releaseObserved!: (value: ObservedAppCandidate[]) => void;
+  const observedPromise = new Promise<ObservedAppCandidate[]>((resolve) => {
+    releaseObserved = resolve;
+  });
+  const calls: string[] = [];
+  const deps: ClassificationBootstrapDeps = {
+    loadObservedAppCandidates: async () => {
+      calls.push("observed");
+      return observedPromise;
+    },
+    loadObservedWebDomainCandidates: async () => {
+      calls.push("web-observed");
+      return [];
+    },
+    loadAppOverrides: async () => {
+      calls.push("overrides");
+      return {};
+    },
+    loadWebDomainOverrides: async () => {
+      calls.push("web-overrides");
+      return {};
+    },
+    loadCategoryColorOverrides: async () => {
+      calls.push("colors");
+      return {};
+    },
+    loadCategoryLabelOverrides: async () => {
+      calls.push("labels");
+      return {};
+    },
+    loadPersistedCategoryIds: async () => {
+      calls.push("categories");
+      return [];
+    },
+    loadDeletedCategories: async () => {
+      calls.push("deleted");
+      return [];
+    },
+    loadAppIconsForExecutables: async () => {
+      calls.push("icons");
+      return {};
+    },
+  };
+
+  const warmupRequest = ClassificationService.loadClassificationBootstrap(deps);
+  const pageRequest = ClassificationService.loadClassificationBootstrap(deps);
+  await Promise.resolve();
+
+  assert.equal(calls.filter((event) => event === "observed").length, 1);
+  assert.equal(calls.filter((event) => event === "overrides").length, 1);
+
+  releaseObserved([buildCandidate("cursor.exe", "Cursor")]);
+  const [warmupBootstrap, pageBootstrap] = await Promise.all([warmupRequest, pageRequest]);
+
+  assert.deepEqual(pageBootstrap, warmupBootstrap);
+  assert.equal(calls.filter((event) => event === "icons").length, 1);
+});
+
+await runTest("late classification refresh cannot overwrite a newer saved bootstrap", async () => {
+  const baselineBootstrap: ClassificationBootstrapData = {
+    icons: {},
+    observed: [buildCandidate("cursor.exe", "Cursor")],
+    observedWebDomains: [],
+    loadedOverrides: {},
+    loadedWebDomainOverrides: {},
+    loadedCategoryColorOverrides: {},
+    loadedCategoryLabelOverrides: {},
+    loadedPersistedCategoryIds: [],
+    loadedDeletedCategories: [],
+  };
+  const savedBootstrap: ClassificationBootstrapData = {
+    ...baselineBootstrap,
+    loadedOverrides: {
+      "cursor.exe": {
+        enabled: true,
+        displayName: "Saved Cursor",
+      },
+    },
+  };
+  let releaseObserved!: (value: ObservedAppCandidate[]) => void;
+  const observedPromise = new Promise<ObservedAppCandidate[]>((resolve) => {
+    releaseObserved = resolve;
+  });
+  const deps: ClassificationBootstrapDeps = {
+    loadObservedAppCandidates: () => observedPromise,
+    loadObservedWebDomainCandidates: async () => [],
+    loadAppOverrides: async () => ({}),
+    loadWebDomainOverrides: async () => ({}),
+    loadCategoryColorOverrides: async () => ({}),
+    loadCategoryLabelOverrides: async () => ({}),
+    loadPersistedCategoryIds: async () => [],
+    loadDeletedCategories: async () => [],
+    loadAppIconsForExecutables: async () => ({}),
+  };
+
+  setClassificationBootstrapCache(baselineBootstrap);
+  const refreshRequest = ClassificationService.loadClassificationBootstrap(deps);
+  setClassificationBootstrapCache(savedBootstrap);
+  releaseObserved([buildCandidate("cursor.exe", "Stale Cursor")]);
+
+  const resolvedBootstrap = await refreshRequest;
+
+  assert.equal(resolvedBootstrap, savedBootstrap);
+  assert.equal(getClassificationBootstrapCache(), savedBootstrap);
 });
 
 await runTest("commitDraftChangesWithDeps does not sync process mapper state when persistence fails", async () => {

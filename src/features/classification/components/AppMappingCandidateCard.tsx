@@ -153,6 +153,7 @@ export default function AppMappingCandidateCard({
             </div>
             <QuietSelect
               value={assignedCategory}
+              ariaLabel={UI_TEXT.mapping.categorySelectLabel(displayName)}
               disabled={isBusy}
               className="order-1 min-w-[132px]"
               onChange={(value) => onCategoryAssign(String(value))}

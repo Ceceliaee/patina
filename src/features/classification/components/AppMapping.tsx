@@ -1,9 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { ListX, RefreshCw, Save, Search, Sparkles, SlidersHorizontal } from "lucide-react";
+import { ListX, RefreshCw, Save, Sparkles, SlidersHorizontal } from "lucide-react";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import QuietDialog from "../../../shared/components/QuietDialog";
 import QuietButton from "../../../shared/components/QuietButton";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
+import QuietSearchField from "../../../shared/components/QuietSearchField";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
 import CategoryColorControls from "./CategoryColorControls";
 import AppMappingCandidateCard from "./AppMappingCandidateCard";
@@ -112,20 +113,12 @@ export default function AppMapping(props: Props) {
     setObjectMode("app");
   }, [objectMode, webActivityEnabled]);
 
-  if (loading || !draftState || !savedState) {
-    return (
-      <div className="h-full flex items-center justify-center gap-2 text-[var(--qp-text-tertiary)]">
-        <RefreshCw size={15} className="animate-spin" />
-        {UI_TEXT.mapping.loading}
-      </div>
-    );
-  }
-
+  const bootstrapReady = !loading && draftState !== null && savedState !== null;
   const effectiveObjectMode = webActivityEnabled ? objectMode : "app";
   const activeCounts = effectiveObjectMode === "web" ? webDomainCounts : counts;
   const objectModeOptions = [
-    { value: "app" as const, label: UI_TEXT.mapping.objectModeApp },
-    { value: "web" as const, label: UI_TEXT.mapping.objectModeWeb },
+    { value: "app" as const, label: UI_TEXT.mapping.objectModeApp, disabled: !bootstrapReady },
+    { value: "web" as const, label: UI_TEXT.mapping.objectModeWeb, disabled: !bootstrapReady },
   ];
   const searchPlaceholder = effectiveObjectMode === "web"
     ? UI_TEXT.mapping.webSearchPlaceholder
@@ -137,7 +130,10 @@ export default function AppMapping(props: Props) {
   const contentPaneKey = `${effectiveObjectMode}:${filter}`;
 
   return (
-    <div className="flex h-full min-w-0 flex-col gap-4 md:gap-5 overflow-hidden">
+    <div
+      className="flex h-full min-w-0 flex-col gap-4 md:gap-5 overflow-hidden"
+      data-classification-content-state={bootstrapReady ? "ready" : "cold"}
+    >
       <QuietPageHeader
         icon={<Sparkles size={18} />}
         title={UI_TEXT.mapping.title}
@@ -149,36 +145,41 @@ export default function AppMapping(props: Props) {
                 saveStatus !== "saving" && hasUnsavedChanges ? "qp-status-danger" : ""
               } flex px-3 py-1.5 rounded-[8px] items-center text-xs font-semibold`}
             >
-              {saveStatus === "saving" && (
+              {!bootstrapReady && (
+                <span className="text-[var(--qp-text-tertiary)]" aria-hidden>—</span>
+              )}
+              {bootstrapReady && saveStatus === "saving" && (
                 <span className="text-[var(--qp-accent-default)] flex items-center gap-2">
                   <RefreshCw size={12} className="animate-spin" />
                   {UI_TEXT.mapping.saving}
                 </span>
               )}
-              {saveStatus === "saved" && !hasUnsavedChanges && (
+              {bootstrapReady && saveStatus === "saved" && !hasUnsavedChanges && (
                 <span className="text-[var(--qp-success)] flex items-center gap-1.5">
                   <Save size={14} />
                   {UI_TEXT.settings.saved}
                 </span>
               )}
-              {saveStatus !== "saving" && hasUnsavedChanges && <span>{UI_TEXT.mapping.unsaved}</span>}
-              {saveStatus === "idle" && !hasUnsavedChanges && (
+              {bootstrapReady && saveStatus !== "saving" && hasUnsavedChanges && <span>{UI_TEXT.mapping.unsaved}</span>}
+              {bootstrapReady && saveStatus === "idle" && !hasUnsavedChanges && (
                 <span className="text-[var(--qp-text-tertiary)]">{UI_TEXT.mapping.idle}</span>
               )}
             </div>
             <QuietButton
+              size="large"
               onClick={handleCancel}
-              disabled={!hasUnsavedChanges || saving}
-              className="rounded-[8px] px-2.5 py-1.5 text-[11px] font-semibold"
+              disabled={!bootstrapReady || !hasUnsavedChanges || saving}
+              className="rounded-[8px]"
             >
               {UI_TEXT.mapping.cancel}
             </QuietButton>
             <QuietButton
               tone="primary"
+              size="large"
               onClick={() => void handleSave()}
-              disabled={!hasUnsavedChanges || saving}
+              disabled={!bootstrapReady || !hasUnsavedChanges || saving}
               busy={saving}
-              className="rounded-[8px] px-2.5 py-1.5 text-[11px] font-semibold"
+              className="rounded-[8px]"
             >
               {saving ? UI_TEXT.mapping.saving : UI_TEXT.mapping.save}
             </QuietButton>
@@ -200,20 +201,22 @@ export default function AppMapping(props: Props) {
                     : activeCounts.classified;
                 return {
                   value: item.value,
-                  label: item.showCount === false ? item.label : `${item.label} (${count})`,
+                  label: item.showCount === false
+                    ? item.label
+                    : `${item.label} (${bootstrapReady ? count : "—"})`,
                   ariaLabel: item.ariaLabel,
+                  disabled: !bootstrapReady,
                 };
               })}
             />
-            <label className="data-app-search w-[220px]">
-              <Search size={14} aria-hidden />
-              <input
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder={searchPlaceholder}
-                aria-label={searchPlaceholder}
-              />
-            </label>
+            <QuietSearchField
+              className="w-[220px]"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder}
+              disabled={!bootstrapReady}
+            />
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {webActivityEnabled && (
@@ -224,8 +227,10 @@ export default function AppMapping(props: Props) {
               />
             )}
             <QuietButton
+              size="regular"
               onClick={() => setShowCategoryDialog(true)}
-              className="inline-flex items-center gap-2 rounded-[8px] px-3 py-2 text-xs font-semibold"
+              disabled={!bootstrapReady}
+              className="rounded-[8px]"
             >
               <SlidersHorizontal size={14} />
               {UI_TEXT.mapping.categoryControl}
@@ -235,7 +240,9 @@ export default function AppMapping(props: Props) {
       </section>
 
       <div className="qp-panel flex-1 min-h-0 p-4">
-        {effectiveObjectMode === "web" ? (
+        {!bootstrapReady ? (
+          <div className="h-full" aria-hidden />
+        ) : effectiveObjectMode === "web" ? (
           <div key={contentPaneKey} className="qp-classification-object-pane h-full">
             {filteredWebDomainCandidates.length === 0 ? (
               <div className="h-full flex items-center justify-center text-sm text-[var(--qp-text-tertiary)]">
@@ -364,6 +371,7 @@ export default function AppMapping(props: Props) {
         actions={(
           <>
             <QuietButton
+              size="large"
               onClick={() => setShowCategoryDialog(false)}
               className="qp-dialog-action"
             >
@@ -371,6 +379,7 @@ export default function AppMapping(props: Props) {
             </QuietButton>
             <QuietButton
               tone="primary"
+              size="large"
               onClick={() => void handleCreateCategory()}
               className="qp-dialog-action"
             >

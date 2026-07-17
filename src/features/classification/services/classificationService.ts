@@ -84,6 +84,7 @@ const defaultClassificationBootstrapDeps: ClassificationBootstrapDeps = {
 
 let warnedWebClassificationFallback = false;
 let warnedClassificationIconFallback = false;
+let classificationBootstrapInFlight: Promise<ClassificationBootstrapData> | null = null;
 
 async function loadOptionalClassificationIconMap(
   deps: ClassificationBootstrapDeps,
@@ -139,45 +140,71 @@ export class ClassificationService {
     return classificationStore.loadObservedWebDomainCandidates(days, limit);
   }
 
-  static async loadClassificationBootstrap(
+  static loadClassificationBootstrap(
     deps: ClassificationBootstrapDeps = defaultClassificationBootstrapDeps,
   ): Promise<ClassificationBootstrapData> {
-    const [
-      observed,
-      loadedOverrides,
-      loadedCategoryColorOverrides,
-      loadedCategoryLabelOverrides,
-      loadedPersistedCategoryIds,
-      loadedDeletedCategories,
-      webClassificationData,
-    ] = await Promise.all([
-      deps.loadObservedAppCandidates(),
-      deps.loadAppOverrides(),
-      deps.loadCategoryColorOverrides(),
-      deps.loadCategoryLabelOverrides(),
-      deps.loadPersistedCategoryIds(),
-      deps.loadDeletedCategories(),
-      loadOptionalWebClassificationData(deps),
-    ]);
+    if (classificationBootstrapInFlight) {
+      return classificationBootstrapInFlight;
+    }
 
-    const [icons] = await Promise.all([
-      loadOptionalClassificationIconMap(deps, observed),
-    ]);
-    const sanitizedDeletedCategories = sanitizeDeletedCategories(loadedDeletedCategories ?? []);
+    const cacheAtRequestStart = getClassificationBootstrapCache();
+    const request = (async () => {
+      const [
+        observed,
+        loadedOverrides,
+        loadedCategoryColorOverrides,
+        loadedCategoryLabelOverrides,
+        loadedPersistedCategoryIds,
+        loadedDeletedCategories,
+        webClassificationData,
+      ] = await Promise.all([
+        deps.loadObservedAppCandidates(),
+        deps.loadAppOverrides(),
+        deps.loadCategoryColorOverrides(),
+        deps.loadCategoryLabelOverrides(),
+        deps.loadPersistedCategoryIds(),
+        deps.loadDeletedCategories(),
+        loadOptionalWebClassificationData(deps),
+      ]);
 
-    const bootstrap = {
-      icons,
-      observed,
-      observedWebDomains: webClassificationData.observedWebDomains,
-      loadedOverrides,
-      loadedWebDomainOverrides: webClassificationData.loadedWebDomainOverrides,
-      loadedCategoryColorOverrides: loadedCategoryColorOverrides ?? {},
-      loadedCategoryLabelOverrides: loadedCategoryLabelOverrides ?? {},
-      loadedPersistedCategoryIds,
-      loadedDeletedCategories: sanitizedDeletedCategories,
-    };
-    setClassificationBootstrapCache(bootstrap);
-    return bootstrap;
+      const icons = await loadOptionalClassificationIconMap(deps, observed);
+      const sanitizedDeletedCategories = sanitizeDeletedCategories(loadedDeletedCategories ?? []);
+
+      const bootstrap = {
+        icons,
+        observed,
+        observedWebDomains: webClassificationData.observedWebDomains,
+        loadedOverrides,
+        loadedWebDomainOverrides: webClassificationData.loadedWebDomainOverrides,
+        loadedCategoryColorOverrides: loadedCategoryColorOverrides ?? {},
+        loadedCategoryLabelOverrides: loadedCategoryLabelOverrides ?? {},
+        loadedPersistedCategoryIds,
+        loadedDeletedCategories: sanitizedDeletedCategories,
+      };
+
+      const latestCache = getClassificationBootstrapCache();
+      if (latestCache !== cacheAtRequestStart && latestCache) {
+        return latestCache;
+      }
+
+      setClassificationBootstrapCache(bootstrap);
+      return bootstrap;
+    })();
+
+    classificationBootstrapInFlight = request;
+    void request.then(
+      () => {
+        if (classificationBootstrapInFlight === request) {
+          classificationBootstrapInFlight = null;
+        }
+      },
+      () => {
+        if (classificationBootstrapInFlight === request) {
+          classificationBootstrapInFlight = null;
+        }
+      },
+    );
+    return request;
   }
 
   static getBootstrapCache(): ClassificationBootstrapData | null {
@@ -192,9 +219,7 @@ export class ClassificationService {
   }
 
   static async prewarmBootstrapCache(): Promise<ClassificationBootstrapData> {
-    const bootstrap = await this.loadClassificationBootstrap();
-    setClassificationBootstrapCache(bootstrap);
-    return bootstrap;
+    return this.loadClassificationBootstrap();
   }
 
   static async saveAppOverride(exeName: string, override: AppOverride | null) {
