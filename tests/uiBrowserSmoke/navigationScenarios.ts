@@ -236,7 +236,18 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
       sessionId,
       `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("历史"))} + ']')?.className.includes("qp-nav-item-active")`,
     );
-    await delay(150);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `(() => {
+        const state = document.querySelector("[data-history-content-state]")
+          ?.getAttribute("data-history-content-state");
+        return (state === "bootstrap" || state === "refreshing")
+          && document.querySelectorAll(".history-horizontal-timeline-segment").length >= 1;
+      })()`,
+      undefined,
+      "History reusable snapshot should render before the delayed refresh settles",
+    );
 
     const slowRefreshState = JSON.parse(String(await evaluate(client!, sessionId, `
       (() => {
@@ -313,7 +324,14 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
       sessionId,
       `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("历史"))} + ']')?.className.includes("qp-nav-item-active")`,
     );
-    await delay(150);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector("[data-history-content-state]")?.getAttribute("data-history-content-state") === "bootstrap"
+        && document.querySelectorAll(".history-horizontal-timeline-segment").length >= 1`,
+      undefined,
+      "History should mount the Dashboard seed before the delayed query settles",
+    );
 
     const coldState = JSON.parse(String(await evaluate(client!, sessionId, `
       (() => JSON.stringify({
