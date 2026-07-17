@@ -69,15 +69,22 @@ export interface HistoryReadModel {
 export interface HistorySnapshotDeps {
   getHistoryByDate: typeof getHistoryByDate;
   getSessionsInRange: typeof getSessionsInRange;
+  getDaySessionsInRange?: typeof getSessionsInRangeWithoutTitleSamples;
   getWeeklySessionsInRange?: typeof getSessionsInRangeWithoutTitleSamples;
   getWebActivitySegmentsInRange: typeof getWebActivitySegmentsInRange;
   getWebFaviconsForDomains: typeof getWebFaviconsForDomains;
   loadWebDomainOverrides: typeof loadWebDomainOverrides;
 }
 
+export interface HistorySnapshotLoadOptions {
+  includeWebActivity?: boolean;
+  includeTitleDetails?: boolean;
+}
+
 const DEFAULT_HISTORY_SNAPSHOT_DEPS: HistorySnapshotDeps = {
   getHistoryByDate,
   getSessionsInRange,
+  getDaySessionsInRange: getSessionsInRangeWithoutTitleSamples,
   getWeeklySessionsInRange: getSessionsInRangeWithoutTitleSamples,
   getWebActivitySegmentsInRange,
   getWebFaviconsForDomains,
@@ -130,6 +137,20 @@ async function loadOptionalWebFaviconMap(
   }
 }
 
+export async function loadHistoryWebFaviconsForSegments(
+  dayWebSegments: WebActivitySegment[],
+  deps: HistorySnapshotDeps = DEFAULT_HISTORY_SNAPSHOT_DEPS,
+): Promise<Record<string, string>> {
+  return loadOptionalWebFaviconMap(deps, dayWebSegments);
+}
+
+export async function loadHistoryDaySessionDetails(
+  date: Date,
+  deps: HistorySnapshotDeps = DEFAULT_HISTORY_SNAPSHOT_DEPS,
+): Promise<HistorySession[]> {
+  return deps.getHistoryByDate(date);
+}
+
 async function loadOptionalWebSnapshotPart(
   deps: HistorySnapshotDeps,
   selectedDayRange: { startMs: number; endMs: number },
@@ -139,11 +160,9 @@ async function loadOptionalWebSnapshotPart(
       deps.getWebActivitySegmentsInRange(selectedDayRange.startMs, selectedDayRange.endMs),
       deps.loadWebDomainOverrides(),
     ]);
-    const webDomainFavicons = await loadOptionalWebFaviconMap(deps, dayWebSegments);
-
     return {
       dayWebSegments,
-      webDomainFavicons,
+      webDomainFavicons: {},
       webDomainOverrides,
     };
   } catch (error) {
@@ -177,16 +196,31 @@ export async function loadHistorySnapshot(
   date: Date,
   rollingDayCount: number = 7,
   deps: HistorySnapshotDeps = DEFAULT_HISTORY_SNAPSHOT_DEPS,
+  options: HistorySnapshotLoadOptions = {},
 ): Promise<HistorySnapshot> {
   const selectedDayRange = getDayRange(date);
   const rollingRanges = getRollingDayRanges(rollingDayCount);
   const weeklyRangeStart = rollingRanges[0]?.startMs ?? selectedDayRange.startMs;
   const weeklyRangeEnd = rollingRanges[rollingRanges.length - 1]?.endMs ?? selectedDayRange.endMs;
 
+  const includeWebActivity = options.includeWebActivity ?? true;
+  const includeTitleDetails = options.includeTitleDetails ?? true;
+  const loadDaySessions = includeTitleDetails
+    ? () => deps.getHistoryByDate(date)
+    : () => (deps.getDaySessionsInRange ?? deps.getWeeklySessionsInRange ?? deps.getSessionsInRange)(
+      selectedDayRange.startMs,
+      selectedDayRange.endMs,
+    );
   const [daySessions, weeklySessions, webSnapshotPart] = await Promise.all([
-    deps.getHistoryByDate(date),
+    loadDaySessions(),
     (deps.getWeeklySessionsInRange ?? deps.getSessionsInRange)(weeklyRangeStart, weeklyRangeEnd),
-    loadOptionalWebSnapshotPart(deps, selectedDayRange),
+    includeWebActivity
+      ? loadOptionalWebSnapshotPart(deps, selectedDayRange)
+      : Promise.resolve({
+        dayWebSegments: [],
+        webDomainFavicons: {},
+        webDomainOverrides: {},
+      }),
   ]);
   const icons = getCachedHistoryIconMap(daySessions, weeklySessions);
 

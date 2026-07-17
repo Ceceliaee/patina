@@ -22,23 +22,20 @@ import {
 } from "./services/readModelRefreshState.ts";
 import {
   loadDashboardRuntimeSnapshot,
+  getHistoryRuntimeSeedSnapshot,
   loadDataTrendRuntimeSnapshot,
   loadHistoryRuntimeSnapshot,
 } from "./services/readModelRuntimeService";
-import {
-  scheduleStartupWarmupRefresh,
-  startStartupWarmup,
-} from "./services/startupWarmupService";
+import { scheduleStartupWarmupRefresh, startStartupWarmup } from "./services/startupWarmupService";
 import { LONG_BACKGROUND_DELAY_MS } from "./services/backgroundReturnHomePolicy.ts";
-import {
-  clearDashboardSnapshotCache,
-} from "../features/dashboard/services/dashboardSnapshotCache.ts";
+import { clearDashboardSnapshotCache } from "../features/dashboard/services/dashboardSnapshotCache.ts";
 import {
   clearDataBootstrapCache,
   clearDataHeavyCaches,
 } from "../features/data/services/dataCacheLifecycle.ts";
 import { prewarmDataFirstScreen } from "../features/data/services/dataFirstScreenPrewarm.ts";
 import { clearHistorySnapshotCache } from "../features/history/services/historySnapshotCache.ts";
+import { clearHistoryCachesAfterDataChange } from "../features/history/services/historyCacheLifecycle.ts";
 import { clearToolsPageCaches } from "../features/tools/services/toolsCacheLifecycle.ts";
 import { AppClassification } from "../shared/classification/appClassification.ts";
 import { useQuietDialogs } from "../shared/hooks/useQuietDialogs";
@@ -515,6 +512,7 @@ function AppShellContent() {
                   minSessionSecs={appSettings.minSessionSecs}
                   onMinSessionSecsChange={handleMinSessionSecsChange}
                   trackerHealth={trackerHealth}
+                  getHistorySeedSnapshot={getHistoryRuntimeSeedSnapshot}
                   loadHistorySnapshot={loadHistoryRuntimeSnapshot}
                   mappingVersion={mappingVersion}
                   selectedDateRequest={historyDateRequest}
@@ -586,7 +584,7 @@ function AppShellContent() {
                   onDirtyChange={setMappingDirty}
                   onOverridesChanged={() => {
                     clearDashboardSnapshotCache();
-                    clearHistorySnapshotCache();
+                    void clearHistoryCachesAfterDataChange();
                     clearToolsPageCaches();
                     void clearDataBootstrapCache();
                     setReadModelRefreshState(applyMappingOverridesReadModelRefresh);
@@ -594,7 +592,7 @@ function AppShellContent() {
                   }}
                   onSessionsDeleted={() => {
                     clearDashboardSnapshotCache();
-                    clearHistorySnapshotCache();
+                    void clearHistoryCachesAfterDataChange();
                     clearDataHeavyCaches();
                     void clearDataBootstrapCache();
                     setReadModelRefreshState(applySessionDeletionReadModelRefresh);

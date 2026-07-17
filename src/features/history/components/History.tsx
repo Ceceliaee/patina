@@ -1,9 +1,13 @@
-﻿import { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from "react";
 import type { CSSProperties } from "react";
 import { Clock, Expand, Minus, Plus, Tags, X, ZoomIn } from "lucide-react";
-import { type HistorySession } from "../../../shared/types/sessions";
-import type { WebActivitySegment } from "../../../shared/types/webActivity.ts";
-import type { WebDomainOverride } from "../../../shared/types/webActivity.ts";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import {
   formatDuration,
@@ -14,6 +18,7 @@ import { useRequestedAppIcons } from "../../../shared/hooks/useRequestedAppIcons
 import {
   buildHistoryReadModel,
   type HistorySnapshot,
+  type HistorySnapshotLoadOptions,
 } from "../services/historyReadModel";
 import type { TrackerHealthSnapshot } from "../../../shared/types/tracking";
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
@@ -23,10 +28,6 @@ import QuietDialog from "../../../shared/components/QuietDialog";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
 import QuietSegmentedFilter, { type QuietSegmentedFilterOption } from "../../../shared/components/QuietSegmentedFilter";
 import type { HourlyActivityChartMode } from "../../../shared/settings/appSettings.ts";
-import {
-  getHistorySnapshotCache,
-  setHistorySnapshotCache,
-} from "../services/historySnapshotCache";
 import {
   buildHistoryTimelineViewModel,
   getHistoryTimelineZoomDurationMs,
@@ -41,6 +42,7 @@ import {
   useHistoryTimelineViewportInteraction,
   type HistoryTimelineViewportChangeReason,
 } from "../hooks/useHistoryTimelineViewportInteraction.ts";
+import { useHistorySnapshotRuntime } from "../hooks/useHistorySnapshotRuntime.ts";
 import {
   readHistoryDayDistributionMode,
   readHistoryTimelineMode,
@@ -58,7 +60,6 @@ import {
 import { loadHistoryIconsForExecutables } from "../services/historyIconService.ts";
 import {
   addLocalDays,
-  buildMondayFirstCalendarGrid,
   formatLocalDateKey,
   parseLocalDateKey,
   startOfLocalDay,
@@ -89,7 +90,12 @@ interface Props {
   minSessionSecs: number;
   onMinSessionSecsChange?: (value: number) => void;
   trackerHealth: TrackerHealthSnapshot;
-  loadHistorySnapshot: (date: Date, rollingDayCount?: number) => Promise<HistorySnapshot>;
+  getHistorySeedSnapshot: (date: Date) => HistorySnapshot | null;
+  loadHistorySnapshot: (
+    date: Date,
+    rollingDayCount?: number,
+    options?: HistorySnapshotLoadOptions,
+  ) => Promise<HistorySnapshot>;
   mappingVersion?: number;
   selectedDateRequest?: {
     dateKey: string;
@@ -99,13 +105,13 @@ interface Props {
   onHourlyActivityChartModeChange: (mode: HourlyActivityChartMode) => void;
   refreshEnabled?: boolean;
   webActivityEnabled?: boolean;
+  titleRecordingEnabled?: boolean;
 }
 
 const TIMELINE_MIN_SESSION_MINUTES_RANGE = { min: 1, max: 10 } as const;
 const clampMinute = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const startOfDay = startOfLocalDay;
 const startOfMonth = startOfLocalMonth;
-const addMonths = (date: Date, delta: number) => new Date(date.getFullYear(), date.getMonth() + delta, 1);
 const DAY_SUMMARY_EMPTY_MARK = "—";
 const DAY_SUMMARY_MIN_SPAN_SESSION_MS = 60_000;
 const formatTimelineWindowBoundary = (timeMs: number, dayEndMs: number) => (
@@ -185,6 +191,7 @@ export default function History({
   minSessionSecs,
   onMinSessionSecsChange,
   trackerHealth,
+  getHistorySeedSnapshot,
   loadHistorySnapshot,
   mappingVersion = 0,
   selectedDateRequest = null,
@@ -192,36 +199,39 @@ export default function History({
   onHourlyActivityChartModeChange,
   refreshEnabled = true,
   webActivityEnabled = false,
+  titleRecordingEnabled = true,
 }: Props) {
   const requestedInitialDate = selectedDateRequest ? parseLocalDateKey(selectedDateRequest.dateKey) : null;
   const selectedDateRequestId = selectedDateRequest?.requestId ?? null;
   const selectedDateRequestDateKey = selectedDateRequest?.dateKey ?? null;
   const initialDate = requestedInitialDate ?? new Date();
-  const initialCachedSnapshot = getHistorySnapshotCache(initialDate);
   const datePickerRef = useRef<HTMLDivElement | null>(null);
   const calendarPopoverRef = useRef<HTMLDivElement | null>(null);
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(initialDate));
   const [calendarPosition, setCalendarPosition] = useState({ left: 0, top: 0 });
-  const [rawDaySessions, setRawDaySessions] = useState<HistorySession[]>(
-    () => initialCachedSnapshot?.daySessions ?? [],
-  );
-  const [rawWeeklySessions, setRawWeeklySessions] = useState<HistorySession[]>(
-    () => initialCachedSnapshot?.weeklySessions ?? [],
-  );
-  const [snapshotIcons, setSnapshotIcons] = useState<Record<string, string>>(
-    () => initialCachedSnapshot?.icons ?? {},
-  );
-  const [rawDayWebSegments, setRawDayWebSegments] = useState<WebActivitySegment[]>(
-    () => initialCachedSnapshot?.dayWebSegments ?? [],
-  );
-  const [webDomainFavicons, setWebDomainFavicons] = useState<Record<string, string>>(
-    () => initialCachedSnapshot?.webDomainFavicons ?? {},
-  );
-  const [webDomainOverrides, setWebDomainOverrides] = useState<Record<string, WebDomainOverride>>(
-    () => initialCachedSnapshot?.webDomainOverrides ?? {},
-  );
+  const {
+    contentState,
+    nowMs,
+    rawDaySessions,
+    rawDayWebSegments,
+    rawWeeklySessions,
+    setNowMs,
+    snapshotIcons,
+    visibleDateKey,
+    webDomainFavicons,
+    webDomainOverrides,
+  } = useHistorySnapshotRuntime({
+    getHistorySeedSnapshot,
+    loadHistorySnapshot,
+    mappingVersion,
+    refreshEnabled,
+    refreshKey,
+    selectedDate,
+    titleRecordingEnabled,
+    webActivityEnabled,
+  });
   const historyIconExeNames = useMemo(() => {
     const seen = new Set<string>();
     const result: string[] = [];
@@ -265,11 +275,6 @@ export default function History({
     return next;
   }, [rawDayWebSegments, webActivityEnabled, webDomainFavicons]);
   const webDomainIconThemeColors = useIconThemeColors(webDomainIcons);
-  const [nowMs, setNowMs] = useState(() => initialCachedSnapshot?.fetchedAtMs ?? Date.now());
-  const [loading, setLoading] = useState(!initialCachedSnapshot);
-  const visibleDateKeyRef = useRef<string | null>(
-    initialCachedSnapshot ? formatHistoryDateCacheKey(initialDate) : null
-  );
   const [timelineDialogOpen, setTimelineDialogOpen] = useState(false);
   const [timelineDialogMode, setTimelineDialogMode] = useState<TimelineDialogMode>("app");
   const [timelineDialogSyncedHeight, setTimelineDialogSyncedHeight] = useState<number | null>(null);
@@ -293,7 +298,6 @@ export default function History({
   const timelineDetailsPopoverRef = useRef<HTMLDivElement | null>(null);
   const timelineDetailsTriggerRef = useRef<HTMLElement | null>(null);
   const timelineViewportWasPannedRef = useRef(false);
-  const hasLoadedRef = useRef(false);
   const historyCopy = UI_TEXT.history;
   const resetTimelineViewportForDate = useCallback((date: Date) => {
     timelineViewportWasPannedRef.current = false;
@@ -422,67 +426,6 @@ export default function History({
   }, [resetTimelineViewportForDate, selectedDate]);
 
   useEffect(() => {
-    if (!refreshEnabled) return undefined;
-
-    let cancelled = false;
-    const requestDate = new Date(selectedDate);
-    const cachedSnapshot = getHistorySnapshotCache(requestDate);
-    const requestDateKey = formatHistoryDateCacheKey(requestDate);
-
-    if (cachedSnapshot) {
-      setRawDaySessions(cachedSnapshot.daySessions);
-      setRawWeeklySessions(cachedSnapshot.weeklySessions);
-      setSnapshotIcons(cachedSnapshot.icons);
-      setRawDayWebSegments(cachedSnapshot.dayWebSegments);
-      setWebDomainFavicons(cachedSnapshot.webDomainFavicons);
-      setWebDomainOverrides(cachedSnapshot.webDomainOverrides);
-      setNowMs(cachedSnapshot.fetchedAtMs);
-      visibleDateKeyRef.current = requestDateKey;
-      setLoading(false);
-    } else if (visibleDateKeyRef.current !== requestDateKey) {
-      setRawDaySessions([]);
-      setRawWeeklySessions([]);
-      setSnapshotIcons({});
-      setRawDayWebSegments([]);
-      setWebDomainFavicons({});
-      setWebDomainOverrides({});
-      visibleDateKeyRef.current = null;
-    }
-
-    if (!cachedSnapshot) {
-      setLoading(!cachedSnapshot);
-    }
-
-    const load = async () => {
-      try {
-        const snapshot = await loadHistorySnapshot(requestDate);
-        if (cancelled) return;
-
-        setHistorySnapshotCache(snapshot, requestDate);
-
-        setRawDaySessions(snapshot.daySessions);
-        setRawWeeklySessions(snapshot.weeklySessions);
-        setSnapshotIcons(snapshot.icons);
-        setRawDayWebSegments(snapshot.dayWebSegments);
-        setWebDomainFavicons(snapshot.webDomainFavicons);
-        setWebDomainOverrides(snapshot.webDomainOverrides);
-        setNowMs(snapshot.fetchedAtMs);
-        visibleDateKeyRef.current = requestDateKey;
-        hasLoadedRef.current = true;
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [loadHistorySnapshot, refreshEnabled, refreshKey, selectedDate]);
-
-  useEffect(() => {
     const hasLiveWebSegment = webActivityEnabled
       && rawDayWebSegments.some((segment) => segment.endTime === null);
     const hasLiveSession = rawDaySessions.some((session) => session.endTime === null)
@@ -502,7 +445,7 @@ export default function History({
     return () => {
       window.clearInterval(timer);
     };
-  }, [rawDaySessions, rawWeeklySessions, rawDayWebSegments, refreshEnabled, refreshIntervalSecs, trackerHealth.status, webActivityEnabled]);
+  }, [rawDaySessions, rawWeeklySessions, rawDayWebSegments, refreshEnabled, refreshIntervalSecs, setNowMs, trackerHealth.status, webActivityEnabled]);
 
   const changeDate = (delta: number) => {
     const nextDate = addLocalDays(selectedDate, delta);
@@ -535,8 +478,6 @@ export default function History({
     setCalendarOpen(false);
   };
   const today = new Date();
-  const calendarDays = useMemo(() => buildMondayFirstCalendarGrid(calendarMonth), [calendarMonth]);
-  const canGoNextCalendarMonth = startOfMonth(addMonths(calendarMonth, 1)) <= startOfMonth(today);
 
   useEffect(() => {
     if (!calendarOpen) return;
@@ -603,7 +544,13 @@ export default function History({
   }, [timelineDetailsPopover, updateTimelineDetailsPopoverPosition]);
 
   const isToday = selectedDate.toDateString() === today.toDateString();
-  const showQuietPlaceholder = loading;
+  const selectedDateKey = formatHistoryDateCacheKey(selectedDate);
+  const hasVisibleSnapshotForSelectedDate = visibleDateKey === selectedDateKey;
+  const showQuietPlaceholder = !hasVisibleSnapshotForSelectedDate
+    || contentState === "cold-loading";
+  const contentPlaceholderMessage = contentState === "error"
+    ? historyCopy.loadFailed
+    : "";
   const historyView = useMemo(
     () => (void mappingVersion, buildHistoryReadModel({
       daySessions: rawDaySessions,
@@ -856,6 +803,13 @@ export default function History({
         : DAY_SUMMARY_EMPTY_MARK,
     };
   }, [compiledSessions, hourlyActivity]);
+  const visibleDaySummaryView = showQuietPlaceholder
+    ? {
+      activeDurationLabel: DAY_SUMMARY_EMPTY_MARK,
+      activeSpanLabel: DAY_SUMMARY_EMPTY_MARK,
+      peakHourLabel: DAY_SUMMARY_EMPTY_MARK,
+    }
+    : daySummaryView;
 
   const minSessionMinutes = clampMinute(
     Math.max(1, Math.round(minSessionSecs / 60)),
@@ -990,7 +944,7 @@ export default function History({
       current === null || measuredHeight > current ? measuredHeight : current
     ));
   }, [
-    loading,
+    showQuietPlaceholder,
     minSessionMinutes,
     selectedDate,
     timelineDialogMode,
@@ -1075,7 +1029,7 @@ export default function History({
     ];
   const renderTimelineList = (className = "") => (
     <HistoryTimelineList
-      loading={loading}
+      loading={showQuietPlaceholder}
       timelineSessions={timelineSessions}
       icons={historyIcons}
       iconThemeColors={iconThemeColors}
@@ -1086,7 +1040,7 @@ export default function History({
   );
   const renderWebTimelineList = (className = "") => (
     <HistoryWebTimelineList
-      loading={loading}
+      loading={showQuietPlaceholder}
       items={webTimelineItems}
       detailsPopover={timelineDetailsPopover}
       className={className}
@@ -1100,15 +1054,20 @@ export default function History({
       modeOptions={dayDistributionOptions}
       items={dayDistributionItems}
       showQuietPlaceholder={showQuietPlaceholder}
+      placeholderMessage={contentPlaceholderMessage}
       onModeChange={handleDayDistributionModeChange}
     />
   );
   const renderDaySummary = () => (
-    <HistoryDaySummaryPanel copy={historyCopy} view={daySummaryView} />
+    <HistoryDaySummaryPanel copy={historyCopy} view={visibleDaySummaryView} />
   );
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col gap-4 md:gap-5 h-full overflow-hidden">
+    <div
+      className="flex-1 min-h-0 flex flex-col gap-4 md:gap-5 h-full overflow-hidden"
+      data-history-content-state={contentState}
+      data-history-content-date={visibleDateKey ?? ""}
+    >
       <QuietPageHeader
         icon={<Clock size={18} />}
         title={UI_TEXT.history.title}
@@ -1123,9 +1082,7 @@ export default function History({
             calendarOpen={calendarOpen}
             calendarPosition={calendarPosition}
             calendarMonth={calendarMonth}
-            calendarDays={calendarDays}
-            canGoNextCalendarMonth={canGoNextCalendarMonth}
-            setCalendarMonth={setCalendarMonth}
+            onCalendarMonthChange={setCalendarMonth}
             onChangeDate={changeDate}
             onOpenDatePicker={openDatePicker}
             onSelectCalendarDate={selectCalendarDate}
@@ -1140,7 +1097,8 @@ export default function History({
           iconThemeColors={iconThemeColors}
           title={historyCopy.timelineAxis}
           actions={showQuietPlaceholder ? null : timelineAxisActions}
-          showEmptyMessage={!showQuietPlaceholder}
+          showEmptyMessage
+          emptyMessage={showQuietPlaceholder ? contentPlaceholderMessage : undefined}
         />
       </div>
 

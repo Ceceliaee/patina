@@ -2,23 +2,31 @@ import {
   loadHistorySnapshot,
   type HistorySnapshot,
   type HistorySnapshotDeps,
+  type HistorySnapshotLoadOptions,
 } from "./historyReadModel.ts";
 
 const HISTORY_SNAPSHOT_CACHE_LIMIT = 7;
 const HISTORY_SNAPSHOT_CACHE = new Map<string, HistorySnapshot>();
 const HISTORY_SNAPSHOT_PROMISES = new Map<string, Promise<HistorySnapshot>>();
+const HISTORY_SNAPSHOT_CACHE_VERSIONS = new Map<string, number>();
+let historySnapshotCacheEpoch = 0;
 
-function formatHistorySnapshotCacheKey(date: Date, rollingDayCount: number): string {
+function formatHistorySnapshotCacheKey(
+  date: Date,
+  rollingDayCount: number,
+  includeWebActivity: boolean,
+): string {
   const localDate = new Date(date);
   localDate.setHours(0, 0, 0, 0);
-  return `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, "0")}-${String(localDate.getDate()).padStart(2, "0")}:${rollingDayCount}`;
+  return `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, "0")}-${String(localDate.getDate()).padStart(2, "0")}:${rollingDayCount}:web-${includeWebActivity ? 1 : 0}`;
 }
 
 export function getHistorySnapshotCache(
   date: Date = new Date(),
   rollingDayCount: number = 7,
+  includeWebActivity: boolean = true,
 ): HistorySnapshot | null {
-  const cacheKey = formatHistorySnapshotCacheKey(date, rollingDayCount);
+  const cacheKey = formatHistorySnapshotCacheKey(date, rollingDayCount, includeWebActivity);
   const snapshot = HISTORY_SNAPSHOT_CACHE.get(cacheKey);
   if (!snapshot) return null;
 
@@ -31,8 +39,13 @@ export function setHistorySnapshotCache(
   snapshot: HistorySnapshot,
   date: Date = new Date(),
   rollingDayCount: number = 7,
+  includeWebActivity: boolean = true,
 ): void {
-  const cacheKey = formatHistorySnapshotCacheKey(date, rollingDayCount);
+  const cacheKey = formatHistorySnapshotCacheKey(date, rollingDayCount, includeWebActivity);
+  HISTORY_SNAPSHOT_CACHE_VERSIONS.set(
+    cacheKey,
+    (HISTORY_SNAPSHOT_CACHE_VERSIONS.get(cacheKey) ?? 0) + 1,
+  );
   HISTORY_SNAPSHOT_CACHE.delete(cacheKey);
   HISTORY_SNAPSHOT_CACHE.set(cacheKey, snapshot);
 
@@ -44,8 +57,10 @@ export function setHistorySnapshotCache(
 }
 
 export function clearHistorySnapshotCache(): void {
+  historySnapshotCacheEpoch += 1;
   HISTORY_SNAPSHOT_CACHE.clear();
   HISTORY_SNAPSHOT_PROMISES.clear();
+  HISTORY_SNAPSHOT_CACHE_VERSIONS.clear();
 }
 
 export function getHistorySnapshotCacheSizeForTests(): number {
@@ -64,27 +79,40 @@ export async function loadHistorySnapshotWithCache(
   date: Date = new Date(),
   rollingDayCount: number = 7,
   deps?: HistorySnapshotDeps,
+  options: HistorySnapshotLoadOptions = {},
 ): Promise<HistorySnapshot> {
-  const cacheKey = formatHistorySnapshotCacheKey(date, rollingDayCount);
-  const pending = HISTORY_SNAPSHOT_PROMISES.get(cacheKey);
+  const includeWebActivity = options.includeWebActivity ?? true;
+  const cacheKey = formatHistorySnapshotCacheKey(date, rollingDayCount, includeWebActivity);
+  const promiseKey = `${cacheKey}:details-${(options.includeTitleDetails ?? true) ? 1 : 0}`;
+  const pending = HISTORY_SNAPSHOT_PROMISES.get(promiseKey);
   if (pending) return pending;
 
-  const snapshotPromise = loadHistorySnapshot(date, rollingDayCount, deps)
+  const loadStartedAtEpoch = historySnapshotCacheEpoch;
+  const loadStartedAtCacheVersion = HISTORY_SNAPSHOT_CACHE_VERSIONS.get(cacheKey) ?? 0;
+  const snapshotPromise = loadHistorySnapshot(date, rollingDayCount, deps, options)
     .then((snapshot) => {
-      setHistorySnapshotCache(snapshot, date, rollingDayCount);
+      if (
+        historySnapshotCacheEpoch === loadStartedAtEpoch
+        && (HISTORY_SNAPSHOT_CACHE_VERSIONS.get(cacheKey) ?? 0) === loadStartedAtCacheVersion
+      ) {
+        setHistorySnapshotCache(snapshot, date, rollingDayCount, includeWebActivity);
+      }
       return snapshot;
     })
     .finally(() => {
-      HISTORY_SNAPSHOT_PROMISES.delete(cacheKey);
+      if (HISTORY_SNAPSHOT_PROMISES.get(promiseKey) === snapshotPromise) {
+        HISTORY_SNAPSHOT_PROMISES.delete(promiseKey);
+      }
     });
 
-  HISTORY_SNAPSHOT_PROMISES.set(cacheKey, snapshotPromise);
+  HISTORY_SNAPSHOT_PROMISES.set(promiseKey, snapshotPromise);
   return snapshotPromise;
 }
 
 export async function prewarmHistorySnapshotCache(
   date: Date = new Date(),
   rollingDayCount: number = 7,
+  options: HistorySnapshotLoadOptions = {},
 ): Promise<HistorySnapshot> {
-  return loadHistorySnapshotWithCache(date, rollingDayCount);
+  return loadHistorySnapshotWithCache(date, rollingDayCount, undefined, options);
 }

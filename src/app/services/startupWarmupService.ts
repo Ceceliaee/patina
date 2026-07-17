@@ -11,6 +11,9 @@ import {
   getHistorySnapshotCache,
 } from "../../features/history/services/historySnapshotCache.ts";
 import {
+  loadPersistedHistoryBootstrapSnapshot,
+} from "../../features/history/services/historyBootstrapSnapshot.ts";
+import {
   prewarmSettingsBootstrapCache,
 } from "../../features/settings/services/settingsBootstrapService.ts";
 import {
@@ -31,6 +34,7 @@ export type StartupWarmupTaskId =
   | "settings-bootstrap"
   | "mapping-bootstrap"
   | "data-bootstrap-snapshot-cache"
+  | "history-bootstrap-snapshot-cache"
   | "dashboard-snapshot"
   | "history-today-snapshot"
   | "tools-runtime-snapshot"
@@ -92,6 +96,7 @@ interface StartupWarmupDeps {
   ) => Promise<unknown>;
   loadHistoryRuntimeSnapshot: (date: Date, rollingDayCount?: number) => Promise<unknown>;
   loadPersistedDataBootstrapSnapshot: typeof loadPersistedDataBootstrapSnapshot;
+  loadPersistedHistoryBootstrapSnapshot: typeof loadPersistedHistoryBootstrapSnapshot;
   preloadLazyViewChunk: (view: PreloadableView) => Promise<unknown>;
   prewarmClassificationBootstrapCache: () => Promise<unknown>;
   prewarmSettingsBootstrapCache: () => Promise<unknown>;
@@ -106,6 +111,7 @@ interface StartupWarmupTaskPolicy {
   dashboardSnapshot: boolean;
   dataBootstrapSnapshotCache: boolean;
   historyTodaySnapshot: boolean;
+  historyBootstrapSnapshotCache: boolean;
   mappingBootstrap: boolean;
   settingsBootstrap: boolean;
   toolsRuntimeSnapshot: boolean;
@@ -123,6 +129,7 @@ const STARTUP_WARMUP_TASKS: StartupWarmupTaskId[] = [
   "settings-bootstrap",
   "mapping-bootstrap",
   "data-bootstrap-snapshot-cache",
+  "history-bootstrap-snapshot-cache",
   "dashboard-snapshot",
   "history-today-snapshot",
   "tools-runtime-snapshot",
@@ -149,6 +156,7 @@ const defaultStartupWarmupDeps: StartupWarmupDeps = {
   loadDataTrendRuntimeSnapshot,
   loadHistoryRuntimeSnapshot,
   loadPersistedDataBootstrapSnapshot,
+  loadPersistedHistoryBootstrapSnapshot,
   preloadLazyViewChunk,
   prewarmClassificationBootstrapCache,
   prewarmSettingsBootstrapCache,
@@ -171,6 +179,7 @@ function resolveStartupWarmupTaskPolicy(mode: StartupWarmupMode): StartupWarmupT
       dashboardSnapshot: false,
       dataBootstrapSnapshotCache: false,
       historyTodaySnapshot: false,
+      historyBootstrapSnapshotCache: true,
       mappingBootstrap: false,
       settingsBootstrap: false,
       toolsRuntimeSnapshot: false,
@@ -183,6 +192,7 @@ function resolveStartupWarmupTaskPolicy(mode: StartupWarmupMode): StartupWarmupT
     dashboardSnapshot: true,
     dataBootstrapSnapshotCache: true,
     historyTodaySnapshot: false,
+    historyBootstrapSnapshotCache: true,
     mappingBootstrap: true,
     settingsBootstrap: true,
     toolsRuntimeSnapshot: true,
@@ -314,9 +324,21 @@ export function startStartupWarmup(
     tasks: createInitialTaskSnapshot(),
   };
   const delay = createDelay(resolvedDeps.scheduler, () => cancelled);
+  const eagerHistoryBootstrapSnapshot = taskPolicy.historyBootstrapSnapshotCache
+    ? resolvedDeps.loadPersistedHistoryBootstrapSnapshot().then(
+      (value) => ({ error: null, value }),
+      (error: unknown) => ({ error, value: null }),
+    )
+    : Promise.resolve({ error: null, value: null });
 
   const ready = (async () => {
     await delay(initialDelayMs);
+    const eagerClassificationBootstrap = taskPolicy.mappingBootstrap
+      ? resolvedDeps.prewarmClassificationBootstrapCache().then(
+        (value) => ({ error: null, value }),
+        (error: unknown) => ({ error, value: null }),
+      )
+      : Promise.resolve({ error: null, value: null });
 
     const runTask = async (
       taskId: StartupWarmupTaskId,
@@ -356,7 +378,8 @@ export function startStartupWarmup(
         return "skipped";
       }
 
-      await resolvedDeps.prewarmClassificationBootstrapCache();
+      const result = await eagerClassificationBootstrap;
+      if (result.error) throw result.error;
     });
 
     await runTask("data-bootstrap-snapshot-cache", async () => {
@@ -366,6 +389,16 @@ export function startStartupWarmup(
 
       const snapshot = await resolvedDeps.loadPersistedDataBootstrapSnapshot();
       return snapshot ? "fulfilled" : "skipped";
+    });
+
+    await runTask("history-bootstrap-snapshot-cache", async () => {
+      if (!taskPolicy.historyBootstrapSnapshotCache) {
+        return "skipped";
+      }
+
+      const result = await eagerHistoryBootstrapSnapshot;
+      if (result.error) throw result.error;
+      return result.value ? "fulfilled" : "skipped";
     });
 
     if (

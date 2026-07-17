@@ -1,10 +1,15 @@
 import { loadDashboardSnapshot, type DashboardSnapshot } from "../../features/dashboard/services/dashboardReadModel.ts";
-import type { HistorySnapshot } from "../../features/history/services/historyReadModel.ts";
+import {
+  type HistorySnapshot,
+  type HistorySnapshotLoadOptions,
+} from "../../features/history/services/historyReadModel.ts";
 import { ensureProcessMapperRuntimeReady } from "./processMapperRuntimeGate.ts";
-import { setDashboardSnapshotCache } from "../../features/dashboard/services/dashboardSnapshotCache.ts";
+import {
+  getDashboardSnapshotCache,
+  setDashboardSnapshotCache,
+} from "../../features/dashboard/services/dashboardSnapshotCache.ts";
 import {
   loadHistorySnapshotWithCache,
-  setHistorySnapshotCache,
 } from "../../features/history/services/historySnapshotCache.ts";
 import {
   loadDataTrendSnapshot,
@@ -20,11 +25,17 @@ type DashboardRuntimeSnapshotDeps = {
 
 type HistoryRuntimeSnapshotDeps = {
   ensureProcessMapperRuntimeReady: () => Promise<void>;
-  loadHistorySnapshot: (date: Date, rollingDayCount?: number) => Promise<HistorySnapshot>;
+  loadHistorySnapshot: (
+    date: Date,
+    rollingDayCount?: number,
+    deps?: undefined,
+    options?: HistorySnapshotLoadOptions,
+  ) => Promise<HistorySnapshot>;
   setHistorySnapshotCache: (
     snapshot: HistorySnapshot,
     date?: Date,
     rollingDayCount?: number,
+    includeWebActivity?: boolean,
   ) => void;
 };
 
@@ -40,12 +51,6 @@ const dashboardRuntimeSnapshotDeps: DashboardRuntimeSnapshotDeps = {
   ensureProcessMapperRuntimeReady,
   loadDashboardSnapshot,
   setDashboardSnapshotCache,
-};
-
-const historyRuntimeSnapshotDeps: HistoryRuntimeSnapshotDeps = {
-  ensureProcessMapperRuntimeReady,
-  loadHistorySnapshot: loadHistorySnapshotWithCache,
-  setHistorySnapshotCache,
 };
 
 const dataTrendRuntimeSnapshotDeps: DataTrendRuntimeSnapshotDeps = {
@@ -71,18 +76,41 @@ export async function loadHistoryRuntimeSnapshotWithDeps(
   date: Date,
   rollingDayCount: number = 7,
   deps: HistoryRuntimeSnapshotDeps,
+  options: HistorySnapshotLoadOptions = {},
 ): Promise<HistorySnapshot> {
   await deps.ensureProcessMapperRuntimeReady();
-  const snapshot = await deps.loadHistorySnapshot(date, rollingDayCount);
-  deps.setHistorySnapshotCache(snapshot, date, rollingDayCount);
+  const snapshot = await deps.loadHistorySnapshot(date, rollingDayCount, undefined, options);
+  deps.setHistorySnapshotCache(
+    snapshot,
+    date,
+    rollingDayCount,
+    options.includeWebActivity ?? true,
+  );
   return snapshot;
 }
 
 export async function loadHistoryRuntimeSnapshot(
   date: Date,
   rollingDayCount: number = 7,
+  options: HistorySnapshotLoadOptions = {},
 ): Promise<HistorySnapshot> {
-  return loadHistoryRuntimeSnapshotWithDeps(date, rollingDayCount, historyRuntimeSnapshotDeps);
+  await ensureProcessMapperRuntimeReady();
+  return loadHistorySnapshotWithCache(date, rollingDayCount, undefined, options);
+}
+
+export function getHistoryRuntimeSeedSnapshot(date: Date): HistorySnapshot | null {
+  const dashboardSnapshot = getDashboardSnapshotCache(date);
+  if (!dashboardSnapshot) return null;
+
+  return {
+    fetchedAtMs: dashboardSnapshot.fetchedAtMs,
+    icons: dashboardSnapshot.icons,
+    daySessions: dashboardSnapshot.sessions,
+    weeklySessions: [],
+    dayWebSegments: [],
+    webDomainFavicons: {},
+    webDomainOverrides: {},
+  };
 }
 
 export async function loadDataTrendRuntimeSnapshot(
