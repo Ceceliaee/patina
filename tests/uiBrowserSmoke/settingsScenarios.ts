@@ -19,6 +19,30 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       true,
     );
     await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString(SETTINGS_MARKER)})`);
+    const ordinaryInputStyles = await evaluate(client!, sessionId, `
+      Array.from(document.querySelectorAll('input.qp-input')).map((input) => ({
+        minHeight: getComputedStyle(input).minHeight,
+        radius: getComputedStyle(input).borderRadius,
+        fontSize: getComputedStyle(input).fontSize,
+        fontWeight: getComputedStyle(input).fontWeight,
+      }))
+    `) as Array<{ minHeight: string; radius: string; fontSize: string; fontWeight: string }>;
+    assert.ok(ordinaryInputStyles.length > 0, "Settings should render inputs using the Quiet Pro CSS contract");
+    assert.equal(ordinaryInputStyles.every((style) => style.minHeight === "34px"), true);
+    assert.equal(ordinaryInputStyles.every((style) => style.radius === "10px"), true);
+    assert.equal(ordinaryInputStyles.every((style) => style.fontSize === "12px"), true);
+    assert.equal(ordinaryInputStyles.every((style) => style.fontWeight === "600"), true);
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const slider = document.querySelector('input[type="range"]');
+          const stepperButton = slider?.parentElement?.querySelector('.qp-button-secondary');
+          return stepperButton ? getComputedStyle(stepperButton).borderRadius : null;
+        })()
+      `),
+      "10px",
+      "specialized stepper controls should preserve the Quiet Pro control radius",
+    );
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
@@ -31,6 +55,13 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       true,
     );
     await waitForExpression(client!, sessionId, "Boolean(document.querySelector('.settings-color-scheme-list'))");
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.activeElement?.matches('.settings-color-scheme-option[aria-pressed="true"]')`,
+      undefined,
+      "theme dialog should focus the current color scheme",
+    );
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
@@ -427,8 +458,14 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       true,
     );
     await waitForExpression(client!, sessionId, "document.querySelectorAll('.settings-data-export-field-group').length === 6");
-      await waitForExpression(client!, sessionId, `document.activeElement?.classList.contains("settings-data-export-field-dialog")`);
-      assert.equal(await evaluate(client!, sessionId, `Boolean(document.querySelector('input[type="search"]'))`), false);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.activeElement?.matches('.settings-data-export-field-dialog .qp-dialog-title')`,
+      undefined,
+      "field configuration dialog should focus its heading",
+    );
+    assert.equal(await evaluate(client!, sessionId, `Boolean(document.querySelector('input[type="search"]'))`), false);
     assert.equal(
       await evaluate(client!, sessionId, `document.querySelector('.qp-tooltip[role="tooltip"]')?.textContent === "恢复当前格式默认字段"`),
       false,
@@ -437,6 +474,28 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       await evaluate(client!, sessionId, `Boolean(document.querySelector('.qp-dialog-header [aria-label="恢复当前格式默认字段"]'))`),
       true,
     );
+    assert.equal(
+      await evaluate(client!, sessionId, `document.querySelector('.qp-dialog-header [aria-label="恢复当前格式默认字段"]')?.hasAttribute('aria-describedby')`),
+      false,
+      "hidden tooltips should not leave a dangling description relationship",
+    );
+    await evaluate(client!, sessionId, `
+      document.querySelector('.qp-dialog-header [aria-label="恢复当前格式默认字段"]')
+        ?.closest('.qp-tooltip-anchor')
+        ?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true }));
+    `);
+    assert.equal(
+      await evaluate(client!, sessionId, `Boolean(document.querySelector('.qp-tooltip[role="tooltip"]'))`),
+      false,
+      "pointer tooltips should not appear in the entry frame",
+    );
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-tooltip[role="tooltip"]'))`);
+    await evaluate(client!, sessionId, `
+      document.querySelector('.qp-dialog-header [aria-label="恢复当前格式默认字段"]')
+        ?.closest('.qp-tooltip-anchor')
+        ?.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, cancelable: true, relatedTarget: document.body }));
+    `);
+    await waitForExpression(client!, sessionId, `!document.querySelector('.qp-tooltip[role="tooltip"]')`);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
@@ -459,6 +518,57 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       `),
       true,
       "tooltip should be connected to its focusable trigger",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const trigger = document.querySelector('.qp-dialog-header [aria-label="恢复当前格式默认字段"]');
+          trigger?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+          return document.activeElement === trigger;
+        })()
+      `),
+      true,
+      "Escape should keep focus on the tooltip trigger",
+    );
+    await waitForExpression(client!, sessionId, `!document.querySelector('.qp-tooltip[role="tooltip"]')`);
+    assert.equal(
+      await evaluate(client!, sessionId, `document.querySelector('.qp-dialog-header [aria-label="恢复当前格式默认字段"]')?.hasAttribute('aria-describedby')`),
+      false,
+      "dismissing a tooltip should remove its description relationship",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `Boolean(document.querySelector('.settings-data-export-field-dialog'))`),
+      true,
+      "dismissing a tooltip should not close its dialog",
+    );
+    await evaluate(client!, sessionId, `
+      (() => {
+        const title = document.querySelector('.settings-data-export-field-dialog .qp-dialog-title');
+        const trigger = document.querySelector('.qp-dialog-header [aria-label="恢复当前格式默认字段"]');
+        title?.focus();
+        trigger?.focus();
+      })()
+    `);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-tooltip[role="tooltip"]'))`);
+    await evaluate(client!, sessionId, `
+      document.querySelector('.qp-dialog-header [aria-label="恢复当前格式默认字段"]')
+        ?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+    `);
+    await waitForExpression(client!, sessionId, `!document.querySelector('.qp-tooltip[role="tooltip"]')`);
+    await evaluate(client!, sessionId, `
+      (() => {
+        const title = document.querySelector('.settings-data-export-field-dialog .qp-dialog-title');
+        const trigger = document.querySelector('.qp-dialog-header [aria-label="恢复当前格式默认字段"]');
+        title?.focus();
+        trigger?.focus();
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('.qp-tooltip[role="tooltip"]'))`,
+      undefined,
+      "keyboard focus should show the tooltip again after a pointer press",
     );
     assert.equal(
       await evaluate(client!, sessionId, `Boolean(document.querySelector('.qp-dialog-header .settings-data-export-field-header-count'))`),

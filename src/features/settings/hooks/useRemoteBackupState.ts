@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { QuietToastTone } from "../../../shared/components/QuietToast";
+import type { QuietToastTone } from "../../../shared/types/toast";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import {
   clearRemoteBackupConfig,
@@ -179,7 +179,7 @@ export function useRemoteBackupState({
           console.error("rollback unsaved WebDAV secret failed", deleteError);
         }
       }
-      notify(UI_TEXT.toast.webDavConfigSaveFailed, "warning");
+      notify(UI_TEXT.toast.webDavConfigSaveFailed, "error");
       return false;
     } finally {
       setIsSaving(false);
@@ -225,12 +225,12 @@ export function useRemoteBackupState({
     try {
       const ok = await testWebDavBackupTarget(runtimeConfig, password || undefined);
       setConnectionStatus(ok ? "ok" : "failed");
-      notify(ok ? UI_TEXT.toast.webDavTestSuccess : UI_TEXT.toast.webDavTestFailed, ok ? "success" : "warning");
+      notify(ok ? UI_TEXT.toast.webDavTestSuccess : UI_TEXT.toast.webDavTestFailed, ok ? "success" : "error");
       return ok;
     } catch (error) {
       console.error("test WebDAV backup target failed", error);
       setConnectionStatus("failed");
-      notify(UI_TEXT.toast.webDavTestFailed, "warning");
+      notify(UI_TEXT.toast.webDavTestFailed, "error");
       return false;
     } finally {
       setIsTesting(false);
@@ -255,7 +255,7 @@ export function useRemoteBackupState({
       notify(UI_TEXT.toast.webDavConfigDeleted, "success");
     } catch (error) {
       console.error("delete WebDAV backup config failed", error);
-      notify(UI_TEXT.toast.webDavConfigDeleteFailed, "warning");
+      notify(UI_TEXT.toast.webDavConfigDeleteFailed, "error");
     }
   }, [confirm, notify]);
 
@@ -281,7 +281,7 @@ export function useRemoteBackupState({
     } catch (error) {
       console.error("upload WebDAV backup failed", error);
       setConnectionStatus("failed");
-      notify(UI_TEXT.toast.webDavUploadFailed, "warning");
+      notify(UI_TEXT.toast.webDavUploadFailed, "error");
     } finally {
       setIsUploading(false);
     }
@@ -302,7 +302,7 @@ export function useRemoteBackupState({
     } catch (error) {
       console.error("list WebDAV backups failed", error);
       setConnectionStatus("failed");
-      notify(UI_TEXT.toast.webDavListFailed, "warning");
+      notify(UI_TEXT.toast.webDavListFailed, "error");
     } finally {
       setIsListing(false);
     }
@@ -345,7 +345,7 @@ export function useRemoteBackupState({
       reload();
     } catch (error) {
       console.error("restore WebDAV backup failed", error);
-      notify(UI_TEXT.toast.webDavDownloadFailed, "warning");
+      notify(UI_TEXT.toast.webDavDownloadFailed, "error");
     } finally {
       if (downloadedPath) {
         try {

@@ -108,7 +108,6 @@ export default function SettingsTrackingPanel({
               checked={trackingPaused}
               onChange={onTrackingPausedChange}
               ariaLabel={UI_TEXT.accessibility.settings.toggleTrackingPaused}
-              tone="warning"
             />
           </div>
         </div>

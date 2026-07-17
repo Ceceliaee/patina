@@ -1,5 +1,5 @@
 import { UI_TEXT } from "../../../shared/copy/index.ts";
-import type { QuietToastTone } from "../../../shared/components/QuietToast";
+import type { QuietToastTone } from "../../../shared/types/toast";
 import type { CleanupRange } from "../types.ts";
 import type { BackupRestorePreparation, BackupRestoreStrategy } from "./settingsRuntimeAdapterService.ts";
 
@@ -105,7 +105,7 @@ export async function runSettingsCleanupFlow(options: CleanupFlowOptions): Promi
     return true;
   } catch (error) {
     options.reportError?.("cleanup failed", error);
-    options.notify(UI_TEXT.toast.cleanupFailed, "warning");
+    options.notify(UI_TEXT.toast.cleanupFailed, "error");
     return false;
   } finally {
     options.onExecutionEnd?.();
@@ -125,7 +125,7 @@ export async function runBackupExportFlow(options: BackupExportFlowOptions): Pro
     return exportedPath;
   } catch (error) {
     options.reportError?.("export backup failed", error);
-    options.notify(UI_TEXT.toast.backupExportFailed, "warning");
+    options.notify(UI_TEXT.toast.backupExportFailed, "error");
     return null;
   } finally {
     options.onExecutionEnd?.();
@@ -169,7 +169,7 @@ export async function prepareBackupRestoreFlow(
     return preparation;
   } catch (error) {
     options.reportError?.("prepare backup restore failed", error);
-    options.notify(UI_TEXT.toast.backupPreviewFailed, "warning");
+    options.notify(UI_TEXT.toast.backupPreviewFailed, "error");
     return null;
   } finally {
     options.onExecutionEnd?.();
@@ -208,7 +208,7 @@ export async function commitPreparedBackupRestoreFlow(options: BackupRestoreComm
     return true;
   } catch (error) {
     options.reportError?.("restore backup failed", error);
-    options.notify(UI_TEXT.toast.backupRestoreFailed, "warning");
+    options.notify(UI_TEXT.toast.backupRestoreFailed, "error");
     return false;
   } finally {
     options.onExecutionEnd?.();

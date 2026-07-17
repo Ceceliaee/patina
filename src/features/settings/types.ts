@@ -1,5 +1,5 @@
 import type { AppLanguage, AppSettings, ColorScheme, ThemeMode } from "../../shared/settings/appSettings";
-import type { QuietToastTone } from "../../shared/components/QuietToast";
+import type { QuietToastTone } from "../../shared/types/toast";
 import type { UpdateSnapshot } from "../../shared/types/update";
 
 export interface ColorSchemePreview {

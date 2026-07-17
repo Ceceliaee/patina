@@ -6,7 +6,7 @@ import QuietDateRangePicker, {
 import QuietDialog from "../../../shared/components/QuietDialog.tsx";
 import QuietButton from "../../../shared/components/QuietButton.tsx";
 import QuietRangeControl from "../../../shared/components/QuietRangeControl.tsx";
-import type { QuietToastTone } from "../../../shared/components/QuietToast.tsx";
+import type { QuietToastTone } from "../../../shared/types/toast.ts";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import { formatLocalDateKey, startOfLocalDay } from "../../../shared/lib/localDate.ts";
 import {
@@ -246,7 +246,7 @@ export default function SettingsDataExportDialog({ open, onClose, onToast }: Pro
       onToast?.(message, "success");
     } catch (error) {
       const msg = `${UI_TEXT.export.exportFailed}: ${error}`;
-      onToast?.(msg, "warning");
+      onToast?.(msg, "error");
     } finally {
       setExporting(false);
     }
@@ -273,18 +273,18 @@ export default function SettingsDataExportDialog({ open, onClose, onToast }: Pro
         actions={(
           <>
             <QuietButton
+              size="large"
               onClick={onClose}
               disabled={exporting}
-              className="h-8 min-h-0 px-3 text-xs font-semibold leading-none"
             >
               {UI_TEXT.common.cancel}
             </QuietButton>
             <QuietButton
               tone="primary"
+              size="large"
               onClick={() => void handleExport()}
               disabled={exporting || selectedFields.length === 0 || Boolean(timeRangeErrorMessage)}
               busy={exporting}
-              className="h-8 min-h-0 px-3 text-xs font-semibold leading-none inline-flex items-center gap-1.5"
             >
               {exporting ? (
                 <>
@@ -362,9 +362,9 @@ export default function SettingsDataExportDialog({ open, onClose, onToast }: Pro
                 </p>
               </div>
               <QuietButton
+                size="large"
                 onClick={() => setShowFieldConfig(true)}
                 disabled={exporting}
-                className="h-8 min-h-0 px-3 text-xs font-semibold leading-none inline-flex items-center gap-1.5"
               >
                 {UI_TEXT.export.configFields}
               </QuietButton>

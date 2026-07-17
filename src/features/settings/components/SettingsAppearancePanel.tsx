@@ -1,5 +1,6 @@
 import { ChevronRight, Palette } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import QuietBadge from "../../../shared/components/QuietBadge";
 import QuietDialog from "../../../shared/components/QuietDialog";
 import QuietButton from "../../../shared/components/QuietButton";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
@@ -41,6 +42,7 @@ export default function SettingsAppearancePanel({
   onConfirmColorSchemeChange,
   colorSchemeConfirming,
 }: SettingsAppearancePanelProps) {
+  const selectedSchemeRef = useRef<HTMLButtonElement>(null);
   const [activeLibrary, setActiveLibrary] = useState<ThemeLibrary | null>(null);
   const [dialogSnapshot, setDialogSnapshot] = useState<{
     library: ThemeLibrary;
@@ -172,7 +174,7 @@ export default function SettingsAppearancePanel({
         <div>
           <label className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--qp-text-tertiary)]">
             {UI_TEXT.settings.dynamicEffectsLabel}
-            <span className="settings-beta-badge settings-beta-badge-small">{UI_TEXT.settings.betaLabel}</span>
+            <QuietBadge variant="beta" size="compact">{UI_TEXT.settings.betaLabel}</QuietBadge>
           </label>
           <p className="mt-2 text-sm leading-relaxed text-[var(--qp-text-secondary)]">
             {UI_TEXT.settings.dynamicEffectsHint}
@@ -193,10 +195,12 @@ export default function SettingsAppearancePanel({
         title={activeLibraryOption?.label ?? UI_TEXT.settings.colorSchemeDialogFallbackTitle}
         description={UI_TEXT.settings.colorSchemeDialogDescription}
         onClose={closeColorSchemeDialog}
+        initialFocusRef={selectedSchemeRef}
         surfaceClassName="qp-theme-dialog-surface"
         actions={(
           <>
             <QuietButton
+              size="large"
               onClick={closeColorSchemeDialog}
               className="qp-dialog-action"
               disabled={colorSchemeConfirming}
@@ -205,6 +209,7 @@ export default function SettingsAppearancePanel({
             </QuietButton>
             <QuietButton
               tone="primary"
+              size="large"
               onClick={() => void handleConfirmColorScheme()}
               busy={colorSchemeConfirming}
               className="qp-dialog-action"
@@ -222,6 +227,7 @@ export default function SettingsAppearancePanel({
                 return (
                   <button
                     key={option.value}
+                    ref={selected ? selectedSchemeRef : undefined}
                     type="button"
                     aria-pressed={selected}
                     onClick={() => changeActiveColorScheme(option.value)}

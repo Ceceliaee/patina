@@ -135,21 +135,20 @@ export default function SettingsDataExportFieldConfigDialog({ open, selectedFiel
         )}
         onClose={onClose}
         surfaceClassName="settings-data-export-field-dialog"
-        initialFocus="surface"
         actions={(
           <>
             <div className="settings-data-export-field-dialog-actions-spacer" />
             <QuietButton
+              size="large"
               onClick={onClose}
-              className="h-8 min-h-0 px-3 text-xs font-semibold leading-none"
             >
               {uiText.dialog.cancel}
             </QuietButton>
             <QuietButton
               tone="primary"
+              size="large"
               onClick={confirm}
               disabled={selectedCount === 0}
-              className="h-8 min-h-0 px-3 text-xs font-semibold leading-none"
             >
               {uiText.dialog.confirm}
             </QuietButton>

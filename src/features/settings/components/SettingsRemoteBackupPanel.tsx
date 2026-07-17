@@ -62,9 +62,10 @@ function RemoteBackupEntryRow({
           </p>
         </div>
         <QuietButton
+          size="regular"
           onClick={onRestore}
           disabled={disabled}
-          className="h-8 shrink-0 rounded-[8px] px-3 text-xs font-semibold"
+          className="shrink-0 rounded-[8px]"
         >
           {UI_TEXT.settings.webDavRestoreSelected}
         </QuietButton>
@@ -77,6 +78,7 @@ export default function SettingsRemoteBackupPanel({
   remoteBackup,
   onRestoreEntrySelected,
 }: SettingsRemoteBackupPanelProps) {
+  const serverUrlRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState<RemoteBackupFormDraft>(() => buildInitialDraft(remoteBackup));
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [isRevealingPassword, setIsRevealingPassword] = useState(false);
@@ -158,26 +160,29 @@ export default function SettingsRemoteBackupPanel({
           <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
             {configured && (
               <QuietButton
+                size="regular"
                 onClick={() => void remoteBackup.testConfig()}
                 disabled={busy || !canUseRemote}
                 busy={remoteBackup.isTesting}
-                className="h-8 shrink-0 rounded-[8px] px-3 text-xs font-semibold text-[var(--qp-text-secondary)]"
+                className="shrink-0 rounded-[8px] text-[var(--qp-text-secondary)]"
               >
                 {remoteBackup.isTesting ? UI_TEXT.settings.webDavTesting : UI_TEXT.settings.webDavTestConnection}
               </QuietButton>
             )}
             <QuietButton
+              size="regular"
               onClick={remoteBackup.openConfigDialog}
               disabled={busy}
-              className="h-8 shrink-0 rounded-[8px] px-3 text-xs font-semibold text-[var(--qp-text-secondary)]"
+              className="shrink-0 rounded-[8px] text-[var(--qp-text-secondary)]"
             >
               {configured ? UI_TEXT.settings.webDavEdit : UI_TEXT.settings.webDavConfigure}
             </QuietButton>
             {configured && (
               <QuietButton
+                size="regular"
                 onClick={() => void remoteBackup.deleteConfig()}
                 disabled={busy}
-                className="h-8 shrink-0 rounded-[8px] px-3 text-xs font-semibold text-[var(--qp-danger)]"
+                className="shrink-0 rounded-[8px] text-[var(--qp-danger)]"
               >
                 {UI_TEXT.settings.webDavDeleteAction}
               </QuietButton>
@@ -192,29 +197,33 @@ export default function SettingsRemoteBackupPanel({
         description={UI_TEXT.settings.webDavConfigDescription}
         onClose={remoteBackup.closeConfigDialog}
         closeOnBackdrop={!busy}
+        initialFocusRef={serverUrlRef}
         actions={(
           <>
             <QuietButton
+              size="large"
               onClick={remoteBackup.closeConfigDialog}
               disabled={busy}
-              className="h-8 rounded-[8px] px-3 text-xs font-semibold"
+              className="rounded-[8px]"
             >
               {UI_TEXT.common.cancel}
             </QuietButton>
             <QuietButton
+              size="large"
               onClick={() => void remoteBackup.testConfig(draft)}
               disabled={busy}
               busy={remoteBackup.isTesting}
-              className="h-8 rounded-[8px] px-3 text-xs font-semibold"
+              className="rounded-[8px]"
             >
               {remoteBackup.isTesting ? UI_TEXT.settings.webDavTesting : UI_TEXT.settings.webDavTestConnection}
             </QuietButton>
             <QuietButton
               tone="primary"
+              size="large"
               onClick={() => void remoteBackup.saveConfig(draft)}
               disabled={busy}
               busy={remoteBackup.isSaving}
-              className="h-8 rounded-[8px] px-3 text-xs font-semibold"
+              className="rounded-[8px]"
             >
               {remoteBackup.isSaving ? UI_TEXT.common.saving : UI_TEXT.common.save}
             </QuietButton>
@@ -226,6 +235,7 @@ export default function SettingsRemoteBackupPanel({
             {UI_TEXT.settings.webDavServerUrl}
             <div className="settings-webdav-server-input h-9">
               <input
+                ref={serverUrlRef}
                 value={draft.url}
                 onChange={(event) => setDraft((current) => ({
                   ...current,
@@ -281,9 +291,10 @@ export default function SettingsRemoteBackupPanel({
         closeOnBackdrop={!remoteBackup.isDownloading}
         actions={(
           <QuietButton
+            size="large"
             onClick={remoteBackup.closeRestoreDialog}
             disabled={remoteBackup.isDownloading}
-            className="h-8 rounded-[8px] px-3 text-xs font-semibold"
+            className="rounded-[8px]"
           >
             {UI_TEXT.common.close}
           </QuietButton>

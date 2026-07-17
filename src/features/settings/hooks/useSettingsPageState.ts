@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { setUiTextLanguage, UI_TEXT } from "../../../shared/copy/index.ts";
-import type { QuietToastTone } from "../../../shared/components/QuietToast";
+import type { QuietToastTone } from "../../../shared/types/toast";
 import { useQuietDialogs } from "../../../shared/hooks/useQuietDialogs";
 import { getSettingsBootstrapCache, setSettingsBootstrapCache } from "../services/settingsBootstrapCache";
 import { loadSettingsPageBootstrap } from "../services/settingsBootstrapService.ts";
@@ -143,7 +143,7 @@ export function useSettingsPageState({
     try {
       const refreshed = await refreshStorageSnapshot();
       if (!refreshed) {
-        notify(UI_TEXT.settings.storage.storageSnapshotRefreshFailed, "warning");
+        notify(UI_TEXT.settings.storage.storageSnapshotRefreshFailed, "error");
       }
     } finally {
       setIsStorageBusy(false);
@@ -301,7 +301,7 @@ export function useSettingsPageState({
     } catch (error) {
       console.error("save settings failed", error);
       setSaveStatus("idle");
-      notify(UI_TEXT.settings.saveFailed, "warning");
+      notify(UI_TEXT.settings.saveFailed, "error");
       return false;
     }
   }, [appVersion, draftSettings, hasUnsavedChanges, notify, onSettingsChanged, saveStatus, savedSettings]);
@@ -341,7 +341,7 @@ export function useSettingsPageState({
     } catch (error) {
       console.error("save color scheme failed", error);
       setSaveStatus("idle");
-      notify(UI_TEXT.settings.saveFailed, "warning");
+      notify(UI_TEXT.settings.saveFailed, "error");
       return false;
     }
   }, [appVersion, draftSettings, notify, onColorSchemeSaved, saveStatus, savedSettings]);
@@ -447,7 +447,7 @@ export function useSettingsPageState({
       await SettingsRuntimeAdapterService.restartAndClearWebviewCache();
     } catch (error) {
       console.error("schedule WebView cache clear failed", error);
-      notify(storageText.webviewCacheClearFailed, "warning");
+      notify(storageText.webviewCacheClearFailed, "error");
     } finally {
       setIsStorageBusy(false);
     }
@@ -476,7 +476,7 @@ export function useSettingsPageState({
       await SettingsRuntimeAdapterService.restartAndApplyStorageMigration(selectedPath);
     } catch (error) {
       console.error("schedule data directory migration failed", error);
-      notify(storageText.storageMigrationFailed, "warning");
+      notify(storageText.storageMigrationFailed, "error");
     } finally {
       setIsStorageBusy(false);
     }
@@ -505,7 +505,7 @@ export function useSettingsPageState({
       await SettingsRuntimeAdapterService.restartAndApplyWebviewCacheMigration(selectedPath);
     } catch (error) {
       console.error("schedule cache directory migration failed", error);
-      notify(storageText.storageMigrationFailed, "warning");
+      notify(storageText.storageMigrationFailed, "error");
     } finally {
       setIsStorageBusy(false);
     }
@@ -531,7 +531,7 @@ export function useSettingsPageState({
       await SettingsRuntimeAdapterService.restartAndApplyRestoreDefaultStorageMigration();
     } catch (error) {
       console.error("schedule restore default data directory failed", error);
-      notify(storageText.storageMigrationFailed, "warning");
+      notify(storageText.storageMigrationFailed, "error");
     } finally {
       setIsStorageBusy(false);
     }
@@ -557,7 +557,7 @@ export function useSettingsPageState({
       await SettingsRuntimeAdapterService.restartAndApplyRestoreDefaultWebviewCacheMigration();
     } catch (error) {
       console.error("schedule restore default cache directory failed", error);
-      notify(storageText.storageMigrationFailed, "warning");
+      notify(storageText.storageMigrationFailed, "error");
     } finally {
       setIsStorageBusy(false);
     }
@@ -569,7 +569,7 @@ export function useSettingsPageState({
       await SettingsRuntimeAdapterService.openStorageDirectory(path);
     } catch (error) {
       console.error("open storage directory failed", error);
-      notify(storageText.storageOpenDirectoryFailed, "warning");
+      notify(storageText.storageOpenDirectoryFailed, "error");
     }
   }, [notify]);
 
@@ -578,7 +578,7 @@ export function useSettingsPageState({
       await SettingsRuntimeAdapterService.openReleaseNotes();
     } catch (error) {
       console.error("open release notes failed", error);
-      notify(UI_TEXT.toast.releaseNotesOpenFailed, "warning");
+      notify(UI_TEXT.toast.releaseNotesOpenFailed, "error");
     }
   }, [notify]);
 
@@ -587,7 +587,7 @@ export function useSettingsPageState({
       await SettingsRuntimeAdapterService.openFeedback();
     } catch (error) {
       console.error("open feedback link failed", error);
-      notify(UI_TEXT.toast.feedbackOpenFailed, "warning");
+      notify(UI_TEXT.toast.feedbackOpenFailed, "error");
     }
   }, [notify]);
 

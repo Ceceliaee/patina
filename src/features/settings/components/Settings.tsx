@@ -104,7 +104,7 @@ export default function Settings({
   }
 
   return (
-    <div className="flex h-full w-full min-w-0 flex-col gap-4 md:gap-5">
+    <div className="settings-button-preview flex h-full w-full min-w-0 flex-col gap-4 md:gap-5">
       {dialogs}
       <QuietPageHeader
         icon={<Settings2 size={18} />}
@@ -137,18 +137,20 @@ export default function Settings({
               )}
             </div>
             <QuietButton
+              size="large"
               onClick={handleCancel}
               disabled={!hasUnsavedChanges || saveStatus === "saving"}
-              className="rounded-[8px] px-2.5 py-1.5 text-[11px] font-semibold"
+              className="settings-header-button rounded-[8px]"
             >
               {UI_TEXT.settings.cancel}
             </QuietButton>
             <QuietButton
               tone="primary"
+              size="large"
               onClick={() => void handleSave()}
               disabled={!hasUnsavedChanges || saveStatus === "saving"}
               busy={saveStatus === "saving"}
-              className="rounded-[8px] px-2.5 py-1.5 text-[11px] font-semibold"
+              className="settings-header-button rounded-[8px]"
             >
               {saveStatus === "saving" ? UI_TEXT.settings.saving : UI_TEXT.settings.save}
             </QuietButton>

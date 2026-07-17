@@ -729,7 +729,7 @@ await runTest("runSettingsCleanupFlow reports failures and still clears busy sta
   });
 
   assert.equal(result, false);
-  assert.deepEqual(events, ["start", "notify:warning", "end"]);
+  assert.deepEqual(events, ["start", "notify:error", "end"]);
   assert.deepEqual(errors, ["cleanup failed:db busy"]);
 });
 

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import {
   BrushCleaning,
   Database,
@@ -11,7 +11,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
-import QuietDangerAction from "../../../shared/components/QuietDangerAction";
+import QuietBadge from "../../../shared/components/QuietBadge";
 import QuietSubpanel from "../../../shared/components/QuietSubpanel";
 import QuietActionRow from "../../../shared/components/QuietActionRow";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
@@ -178,6 +178,10 @@ export default function SettingsDataSafetyPanel({
   onRestoreDefaultCacheDirectory,
   onOpenStorageDirectory,
 }: SettingsDataSafetyPanelProps) {
+  const cacheClearCancelRef = useRef<HTMLButtonElement>(null);
+  const localBackupRef = useRef<HTMLButtonElement>(null);
+  const localRestoreRef = useRef<HTMLButtonElement>(null);
+  const selectedRestoreStrategyRef = useRef<HTMLButtonElement>(null);
   const [strategyDialogOpen, setStrategyDialogOpen] = useState(false);
   const [restoreStrategySource, setRestoreStrategySource] = useState<"local" | "remote">("local");
   const [pendingRemoteRestoreEntry, setPendingRemoteRestoreEntry] = useState<RemoteBackupEntry | null>(null);
@@ -308,16 +312,17 @@ export default function SettingsDataSafetyPanel({
               <div className="settings-data-export-entry-copy min-w-0">
                 <p className="flex items-center gap-1.5 text-sm font-semibold text-[var(--qp-text-primary)]">
                   <span>{UI_TEXT.settings.dataExportTitle}</span>
-                  <span className="settings-beta-badge">{UI_TEXT.settings.betaLabel}</span>
+                  <QuietBadge variant="beta">{UI_TEXT.settings.betaLabel}</QuietBadge>
                 </p>
                 <p className="mt-1 text-sm leading-relaxed text-[var(--qp-text-secondary)]">
                   {UI_TEXT.settings.dataExportHint}
                 </p>
               </div>
               <QuietButton
+                size="regular"
                 onClick={onOpenDataExport}
                 disabled={busy}
-                className="settings-data-export-entry-action h-8 shrink-0 px-3 text-xs font-semibold text-[var(--qp-text-secondary)]"
+                className="settings-data-export-entry-action shrink-0 text-[var(--qp-text-secondary)]"
               >
                 {UI_TEXT.settings.dataExportAction}
               </QuietButton>
@@ -347,10 +352,11 @@ export default function SettingsDataSafetyPanel({
                     </p>
                   </div>
                   <QuietButton
+                    size="regular"
                     onClick={handleBackupAction}
                     disabled={busy}
                     busy={isExportingBackup || remoteBackup.isUploading}
-                    className="h-8 shrink-0 rounded-[8px] px-3 text-xs font-semibold text-[var(--qp-text-secondary)]"
+                    className="shrink-0 rounded-[8px] text-[var(--qp-text-secondary)]"
                   >
                     {isExportingBackup || remoteBackup.isUploading ? UI_TEXT.settings.backupExporting : UI_TEXT.settings.backupExportAction}
                   </QuietButton>
@@ -384,10 +390,11 @@ export default function SettingsDataSafetyPanel({
                     </p>
                   </div>
                   <QuietButton
+                    size="regular"
                     onClick={handleRestoreAction}
                     disabled={busy}
                     busy={isRestoringBackup || remoteBackup.isListing || remoteBackup.isDownloading}
-                    className="h-8 shrink-0 rounded-[8px] px-3 text-xs font-semibold text-[var(--qp-text-secondary)]"
+                    className="shrink-0 rounded-[8px] text-[var(--qp-text-secondary)]"
                   >
                     {isRestoringBackup || remoteBackup.isListing || remoteBackup.isDownloading ? UI_TEXT.settings.backupRestoring : UI_TEXT.settings.backupRestoreAction}
                   </QuietButton>
@@ -406,7 +413,7 @@ export default function SettingsDataSafetyPanel({
               <div className="settings-local-paths-copy">
                 <p className="settings-local-paths-title">
                   <span>{storageText.storageDirectoryTitle}</span>
-                  <span className="settings-local-paths-beta">{storageText.storageDirectoryBetaLabel}</span>
+                  <QuietBadge variant="beta">{storageText.storageDirectoryBetaLabel}</QuietBadge>
                 </p>
                 <p className="mt-1 text-sm leading-relaxed text-[var(--qp-text-secondary)]">{storageText.storageDirectorySummary}</p>
               </div>
@@ -506,20 +513,21 @@ export default function SettingsDataSafetyPanel({
         actions={(
           <>
             <QuietButton
+              size="large"
               onClick={() => setHistoryCleanupDialogOpen(false)}
               disabled={isCleaning}
-              className="h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none"
             >
               {UI_TEXT.common.cancel}
             </QuietButton>
-            <QuietDangerAction
+            <QuietButton
+              tone="danger"
+              size="large"
               onClick={cleanupHistoryFromDialog}
               disabled={isCleaning}
-              leadingIcon={isCleaning ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={14} />}
-              className="h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none"
             >
+              {isCleaning ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={14} />}
               {isCleaning ? UI_TEXT.settings.cleanupRunning : UI_TEXT.settings.cleanupNow}
-            </QuietDangerAction>
+            </QuietButton>
           </>
         )}
       >
@@ -545,20 +553,24 @@ export default function SettingsDataSafetyPanel({
         description={storageText.webviewCacheClearConfirmDetail}
         onClose={() => setCacheClearDialogOpen(false)}
         closeOnBackdrop={!busy}
+        initialFocusRef={cacheClearCancelRef}
         actions={(
           <>
             <QuietButton
+              ref={cacheClearCancelRef}
+              size="large"
               onClick={() => setCacheClearDialogOpen(false)}
               disabled={busy}
-              className="h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none"
+              className="rounded-[8px]"
             >
               {UI_TEXT.common.cancel}
             </QuietButton>
             <QuietButton
               tone="primary"
+              size="large"
               onClick={restartAndClearWebviewCacheFromDialog}
               disabled={busy}
-              className="h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none"
+              className="rounded-[8px]"
             >
               {storageText.restartAndApplyAction}
             </QuietButton>
@@ -572,11 +584,13 @@ export default function SettingsDataSafetyPanel({
         description={UI_TEXT.settings.backupTargetHint}
         onClose={() => setBackupTargetDialogOpen(false)}
         closeOnBackdrop={!busy}
+        initialFocusRef={localBackupRef}
         actions={(
           <QuietButton
+            size="large"
             onClick={() => setBackupTargetDialogOpen(false)}
             disabled={busy}
-            className="h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none"
+            className="rounded-[8px]"
           >
             {UI_TEXT.common.cancel}
           </QuietButton>
@@ -585,6 +599,7 @@ export default function SettingsDataSafetyPanel({
         <div className="grid gap-3 md:grid-cols-2">
           <QuietActionRow>
             <button
+              ref={localBackupRef}
               type="button"
               onClick={() => {
                 setBackupTargetDialogOpen(false);
@@ -620,11 +635,13 @@ export default function SettingsDataSafetyPanel({
         description={UI_TEXT.settings.restoreSourceHint}
         onClose={() => setRestoreSourceDialogOpen(false)}
         closeOnBackdrop={!busy}
+        initialFocusRef={localRestoreRef}
         actions={(
           <QuietButton
+            size="large"
             onClick={() => setRestoreSourceDialogOpen(false)}
             disabled={busy}
-            className="h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none"
+            className="rounded-[8px]"
           >
             {UI_TEXT.common.cancel}
           </QuietButton>
@@ -633,6 +650,7 @@ export default function SettingsDataSafetyPanel({
         <div className="grid gap-3 md:grid-cols-2">
           <QuietActionRow>
             <button
+              ref={localRestoreRef}
               type="button"
               onClick={() => {
                 setRestoreSourceDialogOpen(false);
@@ -668,24 +686,26 @@ export default function SettingsDataSafetyPanel({
         description={UI_TEXT.settings.restoreStrategyHint}
         onClose={closeStrategyDialog}
         closeOnBackdrop={!isRestoringBackup}
-        initialFocus="surface"
+        initialFocusRef={selectedRestoreStrategyRef}
         actions={(
           <>
             <QuietButton
+              size="large"
               onClick={closeStrategyDialog}
               disabled={isRestoringBackup}
-              className="h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none"
+              className="rounded-[8px]"
             >
               {UI_TEXT.common.cancel}
             </QuietButton>
             <QuietButton
               tone="primary"
+              size="large"
               onClick={() => {
                 confirmRestoreStrategy();
               }}
               disabled={busy}
               busy={isRestoringBackup || remoteBackup.isListing}
-              className="h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold leading-none"
+              className="rounded-[8px]"
             >
               {isRestoringBackup || remoteBackup.isListing ? UI_TEXT.settings.backupRestoring : UI_TEXT.settings.backupRestoreAction}
             </QuietButton>
@@ -697,6 +717,7 @@ export default function SettingsDataSafetyPanel({
             value={restoreStrategy}
             options={restoreStrategyOptions}
             onChange={onRestoreStrategyChange}
+            selectedOptionRef={selectedRestoreStrategyRef}
             className="self-start"
           />
         </div>
