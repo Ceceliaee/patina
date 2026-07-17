@@ -1,3 +1,48 @@
+.settings-header-button.qp-button-secondary:hover:not(:disabled) {
+  border-color: var(--qp-border-strong);
+  background: var(--qp-bg-elevated);
+  color: var(--qp-text-primary);
+}
+
+.settings-header-button.qp-button-secondary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--qp-bg-elevated) 78%, var(--qp-bg-panel));
+}
+
+.settings-header-button.qp-button-primary {
+  border-color: color-mix(in srgb, var(--qp-accent-default) 72%, var(--qp-border-strong));
+}
+
+.settings-header-button.qp-button-primary:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--qp-accent-default) 82%, var(--qp-border-strong));
+  background: color-mix(in srgb, var(--qp-accent-default) 94%, black);
+}
+
+.settings-header-button.qp-button-primary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--qp-accent-default) 88%, black);
+}
+
+.settings-header-button:focus-visible,
+.settings-button-preview .qp-dialog-actions .qp-button-danger:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--qp-accent-default) 34%, transparent);
+  outline-offset: 2px;
+}
+
+.settings-button-preview .qp-dialog-actions .qp-button-danger {
+  border-color: color-mix(in srgb, var(--qp-danger) 24%, var(--qp-border-subtle));
+  background: var(--qp-bg-panel);
+  color: color-mix(in srgb, var(--qp-danger) 72%, var(--qp-text-secondary));
+}
+
+.settings-button-preview .qp-dialog-actions .qp-button-danger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--qp-danger) 36%, var(--qp-border-subtle));
+  background: color-mix(in srgb, var(--qp-danger) 7%, var(--qp-bg-panel));
+  color: var(--qp-danger);
+}
+
+.settings-button-preview .qp-dialog-actions .qp-button-danger:active:not(:disabled) {
+  background: color-mix(in srgb, var(--qp-danger) 11%, var(--qp-bg-panel));
+}
+
 .settings-color-scheme-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -230,34 +275,6 @@
   font-size: 14px;
   font-weight: 700;
   line-height: 1.25;
-}
-
-.settings-beta-badge,
-.settings-local-paths-beta {
-  --settings-beta-badge-font-size: 10px;
-  --settings-beta-badge-height: 18px;
-  --settings-beta-badge-padding-x: 6px;
-
-  display: inline-flex;
-  height: var(--settings-beta-badge-height);
-  flex: 0 0 auto;
-  align-items: center;
-  border: 1px solid var(--qp-border-subtle);
-  border-radius: var(--qp-radius-chip);
-  background: var(--qp-bg-elevated);
-  padding: 0 var(--settings-beta-badge-padding-x);
-  color: var(--qp-text-tertiary);
-  font-size: var(--settings-beta-badge-font-size);
-  font-weight: 700;
-  letter-spacing: 0;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
-.settings-beta-badge-small {
-  --settings-beta-badge-font-size: 8px;
-  --settings-beta-badge-height: 14px;
-  --settings-beta-badge-padding-x: 4px;
 }
 
 .settings-local-paths-message-action {

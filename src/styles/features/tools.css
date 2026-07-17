@@ -454,17 +454,6 @@
   gap: 8px;
 }
 
-.tools-action-button {
-  display: inline-flex;
-  min-height: 34px;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 0 12px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
 .tools-icon-button {
   display: inline-flex;
   width: 28px;

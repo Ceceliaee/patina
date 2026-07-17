@@ -90,33 +90,7 @@
 }
 
 .about-pill-action {
-  display: inline-flex;
-  min-height: 34px;
   max-width: 100%;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  border: 1px solid var(--qp-border-subtle);
-  border-radius: var(--qp-radius-chip);
-  background: var(--qp-bg-panel);
-  padding: 0 12px;
-  color: var(--qp-text-secondary);
-  white-space: nowrap;
-}
-
-.about-pill-action:hover {
-  border-color: var(--qp-border-strong);
-  background: var(--qp-bg-elevated);
-  color: var(--qp-text-primary);
-}
-
-.about-pill-action:active {
-  background: color-mix(in srgb, var(--qp-accent-muted) 42%, var(--qp-bg-panel));
-}
-
-.about-pill-action:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--qp-accent-default) 42%, transparent);
-  outline-offset: 2px;
 }
 
 .about-pill-icon {
@@ -141,10 +115,6 @@
 
 .about-pill-label {
   overflow: hidden;
-  color: var(--qp-text-primary);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
   text-overflow: ellipsis;
 }
 
@@ -206,16 +176,6 @@
   color: var(--qp-text-tertiary);
   font-size: 11px;
   line-height: 1.45;
-}
-
-.update-status-compact .qp-button-primary,
-.update-status-compact .qp-button-secondary {
-  min-height: 32px;
-  gap: 5px;
-  padding: 0 12px;
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 1;
 }
 
 .about-support-dialog-surface {
