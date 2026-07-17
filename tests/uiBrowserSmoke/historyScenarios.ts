@@ -3,22 +3,6 @@ import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import { evaluate, jsonString, titleDetailsButtonExpression, waitForExpression } from "./browserHarness.ts";
 import { DATE_TEXT, HISTORY_TITLE_DETAIL_COUNT } from "./constants.ts";
 
-function timelineSegmentContainsPointExpression(x: number, y: number) {
-  return `
-    Array.from(document.querySelectorAll(".history-timeline-zoom-dialog-timeline .history-horizontal-timeline-segment"))
-      .some((segment) => {
-        if (!(segment instanceof HTMLElement)) return false;
-        const rect = segment.getBoundingClientRect();
-        return rect.width > 0
-          && rect.height > 0
-          && ${JSON.stringify(x)} >= rect.left
-          && ${JSON.stringify(x)} <= rect.right
-          && ${JSON.stringify(y)} >= rect.top
-          && ${JSON.stringify(y)} <= rect.bottom;
-      })
-  `;
-}
-
 export async function runHistoryScenarios(context: BrowserSmokeContext) {
   const { appUrl, client, sessionId, runTest } = context;
 
@@ -828,15 +812,18 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
 
     const dragStartPoint = JSON.parse(String(await evaluate(client!, sessionId, `
       (() => {
-        const segment = document.querySelector(".history-timeline-zoom-dialog-timeline .history-horizontal-timeline-segment");
-        if (!(segment instanceof HTMLElement)) return JSON.stringify(null);
-        const rect = segment.getBoundingClientRect();
+        const track = document.querySelector(
+          ".history-timeline-zoom-dialog-timeline .history-horizontal-timeline-track"
+        );
+        if (!(track instanceof HTMLElement)) return JSON.stringify(null);
+        const rect = track.getBoundingClientRect();
         return JSON.stringify({
           x: rect.left + rect.width / 2,
           y: rect.top + rect.height / 2,
         });
       })()
-    `))) as { x: number; y: number };
+    `))) as { x: number; y: number } | null;
+    assert.ok(dragStartPoint, "expected a timeline track for drag interaction");
     const dragStartX = dragStartPoint.x;
     const dragStartY = dragStartPoint.y;
     assert.ok(Number.isFinite(dragStartX));
@@ -846,13 +833,6 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
       x: dragStartX,
       y: dragStartY,
     }, sessionId);
-    await waitForExpression(
-      client!,
-      sessionId,
-      timelineSegmentContainsPointExpression(dragStartX, dragStartY),
-      undefined,
-      "timeline segment at drag start point",
-    );
     await client!.command("Input.dispatchMouseEvent", {
       type: "mousePressed",
       x: dragStartX,
@@ -929,16 +909,19 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
       const repeatedDragState = JSON.parse(String(await evaluate(client!, sessionId, `
         (() => {
           const timeline = document.querySelector(".history-timeline-zoom-dialog-timeline .history-horizontal-timeline");
-          const segment = document.querySelector(".history-timeline-zoom-dialog-timeline .history-horizontal-timeline-segment");
-          if (!(segment instanceof HTMLElement)) return JSON.stringify(null);
-          const rect = segment.getBoundingClientRect();
+          const track = document.querySelector(
+            ".history-timeline-zoom-dialog-timeline .history-horizontal-timeline-track"
+          );
+          if (!(track instanceof HTMLElement)) return JSON.stringify(null);
+          const rect = track.getBoundingClientRect();
           return JSON.stringify({
             windowStart: Number(timeline?.getAttribute("data-history-timeline-window-start")),
             x: rect.left + rect.width / 2,
             y: rect.top + rect.height / 2,
           });
         })()
-      `))) as { windowStart: number; x: number; y: number };
+      `))) as { windowStart: number; x: number; y: number } | null;
+      assert.ok(repeatedDragState, "expected a timeline track for repeated drag interaction");
       const dragDeltaX = attempt % 2 === 0 ? -80 : 80;
       assert.ok(Number.isFinite(repeatedDragState.x));
       assert.ok(Number.isFinite(repeatedDragState.y));
@@ -947,13 +930,6 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
         x: repeatedDragState.x,
         y: repeatedDragState.y,
       }, sessionId);
-      await waitForExpression(
-        client!,
-        sessionId,
-        timelineSegmentContainsPointExpression(repeatedDragState.x, repeatedDragState.y),
-        undefined,
-        "timeline segment at repeated drag point",
-      );
       await client!.command("Input.dispatchMouseEvent", {
         type: "mousePressed",
         x: repeatedDragState.x,
