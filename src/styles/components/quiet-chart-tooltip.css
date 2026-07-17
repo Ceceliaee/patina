@@ -1,0 +1,72 @@
+.qp-chart-tooltip {
+  min-width: 132px;
+  max-width: min(260px, calc(100vw - 16px));
+  border: 1px solid var(--qp-border-subtle);
+  border-radius: var(--qp-radius-control);
+  background: var(--qp-bg-panel);
+  box-shadow: var(--qp-shadow-overlay);
+  padding: 8px 10px;
+  color: var(--qp-text-primary);
+}
+
+.qp-chart-tooltip-fixed-bottom {
+  transform: translateY(-100%);
+  transform-origin: left bottom;
+}
+
+.qp-chart-tooltip-label {
+  margin-bottom: 6px;
+  overflow: hidden;
+  color: var(--qp-text-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qp-chart-tooltip-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qp-chart-tooltip-item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+}
+
+.qp-chart-tooltip-key {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--qp-text-secondary);
+}
+
+.qp-chart-tooltip-dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+.qp-chart-tooltip-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qp-chart-tooltip-value {
+  flex: 0 0 auto;
+  color: var(--qp-text-primary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

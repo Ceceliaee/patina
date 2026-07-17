@@ -3,7 +3,6 @@ interface Props {
   disabled?: boolean;
   ariaLabel: string;
   onChange: (nextChecked: boolean) => void;
-  tone?: "success" | "warning";
 }
 
 export default function QuietSwitch({
@@ -11,7 +10,6 @@ export default function QuietSwitch({
   disabled = false,
   ariaLabel,
   onChange,
-  tone = "success",
 }: Props) {
   return (
     <button
@@ -21,9 +19,9 @@ export default function QuietSwitch({
       aria-label={ariaLabel}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`qp-switch ${checked ? "qp-switch-checked" : "qp-switch-unchecked"} ${tone === "warning" ? "qp-switch-warning" : "qp-switch-success"}`}
+      className={`qp-switch ${checked ? "qp-switch-checked" : ""}`.trim()}
     >
-      <span className={`qp-switch-thumb ${checked ? "qp-switch-thumb-checked" : "qp-switch-thumb-unchecked"}`} />
+      <span className={`qp-switch-thumb ${checked ? "qp-switch-thumb-checked" : ""}`.trim()} />
     </button>
   );
 }

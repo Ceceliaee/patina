@@ -1,12 +1,11 @@
 import { Minus, Plus } from "lucide-react";
-import type { ReactNode } from "react";
 
 interface QuietStepperSliderProps {
   ariaLabel: string;
   value: number;
   min: number;
   max: number;
-  displayValue: ReactNode;
+  displayValue: string;
   decreaseAriaLabel: string;
   increaseAriaLabel: string;
   step?: number;
@@ -49,7 +48,7 @@ export default function QuietStepperSlider({
           onClick={() => updateValue(getButtonValue(-1))}
           disabled={!canDecrease}
           aria-label={decreaseAriaLabel}
-          className="qp-button-secondary order-1 inline-flex h-6 w-6 items-center justify-center rounded-[6px] p-0 disabled:cursor-not-allowed disabled:opacity-50"
+          className="qp-button-secondary order-1 inline-flex h-6 w-6 items-center justify-center p-0 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Minus size={11} />
         </button>
@@ -62,7 +61,7 @@ export default function QuietStepperSlider({
           value={safeValue}
           onChange={(event) => updateValue(Number(event.target.value))}
           aria-label={ariaLabel}
-          aria-valuetext={typeof displayValue === "string" ? displayValue : undefined}
+          aria-valuetext={displayValue}
           style={{
             backgroundImage: `linear-gradient(to right, var(--qp-text-tertiary) 0%, var(--qp-text-tertiary) ${sliderProgress}%, var(--qp-track-muted) ${sliderProgress}%, var(--qp-track-muted) 100%)`,
             backgroundPosition: "center",
@@ -77,7 +76,7 @@ export default function QuietStepperSlider({
           onClick={() => updateValue(getButtonValue(1))}
           disabled={!canIncrease}
           aria-label={increaseAriaLabel}
-          className="qp-button-secondary order-4 inline-flex h-6 w-6 items-center justify-center rounded-[6px] p-0 disabled:cursor-not-allowed disabled:opacity-50"
+          className="qp-button-secondary order-4 inline-flex h-6 w-6 items-center justify-center p-0 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Plus size={11} />
         </button>

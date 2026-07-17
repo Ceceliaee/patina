@@ -1,7 +1,10 @@
 @import "tailwindcss";
 @import "./styles/tokens.css";
 @import "./styles/quiet-pro.css";
+@import "./styles/components/quiet-actions.css";
+@import "./styles/components/quiet-containers.css";
 @import "./styles/components/quiet-range-control.css";
+@import "./styles/components/quiet-chart-tooltip.css";
 @import "./styles/app-shell.css";
 @import "./styles/features/settings.css";
 @import "./styles/features/dashboard.css";

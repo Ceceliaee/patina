@@ -1,0 +1,13 @@
+.qp-subpanel {
+  border: 1px solid var(--qp-border-subtle);
+  border-radius: var(--qp-radius-panel);
+  background: var(--qp-bg-elevated);
+  padding: 16px;
+}
+
+.qp-action-row {
+  border: 1px solid var(--qp-border-subtle);
+  border-radius: var(--qp-radius-control);
+  background: var(--qp-bg-panel);
+  padding: 12px;
+}

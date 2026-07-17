@@ -1,17 +1,29 @@
-import type { ReactNode } from "react";
+import type { ComponentPropsWithoutRef } from "react";
 
-type QuietBadgeTone = "neutral" | "warning" | "subtle";
+export type QuietBadgeTone = "neutral" | "warning" | "subtle";
+export type QuietBadgeSize = "compact" | "regular";
+export type QuietBadgeVariant = "default" | "beta";
 
-interface Props {
-  children: ReactNode;
+interface Props extends ComponentPropsWithoutRef<"span"> {
   tone?: QuietBadgeTone;
-  className?: string;
+  size?: QuietBadgeSize;
+  variant?: QuietBadgeVariant;
 }
 
-export default function QuietBadge({ children, tone = "neutral", className }: Props) {
+export default function QuietBadge({
+  children,
+  tone = "neutral",
+  size = "regular",
+  variant = "default",
+  className,
+  ...spanProps
+}: Props) {
   return (
-    <span className={`qp-badge qp-badge-${tone} ${className ?? ""}`.trim()}>
-      {children}
+    <span
+      {...spanProps}
+      className={`qp-badge qp-badge-${tone} qp-badge-${size} qp-badge-${variant} ${className ?? ""}`.trim()}
+    >
+      <span className="qp-badge-label">{children}</span>
     </span>
   );
 }

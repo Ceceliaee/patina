@@ -1,34 +1,33 @@
 import type { ReactNode } from "react";
-import { Tooltip } from "recharts";
+import {
+  Tooltip,
+  type TooltipContentProps,
+  type TooltipPayloadEntry,
+  type TooltipProps,
+  type TooltipValueType,
+} from "recharts";
 
-type TooltipValue = number | string;
-type TooltipName = string;
-
-interface TooltipPayloadEntry {
-  value?: TooltipValue;
-  name?: string | number;
-  dataKey?: string | number;
-  color?: string;
-  payload?: unknown;
-}
+type TooltipName = number | string;
+type ChartTooltipPayloadEntry = TooltipPayloadEntry<TooltipValueType, TooltipName>;
+type ChartTooltipPayload = readonly ChartTooltipPayloadEntry[];
 
 type TooltipFormatter = (
-  value: TooltipValue,
-  name: TooltipName,
-  item: TooltipPayloadEntry,
+  value: TooltipValueType | undefined,
+  name: TooltipName | undefined,
+  item: ChartTooltipPayloadEntry,
   index: number,
-  payload: readonly TooltipPayloadEntry[],
+  payload: ChartTooltipPayload,
 ) => ReactNode | [ReactNode, ReactNode];
 
-type TooltipLabelFormatter = (label: ReactNode, payload: readonly TooltipPayloadEntry[]) => ReactNode;
+type TooltipLabelFormatter = (label: ReactNode, payload: ChartTooltipPayload) => ReactNode;
 type TooltipColorFormatter = (
-  item: TooltipPayloadEntry,
+  item: ChartTooltipPayloadEntry,
   index: number,
-  payload: readonly TooltipPayloadEntry[],
+  payload: ChartTooltipPayload,
 ) => string | undefined;
 
 interface Props {
-  cursor?: unknown;
+  cursor?: TooltipProps<TooltipValueType, TooltipName>["cursor"];
   formatter?: TooltipFormatter;
   labelFormatter?: TooltipLabelFormatter;
   colorFormatter?: TooltipColorFormatter;
@@ -40,14 +39,17 @@ interface Props {
 
 function formatTooltipItem(
   formatter: TooltipFormatter | undefined,
-  item: TooltipPayloadEntry,
+  item: ChartTooltipPayloadEntry,
   index: number,
-  payload: readonly TooltipPayloadEntry[],
+  payload: ChartTooltipPayload,
 ): { value: ReactNode; name: ReactNode } {
-  const baseValue = item.value as TooltipValue;
-  const baseName = String(item.name ?? item.dataKey ?? "");
+  const baseValue = item.value;
+  const baseName = item.name ?? String(item.dataKey ?? "");
   if (!formatter) {
-    return { value: String(baseValue ?? ""), name: baseName };
+    return {
+      value: Array.isArray(baseValue) ? baseValue.join(" – ") : String(baseValue ?? ""),
+      name: baseName,
+    };
   }
   const formatted = formatter(baseValue, baseName, item, index, payload);
   if (Array.isArray(formatted)) {
@@ -62,7 +64,7 @@ function formatTooltipItem(
 
 function resolveTooltipLabel(
   label: ReactNode,
-  payload: readonly TooltipPayloadEntry[],
+  payload: ChartTooltipPayload,
   labelFormatter?: TooltipLabelFormatter,
 ): ReactNode {
   if (label === undefined || label === null) {
@@ -72,6 +74,15 @@ function resolveTooltipLabel(
     return String(label);
   }
   return labelFormatter(label, payload);
+}
+
+function isZeroTooltipValue(value: TooltipValueType | undefined): boolean {
+  if (Array.isArray(value)) {
+    return value.length > 0 && value.every(isZeroTooltipValue);
+  }
+  if (typeof value === "string" && value.trim() === "") return false;
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) && numericValue === 0;
 }
 
 export default function QuietChartTooltip({
@@ -88,20 +99,16 @@ export default function QuietChartTooltip({
 
   return (
     <Tooltip
-      cursor={cursor as never}
+      cursor={cursor}
       position={useFixedBottom ? { y: fixedBottomY } : undefined}
-      content={(contentProps) => {
-        const { active, payload, label } = contentProps as {
-          active?: boolean;
-          payload?: readonly TooltipPayloadEntry[];
-          label?: ReactNode;
-        };
+      content={(contentProps: TooltipContentProps<TooltipValueType, TooltipName>) => {
+        const { active, payload, label } = contentProps;
         if (!active || !payload || payload.length === 0) {
           return null;
         }
 
         const visiblePayload = payload
-          .filter((item) => !filterZeroValues || Number(item.value ?? 0) > 0);
+          .filter((item) => !filterZeroValues || !isZeroTooltipValue(item.value));
         if (visiblePayload.length === 0) {
           return null;
         }
@@ -109,8 +116,11 @@ export default function QuietChartTooltip({
         const resolvedLabel = resolveTooltipLabel(label, orderedPayload, labelFormatter);
 
         return (
-          <div className={`qp-chart-tooltip${useFixedBottom ? " qp-chart-tooltip-fixed-bottom" : ""}`}>
-            {resolvedLabel ? (
+          <div
+            className={`qp-chart-tooltip${useFixedBottom ? " qp-chart-tooltip-fixed-bottom" : ""}`}
+            role="tooltip"
+          >
+            {resolvedLabel !== null && resolvedLabel !== undefined && resolvedLabel !== "" ? (
               <div className="qp-chart-tooltip-label">{resolvedLabel}</div>
             ) : null}
             <ul className="qp-chart-tooltip-list">
@@ -125,7 +135,7 @@ export default function QuietChartTooltip({
                           ?? item.color
                           ?? "var(--qp-accent-default)" }}
                       />
-                      {name}
+                      <span className="qp-chart-tooltip-name">{name}</span>
                     </span>
                     <span className="qp-chart-tooltip-value">{value}</span>
                   </li>

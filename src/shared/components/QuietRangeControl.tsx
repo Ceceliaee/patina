@@ -12,7 +12,6 @@ interface QuietRangeControlProps {
   onLabelClick?: () => void;
   previousDisabled?: boolean;
   nextDisabled?: boolean;
-  labelDisabled?: boolean;
   expanded?: boolean;
   className?: string;
   labelClassName?: string;
@@ -29,13 +28,16 @@ const QuietRangeControl = forwardRef<HTMLButtonElement, QuietRangeControlProps>(
   onLabelClick,
   previousDisabled = false,
   nextDisabled = false,
-  labelDisabled = false,
   expanded,
   className,
   labelClassName,
 }, ref) {
   return (
-    <div className={`qp-range-control ${className ?? ""}`.trim()} aria-label={ariaLabel}>
+    <div
+      className={`qp-range-control ${className ?? ""}`.trim()}
+      role="group"
+      aria-label={ariaLabel}
+    >
       <button
         type="button"
         onClick={onPrevious}
@@ -45,18 +47,26 @@ const QuietRangeControl = forwardRef<HTMLButtonElement, QuietRangeControlProps>(
       >
         <ChevronLeft size={14} />
       </button>
-      <button
-        ref={ref}
-        type="button"
-        className={`qp-status qp-range-control-label ${labelClassName ?? ""}`.trim()}
-        disabled={labelDisabled}
-        aria-label={labelAriaLabel}
-        aria-expanded={expanded}
-        aria-haspopup={onLabelClick ? "dialog" : undefined}
-        onClick={onLabelClick}
-      >
-        <span className="qp-range-control-label-text">{label}</span>
-      </button>
+      {onLabelClick ? (
+        <button
+          ref={ref}
+          type="button"
+          className={`qp-status qp-range-control-label ${labelClassName ?? ""}`.trim()}
+          aria-label={labelAriaLabel}
+          aria-expanded={expanded}
+          aria-haspopup="dialog"
+          onClick={onLabelClick}
+        >
+          <span className="qp-range-control-label-text">{label}</span>
+        </button>
+      ) : (
+        <span
+          className={`qp-status qp-range-control-label ${labelClassName ?? ""}`.trim()}
+          aria-label={labelAriaLabel}
+        >
+          <span className="qp-range-control-label-text">{label}</span>
+        </span>
+      )}
       <button
         type="button"
         onClick={onNext}
