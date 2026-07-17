@@ -66,3 +66,11 @@ export async function saveDataBootstrapSnapshotPayload(payload: string): Promise
 export async function clearDataBootstrapSnapshotPayload(): Promise<void> {
   await invokeWithCommandError("cmd_clear_data_bootstrap_snapshot_payload");
 }
+
+export async function saveHistoryBootstrapSnapshotPayload(payload: string): Promise<void> {
+  await invokeWithCommandError("cmd_save_history_bootstrap_snapshot_payload", { payload });
+}
+
+export async function clearHistoryBootstrapSnapshotPayload(): Promise<void> {
+  await invokeWithCommandError("cmd_clear_history_bootstrap_snapshot_payload");
+}
