@@ -10,6 +10,8 @@ import {
   prepareBackupRestoreFlow,
   runBackupExportFlow,
   runSettingsCleanupFlow,
+  runTaiCommitFlow,
+  runTaiParseFlow,
 } from "../services/settingsPageActions.ts";
 import {
   applyExternalTitleRecordingSetting,
@@ -24,7 +26,11 @@ import type {
   BackupRestorePreparation,
   BackupRestoreStrategy,
   StorageSnapshot,
+  TaiImportOptions,
+  TaiImportReport,
+  TaiParsePreview,
 } from "../services/settingsRuntimeAdapterService.ts";
+import { pickTaiFile } from "../../../platform/backup/backupRuntimeGateway.ts";
 import { useRemoteBackupState } from "./useRemoteBackupState.ts";
 import { toEbwebviewCachePath } from "../services/storagePathDisplay.ts";
 
@@ -107,6 +113,8 @@ export function useSettingsPageState({
   const [pendingRestorePreparation, setPendingRestorePreparation] = useState<BackupRestorePreparation | null>(null);
   const [isExportingBackup, setIsExportingBackup] = useState(false);
   const [isRestoringBackup, setIsRestoringBackup] = useState(false);
+  const [isParsingTai, setIsParsingTai] = useState(false);
+  const [isCommittingTai, setIsCommittingTai] = useState(false);
   const [storageSnapshot, setStorageSnapshot] = useState<StorageSnapshot | null>(() => cachedStorageSnapshot);
   const [isStorageBusy, setIsStorageBusy] = useState(false);
   const [appVersion, setAppVersion] = useState(() => initialBootstrap?.appVersion ?? "-");
@@ -399,6 +407,36 @@ export function useSettingsPageState({
     });
   }, [exportPath, isExportingBackup, notify]);
 
+  const handleParseTai = useCallback(async (path: string): Promise<TaiParsePreview | null> => {
+    return runTaiParseFlow({
+      parseTaiFile: (filePath) => SettingsRuntimeAdapterService.parseTaiFile(filePath),
+      path,
+      onExecutionStart: () => setIsParsingTai(true),
+      onExecutionEnd: () => setIsParsingTai(false),
+      reportError: (message, error) => {
+        console.error(message, error);
+      },
+    });
+  }, []);
+
+  const handleCommitTai = useCallback(
+    async (path: string, options: TaiImportOptions): Promise<TaiImportReport | null> => {
+      return runTaiCommitFlow({
+        importTaiFile: (filePath, importOptions) =>
+          SettingsRuntimeAdapterService.importTaiFile(filePath, importOptions),
+        path,
+        importOptions: options,
+        notify,
+        onExecutionStart: () => setIsCommittingTai(true),
+        onExecutionEnd: () => setIsCommittingTai(false),
+        reportError: (message, error) => {
+          console.error(message, error);
+        },
+      });
+    },
+    [notify],
+  );
+
   const handlePrepareRestoreBackup = useCallback(async () => {
     if (isRestoringBackup) return;
     const preparation = await prepareBackupRestoreFlow({
@@ -624,8 +662,14 @@ export function useSettingsPageState({
     isCleaning,
     isExportingBackup,
     isRestoringBackup,
+    isParsingTai,
+    isCommittingTai,
     handleCleanup,
     handleExportBackup,
+    handleParseTai,
+    handleCommitTai,
+    pickTaiFile,
+    reload: () => window.location.reload(),
     handlePrepareRestoreBackup,
     handleRestoreBackup,
     clearPendingRestoreBackup,

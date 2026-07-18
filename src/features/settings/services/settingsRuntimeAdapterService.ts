@@ -9,10 +9,15 @@ import {
   exportBackup,
   pickBackupFile,
   pickBackupSaveFile,
+  importTaiFile,
+  parseTaiFile,
   previewBackup,
   restoreBackup,
   type BackupRestoreStrategy,
   type BackupPreview,
+  type TaiImportOptions,
+  type TaiImportReport,
+  type TaiParsePreview,
 } from "../../../platform/backup/backupRuntimeGateway.ts";
 import { copyTextToClipboard } from "../../../platform/desktop/clipboardGateway.ts";
 import { openExternalUrl } from "../../../platform/desktop/externalUrlGateway.ts";
@@ -48,7 +53,7 @@ import {
   clearSessionsByRangeWithDeps,
 } from "./sessionCleanupPolicy.ts";
 
-export type { BackupPreview, BackupRestoreStrategy } from "../../../platform/backup/backupRuntimeGateway.ts";
+export type { BackupPreview, BackupRestoreStrategy, TaiImportOptions, TaiImportReport, TaiOverlapMode, TaiParsePreview } from "../../../platform/backup/backupRuntimeGateway.ts";
 export type { StorageMigrationPreview, StorageSnapshot } from "../../../platform/storage/storageRuntimeGateway.ts";
 export type { WebActivityBridgeSnapshot } from "../../../platform/runtime/webActivityBridgeGateway.ts";
 
@@ -80,7 +85,6 @@ type PrepareBackupRestoreDeps = {
   pickBackupFile: (initialPath?: string) => Promise<string | null>;
   previewBackup: (path: string) => Promise<BackupPreview>;
 };
-
 const RELEASE_NOTES_URL = "https://github.com/Ceceliaee/patina/releases";
 const REPOSITORY_URL = "https://github.com/Ceceliaee/patina";
 const FEEDBACK_URL = "https://github.com/Ceceliaee/patina/issues/new/choose";
@@ -201,6 +205,17 @@ export class SettingsRuntimeAdapterService {
 
   static async prepareBackupRestore(initialPath?: string): Promise<BackupRestorePreparation | null> {
     return prepareBackupRestoreWithDeps(initialPath, prepareBackupRestoreDeps);
+  }
+
+  static async parseTaiFile(filePath: string): Promise<TaiParsePreview> {
+    return parseTaiFile(filePath);
+  }
+
+  static async importTaiFile(
+    filePath: string,
+    options: TaiImportOptions,
+  ): Promise<TaiImportReport> {
+    return importTaiFile(filePath, options);
   }
 
   static restoreBackup(

@@ -1,7 +1,7 @@
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import type { QuietToastTone } from "../../../shared/types/toast";
 import type { CleanupRange } from "../types.ts";
-import type { BackupRestorePreparation, BackupRestoreStrategy } from "./settingsRuntimeAdapterService.ts";
+import type { BackupRestorePreparation, BackupRestoreStrategy, TaiImportOptions, TaiImportReport, TaiParsePreview } from "./settingsRuntimeAdapterService.ts";
 
 interface ConfirmOptions {
   title: string;
@@ -59,6 +59,24 @@ type BackupRestorePrepareFlowOptions = {
   initialPath?: string;
   prepareBackupRestore: (initialPath?: string) => Promise<BackupRestorePreparation | null>;
   setRestorePath: (path: string) => void;
+  notify: NotifyAction;
+  onExecutionStart?: BusyHook;
+  onExecutionEnd?: BusyHook;
+  reportError?: ErrorReporter;
+};
+
+type TaiParseFlowOptions = {
+  parseTaiFile: (path: string) => Promise<TaiParsePreview>;
+  path: string;
+  onExecutionStart?: BusyHook;
+  onExecutionEnd?: BusyHook;
+  reportError?: ErrorReporter;
+};
+
+type TaiCommitFlowOptions = {
+  importTaiFile: (path: string, options: TaiImportOptions) => Promise<TaiImportReport>;
+  path: string;
+  importOptions: TaiImportOptions;
   notify: NotifyAction;
   onExecutionStart?: BusyHook;
   onExecutionEnd?: BusyHook;
@@ -126,6 +144,34 @@ export async function runBackupExportFlow(options: BackupExportFlowOptions): Pro
   } catch (error) {
     options.reportError?.("export backup failed", error);
     options.notify(UI_TEXT.toast.backupExportFailed, "error");
+    return null;
+  } finally {
+    options.onExecutionEnd?.();
+  }
+}
+
+export async function runTaiParseFlow(options: TaiParseFlowOptions): Promise<TaiParsePreview | null> {
+  options.onExecutionStart?.();
+  try {
+    return await options.parseTaiFile(options.path);
+  } catch (error) {
+    options.reportError?.("parse tai file failed", error);
+    return null;
+  } finally {
+    options.onExecutionEnd?.();
+  }
+}
+
+export async function runTaiCommitFlow(options: TaiCommitFlowOptions): Promise<TaiImportReport | null> {
+  options.onExecutionStart?.();
+  try {
+    const report = await options.importTaiFile(options.path, options.importOptions);
+    // No toast/reload here — the dialog's "done" state owns the summary and the
+    // refresh button owns reload; the toast is only for the failure path.
+    return report;
+  } catch (error) {
+    options.reportError?.("import tai file failed", error);
+    options.notify(UI_TEXT.toast.taiImportFailed, "warning");
     return null;
   } finally {
     options.onExecutionEnd?.();

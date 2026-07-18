@@ -5,6 +5,7 @@ use crate::data::remote_backup::{
     WebDavBackupConfigDto, WebDavTestResult,
 };
 use crate::domain::backup::BackupPreview;
+use crate::engine::import::tai;
 use tauri::AppHandle;
 
 #[tauri::command]
@@ -15,6 +16,11 @@ pub fn cmd_pick_backup_save_file(initial_path: Option<String>) -> Option<String>
 #[tauri::command]
 pub fn cmd_pick_backup_file(initial_path: Option<String>) -> Option<String> {
     backup::pick_backup_file(initial_path)
+}
+
+#[tauri::command]
+pub fn cmd_pick_tai_file(initial_path: Option<String>) -> Option<String> {
+    backup::pick_tai_file(initial_path)
 }
 
 #[tauri::command]
@@ -38,6 +44,23 @@ pub async fn cmd_restore_backup(
 #[tauri::command]
 pub async fn cmd_preview_backup(backup_path: String) -> Result<BackupPreview, String> {
     backup::preview_backup(backup_path).await
+}
+
+#[tauri::command]
+pub async fn cmd_parse_tai_file(
+    file_path: String,
+    app: AppHandle,
+) -> Result<tai::TaiParsePreview, String> {
+    app::backup::parse_tai_file(app, file_path).await
+}
+
+#[tauri::command]
+pub async fn cmd_import_tai_file(
+    file_path: String,
+    options: tai::TaiImportOptions,
+    app: AppHandle,
+) -> Result<tai::ImportTaiReport, String> {
+    app::backup::import_tai_file(app, file_path, options).await
 }
 
 #[tauri::command]

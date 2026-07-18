@@ -14,6 +14,9 @@ const ZH_CN_TOAST_COPY = {
     backupRestoreSuccess: "备份已恢复，正在刷新。",
     legacyBackupRestoreSuccess: "旧版备份已恢复。请立即创建一份新的 SQLite 数据快照备份。",
     backupRestoreFailed: "备份恢复未完成。应用已尽力保持或恢复原数据；若应用提示重启或无法继续写入，请先保留日志。",
+    taiImportSummary: (report: { sessionsInserted: number; categoriesCreated: number; categoriesReused: number; rowsSkipped: number }) =>
+      `导入完成：写入 ${report.sessionsInserted} 行，${report.categoriesCreated + report.categoriesReused} 个分类（新建 ${report.categoriesCreated} / 复用 ${report.categoriesReused}），无效 ${report.rowsSkipped} 行。`,
+    taiImportFailed: "Tai 数据导入失败，当前数据未受影响。",
     webDavConfigSaved: "WebDAV 配置已保存。",
     webDavConfigSaveFailed: "WebDAV 配置保存失败，请检查后重试。",
     webDavConfigDeleted: "WebDAV 配置已删除。",
@@ -46,6 +49,9 @@ const EN_US_TOAST_COPY = {
     backupRestoreSuccess: "Backup restored. Refreshing.",
     legacyBackupRestoreSuccess: "Legacy backup restored. Create a new SQLite data snapshot backup now.",
     backupRestoreFailed: "Backup restore did not complete. The app preserved or restored the original data where possible; keep the logs if restart is requested or writes are unavailable.",
+    taiImportSummary: (report: { sessionsInserted: number; categoriesCreated: number; categoriesReused: number; rowsSkipped: number }) =>
+      `Import complete: ${report.sessionsInserted} rows written, ${report.categoriesCreated + report.categoriesReused} categories (${report.categoriesCreated} new / ${report.categoriesReused} reused), ${report.rowsSkipped} invalid.`,
+    taiImportFailed: "Tai data import failed. Current data was not affected.",
     webDavConfigSaved: "WebDAV configuration saved.",
     webDavConfigSaveFailed: "Could not save WebDAV configuration. Check it and try again.",
     webDavConfigDeleted: "WebDAV configuration deleted.",

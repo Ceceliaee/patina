@@ -1,6 +1,9 @@
+use std::path::PathBuf;
+
 use crate::app::desktop_behavior;
 use crate::data::backup::{self, RestoreStrategy};
 use crate::data::remote_backup;
+use crate::engine::import::tai;
 use crate::engine::tracking::runtime as tracking_runtime;
 use tauri::{AppHandle, Emitter};
 
@@ -28,6 +31,46 @@ pub(crate) async fn restore_backup_and_refresh(
         eprintln!("[backup] restore committed but tracking refresh event failed: {error}");
     }
     Ok(())
+}
+
+pub(crate) async fn parse_tai_file(
+    app: AppHandle,
+    file_path: String,
+) -> Result<tai::TaiParsePreview, String> {
+    let path = PathBuf::from(file_path.trim());
+    if path.as_os_str().is_empty() {
+        return Err("tai parse path cannot be empty".to_string());
+    }
+    tai::parse_file(&app, &path).await
+}
+
+pub(crate) async fn import_tai_file(
+    app: AppHandle,
+    file_path: String,
+    options: tai::TaiImportOptions,
+) -> Result<tai::ImportTaiReport, String> {
+    let path = PathBuf::from(file_path.trim());
+    if path.as_os_str().is_empty() {
+        return Err("tai import path cannot be empty".to_string());
+    }
+
+    let conversion = tai::import_file(&app, &path, options).await?;
+    if !conversion.skipped.is_empty() {
+        eprintln!(
+            "[tai-import] skipped {} row(s): {}",
+            conversion.skipped.len(),
+            conversion
+                .skipped
+                .iter()
+                .map(|s| format!("line {} ({})", s.line, s.reason))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+
+    // No auto-refresh or emit here — the dialog owns reload via its refresh
+    // button, and reporting emit errors as a failed import was a false alarm.
+    Ok(tai::ImportTaiReport::from_stats(&conversion.stats))
 }
 
 fn now_ms() -> u64 {

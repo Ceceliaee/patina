@@ -143,3 +143,42 @@ export async function pickBackupSaveFile(initialPath?: string): Promise<string |
 export async function pickBackupFile(initialPath?: string): Promise<string | null> {
   return invoke<string | null>("cmd_pick_backup_file", { initialPath: initialPath ?? null });
 }
+
+export async function pickTaiFile(initialPath?: string): Promise<string | null> {
+  return invoke<string | null>("cmd_pick_tai_file", { initialPath: initialPath ?? null });
+}
+
+export type TaiImportReport = {
+  sessionsCreated: number;
+  // DB-authoritative count actually written by the Merge (0 on re-import).
+  sessionsInserted: number;
+  categoriesCreated: number;
+  categoriesReused: number;
+  rowsSkipped: number;
+};
+
+export type TaiParsePreview = {
+  sessionsCreated: number;
+  titleSamplesCreated: number;
+  categoriesCreated: number;
+  categoriesReused: number;
+  rowsSkipped: number;
+};
+
+export type TaiOverlapMode = "skip" | "coexist";
+
+export type TaiImportOptions = {
+  importCategories: boolean;
+  overlapMode: TaiOverlapMode;
+};
+
+export async function parseTaiFile(filePath: string): Promise<TaiParsePreview> {
+  return invoke<TaiParsePreview>("cmd_parse_tai_file", { filePath });
+}
+
+export async function importTaiFile(
+  filePath: string,
+  options: TaiImportOptions,
+): Promise<TaiImportReport> {
+  return invoke<TaiImportReport>("cmd_import_tai_file", { filePath, options });
+}

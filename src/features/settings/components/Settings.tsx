@@ -55,8 +55,14 @@ export default function Settings({
     isCleaning,
     isExportingBackup,
     isRestoringBackup,
+    isParsingTai,
+    isCommittingTai,
     handleCleanup,
     handleExportBackup,
+    handleParseTai,
+    handleCommitTai,
+    pickTaiFile,
+    reload,
     handlePrepareRestoreBackup,
     handleRestoreBackup,
     clearPendingRestoreBackup,
@@ -257,6 +263,8 @@ export default function Settings({
             isCleaning={isCleaning}
             isExportingBackup={isExportingBackup}
             isRestoringBackup={isRestoringBackup}
+            isParsingTai={isParsingTai}
+            isCommittingTai={isCommittingTai}
             onCleanupRangeChange={setCleanupRange}
             onRestoreStrategyChange={setRestoreStrategy}
             onCleanup={() => { void handleCleanup(); }}
@@ -267,6 +275,10 @@ export default function Settings({
             onPrepareRestoreBackup={handlePrepareRestoreBackup}
             onRestoreBackup={() => { void handleRestoreBackup(); }}
             onClearPendingRestoreBackup={clearPendingRestoreBackup}
+            onParseTai={handleParseTai}
+            onCommitTai={handleCommitTai}
+            pickTaiFile={pickTaiFile}
+            reload={reload}
             remoteBackup={remoteBackup}
             storageSnapshot={storageSnapshot}
             isStorageBusy={isStorageBusy}

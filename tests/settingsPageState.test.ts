@@ -15,6 +15,8 @@ import {
   runBackupExportFlow,
   runBackupRestoreFlow,
   runSettingsCleanupFlow,
+  runTaiCommitFlow,
+  runTaiParseFlow,
 } from "../src/features/settings/services/settingsPageActions.ts";
 import {
   normalizeSettingsRecord,
@@ -916,6 +918,103 @@ await runTest("runBackupRestoreFlow restores and reloads after confirmation", as
     "reload",
     "end",
   ]);
+});
+
+await runTest("runTaiParseFlow returns preview without reloading", async () => {
+  const events: string[] = [];
+  const preview = { sessionsCreated: 10, titleSamplesCreated: 10, categoriesCreated: 3, categoriesReused: 2, rowsSkipped: 1 };
+
+  const result = await runTaiParseFlow({
+    parseTaiFile: async () => preview,
+    path: "/tmp/tai.csv",
+    onExecutionStart: () => {
+      events.push("start");
+    },
+    onExecutionEnd: () => {
+      events.push("end");
+    },
+  });
+
+  assert.deepEqual(result, preview);
+  assert.deepEqual(events, ["start", "end"]);
+});
+
+await runTest("runTaiParseFlow returns null on failure and reports", async () => {
+  const events: string[] = [];
+  const errors: string[] = [];
+
+  const result = await runTaiParseFlow({
+    parseTaiFile: async () => {
+      throw new Error("parse failed");
+    },
+    path: "/tmp/tai.csv",
+    onExecutionStart: () => {
+      events.push("start");
+    },
+    onExecutionEnd: () => {
+      events.push("end");
+    },
+    reportError: (message, error) => {
+      errors.push(`${message}:${error instanceof Error ? error.message : String(error)}`);
+    },
+  });
+
+  assert.equal(result, null);
+  assert.deepEqual(events, ["start", "end"]);
+  assert.deepEqual(errors, ["parse tai file failed:parse failed"]);
+});
+
+await runTest("runTaiCommitFlow returns report without reloading or success toast", async () => {
+  const events: string[] = [];
+  const report = { sessionsCreated: 10, sessionsInserted: 8, categoriesCreated: 3, categoriesReused: 2, rowsSkipped: 1 };
+
+  const result = await runTaiCommitFlow({
+    importTaiFile: async () => report,
+    path: "/tmp/tai.csv",
+    importOptions: { importCategories: true, overlapMode: "skip" },
+    notify: (_message, tone) => {
+      events.push(`notify:${tone}`);
+    },
+    onExecutionStart: () => {
+      events.push("start");
+    },
+    onExecutionEnd: () => {
+      events.push("end");
+    },
+  });
+
+  assert.deepEqual(result, report);
+  // No success toast (the dialog's "done" state owns it) and no reload (manual).
+  assert.deepEqual(events, ["start", "end"]);
+});
+
+await runTest("runTaiCommitFlow toasts warning and returns null on failure", async () => {
+  const events: string[] = [];
+  const errors: string[] = [];
+
+  const result = await runTaiCommitFlow({
+    importTaiFile: async () => {
+      throw new Error("import failed");
+    },
+    path: "/tmp/tai.csv",
+    importOptions: { importCategories: false, overlapMode: "coexist" },
+    notify: (_message, tone) => {
+      events.push(`notify:${tone}`);
+    },
+    onExecutionStart: () => {
+      events.push("start");
+    },
+    onExecutionEnd: () => {
+      events.push("end");
+    },
+    reportError: (message, error) => {
+      errors.push(`${message}:${error instanceof Error ? error.message : String(error)}`);
+    },
+  });
+
+  assert.equal(result, null);
+  assert.deepEqual(events, ["start", "notify:warning", "end"]);
+  assert.deepEqual(errors, ["import tai file failed:import failed"]);
 });
 
 console.log(`Passed ${passed} settings page state tests`);

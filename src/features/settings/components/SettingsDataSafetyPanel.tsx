@@ -11,6 +11,7 @@ import {
   RefreshCw,
   RotateCcw,
   Trash2,
+  Upload,
 } from "lucide-react";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import QuietBadge from "../../../shared/components/QuietBadge";
@@ -22,12 +23,18 @@ import QuietButton from "../../../shared/components/QuietButton";
 import QuietIconAction from "../../../shared/components/QuietIconAction";
 import QuietTooltip from "../../../shared/components/QuietTooltip";
 import type { CleanupRange } from "../types";
-import type { BackupRestoreStrategy } from "../services/settingsRuntimeAdapterService.ts";
-import type { StorageSnapshot } from "../services/settingsRuntimeAdapterService.ts";
+import type {
+  BackupRestoreStrategy,
+  StorageSnapshot,
+  TaiImportOptions,
+  TaiImportReport,
+  TaiParsePreview,
+} from "../services/settingsRuntimeAdapterService.ts";
 import type { RemoteBackupEntry, RemoteBackupState } from "../hooks/useRemoteBackupState.ts";
 import SettingsRemoteBackupPanel from "./SettingsRemoteBackupPanel";
 import QuietStepperSlider from "../../../shared/components/QuietStepperSlider.tsx";
 import SettingsPanelHeader from "./SettingsPanelHeader";
+import SettingsTaiImportDialog from "./SettingsTaiImportDialog";
 import { toEbwebviewCachePath } from "../services/storagePathDisplay.ts";
 
 type CleanupOption = { value: CleanupRange; label: string };
@@ -39,6 +46,8 @@ type SettingsDataSafetyPanelProps = {
   isCleaning: boolean;
   isExportingBackup: boolean;
   isRestoringBackup: boolean;
+  isParsingTai: boolean;
+  isCommittingTai: boolean;
   onCleanupRangeChange: (value: CleanupRange) => void;
   onRestoreStrategyChange: (value: BackupRestoreStrategy) => void;
   onCleanup: () => void;
@@ -46,6 +55,10 @@ type SettingsDataSafetyPanelProps = {
   onPrepareRestoreBackup: () => Promise<boolean | void>;
   onRestoreBackup: (restoreStrategy: BackupRestoreStrategy) => void;
   onClearPendingRestoreBackup: () => void;
+  onParseTai: (path: string) => Promise<TaiParsePreview | null>;
+  onCommitTai: (path: string, options: TaiImportOptions) => Promise<TaiImportReport | null>;
+  pickTaiFile: (initialPath?: string) => Promise<string | null>;
+  reload: () => void;
   onOpenDataExport: () => void;
   onOpenDataImport: () => void;
   isImportBusy: boolean;
@@ -163,6 +176,8 @@ export default function SettingsDataSafetyPanel({
   isCleaning,
   isExportingBackup,
   isRestoringBackup,
+  isParsingTai,
+  isCommittingTai,
   onCleanupRangeChange,
   onRestoreStrategyChange,
   onCleanup,
@@ -170,6 +185,10 @@ export default function SettingsDataSafetyPanel({
   onPrepareRestoreBackup,
   onRestoreBackup,
   onClearPendingRestoreBackup,
+  onParseTai,
+  onCommitTai,
+  pickTaiFile,
+  reload,
   onOpenDataExport,
   onOpenDataImport,
   isImportBusy,
@@ -195,6 +214,7 @@ export default function SettingsDataSafetyPanel({
   const [restoreSourceDialogOpen, setRestoreSourceDialogOpen] = useState(false);
   const [cacheClearDialogOpen, setCacheClearDialogOpen] = useState(false);
   const [historyCleanupDialogOpen, setHistoryCleanupDialogOpen] = useState(false);
+  const [taiImportDialogOpen, setTaiImportDialogOpen] = useState(false);
   const hasRemoteBackupTarget = Boolean(remoteBackup.config && remoteBackup.hasSecret);
   const restoreStrategyOptions: Array<{ value: BackupRestoreStrategy; label: string; tooltip: string }> = [
     {
@@ -210,6 +230,8 @@ export default function SettingsDataSafetyPanel({
   ];
   const busy = isExportingBackup
     || isRestoringBackup
+    || isParsingTai
+    || isCommittingTai
     || isStorageBusy
     || remoteBackup.isUploading
     || remoteBackup.isListing
@@ -425,6 +447,30 @@ export default function SettingsDataSafetyPanel({
                   >
                     {isRestoringBackup || remoteBackup.isListing || remoteBackup.isDownloading ? UI_TEXT.settings.backupRestoring : UI_TEXT.settings.backupRestoreAction}
                   </QuietButton>
+                </div>
+              </QuietActionRow>
+
+              <QuietActionRow className="lg:col-span-2">
+                <div className="flex items-end justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <Upload size={14} className="text-[var(--qp-text-tertiary)]" />
+                      <p className="text-sm font-semibold text-[var(--qp-text-primary)]">
+                        {UI_TEXT.settings.taiImportTitle}
+                      </p>
+                    </div>
+                    <p className="mt-1 text-xs leading-relaxed text-[var(--qp-text-tertiary)]">
+                      {UI_TEXT.settings.taiImportHint}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setTaiImportDialogOpen(true)}
+                    disabled={busy}
+                    className="qp-button-secondary h-8 shrink-0 rounded-[8px] px-3 text-xs font-semibold text-[var(--qp-text-secondary)] disabled:opacity-50"
+                  >
+                    {isParsingTai || isCommittingTai ? UI_TEXT.settings.taiImportImporting : UI_TEXT.settings.taiImportAction}
+                  </button>
                 </div>
               </QuietActionRow>
             </div>
@@ -749,6 +795,17 @@ export default function SettingsDataSafetyPanel({
           />
         </div>
       </QuietDialog>
+
+      <SettingsTaiImportDialog
+        open={taiImportDialogOpen}
+        onClose={() => setTaiImportDialogOpen(false)}
+        pickTaiFile={pickTaiFile}
+        parseTaiFile={onParseTai}
+        importTaiFile={onCommitTai}
+        reload={reload}
+        isParsing={isParsingTai}
+        isCommitting={isCommittingTai}
+      />
     </>
   );
 }
