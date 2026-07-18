@@ -215,8 +215,10 @@ export default function History({
     contentState,
     nowMs,
     rawDaySessions,
+    rawDayAggregateSessions,
     rawDayWebSegments,
     rawWeeklySessions,
+    rawWeeklyAggregateSessions,
     setNowMs,
     snapshotIcons,
     visibleDateKey,
@@ -237,7 +239,12 @@ export default function History({
     const seen = new Set<string>();
     const result: string[] = [];
 
-    for (const session of [...rawDaySessions, ...rawWeeklySessions]) {
+    for (const session of [
+      ...rawDaySessions,
+      ...rawWeeklySessions,
+      ...rawDayAggregateSessions,
+      ...rawWeeklyAggregateSessions,
+    ]) {
       const exeName = session.exeName.trim();
       if (!exeName || seen.has(exeName)) continue;
 
@@ -246,7 +253,7 @@ export default function History({
     }
 
     return result;
-  }, [rawDaySessions, rawWeeklySessions]);
+  }, [rawDayAggregateSessions, rawDaySessions, rawWeeklyAggregateSessions, rawWeeklySessions]);
   const baseHistoryIcons = useMemo(() => ({
     ...icons,
     ...snapshotIcons,
@@ -565,13 +572,15 @@ export default function History({
     () => (void mappingVersion, buildHistoryReadModel({
       daySessions: rawDaySessions,
       weeklySessions: rawWeeklySessions,
+      dayAggregateSessions: rawDayAggregateSessions,
+      weeklyAggregateSessions: rawWeeklyAggregateSessions,
       selectedDate,
       nowMs,
       trackerHealth,
       minSessionSecs,
       mergeThresholdSecs,
     })),
-    [mappingVersion, mergeThresholdSecs, minSessionSecs, nowMs, rawDaySessions, rawWeeklySessions, selectedDate, trackerHealth],
+    [mappingVersion, mergeThresholdSecs, minSessionSecs, nowMs, rawDayAggregateSessions, rawDaySessions, rawWeeklyAggregateSessions, rawWeeklySessions, selectedDate, trackerHealth],
   );
   const {
     compiledSessions,

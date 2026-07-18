@@ -3,6 +3,7 @@ import {
   areHistoryWebFaviconsResolvedForSegments,
   getCachedHistoryWebFaviconsForSegments,
   getHistoryWebFaviconRuntimeCacheStats,
+  buildHistoryReadModel,
   loadHistoryDaySessionDetails,
   loadHistorySnapshot,
   loadHistoryWebFaviconsForSegments,
@@ -24,6 +25,7 @@ import {
 } from "../src/features/history/services/historyBootstrapSnapshot.ts";
 import type { HistorySession } from "../src/shared/types/sessions.ts";
 import type { WebActivitySegment } from "../src/shared/types/webActivity.ts";
+import { resolveTrackerHealth } from "../src/shared/types/tracking.ts";
 
 function makeSession(overrides: Partial<HistorySession> = {}): HistorySession {
   const startTime = overrides.startTime ?? new Date(2026, 0, 2, 9, 0, 0, 0).getTime();
@@ -135,6 +137,44 @@ await runTest("history snapshot skips all web reads when web activity is disable
   assert.deepEqual(snapshot.dayWebSegments, []);
   assert.deepEqual(snapshot.webDomainFavicons, {});
   assert.deepEqual(snapshot.webDomainOverrides, {});
+});
+
+await runTest("hour buckets feed History summaries without becoming timeline sessions", async () => {
+  const selectedDate = new Date(2026, 0, 2);
+  const bucketStart = new Date(2026, 0, 2, 10, 0, 0, 0).getTime();
+  const aggregate = {
+    appName: "Music",
+    exeName: "music.exe",
+    startTime: bucketStart,
+    endTime: bucketStart + 30 * 60_000,
+  };
+  const snapshot = await loadHistorySnapshot(selectedDate, 7, {
+    getHistoryByDate: async () => [],
+    getSessionsInRange: async () => [],
+    getImportedTimeBucketsInRange: async () => [aggregate],
+    getWebActivitySegmentsInRange: async () => [],
+    getWebFaviconsForDomains: async () => ({}),
+    loadWebDomainOverrides: async () => ({}),
+  }, { includeWebActivity: false });
+  const readModel = buildHistoryReadModel({
+    daySessions: snapshot.daySessions,
+    weeklySessions: snapshot.weeklySessions,
+    dayAggregateSessions: snapshot.dayAggregateSessions,
+    weeklyAggregateSessions: snapshot.weeklyAggregateSessions,
+    trackerHealth: resolveTrackerHealth(bucketStart + 3_600_000, bucketStart + 3_600_000, 8_000),
+    selectedDate,
+    nowMs: bucketStart + 3_600_000,
+    minSessionSecs: 0,
+    mergeThresholdSecs: 0,
+  });
+
+  assert.equal(snapshot.dayAggregateSessions?.length, 1);
+  assert.equal(readModel.timelineSessions.length, 0);
+  assert.equal(readModel.compiledSessions.length, 0);
+  assert.equal(readModel.appSummary[0]?.exeName, "music.exe");
+  assert.equal(readModel.appSummary[0]?.duration, 30 * 60_000);
+  assert.equal(readModel.hourlyActivity[10]?.minutes, 30);
+  assert.equal(readModel.weekly.reduce((total, day) => total + day.totalDuration, 0), 30 * 60_000);
 });
 
 await runTest("history core snapshot defers title samples until detail enrichment", async () => {

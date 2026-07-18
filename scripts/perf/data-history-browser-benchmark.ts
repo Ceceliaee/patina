@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import type { ChildProcess } from "node:child_process";
-import { rmSync } from "node:fs";
 import { createServer } from "vite";
 import {
   CdpConnection,
@@ -8,6 +7,7 @@ import {
   getBrowserWebSocketUrl,
   jsonString,
   launchBrowser,
+  removeIsolatedBrowserDataDir,
   stopBrowser,
   waitForExpression,
 } from "../../tests/uiBrowserSmoke/browserHarness.ts";
@@ -220,7 +220,7 @@ async function resetOverviewRangeToSevenDays(client: CdpConnection, sessionId: s
 
     await evaluate(client, sessionId, `
       (() => {
-        const control = document.querySelectorAll(".data-heatmap-range-control")[0];
+        const control = document.querySelectorAll(".data-trend-range-control")[0];
         const button = control?.querySelector("button:first-of-type");
         if (button && !button.disabled) button.click();
         return true;
@@ -235,7 +235,7 @@ async function setOverviewRangeToYear(client: CdpConnection, sessionId: string) 
   for (let index = 0; index < 2; index += 1) {
     await evaluate(client, sessionId, `
       (() => {
-        const control = document.querySelectorAll(".data-heatmap-range-control")[0];
+        const control = document.querySelectorAll(".data-trend-range-control")[0];
         const button = control?.querySelector("button:last-of-type");
         if (button && !button.disabled) button.click();
         return true;
@@ -255,7 +255,7 @@ async function setOverviewRangeToSevenDays(client: CdpConnection, sessionId: str
   for (let index = 0; index < 2; index += 1) {
     await evaluate(client, sessionId, `
       (() => {
-        const control = document.querySelectorAll(".data-heatmap-range-control")[0];
+        const control = document.querySelectorAll(".data-trend-range-control")[0];
         const button = control?.querySelector("button:first-of-type");
         if (button && !button.disabled) button.click();
         return true;
@@ -431,12 +431,7 @@ try {
   }
   if (browserUserDataDir) {
     try {
-      rmSync(browserUserDataDir, {
-        recursive: true,
-        force: true,
-        maxRetries: 5,
-        retryDelay: 200,
-      });
+      await removeIsolatedBrowserDataDir(browserUserDataDir);
     } catch (error) {
       console.warn("Failed to remove browser perf temp profile:", error);
     }

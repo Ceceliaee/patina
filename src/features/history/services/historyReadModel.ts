@@ -6,8 +6,10 @@ import type {
 } from "../../../shared/types/webActivity.ts";
 import {
   getHistoryByDate,
+  getImportedTimeBucketsInRange,
   getSessionsInRange,
   getSessionsInRangeWithoutTitleSamples,
+  type AggregateSessionRecord,
 } from "../../../platform/persistence/sessionReadRepository.ts";
 import {
   getWebFaviconsForDomains,
@@ -44,11 +46,15 @@ import {
 } from "../../../shared/lib/readModelCore.ts";
 import { getCachedHistoryIconsForExecutables } from "./historyIconService.ts";
 
+export type { AggregateSessionRecord } from "../../../platform/persistence/sessionReadRepository.ts";
+
 export interface HistorySnapshot {
   fetchedAtMs: number;
   icons: Record<string, string>;
   daySessions: HistorySession[];
   weeklySessions: HistorySession[];
+  dayAggregateSessions?: AggregateSessionRecord[];
+  weeklyAggregateSessions?: AggregateSessionRecord[];
   dayWebSegments: WebActivitySegment[];
   webDomainFavicons: Record<string, string>;
   webDomainOverrides: Record<string, WebDomainOverride>;
@@ -71,6 +77,7 @@ export interface HistorySnapshotDeps {
   getSessionsInRange: typeof getSessionsInRange;
   getDaySessionsInRange?: typeof getSessionsInRangeWithoutTitleSamples;
   getWeeklySessionsInRange?: typeof getSessionsInRangeWithoutTitleSamples;
+  getImportedTimeBucketsInRange?: typeof getImportedTimeBucketsInRange;
   getWebActivitySegmentsInRange: typeof getWebActivitySegmentsInRange;
   getWebFaviconsForDomains: typeof getWebFaviconsForDomains;
   loadWebDomainOverrides: typeof loadWebDomainOverrides;
@@ -86,6 +93,7 @@ const DEFAULT_HISTORY_SNAPSHOT_DEPS: HistorySnapshotDeps = {
   getSessionsInRange,
   getDaySessionsInRange: getSessionsInRangeWithoutTitleSamples,
   getWeeklySessionsInRange: getSessionsInRangeWithoutTitleSamples,
+  getImportedTimeBucketsInRange,
   getWebActivitySegmentsInRange,
   getWebFaviconsForDomains,
   loadWebDomainOverrides,
@@ -188,7 +196,9 @@ export function getHistoryWebFaviconRuntimeCacheStats() {
   };
 }
 
-function collectHistoryIconExecutables(...sessionGroups: HistorySession[][]): string[] {
+type HistoryIconRecord = Pick<HistorySession, "exeName"> | Pick<AggregateSessionRecord, "exeName">;
+
+function collectHistoryIconExecutables(...sessionGroups: HistoryIconRecord[][]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
 
@@ -208,10 +218,33 @@ function collectHistoryIconExecutables(...sessionGroups: HistorySession[][]): st
 function getCachedHistoryIconMap(
   daySessions: HistorySession[],
   weeklySessions: HistorySession[],
+  dayAggregateSessions: AggregateSessionRecord[],
+  weeklyAggregateSessions: AggregateSessionRecord[],
 ): Record<string, string> {
   return getCachedHistoryIconsForExecutables(
-    collectHistoryIconExecutables(daySessions, weeklySessions),
+    collectHistoryIconExecutables(
+      daySessions,
+      weeklySessions,
+      dayAggregateSessions,
+      weeklyAggregateSessions,
+    ),
   );
+}
+
+function mapAggregateSessionsForSummary(
+  records: AggregateSessionRecord[],
+): HistorySession[] {
+  return records.map((record, index) => ({
+    id: -(index + 1),
+    appName: record.appName,
+    exeName: record.exeName,
+    windowTitle: "",
+    startTime: record.startTime,
+    endTime: record.endTime,
+    duration: Math.max(0, record.endTime - record.startTime),
+    continuityGroupStartTime: record.startTime,
+    titleSampleDetails: [],
+  }));
 }
 
 async function loadOptionalWebFaviconMap(
@@ -330,9 +363,19 @@ export async function loadHistorySnapshot(
       selectedDayRange.startMs,
       selectedDayRange.endMs,
     );
-  const [daySessions, weeklySessions, webSnapshotPart] = await Promise.all([
+  const loadAggregateSessions = deps.getImportedTimeBucketsInRange
+    ?? (async () => [] as AggregateSessionRecord[]);
+  const [
+    daySessions,
+    weeklySessions,
+    dayAggregateSessions,
+    weeklyAggregateSessions,
+    webSnapshotPart,
+  ] = await Promise.all([
     loadDaySessions(),
     (deps.getWeeklySessionsInRange ?? deps.getSessionsInRange)(weeklyRangeStart, weeklyRangeEnd),
+    loadAggregateSessions(selectedDayRange.startMs, selectedDayRange.endMs),
+    loadAggregateSessions(weeklyRangeStart, weeklyRangeEnd),
     includeWebActivity
       ? loadOptionalWebSnapshotPart(deps, selectedDayRange)
       : Promise.resolve({
@@ -341,13 +384,20 @@ export async function loadHistorySnapshot(
         webDomainOverrides: {},
       }),
   ]);
-  const icons = getCachedHistoryIconMap(daySessions, weeklySessions);
+  const icons = getCachedHistoryIconMap(
+    daySessions,
+    weeklySessions,
+    dayAggregateSessions,
+    weeklyAggregateSessions,
+  );
 
   return {
     fetchedAtMs: Date.now(),
     icons,
     daySessions,
     weeklySessions,
+    dayAggregateSessions,
+    weeklyAggregateSessions,
     dayWebSegments: webSnapshotPart.dayWebSegments,
     webDomainFavicons: webSnapshotPart.webDomainFavicons,
     webDomainOverrides: webSnapshotPart.webDomainOverrides,
@@ -357,6 +407,8 @@ export async function loadHistorySnapshot(
 export function buildHistoryReadModel(params: {
   daySessions: HistorySession[];
   weeklySessions: HistorySession[];
+  dayAggregateSessions?: AggregateSessionRecord[];
+  weeklyAggregateSessions?: AggregateSessionRecord[];
   trackerHealth: TrackerHealthSnapshot;
   selectedDate: Date;
   nowMs: number;
@@ -366,6 +418,8 @@ export function buildHistoryReadModel(params: {
   const {
     daySessions,
     weeklySessions,
+    dayAggregateSessions = [],
+    weeklyAggregateSessions = [],
     trackerHealth,
     selectedDate,
     nowMs,
@@ -377,16 +431,21 @@ export function buildHistoryReadModel(params: {
   const liveDaySessions = materializeLiveSessions(daySessions, trackerHealth, nowMs);
   const liveWeeklySessions = materializeLiveSessions(weeklySessions, trackerHealth, nowMs);
   const compiledSessions = compileForRange(liveDaySessions, selectedDayRange, 0);
+  const summaryCompiledSessions = compileForRange(
+    [...liveDaySessions, ...mapAggregateSessionsForSummary(dayAggregateSessions)],
+    selectedDayRange,
+    0,
+  );
   const mergedTimelineSessions = buildTimelineSessions(compiledSessions, mergeThresholdSecs);
   const timelineSessions = filterTimelineSessionsForDisplay(
     mergedTimelineSessions,
     minSessionSecs,
   ).slice().reverse();
-  const appSummary = buildAppSummary(buildNormalizedAppStats(compiledSessions));
-  const hourlyActivity = buildHourlyActivity(compiledSessions);
-  const hourlyCategoryActivity = buildHourlyCategoryActivity(compiledSessions);
+  const appSummary = buildAppSummary(buildNormalizedAppStats(summaryCompiledSessions));
+  const hourlyActivity = buildHourlyActivity(summaryCompiledSessions);
+  const hourlyCategoryActivity = buildHourlyCategoryActivity(summaryCompiledSessions);
   const weekly = buildDailySummaries(
-    liveWeeklySessions,
+    [...liveWeeklySessions, ...mapAggregateSessionsForSummary(weeklyAggregateSessions)],
     rollingRanges,
     0,
   );

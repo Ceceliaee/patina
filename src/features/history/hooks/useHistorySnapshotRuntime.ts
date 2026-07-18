@@ -16,6 +16,7 @@ import {
   getCachedHistoryWebFaviconsForSegments,
   loadHistoryDaySessionDetails,
   loadHistoryWebFaviconsForSegments,
+  type AggregateSessionRecord,
   type HistorySnapshot,
   type HistorySnapshotLoadOptions,
 } from "../services/historyReadModel.ts";
@@ -112,6 +113,12 @@ export function useHistorySnapshotRuntime({
   const [rawWeeklySessions, setRawWeeklySessions] = useState<HistorySession[]>(
     () => initialVisibleSnapshot?.weeklySessions ?? [],
   );
+  const [rawDayAggregateSessions, setRawDayAggregateSessions] = useState<AggregateSessionRecord[]>(
+    () => initialVisibleSnapshot?.dayAggregateSessions ?? [],
+  );
+  const [rawWeeklyAggregateSessions, setRawWeeklyAggregateSessions] = useState<AggregateSessionRecord[]>(
+    () => initialVisibleSnapshot?.weeklyAggregateSessions ?? [],
+  );
   const [snapshotIcons, setSnapshotIcons] = useState<Record<string, string>>(
     () => initialVisibleSnapshot?.icons ?? {},
   );
@@ -150,6 +157,8 @@ export function useHistorySnapshotRuntime({
     const apply = () => {
       setRawDaySessions(snapshot.daySessions);
       setRawWeeklySessions(snapshot.weeklySessions);
+      setRawDayAggregateSessions(snapshot.dayAggregateSessions ?? []);
+      setRawWeeklyAggregateSessions(snapshot.weeklyAggregateSessions ?? []);
       setSnapshotIcons(snapshot.icons);
       setRawDayWebSegments(snapshot.dayWebSegments);
       setWebDomainFavicons(nextWebDomainFavicons);
@@ -170,6 +179,8 @@ export function useHistorySnapshotRuntime({
   const clearVisibleSnapshot = useCallback(() => {
     setRawDaySessions([]);
     setRawWeeklySessions([]);
+    setRawDayAggregateSessions([]);
+    setRawWeeklyAggregateSessions([]);
     setSnapshotIcons({});
     setRawDayWebSegments([]);
     setWebDomainFavicons({});
@@ -238,6 +249,7 @@ export function useHistorySnapshotRuntime({
         if (requestGenerationRef.current !== requestGeneration) return;
 
         const nextState = snapshot.daySessions.length > 0
+          || (snapshot.dayAggregateSessions?.length ?? 0) > 0
           || snapshot.dayWebSegments.length > 0
           ? "ready"
           : "empty";
@@ -315,8 +327,10 @@ export function useHistorySnapshotRuntime({
     contentState,
     nowMs,
     rawDaySessions,
+    rawDayAggregateSessions,
     rawDayWebSegments,
     rawWeeklySessions,
+    rawWeeklyAggregateSessions,
     setNowMs,
     snapshotIcons,
     visibleDateKey: visibleDateKeyRef.current,

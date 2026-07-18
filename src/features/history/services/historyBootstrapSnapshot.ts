@@ -1,4 +1,5 @@
 import type { HistorySession } from "../../../shared/types/sessions.ts";
+import type { AggregateSessionRecord } from "../../../platform/persistence/sessionReadRepository.ts";
 import type {
   WebActivitySegment,
   WebDomainOverride,
@@ -94,6 +95,17 @@ function isHistorySession(value: unknown): value is HistorySession {
   );
 }
 
+function isAggregateSessionRecord(value: unknown): value is AggregateSessionRecord {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.appName === "string"
+    && typeof value.exeName === "string"
+    && isFiniteNumber(value.startTime)
+    && isFiniteNumber(value.endTime)
+    && value.endTime >= value.startTime
+  );
+}
+
 function isWebActivitySegment(value: unknown): value is WebActivitySegment {
   if (!isRecord(value)) return false;
   return (
@@ -134,6 +146,14 @@ function isHistorySnapshot(value: unknown): value is HistorySnapshot {
     && value.daySessions.every(isHistorySession)
     && Array.isArray(value.weeklySessions)
     && value.weeklySessions.every(isHistorySession)
+    && (value.dayAggregateSessions === undefined || (
+      Array.isArray(value.dayAggregateSessions)
+      && value.dayAggregateSessions.every(isAggregateSessionRecord)
+    ))
+    && (value.weeklyAggregateSessions === undefined || (
+      Array.isArray(value.weeklyAggregateSessions)
+      && value.weeklyAggregateSessions.every(isAggregateSessionRecord)
+    ))
     && Array.isArray(value.dayWebSegments)
     && value.dayWebSegments.every(isWebActivitySegment)
     && isRecord(value.webDomainFavicons)
@@ -209,6 +229,8 @@ function buildHistoryBootstrapSnapshot(
       icons: {},
       daySessions: snapshot.daySessions.map(sanitizeHistorySession),
       weeklySessions: [],
+      dayAggregateSessions: (snapshot.dayAggregateSessions ?? []).map((record) => ({ ...record })),
+      weeklyAggregateSessions: [],
       dayWebSegments: identity.webActivityEnabled
         ? snapshot.dayWebSegments.map(sanitizeWebActivitySegment)
         : [],
