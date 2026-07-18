@@ -366,15 +366,13 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
   });
 
   await runTest("settings data export explains four formats before six field groups", async () => {
-    assert.equal(
+    assert.deepEqual(
       await evaluate(client!, sessionId, `
-        (() => {
-          const copy = document.querySelector('.settings-data-export-entry-copy')?.getBoundingClientRect();
-          const action = document.querySelector('.settings-data-export-entry-action')?.getBoundingClientRect();
-          return Boolean(copy && action && Math.abs(copy.bottom - action.bottom) < 0.5);
-        })()
+        Array.from(document.querySelectorAll('.qp-action-row button'))
+          .map((node) => node.textContent?.trim())
+          .filter((label) => label === "导出" || label === "导入")
       `),
-      true,
+      ["导出", "导入"],
     );
     assert.equal(
       await evaluate(client!, sessionId, `
@@ -652,5 +650,56 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       undefined,
       "outer dialog focus restoration",
     );
+  });
+
+  await runTest("settings generic import previews only available granularity and deletes by batch", async () => {
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const trigger = Array.from(document.querySelectorAll("button"))
+            .find((node) => node.textContent?.trim() === "导入");
+          trigger?.scrollIntoView({ block: "center" });
+          trigger?.click();
+          return Boolean(trigger);
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(client!, sessionId, `document.querySelector('.settings-import-action-list') !== null`);
+    assert.deepEqual(
+      await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.settings-import-action-title span')).map((node) => node.textContent)`),
+      ["导入 CSV", "解构外部数据"],
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `Boolean(document.querySelector('[aria-label="删除外部导入数据"]'))`),
+      false,
+    );
+    await evaluate(client!, sessionId, `Array.from(document.querySelectorAll("button")).find((node) => node.textContent?.trim() === "选择文件")?.click()`);
+    await waitForExpression(client!, sessionId, `document.querySelector('.settings-import-preview') !== null`);
+    assert.equal(
+      await evaluate(client!, sessionId, `document.querySelector('.settings-import-preview')?.innerText.includes("小时汇总")`),
+      true,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `document.querySelector('.settings-import-preview')?.innerText.includes("精确记录")`),
+      false,
+    );
+    await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.qp-dialog-actions button')).find((node) => node.textContent?.trim() === "导入")?.click()`);
+    await waitForExpression(client!, sessionId, `document.querySelector('.settings-import-action-list') !== null && Boolean(document.querySelector('[aria-label="删除外部导入数据"]'))`);
+    await evaluate(client!, sessionId, `document.querySelector('[aria-label="删除外部导入数据"]')?.click()`);
+    await waitForExpression(client!, sessionId, `document.querySelector('.settings-import-batch-list')?.innerText.includes("第 1 次导入")`);
+    await evaluate(client!, sessionId, `document.querySelector('[aria-label="删除第 1 次导入"]')?.click()`);
+    await waitForExpression(client!, sessionId, `Array.from(document.querySelectorAll('[role="dialog"]')).some((node) => node.innerText.includes("删除这次导入？"))`);
+    await evaluate(client!, sessionId, `
+      Array.from(document.querySelectorAll('[role="dialog"] .qp-button-danger'))
+        .find((node) => node.textContent?.trim() === "删除")?.click()
+    `);
+    await waitForExpression(client!, sessionId, `document.querySelector('.settings-import-action-list') !== null`);
+    assert.equal(
+      await evaluate(client!, sessionId, `Boolean(document.querySelector('[aria-label="删除外部导入数据"]'))`),
+      false,
+    );
+    await evaluate(client!, sessionId, `document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    await waitForExpression(client!, sessionId, `!document.querySelector('.settings-import-dialog')`);
   });
 }

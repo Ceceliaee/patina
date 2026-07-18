@@ -4,6 +4,8 @@ import {
   Database,
   FolderPen,
   FileArchive,
+  FileInput,
+  FileOutput,
   FolderOpen,
   CircleHelp,
   RefreshCw,
@@ -45,6 +47,8 @@ type SettingsDataSafetyPanelProps = {
   onRestoreBackup: (restoreStrategy: BackupRestoreStrategy) => void;
   onClearPendingRestoreBackup: () => void;
   onOpenDataExport: () => void;
+  onOpenDataImport: () => void;
+  isImportBusy: boolean;
   remoteBackup: RemoteBackupState;
   storageSnapshot: StorageSnapshot | null;
   isStorageBusy: boolean;
@@ -167,6 +171,8 @@ export default function SettingsDataSafetyPanel({
   onRestoreBackup,
   onClearPendingRestoreBackup,
   onOpenDataExport,
+  onOpenDataImport,
+  isImportBusy,
   remoteBackup,
   storageSnapshot,
   isStorageBusy,
@@ -207,7 +213,8 @@ export default function SettingsDataSafetyPanel({
     || isStorageBusy
     || remoteBackup.isUploading
     || remoteBackup.isListing
-    || remoteBackup.isDownloading;
+    || remoteBackup.isDownloading
+    || isImportBusy;
   const webviewCache = storageSnapshot?.webviewCache;
   const webviewCachePath = webviewCache?.ebwebviewPath
     ?? (storageSnapshot ? toEbwebviewCachePath(storageSnapshot.paths.webviewRoot) : "");
@@ -308,24 +315,44 @@ export default function SettingsDataSafetyPanel({
 
         <div className="space-y-5">
           <QuietSubpanel>
-            <div className="settings-data-export-entry flex items-end justify-between gap-4">
-              <div className="settings-data-export-entry-copy min-w-0">
-                <p className="flex items-center gap-1.5 text-sm font-semibold text-[var(--qp-text-primary)]">
-                  <span>{UI_TEXT.settings.dataExportTitle}</span>
-                  <QuietBadge variant="beta">{UI_TEXT.settings.betaLabel}</QuietBadge>
-                </p>
-                <p className="mt-1 text-sm leading-relaxed text-[var(--qp-text-secondary)]">
-                  {UI_TEXT.settings.dataExportHint}
-                </p>
-              </div>
-              <QuietButton
-                size="regular"
-                onClick={onOpenDataExport}
-                disabled={busy}
-                className="settings-data-export-entry-action shrink-0 text-[var(--qp-text-secondary)]"
-              >
-                {UI_TEXT.settings.dataExportAction}
-              </QuietButton>
+            <div>
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-[var(--qp-text-primary)]">
+                <span>{UI_TEXT.settings.dataExportTitle}</span>
+                <QuietBadge variant="beta">{UI_TEXT.settings.betaLabel}</QuietBadge>
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-[var(--qp-text-secondary)]">
+                {UI_TEXT.settings.dataExportHint}
+              </p>
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+              <QuietActionRow>
+                <div className="flex items-end justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <FileOutput size={14} className="text-[var(--qp-text-tertiary)]" />
+                      <p className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.dataExportAction}</p>
+                    </div>
+                    <p className="mt-1 text-xs leading-relaxed text-[var(--qp-text-tertiary)]">{UI_TEXT.settings.dataExportHint}</p>
+                  </div>
+                  <QuietButton size="regular" onClick={onOpenDataExport} disabled={busy}>
+                    {UI_TEXT.settings.dataExportAction}
+                  </QuietButton>
+                </div>
+              </QuietActionRow>
+              <QuietActionRow>
+                <div className="flex items-end justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <FileInput size={14} className="text-[var(--qp-text-tertiary)]" />
+                      <p className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.dataImportAction}</p>
+                    </div>
+                    <p className="mt-1 text-xs leading-relaxed text-[var(--qp-text-tertiary)]">{UI_TEXT.settings.dataImportActionHint}</p>
+                  </div>
+                  <QuietButton size="regular" onClick={onOpenDataImport} disabled={busy}>
+                    {UI_TEXT.settings.dataImportAction}
+                  </QuietButton>
+                </div>
+              </QuietActionRow>
             </div>
           </QuietSubpanel>
 

@@ -12,10 +12,12 @@ import SettingsAppearancePanel from "./SettingsAppearancePanel";
 import SettingsDataSafetyPanel from "./SettingsDataSafetyPanel";
 import SettingsInterfacePanel from "./SettingsInterfacePanel";
 import SettingsDataExportDialog from "./SettingsDataExportDialog.tsx";
+import SettingsDataImportDialog from "./SettingsDataImportDialog.tsx";
 import SettingsResidentPanel from "./SettingsResidentPanel";
 import SettingsTrackingPanel from "./SettingsTrackingPanel";
 import { useSettingsPageState } from "../hooks/useSettingsPageState";
 import { useWebActivitySetupState } from "../hooks/useWebActivitySetupState";
+import { useSettingsImportState } from "../hooks/useSettingsImportState.ts";
 
 export default function Settings({
   onSettingsChanged,
@@ -28,6 +30,7 @@ export default function Settings({
   onLanguagePreview,
 }: SettingsPageProps) {
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const importState = useSettingsImportState(onToast);
   const {
     dialogs,
     loading,
@@ -253,6 +256,8 @@ export default function Settings({
             onCleanup={() => { void handleCleanup(); }}
             onExportBackup={() => void handleExportBackup()}
             onOpenDataExport={() => setExportDialogOpen(true)}
+            onOpenDataImport={() => void importState.openDialog()}
+            isImportBusy={importState.busy}
             onPrepareRestoreBackup={handlePrepareRestoreBackup}
             onRestoreBackup={() => { void handleRestoreBackup(); }}
             onClearPendingRestoreBackup={clearPendingRestoreBackup}
@@ -274,6 +279,20 @@ export default function Settings({
         open={exportDialogOpen}
         onClose={() => setExportDialogOpen(false)}
         onToast={onToast}
+      />
+      <SettingsDataImportDialog
+        open={importState.open}
+        view={importState.view}
+        busy={importState.busy}
+        preview={importState.preview}
+        batches={importState.batches}
+        onClose={importState.closeDialog}
+        onChooseCanonicalCsv={() => void importState.chooseCanonicalCsv()}
+        onConfirmImport={() => void importState.confirmImport()}
+        onDestructureExternal={() => void importState.destructureExternal()}
+        onShowBatches={importState.showBatches}
+        onShowActions={importState.showActions}
+        onRemoveBatch={(batchId) => void importState.removeBatch(batchId)}
       />
     </div>
   );

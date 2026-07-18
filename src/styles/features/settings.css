@@ -1060,3 +1060,131 @@
   outline: 2px solid color-mix(in srgb, var(--qp-accent-default) 42%, transparent);
   outline-offset: 1px;
 }
+
+.settings-import-dialog {
+  width: min(620px, calc(100vw - 40px));
+}
+
+.settings-import-action-list,
+.settings-import-batch-list {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-import-action-row,
+.settings-import-batch-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.settings-import-action-copy,
+.settings-import-batch-copy {
+  min-width: 0;
+}
+
+.settings-import-action-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--qp-text-primary);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.settings-import-action-title svg {
+  flex: 0 0 auto;
+  color: var(--qp-text-tertiary);
+}
+
+.settings-import-action-copy p {
+  margin-top: 5px;
+  color: var(--qp-text-tertiary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.settings-import-preview {
+  display: grid;
+  gap: 16px;
+}
+
+.settings-import-file {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.settings-import-file strong,
+.settings-import-batch-copy strong {
+  color: var(--qp-text-primary);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.settings-import-file span,
+.settings-import-batch-copy span,
+.settings-import-batch-copy small {
+  overflow: hidden;
+  color: var(--qp-text-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-import-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 8px;
+}
+
+.settings-import-summary > div {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--qp-border-subtle);
+  border-radius: var(--qp-radius-control);
+  background: var(--qp-bg-elevated);
+  padding: 10px 12px;
+}
+
+.settings-import-summary dt {
+  color: var(--qp-text-tertiary);
+  font-size: 11px;
+}
+
+.settings-import-summary dd {
+  color: var(--qp-text-primary);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.settings-import-note,
+.settings-import-errors {
+  color: var(--qp-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.settings-import-errors {
+  max-height: 120px;
+  overflow-y: auto;
+  padding-left: 18px;
+}
+
+.settings-import-batch-row {
+  border-bottom: 1px solid var(--qp-border-subtle);
+  padding: 4px 0 12px;
+}
+
+.settings-import-batch-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 4px;
+}
+
+.settings-import-batch-copy {
+  display: grid;
+  gap: 3px;
+}

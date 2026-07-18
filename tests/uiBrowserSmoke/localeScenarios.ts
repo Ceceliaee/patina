@@ -98,7 +98,7 @@ export async function runLocaleScenarios(context: BrowserSmokeContext) {
       `),
       true,
     );
-    await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString("Data export")})`);
+    await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString("Data import and export")})`);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {

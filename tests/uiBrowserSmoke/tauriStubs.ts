@@ -65,6 +65,7 @@ function tauriStubFor(path: string) {
     return `
       const SETTINGS_STORAGE_KEY = "__time_tracker_smoke_settings";
       globalThis.__TIME_TRACKER_CLASSIFICATION_MUTATIONS ??= [];
+      globalThis.__PATINA_IMPORT_BATCHES ??= [];
 
       function loadStoredSettings() {
         try {
@@ -85,6 +86,49 @@ function tauriStubFor(path: string) {
       }
 
       export async function invoke(command, payload = {}) {
+        if (command === "cmd_list_import_batches") {
+          return [...globalThis.__PATINA_IMPORT_BATCHES];
+        }
+        if (command === "cmd_pick_canonical_import_file") {
+          return "C:\\Smoke\\tai.patina.csv";
+        }
+        if (command === "cmd_preview_canonical_import") {
+          return {
+            filePath: payload.filePath,
+            fileName: "tai.patina.csv",
+            fileFingerprint: "smoke-fingerprint",
+            validRecords: 3,
+            duplicateRecords: 1,
+            errorRecords: 0,
+            exactSessions: 0,
+            hourBuckets: 3,
+            errors: [],
+          };
+        }
+        if (command === "cmd_commit_canonical_import") {
+          globalThis.__PATINA_IMPORT_BATCHES = [{
+            id: "smoke-batch",
+            importedAt: 1767225600000,
+            sourceName: "tai.patina.csv",
+            sourceKind: "patina-csv",
+            exactSessions: 0,
+            hourBuckets: 2,
+            totalRecords: 2,
+          }];
+          return {
+            batchId: "smoke-batch",
+            importedRecords: 2,
+            duplicateRecords: 1,
+            errorRecords: 0,
+            exactSessions: 0,
+            hourBuckets: 2,
+          };
+        }
+        if (command === "cmd_delete_import_batch") {
+          globalThis.__PATINA_IMPORT_BATCHES = globalThis.__PATINA_IMPORT_BATCHES
+            .filter((batch) => batch.id !== payload.batchId);
+          return { deletedExactSessions: 0, deletedHourBuckets: 2 };
+        }
         if (command === "cmd_get_web_activity_bridge_snapshot") {
           return globalThis.__TIME_TRACKER_WEB_ACTIVITY_BRIDGE_SNAPSHOT ?? {
             enabled: true,
