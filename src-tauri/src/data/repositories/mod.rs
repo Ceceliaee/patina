@@ -1,6 +1,7 @@
 pub mod app_settings;
 pub mod classification_settings;
 pub mod icon_cache;
+pub mod import_batches;
 pub mod session_title_samples;
 pub mod sessions;
 pub mod settings;

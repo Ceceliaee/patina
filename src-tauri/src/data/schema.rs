@@ -10,6 +10,8 @@ pub const WEB_ACTIVITY_MIGRATION_VERSION: i64 = 4;
 pub const WEB_ACTIVITY_MIGRATION_DESCRIPTION: &str = "create_web_activity_segments";
 pub const WEB_FAVICON_CACHE_MIGRATION_VERSION: i64 = 5;
 pub const WEB_FAVICON_CACHE_MIGRATION_DESCRIPTION: &str = "create_web_favicon_cache";
+pub const IMPORT_DATA_MIGRATION_VERSION: i64 = 6;
+pub const IMPORT_DATA_MIGRATION_DESCRIPTION: &str = "create_import_data_tables";
 
 pub const CURRENT_BASELINE_SCHEMA_SQL: &str = "
     CREATE TABLE IF NOT EXISTS sessions (
@@ -249,6 +251,57 @@ pub const WEB_FAVICON_CACHE_SCHEMA_SQL: &str = "
     WHERE web_favicon_cache.favicon_url <> excluded.favicon_url;
 ";
 
+pub const IMPORT_DATA_SCHEMA_SQL: &str = "
+    CREATE TABLE IF NOT EXISTS import_batches (
+        id TEXT PRIMARY KEY,
+        imported_at INTEGER NOT NULL,
+        source_name TEXT NOT NULL,
+        source_kind TEXT NOT NULL,
+        source_fingerprint TEXT NOT NULL,
+        exact_session_count INTEGER NOT NULL DEFAULT 0 CHECK(exact_session_count >= 0),
+        hour_bucket_count INTEGER NOT NULL DEFAULT 0 CHECK(hour_bucket_count >= 0)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_import_batches_imported_at
+    ON import_batches(imported_at, id);
+
+    CREATE TABLE IF NOT EXISTS import_exact_records (
+        batch_id TEXT NOT NULL,
+        session_id INTEGER NOT NULL UNIQUE,
+        fingerprint TEXT NOT NULL UNIQUE,
+        source_category TEXT,
+        source_path TEXT,
+        PRIMARY KEY(batch_id, session_id),
+        FOREIGN KEY(batch_id) REFERENCES import_batches(id) ON DELETE CASCADE,
+        FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_import_exact_records_batch
+    ON import_exact_records(batch_id, session_id);
+
+    CREATE TABLE IF NOT EXISTS import_time_buckets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        batch_id TEXT NOT NULL,
+        fingerprint TEXT NOT NULL UNIQUE,
+        app_name TEXT NOT NULL,
+        exe_name TEXT NOT NULL,
+        bucket_start_time INTEGER NOT NULL,
+        duration INTEGER NOT NULL CHECK(duration > 0 AND duration <= 3600000),
+        source_category TEXT,
+        source_path TEXT,
+        FOREIGN KEY(batch_id) REFERENCES import_batches(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_import_time_buckets_time
+    ON import_time_buckets(bucket_start_time, duration);
+
+    CREATE INDEX IF NOT EXISTS idx_import_time_buckets_exe_time
+    ON import_time_buckets(exe_name COLLATE NOCASE, bucket_start_time);
+
+    CREATE INDEX IF NOT EXISTS idx_import_time_buckets_batch
+    ON import_time_buckets(batch_id, id);
+";
+
 pub fn tracker_migrations() -> Vec<Migration> {
     vec![
         Migration {
@@ -279,6 +332,12 @@ pub fn tracker_migrations() -> Vec<Migration> {
             version: WEB_FAVICON_CACHE_MIGRATION_VERSION,
             description: WEB_FAVICON_CACHE_MIGRATION_DESCRIPTION,
             sql: WEB_FAVICON_CACHE_SCHEMA_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: IMPORT_DATA_MIGRATION_VERSION,
+            description: IMPORT_DATA_MIGRATION_DESCRIPTION,
+            sql: IMPORT_DATA_SCHEMA_SQL,
             kind: MigrationKind::Up,
         },
     ]
