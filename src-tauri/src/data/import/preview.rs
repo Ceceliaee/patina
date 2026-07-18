@@ -1,11 +1,13 @@
 use crate::data::import::canonical_csv::parse_canonical_csv;
 use crate::data::import::model::{
-    record_fingerprint, ImportPreviewDto, ImportPreviewErrorDto, ImportRecordType,
-    ParsedCanonicalCsv, MAX_IMPORT_FILE_BYTES, MAX_PREVIEW_ERRORS,
+    record_fingerprint, CanonicalImportRecord, ImportCategoryCandidateDto, ImportPreviewDto,
+    ImportPreviewErrorDto, ImportRecordType, ParsedCanonicalCsv, MAX_IMPORT_FILE_BYTES,
+    MAX_PREVIEW_ERRORS,
 };
 use crate::data::repositories::import_batches;
 use crate::data::sqlite_pool::wait_for_sqlite_pool;
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Runtime};
 
@@ -95,6 +97,7 @@ fn build_preview_dto(
         .filter(|record| record.record_type == ImportRecordType::ExactSession)
         .count();
     let hour_buckets = parsed.records.len() - exact_sessions;
+    let category_candidates = collect_category_candidates(&parsed.records);
     ImportPreviewDto {
         file_path: path.to_string_lossy().to_string(),
         file_name: path
@@ -108,6 +111,7 @@ fn build_preview_dto(
         error_records: parsed.errors.len(),
         exact_sessions,
         hour_buckets,
+        category_candidates,
         errors: parsed
             .errors
             .into_iter()
@@ -117,5 +121,94 @@ fn build_preview_dto(
                 message: error.message,
             })
             .collect(),
+    }
+}
+
+fn collect_category_candidates(
+    records: &[CanonicalImportRecord],
+) -> Vec<ImportCategoryCandidateDto> {
+    let mut candidates = BTreeMap::<String, BTreeMap<String, String>>::new();
+    for record in records {
+        let categories = candidates.entry(record.exe_name.clone()).or_default();
+        let Some(raw_category) = record.category.as_deref() else {
+            continue;
+        };
+        let category = raw_category
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        if category.is_empty() || category == "未知" || category.eq_ignore_ascii_case("unknown") {
+            continue;
+        }
+        categories
+            .entry(category.to_lowercase())
+            .or_insert(category);
+    }
+    candidates
+        .into_iter()
+        .map(|(exe_name, categories)| ImportCategoryCandidateDto {
+            exe_name,
+            categories: categories.into_values().collect(),
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data::import::model::ImportRecordType;
+
+    fn record(exe_name: &str, category: Option<&str>, line: usize) -> CanonicalImportRecord {
+        CanonicalImportRecord {
+            source_line: line,
+            record_type: ImportRecordType::HourBucket,
+            start_time_ms: line as i64 * 3_600_000,
+            end_time_ms: None,
+            duration_ms: 1_000,
+            exe_name: exe_name.to_string(),
+            app_name: None,
+            title: None,
+            category: category.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn category_candidates_group_by_executable_and_deduplicate_labels() {
+        let candidates = collect_category_candidates(&[
+            record("code.exe", Some(" 开发 "), 2),
+            record("code.exe", Some("开发"), 3),
+            record("slack.exe", Some("Development"), 4),
+            record("slack.exe", Some("development"), 5),
+            record("chrome.exe", Some("工作"), 6),
+            record("chrome.exe", Some("娱乐"), 7),
+            record("empty.exe", None, 8),
+            record("unknown.exe", Some("未知"), 9),
+        ]);
+
+        assert_eq!(
+            candidates,
+            vec![
+                crate::data::import::model::ImportCategoryCandidateDto {
+                    exe_name: "chrome.exe".into(),
+                    categories: vec!["娱乐".into(), "工作".into()],
+                },
+                crate::data::import::model::ImportCategoryCandidateDto {
+                    exe_name: "code.exe".into(),
+                    categories: vec!["开发".into()],
+                },
+                crate::data::import::model::ImportCategoryCandidateDto {
+                    exe_name: "empty.exe".into(),
+                    categories: vec![],
+                },
+                crate::data::import::model::ImportCategoryCandidateDto {
+                    exe_name: "slack.exe".into(),
+                    categories: vec!["Development".into()],
+                },
+                crate::data::import::model::ImportCategoryCandidateDto {
+                    exe_name: "unknown.exe".into(),
+                    categories: vec![],
+                },
+            ]
+        );
     }
 }

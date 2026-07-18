@@ -76,9 +76,7 @@ fn convert_tai_csv(path: &Path) -> Result<ExternalConversion, String> {
             exe_name: row.exe_name,
             app_name: row.app_name,
             title: None,
-            path: None,
             category: row.category,
-            source: Some("tai-csv".to_string()),
         })
         .collect();
     Ok(ExternalConversion {

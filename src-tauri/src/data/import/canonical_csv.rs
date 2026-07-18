@@ -1,13 +1,11 @@
 use crate::data::import::model::{
-    CanonicalImportRecord, ImportRecordType, ImportRowError, ParsedCanonicalCsv,
-    CANONICAL_CSV_VERSION, MAX_IMPORT_RECORDS,
+    CanonicalImportRecord, ImportRecordType, ImportRowError, ParsedCanonicalCsv, MAX_IMPORT_RECORDS,
 };
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 const REQUIRED_HEADERS: &[&str] = &[
-    "patina_version",
     "record_type",
     "start_time",
     "end_time",
@@ -15,14 +13,11 @@ const REQUIRED_HEADERS: &[&str] = &[
     "exe_name",
     "app_name",
     "title",
-    "path",
     "category",
-    "source",
 ];
 
 #[derive(Debug, Deserialize, Serialize)]
 struct CanonicalCsvRow {
-    patina_version: u32,
     record_type: ImportRecordType,
     start_time: String,
     end_time: String,
@@ -30,9 +25,7 @@ struct CanonicalCsvRow {
     exe_name: String,
     app_name: String,
     title: String,
-    path: String,
     category: String,
-    source: String,
 }
 
 pub fn parse_canonical_csv(bytes: &[u8]) -> Result<ParsedCanonicalCsv, String> {
@@ -145,12 +138,6 @@ fn validate_headers(headers: &csv::StringRecord) -> Result<(), String> {
 }
 
 fn validate_row(line: usize, row: CanonicalCsvRow) -> Result<CanonicalImportRecord, String> {
-    if row.patina_version != CANONICAL_CSV_VERSION {
-        return Err(format!(
-            "unsupported patina_version {}; expected {CANONICAL_CSV_VERSION}",
-            row.patina_version
-        ));
-    }
     let start_time_ms = parse_rfc3339(&row.start_time, "start_time")?;
     let duration_ms = row
         .duration_ms
@@ -182,6 +169,9 @@ fn validate_row(line: usize, row: CanonicalCsvRow) -> Result<CanonicalImportReco
             if duration_ms > 3_600_000 {
                 return Err("hour_bucket duration_ms cannot exceed one hour".to_string());
             }
+            if optional_unprotected_text(&row.title).is_some() {
+                return Err("hour_bucket title must be empty".to_string());
+            }
         }
     }
 
@@ -201,16 +191,13 @@ fn validate_row(line: usize, row: CanonicalCsvRow) -> Result<CanonicalImportReco
         exe_name,
         app_name: optional_unprotected_text(&row.app_name),
         title: optional_unprotected_text(&row.title),
-        path: optional_unprotected_text(&row.path),
         category: optional_unprotected_text(&row.category),
-        source: optional_unprotected_text(&row.source),
     })
 }
 
 fn to_csv_row(record: &CanonicalImportRecord) -> Result<CanonicalCsvRow, String> {
     validate_record_for_output(record)?;
     Ok(CanonicalCsvRow {
-        patina_version: CANONICAL_CSV_VERSION,
         record_type: record.record_type,
         start_time: format_rfc3339(record.start_time_ms)?,
         end_time: record
@@ -222,9 +209,7 @@ fn to_csv_row(record: &CanonicalImportRecord) -> Result<CanonicalCsvRow, String>
         exe_name: protect_spreadsheet_text(&record.exe_name),
         app_name: protect_optional_text(record.app_name.as_deref()),
         title: protect_optional_text(record.title.as_deref()),
-        path: protect_optional_text(record.path.as_deref()),
         category: protect_optional_text(record.category.as_deref()),
-        source: protect_optional_text(record.source.as_deref()),
     })
 }
 
@@ -257,6 +242,13 @@ fn validate_record_for_output(record: &CanonicalImportRecord) -> Result<(), Stri
                 return Err(
                     "hour_bucket must have no end_time and cannot exceed one hour".to_string(),
                 );
+            }
+            if record
+                .title
+                .as_deref()
+                .is_some_and(|title| !title.trim().is_empty())
+            {
+                return Err("hour_bucket title must be empty".to_string());
             }
         }
     }
@@ -342,9 +334,7 @@ mod tests {
             exe_name: "code.exe".to_string(),
             app_name: Some("Visual Studio Code".to_string()),
             title: Some("  =SUM(A1:A2)".to_string()),
-            path: Some("C:\\Code.exe".to_string()),
             category: Some("开发".to_string()),
-            source: Some("test".to_string()),
         }
     }
 
@@ -353,8 +343,16 @@ mod tests {
         let mut bucket = exact_record();
         bucket.record_type = ImportRecordType::HourBucket;
         bucket.end_time_ms = None;
+        bucket.title = None;
         let bytes = encode_canonical_csv(&[exact_record(), bucket.clone()]).unwrap();
         let text = String::from_utf8(bytes.clone()).unwrap();
+        assert_eq!(
+            text.lines().next(),
+            Some("record_type,start_time,end_time,duration_ms,exe_name,app_name,title,category")
+        );
+        assert!(!text.contains("patina_version"));
+        assert!(!text.lines().next().unwrap().contains("path"));
+        assert!(!text.lines().next().unwrap().contains("source"));
         assert!(text.contains("'  =SUM(A1:A2)"));
 
         let parsed = parse_canonical_csv(&bytes).unwrap();
@@ -367,20 +365,51 @@ mod tests {
 
     #[test]
     fn rejects_missing_exact_end_and_hour_bucket_end() {
-        let text = "patina_version,record_type,start_time,end_time,duration_ms,exe_name,app_name,title,path,category,source\n1,exact_session,2026-01-01T00:00:00Z,,60000,a.exe,,,,,\n1,hour_bucket,2026-01-01T01:00:00Z,2026-01-01T01:01:00Z,60000,b.exe,,,,,";
+        let text = "record_type,start_time,end_time,duration_ms,exe_name,app_name,title,category\nexact_session,2026-01-01T00:00:00Z,,60000,a.exe,,,\nhour_bucket,2026-01-01T01:00:00Z,2026-01-01T01:01:00Z,60000,b.exe,,,";
         let parsed = parse_canonical_csv(text.as_bytes()).unwrap();
         assert!(parsed.records.is_empty());
         assert_eq!(parsed.errors.len(), 2);
     }
 
     #[test]
-    fn rejects_non_executable_identity_and_unknown_version() {
-        let text = "patina_version,record_type,start_time,end_time,duration_ms,exe_name,app_name,title,path,category,source\n2,hour_bucket,2026-01-01T00:00:00Z,,60000,Chrome,,,,,";
+    fn rejects_non_executable_identity() {
+        let text = "record_type,start_time,end_time,duration_ms,exe_name,app_name,title,category\nhour_bucket,2026-01-01T00:00:00Z,,60000,Chrome,,,";
         let parsed = parse_canonical_csv(text.as_bytes()).unwrap();
         assert!(parsed.records.is_empty());
+        assert!(parsed.errors[0].message.contains("must end with .exe"));
+    }
+
+    #[test]
+    fn rejects_the_removed_per_row_version_column() {
+        let text = "patina_version,record_type,start_time,end_time,duration_ms,exe_name,app_name,title,category\n1,hour_bucket,2026-01-01T00:00:00Z,,60000,code.exe,,,";
+        let error = parse_canonical_csv(text.as_bytes()).unwrap_err();
+        assert!(error.contains("invalid Patina CSV columns"));
+        assert!(!error.contains("patina_version"));
+    }
+
+    #[test]
+    fn rejects_the_removed_path_and_source_columns() {
+        let text = "record_type,start_time,end_time,duration_ms,exe_name,app_name,title,path,category,source\nhour_bucket,2026-01-01T00:00:00Z,,60000,code.exe,,,,,";
+        let error = parse_canonical_csv(text.as_bytes()).unwrap_err();
+        assert!(error.contains("invalid Patina CSV columns"));
+        assert!(error.contains("title,category"));
+    }
+
+    #[test]
+    fn rejects_hour_bucket_title_when_parsing_and_encoding() {
+        let text = "record_type,start_time,end_time,duration_ms,exe_name,app_name,title,category\nhour_bucket,2026-01-01T00:00:00Z,,60000,code.exe,Code,Project,Development";
+        let parsed = parse_canonical_csv(text.as_bytes()).unwrap();
+        assert!(parsed.records.is_empty());
+        assert_eq!(parsed.errors.len(), 1);
         assert!(parsed.errors[0]
             .message
-            .contains("unsupported patina_version"));
+            .contains("hour_bucket title must be empty"));
+
+        let mut bucket = exact_record();
+        bucket.record_type = ImportRecordType::HourBucket;
+        bucket.end_time_ms = None;
+        let error = encode_canonical_csv(&[bucket]).unwrap_err();
+        assert!(error.contains("hour_bucket title must be empty"));
     }
 
     #[test]

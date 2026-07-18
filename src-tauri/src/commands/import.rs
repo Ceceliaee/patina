@@ -1,6 +1,7 @@
+use crate::commands::settings::ClassificationSettingMutationDto;
 use crate::data::import::model::{
-    DestructureReportDto, ImportBatchDto, ImportCommitReportDto, ImportDeleteReportDto,
-    ImportPreviewDto,
+    DestructureReportDto, ImportBatchDto, ImportClassificationMutation, ImportCommitReportDto,
+    ImportDeleteReportDto, ImportPreviewDto,
 };
 use crate::{app, data::import};
 use tauri::AppHandle;
@@ -27,9 +28,22 @@ pub async fn cmd_preview_canonical_import(
 pub async fn cmd_commit_canonical_import(
     file_path: String,
     expected_fingerprint: String,
+    classification_mutations: Vec<ClassificationSettingMutationDto>,
     app: AppHandle,
 ) -> Result<ImportCommitReportDto, String> {
-    app::import::commit_and_refresh(app, file_path, expected_fingerprint).await
+    app::import::commit_and_refresh(
+        app,
+        file_path,
+        expected_fingerprint,
+        classification_mutations
+            .into_iter()
+            .map(|mutation| {
+                let (key, value) = mutation.into_parts();
+                ImportClassificationMutation { key, value }
+            })
+            .collect(),
+    )
+    .await
 }
 
 #[tauri::command]

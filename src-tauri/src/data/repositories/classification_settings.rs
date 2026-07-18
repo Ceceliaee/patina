@@ -1,5 +1,5 @@
 use crate::data::sqlite_error::SqliteOperationError;
-use sqlx::{Pool, Sqlite};
+use sqlx::{Pool, Sqlite, Transaction};
 
 pub const APP_OVERRIDE_KEY_PREFIX: &str = "__app_override::";
 pub const WEB_DOMAIN_OVERRIDE_KEY_PREFIX: &str = "__web_domain_override::";
@@ -30,6 +30,19 @@ pub async fn commit_classification_setting_mutations(
         SqliteOperationError::from_sqlx("start classification settings transaction", error)
     })?;
 
+    apply_classification_setting_mutations_in_tx(&mut tx, mutations).await?;
+
+    tx.commit().await.map_err(|error| {
+        SqliteOperationError::from_sqlx("commit classification settings transaction", error)
+    })?;
+
+    Ok(())
+}
+
+pub async fn apply_classification_setting_mutations_in_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    mutations: &[ClassificationSettingMutation],
+) -> Result<(), SqliteOperationError> {
     for mutation in mutations {
         validate_classification_setting_mutation(mutation)?;
         if let Some(value) = &mutation.value {
@@ -39,7 +52,7 @@ pub async fn commit_classification_setting_mutations(
             )
             .bind(&mutation.key)
             .bind(value)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await
             .map_err(|error| {
                 SqliteOperationError::from_sqlx("save classification setting", error)
@@ -47,18 +60,13 @@ pub async fn commit_classification_setting_mutations(
         } else {
             sqlx::query("DELETE FROM settings WHERE key = ?")
                 .bind(&mutation.key)
-                .execute(&mut *tx)
+                .execute(&mut **tx)
                 .await
                 .map_err(|error| {
                     SqliteOperationError::from_sqlx("delete classification setting", error)
                 })?;
         }
     }
-
-    tx.commit().await.map_err(|error| {
-        SqliteOperationError::from_sqlx("commit classification settings transaction", error)
-    })?;
-
     Ok(())
 }
 

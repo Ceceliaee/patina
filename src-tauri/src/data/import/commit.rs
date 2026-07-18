@@ -1,5 +1,8 @@
-use crate::data::import::model::{ImportBatchDto, ImportCommitReportDto, ImportDeleteReportDto};
+use crate::data::import::model::{
+    ImportBatchDto, ImportClassificationMutation, ImportCommitReportDto, ImportDeleteReportDto,
+};
 use crate::data::import::preview::{load_canonical_file, validate_canonical_path};
+use crate::data::repositories::classification_settings::ClassificationSettingMutation;
 use crate::data::repositories::import_batches;
 use crate::data::sqlite_pool::wait_for_sqlite_pool;
 use tauri::{AppHandle, Runtime};
@@ -8,6 +11,7 @@ pub async fn commit_canonical_import<R: Runtime>(
     app: &AppHandle<R>,
     file_path: String,
     expected_fingerprint: String,
+    classification_mutations: Vec<ImportClassificationMutation>,
 ) -> Result<ImportCommitReportDto, String> {
     if expected_fingerprint.trim().is_empty() {
         return Err("preview fingerprint is required".to_string());
@@ -22,6 +26,13 @@ pub async fn commit_canonical_import<R: Runtime>(
         .and_then(|value| value.to_str())
         .ok_or_else(|| "canonical CSV file name is not valid UTF-8".to_string())?;
     let pool = wait_for_sqlite_pool(app).await?;
+    let classification_mutations = classification_mutations
+        .into_iter()
+        .map(|mutation| ClassificationSettingMutation {
+            key: mutation.key,
+            value: mutation.value,
+        })
+        .collect::<Vec<_>>();
     import_batches::commit_records(
         &pool,
         source_name,
@@ -29,6 +40,7 @@ pub async fn commit_canonical_import<R: Runtime>(
         &actual_fingerprint,
         &parsed.records,
         parsed.errors.len(),
+        &classification_mutations,
     )
     .await
 }

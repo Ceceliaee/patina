@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-pub const CANONICAL_CSV_VERSION: u32 = 1;
 pub const MAX_IMPORT_FILE_BYTES: u64 = 128 * 1024 * 1024;
 pub const MAX_EXTERNAL_FILE_BYTES: u64 = 512 * 1024 * 1024;
 pub const MAX_IMPORT_RECORDS: usize = 250_000;
@@ -33,9 +32,7 @@ pub struct CanonicalImportRecord {
     pub exe_name: String,
     pub app_name: Option<String>,
     pub title: Option<String>,
-    pub path: Option<String>,
     pub category: Option<String>,
-    pub source: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -57,6 +54,19 @@ pub struct ImportPreviewErrorDto {
     pub message: String,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportCategoryCandidateDto {
+    pub exe_name: String,
+    pub categories: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImportClassificationMutation {
+    pub key: String,
+    pub value: Option<String>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportPreviewDto {
@@ -68,6 +78,7 @@ pub struct ImportPreviewDto {
     pub error_records: usize,
     pub exact_sessions: usize,
     pub hour_buckets: usize,
+    pub category_candidates: Vec<ImportCategoryCandidateDto>,
     pub errors: Vec<ImportPreviewErrorDto>,
 }
 

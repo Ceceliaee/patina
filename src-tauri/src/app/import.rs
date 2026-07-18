@@ -1,6 +1,6 @@
 use crate::data::import::{
     self,
-    model::{ImportCommitReportDto, ImportDeleteReportDto},
+    model::{ImportClassificationMutation, ImportCommitReportDto, ImportDeleteReportDto},
 };
 use crate::engine::tracking::runtime as tracking_runtime;
 use tauri::{AppHandle, Runtime};
@@ -9,8 +9,15 @@ pub(crate) async fn commit_and_refresh<R: Runtime>(
     app: AppHandle<R>,
     file_path: String,
     expected_fingerprint: String,
+    classification_mutations: Vec<ImportClassificationMutation>,
 ) -> Result<ImportCommitReportDto, String> {
-    let report = import::commit_canonical_import(&app, file_path, expected_fingerprint).await?;
+    let report = import::commit_canonical_import(
+        &app,
+        file_path,
+        expected_fingerprint,
+        classification_mutations,
+    )
+    .await?;
     emit_refresh(&app, "external-data-imported");
     Ok(report)
 }

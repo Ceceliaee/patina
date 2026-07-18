@@ -89,7 +89,6 @@ async fn convert_pool(pool: &Pool<Sqlite>) -> Result<ExternalConversion, String>
             app_name,
             app_alias,
             app_description,
-            session_table.is_some(),
             &exact_start_boundaries,
             &mut records,
             &mut warnings,
@@ -207,9 +206,7 @@ async fn decode_exact_sessions(
                 name,
             ]),
             title: row_text(&row, "title_value"),
-            path: file,
             category: None,
-            source: Some("taix-db".to_string()),
         });
     }
     Ok(())
@@ -225,7 +222,6 @@ async fn decode_hour_buckets(
     app_name: Option<&'static str>,
     app_alias: Option<&'static str>,
     app_description: Option<&'static str>,
-    is_taix: bool,
     exact_start_boundaries: &HashMap<String, i64>,
     records: &mut Vec<CanonicalImportRecord>,
     warnings: &mut Vec<ExternalWarning>,
@@ -338,13 +334,7 @@ async fn decode_hour_buckets(
                 name,
             ]),
             title: None,
-            path: file,
             category: None,
-            source: Some(if is_taix {
-                "taix-db".to_string()
-            } else {
-                "tai-db".to_string()
-            }),
         });
     }
     Ok(())

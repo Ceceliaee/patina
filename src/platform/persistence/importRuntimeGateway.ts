@@ -1,8 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { ClassificationSettingMutation } from "./classificationSettingsGateway.ts";
 
 export interface ImportPreviewError {
   line: number;
   message: string;
+}
+
+export interface ImportCategoryCandidate {
+  exeName: string;
+  categories: string[];
 }
 
 export interface ImportPreview {
@@ -14,10 +20,12 @@ export interface ImportPreview {
   errorRecords: number;
   exactSessions: number;
   hourBuckets: number;
+  categoryCandidates: ImportCategoryCandidate[];
   errors: ImportPreviewError[];
 }
 
 export interface ImportCommitReport {
+  batchId: string | null;
   importedRecords: number;
 }
 
@@ -59,6 +67,12 @@ function isPreviewError(value: unknown): value is ImportPreviewError {
   return hasFields(value, ["message"], ["line"]);
 }
 
+function isCategoryCandidate(value: unknown): value is ImportCategoryCandidate {
+  return hasFields(value, ["exeName"], [])
+    && Array.isArray(value.categories)
+    && value.categories.every((category) => typeof category === "string");
+}
+
 export function parseImportPreview(value: unknown): ImportPreview {
   if (!hasFields(
     value,
@@ -66,7 +80,9 @@ export function parseImportPreview(value: unknown): ImportPreview {
     ["validRecords", "duplicateRecords", "errorRecords", "exactSessions", "hourBuckets"],
   )
     || !Array.isArray(value.errors)
-    || !value.errors.every(isPreviewError)) {
+    || !value.errors.every(isPreviewError)
+    || !Array.isArray(value.categoryCandidates)
+    || !value.categoryCandidates.every(isCategoryCandidate)) {
     throw new Error("Received invalid import preview payload");
   }
   return value as unknown as ImportPreview;
@@ -84,7 +100,8 @@ export function parseImportBatches(value: unknown): ImportBatch[] {
 }
 
 function parseCommitReport(value: unknown): ImportCommitReport {
-  if (!hasFields(value, [], ["importedRecords"])) {
+  if (!hasFields(value, [], ["importedRecords"])
+    || !(typeof value.batchId === "string" || value.batchId === null)) {
     throw new Error("Received invalid import commit payload");
   }
   return value as unknown as ImportCommitReport;
@@ -116,10 +133,14 @@ export async function previewCanonicalImport(filePath: string): Promise<ImportPr
   return parseImportPreview(await invoke("cmd_preview_canonical_import", { filePath }));
 }
 
-export async function commitCanonicalImport(preview: ImportPreview): Promise<ImportCommitReport> {
+export async function commitCanonicalImport(
+  preview: ImportPreview,
+  classificationMutations: readonly ClassificationSettingMutation[] = [],
+): Promise<ImportCommitReport> {
   return parseCommitReport(await invoke("cmd_commit_canonical_import", {
     filePath: preview.filePath,
     expectedFingerprint: preview.fileFingerprint,
+    classificationMutations,
   }));
 }
 
