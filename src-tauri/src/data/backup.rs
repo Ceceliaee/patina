@@ -1,12 +1,11 @@
+use crate::data::repositories::sessions::SessionMergePolicy;
 use crate::data::sqlite_pool::{
     acquire_sqlite_maintenance, checkpoint_sqlite_pool, open_single_connection_sqlite_pool,
     prepare_pool_schema, replace_product_db_from_candidate, wait_for_sqlite_pool,
 };
 #[cfg(test)]
-use crate::domain::backup::BackupPayload;
-use crate::domain::backup::BackupPreview;
-#[cfg(test)]
 use crate::domain::backup::{BackupMeta, CURRENT_BACKUP_SCHEMA_VERSION, CURRENT_BACKUP_VERSION};
+use crate::domain::backup::{BackupPayload, BackupPreview};
 #[cfg(test)]
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -31,7 +30,7 @@ use payload::load_backup_payload_from_pool;
 use prepared_source::prepare_backup_source;
 use restore_payload::{restore_backup_payload, restore_backup_payload_in_tx};
 
-pub use paths::{pick_backup_file, pick_backup_save_file};
+pub use paths::{pick_backup_file, pick_backup_save_file, pick_tai_file};
 pub use payload::RestoreStrategy;
 
 #[cfg(test)]
@@ -79,8 +78,27 @@ pub async fn restore_backup(
     }
 
     let pool = wait_for_sqlite_pool(&app).await?;
-    restore_backup_payload(&pool, &payload, strategy).await?;
+    restore_backup_payload(&pool, &payload, strategy, SessionMergePolicy::ByNaturalKey).await?;
     Ok(())
+}
+
+/// DB-truth affected-row counts from a restore/merge write. Only
+/// `sessions_inserted` today; add a field when another report value needs
+/// DB-truth.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct RestoreStats {
+    pub sessions_inserted: usize,
+}
+
+/// Merge an in-memory payload into the DB. Engine entry point — callers never
+/// touch the pool or the internal restore function.
+pub(crate) async fn merge_backup_payload(
+    app: &AppHandle,
+    payload: &BackupPayload,
+    session_merge: SessionMergePolicy,
+) -> Result<RestoreStats, String> {
+    let pool = wait_for_sqlite_pool(app).await?;
+    restore_backup_payload(&pool, payload, RestoreStrategy::Merge, session_merge).await
 }
 
 async fn restore_snapshot_backup(
@@ -129,7 +147,13 @@ async fn restore_snapshot_backup(
                 .begin()
                 .await
                 .map_err(|error| format!("failed to start snapshot merge transaction: {error}"))?;
-            restore_backup_payload_in_tx(&mut tx, &payload, RestoreStrategy::Merge).await?;
+            restore_backup_payload_in_tx(
+                &mut tx,
+                &payload,
+                RestoreStrategy::Merge,
+                SessionMergePolicy::ByNaturalKey,
+            )
+            .await?;
             merge_external_import_backup_in_tx(&mut tx, &import_backup).await?;
             tx.commit()
                 .await
@@ -681,8 +705,13 @@ mod tests {
                 tool_software_reminder_rules: Vec::new(),
             };
 
-            let result =
-                restore_backup_payload(&pool, &bad_payload, RestoreStrategy::Replace).await;
+            let result = restore_backup_payload(
+                &pool,
+                &bad_payload,
+                RestoreStrategy::Replace,
+                SessionMergePolicy::ByNaturalKey,
+            )
+            .await;
             assert!(result.is_err());
             assert!(
                 result.unwrap_err().contains("failed to restore settings"),
@@ -765,9 +794,14 @@ mod tests {
                 tool_software_reminder_rules: Vec::new(),
             };
 
-            restore_backup_payload(&pool, &payload, RestoreStrategy::Replace)
-                .await
-                .unwrap();
+            restore_backup_payload(
+                &pool,
+                &payload,
+                RestoreStrategy::Replace,
+                SessionMergePolicy::ByNaturalKey,
+            )
+            .await
+            .unwrap();
 
             let samples: Vec<(i64, String, i64, Option<i64>)> = sqlx::query_as(
                 "SELECT session_id, title, start_time, end_time
@@ -837,9 +871,14 @@ mod tests {
                 tool_software_reminder_rules: Vec::new(),
             };
 
-            restore_backup_payload(&pool, &payload, RestoreStrategy::Replace)
-                .await
-                .unwrap();
+            restore_backup_payload(
+                &pool,
+                &payload,
+                RestoreStrategy::Replace,
+                SessionMergePolicy::ByNaturalKey,
+            )
+            .await
+            .unwrap();
 
             let samples: Vec<(i64, String)> = sqlx::query_as(
                 "SELECT session_id, title
@@ -946,9 +985,14 @@ mod tests {
                 tool_software_reminder_rules: Vec::new(),
             };
 
-            restore_backup_payload(&pool, &payload, RestoreStrategy::Merge)
-                .await
-                .unwrap();
+            restore_backup_payload(
+                &pool,
+                &payload,
+                RestoreStrategy::Merge,
+                SessionMergePolicy::ByNaturalKey,
+            )
+            .await
+            .unwrap();
 
             let session_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
                 .fetch_one(&pool)
@@ -990,9 +1034,14 @@ mod tests {
                     .unwrap();
             assert_eq!(title_sample_count, 1);
 
-            restore_backup_payload(&pool, &payload, RestoreStrategy::Merge)
-                .await
-                .unwrap();
+            restore_backup_payload(
+                &pool,
+                &payload,
+                RestoreStrategy::Merge,
+                SessionMergePolicy::ByNaturalKey,
+            )
+            .await
+            .unwrap();
             let title_sample_count_after_second_restore: i64 =
                 sqlx::query_scalar("SELECT COUNT(*) FROM session_title_samples")
                     .fetch_one(&pool)
@@ -1051,9 +1100,14 @@ mod tests {
                 tool_software_reminder_rules: Vec::new(),
             };
 
-            restore_backup_payload(&pool, &payload, RestoreStrategy::Merge)
-                .await
-                .unwrap();
+            restore_backup_payload(
+                &pool,
+                &payload,
+                RestoreStrategy::Merge,
+                SessionMergePolicy::ByNaturalKey,
+            )
+            .await
+            .unwrap();
 
             let restored: (i64, String) = sqlx::query_as(
                 "SELECT samples.session_id, sessions.exe_name
@@ -1068,6 +1122,140 @@ mod tests {
 
             assert_ne!(restored.0, 2);
             assert_eq!(restored.1, "imported.exe");
+        });
+    }
+
+    #[test]
+    fn merge_restore_skip_overlapping_keeps_existing_and_drops_skipped_title_samples() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+
+            // Existing session spans [100, 300); the Tai rows below use different
+            // start_times, so natural-key dedup would not catch their overlap.
+            sqlx::query(
+                "INSERT INTO sessions (id, app_name, exe_name, window_title, start_time, end_time, duration, continuity_group_start_time)
+                 VALUES (5, 'Existing', 'existing.exe', 'Existing Title', 100, 300, 200, 100)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+
+            let payload = BackupPayload {
+                version: CURRENT_BACKUP_VERSION,
+                meta: BackupMeta {
+                    exported_at_ms: 1,
+                    schema_version: CURRENT_BACKUP_SCHEMA_VERSION,
+                    app_version: "test".to_string(),
+                },
+                sessions: vec![
+                    BackupSession {
+                        id: 1,
+                        app_name: "Over".to_string(),
+                        exe_name: "over.exe".to_string(),
+                        window_title: Some("Over Title".to_string()),
+                        start_time: 150,
+                        end_time: Some(250),
+                        duration: Some(100),
+                        continuity_group_start_time: Some(150),
+                    },
+                    BackupSession {
+                        id: 2,
+                        app_name: "Later".to_string(),
+                        exe_name: "later.exe".to_string(),
+                        window_title: Some("Later Title".to_string()),
+                        start_time: 400,
+                        end_time: Some(500),
+                        duration: Some(100),
+                        continuity_group_start_time: Some(400),
+                    },
+                ],
+                title_samples: vec![
+                    BackupTitleSample {
+                        id: 1,
+                        session_id: 1,
+                        title: "Over Title".to_string(),
+                        start_time: 150,
+                        end_time: Some(250),
+                    },
+                    BackupTitleSample {
+                        id: 2,
+                        session_id: 2,
+                        title: "Later Title".to_string(),
+                        start_time: 400,
+                        end_time: Some(500),
+                    },
+                ],
+                settings: Vec::new(),
+                icon_cache: Vec::new(),
+                web_activity_segments: Vec::new(),
+                web_favicon_cache: Vec::new(),
+                tool_reminders: Vec::new(),
+                tool_timers: Vec::new(),
+                tool_timer_laps: Vec::new(),
+                tool_pomodoro_runs: Vec::new(),
+                tool_daily_stats: Vec::new(),
+                tool_software_reminder_rules: Vec::new(),
+            };
+
+            let stats = restore_backup_payload(
+                &pool,
+                &payload,
+                RestoreStrategy::Merge,
+                SessionMergePolicy::SkipOverlapping,
+            )
+            .await
+            .unwrap();
+
+            // Only the disjoint session was inserted; the overlapping one was skipped.
+            assert_eq!(stats.sessions_inserted, 1);
+
+            // Conflict-priority: the pre-existing session is untouched.
+            let existing_exe: String =
+                sqlx::query_scalar("SELECT exe_name FROM sessions WHERE id = 5")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            let existing_start: i64 =
+                sqlx::query_scalar("SELECT start_time FROM sessions WHERE id = 5")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(existing_exe, "existing.exe");
+            assert_eq!(existing_start, 100);
+
+            let session_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            assert_eq!(session_count, 2);
+
+            // The skipped session left no orphan title_sample: only the inserted
+            // disjoint session has one, and every sample references an existing row.
+            let title_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM session_title_samples")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            assert_eq!(title_count, 1);
+            let orphan_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM session_title_samples ts
+                 LEFT JOIN sessions s ON ts.session_id = s.id
+                 WHERE s.id IS NULL",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(orphan_count, 0);
+
+            // Idempotent: re-importing the same payload inserts nothing.
+            let stats2 = restore_backup_payload(
+                &pool,
+                &payload,
+                RestoreStrategy::Merge,
+                SessionMergePolicy::SkipOverlapping,
+            )
+            .await
+            .unwrap();
+            assert_eq!(stats2.sessions_inserted, 0);
         });
     }
 }

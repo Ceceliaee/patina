@@ -94,3 +94,14 @@ pub fn pick_backup_file(initial_path: Option<String>) -> Option<String> {
         .pick_file()
         .map(|path| path.to_string_lossy().to_string())
 }
+
+pub fn pick_tai_file(initial_path: Option<String>) -> Option<String> {
+    let mut dialog = rfd::FileDialog::new().add_filter("Tai CSV", &["csv"]);
+    if let Some(dir) = resolve_dialog_directory(initial_path) {
+        dialog = dialog.set_directory(dir);
+    }
+
+    dialog
+        .pick_file()
+        .map(|path| path.to_string_lossy().to_string())
+}

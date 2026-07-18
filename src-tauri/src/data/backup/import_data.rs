@@ -529,6 +529,7 @@ mod tests {
             &mut tx,
             &payload_with_native_session("backup.exe"),
             RestoreStrategy::Replace,
+            SessionMergePolicy::ByNaturalKey,
         )
         .await
         .unwrap();

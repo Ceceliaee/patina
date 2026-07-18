@@ -1,4 +1,5 @@
 use super::import_data::clear_external_imports_in_tx;
+use super::RestoreStats;
 use super::RestoreStrategy;
 use crate::data::repositories;
 use crate::domain::backup::BackupPayload;
@@ -8,24 +9,26 @@ pub(super) async fn restore_backup_payload(
     pool: &Pool<Sqlite>,
     payload: &BackupPayload,
     strategy: RestoreStrategy,
-) -> Result<(), String> {
+    session_merge: repositories::sessions::SessionMergePolicy,
+) -> Result<RestoreStats, String> {
     let mut tx = pool
         .begin()
         .await
         .map_err(|error| format!("failed to start restore transaction: {error}"))?;
-    restore_backup_payload_in_tx(&mut tx, payload, strategy).await?;
+    restore_backup_payload_in_tx(&mut tx, payload, strategy, session_merge).await?;
     tx.commit()
         .await
         .map_err(|error| format!("failed to commit restore transaction: {error}"))?;
-    Ok(())
+    Ok(RestoreStats::default())
 }
 
 pub(super) async fn restore_backup_payload_in_tx(
     tx: &mut Transaction<'_, Sqlite>,
     payload: &BackupPayload,
     strategy: RestoreStrategy,
-) -> Result<(), String> {
-    match strategy {
+    session_merge: repositories::sessions::SessionMergePolicy,
+) -> Result<RestoreStats, String> {
+    let sessions_inserted = match strategy {
         RestoreStrategy::Replace => {
             clear_external_imports_in_tx(tx).await?;
             repositories::session_title_samples::clear_for_restore(tx).await?;
@@ -34,7 +37,6 @@ pub(super) async fn restore_backup_payload_in_tx(
             repositories::icon_cache::clear_for_restore(tx).await?;
             repositories::web_activity::clear_for_restore(tx).await?;
             repositories::tools::clear_for_restore(tx).await?;
-
             repositories::sessions::insert_for_restore(tx, &payload.sessions).await?;
             let session_id_map =
                 repositories::sessions::resolve_restore_session_id_map(tx, &payload.sessions)
@@ -64,9 +66,12 @@ pub(super) async fn restore_backup_payload_in_tx(
                 &payload.tool_software_reminder_rules,
             )
             .await?;
+            payload.sessions.len()
         }
         RestoreStrategy::Merge => {
-            repositories::sessions::insert_missing_for_restore(tx, &payload.sessions).await?;
+            let inserted =
+                repositories::sessions::merge_for_restore(tx, &payload.sessions, session_merge)
+                    .await?;
             let session_id_map =
                 repositories::sessions::resolve_restore_session_id_map(tx, &payload.sessions)
                     .await?;
@@ -98,7 +103,8 @@ pub(super) async fn restore_backup_payload_in_tx(
                 &payload.tool_software_reminder_rules,
             )
             .await?;
+            inserted
         }
-    }
-    Ok(())
+    };
+    Ok(RestoreStats { sessions_inserted })
 }

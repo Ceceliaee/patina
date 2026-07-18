@@ -69,12 +69,35 @@ pub async fn insert_for_restore(
     Ok(())
 }
 
+/// Session-merge policy for restore/Merge writes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SessionMergePolicy {
+    /// Skip a session whose `(exe, start_time)` natural key already exists.
+    ByNaturalKey,
+    /// Skip a session whose time span intersects an existing session.
+    SkipOverlapping,
+}
+
+pub async fn merge_for_restore(
+    tx: &mut Transaction<'_, Sqlite>,
+    sessions: &[BackupSession],
+    policy: SessionMergePolicy,
+) -> Result<usize, String> {
+    match policy {
+        SessionMergePolicy::ByNaturalKey => insert_missing_for_restore(tx, sessions).await,
+        SessionMergePolicy::SkipOverlapping => {
+            insert_non_overlapping_for_restore(tx, sessions).await
+        }
+    }
+}
+
 pub async fn insert_missing_for_restore(
     tx: &mut Transaction<'_, Sqlite>,
     sessions: &[BackupSession],
-) -> Result<(), String> {
+) -> Result<usize, String> {
+    let mut inserted = 0usize;
     for session in sessions {
-        sqlx::query(
+        let result = sqlx::query(
             "INSERT INTO sessions (
                app_name, exe_name, window_title, start_time, end_time, duration,
                continuity_group_start_time
@@ -107,9 +130,58 @@ pub async fn insert_missing_for_restore(
         .execute(&mut **tx)
         .await
         .map_err(|error| format!("failed to merge restore sessions: {error}"))?;
+        // rows_affected is the authoritative merge count (0 when the natural
+        // key already exists), so re-importing returns 0.
+        inserted += result.rows_affected() as usize;
     }
 
-    Ok(())
+    Ok(inserted)
+}
+
+/// Tai `Skip` overlap mode: insert a session only if no existing session's span
+/// intersects it (half-open `[s, e)`; an active `e IS NULL` span is `+∞`).
+/// More conservative than `insert_missing_for_restore`'s natural-key dedup.
+pub async fn insert_non_overlapping_for_restore(
+    tx: &mut Transaction<'_, Sqlite>,
+    sessions: &[BackupSession],
+) -> Result<usize, String> {
+    let mut inserted = 0usize;
+    for session in sessions {
+        // Tai sessions always carry end_time; COALESCE guards a None defensively.
+        let new_end = session.end_time.unwrap_or(i64::MAX);
+        let result = sqlx::query(
+            "INSERT INTO sessions (
+               app_name, exe_name, window_title, start_time, end_time, duration,
+               continuity_group_start_time
+             )
+             SELECT ?, ?, ?, ?, ?, ?, ?
+             WHERE NOT EXISTS (
+               SELECT 1
+               FROM sessions
+               WHERE start_time < ?
+                 AND (end_time IS NULL OR ? < end_time)
+             )",
+        )
+        .bind(&session.app_name)
+        .bind(&session.exe_name)
+        .bind(&session.window_title)
+        .bind(session.start_time)
+        .bind(session.end_time)
+        .bind(session.duration)
+        .bind(
+            session
+                .continuity_group_start_time
+                .unwrap_or(session.start_time),
+        )
+        .bind(new_end)
+        .bind(session.start_time)
+        .execute(&mut **tx)
+        .await
+        .map_err(|error| format!("failed to merge restore sessions (non-overlapping): {error}"))?;
+        inserted += result.rows_affected() as usize;
+    }
+
+    Ok(inserted)
 }
 
 pub async fn resolve_restore_session_id_map(
@@ -522,13 +594,92 @@ mod exclusion_tests {
                 },
             ];
             let mut tx = pool.begin().await.unwrap();
-            insert_missing_for_restore(&mut tx, &backup).await.unwrap();
+            let inserted = insert_missing_for_restore(&mut tx, &backup).await.unwrap();
             tx.commit().await.unwrap();
+            // app.exe @ 100 already exists; only other.exe @ 500 is new.
+            assert_eq!(inserted, 1);
             let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
                 .fetch_one(&pool)
                 .await
                 .unwrap();
             assert_eq!(count, 2);
+
+            // Re-merging inserts nothing (idempotent).
+            let mut tx = pool.begin().await.unwrap();
+            let reinserted = insert_missing_for_restore(&mut tx, &backup).await.unwrap();
+            tx.commit().await.unwrap();
+            assert_eq!(reinserted, 0);
+        });
+    }
+
+    #[test]
+    fn insert_non_overlapping_skips_intersecting_and_keeps_disjoint() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            // Existing session spans [100, 300).
+            sqlx::query(
+                "INSERT INTO sessions (app_name, exe_name, window_title, start_time, end_time, duration)
+                 VALUES ('App', 'app.exe', 'Current', 100, 300, 200)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+
+            let backup = vec![
+                // [250, 350) intersects [100, 300) → skipped.
+                BackupSession {
+                    id: 1,
+                    app_name: "Over".into(),
+                    exe_name: "over.exe".into(),
+                    window_title: Some("O".into()),
+                    start_time: 250,
+                    end_time: Some(350),
+                    duration: Some(100),
+                    continuity_group_start_time: Some(250),
+                },
+                // [400, 500) is disjoint → inserted.
+                BackupSession {
+                    id: 2,
+                    app_name: "Later".into(),
+                    exe_name: "later.exe".into(),
+                    window_title: Some("L".into()),
+                    start_time: 400,
+                    end_time: Some(500),
+                    duration: Some(100),
+                    continuity_group_start_time: Some(400),
+                },
+                // [300, 400) touches at the boundary (end exclusive) → not
+                // intersecting → inserted.
+                BackupSession {
+                    id: 3,
+                    app_name: "Touch".into(),
+                    exe_name: "touch.exe".into(),
+                    window_title: Some("T".into()),
+                    start_time: 300,
+                    end_time: Some(400),
+                    duration: Some(100),
+                    continuity_group_start_time: Some(300),
+                },
+            ];
+            let mut tx = pool.begin().await.unwrap();
+            let inserted = insert_non_overlapping_for_restore(&mut tx, &backup)
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+            assert_eq!(inserted, 2);
+            let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            assert_eq!(count, 3); // 1 existing + 2 inserted
+
+            // Re-merging inserts nothing — every span now intersects a prior insert.
+            let mut tx = pool.begin().await.unwrap();
+            let reinserted = insert_non_overlapping_for_restore(&mut tx, &backup)
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+            assert_eq!(reinserted, 0);
         });
     }
 }
