@@ -71,7 +71,14 @@ export async function loadSettingKeysByKeyPrefix(keyPrefix: string): Promise<Set
 
 export async function loadDistinctSessionExeNames(): Promise<SessionExeNameRow[]> {
   const db = await getDB();
-  const rows = await db.select<RawSessionExeNameRow[]>("SELECT DISTINCT exe_name FROM sessions");
+  const rows = await db.select<RawSessionExeNameRow[]>(
+    `SELECT DISTINCT exe_name
+     FROM (
+       SELECT exe_name FROM sessions
+       UNION ALL
+       SELECT exe_name FROM import_time_buckets
+     )`,
+  );
   return rows.map((row) => ({
     exeName: row.exe_name,
   }));
@@ -85,12 +92,22 @@ export async function loadObservedSessionStats(
   const rows = await db.select<RawObservedSessionStatRow[]>(
     `SELECT exe_name,
             MAX(COALESCE(app_name, '')) AS app_name,
-            SUM(COALESCE(duration, MAX(0, ? - start_time))) AS total_duration,
+            SUM(total_duration) AS total_duration,
             MAX(start_time) AS last_seen_ms
-     FROM sessions
-     WHERE start_time >= ?
+     FROM (
+       SELECT exe_name, app_name, start_time,
+              COALESCE(duration, MAX(0, ? - start_time)) AS total_duration
+       FROM sessions
+       WHERE start_time >= ?
+       UNION ALL
+       SELECT exe_name, COALESCE(app_name, exe_name) AS app_name,
+              bucket_start_time AS start_time,
+              duration AS total_duration
+       FROM import_time_buckets
+       WHERE bucket_start_time >= ?
+     )
      GROUP BY exe_name`,
-    [nowMs, sinceMs],
+    [nowMs, sinceMs, sinceMs],
   );
   return rows.map((row) => ({
     exeName: row.exe_name,

@@ -1,7 +1,11 @@
 import type { AppStat } from "../../../shared/types/app.ts";
 import type { HistorySession } from "../../../shared/types/sessions.ts";
 import type { TrackerHealthSnapshot } from "../../../shared/types/tracking.ts";
-import { getHistoryByDate } from "../../../platform/persistence/sessionReadRepository.ts";
+import {
+  getHistoryByDate,
+  getImportedTimeBucketsByDate,
+  type AggregateSessionRecord,
+} from "../../../platform/persistence/sessionReadRepository.ts";
 import {
   getDashboardIconRuntimeCacheSnapshot,
   loadDashboardIconsForExecutables,
@@ -37,7 +41,11 @@ export interface DashboardSnapshot {
   icons: Record<string, string>;
   sessions: HistorySession[];
   yesterdaySessions?: HistorySession[];
+  importedBuckets?: AggregateSessionRecord[];
+  yesterdayImportedBuckets?: AggregateSessionRecord[];
 }
+
+export type ImportedDashboardBucket = AggregateSessionRecord;
 
 export interface IconSnapshot {
   fetchedAtMs: number;
@@ -60,6 +68,7 @@ export interface DashboardReadModel {
 interface DashboardSnapshotDependencies {
   now: () => number;
   getHistoryByDate: typeof getHistoryByDate;
+  getImportedTimeBucketsByDate: typeof getImportedTimeBucketsByDate;
   loadIcons: typeof loadDashboardIconsForExecutables;
   getCachedIcons: typeof getDashboardIconRuntimeCacheSnapshot;
 }
@@ -67,11 +76,14 @@ interface DashboardSnapshotDependencies {
 const DASHBOARD_SNAPSHOT_DEPENDENCIES: DashboardSnapshotDependencies = {
   now: Date.now,
   getHistoryByDate,
+  getImportedTimeBucketsByDate,
   loadIcons: loadDashboardIconsForExecutables,
   getCachedIcons: getDashboardIconRuntimeCacheSnapshot,
 };
 
-function collectDashboardIconExecutables(...sessionGroups: HistorySession[][]): string[] {
+function collectDashboardIconExecutables(
+  ...sessionGroups: Array<Array<Pick<HistorySession, "exeName">>>
+): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
 
@@ -94,12 +106,14 @@ export async function loadDashboardSnapshotWithDeps(
 ): Promise<DashboardSnapshot> {
   const yesterday = new Date(date);
   yesterday.setDate(yesterday.getDate() - 1);
-  const [sessions, yesterdaySessions] = await Promise.all([
+  const [sessions, yesterdaySessions, importedBuckets, yesterdayImportedBuckets] = await Promise.all([
     deps.getHistoryByDate(date),
     deps.getHistoryByDate(yesterday),
+    deps.getImportedTimeBucketsByDate(date),
+    deps.getImportedTimeBucketsByDate(yesterday),
   ]);
   const icons = await deps.loadIcons(
-    collectDashboardIconExecutables(sessions),
+    collectDashboardIconExecutables(sessions, importedBuckets),
   );
 
   return {
@@ -107,6 +121,8 @@ export async function loadDashboardSnapshotWithDeps(
     icons,
     sessions,
     yesterdaySessions,
+    importedBuckets,
+    yesterdayImportedBuckets,
   };
 }
 
@@ -137,14 +153,24 @@ export function buildDashboardReadModel(
   trackerHealth: TrackerHealthSnapshot,
   nowMs: number,
   yesterdaySessions: HistorySession[] = [],
+  importedBuckets: AggregateSessionRecord[] = [],
+  yesterdayImportedBuckets: AggregateSessionRecord[] = [],
 ): DashboardReadModel {
   const dayRange = getDayRange(new Date(nowMs), nowMs);
   const yesterday = new Date(nowMs);
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayRange = getDayRange(yesterday);
   const liveSessions = materializeLiveSessions(sessions, trackerHealth, nowMs);
-  const compiledSessions = compileForRange(liveSessions, dayRange, 0);
-  const compiledYesterdaySessions = compileForRange(yesterdaySessions, yesterdayRange, 0);
+  const compiledSessions = compileForRange(
+    [...liveSessions, ...materializeImportedBuckets(importedBuckets)],
+    dayRange,
+    0,
+  );
+  const compiledYesterdaySessions = compileForRange(
+    [...yesterdaySessions, ...materializeImportedBuckets(yesterdayImportedBuckets)],
+    yesterdayRange,
+    0,
+  );
   const stats = buildNormalizedAppStats(compiledSessions);
   const yesterdayStats = buildNormalizedAppStats(compiledYesterdaySessions);
   const totalTrackedTime = getTotalTrackedTime(stats);
@@ -167,4 +193,17 @@ export function buildDashboardReadModel(
     categoryDist: buildCategoryDistribution(stats),
     diagnostics,
   };
+}
+
+function materializeImportedBuckets(buckets: AggregateSessionRecord[]): HistorySession[] {
+  return buckets.map((bucket, index) => ({
+    id: -(index + 1),
+    appName: bucket.appName,
+    exeName: bucket.exeName,
+    windowTitle: "",
+    startTime: bucket.startTime,
+    endTime: bucket.endTime,
+    duration: Math.max(0, bucket.endTime - bucket.startTime),
+    continuityGroupStartTime: bucket.startTime,
+  }));
 }

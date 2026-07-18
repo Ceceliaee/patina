@@ -5,6 +5,7 @@ import {
   loadIconSnapshot,
   type DashboardReadModel,
   type DashboardSnapshot,
+  type ImportedDashboardBucket,
 } from "../services/dashboardReadModel";
 import { getRetryableMissingDashboardIconExecutables } from "../services/dashboardIconRuntimeCache";
 import { getDashboardSnapshotCache } from "../services/dashboardSnapshotCache";
@@ -32,6 +33,12 @@ export function useDashboardStats(
   const [rawYesterdaySessions, setRawYesterdaySessions] = useState<HistorySession[]>(
     () => initialSnapshot?.yesterdaySessions ?? [],
   );
+  const [importedBuckets, setImportedBuckets] = useState<ImportedDashboardBucket[]>(
+    () => initialSnapshot?.importedBuckets ?? [],
+  );
+  const [yesterdayImportedBuckets, setYesterdayImportedBuckets] = useState<ImportedDashboardBucket[]>(
+    () => initialSnapshot?.yesterdayImportedBuckets ?? [],
+  );
   const [icons, setIcons] = useState<Record<string, string>>(
     () => initialSnapshot?.icons ?? {},
   );
@@ -44,6 +51,8 @@ export function useDashboardStats(
       startTransition(() => {
         setRawSessions(snapshot.sessions);
         setRawYesterdaySessions(snapshot.yesterdaySessions ?? []);
+        setImportedBuckets(snapshot.importedBuckets ?? []);
+        setYesterdayImportedBuckets(snapshot.yesterdayImportedBuckets ?? []);
         setIcons(snapshot.icons);
         setNowMs(snapshot.fetchedAtMs);
       });
@@ -107,10 +116,12 @@ export function useDashboardStats(
       trackerHealth,
       nowMs,
       classificationReady ? rawYesterdaySessions : [],
+      classificationReady ? importedBuckets : [],
+      classificationReady ? yesterdayImportedBuckets : [],
     ),
     // The read model reads module-level classification mappings; this token is its explicit invalidation signal.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [classificationReady, mappingVersion, nowMs, rawSessions, rawYesterdaySessions, trackerHealth],
+    [classificationReady, importedBuckets, mappingVersion, nowMs, rawSessions, rawYesterdaySessions, trackerHealth, yesterdayImportedBuckets],
   );
 
   return {

@@ -23,6 +23,7 @@ const iconRequests: string[][] = [];
 const selectedDate = new Date(2026, 6, 15, 12);
 const todaySessions = [session(1, "alpha.exe"), session(2, "alpha.exe"), session(3, "")];
 const yesterdaySessions = [session(4, "beta.exe")];
+const todayBuckets = [{ appName: "Imported", exeName: "imported.exe", startTime: 10, endTime: 20 }];
 
 const snapshot = await loadDashboardSnapshotWithDeps(selectedDate, {
   now: () => 1234,
@@ -30,6 +31,9 @@ const snapshot = await loadDashboardSnapshotWithDeps(selectedDate, {
     requestedDates.push(date.toISOString());
     return date.getDate() === selectedDate.getDate() ? todaySessions : yesterdaySessions;
   },
+  getImportedTimeBucketsByDate: async (date) => (
+    date.getDate() === selectedDate.getDate() ? todayBuckets : []
+  ),
   loadIcons: async (exeNames) => {
     iconRequests.push(exeNames);
     return { "alpha.exe": "icon" };
@@ -39,12 +43,14 @@ const snapshot = await loadDashboardSnapshotWithDeps(selectedDate, {
 
 assert.equal(requestedDates.length, 2);
 assert.equal(new Date(requestedDates[1]).getDate(), selectedDate.getDate() - 1);
-assert.deepEqual(iconRequests, [["alpha.exe"]]);
+assert.deepEqual(iconRequests, [["alpha.exe", "imported.exe"]]);
 assert.deepEqual(snapshot, {
   fetchedAtMs: 1234,
   icons: { "alpha.exe": "icon" },
   sessions: todaySessions,
   yesterdaySessions,
+  importedBuckets: todayBuckets,
+  yesterdayImportedBuckets: [],
 });
 
 const loadedIcons = await loadIconSnapshotWithDeps(["alpha.exe"], {

@@ -223,16 +223,63 @@ export async function getSessionSummariesInRange(startMs: number, endMs: number)
   const db = await getDB();
   const now = Date.now();
   const rows = await db.select<RawAggregateSessionCandidateRow[]>(
-    "SELECT app_name, exe_name, window_title, start_time, COALESCE(end_time, ?) AS effective_end_time FROM sessions WHERE start_time < ? AND COALESCE(end_time, ?) > ? ORDER BY start_time ASC",
-    [now, endMs, now, startMs],
+    `SELECT app_name, exe_name, window_title, start_time, effective_end_time
+     FROM (
+       SELECT app_name, exe_name, window_title, start_time,
+              COALESCE(end_time, ?) AS effective_end_time
+       FROM sessions
+       WHERE start_time < ? AND COALESCE(end_time, ?) > ?
+       UNION ALL
+       SELECT COALESCE(NULLIF(app_name, ''), exe_name) AS app_name,
+              exe_name,
+              '' AS window_title,
+              bucket_start_time AS start_time,
+              bucket_start_time + duration AS effective_end_time
+       FROM import_time_buckets
+       WHERE bucket_start_time < ? AND bucket_start_time + duration > ?
+     )
+     ORDER BY start_time ASC`,
+    [now, endMs, now, startMs, endMs, startMs],
   );
   return mapRawAggregateSessionCandidates(rows);
+}
+
+export async function getImportedTimeBucketsInRange(
+  startMs: number,
+  endMs: number,
+): Promise<AggregateSessionRecord[]> {
+  const db = await getDB();
+  const rows = await db.select<RawAggregateSessionCandidateRow[]>(
+    `SELECT COALESCE(NULLIF(app_name, ''), exe_name) AS app_name,
+            exe_name,
+            '' AS window_title,
+            bucket_start_time AS start_time,
+            bucket_start_time + duration AS effective_end_time
+     FROM import_time_buckets
+     WHERE bucket_start_time < ? AND bucket_start_time + duration > ?
+     ORDER BY bucket_start_time ASC`,
+    [endMs, startMs],
+  );
+  return mapRawAggregateSessionCandidates(rows);
+}
+
+export function getImportedTimeBucketsByDate(date: Date): Promise<AggregateSessionRecord[]> {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(date);
+  end.setHours(24, 0, 0, 0);
+  return getImportedTimeBucketsInRange(start.getTime(), end.getTime());
 }
 
 export async function getEarliestSessionStartTime(): Promise<number | null> {
   const db = await getDB();
   const rows = await db.select<{ earliest_start_time: number | null }[]>(
-    "SELECT MIN(start_time) AS earliest_start_time FROM sessions",
+    `SELECT MIN(start_time) AS earliest_start_time
+     FROM (
+       SELECT start_time FROM sessions
+       UNION ALL
+       SELECT bucket_start_time AS start_time FROM import_time_buckets
+     )`,
   );
   return rows[0]?.earliest_start_time ?? null;
 }
