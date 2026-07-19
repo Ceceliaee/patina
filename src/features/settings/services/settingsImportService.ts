@@ -56,7 +56,7 @@ export async function commitImportWithClassification(
 interface DeleteImportBatchWithRefreshDeps {
   deleteImportBatch: (batchId: string) => Promise<ImportDeleteReport>;
   refreshBatches: () => Promise<ImportBatch[]>;
-  onImportedDataChanged: () => void;
+  onImportedDataChanged: () => void | Promise<void>;
 }
 
 export async function deleteImportBatchWithRefresh(
@@ -64,7 +64,7 @@ export async function deleteImportBatchWithRefresh(
   deps: DeleteImportBatchWithRefreshDeps,
 ): Promise<{ report: ImportDeleteReport; batches: ImportBatch[] }> {
   const report = await deps.deleteImportBatch(batchId);
-  deps.onImportedDataChanged();
+  await deps.onImportedDataChanged();
   const batches = await deps.refreshBatches();
   return { report, batches };
 }

@@ -4,10 +4,12 @@ import {
   deleteSettingValue,
   loadDistinctSessionExeNames,
   loadObservedSessionStats,
+  loadRecordedAppCatalogPage,
   loadSettingValue,
   loadSettingKeysByKeyPrefix,
   loadSettingRowsByKeyPrefix,
   upsertSettingValue,
+  type RecordedAppCatalogQueryInput,
 } from "../../../platform/persistence/classificationPersistence.ts";
 import {
   deleteWebActivitySegmentsByDomain,
@@ -246,16 +248,55 @@ async function ensureLegacyAutoClassificationMigration(): Promise<void> {
 
 export async function loadAppOverrides(): Promise<Record<string, AppOverride>> {
   await ensureLegacyAutoClassificationMigration();
-  const [rows, persistedCategoryIds] = await Promise.all([
+  const [rows, persistedCategoryIds, recordedExeRows] = await Promise.all([
     loadSettingRowsByKeyPrefix(APP_OVERRIDE_KEY_PREFIX),
     loadPersistedCategoryIds(),
+    loadDistinctSessionExeNames(),
   ]);
 
   const { overrides, transitionMutations } = buildLoadedAppOverrides(rows, persistedCategoryIds);
+  const cleanup = removeOrphanedAppOverrides(
+    overrides,
+    recordedExeRows.map((row) => row.exeName),
+  );
 
-  await commitClassificationSettingMutations(transitionMutations);
+  await commitClassificationSettingMutations([
+    ...transitionMutations,
+    ...cleanup.mutations,
+  ]);
 
-  return overrides;
+  return cleanup.overrides;
+}
+
+export function removeOrphanedAppOverrides(
+  overrides: Readonly<Record<string, AppOverride>>,
+  recordedExeNames: readonly string[],
+): {
+  overrides: Record<string, AppOverride>;
+  mutations: ClassificationSettingMutation[];
+} {
+  const recordedExecutables = new Set(
+    recordedExeNames.map(resolveCanonicalExecutable).filter(Boolean),
+  );
+  const retainedOverrides: Record<string, AppOverride> = {};
+  const mutations: ClassificationSettingMutation[] = [];
+
+  for (const [exeName, override] of Object.entries(overrides)) {
+    const canonicalExe = resolveCanonicalExecutable(exeName);
+    if (!canonicalExe) {
+      continue;
+    }
+    if (recordedExecutables.has(canonicalExe)) {
+      retainedOverrides[canonicalExe] = override;
+      continue;
+    }
+    mutations.push(...buildSaveAppOverrideMutations(canonicalExe, null));
+  }
+
+  return {
+    overrides: retainedOverrides,
+    mutations,
+  };
 }
 
 export async function loadWebDomainOverrides(): Promise<Record<string, WebDomainOverride>> {
@@ -728,6 +769,10 @@ export async function loadObservedAppCandidates(
     .slice(0, Math.max(1, limit));
 }
 
+export async function loadAppCatalogPage(input: RecordedAppCatalogQueryInput) {
+  return loadRecordedAppCatalogPage(input);
+}
+
 export async function loadObservedWebDomainCandidates(
   days: number = 30,
   limit: number = 120,
@@ -768,7 +813,7 @@ export async function deleteObservedAppSessions(
   dayEnd.setDate(dayEnd.getDate() + 1);
 
   if (scope === "all") {
-    await deleteSessionsByExeNames(matchedExeNames);
+    await deleteSessionsByExeNames([...new Set([...matchedExeNames, canonicalExe])]);
     return matchedExeNames.length;
   }
 

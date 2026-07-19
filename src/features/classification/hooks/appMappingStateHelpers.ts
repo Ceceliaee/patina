@@ -1,4 +1,4 @@
-import type { CandidateFilter, ObservedAppCandidate } from "../types.ts";
+import type { ObservedAppCandidate } from "../types.ts";
 import {
   isExtendedCategory,
   type AppCategory,
@@ -7,18 +7,10 @@ import {
 } from "../../../shared/classification/categoryTokens.ts";
 import type { AppOverride } from "../services/classificationService.ts";
 import type { WebDomainOverride } from "../../../shared/types/webActivity.ts";
-import { getUiLocale } from "../../../shared/copy/index.ts";
 import {
   cloneClassificationDraftState,
   type ClassificationDraftState,
 } from "../services/classificationDraftState.ts";
-
-function createAppMappingCollator() {
-  return new Intl.Collator(getUiLocale(), {
-    numeric: true,
-    sensitivity: "base",
-  });
-}
 
 type AppMappingOverrideParams = {
   category?: UserAssignableAppCategory;
@@ -36,16 +28,6 @@ type WebDomainOverrideParams = {
   enabled?: boolean;
   captureTitle?: boolean;
   updatedAt?: number;
-};
-
-type FilterAndSortCandidatesParams = {
-  candidates: ObservedAppCandidate[];
-  filter: CandidateFilter;
-  searchQuery?: string;
-  resolveMappedCategory: (candidate: ObservedAppCandidate) => UserAssignableAppCategory;
-  resolveTrackingEnabled?: (candidate: ObservedAppCandidate) => boolean;
-  resolveEffectiveDisplayName: (candidate: ObservedAppCandidate) => string;
-  resolveCategoryLabel?: (category: UserAssignableAppCategory) => string;
 };
 
 type ClassificationBootstrapSnapshot = {
@@ -340,51 +322,4 @@ export function updateCategoryLabelInDraftState(
   if (!normalizedLabel) delete next[category];
   else next[category] = normalizedLabel;
   return { ...current, categoryLabelOverrides: next };
-}
-
-export function filterAndSortCandidates({
-  candidates,
-  filter,
-  searchQuery,
-  resolveMappedCategory,
-  resolveTrackingEnabled,
-  resolveEffectiveDisplayName,
-  resolveCategoryLabel,
-}: FilterAndSortCandidatesParams): ObservedAppCandidate[] {
-  const collator = createAppMappingCollator();
-  const normalizedQuery = searchQuery?.trim().toLocaleLowerCase(getUiLocale()) ?? "";
-
-  return candidates
-    .filter((candidate) => {
-      const category = resolveMappedCategory(candidate);
-      const trackingEnabled = resolveTrackingEnabled?.(candidate) ?? true;
-      if (filter === "excluded") return !trackingEnabled;
-      if (!trackingEnabled) return false;
-      if (filter === "all") return true;
-      if (filter === "other") return category === "other";
-      return category !== "other";
-    })
-    .filter((candidate) => {
-      if (!normalizedQuery) return true;
-      const category = resolveMappedCategory(candidate);
-      const categoryLabel = resolveCategoryLabel?.(category) ?? category;
-      const haystack = [
-        resolveEffectiveDisplayName(candidate),
-        candidate.appName,
-        candidate.exeName,
-        categoryLabel,
-        category,
-      ].join(" ").toLocaleLowerCase(getUiLocale());
-      return haystack.includes(normalizedQuery);
-    })
-    .sort((left, right) => {
-      const labelCompare = collator.compare(
-        resolveEffectiveDisplayName(left),
-        resolveEffectiveDisplayName(right),
-      );
-      if (labelCompare !== 0) {
-        return labelCompare;
-      }
-      return collator.compare(left.exeName, right.exeName);
-    });
 }

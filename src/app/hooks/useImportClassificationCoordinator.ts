@@ -15,9 +15,16 @@ export function useImportClassificationCoordinator(
   const onImportedDataChanged = useCallback(() => {
     ClassificationService.invalidateBootstrapCache();
     clearDashboardSnapshotCache();
-    void clearHistoryCachesAfterDataChange();
     clearToolsPageCaches();
-    void clearDataBootstrapCache();
+    void Promise.all([
+      clearHistoryCachesAfterDataChange(),
+      clearDataBootstrapCache(),
+    ]).then(async () => {
+      const bootstrap = await ClassificationService.loadClassificationBootstrap();
+      ClassificationService.applyBootstrapToProcessMapper(bootstrap);
+    }).catch(() => {
+      ClassificationService.invalidateBootstrapCache();
+    });
     setReadModelRefreshState(applyMappingOverridesReadModelRefresh);
   }, [setReadModelRefreshState]);
   const prepareImportCategories = useCallback(async (
@@ -28,7 +35,7 @@ export function useImportClassificationCoordinator(
       mutations: prepared.mutations,
       applyRuntime: () => {
         prepared.applyRuntime();
-        onImportedDataChanged();
+        void onImportedDataChanged();
       },
     };
   }, [onImportedDataChanged]);

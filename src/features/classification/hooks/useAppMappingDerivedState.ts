@@ -14,11 +14,13 @@ import type {
   ObservedWebDomainCandidate,
   WebDomainOverride,
 } from "../../../shared/types/webActivity.ts";
-import type { AppOverride, ClassificationDraftState } from "../services/classificationService";
 import {
-  fallbackDisplayName,
+  countClassificationCandidates,
   filterAndSortCandidates,
-} from "./appMappingStateHelpers.ts";
+  type AppOverride,
+  type ClassificationDraftState,
+} from "../services/classificationService";
+import { fallbackDisplayName } from "./appMappingStateHelpers.ts";
 
 const USER_ASSIGNABLE_CATEGORY_SET = new Set<string>(USER_ASSIGNABLE_CATEGORIES);
 interface UseAppMappingDerivedStateParams {
@@ -249,14 +251,10 @@ export function useAppMappingDerivedState({
     ],
   );
 
-  const counts = useMemo(() => {
-    const includedCandidates = candidates.filter((candidate) => resolveTrackingEnabled(candidate));
-    const all = includedCandidates.length;
-    const other = includedCandidates.filter((candidate) => resolveMappedCategory(candidate) === "other").length;
-    const excluded = candidates.filter((candidate) => !resolveTrackingEnabled(candidate)).length;
-    const classified = Math.max(0, all - other);
-    return { all, other, classified, excluded };
-  }, [candidates, resolveMappedCategory, resolveTrackingEnabled]);
+  const counts = useMemo(
+    () => countClassificationCandidates(candidates, resolveTrackingEnabled, resolveMappedCategory),
+    [candidates, resolveMappedCategory, resolveTrackingEnabled],
+  );
 
   const filteredWebDomainCandidates = useMemo(() => {
     if (!webActivityEnabled) return [];

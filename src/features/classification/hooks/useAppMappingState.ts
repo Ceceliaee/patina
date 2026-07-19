@@ -56,6 +56,7 @@ import {
   normalizeCategoryNameInput,
   useAppMappingDerivedState,
 } from "./useAppMappingDerivedState.ts";
+import { useClassificationAppCatalog } from "./useClassificationAppCatalog.ts";
 
 
 export interface UseAppMappingStateOptions {
@@ -109,23 +110,6 @@ export function useAppMappingState({
   const [deletingSessionsExe, setDeletingSessionsExe] = useState<string | null>(null);
   const [showCategoryDialog, setShowCategoryDialog] = useState(false);
   const [colorFormat, setColorFormat] = useState<ColorDisplayFormat>("hex");
-  const candidateIconExeNames = useMemo(
-    () => candidates.map((candidate) => candidate.exeName),
-    [candidates],
-  );
-  const baseMappingIcons = useMemo(() => ({
-    ...icons,
-    ...bootstrapIcons,
-  }), [bootstrapIcons, icons]);
-  const mappingIcons = useRequestedAppIcons({
-    baseIcons: baseMappingIcons,
-    exeNames: candidateIconExeNames,
-    loadIcons: loadClassificationIconsForExecutables,
-    onError: (error) => {
-      console.warn("Failed to refresh classification app icons:", error);
-    },
-  });
-  const iconThemeColors = useIconThemeColors(mappingIcons);
   const skipNextNameBlurExeRef = useRef<string | null>(null);
   const skipNextWebNameBlurDomainRef = useRef<string | null>(null);
   const hasUnsavedChangesRef = useRef(false);
@@ -202,6 +186,27 @@ export function useAppMappingState({
     () => draftState?.deletedCategories ?? [],
     [draftState?.deletedCategories],
   );
+  const appCatalog = useClassificationAppCatalog({
+    enabled: draftState !== null,
+    initialCandidates: candidates,
+  });
+  const candidateIconExeNames = useMemo(
+    () => appCatalog.candidates.map((candidate) => candidate.exeName),
+    [appCatalog.candidates],
+  );
+  const baseMappingIcons = useMemo(() => ({
+    ...icons,
+    ...bootstrapIcons,
+  }), [bootstrapIcons, icons]);
+  const mappingIcons = useRequestedAppIcons({
+    baseIcons: baseMappingIcons,
+    exeNames: candidateIconExeNames,
+    loadIcons: loadClassificationIconsForExecutables,
+    onError: (error) => {
+      console.warn("Failed to refresh classification app icons:", error);
+    },
+  });
+  const iconThemeColors = useIconThemeColors(mappingIcons);
 
   const hasUnsavedChanges = (() => {
     if (!savedState || !draftState) return false;
@@ -244,7 +249,7 @@ export function useAppMappingState({
     resolveWebDomainAutoDisplayName,
     resolveWebDomainDisplayNameFromOverride,
   } = useAppMappingDerivedState({
-    candidates,
+    candidates: appCatalog.candidates,
     webDomainCandidates,
     iconThemeColors,
     draftOverrides,
@@ -651,17 +656,38 @@ export function useAppMappingState({
           confirmLabel: UI_TEXT.dialog.confirmDanger,
           danger: true,
         }),
-        deleteObservedAppSessions: ClassificationService.deleteObservedAppSessions,
+        deleteObservedAppSessions: async (exeName, scope) => {
+          await ClassificationService.deleteObservedAppSessions(exeName, scope);
+        },
         refreshCandidates,
         onSessionsDeleted,
       });
       if (!result.deleted) {
         return;
       }
+      setSavedState((current) => (
+        current ? updateAppOverrideInDraftState(current, candidate.exeName, null) : current
+      ));
+      setDraftState((current) => (
+        current ? updateAppOverrideInDraftState(current, candidate.exeName, null) : current
+      ));
+      setNameDrafts((current) => {
+        const next = { ...current };
+        delete next[candidate.exeName];
+        return next;
+      });
+      setNameEditSnapshots((current) => {
+        const next = { ...current };
+        delete next[candidate.exeName];
+        return next;
+      });
+      setEditingNameExe((current) => (current === candidate.exeName ? null : current));
+      ClassificationService.invalidateBootstrapCache();
+      await appCatalog.reload();
     } finally {
       setDeletingSessionsExe(null);
     }
-  }, [confirm, onSessionsDeleted, refreshCandidates, resolveEffectiveDisplayName]);
+  }, [appCatalog, confirm, onSessionsDeleted, refreshCandidates, resolveEffectiveDisplayName]);
 
   const handleDeleteWebDomainHistory = useCallback(async (candidate: ObservedWebDomainCandidate) => {
     const displayName = resolveWebDomainDisplayName(candidate);
@@ -828,6 +854,9 @@ export function useAppMappingState({
     handleCancel,
     handleSave,
     filteredCandidates,
+    appCatalogLoading: appCatalog.loading,
+    appCatalogError: appCatalog.error,
+    appCatalogRetry: appCatalog.retry,
     filteredWebDomainCandidates,
     showCategoryDialog,
     setShowCategoryDialog,

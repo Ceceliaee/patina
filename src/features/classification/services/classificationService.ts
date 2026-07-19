@@ -27,6 +27,15 @@ import {
 import type { ImportCategoryCandidate } from "../../../platform/persistence/importRuntimeGateway.ts";
 import type { ClassificationSettingMutation } from "../../../platform/persistence/classificationSettingsGateway.ts";
 import { loadClassificationIconsForExecutables } from "./classificationIconService.ts";
+import type { RecordedAppCatalogQueryInput } from "../../../platform/persistence/classificationPersistence.ts";
+import { ClassificationAppCatalogController } from "./classificationAppCatalog.ts";
+export { filterAndSortCandidates } from "./classificationCandidateFiltering.ts";
+export {
+  ClassificationAppCatalogController,
+  countClassificationCandidates,
+  loadClassificationAppCatalogBatch,
+} from "./classificationAppCatalog.ts";
+export type { RecordedAppCatalogCursor } from "./classificationAppCatalog.ts";
 
 export type { AppOverride } from "../../../shared/classification/processMapper.ts";
 export type { ClassificationDraftState } from "./classificationDraftState.ts";
@@ -147,6 +156,14 @@ async function loadOptionalWebClassificationData(
 export class ClassificationService {
   static async loadObservedAppCandidates(days: number = 30, limit: number = 120): Promise<ObservedAppCandidate[]> {
     return classificationStore.loadObservedAppCandidates(days, limit);
+  }
+
+  static async loadAppCatalogPage(input: RecordedAppCatalogQueryInput) {
+    return classificationStore.loadAppCatalogPage(input);
+  }
+
+  static createAppCatalogController() {
+    return new ClassificationAppCatalogController({ loadRecordedPage: this.loadAppCatalogPage });
   }
 
   static async loadObservedWebDomainCandidates(days: number = 30, limit: number = 120): Promise<ObservedWebDomainCandidate[]> {
@@ -278,6 +295,10 @@ export class ClassificationService {
 
   static async deleteObservedAppSessions(exeName: string, scope: "today" | "all" = "all") {
     await classificationStore.deleteObservedAppSessions(exeName, scope);
+    if (scope === "all") {
+      ProcessMapper.setUserOverride(exeName, null);
+      this.invalidateBootstrapCache();
+    }
   }
 
   static async deleteObservedWebDomainHistory(normalizedDomain: string) {

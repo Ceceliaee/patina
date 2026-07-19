@@ -61,6 +61,9 @@ export default function AppMapping(props: Props) {
     handleCancel,
     handleSave,
     filteredCandidates,
+    appCatalogLoading,
+    appCatalogError,
+    appCatalogRetry,
     filteredWebDomainCandidates,
     showCategoryDialog,
     setShowCategoryDialog,
@@ -116,9 +119,10 @@ export default function AppMapping(props: Props) {
   }, [objectMode, webActivityEnabled]);
 
   const bootstrapReady = !loading && draftState !== null && savedState !== null;
-  const contentState = loadError ? "error" : bootstrapReady ? "ready" : "cold";
   const effectiveObjectMode = webActivityEnabled ? objectMode : "app";
-  const activeCounts = effectiveObjectMode === "web" ? webDomainCounts : counts;
+  const contentError = loadError || (effectiveObjectMode === "app" && appCatalogError);
+  const contentState = contentError ? "error" : bootstrapReady ? "ready" : "cold";
+  const retryContent = loadError ? retryLoading : appCatalogRetry;
   const objectModeOptions = [
     { value: "app" as const, label: UI_TEXT.mapping.objectModeApp, disabled: !bootstrapReady },
     { value: "web" as const, label: UI_TEXT.mapping.objectModeWeb, disabled: !bootstrapReady },
@@ -126,12 +130,13 @@ export default function AppMapping(props: Props) {
   const searchPlaceholder = effectiveObjectMode === "web"
     ? UI_TEXT.mapping.webSearchPlaceholder
     : UI_TEXT.mapping.appSearchPlaceholder;
+  const activeCounts = effectiveObjectMode === "web" ? webDomainCounts : counts;
+  const activeCountsReady = effectiveObjectMode === "web" || (!appCatalogLoading && !appCatalogError);
   const handleObjectModeChange = (mode: MappingObjectMode) => {
     setObjectMode(mode);
     rememberClassificationObjectMode(mode);
   };
   const contentPaneKey = `${effectiveObjectMode}:${filter}`;
-
   return (
     <div
       className="flex h-full min-w-0 flex-col gap-4 md:gap-5 overflow-hidden"
@@ -206,7 +211,7 @@ export default function AppMapping(props: Props) {
                   value: item.value,
                   label: item.showCount === false
                     ? item.label
-                    : `${item.label} (${bootstrapReady ? count : "—"})`,
+                    : `${item.label}${bootstrapReady && activeCountsReady ? ` (${count})` : ""}`,
                   ariaLabel: item.ariaLabel,
                   disabled: !bootstrapReady,
                 };
@@ -243,7 +248,7 @@ export default function AppMapping(props: Props) {
       </section>
 
       <div className="qp-panel flex-1 min-h-0 p-4">
-        {loadError ? (
+        {contentError ? (
           <div
             className="flex h-full flex-col items-center justify-center gap-3 text-center"
             role="alert"
@@ -251,7 +256,7 @@ export default function AppMapping(props: Props) {
             <p className="text-sm font-semibold text-[var(--qp-text-secondary)]">
               {UI_TEXT.mapping.loadFailed}
             </p>
-            <QuietButton size="regular" onClick={retryLoading}>
+            <QuietButton size="regular" onClick={retryContent}>
               <RefreshCw size={14} />
               {UI_TEXT.mapping.retry}
             </QuietButton>
@@ -319,8 +324,10 @@ export default function AppMapping(props: Props) {
           </div>
         ) : filteredCandidates.length === 0 ? (
           <div key={contentPaneKey} className="qp-classification-object-pane h-full">
-            <div className="h-full flex items-center justify-center text-sm text-[var(--qp-text-tertiary)]">
-              {UI_TEXT.mapping.emptyState}
+            <div className="h-full flex flex-col items-center justify-center gap-3 text-sm text-[var(--qp-text-tertiary)]">
+              {!appCatalogLoading && (
+                <span>{searchQuery.trim() ? UI_TEXT.mapping.searchNoResults : UI_TEXT.mapping.emptyState}</span>
+              )}
             </div>
           </div>
         ) : (
