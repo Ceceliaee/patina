@@ -4,8 +4,23 @@
   "version": "1.8.4",
   "type": "module",
   "engines": {
-    "node": "22.23.1",
-    "npm": "10.9.8"
+    "node": "24.18.0",
+    "npm": "11.16.0"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "24.18.0",
+      "onFail": "error"
+    },
+    "packageManager": {
+      "name": "npm",
+      "version": "11.16.0",
+      "onFail": "error"
+    }
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true
   },
   "scripts": {
     "dev": "vite",
@@ -100,7 +115,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.5",
     "@tauri-apps/cli": "^2",
-    "@types/node": "^26.0.1",
+    "@types/node": "^24.13.3",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "6.0.3",

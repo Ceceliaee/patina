@@ -255,6 +255,50 @@ function testReleaseWorkflowSplitsQualityGatesBeforePublish() {
   assert.doesNotMatch(workflow, /run: npm run release:check/);
 }
 
+function testToolchainContractsStayAligned() {
+  const nodeVersion = readFileSync(".node-version", "utf8").trim();
+  const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
+  const packageLock = JSON.parse(readFileSync("package-lock.json", "utf8"));
+  const rootLockPackage = packageLock.packages[""];
+
+  assert.equal(packageJson.engines.node, nodeVersion);
+  assert.equal(packageJson.devEngines.runtime.name, "node");
+  assert.equal(packageJson.devEngines.runtime.version, nodeVersion);
+  assert.equal(packageJson.devEngines.runtime.onFail, "error");
+  assert.equal(rootLockPackage.engines.node, nodeVersion);
+
+  const npmVersion = packageJson.engines.npm;
+  assert.equal(packageJson.devEngines.packageManager.name, "npm");
+  assert.equal(packageJson.devEngines.packageManager.version, npmVersion);
+  assert.equal(packageJson.devEngines.packageManager.onFail, "error");
+  assert.equal(rootLockPackage.engines.npm, npmVersion);
+
+  const nodeMajor = nodeVersion.split(".")[0];
+  const nodeTypesMajor = packageJson.devDependencies["@types/node"].match(/\d+/)?.[0];
+  assert.equal(nodeTypesMajor, nodeMajor);
+
+  const esbuildVersion = packageJson.dependencies.esbuild;
+  assert.deepEqual(packageJson.allowScripts, {
+    [`esbuild@${esbuildVersion}`]: true,
+  });
+}
+
+function testWorkflowsUseNodeVersionFileAsSingleSource() {
+  for (const workflowPath of [
+    ".github/workflows/pr-intake.yml",
+    ".github/workflows/verify.yml",
+    ".github/workflows/prepare-release.yml",
+  ]) {
+    const workflow = readFileSync(workflowPath, "utf8");
+    const setupNodeCount = workflow.match(/uses: actions\/setup-node@/g)?.length ?? 0;
+    const versionFileCount = workflow.match(/node-version-file: \.node-version/g)?.length ?? 0;
+
+    assert.ok(setupNodeCount > 0, `${workflowPath} must configure actions/setup-node`);
+    assert.equal(versionFileCount, setupNodeCount, `${workflowPath} must source every Node version from .node-version`);
+    assert.doesNotMatch(workflow, /^\s+node-version:\s/m);
+  }
+}
+
 function testVersionFilesValidationPassesWhenAllVersionsMatch() {
   assert.deepEqual(validateReleaseVersionFilesText(versionFileFixture(), "1.6.0"), []);
 }
@@ -350,6 +394,8 @@ testReleaseVisibleChangeCountIgnoresInternal();
 testReleaseVisibleChangeCountRejectsTooManyUserFacingItems();
 testReleaseWorkflowDoesNotPublishBrowserExtensionAssets();
 testReleaseWorkflowSplitsQualityGatesBeforePublish();
+testToolchainContractsStayAligned();
+testWorkflowsUseNodeVersionFileAsSingleSource();
 testVersionFilesValidationPassesWhenAllVersionsMatch();
 testVersionFilesValidationCatchesPackageJsonMismatch();
 testVersionFilesValidationCatchesPackageLockRootMismatch();
@@ -359,4 +405,4 @@ testVersionFilesValidationCatchesPolicyMismatch();
 testVersionFilesValidationCatchesMissingChangelogSection();
 testVersionFilesValidationRejectsInvalidVersion();
 
-console.log("Passed 22 release policy tests");
+console.log("Passed 24 release policy tests");
