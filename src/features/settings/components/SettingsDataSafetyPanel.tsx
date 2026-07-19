@@ -4,13 +4,14 @@ import {
   Database,
   FolderPen,
   FileArchive,
-  FileInput,
-  FileOutput,
+  FileDown,
+  FileUp,
   FolderOpen,
-  CircleHelp,
+  CircleAlert,
   RefreshCw,
   RotateCcw,
   Trash2,
+  X,
 } from "lucide-react";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import QuietBadge from "../../../shared/components/QuietBadge";
@@ -329,10 +330,10 @@ export default function SettingsDataSafetyPanel({
                 <div className="flex items-end justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <FileOutput size={14} className="text-[var(--qp-text-tertiary)]" />
+                      <FileUp size={14} className="text-[var(--qp-text-tertiary)]" />
                       <p className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.dataExportAction}</p>
                     </div>
-                    <p className="mt-1 text-xs leading-relaxed text-[var(--qp-text-tertiary)]">{UI_TEXT.settings.dataExportHint}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-[var(--qp-text-tertiary)]">{UI_TEXT.settings.dataExportActionHint}</p>
                   </div>
                   <QuietButton size="regular" onClick={onOpenDataExport} disabled={busy}>
                     {UI_TEXT.settings.dataExportAction}
@@ -343,7 +344,7 @@ export default function SettingsDataSafetyPanel({
                 <div className="flex items-end justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <FileInput size={14} className="text-[var(--qp-text-tertiary)]" />
+                      <FileDown size={14} className="text-[var(--qp-text-tertiary)]" />
                       <p className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.dataImportAction}</p>
                     </div>
                     <p className="mt-1 text-xs leading-relaxed text-[var(--qp-text-tertiary)]">{UI_TEXT.settings.dataImportActionHint}</p>
@@ -408,7 +409,7 @@ export default function SettingsDataSafetyPanel({
                           className="settings-restore-help"
                           aria-label={UI_TEXT.settings.backupRestoreActionHelp}
                         >
-                          <CircleHelp size={13} aria-hidden="true" />
+                          <CircleAlert size={13} aria-hidden="true" />
                         </button>
                       </QuietTooltip>
                     </div>
@@ -612,19 +613,23 @@ export default function SettingsDataSafetyPanel({
         onClose={() => setBackupTargetDialogOpen(false)}
         closeOnBackdrop={!busy}
         initialFocusRef={localBackupRef}
-        actions={(
-          <QuietButton
-            size="large"
-            onClick={() => setBackupTargetDialogOpen(false)}
-            disabled={busy}
-            className="rounded-[8px]"
-          >
-            {UI_TEXT.common.cancel}
-          </QuietButton>
+        surfaceClassName="settings-data-action-dialog"
+        headerAside={(
+          <div className="settings-dialog-header-actions">
+            <button
+              type="button"
+              className="qp-dialog-close-button"
+              aria-label={UI_TEXT.common.close}
+              disabled={busy}
+              onClick={() => setBackupTargetDialogOpen(false)}
+            >
+              <X size={16} aria-hidden="true" />
+            </button>
+          </div>
         )}
       >
         <div className="grid gap-3 md:grid-cols-2">
-          <QuietActionRow>
+          <QuietActionRow className="settings-dialog-action-card">
             <button
               ref={localBackupRef}
               type="button"
@@ -633,13 +638,13 @@ export default function SettingsDataSafetyPanel({
                 onExportBackup();
               }}
               disabled={busy}
-              className="block w-full border-0 bg-transparent p-0 text-left disabled:opacity-50"
+              className="settings-dialog-action-trigger"
             >
               <p className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.backupTargetLocalTitle}</p>
               <p className="mt-1 text-xs leading-relaxed text-[var(--qp-text-tertiary)]">{UI_TEXT.settings.backupTargetLocalHint}</p>
             </button>
           </QuietActionRow>
-          <QuietActionRow>
+          <QuietActionRow className="settings-dialog-action-card">
             <button
               type="button"
               onClick={() => {
@@ -647,7 +652,7 @@ export default function SettingsDataSafetyPanel({
                 void remoteBackup.uploadBackup();
               }}
               disabled={busy}
-              className="block w-full border-0 bg-transparent p-0 text-left disabled:opacity-50"
+              className="settings-dialog-action-trigger"
             >
               <p className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.backupTargetRemoteTitle}</p>
               <p className="mt-1 text-xs leading-relaxed text-[var(--qp-text-tertiary)]">{UI_TEXT.settings.backupTargetRemoteHint}</p>
@@ -663,19 +668,23 @@ export default function SettingsDataSafetyPanel({
         onClose={() => setRestoreSourceDialogOpen(false)}
         closeOnBackdrop={!busy}
         initialFocusRef={localRestoreRef}
-        actions={(
-          <QuietButton
-            size="large"
-            onClick={() => setRestoreSourceDialogOpen(false)}
-            disabled={busy}
-            className="rounded-[8px]"
-          >
-            {UI_TEXT.common.cancel}
-          </QuietButton>
+        surfaceClassName="settings-data-action-dialog"
+        headerAside={(
+          <div className="settings-dialog-header-actions">
+            <button
+              type="button"
+              className="qp-dialog-close-button"
+              aria-label={UI_TEXT.common.close}
+              disabled={busy}
+              onClick={() => setRestoreSourceDialogOpen(false)}
+            >
+              <X size={16} aria-hidden="true" />
+            </button>
+          </div>
         )}
       >
         <div className="grid gap-3 md:grid-cols-2">
-          <QuietActionRow>
+          <QuietActionRow className="settings-dialog-action-card">
             <button
               ref={localRestoreRef}
               type="button"
@@ -684,13 +693,13 @@ export default function SettingsDataSafetyPanel({
                 void prepareLocalRestore();
               }}
               disabled={busy}
-              className="block w-full border-0 bg-transparent p-0 text-left disabled:opacity-50"
+              className="settings-dialog-action-trigger"
             >
               <p className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.restoreSourceLocalTitle}</p>
               <p className="mt-1 text-xs leading-relaxed text-[var(--qp-text-tertiary)]">{UI_TEXT.settings.restoreSourceLocalHint}</p>
             </button>
           </QuietActionRow>
-          <QuietActionRow>
+          <QuietActionRow className="settings-dialog-action-card">
             <button
               type="button"
               onClick={() => {
@@ -698,7 +707,7 @@ export default function SettingsDataSafetyPanel({
                 void openRemoteRestoreList();
               }}
               disabled={busy}
-              className="block w-full border-0 bg-transparent p-0 text-left disabled:opacity-50"
+              className="settings-dialog-action-trigger"
             >
               <p className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.restoreSourceRemoteTitle}</p>
               <p className="mt-1 text-xs leading-relaxed text-[var(--qp-text-tertiary)]">{UI_TEXT.settings.restoreSourceRemoteHint}</p>

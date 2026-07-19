@@ -1617,6 +1617,10 @@
   color: var(--qp-text-primary);
 }
 
+.qp-dialog-title:focus {
+  outline: none;
+}
+
 .qp-dialog-description {
   margin: 0;
   font-size: 0.84rem;
@@ -1705,7 +1709,7 @@
   color: var(--qp-text-tertiary);
 }
 
-.qp-dialog-close-button:hover {
+.qp-dialog-close-button:hover:not(:disabled) {
   border-color: var(--qp-border-subtle);
   background: var(--qp-bg-elevated);
   color: var(--qp-text-primary);
@@ -1714,6 +1718,11 @@
 .qp-dialog-close-button:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--qp-accent-default) 42%, transparent);
   outline-offset: 2px;
+}
+
+.qp-dialog-close-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .qp-dialog-input {

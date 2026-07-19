@@ -432,6 +432,7 @@ await runTest("dialog initial focus is semantic instead of DOM-order driven", ()
   const colorField = readUtf8("src/shared/components/QuietColorField.tsx");
   const rangePicker = readUtf8("src/shared/components/QuietDateRangePicker.tsx");
   const historyCalendar = readUtf8("src/features/history/components/HistoryCalendarPopover.tsx");
+  const quietProCss = readUtf8("src/styles/quiet-pro.css");
 
   assert.doesNotMatch(quietDialog, /initialFocus\??:/);
   assert.match(quietDialog, /aria-labelledby=\{titleId\}/);
@@ -440,6 +441,7 @@ await runTest("dialog initial focus is semantic instead of DOM-order driven", ()
   assert.match(quietDialog, /initialFocusRefRef/);
   assert.match(quietDialog, /restoreAncestors/);
   assert.doesNotMatch(quietDialog, /"surface"/);
+  assert.match(quietProCss, /\.qp-dialog-title:focus \{[\s\S]*?outline: none;/);
   assert.match(quietButton, /forwardRef<HTMLButtonElement/);
   assert.match(quietConfirm, /initialFocusRef=\{cancelButtonRef\}/);
   assert.match(quietPrompt, /initialFocusRef=\{inputRef\}/);

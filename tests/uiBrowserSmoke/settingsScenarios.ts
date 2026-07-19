@@ -667,14 +667,42 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     );
     await waitForExpression(client!, sessionId, `document.querySelector('.settings-import-action-list') !== null`);
     assert.deepEqual(
-      await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.settings-import-action-title span')).map((node) => node.textContent)`),
-      ["导入 CSV", "解构外部数据"],
+      await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.settings-import-action-title')).map((node) => node.textContent)`),
+      ["导入 CSV", "解构工具"],
     );
     assert.equal(
       await evaluate(client!, sessionId, `Boolean(document.querySelector('[aria-label="删除外部导入数据"]'))`),
       false,
     );
-    await evaluate(client!, sessionId, `Array.from(document.querySelectorAll("button")).find((node) => node.textContent?.trim() === "选择文件")?.click()`);
+    await client!.command("Emulation.setDeviceMetricsOverride", {
+      width: 390,
+      height: 820,
+      deviceScaleFactor: 1,
+      mobile: false,
+    }, sessionId);
+    assert.equal(
+      await evaluate(client!, sessionId, "document.documentElement.scrollWidth <= window.innerWidth + 1"),
+      true,
+      "Settings import action dialog overflowed at 390px",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const rows = Array.from(document.querySelectorAll('.settings-import-action-list > .qp-action-row'));
+          if (rows.length !== 2) return false;
+          return rows[1].getBoundingClientRect().top > rows[0].getBoundingClientRect().bottom;
+        })()
+      `),
+      true,
+      "Settings import actions did not stack at 390px",
+    );
+    await client!.command("Emulation.setDeviceMetricsOverride", {
+      width: 1280,
+      height: 820,
+      deviceScaleFactor: 1,
+      mobile: false,
+    }, sessionId);
+    await evaluate(client!, sessionId, `document.querySelector('[aria-label="导入 CSV"]')?.click()`);
     await waitForExpression(client!, sessionId, `document.querySelector('.settings-import-preview') !== null`);
     assert.equal(
       await evaluate(client!, sessionId, `document.querySelector('.settings-import-preview')?.innerText.includes("小时汇总")`),
@@ -685,11 +713,11 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       false,
     );
     assert.equal(
-      await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.settings-import-summary > div')).some((node) => node.querySelector('dt')?.textContent === '单一分类应用' && node.querySelector('dd')?.textContent === '1')`),
+      await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.settings-import-preview-detail-group > div')).some((node) => node.querySelector('dt')?.textContent === '含分类应用：' && node.querySelector('dd')?.textContent === '1')`),
       true,
     );
     assert.equal(
-      await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.settings-import-summary > div')).some((node) => node.querySelector('dt')?.textContent === '分类冲突应用' && node.querySelector('dd')?.textContent === '1')`),
+      await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.settings-import-preview-detail-group > div')).some((node) => node.querySelector('dt')?.textContent === '分类冲突应用：' && node.querySelector('dd')?.textContent === '1')`),
       true,
     );
     await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.qp-dialog-actions button')).find((node) => node.textContent?.trim() === "导入")?.click()`);
@@ -712,6 +740,6 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       false,
     );
     await evaluate(client!, sessionId, `document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
-    await waitForExpression(client!, sessionId, `!document.querySelector('.settings-import-dialog')`);
+    await waitForExpression(client!, sessionId, `!document.querySelector('[role="dialog"]')`);
   });
 }
