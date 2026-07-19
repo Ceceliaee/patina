@@ -1,5 +1,5 @@
+mod csv_source;
 mod sqlite_source;
-pub mod tai_csv;
 
 use crate::data::import::canonical_csv::write_canonical_csv_atomic;
 use crate::data::import::model::{
@@ -63,7 +63,7 @@ pub(super) struct ExternalWarning {
 }
 
 fn convert_tai_csv(path: &Path) -> Result<ExternalConversion, String> {
-    let conversion = tai_csv::convert_file(path)?;
+    let conversion = csv_source::convert_tai_file(path)?;
     let records = conversion
         .rows
         .into_iter()

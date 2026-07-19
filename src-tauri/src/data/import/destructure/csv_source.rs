@@ -30,7 +30,7 @@ pub struct TaiCsvConversion {
     pub skipped: Vec<TaiCsvSkipReason>,
 }
 
-pub fn convert_text(csv_text: &str) -> Result<TaiCsvConversion, String> {
+fn convert_tai_text(csv_text: &str) -> Result<TaiCsvConversion, String> {
     let text = csv_text.strip_prefix('\u{feff}').unwrap_or(csv_text);
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(true)
@@ -125,7 +125,7 @@ pub fn convert_text(csv_text: &str) -> Result<TaiCsvConversion, String> {
     Ok(conversion)
 }
 
-pub fn convert_file(path: &Path) -> Result<TaiCsvConversion, String> {
+pub(super) fn convert_tai_file(path: &Path) -> Result<TaiCsvConversion, String> {
     let bytes = std::fs::read(path)
         .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
     if bytes.len() as u64 > MAX_EXTERNAL_FILE_BYTES {
@@ -136,7 +136,7 @@ pub fn convert_file(path: &Path) -> Result<TaiCsvConversion, String> {
     }
     let text =
         std::str::from_utf8(&bytes).map_err(|_| "Tai CSV must be UTF-8 encoded".to_string())?;
-    convert_text(text)
+    convert_tai_text(text)
 }
 
 fn cell<'a>(headers: &csv::StringRecord, record: &'a csv::StringRecord, column: &str) -> &'a str {
@@ -210,7 +210,7 @@ mod tests {
     #[test]
     fn parses_hourly_fact_without_reconstructing_a_session() {
         let csv = format!("{HEADER}01/15/2026 09:00:00,Chrome.EXE,1800,Chrome,网络");
-        let conversion = convert_text(&csv).unwrap();
+        let conversion = convert_tai_text(&csv).unwrap();
 
         assert_eq!(conversion.rows_parsed, 1);
         assert!(conversion.skipped.is_empty());
@@ -223,7 +223,7 @@ mod tests {
 
     #[test]
     fn rejects_non_tai_csv_missing_required_columns() {
-        let error = convert_text("date,name,total\n2026-01-15,Chrome,10").unwrap_err();
+        let error = convert_tai_text("date,name,total\n2026-01-15,Chrome,10").unwrap_err();
         assert!(error.contains("not a valid Tai 时段.csv"));
         assert!(error.contains("时段"));
     }
@@ -233,7 +233,7 @@ mod tests {
         let csv = format!(
             "{HEADER}bad,a,10,A,X\n01/15/2026 10:00:00,,10,B,Y\n01/15/2026 11:00:00,b,0,C,Z\n01/15/2026 12:00:00,c,30,D,未知"
         );
-        let conversion = convert_text(&csv).unwrap();
+        let conversion = convert_tai_text(&csv).unwrap();
 
         assert_eq!(conversion.rows_parsed, 4);
         assert_eq!(conversion.rows.len(), 1);
@@ -246,7 +246,7 @@ mod tests {
     fn strips_utf8_bom_and_ignores_blank_rows() {
         let csv =
             format!("\u{feff}{HEADER}\n01/15/2026 09:00:00,Code,60,Visual Studio Code,开发\n");
-        let conversion = convert_text(&csv).unwrap();
+        let conversion = convert_tai_text(&csv).unwrap();
 
         assert_eq!(conversion.rows_parsed, 1);
         assert_eq!(conversion.rows.len(), 1);
@@ -258,7 +258,7 @@ mod tests {
         let csv = format!(
             "{HEADER}01/15/2026 09:00:00,a,3.5,A,X\n01/15/2026 10:00:00,b,-5,B,Y\n01/15/2026 11:00:00,c,9223372036854775807,C,Z"
         );
-        let conversion = convert_text(&csv).unwrap();
+        let conversion = convert_tai_text(&csv).unwrap();
 
         assert!(conversion.rows.is_empty());
         assert_eq!(conversion.skipped.len(), 3);
@@ -267,7 +267,7 @@ mod tests {
     #[test]
     fn keeps_multiple_rows_in_the_same_hour_as_independent_aggregate_facts() {
         let csv = format!("{HEADER}01/15/2026 09:00:00,a,2400,A,X\n01/15/2026 09:00:00,b,2400,B,X");
-        let conversion = convert_text(&csv).unwrap();
+        let conversion = convert_tai_text(&csv).unwrap();
 
         assert_eq!(conversion.rows.len(), 2);
         assert_eq!(
