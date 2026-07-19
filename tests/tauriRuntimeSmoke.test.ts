@@ -103,11 +103,20 @@ function runRuntimeBinaryProcessCommand(command: string) {
 function stopResidualRuntimeBinary() {
   const result = runRuntimeBinaryProcessCommand(`
     $target = [IO.Path]::GetFullPath($env:PATINA_RUNTIME_SMOKE_BINARY)
-    Get-Process patina -ErrorAction SilentlyContinue |
-      Where-Object { $_.Path -and [IO.Path]::GetFullPath($_.Path) -eq $target } |
-      Stop-Process -Force
+    $processes = @(Get-Process patina -ErrorAction SilentlyContinue)
+    foreach ($process in $processes) {
+      try {
+        $path = [IO.Path]::GetFullPath($process.Path)
+        if ($path -ieq $target) {
+          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        }
+      } catch {
+        # The process may exit while PowerShell resolves its executable path.
+      }
+    }
+    exit 0
   `);
-  if (result && result.status !== 0) {
+  if (result?.error) {
     throw new Error(`failed to stop residual runtime-smoke binary: ${result.stderr || result.stdout}`);
   }
 }
@@ -115,11 +124,23 @@ function stopResidualRuntimeBinary() {
 function isResidualRuntimeBinaryRunning() {
   const result = runRuntimeBinaryProcessCommand(`
     $target = [IO.Path]::GetFullPath($env:PATINA_RUNTIME_SMOKE_BINARY)
-    $running = Get-Process patina -ErrorAction SilentlyContinue |
-      Where-Object { $_.Path -and [IO.Path]::GetFullPath($_.Path) -eq $target }
-    if ($running) { exit 1 }
+    $processes = @(Get-Process patina -ErrorAction SilentlyContinue)
+    foreach ($process in $processes) {
+      try {
+        if ($process.Path -and [IO.Path]::GetFullPath($process.Path) -ieq $target) {
+          Write-Output 'running'
+          break
+        }
+      } catch {
+        # Treat an exiting process with an unreadable path as already gone.
+      }
+    }
+    exit 0
   `);
-  return result?.status === 1;
+  if (result?.error) {
+    throw new Error(`failed to inspect residual runtime-smoke binary: ${result.stderr || result.stdout}`);
+  }
+  return result?.stdout.trim() === "running";
 }
 
 function verifyDatabase(dbPath: string) {
@@ -361,7 +382,10 @@ try {
     try {
       await waitFor(
         "runtime-smoke Patina binary exit",
-        () => isResidualRuntimeBinaryRunning() ? null : true,
+        () => {
+          stopResidualRuntimeBinary();
+          return isResidualRuntimeBinaryRunning() ? null : true;
+        },
         10_000,
       );
     } catch (error) {
