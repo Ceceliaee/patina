@@ -20,15 +20,39 @@ App note en: TBD.
 
 ### Changed
 
-- “排除统计”现在对应用和网页域名使用统一语义：排除后停止新增记录并从常规统计隐藏既有历史，恢复后重新显示历史，排除期间不会补记。
-
 ### Fixed
 
 ### Removed
 
 ### Internal
 
-- 将开发与 CI 基线升级到 Node.js 24 LTS，并增加 Node/npm 精确版本、Node 类型主版本、CI 单一真源与依赖安装脚本许可的一致性门禁。
+## [1.8.5] - 2026-07-20
+
+Release: 新增活动记录导入和连续时间线，升级 SQLite 快照备份、Classification 管理与追踪控制。
+App note: 新增活动导入和连续时间线，升级备份恢复、应用管理与排除统计。
+App note en: Adds activity import and continuous timelines, with safer backups, app management, and exclusion controls.
+
+### Added
+
+- 设置页新增通用活动记录导入：可预览并导入规范 CSV，也可将 Tai / Taix 数据库安全拆解为规范 CSV；支持精确会话与小时汇总两种粒度、重复检测、导入批次管理和按批次删除，导入结果会进入对应的 Dashboard、History、Data 与 Classification 视图。Refs [#49](https://github.com/Ceceliaee/patina/issues/49)
+- History 时间轴新增连续缩放与平移：可通过 1～24 小时滑杆、滚轮和拖动调整时间窗口，并可打开分轨列表查看同一窗口内的应用或分类活动。Refs [#6](https://github.com/Ceceliaee/patina/issues/6)
+
+### Changed
+
+- Classification 现在会自动加载全部仍有实际记录的应用，不再受 30 天范围或旧的可见数量上限约束；普通应用不再使用内置静态名称与分类映射，已有用户设置保持不变。Refs [#51](https://github.com/Ceceliaee/patina/issues/51)
+- 系统性优化 Quiet Pro 界面组件与交互：统一按钮、搜索、日历、选择器、对话框、Tooltip 和 Toast，并在 Settings、History、Data 与 Tools 等页面补齐悬浮、聚焦、禁用、加载和错误反馈状态。
+- 本地与 WebDAV 备份改用 SQLite 一致快照；覆盖恢复可在失败时回滚，合并恢复会保留当前数据并导入非重复数据。旧结构化备份兼容恢复至 2026 年 10 月 18 日，恢复后请立即创建当前格式的新备份。Refs [#38](https://github.com/Ceceliaee/patina/issues/38)
+- 网页同步新增 QQ 浏览器识别，并统一应用与网页域名的“排除统计”语义：排除后停止追踪并隐藏已有历史，恢复后重新显示历史；排除期间不补记，底层数据不会删除。Refs [#48](https://github.com/Ceceliaee/patina/issues/48)
+
+### Fixed
+
+- 修复“静默启动”依赖“开机自启动”的问题；两项设置现在可以独立启用，手动启动与开机启动都会遵守静默启动偏好，隐藏启动固定进入托盘并保留安全恢复入口。Refs [#54](https://github.com/Ceceliaee/patina/issues/54)
+
+### Removed
+
+### Internal
+
+- 重整前后端数据访问、读模型与运行时边界，并为备份恢复、活动导入、History 快照、Classification 完整目录和排除统计补充发布级回归验证。
 
 ## [1.8.4] - 2026-07-13
 

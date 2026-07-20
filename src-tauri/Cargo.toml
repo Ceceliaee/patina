@@ -1,6 +1,6 @@
 [package]
 name = "patina"
-version = "1.8.4"
+version = "1.8.5"
 description = "Local-first Windows desktop time tracking"
 authors = ["Patina maintainers"]
 license = "MIT"
