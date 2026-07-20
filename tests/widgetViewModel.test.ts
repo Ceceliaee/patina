@@ -137,7 +137,7 @@ await runTest("buildWidgetViewModel maps healthy active tracking to tracking sta
 
   assert.equal(viewModel.statusTone, "tracking");
   assert.equal(viewModel.statusLabel, "\u8ffd\u8e2a\u4e2d");
-  assert.equal(viewModel.appName, "Google Chrome");
+  assert.equal(viewModel.appName, "Chrome");
   assert.equal(viewModel.pauseActionLabel, "\u6682\u505c");
   assert.equal(viewModel.showObjectSlot, true);
   assert.equal(viewModel.objectIconKey, "chrome.exe");

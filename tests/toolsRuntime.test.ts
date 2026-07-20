@@ -277,7 +277,7 @@ await runTest("software reminder app candidates reuse app mapping display names 
       candidates.map((candidate) => `${candidate.appName}:${candidate.exeName}`),
       [
         "Work Editor:cursor.exe",
-        "Google Chrome:chrome.exe",
+        "Chrome Raw:chrome.exe",
       ],
     );
     assert.equal(candidates[0].lastSeenAt, 2_000_000);
@@ -361,6 +361,41 @@ await runTest("software reminder app candidates merge canonical executable alias
   assert.equal(candidates.length, 1);
   assert.equal(candidates[0].appName, "Alma");
   assert.equal(candidates[0].exeName, "alma.exe");
+  assert.equal(candidates[0].lastSeenAt, 2_000_000);
+});
+
+await runTest("software reminder alias-only candidates use canonical executable fallbacks", () => {
+  const candidates = buildSoftwareReminderAppCandidates([{
+    appName: "Douyin_tray",
+    exeName: "Douyin_tray.exe",
+    totalDuration: 60_000,
+    lastSeenMs: 1_000_000,
+  }]);
+
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].appName, "Douyin");
+  assert.equal(candidates[0].exeName, "douyin.exe");
+});
+
+await runTest("software reminder candidates prefer canonical runtime names over newer aliases", () => {
+  const candidates = buildSoftwareReminderAppCandidates([
+    {
+      appName: "抖音",
+      exeName: "douyin.exe",
+      totalDuration: 60_000,
+      lastSeenMs: 1_000_000,
+    },
+    {
+      appName: "Douyin_tray",
+      exeName: "Douyin_tray.exe",
+      totalDuration: 60_000,
+      lastSeenMs: 2_000_000,
+    },
+  ]);
+
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].appName, "抖音");
+  assert.equal(candidates[0].exeName, "douyin.exe");
   assert.equal(candidates[0].lastSeenAt, 2_000_000);
 });
 

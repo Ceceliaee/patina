@@ -30,6 +30,7 @@ export interface CompiledSession extends HistorySession {
   mergedCount: number;
   // User-facing display name produced by normalization rules.
   displayName: string;
+  displayNameRank: number;
   displayTitle: string;
   titleSamples: string[];
   titleSampleDetails: Array<TitleSampleDetail & { endTime: number }>;
@@ -108,7 +109,7 @@ function shouldTrackInReadModel(session: HistorySession) {
   return AppClassification.shouldTrackProcess(exeName, {
     appName: session.appName,
     windowTitle: session.windowTitle,
-  }) && AppClassification.shouldTrackApp(canonicalExe);
+  }) && AppClassification.isAppTrackingEnabledByUser(canonicalExe);
 }
 
 function resolveCompiledDisplayName(
@@ -118,11 +119,6 @@ function resolveCompiledDisplayName(
   const overrideDisplayName = AppClassification.getUserOverride(appKey)?.displayName?.trim();
   if (overrideDisplayName) {
     return overrideDisplayName;
-  }
-
-  const canonicalName = AppClassification.resolveCanonicalDisplayName(appKey);
-  if (canonicalName) {
-    return canonicalName;
   }
 
   const rawExeKey = AppClassification.normalizeExecutable(session.exeName);
@@ -140,6 +136,18 @@ function resolveCompiledDisplayName(
   }
 
   return mapped.name;
+}
+
+function resolveCompiledDisplayNameRank(session: DiagnosableHistorySession, appKey: string) {
+  if (AppClassification.getUserOverride(appKey)?.displayName?.trim()) {
+    return 3;
+  }
+
+  const rawExeKey = AppClassification.normalizeExecutable(session.exeName);
+  if (rawExeKey !== appKey) {
+    return 0;
+  }
+  return session.appName.trim() ? 2 : 1;
 }
 
 function resolveStatsExeName(session: CompiledSession) {
@@ -185,6 +193,7 @@ function prepareSession(
     appKey,
     mergedCount: 1,
     displayName,
+    displayNameRank: resolveCompiledDisplayNameRank(session, appKey),
     displayTitle: normalizedTitle,
     titleSamples: titleSamplesFromDetails(
       normalizedTitleSampleDetails.length > 0
@@ -267,6 +276,12 @@ function buildCompiledSessionBase(
     const sameApp = previous.appKey === session.appKey;
 
     if (sameApp && gap >= 0 && gap <= directMergeGapMs) {
+      if (session.displayNameRank > previous.displayNameRank) {
+        previous.displayName = session.displayName;
+        previous.displayNameRank = session.displayNameRank;
+      } else if (session.displayNameRank === previous.displayNameRank) {
+        previous.displayName = pickPreferredAppName(previous.displayName, session.displayName);
+      }
       previous.endTime = Math.max(previousEnd, session.endTime ?? session.startTime);
       previous.duration = (previous.endTime ?? previousEnd) - previous.startTime;
       previous.continuityGroupStartTime = Math.min(
@@ -380,6 +395,7 @@ export function compileSessions(
 export function buildNormalizedAppStats(sessions: CompiledSession[]): AppStat[] {
   const totals = new Map<string, {
     appName: string;
+    appNameRank: number;
     exeName: string;
     totalDuration: number;
     suspiciousDuration: number;
@@ -393,19 +409,28 @@ export function buildNormalizedAppStats(sessions: CompiledSession[]): AppStat[] 
     if (existing) {
       existing.totalDuration += duration;
       existing.suspiciousDuration += suspiciousDuration;
-      existing.appName = pickPreferredAppName(existing.appName, session.displayName);
+      const appNameRank = session.displayNameRank;
+      if (appNameRank > existing.appNameRank) {
+        existing.appName = session.displayName;
+        existing.appNameRank = appNameRank;
+      } else if (appNameRank === existing.appNameRank) {
+        existing.appName = pickPreferredAppName(existing.appName, session.displayName);
+      }
       continue;
     }
 
     totals.set(session.appKey, {
       appName: session.displayName,
+      appNameRank: session.displayNameRank,
       exeName: resolveStatsExeName(session),
       totalDuration: duration,
       suspiciousDuration: suspiciousDuration,
     });
   }
 
-  return Array.from(totals.values()).sort((a, b) => b.totalDuration - a.totalDuration);
+  return Array.from(totals.values())
+    .map(({ appNameRank: _appNameRank, ...item }) => item)
+    .sort((a, b) => b.totalDuration - a.totalDuration);
 }
 
 export function buildAppSummary(

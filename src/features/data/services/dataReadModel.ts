@@ -135,7 +135,7 @@ let earliestSessionStartTimeCache: number | null | undefined;
 
 interface CompiledDataSession extends AggregateSessionRecord {
   appKey: string;
-  displayName: string;
+  displayName: string; displayNameRank: number;
 }
 
 interface DataTrendAggregateContextOptions {
@@ -207,19 +207,16 @@ function formatAppDayLabel(dateKey: string) {
 function resolveDataDisplayName(session: AggregateSessionRecord, appKey: string) {
   const overrideDisplayName = AppClassification.getUserOverride(appKey)?.displayName?.trim();
   if (overrideDisplayName) return overrideDisplayName;
-
-  const canonicalName = AppClassification.resolveCanonicalDisplayName(appKey);
-  if (canonicalName) return canonicalName;
-
-  const rawExeKey = AppClassification.normalizeExecutable(session.exeName);
-  if (appKey !== rawExeKey) {
+  if (appKey !== AppClassification.normalizeExecutable(session.exeName)) {
     return AppClassification.mapApp(appKey).name;
   }
-
-  const appName = session.appName.trim();
-  return appName || AppClassification.mapApp(appKey).name;
+  return session.appName.trim() || AppClassification.mapApp(appKey).name;
 }
-
+function resolveDataDisplayNameRank(session: AggregateSessionRecord, appKey: string) {
+  const isCanonicalExecutable = AppClassification.normalizeExecutable(session.exeName) === appKey;
+  return AppClassification.getUserOverride(appKey)?.displayName?.trim()
+    ? 3 : (isCanonicalExecutable ? (session.appName.trim() ? 2 : 1) : 0);
+}
 function compileDataSessions(
   sessions: AggregateSessionRecord[],
   range: SessionRange,
@@ -232,7 +229,7 @@ function compileDataSessions(
     }
 
     const appKey = AppClassification.resolveCanonicalExecutable(session.exeName);
-    if (!appKey || !AppClassification.shouldTrackApp(appKey)) {
+    if (!appKey || !AppClassification.isAppTrackingEnabledByUser(appKey)) {
       continue;
     }
 
@@ -246,6 +243,7 @@ function compileDataSessions(
       ...session,
       appKey,
       displayName: resolveDataDisplayName(session, appKey),
+      displayNameRank: resolveDataDisplayNameRank(session, appKey),
       startTime,
       endTime,
     });
@@ -276,17 +274,19 @@ function createMonthDurationBuckets(ranges: SessionRange[]) {
 }
 
 function resolveStatsExeName(session: CompiledDataSession) {
-  const rawExeKey = AppClassification.normalizeExecutable(session.exeName);
-  return session.appKey === rawExeKey ? session.exeName : session.appKey;
+  return session.appKey === AppClassification.normalizeExecutable(session.exeName)
+    ? session.exeName : session.appKey;
 }
-
-function getOrCreateAppDurationBucket(
-  buckets: Map<string, DataAppDurationBucket>,
-  session: CompiledDataSession,
-) {
+function getOrCreateAppDurationBucket(buckets: Map<string, DataAppDurationBucket>, displayNameRanks: Map<string, number>, session: CompiledDataSession) {
   const existing = buckets.get(session.appKey);
   if (existing) {
-    existing.appName = pickPreferredAppName(existing.appName, session.displayName);
+    const existingRank = displayNameRanks.get(session.appKey) ?? 0;
+    if (session.displayNameRank > existingRank) {
+      existing.appName = session.displayName;
+    } else if (session.displayNameRank === existingRank) {
+      existing.appName = pickPreferredAppName(existing.appName, session.displayName);
+    }
+    displayNameRanks.set(session.appKey, Math.max(existingRank, session.displayNameRank));
     return existing;
   }
 
@@ -299,17 +299,16 @@ function getOrCreateAppDurationBucket(
     monthDurations: new Map(),
   };
   buckets.set(session.appKey, bucket);
+  displayNameRanks.set(session.appKey, session.displayNameRank);
   return bucket;
 }
 
 function addSessionToDurationAggregate(
-  aggregate: DataDurationAggregate,
-  session: CompiledDataSession,
-  range: SessionRange,
-  includeAppBuckets: boolean,
+  aggregate: DataDurationAggregate, displayNameRanks: Map<string, number>,
+  session: CompiledDataSession, range: SessionRange, includeAppBuckets: boolean,
 ) {
   const appBucket = includeAppBuckets
-    ? getOrCreateAppDurationBucket(aggregate.appBuckets, session)
+    ? getOrCreateAppDurationBucket(aggregate.appBuckets, displayNameRanks, session)
     : null;
   const sessionDuration = Math.max(0, session.endTime - session.startTime);
 
@@ -407,9 +406,10 @@ function buildDataDurationAggregate(
   };
   const compiledSessions = compileDataSessions(sessions, range);
   const includeAppBuckets = options.includeAppBuckets ?? true;
+  const displayNameRanks = new Map<string, number>();
 
   for (const session of compiledSessions) {
-    addSessionToDurationAggregate(aggregate, session, range, includeAppBuckets);
+    addSessionToDurationAggregate(aggregate, displayNameRanks, session, range, includeAppBuckets);
   }
 
   return aggregate;

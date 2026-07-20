@@ -22,14 +22,28 @@ let cachedCandidates: ToolSoftwareReminderAppCandidate[] = [];
 let cachedLanguage = "";
 
 function resolveCandidateDisplayName(candidate: ObservedAppCandidate, exeName: string) {
-  const mapped = AppClassification.mapApp(exeName, { appName: candidate.appName });
-  return mapped.name.trim() || candidate.appName.trim() || exeName;
+  const rawExe = AppClassification.normalizeExecutable(candidate.exeName);
+  const isCanonicalExecutable = rawExe === exeName;
+  const mapped = AppClassification.mapApp(
+    exeName,
+    isCanonicalExecutable ? { appName: candidate.appName } : {},
+  );
+  const hasDisplayNameOverride = Boolean(
+    AppClassification.getUserOverride(exeName)?.displayName?.trim(),
+  );
+  return {
+    appName: mapped.name,
+    displayNameRank: hasDisplayNameOverride
+      ? 3
+      : (isCanonicalExecutable ? (candidate.appName.trim() ? 2 : 1) : 0),
+  };
 }
 
 export function buildSoftwareReminderAppCandidates(
   observed: readonly ObservedAppCandidate[],
 ): ToolSoftwareReminderAppCandidate[] {
   const merged = new Map<string, ToolSoftwareReminderAppCandidate>();
+  const displayNameRanks = new Map<string, number>();
 
   for (const candidate of observed) {
     if (!AppClassification.shouldTrackProcess(candidate.exeName, { appName: candidate.appName })) {
@@ -37,11 +51,11 @@ export function buildSoftwareReminderAppCandidates(
     }
 
     const exeName = AppClassification.resolveCanonicalExecutable(candidate.exeName);
-    if (!exeName || !AppClassification.shouldTrackApp(exeName)) {
+    if (!exeName || !AppClassification.isAppTrackingEnabledByUser(exeName)) {
       continue;
     }
 
-    const appName = resolveCandidateDisplayName(candidate, exeName);
+    const { appName, displayNameRank } = resolveCandidateDisplayName(candidate, exeName);
     const lastSeenAt = Math.max(0, Number(candidate.lastSeenMs ?? 0));
     const existing = merged.get(exeName);
     if (!existing) {
@@ -50,11 +64,19 @@ export function buildSoftwareReminderAppCandidates(
         exeName,
         lastSeenAt,
       });
+      displayNameRanks.set(exeName, displayNameRank);
       continue;
     }
 
+    const existingDisplayNameRank = displayNameRanks.get(exeName) ?? 0;
+    if (
+      displayNameRank > existingDisplayNameRank
+      || (displayNameRank === existingDisplayNameRank && lastSeenAt >= existing.lastSeenAt)
+    ) {
+      existing.appName = appName;
+      displayNameRanks.set(exeName, displayNameRank);
+    }
     existing.lastSeenAt = Math.max(existing.lastSeenAt, lastSeenAt);
-    existing.appName = appName;
   }
 
   return Array.from(merged.values())

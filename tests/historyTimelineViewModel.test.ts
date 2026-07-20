@@ -94,6 +94,7 @@ function makeCompiledSession(overrides: Partial<CompiledSession> = {}): Compiled
     appKey: exeName,
     mergedCount: 1,
     displayName,
+    displayNameRank: overrides.displayNameRank ?? 2,
     displayTitle: "Work",
     titleSamples: ["Work"],
     titleSampleDetails: [{

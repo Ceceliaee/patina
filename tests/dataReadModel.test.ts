@@ -262,6 +262,26 @@ await runTest("display name scoring prefers readable localized names over tray a
   assert.equal(pickPreferredAppName("Visual Studio Code", "code-helper"), "Visual Studio Code");
 });
 
+await runTest("data aggregation prefers canonical runtime names over alias fallbacks on ASCII ties", () => {
+  const nowMs = new Date(2026, 4, 8, 12, 0, 0).getTime();
+  const context = buildDataTrendAggregateContext([
+    makeSession({
+      appName: "SteamWebHelper",
+      exeName: "steamwebhelper.exe",
+      startTime: new Date(2026, 4, 8, 8, 0, 0).getTime(),
+      endTime: new Date(2026, 4, 8, 9, 0, 0).getTime(),
+    }),
+    makeSession({
+      appName: "Steam Client",
+      exeName: "steam.exe",
+      startTime: new Date(2026, 4, 8, 9, 0, 0).getTime(),
+      endTime: new Date(2026, 4, 8, 10, 0, 0).getTime(),
+    }),
+  ], 7, nowMs);
+
+  assert.equal(context.aggregate.appBuckets.get("steam.exe")?.appName, "Steam Client");
+});
+
 await runTest("yearly app trend averages by month", () => {
   const nowMs = new Date(2026, 4, 8, 12, 0, 0).getTime();
   const rows = buildDataAppTrendViewModel([
