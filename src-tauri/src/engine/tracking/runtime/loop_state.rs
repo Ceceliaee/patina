@@ -490,4 +490,48 @@ mod tests {
             assert_eq!(state.tracked_window.exe_name, "Code.exe");
         });
     }
+
+    #[test]
+    fn canonical_alias_override_disables_native_tracking_and_title_capture() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            crate::data::repositories::tracker_settings::save_setting_value(
+                &pool,
+                "__app_override::alma.exe",
+                r#"{"track":false,"captureTitle":false}"#,
+            )
+            .await
+            .unwrap();
+            let data = TrackingRuntimeDataStore::new(pool);
+            let pause_state = TrackingPauseRuntimeState::default();
+            let title_state = TitleRecordingRuntimeState::default();
+            let mut cache = TrackingSettingsCache::default();
+            let window = tracker::WindowInfo {
+                hwnd: "0x100".into(),
+                root_owner_hwnd: "0x100".into(),
+                process_id: 123,
+                window_class: "Chrome_WidgetWin_1".into(),
+                title: "Alma".into(),
+                exe_name: "alma-0.0.750-win-x64.exe".into(),
+                process_path: r"C:\Program Files\Alma\alma-0.0.750-win-x64.exe".into(),
+                is_afk: false,
+                idle_time_ms: 0,
+            };
+
+            let (state, _) = load_tracking_loop_state(
+                &data,
+                &pause_state,
+                &title_state,
+                &window,
+                1_000,
+                &SustainedParticipationRuntimeState::default(),
+                &mut cache,
+            )
+            .await;
+
+            assert!(!state.app_tracking_enabled);
+            assert!(!state.capture_window_title);
+            assert!(!state.tracking_status.is_tracking_active);
+        });
+    }
 }

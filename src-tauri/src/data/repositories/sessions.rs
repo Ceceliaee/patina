@@ -1,6 +1,6 @@
 use super::session_title_samples;
 use crate::domain::backup::BackupSession;
-use crate::domain::tracking::ActiveSessionSnapshot;
+use crate::domain::tracking::{resolve_app_override_executable, ActiveSessionSnapshot};
 use sqlx::{Pool, Row, Sqlite, Transaction};
 use std::collections::HashMap;
 
@@ -190,16 +190,9 @@ pub async fn end_active_session_for_exe(
     target_exe_name: &str,
     raw_end_time: i64,
 ) -> Result<bool, sqlx::Error> {
-    let mut target = target_exe_name
-        .trim()
-        .trim_matches('"')
-        .to_ascii_lowercase();
-    if target.is_empty() {
+    let Some(target) = resolve_app_override_executable(target_exe_name) else {
         return Ok(false);
-    }
-    if !target.ends_with(".exe") {
-        target.push_str(".exe");
-    }
+    };
 
     let mut tx = pool.begin().await?;
     let active = sqlx::query(
@@ -217,7 +210,7 @@ pub async fn end_active_session_for_exe(
     };
 
     let exe_name: String = active.get("exe_name");
-    if exe_name.trim().trim_matches('"').to_ascii_lowercase() != target {
+    if resolve_app_override_executable(&exe_name).as_deref() != Some(target.as_str()) {
         tx.rollback().await?;
         return Ok(false);
     }
@@ -251,7 +244,8 @@ pub async fn disable_active_title_for_exe(
         tx.rollback().await?;
         return Ok(false);
     };
-    if !exe_name.trim().eq_ignore_ascii_case(target_exe_name.trim()) {
+    let target = resolve_app_override_executable(target_exe_name);
+    if target.is_none() || resolve_app_override_executable(&exe_name) != target {
         tx.rollback().await?;
         return Ok(false);
     }

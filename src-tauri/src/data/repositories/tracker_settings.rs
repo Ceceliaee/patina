@@ -1,4 +1,5 @@
 use crate::domain::settings::parse_boolean_setting;
+use crate::domain::tracking::resolve_app_override_executable;
 use sqlx::{Pool, Row, Sqlite};
 
 pub const TRACKER_LAST_HEARTBEAT_KEY: &str = "__tracker_last_heartbeat_ms";
@@ -51,7 +52,7 @@ pub async fn load_capture_window_title_setting_for_app(
     pool: &Pool<Sqlite>,
     exe_name: &str,
 ) -> Result<bool, sqlx::Error> {
-    let Some(canonical_exe_name) = normalize_exe_setting_key(exe_name) else {
+    let Some(canonical_exe_name) = resolve_app_override_executable(exe_name) else {
         return Ok(true);
     };
 
@@ -75,7 +76,7 @@ pub async fn load_tracking_enabled_setting_for_app(
     pool: &Pool<Sqlite>,
     exe_name: &str,
 ) -> Result<bool, sqlx::Error> {
-    let Some(canonical_exe_name) = normalize_exe_setting_key(exe_name) else {
+    let Some(canonical_exe_name) = resolve_app_override_executable(exe_name) else {
         return Ok(true);
     };
 
@@ -176,20 +177,6 @@ async fn load_u64_setting_or_default(
         .unwrap_or(default_value))
 }
 
-fn normalize_exe_setting_key(exe_name: &str) -> Option<String> {
-    let trimmed = exe_name.trim().trim_matches('"');
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    let mut key = trimmed.to_ascii_lowercase();
-    if !key.ends_with(".exe") {
-        key.push_str(".exe");
-    }
-
-    Some(key)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -261,6 +248,54 @@ mod tests {
             assert!(!load_tracking_enabled_setting_for_app(&pool, "qq")
                 .await
                 .unwrap());
+        });
+    }
+
+    #[test]
+    fn canonical_app_override_applies_to_verified_alias_tracking_and_title_capture() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            save_setting_value(
+                &pool,
+                "__app_override::steam.exe",
+                r#"{"track":false,"captureTitle":false}"#,
+            )
+            .await
+            .unwrap();
+
+            assert!(
+                !load_tracking_enabled_setting_for_app(&pool, "SteamWebHelper.exe")
+                    .await
+                    .unwrap()
+            );
+            assert!(
+                !load_capture_window_title_setting_for_app(&pool, "steamwebhelper.exe")
+                    .await
+                    .unwrap()
+            );
+            assert!(
+                load_tracking_enabled_setting_for_app(&pool, "unknownhelper.exe")
+                    .await
+                    .unwrap()
+            );
+
+            save_setting_value(
+                &pool,
+                "__app_override::alma.exe",
+                r#"{"track":false,"captureTitle":false}"#,
+            )
+            .await
+            .unwrap();
+            assert!(
+                !load_tracking_enabled_setting_for_app(&pool, "alma-0.0.750-win-x64.exe")
+                    .await
+                    .unwrap()
+            );
+            assert!(
+                !load_capture_window_title_setting_for_app(&pool, "alma-0.0.750-win-x64.exe")
+                    .await
+                    .unwrap()
+            );
         });
     }
 

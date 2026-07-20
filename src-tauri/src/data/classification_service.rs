@@ -386,4 +386,73 @@ mod tests {
             assert_eq!(active_web, 0);
         });
     }
+
+    #[test]
+    fn policy_apply_immediately_seals_active_canonical_alias() {
+        tauri::async_runtime::block_on(async {
+            let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+            pool.execute(db_schema::CURRENT_BASELINE_SCHEMA_SQL)
+                .await
+                .unwrap();
+            sessions::start_session(
+                &pool,
+                "Alma",
+                "alma-0.0.750-win-x64.exe",
+                "Alma",
+                1_000,
+                1_000,
+            )
+            .await
+            .unwrap();
+
+            let title_applied = apply_recording_policy_changes_in_pool(
+                &pool,
+                &ClassificationCommitOutcome {
+                    app_title_changes: vec![TitleRecordingPolicyChange {
+                        identity: "alma.exe".into(),
+                        enabled: false,
+                    }],
+                    ..ClassificationCommitOutcome::default()
+                },
+                1_500,
+            )
+            .await
+            .unwrap();
+
+            assert!(title_applied.app_sealed);
+            let title_row: (String, Option<i64>) =
+                sqlx::query_as("SELECT window_title, end_time FROM sessions LIMIT 1")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(title_row, (String::new(), None));
+            let title_sample_end: Option<i64> =
+                sqlx::query_scalar("SELECT end_time FROM session_title_samples LIMIT 1")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(title_sample_end, Some(1_500));
+
+            let tracking_applied = apply_recording_policy_changes_in_pool(
+                &pool,
+                &ClassificationCommitOutcome {
+                    app_recording_changes: vec![AppRecordingPolicyChange {
+                        exe_name: "alma.exe".into(),
+                        enabled: false,
+                    }],
+                    ..ClassificationCommitOutcome::default()
+                },
+                2_000,
+            )
+            .await
+            .unwrap();
+
+            assert!(tracking_applied.app_sealed);
+            let end_time: Option<i64> = sqlx::query_scalar("SELECT end_time FROM sessions LIMIT 1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            assert_eq!(end_time, Some(2_000));
+        });
+    }
 }
