@@ -19,6 +19,7 @@ const WEB_ACTIVITY_CHROMIUM_BROWSER_EXES: &[&str] = &[
     "vivaldi.exe",
     "arc.exe",
     "chromium.exe",
+    "qqbrowser.exe",
     "360chromex.exe",
     "thorium.exe",
     "centbrowser.exe",
@@ -301,6 +302,7 @@ mod tests {
             "vivaldi.exe",
             "arc.exe",
             "chromium.exe",
+            "qqbrowser.exe",
             "360chromex.exe",
             "thorium.exe",
             "centbrowser.exe",
@@ -333,6 +335,10 @@ mod tests {
         );
         assert_eq!(
             resolve_web_activity_browser_family(" Thorium.EXE "),
+            Some(WebActivityBrowserFamily::Chromium),
+        );
+        assert_eq!(
+            resolve_web_activity_browser_family(" QQBrowser.EXE "),
             Some(WebActivityBrowserFamily::Chromium),
         );
     }
