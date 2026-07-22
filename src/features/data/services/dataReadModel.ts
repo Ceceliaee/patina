@@ -162,7 +162,16 @@ interface MergedDataAppDurationBucket extends DataAppDurationBucket {
   sourceAppKeys: string[];
 }
 
-function buildChartAxis(points: DataTrendPoint[]) {
+export function formatHeatmapDateLabel(dateKey: string) {
+  const date = new Date(`${dateKey}T00:00:00`);
+  return date.toLocaleDateString(getUiLocale(), { month: "2-digit", day: "2-digit" });
+}
+
+function formatHeatmapMonthLabel(date: Date) {
+  return UI_TEXT.date.monthLabel(date.getMonth() + 1);
+}
+
+export function buildChartAxis(points: DataTrendPoint[]) {
   const maxHours = Math.max(0, ...points.map((point) => point.hours));
   const intervalCount = 3;
   const rawStep = Math.max(1, maxHours / intervalCount);
@@ -556,7 +565,7 @@ export function buildDataTrendViewModel(
   nowMs: number,
 ): DataTrendViewModel {
   return buildDataTrendViewModelFromAggregate(
-    buildDataTrendAggregateContext(sessions, selection, nowMs, { includeAppBuckets: false }),
+    buildDataTrendAggregateContext(sessions, selection, nowMs, { includeAppBuckets: true }),
   );
 }
 
@@ -651,16 +660,6 @@ export function buildDataAppTrendViewModel(
     buildDataTrendAggregateContext(sessions, selection, nowMs),
     selectedAppKey,
   );
-}
-
-export function buildDataTrendViewModelsFromAggregate(
-  context: DataTrendAggregateContext,
-  selectedAppKey: string | null,
-) {
-  return {
-    overviewTrendViewModel: buildDataTrendViewModelFromAggregate(context),
-    appTrendViewModel: buildDataAppTrendViewModelFromAggregate(context, selectedAppKey),
-  };
 }
 
 async function resolveDefaultDataHeatmapDependencies(): Promise<DataHeatmapDependencies> {

@@ -264,7 +264,7 @@ export async function runDataScenarios(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const trigger = document.querySelectorAll(".data-trend-range-trigger")[1];
+          const trigger = document.querySelector(".data-trend-range-trigger");
           if (!trigger || trigger.textContent?.trim() !== "近 7 天") return false;
           trigger.click();
           return true;
@@ -301,7 +301,7 @@ export async function runDataScenarios(context: BrowserSmokeContext) {
       `),
       true,
     );
-    await waitForExpression(client!, sessionId, `document.querySelectorAll(".data-trend-range-trigger")[1]?.textContent?.trim() === "1天"`);
+    await waitForExpression(client!, sessionId, `document.querySelector(".data-trend-range-trigger")?.textContent?.trim() === "1天"`);
   });
 
   await runTest("data trend chart renders the shared tooltip on real hover", async () => {
