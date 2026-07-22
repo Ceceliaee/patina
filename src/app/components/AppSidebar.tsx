@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { ArrowUpCircle, Monitor, Clock, Settings2, Sparkles, BarChart3, Info, ToolCase } from "lucide-react";
 import appIconUrl from "../../../src-tauri/icons/32x32.png";
 import { UI_TEXT } from "../../shared/copy/index.ts";
+import { scheduleNavigationCommit } from "../services/navigationCommitScheduler.ts";
 import type { View } from "../types/view";
 
 interface Props {
@@ -38,6 +39,7 @@ export default function AppSidebar({
   ];
   const [optimisticView, setOptimisticView] = useState<View | null>(null);
   const navigateRequestRef = useRef(0);
+  const cancelPendingNavigationRef = useRef<(() => void) | null>(null);
   const activeView = optimisticView ?? currentView;
   const activeNavIndex = navItems.findIndex((item) => item.id === activeView);
   const navStyle: NavStyle = {
@@ -49,6 +51,8 @@ export default function AppSidebar({
   }, [currentView]);
 
   const handleNavClick = (view: View) => {
+    cancelPendingNavigationRef.current?.();
+    cancelPendingNavigationRef.current = null;
     navigateRequestRef.current += 1;
     const requestId = navigateRequestRef.current;
 
@@ -68,14 +72,19 @@ export default function AppSidebar({
       });
     };
 
-    // Let the optimistic selection commit in the next paint before the owning
-    // page performs a potentially expensive mount. This keeps click feedback
-    // independent from read-model rendering without changing navigation rules.
-    window.requestAnimationFrame(runNavigate);
+    // Prefer the next paint so optimistic feedback is visible before a heavy
+    // page mount. A bounded timer keeps navigation correct when the browser or
+    // WebView throttles animation frames while transitioning visibility.
+    cancelPendingNavigationRef.current = scheduleNavigationCommit(() => {
+      cancelPendingNavigationRef.current = null;
+      runNavigate();
+    });
   };
 
   useEffect(() => {
     return () => {
+      cancelPendingNavigationRef.current?.();
+      cancelPendingNavigationRef.current = null;
       navigateRequestRef.current += 1;
     };
   }, []);
