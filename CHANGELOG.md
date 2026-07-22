@@ -25,6 +25,8 @@ App note en: TBD.
 
 ### Fixed
 
+- 主窗口现在会先在原生层保持隐藏，待持久化外观、主题和应用框架完成首帧就绪后再统一显示；冷启动、托盘唤起及 WebView 重建不再暴露透明、错误主题或未完成样式的中间帧。Refs [#54](https://github.com/Ceceliaee/patina/issues/54)
+
 ### Removed
 
 ### Internal
