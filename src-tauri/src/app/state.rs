@@ -518,7 +518,17 @@ impl WidgetWindowLifecycleState {
 
 #[cfg(test)]
 mod tests {
-    use super::{MainWindowLifecycleState, TraySafetyState, WidgetWindowLifecycleState};
+    use super::{
+        MainWindowLifecycleState, MainWindowReadyDecision, MainWindowRenderState,
+        MainWindowShowDecision, MainWindowTimeoutDecision, TraySafetyState,
+        WidgetWindowLifecycleState,
+    };
+
+    fn begin_window_creation(state: &MainWindowLifecycleState) -> u64 {
+        state
+            .begin_window_creation()
+            .expect("window creation should be claimable")
+    }
 
     #[test]
     fn tray_safety_visibility_is_explicit_and_reversible() {
@@ -536,9 +546,9 @@ mod tests {
     fn main_window_lifecycle_cancels_stale_destroy_after_show() {
         let state = MainWindowLifecycleState::default();
 
-        let _ = state.show();
+        let _ = state.request_show();
         let hide_generation = state.hide();
-        let _ = state.show();
+        let _ = state.request_show();
 
         assert!(!state.begin_destroy_hidden_window(hide_generation));
     }
@@ -547,7 +557,7 @@ mod tests {
     fn main_window_lifecycle_rejects_late_startup_hide_after_show() {
         let state = MainWindowLifecycleState::default();
 
-        let _ = state.show();
+        let _ = state.request_show();
 
         assert_eq!(state.try_hide_for_startup(), None);
     }
@@ -559,20 +569,221 @@ mod tests {
         let hide_generation = state
             .try_hide_for_startup()
             .expect("initial hidden startup should be accepted");
-        let _ = state.show();
+        let _ = state.request_show();
 
         assert!(!state.begin_destroy_hidden_window(hide_generation));
     }
 
     #[test]
+    fn main_window_lifecycle_starts_each_window_hidden_and_waiting() {
+        let state = MainWindowLifecycleState::default();
+
+        let generation = begin_window_creation(&state);
+        let snapshot = state.snapshot();
+
+        assert_eq!(generation, 1);
+        assert!(!snapshot.desired_visible);
+        assert_eq!(snapshot.generation, generation);
+        assert_eq!(snapshot.render_state, MainWindowRenderState::Waiting);
+        assert!(snapshot.create_in_progress);
+        assert!(!snapshot.destroy_in_progress);
+        assert!(!snapshot.reveal_in_progress);
+        assert!(snapshot.elapsed_ms.is_some());
+    }
+
+    #[test]
+    fn main_window_lifecycle_waits_for_ready_after_early_show_request() {
+        let state = MainWindowLifecycleState::default();
+        let generation = begin_window_creation(&state);
+        state.finish_window_creation(generation, true);
+
+        assert_eq!(state.request_show(), MainWindowShowDecision::Wait);
+        assert_eq!(
+            state.mark_ready(generation),
+            MainWindowReadyDecision::Reveal { generation }
+        );
+        assert!(state.can_reveal(generation));
+    }
+
+    #[test]
+    fn main_window_lifecycle_ready_window_reveals_on_later_show_request() {
+        let state = MainWindowLifecycleState::default();
+        let generation = begin_window_creation(&state);
+        state.finish_window_creation(generation, true);
+
+        assert_eq!(
+            state.mark_ready(generation),
+            MainWindowReadyDecision::Hidden
+        );
+        assert_eq!(
+            state.request_show(),
+            MainWindowShowDecision::Reveal { generation }
+        );
+    }
+
+    #[test]
+    fn main_window_lifecycle_ready_does_not_override_hidden_startup() {
+        let state = MainWindowLifecycleState::default();
+        let generation = begin_window_creation(&state);
+        state.finish_window_creation(generation, true);
+
+        assert_eq!(
+            state.mark_ready(generation),
+            MainWindowReadyDecision::Hidden
+        );
+        assert!(!state.snapshot().desired_visible);
+    }
+
+    #[test]
+    fn main_window_lifecycle_duplicate_ready_is_idempotent_after_reveal() {
+        let state = MainWindowLifecycleState::default();
+        let generation = begin_window_creation(&state);
+        state.finish_window_creation(generation, true);
+        assert_eq!(state.request_show(), MainWindowShowDecision::Wait);
+        assert_eq!(
+            state.mark_ready(generation),
+            MainWindowReadyDecision::Reveal { generation }
+        );
+        assert!(!state.finish_reveal(generation, true));
+
+        assert_eq!(
+            state.mark_ready(generation),
+            MainWindowReadyDecision::Duplicate
+        );
+    }
+
+    #[test]
+    fn main_window_lifecycle_rejects_stale_ready_and_timeout() {
+        let state = MainWindowLifecycleState::default();
+        let stale_generation = begin_window_creation(&state);
+        state.finish_window_creation(stale_generation, true);
+        let current_generation = begin_window_creation(&state);
+
+        assert_eq!(
+            state.mark_ready(stale_generation),
+            MainWindowReadyDecision::Stale
+        );
+        assert_eq!(
+            state.handle_ready_timeout(stale_generation),
+            MainWindowTimeoutDecision::Stale
+        );
+        assert_eq!(state.snapshot().generation, current_generation);
+        assert_eq!(
+            state.snapshot().render_state,
+            MainWindowRenderState::Waiting
+        );
+    }
+
+    #[test]
+    fn main_window_lifecycle_timeout_only_reveals_when_requested() {
+        let hidden_state = MainWindowLifecycleState::default();
+        let hidden_generation = begin_window_creation(&hidden_state);
+        hidden_state.finish_window_creation(hidden_generation, true);
+        assert_eq!(
+            hidden_state.handle_ready_timeout(hidden_generation),
+            MainWindowTimeoutDecision::Hidden
+        );
+
+        let visible_state = MainWindowLifecycleState::default();
+        let visible_generation = begin_window_creation(&visible_state);
+        visible_state.finish_window_creation(visible_generation, true);
+        assert_eq!(visible_state.request_show(), MainWindowShowDecision::Wait);
+        assert_eq!(
+            visible_state.handle_ready_timeout(visible_generation),
+            MainWindowTimeoutDecision::Reveal {
+                generation: visible_generation,
+            }
+        );
+    }
+
+    #[test]
+    fn main_window_lifecycle_retries_reveal_after_show_failure() {
+        let state = MainWindowLifecycleState::default();
+        let generation = begin_window_creation(&state);
+        state.finish_window_creation(generation, true);
+        assert_eq!(state.request_show(), MainWindowShowDecision::Wait);
+        assert_eq!(
+            state.mark_ready(generation),
+            MainWindowReadyDecision::Reveal { generation }
+        );
+        assert!(!state.finish_reveal(generation, false));
+
+        assert_eq!(
+            state.mark_ready(generation),
+            MainWindowReadyDecision::Reveal { generation }
+        );
+    }
+
+    #[test]
+    fn main_window_lifecycle_hides_a_reveal_that_loses_to_hide() {
+        let state = MainWindowLifecycleState::default();
+        let generation = begin_window_creation(&state);
+        state.finish_window_creation(generation, true);
+        assert_eq!(state.request_show(), MainWindowShowDecision::Wait);
+        assert_eq!(
+            state.mark_ready(generation),
+            MainWindowReadyDecision::Reveal { generation }
+        );
+        let _ = state.hide();
+
+        assert!(!state.can_reveal(generation));
+        assert!(state.finish_reveal(generation, true));
+    }
+
+    #[test]
+    fn main_window_lifecycle_invalidates_old_reveal_before_new_generation() {
+        let state = MainWindowLifecycleState::default();
+        let old_generation = begin_window_creation(&state);
+        state.finish_window_creation(old_generation, true);
+        assert_eq!(
+            state.mark_ready(old_generation),
+            MainWindowReadyDecision::Hidden
+        );
+        assert_eq!(
+            state.request_show(),
+            MainWindowShowDecision::Reveal {
+                generation: old_generation,
+            }
+        );
+
+        let new_generation = begin_window_creation(&state);
+
+        assert_ne!(new_generation, old_generation);
+        assert!(!state.can_reveal(old_generation));
+        assert!(!state.finish_window_creation(new_generation, true));
+        assert_eq!(
+            state.mark_ready(new_generation),
+            MainWindowReadyDecision::Reveal {
+                generation: new_generation,
+            }
+        );
+    }
+
+    #[test]
     fn main_window_lifecycle_queues_show_while_destroy_is_in_progress() {
         let state = MainWindowLifecycleState::default();
+        let first_generation = begin_window_creation(&state);
+        state.finish_window_creation(first_generation, true);
+        assert_eq!(
+            state.mark_ready(first_generation),
+            MainWindowReadyDecision::Hidden
+        );
         let hide_generation = state.hide();
 
         assert!(state.begin_destroy_hidden_window(hide_generation));
-        assert!(state.show());
-        assert!(state.finish_destroy_hidden_window());
+        assert_eq!(state.request_show(), MainWindowShowDecision::Destroying);
+        assert!(state.finish_destroy_hidden_window(true));
         assert!(!state.begin_destroy_hidden_window(hide_generation));
+
+        let next_generation = begin_window_creation(&state);
+        state.finish_window_creation(next_generation, true);
+        assert_ne!(next_generation, first_generation);
+        assert_eq!(
+            state.mark_ready(next_generation),
+            MainWindowReadyDecision::Reveal {
+                generation: next_generation,
+            }
+        );
     }
 
     #[test]
@@ -584,7 +795,82 @@ mod tests {
         assert!(!state.begin_destroy_hidden_window(stale_generation));
         assert!(state.begin_destroy_hidden_window(current_generation));
         assert!(!state.begin_destroy_hidden_window(current_generation));
-        assert!(!state.finish_destroy_hidden_window());
+        assert!(!state.finish_destroy_hidden_window(true));
+    }
+
+    #[test]
+    fn main_window_lifecycle_failed_destroy_keeps_current_ready_generation() {
+        let state = MainWindowLifecycleState::default();
+        let generation = begin_window_creation(&state);
+        state.finish_window_creation(generation, true);
+        assert_eq!(
+            state.mark_ready(generation),
+            MainWindowReadyDecision::Hidden
+        );
+        let hide_generation = state.hide();
+        assert!(state.begin_destroy_hidden_window(hide_generation));
+        assert!(!state.finish_destroy_hidden_window(false));
+
+        assert_eq!(state.snapshot().generation, generation);
+        assert_eq!(state.snapshot().render_state, MainWindowRenderState::Ready);
+        assert_eq!(
+            state.request_show(),
+            MainWindowShowDecision::Reveal { generation }
+        );
+    }
+
+    #[test]
+    fn main_window_lifecycle_cancelled_creation_returns_to_absent() {
+        let state = MainWindowLifecycleState::default();
+        let generation = begin_window_creation(&state);
+
+        state.finish_window_creation(generation, false);
+
+        assert_eq!(state.snapshot().render_state, MainWindowRenderState::Absent);
+        assert_eq!(state.mark_ready(generation), MainWindowReadyDecision::Stale);
+    }
+
+    #[test]
+    fn main_window_lifecycle_coalesces_concurrent_creation_claims() {
+        let state = MainWindowLifecycleState::default();
+        let generation = begin_window_creation(&state);
+
+        assert_eq!(state.begin_window_creation(), None);
+        state.finish_window_creation(generation, true);
+        assert!(!state.snapshot().create_in_progress);
+
+        let next_generation = begin_window_creation(&state);
+        assert_ne!(next_generation, generation);
+    }
+
+    #[test]
+    fn main_window_lifecycle_reveals_ready_that_arrives_during_creation() {
+        let state = MainWindowLifecycleState::default();
+        let generation = begin_window_creation(&state);
+        assert_eq!(state.request_show(), MainWindowShowDecision::Wait);
+
+        assert_eq!(
+            state.mark_ready(generation),
+            MainWindowReadyDecision::Hidden
+        );
+        assert!(!state.can_reveal(generation));
+        assert!(state.finish_window_creation(generation, true));
+        assert!(state.can_reveal(generation));
+    }
+
+    #[test]
+    fn main_window_lifecycle_failed_creation_discards_early_ready() {
+        let state = MainWindowLifecycleState::default();
+        let generation = begin_window_creation(&state);
+        assert_eq!(state.request_show(), MainWindowShowDecision::Wait);
+        assert_eq!(
+            state.mark_ready(generation),
+            MainWindowReadyDecision::Hidden
+        );
+
+        assert!(!state.finish_window_creation(generation, false));
+        assert_eq!(state.snapshot().render_state, MainWindowRenderState::Absent);
+        assert_eq!(state.mark_ready(generation), MainWindowReadyDecision::Stale);
     }
 
     #[test]

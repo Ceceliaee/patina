@@ -518,7 +518,7 @@ fn schedule_main_window_ready_timeout<R: Runtime + 'static>(app: AppHandle<R>, g
 mod tests {
     #[cfg(debug_assertions)]
     use super::debug_main_window_url;
-    use super::main_window_url;
+    use super::{main_window_initialization_script, main_window_url};
     use tauri::WebviewUrl;
 
     #[test]
@@ -530,6 +530,16 @@ mod tests {
 
         #[cfg(not(debug_assertions))]
         assert!(matches!(url, WebviewUrl::App(_)));
+    }
+
+    #[test]
+    fn main_window_generation_script_is_immutable_and_numeric() {
+        let script = main_window_initialization_script(42);
+
+        assert!(script.contains("__PATINA_MAIN_WINDOW_GENERATION__"));
+        assert!(script.contains("value: 42"));
+        assert!(script.contains("writable: false"));
+        assert!(script.contains("configurable: false"));
     }
 
     #[cfg(debug_assertions)]

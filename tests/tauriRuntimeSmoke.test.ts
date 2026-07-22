@@ -324,6 +324,29 @@ try {
     30_000,
   );
 
+  const mainWindowGeneration = await waitFor(
+    "frontend main-window readiness handshake",
+    async () => {
+      const generation = await evaluate(client!, "window.__PATINA_MAIN_WINDOW_GENERATION__");
+      return typeof generation === "number"
+        && logs.join("").includes("event=frontend-ready")
+        ? generation
+        : null;
+    },
+    10_000,
+  );
+  assert.ok(Number.isSafeInteger(mainWindowGeneration) && mainWindowGeneration > 0);
+  const duplicateReady = await evaluate(
+    client,
+    `window.__TAURI_INTERNALS__.invoke("cmd_mark_main_window_ready", {
+      generation: ${mainWindowGeneration},
+    })`,
+  );
+  assert.deepEqual(duplicateReady, {
+    outcome: "duplicate",
+    generation: mainWindowGeneration,
+  });
+
   const initialMainWindowVisible = await evaluate(
     client,
     `window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", { label: "main" })`,
@@ -340,9 +363,54 @@ try {
     ),
     10_000,
   );
+  const firstVisibleAppearance = await evaluate(client, `({
+    frameConnected: Boolean(document.querySelector(".qp-app-frame")?.isConnected),
+    themeMode: document.documentElement.dataset.themeMode,
+    theme: document.documentElement.dataset.theme,
+    colorScheme: document.documentElement.dataset.colorScheme,
+    cssColorScheme: document.documentElement.style.colorScheme,
+  })`);
+  assert.deepEqual(firstVisibleAppearance, {
+    frameConnected: true,
+    themeMode: "light",
+    theme: "light",
+    colorScheme: "default",
+    cssColorScheme: "light",
+  });
+
+  const startupVisibilityLogs = logs.join("");
+  const createdLogIndex = startupVisibilityLogs.indexOf("event=created");
+  const readyLogIndex = startupVisibilityLogs.indexOf("event=frontend-ready");
+  const showLogIndex = startupVisibilityLogs.indexOf("event=show-succeeded");
+  assert.ok(createdLogIndex >= 0, "main-window creation log is missing");
+  assert.ok(readyLogIndex > createdLogIndex, "frontend-ready must follow hidden creation");
+  assert.ok(showLogIndex > readyLogIndex, "show must follow frontend readiness");
+  assert.doesNotMatch(startupVisibilityLogs, /event=ready-timeout/);
+  const eventElapsedMs = (event: string) => {
+    const match = startupVisibilityLogs.match(
+      new RegExp(`\\[main-window\\] event=${event}[^\\r\\n]*elapsed_ms=(\\d+)`),
+    );
+    assert.ok(match, `${event} elapsed time is missing`);
+    return Number(match[1]);
+  };
+  console.log("PATINA_MAIN_WINDOW_READINESS_REPORT", JSON.stringify({
+    sampleCount: 1,
+    environment: "isolated real Tauri/WebView2 runtime",
+    generation: mainWindowGeneration,
+    createdElapsedMs: eventElapsedMs("created"),
+    frontendReadyElapsedMs: eventElapsedMs("frontend-ready"),
+    showSucceededElapsedMs: eventElapsedMs("show-succeeded"),
+    watchdogUsed: false,
+    firstVisibleAppearance,
+  }));
 
   const storage = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_get_storage_snapshot")`);
   assert.equal(typeof storage, "object");
+
+  // Freeze the isolated tracker before asserting read-model contents. A live
+  // foreground sample is valid here, so the test waits for projections to
+  // drain instead of assuming the source revision will remain zero.
+  await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_toggle_tracking_paused")`);
 
   const readModelStatus = await waitFor(
     "activity read models ready",
@@ -350,22 +418,35 @@ try {
       const value = await evaluate(
         client!,
         `window.__TAURI_INTERNALS__.invoke("cmd_get_activity_read_model_status")`,
-      ) as { appCatalogState?: string; activityHourlyState?: string };
-      return value.appCatalogState === "ready" && value.activityHourlyState === "ready"
+      ) as {
+        appCatalogState?: string;
+        activityHourlyState?: string;
+        dirtyAppCount?: number;
+        dirtyRangeCount?: number;
+      };
+      return value.appCatalogState === "ready"
+        && value.activityHourlyState === "ready"
+        && value.dirtyAppCount === 0
+        && value.dirtyRangeCount === 0
         ? value
         : null;
     },
     10_000,
-  );
-  assert.deepEqual(readModelStatus, {
-    sourceRevision: 0,
-    appCatalogState: "ready",
-    activityHourlyState: "ready",
-    activityCoverageStartMs: null,
-    activityCoverageEndMs: null,
-    dirtyAppCount: 0,
-    dirtyRangeCount: 0,
-  });
+  ) as {
+    sourceRevision: number;
+    appCatalogState: string;
+    activityHourlyState: string;
+    activityCoverageStartMs: number | null;
+    activityCoverageEndMs: number | null;
+    dirtyAppCount: number;
+    dirtyRangeCount: number;
+  };
+  assert.ok(Number.isSafeInteger(readModelStatus.sourceRevision));
+  assert.ok(readModelStatus.sourceRevision >= 0);
+  assert.equal(readModelStatus.appCatalogState, "ready");
+  assert.equal(readModelStatus.activityHourlyState, "ready");
+  assert.equal(readModelStatus.dirtyAppCount, 0);
+  assert.equal(readModelStatus.dirtyRangeCount, 0);
 
   const catalogPage = await evaluate(
     client,
@@ -374,15 +455,30 @@ try {
       searchQuery: "",
       limit: 50,
     })`,
-  );
-  assert.deepEqual(catalogPage, {
-    rows: [],
-    nextCursor: null,
-    hasMore: false,
-    readPath: "projection",
-    fallbackReason: null,
-    sourceRevision: 0,
-  });
+  ) as {
+    rows: unknown[];
+    nextCursor: unknown;
+    hasMore: boolean;
+    readPath: string;
+    fallbackReason: unknown;
+    sourceRevision: number;
+  };
+  assert.ok(Array.isArray(catalogPage.rows));
+  assert.equal(catalogPage.hasMore, false);
+  if (catalogPage.nextCursor !== null) {
+    assert.equal(typeof catalogPage.nextCursor, "object");
+    assert.equal(
+      typeof (catalogPage.nextCursor as { lastSeenMs?: unknown }).lastSeenMs,
+      "number",
+    );
+    assert.equal(
+      typeof (catalogPage.nextCursor as { rawExeName?: unknown }).rawExeName,
+      "string",
+    );
+  }
+  assert.equal(catalogPage.readPath, "projection");
+  assert.equal(catalogPage.fallbackReason, null);
+  assert.equal(catalogPage.sourceRevision, readModelStatus.sourceRevision);
 
   const aggregateRange = await evaluate(
     client,
@@ -391,16 +487,22 @@ try {
       endMs: 3600000,
       bucketBoundariesMs: [0, 3600000],
     })`,
-  );
-  assert.deepEqual(aggregateRange, {
-    records: [],
-    readPath: "facts",
-    fallbackReason: "outside_projection_coverage",
-    sourceRevision: 0,
-    projectionRowCount: 0,
-    factRowCount: 0,
-    hasActiveSession: false,
-  });
+  ) as {
+    records: unknown[];
+    readPath: string;
+    fallbackReason: string;
+    sourceRevision: number;
+    projectionRowCount: number;
+    factRowCount: number;
+    hasActiveSession: boolean;
+  };
+  assert.deepEqual(aggregateRange.records, []);
+  assert.equal(aggregateRange.readPath, "facts");
+  assert.equal(aggregateRange.fallbackReason, "outside_projection_coverage");
+  assert.equal(aggregateRange.sourceRevision, readModelStatus.sourceRevision);
+  assert.equal(aggregateRange.projectionRowCount, 0);
+  assert.equal(aggregateRange.factRowCount, 0);
+  assert.equal(aggregateRange.hasActiveSession, false);
 
   const resourceDiagnostics = await evaluate(
     client,

@@ -672,11 +672,11 @@ await runTest("storage restarts explicitly restore the main window", () => {
   );
   assert.match(
     runtime,
-    /ensure_main_window_with_initial_visibility\(&app_handle, false\)[\s\S]*apply_startup_desktop_behavior/,
+    /ensure_main_window\(&app_handle\)[\s\S]*apply_startup_desktop_behavior/,
   );
   assert.match(
     desktopBehavior,
-    /StartupUiStrategy::Show => show_main_window\(app\)/,
+    /StartupUiStrategy::Show[\s\S]*?show_main_window\([\s\S]*?MainWindowShowReason::Startup\(source\)/,
   );
 });
 
@@ -692,13 +692,45 @@ await runTest("startup recovery keeps external autostart and tray access safe", 
   assert.match(bootstrap, /TraySafetyState/);
   assert.match(bootstrap, /should_keep_app_running_without_windows/);
   assert.match(tray, /TraySafetyState/);
-  assert.match(tray, /if shown \{\s*app\.state::<TraySafetyState>\(\)\.clear_forced_visibility\(\)/);
+  assert.match(
+    tray,
+    /on_main_window_revealed[\s\S]*state::<TraySafetyState>\(\)\.clear_forced_visibility\(\)/,
+  );
   assert.match(tools, /crate::app::tray::show_main_window/);
   assert.match(readUtf8("src-tauri/src/app/main_window.rs"), /crate::app::tray::show_main_window/);
   assert.match(settingsService, /load_post_install_reopen_main_window/);
   assert.doesNotMatch(settingsService, /take_post_install_reopen_main_window/);
   assert.match(updateState, /load_post_install_reopen_main_window/);
   assert.match(bootstrap, /runtime::setup[\s\S]*clear_post_install_reopen_main_window/);
+});
+
+await runTest("main window first visibility is gated by themed frontend readiness", () => {
+  const mainWindow = readUtf8("src-tauri/src/app/main_window.rs");
+  const lifecycle = readUtf8("src-tauri/src/app/state.rs");
+  const commands = readUtf8("src-tauri/src/commands/window.rs");
+  const bootstrap = readUtf8("src-tauri/src/app/bootstrap.rs");
+  const appShell = readUtf8("src/app/AppShell.tsx");
+  const tracking = readUtf8("src/app/hooks/useWindowTracking.ts");
+  const theme = readUtf8("src/app/hooks/useAppThemeMode.ts");
+  const readiness = readUtf8("src/app/hooks/useMainWindowReady.ts");
+  const widgetShell = readUtf8("src/app/widget/WidgetShell.tsx");
+
+  assert.match(mainWindow, /\.visible\(false\)/);
+  assert.doesNotMatch(mainWindow, /\.visible\(true\)/);
+  assert.match(mainWindow, /\.initialization_script\(initialization_script\)/);
+  assert.match(mainWindow, /schedule_main_window_ready_timeout/);
+  assert.match(lifecycle, /MainWindowRenderState::Waiting/);
+  assert.match(lifecycle, /window_generation/);
+  assert.match(commands, /cmd_mark_main_window_ready/);
+  assert.match(commands, /window\.label\(\) != main_window::MAIN_WINDOW_LABEL/);
+  assert.match(bootstrap, /commands::window::cmd_mark_main_window_ready/);
+  assert.match(tracking, /appearanceResolved/);
+  assert.match(theme, /useLayoutEffect/);
+  assert.match(appShell, /useMainWindowReady/);
+  assert.match(appShell, /ref=\{appFrameRef\}/);
+  assert.match(readiness, /requestAnimationFrame/);
+  assert.match(readiness, /isDocumentThemeApplied/);
+  assert.doesNotMatch(widgetShell, /useMainWindowReady/);
 });
 
 await runTest("cache directory migration preserves persistent WebView state", () => {

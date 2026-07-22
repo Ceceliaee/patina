@@ -67,6 +67,7 @@ function tauriStubFor(path: string) {
       globalThis.__TIME_TRACKER_CLASSIFICATION_MUTATIONS ??= [];
       globalThis.__PATINA_IMPORT_BATCHES ??= [];
       globalThis.__PATINA_INVOKED_COMMANDS ??= [];
+      globalThis.__PATINA_MAIN_WINDOW_GENERATION__ ??= 1;
 
       function loadStoredSettings() {
         try {
@@ -88,6 +89,17 @@ function tauriStubFor(path: string) {
 
       export async function invoke(command, payload = {}) {
         globalThis.__PATINA_INVOKED_COMMANDS.push({ command, payload });
+        if (command === "cmd_mark_main_window_ready") {
+          globalThis.__PATINA_MAIN_WINDOW_READY_EVIDENCE = {
+            generation: Number(payload.generation),
+            themeMode: document.documentElement.dataset.themeMode ?? null,
+            theme: document.documentElement.dataset.theme ?? null,
+            colorScheme: document.documentElement.dataset.colorScheme ?? null,
+            cssColorScheme: document.documentElement.style.colorScheme || null,
+            frameConnected: Boolean(document.querySelector(".qp-app-frame")?.isConnected),
+          };
+          return { outcome: "hidden", generation: Number(payload.generation) };
+        }
         if (command === "cmd_get_recorded_app_catalog_page") {
           const queryDelayMs = Math.max(
             Number(
