@@ -45,7 +45,10 @@ fn register_single_instance_plugin(
     #[cfg(all(desktop, not(debug_assertions)))]
     {
         return builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            tray::show_main_window(app);
+            tray::show_main_window(
+                app,
+                crate::app::main_window::MainWindowShowReason::SingleInstance,
+            );
         }));
     }
 
@@ -136,6 +139,7 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::widget::cmd_toggle_tracking_paused,
         commands::widget::cmd_is_primary_mouse_button_down,
         commands::window::cmd_minimize_main_window,
+        commands::window::cmd_mark_main_window_ready,
         commands::update::cmd_get_update_snapshot,
         commands::update::cmd_check_for_updates,
         commands::update::cmd_download_update,

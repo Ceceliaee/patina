@@ -92,7 +92,9 @@ pub(crate) fn apply_startup_desktop_behavior<R: Runtime + 'static>(
     );
 
     match strategy {
-        StartupUiStrategy::Show => show_main_window(app),
+        StartupUiStrategy::Show => {
+            show_main_window(app, main_window::MainWindowShowReason::Startup(source))
+        }
         StartupUiStrategy::KeepHidden => start_in_tray(app, false),
         StartupUiStrategy::OptimizeHidden => start_in_tray(app, true),
     }
@@ -108,12 +110,12 @@ fn start_in_tray<R: Runtime + 'static>(
 ) -> bool {
     if let Err(error) = ensure_tray_visible(app) {
         eprintln!("[startup] failed to expose tray recovery entry: {error}");
-        return show_main_window(app);
+        return show_main_window(app, main_window::MainWindowShowReason::StartupRecovery);
     }
 
     if !main_window::register_hidden_main_window_startup(app, optimize_background_resources) {
         eprintln!("[startup] hidden main window registration was rejected; showing main window");
-        return show_main_window(app);
+        return show_main_window(app, main_window::MainWindowShowReason::StartupRecovery);
     }
 
     true

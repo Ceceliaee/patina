@@ -50,14 +50,20 @@ fn should_redirect_close_to_tray(settings: DesktopBehaviorSettings, exit_request
         && settings.should_keep_tray_visible()
 }
 
-pub(crate) fn show_main_window<R: Runtime + 'static>(app: &AppHandle<R>) -> bool {
-    let shown = main_window::show_main_window(app);
-    if shown {
-        app.state::<TraySafetyState>().clear_forced_visibility();
-    }
+pub(crate) fn show_main_window<R: Runtime + 'static>(
+    app: &AppHandle<R>,
+    reason: main_window::MainWindowShowReason,
+) -> bool {
+    let accepted = main_window::show_main_window(app, reason);
     let settings = app.state::<DesktopBehaviorState>().snapshot();
     apply_tray_visibility(app, settings);
-    shown
+    accepted
+}
+
+pub(crate) fn on_main_window_revealed<R: Runtime>(app: &AppHandle<R>) {
+    app.state::<TraySafetyState>().clear_forced_visibility();
+    let settings = app.state::<DesktopBehaviorState>().snapshot();
+    apply_tray_visibility(app, settings);
 }
 
 pub(crate) fn apply_tray_visibility<R: Runtime>(
@@ -196,7 +202,7 @@ pub(crate) async fn apply_title_recording_setting_change<R: Runtime>(
 
 pub(crate) fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
     if event.id() == TRAY_MENU_SHOW_ID {
-        show_main_window(app);
+        show_main_window(app, main_window::MainWindowShowReason::TrayMenu);
         return;
     }
 
@@ -237,7 +243,7 @@ pub(crate) fn handle_tray_icon_event<R: Runtime>(app: &AppHandle<R>, event: Tray
             button: MouseButton::Left,
             ..
         } => {
-            show_main_window(app);
+            show_main_window(app, main_window::MainWindowShowReason::TrayIcon);
         }
         _ => {}
     }
@@ -247,7 +253,10 @@ pub(crate) fn handle_window_event<R: Runtime>(window: &Window<R>, event: &Window
     if window.label() == widget::WIDGET_WINDOW_LABEL {
         if let WindowEvent::CloseRequested { api, .. } = event {
             api.prevent_close();
-            show_main_window(window.app_handle());
+            show_main_window(
+                window.app_handle(),
+                main_window::MainWindowShowReason::Widget,
+            );
         }
         return;
     }

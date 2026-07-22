@@ -54,7 +54,7 @@ pub async fn cmd_set_widget_expanded(
 
 #[tauri::command]
 pub fn cmd_show_main_window(app: AppHandle) {
-    tray::show_main_window(&app);
+    tray::show_main_window(&app, crate::app::main_window::MainWindowShowReason::Widget);
 }
 
 #[tauri::command]

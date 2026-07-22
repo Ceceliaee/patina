@@ -1,10 +1,16 @@
-use crate::app::state::{AppExitState, DesktopBehaviorState, MainWindowLifecycleState};
+use crate::app::state::{
+    AppExitState, DesktopBehaviorState, MainWindowLifecycleSnapshot, MainWindowLifecycleState,
+    MainWindowReadyDecision, MainWindowShowDecision, MainWindowTimeoutDecision,
+};
 use crate::app::widget;
-use crate::domain::settings::MinimizeBehavior;
+use crate::domain::settings::{MinimizeBehavior, StartupSource};
 use crate::platform::storage_paths;
 use crate::platform::windows::window_activation;
-use std::time::Duration;
-use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window};
+use std::time::{Duration, Instant};
+use tauri::{
+    webview::PageLoadEvent, AppHandle, Manager, Runtime, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder, Window,
+};
 
 pub(crate) const MAIN_WINDOW_LABEL: &str = "main";
 
@@ -14,32 +20,207 @@ const MAIN_WINDOW_HEIGHT: f64 = 736.0;
 const MAIN_WINDOW_MIN_WIDTH: f64 = 900.0;
 const MAIN_WINDOW_MIN_HEIGHT: f64 = 636.0;
 const MAIN_WINDOW_DESTROY_AFTER_BACKGROUND_SECS: u64 = 3 * 60;
+const MAIN_WINDOW_READY_TIMEOUT_SECS: u64 = 8;
+const MAIN_WINDOW_GENERATION_PROPERTY: &str = "__PATINA_MAIN_WINDOW_GENERATION__";
 
-pub(crate) fn show_main_window<R: Runtime + 'static>(app: &AppHandle<R>) -> bool {
-    if app.state::<MainWindowLifecycleState>().show() {
-        return false;
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum MainWindowShowReason {
+    Startup(StartupSource),
+    StartupRecovery,
+    TrayMenu,
+    TrayIcon,
+    Widget,
+    #[cfg(all(desktop, not(debug_assertions)))]
+    SingleInstance,
+    ToolAlert,
+    DestroyRecovery,
+}
+
+impl MainWindowShowReason {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Startup(source) => source.as_str(),
+            Self::StartupRecovery => "startup-recovery",
+            Self::TrayMenu => "tray-menu",
+            Self::TrayIcon => "tray-icon",
+            Self::Widget => "widget",
+            #[cfg(all(desktop, not(debug_assertions)))]
+            Self::SingleInstance => "single-instance",
+            Self::ToolAlert => "tool-alert",
+            Self::DestroyRecovery => "destroy-recovery",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum MainWindowReadyOutcome {
+    Stale,
+    Duplicate,
+    Hidden,
+    Revealed,
+}
+
+impl MainWindowReadyOutcome {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Stale => "stale",
+            Self::Duplicate => "duplicate",
+            Self::Hidden => "hidden",
+            Self::Revealed => "revealed",
+        }
+    }
+}
+
+fn log_main_window_event(
+    event: &str,
+    snapshot: MainWindowLifecycleSnapshot,
+    reason: &str,
+    result: &str,
+) {
+    eprintln!(
+        "[main-window] event={event} generation={} reason={reason} desired_visible={} render_state={} create_in_progress={} destroy_in_progress={} reveal_in_progress={} elapsed_ms={} result={result}",
+        snapshot.generation,
+        snapshot.desired_visible,
+        snapshot.render_state.as_str(),
+        snapshot.create_in_progress,
+        snapshot.destroy_in_progress,
+        snapshot.reveal_in_progress,
+        snapshot.elapsed_ms.unwrap_or(0),
+    );
+}
+
+pub(crate) fn show_main_window<R: Runtime + 'static>(
+    app: &AppHandle<R>,
+    reason: MainWindowShowReason,
+) -> bool {
+    let lifecycle = app.state::<MainWindowLifecycleState>();
+    let decision = lifecycle.request_show();
+    log_main_window_event(
+        "show-requested",
+        lifecycle.snapshot(),
+        reason.as_str(),
+        match decision {
+            MainWindowShowDecision::Wait => "waiting-for-ready",
+            MainWindowShowDecision::Reveal { .. } => "reveal-claimed",
+            MainWindowShowDecision::Destroying => "queued-during-destroy",
+        },
+    );
+
+    if decision == MainWindowShowDecision::Destroying {
+        return true;
     }
 
-    let window = match ensure_main_window(app) {
-        Ok(window) => window,
+    let ensure_result = match ensure_main_window_once(app) {
+        Ok(result) => result,
         Err(error) => {
             eprintln!("[main-window] failed to ensure main window: {error}");
+            if let MainWindowShowDecision::Reveal { generation } = decision {
+                lifecycle.finish_reveal(generation, false);
+            }
             return false;
         }
     };
 
-    if let Err(error) = window.show() {
-        eprintln!("[main-window] failed to show main window: {error}");
-        return false;
+    match (ensure_result, decision) {
+        (
+            MainWindowEnsureResult::Existing(window),
+            MainWindowShowDecision::Reveal { generation },
+        ) => reveal_main_window(app, &window, generation, reason.as_str()).is_ok(),
+        (MainWindowEnsureResult::Existing(_), MainWindowShowDecision::Wait)
+        | (MainWindowEnsureResult::Created(_), _)
+        | (MainWindowEnsureResult::Creating, _) => true,
+        (_, MainWindowShowDecision::Destroying) => true,
     }
+}
+
+pub(crate) fn mark_main_window_ready<R: Runtime + 'static>(
+    app: &AppHandle<R>,
+    generation: u64,
+) -> Result<MainWindowReadyOutcome, String> {
+    let lifecycle = app.state::<MainWindowLifecycleState>();
+    let decision = lifecycle.mark_ready(generation);
+    let (ready_result, result) = match decision {
+        MainWindowReadyDecision::Stale => ("stale", MainWindowReadyOutcome::Stale),
+        MainWindowReadyDecision::Duplicate => ("duplicate", MainWindowReadyOutcome::Duplicate),
+        MainWindowReadyDecision::Hidden => ("accepted-hidden", MainWindowReadyOutcome::Hidden),
+        MainWindowReadyDecision::Reveal { generation } => {
+            log_main_window_event(
+                "frontend-ready",
+                lifecycle.snapshot(),
+                "frontend",
+                "accepted-reveal",
+            );
+            let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
+                lifecycle.finish_reveal(generation, false);
+                return Err("main window disappeared before ready reveal".to_string());
+            };
+            return if reveal_main_window(app, &window, generation, "frontend-ready")? {
+                Ok(MainWindowReadyOutcome::Revealed)
+            } else {
+                Ok(MainWindowReadyOutcome::Hidden)
+            };
+        }
+    };
+    log_main_window_event(
+        "frontend-ready",
+        lifecycle.snapshot(),
+        "frontend",
+        ready_result,
+    );
+    Ok(result)
+}
+
+fn reveal_main_window<R: Runtime + 'static>(
+    app: &AppHandle<R>,
+    window: &WebviewWindow<R>,
+    generation: u64,
+    reason: &str,
+) -> Result<bool, String> {
+    let lifecycle = app.state::<MainWindowLifecycleState>();
+    if !lifecycle.can_reveal(generation) {
+        lifecycle.finish_reveal(generation, false);
+        log_main_window_event(
+            "show-suppressed",
+            lifecycle.snapshot(),
+            reason,
+            "state-changed-before-show",
+        );
+        return Ok(false);
+    }
+
+    if let Err(error) = window.show() {
+        lifecycle.finish_reveal(generation, false);
+        log_main_window_event(
+            "show-failed",
+            lifecycle.snapshot(),
+            reason,
+            "window-show-error",
+        );
+        return Err(format!("failed to show main window: {error}"));
+    }
+
     let _ = window.unminimize();
     // Win+D can leave the HWND outside Tauri's normal minimized/visible path.
-    if let Err(error) = window_activation::restore_to_foreground(&window) {
+    if let Err(error) = window_activation::restore_to_foreground(window) {
         eprintln!("[main-window] failed to restore native foreground window: {error}");
     }
     let _ = window.set_focus();
+
+    if lifecycle.finish_reveal(generation, true) {
+        let _ = window.hide();
+        log_main_window_event(
+            "show-suppressed",
+            lifecycle.snapshot(),
+            reason,
+            "hidden-race-won",
+        );
+        return Ok(false);
+    }
+
     widget::close_widget_window(app);
-    true
+    crate::app::tray::on_main_window_revealed(app);
+    log_main_window_event("show-succeeded", lifecycle.snapshot(), reason, "visible");
+    Ok(true)
 }
 
 pub(crate) fn minimize_main_window<R: Runtime + 'static>(app: &AppHandle<R>) {
@@ -63,6 +244,7 @@ fn minimize_main_window_to_widget<R: Runtime + 'static>(
     window: &WebviewWindow<R>,
 ) {
     let preferred_monitor = window.current_monitor().ok().flatten();
+    let _ = app.state::<MainWindowLifecycleState>().hide();
     let _ = window.hide();
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -114,21 +296,45 @@ pub(crate) fn register_hidden_main_window_startup<R: Runtime + 'static>(
     true
 }
 
-pub(crate) fn ensure_main_window<R: Runtime>(
+pub(crate) fn ensure_main_window<R: Runtime + 'static>(
     app: &AppHandle<R>,
 ) -> Result<WebviewWindow<R>, String> {
-    ensure_main_window_with_initial_visibility(app, true)
+    match ensure_main_window_once(app)? {
+        MainWindowEnsureResult::Existing(window) | MainWindowEnsureResult::Created(window) => {
+            Ok(window)
+        }
+        MainWindowEnsureResult::Creating => {
+            Err("main window creation is already in progress".to_string())
+        }
+    }
 }
 
-pub(crate) fn ensure_main_window_with_initial_visibility<R: Runtime>(
+enum MainWindowEnsureResult<R: Runtime> {
+    Existing(WebviewWindow<R>),
+    Created(WebviewWindow<R>),
+    Creating,
+}
+
+fn ensure_main_window_once<R: Runtime + 'static>(
     app: &AppHandle<R>,
-    visible: bool,
-) -> Result<WebviewWindow<R>, String> {
+) -> Result<MainWindowEnsureResult<R>, String> {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-        return Ok(window);
+        return Ok(MainWindowEnsureResult::Existing(window));
     }
 
     let webview_root = storage_paths::resolve_storage_paths(app)?.webview_root;
+    let lifecycle = app.state::<MainWindowLifecycleState>();
+    let Some(generation) = lifecycle.begin_window_creation() else {
+        return Ok(MainWindowEnsureResult::Creating);
+    };
+    let created_at = Instant::now();
+    log_main_window_event(
+        "creation-started",
+        lifecycle.snapshot(),
+        "window-missing",
+        "hidden",
+    );
+    let initialization_script = main_window_initialization_script(generation);
 
     let builder = WebviewWindowBuilder::new(app, MAIN_WINDOW_LABEL, main_window_url())
         .title(MAIN_WINDOW_TITLE)
@@ -138,8 +344,20 @@ pub(crate) fn ensure_main_window_with_initial_visibility<R: Runtime>(
         .decorations(false)
         .transparent(true)
         .center()
-        .visible(visible)
-        .data_directory(webview_root);
+        .visible(false)
+        .data_directory(webview_root)
+        .initialization_script(initialization_script)
+        .on_page_load(move |_window, payload| {
+            let event = match payload.event() {
+                PageLoadEvent::Started => "page-load-started",
+                PageLoadEvent::Finished => "page-load-finished",
+            };
+            eprintln!(
+                "[main-window] event={event} generation={generation} elapsed_ms={} url_scheme={} result=observed",
+                created_at.elapsed().as_millis(),
+                payload.url().scheme(),
+            );
+        });
 
     #[cfg(debug_assertions)]
     let builder = if std::env::var("PATINA_E2E").as_deref() == Ok("1") {
@@ -155,9 +373,28 @@ pub(crate) fn ensure_main_window_with_initial_visibility<R: Runtime>(
         builder
     };
 
-    builder
-        .build()
-        .map_err(|error| format!("failed to create main window: {error}"))
+    match builder.build() {
+        Ok(window) => {
+            let should_reveal = lifecycle.finish_window_creation(generation, true);
+            log_main_window_event("created", lifecycle.snapshot(), "builder", "hidden");
+            schedule_main_window_ready_timeout(app.clone(), generation);
+            if should_reveal {
+                reveal_main_window(app, &window, generation, "frontend-ready-during-create")?;
+            }
+            Ok(MainWindowEnsureResult::Created(window))
+        }
+        Err(error) => {
+            lifecycle.finish_window_creation(generation, false);
+            log_main_window_event("creation-failed", lifecycle.snapshot(), "builder", "error");
+            Err(format!("failed to create main window: {error}"))
+        }
+    }
+}
+
+fn main_window_initialization_script(generation: u64) -> String {
+    format!(
+        "Object.defineProperty(window, '{MAIN_WINDOW_GENERATION_PROPERTY}', {{ value: {generation}, writable: false, configurable: false }});"
+    )
 }
 
 fn main_window_url() -> WebviewUrl {
@@ -217,13 +454,62 @@ fn schedule_main_window_destroy_after_background<R: Runtime + 'static>(
             return;
         }
 
-        if let Err(error) = window.destroy() {
-            eprintln!("[main-window] failed to destroy idle main window: {error}");
-        }
+        let destroyed = match window.destroy() {
+            Ok(()) => {
+                log_main_window_event(
+                    "destroyed",
+                    lifecycle.snapshot(),
+                    "background-idle",
+                    "success",
+                );
+                true
+            }
+            Err(error) => {
+                eprintln!("[main-window] failed to destroy idle main window: {error}");
+                false
+            }
+        };
 
-        let should_reopen = lifecycle.finish_destroy_hidden_window();
+        let should_reopen = lifecycle.finish_destroy_hidden_window(destroyed);
         if should_reopen && !app.state::<AppExitState>().is_exit_requested() {
-            let _ = crate::app::tray::show_main_window(&app);
+            let _ = crate::app::tray::show_main_window(&app, MainWindowShowReason::DestroyRecovery);
+        }
+    });
+}
+
+fn schedule_main_window_ready_timeout<R: Runtime + 'static>(app: AppHandle<R>, generation: u64) {
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(MAIN_WINDOW_READY_TIMEOUT_SECS)).await;
+
+        let lifecycle = app.state::<MainWindowLifecycleState>();
+        match lifecycle.handle_ready_timeout(generation) {
+            MainWindowTimeoutDecision::Stale => {}
+            MainWindowTimeoutDecision::Hidden => {
+                log_main_window_event(
+                    "ready-timeout",
+                    lifecycle.snapshot(),
+                    "watchdog",
+                    "kept-hidden",
+                );
+            }
+            MainWindowTimeoutDecision::Reveal { generation } => {
+                log_main_window_event(
+                    "ready-timeout",
+                    lifecycle.snapshot(),
+                    "watchdog",
+                    "fallback-reveal",
+                );
+                let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
+                    lifecycle.finish_reveal(generation, false);
+                    eprintln!(
+                        "[main-window] event=show-failed generation={generation} reason=watchdog result=window-missing"
+                    );
+                    return;
+                };
+                if let Err(error) = reveal_main_window(&app, &window, generation, "ready-timeout") {
+                    eprintln!("[main-window] ready timeout fallback failed: {error}");
+                }
+            }
         }
     });
 }

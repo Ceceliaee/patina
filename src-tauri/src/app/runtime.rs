@@ -76,8 +76,7 @@ pub fn setup(
     crate::data::activity_read_model::spawn_background_worker(app.handle().clone());
 
     let app_handle = app.handle().clone();
-    main_window::ensure_main_window_with_initial_visibility(&app_handle, false)
-        .map_err(std::io::Error::other)?;
+    main_window::ensure_main_window(&app_handle).map_err(std::io::Error::other)?;
     setup_tray(&app_handle)?;
     if !desktop_behavior::apply_startup_desktop_behavior(
         &app_handle,

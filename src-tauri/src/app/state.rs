@@ -3,6 +3,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Mutex,
 };
+use std::time::Instant;
 
 #[derive(Debug, Default)]
 pub(crate) struct DesktopBehaviorState {
@@ -124,104 +125,294 @@ pub(crate) struct MainWindowLifecycleState {
     inner: Mutex<MainWindowLifecycle>,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) enum MainWindowRenderState {
+    #[default]
+    Absent,
+    Waiting,
+    Ready,
+    TimedOut,
+}
+
+impl MainWindowRenderState {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Absent => "absent",
+            Self::Waiting => "waiting",
+            Self::Ready => "ready",
+            Self::TimedOut => "timed-out",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum MainWindowShowDecision {
+    Wait,
+    Reveal { generation: u64 },
+    Destroying,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum MainWindowReadyDecision {
+    Stale,
+    Duplicate,
+    Hidden,
+    Reveal { generation: u64 },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum MainWindowTimeoutDecision {
+    Stale,
+    Hidden,
+    Reveal { generation: u64 },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct MainWindowLifecycleSnapshot {
+    pub(crate) desired_visible: bool,
+    pub(crate) generation: u64,
+    pub(crate) render_state: MainWindowRenderState,
+    pub(crate) create_in_progress: bool,
+    pub(crate) destroy_in_progress: bool,
+    pub(crate) reveal_in_progress: bool,
+    pub(crate) elapsed_ms: Option<u128>,
+}
+
 #[derive(Debug, Default)]
 struct MainWindowLifecycle {
     desired_visible: bool,
     hide_generation: u64,
     destroy_in_progress: bool,
+    window_generation: u64,
+    render_state: MainWindowRenderState,
+    create_in_progress: bool,
+    reveal_in_progress: bool,
+    reveal_satisfied: bool,
+    created_at: Option<Instant>,
 }
 
 impl MainWindowLifecycleState {
-    pub(crate) fn show(&self) -> bool {
-        match self.inner.lock() {
-            Ok(mut guard) => {
-                guard.desired_visible = true;
-                guard.hide_generation = guard.hide_generation.wrapping_add(1);
-                guard.destroy_in_progress
+    fn with_inner<T>(&self, update: impl FnOnce(&mut MainWindowLifecycle) -> T) -> T {
+        let mut guard = match self.inner.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        update(&mut guard)
+    }
+
+    pub(crate) fn begin_window_creation(&self) -> Option<u64> {
+        self.with_inner(|inner| {
+            if inner.create_in_progress || inner.destroy_in_progress {
+                return None;
             }
-            Err(poisoned) => {
-                let mut guard = poisoned.into_inner();
-                guard.desired_visible = true;
-                guard.hide_generation = guard.hide_generation.wrapping_add(1);
-                guard.destroy_in_progress
+
+            inner.create_in_progress = true;
+            inner.window_generation = inner.window_generation.wrapping_add(1);
+            inner.render_state = MainWindowRenderState::Waiting;
+            inner.reveal_in_progress = false;
+            inner.reveal_satisfied = false;
+            inner.created_at = Some(Instant::now());
+            Some(inner.window_generation)
+        })
+    }
+
+    pub(crate) fn finish_window_creation(&self, generation: u64, created: bool) -> bool {
+        self.with_inner(|inner| {
+            if inner.window_generation != generation || !inner.create_in_progress {
+                return false;
             }
-        }
+
+            inner.create_in_progress = false;
+            if !created {
+                inner.render_state = MainWindowRenderState::Absent;
+                inner.reveal_in_progress = false;
+                inner.reveal_satisfied = false;
+                inner.created_at = None;
+                return false;
+            }
+
+            if inner.desired_visible
+                && matches!(
+                    inner.render_state,
+                    MainWindowRenderState::Ready | MainWindowRenderState::TimedOut
+                )
+                && !inner.destroy_in_progress
+                && !inner.reveal_in_progress
+                && !inner.reveal_satisfied
+            {
+                inner.reveal_in_progress = true;
+                return true;
+            }
+
+            false
+        })
+    }
+
+    pub(crate) fn request_show(&self) -> MainWindowShowDecision {
+        self.with_inner(|inner| {
+            inner.desired_visible = true;
+            inner.hide_generation = inner.hide_generation.wrapping_add(1);
+            inner.reveal_satisfied = false;
+
+            if inner.destroy_in_progress {
+                return MainWindowShowDecision::Destroying;
+            }
+
+            if matches!(
+                inner.render_state,
+                MainWindowRenderState::Ready | MainWindowRenderState::TimedOut
+            ) && !inner.create_in_progress
+                && !inner.reveal_in_progress
+            {
+                inner.reveal_in_progress = true;
+                return MainWindowShowDecision::Reveal {
+                    generation: inner.window_generation,
+                };
+            }
+
+            MainWindowShowDecision::Wait
+        })
+    }
+
+    pub(crate) fn mark_ready(&self, generation: u64) -> MainWindowReadyDecision {
+        self.with_inner(|inner| {
+            if inner.window_generation != generation
+                || inner.render_state == MainWindowRenderState::Absent
+            {
+                return MainWindowReadyDecision::Stale;
+            }
+
+            let first_ready = inner.render_state == MainWindowRenderState::Waiting;
+            if first_ready || inner.render_state == MainWindowRenderState::TimedOut {
+                inner.render_state = MainWindowRenderState::Ready;
+            }
+
+            if inner.desired_visible
+                && !inner.create_in_progress
+                && !inner.destroy_in_progress
+                && !inner.reveal_in_progress
+                && !inner.reveal_satisfied
+            {
+                inner.reveal_in_progress = true;
+                return MainWindowReadyDecision::Reveal { generation };
+            }
+
+            if first_ready && (!inner.desired_visible || inner.create_in_progress) {
+                MainWindowReadyDecision::Hidden
+            } else {
+                MainWindowReadyDecision::Duplicate
+            }
+        })
+    }
+
+    pub(crate) fn handle_ready_timeout(&self, generation: u64) -> MainWindowTimeoutDecision {
+        self.with_inner(|inner| {
+            if inner.window_generation != generation
+                || inner.render_state != MainWindowRenderState::Waiting
+            {
+                return MainWindowTimeoutDecision::Stale;
+            }
+
+            inner.render_state = MainWindowRenderState::TimedOut;
+            if inner.desired_visible
+                && !inner.create_in_progress
+                && !inner.destroy_in_progress
+                && !inner.reveal_in_progress
+            {
+                inner.reveal_in_progress = true;
+                MainWindowTimeoutDecision::Reveal { generation }
+            } else {
+                MainWindowTimeoutDecision::Hidden
+            }
+        })
+    }
+
+    pub(crate) fn finish_reveal(&self, generation: u64, succeeded: bool) -> bool {
+        self.with_inner(|inner| {
+            if inner.window_generation != generation {
+                return succeeded;
+            }
+
+            inner.reveal_in_progress = false;
+            inner.reveal_satisfied = succeeded && inner.desired_visible;
+            succeeded && !inner.desired_visible
+        })
+    }
+
+    pub(crate) fn can_reveal(&self, generation: u64) -> bool {
+        self.with_inner(|inner| {
+            inner.window_generation == generation
+                && inner.desired_visible
+                && matches!(
+                    inner.render_state,
+                    MainWindowRenderState::Ready | MainWindowRenderState::TimedOut
+                )
+                && !inner.create_in_progress
+                && !inner.destroy_in_progress
+                && inner.reveal_in_progress
+        })
+    }
+
+    pub(crate) fn snapshot(&self) -> MainWindowLifecycleSnapshot {
+        self.with_inner(|inner| MainWindowLifecycleSnapshot {
+            desired_visible: inner.desired_visible,
+            generation: inner.window_generation,
+            render_state: inner.render_state,
+            create_in_progress: inner.create_in_progress,
+            destroy_in_progress: inner.destroy_in_progress,
+            reveal_in_progress: inner.reveal_in_progress,
+            elapsed_ms: inner
+                .created_at
+                .map(|created_at| created_at.elapsed().as_millis()),
+        })
     }
 
     pub(crate) fn hide(&self) -> u64 {
-        match self.inner.lock() {
-            Ok(mut guard) => {
-                guard.desired_visible = false;
-                guard.hide_generation = guard.hide_generation.wrapping_add(1);
-                guard.hide_generation
-            }
-            Err(poisoned) => {
-                let mut guard = poisoned.into_inner();
-                guard.desired_visible = false;
-                guard.hide_generation = guard.hide_generation.wrapping_add(1);
-                guard.hide_generation
-            }
-        }
+        self.with_inner(|inner| {
+            inner.desired_visible = false;
+            inner.reveal_satisfied = false;
+            inner.hide_generation = inner.hide_generation.wrapping_add(1);
+            inner.hide_generation
+        })
     }
 
     pub(crate) fn try_hide_for_startup(&self) -> Option<u64> {
-        match self.inner.lock() {
-            Ok(mut guard) => {
-                if guard.desired_visible {
-                    return None;
-                }
-                guard.hide_generation = guard.hide_generation.wrapping_add(1);
-                Some(guard.hide_generation)
+        self.with_inner(|inner| {
+            if inner.desired_visible {
+                return None;
             }
-            Err(poisoned) => {
-                let mut guard = poisoned.into_inner();
-                if guard.desired_visible {
-                    return None;
-                }
-                guard.hide_generation = guard.hide_generation.wrapping_add(1);
-                Some(guard.hide_generation)
-            }
-        }
+            inner.reveal_satisfied = false;
+            inner.hide_generation = inner.hide_generation.wrapping_add(1);
+            Some(inner.hide_generation)
+        })
     }
 
     pub(crate) fn begin_destroy_hidden_window(&self, hide_generation: u64) -> bool {
-        match self.inner.lock() {
-            Ok(mut guard) => {
-                if guard.desired_visible
-                    || guard.destroy_in_progress
-                    || guard.hide_generation != hide_generation
-                {
-                    return false;
-                }
-                guard.destroy_in_progress = true;
-                true
+        self.with_inner(|inner| {
+            if inner.desired_visible
+                || inner.create_in_progress
+                || inner.destroy_in_progress
+                || inner.reveal_in_progress
+                || inner.hide_generation != hide_generation
+            {
+                return false;
             }
-            Err(poisoned) => {
-                let mut guard = poisoned.into_inner();
-                if guard.desired_visible
-                    || guard.destroy_in_progress
-                    || guard.hide_generation != hide_generation
-                {
-                    return false;
-                }
-                guard.destroy_in_progress = true;
-                true
-            }
-        }
+            inner.destroy_in_progress = true;
+            true
+        })
     }
 
-    pub(crate) fn finish_destroy_hidden_window(&self) -> bool {
-        match self.inner.lock() {
-            Ok(mut guard) => {
-                guard.destroy_in_progress = false;
-                guard.desired_visible
+    pub(crate) fn finish_destroy_hidden_window(&self, destroyed: bool) -> bool {
+        self.with_inner(|inner| {
+            inner.destroy_in_progress = false;
+            if destroyed {
+                inner.render_state = MainWindowRenderState::Absent;
+                inner.reveal_in_progress = false;
+                inner.reveal_satisfied = false;
+                inner.created_at = None;
             }
-            Err(poisoned) => {
-                let mut guard = poisoned.into_inner();
-                guard.destroy_in_progress = false;
-                guard.desired_visible
-            }
-        }
+            inner.desired_visible
+        })
     }
 }
 
