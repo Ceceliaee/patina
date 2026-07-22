@@ -185,7 +185,7 @@ export default function DataHeatmapTooltip({
     };
   }, [heatmapTooltip, updateTooltipPosition]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     hideTooltip();
   }, [granularity, hideTooltip, rows, selectedHeatmapViewKey]);
 
