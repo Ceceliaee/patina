@@ -65,9 +65,8 @@ export function useAppShellNavigation({ confirm }: UseAppShellNavigationParams) 
     if (nextView === currentView) return true;
     if (viewDirtyState.settings || viewDirtyState.mapping) return false;
 
-    // Navigation rendering is intentionally deferred by the sidebar so its
-    // selection can paint first. Persist the accepted intent synchronously so
-    // a reload in that frame still restores the destination view.
+    // Persist the accepted intent synchronously so a reload during the state
+    // transition still restores the destination view.
     rememberLastActiveView(nextView);
     return true;
   }, [currentView, viewDirtyState]);

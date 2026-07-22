@@ -283,6 +283,8 @@ await runTest("app shell declares every primary desktop view", () => {
   assert.doesNotMatch(shell, /qp-main-view-enter/);
   assert.doesNotMatch(shell, /qp-motion-view-enter/);
   assert.doesNotMatch(shell, /qp-dynamic-effects-off/);
+  assert.doesNotMatch(sidebar, /requestAnimationFrame|setTimeout/);
+  assert.match(sidebar, /runNavigate\(\);/);
 });
 
 await runTest("motion preference keeps reduced motion above enhanced motion", () => {

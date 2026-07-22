@@ -36,11 +36,6 @@ import {
   getHistoryTimelineWheelZoomDurationMs,
   normalizeHistoryTimelineWheelDelta,
 } from "../src/features/history/hooks/useHistoryTimelineViewportInteraction.ts";
-import {
-  NAVIGATION_COMMIT_FALLBACK_MS,
-  scheduleNavigationCommit,
-  type NavigationCommitScheduler,
-} from "../src/app/services/navigationCommitScheduler.ts";
 
 const BASE_SETTINGS: AppSettings = {
   idleTimeoutSecs: 300,
@@ -198,86 +193,6 @@ async function runTest(name: string, fn: () => Promise<void> | void) {
   passed += 1;
   console.log(`PASS ${name}`);
 }
-
-function createNavigationCommitScheduler() {
-  let nextHandle = 1;
-  const frames = new Map<number, FrameRequestCallback>();
-  const timers = new Map<number, { callback: () => void; delayMs: number }>();
-  const cancelledFrames: number[] = [];
-
-  const scheduler: NavigationCommitScheduler = {
-    requestAnimationFrame(callback) {
-      const handle = nextHandle++;
-      frames.set(handle, callback);
-      return handle;
-    },
-    cancelAnimationFrame(handle) {
-      cancelledFrames.push(handle);
-      frames.delete(handle);
-    },
-    setTimeout(callback, delayMs) {
-      const handle = nextHandle++;
-      timers.set(handle, { callback, delayMs });
-      return handle;
-    },
-    clearTimeout(handle) {
-      timers.delete(handle);
-    },
-  };
-
-  return { scheduler, frames, timers, cancelledFrames };
-}
-
-await runTest("navigation commits on the next animation frame exactly once", () => {
-  const runtime = createNavigationCommitScheduler();
-  let commitCount = 0;
-  scheduleNavigationCommit(() => {
-    commitCount += 1;
-  }, runtime.scheduler);
-
-  const frame = Array.from(runtime.frames.values())[0];
-  assert.ok(frame);
-  frame(0);
-  assert.equal(commitCount, 1);
-  assert.equal(runtime.timers.size, 0);
-  frame(16);
-  assert.equal(commitCount, 1);
-});
-
-await runTest("navigation falls back when animation frames are throttled", () => {
-  const runtime = createNavigationCommitScheduler();
-  let commitCount = 0;
-  scheduleNavigationCommit(() => {
-    commitCount += 1;
-  }, runtime.scheduler);
-
-  const timer = Array.from(runtime.timers.values())[0];
-  assert.ok(timer);
-  assert.equal(timer.delayMs, NAVIGATION_COMMIT_FALLBACK_MS);
-  timer.callback();
-  assert.equal(commitCount, 1);
-  assert.equal(runtime.frames.size, 0);
-  assert.equal(runtime.cancelledFrames.length, 1);
-});
-
-await runTest("cancelled navigation cannot commit from either scheduler", () => {
-  const runtime = createNavigationCommitScheduler();
-  let commitCount = 0;
-  const cancel = scheduleNavigationCommit(() => {
-    commitCount += 1;
-  }, runtime.scheduler);
-  const frame = Array.from(runtime.frames.values())[0];
-  const timer = Array.from(runtime.timers.values())[0];
-  assert.ok(frame);
-  assert.ok(timer);
-
-  cancel();
-  frame(0);
-  timer.callback();
-  assert.equal(commitCount, 0);
-  assert.equal(runtime.frames.size, 0);
-  assert.equal(runtime.timers.size, 0);
-});
 
 await runTest("history timeline normalizes pixel line and page wheel deltas", () => {
   assert.equal(normalizeHistoryTimelineWheelDelta(12, 0, 500), 12);

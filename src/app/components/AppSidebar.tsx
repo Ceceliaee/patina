@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { ArrowUpCircle, Monitor, Clock, Settings2, Sparkles, BarChart3, Info, ToolCase } from "lucide-react";
 import appIconUrl from "../../../src-tauri/icons/32x32.png";
 import { UI_TEXT } from "../../shared/copy/index.ts";
-import { scheduleNavigationCommit } from "../services/navigationCommitScheduler.ts";
 import type { View } from "../types/view";
 
 interface Props {
@@ -39,7 +38,6 @@ export default function AppSidebar({
   ];
   const [optimisticView, setOptimisticView] = useState<View | null>(null);
   const navigateRequestRef = useRef(0);
-  const cancelPendingNavigationRef = useRef<(() => void) | null>(null);
   const activeView = optimisticView ?? currentView;
   const activeNavIndex = navItems.findIndex((item) => item.id === activeView);
   const navStyle: NavStyle = {
@@ -51,8 +49,6 @@ export default function AppSidebar({
   }, [currentView]);
 
   const handleNavClick = (view: View) => {
-    cancelPendingNavigationRef.current?.();
-    cancelPendingNavigationRef.current = null;
     navigateRequestRef.current += 1;
     const requestId = navigateRequestRef.current;
 
@@ -72,19 +68,15 @@ export default function AppSidebar({
       });
     };
 
-    // Prefer the next paint so optimistic feedback is visible before a heavy
-    // page mount. A bounded timer keeps navigation correct when the browser or
-    // WebView throttles animation frames while transitioning visibility.
-    cancelPendingNavigationRef.current = scheduleNavigationCommit(() => {
-      cancelPendingNavigationRef.current = null;
-      runNavigate();
-    });
+    // Navigation correctness must not depend on an animation frame or timer:
+    // background and headless WebViews may throttle both. AppShell keeps the
+    // previous rendered view until the destination chunk is ready, so the
+    // accepted state transition remains cheap and can commit immediately.
+    runNavigate();
   };
 
   useEffect(() => {
     return () => {
-      cancelPendingNavigationRef.current?.();
-      cancelPendingNavigationRef.current = null;
       navigateRequestRef.current += 1;
     };
   }, []);
