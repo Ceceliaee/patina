@@ -5,7 +5,6 @@ import {
   saveDataBootstrapSnapshotPayload,
 } from "../../../platform/persistence/dataBootstrapSnapshotStore.ts";
 import type {
-  DataAppTrendViewModel,
   DataTrendViewModel,
 } from "./dataReadModel.ts";
 import type { HeatmapSelection, HeatmapWeek } from "./dataHeatmapReadModel.ts";
@@ -15,12 +14,12 @@ const DATA_BOOTSTRAP_SNAPSHOT_MAX_BYTES = 256 * 1024;
 export interface DataBootstrapSnapshot {
   createdAtMs: number;
   overviewRangeCacheKey: string;
-  appRangeCacheKey: string;
+  appRangeCacheKey?: string;
   heatmapSelection: HeatmapSelection;
   mappingVersion: number;
   uiLanguage: AppLanguage;
   overviewTrendViewModel: DataTrendViewModel;
-  appTrendViewModel: DataAppTrendViewModel;
+  appTrendViewModel?: DataTrendViewModel;
   heatmapRows: HeatmapWeek[];
   earliestStartTime: number | null;
 }
@@ -51,12 +50,12 @@ function isValidBootstrapSnapshot(value: unknown): value is DataBootstrapSnapsho
   return (
     typeof value.createdAtMs === "number"
     && typeof value.overviewRangeCacheKey === "string"
-    && typeof value.appRangeCacheKey === "string"
+    && (value.appRangeCacheKey === undefined || typeof value.appRangeCacheKey === "string")
     && (typeof value.heatmapSelection === "number" || value.heatmapSelection === "recent")
     && typeof value.mappingVersion === "number"
     && (value.uiLanguage === "zh-CN" || value.uiLanguage === "en-US")
     && isRecord(value.overviewTrendViewModel)
-    && isRecord(value.appTrendViewModel)
+    && (value.appTrendViewModel === undefined || isRecord(value.appTrendViewModel))
     && Array.isArray(value.heatmapRows)
     && (typeof value.earliestStartTime === "number" || value.earliestStartTime === null)
   );

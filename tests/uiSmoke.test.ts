@@ -351,7 +351,6 @@ await runTest("app shell keeps History and Data snapshot loaders on their owning
 await runTest("Data regular view avoids visible loading and skeleton branches", () => {
   const data = readUtf8("src/features/data/components/Data.tsx");
   const trendPanel = readUtf8("src/features/data/components/DataTrendPanel.tsx");
-  const appTrendPanel = readUtf8("src/features/data/components/DataAppTrendPanel.tsx");
   const heatmapPanel = readUtf8("src/features/data/components/DataHeatmapPanel.tsx");
 
   assert.doesNotMatch(data, /UI_TEXT\.history\.loading/);
@@ -359,9 +358,7 @@ await runTest("Data regular view avoids visible loading and skeleton branches", 
   assert.doesNotMatch(data, /aria-busy/);
   assert.doesNotMatch(data, /renderStage/);
   assert.doesNotMatch(trendPanel, /Loader2|qp-spin/);
-  assert.doesNotMatch(appTrendPanel, /Loader2|qp-spin/);
   assert.doesNotMatch(trendPanel, /qp-content-fade-in/);
-  assert.doesNotMatch(appTrendPanel, /qp-content-fade-in/);
   assert.doesNotMatch(heatmapPanel, /qp-content-fade-in/);
   assert.match(heatmapPanel, /data-heatmap-loading-state|loading\?: boolean/);
   assert.doesNotMatch(heatmapPanel, /UI_TEXT\.data\.less/);
@@ -376,7 +373,6 @@ await runTest("Data regular view avoids visible loading and skeleton branches", 
   assert.match(data, /freshReadModelsReady/);
   assert.match(data, /shouldDeferRuntimeReadModels/);
   assert.match(data, /shouldDeferHeatmapRows/);
-  assert.match(data, /EMPTY_DATA_APP_TREND_POINTS/);
 });
 
 await runTest("History regular view avoids visible loading copy", () => {
@@ -1276,7 +1272,7 @@ await runTest("search fields share one visual and accessibility owner", () => {
   const sharedSearchField = readUtf8("src/shared/components/QuietSearchField.tsx");
   const consumers = [
     readUtf8("src/features/classification/components/AppMapping.tsx"),
-    readUtf8("src/features/data/components/DataAppTrendPanel.tsx"),
+
     readUtf8("src/features/tools/components/ReminderToolPanel.tsx"),
   ];
 

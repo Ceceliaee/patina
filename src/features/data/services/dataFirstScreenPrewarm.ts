@@ -1,6 +1,5 @@
 import type { AppLanguage } from "../../../shared/settings/appSettings.ts";
 import {
-  buildDataAppTrendViewModelFromAggregate,
   buildDataTrendAggregateContext,
   buildDataTrendViewModelFromAggregate,
   prewarmRecentDataHeatmapCache,
@@ -71,12 +70,10 @@ function buildBootstrapSnapshot(
   return {
     createdAtMs: nowMs,
     overviewRangeCacheKey: trendSnapshot.range.cacheKey,
-    appRangeCacheKey: trendSnapshot.range.cacheKey,
     heatmapSelection: "recent",
     mappingVersion: options.mappingVersion,
     uiLanguage: options.uiLanguage,
     overviewTrendViewModel: buildDataTrendViewModelFromAggregate(trendAggregateContext),
-    appTrendViewModel: buildDataAppTrendViewModelFromAggregate(trendAggregateContext, null),
     heatmapRows: buildActivityHeatmap(heatmapSnapshot.sessions, "recent", nowMs),
     earliestStartTime: heatmapSnapshot.earliestStartTime,
   };

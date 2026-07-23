@@ -15,6 +15,11 @@ const ZH_CN_ACCESSIBILITY_COPY = {
     },
     data: {
       trendSummary: "趋势摘要",
+      expandAppWeb: "展开应用与网页统计",
+      collapseAppWeb: "收起应用与网页统计",
+      showTrendCurve: (label: string) => `显示${label}`,
+      hideTrendCurve: (label: string) => `隐藏${label}`,
+      closeDetailPanel: "关闭详细面板",
       trendRange: "选择趋势范围",
       shorterTrendRange: "缩短趋势范围",
       longerTrendRange: "扩大趋势范围",
@@ -120,6 +125,11 @@ const EN_US_ACCESSIBILITY_COPY = {
     },
     data: {
       trendSummary: "Trend summary",
+      expandAppWeb: "Expand app & web stats",
+      collapseAppWeb: "Collapse app & web stats",
+      showTrendCurve: (label: string) => `Show ${label}`,
+      hideTrendCurve: (label: string) => `Hide ${label}`,
+      closeDetailPanel: "Close detail panel",
       trendRange: "Select trend range",
       shorterTrendRange: "Shorten trend range",
       longerTrendRange: "Expand trend range",
