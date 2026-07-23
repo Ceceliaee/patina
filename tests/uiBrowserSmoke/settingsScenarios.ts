@@ -255,11 +255,11 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       true,
     );
     assert.equal(
-      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("选择所用浏览器，从对应扩展商店安装 Patina Web Sync。")})`),
+      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("选择浏览器，从对应商店安装 Patina Web Sync。")})`),
       true,
     );
     assert.equal(
-      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("无法使用上述商店时，可前往 Patina Web Sync 发布页手动安装。")})`),
+      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("商店不可用时，可从 Patina Web Sync 发布页手动安装。")})`),
       true,
     );
     assert.equal(

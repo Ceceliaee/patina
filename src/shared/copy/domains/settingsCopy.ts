@@ -79,11 +79,6 @@ const ZH_CN_SETTINGS_COPY = {
     webActivityHelpCopiedAction: "已复制",
     webActivityHelpCopyPortAction: "复制端口",
     webActivityHelpCopyTokenAction: "复制 Token",
-    webActivityStoreBadgeLabels: {
-      chrome: "从 Chrome 应用商店安装 Patina Web Sync",
-      firefox: "从 Firefox 附加组件安装 Patina Web Sync",
-      edge: "从 Microsoft Edge 加载项安装 Patina Web Sync",
-    },
     webActivityHelpTitle: "网页同步使用说明",
     webActivityHelpDescription: "Patina Web Sync 会把当前活动网页同步到本机 Patina。",
     webActivityHelpSteps: [
@@ -96,11 +91,11 @@ const ZH_CN_SETTINGS_COPY = {
       },
       {
         title: "安装浏览器扩展",
-        description: "选择所用浏览器，从对应扩展商店安装 Patina Web Sync。",
+        description: "选择浏览器，从对应商店安装 Patina Web Sync。",
         showStoreBadges: true,
         details: [
           {
-            text: "无法使用上述商店时，可前往 Patina Web Sync 发布页手动安装。",
+            text: "商店不可用时，可从 Patina Web Sync 发布页手动安装。",
             links: [
               {
                 label: "打开发布页",
@@ -378,11 +373,6 @@ const EN_US_SETTINGS_COPY = {
     webActivityHelpCopiedAction: "Copied",
     webActivityHelpCopyPortAction: "Copy port",
     webActivityHelpCopyTokenAction: "Copy Token",
-    webActivityStoreBadgeLabels: {
-      chrome: "Install Patina Web Sync from the Chrome Web Store",
-      firefox: "Install Patina Web Sync from Firefox Add-ons",
-      edge: "Install Patina Web Sync from Microsoft Edge Add-ons",
-    },
     webActivityHelpTitle: "Web Sync Guide",
     webActivityHelpDescription: "Patina Web Sync sends the active webpage to the local Patina desktop app.",
     webActivityHelpSteps: [
@@ -395,11 +385,11 @@ const EN_US_SETTINGS_COPY = {
       },
       {
         title: "Install the browser extension",
-        description: "Choose your browser and install Patina Web Sync from its extension store.",
+        description: "Choose a browser and install Patina Web Sync from its store.",
         showStoreBadges: true,
         details: [
           {
-            text: "If you cannot use these stores, install manually from the Patina Web Sync releases page.",
+            text: "If a store is unavailable, install manually from Patina Web Sync releases.",
             links: [
               {
                 label: "Open releases",

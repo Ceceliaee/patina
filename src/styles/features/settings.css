@@ -538,10 +538,27 @@
   outline-offset: 2px;
 }
 
-.settings-web-activity-store-badge-row img {
+.settings-web-activity-store-badge {
   display: block;
-  width: auto;
   height: 36px;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
+.settings-web-activity-store-badge.chrome {
+  width: 128px;
+  background-image: url("../../features/settings/assets/store-badges/chrome-web-store.png");
+}
+
+.settings-web-activity-store-badge.firefox {
+  width: 103px;
+  background-image: url("../../features/settings/assets/store-badges/firefox-add-ons.svg");
+}
+
+.settings-web-activity-store-badge.edge {
+  width: 136px;
+  background-image: url("../../features/settings/assets/store-badges/edge-add-ons.png");
 }
 
 .settings-web-activity-help-detail-list {

@@ -8,10 +8,10 @@ const COPY_DOMAINS_DIR = "src/shared/copy/domains";
 const KI_B = 1024;
 
 const INITIAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 310;
-// Generic import and unified exclusion semantics add reviewed lazy-page workflows.
-// Keep page-specific and total budgets unchanged; the 0.25 KiB aggregate headroom
-// absorbs cross-runner gzip variation from content-hashed lazy chunk references.
-const LAZY_JS_GZIP_BUDGET_KI_B = 85.25;
+// Generic import, unified exclusion semantics, and the reviewed Web Sync store
+// shortcuts add lazy-page workflows. Keep page-specific and total budgets
+// unchanged; the 0.25 KiB aggregate headroom absorbs cross-runner gzip variation.
+const LAZY_JS_GZIP_BUDGET_KI_B = 85.5;
 const TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 390;
 
 const INITIAL_CHUNK_BUDGETS = [
