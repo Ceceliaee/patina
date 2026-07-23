@@ -161,7 +161,7 @@ IPC 契约应保持稳定、可解析、可测试。
 边界规则如下：
 
 - `Patina` 拥有本机 HTTP 接收端、token 校验、网页活动写入、备份恢复、清理历史、History / Classification 读模型和 Settings 配置说明
-- `Patina Web Sync` 独立仓库拥有 Chromium / Firefox 扩展源码、manifest 版本、商店素材、Firefox AMO 签名和扩展 release asset
+- `Patina Web Sync` 独立仓库拥有 Chromium / Firefox 扩展源码、manifest 版本、商店素材、三店提交、AMO 公开 listed XPI 和扩展 release asset
 - 两者通过 [`web-activity-protocol.md`](./web-activity-protocol.md) 定义的本机协议协作
 - 不把浏览器扩展源码、构建脚本或商店发布流程重新放回 `Patina` 主仓库
 - 不为了扩展分发把 `Patina` 主应用发布流程重新绑定到扩展版本号

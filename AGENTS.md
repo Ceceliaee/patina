@@ -15,6 +15,7 @@ These instructions apply to all UI work unless the user gives an explicit task-s
 - Architecture refactors, boundary decisions, and new modules must align with `docs/architecture.md`.
 - Stable-period issue fixes and boundary triage must follow `docs/issue-fix-boundary-guardrails.md`.
 - Versioning, changelog, and release work must follow `docs/versioning-and-release-policy.md`.
+- Patina Web Sync protocol changes and cross-repository release acceptance must follow `docs/web-activity-protocol.md` and the cross-repository acceptance contract in `docs/versioning-and-release-policy.md`.
 - Treat the top-level long-lived docs under `docs/` as the current source of truth.
 
 ## Quiet Pro Baseline
