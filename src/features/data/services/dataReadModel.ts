@@ -162,7 +162,16 @@ interface MergedDataAppDurationBucket extends DataAppDurationBucket {
   sourceAppKeys: string[];
 }
 
-function buildChartAxis(points: DataTrendPoint[]) {
+export function formatHeatmapDateLabel(dateKey: string) {
+  const date = new Date(`${dateKey}T00:00:00`);
+  return date.toLocaleDateString(getUiLocale(), { month: "2-digit", day: "2-digit" });
+}
+
+function formatHeatmapMonthLabel(date: Date) {
+  return UI_TEXT.date.monthLabel(date.getMonth() + 1);
+}
+
+export function buildChartAxis(points: DataTrendPoint[]) {
   const maxHours = Math.max(0, ...points.map((point) => point.hours));
   const intervalCount = 3;
   const rawStep = Math.max(1, maxHours / intervalCount);
