@@ -1,0 +1,21 @@
+<svg width="580" height="144" viewBox="0 0 580 144" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="mark" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#657287"/>
+      <stop offset="0.52" stop-color="#3A4658"/>
+      <stop offset="1" stop-color="#2D3748"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="576" height="140" rx="32" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="4"/>
+  <svg x="98" y="16" width="112" height="112" viewBox="0 0 256 256">
+    <path d="M218.21 95.17A96 96 0 0 1 189.7 201.54" fill="none" stroke="url(#mark)" stroke-width="16" stroke-linecap="round"/>
+    <path d="M160.83 218.21A96 96 0 1 1 160.83 37.79" fill="none" stroke="url(#mark)" stroke-width="16" stroke-linecap="round"/>
+    <circle cx="195.88" cy="60.12" r="14" fill="url(#mark)"/>
+    <path d="M128 184V134Q128 128 132.24 123.76L164 92" fill="none" stroke="url(#mark)" stroke-width="16" stroke-linejoin="round"/>
+    <g transform="translate(164 92) rotate(-45)">
+      <path d="M20 0L-10-16V16L20 0Z" fill="url(#mark)" stroke="url(#mark)" stroke-width="4" stroke-linejoin="round"/>
+    </g>
+  </svg>
+  <text x="214" y="55" fill="#657287" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="600" letter-spacing="0.5">Available from Releases</text>
+  <text x="212" y="107" fill="#24292F" font-family="Segoe UI, Arial, sans-serif" font-size="56" font-weight="700">Patina</text>
+</svg>

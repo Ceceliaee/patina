@@ -36,13 +36,24 @@ Patina records foreground app usage as local, quiet, and trustworthy personal de
 
 ## Download
 
-Prebuilt versions are published on GitHub Releases:
+Download and install the latest Patina:
 
-- [Download latest](https://github.com/Ceceliaee/patina/releases/latest)
+<p align="center">
+  <a href="https://github.com/Ceceliaee/patina/releases/latest">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset=".github/assets/download/patina-download-dark.svg">
+      <img src=".github/assets/download/patina-download-light.svg" height="36" alt="Download the latest Patina release">
+    </picture>
+  </a>
+</p>
 
-Open the release page, download the Windows installer, and run it. Patina currently targets Windows 10/11 desktop use.
+[Patina Web Sync](https://github.com/Ceceliaee/patina-web-sync) adds specific webpage details to browser activity. Install it as needed:
 
-The optional [Patina Web Sync](https://github.com/Ceceliaee/patina-web-sync) browser extension is published separately and is used to identify webpage titles in browsers.
+<p align="center">
+  <a href="https://chromewebstore.google.com/detail/patina-web-sync/gimdckblhckibmeklhemgccabmbnoemd"><img src=".github/assets/store-badges/chrome-web-store.png" height="36" alt="Install Patina Web Sync from the Chrome Web Store"></a>
+  <a href="https://addons.mozilla.org/firefox/addon/patina-web-sync/"><img src=".github/assets/store-badges/firefox-add-ons.svg" height="36" alt="Install Patina Web Sync from Firefox Add-ons"></a>
+  <a href="https://microsoftedge.microsoft.com/addons/detail/gogmlpjhbfjghilmpcciedplifdiibai"><img src=".github/assets/store-badges/edge-add-ons.png" height="36" alt="Install Patina Web Sync from Microsoft Edge Add-ons"></a>
+</p>
 
 ## Core Features
 
