@@ -79,6 +79,11 @@ const ZH_CN_SETTINGS_COPY = {
     webActivityHelpCopiedAction: "已复制",
     webActivityHelpCopyPortAction: "复制端口",
     webActivityHelpCopyTokenAction: "复制 Token",
+    webActivityStoreBadgeLabels: {
+      chrome: "从 Chrome 应用商店安装 Patina Web Sync",
+      firefox: "从 Firefox 附加组件安装 Patina Web Sync",
+      edge: "从 Microsoft Edge 加载项安装 Patina Web Sync",
+    },
     webActivityHelpTitle: "网页同步使用说明",
     webActivityHelpDescription: "Patina Web Sync 会把当前活动网页同步到本机 Patina。",
     webActivityHelpSteps: [
@@ -91,34 +96,16 @@ const ZH_CN_SETTINGS_COPY = {
       },
       {
         title: "安装浏览器扩展",
-        description: "从 Patina Web Sync 发布页获取对应浏览器系的扩展包。",
+        description: "选择所用浏览器，从对应扩展商店安装 Patina Web Sync。",
+        showStoreBadges: true,
         details: [
           {
-            text: "从 Patina Web Sync 发布页获取扩展包。",
+            text: "无法使用上述商店时，可前往 Patina Web Sync 发布页手动安装。",
             links: [
               {
-                label: "打开下载页",
+                label: "打开发布页",
                 href: "https://github.com/Ceceliaee/patina-web-sync/releases/latest",
               },
-            ],
-          },
-          {
-            text: "Chromium 系：",
-            children: [
-              "下载 patina-chromium-extension-v...zip。",
-              "解压后得到 patina-chromium-extension-v... 文件夹。",
-              "在地址栏输入 chrome://extensions/ 或 edge://extensions/，开启「开发者模式」。",
-              "点击「加载已解压的扩展程序」或「加载解压缩的扩展」。",
-              "选择解压得到的 patina-chromium-extension-v... 文件夹（包含 manifest.json）。",
-            ],
-          },
-          {
-            text: "Firefox 系：",
-            children: [
-              "下载 patina-firefox-extension-v...xpi。",
-              "在地址栏输入 about:addons，进入附加组件管理器。",
-              "点击齿轮按钮，选择「从文件安装附加组件」。",
-              "选择下载的 .xpi 文件，并在提示中点击「添加」。",
             ],
           },
         ],
@@ -391,6 +378,11 @@ const EN_US_SETTINGS_COPY = {
     webActivityHelpCopiedAction: "Copied",
     webActivityHelpCopyPortAction: "Copy port",
     webActivityHelpCopyTokenAction: "Copy Token",
+    webActivityStoreBadgeLabels: {
+      chrome: "Install Patina Web Sync from the Chrome Web Store",
+      firefox: "Install Patina Web Sync from Firefox Add-ons",
+      edge: "Install Patina Web Sync from Microsoft Edge Add-ons",
+    },
     webActivityHelpTitle: "Web Sync Guide",
     webActivityHelpDescription: "Patina Web Sync sends the active webpage to the local Patina desktop app.",
     webActivityHelpSteps: [
@@ -403,34 +395,16 @@ const EN_US_SETTINGS_COPY = {
       },
       {
         title: "Install the browser extension",
-        description: "Download the extension package for your browser family from Patina Web Sync releases.",
+        description: "Choose your browser and install Patina Web Sync from its extension store.",
+        showStoreBadges: true,
         details: [
           {
-            text: "Download the extension packages from the Patina Web Sync releases page.",
+            text: "If you cannot use these stores, install manually from the Patina Web Sync releases page.",
             links: [
               {
-                label: "Open downloads",
+                label: "Open releases",
                 href: "https://github.com/Ceceliaee/patina-web-sync/releases/latest",
               },
-            ],
-          },
-          {
-            text: "Chromium-based browsers:",
-            children: [
-              "Download patina-chromium-extension-v...zip.",
-              "Extract it to get the patina-chromium-extension-v... folder.",
-              "Enter chrome://extensions/ or edge://extensions/, then enable Developer mode.",
-              "Click Load unpacked or Load extracted extension.",
-              "Select the extracted patina-chromium-extension-v... folder that contains manifest.json.",
-            ],
-          },
-          {
-            text: "Firefox-based browsers:",
-            children: [
-              "Download patina-firefox-extension-v...xpi.",
-              "Enter about:addons in the address bar to open the add-ons manager.",
-              "Click the cog button, then choose Install Add-on From File.",
-              "Select the downloaded .xpi file, then click Add when prompted.",
             ],
           },
         ],

@@ -239,6 +239,30 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       true,
     );
     assert.equal(
+      await evaluate(client!, sessionId, `document.querySelectorAll(".settings-web-activity-store-badge-row a").length`),
+      3,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `Boolean(document.querySelector('a[href="https://chromewebstore.google.com/detail/patina-web-sync/gimdckblhckibmeklhemgccabmbnoemd"]'))`),
+      true,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `Boolean(document.querySelector('a[href="https://addons.mozilla.org/firefox/addon/patina-web-sync/"]'))`),
+      true,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `Boolean(document.querySelector('a[href="https://microsoftedge.microsoft.com/addons/detail/gogmlpjhbfjghilmpcciedplifdiibai"]'))`),
+      true,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("选择所用浏览器，从对应扩展商店安装 Patina Web Sync。")})`),
+      true,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("无法使用上述商店时，可前往 Patina Web Sync 发布页手动安装。")})`),
+      true,
+    );
+    assert.equal(
       await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("默认端口是 12345")})`),
       false,
     );
@@ -260,7 +284,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     );
     assert.equal(
       await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("patina-chromium-extension-v...zip")})`),
-      true,
+      false,
     );
     assert.equal(
       await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("patina-firefox-extension-v...zip")})`),
@@ -268,11 +292,11 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     );
     assert.equal(
       await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("patina-firefox-extension-v...xpi")})`),
-      true,
+      false,
     );
     assert.equal(
       await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("about:addons")})`),
-      true,
+      false,
     );
     assert.equal(
       await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("about:debugging#/runtime/this-firefox")})`),

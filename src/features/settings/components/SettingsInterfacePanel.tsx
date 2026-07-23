@@ -7,7 +7,13 @@ import QuietSubpanel from "../../../shared/components/QuietSubpanel";
 import QuietSwitch from "../../../shared/components/QuietSwitch";
 import SettingsPanelHeader from "./SettingsPanelHeader";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
-import { SettingsRuntimeAdapterService } from "../services/settingsRuntimeAdapterService.ts";
+import chromeWebStoreBadgeUrl from "../assets/store-badges/chrome-web-store.png";
+import edgeAddOnsBadgeUrl from "../assets/store-badges/edge-add-ons.png";
+import firefoxAddOnsBadgeUrl from "../assets/store-badges/firefox-add-ons.svg";
+import {
+  SettingsRuntimeAdapterService,
+  WEB_ACTIVITY_STORE_LINKS,
+} from "../services/settingsRuntimeAdapterService.ts";
 import { createSettingsToken } from "../services/settingsTokenService.ts";
 
 type SettingsInterfacePanelProps = {
@@ -82,11 +88,17 @@ type WebActivityHelpLink = {
   label: string;
 };
 type WebActivityHelpCopiedField = "port" | "token";
+type WebActivityStoreKind = (typeof WEB_ACTIVITY_STORE_LINKS)[number]["kind"];
 
 const WEB_ACTIVITY_PORT_MIN = 1024;
 const WEB_ACTIVITY_PORT_MAX = 65535;
 const PORT_DRAFT_PATTERN = /^\d{0,5}$/;
 const INTERFACE_FIELD_GRID_CLASS = "mt-4 grid grid-cols-1 gap-x-4 gap-y-3 lg:grid-cols-[minmax(0,4fr)_minmax(0,6fr)]";
+const WEB_ACTIVITY_STORE_BADGE_ASSETS: Record<WebActivityStoreKind, string> = {
+  chrome: chromeWebStoreBadgeUrl,
+  firefox: firefoxAddOnsBadgeUrl,
+  edge: edgeAddOnsBadgeUrl,
+};
 
 function normalizePort(value: string) {
   const parsed = Number(value);
@@ -288,6 +300,29 @@ function WebActivityHelpDetailItem({ detail }: { detail: WebActivityHelpDetail }
         ))}
       </span>
     </>
+  );
+}
+
+function WebActivityStoreBadgeRow() {
+  return (
+    <div className="settings-web-activity-store-badge-row">
+      {WEB_ACTIVITY_STORE_LINKS.map((link) => (
+        <a
+          key={link.kind}
+          href={link.href}
+          onClick={(event) => {
+            event.preventDefault();
+            void SettingsRuntimeAdapterService.openWebActivityHelpLink(link.href);
+          }}
+        >
+          <img
+            src={WEB_ACTIVITY_STORE_BADGE_ASSETS[link.kind]}
+            alt={UI_TEXT.settings.webActivityStoreBadgeLabels[link.kind]}
+            draggable={false}
+          />
+        </a>
+      ))}
+    </div>
   );
 }
 
@@ -546,36 +581,39 @@ export default function SettingsInterfacePanel({
                   <strong>{step.title}</strong>
                 </div>
                 <p className="settings-web-activity-help-step-description">{step.description}</p>
-                <ul className="settings-web-activity-help-detail-list">
-                  {step.details.map((detail, detailIndex) => (
-                    <li key={typeof detail === "string" ? detail : detail.text}>
-                      <WebActivityHelpDetailItem detail={detail} />
-                      {index === 0 && detailIndex === step.details.length - 1 ? (
-                        <span className="settings-web-activity-help-copy-row">
-                          <button
-                            type="button"
-                            aria-label={UI_TEXT.accessibility.settings.copyWebActivityPort}
-                            onClick={() => copyWebActivityHelpValue("port", String(port))}
-                          >
-                            {copiedWebActivityHelpField === "port"
-                              ? UI_TEXT.settings.webActivityHelpCopiedAction
-                              : UI_TEXT.settings.webActivityHelpCopyPortAction}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={webActivityToken.trim().length === 0}
-                            aria-label={UI_TEXT.accessibility.settings.copyWebActivityToken}
-                            onClick={() => copyWebActivityHelpValue("token", webActivityToken)}
-                          >
-                            {copiedWebActivityHelpField === "token"
-                              ? UI_TEXT.settings.webActivityHelpCopiedAction
-                              : UI_TEXT.settings.webActivityHelpCopyTokenAction}
-                          </button>
-                        </span>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
+                {"showStoreBadges" in step && step.showStoreBadges ? <WebActivityStoreBadgeRow /> : null}
+                {step.details.length > 0 ? (
+                  <ul className="settings-web-activity-help-detail-list">
+                    {step.details.map((detail, detailIndex) => (
+                      <li key={typeof detail === "string" ? detail : detail.text}>
+                        <WebActivityHelpDetailItem detail={detail} />
+                        {index === 0 && detailIndex === step.details.length - 1 ? (
+                          <span className="settings-web-activity-help-copy-row">
+                            <button
+                              type="button"
+                              aria-label={UI_TEXT.accessibility.settings.copyWebActivityPort}
+                              onClick={() => copyWebActivityHelpValue("port", String(port))}
+                            >
+                              {copiedWebActivityHelpField === "port"
+                                ? UI_TEXT.settings.webActivityHelpCopiedAction
+                                : UI_TEXT.settings.webActivityHelpCopyPortAction}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={webActivityToken.trim().length === 0}
+                              aria-label={UI_TEXT.accessibility.settings.copyWebActivityToken}
+                              onClick={() => copyWebActivityHelpValue("token", webActivityToken)}
+                            >
+                              {copiedWebActivityHelpField === "token"
+                                ? UI_TEXT.settings.webActivityHelpCopiedAction
+                                : UI_TEXT.settings.webActivityHelpCopyTokenAction}
+                            </button>
+                          </span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </div>
             </li>
           ))}

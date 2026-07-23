@@ -798,7 +798,7 @@ await runTest("settings leaves web activity connection status to the extension",
   assert.doesNotMatch(bridgeGateway, /statusLabel/);
   assert.doesNotMatch(settings, /platform\/runtime\/webActivityBridgeGateway/);
   assert.doesNotMatch(settingsInterface, /bridgeSnapshot|formatBridgeStatus|webActivityStatus/);
-  assert.match(protocol, /Patina Web Sync` owns the browser extension clients/);
+  assert.match(protocol, /Patina Web Sync 拥有浏览器扩展客户端/);
   assert.match(protocol, /patina-web-sync/);
 });
 
@@ -807,6 +807,7 @@ await runTest("settings services only expose web sync and remote push controls",
   const settingsState = readUtf8("src/features/settings/hooks/useSettingsPageState.ts");
   const settingsInterface = readUtf8("src/features/settings/components/SettingsInterfacePanel.tsx");
   const settingsDataSafety = readUtf8("src/features/settings/components/SettingsDataSafetyPanel.tsx");
+  const settingsRuntimeAdapter = readUtf8("src/features/settings/services/settingsRuntimeAdapterService.ts");
   const settingsStyles = readUtf8("src/styles/features/settings.css");
   const appSettings = readUtf8("src/shared/settings/appSettings.ts");
   const appSettingsStore = readUtf8("src/platform/persistence/appSettingsStore.ts");
@@ -865,12 +866,22 @@ await runTest("settings services only expose web sync and remote push controls",
   assert.doesNotMatch(settingsStyles, /\.settings-storage-path-placeholder-action/);
   assert.match(settingsCopy, /webActivityHelpAction/);
   assert.match(settingsCopy, /webActivityHelpSteps/);
+  assert.match(settingsCopy, /选择所用浏览器，从对应扩展商店安装 Patina Web Sync。/);
+  assert.match(settingsCopy, /无法使用上述商店时，可前往 Patina Web Sync 发布页手动安装。/);
   assert.match(settingsCopy, /patina-web-sync\/releases\/latest/);
+  assert.match(settingsRuntimeAdapter, /chromewebstore\.google\.com\/detail\/patina-web-sync\/gimdckblhckibmeklhemgccabmbnoemd/);
+  assert.match(settingsRuntimeAdapter, /addons\.mozilla\.org\/firefox\/addon\/patina-web-sync/);
+  assert.match(settingsRuntimeAdapter, /microsoftedge\.microsoft\.com\/addons\/detail\/gogmlpjhbfjghilmpcciedplifdiibai/);
+  assert.match(settingsInterface, /settings-web-activity-store-badge-row/);
+  assert.match(settingsInterface, /chrome-web-store\.png/);
+  assert.match(settingsInterface, /firefox-add-ons\.svg/);
+  assert.match(settingsInterface, /edge-add-ons\.png/);
+  assert.match(settingsStyles, /\.settings-web-activity-store-badge-row img \{[\s\S]*?height: 36px;/);
   assert.doesNotMatch(settingsCopy, /storageSnapshotUnchecked/);
-  assert.match(settingsCopy, /patina-chromium-extension-v\.\.\.zip/);
-  assert.match(settingsCopy, /manifest\.json/);
-  assert.match(settingsCopy, /patina-firefox-extension-v\.\.\.xpi/);
-  assert.match(settingsCopy, /about:addons/);
+  assert.doesNotMatch(settingsCopy, /patina-chromium-extension-v\.\.\.zip/);
+  assert.doesNotMatch(settingsCopy, /manifest\.json/);
+  assert.doesNotMatch(settingsCopy, /patina-firefox-extension-v\.\.\.xpi/);
+  assert.doesNotMatch(settingsCopy, /about:addons/);
   assert.doesNotMatch(settingsCopy, /patina-firefox-extension-v\.\.\.zip/);
   assert.doesNotMatch(settingsCopy, /about:debugging#\/runtime\/this-firefox/);
   assert.match(settingsCopy, /Patina Web Sync 启用并连接成功后：\\n• 自动同步当前活动标签页的网站地址、标题和网站图标。/);

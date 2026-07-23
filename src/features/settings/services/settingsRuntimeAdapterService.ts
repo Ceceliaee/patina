@@ -85,7 +85,25 @@ const RELEASE_NOTES_URL = "https://github.com/Ceceliaee/patina/releases";
 const REPOSITORY_URL = "https://github.com/Ceceliaee/patina";
 const FEEDBACK_URL = "https://github.com/Ceceliaee/patina/issues/new/choose";
 const KOFI_SUPPORT_URL = "https://ko-fi.com/ceceliaee";
-const WEB_ACTIVITY_HELP_LINKS = new Set(["https://github.com/Ceceliaee/patina-web-sync/releases/latest"]);
+export const WEB_ACTIVITY_STORE_LINKS = [
+  {
+    kind: "chrome",
+    href: "https://chromewebstore.google.com/detail/patina-web-sync/gimdckblhckibmeklhemgccabmbnoemd",
+  },
+  {
+    kind: "firefox",
+    href: "https://addons.mozilla.org/firefox/addon/patina-web-sync/",
+  },
+  {
+    kind: "edge",
+    href: "https://microsoftedge.microsoft.com/addons/detail/gogmlpjhbfjghilmpcciedplifdiibai",
+  },
+] as const;
+const WEB_ACTIVITY_RELEASES_URL = "https://github.com/Ceceliaee/patina-web-sync/releases/latest";
+const WEB_ACTIVITY_HELP_LINKS = new Set([
+  WEB_ACTIVITY_RELEASES_URL,
+  ...WEB_ACTIVITY_STORE_LINKS.map((link) => link.href),
+]);
 
 export function buildBackupPreviewSummary(preview: BackupPreview): string {
   const exportedAt = new Date(preview.exportedAtMs).toLocaleString(getUiLocale());

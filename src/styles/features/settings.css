@@ -515,6 +515,35 @@
   line-height: 1.55;
 }
 
+.settings-web-activity-store-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 4px 0 2px;
+  padding: 2px 0;
+}
+
+.settings-web-activity-store-badge-row a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--qp-radius-chip);
+  line-height: 0;
+}
+
+.settings-web-activity-store-badge-row a:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--qp-accent-default) 42%, transparent);
+  outline-offset: 2px;
+}
+
+.settings-web-activity-store-badge-row img {
+  display: block;
+  width: auto;
+  height: 36px;
+}
+
 .settings-web-activity-help-detail-list {
   display: grid;
   gap: 6px;
