@@ -99,8 +99,13 @@ These instructions apply to all UI work unless the user gives an explicit task-s
 
 ## GitHub Push And Issue Rules
 
-- This is a personal repository. When the user asks to push changes to the repository, default to committing the confirmed scope and pushing directly to `origin/main`.
-- When the user says to push to the repository without specifying a narrower scope, treat it as a request to include all current uncommitted changes, split them into logical commits for easier review, and then push those commits to `origin/main`.
+- Any `git push`, including branch and tag pushes, requires an explicit current-task request to push to the repository or remote. Instructions such as `push to the repository`, `push to the remote`, `push to origin/main`, and `push everything to the repository` are clear remote-push requests. Infer authorization from the remote destination intent, not from one exact phrase.
+- `Commit locally` and `commit to the local repository` mean create local commit(s) only and must never be interpreted as permission to push.
+- Requests such as `finish`, `commit`, `archive`, `sync`, or `continue` do not authorize a push unless the same request also states a clear repository or remote destination.
+- Push authorization does not carry across tasks or later changes. After an authorized push, newly created or modified content must remain local until the user gives another explicit remote-push instruction.
+- A remote-push instruction permits only the confirmed repository scope. Tag creation or push, release publication, force push, issue mutation, and other remote side effects still require their own explicit authorization.
+- `All` and `everything` control scope: when the user says `push everything to the repository`, include all current uncommitted changes, split them into logical commits for easier review, and push those commits directly to `origin/main` unless the user specifies another target. Without an all-scope term, push only the explicitly confirmed task scope.
+- Read-only monitoring of an already-triggered GitHub Actions run does not grant or require new push authorization.
 - Keep grouped commits reviewable: each commit should have a focused subject and contain related files only, unless the user explicitly asks for a single commit.
 - Before creating a commit, inspect the staged scope with `git diff --cached --stat` and `git diff --cached --numstat`.
 - If one staged commit exceeds 1,000 changed lines of manually maintained content (additions plus deletions) or touches more than 25 files, stop and split it into coherent, reviewable commits. Do not create the oversized commit unless the user explicitly approves it after receiving an explanation of why it is not reasonably divisible.
@@ -109,7 +114,8 @@ These instructions apply to all UI work unless the user gives an explicit task-s
 - A single Project item may produce multiple commits; do not compress an entire Project item into one oversized commit.
 - Do not create a branch or pull request unless the user explicitly asks for one.
 - Do not use issue-closing keywords such as `Closes`, `Fixes`, or `Resolves` in commits, changelog entries, pull request descriptions, or GitHub comments unless the user explicitly asks to close the issue.
-- When a change relates to an issue, reference it without changing its state, for example with `Refs #3` or a Markdown issue link.
+- When a commit relates to an issue, keep the issue reference out of the commit subject. Use a concise conventional subject, then add `Refs #3` as a separate paragraph in the commit body. This preserves the repository's compact commit list and exposes the reference through GitHub's expandable body.
+- Do not use subject forms such as `fix(...): ... (Refs #3)`. Existing pushed history with that form does not justify rewriting remote history; apply the body-reference convention to future commits.
 - Do not close, reopen, label, or otherwise mutate GitHub issues unless the user explicitly requests that issue action.
 
 ## External Pull Request Intake
