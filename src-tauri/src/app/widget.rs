@@ -1,6 +1,9 @@
 use crate::app::state::WidgetWindowLifecycleState;
 use crate::data::widget_store::SqliteWidgetPlacementStore;
-use crate::domain::widget::{WidgetPlacement, WidgetSide};
+use crate::domain::widget::{
+    match_widget_monitor, resolve_widget_placement, select_widget_monitor, WidgetMonitorAffinity,
+    WidgetPhysicalRect, WidgetPlacement, WidgetSide,
+};
 use crate::engine::widget as widget_engine;
 use crate::platform::storage_paths;
 #[cfg(debug_assertions)]
@@ -71,28 +74,53 @@ pub(crate) async fn show_widget_window_for_minimize<R: Runtime + 'static>(
     apply_widget_layout_internal(app, preferred_monitor, placement, false, false, false, true).await
 }
 
-pub(crate) async fn apply_widget_layout<R: Runtime + 'static>(
+pub(crate) async fn finalize_widget_drag<R: Runtime + 'static>(
     app: &AppHandle<R>,
-    placement: WidgetPlacement,
-    expanded: bool,
-    show_object_slot: bool,
-) -> Result<(), String> {
+) -> Result<WidgetPlacement, String> {
     if is_main_window_visible(app) {
         close_widget_window(app);
-        return Ok(());
+        return Err("cannot finalize widget drag while the main window is visible".to_string());
     }
 
-    save_widget_placement(app, placement).await?;
+    let window = app
+        .get_webview_window(WIDGET_WINDOW_LABEL)
+        .ok_or_else(|| "failed to finalize widget drag: widget window is missing".to_string())?;
+    if window.is_visible().ok() != Some(true) {
+        return Err("failed to finalize widget drag: widget window is hidden".to_string());
+    }
+
+    let position = window
+        .outer_position()
+        .map_err(|error| format!("failed to read widget position after drag: {error}"))?;
+    let size = window
+        .outer_size()
+        .map_err(|error| format!("failed to read widget size after drag: {error}"))?;
+    let window_rect = WidgetPhysicalRect::new(position.x, position.y, size.width, size.height);
+    let monitors = app
+        .available_monitors()
+        .map_err(|error| format!("failed to enumerate monitors after widget drag: {error}"))?;
+    let affinities = monitors
+        .iter()
+        .map(widget_monitor_affinity)
+        .collect::<Vec<_>>();
+    let target_index = select_widget_monitor(&window_rect, &affinities)
+        .ok_or_else(|| "failed to select a target monitor after widget drag".to_string())?;
+    let target_monitor = monitors[target_index].clone();
+    let placement = resolve_widget_placement(window_rect, affinities[target_index].clone());
+
+    save_widget_placement(app, placement.clone()).await?;
     apply_widget_layout_internal(
         app,
-        None,
-        placement,
-        expanded,
-        expanded,
-        show_object_slot,
+        Some(target_monitor),
+        placement.clone(),
+        false,
+        false,
+        false,
         false,
     )
-    .await
+    .await?;
+
+    Ok(placement)
 }
 
 pub(crate) async fn set_widget_window_expanded<R: Runtime + 'static>(
@@ -176,7 +204,21 @@ fn is_main_window_visible<R: Runtime>(app: &AppHandle<R>) -> bool {
 pub(crate) fn resolve_widget_monitor<R: Runtime>(
     app: &AppHandle<R>,
     preferred_monitor: Option<Monitor>,
+    placement: &WidgetPlacement,
 ) -> Result<Monitor, String> {
+    if let Some(saved_monitor) = placement.monitor.as_ref() {
+        let monitors = app
+            .available_monitors()
+            .map_err(|error| format!("failed to enumerate widget monitors: {error}"))?;
+        let affinities = monitors
+            .iter()
+            .map(widget_monitor_affinity)
+            .collect::<Vec<_>>();
+        if let Some(index) = match_widget_monitor(saved_monitor, &affinities) {
+            return Ok(monitors[index].clone());
+        }
+    }
+
     preferred_monitor
         .or_else(|| {
             app.get_webview_window(WIDGET_WINDOW_LABEL)
@@ -189,6 +231,19 @@ pub(crate) fn resolve_widget_monitor<R: Runtime>(
         })
         .or_else(|| app.primary_monitor().ok().flatten())
         .ok_or_else(|| "failed to resolve widget monitor".to_string())
+}
+
+fn widget_monitor_affinity(monitor: &Monitor) -> WidgetMonitorAffinity {
+    let work_area = monitor.work_area();
+    WidgetMonitorAffinity::new(
+        monitor.name().cloned(),
+        WidgetPhysicalRect::new(
+            work_area.position.x,
+            work_area.position.y,
+            work_area.size.width,
+            work_area.size.height,
+        ),
+    )
 }
 
 fn apply_widget_bounds<R: Runtime>(
@@ -224,9 +279,9 @@ async fn apply_widget_layout_internal<R: Runtime + 'static>(
         return Ok(());
     }
 
-    let monitor = resolve_widget_monitor(app, preferred_monitor)?;
+    let monitor = resolve_widget_monitor(app, preferred_monitor, &placement)?;
     let logical_size = resolve_widget_logical_size(expanded, show_object_slot);
-    let bounds = resolve_widget_bounds(&monitor, placement, logical_size);
+    let bounds = resolve_widget_bounds(&monitor, &placement, logical_size);
     let lifecycle = app.state::<WidgetWindowLifecycleState>();
 
     if let Some(window) = app.get_webview_window(WIDGET_WINDOW_LABEL) {
@@ -412,7 +467,7 @@ fn resolve_widget_physical_size(
 
 fn resolve_widget_bounds(
     monitor: &Monitor,
-    placement: WidgetPlacement,
+    placement: &WidgetPlacement,
     logical_size: WidgetLogicalSize,
 ) -> WidgetPhysicalBounds {
     let physical_size = resolve_widget_physical_size(logical_size, monitor.scale_factor());
@@ -432,7 +487,7 @@ fn resolve_widget_bounds_from_work_area(
     work_y: i32,
     work_width: u32,
     work_height: u32,
-    placement: WidgetPlacement,
+    placement: &WidgetPlacement,
     physical_size: WidgetPhysicalSize,
 ) -> WidgetPhysicalBounds {
     let max_y_offset = work_height.saturating_sub(physical_size.height);
@@ -471,7 +526,7 @@ mod tests {
             0,
             1920,
             1040,
-            WidgetPlacement::new(WidgetSide::Left, 0.5),
+            &WidgetPlacement::new(WidgetSide::Left, 0.5),
             WidgetPhysicalSize {
                 width: 64,
                 height: 48,
@@ -493,7 +548,7 @@ mod tests {
             0,
             1920,
             1040,
-            WidgetPlacement::new(WidgetSide::Right, 0.0),
+            &WidgetPlacement::new(WidgetSide::Right, 0.0),
             WidgetPhysicalSize {
                 width: 64,
                 height: 48,
@@ -511,7 +566,7 @@ mod tests {
             0,
             1920,
             1040,
-            WidgetPlacement::new(WidgetSide::Left, 0.5),
+            &WidgetPlacement::new(WidgetSide::Left, 0.5),
             WidgetPhysicalSize {
                 width: 228,
                 height: 48,
@@ -533,7 +588,7 @@ mod tests {
             0,
             1920,
             1040,
-            WidgetPlacement::new(WidgetSide::Right, 0.0),
+            &WidgetPlacement::new(WidgetSide::Right, 0.0),
             WidgetPhysicalSize {
                 width: 228,
                 height: 48,
@@ -551,7 +606,7 @@ mod tests {
             0,
             1920,
             1040,
-            WidgetPlacement::new(WidgetSide::Right, 0.0),
+            &WidgetPlacement::new(WidgetSide::Right, 0.0),
             WidgetPhysicalSize {
                 width: 184,
                 height: 48,
@@ -731,7 +786,7 @@ mod tests {
                                 0,
                                 resolution_width,
                                 work_height,
-                                WidgetPlacement::new(side, anchor_y),
+                                &WidgetPlacement::new(side, anchor_y),
                                 physical_size,
                             );
 
@@ -770,7 +825,7 @@ mod tests {
             -1440,
             2560,
             1368,
-            WidgetPlacement::new(WidgetSide::Left, 0.0),
+            &WidgetPlacement::new(WidgetSide::Left, 0.0),
             physical_size,
         );
         let right = resolve_widget_bounds_from_work_area(
@@ -778,7 +833,7 @@ mod tests {
             -1440,
             2560,
             1368,
-            WidgetPlacement::new(WidgetSide::Right, 1.0),
+            &WidgetPlacement::new(WidgetSide::Right, 1.0),
             physical_size,
         );
 
@@ -786,5 +841,27 @@ mod tests {
         assert_eq!(left.y, -1440);
         assert_eq!(right.x + right.width as i32, 0);
         assert_eq!(right.y + right.height as i32, -72);
+    }
+
+    #[test]
+    fn widget_bounds_use_offset_work_areas_for_top_and_left_taskbars() {
+        let placement = WidgetPlacement::new(WidgetSide::Right, 1.0);
+        let bounds = resolve_widget_bounds_from_work_area(
+            48,
+            64,
+            1872,
+            976,
+            &placement,
+            WidgetPhysicalSize {
+                width: 80,
+                height: 60,
+                visible_width: 80,
+            },
+        );
+
+        assert_eq!(bounds.x, 1840);
+        assert_eq!(bounds.y, 980);
+        assert_eq!(bounds.x + bounds.width as i32, 1920);
+        assert_eq!(bounds.y + bounds.height as i32, 1040);
     }
 }

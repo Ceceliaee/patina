@@ -1,6 +1,6 @@
 use crate::app::{tray, widget};
 use crate::data::icon_cache_service;
-use crate::domain::widget::{WidgetPlacement, WidgetSide};
+use crate::domain::widget::WidgetPlacement;
 use crate::platform::windows::input;
 use tauri::AppHandle;
 
@@ -18,29 +18,8 @@ pub async fn cmd_get_widget_icon(
 }
 
 #[tauri::command]
-pub async fn cmd_set_widget_placement(
-    side: WidgetSide,
-    anchor_y: f64,
-    app: AppHandle,
-) -> Result<(), String> {
-    widget::save_widget_placement(&app, WidgetPlacement::new(side, anchor_y)).await
-}
-
-#[tauri::command]
-pub async fn cmd_apply_widget_layout(
-    side: WidgetSide,
-    anchor_y: f64,
-    expanded: bool,
-    show_object_slot: bool,
-    app: AppHandle,
-) -> Result<(), String> {
-    widget::apply_widget_layout(
-        &app,
-        WidgetPlacement::new(side, anchor_y),
-        expanded,
-        show_object_slot,
-    )
-    .await
+pub async fn cmd_finalize_widget_drag(app: AppHandle) -> Result<WidgetPlacement, String> {
+    widget::finalize_widget_drag(&app).await
 }
 
 #[tauri::command]

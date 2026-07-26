@@ -488,6 +488,31 @@ try {
     },
     10_000,
   );
+  const finalizedWidgetPlacement = await evaluate(
+    client,
+    `window.__TAURI_INTERNALS__.invoke("cmd_finalize_widget_drag")`,
+  ) as {
+    monitor?: {
+      name?: string | null;
+      work_area?: { x?: number; y?: number; width?: number; height?: number };
+    } | null;
+    side?: string;
+    anchor_y?: number;
+  };
+  assert.ok(finalizedWidgetPlacement.monitor, "finalized widget placement must retain a monitor");
+  assert.ok((finalizedWidgetPlacement.monitor.work_area?.width ?? 0) > 0);
+  assert.ok((finalizedWidgetPlacement.monitor.work_area?.height ?? 0) > 0);
+  assert.match(finalizedWidgetPlacement.side ?? "", /^(left|right)$/);
+  assert.ok(
+    typeof finalizedWidgetPlacement.anchor_y === "number"
+      && finalizedWidgetPlacement.anchor_y >= 0
+      && finalizedWidgetPlacement.anchor_y <= 1,
+  );
+  const reloadedWidgetPlacement = await evaluate(
+    client,
+    `window.__TAURI_INTERNALS__.invoke("cmd_get_widget_placement")`,
+  );
+  assert.deepEqual(reloadedWidgetPlacement, finalizedWidgetPlacement);
   console.log("PATINA_FIRST_MINIMIZE_RECOVERY_REPORT", JSON.stringify({
     environment: "isolated real Tauri/WebView2 runtime",
     hardFailurePreservedMain: true,
@@ -689,6 +714,18 @@ try {
     values: ["refresh_interval_secs"],
   })`);
   assert.deepEqual(rows, [{ value: "77" }]);
+
+  const widgetPlacementRows = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
+    db: "sqlite:patina.db",
+    query: "SELECT key, value FROM settings WHERE key IN (?, ?, ?) ORDER BY key",
+    values: ["widget_placement", "widget_side", "widget_anchor_y"],
+  })`) as Array<{ key?: string; value?: string }>;
+  assert.equal(widgetPlacementRows.length, 1);
+  assert.equal(widgetPlacementRows[0]?.key, "widget_placement");
+  assert.deepEqual(
+    JSON.parse(widgetPlacementRows[0]?.value ?? "null"),
+    finalizedWidgetPlacement,
+  );
 
   const historyBootstrapPayload = JSON.stringify({ version: 1, smoke: true });
   await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_save_history_bootstrap_snapshot_payload", {
