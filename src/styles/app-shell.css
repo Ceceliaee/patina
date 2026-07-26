@@ -693,15 +693,23 @@ body[data-window-label="widget"] {
 }
 
 .widget-status-lamp {
-  position: relative;
+  position: absolute;
+  inset: 0;
   z-index: 1;
-  width: var(--qp-widget-lamp-size);
-  height: var(--qp-widget-lamp-size);
-  border-radius: 999px;
-  background: var(--qp-widget-tone, var(--qp-track-muted));
-  box-shadow:
-    0 0 0 var(--qp-widget-lamp-ring) color-mix(in srgb, var(--qp-widget-tone, var(--qp-track-muted)) 14%, transparent),
-    0 1px 2px color-mix(in srgb, var(--qp-widget-tone, var(--qp-track-muted)) 20%, transparent);
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 50% 50%,
+    var(--qp-widget-tone, var(--qp-track-muted)) 0 calc(var(--qp-widget-lamp-size) / 2),
+    color-mix(in srgb, var(--qp-widget-tone, var(--qp-track-muted)) 14%, transparent)
+      calc(var(--qp-widget-lamp-size) / 2)
+      calc(var(--qp-widget-lamp-size) / 2 + var(--qp-widget-lamp-ring)),
+    color-mix(in srgb, var(--qp-widget-tone, var(--qp-track-muted)) 20%, transparent)
+      calc(var(--qp-widget-lamp-size) / 2 + var(--qp-widget-lamp-ring)),
+    transparent
+      calc(var(--qp-widget-lamp-size) / 2 + var(--qp-widget-lamp-ring) + 2px)
+  );
+  transform-origin: 50% 50%;
   animation: widget-lamp-breathe 2.4s ease-in-out infinite;
 }
 

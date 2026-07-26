@@ -87,11 +87,11 @@
   --qp-widget-peek-size: 36px;
   --qp-widget-peek-recess: 18px;
   --qp-widget-peek-reveal: 32px;
-  --qp-widget-expanded-edge-inset: 14px;
+  --qp-widget-expanded-edge-inset: 13px;
   --qp-widget-expanded-gap: 7px;
   --qp-widget-radius-bar: 18px;
   --qp-widget-radius-edge: 16px;
-  --qp-widget-lamp-size: 9px;
+  --qp-widget-lamp-size: 10px;
   --qp-widget-lamp-ring: 4px;
   --qp-widget-toggle-inset: 5px;
   --qp-widget-action-size: 30px;

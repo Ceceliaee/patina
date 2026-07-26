@@ -11,8 +11,10 @@ pub struct MainWindowReadyResultDto {
 }
 
 #[tauri::command]
-pub fn cmd_minimize_main_window(app: AppHandle) {
-    main_window::minimize_main_window(&app);
+pub async fn cmd_minimize_main_window(app: AppHandle) -> Result<(), CommandErrorDto> {
+    main_window::minimize_main_window(&app)
+        .await
+        .map_err(|error| CommandErrorDto::new("MAIN_WINDOW_MINIMIZE_FAILED", error, true))
 }
 
 #[tauri::command]

@@ -4,6 +4,7 @@ import {
   getWidgetPlacement,
   onCurrentWidgetWindowFocusChanged,
   onCurrentWidgetWindowMoved,
+  onCurrentWidgetWindowScaleChanged,
   onWidgetRuntimeCollapsed,
   onWidgetRuntimeShown,
   readCurrentWidgetWindowRect,
@@ -109,6 +110,10 @@ export function useWidgetWindowState(
 
     unlistenPromises.push(onCurrentWidgetWindowMoved(() => {
       controller.handleWindowMoved();
+    }));
+
+    unlistenPromises.push(onCurrentWidgetWindowScaleChanged(() => {
+      controller.handleScaleFactorChanged();
     }));
 
     unlistenPromises.push(onCurrentWidgetWindowFocusChanged((focused) => {

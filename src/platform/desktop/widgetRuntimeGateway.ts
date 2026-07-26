@@ -275,6 +275,14 @@ export async function onCurrentWidgetWindowMoved(
   return getCurrentWindow().onMoved(handler);
 }
 
+export async function onCurrentWidgetWindowScaleChanged(
+  handler: (scaleFactor: number) => void,
+): Promise<() => void> {
+  return getCurrentWindow().onScaleChanged(({ payload }) => {
+    handler(payload.scaleFactor);
+  });
+}
+
 export async function onCurrentWidgetWindowFocusChanged(
   handler: (focused: boolean) => void,
 ): Promise<() => void> {

@@ -3,6 +3,8 @@ use crate::data::widget_store::SqliteWidgetPlacementStore;
 use crate::domain::widget::{WidgetPlacement, WidgetSide};
 use crate::engine::widget as widget_engine;
 use crate::platform::storage_paths;
+#[cfg(debug_assertions)]
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tauri::{
     AppHandle, Emitter, Manager, Monitor, PhysicalPosition, PhysicalSize, Position, Runtime, Size,
@@ -13,13 +15,15 @@ pub(crate) const WIDGET_WINDOW_LABEL: &str = "widget";
 pub(crate) const WIDGET_RUNTIME_COLLAPSED_EVENT: &str = "widget-runtime-collapsed";
 pub(crate) const WIDGET_RUNTIME_SHOWN_EVENT: &str = "widget-runtime-shown";
 const WIDGET_TITLE: &str = "Patina Widget";
-const WIDGET_EXPANDED_WIDTH_WITH_OBJECT: u32 = 228;
-const WIDGET_EXPANDED_WIDTH_COMPACT: u32 = 184;
-const WIDGET_EXPANDED_HEIGHT: u32 = 48;
-const WIDGET_COLLAPSED_WIDTH: u32 = 64;
-const WIDGET_COLLAPSED_HEIGHT: u32 = 48;
-const WIDGET_COLLAPSED_VISIBLE_WIDTH: u32 = 64;
+const WIDGET_EXPANDED_LOGICAL_WIDTH_WITH_OBJECT: u32 = 228;
+const WIDGET_EXPANDED_LOGICAL_WIDTH_COMPACT: u32 = 184;
+const WIDGET_EXPANDED_LOGICAL_HEIGHT: u32 = 48;
+const WIDGET_COLLAPSED_LOGICAL_WIDTH: u32 = 64;
+const WIDGET_COLLAPSED_LOGICAL_HEIGHT: u32 = 48;
+const WIDGET_COLLAPSED_VISIBLE_LOGICAL_WIDTH: u32 = 64;
 const WIDGET_DESTROY_AFTER_IDLE_SECS: u64 = 3 * 60;
+#[cfg(debug_assertions)]
+static E2E_WIDGET_SHOW_FAILURE_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 pub(crate) async fn load_widget_placement<R: Runtime>(
     app: &AppHandle<R>,
@@ -37,19 +41,34 @@ pub(crate) async fn save_widget_placement<R: Runtime>(
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct WidgetWindowBounds {
+struct WidgetLogicalSize {
+    width: u32,
+    height: u32,
+    visible_width: u32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct WidgetPhysicalSize {
+    width: u32,
+    height: u32,
+    visible_width: u32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct WidgetPhysicalBounds {
     x: i32,
     y: i32,
     width: u32,
     height: u32,
 }
 
-pub(crate) async fn show_widget_window<R: Runtime + 'static>(
+pub(crate) async fn show_widget_window_for_minimize<R: Runtime + 'static>(
     app: &AppHandle<R>,
     preferred_monitor: Option<Monitor>,
 ) -> Result<(), String> {
+    fail_widget_show_for_e2e_if_requested()?;
     let placement = load_widget_placement(app).await?;
-    apply_widget_layout_internal(app, preferred_monitor, placement, false, false, false).await
+    apply_widget_layout_internal(app, preferred_monitor, placement, false, false, false, true).await
 }
 
 pub(crate) async fn apply_widget_layout<R: Runtime + 'static>(
@@ -64,7 +83,16 @@ pub(crate) async fn apply_widget_layout<R: Runtime + 'static>(
     }
 
     save_widget_placement(app, placement).await?;
-    apply_widget_layout_internal(app, None, placement, expanded, expanded, show_object_slot).await
+    apply_widget_layout_internal(
+        app,
+        None,
+        placement,
+        expanded,
+        expanded,
+        show_object_slot,
+        false,
+    )
+    .await
 }
 
 pub(crate) async fn set_widget_window_expanded<R: Runtime + 'static>(
@@ -73,7 +101,22 @@ pub(crate) async fn set_widget_window_expanded<R: Runtime + 'static>(
     show_object_slot: bool,
 ) -> Result<(), String> {
     let placement = load_widget_placement(app).await?;
-    apply_widget_layout_internal(app, None, placement, expanded, expanded, show_object_slot).await
+    apply_widget_layout_internal(
+        app,
+        None,
+        placement,
+        expanded,
+        expanded,
+        show_object_slot,
+        false,
+    )
+    .await
+}
+
+pub(crate) fn is_widget_window_visible<R: Runtime>(app: &AppHandle<R>) -> bool {
+    app.get_webview_window(WIDGET_WINDOW_LABEL)
+        .and_then(|window| window.is_visible().ok())
+        .unwrap_or(false)
 }
 
 pub(crate) fn close_widget_window<R: Runtime + 'static>(app: &AppHandle<R>) {
@@ -136,6 +179,11 @@ pub(crate) fn resolve_widget_monitor<R: Runtime>(
 ) -> Result<Monitor, String> {
     preferred_monitor
         .or_else(|| {
+            app.get_webview_window(WIDGET_WINDOW_LABEL)
+                .filter(|window| window.is_visible().ok() == Some(true))
+                .and_then(|window| window.current_monitor().ok().flatten())
+        })
+        .or_else(|| {
             app.get_webview_window(crate::app::tray::MAIN_WINDOW_LABEL)
                 .and_then(|window| window.current_monitor().ok().flatten())
         })
@@ -145,7 +193,7 @@ pub(crate) fn resolve_widget_monitor<R: Runtime>(
 
 fn apply_widget_bounds<R: Runtime>(
     window: &WebviewWindow<R>,
-    bounds: WidgetWindowBounds,
+    bounds: WidgetPhysicalBounds,
 ) -> Result<(), String> {
     let _ = window.set_shadow(false);
     window
@@ -169,28 +217,26 @@ async fn apply_widget_layout_internal<R: Runtime + 'static>(
     expanded: bool,
     focus_after_show: bool,
     show_object_slot: bool,
+    allow_visible_main_window: bool,
 ) -> Result<(), String> {
-    if is_main_window_visible(app) {
+    if !allow_visible_main_window && is_main_window_visible(app) {
         close_widget_window(app);
         return Ok(());
     }
 
     let monitor = resolve_widget_monitor(app, preferred_monitor)?;
-    let bounds = resolve_widget_bounds(&monitor, placement, expanded, show_object_slot);
+    let logical_size = resolve_widget_logical_size(expanded, show_object_slot);
+    let bounds = resolve_widget_bounds(&monitor, placement, logical_size);
     let lifecycle = app.state::<WidgetWindowLifecycleState>();
 
     if let Some(window) = app.get_webview_window(WIDGET_WINDOW_LABEL) {
         lifecycle.show_existing();
-        let _ = window.set_ignore_cursor_events(false);
-        let _ = window.set_always_on_top(true);
         if !expanded {
             emit_widget_runtime_collapsed(app);
         }
-        apply_widget_bounds(&window, bounds)?;
-        let _ = window.show();
-        let _ = window.set_focusable(true);
-        if focus_after_show {
-            let _ = window.set_focus();
+        if let Err(error) = show_widget_window_instance(&window, bounds, focus_after_show) {
+            close_widget_window(app);
+            return Err(error);
         }
         emit_widget_runtime_shown(app);
         return Ok(());
@@ -198,23 +244,22 @@ async fn apply_widget_layout_internal<R: Runtime + 'static>(
 
     let logical_x = f64::from(bounds.x) / monitor.scale_factor();
     let logical_y = f64::from(bounds.y) / monitor.scale_factor();
-    let logical_width = f64::from(bounds.width) / monitor.scale_factor();
-    let logical_height = f64::from(bounds.height) / monitor.scale_factor();
-
+    let webview_root = storage_paths::resolve_storage_paths(app)?.webview_root;
     if !lifecycle.begin_show() {
-        return Ok(());
+        return Err("widget window creation is already in progress".to_string());
     }
 
-    let webview_root = storage_paths::resolve_storage_paths(app)?.webview_root;
-
-    let window = WebviewWindowBuilder::new(
+    let builder = WebviewWindowBuilder::new(
         app,
         WIDGET_WINDOW_LABEL,
         WebviewUrl::App("index.html".into()),
     )
     .title(WIDGET_TITLE)
     .position(logical_x, logical_y)
-    .inner_size(logical_width, logical_height)
+    .inner_size(
+        f64::from(logical_size.width),
+        f64::from(logical_size.height),
+    )
     .resizable(false)
     .maximizable(false)
     .minimizable(false)
@@ -227,19 +272,37 @@ async fn apply_widget_layout_internal<R: Runtime + 'static>(
     .focusable(true)
     .focused(false)
     .visible(false)
-    .data_directory(webview_root)
-    .build()
-    .map_err(|error| {
+    .data_directory(webview_root);
+
+    #[cfg(debug_assertions)]
+    let builder = apply_e2e_widget_browser_args(builder);
+
+    let window = builder.build().map_err(|error| {
         let _ = lifecycle.finish_show();
         format!("failed to create widget window: {error}")
     })?;
 
     if !lifecycle.finish_show() {
         park_widget_window(&window);
-        return Ok(());
+        return Err("widget show was cancelled before creation completed".to_string());
     }
 
+    if let Err(error) = show_widget_window_instance(&window, bounds, focus_after_show) {
+        close_widget_window(app);
+        return Err(error);
+    }
+    emit_widget_runtime_shown(app);
+    Ok(())
+}
+
+fn show_widget_window_instance<R: Runtime>(
+    window: &WebviewWindow<R>,
+    bounds: WidgetPhysicalBounds,
+    focus_after_show: bool,
+) -> Result<(), String> {
     let _ = window.set_ignore_cursor_events(false);
+    let _ = window.set_always_on_top(true);
+    apply_widget_bounds(window, bounds)?;
     let _ = window.set_focusable(true);
     let _ = window.set_shadow(false);
     window
@@ -248,28 +311,111 @@ async fn apply_widget_layout_internal<R: Runtime + 'static>(
     if focus_after_show {
         let _ = window.set_focus();
     }
-    emit_widget_runtime_shown(app);
+    match window.is_visible() {
+        Ok(true) => {}
+        Ok(false) => return Err("widget window remained hidden after show".to_string()),
+        Err(error) => {
+            return Err(format!(
+                "failed to verify widget window visibility after show: {error}"
+            ))
+        }
+    }
     Ok(())
+}
+
+#[cfg(debug_assertions)]
+fn fail_widget_show_for_e2e_if_requested() -> Result<(), String> {
+    if std::env::var("PATINA_E2E").as_deref() != Ok("1") {
+        return Ok(());
+    }
+
+    let requested_failures = std::env::var("PATINA_E2E_WIDGET_SHOW_FAILURES")
+        .ok()
+        .and_then(|raw| raw.parse::<usize>().ok())
+        .unwrap_or(0);
+    let attempt = E2E_WIDGET_SHOW_FAILURE_COUNT.fetch_add(1, Ordering::Relaxed);
+    if attempt < requested_failures {
+        return Err(format!(
+            "forced E2E widget show failure {}/{}",
+            attempt + 1,
+            requested_failures
+        ));
+    }
+
+    Ok(())
+}
+
+#[cfg(not(debug_assertions))]
+fn fail_widget_show_for_e2e_if_requested() -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(debug_assertions)]
+fn apply_e2e_widget_browser_args<R: Runtime>(
+    builder: WebviewWindowBuilder<'_, R, AppHandle<R>>,
+) -> WebviewWindowBuilder<'_, R, AppHandle<R>> {
+    if std::env::var("PATINA_E2E").as_deref() != Ok("1") {
+        return builder;
+    }
+
+    let devtools_port = std::env::var("PATINA_E2E_DEVTOOLS_PORT")
+        .expect("PATINA_E2E_DEVTOOLS_PORT is required when PATINA_E2E=1")
+        .parse::<u16>()
+        .expect("PATINA_E2E_DEVTOOLS_PORT must be a valid TCP port");
+    builder.additional_browser_args(&format!(
+        "--remote-debugging-port={devtools_port} \
+         --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection"
+    ))
+}
+
+fn resolve_widget_logical_size(expanded: bool, show_object_slot: bool) -> WidgetLogicalSize {
+    if expanded {
+        let width = if show_object_slot {
+            WIDGET_EXPANDED_LOGICAL_WIDTH_WITH_OBJECT
+        } else {
+            WIDGET_EXPANDED_LOGICAL_WIDTH_COMPACT
+        };
+        WidgetLogicalSize {
+            width,
+            height: WIDGET_EXPANDED_LOGICAL_HEIGHT,
+            visible_width: width,
+        }
+    } else {
+        WidgetLogicalSize {
+            width: WIDGET_COLLAPSED_LOGICAL_WIDTH,
+            height: WIDGET_COLLAPSED_LOGICAL_HEIGHT,
+            visible_width: WIDGET_COLLAPSED_VISIBLE_LOGICAL_WIDTH,
+        }
+    }
+}
+
+fn logical_dimension_to_physical(logical: u32, scale_factor: f64) -> u32 {
+    debug_assert!(scale_factor.is_finite() && scale_factor > 0.0);
+    let safe_scale_factor = if scale_factor.is_finite() && scale_factor > 0.0 {
+        scale_factor
+    } else {
+        1.0
+    };
+    (f64::from(logical) * safe_scale_factor).round().max(1.0) as u32
+}
+
+fn resolve_widget_physical_size(
+    logical_size: WidgetLogicalSize,
+    scale_factor: f64,
+) -> WidgetPhysicalSize {
+    WidgetPhysicalSize {
+        width: logical_dimension_to_physical(logical_size.width, scale_factor),
+        height: logical_dimension_to_physical(logical_size.height, scale_factor),
+        visible_width: logical_dimension_to_physical(logical_size.visible_width, scale_factor),
+    }
 }
 
 fn resolve_widget_bounds(
     monitor: &Monitor,
     placement: WidgetPlacement,
-    expanded: bool,
-    show_object_slot: bool,
-) -> WidgetWindowBounds {
-    let (width, height) = if expanded {
-        (
-            if show_object_slot {
-                WIDGET_EXPANDED_WIDTH_WITH_OBJECT
-            } else {
-                WIDGET_EXPANDED_WIDTH_COMPACT
-            },
-            WIDGET_EXPANDED_HEIGHT,
-        )
-    } else {
-        (WIDGET_COLLAPSED_WIDTH, WIDGET_COLLAPSED_HEIGHT)
-    };
+    logical_size: WidgetLogicalSize,
+) -> WidgetPhysicalBounds {
+    let physical_size = resolve_widget_physical_size(logical_size, monitor.scale_factor());
     let work_area = monitor.work_area();
     resolve_widget_bounds_from_work_area(
         work_area.position.x,
@@ -277,8 +423,7 @@ fn resolve_widget_bounds(
         work_area.size.width,
         work_area.size.height,
         placement,
-        width,
-        height,
+        physical_size,
     )
 }
 
@@ -288,36 +433,34 @@ fn resolve_widget_bounds_from_work_area(
     work_width: u32,
     work_height: u32,
     placement: WidgetPlacement,
-    width: u32,
-    height: u32,
-) -> WidgetWindowBounds {
-    let max_y_offset = work_height.saturating_sub(height);
+    physical_size: WidgetPhysicalSize,
+) -> WidgetPhysicalBounds {
+    let max_y_offset = work_height.saturating_sub(physical_size.height);
     let y_offset = (placement.anchor_y * f64::from(max_y_offset)).round() as i32;
     let y = work_y + y_offset;
-    let collapsed_hidden_offset = if width == WIDGET_COLLAPSED_WIDTH {
-        (width.saturating_sub(WIDGET_COLLAPSED_VISIBLE_WIDTH)) as i32
-    } else {
-        0
-    };
+    let hidden_offset = physical_size
+        .width
+        .saturating_sub(physical_size.visible_width) as i32;
     let x = match placement.side {
-        WidgetSide::Left => work_x - collapsed_hidden_offset,
-        WidgetSide::Right => work_x + work_width as i32 - width as i32 + collapsed_hidden_offset,
+        WidgetSide::Left => work_x - hidden_offset,
+        WidgetSide::Right => {
+            work_x + work_width as i32 - physical_size.width as i32 + hidden_offset
+        }
     };
 
-    WidgetWindowBounds {
+    WidgetPhysicalBounds {
         x,
         y,
-        width,
-        height,
+        width: physical_size.width,
+        height: physical_size.height,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        resolve_widget_bounds_from_work_area, WidgetWindowBounds, WIDGET_COLLAPSED_HEIGHT,
-        WIDGET_COLLAPSED_WIDTH, WIDGET_EXPANDED_HEIGHT, WIDGET_EXPANDED_WIDTH_COMPACT,
-        WIDGET_EXPANDED_WIDTH_WITH_OBJECT,
+        resolve_widget_bounds_from_work_area, resolve_widget_logical_size,
+        resolve_widget_physical_size, WidgetPhysicalBounds, WidgetPhysicalSize,
     };
     use crate::domain::widget::{WidgetPlacement, WidgetSide};
 
@@ -329,16 +472,19 @@ mod tests {
             1920,
             1040,
             WidgetPlacement::new(WidgetSide::Left, 0.5),
-            WIDGET_COLLAPSED_WIDTH,
-            WIDGET_COLLAPSED_HEIGHT,
+            WidgetPhysicalSize {
+                width: 64,
+                height: 48,
+                visible_width: 64,
+            },
         );
         assert_eq!(
             left,
-            WidgetWindowBounds {
+            WidgetPhysicalBounds {
                 x: 0,
                 y: 496,
-                width: WIDGET_COLLAPSED_WIDTH,
-                height: WIDGET_COLLAPSED_HEIGHT,
+                width: 64,
+                height: 48,
             }
         );
 
@@ -348,8 +494,11 @@ mod tests {
             1920,
             1040,
             WidgetPlacement::new(WidgetSide::Right, 0.0),
-            WIDGET_COLLAPSED_WIDTH,
-            WIDGET_COLLAPSED_HEIGHT,
+            WidgetPhysicalSize {
+                width: 64,
+                height: 48,
+                visible_width: 64,
+            },
         );
         assert_eq!(right.x, 1856);
         assert_eq!(right.y, 0);
@@ -363,16 +512,19 @@ mod tests {
             1920,
             1040,
             WidgetPlacement::new(WidgetSide::Left, 0.5),
-            WIDGET_EXPANDED_WIDTH_WITH_OBJECT,
-            WIDGET_EXPANDED_HEIGHT,
+            WidgetPhysicalSize {
+                width: 228,
+                height: 48,
+                visible_width: 228,
+            },
         );
         assert_eq!(
             left,
-            WidgetWindowBounds {
+            WidgetPhysicalBounds {
                 x: 0,
                 y: 496,
-                width: WIDGET_EXPANDED_WIDTH_WITH_OBJECT,
-                height: WIDGET_EXPANDED_HEIGHT,
+                width: 228,
+                height: 48,
             }
         );
 
@@ -382,8 +534,11 @@ mod tests {
             1920,
             1040,
             WidgetPlacement::new(WidgetSide::Right, 0.0),
-            WIDGET_EXPANDED_WIDTH_WITH_OBJECT,
-            WIDGET_EXPANDED_HEIGHT,
+            WidgetPhysicalSize {
+                width: 228,
+                height: 48,
+                visible_width: 228,
+            },
         );
         assert_eq!(right.x, 1692);
         assert_eq!(right.y, 0);
@@ -397,12 +552,239 @@ mod tests {
             1920,
             1040,
             WidgetPlacement::new(WidgetSide::Right, 0.0),
-            WIDGET_EXPANDED_WIDTH_COMPACT,
-            WIDGET_EXPANDED_HEIGHT,
+            WidgetPhysicalSize {
+                width: 184,
+                height: 48,
+                visible_width: 184,
+            },
         );
 
         assert_eq!(right.x, 1736);
         assert_eq!(right.y, 0);
-        assert_eq!(right.width, WIDGET_EXPANDED_WIDTH_COMPACT);
+        assert_eq!(right.width, 184);
+    }
+
+    #[test]
+    fn widget_logical_sizes_map_to_expected_physical_sizes_at_supported_dpi_scales() {
+        let cases = [
+            (
+                false,
+                false,
+                1.0,
+                WidgetPhysicalSize {
+                    width: 64,
+                    height: 48,
+                    visible_width: 64,
+                },
+            ),
+            (
+                false,
+                false,
+                1.25,
+                WidgetPhysicalSize {
+                    width: 80,
+                    height: 60,
+                    visible_width: 80,
+                },
+            ),
+            (
+                false,
+                false,
+                1.5,
+                WidgetPhysicalSize {
+                    width: 96,
+                    height: 72,
+                    visible_width: 96,
+                },
+            ),
+            (
+                false,
+                false,
+                2.0,
+                WidgetPhysicalSize {
+                    width: 128,
+                    height: 96,
+                    visible_width: 128,
+                },
+            ),
+            (
+                true,
+                false,
+                1.0,
+                WidgetPhysicalSize {
+                    width: 184,
+                    height: 48,
+                    visible_width: 184,
+                },
+            ),
+            (
+                true,
+                false,
+                1.25,
+                WidgetPhysicalSize {
+                    width: 230,
+                    height: 60,
+                    visible_width: 230,
+                },
+            ),
+            (
+                true,
+                false,
+                1.5,
+                WidgetPhysicalSize {
+                    width: 276,
+                    height: 72,
+                    visible_width: 276,
+                },
+            ),
+            (
+                true,
+                false,
+                2.0,
+                WidgetPhysicalSize {
+                    width: 368,
+                    height: 96,
+                    visible_width: 368,
+                },
+            ),
+            (
+                true,
+                true,
+                1.0,
+                WidgetPhysicalSize {
+                    width: 228,
+                    height: 48,
+                    visible_width: 228,
+                },
+            ),
+            (
+                true,
+                true,
+                1.25,
+                WidgetPhysicalSize {
+                    width: 285,
+                    height: 60,
+                    visible_width: 285,
+                },
+            ),
+            (
+                true,
+                true,
+                1.5,
+                WidgetPhysicalSize {
+                    width: 342,
+                    height: 72,
+                    visible_width: 342,
+                },
+            ),
+            (
+                true,
+                true,
+                2.0,
+                WidgetPhysicalSize {
+                    width: 456,
+                    height: 96,
+                    visible_width: 456,
+                },
+            ),
+        ];
+
+        for (expanded, show_object_slot, scale_factor, expected) in cases {
+            let logical_size = resolve_widget_logical_size(expanded, show_object_slot);
+            assert_eq!(
+                resolve_widget_physical_size(logical_size, scale_factor),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn widget_bounds_stay_inside_representative_work_areas_across_dpi_matrix() {
+        let resolutions = [
+            (1280_u32, 720_u32),
+            (1366, 768),
+            (1600, 900),
+            (1920, 1080),
+            (2560, 1440),
+            (3840, 2160),
+        ];
+        let scales = [1.0_f64, 1.25, 1.5, 2.0];
+        let states = [(false, false), (true, false), (true, true)];
+        let sides = [WidgetSide::Left, WidgetSide::Right];
+        let anchors = [0.0_f64, 0.5, 1.0];
+        let mut case_count = 0;
+
+        for (resolution_width, resolution_height) in resolutions {
+            for scale_factor in scales {
+                let taskbar_height = (48.0 * scale_factor).round() as u32;
+                let work_height = resolution_height.saturating_sub(taskbar_height);
+
+                for (expanded, show_object_slot) in states {
+                    let logical_size = resolve_widget_logical_size(expanded, show_object_slot);
+                    let physical_size = resolve_widget_physical_size(logical_size, scale_factor);
+
+                    for side in sides {
+                        for anchor_y in anchors {
+                            case_count += 1;
+                            let bounds = resolve_widget_bounds_from_work_area(
+                                0,
+                                0,
+                                resolution_width,
+                                work_height,
+                                WidgetPlacement::new(side, anchor_y),
+                                physical_size,
+                            );
+
+                            assert!(bounds.x >= 0);
+                            assert!(bounds.y >= 0);
+                            assert!(bounds.x + bounds.width as i32 <= resolution_width as i32);
+                            assert!(bounds.y + bounds.height as i32 <= work_height as i32);
+
+                            let expected_x = match side {
+                                WidgetSide::Left => 0,
+                                WidgetSide::Right => {
+                                    resolution_width as i32 - physical_size.width as i32
+                                }
+                            };
+                            assert_eq!(bounds.x, expected_x);
+                            if anchor_y == 0.0 {
+                                assert_eq!(bounds.y, 0);
+                            } else if anchor_y == 1.0 {
+                                assert_eq!(bounds.y + bounds.height as i32, work_height as i32);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        assert_eq!(case_count, 432);
+    }
+
+    #[test]
+    fn widget_bounds_preserve_negative_monitor_origins() {
+        let physical_size =
+            resolve_widget_physical_size(resolve_widget_logical_size(true, true), 1.5);
+        let left = resolve_widget_bounds_from_work_area(
+            -2560,
+            -1440,
+            2560,
+            1368,
+            WidgetPlacement::new(WidgetSide::Left, 0.0),
+            physical_size,
+        );
+        let right = resolve_widget_bounds_from_work_area(
+            -2560,
+            -1440,
+            2560,
+            1368,
+            WidgetPlacement::new(WidgetSide::Right, 1.0),
+            physical_size,
+        );
+
+        assert_eq!(left.x, -2560);
+        assert_eq!(left.y, -1440);
+        assert_eq!(right.x + right.width as i32, 0);
+        assert_eq!(right.y + right.height as i32, -72);
     }
 }

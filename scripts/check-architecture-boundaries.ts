@@ -242,6 +242,11 @@ function assertRuntimeBoundaryGuards() {
     throw new Error("Widget capability must explicitly include the widget window");
   }
   const widgetPermissionText = JSON.stringify(widgetCapability.permissions ?? []);
+  if (!widgetPermissionText.includes("core:event:allow-unlisten")) {
+    throw new Error(
+      "Widget capability must include core:event:allow-unlisten for listener cleanup",
+    );
+  }
   if (widgetPermissionText.includes("sql:allow-execute")) {
     throw new Error("Widget capability must not include sql:allow-execute");
   }

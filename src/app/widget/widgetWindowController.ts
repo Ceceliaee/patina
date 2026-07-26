@@ -97,6 +97,7 @@ export function createWidgetWindowController(
   let applyingRuntimeLayout = false;
   let userDragActive = false;
   let runtimeHidden = false;
+  let scaleRefreshPending = false;
   let collapsedDragSettlePending = false;
   let dragTimerHandle: number | null = null;
   let layoutReleaseHandle: number | null = null;
@@ -170,8 +171,30 @@ export function createWidgetWindowController(
       layoutReleaseHandle = deps.schedule(() => {
         applyingRuntimeLayout = false;
         layoutReleaseHandle = null;
+        schedulePendingScaleRefresh();
       }, 0);
     }
+  }
+
+  function schedulePendingScaleRefresh() {
+    if (
+      !scaleRefreshPending
+      || runtimeHidden
+      || userDragActive
+      || applyingRuntimeLayout
+    ) {
+      return;
+    }
+
+    if (!expanded) {
+      scheduleFinalizeMove();
+      return;
+    }
+
+    scaleRefreshPending = false;
+    void runRuntimeLayout(placement, true, showObjectSlot).catch((error) => {
+      deps.onWarning?.("apply expanded widget DPI layout failed", error);
+    });
   }
 
   async function finalizeMove() {
@@ -196,10 +219,12 @@ export function createWidgetWindowController(
     const nextPlacement = resolveWidgetPlacementFromWindowRect(monitor, rect.position, rect.size);
     const alreadySettled = isWindowAtPlacement(monitor, rect.position, rect.size, nextPlacement);
     setPlacement(nextPlacement);
-    if (alreadySettled) {
+    const forceScaleRefresh = scaleRefreshPending;
+    if (alreadySettled && !forceScaleRefresh) {
       return;
     }
 
+    scaleRefreshPending = false;
     try {
       await runRuntimeLayout(nextPlacement, false, showObjectSlot);
     } catch (error) {
@@ -264,6 +289,7 @@ export function createWidgetWindowController(
   function syncCollapsedFromRuntime() {
     runtimeHidden = true;
     userDragActive = false;
+    scaleRefreshPending = false;
     clearDragTimer();
     clearCollapsedDragSettlePending();
     clearCollapseRuntimeTimer();
@@ -316,6 +342,15 @@ export function createWidgetWindowController(
     scheduleFinalizeMove();
   }
 
+  function handleScaleFactorChanged() {
+    if (runtimeHidden) {
+      return;
+    }
+
+    scaleRefreshPending = true;
+    schedulePendingScaleRefresh();
+  }
+
   function setShowObjectSlot(nextShowObjectSlot: boolean) {
     const previousShowObjectSlot = showObjectSlot;
     showObjectSlot = nextShowObjectSlot;
@@ -331,6 +366,7 @@ export function createWidgetWindowController(
   function dispose() {
     runtimeHidden = false;
     userDragActive = false;
+    scaleRefreshPending = false;
     clearDragTimer();
     clearCollapsedDragSettlePending();
     clearLayoutReleaseTimer();
@@ -349,6 +385,7 @@ export function createWidgetWindowController(
       showObjectSlot,
     }),
     handleFocusChanged,
+    handleScaleFactorChanged,
     handleWindowMoved,
     initialize,
     setShowObjectSlot,
