@@ -361,7 +361,7 @@ async function verifyScaleEventRelayout(
 ) {
   const commandCount = await evaluate(context.client, context.sessionId, `
     globalThis.__PATINA_INVOKED_COMMANDS.filter(
-      (entry) => entry.command === "cmd_apply_widget_layout"
+      (entry) => entry.command === "cmd_set_widget_expanded"
     ).length
   `) as number;
 
@@ -372,7 +372,7 @@ async function verifyScaleEventRelayout(
     context.client,
     context.sessionId,
     `globalThis.__PATINA_INVOKED_COMMANDS.filter(
-      (entry) => entry.command === "cmd_apply_widget_layout"
+      (entry) => entry.command === "cmd_set_widget_expanded"
     ).length > ${commandCount}`,
     15_000,
     `expanded ${side} widget DPI relayout`,
@@ -380,12 +380,10 @@ async function verifyScaleEventRelayout(
 
   const lastLayout = await evaluate(context.client, context.sessionId, `
     globalThis.__PATINA_INVOKED_COMMANDS.filter(
-      (entry) => entry.command === "cmd_apply_widget_layout"
+      (entry) => entry.command === "cmd_set_widget_expanded"
     ).at(-1)?.payload
   `);
   assert.deepEqual(lastLayout, {
-    side,
-    anchorY: 0.28,
     expanded: true,
     showObjectSlot,
   });

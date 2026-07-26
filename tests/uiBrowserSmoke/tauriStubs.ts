@@ -56,15 +56,6 @@ function tauriStubFor(path: string) {
       export function getCurrentWindow() {
         return currentWindow;
       }
-      export async function availableMonitors() {
-        return [];
-      }
-      export async function currentMonitor() {
-        return null;
-      }
-      export async function primaryMonitor() {
-        return null;
-      }
       export async function cursorPosition() {
         return { x: 0, y: 0 };
       }
@@ -114,6 +105,7 @@ function tauriStubFor(path: string) {
         const isWidgetSmoke = widgetParams.get("__patinaWindow") === "widget";
         if (isWidgetSmoke && command === "cmd_get_widget_placement") {
           return {
+            monitor: null,
             side: widgetParams.get("widgetSide") === "left" ? "left" : "right",
             anchor_y: 0.28,
           };

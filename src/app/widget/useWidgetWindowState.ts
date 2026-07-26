@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  applyWidgetLayout,
+  finalizeWidgetDrag,
   getWidgetPlacement,
   onCurrentWidgetWindowFocusChanged,
   onCurrentWidgetWindowMoved,
   onCurrentWidgetWindowScaleChanged,
   onWidgetRuntimeCollapsed,
   onWidgetRuntimeShown,
-  readCurrentWidgetWindowRect,
-  resolveWidgetMonitorForWindowRect,
   setCurrentWidgetWindowFocusable,
   setWidgetExpanded,
   type WidgetPlacement,
@@ -53,20 +51,18 @@ export function useWidgetWindowState(
   const controller = useMemo(() => createWidgetWindowController(showObjectSlot, {
     loadPlacement: getWidgetPlacement,
     persistExpanded: setWidgetExpanded,
-    applyLayout: async (nextPlacement, nextExpanded, nextShowObjectSlot) => {
-      await applyWidgetLayout(
-        nextPlacement.side,
-        nextPlacement.anchorY,
-        nextExpanded,
-        nextShowObjectSlot,
-      );
-    },
-    readWindowRect: readCurrentWidgetWindowRect,
-    resolveMonitorForWindowRect: resolveWidgetMonitorForWindowRect,
+    applyLayout: setWidgetExpanded,
+    finalizeDrag: finalizeWidgetDrag,
     schedule: (callback, delayMs) => window.setTimeout(callback, delayMs),
     clearScheduled: (handle) => window.clearTimeout(handle),
     onPlacementChange: (nextPlacement) => {
       setPlacementState({
+        monitor: nextPlacement.monitor
+          ? {
+              name: nextPlacement.monitor.name,
+              workArea: { ...nextPlacement.monitor.workArea },
+            }
+          : null,
         side: nextPlacement.side,
         anchorY: clampWidgetAnchorY(nextPlacement.anchorY),
       });

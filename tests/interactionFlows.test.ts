@@ -19,11 +19,8 @@ import {
 } from "../src/features/settings/hooks/settingsPageStateInteractions.ts";
 import {
   createWidgetWindowController,
-  type WidgetMonitorLike,
-  type WidgetWindowPosition,
-  type WidgetWindowRect,
-  type WidgetWindowSize,
 } from "../src/app/widget/widgetWindowController.ts";
+import type { WidgetPlacement } from "../src/platform/desktop/widgetRuntimeGateway.ts";
 import type { ObservedAppCandidate } from "../src/features/classification/services/classificationStore.ts";
 import type { ObservedWebDomainCandidate } from "../src/shared/types/webActivity.ts";
 import {
@@ -454,42 +451,47 @@ await runTest("web domain name edit mirrors app mapping edit semantics", () => {
   );
 });
 
-await runTest("widget window controller covers expand collapse focus-loss collapse and drag placement", async () => {
+function buildWidgetPlacement(
+  side: WidgetPlacement["side"],
+  anchorY: number,
+  monitorName: string | null = null,
+): WidgetPlacement {
+  return {
+    monitor: monitorName
+      ? {
+          name: monitorName,
+          workArea: { x: 1920, y: 0, width: 2560, height: 1392 },
+        }
+      : null,
+    side,
+    anchorY,
+  };
+}
+
+await runTest("widget window controller covers expand collapse and Rust-owned drag finalization", async () => {
   const scheduler = new FakeScheduler();
   const events: string[] = [];
-  let placementFromCallback = "right:0.28";
+  let placementFromCallback = "right:0.28:none";
   let expandedFromCallback = false;
-  let currentRect: WidgetWindowRect | null = {
-    position: { x: 1500, y: 300 },
-    size: { width: 228, height: 48 },
-  };
-  let currentMonitor: WidgetMonitorLike | null = {
-    workArea: {
-      position: { x: 1000, y: 0 },
-      size: { width: 1000, height: 900 },
-    },
-  };
-
   const controller = createWidgetWindowController(true, {
-    loadPlacement: async () => ({ side: "left", anchorY: 0.4 }),
+    loadPlacement: async () => buildWidgetPlacement("left", 0.4, "DISPLAY1"),
     persistExpanded: async (nextExpanded, showObjectSlot) => {
       events.push(`expanded:${nextExpanded}:${showObjectSlot}`);
     },
-    applyLayout: async (placement, nextExpanded, showObjectSlot) => {
-      events.push(`layout:${placement.side}:${placement.anchorY.toFixed(2)}:${nextExpanded}:${showObjectSlot}`);
+    applyLayout: async (nextExpanded, showObjectSlot) => {
+      events.push(`layout:${nextExpanded}:${showObjectSlot}`);
+    },
+    finalizeDrag: async () => {
+      events.push("finalize");
+      return buildWidgetPlacement("right", 0.35, "DISPLAY2");
     },
     onCollapsedDragSettled: () => {
       events.push("settled");
     },
-    readWindowRect: async () => currentRect,
-    resolveMonitorForWindowRect: async (
-      _position: WidgetWindowPosition,
-      _size: WidgetWindowSize,
-    ) => currentMonitor,
     schedule: (callback) => scheduler.schedule(callback),
     clearScheduled: (handle) => scheduler.clear(handle),
     onPlacementChange: (placement) => {
-      placementFromCallback = `${placement.side}:${placement.anchorY.toFixed(2)}`;
+      placementFromCallback = `${placement.side}:${placement.anchorY.toFixed(2)}:${placement.monitor?.name ?? "none"}`;
     },
     onExpandedChange: (nextExpanded) => {
       expandedFromCallback = nextExpanded;
@@ -497,7 +499,7 @@ await runTest("widget window controller covers expand collapse focus-loss collap
   });
 
   await controller.initialize();
-  assert.equal(placementFromCallback, "left:0.40");
+  assert.equal(placementFromCallback, "left:0.40:DISPLAY1");
 
   controller.expand();
   await flushMicrotasks();
@@ -506,219 +508,158 @@ await runTest("widget window controller covers expand collapse focus-loss collap
 
   controller.setShowObjectSlot(false);
   await flushMicrotasks();
+  assert.ok(events.includes("layout:true:false"));
   scheduler.flushAll();
   await flushMicrotasks();
-  assert.ok(events.includes("layout:left:0.40:true:false"));
 
   const eventsBeforeExpandedMove = events.length;
   controller.handleWindowMoved();
   scheduler.flushAll();
   await flushMicrotasks();
   assert.equal(events.length, eventsBeforeExpandedMove);
-  assert.equal(placementFromCallback, "left:0.40");
 
-  const eventsBeforeFocusCollapse = events.length;
   controller.handleFocusChanged(false);
-  await flushMicrotasks();
   assert.equal(expandedFromCallback, false);
-  assert.equal(events.length, eventsBeforeFocusCollapse);
   scheduler.flushAll();
   await flushMicrotasks();
   assert.deepEqual(events.slice(-1), ["expanded:false:false"]);
 
-  currentRect = {
-    position: { x: 1500, y: 300 },
-    size: { width: 64, height: 48 },
-  };
-  controller.handleWindowMoved();
-  scheduler.flushAll();
-  await flushMicrotasks();
-  assert.equal(placementFromCallback, "right:0.35");
-  assert.ok(events.includes("layout:right:0.35:false:false"));
-});
-
-await runTest("widget controller snaps collapsed drag to the nearest edge", async () => {
-  const scheduler = new FakeScheduler();
-  const events: string[] = [];
-  let placementFromCallback = "right:0.28";
-  const currentRect: WidgetWindowRect = {
-    position: { x: 1008, y: 426 },
-    size: { width: 64, height: 48 },
-  };
-  const currentMonitor: WidgetMonitorLike = {
-    workArea: {
-      position: { x: 1000, y: 0 },
-      size: { width: 1000, height: 900 },
-    },
-  };
-
-  const controller = createWidgetWindowController(true, {
-    loadPlacement: async () => ({ side: "left", anchorY: 0.4 }),
-    persistExpanded: async (nextExpanded, showObjectSlot) => {
-      events.push(`expanded:${nextExpanded}:${showObjectSlot}`);
-    },
-    applyLayout: async (placement, nextExpanded, showObjectSlot) => {
-      events.push(`layout:${placement.side}:${placement.anchorY.toFixed(2)}:${nextExpanded}:${showObjectSlot}`);
-    },
-    onCollapsedDragSettled: () => {
-      events.push("settled");
-    },
-    readWindowRect: async () => currentRect,
-    resolveMonitorForWindowRect: async (
-      _position: WidgetWindowPosition,
-      _size: WidgetWindowSize,
-    ) => currentMonitor,
-    schedule: (callback) => scheduler.schedule(callback),
-    clearScheduled: (handle) => scheduler.clear(handle),
-    onPlacementChange: (placement) => {
-      placementFromCallback = `${placement.side}:${placement.anchorY.toFixed(2)}`;
-    },
-  });
-
-  await controller.initialize();
-
-  controller.beginUserDrag();
-  controller.handleWindowMoved();
-  scheduler.flushAll();
-  await flushMicrotasks();
-  assert.equal(placementFromCallback, "left:0.40");
-  assert.deepEqual(events, []);
-
-  controller.endUserDrag();
-  scheduler.flushAll();
-  await flushMicrotasks();
-  assert.equal(placementFromCallback, "left:0.50");
-  assert.deepEqual(events, ["layout:left:0.50:false:true", "settled"]);
-});
-
-await runTest("widget controller settles collapsed drag when move event is missed", async () => {
-  const scheduler = new FakeScheduler();
-  const events: string[] = [];
-  let placementFromCallback = "right:0.28";
-  const currentRect: WidgetWindowRect = {
-    position: { x: 1008, y: 426 },
-    size: { width: 64, height: 48 },
-  };
-  const currentMonitor: WidgetMonitorLike = {
-    workArea: {
-      position: { x: 1000, y: 0 },
-      size: { width: 1000, height: 900 },
-    },
-  };
-
-  const controller = createWidgetWindowController(true, {
-    loadPlacement: async () => ({ side: "left", anchorY: 0.4 }),
-    persistExpanded: async (nextExpanded, showObjectSlot) => {
-      events.push(`expanded:${nextExpanded}:${showObjectSlot}`);
-    },
-    applyLayout: async (placement, nextExpanded, showObjectSlot) => {
-      events.push(`layout:${placement.side}:${placement.anchorY.toFixed(2)}:${nextExpanded}:${showObjectSlot}`);
-    },
-    onCollapsedDragSettled: () => {
-      events.push("settled");
-    },
-    readWindowRect: async () => currentRect,
-    resolveMonitorForWindowRect: async (
-      _position: WidgetWindowPosition,
-      _size: WidgetWindowSize,
-    ) => currentMonitor,
-    schedule: (callback) => scheduler.schedule(callback),
-    clearScheduled: (handle) => scheduler.clear(handle),
-    onPlacementChange: (placement) => {
-      placementFromCallback = `${placement.side}:${placement.anchorY.toFixed(2)}`;
-    },
-  });
-
-  await controller.initialize();
-
   controller.beginUserDrag();
   controller.endUserDrag();
   scheduler.flushAll();
   await flushMicrotasks();
-  assert.equal(placementFromCallback, "left:0.50");
-  assert.deepEqual(events, ["layout:left:0.50:false:true", "settled"]);
+  assert.equal(placementFromCallback, "right:0.35:DISPLAY2");
+  assert.deepEqual(events.slice(-2), ["finalize", "settled"]);
 });
 
-await runTest("widget controller keeps collapsed drag settled callback when moved event races release", async () => {
+await runTest("widget controller finalizes a collapsed drag even when move event is missed", async () => {
   const scheduler = new FakeScheduler();
   const events: string[] = [];
-  let placementFromCallback = "right:0.28";
-  const currentRect: WidgetWindowRect = {
-    position: { x: 1008, y: 426 },
-    size: { width: 64, height: 48 },
-  };
-  const currentMonitor: WidgetMonitorLike = {
-    workArea: {
-      position: { x: 1000, y: 0 },
-      size: { width: 1000, height: 900 },
-    },
-  };
-
   const controller = createWidgetWindowController(true, {
-    loadPlacement: async () => ({ side: "left", anchorY: 0.4 }),
-    persistExpanded: async (nextExpanded, showObjectSlot) => {
-      events.push(`expanded:${nextExpanded}:${showObjectSlot}`);
+    loadPlacement: async () => buildWidgetPlacement("left", 0.4),
+    persistExpanded: async () => undefined,
+    applyLayout: async () => undefined,
+    finalizeDrag: async () => {
+      events.push("finalize");
+      return buildWidgetPlacement("left", 0.5, "DISPLAY2");
     },
-    applyLayout: async (placement, nextExpanded, showObjectSlot) => {
-      events.push(`layout:${placement.side}:${placement.anchorY.toFixed(2)}:${nextExpanded}:${showObjectSlot}`);
-    },
-    onCollapsedDragSettled: () => {
-      events.push("settled");
-    },
-    readWindowRect: async () => currentRect,
-    resolveMonitorForWindowRect: async (
-      _position: WidgetWindowPosition,
-      _size: WidgetWindowSize,
-    ) => currentMonitor,
+    onCollapsedDragSettled: () => events.push("settled"),
     schedule: (callback) => scheduler.schedule(callback),
     clearScheduled: (handle) => scheduler.clear(handle),
-    onPlacementChange: (placement) => {
-      placementFromCallback = `${placement.side}:${placement.anchorY.toFixed(2)}`;
-    },
   });
 
   await controller.initialize();
+  controller.beginUserDrag();
+  controller.endUserDrag();
+  scheduler.flushAll();
+  await flushMicrotasks();
 
+  assert.equal(controller.getState().placement.monitor?.name, "DISPLAY2");
+  assert.deepEqual(events, ["finalize", "settled"]);
+});
+
+await runTest("widget controller coalesces moved events racing drag release", async () => {
+  const scheduler = new FakeScheduler();
+  let finalizeCount = 0;
+  let settledCount = 0;
+  const controller = createWidgetWindowController(true, {
+    loadPlacement: async () => buildWidgetPlacement("left", 0.4),
+    persistExpanded: async () => undefined,
+    applyLayout: async () => undefined,
+    finalizeDrag: async () => {
+      finalizeCount += 1;
+      return buildWidgetPlacement("left", 0.5, "DISPLAY2");
+    },
+    onCollapsedDragSettled: () => {
+      settledCount += 1;
+    },
+    schedule: (callback) => scheduler.schedule(callback),
+    clearScheduled: (handle) => scheduler.clear(handle),
+  });
+
+  await controller.initialize();
   controller.beginUserDrag();
   controller.endUserDrag();
   controller.handleWindowMoved();
+  controller.handleWindowMoved();
   scheduler.flushAll();
   await flushMicrotasks();
-  assert.equal(placementFromCallback, "left:0.50");
-  assert.deepEqual(events, ["layout:left:0.50:false:true", "settled"]);
+
+  assert.equal(finalizeCount, 1);
+  assert.equal(settledCount, 1);
+
+  controller.handleWindowMoved();
+  scheduler.flushAll();
+  await flushMicrotasks();
+  assert.equal(finalizeCount, 1, "programmatic snap movement must not re-finalize");
 });
 
-await runTest("widget controller accepts runtime collapse without persisting another layout", async () => {
+await runTest("widget controller ignores stale drag results and serializes finalization", async () => {
+  const scheduler = new FakeScheduler();
+  const events: string[] = [];
+  let resolveFirst: ((placement: WidgetPlacement) => void) | null = null;
+  let finalizeCount = 0;
+  let placementFromCallback = "right:none";
+  const firstResult = new Promise<WidgetPlacement>((resolve) => {
+    resolveFirst = resolve;
+  });
+  const controller = createWidgetWindowController(true, {
+    loadPlacement: async () => buildWidgetPlacement("right", 0.28),
+    persistExpanded: async () => undefined,
+    applyLayout: async () => undefined,
+    finalizeDrag: async () => {
+      finalizeCount += 1;
+      events.push(`finalize:${finalizeCount}`);
+      return finalizeCount === 1
+        ? firstResult
+        : buildWidgetPlacement("right", 0.8, "DISPLAY2");
+    },
+    onPlacementChange: (placement) => {
+      placementFromCallback = `${placement.side}:${placement.monitor?.name ?? "none"}`;
+    },
+    onCollapsedDragSettled: () => events.push("settled"),
+    schedule: (callback) => scheduler.schedule(callback),
+    clearScheduled: (handle) => scheduler.clear(handle),
+  });
+
+  await controller.initialize();
+  controller.beginUserDrag();
+  controller.endUserDrag();
+  scheduler.flushAll();
+  await flushMicrotasks();
+  assert.equal(finalizeCount, 1);
+
+  controller.beginUserDrag();
+  controller.endUserDrag();
+  scheduler.flushAll();
+  await flushMicrotasks();
+  assert.equal(finalizeCount, 1);
+
+  assert.ok(resolveFirst);
+  resolveFirst(buildWidgetPlacement("left", 0.1, "DISPLAY1"));
+  await flushMicrotasks();
+
+  assert.equal(finalizeCount, 2);
+  assert.equal(placementFromCallback, "right:DISPLAY2");
+  assert.deepEqual(events, ["finalize:1", "finalize:2", "settled"]);
+});
+
+await runTest("widget controller accepts runtime collapse without finalizing hidden movement", async () => {
   const scheduler = new FakeScheduler();
   const events: string[] = [];
   let expandedFromCallback = false;
-  let placementFromCallback = "right:0.28";
-  let currentRect: WidgetWindowRect | null = {
-    position: { x: -32_000, y: -32_000 },
-    size: { width: 1, height: 1 },
-  };
-  const currentMonitor: WidgetMonitorLike = {
-    workArea: {
-      position: { x: 1000, y: 0 },
-      size: { width: 1000, height: 900 },
-    },
-  };
-
   const controller = createWidgetWindowController(true, {
-    loadPlacement: async () => ({ side: "right", anchorY: 0.28 }),
+    loadPlacement: async () => buildWidgetPlacement("right", 0.28),
     persistExpanded: async (nextExpanded, showObjectSlot) => {
       events.push(`expanded:${nextExpanded}:${showObjectSlot}`);
     },
-    applyLayout: async (placement, nextExpanded, showObjectSlot) => {
-      events.push(`layout:${placement.side}:${placement.anchorY.toFixed(2)}:${nextExpanded}:${showObjectSlot}`);
+    applyLayout: async () => undefined,
+    finalizeDrag: async () => {
+      events.push("finalize");
+      return buildWidgetPlacement("right", 0.35, "DISPLAY2");
     },
-    readWindowRect: async () => currentRect,
-    resolveMonitorForWindowRect: async () => currentMonitor,
     schedule: (callback) => scheduler.schedule(callback),
     clearScheduled: (handle) => scheduler.clear(handle),
-    onPlacementChange: (placement) => {
-      placementFromCallback = `${placement.side}:${placement.anchorY.toFixed(2)}`;
-    },
     onExpandedChange: (nextExpanded) => {
       expandedFromCallback = nextExpanded;
     },
@@ -728,85 +669,54 @@ await runTest("widget controller accepts runtime collapse without persisting ano
   controller.expand();
   await flushMicrotasks();
   assert.equal(expandedFromCallback, true);
-  assert.deepEqual(events, ["expanded:true:true"]);
 
   controller.syncCollapsedFromRuntime();
+  controller.handleWindowMoved();
   scheduler.flushAll();
   await flushMicrotasks();
   assert.equal(expandedFromCallback, false);
   assert.deepEqual(events, ["expanded:true:true"]);
 
-  controller.handleWindowMoved();
-  scheduler.flushAll();
-  await flushMicrotasks();
-  assert.equal(placementFromCallback, "right:0.28");
-  assert.deepEqual(events, ["expanded:true:true"]);
-
   controller.syncShownFromRuntime();
-  currentRect = {
-    position: { x: 1500, y: 300 },
-    size: { width: 64, height: 48 },
-  };
   controller.handleWindowMoved();
   scheduler.flushAll();
   await flushMicrotasks();
-  assert.equal(placementFromCallback, "right:0.35");
-  assert.deepEqual(events.slice(-1), ["layout:right:0.35:false:true"]);
+  assert.deepEqual(events, ["expanded:true:true"]);
 });
 
-await runTest("widget controller reapplies layout after DPI changes without interrupting drag", async () => {
+await runTest("widget controller reapplies DPI layout without interrupting drag finalization", async () => {
   const scheduler = new FakeScheduler();
   const events: string[] = [];
-  const currentRect: WidgetWindowRect = {
-    position: { x: 1936, y: 426 },
-    size: { width: 64, height: 48 },
-  };
-  const currentMonitor: WidgetMonitorLike = {
-    workArea: {
-      position: { x: 1000, y: 0 },
-      size: { width: 1000, height: 900 },
-    },
-  };
-
   const controller = createWidgetWindowController(true, {
-    loadPlacement: async () => ({ side: "right", anchorY: 0.5 }),
+    loadPlacement: async () => buildWidgetPlacement("right", 0.5, "DISPLAY1"),
     persistExpanded: async (nextExpanded, showObjectSlot) => {
       events.push(`expanded:${nextExpanded}:${showObjectSlot}`);
     },
-    applyLayout: async (placement, nextExpanded, showObjectSlot) => {
-      events.push(`layout:${placement.side}:${placement.anchorY.toFixed(2)}:${nextExpanded}:${showObjectSlot}`);
+    applyLayout: async (nextExpanded, showObjectSlot) => {
+      events.push(`layout:${nextExpanded}:${showObjectSlot}`);
     },
-    readWindowRect: async () => currentRect,
-    resolveMonitorForWindowRect: async () => currentMonitor,
+    finalizeDrag: async () => {
+      events.push("finalize");
+      return buildWidgetPlacement("right", 0.5, "DISPLAY2");
+    },
     schedule: (callback) => scheduler.schedule(callback),
     clearScheduled: (handle) => scheduler.clear(handle),
-    onCollapsedDragSettled: () => {
-      events.push("settled");
-    },
+    onCollapsedDragSettled: () => events.push("settled"),
   });
 
   await controller.initialize();
-
   controller.handleScaleFactorChanged();
-  scheduler.flushAll();
   await flushMicrotasks();
-  assert.deepEqual(events, ["layout:right:0.50:false:true"]);
+  assert.deepEqual(events, ["layout:false:true"]);
   scheduler.flushAll();
   await flushMicrotasks();
 
   controller.beginUserDrag();
   controller.handleScaleFactorChanged();
-  scheduler.flushAll();
-  await flushMicrotasks();
-  assert.deepEqual(events, ["layout:right:0.50:false:true"]);
-
   controller.endUserDrag();
   scheduler.flushAll();
   await flushMicrotasks();
-  assert.deepEqual(events.slice(-2), [
-    "layout:right:0.50:false:true",
-    "settled",
-  ]);
+  assert.deepEqual(events.slice(-2), ["finalize", "settled"]);
   scheduler.flushAll();
   await flushMicrotasks();
 
@@ -815,16 +725,7 @@ await runTest("widget controller reapplies layout after DPI changes without inte
   events.length = 0;
   controller.handleScaleFactorChanged();
   await flushMicrotasks();
-  assert.deepEqual(events, ["layout:right:0.50:true:true"]);
-  scheduler.flushAll();
-  await flushMicrotasks();
-
-  controller.syncCollapsedFromRuntime();
-  events.length = 0;
-  controller.handleScaleFactorChanged();
-  scheduler.flushAll();
-  await flushMicrotasks();
-  assert.deepEqual(events, []);
+  assert.deepEqual(events, ["layout:true:true"]);
 });
 
 console.log(`Passed ${passed} interaction flow tests`);

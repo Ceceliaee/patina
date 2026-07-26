@@ -1,12 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
-  availableMonitors,
   cursorPosition,
-  currentMonitor,
   getCurrentWindow,
-  primaryMonitor,
-  type Monitor,
 } from "@tauri-apps/api/window";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
@@ -18,39 +14,71 @@ export type WidgetSide = "left" | "right";
 export type AppWindowLabel = "main" | "widget";
 
 interface RawWidgetPlacement {
+  monitor: RawWidgetMonitorAffinity | null;
   side: WidgetSide;
   anchor_y: number;
 }
 
-export interface WidgetPlacement {
-  side: WidgetSide;
-  anchorY: number;
+interface RawWidgetMonitorAffinity {
+  name: string | null;
+  work_area: RawWidgetPhysicalRect;
 }
 
-export interface WidgetWindowPosition {
+interface RawWidgetPhysicalRect {
   x: number;
   y: number;
-}
-
-export interface WidgetWindowSize {
   width: number;
   height: number;
 }
 
-export interface WidgetWindowRect {
-  position: WidgetWindowPosition;
-  size: WidgetWindowSize;
+export interface WidgetMonitorAffinity {
+  name: string | null;
+  workArea: WidgetPhysicalRect;
 }
 
-export interface WidgetMonitorLike {
-  workArea: {
-    position: WidgetWindowPosition;
-    size: WidgetWindowSize;
-  };
+export interface WidgetPhysicalRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface WidgetPlacement {
+  monitor: WidgetMonitorAffinity | null;
+  side: WidgetSide;
+  anchorY: number;
 }
 
 function isWidgetSide(value: unknown): value is WidgetSide {
   return value === "left" || value === "right";
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isRawWidgetPhysicalRect(value: unknown): value is RawWidgetPhysicalRect {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return Number.isInteger(record.x)
+    && Number.isInteger(record.y)
+    && Number.isInteger(record.width)
+    && Number.isInteger(record.height)
+    && Number(record.width) > 0
+    && Number(record.height) > 0;
+}
+
+function isRawWidgetMonitorAffinity(value: unknown): value is RawWidgetMonitorAffinity {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return (record.name === null || typeof record.name === "string")
+    && isRawWidgetPhysicalRect(record.work_area);
 }
 
 function isRawWidgetPlacement(value: unknown): value is RawWidgetPlacement {
@@ -59,11 +87,24 @@ function isRawWidgetPlacement(value: unknown): value is RawWidgetPlacement {
   }
 
   const record = value as Record<string, unknown>;
-  return isWidgetSide(record.side) && typeof record.anchor_y === "number";
+  return (record.monitor === null || isRawWidgetMonitorAffinity(record.monitor))
+    && isWidgetSide(record.side)
+    && isFiniteNumber(record.anchor_y);
 }
 
 function mapRawWidgetPlacement(raw: RawWidgetPlacement): WidgetPlacement {
   return {
+    monitor: raw.monitor
+      ? {
+          name: raw.monitor.name,
+          workArea: {
+            x: raw.monitor.work_area.x,
+            y: raw.monitor.work_area.y,
+            width: raw.monitor.work_area.width,
+            height: raw.monitor.work_area.height,
+          },
+        }
+      : null,
     side: raw.side,
     anchorY: raw.anchor_y,
   };
@@ -82,25 +123,9 @@ export async function getWidgetIcon(exeName: string): Promise<string | null> {
   return invoke<string | null>("cmd_get_widget_icon", { exeName });
 }
 
-export async function setWidgetPlacement(side: WidgetSide, anchorY: number): Promise<void> {
-  await invoke("cmd_set_widget_placement", {
-    side,
-    anchorY,
-  });
-}
-
-export async function applyWidgetLayout(
-  side: WidgetSide,
-  anchorY: number,
-  expanded: boolean,
-  showObjectSlot: boolean,
-): Promise<void> {
-  await invoke("cmd_apply_widget_layout", {
-    side,
-    anchorY,
-    expanded,
-    showObjectSlot,
-  });
+export async function finalizeWidgetDrag(): Promise<WidgetPlacement | null> {
+  const payload = await invoke<unknown>("cmd_finalize_widget_drag");
+  return parseWidgetPlacement(payload);
 }
 
 export async function setWidgetExpanded(
@@ -167,28 +192,6 @@ export async function startCurrentWidgetWindowDrag(): Promise<void> {
   await getCurrentWindow().startDragging();
 }
 
-export async function readCurrentWidgetWindowRect(): Promise<WidgetWindowRect | null> {
-  const currentWindow = getCurrentWindow();
-  const visible = await currentWindow.isVisible().catch(() => false);
-  if (!visible) {
-    return null;
-  }
-
-  const [position, size] = await Promise.all([
-    currentWindow.outerPosition().catch(() => null),
-    currentWindow.outerSize().catch(() => null),
-  ]);
-
-  if (!position || !size) {
-    return null;
-  }
-
-  return {
-    position,
-    size,
-  };
-}
-
 export async function isCursorInsideCurrentWidgetWindow(): Promise<boolean> {
   const currentWindow = getCurrentWindow();
   const visible = await currentWindow.isVisible().catch(() => false);
@@ -210,63 +213,6 @@ export async function isCursorInsideCurrentWidgetWindow(): Promise<boolean> {
     && cursor.x <= position.x + size.width
     && cursor.y >= position.y
     && cursor.y <= position.y + size.height;
-}
-
-function monitorToWidgetMonitor(monitor: Monitor | null): WidgetMonitorLike | null {
-  if (!monitor) {
-    return null;
-  }
-
-  return {
-    workArea: monitor.workArea,
-  };
-}
-
-export async function resolveWidgetMonitorForWindowRect(
-  position: WidgetWindowPosition | null,
-  size: WidgetWindowSize | null,
-): Promise<WidgetMonitorLike | null> {
-  const monitors = await availableMonitors().catch(() => []);
-  if (position && size && monitors.length > 0) {
-    const centerX = position.x + size.width / 2;
-    const centerY = position.y + size.height / 2;
-
-    for (const monitor of monitors) {
-      const workArea = monitor.workArea;
-      if (
-        centerX >= workArea.position.x
-        && centerX <= (workArea.position.x + workArea.size.width)
-        && centerY >= workArea.position.y
-        && centerY <= (workArea.position.y + workArea.size.height)
-      ) {
-        return monitorToWidgetMonitor(monitor);
-      }
-    }
-
-    let nearestMonitor = monitors[0] ?? null;
-    let nearestDistance = Number.POSITIVE_INFINITY;
-    for (const monitor of monitors) {
-      const workArea = monitor.workArea;
-      const workCenterX = workArea.position.x + workArea.size.width / 2;
-      const workCenterY = workArea.position.y + workArea.size.height / 2;
-      const distance = ((workCenterX - centerX) ** 2) + ((workCenterY - centerY) ** 2);
-      if (distance < nearestDistance) {
-        nearestDistance = distance;
-        nearestMonitor = monitor;
-      }
-    }
-
-    if (nearestMonitor) {
-      return monitorToWidgetMonitor(nearestMonitor);
-    }
-  }
-
-  const current = await currentMonitor().catch(() => null);
-  if (current) {
-    return monitorToWidgetMonitor(current);
-  }
-
-  return monitorToWidgetMonitor(await primaryMonitor().catch(() => null));
 }
 
 export async function onCurrentWidgetWindowMoved(
