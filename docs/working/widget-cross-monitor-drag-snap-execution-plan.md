@@ -12,7 +12,7 @@
 
 > 自动化证据：Rust 486 passed / 1 ignored；浏览器 smoke 50 passed，其中挂件矩阵 144 个渲染案例；Tauri 运行时 smoke 通过；`npm run check` 通过。
 >
-> 已知门禁结果：`npm run check:dependencies` 的 Rust 可达依赖漏洞为 0；npm 开发工具链仍有既有的 5 个 high 告警，自动修复会强制升级 ESLint 10，已按独立依赖升级事项记录，不在本修复中冒险处理。
+> 门禁结果：已将 ESLint 与 `@eslint/js` 成对升级到 10.x，依赖树收敛到 `minimatch 10.2.5` 与 `brace-expansion 5.0.8`。`npm ci`、`npm run check:full` 与依赖审计均通过，npm 漏洞为 0，Rust 的 Windows 可达漏洞为 0。该修复当前仅在本地，尚未取得新的远端推送授权。
 >
 > 唯一未完成条件：当前机器没有第二块物理显示器，尚不能取得 150%/125% 真实双屏双向拖动、展开/收起与重启恢复证据。因此本文档不得归档，事项也不得标记为 `Done`。
 
@@ -695,13 +695,13 @@ WidgetShell 检测鼠标释放
 - [x] `npm run check:architecture`。
 - [x] `npm run check:rust`：486 passed / 1 ignored，clippy 无 warning。
 - [x] `npm run check`：全通过。
-- [ ] `npm run check:full`：代码门通过，但最终依赖审计因既有 npm 开发工具链 5 个 high 告警返回 1；Rust 可达漏洞为 0。
+- [x] `npm run check:full`：ESLint 10 升级后全通过；npm 漏洞为 0，Rust 的 Windows 可达漏洞为 0。
 - [x] `git diff --check`
 
 结果处理：
 
 - [x] 不静默豁免失败。
-- [x] 依赖审计既有告警已单独记录；其他代码门全部通过。
+- [x] 依赖审计告警已通过兼容的 ESLint 10 成对升级消除。
 - [x] capability schema 变化由标准 Tauri 命令生成并单独审查。
 - [x] 查看最终 diff，确认没有调试日志、临时延时或测试专用生产分支。
 
@@ -765,7 +765,7 @@ WidgetShell 检测鼠标释放
 - [x] Issue #55 的 150%/125% 组合自动化通过。
 - [x] 单屏 Tauri 运行时 smoke 通过。
 - [ ] 真实双屏 150%/125% 双向验收通过。
-- [x] 全量代码质量门通过；仅有已记录、与本修复无关的既有 npm 开发依赖审计告警。
+- [x] 全量代码质量门与依赖审计全部通过。
 - [x] 对抗式审查完成且没有未关闭的高风险发现。
 - [x] `CHANGELOG.md` 已加入准确的 `Refs #55`。
 - [x] 四组实现与验证提交均保持可审查范围，并已推送到 `origin/main`。
