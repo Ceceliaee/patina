@@ -1,35 +1,59 @@
-use super::tracker_settings::{load_setting_value, save_setting_value};
+use super::tracker_settings::load_setting_value;
 use crate::domain::widget::WidgetPlacement;
 use sqlx::{Pool, Sqlite};
 
-const WIDGET_SIDE_KEY: &str = "widget_side";
-const WIDGET_ANCHOR_Y_KEY: &str = "widget_anchor_y";
+const WIDGET_PLACEMENT_KEY: &str = "widget_placement";
+const LEGACY_WIDGET_SIDE_KEY: &str = "widget_side";
+const LEGACY_WIDGET_ANCHOR_Y_KEY: &str = "widget_anchor_y";
 
 pub async fn load_widget_placement(pool: &Pool<Sqlite>) -> Result<WidgetPlacement, sqlx::Error> {
-    let side = load_setting_value(pool, WIDGET_SIDE_KEY).await?;
-    let anchor_y = load_setting_value(pool, WIDGET_ANCHOR_Y_KEY).await?;
+    let Some(raw_placement) = load_setting_value(pool, WIDGET_PLACEMENT_KEY).await? else {
+        return Ok(WidgetPlacement::default());
+    };
 
-    Ok(WidgetPlacement::from_storage_values(
-        side.as_deref(),
-        anchor_y.as_deref(),
-    ))
+    Ok(serde_json::from_str::<WidgetPlacement>(&raw_placement)
+        .map(WidgetPlacement::normalized)
+        .unwrap_or_default())
 }
 
 pub async fn save_widget_placement(
     pool: &Pool<Sqlite>,
     placement: WidgetPlacement,
 ) -> Result<(), sqlx::Error> {
-    save_setting_value(pool, WIDGET_SIDE_KEY, placement.side.as_storage_value()).await?;
-    let anchor_y = format!("{:.4}", placement.anchor_y);
-    save_setting_value(pool, WIDGET_ANCHOR_Y_KEY, &anchor_y).await?;
+    let serialized = serde_json::to_string(&placement.normalized())
+        .map_err(|error| sqlx::Error::Encode(Box::new(error)))?;
+    let mut transaction = pool.begin().await?;
+
+    sqlx::query(
+        "INSERT INTO settings (key, value) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    )
+    .bind(WIDGET_PLACEMENT_KEY)
+    .bind(serialized)
+    .execute(&mut *transaction)
+    .await?;
+    sqlx::query("DELETE FROM settings WHERE key IN (?, ?)")
+        .bind(LEGACY_WIDGET_SIDE_KEY)
+        .bind(LEGACY_WIDGET_ANCHOR_Y_KEY)
+        .execute(&mut *transaction)
+        .await?;
+
+    transaction.commit().await?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{load_widget_placement, save_widget_placement};
+    use super::{
+        load_widget_placement, save_widget_placement, LEGACY_WIDGET_ANCHOR_Y_KEY,
+        LEGACY_WIDGET_SIDE_KEY, WIDGET_PLACEMENT_KEY,
+    };
+    use crate::data::repositories::tracker_settings::{load_setting_value, save_setting_value};
     use crate::data::schema as db_schema;
-    use crate::domain::widget::{WidgetPlacement, WidgetSide, DEFAULT_WIDGET_ANCHOR_Y};
+    use crate::domain::widget::{
+        WidgetMonitorAffinity, WidgetPhysicalRect, WidgetPlacement, WidgetSide,
+        DEFAULT_WIDGET_ANCHOR_Y,
+    };
     use sqlx::{Executor, SqlitePool};
 
     async fn setup_test_db() -> SqlitePool {
@@ -40,21 +64,110 @@ mod tests {
         pool
     }
 
+    fn monitor_placement() -> WidgetPlacement {
+        WidgetPlacement::with_monitor(
+            WidgetMonitorAffinity::new(
+                Some(r"\\.\DISPLAY2".to_string()),
+                WidgetPhysicalRect::new(-2560, 0, 2560, 1392),
+            ),
+            WidgetSide::Left,
+            0.66,
+        )
+    }
+
     #[test]
-    fn widget_placement_repo_round_trips_and_defaults() {
+    fn widget_placement_repo_round_trips_one_json_value() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            let saved = monitor_placement();
+
+            save_widget_placement(&pool, saved.clone()).await.unwrap();
+
+            assert_eq!(load_widget_placement(&pool).await.unwrap(), saved);
+            let raw = load_setting_value(&pool, WIDGET_PLACEMENT_KEY)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                serde_json::from_str::<WidgetPlacement>(&raw).unwrap(),
+                saved
+            );
+        });
+    }
+
+    #[test]
+    fn widget_placement_repo_defaults_without_the_new_key() {
         tauri::async_runtime::block_on(async {
             let pool = setup_test_db().await;
 
             let defaults = load_widget_placement(&pool).await.unwrap();
+
+            assert_eq!(defaults.monitor, None);
             assert_eq!(defaults.side, WidgetSide::Right);
             assert_eq!(defaults.anchor_y, DEFAULT_WIDGET_ANCHOR_Y);
+        });
+    }
 
-            let saved = WidgetPlacement::new(WidgetSide::Left, 0.66);
-            save_widget_placement(&pool, saved).await.unwrap();
+    #[test]
+    fn widget_placement_repo_does_not_read_legacy_keys() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            save_setting_value(&pool, LEGACY_WIDGET_SIDE_KEY, "left")
+                .await
+                .unwrap();
+            save_setting_value(&pool, LEGACY_WIDGET_ANCHOR_Y_KEY, "0.9")
+                .await
+                .unwrap();
 
-            let reloaded = load_widget_placement(&pool).await.unwrap();
-            assert_eq!(reloaded.side, WidgetSide::Left);
-            assert!((reloaded.anchor_y - 0.66).abs() < 0.001);
+            assert_eq!(
+                load_widget_placement(&pool).await.unwrap(),
+                WidgetPlacement::default()
+            );
+        });
+    }
+
+    #[test]
+    fn widget_placement_repo_defaults_malformed_json() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            save_setting_value(&pool, WIDGET_PLACEMENT_KEY, "{not-json")
+                .await
+                .unwrap();
+
+            assert_eq!(
+                load_widget_placement(&pool).await.unwrap(),
+                WidgetPlacement::default()
+            );
+        });
+    }
+
+    #[test]
+    fn widget_placement_repo_removes_legacy_keys_on_first_new_save() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            save_setting_value(&pool, LEGACY_WIDGET_SIDE_KEY, "left")
+                .await
+                .unwrap();
+            save_setting_value(&pool, LEGACY_WIDGET_ANCHOR_Y_KEY, "0.9")
+                .await
+                .unwrap();
+
+            save_widget_placement(&pool, monitor_placement())
+                .await
+                .unwrap();
+
+            assert_eq!(
+                load_setting_value(&pool, LEGACY_WIDGET_SIDE_KEY)
+                    .await
+                    .unwrap(),
+                None
+            );
+            assert_eq!(
+                load_setting_value(&pool, LEGACY_WIDGET_ANCHOR_Y_KEY)
+                    .await
+                    .unwrap(),
+                None
+            );
         });
     }
 }

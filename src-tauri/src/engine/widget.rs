@@ -40,7 +40,7 @@ mod tests {
 
     impl WidgetPlacementStore for MemoryWidgetStore {
         fn load_placement(&self) -> WidgetStoreFuture<'_, WidgetPlacement> {
-            Box::pin(async move { Ok(*self.placement.lock().unwrap()) })
+            Box::pin(async move { Ok(self.placement.lock().unwrap().clone()) })
         }
 
         fn save_placement(&self, placement: WidgetPlacement) -> WidgetStoreFuture<'_, ()> {
@@ -57,11 +57,11 @@ mod tests {
             let initial = WidgetPlacement::new(WidgetSide::Left, 0.2);
             let next = WidgetPlacement::new(WidgetSide::Right, 0.8);
             let store = MemoryWidgetStore {
-                placement: Mutex::new(initial),
+                placement: Mutex::new(initial.clone()),
             };
 
             assert_eq!(load_widget_placement(&store).await.unwrap(), initial);
-            save_widget_placement(&store, next).await.unwrap();
+            save_widget_placement(&store, next.clone()).await.unwrap();
             assert_eq!(load_widget_placement(&store).await.unwrap(), next);
         });
     }
