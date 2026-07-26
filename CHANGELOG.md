@@ -18,14 +18,19 @@ App note en: TBD.
 
 ### Added
 
+- 设置页的网页同步使用说明新增 Chrome Web Store、Firefox Add-ons 和 Microsoft Edge Add-ons 官方安装入口，并保留 GitHub Release 手动安装入口。Refs [#29](https://github.com/Ceceliaee/patina/issues/29)
+
 ### Changed
 
 - Classification、Dashboard、History 汇总区和 Data 改用可重建的 SQLite 应用目录与活动汇总读模型；长历史读取不再默认把全部事实记录搬入 WebView 聚合，读模型脏、构建中或不可用时会按范围安全回退到事实。
 - 主导航先提交点击反馈，再在下一帧挂载目标页面；暖切换保持已有页面结构且不出现空白画布。
+- 网页同步新增识别 360 安全浏览器、夸克浏览器和 Tabbit Browser，并沿用现有 Chromium 浏览器的记录与隐私规则。
 
 ### Fixed
 
 - 主窗口现在会先在原生层保持隐藏，待持久化外观、主题和应用框架完成首帧就绪后再统一显示；冷启动、托盘唤起及 WebView 重建不再暴露透明、错误主题或未完成样式的中间帧。Refs [#54](https://github.com/Ceceliaee/patina/issues/54)
+- 修复 Data 热力图切换时间范围、聚合方式或数据集时，旧悬浮提示可能在新内容绘制前短暂残留的问题。
+- 修复挂件在 Windows 125%、150% 和 200% 缩放及展开状态下可能被裁切、贴边偏移，或出现呼吸灯不圆、不同心的问题；首次“最小化到挂件”现在也会先确认挂件可见，失败时自动重试并恢复主窗口。Refs [#26](https://github.com/Ceceliaee/patina/issues/26)
 
 ### Removed
 
