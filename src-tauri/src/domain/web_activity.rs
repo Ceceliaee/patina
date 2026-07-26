@@ -21,9 +21,12 @@ const WEB_ACTIVITY_CHROMIUM_BROWSER_EXES: &[&str] = &[
     "chromium.exe",
     "qqbrowser.exe",
     "360chromex.exe",
+    "360se.exe",
+    "quark.exe",
     "thorium.exe",
     "centbrowser.exe",
     "catsxp.exe",
+    "tabbit browser.exe",
 ];
 
 const WEB_ACTIVITY_FIREFOX_BROWSER_EXES: &[&str] =
@@ -286,9 +289,11 @@ mod tests {
     }
 
     #[test]
-    fn supported_browser_exe_includes_only_new_360_extreme_browser() {
+    fn supported_browser_exe_includes_confirmed_360_browsers() {
         assert!(is_supported_browser_exe("360ChromeX.exe"));
         assert!(is_supported_browser_exe(" 360chromex.exe "));
+        assert!(is_supported_browser_exe("360SE.exe"));
+        assert!(is_supported_browser_exe(" 360se.exe "));
         assert!(!is_supported_browser_exe("360chrome.exe"));
     }
 
@@ -304,9 +309,12 @@ mod tests {
             "chromium.exe",
             "qqbrowser.exe",
             "360chromex.exe",
+            "360se.exe",
+            "quark.exe",
             "thorium.exe",
             "centbrowser.exe",
             "catsxp.exe",
+            "tabbit browser.exe",
         ] {
             assert_eq!(
                 resolve_web_activity_browser_family(exe_name),
@@ -339,6 +347,14 @@ mod tests {
         );
         assert_eq!(
             resolve_web_activity_browser_family(" QQBrowser.EXE "),
+            Some(WebActivityBrowserFamily::Chromium),
+        );
+        assert_eq!(
+            resolve_web_activity_browser_family(" Tabbit Browser.EXE "),
+            Some(WebActivityBrowserFamily::Chromium),
+        );
+        assert_eq!(
+            resolve_web_activity_browser_family(" Quark.EXE "),
             Some(WebActivityBrowserFamily::Chromium),
         );
     }
