@@ -19,6 +19,7 @@ import { runDashboardScenarios } from "./uiBrowserSmoke/dashboardScenarios.ts";
 import { runHistoryScenarios } from "./uiBrowserSmoke/historyScenarios.ts";
 import { runDataScenarios } from "./uiBrowserSmoke/dataScenarios.ts";
 import { runLocaleScenarios } from "./uiBrowserSmoke/localeScenarios.ts";
+import { runWidgetScenarios } from "./uiBrowserSmoke/widgetScenarios.ts";
 
 let passed = 0;
 
@@ -121,6 +122,8 @@ try {
   await runDataScenarios(smokeContext);
 
   await runLocaleScenarios(smokeContext);
+
+  await runWidgetScenarios(smokeContext);
 
   assert.deepEqual(consoleErrors, []);
 } catch (error) {

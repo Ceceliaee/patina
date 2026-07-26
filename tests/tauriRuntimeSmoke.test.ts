@@ -308,6 +308,7 @@ try {
       PATINA_E2E_DATA_ROOT: root,
       PATINA_E2E_FRONTEND_URL: frontendUrl,
       PATINA_E2E_DEVTOOLS_PORT: String(devtoolsPort),
+      PATINA_E2E_WIDGET_SHOW_FAILURES: "3",
       CARGO_TARGET_DIR: RUNTIME_TARGET_DIR,
       TAURI_CONFIG: tauriConfigOverrideJson,
       WEBVIEW2_USER_DATA_FOLDER: join(root, "webview-user-data"),
@@ -408,6 +409,102 @@ try {
     colorScheme: "default",
     cssColorScheme: "light",
   });
+
+  const firstMinimizeError = await evaluate(
+    client,
+    `window.__TAURI_INTERNALS__.invoke("cmd_minimize_main_window")
+      .then(() => null, (error) => error)`,
+  ) as {
+    code?: string;
+    message?: string;
+    retryable?: boolean;
+  };
+  assert.equal(firstMinimizeError.code, "MAIN_WINDOW_MINIMIZE_FAILED");
+  assert.equal(firstMinimizeError.retryable, true);
+  assert.match(firstMinimizeError.message ?? "", /failed to show widget after 2 attempts/);
+  const mainVisibleAfterColdFailure = await evaluate(
+    client,
+    `window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", { label: "main" })`,
+  );
+  assert.equal(
+    mainVisibleAfterColdFailure,
+    true,
+    "a cold widget creation failure must preserve the visible main window",
+  );
+
+  await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_minimize_main_window")`);
+  await waitFor(
+    "cold widget creation after transient retry",
+    async () => {
+      const [mainVisible, widgetVisible] = await Promise.all([
+        evaluate(
+          client!,
+          `window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", { label: "main" })`,
+        ),
+        evaluate(
+          client!,
+          `window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", { label: "widget" })`,
+        ),
+      ]);
+      return mainVisible === false && widgetVisible === true ? true : null;
+    },
+    10_000,
+  );
+
+  await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_show_main_window")`);
+  await waitFor(
+    "main window recovery after cold widget creation",
+    async () => {
+      const [mainVisible, widgetVisible] = await Promise.all([
+        evaluate(
+          client!,
+          `window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", { label: "main" })`,
+        ),
+        evaluate(
+          client!,
+          `window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", { label: "widget" })`,
+        ),
+      ]);
+      return mainVisible === true && widgetVisible === false ? true : null;
+    },
+    10_000,
+  );
+
+  await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_minimize_main_window")`);
+  await waitFor(
+    "warm widget reuse",
+    async () => {
+      const [mainVisible, widgetVisible] = await Promise.all([
+        evaluate(
+          client!,
+          `window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", { label: "main" })`,
+        ),
+        evaluate(
+          client!,
+          `window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", { label: "widget" })`,
+        ),
+      ]);
+      return mainVisible === false && widgetVisible === true ? true : null;
+    },
+    10_000,
+  );
+  console.log("PATINA_FIRST_MINIMIZE_RECOVERY_REPORT", JSON.stringify({
+    environment: "isolated real Tauri/WebView2 runtime",
+    hardFailurePreservedMain: true,
+    transientFailureRetried: true,
+    coldWidgetCreationSucceeded: true,
+    warmWidgetReuseSucceeded: true,
+  }));
+
+  await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_show_main_window")`);
+  await waitFor(
+    "main window recovery after warm widget reuse",
+    async () => evaluate(
+      client!,
+      `window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", { label: "main" })`,
+    ),
+    10_000,
+  );
 
   const startupVisibilityLogs = logs.join("");
   const createdLogIndex = startupVisibilityLogs.indexOf("event=created");

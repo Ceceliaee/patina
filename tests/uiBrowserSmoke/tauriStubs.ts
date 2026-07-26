@@ -7,14 +7,28 @@ function tauriStubFor(path: string) {
       const noop = async () => {};
       const foregroundListeners = new Set();
       const resizeListeners = new Set();
+      const scaleListeners = new Set();
+      const currentWindowLabel = new URL(globalThis.location.href).searchParams.get("__patinaWindow") === "widget"
+        ? "widget"
+        : "main";
       let foregroundState = { visible: true, focused: false };
       globalThis.__TIME_TRACKER_SET_FOREGROUND_STATE = (nextState) => {
         foregroundState = { ...foregroundState, ...nextState };
         for (const listener of foregroundListeners) listener();
         for (const listener of resizeListeners) listener();
       };
+      globalThis.__PATINA_EMIT_SCALE_FACTOR_CHANGED = (scaleFactor) => {
+        const payload = {
+          scaleFactor,
+          size: {
+            width: Math.round(globalThis.innerWidth * scaleFactor),
+            height: Math.round(globalThis.innerHeight * scaleFactor),
+          },
+        };
+        for (const listener of scaleListeners) listener({ payload });
+      };
       const currentWindow = {
-        label: "main",
+        label: currentWindowLabel,
         minimize: noop,
         toggleMaximize: noop,
         close: noop,
@@ -26,6 +40,10 @@ function tauriStubFor(path: string) {
         outerPosition: async () => ({ x: 0, y: 0 }),
         outerSize: async () => ({ width: 1280, height: 800 }),
         onMoved: async () => () => {},
+        onScaleChanged: async (listener) => {
+          scaleListeners.add(listener);
+          return () => scaleListeners.delete(listener);
+        },
         onFocusChanged: async (listener) => {
           foregroundListeners.add(listener);
           return () => foregroundListeners.delete(listener);
@@ -55,8 +73,11 @@ function tauriStubFor(path: string) {
 
   if (path === "@tauri-apps/api/webviewWindow") {
     return `
+      const currentWindowLabel = new URL(globalThis.location.href).searchParams.get("__patinaWindow") === "widget"
+        ? "widget"
+        : "main";
       export function getCurrentWebviewWindow() {
-        return { label: "main" };
+        return { label: currentWindowLabel };
       }
     `;
   }
@@ -89,6 +110,74 @@ function tauriStubFor(path: string) {
 
       export async function invoke(command, payload = {}) {
         globalThis.__PATINA_INVOKED_COMMANDS.push({ command, payload });
+        const widgetParams = new URL(globalThis.location.href).searchParams;
+        const isWidgetSmoke = widgetParams.get("__patinaWindow") === "widget";
+        if (isWidgetSmoke && command === "cmd_get_widget_placement") {
+          return {
+            side: widgetParams.get("widgetSide") === "left" ? "left" : "right",
+            anchor_y: 0.28,
+          };
+        }
+        if (isWidgetSmoke && command === "cmd_get_widget_icon") {
+          return widgetParams.get("widgetObject") === "1"
+            ? "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+            : null;
+        }
+        if (isWidgetSmoke && command === "cmd_get_tracker_health_snapshot") {
+          const now = Date.now();
+          return {
+            last_heartbeat_ms: now,
+            last_successful_sample_ms: now,
+            last_watchdog_seal_sample_ms: null,
+          };
+        }
+        if (isWidgetSmoke && command === "get_current_tracking_snapshot") {
+          const unavailableSignal = {
+            signal: {
+              is_available: false,
+              is_active: false,
+              signal_source: null,
+              source_app_id: null,
+              source_app_identity: null,
+              playback_type: null,
+            },
+            match_result: "unavailable",
+          };
+          return {
+            window: {
+              hwnd: "1",
+              root_owner_hwnd: "1",
+              process_id: 7,
+              window_class: "Chrome_WidgetWin_1",
+              title: "Patina browser smoke",
+              exe_name: "chrome.exe",
+              process_path: "C:/Program Files/Google/Chrome/Application/chrome.exe",
+              is_afk: false,
+              idle_time_ms: 0,
+            },
+            status: {
+              is_tracking_active: true,
+              sustained_participation_eligible: false,
+              sustained_participation_active: false,
+              sustained_participation_kind: null,
+              sustained_participation_state: "inactive",
+              sustained_participation_signal_source: null,
+              sustained_participation_reason: "no-signal",
+              sustained_participation_diagnostics: {
+                state: "inactive",
+                reason: "no-signal",
+                window_identity: null,
+                effective_signal_source: null,
+                last_match_at_ms: null,
+                grace_deadline_ms: null,
+                system_media: unavailableSignal,
+                audio_session: unavailableSignal,
+              },
+            },
+            sampled_at_ms: Date.now(),
+            probe_status: "ok",
+          };
+        }
         if (command === "cmd_mark_main_window_ready") {
           globalThis.__PATINA_MAIN_WINDOW_READY_EVIDENCE = {
             generation: Number(payload.generation),

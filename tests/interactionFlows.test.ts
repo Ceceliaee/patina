@@ -754,4 +754,77 @@ await runTest("widget controller accepts runtime collapse without persisting ano
   assert.deepEqual(events.slice(-1), ["layout:right:0.35:false:true"]);
 });
 
+await runTest("widget controller reapplies layout after DPI changes without interrupting drag", async () => {
+  const scheduler = new FakeScheduler();
+  const events: string[] = [];
+  const currentRect: WidgetWindowRect = {
+    position: { x: 1936, y: 426 },
+    size: { width: 64, height: 48 },
+  };
+  const currentMonitor: WidgetMonitorLike = {
+    workArea: {
+      position: { x: 1000, y: 0 },
+      size: { width: 1000, height: 900 },
+    },
+  };
+
+  const controller = createWidgetWindowController(true, {
+    loadPlacement: async () => ({ side: "right", anchorY: 0.5 }),
+    persistExpanded: async (nextExpanded, showObjectSlot) => {
+      events.push(`expanded:${nextExpanded}:${showObjectSlot}`);
+    },
+    applyLayout: async (placement, nextExpanded, showObjectSlot) => {
+      events.push(`layout:${placement.side}:${placement.anchorY.toFixed(2)}:${nextExpanded}:${showObjectSlot}`);
+    },
+    readWindowRect: async () => currentRect,
+    resolveMonitorForWindowRect: async () => currentMonitor,
+    schedule: (callback) => scheduler.schedule(callback),
+    clearScheduled: (handle) => scheduler.clear(handle),
+    onCollapsedDragSettled: () => {
+      events.push("settled");
+    },
+  });
+
+  await controller.initialize();
+
+  controller.handleScaleFactorChanged();
+  scheduler.flushAll();
+  await flushMicrotasks();
+  assert.deepEqual(events, ["layout:right:0.50:false:true"]);
+  scheduler.flushAll();
+  await flushMicrotasks();
+
+  controller.beginUserDrag();
+  controller.handleScaleFactorChanged();
+  scheduler.flushAll();
+  await flushMicrotasks();
+  assert.deepEqual(events, ["layout:right:0.50:false:true"]);
+
+  controller.endUserDrag();
+  scheduler.flushAll();
+  await flushMicrotasks();
+  assert.deepEqual(events.slice(-2), [
+    "layout:right:0.50:false:true",
+    "settled",
+  ]);
+  scheduler.flushAll();
+  await flushMicrotasks();
+
+  controller.expand();
+  await flushMicrotasks();
+  events.length = 0;
+  controller.handleScaleFactorChanged();
+  await flushMicrotasks();
+  assert.deepEqual(events, ["layout:right:0.50:true:true"]);
+  scheduler.flushAll();
+  await flushMicrotasks();
+
+  controller.syncCollapsedFromRuntime();
+  events.length = 0;
+  controller.handleScaleFactorChanged();
+  scheduler.flushAll();
+  await flushMicrotasks();
+  assert.deepEqual(events, []);
+});
+
 console.log(`Passed ${passed} interaction flow tests`);
