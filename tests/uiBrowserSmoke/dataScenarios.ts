@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { COPY } from "../../src/shared/copy/index.ts";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
-import { evaluate, jsonString, waitForExpression } from "./browserHarness.ts";
+import {
+  evaluate,
+  jsonString,
+  waitForAnimationFrames,
+  waitForExpression,
+} from "./browserHarness.ts";
 
 export async function runDataScenarios(
   context: BrowserSmokeContext,
@@ -1262,6 +1267,7 @@ export async function runDataScenarios(
         mobile: false,
       }, sessionId);
       await waitForExpression(client!, sessionId, `window.innerWidth === ${width}`);
+      await waitForAnimationFrames(client!, sessionId);
       layouts.push(JSON.parse(String(await evaluate(client!, sessionId, `
         (() => {
           const grid = document.querySelector(".data-dashboard-grid");
