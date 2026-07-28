@@ -16,6 +16,7 @@ export interface HeatmapCell {
   isFuture: boolean;
   isOutsideYear: boolean;
   label: string;
+  availability?: HeatmapAvailability;
 }
 
 export interface HeatmapWeek {
@@ -25,6 +26,7 @@ export interface HeatmapWeek {
 }
 
 export type HeatmapSelection = "recent" | number;
+export type HeatmapAvailability = "recorded" | "no-activity" | "unavailable" | "future";
 
 export interface HeatmapRange {
   start: Date;
@@ -35,8 +37,10 @@ export interface HeatmapRange {
 const RECENT_HEATMAP_WEEK_COUNT = 53;
 
 function formatHeatmapDateLabel(dateKey: string) {
-  const date = new Date(`${dateKey}T00:00:00`);
-  return date.toLocaleDateString(getUiLocale(), { month: "2-digit", day: "2-digit" });
+  const [year, month, day] = dateKey.split("-");
+  return getUiLocale().startsWith("zh")
+    ? `${year}/${month}/${day}`
+    : `${month}/${day}/${year}`;
 }
 
 function formatHeatmapMonthLabel(date: Date) {
@@ -97,10 +101,13 @@ export function buildActivityHeatmap(
   sessions: AggregateSessionRecord[],
   selection: HeatmapSelection,
   nowMs: number,
+  selectedAppKeys: string | readonly string[] | null = null,
 ): HeatmapWeek[] {
   const { start: heatmapStart, end: heatmapEnd, weekCount } = getHeatmapRange(selection, nowMs);
-  const todayStart = startOfLocalDay(new Date(nowMs));
   const dayBuckets = new Map<string, number>();
+  const selectedAppKeySet = selectedAppKeys === null
+    ? null
+    : new Set(Array.isArray(selectedAppKeys) ? selectedAppKeys : [selectedAppKeys]);
 
   for (let dayIndex = 0; dayIndex < weekCount * 7; dayIndex += 1) {
     dayBuckets.set(toDateKey(addDays(heatmapStart, dayIndex)), 0);
@@ -108,25 +115,48 @@ export function buildActivityHeatmap(
 
   const heatmapStartMs = heatmapStart.getTime();
   const heatmapEndMs = heatmapEnd.getTime();
-  const statisticalEligibilityByApp = new Map<string, boolean>();
+  const statisticalAppKeyByApp = new Map<string, string | null>();
+  let cachedDayStartMs = Number.NaN;
+  let cachedDayEndMs = Number.NaN;
+  let cachedDayKey = "";
 
   for (const session of sessions) {
     const eligibilityKey = `${session.exeName}\u0000${session.appName}`;
-    let isStatisticallyEligible = statisticalEligibilityByApp.get(eligibilityKey);
-    if (isStatisticallyEligible === undefined) {
-      isStatisticallyEligible = Boolean(resolveStatisticalDataAppKey(session));
-      statisticalEligibilityByApp.set(eligibilityKey, isStatisticallyEligible);
+    if (!statisticalAppKeyByApp.has(eligibilityKey)) {
+      statisticalAppKeyByApp.set(eligibilityKey, resolveStatisticalDataAppKey(session));
     }
-    if (!isStatisticallyEligible) continue;
+    const sessionAppKey = statisticalAppKeyByApp.get(eligibilityKey) ?? null;
+    if (!sessionAppKey) continue;
+    if (selectedAppKeySet && !selectedAppKeySet.has(sessionAppKey)) continue;
 
     const sessionStart = Math.max(session.startTime, heatmapStartMs);
     const sessionEnd = Math.min(session.endTime ?? nowMs, heatmapEndMs);
     if (sessionEnd <= sessionStart) continue;
 
+    if (sessionStart >= cachedDayStartMs && sessionEnd <= cachedDayEndMs) {
+      const previous = dayBuckets.get(cachedDayKey);
+      if (previous !== undefined) {
+        dayBuckets.set(cachedDayKey, previous + sessionEnd - sessionStart);
+      }
+      continue;
+    }
+
     let cursor = startOfLocalDay(new Date(sessionStart));
+    const firstDayEnd = addDays(cursor, 1).getTime();
+    if (sessionEnd <= firstDayEnd) {
+      cachedDayStartMs = cursor.getTime();
+      cachedDayEndMs = firstDayEnd;
+      cachedDayKey = toDateKey(cursor);
+      const previous = dayBuckets.get(cachedDayKey);
+      if (previous !== undefined) {
+        dayBuckets.set(cachedDayKey, previous + sessionEnd - sessionStart);
+      }
+      continue;
+    }
+
     while (cursor.getTime() < sessionEnd) {
       const dayStart = cursor.getTime();
-      const dayEnd = dayStart + 24 * 60 * 60 * 1000;
+      const dayEnd = addDays(cursor, 1).getTime();
       const clippedStart = Math.max(sessionStart, dayStart);
       const clippedEnd = Math.min(sessionEnd, dayEnd);
       const key = toDateKey(cursor);
@@ -140,8 +170,38 @@ export function buildActivityHeatmap(
     }
   }
 
-  const maxDuration = Math.max(1, ...Array.from(dayBuckets.values()));
+  return buildHeatmapFromDailyDurations({
+    dayDurations: dayBuckets,
+    selection,
+    nowMs,
+  });
+}
 
+export function buildHeatmapFromDailyDurations({
+  dayDurations,
+  selection,
+  nowMs,
+  resolveAvailability,
+  resolveSummary,
+}: {
+  dayDurations: Map<string, number>;
+  selection: HeatmapSelection;
+  nowMs: number;
+  resolveAvailability?: (input: {
+    dateKey: string;
+    dateMs: number;
+    duration: number;
+    isFuture: boolean;
+    isOutsideYear: boolean;
+  }) => HeatmapAvailability;
+  resolveSummary?: (input: {
+    availability: HeatmapAvailability;
+    duration: number;
+  }) => string;
+}): HeatmapWeek[] {
+  const { start: heatmapStart, weekCount } = getHeatmapRange(selection, nowMs);
+  const todayStart = startOfLocalDay(new Date(nowMs));
+  const maxDuration = Math.max(1, ...Array.from(dayDurations.values()));
   return Array.from({ length: weekCount }, (_, weekIndex) => {
     const weekStart = addDays(heatmapStart, weekIndex * 7);
     const monthStartInWeek = Array.from({ length: 7 }, (_, weekdayIndex) => addDays(weekStart, weekdayIndex))
@@ -152,17 +212,27 @@ export function buildActivityHeatmap(
       cells: Array.from({ length: 7 }, (_, weekdayIndex) => {
         const date = addDays(weekStart, weekdayIndex);
         const dateKey = toDateKey(date);
-        const duration = dayBuckets.get(dateKey) ?? 0;
+        const duration = dayDurations.get(dateKey) ?? 0;
         const isFuture = date.getTime() > todayStart.getTime();
         const isOutsideYear = selection !== "recent" && date.getFullYear() !== selection;
+        const availability = resolveAvailability?.({
+          dateKey,
+          dateMs: date.getTime(),
+          duration,
+          isFuture,
+          isOutsideYear,
+        }) ?? (isFuture ? "future" : "recorded");
+        const summary = resolveSummary?.({ availability, duration })
+          ?? (isFuture ? UI_TEXT.data.notStarted : formatDuration(duration));
         return {
           key: dateKey,
           date: dateKey,
           duration,
           isFuture,
           isOutsideYear,
+          availability,
           intensity: duration <= 0 || isFuture || isOutsideYear ? 0 : Math.max(0.16, duration / maxDuration),
-          label: `${formatHeatmapDateLabel(dateKey)} · ${isFuture ? UI_TEXT.data.notStarted : formatDuration(duration)}`,
+          label: `${formatHeatmapDateLabel(dateKey)} · ${summary}`,
         };
       }),
     };

@@ -107,6 +107,27 @@ await runTest("activity heatmap splits sessions across local days", () => {
   assert.equal(findCell(rows, "2026-01-02")?.duration, 90 * 60 * 1000);
 });
 
+await runTest("current-app heatmap excludes every other application", () => {
+  const nowMs = new Date(2026, 0, 3, 12, 0, 0).getTime();
+  const rows = buildActivityHeatmap([
+    makeSession({
+      appName: "Cursor",
+      exeName: "cursor.exe",
+      startTime: new Date(2026, 0, 2, 9, 0, 0).getTime(),
+      endTime: new Date(2026, 0, 2, 10, 0, 0).getTime(),
+    }),
+    makeSession({
+      appName: "Blender",
+      exeName: "blender.exe",
+      startTime: new Date(2026, 0, 2, 10, 0, 0).getTime(),
+      endTime: new Date(2026, 0, 2, 12, 0, 0).getTime(),
+    }),
+  ], 2026, nowMs, "cursor.exe");
+
+  assert.equal(findCell(rows, "2026-01-02")?.duration, 60 * 60 * 1000);
+  assert.equal(findCell(rows, "2026-01-01")?.availability, "recorded");
+});
+
 await runTest("activity heatmap suppresses intensity for future and outside-year cells", () => {
   const nowMs = new Date(2026, 0, 3, 12, 0, 0).getTime();
   const rows = buildActivityHeatmap([
@@ -143,8 +164,8 @@ await runTest("activity heatmap labels sub-second durations as zero minutes", ()
     }),
   ], 2026, nowMs);
 
-  assert.equal(findCell(rows, "2026-01-01")?.label, "01/01 · 0m");
-  assert.equal(findCell(rows, "2026-01-02")?.label, "01/02 · 0m");
+  assert.match(findCell(rows, "2026-01-01")?.label ?? "", /^2026.*0m$/);
+  assert.match(findCell(rows, "2026-01-02")?.label ?? "", /^2026.*0m$/);
 });
 
 await runTest("year options include every year from current back to earliest activity", () => {
@@ -198,14 +219,14 @@ await runTest("app trend groups sessions by application and day", () => {
       endTime: new Date(2026, 4, 7, 15, 0, 0).getTime(),
     }),
   ], 7, nowMs, null);
-  const may7 = rows.dayRows.find((row) => row.date === "2026-05-07");
+  const may7 = rows.chartRows.find((row) => row.date === "2026-05-07");
 
-  assert.equal(rows.selectedApp?.appName, "Blender");
+  assert.equal(rows.selectedApps[0]?.appName, "Blender");
   assert.equal(rows.granularity, "day");
-  assert.equal(rows.selectedApp?.totalDuration, 210 * 60 * 1000);
-  assert.equal(rows.selectedApp?.activeDayCount, 2);
-  assert.equal(rows.dayRows.length, 7);
-  assert.equal(may7?.duration, 90 * 60 * 1000);
+  assert.equal(rows.selectedApps[0]?.totalDuration, 210 * 60 * 1000);
+  assert.equal(rows.selectedApps[0]?.activeDayCount, 2);
+  assert.equal(rows.chartRows.length, 7);
+  assert.equal(may7?.totalDuration, 90 * 60 * 1000);
   assert.equal(rows.peakDay?.date, "2026-05-06");
 });
 
@@ -226,9 +247,84 @@ await runTest("app trend preserves explicit selected application", () => {
     }),
   ], 7, nowMs, "blender.exe");
 
-  assert.equal(rows.selectedApp?.appName, "Blender");
-  assert.equal(rows.selectedApp?.totalDuration, 60 * 60 * 1000);
-  assert.equal(rows.chartData.at(-1)?.duration, 60 * 60 * 1000);
+  assert.equal(rows.selectedApps[0]?.appName, "Blender");
+  assert.equal(rows.selectedApps[0]?.totalDuration, 60 * 60 * 1000);
+  assert.equal(rows.chartRows.at(-1)?.totalDuration, 60 * 60 * 1000);
+});
+
+await runTest("app trend builds ordered comparison series and aggregate metrics for multiple apps", () => {
+  const nowMs = new Date(2026, 4, 8, 12, 0, 0).getTime();
+  const may7 = new Date(2026, 4, 7).getTime();
+  const may8 = new Date(2026, 4, 8).getTime();
+  const rows = buildDataAppTrendViewModel([
+    makeSession({
+      appName: "Blender",
+      exeName: "blender.exe",
+      startTime: may7 + (9 * 60 * 60_000),
+      endTime: may7 + (10 * 60 * 60_000),
+    }),
+    makeSession({
+      appName: "Cursor",
+      exeName: "cursor.exe",
+      startTime: may7 + (10 * 60 * 60_000),
+      endTime: may7 + (12 * 60 * 60_000),
+    }),
+    makeSession({
+      appName: "Cursor",
+      exeName: "cursor.exe",
+      startTime: may8 + (9 * 60 * 60_000),
+      endTime: may8 + (9.5 * 60 * 60_000),
+    }),
+  ], 7, nowMs, ["cursor.exe", "blender.exe"]);
+
+  assert.deepEqual(rows.selectedApps.map((app) => app.appName), ["Cursor", "Blender"]);
+  assert.deepEqual(rows.chartSeries.map((series) => series.dataKey), ["series0", "series1"]);
+  assert.equal(rows.summary.totalDuration, 3.5 * 60 * 60_000);
+  assert.equal(rows.summary.averageDuration, 30 * 60_000);
+  assert.equal(rows.summary.activeDayCount, 2);
+  assert.equal(rows.peakDay?.date, "2026-05-07");
+  assert.equal(rows.peakDay?.duration, 3 * 60 * 60_000);
+  const may7Row = rows.chartRows.find((point) => point.date === "2026-05-07");
+  assert.equal(may7Row?.series0, 2);
+  assert.equal(may7Row?.series1, 1);
+  assert.equal(may7Row?.totalHours, 3);
+});
+
+await runTest("app trend keeps an explicit selection as a zero series when the range has no records", () => {
+  const nowMs = new Date(2026, 4, 8, 12, 0, 0).getTime();
+  const rows = buildDataAppTrendViewModel([], 7, nowMs, ["cursor.exe"]);
+
+  assert.deepEqual(rows.selectedApps.map((app) => app.appKey), ["cursor.exe"]);
+  assert.equal(rows.summary.totalDuration, 0);
+  assert.equal(rows.chartSeries[0]?.key, "cursor.exe");
+  assert.ok(rows.chartRows.every((row) => row.series0 === 0));
+});
+
+await runTest("current-app heatmap aggregates an explicit application selection set", () => {
+  const nowMs = new Date(2026, 4, 8, 12, 0, 0).getTime();
+  const may8 = new Date(2026, 4, 8).getTime();
+  const rows = buildActivityHeatmap([
+    makeSession({
+      appName: "Blender",
+      exeName: "blender.exe",
+      startTime: may8 + (8 * 60 * 60_000),
+      endTime: may8 + (9 * 60 * 60_000),
+    }),
+    makeSession({
+      appName: "Cursor",
+      exeName: "cursor.exe",
+      startTime: may8 + (9 * 60 * 60_000),
+      endTime: may8 + (11 * 60 * 60_000),
+    }),
+    makeSession({
+      appName: "Chrome",
+      exeName: "chrome.exe",
+      startTime: may8 + (11 * 60 * 60_000),
+      endTime: may8 + (12 * 60 * 60_000),
+    }),
+  ], 2026, nowMs, ["cursor.exe", "blender.exe"]);
+
+  assert.equal(findCell(rows, "2026-05-08")?.duration, 3 * 60 * 60_000);
 });
 
 await runTest("app trend merges duplicate display options", () => {
@@ -249,9 +345,9 @@ await runTest("app trend merges duplicate display options", () => {
   ], 7, nowMs, null);
 
   assert.equal(rows.appOptions.length, 1);
-  assert.equal(rows.selectedApp?.appName, "Antigravity");
-  assert.equal(rows.selectedApp?.totalDuration, 44 * 1000);
-  assert.equal(rows.chartData.at(-1)?.duration, 44 * 1000);
+  assert.equal(rows.selectedApps[0]?.appName, "Antigravity");
+  assert.equal(rows.selectedApps[0]?.totalDuration, 44 * 1000);
+  assert.equal(rows.chartRows.at(-1)?.totalDuration, 44 * 1000);
 });
 
 await runTest("display name scoring prefers readable localized names over tray aliases", () => {
@@ -295,8 +391,11 @@ await runTest("yearly app trend averages by month", () => {
   ], 365, nowMs, "blender.exe");
 
   assert.equal(rows.granularity, "month");
-  assert.equal(rows.selectedApp?.averageDuration, 60 * 60 * 1000);
-  assert.equal(rows.chartData.find((point) => point.date === "2026-04-01")?.duration, 12 * 60 * 60 * 1000);
+  assert.equal(rows.selectedApps[0]?.averageDuration, 60 * 60 * 1000);
+  assert.equal(
+    rows.chartRows.find((point) => point.date === "2026-04-01")?.totalDuration,
+    12 * 60 * 60 * 1000,
+  );
 });
 
 await runTest("shared trend aggregate matches standalone overview and app read models", () => {
@@ -350,8 +449,8 @@ await runTest("selected app derivation from shared aggregate does not mutate ove
   const overviewAfter = buildDataTrendViewModelFromAggregate(context);
 
   assert.deepEqual(overviewAfter, overviewBefore);
-  assert.equal(blender.selectedApp?.appName, "Blender");
-  assert.equal(cursor.selectedApp?.appName, "Cursor");
+  assert.equal(blender.selectedApps[0]?.appName, "Blender");
+  assert.equal(cursor.selectedApps[0]?.appName, "Cursor");
 });
 
 await runTest("aggregate repository mapping keeps a minimal effective time slice", () => {
@@ -673,7 +772,7 @@ await runTest("data first screen prewarm saves a bootstrap snapshot", async () =
 
   assert.equal(snapshot?.mappingVersion, 3);
   assert.equal(savedSnapshot?.overviewTrendViewModel.totalDuration, 60 * 60 * 1000);
-  assert.equal(savedSnapshot?.appTrendViewModel.selectedApp?.appName, "Cursor");
+  assert.equal(savedSnapshot?.appTrendViewModel.selectedApps[0]?.appName, "Cursor");
   assert.ok(savedSnapshot?.heatmapRows.length);
 });
 

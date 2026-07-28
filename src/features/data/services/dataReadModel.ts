@@ -28,6 +28,7 @@ import {
   type HeatmapRange,
   type HeatmapSelection,
 } from "./dataHeatmapReadModel.ts";
+import type { DataDestinationTrendSummary } from "./dataDestinationState.ts";
 
 export {
   buildActivityHeatmap,
@@ -89,6 +90,20 @@ export interface DataAppTrendPoint {
   duration: number;
 }
 
+export interface DataDestinationChartSeries {
+  key: string;
+  dataKey: string;
+  displayName: string;
+}
+
+export interface DataDestinationTrendChartRow {
+  label: string;
+  date: string;
+  totalDuration: number;
+  totalHours: number;
+  [dataKey: string]: string | number;
+}
+
 export interface DataAppDayRow {
   date: string;
   label: string;
@@ -101,10 +116,11 @@ export interface DataAppTrendViewModel {
   rangeLabel: string;
   granularity: "day" | "month";
   appOptions: DataAppOption[];
-  selectedApp: DataAppOption | null;
-  chartData: DataAppTrendPoint[];
+  selectedApps: DataAppOption[];
+  chartSeries: DataDestinationChartSeries[];
+  chartRows: DataDestinationTrendChartRow[];
+  summary: DataDestinationTrendSummary;
   chartAxis: DataTrendViewModel["chartAxis"];
-  dayRows: DataAppDayRow[];
   peakDay: DataAppDayRow | null;
 }
 
@@ -162,7 +178,7 @@ interface MergedDataAppDurationBucket extends DataAppDurationBucket {
   sourceAppKeys: string[];
 }
 
-function buildChartAxis(points: DataTrendPoint[]) {
+export function buildDataChartAxis(points: DataTrendPoint[]) {
   const maxHours = Math.max(0, ...points.map((point) => point.hours));
   const intervalCount = 3;
   const rawStep = Math.max(1, maxHours / intervalCount);
@@ -183,9 +199,22 @@ function formatMonthLabel(monthKey: string) {
   return UI_TEXT.date.monthLabel(month);
 }
 
+const DATA_APP_DAY_LABEL_CACHE_LIMIT = 800;
+const dataAppDayLabelCache = new Map<string, string>();
+
 function formatAppDayLabel(dateKey: string) {
+  const locale = getUiLocale();
+  const cacheKey = `${locale}:${dateKey}`;
+  const cached = dataAppDayLabelCache.get(cacheKey);
+  if (cached) return cached;
   const date = new Date(`${dateKey}T00:00:00`);
-  return date.toLocaleDateString(getUiLocale(), { month: "2-digit", day: "2-digit", weekday: "short" });
+  const label = date.toLocaleDateString(locale, { month: "2-digit", day: "2-digit", weekday: "short" });
+  dataAppDayLabelCache.set(cacheKey, label);
+  if (dataAppDayLabelCache.size > DATA_APP_DAY_LABEL_CACHE_LIMIT) {
+    const oldestKey = dataAppDayLabelCache.keys().next().value;
+    if (oldestKey) dataAppDayLabelCache.delete(oldestKey);
+  }
+  return label;
 }
 
 function resolveDataDisplayName(session: AggregateSessionRecord, appKey: string) {
@@ -541,7 +570,7 @@ export function buildDataTrendViewModelFromAggregate(
     averageDuration: Math.round(totalDuration / averageDivisor),
     averageDivisor,
     chartData,
-    chartAxis: buildChartAxis(chartData),
+    chartAxis: buildDataChartAxis(chartData),
     metricLabels: {
       total: UI_TEXT.data.rangeTotal(rangeLabel),
       average: shouldGroupByMonth ? UI_TEXT.data.yearlyAverage : UI_TEXT.data.dailyAverage,
@@ -562,7 +591,7 @@ export function buildDataTrendViewModel(
 
 export function buildDataAppTrendViewModelFromAggregate(
   context: DataTrendAggregateContext,
-  selectedAppKey: string | null,
+  selectedAppKeys: string | readonly string[] | null,
 ): DataAppTrendViewModel {
   const { aggregate, dayRanges, monthRanges, range } = context;
   const shouldGroupByMonth = range.granularity === "month";
@@ -581,20 +610,37 @@ export function buildDataAppTrendViewModelFromAggregate(
     dayDurations: item.dayDurations,
     monthDurations: item.monthDurations,
   }));
-  const selectedMergedApp = mergedOptions.find((item) => (
-    item.appKey === selectedAppKey || item.sourceAppKeys.includes(selectedAppKey ?? "")
-  )) ?? mergedOptions[0] ?? null;
-  const selectedApp = selectedMergedApp
-    ? {
-      appKey: selectedMergedApp.appKey,
-      appName: selectedMergedApp.appName,
-      exeName: selectedMergedApp.exeName,
-      totalDuration: selectedMergedApp.totalDuration,
-      percentage: selectedMergedApp.percentage,
-      averageDuration: selectedMergedApp.averageDuration,
-      activeDayCount: selectedMergedApp.activeDayCount,
-    }
-    : null;
+  const requestedKeys = selectedAppKeys === null
+    ? []
+    : Array.isArray(selectedAppKeys) ? selectedAppKeys : [selectedAppKeys];
+  const selectedMergedApps = Array.from(new Set(requestedKeys))
+    .map((selectedKey) => mergedOptions.find((item) => (
+      item.appKey === selectedKey || item.sourceAppKeys.includes(selectedKey)
+    )) ?? {
+      appKey: selectedKey,
+      sourceAppKeys: [selectedKey],
+      appName: selectedKey,
+      exeName: selectedKey,
+      totalDuration: 0,
+      percentage: 0,
+      averageDuration: 0,
+      activeDayCount: 0,
+      dayDurations: new Map<string, number>(),
+      monthDurations: new Map<string, number>(),
+    });
+  if (selectedMergedApps.length === 0 && mergedOptions[0]) {
+    selectedMergedApps.push(mergedOptions[0]);
+  }
+  const toAppOption = (item: typeof mergedOptions[number]): DataAppOption => ({
+    appKey: item.appKey,
+    appName: item.appName,
+    exeName: item.exeName,
+    totalDuration: item.totalDuration,
+    percentage: item.percentage,
+    averageDuration: item.averageDuration,
+    activeDayCount: item.activeDayCount,
+  });
+  const selectedApps = selectedMergedApps.map(toAppOption);
   const appOptions = mergedOptions.map((item) => ({
     appKey: item.appKey,
     appName: item.appName,
@@ -604,22 +650,35 @@ export function buildDataAppTrendViewModelFromAggregate(
     averageDuration: item.averageDuration,
     activeDayCount: item.activeDayCount,
   }));
-  const selectedDayRows = selectedMergedApp
-    ? buildAppDayRowsFromDurations(selectedMergedApp.dayDurations, dayRanges)
-    : [];
-  const chartData = chartRanges.map((rangeItem) => {
+  const selectedDayDurations = new Map<string, number>();
+  for (const selected of selectedMergedApps) {
+    for (const [dateKey, duration] of selected.dayDurations) {
+      selectedDayDurations.set(dateKey, (selectedDayDurations.get(dateKey) ?? 0) + duration);
+    }
+  }
+  const selectedDayRows = buildAppDayRowsFromDurations(selectedDayDurations, dayRanges);
+  const chartSeries = selectedMergedApps.map((item, index) => ({
+    key: item.appKey,
+    dataKey: `series${index}`,
+    displayName: item.appName,
+  }));
+  const chartRows = chartRanges.map((rangeItem) => {
     const date = toDateKey(new Date(rangeItem.startMs));
-    const duration = selectedMergedApp
-      ? shouldGroupByMonth
-        ? selectedMergedApp.monthDurations.get(getMonthKey(date)) ?? 0
-        : selectedMergedApp.dayDurations.get(date) ?? 0
-      : 0;
-    return {
+    const row: DataDestinationTrendChartRow = {
       label: shouldGroupByMonth ? formatMonthLabel(date.slice(0, 7)) : date.slice(5),
       date,
-      duration,
-      hours: duration / 3600000,
+      totalDuration: 0,
+      totalHours: 0,
     };
+    for (const [index, selected] of selectedMergedApps.entries()) {
+      const duration = shouldGroupByMonth
+        ? selected.monthDurations.get(getMonthKey(date)) ?? 0
+        : selected.dayDurations.get(date) ?? 0;
+      row[`series${index}`] = duration / 3600000;
+      row.totalDuration += duration;
+    }
+    row.totalHours = row.totalDuration / 3600000;
+    return row;
   });
   const peakDay = selectedDayRows.reduce<DataAppDayRow | null>((peak, row) => {
     if (!peak || row.duration > peak.duration) {
@@ -627,16 +686,28 @@ export function buildDataAppTrendViewModelFromAggregate(
     }
     return peak;
   }, null);
+  const selectedTotalDuration = selectedApps.reduce((total, app) => total + app.totalDuration, 0);
+  const summary: DataDestinationTrendSummary = {
+    totalDuration: selectedTotalDuration,
+    averageDuration: Math.round(selectedTotalDuration / averageDivisor),
+    activeDayCount: selectedDayRows.filter((row) => row.duration > 0).length,
+  };
+  const axisPoints = chartRows.flatMap((row) => chartSeries.map((series) => ({
+    label: row.label,
+    date: row.date,
+    hours: Number(row[series.dataKey] ?? 0),
+  })));
 
   return {
     range,
     rangeLabel: range.label,
     granularity: shouldGroupByMonth ? "month" : "day",
     appOptions,
-    selectedApp,
-    chartData,
-    chartAxis: buildChartAxis(chartData),
-    dayRows: selectedDayRows.slice().reverse(),
+    selectedApps,
+    chartSeries,
+    chartRows,
+    summary,
+    chartAxis: buildDataChartAxis(axisPoints),
     peakDay: peakDay && peakDay.duration > 0 ? peakDay : null,
   };
 }
@@ -645,21 +716,21 @@ export function buildDataAppTrendViewModel(
   sessions: AggregateSessionRecord[],
   selection: DataTrendRange | ResolvedDataTrendRange,
   nowMs: number,
-  selectedAppKey: string | null,
+  selectedAppKeys: string | readonly string[] | null,
 ): DataAppTrendViewModel {
   return buildDataAppTrendViewModelFromAggregate(
     buildDataTrendAggregateContext(sessions, selection, nowMs),
-    selectedAppKey,
+    selectedAppKeys,
   );
 }
 
 export function buildDataTrendViewModelsFromAggregate(
   context: DataTrendAggregateContext,
-  selectedAppKey: string | null,
+  selectedAppKeys: string | readonly string[] | null,
 ) {
   return {
     overviewTrendViewModel: buildDataTrendViewModelFromAggregate(context),
-    appTrendViewModel: buildDataAppTrendViewModelFromAggregate(context, selectedAppKey),
+    appTrendViewModel: buildDataAppTrendViewModelFromAggregate(context, selectedAppKeys),
   };
 }
 
