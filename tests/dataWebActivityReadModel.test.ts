@@ -116,6 +116,14 @@ await runTest("web heatmap request state distinguishes cold and retained refresh
   });
   assert.equal(refreshFailed.status, "refresh-failed-with-retained-data");
   assert.deepEqual(refreshFailed.snapshot, { value: 7 });
+  assert.strictEqual(
+    resolveDataWebHeatmapRequestState(refreshFailed, "2026:docs", "r2"),
+    refreshFailed,
+  );
+  assert.deepEqual(
+    reduceDataWebHeatmapRequestState(refreshFailed, { type: "reset" }),
+    createInitialDataWebHeatmapRequestState(),
+  );
 });
 
 await runTest("web heatmap request state rejects stale responses and abandoned presentations", () => {
@@ -458,6 +466,45 @@ await runTest("web aggregate gateway shards more than 400 buckets and merges sta
     normalizedDomain: "coverage.example",
     earliestRecordedStartMs: 0,
   }]);
+});
+
+await runTest("web aggregate gateway rejects mismatched snapshot clocks and duration overflow", async () => {
+  await assert.rejects(
+    loadWebActivityAggregateRange(
+      0,
+      10,
+      [0, 10],
+      null,
+      async (_startMs, _endMs, _boundaries, _domainFilter, snapshotNowMs) => ({
+        records: [],
+        domainCoverage: [],
+        sourceRevision: "1",
+        snapshotNowMs: snapshotNowMs + 1,
+      }),
+    ),
+    /snapshot time did not match/i,
+  );
+
+  const boundaries = Array.from({ length: 403 }, (_, index) => index * 1_000);
+  await assert.rejects(
+    loadWebActivityAggregateRange(
+      boundaries[0],
+      boundaries.at(-1) ?? 0,
+      boundaries,
+      null,
+      async (_startMs, _endMs, _chunkBoundaries, _domainFilter, snapshotNowMs) => ({
+        records: [{
+          normalizedDomain: "overflow.example",
+          bucketStartMs: 0,
+          durationMs: Number.MAX_SAFE_INTEGER,
+        }],
+        domainCoverage: [],
+        sourceRevision: "1",
+        snapshotNowMs,
+      }),
+    ),
+    /duration overflowed/i,
+  );
 });
 
 await runTest("web aggregate gateway retries a sharded read when source revision changes", async () => {

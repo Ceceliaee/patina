@@ -3,6 +3,7 @@ import type { ChildProcess } from "node:child_process";
 import { createServer } from "vite";
 import {
   CdpConnection,
+  evaluate,
   getBrowserWebSocketUrl,
   launchBrowser,
   removeIsolatedBrowserDataDir,
@@ -32,7 +33,9 @@ async function runTest(name: string, fn: () => Promise<void> | void) {
 let browserProcess: ChildProcess | null = null;
 let browserUserDataDir: string | null = null;
 let client: CdpConnection | null = null;
+let sessionId: string | null = null;
 const consoleErrors: string[] = [];
+const networkErrors: string[] = [];
 let primaryError: unknown = null;
 const cleanupErrors: unknown[] = [];
 const dataOnly = process.argv.includes("--data-only");
@@ -62,10 +65,11 @@ try {
   const { targetId } = await client.command("Target.createTarget", { url: "about:blank" }) as {
     targetId: string;
   };
-  const { sessionId } = await client.command("Target.attachToTarget", {
+  const attachedTarget = await client.command("Target.attachToTarget", {
     targetId,
     flatten: true,
   }) as { sessionId: string };
+  sessionId = attachedTarget.sessionId;
 
   client.onMessage((message) => {
     if (message.sessionId !== sessionId) {
@@ -89,11 +93,24 @@ try {
         consoleErrors.push(params.entry.text ?? "browser log error");
       }
     }
+
+    if (message.method === "Network.loadingFailed") {
+      const params = message.params as {
+        blockedReason?: string;
+        errorText?: string;
+        type?: string;
+      };
+      networkErrors.push(
+        `${params.type ?? "resource"}: ${params.errorText ?? "loading failed"}`
+        + (params.blockedReason ? ` (${params.blockedReason})` : ""),
+      );
+    }
   });
 
   await client.command("Runtime.enable", {}, sessionId);
   await client.command("Page.enable", {}, sessionId);
   await client.command("Log.enable", {}, sessionId);
+  await client.command("Network.enable", {}, sessionId);
   await client.command("Emulation.setDeviceMetricsOverride", {
     width: 1280,
     height: 820,
@@ -132,7 +149,35 @@ try {
 
   assert.deepEqual(consoleErrors, []);
 } catch (error) {
-  primaryError = error;
+  const diagnostics: unknown[] = [error];
+  if (client && sessionId) {
+    try {
+      const pageState = await evaluate(client, sessionId, `({
+        url: location.href,
+        readyState: document.readyState,
+        title: document.title,
+        bodyText: document.body?.innerText?.slice(0, 1200) ?? "",
+        bodyHtml: document.body?.innerHTML?.slice(0, 1200) ?? "",
+        resources: performance.getEntriesByType("resource")
+          .slice(-12)
+          .map((entry) => ({ name: entry.name, duration: entry.duration })),
+      })`);
+      diagnostics.push(new Error(
+        `Browser failure diagnostics:\n${JSON.stringify({
+          pageState,
+          consoleErrors,
+          networkErrors,
+        }, null, 2)}`,
+      ));
+    } catch (diagnosticError) {
+      diagnostics.push(new Error(
+        `Could not collect browser diagnostics: ${String(diagnosticError)}; `
+        + `consoleErrors=${JSON.stringify(consoleErrors)}; `
+        + `networkErrors=${JSON.stringify(networkErrors)}`,
+      ));
+    }
+  }
+  primaryError = new AggregateError(diagnostics, "Browser scenario failed");
 } finally {
   try {
     client?.close();
@@ -154,7 +199,11 @@ try {
     }
   }
   try {
+    const httpServer = server.httpServer;
     await server.close();
+    if (httpServer?.listening) {
+      throw new Error("Vite browser smoke server remained listening after close");
+    }
   } catch (error) {
     cleanupErrors.push(error);
   }

@@ -469,6 +469,43 @@ function testQualityGateFilesAreMaintainerOwned() {
       deletions: 1,
     })],
   }).includes("quality-gate-modified"));
+
+  assert.ok(ruleNames({
+    pullRequestBody: VALID_BODY,
+    requirePullRequestBody: true,
+    changedFiles: [changedFile({
+      path: "scripts/perf/data-history-browser-benchmark.ts",
+      status: "M",
+      additions: 1,
+      deletions: 1,
+    })],
+  }).includes("quality-gate-modified"));
+}
+
+function testWindowAuthorityChangesRequireRuntimeMatrixEvidence() {
+  const capability = changedFile({
+    path: "src-tauri/capabilities/widget.json",
+    additions: 1,
+    deletions: 1,
+  });
+  const runtimeMatrix = changedFile({
+    path: "tests/tauriRuntimeSmoke.test.ts",
+    additions: 20,
+    deletions: 0,
+  });
+
+  assert.ok(ruleNames({
+    pullRequestBody: VALID_BODY,
+    requirePullRequestBody: true,
+    changedFiles: [capability],
+  }).includes("risk-path-without-tests"));
+
+  assert.deepEqual(ruleNames({
+    pullRequestBody: VALID_BODY,
+    requirePullRequestBody: true,
+    changedFiles: [capability, runtimeMatrix],
+    registeredTypeScriptTests: [runtimeMatrix.path],
+  }), []);
 }
 
 function testEncodingAndHardcodedCopyFail() {
@@ -614,6 +651,7 @@ testInlineRustTestSatisfiesRiskCoverage();
 testHardRulesRemainFailures();
 testStyleGateCatchesHardcodedColorAndBorder();
 testQualityGateFilesAreMaintainerOwned();
+testWindowAuthorityChangesRequireRuntimeMatrixEvidence();
 testEncodingAndHardcodedCopyFail();
 testFeatureSpecificSelectorsCannotGrowQuietProCss();
 testEstablishedFeatureStyleOwnerCanAddItsStylesheet();
@@ -622,4 +660,4 @@ testVerifyRunsAfterSuccessfulIntake();
 testValidationChainCanGrowButCannotBeWeakened();
 testLegacyPrTemplateCanBeSkipped();
 
-console.log("Passed 27 PR intake gate tests");
+console.log("Passed 28 PR intake gate tests");

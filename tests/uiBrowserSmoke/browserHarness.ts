@@ -135,11 +135,32 @@ export async function launchBrowser() {
     `--user-data-dir=${userDataDir}`,
     "about:blank",
   ], {
-    stdio: "ignore",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let browserLogTail = "";
+  let spawnError: Error | null = null;
+  const captureBrowserLog = (chunk: unknown) => {
+    browserLogTail = `${browserLogTail}${String(chunk)}`.slice(-4_096);
+  };
+  browser.stdout?.on("data", captureBrowserLog);
+  browser.stderr?.on("data", captureBrowserLog);
+  browser.once("error", (error) => {
+    spawnError = error;
   });
 
   try {
-    const port = await waitFor("browser devtools port", () => readDevToolsPort(userDataDir));
+    const port = await waitFor("browser devtools port", () => {
+      if (spawnError) {
+        throw new Error(`Browser process failed to start: ${spawnError.message}`);
+      }
+      if (browser.exitCode !== null) {
+        throw new Error(
+          `Browser exited before exposing DevTools (exit ${browser.exitCode})`
+          + (browserLogTail ? `:\n${browserLogTail}` : ""),
+        );
+      }
+      return readDevToolsPort(userDataDir);
+    });
     return {
       browser,
       port,

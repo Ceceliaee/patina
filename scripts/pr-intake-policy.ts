@@ -14,6 +14,7 @@ export const KNOWN_FEATURE_OWNERS = new Set([
 
 export const QUALITY_GATE_PATH_PATTERNS = [
   /^scripts\/check-.*\.ts$/,
+  /^scripts\/perf\/.*benchmark.*\.ts$/,
   /^\.github\/workflows\/[^/]+\.ya?ml$/,
 ] as const;
 
@@ -29,6 +30,19 @@ export const FEATURE_STYLE_OWNER_PREFIXES = [
 ] as const;
 
 export const RISK_AREAS = [
+  {
+    id: "window-authority",
+    label: "Tauri window authority and application permissions",
+    paths: [
+      /^src-tauri\/build\.rs$/,
+      /^src-tauri\/capabilities\/.*\.json$/,
+      /^src-tauri\/permissions\/.*\.toml$/,
+    ],
+    tests: [
+      /^tests\/tauriRuntimeSmoke\.test\.ts$/i,
+    ],
+    testExamples: "tests/tauriRuntimeSmoke.test.ts with an explicit main/widget denial matrix",
+  },
   {
     id: "tracking",
     label: "tracking lifecycle",

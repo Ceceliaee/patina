@@ -252,7 +252,7 @@ function collectValidationGraph(scripts: Record<string, string>) {
     }
   };
 
-  ["check", "check:full", "check:frontend"].forEach(visit);
+  ["check", "check:full", "check:frontend", "test:tauri-runtime-smoke"].forEach(visit);
   return {
     reachableScripts: reachable,
     registeredTypeScriptTests: registered,

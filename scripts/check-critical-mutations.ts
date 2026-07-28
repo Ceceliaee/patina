@@ -7,6 +7,12 @@ import ts from "typescript";
 const TEMP_ROOT = resolve(".tmp/critical-mutations");
 const SQLITE_SOURCE = "src/platform/persistence/sqliteTransactions.ts";
 const ERROR_SOURCE = "src/platform/persistence/commandError.ts";
+const WEB_AGGREGATE_SOURCE = "src/platform/persistence/webActivityAnalysisGateway.ts";
+const WINDOW_PERMISSIONS_SOURCE = "src-tauri/permissions/window-commands.toml";
+const WIDGET_CAPABILITY_SOURCE = "src-tauri/capabilities/widget.json";
+const WINDOW_GUARD_SOURCE = "src-tauri/src/commands/window_guard.rs";
+const WEB_HEATMAP_RUNTIME_SOURCE = "src/features/data/hooks/useDataWebActivityRuntime.ts";
+const WEB_BRIDGE_SOURCE = "src-tauri/src/platform/web_activity_bridge.rs";
 
 interface Mutant {
   name: string;
@@ -66,6 +72,126 @@ const MUTANTS: Mutant[] = [
   },
 ];
 
+interface SourceContractMutant {
+  name: string;
+  source: string;
+  search: string;
+  replacement: string;
+  verify: (source: string) => void;
+}
+
+const SOURCE_CONTRACT_MUTANTS: SourceContractMutant[] = [
+  {
+    name: "main-only command is reclassified as widget-shared",
+    source: WINDOW_PERMISSIONS_SOURCE,
+    search: '  "cmd_toggle_tracking_paused",\n  "cmd_is_primary_mouse_button_down",\n]',
+    replacement: '  "cmd_toggle_tracking_paused",\n  "cmd_is_primary_mouse_button_down",\n  "cmd_restore_backup",\n]',
+    verify: verifyWindowPermissionContract,
+  },
+  {
+    name: "widget regains raw SQL select permission",
+    source: WIDGET_CAPABILITY_SOURCE,
+    search: '    "widget-window-commands"\n  ]',
+    replacement: '    "widget-window-commands",\n    "sql:allow-select"\n  ]',
+    verify: verifyWidgetCapabilityContract,
+  },
+  {
+    name: "main-window caller guard comparison is inverted",
+    source: WINDOW_GUARD_SOURCE,
+    search: "if label == crate::app::tray::MAIN_WINDOW_LABEL {",
+    replacement: "if label != crate::app::tray::MAIN_WINDOW_LABEL {",
+    verify: verifyMainWindowGuardContract,
+  },
+  {
+    name: "web heatmap retry dependency is removed",
+    source: WEB_HEATMAP_RUNTIME_SOURCE,
+    search: "    retryKey,\n    selectedDomains,",
+    replacement: "    selectedDomains,",
+    verify: verifyWebHeatmapRetryContract,
+  },
+  {
+    name: "bridge stops instead of retrying after backoff",
+    source: WEB_BRIDGE_SOURCE,
+    search: [
+      "                    _ = sleep(retry_delay) => {",
+      "                        lock_inner(&lifecycle).mark_starting_retry(generation);",
+      "                    }",
+    ].join("\n"),
+    replacement: [
+      "                    _ = sleep(retry_delay) => {",
+      "                        return None;",
+      "                    }",
+    ].join("\n"),
+    verify: verifyWebBridgeRetryContract,
+  },
+];
+
+function widgetCommandPermissions(source: string) {
+  const block = source.match(
+    /\[\[permission\]\]\s*identifier\s*=\s*"widget-window-commands"(?<body>[\s\S]*?)commands\.allow\s*=\s*\[(?<commands>[\s\S]*?)\]/,
+  );
+  assert.ok(block?.groups?.commands, "widget-window permission block must remain parseable");
+  return new Set(
+    [...block.groups.commands.matchAll(/"([A-Za-z_][A-Za-z0-9_]*)"/g)]
+      .map((match) => match[1]),
+  );
+}
+
+function verifyWindowPermissionContract(source: string) {
+  const widgetCommands = widgetCommandPermissions(source);
+  for (const sensitive of [
+    "cmd_restore_backup",
+    "cmd_save_webdav_backup_secret",
+    "cmd_delete_sessions_before",
+    "cmd_install_update",
+  ]) {
+    assert.ok(!widgetCommands.has(sensitive), `widget permission exposed main-only command ${sensitive}`);
+  }
+}
+
+function verifyWidgetCapabilityContract(source: string) {
+  const capability = JSON.parse(source) as {
+    windows?: string[];
+    permissions?: Array<string | { identifier?: string }>;
+  };
+  assert.deepEqual(capability.windows, ["widget"]);
+  const permissionIds = (capability.permissions ?? []).map((permission) => (
+    typeof permission === "string" ? permission : permission.identifier ?? ""
+  ));
+  assert.ok(permissionIds.includes("widget-window-commands"));
+  assert.ok(
+    permissionIds.every((permission) => !permission.startsWith("sql:")),
+    "widget capability exposed raw SQL",
+  );
+}
+
+function verifyMainWindowGuardContract(source: string) {
+  const guard = source.match(
+    /fn require_main_window_label\(label: &str\)[\s\S]*?\n\}/,
+  )?.[0] ?? "";
+  assert.match(guard, /if label == crate::app::tray::MAIN_WINDOW_LABEL \{/);
+  assert.match(guard, /return Ok\(\(\)\);/);
+  assert.match(guard, /Err\(CommandErrorDto::new\(/);
+  assert.doesNotMatch(guard, /if label != crate::app::tray::MAIN_WINDOW_LABEL/);
+}
+
+function verifyWebHeatmapRetryContract(source: string) {
+  const heatmapEffect = source.match(
+    /void loadDataWebHeatmapSnapshot\([\s\S]*?\}, \[(?<dependencies>[\s\S]*?)\]\);/,
+  );
+  assert.ok(heatmapEffect?.groups?.dependencies, "web heatmap effect dependencies must be parseable");
+  assert.match(heatmapEffect.groups.dependencies, /\bretryKey\b/);
+}
+
+function verifyWebBridgeRetryContract(source: string) {
+  const retryArm = source.match(
+    /_ = sleep\(retry_delay\) => \{(?<body>[\s\S]*?)\n\s*\}\n\s*changed = shutdown_rx\.changed\(\)/,
+  );
+  assert.ok(retryArm?.groups?.body, "bridge retry select arm must be parseable");
+  assert.match(retryArm.groups.body, /mark_starting_retry\(generation\)/);
+  assert.doesNotMatch(retryArm.groups.body, /return None/);
+}
+
 function transpile(sourcePath: string, mutation?: Mutant) {
   let source = readFileSync(sourcePath, "utf8");
   if (sourcePath === ERROR_SOURCE) {
@@ -88,6 +214,79 @@ async function importMutant(sourcePath: string, mutation?: Mutant) {
   const outputPath = resolve(TEMP_ROOT, `${sourcePath.includes("sqlite") ? "sqlite" : "error"}-${suffix}.mjs`);
   writeFileSync(outputPath, transpile(sourcePath, mutation), "utf8");
   return import(`${pathToFileURL(outputPath).href}?run=${Date.now()}`);
+}
+
+const WEB_AGGREGATE_REVISION_MUTANT = {
+  name: "web aggregate silently merges different source revisions",
+  search: "if (sourceRevision !== null && chunk.sourceRevision !== sourceRevision) {",
+  replacement: "if (false) {",
+};
+
+async function importWebAggregateMutation(mutated: boolean) {
+  let source = readFileSync(WEB_AGGREGATE_SOURCE, "utf8").replace(
+    'import { invokeWithCommandError } from "./commandError.ts";',
+    "const invokeWithCommandError = async () => { throw new Error('unconfigured invoke'); };",
+  );
+  if (mutated) {
+    assert(
+      source.includes(WEB_AGGREGATE_REVISION_MUTANT.search),
+      `stale mutant search: ${WEB_AGGREGATE_REVISION_MUTANT.name}`,
+    );
+    source = source.replace(
+      WEB_AGGREGATE_REVISION_MUTANT.search,
+      WEB_AGGREGATE_REVISION_MUTANT.replacement,
+    );
+  }
+  const outputPath = resolve(TEMP_ROOT, `web-aggregate-${mutated ? "mutant" : "baseline"}.mjs`);
+  writeFileSync(outputPath, ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  }).outputText, "utf8");
+  return import(`${pathToFileURL(outputPath).href}?run=${Date.now()}`);
+}
+
+async function verifyWebAggregateRevision(module: Record<string, unknown>) {
+  const load = module.loadWebActivityAggregateRange as (
+    startMs: number,
+    endMs: number,
+    boundaries: number[],
+    filter: null,
+    reader: (
+      startMs: number,
+      endMs: number,
+      boundaries: number[],
+      filter: null,
+      snapshotNowMs: number,
+    ) => Promise<{
+      records: unknown[];
+      domainCoverage: unknown[];
+      sourceRevision: string;
+      snapshotNowMs: number;
+    }>,
+  ) => Promise<{ sourceRevision: string }>;
+  const boundaries = Array.from({ length: 403 }, (_, index) => index * 1_000);
+  let calls = 0;
+  const result = await load(
+    boundaries[0],
+    boundaries.at(-1) ?? 0,
+    boundaries,
+    null,
+    async (_startMs, _endMs, _chunkBoundaries, _filter, snapshotNowMs) => {
+      const attemptIndex = Math.floor(calls / 2);
+      const chunkIndex = calls % 2;
+      calls += 1;
+      return {
+        records: [],
+        domainCoverage: [],
+        sourceRevision: attemptIndex === 0
+          ? (chunkIndex === 0 ? "1" : "2")
+          : "3",
+        snapshotNowMs,
+      };
+    },
+  );
+
+  assert.equal(calls, 4);
+  assert.equal(result.sourceRevision, "3");
 }
 
 async function withTimeout<T>(promise: Promise<T>, milliseconds = 200): Promise<T> {
@@ -187,11 +386,21 @@ async function verifyMutant(mutant: Mutant) {
   }
 }
 
+function verifySourceContractMutant(mutant: SourceContractMutant) {
+  const source = readFileSync(mutant.source, "utf8");
+  assert(source.includes(mutant.search), `stale mutant search: ${mutant.name}`);
+  mutant.verify(source.replace(mutant.search, mutant.replacement));
+}
+
 rmSync(TEMP_ROOT, { recursive: true, force: true });
 mkdirSync(TEMP_ROOT, { recursive: true });
 try {
   await verify(await importMutant(SQLITE_SOURCE), SQLITE_SOURCE);
   await verify(await importMutant(ERROR_SOURCE), ERROR_SOURCE);
+  await verifyWebAggregateRevision(await importWebAggregateMutation(false));
+  for (const mutant of SOURCE_CONTRACT_MUTANTS) {
+    mutant.verify(readFileSync(mutant.source, "utf8"));
+  }
 
   let killed = 0;
   for (const mutant of MUTANTS) {
@@ -204,9 +413,28 @@ try {
     }
   }
 
-  const score = (killed / MUTANTS.length) * 100;
-  console.log(`Critical mutation score: ${killed}/${MUTANTS.length} (${score.toFixed(1)}%)`);
-  if (score < 80) process.exitCode = 1;
+  try {
+    await verifyWebAggregateRevision(await importWebAggregateMutation(true));
+    console.error(`SURVIVED ${WEB_AGGREGATE_REVISION_MUTANT.name}`);
+  } catch {
+    killed += 1;
+    console.log(`KILLED ${WEB_AGGREGATE_REVISION_MUTANT.name}`);
+  }
+
+  for (const mutant of SOURCE_CONTRACT_MUTANTS) {
+    try {
+      verifySourceContractMutant(mutant);
+      console.error(`SURVIVED ${mutant.name}`);
+    } catch {
+      killed += 1;
+      console.log(`KILLED ${mutant.name}`);
+    }
+  }
+
+  const total = MUTANTS.length + 1 + SOURCE_CONTRACT_MUTANTS.length;
+  const score = (killed / total) * 100;
+  console.log(`Critical mutation score: ${killed}/${total} (${score.toFixed(1)}%)`);
+  if (killed !== total) process.exitCode = 1;
 } finally {
   rmSync(TEMP_ROOT, { recursive: true, force: true });
 }
