@@ -28,6 +28,8 @@ pub struct WebActivityDomainCoverageDto {
 pub struct WebActivityAggregateRangeDto {
     pub records: Vec<WebActivityAggregateRecordDto>,
     pub domain_coverage: Vec<WebActivityDomainCoverageDto>,
+    pub source_revision: String,
+    pub snapshot_now_ms: i64,
 }
 
 #[derive(Clone, Debug)]
@@ -134,6 +136,16 @@ pub async fn load_web_activity_aggregate_range_from_pool(
 ) -> Result<WebActivityAggregateRangeDto, String> {
     validate_aggregate_input(start_ms, end_ms, bucket_boundaries_ms)?;
     let domain_filter = normalize_domain_filter(normalized_domain, normalized_domains)?;
+    let mut transaction = pool
+        .begin()
+        .await
+        .map_err(|error| format!("failed to begin web activity aggregate snapshot: {error}"))?;
+    let source_revision = sqlx::query_scalar::<_, i64>(
+        "SELECT source_revision FROM web_activity_revision WHERE id = 1",
+    )
+    .fetch_one(&mut *transaction)
+    .await
+    .map_err(|error| format!("failed to read web activity source revision: {error}"))?;
 
     let mut segment_query =
         QueryBuilder::<Sqlite>::new("SELECT normalized_domain, start_time, COALESCE(end_time, ");
@@ -157,7 +169,7 @@ pub async fn load_web_activity_aggregate_range_from_pool(
         .push_bind(start_ms);
     let segment_rows = segment_query
         .build()
-        .fetch_all(pool)
+        .fetch_all(&mut *transaction)
         .await
         .map_err(|error| format!("failed to query web activity range: {error}"))?;
 
@@ -187,7 +199,7 @@ pub async fn load_web_activity_aggregate_range_from_pool(
         separated.push_unseparated(") GROUP BY normalized_domain");
         let coverage_rows = coverage_query
             .build()
-            .fetch_all(pool)
+            .fetch_all(&mut *transaction)
             .await
             .map_err(|error| format!("failed to query web activity coverage: {error}"))?;
         coverage_rows
@@ -201,9 +213,16 @@ pub async fn load_web_activity_aggregate_range_from_pool(
         Vec::new()
     };
 
+    transaction
+        .commit()
+        .await
+        .map_err(|error| format!("failed to commit web activity aggregate snapshot: {error}"))?;
+
     Ok(WebActivityAggregateRangeDto {
         records: aggregate_segments(segments, bucket_boundaries_ms),
         domain_coverage,
+        source_revision: source_revision.to_string(),
+        snapshot_now_ms: now_ms,
     })
 }
 
@@ -214,8 +233,13 @@ pub async fn load_web_activity_aggregate_range<R: Runtime>(
     bucket_boundaries_ms: Vec<i64>,
     normalized_domain: Option<String>,
     normalized_domains: Option<Vec<String>>,
+    snapshot_now_ms: Option<i64>,
 ) -> Result<WebActivityAggregateRangeDto, String> {
     let pool = wait_for_sqlite_pool(app).await?;
+    let snapshot_now_ms = snapshot_now_ms.unwrap_or_else(now_ms);
+    if snapshot_now_ms < 0 {
+        return Err("web activity aggregate snapshot time is invalid".to_string());
+    }
     load_web_activity_aggregate_range_from_pool(
         &pool,
         start_ms,
@@ -223,7 +247,7 @@ pub async fn load_web_activity_aggregate_range<R: Runtime>(
         &bucket_boundaries_ms,
         normalized_domain.as_deref(),
         normalized_domains.as_deref(),
-        now_ms(),
+        snapshot_now_ms,
     )
     .await
 }
@@ -247,6 +271,9 @@ mod tests {
             .await
             .unwrap();
         pool.execute(schema::WEB_ACTIVITY_SCHEMA_SQL).await.unwrap();
+        pool.execute(schema::WEB_ACTIVITY_REVISION_SCHEMA_SQL)
+            .await
+            .unwrap();
         pool
     }
 
@@ -435,6 +462,62 @@ mod tests {
                     earliest_recorded_start_ms: 5,
                 }],
             );
+            assert_eq!(result.source_revision, "2");
+            assert_eq!(result.snapshot_now_ms, 25);
+        });
+    }
+
+    #[test]
+    fn web_activity_revision_changes_on_insert_update_and_delete() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            sqlx::query(
+                "INSERT INTO web_activity_segments (
+                    browser_client_id, browser_kind, browser_exe_name, domain, normalized_domain,
+                    start_time, end_time, duration, source, created_at, updated_at
+                 ) VALUES (
+                    'a', 'chromium', 'chrome.exe', 'example.com', 'example.com',
+                    5, 15, 10, 'test', 5, 15
+                 )",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            let inserted: i64 = sqlx::query_scalar(
+                "SELECT source_revision FROM web_activity_revision WHERE id = 1",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(inserted, 1);
+
+            sqlx::query(
+                "UPDATE web_activity_segments
+                 SET end_time = 20, duration = 15, updated_at = 20
+                 WHERE id = 1",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            let updated: i64 = sqlx::query_scalar(
+                "SELECT source_revision FROM web_activity_revision WHERE id = 1",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(updated, 2);
+
+            sqlx::query("DELETE FROM web_activity_segments WHERE id = 1")
+                .execute(&pool)
+                .await
+                .unwrap();
+            let deleted: i64 = sqlx::query_scalar(
+                "SELECT source_revision FROM web_activity_revision WHERE id = 1",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(deleted, 3);
         });
     }
 

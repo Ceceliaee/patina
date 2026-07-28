@@ -103,6 +103,22 @@ function tauriStubFor(path: string) {
         globalThis.__PATINA_INVOKED_COMMANDS.push({ command, payload });
         const widgetParams = new URL(globalThis.location.href).searchParams;
         const isWidgetSmoke = widgetParams.get("__patinaWindow") === "widget";
+        if (isWidgetSmoke && command === "cmd_get_widget_bootstrap_snapshot") {
+          const settings = loadStoredSettings();
+          return {
+            settings: {
+              tracking_paused: settings.tracking_paused ?? null,
+              theme_mode: settings.theme_mode ?? null,
+              language: settings.language ?? null,
+              color_scheme_light: settings.color_scheme_light ?? null,
+              color_scheme_dark: settings.color_scheme_dark ?? null,
+            },
+            app_overrides: Object.entries(settings)
+              .filter(([key]) => key.startsWith("__app_override::"))
+              .sort(([left], [right]) => left.localeCompare(right))
+              .map(([key, value]) => ({ key, value: String(value) })),
+          };
+        }
         if (isWidgetSmoke && command === "cmd_get_widget_placement") {
           return {
             monitor: null,
@@ -328,6 +344,8 @@ function tauriStubFor(path: string) {
               normalizedDomain,
               earliestRecordedStartMs: Number(payload.startMs),
             })),
+            sourceRevision: "1",
+            snapshotNowMs: Number(payload.snapshotNowMs),
           };
         }
         if (command === "cmd_list_import_batches") {

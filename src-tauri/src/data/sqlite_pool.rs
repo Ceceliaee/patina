@@ -1,4 +1,5 @@
 use crate::data::schema;
+use crate::data::schema_contracts;
 use crate::data::sqlite_error::SqliteOperationError;
 use crate::platform::storage_paths;
 use futures_util::future::BoxFuture;
@@ -14,7 +15,7 @@ use tauri_plugin_sql::{DbInstances, DbPool, MigrationKind};
 use tokio::time::{sleep, Duration};
 
 pub const SQLITE_DB_NAME: &str = "sqlite:patina.db";
-const VALIDATED_SCHEMA_MIGRATION_HEAD: i64 = schema::ACTIVITY_READ_MODELS_MIGRATION_VERSION;
+const VALIDATED_SCHEMA_MIGRATION_HEAD: i64 = schema::WEB_ACTIVITY_REVISION_MIGRATION_VERSION;
 mod activity_read_model_schema;
 pub(super) mod import_schema;
 mod maintenance;
@@ -767,7 +768,6 @@ pub(super) async fn has_web_activity_schema(pool: &Pool<Sqlite>) -> Result<bool,
         "idx_web_activity_segments_single_active",
     )
     .await?;
-
     Ok(segments_ready && time_index_ready && domain_time_index_ready && single_active_index_ready)
 }
 
@@ -785,13 +785,17 @@ pub(super) async fn has_web_favicon_cache_schema(pool: &Pool<Sqlite>) -> Result<
 }
 
 async fn has_current_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
-    Ok(has_current_baseline_schema(pool).await?
-        && has_base_tools_schema(pool).await?
-        && has_software_reminder_rules_schema(pool).await?
-        && has_web_activity_schema(pool).await?
-        && has_web_favicon_cache_schema(pool).await?
-        && has_import_data_schema(pool).await?
-        && has_activity_read_models_schema(pool).await?)
+    let checks = [
+        has_current_baseline_schema(pool).await?,
+        has_base_tools_schema(pool).await?,
+        has_software_reminder_rules_schema(pool).await?,
+        has_web_activity_schema(pool).await?,
+        has_web_favicon_cache_schema(pool).await?,
+        has_import_data_schema(pool).await?,
+        has_activity_read_models_schema(pool).await?,
+        schema_contracts::has_web_activity_revision_schema(pool).await?,
+    ];
+    Ok(checks.into_iter().all(|ready| ready))
 }
 
 async fn normalize_current_baseline_migration_history_for_pool(
@@ -823,6 +827,9 @@ async fn normalize_current_baseline_migration_history_for_pool(
     } else if !has_activity_read_models_schema(pool).await? {
         expected.truncate(schema::IMPORT_DATA_ISOLATION_MIGRATION_VERSION as usize);
     }
+    let revision_limit = schema::ACTIVITY_READ_MODELS_MIGRATION_VERSION as usize
+        + usize::from(schema_contracts::has_web_activity_revision_schema(pool).await?);
+    expected.truncate(expected.len().min(revision_limit));
     if expected.is_empty() {
         return Ok(false);
     }
@@ -1259,7 +1266,7 @@ mod tests {
                     .fetch_all(&pool)
                     .await
                     .unwrap();
-            assert_eq!(final_versions, vec![1, 2, 3, 4, 5, 6, 7, 8]);
+            assert_eq!(final_versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
         });
     }
 

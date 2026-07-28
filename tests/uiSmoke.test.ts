@@ -960,6 +960,10 @@ await runTest("Data keeps web analysis beside a unified activity overview", () =
   assert.match(webRuntime, /if \(!enabled \|\| mode !== "web" \|\| selectedDomains\.length === 0\)/);
   assert.match(webRuntime, /const heatmapReady =/);
   assert.match(webRuntime, /heatmapReady,/);
+  assert.doesNotMatch(webRuntime, /lastHeatmapPresentationRef/);
+  assert.match(webRuntime, /dispatchHeatmap\(\{\s*type: "begin"/);
+  assert.match(webRuntime, /heatmapSelection,\s*mode,\s*retryKey,\s*selectedDomains,/);
+  assert.match(data, /useEffect\(\(\) => \{\s*if \(!freshHeatmapRows\) return;[\s\S]*lastHeatmapRowsRef\.current/);
   assert.match(data, /resolveDataDestinationMode\(webActivityEnabled, destinationMode\)/);
   assert.match(data, /presentedDestinationMode/);
   assert.match(data, /webDestinationReadyForPresentation/);

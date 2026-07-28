@@ -754,8 +754,13 @@ try {
       normalizedDomain: string;
       earliestRecordedStartMs: number;
     }>;
+    sourceRevision: string;
+    snapshotNowMs: number;
   };
-  assert.deepEqual(webAggregateRange, {
+  assert.deepEqual({
+    records: webAggregateRange.records,
+    domainCoverage: webAggregateRange.domainCoverage,
+  }, {
     records: [
       { normalizedDomain: "example.com", bucketStartMs: 0, durationMs: 1000 },
       { normalizedDomain: "example.com", bucketStartMs: 2000, durationMs: 1500 },
@@ -764,6 +769,8 @@ try {
       { normalizedDomain: "example.com", earliestRecordedStartMs: 1000 },
     ],
   });
+  assert.match(webAggregateRange.sourceRevision, /^(0|[1-9]\d*)$/);
+  assert.equal(Number.isSafeInteger(webAggregateRange.snapshotNowMs), true);
   const multiWebAggregateRange = await evaluate(
     client,
     `window.__TAURI_INTERNALS__.invoke("cmd_get_web_activity_aggregate_range", {
@@ -773,7 +780,10 @@ try {
       normalizedDomains: ["docs.example", "example.com"],
     })`,
   ) as typeof webAggregateRange;
-  assert.deepEqual(multiWebAggregateRange, {
+  assert.deepEqual({
+    records: multiWebAggregateRange.records,
+    domainCoverage: multiWebAggregateRange.domainCoverage,
+  }, {
     records: [
       { normalizedDomain: "docs.example", bucketStartMs: 2000, durationMs: 1000 },
       { normalizedDomain: "example.com", bucketStartMs: 0, durationMs: 1000 },
@@ -784,6 +794,7 @@ try {
       { normalizedDomain: "example.com", earliestRecordedStartMs: 1000 },
     ],
   });
+  assert.equal(multiWebAggregateRange.sourceRevision, webAggregateRange.sourceRevision);
   const conflictingWebAggregateRange = await evaluate(client, `
     window.__TAURI_INTERNALS__.invoke("cmd_get_web_activity_aggregate_range", {
       startMs: 0,

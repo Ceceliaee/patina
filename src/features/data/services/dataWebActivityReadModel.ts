@@ -11,7 +11,6 @@ import {
 } from "../../../platform/persistence/webActivityRepository.ts";
 import {
   loadWebActivityAggregateRange,
-  type WebActivityAggregateRange,
   type WebActivityAggregateRecord,
   type WebActivityDomainCoverage,
 } from "../../../platform/persistence/webActivityAnalysisGateway.ts";
@@ -37,6 +36,7 @@ import {
   type DataTrendRangeSelection,
   type ResolvedDataTrendRange,
 } from "./dataTrendRange.ts";
+import type { DataWebActivitySnapshotDependencies } from "./dataWebActivitySnapshotDependencies.ts";
 
 export interface DataWebDomainOption {
   normalizedDomain: string;
@@ -84,17 +84,6 @@ export interface DataWebHeatmapSnapshot extends DataWebActivitySnapshot {
   normalizedDomains: string[];
   cacheVersion: string;
   cacheKey: string;
-}
-
-export interface DataWebActivitySnapshotDependencies {
-  loadAggregateRange: (
-    startMs: number,
-    endMs: number,
-    bucketBoundariesMs: number[],
-    normalizedDomains: readonly string[] | null,
-  ) => Promise<WebActivityAggregateRange>;
-  loadOverrides: () => Promise<Record<string, WebDomainOverride>>;
-  loadFavicons: (domains: string[]) => Promise<Record<string, string>>;
 }
 
 interface LoadRangeSnapshotInput {

@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
 } from "react";
@@ -30,6 +31,11 @@ import {
   type DataWebHeatmapSnapshot,
   type DataWebTrendSnapshot,
 } from "../services/dataWebActivityReadModel.ts";
+import {
+  createInitialDataWebHeatmapRequestState,
+  reduceDataWebHeatmapRequestState,
+  resolveDataWebHeatmapRequestState,
+} from "../services/dataWebHeatmapRequestState.ts";
 
 interface UseDataWebActivityRuntimeInput {
   cacheVersion: string;
@@ -50,12 +56,6 @@ interface VersionedDataWebTrendSnapshot {
   value: DataWebTrendSnapshot;
 }
 
-interface PresentedDataWebHeatmap {
-  selection: HeatmapSelection;
-  rows: HeatmapWeek[];
-  earliestStartTime: number | null;
-}
-
 export function useDataWebActivityRuntime({
   cacheVersion,
   enabled,
@@ -73,13 +73,14 @@ export function useDataWebActivityRuntime({
   const [trendLoadingCacheKey, setTrendLoadingCacheKey] = useState<string | null>(null);
   const [trendErrorCacheKey, setTrendErrorCacheKey] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
-  const [heatmapSnapshot, setHeatmapSnapshot] = useState<DataWebHeatmapSnapshot | null>(null);
-  const [heatmapLoading, setHeatmapLoading] = useState(false);
-  const [heatmapErrorKey, setHeatmapErrorKey] = useState<string | null>(null);
-  const lastHeatmapPresentationRef = useRef<PresentedDataWebHeatmap | null>(null);
+  const [heatmapState, dispatchHeatmap] = useReducer(
+    reduceDataWebHeatmapRequestState<DataWebHeatmapSnapshot>,
+    createInitialDataWebHeatmapRequestState<DataWebHeatmapSnapshot>(),
+  );
   const trendRequestCacheKey = `${cacheVersion}:${trendRangeCacheKey}`;
   const selectedDomainKey = encodeDataDestinationSelectionKey(selectedDomains);
-  const heatmapRequestKey = `${cacheVersion}:${heatmapSelection}:${selectedDomainKey}`;
+  const heatmapPresentationKey = `${heatmapSelection}:${selectedDomainKey}`;
+  const heatmapRequestKey = `${cacheVersion}:${heatmapPresentationKey}`;
   const trendRequestRef = useRef({
     requestCacheKey: trendRequestCacheKey,
     selection: trendSelection,
@@ -99,8 +100,6 @@ export function useDataWebActivityRuntime({
     clearDataWebActivitySnapshotCache();
     setTrendLoadingCacheKey(null);
     setTrendErrorCacheKey(null);
-    setHeatmapLoading(false);
-    setHeatmapErrorKey(null);
   }, [cacheVersion]);
 
   useEffect(() => {
@@ -108,10 +107,7 @@ export function useDataWebActivityRuntime({
     setTrendSnapshot(null);
     setTrendLoadingCacheKey(null);
     setTrendErrorCacheKey(null);
-    setHeatmapSnapshot(null);
-    setHeatmapLoading(false);
-    setHeatmapErrorKey(null);
-    lastHeatmapPresentationRef.current = null;
+    dispatchHeatmap({ type: "reset" });
   }, [enabled]);
 
   useEffect(() => {
@@ -168,23 +164,36 @@ export function useDataWebActivityRuntime({
       return undefined;
     }
     let cancelled = false;
-    setHeatmapLoading(true);
-    setHeatmapErrorKey(null);
+    dispatchHeatmap({
+      type: "begin",
+      presentationKey: heatmapPresentationKey,
+      requestKey: heatmapRequestKey,
+    });
     void loadDataWebHeatmapSnapshot({
       selection: heatmapSelection,
       normalizedDomains: selectedDomains,
       nowMs: heatmapNowMs,
       cacheVersion,
     }).then((snapshot) => {
-      if (!cancelled) startTransition(() => setHeatmapSnapshot(snapshot));
+      if (!cancelled) {
+        startTransition(() => {
+          dispatchHeatmap({
+            type: "succeeded",
+            presentationKey: heatmapPresentationKey,
+            requestKey: heatmapRequestKey,
+            snapshot,
+          });
+        });
+      }
     }).catch((error: unknown) => {
       if (!cancelled) {
         console.warn("Failed to load data web heatmap snapshot:", error);
-        setHeatmapSnapshot(null);
-        setHeatmapErrorKey(heatmapRequestKey);
+        dispatchHeatmap({
+          type: "failed",
+          presentationKey: heatmapPresentationKey,
+          requestKey: heatmapRequestKey,
+        });
       }
-    }).finally(() => {
-      if (!cancelled) setHeatmapLoading(false);
     });
     return () => {
       cancelled = true;
@@ -193,9 +202,11 @@ export function useDataWebActivityRuntime({
     cacheVersion,
     enabled,
     heatmapNowMs,
+    heatmapPresentationKey,
     heatmapRequestKey,
     heatmapSelection,
     mode,
+    retryKey,
     selectedDomains,
   ]);
 
@@ -283,11 +294,12 @@ export function useDataWebActivityRuntime({
     }))
   ), [selectedTrendDomains]);
 
-  const matchingHeatmapSnapshot = heatmapSnapshot
-    && heatmapSnapshot.selection === heatmapSelection
-    && encodeDataDestinationSelectionKey(heatmapSnapshot.normalizedDomains) === selectedDomainKey
-    ? heatmapSnapshot
-    : null;
+  const presentedHeatmapState = resolveDataWebHeatmapRequestState(
+    heatmapState,
+    heatmapPresentationKey,
+    heatmapRequestKey,
+  );
+  const matchingHeatmapSnapshot = presentedHeatmapState.snapshot;
   const selectedDomainSet = new Set(selectedDomains);
   const heatmapCoverage = matchingHeatmapSnapshot?.domainCoverage
     .filter((coverage) => selectedDomainSet.has(coverage.normalizedDomain))
@@ -302,8 +314,7 @@ export function useDataWebActivityRuntime({
   const heatmapCompleteCoverageStartTime = availableCoverage.length === selectedDomains.length
     ? Math.max(...availableCoverage)
     : null;
-  const currentHeatmapFailed = !matchingHeatmapSnapshot
-    && heatmapErrorKey === heatmapRequestKey;
+  const currentHeatmapFailed = presentedHeatmapState.status === "cold-failed";
   const currentHeatmapRows = useMemo<HeatmapWeek[] | null>(() => (
     selectedDomains.length > 0 && (Boolean(matchingHeatmapSnapshot) || currentHeatmapFailed)
       ? buildDataWebActivityHeatmap({
@@ -325,17 +336,6 @@ export function useDataWebActivityRuntime({
     matchingHeatmapSnapshot,
     selectedDomains,
   ]);
-  if (matchingHeatmapSnapshot && currentHeatmapRows) {
-    lastHeatmapPresentationRef.current = {
-      selection: heatmapSelection,
-      rows: currentHeatmapRows,
-      earliestStartTime: heatmapEarliestStartTime,
-    };
-  }
-  const retainedHeatmapPresentation = !currentHeatmapFailed
-    && lastHeatmapPresentationRef.current?.selection === heatmapSelection
-    ? lastHeatmapPresentationRef.current
-    : null;
   const placeholderHeatmapRows = useMemo(() => (
     selectedDomains.length > 0
       ? buildDataWebActivityHeatmap({
@@ -352,28 +352,22 @@ export function useDataWebActivityRuntime({
     selectedDomains,
   ]);
   const heatmapRows = currentHeatmapRows
-    ?? retainedHeatmapPresentation?.rows
     ?? placeholderHeatmapRows;
-  const presentedHeatmapEarliestStartTime = matchingHeatmapSnapshot
-    ? heatmapEarliestStartTime
-    : retainedHeatmapPresentation?.earliestStartTime ?? heatmapEarliestStartTime;
-  const heatmapColdLoading = heatmapLoading
-    && !currentHeatmapRows
-    && !retainedHeatmapPresentation;
+  const heatmapColdLoading = presentedHeatmapState.status === "loading-cold";
   const heatmapReady = (trendViewModel?.domainOptions.length ?? 0) === 0
     || (
       selectedDomains.length > 0
-      && (
-        Boolean(matchingHeatmapSnapshot)
-        || heatmapErrorKey === heatmapRequestKey
-      )
+      && presentedHeatmapState.status !== "idle"
+      && presentedHeatmapState.status !== "loading-cold"
     );
+  const heatmapRefreshFailed =
+    presentedHeatmapState.status === "refresh-failed-with-retained-data";
 
   const retry = useCallback(() => setRetryKey((value) => value + 1), []);
 
   return {
     hasSearchQuery: normalizedQuery.length > 0,
-    heatmapEarliestStartTime: presentedHeatmapEarliestStartTime,
+    heatmapEarliestStartTime,
     heatmapLoading: heatmapColdLoading,
     heatmapReady,
     heatmapRows,
@@ -383,12 +377,13 @@ export function useDataWebActivityRuntime({
     selectedDomains,
     selectedPanelOptions,
     setSearchQuery,
-    trendError: trendPresentation === "blocking-error"
+    trendError: trendPresentation === "blocking-error" || currentHeatmapFailed
       ? UI_TEXT.data.webTrendError
       : null,
-    trendRefreshFailed: trendPresentation === "refresh-error",
+    trendRefreshFailed: trendPresentation === "refresh-error" || heatmapRefreshFailed,
     trendRefreshing: trendPresentation === "refreshing"
-      || trendPresentation === "refreshing-stale",
+      || trendPresentation === "refreshing-stale"
+      || presentedHeatmapState.status === "refreshing",
     trendViewModel,
   };
 }

@@ -16,6 +16,8 @@ pub const IMPORT_DATA_ISOLATION_MIGRATION_VERSION: i64 = 7;
 pub const IMPORT_DATA_ISOLATION_MIGRATION_DESCRIPTION: &str = "isolate_imported_exact_sessions";
 pub const ACTIVITY_READ_MODELS_MIGRATION_VERSION: i64 = 8;
 pub const ACTIVITY_READ_MODELS_MIGRATION_DESCRIPTION: &str = "create_activity_read_models";
+pub const WEB_ACTIVITY_REVISION_MIGRATION_VERSION: i64 = 9;
+pub const WEB_ACTIVITY_REVISION_MIGRATION_DESCRIPTION: &str = "create_web_activity_revision";
 
 pub const CURRENT_BASELINE_SCHEMA_SQL: &str = "
     CREATE TABLE IF NOT EXISTS sessions (
@@ -203,6 +205,56 @@ pub const WEB_ACTIVITY_SCHEMA_SQL: &str = "
     CREATE UNIQUE INDEX IF NOT EXISTS idx_web_activity_segments_single_active
     ON web_activity_segments((1))
     WHERE end_time IS NULL;
+";
+
+pub const WEB_ACTIVITY_REVISION_SCHEMA_SQL: &str = "
+    CREATE TABLE IF NOT EXISTS web_activity_revision (
+        id INTEGER PRIMARY KEY CHECK(id = 1),
+        source_revision INTEGER NOT NULL DEFAULT 0 CHECK(source_revision >= 0),
+        updated_at_ms INTEGER NOT NULL DEFAULT 0 CHECK(updated_at_ms >= 0)
+    );
+
+    INSERT OR IGNORE INTO web_activity_revision(id, source_revision, updated_at_ms)
+    VALUES (1, 0, 0);
+
+    DROP TRIGGER IF EXISTS trg_web_activity_revision_insert;
+    CREATE TRIGGER trg_web_activity_revision_insert
+    AFTER INSERT ON web_activity_segments
+    BEGIN
+        UPDATE web_activity_revision
+        SET source_revision = source_revision + 1,
+            updated_at_ms = MAX(0, NEW.updated_at)
+        WHERE id = 1;
+    END;
+
+    DROP TRIGGER IF EXISTS trg_web_activity_revision_update;
+    CREATE TRIGGER trg_web_activity_revision_update
+    AFTER UPDATE OF normalized_domain, start_time, end_time, duration, updated_at
+    ON web_activity_segments
+    WHEN OLD.normalized_domain IS NOT NEW.normalized_domain
+      OR OLD.start_time IS NOT NEW.start_time
+      OR OLD.end_time IS NOT NEW.end_time
+      OR OLD.duration IS NOT NEW.duration
+      OR OLD.updated_at IS NOT NEW.updated_at
+    BEGIN
+        UPDATE web_activity_revision
+        SET source_revision = source_revision + 1,
+            updated_at_ms = MAX(0, NEW.updated_at)
+        WHERE id = 1;
+    END;
+
+    DROP TRIGGER IF EXISTS trg_web_activity_revision_delete;
+    CREATE TRIGGER trg_web_activity_revision_delete
+    AFTER DELETE ON web_activity_segments
+    BEGIN
+        UPDATE web_activity_revision
+        SET source_revision = source_revision + 1,
+            updated_at_ms = MAX(
+                updated_at_ms,
+                MAX(0, CAST(strftime('%s', 'now') AS INTEGER) * 1000)
+            )
+        WHERE id = 1;
+    END;
 ";
 
 pub const WEB_FAVICON_CACHE_SCHEMA_SQL: &str = "
@@ -786,6 +838,12 @@ pub fn tracker_migrations() -> Vec<Migration> {
             version: ACTIVITY_READ_MODELS_MIGRATION_VERSION,
             description: ACTIVITY_READ_MODELS_MIGRATION_DESCRIPTION,
             sql: ACTIVITY_READ_MODELS_SCHEMA_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: WEB_ACTIVITY_REVISION_MIGRATION_VERSION,
+            description: WEB_ACTIVITY_REVISION_MIGRATION_DESCRIPTION,
+            sql: WEB_ACTIVITY_REVISION_SCHEMA_SQL,
             kind: MigrationKind::Up,
         },
     ]

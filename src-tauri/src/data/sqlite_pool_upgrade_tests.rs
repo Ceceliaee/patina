@@ -262,6 +262,7 @@ fn version_eight_draft_triggers_are_reinstalled_without_touching_facts() {
             schema::IMPORT_DATA_SCHEMA_SQL,
             schema::IMPORT_DATA_ISOLATION_SCHEMA_SQL,
             schema::ACTIVITY_READ_MODELS_SCHEMA_SQL,
+            schema::WEB_ACTIVITY_REVISION_SCHEMA_SQL,
         ] {
             pool.execute(sql).await.unwrap();
         }
@@ -322,6 +323,6 @@ fn version_eight_draft_triggers_are_reinstalled_without_touching_facts() {
                 .fetch_all(&pool)
                 .await
                 .unwrap();
-        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
     });
 }

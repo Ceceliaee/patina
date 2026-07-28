@@ -972,9 +972,9 @@ export async function runDataScenarios(
         requestAnimationFrame(sample);
       })
     `))) as Array<{ loading: boolean; presentation: string }>;
-    assert.ok(pendingWebHeatmapFrames.every((sample) => !sample.loading));
+    assert.ok(pendingWebHeatmapFrames.some((sample) => sample.loading));
     assert.ok(pendingWebHeatmapFrames.every(
-      (sample) => sample.presentation === initialWebHeatmapPresentation,
+      (sample) => sample.presentation !== initialWebHeatmapPresentation,
     ));
     await waitForExpression(
       client!,

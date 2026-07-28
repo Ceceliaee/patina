@@ -806,16 +806,18 @@ export default function Data({
     yearSessions,
   ]);
   const hasHeatmapRowsForSelectedView = yearSessionsView === selectedHeatmapView;
-  if (heatmapRows && !heatmapLoading && hasHeatmapRowsForSelectedView) {
-    lastHeatmapRowsRef.current = {
-      selection: selectedHeatmapView,
-      rows: heatmapRows,
-    };
-  }
   const bootstrapHeatmapRows = matchingBootstrapSnapshot?.heatmapSelection === selectedHeatmapView
     ? matchingBootstrapSnapshot.heatmapRows
     : null;
   const freshHeatmapRows = heatmapRows && !heatmapLoading && hasHeatmapRowsForSelectedView ? heatmapRows : null;
+  useEffect(() => {
+    if (!freshHeatmapRows) return;
+
+    lastHeatmapRowsRef.current = {
+      selection: selectedHeatmapView,
+      rows: freshHeatmapRows,
+    };
+  }, [freshHeatmapRows, selectedHeatmapView]);
   const lastHeatmapRows = lastHeatmapRowsRef.current?.selection === selectedHeatmapView
     ? lastHeatmapRowsRef.current.rows
     : null;

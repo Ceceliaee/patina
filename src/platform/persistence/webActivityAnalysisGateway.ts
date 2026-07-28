@@ -14,9 +14,12 @@ export interface WebActivityDomainCoverage {
 export interface WebActivityAggregateRange {
   records: WebActivityAggregateRecord[];
   domainCoverage: WebActivityDomainCoverage[];
+  sourceRevision: string;
+  snapshotNowMs: number;
 }
 
 const MAX_WEB_ACTIVITY_BUCKETS_PER_REQUEST = 400;
+const MAX_WEB_ACTIVITY_SNAPSHOT_ATTEMPTS = 2;
 export const MAX_WEB_ACTIVITY_DOMAINS_PER_REQUEST = 7;
 
 export type WebActivityDomainFilter = string | readonly string[] | null;
@@ -68,7 +71,10 @@ export function parseWebActivityAggregateRange(value: unknown): WebActivityAggre
     || !Array.isArray(value.records)
     || !value.records.every(isAggregateRecord)
     || !Array.isArray(value.domainCoverage)
-    || !value.domainCoverage.every(isDomainCoverage)) {
+    || !value.domainCoverage.every(isDomainCoverage)
+    || typeof value.sourceRevision !== "string"
+    || !/^(0|[1-9]\d*)$/u.test(value.sourceRevision)
+    || !isFiniteNonNegativeNumber(value.snapshotNowMs)) {
     throw new Error("Received invalid web activity aggregate payload");
   }
 
@@ -99,7 +105,12 @@ export function parseWebActivityAggregateRange(value: unknown): WebActivityAggre
     };
   });
 
-  return { records, domainCoverage };
+  return {
+    records,
+    domainCoverage,
+    sourceRevision: value.sourceRevision,
+    snapshotNowMs: value.snapshotNowMs,
+  };
 }
 
 function validateWebActivityAggregateInput(
@@ -125,6 +136,7 @@ async function readWebActivityAggregateRangeChunk(
   endMs: number,
   bucketBoundariesMs: number[],
   domainFilter: string | string[] | null,
+  snapshotNowMs: number,
 ): Promise<WebActivityAggregateRange> {
   return parseWebActivityAggregateRange(await invokeWithCommandError(
     "cmd_get_web_activity_aggregate_range",
@@ -134,26 +146,33 @@ async function readWebActivityAggregateRangeChunk(
       bucketBoundariesMs,
       normalizedDomain: typeof domainFilter === "string" ? domainFilter : null,
       normalizedDomains: Array.isArray(domainFilter) ? domainFilter : null,
+      snapshotNowMs,
     },
   ));
 }
 
-export async function loadWebActivityAggregateRange(
-  startMs: number,
-  endMs: number,
+class WebActivitySnapshotChangedError extends Error {
+  constructor() {
+    super("Web activity changed while reading aggregate chunks");
+    this.name = "WebActivitySnapshotChangedError";
+  }
+}
+
+async function loadWebActivityAggregateRangeAttempt(
   bucketBoundariesMs: number[],
-  domainFilter: WebActivityDomainFilter = null,
+  normalizedFilter: string | string[] | null,
   readChunk: (
     startMs: number,
     endMs: number,
     bucketBoundariesMs: number[],
     domainFilter: string | string[] | null,
-  ) => Promise<WebActivityAggregateRange> = readWebActivityAggregateRangeChunk,
+    snapshotNowMs: number,
+  ) => Promise<WebActivityAggregateRange>,
 ): Promise<WebActivityAggregateRange> {
-  validateWebActivityAggregateInput(startMs, endMs, bucketBoundariesMs);
-  const normalizedFilter = normalizeDomainFilter(domainFilter);
   const recordMap = new Map<string, WebActivityAggregateRecord>();
   const coverageMap = new Map<string, WebActivityDomainCoverage>();
+  const snapshotNowMs = Date.now();
+  let sourceRevision: string | null = null;
 
   for (let boundaryIndex = 0; boundaryIndex < bucketBoundariesMs.length - 1; boundaryIndex += MAX_WEB_ACTIVITY_BUCKETS_PER_REQUEST) {
     const chunkBoundaries = bucketBoundariesMs.slice(
@@ -165,7 +184,15 @@ export async function loadWebActivityAggregateRange(
       chunkBoundaries[chunkBoundaries.length - 1] ?? chunkBoundaries[0],
       chunkBoundaries,
       normalizedFilter,
+      snapshotNowMs,
     );
+    if (chunk.snapshotNowMs !== snapshotNowMs) {
+      throw new Error("Web activity aggregate snapshot time did not match the request");
+    }
+    if (sourceRevision !== null && chunk.sourceRevision !== sourceRevision) {
+      throw new WebActivitySnapshotChangedError();
+    }
+    sourceRevision = chunk.sourceRevision;
 
     for (const record of chunk.records) {
       const key = `${record.normalizedDomain}\u0000${record.bucketStartMs}`;
@@ -195,5 +222,43 @@ export async function loadWebActivityAggregateRange(
     domainCoverage: Array.from(coverageMap.values()).sort((left, right) => (
       left.normalizedDomain.localeCompare(right.normalizedDomain)
     )),
+    sourceRevision: sourceRevision ?? "0",
+    snapshotNowMs,
   };
+}
+
+export async function loadWebActivityAggregateRange(
+  startMs: number,
+  endMs: number,
+  bucketBoundariesMs: number[],
+  domainFilter: WebActivityDomainFilter = null,
+  readChunk: (
+    startMs: number,
+    endMs: number,
+    bucketBoundariesMs: number[],
+    domainFilter: string | string[] | null,
+    snapshotNowMs: number,
+  ) => Promise<WebActivityAggregateRange> = readWebActivityAggregateRangeChunk,
+): Promise<WebActivityAggregateRange> {
+  validateWebActivityAggregateInput(startMs, endMs, bucketBoundariesMs);
+  const normalizedFilter = normalizeDomainFilter(domainFilter);
+
+  for (let attempt = 1; attempt <= MAX_WEB_ACTIVITY_SNAPSHOT_ATTEMPTS; attempt += 1) {
+    try {
+      return await loadWebActivityAggregateRangeAttempt(
+        bucketBoundariesMs,
+        normalizedFilter,
+        readChunk,
+      );
+    } catch (error) {
+      if (
+        !(error instanceof WebActivitySnapshotChangedError)
+        || attempt === MAX_WEB_ACTIVITY_SNAPSHOT_ATTEMPTS
+      ) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error("Web activity aggregate snapshot retry exhausted");
 }

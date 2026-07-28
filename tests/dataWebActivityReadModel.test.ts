@@ -7,8 +7,8 @@ import {
   getDataWebActivitySnapshotCacheStats,
   loadDataWebActivitySnapshot,
   loadDataWebHeatmapSnapshot,
-  type DataWebActivitySnapshotDependencies,
 } from "../src/features/data/services/dataWebActivityReadModel.ts";
+import type { DataWebActivitySnapshotDependencies } from "../src/features/data/services/dataWebActivitySnapshotDependencies.ts";
 import {
   DATA_DESTINATION_SELECTION_LIMIT,
   buildDataDestinationTrendSeries,
@@ -37,6 +37,11 @@ import {
   resolveDataTrendRange,
   type DataTrendRangeSelection,
 } from "../src/features/data/services/dataTrendRange.ts";
+import {
+  createInitialDataWebHeatmapRequestState,
+  reduceDataWebHeatmapRequestState,
+  resolveDataWebHeatmapRequestState,
+} from "../src/features/data/services/dataWebHeatmapRequestState.ts";
 
 let passed = 0;
 
@@ -73,6 +78,79 @@ await runTest("destination selection follows desktop replace and ctrl-toggle sem
     keys: ["a", "b", "c", "d", "e", "f", "g"],
     outcome: "limit-reached",
   });
+});
+
+await runTest("web heatmap request state distinguishes cold and retained refresh failures", () => {
+  const cold = reduceDataWebHeatmapRequestState(
+    createInitialDataWebHeatmapRequestState<{ value: number }>(),
+    { type: "begin", presentationKey: "2026:docs", requestKey: "r1" },
+  );
+  assert.equal(cold.status, "loading-cold");
+  assert.equal(cold.snapshot, null);
+
+  const coldFailed = reduceDataWebHeatmapRequestState(cold, {
+    type: "failed",
+    presentationKey: "2026:docs",
+    requestKey: "r1",
+  });
+  assert.equal(coldFailed.status, "cold-failed");
+
+  const ready = reduceDataWebHeatmapRequestState(cold, {
+    type: "succeeded",
+    presentationKey: "2026:docs",
+    requestKey: "r1",
+    snapshot: { value: 7 },
+  });
+  const refreshing = reduceDataWebHeatmapRequestState(ready, {
+    type: "begin",
+    presentationKey: "2026:docs",
+    requestKey: "r2",
+  });
+  assert.equal(refreshing.status, "refreshing");
+  assert.deepEqual(refreshing.snapshot, { value: 7 });
+
+  const refreshFailed = reduceDataWebHeatmapRequestState(refreshing, {
+    type: "failed",
+    presentationKey: "2026:docs",
+    requestKey: "r2",
+  });
+  assert.equal(refreshFailed.status, "refresh-failed-with-retained-data");
+  assert.deepEqual(refreshFailed.snapshot, { value: 7 });
+});
+
+await runTest("web heatmap request state rejects stale responses and abandoned presentations", () => {
+  const ready = {
+    presentationKey: "2026:docs",
+    requestKey: "r1",
+    snapshot: { value: 7 },
+    status: "ready" as const,
+  };
+  const abandonedRender = resolveDataWebHeatmapRequestState(
+    ready,
+    "2025:chat",
+    "r2",
+  );
+  assert.equal(abandonedRender.status, "loading-cold");
+  assert.equal(abandonedRender.snapshot, null);
+  assert.deepEqual(ready, {
+    presentationKey: "2026:docs",
+    requestKey: "r1",
+    snapshot: { value: 7 },
+    status: "ready",
+  });
+
+  const current = reduceDataWebHeatmapRequestState(ready, {
+    type: "begin",
+    presentationKey: "2025:chat",
+    requestKey: "r2",
+  });
+  const afterStaleSuccess = reduceDataWebHeatmapRequestState(current, {
+    type: "succeeded",
+    presentationKey: "2026:docs",
+    requestKey: "r1",
+    snapshot: { value: 99 },
+  });
+  assert.strictEqual(afterStaleSuccess, current);
 });
 
 await runTest("destination selection reconciliation preserves order and falls back only when empty", () => {
@@ -175,6 +253,8 @@ await runTest("web aggregate gateway accepts only the minimal typed payload", ()
       normalizedDomain: "example.com",
       earliestRecordedStartMs: 500,
     }],
+    sourceRevision: "3",
+    snapshotNowMs: 2_000,
   });
 
   assert.deepEqual(result, {
@@ -187,6 +267,8 @@ await runTest("web aggregate gateway accepts only the minimal typed payload", ()
       normalizedDomain: "example.com",
       earliestRecordedStartMs: 500,
     }],
+    sourceRevision: "3",
+    snapshotNowMs: 2_000,
   });
   assert.throws(
     () => parseWebActivityAggregateRange({
@@ -196,6 +278,8 @@ await runTest("web aggregate gateway accepts only the minimal typed payload", ()
         durationMs: -1,
       }],
       domainCoverage: [],
+      sourceRevision: "3",
+      snapshotNowMs: 2_000,
     }),
     /invalid web activity aggregate payload/i,
   );
@@ -207,6 +291,8 @@ await runTest("web aggregate gateway accepts only the minimal typed payload", ()
         durationMs: 1,
       }],
       domainCoverage: [],
+      sourceRevision: "3",
+      snapshotNowMs: 2_000,
     }),
     /invalid web activity aggregate payload/i,
   );
@@ -217,6 +303,8 @@ await runTest("web aggregate gateway accepts only the minimal typed payload", ()
         { normalizedDomain: "example.com", bucketStartMs: 1_000, durationMs: 250 },
       ],
       domainCoverage: [],
+      sourceRevision: "3",
+      snapshotNowMs: 2_000,
     }),
     /duplicate web activity aggregate record/i,
   );
@@ -227,6 +315,8 @@ await runTest("web aggregate gateway accepts only the minimal typed payload", ()
         { normalizedDomain: "example.com", earliestRecordedStartMs: 500 },
         { normalizedDomain: "example.com", earliestRecordedStartMs: 250 },
       ],
+      sourceRevision: "3",
+      snapshotNowMs: 2_000,
     }),
     /duplicate web activity domain coverage/i,
   );
@@ -267,9 +357,14 @@ await runTest("web aggregate gateway sends one deduplicated multi-domain request
     10,
     [0, 10],
     ["docs.example", "chat.example", "docs.example"],
-    async (_startMs, _endMs, _boundaries, domainFilter) => {
+    async (_startMs, _endMs, _boundaries, domainFilter, snapshotNowMs) => {
       receivedFilter = domainFilter;
-      return { records: [], domainCoverage: [] };
+      return {
+        records: [],
+        domainCoverage: [],
+        sourceRevision: "1",
+        snapshotNowMs,
+      };
     },
   );
   assert.deepEqual(receivedFilter, ["docs.example", "chat.example"]);
@@ -291,7 +386,7 @@ await runTest("web aggregate gateway sends all seven selected domains in one req
     10,
     [0, 10],
     domains,
-    async (_startMs, _endMs, _boundaries, domainFilter) => {
+    async (_startMs, _endMs, _boundaries, domainFilter, snapshotNowMs) => {
       assert.ok(Array.isArray(domainFilter));
       receivedFilters.push(domainFilter);
       return {
@@ -304,6 +399,8 @@ await runTest("web aggregate gateway sends all seven selected domains in one req
           normalizedDomain,
           earliestRecordedStartMs: 0,
         })),
+        sourceRevision: "1",
+        snapshotNowMs,
       };
     },
   );
@@ -327,7 +424,7 @@ await runTest("web aggregate gateway shards more than 400 buckets and merges sta
     boundaries.at(-1) ?? 0,
     boundaries,
     null,
-    async (startMs, endMs, chunkBoundaries) => {
+    async (startMs, endMs, chunkBoundaries, _domainFilter, snapshotNowMs) => {
       calls.push({
         startMs,
         endMs,
@@ -343,6 +440,8 @@ await runTest("web aggregate gateway shards more than 400 buckets and merges sta
           normalizedDomain: "coverage.example",
           earliestRecordedStartMs: startMs,
         }],
+        sourceRevision: "1",
+        snapshotNowMs,
       };
     },
   );
@@ -359,6 +458,67 @@ await runTest("web aggregate gateway shards more than 400 buckets and merges sta
     normalizedDomain: "coverage.example",
     earliestRecordedStartMs: 0,
   }]);
+});
+
+await runTest("web aggregate gateway retries a sharded read when source revision changes", async () => {
+  const boundaries = Array.from({ length: 403 }, (_, index) => index * 1_000);
+  const snapshotTimes: number[] = [];
+  let calls = 0;
+  const result = await loadWebActivityAggregateRange(
+    boundaries[0],
+    boundaries.at(-1) ?? 0,
+    boundaries,
+    null,
+    async (startMs, _endMs, _chunkBoundaries, _domainFilter, snapshotNowMs) => {
+      const attemptIndex = Math.floor(calls / 2);
+      const chunkIndex = calls % 2;
+      calls += 1;
+      snapshotTimes.push(snapshotNowMs);
+      return {
+        records: [{
+          normalizedDomain: `attempt-${attemptIndex}.example`,
+          bucketStartMs: startMs,
+          durationMs: 1_000,
+        }],
+        domainCoverage: [],
+        sourceRevision: attemptIndex === 0 && chunkIndex === 1 ? "2" : attemptIndex === 0 ? "1" : "3",
+        snapshotNowMs,
+      };
+    },
+  );
+
+  assert.equal(calls, 4);
+  assert.equal(snapshotTimes[0], snapshotTimes[1]);
+  assert.equal(snapshotTimes[2], snapshotTimes[3]);
+  assert.equal(result.sourceRevision, "3");
+  assert.deepEqual(
+    Array.from(new Set(result.records.map((record) => record.normalizedDomain))),
+    ["attempt-1.example"],
+  );
+});
+
+await runTest("web aggregate gateway fails after bounded snapshot retries", async () => {
+  const boundaries = Array.from({ length: 403 }, (_, index) => index * 1_000);
+  let calls = 0;
+  await assert.rejects(
+    loadWebActivityAggregateRange(
+      boundaries[0],
+      boundaries.at(-1) ?? 0,
+      boundaries,
+      null,
+      async (_startMs, _endMs, _chunkBoundaries, _domainFilter, snapshotNowMs) => {
+        calls += 1;
+        return {
+          records: [],
+          domainCoverage: [],
+          sourceRevision: calls % 2 === 0 ? "2" : "1",
+          snapshotNowMs,
+        };
+      },
+    ),
+    /changed while reading aggregate chunks/i,
+  );
+  assert.equal(calls, 4);
 });
 
 await runTest("web trend applies aliases and exclusions before percentages", () => {
