@@ -375,7 +375,12 @@ try {
     await measureAsyncBenchmark("browser-data-7d-to-365d", 8, 1_000, async () => {
       await openData(client!, sessionId);
       await setOverviewRangeToYear(client!, sessionId);
-      await waitForExpression(client!, sessionId, `Boolean(document.querySelector(".data-overview-grid"))`, 45_000);
+      await waitForExpression(
+        client!,
+        sessionId,
+        `Boolean(document.querySelector(".data-overview .data-trend-panel"))`,
+        45_000,
+      );
     }),
     await measureAsyncBenchmark("browser-data-365d-to-7d", 8, 1_000, async () => {
       await openData(client!, sessionId);

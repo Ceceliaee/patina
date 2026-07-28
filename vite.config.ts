@@ -16,6 +16,20 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          const normalizedId = id.replaceAll("\\", "/");
+          if (
+            normalizedId.endsWith("/features/data/hooks/useDataWebActivityRuntime.ts")
+            || normalizedId.endsWith("/features/data/services/dataAppSearch.ts")
+            || normalizedId.endsWith("/features/data/services/dataChartInteraction.ts")
+            || normalizedId.endsWith("/features/data/services/dataDestinationState.ts")
+            || normalizedId.endsWith("/features/data/services/dataFirstPaintScheduler.ts")
+            || normalizedId.endsWith("/features/data/services/dataHeatmapInteraction.ts")
+            || normalizedId.endsWith("/features/data/services/dataWebActivityReadModel.ts")
+            || normalizedId.endsWith("/platform/persistence/webActivityAnalysisGateway.ts")
+          ) {
+            return "data-analysis-runtime";
+          }
+
           if (!id.includes("node_modules")) {
             return undefined;
           }

@@ -19,6 +19,7 @@ pub mod tracking_pause_service;
 pub mod tracking_runtime;
 pub mod update_store;
 pub mod user_data_maintenance;
+pub mod web_activity_analysis;
 pub mod web_activity_store;
 pub mod widget_store;
 

@@ -243,6 +243,19 @@ function verifyDatabase(dbPath: string) {
   assert.equal(result.status, 0, `database verification failed: ${result.stderr || result.stdout}`);
 }
 
+function seedWebActivitySegment(dbPath: string) {
+  const script = [
+    "import sqlite3, sys",
+    "db = sqlite3.connect(sys.argv[1])",
+    "db.execute(\"INSERT INTO web_activity_segments (browser_client_id, browser_kind, browser_exe_name, domain, normalized_domain, start_time, end_time, duration, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\", ('runtime-smoke', 'chromium', 'chrome.exe', 'Example.COM', 'example.com', 1000, 3500, 2500, 'runtime-smoke', 1000, 3500))",
+    "db.execute(\"INSERT INTO web_activity_segments (browser_client_id, browser_kind, browser_exe_name, domain, normalized_domain, start_time, end_time, duration, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\", ('runtime-smoke-2', 'chromium', 'chrome.exe', 'Docs.EXAMPLE', 'docs.example', 2000, 3000, 1000, 'runtime-smoke', 2000, 3000))",
+    "db.commit()",
+    "db.close()",
+  ].join("; ");
+  const result = spawnSync("python", ["-c", script, dbPath], { encoding: "utf8" });
+  assert.equal(result.status, 0, `web activity seed failed: ${result.stderr || result.stdout}`);
+}
+
 const frontendPort = await reservePort();
 const devtoolsPort = await reservePort();
 const root = mkdtempSync(join(tmpdir(), "patina-tauri-e2e-"));
@@ -656,6 +669,78 @@ try {
   assert.equal(aggregateRange.projectionRowCount, 0);
   assert.equal(aggregateRange.factRowCount, 0);
   assert.equal(aggregateRange.hasActiveSession, false);
+
+  const runtimeDatabasePath = join(root, "data", "patina.db");
+  seedWebActivitySegment(runtimeDatabasePath);
+  const webAggregateRange = await evaluate(
+    client,
+    `window.__TAURI_INTERNALS__.invoke("cmd_get_web_activity_aggregate_range", {
+      startMs: 0,
+      endMs: 4000,
+      bucketBoundariesMs: [0, 2000, 4000],
+      normalizedDomain: "Example.COM.",
+    })`,
+  ) as {
+    records: Array<{
+      normalizedDomain: string;
+      bucketStartMs: number;
+      durationMs: number;
+    }>;
+    domainCoverage: Array<{
+      normalizedDomain: string;
+      earliestRecordedStartMs: number;
+    }>;
+  };
+  assert.deepEqual(webAggregateRange, {
+    records: [
+      { normalizedDomain: "example.com", bucketStartMs: 0, durationMs: 1000 },
+      { normalizedDomain: "example.com", bucketStartMs: 2000, durationMs: 1500 },
+    ],
+    domainCoverage: [
+      { normalizedDomain: "example.com", earliestRecordedStartMs: 1000 },
+    ],
+  });
+  const multiWebAggregateRange = await evaluate(
+    client,
+    `window.__TAURI_INTERNALS__.invoke("cmd_get_web_activity_aggregate_range", {
+      startMs: 0,
+      endMs: 4000,
+      bucketBoundariesMs: [0, 2000, 4000],
+      normalizedDomains: ["docs.example", "example.com"],
+    })`,
+  ) as typeof webAggregateRange;
+  assert.deepEqual(multiWebAggregateRange, {
+    records: [
+      { normalizedDomain: "docs.example", bucketStartMs: 2000, durationMs: 1000 },
+      { normalizedDomain: "example.com", bucketStartMs: 0, durationMs: 1000 },
+      { normalizedDomain: "example.com", bucketStartMs: 2000, durationMs: 1500 },
+    ],
+    domainCoverage: [
+      { normalizedDomain: "docs.example", earliestRecordedStartMs: 2000 },
+      { normalizedDomain: "example.com", earliestRecordedStartMs: 1000 },
+    ],
+  });
+  const conflictingWebAggregateRange = await evaluate(client, `
+    window.__TAURI_INTERNALS__.invoke("cmd_get_web_activity_aggregate_range", {
+      startMs: 0,
+      endMs: 4000,
+      bucketBoundariesMs: [0, 2000, 4000],
+      normalizedDomain: "example.com",
+      normalizedDomains: ["docs.example"],
+    }).then(() => null, (error) => error)
+  `) as { code?: string; retryable?: boolean };
+  assert.equal(conflictingWebAggregateRange.code, "WEB_ACTIVITY_ANALYSIS_FAILED");
+  assert.equal(conflictingWebAggregateRange.retryable, true);
+  const invalidWebAggregateRange = await evaluate(client, `
+    window.__TAURI_INTERNALS__.invoke("cmd_get_web_activity_aggregate_range", {
+      startMs: 0,
+      endMs: 4000,
+      bucketBoundariesMs: [0, 3000, 2000, 4000],
+      normalizedDomain: null,
+    }).then(() => null, (error) => error)
+  `) as { code?: string; retryable?: boolean };
+  assert.equal(invalidWebAggregateRange.code, "WEB_ACTIVITY_ANALYSIS_FAILED");
+  assert.equal(invalidWebAggregateRange.retryable, true);
 
   const resourceDiagnostics = await evaluate(
     client,

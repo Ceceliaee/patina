@@ -7,6 +7,10 @@ import {
   buildDataTrendViewModel,
   type AggregateSessionRecord,
 } from "../../src/features/data/services/dataReadModel.ts";
+import {
+  buildDataWebTrendViewModel,
+} from "../../src/features/data/services/dataWebActivityReadModel.ts";
+import { resolveDataTrendRange } from "../../src/features/data/services/dataTrendRange.ts";
 import { measureBenchmark, printBenchmarkReport } from "./benchmarkUtils.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -57,6 +61,20 @@ const nowMs = new Date(2026, 5, 30, 12, 0, 0, 0).getTime();
 const sevenDaySessions = buildSyntheticSessions(7, 120);
 const yearlySessions = buildSyntheticSessions(365, 120);
 const yearlyAggregateContext = buildDataTrendAggregateContext(yearlySessions, 365, nowMs);
+const yearlyWebRange = resolveDataTrendRange({ kind: "rolling", days: 365 }, nowMs);
+const yearlyWebRecords = Array.from({ length: 365 * 100 }, (_, index) => {
+  const day = Math.floor(index / 100);
+  const domainIndex = index % 100;
+  return {
+    normalizedDomain: `domain-${String(domainIndex).padStart(3, "0")}.example`,
+    bucketStartMs: yearlyWebRange.startMs + day * DAY_MS,
+    durationMs: 30_000 + ((day + domainIndex) % 20) * 15_000,
+  };
+});
+const yearlyWebCoverage = Array.from({ length: 100 }, (_, domainIndex) => ({
+  normalizedDomain: `domain-${String(domainIndex).padStart(3, "0")}.example`,
+  earliestRecordedStartMs: yearlyWebRange.startMs,
+}));
 
 const measurements = [
   measureBenchmark("data-trend-7d", 200, 25, () => {
@@ -81,11 +99,30 @@ const measurements = [
     buildDataTrendViewModelFromAggregate(context);
     buildDataAppTrendViewModelFromAggregate(context, null);
   }),
-  measureBenchmark("data-selected-app-derive-365d", 100, 35, () => {
-    buildDataAppTrendViewModelFromAggregate(yearlyAggregateContext, "cursor.exe");
+  measureBenchmark("data-selected-apps-derive-365d-5-selected", 100, 35, () => {
+    buildDataAppTrendViewModelFromAggregate(
+      yearlyAggregateContext,
+      ["cursor.exe", "chrome.exe", "Code.exe", "QQ.exe", "WeChat.exe"],
+    );
   }),
   measureBenchmark("data-heatmap-recent", 20, 80, () => {
     buildActivityHeatmap(yearlySessions, "recent", nowMs);
+  }),
+  measureBenchmark("data-web-trend-365d-100-domains-5-selected", 25, 150, () => {
+    buildDataWebTrendViewModel({
+      range: yearlyWebRange,
+      records: yearlyWebRecords,
+      domainCoverage: yearlyWebCoverage,
+      overrides: {},
+      favicons: {},
+      selectedDomains: [
+        "domain-042.example",
+        "domain-003.example",
+        "domain-071.example",
+        "domain-018.example",
+        "domain-099.example",
+      ],
+    });
   }),
 ];
 
@@ -97,10 +134,14 @@ printBenchmarkReport({
     nowMs,
     sevenDaySessionCount: sevenDaySessions.length,
     yearlySessionCount: yearlySessions.length,
+    yearlyWebDomainCount: yearlyWebCoverage.length,
+    yearlyWebAggregateRecordCount: yearlyWebRecords.length,
     comparisonNotes: [
       "The 7 day measurements model normal visible Data page ranges.",
       "The 365 day measurements model long-running local history where repeated range/session scans become visible.",
       "The combined trend measurements model the Data page path where overview and app trend can share the same aggregate context.",
+      "The app and web comparison measurements select five destinations, the supported maximum.",
+      "The web trend measurement models 365 daily buckets across 100 normalized domains (36,500 aggregate records).",
       "Treat these as budgeted reference measurements, not direct optimization deltas unless compared before and after the same code change.",
     ],
   },

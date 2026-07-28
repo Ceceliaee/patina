@@ -1117,6 +1117,66 @@ mod query_plan_diagnostics {
         )
     }
 
+    async fn measure_web_activity_analysis_range(pool: &SqlitePool) -> QueryMeasurement {
+        let sql = "SELECT normalized_domain, start_time, COALESCE(end_time, ?) effective_end_time
+                   FROM web_activity_segments
+                   WHERE start_time < ?
+                     AND COALESCE(end_time, ?) > ?";
+        let plan = explain_query(pool, sql, &[NOW_MS, RANGE_END_MS, NOW_MS, RANGE_START_MS]).await;
+        let started_at = Instant::now();
+        let rows = sqlx::query(sql)
+            .bind(NOW_MS)
+            .bind(RANGE_END_MS)
+            .bind(NOW_MS)
+            .bind(RANGE_START_MS)
+            .fetch_all(pool)
+            .await
+            .unwrap();
+        build_measurement(
+            "web-activity-analysis-range-index",
+            rows.len(),
+            started_at,
+            plan,
+        )
+    }
+
+    async fn measure_web_activity_analysis_domain_range(pool: &SqlitePool) -> QueryMeasurement {
+        let sql = "SELECT normalized_domain, start_time, COALESCE(end_time, ?) effective_end_time
+                   FROM web_activity_segments
+                   WHERE normalized_domain = ?
+                     AND start_time < ?
+                     AND COALESCE(end_time, ?) > ?";
+        let explain_sql = format!("EXPLAIN QUERY PLAN {sql}");
+        let plan = sqlx::query(&explain_sql)
+            .bind(NOW_MS)
+            .bind("example-1.test")
+            .bind(RANGE_END_MS)
+            .bind(NOW_MS)
+            .bind(RANGE_START_MS)
+            .fetch_all(pool)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|row| row.get::<String, _>("detail"))
+            .collect();
+        let started_at = Instant::now();
+        let rows = sqlx::query(sql)
+            .bind(NOW_MS)
+            .bind("example-1.test")
+            .bind(RANGE_END_MS)
+            .bind(NOW_MS)
+            .bind(RANGE_START_MS)
+            .fetch_all(pool)
+            .await
+            .unwrap();
+        build_measurement(
+            "web-activity-analysis-domain-range-index",
+            rows.len(),
+            started_at,
+            plan,
+        )
+    }
+
     async fn seed_activity_projections(pool: &SqlitePool) {
         let mut tx = pool.begin().await.unwrap();
         for day in 0..365_i64 {
@@ -1230,6 +1290,8 @@ mod query_plan_diagnostics {
             measure_session_summary_split(&pool, "sessions-split-closed-active-baseline").await,
             measure_title_samples(&pool).await,
             measure_web_activity_current(&pool).await,
+            measure_web_activity_analysis_range(&pool).await,
+            measure_web_activity_analysis_domain_range(&pool).await,
             measure_hourly_projection(&pool).await,
             measure_catalog_projection(&pool).await,
         ];
