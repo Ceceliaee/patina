@@ -1,6 +1,11 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, extname, join, normalize, relative, sep } from "node:path";
+import {
+  measureRustSource,
+  measureTypeScriptSource,
+  type StructuralMetrics,
+} from "./quality/structuralMetrics.ts";
 
 const SCAN_ROOTS = ["src", "src-tauri/src", "tests", "scripts"] as const;
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".rs", ".css"]);
@@ -35,6 +40,7 @@ interface SourceFile {
   extension: string;
   content: string;
   lines: number;
+  structuralMetrics?: StructuralMetrics;
 }
 
 interface ImportSpecifier {
@@ -93,11 +99,20 @@ function collectFiles(root: string): SourceFile[] {
     }
 
     const content = readFileSync(path, "utf8");
+    const workspacePath = toWorkspacePath(path);
+    const structuralMetrics = extension === ".rs"
+      ? measureRustSource(content)
+      : TYPESCRIPT_EXTENSIONS.has(extension)
+        ? measureTypeScriptSource(content, workspacePath)
+        : undefined;
     files.push({
-      path: toWorkspacePath(path),
+      path: workspacePath,
       extension,
       content,
-      lines: content.split(/\r?\n/).length,
+      lines: structuralMetrics && "nonEmptyProductionLines" in structuralMetrics
+        ? structuralMetrics.nonEmptyProductionLines
+        : content.split(/\r?\n/).length,
+      structuralMetrics,
     });
   }
 
@@ -120,6 +135,15 @@ function printTable<Row>(rows: Row[], render: (row: Row, index: number) => strin
   rows.forEach((row, index) => {
     console.log(render(row, index));
   });
+}
+
+function formatStructuralSummary(file: SourceFile) {
+  const metrics = file.structuralMetrics;
+  if (!metrics) return "";
+  if ("astNodes" in metrics) {
+    return `, ast ${metrics.astNodes}, branches ${metrics.branchPoints}, owners ${metrics.importOwners}`;
+  }
+  return `, functions ${metrics.functionCount}, branches ${metrics.branchPoints}, owners ${metrics.dependencyOwners}`;
 }
 
 function normalizeImportPath(fromFile: string, specifier: string) {
@@ -345,7 +369,9 @@ function main() {
   printSection("Largest source files");
   printTable(
     [...sourceFiles].sort((left, right) => right.lines - left.lines).slice(0, MAX_ROWS),
-    (file, index) => `${index + 1}. ${file.path} - ${file.lines} lines`,
+    (file, index) => (
+      `${index + 1}. ${file.path} - ${file.lines} lines${formatStructuralSummary(file)}`
+    ),
   );
 
   printSection("Files above local thresholds");
@@ -353,7 +379,10 @@ function main() {
     sourceFiles
       .filter((file) => file.lines > (LARGE_FILE_THRESHOLDS[file.extension] ?? Number.POSITIVE_INFINITY))
       .sort((left, right) => right.lines - left.lines),
-    (file) => `${file.path} - ${file.lines} lines (threshold ${LARGE_FILE_THRESHOLDS[file.extension]})`,
+    (file) => (
+      `${file.path} - ${file.lines} lines${formatStructuralSummary(file)} `
+      + `(threshold ${LARGE_FILE_THRESHOLDS[file.extension]})`
+    ),
   );
 
   printSection("Unreferenced TS/TSX file candidates");
