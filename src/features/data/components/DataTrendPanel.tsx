@@ -1,5 +1,4 @@
 import { memo, type MouseEvent, type RefObject } from "react";
-import { CalendarDays, Clock3 } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import QuietChartTooltip from "../../../shared/components/QuietChartTooltip";
@@ -44,19 +43,17 @@ function DataTrendPanel({
   onMouseLeave,
 }: DataTrendPanelProps) {
   return (
-    <div className="qp-panel p-5 data-trend-panel">
+    <div className="data-trend-panel">
       <div className="data-trend-header">
         <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">
           {UI_TEXT.data.activityTrend}
         </h3>
         <div className="data-trend-inline-metrics" aria-label={UI_TEXT.accessibility.data.trendSummary}>
           <div className="data-trend-inline-metric">
-            <Clock3 size={13} aria-hidden />
             <span>{viewModel?.metricLabels.total ?? UI_TEXT.data.weeklyTotal}</span>
             <strong>{viewModel ? formatDuration(viewModel.totalDuration) : "-"}</strong>
           </div>
           <div className="data-trend-inline-metric">
-            <CalendarDays size={13} aria-hidden />
             <span>{viewModel?.metricLabels.average ?? UI_TEXT.data.dailyAverage}</span>
             <strong>{viewModel ? formatDuration(viewModel.averageDuration) : "-"}</strong>
           </div>

@@ -10,9 +10,113 @@
   flex-wrap: nowrap;
 }
 
+.data-destination-mode.qp-segmented-filter-compact {
+  flex-wrap: nowrap;
+}
+
+.data-web-error {
+  flex-direction: column;
+  gap: 10px;
+}
+
+.data-app-panel-heading {
+  display: flex;
+  min-width: 0;
+  min-height: 22px;
+  align-items: center;
+  gap: 8px;
+}
+
+.data-app-panel-heading h3 {
+  flex: 0 0 auto;
+}
+
+.data-app-refresh-status {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+  color: var(--qp-text-tertiary);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.data-app-refresh-status:has(.qp-inline-action) {
+  color: var(--qp-text-secondary);
+}
+
+.data-app-refresh-status .qp-inline-action {
+  padding: 2px 4px;
+}
+
+.data-app-sidebar[data-hint]::after {
+  content: attr(data-hint);
+  min-height: 14px;
+  padding-inline: 2px;
+  color: var(--qp-text-tertiary);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.data-app-selected-status {
+  position: relative;
+  overflow: visible;
+}
+
+.data-app-option-selected {
+  border-color: color-mix(
+    in srgb,
+    var(--data-series-color, var(--qp-accent-default)) 34%,
+    var(--qp-border-subtle)
+  );
+  background: color-mix(
+    in srgb,
+    var(--data-series-color, var(--qp-accent-default)) 9%,
+    var(--qp-bg-elevated)
+  );
+  color: var(--qp-text-primary);
+}
+
+.data-app-option-selected .data-app-option-icon {
+  border-color: color-mix(
+    in srgb,
+    var(--data-series-color, var(--qp-accent-default)) 26%,
+    var(--qp-border-subtle)
+  );
+  color: var(--data-series-color, var(--qp-accent-default));
+}
+
+.data-heatmap-cell-unavailable {
+  border-style: dashed;
+  background: transparent;
+  opacity: 0.72;
+}
+
 @media (max-width: 900px) {
   .data-heatmap-range-control {
     justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 720px) {
+  .data-app-panel-heading {
+    width: 100%;
+  }
+
+  .data-app-refresh-status > span:first-child {
+    max-width: min(55vw, 190px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .data-app-header-actions,
+  .data-heatmap-header-actions {
+    width: 100%;
+    justify-content: space-between;
     flex-wrap: wrap;
   }
 }

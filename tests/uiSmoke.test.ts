@@ -372,11 +372,12 @@ await runTest("Data regular view avoids visible loading and skeleton branches", 
   assert.match(heatmapPanel, /isWeeklyFutureCell/);
   assert.doesNotMatch(heatmapPanel, /QuietTooltip/);
   assert.match(heatmapPanel, /data-heatmap-tooltip/);
-  assert.match(data, /selectedHeatmapView === "recent"/);
+  assert.match(heatmapPanel, /selectedHeatmapView === "recent"/);
   assert.match(data, /freshReadModelsReady/);
   assert.match(data, /shouldDeferRuntimeReadModels/);
   assert.match(data, /shouldDeferHeatmapRows/);
-  assert.match(data, /EMPTY_DATA_APP_TREND_POINTS/);
+  assert.match(data, /destinationChartData/);
+  assert.match(data, /chartRows \?\? \[\]/);
 });
 
 await runTest("History regular view avoids visible loading copy", () => {
@@ -932,6 +933,70 @@ await runTest("web activity views are gated by saved web sync setting", () => {
   assert.match(mappingDerivedState, /if \(!webActivityEnabled\) return \{\}/);
   assert.match(mappingDerivedState, /if \(!webActivityEnabled\) return \[\]/);
   assert.match(mappingDerivedState, /if \(!webActivityEnabled\) return \{ all: 0, other: 0, classified: 0, excluded: 0 \}/);
+});
+
+await runTest("Data keeps web analysis beside a unified activity overview", () => {
+  const shell = readUtf8("src/app/AppShell.tsx");
+  const data = readUtf8("src/features/data/components/Data.tsx");
+  const webRuntime = readUtf8("src/features/data/hooks/useDataWebActivityRuntime.ts");
+  const destinationPanel = readUtf8("src/features/data/components/DataAppTrendPanel.tsx");
+  const heatmapPanel = readUtf8("src/features/data/components/DataHeatmapPanel.tsx");
+  const dataBranch = shell.slice(shell.indexOf("<Data"), shell.indexOf("<Settings"));
+  const overviewPanelIndex = data.indexOf('className="qp-panel p-5 data-overview"');
+  const trendPanelIndex = data.indexOf("<DataTrendPanel");
+  const heatmapPanelIndex = data.indexOf("<DataHeatmapPanel");
+  const destinationPanelIndex = data.indexOf("<DataAppTrendPanel");
+
+  assert.match(dataBranch, /webActivityEnabled=\{appSettings\.webActivityEnabled\}/);
+  assert.match(dataBranch, /onToast=\{pushToast\}/);
+  assert.match(data, /enabled: webActivityEnabled/);
+  assert.match(data, /heatmapSelection: selectedDestinationHeatmapView/);
+  assert.match(webRuntime, /if \(!enabled \|\| mode !== "web"\) return undefined/);
+  assert.match(webRuntime, /if \(!enabled \|\| mode !== "web" \|\| selectedDomains\.length === 0\)/);
+  assert.match(webRuntime, /const heatmapReady =/);
+  assert.match(webRuntime, /heatmapReady,/);
+  assert.match(data, /resolveDataDestinationMode\(webActivityEnabled, destinationMode\)/);
+  assert.match(data, /presentedDestinationMode/);
+  assert.match(data, /webDestinationReadyForPresentation/);
+  assert.match(data, /destinationMode !== presentedDestinationMode/);
+  assert.match(destinationPanel, /showDestinationMode \? \(/);
+  assert.match(destinationPanel, /UI_TEXT\.data\.destinationWeb/);
+  assert.doesNotMatch(destinationPanel, /data-web-initial-status|webTrendInitialLoading/);
+  assert.match(destinationPanel, /\{heatmapContent\}/);
+  assert.match(destinationPanel, /data-hint/);
+  assert.match(destinationPanel, /UI_TEXT\.data\.interactionHint/);
+  assert.match(destinationPanel, /event\.ctrlKey/);
+  assert.match(destinationPanel, /aria-pressed=\{isSelected\}/);
+  assert.match(destinationPanel, /aria-description=\{UI_TEXT\.data\.interactionHint\}/);
+  assert.match(destinationPanel, /aria-keyshortcuts="Control\+Enter Control\+Space"/);
+  assert.match(destinationPanel, /<AreaChart/);
+  assert.match(destinationPanel, /trendSeries\.map/);
+  assert.match(destinationPanel, /fillOpacity=\{0\.12\}/);
+  assert.match(destinationPanel, /dot=\{\{ fill: series\.color, r: 3 \}\}/);
+  assert.doesNotMatch(destinationPanel, /<Line/);
+  assert.match(data, /rememberDataDestinationSessionSelectionState/);
+  assert.match(data, /toggleDataDestinationSelection/);
+  assert.match(data, /replaceDataDestinationSelection/);
+  assert.match(data, /buildDataDestinationTrendSeries/);
+  assert.match(data, /onToast\?\.\(UI_TEXT\.data\.selectionLimitReached, "warning"\)/);
+  assert.doesNotMatch(destinationPanel, /selectionFeedback/);
+  assert.doesNotMatch(destinationPanel, /已选|N\/5/);
+  assert.match(heatmapPanel, /data-heatmap-panel-compact/);
+  assert.match(heatmapPanel, /!compact \?/);
+  assert.match(data, /title=\{isWebDestination \? UI_TEXT\.data\.webHeatmap : UI_TEXT\.data\.appHeatmap\}/);
+  assert.match(data, /title=\{isWebDestination[\s\S]*compact/);
+  assert.match(data, /selectedDestinationHeatmapView/);
+  assert.doesNotMatch(destinationPanel, /Dialog|dialog/);
+  assert.doesNotMatch(heatmapPanel, /data-heatmap-scope/);
+  assert.doesNotMatch(heatmapPanel, /data-heatmap-error/);
+  assert.ok(overviewPanelIndex >= 0);
+  assert.ok(overviewPanelIndex < trendPanelIndex);
+  assert.ok(trendPanelIndex < heatmapPanelIndex);
+  assert.ok(heatmapPanelIndex < destinationPanelIndex);
+  assert.match(data, /<div className="qp-panel p-5 data-overview">[\s\S]*<DataTrendPanel[\s\S]*<DataHeatmapPanel[\s\S]*<\/div>\s*\n\s*<DataAppTrendPanel/);
+  assert.equal((data.match(/<DataTrendPanel/g) ?? []).length, 1);
+  assert.equal((data.match(/<DataHeatmapPanel/g) ?? []).length, 2);
+  assert.equal((data.match(/<DataAppTrendPanel/g) ?? []).length, 1);
 });
 
 await runTest("classification web domain colors prefer favicon theme colors", () => {

@@ -880,17 +880,16 @@
   min-width: 0;
 }
 
-.data-overview-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  align-items: stretch;
-  gap: 16px;
-  min-width: 0;
-}
-
+.data-overview,
 .data-trend-panel,
 .data-heatmap-panel {
   min-width: 0;
+}
+
+.data-overview > .data-heatmap-panel {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--qp-border-subtle);
 }
 
 .data-heatmap-panel-header {
@@ -920,12 +919,6 @@
   gap: 7px;
   color: var(--qp-text-tertiary);
   white-space: nowrap;
-}
-
-.data-trend-inline-metric svg {
-  position: relative;
-  top: 2px;
-  color: var(--qp-text-secondary);
 }
 
 .data-trend-inline-metric span {
@@ -985,22 +978,31 @@
 
 .data-app-selected-status {
   display: inline-flex;
-  width: 22px;
+  width: auto;
   height: 22px;
+  min-width: 22px;
   min-height: 0;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  gap: 4px;
   flex-shrink: 0;
   padding: 0;
-  overflow: hidden;
   color: var(--qp-text-secondary);
   font-size: 10px;
   font-weight: 700;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.data-app-selected-status img {
+.data-app-selected-icon {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  align-items: center;
+  justify-content: center;
+}
+
+.data-app-selected-icon img {
   display: block;
   height: 20px;
   width: 20px;
@@ -1074,16 +1076,18 @@
 
 .data-app-list {
   display: grid;
-  max-height: 244px;
+  max-height: 400px;
   gap: 6px;
   overflow-y: auto;
   padding-right: 2px;
 }
 
 .data-app-trend-list {
+  flex: 1 1 400px;
   align-content: start;
   grid-auto-rows: min-content;
-  min-height: 244px;
+  min-height: 400px;
+  max-height: none;
 }
 
 .data-app-empty {
@@ -1241,60 +1245,64 @@
   min-width: 0;
 }
 
+.data-heatmap-panel-compact {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--qp-border-subtle);
+}
+
+.data-heatmap-panel-compact .data-heatmap-calendar {
+  --data-heatmap-cell-size: 8.5px;
+  --data-heatmap-cell-gap: 2px;
+  margin-top: 12px;
+}
+
+.data-heatmap-panel-compact .data-heatmap-months {
+  grid-template-columns: 24px repeat(var(--data-heatmap-week-count, 53), var(--data-heatmap-cell-size));
+  padding-bottom: 4px;
+  font-size: 9px;
+}
+
+.data-heatmap-panel-compact .data-heatmap-body {
+  gap: 4px;
+}
+
+.data-heatmap-panel-compact .data-heatmap-weekdays {
+  width: 24px;
+  font-size: 9px;
+}
+
 @media (min-width: 1900px) {
   .data-dashboard-grid {
     grid-template-columns: minmax(0, var(--data-reference-panel-width)) minmax(420px, 1fr);
+    grid-template-areas: "overview destination";
     align-items: stretch;
   }
 
+  .data-dashboard-grid > .data-overview {
+    grid-area: overview;
+  }
+
   .data-dashboard-grid > .data-app-panel {
+    grid-area: destination;
     align-self: stretch;
   }
 
   .data-app-grid {
-    grid-template-columns: minmax(260px, 1fr) minmax(220px, 0.82fr);
+    grid-template-columns: minmax(230px, 0.72fr) minmax(0, 1.6fr);
     gap: 16px;
   }
 
   .data-app-list {
-    max-height: 190px;
+    max-height: 400px;
   }
 
   .data-app-trend-list {
-    min-height: 190px;
+    min-height: 400px;
   }
 
-  .data-app-chart-column {
-    display: contents;
-  }
-
-  .data-app-metric-strip {
-    align-self: start;
-    grid-template-columns: 1fr;
-    row-gap: 10px;
-    border-bottom: 0;
-    padding-bottom: 0;
-  }
-
-  .data-app-metric {
-    border-left: 0;
-    border-bottom: 1px solid var(--qp-border-subtle);
-    padding: 0 0 10px;
-  }
-
-  .data-app-metric:last-child {
-    border-bottom: 0;
-    padding-bottom: 0;
-  }
-
-  .data-app-metric:nth-child(3) {
-    border-left: 0;
-    padding-left: 0;
-  }
-
-  .data-app-chart {
-    grid-column: 1 / -1;
-    height: 200px;
+  .data-app-list.data-app-trend-list {
+    max-height: none;
   }
 }
 
@@ -1487,7 +1495,7 @@
 }
 
 @media (max-width: 900px) {
-  .data-trend-panel {
+  .data-overview {
     padding: 1.1rem;
   }
 
@@ -1515,8 +1523,10 @@
     max-height: 188px;
   }
 
-  .data-app-trend-list {
+  .data-app-list.data-app-trend-list {
+    flex: none;
     min-height: 188px;
+    max-height: 188px;
   }
 
   .data-app-metric-strip {
