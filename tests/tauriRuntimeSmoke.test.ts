@@ -3,7 +3,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createServer as createNetServer } from "node:net";
+import { createServer as createNetServer, type Server as NetServer } from "node:net";
 import { build as buildVite, preview as previewVite, type PreviewServer } from "vite";
 import {
   CdpConnection,
@@ -27,6 +27,21 @@ async function reservePort() {
       const port = address.port;
       server.close((error) => error ? reject(error) : resolve(port));
     });
+  });
+}
+
+async function occupyPort(port = 0) {
+  return new Promise<NetServer>((resolve, reject) => {
+    const server = createNetServer();
+    server.once("error", reject);
+    server.listen(port, "127.0.0.1", () => resolve(server));
+  });
+}
+
+async function closeNetServer(server: NetServer | null) {
+  if (!server) return;
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => error ? reject(error) : resolve());
   });
 }
 
@@ -233,9 +248,9 @@ function verifyDatabase(dbPath: string) {
     "db.close()",
     "assert integrity == 'ok', integrity",
     "assert value == ('77',), value",
-    "assert migration == (8,), migration",
+    "assert migration == (9,), migration",
     "assert states == {'app_catalog': 'ready', 'activity_hourly': 'ready'}, states",
-    "assert {'recorded_app_catalog', 'activity_hourly_effective', 'activity_summary_dirty_ranges', 'app_catalog_dirty_keys'} <= tables, tables",
+    "assert {'recorded_app_catalog', 'activity_hourly_effective', 'activity_summary_dirty_ranges', 'app_catalog_dirty_keys', 'web_activity_revision'} <= tables, tables",
   ].join("; ");
   const result = spawnSync("python", ["-c", script, dbPath], { encoding: "utf8" });
   assert.equal(result.status, 0, `database verification failed: ${result.stderr || result.stdout}`);
@@ -267,6 +282,8 @@ let appProcess: ChildProcess | null = null;
 let viteServer: PreviewServer | null = null;
 let client: CdpConnection | null = null;
 let widgetClient: CdpConnection | null = null;
+let bridgePortBlocker: NetServer | null = null;
+let webActivityBridgePort: number | null = null;
 let primaryError: unknown = null;
 const cleanupErrors: unknown[] = [];
 let databaseMutationCompleted = false;
@@ -377,6 +394,92 @@ try {
     "real Tauri runtime",
     async () => evaluate(client!, "Boolean(window.__TAURI_INTERNALS__ && document.querySelector('#root')?.children.length)"),
     30_000,
+  );
+
+  bridgePortBlocker = await occupyPort();
+  const bridgeBlockerAddress = bridgePortBlocker.address();
+  assert.ok(bridgeBlockerAddress && typeof bridgeBlockerAddress === "object");
+  webActivityBridgePort = bridgeBlockerAddress.port;
+  await evaluate(client, `
+    window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
+      mutations: [
+        {
+          key: "web_activity_enabled",
+          value: "1",
+        },
+        {
+          key: "web_activity_port",
+          value: "${webActivityBridgePort}",
+        },
+        {
+          key: "web_activity_token",
+          value: "runtime-smoke-bridge-secret",
+        },
+      ],
+    })
+  `);
+  const retryingBridgeDiagnostics = await waitFor(
+    "web activity bridge retry wait",
+    async () => {
+      const diagnostics = await evaluate(
+        client!,
+        `window.__TAURI_INTERNALS__.invoke("cmd_get_resource_diagnostics")`,
+      ) as {
+        web_activity_bridge?: {
+          runtime?: {
+            status?: string;
+            port?: number | null;
+            last_error_category?: string | null;
+            retry_count?: number;
+          };
+        };
+      };
+      return diagnostics.web_activity_bridge?.runtime?.status === "retry-wait"
+        ? diagnostics
+        : null;
+    },
+    10_000,
+  );
+  assert.equal(
+    retryingBridgeDiagnostics.web_activity_bridge?.runtime?.port,
+    webActivityBridgePort,
+  );
+  assert.equal(
+    retryingBridgeDiagnostics.web_activity_bridge?.runtime?.last_error_category,
+    "address-in-use",
+  );
+  assert.ok(
+    Number(retryingBridgeDiagnostics.web_activity_bridge?.runtime?.retry_count) >= 1,
+  );
+  assert.doesNotMatch(JSON.stringify(retryingBridgeDiagnostics), /token/i);
+
+  await closeNetServer(bridgePortBlocker);
+  bridgePortBlocker = null;
+  const listeningBridgeDiagnostics = await waitFor(
+    "web activity bridge automatic port recovery",
+    async () => {
+      const diagnostics = await evaluate(
+        client!,
+        `window.__TAURI_INTERNALS__.invoke("cmd_get_resource_diagnostics")`,
+      ) as {
+        web_activity_bridge?: {
+          runtime?: {
+            status?: string;
+            retry_count?: number;
+            last_error_category?: string | null;
+          };
+        };
+      };
+      return diagnostics.web_activity_bridge?.runtime?.status === "listening"
+        ? diagnostics
+        : null;
+    },
+    35_000,
+  );
+  assert.equal(listeningBridgeDiagnostics.web_activity_bridge?.runtime?.retry_count, 0);
+  assert.equal(
+    listeningBridgeDiagnostics.web_activity_bridge?.runtime?.last_error_category,
+    null,
   );
 
   const mainWindowGeneration = await waitFor(
@@ -928,6 +1031,12 @@ try {
   console.error(logs.join(""));
   primaryError = error;
 } finally {
+  try {
+    await closeNetServer(bridgePortBlocker);
+    bridgePortBlocker = null;
+  } catch (error) {
+    cleanupErrors.push(error);
+  }
   try {
     widgetClient?.close();
   } catch (error) {

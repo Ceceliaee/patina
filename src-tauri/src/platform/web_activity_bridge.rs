@@ -1,4 +1,8 @@
 use crate::domain::settings::WebActivityBridgeSettings;
+use crate::platform::web_activity_bridge_lifecycle::{
+    classify_bind_error, is_retryable_bind_error, unix_now_ms, WebActivityBridgeLifecycle,
+    WebActivityBridgeRetryPolicy, WebActivityBridgeRuntimeSnapshot,
+};
 use serde_json::{json, Value};
 use std::future::Future;
 use std::io;
@@ -9,7 +13,7 @@ use tauri::{AppHandle, Runtime};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::watch;
-use tokio::time::{timeout, Duration};
+use tokio::time::{sleep, timeout, Duration};
 
 const WEB_ACTIVITY_BRIDGE_HTTP_BODY_MAX_BYTES: usize = 64 * 1024;
 const WEB_ACTIVITY_BRIDGE_HTTP_HEADER_MAX_BYTES: usize = 16 * 1024;
@@ -62,6 +66,7 @@ impl<R: Runtime> Copy for WebActivityBridgeRuntimeDeps<R> {}
 pub struct WebActivityBridgeRuntimeState {
     inner: Mutex<WebActivityBridgeRuntimeInner>,
     shutdown_tx: watch::Sender<u64>,
+    lifecycle: Arc<Mutex<WebActivityBridgeLifecycle>>,
     client_tracker: Arc<WebActivityClientTracker>,
 }
 
@@ -78,6 +83,7 @@ pub struct WebActivityBridgeConnectionStats {
     pub rejected_clients: u64,
     pub timed_out_clients: u64,
     pub request_timeout_ms: u64,
+    pub runtime: WebActivityBridgeRuntimeSnapshot,
 }
 
 #[derive(Debug, Default)]
@@ -102,6 +108,7 @@ impl Default for WebActivityBridgeRuntimeState {
         Self {
             inner: Mutex::new(WebActivityBridgeRuntimeInner::default()),
             shutdown_tx,
+            lifecycle: Arc::new(Mutex::new(WebActivityBridgeLifecycle::default())),
             client_tracker: Arc::new(WebActivityClientTracker::default()),
         }
     }
@@ -115,9 +122,9 @@ impl WebActivityBridgeRuntimeState {
         deps: WebActivityBridgeRuntimeDeps<R>,
     ) -> bool {
         let mut inner = lock_inner(&self.inner);
+        let has_active_task = inner.server_task.is_some();
         let previous_settings = inner.settings.clone();
-        let should_restart =
-            should_restart_server(&previous_settings, &settings, inner.server_task.is_some());
+        let should_restart = should_restart_server(&previous_settings, &settings, has_active_task);
 
         if should_restart {
             if let Some(task) = inner.server_task.take() {
@@ -126,18 +133,25 @@ impl WebActivityBridgeRuntimeState {
             signal_shutdown(&self.shutdown_tx);
         }
 
-        if settings.enabled && (should_restart || inner.server_task.is_none()) {
-            inner.server_task = spawn_server(
+        let generation = *self.shutdown_tx.borrow();
+        let should_start = settings.enabled && (should_restart || inner.server_task.is_none());
+        if should_start {
+            lock_inner(&self.lifecycle).start(generation, settings.port);
+            inner.server_task = Some(spawn_server(
                 app,
                 self.shutdown_tx.subscribe(),
+                generation,
                 settings.clone(),
                 deps,
+                Arc::clone(&self.lifecycle),
                 Arc::clone(&self.client_tracker),
-            );
+            ));
+        } else if !settings.enabled {
+            lock_inner(&self.lifecycle).disable(generation);
         }
 
         inner.settings = settings;
-        should_restart
+        should_restart || should_start
     }
 
     pub fn current_settings(&self) -> WebActivityBridgeSettings {
@@ -145,7 +159,8 @@ impl WebActivityBridgeRuntimeState {
     }
 
     pub fn connection_stats(&self) -> WebActivityBridgeConnectionStats {
-        self.client_tracker.stats()
+        self.client_tracker
+            .stats(lock_inner(&self.lifecycle).snapshot())
     }
 }
 
@@ -156,6 +171,7 @@ pub fn inactive_connection_stats() -> WebActivityBridgeConnectionStats {
         rejected_clients: 0,
         timed_out_clients: 0,
         request_timeout_ms: WEB_ACTIVITY_BRIDGE_CLIENT_TIMEOUT_MS,
+        runtime: WebActivityBridgeRuntimeSnapshot::default(),
     }
 }
 
@@ -178,7 +194,7 @@ impl WebActivityClientTracker {
         stats.timed_out_clients = stats.timed_out_clients.saturating_add(1);
     }
 
-    fn stats(&self) -> WebActivityBridgeConnectionStats {
+    fn stats(&self, runtime: WebActivityBridgeRuntimeSnapshot) -> WebActivityBridgeConnectionStats {
         let stats = lock_inner(&self.stats);
         WebActivityBridgeConnectionStats {
             active_clients: stats.active_clients,
@@ -186,6 +202,7 @@ impl WebActivityClientTracker {
             rejected_clients: stats.rejected_clients,
             timed_out_clients: stats.timed_out_clients,
             request_timeout_ms: WEB_ACTIVITY_BRIDGE_CLIENT_TIMEOUT_MS,
+            runtime,
         }
     }
 }
@@ -217,25 +234,32 @@ fn signal_shutdown(shutdown_tx: &watch::Sender<u64>) {
 fn spawn_server<R: Runtime + 'static>(
     app: AppHandle<R>,
     mut shutdown_rx: watch::Receiver<u64>,
+    generation: u64,
     settings: WebActivityBridgeSettings,
     deps: WebActivityBridgeRuntimeDeps<R>,
+    lifecycle: Arc<Mutex<WebActivityBridgeLifecycle>>,
     client_tracker: Arc<WebActivityClientTracker>,
-) -> Option<tauri::async_runtime::JoinHandle<()>> {
-    let (address, std_listener) = match open_web_activity_bridge_listener(settings.port) {
-        Ok(listener) => listener,
-        Err(error) => {
-            eprintln!(
-                "[web-activity-bridge] failed to bind 127.0.0.1:{}: {error}",
-                settings.port
-            );
-            return None;
-        }
-    };
-
-    Some(tauri::async_runtime::spawn(async move {
+) -> tauri::async_runtime::JoinHandle<()> {
+    tauri::async_runtime::spawn(async move {
+        let Some((address, std_listener)) = acquire_listener_with_retry(
+            settings.port,
+            generation,
+            &mut shutdown_rx,
+            Arc::clone(&lifecycle),
+            WebActivityBridgeRetryPolicy::PRODUCTION,
+        )
+        .await
+        else {
+            return;
+        };
         let listener = match TcpListener::from_std(std_listener) {
             Ok(listener) => listener,
             Err(error) => {
+                lock_inner(&lifecycle).mark_failed_terminal(
+                    generation,
+                    classify_bind_error(&error),
+                    0,
+                );
                 eprintln!("[web-activity-bridge] failed to attach listener {address}: {error}");
                 return;
             }
@@ -244,6 +268,7 @@ fn spawn_server<R: Runtime + 'static>(
         loop {
             let (stream, remote_addr) = tokio::select! {
                 changed = shutdown_rx.changed() => {
+                    lock_inner(&lifecycle).mark_stopping(generation);
                     if changed.is_err() {
                         eprintln!("[web-activity-bridge] shutdown channel closed");
                     }
@@ -298,7 +323,7 @@ fn spawn_server<R: Runtime + 'static>(
                 }
             });
         }
-    }))
+    })
 }
 
 fn open_web_activity_bridge_listener(port: u16) -> io::Result<(SocketAddr, StdTcpListener)> {
@@ -306,6 +331,64 @@ fn open_web_activity_bridge_listener(port: u16) -> io::Result<(SocketAddr, StdTc
     let listener = StdTcpListener::bind(address)?;
     listener.set_nonblocking(true)?;
     Ok((address, listener))
+}
+
+async fn acquire_listener_with_retry(
+    port: u16,
+    generation: u64,
+    shutdown_rx: &mut watch::Receiver<u64>,
+    lifecycle: Arc<Mutex<WebActivityBridgeLifecycle>>,
+    retry_policy: WebActivityBridgeRetryPolicy,
+) -> Option<(SocketAddr, StdTcpListener)> {
+    let mut failure_count = 0_u32;
+    loop {
+        match open_web_activity_bridge_listener(port) {
+            Ok(listener) => {
+                lock_inner(&lifecycle).mark_listening(generation);
+                return Some(listener);
+            }
+            Err(error) => {
+                failure_count = failure_count.saturating_add(1);
+                let category = classify_bind_error(&error);
+                if !is_retryable_bind_error(category) || !retry_policy.should_retry(failure_count) {
+                    lock_inner(&lifecycle).mark_failed_terminal(
+                        generation,
+                        category,
+                        failure_count,
+                    );
+                    eprintln!(
+                        "[web-activity-bridge] bind failed terminally on 127.0.0.1:{port}: {category:?}"
+                    );
+                    return None;
+                }
+
+                let retry_delay = retry_policy.delay(port, failure_count);
+                let next_retry_at_ms = unix_now_ms().saturating_add(retry_delay.as_millis() as u64);
+                lock_inner(&lifecycle).mark_retry_wait(
+                    generation,
+                    category,
+                    failure_count,
+                    next_retry_at_ms,
+                );
+                eprintln!(
+                    "[web-activity-bridge] bind failed on 127.0.0.1:{port}: {category:?}; retry {failure_count}"
+                );
+
+                tokio::select! {
+                    _ = sleep(retry_delay) => {
+                        lock_inner(&lifecycle).mark_starting_retry(generation);
+                    }
+                    changed = shutdown_rx.changed() => {
+                        lock_inner(&lifecycle).mark_stopping(generation);
+                        if changed.is_err() {
+                            eprintln!("[web-activity-bridge] shutdown channel closed");
+                        }
+                        return None;
+                    }
+                }
+            }
+        }
+    }
 }
 
 async fn handle_client<R: Runtime>(
@@ -492,6 +575,29 @@ fn lock_inner<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::platform::web_activity_bridge_lifecycle::{
+        WebActivityBridgeErrorCategory, WebActivityBridgeRuntimeStatus,
+    };
+
+    fn tracker_stats(tracker: &WebActivityClientTracker) -> WebActivityBridgeConnectionStats {
+        tracker.stats(WebActivityBridgeRuntimeSnapshot::default())
+    }
+
+    async fn wait_for_lifecycle_status(
+        lifecycle: &Arc<Mutex<WebActivityBridgeLifecycle>>,
+        expected: WebActivityBridgeRuntimeStatus,
+    ) {
+        timeout(Duration::from_millis(500), async {
+            loop {
+                if lock_inner(lifecycle).snapshot().status == expected {
+                    return;
+                }
+                sleep(Duration::from_millis(2)).await;
+            }
+        })
+        .await
+        .expect("lifecycle status should settle");
+    }
 
     #[test]
     fn listener_bind_can_recover_after_occupied_port_is_released() {
@@ -507,6 +613,117 @@ mod tests {
     }
 
     #[test]
+    fn retrying_listener_recovers_without_runtime_restart() {
+        tauri::async_runtime::block_on(async {
+            let (_address, occupied_listener) = open_web_activity_bridge_listener(0).unwrap();
+            let port = occupied_listener.local_addr().unwrap().port();
+            let (_shutdown_tx, mut shutdown_rx) = watch::channel(1);
+            let lifecycle = Arc::new(Mutex::new(WebActivityBridgeLifecycle::default()));
+            lock_inner(&lifecycle).start(1, port);
+            let task_lifecycle = Arc::clone(&lifecycle);
+
+            let acquire_task = tauri::async_runtime::spawn(async move {
+                acquire_listener_with_retry(
+                    port,
+                    1,
+                    &mut shutdown_rx,
+                    task_lifecycle,
+                    WebActivityBridgeRetryPolicy::for_tests(10, 5),
+                )
+                .await
+            });
+
+            wait_for_lifecycle_status(&lifecycle, WebActivityBridgeRuntimeStatus::RetryWait).await;
+            drop(occupied_listener);
+
+            let recovered = timeout(Duration::from_millis(500), acquire_task)
+                .await
+                .expect("listener retry should finish")
+                .expect("listener retry task should not panic")
+                .expect("listener should recover");
+            assert_eq!(recovered.1.local_addr().unwrap().port(), port);
+            assert_eq!(
+                lock_inner(&lifecycle).snapshot(),
+                WebActivityBridgeRuntimeSnapshot {
+                    status: WebActivityBridgeRuntimeStatus::Listening,
+                    port: Some(port),
+                    last_error_category: None,
+                    retry_count: 0,
+                    next_retry_at_ms: None,
+                }
+            );
+        });
+    }
+
+    #[test]
+    fn shutdown_cancels_pending_listener_retry() {
+        tauri::async_runtime::block_on(async {
+            let (_address, occupied_listener) = open_web_activity_bridge_listener(0).unwrap();
+            let port = occupied_listener.local_addr().unwrap().port();
+            let (shutdown_tx, mut shutdown_rx) = watch::channel(1);
+            let lifecycle = Arc::new(Mutex::new(WebActivityBridgeLifecycle::default()));
+            lock_inner(&lifecycle).start(1, port);
+            let task_lifecycle = Arc::clone(&lifecycle);
+
+            let acquire_task = tauri::async_runtime::spawn(async move {
+                acquire_listener_with_retry(
+                    port,
+                    1,
+                    &mut shutdown_rx,
+                    task_lifecycle,
+                    WebActivityBridgeRetryPolicy::for_tests(250, 5),
+                )
+                .await
+            });
+
+            wait_for_lifecycle_status(&lifecycle, WebActivityBridgeRuntimeStatus::RetryWait).await;
+            signal_shutdown(&shutdown_tx);
+
+            assert!(timeout(Duration::from_millis(100), acquire_task)
+                .await
+                .expect("shutdown should cancel retry sleep")
+                .expect("listener retry task should not panic")
+                .is_none());
+            assert_eq!(
+                lock_inner(&lifecycle).snapshot().status,
+                WebActivityBridgeRuntimeStatus::Stopping
+            );
+        });
+    }
+
+    #[test]
+    fn retry_limit_enters_terminal_state_without_busy_loop() {
+        tauri::async_runtime::block_on(async {
+            let (_address, occupied_listener) = open_web_activity_bridge_listener(0).unwrap();
+            let port = occupied_listener.local_addr().unwrap().port();
+            let (_shutdown_tx, mut shutdown_rx) = watch::channel(1);
+            let lifecycle = Arc::new(Mutex::new(WebActivityBridgeLifecycle::default()));
+            lock_inner(&lifecycle).start(1, port);
+
+            let result = acquire_listener_with_retry(
+                port,
+                1,
+                &mut shutdown_rx,
+                Arc::clone(&lifecycle),
+                WebActivityBridgeRetryPolicy::for_tests(5, 3),
+            )
+            .await;
+
+            assert!(result.is_none());
+            let snapshot = lock_inner(&lifecycle).snapshot();
+            assert_eq!(
+                snapshot.status,
+                WebActivityBridgeRuntimeStatus::FailedTerminal
+            );
+            assert_eq!(snapshot.retry_count, 3);
+            assert_eq!(
+                snapshot.last_error_category,
+                Some(WebActivityBridgeErrorCategory::AddressInUse)
+            );
+        });
+    }
+
+    #[test]
     fn token_rotation_requires_server_restart() {
         let previous = WebActivityBridgeSettings {
             enabled: true,
@@ -519,6 +736,17 @@ mod tests {
         };
 
         assert!(should_restart_server(&previous, &next, true));
+    }
+
+    #[test]
+    fn identical_updates_keep_the_single_existing_listener() {
+        let settings = WebActivityBridgeSettings {
+            enabled: true,
+            port: 12_345,
+            token: "stable-token".to_string(),
+        };
+
+        assert!(!should_restart_server(&settings, &settings, true));
     }
 
     #[test]
@@ -547,16 +775,16 @@ mod tests {
         }
 
         assert_eq!(
-            tracker.stats().active_clients,
+            tracker_stats(&tracker).active_clients,
             WEB_ACTIVITY_BRIDGE_MAX_ACTIVE_CLIENTS
         );
         assert!(tracker.try_start().is_none());
-        assert_eq!(tracker.stats().rejected_clients, 1);
+        assert_eq!(tracker_stats(&tracker).rejected_clients, 1);
 
         guards.pop();
 
         assert_eq!(
-            tracker.stats().active_clients,
+            tracker_stats(&tracker).active_clients,
             WEB_ACTIVITY_BRIDGE_MAX_ACTIVE_CLIENTS - 1
         );
         assert!(tracker.try_start().is_some());
@@ -569,9 +797,9 @@ mod tests {
         tracker.mark_timeout();
         tracker.mark_timeout();
 
-        assert_eq!(tracker.stats().timed_out_clients, 2);
+        assert_eq!(tracker_stats(&tracker).timed_out_clients, 2);
         assert_eq!(
-            tracker.stats().request_timeout_ms,
+            tracker_stats(&tracker).request_timeout_ms,
             WEB_ACTIVITY_BRIDGE_CLIENT_TIMEOUT_MS
         );
     }

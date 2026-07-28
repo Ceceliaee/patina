@@ -37,12 +37,38 @@ interface RawUpdaterRetainedPackageStats {
   size_bytes: number | null;
 }
 
+type WebActivityBridgeRuntimeStatus =
+  | "disabled"
+  | "starting"
+  | "listening"
+  | "retry-wait"
+  | "failed-terminal"
+  | "stopping";
+
+type WebActivityBridgeErrorCategory =
+  | "address-in-use"
+  | "address-unavailable"
+  | "permission-denied"
+  | "invalid-input"
+  | "resource-exhausted"
+  | "interrupted"
+  | "other";
+
+interface RawWebActivityBridgeRuntime {
+  status: WebActivityBridgeRuntimeStatus;
+  port: number | null;
+  last_error_category: WebActivityBridgeErrorCategory | null;
+  retry_count: number;
+  next_retry_at_ms: number | null;
+}
+
 interface RawWebActivityBridgeStats {
   active_clients: number;
   active_client_limit: number;
   rejected_clients: number;
   timed_out_clients: number;
   request_timeout_ms: number;
+  runtime: RawWebActivityBridgeRuntime;
 }
 
 interface RawResourceDiagnosticsSnapshot {
@@ -97,6 +123,13 @@ export interface ResourceDiagnosticsSnapshot {
     rejectedClients: number;
     timedOutClients: number;
     requestTimeoutMs: number;
+    runtime: {
+      status: WebActivityBridgeRuntimeStatus;
+      port: number | null;
+      lastErrorCategory: WebActivityBridgeErrorCategory | null;
+      retryCount: number;
+      nextRetryAtMs: number | null;
+    };
   };
 }
 
@@ -188,7 +221,41 @@ function isRawWebActivityBridgeStats(value: unknown): value is RawWebActivityBri
     && isNumber(record.active_client_limit)
     && isNumber(record.rejected_clients)
     && isNumber(record.timed_out_clients)
-    && isNumber(record.request_timeout_ms);
+    && isNumber(record.request_timeout_ms)
+    && isRawWebActivityBridgeRuntime(record.runtime);
+}
+
+function isRawWebActivityBridgeRuntime(value: unknown): value is RawWebActivityBridgeRuntime {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  const statuses: WebActivityBridgeRuntimeStatus[] = [
+    "disabled",
+    "starting",
+    "listening",
+    "retry-wait",
+    "failed-terminal",
+    "stopping",
+  ];
+  const errorCategories: WebActivityBridgeErrorCategory[] = [
+    "address-in-use",
+    "address-unavailable",
+    "permission-denied",
+    "invalid-input",
+    "resource-exhausted",
+    "interrupted",
+    "other",
+  ];
+  return statuses.includes(record.status as WebActivityBridgeRuntimeStatus)
+    && isNullableNumber(record.port)
+    && (
+      record.last_error_category === null
+      || errorCategories.includes(record.last_error_category as WebActivityBridgeErrorCategory)
+    )
+    && isNumber(record.retry_count)
+    && isNullableNumber(record.next_retry_at_ms);
 }
 
 function isRawResourceDiagnostics(value: unknown): value is RawResourceDiagnosticsSnapshot {
@@ -249,6 +316,13 @@ function mapRawResourceDiagnostics(raw: RawResourceDiagnosticsSnapshot): Resourc
       rejectedClients: raw.web_activity_bridge.rejected_clients,
       timedOutClients: raw.web_activity_bridge.timed_out_clients,
       requestTimeoutMs: raw.web_activity_bridge.request_timeout_ms,
+      runtime: {
+        status: raw.web_activity_bridge.runtime.status,
+        port: raw.web_activity_bridge.runtime.port,
+        lastErrorCategory: raw.web_activity_bridge.runtime.last_error_category,
+        retryCount: raw.web_activity_bridge.runtime.retry_count,
+        nextRetryAtMs: raw.web_activity_bridge.runtime.next_retry_at_ms,
+      },
     },
   };
 }
