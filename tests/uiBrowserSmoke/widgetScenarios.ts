@@ -99,7 +99,7 @@ async function waitForWidgetState(
   await waitForExpression(
     context.client,
     context.sessionId,
-    `document.documentElement.dataset.windowLabel === "widget"
+    `document.documentElement?.dataset.windowLabel === "widget"
       && document.querySelector(".widget-shell")?.classList.contains(${JSON.stringify(shellStateClass)})
       && document.querySelector(".widget-shell")?.classList.contains(${JSON.stringify(`widget-shell-${side}`)})
       && ${objectExpectation}`,

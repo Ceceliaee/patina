@@ -293,6 +293,43 @@ function tauriStubFor(path: string) {
             dirtyRangeCount: 0,
           };
         }
+        if (command === "cmd_get_web_activity_aggregate_range") {
+          const delayMs = Number(globalThis.__PATINA_WEB_ACTIVITY_QUERY_DELAY_MS ?? 0);
+          if (Number.isFinite(delayMs) && delayMs > 0) {
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+          }
+          if (globalThis.__PATINA_WEB_ACTIVITY_QUERY_FAILURE === true) {
+            throw new Error("Injected web activity aggregate failure");
+          }
+          const boundaries = Array.isArray(payload.bucketBoundariesMs)
+            ? payload.bucketBoundariesMs.map(Number)
+            : [];
+          const domains = Array.isArray(payload.normalizedDomains)
+            ? payload.normalizedDomains.map(String)
+            : payload.normalizedDomain
+              ? [String(payload.normalizedDomain)]
+              : ["docs.example.com", "research.example"];
+          const records = [];
+          for (let index = 0; index < Math.min(4, boundaries.length - 1); index += 1) {
+            for (const [domainIndex, normalizedDomain] of domains.entries()) {
+              records.push({
+                normalizedDomain,
+                bucketStartMs: boundaries[index],
+                durationMs: Math.min(
+                  Math.max(0, boundaries[index + 1] - boundaries[index]),
+                  (domainIndex + 1) * (index + 1) * 5 * 60 * 1000,
+                ),
+              });
+            }
+          }
+          return {
+            records,
+            domainCoverage: domains.map((normalizedDomain) => ({
+              normalizedDomain,
+              earliestRecordedStartMs: Number(payload.startMs),
+            })),
+          };
+        }
         if (command === "cmd_list_import_batches") {
           return [...globalThis.__PATINA_IMPORT_BATCHES];
         }
@@ -422,8 +459,20 @@ function tauriStubFor(path: string) {
 
   if (path === "@tauri-apps/api/event") {
     return `
-      export async function listen() {
-        return () => {};
+      const listenersByEvent = new Map();
+      globalThis.__PATINA_EMIT_TAURI_EVENT = (eventName, payload) => {
+        for (const listener of listenersByEvent.get(eventName) ?? []) {
+          listener({ event: eventName, id: 0, payload });
+        }
+      };
+      export async function listen(eventName, listener) {
+        const listeners = listenersByEvent.get(eventName) ?? new Set();
+        listeners.add(listener);
+        listenersByEvent.set(eventName, listeners);
+        return () => {
+          listeners.delete(listener);
+          if (listeners.size === 0) listenersByEvent.delete(eventName);
+        };
       }
       export async function emit() {}
     `;

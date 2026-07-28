@@ -35,6 +35,7 @@ let client: CdpConnection | null = null;
 const consoleErrors: string[] = [];
 let primaryError: unknown = null;
 const cleanupErrors: unknown[] = [];
+const dataOnly = process.argv.includes("--data-only");
 
 const server = await createServer({
   configFile: "vite.config.ts",
@@ -105,25 +106,29 @@ try {
 
   await runStartupScenarios(smokeContext);
 
-  await runAboutScenarios(smokeContext);
+  if (dataOnly) {
+    await runDataScenarios(smokeContext, { continuityOnly: true });
+  } else {
+    await runAboutScenarios(smokeContext);
 
-  await runToolsScenarios(smokeContext);
+    await runToolsScenarios(smokeContext);
 
-  await runNavigationScenarios(smokeContext);
+    await runNavigationScenarios(smokeContext);
 
-  await runSettingsScenarios(smokeContext);
+    await runSettingsScenarios(smokeContext);
 
-  await runClassificationScenarios(smokeContext);
+    await runClassificationScenarios(smokeContext);
 
-  await runDashboardScenarios(smokeContext);
+    await runDashboardScenarios(smokeContext);
 
-  await runHistoryScenarios(smokeContext);
+    await runHistoryScenarios(smokeContext);
 
-  await runDataScenarios(smokeContext);
+    await runDataScenarios(smokeContext);
 
-  await runLocaleScenarios(smokeContext);
+    await runLocaleScenarios(smokeContext);
 
-  await runWidgetScenarios(smokeContext);
+    await runWidgetScenarios(smokeContext);
+  }
 
   assert.deepEqual(consoleErrors, []);
 } catch (error) {

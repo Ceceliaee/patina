@@ -3,8 +3,11 @@ import { COPY } from "../../src/shared/copy/index.ts";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import { evaluate, jsonString, waitForExpression } from "./browserHarness.ts";
 
-export async function runDataScenarios(context: BrowserSmokeContext) {
-  const { client, sessionId, runTest } = context;
+export async function runDataScenarios(
+  context: BrowserSmokeContext,
+  options: { continuityOnly?: boolean } = {},
+) {
+  const { appUrl, client, sessionId, runTest } = context;
 
   await runTest("data trend range picker applies custom ranges and resets to last seven days", async () => {
     await client!.command("Emulation.setDeviceMetricsOverride", {
@@ -304,6 +307,730 @@ export async function runDataScenarios(context: BrowserSmokeContext) {
     await waitForExpression(client!, sessionId, `document.querySelectorAll(".data-trend-range-trigger")[1]?.textContent?.trim() === "1天"`);
   });
 
+  await runTest("data web trends keep their geometry and content through slow refreshes", async () => {
+    await evaluate(client!, sessionId, `
+      (() => {
+        globalThis.__PATINA_INVOKED_COMMANDS = [];
+        globalThis.__PATINA_WEB_ACTIVITY_QUERY_DELAY_MS = 800;
+        globalThis.__PATINA_WEB_ACTIVITY_QUERY_FAILURE = false;
+        const next = document.querySelector(
+          ".data-app-panel .data-trend-range-control .qp-range-control-arrow:last-child",
+        );
+        next?.click();
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll(".data-trend-range-trigger")[1]?.textContent?.trim() === "近 7 天"`,
+      45_000,
+      "app trend range reset before web continuity test",
+    );
+    const initialPanelHeight = Number(await evaluate(
+      client!,
+      sessionId,
+      `document.querySelector(".data-app-panel")?.getBoundingClientRect().height ?? 0`,
+    ));
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const group = document.querySelector('[aria-label="选择时间去向类型"]');
+          const web = Array.from(group?.querySelectorAll("button") ?? [])
+            .find((node) => node.textContent?.trim() === "网页");
+          if (!web) return false;
+          web.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Array.from(document.querySelectorAll('[aria-label="选择时间去向类型"] button'))
+        .some((node) => node.textContent?.trim() === "网页" && node.getAttribute("aria-pressed") === "true")`,
+    );
+    const pendingSwitchState = JSON.parse(String(await evaluate(client!, sessionId, `
+      JSON.stringify({
+        title: document.querySelector(".data-app-panel h3")?.textContent?.trim() ?? "",
+        hasAppList: Boolean(document.querySelector('[aria-label="应用列表"]')),
+        hasWebInitialStatus: Boolean(document.querySelector(".data-web-initial-status")),
+        hasBlockingLoadingCopy:
+          document.querySelector(".data-app-panel")?.textContent?.includes("正在加载网页趋势") ?? false,
+        panelHeight: document.querySelector(".data-app-panel")?.getBoundingClientRect().height ?? 0,
+      })
+    `))) as {
+      title: string;
+      hasAppList: boolean;
+      hasWebInitialStatus: boolean;
+      hasBlockingLoadingCopy: boolean;
+      panelHeight: number;
+    };
+    assert.equal(pendingSwitchState.title, "应用趋势");
+    assert.equal(pendingSwitchState.hasAppList, true);
+    assert.equal(pendingSwitchState.hasWebInitialStatus, false);
+    assert.equal(pendingSwitchState.hasBlockingLoadingCopy, false);
+    assert.ok(
+      Math.abs(pendingSwitchState.panelHeight - initialPanelHeight) <= 1,
+      `pending web switch height ${pendingSwitchState.panelHeight} should match ready height ${initialPanelHeight}`,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-app-panel h3")?.textContent?.trim() === "网页趋势"
+        && document.querySelector('[aria-label="网页列表"]')?.textContent?.includes("docs.example.com")`,
+      45_000,
+    );
+
+    const loadedPanelHeight = Number(await evaluate(
+      client!,
+      sessionId,
+      `document.querySelector(".data-app-panel")?.getBoundingClientRect().height ?? 0`,
+    ));
+    const webCommandsBeforeRuntimeRefresh = Number(await evaluate(
+      client!,
+      sessionId,
+      `globalThis.__PATINA_INVOKED_COMMANDS
+        .filter((entry) => entry.command === "cmd_get_web_activity_aggregate_range").length`,
+    ));
+    await evaluate(client!, sessionId, `
+      globalThis.__PATINA_EMIT_TAURI_EVENT?.("tracking-data-changed", {
+        reason: "session-transition",
+        changed_at_ms: Date.now(),
+      })
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `globalThis.__PATINA_INVOKED_COMMANDS
+        .filter((entry) => entry.command === "cmd_get_web_activity_aggregate_range").length
+        > ${webCommandsBeforeRuntimeRefresh}`,
+      45_000,
+      "tracking refresh starts a new web request",
+    );
+    const runtimeRefreshFrames = JSON.parse(String(await evaluate(client!, sessionId, `
+      new Promise((resolve) => {
+        const samples = [];
+        const sample = () => {
+          const panel = document.querySelector(".data-app-panel");
+          const grid = panel?.querySelector(".data-app-grid");
+          samples.push({
+            title: panel?.querySelector("h3")?.textContent?.trim() ?? "",
+            contentVisible: Boolean(
+              grid
+              && panel?.querySelector('[aria-label="网页列表"]')
+              && panel?.querySelectorAll(".data-app-metric").length === 4
+              && panel?.querySelector(".data-app-chart")
+              && !grid.classList.contains("invisible")
+            ),
+            panelHeight: panel?.getBoundingClientRect().height ?? 0,
+          });
+          if (samples.length >= 20) {
+            resolve(JSON.stringify(samples));
+            return;
+          }
+          requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+      })
+    `))) as Array<{
+      title: string;
+      contentVisible: boolean;
+      panelHeight: number;
+    }>;
+    assert.ok(runtimeRefreshFrames.every((sample) => sample.title === "网页趋势"));
+    assert.ok(runtimeRefreshFrames.every((sample) => sample.contentVisible));
+    assert.ok(runtimeRefreshFrames.every(
+      (sample) => Math.abs(sample.panelHeight - loadedPanelHeight) <= 1,
+    ));
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-app-grid")?.getAttribute("aria-busy") !== "true"`,
+      45_000,
+      "tracking refresh completes without hiding web content",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const next = document.querySelector(
+            ".data-app-panel .data-trend-range-control .qp-range-control-arrow:last-child",
+          );
+          if (!(next instanceof HTMLButtonElement)) return false;
+          next.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    const frameSamples = JSON.parse(String(await evaluate(client!, sessionId, `
+      new Promise((resolve) => {
+        const samples = [];
+        const sample = () => {
+          const panel = document.querySelector(".data-app-panel");
+          const grid = panel?.querySelector(".data-app-grid");
+          const list = panel?.querySelector('[aria-label="网页列表"]');
+          const metrics = panel?.querySelectorAll(".data-app-metric");
+          const chart = panel?.querySelector(".data-app-chart");
+          samples.push({
+            busy: grid?.getAttribute("aria-busy") === "true",
+            contentVisible: Boolean(
+              grid
+              && list
+              && metrics?.length === 4
+              && chart
+              && !grid.classList.contains("invisible")
+              && chart.getBoundingClientRect().height > 0
+            ),
+            panelHeight: panel?.getBoundingClientRect().height ?? 0,
+          });
+          if (samples.length >= 15) {
+            resolve(JSON.stringify(samples));
+            return;
+          }
+          requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+      })
+    `))) as Array<{
+      busy: boolean;
+      contentVisible: boolean;
+      panelHeight: number;
+    }>;
+    assert.equal(frameSamples.length, 15);
+    assert.equal(frameSamples.filter((sample) => !sample.contentVisible).length, 0);
+    assert.ok(frameSamples.some((sample) => sample.busy));
+    assert.ok(frameSamples.every(
+      (sample) => Math.abs(sample.panelHeight - loadedPanelHeight) <= 1,
+    ));
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-app-panel")?.textContent?.includes("更新中")`,
+      45_000,
+      "delayed web trend refresh status",
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-app-grid")?.getAttribute("aria-busy") !== "true"
+        && !document.querySelector(".data-app-panel")?.textContent?.includes("更新中")`,
+      45_000,
+      "web trend refresh completion",
+    );
+
+    await evaluate(client!, sessionId, `
+      (() => {
+        globalThis.__PATINA_WEB_ACTIVITY_QUERY_DELAY_MS = 800;
+        document.querySelector(
+          ".data-app-panel .data-trend-range-control .qp-range-control-arrow:last-child",
+        )?.click();
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll(".data-trend-range-trigger")[1]?.textContent?.trim() === "近一年"`,
+      45_000,
+      "slow web trend request starts for a different range",
+    );
+    await evaluate(client!, sessionId, `
+      document.querySelector(
+        ".data-app-panel .data-trend-range-control .qp-range-control-arrow:first-child",
+      )?.click()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll(".data-trend-range-trigger")[1]?.textContent?.trim() === "近 30 天"`,
+      45_000,
+      "web trend returns to the cached range",
+    );
+    const raceFrameSamples = JSON.parse(String(await evaluate(client!, sessionId, `
+      new Promise((resolve) => {
+        const samples = [];
+        const sample = () => {
+          const grid = document.querySelector(".data-app-panel .data-app-grid");
+          samples.push(Boolean(
+            grid
+            && document.querySelector('[aria-label="网页列表"]')
+            && document.querySelectorAll(".data-app-panel .data-app-metric").length === 4
+            && document.querySelector(".data-app-panel .data-app-chart")
+          ));
+          if (samples.length >= 15) {
+            resolve(JSON.stringify(samples));
+            return;
+          }
+          requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+      })
+    `))) as boolean[];
+    assert.deepEqual(raceFrameSamples, Array.from({ length: 15 }, () => true));
+    await evaluate(client!, sessionId, `new Promise((resolve) => setTimeout(resolve, 900))`);
+    assert.deepEqual(
+      JSON.parse(String(await evaluate(client!, sessionId, `
+        JSON.stringify({
+          range: document.querySelectorAll(".data-trend-range-trigger")[1]?.textContent?.trim(),
+          busy: document.querySelector(".data-app-panel .data-app-grid")?.getAttribute("aria-busy"),
+          hasContent: Boolean(document.querySelector('[aria-label="网页列表"]')),
+        })
+      `))),
+      {
+        range: "近 30 天",
+        busy: "false",
+        hasContent: true,
+      },
+      "the late one-year request must not replace the restored 30-day result",
+    );
+
+    const webCommandCount = Number(await evaluate(
+      client!,
+      sessionId,
+      `globalThis.__PATINA_INVOKED_COMMANDS
+        .filter((entry) => entry.command === "cmd_get_web_activity_aggregate_range").length`,
+    ));
+    await evaluate(client!, sessionId, `
+      (() => {
+        const group = document.querySelector('[aria-label="选择时间去向类型"]');
+        Array.from(group?.querySelectorAll("button") ?? [])
+          .find((node) => node.textContent?.trim() === "应用")?.click();
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-app-panel h3")?.textContent?.trim() === "应用趋势"`,
+    );
+    await evaluate(client!, sessionId, `
+      (() => {
+        const group = document.querySelector('[aria-label="选择时间去向类型"]');
+        Array.from(group?.querySelectorAll("button") ?? [])
+          .find((node) => node.textContent?.trim() === "网页")?.click();
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-app-panel h3")?.textContent?.trim() === "网页趋势"`,
+    );
+    assert.deepEqual(
+      JSON.parse(String(await evaluate(client!, sessionId, `
+        JSON.stringify({
+          hasContent: Boolean(document.querySelector('[aria-label="网页列表"]')),
+          hasInvisibleBody: Boolean(document.querySelector(".data-app-panel .invisible")),
+          webCommandCount: globalThis.__PATINA_INVOKED_COMMANDS
+            .filter((entry) => entry.command === "cmd_get_web_activity_aggregate_range").length,
+        })
+      `))),
+      {
+        hasContent: true,
+        hasInvisibleBody: false,
+        webCommandCount,
+      },
+    );
+    await evaluate(
+      client!,
+      sessionId,
+      `new Promise((resolve) => setTimeout(resolve, 320))`,
+    );
+    assert.deepEqual(
+      JSON.parse(String(await evaluate(client!, sessionId, `
+        JSON.stringify({
+          busy: document.querySelector(".data-app-grid")?.getAttribute("aria-busy"),
+          hasUpdatingStatus: document.querySelector(".data-app-panel")
+            ?.textContent?.includes("更新中") ?? false,
+        })
+      `))),
+      {
+        busy: "false",
+        hasUpdatingStatus: false,
+      },
+      "a cache-speed refresh must finish before the delayed status becomes visible",
+    );
+    await evaluate(client!, sessionId, `
+      (() => {
+        globalThis.__PATINA_WEB_ACTIVITY_QUERY_DELAY_MS = 0;
+        globalThis.__PATINA_WEB_ACTIVITY_QUERY_FAILURE = false;
+        const group = document.querySelector('[aria-label="选择时间去向类型"]');
+        Array.from(group?.querySelectorAll("button") ?? [])
+          .find((node) => node.textContent?.trim() === "应用")?.click();
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-app-panel h3")?.textContent?.trim() === "应用趋势"`,
+    );
+  });
+
+  await runTest("data reuses the destination panel for web trends and its compact annual heatmap", async () => {
+    await evaluate(client!, sessionId, `globalThis.__PATINA_INVOKED_COMMANDS = []`);
+    assert.equal(
+      await evaluate(client!, sessionId, `globalThis.__PATINA_INVOKED_COMMANDS.some((entry) => entry.command === "cmd_get_web_activity_aggregate_range")`),
+      false,
+      "the default app view must not issue a web aggregate query",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const group = document.querySelector('[aria-label="选择时间去向类型"]');
+          const web = Array.from(group?.querySelectorAll("button") ?? [])
+            .find((node) => node.textContent?.trim() === "网页");
+          if (!web) return false;
+          web.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-app-panel h3")?.textContent?.trim() === "网页趋势"`,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector('[aria-label="网页列表"]')?.textContent?.includes("docs.example.com")`,
+    );
+    const webState = JSON.parse(String(await evaluate(client!, sessionId, `
+      (() => {
+        const grid = document.querySelector(".data-dashboard-grid");
+        const directPanels = grid ? Array.from(grid.children) : [];
+        const mode = document.querySelector('[aria-label="选择时间去向类型"]');
+        const list = document.querySelector('[aria-label="网页列表"]');
+        const headerActions = document.querySelector(".data-app-header-actions");
+        return JSON.stringify({
+          directChildren: directPanels.length,
+          headerOrder: Array.from(headerActions?.children ?? []).map((node) => (
+            node.classList.contains("data-app-selected-status")
+              ? "selected"
+              : node.classList.contains("data-destination-mode")
+                ? "mode"
+                : node.classList.contains("data-trend-range-control")
+                  ? "range"
+                  : "unknown"
+          )),
+          modePressed: mode?.querySelector('[aria-pressed="true"]')?.textContent?.trim() ?? null,
+          domains: Array.from(list?.querySelectorAll("button") ?? []).map((node) => node.textContent?.trim()),
+          hasHeatmapScope: Boolean(document.querySelector('[aria-label="选择热力图对象"]')),
+          destinationHeatmapTitle: document.querySelector(".data-heatmap-panel-compact h3")
+            ?.textContent?.trim() ?? null,
+          destinationHeatmapHasSubtitle: Boolean(
+            document.querySelector(".data-heatmap-panel-compact p"),
+          ),
+          destinationHeatmapCells: document.querySelectorAll(
+            ".data-heatmap-panel-compact .data-heatmap-cell",
+          ).length,
+          destinationHeatmapTooltips: document.querySelectorAll(
+            ".data-heatmap-panel-compact .data-heatmap-cell[data-heatmap-tooltip]",
+          ).length,
+          destinationHeatmapNotRecordedTooltips: Array.from(document.querySelectorAll(
+            ".data-heatmap-panel-compact .data-heatmap-cell[data-heatmap-tooltip]",
+          )).filter((cell) => cell.getAttribute("data-heatmap-tooltip")?.includes("未记录")).length,
+          destinationHeatmapZeroTooltips: Array.from(document.querySelectorAll(
+            ".data-heatmap-panel-compact .data-heatmap-cell[data-heatmap-tooltip]",
+          )).filter((cell) => cell.getAttribute("data-heatmap-tooltip")?.endsWith("0m")).length,
+        });
+      })()
+    `))) as {
+      directChildren: number;
+      headerOrder: string[];
+      modePressed: string | null;
+      domains: string[];
+      hasHeatmapScope: boolean;
+      destinationHeatmapTitle: string | null;
+      destinationHeatmapHasSubtitle: boolean;
+      destinationHeatmapCells: number;
+      destinationHeatmapTooltips: number;
+      destinationHeatmapNotRecordedTooltips: number;
+      destinationHeatmapZeroTooltips: number;
+    };
+    assert.equal(webState.directChildren, 2);
+    assert.deepEqual(webState.headerOrder, ["selected", "mode", "range"]);
+    assert.equal(webState.modePressed, "网页");
+    assert.equal(webState.domains.length, 2);
+    assert.equal(webState.hasHeatmapScope, false);
+    assert.equal(webState.destinationHeatmapTitle, "网页热力图");
+    assert.equal(webState.destinationHeatmapHasSubtitle, false);
+    assert.ok(webState.destinationHeatmapCells > 0);
+    assert.ok(webState.destinationHeatmapTooltips > 0);
+    assert.equal(webState.destinationHeatmapNotRecordedTooltips, 0);
+    assert.ok(webState.destinationHeatmapZeroTooltips > 0);
+
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const input = document.querySelector('input[aria-label="搜索网页"]');
+          if (!(input instanceof HTMLInputElement)) return false;
+          const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+          setter?.call(input, "research");
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll('[aria-label="网页列表"] button').length === 1
+        && document.querySelector('[aria-label="网页列表"]')?.textContent?.includes("research.example")`,
+    );
+    await evaluate(client!, sessionId, `
+      (() => {
+        const input = document.querySelector('input[aria-label="搜索网页"]');
+        if (!(input instanceof HTMLInputElement)) return;
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        setter?.call(input, "");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll('[aria-label="网页列表"] button').length === 2`,
+    );
+
+    await evaluate(client!, sessionId, `
+      (() => {
+        const group = document.querySelector('[aria-label="选择时间去向类型"]');
+        const app = Array.from(group?.querySelectorAll("button") ?? [])
+          .find((node) => node.textContent?.trim() === "应用");
+        app?.click();
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-app-panel h3")?.textContent?.trim() === "应用趋势"`,
+    );
+  });
+
+  await runTest("data destination selection follows Ctrl multi-select and keeps each mode in session", async () => {
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll('[aria-label="应用列表"] button').length >= 2`,
+      45_000,
+      "app comparison options",
+    );
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const buttons = document.querySelectorAll('[aria-label="应用列表"] button');
+        if (!(buttons[1] instanceof HTMLButtonElement)) return false;
+        buttons[1].dispatchEvent(new MouseEvent("click", { bubbles: true, ctrlKey: true }));
+        return true;
+      })()
+    `), true);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll('[aria-label="应用列表"] button[aria-pressed="true"]').length === 2
+        && document.querySelectorAll(".data-app-selected-icon").length === 2
+        && document.querySelectorAll(".data-app-chart .recharts-area-curve").length === 2
+        && Array.from(document.querySelectorAll(
+          '[aria-label="应用列表"] button[aria-pressed="true"]',
+        )).every((button) => getComputedStyle(button, "::before").content === "none")
+        && document.querySelector(".data-app-legend") === null
+        && Array.from(document.querySelectorAll(
+          ".data-heatmap-panel-compact [data-heatmap-tooltip]",
+        )).every((cell) => !cell.getAttribute("data-heatmap-tooltip")?.includes("个对象"))`,
+      45_000,
+      "two selected app series",
+    );
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const selectedKeys = Array.from(
+          document.querySelectorAll('[aria-label="应用列表"] button[aria-pressed="true"]'),
+        ).map((button) => button.getAttribute("data-destination-key"));
+        const iconKeys = Array.from(document.querySelectorAll(".data-app-selected-icon"))
+          .map((icon) => icon.getAttribute("data-selection-key"));
+        return JSON.stringify(iconKeys) === JSON.stringify(selectedKeys);
+      })()
+    `), true);
+
+    await evaluate(client!, sessionId, `
+      (() => {
+        const input = document.querySelector('input[aria-label="搜索应用"]');
+        const selected = document.querySelectorAll('[aria-label="应用列表"] button[aria-pressed="true"]')[0];
+        if (!(input instanceof HTMLInputElement) || !(selected instanceof HTMLButtonElement)) return;
+        const name = selected.querySelector(".data-app-option-name")?.textContent ?? "";
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        setter?.call(input, name);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll(".data-app-selected-icon").length === 2
+        && document.querySelectorAll(".data-app-chart .recharts-area-curve").length === 2
+        && document.querySelectorAll('[aria-label="应用列表"] button').length === 1`,
+      45_000,
+      "search keeps hidden app selection",
+    );
+    await evaluate(client!, sessionId, `
+      (() => {
+        const input = document.querySelector('input[aria-label="搜索应用"]');
+        if (!(input instanceof HTMLInputElement)) return;
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        setter?.call(input, "");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll('[aria-label="应用列表"] button').length >= 2`,
+    );
+    await evaluate(client!, sessionId, `
+      document.querySelectorAll('[aria-label="应用列表"] button')[1]?.click()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll('[aria-label="应用列表"] button[aria-pressed="true"]').length === 1
+        && document.querySelectorAll(".data-app-selected-icon").length === 1
+        && document.querySelectorAll(".data-app-chart .recharts-area-curve").length === 1`,
+      45_000,
+      "plain click replaces app selection",
+    );
+    await evaluate(client!, sessionId, `
+      document.querySelectorAll('[aria-label="应用列表"] button')[0]
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, ctrlKey: true }))
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll('[aria-label="应用列表"] button[aria-pressed="true"]').length === 2`,
+    );
+
+    await evaluate(client!, sessionId, `
+      (() => {
+        const group = document.querySelector('[aria-label="选择时间去向类型"]');
+        Array.from(group?.querySelectorAll("button") ?? [])
+          .find((node) => node.textContent?.trim() === "网页")?.click();
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll('[aria-label="网页列表"] button').length >= 2`,
+      45_000,
+      "web comparison options",
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll(
+        ".data-heatmap-panel-compact [data-heatmap-tooltip]",
+      ).length > 0
+        && !document.querySelector(".data-heatmap-panel-compact .data-heatmap-loading-state")`,
+      45_000,
+      "initial web heatmap presentation",
+    );
+    const initialWebHeatmapPresentation = String(await evaluate(client!, sessionId, `
+      Array.from(document.querySelectorAll(
+        ".data-heatmap-panel-compact [data-heatmap-tooltip]",
+      )).map((cell) => cell.getAttribute("data-heatmap-tooltip")).join("|")
+    `));
+    await evaluate(client!, sessionId, `
+      (() => {
+        globalThis.__PATINA_WEB_ACTIVITY_QUERY_DELAY_MS = 1_000;
+        document.querySelectorAll('[aria-label="网页列表"] button')[1]
+          ?.dispatchEvent(new MouseEvent("click", { bubbles: true, ctrlKey: true }));
+      })()
+    `);
+    const pendingWebHeatmapFrames = JSON.parse(String(await evaluate(client!, sessionId, `
+      new Promise((resolve) => {
+        const samples = [];
+        const sample = () => {
+          const tooltipCells = Array.from(document.querySelectorAll(
+            ".data-heatmap-panel-compact [data-heatmap-tooltip]",
+          ));
+          samples.push({
+            loading: Boolean(document.querySelector(
+              ".data-heatmap-panel-compact .data-heatmap-loading-state",
+            )),
+            presentation: tooltipCells
+              .map((cell) => cell.getAttribute("data-heatmap-tooltip"))
+              .join("|"),
+          });
+          if (samples.length >= 20) {
+            resolve(JSON.stringify(samples));
+            return;
+          }
+          requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+      })
+    `))) as Array<{ loading: boolean; presentation: string }>;
+    assert.ok(pendingWebHeatmapFrames.every((sample) => !sample.loading));
+    assert.ok(pendingWebHeatmapFrames.every(
+      (sample) => sample.presentation === initialWebHeatmapPresentation,
+    ));
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll('[aria-label="网页列表"] button[aria-pressed="true"]').length === 2
+        && document.querySelectorAll(".data-app-selected-icon").length === 2
+        && document.querySelectorAll(".data-app-chart .recharts-area-curve").length === 2`,
+      45_000,
+      "two selected web series",
+    );
+    await evaluate(
+      client!,
+      sessionId,
+      `new Promise((resolve) => setTimeout(resolve, 1_050))
+        .then(() => { globalThis.__PATINA_WEB_ACTIVITY_QUERY_DELAY_MS = 0; })`,
+    );
+
+    await evaluate(client!, sessionId, `
+      (() => {
+        const group = document.querySelector('[aria-label="选择时间去向类型"]');
+        Array.from(group?.querySelectorAll("button") ?? [])
+          .find((node) => node.textContent?.trim() === "应用")?.click();
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll('[aria-label="应用列表"] button[aria-pressed="true"]').length === 2`,
+      45_000,
+      "app selection survives mode change",
+    );
+    await evaluate(client!, sessionId, `
+      document.querySelector(
+        ".data-app-panel .data-trend-range-control .qp-range-control-arrow:last-child",
+      )?.click()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll(".data-app-selected-icon").length === 2
+        && document.querySelectorAll(".data-app-chart .recharts-area-curve").length === 2
+        && document.querySelectorAll('[aria-label="应用列表"] button[aria-pressed="true"]').length === 2`,
+      45_000,
+      "app selection survives range change",
+    );
+    await evaluate(client!, sessionId, `document.querySelector('[aria-label="设置"]')?.click()`);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector(".settings-button-preview"))`, 45_000);
+    await evaluate(client!, sessionId, `document.querySelector('[aria-label="数据"]')?.click()`);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll('[aria-label="应用列表"] button[aria-pressed="true"]').length === 2
+        && document.querySelectorAll(".data-app-selected-icon").length === 2
+        && document.querySelectorAll(".data-app-chart .recharts-area-curve").length === 2`,
+      45_000,
+      "app selection survives Data page navigation",
+    );
+  });
+
+  if (options.continuityOnly) return;
+
   await runTest("data trend chart renders the shared tooltip on real hover", async () => {
     await client!.command("Emulation.setDeviceMetricsOverride", {
       width: 1280,
@@ -594,7 +1321,7 @@ export async function runDataScenarios(context: BrowserSmokeContext) {
       await evaluate(
         client!,
         sessionId,
-        `document.querySelectorAll('.data-heatmap-weeks [data-heatmap-date][tabindex="0"]').length`,
+        `document.querySelectorAll('.data-overview .data-heatmap-weeks [data-heatmap-date][tabindex="0"]').length`,
       ),
       1,
     );
