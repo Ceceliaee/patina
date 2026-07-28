@@ -763,6 +763,8 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
       await evaluate(client!, sessionId, `
         (() => {
           localStorage.setItem("__time_tracker_enable_classification_catalog_fixture", "1");
+          localStorage.setItem("__time_tracker_reject_classification_query", "1");
+          localStorage.setItem("__time_tracker_classification_catalog_query_delay_ms", "900");
           const storageKey = "__time_tracker_smoke_settings";
           const settings = JSON.parse(localStorage.getItem(storageKey) ?? "{}");
           settings["__app_override::mapped-only.exe"] = JSON.stringify({
@@ -785,10 +787,6 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
       sessionId,
       `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("分类"))} + ']'))`,
     );
-    await evaluate(client!, sessionId, `
-      localStorage.setItem("__time_tracker_reject_classification_query", "1");
-      localStorage.setItem("__time_tracker_classification_catalog_query_delay_ms", "900");
-    `);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
