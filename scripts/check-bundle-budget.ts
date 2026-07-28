@@ -104,6 +104,10 @@ function sumGzipBytes(measured: AssetMeasurement[]) {
   return measured.reduce((sum, item) => sum + item.gzipBytes, 0);
 }
 
+function normalizedSourceBytes(source: string) {
+  return Buffer.from(source.replace(/\r\n?/g, "\n"), "utf8");
+}
+
 function readInitialAssetNames() {
   if (!existsSync(INDEX_HTML_PATH)) {
     console.error(`Bundle budget check failed. Missing ${INDEX_HTML_PATH}; run npm run build first.`);
@@ -169,7 +173,9 @@ function measureCopyDomains() {
   return readdirSync(COPY_DOMAINS_DIR)
     .filter((file) => file.endsWith(".ts"))
     .map((file) => {
-      const bytes = readFileSync(join(COPY_DOMAINS_DIR, file));
+      const bytes = normalizedSourceBytes(
+        readFileSync(join(COPY_DOMAINS_DIR, file), "utf8"),
+      );
       return {
         file,
         rawBytes: bytes.length,
@@ -179,6 +185,12 @@ function measureCopyDomains() {
 }
 
 function main() {
+  const lfProbe = normalizedSourceBytes("first\nsecond\n");
+  const crlfProbe = normalizedSourceBytes("first\r\nsecond\r\n");
+  if (!lfProbe.equals(crlfProbe)) {
+    throw new Error("source attribution must be newline-invariant");
+  }
+
   const initialAssetNames = readInitialAssetNames();
   const measured = measureDistAssets();
   if (!initialAssetNames || !measured) {
