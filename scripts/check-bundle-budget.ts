@@ -6,21 +6,21 @@ const ASSETS_DIR = "dist/assets";
 const INDEX_HTML_PATH = "dist/index.html";
 const COPY_DOMAINS_DIR = "src/shared/copy/domains";
 const KI_B = 1024;
+const MIN_BUDGET_HEADROOM_RATIO = 0.03;
 
 const INITIAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 310;
-// The Data-owned app/web comparison adds multi-series selection, annual heatmaps,
-// and one bounded Web IPC path. Dead single-selection projections were removed
-// first; the reviewed production baseline is 86.33 / 391.51 KiB gzip. Keep entry,
-// shared, and page budgets unchanged and grant only 0.17 / 0.24 KiB headroom.
-const LAZY_JS_GZIP_BUDGET_KI_B = 86.5;
+// Data used to be part of the initial graph. It now has its own route and runtime
+// budgets, so this unchanged aggregate tracks the remaining primary lazy routes.
+const NON_DATA_PRIMARY_LAZY_ROUTES_GZIP_BUDGET_KI_B = 86.5;
 const TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 391.75;
 
 const INITIAL_CHUNK_BUDGETS = [
   { label: "index", pattern: /^index-.*\.js$/, gzipKiB: 65 },
-  { label: "charts", pattern: /^charts-.*\.js$/, gzipKiB: 118 },
   { label: "react-vendor", pattern: /^react-vendor-.*\.js$/, gzipKiB: 60 },
   { label: "icons", pattern: /^icons-.*\.js$/, gzipKiB: 8 },
   { label: "tauri", pattern: /^tauri-.*\.js$/, gzipKiB: 6 },
+  { label: "copy", pattern: /^copy-.*\.js$/, gzipKiB: 25 },
+  { label: "classification", pattern: /^appClassification-.*\.js$/, gzipKiB: 6 },
 ] as const;
 
 const LAZY_PAGE_CHUNK_BUDGETS = [
@@ -32,16 +32,35 @@ const LAZY_PAGE_CHUNK_BUDGETS = [
   { label: "About", pattern: /^About-.*\.js$/, gzipKiB: 18 },
 ] as const;
 
+const NON_DATA_PRIMARY_LAZY_ROUTE_BUDGETS = LAZY_PAGE_CHUNK_BUDGETS.filter(
+  (budget) => budget.label !== "Data",
+);
+
+const LAZY_SECONDARY_CHUNK_BUDGETS = [
+  { label: "WidgetShell", pattern: /^WidgetShell-.*\.js$/, gzipKiB: 6 },
+  { label: "Settings import dialog", pattern: /^SettingsDataImportDialog-.*\.js$/, gzipKiB: 3 },
+  { label: "Settings export dialog", pattern: /^SettingsDataExportDialog-.*\.js$/, gzipKiB: 6 },
+  { label: "Data first-screen prewarm", pattern: /^dataFirstScreenPrewarm-.*\.js$/, gzipKiB: 6 },
+  { label: "Data trend snapshot", pattern: /^dataTrendSnapshot-.*\.js$/, gzipKiB: 2 },
+  { label: "Data bootstrap snapshot", pattern: /^dataBootstrapSnapshot-.*\.js$/, gzipKiB: 1 },
+] as const;
+
 // Stable cross-feature UI owners stay lazy and receive their own narrow budget
 // instead of consuming the allowance for unowned support chunks.
 const LAZY_SHARED_UI_CHUNK_BUDGETS = [
   { label: "QuietBadge", pattern: /^QuietBadge-.*\.js$/, gzipKiB: 0.3 },
   { label: "QuietCalendar", pattern: /^QuietCalendar-.*\.js$/, gzipKiB: 1.3 },
   { label: "QuietSegmentedFilter", pattern: /^QuietSegmentedFilter-.*\.js$/, gzipKiB: 0.8 },
+  { label: "QuietSearchField", pattern: /^QuietSearchField-.*\.js$/, gzipKiB: 0.5 },
+  { label: "QuietStepperSlider", pattern: /^QuietStepperSlider-.*\.js$/, gzipKiB: 1.1 },
+  { label: "QuietDateRangePicker", pattern: /^QuietDateRangePicker-.*\.js$/, gzipKiB: 2.1 },
+  { label: "requested app icons", pattern: /^useRequestedAppIcons-.*\.js$/, gzipKiB: 0.55 },
+  { label: "settings runtime adapter", pattern: /^settingsRuntimeAdapterService-.*\.js$/, gzipKiB: 3 },
+  { label: "duration formatting", pattern: /^durationFormatting-.*\.js$/, gzipKiB: 0.2 },
 ] as const;
 
-// Vite 8/Rolldown creates more granular shared chunks. The support allowance is
-// slightly wider while every aggregate and initial-chunk budget is materially tighter.
+// Unowned fragments remain tightly bounded after route, secondary-runtime, and
+// stable shared owners are attributed above.
 const LAZY_SUPPORT_CHUNKS_GZIP_BUDGET_KI_B = 6.25;
 const SETTINGS_COPY_GZIP_BUDGET_KI_B = 12;
 // Import preview, destructuring, and batch deletion require matching bilingual copy.
@@ -62,6 +81,14 @@ type ChunkBudget = {
 
 function formatKiB(bytes: number) {
   return (bytes / KI_B).toFixed(2);
+}
+
+function budgetHeadroomLimitBytes(gzipKiB: number) {
+  return gzipKiB * KI_B * (1 - MIN_BUDGET_HEADROOM_RATIO);
+}
+
+function describeBudgetLimit(gzipKiB: number) {
+  return `${gzipKiB} KiB budget with ${MIN_BUDGET_HEADROOM_RATIO * 100}% required headroom`;
 }
 
 function findBudgetAsset(measured: AssetMeasurement[], budget: ChunkBudget) {
@@ -124,10 +151,10 @@ function checkChunkBudgets(
       continue;
     }
 
-    const budgetBytes = budget.gzipKiB * KI_B;
+    const budgetBytes = budgetHeadroomLimitBytes(budget.gzipKiB);
     if (asset.gzipBytes > budgetBytes) {
       violations.push(
-        `${label} ${budget.label} gzip ${formatKiB(asset.gzipBytes)} KiB exceeds ${budget.gzipKiB} KiB`,
+        `${label} ${budget.label} gzip ${formatKiB(asset.gzipBytes)} KiB exceeds ${describeBudgetLimit(budget.gzipKiB)}`,
       );
     }
   }
@@ -164,6 +191,7 @@ function main() {
   const lazyJsAssets = jsAssets.filter((item) => !initialAssetNames.has(item.file));
   const lazySupportAssets = lazyJsAssets.filter((item) => (
     !matchesAnyBudget(item.file, LAZY_PAGE_CHUNK_BUDGETS)
+    && !matchesAnyBudget(item.file, LAZY_SECONDARY_CHUNK_BUDGETS)
     && !matchesAnyBudget(item.file, LAZY_SHARED_UI_CHUNK_BUDGETS)
   ));
 
@@ -171,56 +199,69 @@ function main() {
   const copyDomains = measureCopyDomains();
 
   const initialJsCssGzipBytes = sumGzipBytes(initialJsAssets) + sumGzipBytes(initialCssAssets);
-  if (initialJsCssGzipBytes > INITIAL_JS_AND_CSS_GZIP_BUDGET_KI_B * KI_B) {
+  if (initialJsCssGzipBytes > budgetHeadroomLimitBytes(INITIAL_JS_AND_CSS_GZIP_BUDGET_KI_B)) {
     violations.push(
-      `initial JS+CSS gzip ${formatKiB(initialJsCssGzipBytes)} KiB exceeds ${INITIAL_JS_AND_CSS_GZIP_BUDGET_KI_B} KiB`,
+      `initial JS+CSS gzip ${formatKiB(initialJsCssGzipBytes)} KiB exceeds ${describeBudgetLimit(INITIAL_JS_AND_CSS_GZIP_BUDGET_KI_B)}`,
     );
   }
 
-  const lazyJsGzipBytes = sumGzipBytes(lazyJsAssets);
-  if (lazyJsGzipBytes > LAZY_JS_GZIP_BUDGET_KI_B * KI_B) {
+  const nonDataPrimaryLazyRouteAssets = lazyJsAssets.filter((item) =>
+    matchesAnyBudget(item.file, NON_DATA_PRIMARY_LAZY_ROUTE_BUDGETS)
+  );
+  const nonDataPrimaryLazyRoutesGzipBytes = sumGzipBytes(nonDataPrimaryLazyRouteAssets);
+  if (
+    nonDataPrimaryLazyRoutesGzipBytes
+    > budgetHeadroomLimitBytes(NON_DATA_PRIMARY_LAZY_ROUTES_GZIP_BUDGET_KI_B)
+  ) {
     violations.push(
-      `lazy JS gzip ${formatKiB(lazyJsGzipBytes)} KiB exceeds ${LAZY_JS_GZIP_BUDGET_KI_B} KiB`,
+      `non-Data primary lazy routes gzip ${formatKiB(nonDataPrimaryLazyRoutesGzipBytes)} KiB exceeds ${describeBudgetLimit(NON_DATA_PRIMARY_LAZY_ROUTES_GZIP_BUDGET_KI_B)}`,
     );
   }
 
   const totalJsCssGzipBytes = sumGzipBytes(jsAssets) + sumGzipBytes(cssAssets);
-  if (totalJsCssGzipBytes > TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B * KI_B) {
+  if (totalJsCssGzipBytes > budgetHeadroomLimitBytes(TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B)) {
     violations.push(
-      `total JS+CSS gzip ${formatKiB(totalJsCssGzipBytes)} KiB exceeds ${TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B} KiB`,
+      `total JS+CSS gzip ${formatKiB(totalJsCssGzipBytes)} KiB exceeds ${describeBudgetLimit(TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B)}`,
     );
   }
 
   checkChunkBudgets("initial", jsAssets, INITIAL_CHUNK_BUDGETS, violations);
   checkChunkBudgets("lazy page", lazyJsAssets, LAZY_PAGE_CHUNK_BUDGETS, violations);
+  checkChunkBudgets("lazy secondary", lazyJsAssets, LAZY_SECONDARY_CHUNK_BUDGETS, violations);
   checkChunkBudgets("lazy shared UI", lazyJsAssets, LAZY_SHARED_UI_CHUNK_BUDGETS, violations);
 
   const lazySupportGzipBytes = sumGzipBytes(lazySupportAssets);
-  if (lazySupportGzipBytes > LAZY_SUPPORT_CHUNKS_GZIP_BUDGET_KI_B * KI_B) {
+  if (lazySupportGzipBytes > budgetHeadroomLimitBytes(LAZY_SUPPORT_CHUNKS_GZIP_BUDGET_KI_B)) {
     violations.push(
-      `lazy support chunks gzip ${formatKiB(lazySupportGzipBytes)} KiB exceeds ${LAZY_SUPPORT_CHUNKS_GZIP_BUDGET_KI_B} KiB`,
+      `lazy support chunks gzip ${formatKiB(lazySupportGzipBytes)} KiB exceeds ${describeBudgetLimit(LAZY_SUPPORT_CHUNKS_GZIP_BUDGET_KI_B)}`,
     );
   }
 
   if (copyDomains) {
     const copyDomainsGzipBytes = sumGzipBytes(copyDomains);
     const settingsCopy = copyDomains.find((item) => item.file === "settingsCopy.ts");
-    if (settingsCopy && settingsCopy.gzipBytes > SETTINGS_COPY_GZIP_BUDGET_KI_B * KI_B) {
+    if (
+      settingsCopy
+      && settingsCopy.gzipBytes > budgetHeadroomLimitBytes(SETTINGS_COPY_GZIP_BUDGET_KI_B)
+    ) {
       violations.push(
-        `settingsCopy source gzip ${formatKiB(settingsCopy.gzipBytes)} KiB exceeds ${SETTINGS_COPY_GZIP_BUDGET_KI_B} KiB`,
+        `settingsCopy source gzip ${formatKiB(settingsCopy.gzipBytes)} KiB exceeds ${describeBudgetLimit(SETTINGS_COPY_GZIP_BUDGET_KI_B)}`,
       );
     }
 
-    if (copyDomainsGzipBytes > COPY_DOMAINS_GZIP_BUDGET_KI_B * KI_B) {
+    if (copyDomainsGzipBytes > budgetHeadroomLimitBytes(COPY_DOMAINS_GZIP_BUDGET_KI_B)) {
       violations.push(
-        `copy domains source gzip ${formatKiB(copyDomainsGzipBytes)} KiB exceeds ${COPY_DOMAINS_GZIP_BUDGET_KI_B} KiB`,
+        `copy domains source gzip ${formatKiB(copyDomainsGzipBytes)} KiB exceeds ${describeBudgetLimit(COPY_DOMAINS_GZIP_BUDGET_KI_B)}`,
       );
     }
 
     for (const item of copyDomains) {
-      if (item.file !== "settingsCopy.ts" && item.gzipBytes > NON_SETTINGS_COPY_GZIP_REVIEW_KI_B * KI_B) {
+      if (
+        item.file !== "settingsCopy.ts"
+        && item.gzipBytes > budgetHeadroomLimitBytes(NON_SETTINGS_COPY_GZIP_REVIEW_KI_B)
+      ) {
         violations.push(
-          `${item.file} source gzip ${formatKiB(item.gzipBytes)} KiB exceeds ${NON_SETTINGS_COPY_GZIP_REVIEW_KI_B} KiB`,
+          `${item.file} source gzip ${formatKiB(item.gzipBytes)} KiB exceeds ${describeBudgetLimit(NON_SETTINGS_COPY_GZIP_REVIEW_KI_B)}`,
         );
       }
     }
@@ -237,7 +278,10 @@ function main() {
 
   console.log("Bundle budget check passed.");
   console.log(`initial JS+CSS: ${formatKiB(initialJsCssGzipBytes)} KiB gzip`);
-  console.log(`lazy JS: ${formatKiB(lazyJsGzipBytes)} KiB gzip`);
+  console.log(
+    `non-Data primary lazy routes: ${formatKiB(nonDataPrimaryLazyRoutesGzipBytes)} KiB gzip`,
+  );
+  console.log(`all lazy JS: ${formatKiB(sumGzipBytes(lazyJsAssets))} KiB gzip`);
   console.log(`total JS+CSS: ${formatKiB(totalJsCssGzipBytes)} KiB gzip`);
 
   console.log("initial chunks:");
@@ -250,6 +294,13 @@ function main() {
 
   console.log("lazy page chunks:");
   for (const budget of LAZY_PAGE_CHUNK_BUDGETS) {
+    const asset = findBudgetAsset(lazyJsAssets, budget);
+    if (asset) {
+      console.log(`- ${budget.label}: ${formatKiB(asset.gzipBytes)} KiB gzip`);
+    }
+  }
+  console.log("lazy secondary chunks:");
+  for (const budget of LAZY_SECONDARY_CHUNK_BUDGETS) {
     const asset = findBudgetAsset(lazyJsAssets, budget);
     if (asset) {
       console.log(`- ${budget.label}: ${formatKiB(asset.gzipBytes)} KiB gzip`);

@@ -129,30 +129,6 @@ function tauriStubFor(path: string) {
   throw new Error(`Missing Tauri smoke stub for ${path}`);
 }
 
-function createRechartsStub() {
-  const React = require("react") as typeof import("react");
-  const Container = ({ children }: { children?: import("react").ReactNode }) => (
-    React.createElement("div", null, children)
-  );
-  const Empty = () => null;
-
-  return {
-    Area: Container,
-    AreaChart: Container,
-    Bar: Container,
-    BarChart: Container,
-    CartesianGrid: Empty,
-    Cell: Empty,
-    Pie: Container,
-    PieChart: Container,
-    Rectangle: Empty,
-    ResponsiveContainer: Container,
-    Tooltip: Empty,
-    XAxis: Empty,
-    YAxis: Empty,
-  };
-}
-
 function createLucideStub() {
   const React = require("react") as typeof import("react");
   const cache = new Map<string | symbol, unknown>();
@@ -222,9 +198,6 @@ function installSmokeRenderHooks() {
     }
     if (request === "lucide-react") {
       return createLucideStub();
-    }
-    if (request === "recharts") {
-      return createRechartsStub();
     }
     return originalLoad.call(this, request, parent, isMain);
   };
@@ -778,9 +751,8 @@ await runTest("badges share one Quiet Pro owner and protect long labels", () => 
 
   assert.match(badge, /type QuietBadgeSize = "compact" \| "regular"/);
   assert.match(badge, /type QuietBadgeVariant = "default" \| "beta"/);
-  assert.match(badge, /className="qp-badge-label"/);
-  assert.match(quietProStyles, /\.qp-badge \{[\s\S]*?border-radius: var\(--qp-radius-chip\);/);
-  assert.match(quietProStyles, /\.qp-badge-label \{[\s\S]*?text-overflow: ellipsis;[\s\S]*?white-space: nowrap;/);
+  assert.doesNotMatch(badge, /qp-badge-label/);
+  assert.match(quietProStyles, /\.qp-badge \{[\s\S]*?border-radius: var\(--qp-radius-chip\);[\s\S]*?text-overflow: ellipsis;[\s\S]*?white-space: nowrap;/);
   assert.match(quietProStyles, /\.qp-badge-compact \{/);
   assert.match(quietProStyles, /\.qp-badge-regular \{/);
   assert.match(quietProStyles, /\.qp-badge-beta \{/);
@@ -978,11 +950,10 @@ await runTest("Data keeps web analysis beside a unified activity overview", () =
   assert.match(destinationPanel, /aria-pressed=\{isSelected\}/);
   assert.match(destinationPanel, /aria-description=\{UI_TEXT\.data\.interactionHint\}/);
   assert.match(destinationPanel, /aria-keyshortcuts="Control\+Enter Control\+Space"/);
-  assert.match(destinationPanel, /<AreaChart/);
+  assert.match(destinationPanel, /<NativeTrendChart/);
   assert.match(destinationPanel, /trendSeries\.map/);
-  assert.match(destinationPanel, /fillOpacity=\{0\.12\}/);
-  assert.match(destinationPanel, /dot=\{\{ fill: series\.color, r: 3 \}\}/);
-  assert.doesNotMatch(destinationPanel, /<Line/);
+  assert.match(destinationPanel, /onActivePointChange=\{onMouseMove\}/);
+  assert.doesNotMatch(destinationPanel, /from "recharts"/);
   assert.match(data, /rememberDataDestinationSessionSelectionState/);
   assert.match(data, /toggleDataDestinationSelection/);
   assert.match(data, /replaceDataDestinationSelection/);
@@ -1380,22 +1351,22 @@ await runTest("tooltips keep one shared visual owner", () => {
   assert.doesNotMatch(appShellStyles, /\.qp-tooltip(?:-anchor)? \{/);
 });
 
-await runTest("chart tooltips use Recharts contracts and the Quiet Pro visual owner", () => {
+await runTest("native chart tooltips keep one accessible Quiet Pro visual owner", () => {
   const chartTooltip = readUtf8("src/shared/components/QuietChartTooltip.tsx");
+  const nativeTrendChart = readUtf8("src/shared/charts/NativeTrendChart.tsx");
   const appStyles = readUtf8("src/App.css");
   const chartTooltipStyles = readUtf8("src/styles/components/quiet-chart-tooltip.css");
   const appShellStyles = readUtf8("src/styles/app-shell.css");
 
-  assert.match(chartTooltip, /type TooltipContentProps/);
-  assert.match(chartTooltip, /type TooltipPayloadEntry/);
-  assert.match(chartTooltip, /type TooltipProps/);
-  assert.match(chartTooltip, /type TooltipValueType/);
-  assert.doesNotMatch(chartTooltip, /cursor as never/);
-  assert.match(chartTooltip, /function isZeroTooltipValue/);
-  assert.match(chartTooltip, /typeof value === "string" && value\.trim\(\) === ""/);
-  assert.match(chartTooltip, /!isZeroTooltipValue\(item\.value\)/);
+  assert.match(chartTooltip, /export interface QuietChartTooltipItem/);
+  assert.match(chartTooltip, /items: readonly QuietChartTooltipItem\[\]/);
   assert.match(chartTooltip, /role="tooltip"/);
   assert.match(chartTooltip, /className="qp-chart-tooltip-name"/);
+  assert.match(nativeTrendChart, /<QuietChartTooltip/);
+  assert.match(nativeTrendChart, /activePayload: \[\{ payload: row \}\]/);
+  assert.match(nativeTrendChart, /className="qp-native-trend-hit"/);
+  assert.match(nativeTrendChart, /tabIndex=\{0\}/);
+  assert.doesNotMatch(nativeTrendChart, /from "recharts"/);
   assert.match(appStyles, /styles\/components\/quiet-chart-tooltip\.css/);
   assert.match(chartTooltipStyles, /\.qp-chart-tooltip \{/);
   assert.match(chartTooltipStyles, /max-width: min\(260px, calc\(100vw - 16px\)\)/);

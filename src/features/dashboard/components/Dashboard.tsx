@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { Layers3, Monitor, Minus, TrendingDown, TrendingUp } from "lucide-react";
-import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import { useIconThemeColors } from "../../../shared/hooks/useIconThemeColors";
 import { formatDashboardDuration } from "../services/dashboardFormatting";
@@ -25,6 +24,11 @@ interface Props {
 const FOCUS_CATEGORY_LIMIT = 4;
 const FOCUS_CATEGORY_EXPANDED_LIMIT = 6;
 const FOCUS_CATEGORY_EXPANDED_WIDTH = 440;
+const DONUT_CENTER = 56;
+const DONUT_RADIUS = 42;
+const DONUT_STROKE_WIDTH = 27;
+const DONUT_CIRCUMFERENCE = 2 * Math.PI * DONUT_RADIUS;
+const DONUT_GAP_DEGREES = 4;
 
 function buildFocusCategoryDist(categoryDist: DashboardReadModel["categoryDist"], limit: number) {
   const visible = categoryDist.slice(0, limit);
@@ -38,11 +42,64 @@ function buildFocusCategoryDist(categoryDist: DashboardReadModel["categoryDist"]
   return [
     ...visible,
     {
+      category: "other" as const,
       name: UI_TEXT.categories.other,
       value: restValue,
       color: "var(--qp-text-tertiary)",
     },
   ];
+}
+
+function DashboardFocusDonut({
+  categoryDist,
+}: {
+  categoryDist: DashboardReadModel["categoryDist"];
+}) {
+  const total = categoryDist.reduce((sum, item) => sum + Math.max(0, item.value), 0);
+  let consumed = 0;
+
+  return (
+    <svg
+      aria-label={UI_TEXT.dashboard.focusShare}
+      className="block h-full w-full"
+      role="img"
+      viewBox="0 0 112 112"
+    >
+      <circle
+        cx={DONUT_CENTER}
+        cy={DONUT_CENTER}
+        fill="none"
+        r={DONUT_RADIUS}
+        stroke="var(--qp-track-muted)"
+        strokeWidth={DONUT_STROKE_WIDTH}
+      />
+      {total > 0 ? categoryDist.map((item) => {
+        const fraction = Math.max(0, item.value) / total;
+        const segmentLength = fraction * DONUT_CIRCUMFERENCE;
+        const gapLength = Math.min(
+          segmentLength,
+          DONUT_CIRCUMFERENCE * DONUT_GAP_DEGREES / 360,
+        );
+        const dashLength = Math.max(0, segmentLength - gapLength);
+        const dashOffset = -consumed;
+        consumed += segmentLength;
+        return (
+          <circle
+            key={item.name}
+            cx={DONUT_CENTER}
+            cy={DONUT_CENTER}
+            fill="none"
+            r={DONUT_RADIUS}
+            stroke={item.color || "var(--qp-accent-default)"}
+            strokeDasharray={`${dashLength} ${DONUT_CIRCUMFERENCE - dashLength}`}
+            strokeDashoffset={dashOffset}
+            strokeWidth={DONUT_STROKE_WIDTH}
+            transform={`rotate(-90 ${DONUT_CENTER} ${DONUT_CENTER})`}
+          />
+        );
+      }) : null}
+    </svg>
+  );
 }
 
 export default function Dashboard({
@@ -115,25 +172,7 @@ export default function Dashboard({
             </div>
             <div className="dashboard-focus-layout">
               <div className="relative w-full h-[185px] dashboard-focus-chart">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={visibleCategoryDist}
-                      innerRadius="68%"
-                      outerRadius="100%"
-                      paddingAngle={4}
-                      dataKey="value"
-                      startAngle={90}
-                      endAngle={-270}
-                      stroke="none"
-                      isAnimationActive={false}
-                    >
-                      {visibleCategoryDist.map((item, index) => (
-                        <Cell key={`cell-${index}`} fill={item.color || "var(--qp-accent-default)"} />
-                      ))}
-                    </Pie>
-                  </PieChart>
-                </ResponsiveContainer>
+                <DashboardFocusDonut categoryDist={visibleCategoryDist} />
                 <div className="dashboard-focus-total-center absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                   <span className="text-[22px] font-semibold text-[var(--qp-text-primary)] tabular-nums">
                     {formatDashboardDuration(totalTrackedTime)}

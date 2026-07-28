@@ -834,7 +834,7 @@ export async function runDataScenarios(
       sessionId,
       `document.querySelectorAll('[aria-label="应用列表"] button[aria-pressed="true"]').length === 2
         && document.querySelectorAll(".data-app-selected-icon").length === 2
-        && document.querySelectorAll(".data-app-chart .recharts-area-curve").length === 2
+        && document.querySelectorAll(".data-app-chart .qp-native-trend-line").length === 2
         && Array.from(document.querySelectorAll(
           '[aria-label="应用列表"] button[aria-pressed="true"]',
         )).every((button) => getComputedStyle(button, "::before").content === "none")
@@ -871,7 +871,7 @@ export async function runDataScenarios(
       client!,
       sessionId,
       `document.querySelectorAll(".data-app-selected-icon").length === 2
-        && document.querySelectorAll(".data-app-chart .recharts-area-curve").length === 2
+        && document.querySelectorAll(".data-app-chart .qp-native-trend-line").length === 2
         && document.querySelectorAll('[aria-label="应用列表"] button').length === 1`,
       45_000,
       "search keeps hidden app selection",
@@ -898,7 +898,7 @@ export async function runDataScenarios(
       sessionId,
       `document.querySelectorAll('[aria-label="应用列表"] button[aria-pressed="true"]').length === 1
         && document.querySelectorAll(".data-app-selected-icon").length === 1
-        && document.querySelectorAll(".data-app-chart .recharts-area-curve").length === 1`,
+        && document.querySelectorAll(".data-app-chart .qp-native-trend-line").length === 1`,
       45_000,
       "plain click replaces app selection",
     );
@@ -981,7 +981,7 @@ export async function runDataScenarios(
       sessionId,
       `document.querySelectorAll('[aria-label="网页列表"] button[aria-pressed="true"]').length === 2
         && document.querySelectorAll(".data-app-selected-icon").length === 2
-        && document.querySelectorAll(".data-app-chart .recharts-area-curve").length === 2`,
+        && document.querySelectorAll(".data-app-chart .qp-native-trend-line").length === 2`,
       45_000,
       "two selected web series",
     );
@@ -1015,7 +1015,7 @@ export async function runDataScenarios(
       client!,
       sessionId,
       `document.querySelectorAll(".data-app-selected-icon").length === 2
-        && document.querySelectorAll(".data-app-chart .recharts-area-curve").length === 2
+        && document.querySelectorAll(".data-app-chart .qp-native-trend-line").length === 2
         && document.querySelectorAll('[aria-label="应用列表"] button[aria-pressed="true"]').length === 2`,
       45_000,
       "app selection survives range change",
@@ -1028,7 +1028,7 @@ export async function runDataScenarios(
       sessionId,
       `document.querySelectorAll('[aria-label="应用列表"] button[aria-pressed="true"]').length === 2
         && document.querySelectorAll(".data-app-selected-icon").length === 2
-        && document.querySelectorAll(".data-app-chart .recharts-area-curve").length === 2`,
+        && document.querySelectorAll(".data-app-chart .qp-native-trend-line").length === 2`,
       45_000,
       "app selection survives Data page navigation",
     );
@@ -1471,13 +1471,13 @@ export async function runDataScenarios(
     await waitForExpression(
       client!,
       sessionId,
-      `Boolean(document.querySelector(".data-trend-chart .recharts-dot"))`,
+      `Boolean(document.querySelector(".data-trend-chart .qp-native-trend-dot"))`,
       45_000,
       "data trend chart point",
     );
     const chartPoint = await evaluate(client!, sessionId, `
       (() => {
-        const dots = Array.from(document.querySelectorAll(".data-trend-chart .recharts-dot"));
+        const dots = Array.from(document.querySelectorAll(".data-trend-chart .qp-native-trend-dot"));
         const dot = dots.find((node) => {
           const rect = node.getBoundingClientRect();
           return rect.width > 0 && rect.height > 0 && rect.top >= 0 && rect.bottom <= window.innerHeight;
@@ -1498,7 +1498,7 @@ export async function runDataScenarios(
       sessionId,
       `(() => {
         if (document.querySelector('.qp-chart-tooltip[role="tooltip"]')) return true;
-        const dot = Array.from(document.querySelectorAll(".data-trend-chart .recharts-dot")).find((node) => {
+        const dot = Array.from(document.querySelectorAll(".data-trend-chart .qp-native-trend-dot")).find((node) => {
           const rect = node.getBoundingClientRect();
           return rect.width > 0 && rect.height > 0 && rect.top >= 0 && rect.bottom <= window.innerHeight;
         });

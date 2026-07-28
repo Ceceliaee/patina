@@ -188,6 +188,9 @@
   border-radius: var(--qp-radius-chip);
   background: var(--qp-bg-panel);
   line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .qp-badge-regular {
@@ -202,14 +205,6 @@
   padding: 0 4px;
   font-size: 8px;
   font-weight: 700;
-}
-
-.qp-badge-label {
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .qp-badge-neutral {

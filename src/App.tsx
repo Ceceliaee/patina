@@ -1,17 +1,24 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import "./App.css";
 import AppShell from "./app/AppShell";
-import WidgetShell from "./app/widget/WidgetShell";
 import {
   hideWidgetWindow,
   isCurrentWindowVisibleAndFocused,
   resolveCurrentAppWindowLabel,
 } from "./platform/desktop/widgetRuntimeGateway";
-import { installAppDevelopmentResourceDiagnostics } from "./app/services/resourceDiagnosticsService.ts";
 
 const CURRENT_WINDOW_LABEL = resolveCurrentAppWindowLabel();
+const WidgetShell = lazy(() => import("./app/widget/WidgetShell"));
 
-installAppDevelopmentResourceDiagnostics();
+if (import.meta.env.DEV) {
+  void import("./app/services/resourceDiagnosticsService.ts")
+    .then(({ installAppDevelopmentResourceDiagnostics }) => {
+      installAppDevelopmentResourceDiagnostics();
+    })
+    .catch((error: unknown) => {
+      console.warn("install development resource diagnostics failed", error);
+    });
+}
 
 if (typeof document !== "undefined") {
   document.documentElement.dataset.windowLabel = CURRENT_WINDOW_LABEL;
@@ -70,5 +77,9 @@ export default function App() {
     };
   }, []);
 
-  return CURRENT_WINDOW_LABEL === "widget" ? <WidgetShell /> : <AppShell />;
+  return CURRENT_WINDOW_LABEL === "widget" ? (
+    <Suspense fallback={null}>
+      <WidgetShell />
+    </Suspense>
+  ) : <AppShell />;
 }

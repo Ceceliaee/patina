@@ -1,6 +1,7 @@
 import {
   memo,
   useEffect,
+  useLayoutEffect,
   useState,
   type CSSProperties,
   type KeyboardEvent,
@@ -8,8 +9,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from "recharts";
-import QuietChartTooltip from "../../../shared/components/QuietChartTooltip";
+import NativeTrendChart from "../../../shared/charts/NativeTrendChart.tsx";
 import QuietSearchField from "../../../shared/components/QuietSearchField";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter.tsx";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
@@ -30,14 +30,13 @@ import type {
 import type { DataTrendRangeSelection } from "../services/dataTrendRange.ts";
 import DataTrendRangeControl from "./DataTrendRangeControl.tsx";
 
-const DATA_TREND_X_AXIS_MIN_TICK_GAP = 24;
-
 interface DataChartDimension {
   width: number;
   height: number;
 }
 
 interface DataAppTrendPanelProps {
+  onContentCommitted?: () => void;
   destinationMode: DataDestinationMode;
   showDestinationMode: boolean;
   title: string;
@@ -85,6 +84,7 @@ function getOptionInitial(displayName: string) {
 }
 
 function DataAppTrendPanel({
+  onContentCommitted,
   destinationMode,
   showDestinationMode,
   title,
@@ -138,6 +138,9 @@ function DataAppTrendPanel({
     const timer = setTimeout(() => setShowRefreshingMessage(true), 240);
     return () => clearTimeout(timer);
   }, [refreshing]);
+  useLayoutEffect(() => {
+    onContentCommitted?.();
+  }, [onContentCommitted]);
 
   return (
     <div className="qp-panel p-5 data-app-panel relative">
@@ -341,57 +344,24 @@ function DataAppTrendPanel({
               onMouseDownCapture={onMouseDownCapture}
               onDoubleClickCapture={onDoubleClickCapture}
             >
-              <ResponsiveContainer
-                width="100%"
-                height="100%"
-                initialDimension={initialDimension}
-              >
-                <AreaChart
-                  data={chartData}
-                  margin={{ top: 8, right: 22, left: -18, bottom: 0 }}
-                  onMouseMove={onMouseMove}
-                  onMouseLeave={onMouseLeave}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--qp-chart-grid)" />
-                  <XAxis
-                    dataKey="label"
-                    tick={{ fontSize: 11, fill: "var(--qp-text-tertiary)" }}
-                    axisLine={false}
-                    tickLine={false}
-                    interval="preserveStartEnd"
-                    minTickGap={DATA_TREND_X_AXIS_MIN_TICK_GAP}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 11, fill: "var(--qp-text-tertiary)" }}
-                    axisLine={false}
-                    tickLine={false}
-                    interval={0}
-                    ticks={chartAxis.ticks}
-                    domain={[0, chartAxis.domainMax]}
-                    tickFormatter={(value) => formatChartHours(Number(value))}
-                  />
-                  <QuietChartTooltip
-                    formatter={(value, name) => [
-                      formatDuration(Number(value) * 3_600_000),
-                      String(name || usageMetricLabel),
-                    ]}
-                  />
-                  {trendSeries.map((series) => (
-                    <Area
-                      key={series.key}
-                      type="monotone"
-                      dataKey={series.dataKey}
-                      name={series.displayName}
-                      stroke={series.color}
-                      strokeWidth={2}
-                      fill={series.color}
-                      fillOpacity={0.12}
-                      dot={{ fill: series.color, r: 3 }}
-                      isAnimationActive={false}
-                    />
-                  ))}
-                </AreaChart>
-              </ResponsiveContainer>
+              <NativeTrendChart
+                ariaLabel={title}
+                domainMax={chartAxis.domainMax}
+                formatValue={(value) => formatDuration(value * 3_600_000)}
+                formatYAxisTick={formatChartHours}
+                height={initialDimension.height}
+                onActivePointChange={onMouseMove}
+                onMouseLeave={onMouseLeave}
+                rows={chartData}
+                series={trendSeries.map((series) => ({
+                  color: series.color,
+                  dataKey: series.dataKey,
+                  key: series.key,
+                  name: series.displayName || usageMetricLabel,
+                }))}
+                ticks={chartAxis.ticks}
+                width={initialDimension.width}
+              />
             </div>
             {heatmapContent}
           </div>

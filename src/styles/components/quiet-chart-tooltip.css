@@ -70,3 +70,31 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+
+.qp-hourly-chart-hit {
+  outline: none;
+  stroke: transparent;
+}
+
+.qp-hourly-chart-hit:focus-visible {
+  stroke: var(--qp-focus-ring);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.qp-native-trend-line,
+.qp-native-trend-dot,
+.qp-native-trend-cursor {
+  pointer-events: none;
+}
+
+.qp-native-trend-hit {
+  outline: none;
+  stroke: transparent;
+}
+
+.qp-native-trend-hit:focus-visible {
+  stroke: var(--qp-focus-ring);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}

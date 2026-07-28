@@ -1,17 +1,3 @@
-.recharts-wrapper:focus,
-.recharts-surface:focus {
-  outline: 0;
-}
-
-.recharts-wrapper :where(g, path, rect, circle, ellipse, line, polyline, polygon):focus {
-  outline: 0;
-}
-
-.recharts-surface:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--qp-accent-default) 36%, transparent);
-  outline-offset: 2px;
-}
-
 .qp-toast {
   border-radius: var(--qp-radius-control);
   border: 1px solid var(--qp-border-subtle);

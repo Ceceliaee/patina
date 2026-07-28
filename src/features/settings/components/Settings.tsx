@@ -3,7 +3,7 @@ import {
   RefreshCw,
   Settings2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import type { SettingsPageProps } from "../types";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
@@ -11,13 +11,14 @@ import QuietButton from "../../../shared/components/QuietButton";
 import SettingsAppearancePanel from "./SettingsAppearancePanel";
 import SettingsDataSafetyPanel from "./SettingsDataSafetyPanel";
 import SettingsInterfacePanel from "./SettingsInterfacePanel";
-import SettingsDataExportDialog from "./SettingsDataExportDialog.tsx";
-import SettingsDataImportDialog from "./SettingsDataImportDialog.tsx";
 import SettingsResidentPanel from "./SettingsResidentPanel";
 import SettingsTrackingPanel from "./SettingsTrackingPanel";
 import { useSettingsPageState } from "../hooks/useSettingsPageState";
 import { useWebActivitySetupState } from "../hooks/useWebActivitySetupState";
 import { useSettingsImportState } from "../hooks/useSettingsImportState.ts";
+
+const SettingsDataExportDialog = lazy(() => import("./SettingsDataExportDialog.tsx"));
+const SettingsDataImportDialog = lazy(() => import("./SettingsDataImportDialog.tsx"));
 
 export default function Settings({
   onSettingsChanged,
@@ -280,25 +281,33 @@ export default function Settings({
         </div>
       </div>
 
-      <SettingsDataExportDialog
-        open={exportDialogOpen}
-        onClose={() => setExportDialogOpen(false)}
-        onToast={onToast}
-      />
-      <SettingsDataImportDialog
-        open={importState.open}
-        view={importState.view}
-        busy={importState.busy}
-        preview={importState.preview}
-        batches={importState.batches}
-        onClose={importState.closeDialog}
-        onChooseCanonicalCsv={() => void importState.chooseCanonicalCsv()}
-        onConfirmImport={() => void importState.confirmImport()}
-        onDestructureExternal={() => void importState.destructureExternal()}
-        onShowBatches={importState.showBatches}
-        onShowActions={importState.showActions}
-        onRemoveBatch={(batchId) => void importState.removeBatch(batchId)}
-      />
+      {exportDialogOpen ? (
+        <Suspense fallback={null}>
+          <SettingsDataExportDialog
+            open
+            onClose={() => setExportDialogOpen(false)}
+            onToast={onToast}
+          />
+        </Suspense>
+      ) : null}
+      {importState.open ? (
+        <Suspense fallback={null}>
+          <SettingsDataImportDialog
+            open
+            view={importState.view}
+            busy={importState.busy}
+            preview={importState.preview}
+            batches={importState.batches}
+            onClose={importState.closeDialog}
+            onChooseCanonicalCsv={() => void importState.chooseCanonicalCsv()}
+            onConfirmImport={() => void importState.confirmImport()}
+            onDestructureExternal={() => void importState.destructureExternal()}
+            onShowBatches={importState.showBatches}
+            onShowActions={importState.showActions}
+            onRemoveBatch={(batchId) => void importState.removeBatch(batchId)}
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

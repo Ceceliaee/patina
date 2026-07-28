@@ -109,7 +109,7 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
     );
     const barPoint = await evaluate(client!, sessionId, `
       (() => {
-        const bar = Array.from(document.querySelectorAll(".dashboard-pulse-chart .recharts-rectangle"))
+        const bar = Array.from(document.querySelectorAll(".dashboard-pulse-chart .qp-hourly-chart-bar"))
           .find((node) => {
             const rect = node.getBoundingClientRect();
             return rect.width > 0 && rect.height > 0;

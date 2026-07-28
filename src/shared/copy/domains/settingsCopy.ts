@@ -16,10 +16,6 @@ const ZH_CN_SETTINGS_COPY = {
     idleTimeoutHint: "当前应用有音频等持续信号时，继续计入这段时间。",
     timelineMergeGapLabel: "活动保持时间",
     timelineMergeGapHint: "无操作后停止计时；短暂切屏返回，时间线保持连续。",
-    performance: "性能",
-    refreshLabel: "刷新间隔",
-    refreshHint: "前端界面从后端拉取最新数据的时间间隔。",
-    refreshWarning: "较短的刷新频率会增加一定的 CPU 开销。如果你发现界面有些延迟，建议设置为 5s 及以上。",
     cleanup: "数据管理",
     cleanupTitle: "清理历史记录",
     cleanupHint: "删除所选时间及以前的应用与网页记录，包括外部导入记录。操作无法撤销。",
@@ -41,18 +37,6 @@ const ZH_CN_SETTINGS_COPY = {
       15: "15 天前",
       7: "7 天前",
     } as Record<number, string>,
-    refreshPresets: {
-      1: "实时 (1s)",
-      3: "平衡 (3s)",
-      5: "省电 (5s)",
-      10: "低频 (10s)",
-    } as Record<number, string>,
-    minutePresets: {
-      60: "1 分钟",
-      180: "3 分钟",
-      300: "5 分钟",
-      600: "10 分钟",
-    } as Record<number, string>,
     trackingPanelTitle: "追踪",
     trackingPausedLabel: "暂停追踪",
     trackingPausedHint: "暂停后不再写入新记录，恢复后继续追踪。",
@@ -71,7 +55,6 @@ const ZH_CN_SETTINGS_COPY = {
     startMinimizedHint: "启动后隐藏主窗口进入托盘。",
     servicesTitle: "服务",
     webActivityTitle: "网页同步",
-    webActivityEnabledLabel: "网页同步",
     webActivityEnabledHint: "通过浏览器扩展接收当前活动网页。",
     webActivityAddressLabel: "端口",
     webActivityTokenLabel: "Token",
@@ -132,7 +115,6 @@ const ZH_CN_SETTINGS_COPY = {
     remoteStatusBridgeUrlLabel: "接收地址",
     remoteStatusBridgeTokenLabel: "Token",
     remoteStatusBridgeMachineIdLabel: "本机标识",
-    countValue: (count: number) => `${count} 个`,
     appearanceTitle: "外观",
     themeModeOptions: {
       light: "浅色",
@@ -227,10 +209,6 @@ const ZH_CN_SETTINGS_COPY = {
     webDavPassword: "应用密码",
     webDavTestConnection: "测试连接",
     webDavTesting: "测试中...",
-    webDavUploadBackup: "上传备份",
-    webDavUploading: "上传中...",
-    webDavRestoreBackup: "从远端恢复",
-    webDavLoadingBackups: "加载中...",
     webDavRestoreSelected: "恢复",
     webDavDeleteTitle: "删除 WebDAV 配置",
     webDavDeleteDetail: "这只会删除本机保存的 WebDAV 配置和密码，不会删除远端备份文件。",
@@ -274,7 +252,6 @@ const ZH_CN_SETTINGS_COPY = {
       storageCacheMigrationConfirmDetail: (currentWebviewRoot: string, targetWebviewRoot: string) => (
         `当前缓存：${currentWebviewRoot}\n目标缓存：${targetWebviewRoot}\n\nPatina 将保存当前记录并重新启动，然后使用目标缓存目录。完成前，请不要删除或移动目标目录。`
       ),
-      storageMigrationConfirmAction: "确认更改",
       storageRestoreDefaultDataConfirmDetail: (currentDataRoot: string, defaultDataRoot: string) => (
         `当前数据：${currentDataRoot}\n默认数据：${defaultDataRoot}\n\nPatina 将保存当前记录并重新启动，然后把数据迁移到默认目录。迁移完成前，请不要删除或移动当前目录和默认目录。`
       ),
@@ -310,10 +287,6 @@ const EN_US_SETTINGS_COPY = {
     idleTimeoutHint: "When the current app has audio or similar signals, keep counting that time.",
     timelineMergeGapLabel: "Activity hold time",
     timelineMergeGapHint: "Stop after inactivity; brief app switches keep the timeline continuous.",
-    performance: "Performance",
-    refreshLabel: "Refresh interval",
-    refreshHint: "How often the interface pulls fresh data from the backend.",
-    refreshWarning: "Shorter refresh intervals can increase CPU usage. Use 5s or above if the UI feels slow.",
     cleanup: "Data management",
     cleanupTitle: "Clear history records",
     cleanupHint: "Delete app and web records from the selected time and earlier, including imported records. This cannot be undone.",
@@ -335,18 +308,6 @@ const EN_US_SETTINGS_COPY = {
       15: "15 days ago",
       7: "7 days ago",
     } as Record<number, string>,
-    refreshPresets: {
-      1: "Realtime (1s)",
-      3: "Balanced (3s)",
-      5: "Battery saver (5s)",
-      10: "Low frequency (10s)",
-    } as Record<number, string>,
-    minutePresets: {
-      60: "1 minute",
-      180: "3 minutes",
-      300: "5 minutes",
-      600: "10 minutes",
-    } as Record<number, string>,
     trackingPanelTitle: "Tracking",
     trackingPausedLabel: "Pause tracking",
     trackingPausedHint: "Paused tracking will stop writing new records. Resume to continue tracking.",
@@ -365,7 +326,6 @@ const EN_US_SETTINGS_COPY = {
     startMinimizedHint: "Hide the main window in the system tray after startup.",
     servicesTitle: "Services",
     webActivityTitle: "Web sync",
-    webActivityEnabledLabel: "Web sync",
     webActivityEnabledHint: "Receives active web pages from the browser extension.",
     webActivityAddressLabel: "Port",
     webActivityTokenLabel: "Token",
@@ -426,7 +386,6 @@ const EN_US_SETTINGS_COPY = {
     remoteStatusBridgeUrlLabel: "Endpoint URL",
     remoteStatusBridgeTokenLabel: "Token",
     remoteStatusBridgeMachineIdLabel: "Device ID",
-    countValue: (count: number) => `${count}`,
     appearanceTitle: "Appearance",
     themeModeOptions: {
       light: "Light",
@@ -520,10 +479,6 @@ const EN_US_SETTINGS_COPY = {
     webDavPassword: "App password",
     webDavTestConnection: "Test connection",
     webDavTesting: "Testing...",
-    webDavUploadBackup: "Upload backup",
-    webDavUploading: "Uploading...",
-    webDavRestoreBackup: "Restore from remote",
-    webDavLoadingBackups: "Loading...",
     webDavRestoreSelected: "Restore",
     webDavDeleteTitle: "Delete WebDAV configuration",
     webDavDeleteDetail: "This only removes the local WebDAV settings and password. Remote backup files are not deleted.",
@@ -567,7 +522,6 @@ const EN_US_SETTINGS_COPY = {
       storageCacheMigrationConfirmDetail: (currentWebviewRoot: string, targetWebviewRoot: string) => (
         `Current cache: ${currentWebviewRoot}\nTarget cache: ${targetWebviewRoot}\n\nPatina will save the current record, restart, and use the target cache folder. Do not move or delete the target folder until this finishes.`
       ),
-      storageMigrationConfirmAction: "Confirm change",
       storageRestoreDefaultDataConfirmDetail: (currentDataRoot: string, defaultDataRoot: string) => (
         `Current data: ${currentDataRoot}\nDefault data: ${defaultDataRoot}\n\nPatina will save the current record, restart, and migrate the data to the default folder. Do not move or delete either folder until migration finishes.`
       ),
