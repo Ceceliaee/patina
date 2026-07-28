@@ -418,9 +418,7 @@ function AppShellContent() {
     }
 
     const result = await handleNavigate("history");
-    if (!result.navigated) {
-      return;
-    }
+    if (!result.navigated) return;
 
     setHistoryDateRequest((current) => ({
       dateKey,
