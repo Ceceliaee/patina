@@ -19,6 +19,7 @@ import {
   printBenchmarkReport,
   type BenchmarkMeasurement,
 } from "./benchmarkUtils.ts";
+import { DATA_NAVIGATION_PERFORMANCE_MARKS } from "../../src/features/data/services/dataNavigationPerformance.ts";
 
 const DATA_LABEL = "数据";
 const DASHBOARD_LABEL = "今天";
@@ -126,6 +127,69 @@ async function clickNavActiveDurationMs(
   `);
   assert.equal(typeof duration, "number");
   return duration as number;
+}
+
+interface DataNavigationStageDurations {
+  chunkReadyMs: number;
+  rootMountedMs: number;
+  structureActiveMs: number;
+  readModelReadyMs: number;
+  completeMs: number;
+}
+
+async function clickDataNavigationStageDurations(
+  client: CdpConnection,
+  sessionId: string,
+) {
+  const stageDurations = await evaluate(client, sessionId, `
+    new Promise((resolve, reject) => {
+      const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(DATA_LABEL))} + ']');
+      if (!node) {
+        reject(new Error("missing Data navigation entry"));
+        return;
+      }
+
+      const marks = ${JSON.stringify(DATA_NAVIGATION_PERFORMANCE_MARKS)};
+      let observer;
+      const timeout = setTimeout(() => {
+        observer?.disconnect();
+        reject(new Error("timed out waiting for the Data complete lifecycle mark"));
+      }, 45000);
+      const latestMark = (name) => performance.getEntriesByName(name, "mark").at(-1);
+      const finishIfComplete = () => {
+        const intent = latestMark(marks.intent);
+        const complete = latestMark(marks.complete);
+        if (!intent || !complete || complete.startTime < intent.startTime) {
+          return;
+        }
+
+        const readStage = (name) => {
+          const entry = latestMark(name);
+          if (!entry || entry.startTime < intent.startTime) {
+            throw new Error("missing ordered Data lifecycle mark: " + name);
+          }
+          return entry.startTime - intent.startTime;
+        };
+
+        clearTimeout(timeout);
+        observer?.disconnect();
+        resolve({
+          chunkReadyMs: readStage(marks.chunkReady),
+          rootMountedMs: readStage(marks.rootMounted),
+          structureActiveMs: readStage(marks.structureActive),
+          readModelReadyMs: readStage(marks.readModelReady),
+          completeMs: readStage(marks.complete),
+        });
+      };
+
+      observer = new PerformanceObserver(finishIfComplete);
+      observer.observe({ type: "mark", buffered: true });
+      node.click();
+      finishIfComplete();
+    })
+  `);
+  assert.ok(stageDurations && typeof stageDurations === "object");
+  return stageDurations as DataNavigationStageDurations;
 }
 
 async function clickNavConditionDurationMs(
@@ -355,23 +419,46 @@ try {
   );
   await openDashboard(client, sessionId);
 
+  const dataNavigationStages: DataNavigationStageDurations[] = [];
+  for (let index = 0; index < 8; index += 1) {
+    await openDashboard(client, sessionId);
+    dataNavigationStages.push(await clickDataNavigationStageDurations(client, sessionId));
+  }
+
   const measurements = [
     createBenchmarkMeasurement(
       "browser-dashboard-to-history-meaningful-content-cold",
       [coldHistoryMeaningfulContentDurationMs],
       350,
     ),
-    await measurePreparedBrowserDuration("browser-dashboard-to-data-active", 8, 160, async () => {
-      await openDashboard(client!, sessionId);
-    }, async () => {
-      const duration = await clickNavActiveDurationMs(client!, sessionId, DATA_LABEL);
-      assert.equal(await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString(APP_LOADING_VIEW)})`), false);
-      return duration;
-    }),
-    await measureAsyncBenchmark("browser-dashboard-to-data", 8, 500, async () => {
-      await openDashboard(client!, sessionId);
-      await openData(client!, sessionId);
-    }),
+    createBenchmarkMeasurement(
+      "browser-dashboard-to-data-chunk-ready",
+      dataNavigationStages.map((sample) => sample.chunkReadyMs),
+      80,
+    ),
+    createBenchmarkMeasurement(
+      "browser-dashboard-to-data-root-mounted",
+      dataNavigationStages.map((sample) => sample.rootMountedMs),
+      160,
+    ),
+    enforceP95Budget(
+      createBenchmarkMeasurement(
+        "browser-dashboard-to-data-active",
+        dataNavigationStages.map((sample) => sample.structureActiveMs),
+        160,
+      ),
+      160,
+    ),
+    createBenchmarkMeasurement(
+      "browser-dashboard-to-data-read-model-ready",
+      dataNavigationStages.map((sample) => sample.readModelReadyMs),
+      500,
+    ),
+    createBenchmarkMeasurement(
+      "browser-dashboard-to-data-complete",
+      dataNavigationStages.map((sample) => sample.completeMs),
+      500,
+    ),
     await measureAsyncBenchmark("browser-data-7d-to-365d", 8, 1_000, async () => {
       await openData(client!, sessionId);
       await setOverviewRangeToYear(client!, sessionId);
@@ -422,6 +509,7 @@ try {
       consoleErrorCount: consoleErrors.length,
       consoleErrors,
       dataSource: "Vite browser harness with Tauri SQL/plugin stubs; measures navigation and render path, not real SQLite I/O.",
+      dataNavigationContract: "intent -> chunk-ready -> root-mounted -> structure-active -> read-model-ready -> complete; complete requires fresh trend models plus overview and destination heatmaps.",
       viewport: { width: 1280, height: 820 },
     },
   });

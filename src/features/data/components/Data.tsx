@@ -1,4 +1,4 @@
-import { startTransition, type MouseEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lazy, startTransition, Suspense, type MouseEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BarChart3 } from "lucide-react";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import {
@@ -65,8 +65,10 @@ import {
   filterDataAppOptionsForQuery,
 } from "../services/dataAppSearch.ts";
 import DataTrendPanel from "./DataTrendPanel.tsx";
-import DataAppTrendPanel from "./DataAppTrendPanel.tsx";
 import DataHeatmapPanel, { type HeatmapGranularity } from "./DataHeatmapPanel.tsx";
+import { markDataNavigationStage } from "../services/dataNavigationPerformance.ts";
+
+const DataAppTrendPanel = lazy(() => import("./DataAppTrendPanel.tsx"));
 
 interface Props {
   icons: Record<string, string>;
@@ -200,6 +202,7 @@ export default function Data({
   uiLanguage,
   webActivityEnabled,
 }: Props) {
+  const dataRootRef = useRef<HTMLDivElement | null>(null);
   const today = new Date();
   const currentYear = today.getFullYear();
   const [selectedTrendRange, setSelectedTrendRange] = useState<DataTrendRangeSelection>({ kind: "rolling", days: 7 });
@@ -221,6 +224,10 @@ export default function Data({
   const [presentedDestinationMode, setPresentedDestinationMode] =
     useState<DataDestinationMode>("app");
   const [freshReadModelsReady, setFreshReadModelsReady] = useState(false);
+  const [destinationPanelCommitted, setDestinationPanelCommitted] = useState(false);
+  const handleDestinationPanelCommitted = useCallback(() => {
+    setDestinationPanelCommitted(true);
+  }, []);
   const [initialCachedHeatmapSessions] = useState(() => getCachedDataHeatmapSessions("recent", Date.now()));
   const [bootstrapSnapshot, setBootstrapSnapshot] = useState<DataBootstrapSnapshot | null>(
     () => getCachedDataBootstrapSnapshot(),
@@ -862,6 +869,23 @@ export default function Data({
   const visibleDestinationHeatmapLoading = isWebDestination
     ? webHeatmapLoading
     : destinationHeatmapSnapshot.loading;
+  const trustedReadModelsReady = Boolean(
+    overviewTrend.snapshot
+    && appTrend.snapshot
+    && trendViewModel
+    && appTrendViewModel,
+  );
+  const destinationContentReady = isWebDestination
+    ? webHeatmapReady && !webHeatmapLoading
+    : !destinationHeatmapSnapshot.loading;
+  const dataContentComplete = Boolean(
+    trustedReadModelsReady
+    && freshHeatmapRows
+    && !heatmapLoading
+    && yearSessionsView === selectedHeatmapView
+    && destinationContentReady
+    && destinationPanelCommitted,
+  );
   const destinationHeatmapYearOptions = buildYearOptions(
     isWebDestination ? webHeatmapEarliestStartTime : earliestStartTime,
     currentYear,
@@ -981,8 +1005,35 @@ export default function Data({
     yearSessionsView,
   ]);
 
+  useIsomorphicLayoutEffect(() => {
+    markDataNavigationStage("rootMounted");
+    const root = dataRootRef.current;
+    if (root?.querySelector(".data-overview .data-trend-range-trigger")) {
+      markDataNavigationStage("structureActive");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (trustedReadModelsReady) {
+      markDataNavigationStage("readModelReady");
+    }
+    if (dataContentComplete) {
+      markDataNavigationStage("complete");
+    }
+  }, [dataContentComplete, trustedReadModelsReady]);
+
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 md:gap-5 overflow-y-auto pr-1 custom-scrollbar">
+    <div
+      ref={dataRootRef}
+      data-data-content-state={
+        dataContentComplete
+          ? "complete"
+          : trustedReadModelsReady
+            ? "read-model-ready"
+            : "structure-ready"
+      }
+      className="flex h-full min-h-0 flex-col gap-4 md:gap-5 overflow-y-auto pr-1 custom-scrollbar"
+    >
       <QuietPageHeader
         icon={<BarChart3 size={18} />}
         title={UI_TEXT.data.title}
@@ -1019,7 +1070,9 @@ export default function Data({
           />
         </div>
 
-        <DataAppTrendPanel
+        <Suspense fallback={null}>
+          <DataAppTrendPanel
+          onContentCommitted={handleDestinationPanelCommitted}
           destinationMode={destinationMode}
           showDestinationMode={webActivityEnabled}
           title={isWebDestination ? UI_TEXT.data.webTrend : UI_TEXT.data.appTrend}
@@ -1095,8 +1148,9 @@ export default function Data({
           onMouseDownCapture={handleAppTrendMouseDownCapture}
           onDoubleClickCapture={handleAppTrendDoubleClickCapture}
           onMouseMove={handleAppTrendMouseMove}
-          onMouseLeave={handleAppTrendMouseLeave}
-        />
+            onMouseLeave={handleAppTrendMouseLeave}
+          />
+        </Suspense>
       </div>
     </div>
   );

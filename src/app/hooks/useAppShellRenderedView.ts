@@ -5,6 +5,7 @@ import {
   type PreloadableView,
 } from "../services/viewChunkPreloadService.ts";
 import type { View } from "../types/view.ts";
+import { markDataNavigationStage } from "../../features/data/services/dataNavigationPerformance.ts";
 
 export function getPreloadableNavigationView(view: View): PreloadableView | null {
   switch (view) {
@@ -39,6 +40,9 @@ export function useAppShellRenderedView(currentView: View): View {
     const requestId = requestRef.current;
 
     if (!preloadableView || getPreloadableViewChunkStatus(preloadableView) === "resolved") {
+      if (currentView === "data") {
+        markDataNavigationStage("chunkReady");
+      }
       setRenderedView(currentView);
       return undefined;
     }
@@ -47,6 +51,9 @@ export function useAppShellRenderedView(currentView: View): View {
     void preloadLazyViewChunk(preloadableView)
       .then(() => {
         if (!cancelled && requestRef.current === requestId) {
+          if (currentView === "data") {
+            markDataNavigationStage("chunkReady");
+          }
           setRenderedView(currentView);
         }
       })
