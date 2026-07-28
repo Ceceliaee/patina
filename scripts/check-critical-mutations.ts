@@ -14,6 +14,14 @@ const WINDOW_GUARD_SOURCE = "src-tauri/src/commands/window_guard.rs";
 const WEB_HEATMAP_RUNTIME_SOURCE = "src/features/data/hooks/useDataWebActivityRuntime.ts";
 const WEB_BRIDGE_SOURCE = "src-tauri/src/platform/web_activity_bridge.rs";
 
+function normalizeSourceNewlines(source: string) {
+  return source.replace(/\r\n?/g, "\n");
+}
+
+function readSource(sourcePath: string) {
+  return normalizeSourceNewlines(readFileSync(sourcePath, "utf8"));
+}
+
 interface Mutant {
   name: string;
   source: typeof SQLITE_SOURCE | typeof ERROR_SOURCE;
@@ -193,7 +201,7 @@ function verifyWebBridgeRetryContract(source: string) {
 }
 
 function transpile(sourcePath: string, mutation?: Mutant) {
-  let source = readFileSync(sourcePath, "utf8");
+  let source = readSource(sourcePath);
   if (sourcePath === ERROR_SOURCE) {
     source = source.replace(
       'import { invoke } from "@tauri-apps/api/core";',
@@ -223,7 +231,7 @@ const WEB_AGGREGATE_REVISION_MUTANT = {
 };
 
 async function importWebAggregateMutation(mutated: boolean) {
-  let source = readFileSync(WEB_AGGREGATE_SOURCE, "utf8").replace(
+  let source = readSource(WEB_AGGREGATE_SOURCE).replace(
     'import { invokeWithCommandError } from "./commandError.ts";',
     "const invokeWithCommandError = async () => { throw new Error('unconfigured invoke'); };",
   );
@@ -387,7 +395,7 @@ async function verifyMutant(mutant: Mutant) {
 }
 
 function verifySourceContractMutant(mutant: SourceContractMutant) {
-  const source = readFileSync(mutant.source, "utf8");
+  const source = readSource(mutant.source);
   assert(source.includes(mutant.search), `stale mutant search: ${mutant.name}`);
   mutant.verify(source.replace(mutant.search, mutant.replacement));
 }
@@ -399,7 +407,9 @@ try {
   await verify(await importMutant(ERROR_SOURCE), ERROR_SOURCE);
   await verifyWebAggregateRevision(await importWebAggregateMutation(false));
   for (const mutant of SOURCE_CONTRACT_MUTANTS) {
-    mutant.verify(readFileSync(mutant.source, "utf8"));
+    const source = readSource(mutant.source);
+    mutant.verify(source);
+    mutant.verify(normalizeSourceNewlines(source.replace(/\n/g, "\r\n")));
   }
 
   let killed = 0;
