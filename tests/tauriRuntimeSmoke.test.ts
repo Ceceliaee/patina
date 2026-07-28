@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer as createNetServer } from "node:net";
-import { createServer as createViteServer, type ViteDevServer } from "vite";
+import { build as buildVite, preview as previewVite, type PreviewServer } from "vite";
 import {
   CdpConnection,
   assertIsolatedTempPath,
@@ -58,31 +58,6 @@ async function evaluate(client: CdpConnection, expression: string) {
   });
   if (response.exceptionDetails) throw new Error(JSON.stringify(response.exceptionDetails));
   return (response.result as { value?: unknown } | undefined)?.value;
-}
-
-async function warmViteClientGraph(server: ViteDevServer, entryUrl: string) {
-  // An HTML 200 only proves that Vite is listening. Hosted runners may still
-  // spend longer than Patina's product watchdog transforming the cold client
-  // graph, so finish that test-only work before the native window is created.
-  await server.warmupRequest(entryUrl);
-
-  return waitFor(
-    "Vite client module graph warmup",
-    async () => {
-      const modules = [...server.moduleGraph.urlToModuleMap.values()]
-        .filter((module) => module.type !== "asset");
-      const pendingModules = modules.filter((module) => module.transformResult === null);
-
-      if (pendingModules.length > 0) {
-        await Promise.all(pendingModules.map((module) => server.warmupRequest(module.url)));
-        return null;
-      }
-
-      const entryModule = await server.moduleGraph.getModuleByUrl(entryUrl);
-      return entryModule?.transformResult && modules.length > 0 ? modules.length : null;
-    },
-    60_000,
-  );
 }
 
 function isProcessRunning(pid: number) {
@@ -261,40 +236,51 @@ const devtoolsPort = await reservePort();
 const root = mkdtempSync(join(tmpdir(), "patina-tauri-e2e-"));
 assertIsolatedTempPath(root, "patina-tauri-e2e-");
 const frontendUrl = `http://127.0.0.1:${frontendPort}`;
+const frontendDistDir = join(root, "frontend-dist");
 const logs: string[] = [];
 let appLaunchObserved = false;
 let appLogTail = "";
 let appProcess: ChildProcess | null = null;
-let viteServer: ViteDevServer | null = null;
+let viteServer: PreviewServer | null = null;
 let client: CdpConnection | null = null;
 let primaryError: unknown = null;
 const cleanupErrors: unknown[] = [];
 let databaseMutationCompleted = false;
 
 try {
-  viteServer = await createViteServer({
+  // Exercise the WebView against production-shaped static assets. A Vite dev
+  // server sends hundreds of transformed modules and can exceed the product
+  // readiness watchdog on a busy hosted runner even after graph warmup.
+  await buildVite({
     configFile: "vite.config.ts",
-    cacheDir: join(root, "vite-cache"),
     logLevel: "error",
-    server: {
+    build: {
+      outDir: frontendDistDir,
+      emptyOutDir: true,
+    },
+  });
+  viteServer = await previewVite({
+    configFile: "vite.config.ts",
+    logLevel: "error",
+    build: {
+      outDir: frontendDistDir,
+    },
+    preview: {
       host: "127.0.0.1",
       port: frontendPort,
       strictPort: true,
-      hmr: false,
     },
   });
-  await viteServer.listen();
-  await waitFor("Vite dev server", async () => {
+  await waitFor("Vite static preview", async () => {
     try {
       return (await fetch(frontendUrl, { signal: AbortSignal.timeout(1_000) })).ok;
     } catch {
       return null;
     }
   }, 30_000);
-  const warmedViteModuleCount = await warmViteClientGraph(viteServer, "/src/main.tsx");
-  console.log("PATINA_VITE_WARMUP_REPORT", JSON.stringify({
-    moduleCount: warmedViteModuleCount,
-    cache: "isolated-cold",
+  console.log("PATINA_FRONTEND_SERVE_REPORT", JSON.stringify({
+    mode: "production-static-preview",
+    output: "isolated",
   }));
 
   const tauriConfigOverride = {
