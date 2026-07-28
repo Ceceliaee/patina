@@ -155,6 +155,36 @@ function normalizeColorScheme(value: string | undefined, allowedSchemes: Readonl
   return "default";
 }
 
+export interface WidgetBootstrapSettingsInput {
+  trackingPaused: string | null;
+  themeMode: string | null;
+  language: string | null;
+  colorSchemeLight: string | null;
+  colorSchemeDark: string | null;
+}
+
+export function normalizeWidgetBootstrapSettings(
+  settings: WidgetBootstrapSettingsInput,
+): AppSettings {
+  return {
+    ...DEFAULT_SETTINGS,
+    trackingPaused: parseBooleanSetting(
+      settings.trackingPaused ?? undefined,
+      DEFAULT_SETTINGS.trackingPaused,
+    ),
+    themeMode: normalizeThemeMode(settings.themeMode ?? undefined),
+    language: normalizeLanguage(settings.language ?? undefined),
+    colorSchemeLight: normalizeColorScheme(
+      settings.colorSchemeLight ?? undefined,
+      LIGHT_COLOR_SCHEMES,
+    ),
+    colorSchemeDark: normalizeColorScheme(
+      settings.colorSchemeDark ?? undefined,
+      DARK_COLOR_SCHEMES,
+    ),
+  };
+}
+
 export function normalizeSettingsRecord(
   record: Record<string, string | undefined>,
 ): AppSettings {

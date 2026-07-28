@@ -1,6 +1,6 @@
 import type { AppSettings } from "../../shared/settings/appSettings.ts";
 import { ProcessMapper, type AppOverride } from "../../shared/classification/processMapper.ts";
-import { normalizeSettingsRecord } from "../../shared/settings/appSettingsNormalization.ts";
+import { normalizeWidgetBootstrapSettings } from "../../shared/settings/appSettingsNormalization.ts";
 import {
   getWidgetBootstrapSnapshot,
   type WidgetBootstrapSnapshot,
@@ -29,13 +29,7 @@ export function applyWidgetBootstrapSnapshot(
   ProcessMapper.setUserOverrides(overrides);
 
   return {
-    settings: normalizeSettingsRecord({
-      tracking_paused: snapshot.settings.trackingPaused ?? undefined,
-      theme_mode: snapshot.settings.themeMode ?? undefined,
-      language: snapshot.settings.language ?? undefined,
-      color_scheme_light: snapshot.settings.colorSchemeLight ?? undefined,
-      color_scheme_dark: snapshot.settings.colorSchemeDark ?? undefined,
-    }),
+    settings: normalizeWidgetBootstrapSettings(snapshot.settings),
   };
 }
 
