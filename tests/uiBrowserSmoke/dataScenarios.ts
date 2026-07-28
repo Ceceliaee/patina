@@ -1029,6 +1029,418 @@ export async function runDataScenarios(
     );
   });
 
+  await runTest("data web trend failures preserve trustworthy content and remain retryable", async () => {
+    await client!.command("Page.navigate", { url: appUrl }, sessionId);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('[aria-label="数据"]'))`,
+      45_000,
+    );
+    await evaluate(client!, sessionId, `
+      (() => {
+        globalThis.__PATINA_WEB_ACTIVITY_QUERY_DELAY_MS = 0;
+        globalThis.__PATINA_WEB_ACTIVITY_QUERY_FAILURE = true;
+        globalThis.__PATINA_INVOKED_COMMANDS = [];
+        document.querySelector('[aria-label="数据"]')?.click();
+      })()
+    `);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector(".data-app-panel"))`);
+    await evaluate(client!, sessionId, `
+      (() => {
+        const group = document.querySelector('[aria-label="选择时间去向类型"]');
+        Array.from(group?.querySelectorAll("button") ?? [])
+          .find((node) => node.textContent?.trim() === "网页")?.click();
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-web-error")?.textContent?.includes("网页分析暂时不可用")`,
+      45_000,
+      "blocking web trend error",
+    );
+    assert.equal(
+      await evaluate(
+        client!,
+        sessionId,
+        `Boolean(document.querySelector(".data-web-error button"))`,
+      ),
+      true,
+    );
+    await evaluate(client!, sessionId, `
+      (() => {
+        globalThis.__PATINA_WEB_ACTIVITY_QUERY_FAILURE = false;
+        document.querySelector(".data-web-error button")?.click();
+      })()
+    `);
+    try {
+      await waitForExpression(
+        client!,
+        sessionId,
+        `document.querySelector('[aria-label="网页列表"]')?.textContent?.includes("docs.example.com")`,
+        45_000,
+        "web trend retry success",
+      );
+    } catch (error) {
+      const retryState = await evaluate(client!, sessionId, `JSON.stringify({
+        failure: globalThis.__PATINA_WEB_ACTIVITY_QUERY_FAILURE,
+        commands: globalThis.__PATINA_INVOKED_COMMANDS,
+        panelText: document.querySelector(".data-app-panel")?.textContent ?? null,
+      })`);
+      throw new Error(`Web trend retry state: ${String(retryState)}`, { cause: error });
+    }
+
+    await evaluate(client!, sessionId, `
+      (() => {
+        globalThis.__PATINA_WEB_ACTIVITY_QUERY_FAILURE = true;
+        const next = document.querySelector(
+          ".data-app-panel .data-trend-range-control .qp-range-control-arrow:last-child",
+        );
+        next?.click();
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-app-panel")?.textContent?.includes("更新失败，显示上次结果")`,
+      45_000,
+      "non-blocking web trend refresh error",
+    );
+    assert.deepEqual(
+      JSON.parse(String(await evaluate(client!, sessionId, `
+        JSON.stringify({
+          hasList: Boolean(document.querySelector('[aria-label="网页列表"]')),
+          hasChart: Boolean(document.querySelector(".data-app-chart")),
+          hasMetrics: document.querySelectorAll(".data-app-metric").length === 4,
+          busy: document.querySelector(".data-app-grid")?.getAttribute("aria-busy"),
+        })
+      `))),
+      {
+        hasList: true,
+        hasChart: true,
+        hasMetrics: true,
+        busy: "false",
+      },
+    );
+    const webCommandsBeforeRefreshRetry = Number(await evaluate(
+      client!,
+      sessionId,
+      `globalThis.__PATINA_INVOKED_COMMANDS
+        .filter((entry) => entry.command === "cmd_get_web_activity_aggregate_range").length`,
+    ));
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        globalThis.__PATINA_WEB_ACTIVITY_QUERY_FAILURE = false;
+        const retry = Array.from(document.querySelectorAll(".data-app-refresh-status button"))
+          .find((node) => node.textContent?.trim() === "重试");
+        if (!(retry instanceof HTMLButtonElement)) return false;
+        retry.click();
+        return true;
+      })()
+    `), true);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `globalThis.__PATINA_INVOKED_COMMANDS
+        .filter((entry) => entry.command === "cmd_get_web_activity_aggregate_range").length
+        > ${webCommandsBeforeRefreshRetry}`,
+      45_000,
+      "web trend refresh retry request",
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `!document.querySelector(".data-app-panel")?.textContent?.includes("更新失败，显示上次结果")
+        && document.querySelector(".data-app-grid")?.getAttribute("aria-busy") === "false"`,
+      45_000,
+      "web trend refresh retry success",
+    );
+    await evaluate(client!, sessionId, `
+      (() => {
+        globalThis.__PATINA_WEB_ACTIVITY_QUERY_DELAY_MS = 0;
+        globalThis.__PATINA_WEB_ACTIVITY_QUERY_FAILURE = false;
+        const group = document.querySelector('[aria-label="选择时间去向类型"]');
+        Array.from(group?.querySelectorAll("button") ?? [])
+          .find((node) => node.textContent?.trim() === "应用")?.click();
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-app-panel h3")?.textContent?.trim() === "应用趋势"`,
+    );
+  });
+
+  await runTest("data removes every web control and web read when Web Sync is disabled", async () => {
+    await evaluate(client!, sessionId, `
+      (() => {
+        const key = "__time_tracker_smoke_settings";
+        const settings = JSON.parse(localStorage.getItem(key) ?? "{}");
+        settings.web_activity_enabled = "0";
+        localStorage.setItem(key, JSON.stringify(settings));
+        globalThis.__PATINA_INVOKED_COMMANDS = [];
+        globalThis.__PATINA_RELOAD_MARKER = true;
+      })()
+    `);
+    await client!.command("Page.navigate", { url: appUrl }, sessionId);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `!globalThis.__PATINA_RELOAD_MARKER && Boolean(document.querySelector('[aria-label="数据"]'))`,
+      45_000,
+    );
+    await evaluate(client!, sessionId, `document.querySelector('[aria-label="数据"]')?.click()`);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector(".data-app-panel"))`, 45_000);
+    assert.deepEqual(
+      JSON.parse(String(await evaluate(client!, sessionId, `
+        JSON.stringify({
+          modeControl: Boolean(document.querySelector('[aria-label="选择时间去向类型"]')),
+          webText: document.querySelector(".data-app-panel")?.textContent?.includes("网页趋势") ?? false,
+          webCommandCount: globalThis.__PATINA_INVOKED_COMMANDS
+            .filter((entry) => entry.command === "cmd_get_web_activity_aggregate_range").length,
+        })
+      `))),
+      {
+        modeControl: false,
+        webText: false,
+        webCommandCount: 0,
+      },
+    );
+
+    await evaluate(client!, sessionId, `
+      (() => {
+        const key = "__time_tracker_smoke_settings";
+        const settings = JSON.parse(localStorage.getItem(key) ?? "{}");
+        settings.web_activity_enabled = "1";
+        localStorage.setItem(key, JSON.stringify(settings));
+        globalThis.__PATINA_RELOAD_MARKER = true;
+      })()
+    `);
+    await client!.command("Page.navigate", { url: appUrl }, sessionId);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `!globalThis.__PATINA_RELOAD_MARKER && Boolean(document.querySelector('[aria-label="数据"]'))`,
+      45_000,
+    );
+  });
+
+  await runTest("data combines activity trend and annual heatmap without coupling their controls", async () => {
+    await evaluate(client!, sessionId, `document.querySelector('[aria-label="数据"]')?.click()`);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector(".data-dashboard-grid"))`, 45_000);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector(".data-heatmap-panel-compact"))`, 45_000);
+    const layouts: Array<{
+      width: number;
+      pageOverflows: boolean;
+      firstTop: number;
+      firstLeft: number;
+      secondTop: number;
+      secondLeft: number;
+      directChildren: number;
+      panelOrder: string[];
+      overviewSectionOrder: string[];
+      heatmapTop: number;
+      trendTop: number;
+      heatmapHasOwnRange: boolean;
+      trendHasOwnRange: boolean;
+      destinationSidebarLeft: number;
+      destinationSidebarTop: number;
+      destinationSidebarBottom: number;
+      destinationListBottom: number;
+      destinationAnalysisLeft: number;
+      destinationAnalysisTop: number;
+      destinationChartBottom: number;
+      destinationHeatmapTop: number;
+      destinationHeatmapCells: number;
+    }> = [];
+    for (const width of [2048, 1366, 900, 390]) {
+      await client!.command("Emulation.setDeviceMetricsOverride", {
+        width,
+        height: 900,
+        deviceScaleFactor: 1,
+        mobile: false,
+      }, sessionId);
+      await waitForExpression(client!, sessionId, `window.innerWidth === ${width}`);
+      layouts.push(JSON.parse(String(await evaluate(client!, sessionId, `
+        (() => {
+          const grid = document.querySelector(".data-dashboard-grid");
+          const children = grid ? Array.from(grid.children) : [];
+          const first = children[0]?.getBoundingClientRect();
+          const second = children[1]?.getBoundingClientRect();
+          const overview = grid?.querySelector(".data-overview");
+          const overviewSections = overview ? Array.from(overview.children) : [];
+          const trend = overview?.querySelector(".data-trend-panel");
+          const heatmap = overview?.querySelector(".data-heatmap-panel");
+          const destinationSidebar = grid?.querySelector(".data-app-panel .data-app-sidebar")?.getBoundingClientRect();
+          const destinationList = grid?.querySelector(".data-app-panel .data-app-trend-list")?.getBoundingClientRect();
+          const destinationAnalysis = grid?.querySelector(".data-app-panel .data-app-chart-column")?.getBoundingClientRect();
+          const destinationChart = grid?.querySelector(".data-app-panel .data-app-chart")?.getBoundingClientRect();
+          const destinationHeatmap = grid?.querySelector(".data-app-panel .data-heatmap-panel-compact");
+          return JSON.stringify({
+            width: window.innerWidth,
+            pageOverflows: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+            firstTop: first?.top ?? -1,
+            firstLeft: first?.left ?? -1,
+            secondTop: second?.top ?? -1,
+            secondLeft: second?.left ?? -1,
+            directChildren: children.length,
+            panelOrder: children.map((node) => (
+              node.classList.contains("data-overview")
+                ? "overview"
+                : node.classList.contains("data-app-panel")
+                  ? "destination"
+                  : "unknown"
+            )),
+            overviewSectionOrder: overviewSections.map((node) => (
+              node.classList.contains("data-trend-panel")
+                ? "trend"
+                : node.classList.contains("data-heatmap-panel")
+                  ? "heatmap"
+                  : "unknown"
+            )),
+            trendTop: trend?.getBoundingClientRect().top ?? -1,
+            heatmapTop: heatmap?.getBoundingClientRect().top ?? -1,
+            trendHasOwnRange: Boolean(trend?.querySelector(".data-trend-range-trigger")),
+            heatmapHasOwnRange: Boolean(heatmap?.querySelector(".data-heatmap-range-control")),
+            destinationSidebarLeft: destinationSidebar?.left ?? -1,
+            destinationSidebarTop: destinationSidebar?.top ?? -1,
+            destinationSidebarBottom: destinationSidebar?.bottom ?? -1,
+            destinationListBottom: destinationList?.bottom ?? -1,
+            destinationAnalysisLeft: destinationAnalysis?.left ?? -1,
+            destinationAnalysisTop: destinationAnalysis?.top ?? -1,
+            destinationChartBottom: destinationChart?.bottom ?? -1,
+            destinationHeatmapTop: destinationHeatmap?.getBoundingClientRect().top ?? -1,
+            destinationHeatmapCells: destinationHeatmap?.querySelectorAll(".data-heatmap-cell").length ?? 0,
+          });
+        })()
+      `))));
+    }
+
+    assert.deepEqual(layouts.map((layout) => layout.directChildren), [2, 2, 2, 2]);
+    assert.deepEqual(
+      layouts.map((layout) => layout.panelOrder),
+      Array.from({ length: 4 }, () => ["overview", "destination"]),
+    );
+    assert.deepEqual(
+      layouts.map((layout) => layout.overviewSectionOrder),
+      Array.from({ length: 4 }, () => ["trend", "heatmap"]),
+    );
+    assert.ok(layouts.every((layout) => layout.trendHasOwnRange));
+    assert.ok(layouts.every((layout) => layout.heatmapHasOwnRange));
+    assert.ok(layouts.every((layout) => layout.destinationHeatmapCells > 0));
+    assert.ok(layouts.every((layout) => layout.destinationHeatmapTop > layout.destinationChartBottom));
+    assert.ok(layouts.every((layout) => (
+      Math.abs(layout.destinationSidebarBottom - layout.destinationListBottom - 24) <= 1
+    )));
+    assert.deepEqual(layouts.map((layout) => layout.pageOverflows), [false, false, false, false]);
+    assert.ok(Math.abs(layouts[0].firstTop - layouts[0].secondTop) <= 1);
+    assert.ok(layouts[0].secondLeft > layouts[0].firstLeft);
+    assert.ok(layouts[0].heatmapTop > layouts[0].trendTop);
+    for (const layout of layouts.slice(0, 2)) {
+      assert.ok(layout.destinationAnalysisLeft > layout.destinationSidebarLeft);
+      assert.ok(Math.abs(layout.destinationAnalysisTop - layout.destinationSidebarTop) <= 1);
+    }
+    for (const layout of layouts.slice(1)) {
+      assert.ok(layout.secondTop > layout.firstTop);
+      assert.ok(Math.abs(layout.secondLeft - layout.firstLeft) <= 1);
+      assert.ok(layout.heatmapTop > layout.trendTop);
+    }
+    for (const layout of layouts.slice(2)) {
+      assert.ok(layout.destinationAnalysisTop > layout.destinationSidebarTop);
+      assert.ok(Math.abs(layout.destinationAnalysisLeft - layout.destinationSidebarLeft) <= 1);
+    }
+    await client!.command("Emulation.setDeviceMetricsOverride", {
+      width: 1280,
+      height: 820,
+      deviceScaleFactor: 1,
+      mobile: false,
+    }, sessionId);
+  });
+
+  await runTest("data web analysis stays readable in English dark mode and restores locale state", async () => {
+    await evaluate(client!, sessionId, `
+      (() => {
+        const key = "__time_tracker_smoke_settings";
+        const settings = JSON.parse(localStorage.getItem(key) ?? "{}");
+        settings.language = "en-US";
+        settings.theme_mode = "dark";
+        settings.web_activity_enabled = "1";
+        localStorage.setItem(key, JSON.stringify(settings));
+        globalThis.__PATINA_RELOAD_MARKER = true;
+      })()
+    `);
+    await client!.command("Page.navigate", { url: appUrl }, sessionId);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `!globalThis.__PATINA_RELOAD_MARKER && Boolean(document.querySelector('[aria-label="Data"]'))`,
+      45_000,
+    );
+    await client!.command("Emulation.setDeviceMetricsOverride", {
+      width: 390,
+      height: 900,
+      deviceScaleFactor: 1.5,
+      mobile: false,
+    }, sessionId);
+    await evaluate(client!, sessionId, `document.querySelector('[aria-label="Data"]')?.click()`);
+    await waitForExpression(client!, sessionId, `document.body.innerText.includes("Browse long-term trends")`);
+    await evaluate(client!, sessionId, `
+      Array.from(document.querySelectorAll('[aria-label="Select time destination type"] button'))
+        .find((node) => node.textContent?.trim() === "Web")?.click()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-app-panel h3")?.textContent?.trim() === "Web Trends"`,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('[aria-label="Website list"]'))`,
+    );
+    assert.deepEqual(
+      JSON.parse(String(await evaluate(client!, sessionId, `
+        JSON.stringify({
+          theme: document.documentElement.dataset.theme,
+          overflows: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+          hasScope: Boolean(document.querySelector('[aria-label="Select heatmap item"]')),
+          hasWebsiteList: Boolean(document.querySelector('[aria-label="Website list"]')),
+        })
+      `))),
+      {
+        theme: "dark",
+        overflows: false,
+        hasScope: false,
+        hasWebsiteList: true,
+      },
+    );
+
+    await evaluate(client!, sessionId, `
+      (() => {
+        const key = "__time_tracker_smoke_settings";
+        const settings = JSON.parse(localStorage.getItem(key) ?? "{}");
+        settings.language = "zh-CN";
+        settings.theme_mode = "light";
+        localStorage.setItem(key, JSON.stringify(settings));
+        globalThis.__PATINA_RELOAD_MARKER = true;
+      })()
+    `);
+    await client!.command("Emulation.setDeviceMetricsOverride", {
+      width: 1280,
+      height: 820,
+      deviceScaleFactor: 1,
+      mobile: false,
+    }, sessionId);
+    await client!.command("Page.navigate", { url: appUrl }, sessionId);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `!globalThis.__PATINA_RELOAD_MARKER && Boolean(document.querySelector('[aria-label="数据"]'))`,
+      45_000,
+    );
+  });
+
   if (options.continuityOnly) return;
 
   await runTest("data trend chart renders the shared tooltip on real hover", async () => {
