@@ -19,7 +19,9 @@ export async function runLocaleScenarios(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `document.body.innerText.includes(${jsonString("Focus share")})`,
+      `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("History"))} + ']'))`,
+      45_000,
+      "English navigation is ready regardless of the persisted active view",
     );
 
     const clicked = await evaluate(client!, sessionId, `

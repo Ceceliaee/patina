@@ -43,6 +43,7 @@ const LAZY_SECONDARY_CHUNK_BUDGETS = [
   { label: "Data first-screen prewarm", pattern: /^dataFirstScreenPrewarm-.*\.js$/, gzipKiB: 6 },
   { label: "Data trend snapshot", pattern: /^dataTrendSnapshot-.*\.js$/, gzipKiB: 2 },
   { label: "Data bootstrap snapshot", pattern: /^dataBootstrapSnapshot-.*\.js$/, gzipKiB: 1 },
+  { label: "Data destination panel", pattern: /^DataAppTrendPanel-.*\.js$/, gzipKiB: 2.3 },
 ] as const;
 
 // Stable cross-feature UI owners stay lazy and receive their own narrow budget

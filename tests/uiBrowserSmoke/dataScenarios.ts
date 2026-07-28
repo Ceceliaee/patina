@@ -645,11 +645,14 @@ export async function runDataScenarios(
           busy: document.querySelector(".data-app-grid")?.getAttribute("aria-busy"),
           hasUpdatingStatus: document.querySelector(".data-app-panel")
             ?.textContent?.includes("更新中") ?? false,
+          webCommandCount: globalThis.__PATINA_INVOKED_COMMANDS
+            .filter((entry) => entry.command === "cmd_get_web_activity_aggregate_range").length,
         })
       `))),
       {
         busy: "false",
         hasUpdatingStatus: false,
+        webCommandCount,
       },
       "a cache-speed refresh must finish before the delayed status becomes visible",
     );
@@ -1391,6 +1394,13 @@ export async function runDataScenarios(
     }, sessionId);
     await evaluate(client!, sessionId, `document.querySelector('[aria-label="Data"]')?.click()`);
     await waitForExpression(client!, sessionId, `document.body.innerText.includes("Browse long-term trends")`);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('[aria-label="Select time destination type"]'))`,
+      45_000,
+      "lazy destination panel is ready before switching to web mode",
+    );
     await evaluate(client!, sessionId, `
       Array.from(document.querySelectorAll('[aria-label="Select time destination type"] button'))
         .find((node) => node.textContent?.trim() === "Web")?.click()
