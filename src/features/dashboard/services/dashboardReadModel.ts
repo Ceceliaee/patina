@@ -19,7 +19,6 @@ import {
   type TopApplicationItem,
 } from "./dashboardFormatting.ts";
 import {
-  buildHourlyActivity,
   buildHourlyCategoryActivity,
   type HourlyActivityPoint,
   type HourlyCategoryActivity,
@@ -236,6 +235,11 @@ export function buildDashboardReadModel(
     trackerHealth,
     resolveLiveCutoffMs(trackerHealth, nowMs),
   );
+  const hourlyCategoryActivity = buildHourlyCategoryActivity(compiledSessions);
+  const hourlyActivity = hourlyCategoryActivity.points.map(({ hour, minutes }) => ({
+    hour,
+    minutes,
+  }));
 
   return {
     compiledSessions,
@@ -244,8 +248,8 @@ export function buildDashboardReadModel(
     yesterdayTrackedTime,
     dayDeltaTrackedTime: totalTrackedTime - yesterdayTrackedTime,
     topApplications: buildTopApplications(stats),
-    hourlyActivity: buildHourlyActivity(compiledSessions),
-    hourlyCategoryActivity: buildHourlyCategoryActivity(compiledSessions),
+    hourlyActivity,
+    hourlyCategoryActivity,
     categoryDist: buildCategoryDistribution(stats),
     diagnostics,
   };

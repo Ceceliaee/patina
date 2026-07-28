@@ -28,6 +28,10 @@ export function materializeLiveSessions(
   trackerHealth: TrackerHealthSnapshot,
   nowMs: number,
 ): DiagnosableHistorySession[] {
+  if (!sessions.some((session) => session.endTime === null)) {
+    return sessions;
+  }
+
   const liveCutoffMs = resolveLiveCutoffMs(trackerHealth, nowMs);
 
   return sessions.map((session) => {
@@ -51,16 +55,20 @@ export function buildReadModelDiagnostics(
   trackerHealth: TrackerHealthSnapshot,
   liveCutoffMs: number,
 ): ReadModelDiagnostics {
-  const suspiciousSessionCount = compiledSessions.filter((session) => session.diagnosticCodes.length > 0).length;
-  const suspiciousDuration = compiledSessions.reduce(
-    (sum, session) => sum + Math.max(0, session.suspiciousDuration),
-    0,
-  );
-  const suspiciousAppCount = new Set(
-    compiledSessions
-      .filter((session) => session.suspiciousDuration > 0)
-      .map((session) => session.appKey),
-  ).size;
+  let suspiciousSessionCount = 0;
+  let suspiciousDuration = 0;
+  const suspiciousApps = new Set<string>();
+  for (const session of compiledSessions) {
+    if (session.diagnosticCodes.length > 0) {
+      suspiciousSessionCount += 1;
+    }
+    const sessionSuspiciousDuration = Math.max(0, session.suspiciousDuration);
+    suspiciousDuration += sessionSuspiciousDuration;
+    if (sessionSuspiciousDuration > 0) {
+      suspiciousApps.add(session.appKey);
+    }
+  }
+  const suspiciousAppCount = suspiciousApps.size;
 
   return {
     trackerStatus: trackerHealth.status,

@@ -42,6 +42,14 @@ export interface CompiledSession extends HistorySession {
 
 export type TimelineSession = CompiledSession;
 
+interface SessionCompilationContext {
+  canonicalExecutableByRawName: Map<string, string>;
+  normalizedExecutableByRawName: Map<string, string>;
+  overrideDisplayNameByAppKey: Map<string, string | null>;
+  trackingEnabledByAppKey: Map<string, boolean>;
+  mappedNameByAppKey: Map<string, string>;
+}
+
 export interface NormalizedAppSummaryItem {
   exeName: string;
   appName: string;
@@ -103,47 +111,108 @@ function mergeDiagnosticCodes(
   return Array.from(new Set([...current, ...incoming]));
 }
 
-function shouldTrackInReadModel(session: HistorySession) {
-  const exeName = session.exeName;
-  const canonicalExe = AppClassification.resolveCanonicalExecutable(exeName);
-  return AppClassification.shouldTrackProcess(exeName, {
+function createSessionCompilationContext(): SessionCompilationContext {
+  return {
+    canonicalExecutableByRawName: new Map(),
+    normalizedExecutableByRawName: new Map(),
+    overrideDisplayNameByAppKey: new Map(),
+    trackingEnabledByAppKey: new Map(),
+    mappedNameByAppKey: new Map(),
+  };
+}
+
+function getCanonicalExecutable(exeName: string, context: SessionCompilationContext) {
+  const cached = context.canonicalExecutableByRawName.get(exeName);
+  if (cached !== undefined) return cached;
+
+  const canonical = AppClassification.resolveCanonicalExecutable(exeName);
+  context.canonicalExecutableByRawName.set(exeName, canonical);
+  return canonical;
+}
+
+function getNormalizedExecutable(exeName: string, context: SessionCompilationContext) {
+  const cached = context.normalizedExecutableByRawName.get(exeName);
+  if (cached !== undefined) return cached;
+
+  const normalized = AppClassification.normalizeExecutable(exeName);
+  context.normalizedExecutableByRawName.set(exeName, normalized);
+  return normalized;
+}
+
+function getOverrideDisplayName(appKey: string, context: SessionCompilationContext) {
+  if (context.overrideDisplayNameByAppKey.has(appKey)) {
+    return context.overrideDisplayNameByAppKey.get(appKey) ?? null;
+  }
+
+  const displayName = AppClassification.getUserOverride(appKey)?.displayName?.trim() || null;
+  context.overrideDisplayNameByAppKey.set(appKey, displayName);
+  return displayName;
+}
+
+function getMappedAppName(appKey: string, context: SessionCompilationContext) {
+  const cached = context.mappedNameByAppKey.get(appKey);
+  if (cached !== undefined) return cached;
+
+  const name = AppClassification.mapApp(appKey).name;
+  context.mappedNameByAppKey.set(appKey, name);
+  return name;
+}
+
+function shouldTrackInReadModel(
+  session: HistorySession,
+  appKey: string,
+  context: SessionCompilationContext,
+) {
+  const processTrackable = AppClassification.shouldTrackProcess(session.exeName, {
     appName: session.appName,
     windowTitle: session.windowTitle,
-  }) && AppClassification.isAppTrackingEnabledByUser(canonicalExe);
+  });
+  if (!processTrackable) return false;
+
+  const cached = context.trackingEnabledByAppKey.get(appKey);
+  if (cached !== undefined) return cached;
+
+  const enabled = AppClassification.isAppTrackingEnabledByUser(appKey);
+  context.trackingEnabledByAppKey.set(appKey, enabled);
+  return enabled;
 }
 
 function resolveCompiledDisplayName(
   session: DiagnosableHistorySession,
   appKey: string,
+  context: SessionCompilationContext,
 ) {
-  const overrideDisplayName = AppClassification.getUserOverride(appKey)?.displayName?.trim();
+  const overrideDisplayName = getOverrideDisplayName(appKey, context);
   if (overrideDisplayName) {
     return overrideDisplayName;
   }
 
-  const rawExeKey = AppClassification.normalizeExecutable(session.exeName);
+  const rawExeKey = getNormalizedExecutable(session.exeName, context);
 
   if (appKey !== rawExeKey) {
     // For alias executables (installer/updater/tray variants), prefer the
     // canonical app identity over raw product metadata from the alias process.
-    return AppClassification.mapApp(appKey).name;
+    return getMappedAppName(appKey, context);
   }
 
-  const mapped = AppClassification.mapApp(appKey, { appName: session.appName });
   const appName = session.appName.trim();
   if (appName) {
     return appName;
   }
 
-  return mapped.name;
+  return getMappedAppName(appKey, context);
 }
 
-function resolveCompiledDisplayNameRank(session: DiagnosableHistorySession, appKey: string) {
-  if (AppClassification.getUserOverride(appKey)?.displayName?.trim()) {
+function resolveCompiledDisplayNameRank(
+  session: DiagnosableHistorySession,
+  appKey: string,
+  context: SessionCompilationContext,
+) {
+  if (getOverrideDisplayName(appKey, context)) {
     return 3;
   }
 
-  const rawExeKey = AppClassification.normalizeExecutable(session.exeName);
+  const rawExeKey = getNormalizedExecutable(session.exeName, context);
   if (rawExeKey !== appKey) {
     return 0;
   }
@@ -159,10 +228,11 @@ function resolveStatsExeName(session: CompiledSession) {
 
 function prepareSession(
   session: DiagnosableHistorySession,
+  appKey: string,
+  context: SessionCompilationContext,
 ): CompiledSession {
   const rawEndTime = Math.max(session.startTime, getSessionRawEndTime(session));
-  const appKey = AppClassification.resolveCanonicalExecutable(session.exeName);
-  const displayName = resolveCompiledDisplayName(session, appKey);
+  const displayName = resolveCompiledDisplayName(session, appKey, context);
   const cleanedTitle = cleanWindowTitle(session.windowTitle, session.exeName);
   const normalizedTitle = normalizeTitle(cleanedTitle, displayName);
   const rawTitleSamples = session.titleSampleDetails ?? [];
@@ -193,7 +263,7 @@ function prepareSession(
     appKey,
     mergedCount: 1,
     displayName,
-    displayNameRank: resolveCompiledDisplayNameRank(session, appKey),
+    displayNameRank: resolveCompiledDisplayNameRank(session, appKey, context),
     displayTitle: normalizedTitle,
     titleSamples: titleSamplesFromDetails(
       normalizedTitleSampleDetails.length > 0
@@ -259,10 +329,15 @@ function buildCompiledSessionBase(
   keepLatestLiveSession: boolean = false,
 ): CompiledSession[] {
   const directMergeGapMs = minSessionSecs > 0 ? DIRECT_MERGE_GAP_MS : 0;
-  const prepared = sessions
-    .filter((session) => shouldTrackInReadModel(session))
-    .map((session) => prepareSession(session))
-    .sort((a, b) => a.startTime - b.startTime);
+  const context = createSessionCompilationContext();
+  const prepared: CompiledSession[] = [];
+  for (const session of sessions) {
+    const appKey = getCanonicalExecutable(session.exeName, context);
+    if (shouldTrackInReadModel(session, appKey, context)) {
+      prepared.push(prepareSession(session, appKey, context));
+    }
+  }
+  prepared.sort((a, b) => a.startTime - b.startTime);
 
   const merged = prepared.reduce<CompiledSession[]>((acc, session) => {
     const previous = acc[acc.length - 1];
