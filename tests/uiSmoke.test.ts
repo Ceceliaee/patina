@@ -973,7 +973,11 @@ await runTest("Data keeps web analysis beside a unified activity overview", () =
   assert.ok(overviewPanelIndex < trendPanelIndex);
   assert.ok(trendPanelIndex < heatmapPanelIndex);
   assert.ok(heatmapPanelIndex < destinationPanelIndex);
-  assert.match(data, /<div className="qp-panel p-5 data-overview">[\s\S]*<DataTrendPanel[\s\S]*<DataHeatmapPanel[\s\S]*<\/div>\s*\n\s*<DataAppTrendPanel/);
+  assert.match(
+    data,
+    /<div className="qp-panel p-5 data-overview">[\s\S]*<DataTrendPanel[\s\S]*<DataHeatmapPanel[\s\S]*<\/div>\s*\n\s*<Suspense fallback=\{null\}>[\s\S]*<DataAppTrendPanel[\s\S]*<\/Suspense>/,
+  );
+  assert.match(data, /const DataAppTrendPanel = lazy\(\(\) => import\("\.\/DataAppTrendPanel\.tsx"\)\)/);
   assert.equal((data.match(/<DataTrendPanel/g) ?? []).length, 1);
   assert.equal((data.match(/<DataHeatmapPanel/g) ?? []).length, 2);
   assert.equal((data.match(/<DataAppTrendPanel/g) ?? []).length, 1);

@@ -1072,82 +1072,82 @@ export default function Data({
 
         <Suspense fallback={null}>
           <DataAppTrendPanel
-          onContentCommitted={handleDestinationPanelCommitted}
-          destinationMode={destinationMode}
-          showDestinationMode={webActivityEnabled}
-          title={isWebDestination ? UI_TEXT.data.webTrend : UI_TEXT.data.appTrend}
-          rangeAriaLabel={isWebDestination
-            ? UI_TEXT.accessibility.data.webTrendRange
-            : UI_TEXT.accessibility.data.appTrendRange}
-          selection={selectedAppTrendRange}
-          ready={destinationPanelReady}
-          selectedOptions={destinationPanelSelectedOptions}
-          trendSeries={destinationTrendSeries}
-          summary={destinationSummary}
-          filteredOptions={destinationPanelOptions}
-          searchQuery={isWebDestination ? webSearchQuery : appSearchQuery}
-          hasSearchQuery={isWebDestination ? hasWebSearchQuery : hasAppSearchQuery}
-          searchPlaceholder={isWebDestination
-            ? UI_TEXT.data.webSearchPlaceholder
-            : UI_TEXT.data.appSearchPlaceholder}
-          listAriaLabel={isWebDestination
-            ? UI_TEXT.data.webTrendDomainList
-            : UI_TEXT.data.appTrendAppList}
-          emptyLabel={isWebDestination
-            ? UI_TEXT.data.webTrendEmpty
-            : UI_TEXT.data.appTrendEmpty}
-          noMatchLabel={isWebDestination
-            ? UI_TEXT.data.webTrendNoMatch
-            : UI_TEXT.data.appTrendNoMatch}
-          totalMetricLabel={isWebDestination
-            ? UI_TEXT.data.webTrendTotal
-            : UI_TEXT.data.appTrendTotal}
-          usageMetricLabel={isWebDestination
-            ? UI_TEXT.data.webTrendUsage
-            : UI_TEXT.data.appTrendUsage}
-          granularity={destinationGranularity}
-          chartData={destinationChartData}
-          heatmapContent={(
-            <DataHeatmapPanel
-              title={isWebDestination ? UI_TEXT.data.webHeatmap : UI_TEXT.data.appHeatmap}
-              compact
-              selectedHeatmapView={selectedDestinationHeatmapView}
-              selectedHeatmapViewKey={`${presentedDestinationMode}:${encodeDataDestinationSelectionKey(
-                isWebDestination ? selectedWebKeys : selectedAppKeys,
-              )}:${selectedDestinationHeatmapView}`}
-              rows={visibleDestinationHeatmapRows}
-              granularity={destinationHeatmapGranularity}
-              granularityOptions={heatmapGranularityOptions}
-              canSelectOlderHeatmapView={
-                selectedDestinationHeatmapViewIndex >= 0
-                && selectedDestinationHeatmapViewIndex < destinationHeatmapViewOptions.length - 1
-              }
-              canSelectNewerHeatmapView={selectedDestinationHeatmapViewIndex > 0}
-              onGranularityChange={setDestinationHeatmapGranularity}
-              onSelectAdjacentHeatmapView={selectAdjacentDestinationHeatmapView}
-              onOpenHistoryDate={onOpenHistoryDate}
-              loading={visibleDestinationHeatmapLoading}
-            />
-          )}
-          chartAxis={destinationChartAxis}
-          peakDay={destinationPeakDay}
-          listRef={appListRef}
-          chartRef={appTrendChart.chartRef}
-          initialDimension={appTrendChart.initialDimension}
-          canOpenHistory={destinationCanOpenHistory}
-          errorMessage={isWebDestination ? webTrendError : null}
-          refreshing={(isWebDestination && webTrendRefreshing) || destinationModeSwitchPending}
-          refreshFailed={isWebDestination && webTrendRefreshFailed}
-          onRetry={webActivity.retry}
-          onDestinationModeChange={setDestinationMode}
-          onSelectionChange={setSelectedAppTrendRange}
-          onSearchQueryChange={isWebDestination
-            ? webActivity.setSearchQuery
-            : handleAppSearchQueryChange}
-          onOptionSelect={handleDestinationOptionSelect}
-          onMouseDownCapture={handleAppTrendMouseDownCapture}
-          onDoubleClickCapture={handleAppTrendDoubleClickCapture}
-          onMouseMove={handleAppTrendMouseMove}
+            onContentCommitted={handleDestinationPanelCommitted}
+            destinationMode={destinationMode}
+            showDestinationMode={webActivityEnabled}
+            title={isWebDestination ? UI_TEXT.data.webTrend : UI_TEXT.data.appTrend}
+            rangeAriaLabel={isWebDestination
+              ? UI_TEXT.accessibility.data.webTrendRange
+              : UI_TEXT.accessibility.data.appTrendRange}
+            selection={selectedAppTrendRange}
+            ready={destinationPanelReady}
+            selectedOptions={destinationPanelSelectedOptions}
+            trendSeries={destinationTrendSeries}
+            summary={destinationSummary}
+            filteredOptions={destinationPanelOptions}
+            searchQuery={isWebDestination ? webSearchQuery : appSearchQuery}
+            hasSearchQuery={isWebDestination ? hasWebSearchQuery : hasAppSearchQuery}
+            searchPlaceholder={isWebDestination
+              ? UI_TEXT.data.webSearchPlaceholder
+              : UI_TEXT.data.appSearchPlaceholder}
+            listAriaLabel={isWebDestination
+              ? UI_TEXT.data.webTrendDomainList
+              : UI_TEXT.data.appTrendAppList}
+            emptyLabel={isWebDestination
+              ? UI_TEXT.data.webTrendEmpty
+              : UI_TEXT.data.appTrendEmpty}
+            noMatchLabel={isWebDestination
+              ? UI_TEXT.data.webTrendNoMatch
+              : UI_TEXT.data.appTrendNoMatch}
+            totalMetricLabel={isWebDestination
+              ? UI_TEXT.data.webTrendTotal
+              : UI_TEXT.data.appTrendTotal}
+            usageMetricLabel={isWebDestination
+              ? UI_TEXT.data.webTrendUsage
+              : UI_TEXT.data.appTrendUsage}
+            granularity={destinationGranularity}
+            chartData={destinationChartData}
+            heatmapContent={(
+              <DataHeatmapPanel
+                title={isWebDestination ? UI_TEXT.data.webHeatmap : UI_TEXT.data.appHeatmap}
+                compact
+                selectedHeatmapView={selectedDestinationHeatmapView}
+                selectedHeatmapViewKey={`${presentedDestinationMode}:${encodeDataDestinationSelectionKey(
+                  isWebDestination ? selectedWebKeys : selectedAppKeys,
+                )}:${selectedDestinationHeatmapView}`}
+                rows={visibleDestinationHeatmapRows}
+                granularity={destinationHeatmapGranularity}
+                granularityOptions={heatmapGranularityOptions}
+                canSelectOlderHeatmapView={
+                  selectedDestinationHeatmapViewIndex >= 0
+                  && selectedDestinationHeatmapViewIndex < destinationHeatmapViewOptions.length - 1
+                }
+                canSelectNewerHeatmapView={selectedDestinationHeatmapViewIndex > 0}
+                onGranularityChange={setDestinationHeatmapGranularity}
+                onSelectAdjacentHeatmapView={selectAdjacentDestinationHeatmapView}
+                onOpenHistoryDate={onOpenHistoryDate}
+                loading={visibleDestinationHeatmapLoading}
+              />
+            )}
+            chartAxis={destinationChartAxis}
+            peakDay={destinationPeakDay}
+            listRef={appListRef}
+            chartRef={appTrendChart.chartRef}
+            initialDimension={appTrendChart.initialDimension}
+            canOpenHistory={destinationCanOpenHistory}
+            errorMessage={isWebDestination ? webTrendError : null}
+            refreshing={(isWebDestination && webTrendRefreshing) || destinationModeSwitchPending}
+            refreshFailed={isWebDestination && webTrendRefreshFailed}
+            onRetry={webActivity.retry}
+            onDestinationModeChange={setDestinationMode}
+            onSelectionChange={setSelectedAppTrendRange}
+            onSearchQueryChange={isWebDestination
+              ? webActivity.setSearchQuery
+              : handleAppSearchQueryChange}
+            onOptionSelect={handleDestinationOptionSelect}
+            onMouseDownCapture={handleAppTrendMouseDownCapture}
+            onDoubleClickCapture={handleAppTrendDoubleClickCapture}
+            onMouseMove={handleAppTrendMouseMove}
             onMouseLeave={handleAppTrendMouseLeave}
           />
         </Suspense>
