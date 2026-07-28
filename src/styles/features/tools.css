@@ -420,6 +420,7 @@
   z-index: 80;
   max-width: calc(100vw - 24px);
   overflow-y: auto;
+  scrollbar-gutter: stable;
   overscroll-behavior: contain;
   border: 1px solid var(--qp-border-subtle);
   border-radius: var(--qp-radius-panel);
@@ -509,6 +510,7 @@
   align-content: start;
   grid-auto-rows: min-content;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   border: 1px dashed var(--qp-border-subtle);
   border-radius: var(--qp-radius-panel);
   padding: 10px;
@@ -788,6 +790,7 @@
 .tools-pomodoro-rules {
   min-height: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   border-top: 0;
   border-radius: var(--qp-radius-control);
   background: color-mix(in srgb, var(--qp-bg-elevated) 58%, var(--qp-bg-panel));
@@ -966,6 +969,7 @@
 @media (max-width: 720px) {
   .tools-page-body {
     overflow-y: auto;
+    scrollbar-gutter: stable;
   }
 
   .tools-workspace {

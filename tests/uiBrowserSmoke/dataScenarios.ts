@@ -33,6 +33,58 @@ export async function runDataScenarios(
       true,
     );
     await waitForExpression(client!, sessionId, `Boolean(document.querySelector(".data-trend-range-trigger"))`);
+    const stableScrollbarGeometry = JSON.parse(String(await evaluate(client!, sessionId, `
+      (() => {
+        const root = document.querySelector("[data-data-content-state]");
+        const chart = root?.querySelector(".data-overview .data-trend-chart");
+        const destination = root?.querySelector(".data-app-panel");
+        const heatmap = root?.querySelector(".data-overview > .data-heatmap-panel");
+        if (!root || !chart || !heatmap) return null;
+
+        const originalDestinationDisplay = destination?.style.display;
+        const originalHeatmapDisplay = heatmap.style.display;
+        if (destination) destination.style.display = "none";
+        heatmap.style.display = "none";
+        const widthWithoutOverflow = chart.getBoundingClientRect().width;
+        const fitsWithoutOverflow = root.scrollHeight <= root.clientHeight;
+
+        const spacer = document.createElement("div");
+        spacer.style.flex = "0 0 " + (root.clientHeight + 1) + "px";
+        spacer.setAttribute("aria-hidden", "true");
+        root.appendChild(spacer);
+        const widthWithOverflow = chart.getBoundingClientRect().width;
+        const overflowsWithContent = root.scrollHeight > root.clientHeight;
+        spacer.remove();
+
+        if (destination) destination.style.display = originalDestinationDisplay ?? "";
+        heatmap.style.display = originalHeatmapDisplay;
+
+        return JSON.stringify({
+          fitsWithoutOverflow,
+          gutter: getComputedStyle(root).scrollbarGutter,
+          overflowsWithContent,
+          widthWithOverflow,
+          widthWithoutOverflow,
+        });
+      })()
+    `))) as {
+      fitsWithoutOverflow: boolean;
+      gutter: string;
+      overflowsWithContent: boolean;
+      widthWithOverflow: number;
+      widthWithoutOverflow: number;
+    } | null;
+    assert.ok(stableScrollbarGeometry, "data page should expose its scroll owner and trend chart");
+    assert.equal(stableScrollbarGeometry.gutter, "stable");
+    assert.equal(stableScrollbarGeometry.fitsWithoutOverflow, true);
+    assert.equal(stableScrollbarGeometry.overflowsWithContent, true);
+    assert.ok(
+      Math.abs(
+        stableScrollbarGeometry.widthWithOverflow
+        - stableScrollbarGeometry.widthWithoutOverflow,
+      ) <= 0.5,
+      `trend width should remain stable when the data page starts overflowing: ${JSON.stringify(stableScrollbarGeometry)}`,
+    );
     assert.deepEqual(
       await evaluate(client!, sessionId, `
         (() => {
@@ -572,7 +624,31 @@ export async function runDataScenarios(
       })
     `))) as boolean[];
     assert.deepEqual(raceFrameSamples, Array.from({ length: 15 }, () => true));
-    await evaluate(client!, sessionId, `new Promise((resolve) => setTimeout(resolve, 900))`);
+    await evaluate(client!, sessionId, `
+      new Promise((resolve, reject) => {
+        const startedAt = performance.now();
+        let lastCount = -1;
+        let stableSince = performance.now();
+        const sample = () => {
+          const count = globalThis.__PATINA_INVOKED_COMMANDS
+            .filter((entry) => entry.command === "cmd_get_web_activity_aggregate_range").length;
+          if (count !== lastCount) {
+            lastCount = count;
+            stableSince = performance.now();
+          }
+          if (performance.now() - stableSince >= 900) {
+            resolve();
+            return;
+          }
+          if (performance.now() - startedAt >= 12_000) {
+            reject(new Error("web aggregate commands did not become quiescent"));
+            return;
+          }
+          setTimeout(sample, 50);
+        };
+        sample();
+      })
+    `);
     assert.deepEqual(
       JSON.parse(String(await evaluate(client!, sessionId, `
         JSON.stringify({
@@ -1098,6 +1174,16 @@ export async function runDataScenarios(
       })`);
       throw new Error(`Web trend retry state: ${String(retryState)}`, { cause: error });
     }
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('[aria-label="网页列表"]'))
+        && Boolean(document.querySelector(".data-app-chart"))
+        && document.querySelectorAll(".data-app-metric").length === 4
+        && document.querySelector(".data-app-grid")?.getAttribute("aria-busy") === "false"`,
+      45_000,
+      "web trend retry presentation commit",
+    );
 
     await evaluate(client!, sessionId, `
       (() => {
@@ -1535,7 +1621,9 @@ export async function runDataScenarios(
         return JSON.stringify({
           text: tooltip.textContent?.trim() ?? "",
           borderRadius: style.borderRadius,
+          left: rect.left,
           maxWidth: style.maxWidth,
+          right: rect.right,
           withinViewport: rect.left >= -0.5
             && rect.top >= -0.5
             && rect.right <= window.innerWidth + 0.5
@@ -1547,7 +1635,9 @@ export async function runDataScenarios(
     `))) as {
       text: string;
       borderRadius: string;
+      left: number;
       maxWidth: string;
+      right: number;
       withinViewport: boolean;
       labelOverflow: string | null;
       nameOverflow: string | null;
@@ -1556,6 +1646,11 @@ export async function runDataScenarios(
     assert.equal(tooltipState.borderRadius, "10px");
     assert.notEqual(tooltipState.maxWidth, "none");
     assert.equal(tooltipState.withinViewport, true);
+    assert.equal(
+      tooltipState.left >= chartPoint.x + 8 || tooltipState.right <= chartPoint.x - 8,
+      true,
+      "trend tooltip should stay beside the active point instead of covering it",
+    );
     assert.equal(tooltipState.labelOverflow, "ellipsis");
     assert.equal(tooltipState.nameOverflow, "ellipsis");
     await client!.command("Input.dispatchMouseEvent", {

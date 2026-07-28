@@ -576,6 +576,7 @@
 .history-timeline-lanes-scroll {
   height: 250px;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   overscroll-behavior: contain;
   padding-right: 4px;
 }

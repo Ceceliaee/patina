@@ -336,6 +336,69 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
       ),
       "category",
     );
+    const historyBarPoint = await evaluate(client!, sessionId, `
+      (() => {
+        const bar = Array.from(document.querySelectorAll(".history-pulse-chart .qp-hourly-chart-bar"))
+          .find((node) => {
+            const rect = node.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0;
+          });
+        if (!bar) return null;
+        const rect = bar.getBoundingClientRect();
+        return { x: rect.left + rect.width / 2, y: rect.top + Math.min(rect.height / 2, 2) };
+      })()
+    `) as { x: number; y: number } | null;
+    assert.ok(historyBarPoint);
+    await client!.command("Input.dispatchMouseEvent", {
+      type: "mouseMoved",
+      x: historyBarPoint.x,
+      y: historyBarPoint.y,
+    }, sessionId);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('.history-pulse-chart .qp-chart-tooltip[role="tooltip"]'))`,
+      undefined,
+      "contained history hourly chart tooltip",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const chart = document.querySelector(".history-pulse-chart [data-hourly-activity-chart-mode]");
+          const tooltip = chart?.querySelector('.qp-chart-tooltip[role="tooltip"]');
+          if (!(chart instanceof HTMLElement) || !(tooltip instanceof HTMLElement)) return false;
+          const chartRect = chart.getBoundingClientRect();
+          const tooltipRect = tooltip.getBoundingClientRect();
+          const axisTop = Math.min(
+            ...Array.from(chart.querySelectorAll("svg text"))
+              .map((node) => node.getBoundingClientRect().top),
+          );
+          const barBaseline = Math.max(
+            ...Array.from(chart.querySelectorAll(".qp-hourly-chart-bar"))
+              .map((node) => node.getBoundingClientRect().bottom),
+          );
+          const besidePoint = tooltipRect.left >= ${historyBarPoint.x + 8}
+            || tooltipRect.right <= ${historyBarPoint.x - 8};
+          return besidePoint
+            && tooltipRect.top >= chartRect.top - 0.5
+            && tooltipRect.bottom <= chartRect.bottom + 0.5
+            && tooltipRect.bottom <= axisTop - 4
+            && Math.abs(tooltipRect.bottom - barBaseline) <= 0.5;
+        })()
+      `),
+      true,
+      "history hourly tooltip should stay beside its bar and above the time-axis labels",
+    );
+    await client!.command("Input.dispatchMouseEvent", {
+      type: "mouseMoved",
+      x: 1,
+      y: 1,
+    }, sessionId);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `!document.querySelector('.history-pulse-chart .qp-chart-tooltip[role="tooltip"]')`,
+    );
   });
 
   await runTest("history timeline opens list dialog from timeline axis", async () => {

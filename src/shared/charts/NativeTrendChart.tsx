@@ -41,6 +41,8 @@ const CHART_MARGIN = {
   top: 8,
 } as const;
 const X_TICK_MIN_WIDTH = 64;
+const TOOLTIP_EDGE_INSET = 8;
+const TOOLTIP_POINT_GAP = 12;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -163,7 +165,12 @@ export default function NativeTrendChart({
       };
     })
     : [];
-  const tooltipLeft = clamp(activeX, 132, Math.max(132, safeWidth - 132));
+  const tooltipOnRight = activeX <= safeWidth / 2;
+  const tooltipLeft = clamp(
+    activeX + (tooltipOnRight ? TOOLTIP_POINT_GAP : -TOOLTIP_POINT_GAP),
+    TOOLTIP_EDGE_INSET,
+    Math.max(TOOLTIP_EDGE_INSET, safeWidth - TOOLTIP_EDGE_INSET),
+  );
 
   return (
     <div
@@ -294,7 +301,7 @@ export default function NativeTrendChart({
             left: `${tooltipLeft}px`,
             position: "absolute",
             top: "8px",
-            transform: "translateX(-50%)",
+            transform: tooltipOnRight ? undefined : "translateX(-100%)",
             zIndex: 10,
           }}
         />

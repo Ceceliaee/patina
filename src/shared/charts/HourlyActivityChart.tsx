@@ -39,6 +39,28 @@ const EXPANDED_CATEGORY_WIDTH = 400;
 const X_AXIS_HEIGHT = 30;
 const BAR_WIDTH = 8;
 const MAX_MINUTES_PER_HOUR = 60;
+const TOOLTIP_EDGE_INSET = 8;
+const TOOLTIP_POINT_GAP = 12;
+
+function buildTopRoundedBarPath(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+) {
+  const right = x + width;
+  const bottom = y + height;
+  return [
+    `M ${x} ${bottom}`,
+    `V ${y + radius}`,
+    `Q ${x} ${y} ${x + radius} ${y}`,
+    `H ${right - radius}`,
+    `Q ${right} ${y} ${right} ${y + radius}`,
+    `V ${bottom}`,
+    "Z",
+  ].join(" ");
+}
 
 function getPointSegments(point: HourlyCategoryActivityPoint) {
   return Object.keys(point.segmentDetails)
@@ -128,9 +150,13 @@ export default function HourlyActivityChart({
   const activeCenterX = activeIndex === null
     ? 0
     : chartLeft + slotWidth * (activeIndex + 0.5);
+  const tooltipOnRight = activeCenterX <= size.width / 2;
   const tooltipLeft = Math.min(
-    Math.max(activeCenterX, 72),
-    Math.max(72, size.width - 72),
+    Math.max(
+      activeCenterX + (tooltipOnRight ? TOOLTIP_POINT_GAP : -TOOLTIP_POINT_GAP),
+      TOOLTIP_EDGE_INSET,
+    ),
+    Math.max(TOOLTIP_EDGE_INSET, size.width - TOOLTIP_EDGE_INSET),
   );
 
   return (
@@ -183,13 +209,30 @@ export default function HourlyActivityChart({
                   const segmentHeight = scaleMinutes(segment.minutes);
                   const y = chartBottom - stackedHeight - segmentHeight;
                   stackedHeight += segmentHeight;
+                  const isTopSegment = segmentIndex === segments.length - 1;
+                  if (isTopSegment) {
+                    const radius = Math.min(3, segmentHeight / 2, renderedBarWidth / 2);
+                    return (
+                      <path
+                        key={dataKey}
+                        className="qp-hourly-chart-bar"
+                        d={buildTopRoundedBarPath(
+                          x,
+                          y,
+                          renderedBarWidth,
+                          segmentHeight,
+                          radius,
+                        )}
+                        fill={segment.color}
+                      />
+                    );
+                  }
                   return (
                     <rect
                       key={dataKey}
                       className="qp-hourly-chart-bar"
                       fill={segment.color}
                       height={segmentHeight}
-                      rx={segmentIndex === segments.length - 1 ? Math.min(3, segmentHeight / 2) : 0}
                       width={renderedBarWidth}
                       x={x}
                       y={y}
@@ -238,7 +281,6 @@ export default function HourlyActivityChart({
       ) : null}
       {activePoint && activePoint.minutes > 0 ? (
         <QuietChartTooltip
-          fixedBottom
           items={categoryMode
             ? getPointSegments(activePoint as HourlyCategoryActivityPoint)
               .slice()
@@ -258,10 +300,10 @@ export default function HourlyActivityChart({
             ? `${activePoint.hour} · ${UI_TEXT.hourlyActivityChart.activeMinutes} ${Math.round(activePoint.minutes)}m`
             : activePoint.hour}
           style={{
-            bottom: `${Math.max(0, size.height - chartBottom + 8)}px`,
+            bottom: `${size.height - chartBottom}px`,
             left: `${tooltipLeft}px`,
             position: "absolute",
-            transform: "translate(-50%, -100%)",
+            transform: tooltipOnRight ? undefined : "translateX(-100%)",
             zIndex: 10,
           }}
         />

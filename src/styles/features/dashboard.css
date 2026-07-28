@@ -130,6 +130,7 @@
 @media (max-height: 780px) {
   .dashboard-left-column {
     overflow-y: auto;
+    scrollbar-gutter: stable;
     padding-right: 0.2rem;
   }
 }

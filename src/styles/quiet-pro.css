@@ -552,6 +552,7 @@
   max-height: 170px;
   gap: 3px;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -796,6 +797,7 @@
   background: var(--qp-bg-canvas);
   box-shadow: var(--qp-shadow-overlay);
   overflow-y: auto;
+  scrollbar-gutter: stable;
   padding: 10px;
 }
 
@@ -1074,6 +1076,7 @@
   max-height: 400px;
   gap: 6px;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   padding-right: 2px;
 }
 
@@ -1595,12 +1598,14 @@
   margin-top: 10px;
   max-height: min(440px, calc(100vh - 220px));
   overflow-y: auto;
+  scrollbar-gutter: stable;
   padding-right: 2px;
 }
 
 .qp-theme-dialog-body {
   max-height: min(360px, calc(100vh - 220px));
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .qp-dialog-header {
@@ -1779,6 +1784,7 @@
   background: var(--qp-bg-panel);
   box-shadow: var(--qp-shadow-overlay);
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .qp-select-menu-top {

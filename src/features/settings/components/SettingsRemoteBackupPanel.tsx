@@ -311,7 +311,7 @@ export default function SettingsRemoteBackupPanel({
           </QuietButton>
         )}
       >
-        <div className="grid max-h-[420px] gap-3 overflow-y-auto pr-1">
+        <div className="grid max-h-[420px] gap-3 overflow-y-auto pr-1 custom-scrollbar">
           {remoteBackup.entries.length === 0 && (
             <p className="text-sm leading-relaxed text-[var(--qp-text-tertiary)]">
               {UI_TEXT.settings.webDavRemoteBackupsEmpty}

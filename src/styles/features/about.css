@@ -188,6 +188,7 @@
   width: min(500px, calc(100vw - 32px));
   max-height: calc(100vh - 32px);
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .about-feedback-dialog-surface .qp-dialog-header {

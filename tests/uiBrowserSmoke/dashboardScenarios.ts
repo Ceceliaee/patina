@@ -29,6 +29,25 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
     }
   });
 
+  await runTest("dashboard focus donut keeps a restrained ring weight", async () => {
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const ring = document.querySelector(
+            '.dashboard-focus-chart svg[aria-label="专注分布"] circle',
+          );
+          if (!(ring instanceof SVGCircleElement)) return false;
+          const radius = Number(ring.getAttribute("r"));
+          const strokeWidth = Number(ring.getAttribute("stroke-width"));
+          const innerRadius = radius - strokeWidth / 2;
+          return strokeWidth === 16 && innerRadius >= radius * 0.8;
+        })()
+      `),
+      true,
+      "focus donut should keep a generous center opening",
+    );
+  });
+
   await runTest("dashboard hourly chart toggles category layers", async () => {
     assert.equal(
       await evaluate(client!, sessionId, `
@@ -73,6 +92,22 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
       sessionId,
       `document.querySelector(".dashboard-pulse-chart [data-hourly-activity-chart-mode]")
         ?.getAttribute("data-hourly-activity-chart-mode") === "category"`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        Array.from(document.querySelectorAll(".dashboard-pulse-chart svg g"))
+          .filter((group) => group.querySelector(".qp-hourly-chart-bar"))
+          .every((group) => {
+            const segments = Array.from(group.querySelectorAll(".qp-hourly-chart-bar"));
+            return segments.at(-1) instanceof SVGPathElement
+              && segments.slice(0, -1).every((segment) =>
+                segment instanceof SVGRectElement
+                && Number(segment.getAttribute("rx") ?? 0) === 0
+              );
+          })
+      `),
+      true,
+      "stacked hourly bars should round only the outer top edge",
     );
     assert.equal(
       await evaluate(
@@ -128,15 +163,67 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `Boolean(document.querySelector('.qp-chart-tooltip-fixed-bottom[role="tooltip"]'))`,
+      `Boolean(document.querySelector('.dashboard-pulse-chart .qp-chart-tooltip[role="tooltip"]'))`,
       undefined,
-      "fixed-bottom hourly chart tooltip",
+      "contained hourly chart tooltip",
     );
-    assert.notEqual(
-      await evaluate(client!, sessionId, `
-        getComputedStyle(document.querySelector('.qp-chart-tooltip-fixed-bottom[role="tooltip"]')).transform
-      `),
-      "none",
+    const hourlyTooltipGeometry = await evaluate(client!, sessionId, `
+      (() => {
+        const chart = document.querySelector(".dashboard-pulse-chart [data-hourly-activity-chart-mode]");
+        const tooltip = chart?.querySelector('.qp-chart-tooltip[role="tooltip"]');
+        if (!(chart instanceof HTMLElement) || !(tooltip instanceof HTMLElement)) return null;
+        const chartRect = chart.getBoundingClientRect();
+        const tooltipRect = tooltip.getBoundingClientRect();
+        const axisTop = Math.min(
+          ...Array.from(chart.querySelectorAll("svg text"))
+            .map((node) => node.getBoundingClientRect().top),
+        );
+        const barBaseline = Math.max(
+          ...Array.from(chart.querySelectorAll(".qp-hourly-chart-bar"))
+            .map((node) => node.getBoundingClientRect().bottom),
+        );
+        return {
+          axisTop,
+          barBaseline,
+          chartBottom: chartRect.bottom,
+          chartTop: chartRect.top,
+          left: tooltipRect.left,
+          right: tooltipRect.right,
+          tooltipBottom: tooltipRect.bottom,
+          tooltipTop: tooltipRect.top,
+        };
+      })()
+    `) as {
+      axisTop: number;
+      barBaseline: number;
+      chartBottom: number;
+      chartTop: number;
+      left: number;
+      right: number;
+      tooltipBottom: number;
+      tooltipTop: number;
+    } | null;
+    assert.ok(hourlyTooltipGeometry);
+    assert.equal(
+      hourlyTooltipGeometry.left >= barPoint.x + 8
+        || hourlyTooltipGeometry.right <= barPoint.x - 8,
+      true,
+      "hourly tooltip should stay beside the active bar instead of covering it",
+    );
+    assert.equal(
+      hourlyTooltipGeometry.tooltipTop >= hourlyTooltipGeometry.chartTop - 0.5
+        && hourlyTooltipGeometry.tooltipBottom <= hourlyTooltipGeometry.chartBottom + 0.5,
+      true,
+      "hourly tooltip should stay within the chart container",
+    );
+    assert.equal(
+      hourlyTooltipGeometry.tooltipBottom <= hourlyTooltipGeometry.axisTop - 4,
+      true,
+      "hourly tooltip should stop above the time-axis labels",
+    );
+    assert.ok(
+      Math.abs(hourlyTooltipGeometry.tooltipBottom - hourlyTooltipGeometry.barBaseline) <= 0.5,
+      "hourly tooltip bottom should align with the bar baseline",
     );
     await client!.command("Input.dispatchMouseEvent", {
       type: "mouseMoved",
@@ -146,7 +233,7 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `!document.querySelector('.qp-chart-tooltip-fixed-bottom[role="tooltip"]')`,
+      `!document.querySelector('.dashboard-pulse-chart .qp-chart-tooltip[role="tooltip"]')`,
     );
   });
 
