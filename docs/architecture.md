@@ -113,6 +113,14 @@ Rust 负责：
 
 IPC 契约应保持稳定、可解析、可测试。
 
+Tauri application command 采用显式、默认拒绝的窗口授权模型：
+
+- `src-tauri/build.rs` 中的 application command manifest 是命令分类入口；新增 custom command 必须先归入 main-only 或 Widget allowlist，未分类即构建门失败。
+- `src-tauri/permissions/window-commands.toml` 和 `src-tauri/capabilities/{default,widget}.json` 只授予精确命令，不使用 application command 通配符或 default allow-all。
+- main window 与 Widget 分别使用独立 permission set；Widget 只读取专用 bootstrap/icon/placement/tracker 快照并执行必要窗口操作，不获得 plugin SQL load/select/execute。
+- 删除、恢复、密钥、存储迁移和更新安装等敏感 command 即使 capability 配错，也必须在 Rust handler 内根据真实 `WebviewWindow` label 做 caller guard；前端按钮不是安全边界。
+- manifest、permission sets、capabilities、前端调用和 Rust `invoke_handler` 注册必须由静态 checker 保持一致，并由真实 main/Widget runtime denial matrix 证明边界没有只停留在配置文本。
+
 ### 4.3 本地数据读取通道
 
 前端当前保留受控的本地 SQLite 读访问，用于：

@@ -150,7 +150,7 @@ PR 默认分为四类：
 
 错误 owner、退休目录回流、未归属 shared styles、硬编码 Quiet Pro 样式、未完成 contributor checklist 等硬门禁不能通过评论、PR 正文或 label 放行。
 
-PR intake 是独立于普通代码验证的准入 workflow。它需要三点 base/head PR diff 和 PR 正文才能给出有效判断；本地 `npm run check` 不应假装替代这个门禁。workflow 必须 checkout 可信 base revision，只读取 PR head，不执行贡献者修改后的门禁脚本或 package scripts。脚本自身由 `test:pr-intake` 覆盖，真正的 PR 准入在 GitHub Actions 的 `PR Intake` workflow 中执行。普通 `Verify` workflow 只应在 `PR Intake` 成功后验证外部 PR；`main` push 仍可直接验证。
+PR intake 是独立于普通代码验证的准入 workflow。它需要三点 base/head PR diff 和 PR 正文才能给出有效判断；本地 `npm run check` 不应假装替代这个门禁。workflow 必须 checkout 可信 base revision，只读取 PR head，不执行贡献者修改后的门禁脚本或 package scripts。质量 checker、CI workflow 与 performance benchmark budget 属于维护者门禁，功能 PR 不应顺手修改；`package.json` 验证图不得删除既有命令段、测试、coverage include 或阈值。capability、permission set 或 application command manifest 发生变化时，PR 必须同时提供已登记的真实 Tauri main/Widget denial matrix 证据。脚本自身由 `test:pr-intake` 覆盖，真正的 PR 准入在 GitHub Actions 的 `PR Intake` workflow 中执行。普通 `Verify` workflow 只应在 `PR Intake` 成功后验证外部 PR；`main` push 仍可直接验证。
 
 GitHub 可能仍要求维护者批准首次外部贡献者的 Actions。这个平台级批准只允许 workflow 启动，不等于 scope 批准，也不能绕过准入门禁。
 
@@ -197,7 +197,7 @@ Draft PR 暂不运行准入 job；标记为 ready for review 后，必须满足�
 - `npm run check:rust`
 - `npm run check:dependencies`
 
-Rust 默认门槛包含边界检查器自测、`npm run check:rust-boundaries`、`cargo check --locked`、Rust 测试与 `cargo clippy --locked -- -D warnings`，其中 clippy 通过 `npm run check:rust:clippy` 单独暴露，便于局部复查。依赖门禁同时运行 `npm audit` 与固定版本的 `cargo-audit`；CI 必须显式安装仓库要求的 `cargo-audit` 版本，允许项只能是经 Windows target 依赖树证明不可达的精确 advisory，不得用宽泛忽略掩盖当前目标可达漏洞。
+Rust 默认门槛包含边界检查器自测、`npm run check:rust-boundaries`、`cargo check --locked`、Rust 测试与 `cargo clippy --locked -- -D warnings`，其中 clippy 通过 `npm run check:rust:clippy` 单独暴露，便于局部复查。依赖门禁同时运行 `npm audit` 与固定版本的 `cargo-audit`；CI 必须显式安装仓库要求的 `cargo-audit` 版本，允许项只能是经 Windows target 依赖树证明不可达的精确 advisory，不得用宽泛忽略掩盖当前目标可达漏洞。受控无网络环境可以显式设置 `PATINA_DEPENDENCY_AUDIT_OFFLINE=1`，此时门禁必须强制 RustSec `--no-fetch` 和 npm `--offline`，仍执行精确例外可达性校验；该模式只证明本地 advisory 数据库快照下的结果，不能替代发布 CI 的联网新鲜度检查。
 
 工具链版本必须保持单一来源：Node 由仓库根目录 `.node-version` 定义，Rust 由根目录 `rust-toolchain.toml` 定义。CI 应直接读取或安装这两个文件声明的工具链，不得在 workflow 中重复硬编码 Node 或 Rust 版本。`package.json` 的 `engines` 与 `devEngines` 只镜像根配置决定的 Node/npm 事实，其中 `devEngines` 必须对开发 runtime 与 package manager 使用精确版本和 `onFail: error`，让错误工具链在 `npm install`、`npm ci` 与 `npm run` 前失败；`@types/node` 主版本必须与 `.node-version` 的 Node 主版本一致。依赖安装脚本只允许使用精确包版本的 `allowScripts` 条目，不得用包名级宽泛许可。默认测试必须检查这些镜像声明、Node 类型主版本、脚本许可和所有 workflow 的 `.node-version` 引用没有漂移；升级工具链后运行完整门槛验证。
 
@@ -237,7 +237,7 @@ Rust 默认门槛包含边界检查器自测、`npm run check:rust-boundaries`�
 
 `check:architecture` 是基于 TypeScript AST 的前端 owner 边界防线。它扫描静态 import、动态 import、重导出与直接 `invoke`，默认覆盖 `src/app`、`src/features`、`src/shared` 与 `src/platform`：阻止 shared 反向依赖 app / features / platform，阻止 platform 反向依赖 app / features，并阻止 `src/features/*/components/**` 与 `src/features/*/hooks/**` 直接绕过 feature-owned service 访问 platform、Tauri API 或 `invoke`。`src/app/**` 不应直接 import `@tauri-apps/api`；前端生产代码不应重新调用低层 SQLite write helper；`src/app/components/**` 与 `src/app/hooks/**` 不应直接访问 `platform/persistence/**`。main window capability 不应包含 `sql:allow-execute`。检查器自测必须证明多行语法、动态路径与测试例外不会绕过规则。
 
-`check:ipc-contracts` 静态比对前端生产调用与 Rust `invoke_handler` 注册，任何未注册调用、无调用注册或非精确动态命令名都会失败。确需封装的动态调用必须落在精确 allowlist，并由检查器自测覆盖；不能使用目录级、前缀级或通配符豁免。
+`check:ipc-contracts` 静态比对前端生产调用、Rust `invoke_handler`、application command manifest、main/Widget permission set、capability 引用和敏感 caller guard，任何未注册调用、未分类 custom command、错误窗口授权、无 guard 敏感命令或非精确动态命令名都会失败。确需封装的动态调用必须落在精确 allowlist，并由检查器自测覆盖；不能使用目录级、前缀级或通配符豁免。
 
 `check:hotspots` 是高风险热点增长门禁。Rust 统计以剔除 `#[cfg(test)]` 后的生产非空行数为口径，避免大量测试 fixture 掩盖生产职责；它不要求一次性拆掉所有历史大文件，但会锁住当前最高风险热点的增长预算。如果超过预算，必须先按 owner 拆分、补验证，或带理由更新预算。
 
@@ -245,9 +245,9 @@ Rust 默认门槛包含边界检查器自测、`npm run check:rust-boundaries`�
 
 `check:rust-boundaries` 扫描 Rust 高吸力层并先剥离 `#[cfg(test)]` 模块。它阻止 `commands/*`、`app/*` 与 `lib.rs` 直接写 SQL，阻止 `commands/*` 承接 SQLite pool 类型，阻止 Rust `app/*` 直连 repository 或 pool，阻止 `platform/*` 反向依赖 `data/*` / `app/*`，阻止 `domain/*` 依赖 `data/*` / `platform/*`，并阻止 `engine/*` 依赖 app、data、repository、pool、SQL、等待数据库或原始 Windows API。生产路径必须让 SQL 留在 `data/*`，Windows API 实现留在 `platform/*`，领域决策留在 `domain/*`，跨边界数据组合留在 `app/*`；engine 可以调用 platform 暴露的窄能力来编排桌面行为，但不能把 Win32 实现吸入自身。检查器自测与空债务基线共同保证新增反向依赖立即失败。
 
-`test:coverage` 对 tracking effects/policy、Dashboard/History read model、SQLite transaction 与结构化 command error 等核心风险域设置语句、分支、函数和行覆盖率硬阈值。覆盖率是风险证据，不替代行为断言；新增高风险 owner 时应同步扩展 include，而不是用无关低风险文件稀释分母。
+`test:coverage` 对 tracking effects/policy、Dashboard/History read model、Web heatmap retry state、Web aggregate gateway、SQLite transaction 与结构化 command error 等核心风险域设置语句、分支、函数和行覆盖率硬阈值。除 aggregate coverage 外，高风险 owner 必须逐文件满足声明阈值；报告必须列出具体失败文件，不能让高覆盖文件平均掉低覆盖 owner。覆盖率是风险证据，不替代行为断言；新增高风险 owner 时应同步扩展 include，而不是用无关低风险文件稀释分母。
 
-`test:mutation` 对并发等待、批处理完整性、序列化、重试语义和错误 DTO 解析执行关键变异。每个 mutant 必须修改真实模块并由现有行为断言杀死；不能用只测试测试脚本自身的伪 mutant 计分。
+`test:mutation` 对并发等待、批处理完整性、序列化、重试语义、错误 DTO 解析以及权限分类、Widget SQL 拒绝、caller guard、heatmap retry generation、aggregate revision mismatch 和 bridge recovery 执行少量关键变异。每个 mutant 必须修改真实生产模块并由现有行为断言杀死；不能用只测试测试脚本自身的伪 mutant 计分，也不能删除 mutant 而不提供覆盖同一错误模式的替代证据。
 
 压缩 SQLite migration 基线时，必须同时保留旧版本数据库直升保护：新安装可以走当前压缩基线，已安装旧数据库在归一化 `_sqlx_migrations` 前必须先完成幂等的 legacy schema repair，并用 Rust 自动化测试覆盖缺列补齐、历史数据保留、必要回填、active session 归一化和不完整 schema 不误标为当前基线。
 
@@ -260,11 +260,11 @@ Rust 默认门槛包含边界检查器自测、`npm run check:rust-boundaries`�
 
 `test:ui-smoke` 是当前仓库的最小 UI smoke 防线。它不依赖真实 Tauri runtime，而是通过 stub Tauri API、SSR 渲染 AppShell，并确认主导航和 Dashboard 首屏可以被构建与渲染。
 
-`test:ui-browser-smoke` 是真实浏览器/Vite 页面防线。它启动本地 Vite server，用 headless Edge/Chrome 打开主界面，在 stub Tauri API 下检查 Dashboard、主导航、Settings 主题弹窗、控制台 error 与基础横向溢出。
+`test:ui-browser-smoke` 是真实浏览器/Vite 页面防线。它启动本地 Vite server，用 headless Edge/Chrome 打开主界面，在 stub Tauri API 下检查 Dashboard、主导航、Settings、原生图表交互、Data 失败恢复、控制台 error 与基础横向溢出。场景失败必须保留场景名，并附带页面状态、控制台和网络错误；Vite/浏览器异常退出不能退化为无根因超时。成功、失败和最后一个场景都必须关闭 server、浏览器进程与隔离 profile。
 
 `test:tauri-runtime-smoke` 是 Windows 上的真实 Tauri/WebView2 防线。它以隔离的数据目录构建并启动 debug 应用，覆盖真实 command、Rust event、plugin SQL 读写、capability 拒绝、结构化错误和 SQLite 落盘完整性，并在结束后清理子进程与临时目录。它是高风险 runtime/IPC 变更的追加门禁，并在 CI 中独立超时执行，不能被 stub browser smoke 替代。
 
-`check:bundle` 是保守 bundle 预算防线。它在生产构建之后检查关键 JS chunk 与总 gzip 体积，防止静默引入明显超预算依赖。
+`check:bundle` 是保守 bundle 预算防线。它在生产构建之后检查入口、页面、secondary runtime、shared UI、copy source attribution、lazy support 与总 gzip 体积。每个 hard budget 的实际值必须至少保留 `3%` 余量；刚好低于预算仍视为失败，且不能通过上调预算、复制共享依赖或删除可访问性与本地化内容过关。
 
 ### 5.2 Bundle 长期治理与预算变更
 
@@ -361,7 +361,7 @@ Bundle 治理的目标不是让构建产物永远不增长，而是让代码只�
 
 它们不是唯一性能脚本，但代表默认口径：先固定场景，再做前后对照，而不是靠主观感觉宣称“更快了”。`perf:stable` 串行重复运行整套性能场景，聚合 average、p50、p95 与 max，并以任一子进程失败、预算超限或 SQLite table scan 为失败；不得用并发运行基准制造虚假的吞吐或尾延迟结果。
 这些脚本的输出必须明确预算，并在任一测量项超过预算时以非零退出码失败；如果某个脚本只是在比较参考路径和完整现状路径，输出必须说清它不是直接优化收益对照。
-`perf:data-history-browser` 使用 stub Tauri 数据，只测导航与渲染路径，不代表真实 SQLite I/O；`perf:sqlite-query-plan` 使用临时合成 SQLite 数据，只用于判断 query shape 和候选 index 是否值得进入单独 migration 执行单。
+`perf:data-history-browser` 使用 stub Tauri 数据，只测导航与渲染路径，不代表真实 SQLite I/O。Dashboard → Data 必须使用应用发出的稳定生命周期 mark，按 `intent -> chunk-ready -> root-mounted -> structure-active -> read-model-ready -> complete` 顺序测量；`active` 只表示主结构已经可交互，`complete` 必须等待可信 trend read model、overview heatmap、destination heatmap 和下半页内容提交，不能通过删掉真实加载或轮询一个过早 DOM 节点改变定义。`perf:sqlite-query-plan` 使用临时合成 SQLite 数据，只用于判断 query shape 和候选 index 是否值得进入单独 migration 执行单。
 
 ---
 
