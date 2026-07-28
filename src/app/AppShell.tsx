@@ -1,9 +1,16 @@
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { type ComponentProps, useCallback, useEffect, useState } from "react";
 import { getUiText, setUiTextLanguage } from "../shared/copy/index.ts";
 import AppSidebar from "./components/AppSidebar";
 import AppTitleBar from "./components/AppTitleBar";
+import AppViewOutlet from "./components/AppViewOutlet.tsx";
 import type { View } from "./types/view";
-import Dashboard from "../features/dashboard/components/Dashboard";
+import Dashboard from "../features/dashboard/components/Dashboard.tsx";
+import type AboutView from "../features/about/components/About.tsx";
+import type AppMappingView from "../features/classification/components/AppMapping.tsx";
+import type DataView from "../features/data/components/Data.tsx";
+import type HistoryView from "../features/history/components/History.tsx";
+import type SettingsView from "../features/settings/components/Settings.tsx";
+import type ToolsView from "../features/tools/components/Tools.tsx";
 import QuietToastStack from "../shared/components/QuietToastStack";
 import type {
   AppLanguage,
@@ -26,15 +33,11 @@ import {
   loadDataTrendRuntimeSnapshot,
   loadHistoryRuntimeSnapshot,
 } from "./services/readModelRuntimeService";
-import { scheduleStartupWarmupRefresh, startStartupWarmup } from "./services/startupWarmupService";
-import { LONG_BACKGROUND_DELAY_MS } from "./services/backgroundReturnHomePolicy.ts";
 import { clearDashboardSnapshotCache } from "../features/dashboard/services/dashboardSnapshotCache.ts";
 import {
   clearDataBootstrapCache,
   clearDataHeavyCaches,
 } from "../features/data/services/dataCacheLifecycle.ts";
-import { prewarmDataFirstScreen } from "../features/data/services/dataFirstScreenPrewarm.ts";
-import { clearHistorySnapshotCache } from "../features/history/services/historySnapshotCache.ts";
 import { clearHistoryCachesAfterDataChange } from "../features/history/services/historyCacheLifecycle.ts";
 import { clearToolsPageCaches } from "../features/tools/services/toolsCacheLifecycle.ts";
 import { AppClassification } from "../shared/classification/appClassification.ts";
@@ -51,16 +54,12 @@ import {
   saveMinSessionSecsSetting,
 } from "./services/appSettingsRuntimeService.ts";
 import {
-  createPreloadableViewComponent,
-  getPreloadableViewChunkStatus,
-  preloadLazyViewChunk,
-  type PreloadableView,
-} from "./services/viewChunkPreloadService";
-import {
-  readCurrentWindowForegroundState,
-  watchCurrentWindowForegroundState,
-  watchCurrentWindowMaximized,
-} from "../platform/desktop/windowControlGateway";
+  preloadNavigationView,
+  useAppShellRenderedView,
+} from "./hooks/useAppShellRenderedView.ts";
+import { createPreloadableViewComponent } from "./services/viewChunkPreloadService.ts";
+import { useAppWindowState } from "./hooks/useAppWindowState.ts";
+import { useAppShellRuntimeLifecycle } from "./hooks/useAppShellRuntimeLifecycle.ts";
 import ToolsSidebarStatusEntry from "../features/tools/components/ToolsSidebarStatusEntry.tsx";
 import ToolAlertDialog from "../features/tools/components/ToolAlertDialog.tsx";
 import type { ToolsOpenTarget } from "../features/tools/types.ts";
@@ -69,31 +68,15 @@ import {
   startOfLocalDay,
 } from "../shared/lib/localDate.ts";
 
-const DATA_FOREGROUND_PREWARM_DELAY_MS = 1_200;
-const BACKGROUND_CACHE_RELEASE_DELAY_MS = LONG_BACKGROUND_DELAY_MS;
-
-const History = createPreloadableViewComponent("history");
-const Data = createPreloadableViewComponent("data");
-const Settings = createPreloadableViewComponent("settings");
-const About = createPreloadableViewComponent("about");
-const AppMapping = createPreloadableViewComponent("mapping");
-const Tools = createPreloadableViewComponent("tools");
-
-function getPreloadableNavigationView(view: View): PreloadableView | null {
-  switch (view) {
-    case "about":
-    case "data":
-    case "history":
-    case "mapping":
-    case "settings":
-    case "tools":
-      return view;
-    case "dashboard":
-      return null;
-  }
-}
-
 type HistoryDateRequest = { dateKey: string; requestId: number };
+
+const History = createPreloadableViewComponent<ComponentProps<typeof HistoryView>>("history");
+const Data = createPreloadableViewComponent<ComponentProps<typeof DataView>>("data");
+const Settings = createPreloadableViewComponent<ComponentProps<typeof SettingsView>>("settings");
+const About = createPreloadableViewComponent<ComponentProps<typeof AboutView>>("about");
+const AppMapping =
+  createPreloadableViewComponent<ComponentProps<typeof AppMappingView>>("mapping");
+const Tools = createPreloadableViewComponent<ComponentProps<typeof ToolsView>>("tools");
 
 export default function AppShell() {
   return (
@@ -107,31 +90,35 @@ function AppShellContent() {
   const { confirm, dialogs } = useQuietDialogs();
   const { sidebarUpdateEntry, settingsUpdateEntry } = useAppShellUpdateEntry();
   const {
-    currentView, prepareNavigate, handleNavigate,
+    currentView,
+    prepareNavigate,
+    handleNavigate,
     registerSettingsSaveHandler,
     registerMappingSaveHandler,
     setSettingsDirty,
     setMappingDirty,
   } = useAppShellNavigation({ confirm });
   const { toasts, pushToast } = useAppShellToasts();
-  const [readModelRefreshState, setReadModelRefreshState] = useState(INITIAL_READ_MODEL_REFRESH_STATE);
-  const { prepareImportCategories, onImportedDataChanged: handleImportedDataChanged } = useImportClassificationCoordinator(setReadModelRefreshState);
-  const [isWindowMaximized, setIsWindowMaximized] = useState(false);
+  const [readModelRefreshState, setReadModelRefreshState] = useState(
+    INITIAL_READ_MODEL_REFRESH_STATE,
+  );
+  const {
+    prepareImportCategories,
+    onImportedDataChanged: handleImportedDataChanged,
+  } = useImportClassificationCoordinator(setReadModelRefreshState);
   const [settingsThemeModePreview, setSettingsThemeModePreview] = useState<ThemeMode | null>(null);
-  const [settingsColorSchemePreview, setSettingsColorSchemePreview] = useState<ColorSchemePreview | null>(null);
-  const [settingsLanguagePreview, setSettingsLanguagePreview] = useState<AppLanguage | null>(null);
-  const [isDocumentVisible, setIsDocumentVisible] = useState(() => (
-    typeof document === "undefined" ? true : document.visibilityState !== "hidden"
-  ));
-  const [isWindowForegroundLike, setIsWindowForegroundLike] = useState(true);
+  const [settingsColorSchemePreview, setSettingsColorSchemePreview] =
+    useState<ColorSchemePreview | null>(null);
+  const [settingsLanguagePreview, setSettingsLanguagePreview] =
+    useState<AppLanguage | null>(null);
   const [historyDateRequest, setHistoryDateRequest] = useState<HistoryDateRequest | null>(null);
   const [toolsInitialTarget, setToolsInitialTarget] = useState<ToolsOpenTarget | null>(null);
-  const [renderedView, setRenderedView] = useState<View>("dashboard");
-
-  const renderedViewRequestRef = useRef(0);
-  const warmupRuntimeReadyResolveRef = useRef<(() => void) | null>(null);
-  const warmupRuntimeReadyPromiseRef = useRef<Promise<void> | null>(null);
-  const isForegroundReady = isDocumentVisible && isWindowForegroundLike;
+  const renderedView = useAppShellRenderedView(currentView);
+  const {
+    isForegroundReady,
+    isWindowForegroundLike,
+    isWindowMaximized,
+  } = useAppWindowState();
   const {
     activeWindow,
     trackingStatus,
@@ -147,61 +134,16 @@ function AppShellContent() {
   const uiText = getUiText(uiTextLanguage);
   const dynamicEffects = appSettings.dynamicEffects;
   const quietMotionMode = useQuietMotionPreference(dynamicEffects);
-  if (!warmupRuntimeReadyPromiseRef.current) {
-    warmupRuntimeReadyPromiseRef.current = new Promise((resolve) => {
-      warmupRuntimeReadyResolveRef.current = resolve;
-    });
-  }
-
-  useEffect(() => {
-    if (typeof document === "undefined") return undefined;
-
-    document.documentElement.dataset.qpMotion = quietMotionMode;
-    return () => {
-      delete document.documentElement.dataset.qpMotion;
-    };
-  }, [quietMotionMode]);
 
   useEffect(() => {
     setUiTextLanguage(uiTextLanguage);
     setSyncedUiTextLanguage(uiTextLanguage);
   }, [uiTextLanguage]);
 
-  useEffect(() => {
-    const preloadableView = getPreloadableNavigationView(currentView);
-    renderedViewRequestRef.current += 1;
-    const requestId = renderedViewRequestRef.current;
-
-    if (!preloadableView) {
-      setRenderedView(currentView);
-      return undefined;
-    }
-
-    if (getPreloadableViewChunkStatus(preloadableView) === "resolved") {
-      setRenderedView(currentView);
-      return undefined;
-    }
-
-    let cancelled = false;
-    void preloadLazyViewChunk(preloadableView)
-      .then(() => {
-        if (!cancelled && renderedViewRequestRef.current === requestId) {
-          setRenderedView(currentView);
-        }
-      })
-      .catch((error) => {
-        console.warn(`Failed to preload ${preloadableView} view before navigation`, error);
-        if (!cancelled && renderedViewRequestRef.current === requestId) {
-          setRenderedView(currentView);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [currentView]);
   const appFrameRef = useMainWindowReady({
-    appearanceResolved, appSettings, themeModePreview: settingsThemeModePreview,
+    appearanceResolved,
+    appSettings,
+    themeModePreview: settingsThemeModePreview,
     colorSchemePreview: settingsColorSchemePreview,
   });
   const refreshSignal = resolveReadModelRefreshSignal(syncTick, readModelRefreshState);
@@ -219,6 +161,19 @@ function AppShellContent() {
     classificationReady,
     isDashboardRefreshEnabled,
   );
+  useAppShellRuntimeLifecycle({
+    backgroundOptimization: appSettings.backgroundOptimization,
+    classificationReady,
+    isDataRefreshEnabled,
+    isDashboardRefreshEnabled,
+    isForegroundReady,
+    isHistoryRefreshEnabled,
+    isWindowForegroundLike,
+    mappingVersion,
+    quietMotionMode,
+    syncTick,
+    uiTextLanguage,
+  });
 
   const activeExeName = activeWindow?.exeName ?? null;
   const mappedActiveApp = activeExeName && AppClassification.shouldTrackApp(activeExeName)
@@ -238,162 +193,6 @@ function AppShellContent() {
   const handleToolsInitialTargetConsumed = useCallback(() => {
     setToolsInitialTarget(null);
   }, []);
-
-  useEffect(() => {
-    let active = true;
-    let cancelWarmup: (() => void) | null = null;
-    const startWarmup = (foregroundLike: boolean) => {
-      if (!active) return;
-
-      const controller = startStartupWarmup({
-        mode: foregroundLike ? "visible-start" : "hidden-start",
-        runtimeReady: warmupRuntimeReadyPromiseRef.current ?? Promise.resolve(),
-      });
-      cancelWarmup = controller.cancel;
-      if (!active) {
-        controller.cancel();
-      }
-    };
-
-    void readCurrentWindowForegroundState()
-      .then((state) => startWarmup(state.foregroundLike))
-      .catch((error) => {
-        console.warn("read foreground state for startup warmup failed", error);
-        startWarmup(true);
-      });
-
-    return () => {
-      active = false;
-      cancelWarmup?.();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!classificationReady) return;
-
-    warmupRuntimeReadyResolveRef.current?.();
-    warmupRuntimeReadyResolveRef.current = null;
-  }, [classificationReady]);
-
-  useEffect(() => {
-    if (!classificationReady || syncTick <= 0) return undefined;
-
-    return scheduleStartupWarmupRefresh(undefined, {
-      includeDashboard: isDashboardRefreshEnabled,
-      includeHistory: isHistoryRefreshEnabled,
-      includeData: isDataRefreshEnabled,
-    });
-  }, [classificationReady, isDashboardRefreshEnabled, isDataRefreshEnabled, isHistoryRefreshEnabled, syncTick]);
-
-  useEffect(() => {
-    if (typeof document === "undefined") return undefined;
-
-    const syncDocumentVisibility = () => {
-      setIsDocumentVisible(document.visibilityState !== "hidden");
-    };
-
-    syncDocumentVisibility();
-    document.addEventListener("visibilitychange", syncDocumentVisibility);
-    return () => {
-      document.removeEventListener("visibilitychange", syncDocumentVisibility);
-    };
-  }, []);
-
-  useEffect(() => {
-    let disposed = false;
-    let unlisten: (() => void) | null = null;
-
-    void watchCurrentWindowMaximized((maximized) => {
-      if (!disposed) {
-        setIsWindowMaximized(maximized);
-      }
-    })
-      .then((nextUnlisten) => {
-        if (disposed) {
-          nextUnlisten();
-          return;
-        }
-
-        unlisten = nextUnlisten;
-      })
-      .catch((error) => {
-        console.warn("watch current window maximized state failed", error);
-      });
-
-    return () => {
-      disposed = true;
-      if (unlisten) {
-        unlisten();
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    let disposed = false;
-    let unlisten: (() => void) | null = null;
-
-    void watchCurrentWindowForegroundState((state) => {
-      if (!disposed) {
-        setIsWindowForegroundLike(state.foregroundLike);
-      }
-    })
-      .then((nextUnlisten) => {
-        if (disposed) {
-          nextUnlisten();
-          return;
-        }
-
-        unlisten = nextUnlisten;
-      })
-      .catch((error) => {
-        console.warn("watch current window foreground state failed", error);
-      });
-
-    return () => {
-      disposed = true;
-      if (unlisten) {
-        unlisten();
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!classificationReady || !isForegroundReady) return undefined;
-
-    const timer = window.setTimeout(() => {
-      if (!classificationReady || !isForegroundReady) return;
-
-      void prewarmDataFirstScreen({
-        mappingVersion,
-        reason: "foreground-opened",
-        uiLanguage: uiTextLanguage,
-      });
-    }, DATA_FOREGROUND_PREWARM_DELAY_MS);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [classificationReady, isForegroundReady, mappingVersion, uiTextLanguage]);
-
-  useEffect(() => {
-    if (isForegroundReady || !appSettings.backgroundOptimization) return undefined;
-
-    const timer = window.setTimeout(() => {
-      if (document.visibilityState !== "hidden" && isWindowForegroundLike) return;
-
-      try {
-        clearHistorySnapshotCache();
-        clearDataHeavyCaches();
-        clearToolsPageCaches();
-      } catch (error) {
-        console.warn("clear page heavy caches after background delay failed", error);
-      }
-    }, BACKGROUND_CACHE_RELEASE_DELAY_MS);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [appSettings.backgroundOptimization, isForegroundReady, isWindowForegroundLike]);
 
   const handleMinSessionSecsChange = useCallback((nextValue: number) => {
     setAppSettings((current) => ({
@@ -431,23 +230,13 @@ function AppShellContent() {
     if (nextView === "tools") {
       setToolsInitialTarget(null);
     }
-    const preloadableView = getPreloadableNavigationView(nextView);
-    if (preloadableView) {
-      void preloadLazyViewChunk(preloadableView).catch((error) => {
-        console.warn(`Failed to preload ${preloadableView} view on navigation intent`, error);
-      });
-    }
+    preloadNavigationView(nextView, "intent");
     const result = await handleNavigate(nextView);
     return result.navigated;
   }, [handleNavigate]);
 
   const handleSidebarPreviewNavigate = useCallback((nextView: View) => {
-    const preloadableView = getPreloadableNavigationView(nextView);
-    if (!preloadableView) return;
-
-    void preloadLazyViewChunk(preloadableView).catch((error) => {
-      console.warn(`Failed to preload ${preloadableView} view on navigation preview`, error);
-    });
+    preloadNavigationView(nextView, "preview");
   }, []);
 
   return (
@@ -474,137 +263,130 @@ function AppShellContent() {
           {...sidebarUpdateEntry}
         />
 
-        <main className="qp-canvas flex-1 min-h-0 flex flex-col gap-4 md:gap-5 p-4 md:p-5 relative overflow-hidden">
-          <Suspense
-            fallback={
-              <div className="flex-1 min-h-0 flex items-center justify-center text-[var(--qp-text-tertiary)] text-sm">
-                {uiText.app.loadingView}
-              </div>
-            }
-          >
-            <div
-              key={renderedView}
-              className="qp-view-container flex-1 min-h-0 flex flex-col h-full overflow-hidden"
-            >
-              {renderedView === "dashboard" && (
-                <Dashboard
-                  key="dashboard"
-                  dashboard={dashboard}
-                  icons={icons}
-                  isAfk={activeWindow?.isAfk ?? false}
-                  isTrackingActive={activeApp !== null}
-                  activeAppName={activeApp?.name ?? null}
-                  trackingPaused={appSettings.trackingPaused}
-                  hourlyActivityChartMode={appSettings.hourlyActivityChartMode}
-                  onHourlyActivityChartModeChange={handleHourlyActivityChartModeChange}
-                />
-              )}
-              {renderedView === "history" && (
-                <History
-                  key="history"
-                  icons={icons}
-                  refreshKey={refreshSignal}
-                  refreshIntervalSecs={appSettings.refreshIntervalSecs}
-                  mergeThresholdSecs={appSettings.timelineMergeGapSecs}
-                  minSessionSecs={appSettings.minSessionSecs}
-                  onMinSessionSecsChange={handleMinSessionSecsChange}
-                  trackerHealth={trackerHealth}
-                  getHistorySeedSnapshot={getHistoryRuntimeSeedSnapshot}
-                  loadHistorySnapshot={loadHistoryRuntimeSnapshot}
-                  mappingVersion={mappingVersion}
-                  selectedDateRequest={historyDateRequest}
-                  hourlyActivityChartMode={appSettings.hourlyActivityChartMode}
-                  onHourlyActivityChartModeChange={handleHourlyActivityChartModeChange}
-                  refreshEnabled={isHistoryRefreshEnabled}
-                  webActivityEnabled={appSettings.webActivityEnabled}
-                  titleRecordingEnabled={appSettings.titleRecordingEnabled}
-                />
-              )}
-              {renderedView === "data" && (
-                <Data
-                  icons={icons}
-                  refreshKey={refreshSignal}
-                  trackerHealth={trackerHealth}
-                  loadDataTrendSnapshot={loadDataTrendRuntimeSnapshot}
-                  mappingVersion={mappingVersion}
-                  onOpenHistoryDate={openHistoryForDate}
-                  onToast={pushToast}
-                  uiLanguage={uiTextLanguage}
-                  webActivityEnabled={appSettings.webActivityEnabled}
-                />
-              )}
-              {renderedView === "tools" && (
-                <Tools
-                  key="tools"
-                  initialTarget={toolsInitialTarget}
-                  onInitialTargetConsumed={handleToolsInitialTargetConsumed}
-                  icons={icons}
-                  onToast={pushToast}
-                  uiText={uiText}
-                />
-              )}
-              {renderedView === "settings" && (
-                <Settings
-                  key="settings"
-                  onSettingsChanged={(nextSettings: AppSettings) => {
-                    if (nextSettings.language !== appSettings.language) {
-                      void clearDataBootstrapCache();
-                    }
-                    setAppSettings(nextSettings);
-                    setSettingsThemeModePreview(null);
-                    setSettingsColorSchemePreview(null);
-                    setSettingsLanguagePreview(null);
-                  }}
-                  onColorSchemeSaved={(nextSettings: AppSettings) => {
-                    setAppSettings(nextSettings);
-                    setSettingsColorSchemePreview(null);
-                  }}
-                  onRegisterSaveHandler={registerSettingsSaveHandler}
-                  onDirtyChange={setSettingsDirty}
-                  onThemeModePreview={setSettingsThemeModePreview}
-                  onColorSchemePreview={setSettingsColorSchemePreview}
-                  onLanguagePreview={setSettingsLanguagePreview}
-                  onToast={pushToast}
-                  onPrepareImportCategories={prepareImportCategories}
-                  onImportedDataChanged={handleImportedDataChanged}
-                />
-              )}
-              {renderedView === "about" && (
-                <About
-                  key="about"
-                  {...settingsUpdateEntry}
-                  onToast={pushToast}
-                />
-              )}
-              {renderedView === "mapping" && (
-                <AppMapping
-                  key="mapping"
-                  icons={icons}
-                  onRegisterSaveHandler={registerMappingSaveHandler}
-                  onDirtyChange={setMappingDirty}
-                  onOverridesChanged={() => {
-                    clearDashboardSnapshotCache();
-                    void clearHistoryCachesAfterDataChange();
-                    clearToolsPageCaches();
-                    clearDataHeavyCaches();
+        <AppViewOutlet
+          renderedView={renderedView}
+          uiText={uiText}
+          views={{
+            dashboard: (
+              <Dashboard
+                key="dashboard"
+                dashboard={dashboard}
+                icons={icons}
+                isAfk={activeWindow?.isAfk ?? false}
+                isTrackingActive={activeApp !== null}
+                activeAppName={activeApp?.name ?? null}
+                trackingPaused={appSettings.trackingPaused}
+                hourlyActivityChartMode={appSettings.hourlyActivityChartMode}
+                onHourlyActivityChartModeChange={handleHourlyActivityChartModeChange}
+              />
+            ),
+            history: (
+              <History
+                key="history"
+                icons={icons}
+                refreshKey={refreshSignal}
+                refreshIntervalSecs={appSettings.refreshIntervalSecs}
+                mergeThresholdSecs={appSettings.timelineMergeGapSecs}
+                minSessionSecs={appSettings.minSessionSecs}
+                onMinSessionSecsChange={handleMinSessionSecsChange}
+                trackerHealth={trackerHealth}
+                getHistorySeedSnapshot={getHistoryRuntimeSeedSnapshot}
+                loadHistorySnapshot={loadHistoryRuntimeSnapshot}
+                mappingVersion={mappingVersion}
+                selectedDateRequest={historyDateRequest}
+                hourlyActivityChartMode={appSettings.hourlyActivityChartMode}
+                onHourlyActivityChartModeChange={handleHourlyActivityChartModeChange}
+                refreshEnabled={isHistoryRefreshEnabled}
+                webActivityEnabled={appSettings.webActivityEnabled}
+                titleRecordingEnabled={appSettings.titleRecordingEnabled}
+              />
+            ),
+            data: (
+              <Data
+                icons={icons}
+                refreshKey={refreshSignal}
+                trackerHealth={trackerHealth}
+                loadDataTrendSnapshot={loadDataTrendRuntimeSnapshot}
+                mappingVersion={mappingVersion}
+                onOpenHistoryDate={(dateKey) => {
+                  void openHistoryForDate(dateKey);
+                }}
+                onToast={pushToast}
+                uiLanguage={uiTextLanguage}
+                webActivityEnabled={appSettings.webActivityEnabled}
+              />
+            ),
+            tools: (
+              <Tools
+                key="tools"
+                initialTarget={toolsInitialTarget}
+                onInitialTargetConsumed={handleToolsInitialTargetConsumed}
+                icons={icons}
+                onToast={pushToast}
+                uiText={uiText}
+              />
+            ),
+            settings: (
+              <Settings
+                key="settings"
+                onSettingsChanged={(nextSettings: AppSettings) => {
+                  if (nextSettings.language !== appSettings.language) {
                     void clearDataBootstrapCache();
-                    setReadModelRefreshState(applyMappingOverridesReadModelRefresh);
-                    pushToast(uiText.app.mappingUpdated, "success");
-                  }}
-                  onSessionsDeleted={() => {
-                    clearDashboardSnapshotCache();
-                    void clearHistoryCachesAfterDataChange();
-                    clearDataHeavyCaches();
-                    void clearDataBootstrapCache();
-                    setReadModelRefreshState(applySessionDeletionReadModelRefresh);
-                    pushToast(uiText.app.historyDeleted, "success");
-                  }}
-                  webActivityEnabled={appSettings.webActivityEnabled}
-                />
-              )}
-            </div>
-          </Suspense>
-        </main>
+                  }
+                  setAppSettings(nextSettings);
+                  setSettingsThemeModePreview(null);
+                  setSettingsColorSchemePreview(null);
+                  setSettingsLanguagePreview(null);
+                }}
+                onColorSchemeSaved={(nextSettings: AppSettings) => {
+                  setAppSettings(nextSettings);
+                  setSettingsColorSchemePreview(null);
+                }}
+                onRegisterSaveHandler={registerSettingsSaveHandler}
+                onDirtyChange={setSettingsDirty}
+                onThemeModePreview={setSettingsThemeModePreview}
+                onColorSchemePreview={setSettingsColorSchemePreview}
+                onLanguagePreview={setSettingsLanguagePreview}
+                onToast={pushToast}
+                onPrepareImportCategories={prepareImportCategories}
+                onImportedDataChanged={handleImportedDataChanged}
+              />
+            ),
+            about: (
+              <About
+                key="about"
+                {...settingsUpdateEntry}
+                onToast={pushToast}
+              />
+            ),
+            mapping: (
+              <AppMapping
+                key="mapping"
+                icons={icons}
+                onRegisterSaveHandler={registerMappingSaveHandler}
+                onDirtyChange={setMappingDirty}
+                onOverridesChanged={() => {
+                  clearDashboardSnapshotCache();
+                  void clearHistoryCachesAfterDataChange();
+                  clearToolsPageCaches();
+                  clearDataHeavyCaches();
+                  void clearDataBootstrapCache();
+                  setReadModelRefreshState(applyMappingOverridesReadModelRefresh);
+                  pushToast(uiText.app.mappingUpdated, "success");
+                }}
+                onSessionsDeleted={() => {
+                  clearDashboardSnapshotCache();
+                  void clearHistoryCachesAfterDataChange();
+                  clearDataHeavyCaches();
+                  void clearDataBootstrapCache();
+                  setReadModelRefreshState(applySessionDeletionReadModelRefresh);
+                  pushToast(uiText.app.historyDeleted, "success");
+                }}
+                webActivityEnabled={appSettings.webActivityEnabled}
+              />
+            ),
+          }}
+        />
       </div>
     </div>
   );

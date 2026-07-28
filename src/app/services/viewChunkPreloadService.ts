@@ -191,11 +191,13 @@ export function preloadLazyViewChunk(
   return promise;
 }
 
-export function readPreloadedViewComponent(view: PreloadableView): ComponentType<Record<string, unknown>> {
+export function readPreloadedViewComponent<Props extends object = Record<string, unknown>>(
+  view: PreloadableView,
+): ComponentType<Props> {
   const record = getViewChunkRecord(view);
 
   if (record.status === "resolved") {
-    return (record.module as { default: ComponentType<Record<string, unknown>> }).default;
+    return (record.module as { default: ComponentType<Props> }).default;
   }
 
   if (record.status === "rejected") {
@@ -209,12 +211,12 @@ export function getPreloadableViewChunkStatus(view: PreloadableView): ViewChunkS
   return getViewChunkRecord(view).status;
 }
 
-export function createPreloadableViewComponent(
+export function createPreloadableViewComponent<Props extends object = Record<string, unknown>>(
   view: PreloadableView,
-): ComponentType<Record<string, unknown>> {
+): ComponentType<Props> {
   const displayName = `PreloadableView(${view})`;
-  const PreloadableViewComponent: ComponentType<Record<string, unknown>> = (props) => {
-    const Component = readPreloadedViewComponent(view);
+  const PreloadableViewComponent: ComponentType<Props> = (props) => {
+    const Component = readPreloadedViewComponent<Props>(view);
     return createElement(Component, props);
   };
   PreloadableViewComponent.displayName = displayName;

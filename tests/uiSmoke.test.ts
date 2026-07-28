@@ -267,14 +267,16 @@ function renderAppShellForSmoke() {
 await runTest("app shell declares every primary desktop view", () => {
   const viewType = readUtf8("src/app/types/view.ts");
   const shell = readUtf8("src/app/AppShell.tsx");
+  const outlet = readUtf8("src/app/components/AppViewOutlet.tsx");
   const sidebar = readUtf8("src/app/components/AppSidebar.tsx");
   const motionCss = readUtf8("src/styles/motion.css");
 
   for (const view of EXPECTED_VIEWS) {
     assert.match(viewType, new RegExp(`"${view}"`));
-    assert.match(shell, new RegExp(`renderedView === "${view}"`));
+    assert.match(shell, new RegExp(`${view}: \\(`));
     assert.match(sidebar, new RegExp(`id: "${view}" as View`));
   }
+  assert.match(outlet, /views\[renderedView\]/);
   assert.match(shell, /useQuietMotionPreference/);
   assert.match(shell, /data-qp-motion=\{quietMotionMode\}/);
   assert.doesNotMatch(shell, /VIEW_ORDER/);
@@ -339,8 +341,9 @@ await runTest("desktop behavior sync waits for persisted settings", () => {
 
 await runTest("app shell keeps History and Data snapshot loaders on their owning views", () => {
   const shell = readUtf8("src/app/AppShell.tsx");
-  const historyBranch = shell.slice(shell.indexOf("<History"), shell.indexOf("<Data"));
-  const dataBranch = shell.slice(shell.indexOf("<Data"), shell.indexOf("<Settings"));
+  const dataViewIndex = shell.indexOf("<Data", shell.indexOf("data: ("));
+  const historyBranch = shell.slice(shell.indexOf("<History"), dataViewIndex);
+  const dataBranch = shell.slice(dataViewIndex, shell.indexOf("<Tools", dataViewIndex));
 
   assert.match(historyBranch, /loadHistorySnapshot=\{loadHistoryRuntimeSnapshot\}/);
   assert.doesNotMatch(historyBranch, /loadDataTrendSnapshot=/);
@@ -908,8 +911,9 @@ await runTest("web activity views are gated by saved web sync setting", () => {
   const mapping = readUtf8("src/features/classification/components/AppMapping.tsx");
   const mappingState = readUtf8("src/features/classification/hooks/useAppMappingState.ts");
   const mappingDerivedState = readUtf8("src/features/classification/hooks/useAppMappingDerivedState.ts");
-  const historyBranch = shell.slice(shell.indexOf("<History"), shell.indexOf("<Data"));
-  const mappingBranch = shell.slice(shell.indexOf("<AppMapping"), shell.indexOf("</Suspense>"));
+  const dataViewIndex = shell.indexOf("<Data", shell.indexOf("data: ("));
+  const historyBranch = shell.slice(shell.indexOf("<History"), dataViewIndex);
+  const mappingBranch = shell.slice(shell.indexOf("<AppMapping"), shell.indexOf("/>", shell.indexOf("<AppMapping")));
   const webTimelineListBranch = historyTimelineLists.slice(
     historyTimelineLists.indexOf("export function HistoryWebTimelineList"),
   );
@@ -941,7 +945,8 @@ await runTest("Data keeps web analysis beside a unified activity overview", () =
   const webRuntime = readUtf8("src/features/data/hooks/useDataWebActivityRuntime.ts");
   const destinationPanel = readUtf8("src/features/data/components/DataAppTrendPanel.tsx");
   const heatmapPanel = readUtf8("src/features/data/components/DataHeatmapPanel.tsx");
-  const dataBranch = shell.slice(shell.indexOf("<Data"), shell.indexOf("<Settings"));
+  const dataViewIndex = shell.indexOf("<Data", shell.indexOf("data: ("));
+  const dataBranch = shell.slice(dataViewIndex, shell.indexOf("<Tools", dataViewIndex));
   const overviewPanelIndex = data.indexOf('className="qp-panel p-5 data-overview"');
   const trendPanelIndex = data.indexOf("<DataTrendPanel");
   const heatmapPanelIndex = data.indexOf("<DataHeatmapPanel");
@@ -1042,9 +1047,10 @@ await runTest("app icon cache lookup is case-insensitive for Windows executable 
 
 await runTest("app shell uses feature-owned Data prewarm and heavy cache lifecycle exits", () => {
   const shell = readUtf8("src/app/AppShell.tsx");
+  const lifecycle = readUtf8("src/app/hooks/useAppShellRuntimeLifecycle.ts");
 
-  assert.match(shell, /prewarmDataFirstScreen/);
-  assert.match(shell, /clearDataHeavyCaches/);
+  assert.match(lifecycle, /prewarmDataFirstScreen/);
+  assert.match(lifecycle, /clearDataHeavyCaches/);
   assert.match(shell, /clearDataBootstrapCache/);
   assert.doesNotMatch(shell, /clearDataBootstrapSnapshot/);
   assert.doesNotMatch(shell, /buildDataTrendViewModel/);
@@ -1053,22 +1059,23 @@ await runTest("app shell uses feature-owned Data prewarm and heavy cache lifecyc
 
 await runTest("app shell uses feature-owned page cache lifecycle exits", () => {
   const shell = readUtf8("src/app/AppShell.tsx");
-  const cleanupEffect = shell.slice(
-    shell.indexOf("if (isForegroundReady || !appSettings.backgroundOptimization) return undefined;"),
-    shell.indexOf("const handleMinSessionSecsChange"),
+  const lifecycle = readUtf8("src/app/hooks/useAppShellRuntimeLifecycle.ts");
+  const cleanupEffect = lifecycle.slice(
+    lifecycle.indexOf("if (isForegroundReady || !backgroundOptimization) return undefined;"),
+    lifecycle.indexOf("}, [backgroundOptimization"),
   );
 
   assert.match(shell, /clearDashboardSnapshotCache/);
-  assert.match(shell, /clearHistorySnapshotCache/);
+  assert.match(lifecycle, /clearHistorySnapshotCache/);
   assert.match(shell, /clearToolsPageCaches/);
-  assert.match(shell, /includeDashboard: isDashboardRefreshEnabled/);
-  assert.match(shell, /includeHistory: isHistoryRefreshEnabled/);
+  assert.match(lifecycle, /includeDashboard: isDashboardRefreshEnabled/);
+  assert.match(lifecycle, /includeHistory: isHistoryRefreshEnabled/);
   assert.doesNotMatch(cleanupEffect, /clearDashboardSnapshotCache/);
   assert.match(cleanupEffect, /clearHistorySnapshotCache/);
   assert.doesNotMatch(cleanupEffect, /clearHistoryBootstrapSnapshot/);
   assert.match(cleanupEffect, /clearDataHeavyCaches/);
   assert.match(cleanupEffect, /clearToolsPageCaches/);
-  assert.match(cleanupEffect, /appSettings\.backgroundOptimization/);
+  assert.match(cleanupEffect, /backgroundOptimization/);
   assert.doesNotMatch(shell, /DASHBOARD_SNAPSHOT_CACHE/);
   assert.doesNotMatch(shell, /HISTORY_SNAPSHOT_CACHE/);
 });
@@ -1268,6 +1275,7 @@ await runTest("pomodoro alert dialog offers a pause action without changing othe
 await runTest("app shell keeps long background navigation persistent", () => {
   const policy = readUtf8("src/app/services/backgroundReturnHomePolicy.ts");
   const shell = readUtf8("src/app/AppShell.tsx");
+  const lifecycle = readUtf8("src/app/hooks/useAppShellRuntimeLifecycle.ts");
   const navigation = readUtf8("src/app/hooks/useAppShellNavigation.ts");
   const mainWindow = readUtf8("src-tauri/src/app/main_window.rs");
   const widgetWindow = readUtf8("src-tauri/src/app/widget.rs");
@@ -1277,7 +1285,7 @@ await runTest("app shell keeps long background navigation persistent", () => {
   assert.match(widgetWindow, /WIDGET_DESTROY_AFTER_IDLE_SECS: u64 = 3 \* 60/);
   assert.doesNotMatch(shell, /15 \* 60 \* 1000/);
   assert.doesNotMatch(shell, /10 \* 60 \* 1000/);
-  assert.match(shell, /const BACKGROUND_CACHE_RELEASE_DELAY_MS = LONG_BACKGROUND_DELAY_MS/);
+  assert.match(lifecycle, /const BACKGROUND_CACHE_RELEASE_DELAY_MS = LONG_BACKGROUND_DELAY_MS/);
   assert.doesNotMatch(shell, /resetToDashboardAfterLongBackground/);
   assert.doesNotMatch(shell, /backgroundEnteredAtMsRef/);
   assert.doesNotMatch(navigation, /shouldReturnHomeAfterBackground/);
