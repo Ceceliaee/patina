@@ -1,8 +1,17 @@
 use crate::app::{tray, widget};
-use crate::data::icon_cache_service;
+use crate::data::{
+    icon_cache_service, repositories::widget_runtime::WidgetBootstrapSnapshot, widget_store,
+};
 use crate::domain::widget::WidgetPlacement;
 use crate::platform::windows::input;
 use tauri::AppHandle;
+
+#[tauri::command]
+pub async fn cmd_get_widget_bootstrap_snapshot(
+    app: AppHandle,
+) -> Result<WidgetBootstrapSnapshot, String> {
+    widget_store::load_widget_bootstrap_snapshot(&app).await
+}
 
 #[tauri::command]
 pub async fn cmd_get_widget_placement(app: AppHandle) -> Result<WidgetPlacement, String> {

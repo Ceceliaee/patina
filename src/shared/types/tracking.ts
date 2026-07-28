@@ -122,6 +122,8 @@ export interface TrackingDataChangedPayload {
 
 export type TrackerHealthStatus = "healthy" | "stale";
 
+export const TRACKER_HEARTBEAT_STALE_AFTER_MS = 8_000;
+
 export interface TrackerHealthSnapshot {
   status: TrackerHealthStatus;
   lastHeartbeatMs: number | null;

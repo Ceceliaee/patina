@@ -130,6 +130,7 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::tools::cmd_skip_pomodoro_phase,
         commands::tools::cmd_reset_pomodoro,
         commands::widget::cmd_get_widget_icon,
+        commands::widget::cmd_get_widget_bootstrap_snapshot,
         commands::widget::cmd_get_widget_placement,
         commands::widget::cmd_finalize_widget_drag,
         commands::widget::cmd_set_widget_expanded,

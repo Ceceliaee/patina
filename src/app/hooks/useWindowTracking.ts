@@ -6,10 +6,14 @@ import type {
   TrackingStatusSnapshot,
   TrackingWindowSnapshot,
 } from "../../shared/types/tracking";
-import { DEFAULT_TRACKING_STATUS, resolveTrackerHealth } from "../../shared/types/tracking";
+import {
+  DEFAULT_TRACKING_STATUS,
+  resolveTrackerHealth,
+  TRACKER_HEARTBEAT_STALE_AFTER_MS,
+} from "../../shared/types/tracking";
 import {
   loadAppRuntimeBootstrapSnapshot,
-  TRACKER_HEARTBEAT_STALE_AFTER_MS,
+  loadTrackerHealthSnapshot,
 } from "../services/appRuntimeBootstrapService";
 import {
   loadCurrentTrackingSnapshot,
@@ -191,6 +195,10 @@ export function useWindowTracking(options: UseWindowTrackingOptions = {}) {
 
     return startTrackerHealthPolling((snapshot) => {
       setTrackerHealth(snapshot);
+    }, {
+      deps: {
+        loadSnapshot: loadTrackerHealthSnapshot,
+      },
     });
   }, [trackerHealthPollingEnabled]);
 

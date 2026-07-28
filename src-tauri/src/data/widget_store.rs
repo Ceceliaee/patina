@@ -1,9 +1,18 @@
-use crate::data::repositories::widget_state;
+use crate::data::repositories::{widget_runtime, widget_state};
 use crate::data::sqlite_pool::wait_for_sqlite_pool;
 use crate::domain::widget::WidgetPlacement;
 use crate::engine::widget::{WidgetPlacementStore, WidgetStoreFuture};
 use sqlx::{Pool, Sqlite};
 use tauri::{AppHandle, Runtime};
+
+pub async fn load_widget_bootstrap_snapshot<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<widget_runtime::WidgetBootstrapSnapshot, String> {
+    let pool = wait_for_sqlite_pool(app).await?;
+    widget_runtime::load_widget_bootstrap_snapshot(&pool)
+        .await
+        .map_err(|error| format!("failed to load widget bootstrap snapshot: {error}"))
+}
 
 pub struct SqliteWidgetPlacementStore {
     pool: Pool<Sqlite>,

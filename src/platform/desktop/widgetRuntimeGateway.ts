@@ -19,6 +19,24 @@ interface RawWidgetPlacement {
   anchor_y: number;
 }
 
+interface RawWidgetBootstrapSettings {
+  tracking_paused: string | null;
+  theme_mode: string | null;
+  language: string | null;
+  color_scheme_light: string | null;
+  color_scheme_dark: string | null;
+}
+
+interface RawWidgetAppOverrideRow {
+  key: string;
+  value: string;
+}
+
+interface RawWidgetBootstrapSnapshot {
+  settings: RawWidgetBootstrapSettings;
+  app_overrides: RawWidgetAppOverrideRow[];
+}
+
 interface RawWidgetMonitorAffinity {
   name: string | null;
   work_area: RawWidgetPhysicalRect;
@@ -47,6 +65,24 @@ export interface WidgetPlacement {
   monitor: WidgetMonitorAffinity | null;
   side: WidgetSide;
   anchorY: number;
+}
+
+export interface WidgetBootstrapSettings {
+  trackingPaused: string | null;
+  themeMode: string | null;
+  language: string | null;
+  colorSchemeLight: string | null;
+  colorSchemeDark: string | null;
+}
+
+export interface WidgetAppOverrideRow {
+  key: string;
+  value: string;
+}
+
+export interface WidgetBootstrapSnapshot {
+  settings: WidgetBootstrapSettings;
+  appOverrides: WidgetAppOverrideRow[];
 }
 
 function isWidgetSide(value: unknown): value is WidgetSide {
@@ -92,6 +128,43 @@ function isRawWidgetPlacement(value: unknown): value is RawWidgetPlacement {
     && isFiniteNumber(record.anchor_y);
 }
 
+function isOptionalString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+function isRawWidgetBootstrapSettings(value: unknown): value is RawWidgetBootstrapSettings {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return isOptionalString(record.tracking_paused)
+    && isOptionalString(record.theme_mode)
+    && isOptionalString(record.language)
+    && isOptionalString(record.color_scheme_light)
+    && isOptionalString(record.color_scheme_dark);
+}
+
+function isRawWidgetAppOverrideRow(value: unknown): value is RawWidgetAppOverrideRow {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return typeof record.key === "string" && typeof record.value === "string";
+}
+
+function isRawWidgetBootstrapSnapshot(value: unknown): value is RawWidgetBootstrapSnapshot {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return isRawWidgetBootstrapSettings(record.settings)
+    && Array.isArray(record.app_overrides)
+    && record.app_overrides.every(isRawWidgetAppOverrideRow);
+}
+
 function mapRawWidgetPlacement(raw: RawWidgetPlacement): WidgetPlacement {
   return {
     monitor: raw.monitor
@@ -112,6 +185,35 @@ function mapRawWidgetPlacement(raw: RawWidgetPlacement): WidgetPlacement {
 
 export function parseWidgetPlacement(value: unknown): WidgetPlacement | null {
   return isRawWidgetPlacement(value) ? mapRawWidgetPlacement(value) : null;
+}
+
+export function parseWidgetBootstrapSnapshot(value: unknown): WidgetBootstrapSnapshot | null {
+  if (!isRawWidgetBootstrapSnapshot(value)) {
+    return null;
+  }
+
+  return {
+    settings: {
+      trackingPaused: value.settings.tracking_paused,
+      themeMode: value.settings.theme_mode,
+      language: value.settings.language,
+      colorSchemeLight: value.settings.color_scheme_light,
+      colorSchemeDark: value.settings.color_scheme_dark,
+    },
+    appOverrides: value.app_overrides.map((row) => ({
+      key: row.key,
+      value: row.value,
+    })),
+  };
+}
+
+export async function getWidgetBootstrapSnapshot(): Promise<WidgetBootstrapSnapshot> {
+  const payload = await invoke<unknown>("cmd_get_widget_bootstrap_snapshot");
+  const snapshot = parseWidgetBootstrapSnapshot(payload);
+  if (!snapshot) {
+    throw new Error("invalid widget bootstrap snapshot");
+  }
+  return snapshot;
 }
 
 export async function getWidgetPlacement(): Promise<WidgetPlacement | null> {

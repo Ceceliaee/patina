@@ -1,5 +1,4 @@
 import type { TrackerHealthSnapshot } from "../../shared/types/tracking";
-import { loadTrackerHealthSnapshot } from "./appRuntimeBootstrapService.ts";
 
 const TRACKER_HEARTBEAT_POLL_MS = 1_000;
 
@@ -12,17 +11,17 @@ interface TrackerHealthPollingDeps {
 }
 
 interface TrackerHealthPollingOptions {
-  deps?: Partial<TrackerHealthPollingDeps>;
+  deps: Pick<TrackerHealthPollingDeps, "loadSnapshot"> & Partial<TrackerHealthPollingDeps>;
   intervalMs?: number;
   refreshImmediately?: boolean;
 }
 
 function resolveTrackerHealthPollingDeps(
-  deps: Partial<TrackerHealthPollingDeps> = {},
+  deps: TrackerHealthPollingOptions["deps"],
 ): TrackerHealthPollingDeps {
   return {
     clearInterval: deps.clearInterval ?? ((timerId) => window.clearInterval(timerId)),
-    loadSnapshot: deps.loadSnapshot ?? loadTrackerHealthSnapshot,
+    loadSnapshot: deps.loadSnapshot,
     now: deps.now ?? (() => Date.now()),
     setInterval: deps.setInterval ?? ((callback, intervalMs) => window.setInterval(callback, intervalMs)),
     warn: deps.warn ?? ((message, error) => console.warn(message, error)),
@@ -31,7 +30,7 @@ function resolveTrackerHealthPollingDeps(
 
 export function startTrackerHealthPolling(
   onSnapshot: (snapshot: TrackerHealthSnapshot) => void,
-  options: TrackerHealthPollingOptions = {},
+  options: TrackerHealthPollingOptions,
 ) {
   let disposed = false;
   let refreshInFlight = false;

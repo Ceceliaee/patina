@@ -4,7 +4,10 @@ import {
   loadWidgetObjectIconWithDeps,
   resetWidgetIconCacheForTests,
 } from "../src/app/widget/widgetIconService.ts";
+import { applyWidgetBootstrapSnapshot } from "../src/app/widget/widgetBootstrapService.ts";
 import { buildWidgetViewModel, isWidgetSelfWindow } from "../src/app/widget/widgetViewModel.ts";
+import { parseWidgetBootstrapSnapshot } from "../src/platform/desktop/widgetRuntimeGateway.ts";
+import { ProcessMapper } from "../src/shared/classification/processMapper.ts";
 import type { AppSettings } from "../src/shared/settings/appSettings.ts";
 import type {
   TrackerHealthSnapshot,
@@ -346,6 +349,55 @@ await runTest("loadWidgetObjectIconWithDeps caps the widget icon cache", async (
   }
 
   assert.equal(getWidgetIconCacheSizeForTests(), 16);
+});
+
+await runTest("parseWidgetBootstrapSnapshot rejects incomplete native payloads", () => {
+  assert.equal(parseWidgetBootstrapSnapshot({}), null);
+  assert.equal(parseWidgetBootstrapSnapshot({
+    settings: {
+      tracking_paused: "0",
+      theme_mode: "light",
+      language: "zh-CN",
+      color_scheme_light: "default",
+      color_scheme_dark: "default",
+    },
+    app_overrides: [{ key: "__app_override::editor.exe", value: 42 }],
+  }), null);
+});
+
+await runTest("applyWidgetBootstrapSnapshot restores only widget settings and app overrides", () => {
+  const parsed = parseWidgetBootstrapSnapshot({
+    settings: {
+      tracking_paused: "1",
+      theme_mode: "dark",
+      language: "en-US",
+      color_scheme_light: "notion",
+      color_scheme_dark: "nord",
+    },
+    app_overrides: [
+      {
+        key: "__app_override::editor.exe",
+        value: JSON.stringify({
+          displayName: "Quiet Editor",
+          track: false,
+          enabled: true,
+        }),
+      },
+    ],
+  });
+  assert.ok(parsed);
+
+  const bootstrap = applyWidgetBootstrapSnapshot(parsed);
+
+  assert.equal(bootstrap.settings.trackingPaused, true);
+  assert.equal(bootstrap.settings.themeMode, "dark");
+  assert.equal(bootstrap.settings.language, "en-US");
+  assert.equal(bootstrap.settings.colorSchemeLight, "notion");
+  assert.equal(bootstrap.settings.colorSchemeDark, "nord");
+  assert.equal(bootstrap.settings.webActivityToken, "");
+  assert.equal(ProcessMapper.map("editor.exe").name, "Quiet Editor");
+  assert.equal(ProcessMapper.shouldTrack("editor.exe"), false);
+  ProcessMapper.clearUserOverrides();
 });
 
 console.log(`Passed ${passed} widget view model tests`);

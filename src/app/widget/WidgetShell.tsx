@@ -10,9 +10,9 @@ import {
 } from "../../platform/desktop/widgetRuntimeGateway";
 import { toggleTrackingPaused } from "../../platform/runtime/trackingRuntimeGateway";
 import type { TrackingStatusSnapshot, TrackingWindowSnapshot } from "../../shared/types/tracking";
-import { useWindowTracking } from "../hooks/useWindowTracking";
 import { useAppThemeMode } from "../hooks/useAppThemeMode.ts";
 import { useWidgetObjectIcon } from "../hooks/useWidgetObjectIcon";
+import { useWidgetTracking } from "./useWidgetTracking.ts";
 import { useWidgetWindowState } from "./useWidgetWindowState";
 import { buildWidgetViewModel, isWidgetSelfWindow } from "./widgetViewModel";
 import { getUiText, setUiTextLanguage } from "../../shared/copy/index.ts";
@@ -34,7 +34,7 @@ export default function WidgetShell() {
     classificationReady,
     trackerHealth,
     trackingRuntimeProbeStatus,
-  } = useWindowTracking({ syncDesktopLaunchBehavior: false });
+  } = useWidgetTracking();
   const [syncedUiTextLanguage, setSyncedUiTextLanguage] = useState(appSettings.language);
   const uiText = getUiText(appSettings.language);
 

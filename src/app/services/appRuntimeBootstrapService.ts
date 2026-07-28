@@ -5,7 +5,11 @@ import type {
   TrackingStatusSnapshot,
   TrackingWindowSnapshot,
 } from "../../shared/types/tracking.ts";
-import { DEFAULT_TRACKING_STATUS, resolveTrackerHealth } from "../../shared/types/tracking.ts";
+import {
+  DEFAULT_TRACKING_STATUS,
+  resolveTrackerHealth,
+  TRACKER_HEARTBEAT_STALE_AFTER_MS,
+} from "../../shared/types/tracking.ts";
 import type { AppSettings } from "./appSettingsRuntimeService.ts";
 import {
   getCurrentTrackingSnapshot,
@@ -17,8 +21,6 @@ import {
   loadTrackerHealthTimestampMs,
 } from "./appSettingsRuntimeService.ts";
 import { initializeProcessMapperRuntime } from "./processMapperRuntimeService.ts";
-
-export const TRACKER_HEARTBEAT_STALE_AFTER_MS = 8_000;
 
 export interface AppRuntimeBootstrapSnapshot {
   settings: AppSettings;
