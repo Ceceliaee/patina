@@ -1,14 +1,33 @@
-import { memo, type MouseEvent, type RefObject } from "react";
+import {
+  memo,
+  useEffect,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from "recharts";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
 import QuietChartTooltip from "../../../shared/components/QuietChartTooltip";
 import QuietSearchField from "../../../shared/components/QuietSearchField";
+import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter.tsx";
+import { UI_TEXT } from "../../../shared/copy/index.ts";
 import {
   formatChartHours,
   formatDuration,
 } from "../../history/services/historyFormatting";
+import type {
+  DataDestinationMode,
+  DataDestinationTrendOption,
+  DataDestinationTrendSeries,
+  DataDestinationTrendSummary,
+} from "../services/dataDestinationState.ts";
+import type {
+  DataAppTrendViewModel,
+  DataDestinationTrendChartRow,
+} from "../services/dataReadModel.ts";
 import type { DataTrendRangeSelection } from "../services/dataTrendRange.ts";
-import type { DataAppOption, DataAppTrendPoint, DataAppTrendViewModel } from "../services/dataReadModel.ts";
 import DataTrendRangeControl from "./DataTrendRangeControl.tsx";
 
 const DATA_TREND_X_AXIS_MIN_TICK_GAP = 24;
@@ -19,166 +38,277 @@ interface DataChartDimension {
 }
 
 interface DataAppTrendPanelProps {
+  destinationMode: DataDestinationMode;
+  showDestinationMode: boolean;
+  title: string;
+  rangeAriaLabel: string;
   selection: DataTrendRangeSelection;
-  viewModel: DataAppTrendViewModel | null;
-  selectedApp: DataAppOption | null | undefined;
-  filteredAppOptions: DataAppOption[];
-  appSearchQuery: string;
-  hasAppSearchQuery: boolean;
-  chartData: DataAppTrendPoint[];
+  ready: boolean;
+  selectedOptions: DataDestinationTrendOption[];
+  trendSeries: DataDestinationTrendSeries[];
+  summary: DataDestinationTrendSummary;
+  filteredOptions: DataDestinationTrendOption[];
+  searchQuery: string;
+  hasSearchQuery: boolean;
+  searchPlaceholder: string;
+  listAriaLabel: string;
+  emptyLabel: string;
+  noMatchLabel: string;
+  totalMetricLabel: string;
+  usageMetricLabel: string;
+  granularity: "day" | "month";
+  chartData: DataDestinationTrendChartRow[];
+  heatmapContent: ReactNode;
   chartAxis: DataAppTrendViewModel["chartAxis"];
   peakDay: DataAppTrendViewModel["peakDay"];
-  dataIcons: Record<string, string>;
-  appListRef: RefObject<HTMLDivElement | null>;
+  listRef: RefObject<HTMLDivElement | null>;
   chartRef: RefObject<HTMLDivElement | null>;
   initialDimension: DataChartDimension;
   canOpenHistory: boolean;
+  errorMessage?: string | null;
+  refreshing: boolean;
+  refreshFailed: boolean;
+  onRetry: () => void;
+  onDestinationModeChange: (mode: DataDestinationMode) => void;
   onSelectionChange: (selection: DataTrendRangeSelection) => void;
   onSearchQueryChange: (nextQuery: string) => void;
-  onAppSelect: (appKey: string) => void;
+  onOptionSelect: (key: string, multi: boolean) => void;
   onMouseDownCapture: (event: MouseEvent<HTMLDivElement>) => void;
   onDoubleClickCapture: (event: MouseEvent<HTMLDivElement>) => void;
   onMouseMove: (event: unknown) => void;
   onMouseLeave: () => void;
 }
 
-function getAppInitial(appName: string) {
-  const trimmed = appName.trim();
+function getOptionInitial(displayName: string) {
+  const trimmed = displayName.trim();
   return trimmed ? trimmed.charAt(0).toUpperCase() : "?";
 }
 
 function DataAppTrendPanel({
+  destinationMode,
+  showDestinationMode,
+  title,
+  rangeAriaLabel,
   selection,
-  viewModel,
-  selectedApp,
-  filteredAppOptions,
-  appSearchQuery,
-  hasAppSearchQuery,
+  ready,
+  selectedOptions,
+  trendSeries,
+  summary,
+  filteredOptions,
+  searchQuery,
+  hasSearchQuery,
+  searchPlaceholder,
+  listAriaLabel,
+  emptyLabel,
+  noMatchLabel,
+  totalMetricLabel,
+  usageMetricLabel,
+  granularity,
   chartData,
+  heatmapContent,
   chartAxis,
   peakDay,
-  dataIcons,
-  appListRef,
+  listRef,
   chartRef,
   initialDimension,
   canOpenHistory,
+  errorMessage,
+  refreshing,
+  refreshFailed,
+  onRetry,
+  onDestinationModeChange,
   onSelectionChange,
   onSearchQueryChange,
-  onAppSelect,
+  onOptionSelect,
   onMouseDownCapture,
   onDoubleClickCapture,
   onMouseMove,
   onMouseLeave,
 }: DataAppTrendPanelProps) {
+  const modeOptions = [
+    { value: "app" as const, label: UI_TEXT.data.destinationApp },
+    { value: "web" as const, label: UI_TEXT.data.destinationWeb },
+  ];
+  const [showRefreshingMessage, setShowRefreshingMessage] = useState(false);
+  useEffect(() => {
+    if (!refreshing) {
+      setShowRefreshingMessage(false);
+      return;
+    }
+    const timer = setTimeout(() => setShowRefreshingMessage(true), 240);
+    return () => clearTimeout(timer);
+  }, [refreshing]);
+
   return (
     <div className="qp-panel p-5 data-app-panel relative">
       <div className="data-app-panel-header">
-        <div>
+        <div className="data-app-panel-heading">
           <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">
-            {UI_TEXT.data.appTrend}
+            {title}
           </h3>
+          <div
+            className="data-app-refresh-status"
+            role="status"
+          >
+            {refreshFailed ? (
+              <>
+                <span>{UI_TEXT.data.webTrendRefreshError}</span>
+                <button
+                  type="button"
+                  className="qp-inline-action qp-inline-action-accent"
+                  onClick={onRetry}
+                >
+                  {UI_TEXT.data.webTrendRetry}
+                </button>
+              </>
+            ) : showRefreshingMessage ? (
+              UI_TEXT.data.webTrendUpdating
+            ) : null}
+          </div>
         </div>
         <div className="data-app-header-actions">
-          <div className={`data-app-selected-status ${selectedApp ? "" : "data-app-selected-status-empty"}`}>
-            {selectedApp && dataIcons[selectedApp.exeName] ? (
-              <img
-                src={dataIcons[selectedApp.exeName]}
-                alt=""
-                draggable={false}
-              />
-            ) : selectedApp ? (
-              getAppInitial(selectedApp.appName)
-            ) : (
-              ""
-            )}
+          <div
+            className={`data-app-selected-status ${selectedOptions[0] ? "" : "data-app-selected-status-empty"}`}
+            aria-label={UI_TEXT.data.selectedObjectCount(selectedOptions.length)}
+          >
+            {selectedOptions.map((option) => (
+              <span
+                className="data-app-selected-icon"
+                data-selection-key={option.key}
+                key={option.key}
+                aria-hidden
+              >
+                {option.iconUrl ? (
+                  <img
+                    src={option.iconUrl}
+                    alt=""
+                    draggable={false}
+                  />
+                ) : (
+                  getOptionInitial(option.displayName)
+                )}
+              </span>
+            ))}
           </div>
+          {showDestinationMode ? (
+            <QuietSegmentedFilter
+              value={destinationMode}
+              options={modeOptions}
+              onChange={onDestinationModeChange}
+              ariaLabel={UI_TEXT.data.destinationMode}
+              className="data-destination-mode"
+            />
+          ) : null}
           <DataTrendRangeControl
-            ariaLabel={UI_TEXT.accessibility.data.appTrendRange}
+            ariaLabel={rangeAriaLabel}
             selection={selection}
             onChange={onSelectionChange}
           />
         </div>
       </div>
 
-      {!viewModel ? (
-        <div className="relative">
-          <div className="data-app-grid invisible pointer-events-none select-none" aria-hidden="true">
-            <div className="data-app-sidebar">
+      {errorMessage ? (
+        <div className="data-app-loading data-web-error" role="status">
+          <span>{errorMessage}</span>
+          <button type="button" className="qp-control" onClick={onRetry}>
+            {UI_TEXT.data.webTrendRetry}
+          </button>
+        </div>
+      ) : !ready ? (
+        <div className="relative" aria-busy>
+          <div
+            className="data-app-grid pointer-events-none invisible"
+            aria-hidden
+          >
+            <div className="data-app-sidebar" data-hint="">
               <div className="data-app-search" />
               <div className="data-app-list data-app-trend-list" />
             </div>
             <div className="data-app-chart-column">
               <div className="data-app-metric-strip">
-                <div className="data-app-metric">
-                  <span>-</span>
-                  <strong>-</strong>
-                </div>
-                <div className="data-app-metric">
-                  <span>-</span>
-                  <strong>-</strong>
-                </div>
-                <div className="data-app-metric">
-                  <span>-</span>
-                  <strong>-</strong>
-                </div>
-                <div className="data-app-metric">
-                  <span>-</span>
-                  <strong>-</strong>
-                </div>
+                {Array.from({ length: 4 }, (_, index) => (
+                  <div className="data-app-metric" key={index}>
+                    <span>-</span>
+                    <strong>-</strong>
+                  </div>
+                ))}
               </div>
               <div
                 ref={chartRef}
                 className="data-app-chart data-chart-placeholder"
               />
+              {heatmapContent}
             </div>
           </div>
         </div>
-      ) : viewModel.appOptions.length === 0 ? (
-        <div className="data-app-loading text-[var(--qp-text-tertiary)] text-xs">
-          {UI_TEXT.data.appTrendEmpty}
+      ) : filteredOptions.length === 0 && !hasSearchQuery ? (
+        <div className="data-app-loading text-[var(--qp-text-tertiary)] text-xs" role="status">
+          {emptyLabel}
         </div>
       ) : (
-        <div className="data-app-grid">
-          <div className="data-app-sidebar">
+        <div
+          className="data-app-grid"
+          aria-busy={refreshing}
+        >
+          <div
+            className="data-app-sidebar"
+            data-hint={UI_TEXT.data.interactionHint}
+          >
             <QuietSearchField
-              value={appSearchQuery}
+              value={searchQuery}
               onChange={(event) => onSearchQueryChange(event.target.value)}
-              placeholder={UI_TEXT.data.appSearchPlaceholder}
-              aria-label={UI_TEXT.data.appSearchPlaceholder}
+              placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder}
             />
             <div
-              key={hasAppSearchQuery ? "searching" : "all"}
-              ref={appListRef}
+              key={hasSearchQuery ? "searching" : "all"}
+              ref={listRef}
               className="data-app-list data-app-trend-list"
-              aria-label={UI_TEXT.data.appTrendAppList}
+              aria-label={listAriaLabel}
+              aria-description={UI_TEXT.data.interactionHint}
             >
-              {filteredAppOptions.length === 0 ? (
+              {filteredOptions.length === 0 ? (
                 <div className="data-app-empty text-[var(--qp-text-tertiary)] text-xs">
-                  {UI_TEXT.data.appTrendNoMatch}
+                  {noMatchLabel}
                 </div>
-              ) : filteredAppOptions.map((app) => {
-                const isSelected = selectedApp?.appKey === app.appKey;
+              ) : filteredOptions.map((option) => {
+                const selectedIndex = selectedOptions.findIndex((selected) => selected.key === option.key);
+                const isSelected = selectedIndex >= 0;
+                const series = selectedIndex >= 0 ? trendSeries[selectedIndex] : null;
+                const handleOptionKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+                  if (!event.ctrlKey || (event.key !== "Enter" && event.key !== " ")) return;
+                  event.preventDefault();
+                  onOptionSelect(option.key, true);
+                };
                 return (
                   <button
-                    key={app.appKey}
+                    key={option.key}
                     type="button"
                     className={`data-app-option ${isSelected ? "data-app-option-selected" : ""}`}
-                    onClick={() => onAppSelect(app.appKey)}
+                    data-destination-key={option.key}
+                    style={series ? {
+                      "--data-series-color": series.color,
+                    } as CSSProperties : undefined}
+                    onClick={(event) => onOptionSelect(option.key, event.ctrlKey)}
+                    onKeyDown={handleOptionKeyDown}
                     aria-pressed={isSelected}
+                    aria-keyshortcuts="Control+Enter Control+Space"
                   >
                     <span className="data-app-option-icon" aria-hidden>
-                      {dataIcons[app.exeName] ? (
-                        <img src={dataIcons[app.exeName]} alt="" draggable={false} />
+                      {option.iconUrl ? (
+                        <img src={option.iconUrl} alt="" draggable={false} />
                       ) : (
-                        getAppInitial(app.appName)
+                        getOptionInitial(option.displayName)
                       )}
                     </span>
                     <span className="data-app-option-main">
-                      <span className="data-app-option-name">{app.appName}</span>
-                      <span className="data-app-option-meta">{Math.round(app.percentage)}% · {app.exeName}</span>
+                      <span className="data-app-option-name">{option.displayName}</span>
+                      <span className="data-app-option-meta">
+                        {Math.round(option.percentage)}% · {option.secondaryText}
+                      </span>
                     </span>
                     <span className="data-app-option-duration">
-                      {formatDuration(app.totalDuration)}
+                      {formatDuration(option.totalDuration)}
                     </span>
                   </button>
                 );
@@ -189,16 +319,16 @@ function DataAppTrendPanel({
           <div className="data-app-chart-column">
             <div className="data-app-metric-strip">
               <div className="data-app-metric">
-                <span>{UI_TEXT.data.appTrendTotal}</span>
-                <strong>{formatDuration(selectedApp?.totalDuration ?? 0)}</strong>
+                <span>{totalMetricLabel}</span>
+                <strong>{formatDuration(summary.totalDuration)}</strong>
               </div>
               <div className="data-app-metric">
-                <span>{viewModel.granularity === "month" ? UI_TEXT.data.monthlyAverage : UI_TEXT.data.appTrendAverage}</span>
-                <strong>{formatDuration(selectedApp?.averageDuration ?? 0)}</strong>
+                <span>{granularity === "month" ? UI_TEXT.data.monthlyAverage : UI_TEXT.data.appTrendAverage}</span>
+                <strong>{formatDuration(summary.averageDuration)}</strong>
               </div>
               <div className="data-app-metric">
                 <span>{UI_TEXT.data.appTrendActiveDays}</span>
-                <strong>{selectedApp?.activeDayCount ?? 0}</strong>
+                <strong>{summary.activeDayCount}</strong>
               </div>
               <div className="data-app-metric">
                 <span>{UI_TEXT.data.appTrendPeakDay}</span>
@@ -218,46 +348,52 @@ function DataAppTrendPanel({
               >
                 <AreaChart
                   data={chartData}
-                  margin={{ top: 10, right: 18, left: -20, bottom: 0 }}
+                  margin={{ top: 8, right: 22, left: -18, bottom: 0 }}
                   onMouseMove={onMouseMove}
                   onMouseLeave={onMouseLeave}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--qp-border-subtle)" strokeOpacity={0.58} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--qp-chart-grid)" />
                   <XAxis
                     dataKey="label"
-                    tick={{ fontSize: 10, fill: "var(--qp-text-tertiary)" }}
+                    tick={{ fontSize: 11, fill: "var(--qp-text-tertiary)" }}
                     axisLine={false}
                     tickLine={false}
                     interval="preserveStartEnd"
                     minTickGap={DATA_TREND_X_AXIS_MIN_TICK_GAP}
                   />
                   <YAxis
-                    tick={{ fontSize: 10, fill: "var(--qp-text-tertiary)" }}
+                    tick={{ fontSize: 11, fill: "var(--qp-text-tertiary)" }}
                     axisLine={false}
                     tickLine={false}
+                    interval={0}
                     ticks={chartAxis.ticks}
                     domain={[0, chartAxis.domainMax]}
                     tickFormatter={(value) => formatChartHours(Number(value))}
                   />
                   <QuietChartTooltip
-                    formatter={(value) => [
-                      formatDuration(Number(value) * 3600000),
-                      UI_TEXT.data.appTrendUsage,
+                    formatter={(value, name) => [
+                      formatDuration(Number(value) * 3_600_000),
+                      String(name || usageMetricLabel),
                     ]}
                   />
-                  <Area
-                    type="monotone"
-                    dataKey="hours"
-                    stroke="var(--qp-accent-default)"
-                    strokeWidth={2}
-                    fill="var(--qp-accent-default)"
-                    fillOpacity={0.1}
-                    dot={{ fill: "var(--qp-accent-default)", r: 2.5 }}
-                    isAnimationActive={false}
-                  />
+                  {trendSeries.map((series) => (
+                    <Area
+                      key={series.key}
+                      type="monotone"
+                      dataKey={series.dataKey}
+                      name={series.displayName}
+                      stroke={series.color}
+                      strokeWidth={2}
+                      fill={series.color}
+                      fillOpacity={0.12}
+                      dot={{ fill: series.color, r: 3 }}
+                      isAnimationActive={false}
+                    />
+                  ))}
                 </AreaChart>
               </ResponsiveContainer>
             </div>
+            {heatmapContent}
           </div>
         </div>
       )}

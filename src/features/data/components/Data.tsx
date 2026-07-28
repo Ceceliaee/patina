@@ -1,6 +1,10 @@
 import { startTransition, type MouseEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BarChart3 } from "lucide-react";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
+import {
+  getIconThemeFallbackColor,
+  useIconThemeColors,
+} from "../../../shared/hooks/useIconThemeColors.ts";
 import { useRequestedAppIcons } from "../../../shared/hooks/useRequestedAppIcons.ts";
 import type { AppLanguage } from "../../../shared/settings/appSettings.ts";
 import {
@@ -22,6 +26,24 @@ import {
   type HeatmapSelection,
 } from "../services/dataHeatmapReadModel.ts";
 import {
+  buildDataDestinationTrendSeries,
+  encodeDataDestinationSelectionKey,
+  reconcileDataDestinationSelection,
+  replaceDataDestinationSelection,
+  resolveDataDestinationMode,
+  toggleDataDestinationSelection,
+  type DataDestinationMode,
+  type DataDestinationTrendOption,
+} from "../services/dataDestinationState.ts";
+import {
+  getDataDestinationSessionSelectionRevision,
+  getDataDestinationSessionSelectionState,
+  rememberDataDestinationSessionOptions,
+  rememberDataDestinationSessionSelectionRevision,
+  rememberDataDestinationSessionSelectionState,
+  resolveDataDestinationSessionOptions,
+} from "../services/dataDestinationSessionState.ts";
+import {
   getCachedDataBootstrapSnapshot,
   loadPersistedDataBootstrapSnapshot,
   saveDataBootstrapSnapshot,
@@ -30,16 +52,17 @@ import {
 import { prewarmDataFirstScreen } from "../services/dataFirstScreenPrewarm.ts";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
 import type { TrackerHealthSnapshot } from "../../../shared/types/tracking";
+import type { QuietToastTone } from "../../../shared/types/toast.ts";
 import { resolveTrendDateFromChartEvent } from "../services/dataChartInteraction.ts";
 import type { DataTrendSnapshot } from "../services/dataTrendSnapshot.ts";
 import type { DataTrendRangeSelection } from "../services/dataTrendRange.ts";
 import { useDataTrendSnapshot } from "../hooks/useDataTrendSnapshot.ts";
+import { useDataWebActivityRuntime } from "../hooks/useDataWebActivityRuntime.ts";
 import { loadDataIconsForExecutables } from "../services/dataIconService.ts";
 import { scheduleDataWorkAfterFirstPaint } from "../services/dataFirstPaintScheduler.ts";
 import {
   dedupeDataAppOptions,
   filterDataAppOptionsForQuery,
-  resolveDataAppSearchSelection,
 } from "../services/dataAppSearch.ts";
 import DataTrendPanel from "./DataTrendPanel.tsx";
 import DataAppTrendPanel from "./DataAppTrendPanel.tsx";
@@ -53,6 +76,8 @@ interface Props {
   mappingVersion?: number;
   onOpenHistoryDate?: (dateKey: string) => void;
   uiLanguage: AppLanguage;
+  webActivityEnabled: boolean;
+  onToast?: (message: string, tone?: QuietToastTone) => void;
 }
 
 type DataChartDimension = { width: number; height: number };
@@ -63,7 +88,6 @@ const DATA_OPEN_PREWARM_DELAY_MS = 500;
 const DATA_OPEN_PREWARM_IDLE_TIMEOUT_MS = 2_000;
 const EMPTY_DATA_ICON_EXE_NAMES: string[] = [];
 const EMPTY_DATA_APP_OPTIONS: DataAppTrendViewModel["appOptions"] = [];
-const EMPTY_DATA_APP_TREND_POINTS: DataAppTrendViewModel["chartData"] = [];
 const EMPTY_HEATMAP_ROWS: ReturnType<typeof buildActivityHeatmap> = [];
 const DEFAULT_DATA_APP_CHART_AXIS: DataAppTrendViewModel["chartAxis"] = {
   domainMax: 3,
@@ -71,6 +95,22 @@ const DEFAULT_DATA_APP_CHART_AXIS: DataAppTrendViewModel["chartAxis"] = {
 };
 const dataChartDimensionCache: Partial<Record<DataChartDimensionKey, DataChartDimension>> = {};
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+function toAppPanelOption(
+  app: DataAppTrendViewModel["appOptions"][number],
+  icons: Record<string, string>,
+): DataDestinationTrendOption {
+  return {
+    key: app.appKey,
+    displayName: app.appName,
+    secondaryText: app.exeName,
+    iconUrl: icons[app.exeName] ?? null,
+    totalDuration: app.totalDuration,
+    percentage: app.percentage,
+    averageDuration: app.averageDuration,
+    activeDayCount: app.activeDayCount,
+  };
+}
 
 function clampNumber(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -156,14 +196,30 @@ export default function Data({
   loadDataTrendSnapshot,
   mappingVersion = 0,
   onOpenHistoryDate,
+  onToast,
   uiLanguage,
+  webActivityEnabled,
 }: Props) {
   const today = new Date();
   const currentYear = today.getFullYear();
   const [selectedTrendRange, setSelectedTrendRange] = useState<DataTrendRangeSelection>({ kind: "rolling", days: 7 });
   const [selectedAppTrendRange, setSelectedAppTrendRange] = useState<DataTrendRangeSelection>({ kind: "rolling", days: 7 });
-  const [selectedAppKey, setSelectedAppKey] = useState<string | null>(null);
+  const [selectedAppKeys, setSelectedAppKeys] = useState<string[]>(
+    () => getDataDestinationSessionSelectionState().appKeys,
+  );
+  const [selectedWebKeys, setSelectedWebKeys] = useState<string[]>(
+    () => getDataDestinationSessionSelectionState().webKeys,
+  );
+  const appSelectionRevisionRef = useRef(
+    getDataDestinationSessionSelectionRevision("app"),
+  );
+  const webSelectionRevisionRef = useRef(
+    getDataDestinationSessionSelectionRevision("web"),
+  );
   const [appSearchQuery, setAppSearchQuery] = useState("");
+  const [destinationMode, setDestinationMode] = useState<DataDestinationMode>("app");
+  const [presentedDestinationMode, setPresentedDestinationMode] =
+    useState<DataDestinationMode>("app");
   const [freshReadModelsReady, setFreshReadModelsReady] = useState(false);
   const [initialCachedHeatmapSessions] = useState(() => getCachedDataHeatmapSessions("recent", Date.now()));
   const [bootstrapSnapshot, setBootstrapSnapshot] = useState<DataBootstrapSnapshot | null>(
@@ -181,6 +237,10 @@ export default function Data({
   });
   const [selectedHeatmapView, setSelectedHeatmapView] = useState<HeatmapSelection>("recent");
   const [heatmapGranularity, setHeatmapGranularity] = useState<HeatmapGranularity>("daily");
+  const [selectedDestinationHeatmapView, setSelectedDestinationHeatmapView] =
+    useState<HeatmapSelection>("recent");
+  const [destinationHeatmapGranularity, setDestinationHeatmapGranularity] =
+    useState<HeatmapGranularity>("daily");
   const [earliestStartTime, setEarliestStartTime] = useState<number | null>(
     getCachedEarliestSessionStartTime() ?? null,
   );
@@ -191,6 +251,13 @@ export default function Data({
     initialCachedHeatmapSessions ? "recent" : null,
   );
   const [heatmapLoading, setHeatmapLoading] = useState(!initialCachedHeatmapSessions);
+  const [destinationHeatmapSnapshot, setDestinationHeatmapSnapshot] = useState<{
+    loading: boolean;
+    sessions: AggregateSessionRecord[];
+  }>(() => ({
+    loading: !initialCachedHeatmapSessions,
+    sessions: initialCachedHeatmapSessions ?? [],
+  }));
   const overviewTrendChart = useDataChartInitialDimension(
     "overviewTrend",
     getOverviewTrendChartInitialDimension,
@@ -200,6 +267,18 @@ export default function Data({
     getAppTrendChartInitialDimension,
   );
   const nowMs = overviewTrend.nowMs;
+  const webActivity = useDataWebActivityRuntime({
+    cacheVersion: `${mappingVersion}:${refreshKey}`,
+    enabled: webActivityEnabled,
+    heatmapNowMs: nowMs,
+    heatmapSelection: selectedDestinationHeatmapView,
+    mode: destinationMode,
+    trendNowMs: appTrend.nowMs,
+    trendRangeCacheKey: appTrend.resolvedRange.cacheKey,
+    trendSelection: selectedAppTrendRange,
+    uiLanguage,
+    selectedDomains: selectedWebKeys,
+  });
   const lastTrendViewModelRef = useRef<{
     rangeCacheKey: string;
     viewModel: DataTrendViewModel;
@@ -241,6 +320,26 @@ export default function Data({
       });
     }, DATA_OPEN_PREWARM_IDLE_TIMEOUT_MS, DATA_OPEN_PREWARM_DELAY_MS);
   }, [mappingVersion, uiLanguage]);
+
+  useEffect(() => {
+    const resolvedMode = resolveDataDestinationMode(webActivityEnabled, destinationMode);
+    if (resolvedMode !== destinationMode) {
+      setDestinationMode(resolvedMode);
+    }
+    if (!webActivityEnabled) {
+      setPresentedDestinationMode("app");
+    }
+  }, [
+    destinationMode,
+    webActivityEnabled,
+  ]);
+
+  useEffect(() => {
+    rememberDataDestinationSessionSelectionState({
+      appKeys: selectedAppKeys,
+      webKeys: selectedWebKeys,
+    });
+  }, [selectedAppKeys, selectedWebKeys]);
 
   useEffect(() => {
     let cancelled = false;
@@ -303,6 +402,43 @@ export default function Data({
       cancelScheduledLoad?.();
     };
   }, [selectedHeatmapView, refreshKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const nowForRange = Date.now();
+    const cachedSessions = getCachedDataHeatmapSessions(selectedDestinationHeatmapView, nowForRange);
+    if (cachedSessions) {
+      setDestinationHeatmapSnapshot({
+        loading: false,
+        sessions: cachedSessions,
+      });
+    } else {
+      setDestinationHeatmapSnapshot({ loading: true, sessions: [] });
+    }
+
+    void loadDataHeatmapSnapshot(selectedDestinationHeatmapView, nowForRange).then((snapshot) => {
+      if (cancelled) return;
+      startTransition(() => {
+        setDestinationHeatmapSnapshot({
+          loading: false,
+          sessions: snapshot.sessions,
+        });
+      });
+      if (snapshot.earliestStartTime) {
+        const earliestYear = new Date(snapshot.earliestStartTime).getFullYear();
+        if (
+          selectedDestinationHeatmapView !== "recent"
+          && selectedDestinationHeatmapView < earliestYear
+        ) {
+          setSelectedDestinationHeatmapView(earliestYear);
+        }
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey, selectedDestinationHeatmapView]);
 
   const matchingBootstrapSnapshot = bootstrapSnapshot
     && bootstrapSnapshot.mappingVersion === mappingVersion
@@ -389,14 +525,14 @@ export default function Data({
     ?? bootstrapTrendViewModel;
   const appTrendViewModel = useMemo(() => {
     if (sharedTrendAggregateContext) {
-      return buildDataAppTrendViewModelFromAggregate(sharedTrendAggregateContext, selectedAppKey);
+      return buildDataAppTrendViewModelFromAggregate(sharedTrendAggregateContext, selectedAppKeys);
     }
     if (!appTrendSnapshotForViewModel) return null;
     return buildDataAppTrendViewModel(
       appTrendSnapshotForViewModel.sessions,
       appTrendSnapshotForViewModel.range,
       appTrend.nowMs,
-      selectedAppKey,
+      selectedAppKeys,
     );
   // App trend view models read module-level locale/mapping state; these tokens explicitly invalidate that cache.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -404,7 +540,7 @@ export default function Data({
     appTrend.nowMs,
     appTrendSnapshotForViewModel,
     mappingVersion,
-    selectedAppKey,
+    selectedAppKeys,
     sharedTrendAggregateContext,
     uiLanguage,
   ]);
@@ -444,15 +580,6 @@ export default function Data({
     onError: handleDataIconsError,
   });
 
-  useEffect(() => {
-    if (selectedAppKey !== null) return;
-
-    const defaultAppKey = appTrendViewModel?.selectedApp?.appKey;
-    if (defaultAppKey) {
-      setSelectedAppKey(defaultAppKey);
-    }
-  }, [appTrendViewModel?.selectedApp?.appKey, selectedAppKey]);
-
   const dedupedAppOptions = useMemo(() => {
     if (!visibleAppTrendViewModel) return EMPTY_DATA_APP_OPTIONS;
     return dedupeDataAppOptions(visibleAppTrendViewModel.appOptions);
@@ -462,65 +589,208 @@ export default function Data({
   ), [appSearchQuery, dedupedAppOptions]);
 
   const hasAppSearchQuery = appSearchQuery.trim().length > 0;
-  const appTrendSelectedAppMatchesSearch = !hasAppSearchQuery
-    || Boolean(
-      visibleAppTrendViewModel?.selectedApp
-      && filteredAppOptions.some((app) => app.appKey === visibleAppTrendViewModel.selectedApp?.appKey),
-    );
-  const appTrendSelectionHiddenBySearch = hasAppSearchQuery && !appTrendSelectedAppMatchesSearch;
-  const selectedAppTrendApp = appTrendSelectionHiddenBySearch ? null : visibleAppTrendViewModel?.selectedApp;
-  const appTrendChartData = useMemo(() => {
-    if (appTrendSelectionHiddenBySearch && visibleAppTrendViewModel) {
-      return visibleAppTrendViewModel.chartData.map((point) => ({ ...point, duration: 0, hours: 0 }));
-    }
-    return visibleAppTrendViewModel?.chartData ?? EMPTY_DATA_APP_TREND_POINTS;
-  }, [appTrendSelectionHiddenBySearch, visibleAppTrendViewModel]);
-  const appTrendChartAxis = useMemo(() => (
-    appTrendSelectionHiddenBySearch
-      ? DEFAULT_DATA_APP_CHART_AXIS
-      : visibleAppTrendViewModel?.chartAxis ?? DEFAULT_DATA_APP_CHART_AXIS
-  ), [appTrendSelectionHiddenBySearch, visibleAppTrendViewModel?.chartAxis]);
-  const appTrendPeakDay = appTrendSelectionHiddenBySearch ? null : (visibleAppTrendViewModel?.peakDay ?? null);
-
   useEffect(() => {
-    if (!hasAppSearchQuery || !visibleAppTrendViewModel) return;
-    const nextSelectedAppKey = resolveDataAppSearchSelection({
-      wasSearching: false,
-      isSearching: hasAppSearchQuery,
-      selectedAppKey,
-      selectedApp: visibleAppTrendViewModel.selectedApp,
-      filteredOptions: filteredAppOptions,
-    });
-    if (nextSelectedAppKey !== undefined && selectedAppKey !== nextSelectedAppKey) {
-      setSelectedAppKey(nextSelectedAppKey);
+    if (!visibleAppTrendViewModel) return;
+    if (
+      selectedAppKeys.length > 0
+      && appSelectionRevisionRef.current === mappingVersion
+    ) {
+      return;
     }
-  }, [filteredAppOptions, hasAppSearchQuery, selectedAppKey, visibleAppTrendViewModel]);
+    const reconciled = reconcileDataDestinationSelection(
+      selectedAppKeys,
+      dedupedAppOptions.map((app) => app.appKey),
+    );
+    appSelectionRevisionRef.current = mappingVersion;
+    rememberDataDestinationSessionSelectionRevision("app", mappingVersion);
+    if (encodeDataDestinationSelectionKey(reconciled) !== encodeDataDestinationSelectionKey(selectedAppKeys)) {
+      setSelectedAppKeys(reconciled);
+    }
+  }, [dedupedAppOptions, mappingVersion, selectedAppKeys, visibleAppTrendViewModel]);
 
   useLayoutEffect(() => {
     appListRef.current?.scrollTo({ top: 0 });
   }, [hasAppSearchQuery]);
 
   const handleAppSearchQueryChange = useCallback((nextQuery: string) => {
-    const wasSearching = appSearchQuery.trim().length > 0;
-    const isSearching = nextQuery.trim().length > 0;
     setAppSearchQuery(nextQuery);
     appListRef.current?.scrollTo({ top: 0 });
-    const nextSelectedAppKey = resolveDataAppSearchSelection({
-      wasSearching,
-      isSearching,
-      selectedAppKey,
-      selectedApp: visibleAppTrendViewModel?.selectedApp,
-      filteredOptions: filterDataAppOptionsForQuery(dedupedAppOptions, nextQuery),
-    });
-    if (nextSelectedAppKey !== undefined && selectedAppKey !== nextSelectedAppKey) {
-      setSelectedAppKey(nextSelectedAppKey);
+  }, []);
+  const {
+    hasSearchQuery: hasWebSearchQuery,
+    heatmapEarliestStartTime: webHeatmapEarliestStartTime,
+    heatmapLoading: webHeatmapLoading,
+    heatmapReady: webHeatmapReady,
+    heatmapRows: webHeatmapRows,
+    panelOptions: webPanelOptions,
+    searchQuery: webSearchQuery,
+    selectedPanelOptions: webPanelSelectedOptions,
+    trendError: webTrendError,
+    trendRefreshFailed: webTrendRefreshFailed,
+    trendRefreshing: webTrendRefreshing,
+    trendViewModel: webTrendViewModel,
+  } = webActivity;
+
+  useEffect(() => {
+    if (!webTrendViewModel) return;
+    if (
+      selectedWebKeys.length > 0
+      && webSelectionRevisionRef.current === mappingVersion
+    ) {
+      return;
+    }
+    const reconciled = reconcileDataDestinationSelection(
+      selectedWebKeys,
+      webTrendViewModel.domainOptions.map((domain) => domain.normalizedDomain),
+    );
+    webSelectionRevisionRef.current = mappingVersion;
+    rememberDataDestinationSessionSelectionRevision("web", mappingVersion);
+    if (encodeDataDestinationSelectionKey(reconciled) !== encodeDataDestinationSelectionKey(selectedWebKeys)) {
+      setSelectedWebKeys(reconciled);
+    }
+  }, [mappingVersion, selectedWebKeys, webTrendViewModel]);
+
+  useLayoutEffect(() => {
+    appListRef.current?.scrollTo({ top: 0 });
+  }, [hasWebSearchQuery, presentedDestinationMode]);
+
+  const appAllPanelOptions = useMemo<DataDestinationTrendOption[]>(() => (
+    dedupedAppOptions.map((app) => toAppPanelOption(app, dataIcons))
+  ), [dataIcons, dedupedAppOptions]);
+  const appPanelOptions = useMemo<DataDestinationTrendOption[]>(() => {
+    const visibleKeys = new Set(filteredAppOptions.map((app) => app.appKey));
+    return appAllPanelOptions.filter((option) => visibleKeys.has(option.key));
+  }, [appAllPanelOptions, filteredAppOptions]);
+  const appPanelSelectedOptions = useMemo<DataDestinationTrendOption[]>(() => (
+    resolveDataDestinationSessionOptions(
+      "app",
+      (visibleAppTrendViewModel?.selectedApps ?? [])
+        .map((app) => toAppPanelOption(app, dataIcons)),
+      appAllPanelOptions,
+    )
+  ), [appAllPanelOptions, dataIcons, visibleAppTrendViewModel?.selectedApps]);
+  const webAllPanelOptions = useMemo<DataDestinationTrendOption[]>(() => (
+    (webTrendViewModel?.domainOptions ?? []).map((domain) => ({
+      key: domain.normalizedDomain,
+      displayName: domain.displayName,
+      secondaryText: domain.normalizedDomain,
+      iconUrl: domain.faviconUrl,
+      totalDuration: domain.totalDuration,
+      percentage: domain.percentage,
+      averageDuration: domain.averageDuration,
+      activeDayCount: domain.activeDayCount,
+    }))
+  ), [webTrendViewModel?.domainOptions]);
+  const resolvedWebPanelSelectedOptions = useMemo<DataDestinationTrendOption[]>(() => (
+    resolveDataDestinationSessionOptions("web", webPanelSelectedOptions, webAllPanelOptions)
+  ), [webAllPanelOptions, webPanelSelectedOptions]);
+
+  useEffect(() => {
+    rememberDataDestinationSessionOptions("app", appPanelSelectedOptions);
+  }, [appPanelSelectedOptions]);
+
+  useEffect(() => {
+    rememberDataDestinationSessionOptions("web", resolvedWebPanelSelectedOptions);
+  }, [resolvedWebPanelSelectedOptions]);
+  const destinationIconSources = useMemo<Record<string, string>>(() => {
+    const entries = [
+      ...appPanelSelectedOptions.map((option) => [
+        `app:${option.key}`,
+        option.iconUrl ?? "",
+      ] as const),
+      ...resolvedWebPanelSelectedOptions.map((option) => [
+        `web:${option.key}`,
+        option.iconUrl ?? "",
+      ] as const),
+    ].filter((entry) => Boolean(entry[1]));
+    return Object.fromEntries(entries);
+  }, [
+    appPanelSelectedOptions,
+    resolvedWebPanelSelectedOptions,
+  ]);
+  const destinationIconColors = useIconThemeColors(destinationIconSources);
+
+  const webDestinationReadyForPresentation = Boolean(webTrendViewModel) && webHeatmapReady;
+  useLayoutEffect(() => {
+    if (!webActivityEnabled || destinationMode === "app") {
+      setPresentedDestinationMode("app");
+      return;
+    }
+    if (
+      presentedDestinationMode === "web"
+      && !webTrendViewModel
+      && !webTrendError
+    ) {
+      setPresentedDestinationMode("app");
+      return;
+    }
+    if (webTrendError || webDestinationReadyForPresentation) {
+      setPresentedDestinationMode("web");
     }
   }, [
-    appSearchQuery,
-    dedupedAppOptions,
-    selectedAppKey,
-    visibleAppTrendViewModel?.selectedApp,
+    destinationMode,
+    presentedDestinationMode,
+    webActivityEnabled,
+    webDestinationReadyForPresentation,
+    webTrendError,
+    webTrendViewModel,
   ]);
+
+  const isWebDestination = presentedDestinationMode === "web";
+  const destinationModeSwitchPending = destinationMode !== presentedDestinationMode;
+  const destinationPanelReady = isWebDestination
+    ? Boolean(webTrendViewModel)
+    : Boolean(visibleAppTrendViewModel);
+  const destinationPanelOptions = isWebDestination ? webPanelOptions : appPanelOptions;
+  const destinationPanelSelectedOptions = isWebDestination
+    ? resolvedWebPanelSelectedOptions
+    : appPanelSelectedOptions;
+  const destinationChartData = useMemo(() => (
+    isWebDestination
+      ? webTrendViewModel?.chartRows ?? []
+      : visibleAppTrendViewModel?.chartRows ?? []
+  ), [isWebDestination, visibleAppTrendViewModel?.chartRows, webTrendViewModel?.chartRows]);
+  const destinationTrendSeries = useMemo(() => (
+    buildDataDestinationTrendSeries(
+      destinationPanelSelectedOptions,
+      (option) => {
+        const colorKey = `${isWebDestination ? "web" : "app"}:${option.key}`;
+        return destinationIconColors[colorKey] ?? getIconThemeFallbackColor(colorKey);
+      },
+    )
+  ), [destinationIconColors, destinationPanelSelectedOptions, isWebDestination]);
+  const destinationChartAxis = isWebDestination
+    ? webTrendViewModel?.chartAxis ?? DEFAULT_DATA_APP_CHART_AXIS
+    : visibleAppTrendViewModel?.chartAxis ?? DEFAULT_DATA_APP_CHART_AXIS;
+  const destinationPeakDay = isWebDestination
+    ? webTrendViewModel?.peakDay ?? null
+    : visibleAppTrendViewModel?.peakDay ?? null;
+  const destinationSummary = isWebDestination
+    ? webTrendViewModel?.summary ?? { totalDuration: 0, averageDuration: 0, activeDayCount: 0 }
+    : visibleAppTrendViewModel?.summary ?? { totalDuration: 0, averageDuration: 0, activeDayCount: 0 };
+  const destinationGranularity = isWebDestination
+    ? webTrendViewModel?.granularity ?? "day"
+    : visibleAppTrendViewModel?.granularity ?? "day";
+  const destinationCanOpenHistory = destinationGranularity === "day"
+    && destinationPanelSelectedOptions.length > 0
+    && Boolean(onOpenHistoryDate);
+  const handleDestinationOptionSelect = useCallback((key: string, multi: boolean) => {
+    const currentKeys = presentedDestinationMode === "web" ? selectedWebKeys : selectedAppKeys;
+    const result = multi
+      ? toggleDataDestinationSelection(currentKeys, key)
+      : replaceDataDestinationSelection(key);
+    if (presentedDestinationMode === "web") {
+      setSelectedWebKeys(result.keys);
+    } else {
+      setSelectedAppKeys(result.keys);
+    }
+    if (result.outcome === "limit-reached") {
+      onToast?.(UI_TEXT.data.selectionLimitReached, "warning");
+    } else if (result.outcome === "last-item") {
+      onToast?.(UI_TEXT.data.selectionLastItem, "warning");
+    }
+  }, [onToast, presentedDestinationMode, selectedAppKeys, selectedWebKeys]);
+
   const shouldDeferHeatmapRows = Boolean(
     hasInitialBootstrapSnapshotRef.current
     && matchingBootstrapSnapshot?.heatmapSelection === selectedHeatmapView
@@ -529,7 +799,12 @@ export default function Data({
   const heatmapRows = useMemo<ReturnType<typeof buildActivityHeatmap> | null>(() => {
     if (shouldDeferHeatmapRows) return null;
     return buildActivityHeatmap(yearSessions, selectedHeatmapView, nowMs);
-  }, [nowMs, selectedHeatmapView, shouldDeferHeatmapRows, yearSessions]);
+  }, [
+    nowMs,
+    selectedHeatmapView,
+    shouldDeferHeatmapRows,
+    yearSessions,
+  ]);
   const hasHeatmapRowsForSelectedView = yearSessionsView === selectedHeatmapView;
   if (heatmapRows && !heatmapLoading && hasHeatmapRowsForSelectedView) {
     lastHeatmapRowsRef.current = {
@@ -562,34 +837,58 @@ export default function Data({
   // UI_TEXT is module state; uiLanguage is its explicit invalidation signal.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [uiLanguage]);
+  const destinationAppHeatmapRows = useMemo(() => (
+    buildActivityHeatmap(
+      !isWebDestination && destinationPanelSelectedOptions.length > 0
+        ? destinationHeatmapSnapshot.sessions
+        : [],
+      selectedDestinationHeatmapView,
+      nowMs,
+      selectedAppKeys,
+    )
+  ), [
+    destinationPanelSelectedOptions.length,
+    destinationHeatmapSnapshot.sessions,
+    isWebDestination,
+    nowMs,
+    selectedAppKeys,
+    selectedDestinationHeatmapView,
+  ]);
+  const visibleDestinationHeatmapRows = isWebDestination
+    ? webHeatmapRows.length > 0 ? webHeatmapRows : destinationAppHeatmapRows
+    : destinationAppHeatmapRows;
+  const visibleDestinationHeatmapLoading = isWebDestination
+    ? webHeatmapLoading
+    : destinationHeatmapSnapshot.loading;
+  const destinationHeatmapYearOptions = buildYearOptions(
+    isWebDestination ? webHeatmapEarliestStartTime : earliestStartTime,
+    currentYear,
+  );
+  const destinationHeatmapViewOptions: HeatmapSelection[] =
+    ["recent", ...destinationHeatmapYearOptions];
+  const selectedDestinationHeatmapViewIndex = destinationHeatmapViewOptions.findIndex(
+    (option) => option === selectedDestinationHeatmapView,
+  );
+  const selectAdjacentDestinationHeatmapView = (delta: number) => {
+    const nextView = destinationHeatmapViewOptions[selectedDestinationHeatmapViewIndex + delta];
+    if (nextView !== undefined) setSelectedDestinationHeatmapView(nextView);
+  };
   const selectedHeatmapViewKey = String(selectedHeatmapView);
-  const yearOptions = useMemo(
-    () => buildYearOptions(earliestStartTime, currentYear),
-    [currentYear, earliestStartTime],
-  );
-  const heatmapViewOptions = useMemo<HeatmapSelection[]>(
-    () => ["recent", ...yearOptions],
-    [yearOptions],
-  );
+  const heatmapViewOptions: HeatmapSelection[] =
+    ["recent", ...buildYearOptions(earliestStartTime, currentYear)];
   const selectedHeatmapViewIndex = heatmapViewOptions.findIndex((option) => option === selectedHeatmapView);
   const canSelectOlderHeatmapView = selectedHeatmapViewIndex >= 0
     && selectedHeatmapViewIndex < heatmapViewOptions.length - 1;
   const canSelectNewerHeatmapView = selectedHeatmapViewIndex > 0;
-  const selectAdjacentHeatmapView = useCallback((delta: number) => {
+  const selectAdjacentHeatmapView = (delta: number) => {
     if (selectedHeatmapViewIndex < 0) return;
     const nextView = heatmapViewOptions[selectedHeatmapViewIndex + delta];
     if (nextView !== undefined) {
       setHeatmapLoading(true);
       setSelectedHeatmapView(nextView);
     }
-  }, [heatmapViewOptions, selectedHeatmapViewIndex]);
-  const selectedHeatmapViewLabel = selectedHeatmapView === "recent"
-    ? UI_TEXT.data.recentYear
-    : String(selectedHeatmapView);
+  };
   const canOpenTrendHistory = visibleTrendViewModel?.granularity === "day" && Boolean(onOpenHistoryDate);
-  const canOpenAppTrendHistory = visibleAppTrendViewModel?.granularity === "day"
-    && !appTrendSelectionHiddenBySearch
-    && Boolean(onOpenHistoryDate);
   const handleTrendMouseMove = useCallback((event: unknown) => {
     activeTrendDateRef.current = canOpenTrendHistory && visibleTrendViewModel
       ? resolveTrendDateFromChartEvent(event, visibleTrendViewModel.chartData)
@@ -602,16 +901,16 @@ export default function Data({
     }
   }, [canOpenTrendHistory, onOpenHistoryDate]);
   const handleAppTrendMouseMove = useCallback((event: unknown) => {
-    activeAppTrendDateRef.current = canOpenAppTrendHistory
-      ? resolveTrendDateFromChartEvent(event, appTrendChartData)
+    activeAppTrendDateRef.current = destinationCanOpenHistory
+      ? resolveTrendDateFromChartEvent(event, destinationChartData)
       : null;
-  }, [appTrendChartData, canOpenAppTrendHistory]);
+  }, [destinationCanOpenHistory, destinationChartData]);
   const handleAppTrendDoubleClick = useCallback(() => {
     const dateKey = activeAppTrendDateRef.current;
-    if (dateKey && canOpenAppTrendHistory) {
+    if (dateKey && destinationCanOpenHistory) {
       onOpenHistoryDate?.(dateKey);
     }
-  }, [canOpenAppTrendHistory, onOpenHistoryDate]);
+  }, [destinationCanOpenHistory, onOpenHistoryDate]);
   const preventChartTextSelection = useCallback((event: MouseEvent<HTMLDivElement>, canOpenHistory: boolean) => {
     if (canOpenHistory && event.detail > 1) {
       event.preventDefault();
@@ -629,16 +928,16 @@ export default function Data({
     handleTrendDoubleClick();
   }, [canOpenTrendHistory, handleTrendDoubleClick]);
   const handleAppTrendDoubleClickCapture = useCallback((event: MouseEvent<HTMLDivElement>) => {
-    if (!canOpenAppTrendHistory) {
+    if (!destinationCanOpenHistory) {
       return;
     }
 
     event.preventDefault();
     handleAppTrendDoubleClick();
-  }, [canOpenAppTrendHistory, handleAppTrendDoubleClick]);
+  }, [destinationCanOpenHistory, handleAppTrendDoubleClick]);
   const handleAppTrendMouseDownCapture = useCallback((event: MouseEvent<HTMLDivElement>) => {
-    preventChartTextSelection(event, canOpenAppTrendHistory);
-  }, [canOpenAppTrendHistory, preventChartTextSelection]);
+    preventChartTextSelection(event, destinationCanOpenHistory);
+  }, [destinationCanOpenHistory, preventChartTextSelection]);
   const handleTrendMouseLeave = useCallback(() => {
     activeTrendDateRef.current = null;
   }, []);
@@ -689,7 +988,7 @@ export default function Data({
       />
 
       <div className="data-dashboard-grid">
-        <div className="data-overview-grid">
+        <div className="qp-panel p-5 data-overview">
           <DataTrendPanel
             selection={selectedTrendRange}
             viewModel={visibleTrendViewModel}
@@ -706,7 +1005,6 @@ export default function Data({
           <DataHeatmapPanel
             selectedHeatmapView={selectedHeatmapView}
             selectedHeatmapViewKey={selectedHeatmapViewKey}
-            selectedHeatmapViewLabel={selectedHeatmapViewLabel}
             rows={visibleHeatmapRows}
             granularity={heatmapGranularity}
             granularityOptions={heatmapGranularityOptions}
@@ -720,23 +1018,78 @@ export default function Data({
         </div>
 
         <DataAppTrendPanel
+          destinationMode={destinationMode}
+          showDestinationMode={webActivityEnabled}
+          title={isWebDestination ? UI_TEXT.data.webTrend : UI_TEXT.data.appTrend}
+          rangeAriaLabel={isWebDestination
+            ? UI_TEXT.accessibility.data.webTrendRange
+            : UI_TEXT.accessibility.data.appTrendRange}
           selection={selectedAppTrendRange}
-          viewModel={visibleAppTrendViewModel}
-          selectedApp={selectedAppTrendApp}
-          filteredAppOptions={filteredAppOptions}
-          appSearchQuery={appSearchQuery}
-          hasAppSearchQuery={hasAppSearchQuery}
-          chartData={appTrendChartData}
-          chartAxis={appTrendChartAxis}
-          peakDay={appTrendPeakDay}
-          dataIcons={dataIcons}
-          appListRef={appListRef}
+          ready={destinationPanelReady}
+          selectedOptions={destinationPanelSelectedOptions}
+          trendSeries={destinationTrendSeries}
+          summary={destinationSummary}
+          filteredOptions={destinationPanelOptions}
+          searchQuery={isWebDestination ? webSearchQuery : appSearchQuery}
+          hasSearchQuery={isWebDestination ? hasWebSearchQuery : hasAppSearchQuery}
+          searchPlaceholder={isWebDestination
+            ? UI_TEXT.data.webSearchPlaceholder
+            : UI_TEXT.data.appSearchPlaceholder}
+          listAriaLabel={isWebDestination
+            ? UI_TEXT.data.webTrendDomainList
+            : UI_TEXT.data.appTrendAppList}
+          emptyLabel={isWebDestination
+            ? UI_TEXT.data.webTrendEmpty
+            : UI_TEXT.data.appTrendEmpty}
+          noMatchLabel={isWebDestination
+            ? UI_TEXT.data.webTrendNoMatch
+            : UI_TEXT.data.appTrendNoMatch}
+          totalMetricLabel={isWebDestination
+            ? UI_TEXT.data.webTrendTotal
+            : UI_TEXT.data.appTrendTotal}
+          usageMetricLabel={isWebDestination
+            ? UI_TEXT.data.webTrendUsage
+            : UI_TEXT.data.appTrendUsage}
+          granularity={destinationGranularity}
+          chartData={destinationChartData}
+          heatmapContent={(
+            <DataHeatmapPanel
+              title={isWebDestination ? UI_TEXT.data.webHeatmap : UI_TEXT.data.appHeatmap}
+              compact
+              selectedHeatmapView={selectedDestinationHeatmapView}
+              selectedHeatmapViewKey={`${presentedDestinationMode}:${encodeDataDestinationSelectionKey(
+                isWebDestination ? selectedWebKeys : selectedAppKeys,
+              )}:${selectedDestinationHeatmapView}`}
+              rows={visibleDestinationHeatmapRows}
+              granularity={destinationHeatmapGranularity}
+              granularityOptions={heatmapGranularityOptions}
+              canSelectOlderHeatmapView={
+                selectedDestinationHeatmapViewIndex >= 0
+                && selectedDestinationHeatmapViewIndex < destinationHeatmapViewOptions.length - 1
+              }
+              canSelectNewerHeatmapView={selectedDestinationHeatmapViewIndex > 0}
+              onGranularityChange={setDestinationHeatmapGranularity}
+              onSelectAdjacentHeatmapView={selectAdjacentDestinationHeatmapView}
+              onOpenHistoryDate={onOpenHistoryDate}
+              loading={visibleDestinationHeatmapLoading}
+            />
+          )}
+          chartAxis={destinationChartAxis}
+          peakDay={destinationPeakDay}
+          listRef={appListRef}
           chartRef={appTrendChart.chartRef}
           initialDimension={appTrendChart.initialDimension}
-          canOpenHistory={canOpenAppTrendHistory}
+          canOpenHistory={destinationCanOpenHistory}
+          errorMessage={isWebDestination ? webTrendError : null}
+          refreshing={(isWebDestination && webTrendRefreshing) || destinationModeSwitchPending}
+          refreshFailed={isWebDestination && webTrendRefreshFailed}
+          onRetry={webActivity.retry}
+          onDestinationModeChange={setDestinationMode}
           onSelectionChange={setSelectedAppTrendRange}
-          onSearchQueryChange={handleAppSearchQueryChange}
-          onAppSelect={setSelectedAppKey}
+          onSearchQueryChange={isWebDestination
+            ? webActivity.setSearchQuery
+            : handleAppSearchQueryChange}
+          onOptionSelect={handleDestinationOptionSelect}
           onMouseDownCapture={handleAppTrendMouseDownCapture}
           onDoubleClickCapture={handleAppTrendDoubleClickCapture}
           onMouseMove={handleAppTrendMouseMove}

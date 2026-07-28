@@ -524,14 +524,15 @@ function AppShellContent() {
               )}
               {renderedView === "data" && (
                 <Data
-                  key="data"
                   icons={icons}
                   refreshKey={refreshSignal}
                   trackerHealth={trackerHealth}
                   loadDataTrendSnapshot={loadDataTrendRuntimeSnapshot}
                   mappingVersion={mappingVersion}
                   onOpenHistoryDate={openHistoryForDate}
+                  onToast={pushToast}
                   uiLanguage={uiTextLanguage}
+                  webActivityEnabled={appSettings.webActivityEnabled}
                 />
               )}
               {renderedView === "tools" && (

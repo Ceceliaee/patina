@@ -315,6 +315,10 @@ function fallbackThemeColor(identifier: string) {
   return FALLBACK_PALETTE[hash % FALLBACK_PALETTE.length];
 }
 
+export function getIconThemeFallbackColor(identifier: string) {
+  return fallbackThemeColor(identifier);
+}
+
 function normalizeThemeColorIdentifier(identifier: string) {
   return identifier.trim().toLowerCase();
 }
