@@ -5,7 +5,10 @@ import {
   type PreloadableView,
 } from "../services/viewChunkPreloadService.ts";
 import type { View } from "../types/view.ts";
-import { markDataNavigationStage } from "../../features/data/services/dataNavigationPerformance.ts";
+import {
+  beginDataNavigationMeasurement,
+  markDataNavigationStage,
+} from "../../features/data/services/dataNavigationPerformance.ts";
 
 export function getPreloadableNavigationView(view: View): PreloadableView | null {
   switch (view) {
@@ -24,6 +27,9 @@ export function getPreloadableNavigationView(view: View): PreloadableView | null
 export function preloadNavigationView(view: View, reason: "intent" | "preview"): void {
   const preloadableView = getPreloadableNavigationView(view);
   if (!preloadableView) return;
+  if (view === "data" && reason === "intent") {
+    beginDataNavigationMeasurement();
+  }
 
   void preloadLazyViewChunk(preloadableView).catch((error) => {
     console.warn(`Failed to preload ${preloadableView} view on navigation ${reason}`, error);

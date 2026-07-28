@@ -67,7 +67,6 @@ import {
   parseLocalDateKey,
   startOfLocalDay,
 } from "../shared/lib/localDate.ts";
-import { beginDataNavigationMeasurement } from "../features/data/services/dataNavigationPerformance.ts";
 
 type HistoryDateRequest = { dateKey: string; requestId: number };
 
@@ -230,9 +229,6 @@ function AppShellContent() {
     setHistoryDateRequest(null);
     if (nextView === "tools") {
       setToolsInitialTarget(null);
-    }
-    if (nextView === "data") {
-      beginDataNavigationMeasurement();
     }
     preloadNavigationView(nextView, "intent");
     const result = await handleNavigate(nextView);
