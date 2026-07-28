@@ -37,6 +37,7 @@ async function findMainTarget(port: number) {
     });
     if (!response.ok) return null;
     const targets = await response.json() as Array<{
+      title?: string;
       type?: string;
       url?: string;
       webSocketDebuggerUrl?: string;
@@ -44,6 +45,28 @@ async function findMainTarget(port: number) {
     return targets.find((target) => target.type === "page"
       && target.url
       && target.url !== "about:blank"
+      && target.webSocketDebuggerUrl) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function findWidgetTarget(port: number, mainWebSocketDebuggerUrl: string) {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/json/list`, {
+      signal: AbortSignal.timeout(1_000),
+    });
+    if (!response.ok) return null;
+    const targets = await response.json() as Array<{
+      title?: string;
+      type?: string;
+      url?: string;
+      webSocketDebuggerUrl?: string;
+    }>;
+    return targets.find((target) => target.type === "page"
+      && target.url
+      && target.url !== "about:blank"
+      && target.webSocketDebuggerUrl !== mainWebSocketDebuggerUrl
       && target.webSocketDebuggerUrl) ?? null;
   } catch {
     return null;
@@ -243,6 +266,7 @@ let appLogTail = "";
 let appProcess: ChildProcess | null = null;
 let viteServer: PreviewServer | null = null;
 let client: CdpConnection | null = null;
+let widgetClient: CdpConnection | null = null;
 let primaryError: unknown = null;
 const cleanupErrors: unknown[] = [];
 let databaseMutationCompleted = false;
@@ -512,6 +536,60 @@ try {
     `window.__TAURI_INTERNALS__.invoke("cmd_get_widget_placement")`,
   );
   assert.deepEqual(reloadedWidgetPlacement, finalizedWidgetPlacement);
+  const widgetTarget = await waitFor(
+    "Patina widget WebView CDP target",
+    () => findWidgetTarget(devtoolsPort, target.webSocketDebuggerUrl!),
+    10_000,
+  );
+  widgetClient = await CdpConnection.connect(widgetTarget.webSocketDebuggerUrl!);
+  await widgetClient.command("Runtime.enable");
+  await waitFor(
+    "real Tauri widget runtime",
+    async () => evaluate(
+      widgetClient!,
+      "Boolean(window.__TAURI_INTERNALS__ && document.querySelector('.widget-shell'))",
+    ),
+    10_000,
+  );
+  const widgetBootstrap = await evaluate(
+    widgetClient,
+    `window.__TAURI_INTERNALS__.invoke("cmd_get_widget_bootstrap_snapshot")`,
+  ) as {
+    settings?: Record<string, string | null>;
+    app_overrides?: unknown[];
+  };
+  assert.equal(typeof widgetBootstrap.settings, "object");
+  assert.ok(Array.isArray(widgetBootstrap.app_overrides));
+
+  for (const deniedExpression of [
+    `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
+      db: "sqlite:patina.db",
+      query: "SELECT key FROM settings",
+      values: [],
+    })`,
+    `window.__TAURI_INTERNALS__.invoke("plugin:sql|load", {
+      db: "sqlite:patina.db",
+    })`,
+    `window.__TAURI_INTERNALS__.invoke("cmd_get_storage_snapshot")`,
+    `window.__TAURI_INTERNALS__.invoke("cmd_reveal_webdav_backup_secret")`,
+    `window.__TAURI_INTERNALS__.invoke("cmd_restore_backup", {
+      backupPath: "permission-probe.zip",
+      hash: "permission-probe",
+      restoreStrategy: "replace",
+    })`,
+    `window.__TAURI_INTERNALS__.invoke("cmd_delete_sessions_before", {
+      cutoffTime: 0,
+    })`,
+    `window.__TAURI_INTERNALS__.invoke("cmd_install_update")`,
+  ]) {
+    const denied = await evaluate(
+      widgetClient,
+      `${deniedExpression}.then(() => null, (error) => String(error))`,
+    );
+    assert.match(String(denied), /not allowed|permission|denied/i);
+  }
+  widgetClient.close();
+  widgetClient = null;
   console.log("PATINA_FIRST_MINIMIZE_RECOVERY_REPORT", JSON.stringify({
     environment: "isolated real Tauri/WebView2 runtime",
     hardFailurePreservedMain: true,
@@ -839,6 +917,11 @@ try {
   console.error(logs.join(""));
   primaryError = error;
 } finally {
+  try {
+    widgetClient?.close();
+  } catch (error) {
+    cleanupErrors.push(error);
+  }
   try {
     client?.close();
   } catch (error) {

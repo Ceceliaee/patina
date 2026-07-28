@@ -1,4 +1,5 @@
 use crate::app::state::AppExitState;
+use crate::commands::window_guard::require_main_window_string;
 use crate::data::{storage_migration, storage_restart};
 use crate::domain::lifecycle::AppRestartState;
 use crate::domain::storage::{
@@ -7,7 +8,7 @@ use crate::domain::storage::{
 };
 use crate::platform::{storage_anchor, storage_paths, storage_usage, webview_cache};
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 
 #[tauri::command]
 pub fn cmd_pick_storage_directory() -> Option<String> {
@@ -63,8 +64,10 @@ pub async fn cmd_preview_restore_default_webview_cache_migration<R: Runtime>(
 #[tauri::command]
 pub async fn cmd_restart_and_apply_storage_migration(
     app: AppHandle,
+    window: WebviewWindow,
     target_data_root: String,
 ) -> Result<(), String> {
+    require_main_window_string(&window)?;
     restart_after(app, |app| async move {
         storage_migration::schedule_storage_migration(
             app,
@@ -78,8 +81,10 @@ pub async fn cmd_restart_and_apply_storage_migration(
 #[tauri::command]
 pub async fn cmd_restart_and_apply_webview_cache_migration(
     app: AppHandle,
+    window: WebviewWindow,
     target_webview_root: String,
 ) -> Result<(), String> {
+    require_main_window_string(&window)?;
     restart_after(app, |app| async move {
         storage_migration::schedule_webview_cache_migration(
             app,
@@ -95,7 +100,9 @@ pub async fn cmd_restart_and_apply_webview_cache_migration(
 #[tauri::command]
 pub async fn cmd_restart_and_apply_restore_default_storage_migration(
     app: AppHandle,
+    window: WebviewWindow,
 ) -> Result<(), String> {
+    require_main_window_string(&window)?;
     restart_after(app, |app| async move {
         storage_migration::schedule_restore_default_storage_migration(app).await
     })
@@ -105,7 +112,9 @@ pub async fn cmd_restart_and_apply_restore_default_storage_migration(
 #[tauri::command]
 pub async fn cmd_restart_and_apply_restore_default_webview_cache_migration(
     app: AppHandle,
+    window: WebviewWindow,
 ) -> Result<(), String> {
+    require_main_window_string(&window)?;
     restart_after(app, |app| async move {
         storage_migration::schedule_restore_default_webview_cache_migration(app).await
     })
@@ -113,7 +122,11 @@ pub async fn cmd_restart_and_apply_restore_default_webview_cache_migration(
 }
 
 #[tauri::command]
-pub async fn cmd_restart_and_clear_webview_cache(app: AppHandle) -> Result<(), String> {
+pub async fn cmd_restart_and_clear_webview_cache(
+    app: AppHandle,
+    window: WebviewWindow,
+) -> Result<(), String> {
+    require_main_window_string(&window)?;
     restart_after(app, |app| async move {
         storage_restart::schedule_webview_cache_clear(app).await
     })

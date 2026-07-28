@@ -14,3 +14,4 @@ pub mod web_activity;
 pub mod web_activity_analysis;
 pub mod widget;
 pub mod window;
+pub mod window_guard;

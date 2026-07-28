@@ -1,11 +1,12 @@
 use crate::app;
+use crate::commands::window_guard::require_main_window_string;
 use crate::data::backup::{self, RestoreStrategy};
 use crate::data::remote_backup::{
     self, RemoteBackupDownloadResult, RemoteBackupEntry, RemoteBackupUploadResult,
     WebDavBackupConfigDto, WebDavTestResult,
 };
 use crate::domain::backup::BackupPreview;
-use tauri::AppHandle;
+use tauri::{AppHandle, WebviewWindow};
 
 #[tauri::command]
 pub fn cmd_pick_backup_save_file(initial_path: Option<String>) -> Option<String> {
@@ -31,7 +32,9 @@ pub async fn cmd_restore_backup(
     hash: String,
     restore_strategy: RestoreStrategy,
     app: AppHandle,
+    window: WebviewWindow,
 ) -> Result<(), String> {
+    require_main_window_string(&window)?;
     app::backup::restore_backup_and_refresh(app, backup_path, hash, restore_strategy).await
 }
 
@@ -41,12 +44,18 @@ pub async fn cmd_preview_backup(backup_path: String) -> Result<BackupPreview, St
 }
 
 #[tauri::command]
-pub fn cmd_save_webdav_backup_secret(username: String, password: String) -> Result<(), String> {
+pub fn cmd_save_webdav_backup_secret(
+    username: String,
+    password: String,
+    window: WebviewWindow,
+) -> Result<(), String> {
+    require_main_window_string(&window)?;
     remote_backup::save_webdav_backup_secret(username, password)
 }
 
 #[tauri::command]
-pub fn cmd_delete_webdav_backup_secret() -> Result<(), String> {
+pub fn cmd_delete_webdav_backup_secret(window: WebviewWindow) -> Result<(), String> {
+    require_main_window_string(&window)?;
     remote_backup::delete_webdav_backup_secret()
 }
 
@@ -56,7 +65,8 @@ pub fn cmd_has_webdav_backup_secret() -> Result<bool, String> {
 }
 
 #[tauri::command]
-pub fn cmd_reveal_webdav_backup_secret() -> Result<Option<String>, String> {
+pub fn cmd_reveal_webdav_backup_secret(window: WebviewWindow) -> Result<Option<String>, String> {
+    require_main_window_string(&window)?;
     remote_backup::reveal_webdav_backup_secret()
 }
 

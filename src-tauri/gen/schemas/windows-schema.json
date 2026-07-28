@@ -345,6 +345,1170 @@
       "description": "Permission identifier",
       "oneOf": [
         {
+          "description": "Enables the cmd_add_timer_lap command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-add-timer-lap",
+          "markdownDescription": "Enables the cmd_add_timer_lap command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_cancel_reminder command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-cancel-reminder",
+          "markdownDescription": "Enables the cmd_cancel_reminder command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_check_for_updates command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-check-for-updates",
+          "markdownDescription": "Enables the cmd_check_for_updates command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_clear_all_session_window_titles command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-clear-all-session-window-titles",
+          "markdownDescription": "Enables the cmd_clear_all_session_window_titles command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_clear_data_bootstrap_snapshot_payload command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-clear-data-bootstrap-snapshot-payload",
+          "markdownDescription": "Enables the cmd_clear_data_bootstrap_snapshot_payload command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_clear_history_bootstrap_snapshot_payload command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-clear-history-bootstrap-snapshot-payload",
+          "markdownDescription": "Enables the cmd_clear_history_bootstrap_snapshot_payload command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_clear_remote_backup_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-clear-remote-backup-settings",
+          "markdownDescription": "Enables the cmd_clear_remote_backup_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_commit_app_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-commit-app-settings",
+          "markdownDescription": "Enables the cmd_commit_app_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_commit_canonical_import command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-commit-canonical-import",
+          "markdownDescription": "Enables the cmd_commit_canonical_import command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_commit_classification_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-commit-classification-settings",
+          "markdownDescription": "Enables the cmd_commit_classification_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_create_reminder command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-create-reminder",
+          "markdownDescription": "Enables the cmd_create_reminder command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_create_software_reminder_rule command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-create-software-reminder-rule",
+          "markdownDescription": "Enables the cmd_create_software_reminder_rule command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_delete_import_batch command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-delete-import-batch",
+          "markdownDescription": "Enables the cmd_delete_import_batch command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_delete_remote_backup_temp command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-delete-remote-backup-temp",
+          "markdownDescription": "Enables the cmd_delete_remote_backup_temp command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_delete_sessions_before command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-delete-sessions-before",
+          "markdownDescription": "Enables the cmd_delete_sessions_before command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_delete_sessions_by_exe_names command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-delete-sessions-by-exe-names",
+          "markdownDescription": "Enables the cmd_delete_sessions_by_exe_names command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_delete_sessions_by_exe_names_between command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-delete-sessions-by-exe-names-between",
+          "markdownDescription": "Enables the cmd_delete_sessions_by_exe_names_between command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_delete_web_activity_segments_before command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-delete-web-activity-segments-before",
+          "markdownDescription": "Enables the cmd_delete_web_activity_segments_before command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_delete_web_activity_segments_by_domain command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-delete-web-activity-segments-by-domain",
+          "markdownDescription": "Enables the cmd_delete_web_activity_segments_by_domain command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_delete_webdav_backup_secret command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-delete-webdav-backup-secret",
+          "markdownDescription": "Enables the cmd_delete_webdav_backup_secret command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_destructure_external_data command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-destructure-external-data",
+          "markdownDescription": "Enables the cmd_destructure_external_data command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_disable_software_reminder_rule command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-disable-software-reminder-rule",
+          "markdownDescription": "Enables the cmd_disable_software_reminder_rule command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_dismiss_tool_alert command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-dismiss-tool-alert",
+          "markdownDescription": "Enables the cmd_dismiss_tool_alert command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_download_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-download-update",
+          "markdownDescription": "Enables the cmd_download_update command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_download_webdav_backup command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-download-webdav-backup",
+          "markdownDescription": "Enables the cmd_download_webdav_backup command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_export_backup command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-export-backup",
+          "markdownDescription": "Enables the cmd_export_backup command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_export_data command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-export-data",
+          "markdownDescription": "Enables the cmd_export_data command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_finalize_widget_drag command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-finalize-widget-drag",
+          "markdownDescription": "Enables the cmd_finalize_widget_drag command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_activity_aggregate_range command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-activity-aggregate-range",
+          "markdownDescription": "Enables the cmd_get_activity_aggregate_range command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_activity_read_model_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-activity-read-model-status",
+          "markdownDescription": "Enables the cmd_get_activity_read_model_status command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_recorded_app_catalog_page command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-recorded-app-catalog-page",
+          "markdownDescription": "Enables the cmd_get_recorded_app_catalog_page command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_resource_diagnostics command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-resource-diagnostics",
+          "markdownDescription": "Enables the cmd_get_resource_diagnostics command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_storage_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-storage-snapshot",
+          "markdownDescription": "Enables the cmd_get_storage_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_tool_alerts command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-tool-alerts",
+          "markdownDescription": "Enables the cmd_get_tool_alerts command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_tools_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-tools-snapshot",
+          "markdownDescription": "Enables the cmd_get_tools_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_tracker_health_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-tracker-health-snapshot",
+          "markdownDescription": "Enables the cmd_get_tracker_health_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_update_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-update-snapshot",
+          "markdownDescription": "Enables the cmd_get_update_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_web_activity_aggregate_range command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-web-activity-aggregate-range",
+          "markdownDescription": "Enables the cmd_get_web_activity_aggregate_range command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_web_activity_bridge_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-web-activity-bridge-snapshot",
+          "markdownDescription": "Enables the cmd_get_web_activity_bridge_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_widget_bootstrap_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-widget-bootstrap-snapshot",
+          "markdownDescription": "Enables the cmd_get_widget_bootstrap_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_widget_icon command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-widget-icon",
+          "markdownDescription": "Enables the cmd_get_widget_icon command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_widget_placement command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-widget-placement",
+          "markdownDescription": "Enables the cmd_get_widget_placement command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_has_webdav_backup_secret command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-has-webdav-backup-secret",
+          "markdownDescription": "Enables the cmd_has_webdav_backup_secret command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_hide_widget_window command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-hide-widget-window",
+          "markdownDescription": "Enables the cmd_hide_widget_window command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_install_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-install-update",
+          "markdownDescription": "Enables the cmd_install_update command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_is_primary_mouse_button_down command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-is-primary-mouse-button-down",
+          "markdownDescription": "Enables the cmd_is_primary_mouse_button_down command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_list_import_batches command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-list-import-batches",
+          "markdownDescription": "Enables the cmd_list_import_batches command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_list_webdav_backups command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-list-webdav-backups",
+          "markdownDescription": "Enables the cmd_list_webdav_backups command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_mark_main_window_ready command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-mark-main-window-ready",
+          "markdownDescription": "Enables the cmd_mark_main_window_ready command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_minimize_main_window command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-minimize-main-window",
+          "markdownDescription": "Enables the cmd_minimize_main_window command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_open_storage_directory command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-open-storage-directory",
+          "markdownDescription": "Enables the cmd_open_storage_directory command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_pause_pomodoro command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-pause-pomodoro",
+          "markdownDescription": "Enables the cmd_pause_pomodoro command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_pause_timer command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-pause-timer",
+          "markdownDescription": "Enables the cmd_pause_timer command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_pick_backup_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-pick-backup-file",
+          "markdownDescription": "Enables the cmd_pick_backup_file command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_pick_backup_save_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-pick-backup-save-file",
+          "markdownDescription": "Enables the cmd_pick_backup_save_file command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_pick_canonical_import_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-pick-canonical-import-file",
+          "markdownDescription": "Enables the cmd_pick_canonical_import_file command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_pick_export_save_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-pick-export-save-file",
+          "markdownDescription": "Enables the cmd_pick_export_save_file command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_pick_external_import_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-pick-external-import-file",
+          "markdownDescription": "Enables the cmd_pick_external_import_file command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_pick_storage_directory command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-pick-storage-directory",
+          "markdownDescription": "Enables the cmd_pick_storage_directory command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_preview_backup command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-preview-backup",
+          "markdownDescription": "Enables the cmd_preview_backup command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_preview_canonical_import command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-preview-canonical-import",
+          "markdownDescription": "Enables the cmd_preview_canonical_import command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_preview_restore_default_storage_migration command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-preview-restore-default-storage-migration",
+          "markdownDescription": "Enables the cmd_preview_restore_default_storage_migration command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_preview_restore_default_webview_cache_migration command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-preview-restore-default-webview-cache-migration",
+          "markdownDescription": "Enables the cmd_preview_restore_default_webview_cache_migration command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_preview_storage_migration command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-preview-storage-migration",
+          "markdownDescription": "Enables the cmd_preview_storage_migration command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_preview_webview_cache_migration command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-preview-webview-cache-migration",
+          "markdownDescription": "Enables the cmd_preview_webview_cache_migration command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_reset_pomodoro command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-reset-pomodoro",
+          "markdownDescription": "Enables the cmd_reset_pomodoro command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_reset_timer command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-reset-timer",
+          "markdownDescription": "Enables the cmd_reset_timer command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_restart_and_apply_restore_default_storage_migration command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-restart-and-apply-restore-default-storage-migration",
+          "markdownDescription": "Enables the cmd_restart_and_apply_restore_default_storage_migration command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_restart_and_apply_restore_default_webview_cache_migration command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-restart-and-apply-restore-default-webview-cache-migration",
+          "markdownDescription": "Enables the cmd_restart_and_apply_restore_default_webview_cache_migration command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_restart_and_apply_storage_migration command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-restart-and-apply-storage-migration",
+          "markdownDescription": "Enables the cmd_restart_and_apply_storage_migration command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_restart_and_apply_webview_cache_migration command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-restart-and-apply-webview-cache-migration",
+          "markdownDescription": "Enables the cmd_restart_and_apply_webview_cache_migration command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_restart_and_clear_webview_cache command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-restart-and-clear-webview-cache",
+          "markdownDescription": "Enables the cmd_restart_and_clear_webview_cache command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_restore_backup command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-restore-backup",
+          "markdownDescription": "Enables the cmd_restore_backup command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_resume_pomodoro command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-resume-pomodoro",
+          "markdownDescription": "Enables the cmd_resume_pomodoro command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_resume_timer command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-resume-timer",
+          "markdownDescription": "Enables the cmd_resume_timer command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_reveal_webdav_backup_secret command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-reveal-webdav-backup-secret",
+          "markdownDescription": "Enables the cmd_reveal_webdav_backup_secret command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_save_data_bootstrap_snapshot_payload command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-save-data-bootstrap-snapshot-payload",
+          "markdownDescription": "Enables the cmd_save_data_bootstrap_snapshot_payload command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_save_history_bootstrap_snapshot_payload command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-save-history-bootstrap-snapshot-payload",
+          "markdownDescription": "Enables the cmd_save_history_bootstrap_snapshot_payload command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_save_remote_backup_last_backup_at command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-save-remote-backup-last-backup-at",
+          "markdownDescription": "Enables the cmd_save_remote_backup_last_backup_at command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_save_remote_backup_remote_dir command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-save-remote-backup-remote-dir",
+          "markdownDescription": "Enables the cmd_save_remote_backup_remote_dir command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_save_remote_backup_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-save-remote-backup-settings",
+          "markdownDescription": "Enables the cmd_save_remote_backup_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_save_webdav_backup_secret command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-save-webdav-backup-secret",
+          "markdownDescription": "Enables the cmd_save_webdav_backup_secret command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_set_afk_threshold command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-set-afk-threshold",
+          "markdownDescription": "Enables the cmd_set_afk_threshold command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_set_background_optimization command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-set-background-optimization",
+          "markdownDescription": "Enables the cmd_set_background_optimization command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_set_desktop_behavior command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-set-desktop-behavior",
+          "markdownDescription": "Enables the cmd_set_desktop_behavior command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_set_launch_behavior command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-set-launch-behavior",
+          "markdownDescription": "Enables the cmd_set_launch_behavior command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_set_widget_expanded command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-set-widget-expanded",
+          "markdownDescription": "Enables the cmd_set_widget_expanded command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_show_main_window command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-show-main-window",
+          "markdownDescription": "Enables the cmd_show_main_window command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_skip_pomodoro_phase command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-skip-pomodoro-phase",
+          "markdownDescription": "Enables the cmd_skip_pomodoro_phase command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_start_pomodoro command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-start-pomodoro",
+          "markdownDescription": "Enables the cmd_start_pomodoro command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_start_timer command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-start-timer",
+          "markdownDescription": "Enables the cmd_start_timer command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_test_webdav_backup_target command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-test-webdav-backup-target",
+          "markdownDescription": "Enables the cmd_test_webdav_backup_target command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_toggle_tracking_paused command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-toggle-tracking-paused",
+          "markdownDescription": "Enables the cmd_toggle_tracking_paused command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_upload_webdav_backup command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-upload-webdav-backup",
+          "markdownDescription": "Enables the cmd_upload_webdav_backup command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_current_active_window command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-current-active-window",
+          "markdownDescription": "Enables the get_current_active_window command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_current_tracking_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-current-tracking-snapshot",
+          "markdownDescription": "Enables the get_current_tracking_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_add_timer_lap command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-add-timer-lap",
+          "markdownDescription": "Denies the cmd_add_timer_lap command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_cancel_reminder command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-cancel-reminder",
+          "markdownDescription": "Denies the cmd_cancel_reminder command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_check_for_updates command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-check-for-updates",
+          "markdownDescription": "Denies the cmd_check_for_updates command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_clear_all_session_window_titles command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-clear-all-session-window-titles",
+          "markdownDescription": "Denies the cmd_clear_all_session_window_titles command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_clear_data_bootstrap_snapshot_payload command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-clear-data-bootstrap-snapshot-payload",
+          "markdownDescription": "Denies the cmd_clear_data_bootstrap_snapshot_payload command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_clear_history_bootstrap_snapshot_payload command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-clear-history-bootstrap-snapshot-payload",
+          "markdownDescription": "Denies the cmd_clear_history_bootstrap_snapshot_payload command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_clear_remote_backup_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-clear-remote-backup-settings",
+          "markdownDescription": "Denies the cmd_clear_remote_backup_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_commit_app_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-commit-app-settings",
+          "markdownDescription": "Denies the cmd_commit_app_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_commit_canonical_import command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-commit-canonical-import",
+          "markdownDescription": "Denies the cmd_commit_canonical_import command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_commit_classification_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-commit-classification-settings",
+          "markdownDescription": "Denies the cmd_commit_classification_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_create_reminder command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-create-reminder",
+          "markdownDescription": "Denies the cmd_create_reminder command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_create_software_reminder_rule command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-create-software-reminder-rule",
+          "markdownDescription": "Denies the cmd_create_software_reminder_rule command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_delete_import_batch command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-delete-import-batch",
+          "markdownDescription": "Denies the cmd_delete_import_batch command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_delete_remote_backup_temp command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-delete-remote-backup-temp",
+          "markdownDescription": "Denies the cmd_delete_remote_backup_temp command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_delete_sessions_before command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-delete-sessions-before",
+          "markdownDescription": "Denies the cmd_delete_sessions_before command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_delete_sessions_by_exe_names command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-delete-sessions-by-exe-names",
+          "markdownDescription": "Denies the cmd_delete_sessions_by_exe_names command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_delete_sessions_by_exe_names_between command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-delete-sessions-by-exe-names-between",
+          "markdownDescription": "Denies the cmd_delete_sessions_by_exe_names_between command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_delete_web_activity_segments_before command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-delete-web-activity-segments-before",
+          "markdownDescription": "Denies the cmd_delete_web_activity_segments_before command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_delete_web_activity_segments_by_domain command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-delete-web-activity-segments-by-domain",
+          "markdownDescription": "Denies the cmd_delete_web_activity_segments_by_domain command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_delete_webdav_backup_secret command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-delete-webdav-backup-secret",
+          "markdownDescription": "Denies the cmd_delete_webdav_backup_secret command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_destructure_external_data command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-destructure-external-data",
+          "markdownDescription": "Denies the cmd_destructure_external_data command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_disable_software_reminder_rule command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-disable-software-reminder-rule",
+          "markdownDescription": "Denies the cmd_disable_software_reminder_rule command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_dismiss_tool_alert command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-dismiss-tool-alert",
+          "markdownDescription": "Denies the cmd_dismiss_tool_alert command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_download_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-download-update",
+          "markdownDescription": "Denies the cmd_download_update command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_download_webdav_backup command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-download-webdav-backup",
+          "markdownDescription": "Denies the cmd_download_webdav_backup command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_export_backup command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-export-backup",
+          "markdownDescription": "Denies the cmd_export_backup command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_export_data command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-export-data",
+          "markdownDescription": "Denies the cmd_export_data command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_finalize_widget_drag command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-finalize-widget-drag",
+          "markdownDescription": "Denies the cmd_finalize_widget_drag command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_activity_aggregate_range command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-activity-aggregate-range",
+          "markdownDescription": "Denies the cmd_get_activity_aggregate_range command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_activity_read_model_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-activity-read-model-status",
+          "markdownDescription": "Denies the cmd_get_activity_read_model_status command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_recorded_app_catalog_page command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-recorded-app-catalog-page",
+          "markdownDescription": "Denies the cmd_get_recorded_app_catalog_page command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_resource_diagnostics command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-resource-diagnostics",
+          "markdownDescription": "Denies the cmd_get_resource_diagnostics command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_storage_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-storage-snapshot",
+          "markdownDescription": "Denies the cmd_get_storage_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_tool_alerts command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-tool-alerts",
+          "markdownDescription": "Denies the cmd_get_tool_alerts command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_tools_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-tools-snapshot",
+          "markdownDescription": "Denies the cmd_get_tools_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_tracker_health_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-tracker-health-snapshot",
+          "markdownDescription": "Denies the cmd_get_tracker_health_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_update_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-update-snapshot",
+          "markdownDescription": "Denies the cmd_get_update_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_web_activity_aggregate_range command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-web-activity-aggregate-range",
+          "markdownDescription": "Denies the cmd_get_web_activity_aggregate_range command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_web_activity_bridge_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-web-activity-bridge-snapshot",
+          "markdownDescription": "Denies the cmd_get_web_activity_bridge_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_widget_bootstrap_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-widget-bootstrap-snapshot",
+          "markdownDescription": "Denies the cmd_get_widget_bootstrap_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_widget_icon command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-widget-icon",
+          "markdownDescription": "Denies the cmd_get_widget_icon command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_widget_placement command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-widget-placement",
+          "markdownDescription": "Denies the cmd_get_widget_placement command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_has_webdav_backup_secret command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-has-webdav-backup-secret",
+          "markdownDescription": "Denies the cmd_has_webdav_backup_secret command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_hide_widget_window command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-hide-widget-window",
+          "markdownDescription": "Denies the cmd_hide_widget_window command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_install_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-install-update",
+          "markdownDescription": "Denies the cmd_install_update command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_is_primary_mouse_button_down command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-is-primary-mouse-button-down",
+          "markdownDescription": "Denies the cmd_is_primary_mouse_button_down command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_list_import_batches command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-list-import-batches",
+          "markdownDescription": "Denies the cmd_list_import_batches command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_list_webdav_backups command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-list-webdav-backups",
+          "markdownDescription": "Denies the cmd_list_webdav_backups command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_mark_main_window_ready command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-mark-main-window-ready",
+          "markdownDescription": "Denies the cmd_mark_main_window_ready command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_minimize_main_window command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-minimize-main-window",
+          "markdownDescription": "Denies the cmd_minimize_main_window command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_open_storage_directory command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-open-storage-directory",
+          "markdownDescription": "Denies the cmd_open_storage_directory command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_pause_pomodoro command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-pause-pomodoro",
+          "markdownDescription": "Denies the cmd_pause_pomodoro command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_pause_timer command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-pause-timer",
+          "markdownDescription": "Denies the cmd_pause_timer command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_pick_backup_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-pick-backup-file",
+          "markdownDescription": "Denies the cmd_pick_backup_file command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_pick_backup_save_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-pick-backup-save-file",
+          "markdownDescription": "Denies the cmd_pick_backup_save_file command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_pick_canonical_import_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-pick-canonical-import-file",
+          "markdownDescription": "Denies the cmd_pick_canonical_import_file command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_pick_export_save_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-pick-export-save-file",
+          "markdownDescription": "Denies the cmd_pick_export_save_file command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_pick_external_import_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-pick-external-import-file",
+          "markdownDescription": "Denies the cmd_pick_external_import_file command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_pick_storage_directory command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-pick-storage-directory",
+          "markdownDescription": "Denies the cmd_pick_storage_directory command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_preview_backup command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-preview-backup",
+          "markdownDescription": "Denies the cmd_preview_backup command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_preview_canonical_import command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-preview-canonical-import",
+          "markdownDescription": "Denies the cmd_preview_canonical_import command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_preview_restore_default_storage_migration command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-preview-restore-default-storage-migration",
+          "markdownDescription": "Denies the cmd_preview_restore_default_storage_migration command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_preview_restore_default_webview_cache_migration command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-preview-restore-default-webview-cache-migration",
+          "markdownDescription": "Denies the cmd_preview_restore_default_webview_cache_migration command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_preview_storage_migration command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-preview-storage-migration",
+          "markdownDescription": "Denies the cmd_preview_storage_migration command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_preview_webview_cache_migration command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-preview-webview-cache-migration",
+          "markdownDescription": "Denies the cmd_preview_webview_cache_migration command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_reset_pomodoro command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-reset-pomodoro",
+          "markdownDescription": "Denies the cmd_reset_pomodoro command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_reset_timer command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-reset-timer",
+          "markdownDescription": "Denies the cmd_reset_timer command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_restart_and_apply_restore_default_storage_migration command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-restart-and-apply-restore-default-storage-migration",
+          "markdownDescription": "Denies the cmd_restart_and_apply_restore_default_storage_migration command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_restart_and_apply_restore_default_webview_cache_migration command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-restart-and-apply-restore-default-webview-cache-migration",
+          "markdownDescription": "Denies the cmd_restart_and_apply_restore_default_webview_cache_migration command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_restart_and_apply_storage_migration command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-restart-and-apply-storage-migration",
+          "markdownDescription": "Denies the cmd_restart_and_apply_storage_migration command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_restart_and_apply_webview_cache_migration command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-restart-and-apply-webview-cache-migration",
+          "markdownDescription": "Denies the cmd_restart_and_apply_webview_cache_migration command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_restart_and_clear_webview_cache command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-restart-and-clear-webview-cache",
+          "markdownDescription": "Denies the cmd_restart_and_clear_webview_cache command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_restore_backup command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-restore-backup",
+          "markdownDescription": "Denies the cmd_restore_backup command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_resume_pomodoro command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-resume-pomodoro",
+          "markdownDescription": "Denies the cmd_resume_pomodoro command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_resume_timer command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-resume-timer",
+          "markdownDescription": "Denies the cmd_resume_timer command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_reveal_webdav_backup_secret command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-reveal-webdav-backup-secret",
+          "markdownDescription": "Denies the cmd_reveal_webdav_backup_secret command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_save_data_bootstrap_snapshot_payload command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-save-data-bootstrap-snapshot-payload",
+          "markdownDescription": "Denies the cmd_save_data_bootstrap_snapshot_payload command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_save_history_bootstrap_snapshot_payload command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-save-history-bootstrap-snapshot-payload",
+          "markdownDescription": "Denies the cmd_save_history_bootstrap_snapshot_payload command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_save_remote_backup_last_backup_at command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-save-remote-backup-last-backup-at",
+          "markdownDescription": "Denies the cmd_save_remote_backup_last_backup_at command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_save_remote_backup_remote_dir command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-save-remote-backup-remote-dir",
+          "markdownDescription": "Denies the cmd_save_remote_backup_remote_dir command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_save_remote_backup_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-save-remote-backup-settings",
+          "markdownDescription": "Denies the cmd_save_remote_backup_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_save_webdav_backup_secret command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-save-webdav-backup-secret",
+          "markdownDescription": "Denies the cmd_save_webdav_backup_secret command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_set_afk_threshold command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-set-afk-threshold",
+          "markdownDescription": "Denies the cmd_set_afk_threshold command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_set_background_optimization command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-set-background-optimization",
+          "markdownDescription": "Denies the cmd_set_background_optimization command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_set_desktop_behavior command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-set-desktop-behavior",
+          "markdownDescription": "Denies the cmd_set_desktop_behavior command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_set_launch_behavior command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-set-launch-behavior",
+          "markdownDescription": "Denies the cmd_set_launch_behavior command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_set_widget_expanded command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-set-widget-expanded",
+          "markdownDescription": "Denies the cmd_set_widget_expanded command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_show_main_window command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-show-main-window",
+          "markdownDescription": "Denies the cmd_show_main_window command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_skip_pomodoro_phase command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-skip-pomodoro-phase",
+          "markdownDescription": "Denies the cmd_skip_pomodoro_phase command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_start_pomodoro command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-start-pomodoro",
+          "markdownDescription": "Denies the cmd_start_pomodoro command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_start_timer command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-start-timer",
+          "markdownDescription": "Denies the cmd_start_timer command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_test_webdav_backup_target command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-test-webdav-backup-target",
+          "markdownDescription": "Denies the cmd_test_webdav_backup_target command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_toggle_tracking_paused command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-toggle-tracking-paused",
+          "markdownDescription": "Denies the cmd_toggle_tracking_paused command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_upload_webdav_backup command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-upload-webdav-backup",
+          "markdownDescription": "Denies the cmd_upload_webdav_backup command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_current_active_window command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-current-active-window",
+          "markdownDescription": "Denies the get_current_active_window command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_current_tracking_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-current-tracking-snapshot",
+          "markdownDescription": "Denies the get_current_tracking_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Allows the main application window to invoke the complete Patina application command surface.",
+          "type": "string",
+          "const": "main-window-commands",
+          "markdownDescription": "Allows the main application window to invoke the complete Patina application command surface."
+        },
+        {
+          "description": "Allows the compact widget window to read tracking state and use widget-only controls.",
+          "type": "string",
+          "const": "widget-window-commands",
+          "markdownDescription": "Allows the compact widget window to read tracking state and use widget-only controls."
+        },
+        {
           "description": "This permission set configures if your\napplication can enable or disable auto\nstarting the application on boot.\n\n#### Granted Permissions\n\nIt allows all to check, enable and\ndisable the automatic start on boot.\n\n\n#### This default permission set includes:\n\n- `allow-enable`\n- `allow-disable`\n- `allow-is-enabled`",
           "type": "string",
           "const": "autostart:default",

@@ -18,6 +18,7 @@
     "core:window:allow-toggle-maximize",
     "core:app:default",
     "updater:default",
+    "main-window-commands",
     {
       "identifier": "sql:allow-load",
       "args": {

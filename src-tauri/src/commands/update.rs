@@ -1,6 +1,7 @@
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, State, WebviewWindow};
 
 use crate::app::updater;
+use crate::commands::window_guard::require_main_window_string;
 use crate::domain::update::UpdateSnapshot;
 use crate::engine::updater::UpdaterRuntimeState;
 
@@ -30,6 +31,8 @@ pub async fn cmd_download_update(
 pub async fn cmd_install_update(
     app: AppHandle,
     update_state: State<'_, UpdaterRuntimeState>,
+    window: WebviewWindow,
 ) -> Result<UpdateSnapshot, String> {
+    require_main_window_string(&window)?;
     updater::install_downloaded(&app, &update_state).await
 }
