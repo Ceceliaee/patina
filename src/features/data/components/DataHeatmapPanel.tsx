@@ -10,7 +10,7 @@ import {
   useRef,
 } from "react";
 import QuietRangeControl from "../../../shared/components/QuietRangeControl.tsx";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+import { getUiLocale, UI_TEXT } from "../../../shared/copy/index.ts";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
 import { formatDuration } from "../../history/services/historyFormatting";
 import { formatLocalDateKey } from "../../../shared/lib/localDate.ts";
@@ -28,9 +28,10 @@ export type HeatmapGranularity = "daily" | "weekly";
 const HEATMAP_WEEKDAY_COUNT = 7;
 
 interface DataHeatmapPanelProps {
+  title?: string;
+  compact?: boolean;
   selectedHeatmapView: HeatmapSelection;
   selectedHeatmapViewKey: string;
-  selectedHeatmapViewLabel: string;
   rows: HeatmapWeek[];
   granularity: HeatmapGranularity;
   granularityOptions: Array<{ value: HeatmapGranularity; label: string }>;
@@ -43,7 +44,11 @@ interface DataHeatmapPanelProps {
 }
 
 function formatHeatmapShortDate(dateKey: string) {
-  return dateKey.slice(5).replace("-", "/");
+  return new Date(`${dateKey}T00:00:00`).toLocaleDateString(getUiLocale(), {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
 }
 
 function buildWeeklyHeatmapCells(rows: HeatmapWeek[]) {
@@ -63,6 +68,25 @@ function buildWeeklyHeatmapCells(rows: HeatmapWeek[]) {
       : week.key;
     const isOutsideYear = inRangeCells.length === 0;
     const isFuture = !isOutsideYear && visibleCells.length === 0;
+    const unavailableSummary = visibleCells
+      .find((cell) => cell.availability === "unavailable")
+      ?.label.split(" · ").slice(-1)[0];
+    const availability = isFuture
+      ? "future"
+      : duration > 0
+        ? "recorded"
+        : visibleCells.some((cell) => cell.availability === "unavailable")
+          ? "unavailable"
+          : visibleCells.some((cell) => cell.availability === "no-activity")
+            ? "no-activity"
+            : "recorded";
+    const summary = availability === "future"
+      ? UI_TEXT.data.notStarted
+      : availability === "unavailable"
+        ? unavailableSummary ?? UI_TEXT.data.webNotRecorded
+        : availability === "no-activity" && visibleCells.some((cell) => cell.availability === "no-activity")
+          ? UI_TEXT.data.webNoActivity
+          : formatDuration(duration);
 
     return {
       key: week.key,
@@ -70,7 +94,8 @@ function buildWeeklyHeatmapCells(rows: HeatmapWeek[]) {
       intensity: 0,
       isFuture,
       isOutsideYear,
-      label: `${dateLabel} · ${isFuture ? UI_TEXT.data.notStarted : formatDuration(duration)}`,
+      availability,
+      label: `${dateLabel} · ${summary}`,
     };
   });
   const maxDuration = Math.max(1, ...weeklyCells.map((cell) => cell.duration));
@@ -94,9 +119,10 @@ function findHeatmapCell(target: EventTarget | null, container: HTMLElement) {
 }
 
 function DataHeatmapPanel({
+  title = UI_TEXT.data.activityHeatmap,
+  compact = false,
   selectedHeatmapView,
   selectedHeatmapViewKey,
-  selectedHeatmapViewLabel,
   rows,
   granularity,
   granularityOptions,
@@ -117,6 +143,9 @@ function DataHeatmapPanel({
   );
   const keyboardModel = useMemo(() => buildDataHeatmapKeyboardModel(rows), [rows]);
   const todayDateKey = formatLocalDateKey(new Date());
+  const selectedHeatmapViewLabel = selectedHeatmapView === "recent"
+    ? UI_TEXT.data.recentYear
+    : String(selectedHeatmapView);
   const initialActiveDate = resolveDataHeatmapActiveDate(
     keyboardModel,
     activeHeatmapDatesByViewRef.current.get(selectedHeatmapViewKey) ?? activeHeatmapDateRef.current,
@@ -235,13 +264,15 @@ function DataHeatmapPanel({
   }, [initialActiveDate, rememberActiveDate]);
 
   return (
-    <div className="qp-panel p-5 data-heatmap-panel">
+    <div className={`data-heatmap-panel ${compact ? "data-heatmap-panel-compact" : ""}`}>
       <div className="data-heatmap-panel-header">
         <div>
-          <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">{UI_TEXT.data.activityHeatmap}</h3>
-          <p className="mt-1 text-[11px] text-[var(--qp-text-tertiary)]">
-            {selectedHeatmapViewLabel} · {UI_TEXT.data.activityHeatmapHint}
-          </p>
+          <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">{title}</h3>
+          {!compact ? (
+            <p className="mt-1 text-[11px] text-[var(--qp-text-tertiary)]">
+              {selectedHeatmapViewLabel} · {UI_TEXT.data.activityHeatmapHint}
+            </p>
+          ) : null}
         </div>
         <div className="data-heatmap-header-actions">
           <QuietSegmentedFilter
@@ -286,7 +317,7 @@ function DataHeatmapPanel({
                 ref={heatmapWeeksRef}
                 className="data-heatmap-weeks"
                 role="grid"
-                aria-label={UI_TEXT.data.activityHeatmap}
+                aria-label={title}
                 aria-rowcount={HEATMAP_WEEKDAY_COUNT}
                 aria-colcount={rows.length}
                 onClick={handleHeatmapClick}
@@ -326,10 +357,12 @@ function DataHeatmapPanel({
                       const isKeyboardFocusable = !cell.isFuture && !cell.isOutsideYear;
                       const canOpenHistoryDate = !cell.isFuture
                         && !cell.isOutsideYear
+                        && cell.availability !== "unavailable"
                         && Boolean(onOpenHistoryDate);
-                      const tooltipLabel = granularity === "weekly"
+                      const baseTooltipLabel = granularity === "weekly"
                         ? weeklyCell?.label ?? cell.label
                         : cell.label;
+                      const tooltipLabel = baseTooltipLabel;
                       const isWeeklyFutureCell = granularity === "weekly"
                         && Boolean(weeklyCell?.isFuture);
                       const tooltipDisabled = granularity === "weekly"
@@ -355,7 +388,9 @@ function DataHeatmapPanel({
                             canOpenHistoryDate ? "data-heatmap-cell-openable" : ""
                           } ${
                             isDailyFutureCell || isWeeklyFutureCell ? "data-heatmap-cell-future" : ""
-                          } ${cell.isOutsideYear ? "data-heatmap-cell-outside" : ""}`}
+                          } ${cell.isOutsideYear ? "data-heatmap-cell-outside" : ""} ${
+                            cell.availability === "unavailable" ? "data-heatmap-cell-unavailable" : ""
+                          }`}
                           data-heatmap-tooltip={tooltipDisabled ? undefined : tooltipLabel}
                           data-heatmap-date={isKeyboardFocusable ? cell.date : undefined}
                           data-history-date={canOpenHistoryDate ? cell.date : undefined}
