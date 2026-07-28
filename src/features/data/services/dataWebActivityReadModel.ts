@@ -37,6 +37,7 @@ import {
   type ResolvedDataTrendRange,
 } from "./dataTrendRange.ts";
 import type { DataWebActivitySnapshotDependencies } from "./dataWebActivitySnapshotDependencies.ts";
+import { registerDataHeavyCacheClearer } from "./dataCacheLifecycle.ts";
 
 export interface DataWebDomainOption {
   normalizedDomain: string;
@@ -499,6 +500,8 @@ export function clearDataWebActivitySnapshotCache() {
   snapshotCache.clear();
   snapshotPromises.clear();
 }
+
+registerDataHeavyCacheClearer("web-activity-snapshot", clearDataWebActivitySnapshotCache);
 
 export function getDataWebActivitySnapshotCacheStats() {
   return {

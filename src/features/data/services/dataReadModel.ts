@@ -29,6 +29,7 @@ import {
   type HeatmapSelection,
 } from "./dataHeatmapReadModel.ts";
 import type { DataDestinationTrendSummary } from "./dataDestinationState.ts";
+import { registerDataHeavyCacheClearer } from "./dataCacheLifecycle.ts";
 
 export {
   buildActivityHeatmap,
@@ -754,6 +755,8 @@ export function clearDataReadModelCache() {
   heatmapSnapshotPromises.clear();
   earliestSessionStartTimeCache = undefined;
 }
+
+registerDataHeavyCacheClearer("heatmap-read-model", clearDataReadModelCache);
 
 export function getCachedEarliestSessionStartTime() {
   return earliestSessionStartTimeCache;

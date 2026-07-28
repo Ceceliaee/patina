@@ -6,6 +6,7 @@ import {
   type ResolvedDataTrendRange,
 } from "./dataTrendRange.ts";
 import { getCachedDataIconsForExecutables } from "./dataIconService.ts";
+import { registerDataHeavyCacheClearer } from "./dataCacheLifecycle.ts";
 
 export interface DataTrendSnapshot {
   fetchedAtMs: number;
@@ -74,6 +75,8 @@ export function clearDataTrendSnapshotCache(): void {
   snapshotCache.clear();
   sessionPromises.clear();
 }
+
+registerDataHeavyCacheClearer("trend-snapshot", clearDataTrendSnapshotCache);
 
 export async function loadDataTrendSnapshot(
   selection: DataTrendRangeSelection,

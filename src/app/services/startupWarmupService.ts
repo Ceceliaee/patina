@@ -5,9 +5,6 @@ import {
   getDashboardSnapshotCache,
 } from "../../features/dashboard/services/dashboardSnapshotCache.ts";
 import {
-  loadPersistedDataBootstrapSnapshot,
-} from "../../features/data/services/dataBootstrapSnapshot.ts";
-import {
   getHistorySnapshotCache,
 } from "../../features/history/services/historySnapshotCache.ts";
 import {
@@ -95,7 +92,7 @@ interface StartupWarmupDeps {
     nowMs?: number,
   ) => Promise<unknown>;
   loadHistoryRuntimeSnapshot: (date: Date, rollingDayCount?: number) => Promise<unknown>;
-  loadPersistedDataBootstrapSnapshot: typeof loadPersistedDataBootstrapSnapshot;
+  loadPersistedDataBootstrapSnapshot: () => Promise<unknown>;
   loadPersistedHistoryBootstrapSnapshot: typeof loadPersistedHistoryBootstrapSnapshot;
   preloadLazyViewChunk: (view: PreloadableView) => Promise<unknown>;
   prewarmClassificationBootstrapCache: () => Promise<unknown>;
@@ -155,7 +152,12 @@ const defaultStartupWarmupDeps: StartupWarmupDeps = {
   loadDashboardRuntimeSnapshot,
   loadDataTrendRuntimeSnapshot,
   loadHistoryRuntimeSnapshot,
-  loadPersistedDataBootstrapSnapshot,
+  loadPersistedDataBootstrapSnapshot: async () => {
+    const { loadPersistedDataBootstrapSnapshot } = await import(
+      "../../features/data/services/dataBootstrapSnapshot.ts"
+    );
+    return loadPersistedDataBootstrapSnapshot();
+  },
   loadPersistedHistoryBootstrapSnapshot,
   preloadLazyViewChunk,
   prewarmClassificationBootstrapCache,

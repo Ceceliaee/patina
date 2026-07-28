@@ -11,10 +11,7 @@ import {
 import {
   loadHistorySnapshotWithCache,
 } from "../../features/history/services/historySnapshotCache.ts";
-import {
-  loadDataTrendSnapshot,
-  type DataTrendSnapshot,
-} from "../../features/data/services/dataTrendSnapshot.ts";
+import type { DataTrendSnapshot } from "../../features/data/services/dataTrendSnapshot.ts";
 import type { DataTrendRangeSelection } from "../../features/data/services/dataTrendRange.ts";
 
 type DashboardRuntimeSnapshotDeps = {
@@ -51,11 +48,6 @@ const dashboardRuntimeSnapshotDeps: DashboardRuntimeSnapshotDeps = {
   ensureProcessMapperRuntimeReady,
   loadDashboardSnapshot,
   setDashboardSnapshotCache,
-};
-
-const dataTrendRuntimeSnapshotDeps: DataTrendRuntimeSnapshotDeps = {
-  ensureProcessMapperRuntimeReady,
-  loadDataTrendSnapshot,
 };
 
 export async function loadDashboardRuntimeSnapshotWithDeps(
@@ -120,7 +112,11 @@ export async function loadDataTrendRuntimeSnapshot(
   selection: DataTrendRangeSelection,
   nowMs: number = Date.now(),
 ): Promise<DataTrendSnapshot> {
-  return loadDataTrendRuntimeSnapshotWithDeps(selection, nowMs, dataTrendRuntimeSnapshotDeps);
+  await ensureProcessMapperRuntimeReady();
+  const { loadDataTrendSnapshot } = await import(
+    "../../features/data/services/dataTrendSnapshot.ts"
+  );
+  return loadDataTrendSnapshot(selection, nowMs);
 }
 
 export async function loadDataTrendRuntimeSnapshotWithDeps(

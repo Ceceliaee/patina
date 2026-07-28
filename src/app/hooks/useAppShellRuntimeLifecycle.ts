@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import { clearDataHeavyCaches } from "../../features/data/services/dataCacheLifecycle.ts";
-import { prewarmDataFirstScreen } from "../../features/data/services/dataFirstScreenPrewarm.ts";
 import { clearHistorySnapshotCache } from "../../features/history/services/historySnapshotCache.ts";
 import { clearToolsPageCaches } from "../../features/tools/services/toolsCacheLifecycle.ts";
 import { readCurrentWindowForegroundState } from "../../platform/desktop/windowControlGateway.ts";
@@ -118,11 +117,15 @@ export function useAppShellRuntimeLifecycle({
     const timer = window.setTimeout(() => {
       if (!classificationReady || !isForegroundReady) return;
 
-      void prewarmDataFirstScreen({
-        mappingVersion,
-        reason: "foreground-opened",
-        uiLanguage: uiTextLanguage,
-      });
+      void import("../../features/data/services/dataFirstScreenPrewarm.ts")
+        .then(({ prewarmDataFirstScreen }) => prewarmDataFirstScreen({
+          mappingVersion,
+          reason: "foreground-opened",
+          uiLanguage: uiTextLanguage,
+        }))
+        .catch((error: unknown) => {
+          console.warn("load Data first-screen prewarm owner failed", error);
+        });
     }, DATA_FOREGROUND_PREWARM_DELAY_MS);
 
     return () => {

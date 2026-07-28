@@ -1,14 +1,24 @@
-import { clearDataBootstrapSnapshot } from "./dataBootstrapSnapshot.ts";
-import { clearDataReadModelCache } from "./dataReadModel.ts";
-import { clearDataTrendSnapshotCache } from "./dataTrendSnapshot.ts";
-import { clearDataWebActivitySnapshotCache } from "./dataWebActivityReadModel.ts";
+export type DataHeavyCacheOwner =
+  | "heatmap-read-model"
+  | "trend-snapshot"
+  | "web-activity-snapshot";
+
+const heavyCacheClearers = new Map<DataHeavyCacheOwner, () => void>();
+
+export function registerDataHeavyCacheClearer(
+  owner: DataHeavyCacheOwner,
+  clear: () => void,
+): void {
+  heavyCacheClearers.set(owner, clear);
+}
 
 export function clearDataHeavyCaches(): void {
-  clearDataReadModelCache();
-  clearDataTrendSnapshotCache();
-  clearDataWebActivitySnapshotCache();
+  for (const clear of heavyCacheClearers.values()) {
+    clear();
+  }
 }
 
 export function clearDataBootstrapCache(): Promise<void> {
-  return clearDataBootstrapSnapshot();
+  return import("./dataBootstrapSnapshot.ts")
+    .then(({ clearDataBootstrapSnapshot }) => clearDataBootstrapSnapshot());
 }
