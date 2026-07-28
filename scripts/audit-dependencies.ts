@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 const MANIFEST = "src-tauri/Cargo.toml";
 const LOCKFILE = "src-tauri/Cargo.lock";
 const WINDOWS_TARGET = "x86_64-pc-windows-msvc";
+const OFFLINE = process.env.PATINA_DEPENDENCY_AUDIT_OFFLINE === "1";
 
 const LOCK_ONLY_ADVISORIES = [
   {
@@ -65,7 +66,9 @@ interface CargoAuditReport {
   };
 }
 
-const rustAudit = run("cargo", ["audit", "--file", LOCKFILE, "--json"], true);
+const rustAuditArgs = ["audit", "--file", LOCKFILE, "--json"];
+if (OFFLINE) rustAuditArgs.push("--no-fetch");
+const rustAudit = run("cargo", rustAuditArgs, true);
 if (rustAudit.status !== 0 && rustAudit.status !== 1) {
   if (rustAudit.stdout) console.error(rustAudit.stdout);
   if (rustAudit.stderr) console.error(rustAudit.stderr);
@@ -124,7 +127,9 @@ const npmExecutable = process.env.npm_execpath;
 if (!npmExecutable) {
   throw new Error("npm_execpath is unavailable; run this gate through npm run check:dependencies");
 }
-const npmAudit = run(process.execPath, [npmExecutable, "audit", "--audit-level=low"]);
+const npmAuditArgs = [npmExecutable, "audit", "--audit-level=low"];
+if (OFFLINE) npmAuditArgs.push("--offline");
+const npmAudit = run(process.execPath, npmAuditArgs);
 if (npmAudit.status !== 0) process.exit(npmAudit.status ?? 1);
 
-console.log("Dependency audit passed.");
+console.log(`Dependency audit passed${OFFLINE ? " in explicit offline mode" : ""}.`);

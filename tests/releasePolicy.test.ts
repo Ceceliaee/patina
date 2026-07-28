@@ -380,6 +380,13 @@ function testVersionFilesValidationRejectsInvalidVersion() {
   ]);
 }
 
+function testDependencyAuditKeepsOfflineModeExplicitAndNetworkFree() {
+  const source = readFileSync("scripts/audit-dependencies.ts", "utf8");
+  assert.match(source, /PATINA_DEPENDENCY_AUDIT_OFFLINE === "1"/);
+  assert.match(source, /if \(OFFLINE\) rustAuditArgs\.push\("--no-fetch"\)/);
+  assert.match(source, /if \(OFFLINE\) npmAuditArgs\.push\("--offline"\)/);
+}
+
 testSyncsCurrentCodeVersion();
 testSupportsPrereleaseVersion();
 testMissingPolicyVersionIsNull();
@@ -404,5 +411,6 @@ testVersionFilesValidationCatchesCargoMismatch();
 testVersionFilesValidationCatchesPolicyMismatch();
 testVersionFilesValidationCatchesMissingChangelogSection();
 testVersionFilesValidationRejectsInvalidVersion();
+testDependencyAuditKeepsOfflineModeExplicitAndNetworkFree();
 
-console.log("Passed 24 release policy tests");
+console.log("Passed 25 release policy tests");
