@@ -1573,6 +1573,27 @@ export async function runDataScenarios(
       }, sessionId);
       await waitForExpression(client!, sessionId, `window.innerWidth === ${width}`);
       await waitForAnimationFrames(client!, sessionId);
+      await waitForExpression(
+        client!,
+        sessionId,
+        `
+          (() => {
+            const sidebar = document
+              .querySelector(".data-app-panel .data-app-sidebar")
+              ?.getBoundingClientRect();
+            const list = document
+              .querySelector(".data-app-panel .data-app-trend-list")
+              ?.getBoundingClientRect();
+            return Boolean(
+              sidebar
+              && list
+              && Math.abs(sidebar.bottom - list.bottom - 24) <= 1
+            );
+          })()
+        `,
+        45_000,
+        `data destination sidebar final geometry at ${width}px`,
+      );
       layouts.push(JSON.parse(String(await evaluate(client!, sessionId, `
         (() => {
           const grid = document.querySelector(".data-dashboard-grid");
@@ -1643,9 +1664,13 @@ export async function runDataScenarios(
     assert.ok(layouts.every((layout) => !layout.overviewHeatmapHasSubtitle));
     assert.ok(layouts.every((layout) => layout.destinationHeatmapCells > 0));
     assert.ok(layouts.every((layout) => layout.destinationHeatmapTop > layout.destinationChartBottom));
+    const destinationSidebarGaps = layouts.map((layout) => ({
+      width: layout.width,
+      gap: layout.destinationSidebarBottom - layout.destinationListBottom,
+    }));
     assert.ok(layouts.every((layout) => (
       Math.abs(layout.destinationSidebarBottom - layout.destinationListBottom - 24) <= 1
-    )));
+    )), `destination sidebar footer gap must be 24px; observed ${JSON.stringify(destinationSidebarGaps)}`);
     assert.deepEqual(layouts.map((layout) => layout.pageOverflows), [false, false, false, false]);
     assert.ok(Math.abs(layouts[0].firstTop - layouts[0].secondTop) <= 1);
     assert.ok(layouts[0].secondLeft > layouts[0].firstLeft);
