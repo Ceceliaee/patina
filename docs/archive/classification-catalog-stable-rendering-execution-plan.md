@@ -1,8 +1,8 @@
 # 分类目录稳定首屏与原子刷新执行方案
 
-> 文档类型：How-to / 结构性执行方案  
-> 目标读者：Patina 维护者与实际执行本方案的代码代理  
-> 当前状态：已完成实现、验证与对抗式审查，归档于 2026-07-29  
+> 文档类型：How-to / 结构性执行方案
+> 目标读者：Patina 维护者与实际执行本方案的代码代理
+> 当前状态：已完成实现、验证与对抗式审查，归档于 2026-07-29
 > 长期依据：`product-principles-and-scope.md`、`roadmap-and-prioritization.md`、`engineering-quality.md`、`quiet-pro-component-guidelines.md`、`architecture.md`、`issue-fix-boundary-guardrails.md`
 
 ## 0. 完成与归档记录
