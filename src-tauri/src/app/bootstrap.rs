@@ -71,6 +71,7 @@ fn register_managed_state_and_plugins(
         .manage(TrackingRuntimeSnapshotState::default())
         .manage(TrackingPauseRuntimeState::default())
         .manage(TitleRecordingRuntimeState::default())
+        .manage(tray::TrayMenuLanguageState::default())
         .manage(runtime_health)
         .manage(ToolsRuntimeState::default())
         .manage(ToolsRuntimeWakeState::default())

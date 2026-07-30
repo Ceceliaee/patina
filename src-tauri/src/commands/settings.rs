@@ -48,6 +48,14 @@ impl From<ClassificationSettingMutationDto> for ClassificationSettingMutation {
     }
 }
 
+fn last_app_setting_value<'a>(mutations: &'a [AppSettingMutation], key: &str) -> Option<&'a str> {
+    mutations
+        .iter()
+        .rev()
+        .find(|mutation| mutation.key == key)
+        .map(|mutation| mutation.value.as_str())
+}
+
 #[tauri::command]
 pub fn cmd_set_desktop_behavior(
     close_behavior: String,
@@ -97,16 +105,11 @@ pub async fn cmd_commit_app_settings(
         .into_iter()
         .map(AppSettingMutation::from)
         .collect::<Vec<_>>();
-    let tracking_pause_setting = mutations
-        .iter()
-        .rev()
-        .find(|mutation| mutation.key == "tracking_paused")
-        .map(|mutation| parse_boolean_setting(&mutation.value, false));
-    let title_recording_setting = mutations
-        .iter()
-        .rev()
-        .find(|mutation| mutation.key == "title_recording_enabled")
-        .map(|mutation| parse_boolean_setting(&mutation.value, true));
+    let tracking_pause_setting = last_app_setting_value(&mutations, "tracking_paused")
+        .map(|value| parse_boolean_setting(value, false));
+    let title_recording_setting = last_app_setting_value(&mutations, "title_recording_enabled")
+        .map(|value| parse_boolean_setting(value, true));
+    let language_setting = last_app_setting_value(&mutations, "language").map(str::to_owned);
     let title_state = app.state::<TitleRecordingRuntimeState>();
     let _title_update_guard = if title_recording_setting.is_some() {
         Some(title_state.lock_update().await)
@@ -128,6 +131,10 @@ pub async fn cmd_commit_app_settings(
     if let Some(enabled) = title_recording_setting {
         tray::apply_title_recording_setting_change(&app, enabled)
             .await
+            .map_err(|error| CommandErrorDto::new("SETTINGS_APPLY_FAILED", error, false))?;
+    }
+    if let Some(language) = language_setting {
+        tray::apply_language_setting_change(&app, &language)
             .map_err(|error| CommandErrorDto::new("SETTINGS_APPLY_FAILED", error, false))?;
     }
     app.emit("app-settings-changed", json!({}))
@@ -157,4 +164,39 @@ pub async fn cmd_commit_classification_settings(
     crate::app::classification::apply_recording_policy_changes(&app, &outcome)
         .await
         .map_err(|error| CommandErrorDto::new("CLASSIFICATION_APPLY_FAILED", error, false))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn last_app_setting_value_uses_the_last_matching_mutation() {
+        let single = vec![AppSettingMutation {
+            key: "language".to_string(),
+            value: "zh-CN".to_string(),
+        }];
+        assert_eq!(last_app_setting_value(&single, "language"), Some("zh-CN"));
+
+        let mutations = vec![
+            AppSettingMutation {
+                key: "language".to_string(),
+                value: "zh-CN".to_string(),
+            },
+            AppSettingMutation {
+                key: "theme_mode".to_string(),
+                value: "dark".to_string(),
+            },
+            AppSettingMutation {
+                key: "language".to_string(),
+                value: "en-US".to_string(),
+            },
+        ];
+
+        assert_eq!(
+            last_app_setting_value(&mutations, "language"),
+            Some("en-US")
+        );
+        assert_eq!(last_app_setting_value(&mutations, "missing"), None);
+    }
 }

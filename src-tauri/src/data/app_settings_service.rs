@@ -65,6 +65,15 @@ pub async fn load_desktop_behavior_settings<R: Runtime>(
         .map_err(|error| format!("failed to load desktop behavior settings: {error}"))
 }
 
+pub async fn load_language_setting<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<Option<String>, String> {
+    let pool = wait_for_sqlite_pool(app).await?;
+    app_settings::load_language_setting(&pool)
+        .await
+        .map_err(|error| format!("failed to load language setting: {error}"))
+}
+
 pub async fn load_web_activity_settings<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<WebActivitySettings, String> {

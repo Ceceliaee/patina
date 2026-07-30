@@ -9,6 +9,7 @@ use crate::engine::tracking::{
     pause_state::TrackingPauseRuntimeState, runtime as tracking_runtime,
     title_state::TitleRecordingRuntimeState,
 };
+use std::sync::{Mutex, MutexGuard};
 use tauri::{
     menu::{Menu, MenuEvent, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -21,26 +22,106 @@ const TRAY_MENU_SHOW_ID: &str = "tray-show-main";
 const TRAY_MENU_TOGGLE_PAUSE_ID: &str = "tray-toggle-pause";
 const TRAY_MENU_TOGGLE_TITLE_ID: &str = "tray-toggle-title-recording";
 const TRAY_MENU_QUIT_ID: &str = "tray-quit";
-const TRAY_MENU_SHOW_LABEL: &str = "打开主界面";
-const TRAY_MENU_PAUSE_LABEL: &str = "暂停追踪";
-const TRAY_MENU_RESUME_LABEL: &str = "恢复追踪";
-const TRAY_MENU_QUIT_LABEL: &str = "退出应用";
-const TRAY_MENU_DISABLE_TITLE_LABEL: &str = "屏蔽标题";
-const TRAY_MENU_ENABLE_TITLE_LABEL: &str = "记录标题";
+const TRAY_MENU_SHOW_LABEL_ZH_CN: &str = "打开主界面";
+const TRAY_MENU_PAUSE_LABEL_ZH_CN: &str = "暂停追踪";
+const TRAY_MENU_RESUME_LABEL_ZH_CN: &str = "恢复追踪";
+const TRAY_MENU_QUIT_LABEL_ZH_CN: &str = "退出应用";
+const TRAY_MENU_DISABLE_TITLE_LABEL_ZH_CN: &str = "屏蔽标题";
+const TRAY_MENU_ENABLE_TITLE_LABEL_ZH_CN: &str = "记录标题";
+const TRAY_MENU_SHOW_LABEL_EN_US: &str = "Open main window";
+const TRAY_MENU_PAUSE_LABEL_EN_US: &str = "Pause tracking";
+const TRAY_MENU_RESUME_LABEL_EN_US: &str = "Resume tracking";
+const TRAY_MENU_QUIT_LABEL_EN_US: &str = "Exit Patina";
+const TRAY_MENU_DISABLE_TITLE_LABEL_EN_US: &str = "Block titles";
+const TRAY_MENU_ENABLE_TITLE_LABEL_EN_US: &str = "Record titles";
 
-fn title_recording_menu_label(enabled: bool) -> &'static str {
-    if enabled {
-        TRAY_MENU_DISABLE_TITLE_LABEL
-    } else {
-        TRAY_MENU_ENABLE_TITLE_LABEL
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum TrayLanguage {
+    #[default]
+    ZhCn,
+    EnUs,
+}
+
+impl TrayLanguage {
+    fn from_setting(raw: Option<&str>) -> Self {
+        match raw.map(str::trim) {
+            Some(value) if value.eq_ignore_ascii_case("en-US") => Self::EnUs,
+            _ => Self::ZhCn,
+        }
     }
 }
 
-fn tracking_pause_menu_label(tracking_paused: bool) -> &'static str {
-    if tracking_paused {
-        TRAY_MENU_RESUME_LABEL
-    } else {
-        TRAY_MENU_PAUSE_LABEL
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct TrayMenuLabels {
+    show_main: &'static str,
+    toggle_pause: &'static str,
+    toggle_title: &'static str,
+    quit: &'static str,
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct TrayMenuLanguageState {
+    inner: Mutex<TrayLanguage>,
+    rebuild: Mutex<()>,
+}
+
+impl TrayMenuLanguageState {
+    fn snapshot(&self) -> TrayLanguage {
+        match self.inner.lock() {
+            Ok(guard) => *guard,
+            Err(poisoned) => *poisoned.into_inner(),
+        }
+    }
+
+    fn set(&self, language: TrayLanguage) {
+        match self.inner.lock() {
+            Ok(mut guard) => *guard = language,
+            Err(poisoned) => *poisoned.into_inner() = language,
+        }
+    }
+
+    fn lock_rebuild(&self) -> MutexGuard<'_, ()> {
+        match self.rebuild.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        }
+    }
+}
+
+fn tray_menu_labels(
+    language: TrayLanguage,
+    tracking_paused: bool,
+    title_enabled: bool,
+) -> TrayMenuLabels {
+    match language {
+        TrayLanguage::ZhCn => TrayMenuLabels {
+            show_main: TRAY_MENU_SHOW_LABEL_ZH_CN,
+            toggle_pause: if tracking_paused {
+                TRAY_MENU_RESUME_LABEL_ZH_CN
+            } else {
+                TRAY_MENU_PAUSE_LABEL_ZH_CN
+            },
+            toggle_title: if title_enabled {
+                TRAY_MENU_DISABLE_TITLE_LABEL_ZH_CN
+            } else {
+                TRAY_MENU_ENABLE_TITLE_LABEL_ZH_CN
+            },
+            quit: TRAY_MENU_QUIT_LABEL_ZH_CN,
+        },
+        TrayLanguage::EnUs => TrayMenuLabels {
+            show_main: TRAY_MENU_SHOW_LABEL_EN_US,
+            toggle_pause: if tracking_paused {
+                TRAY_MENU_RESUME_LABEL_EN_US
+            } else {
+                TRAY_MENU_PAUSE_LABEL_EN_US
+            },
+            toggle_title: if title_enabled {
+                TRAY_MENU_DISABLE_TITLE_LABEL_EN_US
+            } else {
+                TRAY_MENU_ENABLE_TITLE_LABEL_EN_US
+            },
+            quit: TRAY_MENU_QUIT_LABEL_EN_US,
+        },
     }
 }
 
@@ -101,7 +182,7 @@ pub(crate) fn apply_tracking_pause_setting_change<R: Runtime>(
     reason: &'static str,
 ) -> Result<(), String> {
     update_tracking_pause_runtime_state(app, tracking_paused);
-    if let Err(error) = apply_tracking_pause_menu_label(app, tracking_paused) {
+    if let Err(error) = rebuild_tray_menu(app) {
         eprintln!("[tray] failed to update tracking pause menu label: {error}");
     }
     tracking_runtime::emit_tracking_data_changed(app, reason, now_ms())
@@ -118,22 +199,6 @@ fn update_tracking_pause_runtime_state<R: Runtime>(app: &AppHandle<R>, tracking_
     if let Some(state) = app.try_state::<TrackingPauseRuntimeState>() {
         state.set_after_write(tracking_paused, now_ms() as i64);
     }
-}
-
-fn apply_tracking_pause_menu_label<R: Runtime>(
-    app: &AppHandle<R>,
-    tracking_paused: bool,
-) -> tauri::Result<()> {
-    if let Some(tray) = app.tray_by_id(TRAY_ID) {
-        let title_enabled = app
-            .try_state::<TitleRecordingRuntimeState>()
-            .map(|state| state.is_enabled())
-            .unwrap_or(true);
-        let menu = build_tray_menu(app, tracking_paused, title_enabled)?;
-        tray.set_menu(Some(menu))?;
-    }
-
-    Ok(())
 }
 
 pub(crate) async fn toggle_title_recording<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
@@ -172,17 +237,8 @@ pub(crate) async fn apply_title_recording_setting_change<R: Runtime>(
     {
         eprintln!("[tray] failed to seal web title boundary: {error}");
     }
-    let tracking_paused = app
-        .try_state::<TrackingPauseRuntimeState>()
-        .and_then(|state| state.snapshot())
-        .map(|snapshot| snapshot.tracking_paused)
-        .unwrap_or(false);
-    if let Some(tray) = app.tray_by_id(TRAY_ID) {
-        let menu = build_tray_menu(app, tracking_paused, enabled)
-            .map_err(|error| format!("failed to build title recording menu: {error}"))?;
-        tray.set_menu(Some(menu))
-            .map_err(|error| format!("failed to update title recording menu: {error}"))?;
-    }
+    rebuild_tray_menu(app)
+        .map_err(|error| format!("failed to update title recording menu: {error}"))?;
     if let Err(error) = tracking_runtime::emit_tracking_data_changed(
         app,
         if enabled {
@@ -198,6 +254,18 @@ pub(crate) async fn apply_title_recording_setting_change<R: Runtime>(
         eprintln!("[tray] failed to emit settings refresh event: {error}");
     }
     Ok(())
+}
+
+pub(crate) fn apply_language_setting_change<R: Runtime>(
+    app: &AppHandle<R>,
+    raw_language: &str,
+) -> Result<(), String> {
+    let language = TrayLanguage::from_setting(Some(raw_language));
+    let state = app
+        .try_state::<TrayMenuLanguageState>()
+        .ok_or_else(|| "tray menu language state is unavailable".to_string())?;
+    state.set(language);
+    rebuild_tray_menu(app).map_err(|error| format!("failed to update tray language: {error}"))
 }
 
 pub(crate) fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
@@ -286,6 +354,17 @@ pub(crate) fn handle_window_event<R: Runtime>(window: &Window<R>, event: &Window
 }
 
 pub(crate) fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+    let language_raw =
+        tauri::async_runtime::block_on(app_settings_service::load_language_setting(app))
+            .unwrap_or_else(|error| {
+                eprintln!("[tray] failed to initialize tray menu language: {error}");
+                None
+            });
+    let language = TrayLanguage::from_setting(language_raw.as_deref());
+    if let Some(state) = app.try_state::<TrayMenuLanguageState>() {
+        state.set(language);
+    }
+
     let tracking_paused =
         tauri::async_runtime::block_on(tracking_pause_service::load_tracking_pause_setting(app))
             .unwrap_or_else(|error| {
@@ -304,7 +383,7 @@ pub(crate) fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         state.set_enabled(title_enabled);
     }
 
-    let menu = build_tray_menu(app, tracking_paused, title_enabled)?;
+    let menu = build_tray_menu(app, language, tracking_paused, title_enabled)?;
 
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
@@ -321,34 +400,25 @@ pub(crate) fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 
 fn build_tray_menu<R: Runtime>(
     app: &AppHandle<R>,
+    language: TrayLanguage,
     tracking_paused: bool,
     title_enabled: bool,
 ) -> tauri::Result<Menu<R>> {
-    let open_item = MenuItem::with_id(
-        app,
-        TRAY_MENU_SHOW_ID,
-        TRAY_MENU_SHOW_LABEL,
-        true,
-        None::<&str>,
-    )?;
+    let labels = tray_menu_labels(language, tracking_paused, title_enabled);
+    let open_item =
+        MenuItem::with_id(app, TRAY_MENU_SHOW_ID, labels.show_main, true, None::<&str>)?;
     let toggle_pause_item = MenuItem::with_id(
         app,
         TRAY_MENU_TOGGLE_PAUSE_ID,
-        tracking_pause_menu_label(tracking_paused),
+        labels.toggle_pause,
         true,
         None::<&str>,
     )?;
-    let quit_item = MenuItem::with_id(
-        app,
-        TRAY_MENU_QUIT_ID,
-        TRAY_MENU_QUIT_LABEL,
-        true,
-        None::<&str>,
-    )?;
+    let quit_item = MenuItem::with_id(app, TRAY_MENU_QUIT_ID, labels.quit, true, None::<&str>)?;
     let toggle_title_item = MenuItem::with_id(
         app,
         TRAY_MENU_TOGGLE_TITLE_ID,
-        title_recording_menu_label(title_enabled),
+        labels.toggle_title,
         true,
         None::<&str>,
     )?;
@@ -363,20 +433,144 @@ fn build_tray_menu<R: Runtime>(
     )
 }
 
+fn rebuild_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+    let language_state = app.try_state::<TrayMenuLanguageState>();
+    // Runtime setting commands and tray clicks can overlap. Serializing the full
+    // snapshot/build/set sequence prevents an older rebuild from winning last.
+    let _rebuild_guard = language_state.as_ref().map(|state| state.lock_rebuild());
+    let language = language_state
+        .as_ref()
+        .map(|state| state.snapshot())
+        .unwrap_or_default();
+    let tracking_paused = app
+        .try_state::<TrackingPauseRuntimeState>()
+        .and_then(|state| state.snapshot())
+        .map(|snapshot| snapshot.tracking_paused)
+        .unwrap_or(false);
+    let title_enabled = app
+        .try_state::<TitleRecordingRuntimeState>()
+        .map(|state| state.is_enabled())
+        .unwrap_or(true);
+
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        tray.set_menu(Some(build_tray_menu(
+            app,
+            language,
+            tracking_paused,
+            title_enabled,
+        )?))?;
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn tracking_pause_menu_label_matches_next_available_action() {
-        assert_eq!(tracking_pause_menu_label(false), "暂停追踪");
-        assert_eq!(tracking_pause_menu_label(true), "恢复追踪");
+    fn tray_language_normalization_matches_frontend_fallback_contract() {
+        assert_eq!(TrayLanguage::from_setting(None), TrayLanguage::ZhCn);
+        assert_eq!(
+            TrayLanguage::from_setting(Some(" zh-CN ")),
+            TrayLanguage::ZhCn
+        );
+        assert_eq!(
+            TrayLanguage::from_setting(Some(" en-us ")),
+            TrayLanguage::EnUs
+        );
+        assert_eq!(
+            TrayLanguage::from_setting(Some("fr-FR")),
+            TrayLanguage::ZhCn
+        );
+        assert_eq!(TrayLanguage::from_setting(Some("")), TrayLanguage::ZhCn);
     }
 
     #[test]
-    fn title_recording_menu_label_matches_next_available_action() {
-        assert_eq!(title_recording_menu_label(true), "屏蔽标题");
-        assert_eq!(title_recording_menu_label(false), "记录标题");
+    fn tray_menu_labels_cover_every_language_and_dynamic_state_combination() {
+        let cases = [
+            (
+                TrayLanguage::ZhCn,
+                false,
+                true,
+                ["打开主界面", "暂停追踪", "屏蔽标题", "退出应用"],
+            ),
+            (
+                TrayLanguage::ZhCn,
+                true,
+                true,
+                ["打开主界面", "恢复追踪", "屏蔽标题", "退出应用"],
+            ),
+            (
+                TrayLanguage::ZhCn,
+                false,
+                false,
+                ["打开主界面", "暂停追踪", "记录标题", "退出应用"],
+            ),
+            (
+                TrayLanguage::ZhCn,
+                true,
+                false,
+                ["打开主界面", "恢复追踪", "记录标题", "退出应用"],
+            ),
+            (
+                TrayLanguage::EnUs,
+                false,
+                true,
+                [
+                    "Open main window",
+                    "Pause tracking",
+                    "Block titles",
+                    "Exit Patina",
+                ],
+            ),
+            (
+                TrayLanguage::EnUs,
+                true,
+                true,
+                [
+                    "Open main window",
+                    "Resume tracking",
+                    "Block titles",
+                    "Exit Patina",
+                ],
+            ),
+            (
+                TrayLanguage::EnUs,
+                false,
+                false,
+                [
+                    "Open main window",
+                    "Pause tracking",
+                    "Record titles",
+                    "Exit Patina",
+                ],
+            ),
+            (
+                TrayLanguage::EnUs,
+                true,
+                false,
+                [
+                    "Open main window",
+                    "Resume tracking",
+                    "Record titles",
+                    "Exit Patina",
+                ],
+            ),
+        ];
+
+        for (language, tracking_paused, title_enabled, expected) in cases {
+            let labels = tray_menu_labels(language, tracking_paused, title_enabled);
+            assert_eq!(
+                [
+                    labels.show_main,
+                    labels.toggle_pause,
+                    labels.toggle_title,
+                    labels.quit,
+                ],
+                expected
+            );
+        }
     }
 
     #[test]

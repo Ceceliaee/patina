@@ -10,6 +10,7 @@ const MINIMIZE_BEHAVIOR_KEY: &str = "minimize_behavior";
 const LAUNCH_AT_LOGIN_KEY: &str = "launch_at_login";
 const START_MINIMIZED_KEY: &str = "start_minimized";
 const BACKGROUND_OPTIMIZATION_KEY: &str = "background_optimization";
+const LANGUAGE_KEY: &str = "language";
 const WEB_ACTIVITY_ENABLED_KEY: &str = "web_activity_enabled";
 const WEB_ACTIVITY_PORT_KEY: &str = "web_activity_port";
 const WEB_ACTIVITY_TOKEN_KEY: &str = "web_activity_token";
@@ -72,6 +73,15 @@ pub async fn load_desktop_behavior_settings(
         start_minimized_raw.as_deref(),
         background_optimization_raw.as_deref(),
     ))
+}
+
+pub async fn load_language_setting(pool: &Pool<Sqlite>) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query("SELECT value FROM settings WHERE key = ? LIMIT 1")
+        .bind(LANGUAGE_KEY)
+        .fetch_optional(pool)
+        .await?
+        .map(|row| row.try_get::<String, _>("value"))
+        .transpose()
 }
 
 pub async fn commit_app_setting_mutations(
@@ -360,6 +370,32 @@ mod tests {
 
             let settings = load_desktop_behavior_settings(&pool).await.unwrap();
             assert!(settings.should_optimize_background_resources());
+        });
+    }
+
+    #[test]
+    fn language_setting_loads_raw_saved_value_and_preserves_missing_state() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+
+            assert_eq!(load_language_setting(&pool).await.unwrap(), None);
+
+            for raw_value in ["zh-CN", "en-US", "future-language"] {
+                commit_app_setting_mutations(
+                    &pool,
+                    &[AppSettingMutation {
+                        key: "language".to_string(),
+                        value: raw_value.to_string(),
+                    }],
+                )
+                .await
+                .unwrap();
+
+                assert_eq!(
+                    load_language_setting(&pool).await.unwrap(),
+                    Some(raw_value.to_string())
+                );
+            }
         });
     }
 

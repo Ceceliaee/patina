@@ -978,6 +978,41 @@ try {
   })`);
   assert.deepEqual(rows, [{ value: "77" }]);
 
+  await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
+    mutations: [
+      { key: "language", value: "zh-CN" },
+      { key: "tracking_paused", value: "1" },
+      { key: "title_recording_enabled", value: "0" },
+      { key: "language", value: "en-US" },
+    ],
+  })`);
+  const englishTraySettingRows = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
+    db: "sqlite:patina.db",
+    query: "SELECT key, value FROM settings WHERE key IN (?, ?, ?) ORDER BY key",
+    values: ["language", "tracking_paused", "title_recording_enabled"],
+  })`);
+  assert.deepEqual(englishTraySettingRows, [
+    { key: "language", value: "en-US" },
+    { key: "title_recording_enabled", value: "0" },
+    { key: "tracking_paused", value: "1" },
+  ]);
+  await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
+    mutations: [
+      { key: "language", value: "zh-CN" },
+      { key: "tracking_paused", value: "0" },
+      { key: "title_recording_enabled", value: "1" },
+    ],
+  })`);
+  const restoredTraySettingRows = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
+    db: "sqlite:patina.db",
+    query: "SELECT key, value FROM settings WHERE key IN (?, ?, ?) ORDER BY key",
+    values: ["language", "tracking_paused", "title_recording_enabled"],
+  })`);
+  assert.deepEqual(restoredTraySettingRows, [
+    { key: "language", value: "zh-CN" },
+    { key: "title_recording_enabled", value: "1" },
+    { key: "tracking_paused", value: "0" },
+  ]);
   const widgetPlacementRows = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
     db: "sqlite:patina.db",
     query: "SELECT key, value FROM settings WHERE key IN (?, ?, ?) ORDER BY key",
