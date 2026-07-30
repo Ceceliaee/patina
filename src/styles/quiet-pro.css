@@ -891,7 +891,7 @@
 
 .data-heatmap-panel-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
@@ -932,7 +932,7 @@
 }
 
 .data-trend-chart {
-  height: 168px;
+  height: 214px;
 }
 
 .data-chart-placeholder {
@@ -949,19 +949,13 @@
   -webkit-user-select: none;
 }
 
-@media (min-width: 1536px) and (min-height: 900px) {
-  .data-trend-chart {
-    height: 214px;
-  }
-}
-
 .data-app-panel {
   min-width: 0;
 }
 
 .data-app-panel-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
@@ -1004,10 +998,6 @@
   height: 20px;
   width: 20px;
   object-fit: contain;
-}
-
-.data-app-selected-status-empty {
-  visibility: hidden;
 }
 
 .data-app-loading {
@@ -1274,7 +1264,7 @@
   .data-dashboard-grid {
     grid-template-columns: minmax(0, var(--data-reference-panel-width)) minmax(420px, 1fr);
     grid-template-areas: "overview destination";
-    align-items: stretch;
+    align-items: start;
   }
 
   .data-dashboard-grid > .data-overview {
@@ -1283,7 +1273,7 @@
 
   .data-dashboard-grid > .data-app-panel {
     grid-area: destination;
-    align-self: stretch;
+    align-self: start;
   }
 
   .data-app-grid {
@@ -1301,6 +1291,12 @@
 
   .data-app-list.data-app-trend-list {
     max-height: none;
+  }
+}
+
+@media (min-width: 1900px) and (min-height: 900px) {
+  .data-dashboard-grid > .data-overview .data-trend-chart {
+    height: 257px;
   }
 }
 
@@ -1556,6 +1552,7 @@
 @media (max-width: 720px) {
   .data-heatmap-panel-header,
   .data-app-panel-header {
+    align-items: stretch;
     flex-direction: column;
   }
 

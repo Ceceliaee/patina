@@ -212,9 +212,9 @@ export async function runDataScenarios(
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const control = document.querySelector(".data-trend-range-trigger")?.parentElement;
-          const reset = control?.querySelector("button:last-of-type");
-          if (!reset || reset.getAttribute("aria-label") !== "恢复近 7 天") return false;
+          const reset = document.querySelector(".data-trend-range-reset");
+          if (!(reset instanceof HTMLButtonElement)
+            || reset.getAttribute("aria-label") !== "恢复近 7 天") return false;
           reset.click();
           return true;
         })()
@@ -245,7 +245,7 @@ export async function runDataScenarios(
       `),
       true,
     );
-    await waitForExpression(client!, sessionId, `document.querySelector('.data-trend-range-trigger[aria-expanded="true"]')?.textContent?.trim() === "一周"`);
+    await waitForExpression(client!, sessionId, `document.querySelector('.data-trend-range-trigger[aria-expanded="true"]')?.textContent?.trim() === "周"`);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
@@ -259,7 +259,7 @@ export async function runDataScenarios(
       `),
       true,
     );
-    await waitForExpression(client!, sessionId, `/^\\d+周$/.test(document.querySelector('.data-trend-range-trigger[aria-expanded="true"]')?.textContent?.trim() ?? "")`);
+    await waitForExpression(client!, sessionId, `/^第 \\d+ 周$/.test(document.querySelector('.data-trend-range-trigger[aria-expanded="true"]')?.textContent?.trim() ?? "")`);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
@@ -271,7 +271,7 @@ export async function runDataScenarios(
       `),
       true,
     );
-    await waitForExpression(client!, sessionId, `document.querySelector('.data-trend-range-trigger[aria-expanded="true"]')?.textContent?.trim() === "一月"`);
+    await waitForExpression(client!, sessionId, `document.querySelector('.data-trend-range-trigger[aria-expanded="true"]')?.textContent?.trim() === "月"`);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
@@ -297,7 +297,7 @@ export async function runDataScenarios(
       `),
       true,
     );
-    await waitForExpression(client!, sessionId, `document.querySelector('.data-trend-range-trigger[aria-expanded="true"]')?.textContent?.trim() === "一年"`);
+    await waitForExpression(client!, sessionId, `document.querySelector('.data-trend-range-trigger[aria-expanded="true"]')?.textContent?.trim() === "年"`);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
@@ -320,6 +320,112 @@ export async function runDataScenarios(
       `document.activeElement?.classList.contains('data-trend-range-trigger')`,
       undefined,
       "range picker trigger focus restoration",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const trigger = document.querySelector(".data-trend-range-trigger");
+          if (!(trigger instanceof HTMLButtonElement)) return false;
+          trigger.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('[aria-label="下一个范围模式"]'))`,
+    );
+    await evaluate(
+      client!,
+      sessionId,
+      `document.querySelector('[aria-label="下一个范围模式"]')?.click()`,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector('.data-trend-range-trigger[aria-expanded="true"]')?.textContent?.trim() === "周"`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const date = new Date();
+          const key = [
+            date.getFullYear(),
+            String(date.getMonth() + 1).padStart(2, "0"),
+            String(date.getDate()).padStart(2, "0"),
+          ].join("-");
+          const day = document.querySelector('[data-range-picker-date="' + key + '"]');
+          if (!(day instanceof HTMLButtonElement)) return false;
+          day.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `/^第 \\d+ 周$/.test(document.querySelector('.data-trend-range-trigger[aria-expanded="true"]')?.textContent?.trim() ?? "")`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const apply = Array.from(document.querySelectorAll(".qp-range-picker-footer button"))
+            .find((node) => node.textContent?.trim() === "确定");
+          if (!(apply instanceof HTMLButtonElement) || apply.disabled) return false;
+          apply.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `/^第 \\d+ 周$/.test(document.querySelector(".data-trend-range-trigger")?.textContent?.trim() ?? "")
+        && Boolean(document.querySelector(".data-trend-range-reset"))`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const control = document.querySelector(".data-trend-period-control");
+          const previous = control?.querySelector('[aria-label="切到更早范围"]');
+          const next = control?.querySelector('[aria-label="切到较新范围"]');
+          if (!(previous instanceof HTMLButtonElement)
+            || !(next instanceof HTMLButtonElement)
+            || !next.disabled) return false;
+          previous.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `(() => {
+        const next = document.querySelector('.data-trend-period-control [aria-label="切到较新范围"]');
+        return next instanceof HTMLButtonElement && !next.disabled;
+      })()`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const reset = document.querySelector(".data-trend-range-reset");
+          if (!(reset instanceof HTMLButtonElement)) return false;
+          reset.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-trend-range-trigger")?.textContent?.trim() === "近 7 天"
+        && !document.querySelector(".data-trend-range-reset")`,
     );
     assert.equal(
       await evaluate(client!, sessionId, `
@@ -364,16 +470,100 @@ export async function runDataScenarios(
     await waitForExpression(client!, sessionId, `document.querySelectorAll(".data-trend-range-trigger")[1]?.textContent?.trim() === "1天"`);
   });
 
+  await runTest("monthly data trend axes show every month", async () => {
+    await evaluate(client!, sessionId, `
+      document.querySelector(".data-app-panel .data-trend-range-reset")?.click()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Array.from(document.querySelectorAll(".data-trend-range-trigger"))
+        .every((trigger) => trigger.textContent?.trim() === "近 7 天")`,
+    );
+
+    for (const panelSelector of [".data-overview", ".data-app-panel"]) {
+      for (const expectedLabel of ["近 30 天", "近一年"]) {
+        assert.equal(
+          await evaluate(client!, sessionId, `
+            (() => {
+              const panel = document.querySelector(${jsonString(panelSelector)});
+              const next = panel?.querySelector(
+                ".data-trend-range-control .qp-range-control-arrow:last-child",
+              );
+              if (!(next instanceof HTMLButtonElement) || next.disabled) return false;
+              next.click();
+              return true;
+            })()
+          `),
+          true,
+        );
+        await waitForExpression(
+          client!,
+          sessionId,
+          `document.querySelector(${jsonString(panelSelector)})
+            ?.querySelector(".data-trend-range-trigger")
+            ?.textContent?.trim() === ${jsonString(expectedLabel)}`,
+        );
+      }
+    }
+
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll(".data-overview .qp-native-trend-x-tick").length === 12
+        && document.querySelectorAll(".data-app-panel .qp-native-trend-x-tick").length === 12`,
+      45_000,
+      "all twelve monthly trend ticks",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        [".data-overview", ".data-app-panel"].every((panelSelector) => {
+          const labels = Array.from(document.querySelectorAll(
+            panelSelector + " .qp-native-trend-x-tick text",
+          )).map((node) => node.textContent?.trim() ?? "");
+          return labels.length === 12
+            && new Set(labels).size === 12
+            && labels.every((label) => /^\\d{1,2}月$/.test(label));
+        })
+      `),
+      true,
+      "activity and destination trends should render all twelve month labels",
+    );
+
+    for (const panelSelector of [".data-overview", ".data-app-panel"]) {
+      for (const expectedLabel of ["近 30 天", "近 7 天"]) {
+        assert.equal(
+          await evaluate(client!, sessionId, `
+            (() => {
+              const panel = document.querySelector(${jsonString(panelSelector)});
+              const previous = panel?.querySelector(
+                ".data-trend-range-control .qp-range-control-arrow:first-child",
+              );
+              if (!(previous instanceof HTMLButtonElement) || previous.disabled) return false;
+              previous.click();
+              return true;
+            })()
+          `),
+          true,
+        );
+        await waitForExpression(
+          client!,
+          sessionId,
+          `document.querySelector(${jsonString(panelSelector)})
+            ?.querySelector(".data-trend-range-trigger")
+            ?.textContent?.trim() === ${jsonString(expectedLabel)}`,
+        );
+      }
+    }
+  });
+
   await runTest("data web trends keep their geometry and content through slow refreshes", async () => {
     await evaluate(client!, sessionId, `
       (() => {
         globalThis.__PATINA_INVOKED_COMMANDS = [];
         globalThis.__PATINA_WEB_ACTIVITY_QUERY_DELAY_MS = 800;
         globalThis.__PATINA_WEB_ACTIVITY_QUERY_FAILURE = false;
-        const next = document.querySelector(
-          ".data-app-panel .data-trend-range-control .qp-range-control-arrow:last-child",
-        );
-        next?.click();
+        document.querySelector(".data-app-panel .data-trend-range-reset")?.click();
       })()
     `);
     await waitForExpression(
@@ -784,17 +974,23 @@ export async function runDataScenarios(
         const directPanels = grid ? Array.from(grid.children) : [];
         const mode = document.querySelector('[aria-label="选择时间去向类型"]');
         const list = document.querySelector('[aria-label="网页列表"]');
+        const heading = document.querySelector(".data-app-panel-heading");
         const headerActions = document.querySelector(".data-app-header-actions");
         return JSON.stringify({
           directChildren: directPanels.length,
-          headerOrder: Array.from(headerActions?.children ?? []).map((node) => (
-            node.classList.contains("data-app-selected-status")
-              ? "selected"
+          headingOrder: Array.from(heading?.children ?? []).map((node) => (
+            node.tagName === "H3"
+              ? "title"
               : node.classList.contains("data-destination-mode")
                 ? "mode"
-                : node.classList.contains("data-trend-range-control")
-                  ? "range"
-                  : "unknown"
+                : node.classList.contains("data-app-selected-status")
+                  ? "selected"
+                  : node.classList.contains("data-app-refresh-status")
+                    ? "status"
+                    : "unknown"
+          )),
+          headerOrder: Array.from(headerActions?.children ?? []).map((node) => (
+            node.classList.contains("data-trend-period-control") ? "range" : "unknown"
           )),
           modePressed: mode?.querySelector('[aria-pressed="true"]')?.textContent?.trim() ?? null,
           domains: Array.from(list?.querySelectorAll("button") ?? []).map((node) => node.textContent?.trim()),
@@ -820,6 +1016,7 @@ export async function runDataScenarios(
       })()
     `))) as {
       directChildren: number;
+      headingOrder: string[];
       headerOrder: string[];
       modePressed: string | null;
       domains: string[];
@@ -832,7 +1029,8 @@ export async function runDataScenarios(
       destinationHeatmapZeroTooltips: number;
     };
     assert.equal(webState.directChildren, 2);
-    assert.deepEqual(webState.headerOrder, ["selected", "mode", "range"]);
+    assert.deepEqual(webState.headingOrder, ["title", "mode", "selected", "status"]);
+    assert.deepEqual(webState.headerOrder, ["range"]);
     assert.equal(webState.modePressed, "网页");
     assert.equal(webState.domains.length, 2);
     assert.equal(webState.hasHeatmapScope, false);
@@ -1286,20 +1484,37 @@ export async function runDataScenarios(
     );
     await evaluate(client!, sessionId, `document.querySelector('[aria-label="数据"]')?.click()`);
     await waitForExpression(client!, sessionId, `Boolean(document.querySelector(".data-app-panel"))`, 45_000);
-    assert.deepEqual(
-      JSON.parse(String(await evaluate(client!, sessionId, `
+    const webSyncDisabledState = JSON.parse(String(await evaluate(client!, sessionId, `
         JSON.stringify({
           modeControl: Boolean(document.querySelector('[aria-label="选择时间去向类型"]')),
           webText: document.querySelector(".data-app-panel")?.textContent?.includes("网页趋势") ?? false,
+          headingOrder: Array.from(
+            document.querySelector(".data-app-panel-heading")?.children ?? [],
+          ).map((node) => (
+            node.tagName === "H3"
+              ? "title"
+              : node.classList.contains("data-app-selected-status")
+                ? "selected"
+                : node.classList.contains("data-app-refresh-status")
+                  ? "status"
+                  : "unknown"
+          )),
           webCommandCount: globalThis.__PATINA_INVOKED_COMMANDS
             .filter((entry) => entry.command === "cmd_get_web_activity_aggregate_range").length,
         })
-      `))),
-      {
-        modeControl: false,
-        webText: false,
-        webCommandCount: 0,
-      },
+      `))) as {
+        modeControl: boolean;
+        webText: boolean;
+        headingOrder: string[];
+        webCommandCount: number;
+      };
+    assert.equal(webSyncDisabledState.modeControl, false);
+    assert.equal(webSyncDisabledState.webText, false);
+    assert.equal(webSyncDisabledState.webCommandCount, 0);
+    assert.ok(
+      JSON.stringify(webSyncDisabledState.headingOrder) === JSON.stringify(["title", "status"])
+        || JSON.stringify(webSyncDisabledState.headingOrder) === JSON.stringify(["title", "selected", "status"]),
+      "selected icons must immediately follow the title when present, without a hidden placeholder",
     );
 
     await evaluate(client!, sessionId, `
@@ -1338,6 +1553,7 @@ export async function runDataScenarios(
       trendTop: number;
       heatmapHasOwnRange: boolean;
       trendHasOwnRange: boolean;
+      overviewHeatmapHasSubtitle: boolean;
       destinationSidebarLeft: number;
       destinationSidebarTop: number;
       destinationSidebarBottom: number;
@@ -1398,6 +1614,7 @@ export async function runDataScenarios(
             heatmapTop: heatmap?.getBoundingClientRect().top ?? -1,
             trendHasOwnRange: Boolean(trend?.querySelector(".data-trend-range-trigger")),
             heatmapHasOwnRange: Boolean(heatmap?.querySelector(".data-heatmap-range-control")),
+            overviewHeatmapHasSubtitle: Boolean(heatmap?.querySelector("p")),
             destinationSidebarLeft: destinationSidebar?.left ?? -1,
             destinationSidebarTop: destinationSidebar?.top ?? -1,
             destinationSidebarBottom: destinationSidebar?.bottom ?? -1,
@@ -1423,6 +1640,7 @@ export async function runDataScenarios(
     );
     assert.ok(layouts.every((layout) => layout.trendHasOwnRange));
     assert.ok(layouts.every((layout) => layout.heatmapHasOwnRange));
+    assert.ok(layouts.every((layout) => !layout.overviewHeatmapHasSubtitle));
     assert.ok(layouts.every((layout) => layout.destinationHeatmapCells > 0));
     assert.ok(layouts.every((layout) => layout.destinationHeatmapTop > layout.destinationChartBottom));
     assert.ok(layouts.every((layout) => (
@@ -1485,7 +1703,7 @@ export async function runDataScenarios(
       sessionId,
       `Boolean(document.querySelector('[aria-label="Select time destination type"]'))`,
       45_000,
-      "lazy destination panel is ready before switching to web mode",
+      "destination panel is ready before switching to web mode",
     );
     await evaluate(client!, sessionId, `
       Array.from(document.querySelectorAll('[aria-label="Select time destination type"] button'))

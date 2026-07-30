@@ -149,6 +149,40 @@ function DataAppTrendPanel({
           <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">
             {title}
           </h3>
+          {showDestinationMode ? (
+            <QuietSegmentedFilter
+              value={destinationMode}
+              options={modeOptions}
+              onChange={onDestinationModeChange}
+              ariaLabel={UI_TEXT.data.destinationMode}
+              className="data-destination-mode"
+            />
+          ) : null}
+          {selectedOptions.length > 0 ? (
+            <div
+              className="data-app-selected-status"
+              aria-label={UI_TEXT.data.selectedObjectCount(selectedOptions.length)}
+            >
+              {selectedOptions.map((option) => (
+                <span
+                  className="data-app-selected-icon"
+                  data-selection-key={option.key}
+                  key={option.key}
+                  aria-hidden
+                >
+                  {option.iconUrl ? (
+                    <img
+                      src={option.iconUrl}
+                      alt=""
+                      draggable={false}
+                    />
+                  ) : (
+                    getOptionInitial(option.displayName)
+                  )}
+                </span>
+              ))}
+            </div>
+          ) : null}
           <div
             className="data-app-refresh-status"
             role="status"
@@ -170,38 +204,6 @@ function DataAppTrendPanel({
           </div>
         </div>
         <div className="data-app-header-actions">
-          <div
-            className={`data-app-selected-status ${selectedOptions[0] ? "" : "data-app-selected-status-empty"}`}
-            aria-label={UI_TEXT.data.selectedObjectCount(selectedOptions.length)}
-          >
-            {selectedOptions.map((option) => (
-              <span
-                className="data-app-selected-icon"
-                data-selection-key={option.key}
-                key={option.key}
-                aria-hidden
-              >
-                {option.iconUrl ? (
-                  <img
-                    src={option.iconUrl}
-                    alt=""
-                    draggable={false}
-                  />
-                ) : (
-                  getOptionInitial(option.displayName)
-                )}
-              </span>
-            ))}
-          </div>
-          {showDestinationMode ? (
-            <QuietSegmentedFilter
-              value={destinationMode}
-              options={modeOptions}
-              onChange={onDestinationModeChange}
-              ariaLabel={UI_TEXT.data.destinationMode}
-              className="data-destination-mode"
-            />
-          ) : null}
           <DataTrendRangeControl
             ariaLabel={rangeAriaLabel}
             selection={selection}
@@ -353,6 +355,7 @@ function DataAppTrendPanel({
                 onActivePointChange={onMouseMove}
                 onMouseLeave={onMouseLeave}
                 rows={chartData}
+                showAllXAxisTicks={granularity === "month"}
                 series={trendSeries.map((series) => ({
                   color: series.color,
                   dataKey: series.dataKey,

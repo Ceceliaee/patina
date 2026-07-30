@@ -28,6 +28,8 @@ const LAZY_PAGE_CHUNK_BUDGETS = [
   { label: "AppMapping", pattern: /^AppMapping-.*\.js$/, gzipKiB: 18 },
   { label: "History", pattern: /^History-.*\.js$/, gzipKiB: 18 },
   { label: "Tools", pattern: /^Tools-.*\.js$/, gzipKiB: 18 },
+  // The destination analysis panel is part of Data's first render so both
+  // dashboard columns become available in the same route-chunk evaluation.
   { label: "Data", pattern: /^Data-.*\.js$/, gzipKiB: 18 },
   { label: "About", pattern: /^About-.*\.js$/, gzipKiB: 18 },
 ] as const;
@@ -43,7 +45,6 @@ const LAZY_SECONDARY_CHUNK_BUDGETS = [
   { label: "Data first-screen prewarm", pattern: /^dataFirstScreenPrewarm-.*\.js$/, gzipKiB: 6 },
   { label: "Data trend snapshot", pattern: /^dataTrendSnapshot-.*\.js$/, gzipKiB: 2 },
   { label: "Data bootstrap snapshot", pattern: /^dataBootstrapSnapshot-.*\.js$/, gzipKiB: 1 },
-  { label: "Data destination panel", pattern: /^DataAppTrendPanel-.*\.js$/, gzipKiB: 2.3 },
 ] as const;
 
 // Stable cross-feature UI owners stay lazy and receive their own narrow budget

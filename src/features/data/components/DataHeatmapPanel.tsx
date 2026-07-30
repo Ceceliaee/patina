@@ -266,14 +266,7 @@ function DataHeatmapPanel({
   return (
     <div className={`data-heatmap-panel ${compact ? "data-heatmap-panel-compact" : ""}`}>
       <div className="data-heatmap-panel-header">
-        <div>
-          <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">{title}</h3>
-          {!compact ? (
-            <p className="mt-1 text-[11px] text-[var(--qp-text-tertiary)]">
-              {selectedHeatmapViewLabel} · {UI_TEXT.data.activityHeatmapHint}
-            </p>
-          ) : null}
-        </div>
+        <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">{title}</h3>
         <div className="data-heatmap-header-actions">
           <QuietSegmentedFilter
             value={granularity}

@@ -23,6 +23,7 @@ interface Props {
   onActivePointChange?: (event: unknown) => void;
   onMouseLeave?: () => void;
   rows: readonly NativeTrendChartRow[];
+  showAllXAxisTicks?: boolean;
   series: readonly NativeTrendChartSeries[];
   ticks: readonly number[];
   width: number;
@@ -88,6 +89,7 @@ export default function NativeTrendChart({
   onActivePointChange,
   onMouseLeave,
   rows,
+  showAllXAxisTicks = false,
   series,
   ticks,
   width,
@@ -102,8 +104,10 @@ export default function NativeTrendChart({
   const plotBottom = plotTop + plotHeight;
   const safeDomainMax = Math.max(1, domainMax);
   const xTickIndices = useMemo(
-    () => selectXAxisTickIndices(rows.length, plotWidth),
-    [plotWidth, rows.length],
+    () => showAllXAxisTicks
+      ? Array.from({ length: rows.length }, (_, index) => index)
+      : selectXAxisTickIndices(rows.length, plotWidth),
+    [plotWidth, rows.length, showAllXAxisTicks],
   );
   const seriesPoints = useMemo(() => series.map((item) => ({
     series: item,
@@ -213,7 +217,7 @@ export default function NativeTrendChart({
           const row = rows[index];
           const x = getPointX(index, rows.length, plotLeft, plotWidth);
           return (
-            <g key={`${row.label}-${index}`}>
+            <g className="qp-native-trend-x-tick" key={`${row.label}-${index}`}>
               <line
                 stroke="var(--qp-chart-grid)"
                 strokeDasharray="3 3"

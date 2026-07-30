@@ -1,5 +1,38 @@
-.data-trend-header .data-trend-range-control {
+.data-trend-header .data-trend-period-control {
   justify-self: end;
+}
+
+.data-trend-period-control {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+}
+
+.data-trend-range-reset {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--qp-text-disabled);
+}
+
+.data-trend-range-reset:hover {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--qp-bg-elevated) 72%, transparent);
+  color: var(--qp-text-secondary);
+}
+
+.data-trend-range-reset:focus-visible {
+  border-color: transparent;
+  outline: 2px solid color-mix(in srgb, var(--qp-accent-default) 42%, transparent);
+  outline-offset: 1px;
 }
 
 .data-trend-range-trigger {
@@ -105,6 +138,7 @@
 @media (max-width: 720px) {
   .data-app-panel-heading {
     width: 100%;
+    flex-wrap: wrap;
   }
 
   .data-app-refresh-status > span:first-child {
@@ -113,7 +147,12 @@
     text-overflow: ellipsis;
   }
 
-  .data-app-header-actions,
+  .data-app-header-actions {
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
   .data-heatmap-header-actions {
     width: 100%;
     justify-content: space-between;

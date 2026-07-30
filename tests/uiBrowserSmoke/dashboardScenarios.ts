@@ -66,6 +66,25 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
+          const bars = Array.from(document.querySelectorAll(
+            '.dashboard-pulse-chart [data-hourly-activity-chart-mode="total"] .qp-hourly-chart-bar',
+          )).filter((bar) => bar.getBoundingClientRect().height > 0);
+          return bars.length > 0 && bars.every((bar) => {
+            if (!(bar instanceof SVGPathElement)) return false;
+            const tokens = (bar.getAttribute("d") ?? "").trim().split(/\\s+/);
+            const firstBaseline = Number(tokens[2]);
+            const finalBaseline = Number(tokens.at(-2));
+            return Number.isFinite(firstBaseline)
+              && Math.abs(firstBaseline - finalBaseline) <= 0.001;
+          });
+        })()
+      `),
+      true,
+      "total hourly bars should round only their top corners and keep a flat baseline",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
           const toggle = document.querySelector(".dashboard-pulse-mode-toggle");
           if (!toggle || toggle.getAttribute("aria-pressed") !== "false") return false;
           toggle.click();

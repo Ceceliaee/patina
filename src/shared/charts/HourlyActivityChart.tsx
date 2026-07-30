@@ -187,16 +187,20 @@ export default function HourlyActivityChart({
 
             if (!categoryMode) {
               const barHeight = scaleMinutes(point.minutes);
+              const y = chartBottom - barHeight;
+              const radius = Math.min(3, barHeight / 2, renderedBarWidth / 2);
               return (
-                <rect
+                <path
                   key={point.hour}
                   className="qp-hourly-chart-bar"
+                  d={buildTopRoundedBarPath(
+                    x,
+                    y,
+                    renderedBarWidth,
+                    barHeight,
+                    radius,
+                  )}
                   fill="var(--qp-accent-default)"
-                  height={barHeight}
-                  rx={Math.min(3, barHeight / 2)}
-                  width={renderedBarWidth}
-                  x={x}
-                  y={chartBottom - barHeight}
                 />
               );
             }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   countInclusiveLocalDays,
+  getAdjacentDataTrendRangeSelection,
   resolveDataTrendRange,
   selectDataTrendDraftDate,
   type DataTrendRangeDraft,
@@ -61,7 +62,7 @@ await runTest("custom completed selection restarts on the next click", () => {
 
 await runTest("natural week uses Monday through Sunday and ISO cross-year labels", () => {
   const week = resolveDataTrendRange({ kind: "week", anchorDateKey: "2025-12-29" }, nowMs);
-  assert.deepEqual([week.startDateKey, week.endDateKey, week.label], ["2025-12-29", "2026-01-04", "1周"]);
+  assert.deepEqual([week.startDateKey, week.endDateKey, week.label], ["2025-12-29", "2026-01-04", "第 1 周"]);
 });
 
 await runTest("current natural periods truncate at today", () => {
@@ -72,6 +73,130 @@ await runTest("current natural periods truncate at today", () => {
   assert.equal(week.endDateKey, "2026-05-20");
   assert.deepEqual([month.startDateKey, month.endDateKey, month.label], ["2026-05-01", "2026-05-20", "5月"]);
   assert.deepEqual([year.startDateKey, year.endDateKey, year.label, year.granularity], ["2026-01-01", "2026-05-20", "2026年", "month"]);
+});
+
+await runTest("rolling range arrows move only between the three preset lengths", () => {
+  assert.deepEqual(
+    getAdjacentDataTrendRangeSelection({ kind: "rolling", days: 7 }, 1, nowMs),
+    { kind: "rolling", days: 30 },
+  );
+  assert.deepEqual(
+    getAdjacentDataTrendRangeSelection({ kind: "rolling", days: 30 }, -1, nowMs),
+    { kind: "rolling", days: 7 },
+  );
+  assert.equal(
+    getAdjacentDataTrendRangeSelection({ kind: "rolling", days: 7 }, -1, nowMs),
+    null,
+  );
+  assert.equal(
+    getAdjacentDataTrendRangeSelection({ kind: "rolling", days: 365 }, 1, nowMs),
+    null,
+  );
+});
+
+await runTest("natural period arrows preserve the period and may enter but not pass the current period", () => {
+  assert.deepEqual(
+    getAdjacentDataTrendRangeSelection({ kind: "week", anchorDateKey: "2026-05-13" }, 1, nowMs),
+    { kind: "week", anchorDateKey: "2026-05-18" },
+  );
+  assert.equal(
+    getAdjacentDataTrendRangeSelection({ kind: "week", anchorDateKey: "2026-05-20" }, 1, nowMs),
+    null,
+  );
+  assert.deepEqual(
+    getAdjacentDataTrendRangeSelection({ kind: "month", anchorDateKey: "2026-04-12" }, 1, nowMs),
+    { kind: "month", anchorDateKey: "2026-05-01" },
+  );
+  assert.equal(
+    getAdjacentDataTrendRangeSelection({ kind: "month", anchorDateKey: "2026-05-20" }, 1, nowMs),
+    null,
+  );
+  assert.deepEqual(
+    getAdjacentDataTrendRangeSelection({ kind: "year", anchorDateKey: "2025-08-12" }, 1, nowMs),
+    { kind: "year", anchorDateKey: "2026-01-01" },
+  );
+  assert.equal(
+    getAdjacentDataTrendRangeSelection({ kind: "year", anchorDateKey: "2026-05-20" }, 1, nowMs),
+    null,
+  );
+});
+
+await runTest("ISO week labels and adjacent navigation stay correct across week and year boundaries", () => {
+  const weekNineteen = { kind: "week", anchorDateKey: "2026-05-04" } as const;
+  const previous = getAdjacentDataTrendRangeSelection(weekNineteen, -1, nowMs);
+  const next = getAdjacentDataTrendRangeSelection(weekNineteen, 1, nowMs);
+
+  assert.equal(resolveDataTrendRange(weekNineteen, nowMs).label, "第 19 周");
+  assert.equal(previous && resolveDataTrendRange(previous, nowMs).label, "第 18 周");
+  assert.equal(next && resolveDataTrendRange(next, nowMs).label, "第 20 周");
+  assert.deepEqual(
+    getAdjacentDataTrendRangeSelection({ kind: "week", anchorDateKey: "2026-01-01" }, -1, nowMs),
+    { kind: "week", anchorDateKey: "2025-12-22" },
+  );
+});
+
+await runTest("month and year navigation uses calendar boundaries through short months and leap years", () => {
+  assert.deepEqual(
+    getAdjacentDataTrendRangeSelection({ kind: "month", anchorDateKey: "2026-01-31" }, -1, nowMs),
+    { kind: "month", anchorDateKey: "2025-12-01" },
+  );
+  assert.deepEqual(
+    getAdjacentDataTrendRangeSelection({ kind: "month", anchorDateKey: "2025-12-31" }, 1, nowMs),
+    { kind: "month", anchorDateKey: "2026-01-01" },
+  );
+  assert.deepEqual(
+    getAdjacentDataTrendRangeSelection({ kind: "year", anchorDateKey: "2024-02-29" }, 1, nowMs),
+    { kind: "year", anchorDateKey: "2025-01-01" },
+  );
+});
+
+await runTest("custom range arrows shift the complete inclusive span without entering the future", () => {
+  assert.deepEqual(
+    getAdjacentDataTrendRangeSelection({
+      kind: "custom",
+      startDateKey: "2026-05-01",
+      endDateKey: "2026-05-07",
+    }, 1, nowMs),
+    {
+      kind: "custom",
+      startDateKey: "2026-05-08",
+      endDateKey: "2026-05-14",
+    },
+  );
+  assert.deepEqual(
+    getAdjacentDataTrendRangeSelection({
+      kind: "custom",
+      startDateKey: "2026-05-07",
+      endDateKey: "2026-05-01",
+    }, -1, nowMs),
+    {
+      kind: "custom",
+      startDateKey: "2026-04-24",
+      endDateKey: "2026-04-30",
+    },
+  );
+  assert.equal(
+    getAdjacentDataTrendRangeSelection({
+      kind: "custom",
+      startDateKey: "2026-05-14",
+      endDateKey: "2026-05-20",
+    }, 1, nowMs),
+    null,
+  );
+  const seventeenDays = getAdjacentDataTrendRangeSelection({
+    kind: "custom",
+    startDateKey: "2026-04-01",
+    endDateKey: "2026-04-17",
+  }, 1, nowMs);
+  assert.deepEqual(seventeenDays, {
+    kind: "custom",
+    startDateKey: "2026-04-18",
+    endDateKey: "2026-05-04",
+  });
+  assert.equal(
+    seventeenDays && resolveDataTrendRange(seventeenDays, nowMs).dayCount,
+    17,
+  );
 });
 
 await runTest("custom granularity changes after sixty-two days", () => {

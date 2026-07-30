@@ -83,6 +83,7 @@ function DataTrendPanel({
               onActivePointChange={onMouseMove}
               onMouseLeave={onMouseLeave}
               rows={viewModel.chartData}
+              showAllXAxisTicks={viewModel.granularity === "month"}
               series={[{
                 color: "var(--qp-accent-default)",
                 dataKey: "hours",

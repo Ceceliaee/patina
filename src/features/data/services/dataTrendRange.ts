@@ -37,6 +37,10 @@ export interface DataTrendRangeDraft {
 
 export const DATA_ROLLING_TREND_RANGES: DataRollingTrendRange[] = [7, 30, 365];
 export const DATA_TREND_PICKER_MODES: DataTrendPickerMode[] = ["custom", "week", "month", "year"];
+export const DEFAULT_DATA_TREND_RANGE_SELECTION: DataTrendRangeSelection = {
+  kind: "rolling",
+  days: 7,
+};
 
 export {
   addLocalDays,
@@ -74,6 +78,71 @@ function getRollingLabel(days: DataRollingTrendRange): string {
   if (days === 7) return UI_TEXT.data.pastSevenDays;
   if (days === 30) return UI_TEXT.data.pastThirtyDays;
   return UI_TEXT.data.recentYear;
+}
+
+function getNormalizedCustomBounds(
+  selection: Extract<DataTrendRangeSelection, { kind: "custom" }>,
+): { start: Date; end: Date } | null {
+  const left = parseLocalDateKey(selection.startDateKey);
+  const right = parseLocalDateKey(selection.endDateKey);
+  if (!left || !right) return null;
+  return left <= right
+    ? { start: left, end: right }
+    : { start: right, end: left };
+}
+
+export function getAdjacentDataTrendRangeSelection(
+  selection: DataTrendRangeSelection,
+  delta: -1 | 1,
+  nowMs: number = Date.now(),
+): DataTrendRangeSelection | null {
+  if (selection.kind === "rolling") {
+    const currentIndex = DATA_ROLLING_TREND_RANGES.indexOf(selection.days);
+    const days = DATA_ROLLING_TREND_RANGES[currentIndex + delta];
+    return days ? { kind: "rolling", days } : null;
+  }
+
+  const today = startOfLocalDay(new Date(nowMs));
+  if (selection.kind === "custom") {
+    const bounds = getNormalizedCustomBounds(selection);
+    if (!bounds) return null;
+    const span = countInclusiveLocalDays(
+      toLocalDateKey(bounds.start),
+      toLocalDateKey(bounds.end),
+    );
+    const start = addLocalDays(bounds.start, delta * span);
+    const end = addLocalDays(bounds.end, delta * span);
+    if (end > today) return null;
+    return {
+      kind: "custom",
+      startDateKey: toLocalDateKey(start),
+      endDateKey: toLocalDateKey(end),
+    };
+  }
+
+  const currentRange = resolveDataTrendRange(selection, nowMs);
+  const currentStart = parseLocalDateKey(currentRange.startDateKey);
+  if (!currentStart) return null;
+
+  if (selection.kind === "week") {
+    const nextStart = addLocalDays(currentStart, delta * 7);
+    if (nextStart > today) return null;
+    return { kind: "week", anchorDateKey: toLocalDateKey(nextStart) };
+  }
+
+  if (selection.kind === "month") {
+    const nextStart = new Date(
+      currentStart.getFullYear(),
+      currentStart.getMonth() + delta,
+      1,
+    );
+    if (nextStart > today) return null;
+    return { kind: "month", anchorDateKey: toLocalDateKey(nextStart) };
+  }
+
+  const nextStart = new Date(currentStart.getFullYear() + delta, 0, 1);
+  if (nextStart > today) return null;
+  return { kind: "year", anchorDateKey: toLocalDateKey(nextStart) };
 }
 
 function resolveBounds(

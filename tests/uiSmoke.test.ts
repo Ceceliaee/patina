@@ -339,7 +339,11 @@ await runTest("Data regular view avoids visible loading and skeleton branches", 
   assert.doesNotMatch(trendPanel, /qp-content-fade-in/);
   assert.doesNotMatch(appTrendPanel, /qp-content-fade-in/);
   assert.doesNotMatch(heatmapPanel, /qp-content-fade-in/);
+  assert.match(data, /import DataAppTrendPanel from "\.\/DataAppTrendPanel\.tsx"/);
+  assert.doesNotMatch(data, /lazy\(\(\) => import\("\.\/DataAppTrendPanel\.tsx"\)\)/);
+  assert.doesNotMatch(data, /<Suspense fallback=\{null\}>/);
   assert.match(heatmapPanel, /data-heatmap-loading-state|loading\?: boolean/);
+  assert.doesNotMatch(heatmapPanel, /UI_TEXT\.data\.activityHeatmapHint/);
   assert.doesNotMatch(heatmapPanel, /UI_TEXT\.data\.less/);
   assert.doesNotMatch(heatmapPanel, /UI_TEXT\.data\.more/);
   assert.match(heatmapPanel, /data-heatmap-granularity/);
@@ -603,6 +607,10 @@ await runTest("shared hourly chart resolves responsive category density before p
 
   assert.match(hourlyChart, /import \{ useLayoutEffect,/);
   assert.match(hourlyChart, /useLayoutEffect\(\(\) => \{/);
+  assert.match(
+    hourlyChart,
+    /if \(!categoryMode\) \{[\s\S]*?d=\{buildTopRoundedBarPath\(/,
+  );
   assert.doesNotMatch(hourlyChart, /import \{ useEffect,/);
 });
 
@@ -915,8 +923,12 @@ await runTest("Data keeps web analysis beside a unified activity overview", () =
   const shell = readUtf8("src/app/AppShell.tsx");
   const data = readUtf8("src/features/data/components/Data.tsx");
   const webRuntime = readUtf8("src/features/data/hooks/useDataWebActivityRuntime.ts");
+  const activityTrendPanel = readUtf8("src/features/data/components/DataTrendPanel.tsx");
   const destinationPanel = readUtf8("src/features/data/components/DataAppTrendPanel.tsx");
   const heatmapPanel = readUtf8("src/features/data/components/DataHeatmapPanel.tsx");
+  const trendRangeControl = readUtf8("src/features/data/components/DataTrendRangeControl.tsx");
+  const dataStyles = readUtf8("src/styles/features/data.css");
+  const quietProCss = readUtf8("src/styles/quiet-pro.css");
   const dataViewIndex = shell.indexOf("<Data", shell.indexOf("data: ("));
   const dataBranch = shell.slice(dataViewIndex, shell.indexOf("<Tools", dataViewIndex));
   const overviewPanelIndex = data.indexOf('className="qp-panel p-5 data-overview"');
@@ -942,6 +954,27 @@ await runTest("Data keeps web analysis beside a unified activity overview", () =
   assert.match(data, /destinationMode !== presentedDestinationMode/);
   assert.match(destinationPanel, /showDestinationMode \? \(/);
   assert.match(destinationPanel, /UI_TEXT\.data\.destinationWeb/);
+  assert.match(
+    destinationPanel,
+    /<h3[\s\S]*?\{showDestinationMode \? \([\s\S]*?data-destination-mode[\s\S]*?\{selectedOptions\.length > 0 \? \([\s\S]*?data-app-selected-status/,
+  );
+  assert.match(
+    destinationPanel,
+    /<div className="data-app-header-actions">\s*<DataTrendRangeControl/,
+  );
+  assert.doesNotMatch(destinationPanel, /data-app-selected-status-empty/);
+  assert.match(trendRangeControl, /getAdjacentDataTrendRangeSelection/);
+  assert.match(trendRangeControl, /className="qp-control data-trend-range-reset"/);
+  assert.match(trendRangeControl, /DEFAULT_DATA_TREND_RANGE_SELECTION/);
+  assert.match(dataStyles, /\.data-trend-period-control \{/);
+  assert.match(
+    dataStyles,
+    /\.data-trend-range-reset \{[\s\S]*?border-color: transparent;[\s\S]*?background: transparent;[\s\S]*?color: var\(--qp-text-disabled\);/,
+  );
+  assert.match(
+    dataStyles,
+    /\.data-trend-range-reset:hover \{[\s\S]*?color: var\(--qp-text-secondary\);/,
+  );
   assert.doesNotMatch(destinationPanel, /data-web-initial-status|webTrendInitialLoading/);
   assert.match(destinationPanel, /\{heatmapContent\}/);
   assert.match(destinationPanel, /data-hint/);
@@ -951,6 +984,8 @@ await runTest("Data keeps web analysis beside a unified activity overview", () =
   assert.match(destinationPanel, /aria-description=\{UI_TEXT\.data\.interactionHint\}/);
   assert.match(destinationPanel, /aria-keyshortcuts="Control\+Enter Control\+Space"/);
   assert.match(destinationPanel, /<NativeTrendChart/);
+  assert.match(destinationPanel, /showAllXAxisTicks=\{granularity === "month"\}/);
+  assert.match(activityTrendPanel, /showAllXAxisTicks=\{viewModel\.granularity === "month"\}/);
   assert.match(destinationPanel, /trendSeries\.map/);
   assert.match(destinationPanel, /onActivePointChange=\{onMouseMove\}/);
   assert.doesNotMatch(destinationPanel, /from "recharts"/);
@@ -962,7 +997,7 @@ await runTest("Data keeps web analysis beside a unified activity overview", () =
   assert.doesNotMatch(destinationPanel, /selectionFeedback/);
   assert.doesNotMatch(destinationPanel, /已选|N\/5/);
   assert.match(heatmapPanel, /data-heatmap-panel-compact/);
-  assert.match(heatmapPanel, /!compact \?/);
+  assert.doesNotMatch(heatmapPanel, /<p className=/);
   assert.match(data, /title=\{isWebDestination \? UI_TEXT\.data\.webHeatmap : UI_TEXT\.data\.appHeatmap\}/);
   assert.match(data, /title=\{isWebDestination[\s\S]*compact/);
   assert.match(data, /selectedDestinationHeatmapView/);
@@ -975,12 +1010,29 @@ await runTest("Data keeps web analysis beside a unified activity overview", () =
   assert.ok(heatmapPanelIndex < destinationPanelIndex);
   assert.match(
     data,
-    /<div className="qp-panel p-5 data-overview">[\s\S]*<DataTrendPanel[\s\S]*<DataHeatmapPanel[\s\S]*<\/div>\s*\n\s*<Suspense fallback=\{null\}>[\s\S]*<DataAppTrendPanel[\s\S]*<\/Suspense>/,
+    /<div className="qp-panel p-5 data-overview">[\s\S]*<DataTrendPanel[\s\S]*<DataHeatmapPanel[\s\S]*<\/div>\s*\n\s*<DataAppTrendPanel/,
   );
-  assert.match(data, /const DataAppTrendPanel = lazy\(\(\) => import\("\.\/DataAppTrendPanel\.tsx"\)\)/);
+  assert.match(data, /import DataAppTrendPanel from "\.\/DataAppTrendPanel\.tsx"/);
   assert.equal((data.match(/<DataTrendPanel/g) ?? []).length, 1);
   assert.equal((data.match(/<DataHeatmapPanel/g) ?? []).length, 2);
   assert.equal((data.match(/<DataAppTrendPanel/g) ?? []).length, 1);
+  assert.match(
+    quietProCss,
+    /@media \(min-width: 1900px\) \{[\s\S]*?\.data-dashboard-grid \{[\s\S]*?align-items: start;[\s\S]*?\.data-dashboard-grid > \.data-app-panel \{\s*grid-area: destination;\s*align-self: start;\s*\}/,
+  );
+  assert.match(
+    quietProCss,
+    /@media \(min-width: 1900px\) and \(min-height: 900px\) \{\s*\.data-dashboard-grid > \.data-overview \.data-trend-chart \{\s*height: 257px;\s*\}/,
+  );
+  assert.match(quietProCss, /\.data-trend-chart \{\s*height: 214px;\s*\}/);
+  assert.match(
+    quietProCss,
+    /\.data-heatmap-panel-header \{[\s\S]*?align-items: center;[\s\S]*?\}[\s\S]*?\.data-app-panel-header \{[\s\S]*?align-items: center;[\s\S]*?\}/,
+  );
+  assert.match(
+    quietProCss,
+    /@media \(max-width: 720px\) \{\s*\.data-heatmap-panel-header,\s*\.data-app-panel-header \{\s*align-items: stretch;\s*flex-direction: column;/,
+  );
 });
 
 await runTest("classification web domain colors prefer favicon theme colors", () => {
@@ -1451,7 +1503,7 @@ await runTest("remaining Quiet Pro component families keep one owner and explici
   assert.doesNotMatch(rangeControl, /labelDisabled/);
   assert.doesNotMatch(dataHeatmap, /labelDisabled/);
   assert.doesNotMatch(quietProStyles, /\.data-heatmap-range-(?:arrow|label)/);
-  assert.match(dataStyles, /\.data-trend-header \.data-trend-range-control/);
+  assert.match(dataStyles, /\.data-trend-header \.data-trend-period-control/);
 
   assert.match(stepperSlider, /displayValue: string/);
   assert.match(stepperSlider, /aria-valuetext=\{displayValue\}/);
