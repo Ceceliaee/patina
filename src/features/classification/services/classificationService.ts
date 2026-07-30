@@ -28,7 +28,10 @@ import type { ImportCategoryCandidate } from "../../../platform/persistence/impo
 import type { ClassificationSettingMutation } from "../../../platform/persistence/classificationSettingsGateway.ts";
 import { loadClassificationIconsForExecutables } from "./classificationIconService.ts";
 import type { RecordedAppCatalogQueryInput } from "../../../platform/persistence/classificationPersistence.ts";
-import { ClassificationAppCatalogController } from "./classificationAppCatalog.ts";
+import {
+  ClassificationAppCatalogController,
+  ClassificationAppCatalogSnapshotStore,
+} from "./classificationAppCatalog.ts";
 export { filterAndSortCandidates } from "./classificationCandidateFiltering.ts";
 export {
   ClassificationAppCatalogController,
@@ -91,6 +94,11 @@ export function createClassificationCommitDeps(
 }
 
 const defaultClassificationCommitDeps: ClassificationCommitDeps = createClassificationCommitDeps();
+const classificationAppCatalogSnapshotStore = new ClassificationAppCatalogSnapshotStore({
+  createController: () => new ClassificationAppCatalogController({
+    loadRecordedPage: classificationStore.loadAppCatalogPage,
+  }),
+});
 const defaultClassificationBootstrapDeps: ClassificationBootstrapDeps = {
   loadObservedAppCandidates: () => ClassificationService.loadObservedAppCandidates(),
   loadObservedWebDomainCandidates: () => ClassificationService.loadObservedWebDomainCandidates(),
@@ -164,6 +172,30 @@ export class ClassificationService {
 
   static createAppCatalogController() {
     return new ClassificationAppCatalogController({ loadRecordedPage: this.loadAppCatalogPage });
+  }
+
+  static getAppCatalogSnapshot = classificationAppCatalogSnapshotStore.getSnapshot;
+
+  static subscribeAppCatalogSnapshot = classificationAppCatalogSnapshotStore.subscribe;
+
+  static ensureAppCatalogLoaded() {
+    return classificationAppCatalogSnapshotStore.ensureLoaded();
+  }
+
+  static prewarmAppCatalog() {
+    return classificationAppCatalogSnapshotStore.prewarm();
+  }
+
+  static refreshAppCatalog() {
+    return classificationAppCatalogSnapshotStore.refresh();
+  }
+
+  static retryAppCatalog() {
+    return classificationAppCatalogSnapshotStore.retry();
+  }
+
+  static invalidateAppCatalog(input: { discardCommitted?: boolean } = {}) {
+    classificationAppCatalogSnapshotStore.invalidate(input);
   }
 
   static async loadObservedWebDomainCandidates(days: number = 30, limit: number = 120): Promise<ObservedWebDomainCandidate[]> {
@@ -298,6 +330,7 @@ export class ClassificationService {
     if (scope === "all") {
       ProcessMapper.setUserOverride(exeName, null);
       this.invalidateBootstrapCache();
+      this.invalidateAppCatalog();
     }
   }
 
@@ -350,7 +383,11 @@ export class ClassificationService {
 }
 
 export async function prewarmClassificationBootstrapCache(): Promise<ClassificationBootstrapData> {
-  return ClassificationService.prewarmBootstrapCache();
+  const [bootstrap] = await Promise.all([
+    ClassificationService.prewarmBootstrapCache(),
+    ClassificationService.prewarmAppCatalog(),
+  ]);
+  return bootstrap;
 }
 
 export async function commitDraftChangesWithDeps(

@@ -36,11 +36,47 @@ export interface ClassificationAppCatalogBatchResult {
   displayNameRanks: Record<string, number>;
   nextCursor: RecordedAppCatalogCursor | null;
   hasMore: boolean;
+  sourceRevision: number;
 }
 
 interface ClassificationAppCatalogLoadAllInput {
   requestedGeneration?: number;
   onBatch: (candidates: ObservedAppCandidate[], hasMore: boolean) => void;
+}
+
+export interface ClassificationAppCatalogLoadResult {
+  candidates: ObservedAppCandidate[];
+  sourceRevision: number;
+}
+
+export type ClassificationAppCatalogSnapshotStatus =
+  | "cold"
+  | "ready"
+  | "refreshing"
+  | "error";
+
+export interface CompleteAppCatalogSnapshot {
+  candidates: ObservedAppCandidate[];
+  sourceRevision: number;
+  completedAtMs: number;
+}
+
+export interface ClassificationAppCatalogSnapshotState {
+  status: ClassificationAppCatalogSnapshotStatus;
+  committed: CompleteAppCatalogSnapshot | null;
+  requestGeneration: number;
+  error: unknown | null;
+}
+
+interface ClassificationAppCatalogLoader {
+  loadAll: ClassificationAppCatalogController["loadAll"];
+}
+
+export class ClassificationAppCatalogRevisionChangedError extends Error {
+  constructor() {
+    super("Classification app catalog revision changed during pagination");
+    this.name = "ClassificationAppCatalogRevisionChangedError";
+  }
 }
 
 interface RankedRecordedCandidate {
@@ -99,6 +135,7 @@ export async function loadClassificationAppCatalogBatch(
   let recordedSourceExhausted = false;
   let rawPagesConsumed = 0;
   let stoppedInsidePage = false;
+  let sourceRevision: number | null = null;
 
   while (
     candidates.length < CLASSIFICATION_APP_CATALOG_CARD_LIMIT
@@ -110,6 +147,12 @@ export async function loadClassificationAppCatalogBatch(
       searchQuery: input.searchQuery,
       limit: CLASSIFICATION_APP_CATALOG_RAW_PAGE_LIMIT,
     });
+    const pageRevision = page.sourceRevision ?? 0;
+    if (sourceRevision === null) {
+      sourceRevision = pageRevision;
+    } else if (sourceRevision !== pageRevision) {
+      throw new ClassificationAppCatalogRevisionChangedError();
+    }
     rawPagesConsumed += 1;
     if (page.rows.length === 0) {
       recordedSourceExhausted = !page.hasMore;
@@ -153,6 +196,7 @@ export async function loadClassificationAppCatalogBatch(
     displayNameRanks: Object.fromEntries(displayNameRanks),
     nextCursor: cursor,
     hasMore: stoppedInsidePage || !recordedSourceExhausted,
+    sourceRevision: sourceRevision ?? 0,
   };
 }
 
@@ -172,59 +216,223 @@ export class ClassificationAppCatalogController {
   async loadAll(input: ClassificationAppCatalogLoadAllInput) {
     const requestGeneration = input.requestedGeneration ?? this.invalidate();
     this.generation = requestGeneration;
-    let cursor: RecordedAppCatalogCursor | null = null;
-    const accumulatedCandidates = new Map<string, ObservedAppCandidate>();
-    const accumulatedDisplayNameRanks = new Map<string, number>();
+    const revisionRetryLimit = 1;
 
-    let hasMore = true;
-    while (hasMore) {
-      const previousCursor = cursor;
-      let result: ClassificationAppCatalogBatchResult;
+    for (let attempt = 0; attempt <= revisionRetryLimit; attempt += 1) {
+      let cursor: RecordedAppCatalogCursor | null = null;
+      const accumulatedCandidates = new Map<string, ObservedAppCandidate>();
+      const accumulatedDisplayNameRanks = new Map<string, number>();
+      let expectedRevision: number | null = null;
+      let hasMore = true;
+
       try {
-        result = await loadClassificationAppCatalogBatch({
-          cursor: previousCursor,
-          searchQuery: "",
-          seenExeNames: [],
-        }, this.deps);
+        while (hasMore) {
+          const previousCursor = cursor;
+          const result = await loadClassificationAppCatalogBatch({
+            cursor: previousCursor,
+            searchQuery: "",
+            seenExeNames: [],
+          }, this.deps);
+          if (requestGeneration !== this.generation) return false;
+          if (expectedRevision === null) {
+            expectedRevision = result.sourceRevision;
+          } else if (expectedRevision !== result.sourceRevision) {
+            throw new ClassificationAppCatalogRevisionChangedError();
+          }
+
+          cursor = result.nextCursor;
+          hasMore = result.hasMore;
+          const updates = result.candidates.map((candidate) => {
+            const incomingRank = result.displayNameRanks[candidate.exeName] ?? 0;
+            const existing = accumulatedCandidates.get(candidate.exeName);
+            if (!existing) {
+              const inserted = { ...candidate };
+              accumulatedCandidates.set(candidate.exeName, inserted);
+              accumulatedDisplayNameRanks.set(candidate.exeName, incomingRank);
+              return { ...inserted };
+            }
+
+            existing.lastSeenMs = Math.max(existing.lastSeenMs, candidate.lastSeenMs);
+            existing.totalDuration = Math.max(existing.totalDuration, candidate.totalDuration);
+            existing.hasNativeRecords ||= candidate.hasNativeRecords;
+            const existingRank = accumulatedDisplayNameRanks.get(candidate.exeName) ?? 0;
+            if (incomingRank > existingRank) {
+              existing.appName = candidate.appName;
+              accumulatedDisplayNameRanks.set(candidate.exeName, incomingRank);
+            }
+            return { ...existing };
+          });
+
+          const recordedCursorAdvanced = previousCursor?.lastSeenMs !== result.nextCursor?.lastSeenMs
+            || previousCursor?.rawExeName !== result.nextCursor?.rawExeName;
+          if (hasMore && updates.length === 0 && !recordedCursorAdvanced) {
+            throw new Error("Classification app catalog made no progress");
+          }
+        }
       } catch (error) {
         if (requestGeneration !== this.generation) return false;
+        if (
+          error instanceof ClassificationAppCatalogRevisionChangedError
+          && attempt < revisionRetryLimit
+        ) {
+          continue;
+        }
         throw error;
       }
-      if (requestGeneration !== this.generation) return false;
 
-      cursor = result.nextCursor;
-      hasMore = result.hasMore;
-      const updates = result.candidates.map((candidate) => {
-        const incomingRank = result.displayNameRanks[candidate.exeName] ?? 0;
-        const existing = accumulatedCandidates.get(candidate.exeName);
-        if (!existing) {
-          const inserted = { ...candidate };
-          accumulatedCandidates.set(candidate.exeName, inserted);
-          accumulatedDisplayNameRanks.set(candidate.exeName, incomingRank);
-          return { ...inserted };
-        }
-
-        existing.lastSeenMs = Math.max(existing.lastSeenMs, candidate.lastSeenMs);
-        existing.totalDuration = Math.max(existing.totalDuration, candidate.totalDuration);
-        existing.hasNativeRecords ||= candidate.hasNativeRecords;
-        const existingRank = accumulatedDisplayNameRanks.get(candidate.exeName) ?? 0;
-        if (incomingRank > existingRank) {
-          existing.appName = candidate.appName;
-          accumulatedDisplayNameRanks.set(candidate.exeName, incomingRank);
-        }
-        return { ...existing };
-      });
-
-      const recordedCursorAdvanced = previousCursor?.lastSeenMs !== result.nextCursor?.lastSeenMs
-        || previousCursor?.rawExeName !== result.nextCursor?.rawExeName;
-      if (hasMore && updates.length === 0 && !recordedCursorAdvanced) {
-        throw new Error("Classification app catalog made no progress");
-      }
+      const candidates = Array.from(
+        accumulatedCandidates.values(),
+        (candidate) => ({ ...candidate }),
+      );
+      input.onBatch(candidates, false);
+      return {
+        candidates,
+        sourceRevision: expectedRevision ?? 0,
+      } satisfies ClassificationAppCatalogLoadResult;
     }
-    input.onBatch(
-      Array.from(accumulatedCandidates.values(), (candidate) => ({ ...candidate })),
-      false,
-    );
-    return true;
+
+    throw new ClassificationAppCatalogRevisionChangedError();
+  }
+}
+
+function candidateSnapshotsEqual(
+  left: readonly ObservedAppCandidate[],
+  right: readonly ObservedAppCandidate[],
+) {
+  return left.length === right.length && left.every((candidate, index) => {
+    const other = right[index];
+    return candidate.exeName === other?.exeName
+      && candidate.appName === other.appName
+      && candidate.totalDuration === other.totalDuration
+      && candidate.lastSeenMs === other.lastSeenMs
+      && candidate.hasNativeRecords === other.hasNativeRecords;
+  });
+}
+
+export class ClassificationAppCatalogSnapshotStore {
+  private readonly createController: () => ClassificationAppCatalogLoader;
+  private readonly nowMs: () => number;
+  private state: ClassificationAppCatalogSnapshotState = {
+    status: "cold",
+    committed: null,
+    requestGeneration: 0,
+    error: null,
+  };
+  private listeners = new Set<() => void>();
+  private inFlight: {
+    generation: number;
+    promise: Promise<CompleteAppCatalogSnapshot | null>;
+  } | null = null;
+  private stale = true;
+
+  constructor(input: {
+    createController: () => ClassificationAppCatalogLoader;
+    nowMs?: () => number;
+  }) {
+    this.createController = input.createController;
+    this.nowMs = input.nowMs ?? (() => Date.now());
+  }
+
+  getSnapshot = () => this.state;
+
+  subscribe = (listener: () => void) => {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  };
+
+  private publish(next: ClassificationAppCatalogSnapshotState) {
+    if (this.state === next) return;
+    this.state = next;
+    for (const listener of this.listeners) listener();
+  }
+
+  invalidate(input: { discardCommitted?: boolean } = {}) {
+    const requestGeneration = this.state.requestGeneration + 1;
+    this.stale = true;
+    this.publish({
+      status: "cold",
+      committed: input.discardCommitted ? null : this.state.committed,
+      requestGeneration,
+      error: null,
+    });
+  }
+
+  ensureLoaded() {
+    if (this.state.committed && !this.stale) {
+      return Promise.resolve(this.state.committed);
+    }
+    return this.refresh();
+  }
+
+  prewarm() {
+    return this.ensureLoaded();
+  }
+
+  retry() {
+    return this.refresh();
+  }
+
+  refresh(): Promise<CompleteAppCatalogSnapshot | null> {
+    const generation = this.state.requestGeneration + 1;
+    if (this.inFlight?.generation === this.state.requestGeneration) {
+      return this.inFlight.promise;
+    }
+
+    const committedAtStart = this.state.committed;
+    this.publish({
+      status: committedAtStart ? "refreshing" : "cold",
+      committed: committedAtStart,
+      requestGeneration: generation,
+      error: null,
+    });
+
+    const promise = this.createController().loadAll({
+      onBatch: () => undefined,
+    }).then((result) => {
+      if (!result || this.state.requestGeneration !== generation) {
+        return this.state.committed;
+      }
+      const candidates = committedAtStart
+        && committedAtStart.sourceRevision === result.sourceRevision
+        && candidateSnapshotsEqual(committedAtStart.candidates, result.candidates)
+        ? committedAtStart.candidates
+        : result.candidates;
+      const committed = committedAtStart
+        && committedAtStart.sourceRevision === result.sourceRevision
+        && candidates === committedAtStart.candidates
+        ? committedAtStart
+        : {
+          candidates,
+          sourceRevision: result.sourceRevision,
+          completedAtMs: this.nowMs(),
+        };
+      this.stale = false;
+      this.publish({
+        status: "ready",
+        committed,
+        requestGeneration: generation,
+        error: null,
+      });
+      return committed;
+    }).catch((error: unknown) => {
+      if (this.state.requestGeneration === generation) {
+        this.publish({
+          status: "error",
+          committed: committedAtStart,
+          requestGeneration: generation,
+          error,
+        });
+      }
+      return Promise.reject(error);
+    }).finally(() => {
+      if (this.inFlight?.generation === generation) {
+        this.inFlight = null;
+      }
+    });
+
+    this.inFlight = { generation, promise };
+    return promise;
   }
 }

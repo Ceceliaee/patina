@@ -802,11 +802,33 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
       await evaluate(
         client!,
         sessionId,
-        `!/全部 \\(\\d+\\)/.test(document.body.innerText)`,
+        `document.body.innerText.includes("全部 (—)")
+          && !/全部 \\(\\d+\\)/.test(document.body.innerText)`,
       ),
       true,
-      "Classification must not publish bootstrap counts as complete catalog totals",
+      "Classification must preserve the count structure without publishing bootstrap totals",
     );
+    const coldGeometry = await evaluate(client!, sessionId, `
+      (() => {
+        const all = Array.from(document.querySelectorAll(".qp-classification-count-filter button"))
+          .find((node) => node.textContent?.trim().startsWith("全部"));
+        const search = document.querySelector('input[placeholder="搜索应用或分类"]');
+        const filterRect = all?.getBoundingClientRect();
+        const searchRect = search?.getBoundingClientRect();
+        return filterRect && searchRect
+          ? {
+              filterHeight: filterRect.height,
+              filterTop: filterRect.top,
+              searchTop: searchRect.top,
+            }
+          : null;
+      })()
+    `) as {
+      filterHeight: number;
+      filterTop: number;
+      searchTop: number;
+    } | null;
+    assert.ok(coldGeometry, "Cold classification controls should have measurable geometry");
     await evaluate(
       client!,
       sessionId,
@@ -840,6 +862,39 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
         && /全部 \\(\\d+\\)/.test(document.body.innerText)`,
       15_000,
       "Retrying should automatically load the complete application catalog",
+    );
+    const readyGeometry = await evaluate(client!, sessionId, `
+      (() => {
+        const all = Array.from(document.querySelectorAll(".qp-classification-count-filter button"))
+          .find((node) => node.textContent?.trim().startsWith("全部"));
+        const search = document.querySelector('input[placeholder="搜索应用或分类"]');
+        const filterRect = all?.getBoundingClientRect();
+        const searchRect = search?.getBoundingClientRect();
+        return filterRect && searchRect
+          ? {
+              filterHeight: filterRect.height,
+              filterTop: filterRect.top,
+              searchTop: searchRect.top,
+            }
+          : null;
+      })()
+    `) as {
+      filterHeight: number;
+      filterTop: number;
+      searchTop: number;
+    } | null;
+    assert.ok(readyGeometry, "Ready classification controls should have measurable geometry");
+    assert.ok(
+      Math.abs(readyGeometry.filterHeight - coldGeometry.filterHeight) <= 0.5,
+      "Classification filter height should stay stable while counts load",
+    );
+    assert.ok(
+      Math.abs(readyGeometry.filterTop - coldGeometry.filterTop) <= 0.5,
+      "Classification filter should stay on the same row while counts load",
+    );
+    assert.ok(
+      Math.abs(readyGeometry.searchTop - coldGeometry.searchTop) <= 0.5,
+      "Classification search should stay on the same row while counts load",
     );
     assert.equal(
       await evaluate(client!, sessionId, `

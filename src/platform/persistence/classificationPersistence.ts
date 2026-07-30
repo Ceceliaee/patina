@@ -8,7 +8,10 @@ import {
   resolveNativeSessionPrecedence,
   type TimeRecordOrigin,
 } from "./nativeSessionPrecedence.ts";
-import { loadActivityCatalogPage } from "./activityReadModelGateway.ts";
+import {
+  loadActivityCatalogPage,
+  type ActivityReadPath,
+} from "./activityReadModelGateway.ts";
 
 export interface SettingKeyValueRow {
   key: string;
@@ -61,6 +64,9 @@ export interface RecordedAppCatalogPage {
   rows: RecordedAppCatalogRow[];
   nextCursor: RecordedAppCatalogCursor | null;
   hasMore: boolean;
+  readPath: ActivityReadPath;
+  fallbackReason: string | null;
+  sourceRevision: number;
 }
 
 export interface RecordedAppCatalogQueryInput {
@@ -389,6 +395,9 @@ export async function loadRecordedAppCatalogPage(
     })),
     nextCursor: page.nextCursor ?? input.cursor,
     hasMore: page.hasMore,
+    readPath: page.readPath,
+    fallbackReason: page.fallbackReason,
+    sourceRevision: page.sourceRevision,
   };
 }
 

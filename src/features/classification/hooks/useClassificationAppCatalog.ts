@@ -1,75 +1,40 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { ClassificationService } from "../services/classificationService.ts";
-import type { ObservedAppCandidate } from "../services/classificationStore.ts";
 
 interface UseClassificationAppCatalogInput {
   enabled: boolean;
-  initialCandidates: readonly ObservedAppCandidate[];
 }
-
-interface CatalogViewState {
-  candidates: ObservedAppCandidate[];
-  loading: boolean;
-  error: boolean;
-}
-
-let completeCatalogCache: ObservedAppCandidate[] | null = null;
 
 export function useClassificationAppCatalog({
   enabled,
-  initialCandidates,
 }: UseClassificationAppCatalogInput) {
-  const [view, setView] = useState<CatalogViewState>(() => ({
-    candidates: completeCatalogCache ?? [...initialCandidates],
-    loading: !completeCatalogCache,
-    error: false,
-  }));
-  const controllerRef = useRef<ReturnType<typeof ClassificationService.createAppCatalogController> | null>(null);
-  controllerRef.current ??= ClassificationService.createAppCatalogController();
-
-  const loadAll = useCallback(async () => {
-    const cachedCatalog = completeCatalogCache;
-    const hasCache = !!cachedCatalog;
-    const loadedCandidates = new Map<string, ObservedAppCandidate>();
-    setView({
-      candidates: cachedCatalog ?? [...initialCandidates],
-      loading: !hasCache,
-      error: false,
-    });
-
-    try {
-      await controllerRef.current!.loadAll({
-        onBatch: (candidates, hasMore) => {
-          if (!candidates.length && hasMore) return;
-
-          for (const candidate of candidates) {
-            loadedCandidates.set(candidate.exeName, candidate);
-          }
-          if (hasMore && hasCache) return;
-          const nextCandidates = Array.from(loadedCandidates.values());
-          if (!hasMore) completeCatalogCache = nextCandidates;
-
-          setView({
-            candidates: nextCandidates,
-            loading: hasMore,
-            error: false,
-          });
-        },
-      });
-    } catch {
-      setView((current) => ({
-        ...current,
-        loading: false,
-        error: !completeCatalogCache,
-      }));
-    }
-  }, [initialCandidates]);
+  const snapshot = useSyncExternalStore(
+    ClassificationService.subscribeAppCatalogSnapshot,
+    ClassificationService.getAppCatalogSnapshot,
+    ClassificationService.getAppCatalogSnapshot,
+  );
 
   useEffect(() => {
     if (!enabled) return;
-    void loadAll();
-    return () => { controllerRef.current?.invalidate(); };
-  }, [enabled, loadAll]);
+    void ClassificationService.ensureAppCatalogLoaded().catch(() => undefined);
+  }, [enabled]);
 
-  return { ...view, retry: loadAll, reload: loadAll };
+  const retry = useCallback(
+    () => ClassificationService.retryAppCatalog(),
+    [],
+  );
+  const reload = useCallback(() => {
+    ClassificationService.invalidateAppCatalog();
+    return ClassificationService.refreshAppCatalog();
+  }, []);
+
+  return {
+    candidates: snapshot.committed?.candidates ?? [],
+    hasSnapshot: snapshot.committed !== null,
+    loading: snapshot.status === "cold" || snapshot.status === "refreshing",
+    error: snapshot.status === "error" && snapshot.committed === null,
+    refreshError: snapshot.status === "error" && snapshot.committed !== null,
+    retry,
+    reload,
+  };
 }

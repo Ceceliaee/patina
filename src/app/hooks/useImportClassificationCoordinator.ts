@@ -14,6 +14,7 @@ export function useImportClassificationCoordinator(
 ) {
   const onImportedDataChanged = useCallback(() => {
     ClassificationService.invalidateBootstrapCache();
+    ClassificationService.invalidateAppCatalog();
     clearDashboardSnapshotCache();
     clearToolsPageCaches();
     void Promise.all([
@@ -22,6 +23,7 @@ export function useImportClassificationCoordinator(
     ]).then(async () => {
       const bootstrap = await ClassificationService.loadClassificationBootstrap();
       ClassificationService.applyBootstrapToProcessMapper(bootstrap);
+      await ClassificationService.refreshAppCatalog().catch(() => undefined);
     }).catch(() => {
       ClassificationService.invalidateBootstrapCache();
     });

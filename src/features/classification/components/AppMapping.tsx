@@ -61,8 +61,10 @@ export default function AppMapping(props: Props) {
     handleCancel,
     handleSave,
     filteredCandidates,
+    appCatalogHasSnapshot,
     appCatalogLoading,
     appCatalogError,
+    appCatalogRefreshError,
     appCatalogRetry,
     filteredWebDomainCandidates,
     showCategoryDialog,
@@ -121,7 +123,10 @@ export default function AppMapping(props: Props) {
   const bootstrapReady = !loading && draftState !== null && savedState !== null;
   const effectiveObjectMode = webActivityEnabled ? objectMode : "app";
   const contentError = loadError || (effectiveObjectMode === "app" && appCatalogError);
-  const contentState = contentError ? "error" : bootstrapReady ? "ready" : "cold";
+  const activeCatalogReady = effectiveObjectMode === "web"
+    ? bootstrapReady
+    : bootstrapReady && appCatalogHasSnapshot;
+  const contentState = contentError ? "error" : activeCatalogReady ? "ready" : "cold";
   const retryContent = loadError ? retryLoading : appCatalogRetry;
   const objectModeOptions = [
     { value: "app" as const, label: UI_TEXT.mapping.objectModeApp, disabled: !bootstrapReady },
@@ -131,7 +136,6 @@ export default function AppMapping(props: Props) {
     ? UI_TEXT.mapping.webSearchPlaceholder
     : UI_TEXT.mapping.appSearchPlaceholder;
   const activeCounts = effectiveObjectMode === "web" ? webDomainCounts : counts;
-  const activeCountsReady = effectiveObjectMode === "web" || (!appCatalogLoading && !appCatalogError);
   const handleObjectModeChange = (mode: MappingObjectMode) => {
     setObjectMode(mode);
     rememberClassificationObjectMode(mode);
@@ -199,6 +203,7 @@ export default function AppMapping(props: Props) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3">
             <QuietSegmentedFilter<CandidateFilter>
+              className="qp-classification-count-filter"
               value={filter}
               onChange={setFilter}
               options={filterOptions.map((item) => {
@@ -211,9 +216,9 @@ export default function AppMapping(props: Props) {
                   value: item.value,
                   label: item.showCount === false
                     ? item.label
-                    : `${item.label}${bootstrapReady && activeCountsReady ? ` (${count})` : ""}`,
+                    : `${item.label} (${activeCatalogReady ? count : "—"})`,
                   ariaLabel: item.ariaLabel,
-                  disabled: !bootstrapReady,
+                  disabled: !activeCatalogReady,
                 };
               })}
             />
@@ -223,10 +228,21 @@ export default function AppMapping(props: Props) {
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder={searchPlaceholder}
               aria-label={searchPlaceholder}
-              disabled={!bootstrapReady}
+              disabled={!activeCatalogReady}
             />
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            {effectiveObjectMode === "app" && appCatalogRefreshError && (
+              <QuietButton
+                size="compact"
+                className="size-8 p-0"
+                onClick={() => void appCatalogRetry()}
+                aria-label={`${UI_TEXT.mapping.loadFailed} ${UI_TEXT.mapping.retry}`}
+                title={UI_TEXT.mapping.loadFailed}
+              >
+                <RefreshCw size={13} aria-hidden />
+              </QuietButton>
+            )}
             {webActivityEnabled && (
               <QuietSegmentedFilter
                 value={effectiveObjectMode}
@@ -261,7 +277,7 @@ export default function AppMapping(props: Props) {
               {UI_TEXT.mapping.retry}
             </QuietButton>
           </div>
-        ) : !bootstrapReady ? (
+        ) : !activeCatalogReady ? (
           <div className="h-full" aria-hidden />
         ) : effectiveObjectMode === "web" ? (
           <div key={contentPaneKey} className="qp-classification-object-pane h-full">

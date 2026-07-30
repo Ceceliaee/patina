@@ -9,6 +9,8 @@ import {
   CLASSIFICATION_APP_CATALOG_CARD_LIMIT,
   CLASSIFICATION_APP_CATALOG_MAX_RAW_PAGES,
   ClassificationAppCatalogController,
+  ClassificationAppCatalogSnapshotStore,
+  ClassificationAppCatalogRevisionChangedError,
   loadClassificationAppCatalogBatch,
 } from "../src/features/classification/services/classificationAppCatalog.ts";
 import { ProcessMapper } from "../src/shared/classification/processMapper.ts";
@@ -53,6 +55,18 @@ function createCatalogFixture() {
   return db;
 }
 
+function catalogPage(
+  page: Omit<RecordedAppCatalogPage, "readPath" | "fallbackReason" | "sourceRevision">,
+  sourceRevision: number = 1,
+): RecordedAppCatalogPage {
+  return {
+    ...page,
+    readPath: "projection",
+    fallbackReason: null,
+    sourceRevision,
+  };
+}
+
 function selectRecordedPage(
   db: DatabaseSync,
   cursor: RecordedAppCatalogCursor | null,
@@ -67,13 +81,13 @@ function selectRecordedPage(
     hasNativeRecords: Number(row.has_native_records) === 1,
   }));
   const last = rows.at(-1);
-  return {
+  return catalogPage({
     rows,
     nextCursor: last
       ? { lastSeenMs: last.lastSeenMs, rawExeName: last.rawExeName }
       : cursor,
     hasMore: rows.length === limit,
-  };
+  });
 }
 
 await runTest("recorded catalog reaches native and imported applications older than 30 days", () => {
@@ -162,21 +176,21 @@ await runTest("recorded catalog search keeps SQL injection payloads as data", ()
 
 await runTest("catalog batch canonicalizes duplicates across raw pages", async () => {
   const pages: RecordedAppCatalogPage[] = [
-    {
+    catalogPage({
       rows: [
         { rawExeName: "Code.exe", appName: "Code", lastSeenMs: 300, hasNativeRecords: true },
         { rawExeName: "code.exe", appName: "Visual Studio Code", lastSeenMs: 200, hasNativeRecords: false },
       ],
       nextCursor: { lastSeenMs: 200, rawExeName: "code.exe" },
       hasMore: true,
-    },
-    {
+    }),
+    catalogPage({
       rows: [
         { rawExeName: "notes.exe", appName: "Notes", lastSeenMs: 100, hasNativeRecords: false },
       ],
       nextCursor: { lastSeenMs: 100, rawExeName: "notes.exe" },
       hasMore: false,
-    },
+    }),
   ];
   let call = 0;
   const result = await loadClassificationAppCatalogBatch({
@@ -198,7 +212,7 @@ await runTest("catalog uses the canonical executable fallback for alias-only com
     searchQuery: "",
     seenExeNames: [],
   }, {
-    loadRecordedPage: async () => ({
+    loadRecordedPage: async () => catalogPage({
       rows: [{
         rawExeName: "Douyin_tray.exe",
         appName: "Douyin_tray",
@@ -221,7 +235,7 @@ await runTest("catalog prefers a later canonical runtime name over a newer alias
     searchQuery: "",
     seenExeNames: [],
   }, {
-    loadRecordedPage: async () => ({
+    loadRecordedPage: async () => catalogPage({
       rows: [
         {
           rawExeName: "Douyin_tray.exe",
@@ -257,7 +271,7 @@ await runTest("catalog candidates keep runtime names separate from saved display
       searchQuery: "",
       seenExeNames: [],
     }, {
-      loadRecordedPage: async () => ({
+      loadRecordedPage: async () => catalogPage({
         rows: [{
           rawExeName: "new-editor.exe",
           appName: "Runtime Editor",
@@ -284,11 +298,11 @@ await runTest("catalog batch stops after the bounded raw-page scan budget", asyn
   }, {
     loadRecordedPage: async ({ cursor }) => {
       calls += 1;
-      return {
+      return catalogPage({
         rows: [{ rawExeName: "repeat.exe", appName: "Repeat", lastSeenMs: 1000 - calls, hasNativeRecords: true }],
         nextCursor: { lastSeenMs: 1000 - calls, rawExeName: `repeat-${calls}.exe` },
         hasMore: true,
-      };
+      });
     },
   });
 
@@ -303,7 +317,7 @@ await runTest("catalog never revives applications from classification mappings a
     searchQuery: "",
     seenExeNames: ["recorded.exe"],
   }, {
-    loadRecordedPage: async () => ({ rows: [], nextCursor: null, hasMore: false }),
+    loadRecordedPage: async () => catalogPage({ rows: [], nextCursor: null, hasMore: false }),
   });
 
   assert.deepEqual(result.candidates, []);
@@ -316,7 +330,7 @@ await runTest("search results also require an underlying activity record", async
     searchQuery: "previous alias",
     seenExeNames: [],
   }, {
-    loadRecordedPage: async () => ({ rows: [], nextCursor: null, hasMore: false }),
+    loadRecordedPage: async () => catalogPage({ rows: [], nextCursor: null, hasMore: false }),
   });
   assert.deepEqual(result.candidates, []);
 });
@@ -333,7 +347,7 @@ await runTest("catalog output never exceeds its canonical card boundary", async 
     searchQuery: "",
     seenExeNames: [],
   }, {
-    loadRecordedPage: async () => ({
+    loadRecordedPage: async () => catalogPage({
       rows,
       nextCursor: { lastSeenMs: rows.at(-1)!.lastSeenMs, rawExeName: rows.at(-1)!.rawExeName },
       hasMore: true,
@@ -362,7 +376,7 @@ await runTest("catalog controller automatically exhausts every internal batch", 
       collected.push(...candidates.map((candidate) => candidate.exeName));
     },
   });
-  assert.equal(completed, true);
+  assert.equal(completed && completed.candidates.length, 130);
   assert.equal(collected.length, 130);
   assert.equal(new Set(collected).size, 130);
   assert.equal(batches, 1);
@@ -389,13 +403,13 @@ await runTest("catalog controller upgrades alias fallbacks across batch boundari
     loadRecordedPage: async () => {
       page += 1;
       if (page === 1) {
-        return {
+        return catalogPage({
           rows: firstRows,
           nextCursor: { lastSeenMs: 940, rawExeName: "filler-58.exe" },
           hasMore: true,
-        };
+        });
       }
-      return {
+      return catalogPage({
         rows: [{
           rawExeName: "douyin.exe",
           appName: "抖音",
@@ -404,7 +418,7 @@ await runTest("catalog controller upgrades alias fallbacks across batch boundari
         }],
         nextCursor: { lastSeenMs: 100, rawExeName: "douyin.exe" },
         hasMore: false,
-      };
+      });
     },
   });
   const collected = new Map<string, ObservedAppCandidate>();
@@ -419,7 +433,283 @@ await runTest("catalog controller upgrades alias fallbacks across batch boundari
   assert.equal(collected.get("douyin.exe")?.appName, "抖音");
 });
 
-await runTest("only the latest catalog generation may update visible state", () => {
+await runTest("only the latest catalog generation may update visible state", async () => {
+  let releaseFirstPage!: (page: RecordedAppCatalogPage) => void;
+  const firstPage = new Promise<RecordedAppCatalogPage>((resolve) => {
+    releaseFirstPage = resolve;
+  });
+  let call = 0;
+  const controller = new ClassificationAppCatalogController({
+    loadRecordedPage: async () => {
+      call += 1;
+      if (call === 1) return firstPage;
+      return catalogPage({
+        rows: [{
+          rawExeName: "new.exe",
+          appName: "New",
+          lastSeenMs: 2,
+          hasNativeRecords: true,
+        }],
+        nextCursor: { lastSeenMs: 2, rawExeName: "new.exe" },
+        hasMore: false,
+      }, 2);
+    },
+  });
+  const published: string[][] = [];
+  const first = controller.loadAll({
+    onBatch: (candidates) => published.push(candidates.map((candidate) => candidate.exeName)),
+  });
+  const second = controller.loadAll({
+    onBatch: (candidates) => published.push(candidates.map((candidate) => candidate.exeName)),
+  });
+  releaseFirstPage(catalogPage({
+    rows: [{
+      rawExeName: "old.exe",
+      appName: "Old",
+      lastSeenMs: 1,
+      hasNativeRecords: true,
+    }],
+    nextCursor: { lastSeenMs: 1, rawExeName: "old.exe" },
+    hasMore: false,
+  }, 1));
+
+  assert.equal(await first, false);
+  assert.deepEqual((await second) && published, [["new.exe"]]);
+});
+
+await runTest("catalog retries once when pagination revisions change", async () => {
+  let call = 0;
+  const controller = new ClassificationAppCatalogController({
+    loadRecordedPage: async ({ cursor }) => {
+      call += 1;
+      if (call === 1) {
+        return catalogPage({
+          rows: [{ rawExeName: "first.exe", appName: "First", lastSeenMs: 2, hasNativeRecords: true }],
+          nextCursor: { lastSeenMs: 2, rawExeName: "first.exe" },
+          hasMore: true,
+        }, 1);
+      }
+      if (call === 2) {
+        return catalogPage({
+          rows: [{ rawExeName: "second.exe", appName: "Second", lastSeenMs: 1, hasNativeRecords: true }],
+          nextCursor: { lastSeenMs: 1, rawExeName: "second.exe" },
+          hasMore: false,
+        }, 2);
+      }
+      return catalogPage({
+        rows: cursor
+          ? [{ rawExeName: "second.exe", appName: "Second", lastSeenMs: 1, hasNativeRecords: true }]
+          : [{ rawExeName: "first.exe", appName: "First", lastSeenMs: 2, hasNativeRecords: true }],
+        nextCursor: cursor
+          ? { lastSeenMs: 1, rawExeName: "second.exe" }
+          : { lastSeenMs: 2, rawExeName: "first.exe" },
+        hasMore: cursor === null,
+      }, 2);
+    },
+  });
+
+  const result = await controller.loadAll({ onBatch: () => undefined });
+  assert.equal(result && result.sourceRevision, 2);
+  assert.deepEqual(result && result.candidates.map((candidate) => candidate.exeName), [
+    "first.exe",
+    "second.exe",
+  ]);
+  assert.equal(call, 4);
+});
+
+await runTest("catalog rejects repeated mixed revisions without publishing", async () => {
+  let call = 0;
+  let publishes = 0;
+  const controller = new ClassificationAppCatalogController({
+    loadRecordedPage: async ({ cursor }) => {
+      call += 1;
+      return catalogPage({
+        rows: [{
+          rawExeName: cursor ? "second.exe" : "first.exe",
+          appName: cursor ? "Second" : "First",
+          lastSeenMs: cursor ? 1 : 2,
+          hasNativeRecords: true,
+        }],
+        nextCursor: cursor
+          ? { lastSeenMs: 1, rawExeName: "second.exe" }
+          : { lastSeenMs: 2, rawExeName: "first.exe" },
+        hasMore: cursor === null,
+      }, call % 2 === 1 ? 1 : 2);
+    },
+  });
+
+  await assert.rejects(
+    controller.loadAll({ onBatch: () => { publishes += 1; } }),
+    ClassificationAppCatalogRevisionChangedError,
+  );
+  assert.equal(publishes, 0);
+  assert.equal(call, 4);
+});
+
+await runTest("snapshot store deduplicates prewarm and page load", async () => {
+  let controllerLoads = 0;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const store = new ClassificationAppCatalogSnapshotStore({
+    createController: () => ({
+      loadAll: async () => {
+        controllerLoads += 1;
+        await gate;
+        return {
+          candidates: [{
+            exeName: "stable.exe",
+            appName: "Stable",
+            totalDuration: 0,
+            lastSeenMs: 1,
+            hasNativeRecords: true,
+          }],
+          sourceRevision: 1,
+        };
+      },
+    }),
+    nowMs: () => 10,
+  });
+
+  const prewarm = store.prewarm();
+  const pageLoad = store.ensureLoaded();
+  assert.equal(controllerLoads, 1);
+  assert.equal(store.getSnapshot().committed, null);
+  release();
+  const [first, second] = await Promise.all([prewarm, pageLoad]);
+  assert.equal(first, second);
+  assert.equal(store.getSnapshot().status, "ready");
+});
+
+await runTest("snapshot store preserves the committed snapshot during refresh failure", async () => {
+  let shouldFail = false;
+  const stableCandidate = {
+    exeName: "stable.exe",
+    appName: "Stable",
+    totalDuration: 0,
+    lastSeenMs: 1,
+    hasNativeRecords: true,
+  };
+  const store = new ClassificationAppCatalogSnapshotStore({
+    createController: () => ({
+      loadAll: async () => {
+        if (shouldFail) throw new Error("busy");
+        return { candidates: [stableCandidate], sourceRevision: 1 };
+      },
+    }),
+  });
+
+  await store.ensureLoaded();
+  const committed = store.getSnapshot().committed;
+  shouldFail = true;
+  store.invalidate();
+  assert.equal(store.getSnapshot().committed, committed);
+  await assert.rejects(store.refresh(), /busy/);
+  assert.equal(store.getSnapshot().committed, committed);
+  assert.equal(store.getSnapshot().status, "error");
+});
+
+await runTest("snapshot store ignores an invalidated refresh that finishes late", async () => {
+  let releaseOld!: () => void;
+  const oldGate = new Promise<void>((resolve) => {
+    releaseOld = resolve;
+  });
+  let load = 0;
+  const store = new ClassificationAppCatalogSnapshotStore({
+    createController: () => ({
+      loadAll: async () => {
+        load += 1;
+        if (load === 1) {
+          await oldGate;
+          return {
+            candidates: [{
+              exeName: "old.exe",
+              appName: "Old",
+              totalDuration: 1,
+              lastSeenMs: 1,
+              hasNativeRecords: true,
+            }],
+            sourceRevision: 1,
+          };
+        }
+        return {
+          candidates: [{
+            exeName: "new.exe",
+            appName: "New",
+            totalDuration: 2,
+            lastSeenMs: 2,
+            hasNativeRecords: true,
+          }],
+          sourceRevision: 2,
+        };
+      },
+    }),
+  });
+
+  const obsolete = store.ensureLoaded();
+  store.invalidate();
+  const current = await store.refresh();
+  releaseOld();
+  await obsolete;
+
+  assert.equal(current?.candidates[0]?.exeName, "new.exe");
+  assert.equal(store.getSnapshot().committed?.candidates[0]?.exeName, "new.exe");
+  assert.equal(store.getSnapshot().status, "ready");
+});
+
+await runTest("snapshot store recovers from a cold failure through retry", async () => {
+  let shouldFail = true;
+  const store = new ClassificationAppCatalogSnapshotStore({
+    createController: () => ({
+      loadAll: async () => {
+        if (shouldFail) throw new Error("cold failure");
+        return {
+          candidates: [{
+            exeName: "recovered.exe",
+            appName: "Recovered",
+            totalDuration: 1,
+            lastSeenMs: 1,
+            hasNativeRecords: true,
+          }],
+          sourceRevision: 1,
+        };
+      },
+    }),
+  });
+
+  await assert.rejects(store.ensureLoaded(), /cold failure/);
+  assert.equal(store.getSnapshot().committed, null);
+  assert.equal(store.getSnapshot().status, "error");
+
+  shouldFail = false;
+  await store.retry();
+  assert.equal(store.getSnapshot().status, "ready");
+  assert.equal(store.getSnapshot().committed?.candidates[0]?.exeName, "recovered.exe");
+});
+
+await runTest("snapshot store reuses an unchanged committed snapshot", async () => {
+  const candidate = {
+    exeName: "stable.exe",
+    appName: "Stable",
+    totalDuration: 1,
+    lastSeenMs: 1,
+    hasNativeRecords: true,
+  };
+  const store = new ClassificationAppCatalogSnapshotStore({
+    createController: () => ({
+      loadAll: async () => ({
+        candidates: [{ ...candidate }],
+        sourceRevision: 1,
+      }),
+    }),
+  });
+
+  const first = await store.ensureLoaded();
+  store.invalidate();
+  const second = await store.refresh();
+  assert.equal(second, first);
+  assert.equal(second?.candidates, first?.candidates);
 });
 
 console.log(`Passed ${passed} classification app catalog tests`);

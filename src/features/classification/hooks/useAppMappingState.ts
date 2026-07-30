@@ -188,7 +188,6 @@ export function useAppMappingState({
   );
   const appCatalog = useClassificationAppCatalog({
     enabled: draftState !== null,
-    initialCandidates: candidates,
   });
   const candidateIconExeNames = useMemo(
     () => appCatalog.candidates.map((candidate) => candidate.exeName),
@@ -854,8 +853,10 @@ export function useAppMappingState({
     handleCancel,
     handleSave,
     filteredCandidates,
+    appCatalogHasSnapshot: appCatalog.hasSnapshot,
     appCatalogLoading: appCatalog.loading,
     appCatalogError: appCatalog.error,
+    appCatalogRefreshError: appCatalog.refreshError,
     appCatalogRetry: appCatalog.retry,
     filteredWebDomainCandidates,
     showCategoryDialog,
