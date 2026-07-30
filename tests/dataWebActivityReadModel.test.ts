@@ -813,7 +813,7 @@ await runTest("web snapshot dedupes matching in-flight loads and excludes disabl
   assert.deepEqual(getDataWebActivitySnapshotCacheStats(), {
     entries: 1,
     pendingEntries: 0,
-    limit: 3,
+    limit: 4,
   });
 });
 
@@ -875,7 +875,7 @@ await runTest("cache invalidation prevents a late web snapshot from repopulating
   assert.deepEqual(getDataWebActivitySnapshotCacheStats(), {
     entries: 0,
     pendingEntries: 0,
-    limit: 3,
+    limit: 4,
   });
 });
 
@@ -1074,7 +1074,7 @@ await runTest("web trend cache peeks synchronously without creating new IO", asy
   assert.equal(getCachedDataWebTrendSnapshot({ selection: sevenDays, nowMs }), null);
 });
 
-await runTest("web trend cache peek follows the three-entry LRU order", async () => {
+await runTest("web snapshot cache keeps the active heatmap and three trend ranges warm", async () => {
   const nowMs = new Date(2026, 4, 8, 12, 0, 0).getTime();
   const deps: DataWebActivitySnapshotDependencies = {
     loadAggregateRange: async () => ({ records: [], domainCoverage: [] }),
@@ -1091,6 +1091,12 @@ await runTest("web trend cache peek follows the three-entry LRU order", async ()
   await loadDataWebActivitySnapshot({ selection: selections[0], nowMs, deps });
   await loadDataWebActivitySnapshot({ selection: selections[1], nowMs, deps });
   await loadDataWebActivitySnapshot({ selection: selections[2], nowMs, deps });
+  await loadDataWebHeatmapSnapshot({
+    selection: "recent",
+    normalizedDomains: ["example.com"],
+    nowMs,
+    deps,
+  });
   assert.ok(getCachedDataWebTrendSnapshot({ selection: selections[0], nowMs }));
   await loadDataWebActivitySnapshot({ selection: selections[3], nowMs, deps });
 
@@ -1099,9 +1105,9 @@ await runTest("web trend cache peek follows the three-entry LRU order", async ()
   assert.ok(getCachedDataWebTrendSnapshot({ selection: selections[2], nowMs }));
   assert.ok(getCachedDataWebTrendSnapshot({ selection: selections[3], nowMs }));
   assert.deepEqual(getDataWebActivitySnapshotCacheStats(), {
-    entries: 3,
+    entries: 4,
     pendingEntries: 0,
-    limit: 3,
+    limit: 4,
   });
 });
 

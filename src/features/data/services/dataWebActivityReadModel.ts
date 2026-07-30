@@ -110,7 +110,9 @@ interface BuildDataWebActivityHeatmapInput {
   loadErrorMessage?: string | null;
 }
 
-const DATA_WEB_ACTIVITY_SNAPSHOT_CACHE_LIMIT = 3;
+// Keep the active heatmap plus the three preset trend ranges warm so switching
+// between app and web destinations never evicts the heatmap and flashes a reload.
+const DATA_WEB_ACTIVITY_SNAPSHOT_CACHE_LIMIT = 4;
 const snapshotCache = new Map<string, DataWebActivitySnapshot>();
 const snapshotPromises = new Map<string, Promise<DataWebActivitySnapshot>>();
 let snapshotCacheEpoch = 0;
