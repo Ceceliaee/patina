@@ -2154,13 +2154,12 @@ export async function runDataScenarios(
           const surface = document.querySelector(".data-destination-detail-dialog");
           const body = surface?.querySelector(".qp-dialog-body");
           const records = surface?.querySelector(".data-destination-detail-records");
-          const empty = surface?.querySelector(".data-destination-detail-empty");
-          if (!body || (!records && !empty)) return false;
+          if (!body || !records) return false;
 
           const bodyOverflowY = getComputedStyle(body).overflowY;
-          const recordsOverflowY = records ? getComputedStyle(records).overflowY : null;
+          const recordsOverflowY = getComputedStyle(records).overflowY;
           return !["auto", "scroll"].includes(bodyOverflowY)
-            && (recordsOverflowY === null || ["auto", "scroll"].includes(recordsOverflowY));
+            && ["auto", "scroll"].includes(recordsOverflowY);
         })()
       `),
       true,
@@ -2187,8 +2186,689 @@ export async function runDataScenarios(
       `),
       true,
       "application-detail rows should retain the fixed Quiet Pro summary height",
-  });
+    );
+    const durationControlState = JSON.parse(String(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const controls = document.querySelector(
+            ".data-destination-detail-duration-controls",
+          );
+          const decrease = controls?.querySelector(
+            '[aria-label="减少显示分钟 1 分钟"]',
+          );
+          const increase = controls?.querySelector(
+            '[aria-label="增加显示分钟 1 分钟"]',
+          );
+          const value = controls?.querySelector(
+            ".data-destination-detail-duration-value",
+          );
+          if (
+            !(decrease instanceof HTMLButtonElement)
+            || !(increase instanceof HTMLButtonElement)
+            || !(value instanceof HTMLElement)
+          ) return null;
+          const initialMinutes = Number.parseInt(value.textContent ?? "", 10);
+          const initialActivityCount = document.querySelectorAll(
+            ".data-destination-detail-activity",
+          ).length;
+          const change = increase.disabled ? -1 : 1;
+          const button = change > 0 ? increase : decrease;
+          button.click();
+          return JSON.stringify({
+            change,
+            initialActivityCount,
+            initialMinutes,
+          });
+        })()
+      `),
+    )) as {
+      change: number;
+      initialActivityCount: number;
+      initialMinutes: number;
+    };
+    assert.ok(durationControlState);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Number.parseInt(
+        document.querySelector(".data-destination-detail-duration-value")
+          ?.textContent ?? "",
+        10,
+      ) === ${durationControlState.initialMinutes + durationControlState.change}`,
+      45_000,
+      "detail minimum activity duration update",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        document.querySelectorAll(".data-destination-detail-activity").length
+          ${durationControlState.change > 0 ? "<=" : ">="}
+          ${durationControlState.initialActivityCount}
+      `),
+      true,
+      "raising the minimum duration should never add fragmented activities",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const controls = document.querySelector(
+            ".data-destination-detail-duration-controls",
+          );
+          const button = controls?.querySelector(
+            ${durationControlState.change > 0
+              ? `'[aria-label="减少显示分钟 1 分钟"]'`
+              : `'[aria-label="增加显示分钟 1 分钟"]'`}
+          );
+          if (!(button instanceof HTMLButtonElement)) return false;
+          button.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Number.parseInt(
+        document.querySelector(".data-destination-detail-duration-value")
+          ?.textContent ?? "",
+        10,
+      ) === ${durationControlState.initialMinutes}
+        && Boolean(document.querySelector(
+          ".data-destination-detail-activity-disclosure",
+        ))`,
+      45_000,
+      "restore detail minimum activity duration",
+    );
+    const detailDayNavigationContract = await evaluate(client!, sessionId, `
+        (() => {
+          const controls = document.querySelector(
+            ".data-destination-detail-day-actions",
+          );
+          const arrows = controls?.querySelectorAll(".qp-range-control-arrow");
+          const label = controls?.querySelector(".qp-range-control-label");
+          const referenceLabel = document.querySelector(
+            ".data-app-panel .data-trend-range-control .qp-range-control-label",
+          );
+          if (!arrows || arrows.length !== 2 || !label || !referenceLabel) {
+            return {
+              passed: false,
+              diagnostics: { reason: "missing controls" },
+            };
+          }
+          const leftRect = arrows[0].getBoundingClientRect();
+          const rightRect = arrows[1].getBoundingClientRect();
+          const labelRect = label.getBoundingClientRect();
+          const labelStyle = getComputedStyle(label);
+          const referenceStyle = getComputedStyle(referenceLabel);
+          const sharedStyleProperties = [
+            "height",
+            "minHeight",
+            "borderRadius",
+            "borderTopWidth",
+            "borderTopColor",
+            "backgroundColor",
+            "paddingLeft",
+            "paddingRight",
+            "fontSize",
+            "fontWeight",
+            "lineHeight",
+          ];
+          const geometryMatches = [leftRect.height, rightRect.height, labelRect.height]
+              .every((height) => Math.abs(height - 24) <= 0.5)
+            && [leftRect.width, rightRect.width]
+              .every((width) => Math.abs(width - 24) <= 0.5)
+            && labelRect.width >= 68;
+          const ownerMatches = controls?.parentElement?.classList.contains(
+              "qp-date-picker-day-navigation",
+            );
+          const avoidsInputContract = !label.classList.contains("qp-input");
+          const clickableCursor = labelStyle.cursor === "pointer";
+          const styleDifferences = sharedStyleProperties
+            .filter((property) => labelStyle[property] !== referenceStyle[property])
+            .map((property) => ({
+              property,
+              actual: labelStyle[property],
+              expected: referenceStyle[property],
+            }));
+          return {
+            passed: geometryMatches
+              && ownerMatches
+              && avoidsInputContract
+              && clickableCursor
+              && styleDifferences.length === 0,
+            diagnostics: {
+              geometryMatches,
+              ownerMatches,
+              avoidsInputContract,
+              clickableCursor,
+              rects: {
+                left: { width: leftRect.width, height: leftRect.height },
+                label: { width: labelRect.width, height: labelRect.height },
+                right: { width: rightRect.width, height: rightRect.height },
+              },
+              styleDifferences,
+            },
+          };
+        })()
+      `) as {
+        passed: boolean;
+        diagnostics: unknown;
+      };
+    assert.equal(
+      detailDayNavigationContract.passed,
+      true,
+      `detail day navigation should reuse the actual compact range-control contract: ${
+        JSON.stringify(detailDayNavigationContract.diagnostics)
+      }`,
+    );
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const trigger = document.querySelector(
+          ".data-destination-detail-date-trigger",
+        );
+        if (!(trigger instanceof HTMLButtonElement)) return false;
+        trigger.click();
+        return true;
+      })()
+    `), true);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(
+        ".qp-calendar-popover .qp-calendar-days",
+      ))`,
+      45_000,
+      "detail day calendar",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const trigger = document.querySelector(
+            ".data-destination-detail-date-trigger",
+          );
+          const arrow = document.querySelector(
+            ".data-destination-detail-day-actions .qp-range-control-arrow",
+          );
+          const selected = document.querySelector(
+            ".qp-calendar-popover .qp-calendar-day[data-selected='true']",
+          );
+          if (
+            !(trigger instanceof HTMLButtonElement)
+            || !(arrow instanceof HTMLButtonElement)
+            || !(selected instanceof HTMLButtonElement)
+          ) return false;
+          const selectedKey = selected.dataset.calendarDate;
+          if (!selectedKey) return false;
+          const [year, month, day] = selectedKey.split("-").map(Number);
+          const outsideInitialRange = new Date(year, month - 1, day - 7);
+          const outsideKey = [
+            outsideInitialRange.getFullYear(),
+            String(outsideInitialRange.getMonth() + 1).padStart(2, "0"),
+            String(outsideInitialRange.getDate()).padStart(2, "0"),
+          ].join("-");
+          const outsideButton = document.querySelector(
+            '.qp-calendar-popover [data-calendar-date="' + outsideKey + '"]',
+          );
+          return trigger.classList.contains("qp-date-picker-range-trigger-open")
+            && getComputedStyle(trigger).borderTopColor
+              === getComputedStyle(arrow).borderTopColor
+            && outsideButton instanceof HTMLButtonElement
+            && !outsideButton.disabled;
+        })()
+      `),
+      true,
+      "range date picker should keep neutral chrome and allow dates before the initial seven-day range",
+    );
+    await evaluate(
+      client!,
+      sessionId,
+      `document.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+      }))`,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `!document.querySelector(".qp-calendar-popover")
+        && Boolean(document.querySelector(".data-destination-detail-dialog"))`,
+      45_000,
+      "close detail day calendar",
+    );
+    const activityDisclosureGeometry = JSON.parse(String(await evaluate(
+      client!,
+      sessionId,
+      `
+        (() => {
+          const trigger = document.querySelector(
+            ".data-destination-detail-activity-disclosure",
+          );
+          const records = document.querySelector(
+            ".data-destination-detail-records",
+          );
+          const row = trigger?.closest(".data-destination-detail-activity");
+          if (!(trigger instanceof HTMLButtonElement)) return null;
+          if (!(records instanceof HTMLElement)) return null;
+          if (!(row instanceof HTMLElement)) return null;
+          const rowRect = row.getBoundingClientRect();
+          const recordsRect = records.getBoundingClientRect();
+          trigger.click();
+          return JSON.stringify({
+            rowHeight: rowRect.height,
+            recordsHeight: recordsRect.height,
+          });
+        })()
+      `,
+    ))) as {
+      rowHeight: number;
+      recordsHeight: number;
+    };
+    assert.ok(activityDisclosureGeometry);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(
+        ".data-destination-detail-record-popover "
+          + ".data-destination-detail-popover-item",
+      ))`,
+      45_000,
+      "detail title popover",
+    );
+    const activityPopoverContract = JSON.parse(String(await evaluate(
+      client!,
+      sessionId,
+      `
+        (() => {
+          const trigger = document.querySelector(
+            ".data-destination-detail-activity-disclosure[aria-expanded='true']",
+          );
+          const popover = document.querySelector(
+            ".data-destination-detail-record-popover",
+          );
+          const records = document.querySelector(
+            ".data-destination-detail-records",
+          );
+          const row = trigger?.closest(".data-destination-detail-activity");
+          if (!(trigger instanceof HTMLButtonElement)) return null;
+          if (!(popover instanceof HTMLElement)) return null;
+          if (!(records instanceof HTMLElement)) return null;
+          if (!(row instanceof HTMLElement)) return null;
+          return JSON.stringify({
+            parentIsBody: popover.parentElement === document.body,
+            role: popover.getAttribute("role"),
+            itemCount: popover.querySelectorAll(
+              ".data-destination-detail-popover-item",
+            ).length,
+            hasLegacyDrawer: Boolean(document.querySelector(
+              ".data-destination-detail-fragments",
+            )),
+            nativeTooltipCount: popover.querySelectorAll("[title]").length,
+            rowHeight: row.getBoundingClientRect().height,
+            recordsHeight: records.getBoundingClientRect().height,
+          });
+        })()
+      `,
+    ))) as {
+      parentIsBody: boolean;
+      role: string | null;
+      itemCount: number;
+      hasLegacyDrawer: boolean;
+      nativeTooltipCount: number;
+      rowHeight: number;
+      recordsHeight: number;
+    };
+    assert.ok(activityPopoverContract);
+    assert.equal(activityPopoverContract.parentIsBody, true);
+    assert.equal(activityPopoverContract.role, "region");
+    assert.ok(activityPopoverContract.itemCount >= 1);
+    assert.equal(activityPopoverContract.hasLegacyDrawer, false);
+    assert.equal(
+      activityPopoverContract.nativeTooltipCount,
+      0,
+      "title detail popovers should not duplicate visible copy with browser-native tooltips",
+    );
+    assert.ok(
+      Math.abs(
+        activityPopoverContract.rowHeight - activityDisclosureGeometry.rowHeight,
+      ) < 1,
+      "title popover should not change the activity row height",
+    );
+    assert.ok(
+      Math.abs(
+        activityPopoverContract.recordsHeight
+          - activityDisclosureGeometry.recordsHeight,
+      ) < 1,
+      "title popover should not change the records viewport height",
+    );
+    await evaluate(
+      client!,
+      sessionId,
+      `document.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+      }))`,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `!document.querySelector(".data-destination-detail-record-popover")
+        && Boolean(document.querySelector(".data-destination-detail-dialog"))`,
+      45_000,
+      "close detail title popover without closing the dialog",
+    );
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const trigger = document.querySelector(
+          ".data-destination-detail-date-trigger",
+        );
+        if (!(trigger instanceof HTMLButtonElement)) return false;
+        trigger.click();
+        return true;
+      })()
+    `), true);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(
+        ".qp-calendar-popover .qp-calendar-day[data-selected='true']",
+      ))`,
+      45_000,
+      "reopen unrestricted detail day calendar",
+    );
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const selected = document.querySelector(
+          ".qp-calendar-popover .qp-calendar-day[data-selected='true']",
+        );
+        if (!(selected instanceof HTMLButtonElement)) return false;
+        const selectedKey = selected.dataset.calendarDate;
+        if (!selectedKey) return false;
+        const [year, month, day] = selectedKey.split("-").map(Number);
+        const outsideInitialRange = new Date(year, month - 1, day - 7);
+        const outsideKey = [
+          outsideInitialRange.getFullYear(),
+          String(outsideInitialRange.getMonth() + 1).padStart(2, "0"),
+          String(outsideInitialRange.getDate()).padStart(2, "0"),
+        ].join("-");
+        const outsideButton = document.querySelector(
+          '.qp-calendar-popover [data-calendar-date="' + outsideKey + '"]',
+        );
+        if (!(outsideButton instanceof HTMLButtonElement) || outsideButton.disabled) {
+          return false;
+        }
+        outsideButton.click();
+        return true;
+      })()
+    `), true);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `!document.querySelector(".qp-calendar-popover")
+        && document.querySelector(".data-destination-detail-date-trigger")
+          ?.textContent?.trim() !== "今天"`,
+      45_000,
+      "select a detail date outside the initial seven-day range",
+    );
 
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const close = document.querySelector(
+          '.data-destination-detail-dialog [aria-label="关闭详情"]',
+        );
+        if (!(close instanceof HTMLButtonElement)) return false;
+        close.click();
+        return true;
+      })()
+    `), true);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `!document.querySelector(".data-destination-detail-dialog")`,
+    );
+    assert.deepEqual(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const list = document.querySelector('[aria-label="应用列表"]');
+          return {
+            backgroundRange: document.querySelector(
+              ".data-app-panel > .data-app-panel-header .data-trend-range-trigger",
+            )?.textContent?.trim() ?? "",
+            focusedKey: document.activeElement?.getAttribute("data-destination-key") ?? null,
+            scrollTop: list instanceof HTMLElement ? list.scrollTop : -1,
+            selectedKeys: Array.from(document.querySelectorAll(
+              '[aria-label="应用列表"] button[aria-pressed="true"]',
+            )).map((button) => button.getAttribute("data-destination-key")),
+          };
+        })()
+      `),
+      {
+        backgroundRange: openingState.backgroundRange,
+        focusedKey: openingState.targetKey,
+        scrollTop: openingState.listScrollTop,
+        selectedKeys: [openingState.targetKey],
+      },
+    );
+
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const icon = document.querySelector(".data-app-selected-icon");
+        if (!(icon instanceof HTMLButtonElement)) return false;
+        icon.focus();
+        icon.dispatchEvent(new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+        }));
+        return true;
+      })()
+    `), true);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-destination-detail-timeline")
+        ?.getAttribute("data-data-detail-timeline-zoom-hours") === "2"`,
+      45_000,
+      "detail timeline restores the persisted zoom after reopening",
+    );
+    await evaluate(
+      client!,
+      sessionId,
+      `document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `!document.querySelector(".data-destination-detail-dialog")`,
+    );
+    await evaluate(
+      client!,
+      sessionId,
+      `localStorage.removeItem("patina:data-destination-detail-timeline-zoom-hours:v1")`,
+    );
+
+    await evaluate(
+      client!,
+      sessionId,
+      `globalThis.__TIME_TRACKER_ENABLE_DATA_WEB_DETAIL_FIXTURE = true`,
+    );
+    await evaluate(client!, sessionId, `
+      (() => {
+        const group = document.querySelector('[aria-label="选择时间去向类型"]');
+        Array.from(group?.querySelectorAll("button") ?? [])
+          .find((node) => node.textContent?.trim() === "网页")?.click();
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll('[aria-label="网页列表"] button').length >= 1`,
+      45_000,
+      "web detail candidates",
+    );
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const target = document.querySelector('[aria-label="网页列表"] button');
+        if (!(target instanceof HTMLButtonElement)) return false;
+        target.focus();
+        target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, detail: 1 }));
+        target.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+        target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, detail: 2 }));
+        target.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 2 }));
+        target.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, detail: 2 }));
+        return true;
+      })()
+    `), true);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(".data-destination-detail-dialog"))
+        && !document.querySelector(
+          ".data-destination-detail-dialog .qp-dialog-description",
+        )`,
+      45_000,
+      "web detail dialog",
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(".data-destination-detail-timeline-track"))
+        && Boolean(document.querySelector(
+          ".data-destination-detail-activity-disclosure",
+        ))`,
+      45_000,
+      "web detail day",
+    );
+    const webTitlePopoverContract = JSON.parse(String(await evaluate(
+      client!,
+      sessionId,
+      `
+        (() => {
+          const trigger = document.querySelector(
+            ".data-destination-detail-activity-disclosure",
+          );
+          const row = trigger?.closest(".data-destination-detail-activity");
+          if (!(trigger instanceof HTMLButtonElement)) return null;
+          if (!(row instanceof HTMLElement)) return null;
+          const rowHeight = row.getBoundingClientRect().height;
+          trigger.click();
+          return JSON.stringify({ rowHeight });
+        })()
+      `,
+    ))) as { rowHeight: number };
+    assert.ok(webTitlePopoverContract);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(
+        ".data-destination-detail-record-popover "
+          + ".data-destination-detail-popover-item",
+      ))`,
+      45_000,
+      "web title details popover",
+    );
+    const webTitlePopoverPresentation = JSON.parse(String(await evaluate(
+      client!,
+      sessionId,
+      `
+        (() => {
+          const popover = document.querySelector(
+            ".data-destination-detail-record-popover",
+          );
+          const item = popover?.querySelector(
+            ".data-destination-detail-popover-item",
+          );
+          const copy = item?.querySelector(
+            ".data-destination-detail-popover-copy",
+          );
+          const title = copy?.querySelector("strong");
+          const url = copy?.querySelector("span");
+          const trigger = document.querySelector(
+            ".data-destination-detail-activity-disclosure[aria-expanded='true']",
+          );
+          const row = trigger?.closest(".data-destination-detail-activity");
+          if (!(popover instanceof HTMLElement)) return null;
+          if (!(item instanceof HTMLElement)) return null;
+          if (!(title instanceof HTMLElement)) return null;
+          if (!(url instanceof HTMLElement)) return null;
+          if (!(row instanceof HTMLElement)) return null;
+          const style = getComputedStyle(popover);
+          const titleRect = title.getBoundingClientRect();
+          const urlRect = url.getBoundingClientRect();
+          return JSON.stringify({
+            title: title.textContent?.trim() ?? "",
+            url: url.textContent?.trim() ?? "",
+            titleAboveUrl: titleRect.bottom <= urlRect.top + 1,
+            width: popover.getBoundingClientRect().width,
+            rowHeight: row.getBoundingClientRect().height,
+            position: style.position,
+            parentIsBody: popover.parentElement === document.body,
+          });
+        })()
+      `,
+    ))) as {
+      title: string;
+      url: string;
+      titleAboveUrl: boolean;
+      width: number;
+      rowHeight: number;
+      position: string;
+      parentIsBody: boolean;
+    };
+    assert.ok(webTitlePopoverPresentation);
+    assert.ok(webTitlePopoverPresentation.title.length > 0);
+    assert.ok(webTitlePopoverPresentation.url.length > 0);
+    assert.equal(webTitlePopoverPresentation.titleAboveUrl, true);
+    assert.ok(Math.abs(webTitlePopoverPresentation.width - 284) < 1);
+    assert.ok(
+      Math.abs(
+        webTitlePopoverPresentation.rowHeight
+          - webTitlePopoverContract.rowHeight,
+      ) < 1,
+    );
+    assert.equal(webTitlePopoverPresentation.position, "fixed");
+    assert.equal(webTitlePopoverPresentation.parentIsBody, true);
+    await evaluate(
+      client!,
+      sessionId,
+      `document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `!document.querySelector(".data-destination-detail-record-popover")
+        && Boolean(document.querySelector(".data-destination-detail-dialog"))`,
+      45_000,
+      "close web title details popover",
+    );
+    await evaluate(
+      client!,
+      sessionId,
+      `document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `!document.querySelector(".data-destination-detail-dialog")`,
+    );
+    await evaluate(client!, sessionId, `
+      (() => {
+        const group = document.querySelector('[aria-label="选择时间去向类型"]');
+        Array.from(group?.querySelectorAll("button") ?? [])
+          .find((node) => node.textContent?.trim() === "应用")?.click();
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-app-panel h3")?.textContent?.trim() === "应用趋势"`,
+      45_000,
+      "restore app destination mode",
+    );
+    await evaluate(
+      client!,
+      sessionId,
+      `delete globalThis.__TIME_TRACKER_ENABLE_DATA_WEB_DETAIL_FIXTURE`,
+    );
+  });
 
   await runTest("data web trend failures preserve trustworthy content and remain retryable", async () => {
     await client!.command("Page.navigate", { url: appUrl }, sessionId);
