@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { COPY } from "../../src/shared/copy/index.ts";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import {
+  delay,
   evaluate,
   jsonString,
   waitForAnimationFrames,
@@ -750,12 +751,14 @@ export async function runDataScenarios(
     assert.ok(frameSamples.every(
       (sample) => Math.abs(sample.panelHeight - loadedPanelHeight) <= 1,
     ));
-    await waitForExpression(
-      client!,
-      sessionId,
-      `document.querySelector(".data-app-panel")?.textContent?.includes("更新中")`,
-      45_000,
-      "delayed web trend refresh status",
+    assert.equal(
+      await evaluate(
+        client!,
+        sessionId,
+        `document.querySelector(".data-app-panel")?.textContent?.includes("更新中")`,
+      ),
+      false,
+      "web trend refreshes should stay visually quiet",
     );
     await waitForExpression(
       client!,
@@ -1029,7 +1032,7 @@ export async function runDataScenarios(
       destinationHeatmapZeroTooltips: number;
     };
     assert.equal(webState.directChildren, 2);
-    assert.deepEqual(webState.headingOrder, ["title", "mode", "selected", "status"]);
+    assert.deepEqual(webState.headingOrder, ["title", "mode", "selected"]);
     assert.deepEqual(webState.headerOrder, ["range"]);
     assert.equal(webState.modePressed, "网页");
     assert.equal(webState.domains.length, 2);
@@ -1310,6 +1313,882 @@ export async function runDataScenarios(
       "app selection survives Data page navigation",
     );
   });
+
+  await runTest("data destination details select a double-clicked target and focus on day analysis", async () => {
+    await evaluate(
+      client!,
+      sessionId,
+      `localStorage.removeItem("patina:data-destination-detail-timeline-zoom-hours:v1")`,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll('[aria-label="应用列表"] button').length >= 2`,
+      45_000,
+      "app detail candidates",
+    );
+    await evaluate(client!, sessionId, `
+      (() => {
+        const buttons = Array.from(document.querySelectorAll('[aria-label="应用列表"] button'));
+        if (!buttons.length || buttons.some((button) => button.getAttribute("aria-pressed") !== "true")) {
+          return;
+        }
+        buttons[buttons.length - 1]?.dispatchEvent(new MouseEvent("click", {
+          bubbles: true,
+          ctrlKey: true,
+        }));
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Array.from(document.querySelectorAll('[aria-label="应用列表"] button'))
+        .some((button) => button.getAttribute("aria-pressed") !== "true")`,
+      45_000,
+      "unselected app detail candidate",
+    );
+    const openingState = JSON.parse(String(await evaluate(client!, sessionId, `
+      (() => {
+        const list = document.querySelector('[aria-label="应用列表"]');
+        const buttons = list?.querySelectorAll("button") ?? [];
+        const target = Array.from(buttons).find(
+          (button) => button.getAttribute("aria-pressed") !== "true",
+        ) ?? buttons[1];
+        if (!(list instanceof HTMLElement) || !(target instanceof HTMLButtonElement)) return null;
+        list.scrollTop = 40;
+        target.focus();
+        const selectedKeys = Array.from(
+          list.querySelectorAll('button[aria-pressed="true"]'),
+        ).map((button) => button.getAttribute("data-destination-key"));
+        const backgroundRange = document.querySelector(
+          ".data-app-panel > .data-app-panel-header .data-trend-range-trigger",
+        )?.textContent?.trim() ?? "";
+        window.__dataDetailOpeningTrace = { sawFallback: false };
+        window.__dataDetailOpeningObserver = new MutationObserver((records) => {
+          for (const record of records) {
+            for (const node of record.addedNodes) {
+              if (!(node instanceof Element)) continue;
+              if (
+                node.matches(".data-destination-detail-shell-fallback")
+                || node.querySelector(".data-destination-detail-shell-fallback")
+              ) {
+                window.__dataDetailOpeningTrace.sawFallback = true;
+              }
+            }
+          }
+        });
+        window.__dataDetailOpeningObserver.observe(document.body, {
+          childList: true,
+          subtree: true,
+        });
+        target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, detail: 1 }));
+        target.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+        target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, detail: 2 }));
+        target.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 2 }));
+        target.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, detail: 2 }));
+        return JSON.stringify({
+          backgroundRange,
+          listScrollTop: list.scrollTop,
+          selectedKeys,
+          targetKey: target.getAttribute("data-destination-key"),
+        });
+      })()
+    `))) as {
+      backgroundRange: string;
+      listScrollTop: number;
+      selectedKeys: Array<string | null>;
+      targetKey: string | null;
+    };
+    assert.ok(openingState);
+    assert.ok(openingState.targetKey);
+    assert.ok(!openingState.selectedKeys.includes(openingState.targetKey));
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(".data-destination-detail-dialog"))`,
+      45_000,
+      "app detail dialog",
+    );
+    assert.deepEqual(
+      await evaluate(client!, sessionId, `
+        (() => {
+          window.__dataDetailOpeningObserver?.disconnect();
+          const trace = window.__dataDetailOpeningTrace ?? null;
+          delete window.__dataDetailOpeningObserver;
+          delete window.__dataDetailOpeningTrace;
+          return trace;
+        })()
+      `),
+      { sawFallback: false },
+      "detail dialog should mount its real surface directly without a fallback-frame swap",
+    );
+    assert.deepEqual(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const dialog = document.querySelector(".data-destination-detail-dialog");
+          const background = document.querySelector("[data-data-content-state]");
+          return {
+            dialogCount: document.querySelectorAll(".data-destination-detail-dialog").length,
+            hasDescription: Boolean(dialog?.querySelector(".qp-dialog-description")),
+            hasHeatmap: Boolean(dialog?.querySelector(".data-heatmap-panel")),
+            hasTrend: Boolean(dialog?.querySelector(".data-destination-detail-chart")),
+            hasSummary: Boolean(dialog?.querySelector(".data-destination-detail-summary")),
+            hasModeSwitch: Boolean(dialog?.querySelector(".data-destination-mode")),
+            hasNavigation: Boolean(dialog?.querySelector("nav")),
+            hasTimelineSubtitle: Boolean(
+              dialog?.querySelector(".data-destination-detail-section-header p"),
+            ),
+            backgroundConnected: Boolean(background?.isConnected),
+            selectedKeys: Array.from(document.querySelectorAll(
+              '[aria-label="应用列表"] button[aria-pressed="true"]',
+            )).map((button) => button.getAttribute("data-destination-key")),
+          };
+        })()
+      `),
+      {
+        dialogCount: 1,
+        hasDescription: false,
+        hasHeatmap: false,
+        hasTrend: false,
+        hasSummary: false,
+        hasModeSwitch: false,
+        hasNavigation: false,
+        hasTimelineSubtitle: false,
+        backgroundConnected: true,
+        selectedKeys: [openingState.targetKey],
+      },
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(
+        document.querySelector(".data-destination-detail-header-actions")
+        && document.querySelector(".data-destination-detail-timeline-track")
+      )`,
+      45_000,
+      "app detail content",
+    );
+    assert.deepEqual(
+      await evaluate(client!, sessionId, `(() => {
+        const timeline = document.querySelector(".data-destination-detail-timeline");
+        const slider = document.querySelector(
+          '.data-destination-detail-timeline-slider input[type="range"]',
+        );
+        return {
+          zoomHours: timeline?.getAttribute("data-data-detail-timeline-zoom-hours"),
+          sliderValue: slider instanceof HTMLInputElement ? slider.value : null,
+        };
+      })()`),
+      { zoomHours: "24", sliderValue: "24" },
+      "detail timeline should open with the full 24-hour day",
+    );
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const interaction = document.querySelector(
+          ".data-destination-detail-timeline-interaction",
+        );
+        if (!(interaction instanceof HTMLElement)) return false;
+        const rect = interaction.getBoundingClientRect();
+        const wheel = new WheelEvent("wheel", {
+          bubbles: true,
+          cancelable: true,
+          clientX: rect.left + rect.width * 0.75,
+          clientY: rect.top + rect.height / 2,
+          deltaY: -120,
+        });
+        interaction.dispatchEvent(wheel);
+        return wheel.defaultPrevented;
+      })()
+    `), true);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-destination-detail-timeline")
+        ?.getAttribute("data-data-detail-timeline-zoom-hours") === "23.8"`,
+      45_000,
+      "detail timeline wheel zoom",
+    );
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const interaction = document.querySelector(
+          ".data-destination-detail-timeline-interaction",
+        );
+        if (!(interaction instanceof HTMLElement)) return false;
+        const rect = interaction.getBoundingClientRect();
+        const wheel = new WheelEvent("wheel", {
+          bubbles: true,
+          cancelable: true,
+          clientX: rect.left + rect.width * 0.75,
+          clientY: rect.top + rect.height / 2,
+          deltaY: 120,
+        });
+        interaction.dispatchEvent(wheel);
+        return wheel.defaultPrevented;
+      })()
+    `), true);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-destination-detail-timeline")
+        ?.getAttribute("data-data-detail-timeline-zoom-hours") === "24"`,
+      45_000,
+      "restore detail timeline wheel zoom",
+    );
+    assert.deepEqual(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const surface = document.querySelector(".data-destination-detail-dialog");
+          const body = surface?.querySelector(".qp-dialog-body");
+          return {
+            bodyOwnsScrolling: body
+              ? ["auto", "scroll"].includes(getComputedStyle(body).overflowY)
+              : false,
+            hasRangeControl: Boolean(surface?.querySelector(".data-trend-range-control")),
+            hasTrendChart: Boolean(surface?.querySelector(".data-destination-detail-chart")),
+            hasMetricSummary: Boolean(surface?.querySelector(
+              ".data-destination-detail-summary",
+            )),
+            hasDaySummary: Boolean(surface?.querySelector(
+              ".data-destination-detail-day-summary",
+            )),
+            hasTimelineZoom: Boolean(surface?.querySelector(
+              'input[aria-label="时间轴窗口时长"]',
+            )),
+            nativeTooltipCount: surface?.querySelectorAll("[title]").length ?? -1,
+          };
+        })()
+      `),
+      {
+        bodyOwnsScrolling: false,
+        hasRangeControl: false,
+        hasTrendChart: false,
+        hasMetricSummary: false,
+        hasDaySummary: false,
+        hasTimelineZoom: true,
+        nativeTooltipCount: 0,
+      },
+      "detail should use a compact zoomable day timeline without duplicate summaries or native tooltips",
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(".data-destination-detail-timeline-segment"))`,
+      45_000,
+      "visible detail timeline segment",
+    );
+    const detailSegmentPresentation = JSON.parse(String(await evaluate(
+      client!,
+      sessionId,
+      `
+        (() => {
+          const segment = document.querySelector(
+            ".data-destination-detail-timeline-segment",
+          );
+          const track = document.querySelector(
+            ".data-destination-detail-timeline-track",
+          );
+          const axis = document.querySelector(
+            ".data-destination-detail-timeline-axis",
+          );
+          const firstAxisLabel = axis?.querySelector("span");
+          if (!(segment instanceof HTMLElement)) return null;
+          if (!(track instanceof HTMLElement)) return null;
+          if (!(axis instanceof HTMLElement)) return null;
+          if (!(firstAxisLabel instanceof HTMLElement)) return null;
+          const rect = segment.getBoundingClientRect();
+          const blockStyle = getComputedStyle(segment, "::before");
+          const trackLineStyle = getComputedStyle(track, "::before");
+          const axisStyle = getComputedStyle(axis);
+          const firstAxisLabelStyle = getComputedStyle(firstAxisLabel);
+          return JSON.stringify({
+            nativeTitle: segment.getAttribute("title"),
+            cursor: getComputedStyle(segment).cursor,
+            blockHeight: blockStyle.height,
+            blockRadius: blockStyle.borderRadius,
+            hasGeometry: rect.width > 0 && rect.height > 0,
+            trackLineHeight: trackLineStyle.height,
+            trackLineTop: trackLineStyle.top,
+            axisFontSize: axisStyle.fontSize,
+            axisFontWeight: axisStyle.fontWeight,
+            axisLabelTop: firstAxisLabelStyle.top,
+            hasVerticalGrid: Boolean(document.querySelector(
+              ".data-destination-detail-timeline-grid",
+            )),
+          });
+        })()
+      `,
+    )));
+    assert.deepEqual(
+      {
+        nativeTitle: detailSegmentPresentation.nativeTitle,
+        cursor: detailSegmentPresentation.cursor,
+        blockHeight: detailSegmentPresentation.blockHeight,
+        blockRadius: detailSegmentPresentation.blockRadius,
+        hasGeometry: detailSegmentPresentation.hasGeometry,
+        trackLineHeight: detailSegmentPresentation.trackLineHeight,
+        trackLineTop: detailSegmentPresentation.trackLineTop,
+        axisFontSize: detailSegmentPresentation.axisFontSize,
+        axisFontWeight: detailSegmentPresentation.axisFontWeight,
+        axisLabelTop: detailSegmentPresentation.axisLabelTop,
+        hasVerticalGrid: detailSegmentPresentation.hasVerticalGrid,
+      },
+      {
+        nativeTitle: null,
+        cursor: "default",
+        blockHeight: "48px",
+        blockRadius: "2px",
+        hasGeometry: true,
+        trackLineHeight: "1px",
+        trackLineTop: "31px",
+        axisFontSize: "9px",
+        axisFontWeight: "700",
+        axisLabelTop: "5px",
+        hasVerticalGrid: false,
+      },
+      "detail timeline should reuse the History blocks and centered horizontal track",
+    );
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const segment = document.querySelector(
+          ".data-destination-detail-timeline-segment",
+        );
+        if (!(segment instanceof HTMLElement)) return false;
+        segment.dispatchEvent(new MouseEvent("mouseover", {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+        }));
+        return true;
+      })()
+    `), true);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(
+        ".qp-tooltip.data-destination-detail-timeline-tooltip",
+      ))`,
+      45_000,
+      "Quiet Pro detail timeline tooltip",
+    );
+    assert.equal(
+      await evaluate(
+        client!,
+        sessionId,
+        `(() => {
+          const tooltipLabel = document
+            .querySelector(
+              ".data-destination-detail-timeline-tooltip-label",
+            )
+            ?.textContent?.trim();
+          const dialogHeading = document
+            .querySelector(
+              ".data-destination-detail-dialog .qp-dialog-heading",
+            )
+            ?.textContent?.trim();
+
+          return Boolean(
+            tooltipLabel &&
+              dialogHeading &&
+              dialogHeading.includes(tooltipLabel),
+          );
+        })()`,
+      ),
+      true,
+    );
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const segment = document.querySelector(
+          ".data-destination-detail-timeline-segment",
+        );
+        if (!(segment instanceof HTMLElement)) return false;
+        segment.dispatchEvent(new MouseEvent("mouseout", {
+          bubbles: true,
+          cancelable: true,
+          relatedTarget: document.body,
+          view: window,
+        }));
+        return true;
+      })()
+    `), true);
+    const wideDialogGeometry = JSON.parse(String(await evaluate(client!, sessionId, `
+      (() => {
+        const surface = document.querySelector(".data-destination-detail-dialog");
+        const header = surface?.querySelector(".qp-dialog-header");
+        const heading = surface?.querySelector(".qp-dialog-heading");
+        const actions = surface?.querySelector(".data-destination-detail-header-actions");
+        const timeline = surface?.querySelector(".data-destination-detail-timeline-track");
+        if (!surface || !header || !heading || !actions || !timeline) return null;
+        const surfaceRect = surface.getBoundingClientRect();
+        const headingRect = heading.getBoundingClientRect();
+        const actionsRect = actions.getBoundingClientRect();
+        const timelineRect = timeline.getBoundingClientRect();
+        return JSON.stringify({
+          horizontalOverflow: surface.scrollWidth > surface.clientWidth,
+          insideViewport: surfaceRect.left >= 0
+            && surfaceRect.right <= innerWidth
+            && surfaceRect.top >= 0
+            && surfaceRect.bottom <= innerHeight,
+          referenceHeight: surfaceRect.height <= 672.5,
+          headerOverlap: headingRect.right > actionsRect.left
+            && headingRect.bottom > actionsRect.top
+            && headingRect.top < actionsRect.bottom,
+          timelineInside: timelineRect.left >= surfaceRect.left
+            && timelineRect.right <= surfaceRect.right,
+        });
+      })()
+    `))) as {
+      horizontalOverflow: boolean;
+      insideViewport: boolean;
+      referenceHeight: boolean;
+      headerOverlap: boolean;
+      timelineInside: boolean;
+    };
+    assert.deepEqual(wideDialogGeometry, {
+      horizontalOverflow: false,
+      insideViewport: true,
+      referenceHeight: true,
+      headerOverlap: false,
+      timelineInside: true,
+    });
+    await client!.command("Emulation.setDeviceMetricsOverride", {
+      width: 720,
+      height: 720,
+      deviceScaleFactor: 1.5,
+      mobile: false,
+    }, sessionId);
+    await waitForAnimationFrames(client!, sessionId, 2);
+    assert.deepEqual(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const surface = document.querySelector(".data-destination-detail-dialog");
+          const timeline = surface?.querySelector(".data-destination-detail-timeline-track");
+          if (!surface || !timeline) return null;
+          const surfaceRect = surface.getBoundingClientRect();
+          const timelineRect = timeline.getBoundingClientRect();
+          return {
+            horizontalOverflow: surface.scrollWidth > surface.clientWidth,
+            surfaceInside: surfaceRect.left >= 0 && surfaceRect.right <= innerWidth,
+            timelineInside: timelineRect.left >= surfaceRect.left
+              && timelineRect.right <= surfaceRect.right,
+          };
+        })()
+      `),
+      {
+        horizontalOverflow: false,
+        surfaceInside: true,
+        timelineInside: true,
+      },
+      "detail dialog should remain contained at the narrow supported width and 150% DPR",
+    );
+    await client!.command("Emulation.setDeviceMetricsOverride", {
+      width: 1920,
+      height: 1080,
+      deviceScaleFactor: 1.25,
+      mobile: false,
+    }, sessionId);
+    await waitForAnimationFrames(client!, sessionId, 2);
+    assert.deepEqual(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const surface = document.querySelector(".data-destination-detail-dialog");
+          const actions = surface?.querySelector(".data-destination-detail-header-actions");
+          const heading = surface?.querySelector(".qp-dialog-heading");
+          if (!surface || !actions || !heading) return null;
+          const surfaceRect = surface.getBoundingClientRect();
+          const actionsRect = actions.getBoundingClientRect();
+          const headingRect = heading.getBoundingClientRect();
+          return {
+            horizontalOverflow: surface.scrollWidth > surface.clientWidth,
+            insideViewport: surfaceRect.left >= 0
+              && surfaceRect.right <= innerWidth
+              && surfaceRect.top >= 0
+              && surfaceRect.bottom <= innerHeight,
+            headerOverlap: headingRect.right > actionsRect.left
+              && headingRect.bottom > actionsRect.top
+              && headingRect.top < actionsRect.bottom,
+          };
+        })()
+      `),
+      {
+        horizontalOverflow: false,
+        insideViewport: true,
+        headerOverlap: false,
+      },
+      "detail dialog should remain stable in a 125% DPI full-screen reference viewport",
+    );
+    await client!.command("Emulation.setDeviceMetricsOverride", {
+      width: 1280,
+      height: 820,
+      deviceScaleFactor: 1,
+      mobile: false,
+    }, sessionId);
+    await waitForAnimationFrames(client!, sessionId, 2);
+    assert.deepEqual(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const surface = document.querySelector(".data-destination-detail-dialog");
+          return {
+            backgroundRange: document.querySelector(
+            ".data-app-panel > .data-app-panel-header .data-trend-range-trigger",
+            )?.textContent?.trim() ?? "",
+            hasTrendChart: Boolean(surface?.querySelector(
+              ".data-destination-detail-chart",
+            )),
+            hasMetricSummary: Boolean(surface?.querySelector(
+              ".data-destination-detail-summary",
+            )),
+          };
+        })()
+      `),
+      {
+        backgroundRange: openingState.backgroundRange,
+        hasTrendChart: false,
+        hasMetricSummary: false,
+      },
+      "detail should leave the Data trend range untouched and omit duplicate analysis",
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(".data-destination-detail-timeline-track"))
+        && Boolean(document.querySelector(
+          ".data-destination-detail-activity-disclosure",
+        ))`,
+      45_000,
+      "detail day analysis",
+    );
+    const detailBeforeDelayedDayNavigation = JSON.parse(String(await evaluate(
+      client!,
+      sessionId,
+      `
+        (() => {
+          const content = document.querySelector(
+            ".data-destination-detail-day-content",
+          );
+          const timeline = document.querySelector(
+            ".data-destination-detail-timeline-track",
+          );
+          const records = document.querySelector(
+            ".data-destination-detail-records",
+          );
+          if (!(content instanceof HTMLElement)) return null;
+          if (!(timeline instanceof HTMLElement)) return null;
+          if (!(records instanceof HTMLElement)) return null;
+          const timelineRect = timeline.getBoundingClientRect();
+          const recordsRect = records.getBoundingClientRect();
+          return JSON.stringify({
+            displayedDate: content.dataset.dataDetailDisplayedDate,
+            requestedDate: content.dataset.dataDetailRequestedDate,
+            timelineRect: {
+              width: timelineRect.width,
+              height: timelineRect.height,
+            },
+            recordsRect: {
+              width: recordsRect.width,
+              height: recordsRect.height,
+            },
+          });
+        })()
+      `,
+    ))) as {
+      displayedDate: string;
+      requestedDate: string;
+      timelineRect: { width: number; height: number };
+      recordsRect: { width: number; height: number };
+    };
+    assert.ok(detailBeforeDelayedDayNavigation);
+    assert.equal(
+      detailBeforeDelayedDayNavigation.displayedDate,
+      detailBeforeDelayedDayNavigation.requestedDate,
+    );
+    await evaluate(
+      client!,
+      sessionId,
+      `localStorage.setItem("__time_tracker_history_query_delay_ms", "900")`,
+    );
+    try {
+      assert.equal(await evaluate(client!, sessionId, `
+        (() => {
+          const previous = document.querySelector(
+            ".data-destination-detail-day-actions .qp-range-control-arrow",
+          );
+          if (!(previous instanceof HTMLButtonElement) || previous.disabled) {
+            return false;
+          }
+          previous.click();
+          return true;
+        })()
+      `), true);
+      await delay(150);
+      const retainedDetailDuringDelayedNavigation = JSON.parse(String(
+        await evaluate(client!, sessionId, `
+          (() => {
+            const content = document.querySelector(
+              ".data-destination-detail-day-content",
+            );
+            const timeline = document.querySelector(
+              ".data-destination-detail-timeline-track",
+            );
+            const records = document.querySelector(
+              ".data-destination-detail-records",
+            );
+            if (!(content instanceof HTMLElement)) return null;
+            if (!(timeline instanceof HTMLElement)) return null;
+            if (!(records instanceof HTMLElement)) return null;
+            const timelineRect = timeline.getBoundingClientRect();
+            const recordsRect = records.getBoundingClientRect();
+            return JSON.stringify({
+              busy: content.getAttribute("aria-busy"),
+              displayedDate: content.dataset.dataDetailDisplayedDate,
+              requestedDate: content.dataset.dataDetailRequestedDate,
+              hasTimelinePlaceholder: Boolean(document.querySelector(
+                ".data-destination-detail-timeline-placeholder",
+              )),
+              hasRecordsPlaceholder: Boolean(document.querySelector(
+                ".data-destination-detail-records-placeholder",
+              )),
+              timelineRect: {
+                width: timelineRect.width,
+                height: timelineRect.height,
+              },
+              recordsRect: {
+                width: recordsRect.width,
+                height: recordsRect.height,
+              },
+            });
+          })()
+        `),
+      )) as {
+        busy: string | null;
+        displayedDate: string;
+        requestedDate: string;
+        hasTimelinePlaceholder: boolean;
+        hasRecordsPlaceholder: boolean;
+        timelineRect: { width: number; height: number };
+        recordsRect: { width: number; height: number };
+      };
+      assert.ok(retainedDetailDuringDelayedNavigation);
+      assert.equal(retainedDetailDuringDelayedNavigation.busy, "true");
+      assert.equal(
+        retainedDetailDuringDelayedNavigation.displayedDate,
+        detailBeforeDelayedDayNavigation.displayedDate,
+      );
+      assert.notEqual(
+        retainedDetailDuringDelayedNavigation.requestedDate,
+        detailBeforeDelayedDayNavigation.requestedDate,
+      );
+      assert.equal(retainedDetailDuringDelayedNavigation.hasTimelinePlaceholder, false);
+      assert.equal(retainedDetailDuringDelayedNavigation.hasRecordsPlaceholder, false);
+      assert.ok(
+        Math.abs(
+          retainedDetailDuringDelayedNavigation.timelineRect.width
+            - detailBeforeDelayedDayNavigation.timelineRect.width,
+        ) <= 0.5,
+      );
+      assert.ok(
+        Math.abs(
+          retainedDetailDuringDelayedNavigation.timelineRect.height
+            - detailBeforeDelayedDayNavigation.timelineRect.height,
+        ) <= 0.5,
+      );
+      assert.ok(
+        Math.abs(
+          retainedDetailDuringDelayedNavigation.recordsRect.width
+            - detailBeforeDelayedDayNavigation.recordsRect.width,
+        ) <= 0.5,
+      );
+      assert.ok(
+        Math.abs(
+          retainedDetailDuringDelayedNavigation.recordsRect.height
+            - detailBeforeDelayedDayNavigation.recordsRect.height,
+        ) <= 0.5,
+      );
+      await waitForExpression(
+        client!,
+        sessionId,
+        `(() => {
+          const content = document.querySelector(
+            ".data-destination-detail-day-content",
+          );
+          return content?.getAttribute("aria-busy") === "false"
+            && content.getAttribute("data-data-detail-displayed-date")
+              === content.getAttribute("data-data-detail-requested-date");
+        })()`,
+        45_000,
+        "detail day navigation settles without an intermediate blank frame",
+      );
+    } finally {
+      await evaluate(
+        client!,
+        sessionId,
+        `localStorage.removeItem("__time_tracker_history_query_delay_ms")`,
+      );
+    }
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const arrows = document.querySelectorAll(
+          ".data-destination-detail-day-actions .qp-range-control-arrow",
+        );
+        const next = arrows[1];
+        if (!(next instanceof HTMLButtonElement) || next.disabled) return false;
+        next.click();
+        return true;
+      })()
+    `), true);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-destination-detail-day-content")
+        ?.getAttribute("data-data-detail-displayed-date")
+          === ${jsonString(detailBeforeDelayedDayNavigation.displayedDate)}`,
+      45_000,
+      "restore detail day after delayed navigation regression",
+    );
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const slider = document.querySelector(
+          '.data-destination-detail-timeline-slider input[type="range"]',
+        );
+        if (!(slider instanceof HTMLInputElement)) return false;
+        const setter = Object.getOwnPropertyDescriptor(
+          HTMLInputElement.prototype,
+          "value",
+        )?.set;
+        setter?.call(slider, "3");
+        slider.dispatchEvent(new Event("input", { bubbles: true }));
+        return true;
+      })()
+    `), true);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-destination-detail-timeline")
+        ?.getAttribute("data-data-detail-timeline-zoom-hours") === "3"`,
+      45_000,
+      "detail timeline first zoom step",
+    );
+    assert.equal(
+      await evaluate(
+        client!,
+        sessionId,
+        `localStorage.getItem("patina:data-destination-detail-timeline-zoom-hours:v1")`,
+      ),
+      "3",
+    );
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const decrease = document.querySelector(
+          '.data-destination-detail-dialog button[aria-label="缩短时间轴窗口"]',
+        );
+        if (!(decrease instanceof HTMLButtonElement)) return false;
+        decrease.click();
+        return true;
+      })()
+    `), true);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-destination-detail-timeline")
+        ?.getAttribute("data-data-detail-timeline-zoom-hours") === "2"`,
+      45_000,
+      "detail timeline zoom",
+    );
+    assert.equal(
+      await evaluate(
+        client!,
+        sessionId,
+        `localStorage.getItem("patina:data-destination-detail-timeline-zoom-hours:v1")`,
+      ),
+      "2",
+    );
+    const timelineStartBeforePan = Number(await evaluate(client!, sessionId, `
+      document.querySelector(".data-destination-detail-timeline")
+        ?.getAttribute("data-data-detail-timeline-start-ms")
+    `));
+    assert.ok(Number.isFinite(timelineStartBeforePan));
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const interaction = document.querySelector(
+          ".data-destination-detail-timeline-interaction",
+        );
+        if (!(interaction instanceof HTMLElement)) return false;
+        interaction.dispatchEvent(new KeyboardEvent("keydown", {
+          key: "ArrowRight",
+          bubbles: true,
+        }));
+        return true;
+      })()
+    `), true);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Number(document.querySelector(".data-destination-detail-timeline")
+        ?.getAttribute("data-data-detail-timeline-start-ms")) > ${timelineStartBeforePan}`,
+      45_000,
+      "detail timeline horizontal pan",
+    );
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const interaction = document.querySelector(
+          ".data-destination-detail-timeline-interaction",
+        );
+        if (!(interaction instanceof HTMLElement)) return false;
+        interaction.dispatchEvent(new KeyboardEvent("keydown", {
+          key: "ArrowLeft",
+          bubbles: true,
+        }));
+        return true;
+      })()
+    `), true);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Number(document.querySelector(".data-destination-detail-timeline")
+        ?.getAttribute("data-data-detail-timeline-start-ms")) === ${timelineStartBeforePan}`,
+      45_000,
+      "restore detail timeline pan",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const surface = document.querySelector(".data-destination-detail-dialog");
+          const body = surface?.querySelector(".qp-dialog-body");
+          const records = surface?.querySelector(".data-destination-detail-records");
+          const empty = surface?.querySelector(".data-destination-detail-empty");
+          if (!body || (!records && !empty)) return false;
+
+          const bodyOverflowY = getComputedStyle(body).overflowY;
+          const recordsOverflowY = records ? getComputedStyle(records).overflowY : null;
+          return !["auto", "scroll"].includes(bodyOverflowY)
+            && (recordsOverflowY === null || ["auto", "scroll"].includes(recordsOverflowY));
+        })()
+      `),
+      true,
+      "only the application-detail list should own vertical scrolling",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const records = document.querySelector(".data-destination-detail-records");
+          const summaries = Array.from(
+            document.querySelectorAll(".data-destination-detail-activity-summary"),
+          );
+          if (!(records instanceof HTMLElement) || summaries.length === 0) return false;
+          const recordsStyle = getComputedStyle(records);
+          const summaryHeights = summaries.map(
+            (summary) => summary.getBoundingClientRect().height,
+          );
+          return recordsStyle.alignContent === "start"
+            && recordsStyle.gridAutoRows === "max-content"
+            && summaryHeights.every((height) => height >= 46 && height <= 64)
+            && summaryHeights.reduce((total, height) => total + height, 0)
+              < records.getBoundingClientRect().height;
+        })()
+      `),
+      true,
+      "application-detail rows should retain the fixed Quiet Pro summary height",
+  });
+
 
   await runTest("data web trend failures preserve trustworthy content and remain retryable", async () => {
     await client!.command("Page.navigate", { url: appUrl }, sessionId);
@@ -1759,6 +2638,65 @@ export async function runDataScenarios(
         hasScope: false,
         hasWebsiteList: true,
       },
+    );
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const target = document.querySelector('[aria-label="Website list"] button');
+        if (!(target instanceof HTMLButtonElement)) return false;
+        target.focus();
+        target.dispatchEvent(new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+        }));
+        return true;
+      })()
+    `), true);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(".data-destination-detail-timeline-track"))`,
+      45_000,
+      "English dark detail dialog",
+    );
+    assert.deepEqual(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const surface = document.querySelector(".data-destination-detail-dialog");
+          if (!surface) return null;
+          const rect = surface.getBoundingClientRect();
+          return {
+            theme: document.documentElement.dataset.theme,
+            horizontalOverflow: surface.scrollWidth > surface.clientWidth,
+            insideViewport: rect.left >= 0 && rect.right <= innerWidth,
+            hasHeatmap: Boolean(surface.querySelector(".data-heatmap-panel")),
+            hasTrend: Boolean(surface.querySelector(".data-destination-detail-chart")),
+            hasSummary: Boolean(surface.querySelector(
+              ".data-destination-detail-summary",
+            )),
+            hasDescription: Boolean(surface.querySelector(".qp-dialog-description")),
+          };
+        })()
+      `),
+      {
+        theme: "dark",
+        horizontalOverflow: false,
+        insideViewport: true,
+        hasHeatmap: false,
+        hasTrend: false,
+        hasSummary: false,
+        hasDescription: false,
+      },
+      "the detail pilot should stay readable in English dark mode at 150% DPR",
+    );
+    await evaluate(
+      client!,
+      sessionId,
+      `document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `!document.querySelector(".data-destination-detail-dialog")`,
     );
 
     await evaluate(client!, sessionId, `
