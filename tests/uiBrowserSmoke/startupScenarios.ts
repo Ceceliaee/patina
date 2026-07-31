@@ -40,6 +40,7 @@ export async function runStartupScenarios(context: BrowserSmokeContext) {
     })`) as {
       ready: {
         generation: number;
+        loadEpoch: number;
         themeMode: string | null;
         theme: string | null;
         colorScheme: string | null;
@@ -52,6 +53,7 @@ export async function runStartupScenarios(context: BrowserSmokeContext) {
     assert.deepEqual(evidence, {
       ready: {
         generation: 1,
+        loadEpoch: 1,
         themeMode: "light",
         theme: "light",
         colorScheme: "default",
@@ -60,6 +62,69 @@ export async function runStartupScenarios(context: BrowserSmokeContext) {
       },
       readyCalls: 1,
     });
+  });
+
+  await runTest("hidden main window proves frontend liveness before being revealed again", async () => {
+    const probeStarted = await evaluate(client!, sessionId, `
+      (() => {
+        const callback = globalThis.__PATINA_MAIN_WINDOW_LIVENESS_REQUEST__;
+        const frame = document.querySelector(".qp-app-frame");
+        if (typeof callback !== "function" || !frame) return false;
+        globalThis.__PATINA_READY_FRAME_REFERENCE__ = frame;
+        globalThis.__PATINA_MAIN_WINDOW_LOAD_EPOCH__ = 2;
+        callback();
+        return true;
+      })()
+    `);
+    assert.equal(probeStarted, true, "main-window liveness callback was not registered");
+
+    await waitForExpression(
+      client!,
+      sessionId,
+      `globalThis.__PATINA_MAIN_WINDOW_READY_EVIDENCE?.loadEpoch === 2`,
+      FIRST_RENDER_TIMEOUT_MS,
+      "hidden main-window liveness handshake",
+    );
+
+    const evidence = await evaluate(client!, sessionId, `({
+      ready: globalThis.__PATINA_MAIN_WINDOW_READY_EVIDENCE,
+      readyCalls: globalThis.__PATINA_INVOKED_COMMANDS.filter(
+        (entry) => entry.command === "cmd_mark_main_window_ready"
+      ).length,
+      sameFrame: globalThis.__PATINA_READY_FRAME_REFERENCE__
+        === document.querySelector(".qp-app-frame"),
+      frameConnected: Boolean(document.querySelector(".qp-app-frame")?.isConnected),
+    })`) as {
+      ready: {
+        generation: number;
+        loadEpoch: number;
+        themeMode: string | null;
+        theme: string | null;
+        colorScheme: string | null;
+        cssColorScheme: string | null;
+        frameConnected: boolean;
+      };
+      readyCalls: number;
+      sameFrame: boolean;
+      frameConnected: boolean;
+    };
+
+    assert.deepEqual(evidence, {
+      ready: {
+        generation: 1,
+        loadEpoch: 2,
+        themeMode: "light",
+        theme: "light",
+        colorScheme: "default",
+        cssColorScheme: "light",
+        frameConnected: true,
+      },
+      readyCalls: 2,
+      sameFrame: true,
+      frameConnected: true,
+    });
+
+    await evaluate(client!, sessionId, `delete globalThis.__PATINA_READY_FRAME_REFERENCE__`);
   });
 
   await runTest("main window ready frame stays stable across supported DPI scales", async () => {

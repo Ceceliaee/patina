@@ -276,6 +276,7 @@ assertIsolatedTempPath(root, "patina-tauri-e2e-");
 const frontendUrl = `http://127.0.0.1:${frontendPort}`;
 const frontendDistDir = join(root, "frontend-dist");
 const logs: string[] = [];
+const webviewDiagnostics: string[] = [];
 let appLaunchObserved = false;
 let appLogTail = "";
 let appProcess: ChildProcess | null = null;
@@ -390,6 +391,17 @@ try {
   client = await CdpConnection.connect(target.webSocketDebuggerUrl!);
   await client.command("Runtime.enable");
   await client.command("Page.enable");
+  await client.command("Log.enable");
+  client.onMessage((message) => {
+    const method = String(message.method ?? "");
+    if (
+      method === "Runtime.consoleAPICalled"
+      || method === "Runtime.exceptionThrown"
+      || method === "Log.entryAdded"
+    ) {
+      webviewDiagnostics.push(JSON.stringify(message).slice(0, 4_096));
+    }
+  });
   await waitFor(
     "real Tauri runtime",
     async () => evaluate(client!, "Boolean(window.__TAURI_INTERNALS__ && document.querySelector('#root')?.children.length)"),
@@ -482,27 +494,87 @@ try {
     null,
   );
 
-  const mainWindowGeneration = await waitFor(
-    "frontend main-window readiness handshake",
-    async () => {
-      const generation = await evaluate(client!, "window.__PATINA_MAIN_WINDOW_GENERATION__");
-      return typeof generation === "number"
-        && logs.join("").includes("event=frontend-ready")
-        ? generation
-        : null;
-    },
-    10_000,
-  );
+  let mainWindowReadinessObservation: unknown = null;
+  let mainWindowGeneration: number;
+  try {
+    mainWindowGeneration = await waitFor(
+      "frontend main-window readiness handshake",
+      async () => {
+        mainWindowReadinessObservation = await evaluate(client!, `(async () => {
+          const frame = document.querySelector(".qp-app-frame");
+          const frameStyle = frame ? getComputedStyle(frame) : null;
+          let renderToken = null;
+          let renderTokenError = null;
+          try {
+            renderToken = await window.__TAURI_INTERNALS__.invoke(
+              "cmd_get_main_window_render_token",
+            );
+          } catch (error) {
+            renderTokenError = String(error);
+          }
+          return {
+            generation: window.__PATINA_MAIN_WINDOW_GENERATION__ ?? null,
+            windowLabel: window.__TAURI_INTERNALS__?.metadata?.currentWindow?.label ?? null,
+            documentWindowLabel: document.documentElement.dataset.windowLabel ?? null,
+            frameConnected: Boolean(frame?.isConnected),
+            frameWidth: frame?.getBoundingClientRect().width ?? null,
+            frameHeight: frame?.getBoundingClientRect().height ?? null,
+            frameDisplay: frameStyle?.display ?? null,
+            frameVisibility: frameStyle?.visibility ?? null,
+            frameBackground: frameStyle?.backgroundColor ?? null,
+            themeMode: document.documentElement.dataset.themeMode ?? null,
+            theme: document.documentElement.dataset.theme ?? null,
+            colorScheme: document.documentElement.dataset.colorScheme ?? null,
+            cssColorScheme: document.documentElement.style.colorScheme || null,
+            renderToken,
+            renderTokenError,
+          };
+        })()`);
+        const observation = mainWindowReadinessObservation as {
+          generation?: unknown;
+        } | null;
+        return typeof observation?.generation === "number"
+          && logs.join("").includes("event=frontend-ready")
+          ? observation.generation
+          : null;
+      },
+      10_000,
+    );
+  } catch (error) {
+    throw new AggregateError([
+      error,
+      new Error(
+        `main-window readiness observation: ${JSON.stringify(mainWindowReadinessObservation)}`,
+      ),
+      ...(webviewDiagnostics.length > 0
+        ? [new Error(`WebView diagnostics:\n${webviewDiagnostics.join("\n")}`)]
+        : []),
+    ], "frontend main-window readiness handshake failed");
+  }
   assert.ok(Number.isSafeInteger(mainWindowGeneration) && mainWindowGeneration > 0);
+  const mainWindowRenderToken = await evaluate(
+    client,
+    `window.__TAURI_INTERNALS__.invoke("cmd_get_main_window_render_token")`,
+  ) as {
+    generation: number;
+    loadEpoch: number;
+  };
+  assert.equal(mainWindowRenderToken.generation, mainWindowGeneration);
+  assert.ok(
+    Number.isSafeInteger(mainWindowRenderToken.loadEpoch)
+      && mainWindowRenderToken.loadEpoch > 0,
+  );
   const duplicateReady = await evaluate(
     client,
     `window.__TAURI_INTERNALS__.invoke("cmd_mark_main_window_ready", {
       generation: ${mainWindowGeneration},
+      loadEpoch: ${mainWindowRenderToken.loadEpoch},
     })`,
   );
   assert.deepEqual(duplicateReady, {
     outcome: "duplicate",
     generation: mainWindowGeneration,
+    loadEpoch: mainWindowRenderToken.loadEpoch,
   });
 
   const initialMainWindowVisible = await evaluate(
@@ -512,6 +584,7 @@ try {
   assert.equal(initialMainWindowVisible, false, "fresh-install start minimized should keep the main window hidden");
   assert.match(logs.join(""), /\[startup\] source=manual strategy=start-in-tray-optimized/);
 
+  const trayRevealStartedAt = Date.now();
   await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_show_main_window")`);
   await waitFor(
     "main window recovery from hidden startup",
@@ -521,20 +594,99 @@ try {
     ),
     10_000,
   );
+  const trayRevealElapsedMs = Date.now() - trayRevealStartedAt;
+  assert.ok(
+    trayRevealElapsedMs < 2_000,
+    `a preloaded tray reveal should complete near-immediately, got ${trayRevealElapsedMs}ms`,
+  );
+  assert.doesNotMatch(
+    logs.join(""),
+    /event=ready-timeout/,
+    "normal startup and tray reveal must not depend on the readiness watchdog",
+  );
   const firstVisibleAppearance = await evaluate(client, `({
     frameConnected: Boolean(document.querySelector(".qp-app-frame")?.isConnected),
+    frameWidth: document.querySelector(".qp-app-frame")?.getBoundingClientRect().width ?? 0,
+    frameHeight: document.querySelector(".qp-app-frame")?.getBoundingClientRect().height ?? 0,
+    frameBackground: document.querySelector(".qp-app-frame")
+      ? getComputedStyle(document.querySelector(".qp-app-frame")).backgroundColor
+      : "transparent",
     themeMode: document.documentElement.dataset.themeMode,
     theme: document.documentElement.dataset.theme,
     colorScheme: document.documentElement.dataset.colorScheme,
     cssColorScheme: document.documentElement.style.colorScheme,
-  })`);
-  assert.deepEqual(firstVisibleAppearance, {
-    frameConnected: true,
+  })`) as {
+    frameConnected: boolean;
+    frameWidth: number;
+    frameHeight: number;
+    frameBackground: string;
+    themeMode?: string;
+    theme?: string;
+    colorScheme?: string;
+    cssColorScheme?: string;
+  };
+  assert.equal(firstVisibleAppearance.frameConnected, true);
+  assert.ok(firstVisibleAppearance.frameWidth > 0);
+  assert.ok(firstVisibleAppearance.frameHeight > 0);
+  assert.notEqual(firstVisibleAppearance.frameBackground, "transparent");
+  assert.notEqual(firstVisibleAppearance.frameBackground, "rgba(0, 0, 0, 0)");
+  assert.deepEqual({
+    themeMode: firstVisibleAppearance.themeMode,
+    theme: firstVisibleAppearance.theme,
+    colorScheme: firstVisibleAppearance.colorScheme,
+    cssColorScheme: firstVisibleAppearance.cssColorScheme,
+  }, {
     themeMode: "light",
     theme: "light",
     colorScheme: "default",
     cssColorScheme: "light",
   });
+
+  const logsBeforeReload = logs.join("");
+  await client.command("Page.reload", { ignoreCache: true });
+  await waitFor(
+    "main window reload readiness recovery",
+    async () => {
+      try {
+        const visible = await evaluate(
+          client!,
+          `window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", { label: "main" })`,
+        );
+        const reloadLogs = logs.join("").slice(logsBeforeReload.length);
+        return visible === true
+          && reloadLogs.includes("event=page-load-started")
+          && reloadLogs.includes("result=hidden-until-ready")
+          && reloadLogs.includes("event=frontend-ready")
+          && reloadLogs.includes("result=accepted-reveal")
+          && reloadLogs.includes("event=show-succeeded")
+          ? true
+          : null;
+      } catch {
+        return null;
+      }
+    },
+    15_000,
+  );
+  const reloadAppearance = await evaluate(client, `({
+    frameConnected: Boolean(document.querySelector(".qp-app-frame")?.isConnected),
+    htmlBackground: getComputedStyle(document.documentElement).backgroundColor,
+    bodyBackground: getComputedStyle(document.body).backgroundColor,
+    rootBackground: getComputedStyle(document.querySelector("#root")).backgroundColor,
+  })`) as {
+    frameConnected: boolean;
+    htmlBackground: string;
+    bodyBackground: string;
+    rootBackground: string;
+  };
+  assert.equal(reloadAppearance.frameConnected, true);
+  for (const background of [
+    reloadAppearance.htmlBackground,
+    reloadAppearance.bodyBackground,
+    reloadAppearance.rootBackground,
+  ]) {
+    assert.notEqual(background, "transparent");
+    assert.notEqual(background, "rgba(0, 0, 0, 0)");
+  }
 
   const firstMinimizeError = await evaluate(
     client,
@@ -733,6 +885,7 @@ try {
     createdElapsedMs: eventElapsedMs("created"),
     frontendReadyElapsedMs: eventElapsedMs("frontend-ready"),
     showSucceededElapsedMs: eventElapsedMs("show-succeeded"),
+    trayRevealElapsedMs,
     watchdogUsed: false,
     firstVisibleAppearance,
   }));

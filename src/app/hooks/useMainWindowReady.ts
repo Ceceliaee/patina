@@ -7,6 +7,7 @@ import type {
 import {
   markCurrentMainWindowReady,
   readCurrentMainWindowGeneration,
+  readCurrentMainWindowRenderToken,
 } from "../../platform/desktop/windowControlGateway.ts";
 import { isDocumentThemeApplied, useAppThemeMode } from "./useAppThemeMode.ts";
 
@@ -16,109 +17,179 @@ interface ColorSchemePreview {
 }
 
 interface UseMainWindowReadyOptions {
-  appearanceResolved: boolean;
   appSettings: AppSettings;
   themeModePreview: ThemeMode | null;
   colorSchemePreview: ColorSchemePreview | null;
 }
 
-const MAX_READY_ATTEMPTS = 2;
+declare global {
+  interface Window {
+    __PATINA_MAIN_WINDOW_LIVENESS_REQUEST__?: () => void;
+  }
+}
+
+const MAX_FRAME_READY_ATTEMPTS = 25;
+const MAX_READY_ATTEMPTS = 3;
+const FRAME_READY_RETRY_DELAY_MS = 20;
+
+function hasRenderableMainWindowFrame(
+  frame: HTMLDivElement | null,
+  themeMode: ThemeMode,
+  colorSchemeLight: ColorScheme,
+  colorSchemeDark: ColorScheme,
+): frame is HTMLDivElement {
+  if (
+    !frame?.isConnected
+    || !isDocumentThemeApplied(themeMode, colorSchemeLight, colorSchemeDark)
+  ) {
+    return false;
+  }
+
+  const frameStyle = window.getComputedStyle(frame);
+  const frameBounds = frame.getBoundingClientRect();
+  return frameStyle.display !== "none"
+    && frameStyle.visibility !== "hidden"
+    && frameStyle.backgroundColor !== "transparent"
+    && frameStyle.backgroundColor !== "rgba(0, 0, 0, 0)"
+    && frameBounds.width > 0
+    && frameBounds.height > 0;
+}
 
 export function useMainWindowReady({
-  appearanceResolved,
   appSettings,
   themeModePreview,
   colorSchemePreview,
 }: UseMainWindowReadyOptions) {
   const frameRef = useRef<HTMLDivElement>(null);
-  const pendingGenerationRef = useRef<number | null>(null);
-  const confirmedGenerationRef = useRef<number | null>(null);
+  const pendingTokenRef = useRef<string | null>(null);
+  const confirmedTokenRef = useRef<string | null>(null);
   const themeMode = themeModePreview ?? appSettings.themeMode;
   const colorSchemeLight = colorSchemePreview?.light ?? appSettings.colorSchemeLight;
   const colorSchemeDark = colorSchemePreview?.dark ?? appSettings.colorSchemeDark;
   useAppThemeMode(themeMode, colorSchemeLight, colorSchemeDark);
 
   useEffect(() => {
-    if (!appearanceResolved) return undefined;
-
     const generation = readCurrentMainWindowGeneration();
     if (generation === null) {
-      console.error("main-window generation is unavailable; readiness will fall back to watchdog");
-      return undefined;
-    }
-    if (
-      pendingGenerationRef.current === generation
-      || confirmedGenerationRef.current === generation
-    ) {
+      console.error("main-window generation is unavailable; window will remain hidden");
       return undefined;
     }
 
     let active = true;
-    let firstFrameId: number | null = null;
-    let stableFrameId: number | null = null;
-    let retryFrameId: number | null = null;
-    let resolveRetryFrame: (() => void) | null = null;
+    let readinessInFlight = false;
+    let retryTimerId: number | null = null;
+    let resolveRetryTimer: (() => void) | null = null;
+
+    const waitForRetry = () => new Promise<void>((resolve) => {
+      resolveRetryTimer = resolve;
+      retryTimerId = window.setTimeout(() => {
+        retryTimerId = null;
+        resolveRetryTimer = null;
+        resolve();
+      }, FRAME_READY_RETRY_DELAY_MS);
+    });
+
+    const waitForRenderableFrame = async () => {
+      for (
+        let attempt = 1;
+        active && attempt <= MAX_FRAME_READY_ATTEMPTS;
+        attempt += 1
+      ) {
+        if (
+          hasRenderableMainWindowFrame(
+            frameRef.current,
+            themeMode,
+            colorSchemeLight,
+            colorSchemeDark,
+          )
+        ) {
+          return true;
+        }
+        await waitForRetry();
+      }
+      return false;
+    };
 
     const reportReady = async () => {
-      pendingGenerationRef.current = generation;
       for (let attempt = 1; attempt <= MAX_READY_ATTEMPTS; attempt += 1) {
         if (!active) {
-          pendingGenerationRef.current = null;
+          pendingTokenRef.current = null;
           return;
         }
         try {
-          const result = await markCurrentMainWindowReady(generation);
-          if (result.generation === generation) {
-            confirmedGenerationRef.current = generation;
+          const token = await readCurrentMainWindowRenderToken();
+          if (token.generation !== generation) {
+            throw new Error("main-window generation changed before readiness");
           }
-          pendingGenerationRef.current = null;
-          return;
-        } catch (error) {
-          if (attempt === MAX_READY_ATTEMPTS || !active) {
-            pendingGenerationRef.current = null;
-            console.error("main-window ready handshake failed; watchdog will provide recovery", error);
+          const tokenKey = `${token.generation}:${token.loadEpoch}`;
+          if (
+            pendingTokenRef.current === tokenKey
+            || confirmedTokenRef.current === tokenKey
+          ) {
             return;
           }
 
-          await new Promise<void>((resolve) => {
-            resolveRetryFrame = resolve;
-            retryFrameId = window.requestAnimationFrame(() => {
-              retryFrameId = null;
-              resolveRetryFrame = null;
-              resolve();
-            });
-          });
+          pendingTokenRef.current = tokenKey;
+          const result = await markCurrentMainWindowReady(token);
+          pendingTokenRef.current = null;
+          if (
+            result.outcome !== "stale"
+            && result.generation === token.generation
+            && result.loadEpoch === token.loadEpoch
+          ) {
+            confirmedTokenRef.current = tokenKey;
+            return;
+          }
+        } catch (error) {
+          if (attempt === MAX_READY_ATTEMPTS || !active) {
+            pendingTokenRef.current = null;
+            console.error("main-window ready handshake failed; window will remain hidden", error);
+            return;
+          }
+
+          await waitForRetry();
         }
       }
     };
 
-    firstFrameId = window.requestAnimationFrame(() => {
-      stableFrameId = window.requestAnimationFrame(() => {
-        const frame = frameRef.current;
-        if (
-          !active
-          || !frame?.isConnected
-          || !isDocumentThemeApplied(themeMode, colorSchemeLight, colorSchemeDark)
-        ) {
-          return;
-        }
+    const verifyAndReportReady = async () => {
+      if (!active || readinessInFlight) {
+        return;
+      }
 
-        void reportReady();
-      });
-    });
+      readinessInFlight = true;
+      try {
+        const ready = await waitForRenderableFrame();
+        if (ready && active) {
+          await reportReady();
+        } else if (active) {
+          console.error("main-window frame did not become renderable; window will remain hidden");
+        }
+      } finally {
+        readinessInFlight = false;
+      }
+    };
+
+    const handleLivenessRequest = () => {
+      void verifyAndReportReady();
+    };
+    window.__PATINA_MAIN_WINDOW_LIVENESS_REQUEST__ = handleLivenessRequest;
+    void verifyAndReportReady();
 
     return () => {
       active = false;
-      if (firstFrameId !== null) window.cancelAnimationFrame(firstFrameId);
-      if (stableFrameId !== null) window.cancelAnimationFrame(stableFrameId);
-      if (retryFrameId !== null) {
-        window.cancelAnimationFrame(retryFrameId);
-        retryFrameId = null;
-        resolveRetryFrame?.();
-        resolveRetryFrame = null;
+      pendingTokenRef.current = null;
+      if (window.__PATINA_MAIN_WINDOW_LIVENESS_REQUEST__ === handleLivenessRequest) {
+        delete window.__PATINA_MAIN_WINDOW_LIVENESS_REQUEST__;
+      }
+      if (retryTimerId !== null) {
+        window.clearTimeout(retryTimerId);
+        retryTimerId = null;
+        resolveRetryTimer?.();
+        resolveRetryTimer = null;
       }
     };
-  }, [appearanceResolved, colorSchemeDark, colorSchemeLight, frameRef, themeMode]);
+  }, [colorSchemeDark, colorSchemeLight, frameRef, themeMode]);
 
   return frameRef;
 }

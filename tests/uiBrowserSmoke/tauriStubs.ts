@@ -80,6 +80,7 @@ function tauriStubFor(path: string) {
       globalThis.__PATINA_IMPORT_BATCHES ??= [];
       globalThis.__PATINA_INVOKED_COMMANDS ??= [];
       globalThis.__PATINA_MAIN_WINDOW_GENERATION__ ??= 1;
+      globalThis.__PATINA_MAIN_WINDOW_LOAD_EPOCH__ ??= 1;
 
       function loadStoredSettings() {
         try {
@@ -186,16 +187,27 @@ function tauriStubFor(path: string) {
             probe_status: "ok",
           };
         }
+        if (command === "cmd_get_main_window_render_token") {
+          return {
+            generation: Number(globalThis.__PATINA_MAIN_WINDOW_GENERATION__),
+            loadEpoch: Number(globalThis.__PATINA_MAIN_WINDOW_LOAD_EPOCH__),
+          };
+        }
         if (command === "cmd_mark_main_window_ready") {
           globalThis.__PATINA_MAIN_WINDOW_READY_EVIDENCE = {
             generation: Number(payload.generation),
+            loadEpoch: Number(payload.loadEpoch),
             themeMode: document.documentElement.dataset.themeMode ?? null,
             theme: document.documentElement.dataset.theme ?? null,
             colorScheme: document.documentElement.dataset.colorScheme ?? null,
             cssColorScheme: document.documentElement.style.colorScheme || null,
             frameConnected: Boolean(document.querySelector(".qp-app-frame")?.isConnected),
           };
-          return { outcome: "hidden", generation: Number(payload.generation) };
+          return {
+            outcome: "hidden",
+            generation: Number(payload.generation),
+            loadEpoch: Number(payload.loadEpoch),
+          };
         }
         if (command === "cmd_get_recorded_app_catalog_page") {
           const queryDelayMs = Math.max(

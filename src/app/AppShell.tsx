@@ -123,7 +123,6 @@ function AppShellContent() {
     activeWindow,
     trackingStatus,
     appSettings,
-    appearanceResolved,
     classificationReady,
     setAppSettings,
     syncTick,
@@ -141,7 +140,6 @@ function AppShellContent() {
   }, [uiTextLanguage]);
 
   const appFrameRef = useMainWindowReady({
-    appearanceResolved,
     appSettings,
     themeModePreview: settingsThemeModePreview,
     colorSchemePreview: settingsColorSchemePreview,

@@ -12,6 +12,12 @@ export type MainWindowReadyOutcome = "stale" | "duplicate" | "hidden" | "reveale
 export interface MainWindowReadyResult {
   outcome: MainWindowReadyOutcome;
   generation: number;
+  loadEpoch: number;
+}
+
+export interface MainWindowRenderToken {
+  generation: number;
+  loadEpoch: number;
 }
 
 declare global {
@@ -33,13 +39,20 @@ function parseMainWindowReadyResult(value: unknown): MainWindowReadyResult {
     throw new Error("main-window ready command returned an invalid result");
   }
 
-  const candidate = value as { outcome?: unknown; generation?: unknown };
+  const candidate = value as {
+    outcome?: unknown;
+    generation?: unknown;
+    loadEpoch?: unknown;
+  };
   if (
     typeof candidate.outcome !== "string"
     || !MAIN_WINDOW_READY_OUTCOMES.has(candidate.outcome as MainWindowReadyOutcome)
     || typeof candidate.generation !== "number"
     || !Number.isSafeInteger(candidate.generation)
     || candidate.generation < 1
+    || typeof candidate.loadEpoch !== "number"
+    || !Number.isSafeInteger(candidate.loadEpoch)
+    || candidate.loadEpoch < 1
   ) {
     throw new Error("main-window ready command returned an invalid contract");
   }
@@ -47,6 +60,30 @@ function parseMainWindowReadyResult(value: unknown): MainWindowReadyResult {
   return {
     outcome: candidate.outcome as MainWindowReadyOutcome,
     generation: candidate.generation,
+    loadEpoch: candidate.loadEpoch,
+  };
+}
+
+function parseMainWindowRenderToken(value: unknown): MainWindowRenderToken {
+  if (typeof value !== "object" || value === null) {
+    throw new Error("main-window render token command returned an invalid result");
+  }
+
+  const candidate = value as { generation?: unknown; loadEpoch?: unknown };
+  if (
+    typeof candidate.generation !== "number"
+    || !Number.isSafeInteger(candidate.generation)
+    || candidate.generation < 1
+    || typeof candidate.loadEpoch !== "number"
+    || !Number.isSafeInteger(candidate.loadEpoch)
+    || candidate.loadEpoch < 1
+  ) {
+    throw new Error("main-window render token command returned an invalid contract");
+  }
+
+  return {
+    generation: candidate.generation,
+    loadEpoch: candidate.loadEpoch,
   };
 }
 
@@ -64,15 +101,26 @@ export function readCurrentMainWindowGeneration(): number | null {
 }
 
 export async function markCurrentMainWindowReady(
-  generation: number,
+  token: MainWindowRenderToken,
 ): Promise<MainWindowReadyResult> {
   if (getCurrentWindow().label !== MAIN_WINDOW_LABEL) {
     throw new Error("only the main window can report main-window readiness");
   }
 
   return parseMainWindowReadyResult(await invoke<unknown>("cmd_mark_main_window_ready", {
-    generation,
+    generation: token.generation,
+    loadEpoch: token.loadEpoch,
   }));
+}
+
+export async function readCurrentMainWindowRenderToken(): Promise<MainWindowRenderToken> {
+  if (getCurrentWindow().label !== MAIN_WINDOW_LABEL) {
+    throw new Error("only the main window can read main-window render state");
+  }
+
+  return parseMainWindowRenderToken(
+    await invoke<unknown>("cmd_get_main_window_render_token"),
+  );
 }
 
 export async function minimizeCurrentWindow(): Promise<void> {
