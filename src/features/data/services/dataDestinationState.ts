@@ -4,6 +4,7 @@ export const DATA_DESTINATION_SELECTION_LIMIT = 7;
 
 export interface DataDestinationTrendOption {
   key: string;
+  identityKeys: string[];
   displayName: string;
   secondaryText: string;
   iconUrl: string | null;

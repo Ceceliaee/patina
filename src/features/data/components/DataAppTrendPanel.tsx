@@ -1,8 +1,6 @@
 import {
   memo,
-  useEffect,
   useLayoutEffect,
-  useState,
   type CSSProperties,
   type KeyboardEvent,
   type MouseEvent,
@@ -13,6 +11,7 @@ import NativeTrendChart from "../../../shared/charts/NativeTrendChart.tsx";
 import QuietSearchField from "../../../shared/components/QuietSearchField";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter.tsx";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
+import { getDataDestinationDetailCopy } from "../copy/dataDestinationDetailCopy.ts";
 import {
   formatChartHours,
   formatDuration,
@@ -72,6 +71,11 @@ interface DataAppTrendPanelProps {
   onSelectionChange: (selection: DataTrendRangeSelection) => void;
   onSearchQueryChange: (nextQuery: string) => void;
   onOptionSelect: (key: string, multi: boolean) => void;
+  onOptionIntentStart: (
+    option: DataDestinationTrendOption,
+    selectTarget?: boolean,
+  ) => void;
+  onOptionOpenDetails: (option: DataDestinationTrendOption) => void;
   onMouseDownCapture: (event: MouseEvent<HTMLDivElement>) => void;
   onDoubleClickCapture: (event: MouseEvent<HTMLDivElement>) => void;
   onMouseMove: (event: unknown) => void;
@@ -120,24 +124,18 @@ function DataAppTrendPanel({
   onSelectionChange,
   onSearchQueryChange,
   onOptionSelect,
+  onOptionIntentStart,
+  onOptionOpenDetails,
   onMouseDownCapture,
   onDoubleClickCapture,
   onMouseMove,
   onMouseLeave,
 }: DataAppTrendPanelProps) {
+  const detailCopy = getDataDestinationDetailCopy();
   const modeOptions = [
     { value: "app" as const, label: UI_TEXT.data.destinationApp },
     { value: "web" as const, label: UI_TEXT.data.destinationWeb },
   ];
-  const [showRefreshingMessage, setShowRefreshingMessage] = useState(false);
-  useEffect(() => {
-    if (!refreshing) {
-      setShowRefreshingMessage(false);
-      return;
-    }
-    const timer = setTimeout(() => setShowRefreshingMessage(true), 240);
-    return () => clearTimeout(timer);
-  }, [refreshing]);
   useLayoutEffect(() => {
     onContentCommitted?.();
   }, [onContentCommitted]);
@@ -164,11 +162,27 @@ function DataAppTrendPanel({
               aria-label={UI_TEXT.data.selectedObjectCount(selectedOptions.length)}
             >
               {selectedOptions.map((option) => (
-                <span
+                <button
+                  type="button"
                   className="data-app-selected-icon"
                   data-selection-key={option.key}
                   key={option.key}
-                  aria-hidden
+                  aria-label={detailCopy.open(option.displayName)}
+                  aria-keyshortcuts="Enter"
+                  onMouseDown={(event) => {
+                    if (event.detail === 1) onOptionIntentStart(option);
+                  }}
+                  onDoubleClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onOptionOpenDetails(option);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") return;
+                    event.preventDefault();
+                    onOptionIntentStart(option);
+                    onOptionOpenDetails(option);
+                  }}
                 >
                   {option.iconUrl ? (
                     <img
@@ -179,29 +193,25 @@ function DataAppTrendPanel({
                   ) : (
                     getOptionInitial(option.displayName)
                   )}
-                </span>
+                </button>
               ))}
             </div>
           ) : null}
-          <div
-            className="data-app-refresh-status"
-            role="status"
-          >
-            {refreshFailed ? (
-              <>
-                <span>{UI_TEXT.data.webTrendRefreshError}</span>
-                <button
-                  type="button"
-                  className="qp-inline-action qp-inline-action-accent"
-                  onClick={onRetry}
-                >
-                  {UI_TEXT.data.webTrendRetry}
-                </button>
-              </>
-            ) : showRefreshingMessage ? (
-              UI_TEXT.data.webTrendUpdating
-            ) : null}
-          </div>
+          {refreshFailed ? (
+            <div
+              className="data-app-refresh-status"
+              role="status"
+            >
+              <span>{UI_TEXT.data.webTrendRefreshError}</span>
+              <button
+                type="button"
+                className="qp-inline-action qp-inline-action-accent"
+                onClick={onRetry}
+              >
+                {UI_TEXT.data.webTrendRetry}
+              </button>
+            </div>
+          ) : null}
         </div>
         <div className="data-app-header-actions">
           <DataTrendRangeControl
@@ -281,9 +291,16 @@ function DataAppTrendPanel({
                 const isSelected = selectedIndex >= 0;
                 const series = selectedIndex >= 0 ? trendSeries[selectedIndex] : null;
                 const handleOptionKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-                  if (!event.ctrlKey || (event.key !== "Enter" && event.key !== " ")) return;
+                  if (event.key !== "Enter" && event.key !== " ") return;
                   event.preventDefault();
-                  onOptionSelect(option.key, true);
+                  onOptionIntentStart(option);
+                  if (event.ctrlKey) {
+                    onOptionSelect(option.key, true);
+                  } else if (event.key === "Enter") {
+                    onOptionOpenDetails(option);
+                  } else {
+                    onOptionSelect(option.key, false);
+                  }
                 };
                 return (
                   <button
@@ -294,10 +311,20 @@ function DataAppTrendPanel({
                     style={series ? {
                       "--data-series-color": series.color,
                     } as CSSProperties : undefined}
+                    onMouseDown={(event) => {
+                      if (event.detail === 1) onOptionIntentStart(option);
+                    }}
                     onClick={(event) => onOptionSelect(option.key, event.ctrlKey)}
+                    onDoubleClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onOptionIntentStart(option, true);
+                      onOptionOpenDetails(option);
+                    }}
                     onKeyDown={handleOptionKeyDown}
                     aria-pressed={isSelected}
-                    aria-keyshortcuts="Control+Enter Control+Space"
+                    aria-keyshortcuts="Enter Space Control+Enter Control+Space"
+                    aria-description={UI_TEXT.data.interactionHint}
                   >
                     <span className="data-app-option-icon" aria-hidden>
                       {option.iconUrl ? (

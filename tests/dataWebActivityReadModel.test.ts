@@ -189,6 +189,7 @@ await runTest("destination session selection stays in memory without exposing mu
   assert.equal(getDataDestinationSessionSelectionRevision("app"), 4);
   rememberDataDestinationSessionOptions("app", [{
     key: "cursor.exe",
+    identityKeys: ["cursor.exe"],
     displayName: "Cursor",
     secondaryText: "cursor.exe",
     iconUrl: null,
@@ -208,6 +209,7 @@ await runTest("destination session selection stays in memory without exposing mu
 await runTest("destination series keep app colors and one stable line style", () => {
   const options = ["a", "b", "c"].map((key) => ({
     key,
+    identityKeys: [key],
     displayName: key.toUpperCase(),
     secondaryText: `${key}.exe`,
     iconUrl: null,
@@ -236,6 +238,7 @@ await runTest("destination series keep app colors and one stable line style", ()
 await runTest("five identical colors remain solid without synthetic line styles", () => {
   const options = ["a", "b", "c", "d", "e"].map((key) => ({
     key,
+    identityKeys: [key],
     displayName: key,
     secondaryText: key,
     iconUrl: null,

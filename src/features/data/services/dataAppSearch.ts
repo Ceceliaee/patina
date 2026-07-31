@@ -12,10 +12,17 @@ export function dedupeDataAppOptions(options: DataAppOption[]) {
     const existing = merged.get(key);
 
     if (!existing) {
-      merged.set(key, { ...app });
+      merged.set(key, {
+        ...app,
+        sourceAppKeys: [...app.sourceAppKeys],
+      });
       continue;
     }
 
+    existing.sourceAppKeys = Array.from(new Set([
+      ...existing.sourceAppKeys,
+      ...app.sourceAppKeys,
+    ]));
     existing.totalDuration += app.totalDuration;
     existing.percentage += app.percentage;
     existing.averageDuration += app.averageDuration;

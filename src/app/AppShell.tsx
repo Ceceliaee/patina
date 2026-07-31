@@ -306,6 +306,7 @@ function AppShellContent() {
                 trackerHealth={trackerHealth}
                 loadDataTrendSnapshot={loadDataTrendRuntimeSnapshot}
                 mappingVersion={mappingVersion}
+                mergeThresholdSecs={appSettings.timelineMergeGapSecs}
                 onOpenHistoryDate={(dateKey) => {
                   void openHistoryForDate(dateKey);
                 }}

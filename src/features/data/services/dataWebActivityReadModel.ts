@@ -66,6 +66,7 @@ export interface DataWebTrendViewModel {
   summary: DataDestinationTrendSummary;
   chartAxis: DataTrendViewModel["chartAxis"];
   peakDay: DataAppDayRow | null;
+  activeDateKeys: string[];
 }
 
 export interface DataWebActivitySnapshot {
@@ -382,6 +383,9 @@ export function buildDataWebTrendViewModel(
       }))
     ))),
     peakDay: peakDay && peakDay.duration > 0 ? peakDay : null,
+    activeDateKeys: normalizedDayRows
+      .filter((row) => row.duration > 0)
+      .map((row) => row.date),
   };
 }
 

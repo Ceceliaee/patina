@@ -1,4 +1,13 @@
-import { startTransition, type MouseEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  startTransition,
+  type MouseEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { BarChart3 } from "lucide-react";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import {
@@ -58,6 +67,7 @@ import type { DataTrendSnapshot } from "../services/dataTrendSnapshot.ts";
 import type { DataTrendRangeSelection } from "../services/dataTrendRange.ts";
 import { useDataTrendSnapshot } from "../hooks/useDataTrendSnapshot.ts";
 import { useDataWebActivityRuntime } from "../hooks/useDataWebActivityRuntime.ts";
+import { useDataDestinationDetailPresentation } from "../hooks/useDataDestinationDetailPresentation.ts";
 import { loadDataIconsForExecutables } from "../services/dataIconService.ts";
 import { scheduleDataWorkAfterFirstPaint } from "../services/dataFirstPaintScheduler.ts";
 import {
@@ -69,12 +79,24 @@ import DataTrendPanel from "./DataTrendPanel.tsx";
 import DataHeatmapPanel, { type HeatmapGranularity } from "./DataHeatmapPanel.tsx";
 import { markDataNavigationStage } from "../services/dataNavigationPerformance.ts";
 
+type DataDestinationDetailDialogComponent = (
+  typeof import("./DataDestinationDetailDialog.tsx")
+)["default"];
+
+let DataDestinationDetailDialog: DataDestinationDetailDialogComponent | null = null;
+const dataDestinationDetailDialogModule = import("./DataDestinationDetailDialog.tsx")
+  .then((module) => {
+    DataDestinationDetailDialog = module.default;
+    return module;
+  });
+
 interface Props {
   icons: Record<string, string>;
   refreshKey?: number;
   trackerHealth: TrackerHealthSnapshot;
   loadDataTrendSnapshot: (selection: DataTrendRangeSelection, nowMs?: number) => Promise<DataTrendSnapshot>;
   mappingVersion?: number;
+  mergeThresholdSecs: number;
   onOpenHistoryDate?: (dateKey: string) => void;
   uiLanguage: AppLanguage;
   webActivityEnabled: boolean;
@@ -103,6 +125,7 @@ function toAppPanelOption(
 ): DataDestinationTrendOption {
   return {
     key: app.appKey,
+    identityKeys: app.sourceAppKeys?.length ? [...app.sourceAppKeys] : [app.appKey],
     displayName: app.appName,
     secondaryText: app.exeName,
     iconUrl: icons[app.exeName] ?? null,
@@ -196,6 +219,7 @@ export default function Data({
   refreshKey = 0,
   loadDataTrendSnapshot,
   mappingVersion = 0,
+  mergeThresholdSecs,
   onOpenHistoryDate,
   onToast,
   uiLanguage,
@@ -678,6 +702,7 @@ export default function Data({
   const webAllPanelOptions = useMemo<DataDestinationTrendOption[]>(() => (
     (webTrendViewModel?.domainOptions ?? []).map((domain) => ({
       key: domain.normalizedDomain,
+      identityKeys: [domain.normalizedDomain],
       displayName: domain.displayName,
       secondaryText: domain.normalizedDomain,
       iconUrl: domain.faviconUrl,
@@ -765,6 +790,22 @@ export default function Data({
       },
     )
   ), [destinationIconColors, destinationPanelSelectedOptions, isWebDestination]);
+  const resolveDestinationOptionColor = useCallback((
+    option: DataDestinationTrendOption,
+    mode: DataDestinationMode = presentedDestinationMode,
+  ) => {
+    const selectedSeries = destinationTrendSeries.find((series) => (
+      series.key === option.key && mode === presentedDestinationMode
+    ));
+    const colorKey = `${mode}:${option.key}`;
+    return selectedSeries?.color
+      ?? destinationIconColors[colorKey]
+      ?? getIconThemeFallbackColor(colorKey);
+  }, [
+    destinationIconColors,
+    destinationTrendSeries,
+    presentedDestinationMode,
+  ]);
   const destinationChartAxis = isWebDestination
     ? webTrendViewModel?.chartAxis ?? DEFAULT_DATA_APP_CHART_AXIS
     : visibleAppTrendViewModel?.chartAxis ?? DEFAULT_DATA_APP_CHART_AXIS;
@@ -796,6 +837,37 @@ export default function Data({
       onToast?.(UI_TEXT.data.selectionLastItem, "warning");
     }
   }, [onToast, presentedDestinationMode, selectedAppKeys, selectedWebKeys]);
+  const restoreDestinationDetailSelection = useCallback((selectionSnapshot: {
+    appKeys: string[];
+    webKeys: string[];
+    mode: DataDestinationMode;
+  }) => {
+    setSelectedAppKeys(selectionSnapshot.appKeys);
+    setSelectedWebKeys(selectionSnapshot.webKeys);
+    setDestinationMode(selectionSnapshot.mode);
+    setPresentedDestinationMode(selectionSnapshot.mode);
+  }, []);
+  const {
+    presentation: destinationDetail,
+    captureIntent: captureDestinationDetailIntent,
+    open: openDestinationDetail,
+    close: closeDestinationDetail,
+  } = useDataDestinationDetailPresentation({
+    appKeys: selectedAppKeys,
+    listRef: appListRef,
+    mode: presentedDestinationMode,
+    rangeSelection: selectedAppTrendRange,
+    resolveOptionColor: resolveDestinationOptionColor,
+    restoreSelectionSnapshot: restoreDestinationDetailSelection,
+    webKeys: selectedWebKeys,
+  });
+  const handleOpenDestinationDetail = useCallback((
+    option: DataDestinationTrendOption,
+  ) => {
+    void dataDestinationDetailDialogModule.then(() => {
+      openDestinationDetail(option);
+    });
+  }, [openDestinationDetail]);
 
   const shouldDeferHeatmapRows = Boolean(
     hasInitialBootstrapSnapshotRef.current
@@ -1143,12 +1215,25 @@ export default function Data({
             ? webActivity.setSearchQuery
             : handleAppSearchQueryChange}
           onOptionSelect={handleDestinationOptionSelect}
+          onOptionIntentStart={captureDestinationDetailIntent}
+          onOptionOpenDetails={handleOpenDestinationDetail}
           onMouseDownCapture={handleAppTrendMouseDownCapture}
           onDoubleClickCapture={handleAppTrendDoubleClickCapture}
           onMouseMove={handleAppTrendMouseMove}
           onMouseLeave={handleAppTrendMouseLeave}
         />
       </div>
+      {destinationDetail && DataDestinationDetailDialog ? (
+        <DataDestinationDetailDialog
+          key={`${destinationDetail.target.mode}:${destinationDetail.target.key}`}
+          target={destinationDetail.target}
+          initialSelection={destinationDetail.initialSelection}
+          refreshKey={refreshKey}
+          mappingVersion={mappingVersion}
+          mergeThresholdSecs={mergeThresholdSecs}
+          onClose={closeDestinationDetail}
+        />
+      ) : null}
     </div>
   );
 }

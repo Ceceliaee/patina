@@ -79,6 +79,7 @@ export interface DataTrendViewModel {
 
 export interface DataAppOption {
   appKey: string;
+  sourceAppKeys: string[];
   appName: string;
   exeName: string;
   totalDuration: number;
@@ -126,6 +127,7 @@ export interface DataAppTrendViewModel {
   summary: DataDestinationTrendSummary;
   chartAxis: DataTrendViewModel["chartAxis"];
   peakDay: DataAppDayRow | null;
+  activeDateKeys: string[];
 }
 
 interface CompiledDataSession extends AggregateSessionRecord {
@@ -162,6 +164,25 @@ export interface DataTrendAggregateContext {
 
 interface MergedDataAppDurationBucket extends DataAppDurationBucket {
   sourceAppKeys: string[];
+}
+
+interface DataAppTrendBucket extends MergedDataAppDurationBucket {
+  percentage: number;
+  averageDuration: number;
+  activeDayCount: number;
+}
+
+function toDataAppOption(item: DataAppTrendBucket): DataAppOption {
+  return {
+    appKey: item.appKey,
+    sourceAppKeys: [...item.sourceAppKeys],
+    appName: item.appName,
+    exeName: item.exeName,
+    totalDuration: item.totalDuration,
+    percentage: item.percentage,
+    averageDuration: item.averageDuration,
+    activeDayCount: item.activeDayCount,
+  };
 }
 
 export function buildDataChartAxis(points: DataTrendPoint[]) {
@@ -480,6 +501,25 @@ function countActiveDurationDays(dayDurations: Map<string, number>) {
   return count;
 }
 
+function getActiveDataAppDateKeys(rows: readonly DataAppDayRow[]) {
+  return rows
+    .filter((row) => row.duration > 0)
+    .map((row) => row.date);
+}
+
+function buildSelectedDataAppSummary(
+  selectedApps: readonly DataAppOption[],
+  selectedDayRows: readonly DataAppDayRow[],
+  averageDivisor: number,
+): DataDestinationTrendSummary {
+  const totalDuration = selectedApps.reduce((total, app) => total + app.totalDuration, 0);
+  return {
+    totalDuration,
+    averageDuration: Math.round(totalDuration / averageDivisor),
+    activeDayCount: getActiveDataAppDateKeys(selectedDayRows).length,
+  };
+}
+
 export function getDataTrendRangeLabel(range: DataTrendRange) {
   if (range === 7) return UI_TEXT.data.pastSevenDays;
   if (range === 30) return UI_TEXT.data.pastThirtyDays;
@@ -584,7 +624,7 @@ export function buildDataAppTrendViewModelFromAggregate(
   const chartRanges = shouldGroupByMonth ? monthRanges : dayRanges;
   const averageDivisor = Math.max(1, chartRanges.length);
   const totalAppDuration = aggregate.totalDuration;
-  const mergedOptions = mergeDataAppDurationBuckets(aggregate.appBuckets).map((item) => ({
+  const mergedOptions: DataAppTrendBucket[] = mergeDataAppDurationBuckets(aggregate.appBuckets).map((item) => ({
     appKey: item.appKey,
     sourceAppKeys: item.sourceAppKeys,
     appName: item.appName,
@@ -617,25 +657,8 @@ export function buildDataAppTrendViewModelFromAggregate(
   if (selectedMergedApps.length === 0 && mergedOptions[0]) {
     selectedMergedApps.push(mergedOptions[0]);
   }
-  const toAppOption = (item: typeof mergedOptions[number]): DataAppOption => ({
-    appKey: item.appKey,
-    appName: item.appName,
-    exeName: item.exeName,
-    totalDuration: item.totalDuration,
-    percentage: item.percentage,
-    averageDuration: item.averageDuration,
-    activeDayCount: item.activeDayCount,
-  });
-  const selectedApps = selectedMergedApps.map(toAppOption);
-  const appOptions = mergedOptions.map((item) => ({
-    appKey: item.appKey,
-    appName: item.appName,
-    exeName: item.exeName,
-    totalDuration: item.totalDuration,
-    percentage: item.percentage,
-    averageDuration: item.averageDuration,
-    activeDayCount: item.activeDayCount,
-  }));
+  const selectedApps = selectedMergedApps.map(toDataAppOption);
+  const appOptions = mergedOptions.map(toDataAppOption);
   const selectedDayDurations = new Map<string, number>();
   for (const selected of selectedMergedApps) {
     for (const [dateKey, duration] of selected.dayDurations) {
@@ -672,12 +695,7 @@ export function buildDataAppTrendViewModelFromAggregate(
     }
     return peak;
   }, null);
-  const selectedTotalDuration = selectedApps.reduce((total, app) => total + app.totalDuration, 0);
-  const summary: DataDestinationTrendSummary = {
-    totalDuration: selectedTotalDuration,
-    averageDuration: Math.round(selectedTotalDuration / averageDivisor),
-    activeDayCount: selectedDayRows.filter((row) => row.duration > 0).length,
-  };
+  const summary = buildSelectedDataAppSummary(selectedApps, selectedDayRows, averageDivisor);
   const axisPoints = chartRows.flatMap((row) => chartSeries.map((series) => ({
     label: row.label,
     date: row.date,
@@ -695,6 +713,7 @@ export function buildDataAppTrendViewModelFromAggregate(
     summary,
     chartAxis: buildDataChartAxis(axisPoints),
     peakDay: peakDay && peakDay.duration > 0 ? peakDay : null,
+    activeDateKeys: getActiveDataAppDateKeys(selectedDayRows),
   };
 }
 

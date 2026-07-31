@@ -28,9 +28,9 @@ const LAZY_PAGE_CHUNK_BUDGETS = [
   { label: "AppMapping", pattern: /^AppMapping-.*\.js$/, gzipKiB: 18 },
   { label: "History", pattern: /^History-.*\.js$/, gzipKiB: 18 },
   { label: "Tools", pattern: /^Tools-.*\.js$/, gzipKiB: 18 },
-  // The destination analysis panel is part of Data's first render so both
-  // dashboard columns become available in the same route-chunk evaluation.
-  { label: "Data", pattern: /^Data-.*\.js$/, gzipKiB: 18 },
+  // The destination analysis panel and its range control are both part of
+  // Data's first render; the private detail chunk owns day analysis only.
+  { label: "Data", pattern: /^Data-.*\.js$/, gzipKiB: 19 },
   { label: "About", pattern: /^About-.*\.js$/, gzipKiB: 18 },
 ] as const;
 
@@ -45,6 +45,9 @@ const LAZY_SECONDARY_CHUNK_BUDGETS = [
   { label: "Data first-screen prewarm", pattern: /^dataFirstScreenPrewarm-.*\.js$/, gzipKiB: 6 },
   { label: "Data trend snapshot", pattern: /^dataTrendSnapshot-.*\.js$/, gzipKiB: 2 },
   { label: "Data bootstrap snapshot", pattern: /^dataBootstrapSnapshot-.*\.js$/, gzipKiB: 1 },
+  // Data preloads the single-object detail shell with its route, while retaining
+  // a separate chunk so the comparison view stays below its first-render budget.
+  { label: "Data destination detail", pattern: /^DataDestinationDetailDialog-.*\.js$/, gzipKiB: 6 },
 ] as const;
 
 // Stable cross-feature UI owners stay lazy and receive their own narrow budget

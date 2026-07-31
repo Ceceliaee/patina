@@ -272,6 +272,7 @@ export function useDataWebActivityRuntime({
   const panelOptions = useMemo<DataDestinationTrendOption[]>(() => (
     filteredDomains.map((domain) => ({
       key: domain.normalizedDomain,
+      identityKeys: [domain.normalizedDomain],
       displayName: domain.displayName,
       secondaryText: domain.normalizedDomain,
       iconUrl: domain.faviconUrl,
@@ -284,6 +285,7 @@ export function useDataWebActivityRuntime({
   const selectedPanelOptions = useMemo<DataDestinationTrendOption[]>(() => (
     selectedTrendDomains.map((domain) => ({
       key: domain.normalizedDomain,
+      identityKeys: [domain.normalizedDomain],
       displayName: domain.displayName,
       secondaryText: domain.normalizedDomain,
       iconUrl: domain.faviconUrl,

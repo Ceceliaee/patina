@@ -17,6 +17,7 @@ function runTest(name: string, fn: () => void) {
 function makeAppOption(overrides: Partial<DataAppOption>): DataAppOption {
   return {
     appKey: "cursor.exe",
+    sourceAppKeys: ["cursor.exe"],
     appName: "Cursor",
     exeName: "cursor.exe",
     totalDuration: 60_000,
@@ -31,6 +32,7 @@ runTest("dedupeDataAppOptions merges duplicate display options", () => {
   const rows = dedupeDataAppOptions([
     makeAppOption({
       appKey: "antigravity.exe",
+      sourceAppKeys: ["antigravity.exe"],
       appName: "Antigravity",
       exeName: "antigravity.exe",
       totalDuration: 20_000,
@@ -40,6 +42,7 @@ runTest("dedupeDataAppOptions merges duplicate display options", () => {
     }),
     makeAppOption({
       appKey: "Antigravity.exe",
+      sourceAppKeys: ["Antigravity.exe"],
       appName: " Antigravity ",
       exeName: "Antigravity.exe",
       totalDuration: 30_000,
@@ -54,6 +57,7 @@ runTest("dedupeDataAppOptions merges duplicate display options", () => {
   assert.equal(rows[0].percentage, 11);
   assert.equal(rows[0].averageDuration, 25_000);
   assert.equal(rows[0].activeDayCount, 3);
+  assert.deepEqual(rows[0].sourceAppKeys, ["antigravity.exe", "Antigravity.exe"]);
 });
 
 runTest("filterDataAppOptionsForQuery returns deduped options for empty query", () => {

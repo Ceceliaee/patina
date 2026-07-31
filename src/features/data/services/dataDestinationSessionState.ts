@@ -7,6 +7,13 @@ export interface DataDestinationSessionSelectionState {
 
 type DataDestinationSessionMode = "app" | "web";
 
+function cloneOption(option: DataDestinationTrendOption): DataDestinationTrendOption {
+  return {
+    ...option,
+    identityKeys: [...option.identityKeys],
+  };
+}
+
 const sessionSelectionState: DataDestinationSessionSelectionState = {
   appKeys: [],
   webKeys: [],
@@ -55,7 +62,7 @@ export function rememberDataDestinationSessionOptions(
   options: readonly DataDestinationTrendOption[],
 ): void {
   for (const option of options) {
-    sessionOptionRegistry[mode].set(option.key, { ...option });
+    sessionOptionRegistry[mode].set(option.key, cloneOption(option));
   }
 }
 
@@ -66,7 +73,7 @@ export function getDataDestinationSessionOptions(
   return keys
     .map((key) => sessionOptionRegistry[mode].get(key))
     .filter((option): option is DataDestinationTrendOption => Boolean(option))
-    .map((option) => ({ ...option }));
+    .map(cloneOption);
 }
 
 export function resolveDataDestinationSessionOptions(
@@ -76,7 +83,7 @@ export function resolveDataDestinationSessionOptions(
 ): DataDestinationTrendOption[] {
   const availableByKey = new Map(availableOptions.map((option) => [option.key, option]));
   return currentOptions.map((current) => ({
-    ...(availableByKey.get(current.key) ?? sessionOptionRegistry[mode].get(current.key) ?? current),
+    ...cloneOption(availableByKey.get(current.key) ?? sessionOptionRegistry[mode].get(current.key) ?? current),
     totalDuration: current.totalDuration,
     percentage: current.percentage,
     averageDuration: current.averageDuration,
