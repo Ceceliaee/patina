@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 
 interface QuietDialogProps {
   open: boolean;
-  title: string;
+  title: ReactNode;
   description?: string;
   headerAside?: ReactNode;
   actions?: ReactNode;

@@ -21,6 +21,7 @@ interface Props {
   formatYAxisTick: (value: number) => string;
   height: number;
   onActivePointChange?: (event: unknown) => void;
+  onPointActivate?: (event: unknown) => void;
   onMouseLeave?: () => void;
   rows: readonly NativeTrendChartRow[];
   showAllXAxisTicks?: boolean;
@@ -87,6 +88,7 @@ export default function NativeTrendChart({
   formatYAxisTick,
   height,
   onActivePointChange,
+  onPointActivate,
   onMouseLeave,
   rows,
   showAllXAxisTicks = false,
@@ -138,6 +140,16 @@ export default function NativeTrendChart({
       activePayload: [{ payload: row }],
     });
   };
+  const commitPoint = (index: number) => {
+    const row = rows[index];
+    if (!row) return;
+    activatePoint(index);
+    onPointActivate?.({
+      activeIndex: index,
+      activeLabel: row.label,
+      activePayload: [{ payload: row }],
+    });
+  };
   const handleMouseMove = (event: MouseEvent<HTMLDivElement>) => {
     if (rows.length === 0) return;
     const rect = event.currentTarget.getBoundingClientRect();
@@ -182,7 +194,7 @@ export default function NativeTrendChart({
       className="relative h-full w-full"
       onMouseLeave={handleMouseLeave}
       onMouseMove={handleMouseMove}
-      role="img"
+      role={onPointActivate ? "group" : "img"}
     >
       <svg
         aria-hidden="true"
@@ -283,12 +295,19 @@ export default function NativeTrendChart({
             <rect
               key={`hit-${row.label}-${index}`}
               aria-label={row.label}
+              aria-keyshortcuts={onPointActivate ? "Enter Space" : undefined}
               className="qp-native-trend-hit"
               fill="transparent"
               height={plotHeight}
               onBlur={() => setActiveIndex((current) => current === index ? null : current)}
+              onClick={onPointActivate ? () => commitPoint(index) : undefined}
               onFocus={() => activatePoint(index)}
-              role="img"
+              onKeyDown={onPointActivate ? (event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                commitPoint(index);
+              } : undefined}
+              role={onPointActivate ? "button" : "img"}
               tabIndex={0}
               width={hitWidth}
               x={clamp(x - hitWidth / 2, plotLeft, plotLeft + plotWidth - hitWidth)}

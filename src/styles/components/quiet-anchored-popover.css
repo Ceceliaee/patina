@@ -1,0 +1,19 @@
+.qp-anchored-popover {
+  position: fixed;
+  z-index: 130;
+  max-width: calc(100vw - 24px);
+  max-height: min(260px, calc(100vh - 24px));
+  transform-origin: top center;
+  overflow-y: auto;
+  border: 1px solid var(--qp-border-subtle);
+  border-radius: var(--qp-radius-panel);
+  background: var(--qp-bg-canvas);
+  box-shadow: var(--qp-shadow-overlay);
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+  padding: 10px;
+}
+
+.qp-anchored-popover-top {
+  transform-origin: bottom center;
+}

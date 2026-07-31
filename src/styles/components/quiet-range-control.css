@@ -16,6 +16,7 @@
 .qp-range-control-arrow {
   display: inline-flex;
   width: 24px;
+  flex: 0 0 24px;
   align-items: center;
   justify-content: center;
   padding: 0;
@@ -44,6 +45,27 @@
   font-weight: 700;
   line-height: 1;
   text-align: center;
+}
+
+button.qp-range-control-label {
+  cursor: pointer;
+}
+
+.qp-range-control-label:focus {
+  outline: none;
+}
+
+.qp-range-control-label:focus-visible {
+  outline: 2px solid var(--qp-focus-ring);
+  outline-offset: 2px;
+}
+
+.qp-range-control-label.qp-date-picker-range-trigger:hover:not(:disabled),
+.qp-range-control-label.qp-date-picker-range-trigger-open,
+.qp-range-control-label.qp-date-picker-range-trigger:focus,
+.qp-range-control-label.qp-date-picker-range-trigger:focus-visible {
+  border-color: var(--qp-border-subtle);
+  background: var(--qp-bg-elevated);
 }
 
 .qp-range-control-label-text {

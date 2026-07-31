@@ -64,6 +64,7 @@
   --qp-radius-control: 10px;
   --qp-radius-button: 8px;
   --qp-radius-chip: 8px;
+  --qp-radius-timeline-segment: 2px;
 
   --qp-shadow-overlay: 0 10px 24px rgba(17, 24, 39, 0.08);
   --qp-shadow-toast: 0 8px 20px rgba(17, 24, 39, 0.1);
@@ -1408,6 +1409,12 @@ body,
 #root {
   height: 100%;
   background: transparent;
+}
+
+html[data-window-label="main"],
+html[data-window-label="main"] body,
+html[data-window-label="main"] #root {
+  background: var(--qp-bg-app);
 }
 
 body {

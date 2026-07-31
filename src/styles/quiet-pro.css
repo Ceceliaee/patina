@@ -128,6 +128,33 @@
   border-radius: var(--qp-radius-panel);
 }
 
+.qp-workbench-list-card {
+  overflow: hidden;
+  border: 1px solid var(--qp-border-subtle);
+  border-radius: var(--qp-radius-control);
+  background: var(--qp-bg-elevated);
+  transition:
+    border-color var(--qp-motion-fast) ease,
+    background-color var(--qp-motion-fast) ease;
+}
+
+.qp-workbench-list-card:hover {
+  border-color: var(--qp-border-strong);
+  background: var(--qp-bg-panel);
+}
+
+.qp-compact-disclosure.qp-button-secondary {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0;
+  color: var(--qp-text-tertiary);
+}
+
 .qp-page-header {
   display: flex;
   align-items: center;

@@ -13,6 +13,7 @@ interface QuietRangeControlProps {
   previousDisabled?: boolean;
   nextDisabled?: boolean;
   expanded?: boolean;
+  labelControls?: string;
   className?: string;
   labelClassName?: string;
 }
@@ -29,6 +30,7 @@ const QuietRangeControl = forwardRef<HTMLButtonElement, QuietRangeControlProps>(
   previousDisabled = false,
   nextDisabled = false,
   expanded,
+  labelControls,
   className,
   labelClassName,
 }, ref) {
@@ -55,6 +57,7 @@ const QuietRangeControl = forwardRef<HTMLButtonElement, QuietRangeControlProps>(
           aria-label={labelAriaLabel}
           aria-expanded={expanded}
           aria-haspopup="dialog"
+          aria-controls={labelControls}
           onClick={onLabelClick}
         >
           <span className="qp-range-control-label-text">{label}</span>

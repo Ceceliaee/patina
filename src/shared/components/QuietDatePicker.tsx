@@ -12,21 +12,37 @@ import { createPortal } from "react-dom";
 import { CalendarDays } from "lucide-react";
 import { UI_TEXT } from "../copy/index.ts";
 import {
+  addLocalMonths,
   formatLocalDateKey,
   parseLocalDateKey,
   startOfLocalDay,
   startOfLocalMonth,
 } from "../lib/localDate.ts";
 import QuietCalendar from "./QuietCalendar.tsx";
+import QuietRangeControl from "./QuietRangeControl.tsx";
+
+interface QuietDatePickerDayNavigation {
+  ariaLabel: string;
+  previousAriaLabel: string;
+  nextAriaLabel: string;
+  onPrevious: () => void;
+  onNext: () => void;
+  previousDisabled?: boolean;
+  nextDisabled?: boolean;
+  className?: string;
+}
 
 interface QuietDatePickerProps {
   value: string;
   onChange: (value: string) => void;
   ariaLabel?: string;
   className?: string;
+  displayLabel?: string;
+  showCalendarIcon?: boolean;
   disabled?: boolean;
   minDate?: string;
   maxDate?: string;
+  dayNavigation?: QuietDatePickerDayNavigation;
 }
 
 interface CalendarPosition {
@@ -55,9 +71,12 @@ export default function QuietDatePicker({
   onChange,
   ariaLabel = UI_TEXT.date.pickDate,
   className,
+  displayLabel,
+  showCalendarIcon = true,
   disabled = false,
   minDate,
   maxDate,
+  dayNavigation,
 }: QuietDatePickerProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -188,6 +207,16 @@ export default function QuietDatePicker({
       top: `${position.top}px`,
     }
     : undefined;
+  const previousMonthDisabled = Boolean(
+    minDateValue
+    && startOfLocalMonth(addLocalMonths(calendarMonth, -1))
+      < startOfLocalMonth(minDateValue),
+  );
+  const nextMonthDisabled = Boolean(
+    maxDateValue
+    && startOfLocalMonth(addLocalMonths(calendarMonth, 1))
+      > startOfLocalMonth(maxDateValue),
+  );
 
   const popover = open && position ? (
     <div
@@ -195,7 +224,7 @@ export default function QuietDatePicker({
       id={dialogId}
       role="dialog"
       aria-label={ariaLabel}
-      className={`qp-calendar-popover qp-calendar-popover-${position.placement}`}
+      className={`qp-calendar-popover qp-calendar-popover-${position.placement} qp-motion-popover-enter`}
       style={popoverStyle}
     >
       <QuietCalendar
@@ -205,6 +234,8 @@ export default function QuietDatePicker({
         maxDate={maxDateValue}
         today={today}
         focusedDate={focusedDate}
+        previousMonthDisabled={previousMonthDisabled}
+        nextMonthDisabled={nextMonthDisabled}
         onCalendarMonthChange={setCalendarMonth}
         onFocusedDateChange={setFocusedDate}
         onSelectDate={selectDate}
@@ -213,23 +244,48 @@ export default function QuietDatePicker({
   ) : null;
 
   return (
-    <div ref={rootRef} className="qp-date-picker">
-      <button
-        ref={triggerRef}
-        type="button"
-        disabled={disabled}
-        aria-label={ariaLabel}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={open ? dialogId : undefined}
-        onClick={toggleCalendar}
-        className={`qp-input qp-date-picker-trigger ${open ? "qp-date-picker-trigger-open" : ""} ${
-          className ?? ""
-        }`.trim()}
-      >
-        <span>{formatDateDisplay(value)}</span>
-        <CalendarDays size={14} aria-hidden="true" />
-      </button>
+    <div
+      ref={rootRef}
+      className={`qp-date-picker ${dayNavigation ? "qp-date-picker-day-navigation" : ""}`.trim()}
+    >
+      {dayNavigation ? (
+        <QuietRangeControl
+          ref={triggerRef}
+          className={dayNavigation.className}
+          ariaLabel={dayNavigation.ariaLabel}
+          label={displayLabel ?? formatDateDisplay(value)}
+          labelAriaLabel={ariaLabel}
+          previousAriaLabel={dayNavigation.previousAriaLabel}
+          nextAriaLabel={dayNavigation.nextAriaLabel}
+          previousDisabled={dayNavigation.previousDisabled}
+          nextDisabled={dayNavigation.nextDisabled}
+          onPrevious={dayNavigation.onPrevious}
+          onNext={dayNavigation.onNext}
+          onLabelClick={toggleCalendar}
+          expanded={open}
+          labelControls={open ? dialogId : undefined}
+          labelClassName={`qp-date-picker-range-trigger ${
+            open ? "qp-date-picker-range-trigger-open" : ""
+          } ${className ?? ""}`.trim()}
+        />
+      ) : (
+        <button
+          ref={triggerRef}
+          type="button"
+          disabled={disabled}
+          aria-label={ariaLabel}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-controls={open ? dialogId : undefined}
+          onClick={toggleCalendar}
+          className={`qp-input qp-date-picker-trigger ${open ? "qp-date-picker-trigger-open" : ""} ${
+            className ?? ""
+          }`.trim()}
+        >
+          <span>{displayLabel ?? formatDateDisplay(value)}</span>
+          {showCalendarIcon ? <CalendarDays size={14} aria-hidden="true" /> : null}
+        </button>
+      )}
       {popover ? createPortal(popover, document.body) : null}
     </div>
   );

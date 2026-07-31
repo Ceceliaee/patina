@@ -5,6 +5,8 @@
 @import "./styles/components/quiet-containers.css";
 @import "./styles/components/quiet-range-control.css";
 @import "./styles/components/quiet-chart-tooltip.css";
+@import "./styles/components/quiet-timeline.css";
+@import "./styles/components/quiet-anchored-popover.css";
 @import "./styles/app-shell.css";
 @import "./styles/features/settings.css";
 @import "./styles/features/dashboard.css";
