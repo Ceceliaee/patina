@@ -610,9 +610,47 @@ function tauriStubFor(path: string) {
       }
 
       function historyWebActivityRows() {
-        if (!globalThis.__TIME_TRACKER_ENABLE_WEB_FIXTURE) return [];
+        const dataDetailFixtureEnabled = (
+          globalThis.__TIME_TRACKER_ENABLE_DATA_WEB_DETAIL_FIXTURE === true
+        );
+        if (
+          !dataDetailFixtureEnabled
+          && !globalThis.__TIME_TRACKER_ENABLE_WEB_FIXTURE
+        ) return [];
         const timing = smokeSessionTiming();
         const firstDuration = Math.max(60 * 1000, Math.floor(timing.duration * 0.6));
+        if (dataDetailFixtureEnabled) {
+          return [
+            {
+              id: 1951,
+              browser_client_id: "smoke-browser",
+              browser_kind: "chrome",
+              browser_exe_name: "chrome.exe",
+              domain: "research.example",
+              normalized_domain: "research.example",
+              url: "https://research.example/patina/detail",
+              title: "Patina research workspace",
+              favicon_url: null,
+              start_time: timing.start,
+              end_time: timing.start + firstDuration,
+              duration: firstDuration,
+            },
+            {
+              id: 1952,
+              browser_client_id: "smoke-browser",
+              browser_kind: "chrome",
+              browser_exe_name: "chrome.exe",
+              domain: "docs.example.com",
+              normalized_domain: "docs.example.com",
+              url: "https://docs.example.com/patina/guide",
+              title: "Patina documentation guide",
+              favicon_url: null,
+              start_time: timing.start + firstDuration,
+              end_time: timing.end,
+              duration: Math.max(60 * 1000, timing.end - timing.start - firstDuration),
+            },
+          ];
+        }
         return [
           {
             id: 1901,

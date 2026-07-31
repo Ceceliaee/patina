@@ -485,17 +485,29 @@ await runTest("History separates timeline list dialog from zoom dialog", () => {
   const historyTimelineComponent = readUtf8("src/features/history/components/HistoryHorizontalTimeline.tsx");
   const historyTimelineZoomDialog = readUtf8("src/features/history/components/HistoryTimelineZoomDialog.tsx");
   const quietStepperSlider = readUtf8("src/shared/components/QuietStepperSlider.tsx");
+  const quietTimelineTrack = readUtf8("src/shared/components/QuietTimelineTrack.tsx");
   const quietTooltip = readUtf8("src/shared/components/QuietTooltip.tsx");
   const historyTimelineLaneList = readUtf8("src/features/history/components/HistoryTimelineLaneList.tsx");
   const historyLayoutStorage = readUtf8("src/features/history/services/historyLayoutPreferenceStorage.ts");
+  const historyWebTimeline = readUtf8("src/features/history/services/historyWebActivityViewModel.ts");
   const historyCss = readUtf8("src/styles/features/history.css");
   const quietProCss = readUtf8("src/styles/quiet-pro.css");
   const selectedDateEffect = history.match(
     /useEffect\(\(\) => \{\s*timelineDetailsTriggerRef\.current = null;[\s\S]*?\}, \[resetTimelineViewportForDate, selectedDate\]\);/,
   )?.[0] ?? "";
-  const timelineSegmentMarkup = historyTimelineComponent.match(
-    /<QuietTooltip\s+key=\{segment\.id\}[\s\S]*?<\/QuietTooltip>/,
-  )?.[0] ?? "";
+  const timelineSegmentStart = historyTimelineComponent.indexOf(
+    "<QuietTimelineSegment",
+  );
+  const timelineSegmentEnd = historyTimelineComponent.indexOf(
+    'tooltipClassName="history-horizontal-timeline-tooltip"',
+    timelineSegmentStart,
+  );
+  const timelineSegmentMarkup = timelineSegmentStart >= 0 && timelineSegmentEnd >= 0
+    ? historyTimelineComponent.slice(
+      timelineSegmentStart,
+      timelineSegmentEnd + 'tooltipClassName="history-horizontal-timeline-tooltip"'.length,
+    )
+    : "";
 
   assert.doesNotMatch(history, /HISTORY_TIMELINE_ZOOM_OPTIONS/);
   assert.match(history, /readHistoryTimelineZoomHours/);
@@ -503,6 +515,7 @@ await runTest("History separates timeline list dialog from zoom dialog", () => {
   assert.match(history, /normalizeHistoryTimelineViewport/);
   assert.match(history, /normalizeHistoryTimelineViewportAroundFocus/);
   assert.match(history, /snapHistoryTimelineFocusToNearestHalfHour/);
+  assert.match(history, /resolveTimelineFocusAtReferenceLocalTime/);
   assert.match(history, /timelineDialogOpen/);
   assert.match(history, /timelineZoomDialogOpen/);
   assert.match(history, /useState<HistoryTimelineViewport>/);
@@ -529,13 +542,23 @@ await runTest("History separates timeline list dialog from zoom dialog", () => {
   assert.match(history, /HistoryTimelineZoomDialog/);
   assert.match(historyTimelineZoomDialog, /history-timeline-zoom-dialog-surface/);
   assert.match(historyTimelineZoomDialog, /HistoryTimelineLaneList/);
-  assert.match(historyTimelineZoomDialog, /appIcons=\{appIcons\}/);
+  assert.match(historyTimelineZoomDialog, /sourceIcons=\{sourceIcons\}/);
   assert.match(historyTimelineLaneList, /viewModel\.lanes\.map/);
+  assert.match(historyTimelineLaneList, /lane\.iconKeys/);
   assert.match(historyTimelineLaneList, /history-timeline-lanes-scroll custom-scrollbar/);
   assert.match(historyTimelineLaneList, /variant="lane"/);
   assert.match(historyTimelineLaneList, /showAxis=\{false\}/);
   assert.match(historyCopy, /timelineAppLanes: "应用分轨"/);
   assert.match(historyCopy, /timelineCategoryLanes: "分类分轨"/);
+  assert.match(historyCopy, /timelineWebLanes: "网页分轨"/);
+  assert.match(historyCopy, /showTimelineByWeb: "按网页显示"/);
+  assert.match(historyCopy, /timelineModeSwitch:/);
+  assert.match(historyTimeline, /HistoryTimelineDisplayMode = "app" \| "category" \| "web"/);
+  assert.match(historyLayoutStorage, /getNextHistoryTimelineMode/);
+  assert.match(historyLayoutStorage, /resolveEffectiveHistoryTimelineMode/);
+  assert.match(historyWebTimeline, /buildHistoryWebTimelineViewModel/);
+  assert.match(history, /effectiveHistoryTimelineMode === "web"/);
+  assert.doesNotMatch(history, /pressed=\{historyTimelineMode === "category"\}/);
   assert.match(historyCopy, /emptyTimelineWindow: "当前时间段暂无记录"/);
   assert.match(historyCopy, /timelineInteractionHint: "滚轮每次缩放 0\.2 小时，拖动或横向滚动平移时间轴"/);
   assert.match(historyTimelineZoomDialog, /step=\{0\.2\}/);
@@ -563,8 +586,11 @@ await runTest("History separates timeline list dialog from zoom dialog", () => {
   assert.ok(timelineSegmentMarkup);
   assert.doesNotMatch(timelineSegmentMarkup, /tabIndex|onFocus|onBlur|onClick/);
   assert.match(timelineSegmentMarkup, /tooltipClassName="history-horizontal-timeline-tooltip"/);
-  assert.match(timelineSegmentMarkup, /style=\{segmentStyle\}/);
+  assert.match(timelineSegmentMarkup, /leftRatio=\{segment\.startRatio\}/);
+  assert.match(timelineSegmentMarkup, /widthRatio=\{segment\.widthRatio\}/);
   assert.match(historyTimelineComponent, /disabled=\{interactionActive\}/);
+  assert.match(quietTimelineTrack, /<QuietTooltip/);
+  assert.match(quietTimelineTrack, /className=\{joinClasses\("qp-timeline-segment"/);
   assert.match(quietTooltip, /createPortal/);
   assert.doesNotMatch(historyCss, /history-horizontal-timeline-segment:(?:active|focus-visible)|history-horizontal-timeline-segment:hover::before/);
   assert.match(historyTimelineComponent, /hideOnPointerDown=\{variant !== "expanded"\}/);
@@ -589,6 +615,10 @@ await runTest("History separates timeline list dialog from zoom dialog", () => {
   assert.match(historyCss, /\.history-timeline-zoom-dialog-timeline/);
   assert.match(historyCss, /overscroll-behavior: contain/);
   assert.match(historyCss, /cursor: grab/);
+  assert.match(
+    historyCss,
+    /\.history-timeline-zoom-dialog-timeline \.history-horizontal-timeline-segment \{\s*cursor: default;\s*\}/,
+  );
   assert.match(historyCss, /cursor: grabbing/);
   assert.match(historyCss, /user-select: none/);
   assert.match(historyCss, /\.history-timeline-lanes-scroll/);
@@ -692,29 +722,82 @@ await runTest("startup recovery keeps external autostart and tray access safe", 
 await runTest("main window first visibility is gated by themed frontend readiness", () => {
   const mainWindow = readUtf8("src-tauri/src/app/main_window.rs");
   const lifecycle = readUtf8("src-tauri/src/app/state.rs");
+  const tray = readUtf8("src-tauri/src/app/tray.rs");
+  const windowActivation = readUtf8("src-tauri/src/platform/windows/window_activation.rs");
   const commands = readUtf8("src-tauri/src/commands/window.rs");
   const bootstrap = readUtf8("src-tauri/src/app/bootstrap.rs");
+  const permissions = readUtf8("src-tauri/permissions/window-commands.toml");
   const appShell = readUtf8("src/app/AppShell.tsx");
   const tracking = readUtf8("src/app/hooks/useWindowTracking.ts");
   const theme = readUtf8("src/app/hooks/useAppThemeMode.ts");
   const readiness = readUtf8("src/app/hooks/useMainWindowReady.ts");
+  const windowGateway = readUtf8("src/platform/desktop/windowControlGateway.ts");
+  const tokens = readUtf8("src/styles/tokens.css");
   const widgetShell = readUtf8("src/app/widget/WidgetShell.tsx");
 
   assert.match(mainWindow, /\.visible\(false\)/);
   assert.doesNotMatch(mainWindow, /\.visible\(true\)/);
   assert.match(mainWindow, /\.initialization_script\(initialization_script\)/);
+  assert.match(
+    mainWindow,
+    /setAttribute\('data-window-label', '\{MAIN_WINDOW_LABEL\}'\)/,
+  );
+  assert.match(mainWindow, /PageLoadEvent::Started/);
+  assert.match(mainWindow, /begin_page_load\(generation\)/);
+  assert.match(mainWindow, /window\.hide\(\)/);
+  assert.match(mainWindow, /result=kept-hidden|kept-hidden/);
   assert.match(mainWindow, /schedule_main_window_ready_timeout/);
+  assert.match(mainWindow, /is_native_window_alive/);
+  assert.match(mainWindow, /is_native_window_visible/);
+  assert.match(mainWindow, /recreate_main_window/);
+  assert.match(mainWindow, /stale-native-window/);
+  assert.match(mainWindow, /MAIN_WINDOW_LIVENESS_TIMEOUT_MILLIS/);
+  assert.match(mainWindow, /__PATINA_MAIN_WINDOW_LIVENESS_REQUEST__/);
+  assert.match(mainWindow, /liveness-probe-timeout/);
+  assert.match(mainWindow, /recreate_main_window\(&app, "liveness-timeout"\)/);
+  assert.match(tray, /WindowEvent::Destroyed/);
+  assert.match(tray, /handle_unexpected_main_window_destroyed/);
+  assert.match(windowActivation, /IsWindowVisible/);
   assert.match(lifecycle, /MainWindowRenderState::Waiting/);
   assert.match(lifecycle, /window_generation/);
+  assert.match(lifecycle, /load_epoch/);
+  assert.match(lifecycle, /MainWindowTimeoutDecision::Hidden/);
+  assert.match(lifecycle, /MainWindowShowDecision::Recreate/);
+  assert.match(lifecycle, /MainWindowShowDecision::Probe/);
+  assert.doesNotMatch(
+    lifecycle,
+    /enum MainWindowTimeoutDecision\s*\{[^}]*Reveal/s,
+  );
+  assert.match(commands, /cmd_get_main_window_render_token/);
   assert.match(commands, /cmd_mark_main_window_ready/);
   assert.match(commands, /window\.label\(\) != main_window::MAIN_WINDOW_LABEL/);
+  assert.match(bootstrap, /commands::window::cmd_get_main_window_render_token/);
   assert.match(bootstrap, /commands::window::cmd_mark_main_window_ready/);
-  assert.match(tracking, /appearanceResolved/);
+  assert.match(permissions, /cmd_get_main_window_render_token/);
+  assert.doesNotMatch(
+    readiness,
+    /appearanceResolved/,
+    "main-window paint readiness must not wait for tracking or settings bootstrap",
+  );
   assert.match(theme, /useLayoutEffect/);
   assert.match(appShell, /useMainWindowReady/);
   assert.match(appShell, /ref=\{appFrameRef\}/);
-  assert.match(readiness, /requestAnimationFrame/);
+  assert.doesNotMatch(
+    readiness,
+    /requestAnimationFrame/,
+    "a native-hidden WebView must not gate readiness on animation frames",
+  );
+  assert.match(readiness, /getComputedStyle/);
+  assert.match(readiness, /getBoundingClientRect/);
   assert.match(readiness, /isDocumentThemeApplied/);
+  assert.match(readiness, /readCurrentMainWindowRenderToken/);
+  assert.match(readiness, /__PATINA_MAIN_WINDOW_LIVENESS_REQUEST__/);
+  assert.match(readiness, /verifyAndReportReady/);
+  assert.match(windowGateway, /loadEpoch/);
+  assert.match(
+    tokens,
+    /html\[data-window-label="main"\][\s\S]*background:\s*var\(--qp-bg-app\)/,
+  );
   assert.doesNotMatch(widgetShell, /useMainWindowReady/);
 });
 
@@ -976,13 +1059,14 @@ await runTest("Data keeps web analysis beside a unified activity overview", () =
     /\.data-trend-range-reset:hover \{[\s\S]*?color: var\(--qp-text-secondary\);/,
   );
   assert.doesNotMatch(destinationPanel, /data-web-initial-status|webTrendInitialLoading/);
+  assert.doesNotMatch(destinationPanel, /showRefreshingMessage|webTrendUpdating/);
   assert.match(destinationPanel, /\{heatmapContent\}/);
   assert.match(destinationPanel, /data-hint/);
   assert.match(destinationPanel, /UI_TEXT\.data\.interactionHint/);
   assert.match(destinationPanel, /event\.ctrlKey/);
   assert.match(destinationPanel, /aria-pressed=\{isSelected\}/);
   assert.match(destinationPanel, /aria-description=\{UI_TEXT\.data\.interactionHint\}/);
-  assert.match(destinationPanel, /aria-keyshortcuts="Control\+Enter Control\+Space"/);
+  assert.match(destinationPanel, /aria-keyshortcuts="Enter Space Control\+Enter Control\+Space"/);
   assert.match(destinationPanel, /<NativeTrendChart/);
   assert.match(destinationPanel, /showAllXAxisTicks=\{granularity === "month"\}/);
   assert.match(activityTrendPanel, /showAllXAxisTicks=\{viewModel\.granularity === "month"\}/);
@@ -1033,6 +1117,244 @@ await runTest("Data keeps web analysis beside a unified activity overview", () =
     quietProCss,
     /@media \(max-width: 720px\) \{\s*\.data-heatmap-panel-header,\s*\.data-app-panel-header \{\s*align-items: stretch;\s*flex-direction: column;/,
   );
+});
+
+await runTest("Data owns one private day-detail dialog without duplicating trends or heatmaps", () => {
+  const data = readUtf8("src/features/data/components/Data.tsx");
+  const destinationPanel = readUtf8("src/features/data/components/DataAppTrendPanel.tsx");
+  const dialog = readUtf8("src/features/data/components/DataDestinationDetailDialog.tsx");
+  const detailHook = readUtf8("src/features/data/hooks/useDataDestinationDetail.ts");
+  const detailPresentationHook = readUtf8(
+    "src/features/data/hooks/useDataDestinationDetailPresentation.ts",
+  );
+  const detailReadModel = readUtf8("src/features/data/services/dataDestinationDetailReadModel.ts");
+  const webTimelineCompiler = readUtf8(
+    "src/shared/lib/webActivityTimelineCompiler.ts",
+  );
+  const detailTimelineViewport = readUtf8(
+    "src/features/data/services/dataDestinationDetailTimelineViewport.ts",
+  );
+  const detailTimelinePreference = readUtf8(
+    "src/features/data/services/dataDestinationDetailTimelinePreferenceStorage.ts",
+  );
+  assert.match(
+    detailTimelineViewport,
+    /resolveTimelineFocusAtReferenceLocalTime/,
+  );
+  assert.match(
+    detailTimelineViewport,
+    /snapTimelineFocusToNearestInterval/,
+  );
+  const timeline = readUtf8("src/features/data/components/DataDestinationDetailTimeline.tsx");
+  const historyTimeline = readUtf8(
+    "src/features/history/components/HistoryHorizontalTimeline.tsx",
+  );
+  const historyTimelineViewModel = readUtf8(
+    "src/features/history/services/historyTimelineViewModel.ts",
+  );
+  const quietTimeline = readUtf8("src/shared/components/QuietTimelineTrack.tsx");
+  const quietTimelineAxis = readUtf8("src/shared/lib/timelineAxis.ts");
+  const quietTimelineStyles = readUtf8(
+    "src/styles/components/quiet-timeline.css",
+  );
+  const anchoredPopover = readUtf8(
+    "src/shared/components/QuietAnchoredPopover.tsx",
+  );
+  const anchoredPopoverStyles = readUtf8(
+    "src/styles/components/quiet-anchored-popover.css",
+  );
+  const records = readUtf8("src/features/data/components/DataDestinationDetailRecords.tsx");
+  const dataStyles = readUtf8("src/styles/features/data.css");
+  const quietProStyles = readUtf8("src/styles/quiet-pro.css");
+  const historyTimelineLists = readUtf8(
+    "src/features/history/components/HistoryTimelineLists.tsx",
+  );
+
+  assert.match(data, /const dataDestinationDetailDialogModule = import\("\.\/DataDestinationDetailDialog\.tsx"\)/);
+  assert.match(data, /DataDestinationDetailDialog = module\.default/);
+  assert.match(data, /dataDestinationDetailDialogModule\.then\(\(\) => \{\s*openDestinationDetail\(option\)/);
+  assert.doesNotMatch(data, /DataDestinationDetailDialogFallback|<Suspense|\blazy\(/);
+  assert.match(data, /<DataDestinationDetailDialog/);
+  assert.match(data, /setSelectedAppKeys\(selectionSnapshot\.appKeys\)/);
+  assert.match(data, /setSelectedWebKeys\(selectionSnapshot\.webKeys\)/);
+  assert.match(data, /useDataDestinationDetailPresentation/);
+  assert.match(detailPresentationHook, /createDataDestinationDetailSelectionSnapshot/);
+  assert.match(detailPresentationHook, /selectDataDestinationDetailSnapshotTarget/);
+  assert.match(detailPresentationHook, /buildDataDestinationDetailTarget/);
+  assert.match(
+    detailPresentationHook,
+    /listScrollTop: listRef\.current\?\.scrollTop \?\? 0/,
+  );
+  assert.match(detailPresentationHook, /restoreSelectionSnapshot\(selectionSnapshot\)/);
+  assert.match(destinationPanel, /onDoubleClick=\{\(event\) => \{/);
+  assert.match(destinationPanel, /onOptionIntentStart\(option, true\);/);
+  assert.match(destinationPanel, /onOptionOpenDetails\(option\)/);
+  assert.match(destinationPanel, /event\.key === "Enter"/);
+  assert.match(destinationPanel, /event\.key !== "Enter" && event\.key !== " "/);
+  assert.match(destinationPanel, /<button[\s\S]*className="data-app-selected-icon"/);
+  assert.doesNotMatch(destinationPanel, /className="data-app-selected-icon"[\s\S]{0,120}aria-hidden/);
+
+  assert.match(dialog, /<QuietDialog/);
+  assert.match(dialog, /<QuietDatePicker/);
+  assert.match(dialog, /<DataDestinationDetailTimeline/);
+  assert.match(dialog, /<DataDestinationDetailRecords/);
+  assert.doesNotMatch(
+    dialog,
+    /NativeTrendChart|DataTrendRangeControl|data-destination-detail-summary/,
+  );
+  assert.doesNotMatch(
+    dialog,
+    /DataHeatmapPanel|destinationMode|QuietSegmentedFilter/,
+  );
+  assert.doesNotMatch(dialog, /features\/history\/components/);
+  assert.doesNotMatch(data, /features\/history\/components/);
+  assert.doesNotMatch(
+    detailHook,
+    /loadDataWebHeatmap|buildDataWebHeatmap|loadAppTrendSnapshot|loadDataWebActivitySnapshot/,
+  );
+  assert.doesNotMatch(detailReadModel, /DataDestinationDetailTrendViewModel/);
+  assert.match(detailReadModel, /resolveStatisticalDataAppKey/);
+  assert.match(detailReadModel, /getHistoryByDate/);
+  assert.match(detailReadModel, /getWebActivitySegmentsInRange/);
+  assert.match(
+    detailReadModel,
+    /mergeWebActivityTimelineItemsByDomain\(\s*candidates,\s*mergeThresholdSecs,/,
+  );
+  assert.match(
+    webTimelineCompiler,
+    /item\.normalizedDomain === current\.normalizedDomain/,
+  );
+  assert.match(
+    webTimelineCompiler,
+    /gapFromCurrent >= 0[\s\S]*?gapFromCurrent <= mergeThresholdMs/,
+  );
+  assert.match(timeline, /<QuietStepperSlider/);
+  assert.match(timeline, /<QuietTimelineTrack/);
+  assert.match(timeline, /<QuietTimelineSegment/);
+  assert.match(historyTimeline, /<QuietTimelineTrack/);
+  assert.match(historyTimeline, /<QuietTimelineSegment/);
+  assert.match(quietTimeline, /joinClasses\("qp-timeline-track"/);
+  assert.match(quietTimeline, /joinClasses\("qp-timeline-axis"/);
+  assert.match(quietTimeline, /className=\{joinClasses\("qp-timeline-segment"/);
+  assert.match(timeline, /tooltipClassName="data-destination-detail-timeline-tooltip"/);
+  assert.doesNotMatch(timeline, /title=\{ariaLabel\}/);
+  assert.match(timeline, /onPointerMove=\{handlePointerMove\}/);
+  assert.match(timeline, /getDataDestinationDetailTimelineWheelZoomHours/);
+  assert.match(timeline, /zoomDataDestinationDetailTimelineViewportAroundAnchor/);
+  assert.match(
+    timeline,
+    /addEventListener\("wheel", handleWheel, \{ passive: false \}\)/,
+  );
+  assert.doesNotMatch(timeline, /onWheel=\{handleWheel\}/);
+  assert.match(timeline, /data-data-detail-timeline-start-ms/);
+  assert.match(dialog, /minimumDurationMs=\{minSessionMinutes \* 60_000\}/);
+  assert.doesNotMatch(data, /\bminSessionSecs\b|onMinSessionSecsChange/);
+  assert.doesNotMatch(dialog, /onMinSessionSecsChange/);
+  assert.match(dialog, /const \[minSessionSecs, setMinSessionSecs\] = useState\(readDetailMinSecs\)/);
+  assert.match(dialog, /useState\(readDetailMinSecs\)/);
+  assert.match(dialog, /saveDetailMinSecs\(nextSecs\)/);
+  assert.match(detailTimelineViewport, /DEFAULT_DATA_DESTINATION_DETAIL_ZOOM_HOURS = 24/);
+  assert.match(dialog, /useState\(\s*readDataDestinationDetailTimelineZoomHours,\s*\)/);
+  assert.match(dialog, /rememberDataDestinationDetailTimelineZoomHours\(zoomHours\)/);
+  assert.match(
+    detailTimelinePreference,
+    /patina:data-destination-detail-timeline-zoom-hours:v1/,
+  );
+  assert.match(
+    detailTimelinePreference,
+    /patina:data-detail-min-secs/,
+  );
+  assert.match(detailTimelineViewport, /MIN_VISIBLE_TIMELINE_SEGMENT_MS = 30_000/);
+  assert.match(detailTimelineViewport, /DIRECT_MERGE_GAP_MS = 5_000/);
+  assert.match(detailTimelineViewport, /clipDataDestinationDetailActivitiesToViewport/);
+  assert.match(detailTimelineViewport, /buildTimelineAxisTicks/);
+  assert.match(historyTimelineViewModel, /buildTimelineAxisTicks/);
+  assert.match(quietTimelineAxis, /MIN_EDGE_TICK_GAP_RATIO = 0\.05/);
+  assert.doesNotMatch(detailTimelineViewport, /features\/history/);
+  assert.match(records, /<QuietAnchoredPopover/);
+  assert.match(records, /aria-expanded=\{expanded\}/);
+  assert.match(records, /aria-controls=\{expanded \? popoverId : undefined\}/);
+  assert.match(records, /record\.secondaryText/);
+  assert.match(records, /UI_TEXT\.history\.activitySegmentCount\(activityCount\)/);
+  assert.match(records, /UI_TEXT\.history\.titleRowCount\(titleCount\)/);
+  assert.doesNotMatch(
+    records,
+    /\s+title=/,
+    "detail rows and title popovers should not create browser-native tooltips",
+  );
+  assert.doesNotMatch(records, /<details>|data-destination-detail-fragments/);
+  assert.match(anchoredPopover, /createPortal/);
+  assert.match(anchoredPopover, /document\.addEventListener\("pointerdown"/);
+  assert.match(anchoredPopover, /document\.addEventListener\("keydown"/);
+  assert.match(anchoredPopover, /event\.key !== "Escape"/);
+  assert.match(anchoredPopover, /role="region"/);
+  assert.match(
+    anchoredPopoverStyles,
+    /\.qp-anchored-popover \{[\s\S]*?position: fixed;[\s\S]*?var\(--qp-shadow-overlay\)/,
+  );
+  assert.match(dataStyles, /\.data-destination-detail-dialog/);
+  const detailTitleIconStyles = dataStyles.match(
+    /\.data-destination-detail-title-icon \{[\s\S]*?\}/,
+  )?.[0] ?? "";
+  assert.match(
+    detailTitleIconStyles,
+    /width: 22px;[\s\S]*?height: 22px;[\s\S]*?flex: 0 0 22px;/,
+  );
+  assert.doesNotMatch(
+    detailTitleIconStyles,
+    /\bborder(?:-radius)?:|\bbackground:/,
+  );
+  assert.match(
+    quietProStyles,
+    /\.qp-workbench-list-card \{[\s\S]*?border: 1px solid var\(--qp-border-subtle\);[\s\S]*?border-radius: var\(--qp-radius-control\);/,
+  );
+  assert.match(records, /className="qp-workbench-list-card data-destination-detail-activity"/);
+  assert.match(historyTimelineLists, /className="qp-workbench-list-card flex items-center gap-3 p-3"/);
+  assert.match(records, /qp-button-secondary qp-compact-disclosure data-destination-detail-activity-disclosure/);
+  assert.match(historyTimelineLists, /qp-button-secondary qp-compact-disclosure/);
+  assert.match(
+    quietProStyles,
+    /\.qp-compact-disclosure\.qp-button-secondary \{[\s\S]*?width: 18px;[\s\S]*?height: 18px;[\s\S]*?border-radius: 999px;/,
+  );
+  assert.match(
+    dataStyles,
+    /\.data-destination-detail-dialog \{[\s\S]*?height: min\(634px, calc\(100vh - 48px\)\);/,
+  );
+  assert.match(
+    dataStyles,
+    /\.data-destination-detail-records \{[\s\S]*?gap: 8px;[\s\S]*?max-height: 322px;[\s\S]*?flex: 1 1 322px;/,
+  );
+  assert.match(
+    dataStyles,
+    /\.data-destination-detail-record-popover \{\s*width: 284px;/,
+  );
+  assert.match(
+    dataStyles,
+    /\.data-destination-detail-popover-copy \{[\s\S]*?display: grid;/,
+  );
+  assert.doesNotMatch(
+    dataStyles,
+    /\.data-destination-detail-activity > details|\.data-destination-detail-fragments/,
+  );
+  assert.match(
+    dataStyles,
+    /\.data-destination-detail-timeline-segment \{\s*cursor: default;\s*\}/,
+  );
+  assert.match(
+    quietTimelineStyles,
+    /\.qp-timeline-segment::before[\s\S]*?height: var\(--qp-timeline-segment-height, 36px\)/,
+  );
+  assert.match(
+    quietTimelineStyles,
+    /\.qp-timeline-track::before[\s\S]*?top: 50%;[\s\S]*?height: 1px/,
+  );
+  assert.match(
+    quietTimelineStyles,
+    /\.qp-timeline-axis \{[\s\S]*?font-size: 9px;[\s\S]*?font-weight: 700/,
+  );
+  assert.doesNotMatch(timeline, /data-destination-detail-timeline-grid/);
+  assert.match(dataStyles, /scrollbar-gutter: stable/);
+  assert.doesNotMatch(dataStyles, /\.data-destination-detail[\s\S]*?#[0-9a-fA-F]{3,8}/);
 });
 
 await runTest("classification web domain colors prefer favicon theme colors", () => {
@@ -1459,6 +1781,9 @@ await runTest("remaining Quiet Pro component families keep one owner and explici
   const appShellStyles = readUtf8("src/styles/app-shell.css");
   const actionStyles = readUtf8("src/styles/components/quiet-actions.css");
   const containerStyles = readUtf8("src/styles/components/quiet-containers.css");
+  const rangeControlStyles = readUtf8(
+    "src/styles/components/quiet-range-control.css",
+  );
   const dataStyles = readUtf8("src/styles/features/data.css");
   const quietProStyles = readUtf8("src/styles/quiet-pro.css");
   const actionRow = readUtf8("src/shared/components/QuietActionRow.tsx");
@@ -1501,6 +1826,10 @@ await runTest("remaining Quiet Pro component families keep one owner and explici
   assert.match(rangeControl, /onLabelClick \? \(/);
   assert.match(rangeControl, /aria-haspopup="dialog"/);
   assert.doesNotMatch(rangeControl, /labelDisabled/);
+  assert.match(
+    rangeControlStyles,
+    /button\.qp-range-control-label \{\s*cursor: pointer;\s*\}/,
+  );
   assert.doesNotMatch(dataHeatmap, /labelDisabled/);
   assert.doesNotMatch(quietProStyles, /\.data-heatmap-range-(?:arrow|label)/);
   assert.match(dataStyles, /\.data-trend-header \.data-trend-period-control/);
