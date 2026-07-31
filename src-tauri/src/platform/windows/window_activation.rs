@@ -1,9 +1,26 @@
 use tauri::{Runtime, WebviewWindow};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{
-    BringWindowToTop, IsIconic, IsWindow, SetForegroundWindow, SetWindowPos, ShowWindow,
-    ShowWindowAsync, HWND_TOP, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE, SW_SHOW,
+    BringWindowToTop, IsIconic, IsWindow, IsWindowVisible, SetForegroundWindow, SetWindowPos,
+    ShowWindow, ShowWindowAsync, HWND_TOP, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE,
+    SW_SHOW,
 };
+
+pub(crate) fn is_native_window_alive<R: Runtime>(
+    window: &WebviewWindow<R>,
+) -> Result<bool, String> {
+    let hwnd = native_hwnd(window)?;
+    Ok(unsafe { !hwnd.0.is_null() && IsWindow(Some(hwnd)).as_bool() })
+}
+
+pub(crate) fn is_native_window_visible<R: Runtime>(
+    window: &WebviewWindow<R>,
+) -> Result<bool, String> {
+    let hwnd = native_hwnd(window)?;
+    Ok(unsafe {
+        !hwnd.0.is_null() && IsWindow(Some(hwnd)).as_bool() && IsWindowVisible(hwnd).as_bool()
+    })
+}
 
 pub(crate) fn restore_to_foreground<R: Runtime>(window: &WebviewWindow<R>) -> Result<(), String> {
     let hwnd = native_hwnd(window)?;
@@ -36,6 +53,10 @@ pub(crate) fn restore_to_foreground<R: Runtime>(window: &WebviewWindow<R>) -> Re
         if !SetForegroundWindow(hwnd).as_bool() {
             BringWindowToTop(hwnd)
                 .map_err(|error| format!("failed to bring window to foreground: {error}"))?;
+        }
+
+        if !IsWindowVisible(hwnd).as_bool() {
+            return Err("native window stayed hidden after restore".to_string());
         }
     }
 

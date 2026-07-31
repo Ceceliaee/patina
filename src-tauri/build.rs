@@ -47,6 +47,7 @@ const APP_COMMANDS: &[&str] = &[
     "cmd_toggle_tracking_paused",
     "cmd_is_primary_mouse_button_down",
     "cmd_minimize_main_window",
+    "cmd_get_main_window_render_token",
     "cmd_mark_main_window_ready",
     "cmd_get_update_snapshot",
     "cmd_check_for_updates",

@@ -140,6 +140,7 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::widget::cmd_toggle_tracking_paused,
         commands::widget::cmd_is_primary_mouse_button_down,
         commands::window::cmd_minimize_main_window,
+        commands::window::cmd_get_main_window_render_token,
         commands::window::cmd_mark_main_window_ready,
         commands::update::cmd_get_update_snapshot,
         commands::update::cmd_check_for_updates,

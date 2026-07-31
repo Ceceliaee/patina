@@ -335,6 +335,11 @@ pub(crate) fn handle_window_event<R: Runtime>(window: &Window<R>, event: &Window
 
     let app = window.app_handle();
 
+    if matches!(event, WindowEvent::Destroyed) {
+        main_window::handle_unexpected_main_window_destroyed(app);
+        return;
+    }
+
     if matches!(event, WindowEvent::Focused(true)) && window.is_visible().unwrap_or(false) {
         widget::close_widget_window(app);
         return;

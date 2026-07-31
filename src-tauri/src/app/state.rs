@@ -148,7 +148,9 @@ impl MainWindowRenderState {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum MainWindowShowDecision {
     Wait,
-    Reveal { generation: u64 },
+    Reveal { token: MainWindowRenderToken },
+    Probe { token: MainWindowRenderToken },
+    Recreate,
     Destroying,
 }
 
@@ -157,20 +159,26 @@ pub(crate) enum MainWindowReadyDecision {
     Stale,
     Duplicate,
     Hidden,
-    Reveal { generation: u64 },
+    Reveal { token: MainWindowRenderToken },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum MainWindowTimeoutDecision {
     Stale,
     Hidden,
-    Reveal { generation: u64 },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct MainWindowRenderToken {
+    pub(crate) generation: u64,
+    pub(crate) load_epoch: u64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct MainWindowLifecycleSnapshot {
     pub(crate) desired_visible: bool,
     pub(crate) generation: u64,
+    pub(crate) load_epoch: u64,
     pub(crate) render_state: MainWindowRenderState,
     pub(crate) create_in_progress: bool,
     pub(crate) destroy_in_progress: bool,
@@ -185,6 +193,7 @@ struct MainWindowLifecycle {
     minimize_to_widget_in_progress: bool,
     destroy_in_progress: bool,
     window_generation: u64,
+    load_epoch: u64,
     render_state: MainWindowRenderState,
     create_in_progress: bool,
     reveal_in_progress: bool,
@@ -209,6 +218,7 @@ impl MainWindowLifecycleState {
 
             inner.create_in_progress = true;
             inner.window_generation = inner.window_generation.wrapping_add(1);
+            inner.load_epoch = 1;
             inner.render_state = MainWindowRenderState::Waiting;
             inner.reveal_in_progress = false;
             inner.reveal_satisfied = false;
@@ -217,10 +227,14 @@ impl MainWindowLifecycleState {
         })
     }
 
-    pub(crate) fn finish_window_creation(&self, generation: u64, created: bool) -> bool {
+    pub(crate) fn finish_window_creation(
+        &self,
+        generation: u64,
+        created: bool,
+    ) -> Option<MainWindowRenderToken> {
         self.with_inner(|inner| {
             if inner.window_generation != generation || !inner.create_in_progress {
-                return false;
+                return None;
             }
 
             inner.create_in_progress = false;
@@ -229,28 +243,53 @@ impl MainWindowLifecycleState {
                 inner.reveal_in_progress = false;
                 inner.reveal_satisfied = false;
                 inner.created_at = None;
-                return false;
+                return None;
             }
 
             if inner.desired_visible
-                && matches!(
-                    inner.render_state,
-                    MainWindowRenderState::Ready | MainWindowRenderState::TimedOut
-                )
+                && inner.render_state == MainWindowRenderState::Ready
                 && !inner.destroy_in_progress
                 && !inner.reveal_in_progress
                 && !inner.reveal_satisfied
             {
                 inner.reveal_in_progress = true;
-                return true;
+                return Some(Self::render_token(inner));
             }
 
-            false
+            None
+        })
+    }
+
+    pub(crate) fn begin_page_load(&self, generation: u64) -> Option<MainWindowRenderToken> {
+        self.with_inner(|inner| {
+            if inner.window_generation != generation
+                || inner.render_state == MainWindowRenderState::Absent
+                || inner.destroy_in_progress
+            {
+                return None;
+            }
+
+            inner.load_epoch = inner.load_epoch.wrapping_add(1).max(1);
+            inner.render_state = MainWindowRenderState::Waiting;
+            inner.reveal_in_progress = false;
+            inner.reveal_satisfied = false;
+            inner.created_at = Some(Instant::now());
+            Some(Self::render_token(inner))
+        })
+    }
+
+    pub(crate) fn current_render_token(&self) -> Option<MainWindowRenderToken> {
+        self.with_inner(|inner| {
+            (inner.render_state != MainWindowRenderState::Absent
+                && inner.window_generation > 0
+                && inner.load_epoch > 0)
+                .then(|| Self::render_token(inner))
         })
     }
 
     pub(crate) fn request_show(&self) -> MainWindowShowDecision {
         self.with_inner(|inner| {
+            let was_revealed = inner.reveal_satisfied;
             inner.desired_visible = true;
             inner.hide_generation = inner.hide_generation.wrapping_add(1);
             inner.minimize_to_widget_in_progress = false;
@@ -260,15 +299,26 @@ impl MainWindowLifecycleState {
                 return MainWindowShowDecision::Destroying;
             }
 
-            if matches!(
-                inner.render_state,
-                MainWindowRenderState::Ready | MainWindowRenderState::TimedOut
-            ) && !inner.create_in_progress
+            if inner.render_state == MainWindowRenderState::TimedOut && !inner.create_in_progress {
+                return MainWindowShowDecision::Recreate;
+            }
+
+            if inner.render_state == MainWindowRenderState::Ready
+                && !inner.create_in_progress
                 && !inner.reveal_in_progress
             {
+                if !was_revealed {
+                    inner.load_epoch = inner.load_epoch.wrapping_add(1).max(1);
+                    inner.render_state = MainWindowRenderState::Waiting;
+                    inner.created_at = Some(Instant::now());
+                    return MainWindowShowDecision::Probe {
+                        token: Self::render_token(inner),
+                    };
+                }
+
                 inner.reveal_in_progress = true;
                 return MainWindowShowDecision::Reveal {
-                    generation: inner.window_generation,
+                    token: Self::render_token(inner),
                 };
             }
 
@@ -276,9 +326,51 @@ impl MainWindowLifecycleState {
         })
     }
 
-    pub(crate) fn mark_ready(&self, generation: u64) -> MainWindowReadyDecision {
+    pub(crate) fn begin_unavailable_window_recovery(&self) -> bool {
         self.with_inner(|inner| {
-            if inner.window_generation != generation
+            if !inner.desired_visible || inner.create_in_progress || inner.destroy_in_progress {
+                return false;
+            }
+
+            inner.destroy_in_progress = true;
+            inner.reveal_in_progress = false;
+            inner.reveal_satisfied = false;
+            true
+        })
+    }
+
+    pub(crate) fn finish_unavailable_window_recovery(&self) {
+        self.with_inner(|inner| {
+            inner.destroy_in_progress = false;
+            inner.load_epoch = 0;
+            inner.render_state = MainWindowRenderState::Absent;
+            inner.create_in_progress = false;
+            inner.reveal_in_progress = false;
+            inner.reveal_satisfied = false;
+            inner.created_at = None;
+        });
+    }
+
+    pub(crate) fn handle_unexpected_window_destroyed(&self) -> bool {
+        self.with_inner(|inner| {
+            if inner.destroy_in_progress {
+                return false;
+            }
+
+            inner.load_epoch = 0;
+            inner.render_state = MainWindowRenderState::Absent;
+            inner.create_in_progress = false;
+            inner.reveal_in_progress = false;
+            inner.reveal_satisfied = false;
+            inner.created_at = None;
+            inner.desired_visible
+        })
+    }
+
+    pub(crate) fn mark_ready(&self, token: MainWindowRenderToken) -> MainWindowReadyDecision {
+        self.with_inner(|inner| {
+            if inner.window_generation != token.generation
+                || inner.load_epoch != token.load_epoch
                 || inner.render_state == MainWindowRenderState::Absent
             {
                 return MainWindowReadyDecision::Stale;
@@ -296,7 +388,7 @@ impl MainWindowLifecycleState {
                 && !inner.reveal_satisfied
             {
                 inner.reveal_in_progress = true;
-                return MainWindowReadyDecision::Reveal { generation };
+                return MainWindowReadyDecision::Reveal { token };
             }
 
             if first_ready && (!inner.desired_visible || inner.create_in_progress) {
@@ -307,31 +399,26 @@ impl MainWindowLifecycleState {
         })
     }
 
-    pub(crate) fn handle_ready_timeout(&self, generation: u64) -> MainWindowTimeoutDecision {
+    pub(crate) fn handle_ready_timeout(
+        &self,
+        token: MainWindowRenderToken,
+    ) -> MainWindowTimeoutDecision {
         self.with_inner(|inner| {
-            if inner.window_generation != generation
+            if inner.window_generation != token.generation
+                || inner.load_epoch != token.load_epoch
                 || inner.render_state != MainWindowRenderState::Waiting
             {
                 return MainWindowTimeoutDecision::Stale;
             }
 
             inner.render_state = MainWindowRenderState::TimedOut;
-            if inner.desired_visible
-                && !inner.create_in_progress
-                && !inner.destroy_in_progress
-                && !inner.reveal_in_progress
-            {
-                inner.reveal_in_progress = true;
-                MainWindowTimeoutDecision::Reveal { generation }
-            } else {
-                MainWindowTimeoutDecision::Hidden
-            }
+            MainWindowTimeoutDecision::Hidden
         })
     }
 
-    pub(crate) fn finish_reveal(&self, generation: u64, succeeded: bool) -> bool {
+    pub(crate) fn finish_reveal(&self, token: MainWindowRenderToken, succeeded: bool) -> bool {
         self.with_inner(|inner| {
-            if inner.window_generation != generation {
+            if inner.window_generation != token.generation || inner.load_epoch != token.load_epoch {
                 return succeeded;
             }
 
@@ -341,14 +428,12 @@ impl MainWindowLifecycleState {
         })
     }
 
-    pub(crate) fn can_reveal(&self, generation: u64) -> bool {
+    pub(crate) fn can_reveal(&self, token: MainWindowRenderToken) -> bool {
         self.with_inner(|inner| {
-            inner.window_generation == generation
+            inner.window_generation == token.generation
+                && inner.load_epoch == token.load_epoch
                 && inner.desired_visible
-                && matches!(
-                    inner.render_state,
-                    MainWindowRenderState::Ready | MainWindowRenderState::TimedOut
-                )
+                && inner.render_state == MainWindowRenderState::Ready
                 && !inner.create_in_progress
                 && !inner.destroy_in_progress
                 && inner.reveal_in_progress
@@ -359,6 +444,7 @@ impl MainWindowLifecycleState {
         self.with_inner(|inner| MainWindowLifecycleSnapshot {
             desired_visible: inner.desired_visible,
             generation: inner.window_generation,
+            load_epoch: inner.load_epoch,
             render_state: inner.render_state,
             create_in_progress: inner.create_in_progress,
             destroy_in_progress: inner.destroy_in_progress,
@@ -450,12 +536,20 @@ impl MainWindowLifecycleState {
             inner.destroy_in_progress = false;
             if destroyed {
                 inner.render_state = MainWindowRenderState::Absent;
+                inner.load_epoch = 0;
                 inner.reveal_in_progress = false;
                 inner.reveal_satisfied = false;
                 inner.created_at = None;
             }
             inner.desired_visible
         })
+    }
+
+    fn render_token(inner: &MainWindowLifecycle) -> MainWindowRenderToken {
+        MainWindowRenderToken {
+            generation: inner.window_generation,
+            load_epoch: inner.load_epoch,
+        }
     }
 }
 
@@ -563,7 +657,7 @@ impl WidgetWindowLifecycleState {
 mod tests {
     use super::{
         MainWindowLifecycleState, MainWindowReadyDecision, MainWindowRenderState,
-        MainWindowShowDecision, MainWindowTimeoutDecision, TraySafetyState,
+        MainWindowRenderToken, MainWindowShowDecision, MainWindowTimeoutDecision, TraySafetyState,
         WidgetWindowLifecycleState,
     };
 
@@ -571,6 +665,12 @@ mod tests {
         state
             .begin_window_creation()
             .expect("window creation should be claimable")
+    }
+
+    fn current_render_token(state: &MainWindowLifecycleState) -> MainWindowRenderToken {
+        state
+            .current_render_token()
+            .expect("current window should expose a render token")
     }
 
     #[test]
@@ -675,6 +775,7 @@ mod tests {
         assert_eq!(generation, 1);
         assert!(!snapshot.desired_visible);
         assert_eq!(snapshot.generation, generation);
+        assert_eq!(snapshot.load_epoch, 1);
         assert_eq!(snapshot.render_state, MainWindowRenderState::Waiting);
         assert!(snapshot.create_in_progress);
         assert!(!snapshot.destroy_in_progress);
@@ -686,29 +787,127 @@ mod tests {
     fn main_window_lifecycle_waits_for_ready_after_early_show_request() {
         let state = MainWindowLifecycleState::default();
         let generation = begin_window_creation(&state);
+        let token = current_render_token(&state);
         state.finish_window_creation(generation, true);
 
         assert_eq!(state.request_show(), MainWindowShowDecision::Wait);
         assert_eq!(
-            state.mark_ready(generation),
-            MainWindowReadyDecision::Reveal { generation }
+            state.mark_ready(token),
+            MainWindowReadyDecision::Reveal { token }
         );
-        assert!(state.can_reveal(generation));
+        assert!(state.can_reveal(token));
     }
 
     #[test]
-    fn main_window_lifecycle_ready_window_reveals_on_later_show_request() {
+    fn main_window_lifecycle_hidden_ready_window_requires_a_fresh_liveness_ack() {
         let state = MainWindowLifecycleState::default();
         let generation = begin_window_creation(&state);
+        let initial_token = current_render_token(&state);
         state.finish_window_creation(generation, true);
 
         assert_eq!(
-            state.mark_ready(generation),
+            state.mark_ready(initial_token),
             MainWindowReadyDecision::Hidden
         );
+        let probe_token = match state.request_show() {
+            MainWindowShowDecision::Probe { token } => token,
+            decision => panic!("expected liveness probe, got {decision:?}"),
+        };
+        assert_eq!(probe_token.generation, initial_token.generation);
+        assert_eq!(probe_token.load_epoch, initial_token.load_epoch + 1);
+        assert_eq!(
+            state.mark_ready(initial_token),
+            MainWindowReadyDecision::Stale
+        );
+        assert_eq!(
+            state.mark_ready(probe_token),
+            MainWindowReadyDecision::Reveal { token: probe_token }
+        );
+    }
+
+    #[test]
+    fn main_window_lifecycle_coalesces_show_requests_during_liveness_probe() {
+        let state = MainWindowLifecycleState::default();
+        let generation = begin_window_creation(&state);
+        let initial_token = current_render_token(&state);
+        state.finish_window_creation(generation, true);
+        assert_eq!(
+            state.mark_ready(initial_token),
+            MainWindowReadyDecision::Hidden
+        );
+        let probe_token = match state.request_show() {
+            MainWindowShowDecision::Probe { token } => token,
+            decision => panic!("expected liveness probe, got {decision:?}"),
+        };
+
+        assert_eq!(state.request_show(), MainWindowShowDecision::Wait);
+        assert_eq!(
+            state.mark_ready(probe_token),
+            MainWindowReadyDecision::Reveal { token: probe_token }
+        );
+    }
+
+    #[test]
+    fn main_window_lifecycle_liveness_timeout_requires_recreation() {
+        let state = MainWindowLifecycleState::default();
+        let generation = begin_window_creation(&state);
+        let initial_token = current_render_token(&state);
+        state.finish_window_creation(generation, true);
+        assert_eq!(
+            state.mark_ready(initial_token),
+            MainWindowReadyDecision::Hidden
+        );
+        let probe_token = match state.request_show() {
+            MainWindowShowDecision::Probe { token } => token,
+            decision => panic!("expected liveness probe, got {decision:?}"),
+        };
+
+        assert_eq!(
+            state.handle_ready_timeout(probe_token),
+            MainWindowTimeoutDecision::Hidden
+        );
+        assert_eq!(state.request_show(), MainWindowShowDecision::Recreate);
+    }
+
+    #[test]
+    fn main_window_lifecycle_hide_cancels_a_pending_liveness_reveal() {
+        let state = MainWindowLifecycleState::default();
+        let generation = begin_window_creation(&state);
+        let initial_token = current_render_token(&state);
+        state.finish_window_creation(generation, true);
+        assert_eq!(
+            state.mark_ready(initial_token),
+            MainWindowReadyDecision::Hidden
+        );
+        let probe_token = match state.request_show() {
+            MainWindowShowDecision::Probe { token } => token,
+            decision => panic!("expected liveness probe, got {decision:?}"),
+        };
+
+        let _ = state.hide();
+        assert_eq!(
+            state.mark_ready(probe_token),
+            MainWindowReadyDecision::Hidden
+        );
+        assert!(!state.can_reveal(probe_token));
+    }
+
+    #[test]
+    fn main_window_lifecycle_visible_ready_window_can_reveal_without_a_probe() {
+        let state = MainWindowLifecycleState::default();
+        let generation = begin_window_creation(&state);
+        let token = current_render_token(&state);
+        state.finish_window_creation(generation, true);
+        assert_eq!(state.request_show(), MainWindowShowDecision::Wait);
+        assert_eq!(
+            state.mark_ready(token),
+            MainWindowReadyDecision::Reveal { token }
+        );
+        assert!(!state.finish_reveal(token, true));
+
         assert_eq!(
             state.request_show(),
-            MainWindowShowDecision::Reveal { generation }
+            MainWindowShowDecision::Reveal { token }
         );
     }
 
@@ -716,12 +915,10 @@ mod tests {
     fn main_window_lifecycle_ready_does_not_override_hidden_startup() {
         let state = MainWindowLifecycleState::default();
         let generation = begin_window_creation(&state);
+        let token = current_render_token(&state);
         state.finish_window_creation(generation, true);
 
-        assert_eq!(
-            state.mark_ready(generation),
-            MainWindowReadyDecision::Hidden
-        );
+        assert_eq!(state.mark_ready(token), MainWindowReadyDecision::Hidden);
         assert!(!state.snapshot().desired_visible);
     }
 
@@ -729,33 +926,32 @@ mod tests {
     fn main_window_lifecycle_duplicate_ready_is_idempotent_after_reveal() {
         let state = MainWindowLifecycleState::default();
         let generation = begin_window_creation(&state);
+        let token = current_render_token(&state);
         state.finish_window_creation(generation, true);
         assert_eq!(state.request_show(), MainWindowShowDecision::Wait);
         assert_eq!(
-            state.mark_ready(generation),
-            MainWindowReadyDecision::Reveal { generation }
+            state.mark_ready(token),
+            MainWindowReadyDecision::Reveal { token }
         );
-        assert!(!state.finish_reveal(generation, true));
+        assert!(!state.finish_reveal(token, true));
 
-        assert_eq!(
-            state.mark_ready(generation),
-            MainWindowReadyDecision::Duplicate
-        );
+        assert_eq!(state.mark_ready(token), MainWindowReadyDecision::Duplicate);
     }
 
     #[test]
     fn main_window_lifecycle_rejects_stale_ready_and_timeout() {
         let state = MainWindowLifecycleState::default();
         let stale_generation = begin_window_creation(&state);
+        let stale_token = current_render_token(&state);
         state.finish_window_creation(stale_generation, true);
         let current_generation = begin_window_creation(&state);
 
         assert_eq!(
-            state.mark_ready(stale_generation),
+            state.mark_ready(stale_token),
             MainWindowReadyDecision::Stale
         );
         assert_eq!(
-            state.handle_ready_timeout(stale_generation),
+            state.handle_ready_timeout(stale_token),
             MainWindowTimeoutDecision::Stale
         );
         assert_eq!(state.snapshot().generation, current_generation);
@@ -766,23 +962,34 @@ mod tests {
     }
 
     #[test]
-    fn main_window_lifecycle_timeout_only_reveals_when_requested() {
+    fn main_window_lifecycle_timeout_never_reveals_unready_content() {
         let hidden_state = MainWindowLifecycleState::default();
         let hidden_generation = begin_window_creation(&hidden_state);
+        let hidden_token = current_render_token(&hidden_state);
         hidden_state.finish_window_creation(hidden_generation, true);
         assert_eq!(
-            hidden_state.handle_ready_timeout(hidden_generation),
+            hidden_state.handle_ready_timeout(hidden_token),
             MainWindowTimeoutDecision::Hidden
         );
 
         let visible_state = MainWindowLifecycleState::default();
         let visible_generation = begin_window_creation(&visible_state);
+        let visible_token = current_render_token(&visible_state);
         visible_state.finish_window_creation(visible_generation, true);
         assert_eq!(visible_state.request_show(), MainWindowShowDecision::Wait);
         assert_eq!(
-            visible_state.handle_ready_timeout(visible_generation),
-            MainWindowTimeoutDecision::Reveal {
-                generation: visible_generation,
+            visible_state.handle_ready_timeout(visible_token),
+            MainWindowTimeoutDecision::Hidden
+        );
+        assert_eq!(
+            visible_state.request_show(),
+            MainWindowShowDecision::Recreate
+        );
+        assert!(!visible_state.can_reveal(visible_token));
+        assert_eq!(
+            visible_state.mark_ready(visible_token),
+            MainWindowReadyDecision::Reveal {
+                token: visible_token,
             }
         );
     }
@@ -791,17 +998,18 @@ mod tests {
     fn main_window_lifecycle_retries_reveal_after_show_failure() {
         let state = MainWindowLifecycleState::default();
         let generation = begin_window_creation(&state);
+        let token = current_render_token(&state);
         state.finish_window_creation(generation, true);
         assert_eq!(state.request_show(), MainWindowShowDecision::Wait);
         assert_eq!(
-            state.mark_ready(generation),
-            MainWindowReadyDecision::Reveal { generation }
+            state.mark_ready(token),
+            MainWindowReadyDecision::Reveal { token }
         );
-        assert!(!state.finish_reveal(generation, false));
+        assert!(!state.finish_reveal(token, false));
 
         assert_eq!(
-            state.mark_ready(generation),
-            MainWindowReadyDecision::Reveal { generation }
+            state.mark_ready(token),
+            MainWindowReadyDecision::Reveal { token }
         );
     }
 
@@ -809,43 +1017,140 @@ mod tests {
     fn main_window_lifecycle_hides_a_reveal_that_loses_to_hide() {
         let state = MainWindowLifecycleState::default();
         let generation = begin_window_creation(&state);
+        let token = current_render_token(&state);
         state.finish_window_creation(generation, true);
         assert_eq!(state.request_show(), MainWindowShowDecision::Wait);
         assert_eq!(
-            state.mark_ready(generation),
-            MainWindowReadyDecision::Reveal { generation }
+            state.mark_ready(token),
+            MainWindowReadyDecision::Reveal { token }
         );
         let _ = state.hide();
 
-        assert!(!state.can_reveal(generation));
-        assert!(state.finish_reveal(generation, true));
+        assert!(!state.can_reveal(token));
+        assert!(state.finish_reveal(token, true));
     }
 
     #[test]
     fn main_window_lifecycle_invalidates_old_reveal_before_new_generation() {
         let state = MainWindowLifecycleState::default();
         let old_generation = begin_window_creation(&state);
+        let old_token = current_render_token(&state);
         state.finish_window_creation(old_generation, true);
+        assert_eq!(state.mark_ready(old_token), MainWindowReadyDecision::Hidden);
+        assert!(matches!(
+            state.request_show(),
+            MainWindowShowDecision::Probe { .. }
+        ));
+
+        let new_generation = begin_window_creation(&state);
+        let new_token = current_render_token(&state);
+
+        assert_ne!(new_generation, old_generation);
+        assert!(!state.can_reveal(old_token));
+        assert!(state.finish_window_creation(new_generation, true).is_none());
         assert_eq!(
-            state.mark_ready(old_generation),
-            MainWindowReadyDecision::Hidden
+            state.mark_ready(new_token),
+            MainWindowReadyDecision::Reveal { token: new_token }
+        );
+    }
+
+    #[test]
+    fn main_window_lifecycle_page_reload_requires_a_new_ready_token() {
+        let state = MainWindowLifecycleState::default();
+        let generation = begin_window_creation(&state);
+        let initial_token = current_render_token(&state);
+        state.finish_window_creation(generation, true);
+        assert_eq!(state.request_show(), MainWindowShowDecision::Wait);
+        assert_eq!(
+            state.mark_ready(initial_token),
+            MainWindowReadyDecision::Reveal {
+                token: initial_token,
+            }
+        );
+        assert!(!state.finish_reveal(initial_token, true));
+
+        let reload_token = state
+            .begin_page_load(generation)
+            .expect("reload should mint a new render token");
+
+        assert_eq!(reload_token.generation, initial_token.generation);
+        assert_eq!(reload_token.load_epoch, initial_token.load_epoch + 1);
+        assert_eq!(
+            state.snapshot().render_state,
+            MainWindowRenderState::Waiting
+        );
+        assert_eq!(state.request_show(), MainWindowShowDecision::Wait);
+        assert_eq!(
+            state.mark_ready(initial_token),
+            MainWindowReadyDecision::Stale
         );
         assert_eq!(
-            state.request_show(),
-            MainWindowShowDecision::Reveal {
-                generation: old_generation,
+            state.handle_ready_timeout(initial_token),
+            MainWindowTimeoutDecision::Stale
+        );
+        assert_eq!(
+            state.mark_ready(reload_token),
+            MainWindowReadyDecision::Reveal {
+                token: reload_token,
+            }
+        );
+    }
+
+    #[test]
+    fn main_window_lifecycle_repeated_load_start_invalidates_earlier_timeout() {
+        let state = MainWindowLifecycleState::default();
+        let generation = begin_window_creation(&state);
+        state.finish_window_creation(generation, true);
+        let first_load = state
+            .begin_page_load(generation)
+            .expect("first load should be tracked");
+        let second_load = state
+            .begin_page_load(generation)
+            .expect("second load should replace the first");
+
+        assert!(second_load.load_epoch > first_load.load_epoch);
+        assert_eq!(
+            state.handle_ready_timeout(first_load),
+            MainWindowTimeoutDecision::Stale
+        );
+        assert_eq!(state.mark_ready(first_load), MainWindowReadyDecision::Stale);
+        assert_eq!(
+            state.snapshot().render_state,
+            MainWindowRenderState::Waiting
+        );
+        assert_eq!(
+            state.mark_ready(second_load),
+            MainWindowReadyDecision::Hidden
+        );
+    }
+
+    #[test]
+    fn main_window_lifecycle_stale_reveal_completion_requests_native_hide() {
+        let state = MainWindowLifecycleState::default();
+        let generation = begin_window_creation(&state);
+        let initial_token = current_render_token(&state);
+        state.finish_window_creation(generation, true);
+        assert_eq!(state.request_show(), MainWindowShowDecision::Wait);
+        assert_eq!(
+            state.mark_ready(initial_token),
+            MainWindowReadyDecision::Reveal {
+                token: initial_token,
             }
         );
 
-        let new_generation = begin_window_creation(&state);
+        let reload_token = state
+            .begin_page_load(generation)
+            .expect("reload should invalidate an in-flight reveal");
 
-        assert_ne!(new_generation, old_generation);
-        assert!(!state.can_reveal(old_generation));
-        assert!(!state.finish_window_creation(new_generation, true));
+        assert!(state.finish_reveal(initial_token, true));
         assert_eq!(
-            state.mark_ready(new_generation),
+            state.snapshot().render_state,
+            MainWindowRenderState::Waiting
+        );
+        assert_eq!(
+            state.mark_ready(reload_token),
             MainWindowReadyDecision::Reveal {
-                generation: new_generation,
+                token: reload_token,
             }
         );
     }
@@ -854,9 +1159,10 @@ mod tests {
     fn main_window_lifecycle_queues_show_while_destroy_is_in_progress() {
         let state = MainWindowLifecycleState::default();
         let first_generation = begin_window_creation(&state);
+        let first_token = current_render_token(&state);
         state.finish_window_creation(first_generation, true);
         assert_eq!(
-            state.mark_ready(first_generation),
+            state.mark_ready(first_token),
             MainWindowReadyDecision::Hidden
         );
         let hide_generation = state.hide();
@@ -867,14 +1173,52 @@ mod tests {
         assert!(!state.begin_destroy_hidden_window(hide_generation));
 
         let next_generation = begin_window_creation(&state);
+        let next_token = current_render_token(&state);
         state.finish_window_creation(next_generation, true);
         assert_ne!(next_generation, first_generation);
         assert_eq!(
-            state.mark_ready(next_generation),
-            MainWindowReadyDecision::Reveal {
-                generation: next_generation,
-            }
+            state.mark_ready(next_token),
+            MainWindowReadyDecision::Reveal { token: next_token }
         );
+    }
+
+    #[test]
+    fn main_window_lifecycle_recovers_an_unavailable_visible_window() {
+        let state = MainWindowLifecycleState::default();
+        let stale_generation = begin_window_creation(&state);
+        let stale_token = current_render_token(&state);
+        state.finish_window_creation(stale_generation, true);
+        assert_eq!(state.request_show(), MainWindowShowDecision::Wait);
+
+        assert!(state.begin_unavailable_window_recovery());
+        state.finish_unavailable_window_recovery();
+        assert!(state.snapshot().desired_visible);
+        assert_eq!(state.snapshot().render_state, MainWindowRenderState::Absent);
+        assert_eq!(
+            state.mark_ready(stale_token),
+            MainWindowReadyDecision::Stale
+        );
+
+        let recovered_generation = begin_window_creation(&state);
+        assert_ne!(recovered_generation, stale_generation);
+    }
+
+    #[test]
+    fn main_window_lifecycle_reopens_only_after_an_unexpected_destroy() {
+        let visible_state = MainWindowLifecycleState::default();
+        let generation = begin_window_creation(&visible_state);
+        visible_state.finish_window_creation(generation, true);
+        let _ = visible_state.request_show();
+        assert!(visible_state.handle_unexpected_window_destroyed());
+        assert_eq!(
+            visible_state.snapshot().render_state,
+            MainWindowRenderState::Absent
+        );
+
+        let hidden_state = MainWindowLifecycleState::default();
+        let generation = begin_window_creation(&hidden_state);
+        hidden_state.finish_window_creation(generation, true);
+        assert!(!hidden_state.handle_unexpected_window_destroyed());
     }
 
     #[test]
@@ -893,20 +1237,22 @@ mod tests {
     fn main_window_lifecycle_failed_destroy_keeps_current_ready_generation() {
         let state = MainWindowLifecycleState::default();
         let generation = begin_window_creation(&state);
+        let token = current_render_token(&state);
         state.finish_window_creation(generation, true);
-        assert_eq!(
-            state.mark_ready(generation),
-            MainWindowReadyDecision::Hidden
-        );
+        assert_eq!(state.mark_ready(token), MainWindowReadyDecision::Hidden);
         let hide_generation = state.hide();
         assert!(state.begin_destroy_hidden_window(hide_generation));
         assert!(!state.finish_destroy_hidden_window(false));
 
         assert_eq!(state.snapshot().generation, generation);
         assert_eq!(state.snapshot().render_state, MainWindowRenderState::Ready);
+        let probe_token = match state.request_show() {
+            MainWindowShowDecision::Probe { token } => token,
+            decision => panic!("expected liveness probe, got {decision:?}"),
+        };
         assert_eq!(
-            state.request_show(),
-            MainWindowShowDecision::Reveal { generation }
+            state.mark_ready(probe_token),
+            MainWindowReadyDecision::Reveal { token: probe_token }
         );
     }
 
@@ -914,11 +1260,12 @@ mod tests {
     fn main_window_lifecycle_cancelled_creation_returns_to_absent() {
         let state = MainWindowLifecycleState::default();
         let generation = begin_window_creation(&state);
+        let token = current_render_token(&state);
 
         state.finish_window_creation(generation, false);
 
         assert_eq!(state.snapshot().render_state, MainWindowRenderState::Absent);
-        assert_eq!(state.mark_ready(generation), MainWindowReadyDecision::Stale);
+        assert_eq!(state.mark_ready(token), MainWindowReadyDecision::Stale);
     }
 
     #[test]
@@ -938,30 +1285,26 @@ mod tests {
     fn main_window_lifecycle_reveals_ready_that_arrives_during_creation() {
         let state = MainWindowLifecycleState::default();
         let generation = begin_window_creation(&state);
+        let token = current_render_token(&state);
         assert_eq!(state.request_show(), MainWindowShowDecision::Wait);
 
-        assert_eq!(
-            state.mark_ready(generation),
-            MainWindowReadyDecision::Hidden
-        );
-        assert!(!state.can_reveal(generation));
-        assert!(state.finish_window_creation(generation, true));
-        assert!(state.can_reveal(generation));
+        assert_eq!(state.mark_ready(token), MainWindowReadyDecision::Hidden);
+        assert!(!state.can_reveal(token));
+        assert_eq!(state.finish_window_creation(generation, true), Some(token));
+        assert!(state.can_reveal(token));
     }
 
     #[test]
     fn main_window_lifecycle_failed_creation_discards_early_ready() {
         let state = MainWindowLifecycleState::default();
         let generation = begin_window_creation(&state);
+        let token = current_render_token(&state);
         assert_eq!(state.request_show(), MainWindowShowDecision::Wait);
-        assert_eq!(
-            state.mark_ready(generation),
-            MainWindowReadyDecision::Hidden
-        );
+        assert_eq!(state.mark_ready(token), MainWindowReadyDecision::Hidden);
 
-        assert!(!state.finish_window_creation(generation, false));
+        assert!(state.finish_window_creation(generation, false).is_none());
         assert_eq!(state.snapshot().render_state, MainWindowRenderState::Absent);
-        assert_eq!(state.mark_ready(generation), MainWindowReadyDecision::Stale);
+        assert_eq!(state.mark_ready(token), MainWindowReadyDecision::Stale);
     }
 
     #[test]

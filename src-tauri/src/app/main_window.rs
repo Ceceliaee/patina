@@ -1,6 +1,7 @@
 use crate::app::state::{
     AppExitState, DesktopBehaviorState, MainWindowLifecycleSnapshot, MainWindowLifecycleState,
-    MainWindowReadyDecision, MainWindowShowDecision, MainWindowTimeoutDecision,
+    MainWindowReadyDecision, MainWindowRenderToken, MainWindowShowDecision,
+    MainWindowTimeoutDecision,
 };
 use crate::app::widget;
 use crate::domain::settings::{MinimizeBehavior, StartupSource};
@@ -21,7 +22,9 @@ const MAIN_WINDOW_MIN_WIDTH: f64 = 900.0;
 const MAIN_WINDOW_MIN_HEIGHT: f64 = 636.0;
 const MAIN_WINDOW_DESTROY_AFTER_BACKGROUND_SECS: u64 = 3 * 60;
 const MAIN_WINDOW_READY_TIMEOUT_SECS: u64 = 8;
+const MAIN_WINDOW_LIVENESS_TIMEOUT_MILLIS: u64 = 1_500;
 const MAIN_WINDOW_GENERATION_PROPERTY: &str = "__PATINA_MAIN_WINDOW_GENERATION__";
+const MAIN_WINDOW_LIVENESS_CALLBACK: &str = "__PATINA_MAIN_WINDOW_LIVENESS_REQUEST__";
 const WIDGET_SHOW_MAX_ATTEMPTS: usize = 2;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -81,8 +84,9 @@ fn log_main_window_event(
     result: &str,
 ) {
     eprintln!(
-        "[main-window] event={event} generation={} reason={reason} desired_visible={} render_state={} create_in_progress={} destroy_in_progress={} reveal_in_progress={} elapsed_ms={} result={result}",
+        "[main-window] event={event} generation={} load_epoch={} reason={reason} desired_visible={} render_state={} create_in_progress={} destroy_in_progress={} reveal_in_progress={} elapsed_ms={} result={result}",
         snapshot.generation,
+        snapshot.load_epoch,
         snapshot.desired_visible,
         snapshot.render_state.as_str(),
         snapshot.create_in_progress,
@@ -105,6 +109,8 @@ pub(crate) fn show_main_window<R: Runtime + 'static>(
         match decision {
             MainWindowShowDecision::Wait => "waiting-for-ready",
             MainWindowShowDecision::Reveal { .. } => "reveal-claimed",
+            MainWindowShowDecision::Probe { .. } => "liveness-probe-claimed",
+            MainWindowShowDecision::Recreate => "recreate-after-timeout",
             MainWindowShowDecision::Destroying => "queued-during-destroy",
         },
     );
@@ -113,40 +119,75 @@ pub(crate) fn show_main_window<R: Runtime + 'static>(
         return true;
     }
 
+    if decision == MainWindowShowDecision::Recreate {
+        return recreate_main_window(app, "ready-timeout").is_ok();
+    }
+
     let ensure_result = match ensure_main_window_once(app) {
         Ok(result) => result,
         Err(error) => {
             eprintln!("[main-window] failed to ensure main window: {error}");
-            if let MainWindowShowDecision::Reveal { generation } = decision {
-                lifecycle.finish_reveal(generation, false);
+            if let MainWindowShowDecision::Reveal { token } = decision {
+                lifecycle.finish_reveal(token, false);
             }
             return false;
         }
     };
 
     match (ensure_result, decision) {
-        (
-            MainWindowEnsureResult::Existing(window),
-            MainWindowShowDecision::Reveal { generation },
-        ) => reveal_main_window(app, &window, generation, reason.as_str()).is_ok(),
+        (MainWindowEnsureResult::Existing(window), MainWindowShowDecision::Reveal { token }) => {
+            reveal_main_window(app, &window, token, reason.as_str()).is_ok()
+        }
+        (MainWindowEnsureResult::Existing(window), MainWindowShowDecision::Probe { token }) => {
+            probe_main_window_liveness(app, &window, token, reason.as_str()).is_ok()
+        }
         (MainWindowEnsureResult::Existing(_), MainWindowShowDecision::Wait)
         | (MainWindowEnsureResult::Created(_), _)
         | (MainWindowEnsureResult::Creating, _) => true,
+        (_, MainWindowShowDecision::Recreate) => true,
         (_, MainWindowShowDecision::Destroying) => true,
     }
 }
 
+fn probe_main_window_liveness<R: Runtime + 'static>(
+    app: &AppHandle<R>,
+    window: &WebviewWindow<R>,
+    token: MainWindowRenderToken,
+    reason: &str,
+) -> Result<(), String> {
+    let script = format!("window.{MAIN_WINDOW_LIVENESS_CALLBACK}?.();");
+    if let Err(error) = window.eval(&script) {
+        log_main_window_event(
+            "liveness-probe-failed",
+            app.state::<MainWindowLifecycleState>().snapshot(),
+            reason,
+            "eval-error-recreate",
+        );
+        recreate_main_window(app, "liveness-eval-error")?;
+        return Err(format!("failed to probe hidden main window: {error}"));
+    }
+
+    log_main_window_event(
+        "liveness-probe-started",
+        app.state::<MainWindowLifecycleState>().snapshot(),
+        reason,
+        "waiting-for-frontend",
+    );
+    schedule_main_window_liveness_timeout(app.clone(), token);
+    Ok(())
+}
+
 pub(crate) fn mark_main_window_ready<R: Runtime + 'static>(
     app: &AppHandle<R>,
-    generation: u64,
+    token: MainWindowRenderToken,
 ) -> Result<MainWindowReadyOutcome, String> {
     let lifecycle = app.state::<MainWindowLifecycleState>();
-    let decision = lifecycle.mark_ready(generation);
+    let decision = lifecycle.mark_ready(token);
     let (ready_result, result) = match decision {
         MainWindowReadyDecision::Stale => ("stale", MainWindowReadyOutcome::Stale),
         MainWindowReadyDecision::Duplicate => ("duplicate", MainWindowReadyOutcome::Duplicate),
         MainWindowReadyDecision::Hidden => ("accepted-hidden", MainWindowReadyOutcome::Hidden),
-        MainWindowReadyDecision::Reveal { generation } => {
+        MainWindowReadyDecision::Reveal { token } => {
             log_main_window_event(
                 "frontend-ready",
                 lifecycle.snapshot(),
@@ -154,10 +195,10 @@ pub(crate) fn mark_main_window_ready<R: Runtime + 'static>(
                 "accepted-reveal",
             );
             let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
-                lifecycle.finish_reveal(generation, false);
+                lifecycle.finish_reveal(token, false);
                 return Err("main window disappeared before ready reveal".to_string());
             };
-            return if reveal_main_window(app, &window, generation, "frontend-ready")? {
+            return if reveal_main_window(app, &window, token, "frontend-ready")? {
                 Ok(MainWindowReadyOutcome::Revealed)
             } else {
                 Ok(MainWindowReadyOutcome::Hidden)
@@ -173,15 +214,22 @@ pub(crate) fn mark_main_window_ready<R: Runtime + 'static>(
     Ok(result)
 }
 
+pub(crate) fn current_main_window_render_token<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Option<MainWindowRenderToken> {
+    app.state::<MainWindowLifecycleState>()
+        .current_render_token()
+}
+
 fn reveal_main_window<R: Runtime + 'static>(
     app: &AppHandle<R>,
     window: &WebviewWindow<R>,
-    generation: u64,
+    token: MainWindowRenderToken,
     reason: &str,
 ) -> Result<bool, String> {
     let lifecycle = app.state::<MainWindowLifecycleState>();
-    if !lifecycle.can_reveal(generation) {
-        lifecycle.finish_reveal(generation, false);
+    if !lifecycle.can_reveal(token) {
+        lifecycle.finish_reveal(token, false);
         log_main_window_event(
             "show-suppressed",
             lifecycle.snapshot(),
@@ -192,24 +240,47 @@ fn reveal_main_window<R: Runtime + 'static>(
     }
 
     if let Err(error) = window.show() {
-        lifecycle.finish_reveal(generation, false);
+        lifecycle.finish_reveal(token, false);
         log_main_window_event(
             "show-failed",
             lifecycle.snapshot(),
             reason,
             "window-show-error",
         );
-        return Err(format!("failed to show main window: {error}"));
+        eprintln!("[main-window] failed to show main window: {error}");
+        recreate_main_window(app, "window-show-error")?;
+        return Ok(false);
     }
 
     let _ = window.unminimize();
     // Win+D can leave the HWND outside Tauri's normal minimized/visible path.
     if let Err(error) = window_activation::restore_to_foreground(window) {
+        lifecycle.finish_reveal(token, false);
+        log_main_window_event(
+            "show-failed",
+            lifecycle.snapshot(),
+            reason,
+            "native-restore-error",
+        );
         eprintln!("[main-window] failed to restore native foreground window: {error}");
+        recreate_main_window(app, "native-restore-error")?;
+        return Ok(false);
     }
     let _ = window.set_focus();
 
-    if lifecycle.finish_reveal(generation, true) {
+    if window_activation::is_native_window_visible(window) != Ok(true) {
+        lifecycle.finish_reveal(token, false);
+        log_main_window_event(
+            "show-failed",
+            lifecycle.snapshot(),
+            reason,
+            "native-window-not-visible",
+        );
+        recreate_main_window(app, "native-window-not-visible")?;
+        return Ok(false);
+    }
+
+    if lifecycle.finish_reveal(token, true) {
         let _ = window.hide();
         log_main_window_event(
             "show-suppressed",
@@ -411,7 +482,12 @@ fn ensure_main_window_once<R: Runtime + 'static>(
     app: &AppHandle<R>,
 ) -> Result<MainWindowEnsureResult<R>, String> {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-        return Ok(MainWindowEnsureResult::Existing(window));
+        if window_activation::is_native_window_alive(&window) == Ok(true) {
+            return Ok(MainWindowEnsureResult::Existing(window));
+        }
+
+        eprintln!("[main-window] stale Tauri window found without a live native HWND; recreating");
+        recreate_existing_main_window(app, &window, "stale-native-window")?;
     }
 
     let webview_root = storage_paths::resolve_storage_paths(app)?.webview_root;
@@ -439,16 +515,38 @@ fn ensure_main_window_once<R: Runtime + 'static>(
         .visible(false)
         .data_directory(webview_root)
         .initialization_script(initialization_script)
-        .on_page_load(move |_window, payload| {
-            let event = match payload.event() {
-                PageLoadEvent::Started => "page-load-started",
-                PageLoadEvent::Finished => "page-load-finished",
-            };
-            eprintln!(
-                "[main-window] event={event} generation={generation} elapsed_ms={} url_scheme={} result=observed",
-                created_at.elapsed().as_millis(),
-                payload.url().scheme(),
-            );
+        .on_page_load(move |window, payload| {
+            match payload.event() {
+                PageLoadEvent::Started => {
+                    let app = window.app_handle();
+                    let lifecycle = app.state::<MainWindowLifecycleState>();
+                    let Some(token) = lifecycle.begin_page_load(generation) else {
+                        log_main_window_event(
+                            "page-load-started",
+                            lifecycle.snapshot(),
+                            "webview",
+                            "stale",
+                        );
+                        return;
+                    };
+
+                    let _ = window.hide();
+                    log_main_window_event(
+                        "page-load-started",
+                        lifecycle.snapshot(),
+                        payload.url().scheme(),
+                        "hidden-until-ready",
+                    );
+                    schedule_main_window_ready_timeout(app.clone(), token);
+                }
+                PageLoadEvent::Finished => {
+                    eprintln!(
+                        "[main-window] event=page-load-finished generation={generation} elapsed_ms={} url_scheme={} result=observed",
+                        created_at.elapsed().as_millis(),
+                        payload.url().scheme(),
+                    );
+                }
+            }
         });
 
     #[cfg(debug_assertions)]
@@ -467,11 +565,13 @@ fn ensure_main_window_once<R: Runtime + 'static>(
 
     match builder.build() {
         Ok(window) => {
-            let should_reveal = lifecycle.finish_window_creation(generation, true);
+            let reveal_token = lifecycle.finish_window_creation(generation, true);
             log_main_window_event("created", lifecycle.snapshot(), "builder", "hidden");
-            schedule_main_window_ready_timeout(app.clone(), generation);
-            if should_reveal {
-                reveal_main_window(app, &window, generation, "frontend-ready-during-create")?;
+            if let Some(token) = lifecycle.current_render_token() {
+                schedule_main_window_ready_timeout(app.clone(), token);
+            }
+            if let Some(token) = reveal_token {
+                reveal_main_window(app, &window, token, "frontend-ready-during-create")?;
             }
             Ok(MainWindowEnsureResult::Created(window))
         }
@@ -483,9 +583,81 @@ fn ensure_main_window_once<R: Runtime + 'static>(
     }
 }
 
+fn recreate_main_window<R: Runtime + 'static>(
+    app: &AppHandle<R>,
+    reason: &str,
+) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+        recreate_existing_main_window(app, &window, reason)?;
+    } else {
+        let lifecycle = app.state::<MainWindowLifecycleState>();
+        if lifecycle.begin_unavailable_window_recovery() {
+            lifecycle.finish_unavailable_window_recovery();
+        }
+    }
+
+    match ensure_main_window_once(app)? {
+        MainWindowEnsureResult::Existing(_) | MainWindowEnsureResult::Created(_) => Ok(()),
+        MainWindowEnsureResult::Creating => Ok(()),
+    }
+}
+
+fn recreate_existing_main_window<R: Runtime + 'static>(
+    app: &AppHandle<R>,
+    window: &WebviewWindow<R>,
+    reason: &str,
+) -> Result<(), String> {
+    let lifecycle = app.state::<MainWindowLifecycleState>();
+    if !lifecycle.begin_unavailable_window_recovery() {
+        return Ok(());
+    }
+
+    let destroy_result = window.destroy();
+    lifecycle.finish_unavailable_window_recovery();
+    log_main_window_event(
+        "native-window-recovery",
+        lifecycle.snapshot(),
+        reason,
+        if destroy_result.is_ok() {
+            "destroyed-stale-window"
+        } else {
+            "discarded-stale-window"
+        },
+    );
+
+    if let Err(error) = destroy_result {
+        eprintln!("[main-window] stale window destroy returned an error: {error}");
+    }
+
+    Ok(())
+}
+
+pub(crate) fn handle_unexpected_main_window_destroyed<R: Runtime + 'static>(app: &AppHandle<R>) {
+    let lifecycle = app.state::<MainWindowLifecycleState>();
+    if !lifecycle.handle_unexpected_window_destroyed()
+        || app.state::<AppExitState>().is_exit_requested()
+    {
+        return;
+    }
+
+    log_main_window_event(
+        "destroyed",
+        lifecycle.snapshot(),
+        "native-window-event",
+        "recreating-visible-window",
+    );
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::task::yield_now().await;
+        if let Err(error) = recreate_main_window(&app, "unexpected-destroy") {
+            eprintln!("[main-window] failed to recover destroyed visible window: {error}");
+        }
+    });
+}
+
 fn main_window_initialization_script(generation: u64) -> String {
     format!(
-        "Object.defineProperty(window, '{MAIN_WINDOW_GENERATION_PROPERTY}', {{ value: {generation}, writable: false, configurable: false }});"
+        "(() => {{ Object.defineProperty(window, '{MAIN_WINDOW_GENERATION_PROPERTY}', {{ value: {generation}, writable: false, configurable: false }}); const applyPatinaMainWindowLabel = () => document.documentElement?.setAttribute('data-window-label', '{MAIN_WINDOW_LABEL}'); applyPatinaMainWindowLabel(); if (!document.documentElement) {{ document.addEventListener('DOMContentLoaded', applyPatinaMainWindowLabel, {{ once: true }}); }} }})();"
     )
 }
 
@@ -569,12 +741,15 @@ fn schedule_main_window_destroy_after_background<R: Runtime + 'static>(
     });
 }
 
-fn schedule_main_window_ready_timeout<R: Runtime + 'static>(app: AppHandle<R>, generation: u64) {
+fn schedule_main_window_ready_timeout<R: Runtime + 'static>(
+    app: AppHandle<R>,
+    token: MainWindowRenderToken,
+) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_secs(MAIN_WINDOW_READY_TIMEOUT_SECS)).await;
 
         let lifecycle = app.state::<MainWindowLifecycleState>();
-        match lifecycle.handle_ready_timeout(generation) {
+        match lifecycle.handle_ready_timeout(token) {
             MainWindowTimeoutDecision::Stale => {}
             MainWindowTimeoutDecision::Hidden => {
                 log_main_window_event(
@@ -584,22 +759,38 @@ fn schedule_main_window_ready_timeout<R: Runtime + 'static>(app: AppHandle<R>, g
                     "kept-hidden",
                 );
             }
-            MainWindowTimeoutDecision::Reveal { generation } => {
+        }
+    });
+}
+
+fn schedule_main_window_liveness_timeout<R: Runtime + 'static>(
+    app: AppHandle<R>,
+    token: MainWindowRenderToken,
+) {
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(MAIN_WINDOW_LIVENESS_TIMEOUT_MILLIS)).await;
+
+        let lifecycle = app.state::<MainWindowLifecycleState>();
+        match lifecycle.handle_ready_timeout(token) {
+            MainWindowTimeoutDecision::Stale => {}
+            MainWindowTimeoutDecision::Hidden => {
+                let snapshot = lifecycle.snapshot();
                 log_main_window_event(
-                    "ready-timeout",
-                    lifecycle.snapshot(),
+                    "liveness-probe-timeout",
+                    snapshot,
                     "watchdog",
-                    "fallback-reveal",
+                    if snapshot.desired_visible {
+                        "recreate-hidden-window"
+                    } else {
+                        "cancelled-while-hidden"
+                    },
                 );
-                let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
-                    lifecycle.finish_reveal(generation, false);
-                    eprintln!(
-                        "[main-window] event=show-failed generation={generation} reason=watchdog result=window-missing"
-                    );
-                    return;
-                };
-                if let Err(error) = reveal_main_window(&app, &window, generation, "ready-timeout") {
-                    eprintln!("[main-window] ready timeout fallback failed: {error}");
+                if snapshot.desired_visible && !app.state::<AppExitState>().is_exit_requested() {
+                    if let Err(error) = recreate_main_window(&app, "liveness-timeout") {
+                        eprintln!(
+                            "[main-window] failed to recreate unresponsive hidden window: {error}"
+                        );
+                    }
                 }
             }
         }
@@ -632,6 +823,11 @@ mod tests {
         assert!(script.contains("value: 42"));
         assert!(script.contains("writable: false"));
         assert!(script.contains("configurable: false"));
+        assert!(script.contains("document.documentElement?.setAttribute"));
+        assert!(
+            script.find("Object.defineProperty").unwrap()
+                < script.find("document.documentElement").unwrap()
+        );
     }
 
     #[cfg(debug_assertions)]
