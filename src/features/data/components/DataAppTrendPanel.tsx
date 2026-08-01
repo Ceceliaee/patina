@@ -11,7 +11,6 @@ import NativeTrendChart from "../../../shared/charts/NativeTrendChart.tsx";
 import QuietSearchField from "../../../shared/components/QuietSearchField";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter.tsx";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
-import { getDataDestinationDetailCopy } from "../copy/dataDestinationDetailCopy.ts";
 import {
   formatChartHours,
   formatDuration,
@@ -73,7 +72,7 @@ interface DataAppTrendPanelProps {
   onOptionSelect: (key: string, multi: boolean) => void;
   onOptionIntentStart: (
     option: DataDestinationTrendOption,
-    selectTarget?: boolean,
+    returnFocusTo?: HTMLElement | null,
   ) => void;
   onOptionOpenDetails: (option: DataDestinationTrendOption) => void;
   onMouseDownCapture: (event: MouseEvent<HTMLDivElement>) => void;
@@ -131,7 +130,7 @@ function DataAppTrendPanel({
   onMouseMove,
   onMouseLeave,
 }: DataAppTrendPanelProps) {
-  const detailCopy = getDataDestinationDetailCopy();
+  const detailCopy = UI_TEXT.destinationDetail;
   const modeOptions = [
     { value: "app" as const, label: UI_TEXT.data.destinationApp },
     { value: "web" as const, label: UI_TEXT.data.destinationWeb },
@@ -165,12 +164,15 @@ function DataAppTrendPanel({
                 <button
                   type="button"
                   className="data-app-selected-icon"
+                  data-destination-detail-trigger
                   data-selection-key={option.key}
                   key={option.key}
                   aria-label={detailCopy.open(option.displayName)}
                   aria-keyshortcuts="Enter"
                   onMouseDown={(event) => {
-                    if (event.detail === 1) onOptionIntentStart(option);
+                    if (event.detail === 1) {
+                      onOptionIntentStart(option, event.currentTarget);
+                    }
                   }}
                   onDoubleClick={(event) => {
                     event.preventDefault();
@@ -180,7 +182,7 @@ function DataAppTrendPanel({
                   onKeyDown={(event) => {
                     if (event.key !== "Enter") return;
                     event.preventDefault();
-                    onOptionIntentStart(option);
+                    onOptionIntentStart(option, event.currentTarget);
                     onOptionOpenDetails(option);
                   }}
                 >
@@ -293,7 +295,7 @@ function DataAppTrendPanel({
                 const handleOptionKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
                   if (event.key !== "Enter" && event.key !== " ") return;
                   event.preventDefault();
-                  onOptionIntentStart(option);
+                  onOptionIntentStart(option, event.currentTarget);
                   if (event.ctrlKey) {
                     onOptionSelect(option.key, true);
                   } else if (event.key === "Enter") {
@@ -312,13 +314,20 @@ function DataAppTrendPanel({
                       "--data-series-color": series.color,
                     } as CSSProperties : undefined}
                     onMouseDown={(event) => {
-                      if (event.detail === 1) onOptionIntentStart(option);
+                      const target = event.target as HTMLElement;
+                      if (
+                        event.detail === 1
+                        && target.closest("[data-destination-detail-trigger]")
+                      ) {
+                        onOptionIntentStart(option, event.currentTarget);
+                      }
                     }}
                     onClick={(event) => onOptionSelect(option.key, event.ctrlKey)}
                     onDoubleClick={(event) => {
+                      const target = event.target as HTMLElement;
+                      if (!target.closest("[data-destination-detail-trigger]")) return;
                       event.preventDefault();
                       event.stopPropagation();
-                      onOptionIntentStart(option, true);
                       onOptionOpenDetails(option);
                     }}
                     onKeyDown={handleOptionKeyDown}
@@ -326,7 +335,11 @@ function DataAppTrendPanel({
                     aria-keyshortcuts="Enter Space Control+Enter Control+Space"
                     aria-description={UI_TEXT.data.interactionHint}
                   >
-                    <span className="data-app-option-icon" aria-hidden>
+                    <span
+                      className="data-app-option-icon"
+                      data-destination-detail-trigger
+                      aria-hidden
+                    >
                       {option.iconUrl ? (
                         <img src={option.iconUrl} alt="" draggable={false} />
                       ) : (

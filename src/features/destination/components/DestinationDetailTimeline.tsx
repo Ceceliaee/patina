@@ -13,31 +13,30 @@ import {
   QuietTimelineSegment,
   QuietTimelineTrack,
 } from "../../../shared/components/QuietTimelineTrack.tsx";
-import { getUiLocale } from "../../../shared/copy/index.ts";
+import { getUiLocale, UI_TEXT } from "../../../shared/copy/index.ts";
 import { formatDuration } from "../../../shared/lib/durationFormatting.ts";
-import { getDataDestinationDetailCopy } from "../copy/dataDestinationDetailCopy.ts";
 import type {
-  DataDestinationDetailDayViewModel,
-} from "../services/dataDestinationDetailReadModel.ts";
+  DestinationDetailDayViewModel,
+} from "../services/destinationDetailReadModel.ts";
 import {
-  buildDataDestinationDetailTimelineAxisTicks,
-  buildDataDestinationDetailTimelineSegments,
-  getDataDestinationDetailTimelineWheelZoomHours,
-  panDataDestinationDetailTimelineViewport,
-  panDataDestinationDetailTimelineViewportByPixels,
-  resizeDataDestinationDetailTimelineViewport,
-  zoomDataDestinationDetailTimelineViewportAroundAnchor,
-  type DataDestinationDetailTimelineViewport,
-} from "../services/dataDestinationDetailTimelineViewport.ts";
+  buildDestinationDetailTimelineAxisTicks,
+  buildDestinationDetailTimelineSegments,
+  getDestinationDetailTimelineWheelZoomHours,
+  panDestinationDetailTimelineViewport,
+  panDestinationDetailTimelineViewportByPixels,
+  resizeDestinationDetailTimelineViewport,
+  zoomDestinationDetailTimelineViewportAroundAnchor,
+  type DestinationDetailTimelineViewport,
+} from "../services/destinationDetailTimelineViewport.ts";
 
 interface Props {
   objectName: string;
   color: string;
-  day: DataDestinationDetailDayViewModel;
-  viewport: DataDestinationDetailTimelineViewport;
+  day: DestinationDetailDayViewModel;
+  viewport: DestinationDetailTimelineViewport;
   minimumDurationMs: number;
   toolbarAside: ReactNode;
-  onViewportChange: (viewport: DataDestinationDetailTimelineViewport) => void;
+  onViewportChange: (viewport: DestinationDetailTimelineViewport) => void;
   onZoomHoursChange: (zoomHours: number) => void;
 }
 
@@ -53,7 +52,7 @@ function formatTime(timestamp: number, dayEndMs: number) {
 interface DragSession {
   pointerId: number;
   startClientX: number;
-  startViewport: DataDestinationDetailTimelineViewport;
+  startViewport: DestinationDetailTimelineViewport;
   trackWidthPx: number;
   element: HTMLDivElement;
   dragging: boolean;
@@ -84,15 +83,15 @@ function normalizeWheelDelta(
 }
 
 function viewportsMatch(
-  left: DataDestinationDetailTimelineViewport,
-  right: DataDestinationDetailTimelineViewport,
+  left: DestinationDetailTimelineViewport,
+  right: DestinationDetailTimelineViewport,
 ) {
   return left.startMs === right.startMs
     && left.endMs === right.endMs
     && left.durationMs === right.durationMs;
 }
 
-export default function DataDestinationDetailTimeline({
+export default function DestinationDetailTimeline({
   objectName,
   color,
   day,
@@ -102,7 +101,7 @@ export default function DataDestinationDetailTimeline({
   onViewportChange,
   onZoomHoursChange,
 }: Props) {
-  const copy = getDataDestinationDetailCopy();
+  const copy = UI_TEXT.destinationDetail;
   const [isDragging, setIsDragging] = useState(false);
   const interactionRef = useRef<HTMLDivElement | null>(null);
   const dragSessionRef = useRef<DragSession | null>(null);
@@ -118,12 +117,12 @@ export default function DataDestinationDetailTimeline({
   useEffect(() => {
     onZoomHoursChangeRef.current = onZoomHoursChange;
   }, [onZoomHoursChange]);
-  const axisTicks = buildDataDestinationDetailTimelineAxisTicks(
+  const axisTicks = buildDestinationDetailTimelineAxisTicks(
     viewport,
     day.dayStartMs,
     day.dayEndMs,
   );
-  const segments = buildDataDestinationDetailTimelineSegments(
+  const segments = buildDestinationDetailTimelineSegments(
     day.activities,
     viewport,
     minimumDurationMs,
@@ -171,7 +170,7 @@ export default function DataDestinationDetailTimeline({
       setIsDragging(true);
     }
     event.preventDefault();
-    onViewportChange(panDataDestinationDetailTimelineViewportByPixels({
+    onViewportChange(panDestinationDetailTimelineViewportByPixels({
       dayStartMs: day.dayStartMs,
       dayEndMs: day.dayEndMs,
       viewport: session.startViewport,
@@ -204,7 +203,7 @@ export default function DataDestinationDetailTimeline({
     if (isShiftPan || isHorizontalPan) {
       const panDeltaPx = isShiftPan ? normalizedDeltaY : normalizedDeltaX;
       if (Math.abs(panDeltaPx) < WHEEL_NOISE_THRESHOLD_PX) return;
-      const nextViewport = panDataDestinationDetailTimelineViewport({
+      const nextViewport = panDestinationDetailTimelineViewport({
         dayStartMs: day.dayStartMs,
         dayEndMs: day.dayEndMs,
         viewport: currentViewport,
@@ -218,11 +217,11 @@ export default function DataDestinationDetailTimeline({
     }
 
     const currentZoomHours = currentViewport.durationMs / 3_600_000;
-    const nextZoomHours = getDataDestinationDetailTimelineWheelZoomHours(
+    const nextZoomHours = getDestinationDetailTimelineWheelZoomHours(
       currentZoomHours,
       normalizedDeltaY,
     );
-    const nextViewport = zoomDataDestinationDetailTimelineViewportAroundAnchor({
+    const nextViewport = zoomDestinationDetailTimelineViewportAroundAnchor({
       dayStartMs: day.dayStartMs,
       dayEndMs: day.dayEndMs,
       viewport: currentViewport,
@@ -245,30 +244,30 @@ export default function DataDestinationDetailTimeline({
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const panStepMs = viewport.durationMs / 10;
-    let nextViewport: DataDestinationDetailTimelineViewport | null = null;
+    let nextViewport: DestinationDetailTimelineViewport | null = null;
     if (event.key === "ArrowLeft") {
-      nextViewport = panDataDestinationDetailTimelineViewport({
+      nextViewport = panDestinationDetailTimelineViewport({
         dayStartMs: day.dayStartMs,
         dayEndMs: day.dayEndMs,
         viewport,
         deltaMs: -panStepMs,
       });
     } else if (event.key === "ArrowRight") {
-      nextViewport = panDataDestinationDetailTimelineViewport({
+      nextViewport = panDestinationDetailTimelineViewport({
         dayStartMs: day.dayStartMs,
         dayEndMs: day.dayEndMs,
         viewport,
         deltaMs: panStepMs,
       });
     } else if (event.key === "Home") {
-      nextViewport = panDataDestinationDetailTimelineViewport({
+      nextViewport = panDestinationDetailTimelineViewport({
         dayStartMs: day.dayStartMs,
         dayEndMs: day.dayEndMs,
         viewport,
         deltaMs: day.dayStartMs - viewport.startMs,
       });
     } else if (event.key === "End") {
-      nextViewport = panDataDestinationDetailTimelineViewport({
+      nextViewport = panDestinationDetailTimelineViewport({
         dayStartMs: day.dayStartMs,
         dayEndMs: day.dayEndMs,
         viewport,
@@ -282,14 +281,14 @@ export default function DataDestinationDetailTimeline({
 
   return (
     <div
-      className="data-destination-detail-timeline"
-      data-data-detail-timeline-start-ms={viewport.startMs}
-      data-data-detail-timeline-end-ms={viewport.endMs}
-      data-data-detail-timeline-zoom-hours={displayedZoomHours}
+      className="destination-detail-timeline"
+      data-destination-detail-timeline-start-ms={viewport.startMs}
+      data-destination-detail-timeline-end-ms={viewport.endMs}
+      data-destination-detail-timeline-zoom-hours={displayedZoomHours}
     >
-      <div className="data-destination-detail-timeline-toolbar">
+      <div className="destination-detail-timeline-toolbar">
         <div
-          className="data-destination-detail-timeline-scale"
+          className="destination-detail-timeline-scale"
           role="group"
           aria-label={copy.timelineZoom}
         >
@@ -303,10 +302,10 @@ export default function DataDestinationDetailTimeline({
             displayValue={copy.timelineHoursValue(displayedZoomHours)}
             decreaseAriaLabel={copy.timelineDecreaseHours}
             increaseAriaLabel={copy.timelineIncreaseHours}
-            className="data-destination-detail-timeline-slider"
+            className="destination-detail-timeline-slider"
             onChange={(nextZoomHours) => {
               onZoomHoursChange(nextZoomHours);
-              onViewportChange(resizeDataDestinationDetailTimelineViewport({
+              onViewportChange(resizeDestinationDetailTimelineViewport({
                 dayStartMs: day.dayStartMs,
                 dayEndMs: day.dayEndMs,
                 viewport,
@@ -315,17 +314,17 @@ export default function DataDestinationDetailTimeline({
             }}
           />
         </div>
-        <span className="data-destination-detail-timeline-window">
+        <span className="destination-detail-timeline-window">
           {windowLabel}
         </span>
-        <div className="data-destination-detail-timeline-date">
+        <div className="destination-detail-timeline-date">
           {toolbarAside}
         </div>
       </div>
       <div
         ref={interactionRef}
-        className={`data-destination-detail-timeline-interaction ${
-          isDragging ? "data-destination-detail-timeline-interaction-dragging" : ""
+        className={`destination-detail-timeline-interaction ${
+          isDragging ? "destination-detail-timeline-interaction-dragging" : ""
         }`}
         aria-label={copy.timelineInteractionAria(objectName, day.dateKey, windowLabel)}
         role="group"
@@ -339,8 +338,8 @@ export default function DataDestinationDetailTimeline({
       >
         <QuietTimelineTrack
           axisTicks={axisTicks}
-          trackClassName="data-destination-detail-timeline-track"
-          axisClassName="data-destination-detail-timeline-axis"
+          trackClassName="destination-detail-timeline-track"
+          axisClassName="destination-detail-timeline-axis"
         >
           {segments.map((segment) => {
             const start = formatTime(segment.startTime, day.dayEndMs);
@@ -363,19 +362,19 @@ export default function DataDestinationDetailTimeline({
                 widthRatio={segment.endRatio - segment.startRatio}
                 tooltip={(
                   <div
-                    className="data-destination-detail-timeline-tooltip-content"
+                    className="destination-detail-timeline-tooltip-content"
                     style={tooltipContentStyle}
                   >
-                    <div className="data-destination-detail-timeline-tooltip-title">
+                    <div className="destination-detail-timeline-tooltip-title">
                       <span
-                        className="data-destination-detail-timeline-tooltip-dot"
+                        className="destination-detail-timeline-tooltip-dot"
                         aria-hidden="true"
                       />
-                      <span className="data-destination-detail-timeline-tooltip-label">
+                      <span className="destination-detail-timeline-tooltip-label">
                         {objectName}
                       </span>
                     </div>
-                    <div className="data-destination-detail-timeline-tooltip-time">
+                    <div className="destination-detail-timeline-tooltip-time">
                       {start}
                       {" - "}
                       {end}
@@ -386,8 +385,8 @@ export default function DataDestinationDetailTimeline({
                 )}
                 disabled={isDragging}
                 hideOnPointerDown
-                className="data-destination-detail-timeline-segment"
-                tooltipClassName="data-destination-detail-timeline-tooltip"
+                className="destination-detail-timeline-segment"
+                tooltipClassName="destination-detail-timeline-tooltip"
               />
             );
           })}

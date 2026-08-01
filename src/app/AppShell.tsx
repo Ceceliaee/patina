@@ -40,7 +40,6 @@ import {
 } from "../features/data/services/dataCacheLifecycle.ts";
 import { clearHistoryCachesAfterDataChange } from "../features/history/services/historyCacheLifecycle.ts";
 import { clearToolsPageCaches } from "../features/tools/services/toolsCacheLifecycle.ts";
-import { AppClassification } from "../shared/classification/appClassification.ts";
 import { useQuietDialogs } from "../shared/hooks/useQuietDialogs";
 import UpdateDialogProvider from "./providers/UpdateDialogProvider";
 import { useAppShellNavigation } from "./hooks/useAppShellNavigation";
@@ -120,8 +119,6 @@ function AppShellContent() {
     isWindowMaximized,
   } = useAppWindowState();
   const {
-    activeWindow,
-    trackingStatus,
     appSettings,
     classificationReady,
     setAppSettings,
@@ -173,16 +170,6 @@ function AppShellContent() {
     uiTextLanguage,
   });
 
-  const activeExeName = activeWindow?.exeName ?? null;
-  const mappedActiveApp = activeExeName && AppClassification.shouldTrackApp(activeExeName)
-    ? AppClassification.mapApp(activeExeName)
-    : null;
-  const activeApp = trackerHealth.status === "healthy"
-    && !appSettings.trackingPaused
-    && mappedActiveApp
-    && trackingStatus.isTrackingActive
-    ? mappedActiveApp
-    : null;
   const handleToolsStatusChipOpen = useCallback((target: ToolsOpenTarget) => {
     setHistoryDateRequest(null);
     setToolsInitialTarget(target);
@@ -270,12 +257,11 @@ function AppShellContent() {
                 key="dashboard"
                 dashboard={dashboard}
                 icons={icons}
-                isAfk={activeWindow?.isAfk ?? false}
-                isTrackingActive={activeApp !== null}
-                activeAppName={activeApp?.name ?? null}
-                trackingPaused={appSettings.trackingPaused}
                 hourlyActivityChartMode={appSettings.hourlyActivityChartMode}
                 onHourlyActivityChartModeChange={handleHourlyActivityChartModeChange}
+                refreshKey={refreshSignal}
+                mappingVersion={mappingVersion}
+                mergeThresholdSecs={appSettings.timelineMergeGapSecs}
               />
             ),
             history: (

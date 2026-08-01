@@ -1,8 +1,8 @@
 import type {
-  DataDestinationDetailActivity,
-  DataDestinationDetailDayViewModel,
-  DataDestinationDetailRecord,
-} from "./dataDestinationDetailReadModel.ts";
+  DestinationDetailActivity,
+  DestinationDetailDayViewModel,
+  DestinationDetailRecord,
+} from "./destinationDetailReadModel.ts";
 import {
   buildTimelineAxisTicks,
   resolveTimelineFocusAtReferenceLocalTime,
@@ -20,17 +20,17 @@ const WHEEL_NOISE_THRESHOLD_PX = 0.5;
 const DIRECT_MERGE_GAP_MS = 5_000;
 const MIN_VISIBLE_TIMELINE_SEGMENT_MS = 30_000;
 
-export const DEFAULT_DATA_DESTINATION_DETAIL_ZOOM_HOURS = 24;
+export const DEFAULT_DESTINATION_DETAIL_ZOOM_HOURS = 24;
 
-export interface DataDestinationDetailTimelineViewport {
+export interface DestinationDetailTimelineViewport {
   startMs: number;
   endMs: number;
   durationMs: number;
 }
 
-export type DataDestinationDetailTimelineAxisTick = TimelineAxisTick;
+export type DestinationDetailTimelineAxisTick = TimelineAxisTick;
 
-export interface DataDestinationDetailTimelineSegment {
+export interface DestinationDetailTimelineSegment {
   id: string;
   startTime: number;
   endTime: number;
@@ -53,7 +53,7 @@ function getDayDurationMs(dayStartMs: number, dayEndMs: number) {
   return Math.max(1, dayEndMs - dayStartMs);
 }
 
-export function getDataDestinationDetailZoomDurationMs(
+export function getDestinationDetailZoomDurationMs(
   zoomHours: number,
   dayStartMs: number,
   dayEndMs: number,
@@ -67,7 +67,7 @@ export function getDataDestinationDetailZoomDurationMs(
   );
 }
 
-export function normalizeDataDestinationDetailTimelineViewport({
+export function normalizeDestinationDetailTimelineViewport({
   dayStartMs,
   dayEndMs,
   requestedDurationMs,
@@ -77,7 +77,7 @@ export function normalizeDataDestinationDetailTimelineViewport({
   dayEndMs: number;
   requestedDurationMs: number;
   requestedStartMs: number;
-}): DataDestinationDetailTimelineViewport {
+}): DestinationDetailTimelineViewport {
   const dayDurationMs = getDayDurationMs(dayStartMs, dayEndMs);
   const durationMs = clampNumber(
     requestedDurationMs,
@@ -104,12 +104,12 @@ export function normalizeDataDestinationDetailTimelineViewport({
   };
 }
 
-export function getInitialDataDestinationDetailTimelineViewport(
-  day: DataDestinationDetailDayViewModel,
+export function getInitialDestinationDetailTimelineViewport(
+  day: DestinationDetailDayViewModel,
   referenceTimeMs: number,
-  zoomHours = DEFAULT_DATA_DESTINATION_DETAIL_ZOOM_HOURS,
+  zoomHours = DEFAULT_DESTINATION_DETAIL_ZOOM_HOURS,
 ) {
-  const durationMs = getDataDestinationDetailZoomDurationMs(
+  const durationMs = getDestinationDetailZoomDurationMs(
     zoomHours,
     day.dayStartMs,
     day.dayEndMs,
@@ -125,7 +125,7 @@ export function getInitialDataDestinationDetailTimelineViewport(
     intervalMs: HALF_HOUR_MS,
   });
 
-  return normalizeDataDestinationDetailTimelineViewport({
+  return normalizeDestinationDetailTimelineViewport({
     dayStartMs: day.dayStartMs,
     dayEndMs: day.dayEndMs,
     requestedDurationMs: durationMs,
@@ -133,7 +133,7 @@ export function getInitialDataDestinationDetailTimelineViewport(
   });
 }
 
-export function resizeDataDestinationDetailTimelineViewport({
+export function resizeDestinationDetailTimelineViewport({
   dayStartMs,
   dayEndMs,
   viewport,
@@ -141,16 +141,16 @@ export function resizeDataDestinationDetailTimelineViewport({
 }: {
   dayStartMs: number;
   dayEndMs: number;
-  viewport: DataDestinationDetailTimelineViewport;
+  viewport: DestinationDetailTimelineViewport;
   requestedZoomHours: number;
 }) {
-  const requestedDurationMs = getDataDestinationDetailZoomDurationMs(
+  const requestedDurationMs = getDestinationDetailZoomDurationMs(
     requestedZoomHours,
     dayStartMs,
     dayEndMs,
   );
   const focusMs = viewport.startMs + viewport.durationMs / 2;
-  return normalizeDataDestinationDetailTimelineViewport({
+  return normalizeDestinationDetailTimelineViewport({
     dayStartMs,
     dayEndMs,
     requestedDurationMs,
@@ -158,7 +158,7 @@ export function resizeDataDestinationDetailTimelineViewport({
   });
 }
 
-export function getDataDestinationDetailTimelineWheelZoomHours(
+export function getDestinationDetailTimelineWheelZoomHours(
   currentZoomHours: number,
   normalizedDeltaY: number,
 ) {
@@ -175,7 +175,7 @@ export function getDataDestinationDetailTimelineWheelZoomHours(
   );
 }
 
-export function zoomDataDestinationDetailTimelineViewportAroundAnchor({
+export function zoomDestinationDetailTimelineViewportAroundAnchor({
   dayStartMs,
   dayEndMs,
   viewport,
@@ -184,19 +184,19 @@ export function zoomDataDestinationDetailTimelineViewportAroundAnchor({
 }: {
   dayStartMs: number;
   dayEndMs: number;
-  viewport: DataDestinationDetailTimelineViewport;
+  viewport: DestinationDetailTimelineViewport;
   anchorRatio: number;
   requestedZoomHours: number;
 }) {
   const normalizedAnchorRatio = clampRatio(anchorRatio);
-  const requestedDurationMs = getDataDestinationDetailZoomDurationMs(
+  const requestedDurationMs = getDestinationDetailZoomDurationMs(
     requestedZoomHours,
     dayStartMs,
     dayEndMs,
   );
   const anchorMs = viewport.startMs
     + normalizedAnchorRatio * viewport.durationMs;
-  return normalizeDataDestinationDetailTimelineViewport({
+  return normalizeDestinationDetailTimelineViewport({
     dayStartMs,
     dayEndMs,
     requestedDurationMs,
@@ -204,7 +204,7 @@ export function zoomDataDestinationDetailTimelineViewportAroundAnchor({
   });
 }
 
-export function panDataDestinationDetailTimelineViewport({
+export function panDestinationDetailTimelineViewport({
   dayStartMs,
   dayEndMs,
   viewport,
@@ -212,10 +212,10 @@ export function panDataDestinationDetailTimelineViewport({
 }: {
   dayStartMs: number;
   dayEndMs: number;
-  viewport: DataDestinationDetailTimelineViewport;
+  viewport: DestinationDetailTimelineViewport;
   deltaMs: number;
 }) {
-  return normalizeDataDestinationDetailTimelineViewport({
+  return normalizeDestinationDetailTimelineViewport({
     dayStartMs,
     dayEndMs,
     requestedDurationMs: viewport.durationMs,
@@ -223,7 +223,7 @@ export function panDataDestinationDetailTimelineViewport({
   });
 }
 
-export function panDataDestinationDetailTimelineViewportByPixels({
+export function panDestinationDetailTimelineViewportByPixels({
   dayStartMs,
   dayEndMs,
   viewport,
@@ -232,14 +232,14 @@ export function panDataDestinationDetailTimelineViewportByPixels({
 }: {
   dayStartMs: number;
   dayEndMs: number;
-  viewport: DataDestinationDetailTimelineViewport;
+  viewport: DestinationDetailTimelineViewport;
   deltaPx: number;
   trackWidthPx: number;
 }) {
   if (!Number.isFinite(deltaPx) || !Number.isFinite(trackWidthPx) || trackWidthPx <= 0) {
     return viewport;
   }
-  return panDataDestinationDetailTimelineViewport({
+  return panDestinationDetailTimelineViewport({
     dayStartMs,
     dayEndMs,
     viewport,
@@ -247,25 +247,25 @@ export function panDataDestinationDetailTimelineViewportByPixels({
   });
 }
 
-export function buildDataDestinationDetailTimelineAxisTicks(
-  viewport: DataDestinationDetailTimelineViewport,
+export function buildDestinationDetailTimelineAxisTicks(
+  viewport: DestinationDetailTimelineViewport,
   dayStartMs: number,
   dayEndMs: number,
-): DataDestinationDetailTimelineAxisTick[] {
+): DestinationDetailTimelineAxisTick[] {
   return buildTimelineAxisTicks(viewport, dayStartMs, dayEndMs);
 }
 
-export function buildDataDestinationDetailTimelineSegments(
-  activities: readonly DataDestinationDetailActivity[],
-  viewport: DataDestinationDetailTimelineViewport,
+export function buildDestinationDetailTimelineSegments(
+  activities: readonly DestinationDetailActivity[],
+  viewport: DestinationDetailTimelineViewport,
   minimumDurationMs = MIN_VISIBLE_TIMELINE_SEGMENT_MS,
-): DataDestinationDetailTimelineSegment[] {
+): DestinationDetailTimelineSegment[] {
   const visibleMinimumDurationMs = Math.max(
     MIN_VISIBLE_TIMELINE_SEGMENT_MS,
     Number.isFinite(minimumDurationMs) ? minimumDurationMs : 0,
   );
 
-  return clipDataDestinationDetailActivitiesToViewport(activities, viewport)
+  return clipDestinationDetailActivitiesToViewport(activities, viewport)
     .flatMap((activity) => {
       const merged = activity.records.reduce<Array<{
         id: string;
@@ -289,7 +289,7 @@ export function buildDataDestinationDetailTimelineSegments(
         return segments;
       }, []);
 
-      return merged.flatMap<DataDestinationDetailTimelineSegment>((segment) => {
+      return merged.flatMap<DestinationDetailTimelineSegment>((segment) => {
         const duration = segment.endTime - segment.startTime;
         if (duration < visibleMinimumDurationMs) return [];
         return [{
@@ -307,8 +307,8 @@ export function buildDataDestinationDetailTimelineSegments(
 }
 
 function clipRecordToViewport(
-  record: DataDestinationDetailRecord,
-  viewport: DataDestinationDetailTimelineViewport,
+  record: DestinationDetailRecord,
+  viewport: DestinationDetailTimelineViewport,
 ) {
   const startTime = Math.max(record.startTime, viewport.startMs);
   const endTime = Math.min(record.endTime, viewport.endMs);
@@ -321,14 +321,14 @@ function clipRecordToViewport(
   };
 }
 
-export function clipDataDestinationDetailActivitiesToViewport(
-  activities: readonly DataDestinationDetailActivity[],
-  viewport: DataDestinationDetailTimelineViewport,
+export function clipDestinationDetailActivitiesToViewport(
+  activities: readonly DestinationDetailActivity[],
+  viewport: DestinationDetailTimelineViewport,
 ) {
-  return activities.flatMap<DataDestinationDetailActivity>((activity) => {
+  return activities.flatMap<DestinationDetailActivity>((activity) => {
     const records = activity.records
       .map((record) => clipRecordToViewport(record, viewport))
-      .filter((record): record is DataDestinationDetailRecord => Boolean(record));
+      .filter((record): record is DestinationDetailRecord => Boolean(record));
     if (records.length === 0) return [];
 
     return [{

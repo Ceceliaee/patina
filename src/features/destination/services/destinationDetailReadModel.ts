@@ -14,14 +14,12 @@ import {
   getWebActivityTimelineItemEndTime,
   mergeWebActivityTimelineItemsByDomain,
 } from "../../../shared/lib/webActivityTimelineCompiler.ts";
-import { resolveStatisticalDataAppKey } from "./dataHeatmapReadModel.ts";
-import type {
-  DataDestinationDetailTarget,
-} from "./dataDestinationDetailState.ts";
+import { AppClassification } from "../../../shared/classification/appClassification.ts";
+import type { DestinationDetailTarget } from "../types.ts";
 
 const ADJACENT_DETAIL_RECORD_GAP_MS = 1_000;
 
-export interface DataDestinationDetailRecord {
+export interface DestinationDetailRecord {
   id: string;
   activityId: string;
   sourceActivityIds?: string[];
@@ -36,28 +34,28 @@ export interface DataDestinationDetailRecord {
   current: boolean;
 }
 
-export interface DataDestinationDetailActivity {
+export interface DestinationDetailActivity {
   id: string;
   activityCount?: number;
   startTime: number;
   endTime: number;
   duration: number;
   current: boolean;
-  records: DataDestinationDetailRecord[];
+  records: DestinationDetailRecord[];
 }
 
-export interface DataDestinationDetailDayViewModel {
+export interface DestinationDetailDayViewModel {
   dateKey: string;
   dayStartMs: number;
   dayEndMs: number;
-  records: DataDestinationDetailRecord[];
-  activities: DataDestinationDetailActivity[];
+  records: DestinationDetailRecord[];
+  activities: DestinationDetailActivity[];
   totalDuration: number;
   firstStartTime: number | null;
   lastEndTime: number | null;
 }
 
-export interface DataDestinationDetailDayDependencies {
+export interface DestinationDetailDayDependencies {
   getAppSessions: (date: Date) => Promise<HistorySession[]>;
   getWebSegments: (startMs: number, endMs: number) => Promise<WebActivitySegment[]>;
 }
@@ -84,7 +82,7 @@ interface WebDetailActivityCandidate {
   records: UnpositionedDetailRecord[];
 }
 
-const defaultDayDependencies: DataDestinationDetailDayDependencies = {
+const defaultDayDependencies: DestinationDetailDayDependencies = {
   getAppSessions: getHistoryByDate,
   getWebSegments: getWebActivitySegmentsInRange,
 };
@@ -96,6 +94,14 @@ function cleanOptionalText(value: string | null | undefined) {
 
 function normalizeIdentityKey(value: string) {
   return value.trim().toLowerCase();
+}
+
+function resolveTrackedAppKey(session: HistorySession) {
+  if (!AppClassification.shouldTrackProcess(session.exeName, { appName: session.appName })) {
+    return null;
+  }
+  const key = AppClassification.resolveCanonicalExecutable(session.exeName);
+  return key && AppClassification.isAppTrackingEnabledByUser(key) ? key : null;
 }
 
 function resolveDayBounds(dateKey: string, nowMs: number) {
@@ -137,7 +143,7 @@ function normalizeDetailRecords(
   dayStartMs: number,
   clipEndMs: number,
   dayEndMs: number,
-): DataDestinationDetailRecord[] {
+): DestinationDetailRecord[] {
   const sorted = records
     .map((record) => clipRecord(record, dayStartMs, clipEndMs))
     .filter((record): record is UnpositionedDetailRecord => Boolean(record))
@@ -178,9 +184,9 @@ function normalizeDetailRecords(
 }
 
 function buildDetailActivities(
-  records: readonly DataDestinationDetailRecord[],
-): DataDestinationDetailActivity[] {
-  const activities = new Map<string, DataDestinationDetailActivity>();
+  records: readonly DestinationDetailRecord[],
+): DestinationDetailActivity[] {
+  const activities = new Map<string, DestinationDetailActivity>();
   const activitySourceIds = new Map<string, Set<string>>();
 
   for (const record of records) {
@@ -225,7 +231,7 @@ function resolveHistorySessionEnd(session: HistorySession, nowMs: number) {
 
 function buildAppDetailRecords(
   sessions: readonly HistorySession[],
-  target: DataDestinationDetailTarget,
+  target: DestinationDetailTarget,
   dayStartMs: number,
   clipEndMs: number,
   dayEndMs: number,
@@ -236,12 +242,7 @@ function buildAppDetailRecords(
 
   for (const session of sessions) {
     const sessionEnd = resolveHistorySessionEnd(session, nowMs);
-    const appKey = resolveStatisticalDataAppKey({
-      appName: session.appName,
-      exeName: session.exeName,
-      startTime: session.startTime,
-      endTime: sessionEnd,
-    });
+    const appKey = resolveTrackedAppKey(session);
     if (!appKey || !identityKeys.has(normalizeIdentityKey(appKey))) continue;
     const activityId = `app:${session.continuityGroupStartTime ?? session.id}`;
 
@@ -329,7 +330,7 @@ function buildAppDetailRecords(
 
 function buildWebDetailRecords(
   segments: readonly WebActivitySegment[],
-  target: DataDestinationDetailTarget,
+  target: DestinationDetailTarget,
   dayStartMs: number,
   clipEndMs: number,
   dayEndMs: number,
@@ -392,8 +393,8 @@ function buildDayViewModel(
   dateKey: string,
   dayStartMs: number,
   dayEndMs: number,
-  records: DataDestinationDetailRecord[],
-): DataDestinationDetailDayViewModel {
+  records: DestinationDetailRecord[],
+): DestinationDetailDayViewModel {
   return {
     dateKey,
     dayStartMs,
@@ -406,13 +407,13 @@ function buildDayViewModel(
   };
 }
 
-export async function loadDataDestinationDetailDay(
-  target: DataDestinationDetailTarget,
+export async function loadDestinationDetailDay(
+  target: DestinationDetailTarget,
   dateKey: string,
   nowMs: number = Date.now(),
   mergeThresholdSecs: number = 0,
-  dependencies: DataDestinationDetailDayDependencies = defaultDayDependencies,
-): Promise<DataDestinationDetailDayViewModel> {
+  dependencies: DestinationDetailDayDependencies = defaultDayDependencies,
+): Promise<DestinationDetailDayViewModel> {
   const bounds = resolveDayBounds(dateKey, nowMs);
   if (!bounds) {
     throw new Error(`Invalid local date key: ${dateKey}`);

@@ -8,6 +8,7 @@ import { dashboardCopy } from "./domains/dashboardCopy.ts";
 import { dataCopy } from "./domains/dataCopy.ts";
 import { dateTimeCopy } from "./domains/dateTimeCopy.ts";
 import { dialogCopy } from "./domains/dialogCopy.ts";
+import { destinationCopy } from "./domains/destinationCopy.ts";
 import { exportCopy } from "./domains/exportCopy.ts";
 import { historyCopy } from "./domains/historyCopy.ts";
 import { mappingCopy } from "./domains/mappingCopy.ts";
@@ -29,6 +30,7 @@ export const ZH_CN_UI_TEXT = {
   ...dataCopy["zh-CN"],
   ...dateTimeCopy["zh-CN"],
   ...dialogCopy["zh-CN"],
+  ...destinationCopy["zh-CN"],
   ...exportCopy["zh-CN"],
   ...historyCopy["zh-CN"],
   ...mappingCopy["zh-CN"],
@@ -50,6 +52,7 @@ const EN_US_UI_TEXT = {
   ...dataCopy["en-US"],
   ...dateTimeCopy["en-US"],
   ...dialogCopy["en-US"],
+  ...destinationCopy["en-US"],
   ...exportCopy["en-US"],
   ...historyCopy["en-US"],
   ...mappingCopy["en-US"],

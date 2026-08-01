@@ -67,7 +67,8 @@ import type { DataTrendSnapshot } from "../services/dataTrendSnapshot.ts";
 import type { DataTrendRangeSelection } from "../services/dataTrendRange.ts";
 import { useDataTrendSnapshot } from "../hooks/useDataTrendSnapshot.ts";
 import { useDataWebActivityRuntime } from "../hooks/useDataWebActivityRuntime.ts";
-import { useDataDestinationDetailPresentation } from "../hooks/useDataDestinationDetailPresentation.ts";
+import { useDataDetailEntry } from "../hooks/useDataDetailEntry.ts";
+import DestinationDetailDialogEntry from "../../destination/components/DestinationDetailDialogEntry.tsx";
 import { loadDataIconsForExecutables } from "../services/dataIconService.ts";
 import { scheduleDataWorkAfterFirstPaint } from "../services/dataFirstPaintScheduler.ts";
 import {
@@ -78,17 +79,6 @@ import DataAppTrendPanel from "./DataAppTrendPanel.tsx";
 import DataTrendPanel from "./DataTrendPanel.tsx";
 import DataHeatmapPanel, { type HeatmapGranularity } from "./DataHeatmapPanel.tsx";
 import { markDataNavigationStage } from "../services/dataNavigationPerformance.ts";
-
-type DataDestinationDetailDialogComponent = (
-  typeof import("./DataDestinationDetailDialog.tsx")
-)["default"];
-
-let DataDestinationDetailDialog: DataDestinationDetailDialogComponent | null = null;
-const dataDestinationDetailDialogModule = import("./DataDestinationDetailDialog.tsx")
-  .then((module) => {
-    DataDestinationDetailDialog = module.default;
-    return module;
-  });
 
 interface Props {
   icons: Record<string, string>;
@@ -848,11 +838,11 @@ export default function Data({
     setPresentedDestinationMode(selectionSnapshot.mode);
   }, []);
   const {
-    presentation: destinationDetail,
+    request: destinationDetail,
     captureIntent: captureDestinationDetailIntent,
     open: openDestinationDetail,
     close: closeDestinationDetail,
-  } = useDataDestinationDetailPresentation({
+  } = useDataDetailEntry({
     appKeys: selectedAppKeys,
     listRef: appListRef,
     mode: presentedDestinationMode,
@@ -864,9 +854,7 @@ export default function Data({
   const handleOpenDestinationDetail = useCallback((
     option: DataDestinationTrendOption,
   ) => {
-    void dataDestinationDetailDialogModule.then(() => {
-      openDestinationDetail(option);
-    });
+    openDestinationDetail(option);
   }, [openDestinationDetail]);
 
   const shouldDeferHeatmapRows = Boolean(
@@ -1223,14 +1211,12 @@ export default function Data({
           onMouseLeave={handleAppTrendMouseLeave}
         />
       </div>
-      {destinationDetail && DataDestinationDetailDialog ? (
-        <DataDestinationDetailDialog
+      {destinationDetail ? (
+        <DestinationDetailDialogEntry
           key={`${destinationDetail.target.mode}:${destinationDetail.target.key}`}
           target={destinationDetail.target}
-          initialSelection={destinationDetail.initialSelection}
-          refreshKey={refreshKey}
-          mappingVersion={mappingVersion}
-          mergeThresholdSecs={mergeThresholdSecs}
+          initialDateKey={destinationDetail.initialDateKey}
+          runtime={{ refreshKey, mappingVersion, mergeThresholdSecs }}
           onClose={closeDestinationDetail}
         />
       ) : null}

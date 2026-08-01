@@ -1,6 +1,4 @@
-import { getUiLocale } from "../../../shared/copy/index.ts";
-
-const ZH_CN_DATA_DESTINATION_DETAIL_COPY = {
+const ZH_CN_DESTINATION_DETAIL_COPY = {
   objectTypeApp: "应用",
   objectTypeWeb: "网页",
   timeline: "日内时间轴",
@@ -48,7 +46,7 @@ const ZH_CN_DATA_DESTINATION_DETAIL_COPY = {
   ),
 } as const;
 
-const EN_US_DATA_DESTINATION_DETAIL_COPY = {
+const EN_US_DESTINATION_DETAIL_COPY = {
   objectTypeApp: "App",
   objectTypeWeb: "Website",
   timeline: "Daily timeline",
@@ -101,8 +99,7 @@ const EN_US_DATA_DESTINATION_DETAIL_COPY = {
   ),
 } as const;
 
-export function getDataDestinationDetailCopy() {
-  return getUiLocale() === "en-US"
-    ? EN_US_DATA_DESTINATION_DETAIL_COPY
-    : ZH_CN_DATA_DESTINATION_DETAIL_COPY;
-}
+export const destinationCopy = {
+  "zh-CN": { destinationDetail: ZH_CN_DESTINATION_DETAIL_COPY },
+  "en-US": { destinationDetail: EN_US_DESTINATION_DETAIL_COPY },
+} as const;

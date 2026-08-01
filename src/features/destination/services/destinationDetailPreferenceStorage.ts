@@ -1,8 +1,11 @@
-import { DEFAULT_DATA_DESTINATION_DETAIL_ZOOM_HOURS } from "./dataDestinationDetailTimelineViewport.ts";
+import { DEFAULT_DESTINATION_DETAIL_ZOOM_HOURS } from "./destinationDetailTimelineViewport.ts";
 
-const DATA_DESTINATION_DETAIL_TIMELINE_ZOOM_HOURS_KEY =
+const DESTINATION_DETAIL_TIMELINE_ZOOM_HOURS_KEY =
+  "patina:destination-detail-timeline-zoom-hours:v1";
+const LEGACY_DETAIL_TIMELINE_ZOOM_HOURS_KEY =
   "patina:data-destination-detail-timeline-zoom-hours:v1";
-const DETAIL_MIN_SECS_KEY = "patina:data-detail-min-secs";
+const DETAIL_MIN_SECS_KEY = "patina:destination-detail-min-secs:v1";
+const LEGACY_DETAIL_MIN_SECS_KEY = "patina:data-detail-min-secs";
 
 export const DEFAULT_DETAIL_MIN_SECS = 60;
 export const DETAIL_MIN_SECS_RANGE = {
@@ -51,20 +54,22 @@ export function clampDetailMinSecs(value: number) {
   );
 }
 
-export function readDataDestinationDetailTimelineZoomHours(): number {
+export function readDestinationDetailTimelineZoomHours(): number {
   const storage = getStorage();
-  if (!storage) return DEFAULT_DATA_DESTINATION_DETAIL_ZOOM_HOURS;
+  if (!storage) return DEFAULT_DESTINATION_DETAIL_ZOOM_HOURS;
 
   try {
     return parseZoomHours(
-      storage.getItem(DATA_DESTINATION_DETAIL_TIMELINE_ZOOM_HOURS_KEY),
-    ) ?? DEFAULT_DATA_DESTINATION_DETAIL_ZOOM_HOURS;
+      storage.getItem(DESTINATION_DETAIL_TIMELINE_ZOOM_HOURS_KEY),
+    ) ?? parseZoomHours(
+      storage.getItem(LEGACY_DETAIL_TIMELINE_ZOOM_HOURS_KEY),
+    ) ?? DEFAULT_DESTINATION_DETAIL_ZOOM_HOURS;
   } catch {
-    return DEFAULT_DATA_DESTINATION_DETAIL_ZOOM_HOURS;
+    return DEFAULT_DESTINATION_DETAIL_ZOOM_HOURS;
   }
 }
 
-export function rememberDataDestinationDetailTimelineZoomHours(zoomHours: number) {
+export function rememberDestinationDetailTimelineZoomHours(zoomHours: number) {
   const storage = getStorage();
   if (!storage || !Number.isFinite(zoomHours) || zoomHours < 1 || zoomHours > 24) {
     return;
@@ -72,7 +77,7 @@ export function rememberDataDestinationDetailTimelineZoomHours(zoomHours: number
 
   try {
     storage.setItem(
-      DATA_DESTINATION_DETAIL_TIMELINE_ZOOM_HOURS_KEY,
+      DESTINATION_DETAIL_TIMELINE_ZOOM_HOURS_KEY,
       String(Number(zoomHours.toFixed(4))),
     );
   } catch {
@@ -86,6 +91,7 @@ export function readDetailMinSecs(): number {
 
   try {
     return parseMinSecs(storage.getItem(DETAIL_MIN_SECS_KEY))
+      ?? parseMinSecs(storage.getItem(LEGACY_DETAIL_MIN_SECS_KEY))
       ?? DEFAULT_DETAIL_MIN_SECS;
   } catch {
     return DEFAULT_DETAIL_MIN_SECS;

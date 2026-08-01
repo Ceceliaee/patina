@@ -9,34 +9,30 @@ import {
   parseLocalDateKey,
   startOfLocalDay,
 } from "../../../shared/lib/localDate.ts";
-import type { DataTrendRangeSelection } from "../services/dataTrendRange.ts";
 import {
-  getAdjacentDataDestinationFocusedDateKey,
-  type DataDestinationDetailTarget,
-} from "../services/dataDestinationDetailState.ts";
+  getAdjacentDestinationDetailDateKey,
+} from "../services/destinationDetailState.ts";
+import type { DestinationDetailRuntimeContext, DestinationDetailTarget } from "../types.ts";
 import {
-  getInitialDataDestinationDetailTimelineViewport,
-  type DataDestinationDetailTimelineViewport,
-} from "../services/dataDestinationDetailTimelineViewport.ts";
+  getInitialDestinationDetailTimelineViewport,
+  type DestinationDetailTimelineViewport,
+} from "../services/destinationDetailTimelineViewport.ts";
 import {
   clampDetailMinSecs,
   DETAIL_MIN_SECS_RANGE,
   readDetailMinSecs,
-  readDataDestinationDetailTimelineZoomHours,
-  rememberDataDestinationDetailTimelineZoomHours,
+  readDestinationDetailTimelineZoomHours,
+  rememberDestinationDetailTimelineZoomHours,
   saveDetailMinSecs,
-} from "../services/dataDestinationDetailTimelinePreferenceStorage.ts";
-import { useDataDestinationDetail } from "../hooks/useDataDestinationDetail.ts";
-import { getDataDestinationDetailCopy } from "../copy/dataDestinationDetailCopy.ts";
-import DataDestinationDetailTimeline from "./DataDestinationDetailTimeline.tsx";
-import DataDestinationDetailRecords from "./DataDestinationDetailRecords.tsx";
+} from "../services/destinationDetailPreferenceStorage.ts";
+import { useDestinationDetail } from "../hooks/useDestinationDetail.ts";
+import DestinationDetailTimeline from "./DestinationDetailTimeline.tsx";
+import DestinationDetailRecords from "./DestinationDetailRecords.tsx";
 
 interface Props {
-  target: DataDestinationDetailTarget;
-  initialSelection: DataTrendRangeSelection;
-  refreshKey: number;
-  mappingVersion: number;
-  mergeThresholdSecs: number;
+  target: DestinationDetailTarget;
+  initialDateKey: string;
+  runtime: DestinationDetailRuntimeContext;
   onClose: () => void;
 }
 
@@ -59,17 +55,15 @@ function formatDateControlLabel(dateKey: string) {
   });
 }
 
-export default function DataDestinationDetailDialog({
+export default function DestinationDetailDialog({
   target,
-  initialSelection,
-  refreshKey,
-  mappingVersion,
-  mergeThresholdSecs,
+  initialDateKey,
+  runtime,
   onClose,
 }: Props) {
-  const copy = getDataDestinationDetailCopy();
+  const copy = UI_TEXT.destinationDetail;
   const [timelineZoomHours, setTimelineZoomHours] = useState(
-    readDataDestinationDetailTimelineZoomHours,
+    readDestinationDetailTimelineZoomHours,
   );
   const [minSessionSecs, setMinSessionSecs] = useState(readDetailMinSecs);
   const minSessionMinutes = minSessionSecs / 60;
@@ -82,12 +76,12 @@ export default function DataDestinationDetailDialog({
     setMinSessionSecs(nextSecs);
     saveDetailMinSecs(nextSecs);
   };
-  const detail = useDataDestinationDetail({
+  const detail = useDestinationDetail({
     target,
-    selection: initialSelection,
-    refreshKey,
-    mappingVersion,
-    mergeThresholdSecs,
+    initialDateKey,
+    refreshKey: runtime.refreshKey,
+    mappingVersion: runtime.mappingVersion,
+    mergeThresholdSecs: runtime.mergeThresholdSecs,
   });
   const dayBelongsToTarget = detail.day.requestKey.startsWith(
     `${target.mode}:${target.key}:`,
@@ -99,13 +93,13 @@ export default function DataDestinationDetailDialog({
     : null;
   const displayDay = matchingDay ?? retainedDay;
   const previousDateKey = detail.focusedDateKey
-    ? getAdjacentDataDestinationFocusedDateKey(
+    ? getAdjacentDestinationDetailDateKey(
       detail.focusedDateKey,
       -1,
     )
     : null;
   const nextDateKey = detail.focusedDateKey
-    ? getAdjacentDataDestinationFocusedDateKey(
+    ? getAdjacentDestinationDetailDateKey(
       detail.focusedDateKey,
       1,
     )
@@ -114,7 +108,7 @@ export default function DataDestinationDetailDialog({
     ? `${target.mode}:${target.key}:${displayDay.dateKey}`
     : null;
   const initialTimelineViewport = displayDay
-    ? getInitialDataDestinationDetailTimelineViewport(
+    ? getInitialDestinationDetailTimelineViewport(
       displayDay,
       detail.nowMs,
       timelineZoomHours,
@@ -122,7 +116,7 @@ export default function DataDestinationDetailDialog({
     : null;
   const [timelineViewportState, setTimelineViewportState] = useState<{
     identity: string;
-    viewport: DataDestinationDetailTimelineViewport;
+    viewport: DestinationDetailTimelineViewport;
   } | null>(null);
   const timelineViewport = timelineIdentity
     && timelineViewportState?.identity === timelineIdentity
@@ -133,8 +127,8 @@ export default function DataDestinationDetailDialog({
     <QuietDialog
       open
       title={(
-        <span className="data-destination-detail-title">
-          <span className="data-destination-detail-title-icon" aria-hidden>
+        <span className="destination-detail-title">
+          <span className="destination-detail-title-icon" aria-hidden>
             {target.iconUrl ? (
               <img src={target.iconUrl} alt="" draggable={false} />
             ) : (
@@ -145,7 +139,7 @@ export default function DataDestinationDetailDialog({
         </span>
       )}
       headerAside={(
-        <div className="data-destination-detail-header-actions">
+        <div className="destination-detail-header-actions">
           <button
             type="button"
             className="qp-dialog-close-button"
@@ -157,21 +151,21 @@ export default function DataDestinationDetailDialog({
         </div>
       )}
       onClose={onClose}
-      surfaceClassName="data-destination-detail-dialog"
+      surfaceClassName="destination-detail-dialog"
     >
       <div
-        className="data-destination-detail"
-        style={{ "--data-detail-color": target.color } as CSSProperties}
+        className="destination-detail"
+        style={{ "--destination-detail-color": target.color } as CSSProperties}
       >
-        <section className="data-destination-detail-section">
+        <section className="destination-detail-section">
           <div
-            className="data-destination-detail-day-content"
+            className="destination-detail-day-content"
             aria-busy={detail.day.status === "loading" || detail.day.status === "refreshing"}
-            data-data-detail-displayed-date={displayDay?.dateKey ?? ""}
-            data-data-detail-requested-date={detail.focusedDateKey ?? ""}
+            data-destination-detail-displayed-date={displayDay?.dateKey ?? ""}
+            data-destination-detail-requested-date={detail.focusedDateKey ?? ""}
           >
             {detail.day.status === "error" && !displayDay ? (
-              <div className="data-destination-detail-error" role="status">
+              <div className="destination-detail-error" role="status">
                 <span>{copy.dayError}</span>
                 <button type="button" className="qp-inline-action qp-inline-action-accent" onClick={detail.retryDay}>
                   {copy.retry}
@@ -180,7 +174,7 @@ export default function DataDestinationDetailDialog({
             ) : displayDay && timelineViewport && timelineIdentity ? (
               <>
                 {detail.day.status === "error" ? (
-                  <div className="data-destination-detail-error" role="status">
+                  <div className="destination-detail-error" role="status">
                     <span>{copy.dayError}</span>
                     <button
                       type="button"
@@ -191,7 +185,7 @@ export default function DataDestinationDetailDialog({
                     </button>
                   </div>
                 ) : null}
-                <DataDestinationDetailTimeline
+                <DestinationDetailTimeline
                   key={timelineIdentity}
                   objectName={target.displayName}
                   color={target.color}
@@ -206,14 +200,14 @@ export default function DataDestinationDetailDialog({
                   }}
                   onZoomHoursChange={(zoomHours) => {
                     setTimelineZoomHours(zoomHours);
-                    rememberDataDestinationDetailTimelineZoomHours(zoomHours);
+                    rememberDestinationDetailTimelineZoomHours(zoomHours);
                   }}
                   toolbarAside={(
                     <QuietDatePicker
                       value={detail.focusedDateKey ?? detail.todayDateKey}
                       onChange={detail.setFocusedDateKey}
                       ariaLabel={UI_TEXT.date.pickDate}
-                      className="data-destination-detail-date-trigger"
+                      className="destination-detail-date-trigger"
                       displayLabel={detail.focusedDateKey
                         ? formatDateControlLabel(detail.focusedDateKey)
                         : copy.focusedDate}
@@ -225,7 +219,7 @@ export default function DataDestinationDetailDialog({
                         nextAriaLabel: copy.nextDay,
                         previousDisabled: !previousDateKey,
                         nextDisabled: !nextDateKey,
-                        className: "data-destination-detail-day-actions",
+                        className: "destination-detail-day-actions",
                         onPrevious: () => {
                           if (previousDateKey) detail.setFocusedDateKey(previousDateKey);
                         },
@@ -238,36 +232,36 @@ export default function DataDestinationDetailDialog({
                 />
               </>
             ) : (
-              <div className="data-destination-detail-timeline-placeholder" role="status">
+              <div className="destination-detail-timeline-placeholder" role="status">
                 {copy.loading}
               </div>
             )}
           </div>
         </section>
 
-        <section className="data-destination-detail-section data-destination-detail-record-section">
-          <div className="data-destination-detail-section-header data-destination-detail-record-header">
+        <section className="destination-detail-section destination-detail-record-section">
+          <div className="destination-detail-section-header destination-detail-record-header">
             <h4>{copy.details(target.mode)}</h4>
             <div
-              className="data-destination-detail-duration-controls"
+              className="destination-detail-duration-controls"
               role="group"
               aria-label={copy.minimumDuration}
             >
               <button
                 type="button"
-                className="qp-button-secondary data-destination-detail-duration-button"
+                className="qp-button-secondary destination-detail-duration-button"
                 disabled={!canDecreaseMinSession}
                 aria-label={UI_TEXT.accessibility.history.decreaseMinDuration}
                 onClick={() => updateMinSessionMinutes(minSessionMinutes - 1)}
               >
                 <Minus size={11} aria-hidden />
               </button>
-              <span className="data-destination-detail-duration-value">
+              <span className="destination-detail-duration-value">
                 {UI_TEXT.settings.minuteValue(minSessionMinutes)}
               </span>
               <button
                 type="button"
-                className="qp-button-secondary data-destination-detail-duration-button"
+                className="qp-button-secondary destination-detail-duration-button"
                 disabled={!canIncreaseMinSession}
                 aria-label={UI_TEXT.accessibility.history.increaseMinDuration}
                 onClick={() => updateMinSessionMinutes(minSessionMinutes + 1)}
@@ -277,7 +271,7 @@ export default function DataDestinationDetailDialog({
             </div>
           </div>
           {displayDay && timelineViewport ? (
-            <DataDestinationDetailRecords
+            <DestinationDetailRecords
               day={displayDay}
               minimumDurationMs={minSessionMinutes * 60_000}
               mode={target.mode}
@@ -285,7 +279,7 @@ export default function DataDestinationDetailDialog({
               viewport={timelineViewport}
             />
           ) : (
-            <div className="data-destination-detail-records-placeholder" aria-hidden />
+            <div className="destination-detail-records-placeholder" aria-hidden />
           )}
         </section>
       </div>

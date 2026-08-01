@@ -3,27 +3,26 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { getUiLocale, UI_TEXT } from "../../../shared/copy/index.ts";
 import QuietAnchoredPopover from "../../../shared/components/QuietAnchoredPopover.tsx";
 import { formatDuration } from "../../../shared/lib/durationFormatting.ts";
-import { getDataDestinationDetailCopy } from "../copy/dataDestinationDetailCopy.ts";
 import type {
-  DataDestinationDetailActivity,
-  DataDestinationDetailDayViewModel,
-  DataDestinationDetailRecord,
-} from "../services/dataDestinationDetailReadModel.ts";
+  DestinationDetailActivity,
+  DestinationDetailDayViewModel,
+  DestinationDetailRecord,
+} from "../services/destinationDetailReadModel.ts";
 import {
-  clipDataDestinationDetailActivitiesToViewport,
-  type DataDestinationDetailTimelineViewport,
-} from "../services/dataDestinationDetailTimelineViewport.ts";
+  clipDestinationDetailActivitiesToViewport,
+  type DestinationDetailTimelineViewport,
+} from "../services/destinationDetailTimelineViewport.ts";
 
 interface Props {
-  day: DataDestinationDetailDayViewModel;
+  day: DestinationDetailDayViewModel;
   minimumDurationMs: number;
   mode: "app" | "web";
   objectName: string;
-  viewport: DataDestinationDetailTimelineViewport;
+  viewport: DestinationDetailTimelineViewport;
 }
 
 interface OpenActivityDetails {
-  activity: DataDestinationDetailActivity;
+  activity: DestinationDetailActivity;
   anchor: HTMLButtonElement;
 }
 
@@ -41,26 +40,26 @@ function ActivityDetailItem({
   record,
 }: {
   dayEndMs: number;
-  record: DataDestinationDetailRecord;
+  record: DestinationDetailRecord;
 }) {
-  const copy = getDataDestinationDetailCopy();
+  const copy = UI_TEXT.destinationDetail;
   const start = formatTime(record.startTime, dayEndMs);
   const end = formatTime(record.endTime, dayEndMs);
   const title = record.title ?? copy.untitled;
 
   return (
     <li
-      className="data-destination-detail-popover-item"
+      className="destination-detail-popover-item"
       aria-label={copy.recordAria(start, end, title, formatDuration(record.duration))}
     >
-      <span className="data-destination-detail-popover-copy">
+      <span className="destination-detail-popover-copy">
         <strong>{title}</strong>
         {record.secondaryText ? (
           <span>{record.secondaryText}</span>
         ) : null}
       </span>
-      <span className="data-destination-detail-popover-time">
-        <span className="data-destination-detail-popover-duration">
+      <span className="destination-detail-popover-time">
+        <span className="destination-detail-popover-duration">
           {formatDuration(record.duration)}
         </span>
         <time>{start}–{end}</time>
@@ -79,7 +78,7 @@ function ActivitySummary({
   popoverId,
   onToggleDetails,
 }: {
-  activity: DataDestinationDetailActivity;
+  activity: DestinationDetailActivity;
   dayEndMs: number;
   mode: "app" | "web";
   objectName: string;
@@ -88,7 +87,7 @@ function ActivitySummary({
   popoverId?: string;
   onToggleDetails?: (anchor: HTMLButtonElement) => void;
 }) {
-  const copy = getDataDestinationDetailCopy();
+  const copy = UI_TEXT.destinationDetail;
   const start = formatTime(activity.startTime, dayEndMs);
   const end = formatTime(activity.endTime, dayEndMs);
   const activityCount = activity.activityCount ?? activity.records.length;
@@ -96,7 +95,7 @@ function ActivitySummary({
 
   return (
     <div
-      className="data-destination-detail-activity-summary"
+      className="destination-detail-activity-summary"
       aria-label={copy.activityAria(
         start,
         end,
@@ -106,10 +105,10 @@ function ActivitySummary({
       )}
     >
       <time>{start}–{end}</time>
-      <span className="data-destination-detail-record-copy">
+      <span className="destination-detail-record-copy">
         <strong>{objectName}</strong>
         {mode === "app" ? (
-          <span className="data-destination-detail-record-meta">
+          <span className="destination-detail-record-meta">
             <span>
               {UI_TEXT.history.activitySegmentCount(activityCount)}
             </span>
@@ -119,14 +118,14 @@ function ActivitySummary({
             </span>
           </span>
         ) : titleCount > 0 ? (
-          <span className="data-destination-detail-record-meta">
+          <span className="destination-detail-record-meta">
             {UI_TEXT.history.titleRowCount(titleCount)}
           </span>
         ) : null}
         {disclosure && onToggleDetails ? (
           <button
             type="button"
-            className="qp-button-secondary qp-compact-disclosure data-destination-detail-activity-disclosure"
+            className="qp-button-secondary qp-compact-disclosure destination-detail-activity-disclosure"
             aria-expanded={expanded}
             aria-controls={expanded ? popoverId : undefined}
             aria-label={copy.toggleTitleDetails(expanded, objectName)}
@@ -141,11 +140,11 @@ function ActivitySummary({
         ) : null}
       </span>
       {activity.current ? (
-        <span className="data-destination-detail-current">
+        <span className="destination-detail-current">
           {copy.current}
         </span>
       ) : null}
-      <span className="data-destination-detail-record-duration">
+      <span className="destination-detail-record-duration">
         {formatDuration(activity.duration)}
       </span>
     </div>
@@ -161,14 +160,14 @@ function ActivityRecord({
   popoverId,
   onToggleDetails,
 }: {
-  activity: DataDestinationDetailActivity;
+  activity: DestinationDetailActivity;
   dayEndMs: number;
   mode: "app" | "web";
   objectName: string;
   expanded: boolean;
   popoverId: string;
   onToggleDetails: (
-    activity: DataDestinationDetailActivity,
+    activity: DestinationDetailActivity,
     anchor: HTMLButtonElement,
   ) => void;
 }) {
@@ -178,7 +177,7 @@ function ActivityRecord({
     ));
 
   return (
-    <li className="qp-workbench-list-card data-destination-detail-activity">
+    <li className="qp-workbench-list-card destination-detail-activity">
       <ActivitySummary
         activity={activity}
         dayEndMs={dayEndMs}
@@ -193,19 +192,19 @@ function ActivityRecord({
   );
 }
 
-export default function DataDestinationDetailRecords({
+export default function DestinationDetailRecords({
   day,
   minimumDurationMs,
   mode,
   objectName,
   viewport,
 }: Props) {
-  const copy = getDataDestinationDetailCopy();
+  const copy = UI_TEXT.destinationDetail;
   const popoverId = useId();
   const [openDetails, setOpenDetails] = useState<OpenActivityDetails | null>(
     null,
   );
-  const activitiesInViewport = clipDataDestinationDetailActivitiesToViewport(
+  const activitiesInViewport = clipDestinationDetailActivitiesToViewport(
     day.activities,
     viewport,
   );
@@ -224,7 +223,7 @@ export default function DataDestinationDetailRecords({
 
   if (visibleActivities.length === 0) {
     return (
-      <div className="data-destination-detail-empty" role="status">
+      <div className="destination-detail-empty" role="status">
         {activitiesInViewport.length === 0
           ? day.activities.length === 0
             ? copy.noActivity
@@ -235,7 +234,7 @@ export default function DataDestinationDetailRecords({
   }
 
   const toggleDetails = (
-    activity: DataDestinationDetailActivity,
+    activity: DestinationDetailActivity,
     anchor: HTMLButtonElement,
   ) => {
     setOpenDetails((current) => (
@@ -247,7 +246,7 @@ export default function DataDestinationDetailRecords({
 
   return (
     <>
-      <ol className="data-destination-detail-records">
+      <ol className="destination-detail-records">
         {visibleActivities.map((activity) => (
           <ActivityRecord
             key={activity.id}
@@ -267,12 +266,12 @@ export default function DataDestinationDetailRecords({
         id={popoverId}
         ariaLabel={copy.titleDetails}
         onClose={() => setOpenDetails(null)}
-        className="data-destination-detail-record-popover"
+        className="destination-detail-record-popover"
       >
-        <div className="data-destination-detail-popover-title">
+        <div className="destination-detail-popover-title">
           {copy.titleDetails}
         </div>
-        <ol className="data-destination-detail-popover-list">
+        <ol className="destination-detail-popover-list">
           {openDetails?.activity.records.map((record) => (
             <ActivityDetailItem
               key={record.id}
