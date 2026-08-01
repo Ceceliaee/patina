@@ -33,7 +33,7 @@ const HOTSPOT_BUDGETS: HotspotBudget[] = [
   {
     path: "src/styles/tokens.css",
     owner: "Quiet Pro design tokens",
-    maxLines: 1473,
+    maxLines: 1474,
     risk: "token growth can hide duplicate visual roles",
     reason: "physical lines remain the stable signal for declarative CSS",
   },

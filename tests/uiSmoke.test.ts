@@ -737,6 +737,7 @@ await runTest("main window first visibility is gated by themed frontend readines
   const theme = readUtf8("src/app/hooks/useAppThemeMode.ts");
   const readiness = readUtf8("src/app/hooks/useMainWindowReady.ts");
   const windowGateway = readUtf8("src/platform/desktop/windowControlGateway.ts");
+  const appShellStyles = readUtf8("src/styles/app-shell.css");
   const tokens = readUtf8("src/styles/tokens.css");
   const widgetShell = readUtf8("src/app/widget/WidgetShell.tsx");
 
@@ -799,8 +800,9 @@ await runTest("main window first visibility is gated by themed frontend readines
   assert.match(readiness, /__PATINA_MAIN_WINDOW_LIVENESS_REQUEST__/);
   assert.match(readiness, /verifyAndReportReady/);
   assert.match(windowGateway, /loadEpoch/);
+  assert.match(tokens, /--qp-bg-app:/);
   assert.match(
-    tokens,
+    appShellStyles,
     /html\[data-window-label="main"\][\s\S]*background:\s*var\(--qp-bg-app\)/,
   );
   assert.doesNotMatch(widgetShell, /useMainWindowReady/);

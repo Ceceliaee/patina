@@ -1411,12 +1411,6 @@ body,
   background: transparent;
 }
 
-html[data-window-label="main"],
-html[data-window-label="main"] body,
-html[data-window-label="main"] #root {
-  background: var(--qp-bg-app);
-}
-
 body {
   margin: 0;
   min-height: 100vh;

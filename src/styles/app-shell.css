@@ -1,3 +1,9 @@
+html[data-window-label="main"],
+html[data-window-label="main"] body,
+html[data-window-label="main"] #root {
+  background: var(--qp-bg-app);
+}
+
 .qp-toast {
   border-radius: var(--qp-radius-control);
   border: 1px solid var(--qp-border-subtle);
