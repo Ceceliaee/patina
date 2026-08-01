@@ -3195,6 +3195,7 @@ export async function runDataScenarios(
         sessionId,
         `
           (() => {
+            const dataRoot = document.querySelector('[data-data-content-state="complete"]');
             const sidebar = document
               .querySelector(".data-app-panel .data-app-sidebar")
               ?.getBoundingClientRect();
@@ -3202,7 +3203,8 @@ export async function runDataScenarios(
               .querySelector(".data-app-panel .data-app-trend-list")
               ?.getBoundingClientRect();
             return Boolean(
-              sidebar
+              dataRoot
+              && sidebar
               && list
               && Math.abs(sidebar.bottom - list.bottom - 24) <= 1
             );
@@ -3210,6 +3212,7 @@ export async function runDataScenarios(
         `,
         45_000,
         `data destination sidebar stable final geometry at ${width}px`,
+        8,
       );
       layouts.push(JSON.parse(String(await evaluate(client!, sessionId, `
         (() => {
