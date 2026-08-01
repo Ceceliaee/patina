@@ -231,6 +231,7 @@ src/
     classification/
     data/
     dashboard/
+    destination/
     history/
     settings/
     tools/
@@ -289,7 +290,10 @@ src/
 
 支持型 feature 当前包括：
 
+- `destination`
 - `update`
+
+`destination` 拥有跨 Dashboard、History 与 Data 的应用/网页对象详情能力，包括详情目标契约、打开状态、读模型、时间轴视口、用户偏好和弹窗 UI。来源页面只能构造公开的 `DestinationDetailTarget` 并调用公开 launcher；不得直接读取 `destination/services/*`，也不得复制一套页面私有详情弹窗。
 
 ### 5.3 `shared/`
 
