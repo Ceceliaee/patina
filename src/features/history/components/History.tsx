@@ -30,13 +30,11 @@ import QuietPageHeader from "../../../shared/components/QuietPageHeader";
 import QuietSegmentedFilter, { type QuietSegmentedFilterOption } from "../../../shared/components/QuietSegmentedFilter";
 import type { HourlyActivityChartMode } from "../../../shared/settings/appSettings.ts";
 import {
-  buildHistoryTimelineViewModel,
   getHistoryTimelineZoomDurationMs,
   MAX_HISTORY_TIMELINE_VIEWPORT_DURATION_MS,
   normalizeHistoryTimelineViewport,
   normalizeHistoryTimelineViewportAroundFocus,
   snapHistoryTimelineFocusToNearestHalfHour,
-  type HistoryTimelineDisplayMode,
   type HistoryTimelineViewport,
 } from "../services/historyTimelineViewModel.ts";
 import {
@@ -46,10 +44,8 @@ import {
 import { useHistorySnapshotRuntime } from "../hooks/useHistorySnapshotRuntime.ts";
 import {
   readHistoryDayDistributionMode,
-  readHistoryTimelineMode,
   readHistoryTimelineZoomHours,
   rememberHistoryDayDistributionMode,
-  rememberHistoryTimelineMode,
   rememberHistoryTimelineZoomHours,
   resolveEffectiveDayDistributionMode,
   type DayDistributionMode,
@@ -58,6 +54,11 @@ import {
   buildWebDomainDistribution,
   buildWebTimelineItems,
 } from "../services/historyWebActivityViewModel.ts";
+import { useHistoryTimelineMode } from "../hooks/useHistoryTimelineMode.ts";
+import {
+  shouldHideTimelineContent,
+  useHistoryTimelineViews,
+} from "../hooks/useHistoryTimelineViews.ts";
 import { loadHistoryIconsForExecutables } from "../services/historyIconService.ts";
 import {
   addLocalDays,
@@ -66,6 +67,7 @@ import {
   startOfLocalDay,
   startOfLocalMonth,
 } from "../../../shared/lib/localDate.ts";
+import { resolveTimelineFocusAtReferenceLocalTime } from "../../../shared/lib/timelineAxis.ts";
 import HistoryDaySummaryPanel, { type HistoryDaySummaryView } from "./HistoryDaySummaryPanel.tsx";
 import HistoryDayDistributionPanel, {
   type HistoryDayDistributionItem,
@@ -82,6 +84,7 @@ import HistoryHourlyActivityPanel from "./HistoryHourlyActivityPanel.tsx";
 import HistoryDateNavigator from "./HistoryDateNavigator.tsx";
 import HistoryTimelineDialogDateControls from "./HistoryTimelineDialogDateControls.tsx";
 import HistoryTimelineZoomDialog from "./HistoryTimelineZoomDialog.tsx";
+import { useHistoryDestinationDetailEntry } from "../hooks/useHistoryDestinationDetailEntry.tsx";
 
 interface Props {
   icons: Record<string, string>;
@@ -115,13 +118,45 @@ const startOfDay = startOfLocalDay;
 const startOfMonth = startOfLocalMonth;
 const DAY_SUMMARY_EMPTY_MARK = "—";
 const DAY_SUMMARY_MIN_SPAN_SESSION_MS = 60_000;
+
+interface HistoryDayDistributionView {
+  mode: DayDistributionMode;
+  options: QuietSegmentedFilterOption<DayDistributionMode>[];
+  items: HistoryDayDistributionItem[];
+}
+
+function buildHistoryDayDistributionView({
+  requestedMode,
+  webActivityEnabled,
+  appItems,
+  categoryItems,
+  webItems,
+}: {
+  requestedMode: DayDistributionMode;
+  webActivityEnabled: boolean;
+  appItems: HistoryDayDistributionItem[];
+  categoryItems: HistoryDayDistributionItem[];
+  webItems: HistoryDayDistributionItem[];
+}): HistoryDayDistributionView {
+  const mode = resolveEffectiveDayDistributionMode(requestedMode, webActivityEnabled);
+  const options: QuietSegmentedFilterOption<DayDistributionMode>[] = [
+    { value: "app", label: UI_TEXT.history.distributionByApp },
+    { value: "category", label: UI_TEXT.history.distributionByCategory },
+  ];
+
+  if (webActivityEnabled) {
+    options.push({ value: "web", label: UI_TEXT.history.distributionByWeb });
+  }
+
+  return {
+    mode,
+    options,
+    items: mode === "web" ? webItems : mode === "category" ? categoryItems : appItems,
+  };
+}
+
 const formatTimelineWindowBoundary = (timeMs: number, dayEndMs: number) => (
   timeMs === dayEndMs ? "24:00" : formatTime(timeMs)
-);
-const getHistoryTimelineModeActionLabel = (mode: HistoryTimelineDisplayMode) => (
-  mode === "category"
-    ? UI_TEXT.history.showTimelineByApp
-    : UI_TEXT.history.showTimelineByCategory
 );
 const getHourlyActivityModeActionLabel = (mode: HourlyActivityChartMode) => (
   mode === "category"
@@ -305,9 +340,6 @@ export default function History({
       requestedStartMs: startOfDay(initialDate).getTime(),
     })
   ));
-  const [historyTimelineMode, setHistoryTimelineMode] = useState<HistoryTimelineDisplayMode>(
-    readHistoryTimelineMode,
-  );
   const [dayDistributionMode, setDayDistributionMode] = useState<DayDistributionMode>(
     readHistoryDayDistributionMode,
   );
@@ -318,6 +350,20 @@ export default function History({
   const timelineDetailsTriggerRef = useRef<HTMLElement | null>(null);
   const timelineViewportWasPannedRef = useRef(false);
   const historyCopy = UI_TEXT.history;
+  const destinationDetail = useHistoryDestinationDetailEntry({
+    initialDateKey: formatLocalDateKey(selectedDate),
+    runtime: { refreshKey, mappingVersion, mergeThresholdSecs },
+    webActivityEnabled,
+  });
+  const {
+    mode: effectiveHistoryTimelineMode,
+    actionLabel: historyTimelineModeActionLabel,
+    ariaLabel: historyTimelineModeAriaLabel,
+    toggleMode: toggleHistoryTimelineMode,
+  } = useHistoryTimelineMode(webActivityEnabled);
+  const timelineSourceIcons = effectiveHistoryTimelineMode === "web"
+    ? webDomainIcons
+    : historyIcons;
   const resetTimelineViewportForDate = useCallback((date: Date) => {
     timelineViewportWasPannedRef.current = false;
     setTimelineViewport(normalizeHistoryTimelineViewport({
@@ -567,11 +613,14 @@ export default function History({
   const hasVisibleSnapshotForSelectedDate = visibleDateKey === selectedDateKey;
   const showQuietPlaceholder = !hasVisibleSnapshotForSelectedDate
     || contentState === "cold-loading";
-  const showTimelineQuietPlaceholder = showQuietPlaceholder || (
-    contentState === "bootstrap"
-    && rawDaySessions.length === 0
-    && rawDayAggregateSessions.length > 0
-  );
+  const showTimelineQuietPlaceholder = shouldHideTimelineContent({
+    showQuietPlaceholder,
+    contentState,
+    sessionCount: rawDaySessions.length,
+    aggregateCount: rawDayAggregateSessions.length,
+    mode: effectiveHistoryTimelineMode,
+    webDataReady: webSnapshotReady,
+  });
   const contentPlaceholderMessage = contentState === "error"
     ? historyCopy.loadFailed
     : "";
@@ -598,29 +647,6 @@ export default function History({
     hourlyActivity,
     hourlyCategoryActivity,
   } = historyView;
-  const historyTimelineView = useMemo(
-    () => buildHistoryTimelineViewModel({
-      sessions: compiledSessions,
-      selectedDate,
-      nowMs,
-      mode: historyTimelineMode,
-      mergeThresholdSecs,
-    }),
-    [compiledSessions, historyTimelineMode, mergeThresholdSecs, nowMs, selectedDate],
-  );
-  const historyTimelinePlaceholderView = useMemo(
-    () => buildHistoryTimelineViewModel({
-      sessions: [],
-      selectedDate,
-      nowMs,
-      mode: historyTimelineMode,
-      mergeThresholdSecs,
-    }),
-    [historyTimelineMode, mergeThresholdSecs, nowMs, selectedDate],
-  );
-  const visibleHistoryTimelineView = showQuietPlaceholder
-    ? historyTimelinePlaceholderView
-    : historyTimelineView;
   const selectedDayRange = useMemo(() => {
     const startMs = startOfDay(selectedDate).getTime();
     return {
@@ -628,25 +654,22 @@ export default function History({
       endMs: startMs + 24 * 60 * 60 * 1000,
     };
   }, [selectedDate]);
-  const timelineZoomTimelineView = useMemo(
-    () => buildHistoryTimelineViewModel({
-      sessions: showQuietPlaceholder ? [] : compiledSessions,
-      selectedDate,
-      nowMs,
-      mode: historyTimelineMode,
-      mergeThresholdSecs,
-      viewport: timelineViewport,
-    }),
-    [
-      compiledSessions,
-      historyTimelineMode,
-      mergeThresholdSecs,
-      nowMs,
-      selectedDate,
-      showQuietPlaceholder,
-      timelineViewport,
-    ],
-  );
+  const {
+    fullDayView: visibleHistoryTimelineView,
+    zoomView: timelineZoomTimelineView,
+  } = useHistoryTimelineViews({
+    sessions: compiledSessions,
+    webSegments: visibleDayWebSegments,
+    selectedDate,
+    nowMs,
+    mode: effectiveHistoryTimelineMode,
+    appIconThemeColors: iconThemeColors,
+    webIconThemeColors: webDomainIconThemeColors,
+    webDomainOverrides,
+    mergeThresholdSecs,
+    showQuietPlaceholder: showTimelineQuietPlaceholder,
+    viewport: timelineViewport,
+  });
   const timelineWindowLabel = historyCopy.timelineWindowLabel(
     formatTimelineWindowBoundary(timelineViewport.startMs, selectedDayRange.endMs),
     formatTimelineWindowBoundary(timelineViewport.endMs, selectedDayRange.endMs),
@@ -740,25 +763,13 @@ export default function History({
       webDomainOverrides,
     ],
   );
-  const effectiveDayDistributionMode = resolveEffectiveDayDistributionMode(
-    dayDistributionMode,
+  const dayDistributionView = buildHistoryDayDistributionView({
+    requestedMode: dayDistributionMode,
     webActivityEnabled,
-  );
-  const dayDistributionOptions: QuietSegmentedFilterOption<DayDistributionMode>[] = webActivityEnabled
-    ? [
-      { value: "app", label: historyCopy.distributionByApp },
-      { value: "category", label: historyCopy.distributionByCategory },
-      { value: "web", label: historyCopy.distributionByWeb },
-    ]
-    : [
-      { value: "app", label: historyCopy.distributionByApp },
-      { value: "category", label: historyCopy.distributionByCategory },
-    ];
-  const dayDistributionItems = effectiveDayDistributionMode === "web"
-    ? webDistributionItems
-    : effectiveDayDistributionMode === "category"
-      ? categoryDistributionItems
-      : appDistributionItems;
+    appItems: appDistributionItems,
+    categoryItems: categoryDistributionItems,
+    webItems: webDistributionItems,
+  });
   const daySummaryView = useMemo<HistoryDaySummaryView>(() => {
     const activeSessions = compiledSessions.filter((session) => (session.duration ?? 0) > 0);
     const significantSessions = activeSessions.filter((session) => (
@@ -828,17 +839,12 @@ export default function History({
     onMinSessionSecsChange?.(clampedMinutes * 60);
   };
   const getInitialTimelineZoomFocusMs = useCallback(() => {
-    const currentTime = new Date(nowMs);
-    const sameTimeOfSelectedDay = new Date(selectedDate);
-    sameTimeOfSelectedDay.setHours(
-      currentTime.getHours(),
-      currentTime.getMinutes(),
-      currentTime.getSeconds(),
-      currentTime.getMilliseconds(),
-    );
     return snapHistoryTimelineFocusToNearestHalfHour({
       selectedDate,
-      requestedTimeMs: sameTimeOfSelectedDay.getTime(),
+      requestedTimeMs: resolveTimelineFocusAtReferenceLocalTime({
+        selectedDate,
+        referenceTimeMs: nowMs,
+      }),
     });
   }, [nowMs, selectedDate]);
   const handleTimelineZoomChange = (requestedHours: number) => {
@@ -889,13 +895,6 @@ export default function History({
     interactionRef: timelineViewportInteractionRef,
     onViewportChange: handleTimelineViewportChange,
   });
-  const toggleHistoryTimelineMode = () => {
-    setHistoryTimelineMode((mode) => {
-      const nextMode = mode === "category" ? "app" : "category";
-      rememberHistoryTimelineMode(nextMode);
-      return nextMode;
-    });
-  };
   const changeTimelineDialogMode = (mode: TimelineDialogMode) => {
     timelineDetailsTriggerRef.current = null;
     setTimelineDetailsPopover(null);
@@ -964,9 +963,8 @@ export default function History({
   const renderTimelineModeAction = (className = "") => (
     <QuietIconAction
       icon={<Tags size={15} />}
-      title={getHistoryTimelineModeActionLabel(historyTimelineMode)}
-      ariaLabel={getHistoryTimelineModeActionLabel(historyTimelineMode)}
-      pressed={historyTimelineMode === "category"}
+      title={historyTimelineModeActionLabel}
+      ariaLabel={historyTimelineModeAriaLabel}
       className={`history-timeline-mode-toggle history-horizontal-timeline-action ${className}`.trim()}
       showTooltip={false}
       onClick={toggleHistoryTimelineMode}
@@ -1051,14 +1049,16 @@ export default function History({
   const renderDayDistribution = () => (
     <HistoryDayDistributionPanel
       title={historyCopy.dayDistribution}
-      mode={effectiveDayDistributionMode}
-      modeOptions={dayDistributionOptions}
-      items={dayDistributionItems}
+      mode={dayDistributionView.mode}
+      modeOptions={dayDistributionView.options}
+      items={dayDistributionView.items}
       showQuietPlaceholder={showQuietPlaceholder || (
-        effectiveDayDistributionMode === "web" && !webVisualsReady
+        dayDistributionView.mode === "web" && !webVisualsReady
       )}
       placeholderMessage={contentPlaceholderMessage}
       onModeChange={handleDayDistributionModeChange}
+      onDestinationDetailIntentStart={destinationDetail.prepare}
+      onDestinationDetailOpen={destinationDetail.open}
     />
   );
   const renderDaySummary = () => (
@@ -1096,10 +1096,9 @@ export default function History({
       <div className="qp-panel p-5 history-overview-timeline-card">
         <HistoryHorizontalTimeline
           viewModel={visibleHistoryTimelineView}
-          mode={historyTimelineMode}
-          iconThemeColors={iconThemeColors}
+          mode={effectiveHistoryTimelineMode}
           title={historyCopy.timelineAxis}
-          actions={showTimelineQuietPlaceholder ? null : timelineAxisActions}
+          actions={showQuietPlaceholder ? null : timelineAxisActions}
           showEmptyMessage
           emptyMessage={showTimelineQuietPlaceholder ? contentPlaceholderMessage : undefined}
         />
@@ -1193,12 +1192,13 @@ export default function History({
         interactionLabel={historyCopy.timelineInteractionHint}
         isDragging={timelineViewportIsDragging}
         viewModel={timelineZoomTimelineView}
-        mode={historyTimelineMode}
-        iconThemeColors={iconThemeColors}
-        appIcons={historyIcons}
-        showEmptyMessage={!showQuietPlaceholder}
+        mode={effectiveHistoryTimelineMode}
+        sourceIcons={timelineSourceIcons}
+        showEmptyMessage={!showTimelineQuietPlaceholder}
         emptyMessage={historyCopy.emptyTimelineWindow}
       />
+
+      {destinationDetail.dialog}
     </div>
   );
 }

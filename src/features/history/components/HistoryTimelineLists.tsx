@@ -81,7 +81,7 @@ export function HistoryTimelineList({
           return (
             <div
               key={session.id}
-              className="flex items-center gap-3 p-3 border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-elevated)] rounded-[10px] hover:border-[var(--qp-border-strong)] hover:bg-[var(--qp-bg-panel)] transition-colors"
+              className="qp-workbench-list-card flex items-center gap-3 p-3"
             >
               <div
                 className="w-1 self-stretch rounded-full flex-shrink-0"
@@ -123,7 +123,7 @@ export function HistoryTimelineList({
                         isExpanded,
                         session.displayName,
                       )}
-                      className="qp-button-secondary inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] p-0 text-[var(--qp-text-tertiary)]"
+                      className="qp-button-secondary qp-compact-disclosure"
                     >
                       {isExpanded
                         ? detailPlacement === "top"
@@ -179,7 +179,7 @@ export function HistoryWebTimelineList({
           return (
             <div
               key={item.id}
-              className="flex items-center gap-3 p-3 border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-elevated)] rounded-[10px] hover:border-[var(--qp-border-strong)] hover:bg-[var(--qp-bg-panel)] transition-colors"
+              className="qp-workbench-list-card flex items-center gap-3 p-3"
             >
               <div
                 className="w-1 self-stretch rounded-full flex-shrink-0"
@@ -217,7 +217,7 @@ export function HistoryWebTimelineList({
                         isExpanded,
                         item.label,
                       )}
-                      className="qp-button-secondary inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] p-0 text-[var(--qp-text-tertiary)]"
+                      className="qp-button-secondary qp-compact-disclosure"
                     >
                       {isExpanded
                         ? detailPlacement === "top"

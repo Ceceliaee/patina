@@ -14,7 +14,7 @@ const ARBITRARY_RADIUS_BASELINE: Record<string, number> = {
   "src/features/settings/components/SettingsDataSafetyPanel.tsx": 6,
   "src/features/settings/components/SettingsRemoteBackupPanel.tsx": 9,
   "src/features/history/components/HistoryTimelineDialogDateControls.tsx": 2,
-  "src/features/history/components/HistoryTimelineLists.tsx": 8,
+  "src/features/history/components/HistoryTimelineLists.tsx": 4,
 };
 
 const failures: string[] = [];

@@ -23,8 +23,7 @@ interface Props {
   isDragging: boolean;
   viewModel: HistoryTimelineViewModel;
   mode: HistoryTimelineDisplayMode;
-  iconThemeColors: Record<string, string>;
-  appIcons: Record<string, string>;
+  sourceIcons: Record<string, string>;
   showEmptyMessage: boolean;
   emptyMessage: string;
 }
@@ -42,8 +41,7 @@ export default function HistoryTimelineZoomDialog({
   isDragging,
   viewModel,
   mode,
-  iconThemeColors,
-  appIcons,
+  sourceIcons,
   showEmptyMessage,
   emptyMessage,
 }: Props) {
@@ -98,7 +96,6 @@ export default function HistoryTimelineZoomDialog({
           <HistoryHorizontalTimeline
             viewModel={viewModel}
             mode={mode}
-            iconThemeColors={iconThemeColors}
             title={null}
             variant="expanded"
             showHeader={false}
@@ -108,12 +105,15 @@ export default function HistoryTimelineZoomDialog({
           />
         </div>
         <HistoryTimelineLaneList
-          title={mode === "category" ? UI_TEXT.history.timelineCategoryLanes : UI_TEXT.history.timelineAppLanes}
+          title={mode === "category"
+            ? UI_TEXT.history.timelineCategoryLanes
+            : mode === "web"
+              ? UI_TEXT.history.timelineWebLanes
+              : UI_TEXT.history.timelineAppLanes}
           emptyMessage={emptyMessage}
           viewModel={viewModel}
           mode={mode}
-          appIcons={appIcons}
-          iconThemeColors={iconThemeColors}
+          sourceIcons={sourceIcons}
           interactionActive={isDragging}
         />
       </div>

@@ -1,4 +1,3 @@
-import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import { formatDuration } from "../services/historyFormatting.ts";
 import type {
   HistoryTimelineDisplayMode,
@@ -12,28 +11,19 @@ interface Props {
   emptyMessage: string;
   viewModel: HistoryTimelineViewModel;
   mode: HistoryTimelineDisplayMode;
-  appIcons: Record<string, string>;
-  iconThemeColors: Record<string, string>;
+  sourceIcons: Record<string, string>;
   interactionActive: boolean;
 }
 
-function resolveLaneColor(
+function resolveLaneIcon(
   lane: HistoryTimelineLane,
-  mode: HistoryTimelineDisplayMode,
-  iconThemeColors: Record<string, string>,
+  sourceIcons: Record<string, string>,
 ) {
-  if (mode === "category") {
-    return AppClassification.getCategoryColor(lane.category);
+  for (const key of lane.iconKeys) {
+    const iconSrc = sourceIcons[key];
+    if (iconSrc) return iconSrc;
   }
-
-  const overrideColor = AppClassification.getUserOverride(lane.appKey)?.color
-    ?? AppClassification.getUserOverride(lane.exeName)?.color;
-  const mapped = AppClassification.mapApp(lane.appKey, { appName: lane.label });
-
-  return overrideColor
-    ?? iconThemeColors[lane.appKey]
-    ?? iconThemeColors[lane.exeName]
-    ?? mapped.color;
+  return undefined;
 }
 
 export default function HistoryTimelineLaneList({
@@ -41,8 +31,7 @@ export default function HistoryTimelineLaneList({
   emptyMessage,
   viewModel,
   mode,
-  appIcons,
-  iconThemeColors,
+  sourceIcons,
   interactionActive,
 }: Props) {
   return (
@@ -57,10 +46,7 @@ export default function HistoryTimelineLaneList({
         ) : (
           <div className="history-timeline-lanes-list" role="list">
             {viewModel.lanes.map((lane) => {
-              const color = resolveLaneColor(lane, mode, iconThemeColors);
-              const iconSrc = mode === "app"
-                ? appIcons[lane.exeName] ?? appIcons[lane.appKey]
-                : undefined;
+              const iconSrc = resolveLaneIcon(lane, sourceIcons);
               const laneViewModel: HistoryTimelineViewModel = {
                 ...viewModel,
                 segments: lane.segments,
@@ -81,7 +67,7 @@ export default function HistoryTimelineLaneList({
                     ) : (
                       <span
                         className="history-timeline-lane-dot"
-                        style={{ backgroundColor: color }}
+                        style={{ backgroundColor: lane.color }}
                         aria-hidden="true"
                       />
                     )}
@@ -91,7 +77,6 @@ export default function HistoryTimelineLaneList({
                     <HistoryHorizontalTimeline
                       viewModel={laneViewModel}
                       mode={mode}
-                      iconThemeColors={iconThemeColors}
                       title={null}
                       variant="lane"
                       showHeader={false}

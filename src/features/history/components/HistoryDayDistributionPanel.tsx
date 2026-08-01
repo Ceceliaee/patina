@@ -1,7 +1,12 @@
-import { Globe2 } from "lucide-react";
+import { Globe2, Monitor } from "lucide-react";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import QuietSegmentedFilter, { type QuietSegmentedFilterOption } from "../../../shared/components/QuietSegmentedFilter";
 import type { AppCategory } from "../../../shared/classification/categoryTokens.ts";
+import type { DestinationDetailTarget } from "../../destination/types.ts";
+import {
+  createHistoryAppDetailTarget,
+  createHistoryWebDetailTarget,
+} from "../hooks/useHistoryDestinationDetailEntry.tsx";
 import { formatDuration } from "../services/historyFormatting.ts";
 import type { DayDistributionMode } from "../services/historyLayoutPreferenceStorage.ts";
 
@@ -25,6 +30,14 @@ interface HistoryDayDistributionPanelProps {
   showQuietPlaceholder: boolean;
   placeholderMessage: string;
   onModeChange: (mode: DayDistributionMode) => void;
+  onDestinationDetailIntentStart?: (
+    target: DestinationDetailTarget,
+    trigger: HTMLButtonElement,
+  ) => void;
+  onDestinationDetailOpen?: (
+    target: DestinationDetailTarget,
+    trigger: HTMLButtonElement,
+  ) => void;
 }
 
 function formatDistributionPercentage(percentage: number) {
@@ -32,6 +45,31 @@ function formatDistributionPercentage(percentage: number) {
 
   const boundedPercentage = Math.min(100, Math.max(0, percentage));
   return `${Math.round(boundedPercentage)}%`;
+}
+
+function createDistributionDetailTarget(
+  item: HistoryDayDistributionItem,
+): DestinationDetailTarget | undefined {
+  if (item.kind === "app") {
+    return createHistoryAppDetailTarget(
+      item.key,
+      item.label,
+      item.iconSrc ?? null,
+      item.color,
+    );
+  }
+
+  if (item.kind === "web") {
+    return createHistoryWebDetailTarget(
+      item.key,
+      item.label,
+      item.key,
+      item.iconSrc ?? null,
+      item.color,
+    );
+  }
+
+  return undefined;
 }
 
 export default function HistoryDayDistributionPanel({
@@ -42,6 +80,8 @@ export default function HistoryDayDistributionPanel({
   showQuietPlaceholder,
   placeholderMessage,
   onModeChange,
+  onDestinationDetailIntentStart,
+  onDestinationDetailOpen,
 }: HistoryDayDistributionPanelProps) {
   return (
     <>
@@ -66,14 +106,53 @@ export default function HistoryDayDistributionPanel({
           <p className="text-[var(--qp-text-tertiary)] text-xs text-center mt-8">{UI_TEXT.history.noData}</p>
         ) : (
           <div className="space-y-4">
-            {items.map((item) => (
-              <div key={item.key} className="space-y-1.5">
+            {items.map((item) => {
+              const detailTarget = createDistributionDetailTarget(item);
+
+              return (
+                <div key={item.key} className="space-y-1.5">
                 <div className="mb-1 flex items-center justify-between gap-3">
                   <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium leading-[1.2] text-[var(--qp-text-secondary)]">
-                    {item.iconSrc ? (
-                      <img src={item.iconSrc} className="h-3.5 w-3.5 shrink-0 object-contain" alt="" />
-                    ) : item.kind === "web" ? (
-                      <Globe2 size={14} className="shrink-0 text-[var(--qp-text-tertiary)]" aria-hidden="true" />
+                    {detailTarget ? (
+                      <button
+                        type="button"
+                        className="history-day-distribution-detail-trigger"
+                        aria-label={UI_TEXT.destinationDetail.open(item.label)}
+                        aria-keyshortcuts="Enter"
+                        onPointerDown={(event) => {
+                          if (event.button !== 0) return;
+                          onDestinationDetailIntentStart?.(
+                            detailTarget,
+                            event.currentTarget,
+                          );
+                        }}
+                        onDoubleClick={(event) => {
+                          onDestinationDetailOpen?.(
+                            detailTarget,
+                            event.currentTarget,
+                          );
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter") return;
+                          event.preventDefault();
+                          onDestinationDetailIntentStart?.(
+                            detailTarget,
+                            event.currentTarget,
+                          );
+                          onDestinationDetailOpen?.(
+                            detailTarget,
+                            event.currentTarget,
+                          );
+                        }}
+                      >
+                        {item.iconSrc ? (
+                          <img src={item.iconSrc} className="h-3.5 w-3.5 object-contain" alt="" />
+                        ) : item.kind === "web" ? (
+                          <Globe2 size={14} className="text-[var(--qp-text-tertiary)]" aria-hidden="true" />
+                        ) : (
+                          <Monitor size={14} className="text-[var(--qp-text-tertiary)]" aria-hidden="true" />
+                        )}
+                      </button>
                     ) : (
                       <span
                         className="h-2.5 w-2.5 shrink-0 rounded-full"
@@ -104,8 +183,9 @@ export default function HistoryDayDistributionPanel({
                     }}
                   />
                 </div>
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

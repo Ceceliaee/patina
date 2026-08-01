@@ -23,6 +23,8 @@ const ZH_CN_HISTORY_COPY = {
     showTotalHourlyActivity: "显示总活动",
     showTimelineByApp: "按应用显示",
     showTimelineByCategory: "按分类显示",
+    showTimelineByWeb: "按网页显示",
+    timelineModeSwitch: (current: string, next: string) => `当前按${current}显示，切换到${next}`,
     dayDistribution: "当日分布",
     distributionByApp: "应用",
     distributionByCategory: "分类",
@@ -42,6 +44,7 @@ const ZH_CN_HISTORY_COPY = {
     emptyTimelineWindow: "当前时间段暂无记录",
     timelineAppLanes: "应用分轨",
     timelineCategoryLanes: "分类分轨",
+    timelineWebLanes: "网页分轨",
     webTimelineUntitledPage: "无标题网页",
     horizontalTimeline: {
       ariaLabel: "横向日内时间轴",
@@ -78,6 +81,8 @@ const EN_US_HISTORY_COPY = {
     showTotalHourlyActivity: "Show total activity",
     showTimelineByApp: "Show by app",
     showTimelineByCategory: "Show by category",
+    showTimelineByWeb: "Show by web",
+    timelineModeSwitch: (current: string, next: string) => `Currently showing ${current}; switch to ${next}`,
     dayDistribution: "Day Distribution",
     distributionByApp: "Apps",
     distributionByCategory: "Categories",
@@ -97,6 +102,7 @@ const EN_US_HISTORY_COPY = {
     emptyTimelineWindow: "No records in this time range",
     timelineAppLanes: "App lanes",
     timelineCategoryLanes: "Category lanes",
+    timelineWebLanes: "Web lanes",
     webTimelineUntitledPage: "Untitled page",
     horizontalTimeline: {
       ariaLabel: "Horizontal daily timeline",
