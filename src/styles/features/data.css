@@ -85,12 +85,16 @@
 
 .data-app-sidebar[data-hint]::after {
   content: attr(data-hint);
+  height: 14px;
   min-height: 14px;
+  flex: 0 0 14px;
+  overflow: hidden;
   padding-inline: 2px;
   color: var(--qp-text-tertiary);
   font-size: 10px;
   font-weight: 500;
   line-height: 14px;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
