@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import {
-  loadDataDestinationDetailDay,
-} from "../src/features/data/services/dataDestinationDetailReadModel.ts";
+  loadDestinationDetailDay,
+} from "../src/features/destination/services/destinationDetailReadModel.ts";
 import type {
-  DataDestinationDetailTarget,
-} from "../src/features/data/services/dataDestinationDetailState.ts";
+  DestinationDetailTarget,
+} from "../src/features/destination/types.ts";
 import type { HistorySession } from "../src/shared/types/sessions.ts";
 import type { WebActivitySegment } from "../src/shared/types/webActivity.ts";
 
@@ -20,7 +20,7 @@ function at(hour: number, minute = 0, day = 20) {
   return new Date(2026, 4, day, hour, minute, 0).getTime();
 }
 
-function appTarget(identityKeys = ["chatgpt.exe"]): DataDestinationDetailTarget {
+function appTarget(identityKeys = ["chatgpt.exe"]): DestinationDetailTarget {
   return {
     mode: "app",
     key: "chatgpt.exe",
@@ -32,7 +32,7 @@ function appTarget(identityKeys = ["chatgpt.exe"]): DataDestinationDetailTarget 
   };
 }
 
-function webTarget(): DataDestinationDetailTarget {
+function webTarget(): DestinationDetailTarget {
   return {
     mode: "web",
     key: "github.com",
@@ -99,7 +99,7 @@ await runTest("app detail uses canonical source identities and exact title sampl
       windowTitle: "Must not appear",
     }),
   ];
-  const day = await loadDataDestinationDetailDay(
+  const day = await loadDestinationDetailDay(
     appTarget(["CHATGPT.EXE", "legacy-chatgpt.exe"]),
     "2026-05-20",
     at(12),
@@ -143,7 +143,7 @@ await runTest("app detail uses canonical source identities and exact title sampl
 
 await runTest("app detail groups title fragments by persisted continuity", async () => {
   const continuityGroupStartTime = at(9);
-  const day = await loadDataDestinationDetailDay(
+  const day = await loadDestinationDetailDay(
     appTarget(),
     "2026-05-20",
     at(12),
@@ -200,7 +200,7 @@ await runTest("app detail clips cross-day and current sessions to the visible da
       windowTitle: "Current",
     }),
   ];
-  const day = await loadDataDestinationDetailDay(
+  const day = await loadDestinationDetailDay(
     appTarget(),
     "2026-05-20",
     at(12),
@@ -225,7 +225,7 @@ await runTest("app detail clips cross-day and current sessions to the visible da
 });
 
 await runTest("app detail keeps uncovered title-sample time as an explicit record", async () => {
-  const day = await loadDataDestinationDetailDay(
+  const day = await loadDestinationDetailDay(
     appTarget(),
     "2026-05-20",
     at(12),
@@ -279,7 +279,7 @@ await runTest("web detail normalizes domains, keeps URL separate, and preserves 
     }),
   ];
   let requestedRange: [number, number] | null = null;
-  const day = await loadDataDestinationDetailDay(
+  const day = await loadDestinationDetailDay(
     webTarget(),
     "2026-05-20",
     at(12),
@@ -304,7 +304,7 @@ await runTest("web detail normalizes domains, keeps URL separate, and preserves 
 });
 
 await runTest("web detail merges same-domain fragments before minimum-duration filtering", async () => {
-  const day = await loadDataDestinationDetailDay(
+  const day = await loadDestinationDetailDay(
     webTarget(),
     "2026-05-20",
     at(12),
@@ -344,7 +344,7 @@ await runTest("web detail merges same-domain fragments before minimum-duration f
 });
 
 await runTest("web detail keeps same-domain fragments separate when another domain interrupts them", async () => {
-  const day = await loadDataDestinationDetailDay(
+  const day = await loadDestinationDetailDay(
     webTarget(),
     "2026-05-20",
     at(12),
@@ -383,7 +383,7 @@ await runTest("web detail keeps same-domain fragments separate when another doma
 await runTest("invalid detail dates fail before either repository is queried", async () => {
   let calls = 0;
   await assert.rejects(
-    loadDataDestinationDetailDay(webTarget(), "not-a-date", at(12), 180, {
+    loadDestinationDetailDay(webTarget(), "not-a-date", at(12), 180, {
       getAppSessions: async () => {
         calls += 1;
         return [];

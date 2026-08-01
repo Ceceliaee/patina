@@ -45,9 +45,10 @@ const LAZY_SECONDARY_CHUNK_BUDGETS = [
   { label: "Data first-screen prewarm", pattern: /^dataFirstScreenPrewarm-.*\.js$/, gzipKiB: 6 },
   { label: "Data trend snapshot", pattern: /^dataTrendSnapshot-.*\.js$/, gzipKiB: 2 },
   { label: "Data bootstrap snapshot", pattern: /^dataBootstrapSnapshot-.*\.js$/, gzipKiB: 1 },
-  // Data preloads the single-object detail shell with its route, while retaining
-  // a separate chunk so the comparison view stays below its first-render budget.
-  { label: "Data destination detail", pattern: /^DataDestinationDetailDialog-.*\.js$/, gzipKiB: 6 },
+  // The shared destination-detail entry preloads one cross-feature dialog while
+  // retaining a separate chunk so ordinary Dashboard, History, and Data views
+  // do not pay for single-object analysis in their first-render graphs.
+  { label: "Destination detail", pattern: /^DestinationDetailDialog-.*\.js$/, gzipKiB: 8 },
 ] as const;
 
 // Stable cross-feature UI owners stay lazy and receive their own narrow budget
@@ -69,7 +70,9 @@ const LAZY_SHARED_UI_CHUNK_BUDGETS = [
 const LAZY_SUPPORT_CHUNKS_GZIP_BUDGET_KI_B = 6.25;
 const SETTINGS_COPY_GZIP_BUDGET_KI_B = 12;
 // Import preview, destructuring, and batch deletion require matching bilingual copy.
-const COPY_DOMAINS_GZIP_BUDGET_KI_B = 31;
+// Destination detail contributes one shared bilingual copy domain used by
+// Dashboard, History, and Data. Keep explicit headroom for that stable owner.
+const COPY_DOMAINS_GZIP_BUDGET_KI_B = 33;
 const NON_SETTINGS_COPY_GZIP_REVIEW_KI_B = 4;
 
 type AssetMeasurement = {

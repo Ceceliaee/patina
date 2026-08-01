@@ -1,26 +1,26 @@
 import assert from "node:assert/strict";
 import type {
-  DataDestinationDetailDayViewModel,
-  DataDestinationDetailRecord,
-} from "../src/features/data/services/dataDestinationDetailReadModel.ts";
+  DestinationDetailDayViewModel,
+  DestinationDetailRecord,
+} from "../src/features/destination/services/destinationDetailReadModel.ts";
 import {
-  buildDataDestinationDetailTimelineAxisTicks,
-  buildDataDestinationDetailTimelineSegments,
-  clipDataDestinationDetailActivitiesToViewport,
-  DEFAULT_DATA_DESTINATION_DETAIL_ZOOM_HOURS,
-  getDataDestinationDetailTimelineWheelZoomHours,
-  getInitialDataDestinationDetailTimelineViewport,
-  normalizeDataDestinationDetailTimelineViewport,
-  panDataDestinationDetailTimelineViewportByPixels,
-  resizeDataDestinationDetailTimelineViewport,
-  zoomDataDestinationDetailTimelineViewportAroundAnchor,
-} from "../src/features/data/services/dataDestinationDetailTimelineViewport.ts";
+  buildDestinationDetailTimelineAxisTicks,
+  buildDestinationDetailTimelineSegments,
+  clipDestinationDetailActivitiesToViewport,
+  DEFAULT_DESTINATION_DETAIL_ZOOM_HOURS,
+  getDestinationDetailTimelineWheelZoomHours,
+  getInitialDestinationDetailTimelineViewport,
+  normalizeDestinationDetailTimelineViewport,
+  panDestinationDetailTimelineViewportByPixels,
+  resizeDestinationDetailTimelineViewport,
+  zoomDestinationDetailTimelineViewportAroundAnchor,
+} from "../src/features/destination/services/destinationDetailTimelineViewport.ts";
 import {
   readDetailMinSecs,
-  readDataDestinationDetailTimelineZoomHours,
-  rememberDataDestinationDetailTimelineZoomHours,
+  readDestinationDetailTimelineZoomHours,
+  rememberDestinationDetailTimelineZoomHours,
   saveDetailMinSecs,
-} from "../src/features/data/services/dataDestinationDetailTimelinePreferenceStorage.ts";
+} from "../src/features/destination/services/destinationDetailPreferenceStorage.ts";
 
 let passed = 0;
 
@@ -68,7 +68,7 @@ function makeRecord(
   id: string,
   startTime: number,
   endTime: number,
-): DataDestinationDetailRecord {
+): DestinationDetailRecord {
   return {
     id,
     activityId: "activity",
@@ -84,7 +84,7 @@ function makeRecord(
   };
 }
 
-function makeDay(): DataDestinationDetailDayViewModel {
+function makeDay(): DestinationDetailDayViewModel {
   const records = [
     makeRecord("first", at(9), at(10)),
     makeRecord("second", at(11), at(12)),
@@ -109,18 +109,18 @@ function makeDay(): DataDestinationDetailDayViewModel {
 }
 
 runTest("detail timeline opens the full 24-hour day by default", () => {
-  const viewport = getInitialDataDestinationDetailTimelineViewport(
+  const viewport = getInitialDestinationDetailTimelineViewport(
     makeDay(),
     at(13, 37),
   );
-  assert.equal(DEFAULT_DATA_DESTINATION_DETAIL_ZOOM_HOURS, 24);
+  assert.equal(DEFAULT_DESTINATION_DETAIL_ZOOM_HOURS, 24);
   assert.equal(viewport.durationMs, 24 * 3_600_000);
   assert.equal(viewport.startMs, at(0));
   assert.equal(viewport.endMs, makeDay().dayEndMs);
 });
 
 runTest("detail timeline maps the reference clock time onto a historical day", () => {
-  const viewport = getInitialDataDestinationDetailTimelineViewport(
+  const viewport = getInitialDestinationDetailTimelineViewport(
     makeDay(),
     new Date(2026, 7, 8, 13, 37).getTime(),
     4,
@@ -131,7 +131,7 @@ runTest("detail timeline maps the reference clock time onto a historical day", (
 
 runTest("detail timeline clamps current-time focus at the beginning and end of day", () => {
   const day = makeDay();
-  const earlyViewport = getInitialDataDestinationDetailTimelineViewport(
+  const earlyViewport = getInitialDestinationDetailTimelineViewport(
     day,
     at(0, 10),
     4,
@@ -139,7 +139,7 @@ runTest("detail timeline clamps current-time focus at the beginning and end of d
   assert.equal(earlyViewport.startMs, at(0));
   assert.equal(earlyViewport.endMs, at(4));
 
-  const lateViewport = getInitialDataDestinationDetailTimelineViewport(
+  const lateViewport = getInitialDestinationDetailTimelineViewport(
     day,
     at(23, 50),
     4,
@@ -150,13 +150,13 @@ runTest("detail timeline clamps current-time focus at the beginning and end of d
 
 runTest("detail timeline clamps panning to the selected day", () => {
   const day = makeDay();
-  const startViewport = normalizeDataDestinationDetailTimelineViewport({
+  const startViewport = normalizeDestinationDetailTimelineViewport({
     dayStartMs: day.dayStartMs,
     dayEndMs: day.dayEndMs,
     requestedDurationMs: 4 * 3_600_000,
     requestedStartMs: at(1),
   });
-  const leftEdge = panDataDestinationDetailTimelineViewportByPixels({
+  const leftEdge = panDestinationDetailTimelineViewportByPixels({
     dayStartMs: day.dayStartMs,
     dayEndMs: day.dayEndMs,
     viewport: startViewport,
@@ -165,7 +165,7 @@ runTest("detail timeline clamps panning to the selected day", () => {
   });
   assert.equal(leftEdge.startMs, day.dayStartMs);
 
-  const rightEdge = panDataDestinationDetailTimelineViewportByPixels({
+  const rightEdge = panDestinationDetailTimelineViewportByPixels({
     dayStartMs: day.dayStartMs,
     dayEndMs: day.dayEndMs,
     viewport: startViewport,
@@ -177,8 +177,8 @@ runTest("detail timeline clamps panning to the selected day", () => {
 
 runTest("detail timeline zoom keeps the current window center", () => {
   const day = makeDay();
-  const initial = getInitialDataDestinationDetailTimelineViewport(day, at(13, 37), 4);
-  const resized = resizeDataDestinationDetailTimelineViewport({
+  const initial = getInitialDestinationDetailTimelineViewport(day, at(13, 37), 4);
+  const resized = resizeDestinationDetailTimelineViewport({
     dayStartMs: day.dayStartMs,
     dayEndMs: day.dayEndMs,
     viewport: initial,
@@ -193,7 +193,7 @@ runTest("detail timeline zoom keeps the current window center", () => {
 
 runTest("detail timeline wheel zoom preserves the pointer anchor", () => {
   const day = makeDay();
-  const viewport = normalizeDataDestinationDetailTimelineViewport({
+  const viewport = normalizeDestinationDetailTimelineViewport({
     dayStartMs: day.dayStartMs,
     dayEndMs: day.dayEndMs,
     requestedDurationMs: 12 * 3_600_000,
@@ -201,8 +201,8 @@ runTest("detail timeline wheel zoom preserves the pointer anchor", () => {
   });
   const anchorRatio = 0.75;
   const anchorBefore = viewport.startMs + anchorRatio * viewport.durationMs;
-  const nextZoomHours = getDataDestinationDetailTimelineWheelZoomHours(12, -120);
-  const nextViewport = zoomDataDestinationDetailTimelineViewportAroundAnchor({
+  const nextZoomHours = getDestinationDetailTimelineWheelZoomHours(12, -120);
+  const nextViewport = zoomDestinationDetailTimelineViewportAroundAnchor({
     dayStartMs: day.dayStartMs,
     dayEndMs: day.dayEndMs,
     viewport,
@@ -214,31 +214,31 @@ runTest("detail timeline wheel zoom preserves the pointer anchor", () => {
   assert.ok(Math.abs(
     nextViewport.startMs + anchorRatio * nextViewport.durationMs - anchorBefore,
   ) < 1);
-  assert.equal(getDataDestinationDetailTimelineWheelZoomHours(12, 120), 12.2);
-  assert.equal(getDataDestinationDetailTimelineWheelZoomHours(12, 0.1), 12);
-  assert.equal(getDataDestinationDetailTimelineWheelZoomHours(24, 120), 24);
-  assert.equal(getDataDestinationDetailTimelineWheelZoomHours(1, -120), 1);
+  assert.equal(getDestinationDetailTimelineWheelZoomHours(12, 120), 12.2);
+  assert.equal(getDestinationDetailTimelineWheelZoomHours(12, 0.1), 12);
+  assert.equal(getDestinationDetailTimelineWheelZoomHours(24, 120), 24);
+  assert.equal(getDestinationDetailTimelineWheelZoomHours(1, -120), 1);
 });
 
 runTest("detail timeline zoom preference persists custom values after the 24-hour default", () => {
-  assert.equal(readDataDestinationDetailTimelineZoomHours(), 24);
+  assert.equal(readDestinationDetailTimelineZoomHours(), 24);
 
   const storage = new MemoryStorage();
   withWindowValue({ localStorage: storage }, () => {
-    assert.equal(readDataDestinationDetailTimelineZoomHours(), 24);
+    assert.equal(readDestinationDetailTimelineZoomHours(), 24);
 
-    rememberDataDestinationDetailTimelineZoomHours(6.375);
-    assert.equal(readDataDestinationDetailTimelineZoomHours(), 6.375);
+    rememberDestinationDetailTimelineZoomHours(6.375);
+    assert.equal(readDestinationDetailTimelineZoomHours(), 6.375);
     assert.equal(
-      storage.getItem("patina:data-destination-detail-timeline-zoom-hours:v1"),
+      storage.getItem("patina:destination-detail-timeline-zoom-hours:v1"),
       "6.375",
     );
 
     storage.setItem(
-      "patina:data-destination-detail-timeline-zoom-hours:v1",
+      "patina:destination-detail-timeline-zoom-hours:v1",
       "invalid",
     );
-    assert.equal(readDataDestinationDetailTimelineZoomHours(), 24);
+    assert.equal(readDestinationDetailTimelineZoomHours(), 24);
   });
 
   const inaccessibleWindow = Object.defineProperty({}, "localStorage", {
@@ -248,8 +248,8 @@ runTest("detail timeline zoom preference persists custom values after the 24-hou
     },
   });
   withWindowValue(inaccessibleWindow, () => {
-    assert.equal(readDataDestinationDetailTimelineZoomHours(), 24);
-    assert.doesNotThrow(() => rememberDataDestinationDetailTimelineZoomHours(4));
+    assert.equal(readDestinationDetailTimelineZoomHours(), 24);
+    assert.doesNotThrow(() => rememberDestinationDetailTimelineZoomHours(4));
   });
 });
 
@@ -263,14 +263,19 @@ runTest("detail minimum duration owns an independent preference", () => {
     saveDetailMinSecs(300);
     assert.equal(readDetailMinSecs(), 300);
     assert.equal(
-      storage.getItem("patina:data-detail-min-secs"),
+      storage.getItem("patina:destination-detail-min-secs:v1"),
       "300",
     );
+    assert.equal(storage.getItem("patina:data-detail-min-secs"), null);
 
     storage.setItem(
-      "patina:data-detail-min-secs",
+      "patina:destination-detail-min-secs:v1",
       "invalid",
     );
+    storage.setItem("patina:data-detail-min-secs", "240");
+    assert.equal(readDetailMinSecs(), 240);
+
+    storage.setItem("patina:data-detail-min-secs", "invalid");
     assert.equal(readDetailMinSecs(), 60);
   });
 
@@ -288,14 +293,14 @@ runTest("detail minimum duration owns an independent preference", () => {
 
 runTest("detail timeline builds viewport-relative ticks and clipped segments", () => {
   const day = makeDay();
-  const viewport = normalizeDataDestinationDetailTimelineViewport({
+  const viewport = normalizeDestinationDetailTimelineViewport({
     dayStartMs: day.dayStartMs,
     dayEndMs: day.dayEndMs,
     requestedDurationMs: 4 * 3_600_000,
     requestedStartMs: at(9),
   });
   assert.deepEqual(
-    buildDataDestinationDetailTimelineAxisTicks(
+    buildDestinationDetailTimelineAxisTicks(
       viewport,
       day.dayStartMs,
       day.dayEndMs,
@@ -303,7 +308,7 @@ runTest("detail timeline builds viewport-relative ticks and clipped segments", (
     ["09:00", "10:00", "11:00", "12:00", "13:00"],
   );
   assert.deepEqual(
-    buildDataDestinationDetailTimelineSegments(day.activities, viewport).map((segment) => ({
+    buildDestinationDetailTimelineSegments(day.activities, viewport).map((segment) => ({
       startTime: segment.startTime,
       endTime: segment.endTime,
       startRatio: segment.startRatio,
@@ -323,13 +328,13 @@ runTest("detail timeline merges adjacent fragments before applying the History v
     makeRecord("twenty-seconds", at(9, 0, 10), at(9, 0, 30)),
     makeRecord("twenty-nine-seconds", at(10), at(10, 0, 29)),
   ];
-  const viewport = normalizeDataDestinationDetailTimelineViewport({
+  const viewport = normalizeDestinationDetailTimelineViewport({
     dayStartMs: day.dayStartMs,
     dayEndMs: day.dayEndMs,
     requestedDurationMs: 4 * 3_600_000,
     requestedStartMs: at(8),
   });
-  const segments = buildDataDestinationDetailTimelineSegments([{
+  const segments = buildDestinationDetailTimelineSegments([{
     id: "short-activity",
     startTime: records[0]!.startTime,
     endTime: records[records.length - 1]!.endTime,
@@ -346,13 +351,13 @@ runTest("detail timeline merges adjacent fragments before applying the History v
 
 runTest("detail rows describe only the visible portion of an activity", () => {
   const day = makeDay();
-  const viewport = normalizeDataDestinationDetailTimelineViewport({
+  const viewport = normalizeDestinationDetailTimelineViewport({
     dayStartMs: day.dayStartMs,
     dayEndMs: day.dayEndMs,
     requestedDurationMs: 1 * 3_600_000,
     requestedStartMs: at(9, 30),
   });
-  const activities = clipDataDestinationDetailActivitiesToViewport(
+  const activities = clipDestinationDetailActivitiesToViewport(
     day.activities,
     viewport,
   );
