@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Layers3, Monitor, Minus, TrendingDown, TrendingUp } from "lucide-react";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import { useIconThemeColors } from "../../../shared/hooks/useIconThemeColors";
@@ -9,16 +9,19 @@ import HourlyActivityChart from "../../../shared/charts/HourlyActivityChart";
 import QuietIconAction from "../../../shared/components/QuietIconAction";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
 import type { HourlyActivityChartMode } from "../../../shared/settings/appSettings.ts";
+import DestinationDetailDialogEntry from "../../destination/components/DestinationDetailDialogEntry.tsx";
+import { useDestinationDetailLauncher } from "../../destination/hooks/useDestinationDetailLauncher.ts";
+import { createDestinationDetailTarget } from "../../destination/types.ts";
+import { formatLocalDateKey } from "../../../shared/lib/localDate.ts";
 
 interface Props {
   dashboard: DashboardReadModel;
   icons: Record<string, string>;
-  isAfk: boolean;
-  isTrackingActive: boolean;
-  activeAppName: string | null;
-  trackingPaused: boolean;
   hourlyActivityChartMode: HourlyActivityChartMode;
   onHourlyActivityChartModeChange: (mode: HourlyActivityChartMode) => void;
+  refreshKey: number;
+  mappingVersion: number;
+  mergeThresholdSecs: number;
 }
 
 const FOCUS_CATEGORY_LIMIT = 4;
@@ -107,7 +110,11 @@ export default function Dashboard({
   icons,
   hourlyActivityChartMode,
   onHourlyActivityChartModeChange,
+  refreshKey,
+  mappingVersion,
+  mergeThresholdSecs,
 }: Props) {
+  const detail = useDestinationDetailLauncher();
   const iconThemeColors = useIconThemeColors(icons);
   const {
     totalTrackedTime,
@@ -258,6 +265,25 @@ export default function Dashboard({
               (() => {
                 const overrideColor = AppClassification.getUserOverride(app.exeName)?.color;
                 const accentColor = overrideColor ?? iconThemeColors[app.exeName] ?? app.color;
+                const createDetailRequest = () => ({
+                    target: createDestinationDetailTarget({
+                      mode: "app",
+                      key: app.exeName,
+                      identityKeys: [app.exeName],
+                      displayName: app.name,
+                      secondaryText: app.exeName,
+                      iconUrl: icons[app.exeName] ?? null,
+                      color: accentColor,
+                    }),
+                    initialDateKey: formatLocalDateKey(new Date()),
+                  });
+                const prepareDetail = (returnFocusTo: HTMLElement | null) => {
+                  detail.prepare(createDetailRequest(), { returnFocusTo });
+                };
+                const openDetail = (returnFocusTo: HTMLElement | null) => {
+                  if (detail.openPrepared()) return;
+                  detail.open(createDetailRequest(), { returnFocusTo });
+                };
 
                 return (
                   <div
@@ -265,10 +291,23 @@ export default function Dashboard({
                     className="flex items-center justify-between px-3.5 py-3 border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-elevated)] rounded-[10px] hover:border-[var(--qp-border-strong)] hover:bg-[var(--qp-bg-panel)] transition-colors cursor-default"
                   >
                     <div className="flex items-center gap-4 flex-1 min-w-0">
-                      <div
-                        className="w-10 h-10 bg-[var(--qp-bg-panel)] rounded-[8px] flex items-center justify-center border border-[var(--qp-border-subtle)] overflow-hidden p-2"
+                      <button
+                        type="button"
+                        className="dashboard-top-app-detail-trigger w-10 h-10 bg-[var(--qp-bg-panel)] rounded-[8px] flex items-center justify-center border border-[var(--qp-border-subtle)] overflow-hidden p-2"
                         style={{
                           boxShadow: `0 0 0 2px ${accentColor}22`,
+                        }}
+                        aria-label={UI_TEXT.destinationDetail.open(app.name)}
+                        aria-keyshortcuts="Enter"
+                        onPointerDown={(event) => {
+                          if (event.button === 0) prepareDetail(event.currentTarget);
+                        }}
+                        onDoubleClick={(event) => openDetail(event.currentTarget)}
+                        onKeyDown={(event: KeyboardEvent<HTMLButtonElement>) => {
+                          if (event.key !== "Enter") return;
+                          event.preventDefault();
+                          prepareDetail(event.currentTarget);
+                          openDetail(event.currentTarget);
                         }}
                       >
                         {icons[app.exeName] ? (
@@ -276,7 +315,7 @@ export default function Dashboard({
                         ) : (
                           <div className="text-xs font-semibold opacity-40 text-[var(--qp-text-secondary)]">{app.categoryInitial}</div>
                         )}
-                      </div>
+                      </button>
                       <div className="truncate">
                         <div className="font-semibold text-[var(--qp-text-primary)] text-sm truncate flex items-center gap-2">
                           <span className="truncate">{app.name}</span>
@@ -308,6 +347,15 @@ export default function Dashboard({
           </div>
         </div>
       </div>
+      {detail.request ? (
+        <DestinationDetailDialogEntry
+          key={`${detail.request.target.mode}:${detail.request.target.key}`}
+          target={detail.request.target}
+          initialDateKey={detail.request.initialDateKey}
+          runtime={{ refreshKey, mappingVersion, mergeThresholdSecs }}
+          onClose={detail.close}
+        />
+      ) : null}
     </div>
   );
 }

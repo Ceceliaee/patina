@@ -150,3 +150,13 @@
     min-height: 240px;
   }
 }
+.dashboard-top-app-detail-trigger {
+  appearance: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.dashboard-top-app-detail-trigger:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--qp-accent-default) 42%, transparent);
+  outline-offset: 2px;
+}

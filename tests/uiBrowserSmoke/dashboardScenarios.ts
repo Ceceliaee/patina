@@ -364,4 +364,100 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
       `document.querySelector(".dashboard-pulse-mode-toggle")?.getAttribute("aria-pressed") === "true"`,
     );
   });
+
+  await runTest("dashboard application icon opens shared detail without changing single-click behavior", async () => {
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const navigation = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']');
+          if (!navigation) return false;
+          navigation.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(".dashboard-top-app-detail-trigger"))`,
+    );
+
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const trigger = document.querySelector(".dashboard-top-app-detail-trigger");
+          if (!trigger) return false;
+          trigger.click();
+          return !document.querySelector(".destination-detail-dialog");
+        })()
+      `),
+      true,
+      "a normal click should remain inert",
+    );
+
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const trigger = document.querySelector(".dashboard-top-app-detail-trigger");
+          if (!trigger) return false;
+          trigger.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, button: 0 }));
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(".destination-detail-dialog"))`,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `(() => {
+        const content = document.querySelector(
+          ".destination-detail-dialog .destination-detail-day-content",
+        );
+        if (!content) return false;
+        const now = new Date();
+        const todayKey = [
+          now.getFullYear(),
+          String(now.getMonth() + 1).padStart(2, "0"),
+          String(now.getDate()).padStart(2, "0"),
+        ].join("-");
+        return content.getAttribute("data-destination-detail-requested-date") === todayKey;
+      })()`,
+    );
+    await evaluate(
+      client!,
+      sessionId,
+      `document.querySelector('.destination-detail-dialog [aria-label="关闭详情"]')?.click()`,
+    );
+    await waitForExpression(client!, sessionId, `!document.querySelector(".destination-detail-dialog")`);
+
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const trigger = document.querySelector(".dashboard-top-app-detail-trigger");
+          if (!trigger) return false;
+          trigger.focus();
+          trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+          return document.activeElement === trigger;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(".destination-detail-dialog"))`,
+    );
+    await evaluate(
+      client!,
+      sessionId,
+      `document.querySelector('.destination-detail-dialog [aria-label="关闭详情"]')?.click()`,
+    );
+    await waitForExpression(client!, sessionId, `!document.querySelector(".destination-detail-dialog")`);
+  });
 }
