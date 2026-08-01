@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  getNextHistoryTimelineMode,
   readHistoryDayDistributionMode,
   readHistoryTimelineMode,
   readHistoryTimelineZoomHours,
@@ -7,6 +8,7 @@ import {
   rememberHistoryTimelineMode,
   rememberHistoryTimelineZoomHours,
   resolveEffectiveDayDistributionMode,
+  resolveEffectiveHistoryTimelineMode,
 } from "../src/features/history/services/historyLayoutPreferenceStorage.ts";
 import {
   buildHistoryTimelineViewModel,
@@ -18,6 +20,7 @@ import {
   snapHistoryTimelineFocusToNearestHalfHour,
   zoomHistoryTimelineViewportAroundAnchor,
 } from "../src/features/history/services/historyTimelineViewModel.ts";
+import { shouldHideTimelineContent } from "../src/features/history/hooks/useHistoryTimelineViews.ts";
 import { ProcessMapper } from "../src/shared/classification/processMapper.ts";
 import type { CompiledSession } from "../src/shared/lib/sessionReadCompiler.ts";
 import { createTestHarness } from "./helpers/trackingTestHarness.ts";
@@ -157,9 +160,28 @@ runTest("timeline display mode persists locally", () => {
     assert.equal(readHistoryTimelineMode(), "category");
     assert.equal(window.localStorage.getItem("patina:history-timeline-mode"), "category");
 
+    rememberHistoryTimelineMode("web");
+    assert.equal(readHistoryTimelineMode(), "web");
+    assert.equal(window.localStorage.getItem("patina:history-timeline-mode"), "web");
+
     window.localStorage.setItem("patina:history-timeline-mode", "timeline");
     assert.equal(readHistoryTimelineMode(), "app");
   });
+});
+
+runTest("timeline display mode cycles through web only while web activity is available", () => {
+  assert.equal(getNextHistoryTimelineMode("app", true), "category");
+  assert.equal(getNextHistoryTimelineMode("category", true), "web");
+  assert.equal(getNextHistoryTimelineMode("web", true), "app");
+
+  assert.equal(getNextHistoryTimelineMode("app", false), "category");
+  assert.equal(getNextHistoryTimelineMode("category", false), "app");
+  assert.equal(getNextHistoryTimelineMode("web", false), "app");
+
+  assert.equal(resolveEffectiveHistoryTimelineMode("app", false), "app");
+  assert.equal(resolveEffectiveHistoryTimelineMode("category", false), "category");
+  assert.equal(resolveEffectiveHistoryTimelineMode("web", false), "app");
+  assert.equal(resolveEffectiveHistoryTimelineMode("web", true), "web");
 });
 
 runTest("timeline window hours persist continuous zoom values with a four-hour default", () => {
@@ -187,7 +209,7 @@ runTest("timeline window hours persist continuous zoom values with a four-hour d
   });
 });
 
-runTest("timeline zoom preference remains best-effort when localStorage access throws", () => {
+runTest("timeline preferences remain best-effort when localStorage access throws", () => {
   const inaccessibleWindow = Object.defineProperty({}, "localStorage", {
     configurable: true,
     get() {
@@ -196,9 +218,43 @@ runTest("timeline zoom preference remains best-effort when localStorage access t
   });
 
   withWindowValue(inaccessibleWindow, () => {
+    assert.equal(readHistoryTimelineMode(), "app");
+    assert.doesNotThrow(() => rememberHistoryTimelineMode("web"));
     assert.equal(readHistoryTimelineZoomHours(), 4);
     assert.doesNotThrow(() => rememberHistoryTimelineZoomHours(4));
   });
+});
+
+runTest("timeline quiet placeholder distinguishes loading from a real empty state", () => {
+  const defaults = {
+    showQuietPlaceholder: false,
+    contentState: "ready" as const,
+    sessionCount: 0,
+    aggregateCount: 0,
+    mode: "app" as const,
+    webDataReady: true,
+  };
+
+  assert.equal(shouldHideTimelineContent(defaults), false);
+  assert.equal(shouldHideTimelineContent({
+    ...defaults,
+    showQuietPlaceholder: true,
+  }), true);
+  assert.equal(shouldHideTimelineContent({
+    ...defaults,
+    contentState: "bootstrap",
+    aggregateCount: 1,
+  }), true);
+  assert.equal(shouldHideTimelineContent({
+    ...defaults,
+    mode: "web",
+    webDataReady: false,
+  }), true);
+  assert.equal(shouldHideTimelineContent({
+    ...defaults,
+    mode: "app",
+    webDataReady: false,
+  }), false);
 });
 
 runTest("timeline ratios use the full local day", () => {
@@ -878,7 +934,7 @@ runTest("timeline assigns each minute to the longest app and records short switc
   });
 
   assert.equal(viewModel.segments.length, 1);
-  assert.equal(viewModel.segments[0]?.appKey, "vscodium.exe");
+  assert.equal(viewModel.segments[0]?.sourceKey, "vscodium.exe");
   assert.equal(viewModel.segments[0]?.startTime, minuteStart);
   assert.equal(viewModel.segments[0]?.endTime, minuteStart + 120_000);
   assert.deepEqual(
@@ -1119,7 +1175,7 @@ runTest("timeline preserves app switches between same app segments", () => {
 
   assert.equal(viewModel.segments.length, 3);
   assert.deepEqual(
-    viewModel.segments.map((segment) => segment.appKey),
+    viewModel.segments.map((segment) => segment.sourceKey),
     ["cursor.exe", "chrome.exe", "cursor.exe"],
   );
 });

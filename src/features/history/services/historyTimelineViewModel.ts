@@ -1,6 +1,11 @@
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import type { AppCategory } from "../../../shared/classification/categoryTokens.ts";
 import type { CompiledSession } from "../../../shared/lib/sessionReadCompiler.ts";
+import {
+  buildTimelineAxisTicks,
+  snapTimelineFocusToNearestInterval,
+  type TimelineAxisTick,
+} from "../../../shared/lib/timelineAxis.ts";
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -9,7 +14,8 @@ const HALF_HOUR_MS = 30 * MINUTE_MS;
 const MINUTE_BOUNDARY_SNAP_MS = 1_000;
 const MIN_VISIBLE_TIMELINE_SEGMENT_MS = 30_000;
 
-export type HistoryTimelineDisplayMode = "app" | "category";
+export type HistoryTimelineDisplayMode = "app" | "category" | "web";
+export type HistoryTimelineSourceKind = "app" | "web";
 export type HistoryTimelineZoomHours = number;
 export const DEFAULT_HISTORY_TIMELINE_ZOOM_HOURS: HistoryTimelineZoomHours = 4;
 export const MIN_HISTORY_TIMELINE_VIEWPORT_DURATION_MS = HOUR_MS;
@@ -21,21 +27,45 @@ export interface HistoryTimelineViewport {
   durationMs: number;
 }
 
-export interface HistoryTimelineAxisTick {
-  label: string;
-  ratio: number;
+export type HistoryTimelineAxisTick = TimelineAxisTick;
+
+export interface HistoryTimelineTitleSample {
+  title: string;
+  startTime: number;
+  endTime: number;
+  isUntitled?: boolean;
+}
+
+export interface HistoryTimelineSourceItem {
+  id: string;
+  sourceKind: HistoryTimelineSourceKind;
+  sourceKey: string;
+  sourceLabel: string;
+  sourceColor: string;
+  iconKeys: string[];
+  category: AppCategory;
+  categoryLabel: string;
+  categoryColor: string;
+  fallbackTitle: string;
+  startTime: number;
+  endTime: number;
+  titleSampleDetails: HistoryTimelineTitleSample[];
+  isLive: boolean;
 }
 
 export interface HistoryTimelineSegment {
   id: string;
-  sourceSessionId: number;
+  sourceId: string;
   timelineKey: string;
-  appKey: string;
-  exeName: string;
-  displayName: string;
-  displayTitle: string;
+  sourceKind: HistoryTimelineSourceKind;
+  sourceKey: string;
+  sourceLabel: string;
+  label: string;
+  color: string;
+  iconKeys: string[];
   category: AppCategory;
   categoryLabel: string;
+  categoryColor: string;
   startTime: number;
   endTime: number;
   duration: number;
@@ -43,11 +73,7 @@ export interface HistoryTimelineSegment {
   endRatio: number;
   widthRatio: number;
   titleSamples: string[];
-  titleSampleDetails: Array<{
-    title: string;
-    startTime: number;
-    endTime: number;
-  }>;
+  titleSampleDetails: HistoryTimelineTitleSample[];
   alternateLabels: string[];
   isLive: boolean;
 }
@@ -57,16 +83,16 @@ export interface HistoryTimelineLegendItem {
   label: string;
   duration: number;
   percentage: number;
+  color: string;
   category: AppCategory;
-  exeName: string;
 }
 
 export interface HistoryTimelineLane {
   key: string;
   label: string;
   duration: number;
-  appKey: string;
-  exeName: string;
+  color: string;
+  iconKeys: string[];
   category: AppCategory;
   segments: HistoryTimelineSegment[];
 }
@@ -88,6 +114,16 @@ export interface HistoryTimelineViewModel {
 
 interface BuildHistoryTimelineViewModelParams {
   sessions: CompiledSession[];
+  selectedDate: Date;
+  nowMs: number;
+  mode: Exclude<HistoryTimelineDisplayMode, "web">;
+  iconThemeColors?: Record<string, string>;
+  mergeThresholdSecs?: number;
+  viewport?: HistoryTimelineViewport;
+}
+
+interface BuildHistoryTimelineViewModelFromSourcesParams {
+  sources: HistoryTimelineSourceItem[];
   selectedDate: Date;
   nowMs: number;
   mode: HistoryTimelineDisplayMode;
@@ -176,13 +212,12 @@ export function snapHistoryTimelineFocusToNearestHalfHour({
   requestedTimeMs: number;
 }) {
   const { dayStartMs, dayEndMs } = getFullDayRange(selectedDate);
-  const safeRequestedTimeMs = typeof requestedTimeMs === "number" && Number.isFinite(requestedTimeMs)
-    ? requestedTimeMs
-    : dayStartMs;
-  const snappedTimeMs = dayStartMs
-    + Math.round((safeRequestedTimeMs - dayStartMs) / HALF_HOUR_MS) * HALF_HOUR_MS;
-
-  return clampNumber(snappedTimeMs, dayStartMs, dayEndMs);
+  return snapTimelineFocusToNearestInterval({
+    dayStartMs,
+    dayEndMs,
+    requestedTimeMs,
+    intervalMs: HALF_HOUR_MS,
+  });
 }
 
 export function normalizeHistoryTimelineViewportAroundFocus({
@@ -269,83 +304,6 @@ export function panHistoryTimelineViewportByPixels({
   });
 }
 
-function formatAxisLabel(timeMs: number, dayEndMs: number) {
-  if (timeMs === dayEndMs) {
-    return "24:00";
-  }
-
-  const time = new Date(timeMs);
-  return `${String(time.getHours()).padStart(2, "0")}:${String(time.getMinutes()).padStart(2, "0")}`;
-}
-
-const HISTORY_TIMELINE_AXIS_INTERVALS_MS = [
-  5 * MINUTE_MS,
-  10 * MINUTE_MS,
-  15 * MINUTE_MS,
-  30 * MINUTE_MS,
-  HOUR_MS,
-  2 * HOUR_MS,
-  3 * HOUR_MS,
-  6 * HOUR_MS,
-] as const;
-const HISTORY_TIMELINE_MIN_EDGE_TICK_GAP_RATIO = 0.05;
-
-function getAxisIntervalMs(durationMs: number) {
-  const targetIntervalMs = durationMs / 4;
-  return HISTORY_TIMELINE_AXIS_INTERVALS_MS.find((intervalMs) => intervalMs >= targetIntervalMs)
-    ?? HISTORY_TIMELINE_AXIS_INTERVALS_MS[HISTORY_TIMELINE_AXIS_INTERVALS_MS.length - 1];
-}
-
-function buildAxisTicks(
-  viewport: HistoryTimelineViewport,
-  dayStartMs: number,
-  dayEndMs: number,
-): HistoryTimelineAxisTick[] {
-  const viewportDurationMs = Math.max(1, viewport.durationMs);
-  const intervalMs = getAxisIntervalMs(viewportDurationMs);
-  const ticks: HistoryTimelineAxisTick[] = [{
-    label: formatAxisLabel(viewport.startMs, dayEndMs),
-    ratio: 0,
-  }];
-  const firstAlignedTickMs = dayStartMs
-    + Math.ceil((viewport.startMs - dayStartMs) / intervalMs) * intervalMs;
-
-  for (
-    let timeMs = firstAlignedTickMs;
-    timeMs < viewport.endMs;
-    timeMs += intervalMs
-  ) {
-    if (timeMs <= viewport.startMs) continue;
-    const ratio = clampRatio((timeMs - viewport.startMs) / viewportDurationMs);
-    if (
-      ratio < HISTORY_TIMELINE_MIN_EDGE_TICK_GAP_RATIO
-      || 1 - ratio < HISTORY_TIMELINE_MIN_EDGE_TICK_GAP_RATIO
-    ) {
-      continue;
-    }
-    ticks.push({
-      label: formatAxisLabel(timeMs, dayEndMs),
-      ratio,
-    });
-  }
-
-  const endLabel = formatAxisLabel(viewport.endMs, dayEndMs);
-  const lastTick = ticks[ticks.length - 1];
-  if (lastTick?.label === endLabel) {
-    ticks[ticks.length - 1] = {
-      label: endLabel,
-      ratio: 1,
-    };
-  } else if (!lastTick || lastTick.ratio < 1) {
-    ticks.push({
-      label: endLabel,
-      ratio: 1,
-    });
-  }
-
-  return ticks;
-}
-
 function resolveVisibleEndMs(selectedDate: Date, nowMs: number, dayStartMs: number, dayEndMs: number) {
   const nowDate = new Date(nowMs);
   const selectedIsToday = selectedDate.toDateString() === nowDate.toDateString();
@@ -356,24 +314,67 @@ function resolveVisibleEndMs(selectedDate: Date, nowMs: number, dayStartMs: numb
   return Math.min(dayEndMs, Math.max(dayStartMs, nowMs));
 }
 
-function clipTitleSampleDetails(
+function resolveAppSourceColor(
   session: CompiledSession,
+  iconThemeColors: Record<string, string>,
+) {
+  const overrideColor = AppClassification.getUserOverride(session.appKey)?.color
+    ?? AppClassification.getUserOverride(session.exeName)?.color;
+  const mapped = AppClassification.mapApp(session.appKey, { appName: session.displayName });
+
+  return overrideColor
+    ?? iconThemeColors[session.appKey]
+    ?? iconThemeColors[session.exeName]
+    ?? mapped.color;
+}
+
+export function buildAppTimelineSources(
+  sessions: CompiledSession[],
+  iconThemeColors: Record<string, string>,
+): HistoryTimelineSourceItem[] {
+  return sessions.map((session) => {
+    const mapped = AppClassification.mapApp(session.appKey, { appName: session.displayName });
+    return {
+      id: String(session.id),
+      sourceKind: "app",
+      sourceKey: session.appKey,
+      sourceLabel: session.displayName,
+      sourceColor: resolveAppSourceColor(session, iconThemeColors),
+      iconKeys: Array.from(new Set([session.exeName, session.appKey].filter(Boolean))),
+      category: mapped.category,
+      categoryLabel: AppClassification.getCategoryLabel(mapped.category),
+      categoryColor: AppClassification.getCategoryColor(mapped.category),
+      fallbackTitle: session.displayTitle,
+      startTime: session.startTime,
+      endTime: Math.max(session.startTime, session.endTime ?? session.startTime),
+      titleSampleDetails: session.titleSampleDetails.map((sample) => ({ ...sample })),
+      isLive: session.isLive,
+    } satisfies HistoryTimelineSourceItem;
+  });
+}
+
+function clipTitleSampleDetails(
+  source: HistoryTimelineSourceItem,
   clippedStart: number,
   clippedEnd: number,
 ) {
-  const details = session.titleSampleDetails
+  const details = source.titleSampleDetails
     .map((sample) => ({
       title: sample.title,
       startTime: Math.max(sample.startTime, clippedStart),
       endTime: Math.min(sample.endTime, clippedEnd),
+      ...(sample.isUntitled ? { isUntitled: true } : {}),
     }))
-    .filter((sample) => sample.title.trim() && sample.endTime > sample.startTime);
+    .filter((sample) => (
+      (sample.isUntitled || sample.title.trim())
+      && sample.endTime > sample.startTime
+    ));
 
   if (details.length > 0) {
     return details;
   }
 
-  const fallbackTitle = session.displayTitle.trim();
+  const fallbackTitle = source.fallbackTitle.trim();
   if (!fallbackTitle) {
     return [];
   }
@@ -395,51 +396,58 @@ function clipSegmentTitleSampleDetails(
       title: sample.title,
       startTime: Math.max(sample.startTime, clippedStart),
       endTime: Math.min(sample.endTime, clippedEnd),
+      ...(sample.isUntitled ? { isUntitled: true } : {}),
     }))
-    .filter((sample) => sample.title.trim() && sample.endTime > sample.startTime);
+    .filter((sample) => (
+      (sample.isUntitled || sample.title.trim())
+      && sample.endTime > sample.startTime
+    ));
 }
 
 function buildSegment(
-  session: CompiledSession,
+  source: HistoryTimelineSourceItem,
   dayStartMs: number,
   dayEndMs: number,
   visibleEndMs: number,
   viewport: HistoryTimelineViewport,
 ): HistoryTimelineSegment | null {
-  const rawEndTime = Math.max(session.startTime, session.endTime ?? session.startTime);
-  const clippedStart = Math.max(session.startTime, dayStartMs, viewport.startMs);
-  const clippedEnd = Math.min(rawEndTime, dayEndMs, visibleEndMs, viewport.endMs);
+  const clippedStart = Math.max(source.startTime, dayStartMs, viewport.startMs);
+  const clippedEnd = Math.min(source.endTime, dayEndMs, visibleEndMs, viewport.endMs);
 
   if (clippedEnd <= clippedStart) {
     return null;
   }
 
-  const mapped = AppClassification.mapApp(session.appKey, { appName: session.displayName });
   const viewportDurationMs = Math.max(1, viewport.endMs - viewport.startMs);
   const startRatio = clampRatio((clippedStart - viewport.startMs) / viewportDurationMs);
   const endRatio = clampRatio((clippedEnd - viewport.startMs) / viewportDurationMs);
-  const titleSampleDetails = clipTitleSampleDetails(session, clippedStart, clippedEnd);
+  const titleSampleDetails = clipTitleSampleDetails(source, clippedStart, clippedEnd);
 
   return {
-    id: `${session.id}-${clippedStart}-${clippedEnd}`,
-    sourceSessionId: session.id,
-    timelineKey: `app:${session.appKey}`,
-    appKey: session.appKey,
-    exeName: session.exeName,
-    displayName: session.displayName,
-    displayTitle: session.displayTitle,
-    category: mapped.category,
-    categoryLabel: AppClassification.getCategoryLabel(mapped.category),
+    id: `${source.id}-${clippedStart}-${clippedEnd}`,
+    sourceId: source.id,
+    timelineKey: `${source.sourceKind}:${source.sourceKey}`,
+    sourceKind: source.sourceKind,
+    sourceKey: source.sourceKey,
+    sourceLabel: source.sourceLabel,
+    label: source.sourceLabel,
+    color: source.sourceColor,
+    iconKeys: source.iconKeys,
+    category: source.category,
+    categoryLabel: source.categoryLabel,
+    categoryColor: source.categoryColor,
     startTime: clippedStart,
     endTime: clippedEnd,
     duration: clippedEnd - clippedStart,
     startRatio,
     endRatio,
     widthRatio: Math.max(0, endRatio - startRatio),
-    titleSamples: titleSampleDetails.map((sample) => sample.title),
+    titleSamples: titleSampleDetails
+      .filter((sample) => !sample.isUntitled)
+      .map((sample) => sample.title),
     titleSampleDetails,
     alternateLabels: [],
-    isLive: session.isLive,
+    isLive: source.isLive,
   };
 }
 
@@ -448,12 +456,18 @@ function mergeTitleSampleDetails(
   next: HistoryTimelineSegment["titleSampleDetails"],
 ) {
   const sorted = [...current, ...next]
-    .filter((sample) => sample.title.trim() && sample.endTime > sample.startTime)
+    .filter((sample) => (
+      (sample.isUntitled || sample.title.trim())
+      && sample.endTime > sample.startTime
+    ))
     .sort((a, b) => a.startTime - b.startTime || a.endTime - b.endTime);
 
   return sorted.reduce<HistoryTimelineSegment["titleSampleDetails"]>((merged, sample) => {
     const previous = merged[merged.length - 1];
-    if (previous?.title === sample.title && sample.startTime <= previous.endTime) {
+    const sameTitle = previous
+      && Boolean(previous.isUntitled) === Boolean(sample.isUntitled)
+      && (sample.isUntitled || previous.title === sample.title);
+    if (sameTitle && sample.startTime <= previous.endTime) {
       previous.endTime = Math.max(previous.endTime, sample.endTime);
       return merged;
     }
@@ -481,13 +495,15 @@ function mergeAdjacentTimelineSegments(
 
   return {
     ...current,
-    id: `${current.id}_${next.sourceSessionId}-${next.endTime}`,
+    id: `${current.id}_${next.sourceId}-${next.endTime}`,
     endTime,
     duration: current.duration + next.duration,
     startRatio,
     endRatio,
     widthRatio: Math.max(0, endRatio - startRatio),
-    titleSamples: titleSampleDetails.map((sample) => sample.title),
+    titleSamples: titleSampleDetails
+      .filter((sample) => !sample.isUntitled)
+      .map((sample) => sample.title),
     titleSampleDetails,
     alternateLabels: mergeAlternateLabels(current.alternateLabels, next.alternateLabels),
     isLive: current.isLive || next.isLive,
@@ -495,20 +511,24 @@ function mergeAdjacentTimelineSegments(
 }
 
 function resolveTimelineKey(segment: HistoryTimelineSegment, mode: HistoryTimelineDisplayMode) {
-  return mode === "category" ? `category:${segment.category}` : `app:${segment.appKey}`;
+  return mode === "category"
+    ? `category:${segment.category}`
+    : `${segment.sourceKind}:${segment.sourceKey}`;
 }
 
 interface MinuteTimelineItem {
   key: string;
-  appKey: string;
-  exeName: string;
-  displayName: string;
-  displayTitle: string;
+  sourceKind: HistoryTimelineSourceKind;
+  sourceKey: string;
+  sourceLabel: string;
+  sourceColor: string;
+  iconKeys: string[];
   category: AppCategory;
   categoryLabel: string;
+  categoryColor: string;
   duration: number;
   firstSeenAt: number;
-  sourceSessionIds: number[];
+  sourceIds: string[];
   titleSampleDetails: HistoryTimelineSegment["titleSampleDetails"];
   isLive: boolean;
 }
@@ -573,9 +593,9 @@ function addSegmentOverlapToMinuteBucket(
   if (existing) {
     existing.duration += overlapEnd - overlapStart;
     existing.firstSeenAt = Math.min(existing.firstSeenAt, overlapStart);
-    existing.sourceSessionIds = Array.from(new Set([
-      ...existing.sourceSessionIds,
-      segment.sourceSessionId,
+    existing.sourceIds = Array.from(new Set([
+      ...existing.sourceIds,
+      segment.sourceId,
     ]));
     existing.titleSampleDetails = mergeTitleSampleDetails(
       existing.titleSampleDetails,
@@ -587,15 +607,17 @@ function addSegmentOverlapToMinuteBucket(
 
   bucket.items.set(key, {
     key,
-    appKey: segment.appKey,
-    exeName: segment.exeName,
-    displayName: segment.displayName,
-    displayTitle: segment.displayTitle,
+    sourceKind: segment.sourceKind,
+    sourceKey: segment.sourceKey,
+    sourceLabel: segment.sourceLabel,
+    sourceColor: segment.color,
+    iconKeys: segment.iconKeys,
     category: segment.category,
     categoryLabel: segment.categoryLabel,
+    categoryColor: segment.categoryColor,
     duration: overlapEnd - overlapStart,
     firstSeenAt: overlapStart,
-    sourceSessionIds: [segment.sourceSessionId],
+    sourceIds: [segment.sourceId],
     titleSampleDetails,
     isLive: segment.isLive,
   });
@@ -629,7 +651,11 @@ function buildMinuteBuckets(
 }
 
 function getItemLabel(item: MinuteTimelineItem, mode: HistoryTimelineDisplayMode) {
-  return mode === "category" ? item.categoryLabel : item.displayName;
+  return mode === "category" ? item.categoryLabel : item.sourceLabel;
+}
+
+function getItemColor(item: MinuteTimelineItem, mode: HistoryTimelineDisplayMode) {
+  return mode === "category" ? item.categoryColor : item.sourceColor;
 }
 
 function selectDominantMinuteItem(bucket: MinuteTimelineBucket) {
@@ -661,20 +687,25 @@ function buildMinuteSegment(
       || left.key.localeCompare(right.key)
     ))
     .map((item) => getItemLabel(item, mode));
-  const titleSamples = dominant.titleSampleDetails.map((sample) => sample.title);
+  const titleSamples = dominant.titleSampleDetails
+    .filter((sample) => !sample.isUntitled)
+    .map((sample) => sample.title);
   const startRatio = clampRatio((startTime - viewportStartMs) / viewportDurationMs);
   const endRatio = clampRatio((endTime - viewportStartMs) / viewportDurationMs);
 
   return {
     id: `${dominant.key}-${bucket.startTime}-${bucket.endTime}`,
-    sourceSessionId: dominant.sourceSessionIds[0] ?? 0,
+    sourceId: dominant.sourceIds[0] ?? dominant.key,
     timelineKey: dominant.key,
-    appKey: dominant.appKey,
-    exeName: dominant.exeName,
-    displayName: dominant.displayName,
-    displayTitle: dominant.displayTitle,
+    sourceKind: dominant.sourceKind,
+    sourceKey: dominant.sourceKey,
+    sourceLabel: dominant.sourceLabel,
+    label: getItemLabel(dominant, mode),
+    color: getItemColor(dominant, mode),
+    iconKeys: mode === "category" ? [] : dominant.iconKeys,
     category: dominant.category,
     categoryLabel: dominant.categoryLabel,
+    categoryColor: dominant.categoryColor,
     startTime,
     endTime,
     duration: dominant.duration,
@@ -744,7 +775,7 @@ function buildLegendItems(
   const groups = new Map<string, HistoryTimelineLegendItem>();
 
   for (const segment of segments) {
-    const key = mode === "category" ? segment.category : segment.appKey;
+    const key = mode === "category" ? segment.category : segment.sourceKey;
     const existing = groups.get(key);
 
     if (existing) {
@@ -754,11 +785,11 @@ function buildLegendItems(
 
     groups.set(key, {
       key,
-      label: mode === "category" ? segment.categoryLabel : segment.displayName,
+      label: segment.label,
       duration: segment.duration,
       percentage: 0,
+      color: segment.color,
       category: segment.category,
-      exeName: segment.exeName,
     });
   }
 
@@ -777,7 +808,7 @@ function buildTimelineLanes(
   const lanes = new Map<string, HistoryTimelineLane>();
 
   for (const segment of segments) {
-    const key = mode === "category" ? segment.category : segment.appKey;
+    const key = mode === "category" ? segment.category : segment.sourceKey;
     const existing = lanes.get(key);
     if (existing) {
       existing.duration += segment.duration;
@@ -787,10 +818,10 @@ function buildTimelineLanes(
 
     lanes.set(key, {
       key,
-      label: mode === "category" ? segment.categoryLabel : segment.displayName,
+      label: segment.label,
       duration: segment.duration,
-      appKey: segment.appKey,
-      exeName: segment.exeName,
+      color: segment.color,
+      iconKeys: segment.iconKeys,
       category: segment.category,
       segments: [segment],
     });
@@ -803,14 +834,14 @@ function buildTimelineLanes(
   ));
 }
 
-export function buildHistoryTimelineViewModel({
-  sessions,
+export function buildHistoryTimelineViewModelFromSources({
+  sources,
   selectedDate,
   nowMs,
   mode,
   mergeThresholdSecs = 0,
   viewport: requestedViewport,
-}: BuildHistoryTimelineViewModelParams): HistoryTimelineViewModel {
+}: BuildHistoryTimelineViewModelFromSourcesParams): HistoryTimelineViewModel {
   const { dayStartMs, dayEndMs } = getFullDayRange(selectedDate);
   const viewport = requestedViewport ?? normalizeHistoryTimelineViewport({
     selectedDate,
@@ -819,8 +850,8 @@ export function buildHistoryTimelineViewModel({
   });
   const visibleEndMs = resolveVisibleEndMs(selectedDate, nowMs, dayStartMs, dayEndMs);
   const mergeThresholdMs = Math.max(0, mergeThresholdSecs) * 1000;
-  const rawSegments = sessions
-    .map((session) => buildSegment(session, dayStartMs, dayEndMs, visibleEndMs, viewport))
+  const rawSegments = sources
+    .map((source) => buildSegment(source, dayStartMs, dayEndMs, visibleEndMs, viewport))
     .filter((segment): segment is HistoryTimelineSegment => Boolean(segment))
     .sort((a, b) => a.startTime - b.startTime || a.endTime - b.endTime);
   const segments = buildDominantMinuteSegments(
@@ -837,7 +868,7 @@ export function buildHistoryTimelineViewModel({
     segments,
     lanes: buildTimelineLanes(segments, mode),
     legendItems: buildLegendItems(segments, mode),
-    axisTicks: buildAxisTicks(viewport, dayStartMs, dayEndMs),
+    axisTicks: buildTimelineAxisTicks(viewport, dayStartMs, dayEndMs),
     dayStartMs,
     dayEndMs,
     viewportStartMs: viewport.startMs,
@@ -847,4 +878,23 @@ export function buildHistoryTimelineViewModel({
     visibleEndMs,
     visibleEndRatio: clampRatio((visibleEndMs - dayStartMs) / DAY_MS),
   };
+}
+
+export function buildHistoryTimelineViewModel({
+  sessions,
+  selectedDate,
+  nowMs,
+  mode,
+  iconThemeColors = {},
+  mergeThresholdSecs = 0,
+  viewport,
+}: BuildHistoryTimelineViewModelParams): HistoryTimelineViewModel {
+  return buildHistoryTimelineViewModelFromSources({
+    sources: buildAppTimelineSources(sessions, iconThemeColors),
+    selectedDate,
+    nowMs,
+    mode,
+    mergeThresholdSecs,
+    viewport,
+  });
 }

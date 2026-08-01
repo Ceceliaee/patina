@@ -4,6 +4,16 @@ import type {
   WebActivitySegment,
   WebDomainOverride,
 } from "../../../shared/types/webActivity.ts";
+import {
+  getWebActivityTimelineItemEndTime,
+  mergeWebActivityTimelineItemsByDomain,
+} from "../../../shared/lib/webActivityTimelineCompiler.ts";
+import {
+  buildHistoryTimelineViewModelFromSources,
+  type HistoryTimelineSourceItem,
+  type HistoryTimelineViewport,
+  type HistoryTimelineViewModel,
+} from "./historyTimelineViewModel.ts";
 
 export interface WebDomainDistributionItem {
   key: string;
@@ -127,8 +137,83 @@ function resolveWebFaviconUrl(
   );
 }
 
-function getWebTimelineItemEndTime(item: WebTimelineItem) {
-  return item.endTime ?? item.startTime + item.duration;
+export function buildHistoryWebTimelineViewModel({
+  segments,
+  selectedDate,
+  nowMs,
+  overrides = {},
+  iconThemeColors = {},
+  mergeThresholdSecs = 0,
+  viewport,
+}: {
+  segments: WebActivitySegment[];
+  selectedDate: Date;
+  nowMs: number;
+  overrides?: Record<string, WebDomainOverride>;
+  iconThemeColors?: Record<string, string>;
+  mergeThresholdSecs?: number;
+  viewport?: HistoryTimelineViewport;
+}): HistoryTimelineViewModel {
+  const sources = buildHistoryWebTimelineSources({
+    segments,
+    nowMs,
+    overrides,
+    iconThemeColors,
+  });
+
+  return buildHistoryTimelineViewModelFromSources({
+    sources,
+    selectedDate,
+    nowMs,
+    mode: "web",
+    mergeThresholdSecs,
+    viewport,
+  });
+}
+
+export function buildHistoryWebTimelineSources({
+  segments,
+  nowMs,
+  overrides = {},
+  iconThemeColors = {},
+}: {
+  segments: WebActivitySegment[];
+  nowMs: number;
+  overrides?: Record<string, WebDomainOverride>;
+  iconThemeColors?: Record<string, string>;
+}): HistoryTimelineSourceItem[] {
+  return filterWebActivitySegmentsForStatistics(segments, overrides)
+    .map<HistoryTimelineSourceItem>((segment) => {
+      const category = resolveWebCategory(segment.normalizedDomain, overrides);
+      const endTime = Math.max(segment.startTime, segment.endTime ?? nowMs);
+      const title = segment.title?.trim() ?? "";
+      return {
+        id: String(segment.id),
+        sourceKind: "web",
+        sourceKey: segment.normalizedDomain,
+        sourceLabel: resolveWebLabel(segment, overrides),
+        sourceColor: resolveWebColor(
+          segment.normalizedDomain,
+          category,
+          overrides,
+          iconThemeColors,
+        ),
+        iconKeys: [segment.normalizedDomain],
+        category,
+        categoryLabel: AppClassification.getCategoryLabel(category),
+        categoryColor: AppClassification.getCategoryColor(category),
+        fallbackTitle: title,
+        startTime: segment.startTime,
+        endTime,
+        titleSampleDetails: [{
+          title,
+          startTime: segment.startTime,
+          endTime,
+          ...(title ? {} : { isUntitled: true }),
+        }],
+        isLive: segment.endTime === null,
+      };
+    });
 }
 
 function getWebTimelineTitleSample(
@@ -197,8 +282,8 @@ function getWebTitleSamples(titleSampleDetails: WebTimelineItem["titleSampleDeta
 }
 
 function mergeWebTimelineItems(current: WebTimelineItem, next: WebTimelineItem): WebTimelineItem {
-  const currentEnd = getWebTimelineItemEndTime(current);
-  const nextEnd = getWebTimelineItemEndTime(next);
+  const currentEnd = getWebActivityTimelineItemEndTime(current);
+  const nextEnd = getWebActivityTimelineItemEndTime(next);
   const titleSampleDetails = mergeWebTitleSampleDetails(
     current.titleSampleDetails,
     next.titleSampleDetails,
@@ -215,35 +300,6 @@ function mergeWebTimelineItems(current: WebTimelineItem, next: WebTimelineItem):
     titleSamples: getWebTitleSamples(titleSampleDetails),
     titleSampleDetails,
   };
-}
-
-function mergeWebTimelineItemsByDomain(
-  items: WebTimelineItem[],
-  mergeThresholdSecs: number,
-) {
-  if (items.length === 0) return [];
-
-  const mergeThresholdMs = Math.max(0, mergeThresholdSecs) * 1000;
-  const ordered = items.slice().sort((left, right) => left.startTime - right.startTime);
-  const merged: WebTimelineItem[] = [];
-
-  for (const item of ordered) {
-    const current = merged[merged.length - 1];
-    if (!current) {
-      merged.push({ ...item });
-      continue;
-    }
-
-    const gapFromCurrent = item.startTime - getWebTimelineItemEndTime(current);
-    if (item.normalizedDomain === current.normalizedDomain && gapFromCurrent >= 0 && gapFromCurrent <= mergeThresholdMs) {
-      merged[merged.length - 1] = mergeWebTimelineItems(current, item);
-      continue;
-    }
-
-    merged.push({ ...item });
-  }
-
-  return merged;
 }
 
 function filterWebTimelineItemsForDisplay(
@@ -346,7 +402,11 @@ export function buildWebTimelineItems(
     .filter((item): item is WebTimelineItem => Boolean(item));
 
   return filterWebTimelineItemsForDisplay(
-    mergeWebTimelineItemsByDomain(items, mergeThresholdSecs),
+    mergeWebActivityTimelineItemsByDomain(
+      items,
+      mergeThresholdSecs,
+      mergeWebTimelineItems,
+    ),
     minSessionSecs,
   )
     .sort((left, right) => right.startTime - left.startTime);

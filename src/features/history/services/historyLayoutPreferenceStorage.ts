@@ -23,7 +23,25 @@ function isDayDistributionMode(value: string | null): value is DayDistributionMo
 }
 
 function isHistoryTimelineMode(value: string | null): value is HistoryTimelineDisplayMode {
-  return value === "app" || value === "category";
+  return value === "app" || value === "category" || value === "web";
+}
+
+export function resolveEffectiveHistoryTimelineMode(
+  mode: HistoryTimelineDisplayMode,
+  webActivityEnabled: boolean,
+): HistoryTimelineDisplayMode {
+  return !webActivityEnabled && mode === "web" ? "app" : mode;
+}
+
+export function getNextHistoryTimelineMode(
+  mode: HistoryTimelineDisplayMode,
+  webActivityEnabled: boolean,
+): HistoryTimelineDisplayMode {
+  if (!webActivityEnabled && mode === "web") return "app";
+  const effectiveMode = resolveEffectiveHistoryTimelineMode(mode, webActivityEnabled);
+  if (effectiveMode === "app") return "category";
+  if (effectiveMode === "category") return webActivityEnabled ? "web" : "app";
+  return "app";
 }
 
 function parseHistoryTimelineZoomHours(value: string | null): number | null {

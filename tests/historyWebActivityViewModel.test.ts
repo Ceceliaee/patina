@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import {
+  buildHistoryWebTimelineViewModel,
   buildWebDomainDistribution,
   buildWebTimelineItems,
   filterWebActivitySegmentsForStatistics,
 } from "../src/features/history/services/historyWebActivityViewModel.ts";
+import { normalizeHistoryTimelineViewport } from "../src/features/history/services/historyTimelineViewModel.ts";
 import type { WebActivitySegment } from "../src/shared/types/webActivity.ts";
 
 function makeSegment(overrides: Partial<WebActivitySegment>): WebActivitySegment {
@@ -78,6 +80,191 @@ runTest("web domain distribution clips segments and applies domain overrides", (
   assert.equal("title" in items[0], false);
   assert.equal(items[1].key, "example.com");
   assert.equal(items[1].duration, 2_000);
+});
+
+runTest("web graphical timeline groups real activity by domain with resolved identity", () => {
+  const selectedDate = new Date(2026, 0, 2);
+  const dayStart = new Date(2026, 0, 2, 0, 0, 0, 0).getTime();
+  const viewModel = buildHistoryWebTimelineViewModel({
+    segments: [
+      makeSegment({
+        id: 1,
+        domain: "github.com",
+        normalizedDomain: "github.com",
+        title: "Patina",
+        startTime: dayStart + 9 * 60 * 60_000,
+        endTime: dayStart + 9 * 60 * 60_000 + 2 * 60_000,
+      }),
+      makeSegment({
+        id: 2,
+        domain: "github.com",
+        normalizedDomain: "github.com",
+        title: "Pull request",
+        startTime: dayStart + 9 * 60 * 60_000 + 2 * 60_000,
+        endTime: dayStart + 9 * 60 * 60_000 + 4 * 60_000,
+      }),
+    ],
+    selectedDate,
+    nowMs: dayStart + 24 * 60 * 60_000,
+    overrides: {
+      "github.com": {
+        displayName: "GitHub",
+        color: "#123456",
+        category: "development",
+      },
+    },
+    mergeThresholdSecs: 0,
+  });
+
+  assert.equal(viewModel.segments.length, 1);
+  assert.equal(viewModel.segments[0]?.sourceKind, "web");
+  assert.equal(viewModel.segments[0]?.sourceKey, "github.com");
+  assert.equal(viewModel.segments[0]?.label, "GitHub");
+  assert.equal(viewModel.segments[0]?.color, "#123456");
+  assert.deepEqual(viewModel.segments[0]?.iconKeys, ["github.com"]);
+  assert.deepEqual(viewModel.legendItems.map((item) => item.label), ["GitHub"]);
+  assert.equal(viewModel.legendItems[0]?.color, "#123456");
+  assert.deepEqual(viewModel.lanes.map((lane) => lane.label), ["GitHub"]);
+  assert.deepEqual(viewModel.lanes[0]?.iconKeys, ["github.com"]);
+});
+
+runTest("web graphical timeline resolves dominant-minute ties deterministically", () => {
+  const selectedDate = new Date(2026, 0, 2);
+  const dayStart = new Date(2026, 0, 2, 0, 0, 0, 0).getTime();
+  const minute = 60_000;
+  const at = (minuteOffset: number, secondOffset: number) => (
+    dayStart + (9 * 60 + minuteOffset) * minute + secondOffset * 1000
+  );
+  const segments = [
+    makeSegment({
+      id: 1,
+      domain: "long.example",
+      normalizedDomain: "long.example",
+      startTime: at(0, 0),
+      endTime: at(0, 40),
+    }),
+    makeSegment({
+      id: 2,
+      domain: "short.example",
+      normalizedDomain: "short.example",
+      startTime: at(0, 40),
+      endTime: at(1, 0),
+    }),
+    makeSegment({
+      id: 3,
+      domain: "early.example",
+      normalizedDomain: "early.example",
+      startTime: at(2, 0),
+      endTime: at(2, 30),
+    }),
+    makeSegment({
+      id: 4,
+      domain: "a-late.example",
+      normalizedDomain: "a-late.example",
+      startTime: at(2, 30),
+      endTime: at(3, 0),
+    }),
+    makeSegment({
+      id: 5,
+      domain: "beta.example",
+      normalizedDomain: "beta.example",
+      startTime: at(4, 0),
+      endTime: at(4, 30),
+    }),
+    makeSegment({
+      id: 6,
+      domain: "alpha.example",
+      normalizedDomain: "alpha.example",
+      startTime: at(4, 0),
+      endTime: at(4, 30),
+    }),
+  ];
+
+  const viewModel = buildHistoryWebTimelineViewModel({
+    segments,
+    selectedDate,
+    nowMs: dayStart + 24 * 60 * minute,
+  });
+
+  assert.deepEqual(
+    viewModel.segments.map((segment) => segment.sourceKey),
+    ["long.example", "early.example", "alpha.example"],
+  );
+  assert.deepEqual(viewModel.segments.map((segment) => segment.alternateLabels), [
+    ["short.example"],
+    ["a-late.example"],
+    ["beta.example"],
+  ]);
+});
+
+runTest("web graphical timeline filters excluded domains and clips live activity to now", () => {
+  const selectedDate = new Date(2026, 0, 2);
+  const dayStart = new Date(2026, 0, 2, 0, 0, 0, 0).getTime();
+  const nowMs = dayStart + 10 * 60 * 60_000 + 3 * 60_000;
+  const viewModel = buildHistoryWebTimelineViewModel({
+    segments: [
+      makeSegment({
+        id: 1,
+        normalizedDomain: "excluded.example",
+        domain: "excluded.example",
+        startTime: dayStart + 9 * 60 * 60_000,
+        endTime: dayStart + 9 * 60 * 60_000 + 5 * 60_000,
+      }),
+      makeSegment({
+        id: 2,
+        normalizedDomain: "live.example",
+        domain: "live.example",
+        startTime: dayStart + 10 * 60 * 60_000,
+        endTime: null,
+        duration: null,
+      }),
+    ],
+    selectedDate,
+    nowMs,
+    overrides: {
+      "excluded.example": { enabled: false },
+    },
+  });
+
+  assert.deepEqual(viewModel.legendItems.map((item) => item.key), ["live.example"]);
+  assert.equal(viewModel.segments[0]?.endTime, nowMs);
+  assert.equal(viewModel.segments[0]?.isLive, true);
+});
+
+runTest("web graphical timeline keeps the zoom viewport and visible lane duration", () => {
+  const selectedDate = new Date(2026, 0, 2);
+  const dayStart = new Date(2026, 0, 2, 0, 0, 0, 0).getTime();
+  const viewport = normalizeHistoryTimelineViewport({
+    selectedDate,
+    requestedStartMs: dayStart + 12 * 60 * 60_000,
+    requestedDurationMs: 4 * 60 * 60_000,
+  });
+  const viewModel = buildHistoryWebTimelineViewModel({
+    segments: [
+      makeSegment({
+        id: 1,
+        normalizedDomain: "before.example",
+        domain: "before.example",
+        startTime: dayStart + 10 * 60 * 60_000,
+        endTime: dayStart + 11 * 60 * 60_000,
+      }),
+      makeSegment({
+        id: 2,
+        normalizedDomain: "inside.example",
+        domain: "inside.example",
+        startTime: dayStart + 11 * 60 * 60_000 + 59 * 60_000,
+        endTime: dayStart + 12 * 60 * 60_000 + 2 * 60_000,
+      }),
+    ],
+    selectedDate,
+    nowMs: dayStart + 24 * 60 * 60_000,
+    viewport,
+  });
+
+  assert.equal(viewModel.viewportStartMs, viewport.startMs);
+  assert.equal(viewModel.viewportEndMs, viewport.endMs);
+  assert.deepEqual(viewModel.legendItems.map((item) => item.key), ["inside.example"]);
+  assert.equal(viewModel.lanes[0]?.duration, 2 * 60_000);
 });
 
 runTest("excluded web domains are removed from the effective segment set", () => {
