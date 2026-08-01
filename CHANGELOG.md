@@ -26,6 +26,26 @@ App note en: TBD.
 
 ### Internal
 
+## [1.9.1] - 2026-08-01
+
+Release: 修复从旧版本升级到 v1.9.0 后，旧 Data 快照可能导致主界面白屏的问题。
+App note: 修复升级到 v1.9.0 后偶发的主界面白屏，并重建无效的 Data 快照缓存。
+App note en: Fixes a white screen after upgrading to v1.9.0 by rebuilding invalid Data snapshot caches.
+
+### Added
+
+### Changed
+
+### Fixed
+
+- 修复从旧版本升级到 v1.9.0 后，v1.9.0 读取缺少当前必需字段的 Data 首屏快照时触发前端异常并清空界面的问题；应用现在会在快照进入页面前严格校验其结构，并删除、重建无效缓存。
+
+### Removed
+
+### Internal
+
+- 新增旧 Data 首屏快照被拒绝和清理的回归覆盖，保护安装版升级路径。
+
 ## [1.9.0] - 2026-08-01
 
 Release: 新增应用与网站详情、网页趋势和网页时间轴，并提升长历史读取、窗口首帧与挂件多屏体验。
