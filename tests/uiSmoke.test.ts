@@ -362,6 +362,9 @@ await runTest("Data regular view avoids visible loading and skeleton branches", 
 
 await runTest("History regular view avoids visible loading copy", () => {
   const history = readUtf8("src/features/history/components/History.tsx");
+  const historyDetailEntry = readUtf8(
+    "src/features/history/hooks/useHistoryDestinationDetailEntry.tsx",
+  );
   const appCss = readUtf8("src/App.css");
 
   assert.doesNotMatch(history, /UI_TEXT\.history\.loading/);
@@ -369,7 +372,7 @@ await runTest("History regular view avoids visible loading copy", () => {
   assert.doesNotMatch(history, /aria-busy/);
   assert.match(history, /HistoryHorizontalTimeline/);
   assert.match(history, /visibleHistoryTimelineView/);
-  assert.match(history, /showEmptyMessage=\{!showQuietPlaceholder\}/);
+  assert.match(history, /showEmptyMessage=\{!showTimelineQuietPlaceholder\}/);
   assert.doesNotMatch(history, /!\s*loading\s*&&\s*\(\s*<div className="qp-panel p-5 history-overview-timeline-card"/s);
   assert.match(appCss, /styles\/features\/history\.css/);
 });
@@ -545,6 +548,8 @@ await runTest("History separates timeline list dialog from zoom dialog", () => {
   assert.match(historyTimelineZoomDialog, /sourceIcons=\{sourceIcons\}/);
   assert.match(historyTimelineLaneList, /viewModel\.lanes\.map/);
   assert.match(historyTimelineLaneList, /lane\.iconKeys/);
+  assert.match(historyTimelineLaneList, /className="history-timeline-lane-icon" alt=""/);
+  assert.match(historyTimelineLaneList, /className="history-timeline-lane-dot"/);
   assert.match(historyTimelineLaneList, /history-timeline-lanes-scroll custom-scrollbar/);
   assert.match(historyTimelineLaneList, /variant="lane"/);
   assert.match(historyTimelineLaneList, /showAxis=\{false\}/);
@@ -984,7 +989,9 @@ await runTest("web activity views are gated by saved web sync setting", () => {
   assert.match(historyBranch, /webActivityEnabled=\{appSettings\.webActivityEnabled\}/);
   assert.match(mappingBranch, /webActivityEnabled=\{appSettings\.webActivityEnabled\}/);
   assert.match(history, /webActivityEnabled = false/);
-  assert.match(history, /resolveEffectiveDayDistributionMode\(\s*dayDistributionMode,\s*webActivityEnabled,\s*\)/);
+  assert.match(history, /function buildHistoryDayDistributionView/);
+  assert.match(history, /resolveEffectiveDayDistributionMode\(requestedMode, webActivityEnabled\)/);
+  assert.match(history, /requestedMode: dayDistributionMode/);
   assert.doesNotMatch(history, /const effectiveDayDistributionMode = webActivityEnabled \? dayDistributionMode : "app"/);
   assert.match(history, /const effectiveTimelineDialogMode = webActivityEnabled \? timelineDialogMode : "app"/);
   assert.match(history, /webActivityEnabled && \(/);
@@ -1119,23 +1126,26 @@ await runTest("Data keeps web analysis beside a unified activity overview", () =
   );
 });
 
-await runTest("Data owns one private day-detail dialog without duplicating trends or heatmaps", () => {
+await runTest("destination owns one shared detail dialog without duplicating trends or heatmaps", () => {
   const data = readUtf8("src/features/data/components/Data.tsx");
   const destinationPanel = readUtf8("src/features/data/components/DataAppTrendPanel.tsx");
-  const dialog = readUtf8("src/features/data/components/DataDestinationDetailDialog.tsx");
-  const detailHook = readUtf8("src/features/data/hooks/useDataDestinationDetail.ts");
-  const detailPresentationHook = readUtf8(
-    "src/features/data/hooks/useDataDestinationDetailPresentation.ts",
+  const dialog = readUtf8("src/features/destination/components/DestinationDetailDialog.tsx");
+  const dialogEntry = readUtf8(
+    "src/features/destination/components/DestinationDetailDialogEntry.tsx",
   );
-  const detailReadModel = readUtf8("src/features/data/services/dataDestinationDetailReadModel.ts");
+  const detailHook = readUtf8("src/features/destination/hooks/useDestinationDetail.ts");
+  const dataDetailEntry = readUtf8(
+    "src/features/data/hooks/useDataDetailEntry.ts",
+  );
+  const detailReadModel = readUtf8("src/features/destination/services/destinationDetailReadModel.ts");
   const webTimelineCompiler = readUtf8(
     "src/shared/lib/webActivityTimelineCompiler.ts",
   );
   const detailTimelineViewport = readUtf8(
-    "src/features/data/services/dataDestinationDetailTimelineViewport.ts",
+    "src/features/destination/services/destinationDetailTimelineViewport.ts",
   );
   const detailTimelinePreference = readUtf8(
-    "src/features/data/services/dataDestinationDetailTimelinePreferenceStorage.ts",
+    "src/features/destination/services/destinationDetailPreferenceStorage.ts",
   );
   assert.match(
     detailTimelineViewport,
@@ -1145,7 +1155,7 @@ await runTest("Data owns one private day-detail dialog without duplicating trend
     detailTimelineViewport,
     /snapTimelineFocusToNearestInterval/,
   );
-  const timeline = readUtf8("src/features/data/components/DataDestinationDetailTimeline.tsx");
+  const timeline = readUtf8("src/features/destination/components/DestinationDetailTimeline.tsx");
   const historyTimeline = readUtf8(
     "src/features/history/components/HistoryHorizontalTimeline.tsx",
   );
@@ -1163,44 +1173,83 @@ await runTest("Data owns one private day-detail dialog without duplicating trend
   const anchoredPopoverStyles = readUtf8(
     "src/styles/components/quiet-anchored-popover.css",
   );
-  const records = readUtf8("src/features/data/components/DataDestinationDetailRecords.tsx");
-  const dataStyles = readUtf8("src/styles/features/data.css");
+  const records = readUtf8("src/features/destination/components/DestinationDetailRecords.tsx");
+  const destinationStyles = readUtf8("src/styles/features/destination.css");
   const quietProStyles = readUtf8("src/styles/quiet-pro.css");
   const historyTimelineLists = readUtf8(
     "src/features/history/components/HistoryTimelineLists.tsx",
   );
+  const dashboard = readUtf8(
+    "src/features/dashboard/components/Dashboard.tsx",
+  );
+  const history = readUtf8("src/features/history/components/History.tsx");
+  const historyDetailEntry = readUtf8(
+    "src/features/history/hooks/useHistoryDestinationDetailEntry.tsx",
+  );
+  const historyDayDistribution = readUtf8(
+    "src/features/history/components/HistoryDayDistributionPanel.tsx",
+  );
+  const historyTimelineZoomDialog = readUtf8(
+    "src/features/history/components/HistoryTimelineZoomDialog.tsx",
+  );
 
-  assert.match(data, /const dataDestinationDetailDialogModule = import\("\.\/DataDestinationDetailDialog\.tsx"\)/);
-  assert.match(data, /DataDestinationDetailDialog = module\.default/);
-  assert.match(data, /dataDestinationDetailDialogModule\.then\(\(\) => \{\s*openDestinationDetail\(option\)/);
-  assert.doesNotMatch(data, /DataDestinationDetailDialogFallback|<Suspense|\blazy\(/);
-  assert.match(data, /<DataDestinationDetailDialog/);
+  assert.match(data, /import DestinationDetailDialogEntry from "\.\.\/\.\.\/destination\/components\/DestinationDetailDialogEntry\.tsx"/);
+  assert.doesNotMatch(data, /DestinationDetailDialogFallback|<Suspense|\blazy\(/);
+  assert.match(data, /<DestinationDetailDialogEntry/);
+  assert.match(dialogEntry, /import\("\.\/DestinationDetailDialog\.tsx"\)/);
+  assert.match(dialogEntry, /lazy\(loadDestinationDetailDialog\)/);
+  assert.match(dialogEntry, /<Suspense fallback=\{null\}>/);
   assert.match(data, /setSelectedAppKeys\(selectionSnapshot\.appKeys\)/);
   assert.match(data, /setSelectedWebKeys\(selectionSnapshot\.webKeys\)/);
-  assert.match(data, /useDataDestinationDetailPresentation/);
-  assert.match(detailPresentationHook, /createDataDestinationDetailSelectionSnapshot/);
-  assert.match(detailPresentationHook, /selectDataDestinationDetailSnapshotTarget/);
-  assert.match(detailPresentationHook, /buildDataDestinationDetailTarget/);
+  assert.match(data, /useDataDetailEntry/);
+  assert.match(dataDetailEntry, /useDestinationDetailLauncher/);
+  assert.match(dataDetailEntry, /createDestinationDetailTarget/);
+  assert.match(dataDetailEntry, /const createSnapshot = useCallback/);
   assert.match(
-    detailPresentationHook,
+    dataDetailEntry,
     /listScrollTop: listRef\.current\?\.scrollTop \?\? 0/,
   );
-  assert.match(detailPresentationHook, /restoreSelectionSnapshot\(selectionSnapshot\)/);
+  assert.match(dataDetailEntry, /restoreSelectionSnapshot\(snapshot\)/);
+  assert.match(dataDetailEntry, /launcher\.openPrepared\(\)/);
   assert.match(destinationPanel, /onDoubleClick=\{\(event\) => \{/);
-  assert.match(destinationPanel, /onOptionIntentStart\(option, true\);/);
+  assert.match(destinationPanel, /onOptionIntentStart\(option, event\.currentTarget\);/);
   assert.match(destinationPanel, /onOptionOpenDetails\(option\)/);
   assert.match(destinationPanel, /event\.key === "Enter"/);
   assert.match(destinationPanel, /event\.key !== "Enter" && event\.key !== " "/);
   assert.match(destinationPanel, /<button[\s\S]*className="data-app-selected-icon"/);
   assert.doesNotMatch(destinationPanel, /className="data-app-selected-icon"[\s\S]{0,120}aria-hidden/);
 
+  assert.match(dashboard, /useDestinationDetailLauncher\(\)/);
+  assert.match(dashboard, /className="dashboard-top-app-detail-trigger/);
+  assert.match(dashboard, /onDoubleClick=\{\(event\) => openDetail\(event\.currentTarget\)\}/);
+  assert.match(dashboard, /event\.key !== "Enter"/);
+  assert.doesNotMatch(
+    dashboard.match(/<button[\s\S]*?dashboard-top-app-detail-trigger[\s\S]*?<\/button>/)?.[0] ?? "",
+    /onClick=/,
+  );
+  assert.match(dashboard, /initialDateKey: formatLocalDateKey\(new Date\(\)\)/);
+  assert.match(dashboard, /<DestinationDetailDialogEntry/);
+
+  assert.match(history, /useHistoryDestinationDetailEntry\(/);
+  assert.match(historyDetailEntry, /useDestinationDetailLauncher\(\)/);
+  assert.match(historyDetailEntry, /<DestinationDetailDialogEntry/);
+  assert.match(history, /initialDateKey: formatLocalDateKey\(selectedDate\)/);
+  assert.match(historyDayDistribution, /createHistoryAppDetailTarget/);
+  assert.match(historyDayDistribution, /createHistoryWebDetailTarget/);
+  assert.match(historyDayDistribution, /className="history-day-distribution-detail-trigger"/);
+  assert.match(historyDayDistribution, /onDoubleClick=\{\(event\) => \{/);
+  assert.match(historyDayDistribution, /event\.key !== "Enter"/);
+  assert.doesNotMatch(historyTimelineLists, /DestinationDetail|destination-detail/);
+  assert.doesNotMatch(historyTimeline, /DestinationDetail|destination-detail/);
+  assert.doesNotMatch(historyTimelineZoomDialog, /DestinationDetail|destination-detail/);
+
   assert.match(dialog, /<QuietDialog/);
   assert.match(dialog, /<QuietDatePicker/);
-  assert.match(dialog, /<DataDestinationDetailTimeline/);
-  assert.match(dialog, /<DataDestinationDetailRecords/);
+  assert.match(dialog, /<DestinationDetailTimeline/);
+  assert.match(dialog, /<DestinationDetailRecords/);
   assert.doesNotMatch(
     dialog,
-    /NativeTrendChart|DataTrendRangeControl|data-destination-detail-summary/,
+    /NativeTrendChart|DataTrendRangeControl|destination-detail-summary/,
   );
   assert.doesNotMatch(
     dialog,
@@ -1212,8 +1261,9 @@ await runTest("Data owns one private day-detail dialog without duplicating trend
     detailHook,
     /loadDataWebHeatmap|buildDataWebHeatmap|loadAppTrendSnapshot|loadDataWebActivitySnapshot/,
   );
-  assert.doesNotMatch(detailReadModel, /DataDestinationDetailTrendViewModel/);
-  assert.match(detailReadModel, /resolveStatisticalDataAppKey/);
+  assert.doesNotMatch(detailReadModel, /DestinationDetailTrendViewModel/);
+  assert.match(detailReadModel, /AppClassification\.resolveCanonicalExecutable/);
+  assert.doesNotMatch(detailReadModel, /features\/data\//);
   assert.match(detailReadModel, /getHistoryByDate/);
   assert.match(detailReadModel, /getWebActivitySegmentsInRange/);
   assert.match(
@@ -1236,29 +1286,37 @@ await runTest("Data owns one private day-detail dialog without duplicating trend
   assert.match(quietTimeline, /joinClasses\("qp-timeline-track"/);
   assert.match(quietTimeline, /joinClasses\("qp-timeline-axis"/);
   assert.match(quietTimeline, /className=\{joinClasses\("qp-timeline-segment"/);
-  assert.match(timeline, /tooltipClassName="data-destination-detail-timeline-tooltip"/);
+  assert.match(timeline, /tooltipClassName="destination-detail-timeline-tooltip"/);
   assert.doesNotMatch(timeline, /title=\{ariaLabel\}/);
   assert.match(timeline, /onPointerMove=\{handlePointerMove\}/);
-  assert.match(timeline, /getDataDestinationDetailTimelineWheelZoomHours/);
-  assert.match(timeline, /zoomDataDestinationDetailTimelineViewportAroundAnchor/);
+  assert.match(timeline, /getDestinationDetailTimelineWheelZoomHours/);
+  assert.match(timeline, /zoomDestinationDetailTimelineViewportAroundAnchor/);
   assert.match(
     timeline,
     /addEventListener\("wheel", handleWheel, \{ passive: false \}\)/,
   );
   assert.doesNotMatch(timeline, /onWheel=\{handleWheel\}/);
-  assert.match(timeline, /data-data-detail-timeline-start-ms/);
+  assert.match(timeline, /data-destination-detail-timeline-start-ms/);
   assert.match(dialog, /minimumDurationMs=\{minSessionMinutes \* 60_000\}/);
   assert.doesNotMatch(data, /\bminSessionSecs\b|onMinSessionSecsChange/);
   assert.doesNotMatch(dialog, /onMinSessionSecsChange/);
   assert.match(dialog, /const \[minSessionSecs, setMinSessionSecs\] = useState\(readDetailMinSecs\)/);
   assert.match(dialog, /useState\(readDetailMinSecs\)/);
   assert.match(dialog, /saveDetailMinSecs\(nextSecs\)/);
-  assert.match(detailTimelineViewport, /DEFAULT_DATA_DESTINATION_DETAIL_ZOOM_HOURS = 24/);
-  assert.match(dialog, /useState\(\s*readDataDestinationDetailTimelineZoomHours,\s*\)/);
-  assert.match(dialog, /rememberDataDestinationDetailTimelineZoomHours\(zoomHours\)/);
+  assert.match(detailTimelineViewport, /DEFAULT_DESTINATION_DETAIL_ZOOM_HOURS = 24/);
+  assert.match(dialog, /useState\(\s*readDestinationDetailTimelineZoomHours,\s*\)/);
+  assert.match(dialog, /rememberDestinationDetailTimelineZoomHours\(zoomHours\)/);
+  assert.match(
+    detailTimelinePreference,
+    /patina:destination-detail-timeline-zoom-hours:v1/,
+  );
   assert.match(
     detailTimelinePreference,
     /patina:data-destination-detail-timeline-zoom-hours:v1/,
+  );
+  assert.match(
+    detailTimelinePreference,
+    /patina:destination-detail-min-secs:v1/,
   );
   assert.match(
     detailTimelinePreference,
@@ -1266,7 +1324,7 @@ await runTest("Data owns one private day-detail dialog without duplicating trend
   );
   assert.match(detailTimelineViewport, /MIN_VISIBLE_TIMELINE_SEGMENT_MS = 30_000/);
   assert.match(detailTimelineViewport, /DIRECT_MERGE_GAP_MS = 5_000/);
-  assert.match(detailTimelineViewport, /clipDataDestinationDetailActivitiesToViewport/);
+  assert.match(detailTimelineViewport, /clipDestinationDetailActivitiesToViewport/);
   assert.match(detailTimelineViewport, /buildTimelineAxisTicks/);
   assert.match(historyTimelineViewModel, /buildTimelineAxisTicks/);
   assert.match(quietTimelineAxis, /MIN_EDGE_TICK_GAP_RATIO = 0\.05/);
@@ -1282,7 +1340,7 @@ await runTest("Data owns one private day-detail dialog without duplicating trend
     /\s+title=/,
     "detail rows and title popovers should not create browser-native tooltips",
   );
-  assert.doesNotMatch(records, /<details>|data-destination-detail-fragments/);
+  assert.doesNotMatch(records, /<details>|destination-detail-fragments/);
   assert.match(anchoredPopover, /createPortal/);
   assert.match(anchoredPopover, /document\.addEventListener\("pointerdown"/);
   assert.match(anchoredPopover, /document\.addEventListener\("keydown"/);
@@ -1292,9 +1350,9 @@ await runTest("Data owns one private day-detail dialog without duplicating trend
     anchoredPopoverStyles,
     /\.qp-anchored-popover \{[\s\S]*?position: fixed;[\s\S]*?var\(--qp-shadow-overlay\)/,
   );
-  assert.match(dataStyles, /\.data-destination-detail-dialog/);
-  const detailTitleIconStyles = dataStyles.match(
-    /\.data-destination-detail-title-icon \{[\s\S]*?\}/,
+  assert.match(destinationStyles, /\.destination-detail-dialog/);
+  const detailTitleIconStyles = destinationStyles.match(
+    /\.destination-detail-title-icon \{[\s\S]*?\}/,
   )?.[0] ?? "";
   assert.match(
     detailTitleIconStyles,
@@ -1308,37 +1366,37 @@ await runTest("Data owns one private day-detail dialog without duplicating trend
     quietProStyles,
     /\.qp-workbench-list-card \{[\s\S]*?border: 1px solid var\(--qp-border-subtle\);[\s\S]*?border-radius: var\(--qp-radius-control\);/,
   );
-  assert.match(records, /className="qp-workbench-list-card data-destination-detail-activity"/);
+  assert.match(records, /className="qp-workbench-list-card destination-detail-activity"/);
   assert.match(historyTimelineLists, /className="qp-workbench-list-card flex items-center gap-3 p-3"/);
-  assert.match(records, /qp-button-secondary qp-compact-disclosure data-destination-detail-activity-disclosure/);
+  assert.match(records, /qp-button-secondary qp-compact-disclosure destination-detail-activity-disclosure/);
   assert.match(historyTimelineLists, /qp-button-secondary qp-compact-disclosure/);
   assert.match(
     quietProStyles,
     /\.qp-compact-disclosure\.qp-button-secondary \{[\s\S]*?width: 18px;[\s\S]*?height: 18px;[\s\S]*?border-radius: 999px;/,
   );
   assert.match(
-    dataStyles,
-    /\.data-destination-detail-dialog \{[\s\S]*?height: min\(634px, calc\(100vh - 48px\)\);/,
+    destinationStyles,
+    /\.destination-detail-dialog \{[\s\S]*?height: min\(634px, calc\(100vh - 48px\)\);/,
   );
   assert.match(
-    dataStyles,
-    /\.data-destination-detail-records \{[\s\S]*?gap: 8px;[\s\S]*?max-height: 322px;[\s\S]*?flex: 1 1 322px;/,
+    destinationStyles,
+    /\.destination-detail-records \{[\s\S]*?gap: 8px;[\s\S]*?max-height: 322px;[\s\S]*?flex: 1 1 322px;/,
   );
   assert.match(
-    dataStyles,
-    /\.data-destination-detail-record-popover \{\s*width: 284px;/,
+    destinationStyles,
+    /\.destination-detail-record-popover \{\s*width: 284px;/,
   );
   assert.match(
-    dataStyles,
-    /\.data-destination-detail-popover-copy \{[\s\S]*?display: grid;/,
+    destinationStyles,
+    /\.destination-detail-popover-copy \{[\s\S]*?display: grid;/,
   );
   assert.doesNotMatch(
-    dataStyles,
-    /\.data-destination-detail-activity > details|\.data-destination-detail-fragments/,
+    destinationStyles,
+    /\.destination-detail-activity > details|\.destination-detail-fragments/,
   );
   assert.match(
-    dataStyles,
-    /\.data-destination-detail-timeline-segment \{\s*cursor: default;\s*\}/,
+    destinationStyles,
+    /\.destination-detail-timeline-segment \{\s*cursor: default;\s*\}/,
   );
   assert.match(
     quietTimelineStyles,
@@ -1353,8 +1411,8 @@ await runTest("Data owns one private day-detail dialog without duplicating trend
     /\.qp-timeline-axis \{[\s\S]*?font-size: 9px;[\s\S]*?font-weight: 700/,
   );
   assert.doesNotMatch(timeline, /data-destination-detail-timeline-grid/);
-  assert.match(dataStyles, /scrollbar-gutter: stable/);
-  assert.doesNotMatch(dataStyles, /\.data-destination-detail[\s\S]*?#[0-9a-fA-F]{3,8}/);
+  assert.match(destinationStyles, /scrollbar-gutter: stable/);
+  assert.doesNotMatch(destinationStyles, /\.destination-detail[\s\S]*?#[0-9a-fA-F]{3,8}/);
 });
 
 await runTest("classification web domain colors prefer favicon theme colors", () => {
