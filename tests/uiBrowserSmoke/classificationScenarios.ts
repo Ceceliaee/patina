@@ -139,13 +139,12 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
       `),
       true,
     );
-    await delay(150);
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        document.body.innerText.includes("Cursor")
-          && !document.body.innerText.includes("全部 (0)")
-      `),
-      true,
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.body.innerText.includes("Cursor")
+        && !document.body.innerText.includes("全部 (0)")`,
+      undefined,
       "Classification should keep cached record-backed apps visible while the full catalog refreshes",
     );
     await evaluate(
@@ -797,7 +796,13 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
       `),
       true,
     );
-    await delay(150);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(".qp-classification-count-filter"))`,
+      undefined,
+      "Classification count structure",
+    );
     assert.equal(
       await evaluate(
         client!,
@@ -977,14 +982,11 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
       `),
       true,
     );
-    await delay(150);
-    assert.equal(
-      await evaluate(
-        client!,
-        sessionId,
-        `document.body.innerText.includes("全部 (130)")`,
-      ),
-      true,
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.body.innerText.includes("全部 (130)")`,
+      undefined,
       "Classification should retain the last complete total during a background refresh",
     );
     await delay(800);
