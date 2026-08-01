@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
-import { evaluate, jsonString, waitForExpression } from "./browserHarness.ts";
+import {
+  evaluate,
+  jsonString,
+  waitFor,
+  waitForAnimationFrames,
+  waitForExpression,
+} from "./browserHarness.ts";
 
 export async function runDashboardScenarios(context: BrowserSmokeContext) {
   const { client, sessionId, runTest } = context;
@@ -161,7 +167,8 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
       ),
       "按分类显示",
     );
-    const barPoint = await evaluate(client!, sessionId, `
+    await waitForAnimationFrames(client!, sessionId, 4);
+    const readBarPoint = () => evaluate(client!, sessionId, `
       (() => {
         const bar = Array.from(document.querySelectorAll(".dashboard-pulse-chart .qp-hourly-chart-bar"))
           .find((node) => {
@@ -172,19 +179,33 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
         const rect = bar.getBoundingClientRect();
         return { x: rect.left + rect.width / 2, y: rect.top + Math.min(rect.height / 2, 2) };
       })()
-    `) as { x: number; y: number } | null;
+    `) as Promise<{ x: number; y: number } | null>;
+    const barPoint = await readBarPoint();
     assert.ok(barPoint);
-    await client!.command("Input.dispatchMouseEvent", {
-      type: "mouseMoved",
-      x: barPoint.x,
-      y: barPoint.y,
-    }, sessionId);
-    await waitForExpression(
-      client!,
-      sessionId,
-      `Boolean(document.querySelector('.dashboard-pulse-chart .qp-chart-tooltip[role="tooltip"]'))`,
-      undefined,
+    await waitFor(
       "contained hourly chart tooltip",
+      async () => {
+        const visible = await evaluate(
+          client!,
+          sessionId,
+          `Boolean(document.querySelector('.dashboard-pulse-chart .qp-chart-tooltip[role="tooltip"]'))`,
+        );
+        if (visible) return true;
+
+        const currentBarPoint = await readBarPoint();
+        if (!currentBarPoint) return null;
+        await client!.command("Input.dispatchMouseEvent", {
+          type: "mouseMoved",
+          x: 1,
+          y: 1,
+        }, sessionId);
+        await client!.command("Input.dispatchMouseEvent", {
+          type: "mouseMoved",
+          x: currentBarPoint.x,
+          y: currentBarPoint.y,
+        }, sessionId);
+        return null;
+      },
     );
     const hourlyTooltipGeometry = await evaluate(client!, sessionId, `
       (() => {
