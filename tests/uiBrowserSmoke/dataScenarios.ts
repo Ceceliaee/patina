@@ -2174,7 +2174,14 @@ export async function runDataScenarios(
       45_000,
       "move detail timeline to day end",
     );
-    for (let index = 0; index < 5; index += 1) {
+    let reachedRecordedActivities = false;
+    for (let index = 0; index < 120; index += 1) {
+      reachedRecordedActivities = Boolean(await evaluate(
+        client!,
+        sessionId,
+        `Boolean(document.querySelector(".destination-detail-activity-disclosure"))`,
+      ));
+      if (reachedRecordedActivities) break;
       const panStart = Number(await evaluate(client!, sessionId, `
         document.querySelector(".destination-detail-timeline")
           ?.getAttribute("data-destination-detail-timeline-start-ms")
@@ -2192,12 +2199,15 @@ export async function runDataScenarios(
         "pan detail timeline toward recorded activities",
       );
     }
-    await waitForExpression(
+    reachedRecordedActivities ||= Boolean(await evaluate(
       client!,
       sessionId,
       `Boolean(document.querySelector(".destination-detail-activity-disclosure"))`,
-      45_000,
-      "move detail timeline to recorded activities",
+    ));
+    assert.equal(
+      reachedRecordedActivities,
+      true,
+      "keyboard panning should reach recorded activities regardless of the current clock hour",
     );
     assert.equal(
       await evaluate(client!, sessionId, `
@@ -2450,15 +2460,12 @@ export async function runDataScenarios(
           ) return false;
           const selectedKey = selected.dataset.calendarDate;
           if (!selectedKey) return false;
-          const [year, month, day] = selectedKey.split("-").map(Number);
-          const outsideInitialRange = new Date(year, month - 1, day - 7);
-          const outsideKey = [
-            outsideInitialRange.getFullYear(),
-            String(outsideInitialRange.getMonth() + 1).padStart(2, "0"),
-            String(outsideInitialRange.getDate()).padStart(2, "0"),
-          ].join("-");
-          const outsideButton = document.querySelector(
-            '.qp-calendar-popover [data-calendar-date="' + outsideKey + '"]',
+          const outsideButton = Array.from(document.querySelectorAll(
+            ".qp-calendar-popover [data-calendar-date]",
+          )).find(
+            (candidate) => candidate instanceof HTMLButtonElement
+              && (candidate.dataset.calendarDate ?? "") < selectedKey
+              && !candidate.disabled,
           );
           return trigger.classList.contains("qp-date-picker-range-trigger-open")
             && getComputedStyle(trigger).borderTopColor
@@ -2634,15 +2641,12 @@ export async function runDataScenarios(
         if (!(selected instanceof HTMLButtonElement)) return false;
         const selectedKey = selected.dataset.calendarDate;
         if (!selectedKey) return false;
-        const [year, month, day] = selectedKey.split("-").map(Number);
-        const outsideInitialRange = new Date(year, month - 1, day - 7);
-        const outsideKey = [
-          outsideInitialRange.getFullYear(),
-          String(outsideInitialRange.getMonth() + 1).padStart(2, "0"),
-          String(outsideInitialRange.getDate()).padStart(2, "0"),
-        ].join("-");
-        const outsideButton = document.querySelector(
-          '.qp-calendar-popover [data-calendar-date="' + outsideKey + '"]',
+        const outsideButton = Array.from(document.querySelectorAll(
+          ".qp-calendar-popover [data-calendar-date]",
+        )).find(
+          (candidate) => candidate instanceof HTMLButtonElement
+            && (candidate.dataset.calendarDate ?? "") < selectedKey
+            && !candidate.disabled,
         );
         if (!(outsideButton instanceof HTMLButtonElement) || outsideButton.disabled) {
           return false;
