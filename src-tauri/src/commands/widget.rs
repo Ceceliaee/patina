@@ -1,4 +1,4 @@
-use crate::app::{tray, widget};
+use crate::app::{main_window, tray, widget};
 use crate::data::{
     icon_cache_service, repositories::widget_runtime::WidgetBootstrapSnapshot, widget_store,
 };
@@ -47,7 +47,7 @@ pub fn cmd_show_main_window(app: AppHandle) {
 
 #[tauri::command]
 pub fn cmd_hide_widget_window(app: AppHandle) {
-    widget::close_widget_window(&app);
+    main_window::close_widget_for_main_activity(&app);
 }
 
 #[tauri::command]

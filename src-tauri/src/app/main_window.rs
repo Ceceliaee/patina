@@ -314,6 +314,15 @@ pub(crate) async fn minimize_main_window<R: Runtime + 'static>(
         .map_err(|error| format!("failed to minimize main window: {error}"))
 }
 
+pub(crate) fn close_widget_for_main_activity<R: Runtime + 'static>(app: &AppHandle<R>) {
+    if app
+        .state::<MainWindowLifecycleState>()
+        .should_close_widget_for_main_activity()
+    {
+        widget::close_widget_window(app);
+    }
+}
+
 async fn minimize_main_window_to_widget<R: Runtime + 'static>(
     app: &AppHandle<R>,
     window: &WebviewWindow<R>,

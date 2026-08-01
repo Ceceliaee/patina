@@ -475,6 +475,10 @@ impl MainWindowLifecycleState {
         })
     }
 
+    pub(crate) fn should_close_widget_for_main_activity(&self) -> bool {
+        self.with_inner(|inner| inner.desired_visible && !inner.minimize_to_widget_in_progress)
+    }
+
     pub(crate) fn cancel_minimize_to_widget(&self, intent_generation: u64) {
         self.with_inner(|inner| {
             if inner.minimize_to_widget_in_progress && inner.hide_generation == intent_generation {
@@ -742,6 +746,21 @@ mod tests {
 
         assert!(state.begin_minimize_to_widget().is_some());
         assert!(state.snapshot().desired_visible);
+    }
+
+    #[test]
+    fn main_window_lifecycle_rejects_stale_widget_close_during_minimize_handoff() {
+        let state = MainWindowLifecycleState::default();
+        let _ = state.request_show();
+        assert!(state.should_close_widget_for_main_activity());
+
+        let intent_generation = state
+            .begin_minimize_to_widget()
+            .expect("visible main window should begin widget minimize");
+        assert!(!state.should_close_widget_for_main_activity());
+
+        let _ = state.commit_minimize_to_widget(intent_generation);
+        assert!(!state.should_close_widget_for_main_activity());
     }
 
     #[test]
