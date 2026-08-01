@@ -8,6 +8,7 @@ import {
   launchBrowser,
   removeIsolatedBrowserDataDir,
   stopBrowser,
+  waitForExpression,
 } from "./uiBrowserSmoke/browserHarness.ts";
 import { tauriBrowserSmokeStubPlugin } from "./uiBrowserSmoke/tauriStubs.ts";
 import { runStartupScenarios } from "./uiBrowserSmoke/startupScenarios.ts";
@@ -39,6 +40,13 @@ const networkErrors: string[] = [];
 let primaryError: unknown = null;
 const cleanupErrors: unknown[] = [];
 const dataOnly = process.argv.includes("--data-only");
+const historyWebTimelineOnly = process.argv.includes("--history-web-timeline-only");
+const historyWebTimelineTests = new Set([
+  "history excludes hidden domains from rows and favicon requests, then restores retained history",
+  "history timeline cycles app category and web while zoom stays synchronized",
+  "history timeline removes web mode when Web Sync is disabled",
+  "history web timeline keeps an explicit empty state without inferred browser time",
+]);
 
 const server = await createServer({
   configFile: "vite.config.ts",
@@ -119,12 +127,30 @@ try {
   }, sessionId);
   await client.command("Page.navigate", { url: appUrl }, sessionId);
 
-  const smokeContext = { appUrl, client: client!, sessionId, runTest };
+  const smokeContext = {
+    appUrl,
+    client: client!,
+    sessionId,
+    runTest: historyWebTimelineOnly
+      ? async (name: string, fn: () => Promise<void> | void) => {
+        if (historyWebTimelineTests.has(name)) await runTest(name, fn);
+      }
+      : runTest,
+  };
 
   await runStartupScenarios(smokeContext);
 
   if (dataOnly) {
     await runDataScenarios(smokeContext, { continuityOnly: true });
+  } else if (historyWebTimelineOnly) {
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('[aria-label="历史"]'))`,
+      15_000,
+      "History web timeline focused smoke app readiness",
+    );
+    await runHistoryScenarios(smokeContext);
   } else {
     await runAboutScenarios(smokeContext);
 

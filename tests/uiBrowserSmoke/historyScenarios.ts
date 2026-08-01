@@ -1,10 +1,37 @@
 import assert from "node:assert/strict";
+import { mkdir, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import { evaluate, jsonString, titleDetailsButtonExpression, waitForExpression } from "./browserHarness.ts";
 import { DATE_TEXT, HISTORY_TITLE_DETAIL_COUNT } from "./constants.ts";
 
 export async function runHistoryScenarios(context: BrowserSmokeContext) {
   const { appUrl, client, sessionId, runTest } = context;
+  const captureHistoryScreenshot = async (fileName: string, theme?: "light" | "dark") => {
+    const captureDir = process.env.PATINA_HISTORY_SCREENSHOT_DIR?.trim();
+    if (!captureDir) return;
+
+    const previousTheme = theme
+      ? await evaluate(client!, sessionId, `document.documentElement.getAttribute("data-theme")`)
+      : null;
+    try {
+      if (theme) {
+        await evaluate(client!, sessionId, `document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`);
+      }
+      const result = await client!.command("Page.captureScreenshot", {
+        format: "png",
+        fromSurface: true,
+      }, sessionId) as { data: string };
+      await mkdir(captureDir, { recursive: true });
+      await writeFile(resolve(captureDir, fileName), Buffer.from(result.data, "base64"));
+    } finally {
+      if (theme) {
+        await evaluate(client!, sessionId, previousTheme === null
+          ? `document.documentElement.removeAttribute("data-theme")`
+          : `document.documentElement.setAttribute("data-theme", ${JSON.stringify(String(previousTheme))})`);
+      }
+    }
+  };
 
   await runTest("history date picker uses the shared calendar skeleton", async () => {
     assert.equal(
@@ -401,6 +428,155 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
     );
   });
 
+  await runTest("history daily distribution opens shared destination detail from app icons only", async () => {
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const navigation = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("历史"))} + ']');
+          if (!navigation) return false;
+          navigation.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(".history-app-distribution-card"))`,
+    );
+
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const label = document.querySelector(".history-date-label");
+          const group = label?.parentElement?.parentElement;
+          const previous = group?.querySelector("button");
+          if (!label || !previous) return false;
+          const before = label.textContent;
+          previous.click();
+          return label.textContent === before;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `(() => {
+        const label = document.querySelector(".history-date-label");
+        return Boolean(label && label.textContent?.trim() !== "今天");
+      })()`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const label = document.querySelector(".history-date-label");
+          if (!label) return false;
+          label.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('.history-calendar-popover .qp-calendar-day[data-selected="true"]'))`,
+    );
+    const selectedHistoryDateKey = await evaluate(
+      client!,
+      sessionId,
+      `document.querySelector('.history-calendar-popover .qp-calendar-day[data-selected="true"]')
+        ?.getAttribute("data-calendar-date")`,
+    ) as string;
+    assert.match(selectedHistoryDateKey, /^\d{4}-\d{2}-\d{2}$/);
+    await evaluate(client!, sessionId, `document.querySelector(".history-date-label")?.click()`);
+    await waitForExpression(client!, sessionId, `!document.querySelector(".history-calendar-popover")`);
+
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(".history-app-distribution-card .history-day-distribution-detail-trigger"))`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const trigger = document.querySelector(
+            ".history-app-distribution-card .history-day-distribution-detail-trigger",
+          );
+          if (!trigger) return false;
+          trigger.click();
+          return !document.querySelector(".destination-detail-dialog");
+        })()
+      `),
+      true,
+      "history app icons should preserve inert single-click behavior",
+    );
+    await evaluate(client!, sessionId, `
+      document.querySelector(".history-app-distribution-card .history-day-distribution-detail-trigger")
+        ?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, button: 0 }))
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".destination-detail-dialog .destination-detail-day-content")
+        ?.getAttribute("data-destination-detail-requested-date") === ${jsonString(selectedHistoryDateKey)}`,
+    );
+    await evaluate(
+      client!,
+      sessionId,
+      `document.querySelector('.destination-detail-dialog [aria-label="关闭详情"]')?.click()`,
+    );
+    await waitForExpression(client!, sessionId, `!document.querySelector(".destination-detail-dialog")`);
+
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const categoryButton = Array.from(document.querySelectorAll(
+            ".history-app-distribution-card .history-day-distribution-mode-switch button",
+          )).find((button) => button.textContent?.trim() === "分类");
+          if (!categoryButton) return false;
+          categoryButton.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `!document.querySelector(".history-app-distribution-card .history-day-distribution-detail-trigger")`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        !document.querySelector(
+          ".history-overview-timeline-card .history-day-distribution-detail-trigger",
+        )
+      `),
+      true,
+      "the history main timeline must not become a destination-detail entry point",
+    );
+
+    await evaluate(client!, sessionId, `
+      (() => {
+        Array.from(document.querySelectorAll(
+          ".history-app-distribution-card .history-day-distribution-mode-switch button",
+        )).find((button) => button.textContent?.trim() === "应用")?.click();
+        const label = document.querySelector(".history-date-label");
+        const group = label?.parentElement?.parentElement;
+        const buttons = group?.querySelectorAll("button");
+        const next = buttons?.[buttons.length - 1];
+        if (next instanceof HTMLButtonElement && !next.disabled) next.click();
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".history-date-label")?.textContent?.trim() === "今天"`,
+    );
+  });
+
   await runTest("history timeline opens list dialog from timeline axis", async () => {
     await client!.command("Emulation.setDeviceMetricsOverride", {
       width: 2048,
@@ -646,6 +822,10 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
         const laneTimeline = document.querySelector(".history-timeline-lane-track .history-horizontal-timeline");
         const laneScroll = document.querySelector(".history-timeline-lanes-scroll");
         const slider = document.querySelector('.history-timeline-hour-slider input[type="range"]');
+        const overview = document.querySelector(".history-timeline-zoom-dialog-timeline");
+        const overviewSegment = overview?.querySelector(
+          ".history-horizontal-timeline-segment"
+        );
         return JSON.stringify({
           hasDialog: Boolean(
             dialog
@@ -669,6 +849,12 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
           ).overflowY,
           laneViewportHeight: laneScroll?.clientHeight ?? 0,
           expectedLaneViewportHeight: 250,
+          overviewCursor: overview instanceof HTMLElement
+            ? getComputedStyle(overview).cursor
+            : null,
+          overviewSegmentCursor: overviewSegment instanceof HTMLElement
+            ? getComputedStyle(overviewSegment).cursor
+            : null,
           dialogBottomGap: dialog && laneScroll
             ? Math.round(dialog.getBoundingClientRect().bottom - laneScroll.getBoundingClientRect().bottom)
             : null,
@@ -688,6 +874,8 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
     assert.equal(initialZoomDialogState.laneAxes, 0);
     assert.equal(initialZoomDialogState.laneOverflowY, "auto");
     assert.equal(initialZoomDialogState.laneViewportHeight, initialZoomDialogState.expectedLaneViewportHeight);
+    assert.equal(initialZoomDialogState.overviewCursor, "grab");
+    assert.equal(initialZoomDialogState.overviewSegmentCursor, "default");
     assert.ok(initialZoomDialogState.laneViewportHeight <= 250);
     assert.ok(initialZoomDialogState.dialogBottomGap >= 0 && initialZoomDialogState.dialogBottomGap <= 32);
     const laneHoverPoint = JSON.parse(String(await evaluate(client!, sessionId, `
@@ -1330,7 +1518,7 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
     );
   });
 
-  await runTest("history web distribution publishes favicon colors as one stable frame", async () => {
+  await runTest("history web distribution stays visually stable and opens shared destination detail", async () => {
     const navigateTo = async (label: string) => {
       assert.equal(
         await evaluate(client!, sessionId, `
@@ -1453,6 +1641,30 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
       false,
     );
 
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(
+        ".history-app-distribution-card .history-day-distribution-detail-trigger",
+      ))`,
+    );
+    await evaluate(client!, sessionId, `
+      document.querySelector(".history-app-distribution-card .history-day-distribution-detail-trigger")
+        ?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, button: 0 }))
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".destination-detail-dialog .qp-dialog-heading")
+        ?.textContent?.trim() === "stable.example"`,
+    );
+    await evaluate(
+      client!,
+      sessionId,
+      `document.querySelector('.destination-detail-dialog [aria-label="关闭详情"]')?.click()`,
+    );
+    await waitForExpression(client!, sessionId, `!document.querySelector(".destination-detail-dialog")`);
+
     await navigateTo("数据");
     await evaluate(client!, sessionId, `
       (() => {
@@ -1519,6 +1731,7 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
         settings[${jsonString(webOverrideKey)}] = JSON.stringify({ enabled: false, updatedAt: Date.now() });
         localStorage.setItem("__time_tracker_smoke_settings", JSON.stringify(settings));
         localStorage.setItem("patina:history-day-distribution-mode", "web");
+        localStorage.setItem("patina:history-timeline-mode", "web");
         location.reload();
       })()
     `);
@@ -1551,6 +1764,35 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
       await evaluate(client!, sessionId, `globalThis.__TIME_TRACKER_WEB_FAVICON_QUERY_DOMAINS`),
       ["stable.example"],
     );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `
+        document.querySelector(".history-overview-timeline-card .history-horizontal-timeline")
+          ?.getAttribute("data-history-timeline-mode") === "web"
+        && document.querySelector(".history-overview-timeline-card .history-horizontal-timeline-legend")
+          ?.textContent?.includes("stable.example")
+        && !document.querySelector(".history-overview-timeline-card .history-horizontal-timeline-legend")
+          ?.textContent?.includes("docs.example")
+      `,
+    );
+    await evaluate(client!, sessionId, `
+      document.querySelector(".history-overview-timeline-card .history-timeline-zoom-open")?.click()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `
+        document.querySelector(".history-timeline-zoom-dialog-surface .history-timeline-lanes-scroll")
+          ?.textContent?.includes("stable.example")
+        && !document.querySelector(".history-timeline-zoom-dialog-surface .history-timeline-lanes-scroll")
+          ?.textContent?.includes("docs.example")
+      `,
+    );
+    await evaluate(client!, sessionId, `
+      document.querySelector(".history-timeline-zoom-dialog-surface .history-timeline-dialog-close")?.click()
+    `);
+    await waitForExpression(client!, sessionId, `!document.querySelector(".history-timeline-zoom-dialog-surface")`);
 
     await navigateTo("数据");
     await evaluate(client!, sessionId, `
@@ -1591,5 +1833,578 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
         delete globalThis.__TIME_TRACKER_WEB_FAVICON_QUERY_DOMAINS;
       })()
     `);
+  });
+
+  await runTest("history timeline cycles app category and web while zoom stays synchronized", async () => {
+    const navigateTo = async (label: string) => {
+      assert.equal(
+        await evaluate(client!, sessionId, `
+          (() => {
+            const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(label))} + ']');
+            node?.click();
+            return Boolean(node);
+          })()
+        `),
+        true,
+      );
+      await waitForExpression(
+        client!,
+        sessionId,
+        `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(label))} + ']')?.className.includes("qp-nav-item-active")`,
+      );
+    };
+    const overviewMode = `document.querySelector(".history-overview-timeline-card .history-horizontal-timeline")
+      ?.getAttribute("data-history-timeline-mode")`;
+
+    await client!.command("Emulation.setDeviceMetricsOverride", {
+      width: 1366,
+      height: 768,
+      deviceScaleFactor: 1,
+      mobile: false,
+    }, sessionId);
+    await navigateTo("今天");
+    await evaluate(client!, sessionId, `
+      (() => {
+        globalThis.__TIME_TRACKER_ENABLE_WEB_FIXTURE = true;
+        localStorage.setItem("patina:history-timeline-mode", "app");
+      })()
+    `);
+    await navigateTo("历史");
+    await waitForExpression(client!, sessionId, `${overviewMode} === "app"`);
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const button = document.querySelector(
+            ".history-overview-timeline-card .history-horizontal-timeline-mode-toggle"
+          );
+          return Boolean(
+            button
+            && !button.hasAttribute("aria-pressed")
+            && button.getAttribute("aria-label") === "当前按应用显示，切换到分类"
+          );
+        })()
+      `),
+      true,
+    );
+
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const button = document.querySelector(
+            ".history-overview-timeline-card .history-horizontal-timeline-mode-toggle"
+          );
+          button?.focus();
+          return document.activeElement === button;
+        })()
+      `),
+      true,
+    );
+    await client!.command("Input.dispatchKeyEvent", {
+      type: "keyDown",
+      key: "Enter",
+      code: "Enter",
+      text: "\r",
+      unmodifiedText: "\r",
+      windowsVirtualKeyCode: 13,
+      nativeVirtualKeyCode: 13,
+    }, sessionId);
+    await client!.command("Input.dispatchKeyEvent", {
+      type: "keyUp",
+      key: "Enter",
+      code: "Enter",
+      windowsVirtualKeyCode: 13,
+      nativeVirtualKeyCode: 13,
+    }, sessionId);
+    await waitForExpression(client!, sessionId, `${overviewMode} === "category"`);
+    assert.equal(
+      await evaluate(
+        client!,
+        sessionId,
+        `document.querySelector(".history-overview-timeline-card .history-horizontal-timeline-mode-toggle")
+          ?.getAttribute("aria-label")`,
+      ),
+      "当前按分类显示，切换到网页",
+    );
+
+    await client!.command("Input.dispatchKeyEvent", {
+      type: "keyDown",
+      key: " ",
+      code: "Space",
+      text: " ",
+      unmodifiedText: " ",
+      windowsVirtualKeyCode: 32,
+      nativeVirtualKeyCode: 32,
+    }, sessionId);
+    await client!.command("Input.dispatchKeyEvent", {
+      type: "keyUp",
+      key: " ",
+      code: "Space",
+      windowsVirtualKeyCode: 32,
+      nativeVirtualKeyCode: 32,
+    }, sessionId);
+    await waitForExpression(client!, sessionId, `${overviewMode} === "web"`);
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        document.activeElement === document.querySelector(
+          ".history-overview-timeline-card .history-horizontal-timeline-mode-toggle"
+        )
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `
+        document.querySelector(".history-overview-timeline-card .history-horizontal-timeline-legend")
+          ?.textContent?.includes("stable.example")
+        && document.querySelector(".history-overview-timeline-card .history-horizontal-timeline-legend")
+          ?.textContent?.includes("docs.example")
+      `,
+      15_000,
+      "web timeline legend should use normalized domains",
+    );
+    assert.equal(
+      await evaluate(
+        client!,
+        sessionId,
+        `localStorage.getItem("patina:history-timeline-mode")`,
+      ),
+      "web",
+    );
+    const webSegmentPoint = JSON.parse(String(await evaluate(client!, sessionId, `
+      (() => {
+        const segment = document.querySelector(
+          ".history-overview-timeline-card .history-horizontal-timeline-segment"
+        );
+        if (!(segment instanceof HTMLElement)) return JSON.stringify(null);
+        const rect = segment.getBoundingClientRect();
+        return JSON.stringify({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+      })()
+    `))) as { x: number; y: number } | null;
+    assert.ok(webSegmentPoint, "expected a visible web timeline segment");
+    await client!.command("Input.dispatchMouseEvent", {
+      type: "mouseMoved",
+      x: webSegmentPoint.x,
+      y: webSegmentPoint.y,
+    }, sessionId);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `
+        document.querySelector(".history-horizontal-timeline-tooltip")?.textContent?.includes(".example")
+      `,
+    );
+    await client!.command("Input.dispatchMouseEvent", {
+      type: "mouseMoved",
+      x: 1,
+      y: 1,
+    }, sessionId);
+    await captureHistoryScreenshot("history-web-timeline-main.png", "light");
+    await captureHistoryScreenshot("history-web-timeline-main-dark.png", "dark");
+    for (const width of [1600, 1920]) {
+      await client!.command("Emulation.setDeviceMetricsOverride", {
+        width,
+        height: 900,
+        deviceScaleFactor: 1,
+        mobile: false,
+      }, sessionId);
+      await waitForExpression(client!, sessionId, `window.innerWidth === ${width}`);
+      assert.equal(
+        await evaluate(
+          client!,
+          sessionId,
+          `document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1`,
+        ),
+        true,
+        `History web timeline overflowed at ${width}px`,
+      );
+      await captureHistoryScreenshot(`history-web-timeline-main-${width}.png`, "light");
+    }
+    await client!.command("Emulation.setDeviceMetricsOverride", {
+      width: 1366,
+      height: 768,
+      deviceScaleFactor: 1,
+      mobile: false,
+    }, sessionId);
+    await waitForExpression(client!, sessionId, `window.innerWidth === 1366`);
+
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const button = document.querySelector(".history-overview-timeline-card .history-timeline-zoom-open");
+          if (!(button instanceof HTMLButtonElement)) return false;
+          button.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".history-timeline-zoom-dialog-timeline .history-horizontal-timeline")
+        ?.getAttribute("data-history-timeline-mode") === "web"`,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `
+        document.querySelector(".history-timeline-zoom-dialog-surface .history-timeline-lanes-title")
+          ?.textContent?.includes("网页分轨")
+        && document.querySelector(".history-timeline-zoom-dialog-surface .history-timeline-lanes-scroll")
+          ?.textContent?.includes("stable.example")
+      `,
+    );
+    assert.equal(
+      await evaluate(
+        client!,
+        sessionId,
+        `document.querySelectorAll(
+          ".history-timeline-zoom-dialog-surface img.history-timeline-lane-icon"
+        ).length >= 1`,
+      ),
+      true,
+    );
+    await captureHistoryScreenshot("history-web-timeline-zoom.png", "light");
+    await captureHistoryScreenshot("history-web-timeline-zoom-dark.png", "dark");
+    const initialWebZoom = JSON.parse(String(await evaluate(client!, sessionId, `
+      (() => {
+        const timeline = document.querySelector(
+          ".history-timeline-zoom-dialog-timeline .history-horizontal-timeline"
+        );
+        const interaction = document.querySelector(".history-timeline-zoom-dialog-timeline");
+        if (!(interaction instanceof HTMLElement)) return JSON.stringify(null);
+        const rect = interaction.getBoundingClientRect();
+        return JSON.stringify({
+          zoomHours: Number(timeline?.getAttribute("data-history-timeline-zoom-hours")),
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+        });
+      })()
+    `))) as { zoomHours: number; x: number; y: number } | null;
+    assert.ok(initialWebZoom, "expected web zoom interaction geometry");
+    await client!.command("Input.dispatchMouseEvent", {
+      type: "mouseWheel",
+      x: initialWebZoom.x,
+      y: initialWebZoom.y,
+      deltaX: 0,
+      deltaY: -120,
+    }, sessionId);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Number(document.querySelector(".history-timeline-zoom-dialog-timeline .history-horizontal-timeline")
+        ?.getAttribute("data-history-timeline-zoom-hours")) < ${initialWebZoom.zoomHours}`,
+    );
+    const webDragState = JSON.parse(String(await evaluate(client!, sessionId, `
+      (() => {
+        const timeline = document.querySelector(
+          ".history-timeline-zoom-dialog-timeline .history-horizontal-timeline"
+        );
+        const track = document.querySelector(
+          ".history-timeline-zoom-dialog-timeline .history-horizontal-timeline-track"
+        );
+        if (!(track instanceof HTMLElement)) return JSON.stringify(null);
+        const rect = track.getBoundingClientRect();
+        const start = Number(timeline?.getAttribute("data-history-timeline-window-start"));
+        const dayStart = new Date(start);
+        dayStart.setHours(0, 0, 0, 0);
+        return JSON.stringify({
+          start,
+          deltaX: start > dayStart.getTime() + 1 ? 80 : -80,
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+        });
+      })()
+    `))) as { start: number; deltaX: number; x: number; y: number } | null;
+    assert.ok(webDragState, "expected web timeline track for drag interaction");
+    await client!.command("Input.dispatchMouseEvent", {
+      type: "mouseMoved",
+      x: webDragState.x,
+      y: webDragState.y,
+    }, sessionId);
+    await client!.command("Input.dispatchMouseEvent", {
+      type: "mousePressed",
+      x: webDragState.x,
+      y: webDragState.y,
+      button: "left",
+      clickCount: 1,
+    }, sessionId);
+    await client!.command("Input.dispatchMouseEvent", {
+      type: "mouseMoved",
+      x: webDragState.x + webDragState.deltaX,
+      y: webDragState.y,
+      button: "left",
+      buttons: 1,
+    }, sessionId);
+    await client!.command("Input.dispatchMouseEvent", {
+      type: "mouseReleased",
+      x: webDragState.x + webDragState.deltaX,
+      y: webDragState.y,
+      button: "left",
+      clickCount: 1,
+    }, sessionId);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Number(document.querySelector(".history-timeline-zoom-dialog-timeline .history-horizontal-timeline")
+        ?.getAttribute("data-history-timeline-window-start")) !== ${webDragState.start}`,
+    );
+    const webZoomWindow = JSON.parse(String(await evaluate(client!, sessionId, `
+      (() => {
+        const timeline = document.querySelector(
+          ".history-timeline-zoom-dialog-timeline .history-horizontal-timeline"
+        );
+        return JSON.stringify({
+          zoomHours: timeline?.getAttribute("data-history-timeline-zoom-hours"),
+          start: timeline?.getAttribute("data-history-timeline-window-start"),
+          end: timeline?.getAttribute("data-history-timeline-window-end"),
+        });
+      })()
+    `))) as { zoomHours: string; start: string; end: string };
+
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const button = document.querySelector(
+            ".history-timeline-zoom-dialog-surface .history-timeline-zoom-dialog-mode-toggle"
+          );
+          if (!(button instanceof HTMLButtonElement)) return false;
+          button.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `
+        document.querySelector(".history-timeline-zoom-dialog-timeline .history-horizontal-timeline")
+          ?.getAttribute("data-history-timeline-mode") === "app"
+        && ${overviewMode} === "app"
+      `,
+    );
+    const appZoomWindow = JSON.parse(String(await evaluate(client!, sessionId, `
+      (() => {
+        const timeline = document.querySelector(
+          ".history-timeline-zoom-dialog-timeline .history-horizontal-timeline"
+        );
+        return JSON.stringify({
+          zoomHours: timeline?.getAttribute("data-history-timeline-zoom-hours"),
+          start: timeline?.getAttribute("data-history-timeline-window-start"),
+          end: timeline?.getAttribute("data-history-timeline-window-end"),
+        });
+      })()
+    `))) as { zoomHours: string; start: string; end: string };
+    assert.deepEqual(appZoomWindow, webZoomWindow);
+    assert.equal(
+      await evaluate(
+        client!,
+        sessionId,
+        `document.querySelector(".history-timeline-zoom-dialog-surface .history-timeline-lanes-title")
+          ?.textContent?.includes("应用分轨")`,
+      ),
+      true,
+    );
+
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const close = document.querySelector(
+            ".history-timeline-zoom-dialog-surface .history-timeline-dialog-close"
+          );
+          if (!(close instanceof HTMLButtonElement)) return false;
+          close.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(client!, sessionId, `!document.querySelector(".history-timeline-zoom-dialog-surface")`);
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const open = document.querySelector(".history-overview-timeline-card .history-timeline-open");
+          if (!(open instanceof HTMLButtonElement)) return false;
+          open.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector(".history-timeline-dialog-surface"))`);
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        Array.from(document.querySelectorAll(".history-timeline-dialog-mode-switch button"))
+          .some((button) => button.textContent?.trim() === "应用" && button.getAttribute("aria-pressed") === "true")
+      `),
+      true,
+    );
+    await evaluate(client!, sessionId, `
+      (() => {
+        document.querySelector(".history-timeline-dialog-surface .history-timeline-dialog-close")?.click();
+        delete globalThis.__TIME_TRACKER_ENABLE_WEB_FIXTURE;
+      })()
+    `);
+    await waitForExpression(client!, sessionId, `!document.querySelector(".history-timeline-dialog-surface")`);
+  });
+
+  await runTest("history timeline removes web mode when Web Sync is disabled", async () => {
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']');
+          node?.click();
+          return Boolean(node);
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']')?.className.includes("qp-nav-item-active")`,
+    );
+    await evaluate(client!, sessionId, `
+      (() => {
+        const settings = JSON.parse(localStorage.getItem("__time_tracker_smoke_settings") ?? "{}");
+        settings.web_activity_enabled = "0";
+        localStorage.setItem("__time_tracker_smoke_settings", JSON.stringify(settings));
+        localStorage.setItem("patina:history-timeline-mode", "web");
+        location.reload();
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("历史"))} + ']'))`,
+      15_000,
+    );
+    await evaluate(client!, sessionId, `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("历史"))} + ']')?.click()`);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".history-overview-timeline-card .history-horizontal-timeline")
+        ?.getAttribute("data-history-timeline-mode") === "app"`,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `localStorage.getItem("patina:history-timeline-mode") === "app"`,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(
+        ".history-overview-timeline-card .history-horizontal-timeline-mode-toggle"
+      ))`,
+    );
+    assert.equal(
+      await evaluate(
+        client!,
+        sessionId,
+        `document.querySelector(".history-overview-timeline-card .history-horizontal-timeline-mode-toggle")
+          ?.getAttribute("aria-label")`,
+      ),
+      "当前按应用显示，切换到分类",
+    );
+    await evaluate(client!, sessionId, `document.querySelector(".history-overview-timeline-card .history-horizontal-timeline-mode-toggle")?.click()`);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".history-overview-timeline-card .history-horizontal-timeline")
+        ?.getAttribute("data-history-timeline-mode") === "category"`,
+    );
+    assert.equal(
+      await evaluate(
+        client!,
+        sessionId,
+        `document.querySelector(".history-overview-timeline-card .history-horizontal-timeline-mode-toggle")
+          ?.getAttribute("aria-label")`,
+      ),
+      "当前按分类显示，切换到应用",
+    );
+    await evaluate(client!, sessionId, `document.querySelector(".history-overview-timeline-card .history-horizontal-timeline-mode-toggle")?.click()`);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".history-overview-timeline-card .history-horizontal-timeline")
+        ?.getAttribute("data-history-timeline-mode") === "app"`,
+    );
+
+    await evaluate(client!, sessionId, `
+      (() => {
+        const settings = JSON.parse(localStorage.getItem("__time_tracker_smoke_settings") ?? "{}");
+        settings.web_activity_enabled = "1";
+        localStorage.setItem("__time_tracker_smoke_settings", JSON.stringify(settings));
+        localStorage.setItem("patina:history-timeline-mode", "app");
+        location.reload();
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("历史"))} + ']'))`,
+      15_000,
+    );
+  });
+
+  await runTest("history web timeline keeps an explicit empty state without inferred browser time", async () => {
+    await evaluate(client!, sessionId, `
+      (() => {
+        delete globalThis.__TIME_TRACKER_ENABLE_WEB_FIXTURE;
+        localStorage.setItem("patina:history-timeline-mode", "web");
+        location.reload();
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("历史"))} + ']'))`,
+      15_000,
+    );
+    await evaluate(client!, sessionId, `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("历史"))} + ']')?.click()`);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `
+        document.querySelector(".history-overview-timeline-card .history-horizontal-timeline")
+          ?.getAttribute("data-history-timeline-mode") === "web"
+        && document.querySelectorAll(
+          ".history-overview-timeline-card .history-horizontal-timeline-segment"
+        ).length === 0
+        && document.querySelector(".history-overview-timeline-card")
+          ?.textContent?.includes("这一天暂无记录")
+      `,
+    );
+    await evaluate(client!, sessionId, `
+      document.querySelector(".history-overview-timeline-card .history-timeline-zoom-open")?.click()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `
+        document.querySelector(".history-timeline-zoom-dialog-timeline .history-horizontal-timeline")
+          ?.getAttribute("data-history-timeline-mode") === "web"
+        && document.querySelector(".history-timeline-zoom-dialog-surface")
+          ?.textContent?.includes("当前时间段暂无记录")
+      `,
+    );
+    await evaluate(client!, sessionId, `
+      document.querySelector(".history-timeline-zoom-dialog-surface .history-timeline-zoom-dialog-mode-toggle")?.click()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `
+        document.querySelector(".history-timeline-zoom-dialog-timeline .history-horizontal-timeline")
+          ?.getAttribute("data-history-timeline-mode") === "app"
+      `,
+    );
+    await evaluate(client!, sessionId, `
+      document.querySelector(".history-timeline-zoom-dialog-surface .history-timeline-dialog-close")?.click()
+    `);
+    await waitForExpression(client!, sessionId, `!document.querySelector(".history-timeline-zoom-dialog-surface")`);
   });
 }
