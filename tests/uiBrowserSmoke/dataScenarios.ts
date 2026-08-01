@@ -7,6 +7,7 @@ import {
   jsonString,
   waitForAnimationFrames,
   waitForExpression,
+  waitForStableExpression,
 } from "./browserHarness.ts";
 
 export async function runDataScenarios(
@@ -3189,7 +3190,7 @@ export async function runDataScenarios(
       }, sessionId);
       await waitForExpression(client!, sessionId, `window.innerWidth === ${width}`);
       await waitForAnimationFrames(client!, sessionId);
-      await waitForExpression(
+      await waitForStableExpression(
         client!,
         sessionId,
         `
@@ -3208,7 +3209,7 @@ export async function runDataScenarios(
           })()
         `,
         45_000,
-        `data destination sidebar final geometry at ${width}px`,
+        `data destination sidebar stable final geometry at ${width}px`,
       );
       layouts.push(JSON.parse(String(await evaluate(client!, sessionId, `
         (() => {

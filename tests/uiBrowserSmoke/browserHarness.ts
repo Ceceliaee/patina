@@ -387,6 +387,29 @@ export async function waitForExpression(
   }, timeoutMs);
 }
 
+export async function waitForStableExpression(
+  client: CdpConnection,
+  sessionId: string,
+  expression: string,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  label = "stable browser expression",
+  frameCount = 4,
+) {
+  assert.ok(Number.isInteger(frameCount) && frameCount > 0, "frameCount must be a positive integer");
+  return waitFor(label, async () => {
+    const value = await evaluate(client, sessionId, `
+      (async () => {
+        for (let frame = 0; frame < ${frameCount}; frame += 1) {
+          await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+          if (!(${expression})) return false;
+        }
+        return true;
+      })()
+    `);
+    return value ? value : null;
+  }, timeoutMs);
+}
+
 export async function waitForAnimationFrames(
   client: CdpConnection,
   sessionId: string,
