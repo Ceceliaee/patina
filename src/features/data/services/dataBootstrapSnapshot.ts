@@ -46,6 +46,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isValidAppOption(value: unknown) {
+  return isRecord(value)
+    && typeof value.appKey === "string"
+    && isStringArray(value.sourceAppKeys);
+}
+
+function isValidAppTrendViewModel(value: unknown) {
+  return isRecord(value)
+    && Array.isArray(value.appOptions)
+    && value.appOptions.every(isValidAppOption)
+    && Array.isArray(value.selectedApps)
+    && value.selectedApps.every(isValidAppOption);
+}
+
 function isValidBootstrapSnapshot(value: unknown): value is DataBootstrapSnapshot {
   if (!isRecord(value)) return false;
   return (
@@ -56,7 +74,7 @@ function isValidBootstrapSnapshot(value: unknown): value is DataBootstrapSnapsho
     && typeof value.mappingVersion === "number"
     && (value.uiLanguage === "zh-CN" || value.uiLanguage === "en-US")
     && isRecord(value.overviewTrendViewModel)
-    && isRecord(value.appTrendViewModel)
+    && isValidAppTrendViewModel(value.appTrendViewModel)
     && Array.isArray(value.heatmapRows)
     && (typeof value.earliestStartTime === "number" || value.earliestStartTime === null)
   );
@@ -81,6 +99,7 @@ export async function loadPersistedDataBootstrapSnapshot(
     const parsed: unknown = JSON.parse(payload);
     if (!isValidBootstrapSnapshot(parsed)) {
       cachedSnapshot = null;
+      await resolvedDeps.clearPayload();
       return null;
     }
 
