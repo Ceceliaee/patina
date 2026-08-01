@@ -1318,7 +1318,7 @@ export async function runDataScenarios(
     await evaluate(
       client!,
       sessionId,
-      `localStorage.removeItem("patina:data-destination-detail-timeline-zoom-hours:v1")`,
+      `localStorage.removeItem("patina:destination-detail-timeline-zoom-hours:v1"); localStorage.removeItem("patina:data-destination-detail-timeline-zoom-hours:v1")`,
     );
     await waitForExpression(
       client!,
@@ -1369,8 +1369,8 @@ export async function runDataScenarios(
             for (const node of record.addedNodes) {
               if (!(node instanceof Element)) continue;
               if (
-                node.matches(".data-destination-detail-shell-fallback")
-                || node.querySelector(".data-destination-detail-shell-fallback")
+                node.matches(".destination-detail-shell-fallback")
+                || node.querySelector(".destination-detail-shell-fallback")
               ) {
                 window.__dataDetailOpeningTrace.sawFallback = true;
               }
@@ -1381,11 +1381,13 @@ export async function runDataScenarios(
           childList: true,
           subtree: true,
         });
-        target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, detail: 1 }));
-        target.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
-        target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, detail: 2 }));
-        target.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 2 }));
-        target.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, detail: 2 }));
+        const trigger = target.querySelector("[data-destination-detail-trigger]");
+        if (!(trigger instanceof HTMLElement)) return null;
+        trigger.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, detail: 1 }));
+        trigger.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+        trigger.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, detail: 2 }));
+        trigger.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 2 }));
+        trigger.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, detail: 2 }));
         return JSON.stringify({
           backgroundRange,
           listScrollTop: list.scrollTop,
@@ -1405,7 +1407,7 @@ export async function runDataScenarios(
     await waitForExpression(
       client!,
       sessionId,
-      `Boolean(document.querySelector(".data-destination-detail-dialog"))`,
+      `Boolean(document.querySelector(".destination-detail-dialog"))`,
       45_000,
       "app detail dialog",
     );
@@ -1425,18 +1427,18 @@ export async function runDataScenarios(
     assert.deepEqual(
       await evaluate(client!, sessionId, `
         (() => {
-          const dialog = document.querySelector(".data-destination-detail-dialog");
+          const dialog = document.querySelector(".destination-detail-dialog");
           const background = document.querySelector("[data-data-content-state]");
           return {
-            dialogCount: document.querySelectorAll(".data-destination-detail-dialog").length,
+            dialogCount: document.querySelectorAll(".destination-detail-dialog").length,
             hasDescription: Boolean(dialog?.querySelector(".qp-dialog-description")),
             hasHeatmap: Boolean(dialog?.querySelector(".data-heatmap-panel")),
-            hasTrend: Boolean(dialog?.querySelector(".data-destination-detail-chart")),
-            hasSummary: Boolean(dialog?.querySelector(".data-destination-detail-summary")),
+            hasTrend: Boolean(dialog?.querySelector(".destination-detail-chart")),
+            hasSummary: Boolean(dialog?.querySelector(".destination-detail-summary")),
             hasModeSwitch: Boolean(dialog?.querySelector(".data-destination-mode")),
             hasNavigation: Boolean(dialog?.querySelector("nav")),
             hasTimelineSubtitle: Boolean(
-              dialog?.querySelector(".data-destination-detail-section-header p"),
+              dialog?.querySelector(".destination-detail-section-header p"),
             ),
             backgroundConnected: Boolean(background?.isConnected),
             selectedKeys: Array.from(document.querySelectorAll(
@@ -1455,27 +1457,27 @@ export async function runDataScenarios(
         hasNavigation: false,
         hasTimelineSubtitle: false,
         backgroundConnected: true,
-        selectedKeys: [openingState.targetKey],
+        selectedKeys: openingState.selectedKeys,
       },
     );
     await waitForExpression(
       client!,
       sessionId,
       `Boolean(
-        document.querySelector(".data-destination-detail-header-actions")
-        && document.querySelector(".data-destination-detail-timeline-track")
+        document.querySelector(".destination-detail-header-actions")
+        && document.querySelector(".destination-detail-timeline-track")
       )`,
       45_000,
       "app detail content",
     );
     assert.deepEqual(
       await evaluate(client!, sessionId, `(() => {
-        const timeline = document.querySelector(".data-destination-detail-timeline");
+        const timeline = document.querySelector(".destination-detail-timeline");
         const slider = document.querySelector(
-          '.data-destination-detail-timeline-slider input[type="range"]',
+          '.destination-detail-timeline-slider input[type="range"]',
         );
         return {
-          zoomHours: timeline?.getAttribute("data-data-detail-timeline-zoom-hours"),
+          zoomHours: timeline?.getAttribute("data-destination-detail-timeline-zoom-hours"),
           sliderValue: slider instanceof HTMLInputElement ? slider.value : null,
         };
       })()`),
@@ -1485,7 +1487,7 @@ export async function runDataScenarios(
     assert.equal(await evaluate(client!, sessionId, `
       (() => {
         const interaction = document.querySelector(
-          ".data-destination-detail-timeline-interaction",
+          ".destination-detail-timeline-interaction",
         );
         if (!(interaction instanceof HTMLElement)) return false;
         const rect = interaction.getBoundingClientRect();
@@ -1503,15 +1505,15 @@ export async function runDataScenarios(
     await waitForExpression(
       client!,
       sessionId,
-      `document.querySelector(".data-destination-detail-timeline")
-        ?.getAttribute("data-data-detail-timeline-zoom-hours") === "23.8"`,
+      `document.querySelector(".destination-detail-timeline")
+        ?.getAttribute("data-destination-detail-timeline-zoom-hours") === "23.8"`,
       45_000,
       "detail timeline wheel zoom",
     );
     assert.equal(await evaluate(client!, sessionId, `
       (() => {
         const interaction = document.querySelector(
-          ".data-destination-detail-timeline-interaction",
+          ".destination-detail-timeline-interaction",
         );
         if (!(interaction instanceof HTMLElement)) return false;
         const rect = interaction.getBoundingClientRect();
@@ -1529,27 +1531,27 @@ export async function runDataScenarios(
     await waitForExpression(
       client!,
       sessionId,
-      `document.querySelector(".data-destination-detail-timeline")
-        ?.getAttribute("data-data-detail-timeline-zoom-hours") === "24"`,
+      `document.querySelector(".destination-detail-timeline")
+        ?.getAttribute("data-destination-detail-timeline-zoom-hours") === "24"`,
       45_000,
       "restore detail timeline wheel zoom",
     );
     assert.deepEqual(
       await evaluate(client!, sessionId, `
         (() => {
-          const surface = document.querySelector(".data-destination-detail-dialog");
+          const surface = document.querySelector(".destination-detail-dialog");
           const body = surface?.querySelector(".qp-dialog-body");
           return {
             bodyOwnsScrolling: body
               ? ["auto", "scroll"].includes(getComputedStyle(body).overflowY)
               : false,
             hasRangeControl: Boolean(surface?.querySelector(".data-trend-range-control")),
-            hasTrendChart: Boolean(surface?.querySelector(".data-destination-detail-chart")),
+            hasTrendChart: Boolean(surface?.querySelector(".destination-detail-chart")),
             hasMetricSummary: Boolean(surface?.querySelector(
-              ".data-destination-detail-summary",
+              ".destination-detail-summary",
             )),
             hasDaySummary: Boolean(surface?.querySelector(
-              ".data-destination-detail-day-summary",
+              ".destination-detail-day-summary",
             )),
             hasTimelineZoom: Boolean(surface?.querySelector(
               'input[aria-label="时间轴窗口时长"]',
@@ -1572,7 +1574,7 @@ export async function runDataScenarios(
     await waitForExpression(
       client!,
       sessionId,
-      `Boolean(document.querySelector(".data-destination-detail-timeline-segment"))`,
+      `Boolean(document.querySelector(".destination-detail-timeline-segment"))`,
       45_000,
       "visible detail timeline segment",
     );
@@ -1582,13 +1584,13 @@ export async function runDataScenarios(
       `
         (() => {
           const segment = document.querySelector(
-            ".data-destination-detail-timeline-segment",
+            ".destination-detail-timeline-segment",
           );
           const track = document.querySelector(
-            ".data-destination-detail-timeline-track",
+            ".destination-detail-timeline-track",
           );
           const axis = document.querySelector(
-            ".data-destination-detail-timeline-axis",
+            ".destination-detail-timeline-axis",
           );
           const firstAxisLabel = axis?.querySelector("span");
           if (!(segment instanceof HTMLElement)) return null;
@@ -1612,7 +1614,7 @@ export async function runDataScenarios(
             axisFontWeight: axisStyle.fontWeight,
             axisLabelTop: firstAxisLabelStyle.top,
             hasVerticalGrid: Boolean(document.querySelector(
-              ".data-destination-detail-timeline-grid",
+              ".destination-detail-timeline-grid",
             )),
           });
         })()
@@ -1650,7 +1652,7 @@ export async function runDataScenarios(
     assert.equal(await evaluate(client!, sessionId, `
       (() => {
         const segment = document.querySelector(
-          ".data-destination-detail-timeline-segment",
+          ".destination-detail-timeline-segment",
         );
         if (!(segment instanceof HTMLElement)) return false;
         segment.dispatchEvent(new MouseEvent("mouseover", {
@@ -1665,7 +1667,7 @@ export async function runDataScenarios(
       client!,
       sessionId,
       `Boolean(document.querySelector(
-        ".qp-tooltip.data-destination-detail-timeline-tooltip",
+        ".qp-tooltip.destination-detail-timeline-tooltip",
       ))`,
       45_000,
       "Quiet Pro detail timeline tooltip",
@@ -1677,12 +1679,12 @@ export async function runDataScenarios(
         `(() => {
           const tooltipLabel = document
             .querySelector(
-              ".data-destination-detail-timeline-tooltip-label",
+              ".destination-detail-timeline-tooltip-label",
             )
             ?.textContent?.trim();
           const dialogHeading = document
             .querySelector(
-              ".data-destination-detail-dialog .qp-dialog-heading",
+              ".destination-detail-dialog .qp-dialog-heading",
             )
             ?.textContent?.trim();
 
@@ -1698,7 +1700,7 @@ export async function runDataScenarios(
     assert.equal(await evaluate(client!, sessionId, `
       (() => {
         const segment = document.querySelector(
-          ".data-destination-detail-timeline-segment",
+          ".destination-detail-timeline-segment",
         );
         if (!(segment instanceof HTMLElement)) return false;
         segment.dispatchEvent(new MouseEvent("mouseout", {
@@ -1712,11 +1714,11 @@ export async function runDataScenarios(
     `), true);
     const wideDialogGeometry = JSON.parse(String(await evaluate(client!, sessionId, `
       (() => {
-        const surface = document.querySelector(".data-destination-detail-dialog");
+        const surface = document.querySelector(".destination-detail-dialog");
         const header = surface?.querySelector(".qp-dialog-header");
         const heading = surface?.querySelector(".qp-dialog-heading");
-        const actions = surface?.querySelector(".data-destination-detail-header-actions");
-        const timeline = surface?.querySelector(".data-destination-detail-timeline-track");
+        const actions = surface?.querySelector(".destination-detail-header-actions");
+        const timeline = surface?.querySelector(".destination-detail-timeline-track");
         if (!surface || !header || !heading || !actions || !timeline) return null;
         const surfaceRect = surface.getBoundingClientRect();
         const headingRect = heading.getBoundingClientRect();
@@ -1760,8 +1762,8 @@ export async function runDataScenarios(
     assert.deepEqual(
       await evaluate(client!, sessionId, `
         (() => {
-          const surface = document.querySelector(".data-destination-detail-dialog");
-          const timeline = surface?.querySelector(".data-destination-detail-timeline-track");
+          const surface = document.querySelector(".destination-detail-dialog");
+          const timeline = surface?.querySelector(".destination-detail-timeline-track");
           if (!surface || !timeline) return null;
           const surfaceRect = surface.getBoundingClientRect();
           const timelineRect = timeline.getBoundingClientRect();
@@ -1790,8 +1792,8 @@ export async function runDataScenarios(
     assert.deepEqual(
       await evaluate(client!, sessionId, `
         (() => {
-          const surface = document.querySelector(".data-destination-detail-dialog");
-          const actions = surface?.querySelector(".data-destination-detail-header-actions");
+          const surface = document.querySelector(".destination-detail-dialog");
+          const actions = surface?.querySelector(".destination-detail-header-actions");
           const heading = surface?.querySelector(".qp-dialog-heading");
           if (!surface || !actions || !heading) return null;
           const surfaceRect = surface.getBoundingClientRect();
@@ -1826,16 +1828,16 @@ export async function runDataScenarios(
     assert.deepEqual(
       await evaluate(client!, sessionId, `
         (() => {
-          const surface = document.querySelector(".data-destination-detail-dialog");
+          const surface = document.querySelector(".destination-detail-dialog");
           return {
             backgroundRange: document.querySelector(
             ".data-app-panel > .data-app-panel-header .data-trend-range-trigger",
             )?.textContent?.trim() ?? "",
             hasTrendChart: Boolean(surface?.querySelector(
-              ".data-destination-detail-chart",
+              ".destination-detail-chart",
             )),
             hasMetricSummary: Boolean(surface?.querySelector(
-              ".data-destination-detail-summary",
+              ".destination-detail-summary",
             )),
           };
         })()
@@ -1850,9 +1852,9 @@ export async function runDataScenarios(
     await waitForExpression(
       client!,
       sessionId,
-      `Boolean(document.querySelector(".data-destination-detail-timeline-track"))
+      `Boolean(document.querySelector(".destination-detail-timeline-track"))
         && Boolean(document.querySelector(
-          ".data-destination-detail-activity-disclosure",
+          ".destination-detail-activity-disclosure",
         ))`,
       45_000,
       "detail day analysis",
@@ -1863,13 +1865,13 @@ export async function runDataScenarios(
       `
         (() => {
           const content = document.querySelector(
-            ".data-destination-detail-day-content",
+            ".destination-detail-day-content",
           );
           const timeline = document.querySelector(
-            ".data-destination-detail-timeline-track",
+            ".destination-detail-timeline-track",
           );
           const records = document.querySelector(
-            ".data-destination-detail-records",
+            ".destination-detail-records",
           );
           if (!(content instanceof HTMLElement)) return null;
           if (!(timeline instanceof HTMLElement)) return null;
@@ -1877,8 +1879,8 @@ export async function runDataScenarios(
           const timelineRect = timeline.getBoundingClientRect();
           const recordsRect = records.getBoundingClientRect();
           return JSON.stringify({
-            displayedDate: content.dataset.dataDetailDisplayedDate,
-            requestedDate: content.dataset.dataDetailRequestedDate,
+            displayedDate: content.dataset.destinationDetailDisplayedDate,
+            requestedDate: content.dataset.destinationDetailRequestedDate,
             timelineRect: {
               width: timelineRect.width,
               height: timelineRect.height,
@@ -1910,7 +1912,7 @@ export async function runDataScenarios(
       assert.equal(await evaluate(client!, sessionId, `
         (() => {
           const previous = document.querySelector(
-            ".data-destination-detail-day-actions .qp-range-control-arrow",
+            ".destination-detail-day-actions .qp-range-control-arrow",
           );
           if (!(previous instanceof HTMLButtonElement) || previous.disabled) {
             return false;
@@ -1924,13 +1926,13 @@ export async function runDataScenarios(
         await evaluate(client!, sessionId, `
           (() => {
             const content = document.querySelector(
-              ".data-destination-detail-day-content",
+              ".destination-detail-day-content",
             );
             const timeline = document.querySelector(
-              ".data-destination-detail-timeline-track",
+              ".destination-detail-timeline-track",
             );
             const records = document.querySelector(
-              ".data-destination-detail-records",
+              ".destination-detail-records",
             );
             if (!(content instanceof HTMLElement)) return null;
             if (!(timeline instanceof HTMLElement)) return null;
@@ -1939,13 +1941,13 @@ export async function runDataScenarios(
             const recordsRect = records.getBoundingClientRect();
             return JSON.stringify({
               busy: content.getAttribute("aria-busy"),
-              displayedDate: content.dataset.dataDetailDisplayedDate,
-              requestedDate: content.dataset.dataDetailRequestedDate,
+              displayedDate: content.dataset.destinationDetailDisplayedDate,
+              requestedDate: content.dataset.destinationDetailRequestedDate,
               hasTimelinePlaceholder: Boolean(document.querySelector(
-                ".data-destination-detail-timeline-placeholder",
+                ".destination-detail-timeline-placeholder",
               )),
               hasRecordsPlaceholder: Boolean(document.querySelector(
-                ".data-destination-detail-records-placeholder",
+                ".destination-detail-records-placeholder",
               )),
               timelineRect: {
                 width: timelineRect.width,
@@ -2008,11 +2010,11 @@ export async function runDataScenarios(
         sessionId,
         `(() => {
           const content = document.querySelector(
-            ".data-destination-detail-day-content",
+            ".destination-detail-day-content",
           );
           return content?.getAttribute("aria-busy") === "false"
-            && content.getAttribute("data-data-detail-displayed-date")
-              === content.getAttribute("data-data-detail-requested-date");
+            && content.getAttribute("data-destination-detail-displayed-date")
+              === content.getAttribute("data-destination-detail-requested-date");
         })()`,
         45_000,
         "detail day navigation settles without an intermediate blank frame",
@@ -2027,7 +2029,7 @@ export async function runDataScenarios(
     assert.equal(await evaluate(client!, sessionId, `
       (() => {
         const arrows = document.querySelectorAll(
-          ".data-destination-detail-day-actions .qp-range-control-arrow",
+          ".destination-detail-day-actions .qp-range-control-arrow",
         );
         const next = arrows[1];
         if (!(next instanceof HTMLButtonElement) || next.disabled) return false;
@@ -2038,8 +2040,8 @@ export async function runDataScenarios(
     await waitForExpression(
       client!,
       sessionId,
-      `document.querySelector(".data-destination-detail-day-content")
-        ?.getAttribute("data-data-detail-displayed-date")
+      `document.querySelector(".destination-detail-day-content")
+        ?.getAttribute("data-destination-detail-displayed-date")
           === ${jsonString(detailBeforeDelayedDayNavigation.displayedDate)}`,
       45_000,
       "restore detail day after delayed navigation regression",
@@ -2047,7 +2049,7 @@ export async function runDataScenarios(
     assert.equal(await evaluate(client!, sessionId, `
       (() => {
         const slider = document.querySelector(
-          '.data-destination-detail-timeline-slider input[type="range"]',
+          '.destination-detail-timeline-slider input[type="range"]',
         );
         if (!(slider instanceof HTMLInputElement)) return false;
         const setter = Object.getOwnPropertyDescriptor(
@@ -2062,8 +2064,8 @@ export async function runDataScenarios(
     await waitForExpression(
       client!,
       sessionId,
-      `document.querySelector(".data-destination-detail-timeline")
-        ?.getAttribute("data-data-detail-timeline-zoom-hours") === "3"`,
+      `document.querySelector(".destination-detail-timeline")
+        ?.getAttribute("data-destination-detail-timeline-zoom-hours") === "3"`,
       45_000,
       "detail timeline first zoom step",
     );
@@ -2071,14 +2073,14 @@ export async function runDataScenarios(
       await evaluate(
         client!,
         sessionId,
-        `localStorage.getItem("patina:data-destination-detail-timeline-zoom-hours:v1")`,
+        `localStorage.getItem("patina:destination-detail-timeline-zoom-hours:v1")`,
       ),
       "3",
     );
     assert.equal(await evaluate(client!, sessionId, `
       (() => {
         const decrease = document.querySelector(
-          '.data-destination-detail-dialog button[aria-label="缩短时间轴窗口"]',
+          '.destination-detail-dialog button[aria-label="缩短时间轴窗口"]',
         );
         if (!(decrease instanceof HTMLButtonElement)) return false;
         decrease.click();
@@ -2088,8 +2090,8 @@ export async function runDataScenarios(
     await waitForExpression(
       client!,
       sessionId,
-      `document.querySelector(".data-destination-detail-timeline")
-        ?.getAttribute("data-data-detail-timeline-zoom-hours") === "2"`,
+      `document.querySelector(".destination-detail-timeline")
+        ?.getAttribute("data-destination-detail-timeline-zoom-hours") === "2"`,
       45_000,
       "detail timeline zoom",
     );
@@ -2097,19 +2099,19 @@ export async function runDataScenarios(
       await evaluate(
         client!,
         sessionId,
-        `localStorage.getItem("patina:data-destination-detail-timeline-zoom-hours:v1")`,
+        `localStorage.getItem("patina:destination-detail-timeline-zoom-hours:v1")`,
       ),
       "2",
     );
     const timelineStartBeforePan = Number(await evaluate(client!, sessionId, `
-      document.querySelector(".data-destination-detail-timeline")
-        ?.getAttribute("data-data-detail-timeline-start-ms")
+      document.querySelector(".destination-detail-timeline")
+        ?.getAttribute("data-destination-detail-timeline-start-ms")
     `));
     assert.ok(Number.isFinite(timelineStartBeforePan));
     assert.equal(await evaluate(client!, sessionId, `
       (() => {
         const interaction = document.querySelector(
-          ".data-destination-detail-timeline-interaction",
+          ".destination-detail-timeline-interaction",
         );
         if (!(interaction instanceof HTMLElement)) return false;
         interaction.dispatchEvent(new KeyboardEvent("keydown", {
@@ -2122,15 +2124,15 @@ export async function runDataScenarios(
     await waitForExpression(
       client!,
       sessionId,
-      `Number(document.querySelector(".data-destination-detail-timeline")
-        ?.getAttribute("data-data-detail-timeline-start-ms")) > ${timelineStartBeforePan}`,
+      `Number(document.querySelector(".destination-detail-timeline")
+        ?.getAttribute("data-destination-detail-timeline-start-ms")) > ${timelineStartBeforePan}`,
       45_000,
       "detail timeline horizontal pan",
     );
     assert.equal(await evaluate(client!, sessionId, `
       (() => {
         const interaction = document.querySelector(
-          ".data-destination-detail-timeline-interaction",
+          ".destination-detail-timeline-interaction",
         );
         if (!(interaction instanceof HTMLElement)) return false;
         interaction.dispatchEvent(new KeyboardEvent("keydown", {
@@ -2143,17 +2145,66 @@ export async function runDataScenarios(
     await waitForExpression(
       client!,
       sessionId,
-      `Number(document.querySelector(".data-destination-detail-timeline")
-        ?.getAttribute("data-data-detail-timeline-start-ms")) === ${timelineStartBeforePan}`,
+      `Number(document.querySelector(".destination-detail-timeline")
+        ?.getAttribute("data-destination-detail-timeline-start-ms")) === ${timelineStartBeforePan}`,
       45_000,
       "restore detail timeline pan",
     );
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const surface = document.querySelector(".data-destination-detail-dialog");
+          const interaction = document.querySelector(
+            ".destination-detail-timeline-interaction",
+          );
+          if (!(interaction instanceof HTMLElement)) return false;
+          interaction.dispatchEvent(new KeyboardEvent("keydown", {
+            key: "End",
+            bubbles: true,
+          }));
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Number(document.querySelector(".destination-detail-timeline")
+        ?.getAttribute("data-destination-detail-timeline-start-ms")) > ${timelineStartBeforePan}`,
+      45_000,
+      "move detail timeline to day end",
+    );
+    for (let index = 0; index < 5; index += 1) {
+      const panStart = Number(await evaluate(client!, sessionId, `
+        document.querySelector(".destination-detail-timeline")
+          ?.getAttribute("data-destination-detail-timeline-start-ms")
+      `));
+      await evaluate(client!, sessionId, `
+        document.querySelector(".destination-detail-timeline-interaction")
+          ?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }))
+      `);
+      await waitForExpression(
+        client!,
+        sessionId,
+        `Number(document.querySelector(".destination-detail-timeline")
+          ?.getAttribute("data-destination-detail-timeline-start-ms")) < ${panStart}`,
+        45_000,
+        "pan detail timeline toward recorded activities",
+      );
+    }
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(".destination-detail-activity-disclosure"))`,
+      45_000,
+      "move detail timeline to recorded activities",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const surface = document.querySelector(".destination-detail-dialog");
           const body = surface?.querySelector(".qp-dialog-body");
-          const records = surface?.querySelector(".data-destination-detail-records");
+          const records = surface?.querySelector(".destination-detail-records");
           if (!body || !records) return false;
 
           const bodyOverflowY = getComputedStyle(body).overflowY;
@@ -2168,9 +2219,9 @@ export async function runDataScenarios(
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const records = document.querySelector(".data-destination-detail-records");
+          const records = document.querySelector(".destination-detail-records");
           const summaries = Array.from(
-            document.querySelectorAll(".data-destination-detail-activity-summary"),
+            document.querySelectorAll(".destination-detail-activity-summary"),
           );
           if (!(records instanceof HTMLElement) || summaries.length === 0) return false;
           const recordsStyle = getComputedStyle(records);
@@ -2191,7 +2242,7 @@ export async function runDataScenarios(
       await evaluate(client!, sessionId, `
         (() => {
           const controls = document.querySelector(
-            ".data-destination-detail-duration-controls",
+            ".destination-detail-duration-controls",
           );
           const decrease = controls?.querySelector(
             '[aria-label="减少显示分钟 1 分钟"]',
@@ -2200,7 +2251,7 @@ export async function runDataScenarios(
             '[aria-label="增加显示分钟 1 分钟"]',
           );
           const value = controls?.querySelector(
-            ".data-destination-detail-duration-value",
+            ".destination-detail-duration-value",
           );
           if (
             !(decrease instanceof HTMLButtonElement)
@@ -2209,7 +2260,7 @@ export async function runDataScenarios(
           ) return null;
           const initialMinutes = Number.parseInt(value.textContent ?? "", 10);
           const initialActivityCount = document.querySelectorAll(
-            ".data-destination-detail-activity",
+            ".destination-detail-activity",
           ).length;
           const change = increase.disabled ? -1 : 1;
           const button = change > 0 ? increase : decrease;
@@ -2231,7 +2282,7 @@ export async function runDataScenarios(
       client!,
       sessionId,
       `Number.parseInt(
-        document.querySelector(".data-destination-detail-duration-value")
+        document.querySelector(".destination-detail-duration-value")
           ?.textContent ?? "",
         10,
       ) === ${durationControlState.initialMinutes + durationControlState.change}`,
@@ -2240,7 +2291,7 @@ export async function runDataScenarios(
     );
     assert.equal(
       await evaluate(client!, sessionId, `
-        document.querySelectorAll(".data-destination-detail-activity").length
+        document.querySelectorAll(".destination-detail-activity").length
           ${durationControlState.change > 0 ? "<=" : ">="}
           ${durationControlState.initialActivityCount}
       `),
@@ -2251,7 +2302,7 @@ export async function runDataScenarios(
       await evaluate(client!, sessionId, `
         (() => {
           const controls = document.querySelector(
-            ".data-destination-detail-duration-controls",
+            ".destination-detail-duration-controls",
           );
           const button = controls?.querySelector(
             ${durationControlState.change > 0
@@ -2269,12 +2320,12 @@ export async function runDataScenarios(
       client!,
       sessionId,
       `Number.parseInt(
-        document.querySelector(".data-destination-detail-duration-value")
+        document.querySelector(".destination-detail-duration-value")
           ?.textContent ?? "",
         10,
       ) === ${durationControlState.initialMinutes}
         && Boolean(document.querySelector(
-          ".data-destination-detail-activity-disclosure",
+          ".destination-detail-activity-disclosure",
         ))`,
       45_000,
       "restore detail minimum activity duration",
@@ -2282,7 +2333,7 @@ export async function runDataScenarios(
     const detailDayNavigationContract = await evaluate(client!, sessionId, `
         (() => {
           const controls = document.querySelector(
-            ".data-destination-detail-day-actions",
+            ".destination-detail-day-actions",
           );
           const arrows = controls?.querySelectorAll(".qp-range-control-arrow");
           const label = controls?.querySelector(".qp-range-control-label");
@@ -2364,7 +2415,7 @@ export async function runDataScenarios(
     assert.equal(await evaluate(client!, sessionId, `
       (() => {
         const trigger = document.querySelector(
-          ".data-destination-detail-date-trigger",
+          ".destination-detail-date-trigger",
         );
         if (!(trigger instanceof HTMLButtonElement)) return false;
         trigger.click();
@@ -2384,10 +2435,10 @@ export async function runDataScenarios(
       await evaluate(client!, sessionId, `
         (() => {
           const trigger = document.querySelector(
-            ".data-destination-detail-date-trigger",
+            ".destination-detail-date-trigger",
           );
           const arrow = document.querySelector(
-            ".data-destination-detail-day-actions .qp-range-control-arrow",
+            ".destination-detail-day-actions .qp-range-control-arrow",
           );
           const selected = document.querySelector(
             ".qp-calendar-popover .qp-calendar-day[data-selected='true']",
@@ -2431,7 +2482,7 @@ export async function runDataScenarios(
       client!,
       sessionId,
       `!document.querySelector(".qp-calendar-popover")
-        && Boolean(document.querySelector(".data-destination-detail-dialog"))`,
+        && Boolean(document.querySelector(".destination-detail-dialog"))`,
       45_000,
       "close detail day calendar",
     );
@@ -2441,12 +2492,12 @@ export async function runDataScenarios(
       `
         (() => {
           const trigger = document.querySelector(
-            ".data-destination-detail-activity-disclosure",
+            ".destination-detail-activity-disclosure",
           );
           const records = document.querySelector(
-            ".data-destination-detail-records",
+            ".destination-detail-records",
           );
-          const row = trigger?.closest(".data-destination-detail-activity");
+          const row = trigger?.closest(".destination-detail-activity");
           if (!(trigger instanceof HTMLButtonElement)) return null;
           if (!(records instanceof HTMLElement)) return null;
           if (!(row instanceof HTMLElement)) return null;
@@ -2468,8 +2519,8 @@ export async function runDataScenarios(
       client!,
       sessionId,
       `Boolean(document.querySelector(
-        ".data-destination-detail-record-popover "
-          + ".data-destination-detail-popover-item",
+        ".destination-detail-record-popover "
+          + ".destination-detail-popover-item",
       ))`,
       45_000,
       "detail title popover",
@@ -2480,15 +2531,15 @@ export async function runDataScenarios(
       `
         (() => {
           const trigger = document.querySelector(
-            ".data-destination-detail-activity-disclosure[aria-expanded='true']",
+            ".destination-detail-activity-disclosure[aria-expanded='true']",
           );
           const popover = document.querySelector(
-            ".data-destination-detail-record-popover",
+            ".destination-detail-record-popover",
           );
           const records = document.querySelector(
-            ".data-destination-detail-records",
+            ".destination-detail-records",
           );
-          const row = trigger?.closest(".data-destination-detail-activity");
+          const row = trigger?.closest(".destination-detail-activity");
           if (!(trigger instanceof HTMLButtonElement)) return null;
           if (!(popover instanceof HTMLElement)) return null;
           if (!(records instanceof HTMLElement)) return null;
@@ -2497,10 +2548,10 @@ export async function runDataScenarios(
             parentIsBody: popover.parentElement === document.body,
             role: popover.getAttribute("role"),
             itemCount: popover.querySelectorAll(
-              ".data-destination-detail-popover-item",
+              ".destination-detail-popover-item",
             ).length,
             hasLegacyDrawer: Boolean(document.querySelector(
-              ".data-destination-detail-fragments",
+              ".destination-detail-fragments",
             )),
             nativeTooltipCount: popover.querySelectorAll("[title]").length,
             rowHeight: row.getBoundingClientRect().height,
@@ -2551,15 +2602,15 @@ export async function runDataScenarios(
     await waitForExpression(
       client!,
       sessionId,
-      `!document.querySelector(".data-destination-detail-record-popover")
-        && Boolean(document.querySelector(".data-destination-detail-dialog"))`,
+      `!document.querySelector(".destination-detail-record-popover")
+        && Boolean(document.querySelector(".destination-detail-dialog"))`,
       45_000,
       "close detail title popover without closing the dialog",
     );
     assert.equal(await evaluate(client!, sessionId, `
       (() => {
         const trigger = document.querySelector(
-          ".data-destination-detail-date-trigger",
+          ".destination-detail-date-trigger",
         );
         if (!(trigger instanceof HTMLButtonElement)) return false;
         trigger.click();
@@ -2604,7 +2655,7 @@ export async function runDataScenarios(
       client!,
       sessionId,
       `!document.querySelector(".qp-calendar-popover")
-        && document.querySelector(".data-destination-detail-date-trigger")
+        && document.querySelector(".destination-detail-date-trigger")
           ?.textContent?.trim() !== "今天"`,
       45_000,
       "select a detail date outside the initial seven-day range",
@@ -2613,7 +2664,7 @@ export async function runDataScenarios(
     assert.equal(await evaluate(client!, sessionId, `
       (() => {
         const close = document.querySelector(
-          '.data-destination-detail-dialog [aria-label="关闭详情"]',
+          '.destination-detail-dialog [aria-label="关闭详情"]',
         );
         if (!(close instanceof HTMLButtonElement)) return false;
         close.click();
@@ -2623,7 +2674,7 @@ export async function runDataScenarios(
     await waitForExpression(
       client!,
       sessionId,
-      `!document.querySelector(".data-destination-detail-dialog")`,
+      `!document.querySelector(".destination-detail-dialog")`,
     );
     assert.deepEqual(
       await evaluate(client!, sessionId, `
@@ -2645,7 +2696,7 @@ export async function runDataScenarios(
         backgroundRange: openingState.backgroundRange,
         focusedKey: openingState.targetKey,
         scrollTop: openingState.listScrollTop,
-        selectedKeys: [openingState.targetKey],
+        selectedKeys: openingState.selectedKeys,
       },
     );
 
@@ -2664,8 +2715,8 @@ export async function runDataScenarios(
     await waitForExpression(
       client!,
       sessionId,
-      `document.querySelector(".data-destination-detail-timeline")
-        ?.getAttribute("data-data-detail-timeline-zoom-hours") === "2"`,
+      `document.querySelector(".destination-detail-timeline")
+        ?.getAttribute("data-destination-detail-timeline-zoom-hours") === "2"`,
       45_000,
       "detail timeline restores the persisted zoom after reopening",
     );
@@ -2677,12 +2728,12 @@ export async function runDataScenarios(
     await waitForExpression(
       client!,
       sessionId,
-      `!document.querySelector(".data-destination-detail-dialog")`,
+      `!document.querySelector(".destination-detail-dialog")`,
     );
     await evaluate(
       client!,
       sessionId,
-      `localStorage.removeItem("patina:data-destination-detail-timeline-zoom-hours:v1")`,
+      `localStorage.removeItem("patina:destination-detail-timeline-zoom-hours:v1"); localStorage.removeItem("patina:data-destination-detail-timeline-zoom-hours:v1")`,
     );
 
     await evaluate(
@@ -2709,20 +2760,22 @@ export async function runDataScenarios(
         const target = document.querySelector('[aria-label="网页列表"] button');
         if (!(target instanceof HTMLButtonElement)) return false;
         target.focus();
-        target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, detail: 1 }));
-        target.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
-        target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, detail: 2 }));
-        target.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 2 }));
-        target.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, detail: 2 }));
+        const trigger = target.querySelector("[data-destination-detail-trigger]");
+        if (!(trigger instanceof HTMLElement)) return false;
+        trigger.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, detail: 1 }));
+        trigger.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+        trigger.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, detail: 2 }));
+        trigger.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 2 }));
+        trigger.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, detail: 2 }));
         return true;
       })()
     `), true);
     await waitForExpression(
       client!,
       sessionId,
-      `Boolean(document.querySelector(".data-destination-detail-dialog"))
+      `Boolean(document.querySelector(".destination-detail-dialog"))
         && !document.querySelector(
-          ".data-destination-detail-dialog .qp-dialog-description",
+          ".destination-detail-dialog .qp-dialog-description",
         )`,
       45_000,
       "web detail dialog",
@@ -2730,9 +2783,9 @@ export async function runDataScenarios(
     await waitForExpression(
       client!,
       sessionId,
-      `Boolean(document.querySelector(".data-destination-detail-timeline-track"))
+      `Boolean(document.querySelector(".destination-detail-timeline-track"))
         && Boolean(document.querySelector(
-          ".data-destination-detail-activity-disclosure",
+          ".destination-detail-activity-disclosure",
         ))`,
       45_000,
       "web detail day",
@@ -2743,9 +2796,9 @@ export async function runDataScenarios(
       `
         (() => {
           const trigger = document.querySelector(
-            ".data-destination-detail-activity-disclosure",
+            ".destination-detail-activity-disclosure",
           );
-          const row = trigger?.closest(".data-destination-detail-activity");
+          const row = trigger?.closest(".destination-detail-activity");
           if (!(trigger instanceof HTMLButtonElement)) return null;
           if (!(row instanceof HTMLElement)) return null;
           const rowHeight = row.getBoundingClientRect().height;
@@ -2759,8 +2812,8 @@ export async function runDataScenarios(
       client!,
       sessionId,
       `Boolean(document.querySelector(
-        ".data-destination-detail-record-popover "
-          + ".data-destination-detail-popover-item",
+        ".destination-detail-record-popover "
+          + ".destination-detail-popover-item",
       ))`,
       45_000,
       "web title details popover",
@@ -2771,20 +2824,20 @@ export async function runDataScenarios(
       `
         (() => {
           const popover = document.querySelector(
-            ".data-destination-detail-record-popover",
+            ".destination-detail-record-popover",
           );
           const item = popover?.querySelector(
-            ".data-destination-detail-popover-item",
+            ".destination-detail-popover-item",
           );
           const copy = item?.querySelector(
-            ".data-destination-detail-popover-copy",
+            ".destination-detail-popover-copy",
           );
           const title = copy?.querySelector("strong");
           const url = copy?.querySelector("span");
           const trigger = document.querySelector(
-            ".data-destination-detail-activity-disclosure[aria-expanded='true']",
+            ".destination-detail-activity-disclosure[aria-expanded='true']",
           );
-          const row = trigger?.closest(".data-destination-detail-activity");
+          const row = trigger?.closest(".destination-detail-activity");
           if (!(popover instanceof HTMLElement)) return null;
           if (!(item instanceof HTMLElement)) return null;
           if (!(title instanceof HTMLElement)) return null;
@@ -2834,8 +2887,8 @@ export async function runDataScenarios(
     await waitForExpression(
       client!,
       sessionId,
-      `!document.querySelector(".data-destination-detail-record-popover")
-        && Boolean(document.querySelector(".data-destination-detail-dialog"))`,
+      `!document.querySelector(".destination-detail-record-popover")
+        && Boolean(document.querySelector(".destination-detail-dialog"))`,
       45_000,
       "close web title details popover",
     );
@@ -2847,7 +2900,7 @@ export async function runDataScenarios(
     await waitForExpression(
       client!,
       sessionId,
-      `!document.querySelector(".data-destination-detail-dialog")`,
+      `!document.querySelector(".destination-detail-dialog")`,
     );
     await evaluate(client!, sessionId, `
       (() => {
@@ -3071,8 +3124,8 @@ export async function runDataScenarios(
     assert.equal(webSyncDisabledState.webText, false);
     assert.equal(webSyncDisabledState.webCommandCount, 0);
     assert.ok(
-      JSON.stringify(webSyncDisabledState.headingOrder) === JSON.stringify(["title", "status"])
-        || JSON.stringify(webSyncDisabledState.headingOrder) === JSON.stringify(["title", "selected", "status"]),
+      JSON.stringify(webSyncDisabledState.headingOrder) === JSON.stringify(["title"])
+        || JSON.stringify(webSyncDisabledState.headingOrder) === JSON.stringify(["title", "selected"]),
       "selected icons must immediately follow the title when present, without a hidden placeholder",
     );
 
@@ -3334,14 +3387,14 @@ export async function runDataScenarios(
     await waitForExpression(
       client!,
       sessionId,
-      `Boolean(document.querySelector(".data-destination-detail-timeline-track"))`,
+      `Boolean(document.querySelector(".destination-detail-timeline-track"))`,
       45_000,
       "English dark detail dialog",
     );
     assert.deepEqual(
       await evaluate(client!, sessionId, `
         (() => {
-          const surface = document.querySelector(".data-destination-detail-dialog");
+          const surface = document.querySelector(".destination-detail-dialog");
           if (!surface) return null;
           const rect = surface.getBoundingClientRect();
           return {
@@ -3349,9 +3402,9 @@ export async function runDataScenarios(
             horizontalOverflow: surface.scrollWidth > surface.clientWidth,
             insideViewport: rect.left >= 0 && rect.right <= innerWidth,
             hasHeatmap: Boolean(surface.querySelector(".data-heatmap-panel")),
-            hasTrend: Boolean(surface.querySelector(".data-destination-detail-chart")),
+            hasTrend: Boolean(surface.querySelector(".destination-detail-chart")),
             hasSummary: Boolean(surface.querySelector(
-              ".data-destination-detail-summary",
+              ".destination-detail-summary",
             )),
             hasDescription: Boolean(surface.querySelector(".qp-dialog-description")),
           };
@@ -3376,7 +3429,7 @@ export async function runDataScenarios(
     await waitForExpression(
       client!,
       sessionId,
-      `!document.querySelector(".data-destination-detail-dialog")`,
+      `!document.querySelector(".destination-detail-dialog")`,
     );
 
     await evaluate(client!, sessionId, `
