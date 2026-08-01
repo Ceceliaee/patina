@@ -18,21 +18,35 @@ App note en: TBD.
 
 ### Added
 
-- 设置页的网页同步使用说明新增 Chrome Web Store、Firefox Add-ons 和 Microsoft Edge Add-ons 官方安装入口，并保留 GitHub Release 手动安装入口。Refs [#29](https://github.com/Ceceliaee/patina/issues/29)
-
 ### Changed
-
-- Classification、Dashboard、History 汇总区和 Data 改用可重建的 SQLite 应用目录与活动汇总读模型；长历史读取不再默认把全部事实记录搬入 WebView 聚合，读模型脏、构建中或不可用时会按范围安全回退到事实。
-- 主导航先提交点击反馈，再在下一帧挂载目标页面；暖切换保持已有页面结构且不出现空白画布。
-- 网页同步新增识别 360 安全浏览器、夸克浏览器和 Tabbit Browser，并沿用现有 Chromium 浏览器的记录与隐私规则。
 
 ### Fixed
 
-- 系统托盘菜单现在会跟随已保存的界面语言，并在语言、追踪暂停或标题记录状态变化后立即保持一致。Refs [#61](https://github.com/Ceceliaee/patina/issues/61)
-- 修复挂件在不同缩放比例的显示器之间拖动后可能弹回原屏或主屏的问题；挂件现在会按释放时的物理位置确定目标显示器，并在重启、展开与收起后保持对应屏幕和停靠位置。Refs [#55](https://github.com/Ceceliaee/patina/issues/55)
-- 主窗口现在会先在原生层保持隐藏，待持久化外观、主题和应用框架完成首帧就绪后再统一显示；冷启动、托盘唤起及 WebView 重建不再暴露透明、错误主题或未完成样式的中间帧。Refs [#54](https://github.com/Ceceliaee/patina/issues/54)
-- 修复 Data 热力图切换时间范围、聚合方式或数据集时，旧悬浮提示可能在新内容绘制前短暂残留的问题。
-- 修复挂件在 Windows 125%、150% 和 200% 缩放及展开状态下可能被裁切、贴边偏移，或出现呼吸灯不圆、不同心的问题；首次“最小化到挂件”现在也会先确认挂件可见，失败时自动重试并恢复主窗口。Refs [#26](https://github.com/Ceceliaee/patina/issues/26)
+### Removed
+
+### Internal
+
+## [1.9.0] - 2026-08-01
+
+Release: 新增应用与网站详情、网页趋势和网页时间轴，并提升长历史读取、窗口首帧与挂件多屏体验。
+App note: 新增应用与网站详情、网页趋势和网页时间轴，窗口与挂件恢复更稳定。
+App note en: Adds app and website details, web trends, and web timelines, with more reliable window and widget recovery.
+
+### Added
+
+- Dashboard、History 和 Data 现在可以双击应用或网站图标打开统一详情，查看分日统计、活动记录与可缩放平移的时间线；详情会记住最近使用的视图和时间窗口。
+- Data 新增网页活动趋势分析，可在应用与网页之间切换，支持快捷周期、月份与自定义日期导航，搜索或组合选择多个目标，并查看对应的趋势、汇总指标和紧凑热力图。
+- History 时间轴新增网页模式，可在应用、分类和网页活动之间切换，并与现有缩放、拖动和分轨列表保持一致。
+
+### Changed
+
+- Classification、Dashboard、History 汇总区和 Data 改用可重建的 SQLite 应用目录与活动汇总读模型，降低长历史在 WebView 中的读取与聚合开销；主导航会先响应点击再挂载目标页面，暖切换保持已有页面结构。
+- 网页同步使用说明新增 Chrome Web Store、Firefox Add-ons 和 Microsoft Edge Add-ons 官方安装入口，并新增识别 360 安全浏览器、夸克浏览器和 Tabbit Browser。Refs [#29](https://github.com/Ceceliaee/patina/issues/29)
+
+### Fixed
+
+- 修复 Windows 桌面外壳中的多项显示与恢复问题：主窗口会在主题和应用框架首帧就绪后显示，托盘菜单保持已保存语言，挂件在高 DPI、跨显示器拖动和首次最小化失败恢复时保持正确位置与可见状态。Refs [#26](https://github.com/Ceceliaee/patina/issues/26), [#54](https://github.com/Ceceliaee/patina/issues/54), [#55](https://github.com/Ceceliaee/patina/issues/55), [#61](https://github.com/Ceceliaee/patina/issues/61)
+- 修复网页同步本地桥接在端口暂时占用或监听失败后无法自行恢复的问题；桥接现在会按受控节奏重试，并在设置变化或关闭时停止过期重试。
 
 ### Removed
 
