@@ -99,6 +99,7 @@ const CACHED_DATA_HEATMAP_REFRESH_DELAY_MS = 320;
 const CACHED_DATA_HEATMAP_REFRESH_IDLE_TIMEOUT_MS = 1_500;
 const DATA_OPEN_PREWARM_DELAY_MS = 500;
 const DATA_OPEN_PREWARM_IDLE_TIMEOUT_MS = 2_000;
+const DATA_STACKED_LAYOUT_QUERY = "(min-width: 901px) and (max-width: 1899px)";
 const EMPTY_DATA_ICON_EXE_NAMES: string[] = [];
 const EMPTY_DATA_APP_OPTIONS: DataAppTrendViewModel["appOptions"] = [];
 const EMPTY_HEATMAP_ROWS: ReturnType<typeof buildActivityHeatmap> = [];
@@ -163,16 +164,15 @@ function useDataChartInitialDimension(
   key: DataChartDimensionKey,
   getFallbackDimension: () => DataChartDimension,
 ) {
-  const chartRef = useRef<HTMLDivElement | null>(null);
+  const observerCleanupRef = useRef<(() => void) | null>(null);
   const [initialDimension, setInitialDimension] = useState<DataChartDimension>(
     () => dataChartDimensionCache[key] ?? getFallbackDimension(),
   );
 
-  useIsomorphicLayoutEffect(() => {
-    const element = chartRef.current;
-    if (!element) {
-      return undefined;
-    }
+  const chartRef = useCallback((element: HTMLDivElement | null) => {
+    observerCleanupRef.current?.();
+    observerCleanupRef.current = null;
+    if (!element) return;
 
     const syncDimension = () => {
       const rect = element.getBoundingClientRect();
@@ -193,13 +193,19 @@ function useDataChartInitialDimension(
 
     if (typeof ResizeObserver === "undefined") {
       window.addEventListener("resize", syncDimension);
-      return () => window.removeEventListener("resize", syncDimension);
+      observerCleanupRef.current = () => window.removeEventListener("resize", syncDimension);
+      return;
     }
 
     const observer = new ResizeObserver(syncDimension);
     observer.observe(element);
-    return () => observer.disconnect();
+    observerCleanupRef.current = () => observer.disconnect();
   }, [key]);
+
+  useEffect(() => () => {
+    observerCleanupRef.current?.();
+    observerCleanupRef.current = null;
+  }, []);
 
   return { chartRef, initialDimension };
 }
@@ -1072,6 +1078,68 @@ export default function Data({
     }
   }, []);
 
+  useIsomorphicLayoutEffect(() => {
+    const root = dataRootRef.current;
+    const overviewPanel = root?.querySelector<HTMLElement>(".data-overview");
+    const destinationPanel = root?.querySelector<HTMLElement>(".data-app-panel");
+    const scrollOwner = root?.querySelector<HTMLElement>(".data-page-scroll");
+    if (!root || !overviewPanel || !destinationPanel || !scrollOwner) {
+      return undefined;
+    }
+
+    let frameId: number | null = null;
+    const syncStackedPanelHeight = () => {
+      frameId = null;
+      if (!window.matchMedia(DATA_STACKED_LAYOUT_QUERY).matches) {
+        root.style.removeProperty("--data-stacked-panel-height");
+        root.style.removeProperty("--data-stacked-scroll-end-space");
+        return;
+      }
+
+      const overviewHeight = overviewPanel.getBoundingClientRect().height;
+      if (overviewHeight > 0) {
+        root.style.setProperty(
+          "--data-stacked-panel-height",
+          `${Math.round(overviewHeight)}px`,
+        );
+      }
+      const destinationHeight = destinationPanel.getBoundingClientRect().height;
+      const scrollEndSpace = Math.max(
+        0,
+        Math.round(scrollOwner.clientHeight - destinationHeight),
+      );
+      root.style.setProperty(
+        "--data-stacked-scroll-end-space",
+        `${scrollEndSpace}px`,
+      );
+    };
+    const scheduleSync = () => {
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId);
+      }
+      frameId = requestAnimationFrame(syncStackedPanelHeight);
+    };
+
+    syncStackedPanelHeight();
+    window.addEventListener("resize", scheduleSync);
+    const observer = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(scheduleSync);
+    observer?.observe(overviewPanel);
+    observer?.observe(destinationPanel);
+    observer?.observe(scrollOwner);
+
+    return () => {
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId);
+      }
+      observer?.disconnect();
+      window.removeEventListener("resize", scheduleSync);
+      root.style.removeProperty("--data-stacked-panel-height");
+      root.style.removeProperty("--data-stacked-scroll-end-space");
+    };
+  }, []);
+
   useEffect(() => {
     if (trustedReadModelsReady) {
       markDataNavigationStage("readModelReady");
@@ -1091,7 +1159,7 @@ export default function Data({
             ? "read-model-ready"
             : "structure-ready"
       }
-      className="flex h-full min-h-0 flex-col gap-4 md:gap-5 overflow-y-auto pr-1 custom-scrollbar"
+      className="flex h-full min-h-0 flex-col gap-4 md:gap-5"
     >
       <QuietPageHeader
         icon={<BarChart3 size={18} />}
@@ -1099,117 +1167,119 @@ export default function Data({
         subtitle={UI_TEXT.data.subtitle}
       />
 
-      <div className="data-dashboard-grid">
-        <div className="qp-panel p-5 data-overview">
-          <DataTrendPanel
-            selection={selectedTrendRange}
-            viewModel={visibleTrendViewModel}
-            chartRef={overviewTrendChart.chartRef}
-            initialDimension={overviewTrendChart.initialDimension}
-            canOpenHistory={canOpenTrendHistory}
-            onSelectionChange={setSelectedTrendRange}
-            onMouseDownCapture={handleTrendMouseDownCapture}
-            onDoubleClickCapture={handleTrendDoubleClickCapture}
-            onMouseMove={handleTrendMouseMove}
-            onMouseLeave={handleTrendMouseLeave}
-          />
+      <div className="data-page-scroll min-h-0 flex-1 overflow-y-auto pr-1 custom-scrollbar">
+        <div className="data-dashboard-grid">
+          <div className="qp-panel p-5 data-overview">
+            <DataTrendPanel
+              selection={selectedTrendRange}
+              viewModel={visibleTrendViewModel}
+              chartRef={overviewTrendChart.chartRef}
+              initialDimension={overviewTrendChart.initialDimension}
+              canOpenHistory={canOpenTrendHistory}
+              onSelectionChange={setSelectedTrendRange}
+              onMouseDownCapture={handleTrendMouseDownCapture}
+              onDoubleClickCapture={handleTrendDoubleClickCapture}
+              onMouseMove={handleTrendMouseMove}
+              onMouseLeave={handleTrendMouseLeave}
+            />
 
-          <DataHeatmapPanel
-            selectedHeatmapView={selectedHeatmapView}
-            selectedHeatmapViewKey={selectedHeatmapViewKey}
-            rows={visibleHeatmapRows}
-            granularity={heatmapGranularity}
-            granularityOptions={heatmapGranularityOptions}
-            canSelectOlderHeatmapView={canSelectOlderHeatmapView}
-            canSelectNewerHeatmapView={canSelectNewerHeatmapView}
-            onGranularityChange={setHeatmapGranularity}
-            onSelectAdjacentHeatmapView={selectAdjacentHeatmapView}
-            onOpenHistoryDate={onOpenHistoryDate}
-            loading={heatmapLoading}
+            <DataHeatmapPanel
+              selectedHeatmapView={selectedHeatmapView}
+              selectedHeatmapViewKey={selectedHeatmapViewKey}
+              rows={visibleHeatmapRows}
+              granularity={heatmapGranularity}
+              granularityOptions={heatmapGranularityOptions}
+              canSelectOlderHeatmapView={canSelectOlderHeatmapView}
+              canSelectNewerHeatmapView={canSelectNewerHeatmapView}
+              onGranularityChange={setHeatmapGranularity}
+              onSelectAdjacentHeatmapView={selectAdjacentHeatmapView}
+              onOpenHistoryDate={onOpenHistoryDate}
+              loading={heatmapLoading}
+            />
+          </div>
+
+          <DataAppTrendPanel
+            onContentCommitted={handleDestinationPanelCommitted}
+            destinationMode={destinationMode}
+            showDestinationMode={webActivityEnabled}
+            title={isWebDestination ? UI_TEXT.data.webTrend : UI_TEXT.data.appTrend}
+            rangeAriaLabel={isWebDestination
+              ? UI_TEXT.accessibility.data.webTrendRange
+              : UI_TEXT.accessibility.data.appTrendRange}
+            selection={selectedAppTrendRange}
+            ready={destinationPanelReady}
+            selectedOptions={destinationPanelSelectedOptions}
+            trendSeries={destinationTrendSeries}
+            summary={destinationSummary}
+            filteredOptions={destinationPanelOptions}
+            searchQuery={isWebDestination ? webSearchQuery : appSearchQuery}
+            hasSearchQuery={isWebDestination ? hasWebSearchQuery : hasAppSearchQuery}
+            searchPlaceholder={isWebDestination
+              ? UI_TEXT.data.webSearchPlaceholder
+              : UI_TEXT.data.appSearchPlaceholder}
+            listAriaLabel={isWebDestination
+              ? UI_TEXT.data.webTrendDomainList
+              : UI_TEXT.data.appTrendAppList}
+            emptyLabel={isWebDestination
+              ? UI_TEXT.data.webTrendEmpty
+              : UI_TEXT.data.appTrendEmpty}
+            noMatchLabel={isWebDestination
+              ? UI_TEXT.data.webTrendNoMatch
+              : UI_TEXT.data.appTrendNoMatch}
+            totalMetricLabel={isWebDestination
+              ? UI_TEXT.data.webTrendTotal
+              : UI_TEXT.data.appTrendTotal}
+            usageMetricLabel={isWebDestination
+              ? UI_TEXT.data.webTrendUsage
+              : UI_TEXT.data.appTrendUsage}
+            granularity={destinationGranularity}
+            chartData={destinationChartData}
+            heatmapContent={(
+              <DataHeatmapPanel
+                title={isWebDestination ? UI_TEXT.data.webHeatmap : UI_TEXT.data.appHeatmap}
+                compact
+                selectedHeatmapView={selectedDestinationHeatmapView}
+                selectedHeatmapViewKey={`${presentedDestinationMode}:${encodeDataDestinationSelectionKey(
+                  isWebDestination ? selectedWebKeys : selectedAppKeys,
+                )}:${selectedDestinationHeatmapView}`}
+                rows={visibleDestinationHeatmapRows}
+                granularity={destinationHeatmapGranularity}
+                granularityOptions={heatmapGranularityOptions}
+                canSelectOlderHeatmapView={
+                  selectedDestinationHeatmapViewIndex >= 0
+                  && selectedDestinationHeatmapViewIndex < destinationHeatmapViewOptions.length - 1
+                }
+                canSelectNewerHeatmapView={selectedDestinationHeatmapViewIndex > 0}
+                onGranularityChange={setDestinationHeatmapGranularity}
+                onSelectAdjacentHeatmapView={selectAdjacentDestinationHeatmapView}
+                onOpenHistoryDate={onOpenHistoryDate}
+                loading={visibleDestinationHeatmapLoading}
+              />
+            )}
+            chartAxis={destinationChartAxis}
+            peakDay={destinationPeakDay}
+            listRef={appListRef}
+            chartRef={appTrendChart.chartRef}
+            initialDimension={appTrendChart.initialDimension}
+            canOpenHistory={destinationCanOpenHistory}
+            errorMessage={isWebDestination ? webTrendError : null}
+            refreshing={(isWebDestination && webTrendRefreshing) || destinationModeSwitchPending}
+            refreshFailed={isWebDestination && webTrendRefreshFailed}
+            onRetry={webActivity.retry}
+            onDestinationModeChange={setDestinationMode}
+            onSelectionChange={setSelectedAppTrendRange}
+            onSearchQueryChange={isWebDestination
+              ? webActivity.setSearchQuery
+              : handleAppSearchQueryChange}
+            onOptionSelect={handleDestinationOptionSelect}
+            onOptionIntentStart={captureDestinationDetailIntent}
+            onOptionOpenDetails={handleOpenDestinationDetail}
+            onMouseDownCapture={handleAppTrendMouseDownCapture}
+            onDoubleClickCapture={handleAppTrendDoubleClickCapture}
+            onMouseMove={handleAppTrendMouseMove}
+            onMouseLeave={handleAppTrendMouseLeave}
           />
         </div>
-
-        <DataAppTrendPanel
-          onContentCommitted={handleDestinationPanelCommitted}
-          destinationMode={destinationMode}
-          showDestinationMode={webActivityEnabled}
-          title={isWebDestination ? UI_TEXT.data.webTrend : UI_TEXT.data.appTrend}
-          rangeAriaLabel={isWebDestination
-            ? UI_TEXT.accessibility.data.webTrendRange
-            : UI_TEXT.accessibility.data.appTrendRange}
-          selection={selectedAppTrendRange}
-          ready={destinationPanelReady}
-          selectedOptions={destinationPanelSelectedOptions}
-          trendSeries={destinationTrendSeries}
-          summary={destinationSummary}
-          filteredOptions={destinationPanelOptions}
-          searchQuery={isWebDestination ? webSearchQuery : appSearchQuery}
-          hasSearchQuery={isWebDestination ? hasWebSearchQuery : hasAppSearchQuery}
-          searchPlaceholder={isWebDestination
-            ? UI_TEXT.data.webSearchPlaceholder
-            : UI_TEXT.data.appSearchPlaceholder}
-          listAriaLabel={isWebDestination
-            ? UI_TEXT.data.webTrendDomainList
-            : UI_TEXT.data.appTrendAppList}
-          emptyLabel={isWebDestination
-            ? UI_TEXT.data.webTrendEmpty
-            : UI_TEXT.data.appTrendEmpty}
-          noMatchLabel={isWebDestination
-            ? UI_TEXT.data.webTrendNoMatch
-            : UI_TEXT.data.appTrendNoMatch}
-          totalMetricLabel={isWebDestination
-            ? UI_TEXT.data.webTrendTotal
-            : UI_TEXT.data.appTrendTotal}
-          usageMetricLabel={isWebDestination
-            ? UI_TEXT.data.webTrendUsage
-            : UI_TEXT.data.appTrendUsage}
-          granularity={destinationGranularity}
-          chartData={destinationChartData}
-          heatmapContent={(
-            <DataHeatmapPanel
-              title={isWebDestination ? UI_TEXT.data.webHeatmap : UI_TEXT.data.appHeatmap}
-              compact
-              selectedHeatmapView={selectedDestinationHeatmapView}
-              selectedHeatmapViewKey={`${presentedDestinationMode}:${encodeDataDestinationSelectionKey(
-                isWebDestination ? selectedWebKeys : selectedAppKeys,
-              )}:${selectedDestinationHeatmapView}`}
-              rows={visibleDestinationHeatmapRows}
-              granularity={destinationHeatmapGranularity}
-              granularityOptions={heatmapGranularityOptions}
-              canSelectOlderHeatmapView={
-                selectedDestinationHeatmapViewIndex >= 0
-                && selectedDestinationHeatmapViewIndex < destinationHeatmapViewOptions.length - 1
-              }
-              canSelectNewerHeatmapView={selectedDestinationHeatmapViewIndex > 0}
-              onGranularityChange={setDestinationHeatmapGranularity}
-              onSelectAdjacentHeatmapView={selectAdjacentDestinationHeatmapView}
-              onOpenHistoryDate={onOpenHistoryDate}
-              loading={visibleDestinationHeatmapLoading}
-            />
-          )}
-          chartAxis={destinationChartAxis}
-          peakDay={destinationPeakDay}
-          listRef={appListRef}
-          chartRef={appTrendChart.chartRef}
-          initialDimension={appTrendChart.initialDimension}
-          canOpenHistory={destinationCanOpenHistory}
-          errorMessage={isWebDestination ? webTrendError : null}
-          refreshing={(isWebDestination && webTrendRefreshing) || destinationModeSwitchPending}
-          refreshFailed={isWebDestination && webTrendRefreshFailed}
-          onRetry={webActivity.retry}
-          onDestinationModeChange={setDestinationMode}
-          onSelectionChange={setSelectedAppTrendRange}
-          onSearchQueryChange={isWebDestination
-            ? webActivity.setSearchQuery
-            : handleAppSearchQueryChange}
-          onOptionSelect={handleDestinationOptionSelect}
-          onOptionIntentStart={captureDestinationDetailIntent}
-          onOptionOpenDetails={handleOpenDestinationDetail}
-          onMouseDownCapture={handleAppTrendMouseDownCapture}
-          onDoubleClickCapture={handleAppTrendDoubleClickCapture}
-          onMouseMove={handleAppTrendMouseMove}
-          onMouseLeave={handleAppTrendMouseLeave}
-        />
       </div>
       {destinationDetail ? (
         <DestinationDetailDialogEntry

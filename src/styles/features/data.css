@@ -109,7 +109,50 @@
   border-radius: var(--qp-radius-control);
   background: transparent;
   padding: 0;
-  cursor: default;
+}
+
+.data-app-panel [data-destination-detail-trigger] {
+  cursor: pointer;
+}
+
+@media (min-width: 901px) and (max-width: 1899px) {
+  .data-page-scroll {
+    padding-bottom: var(--data-stacked-scroll-end-space, 0px);
+  }
+
+  .data-dashboard-grid > .data-app-panel {
+    display: flex;
+    height: var(--data-stacked-panel-height, auto);
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .data-dashboard-grid > .data-app-panel > .data-app-grid {
+    min-height: 0;
+    flex: 1 1 auto;
+  }
+
+  .data-dashboard-grid > .data-app-panel .data-app-sidebar,
+  .data-dashboard-grid > .data-app-panel .data-app-chart-column {
+    width: 100%;
+    min-height: 0;
+  }
+
+  .data-dashboard-grid > .data-app-panel .data-app-trend-list {
+    min-height: 0;
+  }
+
+  .data-dashboard-grid > .data-app-panel .data-app-chart {
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    flex: 1 1 210px;
+  }
+
+  .data-dashboard-grid > .data-app-panel .data-app-metric-strip,
+  .data-dashboard-grid > .data-app-panel .data-heatmap-panel-compact {
+    flex-shrink: 0;
+  }
 }
 
 .data-app-selected-icon:hover {

@@ -1,4 +1,4 @@
-import { memo, type MouseEvent, type RefObject } from "react";
+import { memo, type MouseEvent, type Ref } from "react";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import NativeTrendChart from "../../../shared/charts/NativeTrendChart.tsx";
 import {
@@ -17,7 +17,7 @@ interface DataChartDimension {
 interface DataTrendPanelProps {
   selection: DataTrendRangeSelection;
   viewModel: DataTrendViewModel | null;
-  chartRef: RefObject<HTMLDivElement | null>;
+  chartRef: Ref<HTMLDivElement>;
   initialDimension: DataChartDimension;
   canOpenHistory: boolean;
   onSelectionChange: (selection: DataTrendRangeSelection) => void;

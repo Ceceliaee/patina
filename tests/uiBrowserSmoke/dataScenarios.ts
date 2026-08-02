@@ -38,24 +38,31 @@ export async function runDataScenarios(
     const stableScrollbarGeometry = JSON.parse(String(await evaluate(client!, sessionId, `
       (() => {
         const root = document.querySelector("[data-data-content-state]");
+        const scrollOwner = root?.querySelector(".data-page-scroll");
         const chart = root?.querySelector(".data-overview .data-trend-chart");
         const destination = root?.querySelector(".data-app-panel");
         const heatmap = root?.querySelector(".data-overview > .data-heatmap-panel");
-        if (!root || !chart || !heatmap) return null;
+        const header = root?.querySelector(":scope > .qp-page-header");
+        if (!root || !scrollOwner || !header || !chart || !heatmap) return null;
 
         const originalDestinationDisplay = destination?.style.display;
         const originalHeatmapDisplay = heatmap.style.display;
         if (destination) destination.style.display = "none";
         heatmap.style.display = "none";
         const widthWithoutOverflow = chart.getBoundingClientRect().width;
-        const fitsWithoutOverflow = root.scrollHeight <= root.clientHeight;
+        const fitsWithoutOverflow = scrollOwner.scrollHeight <= scrollOwner.clientHeight;
+        const headerTopBeforeScroll = header.getBoundingClientRect().top;
 
         const spacer = document.createElement("div");
-        spacer.style.flex = "0 0 " + (root.clientHeight + 1) + "px";
+        spacer.style.height = (scrollOwner.clientHeight + 1) + "px";
         spacer.setAttribute("aria-hidden", "true");
-        root.appendChild(spacer);
+        scrollOwner.appendChild(spacer);
         const widthWithOverflow = chart.getBoundingClientRect().width;
-        const overflowsWithContent = root.scrollHeight > root.clientHeight;
+        const overflowsWithContent = scrollOwner.scrollHeight > scrollOwner.clientHeight;
+        scrollOwner.scrollTop = scrollOwner.scrollHeight;
+        const contentScrolled = scrollOwner.scrollTop > 0;
+        const headerTopAfterScroll = header.getBoundingClientRect().top;
+        scrollOwner.scrollTop = 0;
         spacer.remove();
 
         if (destination) destination.style.display = originalDestinationDisplay ?? "";
@@ -63,7 +70,11 @@ export async function runDataScenarios(
 
         return JSON.stringify({
           fitsWithoutOverflow,
-          gutter: getComputedStyle(root).scrollbarGutter,
+          gutter: getComputedStyle(scrollOwner).scrollbarGutter,
+          contentScrolled,
+          headerTopDelta: headerTopAfterScroll - headerTopBeforeScroll,
+          headerOutsideScrollOwner: header.parentElement === root
+            && !scrollOwner.contains(header),
           overflowsWithContent,
           widthWithOverflow,
           widthWithoutOverflow,
@@ -72,12 +83,18 @@ export async function runDataScenarios(
     `))) as {
       fitsWithoutOverflow: boolean;
       gutter: string;
+      contentScrolled: boolean;
+      headerTopDelta: number;
+      headerOutsideScrollOwner: boolean;
       overflowsWithContent: boolean;
       widthWithOverflow: number;
       widthWithoutOverflow: number;
     } | null;
     assert.ok(stableScrollbarGeometry, "data page should expose its scroll owner and trend chart");
     assert.equal(stableScrollbarGeometry.gutter, "stable");
+    assert.equal(stableScrollbarGeometry.contentScrolled, true);
+    assert.ok(Math.abs(stableScrollbarGeometry.headerTopDelta) <= 0.5);
+    assert.equal(stableScrollbarGeometry.headerOutsideScrollOwner, true);
     assert.equal(stableScrollbarGeometry.fitsWithoutOverflow, true);
     assert.equal(stableScrollbarGeometry.overflowsWithContent, true);
     assert.ok(
@@ -1384,6 +1401,7 @@ export async function runDataScenarios(
         });
         const trigger = target.querySelector("[data-destination-detail-trigger]");
         if (!(trigger instanceof HTMLElement)) return null;
+        const detailTriggerCursor = getComputedStyle(trigger).cursor;
         trigger.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, detail: 1 }));
         trigger.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
         trigger.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, detail: 2 }));
@@ -1394,6 +1412,7 @@ export async function runDataScenarios(
           listScrollTop: list.scrollTop,
           selectedKeys,
           targetKey: target.getAttribute("data-destination-key"),
+          detailTriggerCursor,
         });
       })()
     `))) as {
@@ -1401,10 +1420,12 @@ export async function runDataScenarios(
       listScrollTop: number;
       selectedKeys: Array<string | null>;
       targetKey: string | null;
+      detailTriggerCursor: string;
     };
     assert.ok(openingState);
     assert.ok(openingState.targetKey);
     assert.ok(!openingState.selectedKeys.includes(openingState.targetKey));
+    assert.equal(openingState.detailTriggerCursor, "pointer");
     await waitForExpression(
       client!,
       sessionId,
@@ -3161,8 +3182,12 @@ export async function runDataScenarios(
       pageOverflows: boolean;
       firstTop: number;
       firstLeft: number;
+      firstHeight: number;
+      topScrollInset: number;
       secondTop: number;
       secondLeft: number;
+      secondHeight: number;
+      bottomScrollInset: number;
       directChildren: number;
       panelOrder: string[];
       overviewSectionOrder: string[];
@@ -3177,7 +3202,12 @@ export async function runDataScenarios(
       destinationListBottom: number;
       destinationAnalysisLeft: number;
       destinationAnalysisTop: number;
+      destinationAnalysisWidth: number;
       destinationChartBottom: number;
+      destinationChartHeight: number;
+      destinationChartWidth: number;
+      destinationChartViewBoxHeight: number;
+      destinationChartViewBoxWidth: number;
       destinationHeatmapTop: number;
       destinationHeatmapCells: number;
     }> = [];
@@ -3228,14 +3258,34 @@ export async function runDataScenarios(
           const destinationList = grid?.querySelector(".data-app-panel .data-app-trend-list")?.getBoundingClientRect();
           const destinationAnalysis = grid?.querySelector(".data-app-panel .data-app-chart-column")?.getBoundingClientRect();
           const destinationChart = grid?.querySelector(".data-app-panel .data-app-chart")?.getBoundingClientRect();
+          const destinationChartSvg = grid?.querySelector(
+            ".data-app-panel .data-app-chart svg",
+          );
           const destinationHeatmap = grid?.querySelector(".data-app-panel .data-heatmap-panel-compact");
+          const scrollOwner = document.querySelector(".data-page-scroll");
+          let topScrollInset = -1;
+          let bottomScrollInset = -1;
+          if (scrollOwner instanceof HTMLElement && children.length >= 2) {
+            const previousScrollTop = scrollOwner.scrollTop;
+            scrollOwner.scrollTop = 0;
+            topScrollInset = children[0].getBoundingClientRect().top
+              - scrollOwner.getBoundingClientRect().top;
+            scrollOwner.scrollTop = scrollOwner.scrollHeight;
+            bottomScrollInset = children[1].getBoundingClientRect().top
+              - scrollOwner.getBoundingClientRect().top;
+            scrollOwner.scrollTop = previousScrollTop;
+          }
           return JSON.stringify({
             width: window.innerWidth,
             pageOverflows: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
             firstTop: first?.top ?? -1,
             firstLeft: first?.left ?? -1,
+            firstHeight: first?.height ?? -1,
+            topScrollInset,
             secondTop: second?.top ?? -1,
             secondLeft: second?.left ?? -1,
+            secondHeight: second?.height ?? -1,
+            bottomScrollInset,
             directChildren: children.length,
             panelOrder: children.map((node) => (
               node.classList.contains("data-overview")
@@ -3262,7 +3312,12 @@ export async function runDataScenarios(
             destinationListBottom: destinationList?.bottom ?? -1,
             destinationAnalysisLeft: destinationAnalysis?.left ?? -1,
             destinationAnalysisTop: destinationAnalysis?.top ?? -1,
+            destinationAnalysisWidth: destinationAnalysis?.width ?? -1,
             destinationChartBottom: destinationChart?.bottom ?? -1,
+            destinationChartHeight: destinationChart?.height ?? -1,
+            destinationChartWidth: destinationChart?.width ?? -1,
+            destinationChartViewBoxHeight: destinationChartSvg?.viewBox.baseVal.height ?? -1,
+            destinationChartViewBoxWidth: destinationChartSvg?.viewBox.baseVal.width ?? -1,
             destinationHeatmapTop: destinationHeatmap?.getBoundingClientRect().top ?? -1,
             destinationHeatmapCells: destinationHeatmap?.querySelectorAll(".data-heatmap-cell").length ?? 0,
           });
@@ -3295,6 +3350,24 @@ export async function runDataScenarios(
     assert.ok(Math.abs(layouts[0].firstTop - layouts[0].secondTop) <= 1);
     assert.ok(layouts[0].secondLeft > layouts[0].firstLeft);
     assert.ok(layouts[0].heatmapTop > layouts[0].trendTop);
+    assert.ok(
+      Math.abs(layouts[1].firstHeight - layouts[1].secondHeight) <= 1,
+      `stacked Data panels should share one height by adapting only the destination chart; observed ${JSON.stringify(layouts[1])}`,
+    );
+    assert.ok(layouts[1].destinationChartHeight > 1);
+    assert.ok(
+      Math.abs(layouts[1].destinationAnalysisWidth - layouts[1].destinationChartWidth) <= 1,
+      `adapting destination height must preserve the full chart width; observed ${JSON.stringify(layouts[1])}`,
+    );
+    assert.ok(
+      Math.abs(layouts[1].destinationChartHeight - layouts[1].destinationChartViewBoxHeight) <= 1
+        && Math.abs(layouts[1].destinationChartWidth - layouts[1].destinationChartViewBoxWidth) <= 1,
+      `destination chart viewBox must track both rendered dimensions; observed ${JSON.stringify(layouts[1])}`,
+    );
+    assert.ok(
+      Math.abs(layouts[1].topScrollInset - layouts[1].bottomScrollInset) <= 1,
+      `stacked Data panels should keep the same header inset at both scroll limits; observed ${JSON.stringify(layouts[1])}`,
+    );
     for (const layout of layouts.slice(0, 2)) {
       assert.ok(layout.destinationAnalysisLeft > layout.destinationSidebarLeft);
       assert.ok(Math.abs(layout.destinationAnalysisTop - layout.destinationSidebarTop) <= 1);

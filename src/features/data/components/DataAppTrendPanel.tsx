@@ -5,6 +5,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
   type ReactNode,
+  type Ref,
   type RefObject,
 } from "react";
 import NativeTrendChart from "../../../shared/charts/NativeTrendChart.tsx";
@@ -59,7 +60,7 @@ interface DataAppTrendPanelProps {
   chartAxis: DataAppTrendViewModel["chartAxis"];
   peakDay: DataAppTrendViewModel["peakDay"];
   listRef: RefObject<HTMLDivElement | null>;
-  chartRef: RefObject<HTMLDivElement | null>;
+  chartRef: Ref<HTMLDivElement>;
   initialDimension: DataChartDimension;
   canOpenHistory: boolean;
   errorMessage?: string | null;
