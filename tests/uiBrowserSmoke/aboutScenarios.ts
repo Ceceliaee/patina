@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
-import { delay, evaluate, jsonString, waitForExpression } from "./browserHarness.ts";
+import { evaluate, jsonString, waitForExpression } from "./browserHarness.ts";
 
 export async function runAboutScenarios(context: BrowserSmokeContext) {
   const { client, sessionId, runTest } = context;
@@ -32,14 +32,27 @@ export async function runAboutScenarios(context: BrowserSmokeContext) {
       `),
       true,
     );
-    await delay(150);
     const pendingState = JSON.parse(String(await evaluate(client!, sessionId, `JSON.stringify({
       presentedView: document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") ?? null,
       aboutMounted: Boolean(document.querySelector(".about-center-panel")),
+      dashboardMounted: Boolean(document.querySelector(".dashboard-workspace")),
       showsLoadingCopy: document.body.innerText.includes("加载中..."),
-    })`))) as { presentedView: string | null; aboutMounted: boolean; showsLoadingCopy: boolean };
-    assert.equal(pendingState.presentedView, "about");
-    assert.equal(pendingState.aboutMounted, true);
+    })`))) as {
+      presentedView: string | null;
+      aboutMounted: boolean;
+      dashboardMounted: boolean;
+      showsLoadingCopy: boolean;
+    };
+    assert.ok(
+      pendingState.presentedView === "dashboard" || pendingState.presentedView === "about",
+      `cold About handoff must retain Dashboard or present About, got ${pendingState.presentedView}`,
+    );
+    assert.equal(
+      pendingState.presentedView === "about"
+        ? pendingState.aboutMounted
+        : pendingState.dashboardMounted,
+      true,
+    );
     assert.equal(pendingState.showsLoadingCopy, false);
 
     await waitForExpression(
