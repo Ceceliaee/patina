@@ -27,6 +27,12 @@ pub async fn cmd_minimize_main_window(app: AppHandle) -> Result<(), CommandError
 }
 
 #[tauri::command]
+pub fn cmd_e2e_destroy_hidden_main_window(app: AppHandle) -> Result<(), CommandErrorDto> {
+    main_window::destroy_hidden_main_window_for_e2e(&app)
+        .map_err(|error| CommandErrorDto::new("E2E_MAIN_WINDOW_DESTROY_FAILED", error, false))
+}
+
+#[tauri::command]
 pub fn cmd_get_main_window_render_token(
     window: WebviewWindow,
 ) -> Result<MainWindowRenderTokenDto, CommandErrorDto> {

@@ -346,6 +346,7 @@ try {
     env: {
       ...process.env,
       PATINA_E2E: "1",
+      PATINA_E2E_SINGLE_INSTANCE: "1",
       PATINA_E2E_DATA_ROOT: root,
       PATINA_E2E_FRONTEND_URL: frontendUrl,
       PATINA_E2E_DEVTOOLS_PORT: String(devtoolsPort),
@@ -584,6 +585,85 @@ try {
   assert.equal(initialMainWindowVisible, false, "fresh-install start minimized should keep the main window hidden");
   assert.match(logs.join(""), /\[startup\] source=manual strategy=start-in-tray-optimized/);
 
+  let destroyCommandError: string | null = null;
+  try {
+    await evaluate(
+      client,
+      `window.__TAURI_INTERNALS__.invoke("cmd_e2e_destroy_hidden_main_window")`,
+    );
+  } catch (error) {
+    // Destroying the WebView can close CDP before the command response arrives.
+    destroyCommandError = String(error);
+  }
+  client.close();
+  client = null;
+  try {
+    await waitFor(
+      "destroyed main WebView target to disappear",
+      async () => (await findMainTarget(devtoolsPort)) ? null : true,
+      10_000,
+    );
+  } catch (error) {
+    throw new AggregateError([
+      error,
+      new Error(`E2E destroy command error: ${destroyCommandError ?? "none"}`),
+      new Error(`main-window log tail: ${logs.join("").slice(-4_096)}`),
+    ], "hidden main WebView destruction was not observed");
+  }
+
+  const secondaryInstance = spawnSync(RUNTIME_BINARY_PATH, [], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    timeout: 10_000,
+    env: {
+      ...process.env,
+      PATINA_E2E: "1",
+      PATINA_E2E_SINGLE_INSTANCE: "1",
+      PATINA_E2E_DATA_ROOT: root,
+      PATINA_E2E_FRONTEND_URL: frontendUrl,
+      PATINA_E2E_DEVTOOLS_PORT: String(devtoolsPort),
+      CARGO_TARGET_DIR: RUNTIME_TARGET_DIR,
+      TAURI_CONFIG: tauriConfigOverrideJson,
+      WEBVIEW2_USER_DATA_FOLDER: join(root, "webview-user-data"),
+    },
+  });
+  assert.equal(
+    secondaryInstance.status,
+    0,
+    `secondary instance failed: ${secondaryInstance.stderr || secondaryInstance.stdout}`,
+  );
+
+  const recoveredTarget = await waitFor(
+    "single-instance main WebView recreation",
+    () => findMainTarget(devtoolsPort),
+    WEBVIEW_STARTUP_TIMEOUT_MS,
+  );
+  client = await CdpConnection.connect(recoveredTarget.webSocketDebuggerUrl!);
+  await client.command("Runtime.enable");
+  await client.command("Page.enable");
+  await client.command("Log.enable");
+  await waitFor(
+    "single-instance recreated main window bridge",
+    async () => evaluate(
+      client!,
+      "Boolean(window.__TAURI_INTERNALS__?.invoke && document.querySelector('#root')?.children.length)",
+    ),
+    WEBVIEW_STARTUP_TIMEOUT_MS,
+  );
+  await waitFor(
+    "single-instance recreated main window visibility",
+    async () => evaluate(
+      client!,
+      `window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", { label: "main" })`,
+    ),
+    10_000,
+  );
+  mainWindowGeneration = Number(await evaluate(
+    client,
+    `window.__PATINA_MAIN_WINDOW_GENERATION__`,
+  ));
+  assert.match(logs.join(""), /reason=single-instance[\s\S]*result=visible/);
+
   const trayRevealStartedAt = Date.now();
   await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_show_main_window")`);
   await waitFor(
@@ -642,6 +722,10 @@ try {
     cssColorScheme: "light",
   });
 
+  await evaluate(
+    client,
+    `localStorage.setItem("patina:last-active-view", "data")`,
+  );
   const logsBeforeReload = logs.join("");
   await client.command("Page.reload", { ignoreCache: true });
   await waitFor(
@@ -672,13 +756,19 @@ try {
     htmlBackground: getComputedStyle(document.documentElement).backgroundColor,
     bodyBackground: getComputedStyle(document.body).backgroundColor,
     rootBackground: getComputedStyle(document.querySelector("#root")).backgroundColor,
+    presentedView: document.querySelector("main.qp-canvas")?.dataset.presentedView ?? null,
+    transitionState: document.querySelector("main.qp-canvas")?.dataset.viewTransitionState ?? null,
   })`) as {
     frameConnected: boolean;
     htmlBackground: string;
     bodyBackground: string;
     rootBackground: string;
+    presentedView: string | null;
+    transitionState: string | null;
   };
   assert.equal(reloadAppearance.frameConnected, true);
+  assert.equal(reloadAppearance.presentedView, "data");
+  assert.equal(reloadAppearance.transitionState, "settled");
   for (const background of [
     reloadAppearance.htmlBackground,
     reloadAppearance.bodyBackground,
@@ -898,6 +988,8 @@ try {
   // drain instead of assuming the source revision will remain zero.
   await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_toggle_tracking_paused")`);
 
+  let readySourceRevision: number | null = null;
+  let readySourceRevisionPolls = 0;
   const readModelStatus = await waitFor(
     "activity read models ready",
     async () => {
@@ -905,17 +997,29 @@ try {
         client!,
         `window.__TAURI_INTERNALS__.invoke("cmd_get_activity_read_model_status")`,
       ) as {
+        sourceRevision?: number;
         appCatalogState?: string;
         activityHourlyState?: string;
         dirtyAppCount?: number;
         dirtyRangeCount?: number;
       };
-      return value.appCatalogState === "ready"
+      const isReady = Number.isSafeInteger(value.sourceRevision)
+        && value.appCatalogState === "ready"
         && value.activityHourlyState === "ready"
         && value.dirtyAppCount === 0
-        && value.dirtyRangeCount === 0
-        ? value
-        : null;
+        && value.dirtyRangeCount === 0;
+      if (!isReady) {
+        readySourceRevision = null;
+        readySourceRevisionPolls = 0;
+        return null;
+      }
+      if (value.sourceRevision === readySourceRevision) {
+        readySourceRevisionPolls += 1;
+      } else {
+        readySourceRevision = value.sourceRevision!;
+        readySourceRevisionPolls = 1;
+      }
+      return readySourceRevisionPolls >= 3 ? value : null;
     },
     10_000,
   ) as {

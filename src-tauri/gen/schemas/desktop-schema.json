@@ -495,6 +495,12 @@
           "markdownDescription": "Enables the cmd_download_webdav_backup command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_e2e_destroy_hidden_main_window command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-e2e-destroy-hidden-main-window",
+          "markdownDescription": "Enables the cmd_e2e_destroy_hidden_main_window command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_export_backup command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-export-backup",
@@ -1075,6 +1081,12 @@
           "type": "string",
           "const": "deny-cmd-download-webdav-backup",
           "markdownDescription": "Denies the cmd_download_webdav_backup command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_e2e_destroy_hidden_main_window command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-e2e-destroy-hidden-main-window",
+          "markdownDescription": "Denies the cmd_e2e_destroy_hidden_main_window command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_export_backup command without any pre-configured scope.",

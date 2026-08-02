@@ -42,17 +42,29 @@ pub fn build(input: BootstrapInput) -> tauri::Builder<tauri::Wry> {
 fn register_single_instance_plugin(
     builder: tauri::Builder<tauri::Wry>,
 ) -> tauri::Builder<tauri::Wry> {
-    #[cfg(all(desktop, not(debug_assertions)))]
+    #[cfg(desktop)]
     {
-        return builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            tray::show_main_window(
-                app,
-                crate::app::main_window::MainWindowShowReason::SingleInstance,
-            );
-        }));
+        let enabled = !cfg!(debug_assertions)
+            || std::env::var("PATINA_E2E_SINGLE_INSTANCE").as_deref() == Ok("1");
+        if enabled {
+            return builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+                let app = app.clone();
+                // The Windows plugin invokes this callback from its WM_COPYDATA window procedure.
+                // Return to the message loop before recreating a background-destroyed WebView so
+                // native window creation cannot be trapped inside the re-entrant message dispatch.
+                tauri::async_runtime::spawn(async move {
+                    tokio::task::yield_now().await;
+                    if !tray::show_main_window(
+                        &app,
+                        crate::app::main_window::MainWindowShowReason::SingleInstance,
+                    ) {
+                        eprintln!("[main-window] single-instance recovery request was rejected");
+                    }
+                });
+            }));
+        }
     }
 
-    #[cfg(any(not(desktop), debug_assertions))]
     builder
 }
 
@@ -140,6 +152,7 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::widget::cmd_toggle_tracking_paused,
         commands::widget::cmd_is_primary_mouse_button_down,
         commands::window::cmd_minimize_main_window,
+        commands::window::cmd_e2e_destroy_hidden_main_window,
         commands::window::cmd_get_main_window_render_token,
         commands::window::cmd_mark_main_window_ready,
         commands::update::cmd_get_update_snapshot,

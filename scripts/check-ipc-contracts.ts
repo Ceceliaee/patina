@@ -23,6 +23,10 @@ const DYNAMIC_INVOKE_ALLOWLIST = new Map([
 
 // Commands intentionally invoked by Rust runtime, auxiliary windows, or tests rather than src/platform.
 const RUNTIME_ONLY_COMMANDS = new Map<string, string>([
+  [
+    "cmd_e2e_destroy_hidden_main_window",
+    "isolated debug-only Tauri runtime smoke recovery command",
+  ],
 ]);
 
 const WIDGET_COMMAND_ALLOWLIST = new Set([

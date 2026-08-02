@@ -35,7 +35,7 @@ pub(crate) enum MainWindowShowReason {
     TrayIcon,
     Widget,
     MinimizeRollback,
-    #[cfg(all(desktop, not(debug_assertions)))]
+    #[cfg(desktop)]
     SingleInstance,
     ToolAlert,
     DestroyRecovery,
@@ -50,7 +50,7 @@ impl MainWindowShowReason {
             Self::TrayIcon => "tray-icon",
             Self::Widget => "widget",
             Self::MinimizeRollback => "minimize-rollback",
-            #[cfg(all(desktop, not(debug_assertions)))]
+            #[cfg(desktop)]
             Self::SingleInstance => "single-instance",
             Self::ToolAlert => "tool-alert",
             Self::DestroyRecovery => "destroy-recovery",
@@ -219,6 +219,31 @@ pub(crate) fn current_main_window_render_token<R: Runtime>(
 ) -> Option<MainWindowRenderToken> {
     app.state::<MainWindowLifecycleState>()
         .current_render_token()
+}
+
+pub(crate) fn destroy_hidden_main_window_for_e2e<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<(), String> {
+    if !cfg!(debug_assertions) || std::env::var("PATINA_E2E").as_deref() != Ok("1") {
+        return Err("main-window destruction is available only to the isolated E2E runtime".into());
+    }
+
+    let window = app
+        .get_webview_window(MAIN_WINDOW_LABEL)
+        .ok_or_else(|| "main window is unavailable".to_string())?;
+    if window.is_visible().unwrap_or(false) {
+        return Err("refusing to destroy a visible main window".to_string());
+    }
+
+    eprintln!("[main-window] event=e2e-destroy-requested result=accepted");
+    let result = window
+        .destroy()
+        .map_err(|error| format!("failed to destroy hidden E2E main window: {error}"));
+    eprintln!(
+        "[main-window] event=e2e-destroy-finished result={}",
+        if result.is_ok() { "success" } else { "error" }
+    );
+    result
 }
 
 fn reveal_main_window<R: Runtime + 'static>(
