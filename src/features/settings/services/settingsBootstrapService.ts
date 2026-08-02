@@ -25,6 +25,9 @@ const settingsPageBootstrapDeps: SettingsPageBootstrapDeps = {
   setSettingsBootstrapCache,
 };
 
+let settingsBootstrapPrewarmInFlight: Promise<SettingsPageBootstrapData> | null = null;
+let settingsBootstrapPrewarmError: unknown = null;
+
 export async function loadSettingsPageBootstrapWithDeps(
   deps: SettingsPageBootstrapDeps,
 ): Promise<SettingsPageBootstrapData> {
@@ -49,6 +52,27 @@ export function getSettingsPageBootstrapCache(): SettingsPageBootstrapData | nul
   return getSettingsBootstrapCache();
 }
 
+export function getSettingsBootstrapPrewarmError(): unknown {
+  return settingsBootstrapPrewarmError;
+}
+
 export async function prewarmSettingsBootstrapCache(): Promise<SettingsPageBootstrapData> {
-  return loadSettingsPageBootstrap();
+  const cached = getSettingsBootstrapCache();
+  if (cached) return cached;
+  if (settingsBootstrapPrewarmInFlight) return settingsBootstrapPrewarmInFlight;
+
+  settingsBootstrapPrewarmError = null;
+  settingsBootstrapPrewarmInFlight = loadSettingsPageBootstrap()
+    .then((bootstrap) => {
+      settingsBootstrapPrewarmError = null;
+      return bootstrap;
+    })
+    .catch((error) => {
+      settingsBootstrapPrewarmError = error;
+      throw error;
+    })
+    .finally(() => {
+      settingsBootstrapPrewarmInFlight = null;
+    });
+  return settingsBootstrapPrewarmInFlight;
 }

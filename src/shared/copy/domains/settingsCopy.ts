@@ -1,6 +1,8 @@
 const ZH_CN_SETTINGS_COPY = {
   settings: {
     loading: "正在获取配置...",
+    loadFailed: "设置加载失败。",
+    retry: "重试",
     title: "设置",
     subtitle: "调整全局运行偏好",
     saving: "正在保存...",
@@ -272,6 +274,8 @@ const EN_US_SETTINGS_COPY = {
   settings: {
     ...ZH_CN_SETTINGS_COPY.settings,
     loading: "Loading settings...",
+    loadFailed: "Could not load settings.",
+    retry: "Retry",
     title: "Settings",
     subtitle: "Adjust global runtime preferences",
     saving: "Saving...",

@@ -3,7 +3,11 @@ import { setUiTextLanguage, UI_TEXT } from "../../../shared/copy/index.ts";
 import type { QuietToastTone } from "../../../shared/types/toast";
 import { useQuietDialogs } from "../../../shared/hooks/useQuietDialogs";
 import { getSettingsBootstrapCache, setSettingsBootstrapCache } from "../services/settingsBootstrapCache";
-import { loadSettingsPageBootstrap } from "../services/settingsBootstrapService.ts";
+import {
+  getSettingsBootstrapPrewarmError,
+  loadSettingsPageBootstrap,
+  prewarmSettingsBootstrapCache,
+} from "../services/settingsBootstrapService.ts";
 import { SettingsRuntimeAdapterService } from "../services/settingsRuntimeAdapterService";
 import {
   commitPreparedBackupRestoreFlow,
@@ -90,6 +94,7 @@ export function useSettingsPageState({
 }: UseSettingsPageStateOptions) {
   const { confirm, dialogs } = useQuietDialogs();
   const initialBootstrap = getSettingsBootstrapCache();
+  const initialBootstrapError = initialBootstrap ? null : getSettingsBootstrapPrewarmError();
   const initialBootstrapRef = useRef(initialBootstrap);
   const [savedSettings, setSavedSettings] = useState<AppSettings | null>(
     () => (initialBootstrap ? { ...initialBootstrap.settings } : null),
@@ -97,7 +102,8 @@ export function useSettingsPageState({
   const [draftSettings, setDraftSettings] = useState<AppSettings | null>(
     () => (initialBootstrap ? { ...initialBootstrap.settings } : null),
   );
-  const [loading, setLoading] = useState(() => !initialBootstrap);
+  const [loading, setLoading] = useState(() => !initialBootstrap && !initialBootstrapError);
+  const [loadError, setLoadError] = useState(() => initialBootstrapError !== null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [cleanupRange, setCleanupRange] = useState<CleanupRange>(30);
   const [isCleaning, setIsCleaning] = useState(false);
@@ -111,6 +117,7 @@ export function useSettingsPageState({
   const [isStorageBusy, setIsStorageBusy] = useState(false);
   const [appVersion, setAppVersion] = useState(() => initialBootstrap?.appVersion ?? "-");
   const hasUnsavedChangesRef = useRef(false);
+  const bootstrapLoadRevisionRef = useRef(0);
   const cleanupOptions = buildCleanupOptions();
 
   const notify = useCallback((message: string, tone: QuietToastTone = "info") => {
@@ -171,8 +178,45 @@ export function useSettingsPageState({
     };
   }, [storageSnapshot]);
 
+  const applyBootstrap = useCallback((bootstrap: Awaited<ReturnType<typeof loadSettingsPageBootstrap>>) => {
+    setSettingsBootstrapCache({
+      settings: { ...bootstrap.settings },
+      appVersion: bootstrap.appVersion,
+    });
+    if (!hasUnsavedChangesRef.current) {
+      setSavedSettings({ ...bootstrap.settings });
+      setDraftSettings({ ...bootstrap.settings });
+    }
+    setAppVersion(bootstrap.appVersion);
+  }, []);
+
+  const retryLoading = useCallback(async () => {
+    const revision = ++bootstrapLoadRevisionRef.current;
+    setLoading(true);
+    setLoadError(false);
+    try {
+      const bootstrap = await prewarmSettingsBootstrapCache();
+      if (revision !== bootstrapLoadRevisionRef.current) return;
+      applyBootstrap(bootstrap);
+    } catch (error) {
+      console.error("retry settings bootstrap failed", error);
+      if (revision === bootstrapLoadRevisionRef.current) {
+        setLoadError(true);
+      }
+    } finally {
+      if (revision === bootstrapLoadRevisionRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [applyBootstrap]);
+
   useEffect(() => {
+    if (!initialBootstrapRef.current && getSettingsBootstrapPrewarmError() !== null) {
+      return undefined;
+    }
+
     let cancelled = false;
+    const revision = ++bootstrapLoadRevisionRef.current;
     const load = async () => {
       const hadCacheAtStart = Boolean(initialBootstrapRef.current);
       if (!hadCacheAtStart) {
@@ -180,20 +224,20 @@ export function useSettingsPageState({
       }
       try {
         const bootstrap = await loadSettingsPageBootstrap();
-        setSettingsBootstrapCache({
-          settings: { ...bootstrap.settings },
-          appVersion: bootstrap.appVersion,
-        });
-        if (cancelled) return;
-        if (!hasUnsavedChangesRef.current) {
-          setSavedSettings({ ...bootstrap.settings });
-          setDraftSettings({ ...bootstrap.settings });
-        }
-        setAppVersion(bootstrap.appVersion);
+        if (cancelled || revision !== bootstrapLoadRevisionRef.current) return;
+        setLoadError(false);
+        applyBootstrap(bootstrap);
       } catch (error) {
         console.error("load settings bootstrap failed", error);
+        if (!cancelled && revision === bootstrapLoadRevisionRef.current) {
+          if (initialBootstrapRef.current) {
+            notify(UI_TEXT.settings.loadFailed, "error");
+          } else {
+            setLoadError(true);
+          }
+        }
       } finally {
-        if (!cancelled && !hadCacheAtStart) {
+        if (!cancelled && revision === bootstrapLoadRevisionRef.current && !hadCacheAtStart) {
           setLoading(false);
         }
       }
@@ -201,20 +245,26 @@ export function useSettingsPageState({
     void load();
     return () => {
       cancelled = true;
+      if (bootstrapLoadRevisionRef.current === revision) {
+        bootstrapLoadRevisionRef.current += 1;
+      }
     };
-  }, []);
+  }, [applyBootstrap, notify]);
 
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | null = null;
-    let externalSyncRevision = 0;
     void SettingsRuntimeAdapterService.subscribeSettingsChanged(async () => {
-      const revision = ++externalSyncRevision;
+      const revision = ++bootstrapLoadRevisionRef.current;
       const next = await loadSettingsPageBootstrap().catch((error) => {
         console.warn("reload settings page after external change failed", error);
         return null;
       });
-      if (cancelled || !next || !isLatestExternalSettingsSync(revision, externalSyncRevision)) return;
+      if (
+        cancelled
+        || !next
+        || !isLatestExternalSettingsSync(revision, bootstrapLoadRevisionRef.current)
+      ) return;
       setSavedSettings((current) => applyExternalTitleRecordingSetting(
         current,
         next.settings.titleRecordingEnabled,
@@ -229,7 +279,7 @@ export function useSettingsPageState({
     });
     return () => {
       cancelled = true;
-      externalSyncRevision += 1;
+      bootstrapLoadRevisionRef.current += 1;
       unlisten?.();
     };
   }, []);
@@ -265,6 +315,7 @@ export function useSettingsPageState({
     if (!savedSettings || !draftSettings) return false;
     if (!hasUnsavedChanges) return true;
     if (saveStatus === "saving") return false;
+    bootstrapLoadRevisionRef.current += 1;
     setSaveStatus("saving");
     try {
       const result = await saveSettingsPageStateWithDeps({
@@ -315,6 +366,7 @@ export function useSettingsPageState({
       return true;
     }
 
+    bootstrapLoadRevisionRef.current += 1;
     setSaveStatus("saving");
     try {
       const nextSavedSettings = {
@@ -608,6 +660,8 @@ export function useSettingsPageState({
   return {
     dialogs,
     loading,
+    loadError,
+    retryLoading,
     savedSettings,
     draftSettings,
     appVersion,

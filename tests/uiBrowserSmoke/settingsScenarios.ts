@@ -1,10 +1,110 @@
 import assert from "node:assert/strict";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
-import { evaluate, jsonString, waitForAnimationFrames, waitForExpression } from "./browserHarness.ts";
+import { delay, evaluate, jsonString, waitForAnimationFrames, waitForExpression } from "./browserHarness.ts";
 import { SETTINGS_MARKER } from "./constants.ts";
 
 export async function runSettingsScenarios(context: BrowserSmokeContext) {
   const { client, sessionId, runTest } = context;
+
+  await runTest("settings cold navigation keeps the current view until its final state is ready", async () => {
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          localStorage.setItem("patina:last-active-view", "dashboard");
+          localStorage.setItem("__time_tracker_settings_query_delay_ms", "900");
+          location.reload();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("设置"))} + ']'))`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("设置"))} + ']');
+          node?.click();
+          return Boolean(node);
+        })()
+      `),
+      true,
+    );
+    await delay(150);
+    const pendingState = JSON.parse(String(await evaluate(client!, sessionId, `JSON.stringify({
+      presentedView: document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") ?? null,
+      settingsMounted: Boolean(document.querySelector(".settings-button-preview")),
+    })`))) as { presentedView: string | null; settingsMounted: boolean };
+    assert.equal(pendingState.presentedView, "dashboard");
+    assert.equal(pendingState.settingsMounted, false);
+
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") === "settings"
+        && Boolean(document.querySelector(".settings-button-preview"))`,
+      15_000,
+      "Settings cold bootstrap should settle before presentation",
+    );
+    await evaluate(client!, sessionId, `localStorage.removeItem("__time_tracker_settings_query_delay_ms")`);
+  });
+
+  await runTest("settings cold failure is explicit and retryable", async () => {
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (async () => {
+          const dashboard = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']');
+          dashboard?.click();
+          if (!dashboard) return false;
+          const cache = await import("/src/features/settings/services/settingsBootstrapCache.ts");
+          cache.setSettingsBootstrapCache(null);
+          globalThis.__TIME_TRACKER_REJECT_SETTINGS_QUERY_COUNT = 1;
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector("main.qp-canvas")?.dataset.presentedView === "dashboard"`,
+    );
+    await evaluate(client!, sessionId, `
+      document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("设置"))} + ']')?.click()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector("main.qp-canvas")?.dataset.presentedView === "settings"
+        && document.body.innerText.includes(${jsonString("设置加载失败。")})
+        && !document.querySelector(".settings-button-preview")`,
+      15_000,
+      "Settings cold failure should expose a stable recovery state",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          globalThis.__TIME_TRACKER_REJECT_SETTINGS_QUERY_COUNT = 0;
+          const retry = Array.from(document.querySelectorAll("button"))
+            .find((node) => node.textContent?.trim() === ${jsonString("重试")});
+          retry?.click();
+          return Boolean(retry);
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(".settings-button-preview"))
+        && !document.body.innerText.includes(${jsonString("设置加载失败。")})`,
+      15_000,
+      "Settings retry should restore the form",
+    );
+  });
 
   await runTest("settings theme dialog opens and closes in a real browser", async () => {
     assert.equal(

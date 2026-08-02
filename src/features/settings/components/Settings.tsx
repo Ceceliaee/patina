@@ -41,6 +41,8 @@ export default function Settings({
   const {
     dialogs,
     loading,
+    loadError,
+    retryLoading,
     savedSettings,
     draftSettings,
     saveStatus,
@@ -106,9 +108,22 @@ export default function Settings({
 
   if (loading || !savedSettings || !draftSettings) {
     return (
-      <div className="flex-1 flex items-center justify-center text-[var(--qp-text-tertiary)] gap-3">
-        <RefreshCw className="animate-spin" size={20} />
-        <span className="text-sm font-medium">{UI_TEXT.settings.loading}</span>
+      <div className="flex h-full min-w-0 flex-col gap-4 md:gap-5">
+        <QuietPageHeader
+          icon={<Settings2 size={18} />}
+          title={UI_TEXT.settings.title}
+          subtitle={UI_TEXT.settings.subtitle}
+        />
+        <div className="qp-panel flex flex-1 items-center justify-center gap-3 text-[var(--qp-text-tertiary)]">
+          <span className="text-sm font-medium">
+            {loadError ? UI_TEXT.settings.loadFailed : UI_TEXT.settings.loading}
+          </span>
+          {loadError ? (
+            <QuietButton size="regular" onClick={() => { void retryLoading(); }}>
+              {UI_TEXT.settings.retry}
+            </QuietButton>
+          ) : null}
+        </div>
       </div>
     );
   }
