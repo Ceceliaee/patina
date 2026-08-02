@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { UI_TEXT, type UiText } from "../../../shared/copy/index.ts";
 import type {
   StartPomodoroInput,
@@ -58,41 +58,60 @@ export function useToolsPageState({
 }: UseToolsPageStateOptions = {}) {
   const [initialSnapshot] = useState(() => toolsRuntimeSnapshotStore.getCurrentSnapshot());
   const [snapshot, setSnapshot] = useState<ToolsRuntimeSnapshot>(() => initialSnapshot ?? DEFAULT_SNAPSHOT);
-  const [loading, setLoading] = useState(() => initialSnapshot === null);
+  const [hasSnapshot, setHasSnapshot] = useState(() => initialSnapshot !== null);
+  const [loadError, setLoadError] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [softwareReminderAppCandidates, setSoftwareReminderAppCandidates] = useState<ToolSoftwareReminderAppCandidate[]>([]);
   const [softwareReminderAppCandidatesLoaded, setSoftwareReminderAppCandidatesLoaded] = useState(false);
+  const mountedRef = useRef(true);
+  const refreshRequestRef = useRef(0);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
     return () => window.clearInterval(timer);
   }, []);
 
+  const refreshSnapshot = useCallback(async () => {
+    const requestId = ++refreshRequestRef.current;
+    const isCold = toolsRuntimeSnapshotStore.getCurrentSnapshot() === null;
+    if (isCold && mountedRef.current) {
+      setLoadError(false);
+    }
+
+    try {
+      await toolsRuntimeSnapshotStore.refreshSnapshot();
+    } catch (error) {
+      console.warn("load tools snapshot failed", error);
+      if (!mountedRef.current || refreshRequestRef.current !== requestId) return;
+      if (toolsRuntimeSnapshotStore.getCurrentSnapshot() === null) {
+        setLoadError(true);
+      } else {
+        onError?.(UI_TEXT.tools.loadFailed);
+      }
+    }
+  }, [onError]);
+
   useEffect(() => {
+    mountedRef.current = true;
     let cancelled = false;
     const unsubscribe = toolsRuntimeSnapshotStore.subscribe((nextSnapshot) => {
       if (!cancelled) {
         setSnapshot(nextSnapshot);
+        setHasSnapshot(true);
+        setLoadError(false);
       }
     });
 
-    void toolsRuntimeSnapshotStore.refreshSnapshot()
-      .catch((error) => {
-        console.warn("load tools snapshot failed", error);
-        onError?.(UI_TEXT.tools.loadFailed);
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
+    void refreshSnapshot();
 
     return () => {
+      mountedRef.current = false;
+      refreshRequestRef.current += 1;
       cancelled = true;
       unsubscribe();
     };
-  }, [onError]);
+  }, [refreshSnapshot]);
 
   useEffect(() => {
     if (activeSection !== "reminders" || softwareReminderAppCandidatesLoaded) {
@@ -227,7 +246,8 @@ export function useToolsPageState({
   const resetPomodoro = useCallback(() => runAction("reset-pomodoro", ToolsRuntimeService.resetPomodoro), [runAction]);
 
   return {
-    loading,
+    hasSnapshot,
+    loadError,
     snapshot,
     nowMs,
     busyAction,
@@ -250,5 +270,6 @@ export function useToolsPageState({
     resumePomodoro,
     skipPomodoroPhase,
     resetPomodoro,
+    retryLoad: refreshSnapshot,
   };
 }

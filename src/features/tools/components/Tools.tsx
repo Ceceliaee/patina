@@ -1,6 +1,7 @@
-import { AlarmClock, BellRing, RefreshCw, Timer, ToolCase } from "lucide-react";
+import { AlarmClock, BellRing, Timer, ToolCase } from "lucide-react";
 import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import QuietBadge from "../../../shared/components/QuietBadge.tsx";
+import QuietButton from "../../../shared/components/QuietButton.tsx";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader.tsx";
 import type { QuietToastTone } from "../../../shared/types/toast.ts";
 import { UI_TEXT, type UiText } from "../../../shared/copy/index.ts";
@@ -155,14 +156,18 @@ export default function Tools({
         subtitle={UI_TEXT.tools.subtitle}
       />
 
-      {state.loading ? (
+      {!state.hasSnapshot ? (
         <div className="tools-loading qp-panel">
-          <RefreshCw size={18} className="animate-spin" />
-          <span>{UI_TEXT.common.loading}</span>
+          <span>{state.loadError ? UI_TEXT.tools.loadFailed : UI_TEXT.common.loading}</span>
+          {state.loadError ? (
+            <QuietButton size="regular" onClick={() => { void state.retryLoad(); }}>
+              {UI_TEXT.tools.retry}
+            </QuietButton>
+          ) : null}
         </div>
       ) : null}
 
-      <div className={state.loading ? "tools-page-body tools-page-body-hidden" : "tools-page-body"}>
+      {state.hasSnapshot ? <div className="tools-page-body">
         <div className="tools-workspace">
           <aside
             className="tools-section-rail tools-section-rail-shell"
@@ -241,7 +246,7 @@ export default function Tools({
             ) : null}
           </div>
         </div>
-      </div>
+      </div> : null}
     </div>
   );
 }

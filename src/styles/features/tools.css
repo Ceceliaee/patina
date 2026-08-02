@@ -13,10 +13,6 @@
   overflow: hidden;
 }
 
-.tools-page-body-hidden {
-  display: none;
-}
-
 .tools-workspace {
   display: grid;
   min-width: 0;

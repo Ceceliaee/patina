@@ -125,10 +125,8 @@ function snapshot(overrides: Partial<ToolsRuntimeSnapshot> = {}): ToolsRuntimeSn
 }
 
 function classificationBootstrap(
-  observed: ObservedAppCandidate[],
 ): ClassificationBootstrapData {
   return {
-    observed,
     observedWebDomains: [],
     loadedOverrides: {},
     loadedWebDomainOverrides: {},
@@ -136,6 +134,17 @@ function classificationBootstrap(
     loadedCategoryLabelOverrides: {},
     loadedPersistedCategoryIds: [],
     loadedDeletedCategories: [],
+  };
+}
+
+function classificationCatalog(
+  candidates: ObservedAppCandidate[],
+  sourceRevision = 1,
+) {
+  return {
+    candidates,
+    sourceRevision,
+    completedAtMs: 1_000_000,
   };
 }
 
@@ -399,9 +408,10 @@ await runTest("software reminder candidates prefer canonical runtime names over 
   assert.equal(candidates[0].lastSeenAt, 2_000_000);
 });
 
-await runTest("software reminder app candidates reuse cached classification bootstrap", async () => {
+await runTest("software reminder app candidates reuse the committed classification catalog", async () => {
   resetSoftwareReminderAppCandidatesCacheForTests();
-  const cachedBootstrap = classificationBootstrap([
+  const cachedBootstrap = classificationBootstrap();
+  const cachedCatalog = classificationCatalog([
     {
       appName: "Chrome Raw",
       exeName: "chrome.exe",
@@ -416,10 +426,15 @@ await runTest("software reminder app candidates reuse cached classification boot
     applyBootstrapToProcessMapper(bootstrap) {
       appliedBootstrap = bootstrap;
     },
+    getAppCatalogSnapshot: () => cachedCatalog,
     getBootstrapCache: () => cachedBootstrap,
+    async loadAppCatalog() {
+      loadCalls += 1;
+      return classificationCatalog([]);
+    },
     async loadClassificationBootstrap() {
       loadCalls += 1;
-      return classificationBootstrap([]);
+      return classificationBootstrap();
     },
   });
 
@@ -430,19 +445,25 @@ await runTest("software reminder app candidates reuse cached classification boot
   candidates[0].appName = "Mutated";
   const nextCandidates = await loadSoftwareReminderAppCandidatesWithDeps({
     applyBootstrapToProcessMapper() {},
+    getAppCatalogSnapshot: () => cachedCatalog,
     getBootstrapCache: () => cachedBootstrap,
+    async loadAppCatalog() {
+      loadCalls += 1;
+      return classificationCatalog([]);
+    },
     async loadClassificationBootstrap() {
       loadCalls += 1;
-      return classificationBootstrap([]);
+      return classificationBootstrap();
     },
   });
 
   assert.notEqual(nextCandidates[0].appName, "Mutated");
 });
 
-await runTest("software reminder app candidates load bootstrap when cache is missing", async () => {
+await runTest("software reminder app candidates load the complete catalog when cache is missing", async () => {
   resetSoftwareReminderAppCandidatesCacheForTests();
-  const loadedBootstrap = classificationBootstrap([
+  const loadedBootstrap = classificationBootstrap();
+  const loadedCatalog = classificationCatalog([
     {
       appName: "Cursor",
       exeName: "cursor.exe",
@@ -454,20 +475,26 @@ await runTest("software reminder app candidates load bootstrap when cache is mis
 
   const candidates = await loadSoftwareReminderAppCandidatesWithDeps({
     applyBootstrapToProcessMapper() {},
+    getAppCatalogSnapshot: () => null,
     getBootstrapCache: () => null,
+    async loadAppCatalog() {
+      loadCalls += 1;
+      return loadedCatalog;
+    },
     async loadClassificationBootstrap() {
       loadCalls += 1;
       return loadedBootstrap;
     },
   });
 
-  assert.equal(loadCalls, 1);
+  assert.equal(loadCalls, 2);
   assert.deepEqual(candidates.map((candidate) => candidate.exeName), ["cursor.exe"]);
 });
 
-await runTest("software reminder app candidates rebuild when cached bootstrap changes", async () => {
+await runTest("software reminder app candidates rebuild when the committed catalog changes", async () => {
   resetSoftwareReminderAppCandidatesCacheForTests();
-  const firstBootstrap = classificationBootstrap([
+  const bootstrap = classificationBootstrap();
+  const firstCatalog = classificationCatalog([
     {
       appName: "Chrome Raw",
       exeName: "chrome.exe",
@@ -475,7 +502,7 @@ await runTest("software reminder app candidates rebuild when cached bootstrap ch
       lastSeenMs: 1_000_000,
     },
   ]);
-  const secondBootstrap = classificationBootstrap([
+  const secondCatalog = classificationCatalog([
     {
       appName: "Cursor Raw",
       exeName: "cursor.exe",
@@ -483,18 +510,22 @@ await runTest("software reminder app candidates rebuild when cached bootstrap ch
       lastSeenMs: 2_000_000,
     },
   ]);
-  let currentBootstrap = firstBootstrap;
+  let currentCatalog = firstCatalog;
 
   const deps = {
     applyBootstrapToProcessMapper() {},
-    getBootstrapCache: () => currentBootstrap,
+    getAppCatalogSnapshot: () => currentCatalog,
+    getBootstrapCache: () => bootstrap,
+    async loadAppCatalog() {
+      return currentCatalog;
+    },
     async loadClassificationBootstrap() {
-      return currentBootstrap;
+      return bootstrap;
     },
   };
 
   const firstCandidates = await loadSoftwareReminderAppCandidatesWithDeps(deps);
-  currentBootstrap = secondBootstrap;
+  currentCatalog = secondCatalog;
   const secondCandidates = await loadSoftwareReminderAppCandidatesWithDeps(deps);
 
   assert.deepEqual(firstCandidates.map((candidate) => candidate.exeName), ["chrome.exe"]);
@@ -503,7 +534,8 @@ await runTest("software reminder app candidates rebuild when cached bootstrap ch
 
 await runTest("software reminder app candidate caches clear and rebuild derived candidates", async () => {
   resetSoftwareReminderAppCandidatesCacheForTests();
-  const bootstrap = classificationBootstrap([
+  const bootstrap = classificationBootstrap();
+  const catalog = classificationCatalog([
     {
       appName: "Chrome Raw",
       exeName: "chrome.exe",
@@ -513,14 +545,18 @@ await runTest("software reminder app candidate caches clear and rebuild derived 
   ]);
   const deps = {
     applyBootstrapToProcessMapper() {},
+    getAppCatalogSnapshot: () => catalog,
     getBootstrapCache: () => bootstrap,
+    async loadAppCatalog() {
+      return catalog;
+    },
     async loadClassificationBootstrap() {
       return bootstrap;
     },
   };
 
   const firstCandidates = await loadSoftwareReminderAppCandidatesWithDeps(deps);
-  bootstrap.observed.splice(0, bootstrap.observed.length, {
+  catalog.candidates.splice(0, catalog.candidates.length, {
     appName: "Cursor Raw",
     exeName: "cursor.exe",
     totalDuration: 120_000,
@@ -538,7 +574,7 @@ await runTest("software reminder app candidate caches clear and rebuild derived 
   const clonedCandidates = await loadSoftwareReminderAppCandidatesWithDeps(deps);
   assert.notEqual(clonedCandidates[0].appName, "Mutated");
 
-  bootstrap.observed.splice(0, bootstrap.observed.length, {
+  catalog.candidates.splice(0, catalog.candidates.length, {
     appName: "Editor Raw",
     exeName: "code.exe",
     totalDuration: 120_000,
@@ -905,6 +941,29 @@ await runTest("tools runtime snapshot store dedupes pending refreshes and publis
   store.publishSnapshot(snapshot({ sampledAtMs: 4_000 }));
   assert.equal(store.getCurrentSnapshot()?.sampledAtMs, 4_000);
   assert.deepEqual(notifications, [3_000, 4_000]);
+  unsubscribe();
+});
+
+await runTest("tools runtime snapshot store ignores refresh results older than runtime events", async () => {
+  let resolveLoad: ((snapshot: ToolsRuntimeSnapshot) => void) | null = null;
+  const notifications: number[] = [];
+  const store = createToolsRuntimeSnapshotStore({
+    getSnapshot: () => new Promise<ToolsRuntimeSnapshot>((resolve) => {
+      resolveLoad = resolve;
+    }),
+    onChanged: async () => () => {},
+    warn: () => {},
+  });
+  const unsubscribe = store.subscribe((nextSnapshot) => {
+    notifications.push(nextSnapshot.sampledAtMs);
+  });
+
+  const refresh = store.refreshSnapshot();
+  store.publishSnapshot(snapshot({ sampledAtMs: 5_000 }));
+  resolveLoad?.(snapshot({ sampledAtMs: 5_000 }));
+  assert.equal((await refresh).sampledAtMs, 5_000);
+  assert.equal(store.getCurrentSnapshot()?.sampledAtMs, 5_000);
+  assert.deepEqual(notifications, [5_000]);
   unsubscribe();
 });
 

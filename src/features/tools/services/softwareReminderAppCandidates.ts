@@ -1,5 +1,6 @@
 import { ClassificationService } from "../../classification/services/classificationService.ts";
 import type { ClassificationBootstrapData } from "../../classification/services/classificationService.ts";
+import type { CompleteAppCatalogSnapshot } from "../../classification/services/classificationAppCatalog.ts";
 import type { ObservedAppCandidate } from "../../classification/types.ts";
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import { getUiTextLanguage } from "../../../shared/copy/index.ts";
@@ -7,17 +8,22 @@ import type { ToolSoftwareReminderAppCandidate } from "../../../shared/types/too
 
 export interface SoftwareReminderAppCandidateDeps {
   applyBootstrapToProcessMapper: (bootstrap: ClassificationBootstrapData) => void;
+  getAppCatalogSnapshot: () => CompleteAppCatalogSnapshot | null;
   getBootstrapCache: () => ClassificationBootstrapData | null;
+  loadAppCatalog: () => Promise<CompleteAppCatalogSnapshot | null>;
   loadClassificationBootstrap: () => Promise<ClassificationBootstrapData>;
 }
 
 const defaultSoftwareReminderAppCandidateDeps: SoftwareReminderAppCandidateDeps = {
   applyBootstrapToProcessMapper: (bootstrap) => ClassificationService.applyBootstrapToProcessMapper(bootstrap),
+  getAppCatalogSnapshot: () => ClassificationService.getAppCatalogSnapshot().committed,
   getBootstrapCache: () => ClassificationService.getBootstrapCache(),
+  loadAppCatalog: () => ClassificationService.ensureAppCatalogLoaded(),
   loadClassificationBootstrap: () => ClassificationService.loadClassificationBootstrap(),
 };
 
 let cachedBootstrap: ClassificationBootstrapData | null = null;
+let cachedCatalog: CompleteAppCatalogSnapshot | null = null;
 let cachedCandidates: ToolSoftwareReminderAppCandidate[] = [];
 let cachedLanguage = "";
 
@@ -91,12 +97,16 @@ function cloneCandidates(candidates: readonly ToolSoftwareReminderAppCandidate[]
   return candidates.map((candidate) => ({ ...candidate }));
 }
 
-function buildCandidatesForBootstrap(bootstrap: ClassificationBootstrapData): ToolSoftwareReminderAppCandidate[] {
+function buildCandidatesForCatalog(
+  bootstrap: ClassificationBootstrapData,
+  catalog: CompleteAppCatalogSnapshot,
+): ToolSoftwareReminderAppCandidate[] {
   const language = getUiTextLanguage();
-  if (bootstrap !== cachedBootstrap || language !== cachedLanguage) {
+  if (bootstrap !== cachedBootstrap || catalog !== cachedCatalog || language !== cachedLanguage) {
     cachedBootstrap = bootstrap;
+    cachedCatalog = catalog;
     cachedLanguage = language;
-    cachedCandidates = buildSoftwareReminderAppCandidates(bootstrap.observed);
+    cachedCandidates = buildSoftwareReminderAppCandidates(catalog.candidates);
   }
 
   return cloneCandidates(cachedCandidates);
@@ -105,9 +115,14 @@ function buildCandidatesForBootstrap(bootstrap: ClassificationBootstrapData): To
 export async function loadSoftwareReminderAppCandidatesWithDeps(
   deps: SoftwareReminderAppCandidateDeps,
 ): Promise<ToolSoftwareReminderAppCandidate[]> {
-  const bootstrap = deps.getBootstrapCache() ?? await deps.loadClassificationBootstrap();
+  const cachedBootstrapSnapshot = deps.getBootstrapCache();
+  const cachedCatalogSnapshot = deps.getAppCatalogSnapshot();
+  const [bootstrap, catalog] = await Promise.all([
+    cachedBootstrapSnapshot ?? deps.loadClassificationBootstrap(),
+    cachedCatalogSnapshot ?? deps.loadAppCatalog(),
+  ]);
   deps.applyBootstrapToProcessMapper(bootstrap);
-  return buildCandidatesForBootstrap(bootstrap);
+  return catalog ? buildCandidatesForCatalog(bootstrap, catalog) : [];
 }
 
 export async function loadSoftwareReminderAppCandidates(): Promise<ToolSoftwareReminderAppCandidate[]> {
@@ -116,6 +131,7 @@ export async function loadSoftwareReminderAppCandidates(): Promise<ToolSoftwareR
 
 export function clearSoftwareReminderAppCandidateCache(): void {
   cachedBootstrap = null;
+  cachedCatalog = null;
   cachedCandidates = [];
   cachedLanguage = "";
 }

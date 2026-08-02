@@ -93,6 +93,7 @@ const ZH_CN_TOOLS_COPY = {
     alertPausingPomodoro: "暂停中...",
     alertDismiss: "知道了",
     loadFailed: "工具状态加载失败。",
+    retry: "重试",
     actionFailed: "操作失败，可稍后重试。",
     statusChip: {
       focus: "专注",
@@ -199,6 +200,7 @@ const EN_US_TOOLS_COPY = {
     alertPausingPomodoro: "Pausing...",
     alertDismiss: "Got it",
     loadFailed: "Could not load tools status.",
+    retry: "Retry",
     actionFailed: "Action failed. Try again later.",
     statusChip: {
       focus: "Focus",

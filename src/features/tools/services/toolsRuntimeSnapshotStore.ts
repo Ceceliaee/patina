@@ -24,9 +24,14 @@ export function createToolsRuntimeSnapshotStore(
   let runtimeUnlisten: (() => void) | null = null;
   let pendingRuntimeListen: Promise<void> | null = null;
   let pendingRefresh: Promise<ToolsRuntimeSnapshot> | null = null;
+  let publicationRevision = 0;
 
   const publishSnapshot = (snapshot: ToolsRuntimeSnapshot) => {
+    if (currentSnapshot && snapshot.sampledAtMs < currentSnapshot.sampledAtMs) {
+      return;
+    }
     currentSnapshot = snapshot;
+    publicationRevision += 1;
     for (const listener of listeners) {
       listener(snapshot);
     }
@@ -67,9 +72,16 @@ export function createToolsRuntimeSnapshotStore(
         return pendingRefresh;
       }
 
+      const refreshStartRevision = publicationRevision;
       pendingRefresh = deps.getSnapshot()
         .then((snapshot) => {
-          publishSnapshot(snapshot);
+          if (
+            publicationRevision === refreshStartRevision
+            || currentSnapshot === null
+            || snapshot.sampledAtMs > currentSnapshot.sampledAtMs
+          ) {
+            publishSnapshot(snapshot);
+          }
           return snapshot;
         })
         .finally(() => {

@@ -1,11 +1,155 @@
 import assert from "node:assert/strict";
 import { COPY } from "../../src/shared/copy/index.ts";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
-import { evaluate, jsonString, waitForExpression } from "./browserHarness.ts";
+import { delay, evaluate, jsonString, waitForExpression } from "./browserHarness.ts";
 import { TOOLS_TEXT } from "./constants.ts";
 
 export async function runToolsScenarios(context: BrowserSmokeContext) {
   const { client, sessionId, runTest } = context;
+
+  await runTest("Tools cold navigation keeps the current view until a runtime snapshot is ready", async () => {
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          localStorage.setItem("patina:last-active-view", "dashboard");
+          localStorage.setItem("__time_tracker_tools_snapshot_delay_ms", "900");
+          location.reload();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']'))`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']');
+          node?.click();
+          return Boolean(node);
+        })()
+      `),
+      true,
+    );
+    await delay(150);
+    const pendingState = JSON.parse(String(await evaluate(client!, sessionId, `JSON.stringify({
+      presentedView: document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") ?? null,
+      toolsMounted: Boolean(document.querySelector(".tools-page")),
+      showsLoadingCopy: document.body.innerText.includes("加载中..."),
+      dashboardActive: document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']')
+        ?.className.includes("qp-nav-item-active") ?? false,
+      toolsActive: document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']')
+        ?.className.includes("qp-nav-item-active") ?? false,
+    })`))) as {
+      presentedView: string | null;
+      toolsMounted: boolean;
+      showsLoadingCopy: boolean;
+      dashboardActive: boolean;
+      toolsActive: boolean;
+    };
+    assert.equal(pendingState.presentedView, "dashboard");
+    assert.equal(pendingState.toolsMounted, false);
+    assert.equal(pendingState.showsLoadingCopy, false);
+    assert.equal(pendingState.dashboardActive, true);
+    assert.equal(pendingState.toolsActive, false);
+
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") === "tools"
+        && Boolean(document.querySelector(".tools-page-body"))`,
+      15_000,
+      "Tools runtime snapshot should settle before presentation",
+    );
+    await evaluate(client!, sessionId, `localStorage.removeItem("__time_tracker_tools_snapshot_delay_ms")`);
+  });
+
+  await runTest("a stale Tools ensure cannot override a newer navigation request", async () => {
+    await evaluate(client!, sessionId, `
+      (() => {
+        localStorage.setItem("patina:last-active-view", "dashboard");
+        localStorage.setItem("__time_tracker_tools_snapshot_delay_ms", "900");
+        location.reload();
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']'))`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (async () => {
+          const tools = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']');
+          const dashboard = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']');
+          if (!tools || !dashboard) return false;
+          tools.click();
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          dashboard.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await delay(1_050);
+    const finalState = JSON.parse(String(await evaluate(client!, sessionId, `JSON.stringify({
+      presentedView: document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") ?? null,
+      toolsMounted: Boolean(document.querySelector(".tools-page")),
+    })`))) as { presentedView: string | null; toolsMounted: boolean };
+    assert.equal(finalState.presentedView, "dashboard");
+    assert.equal(finalState.toolsMounted, false);
+    await evaluate(client!, sessionId, `localStorage.removeItem("__time_tracker_tools_snapshot_delay_ms")`);
+  });
+
+  await runTest("Tools cold snapshot failure is explicit and retryable", async () => {
+    await evaluate(client!, sessionId, `
+      (() => {
+        localStorage.setItem("patina:last-active-view", "dashboard");
+        localStorage.setItem("__time_tracker_reject_tools_snapshot", "1");
+        location.reload();
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']'))`,
+    );
+    await evaluate(client!, sessionId, `
+      document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']')?.click()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") === "tools"
+        && document.body.innerText.includes(${jsonString("工具状态加载失败。")})
+        && !document.querySelector(".tools-page-body")`,
+      15_000,
+      "Tools cold failure should expose recovery without fake runtime data",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          localStorage.removeItem("__time_tracker_reject_tools_snapshot");
+          const retry = Array.from(document.querySelectorAll("button"))
+            .find((node) => node.textContent?.trim() === ${jsonString("重试")});
+          retry?.click();
+          return Boolean(retry);
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(".tools-page-body"))
+        && !document.body.innerText.includes(${jsonString("工具状态加载失败。")})`,
+      15_000,
+      "Tools retry should restore the requested page",
+    );
+  });
 
   await runTest("Tools page renders its tool sections", async () => {
     assert.equal(
