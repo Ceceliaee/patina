@@ -112,7 +112,8 @@ function AppShellContent() {
     useState<AppLanguage | null>(null);
   const [historyDateRequest, setHistoryDateRequest] = useState<HistoryDateRequest | null>(null);
   const [toolsInitialTarget, setToolsInitialTarget] = useState<ToolsOpenTarget | null>(null);
-  const renderedView = useAppShellRenderedView(currentView);
+  const viewPresentation = useAppShellRenderedView(currentView);
+  const { presentedView } = viewPresentation;
   const {
     isForegroundReady,
     isWindowForegroundLike,
@@ -120,6 +121,7 @@ function AppShellContent() {
   } = useAppWindowState();
   const {
     appSettings,
+    appearanceResolved,
     classificationReady,
     setAppSettings,
     syncTick,
@@ -138,6 +140,7 @@ function AppShellContent() {
 
   const appFrameRef = useMainWindowReady({
     appSettings,
+    contentReady: appearanceResolved && presentedView === currentView,
     themeModePreview: settingsThemeModePreview,
     colorSchemePreview: settingsColorSchemePreview,
   });
@@ -240,7 +243,7 @@ function AppShellContent() {
         <ToolAlertDialog />
         {dialogs}
         <AppSidebar
-          currentView={currentView}
+          currentView={viewPresentation.presentedView}
           onPrepareNavigate={prepareNavigate}
           onNavigate={handleSidebarNavigate}
           onPreviewNavigate={handleSidebarPreviewNavigate}
@@ -249,7 +252,7 @@ function AppShellContent() {
         />
 
         <AppViewOutlet
-          renderedView={renderedView}
+          {...viewPresentation.outletProps}
           uiText={uiText}
           views={{
             dashboard: (

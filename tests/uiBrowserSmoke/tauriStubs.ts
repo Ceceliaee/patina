@@ -202,11 +202,42 @@ function tauriStubFor(path: string) {
             colorScheme: document.documentElement.dataset.colorScheme ?? null,
             cssColorScheme: document.documentElement.style.colorScheme || null,
             frameConnected: Boolean(document.querySelector(".qp-app-frame")?.isConnected),
+            presentedView: document.querySelector("main.qp-canvas")?.dataset.presentedView ?? null,
           };
           return {
             outcome: "hidden",
             generation: Number(payload.generation),
             loadEpoch: Number(payload.loadEpoch),
+          };
+        }
+        if (command === "cmd_get_tools_snapshot") {
+          const toolsSnapshotDelayMs = Number(
+            globalThis.__TIME_TRACKER_TOOLS_SNAPSHOT_DELAY_MS
+              ?? localStorage.getItem("__time_tracker_tools_snapshot_delay_ms")
+              ?? 0
+          );
+          if (toolsSnapshotDelayMs > 0) {
+            await new Promise((resolve) => setTimeout(resolve, toolsSnapshotDelayMs));
+          }
+          if (localStorage.getItem("__time_tracker_reject_tools_snapshot") === "1") {
+            throw new Error("tools snapshot rejected by browser smoke fixture");
+          }
+          return {
+            settings: {
+              default_countdown_minutes: 25,
+              pomodoro_focus_minutes: 25,
+              pomodoro_short_break_minutes: 5,
+              pomodoro_long_break_minutes: 15,
+              pomodoro_long_break_every: 4,
+            },
+            reminders: [],
+            software_reminder_rules: [],
+            current_timer: null,
+            timer_laps: [],
+            current_pomodoro: null,
+            today_completed_pomodoros: 0,
+            next_reminder_at: null,
+            sampled_at_ms: Date.now(),
           };
         }
         if (command === "cmd_get_recorded_app_catalog_page") {
@@ -781,6 +812,21 @@ function tauriStubFor(path: string) {
             throw new Error("classification query rejected by browser smoke fixture");
           }
           if (normalizedQuery.includes("from settings")) {
+            if (
+              normalizedQuery.trim() === "select key, value from settings"
+              && Number(globalThis.__TIME_TRACKER_REJECT_SETTINGS_QUERY_COUNT ?? 0) > 0
+            ) {
+              globalThis.__TIME_TRACKER_REJECT_SETTINGS_QUERY_COUNT -= 1;
+              throw new Error("settings query rejected by browser smoke fixture");
+            }
+            const settingsQueryDelayMs = Number(
+              globalThis.__TIME_TRACKER_SETTINGS_QUERY_DELAY_MS
+                ?? localStorage.getItem("__time_tracker_settings_query_delay_ms")
+                ?? 0
+            );
+            if (settingsQueryDelayMs > 0) {
+              await new Promise((resolve) => setTimeout(resolve, settingsQueryDelayMs));
+            }
             const settings = loadStoredSettings();
             const language = globalThis.__TIME_TRACKER_SMOKE_LANGUAGE;
             if (language) settings.language = language;

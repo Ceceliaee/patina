@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
-import { evaluate, jsonString, titleDetailsButtonExpression, waitForExpression } from "./browserHarness.ts";
+import {
+  evaluate,
+  jsonString,
+  titleDetailsButtonExpression,
+  waitForAnimationFrames,
+  waitForExpression,
+} from "./browserHarness.ts";
 import { DATE_TEXT, HISTORY_TITLE_DETAIL_COUNT } from "./constants.ts";
 
 export async function runHistoryScenarios(context: BrowserSmokeContext) {
@@ -1157,6 +1163,13 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
     );
 
     for (let attempt = 0; attempt < 4; attempt += 1) {
+      await waitForExpression(
+        client!,
+        sessionId,
+        `document.querySelector(".history-timeline-zoom-dialog-timeline")
+          ?.classList.contains("history-timeline-zoom-dialog-timeline-dragging") === false`,
+      );
+      await waitForAnimationFrames(client!, sessionId, 2);
       const repeatedDragState = JSON.parse(String(await evaluate(client!, sessionId, `
         (() => {
           const timeline = document.querySelector(".history-timeline-zoom-dialog-timeline .history-horizontal-timeline");
@@ -1186,7 +1199,15 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
         x: repeatedDragState.x,
         y: repeatedDragState.y,
         button: "left",
+        buttons: 1,
         clickCount: 1,
+      }, sessionId);
+      await client!.command("Input.dispatchMouseEvent", {
+        type: "mouseMoved",
+        x: repeatedDragState.x + Math.sign(dragDeltaX),
+        y: repeatedDragState.y,
+        button: "left",
+        buttons: 1,
       }, sessionId);
       await client!.command("Input.dispatchMouseEvent", {
         type: "mouseMoved",
@@ -1195,19 +1216,26 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
         button: "left",
         buttons: 1,
       }, sessionId);
-      await client!.command("Input.dispatchMouseEvent", {
-        type: "mouseReleased",
-        x: repeatedDragState.x + dragDeltaX,
-        y: repeatedDragState.y,
-        button: "left",
-        clickCount: 1,
-      }, sessionId);
       const comparison = dragDeltaX > 0 ? "<" : ">";
       await waitForExpression(
         client!,
         sessionId,
         `Number(document.querySelector(".history-timeline-zoom-dialog-timeline .history-horizontal-timeline")
           ?.getAttribute("data-history-timeline-window-start")) ${comparison} ${repeatedDragState.windowStart}`,
+      );
+      await client!.command("Input.dispatchMouseEvent", {
+        type: "mouseReleased",
+        x: repeatedDragState.x + dragDeltaX,
+        y: repeatedDragState.y,
+        button: "left",
+        buttons: 0,
+        clickCount: 1,
+      }, sessionId);
+      await waitForExpression(
+        client!,
+        sessionId,
+        `document.querySelector(".history-timeline-zoom-dialog-timeline")
+          ?.classList.contains("history-timeline-zoom-dialog-timeline-dragging") === false`,
       );
     }
     const draggedStart = Number(await evaluate(client!, sessionId, `document.querySelector(

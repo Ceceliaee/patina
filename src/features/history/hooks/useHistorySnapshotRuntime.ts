@@ -244,6 +244,8 @@ export function useHistorySnapshotRuntime({
     ) {
       hasUsableSnapshot = true;
       setContentState("refreshing");
+    } else if (visibleDateKeyRef.current !== null) {
+      setContentState("refreshing");
     } else {
       clearVisibleSnapshot();
       setContentState("cold-loading");

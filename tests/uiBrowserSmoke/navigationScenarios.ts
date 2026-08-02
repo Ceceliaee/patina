@@ -82,13 +82,21 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
       const sorted = [...values].sort((left, right) => left - right);
       return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * fraction) - 1)] ?? 0;
     };
+    const activeValues = samples.map((sample) => sample.activeMs);
+    const structureValues = samples.map((sample) => sample.structureMs);
+    const maxBlankFrames = Math.max(...samples.map((sample) => sample.blankFrames));
     console.log(`PATINA_NAVIGATION_EXPERIENCE_REPORT:${JSON.stringify({
       environment: "Vite browser smoke with Tauri stubs; recommendation evidence, not a release hard gate",
       sampleCount: samples.length,
-      activeP95Ms: percentile(samples.map((sample) => sample.activeMs), 0.95),
-      structureP95Ms: percentile(samples.map((sample) => sample.structureMs), 0.95),
-      maxBlankFrames: Math.max(...samples.map((sample) => sample.blankFrames)),
+      activeP50Ms: percentile(activeValues, 0.5),
+      activeP95Ms: percentile(activeValues, 0.95),
+      activeMaxMs: Math.max(...activeValues),
+      structureP50Ms: percentile(structureValues, 0.5),
+      structureP95Ms: percentile(structureValues, 0.95),
+      structureMaxMs: Math.max(...structureValues),
+      maxBlankFrames,
     })}`);
+    assert.equal(maxBlankFrames, 0, "warm navigation should never expose a blank canvas frame");
   });
 
   await runTest("Data navigation is immediate and avoids visible loading affordances", async () => {
@@ -161,7 +169,7 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
     );
   });
 
-  await runTest("History date changes keep the cold placeholder blank", async () => {
+  await runTest("History date changes retain the presented day until the next snapshot is ready", async () => {
     await waitForExpression(
       client!,
       sessionId,
@@ -177,22 +185,12 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const samples = [];
-          const sample = () => {
-            samples.push({
-              loading: document.body.innerText.includes(${jsonString(HISTORY_LOADING_VIEW)}),
-              distribution: document.querySelector(".history-app-distribution-card [role=status]")?.textContent?.trim() ?? null,
-              timeline: document.querySelector(".history-horizontal-timeline-empty")?.textContent?.trim() ?? null,
-            });
-          };
-          const observer = new MutationObserver(sample);
-          observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-          const timer = window.setInterval(sample, 1);
-          globalThis.__TIME_TRACKER_STOP_HISTORY_PLACEHOLDER_SAMPLING = () => {
-            window.clearInterval(timer);
-            observer.disconnect();
-            sample();
-            return samples;
+          const root = document.querySelector("[data-history-content-state]");
+          globalThis.__TIME_TRACKER_HISTORY_PRESENTED_BEFORE_CHANGE = {
+            date: root?.getAttribute("data-history-content-date") ?? "",
+            label: document.querySelector(".history-date-label")?.textContent?.trim() ?? "",
+            summary: document.querySelector(".history-day-summary-value")?.textContent?.trim() ?? "",
+            segmentCount: document.querySelectorAll(".history-horizontal-timeline-segment").length,
           };
           const dateLabel = document.querySelector(".history-date-label");
           const previousButton = dateLabel?.parentElement?.parentElement?.querySelector("button");
@@ -205,30 +203,60 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `document.querySelector("[data-history-content-state]")?.getAttribute("data-history-content-state") === "cold-loading"`,
+      `(() => {
+        const root = document.querySelector("[data-history-content-state]");
+        return root?.getAttribute("data-history-content-state") === "refreshing"
+          && root.getAttribute("data-history-content-date") === globalThis.__TIME_TRACKER_HISTORY_PRESENTED_BEFORE_CHANGE.date;
+      })()`,
       undefined,
-      "History should expose the blank cold frame while the previous date loads",
+      "History should retain its presented date while the previous date loads",
     );
     await delay(150);
 
-    const samples = await evaluate(
+    const retainedPresentation = await evaluate(client!, sessionId, `
+      (() => {
+        const root = document.querySelector("[data-history-content-state]");
+        return {
+          date: root?.getAttribute("data-history-content-date") ?? "",
+          label: document.querySelector(".history-date-label")?.textContent?.trim() ?? "",
+          summary: document.querySelector(".history-day-summary-value")?.textContent?.trim() ?? "",
+          segmentCount: document.querySelectorAll(".history-horizontal-timeline-segment").length,
+          loading: document.body.innerText.includes(${jsonString(HISTORY_LOADING_VIEW)}),
+        };
+      })()
+    `) as {
+      date: string;
+      label: string;
+      summary: string;
+      segmentCount: number;
+      loading: boolean;
+    };
+    const presentationBeforeChange = await evaluate(
       client!,
       sessionId,
-      `globalThis.__TIME_TRACKER_STOP_HISTORY_PLACEHOLDER_SAMPLING()`,
-    ) as Array<{ loading: boolean; distribution: string | null; timeline: string | null }>;
-    assert.ok(samples.length > 0, "expected History placeholder samples");
-    assert.equal(samples.some((sample) => sample.loading), false, JSON.stringify(samples));
-    for (const sample of samples) {
-      assert.ok(sample.distribution === null || sample.distribution === "", JSON.stringify(samples));
-      assert.ok(sample.timeline === null || sample.timeline === "", JSON.stringify(samples));
-    }
+      `globalThis.__TIME_TRACKER_HISTORY_PRESENTED_BEFORE_CHANGE`,
+    ) as Omit<typeof retainedPresentation, "loading">;
+    assert.deepEqual(
+      {
+        date: retainedPresentation.date,
+        label: retainedPresentation.label,
+        summary: retainedPresentation.summary,
+        segmentCount: retainedPresentation.segmentCount,
+      },
+      presentationBeforeChange,
+    );
+    assert.equal(retainedPresentation.loading, false);
 
     await waitForExpression(
       client!,
       sessionId,
-      `document.querySelector("[data-history-content-state]")?.getAttribute("data-history-content-state") === "ready"`,
+      `(() => {
+        const root = document.querySelector("[data-history-content-state]");
+        return root?.getAttribute("data-history-content-state") === "ready"
+          && root.getAttribute("data-history-content-date") !== globalThis.__TIME_TRACKER_HISTORY_PRESENTED_BEFORE_CHANGE.date;
+      })()`,
       15_000,
-      "Previous History date should settle",
+      "Previous History date should replace the retained presentation once ready",
     );
     await evaluate(client!, sessionId, `
       (() => {
@@ -506,5 +534,74 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
 
     await simulateLongBackgroundReturn("数据");
     await simulateLongBackgroundReturn("历史");
+  });
+
+  await runTest("rebuilt main window reveals only after saved appearance and destination settle", async () => {
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("数据"))} + ']');
+          if (!node) return false;
+          node.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector("main.qp-canvas")?.dataset.presentedView === "data"
+        && document.querySelector("main.qp-canvas")?.dataset.viewTransitionState === "settled"`,
+    );
+    await evaluate(client!, sessionId, `
+      (() => {
+        const key = "__time_tracker_smoke_settings";
+        const settings = JSON.parse(localStorage.getItem(key) ?? "{}");
+        settings.theme_mode = "dark";
+        settings.color_scheme_dark = "default";
+        localStorage.setItem(key, JSON.stringify(settings));
+      })()
+    `);
+
+    await client!.command("Page.navigate", { url: context.appUrl }, sessionId);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(globalThis.__PATINA_MAIN_WINDOW_READY_EVIDENCE)`,
+      15_000,
+      "rebuilt dark Data window readiness",
+    );
+    const evidence = await evaluate(
+      client!,
+      sessionId,
+      `globalThis.__PATINA_MAIN_WINDOW_READY_EVIDENCE`,
+    ) as {
+      themeMode: string | null;
+      theme: string | null;
+      presentedView: string | null;
+    };
+    assert.equal(evidence.themeMode, "dark");
+    assert.equal(evidence.theme, "dark");
+    assert.equal(evidence.presentedView, "data");
+
+    await evaluate(client!, sessionId, `
+      (() => {
+        const key = "__time_tracker_smoke_settings";
+        const settings = JSON.parse(localStorage.getItem(key) ?? "{}");
+        settings.theme_mode = "light";
+        localStorage.setItem(key, JSON.stringify(settings));
+        localStorage.setItem("patina:last-active-view", "dashboard");
+      })()
+    `);
+    await client!.command("Page.navigate", { url: context.appUrl }, sessionId);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `globalThis.__PATINA_MAIN_WINDOW_READY_EVIDENCE?.theme === "light"
+        && globalThis.__PATINA_MAIN_WINDOW_READY_EVIDENCE?.presentedView === "dashboard"`,
+      15_000,
+      "restore browser smoke appearance and destination",
+    );
   });
 }

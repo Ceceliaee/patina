@@ -242,6 +242,7 @@ await runTest("app shell declares every primary desktop view", () => {
   const shell = readUtf8("src/app/AppShell.tsx");
   const outlet = readUtf8("src/app/components/AppViewOutlet.tsx");
   const sidebar = readUtf8("src/app/components/AppSidebar.tsx");
+  const renderedView = readUtf8("src/app/hooks/useAppShellRenderedView.ts");
   const motionCss = readUtf8("src/styles/motion.css");
 
   for (const view of EXPECTED_VIEWS) {
@@ -249,7 +250,12 @@ await runTest("app shell declares every primary desktop view", () => {
     assert.match(shell, new RegExp(`${view}: \\(`));
     assert.match(sidebar, new RegExp(`id: "${view}" as View`));
   }
-  assert.match(outlet, /views\[renderedView\]/);
+  assert.match(outlet, /views\[displayedView\]/);
+  assert.match(outlet, /views\[outgoingView\]/);
+  assert.match(outlet, /data-view-transition-state/);
+  assert.match(outlet, /requestAnimationFrame\(finishTransition\)/);
+  assert.match(shell, /appearanceResolved/);
+  assert.match(shell, /contentReady: appearanceResolved && presentedView === currentView/);
   assert.match(shell, /useQuietMotionPreference/);
   assert.match(shell, /data-qp-motion=\{quietMotionMode\}/);
   assert.doesNotMatch(shell, /VIEW_ORDER/);
@@ -259,7 +265,10 @@ await runTest("app shell declares every primary desktop view", () => {
   assert.doesNotMatch(shell, /qp-motion-view-enter/);
   assert.doesNotMatch(shell, /qp-dynamic-effects-off/);
   assert.doesNotMatch(sidebar, /requestAnimationFrame|setTimeout/);
+  assert.doesNotMatch(sidebar, /optimisticView/);
+  assert.match(sidebar, /const activeView = currentView/);
   assert.match(sidebar, /runNavigate\(\);/);
+  assert.match(renderedView, /Promise\.allSettled/);
 });
 
 await runTest("motion preference keeps reduced motion above enhanced motion", () => {
@@ -495,8 +504,8 @@ await runTest("History separates timeline list dialog from zoom dialog", () => {
   const historyWebTimeline = readUtf8("src/features/history/services/historyWebActivityViewModel.ts");
   const historyCss = readUtf8("src/styles/features/history.css");
   const quietProCss = readUtf8("src/styles/quiet-pro.css");
-  const selectedDateEffect = history.match(
-    /useEffect\(\(\) => \{\s*timelineDetailsTriggerRef\.current = null;[\s\S]*?\}, \[resetTimelineViewportForDate, selectedDate\]\);/,
+  const presentedDateEffect = history.match(
+    /useEffect\(\(\) => \{\s*timelineDetailsTriggerRef\.current = null;[\s\S]*?\}, \[presentedDate, resetTimelineViewportForDate\]\);/,
   )?.[0] ?? "";
   const timelineSegmentStart = historyTimelineComponent.indexOf(
     "<QuietTimelineSegment",
@@ -601,8 +610,8 @@ await runTest("History separates timeline list dialog from zoom dialog", () => {
   assert.match(historyTimelineComponent, /hideOnPointerDown=\{variant !== "expanded"\}/);
   assert.match(quietTooltip, /hideOnPointerDown \? hideTooltipAfterPointerDown : undefined/);
   assert.match(history, /if \(timelineDialogOpen\) return;\s*setTimelineDialogSyncedHeight\(null\);/s);
-  assert.ok(selectedDateEffect);
-  assert.doesNotMatch(selectedDateEffect, /setTimelineDialogSyncedHeight\(null\)/);
+  assert.ok(presentedDateEffect);
+  assert.doesNotMatch(presentedDateEffect, /setTimelineDialogSyncedHeight\(null\)/);
   assert.match(historyTimelineZoomDialog, /variant="expanded"/);
   assert.doesNotMatch(history, /timelineViewportWasPannedRef\.current.*localStorage/s);
   assert.doesNotMatch(historyTimeline, /HISTORY_TIMELINE_ZOOM_OPTIONS/);
@@ -657,6 +666,8 @@ await runTest("operation-oriented pages keep action feedback without cold-page l
   const updateDialog = readUtf8("src/features/update/components/UpdateConfirmDialog.tsx");
 
   assert.match(settings, /UI_TEXT\.settings\.loading/);
+  assert.match(settings, /UI_TEXT\.settings\.loadFailed/);
+  assert.match(settings, /retryLoading/);
   assert.doesNotMatch(mapping, /UI_TEXT\.mapping\.loading/);
   assert.match(mapping, /data-classification-content-state/);
   assert.match(mapping, /UI_TEXT\.mapping\.loadFailed/);
@@ -711,6 +722,11 @@ await runTest("startup recovery keeps external autostart and tray access safe", 
   assert.match(desktopBehavior, /source != StartupSource::SettingsRecovery/);
   assert.match(bootstrap, /TraySafetyState/);
   assert.match(bootstrap, /should_keep_app_running_without_windows/);
+  assert.match(
+    bootstrap,
+    /tauri_plugin_single_instance::init[\s\S]*tauri::async_runtime::spawn[\s\S]*tokio::task::yield_now\(\)\.await[\s\S]*MainWindowShowReason::SingleInstance/,
+    "single-instance recovery must leave the Windows message callback before recreating the main WebView",
+  );
   assert.match(tray, /TraySafetyState/);
   assert.match(
     tray,
@@ -1235,7 +1251,7 @@ await runTest("destination owns one shared detail dialog without duplicating tre
   assert.match(history, /useHistoryDestinationDetailEntry\(/);
   assert.match(historyDetailEntry, /useDestinationDetailLauncher\(\)/);
   assert.match(historyDetailEntry, /<DestinationDetailDialogEntry/);
-  assert.match(history, /initialDateKey: formatLocalDateKey\(selectedDate\)/);
+  assert.match(history, /initialDateKey: formatLocalDateKey\(presentedDate\)/);
   assert.match(historyDayDistribution, /createHistoryAppDetailTarget/);
   assert.match(historyDayDistribution, /createHistoryWebDetailTarget/);
   assert.match(historyDayDistribution, /className="history-day-distribution-detail-trigger"/);
@@ -1542,6 +1558,7 @@ await runTest("History bootstrap lifecycle keeps background reuse and invalidate
 await runTest("Tools participates in startup warmup and renders from cached runtime snapshot", () => {
   const warmup = readUtf8("src/app/services/startupWarmupService.ts");
   const chunkPreload = readUtf8("src/app/services/viewChunkPreloadService.ts");
+  const tools = readUtf8("src/features/tools/components/Tools.tsx");
   const toolsState = readUtf8("src/features/tools/hooks/useToolsPageState.ts");
   const toolsStore = readUtf8("src/features/tools/services/toolsRuntimeSnapshotStore.ts");
 
@@ -1551,8 +1568,11 @@ await runTest("Tools participates in startup warmup and renders from cached runt
   assert.match(chunkPreload, /"history", "data", "tools", "mapping"/);
   assert.match(toolsStore, /export function prewarmToolsRuntimeSnapshot/);
   assert.match(toolsState, /toolsRuntimeSnapshotStore\.getCurrentSnapshot\(\)/);
-  assert.match(toolsState, /initialSnapshot === null/);
+  assert.match(toolsState, /initialSnapshot !== null/);
   assert.match(toolsState, /initialSnapshot \?\? DEFAULT_SNAPSHOT/);
+  assert.match(tools, /state\.hasSnapshot \? <div className="tools-page-body">/);
+  assert.match(tools, /state\.loadError \? UI_TEXT\.tools\.loadFailed/);
+  assert.doesNotMatch(tools, /tools-page-body-hidden|animate-spin/);
 });
 
 await runTest("Tools time inputs keep editable empty drafts until submit", () => {

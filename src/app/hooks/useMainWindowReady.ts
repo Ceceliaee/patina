@@ -18,6 +18,7 @@ interface ColorSchemePreview {
 
 interface UseMainWindowReadyOptions {
   appSettings: AppSettings;
+  contentReady: boolean;
   themeModePreview: ThemeMode | null;
   colorSchemePreview: ColorSchemePreview | null;
 }
@@ -57,6 +58,7 @@ function hasRenderableMainWindowFrame(
 
 export function useMainWindowReady({
   appSettings,
+  contentReady,
   themeModePreview,
   colorSchemePreview,
 }: UseMainWindowReadyOptions) {
@@ -69,6 +71,10 @@ export function useMainWindowReady({
   useAppThemeMode(themeMode, colorSchemeLight, colorSchemeDark);
 
   useEffect(() => {
+    if (!contentReady) {
+      return undefined;
+    }
+
     const generation = readCurrentMainWindowGeneration();
     if (generation === null) {
       console.error("main-window generation is unavailable; window will remain hidden");
@@ -189,7 +195,7 @@ export function useMainWindowReady({
         resolveRetryTimer = null;
       }
     };
-  }, [colorSchemeDark, colorSchemeLight, frameRef, themeMode]);
+  }, [colorSchemeDark, colorSchemeLight, contentReady, frameRef, themeMode]);
 
   return frameRef;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import { ArrowUpCircle, Monitor, Clock, Settings2, Sparkles, BarChart3, Info, ToolCase } from "lucide-react";
 import appIconUrl from "../../../src-tauri/icons/32x32.png";
 import { UI_TEXT } from "../../shared/copy/index.ts";
@@ -36,36 +36,22 @@ export default function AppSidebar({
     { id: "settings" as View, icon: Settings2, label: UI_TEXT.settings.title },
     { id: "about" as View, icon: Info, label: UI_TEXT.about.title },
   ];
-  const [optimisticView, setOptimisticView] = useState<View | null>(null);
   const navigateRequestRef = useRef(0);
-  const activeView = optimisticView ?? currentView;
+  const activeView = currentView;
   const activeNavIndex = navItems.findIndex((item) => item.id === activeView);
   const navStyle: NavStyle = {
     "--qp-active-nav-index": Math.max(0, activeNavIndex),
   };
 
-  useEffect(() => {
-    setOptimisticView(null);
-  }, [currentView]);
-
   const handleNavClick = (view: View) => {
     navigateRequestRef.current += 1;
     const requestId = navigateRequestRef.current;
 
-    const canNavigateImmediately = onPrepareNavigate?.(view) ?? true;
-    if (canNavigateImmediately) {
-      setOptimisticView(view);
-    }
+    onPrepareNavigate?.(view);
 
     const runNavigate = () => {
       if (navigateRequestRef.current !== requestId) return;
-
-      void Promise.resolve(onNavigate(view)).then((navigated) => {
-        if (navigateRequestRef.current !== requestId) return;
-        if (navigated === false) {
-          setOptimisticView(null);
-        }
-      });
+      void Promise.resolve(onNavigate(view));
     };
 
     // Navigation correctness must not depend on an animation frame or timer:

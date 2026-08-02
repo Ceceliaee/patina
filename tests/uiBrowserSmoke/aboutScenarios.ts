@@ -1,9 +1,57 @@
 import assert from "node:assert/strict";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
-import { evaluate, jsonString, waitForExpression } from "./browserHarness.ts";
+import { delay, evaluate, jsonString, waitForExpression } from "./browserHarness.ts";
 
 export async function runAboutScenarios(context: BrowserSmokeContext) {
   const { client, sessionId, runTest } = context;
+
+  await runTest("About cold navigation renders stable static content without a loading frame", async () => {
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          localStorage.setItem("patina:last-active-view", "dashboard");
+          localStorage.setItem("__time_tracker_settings_query_delay_ms", "900");
+          location.reload();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("关于"))} + ']'))`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("关于"))} + ']');
+          node?.click();
+          return Boolean(node);
+        })()
+      `),
+      true,
+    );
+    await delay(150);
+    const pendingState = JSON.parse(String(await evaluate(client!, sessionId, `JSON.stringify({
+      presentedView: document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") ?? null,
+      aboutMounted: Boolean(document.querySelector(".about-center-panel")),
+      showsLoadingCopy: document.body.innerText.includes("加载中..."),
+    })`))) as { presentedView: string | null; aboutMounted: boolean; showsLoadingCopy: boolean };
+    assert.equal(pendingState.presentedView, "about");
+    assert.equal(pendingState.aboutMounted, true);
+    assert.equal(pendingState.showsLoadingCopy, false);
+
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") === "about"
+        && Boolean(document.querySelector(".about-center-panel"))`,
+      15_000,
+      "About static content should present without waiting for shared bootstrap",
+    );
+    await evaluate(client!, sessionId, `localStorage.removeItem("__time_tracker_settings_query_delay_ms")`);
+  });
 
   await runTest("About page keeps its centered support layout", async () => {
     const clicked = await evaluate(client!, sessionId, `

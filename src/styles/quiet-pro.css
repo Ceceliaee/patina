@@ -122,6 +122,10 @@
   border-radius: var(--qp-radius-panel);
 }
 
+.qp-view-container-outgoing {
+  background: var(--qp-bg-canvas);
+}
+
 .qp-panel {
   background: var(--qp-bg-panel);
   border: 1px solid var(--qp-border-subtle);

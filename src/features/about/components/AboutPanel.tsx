@@ -66,6 +66,9 @@ export default function AboutPanel({
   onOpenFeedback,
   onOpenSupportDialog,
 }: AboutPanelProps) {
+  const versionLabel = appVersion === "-" || appVersion === "unknown"
+    ? UI_TEXT.about.versionUnknown
+    : `v${appVersion}`;
   return (
     <div className="about-center-workbench">
       <section className="qp-panel about-center-panel">
@@ -75,7 +78,7 @@ export default function AboutPanel({
           </div>
           <div className="about-center-title-row">
             <h2>Patina</h2>
-            <span className="about-center-version-chip">{`v${appVersion}`}</span>
+            <span className="about-center-version-chip">{versionLabel}</span>
           </div>
           <p>{UI_TEXT.about.description}</p>
         </div>

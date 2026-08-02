@@ -46,6 +46,7 @@ export async function runStartupScenarios(context: BrowserSmokeContext) {
         colorScheme: string | null;
         cssColorScheme: string | null;
         frameConnected: boolean;
+        presentedView: string | null;
       };
       readyCalls: number;
     };
@@ -59,6 +60,7 @@ export async function runStartupScenarios(context: BrowserSmokeContext) {
         colorScheme: "default",
         cssColorScheme: "light",
         frameConnected: true,
+        presentedView: "dashboard",
       },
       readyCalls: 1,
     });
@@ -103,6 +105,7 @@ export async function runStartupScenarios(context: BrowserSmokeContext) {
         colorScheme: string | null;
         cssColorScheme: string | null;
         frameConnected: boolean;
+        presentedView: string | null;
       };
       readyCalls: number;
       sameFrame: boolean;
@@ -118,6 +121,7 @@ export async function runStartupScenarios(context: BrowserSmokeContext) {
         colorScheme: "default",
         cssColorScheme: "light",
         frameConnected: true,
+        presentedView: "dashboard",
       },
       readyCalls: 2,
       sameFrame: true,

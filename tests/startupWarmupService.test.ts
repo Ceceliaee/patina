@@ -186,9 +186,9 @@ await runTest("startup warmup runs default tasks in a stable order", async () =>
   assert.deepEqual(events, [
     "history-bootstrap-snapshot-cache",
     "mapping-bootstrap",
+    "settings-bootstrap",
     "chunk:history",
     "chunk:data",
-    "settings-bootstrap",
     "data-bootstrap-snapshot-cache",
     "dashboard-snapshot",
     "tools-snapshot",
@@ -198,7 +198,7 @@ await runTest("startup warmup runs default tasks in a stable order", async () =>
   assert.equal(controller.snapshot().tasks["history-today-snapshot"].status, "skipped");
 });
 
-await runTest("visible startup begins classification bootstrap before queued warmup tasks", async () => {
+await runTest("visible startup begins classification and settings bootstrap before the initial warmup delay", async () => {
   const scheduler = createTaskScheduler();
   const events: string[] = [];
   const controller = startStartupWarmup({
@@ -216,7 +216,11 @@ await runTest("visible startup begins classification bootstrap before queued war
 
   await flushPromises();
 
-  assert.deepEqual(events, ["history-bootstrap-snapshot-cache"]);
+  assert.deepEqual(events, [
+    "history-bootstrap-snapshot-cache",
+    "mapping-bootstrap",
+    "settings-bootstrap",
+  ]);
   assert.equal(scheduler.tasks[0]?.delayMs, 1_000);
 
   scheduler.runNext();
@@ -225,6 +229,7 @@ await runTest("visible startup begins classification bootstrap before queued war
   assert.deepEqual(events, [
     "history-bootstrap-snapshot-cache",
     "mapping-bootstrap",
+    "settings-bootstrap",
   ]);
   assert.equal(scheduler.tasks[0]?.delayMs, 250);
 
@@ -248,11 +253,11 @@ await runTest("startup warmup preloads Tools chunk and runtime snapshot by defau
   assert.deepEqual(events.slice(0, 7), [
     "history-bootstrap-snapshot-cache",
     "mapping-bootstrap",
+    "settings-bootstrap",
     "chunk:history",
     "chunk:data",
     "chunk:tools",
     "chunk:mapping",
-    "chunk:settings",
   ]);
   assert.ok(events.includes("tools-snapshot"));
   assert.equal(controller.snapshot().tasks["tools-runtime-snapshot"].status, "fulfilled");
@@ -302,8 +307,8 @@ await runTest("startup warmup waits for runtime readiness before runtime tasks",
   assert.deepEqual(events.slice(0, 4), [
     "history-bootstrap-snapshot-cache",
     "mapping-bootstrap",
-    "chunk:history",
     "settings-bootstrap",
+    "chunk:history",
   ]);
   assert.equal(events.includes("dashboard-snapshot"), false);
 
@@ -367,6 +372,7 @@ await runTest("startup warmup exposes scheduling and cancels queued work", async
   assert.deepEqual(events, [
     "history-bootstrap-snapshot-cache",
     "mapping-bootstrap",
+    "settings-bootstrap",
   ]);
   assert.equal(controller.snapshot().tasks["view-chunks"].status, "cancelled");
 });

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Info, RefreshCw } from "lucide-react";
+import { Info } from "lucide-react";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import type { QuietToastTone } from "../../../shared/types/toast";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
@@ -9,7 +9,7 @@ import AboutSupportDialog from "./AboutSupportDialog";
 import AboutFeedbackDialog from "./AboutFeedbackDialog";
 import {
   getSettingsPageBootstrapCache,
-  loadSettingsPageBootstrap,
+  prewarmSettingsBootstrapCache,
 } from "../../settings/services/settingsBootstrapService.ts";
 import { SettingsRuntimeAdapterService } from "../../settings/services/settingsRuntimeAdapterService";
 
@@ -39,7 +39,6 @@ export default function About({
   const cachedBootstrap = getSettingsPageBootstrapCache();
   const initialVersion = updateSnapshot?.currentVersion ?? cachedBootstrap?.appVersion ?? "-";
   const [appVersion, setAppVersion] = useState(initialVersion);
-  const [loading, setLoading] = useState(!updateSnapshot?.currentVersion && !cachedBootstrap?.appVersion);
   const [supportDialogOpen, setSupportDialogOpen] = useState(false);
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
 
@@ -47,16 +46,12 @@ export default function About({
     let cancelled = false;
     const load = async () => {
       try {
-        const bootstrap = await loadSettingsPageBootstrap();
+        const bootstrap = await prewarmSettingsBootstrapCache();
         if (!cancelled) {
           setAppVersion(bootstrap.appVersion);
         }
       } catch (error) {
         console.error("load about bootstrap failed", error);
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
       }
     };
     void load();
@@ -120,15 +115,6 @@ export default function About({
     releasePageUrl: null,
     assetDownloadUrl: null,
   };
-
-  if (loading) {
-    return (
-      <div className="flex flex-1 items-center justify-center gap-3 text-[var(--qp-text-tertiary)]">
-        <RefreshCw className="animate-spin" size={20} />
-        <span className="text-sm font-medium">{UI_TEXT.settings.loading}</span>
-      </div>
-    );
-  }
 
   return (
     <div className="flex h-full min-w-0 flex-col gap-4 md:gap-5">

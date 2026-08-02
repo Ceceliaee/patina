@@ -9,6 +9,25 @@ import {
   beginDataNavigationMeasurement,
   markDataNavigationStage,
 } from "../../features/data/services/dataNavigationPerformance.ts";
+import {
+  ClassificationService,
+  prewarmClassificationBootstrapCache,
+} from "../../features/classification/services/classificationService.ts";
+import {
+  getSettingsPageBootstrapCache,
+  prewarmSettingsBootstrapCache,
+} from "../../features/settings/services/settingsBootstrapService.ts";
+import {
+  prewarmToolsRuntimeSnapshot,
+  toolsRuntimeSnapshotStore,
+} from "../../features/tools/services/toolsRuntimeSnapshotStore.ts";
+
+function prepareViewData(view: View): Promise<unknown> {
+  if (view === "mapping") return prewarmClassificationBootstrapCache();
+  if (view === "settings") return prewarmSettingsBootstrapCache();
+  if (view === "tools") return prewarmToolsRuntimeSnapshot();
+  return Promise.resolve();
+}
 
 export function getPreloadableNavigationView(view: View): PreloadableView | null {
   switch (view) {
@@ -31,21 +50,56 @@ export function preloadNavigationView(view: View, reason: "intent" | "preview"):
     beginDataNavigationMeasurement();
   }
 
-  void preloadLazyViewChunk(preloadableView).catch((error) => {
+  void Promise.all([
+    preloadLazyViewChunk(preloadableView),
+    prepareViewData(view),
+  ]).catch((error) => {
     console.warn(`Failed to preload ${preloadableView} view on navigation ${reason}`, error);
   });
 }
 
-export function useAppShellRenderedView(currentView: View): View {
+function isNavigationViewReady(view: View) {
+  const preloadableView = getPreloadableNavigationView(view);
+  if (!preloadableView) return true;
+  if (getPreloadableViewChunkStatus(preloadableView) !== "resolved") return false;
+  if (view === "settings") {
+    return getSettingsPageBootstrapCache() !== null;
+  }
+  if (view === "tools") {
+    return toolsRuntimeSnapshotStore.getCurrentSnapshot() !== null;
+  }
+  if (view !== "mapping") return true;
+
+  return ClassificationService.getBootstrapCache() !== null
+    && ClassificationService.getAppCatalogSnapshot().committed !== null;
+}
+
+async function prepareNavigationView(view: View) {
+  const preloadableView = getPreloadableNavigationView(view);
+  if (!preloadableView) return;
+
+  const [chunkResult, dataResult] = await Promise.allSettled([
+    preloadLazyViewChunk(preloadableView),
+    prepareViewData(view),
+  ]);
+  if (chunkResult.status === "rejected") {
+    throw chunkResult.reason;
+  }
+  if (dataResult.status === "rejected") {
+    throw dataResult.reason;
+  }
+}
+
+export function useAppShellRenderedView(currentView: View) {
   const [renderedView, setRenderedView] = useState<View>("dashboard");
+  const [presentedView, setPresentedView] = useState<View>(renderedView);
   const requestRef = useRef(0);
 
   useEffect(() => {
-    const preloadableView = getPreloadableNavigationView(currentView);
     requestRef.current += 1;
     const requestId = requestRef.current;
 
-    if (!preloadableView || getPreloadableViewChunkStatus(preloadableView) === "resolved") {
+    if (isNavigationViewReady(currentView)) {
       if (currentView === "data") {
         markDataNavigationStage("chunkReady");
       }
@@ -54,7 +108,7 @@ export function useAppShellRenderedView(currentView: View): View {
     }
 
     let cancelled = false;
-    void preloadLazyViewChunk(preloadableView)
+    void prepareNavigationView(currentView)
       .then(() => {
         if (!cancelled && requestRef.current === requestId) {
           if (currentView === "data") {
@@ -64,7 +118,7 @@ export function useAppShellRenderedView(currentView: View): View {
         }
       })
       .catch((error) => {
-        console.warn(`Failed to preload ${preloadableView} view before navigation`, error);
+        console.warn(`Failed to prepare ${currentView} view before navigation`, error);
         if (!cancelled && requestRef.current === requestId) {
           setRenderedView(currentView);
         }
@@ -75,5 +129,12 @@ export function useAppShellRenderedView(currentView: View): View {
     };
   }, [currentView]);
 
-  return renderedView;
+  return {
+    outletProps: {
+      onPresentedViewChange: setPresentedView,
+      renderedView,
+    },
+    presentedView,
+    renderedView,
+  };
 }

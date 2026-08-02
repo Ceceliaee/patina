@@ -332,16 +332,21 @@ export function startStartupWarmup(
       (error: unknown) => ({ error, value: null }),
     )
     : Promise.resolve({ error: null, value: null });
+  const eagerClassificationBootstrap = taskPolicy.mappingBootstrap
+    ? resolvedDeps.prewarmClassificationBootstrapCache().then(
+      (value) => ({ error: null, value }),
+      (error: unknown) => ({ error, value: null }),
+    )
+    : Promise.resolve({ error: null, value: null });
+  const eagerSettingsBootstrap = taskPolicy.settingsBootstrap
+    ? resolvedDeps.prewarmSettingsBootstrapCache().then(
+      (value) => ({ error: null, value }),
+      (error: unknown) => ({ error, value: null }),
+    )
+    : Promise.resolve({ error: null, value: null });
 
   const ready = (async () => {
     await delay(initialDelayMs);
-    const eagerClassificationBootstrap = taskPolicy.mappingBootstrap
-      ? resolvedDeps.prewarmClassificationBootstrapCache().then(
-        (value) => ({ error: null, value }),
-        (error: unknown) => ({ error, value: null }),
-      )
-      : Promise.resolve({ error: null, value: null });
-
     const runTask = async (
       taskId: StartupWarmupTaskId,
       task: () => Promise<"fulfilled" | "skipped" | void>,
@@ -372,7 +377,8 @@ export function startStartupWarmup(
         return "skipped";
       }
 
-      await resolvedDeps.prewarmSettingsBootstrapCache();
+      const result = await eagerSettingsBootstrap;
+      if (result.error) throw result.error;
     });
 
     await runTask("mapping-bootstrap", async () => {

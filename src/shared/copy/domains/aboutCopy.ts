@@ -3,6 +3,7 @@ const ZH_CN_ABOUT_COPY = {
     title: "关于",
     subtitle: "了解项目版本信息",
     description: "本地优先的个人桌面时间追踪工具",
+    versionUnknown: "版本未知",
     feedbackDialog: {
       title: "问题反馈",
       description: "日常交流请扫码加入 QQ 频道；问题反馈请前往 GitHub Issues。",
@@ -27,6 +28,7 @@ const EN_US_ABOUT_COPY = {
     title: "About",
     subtitle: "View project version info",
     description: "A local-first personal desktop time tracker",
+    versionUnknown: "Version unknown",
     feedbackDialog: {
       title: "Feedback",
       description: "Join the QQ channel for conversation; use GitHub Issues to report a problem.",
