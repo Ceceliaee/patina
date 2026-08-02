@@ -5,7 +5,6 @@ import {
   type ExtendedAppCategory,
 } from "../../../shared/classification/categoryTokens.ts";
 import * as classificationStore from "./classificationStore.ts";
-import type { ObservedAppCandidate } from "./classificationStore.ts";
 import type {
   ObservedWebDomainCandidate,
   WebDomainOverride,
@@ -26,7 +25,6 @@ import {
 } from "./importedClassification.ts";
 import type { ImportCategoryCandidate } from "../../../platform/persistence/importRuntimeGateway.ts";
 import type { ClassificationSettingMutation } from "../../../platform/persistence/classificationSettingsGateway.ts";
-import { loadClassificationIconsForExecutables } from "./classificationIconService.ts";
 import type { RecordedAppCatalogQueryInput } from "../../../platform/persistence/classificationPersistence.ts";
 import {
   ClassificationAppCatalogController,
@@ -44,8 +42,6 @@ export type { AppOverride } from "../../../shared/classification/processMapper.t
 export type { ClassificationDraftState } from "./classificationDraftState.ts";
 
 export interface ClassificationBootstrapData {
-  icons?: Record<string, string>;
-  observed: ObservedAppCandidate[];
   observedWebDomains: ObservedWebDomainCandidate[];
   loadedOverrides: Record<string, AppOverride>;
   loadedWebDomainOverrides: Record<string, WebDomainOverride>;
@@ -64,7 +60,6 @@ export interface ClassificationCommitDeps {
 }
 
 export interface ClassificationBootstrapDeps {
-  loadObservedAppCandidates: () => Promise<ObservedAppCandidate[]>;
   loadObservedWebDomainCandidates: () => Promise<ObservedWebDomainCandidate[]>;
   loadAppOverrides: () => Promise<Record<string, AppOverride>>;
   loadWebDomainOverrides: () => Promise<Record<string, WebDomainOverride>>;
@@ -72,7 +67,6 @@ export interface ClassificationBootstrapDeps {
   loadCategoryLabelOverrides: () => Promise<Record<string, string>>;
   loadPersistedCategoryIds: () => Promise<ExtendedAppCategory[]>;
   loadDeletedCategories: () => Promise<AppCategory[]>;
-  loadAppIconsForExecutables?: typeof loadClassificationIconsForExecutables;
 }
 
 export interface PreparedImportedClassification {
@@ -100,7 +94,6 @@ const classificationAppCatalogSnapshotStore = new ClassificationAppCatalogSnapsh
   }),
 });
 const defaultClassificationBootstrapDeps: ClassificationBootstrapDeps = {
-  loadObservedAppCandidates: () => ClassificationService.loadObservedAppCandidates(),
   loadObservedWebDomainCandidates: () => ClassificationService.loadObservedWebDomainCandidates(),
   loadAppOverrides: () => classificationStore.loadAppOverrides(),
   loadWebDomainOverrides: () => classificationStore.loadWebDomainOverrides(),
@@ -108,34 +101,11 @@ const defaultClassificationBootstrapDeps: ClassificationBootstrapDeps = {
   loadCategoryLabelOverrides: () => classificationStore.loadCategoryLabelOverrides(),
   loadPersistedCategoryIds: () => classificationStore.loadPersistedCategoryIds(),
   loadDeletedCategories: () => classificationStore.loadDeletedCategories(),
-  loadAppIconsForExecutables: loadClassificationIconsForExecutables,
 };
 
 let warnedWebClassificationFallback = false;
-let warnedClassificationIconFallback = false;
 let classificationBootstrapInFlight: Promise<ClassificationBootstrapData> | null = null;
 let classificationBootstrapGeneration = 0;
-
-async function loadOptionalClassificationIconMap(
-  deps: ClassificationBootstrapDeps,
-  observed: ObservedAppCandidate[],
-): Promise<Record<string, string>> {
-  if (!deps.loadAppIconsForExecutables) {
-    return {};
-  }
-
-  try {
-    return await deps.loadAppIconsForExecutables(
-      observed.map((candidate) => candidate.exeName),
-    );
-  } catch (error) {
-    if (!warnedClassificationIconFallback) {
-      warnedClassificationIconFallback = true;
-      console.warn("Classification app icon cache is unavailable; continuing with app initials.", error);
-    }
-    return {};
-  }
-}
 
 async function loadOptionalWebClassificationData(
   deps: ClassificationBootstrapDeps,
@@ -162,10 +132,6 @@ async function loadOptionalWebClassificationData(
 }
 
 export class ClassificationService {
-  static async loadObservedAppCandidates(days: number = 30, limit: number = 120): Promise<ObservedAppCandidate[]> {
-    return classificationStore.loadObservedAppCandidates(days, limit);
-  }
-
   static async loadAppCatalogPage(input: RecordedAppCatalogQueryInput) {
     return classificationStore.loadAppCatalogPage(input);
   }
@@ -213,7 +179,6 @@ export class ClassificationService {
     const generationAtRequestStart = classificationBootstrapGeneration;
     const request = (async () => {
       const [
-        observed,
         loadedOverrides,
         loadedCategoryColorOverrides,
         loadedCategoryLabelOverrides,
@@ -221,7 +186,6 @@ export class ClassificationService {
         loadedDeletedCategories,
         webClassificationData,
       ] = await Promise.all([
-        deps.loadObservedAppCandidates(),
         deps.loadAppOverrides(),
         deps.loadCategoryColorOverrides(),
         deps.loadCategoryLabelOverrides(),
@@ -230,12 +194,9 @@ export class ClassificationService {
         loadOptionalWebClassificationData(deps),
       ]);
 
-      const icons = await loadOptionalClassificationIconMap(deps, observed);
       const sanitizedDeletedCategories = sanitizeDeletedCategories(loadedDeletedCategories ?? []);
 
       const bootstrap = {
-        icons,
-        observed,
         observedWebDomains: webClassificationData.observedWebDomains,
         loadedOverrides,
         loadedWebDomainOverrides: webClassificationData.loadedWebDomainOverrides,

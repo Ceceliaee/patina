@@ -1,4 +1,3 @@
-import type { ObservedAppCandidate } from "../types.ts";
 import {
   isExtendedCategory,
   type AppCategory,
@@ -38,10 +37,6 @@ type ClassificationBootstrapSnapshot = {
   loadedPersistedCategoryIds: ClassificationDraftState["persistedCategoryIds"];
   loadedDeletedCategories: ClassificationDraftState["deletedCategories"];
 };
-
-export function cloneObservedCandidates(observed: ObservedAppCandidate[]): ObservedAppCandidate[] {
-  return observed.map((candidate) => ({ ...candidate }));
-}
 
 export function normalizeHexColor(colorValue: string | undefined): string | undefined {
   const raw = (colorValue ?? "").trim();

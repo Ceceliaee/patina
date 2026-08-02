@@ -8,7 +8,6 @@ import {
 import {
   buildAppMappingOverride,
   buildWebDomainMappingOverride,
-  cloneObservedCandidates,
 } from "./appMappingStateHelpers.ts";
 
 type SaveStatus = "idle" | "saving" | "saved";
@@ -32,7 +31,6 @@ export interface WebDomainNameEditState {
 export interface AppMappingSaveFlowInput {
   savedState: ClassificationDraftState | null;
   draftState: ClassificationDraftState | null;
-  candidates: ObservedAppCandidate[];
   webDomainCandidates: ObservedWebDomainCandidate[];
   hasUnsavedChanges: boolean;
   saving: boolean;
@@ -46,8 +44,6 @@ export interface AppMappingSaveFlowDeps {
 }
 
 export interface AppMappingBootstrapSnapshot {
-  icons?: Record<string, string>;
-  observed: ObservedAppCandidate[];
   observedWebDomains: ObservedWebDomainCandidate[];
   loadedOverrides: ClassificationDraftState["overrides"];
   loadedWebDomainOverrides: ClassificationDraftState["webDomainOverrides"];
@@ -71,13 +67,11 @@ export interface AppMappingSaveFlowResult {
 export interface DeleteObservedSessionsDeps {
   confirmDelete: () => Promise<boolean>;
   deleteObservedAppSessions: (exeName: string, scope: "today" | "all") => Promise<void>;
-  refreshCandidates: () => Promise<ObservedAppCandidate[]>;
   onSessionsDeleted?: () => void;
 }
 
 export interface DeleteObservedSessionsFlowResult {
   deleted: boolean;
-  nextCandidates: ObservedAppCandidate[] | null;
 }
 
 function withUpdatedOverride(
@@ -323,7 +317,6 @@ export async function saveAppMappingStateWithDeps(
       nextSavedState,
       nextDraftState,
       nextBootstrap: {
-        observed: cloneObservedCandidates(input.candidates),
         observedWebDomains: input.webDomainCandidates.map((candidate) => ({ ...candidate })),
         loadedOverrides: { ...nextDraftState.overrides },
         loadedWebDomainOverrides: { ...nextDraftState.webDomainOverrides },
@@ -358,15 +351,12 @@ export async function deleteObservedCandidateSessionsWithDeps(
   if (!confirmed) {
     return {
       deleted: false,
-      nextCandidates: null,
     };
   }
 
   await deps.deleteObservedAppSessions(candidate.exeName, "all");
-  const nextCandidates = await deps.refreshCandidates();
   deps.onSessionsDeleted?.();
   return {
     deleted: true,
-    nextCandidates,
   };
 }

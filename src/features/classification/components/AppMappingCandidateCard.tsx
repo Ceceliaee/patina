@@ -62,6 +62,7 @@ export default function AppMappingCandidateCard({
 }: AppMappingCandidateCardProps) {
   return (
     <div
+      data-classification-app={candidate.exeName}
       className="relative rounded-[12px] border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-elevated)] px-4 py-3.5"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">

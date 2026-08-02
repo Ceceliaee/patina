@@ -21,7 +21,6 @@ import {
   buildAppMappingOverride,
   buildWebDomainCategoryOverride,
   buildWebDomainMappingOverride,
-  cloneObservedCandidates,
   createCategoryInDraftState,
   createAppMappingDraftState,
   deleteCategoryFromDraftState,
@@ -82,14 +81,8 @@ export function useAppMappingState({
   const [loading, setLoading] = useState(() => !initialBootstrap);
   const [loadError, setLoadError] = useState(false);
   const [loadRequestVersion, setLoadRequestVersion] = useState(0);
-  const [candidates, setCandidates] = useState<ObservedAppCandidate[]>(
-    () => cloneObservedCandidates(initialBootstrap?.observed ?? []),
-  );
   const [webDomainCandidates, setWebDomainCandidates] = useState<ObservedWebDomainCandidate[]>(
     () => cloneObservedWebDomainCandidates(initialBootstrap?.observedWebDomains ?? []),
-  );
-  const [bootstrapIcons, setBootstrapIcons] = useState<Record<string, string>>(
-    () => initialBootstrap?.icons ?? {},
   );
   const [savedState, setSavedState] = useState<ClassificationDraftState | null>(
     () => (initialBootstrap ? createAppMappingDraftState(initialBootstrap) : null),
@@ -124,16 +117,12 @@ export function useAppMappingState({
       }
       try {
         const bootstrap = await ClassificationService.loadClassificationBootstrap();
-        const nextObserved = cloneObservedCandidates(bootstrap.observed);
         const nextWebDomainCandidates = cloneObservedWebDomainCandidates(bootstrap.observedWebDomains);
         const nextState = createAppMappingDraftState(bootstrap);
-        const nextBootstrapIcons = bootstrap.icons ?? {};
         setClassificationBootstrapCache(bootstrap);
         if (cancelled) return;
         setLoadError(false);
-        setCandidates(nextObserved);
         setWebDomainCandidates(nextWebDomainCandidates);
-        setBootstrapIcons(nextBootstrapIcons);
         if (!hasUnsavedChangesRef.current) {
           setSavedState(cloneClassificationDraftState(nextState));
           setDraftState(cloneClassificationDraftState(nextState));
@@ -193,12 +182,8 @@ export function useAppMappingState({
     () => appCatalog.candidates.map((candidate) => candidate.exeName),
     [appCatalog.candidates],
   );
-  const baseMappingIcons = useMemo(() => ({
-    ...icons,
-    ...bootstrapIcons,
-  }), [bootstrapIcons, icons]);
   const mappingIcons = useRequestedAppIcons({
-    baseIcons: baseMappingIcons,
+    baseIcons: icons,
     exeNames: candidateIconExeNames,
     loadIcons: loadClassificationIconsForExecutables,
     onError: (error) => {
@@ -266,32 +251,11 @@ export function useAppMappingState({
     webActivityEnabled,
   });
 
-  const refreshCandidates = useCallback(async () => {
-    const observed = await ClassificationService.loadObservedAppCandidates();
-    setCandidates(observed);
-    if (savedState) {
-      setClassificationBootstrapCache({
-        observed: cloneObservedCandidates(observed),
-        icons: { ...bootstrapIcons },
-        observedWebDomains: cloneObservedWebDomainCandidates(webDomainCandidates),
-        loadedOverrides: { ...savedState.overrides },
-        loadedWebDomainOverrides: { ...savedState.webDomainOverrides },
-        loadedCategoryColorOverrides: { ...savedState.categoryColorOverrides },
-        loadedCategoryLabelOverrides: { ...savedState.categoryLabelOverrides },
-        loadedPersistedCategoryIds: [...savedState.persistedCategoryIds],
-        loadedDeletedCategories: [...savedState.deletedCategories],
-      });
-    }
-    return observed;
-  }, [bootstrapIcons, savedState, webDomainCandidates]);
-
   const refreshWebDomainCandidates = useCallback(async () => {
     const observedWebDomains = await ClassificationService.loadObservedWebDomainCandidates();
     setWebDomainCandidates(observedWebDomains);
     if (savedState) {
       setClassificationBootstrapCache({
-        observed: cloneObservedCandidates(candidates),
-        icons: { ...bootstrapIcons },
         observedWebDomains: cloneObservedWebDomainCandidates(observedWebDomains),
         loadedOverrides: { ...savedState.overrides },
         loadedWebDomainOverrides: { ...savedState.webDomainOverrides },
@@ -302,7 +266,7 @@ export function useAppMappingState({
       });
     }
     return observedWebDomains;
-  }, [bootstrapIcons, candidates, savedState]);
+  }, [savedState]);
 
   const updateOverride = useCallback((exeName: string, nextOverride: AppOverride | null) => {
     setDraftState((current) => {
@@ -658,7 +622,6 @@ export function useAppMappingState({
         deleteObservedAppSessions: async (exeName, scope) => {
           await ClassificationService.deleteObservedAppSessions(exeName, scope);
         },
-        refreshCandidates,
         onSessionsDeleted,
       });
       if (!result.deleted) {
@@ -681,12 +644,11 @@ export function useAppMappingState({
         return next;
       });
       setEditingNameExe((current) => (current === candidate.exeName ? null : current));
-      ClassificationService.invalidateBootstrapCache();
       await appCatalog.reload();
     } finally {
       setDeletingSessionsExe(null);
     }
-  }, [appCatalog, confirm, onSessionsDeleted, refreshCandidates, resolveEffectiveDisplayName]);
+  }, [appCatalog, confirm, onSessionsDeleted, resolveEffectiveDisplayName]);
 
   const handleDeleteWebDomainHistory = useCallback(async (candidate: ObservedWebDomainCandidate) => {
     const displayName = resolveWebDomainDisplayName(candidate);
@@ -745,7 +707,6 @@ export function useAppMappingState({
       const result = await saveAppMappingStateWithDeps({
         savedState,
         draftState,
-        candidates,
         webDomainCandidates,
         hasUnsavedChanges,
         saving,
@@ -759,12 +720,7 @@ export function useAppMappingState({
         setDraftState(result.nextDraftState);
       }
       if (result.nextBootstrap) {
-        const nextBootstrapIcons = result.nextBootstrap.icons ?? bootstrapIcons;
-        setBootstrapIcons(nextBootstrapIcons);
-        setClassificationBootstrapCache({
-          ...result.nextBootstrap,
-          icons: nextBootstrapIcons,
-        });
+        setClassificationBootstrapCache(result.nextBootstrap);
       }
       if (result.resetEditingState) {
         setNameEditSnapshots({});
@@ -792,7 +748,7 @@ export function useAppMappingState({
     } finally {
       setSaving(false);
     }
-  }, [bootstrapIcons, candidates, draftState, hasUnsavedChanges, onOverridesChanged, savedState, saving, webDomainCandidates]);
+  }, [draftState, hasUnsavedChanges, onOverridesChanged, savedState, saving, webDomainCandidates]);
 
   useEffect(() => {
     onRegisterSaveHandler?.(handleSave);

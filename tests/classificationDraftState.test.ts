@@ -32,6 +32,7 @@ import {
   type ClassificationBootstrapData,
   type ClassificationBootstrapDeps,
   type ClassificationCommitDeps,
+  type AppOverride,
   commitDraftChangesWithDeps,
   createClassificationCommitDeps,
 } from "../src/features/classification/services/classificationService.ts";
@@ -974,7 +975,6 @@ await runTest("classification bootstrap sync applies saved process mapper state"
   ProcessMapper.setDeletedCategories([]);
 
   ClassificationService.applyBootstrapToProcessMapper({
-    observed: [],
     observedWebDomains: [],
     loadedOverrides: {
       "chrome.exe": {
@@ -1004,10 +1004,8 @@ await runTest("classification bootstrap sync applies saved process mapper state"
   ProcessMapper.setDeletedCategories([]);
 });
 
-await runTest("classification bootstrap keeps app data when optional web reads fail", async () => {
-  const observed = [buildCandidate("vscodium.exe", "VSCodium")];
+await runTest("classification bootstrap keeps app rules when optional web reads fail", async () => {
   const deps: ClassificationBootstrapDeps = {
-    loadObservedAppCandidates: async () => observed,
     loadObservedWebDomainCandidates: async () => {
       throw new Error("no such table: web_activity_segments");
     },
@@ -1038,7 +1036,6 @@ await runTest("classification bootstrap keeps app data when optional web reads f
   try {
     const bootstrap = await ClassificationService.loadClassificationBootstrap(deps);
 
-    assert.deepEqual(bootstrap.observed, observed);
     assert.deepEqual(bootstrap.observedWebDomains, []);
     assert.deepEqual(bootstrap.loadedWebDomainOverrides, {});
     assert.equal(bootstrap.loadedOverrides["vscodium.exe"]?.category, "development");
@@ -1052,23 +1049,19 @@ await runTest("classification bootstrap keeps app data when optional web reads f
 });
 
 await runTest("classification bootstrap shares one in-flight read across warmup and page mount", async () => {
-  let releaseObserved!: (value: ObservedAppCandidate[]) => void;
-  const observedPromise = new Promise<ObservedAppCandidate[]>((resolve) => {
-    releaseObserved = resolve;
+  let releaseOverrides!: (value: Record<string, AppOverride>) => void;
+  const overridesPromise = new Promise<Record<string, AppOverride>>((resolve) => {
+    releaseOverrides = resolve;
   });
   const calls: string[] = [];
   const deps: ClassificationBootstrapDeps = {
-    loadObservedAppCandidates: async () => {
-      calls.push("observed");
-      return observedPromise;
-    },
     loadObservedWebDomainCandidates: async () => {
       calls.push("web-observed");
       return [];
     },
     loadAppOverrides: async () => {
       calls.push("overrides");
-      return {};
+      return overridesPromise;
     },
     loadWebDomainOverrides: async () => {
       calls.push("web-overrides");
@@ -1090,65 +1083,55 @@ await runTest("classification bootstrap shares one in-flight read across warmup 
       calls.push("deleted");
       return [];
     },
-    loadAppIconsForExecutables: async () => {
-      calls.push("icons");
-      return {};
-    },
   };
 
   const warmupRequest = ClassificationService.loadClassificationBootstrap(deps);
   const pageRequest = ClassificationService.loadClassificationBootstrap(deps);
   await Promise.resolve();
 
-  assert.equal(calls.filter((event) => event === "observed").length, 1);
   assert.equal(calls.filter((event) => event === "overrides").length, 1);
 
-  releaseObserved([buildCandidate("cursor.exe", "Cursor")]);
+  releaseOverrides({});
   const [warmupBootstrap, pageBootstrap] = await Promise.all([warmupRequest, pageRequest]);
 
   assert.deepEqual(pageBootstrap, warmupBootstrap);
-  assert.equal(calls.filter((event) => event === "icons").length, 1);
 });
 
 await runTest("classification bootstrap invalidation rejects an in-flight pre-delete snapshot", async () => {
   ClassificationService.invalidateBootstrapCache();
-  let observedReads = 0;
-  let releaseStaleObserved!: (value: ObservedAppCandidate[]) => void;
-  const staleObserved = new Promise<ObservedAppCandidate[]>((resolve) => {
-    releaseStaleObserved = resolve;
+  let overrideReads = 0;
+  let releaseStaleOverrides!: (value: Record<string, AppOverride>) => void;
+  const staleOverrides = new Promise<Record<string, AppOverride>>((resolve) => {
+    releaseStaleOverrides = resolve;
   });
   const deps: ClassificationBootstrapDeps = {
-    loadObservedAppCandidates: async () => {
-      observedReads += 1;
-      return observedReads === 1
-        ? staleObserved
-        : [buildCandidate("fresh.exe", "Fresh")];
-    },
     loadObservedWebDomainCandidates: async () => [],
-    loadAppOverrides: async () => ({}),
+    loadAppOverrides: async () => {
+      overrideReads += 1;
+      return overrideReads === 1
+        ? staleOverrides
+        : { "fresh.exe": { enabled: true, displayName: "Fresh" } };
+    },
     loadWebDomainOverrides: async () => ({}),
     loadCategoryColorOverrides: async () => ({}),
     loadCategoryLabelOverrides: async () => ({}),
     loadPersistedCategoryIds: async () => [],
     loadDeletedCategories: async () => [],
-    loadAppIconsForExecutables: async () => ({}),
   };
 
   const staleRequest = ClassificationService.loadClassificationBootstrap(deps);
   await Promise.resolve();
   ClassificationService.invalidateBootstrapCache();
-  releaseStaleObserved([buildCandidate("stale.exe", "Stale")]);
+  releaseStaleOverrides({ "stale.exe": { enabled: true, displayName: "Stale" } });
   const resolved = await staleRequest;
 
-  assert.equal(observedReads, 2);
-  assert.equal(resolved.observed[0]?.exeName, "fresh.exe");
-  assert.equal(ClassificationService.getBootstrapCache()?.observed[0]?.exeName, "fresh.exe");
+  assert.equal(overrideReads, 2);
+  assert.equal(resolved.loadedOverrides["fresh.exe"]?.displayName, "Fresh");
+  assert.equal(ClassificationService.getBootstrapCache()?.loadedOverrides["fresh.exe"]?.displayName, "Fresh");
 });
 
 await runTest("late classification refresh cannot overwrite a newer saved bootstrap", async () => {
   const baselineBootstrap: ClassificationBootstrapData = {
-    icons: {},
-    observed: [buildCandidate("cursor.exe", "Cursor")],
     observedWebDomains: [],
     loadedOverrides: {},
     loadedWebDomainOverrides: {},
@@ -1166,26 +1149,24 @@ await runTest("late classification refresh cannot overwrite a newer saved bootst
       },
     },
   };
-  let releaseObserved!: (value: ObservedAppCandidate[]) => void;
-  const observedPromise = new Promise<ObservedAppCandidate[]>((resolve) => {
-    releaseObserved = resolve;
+  let releaseOverrides!: (value: Record<string, AppOverride>) => void;
+  const overridesPromise = new Promise<Record<string, AppOverride>>((resolve) => {
+    releaseOverrides = resolve;
   });
   const deps: ClassificationBootstrapDeps = {
-    loadObservedAppCandidates: () => observedPromise,
     loadObservedWebDomainCandidates: async () => [],
-    loadAppOverrides: async () => ({}),
+    loadAppOverrides: () => overridesPromise,
     loadWebDomainOverrides: async () => ({}),
     loadCategoryColorOverrides: async () => ({}),
     loadCategoryLabelOverrides: async () => ({}),
     loadPersistedCategoryIds: async () => [],
     loadDeletedCategories: async () => [],
-    loadAppIconsForExecutables: async () => ({}),
   };
 
   setClassificationBootstrapCache(baselineBootstrap);
   const refreshRequest = ClassificationService.loadClassificationBootstrap(deps);
   setClassificationBootstrapCache(savedBootstrap);
-  releaseObserved([buildCandidate("cursor.exe", "Stale Cursor")]);
+  releaseOverrides({ "cursor.exe": { enabled: true, displayName: "Stale Cursor" } });
 
   const resolvedBootstrap = await refreshRequest;
 

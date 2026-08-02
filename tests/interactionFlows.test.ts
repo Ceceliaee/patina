@@ -324,7 +324,6 @@ await runTest("app mapping interaction helpers keep dirty state correct across e
   const saveResult = await saveAppMappingStateWithDeps({
     savedState,
     draftState: reEdited.draftState,
-    candidates: [candidate],
     webDomainCandidates: [],
     hasUnsavedChanges: true,
     saving: false,
@@ -338,7 +337,6 @@ await runTest("app mapping interaction helpers keep dirty state correct across e
   const failedSaveResult = await saveAppMappingStateWithDeps({
     savedState,
     draftState: reEdited.draftState,
-    candidates: [candidate],
     webDomainCandidates: [],
     hasUnsavedChanges: true,
     saving: false,
@@ -359,13 +357,11 @@ await runTest("app mapping interaction helpers keep dirty state correct across e
     deleteObservedAppSessions: async () => {
       deletedSessions += 1;
     },
-    refreshCandidates: async () => [],
     onSessionsDeleted: () => {
       deletedSessions += 1;
     },
   });
   assert.equal(deleteResult.deleted, true);
-  assert.deepEqual(deleteResult.nextCandidates, []);
   assert.equal(deletedSessions, 2);
 
   let externalDeleteCalls = 0;
@@ -380,7 +376,6 @@ await runTest("app mapping interaction helpers keep dirty state correct across e
     deleteObservedAppSessions: async () => {
       externalDeleteCalls += 1;
     },
-    refreshCandidates: async () => [],
   });
   assert.equal(externalOnlyDeleteResult.deleted, true);
   assert.equal(externalDeleteCalls, 2);

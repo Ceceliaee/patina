@@ -21,10 +21,11 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
     }, sessionId);
   };
 
-  await runTest("classification cold navigation never renders page loading copy", async () => {
+  await runTest("classification cold navigation keeps the current view until the final catalog is ready", async () => {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
+          localStorage.setItem("patina:last-active-view", "dashboard");
           localStorage.setItem("__time_tracker_classification_query_delay_ms", "900");
           location.reload();
           return true;
@@ -43,10 +44,14 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
         (() => {
           const samples = [];
           const record = () => {
+            const presentedView = document.querySelector("main.qp-canvas")
+              ?.getAttribute("data-presented-view") ?? null;
             const state = document.querySelector("[data-classification-content-state]")
               ?.getAttribute("data-classification-content-state") ?? null;
             const showsLoadingCopy = document.body.innerText.includes("加载中...");
-            const key = JSON.stringify({ state, showsLoadingCopy });
+            const candidateKeys = Array.from(document.querySelectorAll("[data-classification-app]"))
+              .map((node) => node.getAttribute("data-classification-app") ?? "");
+            const key = JSON.stringify({ presentedView, state, showsLoadingCopy, candidateKeys });
             if (samples.at(-1) !== key) samples.push(key);
           };
           const observer = new MutationObserver(record);
@@ -65,26 +70,21 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
       `),
       true,
     );
-    await waitForExpression(
-      client!,
-      sessionId,
-      `Boolean(document.querySelector('[data-classification-content-state="cold"]'))`,
-      undefined,
-      "Classification should expose its stable cold frame",
-    );
     await delay(150);
 
-    const samples = await evaluate(
-      client!,
-      sessionId,
-      `globalThis.__TIME_TRACKER_STOP_CLASSIFICATION_LOADING_SAMPLING()`,
-    ) as string[];
-    assert.ok(samples.length >= 1, "expected classification first-frame samples");
-    assert.equal(
-      samples.some((sample) => JSON.parse(sample).showsLoadingCopy === true),
-      false,
-      JSON.stringify(samples),
-    );
+    const pendingState = JSON.parse(String(await evaluate(client!, sessionId, `JSON.stringify({
+      presentedView: document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") ?? null,
+      classificationState: document.querySelector("[data-classification-content-state]")
+        ?.getAttribute("data-classification-content-state") ?? null,
+      showsLoadingCopy: document.body.innerText.includes("加载中..."),
+    })`))) as {
+      presentedView: string | null;
+      classificationState: string | null;
+      showsLoadingCopy: boolean;
+    };
+    assert.equal(pendingState.presentedView, "dashboard");
+    assert.equal(pendingState.classificationState, null);
+    assert.equal(pendingState.showsLoadingCopy, false);
 
     await waitForExpression(
       client!,
@@ -92,6 +92,36 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
       `document.querySelector('[data-classification-content-state]')?.getAttribute('data-classification-content-state') === 'ready'`,
       15_000,
       "Classification cold bootstrap should settle",
+    );
+    const samples = await evaluate(
+      client!,
+      sessionId,
+      `globalThis.__TIME_TRACKER_STOP_CLASSIFICATION_LOADING_SAMPLING()`,
+    ) as string[];
+    const parsedSamples = samples.map((sample) => JSON.parse(sample)) as Array<{
+      presentedView: string | null;
+      state: string | null;
+      showsLoadingCopy: boolean;
+      candidateKeys: string[];
+    }>;
+    assert.ok(parsedSamples.length >= 1, "expected classification presentation samples");
+    assert.equal(parsedSamples.some((sample) => sample.showsLoadingCopy), false, JSON.stringify(parsedSamples));
+    assert.equal(parsedSamples.some((sample) => sample.state === "cold"), false, JSON.stringify(parsedSamples));
+    assert.equal(
+      parsedSamples.some((sample) => sample.state !== null && sample.state !== "ready"),
+      false,
+      JSON.stringify(parsedSamples),
+    );
+    const mountedCatalogs = parsedSamples
+      .filter((sample) => sample.state === "ready")
+      .map((sample) => sample.candidateKeys);
+    assert.ok(mountedCatalogs.length >= 1, "expected the final catalog to mount");
+    const finalCatalog = mountedCatalogs.at(-1);
+    assert.ok(finalCatalog && finalCatalog.length > 0, "expected final app candidates");
+    assert.equal(
+      mountedCatalogs.every((catalog) => JSON.stringify(catalog) === JSON.stringify(finalCatalog)),
+      true,
+      JSON.stringify(parsedSamples),
     );
     const searchFieldStyle = await evaluate(client!, sessionId, `
       (() => {

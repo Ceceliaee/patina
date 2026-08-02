@@ -782,16 +782,6 @@ export function buildObservedAppCandidates(
     .slice(0, Math.max(1, limit));
 }
 
-export async function loadObservedAppCandidates(
-  days: number = 30,
-  limit: number = 120,
-): Promise<ObservedAppCandidate[]> {
-  const sinceMs = Date.now() - (Math.max(1, days) * 24 * 60 * 60 * 1000);
-  const nowMs = Date.now();
-  const rows = await loadObservedSessionStats(sinceMs, nowMs);
-  return buildObservedAppCandidates(rows, limit);
-}
-
 export async function loadAppCatalogPage(input: RecordedAppCatalogQueryInput) {
   return loadRecordedAppCatalogPage(input);
 }
