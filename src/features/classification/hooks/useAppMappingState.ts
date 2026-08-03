@@ -14,7 +14,10 @@ import {
   getClassificationBootstrapCache,
   setClassificationBootstrapCache,
 } from "../services/classificationBootstrapCache";
-import { loadClassificationIconsForExecutables } from "../services/classificationIconService.ts";
+import {
+  getCachedClassificationIconsForExecutables,
+  loadClassificationIconsForExecutables,
+} from "../services/classificationIconService.ts";
 import type { CandidateFilter, ObservedAppCandidate } from "../types";
 import {
   buildAppMappingCategoryOverride,
@@ -182,8 +185,16 @@ export function useAppMappingState({
     () => appCatalog.candidates.map((candidate) => candidate.exeName),
     [appCatalog.candidates],
   );
+  const cachedClassificationIcons = useMemo(
+    () => getCachedClassificationIconsForExecutables(candidateIconExeNames),
+    [candidateIconExeNames],
+  );
+  const initialMappingIcons = useMemo(() => ({
+    ...icons,
+    ...cachedClassificationIcons,
+  }), [cachedClassificationIcons, icons]);
   const mappingIcons = useRequestedAppIcons({
-    baseIcons: icons,
+    baseIcons: initialMappingIcons,
     exeNames: candidateIconExeNames,
     loadIcons: loadClassificationIconsForExecutables,
     onError: (error) => {

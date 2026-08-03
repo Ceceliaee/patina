@@ -122,7 +122,7 @@ function markIconRefreshResult(
   requestedExeNames: string[],
   foundIcons: Record<string, string>,
   nowMs: number,
-): void {
+): Record<string, string> {
   const expandedIcons = expandRequestedIconAliases(requestedExeNames, foundIcons);
 
   for (const exeName of requestedExeNames) {
@@ -145,6 +145,8 @@ function markIconRefreshResult(
       missingIconRetryState.delete(oldestKey);
     }
   }
+
+  return expandedIcons;
 }
 
 export function resolveAppIconKeys(exeName: string): string[] {
@@ -243,9 +245,10 @@ export async function loadAppIconsForExecutables(
   }
 
   const loadIcons = deps.loadIcons ?? getIconsForExecutables;
+  let refreshedIcons: Record<string, string> = {};
   const refresh = loadIcons(missingExeNames)
     .then((foundIcons) => {
-      markIconRefreshResult(missingExeNames, foundIcons, nowMs);
+      refreshedIcons = markIconRefreshResult(missingExeNames, foundIcons, nowMs);
     })
     .catch((error) => {
       markIconRefreshResult(missingExeNames, {}, nowMs);
@@ -262,7 +265,10 @@ export async function loadAppIconsForExecutables(
     }
   }
 
-  return getAppIconRuntimeCacheSnapshot();
+  return {
+    ...getAppIconRuntimeCacheSnapshot(),
+    ...refreshedIcons,
+  };
 }
 
 export function resetAppIconRuntimeCacheForTests(): void {

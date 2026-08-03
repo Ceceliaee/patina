@@ -21,6 +21,58 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
     }, sessionId);
   };
 
+  type ClassificationPresentation = Record<string, {
+    icon: string | null;
+    color: string | null;
+  }>;
+  const startClassificationPresentationSampling = async () => {
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const samples = [];
+        let last = "";
+        const sample = () => {
+          const cards = Array.from(document.querySelectorAll('[data-classification-app]'));
+          if (cards.length === 0) return;
+          const snapshot = Object.fromEntries(cards.map((card) => {
+            const exeName = card.getAttribute('data-classification-app') ?? '';
+            return [exeName, {
+              icon: card.querySelector('img')?.getAttribute('src') ?? null,
+              color: card.querySelector('.qp-color-trigger-value')?.textContent?.trim() ?? null,
+            }];
+          }));
+          const key = JSON.stringify(snapshot);
+          if (key !== last) {
+            last = key;
+            samples.push(snapshot);
+          }
+        };
+        const observer = new MutationObserver(sample);
+        observer.observe(document.body, {
+          attributes: true,
+          attributeFilter: ['src', 'style'],
+          childList: true,
+          subtree: true,
+          characterData: true,
+        });
+        const timer = window.setInterval(sample, 1);
+        globalThis.__TIME_TRACKER_STOP_CLASSIFICATION_PRESENTATION_SAMPLING = () => {
+          window.clearInterval(timer);
+          observer.disconnect();
+          sample();
+          return samples;
+        };
+        const navigation = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("分类"))} + ']');
+        navigation?.click();
+        return Boolean(navigation);
+      })()
+    `), true);
+  };
+  const stopClassificationPresentationSampling = async () => evaluate(
+    client!,
+    sessionId,
+    `globalThis.__TIME_TRACKER_STOP_CLASSIFICATION_PRESENTATION_SAMPLING()`,
+  ) as Promise<ClassificationPresentation[]>;
+
   await runTest("classification cold navigation keeps the current view until the final catalog is ready", async () => {
     assert.equal(
       await evaluate(client!, sessionId, `
@@ -370,6 +422,112 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
       assert.equal(sample.includes("#4790CF"), false, JSON.stringify(samples));
       assert.equal(sample.includes("#6F7AE6"), false, JSON.stringify(samples));
     }
+  });
+
+  await runTest("classification presentation stays atomic across cold load and every remount", async () => {
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        localStorage.setItem("patina:last-active-view", "dashboard");
+        localStorage.setItem("__time_tracker_enable_classification_icon_fixture", "1");
+        localStorage.setItem("__time_tracker_app_icon_query_delay_ms", "700");
+        location.reload();
+        return true;
+      })()
+    `), true);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("分类"))} + ']'))`,
+      15_000,
+      "Rebuilt main WebView should become interactive",
+    );
+
+    await startClassificationPresentationSampling();
+    await delay(120);
+    assert.equal(
+      await evaluate(
+        client!,
+        sessionId,
+        `document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view")`,
+      ),
+      "dashboard",
+      "classification must not mount before its complete presentation assets are ready",
+    );
+    await waitForExpression(client!, sessionId, `
+      (() => {
+        const card = document.querySelector('[data-classification-app="classification-only.exe"]');
+        return document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") === "mapping"
+          && card?.querySelector('img')?.getAttribute('src')?.includes('C15B2A')
+          && card?.querySelector('.qp-color-trigger-value')?.textContent?.trim() === '#C15B2A';
+      })()
+    `, 15_000, "Classification-only assets should be complete on first paint");
+    await delay(80);
+
+    const coldSamples = await stopClassificationPresentationSampling();
+    assert.ok(coldSamples.length >= 1, "expected cold classification presentation samples");
+    const baseline = coldSamples.at(-1)!;
+    assert.ok(baseline["classification-only.exe"]?.icon, JSON.stringify(coldSamples));
+    assert.equal(baseline["classification-only.exe"]?.color, "#C15B2A");
+    assert.equal(Object.keys(baseline).length, 3, JSON.stringify(baseline));
+    assert.equal(
+      coldSamples.every((sample) => JSON.stringify(sample) === JSON.stringify(baseline)),
+      true,
+      JSON.stringify(coldSamples),
+    );
+
+    await evaluate(
+      client!,
+      sessionId,
+      `localStorage.removeItem("__time_tracker_app_icon_query_delay_ms")`,
+    );
+    const origins = [
+      { label: "今天", view: "dashboard" },
+      { label: "历史", view: "history" },
+      { label: "数据", view: "data" },
+      { label: "设置", view: "settings" },
+    ];
+    for (const origin of origins) {
+      assert.equal(await evaluate(client!, sessionId, `
+        (() => {
+          const navigation = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(origin.label))} + ']');
+          navigation?.click();
+          return Boolean(navigation);
+        })()
+      `), true);
+      await waitForExpression(
+        client!,
+        sessionId,
+        `document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") === ${jsonString(origin.view)}`,
+      );
+      await startClassificationPresentationSampling();
+      await waitForExpression(
+        client!,
+        sessionId,
+        `document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") === "mapping"`,
+      );
+      await delay(50);
+      const remountSamples = await stopClassificationPresentationSampling();
+      assert.ok(remountSamples.length >= 1, `expected samples after ${origin.label}`);
+      assert.equal(
+        remountSamples.every((sample) => JSON.stringify(sample) === JSON.stringify(baseline)),
+        true,
+        `${origin.label}: ${JSON.stringify(remountSamples)}`,
+      );
+    }
+
+    await evaluate(client!, sessionId, `
+      (() => {
+        localStorage.removeItem("__time_tracker_enable_classification_icon_fixture");
+        localStorage.setItem("patina:last-active-view", "dashboard");
+        location.reload();
+        return true;
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("分类"))} + ']'))`,
+    );
   });
 
   await runTest("app mapping only offers explicit manual categories", async () => {

@@ -29,7 +29,10 @@ import type { RecordedAppCatalogQueryInput } from "../../../platform/persistence
 import {
   ClassificationAppCatalogController,
   ClassificationAppCatalogSnapshotStore,
+  type CompleteAppCatalogSnapshot,
 } from "./classificationAppCatalog.ts";
+import { prewarmIconThemeColors } from "../../../shared/hooks/useIconThemeColors.ts";
+import { loadClassificationIconsForExecutables } from "./classificationIconService.ts";
 export { filterAndSortCandidates } from "./classificationCandidateFiltering.ts";
 export {
   ClassificationAppCatalogController,
@@ -73,6 +76,28 @@ export interface PreparedImportedClassification {
   mutations: ClassificationSettingMutation[];
   result: ImportedClassificationResult;
   applyRuntime: () => void;
+}
+
+interface ClassificationPresentationWarmupDeps {
+  loadIcons: typeof loadClassificationIconsForExecutables;
+  prewarmThemeColors: typeof prewarmIconThemeColors;
+}
+
+const defaultClassificationPresentationWarmupDeps: ClassificationPresentationWarmupDeps = {
+  loadIcons: loadClassificationIconsForExecutables,
+  prewarmThemeColors: prewarmIconThemeColors,
+};
+
+export async function prewarmClassificationPresentationAssets(
+  catalog: CompleteAppCatalogSnapshot | null,
+  deps: ClassificationPresentationWarmupDeps = defaultClassificationPresentationWarmupDeps,
+): Promise<void> {
+  if (!catalog || catalog.candidates.length === 0) return;
+
+  const icons = await deps.loadIcons(
+    catalog.candidates.map((candidate) => candidate.exeName),
+  );
+  await deps.prewarmThemeColors(icons);
 }
 
 export function createClassificationCommitDeps(
@@ -344,10 +369,11 @@ export class ClassificationService {
 }
 
 export async function prewarmClassificationBootstrapCache(): Promise<ClassificationBootstrapData> {
-  const [bootstrap] = await Promise.all([
+  const [bootstrap, catalog] = await Promise.all([
     ClassificationService.prewarmBootstrapCache(),
     ClassificationService.prewarmAppCatalog(),
   ]);
+  await prewarmClassificationPresentationAssets(catalog);
   return bootstrap;
 }
 

@@ -13,6 +13,7 @@ import DestinationDetailDialogEntry from "../../destination/components/Destinati
 import { useDestinationDetailLauncher } from "../../destination/hooks/useDestinationDetailLauncher.ts";
 import { createDestinationDetailTarget } from "../../destination/types.ts";
 import { formatLocalDateKey } from "../../../shared/lib/localDate.ts";
+import type { TrackerHealthSnapshot } from "../../../shared/types/tracking.ts";
 
 interface Props {
   dashboard: DashboardReadModel;
@@ -22,6 +23,7 @@ interface Props {
   refreshKey: number;
   mappingVersion: number;
   mergeThresholdSecs: number;
+  trackerHealth: TrackerHealthSnapshot;
 }
 
 const FOCUS_CATEGORY_LIMIT = 4;
@@ -113,6 +115,7 @@ export default function Dashboard({
   refreshKey,
   mappingVersion,
   mergeThresholdSecs,
+  trackerHealth,
 }: Props) {
   const detail = useDestinationDetailLauncher();
   const iconThemeColors = useIconThemeColors(icons);
@@ -352,7 +355,7 @@ export default function Dashboard({
           key={`${detail.request.target.mode}:${detail.request.target.key}`}
           target={detail.request.target}
           initialDateKey={detail.request.initialDateKey}
-          runtime={{ refreshKey, mappingVersion, mergeThresholdSecs }}
+          runtime={{ refreshKey, mappingVersion, mergeThresholdSecs, trackerHealth }}
           onClose={detail.close}
         />
       ) : null}

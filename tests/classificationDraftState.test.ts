@@ -35,6 +35,7 @@ import {
   type AppOverride,
   commitDraftChangesWithDeps,
   createClassificationCommitDeps,
+  prewarmClassificationPresentationAssets,
 } from "../src/features/classification/services/classificationService.ts";
 import { ProcessMapper } from "../src/shared/classification/processMapper.ts";
 import {
@@ -83,6 +84,50 @@ async function runTest(name: string, fn: () => Promise<void> | void) {
   passed += 1;
   console.log(`PASS ${name}`);
 }
+
+await runTest("classification presentation warmup covers the complete committed catalog atomically", async () => {
+  const events: string[] = [];
+  const requestedExecutables: string[][] = [];
+  const warmedIconMaps: Array<Record<string, string>> = [];
+  const candidates = ["dashboard.exe", "classification-only.exe", "import-only.exe"].map(
+    (exeName, index) => ({
+      exeName,
+      appName: `App ${index}`,
+      totalDuration: 0,
+      lastSeenMs: 100 - index,
+      hasNativeRecords: index === 0,
+    }),
+  );
+
+  await prewarmClassificationPresentationAssets({
+    candidates,
+    sourceRevision: 4,
+    completedAtMs: 1_000,
+  }, {
+    loadIcons: async (exeNames) => {
+      events.push("icons");
+      requestedExecutables.push(exeNames);
+      return Object.fromEntries(exeNames.map((exeName) => [exeName, `icon:${exeName}`]));
+    },
+    prewarmThemeColors: async (icons) => {
+      events.push("colors");
+      warmedIconMaps.push(icons);
+      return Object.fromEntries(Object.keys(icons).map((exeName) => [exeName, "#123456"]));
+    },
+  });
+
+  assert.deepEqual(events, ["icons", "colors"]);
+  assert.deepEqual(requestedExecutables, [[
+    "dashboard.exe",
+    "classification-only.exe",
+    "import-only.exe",
+  ]]);
+  assert.deepEqual(Object.keys(warmedIconMaps[0]), [
+    "dashboard.exe",
+    "classification-only.exe",
+    "import-only.exe",
+  ]);
+});
 
 await runTest("normalizeClassificationOverride trims values and drops empty overrides", () => {
   assert.equal(normalizeClassificationOverride(null), null);

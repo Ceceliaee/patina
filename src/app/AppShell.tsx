@@ -265,6 +265,7 @@ function AppShellContent() {
                 refreshKey={refreshSignal}
                 mappingVersion={mappingVersion}
                 mergeThresholdSecs={appSettings.timelineMergeGapSecs}
+                trackerHealth={trackerHealth}
               />
             ),
             history: (
@@ -285,7 +286,6 @@ function AppShellContent() {
                 onHourlyActivityChartModeChange={handleHourlyActivityChartModeChange}
                 refreshEnabled={isHistoryRefreshEnabled}
                 webActivityEnabled={appSettings.webActivityEnabled}
-                titleRecordingEnabled={appSettings.titleRecordingEnabled}
               />
             ),
             data: (

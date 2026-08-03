@@ -354,6 +354,22 @@ function readCachedThemeColors(icons: Record<string, string>): Record<string, st
   return colors;
 }
 
+export async function prewarmIconThemeColors(
+  icons: Record<string, string>,
+): Promise<Record<string, string>> {
+  if (typeof Image === "undefined" || typeof document === "undefined") {
+    return readCachedThemeColors(icons);
+  }
+
+  const unresolvedEntries = Object.entries(icons).filter(([identifier, iconData]) => (
+    Boolean(toImageSource(iconData)) && !readCachedThemeColor(identifier, iconData)
+  ));
+  await Promise.all(unresolvedEntries.map(([identifier, iconData]) => (
+    resolveThemeColor(identifier, iconData)
+  )));
+  return readCachedThemeColors(icons);
+}
+
 async function extractDominantColor(iconData: string): Promise<string | null> {
   const imageSource = toImageSource(iconData);
   if (!imageSource) return null;

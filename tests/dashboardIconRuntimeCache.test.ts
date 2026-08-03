@@ -8,13 +8,20 @@ import {
 import {
   getAppIconRuntimeCacheStats,
 } from "../src/platform/persistence/appIconRuntimeCache.ts";
+import {
+  getCachedClassificationIconsForExecutables,
+  loadClassificationIconsForExecutables,
+  resetClassificationIconPresentationCacheForTests,
+} from "../src/features/classification/services/classificationIconService.ts";
 
 let passed = 0;
 
 async function runTest(name: string, fn: () => Promise<void> | void) {
   resetDashboardIconRuntimeCacheForTests();
+  resetClassificationIconPresentationCacheForTests();
   await fn();
   resetDashboardIconRuntimeCacheForTests();
+  resetClassificationIconPresentationCacheForTests();
   passed += 1;
   console.log(`PASS ${name}`);
 }
@@ -99,6 +106,22 @@ await runTest("dashboard icon runtime cache keeps bounded icon and retry entries
   );
 
   assert.equal(getAppIconRuntimeCacheStats().missingRetryEntries, 256);
+});
+
+await runTest("classification keeps its complete presentation snapshot beyond the shared LRU", async () => {
+  const exeNames = Array.from({ length: 300 }, (_, index) => `Catalog${index}.exe`);
+  const loaded = await loadClassificationIconsForExecutables(exeNames, {
+    nowMs: () => 1_000,
+    loadIcons: async (requested) => Object.fromEntries(
+      requested.map((exeName) => [exeName.toLowerCase(), `icon:${exeName}`]),
+    ),
+  });
+
+  assert.equal(exeNames.every((exeName) => Boolean(loaded[exeName])), true);
+  assert.equal(getAppIconRuntimeCacheStats().entries, 256);
+
+  const remounted = getCachedClassificationIconsForExecutables(exeNames);
+  assert.equal(exeNames.every((exeName) => Boolean(remounted[exeName])), true);
 });
 
 console.log(`Passed ${passed} dashboard icon runtime cache tests`);
