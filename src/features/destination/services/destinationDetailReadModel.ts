@@ -5,6 +5,7 @@ import {
   getWebActivitySegmentsInRange,
 } from "../../../platform/persistence/webActivityRepository.ts";
 import type { HistorySession } from "../../../shared/types/sessions.ts";
+import type { TrackerHealthStatus } from "../../../shared/types/tracking.ts";
 import type { WebActivitySegment } from "../../../shared/types/webActivity.ts";
 import {
   addLocalDays,
@@ -14,7 +15,12 @@ import {
   getWebActivityTimelineItemEndTime,
   mergeWebActivityTimelineItemsByDomain,
 } from "../../../shared/lib/webActivityTimelineCompiler.ts";
-import { AppClassification } from "../../../shared/classification/appClassification.ts";
+import { materializeLiveSessions } from "../../../shared/lib/readModelCore.ts";
+import {
+  buildTimelineSessions,
+  compileSessions,
+  type TimelineSession,
+} from "../../../shared/lib/sessionReadCompiler.ts";
 import type { DestinationDetailTarget } from "../types.ts";
 
 const ADJACENT_DETAIL_RECORD_GAP_MS = 1_000;
@@ -42,7 +48,12 @@ export interface DestinationDetailActivity {
   duration: number;
   current: boolean;
   records: DestinationDetailRecord[];
+  detailRecords?: DestinationDetailRecord[];
 }
+
+export type DestinationDetailTitleRecord = DestinationDetailRecord & {
+  title: string;
+};
 
 export interface DestinationDetailDayViewModel {
   dateKey: string;
@@ -94,14 +105,6 @@ function cleanOptionalText(value: string | null | undefined) {
 
 function normalizeIdentityKey(value: string) {
   return value.trim().toLowerCase();
-}
-
-function resolveTrackedAppKey(session: HistorySession) {
-  if (!AppClassification.shouldTrackProcess(session.exeName, { appName: session.appName })) {
-    return null;
-  }
-  const key = AppClassification.resolveCanonicalExecutable(session.exeName);
-  return key && AppClassification.isAppTrackingEnabledByUser(key) ? key : null;
 }
 
 function resolveDayBounds(dateKey: string, nowMs: number) {
@@ -224,9 +227,46 @@ function buildDetailActivities(
   ));
 }
 
-function resolveHistorySessionEnd(session: HistorySession, nowMs: number) {
+function resolveMaterializedSessionEnd(session: HistorySession) {
   if (session.endTime !== null) return session.endTime;
-  return Math.max(session.startTime, nowMs);
+  return session.startTime + Math.max(0, session.duration ?? 0);
+}
+
+interface AppDetailActivityMembership {
+  activity: TimelineSession;
+  activityId: string;
+  sourceActivityIds: string[];
+}
+
+function buildAppDetailActivityMemberships(
+  sessions: readonly HistorySession[],
+  target: DestinationDetailTarget,
+  dayStartMs: number,
+  clipEndMs: number,
+  mergeThresholdSecs: number,
+) {
+  const identityKeys = new Set(target.identityKeys.map(normalizeIdentityKey));
+  const compiled = compileSessions([...sessions], {
+    startMs: dayStartMs,
+    endMs: clipEndMs,
+    minSessionSecs: 0,
+  });
+  const detailActivities = buildTimelineSessions(
+    compiled,
+    mergeThresholdSecs,
+  ).filter((activity) => identityKeys.has(normalizeIdentityKey(activity.appKey)));
+  const memberships = new Map<string, AppDetailActivityMembership>();
+
+  for (const activity of detailActivities) {
+    const sourceActivityIds = activity.sourceIds.map((sourceId) => `app:${sourceId}`);
+    const activityId = `app:${activity.appKey}:${activity.startTime}:${activity.sourceIds.join(",")}`;
+    const membership = { activity, activityId, sourceActivityIds };
+    for (const sourceId of activity.sourceIds) {
+      memberships.set(String(sourceId), membership);
+    }
+  }
+
+  return memberships;
 }
 
 function buildAppDetailRecords(
@@ -235,25 +275,35 @@ function buildAppDetailRecords(
   dayStartMs: number,
   clipEndMs: number,
   dayEndMs: number,
-  nowMs: number,
+  mergeThresholdSecs: number,
 ) {
-  const identityKeys = new Set(target.identityKeys.map(normalizeIdentityKey));
+  const memberships = buildAppDetailActivityMemberships(
+    sessions,
+    target,
+    dayStartMs,
+    clipEndMs,
+    mergeThresholdSecs,
+  );
   const records: UnpositionedDetailRecord[] = [];
+  const activityMemberships = new Map<string, AppDetailActivityMembership>();
+  for (const membership of memberships.values()) {
+    activityMemberships.set(membership.activityId, membership);
+  }
 
   for (const session of sessions) {
-    const sessionEnd = resolveHistorySessionEnd(session, nowMs);
-    const appKey = resolveTrackedAppKey(session);
-    if (!appKey || !identityKeys.has(normalizeIdentityKey(appKey))) continue;
-    const activityId = `app:${session.continuityGroupStartTime ?? session.id}`;
+    const membership = memberships.get(String(session.id));
+    if (!membership) continue;
+    const sessionEnd = resolveMaterializedSessionEnd(session);
+    const { activity, activityId, sourceActivityIds } = membership;
 
-    const samples = [...(session.titleSampleDetails ?? [])]
+    const samples = activity.titleSampleDetails
       .map((sample, index) => ({
         ...sample,
         index,
         startTime: Math.max(session.startTime, sample.startTime),
         endTime: Math.min(
           sessionEnd,
-          sample.endTime ?? Math.min(sessionEnd, nowMs),
+          sample.endTime ?? sessionEnd,
         ),
       }))
       .filter((sample) => sample.endTime > sample.startTime)
@@ -266,10 +316,10 @@ function buildAppDetailRecords(
       records.push({
         id: `app:${session.id}`,
         activityId,
-        sourceActivityIds: [`app:${session.id}`],
+        sourceActivityIds,
         startTime: session.startTime,
         endTime: sessionEnd,
-        title: cleanOptionalText(session.windowTitle),
+        title: cleanOptionalText(activity.displayTitle),
         secondaryText: null,
         url: null,
         current: session.endTime === null,
@@ -277,14 +327,16 @@ function buildAppDetailRecords(
       continue;
     }
 
-    const fallbackTitle = cleanOptionalText(session.windowTitle);
+    const fallbackTitle = activity.titleSampleDetails.length === 0
+      ? cleanOptionalText(activity.displayTitle)
+      : null;
     let cursor = session.startTime;
     for (const sample of samples) {
       if (sample.startTime > cursor) {
         records.push({
           id: `app:${session.id}:gap:${cursor}`,
           activityId,
-          sourceActivityIds: [`app:${session.id}`],
+          sourceActivityIds,
           startTime: cursor,
           endTime: sample.startTime,
           title: fallbackTitle,
@@ -299,7 +351,7 @@ function buildAppDetailRecords(
       records.push({
         id: `app:${session.id}:sample:${sample.index}`,
         activityId,
-        sourceActivityIds: [`app:${session.id}`],
+        sourceActivityIds,
         startTime: sampleStartTime,
         endTime: sample.endTime,
         title: cleanOptionalText(sample.title),
@@ -314,7 +366,7 @@ function buildAppDetailRecords(
       records.push({
         id: `app:${session.id}:gap:${cursor}`,
         activityId,
-        sourceActivityIds: [`app:${session.id}`],
+        sourceActivityIds,
         startTime: cursor,
         endTime: sessionEnd,
         title: fallbackTitle,
@@ -325,7 +377,45 @@ function buildAppDetailRecords(
     }
   }
 
-  return normalizeDetailRecords(records, dayStartMs, clipEndMs, dayEndMs);
+  const normalizedRecords = normalizeDetailRecords(
+    records,
+    dayStartMs,
+    clipEndMs,
+    dayEndMs,
+  );
+  const normalizedDetailRecords = normalizeDetailRecords(
+    Array.from(activityMemberships.values()).flatMap((membership) => (
+      membership.activity.titleSampleDetails.map((sample, index) => ({
+        id: `${membership.activityId}:title:${index}`,
+        activityId: membership.activityId,
+        sourceActivityIds: membership.sourceActivityIds,
+        startTime: sample.startTime,
+        endTime: sample.endTime,
+        title: cleanOptionalText(sample.title),
+        secondaryText: null,
+        url: null,
+        current: membership.activity.isLive
+          && sample.endTime >= (membership.activity.endTime ?? membership.activity.startTime),
+      }))
+    )),
+    dayStartMs,
+    clipEndMs,
+    dayEndMs,
+  );
+  const detailRecordsByActivityId = new Map<string, DestinationDetailRecord[]>();
+  for (const record of normalizedDetailRecords) {
+    const current = detailRecordsByActivityId.get(record.activityId);
+    if (current) {
+      current.push(record);
+    } else {
+      detailRecordsByActivityId.set(record.activityId, [record]);
+    }
+  }
+
+  return {
+    records: normalizedRecords,
+    detailRecordsByActivityId,
+  };
 }
 
 function buildWebDetailRecords(
@@ -394,17 +484,29 @@ function buildDayViewModel(
   dayStartMs: number,
   dayEndMs: number,
   records: DestinationDetailRecord[],
+  detailRecordsByActivityId?: Map<string, DestinationDetailRecord[]>,
 ): DestinationDetailDayViewModel {
+  const activities = buildDetailActivities(records).map((activity) => {
+    const detailRecords = detailRecordsByActivityId?.get(activity.id);
+    return detailRecords ? { ...activity, detailRecords } : activity;
+  });
   return {
     dateKey,
     dayStartMs,
     dayEndMs,
     records,
-    activities: buildDetailActivities(records),
+    activities,
     totalDuration: records.reduce((total, record) => total + record.duration, 0),
     firstStartTime: records[0]?.startTime ?? null,
     lastEndTime: records[records.length - 1]?.endTime ?? null,
   };
+}
+
+export function getDestinationDetailTitleRecords(
+  activity: DestinationDetailActivity,
+): DestinationDetailTitleRecord[] {
+  return (activity.detailRecords ?? activity.records)
+    .filter((record): record is DestinationDetailTitleRecord => Boolean(record.title));
 }
 
 export async function loadDestinationDetailDay(
@@ -413,6 +515,8 @@ export async function loadDestinationDetailDay(
   nowMs: number = Date.now(),
   mergeThresholdSecs: number = 0,
   dependencies: DestinationDetailDayDependencies = defaultDayDependencies,
+  trackerStatus: TrackerHealthStatus = "healthy",
+  lastHeartbeatMs: number | null = null,
 ): Promise<DestinationDetailDayViewModel> {
   const bounds = resolveDayBounds(dateKey, nowMs);
   if (!bounds) {
@@ -420,19 +524,25 @@ export async function loadDestinationDetailDay(
   }
 
   if (target.mode === "app") {
-    const sessions = await dependencies.getAppSessions(new Date(bounds.startMs));
+    const sessions = materializeLiveSessions(
+      await dependencies.getAppSessions(new Date(bounds.startMs)),
+      { status: trackerStatus, lastHeartbeatMs },
+      nowMs,
+    );
+    const detail = buildAppDetailRecords(
+      sessions,
+      target,
+      bounds.startMs,
+      bounds.endMs,
+      bounds.requestedEndMs,
+      mergeThresholdSecs,
+    );
     return buildDayViewModel(
       dateKey,
       bounds.startMs,
       bounds.requestedEndMs,
-      buildAppDetailRecords(
-        sessions,
-        target,
-        bounds.startMs,
-        bounds.endMs,
-        bounds.requestedEndMs,
-        nowMs,
-      ),
+      detail.records,
+      detail.detailRecordsByActivityId,
     );
   }
 

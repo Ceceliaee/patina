@@ -1,3 +1,5 @@
+import type { TrackerHealthSnapshot } from "../../shared/types/tracking.ts";
+
 export type DestinationDetailMode = "app" | "web";
 
 export interface DestinationDetailTarget {
@@ -19,6 +21,7 @@ export interface DestinationDetailRuntimeContext {
   refreshKey: number;
   mappingVersion: number;
   mergeThresholdSecs: number;
+  trackerHealth: TrackerHealthSnapshot;
 }
 
 function normalizeIdentityKey(value: string) {

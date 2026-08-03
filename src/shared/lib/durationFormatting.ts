@@ -8,5 +8,5 @@ export function formatDuration(ms: number): string {
   if (hours > 0) return `${hours}h ${minutes}m`;
   if (totalMinutes > 0) return `${minutes}m`;
   if (totalSeconds > 0) return `${totalSeconds}s`;
-  return "0m";
+  return "0s";
 }

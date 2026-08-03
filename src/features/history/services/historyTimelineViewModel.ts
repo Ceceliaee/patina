@@ -6,6 +6,7 @@ import {
   snapTimelineFocusToNearestInterval,
   type TimelineAxisTick,
 } from "../../../shared/lib/timelineAxis.ts";
+import { mergeContiguousTimelineSegments } from "../../../shared/lib/timelineSegmentMerge.ts";
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -31,6 +32,7 @@ export type HistoryTimelineAxisTick = TimelineAxisTick;
 
 export interface HistoryTimelineTitleSample {
   title: string;
+  secondaryText?: string | null;
   startTime: number;
   endTime: number;
   isUntitled?: boolean;
@@ -282,6 +284,32 @@ export function panHistoryTimelineViewport({
   });
 }
 
+export function panHistoryTimelineViewportForKey({
+  selectedDate,
+  viewport,
+  key,
+}: {
+  selectedDate: Date;
+  viewport: HistoryTimelineViewport;
+  key: string;
+}): HistoryTimelineViewport | null {
+  const { dayStartMs, dayEndMs } = getFullDayRange(selectedDate);
+  const panStepMs = viewport.durationMs / 10;
+  const deltaMs = key === "ArrowLeft"
+    ? -panStepMs
+    : key === "ArrowRight"
+      ? panStepMs
+      : key === "Home"
+        ? dayStartMs - viewport.startMs
+        : key === "End"
+          ? dayEndMs - viewport.endMs
+          : null;
+
+  return deltaMs === null
+    ? null
+    : panHistoryTimelineViewport({ selectedDate, viewport, deltaMs });
+}
+
 export function panHistoryTimelineViewportByPixels({
   selectedDate,
   viewport,
@@ -361,6 +389,7 @@ function clipTitleSampleDetails(
   const details = source.titleSampleDetails
     .map((sample) => ({
       title: sample.title,
+      ...(sample.secondaryText ? { secondaryText: sample.secondaryText } : {}),
       startTime: Math.max(sample.startTime, clippedStart),
       endTime: Math.min(sample.endTime, clippedEnd),
       ...(sample.isUntitled ? { isUntitled: true } : {}),
@@ -394,6 +423,7 @@ function clipSegmentTitleSampleDetails(
   return segment.titleSampleDetails
     .map((sample) => ({
       title: sample.title,
+      ...(sample.secondaryText ? { secondaryText: sample.secondaryText } : {}),
       startTime: Math.max(sample.startTime, clippedStart),
       endTime: Math.min(sample.endTime, clippedEnd),
       ...(sample.isUntitled ? { isUntitled: true } : {}),
@@ -466,7 +496,8 @@ function mergeTitleSampleDetails(
     const previous = merged[merged.length - 1];
     const sameTitle = previous
       && Boolean(previous.isUntitled) === Boolean(sample.isUntitled)
-      && (sample.isUntitled || previous.title === sample.title);
+      && (sample.isUntitled || previous.title === sample.title)
+      && previous.secondaryText === sample.secondaryText;
     if (sameTitle && sample.startTime <= previous.endTime) {
       previous.endTime = Math.max(previous.endTime, sample.endTime);
       return merged;
@@ -723,25 +754,11 @@ function mergeContiguousDominantMinuteSegments(
   segments: HistoryTimelineSegment[],
   mergeThresholdMs: number,
 ) {
-  const merged: HistoryTimelineSegment[] = [];
-
-  for (const segment of segments) {
-    const current = merged[merged.length - 1];
-    if (!current) {
-      merged.push(segment);
-      continue;
-    }
-
-    const gapMs = segment.startTime - current.endTime;
-    if (segment.timelineKey === current.timelineKey && gapMs >= 0 && gapMs <= mergeThresholdMs) {
-      merged[merged.length - 1] = mergeAdjacentTimelineSegments(current, segment);
-      continue;
-    }
-
-    merged.push(segment);
-  }
-
-  return merged;
+  return mergeContiguousTimelineSegments(segments, {
+    mergeThresholdMs,
+    getKey: (segment) => segment.timelineKey,
+    merge: mergeAdjacentTimelineSegments,
+  });
 }
 
 function keepVisibleTimelineSegments(segments: HistoryTimelineSegment[]) {

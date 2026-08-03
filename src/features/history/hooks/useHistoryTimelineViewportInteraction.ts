@@ -3,12 +3,14 @@ import {
   useEffect,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from "react";
 import {
   panHistoryTimelineViewport,
   panHistoryTimelineViewportByPixels,
+  panHistoryTimelineViewportForKey,
   zoomHistoryTimelineViewportAroundAnchor,
   type HistoryTimelineViewport,
 } from "../services/historyTimelineViewModel.ts";
@@ -281,10 +283,24 @@ export function useHistoryTimelineViewportInteraction({
     cancelInteraction();
   }, [cancelInteraction]);
 
+  const handleKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!enabled) return;
+    const nextViewport = panHistoryTimelineViewportForKey({
+      selectedDate,
+      viewport: viewportRef.current,
+      key: event.key,
+    });
+    if (!nextViewport) return;
+    event.preventDefault();
+    scheduleViewportChange(nextViewport, "pan");
+  }, [enabled, scheduleViewportChange, selectedDate]);
+
   return {
     isDragging,
     cancelInteraction,
     interactionProps: {
+      tabIndex: 0,
+      onKeyDown: handleKeyDown,
       onPointerDownCapture: handlePointerDown,
       onPointerMove: handlePointerMove,
       onPointerUp: handlePointerUp,

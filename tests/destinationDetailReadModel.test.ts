@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  getDestinationDetailTitleRecords,
   loadDestinationDetailDay,
 } from "../src/features/destination/services/destinationDetailReadModel.ts";
 import type {
@@ -141,7 +142,7 @@ await runTest("app detail uses canonical source identities and exact title sampl
   assert.equal(day.records[1]?.endRatio, 10 / 24);
 });
 
-await runTest("app detail groups title fragments by persisted continuity", async () => {
+await runTest("app detail uses the History threshold when no other app intervenes", async () => {
   const continuityGroupStartTime = at(9);
   const day = await loadDestinationDetailDay(
     appTarget(),
@@ -159,7 +160,7 @@ await runTest("app detail groups title fragments by persisted continuity", async
         }),
         makeSession({
           id: 2,
-          startTime: at(9, 15),
+          startTime: at(9, 12),
           endTime: at(9, 20),
           continuityGroupStartTime,
           windowTitle: "Second",
@@ -179,9 +180,92 @@ await runTest("app detail groups title fragments by persisted continuity", async
   }, {
     startTime: at(9),
     endTime: at(9, 20),
-    duration: 15 * 60_000,
+    duration: 18 * 60_000,
     titles: ["First", "Second"],
   });
+});
+
+await runTest("app detail matches History when a short application switch separates two rows", async () => {
+  const day = await loadDestinationDetailDay(
+    appTarget(),
+    "2026-05-20",
+    at(12),
+    180,
+    {
+      getAppSessions: async () => [
+        makeSession({ id: 1, startTime: at(9), endTime: at(9, 2), windowTitle: "First" }),
+        makeSession({
+          id: 2,
+          appName: "Other",
+          exeName: "other.exe",
+          startTime: at(9, 2),
+          endTime: at(9, 3),
+          windowTitle: "Interruption",
+        }),
+        makeSession({ id: 3, startTime: at(9, 3), endTime: at(9, 5), windowTitle: "Second" }),
+      ],
+      getWebSegments: async () => [],
+    },
+  );
+
+  assert.equal(day.activities.length, 1);
+  assert.deepEqual(day.activities.map((activity) => ({
+    startTime: activity.startTime,
+    endTime: activity.endTime,
+    duration: activity.duration,
+    activityCount: activity.activityCount,
+  })), [
+    { startTime: at(9), endTime: at(9, 5), duration: 4 * 60_000, activityCount: 2 },
+  ]);
+});
+
+await runTest("app detail reuses the History title-row compiler across same-app fragments", async () => {
+  const day = await loadDestinationDetailDay(
+    appTarget(),
+    "2026-05-20",
+    at(12),
+    180,
+    {
+      getAppSessions: async () => [
+        makeSession({ id: 1, startTime: at(9), endTime: at(9, 2), windowTitle: "Editor" }),
+        makeSession({ id: 2, startTime: at(9, 3), endTime: at(9, 5), windowTitle: "Editor" }),
+      ],
+      getWebSegments: async () => [],
+    },
+  );
+
+  assert.equal(day.activities.length, 1);
+  assert.equal(day.activities[0]?.activityCount, 2);
+  assert.deepEqual(
+    day.activities[0]?.detailRecords?.map((record) => record.title),
+    ["Editor"],
+  );
+  assert.equal(day.activities[0]?.duration, 4 * 60_000);
+});
+
+await runTest("app detail does not count the application name as a window title", async () => {
+  const day = await loadDestinationDetailDay(
+    appTarget(),
+    "2026-05-20",
+    at(12),
+    180,
+    {
+      getAppSessions: async () => [makeSession({
+        id: 1,
+        startTime: at(9),
+        endTime: at(9, 5),
+        windowTitle: "ChatGPT",
+      })],
+      getWebSegments: async () => [],
+    },
+  );
+
+  assert.equal(day.activities[0]?.records[0]?.title, null);
+  assert.deepEqual(day.activities[0]?.detailRecords, undefined);
+  assert.deepEqual(
+    day.activities[0] ? getDestinationDetailTitleRecords(day.activities[0]) : null,
+    [],
+  );
 });
 
 await runTest("app detail clips cross-day and current sessions to the visible day", async () => {
@@ -222,6 +306,31 @@ await runTest("app detail clips cross-day and current sessions to the visible da
   ]);
   assert.equal(day.activities.length, 2);
   assert.equal(day.totalDuration, 5_400_000);
+});
+
+await runTest("app detail uses the shared stale-tracker cutoff for live sessions", async () => {
+  const lastHeartbeatMs = at(11, 30);
+  const day = await loadDestinationDetailDay(
+    appTarget(),
+    "2026-05-20",
+    at(12),
+    180,
+    {
+      getAppSessions: async () => [makeSession({
+        id: 1,
+        startTime: at(11),
+        endTime: null,
+        duration: null,
+        windowTitle: "Current",
+      })],
+      getWebSegments: async () => [],
+    },
+    "stale",
+    lastHeartbeatMs,
+  );
+
+  assert.equal(day.activities[0]?.endTime, lastHeartbeatMs);
+  assert.equal(day.activities[0]?.duration, 30 * 60_000);
 });
 
 await runTest("app detail keeps uncovered title-sample time as an explicit record", async () => {

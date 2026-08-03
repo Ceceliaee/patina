@@ -39,6 +39,12 @@ export interface DataDestinationSelectionResult {
   outcome: DataDestinationSelectionOutcome;
 }
 
+export interface DataDestinationSelectionSnapshot {
+  appKeys: string[];
+  webKeys: string[];
+  mode: DataDestinationMode;
+}
+
 function uniqueKeys(keys: readonly string[]) {
   return Array.from(new Set(keys.filter(Boolean)));
 }
@@ -48,6 +54,35 @@ export function replaceDataDestinationSelection(key: string): DataDestinationSel
     keys: key ? [key] : [],
     outcome: "replaced",
   };
+}
+
+export function commitDataDestinationDetailSelection<
+  Snapshot extends DataDestinationSelectionSnapshot,
+>(
+  snapshot: Snapshot,
+  mode: DataDestinationMode,
+  key: string,
+): Snapshot {
+  const selectedKeys = replaceDataDestinationSelection(key).keys;
+  return {
+    ...snapshot,
+    mode,
+    appKeys: mode === "app" ? selectedKeys : snapshot.appKeys,
+    webKeys: mode === "web" ? selectedKeys : snapshot.webKeys,
+  };
+}
+
+export function buildDataDestinationIconSources(
+  appOptions: readonly DataDestinationTrendOption[],
+  webOptions: readonly DataDestinationTrendOption[],
+): Record<string, string> {
+  const entries = [
+    ...appOptions.map((option) => ["app", option] as const),
+    ...webOptions.map((option) => ["web", option] as const),
+  ].flatMap(([mode, option]) => (
+    option.iconUrl ? [[`${mode}:${option.key}`, option.iconUrl] as const] : []
+  ));
+  return Object.fromEntries(entries);
 }
 
 export function toggleDataDestinationSelection(

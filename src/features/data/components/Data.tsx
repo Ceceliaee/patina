@@ -35,6 +35,7 @@ import {
   type HeatmapSelection,
 } from "../services/dataHeatmapReadModel.ts";
 import {
+  buildDataDestinationIconSources,
   buildDataDestinationTrendSeries,
   encodeDataDestinationSelectionKey,
   reconcileDataDestinationSelection,
@@ -213,6 +214,7 @@ function useDataChartInitialDimension(
 export default function Data({
   icons,
   refreshKey = 0,
+  trackerHealth,
   loadDataTrendSnapshot,
   mappingVersion = 0,
   mergeThresholdSecs,
@@ -720,20 +722,10 @@ export default function Data({
     rememberDataDestinationSessionOptions("web", resolvedWebPanelSelectedOptions);
   }, [resolvedWebPanelSelectedOptions]);
   const destinationIconSources = useMemo<Record<string, string>>(() => {
-    const entries = [
-      ...appPanelSelectedOptions.map((option) => [
-        `app:${option.key}`,
-        option.iconUrl ?? "",
-      ] as const),
-      ...resolvedWebPanelSelectedOptions.map((option) => [
-        `web:${option.key}`,
-        option.iconUrl ?? "",
-      ] as const),
-    ].filter((entry) => Boolean(entry[1]));
-    return Object.fromEntries(entries);
+    return buildDataDestinationIconSources(appAllPanelOptions, webAllPanelOptions);
   }, [
-    appPanelSelectedOptions,
-    resolvedWebPanelSelectedOptions,
+    appAllPanelOptions,
+    webAllPanelOptions,
   ]);
   const destinationIconColors = useIconThemeColors(destinationIconSources);
 
@@ -1286,7 +1278,7 @@ export default function Data({
           key={`${destinationDetail.target.mode}:${destinationDetail.target.key}`}
           target={destinationDetail.target}
           initialDateKey={destinationDetail.initialDateKey}
-          runtime={{ refreshKey, mappingVersion, mergeThresholdSecs }}
+          runtime={{ refreshKey, mappingVersion, mergeThresholdSecs, trackerHealth }}
           onClose={closeDestinationDetail}
         />
       ) : null}

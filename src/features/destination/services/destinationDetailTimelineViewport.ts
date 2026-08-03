@@ -17,7 +17,6 @@ const DAY_HOURS = 24;
 const MIN_VIEWPORT_HOURS = 1;
 const WHEEL_ZOOM_STEP_HOURS = 0.2;
 const WHEEL_NOISE_THRESHOLD_PX = 0.5;
-const DIRECT_MERGE_GAP_MS = 5_000;
 const MIN_VISIBLE_TIMELINE_SEGMENT_MS = 30_000;
 
 export const DEFAULT_DESTINATION_DETAIL_ZOOM_HOURS = 24;
@@ -266,44 +265,22 @@ export function buildDestinationDetailTimelineSegments(
   );
 
   return clipDestinationDetailActivitiesToViewport(activities, viewport)
-    .flatMap((activity) => {
-      const merged = activity.records.reduce<Array<{
-        id: string;
-        startTime: number;
-        endTime: number;
-        current: boolean;
-      }>>((segments, record) => {
-        const previous = segments[segments.length - 1];
-        const gapMs = previous ? record.startTime - previous.endTime : Number.POSITIVE_INFINITY;
-        if (previous && gapMs >= 0 && gapMs <= DIRECT_MERGE_GAP_MS) {
-          previous.endTime = Math.max(previous.endTime, record.endTime);
-          previous.current = previous.current || record.current;
-          return segments;
-        }
-        segments.push({
-          id: `${activity.id}:${record.id}`,
-          startTime: record.startTime,
-          endTime: record.endTime,
-          current: record.current,
-        });
-        return segments;
-      }, []);
-
-      return merged.flatMap<DestinationDetailTimelineSegment>((segment) => {
-        const duration = segment.endTime - segment.startTime;
-        if (duration < visibleMinimumDurationMs) return [];
-        return [{
-          ...segment,
-          duration,
-          startRatio: clampRatio(
-            (segment.startTime - viewport.startMs) / viewport.durationMs,
-          ),
-          endRatio: clampRatio(
-            (segment.endTime - viewport.startMs) / viewport.durationMs,
-          ),
-        }];
-      });
-    });
+    .flatMap<DestinationDetailTimelineSegment>((activity) => {
+    if (activity.duration < visibleMinimumDurationMs) return [];
+    return [{
+      id: activity.id,
+      startTime: activity.startTime,
+      endTime: activity.endTime,
+      duration: activity.duration,
+      current: activity.current,
+      startRatio: clampRatio(
+        (activity.startTime - viewport.startMs) / viewport.durationMs,
+      ),
+      endRatio: clampRatio(
+        (activity.endTime - viewport.startMs) / viewport.durationMs,
+      ),
+    }];
+  });
 }
 
 function clipRecordToViewport(
@@ -330,6 +307,9 @@ export function clipDestinationDetailActivitiesToViewport(
       .map((record) => clipRecordToViewport(record, viewport))
       .filter((record): record is DestinationDetailRecord => Boolean(record));
     if (records.length === 0) return [];
+    const detailRecords = activity.detailRecords
+      ?.map((record) => clipRecordToViewport(record, viewport))
+      .filter((record): record is DestinationDetailRecord => Boolean(record));
 
     return [{
       ...activity,
@@ -337,6 +317,7 @@ export function clipDestinationDetailActivitiesToViewport(
       endTime: records[records.length - 1]?.endTime ?? activity.endTime,
       duration: records.reduce((total, record) => total + record.duration, 0),
       records,
+      ...(detailRecords ? { detailRecords } : {}),
     }];
   });
 }

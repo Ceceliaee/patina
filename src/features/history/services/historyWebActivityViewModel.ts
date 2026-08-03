@@ -41,6 +41,7 @@ export interface WebTimelineItem {
   titleSamples: string[];
   titleSampleDetails: Array<{
     title: string;
+    secondaryText?: string | null;
     startTime: number;
     endTime: number | null;
     duration: number;
@@ -207,6 +208,7 @@ export function buildHistoryWebTimelineSources({
         endTime,
         titleSampleDetails: [{
           title,
+          ...(segment.url?.trim() ? { secondaryText: segment.url.trim() } : {}),
           startTime: segment.startTime,
           endTime,
           ...(title ? {} : { isUntitled: true }),
@@ -221,10 +223,12 @@ function getWebTimelineTitleSample(
   clipped: { startTime: number; endTime: number | null; duration: number },
 ): WebTimelineItem["titleSampleDetails"][number] {
   const title = segment.title?.trim();
+  const secondaryText = segment.url?.trim() || null;
 
   if (title) {
     return {
       title,
+      ...(secondaryText ? { secondaryText } : {}),
       startTime: clipped.startTime,
       endTime: clipped.endTime,
       duration: clipped.duration,
@@ -233,6 +237,7 @@ function getWebTimelineTitleSample(
 
   return {
     title: title ?? "",
+    ...(secondaryText ? { secondaryText } : {}),
     startTime: clipped.startTime,
     endTime: clipped.endTime,
     duration: clipped.duration,
@@ -260,7 +265,8 @@ function mergeWebTitleSampleDetails(
     const previous = merged[merged.length - 1];
     const sameTitleDetail = previous
       && Boolean(previous.isUntitled) === Boolean(sample.isUntitled)
-      && (sample.isUntitled || previous.title === sample.title);
+      && (sample.isUntitled || previous.title === sample.title)
+      && previous.secondaryText === sample.secondaryText;
 
     if (sameTitleDetail) {
       previous.endTime = previous.endTime === null || sample.endTime === null

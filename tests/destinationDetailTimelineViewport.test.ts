@@ -94,14 +94,14 @@ function makeDay(): DestinationDetailDayViewModel {
     dayStartMs: at(0),
     dayEndMs: at(0) + 24 * 3_600_000,
     records,
-    activities: [{
-      id: "activity",
-      startTime: at(9),
-      endTime: at(12),
-      duration: 2 * 3_600_000,
+    activities: records.map((record) => ({
+      id: record.id,
+      startTime: record.startTime,
+      endTime: record.endTime,
+      duration: record.duration,
       current: false,
-      records,
-    }],
+      records: [record],
+    })),
     totalDuration: 2 * 3_600_000,
     firstStartTime: at(9),
     lastEndTime: at(12),
@@ -321,7 +321,7 @@ runTest("detail timeline builds viewport-relative ticks and clipped segments", (
   );
 });
 
-runTest("detail timeline merges adjacent fragments before applying the History visibility floor", () => {
+runTest("detail timeline applies the visibility floor after read-model grouping", () => {
   const day = makeDay();
   const records = [
     makeRecord("ten-seconds", at(9), at(9, 0, 10)),
@@ -334,19 +334,62 @@ runTest("detail timeline merges adjacent fragments before applying the History v
     requestedDurationMs: 4 * 3_600_000,
     requestedStartMs: at(8),
   });
-  const segments = buildDestinationDetailTimelineSegments([{
-    id: "short-activity",
-    startTime: records[0]!.startTime,
-    endTime: records[records.length - 1]!.endTime,
-    duration: records.reduce((total, record) => total + record.duration, 0),
-    current: false,
-    records,
-  }], viewport, 0);
+  const segments = buildDestinationDetailTimelineSegments([
+    {
+      id: "visible-activity",
+      startTime: records[0]!.startTime,
+      endTime: records[1]!.endTime,
+      duration: records[0]!.duration + records[1]!.duration,
+      current: false,
+      records: records.slice(0, 2),
+    },
+    {
+      id: "hidden-activity",
+      startTime: records[2]!.startTime,
+      endTime: records[2]!.endTime,
+      duration: records[2]!.duration,
+      current: false,
+      records: [records[2]!],
+    },
+  ], viewport, 0);
 
   assert.equal(segments.length, 1);
   assert.equal(segments[0]?.startTime, at(9));
   assert.equal(segments[0]?.endTime, at(9, 0, 30));
   assert.equal(segments[0]?.duration, 30_000);
+});
+
+runTest("detail timeline renders compiled activities without re-merging them", () => {
+  const day = makeDay();
+  const first = makeRecord("first", at(9), at(9, 1));
+  const second = makeRecord("second", at(9, 3), at(9, 4));
+  const viewport = normalizeDestinationDetailTimelineViewport({
+    dayStartMs: day.dayStartMs,
+    dayEndMs: day.dayEndMs,
+    requestedDurationMs: 4 * 3_600_000,
+    requestedStartMs: at(8),
+  });
+  const activities = [first, second].map((record) => ({
+    id: record.id,
+    startTime: record.startTime,
+    endTime: record.endTime,
+    duration: record.duration,
+    current: false,
+    records: [record],
+  }));
+
+  assert.deepEqual(
+    buildDestinationDetailTimelineSegments(activities, viewport, 0).map((segment) => ({
+      id: segment.id,
+      startTime: segment.startTime,
+      endTime: segment.endTime,
+      duration: segment.duration,
+    })),
+    [
+      { id: "first", startTime: at(9), endTime: at(9, 1), duration: 60_000 },
+      { id: "second", startTime: at(9, 3), endTime: at(9, 4), duration: 60_000 },
+    ],
+  );
 });
 
 runTest("detail rows describe only the visible portion of an activity", () => {

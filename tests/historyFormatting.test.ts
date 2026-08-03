@@ -28,8 +28,8 @@ await runTest("history time formatting uses midnight as 00:00", () => {
 });
 
 await runTest("shared duration formatting keeps compact history labels", () => {
-  assert.equal(formatDuration(-1), "0m");
-  assert.equal(formatDuration(999), "0m");
+  assert.equal(formatDuration(-1), "0s");
+  assert.equal(formatDuration(999), "0s");
   assert.equal(formatDuration(1_000), "1s");
   assert.equal(formatDuration(60_000), "1m");
   assert.equal(formatDuration(3_900_000), "1h 5m");

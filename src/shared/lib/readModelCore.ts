@@ -15,7 +15,10 @@ export interface ReadModelDiagnostics {
   hasWarnings: boolean;
 }
 
-export function resolveLiveCutoffMs(trackerHealth: TrackerHealthSnapshot, nowMs: number): number {
+export function resolveLiveCutoffMs(
+  trackerHealth: Pick<TrackerHealthSnapshot, "status" | "lastHeartbeatMs">,
+  nowMs: number,
+): number {
   if (trackerHealth.status === "healthy") {
     return nowMs;
   }
@@ -25,7 +28,7 @@ export function resolveLiveCutoffMs(trackerHealth: TrackerHealthSnapshot, nowMs:
 
 export function materializeLiveSessions(
   sessions: DiagnosableHistorySession[],
-  trackerHealth: TrackerHealthSnapshot,
+  trackerHealth: Pick<TrackerHealthSnapshot, "status" | "lastHeartbeatMs">,
   nowMs: number,
 ): DiagnosableHistorySession[] {
   if (!sessions.some((session) => session.endTime === null)) {

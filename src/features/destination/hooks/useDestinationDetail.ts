@@ -10,6 +10,7 @@ import {
   resolveDestinationDetailInitialDateKey,
 } from "../services/destinationDetailState.ts";
 import type { DestinationDetailTarget } from "../types.ts";
+import type { TrackerHealthSnapshot } from "../../../shared/types/tracking.ts";
 
 type DetailLoadStatus = "loading" | "refreshing" | "ready" | "error";
 
@@ -19,6 +20,7 @@ interface Params {
   refreshKey: number;
   mappingVersion: number;
   mergeThresholdSecs: number;
+  trackerHealth: TrackerHealthSnapshot;
 }
 
 interface DetailDayState {
@@ -34,8 +36,9 @@ export function useDestinationDetail({
   refreshKey,
   mappingVersion,
   mergeThresholdSecs,
+  trackerHealth,
 }: Params) {
-  const [nowMs] = useState(() => Date.now());
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [focusedDateKey, setFocusedDateKeyState] = useState(() => (
     resolveDestinationDetailInitialDateKey(initialDateKey, nowMs)
   ));
@@ -48,8 +51,9 @@ export function useDestinationDetail({
     error: null,
   });
   const cacheVersion = `${mappingVersion}:${refreshKey}`;
-
   useEffect(() => {
+    const requestNowMs = Date.now();
+    setNowMs(requestNowMs);
     const requestKey = encodeDestinationDetailDayRequestKey(
       target,
       focusedDateKey,
@@ -66,7 +70,15 @@ export function useDestinationDetail({
         error: null,
       };
     });
-    void loadDestinationDetailDay(target, focusedDateKey, nowMs, mergeThresholdSecs)
+    void loadDestinationDetailDay(
+      target,
+      focusedDateKey,
+      requestNowMs,
+      mergeThresholdSecs,
+      undefined,
+      trackerHealth.status,
+      trackerHealth.lastHeartbeatMs,
+    )
       .then((viewModel) => {
         if (cancelled || requestRef.current !== requestKey) return;
         startTransition(() => setDayState({
@@ -85,7 +97,15 @@ export function useDestinationDetail({
         }));
       });
     return () => { cancelled = true; };
-  }, [cacheVersion, focusedDateKey, mergeThresholdSecs, nowMs, retryRevision, target]);
+  }, [
+    cacheVersion,
+    focusedDateKey,
+    mergeThresholdSecs,
+    retryRevision,
+    target,
+    trackerHealth.lastHeartbeatMs,
+    trackerHealth.status,
+  ]);
 
   const setFocusedDateKey = useCallback((dateKey: string) => {
     if (isDestinationDetailDateKeyAvailable(dateKey, nowMs)) {

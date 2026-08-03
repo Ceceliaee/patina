@@ -4,9 +4,10 @@ import { useDestinationDetailLauncher } from "../../destination/hooks/useDestina
 import {
   createDestinationDetailTarget,
 } from "../../destination/types.ts";
-import type {
-  DataDestinationMode,
-  DataDestinationTrendOption,
+import {
+  commitDataDestinationDetailSelection,
+  type DataDestinationMode,
+  type DataDestinationTrendOption,
 } from "../services/dataDestinationState.ts";
 import {
   resolveDataTrendRange,
@@ -84,7 +85,11 @@ export function useDataDetailEntry({
     option: DataDestinationTrendOption,
     returnFocusTo: HTMLElement | null = null,
   ) => {
-    const snapshot = createSnapshot();
+    const snapshot = commitDataDestinationDetailSelection(
+      createSnapshot(),
+      mode,
+      option.key,
+    );
     intentRef.current = {
       key: option.key,
       mode,
@@ -101,7 +106,7 @@ export function useDataDetailEntry({
     const intent = intentRef.current;
     const snapshot = intent?.mode === mode && intent.key === option.key
       ? intent.snapshot
-      : createSnapshot();
+      : commitDataDestinationDetailSelection(createSnapshot(), mode, option.key);
     const returnFocusTo = intent?.mode === mode && intent.key === option.key
       ? intent.returnFocusTo
       : null;

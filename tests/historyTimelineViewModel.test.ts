@@ -17,6 +17,7 @@ import {
   normalizeHistoryTimelineViewportAroundFocus,
   panHistoryTimelineViewport,
   panHistoryTimelineViewportByPixels,
+  panHistoryTimelineViewportForKey,
   snapHistoryTimelineFocusToNearestHalfHour,
   zoomHistoryTimelineViewportAroundAnchor,
 } from "../src/features/history/services/historyTimelineViewModel.ts";
@@ -314,6 +315,37 @@ runTest("timeline viewport clamps requested windows within the selected day", ()
     endMs: dayEnd,
     durationMs: 24 * HOUR_MS,
   });
+});
+
+runTest("timeline keyboard navigation pans and jumps to day boundaries", () => {
+  const selectedDate = new Date(2026, 0, 2);
+  const dayStart = new Date(2026, 0, 2, 0, 0, 0, 0).getTime();
+  const viewport = normalizeHistoryTimelineViewport({
+    selectedDate,
+    requestedDurationMs: 4 * HOUR_MS,
+    requestedStartMs: dayStart + 10 * HOUR_MS,
+  });
+
+  assert.equal(
+    panHistoryTimelineViewportForKey({ selectedDate, viewport, key: "ArrowLeft" })?.startMs,
+    dayStart + 9.6 * HOUR_MS,
+  );
+  assert.equal(
+    panHistoryTimelineViewportForKey({ selectedDate, viewport, key: "ArrowRight" })?.startMs,
+    dayStart + 10.4 * HOUR_MS,
+  );
+  assert.equal(
+    panHistoryTimelineViewportForKey({ selectedDate, viewport, key: "Home" })?.startMs,
+    dayStart,
+  );
+  assert.equal(
+    panHistoryTimelineViewportForKey({ selectedDate, viewport, key: "End" })?.endMs,
+    dayStart + 24 * HOUR_MS,
+  );
+  assert.equal(
+    panHistoryTimelineViewportForKey({ selectedDate, viewport, key: "Escape" }),
+    null,
+  );
 });
 
 runTest("timeline zoom focus snaps to the nearest selected-day half hour", () => {

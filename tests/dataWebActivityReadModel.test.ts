@@ -11,7 +11,9 @@ import {
 import type { DataWebActivitySnapshotDependencies } from "../src/features/data/services/dataWebActivitySnapshotDependencies.ts";
 import {
   DATA_DESTINATION_SELECTION_LIMIT,
+  buildDataDestinationIconSources,
   buildDataDestinationTrendSeries,
+  commitDataDestinationDetailSelection,
   encodeDataDestinationSelectionKey,
   reconcileDataDestinationSelection,
   replaceDataDestinationSelection,
@@ -77,6 +79,57 @@ await runTest("destination selection follows desktop replace and ctrl-toggle sem
   assert.deepEqual(toggleDataDestinationSelection(["a", "b", "c", "d", "e", "f", "g"], "h"), {
     keys: ["a", "b", "c", "d", "e", "f", "g"],
     outcome: "limit-reached",
+  });
+});
+
+await runTest("opening destination details commits the target without disturbing the other mode", () => {
+  const snapshot = {
+    appKeys: ["chatgpt.exe"],
+    webKeys: ["docs.example"],
+    mode: "app" as const,
+    listScrollTop: 40,
+  };
+
+  assert.deepEqual(
+    commitDataDestinationDetailSelection(snapshot, "app", "patina.exe"),
+    {
+      appKeys: ["patina.exe"],
+      webKeys: ["docs.example"],
+      mode: "app",
+      listScrollTop: 40,
+    },
+  );
+  assert.deepEqual(
+    commitDataDestinationDetailSelection(snapshot, "web", "patina.example"),
+    {
+      appKeys: ["chatgpt.exe"],
+      webKeys: ["patina.example"],
+      mode: "web",
+      listScrollTop: 40,
+    },
+  );
+});
+
+await runTest("destination detail theme sources include selected and unselected options", () => {
+  const createOption = (key: string, iconUrl: string | null) => ({
+    key,
+    identityKeys: [key],
+    displayName: key,
+    secondaryText: key,
+    iconUrl,
+    totalDuration: 0,
+    percentage: 0,
+    averageDuration: 0,
+    activeDayCount: 0,
+  });
+
+  assert.deepEqual(buildDataDestinationIconSources(
+    [createOption("chatgpt.exe", "icon-chatgpt"), createOption("patina.exe", "icon-patina")],
+    [createOption("docs.example", "icon-docs"), createOption("empty.example", null)],
+  ), {
+    "app:chatgpt.exe": "icon-chatgpt",
+    "app:patina.exe": "icon-patina",
+    "web:docs.example": "icon-docs",
   });
 });
 
@@ -689,11 +742,11 @@ await runTest("single-domain web heatmap labels empty days like the app heatmap"
   const noActivity = cells.find((cell) => cell.date === "2026-01-03");
 
   assert.match(beforeCoverage?.label ?? "", /^2026/);
-  assert.match(beforeCoverage?.label ?? "", /0m/);
+  assert.match(beforeCoverage?.label ?? "", /0s/);
   assert.match(recorded?.label ?? "", /^2026/);
   assert.match(recorded?.label ?? "", /1h/);
   assert.match(noActivity?.label ?? "", /^2026/);
-  assert.match(noActivity?.label ?? "", /0m/);
+  assert.match(noActivity?.label ?? "", /0s/);
   assert.equal(beforeCoverage?.availability, "recorded");
   assert.equal(recorded?.availability, "recorded");
   assert.equal(noActivity?.availability, "recorded");
@@ -755,7 +808,7 @@ await runTest("multi-domain web heatmap keeps factual activity and app-style emp
   const cells = rows.flatMap((week) => week.cells);
   assert.equal(cells.find((cell) => cell.date === "2026-01-02")?.availability, "recorded");
   assert.equal(cells.find((cell) => cell.date === "2026-01-01")?.availability, "recorded");
-  assert.match(cells.find((cell) => cell.date === "2026-01-01")?.label ?? "", /0m/);
+  assert.match(cells.find((cell) => cell.date === "2026-01-01")?.label ?? "", /0s/);
 });
 
 await runTest("web snapshot dedupes matching in-flight loads and excludes disabled domains", async () => {
