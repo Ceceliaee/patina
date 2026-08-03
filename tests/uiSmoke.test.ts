@@ -642,8 +642,10 @@ await runTest("History separates timeline list dialog from zoom dialog", () => {
   assert.match(historyDetailsPopover, /formatDuration\(getTitleDetailDuration\(sample, nowMs\)\)/);
   assert.match(historyDetailsPopover, /history-activity-popover-item-duration/);
   assert.match(historyDetailsPopover, /history-activity-popover-item-range/);
-  assert.match(quietProCss, /\.history-activity-popover-item-duration/);
-  assert.match(quietProCss, /\.history-activity-popover-item-range/);
+  assert.match(historyDetailsPopover, /history-activity-popover-item-secondary/);
+  assert.match(historyCss, /\.history-activity-popover-item-duration/);
+  assert.match(historyCss, /\.history-activity-popover-item-range/);
+  assert.match(historyCss, /\.history-activity-popover-item-secondary/);
 });
 
 await runTest("shared hourly chart resolves responsive category density before paint", () => {
@@ -1182,6 +1184,9 @@ await runTest("destination owns one shared detail dialog without duplicating tre
   );
   const quietTimeline = readUtf8("src/shared/components/QuietTimelineTrack.tsx");
   const quietTimelineAxis = readUtf8("src/shared/lib/timelineAxis.ts");
+  const timelineSegmentMerge = readUtf8(
+    "src/shared/lib/timelineSegmentMerge.ts",
+  );
   const quietTimelineStyles = readUtf8(
     "src/styles/components/quiet-timeline.css",
   );
@@ -1196,6 +1201,9 @@ await runTest("destination owns one shared detail dialog without duplicating tre
   const quietProStyles = readUtf8("src/styles/quiet-pro.css");
   const historyTimelineLists = readUtf8(
     "src/features/history/components/HistoryTimelineLists.tsx",
+  );
+  const historyTimelineDetailsPopover = readUtf8(
+    "src/features/history/components/HistoryTimelineDetailsPopover.tsx",
   );
   const dashboard = readUtf8(
     "src/features/dashboard/components/Dashboard.tsx",
@@ -1280,7 +1288,17 @@ await runTest("destination owns one shared detail dialog without duplicating tre
     /loadDataWebHeatmap|buildDataWebHeatmap|loadAppTrendSnapshot|loadDataWebActivitySnapshot/,
   );
   assert.doesNotMatch(detailReadModel, /DestinationDetailTrendViewModel/);
-  assert.match(detailReadModel, /AppClassification\.resolveCanonicalExecutable/);
+  assert.match(detailReadModel, /compileSessions/);
+  assert.doesNotMatch(detailReadModel, /bridgeInterveningApps/);
+  assert.match(detailReadModel, /materializeLiveSessions/);
+  assert.match(
+    detailHook,
+    /trackerHealth\.status,\s*trackerHealth\.lastHeartbeatMs,/,
+  );
+  assert.match(
+    detailHook,
+    /trackerHealth\.lastHeartbeatMs,\s*trackerHealth\.status,\s*\]\);/,
+  );
   assert.doesNotMatch(detailReadModel, /features\/data\//);
   assert.match(detailReadModel, /getHistoryByDate/);
   assert.match(detailReadModel, /getWebActivitySegmentsInRange/);
@@ -1341,7 +1359,13 @@ await runTest("destination owns one shared detail dialog without duplicating tre
     /patina:data-detail-min-secs/,
   );
   assert.match(detailTimelineViewport, /MIN_VISIBLE_TIMELINE_SEGMENT_MS = 30_000/);
-  assert.match(detailTimelineViewport, /DIRECT_MERGE_GAP_MS = 5_000/);
+  assert.doesNotMatch(dialog, /mergeThresholdSecs=\{runtime\.mergeThresholdSecs\}/);
+  assert.doesNotMatch(detailTimelineViewport, /mergeContiguousTimelineSegments/);
+  assert.match(historyTimelineViewModel, /mergeContiguousTimelineSegments/);
+  assert.match(timelineSegmentMerge, /gapMs >= 0/);
+  assert.match(timelineSegmentMerge, /gapMs <= safeMergeThresholdMs/);
+  assert.doesNotMatch(detailTimelineViewport, /DIRECT_MERGE_GAP_MS/);
+  assert.match(detailTimelineViewport, /id: activity\.id/);
   assert.match(detailTimelineViewport, /clipDestinationDetailActivitiesToViewport/);
   assert.match(detailTimelineViewport, /buildTimelineAxisTicks/);
   assert.match(historyTimelineViewModel, /buildTimelineAxisTicks/);
@@ -1351,8 +1375,20 @@ await runTest("destination owns one shared detail dialog without duplicating tre
   assert.match(records, /aria-expanded=\{expanded\}/);
   assert.match(records, /aria-controls=\{expanded \? popoverId : undefined\}/);
   assert.match(records, /record\.secondaryText/);
-  assert.match(records, /UI_TEXT\.history\.activitySegmentCount\(activityCount\)/);
+  assert.match(records, /getDestinationDetailTitleRecords/);
+  assert.doesNotMatch(records, /copy\.untitled/);
+  assert.match(
+    records,
+    /UI_TEXT\.history\.activitySegmentCount\(\s*activity\.activityCount \?\? activity\.records\.length,/,
+  );
   assert.match(records, /UI_TEXT\.history\.titleRowCount\(titleCount\)/);
+  assert.match(records, /className="destination-detail-record-timing"/);
+  assert.match(records, /<time>\{start\} - \{end\}<\/time>/);
+  assert.doesNotMatch(
+    records,
+    /destination-detail-(?:title-)?icon|destination-detail-activity-accent/,
+    "detail rows should reuse History typography without an icon or accent strip",
+  );
   assert.doesNotMatch(
     records,
     /\s+title=/,
@@ -1386,6 +1422,46 @@ await runTest("destination owns one shared detail dialog without duplicating tre
   );
   assert.match(records, /className="qp-workbench-list-card destination-detail-activity"/);
   assert.match(historyTimelineLists, /className="qp-workbench-list-card flex items-center gap-3 p-3"/);
+  assert.match(
+    destinationStyles,
+    /\.destination-detail-activity-summary \{[\s\S]*?display: flex;[\s\S]*?gap: 12px;[\s\S]*?padding: 12px;/,
+  );
+  assert.match(
+    destinationStyles,
+    /\.destination-detail-record-copy strong \{[\s\S]*?font-size: 14px;[\s\S]*?font-weight: 600;/,
+  );
+  assert.match(
+    destinationStyles,
+    /\.destination-detail-record-duration \{[\s\S]*?font-size: 12px;[\s\S]*?font-weight: 600;/,
+  );
+  assert.match(
+    destinationStyles,
+    /\.destination-detail-record-timing \{[\s\S]*?font-size: 10px;/,
+  );
+  assert.match(
+    quietProStyles,
+    /\.qp-workbench-list-meta \{[\s\S]*?color: var\(--qp-text-primary\);[\s\S]*?font-size: 9px;[\s\S]*?font-weight: 600;/,
+  );
+  assert.match(
+    quietProStyles,
+    /\.qp-record-detail-title \{[\s\S]*?color: var\(--qp-text-primary\);[\s\S]*?font-size: 11px;[\s\S]*?font-weight: 620;/,
+  );
+  assert.match(
+    historyTimelineDetailsPopover,
+    /className="qp-record-detail-title history-activity-popover-item-title"/,
+  );
+  assert.match(
+    records,
+    /<strong className="qp-record-detail-title">\{record\.title\}<\/strong>/,
+  );
+  assert.match(
+    records,
+    /className="qp-workbench-list-meta destination-detail-record-meta"/,
+  );
+  assert.equal(
+    historyTimelineLists.match(/className="qp-workbench-list-meta"/g)?.length,
+    2,
+  );
   assert.match(records, /qp-button-secondary qp-compact-disclosure destination-detail-activity-disclosure/);
   assert.match(historyTimelineLists, /qp-button-secondary qp-compact-disclosure/);
   assert.match(
@@ -1402,7 +1478,7 @@ await runTest("destination owns one shared detail dialog without duplicating tre
   );
   assert.match(
     destinationStyles,
-    /\.destination-detail-record-popover \{\s*width: 284px;/,
+    /\.destination-detail-record-popover \{\s*width: 568px;/,
   );
   assert.match(
     destinationStyles,

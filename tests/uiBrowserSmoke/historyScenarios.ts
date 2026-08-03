@@ -762,6 +762,27 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
       `),
       true,
     );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const meta = document.querySelector(
+            ".history-timeline-dialog-body .qp-workbench-list-meta",
+          );
+          if (!(meta instanceof HTMLElement)) return false;
+          const style = getComputedStyle(meta);
+          const colorProbe = document.createElement("span");
+          colorProbe.style.color = "var(--qp-text-primary)";
+          document.body.append(colorProbe);
+          const expectedColor = getComputedStyle(colorProbe).color;
+          colorProbe.remove();
+          return style.fontSize === "9px"
+            && style.fontWeight === "600"
+            && style.color === expectedColor;
+        })()
+      `),
+      true,
+      "History metadata should use the shared workbench color, size, and weight",
+    );
     const openedDialogDetails = await evaluate(client!, sessionId, `
       (() => {
         const detailButton = document.querySelector(".history-timeline-dialog-body .history-timeline-list button[aria-expanded]");
@@ -1518,11 +1539,34 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
         (() => {
           const list = document.querySelector('.history-activity-popover-list');
           const popover = document.querySelector('.history-activity-popover');
+          const title = document.querySelector('.history-activity-popover-item-title');
+          const trigger = document.querySelector(
+            ".history-timeline-dialog-surface .qp-compact-disclosure[aria-expanded='true']",
+          );
+          if (!(title instanceof HTMLElement)) return false;
+          if (!(popover instanceof HTMLElement)) return false;
+          if (!(trigger instanceof HTMLElement)) return false;
+          const titleStyle = getComputedStyle(title);
+          const popoverRect = popover.getBoundingClientRect();
+          const triggerRect = trigger.getBoundingClientRect();
+          const anchorCenter = triggerRect.left + triggerRect.width / 2;
+          const leftSpan = anchorCenter - popoverRect.left;
+          const leftShare = leftSpan / popoverRect.width;
+          const colorProbe = document.createElement('span');
+          colorProbe.style.color = 'var(--qp-text-primary)';
+          document.body.append(colorProbe);
+          const expectedColor = getComputedStyle(colorProbe).color;
+          colorProbe.remove();
           return Boolean(
             list
-            && popover
             && list.children.length === ${HISTORY_TITLE_DETAIL_COUNT}
             && popover.scrollHeight > popover.clientHeight
+            && Math.abs(popoverRect.width - 426) < 1
+            && Math.abs(leftSpan - 142) < 1
+            && Math.abs(leftShare - 1 / 3) < 0.02
+            && titleStyle.color === expectedColor
+            && titleStyle.fontSize === '11px'
+            && titleStyle.fontWeight === '620'
           );
         })()
       `),
@@ -2055,6 +2099,104 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
       mobile: false,
     }, sessionId);
     await waitForExpression(client!, sessionId, `window.innerWidth === 1366`);
+
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const button = document.querySelector(
+            ".history-overview-timeline-card .history-timeline-open",
+          );
+          if (!(button instanceof HTMLButtonElement)) return false;
+          button.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(".history-timeline-dialog-surface"))`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const button = Array.from(document.querySelectorAll(
+            ".history-timeline-dialog-mode-switch button",
+          )).find((node) => node.textContent?.trim() === "网页");
+          if (!(button instanceof HTMLButtonElement)) return false;
+          button.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".history-timeline-dialog-list")?.textContent?.includes("stable.example")`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const button = document.querySelector(
+            ".history-timeline-dialog-list button[aria-expanded]",
+          );
+          if (!(button instanceof HTMLButtonElement)) return false;
+          button.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".history-activity-popover-item-secondary")
+        ?.textContent?.trim().startsWith("https://") === true`,
+      15_000,
+      "web timeline title details should retain the recorded URL",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const button = Array.from(document.querySelectorAll(
+            ".history-timeline-dialog-mode-switch button",
+          )).find((node) => node.textContent?.trim() === "应用");
+          if (!(button instanceof HTMLButtonElement)) return false;
+          button.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Array.from(document.querySelectorAll(
+        ".history-timeline-dialog-mode-switch button",
+      )).some((button) => button.textContent?.trim() === "应用"
+        && button.getAttribute("aria-pressed") === "true")`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const close = document.querySelector(
+            ".history-timeline-dialog-surface .history-timeline-dialog-close",
+          );
+          if (!(close instanceof HTMLButtonElement)) return false;
+          close.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `!document.querySelector(".history-timeline-dialog-surface")
+        && !document.querySelector(".history-activity-popover")`,
+    );
 
     assert.equal(
       await evaluate(client!, sessionId, `

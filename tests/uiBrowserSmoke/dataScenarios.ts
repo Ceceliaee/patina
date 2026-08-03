@@ -1032,7 +1032,7 @@ export async function runDataScenarios(
           )).filter((cell) => cell.getAttribute("data-heatmap-tooltip")?.includes("未记录")).length,
           destinationHeatmapZeroTooltips: Array.from(document.querySelectorAll(
             ".data-heatmap-panel-compact .data-heatmap-cell[data-heatmap-tooltip]",
-          )).filter((cell) => cell.getAttribute("data-heatmap-tooltip")?.endsWith("0m")).length,
+          )).filter((cell) => cell.getAttribute("data-heatmap-tooltip")?.endsWith("0s")).length,
         });
       })()
     `))) as {
@@ -1401,6 +1401,12 @@ export async function runDataScenarios(
         });
         const trigger = target.querySelector("[data-destination-detail-trigger]");
         if (!(trigger instanceof HTMLElement)) return null;
+        const iconSource = target.querySelector("img")?.getAttribute("src") ?? "";
+        const targetThemeColor = iconSource.includes("E34A3A")
+          ? "#E34A3A"
+          : iconSource.includes("257F62")
+            ? "#257F62"
+            : null;
         const detailTriggerCursor = getComputedStyle(trigger).cursor;
         trigger.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, detail: 1 }));
         trigger.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
@@ -1412,6 +1418,7 @@ export async function runDataScenarios(
           listScrollTop: list.scrollTop,
           selectedKeys,
           targetKey: target.getAttribute("data-destination-key"),
+          targetThemeColor,
           detailTriggerCursor,
         });
       })()
@@ -1420,10 +1427,12 @@ export async function runDataScenarios(
       listScrollTop: number;
       selectedKeys: Array<string | null>;
       targetKey: string | null;
+      targetThemeColor: string | null;
       detailTriggerCursor: string;
     };
     assert.ok(openingState);
     assert.ok(openingState.targetKey);
+    assert.ok(openingState.targetThemeColor);
     assert.ok(!openingState.selectedKeys.includes(openingState.targetKey));
     assert.equal(openingState.detailTriggerCursor, "pointer");
     await waitForExpression(
@@ -1463,6 +1472,9 @@ export async function runDataScenarios(
               dialog?.querySelector(".destination-detail-section-header p"),
             ),
             backgroundConnected: Boolean(background?.isConnected),
+            detailColor: getComputedStyle(
+              dialog?.querySelector(".destination-detail") ?? document.documentElement,
+            ).getPropertyValue("--destination-detail-color").trim().toUpperCase(),
             selectedKeys: Array.from(document.querySelectorAll(
               '[aria-label="应用列表"] button[aria-pressed="true"]',
             )).map((button) => button.getAttribute("data-destination-key")),
@@ -1479,7 +1491,8 @@ export async function runDataScenarios(
         hasNavigation: false,
         hasTimelineSubtitle: false,
         backgroundConnected: true,
-        selectedKeys: openingState.selectedKeys,
+        detailColor: openingState.targetThemeColor,
+        selectedKeys: [openingState.targetKey],
       },
     );
     await waitForExpression(
@@ -2270,6 +2283,25 @@ export async function runDataScenarios(
       true,
       "application-detail rows should retain the fixed Quiet Pro summary height",
     );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const meta = document.querySelector(".destination-detail-record-meta");
+          if (!(meta instanceof HTMLElement)) return false;
+          const style = getComputedStyle(meta);
+          const colorProbe = document.createElement("span");
+          colorProbe.style.color = "var(--qp-text-primary)";
+          document.body.append(colorProbe);
+          const expectedColor = getComputedStyle(colorProbe).color;
+          colorProbe.remove();
+          return style.fontSize === "9px"
+            && style.fontWeight === "600"
+            && style.color === expectedColor;
+        })()
+      `),
+      true,
+      "application-detail metadata should use the shared History color, size, and weight",
+    );
     const durationControlState = JSON.parse(String(
       await evaluate(client!, sessionId, `
         (() => {
@@ -2722,7 +2754,7 @@ export async function runDataScenarios(
         backgroundRange: openingState.backgroundRange,
         focusedKey: openingState.targetKey,
         scrollTop: openingState.listScrollTop,
-        selectedKeys: openingState.selectedKeys,
+        selectedKeys: [openingState.targetKey],
       },
     );
 
@@ -2870,13 +2902,29 @@ export async function runDataScenarios(
           if (!(url instanceof HTMLElement)) return null;
           if (!(row instanceof HTMLElement)) return null;
           const style = getComputedStyle(popover);
+          const titleStyle = getComputedStyle(title);
+          const colorProbe = document.createElement("span");
+          colorProbe.style.color = "var(--qp-text-primary)";
+          document.body.append(colorProbe);
+          const expectedTitleColor = getComputedStyle(colorProbe).color;
+          colorProbe.remove();
           const titleRect = title.getBoundingClientRect();
           const urlRect = url.getBoundingClientRect();
+          const popoverRect = popover.getBoundingClientRect();
+          const triggerRect = trigger?.getBoundingClientRect();
+          const anchorCenter = triggerRect
+            ? triggerRect.left + triggerRect.width / 2
+            : 0;
           return JSON.stringify({
             title: title.textContent?.trim() ?? "",
             url: url.textContent?.trim() ?? "",
             titleAboveUrl: titleRect.bottom <= urlRect.top + 1,
-            width: popover.getBoundingClientRect().width,
+            titleColorMatches: titleStyle.color === expectedTitleColor,
+            titleFontSize: titleStyle.fontSize,
+            titleFontWeight: titleStyle.fontWeight,
+            width: popoverRect.width,
+            leftSpan: anchorCenter - popoverRect.left,
+            leftShare: (anchorCenter - popoverRect.left) / popoverRect.width,
             rowHeight: row.getBoundingClientRect().height,
             position: style.position,
             parentIsBody: popover.parentElement === document.body,
@@ -2887,7 +2935,12 @@ export async function runDataScenarios(
       title: string;
       url: string;
       titleAboveUrl: boolean;
+      titleColorMatches: boolean;
+      titleFontSize: string;
+      titleFontWeight: string;
       width: number;
+      leftSpan: number;
+      leftShare: number;
       rowHeight: number;
       position: string;
       parentIsBody: boolean;
@@ -2896,7 +2949,12 @@ export async function runDataScenarios(
     assert.ok(webTitlePopoverPresentation.title.length > 0);
     assert.ok(webTitlePopoverPresentation.url.length > 0);
     assert.equal(webTitlePopoverPresentation.titleAboveUrl, true);
-    assert.ok(Math.abs(webTitlePopoverPresentation.width - 284) < 1);
+    assert.equal(webTitlePopoverPresentation.titleColorMatches, true);
+    assert.equal(webTitlePopoverPresentation.titleFontSize, "11px");
+    assert.equal(webTitlePopoverPresentation.titleFontWeight, "620");
+    assert.ok(Math.abs(webTitlePopoverPresentation.width - 568) < 1);
+    assert.ok(Math.abs(webTitlePopoverPresentation.leftSpan - 142) < 1);
+    assert.ok(Math.abs(webTitlePopoverPresentation.leftShare - 0.25) < 0.02);
     assert.ok(
       Math.abs(
         webTitlePopoverPresentation.rowHeight

@@ -261,6 +261,8 @@ function tauriStubFor(path: string) {
           }
           const fixtureEnabled = globalThis.__TIME_TRACKER_ENABLE_CLASSIFICATION_CATALOG_FIXTURE
             || localStorage.getItem("__time_tracker_enable_classification_catalog_fixture") === "1";
+          const iconFixtureEnabled = globalThis.__TIME_TRACKER_ENABLE_CLASSIFICATION_ICON_FIXTURE
+            || localStorage.getItem("__time_tracker_enable_classification_icon_fixture") === "1";
           const baseRows = fixtureEnabled
             ? Array.from({ length: 130 }, (_, index) => ({
                 rawExeName: "catalog-" + String(index).padStart(3, "0") + ".exe",
@@ -287,6 +289,14 @@ function tauriStubFor(path: string) {
               hasImportExactRecords: true,
               hasImportBucketRecords: false,
             },
+            ...(iconFixtureEnabled ? [{
+              rawExeName: "classification-only.exe",
+              appName: "Classification Only",
+              lastSeenMs: 1767222000000,
+              hasNativeRecords: false,
+              hasImportExactRecords: true,
+              hasImportBucketRecords: false,
+            }] : []),
           ];
           const searchQuery = String(payload.searchQuery ?? "").trim().toLowerCase();
           const cursor = payload.cursor ?? null;
@@ -841,6 +851,14 @@ function tauriStubFor(path: string) {
               .map(([key, value]) => ({ key, value: String(value) }));
           }
           if (normalizedQuery.includes("from icon_cache")) {
+            const iconQueryDelayMs = Number(
+              globalThis.__TIME_TRACKER_APP_ICON_QUERY_DELAY_MS
+                ?? localStorage.getItem("__time_tracker_app_icon_query_delay_ms")
+                ?? 0
+            );
+            if (iconQueryDelayMs > 0) {
+              await new Promise((resolve) => setTimeout(resolve, iconQueryDelayMs));
+            }
             const requestedExecutables = new Set(params.map((value) => String(value).toLowerCase()));
             return [
               {
@@ -850,6 +868,10 @@ function tauriStubFor(path: string) {
               {
                 exe_name: "deep-research-workbench.exe",
                 icon_base64: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2248%22%20height%3D%2248%22%3E%3Crect%20width%3D%2248%22%20height%3D%2248%22%20fill%3D%22%23257F62%22%2F%3E%3C%2Fsvg%3E",
+              },
+              {
+                exe_name: "classification-only.exe",
+                icon_base64: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2248%22%20height%3D%2248%22%3E%3Crect%20width%3D%2248%22%20height%3D%2248%22%20fill%3D%22%23C15B2A%22%2F%3E%3C%2Fsvg%3E",
               },
             ].filter((row) => (
               requestedExecutables.size === 0 || requestedExecutables.has(row.exe_name)
