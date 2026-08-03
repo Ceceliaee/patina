@@ -2923,7 +2923,9 @@ export async function runDataScenarios(
             titleFontSize: titleStyle.fontSize,
             titleFontWeight: titleStyle.fontWeight,
             width: popoverRect.width,
-            leftSpan: anchorCenter - popoverRect.left,
+            left: popoverRect.left,
+            anchorCenter,
+            viewportWidth: window.innerWidth,
             leftShare: (anchorCenter - popoverRect.left) / popoverRect.width,
             rowHeight: row.getBoundingClientRect().height,
             position: style.position,
@@ -2939,7 +2941,9 @@ export async function runDataScenarios(
       titleFontSize: string;
       titleFontWeight: string;
       width: number;
-      leftSpan: number;
+      left: number;
+      anchorCenter: number;
+      viewportWidth: number;
       leftShare: number;
       rowHeight: number;
       position: string;
@@ -2953,8 +2957,30 @@ export async function runDataScenarios(
     assert.equal(webTitlePopoverPresentation.titleFontSize, "11px");
     assert.equal(webTitlePopoverPresentation.titleFontWeight, "620");
     assert.ok(Math.abs(webTitlePopoverPresentation.width - 568) < 1);
-    assert.ok(Math.abs(webTitlePopoverPresentation.leftSpan - 142) < 1);
-    assert.ok(Math.abs(webTitlePopoverPresentation.leftShare - 0.25) < 0.02);
+    const expectedPopoverLeft = Math.max(
+      12,
+      Math.min(
+        webTitlePopoverPresentation.anchorCenter
+          - webTitlePopoverPresentation.width * 0.25,
+        webTitlePopoverPresentation.viewportWidth
+          - webTitlePopoverPresentation.width
+          - 12,
+      ),
+    );
+    assert.ok(
+      Math.abs(webTitlePopoverPresentation.left - expectedPopoverLeft) < 1,
+      "web title details should keep one quarter of the popover before its anchor, unless clamped to the viewport",
+    );
+    const isHorizontallyClamped = Math.abs(
+      expectedPopoverLeft
+        - (
+          webTitlePopoverPresentation.anchorCenter
+          - webTitlePopoverPresentation.width * 0.25
+        ),
+    ) >= 1;
+    if (!isHorizontallyClamped) {
+      assert.ok(Math.abs(webTitlePopoverPresentation.leftShare - 0.25) < 0.02);
+    }
     assert.ok(
       Math.abs(
         webTitlePopoverPresentation.rowHeight
