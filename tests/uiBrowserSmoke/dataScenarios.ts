@@ -10,6 +10,14 @@ import {
   waitForStableExpression,
 } from "./browserHarness.ts";
 
+const VISIBLE_DESTINATION_DETAIL_POPOVER = `(() => {
+  const popover = document.querySelector(".destination-detail-record-popover");
+  return popover instanceof HTMLElement
+    && Boolean(popover.querySelector(".destination-detail-popover-item"))
+    && Boolean(popover.dataset.placement)
+    && getComputedStyle(popover).visibility === "visible";
+})()`;
+
 export async function runDataScenarios(
   context: BrowserSmokeContext,
   options: { continuityOnly?: boolean } = {},
@@ -2576,13 +2584,10 @@ export async function runDataScenarios(
       recordsHeight: number;
     };
     assert.ok(activityDisclosureGeometry);
-    await waitForExpression(
+    await waitForStableExpression(
       client!,
       sessionId,
-      `Boolean(document.querySelector(
-        ".destination-detail-record-popover "
-          + ".destination-detail-popover-item",
-      ))`,
+      VISIBLE_DESTINATION_DETAIL_POPOVER,
       45_000,
       "detail title popover",
     );
@@ -2866,13 +2871,10 @@ export async function runDataScenarios(
       `,
     ))) as { rowHeight: number };
     assert.ok(webTitlePopoverContract);
-    await waitForExpression(
+    await waitForStableExpression(
       client!,
       sessionId,
-      `Boolean(document.querySelector(
-        ".destination-detail-record-popover "
-          + ".destination-detail-popover-item",
-      ))`,
+      VISIBLE_DESTINATION_DETAIL_POPOVER,
       45_000,
       "web title details popover",
     );
