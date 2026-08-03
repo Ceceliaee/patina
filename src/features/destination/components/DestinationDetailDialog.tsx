@@ -36,11 +36,6 @@ interface Props {
   onClose: () => void;
 }
 
-function getOptionInitial(displayName: string) {
-  const trimmed = displayName.trim();
-  return trimmed ? trimmed.charAt(0).toUpperCase() : "?";
-}
-
 function formatDateControlLabel(dateKey: string) {
   const date = parseLocalDateKey(dateKey);
   if (!date) return dateKey;
@@ -82,28 +77,24 @@ export default function DestinationDetailDialog({
     refreshKey: runtime.refreshKey,
     mappingVersion: runtime.mappingVersion,
     mergeThresholdSecs: runtime.mergeThresholdSecs,
+    trackerHealth: runtime.trackerHealth,
   });
   const dayBelongsToTarget = detail.day.requestKey.startsWith(
     `${target.mode}:${target.key}:`,
   );
   const retainedDay = dayBelongsToTarget ? detail.day.viewModel : null;
-  const matchingDay = detail.focusedDateKey
-    && retainedDay?.dateKey === detail.focusedDateKey
+  const matchingDay = retainedDay?.dateKey === detail.focusedDateKey
     ? retainedDay
     : null;
   const displayDay = matchingDay ?? retainedDay;
-  const previousDateKey = detail.focusedDateKey
-    ? getAdjacentDestinationDetailDateKey(
-      detail.focusedDateKey,
-      -1,
-    )
-    : null;
-  const nextDateKey = detail.focusedDateKey
-    ? getAdjacentDestinationDetailDateKey(
-      detail.focusedDateKey,
-      1,
-    )
-    : null;
+  const previousDateKey = getAdjacentDestinationDetailDateKey(
+    detail.focusedDateKey,
+    -1,
+  );
+  const nextDateKey = getAdjacentDestinationDetailDateKey(
+    detail.focusedDateKey,
+    1,
+  );
   const timelineIdentity = displayDay
     ? `${target.mode}:${target.key}:${displayDay.dateKey}`
     : null;
@@ -130,9 +121,9 @@ export default function DestinationDetailDialog({
         <span className="destination-detail-title">
           <span className="destination-detail-title-icon" aria-hidden>
             {target.iconUrl ? (
-              <img src={target.iconUrl} alt="" draggable={false} />
+              <img src={target.iconUrl} alt="" />
             ) : (
-              getOptionInitial(target.displayName)
+              target.displayName.trim()[0]?.toUpperCase() || "?"
             )}
           </span>
           <span>{target.displayName}</span>
@@ -162,7 +153,7 @@ export default function DestinationDetailDialog({
             className="destination-detail-day-content"
             aria-busy={detail.day.status === "loading" || detail.day.status === "refreshing"}
             data-destination-detail-displayed-date={displayDay?.dateKey ?? ""}
-            data-destination-detail-requested-date={detail.focusedDateKey ?? ""}
+            data-destination-detail-requested-date={detail.focusedDateKey}
           >
             {detail.day.status === "error" && !displayDay ? (
               <div className="destination-detail-error" role="status">
@@ -204,13 +195,11 @@ export default function DestinationDetailDialog({
                   }}
                   toolbarAside={(
                     <QuietDatePicker
-                      value={detail.focusedDateKey ?? detail.todayDateKey}
+                      value={detail.focusedDateKey}
                       onChange={detail.setFocusedDateKey}
                       ariaLabel={UI_TEXT.date.pickDate}
                       className="destination-detail-date-trigger"
-                      displayLabel={detail.focusedDateKey
-                        ? formatDateControlLabel(detail.focusedDateKey)
-                        : copy.focusedDate}
+                      displayLabel={formatDateControlLabel(detail.focusedDateKey)}
                       showCalendarIcon={false}
                       maxDate={detail.todayDateKey}
                       dayNavigation={{

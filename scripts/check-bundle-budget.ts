@@ -47,8 +47,10 @@ const LAZY_SECONDARY_CHUNK_BUDGETS = [
   { label: "Data bootstrap snapshot", pattern: /^dataBootstrapSnapshot-.*\.js$/, gzipKiB: 1 },
   // The shared destination-detail entry preloads one cross-feature dialog while
   // retaining a separate chunk so ordinary Dashboard, History, and Data views
-  // do not pay for single-object analysis in their first-render graphs.
-  { label: "Destination detail", pattern: /^DestinationDetailDialog-.*\.js$/, gzipKiB: 8 },
+  // do not pay for single-object analysis in their first-render graphs. The
+  // narrow 0.05 KiB adjustment covers shared History semantics after reducing
+  // the chunk itself, while the global 3% headroom rule remains enforced.
+  { label: "Destination detail", pattern: /^DestinationDetailDialog-.*\.js$/, gzipKiB: 8.05 },
 ] as const;
 
 // Stable cross-feature UI owners stay lazy and receive their own narrow budget

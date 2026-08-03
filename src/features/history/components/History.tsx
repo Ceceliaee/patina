@@ -73,6 +73,7 @@ import HistoryDayDistributionPanel, {
   type HistoryDayDistributionItem,
 } from "./HistoryDayDistributionPanel.tsx";
 import HistoryTimelineDetailsPopover, {
+  resolveTimelineDetailsPopoverPosition,
   type HistoryTimelineDetailsPopoverState,
   type TimelineDetailTitle,
 } from "./HistoryTimelineDetailsPopover.tsx";
@@ -109,7 +110,6 @@ interface Props {
   onHourlyActivityChartModeChange: (mode: HourlyActivityChartMode) => void;
   refreshEnabled?: boolean;
   webActivityEnabled?: boolean;
-  titleRecordingEnabled?: boolean;
 }
 
 const TIMELINE_MIN_SESSION_MINUTES_RANGE = { min: 1, max: 10 } as const;
@@ -188,34 +188,6 @@ function cleanTimelineDetailTitles(samples: TimelineDetailTitle[], appName: stri
     .filter((sample) => sample.isUntitled || sample.title);
 }
 
-function resolveTimelineDetailsPopoverPosition(
-  anchor: { top: number; bottom: number; centerX: number },
-  itemCount: number,
-  measuredHeight?: number,
-) {
-  const popoverHalfWidth = 142;
-  const viewportPadding = 12;
-  const gap = 8;
-  const estimatedHeight = Math.min(260, Math.max(48, 20 + itemCount * 40 + Math.max(0, itemCount - 1) * 6));
-  const height = measuredHeight ?? estimatedHeight;
-  const boundedHeight = Math.min(height, window.innerHeight - viewportPadding * 2);
-  const spaceBelow = window.innerHeight - anchor.bottom - gap - viewportPadding;
-  const spaceAbove = anchor.top - gap - viewportPadding;
-  const placement: "top" | "bottom" = spaceBelow < height && spaceAbove > spaceBelow ? "top" : "bottom";
-  const preferredTop = placement === "top" ? anchor.top - height - gap : anchor.bottom + gap;
-
-  return {
-    left: Math.min(
-      Math.max(anchor.centerX, popoverHalfWidth + viewportPadding),
-      window.innerWidth - popoverHalfWidth - viewportPadding,
-    ),
-    top: Math.min(
-      Math.max(preferredTop, viewportPadding),
-      window.innerHeight - boundedHeight - viewportPadding,
-    ),
-    placement,
-  };
-}
 export default function History({
   icons,
   refreshKey = 0,
@@ -232,7 +204,6 @@ export default function History({
   onHourlyActivityChartModeChange,
   refreshEnabled = true,
   webActivityEnabled = false,
-  titleRecordingEnabled = true,
 }: Props) {
   const requestedInitialDate = selectedDateRequest ? parseLocalDateKey(selectedDateRequest.dateKey) : null;
   const selectedDateRequestId = selectedDateRequest?.requestId ?? null;
@@ -266,7 +237,6 @@ export default function History({
     refreshEnabled,
     refreshKey,
     selectedDate,
-    titleRecordingEnabled,
     webActivityEnabled,
   });
   const presentedDate = useMemo(
@@ -353,7 +323,7 @@ export default function History({
   const historyCopy = UI_TEXT.history;
   const destinationDetail = useHistoryDestinationDetailEntry({
     initialDateKey: formatLocalDateKey(presentedDate),
-    runtime: { refreshKey, mappingVersion, mergeThresholdSecs },
+    runtime: { refreshKey, mappingVersion, mergeThresholdSecs, trackerHealth },
     webActivityEnabled,
   });
   const {

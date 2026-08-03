@@ -99,7 +99,7 @@ export function HistoryTimelineList({
                   <div className="min-w-0 truncate text-sm font-semibold text-[var(--qp-text-primary)]">
                     {session.displayName}
                   </div>
-                  <span className="inline-flex h-[18px] shrink-0 items-center gap-1 rounded-[5px] border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-panel)] px-1.5 text-[9px] font-semibold leading-none text-[var(--qp-text-tertiary)]">
+                  <span className="qp-workbench-list-meta">
                     <span>
                       {UI_TEXT.history.activitySegmentCount(session.mergedCount)}
                     </span>
@@ -198,7 +198,7 @@ export function HistoryWebTimelineList({
                     {item.label}
                   </div>
                   {titleCount > 0 && (
-                    <span className="inline-flex h-[18px] shrink-0 items-center gap-1 rounded-[5px] border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-panel)] px-1.5 text-[9px] font-semibold leading-none text-[var(--qp-text-tertiary)]">
+                    <span className="qp-workbench-list-meta">
                       {UI_TEXT.history.titleRowCount(titleCount)}
                     </span>
                   )}

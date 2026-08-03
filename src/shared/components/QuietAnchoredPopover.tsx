@@ -25,6 +25,7 @@ interface QuietAnchoredPopoverProps {
   onClose: () => void;
   children: ReactNode;
   className?: string;
+  horizontalAnchorRatio?: number;
 }
 
 const POPOVER_GAP = 8;
@@ -46,6 +47,7 @@ function positionsMatch(
 function resolvePosition(
   anchorRect: DOMRect,
   popoverRect: DOMRect,
+  horizontalAnchorRatio: number,
 ): QuietAnchoredPopoverPosition {
   const availableBelow = window.innerHeight
     - anchorRect.bottom
@@ -71,7 +73,9 @@ function resolvePosition(
 
   return {
     left: clamp(
-      anchorRect.left + (anchorRect.width - popoverRect.width) / 2,
+      anchorRect.left
+        + anchorRect.width / 2
+        - popoverRect.width * horizontalAnchorRatio,
       VIEWPORT_PADDING,
       maxLeft,
     ),
@@ -88,6 +92,7 @@ export default function QuietAnchoredPopover({
   onClose,
   children,
   className,
+  horizontalAnchorRatio = 0.5,
 }: QuietAnchoredPopoverProps) {
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const onCloseRef = useRef(onClose);
@@ -102,9 +107,10 @@ export default function QuietAnchoredPopover({
     const next = resolvePosition(
       anchor.getBoundingClientRect(),
       popover.getBoundingClientRect(),
+      clamp(horizontalAnchorRatio, 0, 1),
     );
     setPosition((current) => positionsMatch(current, next) ? current : next);
-  }, [anchor, open]);
+  }, [anchor, horizontalAnchorRatio, open]);
 
   useLayoutEffect(() => {
     if (!open || !anchor) {

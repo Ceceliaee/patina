@@ -18,7 +18,6 @@ const ZH_CN_DESTINATION_DETAIL_COPY = {
   noActivity: "当天没有该对象的活动记录",
   noActivityInWindow: "当前时间窗没有该对象的活动记录",
   noActivityAtMinimum: (minutes: number) => `没有达到 ${minutes} 分钟的活动记录`,
-  untitled: "未记录标题",
   loading: "正在读取详情",
   dayError: "当天记录加载失败",
   retry: "重试",
@@ -68,7 +67,6 @@ const EN_US_DESTINATION_DETAIL_COPY = {
   noActivityAtMinimum: (minutes: number) => (
     `No activity lasting at least ${minutes} ${minutes === 1 ? "minute" : "minutes"}`
   ),
-  untitled: "Title not recorded",
   loading: "Loading details",
   dayError: "Could not load this day's records",
   retry: "Retry",

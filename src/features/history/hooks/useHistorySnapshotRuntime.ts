@@ -45,7 +45,6 @@ interface UseHistorySnapshotRuntimeOptions {
   refreshEnabled: boolean;
   refreshKey: number;
   selectedDate: Date;
-  titleRecordingEnabled: boolean;
   webActivityEnabled: boolean;
 }
 
@@ -95,7 +94,6 @@ export function useHistorySnapshotRuntime({
   refreshEnabled,
   refreshKey,
   selectedDate,
-  titleRecordingEnabled,
   webActivityEnabled,
 }: UseHistorySnapshotRuntimeOptions) {
   const [initialSnapshotState] = useState(() => {
@@ -284,25 +282,23 @@ export function useHistorySnapshotRuntime({
         applyVisibleSnapshot(snapshot, requestDateKey, nextState, hasUsableSnapshot);
         void saveHistoryBootstrapSnapshot(snapshot, requestIdentity);
 
-        if (titleRecordingEnabled) {
-          void loadHistoryDaySessionDetails(requestDate).then((daySessions) => {
-            if (requestGenerationRef.current !== requestGeneration) return;
-            const cachedCoreSnapshot = getHistorySnapshotCache(
-              requestDate,
-              7,
-              webActivityEnabled,
-            );
-            if (cachedCoreSnapshot) {
-              setHistorySnapshotCache({
-                ...cachedCoreSnapshot,
-                daySessions,
-              }, requestDate, 7, webActivityEnabled);
-            }
-            startTransition(() => setRawDaySessions(daySessions));
-          }).catch((error) => {
-            console.warn("History title detail enrichment failed", error);
-          });
-        }
+        void loadHistoryDaySessionDetails(requestDate).then((daySessions) => {
+          if (requestGenerationRef.current !== requestGeneration) return;
+          const cachedCoreSnapshot = getHistorySnapshotCache(
+            requestDate,
+            7,
+            webActivityEnabled,
+          );
+          if (cachedCoreSnapshot) {
+            setHistorySnapshotCache({
+              ...cachedCoreSnapshot,
+              daySessions,
+            }, requestDate, 7, webActivityEnabled);
+          }
+          startTransition(() => setRawDaySessions(daySessions));
+        }).catch((error) => {
+          console.warn("History title detail enrichment failed", error);
+        });
       } catch (error) {
         if (requestGenerationRef.current !== requestGeneration) return;
         console.warn("History snapshot refresh failed", error);
@@ -326,7 +322,6 @@ export function useHistorySnapshotRuntime({
     refreshEnabled,
     refreshKey,
     selectedDate,
-    titleRecordingEnabled,
     webActivityEnabled,
   ]);
 

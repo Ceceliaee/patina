@@ -147,6 +147,28 @@
   background: var(--qp-bg-panel);
 }
 
+.qp-workbench-list-meta {
+  display: inline-flex;
+  height: 18px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--qp-border-subtle);
+  border-radius: 5px;
+  background: var(--qp-bg-panel);
+  padding: 0 6px;
+  color: var(--qp-text-primary);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.qp-record-detail-title {
+  color: var(--qp-text-primary);
+  font-size: 11px;
+  font-weight: 620;
+}
+
 .qp-compact-disclosure.qp-button-secondary {
   display: inline-flex;
   width: 18px;
@@ -808,89 +830,6 @@
 .qp-button.qp-button-secondary,
 .qp-button.qp-button-danger {
   border-radius: var(--qp-radius-button);
-}
-
-.history-calendar-popover {
-  z-index: 70;
-  transform-origin: top center;
-}
-
-.history-activity-popover {
-  position: fixed;
-  z-index: 110;
-  width: 284px;
-  max-width: calc(100vw - 24px);
-  max-height: min(260px, calc(100vh - 24px));
-  transform-origin: top center;
-  translate: -50% 0;
-  border: 1px solid var(--qp-border-subtle);
-  border-radius: var(--qp-radius-panel);
-  background: var(--qp-bg-canvas);
-  box-shadow: var(--qp-shadow-overlay);
-  overflow-y: auto;
-  scrollbar-gutter: stable;
-  padding: 10px;
-}
-
-.history-activity-popover-top {
-  transform-origin: bottom center;
-}
-
-.history-activity-popover-title {
-  margin-bottom: 7px;
-  color: var(--qp-text-primary);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.history-activity-popover-list {
-  display: grid;
-  gap: 6px;
-}
-
-.history-activity-popover-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: start;
-  min-width: 0;
-  border: 1px solid var(--qp-border-subtle);
-  border-radius: 7px;
-  background: var(--qp-bg-panel);
-  color: var(--qp-text-secondary);
-  font-size: 10px;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-  padding: 7px 8px;
-}
-
-.history-activity-popover-item-title {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.history-activity-popover-item-time {
-  display: grid;
-  min-width: 58px;
-  justify-items: end;
-  gap: 2px;
-  color: var(--qp-text-tertiary);
-  font-size: 9px;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.15;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.history-activity-popover-item-duration {
-  color: var(--qp-text-secondary);
-  font-size: 10px;
-  font-weight: 650;
-}
-
-.history-activity-popover-item-range {
-  color: var(--qp-text-tertiary);
-  font-size: 9px;
 }
 
 .data-heatmap {
