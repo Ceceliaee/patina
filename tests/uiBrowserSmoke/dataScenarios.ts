@@ -1340,6 +1340,189 @@ export async function runDataScenarios(
     );
   });
 
+  await runTest("data app icons reuse quick classification without changing selection", async () => {
+    await evaluate(client!, sessionId, `document.querySelector('[aria-label="数据"]')?.click()`);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('[aria-label="应用列表"] button[aria-haspopup="menu"]'))`,
+      45_000,
+      "data quick classification target",
+    );
+    const openingState = JSON.parse(String(await evaluate(client!, sessionId, `
+      (() => {
+        const list = document.querySelector('[aria-label="应用列表"]');
+        const target = list?.querySelector('button[aria-haspopup="menu"]');
+        const trigger = target?.querySelector('[data-destination-detail-trigger]');
+        if (
+          !(list instanceof HTMLElement)
+          || !(target instanceof HTMLButtonElement)
+          || !(trigger instanceof HTMLElement)
+        ) return null;
+        list.scrollTop = Math.min(24, Math.max(0, list.scrollHeight - list.clientHeight));
+        target.focus();
+        const selectedKeys = Array.from(
+          list.querySelectorAll('button[aria-pressed="true"]'),
+        ).map((button) => button.getAttribute("data-destination-key"));
+        const rect = trigger.getBoundingClientRect();
+        trigger.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          button: 2,
+          clientX: rect.left + rect.width / 2,
+          clientY: rect.top + rect.height / 2,
+        }));
+        return JSON.stringify({
+          selectedKeys,
+          scrollTop: list.scrollTop,
+          targetKey: target.getAttribute("data-destination-key"),
+          hasNativeTitle: target.hasAttribute("title") || trigger.hasAttribute("title"),
+          unclassified: Boolean(target.querySelector('.qp-badge')),
+        });
+      })()
+    `))) as {
+      selectedKeys: Array<string | null>;
+      scrollTop: number;
+      targetKey: string | null;
+      hasNativeTitle: boolean;
+      unclassified: boolean;
+    };
+    assert.ok(openingState);
+    assert.ok(openingState.targetKey);
+    assert.equal(openingState.hasNativeTitle, false);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-app-menu[role="menu"]'))`);
+    assert.deepEqual(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const list = document.querySelector('[aria-label="应用列表"]');
+          return {
+            labels: Array.from(document.querySelectorAll(
+              '.quick-app-menu[role="menu"] > .quick-app-menu-item',
+            )).map((item) => item.textContent?.trim()),
+            selectedKeys: Array.from(
+              list?.querySelectorAll('button[aria-pressed="true"]') ?? [],
+            ).map((button) => button.getAttribute("data-destination-key")),
+            scrollTop: list instanceof HTMLElement ? list.scrollTop : -1,
+            detailOpen: Boolean(document.querySelector('.destination-detail-dialog')),
+            categoryOpen: Boolean(document.querySelector('.quick-app-category-menu')),
+          };
+        })()
+      `),
+      {
+        labels: ["更改名称", openingState.unclassified ? "设置分类" : "更改分类"],
+        selectedKeys: openingState.selectedKeys,
+        scrollTop: openingState.scrollTop,
+        detailOpen: false,
+        categoryOpen: false,
+      },
+      "right-clicking a Data icon must not select it, scroll the list, or open details",
+    );
+    await evaluate(client!, sessionId, `
+      Array.from(document.querySelectorAll(
+        '.quick-app-menu[role="menu"] > .quick-app-menu-item',
+      )).find((item) => item.textContent?.includes("分类"))?.click()
+    `);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-app-category-menu'))`);
+    await evaluate(client!, sessionId, `
+      Array.from(document.querySelectorAll(
+        '.quick-app-category-menu [role="menuitemradio"]',
+      )).find((item) => item.textContent?.includes("未分类"))?.click()
+    `);
+    await waitForExpression(client!, sessionId, `!document.querySelector('.quick-app-menu[role="menu"]')`);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('.data-app-option-name-row .qp-badge'))`,
+    );
+    const dataBadgeMetrics = JSON.parse(String(await evaluate(client!, sessionId, `
+        (() => {
+          const badge = document.querySelector('.data-app-option-name-row .qp-badge');
+          const name = badge?.closest('.data-app-option-name-row')
+            ?.querySelector('.data-app-option-name');
+          if (!(badge instanceof HTMLElement) || !(name instanceof HTMLElement)) return null;
+          const badgeRect = badge.getBoundingClientRect();
+          const nameRect = name.getBoundingClientRect();
+          const style = getComputedStyle(badge);
+          return JSON.stringify({
+            regular: badge.classList.contains('qp-badge-regular'),
+            neutral: badge.classList.contains('qp-badge-neutral'),
+            badgeHeight: badgeRect.height,
+            nameHeight: nameRect.height,
+            fontSize: style.fontSize,
+            fontWeight: style.fontWeight,
+          });
+        })()
+      `))) as {
+      regular: boolean;
+      neutral: boolean;
+      badgeHeight: number;
+      nameHeight: number;
+      fontSize: string;
+      fontWeight: string;
+    };
+    assert.ok(dataBadgeMetrics);
+    assert.equal(dataBadgeMetrics.regular, true);
+    assert.equal(dataBadgeMetrics.neutral, true);
+    assert.ok(
+      Math.abs(dataBadgeMetrics.badgeHeight - dataBadgeMetrics.nameHeight) <= 2,
+      `Data should use the compact name-line badge density: ${JSON.stringify(dataBadgeMetrics)}`,
+    );
+    assert.equal(dataBadgeMetrics.fontSize, "11px");
+    assert.equal(dataBadgeMetrics.fontWeight, "500");
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.activeElement?.getAttribute("data-destination-key") === ${jsonString(openingState.targetKey)}`,
+    );
+    const selectedKeysBeforeTopIconMenu = await evaluate(client!, sessionId, `
+      JSON.stringify(Array.from(document.querySelectorAll(
+        '[aria-label="应用列表"] button[aria-pressed="true"]',
+      )).map((button) => button.getAttribute("data-destination-key")))
+    `) as string;
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const trigger = document.querySelector('.data-app-selected-icon[aria-haspopup="menu"]');
+          if (!(trigger instanceof HTMLButtonElement)) return false;
+          const rect = trigger.getBoundingClientRect();
+          trigger.dispatchEvent(new MouseEvent("contextmenu", {
+            bubbles: true,
+            cancelable: true,
+            button: 2,
+            clientX: rect.left + rect.width / 2,
+            clientY: rect.top + rect.height / 2,
+          }));
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-app-menu[role="menu"]'))`);
+    assert.deepEqual(
+      await evaluate(client!, sessionId, `
+        ({
+          selectedKeys: JSON.stringify(Array.from(document.querySelectorAll(
+            '[aria-label="应用列表"] button[aria-pressed="true"]',
+          )).map((button) => button.getAttribute("data-destination-key"))),
+          detailOpen: Boolean(document.querySelector('.destination-detail-dialog')),
+        })
+      `),
+      { selectedKeys: selectedKeysBeforeTopIconMenu, detailOpen: false },
+      "the selected-app icon must reuse the menu without changing selection or opening details",
+    );
+    await evaluate(client!, sessionId, `
+      document.querySelector('.quick-app-menu[role="menu"]')?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      )
+    `);
+    await waitForExpression(client!, sessionId, `!document.querySelector('.quick-app-menu[role="menu"]')`);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.activeElement?.matches('.data-app-selected-icon[aria-haspopup="menu"]')`,
+    );
+  });
+
   await runTest("data destination details select a double-clicked target and focus on day analysis", async () => {
     await evaluate(
       client!,

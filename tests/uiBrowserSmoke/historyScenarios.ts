@@ -583,6 +583,128 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
     );
   });
 
+  await runTest("history app icons reuse the shared quick classification surface", async () => {
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(
+        '.history-app-distribution-card .history-day-distribution-detail-trigger[aria-haspopup="menu"]',
+      ))`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const trigger = document.querySelector(
+            '.history-app-distribution-card .history-day-distribution-detail-trigger[aria-haspopup="menu"]',
+          );
+          if (!(trigger instanceof HTMLButtonElement)) return false;
+          window.__historyQuickMenuTrace = { sawCategoryMenu: false };
+          window.__historyQuickMenuObserver = new MutationObserver(() => {
+            if (document.querySelector('.quick-app-category-menu')) {
+              window.__historyQuickMenuTrace.sawCategoryMenu = true;
+            }
+          });
+          window.__historyQuickMenuObserver.observe(document.body, { childList: true, subtree: true });
+          const rect = trigger.getBoundingClientRect();
+          trigger.dispatchEvent(new MouseEvent("contextmenu", {
+            bubbles: true,
+            cancelable: true,
+            button: 2,
+            clientX: rect.left + rect.width / 2,
+            clientY: rect.top + rect.height / 2,
+          }));
+          return !trigger.hasAttribute("title");
+        })()
+      `),
+      true,
+      "history app icons must not expose native title tooltips",
+    );
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-app-menu[role="menu"]'))`);
+    await waitForAnimationFrames(client!, sessionId, 2);
+    assert.deepEqual(
+      await evaluate(client!, sessionId, `
+        (() => {
+          window.__historyQuickMenuObserver?.disconnect();
+          const trace = window.__historyQuickMenuTrace ?? null;
+          delete window.__historyQuickMenuObserver;
+          delete window.__historyQuickMenuTrace;
+          return {
+            labels: Array.from(document.querySelectorAll(
+              '.quick-app-menu[role="menu"] > .quick-app-menu-item',
+            )).map((item) => item.textContent?.trim()),
+            sawCategoryMenu: trace?.sawCategoryMenu ?? true,
+            detailOpen: Boolean(document.querySelector('.destination-detail-dialog')),
+          };
+        })()
+      `),
+      {
+        labels: ["更改名称", "更改分类"],
+        sawCategoryMenu: false,
+        detailOpen: false,
+      },
+      "the category submenu must wait for an explicit click without flashing",
+    );
+    await evaluate(client!, sessionId, `
+      Array.from(document.querySelectorAll(
+        '.quick-app-menu[role="menu"] > .quick-app-menu-item',
+      )).find((item) => item.textContent?.includes("分类"))?.click()
+    `);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-app-category-menu'))`);
+    await evaluate(client!, sessionId, `
+      Array.from(document.querySelectorAll(
+        '.quick-app-category-menu [role="menuitemradio"]',
+      )).find((item) => item.textContent?.includes("未分类"))?.click()
+    `);
+    await waitForExpression(client!, sessionId, `!document.querySelector('.quick-app-menu[role="menu"]')`);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('.history-day-distribution-name-row .qp-badge'))`,
+    );
+    const historyBadgeMetrics = JSON.parse(String(await evaluate(client!, sessionId, `
+        (() => {
+          const badge = document.querySelector('.history-day-distribution-name-row .qp-badge');
+          const name = badge?.closest('.history-day-distribution-name-row')
+            ?.querySelector(':scope > span:first-child');
+          if (!(badge instanceof HTMLElement) || !(name instanceof HTMLElement)) return null;
+          const badgeRect = badge.getBoundingClientRect();
+          const nameRect = name.getBoundingClientRect();
+          const style = getComputedStyle(badge);
+          return JSON.stringify({
+            inline: badge.classList.contains('qp-badge-inline'),
+            neutral: badge.classList.contains('qp-badge-neutral'),
+            badgeHeight: badgeRect.height,
+            nameHeight: nameRect.height,
+            fontSize: style.fontSize,
+            fontWeight: style.fontWeight,
+          });
+        })()
+      `))) as {
+      inline: boolean;
+      neutral: boolean;
+      badgeHeight: number;
+      nameHeight: number;
+      fontSize: string;
+      fontWeight: string;
+    };
+    assert.ok(historyBadgeMetrics);
+    assert.equal(historyBadgeMetrics.inline, true);
+    assert.equal(historyBadgeMetrics.neutral, true);
+    assert.ok(
+      Math.abs(historyBadgeMetrics.badgeHeight - historyBadgeMetrics.nameHeight) <= 2,
+      `History should use the compact name-line badge density: ${JSON.stringify(historyBadgeMetrics)}`,
+    );
+    assert.equal(historyBadgeMetrics.fontSize, "9px");
+    assert.equal(historyBadgeMetrics.fontWeight, "500");
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.activeElement?.matches(
+        '.history-app-distribution-card .history-day-distribution-detail-trigger[aria-haspopup="menu"]',
+      )`,
+    );
+  });
+
   await runTest("history timeline opens list dialog from timeline axis", async () => {
     await client!.command("Emulation.setDeviceMetricsOverride", {
       width: 2048,

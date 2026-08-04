@@ -481,4 +481,327 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
     );
     await waitForExpression(client!, sessionId, `!document.querySelector(".destination-detail-dialog")`);
   });
+
+  await runTest("dashboard app icon supports quick rename and category context actions", async () => {
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(".dashboard-top-app-detail-trigger"))`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const trigger = document.querySelector(".dashboard-top-app-detail-trigger");
+          if (!(trigger instanceof HTMLElement)) return false;
+          const rect = trigger.getBoundingClientRect();
+          trigger.dispatchEvent(new MouseEvent("contextmenu", {
+            bubbles: true,
+            cancelable: true,
+            button: 2,
+            clientX: rect.left + rect.width / 2,
+            clientY: rect.top + rect.height / 2,
+          }));
+          return !trigger.hasAttribute("title");
+        })()
+      `),
+      true,
+      "the icon must not rely on a native title tooltip",
+    );
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-app-menu[role="menu"]'))`);
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const menu = document.querySelector('.quick-app-menu[role="menu"]');
+          if (!(menu instanceof HTMLElement)) return false;
+          const rect = menu.getBoundingClientRect();
+          const items = Array.from(menu.querySelectorAll(':scope > .quick-app-menu-item'));
+          return rect.width <= 149
+            && rect.height <= 66
+            && menu.querySelector(':scope > .quick-app-menu-item svg') === null
+            && items.every((item) => item.getBoundingClientRect().height <= 29);
+        })()
+      `),
+      true,
+      "quick actions should use compact desktop-menu density",
+    );
+    assert.deepEqual(
+      await evaluate(client!, sessionId, `
+        Array.from(document.querySelectorAll('.quick-app-menu[role="menu"] > .quick-app-menu-item'))
+          .map((item) => item.textContent?.trim())
+      `),
+      ["更改名称", "更改分类"],
+    );
+
+    await evaluate(client!, sessionId, `
+      (() => {
+        const trigger = Array.from(document.querySelectorAll('.quick-app-menu-item'))
+          .find((item) => item.textContent?.includes("更改分类"));
+        trigger?.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+      })()
+    `);
+    await waitForAnimationFrames(client!, sessionId, 2);
+    assert.equal(
+      await evaluate(client!, sessionId, `Boolean(document.querySelector('.quick-app-category-menu'))`),
+      false,
+      "hovering the category action must not open the submenu",
+    );
+
+    await evaluate(client!, sessionId, `
+      Array.from(document.querySelectorAll('.quick-app-menu-item'))
+        .find((item) => item.textContent?.includes("更改分类"))?.click()
+    `);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-app-category-menu'))`);
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const menu = document.querySelector('.quick-app-category-menu');
+          if (!(menu instanceof HTMLElement)) return false;
+          const rect = menu.getBoundingClientRect();
+          const firstItemRect = menu.querySelector('.quick-app-menu-item')?.getBoundingClientRect();
+          return rect.left >= 11 && rect.top >= 11
+            && rect.right <= window.innerWidth - 11
+            && rect.bottom <= window.innerHeight - 11
+            && rect.width <= 185
+            && rect.height <= 273
+            && Boolean(firstItemRect && firstItemRect.height <= 29);
+        })()
+      `),
+      true,
+      "the category submenu should remain inside the viewport",
+    );
+    const categoryMenuCenter = await evaluate(client!, sessionId, `
+      (() => {
+        const menu = document.querySelector('.quick-app-category-menu');
+        if (!(menu instanceof HTMLElement)) return null;
+        const rect = menu.getBoundingClientRect();
+        return {
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+          canScroll: menu.scrollHeight > menu.clientHeight,
+        };
+      })()
+    `) as { x: number; y: number; canScroll: boolean } | null;
+    assert.equal(categoryMenuCenter?.canScroll, true, "the category submenu fixture should overflow");
+    await client!.command("Input.dispatchMouseEvent", {
+      type: "mouseWheel",
+      x: categoryMenuCenter!.x,
+      y: categoryMenuCenter!.y,
+      deltaX: 0,
+      deltaY: 180,
+    }, sessionId);
+    await waitForExpression(client!, sessionId, `
+      (() => {
+        const menu = document.querySelector('.quick-app-category-menu');
+        return menu instanceof HTMLElement && menu.scrollTop > 0;
+      })()
+    `);
+    assert.equal(
+      await evaluate(client!, sessionId, `Boolean(document.querySelector('.quick-app-category-menu'))`),
+      true,
+      "wheel-scrolling the category submenu must not close it",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const options = Array.from(document.querySelectorAll('.quick-app-category-menu [role="menuitemradio"]'));
+          const unclassified = options.find((item) => item.textContent?.includes("未分类"));
+          if (!(unclassified instanceof HTMLElement)) return false;
+          unclassified.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(client!, sessionId, `
+      Boolean(document.querySelector('.dashboard-top-app-name-row .qp-badge')?.textContent?.includes("未分类"))
+    `);
+    assert.equal(
+      await evaluate(client!, sessionId, `Boolean(document.querySelector('.dashboard-top-app-meta .qp-badge'))`),
+      false,
+      "the unclassified badge belongs beside the app name, not in the share row",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const badge = document.querySelector('.dashboard-top-app-name-row .qp-badge');
+          const nameRow = document.querySelector('.dashboard-top-app-name-row');
+          const duration = document.querySelector('.dashboard-top-app-duration');
+          if (
+            !(badge instanceof HTMLElement)
+            || !(nameRow instanceof HTMLElement)
+            || !(duration instanceof HTMLElement)
+          ) return false;
+          const badgeRect = badge.getBoundingClientRect();
+          const nameRowRect = nameRow.getBoundingClientRect();
+          const durationRect = duration.getBoundingClientRect();
+          const badgeStyle = getComputedStyle(badge);
+          return badge.classList.contains('qp-badge-regular')
+            && badge.classList.contains('qp-badge-neutral')
+            && Math.abs(nameRowRect.height - badgeRect.height) <= 2
+            && badgeStyle.fontSize === '11px'
+            && badgeStyle.fontWeight === '500'
+            && badgeRect.right + 8 <= durationRect.left;
+        })()
+      `),
+      true,
+      "the badge should match the app-name line height without crowding duration",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        globalThis.__TIME_TRACKER_CLASSIFICATION_MUTATIONS?.some((mutation) =>
+          mutation.key === "__app_override::cursor.exe" && mutation.value === null
+        ) ?? false
+      `),
+      true,
+      "choosing unclassified should clear only the manual category",
+    );
+
+    await evaluate(client!, sessionId, `
+      (() => {
+        const trigger = document.querySelector(".dashboard-top-app-detail-trigger");
+        if (!(trigger instanceof HTMLElement)) return false;
+        const rect = trigger.getBoundingClientRect();
+        trigger.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          button: 2,
+          clientX: rect.left + rect.width / 2,
+          clientY: rect.top + rect.height / 2,
+        }));
+        return true;
+      })()
+    `);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-app-menu[role="menu"]'))`);
+    assert.deepEqual(
+      await evaluate(client!, sessionId, `
+        Array.from(document.querySelectorAll('.quick-app-menu[role="menu"] > .quick-app-menu-item'))
+          .map((item) => item.textContent?.trim())
+      `),
+      ["更改名称", "设置分类"],
+      "clearing the category should switch the action back to set category",
+    );
+    await evaluate(client!, sessionId, `
+      Array.from(document.querySelectorAll('.quick-app-menu-item'))
+        .find((item) => item.textContent?.includes("更改名称"))?.click()
+    `);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('#quick-app-rename-form'))`);
+    await waitForExpression(client!, sessionId, `document.activeElement?.matches('.quick-app-rename-input')`);
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const dialog = document.querySelector('.quick-app-rename-dialog');
+          const input = document.querySelector('.quick-app-rename-input');
+          if (!(dialog instanceof HTMLElement) || !(input instanceof HTMLElement)) return false;
+          const dialogRect = dialog.getBoundingClientRect();
+          const inputRect = input.getBoundingClientRect();
+          return dialogRect.width <= 421 && inputRect.height <= 39;
+        })()
+      `),
+      true,
+      "quick rename should use compact task-dialog proportions",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const input = document.querySelector('.quick-app-rename-input');
+          if (!(input instanceof HTMLInputElement)) return false;
+          const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+          valueSetter?.call(input, "Smoke Alias");
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          return document.activeElement === input;
+        })()
+      `),
+      true,
+      "rename dialog should focus its input without a native hover surface",
+    );
+    await evaluate(client!, sessionId, `
+      document.querySelector('#quick-app-rename-form')?.dispatchEvent(
+        new SubmitEvent("submit", { bubbles: true, cancelable: true }),
+      )
+    `);
+    await waitForExpression(client!, sessionId, `
+      (() => {
+        const settings = JSON.parse(localStorage.getItem("__time_tracker_smoke_settings") ?? "{}");
+        const raw = settings["__app_override::cursor.exe"];
+        return raw ? JSON.parse(raw).displayName === "Smoke Alias" : false;
+      })()
+    `);
+    await waitForExpression(client!, sessionId, `
+      Array.from(document.querySelectorAll('.dashboard-top-app-detail-trigger + div span'))
+        .some((node) => node.textContent?.trim() === "Smoke Alias")
+    `);
+
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const trigger = document.querySelector(".dashboard-top-app-detail-trigger");
+          if (!(trigger instanceof HTMLElement)) return false;
+          trigger.focus();
+          trigger.dispatchEvent(new KeyboardEvent("keydown", {
+            key: "F10",
+            shiftKey: true,
+            bubbles: true,
+            cancelable: true,
+          }));
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-app-menu[role="menu"]'))`);
+    await evaluate(client!, sessionId, `
+      document.querySelector('.quick-app-menu[role="menu"]')?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      )
+    `);
+    await waitForExpression(client!, sessionId, `!document.querySelector('.quick-app-menu[role="menu"]')`);
+    await waitForExpression(client!, sessionId, `document.activeElement?.matches('.dashboard-top-app-detail-trigger')`);
+
+    await evaluate(client!, sessionId, `
+      (() => {
+        const trigger = document.querySelector(".dashboard-top-app-detail-trigger");
+        if (!(trigger instanceof HTMLElement)) return false;
+        trigger.focus();
+        trigger.dispatchEvent(new KeyboardEvent("keydown", {
+          key: "F10",
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+        return true;
+      })()
+    `);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-app-menu[role="menu"]'))`);
+    await evaluate(client!, sessionId, `
+      document.querySelector('.dashboard-top-apps-list')?.dispatchEvent(new Event("scroll", { bubbles: false }))
+    `);
+    await waitForExpression(client!, sessionId, `!document.querySelector('.quick-app-menu[role="menu"]')`);
+
+    await evaluate(client!, sessionId, `
+      (() => {
+        const trigger = document.querySelector(".dashboard-top-app-detail-trigger");
+        if (!(trigger instanceof HTMLElement)) return false;
+        trigger.focus();
+        trigger.dispatchEvent(new KeyboardEvent("keydown", {
+          key: "F10",
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+        return true;
+      })()
+    `);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-app-menu[role="menu"]'))`);
+    await waitForExpression(client!, sessionId, `document.activeElement?.matches('.quick-app-menu-item')`);
+    await evaluate(client!, sessionId, `
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }),
+      )
+    `);
+    await waitForExpression(client!, sessionId, `!document.querySelector('.quick-app-menu[role="menu"]')`);
+    await waitForExpression(client!, sessionId, `
+      document.activeElement?.matches('.dashboard-top-app-detail-trigger')
+        && document.activeElement !== document.querySelector('.dashboard-top-app-detail-trigger')
+    `);
+  });
 }
