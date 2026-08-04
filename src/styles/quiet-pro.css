@@ -260,6 +260,13 @@
   font-weight: 700;
 }
 
+.qp-badge-inline {
+  height: 14px;
+  padding: 0 5px;
+  font-size: 9px;
+  font-weight: 500;
+}
+
 .qp-badge-neutral {
   color: var(--qp-text-secondary);
 }
@@ -1123,6 +1130,21 @@
 }
 
 .data-app-option-main {
+  min-width: 0;
+}
+
+.data-app-option-name-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.data-app-option-name-row .qp-badge {
+  flex: 0 0 auto;
+}
+
+.data-app-option-name-row .data-app-option-name {
   min-width: 0;
 }
 

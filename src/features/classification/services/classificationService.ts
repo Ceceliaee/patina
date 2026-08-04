@@ -33,6 +33,7 @@ import {
 } from "./classificationAppCatalog.ts";
 import { prewarmIconThemeColors } from "../../../shared/hooks/useIconThemeColors.ts";
 import { loadClassificationIconsForExecutables } from "./classificationIconService.ts";
+import { resolveCanonicalExecutable } from "../../../shared/classification/processNormalization.ts";
 export { filterAndSortCandidates } from "./classificationCandidateFiltering.ts";
 export {
   ClassificationAppCatalogController,
@@ -284,6 +285,22 @@ export class ClassificationService {
   static async saveAppOverride(exeName: string, override: AppOverride | null) {
     await classificationStore.saveAppOverride(exeName, override);
     ProcessMapper.setUserOverride(exeName, override);
+    const canonicalExe = resolveCanonicalExecutable(exeName);
+    if (!canonicalExe) return;
+    const bootstrap = getClassificationBootstrapCache();
+    if (bootstrap) {
+      const loadedOverrides = { ...bootstrap.loadedOverrides };
+      if (canonicalExe !== exeName) {
+        delete loadedOverrides[exeName];
+      }
+      const runtimeOverride = ProcessMapper.getUserOverride(canonicalExe);
+      if (runtimeOverride) {
+        loadedOverrides[canonicalExe] = runtimeOverride;
+      } else {
+        delete loadedOverrides[canonicalExe];
+      }
+      setClassificationBootstrapCache({ ...bootstrap, loadedOverrides });
+    }
   }
 
   static async saveCategoryColorOverride(category: AppCategory, colorValue: string | null) {

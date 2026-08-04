@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 export type QuietBadgeTone = "neutral" | "warning" | "subtle";
-export type QuietBadgeSize = "compact" | "regular";
+export type QuietBadgeSize = "compact" | "inline" | "regular";
 export type QuietBadgeVariant = "default" | "beta";
 
 interface Props {

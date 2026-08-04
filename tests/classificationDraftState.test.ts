@@ -50,6 +50,15 @@ import {
   getClassificationBootstrapCache,
   setClassificationBootstrapCache,
 } from "../src/features/classification/services/classificationBootstrapCache.ts";
+import {
+  buildQuickAppCategoryOptions,
+  buildQuickAppOverride,
+  isQuickAppUnclassified,
+} from "../src/features/classification/services/quickAppClassification.ts";
+import {
+  createQuickAppClassificationTarget,
+  resolveQuickAppClassificationElementAnchor,
+} from "../src/features/classification/types.ts";
 
 function buildDraftState(overrides: Partial<ClassificationDraftState> = {}): ClassificationDraftState {
   return {
@@ -84,6 +93,92 @@ async function runTest(name: string, fn: () => Promise<void> | void) {
   passed += 1;
   console.log(`PASS ${name}`);
 }
+
+await runTest("quick app targets keep business identity separate from menu placement", () => {
+  assert.deepEqual(createQuickAppClassificationTarget({
+    exeName: "  code.exe  ",
+    displayName: "  ",
+    category: "development",
+  }), {
+    exeName: "code.exe",
+    displayName: "code.exe",
+    category: "development",
+  });
+  assert.throws(() => createQuickAppClassificationTarget({
+    exeName: "   ",
+    displayName: "Editor",
+    category: "development",
+  }), /non-empty executable name/);
+
+  assert.deepEqual(resolveQuickAppClassificationElementAnchor({
+    getBoundingClientRect: () => ({ left: 20, top: 30, width: 40, height: 18 }),
+  } as HTMLElement), {
+    clientX: 40,
+    clientY: 39,
+  });
+});
+
+await runTest("quick app classification preserves unrelated override fields", () => {
+  const next = buildQuickAppOverride({
+    displayName: "Editor",
+    color: "#123456",
+    track: false,
+    captureTitle: false,
+    enabled: true,
+    updatedAt: 1,
+  }, { category: "development" }, 2);
+
+  assert.deepEqual(next, {
+    category: "development",
+    displayName: "Editor",
+    color: "#123456",
+    track: false,
+    captureTitle: false,
+    enabled: true,
+    updatedAt: 2,
+  });
+});
+
+await runTest("quick app name restore clears only the display name", () => {
+  const next = buildQuickAppOverride({
+    category: "development",
+    displayName: "Editor",
+    enabled: true,
+  }, { displayName: "   " }, 3);
+
+  assert.deepEqual(next, {
+    category: "development",
+    enabled: true,
+    updatedAt: 3,
+  });
+});
+
+await runTest("quick app unclassified state follows effective active category", () => {
+  assert.equal(isQuickAppUnclassified(null), true);
+  assert.equal(isQuickAppUnclassified({ displayName: "Editor" }), true);
+  assert.equal(isQuickAppUnclassified({ category: "other" }), true);
+  assert.equal(isQuickAppUnclassified({ category: "development" }), false);
+  assert.equal(isQuickAppUnclassified({ category: "development" }, ["development"]), true);
+});
+
+await runTest("quick app category options include active custom categories and keep other last", () => {
+  const custom = "custom:category_focus" as const;
+  const options = buildQuickAppCategoryOptions({
+    loadedOverrides: { "editor.exe": { category: custom } },
+    loadedWebDomainOverrides: {},
+    loadedCategoryColorOverrides: {},
+    loadedCategoryLabelOverrides: { [custom]: "专注" },
+    loadedPersistedCategoryIds: [custom],
+    loadedDeletedCategories: ["game"],
+  });
+
+  assert.equal(options.some((option) => option.value === "game"), false);
+  assert.deepEqual(options.find((option) => option.value === custom), {
+    value: custom,
+    label: "专注",
+  });
+  assert.equal(options.at(-1)?.value, "other");
+});
 
 await runTest("classification presentation warmup covers the complete committed catalog atomically", async () => {
   const events: string[] = [];

@@ -1,0 +1,79 @@
+.quick-app-menu {
+  position: fixed;
+  z-index: 140;
+  width: 148px;
+  border: 1px solid var(--qp-border-subtle);
+  border-radius: var(--qp-radius-control);
+  background: var(--qp-bg-panel);
+  box-shadow: var(--qp-shadow-overlay);
+  padding: 4px;
+}
+
+.quick-app-category-menu {
+  position: fixed;
+  width: 184px;
+  max-height: min(272px, calc(100vh - 24px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.quick-app-menu-item {
+  display: flex;
+  width: 100%;
+  min-height: 28px;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: var(--qp-radius-button);
+  background: transparent;
+  padding: 4px 7px;
+  color: var(--qp-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.quick-app-menu-item:hover:not(:disabled),
+.quick-app-menu-item:active:not(:disabled),
+.quick-app-menu-item:focus-visible,
+.quick-app-menu-item[aria-expanded="true"] {
+  background: var(--qp-bg-elevated);
+  color: var(--qp-text-primary);
+  outline: none;
+}
+
+.quick-app-menu-item:disabled {
+  cursor: not-allowed;
+  color: var(--qp-text-disabled);
+}
+
+.quick-app-menu-check {
+  display: inline-flex;
+  width: 12px;
+  flex: 0 0 12px;
+  color: var(--qp-accent-default);
+}
+
+.quick-app-menu-check svg {
+  width: 12px;
+  height: 12px;
+}
+
+.quick-app-rename-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.quick-app-rename-dialog {
+  width: min(420px, calc(100vw - 32px));
+}
+
+.quick-app-rename-input {
+  width: 100%;
+}
+
+.quick-app-restore-name {
+  align-self: flex-start;
+}
