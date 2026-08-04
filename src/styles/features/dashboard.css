@@ -108,6 +108,18 @@
   transition: width var(--qp-motion-base) var(--qp-motion-ease);
 }
 
+.dashboard-top-app-name-row,
+.dashboard-top-app-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.dashboard-top-app-name-row .qp-badge {
+  flex: 0 0 auto;
+}
+
 @media (max-height: 900px) {
   .dashboard-focus-card {
     flex-basis: clamp(250px, 32vh, 320px);

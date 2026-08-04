@@ -69,9 +69,8 @@ import {
 } from "../../../shared/lib/localDate.ts";
 import { resolveTimelineFocusAtReferenceLocalTime } from "../../../shared/lib/timelineAxis.ts";
 import HistoryDaySummaryPanel, { type HistoryDaySummaryView } from "./HistoryDaySummaryPanel.tsx";
-import HistoryDayDistributionPanel, {
-  type HistoryDayDistributionItem,
-} from "./HistoryDayDistributionPanel.tsx";
+import type { HistoryDayDistributionItem } from "./HistoryDayDistributionPanel.tsx";
+import HistoryDayDistributionQuickActions from "./HistoryDayDistributionQuickActions.tsx";
 import HistoryTimelineDetailsPopover, {
   resolveTimelineDetailsPopoverPosition,
   type HistoryTimelineDetailsPopoverState,
@@ -86,6 +85,7 @@ import HistoryDateNavigator from "./HistoryDateNavigator.tsx";
 import HistoryTimelineDialogDateControls from "./HistoryTimelineDialogDateControls.tsx";
 import HistoryTimelineZoomDialog from "./HistoryTimelineZoomDialog.tsx";
 import { useHistoryDestinationDetailEntry } from "../hooks/useHistoryDestinationDetailEntry.tsx";
+import { createQuickAppClassificationTarget } from "../../classification/types.ts";
 
 interface Props {
   icons: Record<string, string>;
@@ -110,6 +110,8 @@ interface Props {
   onHourlyActivityChartModeChange: (mode: HourlyActivityChartMode) => void;
   refreshEnabled?: boolean;
   webActivityEnabled?: boolean;
+  onOverridesChanged: () => void;
+  onQuickActionError: (message: string) => void;
 }
 
 const TIMELINE_MIN_SESSION_MINUTES_RANGE = { min: 1, max: 10 } as const;
@@ -204,6 +206,8 @@ export default function History({
   onHourlyActivityChartModeChange,
   refreshEnabled = true,
   webActivityEnabled = false,
+  onOverridesChanged,
+  onQuickActionError,
 }: Props) {
   const requestedInitialDate = selectedDateRequest ? parseLocalDateKey(selectedDateRequest.dateKey) : null;
   const selectedDateRequestId = selectedDateRequest?.requestId ?? null;
@@ -644,22 +648,32 @@ export default function History({
   );
   const timelineZoomHours = timelineViewport.durationMs / (60 * 60_000);
   const appDistributionItems = useMemo<HistoryDayDistributionItem[]>(
-    () => appSummary.map((app) => {
-      const mapped = AppClassification.mapApp(app.exeName, { appName: app.appName });
-      const overrideColor = AppClassification.getUserOverride(app.exeName)?.color;
-      const accentColor = overrideColor ?? iconThemeColors[app.exeName] ?? mapped.color;
-      const appName = app.appName.trim() || mapped.name;
-      return {
-        key: app.exeName,
-        label: appName,
-        duration: app.duration,
-        percentage: app.percentage,
-        color: accentColor,
-        iconSrc: historyIcons[app.exeName],
-        kind: "app",
-      };
-    }),
-    [appSummary, historyIcons, iconThemeColors],
+    () => {
+      void mappingVersion;
+      return appSummary.map((app) => {
+        const mapped = AppClassification.mapApp(app.exeName, { appName: app.appName });
+        const appOverride = AppClassification.getUserOverride(app.exeName);
+        const overrideColor = appOverride?.color;
+        const accentColor = overrideColor ?? iconThemeColors[app.exeName] ?? mapped.color;
+        const appName = appOverride?.displayName?.trim() || app.appName.trim() || mapped.name;
+        return {
+          key: app.exeName,
+          label: appName,
+          duration: app.duration,
+          percentage: app.percentage,
+          color: accentColor,
+          iconSrc: historyIcons[app.exeName],
+          kind: "app",
+          quickClassificationTarget: createQuickAppClassificationTarget({
+            exeName: app.exeName,
+            displayName: appName,
+            category: mapped.category,
+          }),
+          unclassified: mapped.category === "other",
+        };
+      });
+    },
+    [appSummary, historyIcons, iconThemeColors, mappingVersion],
   );
   const categoryDistributionItems = useMemo<HistoryDayDistributionItem[]>(() => {
     return buildHistoryCategoryDistribution(appSummary, (app) => {
@@ -1015,18 +1029,22 @@ export default function History({
     />
   );
   const renderDayDistribution = () => (
-    <HistoryDayDistributionPanel
-      title={historyCopy.dayDistribution}
-      mode={dayDistributionView.mode}
-      modeOptions={dayDistributionView.options}
-      items={dayDistributionView.items}
-      showQuietPlaceholder={showQuietPlaceholder || (
-        dayDistributionView.mode === "web" && !webVisualsReady
-      )}
-      placeholderMessage={contentPlaceholderMessage}
-      onModeChange={handleDayDistributionModeChange}
-      onDestinationDetailIntentStart={destinationDetail.prepare}
-      onDestinationDetailOpen={destinationDetail.open}
+    <HistoryDayDistributionQuickActions
+      panelProps={{
+        title: historyCopy.dayDistribution,
+        mode: dayDistributionView.mode,
+        modeOptions: dayDistributionView.options,
+        items: dayDistributionView.items,
+        showQuietPlaceholder: showQuietPlaceholder || (
+          dayDistributionView.mode === "web" && !webVisualsReady
+        ),
+        placeholderMessage: contentPlaceholderMessage,
+        onModeChange: handleDayDistributionModeChange,
+        onDestinationDetailIntentStart: destinationDetail.prepare,
+        onDestinationDetailOpen: destinationDetail.open,
+      }}
+      onSaved={onOverridesChanged}
+      onError={onQuickActionError}
     />
   );
   const renderDaySummary = () => (

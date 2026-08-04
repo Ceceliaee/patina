@@ -1,7 +1,10 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { ClassificationService } from "../../features/classification/services/classificationService.ts";
 import { clearDashboardSnapshotCache } from "../../features/dashboard/services/dashboardSnapshotCache.ts";
-import { clearDataBootstrapCache } from "../../features/data/services/dataCacheLifecycle.ts";
+import {
+  clearDataBootstrapCache,
+  clearDataHeavyCaches,
+} from "../../features/data/services/dataCacheLifecycle.ts";
 import { clearHistoryCachesAfterDataChange } from "../../features/history/services/historyCacheLifecycle.ts";
 import { clearToolsPageCaches } from "../../features/tools/services/toolsCacheLifecycle.ts";
 import {
@@ -12,6 +15,14 @@ import {
 export function useImportClassificationCoordinator(
   setReadModelRefreshState: Dispatch<SetStateAction<ReadModelRefreshState>>,
 ) {
+  const onMappingOverridesChanged = useCallback(() => {
+    clearDashboardSnapshotCache();
+    void clearHistoryCachesAfterDataChange();
+    clearToolsPageCaches();
+    clearDataHeavyCaches();
+    void clearDataBootstrapCache();
+    setReadModelRefreshState(applyMappingOverridesReadModelRefresh);
+  }, [setReadModelRefreshState]);
   const onImportedDataChanged = useCallback(() => {
     ClassificationService.invalidateBootstrapCache();
     ClassificationService.invalidateAppCatalog();
@@ -41,5 +52,5 @@ export function useImportClassificationCoordinator(
       },
     };
   }, [onImportedDataChanged]);
-  return { prepareImportCategories, onImportedDataChanged };
+  return { prepareImportCategories, onImportedDataChanged, onMappingOverridesChanged };
 }

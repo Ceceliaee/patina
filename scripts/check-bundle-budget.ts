@@ -30,7 +30,7 @@ const LAZY_PAGE_CHUNK_BUDGETS = [
   { label: "Tools", pattern: /^Tools-.*\.js$/, gzipKiB: 18 },
   // The destination analysis panel and its range control are both part of
   // Data's first render; the private detail chunk owns day analysis only.
-  { label: "Data", pattern: /^Data-.*\.js$/, gzipKiB: 19 },
+  { label: "Data", pattern: /^Data-.*\.js$/, gzipKiB: 19.5 },
   { label: "About", pattern: /^About-.*\.js$/, gzipKiB: 18 },
 ] as const;
 
@@ -51,12 +51,14 @@ const LAZY_SECONDARY_CHUNK_BUDGETS = [
   // narrow 0.05 KiB adjustment covers shared History semantics after reducing
   // the chunk itself, while the global 3% headroom rule remains enforced.
   { label: "Destination detail", pattern: /^DestinationDetailDialog-.*\.js$/, gzipKiB: 8.05 },
+  // Dashboard preloads this classification-owned editor on icon hover/focus and
+  // keeps it out of the initial graph until the user opens the context menu.
+  { label: "Quick app classification", pattern: /^QuickAppClassificationSurface-.*\.js$/, gzipKiB: 3.1 },
 ] as const;
 
 // Stable cross-feature UI owners stay lazy and receive their own narrow budget
 // instead of consuming the allowance for unowned support chunks.
 const LAZY_SHARED_UI_CHUNK_BUDGETS = [
-  { label: "QuietBadge", pattern: /^QuietBadge-.*\.js$/, gzipKiB: 0.3 },
   { label: "QuietCalendar", pattern: /^QuietCalendar-.*\.js$/, gzipKiB: 1.3 },
   { label: "QuietSegmentedFilter", pattern: /^QuietSegmentedFilter-.*\.js$/, gzipKiB: 0.8 },
   { label: "QuietSearchField", pattern: /^QuietSearchField-.*\.js$/, gzipKiB: 0.5 },

@@ -865,11 +865,12 @@ await runTest("badges share one Quiet Pro owner and protect long labels", () => 
     readUtf8("src/features/settings/components/SettingsDataSafetyPanel.tsx"),
   ];
 
-  assert.match(badge, /type QuietBadgeSize = "compact" \| "regular"/);
+  assert.match(badge, /type QuietBadgeSize = "compact" \| "inline" \| "regular"/);
   assert.match(badge, /type QuietBadgeVariant = "default" \| "beta"/);
   assert.doesNotMatch(badge, /qp-badge-label/);
   assert.match(quietProStyles, /\.qp-badge \{[\s\S]*?border-radius: var\(--qp-radius-chip\);[\s\S]*?text-overflow: ellipsis;[\s\S]*?white-space: nowrap;/);
   assert.match(quietProStyles, /\.qp-badge-compact \{/);
+  assert.match(quietProStyles, /\.qp-badge-inline \{/);
   assert.match(quietProStyles, /\.qp-badge-regular \{/);
   assert.match(quietProStyles, /\.qp-badge-beta \{/);
   assert.doesNotMatch(appShellStyles, /\.qp-badge(?:-|\s|\{)/);
@@ -877,6 +878,46 @@ await runTest("badges share one Quiet Pro owner and protect long labels", () => 
   for (const consumer of consumers) {
     assert.match(consumer, /<QuietBadge variant="beta"/);
   }
+});
+
+await runTest("classification owns one shared quick app surface and density-aware status", () => {
+  const entry = readUtf8("src/features/classification/components/QuickAppClassificationEntry.tsx");
+  const surface = readUtf8("src/features/classification/components/QuickAppClassificationSurface.tsx");
+  const launcher = readUtf8("src/features/classification/hooks/useQuickAppClassificationLauncher.ts");
+  const status = readUtf8("src/features/classification/components/QuickAppClassificationStatus.tsx");
+  const dashboard = readUtf8("src/features/dashboard/components/Dashboard.tsx");
+  const history = readUtf8("src/features/history/components/History.tsx");
+  const historyQuickActions = readUtf8(
+    "src/features/history/components/HistoryDayDistributionQuickActions.tsx",
+  );
+  const data = readUtf8("src/features/data/components/Data.tsx");
+  const directPageConsumers = [dashboard, data];
+
+  assert.match(entry, /lazy\(loadQuickAppClassificationSurface\)/);
+  assert.match(entry, /Suspense fallback=\{null\}/);
+  assert.match(surface, /className="quick-app-menu qp-motion-overlay-enter"/);
+  assert.match(launcher, /openAtPointer/);
+  assert.match(launcher, /openAtElement/);
+  assert.match(status, /density\?: "dense" \| "standard"/);
+  assert.match(status, /size=\{density === "dense" \? "inline" : "regular"\}/);
+  for (const consumer of directPageConsumers) {
+    assert.match(consumer, /useQuickAppClassificationLauncher/);
+    assert.match(consumer, /<QuickAppClassificationEntry/);
+    assert.doesNotMatch(consumer, /className="quick-app-menu/);
+    assert.doesNotMatch(consumer, /ClassificationService/);
+  }
+  assert.match(history, /<HistoryDayDistributionQuickActions/);
+  assert.doesNotMatch(history, /useQuickAppClassificationLauncher/);
+  assert.doesNotMatch(history, /<QuickAppClassificationEntry/);
+  assert.match(historyQuickActions, /useQuickAppClassificationLauncher/);
+  assert.match(historyQuickActions, /<QuickAppClassificationEntry/);
+  assert.doesNotMatch(historyQuickActions, /ClassificationService/);
+  assert.match(data, /classificationCategory: mapped\.category/);
+  assert.match(data, /category: option\.classificationCategory/);
+  assert.doesNotMatch(
+    data.match(/const handleOpenQuickClassification[\s\S]*?\}, \[openQuickClassificationAtPointer\]\);/)?.[0] ?? "",
+    /identityKeys|secondaryText/,
+  );
 });
 
 await runTest("settings leaves web activity connection status to the extension", () => {
@@ -1093,7 +1134,14 @@ await runTest("Data keeps web analysis beside a unified activity overview", () =
   assert.match(destinationPanel, /event\.ctrlKey/);
   assert.match(destinationPanel, /aria-pressed=\{isSelected\}/);
   assert.match(destinationPanel, /aria-description=\{UI_TEXT\.data\.interactionHint\}/);
-  assert.match(destinationPanel, /aria-keyshortcuts="Enter Space Control\+Enter Control\+Space"/);
+  assert.match(
+    destinationPanel,
+    /"Enter Space Control\+Enter Control\+Space Shift\+F10"/,
+  );
+  assert.match(
+    destinationPanel,
+    /"Enter Space Control\+Enter Control\+Space"/,
+  );
   assert.match(destinationPanel, /<NativeTrendChart/);
   assert.match(destinationPanel, /showAllXAxisTicks=\{granularity === "month"\}/);
   assert.match(activityTrendPanel, /showAllXAxisTicks=\{viewModel\.granularity === "month"\}/);
@@ -1248,7 +1296,11 @@ await runTest("destination owns one shared detail dialog without duplicating tre
   assert.match(dashboard, /useDestinationDetailLauncher\(\)/);
   assert.match(dashboard, /className="dashboard-top-app-detail-trigger/);
   assert.match(dashboard, /onDoubleClick=\{\(event\) => openDetail\(event\.currentTarget\)\}/);
-  assert.match(dashboard, /event\.key !== "Enter"/);
+  assert.match(dashboard, /event\.key === "Enter"/);
+  assert.match(dashboard, /event\.key === "ContextMenu"/);
+  assert.match(dashboard, /event\.shiftKey && event\.key === "F10"/);
+  assert.match(dashboard, /onContextMenu=\{\(event\) => \{/);
+  assert.doesNotMatch(dashboard, /title=\{UI_TEXT\.mapping\.quick/);
   assert.doesNotMatch(
     dashboard.match(/<button[\s\S]*?dashboard-top-app-detail-trigger[\s\S]*?<\/button>/)?.[0] ?? "",
     /onClick=/,
@@ -1264,7 +1316,9 @@ await runTest("destination owns one shared detail dialog without duplicating tre
   assert.match(historyDayDistribution, /createHistoryWebDetailTarget/);
   assert.match(historyDayDistribution, /className="history-day-distribution-detail-trigger"/);
   assert.match(historyDayDistribution, /onDoubleClick=\{\(event\) => \{/);
-  assert.match(historyDayDistribution, /event\.key !== "Enter"/);
+  assert.match(historyDayDistribution, /event\.key === "Enter"/);
+  assert.match(historyDayDistribution, /event\.key === "ContextMenu"/);
+  assert.match(historyDayDistribution, /event\.shiftKey && event\.key === "F10"/);
   assert.doesNotMatch(historyTimelineLists, /DestinationDetail|destination-detail/);
   assert.doesNotMatch(historyTimeline, /DestinationDetail|destination-detail/);
   assert.doesNotMatch(historyTimelineZoomDialog, /DestinationDetail|destination-detail/);
@@ -1565,6 +1619,9 @@ await runTest("app shell uses feature-owned Data prewarm and heavy cache lifecyc
 await runTest("app shell uses feature-owned page cache lifecycle exits", () => {
   const shell = readUtf8("src/app/AppShell.tsx");
   const lifecycle = readUtf8("src/app/hooks/useAppShellRuntimeLifecycle.ts");
+  const classificationCoordinator = readUtf8(
+    "src/app/hooks/useImportClassificationCoordinator.ts",
+  );
   const cleanupEffect = lifecycle.slice(
     lifecycle.indexOf("if (isForegroundReady || !backgroundOptimization) return undefined;"),
     lifecycle.indexOf("}, [backgroundOptimization"),
@@ -1572,7 +1629,7 @@ await runTest("app shell uses feature-owned page cache lifecycle exits", () => {
 
   assert.match(shell, /clearDashboardSnapshotCache/);
   assert.match(lifecycle, /clearHistorySnapshotCache/);
-  assert.match(shell, /clearToolsPageCaches/);
+  assert.match(classificationCoordinator, /clearToolsPageCaches/);
   assert.match(lifecycle, /includeDashboard: isDashboardRefreshEnabled/);
   assert.match(lifecycle, /includeHistory: isHistoryRefreshEnabled/);
   assert.doesNotMatch(cleanupEffect, /clearDashboardSnapshotCache/);
@@ -1596,15 +1653,20 @@ await runTest("app shell restores the last active primary view on startup", () =
 
 await runTest("app shell invalidates Tools page caches after app mapping changes", () => {
   const shell = readUtf8("src/app/AppShell.tsx");
+  const classificationCoordinator = readUtf8(
+    "src/app/hooks/useImportClassificationCoordinator.ts",
+  );
   const mappingChangedHandler = shell.slice(
-    shell.indexOf("onOverridesChanged={() => {"),
-    shell.indexOf("onSessionsDeleted={() => {"),
+    shell.indexOf("const handleMappingOverridesChanged = () =>"),
+    shell.indexOf("const handleQuickActionError"),
   );
 
-  assert.match(mappingChangedHandler, /clearDashboardSnapshotCache/);
-  assert.match(mappingChangedHandler, /clearHistoryCachesAfterDataChange/);
-  assert.match(mappingChangedHandler, /clearToolsPageCaches/);
-  assert.match(mappingChangedHandler, /clearDataBootstrapCache/);
+  assert.match(shell, /onOverridesChanged=\{handleMappingOverridesChanged\}/);
+  assert.match(mappingChangedHandler, /onMappingOverridesChanged\(\)/);
+  assert.match(classificationCoordinator, /clearDashboardSnapshotCache/);
+  assert.match(classificationCoordinator, /clearHistoryCachesAfterDataChange/);
+  assert.match(classificationCoordinator, /clearToolsPageCaches/);
+  assert.match(classificationCoordinator, /clearDataBootstrapCache/);
 });
 
 await runTest("History bootstrap lifecycle keeps background reuse and invalidates changed data", () => {

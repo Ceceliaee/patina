@@ -1,3 +1,5 @@
+import type { AppCategory } from "../../../shared/classification/categoryTokens.ts";
+
 export type DataDestinationMode = "app" | "web";
 
 export const DATA_DESTINATION_SELECTION_LIMIT = 7;
@@ -5,6 +7,9 @@ export const DATA_DESTINATION_SELECTION_LIMIT = 7;
 export interface DataDestinationTrendOption {
   key: string;
   identityKeys: string[];
+  exeName?: string;
+  classificationCategory?: AppCategory;
+  unclassified?: boolean;
   displayName: string;
   secondaryText: string;
   iconUrl: string | null;

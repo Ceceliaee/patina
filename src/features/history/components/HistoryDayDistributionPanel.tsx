@@ -9,6 +9,11 @@ import {
 } from "../hooks/useHistoryDestinationDetailEntry.tsx";
 import { formatDuration } from "../services/historyFormatting.ts";
 import type { DayDistributionMode } from "../services/historyLayoutPreferenceStorage.ts";
+import QuickAppClassificationStatus from "../../classification/components/QuickAppClassificationStatus.tsx";
+import type {
+  QuickAppClassificationAnchor,
+  QuickAppClassificationTarget,
+} from "../../classification/types.ts";
 
 export interface HistoryDayDistributionItem {
   key: string;
@@ -20,6 +25,8 @@ export interface HistoryDayDistributionItem {
   iconSrc?: string;
   category?: AppCategory;
   kind?: "app" | "category" | "web";
+  quickClassificationTarget?: QuickAppClassificationTarget;
+  unclassified?: boolean;
 }
 
 interface HistoryDayDistributionPanelProps {
@@ -36,6 +43,13 @@ interface HistoryDayDistributionPanelProps {
   ) => void;
   onDestinationDetailOpen?: (
     target: DestinationDetailTarget,
+    trigger: HTMLButtonElement,
+  ) => void;
+  activeQuickClassificationExeName?: string | null;
+  onQuickClassificationPreload?: () => void;
+  onQuickClassificationOpen?: (
+    target: QuickAppClassificationTarget,
+    anchor: QuickAppClassificationAnchor,
     trigger: HTMLButtonElement,
   ) => void;
 }
@@ -82,6 +96,9 @@ export default function HistoryDayDistributionPanel({
   onModeChange,
   onDestinationDetailIntentStart,
   onDestinationDetailOpen,
+  activeQuickClassificationExeName,
+  onQuickClassificationPreload,
+  onQuickClassificationOpen,
 }: HistoryDayDistributionPanelProps) {
   return (
     <>
@@ -118,7 +135,17 @@ export default function HistoryDayDistributionPanel({
                         type="button"
                         className="history-day-distribution-detail-trigger"
                         aria-label={UI_TEXT.destinationDetail.open(item.label)}
-                        aria-keyshortcuts="Enter"
+                        aria-keyshortcuts={item.quickClassificationTarget ? "Enter Shift+F10" : "Enter"}
+                        aria-haspopup={item.quickClassificationTarget ? "menu" : undefined}
+                        aria-expanded={item.quickClassificationTarget
+                          ? activeQuickClassificationExeName === item.quickClassificationTarget.exeName
+                          : undefined}
+                        onPointerEnter={item.quickClassificationTarget
+                          ? onQuickClassificationPreload
+                          : undefined}
+                        onFocus={item.quickClassificationTarget
+                          ? onQuickClassificationPreload
+                          : undefined}
                         onPointerDown={(event) => {
                           if (event.button !== 0) return;
                           onDestinationDetailIntentStart?.(
@@ -132,17 +159,42 @@ export default function HistoryDayDistributionPanel({
                             event.currentTarget,
                           );
                         }}
-                        onKeyDown={(event) => {
-                          if (event.key !== "Enter") return;
+                        onContextMenu={item.quickClassificationTarget ? (event) => {
                           event.preventDefault();
-                          onDestinationDetailIntentStart?.(
-                            detailTarget,
+                          onQuickClassificationOpen?.(
+                            item.quickClassificationTarget!,
+                            { clientX: event.clientX, clientY: event.clientY },
                             event.currentTarget,
                           );
-                          onDestinationDetailOpen?.(
-                            detailTarget,
-                            event.currentTarget,
-                          );
+                        } : undefined}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            onDestinationDetailIntentStart?.(
+                              detailTarget,
+                              event.currentTarget,
+                            );
+                            onDestinationDetailOpen?.(
+                              detailTarget,
+                              event.currentTarget,
+                            );
+                            return;
+                          }
+                          if (
+                            item.quickClassificationTarget
+                            && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))
+                          ) {
+                            event.preventDefault();
+                            const bounds = event.currentTarget.getBoundingClientRect();
+                            onQuickClassificationOpen?.(
+                              item.quickClassificationTarget,
+                              {
+                                clientX: bounds.left + bounds.width / 2,
+                                clientY: bounds.top + bounds.height / 2,
+                              },
+                              event.currentTarget,
+                            );
+                          }
                         }}
                       >
                         {item.iconSrc ? (
@@ -161,7 +213,13 @@ export default function HistoryDayDistributionPanel({
                       />
                     )}
                     <span className="min-w-0 leading-[1.2]">
-                      <span className="block truncate text-xs font-medium leading-[1.2]">{item.label}</span>
+                      <span className="history-day-distribution-name-row">
+                        <span className="truncate text-xs font-medium leading-[1.2]">{item.label}</span>
+                        <QuickAppClassificationStatus
+                          density="dense"
+                          unclassified={Boolean(item.unclassified)}
+                        />
+                      </span>
                       {item.subtitle && (
                         <span className="mt-0.5 block truncate text-[10px] font-normal text-[var(--qp-text-tertiary)]">
                           {item.subtitle}

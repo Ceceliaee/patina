@@ -43,6 +43,21 @@
   outline-offset: 2px;
 }
 
+.history-day-distribution-name-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.history-day-distribution-name-row .qp-badge {
+  flex: 0 0 auto;
+}
+
+.history-day-distribution-name-row > span:first-child {
+  min-width: 0;
+}
+
 .history-day-summary-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);

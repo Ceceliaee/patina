@@ -1,4 +1,8 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Layers3, Monitor, Minus, TrendingDown, TrendingUp } from "lucide-react";
 import { UI_TEXT } from "../../../shared/copy/index.ts";
 import { useIconThemeColors } from "../../../shared/hooks/useIconThemeColors";
@@ -14,16 +18,25 @@ import { useDestinationDetailLauncher } from "../../destination/hooks/useDestina
 import { createDestinationDetailTarget } from "../../destination/types.ts";
 import { formatLocalDateKey } from "../../../shared/lib/localDate.ts";
 import type { TrackerHealthSnapshot } from "../../../shared/types/tracking.ts";
+import type { AppOverride } from "../../../shared/classification/processMapper.ts";
+import QuickAppClassificationEntry from "../../classification/components/QuickAppClassificationEntry.tsx";
+import QuickAppClassificationStatus from "../../classification/components/QuickAppClassificationStatus.tsx";
+import { useQuickAppClassificationLauncher } from "../../classification/hooks/useQuickAppClassificationLauncher.ts";
+import { createQuickAppClassificationTarget } from "../../classification/types.ts";
 
 interface Props {
   dashboard: DashboardReadModel;
   icons: Record<string, string>;
   hourlyActivityChartMode: HourlyActivityChartMode;
   onHourlyActivityChartModeChange: (mode: HourlyActivityChartMode) => void;
-  refreshKey: number;
-  mappingVersion: number;
-  mergeThresholdSecs: number;
-  trackerHealth: TrackerHealthSnapshot;
+  runtime: {
+    refreshKey: number;
+    mappingVersion: number;
+    mergeThresholdSecs: number;
+    trackerHealth: TrackerHealthSnapshot;
+  };
+  onOverridesChanged: () => void;
+  onQuickActionError: (message: string) => void;
 }
 
 const FOCUS_CATEGORY_LIMIT = 4;
@@ -112,12 +125,13 @@ export default function Dashboard({
   icons,
   hourlyActivityChartMode,
   onHourlyActivityChartModeChange,
-  refreshKey,
-  mappingVersion,
-  mergeThresholdSecs,
-  trackerHealth,
+  runtime,
+  onOverridesChanged,
+  onQuickActionError,
 }: Props) {
+  const { refreshKey, mappingVersion, mergeThresholdSecs, trackerHealth } = runtime;
   const detail = useDestinationDetailLauncher();
+  const quickClassification = useQuickAppClassificationLauncher();
   const iconThemeColors = useIconThemeColors(icons);
   const {
     totalTrackedTime,
@@ -143,6 +157,7 @@ export default function Dashboard({
       : Minus;
   const focusCardRef = useRef<HTMLDivElement | null>(null);
   const [focusCategoryLimit, setFocusCategoryLimit] = useState(FOCUS_CATEGORY_LIMIT);
+  const [quickOverrides, setQuickOverrides] = useState<Record<string, AppOverride | null>>({});
   const visibleCategoryDist = buildFocusCategoryDist(categoryDist, focusCategoryLimit);
 
   useEffect(() => {
@@ -162,6 +177,7 @@ export default function Dashboard({
     observer.observe(card);
     return () => observer.disconnect();
   }, []);
+  const quickClassificationRequest = quickClassification.request;
 
   return (
     <div className="flex flex-col gap-4 md:gap-5 h-full overflow-hidden">
@@ -257,7 +273,7 @@ export default function Dashboard({
             </div>
           </header>
 
-          <div className="flex-1 overflow-y-auto pr-1 md:pr-2 space-y-2.5 custom-scrollbar">
+          <div className="dashboard-top-apps-list flex-1 overflow-y-auto pr-1 md:pr-2 space-y-2.5 custom-scrollbar">
             {topApplications.length === 0 && (
               <div className="h-full flex flex-col items-center justify-center text-[var(--qp-text-tertiary)] gap-2">
                 <Monitor size={32} className="opacity-40" />
@@ -266,14 +282,23 @@ export default function Dashboard({
             )}
             {topApplications.map((app) => (
               (() => {
-                const overrideColor = AppClassification.getUserOverride(app.exeName)?.color;
+                const hasQuickOverride = Object.prototype.hasOwnProperty.call(quickOverrides, app.exeName);
+                const appOverride = hasQuickOverride
+                  ? quickOverrides[app.exeName]
+                  : AppClassification.getUserOverride(app.exeName);
+                const overrideColor = appOverride?.color;
+                const effectiveCategory = hasQuickOverride
+                  ? appOverride?.category ?? "other"
+                  : AppClassification.mapApp(app.exeName, { appName: app.name }).category;
+                const isUnclassified = effectiveCategory === "other";
+                const displayName = appOverride?.displayName?.trim() || app.name;
                 const accentColor = overrideColor ?? iconThemeColors[app.exeName] ?? app.color;
                 const createDetailRequest = () => ({
                     target: createDestinationDetailTarget({
                       mode: "app",
                       key: app.exeName,
                       identityKeys: [app.exeName],
-                      displayName: app.name,
+                      displayName,
                       secondaryText: app.exeName,
                       iconUrl: icons[app.exeName] ?? null,
                       color: accentColor,
@@ -287,6 +312,11 @@ export default function Dashboard({
                   if (detail.openPrepared()) return;
                   detail.open(createDetailRequest(), { returnFocusTo });
                 };
+                const quickTarget = createQuickAppClassificationTarget({
+                  exeName: app.exeName,
+                  displayName,
+                  category: effectiveCategory,
+                });
 
                 return (
                   <div
@@ -300,17 +330,38 @@ export default function Dashboard({
                         style={{
                           boxShadow: `0 0 0 2px ${accentColor}22`,
                         }}
-                        aria-label={UI_TEXT.destinationDetail.open(app.name)}
-                        aria-keyshortcuts="Enter"
+                        aria-label={UI_TEXT.destinationDetail.open(displayName)}
+                        aria-keyshortcuts="Enter Shift+F10"
+                        aria-haspopup="menu"
+                        aria-expanded={quickClassification.request?.target.exeName === app.exeName}
+                        onPointerEnter={quickClassification.preload}
+                        onFocus={quickClassification.preload}
                         onPointerDown={(event) => {
                           if (event.button === 0) prepareDetail(event.currentTarget);
                         }}
                         onDoubleClick={(event) => openDetail(event.currentTarget)}
-                        onKeyDown={(event: KeyboardEvent<HTMLButtonElement>) => {
-                          if (event.key !== "Enter") return;
+                        onContextMenu={(event) => {
                           event.preventDefault();
-                          prepareDetail(event.currentTarget);
-                          openDetail(event.currentTarget);
+                          quickClassification.openAtPointer(
+                            quickTarget,
+                            {
+                            clientX: event.clientX,
+                            clientY: event.clientY,
+                            },
+                            event.currentTarget,
+                          );
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            prepareDetail(event.currentTarget);
+                            openDetail(event.currentTarget);
+                            return;
+                          }
+                          if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+                            event.preventDefault();
+                            quickClassification.openAtElement(quickTarget, event.currentTarget);
+                          }
                         }}
                       >
                         {icons[app.exeName] ? (
@@ -319,18 +370,19 @@ export default function Dashboard({
                           <div className="text-xs font-semibold opacity-40 text-[var(--qp-text-secondary)]">{app.categoryInitial}</div>
                         )}
                       </button>
-                      <div className="truncate">
-                        <div className="font-semibold text-[var(--qp-text-primary)] text-sm truncate flex items-center gap-2">
-                          <span className="truncate">{app.name}</span>
+                      <div className="min-w-0">
+                        <div className="dashboard-top-app-name-row font-semibold text-[var(--qp-text-primary)] text-sm">
+                          <span className="truncate">{displayName}</span>
+                          <QuickAppClassificationStatus unclassified={isUnclassified} />
                         </div>
-                        <div className="text-[10px] text-[var(--qp-text-tertiary)] font-medium mt-0.5 tabular-nums">
-                          {UI_TEXT.dashboard.sharePrefix} {app.percentage}%
+                        <div className="dashboard-top-app-meta text-[10px] text-[var(--qp-text-tertiary)] font-medium mt-0.5 tabular-nums">
+                          <span>{UI_TEXT.dashboard.sharePrefix} {app.percentage}%</span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="text-right ml-4 flex-shrink-0">
-                      <div className="font-semibold text-[var(--qp-text-primary)] text-sm tabular-nums">
+                      <div className="text-right ml-4 flex-shrink-0">
+                      <div className="dashboard-top-app-duration font-semibold text-[var(--qp-text-primary)] text-sm tabular-nums">
                         {formatDashboardDuration(app.duration)}
                       </div>
                       <div className="w-20 h-1.5 bg-[var(--qp-track-muted)] rounded-full mt-2.5 overflow-hidden">
@@ -357,6 +409,21 @@ export default function Dashboard({
           initialDateKey={detail.request.initialDateKey}
           runtime={{ refreshKey, mappingVersion, mergeThresholdSecs, trackerHealth }}
           onClose={detail.close}
+        />
+      ) : null}
+      {quickClassificationRequest ? (
+        <QuickAppClassificationEntry
+          key={`${quickClassificationRequest.target.exeName}:${quickClassificationRequest.anchor.clientX}:${quickClassificationRequest.anchor.clientY}`}
+          request={quickClassificationRequest}
+          onClose={quickClassification.close}
+          onSaved={(override) => {
+            setQuickOverrides((current) => ({
+              ...current,
+              [quickClassificationRequest.target.exeName]: override,
+            }));
+            onOverridesChanged();
+          }}
+          onError={onQuickActionError}
         />
       ) : null}
     </div>

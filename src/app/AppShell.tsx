@@ -22,7 +22,6 @@ import type { ColorSchemePreview } from "../features/settings/types.ts";
 import { useDashboardStats } from "../features/dashboard/hooks/useDashboardStats";
 import { useWindowTracking } from "./hooks/useWindowTracking";
 import {
-  applyMappingOverridesReadModelRefresh,
   applySessionDeletionReadModelRefresh,
   INITIAL_READ_MODEL_REFRESH_STATE,
   resolveReadModelRefreshSignal,
@@ -39,7 +38,6 @@ import {
   clearDataHeavyCaches,
 } from "../features/data/services/dataCacheLifecycle.ts";
 import { clearHistoryCachesAfterDataChange } from "../features/history/services/historyCacheLifecycle.ts";
-import { clearToolsPageCaches } from "../features/tools/services/toolsCacheLifecycle.ts";
 import { useQuietDialogs } from "../shared/hooks/useQuietDialogs";
 import UpdateDialogProvider from "./providers/UpdateDialogProvider";
 import { useAppShellNavigation } from "./hooks/useAppShellNavigation";
@@ -104,6 +102,7 @@ function AppShellContent() {
   const {
     prepareImportCategories,
     onImportedDataChanged: handleImportedDataChanged,
+    onMappingOverridesChanged,
   } = useImportClassificationCoordinator(setReadModelRefreshState);
   const [settingsThemeModePreview, setSettingsThemeModePreview] = useState<ThemeMode | null>(null);
   const [settingsColorSchemePreview, setSettingsColorSchemePreview] =
@@ -198,6 +197,15 @@ function AppShellContent() {
     void saveHourlyActivityChartModeSetting(nextValue).catch(console.warn);
   }, [setAppSettings]);
 
+  const handleMappingOverridesChanged = () => {
+    onMappingOverridesChanged();
+    pushToast(uiText.app.mappingUpdated, "success");
+  };
+
+  const handleQuickActionError = (message: string) => {
+    pushToast(message, "error");
+  };
+
   const openHistoryForDate = useCallback(async (dateKey: string) => {
     const targetDate = parseLocalDateKey(dateKey);
     if (!targetDate || startOfLocalDay(targetDate) > startOfLocalDay(new Date())) {
@@ -226,6 +234,10 @@ function AppShellContent() {
   const handleSidebarPreviewNavigate = useCallback((nextView: View) => {
     preloadNavigationView(nextView, "preview");
   }, []);
+  const quickAppClassificationCallbacks = {
+    onOverridesChanged: handleMappingOverridesChanged,
+    onQuickActionError: handleQuickActionError,
+  };
 
   return (
     <div
@@ -262,10 +274,13 @@ function AppShellContent() {
                 icons={icons}
                 hourlyActivityChartMode={appSettings.hourlyActivityChartMode}
                 onHourlyActivityChartModeChange={handleHourlyActivityChartModeChange}
-                refreshKey={refreshSignal}
-                mappingVersion={mappingVersion}
-                mergeThresholdSecs={appSettings.timelineMergeGapSecs}
-                trackerHealth={trackerHealth}
+                runtime={{
+                  refreshKey: refreshSignal,
+                  mappingVersion,
+                  mergeThresholdSecs: appSettings.timelineMergeGapSecs,
+                  trackerHealth,
+                }}
+                {...quickAppClassificationCallbacks}
               />
             ),
             history: (
@@ -286,6 +301,7 @@ function AppShellContent() {
                 onHourlyActivityChartModeChange={handleHourlyActivityChartModeChange}
                 refreshEnabled={isHistoryRefreshEnabled}
                 webActivityEnabled={appSettings.webActivityEnabled}
+                {...quickAppClassificationCallbacks}
               />
             ),
             data: (
@@ -300,6 +316,7 @@ function AppShellContent() {
                   void openHistoryForDate(dateKey);
                 }}
                 onToast={pushToast}
+                {...quickAppClassificationCallbacks}
                 uiLanguage={uiTextLanguage}
                 webActivityEnabled={appSettings.webActivityEnabled}
               />
@@ -353,15 +370,7 @@ function AppShellContent() {
                 icons={icons}
                 onRegisterSaveHandler={registerMappingSaveHandler}
                 onDirtyChange={setMappingDirty}
-                onOverridesChanged={() => {
-                  clearDashboardSnapshotCache();
-                  void clearHistoryCachesAfterDataChange();
-                  clearToolsPageCaches();
-                  clearDataHeavyCaches();
-                  void clearDataBootstrapCache();
-                  setReadModelRefreshState(applyMappingOverridesReadModelRefresh);
-                  pushToast(uiText.app.mappingUpdated, "success");
-                }}
+                onOverridesChanged={handleMappingOverridesChanged}
                 onSessionsDeleted={() => {
                   clearDashboardSnapshotCache();
                   void clearHistoryCachesAfterDataChange();

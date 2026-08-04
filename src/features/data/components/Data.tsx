@@ -80,6 +80,10 @@ import DataAppTrendPanel from "./DataAppTrendPanel.tsx";
 import DataTrendPanel from "./DataTrendPanel.tsx";
 import DataHeatmapPanel, { type HeatmapGranularity } from "./DataHeatmapPanel.tsx";
 import { markDataNavigationStage } from "../services/dataNavigationPerformance.ts";
+import { AppClassification } from "../../../shared/classification/appClassification.ts";
+import QuickAppClassificationEntry from "../../classification/components/QuickAppClassificationEntry.tsx";
+import { useQuickAppClassificationLauncher } from "../../classification/hooks/useQuickAppClassificationLauncher.ts";
+import { createQuickAppClassificationTarget } from "../../classification/types.ts";
 
 interface Props {
   icons: Record<string, string>;
@@ -92,6 +96,8 @@ interface Props {
   uiLanguage: AppLanguage;
   webActivityEnabled: boolean;
   onToast?: (message: string, tone?: QuietToastTone) => void;
+  onOverridesChanged: () => void;
+  onQuickActionError: (message: string) => void;
 }
 
 type DataChartDimension = { width: number; height: number };
@@ -115,9 +121,13 @@ function toAppPanelOption(
   app: DataAppTrendViewModel["appOptions"][number],
   icons: Record<string, string>,
 ): DataDestinationTrendOption {
+  const mapped = AppClassification.mapApp(app.exeName, { appName: app.appName });
   return {
     key: app.appKey,
     identityKeys: app.sourceAppKeys?.length ? [...app.sourceAppKeys] : [app.appKey],
+    exeName: app.exeName,
+    classificationCategory: mapped.category,
+    unclassified: mapped.category === "other",
     displayName: app.appName,
     secondaryText: app.exeName,
     iconUrl: icons[app.exeName] ?? null,
@@ -220,9 +230,13 @@ export default function Data({
   mergeThresholdSecs,
   onOpenHistoryDate,
   onToast,
+  onOverridesChanged,
+  onQuickActionError,
   uiLanguage,
   webActivityEnabled,
 }: Props) {
+  const quickClassification = useQuickAppClassificationLauncher();
+  const { openAtPointer: openQuickClassificationAtPointer } = quickClassification;
   const dataRootRef = useRef<HTMLDivElement | null>(null);
   const today = new Date();
   const currentYear = today.getFullYear();
@@ -682,21 +696,23 @@ export default function Data({
     appListRef.current?.scrollTo({ top: 0 });
   }, [hasWebSearchQuery, presentedDestinationMode]);
 
-  const appAllPanelOptions = useMemo<DataDestinationTrendOption[]>(() => (
-    dedupedAppOptions.map((app) => toAppPanelOption(app, dataIcons))
-  ), [dataIcons, dedupedAppOptions]);
+  const appAllPanelOptions = useMemo<DataDestinationTrendOption[]>(() => {
+    void mappingVersion;
+    return dedupedAppOptions.map((app) => toAppPanelOption(app, dataIcons));
+  }, [dataIcons, dedupedAppOptions, mappingVersion]);
   const appPanelOptions = useMemo<DataDestinationTrendOption[]>(() => {
     const visibleKeys = new Set(filteredAppOptions.map((app) => app.appKey));
     return appAllPanelOptions.filter((option) => visibleKeys.has(option.key));
   }, [appAllPanelOptions, filteredAppOptions]);
-  const appPanelSelectedOptions = useMemo<DataDestinationTrendOption[]>(() => (
-    resolveDataDestinationSessionOptions(
+  const appPanelSelectedOptions = useMemo<DataDestinationTrendOption[]>(() => {
+    void mappingVersion;
+    return resolveDataDestinationSessionOptions(
       "app",
       (visibleAppTrendViewModel?.selectedApps ?? [])
         .map((app) => toAppPanelOption(app, dataIcons)),
       appAllPanelOptions,
-    )
-  ), [appAllPanelOptions, dataIcons, visibleAppTrendViewModel?.selectedApps]);
+    );
+  }, [appAllPanelOptions, dataIcons, mappingVersion, visibleAppTrendViewModel?.selectedApps]);
   const webAllPanelOptions = useMemo<DataDestinationTrendOption[]>(() => (
     (webTrendViewModel?.domainOptions ?? []).map((domain) => ({
       key: domain.normalizedDomain,
@@ -854,6 +870,22 @@ export default function Data({
   ) => {
     openDestinationDetail(option);
   }, [openDestinationDetail]);
+  const handleOpenQuickClassification = useCallback((
+    option: DataDestinationTrendOption,
+    anchor: { clientX: number; clientY: number },
+    trigger: HTMLButtonElement,
+  ) => {
+    if (!option.exeName || !option.classificationCategory) return;
+    openQuickClassificationAtPointer(
+      createQuickAppClassificationTarget({
+        exeName: option.exeName,
+        displayName: option.displayName,
+        category: option.classificationCategory,
+      }),
+      anchor,
+      trigger,
+    );
+  }, [openQuickClassificationAtPointer]);
 
   const shouldDeferHeatmapRows = Boolean(
     hasInitialBootstrapSnapshotRef.current
@@ -1266,6 +1298,9 @@ export default function Data({
             onOptionSelect={handleDestinationOptionSelect}
             onOptionIntentStart={captureDestinationDetailIntent}
             onOptionOpenDetails={handleOpenDestinationDetail}
+            activeQuickClassificationExeName={quickClassification.request?.target.exeName}
+            onQuickClassificationPreload={quickClassification.preload}
+            onQuickClassificationOpen={handleOpenQuickClassification}
             onMouseDownCapture={handleAppTrendMouseDownCapture}
             onDoubleClickCapture={handleAppTrendDoubleClickCapture}
             onMouseMove={handleAppTrendMouseMove}
@@ -1280,6 +1315,15 @@ export default function Data({
           initialDateKey={destinationDetail.initialDateKey}
           runtime={{ refreshKey, mappingVersion, mergeThresholdSecs, trackerHealth }}
           onClose={closeDestinationDetail}
+        />
+      ) : null}
+      {quickClassification.request ? (
+        <QuickAppClassificationEntry
+          key={`${quickClassification.request.target.exeName}:${quickClassification.request.anchor.clientX}:${quickClassification.request.anchor.clientY}`}
+          request={quickClassification.request}
+          onClose={quickClassification.close}
+          onSaved={onOverridesChanged}
+          onError={onQuickActionError}
         />
       ) : null}
     </div>
