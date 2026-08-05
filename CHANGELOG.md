@@ -26,6 +26,35 @@ App note en: TBD.
 
 ### Internal
 
+## [1.9.2] - 2026-08-05
+
+Release: 新增跨页面应用快捷分类与改名，并提升页面切换、时间线一致性和窗口恢复稳定性。
+App note: 新增应用快捷分类与改名，页面切换、时间线和窗口恢复更稳定。
+App note en: Adds quick app classification and renaming, with more reliable navigation, timelines, and window recovery.
+
+### Added
+
+- Dashboard、History 和 Data 现在可以从应用图标的右键菜单直接更改应用名称，以及设置、更改或清除分类；未分类应用会显示统一 Badge，同时保留原有双击详情行为。Refs [#6](https://github.com/Ceceliaee/patina/issues/6)
+
+### Changed
+
+- Classification、Settings、Tools 和 About 的页面切换现在会等待可信内容准备完成，并在刷新期间保留已经呈现的页面或快照；快速切换不再提前高亮目标页，也不会短暂显示空白页、默认值或整页 loading。
+- History 与应用详情现在使用一致的活动合并、实时会话截断、时长、活动数和标题统计语义；详情卡片与图形时间线来自同一结果，关闭标题记录也不会隐藏已经保存的历史标题。
+
+### Fixed
+
+- 修复 Classification 可能先显示不完整候选目录、刷新后重排，以及保存映射时名称、图标或分类颜色短暂回退的问题；页面现在只呈现完整目录，并在保存后稳定同步相关视图。
+- 修复 Settings 首次读取失败后可能持续 loading、旧请求覆盖较新设置，以及 Tools 显示默认运行状态或被过期刷新覆盖的问题；失败现在提供明确重试，未保存草稿和最新工具状态会被保留。
+- 修复 Data 趋势页在不同窗口宽度下图表、筛选器和应用列表可能挤压或错位，以及 History、详情记录和锚定弹层在刷新、滚动或窄窗口下可能闪动、溢出或定位不稳的问题。
+- 修复主窗口被销毁后再次启动 Patina 可能无法恢复可见窗口的问题；运行中的应用现在会重新创建并显示主窗口。
+
+### Removed
+
+### Internal
+
+- 收敛页面交接与 feature-owned 快照边界，统一 History 和详情的活动编译策略，并将跨页面应用快捷操作集中到 Classification 共享能力。
+- 补充页面切换、设置与工具竞态、Classification 完整目录、详情时间线、窗口恢复、响应式布局和跨页面快捷操作的真实浏览器及运行时回归验证。
+
 ## [1.9.1] - 2026-08-01
 
 Release: 修复从旧版本升级到 v1.9.0 后，旧 Data 快照可能导致主界面白屏的问题。
