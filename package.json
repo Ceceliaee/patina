@@ -42,7 +42,7 @@
     "test:persistence": "node --experimental-strip-types --experimental-specifier-resolution=node tests/persistenceTransaction.test.ts && node --experimental-strip-types --experimental-specifier-resolution=node tests/activityReadModelGateway.test.ts",
     "test:dashboard-snapshot": "node --experimental-strip-types --experimental-specifier-resolution=node tests/dashboardSnapshotLoader.test.ts",
     "test:fast:covered": "npm run test:tracking && npm run test:replay && npm run test:history-timeline && npm run test:persistence && npm run test:dashboard-snapshot && npm run test:data",
-    "test:fast:remaining": "npm run test:update && npm run test:settings && npm run test:import && npm run test:widget && npm run test:classification && npm run test:icon-colors && npm run test:dashboard-icons && npm run test:data-range && npm run test:data-chart && npm run test:interaction && npm run test:release && npm run test:export && npm run test:pr-intake && npm run test:warmup && npm run test:background-return && npm run test:tools && npm run test:toast && npm run test:preload && npm run test:tracker-health && npm run test:ui-smoke",
+    "test:fast:remaining": "npm run test:i18n && npm run test:update && npm run test:settings && npm run test:import && npm run test:widget && npm run test:classification && npm run test:icon-colors && npm run test:dashboard-icons && npm run test:data-range && npm run test:data-chart && npm run test:interaction && npm run test:release && npm run test:export && npm run test:pr-intake && npm run test:warmup && npm run test:background-return && npm run test:tools && npm run test:toast && npm run test:preload && npm run test:tracker-health && npm run test:ui-smoke",
     "test:coverage": "c8 --all --clean --reporter=text --reporter=json-summary --report-dir=artifacts/coverage --include=src/app/hooks/trackingDataChangedPolicy.ts --include=src/app/hooks/trackingDataChangedRuntime.ts --include=src/features/dashboard/services/dashboardReadModel.ts --include=src/features/history/services/historyReadModel.ts --include=src/features/data/services/dataWebActivityReadModel.ts --include=src/features/data/services/dataWebHeatmapRequestState.ts --include=src/platform/persistence/webActivityAnalysisGateway.ts --include=src/platform/persistence/sqliteTransactions.ts --include=src/platform/persistence/commandError.ts --check-coverage --lines=80 --functions=80 --branches=75 --statements=80 npm run test:fast:covered && npm run check:coverage-thresholds",
     "test:mutation": "node --experimental-strip-types scripts/check-critical-mutations.ts",
     "test:interaction": "node --experimental-strip-types --experimental-specifier-resolution=node tests/interactionFlows.test.ts",
@@ -56,6 +56,7 @@
     "test:preload": "node --experimental-strip-types --experimental-specifier-resolution=node tests/viewChunkPreloadService.test.ts",
     "test:tracker-health": "node --experimental-strip-types --experimental-specifier-resolution=node tests/trackerHealthPollingService.test.ts",
     "test:ui-smoke": "node --experimental-strip-types --experimental-specifier-resolution=node tests/uiSmoke.test.ts",
+    "test:i18n": "node --experimental-strip-types --experimental-specifier-resolution=node tests/i18nContract.test.ts && node --experimental-strip-types --experimental-specifier-resolution=node tests/i18nTranslationKit.test.ts",
     "test:ui-browser-smoke": "node --experimental-strip-types --experimental-specifier-resolution=node tests/uiBrowserSmoke.test.ts",
     "test:tauri-runtime-smoke": "node --experimental-strip-types --experimental-specifier-resolution=node tests/tauriRuntimeSmoke.test.ts",
     "check:types": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.quality.json",
@@ -74,6 +75,13 @@
     "check:quiet-pro-style-debt": "node --experimental-strip-types scripts/check-quiet-pro-style-debt.ts",
     "check:test-governance": "node --experimental-strip-types scripts/check-test-suite-governance.ts",
     "check:test-governance:self-test": "node --experimental-strip-types scripts/check-test-suite-governance.ts --self-test",
+    "i18n:generate": "node --experimental-strip-types scripts/i18n/generate.ts --write",
+    "i18n:new": "node --experimental-strip-types scripts/i18n/new-locale.ts",
+    "i18n:review": "node --experimental-strip-types scripts/i18n/review-locale.ts",
+    "i18n:export-kit": "node --experimental-strip-types scripts/i18n/export-translation-kit.ts",
+    "i18n:import-kit": "node --experimental-strip-types scripts/i18n/import-translation-kit.ts",
+    "check:i18n": "node --experimental-strip-types scripts/i18n/check.ts && node --experimental-strip-types scripts/i18n/check-hardcoded.ts",
+    "check:i18n:self-test": "node --experimental-strip-types scripts/i18n/check.ts --self-test && node --experimental-strip-types scripts/i18n/check-hardcoded.ts --self-test && node --experimental-strip-types scripts/i18n/new-locale.ts --self-test",
     "check:pr-intake": "node --experimental-strip-types scripts/check-pr-intake.ts",
     "check:bundle": "node --experimental-strip-types scripts/check-bundle-budget.ts",
     "check:dependencies": "node --experimental-strip-types scripts/audit-dependencies.ts",
@@ -84,7 +92,7 @@
     "check:rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check",
     "check:rust": "npm run check:rust-boundaries:self-test && npm run check:rust-boundaries && npm run check:rust:fmt && cargo check --manifest-path src-tauri/Cargo.toml --locked --quiet && cargo test --manifest-path src-tauri/Cargo.toml --locked --quiet && npm run check:rust:clippy",
     "check:full": "npm run check && npm run check:rust && npm run check:dependencies",
-    "check": "npm run check:types && npm run check:lint && npm run check:coverage-thresholds:self-test && npm run check:naming && npm run check:architecture:self-test && npm run check:architecture && npm run check:ipc-contracts:self-test && npm run check:ipc-contracts && npm run check:hotspots:self-test && npm run check:hotspots && npm run check:quiet-pro-style-debt && npm run check:test-governance:self-test && npm run check:test-governance && npm run check:tests && npm run check:frontend",
+    "check": "npm run check:i18n:self-test && npm run check:i18n && npm run check:types && npm run check:lint && npm run check:coverage-thresholds:self-test && npm run check:naming && npm run check:architecture:self-test && npm run check:architecture && npm run check:ipc-contracts:self-test && npm run check:ipc-contracts && npm run check:hotspots:self-test && npm run check:hotspots && npm run check:quiet-pro-style-debt && npm run check:test-governance:self-test && npm run check:test-governance && npm run check:tests && npm run check:frontend",
     "perf:history-read-model": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/perf/history-read-model-benchmark.ts",
     "perf:dashboard-read-model": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/perf/dashboard-read-model-benchmark.ts",
     "perf:data-read-model": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/perf/data-read-model-benchmark.ts",
@@ -126,8 +134,15 @@
     "c8": "11.0.0",
     "eslint": "^10.8.0",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "exceljs": "^4.4.0",
+    "saxes": "^6.0.0",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.64.0",
     "vite": "8.1.4"
+  },
+  "overrides": {
+    "exceljs": {
+      "uuid": "^11.1.1"
+    }
   }
 }

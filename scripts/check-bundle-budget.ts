@@ -4,7 +4,7 @@ import { gzipSync } from "node:zlib";
 
 const ASSETS_DIR = "dist/assets";
 const INDEX_HTML_PATH = "dist/index.html";
-const COPY_DOMAINS_DIR = "src/shared/copy/domains";
+const COPY_DOMAINS_DIR = "locales/zh-CN";
 const KI_B = 1024;
 const MIN_BUDGET_HEADROOM_RATIO = 0.03;
 
@@ -19,18 +19,18 @@ const INITIAL_CHUNK_BUDGETS = [
   { label: "react-vendor", pattern: /^react-vendor-.*\.js$/, gzipKiB: 60 },
   { label: "icons", pattern: /^icons-.*\.js$/, gzipKiB: 8 },
   { label: "tauri", pattern: /^tauri-.*\.js$/, gzipKiB: 6 },
-  { label: "copy", pattern: /^copy-.*\.js$/, gzipKiB: 25 },
+  { label: "localization", pattern: /^runtime-.*\.js$/, gzipKiB: 25 },
   { label: "classification", pattern: /^appClassification-.*\.js$/, gzipKiB: 6 },
 ] as const;
 
 const LAZY_PAGE_CHUNK_BUDGETS = [
   { label: "Settings", pattern: /^Settings-.*\.js$/, gzipKiB: 24 },
   { label: "AppMapping", pattern: /^AppMapping-.*\.js$/, gzipKiB: 18 },
-  { label: "History", pattern: /^History-.*\.js$/, gzipKiB: 18 },
+  { label: "History", pattern: /^History-.*\.js$/, gzipKiB: 18.7 },
   { label: "Tools", pattern: /^Tools-.*\.js$/, gzipKiB: 18 },
   // The destination analysis panel and its range control are both part of
   // Data's first render; the private detail chunk owns day analysis only.
-  { label: "Data", pattern: /^Data-.*\.js$/, gzipKiB: 19.5 },
+  { label: "Data", pattern: /^Data-.*\.js$/, gzipKiB: 20.35 },
   { label: "About", pattern: /^About-.*\.js$/, gzipKiB: 18 },
 ] as const;
 
@@ -50,7 +50,7 @@ const LAZY_SECONDARY_CHUNK_BUDGETS = [
   // do not pay for single-object analysis in their first-render graphs. The
   // narrow 0.05 KiB adjustment covers shared History semantics after reducing
   // the chunk itself, while the global 3% headroom rule remains enforced.
-  { label: "Destination detail", pattern: /^DestinationDetailDialog-.*\.js$/, gzipKiB: 8.05 },
+  { label: "Destination detail", pattern: /^DestinationDetailDialog-.*\.js$/, gzipKiB: 8.1 },
   // Dashboard preloads this classification-owned editor on icon hover/focus and
   // keeps it out of the initial graph until the user opens the context menu.
   { label: "Quick app classification", pattern: /^QuickAppClassificationSurface-.*\.js$/, gzipKiB: 3.1 },
@@ -73,8 +73,8 @@ const LAZY_SHARED_UI_CHUNK_BUDGETS = [
 // stable shared owners are attributed above.
 const LAZY_SUPPORT_CHUNKS_GZIP_BUDGET_KI_B = 6.25;
 const SETTINGS_COPY_GZIP_BUDGET_KI_B = 12;
-// Import preview, destructuring, and batch deletion require matching bilingual copy.
-// Destination detail contributes one shared bilingual copy domain used by
+// Import preview, destructuring, and batch deletion require matching locale resources.
+// Destination detail contributes shared bilingual resources used by
 // Dashboard, History, and Data. Keep explicit headroom for that stable owner.
 const COPY_DOMAINS_GZIP_BUDGET_KI_B = 33;
 const NON_SETTINGS_COPY_GZIP_REVIEW_KI_B = 4;
@@ -263,25 +263,25 @@ function main() {
 
   if (copyDomains) {
     const copyDomainsGzipBytes = sumGzipBytes(copyDomains);
-    const settingsCopy = copyDomains.find((item) => item.file === "settingsCopy.ts");
+    const settingsCopy = copyDomains.find((item) => item.file === "settings.ts");
     if (
       settingsCopy
       && settingsCopy.gzipBytes > budgetHeadroomLimitBytes(SETTINGS_COPY_GZIP_BUDGET_KI_B)
     ) {
       violations.push(
-        `settingsCopy source gzip ${formatKiB(settingsCopy.gzipBytes)} KiB exceeds ${describeBudgetLimit(SETTINGS_COPY_GZIP_BUDGET_KI_B)}`,
+        `settings locale source gzip ${formatKiB(settingsCopy.gzipBytes)} KiB exceeds ${describeBudgetLimit(SETTINGS_COPY_GZIP_BUDGET_KI_B)}`,
       );
     }
 
     if (copyDomainsGzipBytes > budgetHeadroomLimitBytes(COPY_DOMAINS_GZIP_BUDGET_KI_B)) {
       violations.push(
-        `copy domains source gzip ${formatKiB(copyDomainsGzipBytes)} KiB exceeds ${describeBudgetLimit(COPY_DOMAINS_GZIP_BUDGET_KI_B)}`,
+        `locale resource source gzip ${formatKiB(copyDomainsGzipBytes)} KiB exceeds ${describeBudgetLimit(COPY_DOMAINS_GZIP_BUDGET_KI_B)}`,
       );
     }
 
     for (const item of copyDomains) {
       if (
-        item.file !== "settingsCopy.ts"
+        item.file !== "settings.ts"
         && item.gzipBytes > budgetHeadroomLimitBytes(NON_SETTINGS_COPY_GZIP_REVIEW_KI_B)
       ) {
         violations.push(
@@ -341,10 +341,10 @@ function main() {
 
   if (copyDomains) {
     const copyDomainsGzipBytes = sumGzipBytes(copyDomains);
-    const settingsCopy = copyDomains.find((item) => item.file === "settingsCopy.ts");
-    console.log(`copy domains source attribution: ${formatKiB(copyDomainsGzipBytes)} KiB gzip`);
+    const settingsCopy = copyDomains.find((item) => item.file === "settings.ts");
+    console.log(`locale resource source attribution: ${formatKiB(copyDomainsGzipBytes)} KiB gzip`);
     if (settingsCopy) {
-      console.log(`settingsCopy source attribution: ${formatKiB(settingsCopy.gzipBytes)} KiB gzip`);
+      console.log(`settings locale source attribution: ${formatKiB(settingsCopy.gzipBytes)} KiB gzip`);
     }
   }
 

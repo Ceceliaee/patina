@@ -164,6 +164,9 @@ function findArchitectureViolations(files: SourceFile[]): ArchitectureViolation[
       }
 
       const importedPath = normalizeImportPath(file.path, reference.specifier);
+      if (/^src\/shared\/copy(?:\/|$)/.test(importedPath)) {
+        addViolation(violations, file, sourceFile, reference.node, "frontend-no-legacy-copy-import");
+      }
       if (isSharedSource(file.path) && /^src\/app\//.test(importedPath)) {
         addViolation(violations, file, sourceFile, reference.node, "shared-no-app-import");
       }
@@ -261,9 +264,8 @@ function assertRuntimeBoundaryGuards() {
     ["src/app/AppShell.tsx", appShell],
     ["src/app/widget/WidgetShell.tsx", widgetShell],
   ] as const) {
-    const renderBody = content.split(/\buseEffect\s*\(/)[0] ?? content;
-    if (renderBody.includes("setUiTextLanguage(")) {
-      throw new Error(`${path} must not call setUiTextLanguage before its first effect`);
+    if (content.includes("setUiTextLanguage(")) {
+      throw new Error(`${path} must not call the retired setUiTextLanguage API`);
     }
   }
 
@@ -327,6 +329,10 @@ function runSelfTest() {
       path: "src/features/data/services/lazy.ts",
       content: "const path = './dynamic'; import(path);",
     },
+    {
+      path: "src/features/settings/services/legacyCopy.ts",
+      content: "import { UI_TEXT } from '../../../shared/copy/index.ts';",
+    },
   ]);
 
   const rules = violations.map((violation) => violation.rule).sort();
@@ -342,6 +348,7 @@ function runSelfTest() {
     "app-no-tauri-api",
     "frontend-no-sql-execute-write",
     "restricted-no-nonliteral-dynamic-import",
+    "frontend-no-legacy-copy-import",
   ].sort();
 
   if (JSON.stringify(rules) !== JSON.stringify(expectedRules)) {
