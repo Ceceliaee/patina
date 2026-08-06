@@ -1,5 +1,6 @@
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import type { AppCategory } from "../../../shared/classification/categoryTokens.ts";
+import type { UiText } from "../../../shared/i18n/index.ts";
 import type { CompiledSession } from "../../../shared/lib/sessionReadCompiler.ts";
 import {
   buildTimelineAxisTicks,
@@ -120,6 +121,7 @@ interface BuildHistoryTimelineViewModelParams {
   nowMs: number;
   mode: Exclude<HistoryTimelineDisplayMode, "web">;
   iconThemeColors?: Record<string, string>;
+  uiText: UiText;
   mergeThresholdSecs?: number;
   viewport?: HistoryTimelineViewport;
 }
@@ -359,6 +361,7 @@ function resolveAppSourceColor(
 export function buildAppTimelineSources(
   sessions: CompiledSession[],
   iconThemeColors: Record<string, string>,
+  uiText: UiText,
 ): HistoryTimelineSourceItem[] {
   return sessions.map((session) => {
     const mapped = AppClassification.mapApp(session.appKey, { appName: session.displayName });
@@ -370,7 +373,7 @@ export function buildAppTimelineSources(
       sourceColor: resolveAppSourceColor(session, iconThemeColors),
       iconKeys: Array.from(new Set([session.exeName, session.appKey].filter(Boolean))),
       category: mapped.category,
-      categoryLabel: AppClassification.getCategoryLabel(mapped.category),
+      categoryLabel: AppClassification.getCategoryLabel(mapped.category, uiText),
       categoryColor: AppClassification.getCategoryColor(mapped.category),
       fallbackTitle: session.displayTitle,
       startTime: session.startTime,
@@ -903,11 +906,12 @@ export function buildHistoryTimelineViewModel({
   nowMs,
   mode,
   iconThemeColors = {},
+  uiText,
   mergeThresholdSecs = 0,
   viewport,
 }: BuildHistoryTimelineViewModelParams): HistoryTimelineViewModel {
   return buildHistoryTimelineViewModelFromSources({
-    sources: buildAppTimelineSources(sessions, iconThemeColors),
+    sources: buildAppTimelineSources(sessions, iconThemeColors, uiText),
     selectedDate,
     nowMs,
     mode,

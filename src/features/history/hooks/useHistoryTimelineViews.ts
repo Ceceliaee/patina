@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import type { UiText } from "../../../shared/i18n/generated/contract.ts";
 import type { CompiledSession } from "../../../shared/lib/sessionReadCompiler.ts";
 import type {
   WebActivitySegment,
@@ -28,6 +29,7 @@ interface Params {
   mergeThresholdSecs: number;
   showQuietPlaceholder: boolean;
   viewport: HistoryTimelineViewport;
+  uiText: UiText;
 }
 
 export function shouldHideTimelineContent({
@@ -62,10 +64,11 @@ export function useHistoryTimelineViews({
   mergeThresholdSecs,
   showQuietPlaceholder,
   viewport,
+  uiText,
 }: Params) {
   const appSources = useMemo(
-    () => buildAppTimelineSources(sessions, appIconThemeColors),
-    [appIconThemeColors, sessions],
+    () => buildAppTimelineSources(sessions, appIconThemeColors, uiText),
+    [appIconThemeColors, sessions, uiText],
   );
   const webSources = useMemo(
     () => buildHistoryWebTimelineSources({
@@ -73,8 +76,9 @@ export function useHistoryTimelineViews({
       nowMs,
       overrides: webDomainOverrides,
       iconThemeColors: webIconThemeColors,
+      uiText,
     }),
-    [nowMs, webDomainOverrides, webIconThemeColors, webSegments],
+    [nowMs, webDomainOverrides, webIconThemeColors, webSegments, uiText],
   );
   const sources = mode === "web" ? webSources : appSources;
   const visibleSources = showQuietPlaceholder ? EMPTY_TIMELINE_SOURCES : sources;

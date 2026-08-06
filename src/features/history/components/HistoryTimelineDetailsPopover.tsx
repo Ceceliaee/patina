@@ -1,6 +1,7 @@
+import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
 import type { RefObject } from "react";
 import { createPortal } from "react-dom";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import { formatDuration, formatTime } from "../services/historyFormatting.ts";
 
 export type TimelineDetailTitle = {
@@ -73,6 +74,8 @@ export default function HistoryTimelineDetailsPopover({
   popover,
   popoverRef,
 }: HistoryTimelineDetailsPopoverProps) {
+  const UI_TEXT = useLocaleText();
+  const locale = useLocale();
   const nowMs = Date.now();
 
   return createPortal(
@@ -109,8 +112,8 @@ export default function HistoryTimelineDetailsPopover({
                     {formatDuration(getTitleDetailDuration(sample, nowMs))}
                   </span>
                   <span className="history-activity-popover-item-range">
-                    {formatTime(sample.startTime)}
-                    {sample.endTime ? ` - ${formatTime(sample.endTime)}` : ` ${UI_TEXT.history.untilNow}`}
+                    {formatTime(sample.startTime, locale)}
+                    {sample.endTime ? ` - ${formatTime(sample.endTime, locale)}` : ` ${UI_TEXT.history.untilNow}`}
                   </span>
                 </span>
               </div>

@@ -1,8 +1,9 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import type { HTMLAttributes, ReactNode, RefObject } from "react";
 import { X } from "lucide-react";
 import QuietDialog from "../../../shared/components/QuietDialog.tsx";
 import QuietStepperSlider from "../../../shared/components/QuietStepperSlider.tsx";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import type {
   HistoryTimelineDisplayMode,
   HistoryTimelineViewModel,
@@ -45,6 +46,7 @@ export default function HistoryTimelineZoomDialog({
   showEmptyMessage,
   emptyMessage,
 }: Props) {
+  const UI_TEXT = useLocaleText();
   const displayedZoomHours = Number(zoomHours.toFixed(1));
 
   return (

@@ -1,6 +1,6 @@
 import type { DailySummary } from "../../../shared/types/sessions.ts";
 import type { AppCategory } from "../../../shared/classification/categoryTokens.ts";
-import { getUiLocale, UI_TEXT } from "../../../shared/copy/index.ts";
+import type { Locale, UiText } from "../../../shared/i18n/index.ts";
 import { formatDuration } from "../../../shared/lib/durationFormatting.ts";
 
 export interface HistoryChartPoint {
@@ -66,23 +66,23 @@ export function buildHistoryCategoryDistribution(
 
 export { formatDuration };
 
-export function formatTime(ts: number) {
-  return new Date(ts).toLocaleTimeString(getUiLocale(), {
+export function formatTime(ts: number, locale: Locale) {
+  return new Date(ts).toLocaleTimeString(locale, {
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
   });
 }
 
-export function formatDateLabel(date: Date) {
+export function formatDateLabel(date: Date, uiText: UiText, locale: Locale) {
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
 
-  if (date.toDateString() === today.toDateString()) return UI_TEXT.date.today;
-  if (date.toDateString() === yesterday.toDateString()) return UI_TEXT.date.yesterday;
+  if (date.toDateString() === today.toDateString()) return uiText.date.today;
+  if (date.toDateString() === yesterday.toDateString()) return uiText.date.yesterday;
 
-  return date.toLocaleDateString(getUiLocale(), { month: "short", day: "numeric" });
+  return date.toLocaleDateString(locale, { month: "short", day: "numeric" });
 }
 
 export function buildChartData(weekly: DailySummary[]): HistoryChartPoint[] {

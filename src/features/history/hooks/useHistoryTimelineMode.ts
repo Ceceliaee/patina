@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+import { useLocaleText, type UiText } from "../../../shared/i18n/index.ts";
+
 import {
   getNextHistoryTimelineMode,
   readHistoryTimelineMode,
@@ -8,19 +9,20 @@ import {
 } from "../services/historyLayoutPreferenceStorage.ts";
 import type { HistoryTimelineDisplayMode } from "../services/historyTimelineViewModel.ts";
 
-function getModeLabel(mode: HistoryTimelineDisplayMode) {
-  if (mode === "app") return UI_TEXT.history.distributionByApp;
-  if (mode === "category") return UI_TEXT.history.distributionByCategory;
-  return UI_TEXT.history.distributionByWeb;
+function getModeLabel(mode: HistoryTimelineDisplayMode, text: UiText["history"]) {
+  if (mode === "app") return text.distributionByApp;
+  if (mode === "category") return text.distributionByCategory;
+  return text.distributionByWeb;
 }
 
-function getModeActionLabel(mode: HistoryTimelineDisplayMode) {
-  if (mode === "app") return UI_TEXT.history.showTimelineByApp;
-  if (mode === "category") return UI_TEXT.history.showTimelineByCategory;
-  return UI_TEXT.history.showTimelineByWeb;
+function getModeActionLabel(mode: HistoryTimelineDisplayMode, text: UiText["history"]) {
+  if (mode === "app") return text.showTimelineByApp;
+  if (mode === "category") return text.showTimelineByCategory;
+  return text.showTimelineByWeb;
 }
 
 export function useHistoryTimelineMode(webActivityEnabled: boolean) {
+  const UI_TEXT = useLocaleText();
   const [storedMode, setStoredMode] = useState<HistoryTimelineDisplayMode>(
     readHistoryTimelineMode,
   );
@@ -48,10 +50,10 @@ export function useHistoryTimelineMode(webActivityEnabled: boolean) {
 
   return {
     mode,
-    actionLabel: getModeActionLabel(nextMode),
+    actionLabel: getModeActionLabel(nextMode, UI_TEXT.history),
     ariaLabel: UI_TEXT.history.timelineModeSwitch(
-      getModeLabel(mode),
-      getModeLabel(nextMode),
+      getModeLabel(mode, UI_TEXT.history),
+      getModeLabel(nextMode, UI_TEXT.history),
     ),
     toggleMode,
   };

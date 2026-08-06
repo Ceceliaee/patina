@@ -1,11 +1,9 @@
+import { useLocale, useLocaleText, type Locale } from "../../../shared/i18n/index.ts";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import {
-  QuietTimelineSegment,
-  QuietTimelineTrack,
-  type QuietTimelineTrackStyle,
-} from "../../../shared/components/QuietTimelineTrack.tsx";
+  QuietTimelineSegment, QuietTimelineTrack, type QuietTimelineTrackStyle, } from "../../../shared/components/QuietTimelineTrack.tsx";
 import QuietTooltip from "../../../shared/components/QuietTooltip.tsx";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import { formatDuration, formatTime } from "../services/historyFormatting.ts";
 import type {
   HistoryTimelineDisplayMode,
@@ -56,8 +54,8 @@ function getTimelineMetrics(variant: Props["variant"], viewportWidth: number) {
   return null;
 }
 
-function formatTimelineTime(timeMs: number, viewModel: HistoryTimelineViewModel) {
-  return timeMs === viewModel.dayEndMs ? "24:00" : formatTime(timeMs);
+function formatTimelineTime(timeMs: number, viewModel: HistoryTimelineViewModel, locale: Locale) {
+  return timeMs === viewModel.dayEndMs ? "24:00" : formatTime(timeMs, locale);
 }
 
 export default function HistoryHorizontalTimeline({
@@ -73,6 +71,8 @@ export default function HistoryHorizontalTimeline({
   emptyMessage,
   interactionActive = false,
 }: Props) {
+  const UI_TEXT = useLocaleText();
+  const locale = useLocale();
   const copy = UI_TEXT.history.horizontalTimeline;
   const headingTitle = title === undefined ? copy.defaultTitle : title;
   const resolvedEmptyMessage = emptyMessage ?? copy.emptyDay;
@@ -197,7 +197,8 @@ export default function HistoryHorizontalTimeline({
           const ariaLabel = `${copy.ariaLabel} ${label} ${formatTimelineTime(
             segment.startTime,
             viewModel,
-          )} - ${formatTimelineTime(segment.endTime, viewModel)} ${formatDuration(segment.duration)}`;
+            locale,
+          )} - ${formatTimelineTime(segment.endTime, viewModel, locale)} ${formatDuration(segment.duration)}`;
           const tooltipContentStyle: TooltipContentStyle = {
             "--tooltip-color": segmentColor,
           };
@@ -224,9 +225,9 @@ export default function HistoryHorizontalTimeline({
                     </span>
                   </div>
                   <div className="history-horizontal-timeline-tooltip-time">
-                    {formatTimelineTime(segment.startTime, viewModel)}
+                    {formatTimelineTime(segment.startTime, viewModel, locale)}
                     {" - "}
-                    {formatTimelineTime(segment.endTime, viewModel)}
+                    {formatTimelineTime(segment.endTime, viewModel, locale)}
                     <span aria-hidden="true"> · </span>
                     {formatDuration(segment.duration)}
                   </div>

@@ -1,4 +1,5 @@
 import type { RefObject } from "react";
+import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { formatDateLabel } from "../services/historyFormatting.ts";
 import HistoryCalendarPopover from "./HistoryCalendarPopover.tsx";
@@ -35,6 +36,8 @@ export default function HistoryDateNavigator({
   onOpenDatePicker,
   onSelectCalendarDate,
 }: HistoryDateNavigatorProps) {
+  const UI_TEXT = useLocaleText();
+  const locale = useLocale();
   return (
     <div className="flex items-center gap-2 shrink-0">
       <button
@@ -57,7 +60,7 @@ export default function HistoryDateNavigator({
           }}
           className="qp-status history-date-label relative inline-flex min-w-[102px] cursor-pointer items-center justify-center px-3 py-1.5 text-center text-xs font-semibold text-[var(--qp-text-secondary)]"
         >
-          {formatDateLabel(selectedDate)}
+          {formatDateLabel(selectedDate, UI_TEXT, locale)}
         </span>
         <HistoryCalendarPopover
           open={calendarOpen}

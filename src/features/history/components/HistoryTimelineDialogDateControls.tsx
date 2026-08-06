@@ -1,5 +1,6 @@
+import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import { addLocalDays } from "../../../shared/lib/localDate.ts";
 import { formatDateLabel } from "../services/historyFormatting.ts";
 
@@ -16,9 +17,11 @@ export default function HistoryTimelineDialogDateControls({
   className = "",
   onChangeDate,
 }: HistoryTimelineDialogDateControlsProps) {
-  const previousDateLabel = formatDateLabel(addLocalDays(selectedDate, -1));
-  const currentDateLabel = formatDateLabel(selectedDate);
-  const nextDateLabel = formatDateLabel(addLocalDays(selectedDate, 1));
+  const UI_TEXT = useLocaleText();
+  const locale = useLocale();
+  const previousDateLabel = formatDateLabel(addLocalDays(selectedDate, -1), UI_TEXT, locale);
+  const currentDateLabel = formatDateLabel(selectedDate, UI_TEXT, locale);
+  const nextDateLabel = formatDateLabel(addLocalDays(selectedDate, 1), UI_TEXT, locale);
 
   return (
     <div className={`history-timeline-dialog-date-switch ${className}`.trim()} role="group" aria-label={UI_TEXT.date.pickDate}>

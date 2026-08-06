@@ -1,5 +1,6 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { Globe2, Monitor } from "lucide-react";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import QuietSegmentedFilter, { type QuietSegmentedFilterOption } from "../../../shared/components/QuietSegmentedFilter";
 import type { AppCategory } from "../../../shared/classification/categoryTokens.ts";
 import type { DestinationDetailTarget } from "../../destination/types.ts";
@@ -100,6 +101,7 @@ export default function HistoryDayDistributionPanel({
   onQuickClassificationPreload,
   onQuickClassificationOpen,
 }: HistoryDayDistributionPanelProps) {
+  const UI_TEXT = useLocaleText();
   return (
     <>
       <div className="mb-4 flex items-center justify-between gap-3">

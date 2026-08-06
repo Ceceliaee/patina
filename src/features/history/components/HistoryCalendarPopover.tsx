@@ -1,12 +1,10 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { useEffect, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import QuietCalendar from "../../../shared/components/QuietCalendar.tsx";
 import {
-  addLocalMonths,
-  formatLocalDateKey,
-  startOfLocalMonth,
-} from "../../../shared/lib/localDate.ts";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+  addLocalMonths, formatLocalDateKey, startOfLocalMonth, } from "../../../shared/lib/localDate.ts";
+
 
 interface HistoryCalendarPopoverProps {
   open: boolean;
@@ -34,6 +32,7 @@ export default function HistoryCalendarPopover({
   onCalendarMonthChange,
   onSelectDate,
 }: HistoryCalendarPopoverProps) {
+  const UI_TEXT = useLocaleText();
   const [focusedDate, setFocusedDate] = useState(selectedDate);
 
   useEffect(() => {

@@ -1,5 +1,6 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { Layers3 } from "lucide-react";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import HourlyActivityChart from "../../../shared/charts/HourlyActivityChart";
 import QuietIconAction from "../../../shared/components/QuietIconAction";
 import type {
@@ -25,6 +26,7 @@ export default function HistoryHourlyActivityPanel({
   actionLabel,
   onToggleMode,
 }: HistoryHourlyActivityPanelProps) {
+  const UI_TEXT = useLocaleText();
   return (
     <div className="qp-panel p-5 history-pulse-card history-pulse-card-primary">
       <div className="flex items-center justify-between gap-3">

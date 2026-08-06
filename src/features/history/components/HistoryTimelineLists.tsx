@@ -1,5 +1,6 @@
+import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
 import { ChevronDown, ChevronRight, ChevronUp, Globe2 } from "lucide-react";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import { formatDuration, formatTime } from "../services/historyFormatting.ts";
 import type { TimelineSession } from "../../../shared/lib/sessionReadCompiler.ts";
@@ -46,6 +47,8 @@ export function HistoryTimelineList({
   className = "",
   onToggleSessionDetails,
 }: HistoryTimelineListProps) {
+  const UI_TEXT = useLocaleText();
+  const locale = useLocale();
   if (loading) {
     return <div className="flex-1" aria-hidden="true" />;
   }
@@ -137,8 +140,8 @@ export function HistoryTimelineList({
               <div className="text-right flex-shrink-0">
                 <div className="text-xs font-semibold text-[var(--qp-text-primary)] tabular-nums">{formatDuration(session.duration || 0)}</div>
                 <div className="text-[10px] text-[var(--qp-text-tertiary)] mt-0.5 tabular-nums">
-                  {formatTime(session.startTime)}
-                  {session.endTime ? ` - ${formatTime(session.endTime)}` : ` ${UI_TEXT.history.untilNow}`}
+                  {formatTime(session.startTime, locale)}
+                  {session.endTime ? ` - ${formatTime(session.endTime, locale)}` : ` ${UI_TEXT.history.untilNow}`}
                 </div>
               </div>
             </div>
@@ -155,6 +158,8 @@ export function HistoryWebTimelineList({
   className = "",
   onToggleSessionDetails,
 }: HistoryWebTimelineListProps) {
+  const UI_TEXT = useLocaleText();
+  const locale = useLocale();
   if (loading) {
     return <div className="flex-1" aria-hidden="true" />;
   }
@@ -233,8 +238,8 @@ export function HistoryWebTimelineList({
                   {formatDuration(item.duration || 0)}
                 </div>
                 <div className="text-[10px] text-[var(--qp-text-tertiary)] mt-0.5 tabular-nums">
-                  {formatTime(item.startTime)}
-                  {item.endTime ? ` - ${formatTime(item.endTime)}` : ` ${UI_TEXT.history.untilNow}`}
+                  {formatTime(item.startTime, locale)}
+                  {item.endTime ? ` - ${formatTime(item.endTime, locale)}` : ` ${UI_TEXT.history.untilNow}`}
                 </div>
               </div>
             </div>

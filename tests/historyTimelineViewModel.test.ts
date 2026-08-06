@@ -11,7 +11,7 @@ import {
   resolveEffectiveHistoryTimelineMode,
 } from "../src/features/history/services/historyLayoutPreferenceStorage.ts";
 import {
-  buildHistoryTimelineViewModel,
+  buildHistoryTimelineViewModel as buildHistoryTimelineViewModelRaw,
   DEFAULT_HISTORY_TIMELINE_ZOOM_HOURS,
   normalizeHistoryTimelineViewport,
   normalizeHistoryTimelineViewportAroundFocus,
@@ -23,6 +23,12 @@ import {
 } from "../src/features/history/services/historyTimelineViewModel.ts";
 import { shouldHideTimelineContent } from "../src/features/history/hooks/useHistoryTimelineViews.ts";
 import { ProcessMapper } from "../src/shared/classification/processMapper.ts";
+import { getLocaleText } from "../src/shared/i18n/runtime.ts";
+
+type HistoryTimelineInput = Omit<Parameters<typeof buildHistoryTimelineViewModelRaw>[0], "uiText">;
+const buildHistoryTimelineViewModel = (input: HistoryTimelineInput) => (
+  buildHistoryTimelineViewModelRaw({ ...input, uiText: getLocaleText("zh-CN") })
+);
 import type { CompiledSession } from "../src/shared/lib/sessionReadCompiler.ts";
 import { createTestHarness } from "./helpers/trackingTestHarness.ts";
 

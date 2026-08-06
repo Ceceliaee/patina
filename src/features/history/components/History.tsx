@@ -1,14 +1,8 @@
-import {
-  useState,
-  useEffect,
-  useCallback,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-} from "react";
+import type { Locale, UiText } from "../../../shared/i18n/index.ts";
+import { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef, } from "react";
 import type { CSSProperties } from "react";
 import { Clock, Expand, Minus, Plus, Tags, X, ZoomIn } from "lucide-react";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import {
   buildHistoryCategoryDistribution,
   formatDuration,
@@ -88,6 +82,8 @@ import { useHistoryDestinationDetailEntry } from "../hooks/useHistoryDestination
 import { createQuickAppClassificationTarget } from "../../classification/types.ts";
 
 interface Props {
+  uiText: UiText;
+  locale: Locale;
   icons: Record<string, string>;
   refreshKey?: number;
   refreshIntervalSecs: number;
@@ -133,21 +129,23 @@ function buildHistoryDayDistributionView({
   appItems,
   categoryItems,
   webItems,
+  text,
 }: {
   requestedMode: DayDistributionMode;
   webActivityEnabled: boolean;
   appItems: HistoryDayDistributionItem[];
   categoryItems: HistoryDayDistributionItem[];
   webItems: HistoryDayDistributionItem[];
+  text: UiText["history"];
 }): HistoryDayDistributionView {
   const mode = resolveEffectiveDayDistributionMode(requestedMode, webActivityEnabled);
   const options: QuietSegmentedFilterOption<DayDistributionMode>[] = [
-    { value: "app", label: UI_TEXT.history.distributionByApp },
-    { value: "category", label: UI_TEXT.history.distributionByCategory },
+    { value: "app", label: text.distributionByApp },
+    { value: "category", label: text.distributionByCategory },
   ];
 
   if (webActivityEnabled) {
-    options.push({ value: "web", label: UI_TEXT.history.distributionByWeb });
+    options.push({ value: "web", label: text.distributionByWeb });
   }
 
   return {
@@ -157,13 +155,13 @@ function buildHistoryDayDistributionView({
   };
 }
 
-const formatTimelineWindowBoundary = (timeMs: number, dayEndMs: number) => (
-  timeMs === dayEndMs ? "24:00" : formatTime(timeMs)
+const formatTimelineWindowBoundary = (timeMs: number, dayEndMs: number, locale: Locale) => (
+  timeMs === dayEndMs ? "24:00" : formatTime(timeMs, locale)
 );
-const getHourlyActivityModeActionLabel = (mode: HourlyActivityChartMode) => (
+const getHourlyActivityModeActionLabel = (mode: HourlyActivityChartMode, text: UiText["history"]) => (
   mode === "category"
-    ? UI_TEXT.history.showTotalHourlyActivity
-    : UI_TEXT.history.showHourlyActivityByCategory
+    ? text.showTotalHourlyActivity
+    : text.showHourlyActivityByCategory
 );
 type TimelineDialogMode = "app" | "web";
 function cleanTimelineDetailTitle(sample: TimelineDetailTitle, appName: string): TimelineDetailTitle {
@@ -191,6 +189,8 @@ function cleanTimelineDetailTitles(samples: TimelineDetailTitle[], appName: stri
 }
 
 export default function History({
+  uiText: UI_TEXT,
+  locale,
   icons,
   refreshKey = 0,
   refreshIntervalSecs,
@@ -641,10 +641,11 @@ export default function History({
     mergeThresholdSecs,
     showQuietPlaceholder: showTimelineQuietPlaceholder,
     viewport: timelineViewport,
+    uiText: UI_TEXT,
   });
   const timelineWindowLabel = historyCopy.timelineWindowLabel(
-    formatTimelineWindowBoundary(timelineViewport.startMs, selectedDayRange.endMs),
-    formatTimelineWindowBoundary(timelineViewport.endMs, selectedDayRange.endMs),
+    formatTimelineWindowBoundary(timelineViewport.startMs, selectedDayRange.endMs, locale),
+    formatTimelineWindowBoundary(timelineViewport.endMs, selectedDayRange.endMs, locale),
   );
   const timelineZoomHours = timelineViewport.durationMs / (60 * 60_000);
   const appDistributionItems = useMemo<HistoryDayDistributionItem[]>(
@@ -680,11 +681,11 @@ export default function History({
       const mapped = AppClassification.mapApp(app.exeName, { appName: app.appName });
       return {
         category: mapped.category,
-        label: AppClassification.getCategoryLabel(mapped.category),
+        label: AppClassification.getCategoryLabel(mapped.category, UI_TEXT),
         color: AppClassification.getCategoryColor(mapped.category),
       };
     });
-  }, [appSummary]);
+  }, [appSummary, UI_TEXT]);
   const webDistributionItems = useMemo<HistoryDayDistributionItem[]>(
     () => {
       if (!webActivityEnabled) return [];
@@ -751,6 +752,7 @@ export default function History({
     appItems: appDistributionItems,
     categoryItems: categoryDistributionItems,
     webItems: webDistributionItems,
+    text: historyCopy,
   });
   const daySummaryView = useMemo<HistoryDaySummaryView>(() => {
     const activeSessions = compiledSessions.filter((session) => (session.duration ?? 0) > 0);
@@ -790,13 +792,13 @@ export default function History({
         ? formatDuration(summaryActiveDurationMs)
         : "0m",
       activeSpanLabel: firstStartTime !== null && lastEndTime !== null
-        ? `${formatTime(firstStartTime)} - ${formatTime(lastEndTime)}`
+        ? `${formatTime(firstStartTime, locale)} - ${formatTime(lastEndTime, locale)}`
         : DAY_SUMMARY_EMPTY_MARK,
       peakHourLabel: peakHour.minutes > 0
         ? `${peakHour.hour} · ${formatDuration(peakHour.minutes * 60_000)}`
         : DAY_SUMMARY_EMPTY_MARK,
     };
-  }, [compiledSessions, hourlyActivity, summaryActiveDurationMs]);
+  }, [compiledSessions, hourlyActivity, summaryActiveDurationMs, locale]);
   const visibleDaySummaryView = showQuietPlaceholder
     ? {
       activeDurationLabel: DAY_SUMMARY_EMPTY_MARK,
@@ -1098,7 +1100,7 @@ export default function History({
             hourlyActivity={hourlyActivity}
             hourlyCategoryActivity={hourlyCategoryActivity}
             showQuietPlaceholder={showQuietPlaceholder}
-            actionLabel={getHourlyActivityModeActionLabel(hourlyActivityChartMode)}
+            actionLabel={getHourlyActivityModeActionLabel(hourlyActivityChartMode, historyCopy)}
             onToggleMode={() => onHourlyActivityChartModeChange(
               hourlyActivityChartMode === "category" ? "total" : "category",
             )}

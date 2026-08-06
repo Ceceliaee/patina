@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import {
-  buildHistoryWebTimelineViewModel,
+  buildHistoryWebTimelineViewModel as buildHistoryWebTimelineViewModelRaw,
   buildWebDomainDistribution,
   buildWebTimelineItems,
   filterWebActivitySegmentsForStatistics,
 } from "../src/features/history/services/historyWebActivityViewModel.ts";
 import { normalizeHistoryTimelineViewport } from "../src/features/history/services/historyTimelineViewModel.ts";
 import type { WebActivitySegment } from "../src/shared/types/webActivity.ts";
+import { getLocaleText } from "../src/shared/i18n/runtime.ts";
+
+type WebTimelineInput = Omit<Parameters<typeof buildHistoryWebTimelineViewModelRaw>[0], "uiText">;
+const buildHistoryWebTimelineViewModel = (input: WebTimelineInput) => (
+  buildHistoryWebTimelineViewModelRaw({ ...input, uiText: getLocaleText("zh-CN") })
+);
 
 function makeSegment(overrides: Partial<WebActivitySegment>): WebActivitySegment {
   return {

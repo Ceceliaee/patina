@@ -1,5 +1,6 @@
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import type { AppCategory } from "../../../shared/classification/categoryTokens.ts";
+import type { UiText } from "../../../shared/i18n/index.ts";
 import type {
   WebActivitySegment,
   WebDomainOverride,
@@ -144,6 +145,7 @@ export function buildHistoryWebTimelineViewModel({
   nowMs,
   overrides = {},
   iconThemeColors = {},
+  uiText,
   mergeThresholdSecs = 0,
   viewport,
 }: {
@@ -152,6 +154,7 @@ export function buildHistoryWebTimelineViewModel({
   nowMs: number;
   overrides?: Record<string, WebDomainOverride>;
   iconThemeColors?: Record<string, string>;
+  uiText: UiText;
   mergeThresholdSecs?: number;
   viewport?: HistoryTimelineViewport;
 }): HistoryTimelineViewModel {
@@ -160,6 +163,7 @@ export function buildHistoryWebTimelineViewModel({
     nowMs,
     overrides,
     iconThemeColors,
+    uiText,
   });
 
   return buildHistoryTimelineViewModelFromSources({
@@ -177,11 +181,13 @@ export function buildHistoryWebTimelineSources({
   nowMs,
   overrides = {},
   iconThemeColors = {},
+  uiText,
 }: {
   segments: WebActivitySegment[];
   nowMs: number;
   overrides?: Record<string, WebDomainOverride>;
   iconThemeColors?: Record<string, string>;
+  uiText: UiText;
 }): HistoryTimelineSourceItem[] {
   return filterWebActivitySegmentsForStatistics(segments, overrides)
     .map<HistoryTimelineSourceItem>((segment) => {
@@ -201,7 +207,7 @@ export function buildHistoryWebTimelineSources({
         ),
         iconKeys: [segment.normalizedDomain],
         category,
-        categoryLabel: AppClassification.getCategoryLabel(category),
+        categoryLabel: AppClassification.getCategoryLabel(category, uiText),
         categoryColor: AppClassification.getCategoryColor(category),
         fallbackTitle: title,
         startTime: segment.startTime,
