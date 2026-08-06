@@ -22,6 +22,8 @@ App note en: TBD.
 
 ### Fixed
 
+- 修复挂件在单显示器左右边缘可能只有一侧正确、截图后错误侧互换，以及跨显示器或混合缩放拖动后回弹、吸附错误的问题；挂件的左右贴边、半隐藏方向和位置恢复现在保持一致。Refs [#55](https://github.com/Ceceliaee/patina/issues/55), [#64](https://github.com/Ceceliaee/patina/issues/64)
+
 ### Removed
 
 ### Internal
