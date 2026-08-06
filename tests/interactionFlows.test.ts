@@ -553,6 +553,68 @@ await runTest("widget controller finalizes a collapsed drag even when move event
   assert.deepEqual(events, ["finalize", "settled"]);
 });
 
+await runTest("widget controller preserves the captured physical release point until finalization", async () => {
+  const scheduler = new FakeScheduler();
+  const capturedPoints: Array<{ x: number; y: number } | null> = [];
+  const controller = createWidgetWindowController(true, {
+    loadPlacement: async () => buildWidgetPlacement("right", 0.28),
+    persistExpanded: async () => undefined,
+    applyLayout: async () => undefined,
+    finalizeDrag: async (releasePosition) => {
+      capturedPoints.push(releasePosition);
+      return buildWidgetPlacement("left", 0.5, "DISPLAY2");
+    },
+    schedule: (callback) => scheduler.schedule(callback),
+    clearScheduled: (handle) => scheduler.clear(handle),
+  });
+
+  await controller.initialize();
+  controller.beginUserDrag();
+  controller.endUserDrag({ x: -17, y: 640 });
+  scheduler.flushAll();
+  await flushMicrotasks();
+
+  assert.deepEqual(capturedPoints, [{ x: -17, y: 640 }]);
+});
+
+await runTest("widget controller rejects a late release point from an older drag generation", async () => {
+  const scheduler = new FakeScheduler();
+  const finalizedPoints: Array<{ x: number; y: number } | null> = [];
+  let resolveFirstRelease: ((point: { x: number; y: number }) => void) | null = null;
+  const firstRelease = new Promise<{ x: number; y: number }>((resolve) => {
+    resolveFirstRelease = resolve;
+  });
+  const controller = createWidgetWindowController(true, {
+    loadPlacement: async () => buildWidgetPlacement("right", 0.28),
+    persistExpanded: async () => undefined,
+    applyLayout: async () => undefined,
+    finalizeDrag: async (releasePosition) => {
+      finalizedPoints.push(releasePosition);
+      return buildWidgetPlacement("right", 0.75, "DISPLAY2");
+    },
+    schedule: (callback) => scheduler.schedule(callback),
+    clearScheduled: (handle) => scheduler.clear(handle),
+  });
+
+  await controller.initialize();
+  controller.beginUserDrag();
+  controller.endUserDrag(firstRelease);
+  scheduler.flushAll();
+  await flushMicrotasks();
+
+  controller.beginUserDrag();
+  controller.endUserDrag({ x: 2200, y: 720 });
+  scheduler.flushAll();
+  await flushMicrotasks();
+  assert.deepEqual(finalizedPoints, []);
+
+  assert.ok(resolveFirstRelease);
+  resolveFirstRelease({ x: 100, y: 100 });
+  await flushMicrotasks();
+
+  assert.deepEqual(finalizedPoints, [{ x: 2200, y: 720 }]);
+});
+
 await runTest("widget controller coalesces moved events racing drag release", async () => {
   const scheduler = new FakeScheduler();
   let finalizeCount = 0;
@@ -677,6 +739,59 @@ await runTest("widget controller accepts runtime collapse without finalizing hid
   scheduler.flushAll();
   await flushMicrotasks();
   assert.deepEqual(events, ["expanded:true:true"]);
+});
+
+await runTest("widget controller synchronizes the rendered side from native runtime layout", async () => {
+  const scheduler = new FakeScheduler();
+  const placements: string[] = [];
+  const controller = createWidgetWindowController(false, {
+    loadPlacement: async () => buildWidgetPlacement("left", 0.28, "DISPLAY1"),
+    persistExpanded: async () => undefined,
+    applyLayout: async () => undefined,
+    finalizeDrag: async () => null,
+    schedule: (callback) => scheduler.schedule(callback),
+    clearScheduled: (handle) => scheduler.clear(handle),
+    onPlacementChange: (placement) => {
+      placements.push(`${placement.side}:${placement.monitor?.name ?? "none"}`);
+    },
+  });
+
+  await controller.initialize();
+  controller.syncShownFromRuntime(buildWidgetPlacement("right", 0.4, "DISPLAY2"));
+
+  assert.deepEqual(placements, ["left:DISPLAY1", "right:DISPLAY2"]);
+  assert.equal(controller.getState().placement.side, "right");
+  assert.equal(controller.getState().placement.monitor?.name, "DISPLAY2");
+});
+
+await runTest("widget controller rejects stale initialization after a native placement event", async () => {
+  const scheduler = new FakeScheduler();
+  const placements: string[] = [];
+  let resolveLoadedPlacement: ((placement: ReturnType<typeof buildWidgetPlacement>) => void) | null = null;
+  const loadedPlacement = new Promise<ReturnType<typeof buildWidgetPlacement>>((resolve) => {
+    resolveLoadedPlacement = resolve;
+  });
+  const controller = createWidgetWindowController(false, {
+    loadPlacement: async () => loadedPlacement,
+    persistExpanded: async () => undefined,
+    applyLayout: async () => undefined,
+    finalizeDrag: async () => null,
+    schedule: (callback) => scheduler.schedule(callback),
+    clearScheduled: (handle) => scheduler.clear(handle),
+    onPlacementChange: (placement) => {
+      placements.push(`${placement.side}:${placement.monitor?.name ?? "none"}`);
+    },
+  });
+
+  const initialization = controller.initialize();
+  controller.syncShownFromRuntime(buildWidgetPlacement("right", 0.4, "DISPLAY2"));
+  assert.ok(resolveLoadedPlacement);
+  resolveLoadedPlacement(buildWidgetPlacement("left", 0.2, "DISPLAY1"));
+  await initialization;
+
+  assert.deepEqual(placements, ["right:DISPLAY2"]);
+  assert.equal(controller.getState().placement.side, "right");
+  assert.equal(controller.getState().placement.monitor?.name, "DISPLAY2");
 });
 
 await runTest("widget controller reapplies DPI layout without interrupting drag finalization", async () => {

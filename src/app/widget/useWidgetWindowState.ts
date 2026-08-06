@@ -121,9 +121,9 @@ export function useWidgetWindowState(
       controller.syncCollapsedFromRuntime();
     }));
 
-    unlistenPromises.push(onWidgetRuntimeShown(() => {
+    unlistenPromises.push(onWidgetRuntimeShown((runtimePlacement) => {
       onRuntimeShownRef.current?.();
-      controller.syncShownFromRuntime();
+      controller.syncShownFromRuntime(runtimePlacement);
     }));
 
     return () => {

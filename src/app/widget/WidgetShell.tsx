@@ -4,6 +4,7 @@ import { Pause, Play, SquareArrowOutUpRight } from "lucide-react";
 import QuietIconAction from "../../shared/components/QuietIconAction";
 import {
   isCursorInsideCurrentWidgetWindow,
+  getCurrentCursorPhysicalPosition,
   isPrimaryMouseButtonDown,
   showMainWindow,
   startCurrentWidgetWindowDrag,
@@ -179,7 +180,7 @@ export default function WidgetShell() {
 
     dragActiveRef.current = false;
     suppressHoverRevealUntilPointerLeaves();
-    endUserDrag();
+    endUserDrag(getCurrentCursorPhysicalPosition());
   };
 
   const pollCollapsedDragRelease = () => {

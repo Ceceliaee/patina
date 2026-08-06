@@ -61,6 +61,11 @@ export interface WidgetPhysicalRect {
   height: number;
 }
 
+export interface WidgetPhysicalPoint {
+  x: number;
+  y: number;
+}
+
 export interface WidgetPlacement {
   monitor: WidgetMonitorAffinity | null;
   side: WidgetSide;
@@ -225,9 +230,34 @@ export async function getWidgetIcon(exeName: string): Promise<string | null> {
   return invoke<string | null>("cmd_get_widget_icon", { exeName });
 }
 
-export async function finalizeWidgetDrag(): Promise<WidgetPlacement | null> {
-  const payload = await invoke<unknown>("cmd_finalize_widget_drag");
+export async function finalizeWidgetDrag(
+  releasePosition: WidgetPhysicalPoint | null,
+): Promise<WidgetPlacement | null> {
+  const payload = await invoke<unknown>("cmd_finalize_widget_drag", { releasePosition });
   return parseWidgetPlacement(payload);
+}
+
+export async function getCurrentCursorPhysicalPosition(): Promise<WidgetPhysicalPoint | null> {
+  const position = await cursorPosition().catch(() => null);
+  if (!position || !Number.isFinite(position.x) || !Number.isFinite(position.y)) {
+    return null;
+  }
+
+  const x = Math.round(position.x);
+  const y = Math.round(position.y);
+  if (
+    x < -2_147_483_648
+    || x > 2_147_483_647
+    || y < -2_147_483_648
+    || y > 2_147_483_647
+  ) {
+    return null;
+  }
+
+  return {
+    x,
+    y,
+  };
 }
 
 export async function setWidgetExpanded(
@@ -254,9 +284,11 @@ export async function onWidgetRuntimeCollapsed(handler: () => void): Promise<() 
   });
 }
 
-export async function onWidgetRuntimeShown(handler: () => void): Promise<() => void> {
-  return listen(WIDGET_RUNTIME_SHOWN_EVENT, () => {
-    handler();
+export async function onWidgetRuntimeShown(
+  handler: (placement: WidgetPlacement | null) => void,
+): Promise<() => void> {
+  return listen<unknown>(WIDGET_RUNTIME_SHOWN_EVENT, (event) => {
+    handler(parseWidgetPlacement(event.payload));
   });
 }
 

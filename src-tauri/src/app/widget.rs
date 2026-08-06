@@ -1,8 +1,9 @@
 use crate::app::state::WidgetWindowLifecycleState;
 use crate::data::widget_store::SqliteWidgetPlacementStore;
 use crate::domain::widget::{
-    match_widget_monitor, resolve_widget_placement, select_widget_monitor, WidgetMonitorAffinity,
-    WidgetPhysicalRect, WidgetPlacement, WidgetSide,
+    match_widget_monitor, resolve_widget_drag_placement, resolve_widget_placement,
+    select_widget_monitor, select_widget_monitor_for_release, WidgetMonitorAffinity,
+    WidgetPhysicalPoint, WidgetPhysicalRect, WidgetPlacement, WidgetSide,
 };
 use crate::engine::widget as widget_engine;
 use crate::platform::storage_paths;
@@ -76,6 +77,7 @@ pub(crate) async fn show_widget_window_for_minimize<R: Runtime + 'static>(
 
 pub(crate) async fn finalize_widget_drag<R: Runtime + 'static>(
     app: &AppHandle<R>,
+    captured_release_point: Option<WidgetPhysicalPoint>,
 ) -> Result<WidgetPlacement, String> {
     if is_main_window_visible(app) {
         close_widget_window(app);
@@ -96,6 +98,12 @@ pub(crate) async fn finalize_widget_drag<R: Runtime + 'static>(
         .outer_size()
         .map_err(|error| format!("failed to read widget size after drag: {error}"))?;
     let window_rect = WidgetPhysicalRect::new(position.x, position.y, size.width, size.height);
+    let release_point = captured_release_point.or_else(|| {
+        app.cursor_position()
+            .ok()
+            .and_then(|position| widget_physical_point(position.x, position.y))
+            .filter(|point| window_rect.contains_point(*point))
+    });
     let monitors = app
         .available_monitors()
         .map_err(|error| format!("failed to enumerate monitors after widget drag: {error}"))?;
@@ -103,10 +111,19 @@ pub(crate) async fn finalize_widget_drag<R: Runtime + 'static>(
         .iter()
         .map(widget_monitor_affinity)
         .collect::<Vec<_>>();
-    let target_index = select_widget_monitor(&window_rect, &affinities)
+    let target_index = release_point
+        .and_then(|point| select_widget_monitor_for_release(point, &affinities))
+        .or_else(|| select_widget_monitor(&window_rect, &affinities))
         .ok_or_else(|| "failed to select a target monitor after widget drag".to_string())?;
     let target_monitor = monitors[target_index].clone();
-    let placement = resolve_widget_placement(window_rect, affinities[target_index].clone());
+    let placement_rect =
+        normalize_widget_drag_rect_for_target(window_rect, target_monitor.scale_factor());
+    let placement = release_point.map_or_else(
+        || resolve_widget_placement(placement_rect, affinities[target_index].clone()),
+        |point| {
+            resolve_widget_drag_placement(placement_rect, point, affinities[target_index].clone())
+        },
+    );
 
     save_widget_placement(app, placement.clone()).await?;
     apply_widget_layout_internal(
@@ -121,6 +138,32 @@ pub(crate) async fn finalize_widget_drag<R: Runtime + 'static>(
     .await?;
 
     Ok(placement)
+}
+
+fn normalize_widget_drag_rect_for_target(
+    window_rect: WidgetPhysicalRect,
+    target_scale_factor: f64,
+) -> WidgetPhysicalRect {
+    let target_size = resolve_widget_physical_size(
+        resolve_widget_logical_size(false, false),
+        target_scale_factor,
+    );
+    WidgetPhysicalRect::new(
+        window_rect.x,
+        window_rect.y,
+        target_size.width,
+        target_size.height,
+    )
+}
+
+fn widget_physical_point(x: f64, y: f64) -> Option<WidgetPhysicalPoint> {
+    fn coordinate(value: f64) -> Option<i32> {
+        let rounded = value.round();
+        (rounded.is_finite() && rounded >= f64::from(i32::MIN) && rounded <= f64::from(i32::MAX))
+            .then_some(rounded as i32)
+    }
+
+    Some(WidgetPhysicalPoint::new(coordinate(x)?, coordinate(y)?))
 }
 
 pub(crate) async fn set_widget_window_expanded<R: Runtime + 'static>(
@@ -182,8 +225,8 @@ fn emit_widget_runtime_collapsed<R: Runtime>(app: &AppHandle<R>) {
     let _ = app.emit(WIDGET_RUNTIME_COLLAPSED_EVENT, ());
 }
 
-fn emit_widget_runtime_shown<R: Runtime>(app: &AppHandle<R>) {
-    let _ = app.emit(WIDGET_RUNTIME_SHOWN_EVENT, ());
+fn emit_widget_runtime_shown<R: Runtime>(app: &AppHandle<R>, placement: &WidgetPlacement) {
+    let _ = app.emit(WIDGET_RUNTIME_SHOWN_EVENT, placement.clone());
 }
 
 fn park_widget_window<R: Runtime>(window: &WebviewWindow<R>) {
@@ -293,7 +336,7 @@ async fn apply_widget_layout_internal<R: Runtime + 'static>(
             close_widget_window(app);
             return Err(error);
         }
-        emit_widget_runtime_shown(app);
+        emit_widget_runtime_shown(app, &placement);
         return Ok(());
     }
 
@@ -346,7 +389,7 @@ async fn apply_widget_layout_internal<R: Runtime + 'static>(
         close_widget_window(app);
         return Err(error);
     }
-    emit_widget_runtime_shown(app);
+    emit_widget_runtime_shown(app, &placement);
     Ok(())
 }
 
@@ -514,10 +557,53 @@ fn resolve_widget_bounds_from_work_area(
 #[cfg(test)]
 mod tests {
     use super::{
-        resolve_widget_bounds_from_work_area, resolve_widget_logical_size,
-        resolve_widget_physical_size, WidgetPhysicalBounds, WidgetPhysicalSize,
+        normalize_widget_drag_rect_for_target, resolve_widget_bounds_from_work_area,
+        resolve_widget_logical_size, resolve_widget_physical_size, widget_physical_point,
+        WidgetPhysicalBounds, WidgetPhysicalSize,
     };
-    use crate::domain::widget::{WidgetPlacement, WidgetSide};
+    use crate::domain::widget::{
+        resolve_widget_drag_placement, WidgetMonitorAffinity, WidgetPhysicalPoint,
+        WidgetPhysicalRect, WidgetPlacement, WidgetSide,
+    };
+
+    #[test]
+    fn widget_cursor_coordinates_round_to_bounded_physical_points() {
+        assert_eq!(
+            widget_physical_point(-16.6, 640.4),
+            Some(WidgetPhysicalPoint::new(-17, 640))
+        );
+        assert_eq!(widget_physical_point(f64::NAN, 0.0), None);
+        assert_eq!(widget_physical_point(0.0, f64::INFINITY), None);
+        assert_eq!(widget_physical_point(f64::from(i32::MAX) + 1.0, 0.0), None);
+    }
+
+    #[test]
+    fn mixed_dpi_drag_anchor_uses_the_target_widget_height() {
+        let dragged_at_150_percent = WidgetPhysicalRect::new(2200, 650, 96, 72);
+        let target_rect = normalize_widget_drag_rect_for_target(dragged_at_150_percent, 1.25);
+        assert_eq!(target_rect, WidgetPhysicalRect::new(2200, 650, 80, 60));
+
+        let target_monitor = WidgetMonitorAffinity::new(
+            Some("secondary-125".to_string()),
+            WidgetPhysicalRect::new(1920, 0, 2400, 1300),
+        );
+        let placement = resolve_widget_drag_placement(
+            target_rect,
+            WidgetPhysicalPoint::new(2208, 680),
+            target_monitor,
+        );
+        let final_bounds = resolve_widget_bounds_from_work_area(
+            1920,
+            0,
+            2400,
+            1300,
+            &placement,
+            resolve_widget_physical_size(resolve_widget_logical_size(false, false), 1.25),
+        );
+
+        assert_eq!(final_bounds.y, 650);
+        assert_eq!(final_bounds.height, 60);
+    }
 
     #[test]
     fn widget_bounds_snap_to_expected_collapsed_edge_and_height() {

@@ -858,7 +858,7 @@ try {
   );
   const finalizedWidgetPlacement = await evaluate(
     client,
-    `window.__TAURI_INTERNALS__.invoke("cmd_finalize_widget_drag")`,
+    `window.__TAURI_INTERNALS__.invoke("cmd_finalize_widget_drag", { releasePosition: null })`,
   ) as {
     monitor?: {
       name?: string | null;
@@ -876,11 +876,54 @@ try {
       && finalizedWidgetPlacement.anchor_y >= 0
       && finalizedWidgetPlacement.anchor_y <= 1,
   );
+  const [finalizedWidgetPosition, finalizedWidgetSize] = await Promise.all([
+    evaluate(
+      client,
+      `window.__TAURI_INTERNALS__.invoke("plugin:window|outer_position", { label: "widget" })`,
+    ) as Promise<{ x?: number; y?: number }>,
+    evaluate(
+      client,
+      `window.__TAURI_INTERNALS__.invoke("plugin:window|outer_size", { label: "widget" })`,
+    ) as Promise<{ width?: number; height?: number }>,
+  ]);
+  const finalizedWorkArea = finalizedWidgetPlacement.monitor.work_area;
+  assert.ok(Number.isInteger(finalizedWidgetPosition.x));
+  assert.ok(Number.isInteger(finalizedWidgetPosition.y));
+  assert.ok((finalizedWidgetSize.width ?? 0) > 0);
+  assert.ok((finalizedWidgetSize.height ?? 0) > 0);
+  if (finalizedWidgetPlacement.side === "left") {
+    assert.equal(finalizedWidgetPosition.x, finalizedWorkArea?.x);
+  } else {
+    assert.equal(
+      (finalizedWidgetPosition.x ?? 0) + (finalizedWidgetSize.width ?? 0),
+      (finalizedWorkArea?.x ?? 0) + (finalizedWorkArea?.width ?? 0),
+    );
+  }
+  assert.ok((finalizedWidgetPosition.y ?? 0) >= (finalizedWorkArea?.y ?? 0));
+  assert.ok(
+    (finalizedWidgetPosition.y ?? 0) + (finalizedWidgetSize.height ?? 0)
+      <= (finalizedWorkArea?.y ?? 0) + (finalizedWorkArea?.height ?? 0),
+  );
+  const leftWidgetPlacement = await evaluate(
+    client,
+    `window.__TAURI_INTERNALS__.invoke("cmd_finalize_widget_drag", {
+      releasePosition: {
+        x: ${finalizedWorkArea?.x ?? 0},
+        y: ${(finalizedWidgetPosition.y ?? 0) + Math.floor((finalizedWidgetSize.height ?? 1) / 2)}
+      }
+    })`,
+  ) as typeof finalizedWidgetPlacement;
+  assert.equal(leftWidgetPlacement.side, "left");
+  const leftWidgetPosition = await evaluate(
+    client,
+    `window.__TAURI_INTERNALS__.invoke("plugin:window|outer_position", { label: "widget" })`,
+  ) as { x?: number; y?: number };
+  assert.equal(leftWidgetPosition.x, finalizedWorkArea?.x);
   const reloadedWidgetPlacement = await evaluate(
     client,
     `window.__TAURI_INTERNALS__.invoke("cmd_get_widget_placement")`,
   );
-  assert.deepEqual(reloadedWidgetPlacement, finalizedWidgetPlacement);
+  assert.deepEqual(reloadedWidgetPlacement, leftWidgetPlacement);
   const widgetTarget = await waitFor(
     "Patina widget WebView CDP target",
     () => findWidgetTarget(devtoolsPort, target.webSocketDebuggerUrl!),
@@ -895,6 +938,97 @@ try {
       "Boolean(window.__TAURI_INTERNALS__ && document.querySelector('.widget-shell'))",
     ),
     10_000,
+  );
+  await waitFor(
+    "widget DOM side matches the native left-edge placement",
+    async () => evaluate(
+      widgetClient!,
+      `document.querySelector('.widget-shell')?.classList.contains('widget-shell-left') === true`,
+    ),
+    10_000,
+  );
+  assert.equal(
+    await evaluate(
+      widgetClient,
+      `(() => {
+        const rect = document.querySelector('.widget-pill-anchor-collapsed')?.getBoundingClientRect();
+        return Boolean(rect && rect.left < 0 && rect.right > 0);
+      })()`,
+    ),
+    true,
+    "the collapsed anchor must straddle the widget window's left edge",
+  );
+  const rightWidgetPlacement = await evaluate(
+    client,
+    `window.__TAURI_INTERNALS__.invoke("cmd_finalize_widget_drag", {
+      releasePosition: {
+        x: ${(finalizedWorkArea?.x ?? 0) + (finalizedWorkArea?.width ?? 1) - 1},
+        y: ${(finalizedWidgetPosition.y ?? 0) + Math.floor((finalizedWidgetSize.height ?? 1) / 2)}
+      }
+    })`,
+  ) as typeof finalizedWidgetPlacement;
+  assert.equal(rightWidgetPlacement.side, "right");
+  const [rightWidgetPosition, rightWidgetSize] = await Promise.all([
+    evaluate(
+      client,
+      `window.__TAURI_INTERNALS__.invoke("plugin:window|outer_position", { label: "widget" })`,
+    ) as Promise<{ x?: number; y?: number }>,
+    evaluate(
+      client,
+      `window.__TAURI_INTERNALS__.invoke("plugin:window|outer_size", { label: "widget" })`,
+    ) as Promise<{ width?: number; height?: number }>,
+  ]);
+  assert.equal(
+    (rightWidgetPosition.x ?? 0) + (rightWidgetSize.width ?? 0),
+    (finalizedWorkArea?.x ?? 0) + (finalizedWorkArea?.width ?? 0),
+  );
+  await waitFor(
+    "widget DOM side follows a native right-edge placement update",
+    async () => evaluate(
+      widgetClient!,
+      `document.querySelector('.widget-shell')?.classList.contains('widget-shell-right') === true`,
+    ),
+    10_000,
+  );
+  assert.equal(
+    await evaluate(
+      widgetClient,
+      `(() => {
+        const rect = document.querySelector('.widget-pill-anchor-collapsed')?.getBoundingClientRect();
+        return Boolean(rect && rect.left < window.innerWidth && rect.right > window.innerWidth);
+      })()`,
+    ),
+    true,
+    "the collapsed anchor must straddle the widget window's right edge",
+  );
+  const restoredLeftWidgetPlacement = await evaluate(
+    client,
+    `window.__TAURI_INTERNALS__.invoke("cmd_finalize_widget_drag", {
+      releasePosition: {
+        x: ${finalizedWorkArea?.x ?? 0},
+        y: ${(finalizedWidgetPosition.y ?? 0) + Math.floor((finalizedWidgetSize.height ?? 1) / 2)}
+      }
+    })`,
+  ) as typeof finalizedWidgetPlacement;
+  assert.equal(restoredLeftWidgetPlacement.side, "left");
+  await waitFor(
+    "widget DOM side follows the restored native left-edge placement",
+    async () => evaluate(
+      widgetClient!,
+      `document.querySelector('.widget-shell')?.classList.contains('widget-shell-left') === true`,
+    ),
+    10_000,
+  );
+  assert.equal(
+    await evaluate(
+      widgetClient,
+      `(() => {
+        const rect = document.querySelector('.widget-pill-anchor-collapsed')?.getBoundingClientRect();
+        return Boolean(rect && rect.left < 0 && rect.right > 0);
+      })()`,
+    ),
+    true,
+    "restoring the left placement must restore the left-edge visible crescent",
   );
   const widgetBootstrap = await evaluate(
     widgetClient,
@@ -1279,7 +1413,7 @@ try {
   assert.equal(widgetPlacementRows[0]?.key, "widget_placement");
   assert.deepEqual(
     JSON.parse(widgetPlacementRows[0]?.value ?? "null"),
-    finalizedWidgetPlacement,
+    leftWidgetPlacement,
   );
 
   const historyBootstrapPayload = JSON.stringify({ version: 1, smoke: true });

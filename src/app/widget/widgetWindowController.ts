@@ -1,10 +1,13 @@
-import type { WidgetPlacement } from "../../platform/desktop/widgetRuntimeGateway.ts";
+import type {
+  WidgetPhysicalPoint,
+  WidgetPlacement,
+} from "../../platform/desktop/widgetRuntimeGateway.ts";
 
 interface WidgetWindowControllerDeps {
   loadPlacement: () => Promise<WidgetPlacement | null>;
   persistExpanded: (expanded: boolean, showObjectSlot: boolean) => Promise<void>;
   applyLayout: (expanded: boolean, showObjectSlot: boolean) => Promise<void>;
-  finalizeDrag: () => Promise<WidgetPlacement | null>;
+  finalizeDrag: (releasePosition: WidgetPhysicalPoint | null) => Promise<WidgetPlacement | null>;
   schedule: (callback: () => void, delayMs: number) => number;
   clearScheduled: (handle: number) => void;
   onPlacementChange?: (placement: WidgetPlacement) => void;
@@ -48,6 +51,7 @@ export function createWidgetWindowController(
   deps: WidgetWindowControllerDeps,
 ) {
   let placement = DEFAULT_WIDGET_PLACEMENT;
+  let placementRevision = 0;
   let expanded = false;
   let showObjectSlot = initialShowObjectSlot;
   let applyingRuntimeLayout = false;
@@ -58,12 +62,17 @@ export function createWidgetWindowController(
   let dragGeneration = 0;
   let finalizeInFlightGeneration: number | null = null;
   let queuedFinalizeGeneration: number | null = null;
+  let dragReleasePosition: {
+    generation: number;
+    point: Promise<WidgetPhysicalPoint | null>;
+  } | null = null;
   let dragTimerHandle: number | null = null;
   let layoutReleaseHandle: number | null = null;
   let collapseRuntimeHandle: number | null = null;
 
   function setPlacement(nextPlacement: WidgetPlacement) {
     placement = normalizePlacement(nextPlacement);
+    placementRevision += 1;
     deps.onPlacementChange?.(placement);
   }
 
@@ -163,7 +172,18 @@ export function createWidgetWindowController(
       return;
     }
 
-    const nextPlacement = await deps.finalizeDrag();
+    const releasePosition = dragReleasePosition?.generation === generation
+      ? await dragReleasePosition.point
+      : null;
+    if (
+      expanded
+      || runtimeHidden
+      || userDragActive
+      || generation !== dragGeneration
+    ) {
+      return;
+    }
+    const nextPlacement = await deps.finalizeDrag(releasePosition);
     if (
       !nextPlacement
       || expanded
@@ -228,9 +248,10 @@ export function createWidgetWindowController(
   }
 
   async function initialize() {
+    const revisionAtStart = placementRevision;
     try {
       const loadedPlacement = await deps.loadPlacement();
-      if (loadedPlacement) {
+      if (loadedPlacement && placementRevision === revisionAtStart) {
         setPlacement(loadedPlacement);
       }
     } catch (error) {
@@ -279,6 +300,7 @@ export function createWidgetWindowController(
     dragGeneration += 1;
     userDragActive = true;
     queuedFinalizeGeneration = null;
+    dragReleasePosition = null;
     clearCollapsedDragSettlePending();
     clearDragTimer();
   }
@@ -289,6 +311,7 @@ export function createWidgetWindowController(
     userDragActive = false;
     scaleRefreshPending = false;
     queuedFinalizeGeneration = null;
+    dragReleasePosition = null;
     clearDragTimer();
     clearCollapsedDragSettlePending();
     clearCollapseRuntimeTimer();
@@ -299,16 +322,25 @@ export function createWidgetWindowController(
     setExpanded(false);
   }
 
-  function syncShownFromRuntime() {
+  function syncShownFromRuntime(runtimePlacement: WidgetPlacement | null = null) {
     runtimeHidden = false;
+    if (runtimePlacement) {
+      setPlacement(runtimePlacement);
+    }
   }
 
-  function endUserDrag() {
+  function endUserDrag(
+    releasePosition: WidgetPhysicalPoint | null | Promise<WidgetPhysicalPoint | null> = null,
+  ) {
     if (!userDragActive) {
       return;
     }
 
     userDragActive = false;
+    dragReleasePosition = {
+      generation: dragGeneration,
+      point: Promise.resolve(releasePosition).catch(() => null),
+    };
     collapsedDragSettlePending = true;
     scheduleFinalizeMove();
   }
@@ -373,6 +405,7 @@ export function createWidgetWindowController(
     userDragActive = false;
     scaleRefreshPending = false;
     queuedFinalizeGeneration = null;
+    dragReleasePosition = null;
     clearDragTimer();
     clearCollapsedDragSettlePending();
     clearLayoutReleaseTimer();

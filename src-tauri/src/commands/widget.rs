@@ -2,7 +2,7 @@ use crate::app::{main_window, tray, widget};
 use crate::data::{
     icon_cache_service, repositories::widget_runtime::WidgetBootstrapSnapshot, widget_store,
 };
-use crate::domain::widget::WidgetPlacement;
+use crate::domain::widget::{WidgetPhysicalPoint, WidgetPlacement};
 use crate::platform::windows::input;
 use tauri::AppHandle;
 
@@ -27,8 +27,11 @@ pub async fn cmd_get_widget_icon(
 }
 
 #[tauri::command]
-pub async fn cmd_finalize_widget_drag(app: AppHandle) -> Result<WidgetPlacement, String> {
-    widget::finalize_widget_drag(&app).await
+pub async fn cmd_finalize_widget_drag(
+    release_position: Option<WidgetPhysicalPoint>,
+    app: AppHandle,
+) -> Result<WidgetPlacement, String> {
+    widget::finalize_widget_drag(&app, release_position).await
 }
 
 #[tauri::command]

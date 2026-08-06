@@ -12,6 +12,18 @@ pub enum WidgetSide {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct WidgetPhysicalPoint {
+    pub x: i32,
+    pub y: i32,
+}
+
+impl WidgetPhysicalPoint {
+    pub const fn new(x: i32, y: i32) -> Self {
+        Self { x, y }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct WidgetPhysicalRect {
     pub x: i32,
     pub y: i32,
@@ -31,6 +43,13 @@ impl WidgetPhysicalRect {
 
     pub fn is_valid(self) -> bool {
         self.width > 0 && self.height > 0
+    }
+
+    pub fn contains_point(self, point: WidgetPhysicalPoint) -> bool {
+        i64::from(point.x) >= i64::from(self.x)
+            && i64::from(point.x) < self.right()
+            && i64::from(point.y) >= i64::from(self.y)
+            && i64::from(point.y) < self.bottom()
     }
 
     fn right(self) -> i64 {
@@ -149,10 +168,30 @@ pub fn resolve_widget_placement(
     window_rect: WidgetPhysicalRect,
     monitor: WidgetMonitorAffinity,
 ) -> WidgetPlacement {
-    let work_area = monitor.work_area;
     let (center_x, _) = window_rect.center();
+    resolve_widget_placement_from_horizontal_reference(window_rect, center_x, monitor)
+}
+
+pub fn resolve_widget_drag_placement(
+    window_rect: WidgetPhysicalRect,
+    release_point: WidgetPhysicalPoint,
+    monitor: WidgetMonitorAffinity,
+) -> WidgetPlacement {
+    resolve_widget_placement_from_horizontal_reference(
+        window_rect,
+        f64::from(release_point.x),
+        monitor,
+    )
+}
+
+fn resolve_widget_placement_from_horizontal_reference(
+    window_rect: WidgetPhysicalRect,
+    horizontal_reference: f64,
+    monitor: WidgetMonitorAffinity,
+) -> WidgetPlacement {
+    let work_area = monitor.work_area;
     let work_center_x = f64::from(work_area.x) + f64::from(work_area.width) / 2.0;
-    let side = if center_x < work_center_x {
+    let side = if horizontal_reference < work_center_x {
         WidgetSide::Left
     } else {
         WidgetSide::Right
@@ -165,6 +204,16 @@ pub fn resolve_widget_placement(
     };
 
     WidgetPlacement::with_monitor(monitor, side, anchor_y)
+}
+
+pub fn select_widget_monitor_for_release(
+    release_point: WidgetPhysicalPoint,
+    monitors: &[WidgetMonitorAffinity],
+) -> Option<usize> {
+    select_widget_monitor(
+        &WidgetPhysicalRect::new(release_point.x, release_point.y, 1, 1),
+        monitors,
+    )
 }
 
 pub fn select_widget_monitor(
@@ -225,9 +274,12 @@ pub fn match_widget_monitor(
         }
     }
 
-    valid_monitors
-        .min_by(|(_, left), (_, right)| compare_affinity_match(saved, left, right))
-        .map(|(index, _)| index)
+    let mut exact_geometry_matches = valid_monitors
+        .filter(|(_, monitor)| monitor.work_area == saved.work_area)
+        .collect::<Vec<_>>();
+    exact_geometry_matches
+        .sort_by(|(_, left), (_, right)| left.stable_key().cmp(&right.stable_key()));
+    exact_geometry_matches.first().map(|(index, _)| *index)
 }
 
 #[derive(Debug)]
@@ -328,8 +380,9 @@ fn affinity_geometry_distance(saved: WidgetPhysicalRect, candidate: WidgetPhysic
 #[cfg(test)]
 mod tests {
     use super::{
-        clamp_widget_anchor_y, match_widget_monitor, resolve_widget_placement,
-        select_widget_monitor, WidgetMonitorAffinity, WidgetPhysicalRect, WidgetPlacement,
+        clamp_widget_anchor_y, match_widget_monitor, resolve_widget_drag_placement,
+        resolve_widget_placement, select_widget_monitor, select_widget_monitor_for_release,
+        WidgetMonitorAffinity, WidgetPhysicalPoint, WidgetPhysicalRect, WidgetPlacement,
         WidgetSide, DEFAULT_WIDGET_ANCHOR_Y,
     };
 
@@ -371,6 +424,43 @@ mod tests {
             select_widget_monitor(&final_widget_rect, &monitors),
             Some(1)
         );
+    }
+
+    #[test]
+    fn release_point_owns_the_target_when_the_window_still_straddles_the_source_monitor() {
+        let monitors = [
+            monitor("primary", 0, 0, 1920, 1040),
+            monitor("secondary", 1920, 0, 2560, 1392),
+        ];
+        let straddling_window = WidgetPhysicalRect::new(1840, 300, 96, 72);
+        let release_on_secondary = WidgetPhysicalPoint::new(1928, 336);
+
+        assert_eq!(
+            select_widget_monitor(&straddling_window, &monitors),
+            Some(0)
+        );
+        assert_eq!(
+            select_widget_monitor_for_release(release_on_secondary, &monitors),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn release_point_determines_the_nearest_edge_without_drag_handle_offset_bias() {
+        let target = monitor("primary", 0, 0, 1920, 1040);
+        let window = WidgetPhysicalRect::new(930, 300, 96, 72);
+
+        let released_left = resolve_widget_drag_placement(
+            window,
+            WidgetPhysicalPoint::new(940, 336),
+            target.clone(),
+        );
+        let released_right =
+            resolve_widget_drag_placement(window, WidgetPhysicalPoint::new(980, 336), target);
+
+        assert_eq!(released_left.side, WidgetSide::Left);
+        assert_eq!(released_right.side, WidgetSide::Right);
+        assert_eq!(released_left.anchor_y, released_right.anchor_y);
     }
 
     #[test]
@@ -483,11 +573,22 @@ mod tests {
     }
 
     #[test]
-    fn saved_monitor_falls_back_to_closest_geometry() {
+    fn disconnected_saved_monitor_does_not_hijack_the_safe_fallback_chain() {
         let saved = monitor("missing", -2560, 0, 2560, 1392);
         let monitors = [
             monitor("primary", 0, 0, 1920, 1040),
-            monitor("renamed", -2560, 0, 2560, 1392),
+            monitor("other", 1920, 0, 2560, 1392),
+        ];
+
+        assert_eq!(match_widget_monitor(&saved, &monitors), None);
+    }
+
+    #[test]
+    fn renamed_saved_monitor_matches_only_when_its_work_area_is_unchanged() {
+        let saved = monitor("old-name", -2560, 0, 2560, 1392);
+        let monitors = [
+            monitor("primary", 0, 0, 1920, 1040),
+            monitor("new-name", -2560, 0, 2560, 1392),
         ];
 
         assert_eq!(match_widget_monitor(&saved, &monitors), Some(1));
