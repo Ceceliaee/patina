@@ -1,3 +1,4 @@
+import { LOCALE_METADATA, SUPPORTED_LOCALES, useLocaleText } from "../../../shared/i18n/index.ts";
 import { ChevronRight, Palette } from "lucide-react";
 import { useRef, useState } from "react";
 import QuietBadge from "../../../shared/components/QuietBadge";
@@ -8,10 +9,8 @@ import QuietSwitch from "../../../shared/components/QuietSwitch";
 import SettingsPanelHeader from "./SettingsPanelHeader";
 import type { AppLanguage, ColorScheme, ThemeMode } from "../../../shared/settings/appSettings.ts";
 import {
-  COLOR_SCHEME_OPTIONS,
-  type ThemeLibrary,
-} from "../../../shared/settings/colorSchemeOptions.ts";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+  COLOR_SCHEME_OPTIONS, type ThemeLibrary, } from "../../../shared/settings/colorSchemeOptions.ts";
+
 
 type SettingsAppearancePanelProps = {
   themeMode: ThemeMode;
@@ -42,6 +41,7 @@ export default function SettingsAppearancePanel({
   onConfirmColorSchemeChange,
   colorSchemeConfirming,
 }: SettingsAppearancePanelProps) {
+  const UI_TEXT = useLocaleText();
   const selectedSchemeRef = useRef<HTMLButtonElement>(null);
   const [activeLibrary, setActiveLibrary] = useState<ThemeLibrary | null>(null);
   const [dialogSnapshot, setDialogSnapshot] = useState<{
@@ -53,10 +53,10 @@ export default function SettingsAppearancePanel({
     { value: "dark", label: UI_TEXT.settings.themeModeOptions.dark },
     { value: "system", label: UI_TEXT.settings.themeModeOptions.system },
   ];
-  const languageOptions: Array<{ value: AppLanguage; label: string }> = [
-    { value: "zh-CN", label: UI_TEXT.settings.languageOptions.zhCN },
-    { value: "en-US", label: UI_TEXT.settings.languageOptions.enUS },
-  ];
+  const languageOptions: Array<{ value: AppLanguage; label: string }> = SUPPORTED_LOCALES.map((value) => ({
+    value,
+    label: LOCALE_METADATA[value].label,
+  }));
   const themeLibraryOptions: Array<{
     value: ThemeLibrary;
     label: string;

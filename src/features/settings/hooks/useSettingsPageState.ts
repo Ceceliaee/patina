@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { setUiTextLanguage, UI_TEXT } from "../../../shared/copy/index.ts";
+import { useLocale, useLocaleText, type UiText } from "../../../shared/i18n/index.ts";
 import type { QuietToastTone } from "../../../shared/types/toast";
 import { useQuietDialogs } from "../../../shared/hooks/useQuietDialogs";
 import { getSettingsBootstrapCache, setSettingsBootstrapCache } from "../services/settingsBootstrapCache";
@@ -32,13 +32,13 @@ import type {
 import { useRemoteBackupState } from "./useRemoteBackupState.ts";
 import { toEbwebviewCachePath } from "../services/storagePathDisplay.ts";
 
-const buildCleanupOptions = (): Array<{ value: CleanupRange; label: string }> => [
-  { value: 180, label: UI_TEXT.settings.cleanupRangeLabels[180] },
-  { value: 90, label: UI_TEXT.settings.cleanupRangeLabels[90] },
-  { value: 60, label: UI_TEXT.settings.cleanupRangeLabels[60] },
-  { value: 30, label: UI_TEXT.settings.cleanupRangeLabels[30] },
-  { value: 15, label: UI_TEXT.settings.cleanupRangeLabels[15] },
-  { value: 7, label: UI_TEXT.settings.cleanupRangeLabels[7] },
+const buildCleanupOptions = (uiText: UiText): Array<{ value: CleanupRange; label: string }> => [
+  { value: 180, label: uiText.settings.cleanupRangeLabels[180] },
+  { value: 90, label: uiText.settings.cleanupRangeLabels[90] },
+  { value: 60, label: uiText.settings.cleanupRangeLabels[60] },
+  { value: 30, label: uiText.settings.cleanupRangeLabels[30] },
+  { value: 15, label: uiText.settings.cleanupRangeLabels[15] },
+  { value: 7, label: uiText.settings.cleanupRangeLabels[7] },
 ];
 
 const IDLE_TIMEOUT_MINUTES_RANGE = { min: 5, max: 30 } as const;
@@ -92,6 +92,8 @@ export function useSettingsPageState({
   onToast,
   onRegisterSaveHandler,
 }: UseSettingsPageStateOptions) {
+  const UI_TEXT = useLocaleText();
+  const locale = useLocale();
   const { confirm, dialogs } = useQuietDialogs();
   const initialBootstrap = getSettingsBootstrapCache();
   const initialBootstrapError = initialBootstrap ? null : getSettingsBootstrapPrewarmError();
@@ -118,7 +120,7 @@ export function useSettingsPageState({
   const [appVersion, setAppVersion] = useState(() => initialBootstrap?.appVersion ?? "-");
   const hasUnsavedChangesRef = useRef(false);
   const bootstrapLoadRevisionRef = useRef(0);
-  const cleanupOptions = buildCleanupOptions();
+  const cleanupOptions = buildCleanupOptions(UI_TEXT);
 
   const notify = useCallback((message: string, tone: QuietToastTone = "info") => {
     onToast?.(message, tone);
@@ -155,7 +157,7 @@ export function useSettingsPageState({
     } finally {
       setIsStorageBusy(false);
     }
-  }, [isStorageBusy, notify, refreshStorageSnapshot]);
+  }, [isStorageBusy, notify, refreshStorageSnapshot, UI_TEXT]);
 
   useEffect(() => {
     if (storageSnapshot) return;
@@ -249,7 +251,7 @@ export function useSettingsPageState({
         bootstrapLoadRevisionRef.current += 1;
       }
     };
-  }, [applyBootstrap, notify]);
+  }, [applyBootstrap, notify, UI_TEXT]);
 
   useEffect(() => {
     let cancelled = false;
@@ -336,7 +338,6 @@ export function useSettingsPageState({
       }
       if (result.nextBootstrap) {
         setSettingsBootstrapCache(result.nextBootstrap);
-        setUiTextLanguage(result.nextBootstrap.settings.language);
         onSettingsChanged(result.nextBootstrap.settings);
       }
       setSaveStatus(result.nextSaveStatus);
@@ -355,7 +356,7 @@ export function useSettingsPageState({
       notify(UI_TEXT.settings.saveFailed, "error");
       return false;
     }
-  }, [appVersion, draftSettings, hasUnsavedChanges, notify, onSettingsChanged, saveStatus, savedSettings]);
+  }, [appVersion, draftSettings, hasUnsavedChanges, notify, onSettingsChanged, saveStatus, savedSettings, UI_TEXT]);
 
   const handleSaveColorScheme = useCallback(async (library: ThemeLibrary): Promise<boolean> => {
     if (!savedSettings || !draftSettings) return false;
@@ -396,7 +397,7 @@ export function useSettingsPageState({
       notify(UI_TEXT.settings.saveFailed, "error");
       return false;
     }
-  }, [appVersion, draftSettings, notify, onColorSchemeSaved, saveStatus, savedSettings]);
+  }, [appVersion, draftSettings, notify, onColorSchemeSaved, saveStatus, savedSettings, UI_TEXT]);
 
   useEffect(() => {
     onRegisterSaveHandler?.(handleSave);
@@ -416,12 +417,13 @@ export function useSettingsPageState({
     if (result.toastKind === "cancelled") {
       notify(UI_TEXT.settings.cancelled, "info");
     }
-  }, [hasUnsavedChanges, notify, savedSettings]);
+  }, [hasUnsavedChanges, notify, savedSettings, UI_TEXT]);
 
   const handleCleanup = useCallback(async () => {
     const selectedLabel = cleanupOptions.find((option) => option.value === cleanupRange)?.label
       ?? UI_TEXT.settings.confirmRangeFallback;
     await runSettingsCleanupFlow({
+      uiText: UI_TEXT,
       cleanupRange,
       cleanupRangeLabel: selectedLabel,
       confirm,
@@ -434,11 +436,12 @@ export function useSettingsPageState({
         console.error(message, error);
       },
     });
-  }, [cleanupOptions, cleanupRange, confirm, notify]);
+  }, [cleanupOptions, cleanupRange, confirm, notify, UI_TEXT]);
 
   const handleExportBackup = useCallback(async () => {
     if (isExportingBackup) return;
     await runBackupExportFlow({
+      uiText: UI_TEXT,
       initialPath: exportPath,
       exportBackupWithPicker: SettingsRuntimeAdapterService.exportBackupWithPicker,
       setExportPath,
@@ -449,13 +452,18 @@ export function useSettingsPageState({
         console.error(message, error);
       },
     });
-  }, [exportPath, isExportingBackup, notify]);
+  }, [exportPath, isExportingBackup, notify, UI_TEXT]);
 
   const handlePrepareRestoreBackup = useCallback(async () => {
     if (isRestoringBackup) return;
     const preparation = await prepareBackupRestoreFlow({
+      uiText: UI_TEXT,
       initialPath: restorePath,
-      prepareBackupRestore: SettingsRuntimeAdapterService.prepareBackupRestore,
+      prepareBackupRestore: (initialPath) => SettingsRuntimeAdapterService.prepareBackupRestore(
+        initialPath,
+        UI_TEXT,
+        locale,
+      ),
       setRestorePath,
       notify,
       onExecutionStart: () => setIsRestoringBackup(true),
@@ -466,11 +474,12 @@ export function useSettingsPageState({
     });
     setPendingRestorePreparation(preparation);
     return Boolean(preparation);
-  }, [isRestoringBackup, notify, restorePath]);
+  }, [isRestoringBackup, notify, restorePath, UI_TEXT, locale]);
 
   const handleRestoreBackup = useCallback(async (selectedRestoreStrategy: BackupRestoreStrategy = restoreStrategy) => {
     if (isRestoringBackup || !pendingRestorePreparation) return;
     await commitPreparedBackupRestoreFlow({
+      uiText: UI_TEXT,
       preparation: pendingRestorePreparation,
       restoreStrategy: selectedRestoreStrategy,
       confirm,
@@ -484,7 +493,7 @@ export function useSettingsPageState({
       },
     });
     setPendingRestorePreparation(null);
-  }, [confirm, isRestoringBackup, notify, pendingRestorePreparation, restoreStrategy]);
+  }, [confirm, isRestoringBackup, notify, pendingRestorePreparation, restoreStrategy, UI_TEXT]);
 
   const clearPendingRestoreBackup = useCallback(() => {
     setPendingRestorePreparation(null);
@@ -503,7 +512,7 @@ export function useSettingsPageState({
     } finally {
       setIsStorageBusy(false);
     }
-  }, [isStorageBusy, notify]);
+  }, [isStorageBusy, notify, UI_TEXT]);
 
   const handleChooseDataDirectory = useCallback(async () => {
     if (isStorageBusy) return;
@@ -532,7 +541,7 @@ export function useSettingsPageState({
     } finally {
       setIsStorageBusy(false);
     }
-  }, [confirm, isStorageBusy, notify]);
+  }, [confirm, isStorageBusy, notify, UI_TEXT]);
 
   const handleChooseCacheDirectory = useCallback(async () => {
     if (isStorageBusy) return;
@@ -561,7 +570,7 @@ export function useSettingsPageState({
     } finally {
       setIsStorageBusy(false);
     }
-  }, [confirm, isStorageBusy, notify]);
+  }, [confirm, isStorageBusy, notify, UI_TEXT]);
 
   const handleRestoreDefaultDataDirectory = useCallback(async () => {
     if (isStorageBusy || !storageSnapshot?.paths.isCustomDataRoot) return;
@@ -587,7 +596,7 @@ export function useSettingsPageState({
     } finally {
       setIsStorageBusy(false);
     }
-  }, [confirm, isStorageBusy, notify, storageSnapshot?.paths.isCustomDataRoot]);
+  }, [confirm, isStorageBusy, notify, storageSnapshot?.paths.isCustomDataRoot, UI_TEXT]);
 
   const handleRestoreDefaultCacheDirectory = useCallback(async () => {
     if (isStorageBusy || !storageSnapshot?.paths.isCustomWebviewRoot) return;
@@ -613,7 +622,7 @@ export function useSettingsPageState({
     } finally {
       setIsStorageBusy(false);
     }
-  }, [confirm, isStorageBusy, notify, storageSnapshot?.paths.isCustomWebviewRoot]);
+  }, [confirm, isStorageBusy, notify, storageSnapshot?.paths.isCustomWebviewRoot, UI_TEXT]);
 
   const handleOpenStorageDirectory = useCallback(async (path: string) => {
     const storageText = UI_TEXT.settings.storage;
@@ -623,7 +632,7 @@ export function useSettingsPageState({
       console.error("open storage directory failed", error);
       notify(storageText.storageOpenDirectoryFailed, "error");
     }
-  }, [notify]);
+  }, [notify, UI_TEXT]);
 
   const handleOpenReleaseNotes = useCallback(async () => {
     try {
@@ -632,7 +641,7 @@ export function useSettingsPageState({
       console.error("open release notes failed", error);
       notify(UI_TEXT.toast.releaseNotesOpenFailed, "error");
     }
-  }, [notify]);
+  }, [notify, UI_TEXT]);
 
   const handleOpenFeedback = useCallback(async () => {
     try {
@@ -641,7 +650,7 @@ export function useSettingsPageState({
       console.error("open feedback link failed", error);
       notify(UI_TEXT.toast.feedbackOpenFailed, "error");
     }
-  }, [notify]);
+  }, [notify, UI_TEXT]);
 
   const idleTimeoutMinutes = draftSettings
     ? secondsToMinute(

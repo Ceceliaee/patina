@@ -1,19 +1,8 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { useRef, useState, type ReactNode } from "react";
 import {
-  BrushCleaning,
-  Database,
-  FolderPen,
-  FileArchive,
-  FileDown,
-  FileUp,
-  FolderOpen,
-  CircleAlert,
-  RefreshCw,
-  RotateCcw,
-  Trash2,
-  X,
-} from "lucide-react";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+  BrushCleaning, Database, FolderPen, FileArchive, FileDown, FileUp, FolderOpen, CircleAlert, RefreshCw, RotateCcw, Trash2, X, } from "lucide-react";
+
 import QuietBadge from "../../../shared/components/QuietBadge";
 import QuietSubpanel from "../../../shared/components/QuietSubpanel";
 import QuietActionRow from "../../../shared/components/QuietActionRow";
@@ -85,6 +74,7 @@ function StoragePathRow({
   changeDisabled?: boolean;
   restoreDisabled?: boolean;
 }) {
+  const UI_TEXT = useLocaleText();
   const storageText = UI_TEXT.settings.storage;
   return (
     <div className="settings-storage-path-row">
@@ -185,6 +175,7 @@ export default function SettingsDataSafetyPanel({
   onRestoreDefaultCacheDirectory,
   onOpenStorageDirectory,
 }: SettingsDataSafetyPanelProps) {
+  const UI_TEXT = useLocaleText();
   const cacheClearCancelRef = useRef<HTMLButtonElement>(null);
   const localBackupRef = useRef<HTMLButtonElement>(null);
   const localRestoreRef = useRef<HTMLButtonElement>(null);

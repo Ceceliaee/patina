@@ -9,6 +9,7 @@ import {
   type PreparedImportClassification,
 } from "../services/settingsImportService.ts";
 import type { QuietToastTone } from "../../../shared/types/toast.ts";
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 
 type ImportDialogView = "actions" | "preview" | "batches";
 
@@ -19,6 +20,7 @@ export function useSettingsImportState(
   ) => Promise<PreparedImportClassification>,
   onImportedDataChanged: () => void = () => {},
 ) {
+  const UI_TEXT = useLocaleText();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<ImportDialogView>("actions");
   const [busy, setBusy] = useState(false);
@@ -77,7 +79,7 @@ export function useSettingsImportState(
         })),
       });
       await refreshBatches();
-      onToast?.(`已导入 ${report.importedRecords} 条记录`, "success");
+      onToast?.(UI_TEXT.settings.dataImport.importSuccess(report.importedRecords), "success");
       setPreview(null);
       setView("actions");
     } catch (error) {
@@ -85,7 +87,7 @@ export function useSettingsImportState(
     } finally {
       setBusy(false);
     }
-  }, [busy, onPrepareImportCategories, onToast, preview, refreshBatches]);
+  }, [UI_TEXT, busy, onPrepareImportCategories, onToast, preview, refreshBatches]);
 
   const destructureExternal = useCallback(async () => {
     if (busy) return;
@@ -94,13 +96,13 @@ export function useSettingsImportState(
       const filePath = await SettingsImportService.pickExternalImportFile();
       if (!filePath) return;
       const report = await SettingsImportService.destructureExternalData(filePath);
-      onToast?.(`已生成 ${report.recordsWritten} 条记录：${report.outputPath}`, "success");
+      onToast?.(UI_TEXT.settings.dataImport.destructureSuccess(report.recordsWritten, report.outputPath), "success");
     } catch (error) {
       onToast?.(String(error), "error");
     } finally {
       setBusy(false);
     }
-  }, [busy, onToast]);
+  }, [UI_TEXT, busy, onToast]);
 
   const showBatches = useCallback(() => {
     if (batches.length > 0) setView("batches");
@@ -115,17 +117,16 @@ export function useSettingsImportState(
         refreshBatches,
         onImportedDataChanged,
       });
-      onToast?.(
-        `已删除 ${report.deletedExactSessions + report.deletedHourBuckets} 条外部记录`,
-        "success",
-      );
+      onToast?.(UI_TEXT.settings.dataImport.deleteSuccess(
+        report.deletedExactSessions + report.deletedHourBuckets,
+      ), "success");
       if (nextBatches.length === 0) setView("actions");
     } catch (error) {
       onToast?.(String(error), "error");
     } finally {
       setBusy(false);
     }
-  }, [busy, onImportedDataChanged, onToast, refreshBatches]);
+  }, [UI_TEXT, busy, onImportedDataChanged, onToast, refreshBatches]);
 
   return {
     open,

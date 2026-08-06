@@ -1,3 +1,5 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
+import type { UiText } from "../../../shared/i18n/index.ts";
 import { Dices, EthernetPort, Eye, EyeOff, Fingerprint, KeyRound, Link2, Server, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
@@ -6,7 +8,7 @@ import QuietDialog from "../../../shared/components/QuietDialog";
 import QuietSubpanel from "../../../shared/components/QuietSubpanel";
 import QuietSwitch from "../../../shared/components/QuietSwitch";
 import SettingsPanelHeader from "./SettingsPanelHeader";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import { SettingsRuntimeAdapterService } from "../services/settingsRuntimeAdapterService.ts";
 import { createSettingsToken } from "../services/settingsTokenService.ts";
 
@@ -76,7 +78,7 @@ type InterfaceInlineFieldProps = {
   className?: string;
 };
 
-type WebActivityHelpDetail = (typeof UI_TEXT.settings.webActivityHelpSteps)[number]["details"][number];
+type WebActivityHelpDetail = UiText["settings"]["webActivityHelpSteps"][number]["details"][number];
 type WebActivityHelpLink = {
   href: string;
   label: string;
@@ -111,6 +113,7 @@ function TokenField({
   showLabel,
   hideLabel,
 }: TokenFieldProps) {
+  const UI_TEXT = useLocaleText();
   return (
     <div className="relative w-full">
       <input
@@ -332,6 +335,7 @@ export default function SettingsInterfacePanel({
   onRemoteStatusBridgeUrlChange,
   onRemoteStatusBridgeTokenChange,
 }: SettingsInterfacePanelProps) {
+  const UI_TEXT = useLocaleText();
   const [webActivityPortDraft, setWebActivityPortDraft] = useState(String(port));
   const [webActivityTokenVisible, setWebActivityTokenVisible] = useState(false);
   const [webActivityHelpOpen, setWebActivityHelpOpen] = useState(false);

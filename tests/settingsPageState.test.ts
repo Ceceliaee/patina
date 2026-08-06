@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { getLocaleText } from "../src/shared/i18n/runtime.ts";
 import type { BackupPreview } from "../src/features/settings/services/settingsRuntimeAdapterService.ts";
 import { parseBackupPreview } from "../src/platform/backup/backupRuntimeGateway.ts";
 import {
@@ -28,6 +29,8 @@ import {
 import {
   shouldShowWebActivityHelp,
 } from "../src/features/settings/services/webActivitySetupState.ts";
+
+const ZH_TEXT = getLocaleText("zh-CN");
 
 interface AppSettings {
   idleTimeoutSecs: number;
@@ -669,6 +672,7 @@ await runTest("runSettingsCleanupFlow executes confirmed cleanup and reloads", a
   const cleanupRange: CleanupRange = 30;
 
   const result = await runSettingsCleanupFlow({
+    uiText: ZH_TEXT,
     cleanupRange,
     cleanupRangeLabel: "30 days",
     confirm: async (options) => {
@@ -709,6 +713,7 @@ await runTest("runSettingsCleanupFlow reports failures and still clears busy sta
   const errors: string[] = [];
 
   const result = await runSettingsCleanupFlow({
+    uiText: ZH_TEXT,
     cleanupRange: 7,
     cleanupRangeLabel: "7 days",
     confirm: async () => true,
@@ -751,7 +756,7 @@ await runTest("prepareBackupRestoreWithDeps separates native and external backup
       return "C:/tmp/backup.db";
     },
     previewBackup: async () => preview,
-  });
+  }, ZH_TEXT, "zh-CN");
 
   assert.equal(receivedInitialPath, "backup.db");
   assert.equal(preparation?.compatible, true);
@@ -801,6 +806,7 @@ await runTest("runBackupExportFlow normalizes the initial path and stores the ex
   const events: string[] = [];
 
   const exportedPath = await runBackupExportFlow({
+    uiText: ZH_TEXT,
     initialPath: "  C:/tmp/previous.db  ",
     exportBackupWithPicker: async (initialPath) => {
       receivedInitialPath = initialPath;
@@ -833,6 +839,7 @@ await runTest("runBackupRestoreFlow blocks incompatible backups before confirmat
   const tones: string[] = [];
 
   const result = await runBackupRestoreFlow({
+    uiText: ZH_TEXT,
     initialPath: "restore.db",
     restoreStrategy: "replace",
     prepareBackupRestore: async () => ({
@@ -872,6 +879,7 @@ await runTest("runBackupRestoreFlow restores and reloads after confirmation", as
   let receivedStrategy = "";
 
   const result = await runBackupRestoreFlow({
+    uiText: ZH_TEXT,
     initialPath: "restore.db",
     restoreStrategy: "merge",
     prepareBackupRestore: async () => ({

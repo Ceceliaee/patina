@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
+import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
 import type { QuietToastTone } from "../../../shared/types/toast";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import {
   clearRemoteBackupConfig,
   DEFAULT_WEBDAV_REMOTE_DIR,
@@ -104,6 +105,8 @@ export function useRemoteBackupState({
   restoreBackup,
   reload,
 }: UseRemoteBackupStateOptions): RemoteBackupState {
+  const UI_TEXT = useLocaleText();
+  const locale = useLocale();
   const [config, setConfig] = useState<PersistedRemoteBackupConfig | null>(null);
   const [hasSecret, setHasSecret] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -184,7 +187,7 @@ export function useRemoteBackupState({
     } finally {
       setIsSaving(false);
     }
-  }, [config, hasSecret, isSaving, notify]);
+  }, [config, hasSecret, isSaving, notify, UI_TEXT]);
 
   const closeConfigDialog = useCallback(() => {
     setConfigDialogOpen(false);
@@ -235,7 +238,7 @@ export function useRemoteBackupState({
     } finally {
       setIsTesting(false);
     }
-  }, [config, isTesting, notify]);
+  }, [config, isTesting, notify, UI_TEXT]);
 
   const deleteConfig = useCallback(async () => {
     const accepted = await confirm({
@@ -257,7 +260,7 @@ export function useRemoteBackupState({
       console.error("delete WebDAV backup config failed", error);
       notify(UI_TEXT.toast.webDavConfigDeleteFailed, "error");
     }
-  }, [confirm, notify]);
+  }, [confirm, notify, UI_TEXT]);
 
   const uploadBackup = useCallback(async () => {
     if (isUploading) return;
@@ -285,7 +288,7 @@ export function useRemoteBackupState({
     } finally {
       setIsUploading(false);
     }
-  }, [config, hasSecret, isUploading, notify]);
+  }, [config, hasSecret, isUploading, notify, UI_TEXT]);
 
   const openRestoreDialog = useCallback(async () => {
     if (!config || !hasSecret) {
@@ -306,7 +309,7 @@ export function useRemoteBackupState({
     } finally {
       setIsListing(false);
     }
-  }, [config, hasSecret, notify]);
+  }, [config, hasSecret, notify, UI_TEXT]);
 
   const restoreEntry = useCallback(async (entry: RemoteBackupEntry, restoreStrategy: BackupRestoreStrategy) => {
     if (!config || isDownloading) return;
@@ -317,7 +320,7 @@ export function useRemoteBackupState({
       downloadedPath = download.path;
       if (!download.preview.restoreSupported) {
         notify(
-          UI_TEXT.toast.backupIncompatible(localizeBackupRestoreMessage(download.preview)),
+          UI_TEXT.toast.backupIncompatible(localizeBackupRestoreMessage(download.preview, UI_TEXT)),
           "warning",
         );
         return;
@@ -326,7 +329,7 @@ export function useRemoteBackupState({
         title: UI_TEXT.settings.restoreConfirmTitle,
         description: UI_TEXT.settings.restoreConfirmDetail(
           download.path,
-          buildBackupPreviewSummary(download.preview),
+          buildBackupPreviewSummary(download.preview, UI_TEXT, locale),
           UI_TEXT.settings.restoreStrategyOptions[restoreStrategy],
         ),
         confirmLabel: UI_TEXT.settings.backupRestoreAction,
@@ -356,7 +359,7 @@ export function useRemoteBackupState({
       }
       setIsDownloading(false);
     }
-  }, [config, confirm, isDownloading, notify, reload, restoreBackup]);
+  }, [config, confirm, isDownloading, notify, reload, restoreBackup, UI_TEXT, locale]);
 
   return {
     config,

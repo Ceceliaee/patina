@@ -1,7 +1,8 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { MousePointerClick } from "lucide-react";
 import type { ReactNode } from "react";
 import QuietSwitch from "../../../shared/components/QuietSwitch";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import QuietStepperSlider from "../../../shared/components/QuietStepperSlider.tsx";
 import SettingsPanelHeader from "./SettingsPanelHeader";
 
@@ -38,6 +39,7 @@ function MinuteStepperSlider({
   maxMinutes,
   onMinutesChange,
 }: MinuteStepperSliderProps) {
+  const UI_TEXT = useLocaleText();
   return (
     <QuietStepperSlider
       ariaLabel={ariaLabel}
@@ -85,6 +87,7 @@ export default function SettingsTrackingPanel({
   titleRecordingEnabled,
   onTitleRecordingEnabledChange,
 }: SettingsTrackingPanelProps) {
+  const UI_TEXT = useLocaleText();
   return (
     <section className="qp-panel min-h-[240px] p-5 md:p-6">
       <SettingsPanelHeader

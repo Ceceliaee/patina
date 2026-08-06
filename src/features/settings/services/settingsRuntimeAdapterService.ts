@@ -41,7 +41,7 @@ import {
   getWebActivityBridgeSnapshot,
   type WebActivityBridgeSnapshot,
 } from "../../../platform/runtime/webActivityBridgeGateway.ts";
-import { getUiLocale, UI_TEXT } from "../../../shared/copy/index.ts";
+import type { Locale, UiText } from "../../../shared/i18n/index.ts";
 import type { CleanupRange } from "../types.ts";
 import {
   buildSessionCleanupPlan,
@@ -86,9 +86,10 @@ const REPOSITORY_URL = "https://github.com/Ceceliaee/patina";
 const FEEDBACK_URL = "https://github.com/Ceceliaee/patina/issues/new/choose";
 const KOFI_SUPPORT_URL = "https://ko-fi.com/ceceliaee";
 
-export function buildBackupPreviewSummary(preview: BackupPreview): string {
-  const exportedAt = new Date(preview.exportedAtMs).toLocaleString(getUiLocale());
-  const restoreMessage = localizeBackupRestoreMessage(preview);
+export function buildBackupPreviewSummary(preview: BackupPreview, uiText: UiText, locale: Locale): string {
+  const UI_TEXT = uiText;
+  const exportedAt = new Date(preview.exportedAtMs).toLocaleString(locale);
+  const restoreMessage = localizeBackupRestoreMessage(preview, uiText);
   const lines = [
     UI_TEXT.backup.formatLabel(preview.formatKind),
     UI_TEXT.backup.exportedAt(exportedAt),
@@ -110,7 +111,8 @@ export function buildBackupPreviewSummary(preview: BackupPreview): string {
   return lines.join("\n");
 }
 
-export function localizeBackupRestoreMessage(preview: BackupPreview): string {
+export function localizeBackupRestoreMessage(preview: BackupPreview, uiText: UiText): string {
+  const UI_TEXT = uiText;
   return UI_TEXT.backup.restoreMessage(
     preview.restoreMessageKey,
     preview.restoreMessageArgs,
@@ -149,6 +151,8 @@ export async function exportBackupWithPickerWithDeps(
 export async function prepareBackupRestoreWithDeps(
   initialPath: string | undefined,
   deps: PrepareBackupRestoreDeps,
+  uiText: UiText,
+  locale: Locale,
 ): Promise<BackupRestorePreparation | null> {
   const selectedPath = await deps.pickBackupFile(initialPath);
   if (!selectedPath) {
@@ -162,14 +166,14 @@ export async function prepareBackupRestoreWithDeps(
       preview,
       previewSummary: "",
       compatible: false,
-      incompatibilityMessage: localizeBackupRestoreMessage(preview),
+      incompatibilityMessage: localizeBackupRestoreMessage(preview, uiText),
     };
   }
 
   return {
     path: selectedPath,
     preview,
-    previewSummary: buildBackupPreviewSummary(preview),
+    previewSummary: buildBackupPreviewSummary(preview, uiText, locale),
     compatible: true,
   };
 }
@@ -198,8 +202,12 @@ export class SettingsRuntimeAdapterService {
     return exportBackupWithPickerWithDeps(initialPath, exportBackupDeps);
   }
 
-  static async prepareBackupRestore(initialPath?: string): Promise<BackupRestorePreparation | null> {
-    return prepareBackupRestoreWithDeps(initialPath, prepareBackupRestoreDeps);
+  static async prepareBackupRestore(
+    initialPath: string | undefined,
+    uiText: UiText,
+    locale: Locale,
+  ): Promise<BackupRestorePreparation | null> {
+    return prepareBackupRestoreWithDeps(initialPath, prepareBackupRestoreDeps, uiText, locale);
   }
 
   static restoreBackup(

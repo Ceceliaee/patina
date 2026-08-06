@@ -1,5 +1,6 @@
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import type { QuietToastTone } from "../../../shared/types/toast";
+import type { UiText } from "../../../shared/i18n/index.ts";
 import type { CleanupRange } from "../types.ts";
 import type { BackupRestorePreparation, BackupRestoreStrategy } from "./settingsRuntimeAdapterService.ts";
 
@@ -16,6 +17,7 @@ type BusyHook = () => void;
 type ErrorReporter = (message: string, error: unknown) => void;
 
 type CleanupFlowOptions = {
+  uiText: UiText;
   cleanupRange: CleanupRange;
   cleanupRangeLabel: string;
   confirm: ConfirmAction;
@@ -28,6 +30,7 @@ type CleanupFlowOptions = {
 };
 
 type BackupExportFlowOptions = {
+  uiText: UiText;
   initialPath?: string;
   exportBackupWithPicker: (initialPath?: string) => Promise<string | null>;
   setExportPath: (path: string) => void;
@@ -38,6 +41,7 @@ type BackupExportFlowOptions = {
 };
 
 type BackupRestoreFlowOptions = {
+  uiText: UiText;
   initialPath?: string;
   restoreStrategy: BackupRestoreStrategy;
   prepareBackupRestore: (initialPath?: string) => Promise<BackupRestorePreparation | null>;
@@ -56,6 +60,7 @@ type BackupRestoreFlowOptions = {
 };
 
 type BackupRestorePrepareFlowOptions = {
+  uiText: UiText;
   initialPath?: string;
   prepareBackupRestore: (initialPath?: string) => Promise<BackupRestorePreparation | null>;
   setRestorePath: (path: string) => void;
@@ -66,6 +71,7 @@ type BackupRestorePrepareFlowOptions = {
 };
 
 type BackupRestoreCommitFlowOptions = {
+  uiText: UiText;
   preparation: BackupRestorePreparation;
   restoreStrategy: BackupRestoreStrategy;
   confirm: ConfirmAction;
@@ -87,6 +93,7 @@ function normalizeOptionalPath(path: string | undefined): string | undefined {
 }
 
 export async function runSettingsCleanupFlow(options: CleanupFlowOptions): Promise<boolean> {
+  const UI_TEXT = options.uiText;
   const confirmed = await options.confirm({
     title: UI_TEXT.settings.cleanupConfirmTitle,
     description: UI_TEXT.settings.cleanupConfirmDetail(options.cleanupRangeLabel),
@@ -113,6 +120,7 @@ export async function runSettingsCleanupFlow(options: CleanupFlowOptions): Promi
 }
 
 export async function runBackupExportFlow(options: BackupExportFlowOptions): Promise<string | null> {
+  const UI_TEXT = options.uiText;
   options.onExecutionStart?.();
   try {
     const exportedPath = await options.exportBackupWithPicker(normalizeOptionalPath(options.initialPath));
@@ -139,6 +147,7 @@ export async function runBackupRestoreFlow(options: BackupRestoreFlowOptions): P
     setRestorePath: options.setRestorePath,
     notify: options.notify,
     reportError: options.reportError,
+    uiText: options.uiText,
   });
   if (!preparation) {
     return false;
@@ -153,6 +162,7 @@ export async function runBackupRestoreFlow(options: BackupRestoreFlowOptions): P
 export async function prepareBackupRestoreFlow(
   options: BackupRestorePrepareFlowOptions,
 ): Promise<BackupRestorePreparation | null> {
+  const UI_TEXT = options.uiText;
   options.onExecutionStart?.();
   try {
     const preparation = await options.prepareBackupRestore(normalizeOptionalPath(options.initialPath));
@@ -177,6 +187,7 @@ export async function prepareBackupRestoreFlow(
 }
 
 export async function commitPreparedBackupRestoreFlow(options: BackupRestoreCommitFlowOptions): Promise<boolean> {
+  const UI_TEXT = options.uiText;
   const confirmed = await options.confirm({
     title: UI_TEXT.settings.restoreConfirmTitle,
     description: UI_TEXT.settings.restoreConfirmDetail(

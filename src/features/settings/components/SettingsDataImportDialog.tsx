@@ -1,3 +1,4 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { CircleAlert, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import QuietActionRow from "../../../shared/components/QuietActionRow.tsx";
@@ -6,7 +7,7 @@ import QuietConfirmDialog from "../../../shared/components/QuietConfirmDialog.ts
 import QuietDialog from "../../../shared/components/QuietDialog.tsx";
 import QuietIconAction from "../../../shared/components/QuietIconAction.tsx";
 import QuietTooltip from "../../../shared/components/QuietTooltip.tsx";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import type { ImportBatch, ImportPreview } from "../services/settingsImportService.ts";
 
 interface Props {
@@ -38,6 +39,7 @@ export default function SettingsDataImportDialog({
   onShowActions,
   onRemoveBatch,
 }: Props) {
+  const UI_TEXT = useLocaleText();
   const [pendingDelete, setPendingDelete] = useState<ImportBatch | null>(null);
   const importText = UI_TEXT.settings.dataImport;
   const availableRecords = preview

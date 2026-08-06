@@ -1,13 +1,14 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
+import type { UiText } from "../../../shared/i18n/index.ts";
 import { Loader2 } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import QuietDateRangePicker, {
-  type QuietDateRangePickerSelection,
-} from "../../../shared/components/QuietDateRangePicker.tsx";
+  type QuietDateRangePickerSelection, } from "../../../shared/components/QuietDateRangePicker.tsx";
 import QuietDialog from "../../../shared/components/QuietDialog.tsx";
 import QuietButton from "../../../shared/components/QuietButton.tsx";
 import QuietRangeControl from "../../../shared/components/QuietRangeControl.tsx";
 import type { QuietToastTone } from "../../../shared/types/toast.ts";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import { formatLocalDateKey, startOfLocalDay } from "../../../shared/lib/localDate.ts";
 import {
   SETTINGS_DATA_EXPORT_DEFAULT_FIELDS_BY_FORMAT,
@@ -44,12 +45,12 @@ interface Props {
   onToast?: (message: string, tone?: QuietToastTone) => void;
 }
 
-function getFormatOptions(): Array<{ value: ExportFormat; label: string; hint: string }> {
+function getFormatOptions(text: UiText): Array<{ value: ExportFormat; label: string; hint: string }> {
   return [
-    { value: "csv", label: UI_TEXT.export.formatCSV, hint: UI_TEXT.export.formatCSVHint },
-    { value: "markdown", label: UI_TEXT.export.formatMarkdown, hint: UI_TEXT.export.formatMarkdownHint },
-    { value: "parquet", label: UI_TEXT.export.formatParquet, hint: UI_TEXT.export.formatParquetHint },
-    { value: "sqlite", label: UI_TEXT.export.formatSQLite, hint: UI_TEXT.export.formatSQLiteHint },
+    { value: "csv", label: text.export.formatCSV, hint: text.export.formatCSVHint },
+    { value: "markdown", label: text.export.formatMarkdown, hint: text.export.formatMarkdownHint },
+    { value: "parquet", label: text.export.formatParquet, hint: text.export.formatParquetHint },
+    { value: "sqlite", label: text.export.formatSQLite, hint: text.export.formatSQLiteHint },
   ];
 }
 
@@ -77,45 +78,45 @@ function isExportRangeMode(value: string): value is ExportRangeMode {
   return value === "day" || value === "week" || value === "month" || value === "year";
 }
 
-function getPickerLabels() {
+function getPickerLabels(text: UiText) {
   return {
-    title: UI_TEXT.data.rangePickerTitle,
+    title: text.data.rangePickerTitle,
     modeLabels: {
-      custom: UI_TEXT.data.pickerModes.custom,
-      day: UI_TEXT.export.timeRangeModeDay,
-      week: UI_TEXT.data.pickerModes.week,
-      month: UI_TEXT.data.pickerModes.month,
-      year: UI_TEXT.data.pickerModes.year,
+      custom: text.data.pickerModes.custom,
+      day: text.export.timeRangeModeDay,
+      week: text.data.pickerModes.week,
+      month: text.data.pickerModes.month,
+      year: text.data.pickerModes.year,
     },
-    pickStartDate: UI_TEXT.data.pickStartDate,
-    pickEndDate: UI_TEXT.data.pickEndDate,
-    pickDate: UI_TEXT.data.pickDate,
-    shortRangeHint: UI_TEXT.data.shortRangeHint,
-    cancel: UI_TEXT.common.cancel,
-    apply: UI_TEXT.data.applyRange,
-    previousMonth: UI_TEXT.accessibility.data.previousPickerMonth,
-    nextMonth: UI_TEXT.accessibility.data.nextPickerMonth,
-    yearMonthLabel: UI_TEXT.date.yearMonthLabel,
-    weekdaysShort: UI_TEXT.date.weekdaysShort,
+    pickStartDate: text.data.pickStartDate,
+    pickEndDate: text.data.pickEndDate,
+    pickDate: text.data.pickDate,
+    shortRangeHint: text.data.shortRangeHint,
+    cancel: text.common.cancel,
+    apply: text.data.applyRange,
+    previousMonth: text.accessibility.data.previousPickerMonth,
+    nextMonth: text.accessibility.data.nextPickerMonth,
+    yearMonthLabel: text.date.yearMonthLabel,
+    weekdaysShort: text.date.weekdaysShort,
   };
 }
 
-function getDataStyleRangeLabel(resolved: ResolvedExportTimeRange): string {
+function getDataStyleRangeLabel(resolved: ResolvedExportTimeRange, text: UiText): string {
   if (resolved.selection.kind === "custom") {
-    return resolved.dayCount > 0 ? UI_TEXT.data.customDayCount(resolved.dayCount) : UI_TEXT.data.pickerModes.custom;
+    return resolved.dayCount > 0 ? text.data.customDayCount(resolved.dayCount) : text.data.pickerModes.custom;
   }
   if (resolved.selection.kind === "week") {
     const weekMatch = /W(\d{2})$/.exec(resolved.label);
     const weekNumber = weekMatch ? Number(weekMatch[1]) : null;
-    return weekNumber ? UI_TEXT.data.weekLabel(weekNumber) : resolved.label;
+    return weekNumber ? text.data.weekLabel(weekNumber) : resolved.label;
   }
   if (resolved.selection.kind === "month") {
     const month = Number(resolved.startDateKey.slice(5, 7));
-    return month ? UI_TEXT.date.monthLabel(month) : resolved.label;
+    return month ? text.date.monthLabel(month) : resolved.label;
   }
   if (resolved.selection.kind === "year") {
     const year = Number(resolved.startDateKey.slice(0, 4));
-    return year ? UI_TEXT.data.yearLabel(year) : resolved.label;
+    return year ? text.data.yearLabel(year) : resolved.label;
   }
   return resolved.startDateKey || resolved.label;
 }
@@ -123,33 +124,36 @@ function getDataStyleRangeLabel(resolved: ResolvedExportTimeRange): string {
 function getClosedRangeLabel(
   resolved: ResolvedExportTimeRange,
   presetLabels: Record<ExportRangeMode, string>,
+  text: UiText,
 ): string {
   const todayKey = formatLocalDateKey(startOfLocalDay(new Date()));
   if (resolved.selection.kind !== "custom" && resolved.endDateKey === todayKey) {
     return presetLabels[resolved.selection.kind];
   }
-  return getDataStyleRangeLabel(resolved);
+  return getDataStyleRangeLabel(resolved, text);
 }
 
 function resolveExportPickerSelection(
   selection: QuietDateRangePickerSelection,
+  text: UiText,
   nowMs?: number,
 ): ResolvedExportTimeRange {
   const resolved = resolveExportRangeSelection(selection, nowMs);
   return {
     ...resolved,
-    label: getDataStyleRangeLabel(resolved),
+    label: getDataStyleRangeLabel(resolved, text),
   };
 }
 
 export default function SettingsDataExportDialog({ open, onClose, onToast }: Props) {
+  const UI_TEXT = useLocaleText();
   const initialRangeMode = readExportRangeMode();
   const initialFormat = readExportFormat();
   const [rangeMode, setRangeMode] = useState<ExportRangeMode>(initialRangeMode);
   const [rangeSelection, setRangeSelection] = useState<ExportRangeSelection>(() => buildExportRangeSelection(initialRangeMode));
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerMode, setPickerMode] = useState<ExportRangePickerMode>("custom");
-  const [pickerLabel, setPickerLabel] = useState(getPickerLabels().modeLabels.custom);
+  const [pickerLabel, setPickerLabel] = useState(() => getPickerLabels(UI_TEXT).modeLabels.custom);
   const [format, setFormat] = useState<ExportFormat>(initialFormat);
   const [exporting, setExporting] = useState(false);
   const [selectedFields, setSelectedFields] = useState<string[]>(() => readExportFields(
@@ -169,7 +173,7 @@ export default function SettingsDataExportDialog({ open, onClose, onToast }: Pro
     month: UI_TEXT.export.timeRangeModeMonth,
     year: UI_TEXT.export.timeRangeModeYear,
   };
-  const rangeLabel = getClosedRangeLabel(resolvedTimeRange, rangeLabels);
+  const rangeLabel = getClosedRangeLabel(resolvedTimeRange, rangeLabels, UI_TEXT);
   const rangeModeIndex = EXPORT_RANGE_MODES.indexOf(rangeMode);
   const timeRangeErrorMessage = resolvedTimeRange.error === "missingCustomRange"
     ? UI_TEXT.export.timeRangeMissing
@@ -200,7 +204,7 @@ export default function SettingsDataExportDialog({ open, onClose, onToast }: Pro
       const nextMode = EXPORT_RANGE_PICKER_MODES[pickerModeIndex + delta];
       if (nextMode) {
         setPickerMode(nextMode);
-        setPickerLabel(getPickerLabels().modeLabels[nextMode]);
+        setPickerLabel(getPickerLabels(UI_TEXT).modeLabels[nextMode]);
       }
       return;
     }
@@ -210,13 +214,13 @@ export default function SettingsDataExportDialog({ open, onClose, onToast }: Pro
       rememberExportRangeMode(nextMode);
       setRangeSelection(buildExportRangeSelection(nextMode));
     }
-  }, [pickerMode, pickerOpen, rangeModeIndex]);
+  }, [pickerMode, pickerOpen, rangeModeIndex, UI_TEXT]);
 
   const openPicker = useCallback(() => {
     setPickerMode("custom");
-    setPickerLabel(getPickerLabels().modeLabels.custom);
+    setPickerLabel(getPickerLabels(UI_TEXT).modeLabels.custom);
     setPickerOpen((current) => !current);
-  }, []);
+  }, [UI_TEXT]);
 
   const handleExport = useCallback(async () => {
     if (selectedFields.length === 0) {
@@ -259,6 +263,7 @@ export default function SettingsDataExportDialog({ open, onClose, onToast }: Pro
     resolvedTimeRange.startTime,
     selectedFields,
     timeRangeErrorMessage,
+    UI_TEXT,
   ]);
 
   return (
@@ -336,7 +341,7 @@ export default function SettingsDataExportDialog({ open, onClose, onToast }: Pro
               </div>
             </div>
             <div className="settings-data-export-format-grid" role="radiogroup" aria-label={UI_TEXT.export.formatLabel}>
-              {getFormatOptions().map((option) => (
+              {getFormatOptions(UI_TEXT).map((option) => (
                 <button
                   key={option.value}
                   type="button"
@@ -379,8 +384,8 @@ export default function SettingsDataExportDialog({ open, onClose, onToast }: Pro
         <QuietDateRangePicker
           anchor={rangeAnchorRef.current}
           mode={pickerMode}
-          labels={getPickerLabels()}
-          resolveSelection={resolveExportPickerSelection}
+          labels={getPickerLabels(UI_TEXT)}
+          resolveSelection={(selection, nowMs) => resolveExportPickerSelection(selection, UI_TEXT, nowMs)}
           onDraftLabelChange={setPickerLabel}
           onClose={() => setPickerOpen(false)}
           onApply={applyRangeSelection}

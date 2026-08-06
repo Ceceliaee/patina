@@ -1,10 +1,7 @@
-import {
-  Save,
-  RefreshCw,
-  Settings2,
-} from "lucide-react";
+import { useLocaleText } from "../../../shared/i18n/index.ts";
+import { Save, RefreshCw, Settings2, } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import type { SettingsPageProps } from "../types";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
 import QuietButton from "../../../shared/components/QuietButton";
@@ -32,6 +29,7 @@ export default function Settings({
   onPrepareImportCategories,
   onImportedDataChanged,
 }: SettingsPageProps) {
+  const UI_TEXT = useLocaleText();
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const importState = useSettingsImportState(
     onToast,

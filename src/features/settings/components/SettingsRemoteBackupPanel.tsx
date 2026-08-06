@@ -1,9 +1,10 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { Cloud, Eye, EyeOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import QuietActionRow from "../../../shared/components/QuietActionRow";
 import QuietDialog from "../../../shared/components/QuietDialog";
 import QuietButton from "../../../shared/components/QuietButton";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import type { RemoteBackupEntry, RemoteBackupState, RemoteBackupFormDraft } from "../hooks/useRemoteBackupState.ts";
 import { DEFAULT_WEBDAV_REMOTE_DIR } from "../hooks/useRemoteBackupState.ts";
 
@@ -49,6 +50,7 @@ function RemoteBackupEntryRow({
   disabled: boolean;
   onRestore: () => void;
 }) {
+  const UI_TEXT = useLocaleText();
   return (
     <QuietActionRow>
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -89,6 +91,7 @@ export default function SettingsRemoteBackupPanel({
   remoteBackup,
   onRestoreEntrySelected,
 }: SettingsRemoteBackupPanelProps) {
+  const UI_TEXT = useLocaleText();
   const serverUrlRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState<RemoteBackupFormDraft>(() => buildInitialDraft(remoteBackup));
   const [passwordVisible, setPasswordVisible] = useState(false);

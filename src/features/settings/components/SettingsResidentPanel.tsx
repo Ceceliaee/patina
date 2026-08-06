@@ -1,7 +1,8 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { MonitorCog } from "lucide-react";
 import QuietSwitch from "../../../shared/components/QuietSwitch";
 import SettingsPanelHeader from "./SettingsPanelHeader";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 
 type SettingsResidentPanelProps = {
   minimizeToWidgetChecked: boolean;
@@ -28,6 +29,7 @@ export default function SettingsResidentPanel({
   startMinimizedChecked,
   onStartMinimizedChange,
 }: SettingsResidentPanelProps) {
+  const UI_TEXT = useLocaleText();
   return (
     <section className="qp-panel min-h-[220px] p-5 md:p-6">
       <SettingsPanelHeader
