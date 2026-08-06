@@ -5,7 +5,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { UiText } from "../../shared/copy/index.ts";
+import type { UiText } from "../../shared/i18n/index.ts";
 import type { View } from "../types/view.ts";
 
 interface AppViewOutletProps {

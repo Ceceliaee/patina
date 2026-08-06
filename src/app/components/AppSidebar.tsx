@@ -1,7 +1,8 @@
+import { useLocaleText } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import { ArrowUpCircle, Monitor, Clock, Settings2, Sparkles, BarChart3, Info, ToolCase } from "lucide-react";
 import appIconUrl from "../../../src-tauri/icons/32x32.png";
-import { UI_TEXT } from "../../shared/copy/index.ts";
+
 import type { View } from "../types/view";
 
 interface Props {
@@ -27,6 +28,7 @@ export default function AppSidebar({
   showUpdateEntry = false,
   onOpenUpdateDialog,
 }: Props) {
+  const UI_TEXT = useLocaleText();
   const navItems = [
     { id: "dashboard" as View, icon: Monitor, label: UI_TEXT.dashboard.title },
     { id: "history" as View, icon: Clock, label: UI_TEXT.history.title },

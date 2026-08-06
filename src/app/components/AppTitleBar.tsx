@@ -1,13 +1,10 @@
+import { useLocaleText } from "../../shared/i18n/index.ts";
 import { type MouseEvent } from "react";
 import { Maximize2, Minimize2, Minus, X } from "lucide-react";
 import appIconUrl from "../../../src-tauri/icons/32x32.png";
 import {
-  closeCurrentWindow,
-  minimizeCurrentWindow,
-  startCurrentWindowDrag,
-  toggleCurrentWindowMaximized,
-} from "../../platform/desktop/windowControlGateway";
-import { UI_TEXT } from "../../shared/copy/index.ts";
+  closeCurrentWindow, minimizeCurrentWindow, startCurrentWindowDrag, toggleCurrentWindowMaximized, } from "../../platform/desktop/windowControlGateway";
+
 
 const APP_TITLE = "Patina";
 
@@ -22,6 +19,7 @@ function runWindowAction(action: () => Promise<void>, actionName: string) {
 }
 
 export default function AppTitleBar({ isMaximized }: AppTitleBarProps) {
+  const UI_TEXT = useLocaleText();
   const handleDragMouseDown = (event: MouseEvent<HTMLDivElement>) => {
     if (event.button !== 0 || event.detail > 1) {
       return;

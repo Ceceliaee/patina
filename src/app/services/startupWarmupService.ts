@@ -25,6 +25,8 @@ import {
   preloadLazyViewChunk,
   type PreloadableView,
 } from "./viewChunkPreloadService.ts";
+import { getLocaleText } from "../../shared/i18n/runtime.ts";
+import type { UiText } from "../../shared/i18n/index.ts";
 
 export type StartupWarmupTaskId =
   | "view-chunks"
@@ -89,7 +91,8 @@ interface StartupWarmupDeps {
   loadDashboardRuntimeSnapshot: (date?: Date) => Promise<unknown>;
   loadDataTrendRuntimeSnapshot: (
     selection: Parameters<typeof loadDataTrendRuntimeSnapshot>[0],
-    nowMs?: number,
+    nowMs: number,
+    uiText: UiText,
   ) => Promise<unknown>;
   loadHistoryRuntimeSnapshot: (date: Date, rollingDayCount?: number) => Promise<unknown>;
   loadPersistedDataBootstrapSnapshot: () => Promise<unknown>;
@@ -495,6 +498,7 @@ export function scheduleStartupWarmupRefresh(
     | "loadDataTrendRuntimeSnapshot"
     | "loadHistoryRuntimeSnapshot"
     | "scheduler"
+    | "nowMs"
     | "warn"
   > = defaultStartupWarmupDeps,
 ): () => void {
@@ -518,7 +522,11 @@ export function scheduleStartupWarmupRefresh(
     }
 
     if (options.includeData) {
-      tasks.push(deps.loadDataTrendRuntimeSnapshot({ kind: "rolling", days: 7 }));
+      tasks.push(deps.loadDataTrendRuntimeSnapshot(
+        { kind: "rolling", days: 7 },
+        deps.nowMs(),
+        getLocaleText("zh-CN"),
+      ));
     }
 
     if (tasks.length === 0) {

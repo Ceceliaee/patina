@@ -5,7 +5,8 @@ import {
   resetWidgetIconCacheForTests,
 } from "../src/app/widget/widgetIconService.ts";
 import { applyWidgetBootstrapSnapshot } from "../src/app/widget/widgetBootstrapService.ts";
-import { buildWidgetViewModel, isWidgetSelfWindow } from "../src/app/widget/widgetViewModel.ts";
+import { buildWidgetViewModel as buildWidgetViewModelRaw, isWidgetSelfWindow } from "../src/app/widget/widgetViewModel.ts";
+import { getLocaleText } from "../src/shared/i18n/runtime.ts";
 import { parseWidgetBootstrapSnapshot } from "../src/platform/desktop/widgetRuntimeGateway.ts";
 import { ProcessMapper } from "../src/shared/classification/processMapper.ts";
 import type { AppSettings } from "../src/shared/settings/appSettings.ts";
@@ -14,6 +15,21 @@ import type {
   TrackingStatusSnapshot,
   TrackingWindowSnapshot,
 } from "../src/shared/types/tracking.ts";
+
+const buildWidgetViewModel = (
+  activeWindow: TrackingWindowSnapshot | null,
+  trackingStatus: TrackingStatusSnapshot,
+  appSettings: AppSettings,
+  trackerHealth: TrackerHealthSnapshot,
+  probeStatus: Parameters<typeof buildWidgetViewModelRaw>[4] = null,
+) => buildWidgetViewModelRaw(
+  activeWindow,
+  trackingStatus,
+  appSettings,
+  trackerHealth,
+  probeStatus,
+  getLocaleText("zh-CN"),
+);
 
 const BASE_SETTINGS: AppSettings = {
   idleTimeoutSecs: 900,

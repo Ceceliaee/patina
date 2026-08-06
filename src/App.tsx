@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import "./App.css";
-import AppShell from "./app/AppShell";
+import AppShell from "./app/AppShellLocaleRoot";
 import {
   hideWidgetWindow,
   isCurrentWindowVisibleAndFocused,

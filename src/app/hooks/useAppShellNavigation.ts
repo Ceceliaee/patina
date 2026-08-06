@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { UI_TEXT } from "../../shared/copy/index.ts";
+import { useLocaleText } from "../../shared/i18n/index.ts";
+
 import type { View } from "../types/view";
 import {
   consumePendingUpdateRelaunchView,
@@ -34,6 +35,7 @@ const INITIAL_DIRTY_STATE: ViewDirtyState = {
 };
 
 export function useAppShellNavigation({ confirm }: UseAppShellNavigationParams) {
+  const UI_TEXT = useLocaleText();
   const settingsSaveHandlerRef = useRef<SaveHandler>(null);
   const mappingSaveHandlerRef = useRef<SaveHandler>(null);
   const [currentView, setCurrentView] = useState<View>(
@@ -112,7 +114,7 @@ export function useAppShellNavigation({ confirm }: UseAppShellNavigationParams) 
     });
     setCurrentView(nextView);
     return { navigated: true };
-  }, [confirm, currentView, viewDirtyState]);
+  }, [confirm, currentView, viewDirtyState, UI_TEXT]);
 
   return {
     currentView,

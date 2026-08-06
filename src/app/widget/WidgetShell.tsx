@@ -16,7 +16,7 @@ import { useWidgetObjectIcon } from "../hooks/useWidgetObjectIcon";
 import { useWidgetTracking } from "./useWidgetTracking.ts";
 import { useWidgetWindowState } from "./useWidgetWindowState";
 import { buildWidgetViewModel, isWidgetSelfWindow } from "./widgetViewModel";
-import { getUiText, setUiTextLanguage } from "../../shared/copy/index.ts";
+import { LocaleProvider, useLocaleText } from "../../shared/i18n/index.ts";
 
 interface WidgetDisplaySnapshot {
   activeWindow: TrackingWindowSnapshot | null;
@@ -28,6 +28,20 @@ const DRAG_RELEASE_POLL_MS = 40;
 const STALE_HOVER_ENTER_GUARD_MS = 80;
 
 export default function WidgetShell() {
+  const widgetTracking = useWidgetTracking();
+  return (
+    <LocaleProvider locale={widgetTracking.appSettings.language}>
+      <LocalizedWidgetShell widgetTracking={widgetTracking} />
+    </LocaleProvider>
+  );
+}
+
+function LocalizedWidgetShell({
+  widgetTracking,
+}: {
+  widgetTracking: ReturnType<typeof useWidgetTracking>;
+}) {
+  const uiText = useLocaleText();
   const {
     activeWindow,
     trackingStatus,
@@ -35,14 +49,7 @@ export default function WidgetShell() {
     classificationReady,
     trackerHealth,
     trackingRuntimeProbeStatus,
-  } = useWidgetTracking();
-  const [syncedUiTextLanguage, setSyncedUiTextLanguage] = useState(appSettings.language);
-  const uiText = getUiText(appSettings.language);
-
-  useEffect(() => {
-    setUiTextLanguage(appSettings.language);
-    setSyncedUiTextLanguage(appSettings.language);
-  }, [appSettings.language]);
+  } = widgetTracking;
 
   useAppThemeMode(appSettings.themeMode, appSettings.colorSchemeLight, appSettings.colorSchemeDark);
   const [lastNonWidgetSnapshot, setLastNonWidgetSnapshot] = useState<WidgetDisplaySnapshot | null>(null);
@@ -75,6 +82,7 @@ export default function WidgetShell() {
       appSettings,
       trackerHealth,
       trackingRuntimeProbeStatus,
+      uiText,
     )
     : {
       statusTone: "idle" as const,
@@ -90,7 +98,6 @@ export default function WidgetShell() {
   const objectIcon = useWidgetObjectIcon(viewModel.objectIconKey);
   const showObjectSlot = viewModel.showObjectSlot && Boolean(objectIcon);
   const objectSlotTitle = uiText.accessibility.widget.currentApp(viewModel.appName);
-  void syncedUiTextLanguage;
   const dragHoldTimerRef = useRef<number | null>(null);
   const dragPointerIdRef = useRef<number | null>(null);
   const dragReleasePollRef = useRef<number | null>(null);

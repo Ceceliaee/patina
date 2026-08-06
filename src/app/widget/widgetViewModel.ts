@@ -1,6 +1,7 @@
 import { AppClassification } from "../../shared/classification/appClassification.ts";
-import { UI_TEXT } from "../../shared/copy/index.ts";
+
 import type { AppSettings } from "../../shared/settings/appSettings.ts";
+import type { UiText } from "../../shared/i18n/index.ts";
 import type {
   TrackerHealthSnapshot,
   TrackingRuntimeProbeStatus,
@@ -60,9 +61,10 @@ function buildActiveTrackingViewModel(
     statusTone: WidgetStatusTone;
     statusLabel: string;
     helperText: string;
+    text: UiText["widget"];
   },
 ): WidgetViewModel {
-  const text = UI_TEXT.widget;
+  const text = options.text;
   return {
     statusTone: options.statusTone,
     statusLabel: options.statusLabel,
@@ -80,8 +82,9 @@ export function buildWidgetViewModel(
   appSettings: AppSettings,
   trackerHealth: TrackerHealthSnapshot,
   trackingRuntimeProbeStatus: TrackingRuntimeProbeStatus | null = null,
+  uiText: UiText,
 ): WidgetViewModel {
-  const text = UI_TEXT.widget;
+  const text = uiText.widget;
   const trackableAppName = resolveTrackableAppName(activeWindow);
   const hasTrackableForegroundApp = trackableAppName !== null;
   const isSustainedParticipationActive = trackingStatus.sustainedParticipationActive;
@@ -141,6 +144,7 @@ export function buildWidgetViewModel(
       statusTone: "tracking-sustained",
       statusLabel: text.sustainedTracking,
       helperText: text.currentSustainedRecording,
+      text,
     });
   }
 
@@ -148,5 +152,6 @@ export function buildWidgetViewModel(
     statusTone: "tracking",
     statusLabel: text.tracking,
     helperText: text.currentActivityRecording,
+    text,
   });
 }

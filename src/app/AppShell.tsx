@@ -1,5 +1,5 @@
-import { type ComponentProps, useCallback, useEffect, useState } from "react";
-import { getUiText, setUiTextLanguage } from "../shared/copy/index.ts";
+import { type ComponentProps, useCallback, useState } from "react";
+import { useLocaleText } from "../shared/i18n/index.ts";
 import AppSidebar from "./components/AppSidebar";
 import AppTitleBar from "./components/AppTitleBar";
 import AppViewOutlet from "./components/AppViewOutlet.tsx";
@@ -39,7 +39,6 @@ import {
 } from "../features/data/services/dataCacheLifecycle.ts";
 import { clearHistoryCachesAfterDataChange } from "../features/history/services/historyCacheLifecycle.ts";
 import { useQuietDialogs } from "../shared/hooks/useQuietDialogs";
-import UpdateDialogProvider from "./providers/UpdateDialogProvider";
 import { useAppShellNavigation } from "./hooks/useAppShellNavigation";
 import { useAppShellToasts } from "./hooks/useAppShellToasts";
 import { useAppShellUpdateEntry } from "./hooks/useAppShellUpdateEntry";
@@ -75,15 +74,20 @@ const AppMapping =
   createPreloadableViewComponent<ComponentProps<typeof AppMappingView>>("mapping");
 const Tools = createPreloadableViewComponent<ComponentProps<typeof ToolsView>>("tools");
 
-export default function AppShell() {
-  return (
-    <UpdateDialogProvider>
-      <AppShellContent />
-    </UpdateDialogProvider>
-  );
-}
+type WindowTrackingState = ReturnType<typeof useWindowTracking>;
+type AppWindowState = ReturnType<typeof useAppWindowState>;
 
-function AppShellContent() {
+export default function AppShellContent({
+  appWindowState,
+  settingsLanguagePreview,
+  setSettingsLanguagePreview,
+  windowTracking,
+}: {
+  appWindowState: AppWindowState;
+  settingsLanguagePreview: AppLanguage | null;
+  setSettingsLanguagePreview: (language: AppLanguage | null) => void;
+  windowTracking: WindowTrackingState;
+}) {
   const { confirm, dialogs } = useQuietDialogs();
   const { sidebarUpdateEntry, settingsUpdateEntry } = useAppShellUpdateEntry();
   const {
@@ -107,8 +111,6 @@ function AppShellContent() {
   const [settingsThemeModePreview, setSettingsThemeModePreview] = useState<ThemeMode | null>(null);
   const [settingsColorSchemePreview, setSettingsColorSchemePreview] =
     useState<ColorSchemePreview | null>(null);
-  const [settingsLanguagePreview, setSettingsLanguagePreview] =
-    useState<AppLanguage | null>(null);
   const [historyDateRequest, setHistoryDateRequest] = useState<HistoryDateRequest | null>(null);
   const [toolsInitialTarget, setToolsInitialTarget] = useState<ToolsOpenTarget | null>(null);
   const viewPresentation = useAppShellRenderedView(currentView);
@@ -117,7 +119,7 @@ function AppShellContent() {
     isForegroundReady,
     isWindowForegroundLike,
     isWindowMaximized,
-  } = useAppWindowState();
+  } = appWindowState;
   const {
     appSettings,
     appearanceResolved,
@@ -125,17 +127,11 @@ function AppShellContent() {
     setAppSettings,
     syncTick,
     trackerHealth,
-  } = useWindowTracking({ trackerHealthPollingEnabled: isForegroundReady });
-  const [syncedUiTextLanguage, setSyncedUiTextLanguage] = useState<AppLanguage>(appSettings.language);
+  } = windowTracking;
   const uiTextLanguage = settingsLanguagePreview ?? appSettings.language;
-  const uiText = getUiText(uiTextLanguage);
+  const uiText = useLocaleText();
   const dynamicEffects = appSettings.dynamicEffects;
   const quietMotionMode = useQuietMotionPreference(dynamicEffects);
-
-  useEffect(() => {
-    setUiTextLanguage(uiTextLanguage);
-    setSyncedUiTextLanguage(uiTextLanguage);
-  }, [uiTextLanguage]);
 
   const appFrameRef = useMainWindowReady({
     appSettings,
@@ -144,7 +140,6 @@ function AppShellContent() {
     colorSchemePreview: settingsColorSchemePreview,
   });
   const refreshSignal = resolveReadModelRefreshSignal(syncTick, readModelRefreshState);
-  void syncedUiTextLanguage;
   const { mappingVersion } = readModelRefreshState;
   const isDashboardRefreshEnabled = currentView === "dashboard" && isForegroundReady;
   const isHistoryRefreshEnabled = currentView === "history" && isForegroundReady;
@@ -259,7 +254,7 @@ function AppShellContent() {
           onPrepareNavigate={prepareNavigate}
           onNavigate={handleSidebarNavigate}
           onPreviewNavigate={handleSidebarPreviewNavigate}
-          footerContent={<ToolsSidebarStatusEntry onOpenSection={handleToolsStatusChipOpen} uiText={uiText} />}
+          footerContent={<ToolsSidebarStatusEntry onOpenSection={handleToolsStatusChipOpen} />}
           {...sidebarUpdateEntry}
         />
 
@@ -301,6 +296,8 @@ function AppShellContent() {
                 onHourlyActivityChartModeChange={handleHourlyActivityChartModeChange}
                 refreshEnabled={isHistoryRefreshEnabled}
                 webActivityEnabled={appSettings.webActivityEnabled}
+                uiText={uiText}
+                locale={uiTextLanguage}
                 {...quickAppClassificationCallbacks}
               />
             ),
@@ -328,7 +325,6 @@ function AppShellContent() {
                 onInitialTargetConsumed={handleToolsInitialTargetConsumed}
                 icons={icons}
                 onToast={pushToast}
-                uiText={uiText}
               />
             ),
             settings: (
