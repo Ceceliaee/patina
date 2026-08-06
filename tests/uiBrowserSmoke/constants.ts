@@ -1,4 +1,5 @@
-import { COPY } from "../../src/shared/copy/index.ts";
+import { getLocaleText } from "../../src/shared/i18n/runtime.ts";
+const COPY = { "zh-CN": getLocaleText("zh-CN") } as const;
 
 export const EXPECTED_NAV_LABELS = ["今天", "历史", "数据", "分类", "工具", "设置", "关于"] as const;
 export const DASHBOARD_MARKERS = ["专注分布", "应用排行"] as const;

@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import ts from "typescript";
-import { COPY } from "../src/shared/copy/index.ts";
+import { getLocaleText } from "../src/shared/i18n/runtime.ts";
 import { resolveQuietMotionMode } from "../src/shared/motion/quietMotion.ts";
+
+const COPY = { "zh-CN": getLocaleText("zh-CN"), "en-US": getLocaleText("en-US") } as const;
 
 const EXPECTED_VIEWS = [
   "dashboard",
@@ -216,7 +218,7 @@ function renderAppShellForSmoke() {
   try {
     const React = require("react") as typeof import("react");
     const { renderToString } = require("react-dom/server") as typeof import("react-dom/server");
-    const AppShellModule = require("../src/app/AppShell.tsx") as {
+    const AppShellModule = require("../src/app/AppShellLocaleRoot.tsx") as {
       default: React.ComponentType;
     };
 
@@ -489,7 +491,7 @@ await runTest("Toast separates failure semantics and uses the Quiet Pro radius t
 
 await runTest("History separates timeline list dialog from zoom dialog", () => {
   const history = readUtf8("src/features/history/components/History.tsx");
-  const historyCopy = readUtf8("src/shared/copy/domains/historyCopy.ts");
+  const historyCopy = readUtf8("locales/zh-CN/history.ts");
   const historyDetailsPopover = readUtf8("src/features/history/components/HistoryTimelineDetailsPopover.tsx");
   const historyTimelineDateControls = readUtf8("src/features/history/components/HistoryTimelineDialogDateControls.tsx");
   const historyTimeline = readUtf8("src/features/history/services/historyTimelineViewModel.ts");
@@ -562,19 +564,19 @@ await runTest("History separates timeline list dialog from zoom dialog", () => {
   assert.match(historyTimelineLaneList, /history-timeline-lanes-scroll custom-scrollbar/);
   assert.match(historyTimelineLaneList, /variant="lane"/);
   assert.match(historyTimelineLaneList, /showAxis=\{false\}/);
-  assert.match(historyCopy, /timelineAppLanes: "应用分轨"/);
-  assert.match(historyCopy, /timelineCategoryLanes: "分类分轨"/);
-  assert.match(historyCopy, /timelineWebLanes: "网页分轨"/);
-  assert.match(historyCopy, /showTimelineByWeb: "按网页显示"/);
-  assert.match(historyCopy, /timelineModeSwitch:/);
+  assert.match(historyCopy, /"history\.timelineAppLanes": "应用分轨"/);
+  assert.match(historyCopy, /"history\.timelineCategoryLanes": "分类分轨"/);
+  assert.match(historyCopy, /"history\.timelineWebLanes": "网页分轨"/);
+  assert.match(historyCopy, /"history\.showTimelineByWeb": "按网页显示"/);
+  assert.match(historyCopy, /"history\.timelineModeSwitch":/);
   assert.match(historyTimeline, /HistoryTimelineDisplayMode = "app" \| "category" \| "web"/);
   assert.match(historyLayoutStorage, /getNextHistoryTimelineMode/);
   assert.match(historyLayoutStorage, /resolveEffectiveHistoryTimelineMode/);
   assert.match(historyWebTimeline, /buildHistoryWebTimelineViewModel/);
   assert.match(history, /effectiveHistoryTimelineMode === "web"/);
   assert.doesNotMatch(history, /pressed=\{historyTimelineMode === "category"\}/);
-  assert.match(historyCopy, /emptyTimelineWindow: "当前时间段暂无记录"/);
-  assert.match(historyCopy, /timelineInteractionHint: "滚轮每次缩放 0\.2 小时，拖动或横向滚动平移时间轴"/);
+  assert.match(historyCopy, /"history\.emptyTimelineWindow": "当前时间段暂无记录"/);
+  assert.match(historyCopy, /"history\.timelineInteractionHint": "滚轮每次缩放 0\.2 小时，拖动或横向滚动平移时间轴"/);
   assert.match(historyTimelineZoomDialog, /step=\{0\.2\}/);
   assert.match(historyTimelineZoomDialog, /integerButtons/);
   assert.match(quietStepperSlider, /Math\.ceil\(safeValue\) - 1/);
@@ -945,7 +947,7 @@ await runTest("settings services only expose web sync and remote push controls",
   const appSettings = readUtf8("src/shared/settings/appSettings.ts");
   const appSettingsStore = readUtf8("src/platform/persistence/appSettingsStore.ts");
   const bridgeRuntime = readUtf8("src-tauri/src/platform/web_activity_bridge.rs");
-  const settingsCopy = readUtf8("src/shared/copy/domains/settingsCopy.ts");
+  const settingsCopy = readUtf8("locales/zh-CN/settings.ts");
   const combined = [
     settings,
     settingsInterface,
@@ -993,7 +995,7 @@ await runTest("settings services only expose web sync and remote push controls",
   assert.doesNotMatch(settingsState, /scheduleStorageMigration|cancelPendingStorageMigration/);
   assert.match(settingsDataSafety, /restartAndApplyAction/);
   assert.doesNotMatch(settingsDataSafety, /pendingMigration|pendingClear|稍后重启/);
-  assert.match(settingsCopy, /restartAndApplyAction: "重启并应用"/);
+  assert.match(settingsCopy, /"settings\.storage\.restartAndApplyAction": "重启并应用"/);
   assert.doesNotMatch(settingsCopy, /下次启动|稍后重启|next launch|Restart later/);
   assert.match(settingsStyles, /\.settings-storage-path-row-placeholder/);
   assert.doesNotMatch(settingsStyles, /\.settings-storage-path-placeholder-action/);
@@ -1809,7 +1811,7 @@ await runTest("tools status surfaces share the feature-owned runtime snapshot st
 });
 
 await runTest("tracker health polling is foreground gated without resubscribing runtime events", () => {
-  const shell = readUtf8("src/app/AppShell.tsx");
+  const shell = readUtf8("src/app/AppShellLocaleRoot.tsx");
   const hook = readUtf8("src/app/hooks/useWindowTracking.ts");
   const service = readUtf8("src/app/services/trackerHealthPollingService.ts");
   const bootstrap = readUtf8("src/app/services/appRuntimeBootstrapService.ts");
@@ -1822,7 +1824,10 @@ await runTest("tracker health polling is foreground gated without resubscribing 
     hook.indexOf("return {"),
   );
 
-  assert.match(shell, /useWindowTracking\(\{ trackerHealthPollingEnabled: isForegroundReady \}\)/);
+  assert.match(
+    shell,
+    /useWindowTracking\(\{\s*trackerHealthPollingEnabled: appWindowState\.isForegroundReady,?\s*\}\)/,
+  );
   assert.match(hook, /trackerHealthPollingEnabled = options\.trackerHealthPollingEnabled \?\? true/);
   assert.doesNotMatch(initEffect, /startTrackerHealthPolling/);
   assert.match(pollingEffect, /startTrackerHealthPolling/);
