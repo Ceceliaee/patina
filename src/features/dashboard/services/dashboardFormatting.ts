@@ -65,7 +65,7 @@ export function buildCategoryDistribution(stats: AppStat[]): CategoryDistItem[] 
   return Array.from(categories.entries())
     .map(([cat, val]) => ({
       category: cat,
-      name: AppClassification.getCategoryLabel(cat),
+      name: AppClassification.getCategoryLabelOverride(cat) ?? "",
       value: val,
       color: AppClassification.getCategoryColor(cat),
     }))

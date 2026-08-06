@@ -1,12 +1,11 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { RefreshCw } from "lucide-react";
 import QuietButton from "../../../shared/components/QuietButton";
 import type { UpdateSnapshot } from "../../../shared/types/update";
 import {
-  buildUpdateStatusPanelModel,
-  type UpdateActionModel,
-} from "../services/updateViewModel";
+  buildUpdateStatusPanelModel, type UpdateActionModel, } from "../services/updateViewModel";
 import UpdateProgressBar from "./UpdateProgressBar";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 
 interface UpdateStatusPanelProps {
   snapshot: UpdateSnapshot;
@@ -50,7 +49,8 @@ export default function UpdateStatusPanel({
   onOpenFeedback,
   onOpenSupport,
 }: UpdateStatusPanelProps) {
-  const viewModel = buildUpdateStatusPanelModel(snapshot, checking, installing);
+  const UI_TEXT = useLocaleText();
+  const viewModel = buildUpdateStatusPanelModel(snapshot, checking, installing, UI_TEXT);
 
   const handleAction = (action: UpdateActionModel) => {
     if (action.disabled) return;

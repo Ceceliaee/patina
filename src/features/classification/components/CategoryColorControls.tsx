@@ -1,9 +1,10 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { PencilLine, RotateCcw, Trash2 } from "lucide-react";
 import type { AppCategory } from "../../../shared/classification/categoryTokens";
 import QuietColorField from "../../../shared/components/QuietColorField";
 import QuietIconAction from "../../../shared/components/QuietIconAction";
 import type { ColorDisplayFormat } from "../../../shared/lib/colorFormatting";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 
 interface Props {
   categories: AppCategory[];
@@ -26,6 +27,7 @@ export default function CategoryColorControls({
   onRenameCategory,
   onDeleteCategory,
 }: Props) {
+  const UI_TEXT = useLocaleText();
   if (categories.length === 0) {
     return null;
   }

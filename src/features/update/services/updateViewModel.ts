@@ -1,5 +1,5 @@
 import type { UpdateErrorStage, UpdateSnapshot } from "../../../shared/types/update";
-import { getUiTextLanguage, UI_TEXT } from "../../../shared/copy/index.ts";
+import { SUPPORTED_LOCALES, type Locale, type UiText } from "../../../shared/i18n/generated/contract.ts";
 
 export type UpdateAction =
   | "check"
@@ -61,26 +61,25 @@ function formatVersion(value: string | null): string {
   return `v${value ?? "0.0.0"}`;
 }
 
-function getReleaseNotesPreview(releaseNotes: string | null): string | null {
+function getReleaseNotesPreview(releaseNotes: string | null, locale: Locale): string | null {
   if (!releaseNotes) return null;
-  const trimmed = resolveLocalizedReleaseNotes(releaseNotes).trim();
+  const trimmed = resolveLocalizedReleaseNotes(releaseNotes, locale).trim();
   if (!trimmed) return null;
   return trimmed.length > 220 ? `${trimmed.slice(0, 220).trimEnd()}...` : trimmed;
 }
 
-function resolveLocalizedReleaseNotes(releaseNotes: string): string {
-  const localizedNotes: Partial<Record<"zh-CN" | "en-US", string>> = {};
+function resolveLocalizedReleaseNotes(releaseNotes: string, locale: Locale): string {
+  const localizedNotes: Partial<Record<Locale, string>> = {};
 
   for (const line of releaseNotes.split(/\r?\n/)) {
-    const match = /^(zh-CN|en-US):\s*(.+)$/.exec(line.trim());
-    if (match) {
-      const language = match[1] as "zh-CN" | "en-US";
+    const match = /^([A-Za-z]{2,3}(?:-[A-Za-z0-9]+)*):\s*(.+)$/.exec(line.trim());
+    if (match && SUPPORTED_LOCALES.includes(match[1] as Locale)) {
+      const language = match[1] as Locale;
       localizedNotes[language] = match[2].trim();
     }
   }
 
-  const language = getUiTextLanguage();
-  return localizedNotes[language] ?? localizedNotes["zh-CN"] ?? releaseNotes;
+  return localizedNotes[locale] ?? localizedNotes[SUPPORTED_LOCALES[0]] ?? releaseNotes;
 }
 
 function formatByteCount(value: number): string {
@@ -96,7 +95,7 @@ function formatByteCount(value: number): string {
   return `${next.toFixed(digits)} ${units[unitIndex]}`;
 }
 
-function buildErrorDetail(stage: UpdateErrorStage | null): string {
+function buildErrorDetail(stage: UpdateErrorStage | null, UI_TEXT: UiText): string {
   return stage === "check"
     ? UI_TEXT.update.checkErrorDetail
     : stage === "download"
@@ -106,7 +105,7 @@ function buildErrorDetail(stage: UpdateErrorStage | null): string {
         : UI_TEXT.update.genericErrorDetail;
 }
 
-function buildUpdateProgressModel(snapshot: UpdateSnapshot): UpdateProgressModel | null {
+function buildUpdateProgressModel(snapshot: UpdateSnapshot, UI_TEXT: UiText): UpdateProgressModel | null {
   const downloadedBytes = snapshot.downloadedBytes;
   const totalBytes = snapshot.totalBytes;
   const hasDownloadedBytes = typeof downloadedBytes === "number" && Number.isFinite(downloadedBytes);
@@ -153,7 +152,7 @@ function buildUpdateProgressModel(snapshot: UpdateSnapshot): UpdateProgressModel
   return null;
 }
 
-function buildOpenReleaseAction(snapshot: UpdateSnapshot, label: string = UI_TEXT.update.manualDownload): UpdateActionModel | null {
+function buildOpenReleaseAction(snapshot: UpdateSnapshot, UI_TEXT: UiText, label: string = UI_TEXT.update.manualDownload): UpdateActionModel | null {
   if (!snapshot.releasePageUrl) return null;
   return {
     label,
@@ -164,7 +163,7 @@ function buildOpenReleaseAction(snapshot: UpdateSnapshot, label: string = UI_TEX
   };
 }
 
-function buildOpenDownloadAction(snapshot: UpdateSnapshot, label: string = UI_TEXT.update.downloadInstaller): UpdateActionModel | null {
+function buildOpenDownloadAction(snapshot: UpdateSnapshot, UI_TEXT: UiText, label: string = UI_TEXT.update.downloadInstaller): UpdateActionModel | null {
   if (!snapshot.assetDownloadUrl) return null;
   return {
     label,
@@ -179,9 +178,10 @@ export function buildUpdateStatusPanelModel(
   snapshot: UpdateSnapshot,
   isChecking: boolean,
   isInstalling: boolean,
+  UI_TEXT: UiText,
 ): UpdateStatusPanelModel {
   const latestVersion = snapshot.latestVersion ? formatVersion(snapshot.latestVersion) : null;
-  const progress = buildUpdateProgressModel(snapshot);
+  const progress = buildUpdateProgressModel(snapshot, UI_TEXT);
 
   if (snapshot.status === "available") {
     return {
@@ -210,7 +210,7 @@ export function buildUpdateStatusPanelModel(
         loading: isInstalling,
         emphasis: "primary",
       },
-      secondaryAction: buildOpenDownloadAction(snapshot, UI_TEXT.update.redownloadInstaller),
+      secondaryAction: buildOpenDownloadAction(snapshot, UI_TEXT, UI_TEXT.update.redownloadInstaller),
       progress,
     };
   }
@@ -226,7 +226,7 @@ export function buildUpdateStatusPanelModel(
         loading: true,
         emphasis: "primary",
       },
-      secondaryAction: buildOpenReleaseAction(snapshot, UI_TEXT.update.manualDownload),
+      secondaryAction: buildOpenReleaseAction(snapshot, UI_TEXT, UI_TEXT.update.manualDownload),
       progress,
     };
   }
@@ -280,8 +280,8 @@ export function buildUpdateStatusPanelModel(
   }
 
   if (snapshot.status === "error") {
-    const releaseAction = buildOpenReleaseAction(snapshot, UI_TEXT.update.manualDownload);
-    const downloadAction = buildOpenDownloadAction(snapshot, UI_TEXT.update.downloadInstaller);
+    const releaseAction = buildOpenReleaseAction(snapshot, UI_TEXT, UI_TEXT.update.manualDownload);
+    const downloadAction = buildOpenDownloadAction(snapshot, UI_TEXT, UI_TEXT.update.downloadInstaller);
     const primaryAction = snapshot.errorStage === "download" && downloadAction
       ? downloadAction
       : snapshot.errorStage === "install"
@@ -325,7 +325,7 @@ export function buildUpdateStatusPanelModel(
           : snapshot.errorStage === "install"
             ? UI_TEXT.update.installFailed
             : UI_TEXT.update.updateFailed,
-      statusDetail: buildErrorDetail(snapshot.errorStage),
+      statusDetail: buildErrorDetail(snapshot.errorStage, UI_TEXT),
       primaryAction,
       secondaryAction,
       progress,
@@ -347,7 +347,11 @@ export function buildUpdateStatusPanelModel(
   };
 }
 
-export function buildUpdateConfirmDialogModel(snapshot: UpdateSnapshot): UpdateConfirmDialogModel {
+export function buildUpdateConfirmDialogModel(
+  snapshot: UpdateSnapshot,
+  UI_TEXT: UiText,
+  locale: Locale,
+): UpdateConfirmDialogModel {
   const currentVersion = formatVersion(snapshot.currentVersion);
   const latestVersion = formatVersion(snapshot.latestVersion ?? snapshot.currentVersion);
   const isDownloaded = snapshot.status === "downloaded";
@@ -356,7 +360,7 @@ export function buildUpdateConfirmDialogModel(snapshot: UpdateSnapshot): UpdateC
 
   if (snapshot.status === "error") {
     const primaryAction = snapshot.errorStage === "download"
-      ? buildOpenDownloadAction(snapshot, UI_TEXT.update.downloadInstaller) ?? buildOpenReleaseAction(snapshot)
+      ? buildOpenDownloadAction(snapshot, UI_TEXT, UI_TEXT.update.downloadInstaller) ?? buildOpenReleaseAction(snapshot, UI_TEXT)
       : snapshot.errorStage === "install"
         ? {
           label: UI_TEXT.update.installAgain,
@@ -365,7 +369,7 @@ export function buildUpdateConfirmDialogModel(snapshot: UpdateSnapshot): UpdateC
           loading: false,
           emphasis: "primary" as const,
         }
-        : buildOpenReleaseAction(snapshot, UI_TEXT.update.manualDownload);
+        : buildOpenReleaseAction(snapshot, UI_TEXT, UI_TEXT.update.manualDownload);
 
     return {
       title: snapshot.errorStage === "check"
@@ -376,15 +380,15 @@ export function buildUpdateConfirmDialogModel(snapshot: UpdateSnapshot): UpdateC
             ? UI_TEXT.update.installFailedDialog
             : UI_TEXT.update.updateFailedDialog,
       versionCompareLabel: `${currentVersion} -> ${latestVersion}`,
-      confirmDescription: buildErrorDetail(snapshot.errorStage),
-      notesPreview: getReleaseNotesPreview(snapshot.releaseNotes),
-      progress: buildUpdateProgressModel(snapshot),
+      confirmDescription: buildErrorDetail(snapshot.errorStage, UI_TEXT),
+      notesPreview: getReleaseNotesPreview(snapshot.releaseNotes, locale),
+      progress: buildUpdateProgressModel(snapshot, UI_TEXT),
       primaryAction,
       secondaryAction: primaryAction?.action === "check"
-        ? buildOpenReleaseAction(snapshot, UI_TEXT.update.manualDownload)
+        ? buildOpenReleaseAction(snapshot, UI_TEXT, UI_TEXT.update.manualDownload)
         : snapshot.errorStage === "install"
-          ? buildOpenDownloadAction(snapshot, UI_TEXT.update.redownloadInstaller)
-            ?? buildOpenReleaseAction(snapshot, UI_TEXT.update.manualDownload)
+          ? buildOpenDownloadAction(snapshot, UI_TEXT, UI_TEXT.update.redownloadInstaller)
+            ?? buildOpenReleaseAction(snapshot, UI_TEXT, UI_TEXT.update.manualDownload)
           : {
             label: UI_TEXT.update.checkAgain,
             action: "check",
@@ -411,8 +415,8 @@ export function buildUpdateConfirmDialogModel(snapshot: UpdateSnapshot): UpdateC
         : isDownloaded
           ? UI_TEXT.update.dialogDownloadedDetail
           : UI_TEXT.update.dialogAvailableDetail,
-    notesPreview: getReleaseNotesPreview(snapshot.releaseNotes),
-    progress: buildUpdateProgressModel(snapshot),
+    notesPreview: getReleaseNotesPreview(snapshot.releaseNotes, locale),
+    progress: buildUpdateProgressModel(snapshot, UI_TEXT),
     primaryAction: isInstalling
       ? null
       : {
@@ -423,7 +427,7 @@ export function buildUpdateConfirmDialogModel(snapshot: UpdateSnapshot): UpdateC
         emphasis: "primary",
       },
     secondaryAction: isDownloading
-      ? buildOpenReleaseAction(snapshot, UI_TEXT.update.manualDownload)
+      ? buildOpenReleaseAction(snapshot, UI_TEXT, UI_TEXT.update.manualDownload)
       : null,
   };
 }

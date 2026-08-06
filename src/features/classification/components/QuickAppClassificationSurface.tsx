@@ -1,18 +1,12 @@
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type FormEvent,
-  type KeyboardEvent,
-} from "react";
+import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent, } from "react";
 import { Check } from "lucide-react";
 import { createPortal } from "react-dom";
 import QuietButton from "../../../shared/components/QuietButton.tsx";
 import QuietDialog from "../../../shared/components/QuietDialog.tsx";
 import { ProcessMapper } from "../../../shared/classification/processMapper.ts";
 import type { AppOverride } from "../../../shared/classification/processMapper.ts";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import type { QuickAppClassificationOpenRequest } from "../types.ts";
 import { ClassificationService } from "../services/classificationService.ts";
 import {
@@ -61,6 +55,8 @@ export default function QuickAppClassificationSurface({
   onSaved,
   onError,
 }: Props) {
+  const UI_TEXT = useLocaleText();
+  const locale = useLocale();
   const { anchor, returnFocusTo, target } = request;
   const menuRef = useRef<HTMLDivElement>(null);
   const categoryTriggerRef = useRef<HTMLButtonElement>(null);
@@ -96,7 +92,7 @@ export default function QuickAppClassificationSurface({
     let active = true;
     void ClassificationService.loadClassificationBootstrap().then((bootstrap) => {
       if (!active) return;
-      setCategoryOptions(buildQuickAppCategoryOptions(bootstrap));
+      setCategoryOptions(buildQuickAppCategoryOptions(bootstrap, UI_TEXT, locale));
       setLoading(false);
     }).catch(() => {
       if (!active) return;
@@ -107,7 +103,7 @@ export default function QuickAppClassificationSurface({
     return () => {
       active = false;
     };
-  }, []);
+  }, [UI_TEXT, locale]);
 
   useEffect(() => {
     if (renameOpen) return;

@@ -1,10 +1,8 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useLocaleText } from "../../../shared/i18n/index.ts";
+import { getCategoryToken } from "../../../shared/classification/categoryTokens.ts";
+import { useEffect, useMemo, useRef, useState, } from "react";
 import { Layers3, Monitor, Minus, TrendingDown, TrendingUp } from "lucide-react";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import { useIconThemeColors } from "../../../shared/hooks/useIconThemeColors";
 import { formatDashboardDuration } from "../services/dashboardFormatting";
 import type { DashboardReadModel } from "../services/dashboardReadModel";
@@ -48,7 +46,11 @@ const DONUT_STROKE_WIDTH = 16;
 const DONUT_CIRCUMFERENCE = 2 * Math.PI * DONUT_RADIUS;
 const DONUT_GAP_DEGREES = 4;
 
-function buildFocusCategoryDist(categoryDist: DashboardReadModel["categoryDist"], limit: number) {
+function buildFocusCategoryDist(
+  categoryDist: DashboardReadModel["categoryDist"],
+  limit: number,
+  otherLabel: string,
+) {
   const visible = categoryDist.slice(0, limit);
   const rest = categoryDist.slice(limit);
   const restValue = rest.reduce((sum, item) => sum + item.value, 0);
@@ -61,7 +63,7 @@ function buildFocusCategoryDist(categoryDist: DashboardReadModel["categoryDist"]
     ...visible,
     {
       category: "other" as const,
-      name: UI_TEXT.categories.other,
+      name: otherLabel,
       value: restValue,
       color: "var(--qp-text-tertiary)",
     },
@@ -73,6 +75,7 @@ function DashboardFocusDonut({
 }: {
   categoryDist: DashboardReadModel["categoryDist"];
 }) {
+  const UI_TEXT = useLocaleText();
   const total = categoryDist.reduce((sum, item) => sum + Math.max(0, item.value), 0);
   let consumed = 0;
 
@@ -129,6 +132,7 @@ export default function Dashboard({
   onOverridesChanged,
   onQuickActionError,
 }: Props) {
+  const UI_TEXT = useLocaleText();
   const { refreshKey, mappingVersion, mergeThresholdSecs, trackerHealth } = runtime;
   const detail = useDestinationDetailLauncher();
   const quickClassification = useQuickAppClassificationLauncher();
@@ -158,7 +162,18 @@ export default function Dashboard({
   const focusCardRef = useRef<HTMLDivElement | null>(null);
   const [focusCategoryLimit, setFocusCategoryLimit] = useState(FOCUS_CATEGORY_LIMIT);
   const [quickOverrides, setQuickOverrides] = useState<Record<string, AppOverride | null>>({});
-  const visibleCategoryDist = buildFocusCategoryDist(categoryDist, focusCategoryLimit);
+  const localizedCategoryDist = useMemo(
+    () => categoryDist.map((item) => ({
+      ...item,
+      name: item.name || getCategoryToken(item.category, UI_TEXT).label,
+    })),
+    [categoryDist, UI_TEXT],
+  );
+  const visibleCategoryDist = buildFocusCategoryDist(
+    localizedCategoryDist,
+    focusCategoryLimit,
+    UI_TEXT.categories.other,
+  );
 
   useEffect(() => {
     const card = focusCardRef.current;

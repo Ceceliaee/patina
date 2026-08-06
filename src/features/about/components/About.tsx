@@ -1,6 +1,7 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { useCallback, useEffect, useState } from "react";
 import { Info } from "lucide-react";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import type { QuietToastTone } from "../../../shared/types/toast";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
 import type { UpdateSnapshot } from "../../../shared/types/update";
@@ -36,6 +37,7 @@ export default function About({
   updateDialogOpen = false,
   onToast,
 }: Props) {
+  const UI_TEXT = useLocaleText();
   const cachedBootstrap = getSettingsPageBootstrapCache();
   const initialVersion = updateSnapshot?.currentVersion ?? cachedBootstrap?.appVersion ?? "-";
   const [appVersion, setAppVersion] = useState(initialVersion);
@@ -71,7 +73,7 @@ export default function About({
       console.error("open release notes failed", error);
       notify(UI_TEXT.toast.releaseNotesOpenFailed, "error");
     }
-  }, [notify]);
+  }, [notify, UI_TEXT]);
 
   const handleOpenRepository = useCallback(async () => {
     try {
@@ -80,7 +82,7 @@ export default function About({
       console.error("open repository link failed", error);
       notify(UI_TEXT.toast.repositoryOpenFailed, "error");
     }
-  }, [notify]);
+  }, [notify, UI_TEXT]);
 
   const handleOpenFeedback = useCallback(async (): Promise<boolean> => {
     try {
@@ -91,7 +93,7 @@ export default function About({
       notify(UI_TEXT.toast.feedbackOpenFailed, "error");
       return false;
     }
-  }, [notify]);
+  }, [notify, UI_TEXT]);
 
   const handleOpenKofiSupport = useCallback(async () => {
     try {
@@ -100,7 +102,7 @@ export default function About({
       console.error("open Ko-fi support link failed", error);
       notify(UI_TEXT.toast.supportOpenFailed, "error");
     }
-  }, [notify]);
+  }, [notify, UI_TEXT]);
 
   const effectiveUpdateSnapshot = updateSnapshot ?? {
     currentVersion: appVersion,

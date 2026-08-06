@@ -1,14 +1,11 @@
-import {
-  FileText,
-  Heart,
-  MessageSquare,
-} from "lucide-react";
+import { useLocaleText } from "../../../shared/i18n/index.ts";
+import { FileText, Heart, MessageSquare, } from "lucide-react";
 import type { ReactNode } from "react";
 import appIconUrl from "../../../../src-tauri/icons/icon.png";
 import type { UpdateSnapshot } from "../../../shared/types/update";
 import QuietButton from "../../../shared/components/QuietButton";
 import UpdateStatusPanel from "../../update/components/UpdateStatusPanel";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 
 type AboutPanelProps = {
   appVersion: string;
@@ -66,6 +63,7 @@ export default function AboutPanel({
   onOpenFeedback,
   onOpenSupportDialog,
 }: AboutPanelProps) {
+  const UI_TEXT = useLocaleText();
   const versionLabel = appVersion === "-" || appVersion === "unknown"
     ? UI_TEXT.about.versionUnknown
     : `v${appVersion}`;

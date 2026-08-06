@@ -1,9 +1,8 @@
 import type { ImportCategoryCandidate } from "../../../platform/persistence/importRuntimeGateway.ts";
 import {
   createCategoryId,
-  getCategoryToken,
+  EXTENDED_CATEGORY_PREFIX,
   normalizeCategoryLabelInput,
-  resolveExtendedCategoryLabel,
   USER_ASSIGNABLE_CATEGORIES,
   type ExtendedAppCategory,
   type UserAssignableAppCategory,
@@ -48,7 +47,6 @@ function buildExistingCategoryIndex(
   const index = new Map<string, UserAssignableAppCategory>();
   for (const category of USER_ASSIGNABLE_CATEGORIES) {
     const labels = new Set<string>([
-      getCategoryToken(category).label,
       state.categoryLabelOverrides[category] ?? "",
       ...(SEEDED_CATEGORY_ALIASES[category] ?? []),
     ]);
@@ -58,7 +56,8 @@ function buildExistingCategoryIndex(
     }
   }
   for (const category of state.persistedCategoryIds) {
-    const label = state.categoryLabelOverrides[category] ?? resolveExtendedCategoryLabel(category);
+    const label = state.categoryLabelOverrides[category]
+      ?? decodeURIComponent(category.slice(EXTENDED_CATEGORY_PREFIX.length));
     const key = categoryLabelKey(label);
     if (key && !index.has(key)) index.set(key, category);
   }

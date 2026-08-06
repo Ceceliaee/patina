@@ -1,5 +1,6 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import QuietBadge from "../../../shared/components/QuietBadge.tsx";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 
 interface Props {
   density?: "dense" | "standard";
@@ -10,6 +11,7 @@ export default function QuickAppClassificationStatus({
   density = "standard",
   unclassified,
 }: Props) {
+  const UI_TEXT = useLocaleText();
   if (!unclassified) return null;
   return (
     <QuietBadge tone="neutral" size={density === "dense" ? "inline" : "regular"}>

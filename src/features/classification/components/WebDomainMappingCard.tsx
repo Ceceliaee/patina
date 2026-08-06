@@ -1,3 +1,4 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { Captions, CaptionsOff, Globe2, ListPlus, ListX, PencilLine, RotateCcw, Trash2 } from "lucide-react";
 import type { ObservedWebDomainCandidate } from "../../../shared/types/webActivity.ts";
 import type { UserAssignableAppCategory } from "../../../shared/classification/categoryTokens.ts";
@@ -7,7 +8,7 @@ import QuietColorField from "../../../shared/components/QuietColorField";
 import QuietIconAction from "../../../shared/components/QuietIconAction";
 import QuietInlineAction from "../../../shared/components/QuietInlineAction";
 import QuietSelect from "../../../shared/components/QuietSelect";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 
 interface WebDomainMappingCardProps {
   candidate: ObservedWebDomainCandidate;
@@ -58,6 +59,7 @@ export default function WebDomainMappingCard({
   onToggleTitleCapture,
   onDeleteHistory,
 }: WebDomainMappingCardProps) {
+  const UI_TEXT = useLocaleText();
   return (
     <div className="relative rounded-[12px] border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-elevated)] px-4 py-3.5">
       <div className="flex flex-wrap items-start justify-between gap-3">

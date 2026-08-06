@@ -163,7 +163,7 @@ function repairTruncatedModernCategoryReference(
   category: AppOverride["category"],
   knownPersistedCategoryIds: readonly ExtendedAppCategory[],
 ): AppOverride["category"] {
-  if (!category || !isModernExtendedCategoryId(category)) {
+  if (!category || !isExtendedCategory(category) || !isModernExtendedCategoryId(category)) {
     return category;
   }
   if (knownPersistedCategoryIds.includes(category)) {

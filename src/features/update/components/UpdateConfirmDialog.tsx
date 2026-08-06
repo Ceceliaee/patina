@@ -1,13 +1,12 @@
+import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
 import { useRef } from "react";
 import QuietDialog from "../../../shared/components/QuietDialog";
 import QuietButton, { type QuietButtonTone } from "../../../shared/components/QuietButton";
 import type { UpdateSnapshot } from "../../../shared/types/update";
 import {
-  buildUpdateConfirmDialogModel,
-  type UpdateActionModel,
-} from "../services/updateViewModel";
+  buildUpdateConfirmDialogModel, type UpdateActionModel, } from "../services/updateViewModel";
 import UpdateProgressBar from "./UpdateProgressBar";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 
 interface UpdateConfirmDialogProps {
   open: boolean;
@@ -34,8 +33,10 @@ export default function UpdateConfirmDialog({
   onOpenReleasePage,
   onOpenAssetDownload,
 }: UpdateConfirmDialogProps) {
+  const UI_TEXT = useLocaleText();
+  const locale = useLocale();
   const laterButtonRef = useRef<HTMLButtonElement>(null);
-  const viewModel = buildUpdateConfirmDialogModel(snapshot);
+  const viewModel = buildUpdateConfirmDialogModel(snapshot, UI_TEXT, locale);
 
   const handleAction = (action: UpdateActionModel | null) => {
     if (!action || action.disabled) return;

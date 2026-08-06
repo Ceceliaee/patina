@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {
-  buildUpdateConfirmDialogModel,
-  buildUpdateStatusPanelModel,
+  buildUpdateConfirmDialogModel as buildUpdateConfirmDialogModelRaw,
+  buildUpdateStatusPanelModel as buildUpdateStatusPanelModelRaw,
   shouldOpenUpdateDialogForSnapshot,
   shouldShowSidebarUpdateEntry,
 } from "../src/features/update/services/updateViewModel.ts";
@@ -12,8 +12,18 @@ import {
   readLastActiveView,
   rememberLastActiveView,
 } from "../src/app/services/updateRelaunchViewStorage.ts";
-import { setUiTextLanguage } from "../src/shared/copy/index.ts";
+import { getLocaleText } from "../src/shared/i18n/runtime.ts";
 import type { UpdateSnapshot } from "../src/shared/types/update.ts";
+
+const ZH_TEXT = getLocaleText("zh-CN");
+const buildUpdateStatusPanelModel = (
+  snapshot: UpdateSnapshot,
+  isChecking: boolean,
+  isInstalling: boolean,
+) => buildUpdateStatusPanelModelRaw(snapshot, isChecking, isInstalling, ZH_TEXT);
+const buildUpdateConfirmDialogModel = (snapshot: UpdateSnapshot) => (
+  buildUpdateConfirmDialogModelRaw(snapshot, ZH_TEXT, "zh-CN")
+);
 
 function makeSnapshot(overrides: Partial<UpdateSnapshot> = {}): UpdateSnapshot {
   return {
@@ -220,15 +230,13 @@ runTest("confirm dialog model includes notes preview", () => {
 });
 
 runTest("confirm dialog localizes structured release notes", () => {
-  setUiTextLanguage("en-US");
-  const model = buildUpdateConfirmDialogModel(makeSnapshot({
+  const model = buildUpdateConfirmDialogModelRaw(makeSnapshot({
     status: "available",
     latestVersion: "0.2.0",
     releaseNotes: "zh-CN: 改进应用映射与备份恢复。\nen-US: Improved app mapping and backup restore.",
-  }));
+  }), getLocaleText("en-US"), "en-US");
 
   assert.equal(model.notesPreview, "Improved app mapping and backup restore.");
-  setUiTextLanguage("zh-CN");
 });
 
 runTest("confirm dialog shows progress while downloading", () => {

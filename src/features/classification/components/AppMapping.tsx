@@ -1,6 +1,7 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { useEffect, useState, type ReactNode } from "react";
 import { ListX, RefreshCw, Save, Sparkles, SlidersHorizontal } from "lucide-react";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import QuietDialog from "../../../shared/components/QuietDialog";
 import QuietButton from "../../../shared/components/QuietButton";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
@@ -28,6 +29,7 @@ interface Props {
 }
 
 export default function AppMapping(props: Props) {
+  const UI_TEXT = useLocaleText();
   const { webActivityEnabled = false, titleRecordingEnabled = true } = props;
   const [objectMode, setObjectMode] = useState<MappingObjectMode>(readClassificationObjectMode);
   const filterOptions: Array<{ value: CandidateFilter; label: ReactNode; showCount?: boolean; ariaLabel?: string }> = [

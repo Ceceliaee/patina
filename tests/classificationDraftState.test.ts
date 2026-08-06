@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {
   buildLegacyExtendedCategoryId,
   createCategoryId,
-  resolveExtendedCategoryLabel,
+  resolveExtendedCategoryLabel as resolveExtendedCategoryLabelRaw,
   USER_ASSIGNABLE_CATEGORIES,
   type UserAssignableAppCategory,
 } from "../src/shared/classification/categoryTokens.ts";
@@ -28,7 +28,7 @@ import {
 } from "../src/features/classification/services/legacyAutoClassificationMigration.ts";
 import {
   ClassificationService,
-  filterAndSortCandidates,
+  filterAndSortCandidates as filterAndSortCandidatesRaw,
   type ClassificationBootstrapData,
   type ClassificationBootstrapDeps,
   type ClassificationCommitDeps,
@@ -51,7 +51,7 @@ import {
   setClassificationBootstrapCache,
 } from "../src/features/classification/services/classificationBootstrapCache.ts";
 import {
-  buildQuickAppCategoryOptions,
+  buildQuickAppCategoryOptions as buildQuickAppCategoryOptionsRaw,
   buildQuickAppOverride,
   isQuickAppUnclassified,
 } from "../src/features/classification/services/quickAppClassification.ts";
@@ -59,6 +59,18 @@ import {
   createQuickAppClassificationTarget,
   resolveQuickAppClassificationElementAnchor,
 } from "../src/features/classification/types.ts";
+import { getLocaleText } from "../src/shared/i18n/runtime.ts";
+
+const ZH_TEXT = getLocaleText("zh-CN");
+const resolveExtendedCategoryLabel = (
+  category: Parameters<typeof resolveExtendedCategoryLabelRaw>[0],
+) => resolveExtendedCategoryLabelRaw(category, ZH_TEXT);
+const buildQuickAppCategoryOptions = (
+  bootstrap: Parameters<typeof buildQuickAppCategoryOptionsRaw>[0],
+) => buildQuickAppCategoryOptionsRaw(bootstrap, ZH_TEXT, "zh-CN");
+const filterAndSortCandidates = (
+  input: Omit<Parameters<typeof filterAndSortCandidatesRaw>[0], "locale">,
+) => filterAndSortCandidatesRaw({ ...input, locale: "zh-CN" });
 
 function buildDraftState(overrides: Partial<ClassificationDraftState> = {}): ClassificationDraftState {
   return {
@@ -531,7 +543,7 @@ await runTest("process mapper applies extended category display label overrides"
     [category]: "Focus",
   });
 
-  assert.equal(ProcessMapper.getCategoryLabel(category), "Focus");
+  assert.equal(ProcessMapper.getCategoryLabel(category, ZH_TEXT), "Focus");
 
   ProcessMapper.clearCategoryLabelOverrides();
 });
@@ -1099,7 +1111,7 @@ await runTest("default classification commit deps keep ProcessMapper runtime syn
 
   assert.equal(ProcessMapper.getUserOverride("chrome.exe")?.displayName, "Work Browser");
   assert.equal(ProcessMapper.getCategoryColorOverride("development"), "#112233");
-  assert.equal(ProcessMapper.getCategoryLabel("development"), "Dev Tools");
+  assert.equal(ProcessMapper.getCategoryLabel("development", ZH_TEXT), "Dev Tools");
   assert.equal(ProcessMapper.isCategoryDeleted("music"), true);
 
   ProcessMapper.clearUserOverrides();
@@ -1135,7 +1147,7 @@ await runTest("classification bootstrap sync applies saved process mapper state"
 
   assert.equal(ProcessMapper.getUserOverride("chrome.exe")?.displayName, "Work Browser");
   assert.equal(ProcessMapper.getCategoryColorOverride("development"), "#112233");
-  assert.equal(ProcessMapper.getCategoryLabel("development"), "Dev Tools");
+  assert.equal(ProcessMapper.getCategoryLabel("development", ZH_TEXT), "Dev Tools");
   assert.equal(ProcessMapper.isCategoryDeleted("music"), true);
 
   ProcessMapper.clearUserOverrides();

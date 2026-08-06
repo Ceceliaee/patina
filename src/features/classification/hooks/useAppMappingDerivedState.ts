@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { getUiTextLanguage } from "../../../shared/copy/index.ts";
+import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
 import { useIconThemeColors } from "../../../shared/hooks/useIconThemeColors";
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import {
@@ -95,6 +95,8 @@ export function useAppMappingDerivedState({
   searchQuery,
   webActivityEnabled,
 }: UseAppMappingDerivedStateParams) {
+  const locale = useLocale();
+  const UI_TEXT = useLocaleText();
   const webDomainIcons = useMemo(() => {
     if (!webActivityEnabled) return {};
 
@@ -114,8 +116,8 @@ export function useAppMappingDerivedState({
   ), [draftCategoryColorOverrides]);
 
   const resolveCategoryLabel = useCallback((category: AppCategory) => (
-    draftCategoryLabelOverrides[category] ?? AppClassification.getCategoryLabel(category)
-  ), [draftCategoryLabelOverrides]);
+    draftCategoryLabelOverrides[category] ?? AppClassification.getCategoryLabel(category, UI_TEXT)
+  ), [draftCategoryLabelOverrides, UI_TEXT]);
 
   const resolveAutoDisplayName = useCallback((candidate: ObservedAppCandidate) => (
     AppClassification.mapAppWithoutOverride(candidate.exeName, { appName: candidate.appName }).name
@@ -231,6 +233,7 @@ export function useAppMappingDerivedState({
       resolveTrackingEnabled,
       resolveEffectiveDisplayName: resolveSortDisplayName,
       resolveCategoryLabel,
+      locale,
     }),
     [
       candidates,
@@ -240,6 +243,7 @@ export function useAppMappingDerivedState({
       resolveMappedCategory,
       resolveSortDisplayName,
       resolveTrackingEnabled,
+      locale,
     ],
   );
 
@@ -251,7 +255,7 @@ export function useAppMappingDerivedState({
   const filteredWebDomainCandidates = useMemo(() => {
     if (!webActivityEnabled) return [];
 
-    const normalizedQuery = searchQuery.trim().toLocaleLowerCase(getUiTextLanguage());
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase(locale);
     return webDomainCandidates
       .filter((candidate) => {
         const category = resolveWebDomainCategory(candidate);
@@ -273,15 +277,15 @@ export function useAppMappingDerivedState({
           candidate.title ?? "",
           categoryLabel,
           category,
-        ].join(" ").toLocaleLowerCase(getUiTextLanguage());
+        ].join(" ").toLocaleLowerCase(locale);
         return haystack.includes(normalizedQuery);
       })
       .sort((left, right) => (
-        resolveWebDomainSortDisplayName(left).localeCompare(resolveWebDomainSortDisplayName(right), getUiTextLanguage(), {
+        resolveWebDomainSortDisplayName(left).localeCompare(resolveWebDomainSortDisplayName(right), locale, {
           numeric: true,
           sensitivity: "base",
         })
-        || left.normalizedDomain.localeCompare(right.normalizedDomain, getUiTextLanguage())
+        || left.normalizedDomain.localeCompare(right.normalizedDomain, locale)
       ));
   }, [
     filter,
@@ -292,6 +296,7 @@ export function useAppMappingDerivedState({
     resolveWebDomainSortDisplayName,
     webActivityEnabled,
     webDomainCandidates,
+    locale,
   ]);
 
   const webDomainCounts = useMemo(() => {

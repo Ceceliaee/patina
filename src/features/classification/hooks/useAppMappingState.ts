@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+import { useLocaleText } from "../../../shared/i18n/index.ts";
+
 import { useIconThemeColors } from "../../../shared/hooks/useIconThemeColors";
 import { useRequestedAppIcons } from "../../../shared/hooks/useRequestedAppIcons.ts";
 import { useQuietDialogs } from "../../../shared/hooks/useQuietDialogs";
@@ -78,6 +79,7 @@ export function useAppMappingState({
   onRegisterSaveHandler,
   webActivityEnabled = false,
 }: UseAppMappingStateOptions) {
+  const UI_TEXT = useLocaleText();
   const { confirm, prompt, dialogs } = useQuietDialogs();
   const initialBootstrap = getClassificationBootstrapCache();
   const initialBootstrapRef = useRef(initialBootstrap);
@@ -320,7 +322,7 @@ export function useAppMappingState({
       }
       return createCategoryInDraftState(current, nextCategory, normalized);
     });
-  }, [candidateCategoryOptions, prompt]);
+  }, [candidateCategoryOptions, prompt, UI_TEXT]);
 
   const handleDeleteCategory = useCallback(async (category: AppCategory) => {
     if (category === "other") {
@@ -338,7 +340,7 @@ export function useAppMappingState({
       if (!current) return current;
       return deleteCategoryFromDraftState(current, category);
     });
-  }, [confirm, resolveCategoryLabel]);
+  }, [confirm, resolveCategoryLabel, UI_TEXT]);
 
   const handleRenameCategory = useCallback(async (category: AppCategory) => {
     if (!draftState || category === "other" || category === "system") {
@@ -382,13 +384,13 @@ export function useAppMappingState({
       return;
     }
 
-    const defaultLabel = getCategoryToken(category).label;
+    const defaultLabel = getCategoryToken(category, UI_TEXT).label;
     const nextLabel = normalized === defaultLabel ? null : normalized;
     setDraftState((current) => {
       if (!current) return current;
       return updateCategoryLabelInDraftState(current, category, nextLabel);
     });
-  }, [candidateCategoryOptions, confirm, draftState, prompt, resolveCategoryColor, resolveCategoryLabel]);
+  }, [candidateCategoryOptions, confirm, draftState, prompt, resolveCategoryColor, resolveCategoryLabel, UI_TEXT]);
 
   const handleCategoryAssign = useCallback((candidate: ObservedAppCandidate, categoryValue: string) => {
     const current = draftOverrides[candidate.exeName] ?? null;
@@ -659,7 +661,7 @@ export function useAppMappingState({
     } finally {
       setDeletingSessionsExe(null);
     }
-  }, [appCatalog, confirm, onSessionsDeleted, resolveEffectiveDisplayName]);
+  }, [appCatalog, confirm, onSessionsDeleted, resolveEffectiveDisplayName, UI_TEXT]);
 
   const handleDeleteWebDomainHistory = useCallback(async (candidate: ObservedWebDomainCandidate) => {
     const displayName = resolveWebDomainDisplayName(candidate);
@@ -680,7 +682,7 @@ export function useAppMappingState({
     } finally {
       setDeletingSessionsExe(null);
     }
-  }, [confirm, onSessionsDeleted, refreshWebDomainCandidates, resolveWebDomainDisplayName]);
+  }, [confirm, onSessionsDeleted, refreshWebDomainCandidates, resolveWebDomainDisplayName, UI_TEXT]);
 
   const handleTrackingToggle = useCallback((candidate: ObservedAppCandidate, nextTrack: boolean) => {
     const current = draftOverrides[candidate.exeName] ?? null;

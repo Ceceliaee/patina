@@ -1,7 +1,8 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import QuietDialog from "../../../shared/components/QuietDialog";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import qqChannelDarkUrl from "../assets/qq-channel-dark.jpg";
 import qqChannelLightUrl from "../assets/qq-channel-light.jpg";
 import githubIssuesButtonBlackUrl from "../assets/github-issues-button-black.svg";
@@ -18,6 +19,7 @@ export default function AboutFeedbackDialog({
   onClose,
   onOpenGitHub,
 }: AboutFeedbackDialogProps) {
+  const UI_TEXT = useLocaleText();
   const copy = UI_TEXT.about.feedbackDialog;
   const githubButtonRef = useRef<HTMLButtonElement>(null);
   const mountedRef = useRef(true);

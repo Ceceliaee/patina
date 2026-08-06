@@ -1,9 +1,10 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { Heart, X } from "lucide-react";
 import wechatRewardDarkUrl from "../assets/wechat-reward-dark.png";
 import wechatRewardLightUrl from "../assets/wechat-reward-light.png";
 import kofiButtonUrl from "../assets/kofi-button.png";
 import QuietDialog from "../../../shared/components/QuietDialog";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 
 
 interface AboutSupportDialogProps {
@@ -17,6 +18,7 @@ export default function AboutSupportDialog({
   onClose,
   onOpenKofi,
 }: AboutSupportDialogProps) {
+  const UI_TEXT = useLocaleText();
   const copy = UI_TEXT.about.supportDialog;
 
   return (

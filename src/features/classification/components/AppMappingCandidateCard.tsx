@@ -1,3 +1,4 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { Captions, CaptionsOff, ListPlus, ListX, PencilLine, RotateCcw, Trash2 } from "lucide-react";
 import type { ObservedAppCandidate } from "../types";
 import type { UserAssignableAppCategory } from "../../../shared/classification/categoryTokens";
@@ -7,7 +8,7 @@ import QuietColorField from "../../../shared/components/QuietColorField";
 import QuietInlineAction from "../../../shared/components/QuietInlineAction";
 import QuietIconAction from "../../../shared/components/QuietIconAction";
 import QuietBadge from "../../../shared/components/QuietBadge";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 
 interface AppMappingCandidateCardProps {
   candidate: ObservedAppCandidate;
@@ -60,6 +61,7 @@ export default function AppMappingCandidateCard({
   onToggleTracking,
   onDeleteAllSessions,
 }: AppMappingCandidateCardProps) {
+  const UI_TEXT = useLocaleText();
   return (
     <div
       data-classification-app={candidate.exeName}

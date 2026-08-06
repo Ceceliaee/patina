@@ -7,6 +7,7 @@ import {
 } from "../../../shared/classification/categoryTokens.ts";
 import type { AppOverride } from "../../../shared/classification/processMapper.ts";
 import type { ClassificationBootstrapData } from "./classificationService.ts";
+import type { Locale, UiText } from "../../../shared/i18n/index.ts";
 
 export interface QuickAppCategoryOption {
   value: UserAssignableAppCategory;
@@ -64,6 +65,8 @@ export function buildQuickAppCategoryOptions(
     | "loadedPersistedCategoryIds"
     | "loadedDeletedCategories"
   >,
+  uiText: UiText,
+  locale: Locale,
 ): QuickAppCategoryOption[] {
   const deleted = new Set<AppCategory>(bootstrap.loadedDeletedCategories);
   const extended = new Set<UserAssignableAppCategory>();
@@ -81,13 +84,13 @@ export function buildQuickAppCategoryOptions(
   });
 
   const resolveLabel = (category: UserAssignableAppCategory) => (
-    bootstrap.loadedCategoryLabelOverrides[category] ?? getCategoryToken(category).label
+    bootstrap.loadedCategoryLabelOverrides[category] ?? getCategoryToken(category, uiText).label
   );
   const seeded = USER_ASSIGNABLE_CATEGORIES.filter(
     (category) => category !== "other" && !deleted.has(category),
   );
   const custom = Array.from(extended).sort((left, right) => (
-    resolveLabel(left).localeCompare(resolveLabel(right), "zh-CN")
+    resolveLabel(left).localeCompare(resolveLabel(right), locale)
   ));
   const ordered = deleted.has("other")
     ? [...seeded, ...custom]

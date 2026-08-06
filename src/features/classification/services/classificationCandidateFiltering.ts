@@ -1,4 +1,4 @@
-import { getUiLocale } from "../../../shared/copy/index.ts";
+import type { Locale } from "../../../shared/i18n/index.ts";
 import type { UserAssignableAppCategory } from "../../../shared/classification/categoryTokens.ts";
 import type { CandidateFilter, ObservedAppCandidate } from "../types.ts";
 
@@ -10,6 +10,7 @@ interface FilterAndSortCandidatesParams {
   resolveTrackingEnabled?: (candidate: ObservedAppCandidate) => boolean;
   resolveEffectiveDisplayName: (candidate: ObservedAppCandidate) => string;
   resolveCategoryLabel?: (category: UserAssignableAppCategory) => string;
+  locale: Locale;
 }
 
 export function filterAndSortCandidates({
@@ -20,8 +21,8 @@ export function filterAndSortCandidates({
   resolveTrackingEnabled,
   resolveEffectiveDisplayName,
   resolveCategoryLabel,
+  locale,
 }: FilterAndSortCandidatesParams): ObservedAppCandidate[] {
-  const locale = getUiLocale();
   const collator = new Intl.Collator(locale, { numeric: true, sensitivity: "base" });
   const normalizedQuery = searchQuery?.trim().toLocaleLowerCase(locale) ?? "";
   return candidates
