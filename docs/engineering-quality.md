@@ -384,6 +384,19 @@ Bundle 治理的目标不是让构建产物永远不增长，而是让代码只�
 
 ## 7. 文档与归档规则
 
+### 本地化质量门禁
+
+任何本地化契约、用户可见文案或原生表面变更必须通过 `npm run check:i18n:self-test` 与 `npm run check:i18n`。检查链必须覆盖缺失/多余 key、参数、locale 的 CLDR 复数类别、source-review hash、生成产物陈旧和用户可见硬编码。
+
+前端与 Rust 使用同一份 `ru-RU` 非生产夹具验证代表性基数复数结果。不得手写俄语复数公式，也不得以任意 TypeScript 函数代替声明式消息。硬编码例外只能精确到文件和值，必须写 owner 和原因，并由 stale-exception 检查自动清理压力。
+
+结构性本地化变更最终运行 `npm run check:full`。只改翻译且未触及 schema 或 native 表面时，至少运行 i18n 检查、类型检查和命中的界面测试。完整贡献流程见 [`localization.md`](./localization.md)。
+
+外部翻译工作簿是未可信开发输入。导入必须验证工作簿格式版本、schema/source fingerprint、完整 unit 集合、不可变列、公式、占位符和目标 locale 的 CLDR 结果，并先输出到非生产审查目录。工作簿身份不能自授权：维护者必须在命令行显式给出参考语言、目标语言、原生名称和文字方向并逐项核对。返回的原始 XLSX 不作为可直接打开的审查载体；先由 CLI 通过 OPC/XML 白名单、外部关系、嵌入部件和资源上限检查，再生成纯 TypeScript 资源供审查。只有维护者显式使用 `--apply` 才可通过带跨进程锁与失败回滚的注册事务新增 locale；导入动作不能自动签署 source review。
+
+---
+
+
 工程质量文档长期采用两层结构：
 
 - top-level `docs/`：只保留当前有效的长期规则

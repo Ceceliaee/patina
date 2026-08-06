@@ -689,6 +689,16 @@ Rust 侧允许为了稳定演进保留少量入口协调或兼容封装，但规
 - 与 [`quiet-pro-component-guidelines.md`](./quiet-pro-component-guidelines.md) 互补：Quiet Pro 约束视觉与组件边界，本文件约束代码与所有权边界。
 - 与 [`issue-fix-boundary-guardrails.md`](./issue-fix-boundary-guardrails.md) 互补：边界守则决定具体问题如何分流，本文件提供分流时依赖的长期结构基线。
 - 与 [`versioning-and-release-policy.md`](./versioning-and-release-policy.md) 互补：发布规范决定什么样的变更可以形成正式版本，本文件决定这些变更如何稳定落地。
+- 与 [`localization.md`](./localization.md) 互补：本文件确定 owner 边界，本地化文档定义仓库级消息契约和贡献流程。
+
+### 本地化 owner 边界
+
+- `locales/` 是前端与 Rust 中立的唯一人工编辑源，包含 schema、生产注册表、review manifest 与按 locale 拆分的声明式 bundle。
+- `src/shared/i18n/` 只拥有前端 Provider、纯格式化 runtime 和生成接口；不得重新成为翻译源。
+- `src-tauri/src/domain/localization/` 拥有 Rust locale、回退、插值与 CLDR 复数语义；`app/tray`、`engine/tools` 和 `data/export` 只能作为调用方。
+- `scripts/i18n/` 拥有验证、生成、新语言脚手架、外部翻译 XLSX 交接和硬编码门禁；XLSX 依赖只存在于开发工具链，不得进入 `src/*` 或 Rust 产品依赖。
+- `generated` 文件是构建边界，不是人工 owner；前端和 Rust 产物必须从同一 schema、注册表和 locale 资源生成。
+- locale 必须作为显示派生和缓存的显式输入。语言无关 read model 不应为了方便携带本地化字符串。
 
 ---
 
