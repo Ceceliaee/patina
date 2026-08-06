@@ -1,3 +1,4 @@
+use crate::domain::localization::{self, LocalizationState};
 use crate::domain::tools::{
     CompletedPomodoroNotification, CompletedTimerNotification, PomodoroPhase, PomodoroStatus,
     SoftwareReminderNotification, TimerMode, TimerStatus, ToolAlert, ToolAlertKind, ToolReminder,
@@ -446,6 +447,10 @@ async fn tick_and_notify<R: Runtime + 'static>(
 }
 
 fn notify_tick_events<R: Runtime + 'static>(app: &AppHandle<R>, events: ToolsTickEvents, now: i64) {
+    let localizer = app.state::<LocalizationState>();
+    // One event batch must render from one locale snapshot so a concurrent setting change
+    // cannot produce mixed-language title/body pairs.
+    let locale = localizer.locale();
     let ToolsTickEvents {
         reminders: fired_reminders,
         software_reminders: fired_software_reminders,
@@ -460,9 +465,9 @@ fn notify_tick_events<R: Runtime + 'static>(app: &AppHandle<R>, events: ToolsTic
             ToolAlert {
                 id: format!("reminder:{}", reminder.id),
                 kind: ToolAlertKind::Reminder,
-                title: "提醒".to_string(),
+                title: localization::text(locale, "native.tools.reminderTitle"),
                 body: if reminder.label.trim().is_empty() {
-                    "时间到了".to_string()
+                    localization::text(locale, "native.tools.reminderDefaultBody")
                 } else {
                     reminder.label
                 },
@@ -476,9 +481,14 @@ fn notify_tick_events<R: Runtime + 'static>(app: &AppHandle<R>, events: ToolsTic
         let limit_minutes = (reminder.limit_ms / 60_000).max(1);
         let usage_minutes = (reminder.usage_ms / 60_000).max(limit_minutes);
         let body = if reminder.message.trim().is_empty() {
-            format!(
-                "{} 今日已使用 {} 分钟，已达到 {} 分钟上限",
-                reminder.app_name, usage_minutes, limit_minutes
+            localization::format_text(
+                locale,
+                "native.tools.softwareReminderDefaultBody",
+                &[
+                    ("appName", reminder.app_name.clone()),
+                    ("usageMinutes", usage_minutes.to_string()),
+                    ("limitMinutes", limit_minutes.to_string()),
+                ],
             )
         } else {
             reminder.message
@@ -491,7 +501,7 @@ fn notify_tick_events<R: Runtime + 'static>(app: &AppHandle<R>, events: ToolsTic
                     reminder.rule_id, current_date_key
                 ),
                 kind: ToolAlertKind::SoftwareReminder,
-                title: "软件提醒".to_string(),
+                title: localization::text(locale, "native.tools.softwareReminderTitle"),
                 body,
                 occurred_at: now,
             },
@@ -504,24 +514,24 @@ fn notify_tick_events<R: Runtime + 'static>(app: &AppHandle<R>, events: ToolsTic
             ToolAlert {
                 id: format!("countdown:{}", completed_timer.timer_id),
                 kind: ToolAlertKind::Countdown,
-                title: "倒计时结束".to_string(),
-                body: completed_timer
-                    .label
-                    .unwrap_or_else(|| "倒计时已完成".to_string()),
+                title: localization::text(locale, "native.tools.countdownTitle"),
+                body: completed_timer.label.unwrap_or_else(|| {
+                    localization::text(locale, "native.tools.countdownDefaultBody")
+                }),
                 occurred_at: now,
             },
         );
     }
 
     if let Some(completed_phase) = completed_pomodoro {
-        let title = match completed_phase.completed_phase {
-            PomodoroPhase::Focus => "专注结束",
-            PomodoroPhase::ShortBreak | PomodoroPhase::LongBreak => "休息结束",
+        let title_key = match completed_phase.completed_phase {
+            PomodoroPhase::Focus => "native.tools.focusEnded",
+            PomodoroPhase::ShortBreak | PomodoroPhase::LongBreak => "native.tools.breakEnded",
         };
-        let body = match completed_phase.next_phase {
-            PomodoroPhase::Focus => "下一阶段：专注",
-            PomodoroPhase::ShortBreak => "下一阶段：短休息",
-            PomodoroPhase::LongBreak => "下一阶段：长休息",
+        let body_key = match completed_phase.next_phase {
+            PomodoroPhase::Focus => "native.tools.nextFocus",
+            PomodoroPhase::ShortBreak => "native.tools.nextShortBreak",
+            PomodoroPhase::LongBreak => "native.tools.nextLongBreak",
         };
         send_tool_alert(
             app,
@@ -533,8 +543,8 @@ fn notify_tick_events<R: Runtime + 'static>(app: &AppHandle<R>, events: ToolsTic
                     completed_phase.completed_phase.as_str()
                 ),
                 kind: ToolAlertKind::Pomodoro,
-                title: title.to_string(),
-                body: body.to_string(),
+                title: localization::text(locale, title_key),
+                body: localization::text(locale, body_key),
                 occurred_at: now,
             },
         );

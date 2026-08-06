@@ -1,4 +1,4 @@
-use crate::app::state::DesktopBehaviorState;
+use crate::app::state::{AppSettingsCommitState, DesktopBehaviorState};
 use crate::app::{desktop_behavior, tray};
 use crate::commands::error::CommandErrorDto;
 use crate::data::app_settings_service::commit_app_setting_mutations_with_recovery;
@@ -116,6 +116,8 @@ pub async fn cmd_commit_app_settings(
     } else {
         None
     };
+    let settings_commit_state = app.state::<AppSettingsCommitState>();
+    let _settings_commit_guard = settings_commit_state.lock().await;
 
     commit_app_setting_mutations_with_recovery(&app, &mutations)
         .await

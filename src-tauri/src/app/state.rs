@@ -6,6 +6,17 @@ use std::sync::{
 use std::time::Instant;
 
 #[derive(Debug, Default)]
+pub(crate) struct AppSettingsCommitState {
+    inner: tokio::sync::Mutex<()>,
+}
+
+impl AppSettingsCommitState {
+    pub(crate) async fn lock(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.inner.lock().await
+    }
+}
+
+#[derive(Debug, Default)]
 pub(crate) struct DesktopBehaviorState {
     inner: Mutex<DesktopBehaviorSettings>,
 }
@@ -660,9 +671,9 @@ impl WidgetWindowLifecycleState {
 #[cfg(test)]
 mod tests {
     use super::{
-        MainWindowLifecycleState, MainWindowReadyDecision, MainWindowRenderState,
-        MainWindowRenderToken, MainWindowShowDecision, MainWindowTimeoutDecision, TraySafetyState,
-        WidgetWindowLifecycleState,
+        AppSettingsCommitState, MainWindowLifecycleState, MainWindowReadyDecision,
+        MainWindowRenderState, MainWindowRenderToken, MainWindowShowDecision,
+        MainWindowTimeoutDecision, TraySafetyState, WidgetWindowLifecycleState,
     };
 
     fn begin_window_creation(state: &MainWindowLifecycleState) -> u64 {
@@ -1358,5 +1369,14 @@ mod tests {
         state.show_existing();
 
         assert!(!state.should_destroy_hidden_window(hide_generation));
+    }
+
+    #[tokio::test]
+    async fn app_settings_commit_state_serializes_commit_and_runtime_apply_sections() {
+        let state = AppSettingsCommitState::default();
+        let first = state.lock().await;
+        assert!(state.inner.try_lock().is_err());
+        drop(first);
+        assert!(state.inner.try_lock().is_ok());
     }
 }

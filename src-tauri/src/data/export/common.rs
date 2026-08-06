@@ -1,3 +1,4 @@
+use crate::domain::localization::{self, Locale};
 use chrono::{DateTime, Datelike, Timelike};
 use serde_json::Value;
 use sqlx::{Pool, Row, Sqlite};
@@ -177,7 +178,7 @@ pub struct ExportClassification {
     label_overrides: HashMap<String, String>,
     color_overrides: HashMap<String, String>,
     deleted_categories: HashSet<String>,
-    language: String,
+    locale: Locale,
 }
 
 pub async fn load_export_classification(
@@ -202,18 +203,13 @@ pub async fn load_export_classification(
     .await
     .map_err(|error| format!("failed to read classification settings: {error}"))?;
 
-    let mut classification = ExportClassification {
-        language: "zh-CN".to_string(),
-        ..ExportClassification::default()
-    };
+    let mut classification = ExportClassification::default();
 
     for row in rows {
         let key: String = row.get("key");
         let value: String = row.get("value");
         if key == "language" {
-            if value.eq_ignore_ascii_case("en-US") {
-                classification.language = "en-US".to_string();
-            }
+            classification.locale = Locale::from_tag(Some(&value));
             continue;
         }
 
@@ -266,7 +262,7 @@ pub async fn load_export_classification(
 
 impl ExportClassification {
     pub fn language(&self) -> &str {
-        &self.language
+        self.locale.tag()
     }
     pub fn resolve_session_category(&self, exe_name: &str) -> ResolvedExportCategory {
         let canonical = canonical_exe(exe_name);
@@ -312,7 +308,7 @@ impl ExportClassification {
         if let Some(label) = self.label_overrides.get(category) {
             return label.clone();
         }
-        seeded_category_label(category, &self.language).unwrap_or_else(|| {
+        seeded_category_label(category, self.locale).unwrap_or_else(|| {
             extended_category_label(category).unwrap_or_else(|| category.to_string())
         })
     }
@@ -374,35 +370,15 @@ fn normalize_hex_color(value: &str) -> Option<String> {
     None
 }
 
-fn seeded_category_label(category: &str, language: &str) -> Option<String> {
-    let label = match (language, category) {
-        ("en-US", "ai") => "AI",
-        ("en-US", "development") => "Development",
-        ("en-US", "office") => "Office",
-        ("en-US", "browser") => "Browser",
-        ("en-US", "communication") => "Communication",
-        ("en-US", "video") => "Video",
-        ("en-US", "music") => "Music",
-        ("en-US", "game") => "Game",
-        ("en-US", "design") => "Design",
-        ("en-US", "utility") => "Utility",
-        ("en-US", "other") => "Other",
-        ("en-US", "system") => "System",
-        (_, "ai") => "AI",
-        (_, "development") => "开发",
-        (_, "office") => "办公",
-        (_, "browser") => "浏览器",
-        (_, "communication") => "沟通",
-        (_, "video") => "视频",
-        (_, "music") => "音乐",
-        (_, "game") => "游戏",
-        (_, "design") => "设计",
-        (_, "utility") => "工具",
-        (_, "other") => "其他",
-        (_, "system") => "系统",
-        _ => return None,
-    };
-    Some(label.to_string())
+fn seeded_category_label(category: &str, locale: Locale) -> Option<String> {
+    match category {
+        "ai" | "development" | "office" | "browser" | "communication" | "video" | "music"
+        | "game" | "design" | "utility" | "other" | "system" => Some(localization::text(
+            locale,
+            &format!("native.category.{category}"),
+        )),
+        _ => None,
+    }
 }
 
 fn extended_category_label(category: &str) -> Option<String> {

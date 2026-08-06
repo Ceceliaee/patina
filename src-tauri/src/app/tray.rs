@@ -4,6 +4,7 @@ use crate::app::state::{AppExitState, DesktopBehaviorState, TraySafetyState};
 use crate::app::widget;
 use crate::data::app_settings_service::{self, AppSettingMutation};
 use crate::data::tracking_pause_service;
+use crate::domain::localization::{Locale, LocalizationState};
 use crate::domain::settings::{CloseBehavior, DesktopBehaviorSettings};
 use crate::engine::tracking::{
     pause_state::TrackingPauseRuntimeState, runtime as tracking_runtime,
@@ -22,64 +23,20 @@ const TRAY_MENU_SHOW_ID: &str = "tray-show-main";
 const TRAY_MENU_TOGGLE_PAUSE_ID: &str = "tray-toggle-pause";
 const TRAY_MENU_TOGGLE_TITLE_ID: &str = "tray-toggle-title-recording";
 const TRAY_MENU_QUIT_ID: &str = "tray-quit";
-const TRAY_MENU_SHOW_LABEL_ZH_CN: &str = "打开主界面";
-const TRAY_MENU_PAUSE_LABEL_ZH_CN: &str = "暂停追踪";
-const TRAY_MENU_RESUME_LABEL_ZH_CN: &str = "恢复追踪";
-const TRAY_MENU_QUIT_LABEL_ZH_CN: &str = "退出应用";
-const TRAY_MENU_DISABLE_TITLE_LABEL_ZH_CN: &str = "屏蔽标题";
-const TRAY_MENU_ENABLE_TITLE_LABEL_ZH_CN: &str = "记录标题";
-const TRAY_MENU_SHOW_LABEL_EN_US: &str = "Open main window";
-const TRAY_MENU_PAUSE_LABEL_EN_US: &str = "Pause tracking";
-const TRAY_MENU_RESUME_LABEL_EN_US: &str = "Resume tracking";
-const TRAY_MENU_QUIT_LABEL_EN_US: &str = "Exit Patina";
-const TRAY_MENU_DISABLE_TITLE_LABEL_EN_US: &str = "Block titles";
-const TRAY_MENU_ENABLE_TITLE_LABEL_EN_US: &str = "Record titles";
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-enum TrayLanguage {
-    #[default]
-    ZhCn,
-    EnUs,
-}
-
-impl TrayLanguage {
-    fn from_setting(raw: Option<&str>) -> Self {
-        match raw.map(str::trim) {
-            Some(value) if value.eq_ignore_ascii_case("en-US") => Self::EnUs,
-            _ => Self::ZhCn,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct TrayMenuLabels {
-    show_main: &'static str,
-    toggle_pause: &'static str,
-    toggle_title: &'static str,
-    quit: &'static str,
+    show_main: String,
+    toggle_pause: String,
+    toggle_title: String,
+    quit: String,
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct TrayMenuLanguageState {
-    inner: Mutex<TrayLanguage>,
+pub(crate) struct TrayMenuRebuildState {
     rebuild: Mutex<()>,
 }
 
-impl TrayMenuLanguageState {
-    fn snapshot(&self) -> TrayLanguage {
-        match self.inner.lock() {
-            Ok(guard) => *guard,
-            Err(poisoned) => *poisoned.into_inner(),
-        }
-    }
-
-    fn set(&self, language: TrayLanguage) {
-        match self.inner.lock() {
-            Ok(mut guard) => *guard = language,
-            Err(poisoned) => *poisoned.into_inner() = language,
-        }
-    }
-
+impl TrayMenuRebuildState {
     fn lock_rebuild(&self) -> MutexGuard<'_, ()> {
         match self.rebuild.lock() {
             Ok(guard) => guard,
@@ -88,40 +45,26 @@ impl TrayMenuLanguageState {
     }
 }
 
-fn tray_menu_labels(
-    language: TrayLanguage,
-    tracking_paused: bool,
-    title_enabled: bool,
-) -> TrayMenuLabels {
-    match language {
-        TrayLanguage::ZhCn => TrayMenuLabels {
-            show_main: TRAY_MENU_SHOW_LABEL_ZH_CN,
-            toggle_pause: if tracking_paused {
-                TRAY_MENU_RESUME_LABEL_ZH_CN
+fn tray_menu_labels(locale: Locale, tracking_paused: bool, title_enabled: bool) -> TrayMenuLabels {
+    TrayMenuLabels {
+        show_main: crate::domain::localization::text(locale, "native.tray.showMain"),
+        toggle_pause: crate::domain::localization::text(
+            locale,
+            if tracking_paused {
+                "native.tray.resume"
             } else {
-                TRAY_MENU_PAUSE_LABEL_ZH_CN
+                "native.tray.pause"
             },
-            toggle_title: if title_enabled {
-                TRAY_MENU_DISABLE_TITLE_LABEL_ZH_CN
+        ),
+        toggle_title: crate::domain::localization::text(
+            locale,
+            if title_enabled {
+                "native.tray.disableTitle"
             } else {
-                TRAY_MENU_ENABLE_TITLE_LABEL_ZH_CN
+                "native.tray.enableTitle"
             },
-            quit: TRAY_MENU_QUIT_LABEL_ZH_CN,
-        },
-        TrayLanguage::EnUs => TrayMenuLabels {
-            show_main: TRAY_MENU_SHOW_LABEL_EN_US,
-            toggle_pause: if tracking_paused {
-                TRAY_MENU_RESUME_LABEL_EN_US
-            } else {
-                TRAY_MENU_PAUSE_LABEL_EN_US
-            },
-            toggle_title: if title_enabled {
-                TRAY_MENU_DISABLE_TITLE_LABEL_EN_US
-            } else {
-                TRAY_MENU_ENABLE_TITLE_LABEL_EN_US
-            },
-            quit: TRAY_MENU_QUIT_LABEL_EN_US,
-        },
+        ),
+        quit: crate::domain::localization::text(locale, "native.tray.quit"),
     }
 }
 
@@ -171,6 +114,8 @@ pub(crate) fn ensure_tray_visible<R: Runtime>(app: &AppHandle<R>) -> Result<(), 
 }
 
 pub(crate) async fn toggle_tracking_paused<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    let settings_commit_state = app.state::<crate::app::state::AppSettingsCommitState>();
+    let _settings_commit_guard = settings_commit_state.lock().await;
     let change = tracking_pause_service::toggle_tracking_pause_setting(&app).await?;
 
     apply_tracking_pause_setting_change(&app, change.tracking_paused, change.reason)
@@ -204,6 +149,8 @@ fn update_tracking_pause_runtime_state<R: Runtime>(app: &AppHandle<R>, tracking_
 pub(crate) async fn toggle_title_recording<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
     let title_state = app.state::<TitleRecordingRuntimeState>();
     let _update_guard = title_state.lock_update().await;
+    let settings_commit_state = app.state::<crate::app::state::AppSettingsCommitState>();
+    let _settings_commit_guard = settings_commit_state.lock().await;
     let current = title_state.is_enabled();
     let next = !current;
     app_settings_service::commit_app_setting_mutations_with_recovery(
@@ -260,12 +207,16 @@ pub(crate) fn apply_language_setting_change<R: Runtime>(
     app: &AppHandle<R>,
     raw_language: &str,
 ) -> Result<(), String> {
-    let language = TrayLanguage::from_setting(Some(raw_language));
     let state = app
-        .try_state::<TrayMenuLanguageState>()
-        .ok_or_else(|| "tray menu language state is unavailable".to_string())?;
-    state.set(language);
-    rebuild_tray_menu(app).map_err(|error| format!("failed to update tray language: {error}"))
+        .try_state::<LocalizationState>()
+        .ok_or_else(|| "localization state is unavailable".to_string())?;
+    state.set_tag(raw_language);
+    if let Err(error) = rebuild_tray_menu(app) {
+        // The database commit is already authoritative. Keep the runtime locale aligned
+        // and retain the last usable native menu until the next rebuild opportunity.
+        eprintln!("[tray] failed to rebuild menu after language update: {error}");
+    }
+    Ok(())
 }
 
 pub(crate) fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
@@ -365,9 +316,9 @@ pub(crate) fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
                 eprintln!("[tray] failed to initialize tray menu language: {error}");
                 None
             });
-    let language = TrayLanguage::from_setting(language_raw.as_deref());
-    if let Some(state) = app.try_state::<TrayMenuLanguageState>() {
-        state.set(language);
+    let locale = Locale::from_tag(language_raw.as_deref());
+    if let Some(state) = app.try_state::<LocalizationState>() {
+        state.set_tag(locale.tag());
     }
 
     let tracking_paused =
@@ -388,7 +339,7 @@ pub(crate) fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         state.set_enabled(title_enabled);
     }
 
-    let menu = build_tray_menu(app, language, tracking_paused, title_enabled)?;
+    let menu = build_tray_menu(app, locale, tracking_paused, title_enabled)?;
 
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
@@ -405,25 +356,30 @@ pub(crate) fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 
 fn build_tray_menu<R: Runtime>(
     app: &AppHandle<R>,
-    language: TrayLanguage,
+    locale: Locale,
     tracking_paused: bool,
     title_enabled: bool,
 ) -> tauri::Result<Menu<R>> {
-    let labels = tray_menu_labels(language, tracking_paused, title_enabled);
-    let open_item =
-        MenuItem::with_id(app, TRAY_MENU_SHOW_ID, labels.show_main, true, None::<&str>)?;
-    let toggle_pause_item = MenuItem::with_id(
+    let labels = tray_menu_labels(locale, tracking_paused, title_enabled);
+    let open_item = MenuItem::with_id(
         app,
-        TRAY_MENU_TOGGLE_PAUSE_ID,
-        labels.toggle_pause,
+        TRAY_MENU_SHOW_ID,
+        &labels.show_main,
         true,
         None::<&str>,
     )?;
-    let quit_item = MenuItem::with_id(app, TRAY_MENU_QUIT_ID, labels.quit, true, None::<&str>)?;
+    let toggle_pause_item = MenuItem::with_id(
+        app,
+        TRAY_MENU_TOGGLE_PAUSE_ID,
+        &labels.toggle_pause,
+        true,
+        None::<&str>,
+    )?;
+    let quit_item = MenuItem::with_id(app, TRAY_MENU_QUIT_ID, &labels.quit, true, None::<&str>)?;
     let toggle_title_item = MenuItem::with_id(
         app,
         TRAY_MENU_TOGGLE_TITLE_ID,
-        labels.toggle_title,
+        &labels.toggle_title,
         true,
         None::<&str>,
     )?;
@@ -439,13 +395,13 @@ fn build_tray_menu<R: Runtime>(
 }
 
 fn rebuild_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
-    let language_state = app.try_state::<TrayMenuLanguageState>();
+    let rebuild_state = app.try_state::<TrayMenuRebuildState>();
     // Runtime setting commands and tray clicks can overlap. Serializing the full
     // snapshot/build/set sequence prevents an older rebuild from winning last.
-    let _rebuild_guard = language_state.as_ref().map(|state| state.lock_rebuild());
-    let language = language_state
-        .as_ref()
-        .map(|state| state.snapshot())
+    let _rebuild_guard = rebuild_state.as_ref().map(|state| state.lock_rebuild());
+    let locale = app
+        .try_state::<LocalizationState>()
+        .map(|state| state.locale())
         .unwrap_or_default();
     let tracking_paused = app
         .try_state::<TrackingPauseRuntimeState>()
@@ -460,7 +416,7 @@ fn rebuild_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
         tray.set_menu(Some(build_tray_menu(
             app,
-            language,
+            locale,
             tracking_paused,
             title_enabled,
         )?))?;
@@ -475,51 +431,42 @@ mod tests {
 
     #[test]
     fn tray_language_normalization_matches_frontend_fallback_contract() {
-        assert_eq!(TrayLanguage::from_setting(None), TrayLanguage::ZhCn);
-        assert_eq!(
-            TrayLanguage::from_setting(Some(" zh-CN ")),
-            TrayLanguage::ZhCn
-        );
-        assert_eq!(
-            TrayLanguage::from_setting(Some(" en-us ")),
-            TrayLanguage::EnUs
-        );
-        assert_eq!(
-            TrayLanguage::from_setting(Some("fr-FR")),
-            TrayLanguage::ZhCn
-        );
-        assert_eq!(TrayLanguage::from_setting(Some("")), TrayLanguage::ZhCn);
+        assert_eq!(Locale::from_tag(None), Locale::ZhCn);
+        assert_eq!(Locale::from_tag(Some(" zh-CN ")), Locale::ZhCn);
+        assert_eq!(Locale::from_tag(Some(" en-us ")), Locale::EnUs);
+        assert_eq!(Locale::from_tag(Some("fr-FR")), Locale::ZhCn);
+        assert_eq!(Locale::from_tag(Some("")), Locale::ZhCn);
     }
 
     #[test]
     fn tray_menu_labels_cover_every_language_and_dynamic_state_combination() {
         let cases = [
             (
-                TrayLanguage::ZhCn,
+                Locale::ZhCn,
                 false,
                 true,
                 ["打开主界面", "暂停追踪", "屏蔽标题", "退出应用"],
             ),
             (
-                TrayLanguage::ZhCn,
+                Locale::ZhCn,
                 true,
                 true,
                 ["打开主界面", "恢复追踪", "屏蔽标题", "退出应用"],
             ),
             (
-                TrayLanguage::ZhCn,
+                Locale::ZhCn,
                 false,
                 false,
                 ["打开主界面", "暂停追踪", "记录标题", "退出应用"],
             ),
             (
-                TrayLanguage::ZhCn,
+                Locale::ZhCn,
                 true,
                 false,
                 ["打开主界面", "恢复追踪", "记录标题", "退出应用"],
             ),
             (
-                TrayLanguage::EnUs,
+                Locale::EnUs,
                 false,
                 true,
                 [
@@ -530,7 +477,7 @@ mod tests {
                 ],
             ),
             (
-                TrayLanguage::EnUs,
+                Locale::EnUs,
                 true,
                 true,
                 [
@@ -541,7 +488,7 @@ mod tests {
                 ],
             ),
             (
-                TrayLanguage::EnUs,
+                Locale::EnUs,
                 false,
                 false,
                 [
@@ -552,7 +499,7 @@ mod tests {
                 ],
             ),
             (
-                TrayLanguage::EnUs,
+                Locale::EnUs,
                 true,
                 false,
                 [
@@ -573,7 +520,7 @@ mod tests {
                     labels.toggle_title,
                     labels.quit,
                 ],
-                expected
+                expected.map(str::to_owned)
             );
         }
     }

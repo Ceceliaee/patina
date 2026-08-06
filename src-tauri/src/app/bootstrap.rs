@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::app::{
     runtime,
     state::{
-        AppExitState, DesktopBehaviorState, MainWindowLifecycleState, TraySafetyState,
-        WidgetWindowLifecycleState,
+        AppExitState, AppSettingsCommitState, DesktopBehaviorState, MainWindowLifecycleState,
+        TraySafetyState, WidgetWindowLifecycleState,
     },
     tray,
 };
@@ -75,6 +75,7 @@ fn register_managed_state_and_plugins(
 ) -> tauri::Builder<tauri::Wry> {
     builder
         .manage(DesktopBehaviorState::default())
+        .manage(AppSettingsCommitState::default())
         .manage(AppExitState::default())
         .manage(TraySafetyState::default())
         .manage(AppRestartState::default())
@@ -83,7 +84,8 @@ fn register_managed_state_and_plugins(
         .manage(TrackingRuntimeSnapshotState::default())
         .manage(TrackingPauseRuntimeState::default())
         .manage(TitleRecordingRuntimeState::default())
-        .manage(tray::TrayMenuLanguageState::default())
+        .manage(crate::domain::localization::LocalizationState::default())
+        .manage(tray::TrayMenuRebuildState::default())
         .manage(runtime_health)
         .manage(ToolsRuntimeState::default())
         .manage(ToolsRuntimeWakeState::default())

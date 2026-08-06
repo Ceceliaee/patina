@@ -4,6 +4,7 @@ use super::common::{
     replace_output_file, resolve_export_fields, unique_temp_path, ExportClassification,
     ExportTimeFilter,
 };
+use crate::domain::localization::{self, Locale};
 use sqlx::{Pool, Row, Sqlite};
 use std::fmt::Write as FmtWrite;
 
@@ -115,47 +116,45 @@ fn render_document(
     end_time: Option<i64>,
     exported_at: i64,
 ) -> String {
-    let chinese = classification.language() != "en-US";
+    let locale = Locale::from_tag(Some(classification.language()));
     let total_duration: i64 = rows.iter().filter_map(ActivityRow::duration).sum();
     let range_start = start_time
         .map(ms_to_local_date)
-        .unwrap_or_else(|| if chinese { "全部" } else { "All" }.to_string());
+        .unwrap_or_else(|| localization::text(locale, "native.export.rangeAll"));
     let range_end = end_time
         .map(|value| ms_to_local_date(value.saturating_sub(1)))
-        .unwrap_or_else(|| if chinese { "当前" } else { "Current" }.to_string());
+        .unwrap_or_else(|| localization::text(locale, "native.export.rangeCurrent"));
     let mut output = String::new();
-    let title = if chinese {
-        "Patina 活动记录"
-    } else {
-        "Patina Activity Records"
-    };
+    let title = localization::text(locale, "native.export.title");
     let _ = writeln!(output, "# {title}\n");
-    if chinese {
-        let _ = writeln!(output, "- 导出范围：{range_start} 至 {range_end}");
-        let _ = writeln!(output, "- 导出时间：{}", ms_to_datetime_str(exported_at));
-        let _ = writeln!(output, "- 记录数量：{}", rows.len());
-        let _ = writeln!(
-            output,
-            "- 总时长：{}\n",
-            readable_duration(total_duration, true)
-        );
-    } else {
-        let _ = writeln!(output, "- Range: {range_start} to {range_end}");
-        let _ = writeln!(output, "- Exported at: {}", ms_to_datetime_str(exported_at));
-        let _ = writeln!(output, "- Records: {}", rows.len());
-        let _ = writeln!(
-            output,
-            "- Total duration: {}\n",
-            readable_duration(total_duration, false)
-        );
-    }
+    let range = localization::format_text(
+        locale,
+        "native.export.range",
+        &[("start", range_start), ("end", range_end)],
+    );
+    let exported = localization::format_text(
+        locale,
+        "native.export.exportedAt",
+        &[("value", ms_to_datetime_str(exported_at))],
+    );
+    let records = localization::format_text(
+        locale,
+        "native.export.records",
+        &[("count", rows.len().to_string())],
+    );
+    let duration = readable_duration(total_duration, locale);
+    let total = localization::format_text(
+        locale,
+        "native.export.totalDuration",
+        &[("value", duration)],
+    );
+    let _ = writeln!(output, "- {range}");
+    let _ = writeln!(output, "- {exported}");
+    let _ = writeln!(output, "- {records}");
+    let _ = writeln!(output, "- {total}\n");
 
     if rows.is_empty() {
-        let message = if chinese {
-            "所选范围内没有活动记录。"
-        } else {
-            "No activity records were found in the selected range."
-        };
+        let message = localization::text(locale, "native.export.empty");
         let _ = writeln!(output, "{message}");
         return output;
     }
@@ -168,7 +167,7 @@ fn render_document(
             let _ = writeln!(output, "## {current_date}\n");
             let labels = fields
                 .iter()
-                .map(|field| field_label(field, chinese))
+                .map(|field| escape_markdown_header(&field_label(field, locale)))
                 .collect::<Vec<_>>();
             let _ = writeln!(output, "| {} |", labels.join(" | "));
             let _ = writeln!(output, "| {} |", vec!["---"; fields.len()].join(" | "));
@@ -302,58 +301,29 @@ fn escape_markdown_cell(value: &str) -> String {
     escaped
 }
 
-fn readable_duration(milliseconds: i64, chinese: bool) -> String {
+fn escape_markdown_header(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('|', "\\|")
+        .replace(['\r', '\n'], " ")
+}
+
+fn readable_duration(milliseconds: i64, locale: Locale) -> String {
     let total_minutes = milliseconds.max(0) / 60_000;
     let hours = total_minutes / 60;
     let minutes = total_minutes % 60;
-    if chinese {
-        format!("{hours} 小时 {minutes} 分钟")
-    } else {
-        format!("{hours}h {minutes}m")
-    }
+    localization::format_text(
+        locale,
+        "native.export.duration",
+        &[
+            ("hours", hours.to_string()),
+            ("minutes", minutes.to_string()),
+        ],
+    )
 }
 
-fn field_label(field: &str, chinese: bool) -> &'static str {
-    let labels = match field {
-        "record_type" => ("记录类型", "Record Type"),
-        "category" => ("分类", "Category"),
-        "start_time" => ("开始时间", "Start Time"),
-        "end_time" => ("结束时间", "End Time"),
-        "duration_ms" => ("时长（毫秒）", "Duration (ms)"),
-        "duration_minutes" => ("时长（分钟）", "Duration (minutes)"),
-        "app_name" => ("应用名称", "App Name"),
-        "exe_name" => ("可执行文件名", "Executable Name"),
-        "window_title" => ("窗口标题", "Window Title"),
-        "domain" => ("域名", "Domain"),
-        "normalized_domain" => ("标准化域名", "Normalized Domain"),
-        "url" => ("URL 地址", "URL"),
-        "page_title" => ("页面标题", "Page Title"),
-        "category_id" => ("分类 ID", "Category ID"),
-        "local_date" => ("本地日期", "Local Date"),
-        "local_week" => ("本地周", "Local Week"),
-        "local_month" => ("本地月份", "Local Month"),
-        "weekday" => ("星期", "Weekday"),
-        "start_hour" => ("开始小时", "Start Hour"),
-        "source_key" => ("来源键", "Source Key"),
-        "source_name" => ("来源名称", "Source Name"),
-        "session_id" => ("会话 ID", "Session ID"),
-        "web_segment_id" => ("网页片段 ID", "Web Segment ID"),
-        "continuity_group_start_time" => ("连续组开始时间", "Continuity Group Start"),
-        "browser_client_id" => ("浏览器客户端 ID", "Browser Client ID"),
-        "browser_kind" => ("浏览器类型", "Browser Kind"),
-        "browser_exe_name" => ("浏览器可执行文件", "Browser Executable"),
-        "favicon_url" => ("网站图标 URL", "Favicon URL"),
-        "web_source" => ("网页来源", "Web Source"),
-        "created_at" => ("创建时间", "Created At"),
-        "updated_at" => ("更新时间", "Updated At"),
-        "category_color" => ("分类颜色", "Category Color"),
-        _ => ("未知字段", "Unknown Field"),
-    };
-    if chinese {
-        labels.0
-    } else {
-        labels.1
-    }
+fn field_label(field: &str, locale: Locale) -> String {
+    localization::text(locale, &format!("native.export.field.{field}"))
 }
 
 async fn load_sessions(
@@ -436,10 +406,23 @@ mod tests {
     }
 
     #[test]
+    fn markdown_headers_escape_column_breakers_without_changing_normal_labels() {
+        assert_eq!(escape_markdown_header("Duration (ms)"), "Duration (ms)");
+        assert_eq!(escape_markdown_header("A|B\nC"), "A\\|B C");
+    }
+
+    #[test]
     fn every_export_field_has_a_localized_label() {
         for field in super::super::common::ALL_EXPORT_FIELDS {
-            assert_ne!(field_label(field, true), "未知字段");
-            assert_ne!(field_label(field, false), "Unknown Field");
+            let key = format!("native.export.field.{field}");
+            assert!(
+                localization::has_message(Locale::ZhCn, &key),
+                "missing zh-CN {key}"
+            );
+            assert!(
+                localization::has_message(Locale::EnUs, &key),
+                "missing en-US {key}"
+            );
         }
     }
 }
