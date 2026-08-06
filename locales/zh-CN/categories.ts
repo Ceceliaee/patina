@@ -1,0 +1,27 @@
+// zh-CN categories locale resource. Pure data only.
+export const MESSAGES = {
+  "categories.ai": "AI",
+  "categories.browser": "浏览阅读",
+  "categories.communication": "即时通讯",
+  "categories.custom": "自定义",
+  "categories.design": "设计创作",
+  "categories.development": "开发编码",
+  "categories.game": "游戏",
+  "categories.music": "音乐音频",
+  "categories.office": "办公协作",
+  "categories.other": "其他",
+  "categories.short.browser": "浏览",
+  "categories.short.communication": "通讯",
+  "categories.short.design": "设计",
+  "categories.short.development": "开发",
+  "categories.short.game": "游戏",
+  "categories.short.music": "音乐",
+  "categories.short.office": "办公",
+  "categories.short.other": "未分类",
+  "categories.short.system": "系统",
+  "categories.short.utility": "工具",
+  "categories.short.video": "视频",
+  "categories.system": "系统工具",
+  "categories.utility": "工具效率",
+  "categories.video": "视频内容"
+} as const;
