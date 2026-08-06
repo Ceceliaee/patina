@@ -1,3 +1,4 @@
+import { useLocaleText } from "../i18n/index.ts";
 import {
   useCallback,
   useEffect,
@@ -20,7 +21,6 @@ import {
   type HslColor,
   type RgbColor,
 } from "../lib/colorFormatting";
-import { UI_TEXT } from "../copy/index.ts";
 import QuietSegmentedFilter, {
   type QuietSegmentedFilterOption,
 } from "./QuietSegmentedFilter.tsx";
@@ -93,6 +93,7 @@ export default function QuietColorField({
   onChange,
   onFormatChange,
 }: Props) {
+  const UI_TEXT = useLocaleText();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const titleRef = useRef<HTMLDivElement | null>(null);

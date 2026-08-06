@@ -1,3 +1,4 @@
+import { useLocaleText } from "../i18n/index.ts";
 import {
   type ButtonHTMLAttributes,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -5,7 +6,6 @@ import {
   useMemo,
 } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { UI_TEXT } from "../copy/index.ts";
 import {
   addLocalMonths,
   buildMondayFirstCalendarGrid,
@@ -153,6 +153,7 @@ export default function QuietCalendar({
   onFocusedDateChange,
   onSelectDate,
 }: QuietCalendarProps) {
+  const UI_TEXT = useLocaleText();
   const normalizedMinDate = minDate ? startOfLocalDay(minDate) : null;
   const normalizedMaxDate = maxDate ? startOfLocalDay(maxDate) : null;
   const calendarDays = useMemo(

@@ -1,4 +1,4 @@
-import { UI_TEXT } from "../copy/index.ts";
+import type { UiText } from "../i18n/index.ts";
 
 // The persisted prefix is historical; keep the literal value for existing user data.
 export const EXTENDED_CATEGORY_PREFIX = "custom:" as const;
@@ -114,15 +114,15 @@ export function normalizeCategoryLabelInput(input: string): string {
   return Array.from(latinValue).slice(0, CATEGORY_NAME_LIMITS.latinCharacters).join("").trimEnd();
 }
 
-function getSeededCategoryLabel(category: SeededAppCategory): string {
-  if (category === "ai") return UI_TEXT.categories.ai;
-  return UI_TEXT.categories.short[category];
+function getSeededCategoryLabel(category: SeededAppCategory, uiText: UiText): string {
+  if (category === "ai") return uiText.categories.ai;
+  return uiText.categories.short[category];
 }
 
 function normalizeLegacyExtendedCategoryLabel(label: string): string {
   const trimmed = label.trim().replace(/\s+/g, " ");
   if (!trimmed) {
-    return UI_TEXT.categories.custom;
+    return "custom";
   }
   return trimmed.slice(0, 20);
 }
@@ -143,10 +143,10 @@ function decodeLegacyExtendedCategoryRawLabel(raw: string): string {
   return decoded;
 }
 
-export function resolveExtendedCategoryLabel(category: ExtendedAppCategory): string {
+export function resolveExtendedCategoryLabel(category: ExtendedAppCategory, uiText: UiText): string {
   const raw = category.slice(EXTENDED_CATEGORY_PREFIX.length);
   if (!raw) {
-    return UI_TEXT.categories.custom;
+    return uiText.categories.custom;
   }
   return normalizeLegacyExtendedCategoryLabel(decodeLegacyExtendedCategoryRawLabel(raw));
 }
@@ -169,7 +169,7 @@ export function isExtendedCategory(category: string): category is ExtendedAppCat
   return category.startsWith(EXTENDED_CATEGORY_PREFIX) && category.length > EXTENDED_CATEGORY_PREFIX.length;
 }
 
-export function isModernExtendedCategoryId(category: string): category is ExtendedAppCategory {
+export function isModernExtendedCategoryId(category: string): boolean {
   return isExtendedCategory(category) && category.slice(EXTENDED_CATEGORY_PREFIX.length).startsWith("category_");
 }
 
@@ -177,7 +177,9 @@ export function normalizeExtendedCategory(category: ExtendedAppCategory): Extend
   if (isModernExtendedCategoryId(category)) {
     return category;
   }
-  return buildLegacyExtendedCategoryId(resolveExtendedCategoryLabel(category));
+  return buildLegacyExtendedCategoryId(
+    decodeLegacyExtendedCategoryRawLabel(category.slice(EXTENDED_CATEGORY_PREFIX.length)),
+  );
 }
 
 export function isSeededCategory(category: string): category is SeededAppCategory {
@@ -188,27 +190,27 @@ export function isAppCategory(category: string): category is AppCategory {
   return isSeededCategory(category) || isExtendedCategory(category);
 }
 
-export function getCategoryToken(category: AppCategory): CategoryToken {
+export function getCategoryToken(category: AppCategory, uiText: UiText): CategoryToken {
   if (category === "system") {
-    return { label: UI_TEXT.categories.system, color: "#475569" };
+    return { label: uiText.categories.system, color: "#475569" };
   }
 
   if (category === "other") {
     return {
-      label: getSeededCategoryLabel("other"),
+      label: getSeededCategoryLabel("other", uiText),
       color: OTHER_CATEGORY_FIXED_COLOR,
     };
   }
 
   if (isExtendedCategory(category)) {
     return {
-      label: resolveExtendedCategoryLabel(category),
+      label: resolveExtendedCategoryLabel(category, uiText),
       color: QUIET_PRO_CATEGORY_PALETTE_37[0],
     };
   }
 
   return {
-    label: getSeededCategoryLabel(category),
+    label: getSeededCategoryLabel(category, uiText),
     color: QUIET_PRO_CATEGORY_PALETTE_37[0],
   };
 }

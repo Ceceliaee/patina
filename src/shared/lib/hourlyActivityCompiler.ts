@@ -1,6 +1,6 @@
 import { AppClassification } from "../classification/appClassification.ts";
 import type { AppCategory } from "../classification/categoryTokens.ts";
-import { UI_TEXT } from "../copy/index.ts";
+import type { UiText } from "../i18n/index.ts";
 import type { HistorySession } from "../types/sessions.ts";
 
 export interface HourlyActivityPoint {
@@ -112,7 +112,7 @@ function buildVisibleSeries(
     return {
       dataKey: `category${index}`,
       category,
-      name: descriptor?.name ?? AppClassification.getCategoryLabel(category),
+      name: descriptor?.name ?? "",
       color: descriptor?.color ?? AppClassification.getCategoryColor(category),
       totalMinutes,
       isRemainder: false,
@@ -135,7 +135,7 @@ export function buildHourlyCategoryActivity(
       const mapped = AppClassification.mapApp(session.exeName, { appName: session.appName });
       descriptor = {
         category: mapped.category,
-        name: AppClassification.getCategoryLabel(mapped.category),
+        name: AppClassification.getCategoryLabelOverride(mapped.category) ?? "",
         color: AppClassification.getCategoryColor(mapped.category),
       };
       appCategoryCache.set(cacheKey, descriptor);
@@ -199,6 +199,7 @@ export function buildHourlyCategoryActivity(
 export function limitHourlyCategoryActivity(
   activity: HourlyCategoryActivity,
   visibleCategoryLimit: number,
+  uiText: UiText,
 ): HourlyCategoryActivity {
   const limit = Math.max(0, visibleCategoryLimit);
   const points = activity.points.map((sourcePoint) => {
@@ -211,12 +212,18 @@ export function limitHourlyCategoryActivity(
     const displaySegments = [
       ...(remainderMinutes > 0 ? [{
         category: null,
-        name: UI_TEXT.hourlyActivityChart.remainingCategories,
+        name: uiText.hourlyActivityChart.remainingCategories,
         color: "var(--qp-text-tertiary)",
         minutes: remainderMinutes,
         isRemainder: true,
       } satisfies HourlyCategoryActivitySegment] : []),
-      ...visibleSegments.sort((left, right) => left.minutes - right.minutes),
+      ...visibleSegments
+        .sort((left, right) => left.minutes - right.minutes)
+        .map((segment) => ({
+          ...segment,
+          name: segment.name
+            || (segment.category ? AppClassification.getCategoryLabel(segment.category, uiText) : ""),
+        })),
     ];
     const point: HourlyCategoryActivityPoint = {
       hour: sourcePoint.hour,
@@ -233,5 +240,12 @@ export function limitHourlyCategoryActivity(
     return point;
   });
 
-  return { points, series: activity.series };
+  return {
+    points,
+    series: activity.series.map((series) => ({
+      ...series,
+      name: series.name
+        || (series.category ? AppClassification.getCategoryLabel(series.category, uiText) : ""),
+    })),
+  };
 }

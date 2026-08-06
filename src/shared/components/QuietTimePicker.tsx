@@ -1,3 +1,4 @@
+import { useLocaleText } from "../i18n/index.ts";
 import {
   type CSSProperties,
   useCallback,
@@ -11,7 +12,6 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Clock3 } from "lucide-react";
-import { UI_TEXT } from "../copy/index.ts";
 
 interface QuietTimePickerProps {
   value: string;
@@ -66,10 +66,12 @@ function formatTimeValue(hour: number, minute: number) {
 export default function QuietTimePicker({
   value,
   onChange,
-  ariaLabel = UI_TEXT.time.pickTime,
+  ariaLabel,
   className,
   disabled = false,
 }: QuietTimePickerProps) {
+  const UI_TEXT = useLocaleText();
+  const resolvedAriaLabel = ariaLabel ?? UI_TEXT.time.pickTime;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
@@ -235,7 +237,7 @@ export default function QuietTimePicker({
       ref={popoverRef}
       id={dialogId}
       role="dialog"
-      aria-label={ariaLabel}
+      aria-label={resolvedAriaLabel}
       className={`qp-time-picker-popover qp-time-picker-popover-${position.placement}`}
       style={popoverStyle}
     >
@@ -302,7 +304,7 @@ export default function QuietTimePicker({
         ref={triggerRef}
         type="button"
         disabled={disabled}
-        aria-label={ariaLabel}
+        aria-label={resolvedAriaLabel}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? dialogId : undefined}

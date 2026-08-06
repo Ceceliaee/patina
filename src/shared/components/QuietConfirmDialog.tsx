@@ -1,7 +1,7 @@
+import { useLocaleText } from "../i18n/index.ts";
 import { useRef } from "react";
 import QuietDialog from "./QuietDialog";
 import QuietButton from "./QuietButton";
-import { UI_TEXT } from "../copy/index.ts";
 
 interface QuietConfirmDialogProps {
   open: boolean;
@@ -28,6 +28,7 @@ export default function QuietConfirmDialog({
   onCancel,
   onConfirm,
 }: QuietConfirmDialogProps) {
+  const UI_TEXT = useLocaleText();
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
   return (

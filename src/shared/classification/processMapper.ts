@@ -9,6 +9,7 @@ import {
 } from "./categoryTokens.ts";
 import { resolveCanonicalExecutable, shouldTrackProcess } from "./processNormalization.ts";
 import { CategoryColorRegistry } from "./categoryColorRegistry.ts";
+import type { UiText } from "../i18n/index.ts";
 
 export interface MappingHints {
   appName?: string;
@@ -155,8 +156,12 @@ export class ProcessMapper {
     return this.categoryColors.isCategoryDeleted(category);
   }
 
-  static getCategoryLabel(category: AppCategory) {
-    return this.categoryLabelOverrides[category] ?? getCategoryToken(category).label;
+  static getCategoryLabel(category: AppCategory, uiText: UiText) {
+    return this.categoryLabelOverrides[category] ?? getCategoryToken(category, uiText).label;
+  }
+
+  static getCategoryLabelOverride(category: AppCategory): string | null {
+    return this.categoryLabelOverrides[category] ?? null;
   }
 
   static setCategoryLabelOverrides(overrides: Record<string, string>) {

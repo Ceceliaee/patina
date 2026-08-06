@@ -1,7 +1,7 @@
+import { useLocaleText } from "../i18n/index.ts";
 import { useCallback, useMemo, useState } from "react";
 import QuietConfirmDialog from "../components/QuietConfirmDialog";
 import QuietPromptDialog from "../components/QuietPromptDialog";
-import { UI_TEXT } from "../copy/index.ts";
 
 interface ConfirmDialogOptions {
   title: string;
@@ -32,6 +32,7 @@ interface PromptState extends PromptDialogOptions {
 }
 
 export function useQuietDialogs() {
+  const UI_TEXT = useLocaleText();
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [promptState, setPromptState] = useState<PromptState | null>(null);
 
@@ -101,7 +102,7 @@ export function useQuietDialogs() {
         />
       )}
     </>
-  ), [confirmState, promptState]);
+  ), [confirmState, promptState, UI_TEXT]);
 
   return {
     confirm,

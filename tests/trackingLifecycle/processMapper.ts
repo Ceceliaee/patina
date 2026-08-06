@@ -11,6 +11,7 @@ import {
   runTest,
   shouldTrackProcess,
 } from "./shared.ts";
+import { getLocaleText } from "../../src/shared/i18n/runtime.ts";
 
 export function runProcessMapperTests() {
   runTest("system windows processes are excluded from tracking", () => {
@@ -244,7 +245,7 @@ export function runProcessMapperTests() {
     const mapped = ProcessMapper.map("atlas.exe");
     assert.equal(mapped.category, "custom:%E4%B8%93%E6%B3%A8");
     assert.equal(
-      ProcessMapper.getCategoryLabel("custom:\u4e13\u6ce8"),
+      ProcessMapper.getCategoryLabel("custom:\u4e13\u6ce8", getLocaleText("zh-CN")),
       "\u4e13\u6ce8",
     );
 

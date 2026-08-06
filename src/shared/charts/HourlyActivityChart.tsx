@@ -1,6 +1,7 @@
+import { useLocaleText } from "../i18n/index.ts";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import QuietChartTooltip from "../components/QuietChartTooltip.tsx";
-import { UI_TEXT } from "../copy/index.ts";
+import type { UiText } from "../i18n/index.ts";
 import type {
   HourlyActivityPoint,
   HourlyCategoryActivity,
@@ -81,9 +82,10 @@ function getPointSegments(point: HourlyCategoryActivityPoint) {
 function formatHourlyChartAriaLabel(
   point: HourlyActivityPoint | HourlyCategoryActivityPoint,
   categoryMode: boolean,
+  text: UiText["hourlyActivityChart"],
 ) {
   if (!categoryMode) {
-    return `${point.hour} · ${UI_TEXT.hourlyActivityChart.activeMinutes} ${Math.round(point.minutes)}m`;
+    return `${point.hour} · ${text.activeMinutes} ${Math.round(point.minutes)}m`;
   }
 
   const categoryPoint = point as HourlyCategoryActivityPoint;
@@ -92,7 +94,7 @@ function formatHourlyChartAriaLabel(
     .reverse()
     .map(({ segment }) => `${segment.name} ${Math.round(segment.minutes)}m`)
     .join(" · ");
-  const total = `${point.hour} · ${UI_TEXT.hourlyActivityChart.activeMinutes} ${Math.round(point.minutes)}m`;
+  const total = `${point.hour} · ${text.activeMinutes} ${Math.round(point.minutes)}m`;
   return details ? `${total} · ${details}` : total;
 }
 
@@ -103,6 +105,7 @@ export default function HourlyActivityChart({
   margin,
   padding,
 }: Props) {
+  const UI_TEXT = useLocaleText();
   const chartRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState<ChartSize>({ height: 0, width: 0 });
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -111,8 +114,8 @@ export default function HourlyActivityChart({
     ? EXPANDED_CATEGORY_LIMIT
     : COMPACT_CATEGORY_LIMIT;
   const visibleHourlyCategoryActivity = useMemo(
-    () => limitHourlyCategoryActivity(hourlyCategoryActivity, visibleCategoryLimit),
-    [hourlyCategoryActivity, visibleCategoryLimit],
+    () => limitHourlyCategoryActivity(hourlyCategoryActivity, visibleCategoryLimit, UI_TEXT),
+    [hourlyCategoryActivity, visibleCategoryLimit, UI_TEXT],
   );
   const chartData = categoryMode ? visibleHourlyCategoryActivity.points : hourlyActivity;
   const chartTop = margin.top;
@@ -251,7 +254,7 @@ export default function HourlyActivityChart({
             return (
               <rect
                 key={`hit-${point.hour}`}
-                aria-label={formatHourlyChartAriaLabel(point, categoryMode)}
+                aria-label={formatHourlyChartAriaLabel(point, categoryMode, UI_TEXT.hourlyActivityChart)}
                 className="qp-hourly-chart-hit"
                 fill="transparent"
                 height={chartHeight}

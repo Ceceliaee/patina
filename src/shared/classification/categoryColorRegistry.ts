@@ -1,5 +1,4 @@
 import {
-  getCategoryToken,
   isAppCategory,
   isExtendedCategory,
   OTHER_CATEGORY_FIXED_COLOR,
@@ -112,7 +111,7 @@ export class CategoryColorRegistry {
 
   getDefaultCategoryColor(category: AppCategory) {
     if (category === "system") {
-      return getCategoryToken(category).color;
+      return "#475569";
     }
 
     if (category === "other") {

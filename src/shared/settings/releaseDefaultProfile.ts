@@ -1,3 +1,5 @@
+import type { Locale } from "../i18n/generated/contract.ts";
+
 export interface ReleaseDefaultSettingsProfile {
   idleTimeoutSecs: number;
   timelineMergeGapSecs: number;
@@ -8,7 +10,7 @@ export interface ReleaseDefaultSettingsProfile {
   closeBehavior: "exit" | "tray";
   minimizeBehavior: "taskbar" | "widget";
   themeMode: "light" | "dark" | "system";
-  language: "zh-CN" | "en-US";
+  language: Locale;
   hourlyActivityChartMode: "total" | "category";
   dynamicEffects: boolean;
   colorSchemeLight:

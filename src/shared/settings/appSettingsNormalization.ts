@@ -8,6 +8,7 @@ import {
   type MinimizeBehavior,
   type ThemeMode,
 } from "./appSettings.ts";
+import { SUPPORTED_LOCALES } from "../i18n/generated/contract.ts";
 
 const IDLE_TIMEOUT_SECONDS_RANGE = { min: 300, max: 1800, step: 60 } as const;
 const TIMELINE_MERGE_GAP_SECONDS_RANGE = { min: 60, max: 300, step: 60 } as const;
@@ -139,8 +140,8 @@ function normalizeThemeMode(value: string | undefined): ThemeMode {
 
 function normalizeLanguage(value: string | undefined): AppLanguage {
   if (value === undefined) return DEFAULT_SETTINGS.language;
-  const normalized = value.trim().toLowerCase();
-  return normalized === "en-us" ? "en-US" : "zh-CN";
+  const normalized = value.trim();
+  return SUPPORTED_LOCALES.find((locale) => locale.toLowerCase() === normalized.toLowerCase()) ?? DEFAULT_SETTINGS.language;
 }
 
 function normalizeHourlyActivityChartMode(value: string | undefined): HourlyActivityChartMode {

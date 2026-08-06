@@ -9,6 +9,7 @@ import {
 } from "../src/shared/lib/hourlyActivityCompiler.ts";
 import { ProcessMapper } from "../src/shared/classification/processMapper.ts";
 import { resolveTrackerHealth } from "../src/shared/types/tracking.ts";
+import { getLocaleText } from "../src/shared/i18n/runtime.ts";
 import {
   shouldDeleteSessionByStartTime,
 } from "../src/features/settings/services/sessionCleanupPolicy.ts";
@@ -21,6 +22,7 @@ const harness = createTestHarness();
 const runTest = harness.run;
 
 const trackerHealth = resolveTrackerHealth(400_000, 400_000, 8_000);
+const ZH_TEXT = getLocaleText("zh-CN");
 
 runTest("history replay filters pickerhost and keeps alias aggregation stable", () => {
   const daySessions = [
@@ -551,8 +553,8 @@ runTest("hourly category compiler keeps remainder distinct from the real other c
 
   try {
     const categoryActivity = buildHourlyCategoryActivity(sessions);
-    const visibleCategoryActivity = limitHourlyCategoryActivity(categoryActivity, 6);
-    const otherSeries = categoryActivity.series.find((item) => item.category === "other");
+    const visibleCategoryActivity = limitHourlyCategoryActivity(categoryActivity, 6, ZH_TEXT);
+    const otherSeries = visibleCategoryActivity.series.find((item) => item.category === "other");
     const nineOClock = visibleCategoryActivity.points[9];
     const remainderSeries = Object.values(nineOClock?.segmentDetails ?? {}).find((item) => item.isRemainder);
     const stackedTotal = Object.values(nineOClock?.segmentDetails ?? {}).reduce(
@@ -596,10 +598,10 @@ runTest("hourly category compiler only adds remainder after the per-hour limit i
   try {
     const categoryActivity = buildHourlyCategoryActivity(sessions);
     const fourPlusRemainder = Object.values(
-      limitHourlyCategoryActivity(categoryActivity, 4).points[9]?.segmentDetails ?? {},
+      limitHourlyCategoryActivity(categoryActivity, 4, ZH_TEXT).points[9]?.segmentDetails ?? {},
     );
     const sixWithoutRemainder = Object.values(
-      limitHourlyCategoryActivity(categoryActivity, 6).points[9]?.segmentDetails ?? {},
+      limitHourlyCategoryActivity(categoryActivity, 6, ZH_TEXT).points[9]?.segmentDetails ?? {},
     );
 
     assert.equal(fourPlusRemainder.length, 5);

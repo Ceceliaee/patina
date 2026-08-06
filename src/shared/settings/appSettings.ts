@@ -1,9 +1,10 @@
 import { RELEASE_DEFAULT_SETTINGS } from "./releaseDefaultProfile.ts";
+import type { Locale } from "../i18n/index.ts";
+export type { Locale as AppLanguage } from "../i18n/index.ts";
 
 export type CloseBehavior = "exit" | "tray";
 export type MinimizeBehavior = "taskbar" | "widget";
 export type ThemeMode = "light" | "dark" | "system";
-export type AppLanguage = "zh-CN" | "en-US";
 export type HourlyActivityChartMode = "total" | "category";
 export type ColorScheme =
   | "default"
@@ -45,7 +46,7 @@ export interface AppSettings {
   closeBehavior: CloseBehavior;
   minimizeBehavior: MinimizeBehavior;
   themeMode: ThemeMode;
-  language: AppLanguage;
+  language: Locale;
   hourlyActivityChartMode: HourlyActivityChartMode;
   dynamicEffects: boolean;
   colorSchemeLight: ColorScheme;

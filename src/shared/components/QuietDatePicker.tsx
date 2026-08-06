@@ -10,7 +10,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { CalendarDays } from "lucide-react";
-import { UI_TEXT } from "../copy/index.ts";
+import { useLocaleText } from "../i18n/index.ts";
 import {
   addLocalMonths,
   formatLocalDateKey,
@@ -69,7 +69,7 @@ function formatDateDisplay(dateKey: string) {
 export default function QuietDatePicker({
   value,
   onChange,
-  ariaLabel = UI_TEXT.date.pickDate,
+  ariaLabel,
   className,
   displayLabel,
   showCalendarIcon = true,
@@ -78,6 +78,8 @@ export default function QuietDatePicker({
   maxDate,
   dayNavigation,
 }: QuietDatePickerProps) {
+  const UI_TEXT = useLocaleText();
+  const resolvedAriaLabel = ariaLabel ?? UI_TEXT.date.pickDate;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
@@ -223,7 +225,7 @@ export default function QuietDatePicker({
       ref={popoverRef}
       id={dialogId}
       role="dialog"
-      aria-label={ariaLabel}
+      aria-label={resolvedAriaLabel}
       className={`qp-calendar-popover qp-calendar-popover-${position.placement} qp-motion-popover-enter`}
       style={popoverStyle}
     >
@@ -254,7 +256,7 @@ export default function QuietDatePicker({
           className={dayNavigation.className}
           ariaLabel={dayNavigation.ariaLabel}
           label={displayLabel ?? formatDateDisplay(value)}
-          labelAriaLabel={ariaLabel}
+          labelAriaLabel={resolvedAriaLabel}
           previousAriaLabel={dayNavigation.previousAriaLabel}
           nextAriaLabel={dayNavigation.nextAriaLabel}
           previousDisabled={dayNavigation.previousDisabled}
@@ -273,7 +275,7 @@ export default function QuietDatePicker({
           ref={triggerRef}
           type="button"
           disabled={disabled}
-          aria-label={ariaLabel}
+          aria-label={resolvedAriaLabel}
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={open ? dialogId : undefined}
