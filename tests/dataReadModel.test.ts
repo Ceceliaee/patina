@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { ProcessMapper } from "../src/shared/classification/processMapper.ts";
 import { mapRawAggregateSessionCandidates } from "../src/platform/persistence/sessionReadRepository.ts";
 import {
-  buildActivityHeatmap,
+  buildActivityHeatmap as buildActivityHeatmapRaw,
   buildDataAppTrendViewModelFromAggregate,
-  buildDataTrendAggregateContext,
+  buildDataTrendAggregateContext as buildDataTrendAggregateContextRaw,
   buildDataTrendViewModelFromAggregate,
-  buildDataTrendViewModel,
-  buildDataAppTrendViewModel,
+  buildDataTrendViewModel as buildDataTrendViewModelRaw,
+  buildDataAppTrendViewModel as buildDataAppTrendViewModelRaw,
   buildYearOptions,
   getDataHeatmapSessionCacheSizeForTests,
   getCachedEarliestSessionStartTime,
@@ -27,7 +27,8 @@ import {
 import {
   clearDataTrendSnapshotCache,
   getDataTrendSnapshotCacheSizeForTests,
-  loadDataTrendSnapshot,
+  loadDataTrendSnapshot as loadDataTrendSnapshotRaw,
+  type DataTrendSnapshotDependencies,
   type DataTrendSnapshot,
 } from "../src/features/data/services/dataTrendSnapshot.ts";
 import {
@@ -40,6 +41,39 @@ import {
   pickPreferredAppName,
   scoreDisplayNameForStats,
 } from "../src/shared/lib/displayNameScoring.ts";
+import { getLocaleText } from "../src/shared/i18n/runtime.ts";
+
+const ZH_TEXT = getLocaleText("zh-CN");
+type BuildActivityArgs = Parameters<typeof buildActivityHeatmapRaw>;
+const buildActivityHeatmap = (
+  sessions: BuildActivityArgs[0],
+  selection: BuildActivityArgs[1],
+  atMs: BuildActivityArgs[2],
+  selectedApps?: BuildActivityArgs[5],
+) => buildActivityHeatmapRaw(sessions, selection, atMs, ZH_TEXT, "zh-CN", selectedApps);
+type TrendContextArgs = Parameters<typeof buildDataTrendAggregateContextRaw>;
+const buildDataTrendAggregateContext = (
+  sessions: TrendContextArgs[0],
+  selection: TrendContextArgs[1],
+  atMs: TrendContextArgs[2],
+  options?: TrendContextArgs[5],
+) => buildDataTrendAggregateContextRaw(sessions, selection, atMs, ZH_TEXT, "zh-CN", options);
+const buildDataTrendViewModel = (
+  sessions: Parameters<typeof buildDataTrendViewModelRaw>[0],
+  selection: Parameters<typeof buildDataTrendViewModelRaw>[1],
+  atMs: number,
+) => buildDataTrendViewModelRaw(sessions, selection, atMs, ZH_TEXT, "zh-CN");
+const buildDataAppTrendViewModel = (
+  sessions: Parameters<typeof buildDataAppTrendViewModelRaw>[0],
+  selection: Parameters<typeof buildDataAppTrendViewModelRaw>[1],
+  atMs: number,
+  selectedApps: Parameters<typeof buildDataAppTrendViewModelRaw>[3],
+) => buildDataAppTrendViewModelRaw(sessions, selection, atMs, selectedApps, ZH_TEXT, "zh-CN");
+const loadDataTrendSnapshot = (
+  selection: Parameters<typeof loadDataTrendSnapshotRaw>[0],
+  atMs: number,
+  deps?: DataTrendSnapshotDependencies,
+) => loadDataTrendSnapshotRaw(selection, atMs, ZH_TEXT, deps);
 
 let passed = 0;
 

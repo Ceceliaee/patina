@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { COPY } from "../../src/shared/copy/index.ts";
+import { getLocaleText } from "../../src/shared/i18n/runtime.ts";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import {
   delay,
@@ -9,6 +9,8 @@ import {
   waitForExpression,
   waitForStableExpression,
 } from "./browserHarness.ts";
+
+const COPY = { "zh-CN": getLocaleText("zh-CN") } as const;
 
 const VISIBLE_DESTINATION_DETAIL_POPOVER = `(() => {
   const popover = document.querySelector(".destination-detail-record-popover");

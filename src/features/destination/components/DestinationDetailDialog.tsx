@@ -1,8 +1,9 @@
+import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
+import type { UiText } from "../../../shared/i18n/index.ts";
 import { useState, type CSSProperties } from "react";
 import { Minus, Plus, X } from "lucide-react";
 import QuietDatePicker from "../../../shared/components/QuietDatePicker.tsx";
 import QuietDialog from "../../../shared/components/QuietDialog.tsx";
-import { UI_TEXT, getUiLocale } from "../../../shared/copy/index.ts";
 import {
   addLocalDays,
   formatLocalDateKey,
@@ -36,15 +37,15 @@ interface Props {
   onClose: () => void;
 }
 
-function formatDateControlLabel(dateKey: string) {
+function formatDateControlLabel(dateKey: string, text: UiText, locale: string) {
   const date = parseLocalDateKey(dateKey);
   if (!date) return dateKey;
   const today = startOfLocalDay(new Date());
-  if (dateKey === formatLocalDateKey(today)) return UI_TEXT.date.today;
+  if (dateKey === formatLocalDateKey(today)) return text.date.today;
   if (dateKey === formatLocalDateKey(addLocalDays(today, -1))) {
-    return UI_TEXT.date.yesterday;
+    return text.date.yesterday;
   }
-  return date.toLocaleDateString(getUiLocale(), {
+  return date.toLocaleDateString(locale, {
     month: "short",
     day: "numeric",
   });
@@ -56,6 +57,8 @@ export default function DestinationDetailDialog({
   runtime,
   onClose,
 }: Props) {
+  const UI_TEXT = useLocaleText();
+  const locale = useLocale();
   const copy = UI_TEXT.destinationDetail;
   const [timelineZoomHours, setTimelineZoomHours] = useState(
     readDestinationDetailTimelineZoomHours,
@@ -199,7 +202,7 @@ export default function DestinationDetailDialog({
                       onChange={detail.setFocusedDateKey}
                       ariaLabel={UI_TEXT.date.pickDate}
                       className="destination-detail-date-trigger"
-                      displayLabel={formatDateControlLabel(detail.focusedDateKey)}
+                      displayLabel={formatDateControlLabel(detail.focusedDateKey, UI_TEXT, locale)}
                       showCalendarIcon={false}
                       maxDate={detail.todayDateKey}
                       dayNavigation={{

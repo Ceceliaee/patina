@@ -1,6 +1,6 @@
+import { useLocale, useLocaleText, type Locale } from "../../../shared/i18n/index.ts";
 import { useEffect, useId, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { getUiLocale, UI_TEXT } from "../../../shared/copy/index.ts";
 import QuietAnchoredPopover from "../../../shared/components/QuietAnchoredPopover.tsx";
 import { formatDuration } from "../../../shared/lib/durationFormatting.ts";
 import {
@@ -27,9 +27,9 @@ interface OpenActivityDetails {
   anchor: HTMLButtonElement;
 }
 
-function formatTime(timestamp: number, dayEndMs: number) {
+function formatTime(timestamp: number, dayEndMs: number, locale: Locale) {
   if (timestamp === dayEndMs) return "24:00";
-  return new Date(timestamp).toLocaleTimeString(getUiLocale(), {
+  return new Date(timestamp).toLocaleTimeString(locale, {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
@@ -43,6 +43,8 @@ export default function DestinationDetailRecords({
   objectName,
   viewport,
 }: Props) {
+  const UI_TEXT = useLocaleText();
+  const locale = useLocale();
   const copy = UI_TEXT.destinationDetail;
   const popoverId = useId();
   const [openDetails, setOpenDetails] = useState<OpenActivityDetails | null>(
@@ -92,8 +94,8 @@ export default function DestinationDetailRecords({
     <>
       <ol className="destination-detail-records">
         {visibleActivities.map((activity) => {
-          const start = formatTime(activity.startTime, day.dayEndMs);
-          const end = formatTime(activity.endTime, day.dayEndMs);
+          const start = formatTime(activity.startTime, day.dayEndMs, locale);
+          const end = formatTime(activity.endTime, day.dayEndMs, locale);
           const duration = formatDuration(activity.duration);
           const titleCount = getDestinationDetailTitleRecords(activity).length;
           const expanded = openDetails?.activity.id === activity.id;
@@ -164,8 +166,8 @@ export default function DestinationDetailRecords({
           {(openDetails
             ? getDestinationDetailTitleRecords(openDetails.activity)
             : []).map((record: DestinationDetailTitleRecord) => {
-            const start = formatTime(record.startTime, day.dayEndMs);
-            const end = formatTime(record.endTime, day.dayEndMs);
+            const start = formatTime(record.startTime, day.dayEndMs, locale);
+            const end = formatTime(record.endTime, day.dayEndMs, locale);
             const duration = formatDuration(record.duration);
             return (
               <li

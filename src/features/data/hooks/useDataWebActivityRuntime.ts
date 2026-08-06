@@ -7,7 +7,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+import { useLocaleText } from "../../../shared/i18n/index.ts";
+
 import type { AppLanguage } from "../../../shared/settings/appSettings.ts";
 import type {
   DataDestinationMode,
@@ -68,6 +69,7 @@ export function useDataWebActivityRuntime({
   uiLanguage,
   selectedDomains,
 }: UseDataWebActivityRuntimeInput) {
+  const UI_TEXT = useLocaleText();
   const [searchQuery, setSearchQuery] = useState("");
   const [trendSnapshot, setTrendSnapshot] = useState<VersionedDataWebTrendSnapshot | null>(null);
   const [trendLoadingCacheKey, setTrendLoadingCacheKey] = useState<string | null>(null);
@@ -120,6 +122,7 @@ export function useDataWebActivityRuntime({
       selection: request.selection,
       nowMs: request.nowMs,
       cacheVersion: request.cacheVersion,
+      uiText: UI_TEXT,
     }).then((snapshot) => {
       if (!cancelled) {
         startTransition(() => {
@@ -157,6 +160,7 @@ export function useDataWebActivityRuntime({
     mode,
     retryKey,
     trendRequestCacheKey,
+    UI_TEXT,
   ]);
 
   useEffect(() => {
@@ -216,6 +220,7 @@ export function useDataWebActivityRuntime({
         selection: trendSelection,
         nowMs: trendNowMs,
         cacheVersion,
+        uiText: UI_TEXT,
       })
       : null
   ), [
@@ -224,6 +229,7 @@ export function useDataWebActivityRuntime({
     mode,
     trendNowMs,
     trendSelection,
+    UI_TEXT,
   ]);
   const displayTrendSnapshot = useMemo<VersionedDataWebTrendSnapshot | null>(() => (
     cachedTrendSnapshot
@@ -251,11 +257,14 @@ export function useDataWebActivityRuntime({
   });
   const trendViewModel = useMemo(() => (
     displayTrendSnapshot
-      ? buildDataWebTrendViewModel({ ...displayTrendSnapshot.value, selectedDomains })
+      ? buildDataWebTrendViewModel({
+        ...displayTrendSnapshot.value,
+        selectedDomains,
+        uiText: UI_TEXT,
+        locale: uiLanguage,
+      })
       : null
-  // UI_TEXT and locale are module state; uiLanguage explicitly invalidates labels.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  ), [displayTrendSnapshot, selectedDomainKey, selectedDomains, uiLanguage]);
+  ), [displayTrendSnapshot, selectedDomains, uiLanguage, UI_TEXT]);
   const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
   const filteredDomains = useMemo(() => (
     trendViewModel?.domainOptions.filter((domain) => (
@@ -328,6 +337,8 @@ export function useDataWebActivityRuntime({
         loadErrorMessage: currentHeatmapFailed
           ? UI_TEXT.data.webTrendError
           : null,
+        uiText: UI_TEXT,
+        locale: uiLanguage,
       })
       : null
   ), [
@@ -337,6 +348,8 @@ export function useDataWebActivityRuntime({
     heatmapSelection,
     matchingHeatmapSnapshot,
     selectedDomains,
+    UI_TEXT,
+    uiLanguage,
   ]);
   const placeholderHeatmapRows = useMemo(() => (
     selectedDomains.length > 0
@@ -346,12 +359,16 @@ export function useDataWebActivityRuntime({
         normalizedDomains: selectedDomains,
         records: [],
         earliestRecordedStartMs: null,
+        uiText: UI_TEXT,
+        locale: uiLanguage,
       })
       : []
   ), [
     heatmapNowMs,
     heatmapSelection,
     selectedDomains,
+    UI_TEXT,
+    uiLanguage,
   ]);
   const heatmapRows = currentHeatmapRows
     ?? placeholderHeatmapRows;

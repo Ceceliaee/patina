@@ -1,4 +1,5 @@
 import type { AppLanguage } from "../../../shared/settings/appSettings.ts";
+import { SUPPORTED_LOCALES } from "../../../shared/i18n/generated/contract.ts";
 import {
   clearDataBootstrapSnapshotPayload,
   loadDataBootstrapSnapshotPayload,
@@ -72,7 +73,7 @@ function isValidBootstrapSnapshot(value: unknown): value is DataBootstrapSnapsho
     && typeof value.appRangeCacheKey === "string"
     && (typeof value.heatmapSelection === "number" || value.heatmapSelection === "recent")
     && typeof value.mappingVersion === "number"
-    && (value.uiLanguage === "zh-CN" || value.uiLanguage === "en-US")
+    && SUPPORTED_LOCALES.some((locale) => value.uiLanguage === locale)
     && isRecord(value.overviewTrendViewModel)
     && isValidAppTrendViewModel(value.appTrendViewModel)
     && Array.isArray(value.heatmapRows)

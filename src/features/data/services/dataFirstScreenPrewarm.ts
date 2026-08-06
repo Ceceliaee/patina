@@ -1,4 +1,5 @@
 import type { AppLanguage } from "../../../shared/settings/appSettings.ts";
+import { getLocaleText } from "../../../shared/i18n/runtime.ts";
 import {
   buildDataAppTrendViewModelFromAggregate,
   buildDataTrendAggregateContext,
@@ -66,6 +67,8 @@ function buildBootstrapSnapshot(
     trendSnapshot.sessions,
     trendSnapshot.range,
     trendSnapshot.fetchedAtMs,
+    getLocaleText(options.uiLanguage),
+    options.uiLanguage,
   );
 
   return {
@@ -77,7 +80,13 @@ function buildBootstrapSnapshot(
     uiLanguage: options.uiLanguage,
     overviewTrendViewModel: buildDataTrendViewModelFromAggregate(trendAggregateContext),
     appTrendViewModel: buildDataAppTrendViewModelFromAggregate(trendAggregateContext, null),
-    heatmapRows: buildActivityHeatmap(heatmapSnapshot.sessions, "recent", nowMs),
+    heatmapRows: buildActivityHeatmap(
+      heatmapSnapshot.sessions,
+      "recent",
+      nowMs,
+      getLocaleText(options.uiLanguage),
+      options.uiLanguage,
+    ),
     earliestStartTime: heatmapSnapshot.earliestStartTime,
   };
 }
@@ -110,7 +119,11 @@ export async function prewarmDataFirstScreen(
   pendingPrewarm = (async () => {
     try {
       const [trendSnapshot, heatmapSnapshot] = await Promise.all([
-        resolvedDeps.loadTrendSnapshot(DEFAULT_TREND_SELECTION, nowMs),
+        resolvedDeps.loadTrendSnapshot(
+          DEFAULT_TREND_SELECTION,
+          nowMs,
+          getLocaleText(options.uiLanguage),
+        ),
         resolvedDeps.prewarmRecentHeatmap(nowMs),
       ]);
       const snapshot = buildBootstrapSnapshot(trendSnapshot, heatmapSnapshot, options, nowMs);

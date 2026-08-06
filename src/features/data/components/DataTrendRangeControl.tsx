@@ -1,7 +1,8 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { RotateCcw } from "lucide-react";
 import { useRef, useState } from "react";
 import QuietRangeControl from "../../../shared/components/QuietRangeControl.tsx";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import {
   DATA_TREND_PICKER_MODES,
   DEFAULT_DATA_TREND_RANGE_SELECTION,
@@ -19,13 +20,14 @@ interface Props {
 }
 
 export default function DataTrendRangeControl({ ariaLabel, selection, onChange }: Props) {
+  const UI_TEXT = useLocaleText();
   const anchorRef = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
   const [pickerMode, setPickerMode] = useState<DataTrendPickerMode>("custom");
   const [pickerLabel, setPickerLabel] = useState(UI_TEXT.data.pickerModes.custom);
   const isSpecial = selection.kind !== "rolling";
   const nowMs = Date.now();
-  const label = resolveDataTrendRange(selection, nowMs).label;
+  const label = resolveDataTrendRange(selection, nowMs, UI_TEXT).label;
   const pickerModeIndex = DATA_TREND_PICKER_MODES.indexOf(pickerMode);
 
   const selectAdjacent = (delta: number) => {
@@ -38,15 +40,16 @@ export default function DataTrendRangeControl({ ariaLabel, selection, onChange }
       selection,
       delta < 0 ? -1 : 1,
       nowMs,
+      UI_TEXT,
     );
     if (nextSelection) onChange(nextSelection);
   };
   const previousSelection = open
     ? null
-    : getAdjacentDataTrendRangeSelection(selection, -1, nowMs);
+    : getAdjacentDataTrendRangeSelection(selection, -1, nowMs, UI_TEXT);
   const nextSelection = open
     ? null
-    : getAdjacentDataTrendRangeSelection(selection, 1, nowMs);
+    : getAdjacentDataTrendRangeSelection(selection, 1, nowMs, UI_TEXT);
 
   return (
     <>

@@ -1,17 +1,48 @@
 import {
-  buildActivityHeatmap,
-  buildDataAppTrendViewModel,
+  buildActivityHeatmap as buildActivityHeatmapRaw,
+  buildDataAppTrendViewModel as buildDataAppTrendViewModelRaw,
   buildDataAppTrendViewModelFromAggregate,
-  buildDataTrendAggregateContext,
+  buildDataTrendAggregateContext as buildDataTrendAggregateContextRaw,
   buildDataTrendViewModelFromAggregate,
-  buildDataTrendViewModel,
+  buildDataTrendViewModel as buildDataTrendViewModelRaw,
   type AggregateSessionRecord,
 } from "../../src/features/data/services/dataReadModel.ts";
 import {
-  buildDataWebTrendViewModel,
+  buildDataWebTrendViewModel as buildDataWebTrendViewModelRaw,
 } from "../../src/features/data/services/dataWebActivityReadModel.ts";
-import { resolveDataTrendRange } from "../../src/features/data/services/dataTrendRange.ts";
+import { resolveDataTrendRange as resolveDataTrendRangeRaw } from "../../src/features/data/services/dataTrendRange.ts";
 import { measureBenchmark, printBenchmarkReport } from "./benchmarkUtils.ts";
+import { getLocaleText } from "../../src/shared/i18n/runtime.ts";
+
+const ZH_TEXT = getLocaleText("zh-CN");
+const resolveDataTrendRange = (
+  selection: Parameters<typeof resolveDataTrendRangeRaw>[0],
+  atMs: number,
+) => resolveDataTrendRangeRaw(selection, atMs, ZH_TEXT);
+const buildActivityHeatmap = (
+  sessions: Parameters<typeof buildActivityHeatmapRaw>[0],
+  selection: Parameters<typeof buildActivityHeatmapRaw>[1],
+  atMs: number,
+) => buildActivityHeatmapRaw(sessions, selection, atMs, ZH_TEXT, "zh-CN");
+const buildDataTrendAggregateContext = (
+  sessions: Parameters<typeof buildDataTrendAggregateContextRaw>[0],
+  selection: Parameters<typeof buildDataTrendAggregateContextRaw>[1],
+  atMs: number,
+) => buildDataTrendAggregateContextRaw(sessions, selection, atMs, ZH_TEXT, "zh-CN");
+const buildDataTrendViewModel = (
+  sessions: Parameters<typeof buildDataTrendViewModelRaw>[0],
+  selection: Parameters<typeof buildDataTrendViewModelRaw>[1],
+  atMs: number,
+) => buildDataTrendViewModelRaw(sessions, selection, atMs, ZH_TEXT, "zh-CN");
+const buildDataAppTrendViewModel = (
+  sessions: Parameters<typeof buildDataAppTrendViewModelRaw>[0],
+  selection: Parameters<typeof buildDataAppTrendViewModelRaw>[1],
+  atMs: number,
+  selected: Parameters<typeof buildDataAppTrendViewModelRaw>[3],
+) => buildDataAppTrendViewModelRaw(sessions, selection, atMs, selected, ZH_TEXT, "zh-CN");
+const buildDataWebTrendViewModel = (
+  input: Omit<Parameters<typeof buildDataWebTrendViewModelRaw>[0], "uiText" | "locale">,
+) => buildDataWebTrendViewModelRaw({ ...input, uiText: ZH_TEXT, locale: "zh-CN" });
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

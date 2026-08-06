@@ -1,15 +1,7 @@
-import {
-  startTransition,
-  type MouseEvent,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useLocaleText, type UiText } from "../../../shared/i18n/index.ts";
+import { startTransition, type MouseEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, } from "react";
 import { BarChart3 } from "lucide-react";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import {
   getIconThemeFallbackColor,
   useIconThemeColors,
@@ -89,7 +81,11 @@ interface Props {
   icons: Record<string, string>;
   refreshKey?: number;
   trackerHealth: TrackerHealthSnapshot;
-  loadDataTrendSnapshot: (selection: DataTrendRangeSelection, nowMs?: number) => Promise<DataTrendSnapshot>;
+  loadDataTrendSnapshot: (
+    selection: DataTrendRangeSelection,
+    nowMs: number,
+    uiText: UiText,
+  ) => Promise<DataTrendSnapshot>;
   mappingVersion?: number;
   mergeThresholdSecs: number;
   onOpenHistoryDate?: (dateKey: string) => void;
@@ -235,6 +231,7 @@ export default function Data({
   uiLanguage,
   webActivityEnabled,
 }: Props) {
+  const UI_TEXT = useLocaleText();
   const quickClassification = useQuickAppClassificationLauncher();
   const { openAtPointer: openQuickClassificationAtPointer } = quickClassification;
   const dataRootRef = useRef<HTMLDivElement | null>(null);
@@ -521,6 +518,8 @@ export default function Data({
       overviewTrendSnapshotForViewModel.sessions,
       overviewRange,
       overviewTrend.nowMs,
+      UI_TEXT,
+      uiLanguage,
     );
   // Data aggregators read module-level locale/mapping state; these tokens explicitly invalidate that cache.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -530,6 +529,7 @@ export default function Data({
     overviewTrend.nowMs,
     overviewTrendSnapshotForViewModel,
     uiLanguage,
+    UI_TEXT,
   ]);
 
   const trendViewModel = useMemo(() => {
@@ -541,6 +541,8 @@ export default function Data({
       overviewTrendSnapshotForViewModel.sessions,
       overviewTrendSnapshotForViewModel.range,
       overviewTrend.nowMs,
+      UI_TEXT,
+      uiLanguage,
     );
   // Data view models read module-level locale/mapping state; these tokens explicitly invalidate that cache.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -550,6 +552,7 @@ export default function Data({
     overviewTrendSnapshotForViewModel,
     sharedTrendAggregateContext,
     uiLanguage,
+    UI_TEXT,
   ]);
   if (trendViewModel) {
     lastTrendViewModelRef.current = {
@@ -575,6 +578,8 @@ export default function Data({
       appTrendSnapshotForViewModel.range,
       appTrend.nowMs,
       selectedAppKeys,
+      UI_TEXT,
+      uiLanguage,
     );
   // App trend view models read module-level locale/mapping state; these tokens explicitly invalidate that cache.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -585,6 +590,7 @@ export default function Data({
     selectedAppKeys,
     sharedTrendAggregateContext,
     uiLanguage,
+    UI_TEXT,
   ]);
   const bootstrapAppTrendViewModel = matchingBootstrapSnapshot?.appRangeCacheKey === appTrend.resolvedRange.cacheKey
     ? matchingBootstrapSnapshot.appTrendViewModel
@@ -840,7 +846,7 @@ export default function Data({
     } else if (result.outcome === "last-item") {
       onToast?.(UI_TEXT.data.selectionLastItem, "warning");
     }
-  }, [onToast, presentedDestinationMode, selectedAppKeys, selectedWebKeys]);
+  }, [onToast, presentedDestinationMode, selectedAppKeys, selectedWebKeys, UI_TEXT]);
   const restoreDestinationDetailSelection = useCallback((selectionSnapshot: {
     appKeys: string[];
     webKeys: string[];
@@ -894,12 +900,14 @@ export default function Data({
   );
   const heatmapRows = useMemo<ReturnType<typeof buildActivityHeatmap> | null>(() => {
     if (shouldDeferHeatmapRows) return null;
-    return buildActivityHeatmap(yearSessions, selectedHeatmapView, nowMs);
+    return buildActivityHeatmap(yearSessions, selectedHeatmapView, nowMs, UI_TEXT, uiLanguage);
   }, [
     nowMs,
     selectedHeatmapView,
     shouldDeferHeatmapRows,
     yearSessions,
+    UI_TEXT,
+    uiLanguage,
   ]);
   const hasHeatmapRowsForSelectedView = yearSessionsView === selectedHeatmapView;
   const bootstrapHeatmapRows = matchingBootstrapSnapshot?.heatmapSelection === selectedHeatmapView
@@ -922,8 +930,10 @@ export default function Data({
   );
   const shouldBuildHeatmapPlaceholderRows = !freshHeatmapRows && !lastHeatmapRows && !canUseBootstrapHeatmap;
   const heatmapPlaceholderRows = useMemo(() => (
-    shouldBuildHeatmapPlaceholderRows ? buildActivityHeatmap([], selectedHeatmapView, nowMs) : null
-  ), [nowMs, selectedHeatmapView, shouldBuildHeatmapPlaceholderRows]);
+    shouldBuildHeatmapPlaceholderRows
+      ? buildActivityHeatmap([], selectedHeatmapView, nowMs, UI_TEXT, uiLanguage)
+      : null
+  ), [nowMs, selectedHeatmapView, shouldBuildHeatmapPlaceholderRows, UI_TEXT, uiLanguage]);
   const visibleHeatmapRows = freshHeatmapRows
     ?? lastHeatmapRows
     ?? (canUseBootstrapHeatmap ? bootstrapHeatmapRows : null)
@@ -932,9 +942,7 @@ export default function Data({
   const heatmapGranularityOptions = useMemo<Array<{ value: HeatmapGranularity; label: string }>>(() => [
     { value: "daily", label: UI_TEXT.data.heatmapDaily },
     { value: "weekly", label: UI_TEXT.data.heatmapWeekly },
-  // UI_TEXT is module state; uiLanguage is its explicit invalidation signal.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [uiLanguage]);
+  ], [UI_TEXT]);
   const destinationAppHeatmapRows = useMemo(() => (
     buildActivityHeatmap(
       !isWebDestination && destinationPanelSelectedOptions.length > 0
@@ -942,6 +950,8 @@ export default function Data({
         : [],
       selectedDestinationHeatmapView,
       nowMs,
+      UI_TEXT,
+      uiLanguage,
       selectedAppKeys,
     )
   ), [
@@ -951,6 +961,8 @@ export default function Data({
     nowMs,
     selectedAppKeys,
     selectedDestinationHeatmapView,
+    UI_TEXT,
+    uiLanguage,
   ]);
   const visibleDestinationHeatmapRows = isWebDestination
     ? webHeatmapRows.length > 0 ? webHeatmapRows : destinationAppHeatmapRows

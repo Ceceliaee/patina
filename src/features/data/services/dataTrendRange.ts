@@ -1,5 +1,6 @@
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import type { SessionRange } from "../../../shared/lib/sessionReadCompiler.ts";
+import type { UiText } from "../../../shared/i18n/index.ts";
 import {
   addLocalDays,
   formatLocalDateKey,
@@ -74,10 +75,10 @@ function getIsoWeek(date: Date): { week: number; year: number } {
   };
 }
 
-function getRollingLabel(days: DataRollingTrendRange): string {
-  if (days === 7) return UI_TEXT.data.pastSevenDays;
-  if (days === 30) return UI_TEXT.data.pastThirtyDays;
-  return UI_TEXT.data.recentYear;
+function getRollingLabel(days: DataRollingTrendRange, uiText: UiText): string {
+  if (days === 7) return uiText.data.pastSevenDays;
+  if (days === 30) return uiText.data.pastThirtyDays;
+  return uiText.data.recentYear;
 }
 
 function getNormalizedCustomBounds(
@@ -94,7 +95,8 @@ function getNormalizedCustomBounds(
 export function getAdjacentDataTrendRangeSelection(
   selection: DataTrendRangeSelection,
   delta: -1 | 1,
-  nowMs: number = Date.now(),
+  nowMs: number,
+  uiText: UiText,
 ): DataTrendRangeSelection | null {
   if (selection.kind === "rolling") {
     const currentIndex = DATA_ROLLING_TREND_RANGES.indexOf(selection.days);
@@ -120,7 +122,7 @@ export function getAdjacentDataTrendRangeSelection(
     };
   }
 
-  const currentRange = resolveDataTrendRange(selection, nowMs);
+  const currentRange = resolveDataTrendRange(selection, nowMs, uiText);
   const currentStart = parseLocalDateKey(currentRange.startDateKey);
   if (!currentStart) return null;
 
@@ -173,20 +175,21 @@ function resolveBounds(
 
 export function resolveDataTrendRange(
   selection: DataTrendRangeSelection,
-  nowMs: number = Date.now(),
+  nowMs: number,
+  uiText: UiText,
 ): ResolvedDataTrendRange {
   const today = startOfLocalDay(new Date(nowMs));
   if (selection.kind === "rolling") {
     if (selection.days === 365) {
       const start = new Date(today.getFullYear(), today.getMonth() - 11, 1);
-      return resolveBounds(selection, start, today, nowMs, getRollingLabel(selection.days), "month");
+      return resolveBounds(selection, start, today, nowMs, getRollingLabel(selection.days, uiText), "month");
     }
     return resolveBounds(
       selection,
       addLocalDays(today, -(selection.days - 1)),
       today,
       nowMs,
-      getRollingLabel(selection.days),
+      getRollingLabel(selection.days, uiText),
       "day",
     );
   }
@@ -202,7 +205,7 @@ export function resolveDataTrendRange(
       start,
       end,
       nowMs,
-      UI_TEXT.data.customDayCount(dayCount),
+      uiText.data.customDayCount(dayCount),
       dayCount > 62 ? "month" : "day",
     );
   }
@@ -212,24 +215,25 @@ export function resolveDataTrendRange(
     const mondayOffset = (anchor.getDay() + 6) % 7;
     const start = addLocalDays(anchor, -mondayOffset);
     const isoWeek = getIsoWeek(anchor);
-    return resolveBounds(selection, start, addLocalDays(start, 6), nowMs, UI_TEXT.data.weekLabel(isoWeek.week), "day");
+    return resolveBounds(selection, start, addLocalDays(start, 6), nowMs, uiText.data.weekLabel(isoWeek.week), "day");
   }
 
   if (selection.kind === "month") {
     const start = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
     const end = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
-    return resolveBounds(selection, start, end, nowMs, UI_TEXT.date.monthLabel(anchor.getMonth() + 1), "day");
+    return resolveBounds(selection, start, end, nowMs, uiText.date.monthLabel(anchor.getMonth() + 1), "day");
   }
 
   const start = new Date(anchor.getFullYear(), 0, 1);
   const end = new Date(anchor.getFullYear(), 11, 31);
-  return resolveBounds(selection, start, end, nowMs, UI_TEXT.data.yearLabel(anchor.getFullYear()), "month");
+  return resolveBounds(selection, start, end, nowMs, uiText.data.yearLabel(anchor.getFullYear()), "month");
 }
 
 export function selectDataTrendDraftDate(
   draft: DataTrendRangeDraft,
   dateKey: string,
-  nowMs: number = Date.now(),
+  nowMs: number,
+  uiText: UiText,
 ): DataTrendRangeDraft {
   const date = parseLocalDateKey(dateKey);
   if (!date || date > startOfLocalDay(new Date(nowMs))) return draft;
@@ -238,13 +242,13 @@ export function selectDataTrendDraftDate(
     return {
       mode: "custom",
       firstDateKey: null,
-      range: resolveDataTrendRange({ kind: "custom", startDateKey: draft.firstDateKey, endDateKey: dateKey }, nowMs),
+      range: resolveDataTrendRange({ kind: "custom", startDateKey: draft.firstDateKey, endDateKey: dateKey }, nowMs, uiText),
     };
   }
   return {
     mode: draft.mode,
     firstDateKey: null,
-    range: resolveDataTrendRange({ kind: draft.mode, anchorDateKey: dateKey }, nowMs),
+    range: resolveDataTrendRange({ kind: draft.mode, anchorDateKey: dateKey }, nowMs, uiText),
   };
 }
 

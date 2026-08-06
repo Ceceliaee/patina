@@ -1,8 +1,9 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import QuietDateRangePicker, {
   type QuietDateRangePickerSelection,
   type QuietResolvedDateRange,
 } from "../../../shared/components/QuietDateRangePicker.tsx";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import {
   resolveDataTrendRange,
   type DataTrendPickerMode,
@@ -19,7 +20,8 @@ interface Props {
 
 function resolveDataPickerSelection(
   selection: QuietDateRangePickerSelection,
-  nowMs?: number,
+  uiText: ReturnType<typeof useLocaleText>,
+  nowMs: number = Date.now(),
 ): QuietResolvedDateRange {
   const dataSelection: DataTrendRangeSelection = selection.kind === "day"
     ? {
@@ -28,7 +30,7 @@ function resolveDataPickerSelection(
       endDateKey: selection.anchorDateKey,
     }
     : selection as DataTrendRangeSelection;
-  const resolved = resolveDataTrendRange(dataSelection, nowMs);
+  const resolved = resolveDataTrendRange(dataSelection, nowMs, uiText);
   return {
     ...resolved,
     selection,
@@ -47,6 +49,7 @@ function toDataSelection(selection: QuietDateRangePickerSelection): DataTrendRan
 }
 
 export default function DataTrendRangePicker({ anchor, mode, onApply, onClose, onDraftLabelChange }: Props) {
+  const UI_TEXT = useLocaleText();
   return (
     <QuietDateRangePicker
       anchor={anchor}
@@ -71,7 +74,7 @@ export default function DataTrendRangePicker({ anchor, mode, onApply, onClose, o
         yearMonthLabel: UI_TEXT.date.yearMonthLabel,
         weekdaysShort: UI_TEXT.date.weekdaysShort,
       }}
-      resolveSelection={resolveDataPickerSelection}
+      resolveSelection={(selection, nowMs) => resolveDataPickerSelection(selection, UI_TEXT, nowMs)}
       onDraftLabelChange={onDraftLabelChange}
       onClose={onClose}
       onApply={(selection) => onApply(toDataSelection(selection))}

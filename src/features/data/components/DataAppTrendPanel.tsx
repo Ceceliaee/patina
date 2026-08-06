@@ -1,17 +1,9 @@
-import {
-  memo,
-  useLayoutEffect,
-  type CSSProperties,
-  type KeyboardEvent,
-  type MouseEvent,
-  type ReactNode,
-  type Ref,
-  type RefObject,
-} from "react";
+import { useLocaleText } from "../../../shared/i18n/index.ts";
+import { memo, useLayoutEffect, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode, type Ref, type RefObject, } from "react";
 import NativeTrendChart from "../../../shared/charts/NativeTrendChart.tsx";
 import QuietSearchField from "../../../shared/components/QuietSearchField";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter.tsx";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import {
   formatChartHours,
   formatDuration,
@@ -143,6 +135,7 @@ function DataAppTrendPanel({
   onMouseMove,
   onMouseLeave,
 }: DataAppTrendPanelProps) {
+  const UI_TEXT = useLocaleText();
   const detailCopy = UI_TEXT.destinationDetail;
   const modeOptions = [
     { value: "app" as const, label: UI_TEXT.data.destinationApp },

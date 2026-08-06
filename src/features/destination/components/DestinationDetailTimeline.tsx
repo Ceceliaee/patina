@@ -1,19 +1,8 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type KeyboardEvent,
-  type PointerEvent,
-  type ReactNode,
-} from "react";
+import { useLocale, useLocaleText, type Locale } from "../../../shared/i18n/index.ts";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode, } from "react";
 import QuietStepperSlider from "../../../shared/components/QuietStepperSlider.tsx";
 import {
-  QuietTimelineSegment,
-  QuietTimelineTrack,
-} from "../../../shared/components/QuietTimelineTrack.tsx";
-import { getUiLocale, UI_TEXT } from "../../../shared/copy/index.ts";
+  QuietTimelineSegment, QuietTimelineTrack, } from "../../../shared/components/QuietTimelineTrack.tsx";
 import { formatDuration } from "../../../shared/lib/durationFormatting.ts";
 import type {
   DestinationDetailDayViewModel,
@@ -40,9 +29,9 @@ interface Props {
   onZoomHoursChange: (zoomHours: number) => void;
 }
 
-function formatTime(timestamp: number, dayEndMs: number) {
+function formatTime(timestamp: number, dayEndMs: number, locale: Locale) {
   if (timestamp === dayEndMs) return "24:00";
-  return new Date(timestamp).toLocaleTimeString(getUiLocale(), {
+  return new Date(timestamp).toLocaleTimeString(locale, {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
@@ -101,6 +90,8 @@ export default function DestinationDetailTimeline({
   onViewportChange,
   onZoomHoursChange,
 }: Props) {
+  const UI_TEXT = useLocaleText();
+  const locale = useLocale();
   const copy = UI_TEXT.destinationDetail;
   const [isDragging, setIsDragging] = useState(false);
   const interactionRef = useRef<HTMLDivElement | null>(null);
@@ -129,9 +120,10 @@ export default function DestinationDetailTimeline({
   );
   const zoomHours = viewport.durationMs / 3_600_000;
   const displayedZoomHours = Number(zoomHours.toFixed(1));
-  const windowLabel = `${formatTime(viewport.startMs, day.dayEndMs)}–${formatTime(
+  const windowLabel = `${formatTime(viewport.startMs, day.dayEndMs, locale)}–${formatTime(
     viewport.endMs,
     day.dayEndMs,
+    locale,
   )}`;
 
   const finishDrag = (pointerId: number) => {
@@ -342,8 +334,8 @@ export default function DestinationDetailTimeline({
           axisClassName="destination-detail-timeline-axis"
         >
           {segments.map((segment) => {
-            const start = formatTime(segment.startTime, day.dayEndMs);
-            const end = formatTime(segment.endTime, day.dayEndMs);
+            const start = formatTime(segment.startTime, day.dayEndMs, locale);
+            const end = formatTime(segment.endTime, day.dayEndMs, locale);
             const ariaLabel = copy.recordAria(
               start,
               end,

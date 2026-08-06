@@ -1,16 +1,7 @@
-import {
-  memo,
-  type CSSProperties,
-  type FocusEvent,
-  type KeyboardEvent,
-  type MouseEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-} from "react";
+import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
+import type { UiText } from "../../../shared/i18n/index.ts";
+import { memo, type CSSProperties, type FocusEvent, type KeyboardEvent, type MouseEvent, useCallback, useEffect, useMemo, useRef, } from "react";
 import QuietRangeControl from "../../../shared/components/QuietRangeControl.tsx";
-import { getUiLocale, UI_TEXT } from "../../../shared/copy/index.ts";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
 import { formatDuration } from "../../history/services/historyFormatting";
 import { formatLocalDateKey } from "../../../shared/lib/localDate.ts";
@@ -43,15 +34,15 @@ interface DataHeatmapPanelProps {
   loading?: boolean;
 }
 
-function formatHeatmapShortDate(dateKey: string) {
-  return new Date(`${dateKey}T00:00:00`).toLocaleDateString(getUiLocale(), {
+function formatHeatmapShortDate(dateKey: string, locale: string) {
+  return new Date(`${dateKey}T00:00:00`).toLocaleDateString(locale, {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   });
 }
 
-function buildWeeklyHeatmapCells(rows: HeatmapWeek[]) {
+function buildWeeklyHeatmapCells(rows: HeatmapWeek[], text: UiText["data"], locale: string) {
   const weeklyCells = rows.map((week) => {
     const inRangeCells = week.cells.filter((cell) => !cell.isOutsideYear);
     const visibleCells = inRangeCells.filter((cell) => !cell.isFuture);
@@ -64,7 +55,7 @@ function buildWeeklyHeatmapCells(rows: HeatmapWeek[]) {
     const firstCell = labelCells[0];
     const lastCell = labelCells[labelCells.length - 1];
     const dateLabel = firstCell && lastCell
-      ? `${formatHeatmapShortDate(firstCell.date)} - ${formatHeatmapShortDate(lastCell.date)}`
+      ? `${formatHeatmapShortDate(firstCell.date, locale)} - ${formatHeatmapShortDate(lastCell.date, locale)}`
       : week.key;
     const isOutsideYear = inRangeCells.length === 0;
     const isFuture = !isOutsideYear && visibleCells.length === 0;
@@ -81,11 +72,11 @@ function buildWeeklyHeatmapCells(rows: HeatmapWeek[]) {
             ? "no-activity"
             : "recorded";
     const summary = availability === "future"
-      ? UI_TEXT.data.notStarted
+      ? text.notStarted
       : availability === "unavailable"
-        ? unavailableSummary ?? UI_TEXT.data.webNotRecorded
+        ? unavailableSummary ?? text.webNotRecorded
         : availability === "no-activity" && visibleCells.some((cell) => cell.availability === "no-activity")
-          ? UI_TEXT.data.webNoActivity
+          ? text.webNoActivity
           : formatDuration(duration);
 
     return {
@@ -119,7 +110,7 @@ function findHeatmapCell(target: EventTarget | null, container: HTMLElement) {
 }
 
 function DataHeatmapPanel({
-  title = UI_TEXT.data.activityHeatmap,
+  title,
   compact = false,
   selectedHeatmapView,
   selectedHeatmapViewKey,
@@ -133,10 +124,16 @@ function DataHeatmapPanel({
   onOpenHistoryDate,
   loading = false,
 }: DataHeatmapPanelProps) {
+  const UI_TEXT = useLocaleText();
+  const locale = useLocale();
   const heatmapWeeksRef = useRef<HTMLDivElement | null>(null);
   const activeHeatmapDateRef = useRef<string | null>(null);
   const activeHeatmapDatesByViewRef = useRef(new Map<string, string>());
-  const weeklyHeatmapCells = useMemo(() => buildWeeklyHeatmapCells(rows), [rows]);
+  const weeklyHeatmapCells = useMemo(
+    () => buildWeeklyHeatmapCells(rows, UI_TEXT.data, locale),
+    [locale, rows, UI_TEXT],
+  );
+  const resolvedTitle = title ?? UI_TEXT.data.activityHeatmap;
   const weeklyHeatmapCellsByKey = useMemo(
     () => new Map(weeklyHeatmapCells.map((cell) => [cell.key, cell])),
     [weeklyHeatmapCells],
@@ -266,7 +263,7 @@ function DataHeatmapPanel({
   return (
     <div className={`data-heatmap-panel ${compact ? "data-heatmap-panel-compact" : ""}`}>
       <div className="data-heatmap-panel-header">
-        <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">{title}</h3>
+        <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">{resolvedTitle}</h3>
         <div className="data-heatmap-header-actions">
           <QuietSegmentedFilter
             value={granularity}
@@ -310,7 +307,7 @@ function DataHeatmapPanel({
                 ref={heatmapWeeksRef}
                 className="data-heatmap-weeks"
                 role="grid"
-                aria-label={title}
+                aria-label={resolvedTitle}
                 aria-rowcount={HEATMAP_WEEKDAY_COUNT}
                 aria-colcount={rows.length}
                 onClick={handleHeatmapClick}

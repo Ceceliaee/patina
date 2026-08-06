@@ -1,5 +1,6 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { memo, type MouseEvent, type Ref } from "react";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import NativeTrendChart from "../../../shared/charts/NativeTrendChart.tsx";
 import {
   formatChartHours,
@@ -39,6 +40,7 @@ function DataTrendPanel({
   onMouseMove,
   onMouseLeave,
 }: DataTrendPanelProps) {
+  const UI_TEXT = useLocaleText();
   return (
     <div className="data-trend-panel">
       <div className="data-trend-header">

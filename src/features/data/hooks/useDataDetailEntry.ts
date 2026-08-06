@@ -1,4 +1,5 @@
 import { useCallback, useRef, type RefObject } from "react";
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { formatLocalDateKey } from "../../../shared/lib/localDate.ts";
 import { useDestinationDetailLauncher } from "../../destination/hooks/useDestinationDetailLauncher.ts";
 import {
@@ -47,12 +48,13 @@ export function useDataDetailEntry({
   resolveOptionColor,
   restoreSelectionSnapshot,
 }: Params) {
+  const UI_TEXT = useLocaleText();
   const launcher = useDestinationDetailLauncher();
   const intentRef = useRef<DetailIntent | null>(null);
 
   const createRequest = useCallback((option: DataDestinationTrendOption) => {
     const todayKey = formatLocalDateKey(new Date());
-    const range = resolveDataTrendRange(rangeSelection, Date.now());
+    const range = resolveDataTrendRange(rangeSelection, Date.now(), UI_TEXT);
     return {
       target: createDestinationDetailTarget({
         mode,
@@ -65,7 +67,7 @@ export function useDataDetailEntry({
       }),
       initialDateKey: range.endDateKey <= todayKey ? range.endDateKey : todayKey,
     };
-  }, [mode, rangeSelection, resolveOptionColor]);
+  }, [mode, rangeSelection, resolveOptionColor, UI_TEXT]);
 
   const createCloseHandler = useCallback((snapshot: SelectionSnapshot) => () => {
     restoreSelectionSnapshot(snapshot);

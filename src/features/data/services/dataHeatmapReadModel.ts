@@ -1,5 +1,5 @@
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
-import { getUiLocale, UI_TEXT } from "../../../shared/copy/index.ts";
+import type { Locale, UiText } from "../../../shared/i18n/index.ts";
 import { formatDuration } from "../../../shared/lib/durationFormatting.ts";
 import {
   addLocalDays as addDays,
@@ -36,15 +36,15 @@ export interface HeatmapRange {
 
 const RECENT_HEATMAP_WEEK_COUNT = 53;
 
-function formatHeatmapDateLabel(dateKey: string) {
+function formatHeatmapDateLabel(dateKey: string, locale: Locale) {
   const [year, month, day] = dateKey.split("-");
-  return getUiLocale().startsWith("zh")
+  return locale.startsWith("zh")
     ? `${year}/${month}/${day}`
     : `${month}/${day}/${year}`;
 }
 
-function formatHeatmapMonthLabel(date: Date) {
-  return UI_TEXT.date.monthLabel(date.getMonth() + 1);
+function formatHeatmapMonthLabel(date: Date, uiText: UiText) {
+  return uiText.date.monthLabel(date.getMonth() + 1);
 }
 
 export function resolveStatisticalDataAppKey(session: AggregateSessionRecord): string | null {
@@ -101,6 +101,8 @@ export function buildActivityHeatmap(
   sessions: AggregateSessionRecord[],
   selection: HeatmapSelection,
   nowMs: number,
+  uiText: UiText,
+  locale: Locale,
   selectedAppKeys: string | readonly string[] | null = null,
 ): HeatmapWeek[] {
   const { start: heatmapStart, end: heatmapEnd, weekCount } = getHeatmapRange(selection, nowMs);
@@ -174,6 +176,8 @@ export function buildActivityHeatmap(
     dayDurations: dayBuckets,
     selection,
     nowMs,
+    uiText,
+    locale,
   });
 }
 
@@ -183,6 +187,8 @@ export function buildHeatmapFromDailyDurations({
   nowMs,
   resolveAvailability,
   resolveSummary,
+  uiText,
+  locale,
 }: {
   dayDurations: Map<string, number>;
   selection: HeatmapSelection;
@@ -198,6 +204,8 @@ export function buildHeatmapFromDailyDurations({
     availability: HeatmapAvailability;
     duration: number;
   }) => string;
+  uiText: UiText;
+  locale: Locale;
 }): HeatmapWeek[] {
   const { start: heatmapStart, weekCount } = getHeatmapRange(selection, nowMs);
   const todayStart = startOfLocalDay(new Date(nowMs));
@@ -208,7 +216,7 @@ export function buildHeatmapFromDailyDurations({
       .find((date) => (selection === "recent" || date.getFullYear() === selection) && date.getDate() === 1);
     return {
       key: toDateKey(weekStart),
-      monthLabel: monthStartInWeek ? formatHeatmapMonthLabel(monthStartInWeek) : "",
+      monthLabel: monthStartInWeek ? formatHeatmapMonthLabel(monthStartInWeek, uiText) : "",
       cells: Array.from({ length: 7 }, (_, weekdayIndex) => {
         const date = addDays(weekStart, weekdayIndex);
         const dateKey = toDateKey(date);
@@ -223,7 +231,7 @@ export function buildHeatmapFromDailyDurations({
           isOutsideYear,
         }) ?? (isFuture ? "future" : "recorded");
         const summary = resolveSummary?.({ availability, duration })
-          ?? (isFuture ? UI_TEXT.data.notStarted : formatDuration(duration));
+          ?? (isFuture ? uiText.data.notStarted : formatDuration(duration));
         return {
           key: dateKey,
           date: dateKey,
@@ -232,7 +240,7 @@ export function buildHeatmapFromDailyDurations({
           isOutsideYear,
           availability,
           intensity: duration <= 0 || isFuture || isOutsideYear ? 0 : Math.max(0.16, duration / maxDuration),
-          label: `${formatHeatmapDateLabel(dateKey)} · ${summary}`,
+          label: `${formatHeatmapDateLabel(dateKey, locale)} · ${summary}`,
         };
       }),
     };

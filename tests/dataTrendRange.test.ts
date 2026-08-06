@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import {
   countInclusiveLocalDays,
-  getAdjacentDataTrendRangeSelection,
-  resolveDataTrendRange,
-  selectDataTrendDraftDate,
+  getAdjacentDataTrendRangeSelection as getAdjacentDataTrendRangeSelectionRaw,
+  resolveDataTrendRange as resolveDataTrendRangeRaw,
+  selectDataTrendDraftDate as selectDataTrendDraftDateRaw,
+  type DataTrendRangeSelection,
   type DataTrendRangeDraft,
 } from "../src/features/data/services/dataTrendRange.ts";
 import {
@@ -16,8 +17,30 @@ import {
   clearDataTrendSnapshotCache,
   getCachedDataTrendSnapshot,
   getDataTrendSnapshotCacheSizeForTests,
-  loadDataTrendSnapshot,
+  loadDataTrendSnapshot as loadDataTrendSnapshotRaw,
+  type DataTrendSnapshotDependencies,
 } from "../src/features/data/services/dataTrendSnapshot.ts";
+import { getLocaleText } from "../src/shared/i18n/runtime.ts";
+
+const ZH_TEXT = getLocaleText("zh-CN");
+const resolveDataTrendRange = (selection: DataTrendRangeSelection, atMs: number) => (
+  resolveDataTrendRangeRaw(selection, atMs, ZH_TEXT)
+);
+const getAdjacentDataTrendRangeSelection = (
+  selection: DataTrendRangeSelection,
+  delta: -1 | 1,
+  atMs: number,
+) => getAdjacentDataTrendRangeSelectionRaw(selection, delta, atMs, ZH_TEXT);
+const selectDataTrendDraftDate = (
+  draft: DataTrendRangeDraft,
+  dateKey: string,
+  atMs: number,
+) => selectDataTrendDraftDateRaw(draft, dateKey, atMs, ZH_TEXT);
+const loadDataTrendSnapshot = (
+  selection: DataTrendRangeSelection,
+  atMs: number,
+  deps?: DataTrendSnapshotDependencies,
+) => loadDataTrendSnapshotRaw(selection, atMs, ZH_TEXT, deps);
 
 let passed = 0;
 

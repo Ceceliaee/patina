@@ -1,4 +1,6 @@
 import { getSessionSummariesInRangeByLocalDay } from "../../../platform/persistence/sessionReadRepository.ts";
+import { getLocaleText } from "../../../shared/i18n/runtime.ts";
+import type { UiText } from "../../../shared/i18n/index.ts";
 import type { AggregateSessionRecord } from "../../../platform/persistence/sessionReadRepository.ts";
 import {
   resolveDataTrendRange,
@@ -80,10 +82,11 @@ registerDataHeavyCacheClearer("trend-snapshot", clearDataTrendSnapshotCache);
 
 export async function loadDataTrendSnapshot(
   selection: DataTrendRangeSelection,
-  nowMs: number = Date.now(),
+  nowMs: number,
+  uiText: UiText,
   deps: DataTrendSnapshotDependencies = { getSessionSummariesInRange: getSessionSummariesInRangeByLocalDay },
 ): Promise<DataTrendSnapshot> {
-  const range = resolveDataTrendRange(selection, nowMs);
+  const range = resolveDataTrendRange(selection, nowMs, uiText);
   const pending = sessionPromises.get(range.cacheKey);
   const loadStartedAtEpoch = dataTrendSnapshotCacheEpoch;
   const sessionPromise = pending ?? (() => {
@@ -106,7 +109,7 @@ export async function loadDataTrendSnapshot(
 }
 
 export function prewarmDefaultDataTrendSnapshot(nowMs: number = Date.now()) {
-  return loadDataTrendSnapshot({ kind: "rolling", days: 7 }, nowMs);
+  return loadDataTrendSnapshot({ kind: "rolling", days: 7 }, nowMs, getLocaleText("zh-CN"));
 }
 
 export function getDataTrendSnapshotCacheSizeForTests(): number {

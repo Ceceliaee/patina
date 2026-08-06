@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import {
-  buildDataWebActivityHeatmap,
-  buildDataWebTrendViewModel,
+  buildDataWebActivityHeatmap as buildDataWebActivityHeatmapRaw,
+  buildDataWebTrendViewModel as buildDataWebTrendViewModelRaw,
   clearDataWebActivitySnapshotCache,
-  getCachedDataWebTrendSnapshot,
+  getCachedDataWebTrendSnapshot as getCachedDataWebTrendSnapshotRaw,
   getDataWebActivitySnapshotCacheStats,
-  loadDataWebActivitySnapshot,
+  loadDataWebActivitySnapshot as loadDataWebActivitySnapshotRaw,
   loadDataWebHeatmapSnapshot,
 } from "../src/features/data/services/dataWebActivityReadModel.ts";
 import type { DataWebActivitySnapshotDependencies } from "../src/features/data/services/dataWebActivitySnapshotDependencies.ts";
@@ -36,15 +36,43 @@ import {
   parseWebActivityAggregateRange,
 } from "../src/platform/persistence/webActivityAnalysisGateway.ts";
 import {
-  resolveDataTrendRange,
+  resolveDataTrendRange as resolveDataTrendRangeRaw,
   type DataTrendRangeSelection,
 } from "../src/features/data/services/dataTrendRange.ts";
+import { getLocaleText } from "../src/shared/i18n/runtime.ts";
 import {
   createInitialDataWebHeatmapRequestState,
   reduceDataWebHeatmapRequestState,
   resolveDataWebHeatmapRequestState,
 } from "../src/features/data/services/dataWebHeatmapRequestState.ts";
 
+const ZH_TEXT = getLocaleText("zh-CN");
+type WebTrendInput = Omit<Parameters<typeof buildDataWebTrendViewModelRaw>[0], "uiText" | "locale">;
+type WebHeatmapInput = Omit<Parameters<typeof buildDataWebActivityHeatmapRaw>[0], "uiText" | "locale">;
+type WebLoadInput = Omit<Parameters<typeof loadDataWebActivitySnapshotRaw>[0], "uiText">;
+type WebCacheInput = Omit<Parameters<typeof getCachedDataWebTrendSnapshotRaw>[0], "uiText">;
+const resolveDataTrendRange = (
+  selection: DataTrendRangeSelection,
+  atMs: number,
+) => resolveDataTrendRangeRaw(selection, atMs, ZH_TEXT);
+const buildDataWebTrendViewModel = (input: WebTrendInput) => buildDataWebTrendViewModelRaw({
+  ...input,
+  uiText: ZH_TEXT,
+  locale: "zh-CN",
+});
+const buildDataWebActivityHeatmap = (input: WebHeatmapInput) => buildDataWebActivityHeatmapRaw({
+  ...input,
+  uiText: ZH_TEXT,
+  locale: "zh-CN",
+});
+const loadDataWebActivitySnapshot = (input: WebLoadInput) => loadDataWebActivitySnapshotRaw({
+  ...input,
+  uiText: ZH_TEXT,
+});
+const getCachedDataWebTrendSnapshot = (input: WebCacheInput) => getCachedDataWebTrendSnapshotRaw({
+  ...input,
+  uiText: ZH_TEXT,
+});
 let passed = 0;
 
 async function runTest(name: string, fn: () => Promise<void> | void) {

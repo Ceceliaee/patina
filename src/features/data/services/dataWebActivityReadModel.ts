@@ -1,4 +1,4 @@
-import { getUiLocale, UI_TEXT } from "../../../shared/copy/index.ts";
+import type { Locale, UiText } from "../../../shared/i18n/index.ts";
 import { formatDuration } from "../../../shared/lib/durationFormatting.ts";
 import {
   addLocalDays,
@@ -100,6 +100,8 @@ interface LoadRangeSnapshotInput {
 interface BuildDataWebTrendViewModelInput extends DataWebActivitySnapshot {
   range: ResolvedDataTrendRange;
   selectedDomains: readonly string[];
+  uiText: UiText;
+  locale: Locale;
 }
 
 interface BuildDataWebActivityHeatmapInput {
@@ -109,6 +111,8 @@ interface BuildDataWebActivityHeatmapInput {
   records: WebActivityAggregateRecord[];
   earliestRecordedStartMs: number | null;
   loadErrorMessage?: string | null;
+  uiText: UiText;
+  locale: Locale;
 }
 
 // Keep the active heatmap plus the three preset trend ranges warm so switching
@@ -205,8 +209,8 @@ function getMonthKey(dateKey: string) {
   return dateKey.slice(0, 7);
 }
 
-function formatMonthLabel(monthKey: string) {
-  return UI_TEXT.date.monthLabel(Number(monthKey.slice(5, 7)));
+function formatMonthLabel(monthKey: string, uiText: UiText) {
+  return uiText.date.monthLabel(Number(monthKey.slice(5, 7)));
 }
 
 function buildDomainAggregates({
@@ -215,6 +219,7 @@ function buildDomainAggregates({
   domainCoverage,
   overrides,
   favicons,
+  locale,
 }: Omit<BuildDataWebTrendViewModelInput, "selectedDomains">): DataWebDomainAggregate[] {
   const domainBuckets = new Map<string, {
     dayDurations: Map<string, number>;
@@ -263,7 +268,7 @@ function buildDomainAggregates({
     monthDurations: bucket.monthDurations,
   })).sort((left, right) => (
     right.totalDuration - left.totalDuration
-    || left.displayName.localeCompare(right.displayName, getUiLocale())
+    || left.displayName.localeCompare(right.displayName, locale)
     || left.normalizedDomain.localeCompare(right.normalizedDomain)
   ));
 }
@@ -305,7 +310,7 @@ export function buildDataWebTrendViewModel(
   const chartRows = chartRanges.map<DataDestinationTrendChartRow>((rangeItem) => {
     const date = formatLocalDateKey(new Date(rangeItem.startMs));
     const row: DataDestinationTrendChartRow = {
-      label: input.range.granularity === "month" ? formatMonthLabel(getMonthKey(date)) : date.slice(5),
+      label: input.range.granularity === "month" ? formatMonthLabel(getMonthKey(date), input.uiText) : date.slice(5),
       date,
       totalDuration: 0,
       totalHours: 0,
@@ -395,6 +400,8 @@ export function buildDataWebActivityHeatmap({
   normalizedDomains,
   records,
   loadErrorMessage = null,
+  uiText,
+  locale,
 }: BuildDataWebActivityHeatmapInput): HeatmapWeek[] {
   const selectedDomains = new Set(normalizedDomains);
   const dayDurations = new Map<string, number>();
@@ -407,13 +414,15 @@ export function buildDataWebActivityHeatmap({
     dayDurations,
     selection,
     nowMs,
+    uiText,
+    locale,
     resolveAvailability: ({ isFuture }) => {
       if (isFuture) return "future";
       if (loadErrorMessage) return "unavailable";
       return "recorded";
     },
     resolveSummary: ({ availability, duration }) => {
-      if (availability === "future") return UI_TEXT.data.notStarted;
+      if (availability === "future") return uiText.data.notStarted;
       if (loadErrorMessage) return loadErrorMessage;
       return formatDuration(duration);
     },
@@ -426,14 +435,16 @@ export async function loadDataWebActivitySnapshot({
   normalizedDomains = null,
   cacheVersion = "default",
   deps = defaultDependencies,
+  uiText,
 }: {
   selection: DataTrendRangeSelection;
   nowMs?: number;
   normalizedDomains?: readonly string[] | null;
   cacheVersion?: string;
   deps?: DataWebActivitySnapshotDependencies;
+  uiText: UiText;
 }): Promise<DataWebTrendSnapshot> {
-  const range = resolveDataTrendRange(selection, nowMs);
+  const range = resolveDataTrendRange(selection, nowMs, uiText);
   const bucketBoundariesMs = buildDailyBucketBoundaries(range.startMs, range.endMs);
   const cacheKey = getTrendSnapshotCacheKey(range, normalizedDomains, cacheVersion);
   const snapshot = await loadRangeSnapshot({
@@ -452,13 +463,15 @@ export function getCachedDataWebTrendSnapshot({
   nowMs = Date.now(),
   normalizedDomains = null,
   cacheVersion = "default",
+  uiText,
 }: {
   selection: DataTrendRangeSelection;
   nowMs?: number;
   normalizedDomains?: readonly string[] | null;
   cacheVersion?: string;
+  uiText: UiText;
 }): DataWebTrendSnapshot | null {
-  const range = resolveDataTrendRange(selection, nowMs);
+  const range = resolveDataTrendRange(selection, nowMs, uiText);
   const cacheKey = getTrendSnapshotCacheKey(range, normalizedDomains, cacheVersion);
   const snapshot = snapshotCache.get(cacheKey);
   if (!snapshot) return null;

@@ -1,6 +1,6 @@
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import type { SessionRange } from "../../../shared/lib/sessionReadCompiler.ts";
-import { getUiLocale, UI_TEXT } from "../../../shared/copy/index.ts";
+import type { Locale, UiText } from "../../../shared/i18n/index.ts";
 import type { AggregateSessionRecord } from "../../../platform/persistence/sessionReadRepository.ts";
 import {
   buildDataDayRanges,
@@ -160,6 +160,8 @@ export interface DataTrendAggregateContext {
   dayRanges: SessionRange[];
   monthRanges: SessionRange[];
   aggregate: DataDurationAggregate;
+  uiText: UiText;
+  locale: Locale;
 }
 
 interface MergedDataAppDurationBucket extends DataAppDurationBucket {
@@ -201,16 +203,15 @@ export function buildDataChartAxis(points: DataTrendPoint[]) {
   };
 }
 
-function formatMonthLabel(monthKey: string) {
+function formatMonthLabel(monthKey: string, uiText: UiText) {
   const month = Number(monthKey.slice(5, 7));
-  return UI_TEXT.date.monthLabel(month);
+  return uiText.date.monthLabel(month);
 }
 
 const DATA_APP_DAY_LABEL_CACHE_LIMIT = 800;
 const dataAppDayLabelCache = new Map<string, string>();
 
-function formatAppDayLabel(dateKey: string) {
-  const locale = getUiLocale();
+function formatAppDayLabel(dateKey: string, locale: Locale) {
   const cacheKey = `${locale}:${dateKey}`;
   const cached = dataAppDayLabelCache.get(cacheKey);
   if (cached) return cached;
@@ -433,12 +434,13 @@ function buildDataDurationAggregate(
 function buildAppDayRowsFromDurations(
   dayDurations: Map<string, number>,
   dayRanges: SessionRange[],
+  locale: Locale,
 ) {
   const rows = dayRanges.map((range) => {
     const date = toDateKey(new Date(range.startMs));
     return {
       date,
-      label: formatAppDayLabel(date),
+      label: formatAppDayLabel(date, locale),
       duration: dayDurations.get(date) ?? 0,
       intensity: 0,
     };
@@ -520,18 +522,19 @@ function buildSelectedDataAppSummary(
   };
 }
 
-export function getDataTrendRangeLabel(range: DataTrendRange) {
-  if (range === 7) return UI_TEXT.data.pastSevenDays;
-  if (range === 30) return UI_TEXT.data.pastThirtyDays;
-  return UI_TEXT.data.recentYear;
+export function getDataTrendRangeLabel(range: DataTrendRange, uiText: UiText) {
+  if (range === 7) return uiText.data.pastSevenDays;
+  if (range === 30) return uiText.data.pastThirtyDays;
+  return uiText.data.recentYear;
 }
 
 function resolveDataTrendViewRange(
   selection: DataTrendRange | ResolvedDataTrendRange,
   nowMs: number,
+  uiText: UiText,
 ) {
   return typeof selection === "number"
-    ? resolveDataTrendRange({ kind: "rolling", days: selection }, nowMs)
+    ? resolveDataTrendRange({ kind: "rolling", days: selection }, nowMs, uiText)
     : selection;
 }
 
@@ -539,9 +542,11 @@ export function buildDataTrendAggregateContext(
   sessions: AggregateSessionRecord[],
   selection: DataTrendRange | ResolvedDataTrendRange,
   nowMs: number,
+  uiText: UiText,
+  locale: Locale,
   options: DataTrendAggregateContextOptions = {},
 ): DataTrendAggregateContext {
-  const range = resolveDataTrendViewRange(selection, nowMs);
+  const range = resolveDataTrendViewRange(selection, nowMs, uiText);
   const dayRanges = buildDataDayRanges(range);
   const shouldGroupByMonth = range.granularity === "month";
   const monthRanges = shouldGroupByMonth ? buildDataMonthRanges(range) : [];
@@ -559,13 +564,15 @@ export function buildDataTrendAggregateContext(
     dayRanges,
     monthRanges,
     aggregate,
+    uiText,
+    locale,
   };
 }
 
 export function buildDataTrendViewModelFromAggregate(
   context: DataTrendAggregateContext,
 ): DataTrendViewModel {
-  const { aggregate, dayRanges, monthRanges, range } = context;
+  const { aggregate, dayRanges, monthRanges, range, uiText } = context;
   const shouldGroupByMonth = range.granularity === "month";
   const summaryRanges = shouldGroupByMonth ? monthRanges : dayRanges;
   const summaries = summaryRanges.map((summaryRange) => {
@@ -581,7 +588,7 @@ export function buildDataTrendViewModelFromAggregate(
   const totalDuration = summaries.reduce((sum, item) => sum + item.totalDuration, 0);
   const averageDivisor = Math.max(1, shouldGroupByMonth ? summaries.length : dayRanges.length);
   const chartData = summaries.map((item) => ({
-    label: shouldGroupByMonth ? formatMonthLabel(item.date.slice(0, 7)) : item.date.slice(5),
+    label: shouldGroupByMonth ? formatMonthLabel(item.date.slice(0, 7), uiText) : item.date.slice(5),
     date: shouldGroupByMonth ? null : item.date,
     hours: Math.max(0, item.totalDuration) / 3600000,
   }));
@@ -598,9 +605,9 @@ export function buildDataTrendViewModelFromAggregate(
     chartData,
     chartAxis: buildDataChartAxis(chartData),
     metricLabels: {
-      total: UI_TEXT.data.rangeTotal(rangeLabel),
-      average: shouldGroupByMonth ? UI_TEXT.data.yearlyAverage : UI_TEXT.data.dailyAverage,
-      averageHint: shouldGroupByMonth ? UI_TEXT.data.yearlyAverageHint : UI_TEXT.data.rangeAverageHint(rangeLabel),
+      total: uiText.data.rangeTotal(rangeLabel),
+      average: shouldGroupByMonth ? uiText.data.yearlyAverage : uiText.data.dailyAverage,
+      averageHint: shouldGroupByMonth ? uiText.data.yearlyAverageHint : uiText.data.rangeAverageHint(rangeLabel),
     },
   };
 }
@@ -609,9 +616,11 @@ export function buildDataTrendViewModel(
   sessions: AggregateSessionRecord[],
   selection: DataTrendRange | ResolvedDataTrendRange,
   nowMs: number,
+  uiText: UiText,
+  locale: Locale,
 ): DataTrendViewModel {
   return buildDataTrendViewModelFromAggregate(
-    buildDataTrendAggregateContext(sessions, selection, nowMs, { includeAppBuckets: false }),
+    buildDataTrendAggregateContext(sessions, selection, nowMs, uiText, locale, { includeAppBuckets: false }),
   );
 }
 
@@ -619,7 +628,7 @@ export function buildDataAppTrendViewModelFromAggregate(
   context: DataTrendAggregateContext,
   selectedAppKeys: string | readonly string[] | null,
 ): DataAppTrendViewModel {
-  const { aggregate, dayRanges, monthRanges, range } = context;
+  const { aggregate, dayRanges, monthRanges, range, uiText, locale } = context;
   const shouldGroupByMonth = range.granularity === "month";
   const chartRanges = shouldGroupByMonth ? monthRanges : dayRanges;
   const averageDivisor = Math.max(1, chartRanges.length);
@@ -665,7 +674,7 @@ export function buildDataAppTrendViewModelFromAggregate(
       selectedDayDurations.set(dateKey, (selectedDayDurations.get(dateKey) ?? 0) + duration);
     }
   }
-  const selectedDayRows = buildAppDayRowsFromDurations(selectedDayDurations, dayRanges);
+  const selectedDayRows = buildAppDayRowsFromDurations(selectedDayDurations, dayRanges, locale);
   const chartSeries = selectedMergedApps.map((item, index) => ({
     key: item.appKey,
     dataKey: `series${index}`,
@@ -674,7 +683,7 @@ export function buildDataAppTrendViewModelFromAggregate(
   const chartRows = chartRanges.map((rangeItem) => {
     const date = toDateKey(new Date(rangeItem.startMs));
     const row: DataDestinationTrendChartRow = {
-      label: shouldGroupByMonth ? formatMonthLabel(date.slice(0, 7)) : date.slice(5),
+      label: shouldGroupByMonth ? formatMonthLabel(date.slice(0, 7), uiText) : date.slice(5),
       date,
       totalDuration: 0,
       totalHours: 0,
@@ -722,9 +731,11 @@ export function buildDataAppTrendViewModel(
   selection: DataTrendRange | ResolvedDataTrendRange,
   nowMs: number,
   selectedAppKeys: string | readonly string[] | null,
+  uiText: UiText,
+  locale: Locale,
 ): DataAppTrendViewModel {
   return buildDataAppTrendViewModelFromAggregate(
-    buildDataTrendAggregateContext(sessions, selection, nowMs),
+    buildDataTrendAggregateContext(sessions, selection, nowMs, uiText, locale),
     selectedAppKeys,
   );
 }
