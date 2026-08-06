@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlarmClock, BellRing, Timer } from "lucide-react";
 import type { ToolsRuntimeSnapshot } from "../../../shared/types/tools.ts";
-import { UI_TEXT, type UiText } from "../../../shared/copy/index.ts";
 import { buildToolsViewModelLabels } from "../services/toolsLabels.ts";
 import { toolsRuntimeSnapshotStore } from "../services/toolsRuntimeSnapshotStore.ts";
 import { buildToolsStatusChipViewModels } from "../services/toolsViewModel.ts";
@@ -10,7 +9,6 @@ import ToolsStatusChip from "./ToolsStatusChip.tsx";
 
 interface ToolsSidebarStatusEntryProps {
   onOpenSection: (target: ToolsOpenTarget) => void;
-  uiText?: UiText;
 }
 
 function resolveStatusIcon(statusChip: ToolStatusChipViewModel) {
@@ -32,8 +30,8 @@ function hasToolsStatusChip(snapshot: ToolsRuntimeSnapshot | null) {
 
 export default function ToolsSidebarStatusEntry({
   onOpenSection,
-  uiText = UI_TEXT,
 }: ToolsSidebarStatusEntryProps) {
+  const uiText = useLocaleText();
   const [snapshot, setSnapshot] = useState<ToolsRuntimeSnapshot | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const labels = useMemo(() => buildToolsViewModelLabels(uiText), [uiText]);
@@ -95,3 +93,4 @@ export default function ToolsSidebarStatusEntry({
     </div>
   );
 }
+import { useLocaleText } from "../../../shared/i18n/index.ts";

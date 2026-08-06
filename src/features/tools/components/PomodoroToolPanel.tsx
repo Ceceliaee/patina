@@ -1,7 +1,8 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { AlarmClock, FastForward, Pause, Play, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import QuietButton from "../../../shared/components/QuietButton.tsx";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import type { StartPomodoroInput, ToolsRuntimeSnapshot } from "../../../shared/types/tools.ts";
 import type { PomodoroViewModel } from "../types.ts";
 import ToolDurationInput from "./ToolDurationInput.tsx";
@@ -31,6 +32,7 @@ export default function PomodoroToolPanel({
   onSkipPomodoroPhase,
   onResetPomodoro,
 }: PomodoroToolPanelProps) {
+  const UI_TEXT = useLocaleText();
   const [focusMinutes, setFocusMinutes] = useState(() => formatMinuteInput(snapshot.settings.pomodoroFocusMinutes));
   const [shortBreakMinutes, setShortBreakMinutes] = useState(() => formatMinuteInput(snapshot.settings.pomodoroShortBreakMinutes));
   const [longBreakMinutes, setLongBreakMinutes] = useState(() => formatMinuteInput(snapshot.settings.pomodoroLongBreakMinutes));

@@ -1,18 +1,13 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { BellRing, Plus, X } from "lucide-react";
 import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+  useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, } from "react";
 import QuietDatePicker from "../../../shared/components/QuietDatePicker.tsx";
 import QuietButton from "../../../shared/components/QuietButton.tsx";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter.tsx";
 import QuietSearchField from "../../../shared/components/QuietSearchField.tsx";
 import QuietTimePicker from "../../../shared/components/QuietTimePicker.tsx";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import type { ToolSoftwareReminderAppCandidate } from "../../../shared/types/tools.ts";
 import {
   readToolsReminderMode,
@@ -99,8 +94,8 @@ function parseLocalDateTime(dateValue: string, timeValue: string) {
   return date.getTime();
 }
 
-function reminderStatusLabel(status: ReminderRowViewModel["status"]) {
-  return UI_TEXT.tools.reminderStatus[status];
+function reminderStatusLabel(status: ReminderRowViewModel["status"], text: ReturnType<typeof useLocaleText>) {
+  return text.tools.reminderStatus[status];
 }
 
 function appInitial(appName: string) {
@@ -122,6 +117,7 @@ function SoftwareReminderPanel({
   onCreateRule,
   onDisableRule,
 }: SoftwareReminderPanelProps) {
+  const UI_TEXT = useLocaleText();
   const searchFieldRef = useRef<HTMLDivElement | null>(null);
   const [softwareName, setSoftwareName] = useState("");
   const [durationMinutes, setDurationMinutes] = useState("30");
@@ -383,6 +379,7 @@ export default function ReminderToolPanel({
   onCreateSoftwareReminderRule,
   onDisableSoftwareReminderRule,
 }: ReminderToolPanelProps) {
+  const UI_TEXT = useLocaleText();
   const [reminderMode, setReminderMode] = useState<ReminderMode>(readToolsReminderMode);
   const [mode, setMode] = useState<ReminderFormMode>(readToolsReminderFormMode);
   const [label, setLabel] = useState("");
@@ -568,7 +565,7 @@ export default function ReminderToolPanel({
                         </div>
                         <div className="tools-reminder-row-meta">
                           <span className={`tools-status-pill tools-status-${row.status}`}>
-                            {reminderStatusLabel(row.status)}
+                            {reminderStatusLabel(row.status, UI_TEXT)}
                           </span>
                           <span className="tools-tabular">{row.remainingLabel}</span>
                           {row.canCancel ? (

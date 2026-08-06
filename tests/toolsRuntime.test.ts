@@ -8,11 +8,20 @@ import {
   buildToolsStatusChipViewModels,
 } from "../src/features/tools/services/toolsViewModel.ts";
 import {
-  buildSoftwareReminderAppCandidates,
+  buildSoftwareReminderAppCandidates as buildSoftwareReminderAppCandidatesRaw,
   clearSoftwareReminderAppCandidateCache,
-  loadSoftwareReminderAppCandidatesWithDeps,
+  loadSoftwareReminderAppCandidatesWithDeps as loadSoftwareReminderAppCandidatesWithDepsRaw,
+  type SoftwareReminderAppCandidateDeps,
   resetSoftwareReminderAppCandidatesCacheForTests,
 } from "../src/features/tools/services/softwareReminderAppCandidates.ts";
+import type { ObservedAppCandidate } from "../src/features/classification/types.ts";
+
+const buildSoftwareReminderAppCandidates = (observed: readonly ObservedAppCandidate[]) => (
+  buildSoftwareReminderAppCandidatesRaw(observed, "zh-CN")
+);
+const loadSoftwareReminderAppCandidatesWithDeps = (deps: SoftwareReminderAppCandidateDeps) => (
+  loadSoftwareReminderAppCandidatesWithDepsRaw(deps, "zh-CN")
+);
 import {
   filterSoftwareReminderAppCandidates,
   resolveSoftwareReminderSelectedCandidate,
@@ -28,7 +37,6 @@ import { createToolsRuntimeGateway } from "../src/platform/runtime/toolsRuntimeG
 import type { ToolsRuntimeSnapshot } from "../src/shared/types/tools.ts";
 import type { ToolsViewModelLabels } from "../src/features/tools/types.ts";
 import { ProcessMapper } from "../src/shared/classification/processMapper.ts";
-import type { ObservedAppCandidate } from "../src/features/classification/types.ts";
 import {
   readToolsReminderFormMode,
   readToolsReminderMode,

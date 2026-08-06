@@ -1,10 +1,10 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { AlarmClock, BellRing, Timer, ToolCase } from "lucide-react";
 import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import QuietBadge from "../../../shared/components/QuietBadge.tsx";
 import QuietButton from "../../../shared/components/QuietButton.tsx";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader.tsx";
 import type { QuietToastTone } from "../../../shared/types/toast.ts";
-import { UI_TEXT, type UiText } from "../../../shared/copy/index.ts";
 import { useRequestedAppIcons } from "../../../shared/hooks/useRequestedAppIcons.ts";
 import type { TimerMode } from "../../../shared/types/tools.ts";
 import { useToolsPageState } from "../hooks/useToolsPageState.ts";
@@ -25,7 +25,6 @@ interface ToolsProps {
   icons: Record<string, string>;
   onInitialTargetConsumed?: () => void;
   onToast?: (message: string, tone?: QuietToastTone) => void;
-  uiText?: UiText;
 }
 
 type ToolsSectionRailStyle = CSSProperties & { "--tools-active-section-index"?: number };
@@ -56,8 +55,8 @@ export default function Tools({
   icons,
   onInitialTargetConsumed,
   onToast,
-  uiText = UI_TEXT,
 }: ToolsProps) {
+  const UI_TEXT = useLocaleText();
   const [activeSection, setActiveSection] = useState<ToolsSection>(() => (
     initialTarget ? normalizeToolsSection(initialTarget) : readToolsSection()
   ));
@@ -71,7 +70,7 @@ export default function Tools({
   const state = useToolsPageState({
     activeSection,
     onError: handleError,
-    uiText,
+    uiText: UI_TEXT,
   });
   const toolsIconExeNames = useMemo(() => [
     ...state.softwareReminderAppCandidates.map((candidate) => candidate.exeName),

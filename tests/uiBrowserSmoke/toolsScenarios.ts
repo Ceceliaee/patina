@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { COPY } from "../../src/shared/copy/index.ts";
+import { getLocaleText } from "../../src/shared/i18n/runtime.ts";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import { delay, evaluate, jsonString, waitForExpression } from "./browserHarness.ts";
 import { TOOLS_TEXT } from "./constants.ts";
+
+const COPY = { "zh-CN": getLocaleText("zh-CN") } as const;
 
 export async function runToolsScenarios(context: BrowserSmokeContext) {
   const { client, sessionId, runTest } = context;

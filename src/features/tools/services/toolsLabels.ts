@@ -1,7 +1,7 @@
-import { UI_TEXT, type UiText } from "../../../shared/copy/index.ts";
+import { type UiText } from "../../../shared/i18n/index.ts";
 import type { ToolsViewModelLabels } from "../types.ts";
 
-export function buildToolsViewModelLabels(uiText: UiText = UI_TEXT): ToolsViewModelLabels {
+export function buildToolsViewModelLabels(uiText: UiText): ToolsViewModelLabels {
   return {
     timerIdle: uiText.tools.timerStatus.idle,
     timerRunning: uiText.tools.timerStatus.running,

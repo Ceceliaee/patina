@@ -1,8 +1,9 @@
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { AlarmClock, BellRing, TimerReset } from "lucide-react";
 import { useCallback, useRef, useState, type ReactNode } from "react";
 import QuietDialog from "../../../shared/components/QuietDialog.tsx";
 import QuietButton from "../../../shared/components/QuietButton.tsx";
-import { UI_TEXT } from "../../../shared/copy/index.ts";
+
 import type { ToolAlert } from "../../../shared/types/tools.ts";
 import { useToolAlerts } from "../hooks/useToolAlerts.ts";
 import { ToolsRuntimeService } from "../services/toolsRuntimeService.ts";
@@ -23,6 +24,7 @@ function alertIcon(alert: ToolAlert): ReactNode {
 }
 
 export default function ToolAlertDialog() {
+  const UI_TEXT = useLocaleText();
   const pauseButtonRef = useRef<HTMLButtonElement>(null);
   const dismissButtonRef = useRef<HTMLButtonElement>(null);
   const { activeAlert, dismissActiveAlert } = useToolAlerts();

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { UI_TEXT, type UiText } from "../../../shared/copy/index.ts";
+import { useLocale, type UiText } from "../../../shared/i18n/index.ts";
 import type {
   StartPomodoroInput,
   TimerMode,
@@ -48,14 +48,15 @@ const EMPTY_SOFTWARE_REMINDER_RULE_ROWS: SoftwareReminderRuleRowViewModel[] = []
 export interface UseToolsPageStateOptions {
   activeSection?: ToolsSection;
   onError?: (message: string) => void;
-  uiText?: UiText;
+  uiText: UiText;
 }
 
 export function useToolsPageState({
   activeSection = "reminders",
   onError,
-  uiText = UI_TEXT,
-}: UseToolsPageStateOptions = {}) {
+  uiText,
+}: UseToolsPageStateOptions) {
+  const locale = useLocale();
   const [initialSnapshot] = useState(() => toolsRuntimeSnapshotStore.getCurrentSnapshot());
   const [snapshot, setSnapshot] = useState<ToolsRuntimeSnapshot>(() => initialSnapshot ?? DEFAULT_SNAPSHOT);
   const [hasSnapshot, setHasSnapshot] = useState(() => initialSnapshot !== null);
@@ -87,10 +88,10 @@ export function useToolsPageState({
       if (toolsRuntimeSnapshotStore.getCurrentSnapshot() === null) {
         setLoadError(true);
       } else {
-        onError?.(UI_TEXT.tools.loadFailed);
+        onError?.(uiText.tools.loadFailed);
       }
     }
-  }, [onError]);
+  }, [onError, uiText]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -114,12 +115,16 @@ export function useToolsPageState({
   }, [refreshSnapshot]);
 
   useEffect(() => {
+    setSoftwareReminderAppCandidatesLoaded(false);
+  }, [locale]);
+
+  useEffect(() => {
     if (activeSection !== "reminders" || softwareReminderAppCandidatesLoaded) {
       return undefined;
     }
 
     let cancelled = false;
-    void loadSoftwareReminderAppCandidates()
+    void loadSoftwareReminderAppCandidates(locale)
       .then((candidates) => {
         if (!cancelled) {
           setSoftwareReminderAppCandidates(candidates);
@@ -133,7 +138,7 @@ export function useToolsPageState({
     return () => {
       cancelled = true;
     };
-  }, [activeSection, softwareReminderAppCandidatesLoaded]);
+  }, [activeSection, locale, softwareReminderAppCandidatesLoaded]);
 
   const labels = useMemo(() => buildToolsViewModelLabels(uiText), [uiText]);
   const inactiveTimerViewModel = useMemo<TimerViewModel>(
@@ -178,11 +183,11 @@ export function useToolsPageState({
       toolsRuntimeSnapshotStore.publishSnapshot(nextSnapshot);
     } catch (error) {
       console.warn(`tools action failed: ${actionKey}`, error);
-      onError?.(UI_TEXT.tools.actionFailed);
+      onError?.(uiText.tools.actionFailed);
     } finally {
       setBusyAction(null);
     }
-  }, [busyAction, onError]);
+  }, [busyAction, onError, uiText]);
 
   const createReminder = useCallback((label: string, scheduledAt: number) => runAction(
     "create-reminder",

@@ -3,7 +3,7 @@ import type { ClassificationBootstrapData } from "../../classification/services/
 import type { CompleteAppCatalogSnapshot } from "../../classification/services/classificationAppCatalog.ts";
 import type { ObservedAppCandidate } from "../../classification/types.ts";
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
-import { getUiTextLanguage } from "../../../shared/copy/index.ts";
+import type { Locale } from "../../../shared/i18n/index.ts";
 import type { ToolSoftwareReminderAppCandidate } from "../../../shared/types/tools.ts";
 
 export interface SoftwareReminderAppCandidateDeps {
@@ -47,6 +47,7 @@ function resolveCandidateDisplayName(candidate: ObservedAppCandidate, exeName: s
 
 export function buildSoftwareReminderAppCandidates(
   observed: readonly ObservedAppCandidate[],
+  locale: Locale,
 ): ToolSoftwareReminderAppCandidate[] {
   const merged = new Map<string, ToolSoftwareReminderAppCandidate>();
   const displayNameRanks = new Map<string, number>();
@@ -88,8 +89,8 @@ export function buildSoftwareReminderAppCandidates(
   return Array.from(merged.values())
     .sort((left, right) => (
       right.lastSeenAt - left.lastSeenAt
-      || left.appName.localeCompare(right.appName, undefined, { numeric: true, sensitivity: "base" })
-      || left.exeName.localeCompare(right.exeName, undefined, { numeric: true, sensitivity: "base" })
+      || left.appName.localeCompare(right.appName, locale, { numeric: true, sensitivity: "base" })
+      || left.exeName.localeCompare(right.exeName, locale, { numeric: true, sensitivity: "base" })
     ));
 }
 
@@ -100,13 +101,13 @@ function cloneCandidates(candidates: readonly ToolSoftwareReminderAppCandidate[]
 function buildCandidatesForCatalog(
   bootstrap: ClassificationBootstrapData,
   catalog: CompleteAppCatalogSnapshot,
+  locale: Locale,
 ): ToolSoftwareReminderAppCandidate[] {
-  const language = getUiTextLanguage();
-  if (bootstrap !== cachedBootstrap || catalog !== cachedCatalog || language !== cachedLanguage) {
+  if (bootstrap !== cachedBootstrap || catalog !== cachedCatalog || locale !== cachedLanguage) {
     cachedBootstrap = bootstrap;
     cachedCatalog = catalog;
-    cachedLanguage = language;
-    cachedCandidates = buildSoftwareReminderAppCandidates(catalog.candidates);
+    cachedLanguage = locale;
+    cachedCandidates = buildSoftwareReminderAppCandidates(catalog.candidates, locale);
   }
 
   return cloneCandidates(cachedCandidates);
@@ -114,6 +115,7 @@ function buildCandidatesForCatalog(
 
 export async function loadSoftwareReminderAppCandidatesWithDeps(
   deps: SoftwareReminderAppCandidateDeps,
+  locale: Locale,
 ): Promise<ToolSoftwareReminderAppCandidate[]> {
   const cachedBootstrapSnapshot = deps.getBootstrapCache();
   const cachedCatalogSnapshot = deps.getAppCatalogSnapshot();
@@ -122,11 +124,11 @@ export async function loadSoftwareReminderAppCandidatesWithDeps(
     cachedCatalogSnapshot ?? deps.loadAppCatalog(),
   ]);
   deps.applyBootstrapToProcessMapper(bootstrap);
-  return catalog ? buildCandidatesForCatalog(bootstrap, catalog) : [];
+  return catalog ? buildCandidatesForCatalog(bootstrap, catalog, locale) : [];
 }
 
-export async function loadSoftwareReminderAppCandidates(): Promise<ToolSoftwareReminderAppCandidate[]> {
-  return loadSoftwareReminderAppCandidatesWithDeps(defaultSoftwareReminderAppCandidateDeps);
+export async function loadSoftwareReminderAppCandidates(locale: Locale): Promise<ToolSoftwareReminderAppCandidate[]> {
+  return loadSoftwareReminderAppCandidatesWithDeps(defaultSoftwareReminderAppCandidateDeps, locale);
 }
 
 export function clearSoftwareReminderAppCandidateCache(): void {
