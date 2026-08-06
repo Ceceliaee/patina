@@ -1,0 +1,27 @@
+// en-US categories locale resource. Pure data only.
+export const MESSAGES = {
+  "categories.ai": "AI",
+  "categories.browser": "Browser",
+  "categories.communication": "Communication",
+  "categories.custom": "Custom",
+  "categories.design": "Design",
+  "categories.development": "Development",
+  "categories.game": "Games",
+  "categories.music": "Music",
+  "categories.office": "Office",
+  "categories.other": "Other",
+  "categories.short.browser": "Browser",
+  "categories.short.communication": "Chat",
+  "categories.short.design": "Design",
+  "categories.short.development": "Dev",
+  "categories.short.game": "Games",
+  "categories.short.music": "Music",
+  "categories.short.office": "Office",
+  "categories.short.other": "Other",
+  "categories.short.system": "System",
+  "categories.short.utility": "Tools",
+  "categories.short.video": "Video",
+  "categories.system": "System",
+  "categories.utility": "Utilities",
+  "categories.video": "Video"
+} as const;
