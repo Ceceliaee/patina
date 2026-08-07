@@ -164,6 +164,9 @@ fn is_allowed_app_setting_key(key: &str) -> bool {
             | "remote_status_bridge_url"
             | "remote_status_bridge_token"
             | "remote_status_bridge_machine_id"
+            | "screenshots_enabled"
+            | "screenshots_interval_secs"
+            | "screenshots_retention_days"
     )
 }
 
