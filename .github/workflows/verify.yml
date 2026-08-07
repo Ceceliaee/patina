@@ -39,7 +39,8 @@ jobs:
         if: github.event_name == 'workflow_run'
         uses: actions/checkout@v4
         with:
-          ref: refs/pull/${{ github.event.workflow_run.pull_requests[0].number }}/head
+          repository: ${{ github.event.workflow_run.head_repository.full_name }}
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Checkout manually selected pull request revision
         if: github.event_name == 'workflow_dispatch' && inputs.pr_number != ''
@@ -85,7 +86,8 @@ jobs:
         if: github.event_name == 'workflow_run'
         uses: actions/checkout@v4
         with:
-          ref: refs/pull/${{ github.event.workflow_run.pull_requests[0].number }}/head
+          repository: ${{ github.event.workflow_run.head_repository.full_name }}
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Checkout manually selected pull request revision
         if: github.event_name == 'workflow_dispatch' && inputs.pr_number != ''
@@ -133,7 +135,8 @@ jobs:
         if: github.event_name == 'workflow_run'
         uses: actions/checkout@v4
         with:
-          ref: refs/pull/${{ github.event.workflow_run.pull_requests[0].number }}/head
+          repository: ${{ github.event.workflow_run.head_repository.full_name }}
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Checkout manually selected pull request revision
         if: github.event_name == 'workflow_dispatch' && inputs.pr_number != ''
