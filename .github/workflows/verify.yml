@@ -39,6 +39,7 @@ jobs:
         if: github.event_name == 'workflow_run'
         uses: actions/checkout@v4
         with:
+          repository: ${{ github.event.workflow_run.head_repository.full_name }}
           ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Checkout manually selected pull request revision
@@ -85,6 +86,7 @@ jobs:
         if: github.event_name == 'workflow_run'
         uses: actions/checkout@v4
         with:
+          repository: ${{ github.event.workflow_run.head_repository.full_name }}
           ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Checkout manually selected pull request revision
@@ -133,6 +135,7 @@ jobs:
         if: github.event_name == 'workflow_run'
         uses: actions/checkout@v4
         with:
+          repository: ${{ github.event.workflow_run.head_repository.full_name }}
           ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Checkout manually selected pull request revision
