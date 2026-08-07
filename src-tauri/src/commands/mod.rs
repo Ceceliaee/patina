@@ -5,6 +5,7 @@ pub mod error;
 pub mod export;
 pub mod import;
 pub mod persistence;
+pub mod screenshots;
 pub mod settings;
 pub mod storage;
 pub mod tools;

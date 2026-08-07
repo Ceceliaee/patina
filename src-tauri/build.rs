@@ -97,6 +97,14 @@ const APP_COMMANDS: &[&str] = &[
     "cmd_save_history_bootstrap_snapshot_payload",
     "cmd_clear_history_bootstrap_snapshot_payload",
     "cmd_get_resource_diagnostics",
+    "cmd_get_screenshot_settings",
+    "cmd_set_screenshot_settings",
+    "cmd_query_screenshots",
+    "cmd_query_screenshot_metadata",
+    "cmd_get_screenshot_thumbnail",
+    "cmd_get_screenshot_data",
+    "cmd_get_screenshot_file_path",
+    "cmd_reveal_screenshot_in_folder",
 ];
 
 fn main() {

@@ -549,6 +549,30 @@
           "markdownDescription": "Enables the cmd_get_resource_diagnostics command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_get_screenshot_data command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-screenshot-data",
+          "markdownDescription": "Enables the cmd_get_screenshot_data command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_screenshot_file_path command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-screenshot-file-path",
+          "markdownDescription": "Enables the cmd_get_screenshot_file_path command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_screenshot_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-screenshot-settings",
+          "markdownDescription": "Enables the cmd_get_screenshot_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_screenshot_thumbnail command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-screenshot-thumbnail",
+          "markdownDescription": "Enables the cmd_get_screenshot_thumbnail command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_get_storage_snapshot command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-get-storage-snapshot",
@@ -747,6 +771,18 @@
           "markdownDescription": "Enables the cmd_preview_webview_cache_migration command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_query_screenshot_metadata command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-query-screenshot-metadata",
+          "markdownDescription": "Enables the cmd_query_screenshot_metadata command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_query_screenshots command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-query-screenshots",
+          "markdownDescription": "Enables the cmd_query_screenshots command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_reset_pomodoro command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-reset-pomodoro",
@@ -805,6 +841,12 @@
           "type": "string",
           "const": "allow-cmd-resume-timer",
           "markdownDescription": "Enables the cmd_resume_timer command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_reveal_screenshot_in_folder command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-reveal-screenshot-in-folder",
+          "markdownDescription": "Enables the cmd_reveal_screenshot_in_folder command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_reveal_webdav_backup_secret command without any pre-configured scope.",
@@ -871,6 +913,12 @@
           "type": "string",
           "const": "allow-cmd-set-launch-behavior",
           "markdownDescription": "Enables the cmd_set_launch_behavior command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_set_screenshot_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-set-screenshot-settings",
+          "markdownDescription": "Enables the cmd_set_screenshot_settings command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_set_widget_expanded command without any pre-configured scope.",
@@ -1137,6 +1185,30 @@
           "markdownDescription": "Denies the cmd_get_resource_diagnostics command without any pre-configured scope."
         },
         {
+          "description": "Denies the cmd_get_screenshot_data command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-screenshot-data",
+          "markdownDescription": "Denies the cmd_get_screenshot_data command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_screenshot_file_path command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-screenshot-file-path",
+          "markdownDescription": "Denies the cmd_get_screenshot_file_path command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_screenshot_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-screenshot-settings",
+          "markdownDescription": "Denies the cmd_get_screenshot_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_screenshot_thumbnail command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-screenshot-thumbnail",
+          "markdownDescription": "Denies the cmd_get_screenshot_thumbnail command without any pre-configured scope."
+        },
+        {
           "description": "Denies the cmd_get_storage_snapshot command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-get-storage-snapshot",
@@ -1335,6 +1407,18 @@
           "markdownDescription": "Denies the cmd_preview_webview_cache_migration command without any pre-configured scope."
         },
         {
+          "description": "Denies the cmd_query_screenshot_metadata command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-query-screenshot-metadata",
+          "markdownDescription": "Denies the cmd_query_screenshot_metadata command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_query_screenshots command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-query-screenshots",
+          "markdownDescription": "Denies the cmd_query_screenshots command without any pre-configured scope."
+        },
+        {
           "description": "Denies the cmd_reset_pomodoro command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-reset-pomodoro",
@@ -1393,6 +1477,12 @@
           "type": "string",
           "const": "deny-cmd-resume-timer",
           "markdownDescription": "Denies the cmd_resume_timer command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_reveal_screenshot_in_folder command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-reveal-screenshot-in-folder",
+          "markdownDescription": "Denies the cmd_reveal_screenshot_in_folder command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_reveal_webdav_backup_secret command without any pre-configured scope.",
@@ -1459,6 +1549,12 @@
           "type": "string",
           "const": "deny-cmd-set-launch-behavior",
           "markdownDescription": "Denies the cmd_set_launch_behavior command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_set_screenshot_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-set-screenshot-settings",
+          "markdownDescription": "Denies the cmd_set_screenshot_settings command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_set_widget_expanded command without any pre-configured scope.",

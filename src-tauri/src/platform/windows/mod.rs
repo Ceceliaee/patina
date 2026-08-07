@@ -7,4 +7,5 @@ pub mod input;
 pub mod media;
 pub mod power;
 pub mod resource;
+pub mod screen_capture;
 pub mod window_activation;
