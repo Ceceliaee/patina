@@ -10,6 +10,7 @@ pub mod remote_status_store;
 pub mod repositories;
 pub mod schema;
 pub mod schema_contracts;
+pub mod screenshots_store;
 pub mod settings_payload_service;
 pub mod sqlite_error;
 pub mod sqlite_pool;

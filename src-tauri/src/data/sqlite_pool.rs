@@ -15,7 +15,7 @@ use tauri_plugin_sql::{DbInstances, DbPool, MigrationKind};
 use tokio::time::{sleep, Duration};
 
 pub const SQLITE_DB_NAME: &str = "sqlite:patina.db";
-const VALIDATED_SCHEMA_MIGRATION_HEAD: i64 = schema::WEB_ACTIVITY_REVISION_MIGRATION_VERSION;
+const VALIDATED_SCHEMA_MIGRATION_HEAD: i64 = schema::SCREENSHOTS_MIGRATION_VERSION;
 mod activity_read_model_schema;
 pub(super) mod import_schema;
 mod maintenance;
@@ -259,6 +259,7 @@ async fn table_has_columns(
         "app_catalog_dirty_keys" => "PRAGMA table_info(app_catalog_dirty_keys)",
         "recorded_app_catalog" => "PRAGMA table_info(recorded_app_catalog)",
         "activity_hourly_effective" => "PRAGMA table_info(activity_hourly_effective)",
+        "screenshots" => "PRAGMA table_info(screenshots)",
         _ => {
             return Err(format!(
                 "unsupported schema inspection table `{table_name}`"
@@ -306,6 +307,7 @@ async fn table_has_index(
         "app_catalog_dirty_keys" => "PRAGMA index_list(app_catalog_dirty_keys)",
         "recorded_app_catalog" => "PRAGMA index_list(recorded_app_catalog)",
         "activity_hourly_effective" => "PRAGMA index_list(activity_hourly_effective)",
+        "screenshots" => "PRAGMA index_list(screenshots)",
         _ => return Err(format!("unsupported index inspection table `{table_name}`")),
     };
 
@@ -784,6 +786,34 @@ pub(super) async fn has_web_favicon_cache_schema(pool: &Pool<Sqlite>) -> Result<
     .await
 }
 
+pub(super) async fn has_base_screenshots_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    if !table_exists(pool, "screenshots").await? {
+        return Ok(false);
+    }
+
+    let columns_ready = table_has_columns(
+        pool,
+        "screenshots",
+        &[
+            "id",
+            "file_path",
+            "captured_at",
+            "width",
+            "height",
+            "thumbnail_base64",
+            "session_id",
+        ],
+    )
+    .await?;
+
+    let captured_at_index_ready =
+        table_has_index(pool, "screenshots", "idx_screenshots_captured_at").await?;
+    let session_index_ready =
+        table_has_index(pool, "screenshots", "idx_screenshots_session_id").await?;
+
+    Ok(columns_ready && captured_at_index_ready && session_index_ready)
+}
+
 async fn has_current_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
     let checks = [
         has_current_baseline_schema(pool).await?,
@@ -794,6 +824,7 @@ async fn has_current_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
         has_import_data_schema(pool).await?,
         has_activity_read_models_schema(pool).await?,
         schema_contracts::has_web_activity_revision_schema(pool).await?,
+        schema_contracts::has_screenshots_schema(pool).await?,
     ];
     Ok(checks.into_iter().all(|ready| ready))
 }
@@ -826,9 +857,17 @@ async fn normalize_current_baseline_migration_history_for_pool(
         });
     } else if !has_activity_read_models_schema(pool).await? {
         expected.truncate(schema::IMPORT_DATA_ISOLATION_MIGRATION_VERSION as usize);
+    } else if !schema_contracts::has_web_activity_revision_schema(pool).await? {
+        expected.truncate(schema::ACTIVITY_READ_MODELS_MIGRATION_VERSION as usize);
+    } else if !has_base_screenshots_schema(pool).await? {
+        expected.truncate(schema::WEB_ACTIVITY_REVISION_MIGRATION_VERSION as usize);
+    } else if !schema_contracts::has_screenshots_schema(pool).await? {
+        expected.truncate(schema::SCREENSHOTS_MIGRATION_VERSION as usize);
     }
     let revision_limit = schema::ACTIVITY_READ_MODELS_MIGRATION_VERSION as usize
-        + usize::from(schema_contracts::has_web_activity_revision_schema(pool).await?);
+        + usize::from(schema_contracts::has_web_activity_revision_schema(pool).await?)
+        + usize::from(has_base_screenshots_schema(pool).await?)
+        + usize::from(schema_contracts::has_screenshots_schema(pool).await?);
     expected.truncate(expected.len().min(revision_limit));
     if expected.is_empty() {
         return Ok(false);
@@ -1266,7 +1305,7 @@ mod tests {
                     .fetch_all(&pool)
                     .await
                     .unwrap();
-            assert_eq!(final_versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
+            assert_eq!(final_versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
         });
     }
 

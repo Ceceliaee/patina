@@ -18,6 +18,8 @@ pub const ACTIVITY_READ_MODELS_MIGRATION_VERSION: i64 = 8;
 pub const ACTIVITY_READ_MODELS_MIGRATION_DESCRIPTION: &str = "create_activity_read_models";
 pub const WEB_ACTIVITY_REVISION_MIGRATION_VERSION: i64 = 9;
 pub const WEB_ACTIVITY_REVISION_MIGRATION_DESCRIPTION: &str = "create_web_activity_revision";
+pub const SCREENSHOTS_MIGRATION_VERSION: i64 = 10;
+pub const SCREENSHOTS_MIGRATION_DESCRIPTION: &str = "create_screenshots";
 
 pub const CURRENT_BASELINE_SCHEMA_SQL: &str = "
     CREATE TABLE IF NOT EXISTS sessions (
@@ -790,6 +792,29 @@ pub const ACTIVITY_READ_MODELS_SCHEMA_SQL: &str = "
     END;
 ";
 
+pub const SCREENSHOTS_SCHEMA_SQL: &str = "
+    CREATE TABLE IF NOT EXISTS screenshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        file_path TEXT NOT NULL,
+        captured_at INTEGER NOT NULL,
+        width INTEGER NOT NULL,
+        height INTEGER NOT NULL,
+        thumbnail_base64 TEXT NOT NULL,
+        session_id INTEGER REFERENCES sessions(id),
+        active_url TEXT,
+        active_normalized_domain TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_screenshots_captured_at
+    ON screenshots(captured_at);
+
+    CREATE INDEX IF NOT EXISTS idx_screenshots_session_id
+    ON screenshots(session_id);
+
+    CREATE INDEX IF NOT EXISTS idx_screenshots_active_domain
+    ON screenshots(active_normalized_domain, captured_at);
+";
+
 pub fn tracker_migrations() -> Vec<Migration> {
     vec![
         Migration {
@@ -844,6 +869,12 @@ pub fn tracker_migrations() -> Vec<Migration> {
             version: WEB_ACTIVITY_REVISION_MIGRATION_VERSION,
             description: WEB_ACTIVITY_REVISION_MIGRATION_DESCRIPTION,
             sql: WEB_ACTIVITY_REVISION_SCHEMA_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: SCREENSHOTS_MIGRATION_VERSION,
+            description: SCREENSHOTS_MIGRATION_DESCRIPTION,
+            sql: SCREENSHOTS_SCHEMA_SQL,
             kind: MigrationKind::Up,
         },
     ]
