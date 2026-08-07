@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::domain::screenshot::{ScreenshotEntry, ScreenshotSettings};
 use std::fmt;
 use std::future::Future;

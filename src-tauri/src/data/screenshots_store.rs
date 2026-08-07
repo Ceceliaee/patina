@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::data::repositories::tracker_settings;
 use crate::data::repositories::web_activity;
 use crate::data::sqlite_pool;
@@ -575,7 +577,9 @@ mod tests {
     use super::*;
 
     async fn test_pool() -> Pool<Sqlite> {
-        let pool = Pool::connect("sqlite::memory:").await.expect("connect memory pool");
+        let pool = Pool::connect("sqlite::memory:")
+            .await
+            .expect("connect memory pool");
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
              CREATE TABLE IF NOT EXISTS sessions (

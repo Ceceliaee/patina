@@ -1,10 +1,8 @@
 pub mod ports;
 
-pub use ports::{ScreenshotDataError, ScreenshotDataStore, SharedScreenshotDataStore};
-
 #[cfg(test)]
 mod tests {
-    use super::ScreenshotDataError;
+    use super::ports::ScreenshotDataError;
 
     #[test]
     fn screenshot_data_error_roundtrips_through_display() {
