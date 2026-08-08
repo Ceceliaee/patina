@@ -671,7 +671,7 @@ await runTest("web trend applies aliases and exclusions before percentages", () 
       { normalizedDomain: "search.example", earliestRecordedStartMs: may7 },
     ],
     overrides: {
-      "docs.example": { displayName: "产品文档" },
+      "docs.example": { displayName: "产品文档", category: "development" },
       "blocked.example": { enabled: false },
     },
     favicons: {
@@ -689,6 +689,16 @@ await runTest("web trend applies aliases and exclusions before percentages", () 
   assert.equal(result.selectedDomains[0]?.percentage, 75);
   assert.equal(result.selectedDomains[0]?.activeDayCount, 2);
   assert.equal(result.selectedDomains[0]?.faviconUrl, "data:image/png;base64,docs");
+  assert.equal(result.selectedDomains[0]?.category, "development");
+  assert.equal(result.selectedDomains[0]?.unclassified, false);
+  assert.equal(
+    result.domainOptions.find((domain) => domain.normalizedDomain === "search.example")?.category,
+    "other",
+  );
+  assert.equal(
+    result.domainOptions.find((domain) => domain.normalizedDomain === "search.example")?.unclassified,
+    true,
+  );
   assert.equal(
     result.chartRows.find((point) => point.date === "2026-05-07")?.totalDuration,
     60 * 60_000,

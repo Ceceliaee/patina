@@ -882,11 +882,11 @@ await runTest("badges share one Quiet Pro owner and protect long labels", () => 
   }
 });
 
-await runTest("classification owns one shared quick app surface and density-aware status", () => {
-  const entry = readUtf8("src/features/classification/components/QuickAppClassificationEntry.tsx");
-  const surface = readUtf8("src/features/classification/components/QuickAppClassificationSurface.tsx");
-  const launcher = readUtf8("src/features/classification/hooks/useQuickAppClassificationLauncher.ts");
-  const status = readUtf8("src/features/classification/components/QuickAppClassificationStatus.tsx");
+await runTest("classification owns one shared app and web quick surface with density-aware status", () => {
+  const entry = readUtf8("src/features/classification/components/QuickClassificationEntry.tsx");
+  const surface = readUtf8("src/features/classification/components/QuickClassificationSurface.tsx");
+  const launcher = readUtf8("src/features/classification/hooks/useQuickClassificationLauncher.ts");
+  const status = readUtf8("src/features/classification/components/QuickClassificationStatus.tsx");
   const dashboard = readUtf8("src/features/dashboard/components/Dashboard.tsx");
   const history = readUtf8("src/features/history/components/History.tsx");
   const historyQuickActions = readUtf8(
@@ -895,27 +895,30 @@ await runTest("classification owns one shared quick app surface and density-awar
   const data = readUtf8("src/features/data/components/Data.tsx");
   const directPageConsumers = [dashboard, data];
 
-  assert.match(entry, /lazy\(loadQuickAppClassificationSurface\)/);
+  assert.match(entry, /lazy\(loadQuickClassificationSurface\)/);
   assert.match(entry, /Suspense fallback=\{null\}/);
-  assert.match(surface, /className="quick-app-menu qp-motion-overlay-enter"/);
+  assert.match(surface, /className="quick-classification-menu qp-motion-overlay-enter"/);
   assert.match(launcher, /openAtPointer/);
   assert.match(launcher, /openAtElement/);
   assert.match(status, /density\?: "dense" \| "standard"/);
   assert.match(status, /size=\{density === "dense" \? "inline" : "regular"\}/);
   for (const consumer of directPageConsumers) {
-    assert.match(consumer, /useQuickAppClassificationLauncher/);
-    assert.match(consumer, /<QuickAppClassificationEntry/);
-    assert.doesNotMatch(consumer, /className="quick-app-menu/);
+    assert.match(consumer, /useQuickClassificationLauncher/);
+    assert.match(consumer, /<QuickClassificationEntry/);
+    assert.doesNotMatch(consumer, /className="quick-classification-menu/);
     assert.doesNotMatch(consumer, /ClassificationService/);
   }
   assert.match(history, /<HistoryDayDistributionQuickActions/);
-  assert.doesNotMatch(history, /useQuickAppClassificationLauncher/);
-  assert.doesNotMatch(history, /<QuickAppClassificationEntry/);
-  assert.match(historyQuickActions, /useQuickAppClassificationLauncher/);
-  assert.match(historyQuickActions, /<QuickAppClassificationEntry/);
+  assert.doesNotMatch(history, /useQuickClassificationLauncher/);
+  assert.doesNotMatch(history, /<QuickClassificationEntry/);
+  assert.match(historyQuickActions, /useQuickClassificationLauncher/);
+  assert.match(historyQuickActions, /<QuickClassificationEntry/);
   assert.doesNotMatch(historyQuickActions, /ClassificationService/);
   assert.match(data, /classificationCategory: mapped\.category/);
+  assert.match(data, /normalizedDomain: domain\.normalizedDomain/);
+  assert.match(data, /createQuickWebClassificationTarget/);
   assert.match(data, /category: option\.classificationCategory/);
+  assert.match(history, /createQuickWebClassificationTarget/);
   assert.doesNotMatch(
     data.match(/const handleOpenQuickClassification[\s\S]*?\}, \[openQuickClassificationAtPointer\]\);/)?.[0] ?? "",
     /identityKeys|secondaryText/,

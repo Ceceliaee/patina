@@ -600,7 +600,7 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
           if (!(trigger instanceof HTMLButtonElement)) return false;
           window.__historyQuickMenuTrace = { sawCategoryMenu: false };
           window.__historyQuickMenuObserver = new MutationObserver(() => {
-            if (document.querySelector('.quick-app-category-menu')) {
+            if (document.querySelector('.quick-classification-category-menu')) {
               window.__historyQuickMenuTrace.sawCategoryMenu = true;
             }
           });
@@ -619,7 +619,7 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
       true,
       "history app icons must not expose native title tooltips",
     );
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-app-menu[role="menu"]'))`);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-classification-menu[role="menu"]'))`);
     await waitForAnimationFrames(client!, sessionId, 2);
     assert.deepEqual(
       await evaluate(client!, sessionId, `
@@ -630,7 +630,7 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
           delete window.__historyQuickMenuTrace;
           return {
             labels: Array.from(document.querySelectorAll(
-              '.quick-app-menu[role="menu"] > .quick-app-menu-item',
+              '.quick-classification-menu[role="menu"] > .quick-classification-menu-item',
             )).map((item) => item.textContent?.trim()),
             sawCategoryMenu: trace?.sawCategoryMenu ?? true,
             detailOpen: Boolean(document.querySelector('.destination-detail-dialog')),
@@ -646,16 +646,16 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
     );
     await evaluate(client!, sessionId, `
       Array.from(document.querySelectorAll(
-        '.quick-app-menu[role="menu"] > .quick-app-menu-item',
+        '.quick-classification-menu[role="menu"] > .quick-classification-menu-item',
       )).find((item) => item.textContent?.includes("分类"))?.click()
     `);
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-app-category-menu'))`);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-classification-category-menu'))`);
     await evaluate(client!, sessionId, `
       Array.from(document.querySelectorAll(
-        '.quick-app-category-menu [role="menuitemradio"]',
+        '.quick-classification-category-menu [role="menuitemradio"]',
       )).find((item) => item.textContent?.includes("未分类"))?.click()
     `);
-    await waitForExpression(client!, sessionId, `!document.querySelector('.quick-app-menu[role="menu"]')`);
+    await waitForExpression(client!, sessionId, `!document.querySelector('.quick-classification-menu[role="menu"]')`);
     await waitForExpression(
       client!,
       sessionId,
@@ -1858,6 +1858,147 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
       `document.querySelector('.destination-detail-dialog [aria-label="关闭详情"]')?.click()`,
     );
     await waitForExpression(client!, sessionId, `!document.querySelector(".destination-detail-dialog")`);
+
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const trigger = Array.from(document.querySelectorAll(
+            '.history-app-distribution-card .history-day-distribution-detail-trigger[aria-haspopup="menu"]',
+          )).find((node) => node.getAttribute("aria-label")?.includes("stable.example"));
+          if (!(trigger instanceof HTMLButtonElement)) return false;
+          const rect = trigger.getBoundingClientRect();
+          trigger.dispatchEvent(new MouseEvent("contextmenu", {
+            bubbles: true,
+            cancelable: true,
+            button: 2,
+            clientX: rect.left + rect.width / 2,
+            clientY: rect.top + rect.height / 2,
+          }));
+          return !trigger.hasAttribute("title");
+        })()
+      `),
+      true,
+      "history web icons must expose the shared menu without native tooltips",
+    );
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-classification-menu[role="menu"]'))`);
+    assert.deepEqual(
+      await evaluate(client!, sessionId, `
+        ({
+          labels: Array.from(document.querySelectorAll(
+            '.quick-classification-menu[role="menu"] > .quick-classification-menu-item',
+          )).map((item) => item.textContent?.trim()),
+          detailOpen: Boolean(document.querySelector('.destination-detail-dialog')),
+          categoryOpen: Boolean(document.querySelector('.quick-classification-category-menu')),
+        })
+      `),
+      {
+        labels: ["更改名称", "设置分类"],
+        detailOpen: false,
+        categoryOpen: false,
+      },
+    );
+    await evaluate(client!, sessionId, `
+      Array.from(document.querySelectorAll(
+        '.quick-classification-menu[role="menu"] > .quick-classification-menu-item',
+      )).find((item) => item.textContent?.trim() === "更改名称")?.click()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector('.qp-dialog-heading')?.textContent?.trim() === "更改名称"`,
+    );
+    assert.deepEqual(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const dialog = document.querySelector('.qp-dialog-surface');
+          const input = dialog?.querySelector('input');
+          return {
+            hasDescription: Boolean(dialog?.querySelector('.qp-dialog-description')),
+            placeholder: input?.getAttribute('placeholder') ?? null,
+          };
+        })()
+      `),
+      { hasDescription: false, placeholder: "名称" },
+      "the shared rename dialog should stay object-neutral and omit explanatory copy",
+    );
+    await evaluate(client!, sessionId, `
+      (() => {
+        const input = document.querySelector('.qp-dialog-surface input');
+        if (!(input instanceof HTMLInputElement)) return false;
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        setter?.call(input, "专注网页");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        return true;
+      })()
+    `);
+    await evaluate(client!, sessionId, `
+      Array.from(document.querySelectorAll('.qp-dialog-surface button'))
+        .find((button) => button.textContent?.trim() === "保存")?.click()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector('.history-app-distribution-card')?.textContent?.includes("专注网页")`,
+    );
+    const savedWebRename = JSON.parse(String(await evaluate(client!, sessionId, `
+      JSON.stringify((globalThis.__TIME_TRACKER_CLASSIFICATION_MUTATIONS ?? [])
+        .filter((mutation) => mutation.key === "__web_domain_override::stable.example")
+        .at(-1) ?? null)
+    `))) as { key: string; value: string | null } | null;
+    assert.ok(savedWebRename);
+    assert.equal(JSON.parse(savedWebRename.value ?? "null")?.displayName, "专注网页");
+
+    await evaluate(client!, sessionId, `
+      (() => {
+        const trigger = Array.from(document.querySelectorAll(
+          '.history-app-distribution-card .history-day-distribution-detail-trigger[aria-haspopup="menu"]',
+        )).find((node) => node.getAttribute("aria-label")?.includes("专注网页"));
+        if (!(trigger instanceof HTMLButtonElement)) return false;
+        const rect = trigger.getBoundingClientRect();
+        trigger.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          button: 2,
+          clientX: rect.left + rect.width / 2,
+          clientY: rect.top + rect.height / 2,
+        }));
+        return true;
+      })()
+    `);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-classification-menu[role="menu"]'))`);
+    await evaluate(client!, sessionId, `
+      Array.from(document.querySelectorAll(
+        '.quick-classification-menu[role="menu"] > .quick-classification-menu-item',
+      )).find((item) => item.textContent?.trim() === "更改名称")?.click()
+    `);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-dialog-surface input'))`);
+    await evaluate(client!, sessionId, `
+      (() => {
+        const input = document.querySelector('.qp-dialog-surface input');
+        if (!(input instanceof HTMLInputElement)) return false;
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        setter?.call(input, "");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        return true;
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector('.qp-dialog-surface input')?.value === ""`,
+    );
+    await evaluate(client!, sessionId, `
+      Array.from(document.querySelectorAll('.qp-dialog-surface button'))
+        .find((button) => button.textContent?.trim() === "保存")?.click()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector('.history-app-distribution-card')?.textContent?.includes("stable.example")
+        && !document.querySelector('.history-app-distribution-card')?.textContent?.includes("专注网页")`,
+    );
 
     await navigateTo("数据");
     await evaluate(client!, sessionId, `

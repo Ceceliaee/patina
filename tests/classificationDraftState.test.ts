@@ -17,6 +17,7 @@ import {
 import {
   buildObservedAppCandidates,
   buildAppOverrideTransition,
+  buildSaveWebDomainOverrideMutations,
   buildLegacyAutoClassificationMigrationMutations,
   parsePersistedDeletedCategories,
   removeOrphanedAppOverrides,
@@ -33,6 +34,7 @@ import {
   type ClassificationBootstrapDeps,
   type ClassificationCommitDeps,
   type AppOverride,
+  applySavedWebDomainOverrideToBootstrap,
   commitDraftChangesWithDeps,
   createClassificationCommitDeps,
   prewarmClassificationPresentationAssets,
@@ -43,6 +45,7 @@ import {
   cloneClassificationDraftState,
   hasClassificationDraftChanges,
   normalizeClassificationOverride,
+  normalizeWebDomainOverride,
   sanitizeDeletedCategories,
   type ClassificationDraftState,
 } from "../src/features/classification/services/classificationDraftState.ts";
@@ -51,13 +54,17 @@ import {
   setClassificationBootstrapCache,
 } from "../src/features/classification/services/classificationBootstrapCache.ts";
 import {
-  buildQuickAppCategoryOptions as buildQuickAppCategoryOptionsRaw,
+  buildQuickClassificationCategoryOptions as buildQuickCategoryOptionsRaw,
+  buildQuickClassificationOverride,
   buildQuickAppOverride,
-  isQuickAppUnclassified,
-} from "../src/features/classification/services/quickAppClassification.ts";
+  buildQuickWebDomainOverride,
+  isQuickClassificationUnclassified,
+} from "../src/features/classification/services/quickClassification.ts";
 import {
   createQuickAppClassificationTarget,
-  resolveQuickAppClassificationElementAnchor,
+  createQuickWebClassificationTarget,
+  getQuickClassificationTargetKey,
+  resolveQuickClassificationElementAnchor,
 } from "../src/features/classification/types.ts";
 import { getLocaleText } from "../src/shared/i18n/runtime.ts";
 
@@ -65,9 +72,9 @@ const ZH_TEXT = getLocaleText("zh-CN");
 const resolveExtendedCategoryLabel = (
   category: Parameters<typeof resolveExtendedCategoryLabelRaw>[0],
 ) => resolveExtendedCategoryLabelRaw(category, ZH_TEXT);
-const buildQuickAppCategoryOptions = (
-  bootstrap: Parameters<typeof buildQuickAppCategoryOptionsRaw>[0],
-) => buildQuickAppCategoryOptionsRaw(bootstrap, ZH_TEXT, "zh-CN");
+const buildQuickCategoryOptions = (
+  bootstrap: Parameters<typeof buildQuickCategoryOptionsRaw>[0],
+) => buildQuickCategoryOptionsRaw(bootstrap, ZH_TEXT, "zh-CN");
 const filterAndSortCandidates = (
   input: Omit<Parameters<typeof filterAndSortCandidatesRaw>[0], "locale">,
 ) => filterAndSortCandidatesRaw({ ...input, locale: "zh-CN" });
@@ -112,6 +119,7 @@ await runTest("quick app targets keep business identity separate from menu place
     displayName: "  ",
     category: "development",
   }), {
+    kind: "app",
     exeName: "code.exe",
     displayName: "code.exe",
     category: "development",
@@ -122,12 +130,39 @@ await runTest("quick app targets keep business identity separate from menu place
     category: "development",
   }), /non-empty executable name/);
 
-  assert.deepEqual(resolveQuickAppClassificationElementAnchor({
+  assert.deepEqual(resolveQuickClassificationElementAnchor({
     getBoundingClientRect: () => ({ left: 20, top: 30, width: 40, height: 18 }),
   } as HTMLElement), {
     clientX: 40,
     clientY: 39,
   });
+});
+
+await runTest("quick web targets normalize domains and keep target keys kind-safe", () => {
+  const app = createQuickAppClassificationTarget({
+    exeName: "github.com",
+    displayName: "GitHub App",
+    category: "development",
+  });
+  const web = createQuickWebClassificationTarget({
+    normalizedDomain: "  GitHub.COM. ",
+    displayName: "  ",
+    category: "other",
+  });
+
+  assert.deepEqual(web, {
+    kind: "web",
+    normalizedDomain: "github.com",
+    displayName: "github.com",
+    category: "other",
+  });
+  assert.equal(getQuickClassificationTargetKey(app), "app:github.com");
+  assert.equal(getQuickClassificationTargetKey(web), "web:github.com");
+  assert.throws(() => createQuickWebClassificationTarget({
+    normalizedDomain: "   ",
+    displayName: "Website",
+    category: "other",
+  }), /non-empty normalized domain/);
 });
 
 await runTest("quick app classification preserves unrelated override fields", () => {
@@ -165,17 +200,54 @@ await runTest("quick app name restore clears only the display name", () => {
   });
 });
 
+await runTest("quick web classification preserves web-only controls", () => {
+  const target = createQuickWebClassificationTarget({
+    normalizedDomain: "example.com",
+    displayName: "Example",
+    category: "other",
+  });
+  const current = {
+    displayName: "Example",
+    color: "#123456",
+    enabled: false,
+    captureTitle: false,
+    updatedAt: 1,
+  };
+  const next = buildQuickWebDomainOverride(current, { category: "development" }, 2);
+
+  assert.deepEqual(next, {
+    category: "development",
+    displayName: "Example",
+    color: "#123456",
+    enabled: false,
+    captureTitle: false,
+    updatedAt: 2,
+  });
+  assert.deepEqual(buildQuickClassificationOverride(
+    target,
+    next,
+    { displayName: "  " },
+    3,
+  ), {
+    category: "development",
+    color: "#123456",
+    enabled: false,
+    captureTitle: false,
+    updatedAt: 3,
+  });
+});
+
 await runTest("quick app unclassified state follows effective active category", () => {
-  assert.equal(isQuickAppUnclassified(null), true);
-  assert.equal(isQuickAppUnclassified({ displayName: "Editor" }), true);
-  assert.equal(isQuickAppUnclassified({ category: "other" }), true);
-  assert.equal(isQuickAppUnclassified({ category: "development" }), false);
-  assert.equal(isQuickAppUnclassified({ category: "development" }, ["development"]), true);
+  assert.equal(isQuickClassificationUnclassified(null), true);
+  assert.equal(isQuickClassificationUnclassified(undefined), true);
+  assert.equal(isQuickClassificationUnclassified("other"), true);
+  assert.equal(isQuickClassificationUnclassified("development"), false);
+  assert.equal(isQuickClassificationUnclassified("development", ["development"]), true);
 });
 
 await runTest("quick app category options include active custom categories and keep other last", () => {
   const custom = "custom:category_focus" as const;
-  const options = buildQuickAppCategoryOptions({
+  const options = buildQuickCategoryOptions({
     loadedOverrides: { "editor.exe": { category: custom } },
     loadedWebDomainOverrides: {},
     loadedCategoryColorOverrides: {},
@@ -190,6 +262,43 @@ await runTest("quick app category options include active custom categories and k
     label: "专注",
   });
   assert.equal(options.at(-1)?.value, "other");
+});
+
+await runTest("web override normalization keeps title capture exclusions", () => {
+  assert.deepEqual(normalizeWebDomainOverride({
+    displayName: "  Focus  ",
+    captureTitle: false,
+    updatedAt: 7,
+  }), {
+    displayName: "Focus",
+    captureTitle: false,
+    updatedAt: 7,
+  });
+});
+
+await runTest("web override setting mutations preserve controls and normalize domain keys", () => {
+  const [upsert] = buildSaveWebDomainOverrideMutations("  Example.COM. ", {
+    category: "development",
+    displayName: "  Example  ",
+    color: "#123456",
+    enabled: false,
+    captureTitle: false,
+    updatedAt: 8,
+  });
+  assert.equal(upsert?.key, "__web_domain_override::example.com");
+  assert.deepEqual(JSON.parse(upsert?.value ?? "{}"), {
+    category: "development",
+    displayName: "Example",
+    color: "#123456",
+    enabled: false,
+    captureTitle: false,
+    updatedAt: 8,
+  });
+  assert.deepEqual(buildSaveWebDomainOverrideMutations("example.com", null), [{
+    key: "__web_domain_override::example.com",
+    value: null,
+  }]);
+  assert.deepEqual(buildSaveWebDomainOverrideMutations("   ", { displayName: "ignored" }), []);
 });
 
 await runTest("classification presentation warmup covers the complete committed catalog atomically", async () => {
@@ -1324,6 +1433,52 @@ await runTest("late classification refresh cannot overwrite a newer saved bootst
 
   assert.equal(resolvedBootstrap, savedBootstrap);
   assert.equal(getClassificationBootstrapCache(), savedBootstrap);
+});
+
+await runTest("saved web override updates only its normalized bootstrap key", () => {
+  const baseline: ClassificationBootstrapData = {
+    observedWebDomains: [],
+    loadedOverrides: { "editor.exe": { category: "development" } },
+    loadedWebDomainOverrides: {
+      "existing.example": { displayName: "Existing", category: "office" },
+    },
+    loadedCategoryColorOverrides: { development: "#123456" },
+    loadedCategoryLabelOverrides: {},
+    loadedPersistedCategoryIds: [],
+    loadedDeletedCategories: [],
+  };
+
+  const saved = applySavedWebDomainOverrideToBootstrap(
+    baseline,
+    "docs.example",
+    {
+      displayName: "Docs",
+      category: "development",
+      enabled: false,
+      captureTitle: false,
+    },
+  );
+
+  assert.equal(saved.loadedOverrides, baseline.loadedOverrides);
+  assert.equal(saved.loadedCategoryColorOverrides, baseline.loadedCategoryColorOverrides);
+  assert.deepEqual(saved.loadedWebDomainOverrides["existing.example"], {
+    displayName: "Existing",
+    category: "office",
+  });
+  assert.deepEqual(saved.loadedWebDomainOverrides["docs.example"], {
+    displayName: "Docs",
+    category: "development",
+    enabled: false,
+    captureTitle: false,
+  });
+  assert.equal(baseline.loadedWebDomainOverrides["docs.example"], undefined);
+
+  const cleared = applySavedWebDomainOverrideToBootstrap(saved, "docs.example", null);
+  assert.equal(cleared.loadedWebDomainOverrides["docs.example"], undefined);
+  assert.deepEqual(cleared.loadedWebDomainOverrides["existing.example"], {
+    displayName: "Existing",
+    category: "office",
+  });
 });
 
 await runTest("commitDraftChangesWithDeps does not sync process mapper state when persistence fails", async () => {

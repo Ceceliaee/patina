@@ -507,17 +507,17 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
       true,
       "the icon must not rely on a native title tooltip",
     );
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-app-menu[role="menu"]'))`);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-classification-menu[role="menu"]'))`);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const menu = document.querySelector('.quick-app-menu[role="menu"]');
+          const menu = document.querySelector('.quick-classification-menu[role="menu"]');
           if (!(menu instanceof HTMLElement)) return false;
           const rect = menu.getBoundingClientRect();
-          const items = Array.from(menu.querySelectorAll(':scope > .quick-app-menu-item'));
+          const items = Array.from(menu.querySelectorAll(':scope > .quick-classification-menu-item'));
           return rect.width <= 149
             && rect.height <= 66
-            && menu.querySelector(':scope > .quick-app-menu-item svg') === null
+            && menu.querySelector(':scope > .quick-classification-menu-item svg') === null
             && items.every((item) => item.getBoundingClientRect().height <= 29);
         })()
       `),
@@ -526,7 +526,7 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
     );
     assert.deepEqual(
       await evaluate(client!, sessionId, `
-        Array.from(document.querySelectorAll('.quick-app-menu[role="menu"] > .quick-app-menu-item'))
+        Array.from(document.querySelectorAll('.quick-classification-menu[role="menu"] > .quick-classification-menu-item'))
           .map((item) => item.textContent?.trim())
       `),
       ["更改名称", "更改分类"],
@@ -534,30 +534,30 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
 
     await evaluate(client!, sessionId, `
       (() => {
-        const trigger = Array.from(document.querySelectorAll('.quick-app-menu-item'))
+        const trigger = Array.from(document.querySelectorAll('.quick-classification-menu-item'))
           .find((item) => item.textContent?.includes("更改分类"));
         trigger?.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
       })()
     `);
     await waitForAnimationFrames(client!, sessionId, 2);
     assert.equal(
-      await evaluate(client!, sessionId, `Boolean(document.querySelector('.quick-app-category-menu'))`),
+      await evaluate(client!, sessionId, `Boolean(document.querySelector('.quick-classification-category-menu'))`),
       false,
       "hovering the category action must not open the submenu",
     );
 
     await evaluate(client!, sessionId, `
-      Array.from(document.querySelectorAll('.quick-app-menu-item'))
+      Array.from(document.querySelectorAll('.quick-classification-menu-item'))
         .find((item) => item.textContent?.includes("更改分类"))?.click()
     `);
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-app-category-menu'))`);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-classification-category-menu'))`);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const menu = document.querySelector('.quick-app-category-menu');
+          const menu = document.querySelector('.quick-classification-category-menu');
           if (!(menu instanceof HTMLElement)) return false;
           const rect = menu.getBoundingClientRect();
-          const firstItemRect = menu.querySelector('.quick-app-menu-item')?.getBoundingClientRect();
+          const firstItemRect = menu.querySelector('.quick-classification-menu-item')?.getBoundingClientRect();
           return rect.left >= 11 && rect.top >= 11
             && rect.right <= window.innerWidth - 11
             && rect.bottom <= window.innerHeight - 11
@@ -571,7 +571,7 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
     );
     const categoryMenuCenter = await evaluate(client!, sessionId, `
       (() => {
-        const menu = document.querySelector('.quick-app-category-menu');
+        const menu = document.querySelector('.quick-classification-category-menu');
         if (!(menu instanceof HTMLElement)) return null;
         const rect = menu.getBoundingClientRect();
         return {
@@ -591,19 +591,19 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
     }, sessionId);
     await waitForExpression(client!, sessionId, `
       (() => {
-        const menu = document.querySelector('.quick-app-category-menu');
+        const menu = document.querySelector('.quick-classification-category-menu');
         return menu instanceof HTMLElement && menu.scrollTop > 0;
       })()
     `);
     assert.equal(
-      await evaluate(client!, sessionId, `Boolean(document.querySelector('.quick-app-category-menu'))`),
+      await evaluate(client!, sessionId, `Boolean(document.querySelector('.quick-classification-category-menu'))`),
       true,
       "wheel-scrolling the category submenu must not close it",
     );
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const options = Array.from(document.querySelectorAll('.quick-app-category-menu [role="menuitemradio"]'));
+          const options = Array.from(document.querySelectorAll('.quick-classification-category-menu [role="menuitemradio"]'));
           const unclassified = options.find((item) => item.textContent?.includes("未分类"));
           if (!(unclassified instanceof HTMLElement)) return false;
           unclassified.click();
@@ -671,26 +671,26 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
         return true;
       })()
     `);
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-app-menu[role="menu"]'))`);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-classification-menu[role="menu"]'))`);
     assert.deepEqual(
       await evaluate(client!, sessionId, `
-        Array.from(document.querySelectorAll('.quick-app-menu[role="menu"] > .quick-app-menu-item'))
+        Array.from(document.querySelectorAll('.quick-classification-menu[role="menu"] > .quick-classification-menu-item'))
           .map((item) => item.textContent?.trim())
       `),
       ["更改名称", "设置分类"],
       "clearing the category should switch the action back to set category",
     );
     await evaluate(client!, sessionId, `
-      Array.from(document.querySelectorAll('.quick-app-menu-item'))
+      Array.from(document.querySelectorAll('.quick-classification-menu-item'))
         .find((item) => item.textContent?.includes("更改名称"))?.click()
     `);
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('#quick-app-rename-form'))`);
-    await waitForExpression(client!, sessionId, `document.activeElement?.matches('.quick-app-rename-input')`);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('#quick-classification-rename-form'))`);
+    await waitForExpression(client!, sessionId, `document.activeElement?.matches('.quick-classification-rename-input')`);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const dialog = document.querySelector('.quick-app-rename-dialog');
-          const input = document.querySelector('.quick-app-rename-input');
+          const dialog = document.querySelector('.quick-classification-rename-dialog');
+          const input = document.querySelector('.quick-classification-rename-input');
           if (!(dialog instanceof HTMLElement) || !(input instanceof HTMLElement)) return false;
           const dialogRect = dialog.getBoundingClientRect();
           const inputRect = input.getBoundingClientRect();
@@ -703,7 +703,7 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const input = document.querySelector('.quick-app-rename-input');
+          const input = document.querySelector('.quick-classification-rename-input');
           if (!(input instanceof HTMLInputElement)) return false;
           const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
           valueSetter?.call(input, "Smoke Alias");
@@ -715,7 +715,7 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
       "rename dialog should focus its input without a native hover surface",
     );
     await evaluate(client!, sessionId, `
-      document.querySelector('#quick-app-rename-form')?.dispatchEvent(
+      document.querySelector('#quick-classification-rename-form')?.dispatchEvent(
         new SubmitEvent("submit", { bubbles: true, cancelable: true }),
       )
     `);
@@ -748,13 +748,13 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
       `),
       true,
     );
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-app-menu[role="menu"]'))`);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-classification-menu[role="menu"]'))`);
     await evaluate(client!, sessionId, `
-      document.querySelector('.quick-app-menu[role="menu"]')?.dispatchEvent(
+      document.querySelector('.quick-classification-menu[role="menu"]')?.dispatchEvent(
         new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
       )
     `);
-    await waitForExpression(client!, sessionId, `!document.querySelector('.quick-app-menu[role="menu"]')`);
+    await waitForExpression(client!, sessionId, `!document.querySelector('.quick-classification-menu[role="menu"]')`);
     await waitForExpression(client!, sessionId, `document.activeElement?.matches('.dashboard-top-app-detail-trigger')`);
 
     await evaluate(client!, sessionId, `
@@ -771,11 +771,11 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
         return true;
       })()
     `);
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-app-menu[role="menu"]'))`);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-classification-menu[role="menu"]'))`);
     await evaluate(client!, sessionId, `
       document.querySelector('.dashboard-top-apps-list')?.dispatchEvent(new Event("scroll", { bubbles: false }))
     `);
-    await waitForExpression(client!, sessionId, `!document.querySelector('.quick-app-menu[role="menu"]')`);
+    await waitForExpression(client!, sessionId, `!document.querySelector('.quick-classification-menu[role="menu"]')`);
 
     await evaluate(client!, sessionId, `
       (() => {
@@ -791,14 +791,14 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
         return true;
       })()
     `);
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-app-menu[role="menu"]'))`);
-    await waitForExpression(client!, sessionId, `document.activeElement?.matches('.quick-app-menu-item')`);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-classification-menu[role="menu"]'))`);
+    await waitForExpression(client!, sessionId, `document.activeElement?.matches('.quick-classification-menu-item')`);
     await evaluate(client!, sessionId, `
       document.activeElement?.dispatchEvent(
         new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }),
       )
     `);
-    await waitForExpression(client!, sessionId, `!document.querySelector('.quick-app-menu[role="menu"]')`);
+    await waitForExpression(client!, sessionId, `!document.querySelector('.quick-classification-menu[role="menu"]')`);
     await waitForExpression(client!, sessionId, `
       document.activeElement?.matches('.dashboard-top-app-detail-trigger')
         && document.activeElement !== document.querySelector('.dashboard-top-app-detail-trigger')
