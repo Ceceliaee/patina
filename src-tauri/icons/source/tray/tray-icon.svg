@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!--
+    Canonical tray geometry. Runtime variants must only replace the two role colors:
+    ring (#536174) and focus (#2F3B4C). Paths, transforms, stroke widths, and
+    padding are intentionally identical to the Patina brand mark.
+  -->
+  <g transform="translate(128 128) scale(1.18) translate(-128 -128)">
+    <path d="M 218.21 95.17 A 96 96 0 0 1 189.70 201.54" fill="none" stroke="#536174" stroke-width="16" stroke-linecap="round" />
+    <path d="M 160.83 218.21 A 96 96 0 1 1 160.83 37.79" fill="none" stroke="#536174" stroke-width="16" stroke-linecap="round" />
+    <circle cx="195.88" cy="60.12" r="14" fill="#2F3B4C" />
+    <path d="M 128 184 L 128 134 Q 128 128 132.24 123.76 L 164 92" fill="none" stroke="#2F3B4C" stroke-width="16" stroke-linecap="butt" stroke-linejoin="round" />
+    <g transform="translate(164, 92) rotate(-45)">
+      <path d="M 20 0 L -10 -16 L -10 16 Z" fill="#2F3B4C" stroke="#2F3B4C" stroke-width="4" stroke-linejoin="round" />
+    </g>
+  </g>
+</svg>

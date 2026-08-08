@@ -1,7 +1,7 @@
 import { useLocaleText } from "../../shared/i18n/index.ts";
 import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import { ArrowUpCircle, Monitor, Clock, Settings2, Sparkles, BarChart3, Info, ToolCase } from "lucide-react";
-import appIconUrl from "../../../src-tauri/icons/32x32.png";
+import appIconUrl from "../../../src-tauri/icons/128x128@2x.png";
 
 import type { View } from "../types/view";
 

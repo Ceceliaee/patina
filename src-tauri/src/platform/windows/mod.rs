@@ -7,4 +7,5 @@ pub mod input;
 pub mod media;
 pub mod power;
 pub mod resource;
+pub mod tray_icon_theme;
 pub mod window_activation;

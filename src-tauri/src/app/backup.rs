@@ -1,4 +1,4 @@
-use crate::app::desktop_behavior;
+use crate::app::{desktop_behavior, tray};
 use crate::data::backup::{self, RestoreStrategy};
 use crate::data::remote_backup;
 use crate::engine::tracking::runtime as tracking_runtime;
@@ -16,6 +16,9 @@ pub(crate) async fn restore_backup_and_refresh(
     }
     if let Err(error) = desktop_behavior::refresh_desktop_behavior_from_storage(app.clone()).await {
         eprintln!("[backup] restore committed but desktop behavior refresh failed: {error}");
+    }
+    if let Err(error) = tray::refresh_tracking_pause_from_storage(&app).await {
+        eprintln!("[backup] restore committed but tracking pause refresh failed: {error}");
     }
     if let Err(error) = app.emit("app-settings-changed", serde_json::json!({})) {
         eprintln!("[backup] restore committed but settings refresh event failed: {error}");

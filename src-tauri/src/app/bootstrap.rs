@@ -86,6 +86,7 @@ fn register_managed_state_and_plugins(
         .manage(TitleRecordingRuntimeState::default())
         .manage(crate::domain::localization::LocalizationState::default())
         .manage(tray::TrayMenuRebuildState::default())
+        .manage(tray::TrayIconRuntimeState::default())
         .manage(runtime_health)
         .manage(ToolsRuntimeState::default())
         .manage(ToolsRuntimeWakeState::default())
@@ -280,19 +281,23 @@ fn resolve_startup_source(
 }
 
 pub(crate) fn handle_run_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
-    if let tauri::RunEvent::ExitRequested { api, .. } = event {
-        let exit_requested = app.state::<AppExitState>().is_exit_requested();
-        let keep_tray_visible = should_keep_app_running_without_windows(
-            app.state::<DesktopBehaviorState>()
-                .snapshot()
-                .should_keep_tray_visible(),
-            app.state::<TraySafetyState>().is_forced_visible(),
-            exit_requested,
-        );
+    match event {
+        tauri::RunEvent::ExitRequested { api, .. } => {
+            let exit_requested = app.state::<AppExitState>().is_exit_requested();
+            let keep_tray_visible = should_keep_app_running_without_windows(
+                app.state::<DesktopBehaviorState>()
+                    .snapshot()
+                    .should_keep_tray_visible(),
+                app.state::<TraySafetyState>().is_forced_visible(),
+                exit_requested,
+            );
 
-        if keep_tray_visible {
-            api.prevent_exit();
+            if keep_tray_visible {
+                api.prevent_exit();
+            }
         }
+        tauri::RunEvent::Exit => tray::stop_taskbar_theme_watcher(app),
+        _ => {}
     }
 }
 

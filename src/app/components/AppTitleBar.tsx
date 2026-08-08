@@ -1,7 +1,7 @@
 import { useLocaleText } from "../../shared/i18n/index.ts";
 import { type MouseEvent } from "react";
 import { Maximize2, Minimize2, Minus, X } from "lucide-react";
-import appIconUrl from "../../../src-tauri/icons/32x32.png";
+import appIconUrl from "../../../src-tauri/icons/128x128@2x.png";
 import {
   closeCurrentWindow, minimizeCurrentWindow, startCurrentWindowDrag, toggleCurrentWindowMaximized, } from "../../platform/desktop/windowControlGateway";
 
