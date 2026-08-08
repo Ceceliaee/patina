@@ -305,10 +305,10 @@ Project 默认遵守以下边界：
 
 - 只收录维护者已经筛选并确认想做的工作。
 - 不自动收集所有公开反馈。
-- 不记录反馈来源、评论者身份、点赞数或反馈次数。
-- 原始文字、截图和链接只用于帮助理解问题，不进入最终工作项。
+- 不记录反馈渠道、评论者身份、点赞数或反馈次数。
+- 原始文字、截图和一般外部链接只用于帮助理解问题，不进入最终工作项；如果工作项直接对应一个或多个仓库 GitHub Issue，则保留精简的 `Related: Ceceliaee/patina#N` 关联。
 - Project 状态独立于 GitHub Issue 状态；整理、排序、完成或删除 Project item 时，不修改对应 Issue 的开关状态。
-- 无论反馈来自 GitHub Issue 还是其他渠道，进入 Project 时都整理为独立的 draft item；Project 不保留原反馈来源或链接，也不修改原 GitHub Issue 状态。
+- 无论反馈来自 GitHub Issue 还是其他渠道，进入 Project 时都整理为独立的 draft item；GitHub Issue 关联只用于追溯相关上下文，不代替完整工作项，也不修改原 GitHub Issue 状态。没有直接对应 Issue 的事项不创建空关联或牵强关联。
 
 Project 只维护已确认工作，不用 `Parked` 或类似状态保存尚未决定是否要做的想法。没有被维护者选中的反馈，不进入 Project。
 
@@ -373,6 +373,7 @@ Project 从上到下的手动顺序就是当前真实开发顺序，不额外维
 每个工作项默认整理为以下内容：
 
 - `Problem`
+- 可选的 `Related: Ceceliaee/patina#N`；存在多个直接相关 Issue 时在同一行列出，放在 `Problem` 说明之后
 - `Expected outcome`
 - `Scope`
 - `Non-goals`
@@ -567,7 +568,7 @@ Project item 进入 `Done` 不代表必须关闭对应 GitHub Issue。Issue 状�
 - 不因为“属于架构整理”就自动压过可信度问题
 - 不因为“新功能更显眼”就自动压过高频主路径改进
 - 不把所有渠道反馈自动收进 Project；只有维护者明确选中的事项才允许进入
-- 不在 Project 中记录反馈来源、评论者身份、点赞数或反馈次数
+- 不在 Project 中记录反馈渠道、评论者身份、点赞数或反馈次数；直接对应仓库 GitHub Issue 时保留精简的 `Related` 关联
 - 不在维护者确认变更预览前修改 Project
 - 不用 Project 状态变化代替或隐式触发 GitHub Issue 状态变化
 - 新事项进入时先读取完整队列；确认后只在底部新增并设置字段与状态，再报告推荐位置
