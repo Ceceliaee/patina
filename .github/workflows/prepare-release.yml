@@ -13,7 +13,11 @@ on:
       - "v[0-9]*.[0-9]*.[0-9]*-*"
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: publish-release-${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   resolve:
@@ -67,6 +71,36 @@ jobs:
           } else {
             Write-Host "Release was triggered by pushed tag $tag."
           }
+
+      - name: Ensure release does not already exist
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ steps.release.outputs.tag }}"
+          $releaseUri = "https://api.github.com/repos/${{ github.repository }}/releases/tags/$tag"
+          $headers = @{
+            Accept = "application/vnd.github+json"
+            Authorization = "Bearer $env:GH_TOKEN"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+          $releaseExists = $false
+
+          try {
+            Invoke-RestMethod -Uri $releaseUri -Headers $headers | Out-Null
+            $releaseExists = $true
+          } catch {
+            $statusCode = [int]$_.Exception.Response.StatusCode
+            if ($statusCode -ne 404) {
+              throw "Could not determine whether release $tag already exists: $($_.Exception.Message)"
+            }
+          }
+
+          if ($releaseExists) {
+            throw "Release $tag already exists. Published release assets are immutable; prepare a new version instead of rebuilding or overwriting this tag."
+          }
+
+          Write-Host "Release $tag does not exist; publication may continue."
 
           $tagRef = "refs/tags/$tag"
           git fetch --force origin "${tagRef}:${tagRef}"
@@ -249,6 +283,11 @@ jobs:
     name: Publish GitHub Release
     runs-on: windows-latest
     needs: [resolve, release-notes, build]
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
 
     steps:
       - name: Checkout release tag
@@ -281,12 +320,24 @@ jobs:
           $version = "${{ needs.resolve.outputs.version }}"
           npm run release:prepare-assets -- $version src-tauri/target/release/bundle dist-release ${{ github.repository }} windows-x86_64
 
+      - name: Verify release assets
+        shell: pwsh
+        run: |
+          $version = "${{ needs.resolve.outputs.version }}"
+          npm run release:verify-assets -- $version src-tauri/target/release/bundle dist-release ${{ github.repository }} windows-x86_64
+
+      - name: Attest Windows installer
+        uses: actions/attest@v4
+        with:
+          subject-path: dist-release/Patina_${{ needs.resolve.outputs.version }}_x64-setup.exe
+
       - name: Upload release assets
         uses: actions/upload-artifact@v4
         with:
           name: release-assets
           path: |
             dist-release/Patina_${{ needs.resolve.outputs.version }}_x64-setup.exe
+            dist-release/SHA256SUMS.txt
             dist-release/latest.json
           if-no-files-found: error
           retention-days: 7
@@ -299,8 +350,10 @@ jobs:
           body_path: dist-release/release-notes.md
           draft: false
           prerelease: ${{ contains(needs.resolve.outputs.version, '-') }}
+          overwrite_files: false
           files: |
             dist-release/Patina_${{ needs.resolve.outputs.version }}_x64-setup.exe
+            dist-release/SHA256SUMS.txt
             dist-release/latest.json
 
   r2:

@@ -332,9 +332,23 @@ GitHub Release 中的 Windows 安装包附件统一使用无空格文件名，�
 
 - `Patina_1.0.1_x64-setup.exe`
 
+每次正式发布还必须携带根级 `SHA256SUMS.txt`：
+
+- 校验文件只记录最终公开的 `Patina_<version>_x64-setup.exe`，不记录 Tauri bundle 中间路径或 `latest.json`。
+- 记录格式固定为 64 位小写 SHA-256、两个空格和无路径前缀的安装包文件名，并以单个 LF 换行结束。
+- SHA-256 必须在公开文件完成复制与重命名后，从 `dist-release/Patina_<version>_x64-setup.exe` 重新读取计算。
+- 发布工作流必须同时比较 Tauri 输入安装包与最终公开安装包的摘要；字节不一致时不得发布。
+- `SHA256SUMS.txt` 只证明文件字节一致性，不单独证明发布者身份或软件绝对安全。
+
+最终公开安装包还必须生成 GitHub Artifact Attestation：
+
+- attestation subject 必须是最终公开的 `dist-release/Patina_<version>_x64-setup.exe`，不能是原始 bundle 路径或目录 glob。
+- attestation 必须在独立发布资产校验通过后、GitHub Release 对外发布前生成；生成失败必须阻断 Release。
+- attestation 用于把安装包摘要与 Patina 仓库、源码引用和发布工作流关联，不替代 Tauri updater 签名或 Windows Authenticode。
+
 Patina Web Sync 浏览器扩展由独立公开仓库 [`patina-web-sync`](https://github.com/Ceceliaee/patina-web-sync) 发布，不再作为 Patina Release 的必备附件。
 
-Patina Release 只发布主应用安装包、`latest.json` 与更新通道所需资产。浏览器扩展的安装来源、版本号、商店素材、三店提交、AMO 公开 listed XPI 与扩展 release asset 由 `patina-web-sync` 仓库负责。
+Patina Release 只发布主应用安装包、`SHA256SUMS.txt`、`latest.json` 与更新通道所需资产。浏览器扩展的安装来源、版本号、商店素材、三店提交、AMO 公开 listed XPI 与扩展 release asset 由 `patina-web-sync` 仓库负责。
 
 浏览器扩展的用户配置说明由 Patina README 与 Patina 设置页承载。Patina 设置页应指向 `patina-web-sync` 的发布页或商店入口，并继续说明本机端口与 token 配置步骤。
 
@@ -375,6 +389,12 @@ GitHub Release 继续作为正式发布源、主下载入口和主更新清单�
 - `npm run release:validate-version-files -- <version>` 或工作流中的等价校验
 - `npm run release:validate-changelog -- <version>` 或工作流中的等价校验
 - `npm run check`
+
+GitHub Actions 生成正式发布资产后、发布 GitHub Release 前，还必须执行：
+
+- `npm run release:verify-assets -- <version> <bundle-dir> <output-dir> <repository> windows-x86_64`
+
+该 gate 必须重新读取磁盘产物，并验证唯一 `.exe/.exe.sig` 配对、输入与最终安装包 SHA-256、`SHA256SUMS.txt`、`latest.json` 版本、平台、下载 URL 和 updater signature。生成命令成功不能代替独立校验命令成功。
 
 如果是正式准备发布，还应完成：
 
@@ -439,13 +459,16 @@ Refs #26
 5. 只有用户在当前任务中明确要求推到仓库或远端后，才将准备发布所需提交推送出去；“推到本地”只允许创建本地提交。提交信息推荐使用 `chore: prepare vX.Y.Z release`。
 6. 推送对应的 `vX.Y.Z` 版本 tag 还必须同时获得明确的 tag 或发布授权；普通的仓库推送请求本身不自动授权创建或推送 tag。
 7. 工作流 checkout 到 tag 对应 commit，并校验版本文件、changelog 和长期版本文档与 tag 版本一致。
-8. `publish` job 下载 release notes 与 Tauri bundle，在同一个 runner 中生成安装包和 GitHub 版 `latest.json`、保存 release assets artifact，并发布 GitHub Release。
-9. GitHub Release 成功后，单一 `r2` job 检查镜像 secrets；配置完整时依次生成 R2 版 `latest.json`、上传当前版本安装包和 `latest.json`、清理旧 R2 镜像，未配置时安全跳过同步。R2 不上传浏览器扩展包。
-10. R2 同步失败不撤销或覆盖已经成立的 GitHub Release 主发布事实；应用 updater 继续优先使用 GitHub endpoint。
+8. 工作流按规范化 tag 维度串行执行，并在构建前确认对应 GitHub Release 尚不存在；已存在 Release 时必须失败，不能对同一 tag 重新构建或覆盖附件。
+9. `publish` job 下载 release notes 与 Tauri bundle，在同一个 runner 中生成最终公开安装包、`SHA256SUMS.txt` 和 GitHub 版 `latest.json`。
+10. `publish` job 通过独立 release asset gate 后，对最终公开安装包生成 Artifact Attestation；校验或 attestation 失败时不得创建 GitHub Release。
+11. `publish` job 保存精确的 release assets artifact，并以禁止覆盖同名文件的方式发布包含安装包、`SHA256SUMS.txt` 和 `latest.json` 的 GitHub Release。
+12. GitHub Release 成功后，单一 `r2` job 检查镜像 secrets；配置完整时依次生成 R2 版 `latest.json`、上传当前版本安装包和 `latest.json`、清理旧 R2 镜像，未配置时安全跳过同步。R2 不上传 `SHA256SUMS.txt`、attestation bundle 或浏览器扩展包。
+13. R2 同步失败不撤销或覆盖已经成立的 GitHub Release 主发布事实；应用 updater 继续优先使用 GitHub endpoint。
 
 如果只是把版本号、changelog、发布脚本或 release 说明准备好并推到 `main`，提交信息应避免让人误以为已经发布完成。推荐使用能表达准备状态的提交信息，例如 `chore: prepare vX.Y.Z release`。默认不再使用 GitHub Actions 自动生成 `release: vX.Y.Z` 版本提交。
 
-`workflow_dispatch` 只用于补跑已有 tag 的发布流程，例如重新构建或补传 release assets。手动触发时输入不带 `v` 的版本号；如果对应 `vX.Y.Z` tag 不存在，工作流必须失败并提示先完成发布准备提交和 tag 推送。手动触发不应同步版本文件、创建 commit、创建 tag 或推送分支。
+`workflow_dispatch` 只用于补跑“已有 tag、但尚未形成 GitHub Release”的失败流程。手动触发时输入不带 `v` 的版本号；如果对应 `vX.Y.Z` tag 不存在，工作流必须失败并提示先完成发布准备提交和 tag 推送。如果对应 Release 已存在，无论附件是否完整，工作流都必须失败，不允许重新构建、补传或覆盖该版本资产；维护者应先判断失败是否已经形成公开发布事实，并按已发布版本不可变规则准备新版本。手动触发不应同步版本文件、创建 commit、创建 tag 或推送分支。
 
 默认发布执行到 `vX.Y.Z` tag 已推送、`Publish Release` 工作流已触发即可。除非用户明确要求或正在排查发布流水线失败，不需要等待 GitHub Actions 完整构建、签名、上传和发布结束。
 

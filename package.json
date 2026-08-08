@@ -108,6 +108,7 @@
     "release:notes": "node --experimental-strip-types scripts/release.ts print-release-notes",
     "release:latest": "node --experimental-strip-types scripts/release.ts write-latest-json",
     "release:prepare-assets": "node --experimental-strip-types scripts/release.ts prepare-release-assets",
+    "release:verify-assets": "node --experimental-strip-types scripts/release.ts verify-release-assets",
     "release:check": "npm run check:full && npm run release:validate-changelog",
     "preview": "vite preview",
     "tauri": "tauri"
