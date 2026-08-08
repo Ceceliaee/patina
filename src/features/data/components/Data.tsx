@@ -73,9 +73,13 @@ import DataTrendPanel from "./DataTrendPanel.tsx";
 import DataHeatmapPanel, { type HeatmapGranularity } from "./DataHeatmapPanel.tsx";
 import { markDataNavigationStage } from "../services/dataNavigationPerformance.ts";
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
-import QuickAppClassificationEntry from "../../classification/components/QuickAppClassificationEntry.tsx";
-import { useQuickAppClassificationLauncher } from "../../classification/hooks/useQuickAppClassificationLauncher.ts";
-import { createQuickAppClassificationTarget } from "../../classification/types.ts";
+import QuickClassificationEntry from "../../classification/components/QuickClassificationEntry.tsx";
+import { useQuickClassificationLauncher } from "../../classification/hooks/useQuickClassificationLauncher.ts";
+import {
+  createQuickAppClassificationTarget,
+  createQuickWebClassificationTarget,
+  getQuickClassificationTargetKey,
+} from "../../classification/types.ts";
 
 interface Props {
   icons: Record<string, string>;
@@ -232,7 +236,7 @@ export default function Data({
   webActivityEnabled,
 }: Props) {
   const UI_TEXT = useLocaleText();
-  const quickClassification = useQuickAppClassificationLauncher();
+  const quickClassification = useQuickClassificationLauncher();
   const { openAtPointer: openQuickClassificationAtPointer } = quickClassification;
   const dataRootRef = useRef<HTMLDivElement | null>(null);
   const today = new Date();
@@ -723,6 +727,9 @@ export default function Data({
     (webTrendViewModel?.domainOptions ?? []).map((domain) => ({
       key: domain.normalizedDomain,
       identityKeys: [domain.normalizedDomain],
+      normalizedDomain: domain.normalizedDomain,
+      classificationCategory: domain.category,
+      unclassified: domain.unclassified,
       displayName: domain.displayName,
       secondaryText: domain.normalizedDomain,
       iconUrl: domain.faviconUrl,
@@ -881,13 +888,23 @@ export default function Data({
     anchor: { clientX: number; clientY: number },
     trigger: HTMLButtonElement,
   ) => {
-    if (!option.exeName || !option.classificationCategory) return;
-    openQuickClassificationAtPointer(
-      createQuickAppClassificationTarget({
+    if (!option.classificationCategory) return;
+    const target = option.exeName
+      ? createQuickAppClassificationTarget({
         exeName: option.exeName,
         displayName: option.displayName,
         category: option.classificationCategory,
-      }),
+      })
+      : option.normalizedDomain
+        ? createQuickWebClassificationTarget({
+          normalizedDomain: option.normalizedDomain,
+          displayName: option.displayName,
+          category: option.classificationCategory,
+        })
+        : null;
+    if (!target) return;
+    openQuickClassificationAtPointer(
+      target,
       anchor,
       trigger,
     );
@@ -1310,7 +1327,9 @@ export default function Data({
             onOptionSelect={handleDestinationOptionSelect}
             onOptionIntentStart={captureDestinationDetailIntent}
             onOptionOpenDetails={handleOpenDestinationDetail}
-            activeQuickClassificationExeName={quickClassification.request?.target.exeName}
+            activeQuickClassificationTargetKey={quickClassification.request
+              ? getQuickClassificationTargetKey(quickClassification.request.target)
+              : null}
             onQuickClassificationPreload={quickClassification.preload}
             onQuickClassificationOpen={handleOpenQuickClassification}
             onMouseDownCapture={handleAppTrendMouseDownCapture}
@@ -1330,8 +1349,8 @@ export default function Data({
         />
       ) : null}
       {quickClassification.request ? (
-        <QuickAppClassificationEntry
-          key={`${quickClassification.request.target.exeName}:${quickClassification.request.anchor.clientX}:${quickClassification.request.anchor.clientY}`}
+        <QuickClassificationEntry
+          key={`${getQuickClassificationTargetKey(quickClassification.request.target)}:${quickClassification.request.anchor.clientX}:${quickClassification.request.anchor.clientY}`}
           request={quickClassification.request}
           onClose={quickClassification.close}
           onSaved={onOverridesChanged}

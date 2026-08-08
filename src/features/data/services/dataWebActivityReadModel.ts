@@ -5,6 +5,7 @@ import {
   formatLocalDateKey,
 } from "../../../shared/lib/localDate.ts";
 import type { WebDomainOverride } from "../../../shared/types/webActivity.ts";
+import type { AppCategory } from "../../../shared/classification/categoryTokens.ts";
 import {
   getWebFaviconsForDomains,
   loadWebDomainOverrides,
@@ -42,6 +43,8 @@ import { registerDataHeavyCacheClearer } from "./dataCacheLifecycle.ts";
 export interface DataWebDomainOption {
   normalizedDomain: string;
   displayName: string;
+  category: AppCategory;
+  unclassified: boolean;
   faviconUrl: string | null;
   totalDuration: number;
   percentage: number;
@@ -258,6 +261,9 @@ function buildDomainAggregates({
   return Array.from(domainBuckets, ([normalizedDomain, bucket]) => ({
     normalizedDomain,
     displayName: overrides[normalizedDomain]?.displayName?.trim() || normalizedDomain,
+    category: overrides[normalizedDomain]?.category ?? "other",
+    unclassified: !overrides[normalizedDomain]?.category
+      || overrides[normalizedDomain]?.category === "other",
     faviconUrl: favicons[normalizedDomain] ?? null,
     totalDuration: bucket.totalDuration,
     percentage: totalWebDuration > 0 ? (bucket.totalDuration / totalWebDuration) * 100 : 0,
@@ -284,6 +290,9 @@ export function buildDataWebTrendViewModel(
     .map((domain): DataWebDomainAggregate => aggregateByDomain.get(domain) ?? ({
       normalizedDomain: domain,
       displayName: input.overrides[domain]?.displayName?.trim() || domain,
+      category: input.overrides[domain]?.category ?? "other",
+      unclassified: !input.overrides[domain]?.category
+        || input.overrides[domain]?.category === "other",
       faviconUrl: input.favicons[domain] ?? null,
       totalDuration: 0,
       percentage: 0,

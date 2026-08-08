@@ -79,7 +79,10 @@ import HistoryDateNavigator from "./HistoryDateNavigator.tsx";
 import HistoryTimelineDialogDateControls from "./HistoryTimelineDialogDateControls.tsx";
 import HistoryTimelineZoomDialog from "./HistoryTimelineZoomDialog.tsx";
 import { useHistoryDestinationDetailEntry } from "../hooks/useHistoryDestinationDetailEntry.tsx";
-import { createQuickAppClassificationTarget } from "../../classification/types.ts";
+import {
+  createQuickAppClassificationTarget,
+  createQuickWebClassificationTarget,
+} from "../../classification/types.ts";
 
 interface Props {
   uiText: UiText;
@@ -707,6 +710,12 @@ export default function History({
           iconSrc: item.faviconUrl ?? undefined,
           category: item.category,
           kind: "web" as const,
+          quickClassificationTarget: createQuickWebClassificationTarget({
+            normalizedDomain: item.key,
+            displayName: item.label,
+            category: item.category,
+          }),
+          unclassified: item.category === "other",
         }));
     },
     [

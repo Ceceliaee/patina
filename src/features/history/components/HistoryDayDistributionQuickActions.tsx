@@ -1,19 +1,19 @@
 import type { ComponentProps } from "react";
-import QuickAppClassificationEntry from "../../classification/components/QuickAppClassificationEntry.tsx";
-import { useQuickAppClassificationLauncher } from "../../classification/hooks/useQuickAppClassificationLauncher.ts";
-import type { AppOverride } from "../../../shared/classification/processMapper.ts";
+import QuickClassificationEntry from "../../classification/components/QuickClassificationEntry.tsx";
+import { useQuickClassificationLauncher } from "../../classification/hooks/useQuickClassificationLauncher.ts";
+import { getQuickClassificationTargetKey } from "../../classification/types.ts";
 import HistoryDayDistributionPanel from "./HistoryDayDistributionPanel.tsx";
 
 type PanelProps = ComponentProps<typeof HistoryDayDistributionPanel>;
 type OwnedPanelProp =
-  | "activeQuickClassificationExeName"
+  | "activeQuickClassificationTargetKey"
   | "onQuickClassificationOpen"
   | "onQuickClassificationPreload";
 
 interface Props {
   panelProps: Omit<PanelProps, OwnedPanelProp>;
   onError: (message: string) => void;
-  onSaved: (override: AppOverride | null) => void;
+  onSaved: () => void;
 }
 
 export default function HistoryDayDistributionQuickActions({
@@ -21,20 +21,22 @@ export default function HistoryDayDistributionQuickActions({
   onError,
   onSaved,
 }: Props) {
-  const launcher = useQuickAppClassificationLauncher();
+  const launcher = useQuickClassificationLauncher();
   const request = launcher.request;
 
   return (
     <>
       <HistoryDayDistributionPanel
         {...panelProps}
-        activeQuickClassificationExeName={request?.target.exeName}
+        activeQuickClassificationTargetKey={request
+          ? getQuickClassificationTargetKey(request.target)
+          : null}
         onQuickClassificationPreload={launcher.preload}
         onQuickClassificationOpen={launcher.openAtPointer}
       />
       {request ? (
-        <QuickAppClassificationEntry
-          key={`${request.target.exeName}:${request.anchor.clientX}:${request.anchor.clientY}`}
+        <QuickClassificationEntry
+          key={`${getQuickClassificationTargetKey(request.target)}:${request.anchor.clientX}:${request.anchor.clientY}`}
           request={request}
           onClose={launcher.close}
           onSaved={onSaved}

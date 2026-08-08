@@ -10,11 +10,12 @@ import {
 } from "../hooks/useHistoryDestinationDetailEntry.tsx";
 import { formatDuration } from "../services/historyFormatting.ts";
 import type { DayDistributionMode } from "../services/historyLayoutPreferenceStorage.ts";
-import QuickAppClassificationStatus from "../../classification/components/QuickAppClassificationStatus.tsx";
+import QuickClassificationStatus from "../../classification/components/QuickClassificationStatus.tsx";
 import type {
-  QuickAppClassificationAnchor,
-  QuickAppClassificationTarget,
+  QuickClassificationAnchor,
+  QuickClassificationTarget,
 } from "../../classification/types.ts";
+import { getQuickClassificationTargetKey } from "../../classification/types.ts";
 
 export interface HistoryDayDistributionItem {
   key: string;
@@ -26,7 +27,7 @@ export interface HistoryDayDistributionItem {
   iconSrc?: string;
   category?: AppCategory;
   kind?: "app" | "category" | "web";
-  quickClassificationTarget?: QuickAppClassificationTarget;
+  quickClassificationTarget?: QuickClassificationTarget;
   unclassified?: boolean;
 }
 
@@ -46,11 +47,11 @@ interface HistoryDayDistributionPanelProps {
     target: DestinationDetailTarget,
     trigger: HTMLButtonElement,
   ) => void;
-  activeQuickClassificationExeName?: string | null;
+  activeQuickClassificationTargetKey?: string | null;
   onQuickClassificationPreload?: () => void;
   onQuickClassificationOpen?: (
-    target: QuickAppClassificationTarget,
-    anchor: QuickAppClassificationAnchor,
+    target: QuickClassificationTarget,
+    anchor: QuickClassificationAnchor,
     trigger: HTMLButtonElement,
   ) => void;
 }
@@ -97,7 +98,7 @@ export default function HistoryDayDistributionPanel({
   onModeChange,
   onDestinationDetailIntentStart,
   onDestinationDetailOpen,
-  activeQuickClassificationExeName,
+  activeQuickClassificationTargetKey,
   onQuickClassificationPreload,
   onQuickClassificationOpen,
 }: HistoryDayDistributionPanelProps) {
@@ -140,7 +141,8 @@ export default function HistoryDayDistributionPanel({
                         aria-keyshortcuts={item.quickClassificationTarget ? "Enter Shift+F10" : "Enter"}
                         aria-haspopup={item.quickClassificationTarget ? "menu" : undefined}
                         aria-expanded={item.quickClassificationTarget
-                          ? activeQuickClassificationExeName === item.quickClassificationTarget.exeName
+                          ? activeQuickClassificationTargetKey
+                            === getQuickClassificationTargetKey(item.quickClassificationTarget)
                           : undefined}
                         onPointerEnter={item.quickClassificationTarget
                           ? onQuickClassificationPreload
@@ -217,7 +219,7 @@ export default function HistoryDayDistributionPanel({
                     <span className="min-w-0 leading-[1.2]">
                       <span className="history-day-distribution-name-row">
                         <span className="truncate text-xs font-medium leading-[1.2]">{item.label}</span>
-                        <QuickAppClassificationStatus
+                        <QuickClassificationStatus
                           density="dense"
                           unclassified={Boolean(item.unclassified)}
                         />

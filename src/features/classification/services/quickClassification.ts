@@ -6,30 +6,36 @@ import {
   type UserAssignableAppCategory,
 } from "../../../shared/classification/categoryTokens.ts";
 import type { AppOverride } from "../../../shared/classification/processMapper.ts";
-import type { ClassificationBootstrapData } from "./classificationService.ts";
+import type { WebDomainOverride } from "../../../shared/types/webActivity.ts";
+import {
+  ClassificationService,
+  type ClassificationBootstrapData,
+} from "./classificationService.ts";
 import type { Locale, UiText } from "../../../shared/i18n/index.ts";
+import type { QuickClassificationTarget } from "../types.ts";
 
-export interface QuickAppCategoryOption {
+export interface QuickClassificationCategoryOption {
   value: UserAssignableAppCategory;
   label: string;
 }
 
-export interface QuickAppOverridePatch {
+export interface QuickClassificationOverridePatch {
   category?: UserAssignableAppCategory | null;
   displayName?: string | null;
 }
 
-export function isQuickAppUnclassified(
-  override: AppOverride | null | undefined,
+export type QuickClassificationOverride = AppOverride | WebDomainOverride;
+
+export function isQuickClassificationUnclassified(
+  category: AppCategory | null | undefined,
   deletedCategories: readonly AppCategory[] = [],
 ): boolean {
-  const category = override?.category;
   return !category || category === "other" || deletedCategories.includes(category);
 }
 
 export function buildQuickAppOverride(
   current: AppOverride | null,
-  patch: QuickAppOverridePatch,
+  patch: QuickClassificationOverridePatch,
   updatedAt: number = Date.now(),
 ): AppOverride | null {
   const category = Object.prototype.hasOwnProperty.call(patch, "category")
@@ -55,7 +61,72 @@ export function buildQuickAppOverride(
   return hasMeaningfulOverride ? next : null;
 }
 
-export function buildQuickAppCategoryOptions(
+export function buildQuickWebDomainOverride(
+  current: WebDomainOverride | null,
+  patch: QuickClassificationOverridePatch,
+  updatedAt: number = Date.now(),
+): WebDomainOverride | null {
+  const category = Object.prototype.hasOwnProperty.call(patch, "category")
+    ? patch.category ?? undefined
+    : current?.category;
+  const displayName = Object.prototype.hasOwnProperty.call(patch, "displayName")
+    ? patch.displayName ?? undefined
+    : current?.displayName;
+
+  const next: WebDomainOverride = { updatedAt };
+  if (category && category !== "other") next.category = category;
+  if (displayName?.trim()) next.displayName = displayName.trim();
+  if (current?.color) next.color = current.color;
+  if (current?.enabled === false) next.enabled = false;
+  if (current?.captureTitle === false) next.captureTitle = false;
+  const hasMeaningfulOverride = Boolean(
+    next.category
+    || next.displayName
+    || next.color
+    || next.enabled === false
+    || next.captureTitle === false,
+  );
+  return hasMeaningfulOverride ? next : null;
+}
+
+export function resolveQuickClassificationOverride(
+  bootstrap: Pick<ClassificationBootstrapData, "loadedOverrides" | "loadedWebDomainOverrides">,
+  target: QuickClassificationTarget,
+): QuickClassificationOverride | null {
+  return target.kind === "app"
+    ? bootstrap.loadedOverrides[target.exeName] ?? null
+    : bootstrap.loadedWebDomainOverrides[target.normalizedDomain] ?? null;
+}
+
+export function buildQuickClassificationOverride(
+  target: QuickClassificationTarget,
+  current: QuickClassificationOverride | null,
+  patch: QuickClassificationOverridePatch,
+  updatedAt: number = Date.now(),
+): QuickClassificationOverride | null {
+  return target.kind === "app"
+    ? buildQuickAppOverride(current as AppOverride | null, patch, updatedAt)
+    : buildQuickWebDomainOverride(current as WebDomainOverride | null, patch, updatedAt);
+}
+
+export async function saveQuickClassificationOverride(
+  target: QuickClassificationTarget,
+  override: QuickClassificationOverride | null,
+): Promise<void> {
+  if (target.kind === "app") {
+    await ClassificationService.saveAppOverride(
+      target.exeName,
+      override as AppOverride | null,
+    );
+    return;
+  }
+  await ClassificationService.saveWebDomainOverride(
+    target.normalizedDomain,
+    override as WebDomainOverride | null,
+  );
+}
+
+export function buildQuickClassificationCategoryOptions(
   bootstrap: Pick<
     ClassificationBootstrapData,
     | "loadedOverrides"
@@ -67,7 +138,7 @@ export function buildQuickAppCategoryOptions(
   >,
   uiText: UiText,
   locale: Locale,
-): QuickAppCategoryOption[] {
+): QuickClassificationCategoryOption[] {
   const deleted = new Set<AppCategory>(bootstrap.loadedDeletedCategories);
   const extended = new Set<UserAssignableAppCategory>();
   const collectExtended = (category: AppCategory | undefined) => {

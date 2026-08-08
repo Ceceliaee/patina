@@ -7,7 +7,7 @@ interface Props {
   unclassified: boolean;
 }
 
-export default function QuickAppClassificationStatus({
+export default function QuickClassificationStatus({
   density = "standard",
   unclassified,
 }: Props) {

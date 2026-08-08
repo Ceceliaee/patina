@@ -125,6 +125,9 @@ function normalizeWebDomainOverride(override: WebDomainOverride | null | undefin
   if (override.enabled === false) {
     normalized.enabled = false;
   }
+  if (override.captureTitle === false) {
+    normalized.captureTitle = false;
+  }
   if (typeof override.updatedAt === "number" && Number.isFinite(override.updatedAt)) {
     normalized.updatedAt = override.updatedAt;
   }
@@ -133,7 +136,8 @@ function normalizeWebDomainOverride(override: WebDomainOverride | null | undefin
     normalized.category
     || normalized.displayName
     || normalized.color
-    || normalized.enabled === false,
+    || normalized.enabled === false
+    || normalized.captureTitle === false,
   );
 
   return hasMeaningfulValue ? normalized : null;
@@ -155,6 +159,7 @@ function toWebDomainOverrideStorageValue(override: WebDomainOverride): string {
     displayName: override.displayName ?? null,
     color: normalizeHexColor(override.color) ?? null,
     enabled: override.enabled !== false,
+    captureTitle: override.captureTitle !== false,
     updatedAt: override.updatedAt ?? Date.now(),
   });
 }
@@ -396,7 +401,7 @@ function buildSaveAppOverrideMutations(
   }];
 }
 
-function buildSaveWebDomainOverrideMutations(
+export function buildSaveWebDomainOverrideMutations(
   normalizedDomain: string,
   override: WebDomainOverride | null,
 ): ClassificationSettingMutation[] {
@@ -418,6 +423,15 @@ function buildSaveWebDomainOverrideMutations(
     key,
     value: toWebDomainOverrideStorageValue(normalizedOverride),
   }];
+}
+
+export async function saveWebDomainOverride(
+  normalizedDomain: string,
+  override: WebDomainOverride | null,
+): Promise<void> {
+  await commitClassificationSettingMutations(
+    buildSaveWebDomainOverrideMutations(normalizedDomain, override),
+  );
 }
 
 export async function loadCategoryColorOverrides(): Promise<Record<string, string>> {

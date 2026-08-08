@@ -8,6 +8,7 @@ export interface DataDestinationTrendOption {
   key: string;
   identityKeys: string[];
   exeName?: string;
+  normalizedDomain?: string;
   classificationCategory?: AppCategory;
   unclassified?: boolean;
   displayName: string;

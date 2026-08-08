@@ -16,6 +16,7 @@ import {
 import {
   buildClassificationDraftChangePlan,
   hasClassificationDraftChanges,
+  normalizeWebDomainOverride,
   sanitizeDeletedCategories,
   type ClassificationDraftState,
 } from "./classificationDraftState.ts";
@@ -53,6 +54,21 @@ export interface ClassificationBootstrapData {
   loadedCategoryLabelOverrides: Record<string, string>;
   loadedPersistedCategoryIds: ExtendedAppCategory[];
   loadedDeletedCategories: AppCategory[];
+}
+
+export function applySavedWebDomainOverrideToBootstrap(
+  bootstrap: ClassificationBootstrapData,
+  normalizedDomain: string,
+  override: WebDomainOverride | null,
+): ClassificationBootstrapData {
+  const loadedWebDomainOverrides = { ...bootstrap.loadedWebDomainOverrides };
+  const normalizedOverride = normalizeWebDomainOverride(override);
+  if (normalizedOverride) {
+    loadedWebDomainOverrides[normalizedDomain] = normalizedOverride;
+  } else {
+    delete loadedWebDomainOverrides[normalizedDomain];
+  }
+  return { ...bootstrap, loadedWebDomainOverrides };
 }
 
 export interface ClassificationCommitDeps {
@@ -301,6 +317,20 @@ export class ClassificationService {
       }
       setClassificationBootstrapCache({ ...bootstrap, loadedOverrides });
     }
+  }
+
+  static async saveWebDomainOverride(
+    normalizedDomain: string,
+    override: WebDomainOverride | null,
+  ) {
+    const domainKey = normalizedDomain.trim().replace(/\.$/, "").toLocaleLowerCase();
+    if (!domainKey) return;
+    await classificationStore.saveWebDomainOverride(domainKey, override);
+    const bootstrap = getClassificationBootstrapCache();
+    if (!bootstrap) return;
+    setClassificationBootstrapCache(
+      applySavedWebDomainOverrideToBootstrap(bootstrap, domainKey, override),
+    );
   }
 
   static async saveCategoryColorOverride(category: AppCategory, colorValue: string | null) {

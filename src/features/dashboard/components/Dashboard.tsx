@@ -17,10 +17,13 @@ import { createDestinationDetailTarget } from "../../destination/types.ts";
 import { formatLocalDateKey } from "../../../shared/lib/localDate.ts";
 import type { TrackerHealthSnapshot } from "../../../shared/types/tracking.ts";
 import type { AppOverride } from "../../../shared/classification/processMapper.ts";
-import QuickAppClassificationEntry from "../../classification/components/QuickAppClassificationEntry.tsx";
-import QuickAppClassificationStatus from "../../classification/components/QuickAppClassificationStatus.tsx";
-import { useQuickAppClassificationLauncher } from "../../classification/hooks/useQuickAppClassificationLauncher.ts";
-import { createQuickAppClassificationTarget } from "../../classification/types.ts";
+import QuickClassificationEntry from "../../classification/components/QuickClassificationEntry.tsx";
+import QuickClassificationStatus from "../../classification/components/QuickClassificationStatus.tsx";
+import { useQuickClassificationLauncher } from "../../classification/hooks/useQuickClassificationLauncher.ts";
+import {
+  createQuickAppClassificationTarget,
+  getQuickClassificationTargetKey,
+} from "../../classification/types.ts";
 
 interface Props {
   dashboard: DashboardReadModel;
@@ -135,7 +138,7 @@ export default function Dashboard({
   const UI_TEXT = useLocaleText();
   const { refreshKey, mappingVersion, mergeThresholdSecs, trackerHealth } = runtime;
   const detail = useDestinationDetailLauncher();
-  const quickClassification = useQuickAppClassificationLauncher();
+  const quickClassification = useQuickClassificationLauncher();
   const iconThemeColors = useIconThemeColors(icons);
   const {
     totalTrackedTime,
@@ -348,7 +351,8 @@ export default function Dashboard({
                         aria-label={UI_TEXT.destinationDetail.open(displayName)}
                         aria-keyshortcuts="Enter Shift+F10"
                         aria-haspopup="menu"
-                        aria-expanded={quickClassification.request?.target.exeName === app.exeName}
+                        aria-expanded={quickClassification.request?.target.kind === "app"
+                          && quickClassification.request.target.exeName === app.exeName}
                         onPointerEnter={quickClassification.preload}
                         onFocus={quickClassification.preload}
                         onPointerDown={(event) => {
@@ -388,7 +392,7 @@ export default function Dashboard({
                       <div className="min-w-0">
                         <div className="dashboard-top-app-name-row font-semibold text-[var(--qp-text-primary)] text-sm">
                           <span className="truncate">{displayName}</span>
-                          <QuickAppClassificationStatus unclassified={isUnclassified} />
+                          <QuickClassificationStatus unclassified={isUnclassified} />
                         </div>
                         <div className="dashboard-top-app-meta text-[10px] text-[var(--qp-text-tertiary)] font-medium mt-0.5 tabular-nums">
                           <span>{UI_TEXT.dashboard.sharePrefix} {app.percentage}%</span>
@@ -427,14 +431,15 @@ export default function Dashboard({
         />
       ) : null}
       {quickClassificationRequest ? (
-        <QuickAppClassificationEntry
-          key={`${quickClassificationRequest.target.exeName}:${quickClassificationRequest.anchor.clientX}:${quickClassificationRequest.anchor.clientY}`}
+        <QuickClassificationEntry
+          key={`${getQuickClassificationTargetKey(quickClassificationRequest.target)}:${quickClassificationRequest.anchor.clientX}:${quickClassificationRequest.anchor.clientY}`}
           request={quickClassificationRequest}
           onClose={quickClassification.close}
-          onSaved={(override) => {
+          onSaved={(target, override) => {
+            if (target.kind !== "app") return;
             setQuickOverrides((current) => ({
               ...current,
-              [quickClassificationRequest.target.exeName]: override,
+              [target.exeName]: override as AppOverride | null,
             }));
             onOverridesChanged();
           }}

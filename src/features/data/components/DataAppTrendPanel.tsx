@@ -20,8 +20,8 @@ import type {
 } from "../services/dataReadModel.ts";
 import type { DataTrendRangeSelection } from "../services/dataTrendRange.ts";
 import DataTrendRangeControl from "./DataTrendRangeControl.tsx";
-import QuickAppClassificationStatus from "../../classification/components/QuickAppClassificationStatus.tsx";
-import type { QuickAppClassificationAnchor } from "../../classification/types.ts";
+import QuickClassificationStatus from "../../classification/components/QuickClassificationStatus.tsx";
+import type { QuickClassificationAnchor } from "../../classification/types.ts";
 
 interface DataChartDimension {
   width: number;
@@ -70,11 +70,11 @@ interface DataAppTrendPanelProps {
     returnFocusTo?: HTMLElement | null,
   ) => void;
   onOptionOpenDetails: (option: DataDestinationTrendOption) => void;
-  activeQuickClassificationExeName?: string | null;
+  activeQuickClassificationTargetKey?: string | null;
   onQuickClassificationPreload?: () => void;
   onQuickClassificationOpen?: (
     option: DataDestinationTrendOption,
-    anchor: QuickAppClassificationAnchor,
+    anchor: QuickClassificationAnchor,
     trigger: HTMLButtonElement,
   ) => void;
   onMouseDownCapture: (event: MouseEvent<HTMLDivElement>) => void;
@@ -127,7 +127,7 @@ function DataAppTrendPanel({
   onOptionSelect,
   onOptionIntentStart,
   onOptionOpenDetails,
-  activeQuickClassificationExeName,
+  activeQuickClassificationTargetKey,
   onQuickClassificationPreload,
   onQuickClassificationOpen,
   onMouseDownCapture,
@@ -174,13 +174,15 @@ function DataAppTrendPanel({
                   data-selection-key={option.key}
                   key={option.key}
                   aria-label={detailCopy.open(option.displayName)}
-                  aria-keyshortcuts={option.exeName ? "Enter Shift+F10" : "Enter"}
-                  aria-haspopup={option.exeName ? "menu" : undefined}
-                  aria-expanded={option.exeName
-                    ? activeQuickClassificationExeName === option.exeName
+                  aria-keyshortcuts={option.exeName || option.normalizedDomain ? "Enter Shift+F10" : "Enter"}
+                  aria-haspopup={option.exeName || option.normalizedDomain ? "menu" : undefined}
+                  aria-expanded={option.exeName || option.normalizedDomain
+                    ? activeQuickClassificationTargetKey === (option.exeName
+                      ? `app:${option.exeName}`
+                      : `web:${option.normalizedDomain}`)
                     : undefined}
-                  onPointerEnter={option.exeName ? onQuickClassificationPreload : undefined}
-                  onFocus={option.exeName ? onQuickClassificationPreload : undefined}
+                  onPointerEnter={option.exeName || option.normalizedDomain ? onQuickClassificationPreload : undefined}
+                  onFocus={option.exeName || option.normalizedDomain ? onQuickClassificationPreload : undefined}
                   onMouseDown={(event) => {
                     if (event.button === 0 && event.detail === 1) {
                       onOptionIntentStart(option, event.currentTarget);
@@ -191,7 +193,7 @@ function DataAppTrendPanel({
                     event.stopPropagation();
                     onOptionOpenDetails(option);
                   }}
-                  onContextMenu={option.exeName ? (event) => {
+                  onContextMenu={option.exeName || option.normalizedDomain ? (event) => {
                     event.preventDefault();
                     event.stopPropagation();
                     onQuickClassificationOpen?.(
@@ -208,7 +210,7 @@ function DataAppTrendPanel({
                       return;
                     }
                     if (
-                      option.exeName
+                      (option.exeName || option.normalizedDomain)
                       && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))
                     ) {
                       event.preventDefault();
@@ -332,7 +334,7 @@ function DataAppTrendPanel({
                 const series = selectedIndex >= 0 ? trendSeries[selectedIndex] : null;
                 const handleOptionKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
                   if (
-                    option.exeName
+                    (option.exeName || option.normalizedDomain)
                     && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))
                   ) {
                     event.preventDefault();
@@ -386,7 +388,7 @@ function DataAppTrendPanel({
                       event.stopPropagation();
                       onOptionOpenDetails(option);
                     }}
-                    onContextMenu={option.exeName ? (event) => {
+                    onContextMenu={option.exeName || option.normalizedDomain ? (event) => {
                       const target = event.target as HTMLElement;
                       if (!target.closest("[data-destination-detail-trigger]")) return;
                       event.preventDefault();
@@ -397,16 +399,18 @@ function DataAppTrendPanel({
                         event.currentTarget,
                       );
                     } : undefined}
-                    onPointerEnter={option.exeName ? onQuickClassificationPreload : undefined}
-                    onFocus={option.exeName ? onQuickClassificationPreload : undefined}
+                    onPointerEnter={option.exeName || option.normalizedDomain ? onQuickClassificationPreload : undefined}
+                    onFocus={option.exeName || option.normalizedDomain ? onQuickClassificationPreload : undefined}
                     onKeyDown={handleOptionKeyDown}
                     aria-pressed={isSelected}
-                    aria-keyshortcuts={option.exeName
+                    aria-keyshortcuts={option.exeName || option.normalizedDomain
                       ? "Enter Space Control+Enter Control+Space Shift+F10"
                       : "Enter Space Control+Enter Control+Space"}
-                    aria-haspopup={option.exeName ? "menu" : undefined}
-                    aria-expanded={option.exeName
-                      ? activeQuickClassificationExeName === option.exeName
+                    aria-haspopup={option.exeName || option.normalizedDomain ? "menu" : undefined}
+                    aria-expanded={option.exeName || option.normalizedDomain
+                      ? activeQuickClassificationTargetKey === (option.exeName
+                        ? `app:${option.exeName}`
+                        : `web:${option.normalizedDomain}`)
                       : undefined}
                     aria-description={UI_TEXT.data.interactionHint}
                   >
@@ -424,8 +428,8 @@ function DataAppTrendPanel({
                     <span className="data-app-option-main">
                       <span className="data-app-option-name-row">
                         <span className="data-app-option-name">{option.displayName}</span>
-                        <QuickAppClassificationStatus
-                          unclassified={Boolean(option.exeName && option.unclassified)}
+                        <QuickClassificationStatus
+                          unclassified={Boolean((option.exeName || option.normalizedDomain) && option.unclassified)}
                         />
                       </span>
                       <span className="data-app-option-meta">

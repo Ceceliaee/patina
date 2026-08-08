@@ -229,7 +229,7 @@ export default function AppShellContent({
   const handleSidebarPreviewNavigate = useCallback((nextView: View) => {
     preloadNavigationView(nextView, "preview");
   }, []);
-  const quickAppClassificationCallbacks = {
+  const quickClassificationCallbacks = {
     onOverridesChanged: handleMappingOverridesChanged,
     onQuickActionError: handleQuickActionError,
   };
@@ -275,7 +275,7 @@ export default function AppShellContent({
                   mergeThresholdSecs: appSettings.timelineMergeGapSecs,
                   trackerHealth,
                 }}
-                {...quickAppClassificationCallbacks}
+                {...quickClassificationCallbacks}
               />
             ),
             history: (
@@ -298,7 +298,7 @@ export default function AppShellContent({
                 webActivityEnabled={appSettings.webActivityEnabled}
                 uiText={uiText}
                 locale={uiTextLanguage}
-                {...quickAppClassificationCallbacks}
+                {...quickClassificationCallbacks}
               />
             ),
             data: (
@@ -313,7 +313,7 @@ export default function AppShellContent({
                   void openHistoryForDate(dateKey);
                 }}
                 onToast={pushToast}
-                {...quickAppClassificationCallbacks}
+                {...quickClassificationCallbacks}
                 uiLanguage={uiTextLanguage}
                 webActivityEnabled={appSettings.webActivityEnabled}
               />

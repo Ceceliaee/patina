@@ -101,12 +101,14 @@ export function normalizeWebDomainOverride(
   if (override.displayName?.trim()) next.displayName = override.displayName.trim();
   if (override.color) next.color = override.color;
   if (override.enabled === false) next.enabled = false;
+  if (override.captureTitle === false) next.captureTitle = false;
   if (typeof override.updatedAt === "number") next.updatedAt = override.updatedAt;
   const hasMeaningfulValue = Boolean(
     next.category
     || next.displayName
     || next.color
-    || next.enabled === false,
+    || next.enabled === false
+    || next.captureTitle === false,
   );
   return hasMeaningfulValue ? next : null;
 }
@@ -137,7 +139,8 @@ export function areWebDomainOverridesEqual(
   return normalizedLeft.category === normalizedRight.category
     && normalizedLeft.displayName === normalizedRight.displayName
     && normalizedLeft.color === normalizedRight.color
-    && normalizedLeft.enabled === normalizedRight.enabled;
+    && normalizedLeft.enabled === normalizedRight.enabled
+    && normalizedLeft.captureTitle === normalizedRight.captureTitle;
 }
 
 export function hasClassificationDraftChanges(

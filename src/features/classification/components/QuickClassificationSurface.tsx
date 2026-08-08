@@ -4,21 +4,31 @@ import { Check } from "lucide-react";
 import { createPortal } from "react-dom";
 import QuietButton from "../../../shared/components/QuietButton.tsx";
 import QuietDialog from "../../../shared/components/QuietDialog.tsx";
-import { ProcessMapper } from "../../../shared/classification/processMapper.ts";
-import type { AppOverride } from "../../../shared/classification/processMapper.ts";
-
-import type { QuickAppClassificationOpenRequest } from "../types.ts";
-import { ClassificationService } from "../services/classificationService.ts";
+import type {
+  QuickClassificationOpenRequest,
+  QuickClassificationTarget,
+} from "../types.ts";
 import {
-  buildQuickAppCategoryOptions,
-  buildQuickAppOverride,
-  type QuickAppCategoryOption,
-} from "../services/quickAppClassification.ts";
+  ClassificationService,
+  type ClassificationBootstrapData,
+} from "../services/classificationService.ts";
+import {
+  buildQuickClassificationCategoryOptions,
+  buildQuickClassificationOverride,
+  isQuickClassificationUnclassified,
+  resolveQuickClassificationOverride,
+  saveQuickClassificationOverride,
+  type QuickClassificationCategoryOption,
+  type QuickClassificationOverride,
+} from "../services/quickClassification.ts";
 
 interface Props {
-  request: QuickAppClassificationOpenRequest;
+  request: QuickClassificationOpenRequest;
   onClose: (focusTarget?: HTMLElement) => void;
-  onSaved: (override: AppOverride | null) => void;
+  onSaved: (
+    target: QuickClassificationTarget,
+    override: QuickClassificationOverride | null,
+  ) => void;
   onError: (message: string) => void;
 }
 
@@ -40,7 +50,7 @@ function resolveAdjacentPageFocusTarget(trigger: HTMLElement, backwards: boolean
     "textarea:not([disabled])",
     "[tabindex]:not([tabindex='-1'])",
   ].join(","))).filter((element) => (
-    !element.closest(".quick-app-menu")
+    !element.closest(".quick-classification-menu")
     && !element.closest(".qp-dialog-backdrop")
     && element.getClientRects().length > 0
   ));
@@ -49,7 +59,7 @@ function resolveAdjacentPageFocusTarget(trigger: HTMLElement, backwards: boolean
   return focusable[triggerIndex + (backwards ? -1 : 1)] ?? trigger;
 }
 
-export default function QuickAppClassificationSurface({
+export default function QuickClassificationSurface({
   request,
   onClose,
   onSaved,
@@ -67,12 +77,12 @@ export default function QuickAppClassificationSurface({
   onErrorRef.current = onError;
   const [position, setPosition] = useState({ left: anchor.clientX, top: anchor.clientY });
   const [categoryPosition, setCategoryPosition] = useState({ left: anchor.clientX, top: anchor.clientY });
-  const [categoryOptions, setCategoryOptions] = useState<QuickAppCategoryOption[]>([]);
+  const [categoryOptions, setCategoryOptions] = useState<QuickClassificationCategoryOption[]>([]);
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
-  const [renameValue, setRenameValue] = useState(
-    ProcessMapper.getUserOverride(target.exeName)?.displayName ?? target.displayName,
-  );
+  const [renameValue, setRenameValue] = useState(target.displayName);
+  const [currentOverride, setCurrentOverride] = useState<QuickClassificationOverride | null>(null);
+  const [deletedCategories, setDeletedCategories] = useState<ClassificationBootstrapData["loadedDeletedCategories"]>([]);
   const [loading, setLoading] = useState(true);
   const [categoryLoadFailed, setCategoryLoadFailed] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -92,7 +102,11 @@ export default function QuickAppClassificationSurface({
     let active = true;
     void ClassificationService.loadClassificationBootstrap().then((bootstrap) => {
       if (!active) return;
-      setCategoryOptions(buildQuickAppCategoryOptions(bootstrap, UI_TEXT, locale));
+      const resolvedOverride = resolveQuickClassificationOverride(bootstrap, target);
+      setCategoryOptions(buildQuickClassificationCategoryOptions(bootstrap, UI_TEXT, locale));
+      setDeletedCategories(bootstrap.loadedDeletedCategories);
+      setCurrentOverride(resolvedOverride);
+      setRenameValue(resolvedOverride?.displayName?.trim() || target.displayName);
       setLoading(false);
     }).catch(() => {
       if (!active) return;
@@ -103,7 +117,7 @@ export default function QuickAppClassificationSurface({
     return () => {
       active = false;
     };
-  }, [UI_TEXT, locale]);
+  }, [UI_TEXT, locale, target]);
 
   useEffect(() => {
     if (renameOpen) return;
@@ -212,13 +226,14 @@ export default function QuickAppClassificationSurface({
     }
   };
 
-  const saveOverride = async (override: ReturnType<typeof buildQuickAppOverride>) => {
+  const saveOverride = async (override: QuickClassificationOverride | null) => {
     if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
     try {
-      await ClassificationService.saveAppOverride(target.exeName, override);
-      onSaved(override);
+      await saveQuickClassificationOverride(target, override);
+      setCurrentOverride(override);
+      onSaved(target, override);
       onClose();
     } catch {
       savingRef.current = false;
@@ -227,20 +242,29 @@ export default function QuickAppClassificationSurface({
     }
   };
 
-  const saveCategory = (option: QuickAppCategoryOption) => {
-    const current = ProcessMapper.getUserOverride(target.exeName);
-    void saveOverride(buildQuickAppOverride(current, { category: option.value }));
+  const saveCategory = (option: QuickClassificationCategoryOption) => {
+    void saveOverride(buildQuickClassificationOverride(
+      target,
+      currentOverride,
+      { category: option.value },
+    ));
   };
 
   const submitRename = (event: FormEvent) => {
     event.preventDefault();
     if (savingRef.current || !renameHasChanges) return;
-    const current = ProcessMapper.getUserOverride(target.exeName);
-    void saveOverride(buildQuickAppOverride(current, { displayName: renameValue }));
+    void saveOverride(buildQuickClassificationOverride(
+      target,
+      currentOverride,
+      { displayName: renameValue },
+    ));
   };
 
-  const currentDisplayName = ProcessMapper.getUserOverride(target.exeName)?.displayName?.trim() ?? "";
-  const hasValidCategory = currentCategory !== "other";
+  const currentDisplayName = currentOverride?.displayName?.trim() ?? "";
+  const hasValidCategory = !isQuickClassificationUnclassified(
+    currentCategory,
+    deletedCategories,
+  );
   const normalizedRenameValue = renameValue.trim();
   const renameHasChanges = currentDisplayName
     ? normalizedRenameValue !== currentDisplayName
@@ -251,7 +275,7 @@ export default function QuickAppClassificationSurface({
       {!renameOpen ? (
         <div
           ref={menuRef}
-          className="quick-app-menu qp-motion-overlay-enter"
+          className="quick-classification-menu qp-motion-overlay-enter"
           role="menu"
           aria-label={UI_TEXT.mapping.quickMenuLabel(target.displayName)}
           style={{ left: position.left, top: position.top }}
@@ -260,7 +284,7 @@ export default function QuickAppClassificationSurface({
         >
           <button
             type="button"
-            className="quick-app-menu-item"
+            className="quick-classification-menu-item"
             role="menuitem"
             onClick={() => setRenameOpen(true)}
           >
@@ -269,7 +293,7 @@ export default function QuickAppClassificationSurface({
           <button
             ref={categoryTriggerRef}
             type="button"
-            className="quick-app-menu-item"
+            className="quick-classification-menu-item"
             role="menuitem"
             aria-haspopup="menu"
             aria-expanded={categoryMenuOpen}
@@ -292,7 +316,7 @@ export default function QuickAppClassificationSurface({
           {categoryMenuOpen && !loading ? (
             <div
               ref={categoryMenuRef}
-              className="quick-app-menu quick-app-category-menu custom-scrollbar"
+              className="quick-classification-menu quick-classification-category-menu custom-scrollbar"
               role="menu"
               aria-label={UI_TEXT.mapping.quickCategoryMenuLabel}
               style={{ left: categoryPosition.left, top: categoryPosition.top }}
@@ -301,13 +325,13 @@ export default function QuickAppClassificationSurface({
                 <button
                   key={option.value}
                   type="button"
-                  className="quick-app-menu-item quick-app-category-item"
+                  className="quick-classification-menu-item quick-classification-category-item"
                   role="menuitemradio"
                   aria-checked={option.value === currentCategory}
                   disabled={saving}
                   onClick={() => saveCategory(option)}
                 >
-                  <span className="quick-app-menu-check" aria-hidden="true">
+                  <span className="quick-classification-menu-check" aria-hidden="true">
                     {option.value === currentCategory ? <Check size={14} /> : null}
                   </span>
                   <span>{option.label}</span>
@@ -320,7 +344,7 @@ export default function QuickAppClassificationSurface({
       <QuietDialog
         open={renameOpen}
         title={UI_TEXT.mapping.quickRenameTitle}
-        surfaceClassName="quick-app-rename-dialog"
+        surfaceClassName="quick-classification-rename-dialog"
         initialFocusRef={renameInputRef}
         onClose={() => {
           if (!saving) onClose();
@@ -333,7 +357,7 @@ export default function QuickAppClassificationSurface({
             <QuietButton
               tone="primary"
               type="submit"
-              form="quick-app-rename-form"
+              form="quick-classification-rename-form"
               disabled={saving || !renameHasChanges}
             >
               {saving ? UI_TEXT.mapping.quickSaving : UI_TEXT.mapping.quickSave}
@@ -341,20 +365,20 @@ export default function QuickAppClassificationSurface({
           </>
         )}
       >
-        <form id="quick-app-rename-form" className="quick-app-rename-form" onSubmit={submitRename}>
+        <form id="quick-classification-rename-form" className="quick-classification-rename-form" onSubmit={submitRename}>
           <input
             ref={renameInputRef}
-            className="qp-control qp-dialog-input quick-app-rename-input"
+            className="qp-control qp-dialog-input quick-classification-rename-input"
             value={renameValue}
             placeholder={UI_TEXT.mapping.quickRenamePlaceholder}
             disabled={saving}
             maxLength={80}
             onChange={(event) => setRenameValue(event.target.value)}
           />
-          {ProcessMapper.getUserOverride(target.exeName)?.displayName ? (
+          {currentOverride?.displayName ? (
             <button
               type="button"
-              className="qp-inline-action qp-inline-action-neutral quick-app-restore-name"
+              className="qp-inline-action qp-inline-action-neutral quick-classification-restore-name"
               disabled={saving}
               onClick={() => setRenameValue("")}
             >

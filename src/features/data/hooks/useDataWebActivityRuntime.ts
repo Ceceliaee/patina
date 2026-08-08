@@ -282,6 +282,9 @@ export function useDataWebActivityRuntime({
     filteredDomains.map((domain) => ({
       key: domain.normalizedDomain,
       identityKeys: [domain.normalizedDomain],
+      normalizedDomain: domain.normalizedDomain,
+      classificationCategory: domain.category,
+      unclassified: domain.unclassified,
       displayName: domain.displayName,
       secondaryText: domain.normalizedDomain,
       iconUrl: domain.faviconUrl,
@@ -295,6 +298,9 @@ export function useDataWebActivityRuntime({
     selectedTrendDomains.map((domain) => ({
       key: domain.normalizedDomain,
       identityKeys: [domain.normalizedDomain],
+      normalizedDomain: domain.normalizedDomain,
+      classificationCategory: domain.category,
+      unclassified: domain.unclassified,
       displayName: domain.displayName,
       secondaryText: domain.normalizedDomain,
       iconUrl: domain.faviconUrl,

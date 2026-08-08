@@ -53,7 +53,7 @@ const LAZY_SECONDARY_CHUNK_BUDGETS = [
   { label: "Destination detail", pattern: /^DestinationDetailDialog-.*\.js$/, gzipKiB: 8.1 },
   // Dashboard preloads this classification-owned editor on icon hover/focus and
   // keeps it out of the initial graph until the user opens the context menu.
-  { label: "Quick app classification", pattern: /^QuickAppClassificationSurface-.*\.js$/, gzipKiB: 3.1 },
+  { label: "Quick classification", pattern: /^QuickClassificationSurface-.*\.js$/, gzipKiB: 3.4 },
 ] as const;
 
 // Stable cross-feature UI owners stay lazy and receive their own narrow budget

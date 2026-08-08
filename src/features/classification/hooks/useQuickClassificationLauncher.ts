@@ -1,23 +1,23 @@
 import { useCallback, useRef, useState } from "react";
-import { preloadQuickAppClassificationEntry } from "../components/QuickAppClassificationEntry.tsx";
+import { preloadQuickClassificationEntry } from "../components/QuickClassificationEntry.tsx";
 import {
-  resolveQuickAppClassificationElementAnchor,
-  type QuickAppClassificationAnchor,
-  type QuickAppClassificationOpenRequest,
-  type QuickAppClassificationTarget,
+  resolveQuickClassificationElementAnchor,
+  type QuickClassificationAnchor,
+  type QuickClassificationOpenRequest,
+  type QuickClassificationTarget,
 } from "../types.ts";
 
-export function useQuickAppClassificationLauncher() {
-  const [request, setRequest] = useState<QuickAppClassificationOpenRequest | null>(null);
-  const activeRequestRef = useRef<QuickAppClassificationOpenRequest | null>(null);
+export function useQuickClassificationLauncher() {
+  const [request, setRequest] = useState<QuickClassificationOpenRequest | null>(null);
+  const activeRequestRef = useRef<QuickClassificationOpenRequest | null>(null);
 
   const preload = useCallback(() => {
-    void preloadQuickAppClassificationEntry().catch(() => undefined);
+    void preloadQuickClassificationEntry().catch(() => undefined);
   }, []);
 
   const open = useCallback((
-    target: QuickAppClassificationTarget,
-    anchor: QuickAppClassificationAnchor,
+    target: QuickClassificationTarget,
+    anchor: QuickClassificationAnchor,
     returnFocusTo: HTMLElement | null,
   ) => {
     preload();
@@ -27,18 +27,18 @@ export function useQuickAppClassificationLauncher() {
   }, [preload]);
 
   const openAtPointer = useCallback((
-    target: QuickAppClassificationTarget,
-    anchor: QuickAppClassificationAnchor,
+    target: QuickClassificationTarget,
+    anchor: QuickClassificationAnchor,
     returnFocusTo: HTMLElement | null,
   ) => {
     open(target, anchor, returnFocusTo);
   }, [open]);
 
   const openAtElement = useCallback((
-    target: QuickAppClassificationTarget,
+    target: QuickClassificationTarget,
     element: HTMLElement,
   ) => {
-    open(target, resolveQuickAppClassificationElementAnchor(element), element);
+    open(target, resolveQuickClassificationElementAnchor(element), element);
   }, [open]);
 
   const close = useCallback((focusTarget?: HTMLElement) => {
