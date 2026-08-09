@@ -361,7 +361,8 @@ Patina Release 只发布主应用安装包、`SHA256SUMS.txt`、`latest.json` �
 3. 维护者确认三店状态后，为对应发布候选提交创建并推送 `vX.Y.Z` tag。
 4. Tag 自动工作流已经发布完整的 Patina Web Sync GitHub Release，tag、Release 标题与附件版本一致。
 5. Firefox Release 附件来自 AMO 的同版本公开 listed XPI，并已校验 AMO SHA-256、manifest version 与稳定 Gecko id。
-6. 若版本改变 Web Activity 协议，Patina 接收端兼容必须先落地，两仓的 `docs/web-activity-protocol.md` 必须保持一致。
+6. Chromium ZIP 与 Firefox XPI 已由 `SHA256SUMS` 和 GitHub Artifact Attestation 绑定；同 tag 重跑只可复用字节相同的既有资产或补齐缺失资产，同名哈希冲突必须失败，发布后必须回读远端资产验证。
+7. 若版本改变 Web Activity 协议，Patina 接收端兼容必须先落地，两仓的 `docs/web-activity-protocol.md` 必须保持一致。
 
 完成签收不绑定两个项目的版本号，也不要求 Patina 与 Patina Web Sync 同日发布。Patina Release 不携带扩展附件；Patina 只消费稳定商店入口、扩展 Release 和双方已对齐的本机协议。普通扩展发布不得依赖尚未发布的 Patina 接收端行为。
 

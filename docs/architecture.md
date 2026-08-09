@@ -161,6 +161,10 @@ Tauri application command 采用显式、默认拒绝的窗口授权模型：
 - 合并去重由各数据域 repository 持有，不能把表级 SQL 上提到 command、app 或前端
 - `commands/backup.rs` 与 `app/backup.rs` 只承担参数边界和恢复后的薄协调
 - 冻结的旧格式 reader 是带丢弃窗口的兼容壳，不得成为新增数据域的长期 owner
+- 自动备份的时间声明、重试与调和决策归备份专用 `engine/backup_scheduler.rs`；目标执行、运行账本和保留策略分别归 `data/scheduled_backup.rs` 与其 repository，不为未来定时导出提前建立通用任务框架
+- WebDAV 自动备份只有在本地快照校验、不可覆盖上传、远端全量回读校验和索引发布全部完成后才可记为成功；旧自动对象必须在新备份成立后，凭精确路径、来源、目标身份与 ETag 等所有权证据清理，证据不足时保留对象并记录警告
+- WebDAV 地址、用户名和远端目录可作为非秘密配置持久化；密码只由平台凭据存储 owner 读取，不得进入 SQLite、IPC 返回值、事件载荷、远端索引或日志
+- 自动导出的日历周期、到期槽位、补跑与重试决策归导出专用 `engine/export_scheduler.rs`；配置与运行账本归 `data/repositories/scheduled_export.rs`，文件生成、格式校验、不可覆盖发布和崩溃对账归 `data/scheduled_export.rs`，不得与自动备份合并成通用任务框架
 
 ### 4.4 浏览器扩展伴生边界
 

@@ -72,7 +72,7 @@ Success response body：
 }
 ```
 
-Web Sync disabled response body：
+Web Sync disabled 使用 HTTP `409`，response body：
 
 ```json
 {
