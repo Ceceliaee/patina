@@ -19,7 +19,9 @@ const INITIAL_CHUNK_BUDGETS = [
   { label: "react-vendor", pattern: /^react-vendor-.*\.js$/, gzipKiB: 60 },
   { label: "icons", pattern: /^icons-.*\.js$/, gzipKiB: 8 },
   { label: "tauri", pattern: /^tauri-.*\.js$/, gzipKiB: 6 },
-  { label: "localization", pattern: /^runtime-.*\.js$/, gzipKiB: 25 },
+  // Data category analysis plus scheduled backup/export add bilingual trust and
+  // control labels while the global initial and total budgets stay fixed.
+  { label: "localization", pattern: /^runtime-.*\.js$/, gzipKiB: 25.7 },
   { label: "classification", pattern: /^appClassification-.*\.js$/, gzipKiB: 6 },
 ] as const;
 
@@ -29,8 +31,10 @@ const LAZY_PAGE_CHUNK_BUDGETS = [
   { label: "History", pattern: /^History-.*\.js$/, gzipKiB: 18.7 },
   { label: "Tools", pattern: /^Tools-.*\.js$/, gzipKiB: 18 },
   // The destination analysis panel and its range control are both part of
-  // Data's first render; the private detail chunk owns day analysis only.
-  { label: "Data", pattern: /^Data-.*\.js$/, gzipKiB: 20.35 },
+  // Data's first render; the private detail chunk owns day analysis only. The
+  // third application-category mode remains synchronous and feature-owned here;
+  // splitting it would duplicate the read-model graph into unowned support chunks.
+  { label: "Data", pattern: /^Data-.*\.js$/, gzipKiB: 22 },
   { label: "About", pattern: /^About-.*\.js$/, gzipKiB: 18 },
 ] as const;
 
@@ -42,6 +46,8 @@ const LAZY_SECONDARY_CHUNK_BUDGETS = [
   { label: "WidgetShell", pattern: /^WidgetShell-.*\.js$/, gzipKiB: 6 },
   { label: "Settings import dialog", pattern: /^SettingsDataImportDialog-.*\.js$/, gzipKiB: 3 },
   { label: "Settings export dialog", pattern: /^SettingsDataExportDialog-.*\.js$/, gzipKiB: 6 },
+  { label: "Settings scheduled export dialog", pattern: /^SettingsScheduledExportDialog-.*\.js$/, gzipKiB: 3.6 },
+  { label: "Settings backup dialog", pattern: /^SettingsBackupDialog-.*\.js$/, gzipKiB: 7 },
   { label: "Data first-screen prewarm", pattern: /^dataFirstScreenPrewarm-.*\.js$/, gzipKiB: 6 },
   { label: "Data trend snapshot", pattern: /^dataTrendSnapshot-.*\.js$/, gzipKiB: 2 },
   { label: "Data bootstrap snapshot", pattern: /^dataBootstrapSnapshot-.*\.js$/, gzipKiB: 1 },
@@ -56,7 +62,7 @@ const LAZY_SECONDARY_CHUNK_BUDGETS = [
   { label: "Quick classification", pattern: /^QuickClassificationSurface-.*\.js$/, gzipKiB: 3.4 },
 ] as const;
 
-// Stable cross-feature UI owners stay lazy and receive their own narrow budget
+// Stable cross-feature owners stay lazy and receive their own narrow budget
 // instead of consuming the allowance for unowned support chunks.
 const LAZY_SHARED_UI_CHUNK_BUDGETS = [
   { label: "QuietCalendar", pattern: /^QuietCalendar-.*\.js$/, gzipKiB: 1.3 },
@@ -64,14 +70,19 @@ const LAZY_SHARED_UI_CHUNK_BUDGETS = [
   { label: "QuietSearchField", pattern: /^QuietSearchField-.*\.js$/, gzipKiB: 0.5 },
   { label: "QuietStepperSlider", pattern: /^QuietStepperSlider-.*\.js$/, gzipKiB: 1.1 },
   { label: "QuietDateRangePicker", pattern: /^QuietDateRangePicker-.*\.js$/, gzipKiB: 2.1 },
+  { label: "QuietSelect", pattern: /^QuietSelect-.*\.js$/, gzipKiB: 2.4 },
+  { label: "QuietTimePicker", pattern: /^QuietTimePicker-.*\.js$/, gzipKiB: 2.1 },
   { label: "requested app icons", pattern: /^useRequestedAppIcons-.*\.js$/, gzipKiB: 0.55 },
   { label: "settings runtime adapter", pattern: /^settingsRuntimeAdapterService-.*\.js$/, gzipKiB: 3 },
   { label: "duration formatting", pattern: /^durationFormatting-.*\.js$/, gzipKiB: 0.2 },
+  { label: "data export protocol", pattern: /^dataExportGateway-.*\.js$/, gzipKiB: 0.7 },
 ] as const;
 
 // Unowned fragments remain tightly bounded after route, secondary-runtime, and
 // stable shared owners are attributed above.
-const LAZY_SUPPORT_CHUNKS_GZIP_BUDGET_KI_B = 6.25;
+// The scheduled-export entry adds two direct icon modules. Keep them in the
+// unowned support aggregate while preserving the global and per-owner limits.
+const LAZY_SUPPORT_CHUNKS_GZIP_BUDGET_KI_B = 6.55;
 const SETTINGS_COPY_GZIP_BUDGET_KI_B = 12;
 // Import preview, destructuring, and batch deletion require matching locale resources.
 // Destination detail contributes shared bilingual resources used by

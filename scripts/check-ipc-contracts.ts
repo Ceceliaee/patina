@@ -47,7 +47,6 @@ const SENSITIVE_CALLER_GUARD_COMMANDS = new Set([
   "cmd_restore_backup",
   "cmd_save_webdav_backup_secret",
   "cmd_delete_webdav_backup_secret",
-  "cmd_reveal_webdav_backup_secret",
   "cmd_delete_sessions_before",
   "cmd_clear_all_session_window_titles",
   "cmd_delete_sessions_by_exe_names",

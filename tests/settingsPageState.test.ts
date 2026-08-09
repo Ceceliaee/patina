@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { getLocaleText } from "../src/shared/i18n/runtime.ts";
 import type { BackupPreview } from "../src/features/settings/services/settingsRuntimeAdapterService.ts";
 import { parseBackupPreview } from "../src/platform/backup/backupRuntimeGateway.ts";
+import { parseScheduledBackupSnapshot } from "../src/platform/backup/scheduledBackupRuntimeGateway.ts";
+import { parseScheduledExportSnapshot } from "../src/platform/persistence/scheduledExportRuntimeGateway.ts";
+import { getScheduledExportErrorCode } from "../src/features/settings/services/scheduledExportService.ts";
 import {
   commitSettingsPatchWithDeps,
   prepareBackupRestoreWithDeps,
@@ -29,6 +32,10 @@ import {
 import {
   shouldShowWebActivityHelp,
 } from "../src/features/settings/services/webActivitySetupState.ts";
+import {
+  toUserVisibleStoragePath,
+} from "../src/features/settings/services/storagePathDisplay.ts";
+import { formatRemoteBackupTargetSummary } from "../src/features/settings/services/remoteBackupTargetSummary.ts";
 
 const ZH_TEXT = getLocaleText("zh-CN");
 
@@ -708,6 +715,42 @@ await runTest("runSettingsCleanupFlow executes confirmed cleanup and reloads", a
   ]);
 });
 
+await runTest("storage paths hide Windows device prefixes from users", () => {
+  assert.equal(
+    toUserVisibleStoragePath("\\\\?\\C:\\Users\\Patina\\backups"),
+    "C:\\Users\\Patina\\backups",
+  );
+  assert.equal(
+    toUserVisibleStoragePath("\\\\?\\UNC\\server\\share\\backups"),
+    "\\\\server\\share\\backups",
+  );
+  assert.equal(
+    toUserVisibleStoragePath("C:\\Users\\Patina\\backups"),
+    "C:\\Users\\Patina\\backups",
+  );
+});
+
+await runTest("scheduled WebDAV target summary preserves the saved server base path", () => {
+  assert.equal(
+    formatRemoteBackupTargetSummary({
+      url: "https://dav.jianguoyun.com/dav/",
+      username: "patina",
+      remoteDir: "/Patina",
+      lastBackupAtMs: null,
+    }),
+    "https://dav.jianguoyun.com/dav/Patina",
+  );
+  assert.equal(
+    formatRemoteBackupTargetSummary({
+      url: "https://example.com/webdav/account",
+      username: "patina",
+      remoteDir: "/Patina/backups",
+      lastBackupAtMs: null,
+    }),
+    "https://example.com/webdav/account/Patina/backups",
+  );
+});
+
 await runTest("runSettingsCleanupFlow reports failures and still clears busy state", async () => {
   const events: string[] = [];
   const errors: string[] = [];
@@ -798,6 +841,88 @@ await runTest("backup preview gateway maps external counts and defaults old payl
   assert.equal(currentPreview.importBatchCount, 5);
   assert.equal(currentPreview.importExactSessionCount, 6);
   assert.equal(currentPreview.importTimeBucketCount, 7);
+});
+
+await runTest("scheduled backup gateway accepts the fixed-retention contract", () => {
+  const snapshot = parseScheduledBackupSnapshot({
+    config: {
+      enabled: true,
+      cadence: "daily",
+      weekday: null,
+      localTimeMinutes: 120,
+      target: { kind: "local", targetDir: "C:/Patina/backups" },
+      targetGeneration: "a".repeat(32),
+      scheduleAnchorAtMs: 1,
+      updatedAtMs: 1,
+    },
+    nextExecutionAtMs: 2,
+    recentSuccess: null,
+    recentFailure: null,
+    activeRun: null,
+  });
+
+  assert.equal(snapshot.config.cadence, "daily");
+  assert.equal(snapshot.nextExecutionAtMs, 2);
+});
+
+await runTest("scheduled backup gateway strips the retired retention field", () => {
+  const snapshot = parseScheduledBackupSnapshot({
+    config: {
+      enabled: true,
+      cadence: "daily",
+      weekday: null,
+      localTimeMinutes: 120,
+      target: { kind: "local", targetDir: "C:/Patina/backups" },
+      retentionCount: 7,
+      targetGeneration: "a".repeat(32),
+      scheduleAnchorAtMs: 1,
+      updatedAtMs: 1,
+    },
+    nextExecutionAtMs: null,
+    recentSuccess: null,
+    recentFailure: null,
+    activeRun: null,
+  });
+  assert.equal("retentionCount" in snapshot.config, false);
+});
+
+await runTest("scheduled backup gateway rejects an invalid local time", () => {
+  assert.throws(() => parseScheduledBackupSnapshot({
+    config: {
+      enabled: true,
+      cadence: "daily",
+      weekday: null,
+      localTimeMinutes: 1440,
+      target: { kind: "local", targetDir: "C:/Patina/backups" },
+      targetGeneration: "a".repeat(32),
+      scheduleAnchorAtMs: 1,
+      updatedAtMs: 1,
+    },
+    nextExecutionAtMs: null,
+    recentSuccess: null,
+    recentFailure: null,
+    activeRun: null,
+  }), /invalid scheduled backup configuration/);
+});
+
+await runTest("scheduled backup gateway accepts a WebDAV target identity", () => {
+  const snapshot = parseScheduledBackupSnapshot({
+    config: {
+      enabled: true,
+      cadence: "weekly",
+      weekday: 7,
+      localTimeMinutes: 120,
+      target: { kind: "webdav", targetIdentity: "b".repeat(64) },
+      targetGeneration: "a".repeat(32),
+      scheduleAnchorAtMs: 1,
+      updatedAtMs: 1,
+    },
+    nextExecutionAtMs: 2,
+    recentSuccess: null,
+    recentFailure: null,
+    activeRun: null,
+  });
+  assert.equal(snapshot.config.target.kind, "webdav");
 });
 
 await runTest("runBackupExportFlow normalizes the initial path and stores the exported path", async () => {
@@ -924,6 +1049,124 @@ await runTest("runBackupRestoreFlow restores and reloads after confirmation", as
     "reload",
     "end",
   ]);
+});
+
+await runTest("parseScheduledExportSnapshot preserves the saved format and field order", () => {
+  const snapshot = parseScheduledExportSnapshot({
+    config: {
+      enabled: true,
+      cadence: "weekly",
+      weekday: 1,
+      localTimeMinutes: 120,
+      targetDir: "C:/Exports",
+      format: "csv",
+      selectedFields: ["url", "record_type"],
+      planGeneration: "generation",
+      scheduleAnchorAtMs: 1,
+      updatedAtMs: 2,
+    },
+    nextExecutionAtMs: 3,
+    recentSuccess: null,
+    recentFailure: null,
+    activeRun: null,
+  });
+  assert.equal(snapshot.config.cadence, "weekly");
+  assert.deepEqual(snapshot.config.selectedFields, ["url", "record_type"]);
+});
+
+await runTest("parseScheduledExportSnapshot rejects duplicate or unknown fields", () => {
+  const base = {
+    enabled: false,
+    cadence: "daily",
+    weekday: null,
+    localTimeMinutes: 120,
+    targetDir: "C:/Exports",
+    format: "csv",
+    planGeneration: "generation",
+    scheduleAnchorAtMs: 1,
+    updatedAtMs: 2,
+  };
+  for (const selectedFields of [["record_type", "record_type"], ["not_a_field"]]) {
+    assert.throws(() => parseScheduledExportSnapshot({
+      config: { ...base, selectedFields },
+      nextExecutionAtMs: null,
+      recentSuccess: null,
+      recentFailure: null,
+      activeRun: null,
+    }));
+  }
+});
+
+await runTest("parseScheduledExportSnapshot rejects fractional controls and invalid run metadata", () => {
+  const config = {
+    enabled: true,
+    cadence: "daily",
+    weekday: null,
+    localTimeMinutes: 120,
+    targetDir: "C:/Exports",
+    format: "csv",
+    selectedFields: ["record_type"],
+    planGeneration: "generation",
+    scheduleAnchorAtMs: 1,
+    updatedAtMs: 2,
+  };
+  const snapshot = {
+    config,
+    nextExecutionAtMs: 3,
+    recentSuccess: null,
+    recentFailure: null,
+    activeRun: null,
+  };
+  assert.throws(() => parseScheduledExportSnapshot({
+    ...snapshot,
+    config: { ...config, localTimeMinutes: 120.5 },
+  }));
+  assert.throws(() => parseScheduledExportSnapshot({
+    ...snapshot,
+    nextExecutionAtMs: -1,
+  }));
+  assert.throws(() => parseScheduledExportSnapshot({
+    ...snapshot,
+    activeRun: {
+      runKey: "run",
+      planGeneration: "generation",
+      cadence: "daily",
+      logicalStartDate: "2026-02-30",
+      logicalEndDate: "2026-02-30",
+      periodStartMs: 1,
+      periodEndMs: 2,
+      format: "csv",
+      selectedFields: ["record_type"],
+      targetPath: "C:/Exports/export.csv",
+      stagingPath: null,
+      phase: "claimed",
+      status: "running",
+      fileState: "absent",
+      attemptCount: 1.5,
+      retryAtMs: null,
+      rowCount: null,
+      sizeBytes: null,
+      sha256: null,
+      errorCode: null,
+      errorMessage: null,
+      startedAtMs: 1,
+      completedAtMs: null,
+      updatedAtMs: 1,
+    },
+  }));
+});
+
+await runTest("scheduled export errors retain stable actionable categories", () => {
+  assert.equal(getScheduledExportErrorCode("target_missing"), "target_missing");
+  assert.equal(
+    getScheduledExportErrorCode(new Error("database_busy: locked")),
+    "database_busy",
+  );
+  assert.equal(
+    getScheduledExportErrorCode({ code: "permission_denied" }),
+    "permission_denied",
+  );
+  assert.equal(getScheduledExportErrorCode("raw SQL details"), "export_failed");
 });
 
 console.log(`Passed ${passed} settings page state tests`);

@@ -861,10 +861,10 @@ await runTest("badges share one Quiet Pro owner and protect long labels", () => 
   const quietProStyles = readUtf8("src/styles/quiet-pro.css");
   const appShellStyles = readUtf8("src/styles/app-shell.css");
   const settingsStyles = readUtf8("src/styles/features/settings.css");
+  const dataSafety = readUtf8("src/features/settings/components/SettingsDataSafetyPanel.tsx");
   const consumers = [
     readUtf8("src/features/tools/components/Tools.tsx"),
     readUtf8("src/features/settings/components/SettingsAppearancePanel.tsx"),
-    readUtf8("src/features/settings/components/SettingsDataSafetyPanel.tsx"),
   ];
 
   assert.match(badge, /type QuietBadgeSize = "compact" \| "inline" \| "regular"/);
@@ -880,6 +880,7 @@ await runTest("badges share one Quiet Pro owner and protect long labels", () => 
   for (const consumer of consumers) {
     assert.match(consumer, /<QuietBadge variant="beta"/);
   }
+  assert.doesNotMatch(dataSafety, /<QuietBadge/);
 });
 
 await runTest("classification owns one shared app and web quick surface with density-aware status", () => {
@@ -1108,11 +1109,13 @@ await runTest("Data keeps web analysis beside a unified activity overview", () =
   assert.match(data, /presentedDestinationMode/);
   assert.match(data, /webDestinationReadyForPresentation/);
   assert.match(data, /destinationMode !== presentedDestinationMode/);
-  assert.match(destinationPanel, /showDestinationMode \? \(/);
+  assert.match(destinationPanel, /modeOptions\.length > 1 \? \(/);
+  assert.match(destinationPanel, /availableDestinationModes/);
+  assert.match(destinationPanel, /UI_TEXT\.data\.destinationCategory/);
   assert.match(destinationPanel, /UI_TEXT\.data\.destinationWeb/);
   assert.match(
     destinationPanel,
-    /<h3[\s\S]*?\{showDestinationMode \? \([\s\S]*?data-destination-mode[\s\S]*?\{selectedOptions\.length > 0 \? \([\s\S]*?data-app-selected-status/,
+    /<h3[\s\S]*?\{modeOptions\.length > 1 \? \([\s\S]*?data-destination-mode[\s\S]*?\{selectedOptions\.length > 0 \? \([\s\S]*?data-app-selected-status/,
   );
   assert.match(
     destinationPanel,
@@ -1135,10 +1138,13 @@ await runTest("Data keeps web analysis beside a unified activity overview", () =
   assert.doesNotMatch(destinationPanel, /showRefreshingMessage|webTrendUpdating/);
   assert.match(destinationPanel, /\{heatmapContent\}/);
   assert.match(destinationPanel, /data-hint/);
-  assert.match(destinationPanel, /UI_TEXT\.data\.interactionHint/);
+  assert.match(destinationPanel, /interactionHint/);
+  assert.match(destinationPanel, /supportsDestinationDetails/);
+  assert.match(destinationPanel, /supportsQuickClassification/);
+  assert.match(destinationPanel, /data-category-color-marker/);
   assert.match(destinationPanel, /event\.ctrlKey/);
   assert.match(destinationPanel, /aria-pressed=\{isSelected\}/);
-  assert.match(destinationPanel, /aria-description=\{UI_TEXT\.data\.interactionHint\}/);
+  assert.match(destinationPanel, /aria-description=\{interactionHint\}/);
   assert.match(
     destinationPanel,
     /"Enter Space Control\+Enter Control\+Space Shift\+F10"/,
@@ -1162,8 +1168,12 @@ await runTest("Data keeps web analysis beside a unified activity overview", () =
   assert.doesNotMatch(destinationPanel, /已选|N\/5/);
   assert.match(heatmapPanel, /data-heatmap-panel-compact/);
   assert.doesNotMatch(heatmapPanel, /<p className=/);
-  assert.match(data, /title=\{isWebDestination \? UI_TEXT\.data\.webHeatmap : UI_TEXT\.data\.appHeatmap\}/);
-  assert.match(data, /title=\{isWebDestination[\s\S]*compact/);
+  assert.match(data, /const destinationHeatmapTitle = isWebDestination/);
+  assert.match(data, /title=\{destinationHeatmapTitle\}[\s\S]*compact/);
+  assert.match(data, /webActivityEnabled \? \["app", "category", "web"\] : \["app", "category"\]/);
+  assert.match(data, /resolveDataCategorySourceAppKeys/);
+  assert.match(data, /supportsDestinationDetails=\{destinationSupportsObjectActions\}/);
+  assert.match(data, /supportsQuickClassification=\{destinationSupportsObjectActions\}/);
   assert.match(data, /selectedDestinationHeatmapView/);
   assert.doesNotMatch(destinationPanel, /Dialog|dialog/);
   assert.doesNotMatch(heatmapPanel, /data-heatmap-scope/);
@@ -1924,6 +1934,38 @@ await runTest("data export chooses among four explained formats before configuri
   }
 });
 
+await runTest("scheduled export reuses the manual export configuration in a restrained secondary dialog", () => {
+  const outerDialog = readUtf8("src/features/settings/components/SettingsDataExportDialog.tsx");
+  const scheduledDialog = readUtf8("src/features/settings/components/SettingsScheduledExportDialog.tsx");
+  const gateway = readUtf8("src/platform/persistence/scheduledExportRuntimeGateway.ts");
+  const service = readUtf8("src/features/settings/services/scheduledExportService.ts");
+  const styles = readUtf8("src/styles/features/settings.css");
+
+  assert.match(outerDialog, /<CalendarClock size=\{16\}/);
+  assert.match(outerDialog, /headerAside=\{\(/);
+  assert.match(outerDialog, /await import\("\.\/SettingsScheduledExportDialog\.tsx"\)/);
+  assert.ok(outerDialog.indexOf("loadScheduledExportSnapshot()") < outerDialog.indexOf("setScheduledExportOpen(true)"));
+  assert.match(outerDialog, /currentFormat=\{format\}/);
+  assert.match(outerDialog, /currentFields=\{scheduledExportFields\}/);
+  assert.match(scheduledDialog, /surfaceClassName="settings-scheduled-export-dialog"/);
+  assert.match(scheduledDialog, /<QuietBadge variant="beta" size="regular">/);
+  assert.match(scheduledDialog, /headerAside=\{\(/);
+  assert.match(scheduledDialog, /<QuietSwitch/);
+  assert.doesNotMatch(scheduledDialog, /settings-data-export-format-grid|SettingsDataExportFieldConfigDialog/);
+  assert.doesNotMatch(scheduledDialog, /retention|WebDAV|close-button/);
+  assert.match(scheduledDialog, /draft\.cadence === "weekly"/);
+  assert.match(scheduledDialog, /className="settings-scheduled-export-directory-value"/);
+  assert.doesNotMatch(scheduledDialog, /<input[^>]+value=\{draft\.targetDir\}/);
+  assert.match(gateway, /cmd_get_scheduled_export_snapshot/);
+  assert.match(gateway, /cmd_save_scheduled_export_config/);
+  assert.match(gateway, /scheduled-export-changed/);
+  assert.match(service, /ScheduledExportService/);
+  assert.match(styles, /\.settings-scheduled-export-dialog \{[\s\S]*?width: min\(600px, calc\(100vw - 32px\)\)/);
+  assert.match(styles, /\.settings-scheduled-export-schedule \{[\s\S]*?repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /\[data-cadence="weekly"\][\s\S]*?repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.doesNotMatch(styles, /\.settings-scheduled-export[^\n{]*\{[^}]*#[0-9a-f]{3,8}/i);
+});
+
 await runTest("search fields share one visual and accessibility owner", () => {
   const sharedSearchField = readUtf8("src/shared/components/QuietSearchField.tsx");
   const consumers = [
@@ -2070,6 +2112,57 @@ await runTest("remaining Quiet Pro component families keep one owner and explici
   for (const consumer of pageHeaderConsumers) {
     assert.match(consumer, /<QuietPageHeader/);
   }
+});
+
+await runTest("backup dialog owns one-time and mutually exclusive scheduled backup targets", () => {
+  const dataSafety = readUtf8("src/features/settings/components/SettingsDataSafetyPanel.tsx");
+  const dialog = readUtf8("src/features/settings/components/SettingsBackupDialog.tsx");
+  const gateway = readUtf8("src/platform/backup/scheduledBackupRuntimeGateway.ts");
+  const storagePathDisplay = readUtf8("src/features/settings/services/storagePathDisplay.ts");
+  const styles = readUtf8("src/styles/features/settings.css");
+
+  assert.match(dataSafety, /const handleBackupAction = \(\) => \{\s*setBackupTargetDialogOpen\(true\)/);
+  assert.match(dataSafety, /<SettingsBackupDialog/);
+  assert.match(dataSafety, /const settingsBackupDialogModule = import\("\.\/SettingsBackupDialog"\)/);
+  assert.match(dataSafety, /lazy\(\(\) => settingsBackupDialogModule\)/);
+  assert.match(dataSafety, /<Suspense fallback=\{null\}>/);
+  assert.doesNotMatch(dataSafety, /<Suspense fallback=\{\([\s\S]*?UI_TEXT\.common\.loading/);
+  assert.doesNotMatch(dataSafety, /if \(hasRemoteBackupTarget\)[\s\S]{0,80}setBackupTargetDialogOpen/);
+  assert.match(dialog, /<QuietSwitch/);
+  assert.doesNotMatch(dialog, /import\s+["'][^"']+\.css["']/);
+  assert.match(dialog, /<QuietTimePicker/);
+  assert.match(dialog, /CalendarClock/);
+  assert.match(dialog, /openScheduledDialog\("local"\)/);
+  assert.match(dialog, /openScheduledDialog\("webdav"\)/);
+  assert.match(dialog, /<Cloud size=\{14\} aria-hidden="true" \/>/);
+  assert.match(dialog, /<span>\{remoteBackupTargetSummary\}<\/span>/);
+  assert.match(dialog, /className="settings-backup-schedule-anchor"/);
+  assert.match(dialog, /className="settings-backup-schedule-action"/);
+  assert.doesNotMatch(dialog, /tooltipPlacement="bottom"/);
+  assert.match(dialog, /surfaceClassName="settings-scheduled-backup-dialog"/);
+  assert.match(dialog, /open=\{open && scheduledDialogOpen\}/);
+  assert.match(dialog, /<QuietBadge variant="beta" size="regular">\{text\.betaLabel\}<\/QuietBadge>/);
+  assert.doesNotMatch(dialog, /retentionOptions|retentionCount|labels\.retention/);
+  assert.match(dialog, /draft\.cadence === "weekly"/);
+  assert.doesNotMatch(dialog, /scheduledBackupPolicy|settings-scheduled-backup-policy/);
+  assert.match(gateway, /cmd_get_scheduled_backup_snapshot/);
+  assert.match(gateway, /cmd_save_scheduled_backup_config/);
+  assert.match(gateway, /scheduled-backup-changed/);
+  assert.match(styles, /\.settings-backup-dialog \{/);
+  assert.match(dialog, /const hasScheduledStatus = Boolean\(/);
+  assert.match(dialog, /\{hasScheduledStatus \? \(/);
+  assert.doesNotMatch(dialog, /nextExecutionAtMs\s*\?[^\n]+:\s*"—"/);
+  assert.match(dialog, /<Folder size=\{14\} aria-hidden="true" \/>/);
+  assert.match(dialog, /<span>\{targetDirDisplay\}<\/span>/);
+  assert.doesNotMatch(dialog, /<input[^>]+value=\{draft\.targetDir\}/);
+  assert.doesNotMatch(dialog, /<input[^>]+value=\{remoteBackupTargetSummary\}/);
+  assert.match(storagePathDisplay, /path\.startsWith\("\\\\\\\\\?\\\\UNC\\\\"\)/);
+  assert.match(styles, /\.settings-scheduled-backup-setting-row \{[\s\S]*?grid-template-columns: 64px minmax\(0, 1fr\)/);
+  assert.match(styles, /\.settings-scheduled-backup-schedule-controls \{[\s\S]*?repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /\[data-cadence="weekly"\][\s\S]*?repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /\.settings-scheduled-backup-status \{[\s\S]*?display: flex/);
+  assert.match(styles, /var\(--qp-border-subtle\)/);
+  assert.doesNotMatch(styles, /\.settings-backup-dialog[\s\S]{0,500}(?:#[0-9a-f]{3,8}|rgba?\()/i);
 });
 
 console.log(`Passed ${passed} UI smoke tests`);
