@@ -154,6 +154,11 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
+  "accessibility.data.categoryTrendRange": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
   "accessibility.data.earlierRange": {
     "kind": "string",
     "params": [],
@@ -1007,6 +1012,11 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
+  "data.allTime": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
   "data.appHeatmap": {
     "kind": "string",
     "params": [],
@@ -1067,6 +1077,52 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
+  "data.categoryHeatmap": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "data.categoryInteractionHint": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "data.categoryMemberCount": {
+    "kind": "message",
+    "params": [
+      {
+        "name": "count",
+        "type": "integer",
+        "optional": false
+      }
+    ],
+    "surface": "frontend"
+  },
+  "data.categorySearchPlaceholder": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "data.categoryTrend": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "data.categoryTrendCategoryList": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "data.categoryTrendEmpty": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "data.categoryTrendNoMatch": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
   "data.customDayCount": {
     "kind": "message",
     "params": [
@@ -1084,6 +1140,11 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.destinationApp": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "data.destinationCategory": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2223,6 +2284,16 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "export.selectGroupFields": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "export.scheduledErrors": {
+    "kind": "string-record",
+    "params": [],
+    "surface": "frontend"
+  },
+  "export.scheduledTitle": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4137,6 +4208,16 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
+  "settings.scheduledBackupCleanupWarning": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "settings.scheduledBackupLabels": {
+    "kind": "string-record",
+    "params": [],
+    "surface": "frontend"
+  },
   "settings.servicesTitle": {
     "kind": "string",
     "params": [],
@@ -4220,11 +4301,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.storage.storageDataMigrationConfirmTitle": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "settings.storage.storageDirectoryBetaLabel": {
     "kind": "string",
     "params": [],
     "surface": "frontend"

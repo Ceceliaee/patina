@@ -286,6 +286,16 @@ export const MESSAGES = {
   "settings.save": "保存",
   "settings.saved": "配置已更新",
   "settings.saveFailed": "配置保存失败，请稍后重试。",
+  "settings.scheduledBackupCleanupWarning": "最新备份有效，但上一份自动备份暂未清理；Patina 将稍后重试。",
+  "settings.scheduledBackupLabels": {
+    "directory": "保存到",
+    "frequency": "频率",
+    "nextExecution": "下次执行",
+    "recentFailure": "最近失败",
+    "recentSuccess": "最近成功",
+    "time": "时间",
+    "title": "定时备份"
+  },
   "settings.saving": "正在保存...",
   "settings.servicesTitle": "服务",
   "settings.startMinimizedHint": "启动后隐藏主窗口进入托盘。",
@@ -336,7 +346,6 @@ export const MESSAGES = {
     }
   },
   "settings.storage.storageDataMigrationConfirmTitle": "更改数据目录",
-  "settings.storage.storageDirectoryBetaLabel": "Beta",
   "settings.storage.storageDirectorySummary": "安装目录随应用安装位置确定；数据目录和缓存目录可单独调整。",
   "settings.storage.storageDirectoryTitle": "本机目录",
   "settings.storage.storageMigrationFailed": "无法准备重启，请检查目标目录。",

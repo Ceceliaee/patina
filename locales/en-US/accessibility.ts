@@ -14,6 +14,7 @@ export const MESSAGES = {
   "accessibility.color.redChannel": "Red channel",
   "accessibility.color.saturationChannel": "Saturation",
   "accessibility.data.appTrendRange": "Select app trend range",
+  "accessibility.data.categoryTrendRange": "Select app category trend range",
   "accessibility.data.earlierRange": "Switch to earlier range",
   "accessibility.data.heatmapCell": {
     "$type": "message",

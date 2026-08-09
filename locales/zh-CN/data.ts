@@ -3,6 +3,7 @@ export const MESSAGES = {
   "data.activityHeatmap": "活动热力图",
   "data.activityHeatmapHint": "每日活动强度",
   "data.activityTrend": "活动趋势",
+  "data.allTime": "总计",
   "data.appHeatmap": "应用热力图",
   "data.applyRange": "确定",
   "data.appSearchPlaceholder": "搜索应用",
@@ -15,6 +16,27 @@ export const MESSAGES = {
   "data.appTrendPeakDay": "峰值日",
   "data.appTrendTotal": "总时长",
   "data.appTrendUsage": "应用时长",
+  "data.categoryHeatmap": "分类热力图",
+  "data.categoryInteractionHint": "回车选择 · Ctrl 多选",
+  "data.categoryMemberCount": {
+    "$type": "message",
+    "body": {
+      "$op": "concat",
+      "parts": [
+        "",
+        {
+          "$op": "arg",
+          "name": "count"
+        },
+        " 个应用"
+      ]
+    }
+  },
+  "data.categorySearchPlaceholder": "搜索分类",
+  "data.categoryTrend": "分类趋势",
+  "data.categoryTrendCategoryList": "应用分类列表",
+  "data.categoryTrendEmpty": "当前范围暂无应用分类记录",
+  "data.categoryTrendNoMatch": "没有匹配的分类",
   "data.customDayCount": {
     "$type": "message",
     "body": {
@@ -31,6 +53,7 @@ export const MESSAGES = {
   },
   "data.dailyAverage": "日均时长",
   "data.destinationApp": "应用",
+  "data.destinationCategory": "分类",
   "data.destinationMode": "选择时间去向类型",
   "data.destinationWeb": "网页",
   "data.duration": "时长",

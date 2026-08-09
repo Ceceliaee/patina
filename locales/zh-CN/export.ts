@@ -136,6 +136,18 @@ export const MESSAGES = {
   "export.previousRange": "上一个范围",
   "export.restoreFormatDefaults": "恢复当前格式默认字段",
   "export.selectGroupFields": "全选",
+  "export.scheduledErrors": {
+    "databaseUnavailable": "活动数据暂时不可用，Patina 将自动重试",
+    "diskFull": "保存位置空间不足",
+    "generic": "定时导出未能完成",
+    "interrupted": "导出被中断，Patina 将自动重试",
+    "permissionDenied": "没有写入保存位置的权限",
+    "publishFailed": "导出已通过校验，但未能保存到目标位置",
+    "targetConflict": "该周期的文件名已被其他文件占用",
+    "targetMissing": "保存位置已不可用",
+    "validation": "生成的导出文件未通过校验"
+  },
+  "export.scheduledTitle": "定时导出",
   "export.subtitle": "导出会话和网页活动，用于表格查看、归档或分析。",
   "export.timeRangeInvalid": "结束日期不能早于开始日期",
   "export.timeRangeLabel": "时间范围",

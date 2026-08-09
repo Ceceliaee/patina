@@ -295,6 +295,16 @@ export const MESSAGES = {
   "settings.save": "Save",
   "settings.saved": "Settings updated",
   "settings.saveFailed": "Could not save settings. Try again later.",
+  "settings.scheduledBackupCleanupWarning": "The latest backup is valid, but the previous automatic backup could not be removed yet. Patina will retry later.",
+  "settings.scheduledBackupLabels": {
+    "directory": "Save to",
+    "frequency": "Frequency",
+    "nextExecution": "Next run",
+    "recentFailure": "Recent failure",
+    "recentSuccess": "Recent success",
+    "time": "Time",
+    "title": "Scheduled backup"
+  },
   "settings.saving": "Saving...",
   "settings.servicesTitle": "Services",
   "settings.startMinimizedHint": "Hide the main window in the system tray after startup.",
@@ -345,7 +355,6 @@ export const MESSAGES = {
     }
   },
   "settings.storage.storageDataMigrationConfirmTitle": "Change data folder",
-  "settings.storage.storageDirectoryBetaLabel": "Beta",
   "settings.storage.storageDirectorySummary": "Install folder follows the app install location; data and cache folders can be adjusted separately.",
   "settings.storage.storageDirectoryTitle": "Local paths",
   "settings.storage.storageMigrationFailed": "Could not prepare the restart. Check the target folder.",

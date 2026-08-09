@@ -14,6 +14,7 @@ export const MESSAGES = {
   "accessibility.color.redChannel": "红色通道",
   "accessibility.color.saturationChannel": "饱和度",
   "accessibility.data.appTrendRange": "选择应用趋势范围",
+  "accessibility.data.categoryTrendRange": "选择应用分类趋势范围",
   "accessibility.data.earlierRange": "切到更早范围",
   "accessibility.data.heatmapCell": {
     "$type": "message",

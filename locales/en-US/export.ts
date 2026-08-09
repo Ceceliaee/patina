@@ -136,6 +136,18 @@ export const MESSAGES = {
   "export.previousRange": "Previous range",
   "export.restoreFormatDefaults": "Restore defaults for this format",
   "export.selectGroupFields": "Select all",
+  "export.scheduledErrors": {
+    "databaseUnavailable": "Activity data is temporarily unavailable; Patina will retry",
+    "diskFull": "The export destination is out of space",
+    "generic": "The scheduled export could not be completed",
+    "interrupted": "The export was interrupted; Patina will retry",
+    "permissionDenied": "Patina cannot write to the export destination",
+    "publishFailed": "The validated export could not be saved to the destination",
+    "targetConflict": "Another file already uses this period's name",
+    "targetMissing": "The export destination is unavailable",
+    "validation": "The generated export did not pass validation"
+  },
+  "export.scheduledTitle": "Scheduled export",
   "export.subtitle": "Export sessions and web activity for spreadsheets, archives, or analysis.",
   "export.timeRangeInvalid": "End date cannot be earlier than start date",
   "export.timeRangeLabel": "Time range",

@@ -3,6 +3,7 @@ export const MESSAGES = {
   "data.activityHeatmap": "Activity Heatmap",
   "data.activityHeatmapHint": "Daily activity intensity",
   "data.activityTrend": "Activity Trend",
+  "data.allTime": "All time",
   "data.appHeatmap": "App Heatmap",
   "data.applyRange": "Apply",
   "data.appSearchPlaceholder": "Search apps",
@@ -15,6 +16,36 @@ export const MESSAGES = {
   "data.appTrendPeakDay": "Peak day",
   "data.appTrendTotal": "Total",
   "data.appTrendUsage": "App time",
+  "data.categoryHeatmap": "Category Heatmap",
+  "data.categoryInteractionHint": "Enter to select · Ctrl for multiple",
+  "data.categoryMemberCount": {
+    "$type": "message",
+    "body": {
+      "$op": "concat",
+      "parts": [
+        "",
+        {
+          "$op": "arg",
+          "name": "count"
+        },
+        " ",
+        {
+          "$op": "plural",
+          "arg": "count",
+          "cases": {
+            "one": "app",
+            "other": "apps"
+          }
+        },
+        ""
+      ]
+    }
+  },
+  "data.categorySearchPlaceholder": "Search categories",
+  "data.categoryTrend": "Category Trends",
+  "data.categoryTrendCategoryList": "App category list",
+  "data.categoryTrendEmpty": "No app category data in this range",
+  "data.categoryTrendNoMatch": "No matching categories",
   "data.customDayCount": {
     "$type": "message",
     "body": {
@@ -31,6 +62,7 @@ export const MESSAGES = {
   },
   "data.dailyAverage": "Daily avg.",
   "data.destinationApp": "Apps",
+  "data.destinationCategory": "Categories",
   "data.destinationMode": "Select time destination type",
   "data.destinationWeb": "Web",
   "data.duration": "Duration",

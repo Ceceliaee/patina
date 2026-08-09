@@ -57,6 +57,7 @@ export interface UiText {
     };
     "data": {
       "appTrendRange": string;
+      "categoryTrendRange": string;
       "earlierRange": string;
       "heatmapCell": (dateKey: string, summary: string) => string;
       "heatmapRange": string;
@@ -223,6 +224,7 @@ export interface UiText {
     "activityHeatmap": string;
     "activityHeatmapHint": string;
     "activityTrend": string;
+    "allTime": string;
     "appHeatmap": string;
     "applyRange": string;
     "appSearchPlaceholder": string;
@@ -235,9 +237,18 @@ export interface UiText {
     "appTrendPeakDay": string;
     "appTrendTotal": string;
     "appTrendUsage": string;
+    "categoryHeatmap": string;
+    "categoryInteractionHint": string;
+    "categoryMemberCount": (count: number) => string;
+    "categorySearchPlaceholder": string;
+    "categoryTrend": string;
+    "categoryTrendCategoryList": string;
+    "categoryTrendEmpty": string;
+    "categoryTrendNoMatch": string;
     "customDayCount": (days: number) => string;
     "dailyAverage": string;
     "destinationApp": string;
+    "destinationCategory": string;
     "destinationMode": string;
     "destinationWeb": string;
     "duration": string;
@@ -505,6 +516,8 @@ export interface UiText {
     "previousPickerMode": string;
     "previousRange": string;
     "restoreFormatDefaults": string;
+    "scheduledErrors": Record<string | number, string>;
+    "scheduledTitle": string;
     "selectGroupFields": string;
     "subtitle": string;
     "timeRangeInvalid": string;
@@ -787,6 +800,8 @@ export interface UiText {
     "saved": string;
     "saveFailed": string;
     "saving": string;
+    "scheduledBackupCleanupWarning": string;
+    "scheduledBackupLabels": Record<string | number, string>;
     "servicesTitle": string;
     "startMinimizedHint": string;
     "startMinimizedLabel": string;
@@ -801,7 +816,6 @@ export interface UiText {
       "storageCacheMigrationConfirmTitle": string;
       "storageDataMigrationConfirmDetail": (currentDataRoot: string, targetDataRoot: string) => string;
       "storageDataMigrationConfirmTitle": string;
-      "storageDirectoryBetaLabel": string;
       "storageDirectorySummary": string;
       "storageDirectoryTitle": string;
       "storageMigrationFailed": string;
