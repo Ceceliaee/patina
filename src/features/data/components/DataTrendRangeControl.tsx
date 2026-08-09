@@ -14,18 +14,26 @@ import {
 import DataTrendRangePicker from "./DataTrendRangePicker.tsx";
 
 interface Props {
+  allTimeEndDateKey: string;
+  allTimeStartDateKey: string;
   ariaLabel: string;
   selection: DataTrendRangeSelection;
   onChange: (selection: DataTrendRangeSelection) => void;
 }
 
-export default function DataTrendRangeControl({ ariaLabel, selection, onChange }: Props) {
+export default function DataTrendRangeControl({
+  allTimeEndDateKey,
+  allTimeStartDateKey,
+  ariaLabel,
+  selection,
+  onChange,
+}: Props) {
   const UI_TEXT = useLocaleText();
   const anchorRef = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
   const [pickerMode, setPickerMode] = useState<DataTrendPickerMode>("custom");
   const [pickerLabel, setPickerLabel] = useState(UI_TEXT.data.pickerModes.custom);
-  const isSpecial = selection.kind !== "rolling";
+  const isSpecial = selection.kind !== "all" && selection.kind !== "rolling";
   const nowMs = Date.now();
   const label = resolveDataTrendRange(selection, nowMs, UI_TEXT).label;
   const pickerModeIndex = DATA_TREND_PICKER_MODES.indexOf(pickerMode);
@@ -41,15 +49,31 @@ export default function DataTrendRangeControl({ ariaLabel, selection, onChange }
       delta < 0 ? -1 : 1,
       nowMs,
       UI_TEXT,
+      allTimeStartDateKey,
+      allTimeEndDateKey,
     );
     if (nextSelection) onChange(nextSelection);
   };
   const previousSelection = open
     ? null
-    : getAdjacentDataTrendRangeSelection(selection, -1, nowMs, UI_TEXT);
+    : getAdjacentDataTrendRangeSelection(
+      selection,
+      -1,
+      nowMs,
+      UI_TEXT,
+      allTimeStartDateKey,
+      allTimeEndDateKey,
+    );
   const nextSelection = open
     ? null
-    : getAdjacentDataTrendRangeSelection(selection, 1, nowMs, UI_TEXT);
+    : getAdjacentDataTrendRangeSelection(
+      selection,
+      1,
+      nowMs,
+      UI_TEXT,
+      allTimeStartDateKey,
+      allTimeEndDateKey,
+    );
 
   return (
     <>

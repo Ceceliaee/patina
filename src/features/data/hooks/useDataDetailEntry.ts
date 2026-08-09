@@ -7,7 +7,7 @@ import {
 } from "../../destination/types.ts";
 import {
   commitDataDestinationDetailSelection,
-  type DataDestinationMode,
+  type DataDestinationDetailMode,
   type DataDestinationTrendOption,
 } from "../services/dataDestinationState.ts";
 import {
@@ -18,23 +18,23 @@ import {
 interface SelectionSnapshot {
   appKeys: string[];
   webKeys: string[];
-  mode: DataDestinationMode;
+  mode: DataDestinationDetailMode;
   listScrollTop: number;
 }
 
 interface Params {
   appKeys: readonly string[];
   webKeys: readonly string[];
-  mode: DataDestinationMode;
+  mode: DataDestinationDetailMode;
   rangeSelection: DataTrendRangeSelection;
   listRef: RefObject<HTMLDivElement | null>;
-  resolveOptionColor: (option: DataDestinationTrendOption, mode: DataDestinationMode) => string;
+  resolveOptionColor: (option: DataDestinationTrendOption, mode: DataDestinationDetailMode) => string;
   restoreSelectionSnapshot: (snapshot: SelectionSnapshot) => void;
 }
 
 interface DetailIntent {
   key: string;
-  mode: DataDestinationMode;
+  mode: DataDestinationDetailMode;
   snapshot: SelectionSnapshot;
   returnFocusTo: HTMLElement | null;
 }

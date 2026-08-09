@@ -111,6 +111,19 @@
   padding: 0;
 }
 
+.data-category-selected-icon > span,
+.data-category-color-marker {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--data-category-color, var(--qp-text-tertiary));
+}
+
+.data-app-option-icon[data-category-marker] {
+  padding: 0;
+}
+
 .data-app-panel [data-destination-detail-trigger] {
   cursor: pointer;
 }

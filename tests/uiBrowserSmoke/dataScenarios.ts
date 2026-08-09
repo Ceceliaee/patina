@@ -511,6 +511,55 @@ export async function runDataScenarios(
     );
 
     for (const panelSelector of [".data-overview", ".data-app-panel"]) {
+      assert.equal(
+        await evaluate(client!, sessionId, `
+          (() => {
+            const panel = document.querySelector(${jsonString(panelSelector)});
+            const previous = panel?.querySelector(
+              ".data-trend-range-control .qp-range-control-arrow:first-child",
+            );
+            if (!(previous instanceof HTMLButtonElement) || previous.disabled) return false;
+            previous.click();
+            return true;
+          })()
+        `),
+        true,
+      );
+      await waitForExpression(
+        client!,
+        sessionId,
+        `document.querySelector(${jsonString(panelSelector)})
+          ?.querySelector(".data-trend-range-trigger")
+          ?.textContent?.trim() === "总计"`,
+      );
+      assert.equal(
+        await evaluate(client!, sessionId, `
+          (() => {
+            const panel = document.querySelector(${jsonString(panelSelector)});
+            const previous = panel?.querySelector(
+              ".data-trend-range-control .qp-range-control-arrow:first-child",
+            );
+            const next = panel?.querySelector(
+              ".data-trend-range-control .qp-range-control-arrow:last-child",
+            );
+            if (!(previous instanceof HTMLButtonElement) || !previous.disabled) return false;
+            if (!(next instanceof HTMLButtonElement) || next.disabled) return false;
+            next.click();
+            return true;
+          })()
+        `),
+        true,
+      );
+      await waitForExpression(
+        client!,
+        sessionId,
+        `document.querySelector(${jsonString(panelSelector)})
+          ?.querySelector(".data-trend-range-trigger")
+          ?.textContent?.trim() === "近 7 天"`,
+      );
+    }
+
+    for (const panelSelector of [".data-overview", ".data-app-panel"]) {
       for (const expectedLabel of ["近 30 天", "近一年"]) {
         assert.equal(
           await evaluate(client!, sessionId, `
@@ -957,6 +1006,137 @@ export async function runDataScenarios(
       (() => {
         globalThis.__PATINA_WEB_ACTIVITY_QUERY_DELAY_MS = 0;
         globalThis.__PATINA_WEB_ACTIVITY_QUERY_FAILURE = false;
+        const group = document.querySelector('[aria-label="选择时间去向类型"]');
+        Array.from(group?.querySelectorAll("button") ?? [])
+          .find((node) => node.textContent?.trim() === "应用")?.click();
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-app-panel h3")?.textContent?.trim() === "应用趋势"`,
+    );
+  });
+
+  await runTest("data category mode groups apps without exposing object details", async () => {
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const group = document.querySelector('[aria-label="选择时间去向类型"]');
+          const labels = Array.from(group?.querySelectorAll("button") ?? [])
+            .map((node) => node.textContent?.trim());
+          if (JSON.stringify(labels) !== JSON.stringify(["应用", "分类", "网页"])) return false;
+          const category = Array.from(group?.querySelectorAll("button") ?? [])
+            .find((node) => node.textContent?.trim() === "分类");
+          if (!(category instanceof HTMLButtonElement)) return false;
+          category.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-app-panel h3")?.textContent?.trim() === "分类趋势"
+        && document.querySelectorAll('[aria-label="应用分类列表"] button').length === 2`,
+      45_000,
+      "category trend presentation",
+    );
+    const initialState = JSON.parse(String(await evaluate(client!, sessionId, `
+      (() => {
+        const panel = document.querySelector(".data-app-panel");
+        const list = document.querySelector('[aria-label="应用分类列表"]');
+        const selected = panel?.querySelector(".data-app-selected-status");
+        const selectedMarker = selected?.querySelector(".data-category-selected-icon");
+        const mode = document.querySelector('[aria-label="选择时间去向类型"]');
+        return JSON.stringify({
+          modePressed: mode?.querySelector('[aria-pressed="true"]')?.textContent?.trim() ?? null,
+          categories: Array.from(list?.querySelectorAll("button") ?? [])
+            .map((node) => node.textContent?.replace(/\\s+/g, " ").trim()),
+          detailTriggers: list?.querySelectorAll("[data-destination-detail-trigger]").length ?? -1,
+          detailButtons: selected?.querySelectorAll("button").length ?? -1,
+          selectedMarkers: selected?.querySelectorAll(".data-category-selected-icon").length ?? 0,
+          selectedMarkerBorder: selectedMarker ? getComputedStyle(selectedMarker).borderTopWidth : null,
+          selectedMarkerBackground: selectedMarker ? getComputedStyle(selectedMarker).backgroundColor : null,
+          heatmapTitle: panel?.querySelector(".data-heatmap-panel-compact h3")?.textContent?.trim() ?? null,
+          hasTooltipTitle: Boolean(panel?.querySelector('[title]')),
+        });
+      })()
+    `))) as {
+      modePressed: string | null;
+      categories: string[];
+      detailTriggers: number;
+      detailButtons: number;
+      selectedMarkers: number;
+      selectedMarkerBorder: string | null;
+      selectedMarkerBackground: string | null;
+      heatmapTitle: string | null;
+      hasTooltipTitle: boolean;
+    };
+    assert.equal(initialState.modePressed, "分类");
+    assert.equal(initialState.categories.length, 2);
+    assert.ok(initialState.categories.every((label) => label.includes("1 个应用")));
+    assert.equal(initialState.detailTriggers, 0);
+    assert.equal(initialState.detailButtons, 0);
+    assert.equal(initialState.selectedMarkers, 1);
+    assert.equal(initialState.selectedMarkerBorder, "0px");
+    assert.equal(initialState.selectedMarkerBackground, "rgba(0, 0, 0, 0)");
+    assert.equal(initialState.heatmapTitle, "分类热力图");
+    assert.equal(initialState.hasTooltipTitle, false);
+
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const buttons = document.querySelectorAll('[aria-label="应用分类列表"] button');
+        const second = buttons[1];
+        if (!(second instanceof HTMLButtonElement)) return false;
+        second.dispatchEvent(new MouseEvent("click", { bubbles: true, ctrlKey: true }));
+        return true;
+      })()
+    `), true);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll('[aria-label="应用分类列表"] button[aria-pressed="true"]').length === 2
+        && document.querySelectorAll(".data-category-selected-icon").length === 2`,
+    );
+
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const marker = document.querySelector('[aria-label="应用分类列表"] [data-category-marker]');
+        if (!(marker instanceof HTMLElement)) return false;
+        marker.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+        return true;
+      })()
+    `), true);
+    await delay(80);
+    assert.equal(
+      await evaluate(client!, sessionId, `Boolean(document.querySelector(".destination-detail-dialog"))`),
+      false,
+    );
+
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const input = document.querySelector('input[aria-label="搜索分类"]');
+        if (!(input instanceof HTMLInputElement)) return false;
+        const firstName = document.querySelector(
+          '[aria-label="应用分类列表"] .data-app-option-name',
+        )?.textContent?.trim();
+        if (!firstName) return false;
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        setter?.call(input, firstName);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        return true;
+      })()
+    `), true);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll('[aria-label="应用分类列表"] button').length === 1`,
+    );
+
+    await evaluate(client!, sessionId, `
+      (() => {
         const group = document.querySelector('[aria-label="选择时间去向类型"]');
         Array.from(group?.querySelectorAll("button") ?? [])
           .find((node) => node.textContent?.trim() === "应用")?.click();
@@ -3570,6 +3750,8 @@ export async function runDataScenarios(
           ).map((node) => (
             node.tagName === "H3"
               ? "title"
+              : node.classList.contains("data-destination-mode")
+                ? "mode"
               : node.classList.contains("data-app-selected-status")
                 ? "selected"
                 : node.classList.contains("data-app-refresh-status")
@@ -3585,13 +3767,20 @@ export async function runDataScenarios(
         headingOrder: string[];
         webCommandCount: number;
       };
-    assert.equal(webSyncDisabledState.modeControl, false);
+    assert.equal(webSyncDisabledState.modeControl, true);
     assert.equal(webSyncDisabledState.webText, false);
     assert.equal(webSyncDisabledState.webCommandCount, 0);
     assert.ok(
-      JSON.stringify(webSyncDisabledState.headingOrder) === JSON.stringify(["title"])
-        || JSON.stringify(webSyncDisabledState.headingOrder) === JSON.stringify(["title", "selected"]),
-      "selected icons must immediately follow the title when present, without a hidden placeholder",
+      JSON.stringify(webSyncDisabledState.headingOrder) === JSON.stringify(["title", "mode"])
+        || JSON.stringify(webSyncDisabledState.headingOrder) === JSON.stringify(["title", "mode", "selected"]),
+      "app and category mode control must remain before selected icons when Web Sync is disabled",
+    );
+    assert.deepEqual(
+      await evaluate(client!, sessionId, `
+        Array.from(document.querySelector('[aria-label="选择时间去向类型"]')?.querySelectorAll("button") ?? [])
+          .map((node) => node.textContent?.trim())
+      `),
+      ["应用", "分类"],
     );
 
     await evaluate(client!, sessionId, `

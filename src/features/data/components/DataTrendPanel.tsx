@@ -16,6 +16,8 @@ interface DataChartDimension {
 }
 
 interface DataTrendPanelProps {
+  allTimeEndDateKey: string;
+  allTimeStartDateKey: string;
   selection: DataTrendRangeSelection;
   viewModel: DataTrendViewModel | null;
   chartRef: Ref<HTMLDivElement>;
@@ -29,6 +31,8 @@ interface DataTrendPanelProps {
 }
 
 function DataTrendPanel({
+  allTimeEndDateKey,
+  allTimeStartDateKey,
   selection,
   viewModel,
   chartRef,
@@ -58,6 +62,8 @@ function DataTrendPanel({
           </div>
         </div>
         <DataTrendRangeControl
+          allTimeEndDateKey={allTimeEndDateKey}
+          allTimeStartDateKey={allTimeStartDateKey}
           ariaLabel={UI_TEXT.accessibility.data.trendRange}
           selection={selection}
           onChange={onSelectionChange}

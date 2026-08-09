@@ -34,6 +34,7 @@ import {
   replaceDataDestinationSelection,
   resolveDataDestinationMode,
   toggleDataDestinationSelection,
+  type DataDestinationDetailMode,
   type DataDestinationMode,
   type DataDestinationTrendOption,
 } from "../services/dataDestinationState.ts";
@@ -46,6 +47,12 @@ import {
   resolveDataDestinationSessionOptions,
 } from "../services/dataDestinationSessionState.ts";
 import {
+  buildDataCategoryTrendViewModelFromAggregate,
+  filterDataCategoryOptionsForQuery,
+  resolveDataCategorySourceAppKeys,
+  type DataCategoryTrendViewModel,
+} from "../services/dataCategoryTrendReadModel.ts";
+import {
   getCachedDataBootstrapSnapshot,
   loadPersistedDataBootstrapSnapshot,
   saveDataBootstrapSnapshot,
@@ -55,6 +62,7 @@ import { prewarmDataFirstScreen } from "../services/dataFirstScreenPrewarm.ts";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
 import type { TrackerHealthSnapshot } from "../../../shared/types/tracking";
 import type { QuietToastTone } from "../../../shared/types/toast.ts";
+import { formatLocalDateKey } from "../../../shared/lib/localDate.ts";
 import { resolveTrendDateFromChartEvent } from "../services/dataChartInteraction.ts";
 import type { DataTrendSnapshot } from "../services/dataTrendSnapshot.ts";
 import type { DataTrendRangeSelection } from "../services/dataTrendRange.ts";
@@ -109,6 +117,7 @@ const DATA_OPEN_PREWARM_IDLE_TIMEOUT_MS = 2_000;
 const DATA_STACKED_LAYOUT_QUERY = "(min-width: 901px) and (max-width: 1899px)";
 const EMPTY_DATA_ICON_EXE_NAMES: string[] = [];
 const EMPTY_DATA_APP_OPTIONS: DataAppTrendViewModel["appOptions"] = [];
+const EMPTY_DATA_CATEGORY_OPTIONS: DataCategoryTrendViewModel["categoryOptions"] = [];
 const EMPTY_HEATMAP_ROWS: ReturnType<typeof buildActivityHeatmap> = [];
 const DEFAULT_DATA_APP_CHART_AXIS: DataAppTrendViewModel["chartAxis"] = {
   domainMax: 3,
@@ -135,6 +144,25 @@ function toAppPanelOption(
     percentage: app.percentage,
     averageDuration: app.averageDuration,
     activeDayCount: app.activeDayCount,
+  };
+}
+
+function toCategoryPanelOption(
+  category: DataCategoryTrendViewModel["categoryOptions"][number],
+  uiText: UiText,
+): DataDestinationTrendOption {
+  return {
+    key: category.category,
+    identityKeys: [],
+    classificationCategory: category.category,
+    accentColor: category.color,
+    displayName: category.displayName,
+    secondaryText: uiText.data.categoryMemberCount(category.appCount),
+    iconUrl: null,
+    totalDuration: category.totalDuration,
+    percentage: category.percentage,
+    averageDuration: category.averageDuration,
+    activeDayCount: category.activeDayCount,
   };
 }
 
@@ -246,16 +274,23 @@ export default function Data({
   const [selectedAppKeys, setSelectedAppKeys] = useState<string[]>(
     () => getDataDestinationSessionSelectionState().appKeys,
   );
+  const [selectedCategoryKeys, setSelectedCategoryKeys] = useState<string[]>(
+    () => getDataDestinationSessionSelectionState().categoryKeys,
+  );
   const [selectedWebKeys, setSelectedWebKeys] = useState<string[]>(
     () => getDataDestinationSessionSelectionState().webKeys,
   );
   const appSelectionRevisionRef = useRef(
     getDataDestinationSessionSelectionRevision("app"),
   );
+  const categorySelectionRevisionRef = useRef(
+    getDataDestinationSessionSelectionRevision("category"),
+  );
   const webSelectionRevisionRef = useRef(
     getDataDestinationSessionSelectionRevision("web"),
   );
   const [appSearchQuery, setAppSearchQuery] = useState("");
+  const [categorySearchQuery, setCategorySearchQuery] = useState("");
   const [destinationMode, setDestinationMode] = useState<DataDestinationMode>("app");
   const [presentedDestinationMode, setPresentedDestinationMode] =
     useState<DataDestinationMode>("app");
@@ -265,16 +300,41 @@ export default function Data({
     setDestinationPanelCommitted(true);
   }, []);
   const [initialCachedHeatmapSessions] = useState(() => getCachedDataHeatmapSessions("recent", Date.now()));
+  const [earliestStartTime, setEarliestStartTime] = useState<number | null>(
+    getCachedEarliestSessionStartTime() ?? null,
+  );
+  const allTimeStartDateKey = formatLocalDateKey(
+    earliestStartTime === null ? today : new Date(earliestStartTime),
+  );
+  const allTimeEndDateKey = formatLocalDateKey(today);
+  const effectiveSelectedTrendRange = useMemo<DataTrendRangeSelection>(() => (
+    selectedTrendRange.kind === "all"
+      ? {
+        kind: "all",
+        startDateKey: allTimeStartDateKey,
+        endDateKey: allTimeEndDateKey,
+      }
+      : selectedTrendRange
+  ), [allTimeEndDateKey, allTimeStartDateKey, selectedTrendRange]);
+  const effectiveSelectedAppTrendRange = useMemo<DataTrendRangeSelection>(() => (
+    selectedAppTrendRange.kind === "all"
+      ? {
+        kind: "all",
+        startDateKey: allTimeStartDateKey,
+        endDateKey: allTimeEndDateKey,
+      }
+      : selectedAppTrendRange
+  ), [allTimeEndDateKey, allTimeStartDateKey, selectedAppTrendRange]);
   const [bootstrapSnapshot, setBootstrapSnapshot] = useState<DataBootstrapSnapshot | null>(
     () => getCachedDataBootstrapSnapshot(),
   );
   const overviewTrend = useDataTrendSnapshot({
-    selection: selectedTrendRange,
+    selection: effectiveSelectedTrendRange,
     refreshKey,
     loadSnapshot: loadDataTrendSnapshot,
   });
   const appTrend = useDataTrendSnapshot({
-    selection: selectedAppTrendRange,
+    selection: effectiveSelectedAppTrendRange,
     refreshKey,
     loadSnapshot: loadDataTrendSnapshot,
   });
@@ -284,9 +344,6 @@ export default function Data({
     useState<HeatmapSelection>("recent");
   const [destinationHeatmapGranularity, setDestinationHeatmapGranularity] =
     useState<HeatmapGranularity>("daily");
-  const [earliestStartTime, setEarliestStartTime] = useState<number | null>(
-    getCachedEarliestSessionStartTime() ?? null,
-  );
   const [yearSessions, setYearSessions] = useState<AggregateSessionRecord[]>(
     () => initialCachedHeatmapSessions ?? [],
   );
@@ -318,7 +375,7 @@ export default function Data({
     mode: destinationMode,
     trendNowMs: appTrend.nowMs,
     trendRangeCacheKey: appTrend.resolvedRange.cacheKey,
-    trendSelection: selectedAppTrendRange,
+    trendSelection: effectiveSelectedAppTrendRange,
     uiLanguage,
     selectedDomains: selectedWebKeys,
   });
@@ -329,6 +386,10 @@ export default function Data({
   const lastAppTrendViewModelRef = useRef<{
     rangeCacheKey: string;
     viewModel: DataAppTrendViewModel;
+  } | null>(null);
+  const lastCategoryTrendViewModelRef = useRef<{
+    rangeCacheKey: string;
+    viewModel: DataCategoryTrendViewModel;
   } | null>(null);
   const lastHeatmapRowsRef = useRef<{
     selection: HeatmapSelection;
@@ -369,20 +430,22 @@ export default function Data({
     if (resolvedMode !== destinationMode) {
       setDestinationMode(resolvedMode);
     }
-    if (!webActivityEnabled) {
+    if (!webActivityEnabled && presentedDestinationMode === "web") {
       setPresentedDestinationMode("app");
     }
   }, [
     destinationMode,
+    presentedDestinationMode,
     webActivityEnabled,
   ]);
 
   useEffect(() => {
     rememberDataDestinationSessionSelectionState({
       appKeys: selectedAppKeys,
+      categoryKeys: selectedCategoryKeys,
       webKeys: selectedWebKeys,
     });
-  }, [selectedAppKeys, selectedWebKeys]);
+  }, [selectedAppKeys, selectedCategoryKeys, selectedWebKeys]);
 
   useEffect(() => {
     let cancelled = false;
@@ -610,6 +673,42 @@ export default function Data({
       ? lastAppTrendViewModelRef.current.viewModel
       : null)
     ?? bootstrapAppTrendViewModel;
+  const categoryTrendViewModel = useMemo(() => {
+    const context = sharedTrendAggregateContext ?? (
+      appTrendSnapshotForViewModel
+        ? buildDataTrendAggregateContext(
+          appTrendSnapshotForViewModel.sessions,
+          appTrendSnapshotForViewModel.range,
+          appTrend.nowMs,
+          UI_TEXT,
+          uiLanguage,
+        )
+        : null
+    );
+    return context
+      ? buildDataCategoryTrendViewModelFromAggregate(context, selectedCategoryKeys)
+      : null;
+  // Category grouping reads module-level classification state; mappingVersion owns invalidation.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    appTrend.nowMs,
+    appTrendSnapshotForViewModel,
+    mappingVersion,
+    selectedCategoryKeys,
+    sharedTrendAggregateContext,
+    uiLanguage,
+    UI_TEXT,
+  ]);
+  if (categoryTrendViewModel) {
+    lastCategoryTrendViewModelRef.current = {
+      rangeCacheKey: appTrend.resolvedRange.cacheKey,
+      viewModel: categoryTrendViewModel,
+    };
+  }
+  const visibleCategoryTrendViewModel = categoryTrendViewModel
+    ?? (lastCategoryTrendViewModelRef.current?.rangeCacheKey === appTrend.resolvedRange.cacheKey
+      ? lastCategoryTrendViewModelRef.current.viewModel
+      : null);
   const dataIconExeNames = useMemo(
     () => visibleAppTrendViewModel?.appOptions.map((app) => app.exeName) ?? EMPTY_DATA_ICON_EXE_NAMES,
     [visibleAppTrendViewModel?.appOptions],
@@ -668,6 +767,39 @@ export default function Data({
     setAppSearchQuery(nextQuery);
     appListRef.current?.scrollTo({ top: 0 });
   }, []);
+  const categoryOptions = visibleCategoryTrendViewModel?.categoryOptions
+    ?? EMPTY_DATA_CATEGORY_OPTIONS;
+  const filteredCategoryOptions = useMemo(() => (
+    filterDataCategoryOptionsForQuery(categoryOptions, categorySearchQuery)
+  ), [categoryOptions, categorySearchQuery]);
+  const hasCategorySearchQuery = categorySearchQuery.trim().length > 0;
+
+  useEffect(() => {
+    if (!visibleCategoryTrendViewModel) return;
+    if (
+      selectedCategoryKeys.length > 0
+      && categorySelectionRevisionRef.current === mappingVersion
+    ) {
+      return;
+    }
+    const reconciled = reconcileDataDestinationSelection(
+      selectedCategoryKeys,
+      categoryOptions.map((category) => category.category),
+    );
+    categorySelectionRevisionRef.current = mappingVersion;
+    rememberDataDestinationSessionSelectionRevision("category", mappingVersion);
+    if (
+      encodeDataDestinationSelectionKey(reconciled)
+      !== encodeDataDestinationSelectionKey(selectedCategoryKeys)
+    ) {
+      setSelectedCategoryKeys(reconciled);
+    }
+  }, [categoryOptions, mappingVersion, selectedCategoryKeys, visibleCategoryTrendViewModel]);
+
+  const handleCategorySearchQueryChange = useCallback((nextQuery: string) => {
+    setCategorySearchQuery(nextQuery);
+    appListRef.current?.scrollTo({ top: 0 });
+  }, []);
   const {
     hasSearchQuery: hasWebSearchQuery,
     heatmapEarliestStartTime: webHeatmapEarliestStartTime,
@@ -704,7 +836,7 @@ export default function Data({
 
   useLayoutEffect(() => {
     appListRef.current?.scrollTo({ top: 0 });
-  }, [hasWebSearchQuery, presentedDestinationMode]);
+  }, [hasCategorySearchQuery, hasWebSearchQuery, presentedDestinationMode]);
 
   const appAllPanelOptions = useMemo<DataDestinationTrendOption[]>(() => {
     void mappingVersion;
@@ -723,6 +855,23 @@ export default function Data({
       appAllPanelOptions,
     );
   }, [appAllPanelOptions, dataIcons, mappingVersion, visibleAppTrendViewModel?.selectedApps]);
+  const categoryAllPanelOptions = useMemo<DataDestinationTrendOption[]>(() => (
+    categoryOptions.map((category) => toCategoryPanelOption(category, UI_TEXT))
+  ), [categoryOptions, UI_TEXT]);
+  const categoryPanelOptions = useMemo<DataDestinationTrendOption[]>(() => {
+    const visibleKeys = new Set<string>(
+      filteredCategoryOptions.map((category) => category.category),
+    );
+    return categoryAllPanelOptions.filter((option) => visibleKeys.has(option.key));
+  }, [categoryAllPanelOptions, filteredCategoryOptions]);
+  const categoryPanelSelectedOptions = useMemo<DataDestinationTrendOption[]>(() => (
+    resolveDataDestinationSessionOptions(
+      "category",
+      (visibleCategoryTrendViewModel?.selectedCategories ?? [])
+        .map((category) => toCategoryPanelOption(category, UI_TEXT)),
+      categoryAllPanelOptions,
+    )
+  ), [categoryAllPanelOptions, UI_TEXT, visibleCategoryTrendViewModel?.selectedCategories]);
   const webAllPanelOptions = useMemo<DataDestinationTrendOption[]>(() => (
     (webTrendViewModel?.domainOptions ?? []).map((domain) => ({
       key: domain.normalizedDomain,
@@ -748,6 +897,10 @@ export default function Data({
   }, [appPanelSelectedOptions]);
 
   useEffect(() => {
+    rememberDataDestinationSessionOptions("category", categoryPanelSelectedOptions);
+  }, [categoryPanelSelectedOptions]);
+
+  useEffect(() => {
     rememberDataDestinationSessionOptions("web", resolvedWebPanelSelectedOptions);
   }, [resolvedWebPanelSelectedOptions]);
   const destinationIconSources = useMemo<Record<string, string>>(() => {
@@ -760,7 +913,11 @@ export default function Data({
 
   const webDestinationReadyForPresentation = Boolean(webTrendViewModel) && webHeatmapReady;
   useLayoutEffect(() => {
-    if (!webActivityEnabled || destinationMode === "app") {
+    if (destinationMode !== "web") {
+      setPresentedDestinationMode(destinationMode);
+      return;
+    }
+    if (!webActivityEnabled) {
       setPresentedDestinationMode("app");
       return;
     }
@@ -785,28 +942,52 @@ export default function Data({
   ]);
 
   const isWebDestination = presentedDestinationMode === "web";
+  const isCategoryDestination = presentedDestinationMode === "category";
+  const availableDestinationModes = useMemo<DataDestinationMode[]>(() => (
+    webActivityEnabled ? ["app", "category", "web"] : ["app", "category"]
+  ), [webActivityEnabled]);
   const destinationModeSwitchPending = destinationMode !== presentedDestinationMode;
   const destinationPanelReady = isWebDestination
     ? Boolean(webTrendViewModel)
-    : Boolean(visibleAppTrendViewModel);
-  const destinationPanelOptions = isWebDestination ? webPanelOptions : appPanelOptions;
+    : isCategoryDestination
+      ? Boolean(visibleCategoryTrendViewModel)
+      : Boolean(visibleAppTrendViewModel);
+  const destinationPanelOptions = isWebDestination
+    ? webPanelOptions
+    : isCategoryDestination ? categoryPanelOptions : appPanelOptions;
   const destinationPanelSelectedOptions = isWebDestination
     ? resolvedWebPanelSelectedOptions
-    : appPanelSelectedOptions;
+    : isCategoryDestination ? categoryPanelSelectedOptions : appPanelSelectedOptions;
   const destinationChartData = useMemo(() => (
     isWebDestination
       ? webTrendViewModel?.chartRows ?? []
-      : visibleAppTrendViewModel?.chartRows ?? []
-  ), [isWebDestination, visibleAppTrendViewModel?.chartRows, webTrendViewModel?.chartRows]);
+      : isCategoryDestination
+        ? visibleCategoryTrendViewModel?.chartRows ?? []
+        : visibleAppTrendViewModel?.chartRows ?? []
+  ), [
+    isCategoryDestination,
+    isWebDestination,
+    visibleAppTrendViewModel?.chartRows,
+    visibleCategoryTrendViewModel?.chartRows,
+    webTrendViewModel?.chartRows,
+  ]);
   const destinationTrendSeries = useMemo(() => (
     buildDataDestinationTrendSeries(
       destinationPanelSelectedOptions,
       (option) => {
+        if (isCategoryDestination && option.accentColor) {
+          return option.accentColor;
+        }
         const colorKey = `${isWebDestination ? "web" : "app"}:${option.key}`;
         return destinationIconColors[colorKey] ?? getIconThemeFallbackColor(colorKey);
       },
     )
-  ), [destinationIconColors, destinationPanelSelectedOptions, isWebDestination]);
+  ), [
+    destinationIconColors,
+    destinationPanelSelectedOptions,
+    isCategoryDestination,
+    isWebDestination,
+  ]);
   const resolveDestinationOptionColor = useCallback((
     option: DataDestinationTrendOption,
     mode: DataDestinationMode = presentedDestinationMode,
@@ -814,6 +995,9 @@ export default function Data({
     const selectedSeries = destinationTrendSeries.find((series) => (
       series.key === option.key && mode === presentedDestinationMode
     ));
+    if (option.accentColor) {
+      return selectedSeries?.color ?? option.accentColor;
+    }
     const colorKey = `${mode}:${option.key}`;
     return selectedSeries?.color
       ?? destinationIconColors[colorKey]
@@ -825,26 +1009,89 @@ export default function Data({
   ]);
   const destinationChartAxis = isWebDestination
     ? webTrendViewModel?.chartAxis ?? DEFAULT_DATA_APP_CHART_AXIS
-    : visibleAppTrendViewModel?.chartAxis ?? DEFAULT_DATA_APP_CHART_AXIS;
+    : isCategoryDestination
+      ? visibleCategoryTrendViewModel?.chartAxis ?? DEFAULT_DATA_APP_CHART_AXIS
+      : visibleAppTrendViewModel?.chartAxis ?? DEFAULT_DATA_APP_CHART_AXIS;
   const destinationPeakDay = isWebDestination
     ? webTrendViewModel?.peakDay ?? null
-    : visibleAppTrendViewModel?.peakDay ?? null;
+    : isCategoryDestination
+      ? visibleCategoryTrendViewModel?.peakDay ?? null
+      : visibleAppTrendViewModel?.peakDay ?? null;
   const destinationSummary = isWebDestination
     ? webTrendViewModel?.summary ?? { totalDuration: 0, averageDuration: 0, activeDayCount: 0 }
-    : visibleAppTrendViewModel?.summary ?? { totalDuration: 0, averageDuration: 0, activeDayCount: 0 };
+    : isCategoryDestination
+      ? visibleCategoryTrendViewModel?.summary ?? { totalDuration: 0, averageDuration: 0, activeDayCount: 0 }
+      : visibleAppTrendViewModel?.summary ?? { totalDuration: 0, averageDuration: 0, activeDayCount: 0 };
   const destinationGranularity = isWebDestination
     ? webTrendViewModel?.granularity ?? "day"
-    : visibleAppTrendViewModel?.granularity ?? "day";
+    : isCategoryDestination
+      ? visibleCategoryTrendViewModel?.granularity ?? "day"
+      : visibleAppTrendViewModel?.granularity ?? "day";
+  const destinationTrendSelection = isWebDestination
+    ? webTrendViewModel?.range.selection ?? effectiveSelectedAppTrendRange
+    : isCategoryDestination
+      ? visibleCategoryTrendViewModel?.range.selection ?? effectiveSelectedAppTrendRange
+      : visibleAppTrendViewModel?.range.selection ?? effectiveSelectedAppTrendRange;
   const destinationCanOpenHistory = destinationGranularity === "day"
     && destinationPanelSelectedOptions.length > 0
     && Boolean(onOpenHistoryDate);
+  const destinationTitle = isWebDestination
+    ? UI_TEXT.data.webTrend
+    : isCategoryDestination ? UI_TEXT.data.categoryTrend : UI_TEXT.data.appTrend;
+  const destinationRangeAriaLabel = isWebDestination
+    ? UI_TEXT.accessibility.data.webTrendRange
+    : isCategoryDestination
+      ? UI_TEXT.accessibility.data.categoryTrendRange
+      : UI_TEXT.accessibility.data.appTrendRange;
+  const destinationSearchQuery = isWebDestination
+    ? webSearchQuery
+    : isCategoryDestination ? categorySearchQuery : appSearchQuery;
+  const destinationHasSearchQuery = isWebDestination
+    ? hasWebSearchQuery
+    : isCategoryDestination ? hasCategorySearchQuery : hasAppSearchQuery;
+  const destinationSearchPlaceholder = isWebDestination
+    ? UI_TEXT.data.webSearchPlaceholder
+    : isCategoryDestination
+      ? UI_TEXT.data.categorySearchPlaceholder
+      : UI_TEXT.data.appSearchPlaceholder;
+  const destinationListAriaLabel = isWebDestination
+    ? UI_TEXT.data.webTrendDomainList
+    : isCategoryDestination
+      ? UI_TEXT.data.categoryTrendCategoryList
+      : UI_TEXT.data.appTrendAppList;
+  const destinationEmptyLabel = isWebDestination
+    ? UI_TEXT.data.webTrendEmpty
+    : isCategoryDestination ? UI_TEXT.data.categoryTrendEmpty : UI_TEXT.data.appTrendEmpty;
+  const destinationNoMatchLabel = isWebDestination
+    ? UI_TEXT.data.webTrendNoMatch
+    : isCategoryDestination ? UI_TEXT.data.categoryTrendNoMatch : UI_TEXT.data.appTrendNoMatch;
+  const destinationTotalMetricLabel = isWebDestination
+    ? UI_TEXT.data.webTrendTotal
+    : UI_TEXT.data.appTrendTotal;
+  const destinationUsageMetricLabel = isWebDestination
+    ? UI_TEXT.data.webTrendUsage
+    : isCategoryDestination ? UI_TEXT.data.categoryTrend : UI_TEXT.data.appTrendUsage;
+  const destinationInteractionHint = isCategoryDestination
+    ? UI_TEXT.data.categoryInteractionHint
+    : UI_TEXT.data.interactionHint;
+  const destinationHeatmapTitle = isWebDestination
+    ? UI_TEXT.data.webHeatmap
+    : isCategoryDestination ? UI_TEXT.data.categoryHeatmap : UI_TEXT.data.appHeatmap;
+  const destinationSelectionKeys = isWebDestination
+    ? selectedWebKeys
+    : isCategoryDestination ? selectedCategoryKeys : selectedAppKeys;
+  const destinationSupportsObjectActions = !isCategoryDestination;
   const handleDestinationOptionSelect = useCallback((key: string, multi: boolean) => {
-    const currentKeys = presentedDestinationMode === "web" ? selectedWebKeys : selectedAppKeys;
+    const currentKeys = presentedDestinationMode === "web"
+      ? selectedWebKeys
+      : presentedDestinationMode === "category" ? selectedCategoryKeys : selectedAppKeys;
     const result = multi
       ? toggleDataDestinationSelection(currentKeys, key)
       : replaceDataDestinationSelection(key);
     if (presentedDestinationMode === "web") {
       setSelectedWebKeys(result.keys);
+    } else if (presentedDestinationMode === "category") {
+      setSelectedCategoryKeys(result.keys);
     } else {
       setSelectedAppKeys(result.keys);
     }
@@ -853,17 +1100,25 @@ export default function Data({
     } else if (result.outcome === "last-item") {
       onToast?.(UI_TEXT.data.selectionLastItem, "warning");
     }
-  }, [onToast, presentedDestinationMode, selectedAppKeys, selectedWebKeys, UI_TEXT]);
+  }, [
+    onToast,
+    presentedDestinationMode,
+    selectedAppKeys,
+    selectedCategoryKeys,
+    selectedWebKeys,
+    UI_TEXT,
+  ]);
   const restoreDestinationDetailSelection = useCallback((selectionSnapshot: {
     appKeys: string[];
     webKeys: string[];
-    mode: DataDestinationMode;
+    mode: DataDestinationDetailMode;
   }) => {
     setSelectedAppKeys(selectionSnapshot.appKeys);
     setSelectedWebKeys(selectionSnapshot.webKeys);
     setDestinationMode(selectionSnapshot.mode);
     setPresentedDestinationMode(selectionSnapshot.mode);
   }, []);
+  const destinationDetailMode: DataDestinationDetailMode = isWebDestination ? "web" : "app";
   const {
     request: destinationDetail,
     captureIntent: captureDestinationDetailIntent,
@@ -872,8 +1127,8 @@ export default function Data({
   } = useDataDetailEntry({
     appKeys: selectedAppKeys,
     listRef: appListRef,
-    mode: presentedDestinationMode,
-    rangeSelection: selectedAppTrendRange,
+    mode: destinationDetailMode,
+    rangeSelection: destinationTrendSelection,
     resolveOptionColor: resolveDestinationOptionColor,
     restoreSelectionSnapshot: restoreDestinationDetailSelection,
     webKeys: selectedWebKeys,
@@ -960,6 +1215,21 @@ export default function Data({
     { value: "daily", label: UI_TEXT.data.heatmapDaily },
     { value: "weekly", label: UI_TEXT.data.heatmapWeekly },
   ], [UI_TEXT]);
+  const selectedCategoryHeatmapAppKeys = useMemo(() => (
+    isCategoryDestination
+      ? resolveDataCategorySourceAppKeys(
+        destinationHeatmapSnapshot.sessions,
+        selectedCategoryKeys,
+      )
+      : []
+  ), [
+    destinationHeatmapSnapshot.sessions,
+    isCategoryDestination,
+    selectedCategoryKeys,
+  ]);
+  const selectedDestinationAppKeys = isCategoryDestination
+    ? selectedCategoryHeatmapAppKeys
+    : selectedAppKeys;
   const destinationAppHeatmapRows = useMemo(() => (
     buildActivityHeatmap(
       !isWebDestination && destinationPanelSelectedOptions.length > 0
@@ -969,14 +1239,14 @@ export default function Data({
       nowMs,
       UI_TEXT,
       uiLanguage,
-      selectedAppKeys,
+      selectedDestinationAppKeys,
     )
   ), [
     destinationPanelSelectedOptions.length,
     destinationHeatmapSnapshot.sessions,
     isWebDestination,
     nowMs,
-    selectedAppKeys,
+    selectedDestinationAppKeys,
     selectedDestinationHeatmapView,
     UI_TEXT,
     uiLanguage,
@@ -1224,7 +1494,9 @@ export default function Data({
         <div className="data-dashboard-grid">
           <div className="qp-panel p-5 data-overview">
             <DataTrendPanel
-              selection={selectedTrendRange}
+              allTimeEndDateKey={allTimeEndDateKey}
+              allTimeStartDateKey={allTimeStartDateKey}
+              selection={effectiveSelectedTrendRange}
               viewModel={visibleTrendViewModel}
               chartRef={overviewTrendChart.chartRef}
               initialDimension={overviewTrendChart.initialDimension}
@@ -1252,48 +1524,39 @@ export default function Data({
           </div>
 
           <DataAppTrendPanel
+            allTimeEndDateKey={allTimeEndDateKey}
+            allTimeStartDateKey={allTimeStartDateKey}
             onContentCommitted={handleDestinationPanelCommitted}
             destinationMode={destinationMode}
-            showDestinationMode={webActivityEnabled}
-            title={isWebDestination ? UI_TEXT.data.webTrend : UI_TEXT.data.appTrend}
-            rangeAriaLabel={isWebDestination
-              ? UI_TEXT.accessibility.data.webTrendRange
-              : UI_TEXT.accessibility.data.appTrendRange}
-            selection={selectedAppTrendRange}
+            availableDestinationModes={availableDestinationModes}
+            title={destinationTitle}
+            rangeAriaLabel={destinationRangeAriaLabel}
+            selection={destinationTrendSelection}
             ready={destinationPanelReady}
             selectedOptions={destinationPanelSelectedOptions}
             trendSeries={destinationTrendSeries}
             summary={destinationSummary}
             filteredOptions={destinationPanelOptions}
-            searchQuery={isWebDestination ? webSearchQuery : appSearchQuery}
-            hasSearchQuery={isWebDestination ? hasWebSearchQuery : hasAppSearchQuery}
-            searchPlaceholder={isWebDestination
-              ? UI_TEXT.data.webSearchPlaceholder
-              : UI_TEXT.data.appSearchPlaceholder}
-            listAriaLabel={isWebDestination
-              ? UI_TEXT.data.webTrendDomainList
-              : UI_TEXT.data.appTrendAppList}
-            emptyLabel={isWebDestination
-              ? UI_TEXT.data.webTrendEmpty
-              : UI_TEXT.data.appTrendEmpty}
-            noMatchLabel={isWebDestination
-              ? UI_TEXT.data.webTrendNoMatch
-              : UI_TEXT.data.appTrendNoMatch}
-            totalMetricLabel={isWebDestination
-              ? UI_TEXT.data.webTrendTotal
-              : UI_TEXT.data.appTrendTotal}
-            usageMetricLabel={isWebDestination
-              ? UI_TEXT.data.webTrendUsage
-              : UI_TEXT.data.appTrendUsage}
+            searchQuery={destinationSearchQuery}
+            hasSearchQuery={destinationHasSearchQuery}
+            searchPlaceholder={destinationSearchPlaceholder}
+            listAriaLabel={destinationListAriaLabel}
+            emptyLabel={destinationEmptyLabel}
+            noMatchLabel={destinationNoMatchLabel}
+            totalMetricLabel={destinationTotalMetricLabel}
+            usageMetricLabel={destinationUsageMetricLabel}
+            interactionHint={destinationInteractionHint}
+            supportsDestinationDetails={destinationSupportsObjectActions}
+            supportsQuickClassification={destinationSupportsObjectActions}
             granularity={destinationGranularity}
             chartData={destinationChartData}
             heatmapContent={(
               <DataHeatmapPanel
-                title={isWebDestination ? UI_TEXT.data.webHeatmap : UI_TEXT.data.appHeatmap}
+                title={destinationHeatmapTitle}
                 compact
                 selectedHeatmapView={selectedDestinationHeatmapView}
                 selectedHeatmapViewKey={`${presentedDestinationMode}:${encodeDataDestinationSelectionKey(
-                  isWebDestination ? selectedWebKeys : selectedAppKeys,
+                  destinationSelectionKeys,
                 )}:${selectedDestinationHeatmapView}`}
                 rows={visibleDestinationHeatmapRows}
                 granularity={destinationHeatmapGranularity}
@@ -1323,7 +1586,9 @@ export default function Data({
             onSelectionChange={setSelectedAppTrendRange}
             onSearchQueryChange={isWebDestination
               ? webActivity.setSearchQuery
-              : handleAppSearchQueryChange}
+              : isCategoryDestination
+                ? handleCategorySearchQueryChange
+                : handleAppSearchQueryChange}
             onOptionSelect={handleDestinationOptionSelect}
             onOptionIntentStart={captureDestinationDetailIntent}
             onOptionOpenDetails={handleOpenDestinationDetail}

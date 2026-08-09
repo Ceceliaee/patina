@@ -29,9 +29,11 @@ interface DataChartDimension {
 }
 
 interface DataAppTrendPanelProps {
+  allTimeEndDateKey: string;
+  allTimeStartDateKey: string;
   onContentCommitted?: () => void;
   destinationMode: DataDestinationMode;
-  showDestinationMode: boolean;
+  availableDestinationModes: DataDestinationMode[];
   title: string;
   rangeAriaLabel: string;
   selection: DataTrendRangeSelection;
@@ -48,6 +50,9 @@ interface DataAppTrendPanelProps {
   noMatchLabel: string;
   totalMetricLabel: string;
   usageMetricLabel: string;
+  interactionHint: string;
+  supportsDestinationDetails: boolean;
+  supportsQuickClassification: boolean;
   granularity: "day" | "month";
   chartData: DataDestinationTrendChartRow[];
   heatmapContent: ReactNode;
@@ -89,9 +94,11 @@ function getOptionInitial(displayName: string) {
 }
 
 function DataAppTrendPanel({
+  allTimeEndDateKey,
+  allTimeStartDateKey,
   onContentCommitted,
   destinationMode,
-  showDestinationMode,
+  availableDestinationModes,
   title,
   rangeAriaLabel,
   selection,
@@ -108,6 +115,9 @@ function DataAppTrendPanel({
   noMatchLabel,
   totalMetricLabel,
   usageMetricLabel,
+  interactionHint,
+  supportsDestinationDetails,
+  supportsQuickClassification,
   granularity,
   chartData,
   heatmapContent,
@@ -137,10 +147,15 @@ function DataAppTrendPanel({
 }: DataAppTrendPanelProps) {
   const UI_TEXT = useLocaleText();
   const detailCopy = UI_TEXT.destinationDetail;
-  const modeOptions = [
-    { value: "app" as const, label: UI_TEXT.data.destinationApp },
-    { value: "web" as const, label: UI_TEXT.data.destinationWeb },
-  ];
+  const modeLabels: Record<DataDestinationMode, string> = {
+    app: UI_TEXT.data.destinationApp,
+    category: UI_TEXT.data.destinationCategory,
+    web: UI_TEXT.data.destinationWeb,
+  };
+  const modeOptions = availableDestinationModes.map((value) => ({
+    value,
+    label: modeLabels[value],
+  }));
   useLayoutEffect(() => {
     onContentCommitted?.();
   }, [onContentCommitted]);
@@ -152,7 +167,7 @@ function DataAppTrendPanel({
           <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">
             {title}
           </h3>
-          {showDestinationMode ? (
+          {modeOptions.length > 1 ? (
             <QuietSegmentedFilter
               value={destinationMode}
               options={modeOptions}
@@ -167,75 +182,89 @@ function DataAppTrendPanel({
               aria-label={UI_TEXT.data.selectedObjectCount(selectedOptions.length)}
             >
               {selectedOptions.map((option) => (
-                <button
-                  type="button"
-                  className="data-app-selected-icon"
-                  data-destination-detail-trigger
-                  data-selection-key={option.key}
-                  key={option.key}
-                  aria-label={detailCopy.open(option.displayName)}
-                  aria-keyshortcuts={option.exeName || option.normalizedDomain ? "Enter Shift+F10" : "Enter"}
-                  aria-haspopup={option.exeName || option.normalizedDomain ? "menu" : undefined}
-                  aria-expanded={option.exeName || option.normalizedDomain
-                    ? activeQuickClassificationTargetKey === (option.exeName
-                      ? `app:${option.exeName}`
-                      : `web:${option.normalizedDomain}`)
-                    : undefined}
-                  onPointerEnter={option.exeName || option.normalizedDomain ? onQuickClassificationPreload : undefined}
-                  onFocus={option.exeName || option.normalizedDomain ? onQuickClassificationPreload : undefined}
-                  onMouseDown={(event) => {
-                    if (event.button === 0 && event.detail === 1) {
-                      onOptionIntentStart(option, event.currentTarget);
-                    }
-                  }}
-                  onDoubleClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onOptionOpenDetails(option);
-                  }}
-                  onContextMenu={option.exeName || option.normalizedDomain ? (event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onQuickClassificationOpen?.(
-                      option,
-                      { clientX: event.clientX, clientY: event.clientY },
-                      event.currentTarget,
-                    );
-                  } : undefined}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
+                supportsDestinationDetails ? (
+                  <button
+                    type="button"
+                    className="data-app-selected-icon"
+                    data-destination-detail-trigger
+                    data-selection-key={option.key}
+                    key={option.key}
+                    aria-label={detailCopy.open(option.displayName)}
+                    aria-keyshortcuts={supportsQuickClassification ? "Enter Shift+F10" : "Enter"}
+                    aria-haspopup={supportsQuickClassification ? "menu" : undefined}
+                    aria-expanded={supportsQuickClassification
+                      ? activeQuickClassificationTargetKey === (option.exeName
+                        ? `app:${option.exeName}`
+                        : `web:${option.normalizedDomain}`)
+                      : undefined}
+                    onPointerEnter={supportsQuickClassification ? onQuickClassificationPreload : undefined}
+                    onFocus={supportsQuickClassification ? onQuickClassificationPreload : undefined}
+                    onMouseDown={(event) => {
+                      if (event.button === 0 && event.detail === 1) {
+                        onOptionIntentStart(option, event.currentTarget);
+                      }
+                    }}
+                    onDoubleClick={(event) => {
                       event.preventDefault();
-                      onOptionIntentStart(option, event.currentTarget);
+                      event.stopPropagation();
                       onOptionOpenDetails(option);
-                      return;
-                    }
-                    if (
-                      (option.exeName || option.normalizedDomain)
-                      && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))
-                    ) {
+                    }}
+                    onContextMenu={supportsQuickClassification ? (event) => {
                       event.preventDefault();
-                      const bounds = event.currentTarget.getBoundingClientRect();
+                      event.stopPropagation();
                       onQuickClassificationOpen?.(
                         option,
-                        {
-                          clientX: bounds.left + bounds.width / 2,
-                          clientY: bounds.top + bounds.height / 2,
-                        },
+                        { clientX: event.clientX, clientY: event.clientY },
                         event.currentTarget,
                       );
-                    }
-                  }}
-                >
-                  {option.iconUrl ? (
-                    <img
-                      src={option.iconUrl}
-                      alt=""
-                      draggable={false}
-                    />
-                  ) : (
-                    getOptionInitial(option.displayName)
-                  )}
-                </button>
+                    } : undefined}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        onOptionIntentStart(option, event.currentTarget);
+                        onOptionOpenDetails(option);
+                        return;
+                      }
+                      if (
+                        supportsQuickClassification
+                        && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))
+                      ) {
+                        event.preventDefault();
+                        const bounds = event.currentTarget.getBoundingClientRect();
+                        onQuickClassificationOpen?.(
+                          option,
+                          {
+                            clientX: bounds.left + bounds.width / 2,
+                            clientY: bounds.top + bounds.height / 2,
+                          },
+                          event.currentTarget,
+                        );
+                      }
+                    }}
+                  >
+                    {option.iconUrl ? (
+                      <img
+                        src={option.iconUrl}
+                        alt=""
+                        draggable={false}
+                      />
+                    ) : (
+                      getOptionInitial(option.displayName)
+                    )}
+                  </button>
+                ) : (
+                  <span
+                    className="data-app-selected-icon data-category-selected-icon"
+                    data-selection-key={option.key}
+                    key={option.key}
+                    style={{
+                      "--data-category-color": option.accentColor,
+                    } as CSSProperties}
+                    aria-hidden
+                  >
+                    <span />
+                  </span>
+                )
               ))}
             </div>
           ) : null}
@@ -257,6 +286,8 @@ function DataAppTrendPanel({
         </div>
         <div className="data-app-header-actions">
           <DataTrendRangeControl
+            allTimeEndDateKey={allTimeEndDateKey}
+            allTimeStartDateKey={allTimeStartDateKey}
             ariaLabel={rangeAriaLabel}
             selection={selection}
             onChange={onSelectionChange}
@@ -309,7 +340,7 @@ function DataAppTrendPanel({
         >
           <div
             className="data-app-sidebar"
-            data-hint={UI_TEXT.data.interactionHint}
+            data-hint={interactionHint}
           >
             <QuietSearchField
               value={searchQuery}
@@ -322,7 +353,7 @@ function DataAppTrendPanel({
               ref={listRef}
               className="data-app-list data-app-trend-list"
               aria-label={listAriaLabel}
-              aria-description={UI_TEXT.data.interactionHint}
+              aria-description={interactionHint}
             >
               {filteredOptions.length === 0 ? (
                 <div className="data-app-empty text-[var(--qp-text-tertiary)] text-xs">
@@ -334,7 +365,7 @@ function DataAppTrendPanel({
                 const series = selectedIndex >= 0 ? trendSeries[selectedIndex] : null;
                 const handleOptionKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
                   if (
-                    (option.exeName || option.normalizedDomain)
+                    supportsQuickClassification
                     && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))
                   ) {
                     event.preventDefault();
@@ -351,10 +382,10 @@ function DataAppTrendPanel({
                   }
                   if (event.key !== "Enter" && event.key !== " ") return;
                   event.preventDefault();
-                  onOptionIntentStart(option, event.currentTarget);
                   if (event.ctrlKey) {
                     onOptionSelect(option.key, true);
-                  } else if (event.key === "Enter") {
+                  } else if (event.key === "Enter" && supportsDestinationDetails) {
+                    onOptionIntentStart(option, event.currentTarget);
                     onOptionOpenDetails(option);
                   } else {
                     onOptionSelect(option.key, false);
@@ -372,6 +403,8 @@ function DataAppTrendPanel({
                     onMouseDown={(event) => {
                       const target = event.target as HTMLElement;
                       if (
+                        supportsDestinationDetails
+                        &&
                         event.button === 0
                         &&
                         event.detail === 1
@@ -383,12 +416,12 @@ function DataAppTrendPanel({
                     onClick={(event) => onOptionSelect(option.key, event.ctrlKey)}
                     onDoubleClick={(event) => {
                       const target = event.target as HTMLElement;
-                      if (!target.closest("[data-destination-detail-trigger]")) return;
+                      if (!supportsDestinationDetails || !target.closest("[data-destination-detail-trigger]")) return;
                       event.preventDefault();
                       event.stopPropagation();
                       onOptionOpenDetails(option);
                     }}
-                    onContextMenu={option.exeName || option.normalizedDomain ? (event) => {
+                    onContextMenu={supportsQuickClassification ? (event) => {
                       const target = event.target as HTMLElement;
                       if (!target.closest("[data-destination-detail-trigger]")) return;
                       event.preventDefault();
@@ -399,27 +432,33 @@ function DataAppTrendPanel({
                         event.currentTarget,
                       );
                     } : undefined}
-                    onPointerEnter={option.exeName || option.normalizedDomain ? onQuickClassificationPreload : undefined}
-                    onFocus={option.exeName || option.normalizedDomain ? onQuickClassificationPreload : undefined}
+                    onPointerEnter={supportsQuickClassification ? onQuickClassificationPreload : undefined}
+                    onFocus={supportsQuickClassification ? onQuickClassificationPreload : undefined}
                     onKeyDown={handleOptionKeyDown}
                     aria-pressed={isSelected}
-                    aria-keyshortcuts={option.exeName || option.normalizedDomain
+                    aria-keyshortcuts={supportsQuickClassification
                       ? "Enter Space Control+Enter Control+Space Shift+F10"
                       : "Enter Space Control+Enter Control+Space"}
-                    aria-haspopup={option.exeName || option.normalizedDomain ? "menu" : undefined}
-                    aria-expanded={option.exeName || option.normalizedDomain
+                    aria-haspopup={supportsQuickClassification ? "menu" : undefined}
+                    aria-expanded={supportsQuickClassification
                       ? activeQuickClassificationTargetKey === (option.exeName
                         ? `app:${option.exeName}`
                         : `web:${option.normalizedDomain}`)
                       : undefined}
-                    aria-description={UI_TEXT.data.interactionHint}
+                    aria-description={interactionHint}
                   >
                     <span
                       className="data-app-option-icon"
-                      data-destination-detail-trigger
+                      data-destination-detail-trigger={supportsDestinationDetails ? "" : undefined}
+                      data-category-marker={option.accentColor ? "" : undefined}
+                      style={option.accentColor ? {
+                        "--data-category-color": option.accentColor,
+                      } as CSSProperties : undefined}
                       aria-hidden
                     >
-                      {option.iconUrl ? (
+                      {option.accentColor ? (
+                        <span className="data-category-color-marker" />
+                      ) : option.iconUrl ? (
                         <img src={option.iconUrl} alt="" draggable={false} />
                       ) : (
                         getOptionInitial(option.displayName)
@@ -429,7 +468,7 @@ function DataAppTrendPanel({
                       <span className="data-app-option-name-row">
                         <span className="data-app-option-name">{option.displayName}</span>
                         <QuickClassificationStatus
-                          unclassified={Boolean((option.exeName || option.normalizedDomain) && option.unclassified)}
+                          unclassified={Boolean(supportsQuickClassification && option.unclassified)}
                         />
                       </span>
                       <span className="data-app-option-meta">
