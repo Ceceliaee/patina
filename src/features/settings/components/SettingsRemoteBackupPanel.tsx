@@ -95,7 +95,6 @@ export default function SettingsRemoteBackupPanel({
   const serverUrlRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState<RemoteBackupFormDraft>(() => buildInitialDraft(remoteBackup));
   const [passwordVisible, setPasswordVisible] = useState(false);
-  const [isRevealingPassword, setIsRevealingPassword] = useState(false);
   const wasConfigDialogOpenRef = useRef(false);
   const busy = remoteBackup.isSaving
     || remoteBackup.isTesting
@@ -106,54 +105,16 @@ export default function SettingsRemoteBackupPanel({
   const hasSavedConfigSecret = configured && remoteBackup.hasSecret;
 
   useEffect(() => {
-    let cancelled = false;
     const openedNow = remoteBackup.configDialogOpen && !wasConfigDialogOpenRef.current;
     wasConfigDialogOpenRef.current = remoteBackup.configDialogOpen;
     if (openedNow) {
       setDraft(buildInitialDraft(remoteBackup));
       setPasswordVisible(false);
-      if (hasSavedConfigSecret) {
-        setIsRevealingPassword(true);
-        void remoteBackup.revealSavedPassword()
-          .then((savedPassword) => {
-            if (!cancelled && savedPassword) {
-              setDraft((current) => ({ ...current, password: savedPassword }));
-            }
-          })
-          .finally(() => {
-            if (!cancelled) {
-              setIsRevealingPassword(false);
-            }
-          });
-      }
     }
-    return () => {
-      cancelled = true;
-    };
   }, [remoteBackup.configDialogOpen, remoteBackup.config, hasSavedConfigSecret, remoteBackup]);
 
   const canUseRemote = configured && remoteBackup.hasSecret;
-  const handleTogglePasswordVisibility = async () => {
-    if (passwordVisible) {
-      setPasswordVisible(false);
-      return;
-    }
-    let shouldShowPassword = true;
-    if (!draft.password && hasSavedConfigSecret) {
-      setIsRevealingPassword(true);
-      try {
-        const savedPassword = await remoteBackup.revealSavedPassword();
-        if (savedPassword) {
-          setDraft((current) => ({ ...current, password: savedPassword }));
-        } else {
-          shouldShowPassword = false;
-        }
-      } finally {
-        setIsRevealingPassword(false);
-      }
-    }
-    setPasswordVisible(shouldShowPassword);
-  };
+  const handleTogglePasswordVisibility = () => setPasswordVisible((visible) => !visible);
 
   return (
     <>
@@ -278,15 +239,16 @@ export default function SettingsRemoteBackupPanel({
               <input
                 value={draft.password}
                 onChange={(event) => setDraft((current) => ({ ...current, password: event.target.value }))}
-                className={`qp-input h-9 w-full pr-10 ${passwordVisible ? "" : "settings-webdav-password-masked"}`.trim()}
-                type="text"
+                className="qp-input h-9 w-full pr-10"
+                type={passwordVisible ? "text" : "password"}
+                placeholder={hasSavedConfigSecret ? "••••••••" : undefined}
                 disabled={busy}
                 autoComplete="current-password"
               />
               <button
                 type="button"
-                onClick={() => void handleTogglePasswordVisibility()}
-                disabled={busy || isRevealingPassword}
+                onClick={handleTogglePasswordVisibility}
+                disabled={busy}
                 aria-label={passwordVisible ? UI_TEXT.common.hidePassword : UI_TEXT.common.showPassword}
                 className="absolute right-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-[6px] text-[var(--qp-text-tertiary)] transition-colors hover:bg-[var(--qp-surface-muted)] hover:text-[var(--qp-text-secondary)] disabled:opacity-50"
               >

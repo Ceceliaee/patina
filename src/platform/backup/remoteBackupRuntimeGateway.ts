@@ -154,13 +154,6 @@ export async function hasWebDavBackupSecret(): Promise<boolean> {
   return invoke<boolean>("cmd_has_webdav_backup_secret");
 }
 
-export async function revealWebDavBackupSecret(): Promise<string | null> {
-  const result = await invoke<unknown>("cmd_reveal_webdav_backup_secret");
-  if (result === null) return null;
-  if (typeof result === "string") return result;
-  throw new Error("Received invalid WebDAV secret payload");
-}
-
 export async function testWebDavBackupTarget(config: WebDavBackupConfig, password?: string): Promise<boolean> {
   const result = await invoke<{ ok?: unknown }>("cmd_test_webdav_backup_target", { config, password });
   return result.ok === true;

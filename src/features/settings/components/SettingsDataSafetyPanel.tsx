@@ -1,9 +1,8 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
-import { useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useRef, useState, type ReactNode } from "react";
 import {
   BrushCleaning, Database, FolderPen, FileArchive, FileDown, FileUp, FolderOpen, CircleAlert, RefreshCw, RotateCcw, Trash2, X, } from "lucide-react";
 
-import QuietBadge from "../../../shared/components/QuietBadge";
 import QuietSubpanel from "../../../shared/components/QuietSubpanel";
 import QuietActionRow from "../../../shared/components/QuietActionRow";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
@@ -19,6 +18,10 @@ import SettingsRemoteBackupPanel from "./SettingsRemoteBackupPanel";
 import QuietStepperSlider from "../../../shared/components/QuietStepperSlider.tsx";
 import SettingsPanelHeader from "./SettingsPanelHeader";
 import { toEbwebviewCachePath } from "../services/storagePathDisplay.ts";
+import { formatRemoteBackupTargetSummary } from "../services/remoteBackupTargetSummary.ts";
+
+const settingsBackupDialogModule = import("./SettingsBackupDialog");
+const SettingsBackupDialog = lazy(() => settingsBackupDialogModule);
 
 type CleanupOption = { value: CleanupRange; label: string };
 
@@ -177,7 +180,6 @@ export default function SettingsDataSafetyPanel({
 }: SettingsDataSafetyPanelProps) {
   const UI_TEXT = useLocaleText();
   const cacheClearCancelRef = useRef<HTMLButtonElement>(null);
-  const localBackupRef = useRef<HTMLButtonElement>(null);
   const localRestoreRef = useRef<HTMLButtonElement>(null);
   const selectedRestoreStrategyRef = useRef<HTMLButtonElement>(null);
   const [strategyDialogOpen, setStrategyDialogOpen] = useState(false);
@@ -230,11 +232,7 @@ export default function SettingsDataSafetyPanel({
   };
 
   const handleBackupAction = () => {
-    if (hasRemoteBackupTarget) {
-      setBackupTargetDialogOpen(true);
-      return;
-    }
-    onExportBackup();
+    setBackupTargetDialogOpen(true);
   };
 
   const handleRestoreAction = () => {
@@ -310,7 +308,6 @@ export default function SettingsDataSafetyPanel({
             <div>
               <p className="flex items-center gap-1.5 text-sm font-semibold text-[var(--qp-text-primary)]">
                 <span>{UI_TEXT.settings.dataExportTitle}</span>
-                <QuietBadge variant="beta">{UI_TEXT.settings.betaLabel}</QuietBadge>
               </p>
               <p className="mt-1 text-sm leading-relaxed text-[var(--qp-text-secondary)]">
                 {UI_TEXT.settings.dataExportHint}
@@ -432,7 +429,6 @@ export default function SettingsDataSafetyPanel({
               <div className="settings-local-paths-copy">
                 <p className="settings-local-paths-title">
                   <span>{storageText.storageDirectoryTitle}</span>
-                  <QuietBadge variant="beta">{storageText.storageDirectoryBetaLabel}</QuietBadge>
                 </p>
                 <p className="mt-1 text-sm leading-relaxed text-[var(--qp-text-secondary)]">{storageText.storageDirectorySummary}</p>
               </div>
@@ -597,60 +593,26 @@ export default function SettingsDataSafetyPanel({
         )}
       />
 
-      <QuietDialog
-        open={backupTargetDialogOpen}
-        title={UI_TEXT.settings.backupTargetTitle}
-        description={UI_TEXT.settings.backupTargetHint}
-        onClose={() => setBackupTargetDialogOpen(false)}
-        closeOnBackdrop={!busy}
-        initialFocusRef={localBackupRef}
-        surfaceClassName="settings-data-action-dialog"
-        headerAside={(
-          <div className="settings-dialog-header-actions">
-            <button
-              type="button"
-              className="qp-dialog-close-button"
-              aria-label={UI_TEXT.common.close}
-              disabled={busy}
-              onClick={() => setBackupTargetDialogOpen(false)}
-            >
-              <X size={16} aria-hidden="true" />
-            </button>
-          </div>
-        )}
-      >
-        <div className="grid gap-3 md:grid-cols-2">
-          <QuietActionRow className="settings-dialog-action-card">
-            <button
-              ref={localBackupRef}
-              type="button"
-              onClick={() => {
-                setBackupTargetDialogOpen(false);
-                onExportBackup();
-              }}
-              disabled={busy}
-              className="settings-dialog-action-trigger"
-            >
-              <p className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.backupTargetLocalTitle}</p>
-              <p className="mt-1 text-xs leading-relaxed text-[var(--qp-text-tertiary)]">{UI_TEXT.settings.backupTargetLocalHint}</p>
-            </button>
-          </QuietActionRow>
-          <QuietActionRow className="settings-dialog-action-card">
-            <button
-              type="button"
-              onClick={() => {
-                setBackupTargetDialogOpen(false);
-                void remoteBackup.uploadBackup();
-              }}
-              disabled={busy}
-              className="settings-dialog-action-trigger"
-            >
-              <p className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.backupTargetRemoteTitle}</p>
-              <p className="mt-1 text-xs leading-relaxed text-[var(--qp-text-tertiary)]">{UI_TEXT.settings.backupTargetRemoteHint}</p>
-            </button>
-          </QuietActionRow>
-        </div>
-      </QuietDialog>
+      {backupTargetDialogOpen ? (
+        <Suspense fallback={null}>
+          <SettingsBackupDialog
+            open
+            busy={busy}
+            hasRemoteBackupTarget={hasRemoteBackupTarget}
+            defaultLocalBackupTarget={storageSnapshot?.paths.backupDir ?? ""}
+            remoteBackupTargetSummary={formatRemoteBackupTargetSummary(remoteBackup.config)}
+            onClose={() => setBackupTargetDialogOpen(false)}
+            onLocalBackup={() => {
+              setBackupTargetDialogOpen(false);
+              onExportBackup();
+            }}
+            onRemoteBackup={() => {
+              setBackupTargetDialogOpen(false);
+              void remoteBackup.uploadBackup();
+            }}
+          />
+        </Suspense>
+      ) : null}
 
       <QuietDialog
         open={restoreSourceDialogOpen}

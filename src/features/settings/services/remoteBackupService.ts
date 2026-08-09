@@ -4,7 +4,6 @@ export {
   downloadWebDavBackup,
   hasWebDavBackupSecret,
   listWebDavBackups,
-  revealWebDavBackupSecret,
   saveWebDavBackupSecret,
   testWebDavBackupTarget,
   uploadWebDavBackup,

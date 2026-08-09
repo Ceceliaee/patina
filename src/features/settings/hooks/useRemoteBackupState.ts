@@ -11,7 +11,6 @@ import {
   hasWebDavBackupSecret,
   listWebDavBackups,
   loadRemoteBackupConfig,
-  revealWebDavBackupSecret,
   saveRemoteBackupConfig,
   saveRemoteBackupLastBackupAt,
   saveWebDavBackupSecret,
@@ -62,7 +61,6 @@ export interface RemoteBackupState {
   connectionStatus: "unknown" | "ok" | "failed";
   openConfigDialog: () => void;
   closeConfigDialog: () => void;
-  revealSavedPassword: () => Promise<string | null>;
   saveConfig: (draft: RemoteBackupFormDraft) => Promise<boolean>;
   deleteConfig: () => Promise<void>;
   testConfig: (draft?: RemoteBackupFormDraft) => Promise<boolean>;
@@ -201,15 +199,6 @@ export function useRemoteBackupState({
         });
     }
   }, [config, hasSecret]);
-
-  const revealSavedPassword = useCallback(async () => {
-    try {
-      return await revealWebDavBackupSecret();
-    } catch (error) {
-      console.error("reveal WebDAV backup secret failed", error);
-      return null;
-    }
-  }, []);
 
   const testConfig = useCallback(async (draft?: RemoteBackupFormDraft) => {
     if (isTesting) return false;
@@ -376,7 +365,6 @@ export function useRemoteBackupState({
     connectionStatus,
     openConfigDialog: () => setConfigDialogOpen(true),
     closeConfigDialog,
-    revealSavedPassword,
     saveConfig,
     deleteConfig,
     testConfig,
