@@ -30,7 +30,16 @@ const getAdjacentDataTrendRangeSelection = (
   selection: DataTrendRangeSelection,
   delta: -1 | 1,
   atMs: number,
-) => getAdjacentDataTrendRangeSelectionRaw(selection, delta, atMs, ZH_TEXT);
+  allTimeStartDateKey?: string,
+  allTimeEndDateKey?: string,
+) => getAdjacentDataTrendRangeSelectionRaw(
+  selection,
+  delta,
+  atMs,
+  ZH_TEXT,
+  allTimeStartDateKey,
+  allTimeEndDateKey,
+);
 const selectDataTrendDraftDate = (
   draft: DataTrendRangeDraft,
   dateKey: string,
@@ -61,6 +70,19 @@ await runTest("rolling ranges preserve day and recent twelve-month semantics", (
   assert.deepEqual([seven.startDateKey, seven.endDateKey, seven.granularity], ["2026-05-14", "2026-05-20", "day"]);
   assert.deepEqual([thirty.startDateKey, thirty.endDateKey, thirty.granularity], ["2026-04-21", "2026-05-20", "day"]);
   assert.deepEqual([year.startDateKey, year.endDateKey, year.granularity], ["2025-06-01", "2026-05-20", "month"]);
+});
+
+await runTest("all-time range spans the first through last recorded months", () => {
+  const allTime = resolveDataTrendRange({
+    kind: "all",
+    startDateKey: "2024-02-19",
+    endDateKey: "2025-11-08",
+  }, nowMs);
+
+  assert.deepEqual(
+    [allTime.startDateKey, allTime.endDateKey, allTime.granularity, allTime.label],
+    ["2024-02-01", "2025-11-30", "month", "总计"],
+  );
 });
 
 await runTest("custom selection swaps reverse clicks and permits a short range", () => {
@@ -98,7 +120,7 @@ await runTest("current natural periods truncate at today", () => {
   assert.deepEqual([year.startDateKey, year.endDateKey, year.label, year.granularity], ["2026-01-01", "2026-05-20", "2026年", "month"]);
 });
 
-await runTest("rolling range arrows move only between the three preset lengths", () => {
+await runTest("preset range arrows include all time before seven days", () => {
   assert.deepEqual(
     getAdjacentDataTrendRangeSelection({ kind: "rolling", days: 7 }, 1, nowMs),
     { kind: "rolling", days: 30 },
@@ -107,14 +129,61 @@ await runTest("rolling range arrows move only between the three preset lengths",
     getAdjacentDataTrendRangeSelection({ kind: "rolling", days: 30 }, -1, nowMs),
     { kind: "rolling", days: 7 },
   );
+  assert.deepEqual(
+    getAdjacentDataTrendRangeSelection(
+      { kind: "rolling", days: 7 },
+      -1,
+      nowMs,
+      "2024-02-19",
+      "2026-05-20",
+    ),
+    { kind: "all", startDateKey: "2024-02-19", endDateKey: "2026-05-20" },
+  );
+  assert.deepEqual(
+    getAdjacentDataTrendRangeSelection(
+      { kind: "all", startDateKey: "2024-02-19", endDateKey: "2026-05-20" },
+      1,
+      nowMs,
+    ),
+    { kind: "rolling", days: 7 },
+  );
   assert.equal(
-    getAdjacentDataTrendRangeSelection({ kind: "rolling", days: 7 }, -1, nowMs),
+    getAdjacentDataTrendRangeSelection(
+      { kind: "all", startDateKey: "2024-02-19", endDateKey: "2026-05-20" },
+      -1,
+      nowMs,
+    ),
     null,
   );
   assert.equal(
     getAdjacentDataTrendRangeSelection({ kind: "rolling", days: 365 }, 1, nowMs),
     null,
   );
+});
+
+await runTest("all-time snapshots request month buckets", async () => {
+  const calls: Array<{ startMs: number; endMs: number; mode: string }> = [];
+  const snapshot = await loadDataTrendSnapshot({
+    kind: "all",
+    startDateKey: "2024-02-19",
+    endDateKey: "2026-05-20",
+  }, nowMs, {
+    getSessionSummariesInRange: async (startMs, endMs) => {
+      calls.push({ startMs, endMs, mode: "day" });
+      return [];
+    },
+    getSessionSummariesInRangeByLocalMonth: async (startMs, endMs) => {
+      calls.push({ startMs, endMs, mode: "month" });
+      return [];
+    },
+  });
+
+  assert.deepEqual(calls, [{
+    startMs: new Date(2024, 1, 1).getTime(),
+    endMs: nowMs,
+    mode: "month",
+  }]);
+  assert.equal(snapshot.range.label, "总计");
 });
 
 await runTest("natural period arrows preserve the period and may enter but not pass the current period", () => {

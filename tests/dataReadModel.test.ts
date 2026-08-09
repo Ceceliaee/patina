@@ -42,6 +42,7 @@ import {
   scoreDisplayNameForStats,
 } from "../src/shared/lib/displayNameScoring.ts";
 import { getLocaleText } from "../src/shared/i18n/runtime.ts";
+import { resolveDataTrendRange } from "../src/features/data/services/dataTrendRange.ts";
 
 const ZH_TEXT = getLocaleText("zh-CN");
 type BuildActivityArgs = Parameters<typeof buildActivityHeatmapRaw>;
@@ -430,6 +431,78 @@ await runTest("yearly app trend averages by month", () => {
     rows.chartRows.find((point) => point.date === "2026-04-01")?.totalDuration,
     12 * 60 * 60 * 1000,
   );
+});
+
+await runTest("all-time app trend follows the selected apps' widest activity bounds", () => {
+  const nowMs = new Date(2026, 7, 9, 12, 0, 0).getTime();
+  const range = resolveDataTrendRange({
+    kind: "all",
+    startDateKey: "2026-01-05",
+    endDateKey: "2026-08-09",
+  }, nowMs, ZH_TEXT);
+  const sessions = [
+    makeSession({
+      appName: "Archive",
+      exeName: "archive.exe",
+      startTime: new Date(2026, 0, 5, 9, 0, 0).getTime(),
+      endTime: new Date(2026, 0, 5, 13, 0, 0).getTime(),
+    }),
+    makeSession({
+      appName: "Chrome",
+      exeName: "chrome.exe",
+      startTime: new Date(2026, 3, 10, 9, 0, 0).getTime(),
+      endTime: new Date(2026, 3, 10, 10, 0, 0).getTime(),
+    }),
+    makeSession({
+      appName: "Patina",
+      exeName: "patina.exe",
+      startTime: new Date(2026, 5, 3, 9, 0, 0).getTime(),
+      endTime: new Date(2026, 5, 3, 10, 0, 0).getTime(),
+    }),
+    makeSession({
+      appName: "Patina",
+      exeName: "patina.exe",
+      startTime: new Date(2026, 6, 20, 9, 0, 0).getTime(),
+      endTime: new Date(2026, 6, 20, 11, 0, 0).getTime(),
+    }),
+    makeSession({
+      appName: "Chrome",
+      exeName: "chrome.exe",
+      startTime: new Date(2026, 7, 2, 9, 0, 0).getTime(),
+      endTime: new Date(2026, 7, 2, 11, 0, 0).getTime(),
+    }),
+  ];
+
+  const patina = buildDataAppTrendViewModel(sessions, range, nowMs, ["patina.exe"]);
+  assert.deepEqual(
+    [patina.range.startDateKey, patina.range.endDateKey],
+    ["2026-06-01", "2026-07-31"],
+  );
+  assert.deepEqual(
+    patina.chartRows.map((row) => row.date),
+    ["2026-06-01", "2026-07-01"],
+  );
+  assert.equal(patina.summary.totalDuration, 3 * 60 * 60_000);
+  assert.equal(
+    patina.appOptions.find((app) => app.appKey === "archive.exe")?.totalDuration,
+    4 * 60 * 60_000,
+  );
+
+  const comparison = buildDataAppTrendViewModel(
+    sessions,
+    range,
+    nowMs,
+    ["patina.exe", "chrome.exe"],
+  );
+  assert.deepEqual(
+    [comparison.range.startDateKey, comparison.range.endDateKey],
+    ["2026-04-01", "2026-08-09"],
+  );
+  assert.deepEqual(
+    comparison.chartRows.map((row) => row.date),
+    ["2026-04-01", "2026-05-01", "2026-06-01", "2026-07-01", "2026-08-01"],
+  );
+  assert.equal(comparison.summary.totalDuration, 6 * 60 * 60_000);
 });
 
 await runTest("shared trend aggregate matches standalone overview and app read models", () => {

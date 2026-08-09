@@ -258,12 +258,14 @@ await runTest("destination selection reconciliation preserves order and falls ba
 await runTest("destination session selection stays in memory without exposing mutable arrays", () => {
   rememberDataDestinationSessionSelectionState({
     appKeys: ["cursor.exe", "chrome.exe"],
+    categoryKeys: ["development"],
     webKeys: ["docs.example"],
   });
   const first = getDataDestinationSessionSelectionState();
   first.appKeys.push("mutated.exe");
   assert.deepEqual(getDataDestinationSessionSelectionState(), {
     appKeys: ["cursor.exe", "chrome.exe"],
+    categoryKeys: ["development"],
     webKeys: ["docs.example"],
   });
   rememberDataDestinationSessionSelectionRevision("app", 4);
@@ -742,6 +744,81 @@ await runTest("web trend preserves selected order and aggregates multiple domain
   assert.equal(result.summary.activeDayCount, 1);
 });
 
+await runTest("all-time web trend follows the selected domains' widest activity bounds", () => {
+  const nowMs = new Date(2026, 7, 9, 12, 0, 0).getTime();
+  const range = resolveDataTrendRange({
+    kind: "all",
+    startDateKey: "2026-01-05",
+    endDateKey: "2026-08-09",
+  }, nowMs);
+  const records = [
+    {
+      normalizedDomain: "archive.example",
+      bucketStartMs: new Date(2026, 0, 1).getTime(),
+      durationMs: 4 * 60 * 60_000,
+    },
+    {
+      normalizedDomain: "chrome.example",
+      bucketStartMs: new Date(2026, 3, 1).getTime(),
+      durationMs: 60 * 60_000,
+    },
+    {
+      normalizedDomain: "patina.example",
+      bucketStartMs: new Date(2026, 5, 1).getTime(),
+      durationMs: 60 * 60_000,
+    },
+    {
+      normalizedDomain: "patina.example",
+      bucketStartMs: new Date(2026, 6, 1).getTime(),
+      durationMs: 2 * 60 * 60_000,
+    },
+    {
+      normalizedDomain: "chrome.example",
+      bucketStartMs: new Date(2026, 7, 1).getTime(),
+      durationMs: 2 * 60 * 60_000,
+    },
+  ];
+  const baseInput = {
+    range,
+    records,
+    domainCoverage: [],
+    overrides: {},
+    favicons: {},
+  };
+
+  const patina = buildDataWebTrendViewModel({
+    ...baseInput,
+    selectedDomains: ["patina.example"],
+  });
+  assert.deepEqual(
+    [patina.range.startDateKey, patina.range.endDateKey],
+    ["2026-06-01", "2026-07-31"],
+  );
+  assert.deepEqual(
+    patina.chartRows.map((row) => row.date),
+    ["2026-06-01", "2026-07-01"],
+  );
+  assert.equal(patina.summary.totalDuration, 3 * 60 * 60_000);
+  assert.equal(
+    patina.domainOptions.find((domain) => domain.normalizedDomain === "archive.example")?.totalDuration,
+    4 * 60 * 60_000,
+  );
+
+  const comparison = buildDataWebTrendViewModel({
+    ...baseInput,
+    selectedDomains: ["patina.example", "chrome.example"],
+  });
+  assert.deepEqual(
+    [comparison.range.startDateKey, comparison.range.endDateKey],
+    ["2026-04-01", "2026-08-09"],
+  );
+  assert.deepEqual(
+    comparison.chartRows.map((row) => row.date),
+    ["2026-04-01", "2026-05-01", "2026-06-01", "2026-07-01", "2026-08-01"],
+  );
+  assert.equal(comparison.summary.totalDuration, 6 * 60 * 60_000);
+});
+
 await runTest("web trend keeps selected domains as zero series across empty ranges", () => {
   const nowMs = new Date(2026, 4, 8, 12, 0, 0).getTime();
   const result = buildDataWebTrendViewModel({
@@ -907,8 +984,38 @@ await runTest("web snapshot dedupes matching in-flight loads and excludes disabl
   assert.deepEqual(getDataWebActivitySnapshotCacheStats(), {
     entries: 1,
     pendingEntries: 0,
-    limit: 4,
+    limit: 5,
   });
+});
+
+await runTest("all-time web snapshots use monthly buckets from the first recorded month", async () => {
+  const nowMs = new Date(2026, 4, 20, 12, 0, 0).getTime();
+  const startMs = new Date(2024, 1, 1).getTime();
+  let receivedBoundaries: number[] = [];
+  const snapshot = await loadDataWebActivitySnapshot({
+    selection: {
+      kind: "all",
+      startDateKey: "2024-02-19",
+      endDateKey: "2026-05-20",
+    },
+    nowMs,
+    deps: {
+      loadAggregateRange: async (receivedStartMs, receivedEndMs, bucketBoundariesMs) => {
+        assert.equal(receivedStartMs, startMs);
+        assert.equal(receivedEndMs, nowMs);
+        receivedBoundaries = bucketBoundariesMs;
+        return { records: [], domainCoverage: [] };
+      },
+      loadOverrides: async () => ({}),
+      loadFavicons: async () => ({}),
+    },
+  });
+
+  assert.equal(snapshot.range.label, "总计");
+  assert.equal(receivedBoundaries[0], startMs);
+  assert.equal(receivedBoundaries[1], new Date(2024, 2, 1).getTime());
+  assert.equal(receivedBoundaries.at(-1), nowMs);
+  assert.equal(receivedBoundaries.length, 29);
 });
 
 await runTest("web heatmap cache identity includes the data revision", async () => {
@@ -969,7 +1076,7 @@ await runTest("cache invalidation prevents a late web snapshot from repopulating
   assert.deepEqual(getDataWebActivitySnapshotCacheStats(), {
     entries: 0,
     pendingEntries: 0,
-    limit: 4,
+    limit: 5,
   });
 });
 
@@ -1168,7 +1275,7 @@ await runTest("web trend cache peeks synchronously without creating new IO", asy
   assert.equal(getCachedDataWebTrendSnapshot({ selection: sevenDays, nowMs }), null);
 });
 
-await runTest("web snapshot cache keeps the active heatmap and three trend ranges warm", async () => {
+await runTest("web snapshot cache keeps the active heatmap and four preset trend ranges warm", async () => {
   const nowMs = new Date(2026, 4, 8, 12, 0, 0).getTime();
   const deps: DataWebActivitySnapshotDependencies = {
     loadAggregateRange: async () => ({ records: [], domainCoverage: [] }),
@@ -1176,6 +1283,7 @@ await runTest("web snapshot cache keeps the active heatmap and three trend range
     loadFavicons: async () => ({}),
   };
   const selections: DataTrendRangeSelection[] = [
+    { kind: "all", startDateKey: "2024-01-01", endDateKey: "2026-05-20" },
     { kind: "rolling", days: 7 },
     { kind: "rolling", days: 30 },
     { kind: "rolling", days: 365 },
@@ -1185,6 +1293,7 @@ await runTest("web snapshot cache keeps the active heatmap and three trend range
   await loadDataWebActivitySnapshot({ selection: selections[0], nowMs, deps });
   await loadDataWebActivitySnapshot({ selection: selections[1], nowMs, deps });
   await loadDataWebActivitySnapshot({ selection: selections[2], nowMs, deps });
+  await loadDataWebActivitySnapshot({ selection: selections[3], nowMs, deps });
   await loadDataWebHeatmapSnapshot({
     selection: "recent",
     normalizedDomains: ["example.com"],
@@ -1192,21 +1301,24 @@ await runTest("web snapshot cache keeps the active heatmap and three trend range
     deps,
   });
   assert.ok(getCachedDataWebTrendSnapshot({ selection: selections[0], nowMs }));
-  await loadDataWebActivitySnapshot({ selection: selections[3], nowMs, deps });
+  assert.ok(getCachedDataWebTrendSnapshot({ selection: selections[1], nowMs }));
+  await loadDataWebActivitySnapshot({ selection: selections[4], nowMs, deps });
 
   assert.ok(getCachedDataWebTrendSnapshot({ selection: selections[0], nowMs }));
-  assert.equal(getCachedDataWebTrendSnapshot({ selection: selections[1], nowMs }), null);
-  assert.ok(getCachedDataWebTrendSnapshot({ selection: selections[2], nowMs }));
+  assert.ok(getCachedDataWebTrendSnapshot({ selection: selections[1], nowMs }));
+  assert.equal(getCachedDataWebTrendSnapshot({ selection: selections[2], nowMs }), null);
   assert.ok(getCachedDataWebTrendSnapshot({ selection: selections[3], nowMs }));
+  assert.ok(getCachedDataWebTrendSnapshot({ selection: selections[4], nowMs }));
   assert.deepEqual(getDataWebActivitySnapshotCacheStats(), {
-    entries: 4,
+    entries: 5,
     pendingEntries: 0,
-    limit: 4,
+    limit: 5,
   });
 });
 
 await runTest("disabled web sync removes web destination mode", () => {
   assert.equal(resolveDataDestinationMode(false, "web"), "app");
+  assert.equal(resolveDataDestinationMode(false, "category"), "category");
   assert.equal(resolveDataDestinationMode(true, "web"), "web");
 });
 
