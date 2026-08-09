@@ -1372,3 +1372,302 @@
     grid-template-columns: 1fr;
   }
 }
+
+.settings-scheduled-export-dialog {
+  width: min(600px, calc(100vw - 32px));
+}
+
+.settings-scheduled-export {
+  display: grid;
+  gap: 14px;
+}
+
+.settings-scheduled-export-schedule {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.settings-scheduled-export-schedule[data-cadence="weekly"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.settings-scheduled-export-control {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.settings-scheduled-export-control > span,
+.settings-scheduled-export-directory-label {
+  color: var(--qp-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.settings-scheduled-export-control .qp-select,
+.settings-scheduled-export-control .qp-time-picker,
+.settings-scheduled-export-control .qp-select-trigger,
+.settings-scheduled-export-control .qp-time-picker-trigger {
+  width: 100%;
+}
+
+.settings-scheduled-export-directory {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-scheduled-export-directory-value {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  color: var(--qp-text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  user-select: text;
+}
+
+.settings-scheduled-export-directory-value > svg {
+  flex: 0 0 auto;
+  color: var(--qp-text-tertiary);
+}
+
+.settings-scheduled-export-directory-value > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-scheduled-export-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin: 0;
+  border-top: 1px solid var(--qp-border-subtle);
+  padding-top: 10px;
+}
+
+.settings-scheduled-export-status > div {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.settings-scheduled-export-status dt {
+  color: var(--qp-text-tertiary);
+}
+
+.settings-scheduled-export-status dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--qp-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-scheduled-export-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--qp-danger);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .settings-scheduled-export-schedule,
+  .settings-scheduled-export-schedule[data-cadence="weekly"] {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-scheduled-export-directory {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .settings-scheduled-export-status > div {
+    flex-basis: 100%;
+  }
+}
+
+.settings-backup-dialog {
+  width: min(600px, calc(100vw - 32px));
+}
+
+.settings-backup-target-card {
+  position: relative;
+}
+
+.settings-backup-local-trigger {
+  padding-right: 52px;
+}
+
+.settings-backup-schedule-anchor {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  right: 12px;
+  display: flex;
+  transform: translateY(-50%);
+}
+
+.settings-scheduled-backup-dialog {
+  width: min(600px, calc(100vw - 32px));
+}
+
+.settings-scheduled-backup-dialog .qp-dialog-body {
+  max-height: min(68vh, 660px);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.settings-scheduled-backup {
+  display: grid;
+  gap: 14px;
+}
+
+.settings-scheduled-backup-fields {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-scheduled-backup-setting-row {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-scheduled-backup-setting-label {
+  color: var(--qp-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.settings-scheduled-backup-schedule-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.settings-scheduled-backup-fields[data-cadence="weekly"] .settings-scheduled-backup-schedule-controls {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.settings-scheduled-backup-fields .qp-select,
+.settings-scheduled-backup-fields .qp-time-picker,
+.settings-scheduled-backup-fields .qp-select-trigger,
+.settings-scheduled-backup-fields .qp-time-picker-trigger {
+  width: 100%;
+}
+
+.settings-scheduled-backup-directory-field > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.settings-scheduled-backup-directory-value {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  color: var(--qp-text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  user-select: text;
+}
+
+.settings-scheduled-backup-directory-value > svg {
+  flex: 0 0 auto;
+  color: var(--qp-text-tertiary);
+}
+
+.settings-scheduled-backup-directory-value > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-scheduled-backup-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin: 0;
+  border-top: 1px solid var(--qp-border-subtle);
+  padding-top: 10px;
+}
+
+.settings-scheduled-backup-status > div {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.settings-scheduled-backup-status > .settings-scheduled-backup-active-run {
+  flex-basis: 100%;
+}
+
+.settings-scheduled-backup-status dt {
+  color: var(--qp-text-tertiary);
+}
+
+.settings-scheduled-backup-status dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--qp-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-scheduled-backup-loading,
+.settings-scheduled-backup-error,
+.settings-scheduled-backup-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.settings-scheduled-backup-loading {
+  color: var(--qp-text-tertiary);
+}
+
+.settings-scheduled-backup-error {
+  justify-content: space-between;
+  color: var(--qp-danger);
+}
+
+.settings-scheduled-backup-warning {
+  color: var(--qp-text-secondary);
+}
+
+@media (max-width: 640px) {
+  .settings-scheduled-backup-setting-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .settings-scheduled-backup-directory-field > div {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-scheduled-backup-status > div {
+    flex-basis: 100%;
+  }
+}

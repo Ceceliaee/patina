@@ -459,6 +459,84 @@ function tauriStubFor(path: string) {
             lastActivityAtMs: null,
           };
         }
+        if (command === "cmd_get_scheduled_backup_snapshot") {
+          globalThis.__PATINA_SCHEDULED_BACKUP_SNAPSHOT ??= {
+            config: {
+              enabled: false,
+              cadence: "daily",
+              weekday: null,
+              localTimeMinutes: 120,
+              target: { kind: "local", targetDir: "C:\\Smoke\\Patina\\backups" },
+              targetGeneration: "0123456789abcdef0123456789abcdef",
+              scheduleAnchorAtMs: Date.now(),
+              updatedAtMs: Date.now(),
+            },
+            nextExecutionAtMs: null,
+            recentSuccess: null,
+            recentFailure: null,
+            activeRun: null,
+          };
+          return structuredClone(globalThis.__PATINA_SCHEDULED_BACKUP_SNAPSHOT);
+        }
+        if (command === "cmd_save_scheduled_backup_config") {
+          const current = globalThis.__PATINA_SCHEDULED_BACKUP_SNAPSHOT;
+          const nextTarget = payload.input.target?.kind === "webdav"
+            ? { kind: "webdav", targetIdentity: "fedcba9876543210fedcba9876543210" }
+            : payload.input.target;
+          globalThis.__PATINA_SCHEDULED_BACKUP_SNAPSHOT = {
+            ...current,
+            config: {
+              ...current.config,
+              ...payload.input,
+              target: nextTarget,
+              updatedAtMs: Date.now(),
+            },
+            nextExecutionAtMs: payload.input.enabled ? Date.now() + 86400000 : null,
+          };
+          return structuredClone(globalThis.__PATINA_SCHEDULED_BACKUP_SNAPSHOT);
+        }
+        if (command === "cmd_pick_scheduled_backup_directory") {
+          return "C:\\Smoke\\Scheduled Backups";
+        }
+        if (command === "cmd_get_scheduled_export_snapshot") {
+          globalThis.__PATINA_SCHEDULED_EXPORT_SNAPSHOT ??= {
+            config: {
+              enabled: false,
+              cadence: "daily",
+              weekday: null,
+              localTimeMinutes: 120,
+              targetDir: "C:\\Smoke\\Patina\\exports",
+              format: "csv",
+              selectedFields: ["record_type", "start_time", "end_time", "duration_ms"],
+              planGeneration: "0123456789abcdef0123456789abcdef",
+              scheduleAnchorAtMs: Date.now(),
+              updatedAtMs: Date.now(),
+            },
+            nextExecutionAtMs: null,
+            recentSuccess: null,
+            recentFailure: null,
+            activeRun: null,
+          };
+          return structuredClone(globalThis.__PATINA_SCHEDULED_EXPORT_SNAPSHOT);
+        }
+        if (command === "cmd_save_scheduled_export_config") {
+          const current = globalThis.__PATINA_SCHEDULED_EXPORT_SNAPSHOT;
+          globalThis.__PATINA_SCHEDULED_EXPORT_SNAPSHOT = {
+            ...current,
+            config: {
+              ...current.config,
+              ...payload.input,
+              planGeneration: current.config.planGeneration,
+              updatedAtMs: Date.now(),
+            },
+            nextExecutionAtMs: payload.input.enabled ? Date.now() + 86400000 : null,
+          };
+          globalThis.__PATINA_EMIT_TAURI_EVENT?.("scheduled-export-changed", null);
+          return structuredClone(globalThis.__PATINA_SCHEDULED_EXPORT_SNAPSHOT);
+        }
+        if (command === "cmd_pick_scheduled_export_directory") {
+          return "C:\\Smoke\\Scheduled Exports";
+        }
         if (command === "cmd_get_storage_snapshot") {
           return {
             paths: {

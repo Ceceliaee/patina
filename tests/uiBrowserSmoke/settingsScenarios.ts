@@ -568,6 +568,338 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       deviceScaleFactor: 1,
       mobile: false,
     }, sessionId);
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const dialog = document.querySelector('[role="dialog"]');
+          const inputs = Array.from(dialog?.querySelectorAll('input') ?? []);
+          if (inputs.length !== 3) return false;
+          const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+          for (const [input, value] of inputs.map((input, index) => [
+            input,
+            ["https://dav.jianguoyun.com/dav/", "patina-smoke", "app-password"][index],
+          ])) {
+            setter?.call(input, value);
+            input.dispatchEvent(new InputEvent("input", { bubbles: true, data: value, inputType: "insertText" }));
+          }
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForAnimationFrames(client!, sessionId);
+    await evaluate(client!, sessionId, `
+      Array.from(document.querySelectorAll('[role="dialog"] button'))
+        .find((node) => node.textContent?.trim() === "保存")?.click()
+    `);
+    await waitForExpression(client!, sessionId, "!document.querySelector('[role=\"dialog\"]')");
+    await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString("编辑")})`);
+  });
+
+  await runTest("settings backup dialog opens scheduled local backup as a secondary dialog", async () => {
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const trigger = Array.from(document.querySelectorAll('.qp-action-row button'))
+            .find((node) => node.textContent?.trim() === "备份" && !node.disabled);
+          if (!trigger) return false;
+          trigger.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString("选择备份位置")})`);
+    assert.equal(
+      await evaluate(client!, sessionId, "Math.round(document.querySelector('.settings-backup-dialog')?.getBoundingClientRect().width ?? 0)"),
+      600,
+      "The primary backup dialog width changed",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, "document.querySelector('.settings-scheduled-backup') === null"),
+      true,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `!document.body.innerText.includes(${jsonString("加载中...")})`),
+      true,
+      "The primary backup dialog exposed a loading placeholder",
+    );
+    await evaluate(client!, sessionId, `
+      document.querySelector('button.settings-backup-schedule-action')
+        ?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    `);
+    await waitForExpression(client!, sessionId, "Boolean(document.querySelector('[role=\"tooltip\"]'))");
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const trigger = document.querySelector('button.settings-backup-schedule-action');
+          const tooltip = document.querySelector('[role="tooltip"]');
+          if (!trigger || !tooltip) return false;
+          return tooltip.getBoundingClientRect().bottom <= trigger.getBoundingClientRect().top;
+        })()
+      `),
+      true,
+      "The scheduled backup tooltip was not positioned above its icon trigger",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const trigger = document.querySelector('button.settings-backup-schedule-action[aria-label="定时备份"]');
+          if (!trigger) return false;
+          trigger.focus();
+          trigger.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(client!, sessionId, "document.querySelectorAll('[role=\"dialog\"]').length === 2");
+    assert.equal(
+      await evaluate(client!, sessionId, "document.querySelectorAll('[role=\"dialog\"]').length === 2"),
+      true,
+    );
+    const scheduledBadgeMetrics = await evaluate(client!, sessionId, `
+        (() => {
+          const dialogs = document.querySelectorAll('[role="dialog"]');
+          const scheduledDialog = Array.from(dialogs).find((dialog) =>
+            dialog.querySelector('.qp-dialog-title')?.textContent?.includes('定时备份')
+          );
+          const title = scheduledDialog?.querySelector('.qp-dialog-title');
+          const badge = title?.querySelector('.qp-badge-beta');
+          if (!title || !badge) return { found: false };
+          const titleRect = title.getBoundingClientRect();
+          const badgeRect = badge.getBoundingClientRect();
+          const titleCenter = titleRect.top + titleRect.height / 2;
+          const badgeCenter = badgeRect.top + badgeRect.height / 2;
+          const titleFontSize = Number.parseFloat(getComputedStyle(title).fontSize);
+          const badgeFontSize = Number.parseFloat(getComputedStyle(badge).fontSize);
+          return {
+            found: true,
+            text: badge.textContent?.trim(),
+            regular: badge.classList.contains('qp-badge-regular'),
+            fontRatio: badgeFontSize / titleFontSize,
+            heightRatio: badgeRect.height / titleRect.height,
+            centerDelta: Math.abs(titleCenter - badgeCenter),
+          };
+        })()
+      `) as {
+        found: boolean;
+        text?: string;
+        regular?: boolean;
+        fontRatio?: number;
+        heightRatio?: number;
+        centerDelta?: number;
+      };
+    assert.ok(
+      scheduledBadgeMetrics.found
+        && scheduledBadgeMetrics.text?.toUpperCase() === "BETA"
+        && scheduledBadgeMetrics.regular
+        && (scheduledBadgeMetrics.fontRatio ?? 0) >= 0.6
+        && (scheduledBadgeMetrics.heightRatio ?? 0) >= 0.8
+        && (scheduledBadgeMetrics.centerDelta ?? Number.POSITIVE_INFINITY) <= 2,
+      `The scheduled backup dialog BETA badge did not match the title scale: ${JSON.stringify(scheduledBadgeMetrics)}`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const dialogs = document.querySelectorAll('[role="dialog"]');
+          return dialogs.length === 2 && !dialogs[1].querySelector('.qp-dialog-close-button');
+        })()
+      `),
+      true,
+      "The secondary scheduled backup dialog exposed a redundant close button",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const controls = Array.from(document.querySelector('.settings-scheduled-backup-schedule-controls')?.children ?? []);
+          const tops = controls.map((node) => Math.round(node.getBoundingClientRect().top));
+          return tops.length === 2 && Math.max(...tops) - Math.min(...tops) <= 1;
+        })()
+      `),
+      true,
+      "Daily scheduled backup controls did not stay on one row",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, "document.querySelector('.settings-scheduled-backup-status') === null"),
+      true,
+      "Disabled scheduled backup exposed a redundant empty status row",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const path = document.querySelector('.settings-scheduled-backup-directory-value');
+          return path?.tagName === 'SPAN'
+            && Boolean(path.textContent?.trim())
+            && !path.textContent?.startsWith('\\\\?\\\\')
+            && Boolean(path.querySelector('svg'))
+            && !document.querySelector('.settings-scheduled-backup-directory-field input');
+        })()
+      `),
+      true,
+      "Scheduled backup directory looked like an editable input",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        !document.body.innerText.includes('保留最近')
+          && !document.body.innerText.includes('每份均可独立恢复')
+      `),
+      true,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const toggle = document.querySelector('[role="switch"][aria-label="定时备份"]');
+          if (!toggle) return false;
+          toggle.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(client!, sessionId, `
+      (() => {
+        const save = Array.from(document.querySelectorAll('[role="dialog"] button'))
+          .find((node) => node.textContent?.trim() === "保存");
+        return Boolean(save && !save.disabled);
+      })()
+    `);
+    await evaluate(client!, sessionId, `
+      Array.from(document.querySelectorAll('[role="dialog"] button'))
+        .find((node) => node.textContent?.trim() === "保存")?.click()
+    `);
+    await waitForExpression(client!, sessionId, `
+      globalThis.__PATINA_INVOKED_COMMANDS.some((entry) =>
+        entry.command === "cmd_save_scheduled_backup_config"
+        && entry.payload?.input?.enabled === true
+        && !("retentionCount" in entry.payload.input)
+      )
+    `);
+    await waitForExpression(client!, sessionId, `
+      document.querySelectorAll('.settings-scheduled-backup-status > div').length === 1
+        && document.querySelector('.settings-scheduled-backup-status dt')?.textContent?.trim() === '下次执行'
+    `);
+
+    await client!.command("Emulation.setDeviceMetricsOverride", {
+      width: 390,
+      height: 844,
+      deviceScaleFactor: 1,
+      mobile: true,
+    }, sessionId);
+    await waitForAnimationFrames(client!, sessionId);
+    assert.equal(
+      await evaluate(client!, sessionId, "document.documentElement.scrollWidth <= window.innerWidth + 1"),
+      true,
+      "Scheduled backup dialog overflowed at 390px",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const scheduledDialog = Array.from(document.querySelectorAll('[role="dialog"]')).find((dialog) =>
+            dialog.querySelector('.qp-dialog-title')?.textContent?.includes('定时备份')
+          );
+          const badge = scheduledDialog?.querySelector('.qp-badge-beta');
+          const toggle = scheduledDialog?.querySelector('[role="switch"]');
+          if (!badge || !toggle) return false;
+          return badge.getBoundingClientRect().right <= toggle.getBoundingClientRect().left;
+        })()
+      `),
+      true,
+      "The scheduled backup BETA badge collided with the toggle at 390px",
+    );
+
+    await client!.command("Emulation.setDeviceMetricsOverride", {
+      width: 1280,
+      height: 820,
+      deviceScaleFactor: 1,
+      mobile: false,
+    }, sessionId);
+    await evaluate(client!, sessionId, `
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    `);
+    await waitForExpression(client!, sessionId, "document.querySelectorAll('[role=\"dialog\"]').length === 1");
+    assert.equal(
+      await evaluate(client!, sessionId, "document.activeElement?.classList.contains('settings-backup-schedule-action')"),
+      true,
+      "Closing the scheduled backup dialog did not restore focus to its icon trigger",
+    );
+    await evaluate(client!, sessionId, `
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    `);
+    await waitForExpression(client!, sessionId, "!document.querySelector('[role=\"dialog\"]')");
+  });
+
+  await runTest("settings backup dialog opens WebDAV scheduling without a fake editable path", async () => {
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const trigger = Array.from(document.querySelectorAll('.qp-action-row button'))
+            .find((node) => node.textContent?.trim() === "备份" && !node.disabled);
+          if (!trigger) return false;
+          trigger.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString("选择备份位置")})`);
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const triggers = document.querySelectorAll('button.settings-backup-schedule-action[aria-label="定时备份"]');
+          if (triggers.length !== 2) return false;
+          triggers[1].focus();
+          triggers[1].click();
+          return true;
+        })()
+      `),
+      true,
+      "The WebDAV target did not expose the same secondary scheduling action",
+    );
+    await waitForExpression(client!, sessionId, "document.querySelectorAll('[role=\"dialog\"]').length === 2");
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const value = document.querySelector('.settings-scheduled-backup-directory-value');
+          return value?.tagName === 'SPAN'
+            && Boolean(value.querySelector('svg'))
+            && value.textContent?.trim() === 'https://dav.jianguoyun.com/dav/Patina'
+            && !document.querySelector('.settings-scheduled-backup-directory-field input')
+            && !document.body.innerText.includes('更改目录');
+        })()
+      `),
+      true,
+      "The WebDAV scheduling target was not a complete, read-only HTTPS location",
+    );
+    await evaluate(client!, sessionId, `
+      (() => {
+        const toggle = document.querySelector('[role="switch"][aria-label="定时备份"]');
+        if (toggle?.getAttribute("aria-checked") !== "true") toggle?.click();
+      })()
+    `);
+    await waitForExpression(client!, sessionId, `
+      (() => {
+        const save = Array.from(document.querySelectorAll('[role="dialog"] button'))
+          .find((node) => node.textContent?.trim() === "保存");
+        return Boolean(save && !save.disabled);
+      })()
+    `);
+    await evaluate(client!, sessionId, `
+      Array.from(document.querySelectorAll('[role="dialog"] button'))
+        .find((node) => node.textContent?.trim() === "保存")?.click()
+    `);
+    await waitForExpression(client!, sessionId, `
+      globalThis.__PATINA_INVOKED_COMMANDS.some((entry) =>
+        entry.command === "cmd_save_scheduled_backup_config"
+        && entry.payload?.input?.enabled === true
+        && entry.payload?.input?.target?.kind === "webdav"
+        && !("targetDir" in entry.payload.input.target)
+      )
+    `);
+    await evaluate(client!, sessionId, `
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    `);
+    await waitForExpression(client!, sessionId, "document.querySelectorAll('[role=\"dialog\"]').length === 1");
     await evaluate(client!, sessionId, `
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     `);
@@ -859,6 +1191,147 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       undefined,
       "outer dialog focus restoration",
     );
+  });
+
+  await runTest("settings scheduled export captures the outer format and fields without changing the primary dialog", async () => {
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const trigger = Array.from(document.querySelectorAll("button"))
+            .find((node) => node.textContent?.trim() === "导出");
+          trigger?.scrollIntoView({ block: "center" });
+          trigger?.click();
+          return Boolean(trigger);
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(client!, sessionId, "Boolean(document.querySelector('.settings-data-export-dialog-surface'))");
+    const primaryWidth = Number(await evaluate(
+      client!,
+      sessionId,
+      "document.querySelector('.settings-data-export-dialog-surface')?.getBoundingClientRect().width ?? 0",
+    ));
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const trigger = document.querySelector('.settings-data-export-dialog-surface [aria-label="定时导出"]');
+          trigger?.focus();
+          trigger?.click();
+          return Boolean(trigger);
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(client!, sessionId, "document.querySelectorAll('[role=\"dialog\"]').length === 2");
+    assert.equal(
+      Number(await evaluate(
+        client!,
+        sessionId,
+        "document.querySelector('.settings-data-export-dialog-surface')?.getBoundingClientRect().width ?? 0",
+      )),
+      primaryWidth,
+      "Opening scheduled export changed the primary export dialog width",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const dialog = document.querySelector('.settings-scheduled-export-dialog');
+          const controls = Array.from(dialog?.querySelector('.settings-scheduled-export-schedule')?.children ?? []);
+          const tops = controls.map((node) => Math.round(node.getBoundingClientRect().top));
+          const path = dialog?.querySelector('.settings-scheduled-export-directory-value');
+          return Boolean(dialog)
+            && !dialog.querySelector('.qp-dialog-close-button')
+            && !dialog.innerText.includes('导出格式')
+            && !dialog.innerText.includes('配置字段')
+            && !document.body.innerText.includes('加载中...')
+            && controls.length === 2
+            && Math.max(...tops) - Math.min(...tops) <= 1
+            && path?.tagName === 'SPAN'
+            && Boolean(path.querySelector('svg'))
+            && !path.hasAttribute('title')
+            && !dialog.querySelector('.settings-scheduled-export-directory input');
+        })()
+      `),
+      true,
+      "Scheduled export did not preserve the approved compact secondary-dialog structure",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const badge = document.querySelector('.settings-scheduled-export-dialog .qp-badge');
+          const title = document.querySelector('.settings-scheduled-export-dialog .qp-dialog-title');
+          if (!badge || !title) return false;
+          const badgeRect = badge.getBoundingClientRect();
+          const titleRect = title.getBoundingClientRect();
+          return badge.classList.contains('qp-badge-regular')
+            && badgeRect.height >= titleRect.height * 0.6;
+        })()
+      `),
+      true,
+      "Scheduled export BETA badge did not adapt to the dialog title",
+    );
+    await evaluate(client!, sessionId, `
+      document.querySelector('.settings-scheduled-export-dialog [aria-label^="频率:"]')?.click();
+    `);
+    await waitForExpression(client!, sessionId, "Boolean(document.querySelector('[role=\"option\"]'))");
+    await evaluate(client!, sessionId, `
+      Array.from(document.querySelectorAll('[role="option"]'))
+        .find((node) => node.textContent?.trim() === '每周')
+        ?.click();
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      "document.querySelector('.settings-scheduled-export-schedule')?.children.length === 3",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const controls = Array.from(document.querySelector('.settings-scheduled-export-schedule')?.children ?? []);
+          const tops = controls.map((node) => Math.round(node.getBoundingClientRect().top));
+          return controls.length === 3 && Math.max(...tops) - Math.min(...tops) <= 1;
+        })()
+      `),
+      true,
+      "Weekly scheduled export controls did not stay on one row",
+    );
+    await evaluate(client!, sessionId, `
+      document.querySelector('.settings-scheduled-export-dialog [role="switch"]')?.click();
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      "document.querySelector('.settings-scheduled-export-dialog [role=\"switch\"]')?.getAttribute('aria-checked') === 'true'",
+    );
+    await evaluate(client!, sessionId, `
+      Array.from(document.querySelectorAll('.settings-scheduled-export-dialog button'))
+        .find((node) => node.textContent?.trim() === '保存')
+        ?.click();
+    `);
+    await waitForExpression(client!, sessionId, `
+      globalThis.__PATINA_INVOKED_COMMANDS.some((entry) =>
+        entry.command === 'cmd_save_scheduled_export_config'
+        && entry.payload.input.enabled === true
+        && entry.payload.input.cadence === 'weekly'
+        && entry.payload.input.weekday === 1
+        && entry.payload.input.format === 'csv'
+        && entry.payload.input.selectedFields.length === 12
+      )
+    `);
+    await waitForExpression(client!, sessionId, "document.querySelectorAll('.settings-scheduled-export-status > div').length === 1");
+
+    await evaluate(client!, sessionId, `document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    await waitForExpression(client!, sessionId, "document.querySelectorAll('[role=\"dialog\"]').length === 1");
+    await waitForExpression(
+      client!,
+      sessionId,
+      "document.activeElement?.getAttribute('aria-label') === '定时导出'",
+      undefined,
+      "Closing scheduled export did not restore focus to its icon trigger",
+    );
+    await evaluate(client!, sessionId, `document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    await waitForExpression(client!, sessionId, "!document.querySelector('[role=\"dialog\"]')");
   });
 
   await runTest("settings generic import previews only available granularity and deletes by batch", async () => {

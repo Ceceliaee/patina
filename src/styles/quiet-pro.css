@@ -778,10 +778,6 @@
   color: var(--qp-text-primary);
 }
 
-.settings-webdav-password-masked {
-  -webkit-text-security: disc;
-}
-
 .settings-webdav-server-input {
   display: flex;
   align-items: center;
