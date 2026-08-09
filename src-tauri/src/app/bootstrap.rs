@@ -94,6 +94,8 @@ fn register_managed_state_and_plugins(
         .manage(crate::engine::remote_status_bridge::RemoteStatusBridgeRuntimeState::default())
         .manage(WebActivityRuntimeState::default())
         .manage(UpdaterRuntimeState::new(app_version.to_string()))
+        .manage(crate::app::scheduled_backup::ScheduledBackupRuntimeState::default())
+        .manage(crate::app::scheduled_export::ScheduledExportRuntimeState::default())
         .plugin(
             tauri_plugin_autostart::Builder::new()
                 .args(vec![runtime::AUTOSTART_ARG.to_string()])
@@ -121,6 +123,9 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::settings::cmd_commit_classification_settings,
         commands::export::cmd_pick_export_save_file,
         commands::export::cmd_export_data,
+        commands::export::cmd_get_scheduled_export_snapshot,
+        commands::export::cmd_pick_scheduled_export_directory,
+        commands::export::cmd_save_scheduled_export_config,
         commands::import::cmd_pick_canonical_import_file,
         commands::import::cmd_pick_external_import_file,
         commands::import::cmd_preview_canonical_import,
@@ -166,13 +171,15 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::web_activity_analysis::cmd_get_web_activity_aggregate_range,
         commands::backup::cmd_pick_backup_save_file,
         commands::backup::cmd_pick_backup_file,
+        commands::backup::cmd_get_scheduled_backup_snapshot,
+        commands::backup::cmd_pick_scheduled_backup_directory,
+        commands::backup::cmd_save_scheduled_backup_config,
         commands::backup::cmd_preview_backup,
         commands::backup::cmd_export_backup,
         commands::backup::cmd_restore_backup,
         commands::backup::cmd_save_webdav_backup_secret,
         commands::backup::cmd_delete_webdav_backup_secret,
         commands::backup::cmd_has_webdav_backup_secret,
-        commands::backup::cmd_reveal_webdav_backup_secret,
         commands::backup::cmd_test_webdav_backup_target,
         commands::backup::cmd_upload_webdav_backup,
         commands::backup::cmd_list_webdav_backups,

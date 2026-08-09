@@ -6,6 +6,7 @@ use crate::data::remote_backup::{
     WebDavBackupConfigDto, WebDavTestResult,
 };
 use crate::domain::backup::BackupPreview;
+use crate::domain::backup_schedule::{ScheduledBackupConfigInput, ScheduledBackupSnapshot};
 use tauri::{AppHandle, WebviewWindow};
 
 #[tauri::command]
@@ -16,6 +17,28 @@ pub fn cmd_pick_backup_save_file(initial_path: Option<String>) -> Option<String>
 #[tauri::command]
 pub fn cmd_pick_backup_file(initial_path: Option<String>) -> Option<String> {
     backup::pick_backup_file(initial_path)
+}
+
+#[tauri::command]
+pub async fn cmd_get_scheduled_backup_snapshot(
+    app: AppHandle,
+) -> Result<ScheduledBackupSnapshot, String> {
+    app::scheduled_backup::get_snapshot(&app).await
+}
+
+#[tauri::command]
+pub fn cmd_pick_scheduled_backup_directory(initial_path: Option<String>) -> Option<String> {
+    app::scheduled_backup::pick_directory(initial_path)
+}
+
+#[tauri::command]
+pub async fn cmd_save_scheduled_backup_config(
+    input: ScheduledBackupConfigInput,
+    app: AppHandle,
+    window: WebviewWindow,
+) -> Result<ScheduledBackupSnapshot, String> {
+    require_main_window_string(&window)?;
+    app::scheduled_backup::save_config(&app, input).await
 }
 
 #[tauri::command]
@@ -62,12 +85,6 @@ pub fn cmd_delete_webdav_backup_secret(window: WebviewWindow) -> Result<(), Stri
 #[tauri::command]
 pub fn cmd_has_webdav_backup_secret() -> Result<bool, String> {
     remote_backup::has_webdav_backup_secret()
-}
-
-#[tauri::command]
-pub fn cmd_reveal_webdav_backup_secret(window: WebviewWindow) -> Result<Option<String>, String> {
-    require_main_window_string(&window)?;
-    remote_backup::reveal_webdav_backup_secret()
 }
 
 #[tauri::command]

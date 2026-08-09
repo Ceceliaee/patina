@@ -7,6 +7,8 @@ pub mod main_window;
 pub mod remote_status_bridge;
 pub mod runtime;
 pub mod runtime_tasks;
+pub mod scheduled_backup;
+pub mod scheduled_export;
 pub mod state;
 pub mod tools;
 pub mod tracking;

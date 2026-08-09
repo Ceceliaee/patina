@@ -549,6 +549,18 @@
           "markdownDescription": "Enables the cmd_get_resource_diagnostics command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_get_scheduled_backup_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-scheduled-backup-snapshot",
+          "markdownDescription": "Enables the cmd_get_scheduled_backup_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_scheduled_export_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-scheduled-export-snapshot",
+          "markdownDescription": "Enables the cmd_get_scheduled_export_snapshot command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_get_storage_snapshot command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-get-storage-snapshot",
@@ -705,6 +717,18 @@
           "markdownDescription": "Enables the cmd_pick_external_import_file command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_pick_scheduled_backup_directory command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-pick-scheduled-backup-directory",
+          "markdownDescription": "Enables the cmd_pick_scheduled_backup_directory command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_pick_scheduled_export_directory command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-pick-scheduled-export-directory",
+          "markdownDescription": "Enables the cmd_pick_scheduled_export_directory command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_pick_storage_directory command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-pick-storage-directory",
@@ -807,12 +831,6 @@
           "markdownDescription": "Enables the cmd_resume_timer command without any pre-configured scope."
         },
         {
-          "description": "Enables the cmd_reveal_webdav_backup_secret command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-reveal-webdav-backup-secret",
-          "markdownDescription": "Enables the cmd_reveal_webdav_backup_secret command without any pre-configured scope."
-        },
-        {
           "description": "Enables the cmd_save_data_bootstrap_snapshot_payload command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-save-data-bootstrap-snapshot-payload",
@@ -841,6 +859,18 @@
           "type": "string",
           "const": "allow-cmd-save-remote-backup-settings",
           "markdownDescription": "Enables the cmd_save_remote_backup_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_save_scheduled_backup_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-save-scheduled-backup-config",
+          "markdownDescription": "Enables the cmd_save_scheduled_backup_config command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_save_scheduled_export_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-save-scheduled-export-config",
+          "markdownDescription": "Enables the cmd_save_scheduled_export_config command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_save_webdav_backup_secret command without any pre-configured scope.",
@@ -1137,6 +1167,18 @@
           "markdownDescription": "Denies the cmd_get_resource_diagnostics command without any pre-configured scope."
         },
         {
+          "description": "Denies the cmd_get_scheduled_backup_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-scheduled-backup-snapshot",
+          "markdownDescription": "Denies the cmd_get_scheduled_backup_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_scheduled_export_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-scheduled-export-snapshot",
+          "markdownDescription": "Denies the cmd_get_scheduled_export_snapshot command without any pre-configured scope."
+        },
+        {
           "description": "Denies the cmd_get_storage_snapshot command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-get-storage-snapshot",
@@ -1293,6 +1335,18 @@
           "markdownDescription": "Denies the cmd_pick_external_import_file command without any pre-configured scope."
         },
         {
+          "description": "Denies the cmd_pick_scheduled_backup_directory command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-pick-scheduled-backup-directory",
+          "markdownDescription": "Denies the cmd_pick_scheduled_backup_directory command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_pick_scheduled_export_directory command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-pick-scheduled-export-directory",
+          "markdownDescription": "Denies the cmd_pick_scheduled_export_directory command without any pre-configured scope."
+        },
+        {
           "description": "Denies the cmd_pick_storage_directory command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-pick-storage-directory",
@@ -1395,12 +1449,6 @@
           "markdownDescription": "Denies the cmd_resume_timer command without any pre-configured scope."
         },
         {
-          "description": "Denies the cmd_reveal_webdav_backup_secret command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-reveal-webdav-backup-secret",
-          "markdownDescription": "Denies the cmd_reveal_webdav_backup_secret command without any pre-configured scope."
-        },
-        {
           "description": "Denies the cmd_save_data_bootstrap_snapshot_payload command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-save-data-bootstrap-snapshot-payload",
@@ -1429,6 +1477,18 @@
           "type": "string",
           "const": "deny-cmd-save-remote-backup-settings",
           "markdownDescription": "Denies the cmd_save_remote_backup_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_save_scheduled_backup_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-save-scheduled-backup-config",
+          "markdownDescription": "Denies the cmd_save_scheduled_backup_config command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_save_scheduled_export_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-save-scheduled-export-config",
+          "markdownDescription": "Denies the cmd_save_scheduled_export_config command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_save_webdav_backup_secret command without any pre-configured scope.",

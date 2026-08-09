@@ -100,23 +100,31 @@ pub async fn cmd_delete_web_activity_segments_by_domain<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn cmd_save_remote_backup_settings<R: Runtime>(
+pub async fn cmd_save_remote_backup_settings(
     patch: RemoteBackupSettingsPatchDto,
-    app: AppHandle<R>,
+    app: AppHandle,
 ) -> Result<(), CommandErrorDto> {
+    let _guard = crate::app::scheduled_backup::lock_for_configuration(&app).await;
     settings_payload_service::save_remote_backup_settings(&app, patch.into())
         .await
-        .map_err(Into::into)
+        .map_err(CommandErrorDto::from)?;
+    crate::app::scheduled_backup::refresh_webdav_target_while_locked(&app)
+        .await
+        .map_err(|error| CommandErrorDto::new("SCHEDULED_BACKUP_UPDATE_FAILED", error, true))
 }
 
 #[tauri::command]
-pub async fn cmd_save_remote_backup_remote_dir<R: Runtime>(
+pub async fn cmd_save_remote_backup_remote_dir(
     remote_dir: String,
-    app: AppHandle<R>,
+    app: AppHandle,
 ) -> Result<(), CommandErrorDto> {
+    let _guard = crate::app::scheduled_backup::lock_for_configuration(&app).await;
     settings_payload_service::save_remote_backup_remote_dir(&app, remote_dir)
         .await
-        .map_err(Into::into)
+        .map_err(CommandErrorDto::from)?;
+    crate::app::scheduled_backup::refresh_webdav_target_while_locked(&app)
+        .await
+        .map_err(|error| CommandErrorDto::new("SCHEDULED_BACKUP_UPDATE_FAILED", error, true))
 }
 
 #[tauri::command]
@@ -130,12 +138,14 @@ pub async fn cmd_save_remote_backup_last_backup_at<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn cmd_clear_remote_backup_settings<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<(), CommandErrorDto> {
+pub async fn cmd_clear_remote_backup_settings(app: AppHandle) -> Result<(), CommandErrorDto> {
+    let _guard = crate::app::scheduled_backup::lock_for_configuration(&app).await;
     settings_payload_service::clear_remote_backup_settings(&app)
         .await
-        .map_err(Into::into)
+        .map_err(CommandErrorDto::from)?;
+    crate::app::scheduled_backup::refresh_webdav_target_while_locked(&app)
+        .await
+        .map_err(|error| CommandErrorDto::new("SCHEDULED_BACKUP_UPDATE_FAILED", error, true))
 }
 
 #[tauri::command]

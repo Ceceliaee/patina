@@ -10,7 +10,15 @@ pub(crate) async fn restore_backup_and_refresh(
     hash: String,
     strategy: RestoreStrategy,
 ) -> Result<(), String> {
+    let scheduled_backup_guard = crate::app::scheduled_backup::lock_for_restore(&app).await;
+    let scheduled_export_guard = crate::app::scheduled_export::lock_for_restore(&app).await;
     backup::restore_backup(backup_path.clone(), hash, app.clone(), strategy).await?;
+    if strategy == RestoreStrategy::Replace {
+        crate::app::scheduled_backup::reset_after_replace_restore_while_locked(&app).await?;
+        crate::app::scheduled_export::reset_after_replace_restore_while_locked(&app).await?;
+    }
+    drop(scheduled_export_guard);
+    drop(scheduled_backup_guard);
     if let Err(error) = remote_backup::cleanup_remote_backup_temp_if_owned(&app, &backup_path) {
         eprintln!("[backup] restore committed but remote temp cleanup failed: {error}");
     }

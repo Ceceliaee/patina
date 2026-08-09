@@ -105,6 +105,44 @@ pub(crate) fn spawn_tools_runtime_restart_loop<R: Runtime + 'static>(app: AppHan
     });
 }
 
+pub(crate) fn spawn_scheduled_backup_runtime_restart_loop(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let mut retry_delay = RestartBackoff::new();
+        loop {
+            if let Err(error) = crate::app::scheduled_backup::run(app.clone()).await {
+                eprintln!("[scheduled-backup] runtime stopped: {error}");
+                let delay = retry_delay.next_delay();
+                eprintln!(
+                    "[scheduled-backup] restarting runtime in {} seconds...",
+                    delay.as_secs()
+                );
+                sleep(delay).await;
+                continue;
+            }
+            break;
+        }
+    });
+}
+
+pub(crate) fn spawn_scheduled_export_runtime_restart_loop(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let mut retry_delay = RestartBackoff::new();
+        loop {
+            if let Err(error) = crate::app::scheduled_export::run(app.clone()).await {
+                eprintln!("[scheduled-export] runtime stopped: {error}");
+                let delay = retry_delay.next_delay();
+                eprintln!(
+                    "[scheduled-export] restarting runtime in {} seconds...",
+                    delay.as_secs()
+                );
+                sleep(delay).await;
+                continue;
+            }
+            break;
+        }
+    });
+}
+
 #[derive(Debug)]
 struct RestartBackoff {
     current_delay_secs: u64,

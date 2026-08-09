@@ -1,7 +1,9 @@
+use crate::commands::window_guard::require_main_window_string;
 use crate::data::export::{self, ExportDataRequest};
+use crate::domain::export_schedule::{ScheduledExportConfigInput, ScheduledExportSnapshot};
 use rfd::FileDialog;
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, WebviewWindow};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -73,6 +75,28 @@ pub async fn cmd_export_data(
 ) -> Result<ExportDataResult, String> {
     let row_count = export::export_data(&app, request).await?;
     Ok(ExportDataResult { row_count })
+}
+
+#[tauri::command]
+pub async fn cmd_get_scheduled_export_snapshot(
+    app: AppHandle,
+) -> Result<ScheduledExportSnapshot, String> {
+    crate::app::scheduled_export::get_snapshot(&app).await
+}
+
+#[tauri::command]
+pub fn cmd_pick_scheduled_export_directory(initial_path: Option<String>) -> Option<String> {
+    crate::app::scheduled_export::pick_directory(initial_path)
+}
+
+#[tauri::command]
+pub async fn cmd_save_scheduled_export_config(
+    input: ScheduledExportConfigInput,
+    app: AppHandle,
+    window: WebviewWindow,
+) -> Result<ScheduledExportSnapshot, String> {
+    require_main_window_string(&window)?;
+    crate::app::scheduled_export::save_config(&app, input).await
 }
 
 #[cfg(test)]

@@ -1,5 +1,7 @@
 pub mod activity_read_model;
 pub mod backup;
+pub mod backup_schedule;
+pub mod export_schedule;
 pub mod lifecycle;
 pub mod localization;
 pub mod settings;
