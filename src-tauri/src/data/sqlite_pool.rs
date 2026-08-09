@@ -15,7 +15,7 @@ use tauri_plugin_sql::{DbInstances, DbPool, MigrationKind};
 use tokio::time::{sleep, Duration};
 
 pub const SQLITE_DB_NAME: &str = "sqlite:patina.db";
-const VALIDATED_SCHEMA_MIGRATION_HEAD: i64 = schema::WEB_ACTIVITY_REVISION_MIGRATION_VERSION;
+const VALIDATED_SCHEMA_MIGRATION_HEAD: i64 = schema::SCHEDULED_EXPORT_MIGRATION_VERSION;
 mod activity_read_model_schema;
 pub(super) mod import_schema;
 mod maintenance;
@@ -794,6 +794,8 @@ async fn has_current_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
         has_import_data_schema(pool).await?,
         has_activity_read_models_schema(pool).await?,
         schema_contracts::has_web_activity_revision_schema(pool).await?,
+        schema_contracts::has_scheduled_backup_schema(pool).await?,
+        schema_contracts::has_scheduled_export_schema(pool).await?,
     ];
     Ok(checks.into_iter().all(|ready| ready))
 }
@@ -827,8 +829,18 @@ async fn normalize_current_baseline_migration_history_for_pool(
     } else if !has_activity_read_models_schema(pool).await? {
         expected.truncate(schema::IMPORT_DATA_ISOLATION_MIGRATION_VERSION as usize);
     }
+    let scheduled_backup_migration_count =
+        if schema_contracts::has_scheduled_backup_schema(pool).await? {
+            2
+        } else if schema_contracts::has_local_only_scheduled_backup_schema(pool).await? {
+            1
+        } else {
+            0
+        };
     let revision_limit = schema::ACTIVITY_READ_MODELS_MIGRATION_VERSION as usize
-        + usize::from(schema_contracts::has_web_activity_revision_schema(pool).await?);
+        + usize::from(schema_contracts::has_web_activity_revision_schema(pool).await?)
+        + scheduled_backup_migration_count
+        + usize::from(schema_contracts::has_scheduled_export_schema(pool).await?);
     expected.truncate(expected.len().min(revision_limit));
     if expected.is_empty() {
         return Ok(false);
@@ -1266,7 +1278,7 @@ mod tests {
                     .fetch_all(&pool)
                     .await
                     .unwrap();
-            assert_eq!(final_versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
+            assert_eq!(final_versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
         });
     }
 

@@ -18,6 +18,12 @@ pub const ACTIVITY_READ_MODELS_MIGRATION_VERSION: i64 = 8;
 pub const ACTIVITY_READ_MODELS_MIGRATION_DESCRIPTION: &str = "create_activity_read_models";
 pub const WEB_ACTIVITY_REVISION_MIGRATION_VERSION: i64 = 9;
 pub const WEB_ACTIVITY_REVISION_MIGRATION_DESCRIPTION: &str = "create_web_activity_revision";
+pub const SCHEDULED_BACKUP_MIGRATION_VERSION: i64 = 10;
+pub const SCHEDULED_BACKUP_MIGRATION_DESCRIPTION: &str = "create_scheduled_backup_tables";
+pub const SCHEDULED_BACKUP_TARGETS_MIGRATION_VERSION: i64 = 11;
+pub const SCHEDULED_BACKUP_TARGETS_MIGRATION_DESCRIPTION: &str = "extend_scheduled_backup_targets";
+pub const SCHEDULED_EXPORT_MIGRATION_VERSION: i64 = 12;
+pub const SCHEDULED_EXPORT_MIGRATION_DESCRIPTION: &str = "create_scheduled_export_tables";
 
 pub const CURRENT_BASELINE_SCHEMA_SQL: &str = "
     CREATE TABLE IF NOT EXISTS sessions (
@@ -255,6 +261,197 @@ pub const WEB_ACTIVITY_REVISION_SCHEMA_SQL: &str = "
             )
         WHERE id = 1;
     END;
+";
+
+pub const SCHEDULED_BACKUP_SCHEMA_SQL: &str = "
+    CREATE TABLE IF NOT EXISTS scheduled_backup_config (
+        id INTEGER PRIMARY KEY CHECK(id = 1),
+        enabled INTEGER NOT NULL CHECK(enabled IN (0, 1)),
+        cadence TEXT NOT NULL CHECK(cadence IN ('daily', 'weekly')),
+        weekday INTEGER CHECK(weekday BETWEEN 1 AND 7),
+        local_time_minutes INTEGER NOT NULL CHECK(local_time_minutes BETWEEN 0 AND 1439),
+        target_dir TEXT NOT NULL CHECK(TRIM(target_dir) <> ''),
+        retention_count INTEGER NOT NULL CHECK(retention_count IN (1, 3, 7)),
+        target_generation TEXT NOT NULL CHECK(TRIM(target_generation) <> ''),
+        schedule_anchor_at_ms INTEGER NOT NULL CHECK(schedule_anchor_at_ms >= 0),
+        updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms >= 0),
+        CHECK(
+            (cadence = 'daily' AND weekday IS NULL)
+            OR (cadence = 'weekly' AND weekday IS NOT NULL)
+        )
+    );
+
+    CREATE TABLE IF NOT EXISTS scheduled_backup_runs (
+        run_key TEXT PRIMARY KEY CHECK(TRIM(run_key) <> ''),
+        target_generation TEXT NOT NULL CHECK(TRIM(target_generation) <> ''),
+        logical_date TEXT NOT NULL CHECK(length(logical_date) = 10),
+        logical_time_minutes INTEGER NOT NULL CHECK(logical_time_minutes BETWEEN 0 AND 1439),
+        target_path TEXT NOT NULL CHECK(TRIM(target_path) <> ''),
+        status TEXT NOT NULL CHECK(status IN ('running', 'retry_wait', 'succeeded', 'failed')),
+        file_state TEXT NOT NULL CHECK(file_state IN ('absent', 'present', 'pruned', 'missing', 'conflict')),
+        attempt_count INTEGER NOT NULL CHECK(attempt_count BETWEEN 1 AND 3),
+        retry_at_ms INTEGER CHECK(retry_at_ms IS NULL OR retry_at_ms >= 0),
+        started_at_ms INTEGER NOT NULL CHECK(started_at_ms >= 0),
+        completed_at_ms INTEGER CHECK(completed_at_ms IS NULL OR completed_at_ms >= 0),
+        archive_sha256 TEXT,
+        size_bytes INTEGER CHECK(size_bytes IS NULL OR size_bytes >= 0),
+        error_code TEXT,
+        error_message TEXT,
+        cleanup_warning TEXT,
+        updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms >= 0),
+        UNIQUE(target_generation, logical_date, logical_time_minutes)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_scheduled_backup_runs_retention
+    ON scheduled_backup_runs(
+        target_generation, status, file_state,
+        logical_date DESC, logical_time_minutes DESC
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_scheduled_backup_runs_status_retry
+    ON scheduled_backup_runs(status, retry_at_ms, updated_at_ms);
+";
+
+pub const SCHEDULED_BACKUP_TARGETS_SCHEMA_SQL: &str = "
+    ALTER TABLE scheduled_backup_config RENAME TO scheduled_backup_config_local_only;
+    ALTER TABLE scheduled_backup_runs RENAME TO scheduled_backup_runs_local_only;
+
+    CREATE TABLE scheduled_backup_config (
+        id INTEGER PRIMARY KEY CHECK(id = 1),
+        enabled INTEGER NOT NULL CHECK(enabled IN (0, 1)),
+        cadence TEXT NOT NULL CHECK(cadence IN ('daily', 'weekly')),
+        weekday INTEGER CHECK(weekday BETWEEN 1 AND 7),
+        local_time_minutes INTEGER NOT NULL CHECK(local_time_minutes BETWEEN 0 AND 1439),
+        target_kind TEXT NOT NULL CHECK(target_kind IN ('local', 'webdav')),
+        target_dir TEXT,
+        target_identity TEXT,
+        retention_count INTEGER NOT NULL CHECK(retention_count = 1),
+        target_generation TEXT NOT NULL CHECK(TRIM(target_generation) <> ''),
+        schedule_anchor_at_ms INTEGER NOT NULL CHECK(schedule_anchor_at_ms >= 0),
+        updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms >= 0),
+        CHECK(
+            (cadence = 'daily' AND weekday IS NULL)
+            OR (cadence = 'weekly' AND weekday IS NOT NULL)
+        ),
+        CHECK(
+            (target_kind = 'local' AND target_dir IS NOT NULL AND TRIM(target_dir) <> '' AND target_identity IS NULL)
+            OR (target_kind = 'webdav' AND target_dir IS NULL AND target_identity IS NOT NULL AND TRIM(target_identity) <> '')
+        )
+    );
+
+    INSERT INTO scheduled_backup_config (
+        id, enabled, cadence, weekday, local_time_minutes, target_kind, target_dir,
+        target_identity, retention_count, target_generation, schedule_anchor_at_ms, updated_at_ms
+    )
+    SELECT id, enabled, cadence, weekday, local_time_minutes, 'local', target_dir,
+           NULL, 1, target_generation, schedule_anchor_at_ms, updated_at_ms
+    FROM scheduled_backup_config_local_only;
+
+    CREATE TABLE scheduled_backup_runs (
+        run_key TEXT PRIMARY KEY CHECK(TRIM(run_key) <> ''),
+        target_generation TEXT NOT NULL CHECK(TRIM(target_generation) <> ''),
+        target_kind TEXT NOT NULL CHECK(target_kind IN ('local', 'webdav')),
+        logical_date TEXT NOT NULL CHECK(length(logical_date) = 10),
+        logical_time_minutes INTEGER NOT NULL CHECK(logical_time_minutes BETWEEN 0 AND 1439),
+        target_path TEXT NOT NULL CHECK(TRIM(target_path) <> ''),
+        staging_path TEXT,
+        phase TEXT NOT NULL CHECK(phase IN ('claimed', 'staged', 'uploaded', 'remote_verified', 'indexed', 'succeeded')),
+        remote_etag TEXT,
+        status TEXT NOT NULL CHECK(status IN ('running', 'retry_wait', 'succeeded', 'failed')),
+        file_state TEXT NOT NULL CHECK(file_state IN ('absent', 'present', 'pruned', 'missing', 'conflict')),
+        attempt_count INTEGER NOT NULL CHECK(attempt_count BETWEEN 1 AND 3),
+        retry_at_ms INTEGER CHECK(retry_at_ms IS NULL OR retry_at_ms >= 0),
+        started_at_ms INTEGER NOT NULL CHECK(started_at_ms >= 0),
+        completed_at_ms INTEGER CHECK(completed_at_ms IS NULL OR completed_at_ms >= 0),
+        archive_sha256 TEXT,
+        size_bytes INTEGER CHECK(size_bytes IS NULL OR size_bytes >= 0),
+        error_code TEXT,
+        error_message TEXT,
+        cleanup_warning TEXT,
+        updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms >= 0),
+        UNIQUE(target_generation, logical_date, logical_time_minutes)
+    );
+
+    INSERT INTO scheduled_backup_runs (
+        run_key, target_generation, target_kind, logical_date, logical_time_minutes,
+        target_path, staging_path, phase, remote_etag, status, file_state, attempt_count,
+        retry_at_ms, started_at_ms, completed_at_ms, archive_sha256, size_bytes,
+        error_code, error_message, cleanup_warning, updated_at_ms
+    )
+    SELECT REPLACE(run_key, 'scheduled-local-backup:', 'scheduled-backup:'),
+           target_generation, 'local', logical_date, logical_time_minutes,
+           target_path, NULL,
+           CASE WHEN status = 'succeeded' THEN 'succeeded' ELSE 'claimed' END,
+           NULL, status, file_state, attempt_count, retry_at_ms, started_at_ms,
+           completed_at_ms, archive_sha256, size_bytes, error_code, error_message,
+           cleanup_warning, updated_at_ms
+    FROM scheduled_backup_runs_local_only;
+
+    DROP TABLE scheduled_backup_config_local_only;
+    DROP TABLE scheduled_backup_runs_local_only;
+
+    CREATE INDEX idx_scheduled_backup_runs_retention
+    ON scheduled_backup_runs(
+        target_generation, status, file_state,
+        logical_date DESC, logical_time_minutes DESC
+    );
+
+    CREATE INDEX idx_scheduled_backup_runs_status_retry
+    ON scheduled_backup_runs(status, retry_at_ms, updated_at_ms);
+";
+
+pub const SCHEDULED_EXPORT_SCHEMA_SQL: &str = "
+    CREATE TABLE IF NOT EXISTS scheduled_export_config (
+        id INTEGER PRIMARY KEY CHECK(id = 1),
+        enabled INTEGER NOT NULL CHECK(enabled IN (0, 1)),
+        cadence TEXT NOT NULL CHECK(cadence IN ('daily', 'weekly')),
+        weekday INTEGER CHECK(weekday BETWEEN 1 AND 7),
+        local_time_minutes INTEGER NOT NULL CHECK(local_time_minutes BETWEEN 0 AND 1439),
+        target_dir TEXT NOT NULL CHECK(TRIM(target_dir) <> ''),
+        format TEXT NOT NULL CHECK(format IN ('csv', 'markdown', 'parquet', 'sqlite')),
+        selected_fields_json TEXT NOT NULL CHECK(json_valid(selected_fields_json)),
+        plan_generation TEXT NOT NULL CHECK(TRIM(plan_generation) <> ''),
+        schedule_anchor_at_ms INTEGER NOT NULL CHECK(schedule_anchor_at_ms >= 0),
+        updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms >= 0),
+        CHECK(
+            (cadence = 'daily' AND weekday IS NULL)
+            OR (cadence = 'weekly' AND weekday IS NOT NULL)
+        )
+    );
+
+    CREATE TABLE IF NOT EXISTS scheduled_export_runs (
+        run_key TEXT PRIMARY KEY CHECK(TRIM(run_key) <> ''),
+        plan_generation TEXT NOT NULL CHECK(TRIM(plan_generation) <> ''),
+        cadence TEXT NOT NULL CHECK(cadence IN ('daily', 'weekly')),
+        logical_start_date TEXT NOT NULL CHECK(length(logical_start_date) = 10),
+        logical_end_date TEXT NOT NULL CHECK(length(logical_end_date) = 10),
+        period_start_ms INTEGER NOT NULL CHECK(period_start_ms >= 0),
+        period_end_ms INTEGER NOT NULL CHECK(period_end_ms > period_start_ms),
+        format TEXT NOT NULL CHECK(format IN ('csv', 'markdown', 'parquet', 'sqlite')),
+        selected_fields_json TEXT NOT NULL CHECK(json_valid(selected_fields_json)),
+        target_path TEXT NOT NULL CHECK(TRIM(target_path) <> ''),
+        staging_path TEXT,
+        phase TEXT NOT NULL CHECK(phase IN ('claimed', 'written', 'validated', 'published', 'succeeded')),
+        status TEXT NOT NULL CHECK(status IN ('running', 'retry_wait', 'succeeded', 'failed', 'superseded')),
+        file_state TEXT NOT NULL CHECK(file_state IN ('absent', 'present', 'missing', 'conflict')),
+        attempt_count INTEGER NOT NULL CHECK(attempt_count BETWEEN 1 AND 3),
+        retry_at_ms INTEGER,
+        row_count INTEGER CHECK(row_count >= 0),
+        size_bytes INTEGER CHECK(size_bytes >= 0),
+        sha256 TEXT,
+        error_code TEXT,
+        error_message TEXT,
+        started_at_ms INTEGER NOT NULL CHECK(started_at_ms >= 0),
+        completed_at_ms INTEGER,
+        updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms >= 0),
+        UNIQUE(plan_generation, period_start_ms, period_end_ms)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_scheduled_export_runs_status_retry
+    ON scheduled_export_runs(status, retry_at_ms, updated_at_ms);
+
+    CREATE INDEX IF NOT EXISTS idx_scheduled_export_runs_recent
+    ON scheduled_export_runs(plan_generation, status, updated_at_ms DESC);
 ";
 
 pub const WEB_FAVICON_CACHE_SCHEMA_SQL: &str = "
@@ -844,6 +1041,24 @@ pub fn tracker_migrations() -> Vec<Migration> {
             version: WEB_ACTIVITY_REVISION_MIGRATION_VERSION,
             description: WEB_ACTIVITY_REVISION_MIGRATION_DESCRIPTION,
             sql: WEB_ACTIVITY_REVISION_SCHEMA_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: SCHEDULED_BACKUP_MIGRATION_VERSION,
+            description: SCHEDULED_BACKUP_MIGRATION_DESCRIPTION,
+            sql: SCHEDULED_BACKUP_SCHEMA_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: SCHEDULED_BACKUP_TARGETS_MIGRATION_VERSION,
+            description: SCHEDULED_BACKUP_TARGETS_MIGRATION_DESCRIPTION,
+            sql: SCHEDULED_BACKUP_TARGETS_SCHEMA_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: SCHEDULED_EXPORT_MIGRATION_VERSION,
+            description: SCHEDULED_EXPORT_MIGRATION_DESCRIPTION,
+            sql: SCHEDULED_EXPORT_SCHEMA_SQL,
             kind: MigrationKind::Up,
         },
     ]

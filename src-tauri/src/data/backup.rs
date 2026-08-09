@@ -11,6 +11,7 @@ use crate::domain::backup::{BackupMeta, CURRENT_BACKUP_SCHEMA_VERSION, CURRENT_B
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::AppHandle;
+use tokio::sync::Mutex;
 
 mod archive;
 #[cfg(test)]
@@ -21,6 +22,8 @@ mod payload;
 mod prepared_source;
 mod restore_payload;
 mod snapshot;
+
+static BACKUP_SNAPSHOT_LOCK: Mutex<()> = Mutex::const_new(());
 
 #[cfg(test)]
 use archive::encode_backup_archive;
@@ -33,6 +36,7 @@ use restore_payload::{restore_backup_payload, restore_backup_payload_in_tx};
 
 pub use paths::{pick_backup_file, pick_backup_save_file};
 pub use payload::RestoreStrategy;
+pub(crate) use snapshot::{export_scheduled_backup_create_new, validate_scheduled_snapshot};
 
 #[cfg(test)]
 use archive::*;
@@ -50,6 +54,8 @@ use zip::{CompressionMethod, ZipArchive, ZipWriter};
 pub async fn export_backup(backup_path: Option<String>, app: AppHandle) -> Result<String, String> {
     let target_path = resolve_backup_path(&app, backup_path)?;
     let pool = wait_for_sqlite_pool(&app).await?;
+    let _snapshot = BACKUP_SNAPSHOT_LOCK.lock().await;
+    let _maintenance = acquire_sqlite_maintenance().await;
     snapshot::write_snapshot_archive(&pool, &target_path, env!("CARGO_PKG_VERSION")).await?;
 
     Ok(target_path.to_string_lossy().to_string())

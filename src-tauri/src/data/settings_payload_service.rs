@@ -3,13 +3,13 @@ use crate::data::sqlite_pool::run_recoverable_sqlite_write;
 use sqlx::{Pool, Sqlite};
 use tauri::{AppHandle, Runtime};
 
-const WEBDAV_BACKUP_URL_KEY: &str = "webdav_backup_url";
-const WEBDAV_BACKUP_USERNAME_KEY: &str = "webdav_backup_username";
-const WEBDAV_BACKUP_REMOTE_DIR_KEY: &str = "webdav_backup_remote_dir";
-const WEBDAV_BACKUP_LAST_BACKUP_AT_MS_KEY: &str = "webdav_backup_last_backup_at_ms";
+use crate::data::repositories::remote_backup_settings::{
+    normalize_config, WEBDAV_BACKUP_LAST_BACKUP_AT_MS_KEY, WEBDAV_BACKUP_REMOTE_DIR_KEY,
+    WEBDAV_BACKUP_URL_KEY, WEBDAV_BACKUP_USERNAME_KEY,
+};
+use crate::platform::webdav::normalize_remote_dir;
 const DATA_BOOTSTRAP_SNAPSHOT_KEY: &str = "data.bootstrap_snapshot";
 const HISTORY_BOOTSTRAP_SNAPSHOT_KEY: &str = "history.bootstrap_snapshot.v1";
-const DEFAULT_WEBDAV_REMOTE_DIR: &str = "/Patina";
 const MAX_SETTINGS_PAYLOAD_LEN: usize = 10 * 1024 * 1024;
 const MAX_HISTORY_BOOTSTRAP_SNAPSHOT_LEN: usize = 256 * 1024;
 
@@ -24,22 +24,15 @@ pub async fn save_remote_backup_settings<R: Runtime>(
     app: &AppHandle<R>,
     patch: RemoteBackupSettingsPatch,
 ) -> Result<(), SqliteOperationError> {
-    let url = patch.url.trim().to_string();
-    let username = patch.username.trim().to_string();
-    if url.is_empty() {
-        return Err(SqliteOperationError::invalid_input(
-            "save remote backup settings",
-            "URL cannot be empty",
-        ));
-    }
-    if username.is_empty() {
-        return Err(SqliteOperationError::invalid_input(
-            "save remote backup settings",
-            "username cannot be empty",
-        ));
-    }
-
-    let remote_dir = normalize_remote_dir(patch.remote_dir.as_deref());
+    let normalized = normalize_config(
+        &patch.url,
+        &patch.username,
+        patch.remote_dir.as_deref().unwrap_or(""),
+    )
+    .map_err(|error| SqliteOperationError::invalid_input("save remote backup settings", error))?;
+    let url = normalized.url;
+    let username = normalized.username;
+    let remote_dir = normalized.remote_dir;
     let last_backup_at_ms = patch.last_backup_at_ms.filter(|timestamp| *timestamp > 0);
 
     run_recoverable_sqlite_write(app, "failed to save remote backup settings", move |pool| {
@@ -68,7 +61,9 @@ pub async fn save_remote_backup_remote_dir<R: Runtime>(
     app: &AppHandle<R>,
     remote_dir: String,
 ) -> Result<(), SqliteOperationError> {
-    let remote_dir = normalize_remote_dir(Some(&remote_dir));
+    let remote_dir = normalize_remote_dir(&remote_dir).map_err(|error| {
+        SqliteOperationError::invalid_input("save remote backup directory", error)
+    })?;
     upsert_single_setting(app, WEBDAV_BACKUP_REMOTE_DIR_KEY, remote_dir).await
 }
 
@@ -196,25 +191,6 @@ async fn upsert_single_setting<R: Runtime>(
     .await
 }
 
-fn normalize_remote_dir(value: Option<&str>) -> String {
-    let trimmed = value.unwrap_or("").trim();
-    if trimmed.is_empty() {
-        return DEFAULT_WEBDAV_REMOTE_DIR.to_string();
-    }
-
-    let with_leading_slash = if trimmed.starts_with('/') {
-        trimmed.to_string()
-    } else {
-        format!("/{trimmed}")
-    };
-
-    if with_leading_slash.len() > 1 && with_leading_slash.ends_with('/') {
-        with_leading_slash[..with_leading_slash.len() - 1].to_string()
-    } else {
-        with_leading_slash
-    }
-}
-
 struct SettingMutation {
     key: &'static str,
     value: Option<String>,
@@ -300,13 +276,13 @@ mod tests {
 
     #[test]
     fn remote_dir_normalization_matches_frontend_contract() {
-        assert_eq!(normalize_remote_dir(None), "/Patina");
-        assert_eq!(normalize_remote_dir(Some("")), "/Patina");
-        assert_eq!(normalize_remote_dir(Some("TimeTracker")), "/TimeTracker");
+        assert_eq!(normalize_remote_dir("").unwrap(), "/Patina");
+        assert_eq!(normalize_remote_dir("TimeTracker").unwrap(), "/TimeTracker");
         assert_eq!(
-            normalize_remote_dir(Some("/Patina/backups/")),
+            normalize_remote_dir("/Patina/backups/").unwrap(),
             "/Patina/backups"
         );
+        assert!(normalize_remote_dir("../outside").is_err());
     }
 
     #[test]

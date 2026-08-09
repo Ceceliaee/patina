@@ -123,6 +123,22 @@ fn field_is_always_not_null(name: &str) -> bool {
     )
 }
 
+pub(crate) fn resolved_parquet_schema(selected_fields: &[String]) -> Result<Schema, String> {
+    let fields = resolve_export_fields(Some(selected_fields))?;
+    Ok(Schema::new(
+        fields
+            .iter()
+            .map(|name| {
+                Field::new(
+                    *name,
+                    field_data_type(name),
+                    !field_is_always_not_null(name),
+                )
+            })
+            .collect::<Vec<_>>(),
+    ))
+}
+
 #[derive(Clone, Debug)]
 struct SessionRow {
     id: i64,

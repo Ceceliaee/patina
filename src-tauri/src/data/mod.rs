@@ -8,6 +8,8 @@ pub mod import;
 pub mod remote_backup;
 pub mod remote_status_store;
 pub mod repositories;
+pub mod scheduled_backup;
+pub mod scheduled_export;
 pub mod schema;
 pub mod schema_contracts;
 pub mod settings_payload_service;

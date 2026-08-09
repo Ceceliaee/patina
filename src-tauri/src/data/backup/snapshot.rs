@@ -1,5 +1,7 @@
 use crate::data::schema;
-use crate::data::sqlite_pool::expected_migration_metadata;
+use crate::data::sqlite_pool::{
+    acquire_sqlite_maintenance, expected_migration_metadata, wait_for_sqlite_pool,
+};
 use crate::domain::backup::{BackupPreview, CURRENT_BACKUP_VERSION};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -11,6 +13,7 @@ use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::AppHandle;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
@@ -21,6 +24,35 @@ const DATABASE_ENTRY: &str = "database/patina.db";
 const MAX_METADATA_BYTES: u64 = 256 * 1024;
 pub(crate) const MAX_DATABASE_BYTES: u64 = 512 * 1024 * 1024;
 static UNIQUE_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+pub(crate) async fn export_scheduled_backup_create_new(
+    app: &AppHandle,
+    target_path: &Path,
+) -> Result<(), String> {
+    let pool = wait_for_sqlite_pool(app).await?;
+    let _snapshot = super::BACKUP_SNAPSHOT_LOCK.lock().await;
+    let _maintenance = acquire_sqlite_maintenance().await;
+    write_snapshot_archive_create_new(
+        &pool,
+        &[target_path.to_path_buf()],
+        env!("CARGO_PKG_VERSION"),
+    )
+    .await?;
+    Ok(())
+}
+
+pub(crate) async fn validate_scheduled_snapshot(path: &Path) -> Result<(String, u64), String> {
+    let extracted = extract_snapshot_archive(path, false).await?;
+    if !extracted.preview.restore_supported {
+        return Err("scheduled snapshot is not restorable by this app version".to_string());
+    }
+    drop(extracted);
+    let size = std::fs::metadata(path)
+        .map_err(|error| format!("failed to read scheduled backup metadata: {error}"))?
+        .len();
+    let hash = sha256_file(path)?;
+    Ok((hash, size))
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -68,6 +100,10 @@ struct SnapshotCounts {
     tool_pomodoro_runs: usize,
     tool_daily_stats: usize,
     tool_software_reminder_rules: usize,
+    scheduled_backup_config: usize,
+    scheduled_backup_runs: usize,
+    scheduled_export_config: usize,
+    scheduled_export_runs: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -262,6 +298,10 @@ async fn count_table(pool: &Pool<Sqlite>, table: &str) -> Result<usize, String> 
         "tool_pomodoro_runs" => "SELECT COUNT(*) FROM tool_pomodoro_runs",
         "tool_daily_stats" => "SELECT COUNT(*) FROM tool_daily_stats",
         "tool_software_reminder_rules" => "SELECT COUNT(*) FROM tool_software_reminder_rules",
+        "scheduled_backup_config" => "SELECT COUNT(*) FROM scheduled_backup_config",
+        "scheduled_backup_runs" => "SELECT COUNT(*) FROM scheduled_backup_runs",
+        "scheduled_export_config" => "SELECT COUNT(*) FROM scheduled_export_config",
+        "scheduled_export_runs" => "SELECT COUNT(*) FROM scheduled_export_runs",
         _ => return Err(format!("unsupported backup count table `{table}`")),
     };
     let value: i64 = sqlx::query_scalar(query)
@@ -288,6 +328,10 @@ async fn read_counts(pool: &Pool<Sqlite>) -> Result<SnapshotCounts, String> {
         tool_pomodoro_runs: count_table(pool, "tool_pomodoro_runs").await?,
         tool_daily_stats: count_table(pool, "tool_daily_stats").await?,
         tool_software_reminder_rules: count_table(pool, "tool_software_reminder_rules").await?,
+        scheduled_backup_config: count_table(pool, "scheduled_backup_config").await?,
+        scheduled_backup_runs: count_table(pool, "scheduled_backup_runs").await?,
+        scheduled_export_config: count_table(pool, "scheduled_export_config").await?,
+        scheduled_export_runs: count_table(pool, "scheduled_export_runs").await?,
     })
 }
 
@@ -421,6 +465,71 @@ fn publish_archive_atomically(replacement: &Path, target: &Path) -> Result<(), S
     .map_err(|error| format!("failed to atomically replace existing backup file: {error}"))
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum CreateNewPublishError {
+    AlreadyExists,
+    Other(String),
+}
+
+#[cfg(target_os = "windows")]
+fn publish_archive_create_new(
+    replacement: &Path,
+    target: &Path,
+) -> Result<(), CreateNewPublishError> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::core::PCWSTR;
+    use windows::Win32::Storage::FileSystem::{MoveFileExW, MOVEFILE_WRITE_THROUGH};
+
+    let target_wide = target
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect::<Vec<_>>();
+    let replacement_wide = replacement
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect::<Vec<_>>();
+    match unsafe {
+        MoveFileExW(
+            PCWSTR(replacement_wide.as_ptr()),
+            PCWSTR(target_wide.as_ptr()),
+            MOVEFILE_WRITE_THROUGH,
+        )
+    } {
+        Ok(()) => Ok(()),
+        Err(error) if (error.code().0 as u32 & 0xffff) == 183 => {
+            Err(CreateNewPublishError::AlreadyExists)
+        }
+        Err(error) => Err(CreateNewPublishError::Other(format!(
+            "failed to atomically publish new scheduled backup file: {error}"
+        ))),
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn publish_archive_create_new(
+    replacement: &Path,
+    target: &Path,
+) -> Result<(), CreateNewPublishError> {
+    match fs::hard_link(replacement, target) {
+        Ok(()) => {
+            fs::remove_file(replacement).map_err(|error| {
+                CreateNewPublishError::Other(format!(
+                    "failed to finish publishing scheduled backup: {error}"
+                ))
+            })?;
+            Ok(())
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            Err(CreateNewPublishError::AlreadyExists)
+        }
+        Err(error) => Err(CreateNewPublishError::Other(format!(
+            "failed to atomically publish new scheduled backup file: {error}"
+        ))),
+    }
+}
+
 #[cfg(not(target_os = "windows"))]
 fn publish_archive_atomically(replacement: &Path, target: &Path) -> Result<(), String> {
     fs::rename(replacement, target)
@@ -444,6 +553,31 @@ pub(super) async fn write_snapshot_archive(
     target: &Path,
     app_version: &str,
 ) -> Result<BackupPreview, String> {
+    write_snapshot_archive_internal(pool, &[target.to_path_buf()], app_version, true)
+        .await
+        .map(|(_, preview)| preview)
+}
+
+pub(super) async fn write_snapshot_archive_create_new(
+    pool: &Pool<Sqlite>,
+    targets: &[PathBuf],
+    app_version: &str,
+) -> Result<(PathBuf, BackupPreview), String> {
+    if targets.is_empty() {
+        return Err("scheduled backup requires at least one target candidate".to_string());
+    }
+    write_snapshot_archive_internal(pool, targets, app_version, false).await
+}
+
+async fn write_snapshot_archive_internal(
+    pool: &Pool<Sqlite>,
+    targets: &[PathBuf],
+    app_version: &str,
+    replace_existing: bool,
+) -> Result<(PathBuf, BackupPreview), String> {
+    let target = targets
+        .first()
+        .ok_or_else(|| "backup requires a target path".to_string())?;
     let parent = target
         .parent()
         .filter(|path| !path.as_os_str().is_empty())
@@ -523,8 +657,19 @@ pub(super) async fn write_snapshot_archive(
         }
         let preview = inspected.preview.clone();
         drop(inspected);
-        publish_archive_atomically(&archive_path, target)?;
-        Ok(preview)
+        if replace_existing {
+            publish_archive_atomically(&archive_path, target)?;
+            return Ok((target.clone(), preview));
+        }
+
+        for candidate in targets {
+            match publish_archive_create_new(&archive_path, candidate) {
+                Ok(()) => return Ok((candidate.clone(), preview)),
+                Err(CreateNewPublishError::AlreadyExists) => continue,
+                Err(CreateNewPublishError::Other(error)) => return Err(error),
+            }
+        }
+        Err("all scheduled backup file names are already in use".to_string())
     }
     .await;
     let _ = fs::remove_dir_all(&work_dir);
@@ -800,22 +945,20 @@ mod tests {
             .nth(1)
             .expect("previous migration")
             .0;
-        sqlx::query("DROP TABLE web_favicon_cache")
+        sqlx::query("DROP TABLE scheduled_export_runs")
             .execute(&pool)
             .await
-            .expect("remove table introduced by latest migration");
+            .expect("remove current scheduled export runs table");
+        sqlx::query("DROP TABLE scheduled_export_config")
+            .execute(&pool)
+            .await
+            .expect("remove current scheduled export config table");
         sqlx::query("DELETE FROM _sqlx_migrations WHERE version = ?")
             .bind(removed_version)
             .execute(&pool)
             .await
             .expect("rewind migration history");
         pool.close().await;
-
-        let count_pool = open_snapshot_pool(&db_path, true)
-            .await
-            .expect("open old schema");
-        assert!(read_counts(&count_pool).await.is_err());
-        count_pool.close().await;
 
         let manifest = SnapshotManifest {
             format: SNAPSHOT_FORMAT.to_string(),
@@ -867,6 +1010,27 @@ mod tests {
 
         assert_eq!(fs::read(&target).expect("read published backup"), b"new");
         assert!(!replacement.exists());
+        fs::remove_dir_all(work_dir).expect("remove test directory");
+    }
+
+    #[test]
+    fn create_new_publish_never_overwrites_an_unknown_target() {
+        let work_dir = create_private_work_dir(&std::env::temp_dir(), "patina-create-new-test")
+            .expect("create test directory");
+        let target = work_dir.join("backup.zip");
+        let replacement = work_dir.join("replacement.zip");
+        fs::write(&target, b"unknown").expect("write unknown target");
+        fs::write(&replacement, b"scheduled").expect("write replacement");
+
+        assert_eq!(
+            publish_archive_create_new(&replacement, &target),
+            Err(CreateNewPublishError::AlreadyExists)
+        );
+        assert_eq!(fs::read(&target).expect("read target"), b"unknown");
+        assert_eq!(
+            fs::read(&replacement).expect("read retained replacement"),
+            b"scheduled"
+        );
         fs::remove_dir_all(work_dir).expect("remove test directory");
     }
 

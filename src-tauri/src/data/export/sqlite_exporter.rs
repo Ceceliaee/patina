@@ -210,6 +210,24 @@ fn resolve_sqlite_fields(selected_fields: Option<&[String]>) -> Result<ResolvedF
     })
 }
 
+pub(crate) fn resolved_sqlite_column_names(
+    selected_fields: &[String],
+) -> Result<(Vec<String>, Vec<String>), String> {
+    let resolved = resolve_sqlite_fields(Some(selected_fields))?;
+    Ok((
+        resolved
+            .session_cols
+            .iter()
+            .map(|column| column.output_name.to_string())
+            .collect(),
+        resolved
+            .web_cols
+            .iter()
+            .map(|column| column.output_name.to_string())
+            .collect(),
+    ))
+}
+
 fn push_shared(
     session_cols: &mut Vec<ExportColumn>,
     web_cols: &mut Vec<ExportColumn>,
