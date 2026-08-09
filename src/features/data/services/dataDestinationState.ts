@@ -1,6 +1,7 @@
 import type { AppCategory } from "../../../shared/classification/categoryTokens.ts";
 
-export type DataDestinationMode = "app" | "web";
+export type DataDestinationMode = "app" | "category" | "web";
+export type DataDestinationDetailMode = Exclude<DataDestinationMode, "category">;
 
 export const DATA_DESTINATION_SELECTION_LIMIT = 7;
 
@@ -11,6 +12,7 @@ export interface DataDestinationTrendOption {
   normalizedDomain?: string;
   classificationCategory?: AppCategory;
   unclassified?: boolean;
+  accentColor?: string;
   displayName: string;
   secondaryText: string;
   iconUrl: string | null;
@@ -48,7 +50,7 @@ export interface DataDestinationSelectionResult {
 export interface DataDestinationSelectionSnapshot {
   appKeys: string[];
   webKeys: string[];
-  mode: DataDestinationMode;
+  mode: DataDestinationDetailMode;
 }
 
 function uniqueKeys(keys: readonly string[]) {
@@ -66,7 +68,7 @@ export function commitDataDestinationDetailSelection<
   Snapshot extends DataDestinationSelectionSnapshot,
 >(
   snapshot: Snapshot,
-  mode: DataDestinationMode,
+  mode: DataDestinationDetailMode,
   key: string,
 ): Snapshot {
   const selectedKeys = replaceDataDestinationSelection(key).keys;
@@ -169,7 +171,7 @@ export function resolveDataDestinationMode(
   webActivityEnabled: boolean,
   mode: DataDestinationMode,
 ): DataDestinationMode {
-  return webActivityEnabled ? mode : "app";
+  return !webActivityEnabled && mode === "web" ? "app" : mode;
 }
 
 export function resolveDataWebTrendPresentation({

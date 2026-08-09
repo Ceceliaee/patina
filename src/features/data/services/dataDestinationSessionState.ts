@@ -2,10 +2,11 @@ import type { DataDestinationTrendOption } from "./dataDestinationState.ts";
 
 export interface DataDestinationSessionSelectionState {
   appKeys: string[];
+  categoryKeys: string[];
   webKeys: string[];
 }
 
-type DataDestinationSessionMode = "app" | "web";
+type DataDestinationSessionMode = "app" | "category" | "web";
 
 function cloneOption(option: DataDestinationTrendOption): DataDestinationTrendOption {
   return {
@@ -16,10 +17,12 @@ function cloneOption(option: DataDestinationTrendOption): DataDestinationTrendOp
 
 const sessionSelectionState: DataDestinationSessionSelectionState = {
   appKeys: [],
+  categoryKeys: [],
   webKeys: [],
 };
 const sessionSelectionRevisions: Record<DataDestinationSessionMode, number | null> = {
   app: null,
+  category: null,
   web: null,
 };
 const sessionOptionRegistry: Record<
@@ -27,12 +30,14 @@ const sessionOptionRegistry: Record<
   Map<string, DataDestinationTrendOption>
 > = {
   app: new Map(),
+  category: new Map(),
   web: new Map(),
 };
 
 export function getDataDestinationSessionSelectionState(): DataDestinationSessionSelectionState {
   return {
     appKeys: [...sessionSelectionState.appKeys],
+    categoryKeys: [...sessionSelectionState.categoryKeys],
     webKeys: [...sessionSelectionState.webKeys],
   };
 }
@@ -41,6 +46,7 @@ export function rememberDataDestinationSessionSelectionState(
   nextState: DataDestinationSessionSelectionState,
 ): void {
   sessionSelectionState.appKeys = [...nextState.appKeys];
+  sessionSelectionState.categoryKeys = [...nextState.categoryKeys];
   sessionSelectionState.webKeys = [...nextState.webKeys];
 }
 
@@ -93,9 +99,12 @@ export function resolveDataDestinationSessionOptions(
 
 export function resetDataDestinationSessionSelectionStateForTests(): void {
   sessionSelectionState.appKeys = [];
+  sessionSelectionState.categoryKeys = [];
   sessionSelectionState.webKeys = [];
   sessionSelectionRevisions.app = null;
+  sessionSelectionRevisions.category = null;
   sessionSelectionRevisions.web = null;
   sessionOptionRegistry.app.clear();
+  sessionOptionRegistry.category.clear();
   sessionOptionRegistry.web.clear();
 }

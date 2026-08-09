@@ -33,6 +33,7 @@ import {
 import {
   buildDataDayRanges,
   buildDataMonthRanges,
+  resolveDataAllTimePresentationRange,
   resolveDataTrendRange,
   type DataTrendRangeSelection,
   type ResolvedDataTrendRange,
@@ -118,9 +119,9 @@ interface BuildDataWebActivityHeatmapInput {
   locale: Locale;
 }
 
-// Keep the active heatmap plus the three preset trend ranges warm so switching
+// Keep the active heatmap plus the four preset trend ranges warm so switching
 // between app and web destinations never evicts the heatmap and flashes a reload.
-const DATA_WEB_ACTIVITY_SNAPSHOT_CACHE_LIMIT = 4;
+const DATA_WEB_ACTIVITY_SNAPSHOT_CACHE_LIMIT = 5;
 const snapshotCache = new Map<string, DataWebActivitySnapshot>();
 const snapshotPromises = new Map<string, Promise<DataWebActivitySnapshot>>();
 let snapshotCacheEpoch = 0;
@@ -150,6 +151,18 @@ function buildDailyBucketBoundaries(startMs: number, endMs: number): number[] {
     boundaries.push(Math.min(cursor.getTime(), endMs));
   }
   if (boundaries[boundaries.length - 1] !== endMs) boundaries.push(endMs);
+  return Array.from(new Set(boundaries));
+}
+
+function buildMonthlyBucketBoundaries(startMs: number, endMs: number): number[] {
+  const boundaries = [startMs];
+  const start = new Date(startMs);
+  let cursor = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+  while (cursor.getTime() < endMs) {
+    boundaries.push(cursor.getTime());
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  }
+  boundaries.push(endMs);
   return Array.from(new Set(boundaries));
 }
 
@@ -307,9 +320,18 @@ export function buildDataWebTrendViewModel(
   if (selectedAggregates.length === 0 && aggregates[0]) {
     selectedAggregates.push(aggregates[0]);
   }
-  const dayRanges = buildDataDayRanges(input.range);
-  const chartRanges = input.range.granularity === "month"
-    ? buildDataMonthRanges(input.range)
+  const presentationRange = resolveDataAllTimePresentationRange(
+    input.range,
+    selectedAggregates.flatMap((aggregate) => (
+      Array.from(aggregate.monthDurations, ([monthKey, duration]) => (
+        duration > 0 ? monthKey : null
+      )).filter((monthKey): monthKey is string => monthKey !== null)
+    )),
+    input.uiText,
+  );
+  const dayRanges = buildDataDayRanges(presentationRange);
+  const chartRanges = presentationRange.granularity === "month"
+    ? buildDataMonthRanges(presentationRange)
     : dayRanges;
   const chartSeries = selectedAggregates.map<DataDestinationChartSeries>((aggregate, index) => ({
     key: aggregate.normalizedDomain,
@@ -319,13 +341,15 @@ export function buildDataWebTrendViewModel(
   const chartRows = chartRanges.map<DataDestinationTrendChartRow>((rangeItem) => {
     const date = formatLocalDateKey(new Date(rangeItem.startMs));
     const row: DataDestinationTrendChartRow = {
-      label: input.range.granularity === "month" ? formatMonthLabel(getMonthKey(date), input.uiText) : date.slice(5),
+      label: presentationRange.granularity === "month"
+        ? formatMonthLabel(getMonthKey(date), input.uiText)
+        : date.slice(5),
       date,
       totalDuration: 0,
       totalHours: 0,
     };
     for (const [index, aggregate] of selectedAggregates.entries()) {
-      const duration = input.range.granularity === "month"
+      const duration = presentationRange.granularity === "month"
         ? aggregate.monthDurations.get(getMonthKey(date)) ?? 0
         : aggregate.dayDurations.get(date) ?? 0;
       row[`series${index}`] = duration / 3_600_000;
@@ -377,9 +401,9 @@ export function buildDataWebTrendViewModel(
   }) => domain);
 
   return {
-    range: input.range,
-    rangeLabel: input.range.label,
-    granularity: input.range.granularity,
+    range: presentationRange,
+    rangeLabel: presentationRange.label,
+    granularity: presentationRange.granularity,
     domainOptions: aggregates.map(({
       dayDurations: _dayDurations,
       monthDurations: _monthDurations,
@@ -454,7 +478,9 @@ export async function loadDataWebActivitySnapshot({
   uiText: UiText;
 }): Promise<DataWebTrendSnapshot> {
   const range = resolveDataTrendRange(selection, nowMs, uiText);
-  const bucketBoundariesMs = buildDailyBucketBoundaries(range.startMs, range.endMs);
+  const bucketBoundariesMs = selection.kind === "all"
+    ? buildMonthlyBucketBoundaries(range.startMs, range.endMs)
+    : buildDailyBucketBoundaries(range.startMs, range.endMs);
   const cacheKey = getTrendSnapshotCacheKey(range, normalizedDomains, cacheVersion);
   const snapshot = await loadRangeSnapshot({
     startMs: range.startMs,

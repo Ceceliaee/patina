@@ -365,6 +365,25 @@ export async function getSessionSummariesInRangeByLocalDay(
   }));
 }
 
+export async function getSessionSummariesInRangeByLocalMonth(
+  startMs: number,
+  endMs: number,
+): Promise<AggregateSessionRecord[]> {
+  if (endMs <= startMs) return [];
+  const boundaries = [startMs];
+  const start = new Date(startMs);
+  let cursor = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+  while (cursor.getTime() < endMs) {
+    boundaries.push(cursor.getTime());
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  }
+  boundaries.push(endMs);
+  const response = await loadActivityAggregateRange(startMs, endMs, boundaries);
+  return response.records.filter((row) => AppClassification.shouldTrackProcess(row.exeName, {
+    appName: row.appName,
+  }));
+}
+
 export async function getImportedTimeBucketsInRange(
   startMs: number,
   endMs: number,

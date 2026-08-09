@@ -5,6 +5,7 @@ import type { AggregateSessionRecord } from "../../../platform/persistence/sessi
 import {
   buildDataDayRanges,
   buildDataMonthRanges,
+  resolveDataAllTimePresentationRange,
   resolveDataTrendRange,
   type DataRollingTrendRange,
   type ResolvedDataTrendRange,
@@ -164,7 +165,7 @@ export interface DataTrendAggregateContext {
   locale: Locale;
 }
 
-interface MergedDataAppDurationBucket extends DataAppDurationBucket {
+export interface MergedDataAppDurationBucket extends DataAppDurationBucket {
   sourceAppKeys: string[];
 }
 
@@ -463,7 +464,7 @@ function mergeDurationBuckets(target: Map<string, number>, source: Map<string, n
   }
 }
 
-function mergeDataAppDurationBuckets(appBuckets: Map<string, DataAppDurationBucket>) {
+export function mergeDataAppDurationBuckets(appBuckets: Map<string, DataAppDurationBucket>) {
   const merged = new Map<string, MergedDataAppDurationBucket>();
   const sortedBuckets = Array.from(appBuckets.values()).sort((a, b) => b.totalDuration - a.totalDuration);
 
@@ -520,6 +521,56 @@ function buildSelectedDataAppSummary(
     averageDuration: Math.round(totalDuration / averageDivisor),
     activeDayCount: getActiveDataAppDateKeys(selectedDayRows).length,
   };
+}
+
+function resolveSelectedDataTrendPresentation(
+  context: DataTrendAggregateContext,
+  selectedBuckets: readonly Pick<DataAppTrendBucket, "monthDurations">[],
+) {
+  const activeMonthKeys: string[] = [];
+  for (const bucket of selectedBuckets) {
+    for (const [monthKey, duration] of bucket.monthDurations) {
+      if (duration > 0) activeMonthKeys.push(monthKey);
+    }
+  }
+  const range = resolveDataAllTimePresentationRange(
+    context.range,
+    activeMonthKeys,
+    context.uiText,
+  );
+  return {
+    range,
+    dayRanges: range === context.range ? context.dayRanges : buildDataDayRanges(range),
+    monthRanges: range === context.range ? context.monthRanges : buildDataMonthRanges(range),
+  };
+}
+
+function resolveSelectedDataAppBuckets(
+  options: readonly DataAppTrendBucket[],
+  selectedAppKeys: string | readonly string[] | null,
+): DataAppTrendBucket[] {
+  const requestedKeys = selectedAppKeys === null
+    ? []
+    : Array.isArray(selectedAppKeys) ? selectedAppKeys : [selectedAppKeys];
+  const selectedBuckets = Array.from(new Set(requestedKeys))
+    .map((selectedKey) => options.find((item) => (
+      item.appKey === selectedKey || item.sourceAppKeys.includes(selectedKey)
+    )) ?? {
+      appKey: selectedKey,
+      sourceAppKeys: [selectedKey],
+      appName: selectedKey,
+      exeName: selectedKey,
+      totalDuration: 0,
+      percentage: 0,
+      averageDuration: 0,
+      activeDayCount: 0,
+      dayDurations: new Map<string, number>(),
+      monthDurations: new Map<string, number>(),
+    });
+  if (selectedBuckets.length === 0 && options[0]) {
+    selectedBuckets.push(options[0]);
+  }
+  return selectedBuckets;
 }
 
 export function getDataTrendRangeLabel(range: DataTrendRange, uiText: UiText) {
@@ -629,9 +680,9 @@ export function buildDataAppTrendViewModelFromAggregate(
   selectedAppKeys: string | readonly string[] | null,
 ): DataAppTrendViewModel {
   const { aggregate, dayRanges, monthRanges, range, uiText, locale } = context;
-  const shouldGroupByMonth = range.granularity === "month";
-  const chartRanges = shouldGroupByMonth ? monthRanges : dayRanges;
-  const averageDivisor = Math.max(1, chartRanges.length);
+  const shouldGroupOptionsByMonth = range.granularity === "month";
+  const optionRanges = shouldGroupOptionsByMonth ? monthRanges : dayRanges;
+  const optionAverageDivisor = Math.max(1, optionRanges.length);
   const totalAppDuration = aggregate.totalDuration;
   const mergedOptions: DataAppTrendBucket[] = mergeDataAppDurationBuckets(aggregate.appBuckets).map((item) => ({
     appKey: item.appKey,
@@ -640,32 +691,20 @@ export function buildDataAppTrendViewModelFromAggregate(
     exeName: item.exeName,
     totalDuration: item.totalDuration,
     percentage: totalAppDuration > 0 ? (item.totalDuration / totalAppDuration) * 100 : 0,
-    averageDuration: Math.round(item.totalDuration / averageDivisor),
+    averageDuration: Math.round(item.totalDuration / optionAverageDivisor),
     activeDayCount: countActiveDurationDays(item.dayDurations),
     dayDurations: item.dayDurations,
     monthDurations: item.monthDurations,
   }));
-  const requestedKeys = selectedAppKeys === null
-    ? []
-    : Array.isArray(selectedAppKeys) ? selectedAppKeys : [selectedAppKeys];
-  const selectedMergedApps = Array.from(new Set(requestedKeys))
-    .map((selectedKey) => mergedOptions.find((item) => (
-      item.appKey === selectedKey || item.sourceAppKeys.includes(selectedKey)
-    )) ?? {
-      appKey: selectedKey,
-      sourceAppKeys: [selectedKey],
-      appName: selectedKey,
-      exeName: selectedKey,
-      totalDuration: 0,
-      percentage: 0,
-      averageDuration: 0,
-      activeDayCount: 0,
-      dayDurations: new Map<string, number>(),
-      monthDurations: new Map<string, number>(),
-    });
-  if (selectedMergedApps.length === 0 && mergedOptions[0]) {
-    selectedMergedApps.push(mergedOptions[0]);
-  }
+  const selectedMergedApps = resolveSelectedDataAppBuckets(mergedOptions, selectedAppKeys);
+  const {
+    range: presentationRange,
+    dayRanges: presentationDayRanges,
+    monthRanges: presentationMonthRanges,
+  } = resolveSelectedDataTrendPresentation(context, selectedMergedApps);
+  const shouldGroupByMonth = presentationRange.granularity === "month";
+  const chartRanges = shouldGroupByMonth ? presentationMonthRanges : presentationDayRanges;
+  const averageDivisor = Math.max(1, chartRanges.length);
   const selectedApps = selectedMergedApps.map(toDataAppOption);
   const appOptions = mergedOptions.map(toDataAppOption);
   const selectedDayDurations = new Map<string, number>();
@@ -674,7 +713,11 @@ export function buildDataAppTrendViewModelFromAggregate(
       selectedDayDurations.set(dateKey, (selectedDayDurations.get(dateKey) ?? 0) + duration);
     }
   }
-  const selectedDayRows = buildAppDayRowsFromDurations(selectedDayDurations, dayRanges, locale);
+  const selectedDayRows = buildAppDayRowsFromDurations(
+    selectedDayDurations,
+    presentationDayRanges,
+    locale,
+  );
   const chartSeries = selectedMergedApps.map((item, index) => ({
     key: item.appKey,
     dataKey: `series${index}`,
@@ -712,8 +755,8 @@ export function buildDataAppTrendViewModelFromAggregate(
   })));
 
   return {
-    range,
-    rangeLabel: range.label,
+    range: presentationRange,
+    rangeLabel: presentationRange.label,
     granularity: shouldGroupByMonth ? "month" : "day",
     appOptions,
     selectedApps,

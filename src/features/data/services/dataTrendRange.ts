@@ -12,6 +12,7 @@ export type DataRollingTrendRange = 7 | 30 | 365;
 export type DataTrendPickerMode = "custom" | "week" | "month" | "year";
 
 export type DataTrendRangeSelection =
+  | { kind: "all"; startDateKey: string; endDateKey: string }
   | { kind: "rolling"; days: DataRollingTrendRange }
   | { kind: "custom"; startDateKey: string; endDateKey: string }
   | { kind: "week"; anchorDateKey: string }
@@ -53,6 +54,10 @@ export const toLocalDateKey = formatLocalDateKey;
 
 function minDate(left: Date, right: Date): Date {
   return left.getTime() <= right.getTime() ? left : right;
+}
+
+function maxDate(left: Date, right: Date): Date {
+  return left.getTime() >= right.getTime() ? left : right;
 }
 
 export function countInclusiveLocalDays(startDateKey: string, endDateKey: string): number {
@@ -97,9 +102,22 @@ export function getAdjacentDataTrendRangeSelection(
   delta: -1 | 1,
   nowMs: number,
   uiText: UiText,
+  allTimeStartDateKey: string = toLocalDateKey(new Date(0)),
+  allTimeEndDateKey: string = toLocalDateKey(new Date(nowMs)),
 ): DataTrendRangeSelection | null {
+  if (selection.kind === "all") {
+    return delta === 1 ? { kind: "rolling", days: 7 } : null;
+  }
+
   if (selection.kind === "rolling") {
     const currentIndex = DATA_ROLLING_TREND_RANGES.indexOf(selection.days);
+    if (currentIndex === 0 && delta === -1) {
+      return {
+        kind: "all",
+        startDateKey: allTimeStartDateKey,
+        endDateKey: allTimeEndDateKey,
+      };
+    }
     const days = DATA_ROLLING_TREND_RANGES[currentIndex + delta];
     return days ? { kind: "rolling", days } : null;
   }
@@ -179,6 +197,23 @@ export function resolveDataTrendRange(
   uiText: UiText,
 ): ResolvedDataTrendRange {
   const today = startOfLocalDay(new Date(nowMs));
+  if (selection.kind === "all") {
+    const left = minDate(parseLocalDateKey(selection.startDateKey) ?? today, today);
+    const right = minDate(parseLocalDateKey(selection.endDateKey) ?? today, today);
+    const earliest = minDate(left, right);
+    const latest = maxDate(left, right);
+    const start = new Date(earliest.getFullYear(), earliest.getMonth(), 1);
+    const end = new Date(latest.getFullYear(), latest.getMonth() + 1, 0);
+    return resolveBounds(
+      selection,
+      start,
+      end,
+      nowMs,
+      uiText.data.allTime,
+      "month",
+    );
+  }
+
   if (selection.kind === "rolling") {
     if (selection.days === 365) {
       const start = new Date(today.getFullYear(), today.getMonth() - 11, 1);
@@ -227,6 +262,33 @@ export function resolveDataTrendRange(
   const start = new Date(anchor.getFullYear(), 0, 1);
   const end = new Date(anchor.getFullYear(), 11, 31);
   return resolveBounds(selection, start, end, nowMs, uiText.data.yearLabel(anchor.getFullYear()), "month");
+}
+
+export function resolveDataAllTimePresentationRange(
+  range: ResolvedDataTrendRange,
+  activeMonthKeys: Iterable<string>,
+  uiText: UiText,
+): ResolvedDataTrendRange {
+  if (range.selection.kind !== "all") return range;
+
+  let earliestMonthKey: string | null = null;
+  let latestMonthKey: string | null = null;
+  for (const monthKey of activeMonthKeys) {
+    if (!/^\d{4}-\d{2}$/u.test(monthKey)) continue;
+    if (earliestMonthKey === null || monthKey < earliestMonthKey) {
+      earliestMonthKey = monthKey;
+    }
+    if (latestMonthKey === null || monthKey > latestMonthKey) {
+      latestMonthKey = monthKey;
+    }
+  }
+  if (earliestMonthKey === null || latestMonthKey === null) return range;
+
+  return resolveDataTrendRange({
+    kind: "all",
+    startDateKey: `${earliestMonthKey}-01`,
+    endDateKey: `${latestMonthKey}-01`,
+  }, range.endMs, uiText);
 }
 
 export function selectDataTrendDraftDate(
