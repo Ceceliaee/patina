@@ -352,8 +352,8 @@ function testReleaseWorkflowSplitsQualityGatesBeforePublish() {
   assert.match(workflow, /if: steps\.r2\.outputs\.enabled == 'true'/);
   assert.match(workflow, /run: npm run check$/m);
   assert.match(workflow, /run: npm run check:rust$/m);
-  assert.match(workflow, /uses: actions\/upload-artifact@v4/);
-  assert.match(workflow, /uses: actions\/download-artifact@v4/);
+  assert.match(workflow, /uses: actions\/upload-artifact@[0-9a-f]{40} # v4/);
+  assert.match(workflow, /uses: actions\/download-artifact@[0-9a-f]{40} # v4/);
   assert.match(workflow, /name: Prepare release assets/);
   assert.match(workflow, /name: Verify release assets/);
   assert.match(workflow, /name: Attest Windows installer/);
@@ -389,7 +389,7 @@ function testReleaseWorkflowAttestsVerifiedFinalInstallerWithMinimumPermissions(
   const uploadIndex = publishJob.indexOf("- name: Upload release assets");
   const releaseIndex = publishJob.indexOf("- name: Publish GitHub Release");
   assert.ok(prepareIndex < verifyIndex && verifyIndex < attestIndex && attestIndex < uploadIndex && uploadIndex < releaseIndex);
-  assert.match(publishJob, /uses: actions\/attest@v4/);
+  assert.match(publishJob, /uses: actions\/attest@[0-9a-f]{40} # v4/);
   assert.match(
     publishJob,
     /subject-path: dist-release\/Patina_\$\{\{ needs\.resolve\.outputs\.version \}\}_x64-setup\.exe/,
@@ -439,6 +439,27 @@ function testWorkflowsUseNodeVersionFileAsSingleSource() {
     assert.ok(setupNodeCount > 0, `${workflowPath} must configure actions/setup-node`);
     assert.equal(versionFileCount, setupNodeCount, `${workflowPath} must source every Node version from .node-version`);
     assert.doesNotMatch(workflow, /^\s+node-version:\s/m);
+  }
+}
+
+function testWorkflowsPinThirdPartyActionsToReviewedCommits() {
+  for (const workflowPath of [
+    ".github/workflows/pr-intake.yml",
+    ".github/workflows/verify.yml",
+    ".github/workflows/prepare-release.yml",
+  ]) {
+    const workflow = readFileSync(workflowPath, "utf8");
+    const usesCount = workflow.match(/^\s+uses:/gm)?.length ?? 0;
+    const pinnedCount = workflow.match(
+      /^\s+uses: [^@\s]+@[0-9a-f]{40} # v\d+$/gm,
+    )?.length ?? 0;
+
+    assert.ok(usesCount > 0, `${workflowPath} must use at least one reviewed Action`);
+    assert.equal(
+      pinnedCount,
+      usesCount,
+      `${workflowPath} must pin every Action to a commit and retain its reviewed major version`,
+    );
   }
 }
 
@@ -648,6 +669,7 @@ testReleaseWorkflowSplitsQualityGatesBeforePublish();
 testReleaseWorkflowAttestsVerifiedFinalInstallerWithMinimumPermissions();
 testToolchainContractsStayAligned();
 testWorkflowsUseNodeVersionFileAsSingleSource();
+testWorkflowsPinThirdPartyActionsToReviewedCommits();
 testVersionFilesValidationPassesWhenAllVersionsMatch();
 testVersionFilesValidationCatchesPackageJsonMismatch();
 testVersionFilesValidationCatchesPackageLockRootMismatch();
