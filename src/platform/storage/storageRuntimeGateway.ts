@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export interface StoragePathSnapshot {
+interface StoragePathSnapshot {
   installDir: string;
   dataRoot: string;
   databasePath: string;
@@ -11,19 +11,19 @@ export interface StoragePathSnapshot {
   isCustomWebviewRoot: boolean;
 }
 
-export interface StorageSizeSnapshot {
+interface StorageSizeSnapshot {
   installDirSizeBytes: number;
   dataSizeBytes: number;
   backupDirSizeBytes: number;
 }
 
-export interface WebviewCacheEntrySnapshot {
+interface WebviewCacheEntrySnapshot {
   label: string;
   path: string;
   sizeBytes: number;
 }
 
-export interface WebviewCacheSnapshot {
+interface WebviewCacheSnapshot {
   webviewRoot: string;
   ebwebviewPath: string;
   totalSizeBytes: number;
@@ -32,7 +32,7 @@ export interface WebviewCacheSnapshot {
   entries: WebviewCacheEntrySnapshot[];
 }
 
-export interface StorageMaintenanceSnapshot {
+interface StorageMaintenanceSnapshot {
   lastError: string | null;
 }
 

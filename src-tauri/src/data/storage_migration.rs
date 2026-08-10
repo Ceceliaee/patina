@@ -1,3 +1,10 @@
+use crate::data::storage_migration_cleanup::{
+    remove_migration_path_if_safe, remove_path_if_exists,
+};
+use crate::data::storage_path_safety::{
+    ensure_destructive_paths_are_disjoint, probe_directory_writable,
+    resolved_path_is_same_or_child, resolved_paths_equal, same_path,
+};
 use crate::data::{backup, sqlite_pool, storage_restart};
 use crate::domain::storage::{
     StorageMigrationPreview, StorageMigrationRequest, WebviewCacheMigrationRequest,
@@ -213,12 +220,12 @@ async fn execute_pending_storage_migration<R: Runtime>(
     let data_root_changes = !same_path(&pending.source_data_root, &pending.target_data_root);
     let webview_root_changes = !same_path(&source_webview_root, &pending.target_webview_root);
     let default_paths = storage_paths::default_storage_paths(app)?;
-    let target_mode = if same_path(&pending.target_data_root, &default_paths.data_root) {
-        TargetDataRootMode::RestoreDefault
-    } else {
-        TargetDataRootMode::Custom
-    };
+    let (target_mode, target_webview_mode) = resolve_target_modes(pending, &default_paths);
     if data_root_changes {
+        ensure_destructive_paths_are_disjoint(
+            &pending.source_data_root,
+            &pending.target_data_root,
+        )?;
         if !pending
             .source_data_root
             .join(storage_paths::SQLITE_DB_FILE_NAME)
@@ -248,7 +255,7 @@ async fn execute_pending_storage_migration<R: Runtime>(
             .target_data_root
             .join(format!(".patina-migration-staging-{}", pending.id));
         if staging_root.exists() {
-            fs::remove_dir_all(&staging_root).map_err(|error| {
+            remove_migration_path_if_safe(&staging_root).map_err(|error| {
                 format!(
                     "failed to clear migration staging `{}`: {error}",
                     staging_root.display()
@@ -264,7 +271,7 @@ async fn execute_pending_storage_migration<R: Runtime>(
 
         let result = copy_and_validate_data_root(&pending.source_data_root, &staging_root).await;
         if let Err(error) = result {
-            let _ = fs::remove_dir_all(&staging_root);
+            let _ = remove_migration_path_if_safe(&staging_root);
             return Err(error);
         }
 
@@ -284,6 +291,11 @@ async fn execute_pending_storage_migration<R: Runtime>(
     }
 
     if webview_root_changes {
+        validate_target_webview_root_for_execution(
+            &source_paths,
+            &pending.target_webview_root,
+            target_webview_mode,
+        )?;
         webview_cache::migrate_persistent_profile_state(
             &source_webview_root,
             &pending.target_webview_root,
@@ -305,11 +317,15 @@ async fn execute_pending_storage_migration<R: Runtime>(
     )?;
 
     if data_root_changes {
+        ensure_destructive_paths_are_disjoint(
+            &pending.source_data_root,
+            &pending.target_data_root,
+        )?;
         let remove_old_data_root = should_remove_old_data_root_container(
             &pending.source_data_root,
             &pending.target_webview_root,
             &default_paths.data_root,
-        );
+        )?;
         if let Err(error) = clean_old_data_payload(&pending.source_data_root, remove_old_data_root)
         {
             let _ = storage_anchor::record_maintenance_error(
@@ -324,6 +340,7 @@ async fn execute_pending_storage_migration<R: Runtime>(
     }
 
     if webview_root_changes {
+        ensure_destructive_paths_are_disjoint(&source_webview_root, &pending.target_webview_root)?;
         if let Err(error) = webview_cache::remove_retired_cache_root(
             &source_webview_root,
             source_paths.is_custom_webview_root,
@@ -374,15 +391,9 @@ fn promote_staging_root(staging: &Path, target: &Path) -> Result<(), String> {
         })?;
         let target_path = target.join(entry.file_name());
         if target_path.exists() {
-            if target_path.is_dir() {
-                fs::remove_dir_all(&target_path).map_err(|error| {
-                    format!("failed to replace `{}`: {error}", target_path.display())
-                })?;
-            } else {
-                fs::remove_file(&target_path).map_err(|error| {
-                    format!("failed to replace `{}`: {error}", target_path.display())
-                })?;
-            }
+            remove_migration_path_if_safe(&target_path).map_err(|error| {
+                format!("failed to replace `{}`: {error}", target_path.display())
+            })?;
         }
         fs::rename(entry.path(), &target_path).map_err(|error| {
             format!(
@@ -393,7 +404,7 @@ fn promote_staging_root(staging: &Path, target: &Path) -> Result<(), String> {
         })?;
     }
 
-    fs::remove_dir_all(staging)
+    remove_migration_path_if_safe(staging)
         .map_err(|error| format!("failed to remove staging `{}`: {error}", staging.display()))
 }
 
@@ -429,9 +440,9 @@ fn should_remove_old_data_root_container(
     source_data_root: &Path,
     target_webview_root: &Path,
     default_data_root: &Path,
-) -> bool {
-    !same_path(source_data_root, default_data_root)
-        && !path_is_same_or_child(target_webview_root, source_data_root)
+) -> Result<bool, String> {
+    Ok(!resolved_paths_equal(source_data_root, default_data_root)?
+        && !resolved_path_is_same_or_child(target_webview_root, source_data_root)?)
 }
 
 fn clean_pre_migration_backup(data_root: &Path, migration_id: &str) -> Result<(), String> {
@@ -440,43 +451,6 @@ fn clean_pre_migration_backup(data_root: &Path, migration_id: &str) -> Result<()
     remove_path_if_exists(&backup_path)?;
     let _ = fs::remove_dir(&backup_dir);
     Ok(())
-}
-
-fn remove_path_if_exists(path: &Path) -> Result<(), String> {
-    let metadata = match fs::symlink_metadata(path) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => return Err(format!("failed to inspect `{}`: {error}", path.display())),
-    };
-
-    if metadata.is_dir() {
-        if is_reparse_or_symlink(&metadata) {
-            fs::remove_dir(path)
-        } else {
-            fs::remove_dir_all(path)
-        }
-    } else {
-        fs::remove_file(path)
-    }
-    .map_err(|error| format!("failed to remove `{}`: {error}", path.display()))
-}
-
-fn is_reparse_or_symlink(metadata: &fs::Metadata) -> bool {
-    if metadata.file_type().is_symlink() {
-        return true;
-    }
-
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
-        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-    }
-
-    #[cfg(not(windows))]
-    {
-        false
-    }
 }
 
 fn copy_sqlite_files(source: &Path, target: &Path) -> Result<(), String> {
@@ -643,22 +617,44 @@ enum TargetValidationAccess {
     CreateAndProbe,
 }
 
+fn resolve_target_modes(
+    pending: &storage_anchor::PendingStorageMigration,
+    default_paths: &storage_paths::StoragePaths,
+) -> (TargetDataRootMode, TargetWebviewRootMode) {
+    let data = if same_path(&pending.target_data_root, &default_paths.data_root) {
+        TargetDataRootMode::RestoreDefault
+    } else {
+        TargetDataRootMode::Custom
+    };
+    let webview = if same_path(&pending.target_webview_root, &default_paths.webview_root) {
+        TargetWebviewRootMode::RestoreDefault
+    } else {
+        TargetWebviewRootMode::Custom
+    };
+    (data, webview)
+}
+
 fn validate_target_data_root(
     current: &storage_paths::StoragePaths,
     target: &Path,
     mode: TargetDataRootMode,
     access: TargetValidationAccess,
 ) -> Result<(), String> {
-    if same_path(target, &current.data_root) {
+    if resolved_paths_equal(target, &current.data_root)? {
         return Err("target data directory is already active".to_string());
     }
-    if target.starts_with(&current.data_root) || current.data_root.starts_with(target) {
+    if resolved_path_is_same_or_child(target, &current.data_root)?
+        || resolved_path_is_same_or_child(&current.data_root, target)?
+    {
         return Err(
             "target data directory cannot be inside or above the current data directory"
                 .to_string(),
         );
     }
-    if target.starts_with(webview_cache::ebwebview_path(&current.webview_root)) {
+    if resolved_path_is_same_or_child(
+        target,
+        &webview_cache::ebwebview_path(&current.webview_root),
+    )? {
         return Err(
             "target data directory cannot be inside the current WebView cache directory"
                 .to_string(),
@@ -687,12 +683,7 @@ fn validate_target_data_root(
 
     fs::create_dir_all(target)
         .map_err(|error| format!("failed to create target data directory: {error}"))?;
-    let probe = target.join(".patina-write-probe");
-    fs::write(&probe, b"ok")
-        .map_err(|error| format!("target data directory is not writable: {error}"))?;
-    fs::remove_file(&probe)
-        .map_err(|error| format!("failed to remove target write probe: {error}"))?;
-    Ok(())
+    probe_directory_writable(target, "target data directory")
 }
 
 fn target_data_validation_paths(
@@ -719,10 +710,12 @@ fn validate_target_webview_root(
     mode: TargetWebviewRootMode,
     access: TargetValidationAccess,
 ) -> Result<(), String> {
-    if same_path(target, &current.webview_root) {
+    if resolved_paths_equal(target, &current.webview_root)? {
         return Err("target cache directory is already active".to_string());
     }
-    if target.starts_with(&current.webview_root) || current.webview_root.starts_with(target) {
+    if resolved_path_is_same_or_child(target, &current.webview_root)?
+        || resolved_path_is_same_or_child(&current.webview_root, target)?
+    {
         return Err(
             "target cache directory cannot be inside or above the current cache directory"
                 .to_string(),
@@ -750,22 +743,27 @@ fn validate_target_webview_root(
 
     fs::create_dir_all(target)
         .map_err(|error| format!("failed to create target cache directory: {error}"))?;
-    let probe = target.join(".patina-write-probe");
-    fs::write(&probe, b"ok")
-        .map_err(|error| format!("target cache directory is not writable: {error}"))?;
-    fs::remove_file(&probe)
-        .map_err(|error| format!("failed to remove target cache write probe: {error}"))?;
-    Ok(())
+    probe_directory_writable(target, "target cache directory")
+}
+
+fn validate_target_webview_root_for_execution(
+    current: &storage_paths::StoragePaths,
+    target: &Path,
+    mode: TargetWebviewRootMode,
+) -> Result<(), String> {
+    ensure_destructive_paths_are_disjoint(&current.webview_root, target)?;
+    validate_target_webview_root(
+        current,
+        target,
+        mode,
+        TargetValidationAccess::CreateAndProbe,
+    )
 }
 
 fn probe_existing_parent(target: &Path, label: &str) -> Result<(), String> {
     let probe_dir = existing_parent_dir(target)
         .ok_or_else(|| format!("{label} has no writable parent directory"))?;
-    let probe = probe_dir.join(".patina-write-probe");
-    fs::write(&probe, b"ok").map_err(|error| format!("{label} parent is not writable: {error}"))?;
-    fs::remove_file(&probe)
-        .map_err(|error| format!("failed to remove {label} parent write probe: {error}"))?;
-    Ok(())
+    probe_directory_writable(&probe_dir, &format!("{label} parent"))
 }
 
 fn existing_parent_dir(target: &Path) -> Option<PathBuf> {
@@ -916,33 +914,6 @@ fn storage_migration_preview<R: Runtime>(
     })
 }
 
-fn same_path(left: &Path, right: &Path) -> bool {
-    path_key(left) == path_key(right)
-}
-
-fn path_is_same_or_child(child: &Path, parent: &Path) -> bool {
-    let child_key = path_key(child);
-    let parent_key = path_key(parent);
-    child_key == parent_key || child_key.starts_with(&format!("{parent_key}/"))
-}
-
-fn path_key(path: &Path) -> String {
-    let mut key = path.to_string_lossy().replace('\\', "/");
-    while key.len() > 1 && key.ends_with('/') {
-        key.pop();
-    }
-
-    #[cfg(windows)]
-    {
-        key.to_lowercase()
-    }
-
-    #[cfg(not(windows))]
-    {
-        key
-    }
-}
-
 fn file_size(path: &Path) -> u64 {
     fs::metadata(path)
         .map(|metadata| metadata.len())
@@ -982,6 +953,164 @@ fn pre_migration_backup_file_name(migration_id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_storage_paths(
+        data_root: PathBuf,
+        webview_root: PathBuf,
+    ) -> storage_paths::StoragePaths {
+        storage_paths::StoragePaths {
+            data_anchor_dir: data_root.join(".data-anchor"),
+            cache_anchor_dir: webview_root.join(".cache-anchor"),
+            db_path: data_root.join(storage_paths::SQLITE_DB_FILE_NAME),
+            backup_dir: data_root.join("backups"),
+            remote_backup_temp_dir: data_root.join("remote-backup-temp"),
+            data_root,
+            webview_root,
+            is_custom_data_root: true,
+            is_custom_webview_root: true,
+        }
+    }
+
+    #[test]
+    fn target_path_with_parent_segments_cannot_alias_the_active_data_root() {
+        let root = std::env::temp_dir().join(format!(
+            "patina-storage-alias-parent-segments-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let current_root = root.join("current");
+        let webview_root = root.join("webview");
+        fs::create_dir_all(&current_root).unwrap();
+        fs::create_dir_all(&webview_root).unwrap();
+        let current = test_storage_paths(current_root.clone(), webview_root);
+        let alias = root.join("unused").join("..").join("current");
+
+        let error = validate_target_data_root(
+            &current,
+            &alias,
+            TargetDataRootMode::Custom,
+            TargetValidationAccess::InspectOnly,
+        )
+        .unwrap_err();
+
+        assert!(error.contains("already active"));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn target_junction_cannot_alias_the_active_data_root() {
+        let root = std::env::temp_dir().join(format!(
+            "patina-storage-alias-junction-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let current_root = root.join("current");
+        let webview_root = root.join("webview");
+        let junction = root.join("current-junction");
+        fs::create_dir_all(&current_root).unwrap();
+        fs::create_dir_all(&webview_root).unwrap();
+        let status = std::process::Command::new("cmd")
+            .arg("/C")
+            .arg("mklink")
+            .arg("/J")
+            .arg(&junction)
+            .arg(&current_root)
+            .status()
+            .unwrap();
+        assert!(status.success(), "failed to create test junction");
+        let current = test_storage_paths(current_root, webview_root);
+
+        let error = validate_target_data_root(
+            &current,
+            &junction,
+            TargetDataRootMode::Custom,
+            TargetValidationAccess::InspectOnly,
+        )
+        .unwrap_err();
+
+        assert!(error.contains("already active"));
+        fs::remove_dir(&junction).unwrap();
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn execution_validation_rejects_a_webview_target_junctioned_to_the_active_root() {
+        let root = std::env::temp_dir().join(format!(
+            "patina-webview-execution-alias-junction-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let data_root = root.join("data");
+        let current_webview_root = root.join("current-webview");
+        let target_junction = root.join("target-webview");
+        fs::create_dir_all(&data_root).unwrap();
+        fs::create_dir_all(&current_webview_root).unwrap();
+        let status = std::process::Command::new("cmd")
+            .arg("/C")
+            .arg("mklink")
+            .arg("/J")
+            .arg(&target_junction)
+            .arg(&current_webview_root)
+            .status()
+            .unwrap();
+        assert!(status.success(), "failed to create test junction");
+        let current = test_storage_paths(data_root, current_webview_root.clone());
+
+        let error = validate_target_webview_root_for_execution(
+            &current,
+            &target_junction,
+            TargetWebviewRootMode::Custom,
+        )
+        .unwrap_err();
+
+        assert!(error.contains("overlapping locations"));
+        fs::remove_dir(&target_junction).unwrap();
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn writable_probe_preserves_a_preexisting_legacy_probe_file() {
+        let root = std::env::temp_dir().join(format!(
+            "patina-storage-probe-preserves-existing-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let legacy_probe = root.join(".patina-write-probe");
+        fs::write(&legacy_probe, b"user-owned").unwrap();
+
+        probe_directory_writable(&root, "test directory").unwrap();
+
+        assert_eq!(fs::read(&legacy_probe).unwrap(), b"user-owned");
+        let remaining: Vec<_> = fs::read_dir(&root)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(remaining, vec![legacy_probe.file_name().unwrap()]);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn writable_probes_use_collision_safe_names_and_leave_no_artifacts() {
+        let root = std::env::temp_dir().join(format!(
+            "patina-storage-probe-concurrent-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+
+        std::thread::scope(|scope| {
+            for _ in 0..8 {
+                let root = root.clone();
+                scope.spawn(move || probe_directory_writable(&root, "test directory").unwrap());
+            }
+        });
+
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 0);
+        let _ = fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn target_cannot_be_inside_current_data_root() {
@@ -1255,11 +1384,10 @@ mod tests {
         let source_root = PathBuf::from(r"D:\Patina");
         let cache_root = source_root.join("webview");
 
-        assert!(!should_remove_old_data_root_container(
-            &source_root,
-            &cache_root,
-            &default_root,
-        ));
+        assert!(
+            !should_remove_old_data_root_container(&source_root, &cache_root, &default_root,)
+                .unwrap()
+        );
     }
 
     #[test]
@@ -1268,11 +1396,10 @@ mod tests {
         let source_root = PathBuf::from(r"D:\Patina");
         let cache_root = PathBuf::from(r"E:\Patina\webview");
 
-        assert!(should_remove_old_data_root_container(
-            &source_root,
-            &cache_root,
-            &default_root,
-        ));
+        assert!(
+            should_remove_old_data_root_container(&source_root, &cache_root, &default_root,)
+                .unwrap()
+        );
     }
 
     #[test]
@@ -1280,11 +1407,78 @@ mod tests {
         let default_root = PathBuf::from(r"C:\Users\Example\AppData\Roaming\Patina");
         let cache_root = PathBuf::from(r"E:\Patina\webview");
 
-        assert!(!should_remove_old_data_root_container(
-            &default_root,
-            &cache_root,
-            &default_root,
+        assert!(
+            !should_remove_old_data_root_container(&default_root, &cache_root, &default_root,)
+                .unwrap()
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn old_data_root_container_stays_when_target_cache_aliases_a_child() {
+        let root = std::env::temp_dir().join(format!(
+            "patina-cross-root-cache-alias-junction-{}",
+            std::process::id()
         ));
+        let _ = fs::remove_dir_all(&root);
+        let source_data_root = root.join("old-data");
+        let target_cache_real = source_data_root.join("new-cache");
+        let target_cache_junction = root.join("target-cache");
+        let default_data_root = root.join("default-data");
+        fs::create_dir_all(&target_cache_real).unwrap();
+        fs::create_dir_all(&default_data_root).unwrap();
+        let status = std::process::Command::new("cmd")
+            .arg("/C")
+            .arg("mklink")
+            .arg("/J")
+            .arg(&target_cache_junction)
+            .arg(&target_cache_real)
+            .status()
+            .unwrap();
+        assert!(status.success(), "failed to create test junction");
+
+        assert!(!should_remove_old_data_root_container(
+            &source_data_root,
+            &target_cache_junction,
+            &default_data_root,
+        )
+        .unwrap());
+
+        fs::remove_dir(&target_cache_junction).unwrap();
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn removing_a_preexisting_staging_junction_never_removes_its_target() {
+        let root = std::env::temp_dir().join(format!(
+            "patina-staging-junction-removal-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let owned_target = root.join("user-owned");
+        let sentinel = owned_target.join("keep.txt");
+        let staging_junction = root.join(".patina-migration-staging-test");
+        fs::create_dir_all(&owned_target).unwrap();
+        fs::write(&sentinel, b"keep").unwrap();
+        let status = std::process::Command::new("cmd")
+            .arg("/C")
+            .arg("mklink")
+            .arg("/J")
+            .arg(&staging_junction)
+            .arg(&owned_target)
+            .status()
+            .unwrap();
+        assert!(status.success(), "failed to create test junction");
+
+        let error = remove_migration_path_if_safe(&staging_junction).unwrap_err();
+
+        assert!(error.contains("refusing to remove linked migration path"));
+        assert!(staging_junction.exists());
+        assert_eq!(fs::read(&sentinel).unwrap(), b"keep");
+        fs::remove_file(&sentinel).unwrap();
+        fs::remove_dir(&staging_junction).unwrap();
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
