@@ -1,8 +1,8 @@
 import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 
-export type LoadRequestedAppIcons = (exeNames: string[]) => Promise<Record<string, string>>;
+type LoadRequestedAppIcons = (exeNames: string[]) => Promise<Record<string, string>>;
 
-export interface UseRequestedAppIconsOptions {
+interface UseRequestedAppIconsOptions {
   baseIcons: Record<string, string>;
   exeNames: readonly (string | null | undefined)[];
   loadIcons: LoadRequestedAppIcons;

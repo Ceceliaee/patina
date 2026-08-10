@@ -11,7 +11,7 @@ import { getRetryableMissingDashboardIconExecutables } from "../services/dashboa
 import { getDashboardSnapshotCache } from "../services/dashboardSnapshotCache";
 import type { TrackerHealthSnapshot } from "../../../shared/types/tracking";
 
-export interface UseStatsResult {
+interface UseStatsResult {
   dashboard: DashboardReadModel;
   icons: Record<string, string>;
 }

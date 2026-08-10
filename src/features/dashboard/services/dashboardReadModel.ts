@@ -50,7 +50,7 @@ export interface DashboardSnapshot {
 
 export type ImportedDashboardBucket = AggregateSessionRecord;
 
-export interface IconSnapshot {
+interface IconSnapshot {
   fetchedAtMs: number;
   icons: Record<string, string>;
 }

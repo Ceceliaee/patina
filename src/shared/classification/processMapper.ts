@@ -9,6 +9,7 @@ import {
 } from "./categoryTokens.ts";
 import { resolveCanonicalExecutable, shouldTrackProcess } from "./processNormalization.ts";
 import { CategoryColorRegistry } from "./categoryColorRegistry.ts";
+import { formatExecutableFallbackName } from "./executableDisplayName.ts";
 import type { UiText } from "../i18n/index.ts";
 
 export interface MappingHints {
@@ -32,15 +33,6 @@ export interface AppInfo {
 }
 
 const USER_ASSIGNABLE_CATEGORY_SET = new Set<string>(USER_ASSIGNABLE_CATEGORIES);
-
-function formatFallbackName(exeName: string) {
-  return exeName
-    .replace(/\.exe$/i, "")
-    .split(/[_\-\s.]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
 
 function normalizeDisplayName(name: string | undefined) {
   return (name ?? "").trim().replace(/\.exe$/i, "");
@@ -257,7 +249,7 @@ export class ProcessMapper {
 
   private static mapWithOverride(exeName: string, hints: MappingHints, override: AppOverride | null | undefined): AppInfo {
     const canonicalExe = resolveCanonicalExecutable(exeName);
-    const fallbackName = formatFallbackName(canonicalExe) || canonicalExe;
+    const fallbackName = formatExecutableFallbackName(canonicalExe) || canonicalExe;
     const resolvedName = override?.displayName || normalizeDisplayName(hints.appName) || fallbackName;
     const rawCategory = override?.category ?? "other";
     const resolvedCategory = this.categoryColors.resolveActiveCategory(rawCategory);

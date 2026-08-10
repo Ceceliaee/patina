@@ -3,7 +3,7 @@ import type { UiText } from "../i18n/index.ts";
 // The persisted prefix is historical; keep the literal value for existing user data.
 export const EXTENDED_CATEGORY_PREFIX = "custom:" as const;
 
-export type SeededAppCategory =
+type SeededAppCategory =
   | "ai"
   | "development"
   | "office"
@@ -182,7 +182,7 @@ export function normalizeExtendedCategory(category: ExtendedAppCategory): Extend
   );
 }
 
-export function isSeededCategory(category: string): category is SeededAppCategory {
+function isSeededCategory(category: string): category is SeededAppCategory {
   return SEEDED_CATEGORY_SET.has(category);
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-export interface IconThemeColorPersistence {
+interface IconThemeColorPersistence {
   read: (iconSource: string) => string | null;
   remember: (iconSource: string, color: string) => void;
 }

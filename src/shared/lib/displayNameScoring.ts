@@ -1,4 +1,4 @@
-export function containsCjkCharacters(value: string): boolean {
+function containsCjkCharacters(value: string): boolean {
   return /[\u3400-\u9fff]/.test(value);
 }
 

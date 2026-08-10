@@ -5,8 +5,11 @@ export {
   hasAppIconForExecutable as hasDashboardIconForExecutable,
   loadAppIconsForExecutables as loadDashboardIconsForExecutables,
   resetAppIconRuntimeCacheForTests as resetDashboardIconRuntimeCacheForTests,
-  resolveAppIconKeys as resolveDashboardIconKeys,
 } from "../../../platform/persistence/appIconRuntimeCache.ts";
+
+export {
+  resolveAppIconKeys as resolveDashboardIconKeys,
+} from "../../../shared/classification/appIconIdentity.ts";
 
 export type {
   AppIconRuntimeCacheDeps as DashboardIconRuntimeCacheDeps,

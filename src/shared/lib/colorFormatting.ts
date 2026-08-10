@@ -1,7 +1,5 @@
 export type ColorDisplayFormat = "hex" | "rgb" | "hsl";
 
-export const COLOR_DISPLAY_FORMATS: ColorDisplayFormat[] = ["hex", "rgb", "hsl"];
-
 export interface RgbColor {
   r: number;
   g: number;
@@ -23,7 +21,7 @@ function toHexPart(value: number): string {
   return normalized.toString(16).padStart(2, "0").toUpperCase();
 }
 
-export function normalizeHexColor(input: string): string {
+function normalizeHexColor(input: string): string {
   const value = input.trim().toUpperCase();
   if (/^#[0-9A-F]{6}$/.test(value)) return value;
   return "#000000";
@@ -42,7 +40,7 @@ export function rgbToHex(rgb: RgbColor): string {
   return `#${toHexPart(rgb.r)}${toHexPart(rgb.g)}${toHexPart(rgb.b)}`;
 }
 
-export function rgbToHsl(rgb: RgbColor): HslColor {
+function rgbToHsl(rgb: RgbColor): HslColor {
   const r = clamp(rgb.r, 0, 255) / 255;
   const g = clamp(rgb.g, 0, 255) / 255;
   const b = clamp(rgb.b, 0, 255) / 255;
@@ -70,7 +68,7 @@ export function rgbToHsl(rgb: RgbColor): HslColor {
   };
 }
 
-export function hslToRgb(hsl: HslColor): RgbColor {
+function hslToRgb(hsl: HslColor): RgbColor {
   const h = ((hsl.h % 360) + 360) % 360;
   const s = clamp(hsl.s, 0, 100) / 100;
   const l = clamp(hsl.l, 0, 100) / 100;
@@ -116,21 +114,4 @@ export function hexToHsl(hex: string): HslColor {
 
 export function hslToHex(hsl: HslColor): string {
   return rgbToHex(hslToRgb(hsl));
-}
-
-export function formatColorForDisplay(hex: string, format: ColorDisplayFormat): string {
-  const normalized = normalizeHexColor(hex);
-  if (format === "hex") return normalized;
-  if (format === "rgb") {
-    const rgb = hexToRgb(normalized);
-    return `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
-  }
-  const hsl = hexToHsl(normalized);
-  return `hsl(${hsl.h} ${hsl.s}% ${hsl.l}%)`;
-}
-
-export function getNextColorDisplayFormat(current: ColorDisplayFormat): ColorDisplayFormat {
-  const currentIndex = COLOR_DISPLAY_FORMATS.indexOf(current);
-  if (currentIndex === -1) return "hex";
-  return COLOR_DISPLAY_FORMATS[(currentIndex + 1) % COLOR_DISPLAY_FORMATS.length];
 }

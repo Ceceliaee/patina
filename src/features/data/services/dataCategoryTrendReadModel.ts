@@ -18,7 +18,7 @@ import {
 } from "./dataTrendRange.ts";
 import { resolveStatisticalDataAppKey } from "./dataHeatmapReadModel.ts";
 
-export interface DataCategoryOption {
+interface DataCategoryOption {
   category: AppCategory;
   sourceAppKeys: string[];
   displayName: string;

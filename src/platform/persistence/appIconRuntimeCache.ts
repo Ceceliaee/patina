@@ -1,4 +1,5 @@
 import { AppClassification } from "../../shared/classification/appClassification.ts";
+import { resolveAppIconKeys } from "../../shared/classification/appIconIdentity.ts";
 import { getIconsForExecutables } from "./sessionReadRepository.ts";
 
 type LoadIconsForExecutables = typeof getIconsForExecutables;
@@ -147,22 +148,6 @@ function markIconRefreshResult(
   }
 
   return expandedIcons;
-}
-
-export function resolveAppIconKeys(exeName: string): string[] {
-  const rawExe = exeName.trim();
-  if (!rawExe) return [];
-
-  const lowerExe = rawExe.toLowerCase();
-  const normalizedExe = AppClassification.normalizeExecutable(rawExe);
-  const canonicalExe = AppClassification.resolveCanonicalExecutable(rawExe);
-
-  return Array.from(new Set([
-    rawExe,
-    lowerExe,
-    normalizedExe,
-    canonicalExe,
-  ].filter(Boolean)));
 }
 
 export function getAppIcon(icons: Record<string, string>, exeName: string): string | null {
