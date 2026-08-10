@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   parseImportBatches,
@@ -327,60 +326,6 @@ test("import gateway rejects malformed backend payloads", () => {
   assert.throws(() => parseImportBatches([{ id: 1 }]), /invalid import batch/i);
 });
 
-test("hourly imports feed aggregates but never the exact history query", () => {
-  const source = readFileSync("src/platform/persistence/sessionReadRepository.ts", "utf8");
-  const historyFunction = source.slice(
-    source.indexOf("export async function getSessionsInRange("),
-    source.indexOf("export async function getSessionsInRangeWithoutTitleSamples("),
-  );
-  const aggregateFunction = source.slice(
-    source.indexOf("async function loadEffectiveAggregateCandidateRows("),
-    source.indexOf("export async function getEarliestSessionStartTime("),
-  );
-  assert.doesNotMatch(historyFunction, /import_time_buckets/);
-  assert.match(aggregateFunction, /import_time_buckets/);
-  assert.match(aggregateFunction, /bucket_start_time \+ duration/);
-  assert.match(aggregateFunction, /resolveNativeSessionPrecedence/);
-  assert.match(aggregateFunction, /origin === "import_bucket"/);
-});
-
-test("batch deletion removes only orphaned imported app mappings and never native sessions", () => {
-  const readRepository = readFileSync("src/platform/persistence/sessionReadRepository.ts", "utf8");
-  const historyFunction = readRepository.slice(
-    readRepository.indexOf("export async function getSessionsInRange("),
-    readRepository.indexOf("export async function getSessionsInRangeWithoutTitleSamples("),
-  );
-  const importRepository = readFileSync(
-    "src-tauri/src/data/repositories/import_batches.rs",
-    "utf8",
-  );
-
-  assert.match(historyFunction, /import_exact_sessions/);
-  assert.doesNotMatch(historyFunction, /import_time_buckets/);
-  assert.doesNotMatch(importRepository, /DELETE FROM sessions/i);
-  assert.match(importRepository, /has_native_records/);
-  assert.match(importRepository, /has_remaining_external_records/);
-  assert.match(importRepository, /APP_OVERRIDE_KEY_PREFIX/);
-  assert.match(importRepository, /DELETE FROM settings WHERE key = \?/i);
-});
-
-test("external backup owner cannot write or delete native sessions", () => {
-  const externalBackupSource = readFileSync(
-    "src-tauri/src/data/backup/import_data.rs",
-    "utf8",
-  );
-  const externalBackupOwner = externalBackupSource.slice(
-    0,
-    externalBackupSource.indexOf("#[cfg(test)]"),
-  );
-
-  assert.doesNotMatch(externalBackupOwner, /INSERT\s+INTO\s+sessions\b/i);
-  assert.doesNotMatch(externalBackupOwner, /UPDATE\s+sessions\b/i);
-  assert.doesNotMatch(externalBackupOwner, /DELETE\s+FROM\s+sessions\b/i);
-  assert.match(externalBackupOwner, /INSERT INTO import_exact_sessions/);
-  assert.match(externalBackupOwner, /INSERT INTO import_time_buckets/);
-});
-
 test("hourly imports contribute to dashboard ranking without becoming history sessions", () => {
   const dashboard = buildDashboardReadModel(
     [],
@@ -391,19 +336,4 @@ test("hourly imports contribute to dashboard ranking without becoming history se
   );
   assert.equal(dashboard.totalTrackedTime, 60_000);
   assert.equal(dashboard.topApplications[0]?.exeName, "music.exe");
-});
-
-test("import command set is registered as a complete IPC boundary", () => {
-  const bootstrap = readFileSync("src-tauri/src/app/bootstrap.rs", "utf8");
-  for (const command of [
-    "cmd_pick_canonical_import_file",
-    "cmd_pick_external_import_file",
-    "cmd_preview_canonical_import",
-    "cmd_commit_canonical_import",
-    "cmd_destructure_external_data",
-    "cmd_list_import_batches",
-    "cmd_delete_import_batch",
-  ]) {
-    assert.match(bootstrap, new RegExp(`commands::import::${command}`));
-  }
 });

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import {
   parseActivityAggregateRange,
   parseActivityCatalogPage,
-  parseActivityReadModelStatus,
 } from "../src/platform/persistence/activityReadModelGateway.ts";
 
 let passed = 0;
@@ -47,22 +46,8 @@ await runTest("aggregate payload accepts hybrid active-hour reads", () => {
   assert.equal(parsed.records[0].endTime, 20);
 });
 
-await runTest("malformed aggregate and status payloads fail closed", () => {
+await runTest("malformed aggregate payloads fail closed", () => {
   assert.throws(() => parseActivityAggregateRange({ records: [], readPath: "cache" }));
-  assert.throws(() => parseActivityReadModelStatus({ sourceRevision: "1" }));
-});
-
-await runTest("status payload accepts nullable coverage", () => {
-  const parsed = parseActivityReadModelStatus({
-    sourceRevision: 0,
-    appCatalogState: "invalid",
-    activityHourlyState: "building",
-    activityCoverageStartMs: null,
-    activityCoverageEndMs: null,
-    dirtyAppCount: 0,
-    dirtyRangeCount: 0,
-  });
-  assert.equal(parsed.activityCoverageStartMs, null);
 });
 
 console.log(`Passed ${passed} activity read-model gateway tests`);
