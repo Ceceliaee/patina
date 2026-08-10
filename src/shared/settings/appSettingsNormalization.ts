@@ -156,7 +156,7 @@ function normalizeColorScheme(value: string | undefined, allowedSchemes: Readonl
   return "default";
 }
 
-export interface WidgetBootstrapSettingsInput {
+interface WidgetBootstrapSettingsInput {
   trackingPaused: string | null;
   themeMode: string | null;
   language: string | null;

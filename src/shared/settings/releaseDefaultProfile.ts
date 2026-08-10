@@ -1,6 +1,6 @@
 import type { Locale } from "../i18n/generated/contract.ts";
 
-export interface ReleaseDefaultSettingsProfile {
+interface ReleaseDefaultSettingsProfile {
   idleTimeoutSecs: number;
   timelineMergeGapSecs: number;
   refreshIntervalSecs: number;

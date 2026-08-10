@@ -855,6 +855,7 @@ await runTest("scheduled backup gateway accepts the fixed-retention contract", (
       scheduleAnchorAtMs: 1,
       updatedAtMs: 1,
     },
+    defaultLocalTargetDir: "C:/Patina/backups",
     nextExecutionAtMs: 2,
     recentSuccess: null,
     recentFailure: null,
@@ -878,6 +879,7 @@ await runTest("scheduled backup gateway strips the retired retention field", () 
       scheduleAnchorAtMs: 1,
       updatedAtMs: 1,
     },
+    defaultLocalTargetDir: "C:/Patina/backups",
     nextExecutionAtMs: null,
     recentSuccess: null,
     recentFailure: null,
@@ -898,6 +900,7 @@ await runTest("scheduled backup gateway rejects an invalid local time", () => {
       scheduleAnchorAtMs: 1,
       updatedAtMs: 1,
     },
+    defaultLocalTargetDir: "C:/Patina/backups",
     nextExecutionAtMs: null,
     recentSuccess: null,
     recentFailure: null,
@@ -917,12 +920,14 @@ await runTest("scheduled backup gateway accepts a WebDAV target identity", () =>
       scheduleAnchorAtMs: 1,
       updatedAtMs: 1,
     },
+    defaultLocalTargetDir: "C:/Patina/backups",
     nextExecutionAtMs: 2,
     recentSuccess: null,
     recentFailure: null,
     activeRun: null,
   });
   assert.equal(snapshot.config.target.kind, "webdav");
+  assert.equal(snapshot.defaultLocalTargetDir, "C:/Patina/backups");
 });
 
 await runTest("runBackupExportFlow normalizes the initial path and stores the exported path", async () => {

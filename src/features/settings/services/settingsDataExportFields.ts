@@ -1,6 +1,4 @@
 import {
-  ADVANCED_DATA_EXPORT_PROTOCOL_FIELDS,
-  ANALYSIS_DATA_EXPORT_PROTOCOL_FIELDS,
   DATA_EXPORT_PROTOCOL_FIELDS,
   DATA_EXPORT_PROTOCOL_FIELD_GROUPS,
   DATA_EXPORT_PROTOCOL_DEFAULT_FIELDS_BY_FORMAT,
@@ -10,8 +8,6 @@ import {
 } from "../../../platform/persistence/dataExportGateway.ts";
 
 export const DEFAULT_SETTINGS_DATA_EXPORT_FIELDS = DEFAULT_DATA_EXPORT_PROTOCOL_FIELDS;
-export const ANALYSIS_SETTINGS_DATA_EXPORT_FIELDS = ANALYSIS_DATA_EXPORT_PROTOCOL_FIELDS;
-export const ADVANCED_SETTINGS_DATA_EXPORT_FIELDS = ADVANCED_DATA_EXPORT_PROTOCOL_FIELDS;
 export const SETTINGS_DATA_EXPORT_FIELD_KEYS = DATA_EXPORT_PROTOCOL_FIELDS;
 
 export type SettingsDataExportFieldKey = DataExportProtocolField;
@@ -20,9 +16,9 @@ export function isSettingsDataExportField(value: string): value is SettingsDataE
   return isDataExportProtocolField(value);
 }
 
-export type SettingsDataExportFieldGroupId = "activity" | "apps" | "web" | "classification" | "analysis" | "audit";
+type SettingsDataExportFieldGroupId = "activity" | "apps" | "web" | "classification" | "analysis" | "audit";
 
-export interface SettingsDataExportFieldGroup {
+interface SettingsDataExportFieldGroup {
   id: SettingsDataExportFieldGroupId;
   fields: readonly SettingsDataExportFieldKey[];
 }
@@ -55,7 +51,3 @@ export const SETTINGS_DATA_EXPORT_FIELD_GROUPS: SettingsDataExportFieldGroup[] =
 ];
 
 export const SETTINGS_DATA_EXPORT_DEFAULT_FIELDS_BY_FORMAT = DATA_EXPORT_PROTOCOL_DEFAULT_FIELDS_BY_FORMAT;
-
-export function createDefaultSettingsDataExportFields(): SettingsDataExportFieldKey[] {
-  return [...DEFAULT_SETTINGS_DATA_EXPORT_FIELDS];
-}

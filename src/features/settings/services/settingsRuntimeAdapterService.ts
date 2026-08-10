@@ -136,7 +136,7 @@ const defaultSettingsCommitDeps: SettingsCommitDeps = {
   notifySettingsChanged: emitAppSettingsChanged,
 };
 
-export async function exportBackupWithPickerWithDeps(
+async function exportBackupWithPickerWithDeps(
   initialPath: string | undefined,
   deps: ExportBackupDeps,
 ): Promise<string | null> {

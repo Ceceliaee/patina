@@ -3,7 +3,7 @@ type WebActivitySetupSnapshot = {
   connected: boolean;
 } | null;
 
-export interface WebActivitySetupInput {
+interface WebActivitySetupInput {
   draftEnabled: boolean;
   draftPort: number;
   draftToken: string;

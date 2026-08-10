@@ -1,11 +1,11 @@
 import type { CleanupRange } from "../types";
 
-export type SessionCleanupMode = "session-start-before-cutoff";
+type SessionCleanupMode = "session-start-before-cutoff";
 type SessionCleanupDeps = {
   clearSessionsBefore: (cutoffTime: number) => Promise<void>;
 };
 
-export interface SessionCleanupPlan {
+interface SessionCleanupPlan {
   range: CleanupRange;
   nowMs: number;
   cutoffTime: number;
@@ -33,7 +33,7 @@ export function buildSessionCleanupPlan(range: CleanupRange, nowMs: number): Ses
   };
 }
 
-export async function executeSessionCleanupPlan(
+async function executeSessionCleanupPlan(
   cleanupPlan: SessionCleanupPlan,
   deps: SessionCleanupDeps,
 ): Promise<void> {

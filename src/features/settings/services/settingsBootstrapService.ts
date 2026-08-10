@@ -28,7 +28,7 @@ const settingsPageBootstrapDeps: SettingsPageBootstrapDeps = {
 let settingsBootstrapPrewarmInFlight: Promise<SettingsPageBootstrapData> | null = null;
 let settingsBootstrapPrewarmError: unknown = null;
 
-export async function loadSettingsPageBootstrapWithDeps(
+async function loadSettingsPageBootstrapWithDeps(
   deps: SettingsPageBootstrapDeps,
 ): Promise<SettingsPageBootstrapData> {
   const [settings, appVersion] = await Promise.all([

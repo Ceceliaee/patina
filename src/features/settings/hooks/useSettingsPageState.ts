@@ -77,7 +77,7 @@ const loadInitialStorageSnapshotOnce = () => {
   return pendingInitialStorageSnapshot;
 };
 
-export interface UseSettingsPageStateOptions {
+interface UseSettingsPageStateOptions {
   onSettingsChanged: (settings: AppSettings) => void;
   onColorSchemeSaved?: (settings: AppSettings) => void;
   onDirtyChange?: (dirty: boolean) => void;

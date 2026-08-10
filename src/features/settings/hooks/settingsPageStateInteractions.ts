@@ -4,7 +4,7 @@ import type { SettingsCommitResult } from "../services/settingsRuntimeAdapterSer
 type SettingsPatch = Partial<AppSettings>;
 type SaveStatus = "idle" | "saving" | "saved";
 
-export interface SettingsSaveFlowInput {
+interface SettingsSaveFlowInput {
   savedSettings: AppSettings | null;
   draftSettings: AppSettings | null;
   appVersion: string;
@@ -12,17 +12,17 @@ export interface SettingsSaveFlowInput {
   saveStatus: SaveStatus;
 }
 
-export interface SettingsSaveFlowDeps {
+interface SettingsSaveFlowDeps {
   buildPatch: (saved: AppSettings, draft: AppSettings) => SettingsPatch;
   commitPatch: (patch: SettingsPatch) => Promise<SettingsCommitResult>;
 }
 
-export interface SettingsBootstrapSnapshot {
+interface SettingsBootstrapSnapshot {
   settings: AppSettings;
   appVersion: string;
 }
 
-export interface SettingsSaveFlowResult {
+interface SettingsSaveFlowResult {
   accepted: boolean;
   skippedReason: "missing-settings" | "no-changes" | "saving" | null;
   nextSavedSettings: AppSettings | null;
@@ -33,12 +33,12 @@ export interface SettingsSaveFlowResult {
   runtimeSyncErrors: string[];
 }
 
-export interface SettingsCancelFlowInput {
+interface SettingsCancelFlowInput {
   savedSettings: AppSettings | null;
   hasUnsavedChanges: boolean;
 }
 
-export interface SettingsCancelFlowResult {
+interface SettingsCancelFlowResult {
   cancelled: boolean;
   nextDraftSettings: AppSettings | null;
   nextSaveStatus: SaveStatus;

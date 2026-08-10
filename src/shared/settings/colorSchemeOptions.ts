@@ -1,9 +1,9 @@
 import type { ColorScheme } from "./appSettings.ts";
 
 export type ThemeLibrary = "light" | "dark";
-export type ColorSchemeSwatches = [string, string, string, string, string, string];
+type ColorSchemeSwatches = [string, string, string, string, string, string];
 
-export interface ColorSchemeOption {
+interface ColorSchemeOption {
   value: ColorScheme;
   label?: string;
   swatches: ColorSchemeSwatches;
