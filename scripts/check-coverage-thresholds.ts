@@ -24,6 +24,14 @@ interface CoverageThreshold {
 const COVERAGE_SUMMARY_PATH = "artifacts/coverage/coverage-summary.json";
 const HIGH_RISK_THRESHOLDS: CoverageThreshold[] = [
   {
+    path: "src/app/services/startupWarmupService.ts",
+    minimum: { statements: 90, branches: 85, functions: 90, lines: 90 },
+  },
+  {
+    path: "src/features/data/services/dataHeatmapSnapshot.ts",
+    minimum: { statements: 90, branches: 85, functions: 90, lines: 90 },
+  },
+  {
     path: "src/features/data/services/dataWebActivityReadModel.ts",
     minimum: { statements: 90, branches: 85, functions: 90, lines: 90 },
   },
@@ -95,14 +103,14 @@ function runSelfTest() {
   };
   const threshold = HIGH_RISK_THRESHOLDS[0];
   const valid = {
-    "C:\\repo\\src\\features\\data\\services\\dataWebActivityReadModel.ts": validCoverage,
+    [`C:\\repo\\${threshold.path.replaceAll("/", "\\")}`]: validCoverage,
   };
   if (auditCoverage(valid, [threshold]).length > 0) {
     throw new Error("coverage threshold self-test rejected a valid Windows path");
   }
 
   const lowBranches = {
-    "/repo/src/features/data/services/dataWebActivityReadModel.ts": {
+    [`/repo/${threshold.path}`]: {
       ...validCoverage,
       branches: metric(84.99),
     },

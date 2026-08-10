@@ -24,6 +24,10 @@ const DYNAMIC_INVOKE_ALLOWLIST = new Map([
 // Commands intentionally invoked by Rust runtime, auxiliary windows, or tests rather than src/platform.
 const RUNTIME_ONLY_COMMANDS = new Map<string, string>([
   [
+    "cmd_get_activity_read_model_status",
+    "isolated Tauri runtime smoke waits for read-model projection convergence",
+  ],
+  [
     "cmd_e2e_destroy_hidden_main_window",
     "isolated debug-only Tauri runtime smoke recovery command",
   ],
@@ -47,11 +51,10 @@ const SENSITIVE_CALLER_GUARD_COMMANDS = new Set([
   "cmd_restore_backup",
   "cmd_save_webdav_backup_secret",
   "cmd_delete_webdav_backup_secret",
+  "cmd_reveal_webdav_backup_secret",
   "cmd_delete_sessions_before",
-  "cmd_clear_all_session_window_titles",
   "cmd_delete_sessions_by_exe_names",
   "cmd_delete_sessions_by_exe_names_between",
-  "cmd_delete_web_activity_segments_before",
   "cmd_delete_web_activity_segments_by_domain",
   "cmd_restart_and_apply_storage_migration",
   "cmd_restart_and_apply_webview_cache_migration",

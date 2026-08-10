@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { relative, sep } from "node:path";
+import ts from "typescript";
 
 interface AuditInput {
   scripts: Record<string, string>;
@@ -7,6 +8,13 @@ interface AuditInput {
   testSources: Map<string, string>;
   rustSources: Map<string, string>;
   allowedIgnoredTests: Map<string, string>;
+  allowedSourceTextReads: Map<string, SourceTextReadException>;
+}
+
+interface SourceTextReadException {
+  owner: string;
+  reason: string;
+  exitCriteria: string;
 }
 
 interface AuditResult {
@@ -36,9 +44,19 @@ const ALLOWED_IGNORED_TESTS = new Map([
     "run with npm run perf:sqlite-query-plan",
   ],
 ]);
+const ALLOWED_SOURCE_TEXT_READS = new Map<string, SourceTextReadException>([
+  [
+    "tests/exportFieldContract.test.ts -> src-tauri/src/data/export/common.rs",
+    {
+      owner: "data export protocol",
+      reason: "Cross-language compile-time field constants have no runtime adapter; this exact read prevents frontend and Rust export schemas from drifting.",
+      exitCriteria: "Replace when both runtimes consume a generated protocol artifact or an equivalent typed cross-language contract.",
+    },
+  ],
+]);
 
 function normalizePath(path: string) {
-  return path.split(sep).join("/").replace(/^\.\//, "");
+  return path.split(sep).join("/").replaceAll("\\", "/").replace(/^\.\//, "");
 }
 
 function collectFiles(root: string, extension: RegExp): string[] {
@@ -117,6 +135,89 @@ function findIgnoredTests(path: string, source: string) {
   return ignoredTests;
 }
 
+function findProductionSourceTextReads(source: string) {
+  const sourceFile = ts.createSourceFile(
+    "test-governance-source.ts",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const readerNames = new Set(["readFile", "readFileSync", "readUtf8"]);
+  const constantPaths = new Map<string, string>();
+  const reads = new Set<string>();
+
+  for (const statement of sourceFile.statements) {
+    if (
+      ts.isImportDeclaration(statement)
+      && ts.isStringLiteral(statement.moduleSpecifier)
+      && ["node:fs", "node:fs/promises", "fs", "fs/promises"].includes(statement.moduleSpecifier.text)
+      && statement.importClause?.namedBindings
+      && ts.isNamedImports(statement.importClause.namedBindings)
+    ) {
+      for (const element of statement.importClause.namedBindings.elements) {
+        const importedName = element.propertyName?.text ?? element.name.text;
+        if (readerNames.has(importedName)) readerNames.add(element.name.text);
+      }
+    }
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (
+        ts.isIdentifier(declaration.name)
+        && declaration.initializer
+        && ts.isStringLiteralLike(declaration.initializer)
+      ) {
+        constantPaths.set(declaration.name.text, declaration.initializer.text);
+      }
+    }
+  }
+
+  function resolvePathExpressions(node: ts.Node): string[] {
+    if (ts.isStringLiteralLike(node)) return [node.text];
+    if (ts.isIdentifier(node)) {
+      const value = constantPaths.get(node.text);
+      return value === undefined ? [] : [value];
+    }
+    if (ts.isCallExpression(node)) {
+      const callee = ts.isIdentifier(node.expression)
+        ? node.expression.text
+        : ts.isPropertyAccessExpression(node.expression)
+          ? node.expression.name.text
+          : "";
+      const values = node.arguments.flatMap(resolvePathExpressions);
+      if (["join", "resolve"].includes(callee) && values.length > 0) {
+        return [...values, values.join("/")];
+      }
+      return values;
+    }
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+      const left = resolvePathExpressions(node.left);
+      const right = resolvePathExpressions(node.right);
+      return [...left, ...right, ...left.flatMap((a) => right.map((b) => `${a}${b}`))];
+    }
+    return [];
+  }
+
+  function visit(node: ts.Node): void {
+    if (ts.isCallExpression(node)) {
+      const readerName = ts.isIdentifier(node.expression)
+        ? node.expression.text
+        : ts.isPropertyAccessExpression(node.expression)
+          ? node.expression.name.text
+          : "";
+      if (readerNames.has(readerName) && node.arguments[0]) {
+        for (const candidate of resolvePathExpressions(node.arguments[0])) {
+          const normalized = normalizePath(candidate);
+          if (/^(?:src\/|src-tauri\/src\/)/.test(normalized)) reads.add(normalized);
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return [...reads];
+}
+
 function audit(input: AuditInput): AuditResult {
   const failures: string[] = [];
   const testFileSet = new Set(input.testFiles);
@@ -178,6 +279,24 @@ function audit(input: AuditInput): AuditResult {
   for (const [path, source] of input.testSources) {
     for (const match of source.matchAll(/\b(?:describe|it|test|runTest)\.(only|skip)\s*\(/g)) {
       failures.push(`focused or skipped TypeScript test is not allowed: ${path} (${match[0].trim()})`);
+    }
+    for (const productionPath of findProductionSourceTextReads(source)) {
+      const key = `${path} -> ${productionPath}`;
+      const exception = input.allowedSourceTextReads.get(key);
+      if (!exception) {
+        failures.push(`test reads production source text without an exact exception: ${key}`);
+      }
+    }
+  }
+  for (const [key, exception] of input.allowedSourceTextReads) {
+    if (!exception.owner || !exception.reason || !exception.exitCriteria) {
+      failures.push(`source-text read exception is incomplete: ${key}`);
+      continue;
+    }
+    const [testPath, productionPath] = key.split(" -> ");
+    const source = input.testSources.get(testPath);
+    if (!source || !findProductionSourceTextReads(source).includes(productionPath)) {
+      failures.push(`source-text read exception is stale: ${key}`);
     }
   }
 
@@ -242,6 +361,7 @@ function runSelfTest() {
       '#[ignore = "run with npm run perf:sqlite-query-plan"]\nasync fn session_range_query_plan_report() {}',
     ]]),
     allowedIgnoredTests: new Map(ALLOWED_IGNORED_TESTS),
+    allowedSourceTextReads: new Map(),
   };
 
   const valid = audit(base);
@@ -261,6 +381,20 @@ function runSelfTest() {
     ...base,
     testSources: new Map(base.testSources).set("tests/a.test.ts", "test.only('a', () => {})"),
   }), "focused or skipped TypeScript test");
+  expectFailure(audit({
+    ...base,
+    testSources: new Map(base.testSources).set(
+      "tests/a.test.ts",
+      'readFileSync("src/app/AppShell.tsx", "utf8")',
+    ),
+  }), "reads production source text without an exact exception");
+  expectFailure(audit({
+    ...base,
+    testSources: new Map(base.testSources).set(
+      "tests/a.test.ts",
+      'readFileSync(resolve("src/app/AppShell.tsx"), "utf8")',
+    ),
+  }), "reads production source text without an exact exception");
   expectFailure(audit({
     ...base,
     rustSources: new Map([[
@@ -307,12 +441,13 @@ function inventory(): AuditInput {
     testSources: allTestSources,
     rustSources,
     allowedIgnoredTests: new Map(ALLOWED_IGNORED_TESTS),
+    allowedSourceTextReads: new Map(ALLOWED_SOURCE_TEXT_READS),
   };
 }
 
 runSelfTest();
 if (process.argv.includes("--self-test")) {
-  console.log("Test suite governance self-test passed (8 adversarial cases)");
+  console.log("Test suite governance self-test passed (10 adversarial cases)");
   process.exit(0);
 }
 

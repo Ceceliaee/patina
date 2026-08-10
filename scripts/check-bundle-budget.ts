@@ -19,6 +19,8 @@ const INITIAL_CHUNK_BUDGETS = [
   { label: "react-vendor", pattern: /^react-vendor-.*\.js$/, gzipKiB: 60 },
   { label: "icons", pattern: /^icons-.*\.js$/, gzipKiB: 8 },
   { label: "tauri", pattern: /^tauri-.*\.js$/, gzipKiB: 6 },
+  { label: "runtime type guards", pattern: /^runtimeTypeGuards-.*\.js$/, gzipKiB: 0.2 },
+  { label: "browser storage gateway", pattern: /^browserStorageGateway-.*\.js$/, gzipKiB: 0.21 },
   // Data category analysis plus scheduled backup/export add bilingual trust and
   // control labels while the global initial and total budgets stay fixed.
   { label: "localization", pattern: /^runtime-.*\.js$/, gzipKiB: 25.7 },
@@ -76,6 +78,8 @@ const LAZY_SHARED_UI_CHUNK_BUDGETS = [
   { label: "settings runtime adapter", pattern: /^settingsRuntimeAdapterService-.*\.js$/, gzipKiB: 3 },
   { label: "duration formatting", pattern: /^durationFormatting-.*\.js$/, gzipKiB: 0.2 },
   { label: "data export protocol", pattern: /^dataExportGateway-.*\.js$/, gzipKiB: 0.7 },
+  { label: "domain color", pattern: /^domainColor-.*\.js$/, gzipKiB: 0.4 },
+  { label: "scheduled task presentation", pattern: /^scheduledTaskPresentation-.*\.js$/, gzipKiB: 0.48 },
 ] as const;
 
 // Unowned fragments remain tightly bounded after route, secondary-runtime, and

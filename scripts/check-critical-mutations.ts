@@ -13,6 +13,13 @@ const WIDGET_CAPABILITY_SOURCE = "src-tauri/capabilities/widget.json";
 const WINDOW_GUARD_SOURCE = "src-tauri/src/commands/window_guard.rs";
 const WEB_HEATMAP_RUNTIME_SOURCE = "src/features/data/hooks/useDataWebActivityRuntime.ts";
 const WEB_BRIDGE_SOURCE = "src-tauri/src/platform/web_activity_bridge.rs";
+const STORAGE_PATH_SAFETY_SOURCE = "src-tauri/src/data/storage_path_safety.rs";
+const WEBDAV_SOURCE = "src-tauri/src/platform/webdav.rs";
+const CREDENTIALS_SOURCE = "src-tauri/src/platform/credentials.rs";
+const STARTUP_WARMUP_SOURCE = "src/app/services/startupWarmupService.ts";
+const DATA_COMPONENT_SOURCE = "src/features/data/components/Data.tsx";
+const STORAGE_MIGRATION_SOURCE = "src-tauri/src/data/storage_migration.rs";
+const STORAGE_MIGRATION_CLEANUP_SOURCE = "src-tauri/src/data/storage_migration_cleanup.rs";
 
 function normalizeSourceNewlines(source: string) {
   return source.replace(/\r\n?/g, "\n");
@@ -90,6 +97,103 @@ interface SourceContractMutant {
 
 const SOURCE_CONTRACT_MUTANTS: SourceContractMutant[] = [
   {
+    name: "WebView migration execution stops rejecting a target aliased to the active cache",
+    source: STORAGE_MIGRATION_SOURCE,
+    search: "ensure_destructive_paths_are_disjoint(&current.webview_root, target)?;",
+    replacement: "let _ = (&current.webview_root, target);",
+    verify: verifyStorageMigrationExecutionIdentityContract,
+  },
+  {
+    name: "WebView migration cleanup loses its final path identity recheck",
+    source: STORAGE_MIGRATION_SOURCE,
+    search: "ensure_destructive_paths_are_disjoint(&source_webview_root, &pending.target_webview_root)?;",
+    replacement: "        let _ = (&source_webview_root, &pending.target_webview_root);",
+    verify: verifyStorageMigrationExecutionIdentityContract,
+  },
+  {
+    name: "old data cleanup ignores a target cache aliased inside the source root",
+    source: STORAGE_MIGRATION_SOURCE,
+    search: "!resolved_path_is_same_or_child(target_webview_root, source_data_root)?",
+    replacement: "true",
+    verify: verifyStorageMigrationExecutionIdentityContract,
+  },
+  {
+    name: "storage migration staging accepts a preexisting reparse point",
+    source: STORAGE_MIGRATION_CLEANUP_SOURCE,
+    search: "refusing to remove linked migration path",
+    replacement: "removing linked migration path",
+    verify: verifyStorageMigrationCleanupContract,
+  },
+  {
+    name: "storage write probe returns to a fixed collision-prone filename",
+    source: STORAGE_PATH_SAFETY_SOURCE,
+    search: "let sequence = WRITE_PROBE_SEQUENCE.fetch_add(1, Ordering::Relaxed);",
+    replacement: "let sequence = 0;",
+    verify: verifyStorageProbeContract,
+  },
+  {
+    name: "storage cleanup stops rejecting aliased overlapping paths",
+    source: STORAGE_PATH_SAFETY_SOURCE,
+    search: "if resolved_path_is_same_or_child(source, target)?\n        || resolved_path_is_same_or_child(target, source)?",
+    replacement: "if false\n        && (resolved_path_is_same_or_child(source, target)?\n            || resolved_path_is_same_or_child(target, source)?)",
+    verify: verifyStoragePathIdentityContract,
+  },
+  {
+    name: "WebDAV accepts cleartext credentials for remote hosts",
+    source: WEBDAV_SOURCE,
+    search: "if !is_literal_loopback {",
+    replacement: "if false && !is_literal_loopback {",
+    verify: verifyWebDavTransportContract,
+  },
+  {
+    name: "WebDAV credential target loses profile isolation",
+    source: CREDENTIALS_SOURCE,
+    search: "format!(\"{WEBDAV_BACKUP_CREDENTIAL_TARGET_PREFIX}.{}\", profile.key())",
+    replacement: "format!(\"{WEBDAV_BACKUP_CREDENTIAL_TARGET_PREFIX}.default\")",
+    verify: verifyCredentialProfileContract,
+  },
+  {
+    name: "credential allocation is detached before fallible UTF-8 decoding",
+    source: CREDENTIALS_SOURCE,
+    search: "let allocation = CredentialAllocation(credential);",
+    replacement: "let allocation = CredentialAllocation(ptr::null_mut());",
+    verify: verifyCredentialAllocationContract,
+  },
+  {
+    name: "credential blob reads dereference a null pointer for an empty legacy secret",
+    source: CREDENTIALS_SOURCE,
+    search: "if size == 0 {\n            return Ok(Vec::new());\n        }",
+    replacement: "if size == usize::MAX {\n            return Ok(Vec::new());\n        }",
+    verify: verifyCredentialAllocationContract,
+  },
+  {
+    name: "older startup warmup clears the newer active controller",
+    source: STARTUP_WARMUP_SOURCE,
+    search: "if (activeStartupWarmup === controller) {",
+    replacement: "if (true) {",
+    verify: verifyStartupWarmupIdentityContract,
+  },
+  {
+    name: "data heatmap rejection loses explicit settled error handling",
+    source: DATA_COMPONENT_SOURCE,
+    search: [
+      "      } catch {",
+      "        if (!cancelled) {",
+      "          setHeatmapError(true);",
+      "        }",
+      "      } finally {",
+    ].join("\n"),
+    replacement: "      } finally {",
+    verify: verifyDataHeatmapFailureContract,
+  },
+  {
+    name: "data cold heatmap failures never settle the page completion state",
+    source: DATA_COMPONENT_SOURCE,
+    search: "&& isDataHeatmapSelectionSettled(yearSessionsView, selectedHeatmapView, heatmapColdError)",
+    replacement: "&& yearSessionsView === selectedHeatmapView",
+    verify: verifyDataHeatmapFailureContract,
+  },
+  {
     name: "main-only command is reclassified as widget-shared",
     source: WINDOW_PERMISSIONS_SOURCE,
     search: '  "cmd_toggle_tracking_paused",\n  "cmd_is_primary_mouse_button_down",\n]',
@@ -150,6 +254,7 @@ function verifyWindowPermissionContract(source: string) {
   for (const sensitive of [
     "cmd_restore_backup",
     "cmd_save_webdav_backup_secret",
+    "cmd_reveal_webdav_backup_secret",
     "cmd_delete_sessions_before",
     "cmd_install_update",
   ]) {
@@ -200,6 +305,104 @@ function verifyWebBridgeRetryContract(source: string) {
   assert.doesNotMatch(retryArm.groups.body, /return None/);
 }
 
+function verifyStorageProbeContract(source: string) {
+  assert.match(source, /WRITE_PROBE_SEQUENCE\.fetch_add\(1, Ordering::Relaxed\)/);
+  assert.match(source, /\.patina-write-probe-\{\}-\{sequence\}/);
+  assert.match(source, /\.create_new\(true\)/);
+  assert.match(source, /WriteProbeGuard::new\(probe\.clone\(\)\)/);
+}
+
+function verifyStoragePathIdentityContract(source: string) {
+  const guard = source.match(
+    /fn ensure_destructive_paths_are_disjoint[\s\S]*?\n\}/,
+  )?.[0] ?? "";
+  assert.match(guard, /resolved_path_is_same_or_child\(source, target\)\?/);
+  assert.match(guard, /resolved_path_is_same_or_child\(target, source\)\?/);
+  assert.doesNotMatch(guard, /if false/);
+}
+
+function verifyStorageMigrationExecutionIdentityContract(source: string) {
+  const executionGuard = source.match(
+    /fn validate_target_webview_root_for_execution[\s\S]*?\n\}/,
+  )?.[0] ?? "";
+  assert.match(
+    executionGuard,
+    /ensure_destructive_paths_are_disjoint\(&current\.webview_root, target\)\?;/,
+  );
+  const executionBody = source.match(
+    /async fn execute_pending_storage_migration[\s\S]*?\n\}/,
+  )?.[0] ?? "";
+  assert.match(
+    executionBody,
+    /ensure_destructive_paths_are_disjoint\(\s*&source_webview_root,\s*&pending\.target_webview_root,?\s*\)\?;/,
+  );
+  const dataCleanupDecision = source.match(
+    /fn should_remove_old_data_root_container[\s\S]*?\n\}/,
+  )?.[0] ?? "";
+  assert.match(
+    dataCleanupDecision,
+    /!resolved_path_is_same_or_child\(target_webview_root, source_data_root\)\?/,
+  );
+  assert.match(source, /remove_migration_path_if_safe\(&staging_root\)/);
+  assert.match(source, /remove_migration_path_if_safe\(&target_path\)/);
+}
+
+function verifyStorageMigrationCleanupContract(source: string) {
+  const safeMigrationRemoval = source.match(
+    /pub\(super\) fn remove_migration_path_if_safe[\s\S]*?\n\}/,
+  )?.[0] ?? "";
+  assert.match(safeMigrationRemoval, /is_reparse_or_symlink\(&metadata\)/);
+  assert.match(safeMigrationRemoval, /refusing to remove linked migration path/);
+}
+
+function verifyWebDavTransportContract(source: string) {
+  const cleartextPolicy = source.match(/if url\.scheme\(\) == "http" \{[\s\S]*?\n    \}/)?.[0] ?? "";
+  assert.match(cleartextPolicy, /address\.is_loopback\(\)/);
+  assert.match(cleartextPolicy, /if !is_literal_loopback \{/);
+  assert.doesNotMatch(cleartextPolicy, /if false/);
+}
+
+function verifyCredentialProfileContract(source: string) {
+  const targetOwner = source.match(
+    /fn webdav_backup_credential_target[\s\S]*?\n\}/,
+  )?.[0] ?? "";
+  assert.match(targetOwner, /profile\.key\(\)/);
+  assert.doesNotMatch(targetOwner, /\.default/);
+}
+
+function verifyCredentialAllocationContract(source: string) {
+  const readOwner = source.match(
+    /pub fn read_webdav_password[\s\S]*?\n    \}/,
+  )?.[0] ?? "";
+  assert.match(readOwner, /let allocation = CredentialAllocation\(credential\);/);
+  assert.match(readOwner, /String::from_utf8[\s\S]*?\?/);
+  assert.match(source, /unsafe \{ CredFree\(self\.0\.cast\(\)\) \}/);
+  const blobCopy = source.match(/fn copy_credential_blob[\s\S]*?\n    \}/)?.[0] ?? "";
+  assert.match(blobCopy, /if size == 0 \{\s*return Ok\(Vec::new\(\)\);/);
+  assert.match(blobCopy, /if blob\.is_null\(\) \{/);
+}
+
+function verifyStartupWarmupIdentityContract(source: string) {
+  assert.equal(
+    source.match(/if \(activeStartupWarmup === controller\) \{/g)?.length,
+    2,
+    "completion and cancellation must both use controller identity guards",
+  );
+  assert.doesNotMatch(source, /if \(true\) \{\n\s*activeStartupWarmup = null/);
+}
+
+function verifyDataHeatmapFailureContract(source: string) {
+  const heatmapLoad = source.match(
+    /const loadYearSnapshot = async \(\) => \{[\s\S]*?\n    \};/,
+  )?.[0] ?? "";
+  assert.match(heatmapLoad, /catch \{[\s\S]*?setHeatmapError\(true\)/);
+  assert.match(heatmapLoad, /finally \{[\s\S]*?setHeatmapLoading\(false\)/);
+  assert.match(
+    source,
+    /&& isDataHeatmapSelectionSettled\(yearSessionsView, selectedHeatmapView, heatmapColdError\)/,
+  );
+}
+
 function transpile(sourcePath: string, mutation?: Mutant) {
   let source = readSource(sourcePath);
   if (sourcePath === ERROR_SOURCE) {
@@ -234,6 +437,9 @@ async function importWebAggregateMutation(mutated: boolean) {
   let source = readSource(WEB_AGGREGATE_SOURCE).replace(
     'import { invokeWithCommandError } from "./commandError.ts";',
     "const invokeWithCommandError = async () => { throw new Error('unconfigured invoke'); };",
+  ).replace(
+    'import { isPlainRecord as isRecord } from "../../shared/lib/runtimeTypeGuards.ts";',
+    'const isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);',
   );
   if (mutated) {
     assert(
