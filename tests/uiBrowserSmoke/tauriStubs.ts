@@ -81,6 +81,7 @@ function tauriStubFor(path: string) {
       globalThis.__PATINA_INVOKED_COMMANDS ??= [];
       globalThis.__PATINA_MAIN_WINDOW_GENERATION__ ??= 1;
       globalThis.__PATINA_MAIN_WINDOW_LOAD_EPOCH__ ??= 1;
+      globalThis.__PATINA_WEBDAV_SECRET ??= null;
 
       function loadStoredSettings() {
         try {
@@ -210,6 +211,24 @@ function tauriStubFor(path: string) {
             loadEpoch: Number(payload.loadEpoch),
           };
         }
+        if (command === "cmd_save_webdav_backup_secret") {
+          globalThis.__PATINA_WEBDAV_SECRET = String(payload.password ?? "");
+          return null;
+        }
+        if (command === "cmd_delete_webdav_backup_secret") {
+          globalThis.__PATINA_WEBDAV_SECRET = null;
+          return null;
+        }
+        if (command === "cmd_has_webdav_backup_secret") {
+          return typeof globalThis.__PATINA_WEBDAV_SECRET === "string"
+            && globalThis.__PATINA_WEBDAV_SECRET.length > 0;
+        }
+        if (command === "cmd_reveal_webdav_backup_secret") {
+          return globalThis.__PATINA_WEBDAV_SECRET;
+        }
+        if (command === "cmd_test_webdav_backup_target") {
+          return { ok: true };
+        }
         if (command === "cmd_get_tools_snapshot") {
           const toolsSnapshotDelayMs = Number(
             globalThis.__TIME_TRACKER_TOOLS_SNAPSHOT_DELAY_MS
@@ -334,6 +353,15 @@ function tauriStubFor(path: string) {
           }
           const start = Number(payload.startMs ?? 0);
           const end = Number(payload.endMs ?? start);
+          const bucketBoundaries = Array.isArray(payload.bucketBoundariesMs)
+            ? payload.bucketBoundariesMs
+            : [];
+          if (
+            localStorage.getItem("__time_tracker_reject_heatmap_query") === "1"
+            && bucketBoundaries.length > 100
+          ) {
+            throw new Error("Injected activity heatmap aggregate failure");
+          }
           const duration = Math.max(0, Math.min(30 * 60 * 1000, end - start));
           return {
             records: duration > 0 ? [
@@ -349,17 +377,6 @@ function tauriStubFor(path: string) {
             projectionRowCount: duration > 0 ? 2 : 0,
             factRowCount: 0,
             hasActiveSession: false,
-          };
-        }
-        if (command === "cmd_get_activity_read_model_status") {
-          return {
-            sourceRevision: 4,
-            appCatalogState: "ready",
-            activityHourlyState: "ready",
-            activityCoverageStartMs: 0,
-            activityCoverageEndMs: Date.now(),
-            dirtyAppCount: 0,
-            dirtyRangeCount: 0,
           };
         }
         if (command === "cmd_get_web_activity_aggregate_range") {
@@ -463,14 +480,15 @@ function tauriStubFor(path: string) {
           globalThis.__PATINA_SCHEDULED_BACKUP_SNAPSHOT ??= {
             config: {
               enabled: false,
-              cadence: "daily",
-              weekday: null,
-              localTimeMinutes: 120,
+              cadence: "weekly",
+              weekday: 5,
+              localTimeMinutes: 1260,
               target: { kind: "local", targetDir: "C:\\Smoke\\Patina\\backups" },
               targetGeneration: "0123456789abcdef0123456789abcdef",
               scheduleAnchorAtMs: Date.now(),
               updatedAtMs: Date.now(),
             },
+            defaultLocalTargetDir: "C:\\\\Smoke\\\\Patina\\\\backups",
             nextExecutionAtMs: null,
             recentSuccess: null,
             recentFailure: null,
@@ -504,7 +522,7 @@ function tauriStubFor(path: string) {
               enabled: false,
               cadence: "daily",
               weekday: null,
-              localTimeMinutes: 120,
+              localTimeMinutes: 1260,
               targetDir: "C:\\Smoke\\Patina\\exports",
               format: "csv",
               selectedFields: ["record_type", "start_time", "end_time", "duration_ms"],

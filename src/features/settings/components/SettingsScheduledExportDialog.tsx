@@ -17,6 +17,12 @@ import {
   type ScheduledExportSnapshot,
 } from "../services/scheduledExportService.ts";
 import { toUserVisibleStoragePath } from "../services/storagePathDisplay.ts";
+import {
+  formatScheduledDateTime as formatDateTime,
+  formatScheduledSize as formatSize,
+  scheduledMinutesToTime as minutesToTime,
+  scheduledTimeToMinutes as timeToMinutes,
+} from "../services/scheduledTaskPresentation.ts";
 
 interface Props {
   open: boolean;
@@ -28,16 +34,6 @@ interface Props {
 
 export async function loadScheduledExportSnapshot(): Promise<ScheduledExportSnapshot> {
   return ScheduledExportService.getSnapshot();
-}
-
-function minutesToTime(minutes: number): string {
-  const normalized = Math.max(0, Math.min(1439, Math.trunc(minutes)));
-  return `${String(Math.floor(normalized / 60)).padStart(2, "0")}:${String(normalized % 60).padStart(2, "0")}`;
-}
-
-function timeToMinutes(value: string): number {
-  const match = /^(\d{2}):(\d{2})$/.exec(value);
-  return match ? Number(match[1]) * 60 + Number(match[2]) : 120;
 }
 
 function toDraft(
@@ -69,22 +65,6 @@ function toSavedInput(snapshot: ScheduledExportSnapshot): ScheduledExportConfigI
   };
 }
 
-function formatDateTime(value: number | null): string {
-  if (value === null) return "";
-  return new Intl.DateTimeFormat(undefined, {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function formatSize(bytes: number | null): string {
-  if (bytes === null) return "";
-  return `${(bytes / 1048576).toFixed(bytes >= 10 * 1048576 ? 1 : 2)} MB`;
-}
-
 export default function SettingsScheduledExportDialog({
   open,
   initialSnapshot,
@@ -102,6 +82,7 @@ export default function SettingsScheduledExportDialog({
   const [saving, setSaving] = useState(false);
   const [saveErrorCode, setSaveErrorCode] = useState<string | null>(null);
   const dirty = JSON.stringify(draft) !== JSON.stringify(toSavedInput(snapshot));
+  const controlsDisabled = saving || !draft.enabled;
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
 
@@ -228,14 +209,18 @@ export default function SettingsScheduledExportDialog({
       )}
     >
       <div className="settings-scheduled-export">
-        <div className="settings-scheduled-export-schedule" data-cadence={draft.cadence}>
+        <div
+          className="settings-scheduled-export-schedule"
+          data-cadence={draft.cadence}
+          aria-disabled={controlsDisabled}
+        >
           <div className="settings-scheduled-export-control">
             <span>{labels.frequency}</span>
             <QuietSelect
               value={draft.cadence}
               options={cadenceOptions}
               ariaLabel={labels.frequency}
-              disabled={saving}
+              disabled={controlsDisabled}
               onChange={(cadence) => updateDraft({
                 cadence,
                 weekday: cadence === "weekly" ? (draft.weekday ?? 1) : null,
@@ -249,7 +234,7 @@ export default function SettingsScheduledExportDialog({
                 value={draft.weekday ?? 1}
                 options={weekdayOptions}
                 ariaLabel={UI_TEXT.export.fields.weekday.label}
-                disabled={saving}
+                disabled={controlsDisabled}
                 onChange={(weekday) => updateDraft({ weekday })}
               />
             </div>
@@ -259,7 +244,7 @@ export default function SettingsScheduledExportDialog({
             <QuietTimePicker
               value={minutesToTime(draft.localTimeMinutes)}
               ariaLabel={labels.time}
-              disabled={saving}
+              disabled={controlsDisabled}
               onChange={(value) => updateDraft({ localTimeMinutes: timeToMinutes(value) })}
             />
           </div>
@@ -271,7 +256,7 @@ export default function SettingsScheduledExportDialog({
             <Folder size={14} aria-hidden="true" />
             <span>{toUserVisibleStoragePath(draft.targetDir)}</span>
           </span>
-          <QuietButton size="regular" onClick={() => void chooseDirectory()} disabled={saving}>
+          <QuietButton size="regular" onClick={() => void chooseDirectory()} disabled={controlsDisabled}>
             {UI_TEXT.settings.storage.changePathAction}
           </QuietButton>
         </div>

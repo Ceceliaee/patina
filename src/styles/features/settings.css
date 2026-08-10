@@ -162,14 +162,7 @@
   color: var(--qp-text-primary);
 }
 
-.settings-theme-entry-active {
-  border-color: color-mix(in srgb, var(--qp-accent-default) 40%, var(--qp-border-subtle));
-  background: var(--qp-accent-muted);
-  color: var(--qp-accent-default);
-}
-
-.settings-theme-entry-title,
-.settings-theme-entry-description {
+.settings-theme-entry-title {
   display: block;
 }
 
@@ -177,61 +170,6 @@
   font-size: 12px;
   font-weight: 600;
   line-height: 1;
-}
-
-.settings-theme-entry-description {
-  margin-top: 3px;
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 1.2;
-  color: var(--qp-text-tertiary);
-}
-
-.settings-theme-subview {
-  margin-top: 16px;
-  border-top: 1px solid var(--qp-border-subtle);
-  padding-top: 16px;
-}
-
-.settings-theme-subview-header {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.settings-theme-subview-header h3 {
-  margin: 0;
-  color: var(--qp-text-primary);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.25;
-}
-
-.settings-theme-subview-header p {
-  margin: 4px 0 0;
-  color: var(--qp-text-tertiary);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.settings-theme-subview-back {
-  display: inline-flex;
-  height: 28px;
-  align-items: center;
-  gap: 4px;
-  border-radius: 8px;
-  border: 1px solid var(--qp-border-subtle);
-  background: var(--qp-bg-panel);
-  padding: 0 8px;
-  color: var(--qp-text-secondary);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.settings-theme-subview-back:hover {
-  border-color: var(--qp-border-strong);
-  color: var(--qp-text-primary);
 }
 
 .settings-interface-field {
@@ -275,10 +213,6 @@
   font-size: 14px;
   font-weight: 700;
   line-height: 1.25;
-}
-
-.settings-local-paths-message-action {
-  position: relative;
 }
 
 .settings-storage-path-list {
@@ -1405,7 +1339,7 @@
   line-height: 1.4;
 }
 
-.settings-scheduled-export-control .qp-select,
+.settings-scheduled-export-control .qp-select-root,
 .settings-scheduled-export-control .qp-time-picker,
 .settings-scheduled-export-control .qp-select-trigger,
 .settings-scheduled-export-control .qp-time-picker-trigger {
@@ -1563,7 +1497,7 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.settings-scheduled-backup-fields .qp-select,
+.settings-scheduled-backup-fields .qp-select-root,
 .settings-scheduled-backup-fields .qp-time-picker,
 .settings-scheduled-backup-fields .qp-select-trigger,
 .settings-scheduled-backup-fields .qp-time-picker-trigger {

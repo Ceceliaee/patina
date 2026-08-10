@@ -596,6 +596,79 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString("编辑")})`);
   });
 
+  await runTest("settings WebDAV password reveals only after an explicit click and clears when hidden", async () => {
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const trigger = Array.from(document.querySelectorAll("button"))
+            .find((node) => node.textContent?.trim() === "编辑");
+          if (!trigger) return false;
+          trigger.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString("WebDAV 配置")})`);
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const dialog = document.querySelector('[role="dialog"]');
+          const password = dialog?.querySelectorAll('input')[2];
+          const revealCalls = globalThis.__PATINA_INVOKED_COMMANDS
+            .filter((entry) => entry.command === "cmd_reveal_webdav_backup_secret");
+          return password?.value === ""
+            && password?.getAttribute("placeholder") === "••••••••"
+            && revealCalls.length === 0;
+        })()
+      `),
+      true,
+      "Opening the dialog eagerly fetched the saved password",
+    );
+
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const button = document.querySelector('button[aria-label="显示密码"]');
+          if (!button) return false;
+          button.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(client!, sessionId, `
+      (() => {
+        const dialog = document.querySelector('[role="dialog"]');
+        const password = dialog?.querySelectorAll('input')[2];
+        return password?.type === "text" && password?.value === "app-password";
+      })()
+    `);
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        globalThis.__PATINA_INVOKED_COMMANDS
+          .filter((entry) => entry.command === "cmd_reveal_webdav_backup_secret").length
+      `),
+      1,
+    );
+
+    await evaluate(client!, sessionId, `document.querySelector('button[aria-label="隐藏密码"]')?.click()`);
+    await waitForExpression(client!, sessionId, `
+      (() => {
+        const dialog = document.querySelector('[role="dialog"]');
+        const password = dialog?.querySelectorAll('input')[2];
+        return password?.type === "password"
+          && password?.value === ""
+          && password?.getAttribute("placeholder") === "••••••••";
+      })()
+    `);
+    await evaluate(client!, sessionId, `
+      Array.from(document.querySelectorAll('[role="dialog"] button'))
+        .find((node) => node.textContent?.trim() === "取消")?.click()
+    `);
+    await waitForExpression(client!, sessionId, "!document.querySelector('[role=\"dialog\"]')");
+  });
+
   await runTest("settings backup dialog opens scheduled local backup as a secondary dialog", async () => {
     assert.equal(
       await evaluate(client!, sessionId, `
@@ -714,11 +787,11 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
         (() => {
           const controls = Array.from(document.querySelector('.settings-scheduled-backup-schedule-controls')?.children ?? []);
           const tops = controls.map((node) => Math.round(node.getBoundingClientRect().top));
-          return tops.length === 2 && Math.max(...tops) - Math.min(...tops) <= 1;
+          return tops.length === 3 && Math.max(...tops) - Math.min(...tops) <= 1;
         })()
       `),
       true,
-      "Daily scheduled backup controls did not stay on one row",
+      "Weekly scheduled backup controls did not stay on one row",
     );
     assert.equal(
       await evaluate(client!, sessionId, "document.querySelector('.settings-scheduled-backup-status') === null"),
@@ -896,6 +969,49 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
         && !("targetDir" in entry.payload.input.target)
       )
     `);
+    await evaluate(client!, sessionId, `
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    `);
+    await waitForExpression(client!, sessionId, "document.querySelectorAll('[role=\"dialog\"]').length === 1");
+    await evaluate(client!, sessionId, `
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    `);
+    await waitForExpression(client!, sessionId, "!document.querySelector('[role=\"dialog\"]')");
+  });
+
+  await runTest("settings local scheduling keeps its first-install default after WebDAV becomes active", async () => {
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const trigger = Array.from(document.querySelectorAll('.qp-action-row button'))
+            .find((node) => node.textContent?.trim() === "备份" && !node.disabled);
+          if (!trigger) return false;
+          trigger.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString("选择备份位置")})`);
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const trigger = document.querySelector('button.settings-backup-schedule-action[aria-label="定时备份"]');
+          if (!trigger) return false;
+          trigger.click();
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(client!, sessionId, "document.querySelectorAll('[role=\"dialog\"]').length === 2");
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        document.querySelector('.settings-scheduled-backup-directory-value > span')?.textContent
+      `),
+      "C:\\Smoke\\Patina\\backups",
+      "The local scheduling dialog lost the authoritative first-install backup directory",
+    );
     await evaluate(client!, sessionId, `
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     `);
@@ -1271,6 +1387,47 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       true,
       "Scheduled export BETA badge did not adapt to the dialog title",
     );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const dialog = document.querySelector('.settings-scheduled-export-dialog');
+          const schedule = dialog?.querySelector('.settings-scheduled-export-schedule');
+          const scheduleButtons = Array.from(schedule?.querySelectorAll('button') ?? []);
+          const changeDirectory = Array.from(dialog?.querySelectorAll('button') ?? [])
+            .find((node) => node.textContent?.trim() === '更改目录');
+          return schedule?.getAttribute('aria-disabled') === 'true'
+            && scheduleButtons.length === 2
+            && scheduleButtons.every((button) => button.disabled)
+            && changeDirectory?.disabled === true;
+        })()
+      `),
+      true,
+      "Disabled scheduled export controls did not match the scheduled backup disabled state",
+    );
+    await evaluate(client!, sessionId, `
+      document.querySelector('.settings-scheduled-export-dialog [role="switch"]')?.click();
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      "document.querySelector('.settings-scheduled-export-dialog [role=\"switch\"]')?.getAttribute('aria-checked') === 'true'",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const dialog = document.querySelector('.settings-scheduled-export-dialog');
+          const schedule = dialog?.querySelector('.settings-scheduled-export-schedule');
+          const scheduleButtons = Array.from(schedule?.querySelectorAll('button') ?? []);
+          const changeDirectory = Array.from(dialog?.querySelectorAll('button') ?? [])
+            .find((node) => node.textContent?.trim() === '更改目录');
+          return schedule?.getAttribute('aria-disabled') === 'false'
+            && scheduleButtons.every((button) => !button.disabled)
+            && changeDirectory?.disabled === false;
+        })()
+      `),
+      true,
+      "Enabled scheduled export controls remained disabled",
+    );
     await evaluate(client!, sessionId, `
       document.querySelector('.settings-scheduled-export-dialog [aria-label^="频率:"]')?.click();
     `);
@@ -1295,14 +1452,6 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       `),
       true,
       "Weekly scheduled export controls did not stay on one row",
-    );
-    await evaluate(client!, sessionId, `
-      document.querySelector('.settings-scheduled-export-dialog [role="switch"]')?.click();
-    `);
-    await waitForExpression(
-      client!,
-      sessionId,
-      "document.querySelector('.settings-scheduled-export-dialog [role=\"switch\"]')?.getAttribute('aria-checked') === 'true'",
     );
     await evaluate(client!, sessionId, `
       Array.from(document.querySelectorAll('.settings-scheduled-export-dialog button'))

@@ -95,8 +95,12 @@ export default function SettingsRemoteBackupPanel({
   const serverUrlRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState<RemoteBackupFormDraft>(() => buildInitialDraft(remoteBackup));
   const [passwordVisible, setPasswordVisible] = useState(false);
+  const [savedPasswordPreview, setSavedPasswordPreview] = useState<string | null>(null);
+  const [isRevealingPassword, setIsRevealingPassword] = useState(false);
+  const revealRequestGenerationRef = useRef(0);
   const wasConfigDialogOpenRef = useRef(false);
-  const busy = remoteBackup.isSaving
+  const busy = isRevealingPassword
+    || remoteBackup.isSaving
     || remoteBackup.isTesting
     || remoteBackup.isUploading
     || remoteBackup.isListing
@@ -105,16 +109,53 @@ export default function SettingsRemoteBackupPanel({
   const hasSavedConfigSecret = configured && remoteBackup.hasSecret;
 
   useEffect(() => {
-    const openedNow = remoteBackup.configDialogOpen && !wasConfigDialogOpenRef.current;
+    const wasOpen = wasConfigDialogOpenRef.current;
+    const openedNow = remoteBackup.configDialogOpen && !wasOpen;
+    const closedNow = !remoteBackup.configDialogOpen && wasOpen;
     wasConfigDialogOpenRef.current = remoteBackup.configDialogOpen;
     if (openedNow) {
       setDraft(buildInitialDraft(remoteBackup));
       setPasswordVisible(false);
+      setSavedPasswordPreview(null);
+    } else if (closedNow) {
+      revealRequestGenerationRef.current += 1;
+      setDraft(buildInitialDraft(remoteBackup));
+      setPasswordVisible(false);
+      setSavedPasswordPreview(null);
+      setIsRevealingPassword(false);
     }
   }, [remoteBackup.configDialogOpen, remoteBackup.config, hasSavedConfigSecret, remoteBackup]);
 
   const canUseRemote = configured && remoteBackup.hasSecret;
-  const handleTogglePasswordVisibility = () => setPasswordVisible((visible) => !visible);
+  const handleTogglePasswordVisibility = async () => {
+    if (passwordVisible) {
+      setPasswordVisible(false);
+      setSavedPasswordPreview(null);
+      return;
+    }
+    if (draft.password || !hasSavedConfigSecret) {
+      setPasswordVisible(true);
+      return;
+    }
+
+    const requestGeneration = ++revealRequestGenerationRef.current;
+    setIsRevealingPassword(true);
+    try {
+      const savedPassword = await remoteBackup.revealSavedPassword();
+      if (
+        revealRequestGenerationRef.current === requestGeneration
+        && wasConfigDialogOpenRef.current
+        && savedPassword !== null
+      ) {
+        setSavedPasswordPreview(savedPassword);
+        setPasswordVisible(true);
+      }
+    } finally {
+      if (revealRequestGenerationRef.current === requestGeneration) {
+        setIsRevealingPassword(false);
+      }
+    }
+  };
 
   return (
     <>
@@ -237,8 +278,11 @@ export default function SettingsRemoteBackupPanel({
             {UI_TEXT.settings.webDavPassword}
             <div className="relative w-full">
               <input
-                value={draft.password}
-                onChange={(event) => setDraft((current) => ({ ...current, password: event.target.value }))}
+                value={draft.password || savedPasswordPreview || ""}
+                onChange={(event) => {
+                  setSavedPasswordPreview(null);
+                  setDraft((current) => ({ ...current, password: event.target.value }));
+                }}
                 className="qp-input h-9 w-full pr-10"
                 type={passwordVisible ? "text" : "password"}
                 placeholder={hasSavedConfigSecret ? "••••••••" : undefined}
@@ -247,7 +291,7 @@ export default function SettingsRemoteBackupPanel({
               />
               <button
                 type="button"
-                onClick={handleTogglePasswordVisibility}
+                onClick={() => void handleTogglePasswordVisibility()}
                 disabled={busy}
                 aria-label={passwordVisible ? UI_TEXT.common.hidePassword : UI_TEXT.common.showPassword}
                 className="absolute right-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-[6px] text-[var(--qp-text-tertiary)] transition-colors hover:bg-[var(--qp-surface-muted)] hover:text-[var(--qp-text-secondary)] disabled:opacity-50"

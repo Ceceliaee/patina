@@ -16,27 +16,21 @@ import {
   type ScheduledBackupSnapshot,
 } from "../services/scheduledBackupService.ts";
 import { toUserVisibleStoragePath } from "../services/storagePathDisplay.ts";
+import {
+  formatScheduledDateTime as formatDateTime,
+  formatScheduledSize as formatSize,
+  scheduledMinutesToTime as minutesToTime,
+  scheduledTimeToMinutes as timeToMinutes,
+} from "../services/scheduledTaskPresentation.ts";
 
 interface SettingsBackupDialogProps {
   open: boolean;
   busy: boolean;
   hasRemoteBackupTarget: boolean;
-  defaultLocalBackupTarget: string;
   remoteBackupTargetSummary: string;
   onClose: () => void;
   onLocalBackup: () => void;
   onRemoteBackup: () => void;
-}
-
-export function minutesToTime(minutes: number): string {
-  const normalized = Math.max(0, Math.min(1439, Math.trunc(minutes)));
-  return `${String(Math.floor(normalized / 60)).padStart(2, "0")}:${String(normalized % 60).padStart(2, "0")}`;
-}
-
-export function timeToMinutes(value: string): number {
-  const match = /^(\d{2}):(\d{2})$/.exec(value);
-  if (!match) return 120;
-  return Number(match[1]) * 60 + Number(match[2]);
 }
 
 type ScheduledTargetKind = ScheduledBackupConfigInput["target"]["kind"];
@@ -44,7 +38,6 @@ type ScheduledTargetKind = ScheduledBackupConfigInput["target"]["kind"];
 function toDraft(
   snapshot: ScheduledBackupSnapshot,
   requestedTarget?: ScheduledTargetKind,
-  defaultLocalBackupTarget = "",
 ): ScheduledBackupConfigInput {
   const { config } = snapshot;
   const targetKind = requestedTarget ?? config.target.kind;
@@ -59,25 +52,9 @@ function toDraft(
         kind: "local",
         targetDir: config.target.kind === "local"
           ? config.target.targetDir
-          : defaultLocalBackupTarget,
+          : snapshot.defaultLocalTargetDir,
       },
   };
-}
-
-function formatDateTime(value: number | null): string {
-  if (value === null) return "";
-  return new Intl.DateTimeFormat(undefined, {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function formatSize(bytes: number | null): string {
-  if (bytes === null) return "";
-  return `${(bytes / 1048576).toFixed(bytes >= 10 * 1048576 ? 1 : 2)} MB`;
 }
 
 function scheduledErrorMessage(
@@ -102,7 +79,6 @@ export default function SettingsBackupDialog({
   open,
   busy,
   hasRemoteBackupTarget,
-  defaultLocalBackupTarget,
   remoteBackupTargetSummary,
   onClose,
   onLocalBackup,
@@ -141,7 +117,7 @@ export default function SettingsBackupDialog({
         setSnapshot(next);
         setDraft((current) => (
           replaceDraft || current === null || !dirtyRef.current
-            ? toDraft(next, scheduledTargetKind, defaultLocalBackupTarget)
+            ? toDraft(next, scheduledTargetKind)
             : current
         ));
         setLoadError(false);
@@ -161,7 +137,7 @@ export default function SettingsBackupDialog({
       disposed = true;
       unlisten?.();
     };
-  }, [defaultLocalBackupTarget, scheduledDialogOpen, scheduledTargetKind, reloadToken]);
+  }, [scheduledDialogOpen, scheduledTargetKind, reloadToken]);
 
   useEffect(() => {
     if (!open) {

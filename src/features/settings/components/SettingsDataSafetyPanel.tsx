@@ -599,7 +599,6 @@ export default function SettingsDataSafetyPanel({
             open
             busy={busy}
             hasRemoteBackupTarget={hasRemoteBackupTarget}
-            defaultLocalBackupTarget={storageSnapshot?.paths.backupDir ?? ""}
             remoteBackupTargetSummary={formatRemoteBackupTargetSummary(remoteBackup.config)}
             onClose={() => setBackupTargetDialogOpen(false)}
             onLocalBackup={() => {
