@@ -986,6 +986,7 @@ export const LOCALE_SOURCE_REVIEWS = {
     "settings.scheduledBackupCleanupWarning": "442dee37d07cfc8b",
     "settings.scheduledBackupLabels": "34df3520434e39f8",
     "export.scheduledErrors": "ec8d08bb1bfae374",
-    "export.scheduledTitle": "735da0ed899dc4c2"
+    "export.scheduledTitle": "735da0ed899dc4c2",
+    "data.heatmapError": "df18b03b78b265cb"
   }
 } as const;

@@ -253,6 +253,7 @@ export interface UiText {
     "destinationWeb": string;
     "duration": string;
     "heatmapDaily": string;
+    "heatmapError": string;
     "heatmapWeekly": string;
     "interactionHint": string;
     "monthlyAverage": string;

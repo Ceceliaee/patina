@@ -26,7 +26,15 @@ export interface HeatmapWeek {
 }
 
 export type HeatmapSelection = "recent" | number;
-export type HeatmapAvailability = "recorded" | "no-activity" | "unavailable" | "future";
+
+export function isDataHeatmapSelectionSettled(
+  loadedSelection: HeatmapSelection | null,
+  requestedSelection: HeatmapSelection,
+  coldError: boolean,
+): boolean {
+  return coldError || loadedSelection === requestedSelection;
+}
+type HeatmapAvailability = "recorded" | "no-activity" | "unavailable" | "future";
 
 export interface HeatmapRange {
   start: Date;

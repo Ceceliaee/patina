@@ -40,8 +40,9 @@ import {
 } from "./dataTrendRange.ts";
 import type { DataWebActivitySnapshotDependencies } from "./dataWebActivitySnapshotDependencies.ts";
 import { registerDataHeavyCacheClearer } from "./dataCacheLifecycle.ts";
+import { touchBoundedDataCacheEntry } from "./dataLruCache.ts";
 
-export interface DataWebDomainOption {
+interface DataWebDomainOption {
   normalizedDomain: string;
   displayName: string;
   category: AppCategory;
@@ -59,7 +60,7 @@ interface DataWebDomainAggregate extends DataWebDomainOption {
   monthDurations: Map<string, number>;
 }
 
-export interface DataWebTrendViewModel {
+interface DataWebTrendViewModel {
   range: ResolvedDataTrendRange;
   rangeLabel: string;
   granularity: "day" | "month";
@@ -73,7 +74,7 @@ export interface DataWebTrendViewModel {
   activeDateKeys: string[];
 }
 
-export interface DataWebActivitySnapshot {
+interface DataWebActivitySnapshot {
   records: WebActivityAggregateRecord[];
   domainCoverage: WebActivityDomainCoverage[];
   overrides: Record<string, WebDomainOverride>;
@@ -133,14 +134,12 @@ const defaultDependencies: DataWebActivitySnapshotDependencies = {
 };
 
 function touchSnapshotCacheEntry(cacheKey: string, snapshot: DataWebActivitySnapshot) {
-  snapshotCache.delete(cacheKey);
-  snapshotCache.set(cacheKey, snapshot);
-
-  while (snapshotCache.size > DATA_WEB_ACTIVITY_SNAPSHOT_CACHE_LIMIT) {
-    const oldestKey = snapshotCache.keys().next().value;
-    if (!oldestKey) break;
-    snapshotCache.delete(oldestKey);
-  }
+  touchBoundedDataCacheEntry(
+    snapshotCache,
+    cacheKey,
+    snapshot,
+    DATA_WEB_ACTIVITY_SNAPSHOT_CACHE_LIMIT,
+  );
 }
 
 function buildDailyBucketBoundaries(startMs: number, endMs: number): number[] {

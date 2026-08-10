@@ -67,6 +67,7 @@ export const MESSAGES = {
   "data.destinationWeb": "Web",
   "data.duration": "Duration",
   "data.heatmapDaily": "Daily",
+  "data.heatmapError": "The heatmap is temporarily unavailable",
   "data.heatmapWeekly": "Weekly",
   "data.interactionHint": "Double-click details · Ctrl select",
   "data.monthlyAverage": "Monthly avg.",

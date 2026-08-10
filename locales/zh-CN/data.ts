@@ -58,6 +58,7 @@ export const MESSAGES = {
   "data.destinationWeb": "网页",
   "data.duration": "时长",
   "data.heatmapDaily": "每日",
+  "data.heatmapError": "热力图暂时不可用",
   "data.heatmapWeekly": "每周",
   "data.interactionHint": "双击详情 · Ctrl 多选",
   "data.monthlyAverage": "月均",

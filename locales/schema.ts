@@ -1169,6 +1169,11 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
+  "data.heatmapError": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
   "data.heatmapWeekly": {
     "kind": "string",
     "params": [],

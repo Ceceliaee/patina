@@ -10,6 +10,7 @@ import {
   buildDataAppTrendViewModel as buildDataAppTrendViewModelRaw,
   buildYearOptions,
   getDataHeatmapSessionCacheSizeForTests,
+  getDataHeatmapSessionCacheStats,
   getCachedEarliestSessionStartTime,
   getCachedDataHeatmapSessions,
   getHeatmapRange,
@@ -19,6 +20,7 @@ import {
   type AggregateSessionRecord,
   type DataHeatmapDependencies,
 } from "../src/features/data/services/dataReadModel.ts";
+import { isDataHeatmapSelectionSettled } from "../src/features/data/services/dataHeatmapReadModel.ts";
 import { clearDataHeavyCaches } from "../src/features/data/services/dataCacheLifecycle.ts";
 import {
   prewarmDataFirstScreen,
@@ -749,6 +751,39 @@ await runTest("heatmap snapshot dedupes matching in-flight range loads", async (
   assert.equal(firstSnapshot.sessions, secondSnapshot.sessions);
   assert.equal(earliestLoadCount, 1);
   assert.equal(sessionLoadCount, 1);
+});
+
+await runTest("failed heatmap snapshots release pending state and remain retryable", async () => {
+  resetDataReadModelCacheForTests();
+  const nowMs = new Date(2026, 0, 3, 12, 0, 0).getTime();
+  let attempts = 0;
+  const deps: DataHeatmapDependencies = {
+    getEarliestSessionStartTime: async () => null,
+    getSessionsInRange: async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("heatmap unavailable");
+      return [];
+    },
+  };
+
+  await assert.rejects(loadDataHeatmapSnapshot("recent", nowMs, deps), /heatmap unavailable/);
+  assert.deepEqual(getDataHeatmapSessionCacheStats(), {
+    entries: 0,
+    limit: 2,
+    pendingEntries: 0,
+    earliestSessionStartTimeCached: false,
+  });
+
+  const recovered = await loadDataHeatmapSnapshot("recent", nowMs, deps);
+  assert.deepEqual(recovered.sessions, []);
+  assert.equal(attempts, 2);
+});
+
+await runTest("cold heatmap failures settle the requested selection without claiming stale data", () => {
+  assert.equal(isDataHeatmapSelectionSettled(null, "recent", true), true);
+  assert.equal(isDataHeatmapSelectionSettled(null, "recent", false), false);
+  assert.equal(isDataHeatmapSelectionSettled(2025, 2026, false), false);
+  assert.equal(isDataHeatmapSelectionSettled(2026, 2026, false), true);
 });
 
 await runTest("recent heatmap prewarm reuses a warm cache", async () => {

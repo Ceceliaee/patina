@@ -48,15 +48,15 @@ export {
   type DataHeatmapSnapshot,
 } from "./dataHeatmapSnapshot.ts";
 
-export type DataTrendRange = DataRollingTrendRange;
+type DataTrendRange = DataRollingTrendRange;
 
-export interface DataTrendPoint {
+interface DataTrendPoint {
   label: string;
   date: string | null;
   hours: number;
 }
 
-export interface DataTrendMetricLabels {
+interface DataTrendMetricLabels {
   total: string;
   average: string;
   averageHint: string;
@@ -87,13 +87,6 @@ export interface DataAppOption {
   percentage: number;
   averageDuration: number;
   activeDayCount: number;
-}
-
-export interface DataAppTrendPoint {
-  label: string;
-  date: string;
-  hours: number;
-  duration: number;
 }
 
 export interface DataDestinationChartSeries {
@@ -140,7 +133,7 @@ interface DataTrendAggregateContextOptions {
   includeAppBuckets?: boolean;
 }
 
-export interface DataAppDurationBucket {
+interface DataAppDurationBucket {
   appKey: string;
   appName: string;
   exeName: string;
@@ -149,7 +142,7 @@ export interface DataAppDurationBucket {
   monthDurations: Map<string, number>;
 }
 
-export interface DataDurationAggregate {
+interface DataDurationAggregate {
   totalDuration: number;
   dayDurations: Map<string, number>;
   monthDurations: Map<string, number>;
@@ -573,12 +566,6 @@ function resolveSelectedDataAppBuckets(
   return selectedBuckets;
 }
 
-export function getDataTrendRangeLabel(range: DataTrendRange, uiText: UiText) {
-  if (range === 7) return uiText.data.pastSevenDays;
-  if (range === 30) return uiText.data.pastThirtyDays;
-  return uiText.data.recentYear;
-}
-
 function resolveDataTrendViewRange(
   selection: DataTrendRange | ResolvedDataTrendRange,
   nowMs: number,
@@ -781,14 +768,4 @@ export function buildDataAppTrendViewModel(
     buildDataTrendAggregateContext(sessions, selection, nowMs, uiText, locale),
     selectedAppKeys,
   );
-}
-
-export function buildDataTrendViewModelsFromAggregate(
-  context: DataTrendAggregateContext,
-  selectedAppKeys: string | readonly string[] | null,
-) {
-  return {
-    overviewTrendViewModel: buildDataTrendViewModelFromAggregate(context),
-    appTrendViewModel: buildDataAppTrendViewModelFromAggregate(context, selectedAppKeys),
-  };
 }

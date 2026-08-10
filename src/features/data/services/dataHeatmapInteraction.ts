@@ -1,6 +1,6 @@
 import type { HeatmapWeek } from "./dataHeatmapReadModel.ts";
 
-export type HeatmapNavigationKey =
+type HeatmapNavigationKey =
   | "ArrowUp"
   | "ArrowDown"
   | "ArrowLeft"
@@ -13,7 +13,7 @@ interface HeatmapCellPosition {
   weekdayIndex: number;
 }
 
-export interface DataHeatmapKeyboardModel {
+interface DataHeatmapKeyboardModel {
   datesByPosition: ReadonlyArray<ReadonlyArray<string | null>>;
   datesInOrder: readonly string[];
   positionsByDate: ReadonlyMap<string, HeatmapCellPosition>;

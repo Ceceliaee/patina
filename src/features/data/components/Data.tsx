@@ -24,6 +24,7 @@ import {
 import {
   buildActivityHeatmap,
   buildYearOptions,
+  isDataHeatmapSelectionSettled,
   type HeatmapSelection,
 } from "../services/dataHeatmapReadModel.ts";
 import {
@@ -351,10 +352,16 @@ export default function Data({
     initialCachedHeatmapSessions ? "recent" : null,
   );
   const [heatmapLoading, setHeatmapLoading] = useState(!initialCachedHeatmapSessions);
+  const [heatmapError, setHeatmapError] = useState(false);
+  const [heatmapRetryKey, setHeatmapRetryKey] = useState(0);
   const [destinationHeatmapSnapshot, setDestinationHeatmapSnapshot] = useState<{
+    error: boolean;
+    hasSnapshot: boolean;
     loading: boolean;
     sessions: AggregateSessionRecord[];
   }>(() => ({
+    error: false,
+    hasSnapshot: Boolean(initialCachedHeatmapSessions),
     loading: !initialCachedHeatmapSessions,
     sessions: initialCachedHeatmapSessions ?? [],
   }));
@@ -471,6 +478,10 @@ export default function Data({
             });
           }
         }
+      } catch {
+        if (!cancelled) {
+          setHeatmapError(true);
+        }
       } finally {
         if (!cancelled) {
           setHeatmapLoading(false);
@@ -480,6 +491,7 @@ export default function Data({
     const scheduleLoadYear = () => {
       const nowForRange = Date.now();
       const cachedSessions = getCachedDataHeatmapSessions(selectedHeatmapView, nowForRange);
+      setHeatmapError(false);
 
       if (cachedSessions) {
         startTransition(() => {
@@ -507,7 +519,7 @@ export default function Data({
       cancelled = true;
       cancelScheduledLoad?.();
     };
-  }, [selectedHeatmapView, refreshKey]);
+  }, [selectedHeatmapView, refreshKey, heatmapRetryKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -515,36 +527,57 @@ export default function Data({
     const cachedSessions = getCachedDataHeatmapSessions(selectedDestinationHeatmapView, nowForRange);
     if (cachedSessions) {
       setDestinationHeatmapSnapshot({
+        error: false,
+        hasSnapshot: true,
         loading: false,
         sessions: cachedSessions,
       });
     } else {
-      setDestinationHeatmapSnapshot({ loading: true, sessions: [] });
+      setDestinationHeatmapSnapshot({
+        error: false,
+        hasSnapshot: false,
+        loading: true,
+        sessions: [],
+      });
     }
 
-    void loadDataHeatmapSnapshot(selectedDestinationHeatmapView, nowForRange).then((snapshot) => {
-      if (cancelled) return;
-      startTransition(() => {
-        setDestinationHeatmapSnapshot({
-          loading: false,
-          sessions: snapshot.sessions,
+    const loadDestinationSnapshot = async () => {
+      try {
+        const snapshot = await loadDataHeatmapSnapshot(selectedDestinationHeatmapView, nowForRange);
+        if (cancelled) return;
+        startTransition(() => {
+          setDestinationHeatmapSnapshot({
+            error: false,
+            hasSnapshot: true,
+            loading: false,
+            sessions: snapshot.sessions,
+          });
         });
-      });
-      if (snapshot.earliestStartTime) {
-        const earliestYear = new Date(snapshot.earliestStartTime).getFullYear();
-        if (
-          selectedDestinationHeatmapView !== "recent"
-          && selectedDestinationHeatmapView < earliestYear
-        ) {
-          setSelectedDestinationHeatmapView(earliestYear);
+        if (snapshot.earliestStartTime) {
+          const earliestYear = new Date(snapshot.earliestStartTime).getFullYear();
+          if (
+            selectedDestinationHeatmapView !== "recent"
+            && selectedDestinationHeatmapView < earliestYear
+          ) {
+            setSelectedDestinationHeatmapView(earliestYear);
+          }
         }
+      } catch {
+        if (cancelled) return;
+        setDestinationHeatmapSnapshot({
+          error: true,
+          hasSnapshot: Boolean(cachedSessions),
+          loading: false,
+          sessions: cachedSessions ?? [],
+        });
       }
-    });
+    };
+    void loadDestinationSnapshot();
 
     return () => {
       cancelled = true;
     };
-  }, [refreshKey, selectedDestinationHeatmapView]);
+  }, [heatmapRetryKey, refreshKey, selectedDestinationHeatmapView]);
 
   const matchingBootstrapSnapshot = bootstrapSnapshot
     && bootstrapSnapshot.mappingVersion === mappingVersion
@@ -1211,6 +1244,10 @@ export default function Data({
     ?? (canUseBootstrapHeatmap ? bootstrapHeatmapRows : null)
     ?? heatmapPlaceholderRows
     ?? EMPTY_HEATMAP_ROWS;
+  const heatmapColdError = heatmapError && !heatmapLoading
+    && !freshHeatmapRows
+    && !lastHeatmapRows
+    && !canUseBootstrapHeatmap;
   const heatmapGranularityOptions = useMemo<Array<{ value: HeatmapGranularity; label: string }>>(() => [
     { value: "daily", label: UI_TEXT.data.heatmapDaily },
     { value: "weekly", label: UI_TEXT.data.heatmapWeekly },
@@ -1257,6 +1294,9 @@ export default function Data({
   const visibleDestinationHeatmapLoading = isWebDestination
     ? webHeatmapLoading
     : destinationHeatmapSnapshot.loading;
+  const destinationHeatmapColdError = !isWebDestination
+    && destinationHeatmapSnapshot.error
+    && !destinationHeatmapSnapshot.hasSnapshot;
   const trustedReadModelsReady = Boolean(
     overviewTrend.snapshot
     && appTrend.snapshot
@@ -1265,12 +1305,12 @@ export default function Data({
   );
   const destinationContentReady = isWebDestination
     ? webHeatmapReady && !webHeatmapLoading
-    : !destinationHeatmapSnapshot.loading;
+    : !destinationHeatmapSnapshot.loading
+      && (destinationHeatmapSnapshot.hasSnapshot || destinationHeatmapSnapshot.error);
   const dataContentComplete = Boolean(
     trustedReadModelsReady
-    && freshHeatmapRows
-    && !heatmapLoading
-    && yearSessionsView === selectedHeatmapView
+    && (freshHeatmapRows || heatmapColdError)
+    && isDataHeatmapSelectionSettled(yearSessionsView, selectedHeatmapView, heatmapColdError)
     && destinationContentReady
     && destinationPanelCommitted,
   );
@@ -1520,6 +1560,9 @@ export default function Data({
               onSelectAdjacentHeatmapView={selectAdjacentHeatmapView}
               onOpenHistoryDate={onOpenHistoryDate}
               loading={heatmapLoading}
+              errorMessage={heatmapColdError ? UI_TEXT.data.heatmapError : null}
+              refreshFailed={heatmapError && !heatmapColdError}
+              onRetry={() => setHeatmapRetryKey((value) => value + 1)}
             />
           </div>
 
@@ -1570,6 +1613,15 @@ export default function Data({
                 onSelectAdjacentHeatmapView={selectAdjacentDestinationHeatmapView}
                 onOpenHistoryDate={onOpenHistoryDate}
                 loading={visibleDestinationHeatmapLoading}
+                errorMessage={
+                  destinationHeatmapColdError ? UI_TEXT.data.heatmapError : null
+                }
+                refreshFailed={
+                  !isWebDestination
+                  && destinationHeatmapSnapshot.error
+                  && destinationHeatmapSnapshot.hasSnapshot
+                }
+                onRetry={() => setHeatmapRetryKey((value) => value + 1)}
               />
             )}
             chartAxis={destinationChartAxis}

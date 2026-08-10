@@ -3568,6 +3568,83 @@ export async function runDataScenarios(
     );
   });
 
+  await runTest("data heatmap failures settle explicitly and remain retryable", async () => {
+    await evaluate(
+      client!,
+      sessionId,
+      `localStorage.setItem("__time_tracker_reject_heatmap_query", "1")`,
+    );
+    await client!.command("Page.navigate", { url: appUrl }, sessionId);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('[aria-label="数据"]'))`,
+      45_000,
+    );
+    await evaluate(
+      client!,
+      sessionId,
+      `document.querySelector('[aria-label="数据"]')?.click()`,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector(".data-overview .data-heatmap-panel [role=status]")
+        ?.textContent?.includes("热力图暂时不可用")
+        && document.querySelector("[data-data-content-state]")
+          ?.getAttribute("data-data-content-state") === "complete"`,
+      45_000,
+      "activity heatmap cold error",
+    );
+    assert.equal(
+      await evaluate(
+        client!,
+        sessionId,
+        `Boolean(document.querySelector(".data-overview .data-heatmap-panel [role=status] button"))
+          && !document.querySelector(".data-overview .data-heatmap-loading-state")
+          && document.querySelector("[data-data-content-state]")
+            ?.getAttribute("data-data-content-state") === "complete"`,
+      ),
+      true,
+    );
+
+    await evaluate(client!, sessionId, `
+      (() => {
+        localStorage.removeItem("__time_tracker_reject_heatmap_query");
+        document.querySelector(".data-overview .data-heatmap-panel [role=status] button")?.click();
+      })()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector(".data-overview .data-heatmap-weeks"))
+        && !document.querySelector(".data-overview .data-heatmap-panel [role=status]")
+        && !document.querySelector(".data-overview .data-heatmap-loading-state")`,
+      45_000,
+      "activity heatmap retry success",
+    );
+
+    const destinationRetry = await evaluate(client!, sessionId, `
+      (() => {
+        const retry = document.querySelector(
+          ".data-app-panel .data-heatmap-panel [role=status] button",
+        );
+        retry?.click();
+        return Boolean(retry);
+      })()
+    `);
+    if (destinationRetry) {
+      await waitForExpression(
+        client!,
+        sessionId,
+        `Boolean(document.querySelector(".data-app-panel .data-heatmap-weeks"))
+          && !document.querySelector(".data-app-panel .data-heatmap-panel [role=status]")`,
+        45_000,
+        "destination heatmap retry success",
+      );
+    }
+  });
+
   await runTest("data web trend failures preserve trustworthy content and remain retryable", async () => {
     await client!.command("Page.navigate", { url: appUrl }, sessionId);
     await waitForExpression(

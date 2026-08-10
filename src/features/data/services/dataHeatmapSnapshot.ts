@@ -29,12 +29,10 @@ const heatmapSnapshotPromises = new Map<string, Promise<DataHeatmapSnapshot>>();
 let earliestSessionStartTimeCache: number | null | undefined;
 let dataReadModelCacheEpoch = 0;
 
-function resolveDefaultDataHeatmapDependencies(): DataHeatmapDependencies {
-  return {
-    getEarliestSessionStartTime,
-    getSessionsInRange: getSessionSummariesInRangeByLocalDay,
-  };
-}
+const defaultDataHeatmapDependencies: DataHeatmapDependencies = {
+  getEarliestSessionStartTime,
+  getSessionsInRange: getSessionSummariesInRangeByLocalDay,
+};
 
 export function resetDataReadModelCacheForTests() {
   clearDataReadModelCache();
@@ -76,7 +74,7 @@ export function getCachedDataHeatmapSessions(selection: HeatmapSelection, nowMs:
 export async function loadDataHeatmapSnapshot(
   selection: HeatmapSelection,
   nowMs: number = Date.now(),
-  deps: DataHeatmapDependencies = resolveDefaultDataHeatmapDependencies(),
+  deps: DataHeatmapDependencies = defaultDataHeatmapDependencies,
 ): Promise<DataHeatmapSnapshot> {
   const range = getHeatmapRange(selection, nowMs);
   const cacheKey = getHeatmapSelectionKey(selection, nowMs);

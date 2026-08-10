@@ -60,11 +60,19 @@
   gap: 8px;
 }
 
+.data-heatmap-panel-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
 .data-app-panel-heading h3 {
   flex: 0 0 auto;
 }
 
-.data-app-refresh-status {
+.data-app-refresh-status,
+.data-heatmap-refresh-status {
   display: inline-flex;
   min-width: 0;
   align-items: center;
@@ -75,11 +83,13 @@
   white-space: nowrap;
 }
 
-.data-app-refresh-status:has(.qp-inline-action) {
+.data-app-refresh-status:has(.qp-inline-action),
+.data-heatmap-refresh-status:has(.qp-inline-action) {
   color: var(--qp-text-secondary);
 }
 
-.data-app-refresh-status .qp-inline-action {
+.data-app-refresh-status .qp-inline-action,
+.data-heatmap-refresh-status .qp-inline-action {
   padding: 2px 4px;
 }
 

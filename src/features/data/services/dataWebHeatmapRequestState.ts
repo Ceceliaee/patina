@@ -1,4 +1,4 @@
-export type DataWebHeatmapRequestStatus =
+type DataWebHeatmapRequestStatus =
   | "idle"
   | "loading-cold"
   | "ready"
@@ -6,14 +6,14 @@ export type DataWebHeatmapRequestStatus =
   | "refresh-failed-with-retained-data"
   | "cold-failed";
 
-export interface DataWebHeatmapRequestState<Snapshot> {
+interface DataWebHeatmapRequestState<Snapshot> {
   presentationKey: string | null;
   requestKey: string | null;
   snapshot: Snapshot | null;
   status: DataWebHeatmapRequestStatus;
 }
 
-export type DataWebHeatmapRequestAction<Snapshot> =
+type DataWebHeatmapRequestAction<Snapshot> =
   | {
     type: "begin";
     presentationKey: string;

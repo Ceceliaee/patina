@@ -32,6 +32,9 @@ interface DataHeatmapPanelProps {
   onSelectAdjacentHeatmapView: (delta: number) => void;
   onOpenHistoryDate?: (dateKey: string) => void;
   loading?: boolean;
+  errorMessage: string | null;
+  refreshFailed: boolean;
+  onRetry: () => void;
 }
 
 function formatHeatmapShortDate(dateKey: string, locale: string) {
@@ -123,6 +126,9 @@ function DataHeatmapPanel({
   onSelectAdjacentHeatmapView,
   onOpenHistoryDate,
   loading = false,
+  errorMessage,
+  refreshFailed,
+  onRetry,
 }: DataHeatmapPanelProps) {
   const UI_TEXT = useLocaleText();
   const locale = useLocale();
@@ -263,7 +269,21 @@ function DataHeatmapPanel({
   return (
     <div className={`data-heatmap-panel ${compact ? "data-heatmap-panel-compact" : ""}`}>
       <div className="data-heatmap-panel-header">
-        <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">{resolvedTitle}</h3>
+        <div className="data-heatmap-panel-heading">
+          <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">{resolvedTitle}</h3>
+          {refreshFailed ? (
+            <div className="data-heatmap-refresh-status" role="status">
+              <span>{UI_TEXT.data.webTrendRefreshError}</span>
+              <button
+                type="button"
+                className="qp-inline-action qp-inline-action-accent"
+                onClick={onRetry}
+              >
+                {UI_TEXT.data.webTrendRetry}
+              </button>
+            </div>
+          ) : null}
+        </div>
         <div className="data-heatmap-header-actions">
           <QuietSegmentedFilter
             value={granularity}
@@ -285,12 +305,23 @@ function DataHeatmapPanel({
         </div>
       </div>
 
-      <div className="data-heatmap data-heatmap-calendar mt-5">
-        <div className="data-heatmap-content">
-          <div
-            className={loading ? "data-heatmap-scroll data-heatmap-loading-state" : "data-heatmap-scroll"}
-            style={{ "--data-heatmap-week-count": rows.length } as CSSProperties}
-          >
+      {errorMessage ? (
+        <div
+          className="mt-5 flex min-h-32 flex-col items-center justify-center gap-2 text-sm text-[var(--qp-text-secondary)]"
+          role="status"
+        >
+          <span>{errorMessage}</span>
+          <button type="button" className="qp-control" onClick={onRetry}>
+            {UI_TEXT.data.webTrendRetry}
+          </button>
+        </div>
+      ) : (
+        <div className="data-heatmap data-heatmap-calendar mt-5">
+          <div className="data-heatmap-content">
+            <div
+              className={loading ? "data-heatmap-scroll data-heatmap-loading-state" : "data-heatmap-scroll"}
+              style={{ "--data-heatmap-week-count": rows.length } as CSSProperties}
+            >
             <div className="data-heatmap-months" aria-hidden>
               <span />
               {rows.map((week) => (
@@ -394,7 +425,8 @@ function DataHeatmapPanel({
             </div>
           </div>
         </div>
-      </div>
+        </div>
+      )}
       <DataHeatmapTooltip
         containerRef={heatmapWeeksRef}
         granularity={granularity}
