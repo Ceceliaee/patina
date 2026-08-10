@@ -1,12 +1,12 @@
 import type { View } from "../types/view";
+import {
+  readBrowserStorage,
+  removeBrowserStorage,
+  writeBrowserStorage,
+} from "../../platform/browser/browserStorageGateway.ts";
 
 const LAST_ACTIVE_VIEW_KEY = "patina:last-active-view";
 const PENDING_UPDATE_RELAUNCH_VIEW_KEY = "patina:pending-update-relaunch-view";
-
-function getStorage(): Storage | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage;
-}
 
 function isView(value: string | null): value is View {
   return value === "dashboard"
@@ -19,41 +19,29 @@ function isView(value: string | null): value is View {
 }
 
 export function rememberLastActiveView(view: View) {
-  const storage = getStorage();
-  if (!storage) return;
-  storage.setItem(LAST_ACTIVE_VIEW_KEY, view);
+  writeBrowserStorage(LAST_ACTIVE_VIEW_KEY, view);
 }
 
 export function readLastActiveView(): View | null {
-  const storage = getStorage();
-  if (!storage) return null;
-
-  const storedView = storage.getItem(LAST_ACTIVE_VIEW_KEY);
+  const storedView = readBrowserStorage(LAST_ACTIVE_VIEW_KEY);
   return isView(storedView) ? storedView : null;
 }
 
 export function markPendingUpdateRelaunchViewRestore() {
-  const storage = getStorage();
-  if (!storage) return;
-  storage.setItem(PENDING_UPDATE_RELAUNCH_VIEW_KEY, "1");
+  writeBrowserStorage(PENDING_UPDATE_RELAUNCH_VIEW_KEY, "1");
 }
 
 export function clearPendingUpdateRelaunchViewRestore() {
-  const storage = getStorage();
-  if (!storage) return;
-  storage.removeItem(PENDING_UPDATE_RELAUNCH_VIEW_KEY);
+  removeBrowserStorage(PENDING_UPDATE_RELAUNCH_VIEW_KEY);
 }
 
 export function consumePendingUpdateRelaunchView(): View | null {
-  const storage = getStorage();
-  if (!storage) return null;
-
-  const pendingValue = storage.getItem(PENDING_UPDATE_RELAUNCH_VIEW_KEY);
+  const pendingValue = readBrowserStorage(PENDING_UPDATE_RELAUNCH_VIEW_KEY);
 
   if (pendingValue !== "1") {
     return null;
   }
 
-  storage.removeItem(PENDING_UPDATE_RELAUNCH_VIEW_KEY);
+  removeBrowserStorage(PENDING_UPDATE_RELAUNCH_VIEW_KEY);
   return readLastActiveView();
 }

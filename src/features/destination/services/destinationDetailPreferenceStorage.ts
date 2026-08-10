@@ -1,4 +1,5 @@
 import { DEFAULT_DESTINATION_DETAIL_ZOOM_HOURS } from "./destinationDetailTimelineViewport.ts";
+import { getBrowserLocalStorage } from "../../../platform/browser/browserStorageGateway.ts";
 
 const DESTINATION_DETAIL_TIMELINE_ZOOM_HOURS_KEY =
   "patina:destination-detail-timeline-zoom-hours:v1";
@@ -7,20 +8,11 @@ const LEGACY_DETAIL_TIMELINE_ZOOM_HOURS_KEY =
 const DETAIL_MIN_SECS_KEY = "patina:destination-detail-min-secs:v1";
 const LEGACY_DETAIL_MIN_SECS_KEY = "patina:data-detail-min-secs";
 
-export const DEFAULT_DETAIL_MIN_SECS = 60;
+const DEFAULT_DETAIL_MIN_SECS = 60;
 export const DETAIL_MIN_SECS_RANGE = {
   min: 60,
   max: 600,
 } as const;
-
-function getStorage(): Storage | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-}
 
 function parseZoomHours(value: string | null): number | null {
   if (value === null || value.trim() === "") return null;
@@ -55,7 +47,7 @@ export function clampDetailMinSecs(value: number) {
 }
 
 export function readDestinationDetailTimelineZoomHours(): number {
-  const storage = getStorage();
+  const storage = getBrowserLocalStorage();
   if (!storage) return DEFAULT_DESTINATION_DETAIL_ZOOM_HOURS;
 
   try {
@@ -70,7 +62,7 @@ export function readDestinationDetailTimelineZoomHours(): number {
 }
 
 export function rememberDestinationDetailTimelineZoomHours(zoomHours: number) {
-  const storage = getStorage();
+  const storage = getBrowserLocalStorage();
   if (!storage || !Number.isFinite(zoomHours) || zoomHours < 1 || zoomHours > 24) {
     return;
   }
@@ -86,7 +78,7 @@ export function rememberDestinationDetailTimelineZoomHours(zoomHours: number) {
 }
 
 export function readDetailMinSecs(): number {
-  const storage = getStorage();
+  const storage = getBrowserLocalStorage();
   if (!storage) return DEFAULT_DETAIL_MIN_SECS;
 
   try {
@@ -99,7 +91,7 @@ export function readDetailMinSecs(): number {
 }
 
 export function saveDetailMinSecs(seconds: number) {
-  const storage = getStorage();
+  const storage = getBrowserLocalStorage();
   const normalizedSeconds = parseMinSecs(String(seconds));
   if (!storage || normalizedSeconds === null) return;
 

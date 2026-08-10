@@ -2,21 +2,13 @@ import {
   DEFAULT_HISTORY_TIMELINE_ZOOM_HOURS,
   type HistoryTimelineDisplayMode,
 } from "./historyTimelineViewModel.ts";
+import { getBrowserLocalStorage } from "../../../platform/browser/browserStorageGateway.ts";
 
 const HISTORY_TIMELINE_MODE_KEY = "patina:history-timeline-mode";
 const HISTORY_DAY_DISTRIBUTION_MODE_KEY = "patina:history-day-distribution-mode";
 const HISTORY_TIMELINE_ZOOM_HOURS_KEY = "patina:history-timeline-zoom-hours";
 
 export type DayDistributionMode = "app" | "category" | "web";
-
-function getStorage(): Storage | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-}
 
 function isDayDistributionMode(value: string | null): value is DayDistributionMode {
   return value === "app" || value === "category" || value === "web";
@@ -53,7 +45,7 @@ function parseHistoryTimelineZoomHours(value: string | null): number | null {
 }
 
 export function readHistoryTimelineMode(): HistoryTimelineDisplayMode {
-  const storage = getStorage();
+  const storage = getBrowserLocalStorage();
   if (!storage) return "app";
 
   try {
@@ -65,7 +57,7 @@ export function readHistoryTimelineMode(): HistoryTimelineDisplayMode {
 }
 
 export function rememberHistoryTimelineMode(mode: HistoryTimelineDisplayMode) {
-  const storage = getStorage();
+  const storage = getBrowserLocalStorage();
   if (!storage) return;
 
   try {
@@ -76,7 +68,7 @@ export function rememberHistoryTimelineMode(mode: HistoryTimelineDisplayMode) {
 }
 
 export function readHistoryTimelineZoomHours(): number {
-  const storage = getStorage();
+  const storage = getBrowserLocalStorage();
   if (!storage) return DEFAULT_HISTORY_TIMELINE_ZOOM_HOURS;
 
   try {
@@ -88,7 +80,7 @@ export function readHistoryTimelineZoomHours(): number {
 }
 
 export function rememberHistoryTimelineZoomHours(zoomHours: number) {
-  const storage = getStorage();
+  const storage = getBrowserLocalStorage();
   if (!storage || !Number.isFinite(zoomHours) || zoomHours < 1 || zoomHours > 24) return;
 
   try {
@@ -99,7 +91,7 @@ export function rememberHistoryTimelineZoomHours(zoomHours: number) {
 }
 
 export function readHistoryDayDistributionMode(): DayDistributionMode {
-  const storage = getStorage();
+  const storage = getBrowserLocalStorage();
   if (!storage) return "app";
 
   try {
@@ -111,7 +103,7 @@ export function readHistoryDayDistributionMode(): DayDistributionMode {
 }
 
 export function rememberHistoryDayDistributionMode(mode: DayDistributionMode) {
-  const storage = getStorage();
+  const storage = getBrowserLocalStorage();
   if (!storage) return;
 
   try {

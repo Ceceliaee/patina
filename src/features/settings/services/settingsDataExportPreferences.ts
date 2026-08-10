@@ -4,17 +4,13 @@ import {
   isDataExportProtocolField,
   type DataExportProtocolField,
 } from "../../../platform/persistence/dataExportGateway.ts";
+import { getBrowserLocalStorage } from "../../../platform/browser/browserStorageGateway.ts";
 
 const EXPORT_RANGE_MODE_KEY = "patina:export-range-mode";
 const EXPORT_FORMAT_KEY = "patina:export-format";
 
-export const DEFAULT_EXPORT_RANGE_MODE: ExportRangeMode = "month";
-export const DEFAULT_EXPORT_FORMAT: ExportFormat = "csv";
-
-function getStorage(): Storage | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage;
-}
+const DEFAULT_EXPORT_RANGE_MODE: ExportRangeMode = "month";
+const DEFAULT_EXPORT_FORMAT: ExportFormat = "csv";
 
 function isExportRangeMode(value: string | null): value is ExportRangeMode {
   return value === "day" || value === "week" || value === "month" || value === "year";
@@ -46,7 +42,7 @@ export function readExportFields(
   format: ExportFormat,
   fallback: readonly DataExportProtocolField[],
 ): DataExportProtocolField[] {
-  const storage = getStorage();
+  const storage = getBrowserLocalStorage();
   if (!storage) return [...fallback];
   try {
     const raw = storage.getItem(exportFieldsKey(format));
@@ -57,7 +53,7 @@ export function readExportFields(
 }
 
 export function rememberExportFields(format: ExportFormat, fields: readonly string[]) {
-  const storage = getStorage();
+  const storage = getBrowserLocalStorage();
   if (!storage) return;
   try {
     const normalized = normalizeExportFields(fields, DATA_EXPORT_PROTOCOL_FIELDS);
@@ -68,7 +64,7 @@ export function rememberExportFields(format: ExportFormat, fields: readonly stri
 }
 
 export function readExportRangeMode(): ExportRangeMode {
-  const storage = getStorage();
+  const storage = getBrowserLocalStorage();
   if (!storage) return DEFAULT_EXPORT_RANGE_MODE;
 
   try {
@@ -80,7 +76,7 @@ export function readExportRangeMode(): ExportRangeMode {
 }
 
 export function rememberExportRangeMode(mode: ExportRangeMode) {
-  const storage = getStorage();
+  const storage = getBrowserLocalStorage();
   if (!storage) return;
 
   try {
@@ -91,7 +87,7 @@ export function rememberExportRangeMode(mode: ExportRangeMode) {
 }
 
 export function readExportFormat(): ExportFormat {
-  const storage = getStorage();
+  const storage = getBrowserLocalStorage();
   if (!storage) return DEFAULT_EXPORT_FORMAT;
 
   try {
@@ -103,7 +99,7 @@ export function readExportFormat(): ExportFormat {
 }
 
 export function rememberExportFormat(format: ExportFormat) {
-  const storage = getStorage();
+  const storage = getBrowserLocalStorage();
   if (!storage) return;
 
   try {

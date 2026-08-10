@@ -1,22 +1,18 @@
 import type { TimerMode } from "../../../shared/types/tools.ts";
 import type { ReminderFormMode, ReminderMode, ToolsSection } from "../types.ts";
+import { getBrowserLocalStorage } from "../../../platform/browser/browserStorageGateway.ts";
 
 const TOOLS_SECTION_KEY = "patina:tools-section";
 const TOOLS_TIMER_MODE_KEY = "patina:tools-timer-mode";
 const TOOLS_REMINDER_MODE_KEY = "patina:tools-reminder-mode";
 const TOOLS_REMINDER_FORM_MODE_KEY = "patina:tools-reminder-form-mode";
 
-function getStorage(): Storage | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage;
-}
-
 function readStoredValue<T extends string>(
   key: string,
   fallback: T,
   isValid: (value: string | null) => value is T,
 ): T {
-  const storage = getStorage();
+  const storage = getBrowserLocalStorage();
   if (!storage) return fallback;
 
   try {
@@ -28,7 +24,7 @@ function readStoredValue<T extends string>(
 }
 
 function rememberStoredValue(key: string, value: string) {
-  const storage = getStorage();
+  const storage = getBrowserLocalStorage();
   if (!storage) return;
 
   try {
