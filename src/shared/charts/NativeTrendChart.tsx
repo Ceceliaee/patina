@@ -3,11 +3,11 @@ import QuietChartTooltip, {
   type QuietChartTooltipItem,
 } from "../components/QuietChartTooltip.tsx";
 
-export interface NativeTrendChartRow {
+interface NativeTrendChartRow {
   label: string;
 }
 
-export interface NativeTrendChartSeries {
+interface NativeTrendChartSeries {
   color: string;
   dataKey: string;
   key: string;

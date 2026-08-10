@@ -6,7 +6,7 @@ import { pickPreferredAppName } from "./displayNameScoring.ts";
 
 const DIRECT_MERGE_GAP_MS = 5_000;
 
-export type SessionDiagnosticCode = "tracker_stale_live_session";
+type SessionDiagnosticCode = "tracker_stale_live_session";
 
 export interface DiagnosableHistorySession extends HistorySession {
   diagnosticCodes?: SessionDiagnosticCode[];
@@ -18,7 +18,7 @@ export interface SessionRange {
   endMs: number;
 }
 
-export interface CompileSessionsOptions extends SessionRange {
+interface CompileSessionsOptions extends SessionRange {
   minSessionSecs: number;
   keepLatestLiveSession?: boolean;
 }

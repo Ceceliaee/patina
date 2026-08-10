@@ -15,7 +15,7 @@ import {
 import QuietButton from "./QuietButton.tsx";
 import { QuietCalendarMonthFrame } from "./QuietCalendar.tsx";
 
-export type QuietDateRangePickerMode = "custom" | "day" | "week" | "month" | "year";
+type QuietDateRangePickerMode = "custom" | "day" | "week" | "month" | "year";
 
 export type QuietDateRangePickerSelection =
   | { kind: "custom"; startDateKey: string; endDateKey: string }

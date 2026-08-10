@@ -8,7 +8,7 @@ export interface HourlyActivityPoint {
   minutes: number;
 }
 
-export interface HourlyCategorySeries {
+interface HourlyCategorySeries {
   dataKey: string;
   category: AppCategory | null;
   name: string;
@@ -45,7 +45,7 @@ interface CategoryDescriptor {
 
 const HOURLY_CATEGORY_SLOT_PREFIX = "slot";
 
-export function getHourlyCategorySlotDataKey(index: number) {
+function getHourlyCategorySlotDataKey(index: number) {
   return `${HOURLY_CATEGORY_SLOT_PREFIX}${index}`;
 }
 

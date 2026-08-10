@@ -1,4 +1,4 @@
-export interface WebActivityTimelineMergeItem {
+interface WebActivityTimelineMergeItem {
   normalizedDomain: string;
   startTime: number;
   endTime: number | null;

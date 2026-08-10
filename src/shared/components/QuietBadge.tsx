@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 
-export type QuietBadgeTone = "neutral" | "warning" | "subtle";
-export type QuietBadgeSize = "compact" | "inline" | "regular";
-export type QuietBadgeVariant = "default" | "beta";
+type QuietBadgeTone = "neutral" | "warning" | "subtle";
+type QuietBadgeSize = "compact" | "inline" | "regular";
+type QuietBadgeVariant = "default" | "beta";
 
 interface Props {
   children: ReactNode;

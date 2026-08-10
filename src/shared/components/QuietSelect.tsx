@@ -12,7 +12,7 @@ import {
 import { createPortal } from "react-dom";
 import { ChevronDown } from "lucide-react";
 
-export interface QuietSelectOption<T extends string | number> {
+interface QuietSelectOption<T extends string | number> {
   value: T;
   label: string;
   disabled?: boolean;

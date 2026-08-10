@@ -26,19 +26,3 @@ export interface UpdateSnapshot {
   releasePageUrl: string | null;
   assetDownloadUrl: string | null;
 }
-
-export function createIdleUpdateSnapshot(currentVersion = "0.0.0"): UpdateSnapshot {
-  return {
-    currentVersion,
-    status: "idle",
-    latestVersion: null,
-    releaseNotes: null,
-    releaseDate: null,
-    errorMessage: null,
-    errorStage: null,
-    downloadedBytes: null,
-    totalBytes: null,
-    releasePageUrl: null,
-    assetDownloadUrl: null,
-  };
-}

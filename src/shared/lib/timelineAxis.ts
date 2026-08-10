@@ -13,7 +13,7 @@ const TIMELINE_AXIS_INTERVALS_MS = [
   6 * HOUR_MS,
 ] as const;
 
-export interface TimelineAxisViewport {
+interface TimelineAxisViewport {
   startMs: number;
   endMs: number;
   durationMs: number;

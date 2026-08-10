@@ -1,7 +1,7 @@
 import type { UpdateErrorStage, UpdateSnapshot } from "../../../shared/types/update";
 import { SUPPORTED_LOCALES, type Locale, type UiText } from "../../../shared/i18n/generated/contract.ts";
 
-export type UpdateAction =
+type UpdateAction =
   | "check"
   | "open_confirm"
   | "open_release_page"
@@ -15,14 +15,14 @@ export interface UpdateActionModel {
   emphasis?: "primary" | "secondary";
 }
 
-export interface UpdateProgressModel {
+interface UpdateProgressModel {
   percent: number | null;
   label: string;
   valueText: string | null;
   indeterminate: boolean;
 }
 
-export interface UpdateStatusPanelModel {
+interface UpdateStatusPanelModel {
   statusTitle: string;
   statusDetail: string | null;
   primaryAction: UpdateActionModel;
@@ -30,7 +30,7 @@ export interface UpdateStatusPanelModel {
   progress: UpdateProgressModel | null;
 }
 
-export interface UpdateConfirmDialogModel {
+interface UpdateConfirmDialogModel {
   title: string;
   versionCompareLabel: string;
   confirmDescription: string;

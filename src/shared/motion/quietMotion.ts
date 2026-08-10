@@ -14,7 +14,3 @@ export function resolveQuietMotionMode(options: {
 
   return "baseline";
 }
-
-export function quietMotionClass(className: string, mode: QuietMotionMode): string {
-  return mode === "enhanced" ? className : "";
-}

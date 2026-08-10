@@ -9,7 +9,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-export type QuietAnchoredPopoverPlacement = "top" | "bottom";
+type QuietAnchoredPopoverPlacement = "top" | "bottom";
 
 interface QuietAnchoredPopoverPosition {
   left: number;

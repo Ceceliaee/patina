@@ -1,4 +1,4 @@
-export interface TimelineMergeSegment {
+interface TimelineMergeSegment {
   startTime: number;
   endTime: number;
 }

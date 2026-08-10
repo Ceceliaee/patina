@@ -1,7 +1,7 @@
 import { forwardRef, type ButtonHTMLAttributes } from "react";
 
 export type QuietButtonTone = "primary" | "secondary" | "danger";
-export type QuietButtonSize = "compact" | "regular" | "large";
+type QuietButtonSize = "compact" | "regular" | "large";
 
 interface QuietButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   tone?: QuietButtonTone;

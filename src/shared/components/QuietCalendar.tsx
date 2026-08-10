@@ -47,7 +47,7 @@ interface QuietCalendarMonthFrameProps {
   onNextMonth: () => void;
 }
 
-export interface QuietCalendarProps {
+interface QuietCalendarProps {
   calendarMonth: Date;
   selectedDate: Date;
   minDate?: Date | null;
