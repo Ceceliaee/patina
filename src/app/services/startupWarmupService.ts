@@ -39,7 +39,7 @@ export type StartupWarmupTaskId =
   | "tools-runtime-snapshot"
   | "about-bootstrap";
 
-export type StartupWarmupTaskStatus =
+type StartupWarmupTaskStatus =
   | "idle"
   | "scheduled"
   | "running"
@@ -48,31 +48,31 @@ export type StartupWarmupTaskStatus =
   | "cancelled"
   | "skipped";
 
-export interface StartupWarmupTaskSnapshot {
+interface StartupWarmupTaskSnapshot {
   durationMs: number | null;
   errorMessage: string | null;
   startedAtMs: number | null;
   status: StartupWarmupTaskStatus;
 }
 
-export interface StartupWarmupSnapshot {
+interface StartupWarmupSnapshot {
   completedAtMs: number | null;
   startedAtMs: number | null;
   tasks: Record<StartupWarmupTaskId, StartupWarmupTaskSnapshot>;
 }
 
-export interface StartupWarmupController {
+interface StartupWarmupController {
   cancel: () => void;
   ready: Promise<void>;
   snapshot: () => StartupWarmupSnapshot;
 }
 
-export type StartupWarmupMode =
+type StartupWarmupMode =
   | "hidden-start"
   | "visible-start"
   | "foreground-open";
 
-export interface StartupWarmupOptions {
+interface StartupWarmupOptions {
   initialDelayMs?: number;
   mode?: StartupWarmupMode;
   runtimeReady?: Promise<unknown>;
@@ -118,7 +118,7 @@ interface StartupWarmupTaskPolicy {
   viewChunks: boolean;
 }
 
-export interface StartupWarmupRefreshOptions {
+interface StartupWarmupRefreshOptions {
   includeDashboard?: boolean;
   includeData?: boolean;
   includeHistory?: boolean;
@@ -170,7 +170,7 @@ const defaultStartupWarmupDeps: StartupWarmupDeps = {
     const handle = globalThis.setTimeout(callback, delayMs);
     return () => globalThis.clearTimeout(handle);
   },
-  nowMs: () => Date.now(),
+  nowMs: Date.now,
   warn: console.warn,
 };
 
@@ -347,6 +347,7 @@ export function startStartupWarmup(
       (error: unknown) => ({ error, value: null }),
     )
     : Promise.resolve({ error: null, value: null });
+  let controller: StartupWarmupController;
 
   const ready = (async () => {
     await delay(initialDelayMs);
@@ -469,10 +470,12 @@ export function startStartupWarmup(
     })
     .finally(() => {
       snapshot.completedAtMs = resolvedDeps.nowMs();
-      activeStartupWarmup = null;
+      if (activeStartupWarmup === controller) {
+        activeStartupWarmup = null;
+      }
     });
 
-  activeStartupWarmup = {
+  controller = {
     cancel: () => {
       cancelled = true;
       for (const taskId of STARTUP_WARMUP_TASKS) {
@@ -480,13 +483,16 @@ export function startStartupWarmup(
           snapshot.tasks[taskId].status = "cancelled";
         }
       }
-      activeStartupWarmup = null;
+      if (activeStartupWarmup === controller) {
+        activeStartupWarmup = null;
+      }
     },
     ready,
     snapshot: () => cloneStartupWarmupSnapshot(snapshot),
   };
+  activeStartupWarmup = controller;
 
-  return activeStartupWarmup;
+  return controller;
 }
 
 export function scheduleStartupWarmupRefresh(

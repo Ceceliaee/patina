@@ -377,6 +377,42 @@ await runTest("startup warmup exposes scheduling and cancels queued work", async
   assert.equal(controller.snapshot().tasks["view-chunks"].status, "cancelled");
 });
 
+await runTest("an older cancelled warmup cannot clear a newer active controller", async () => {
+  const firstRuntimeReady = createDeferred();
+  const secondRuntimeReady = createDeferred();
+  const firstEvents: string[] = [];
+  const secondEvents: string[] = [];
+  const first = startStartupWarmup({
+    initialDelayMs: 0,
+    taskGapMs: 0,
+    runtimeReady: firstRuntimeReady.promise,
+    views: [],
+  }, {
+    ...createWarmupDeps(firstEvents),
+    warn: () => undefined,
+  });
+  await waitForEventCount(firstEvents, 4);
+
+  first.cancel();
+  const second = startStartupWarmup({
+    initialDelayMs: 0,
+    taskGapMs: 0,
+    runtimeReady: secondRuntimeReady.promise,
+    views: [],
+  }, {
+    ...createWarmupDeps(secondEvents),
+    warn: () => undefined,
+  });
+
+  firstRuntimeReady.resolve();
+  await first.ready;
+
+  const reused = startStartupWarmup();
+  assert.equal(reused, second);
+  secondRuntimeReady.resolve();
+  await second.ready;
+});
+
 await runTest("startup warmup refresh debounces repeated tracking changes", async () => {
   const scheduler = createTaskScheduler();
   const events: string[] = [];
@@ -447,6 +483,17 @@ await runTest("startup warmup refresh can skip invisible page refreshes", async 
   await flushPromises();
 
   assert.deepEqual(events, []);
+});
+
+await runTest("default refresh scheduling can be cancelled without executing runtime work", async () => {
+  const cancel = scheduleStartupWarmupRefresh(60_000, {
+    includeDashboard: false,
+    includeHistory: false,
+    includeData: false,
+  });
+
+  cancel();
+  await flushPromises();
 });
 
 await runTest("dashboard snapshot cache keeps a small LRU set", () => {
