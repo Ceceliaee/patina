@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
 use std::thread;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
@@ -139,8 +138,5 @@ fn emit_power_event(state: &str) {
 }
 
 fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or(0)
+    crate::platform::clock::unix_timestamp_millis_u64()
 }

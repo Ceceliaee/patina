@@ -1,7 +1,6 @@
 use super::super::runtime_snapshot::{TrackingRuntimeProbeDiagnostics, TrackingRuntimeProbeStatus};
 use crate::platform::windows::foreground as tracker;
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::task::spawn_blocking;
 use tokio::time::{timeout, Duration};
 
@@ -341,10 +340,7 @@ impl Drop for ForegroundProbeInFlightGuard {
 }
 
 fn now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as i64
+    crate::platform::clock::unix_timestamp_millis_i64()
 }
 
 #[cfg(test)]

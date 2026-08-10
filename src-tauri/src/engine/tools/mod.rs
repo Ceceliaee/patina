@@ -4,7 +4,7 @@ use crate::domain::tools::{
     SoftwareReminderNotification, TimerMode, TimerStatus, ToolAlert, ToolAlertKind, ToolReminder,
     ToolsRuntimeSnapshot,
 };
-use chrono::Local;
+use chrono::{Local, Utc};
 use serde::Serialize;
 use std::future::Future;
 use std::pin::Pin;
@@ -679,10 +679,7 @@ fn snapshot_has_runtime_boundary_work(snapshot: &ToolsRuntimeSnapshot) -> bool {
 }
 
 fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as i64)
-        .unwrap_or_default()
+    Utc::now().timestamp_millis().max(0)
 }
 
 fn date_key() -> String {

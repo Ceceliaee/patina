@@ -444,10 +444,7 @@ pub fn build_overlap_where_clause(filter: ExportTimeFilter) -> (String, Vec<i64>
 }
 
 pub fn current_time_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis().min(i64::MAX as u128) as i64)
-        .unwrap_or_default()
+    crate::platform::clock::unix_timestamp_millis_i64()
 }
 
 pub fn ms_to_datetime_str(ms: i64) -> String {

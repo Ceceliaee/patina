@@ -278,10 +278,7 @@ pub(crate) async fn maintain_once(pool: &Pool<Sqlite>) -> Result<bool, String> {
 }
 
 pub(crate) fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|value| value.as_millis() as i64)
-        .unwrap_or_default()
+    crate::platform::clock::unix_timestamp_millis_i64()
 }
 
 #[cfg(test)]

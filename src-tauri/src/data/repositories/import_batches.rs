@@ -339,10 +339,7 @@ fn build_batch_id(source_fingerprint: &str, imported_at: i64) -> String {
 }
 
 fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|value| value.as_millis() as i64)
-        .unwrap_or_default()
+    crate::platform::clock::unix_timestamp_millis_i64()
 }
 
 #[cfg(test)]

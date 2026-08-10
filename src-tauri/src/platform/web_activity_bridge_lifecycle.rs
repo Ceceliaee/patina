@@ -1,6 +1,6 @@
 use serde::Serialize;
 use std::io;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 const RETRY_INITIAL_DELAY_MS: u64 = 1_000;
 const RETRY_MAX_DELAY_MS: u64 = 30_000;
@@ -208,10 +208,7 @@ pub(crate) fn is_retryable_bind_error(category: WebActivityBridgeErrorCategory) 
 }
 
 pub(crate) fn unix_now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or_default()
+    crate::platform::clock::unix_timestamp_millis_u64()
 }
 
 #[cfg(test)]

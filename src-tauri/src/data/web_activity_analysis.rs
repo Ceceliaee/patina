@@ -253,10 +253,7 @@ pub async fn load_web_activity_aggregate_range<R: Runtime>(
 }
 
 fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as i64)
-        .unwrap_or_default()
+    crate::platform::clock::unix_timestamp_millis_i64()
 }
 
 #[cfg(test)]

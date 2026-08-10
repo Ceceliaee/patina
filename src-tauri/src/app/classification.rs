@@ -6,7 +6,6 @@ use crate::domain::tracking::{
     TRACKING_REASON_APP_EXCLUDED_SEALED, TRACKING_REASON_WEB_DOMAIN_EXCLUDED_SEALED,
 };
 use crate::engine::tracking::runtime::emit_tracking_data_changed;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager, Runtime};
 
 pub async fn apply_recording_policy_changes<R: Runtime>(
@@ -41,8 +40,5 @@ pub async fn apply_recording_policy_changes<R: Runtime>(
 }
 
 fn now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as i64
+    crate::platform::clock::unix_timestamp_millis_i64()
 }

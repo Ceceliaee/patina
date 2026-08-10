@@ -38,8 +38,5 @@ fn emit_refresh<R: Runtime>(app: &AppHandle<R>, reason: &str) {
 }
 
 fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or_default()
+    crate::platform::clock::unix_timestamp_millis_u64()
 }
