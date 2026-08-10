@@ -32,7 +32,7 @@ export function formatHms(ms: number): string {
   return `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`;
 }
 
-export function formatCompactDuration(ms: number): string {
+function formatCompactDuration(ms: number): string {
   const safeMs = Math.max(0, ms);
   if (safeMs >= MS_PER_HOUR) {
     return formatHms(safeMs);
@@ -42,19 +42,19 @@ export function formatCompactDuration(ms: number): string {
   return `${pad2(minutes)}:${pad2(seconds)}`;
 }
 
-export function getTimerElapsedMs(timer: ToolTimer, nowMs: number): number {
+function getTimerElapsedMs(timer: ToolTimer, nowMs: number): number {
   const runningDelta = timer.status === "running" && timer.startedAt !== null
     ? Math.max(0, nowMs - timer.startedAt)
     : 0;
   return Math.max(0, timer.accumulatedMs + runningDelta);
 }
 
-export function getTimerRemainingMs(timer: ToolTimer, nowMs: number): number {
+function getTimerRemainingMs(timer: ToolTimer, nowMs: number): number {
   const durationMs = timer.durationMs ?? 0;
   return Math.max(0, durationMs - getTimerElapsedMs(timer, nowMs));
 }
 
-export function getPomodoroRemainingMs(run: ToolPomodoroRun, nowMs: number): number {
+function getPomodoroRemainingMs(run: ToolPomodoroRun, nowMs: number): number {
   const phaseDuration = getPomodoroPhaseDurationMs(run);
   const baseRemaining = run.phaseRemainingMs ?? phaseDuration;
   if (run.status !== "running" || run.phaseStartedAt === null) {
@@ -63,7 +63,7 @@ export function getPomodoroRemainingMs(run: ToolPomodoroRun, nowMs: number): num
   return Math.max(0, baseRemaining - Math.max(0, nowMs - run.phaseStartedAt));
 }
 
-export function getPomodoroPhaseDurationMs(run: ToolPomodoroRun): number {
+function getPomodoroPhaseDurationMs(run: ToolPomodoroRun): number {
   if (run.phase === "short_break") return run.shortBreakMs;
   if (run.phase === "long_break") return run.longBreakMs;
   return run.focusMs;

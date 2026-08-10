@@ -1,9 +1,9 @@
 import type { PomodoroPhase, ReminderStatus, TimerMode, TimerStatus } from "../../shared/types/tools.ts";
 
 export type ToolsSection = "reminders" | "timer" | "pomodoro";
-export type LegacyToolsSection = "timing";
-export type TimingMode = "reminder" | "timer";
-export type ToolsOpenTimingMode = TimingMode | TimerMode;
+type LegacyToolsSection = "timing";
+type TimingMode = "reminder" | "timer";
+type ToolsOpenTimingMode = TimingMode | TimerMode;
 export type ReminderMode = "event" | "software";
 export type ReminderFormMode = "relative" | "absolute";
 

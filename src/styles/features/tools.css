@@ -223,26 +223,6 @@
   gap: 12px;
 }
 
-.tools-mode-toolbar {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.tools-mode-toolbar p,
-.tools-mode-description {
-  margin: 0;
-  color: var(--qp-text-secondary);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.tools-mode-toolbar p {
-  min-width: 0;
-}
-
 .tools-mode-switch-row {
   display: flex;
   min-height: 30px;
@@ -978,8 +958,7 @@
   }
 
   .tools-panel-header,
-  .tools-subpanel-header,
-  .tools-mode-toolbar {
+  .tools-subpanel-header {
     height: auto;
     align-items: stretch;
     flex-direction: column;

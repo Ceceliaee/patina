@@ -45,7 +45,7 @@ const DEFAULT_SNAPSHOT: ToolsRuntimeSnapshot = {
 const EMPTY_REMINDER_ROWS: ReminderRowViewModel[] = [];
 const EMPTY_SOFTWARE_REMINDER_RULE_ROWS: SoftwareReminderRuleRowViewModel[] = [];
 
-export interface UseToolsPageStateOptions {
+interface UseToolsPageStateOptions {
   activeSection?: ToolsSection;
   onError?: (message: string) => void;
   uiText: UiText;

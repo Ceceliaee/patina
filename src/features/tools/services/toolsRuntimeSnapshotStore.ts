@@ -9,7 +9,7 @@ interface ToolsRuntimeSnapshotStoreDeps {
   warn: (message: string, error: unknown) => void;
 }
 
-export interface ToolsRuntimeSnapshotStore {
+interface ToolsRuntimeSnapshotStore {
   getCurrentSnapshot: () => ToolsRuntimeSnapshot | null;
   publishSnapshot: (snapshot: ToolsRuntimeSnapshot) => void;
   refreshSnapshot: () => Promise<ToolsRuntimeSnapshot>;

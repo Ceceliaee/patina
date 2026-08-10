@@ -1,6 +1,6 @@
 import type { ToolSoftwareReminderAppCandidate } from "../../../shared/types/tools.ts";
 
-export function softwareReminderCandidateLabel(candidate: ToolSoftwareReminderAppCandidate) {
+function softwareReminderCandidateLabel(candidate: ToolSoftwareReminderAppCandidate) {
   return `${candidate.appName} (${candidate.exeName})`;
 }
 
@@ -8,7 +8,7 @@ export function softwareReminderCandidateInputValue(candidate: ToolSoftwareRemin
   return candidate.appName;
 }
 
-export function findSoftwareReminderAppCandidate(
+function findSoftwareReminderAppCandidate(
   value: string,
   candidates: readonly ToolSoftwareReminderAppCandidate[],
 ) {
