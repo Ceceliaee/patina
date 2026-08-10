@@ -19,7 +19,7 @@ export interface QuickClassificationCategoryOption {
   label: string;
 }
 
-export interface QuickClassificationOverridePatch {
+interface QuickClassificationOverridePatch {
   category?: UserAssignableAppCategory | null;
   displayName?: string | null;
 }

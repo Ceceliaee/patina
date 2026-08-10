@@ -99,7 +99,7 @@ const LEGACY_CATEGORY_BY_KEYWORD: Array<{
   { category: "utility", keywords: ["todesk", "teamviewer", "anydesk", "terminal", "flash", "snip", "screenshot", "tool", "utility"] },
 ];
 
-export interface LegacyObservedApp {
+interface LegacyObservedApp {
   exeName: string;
   appName?: string;
 }

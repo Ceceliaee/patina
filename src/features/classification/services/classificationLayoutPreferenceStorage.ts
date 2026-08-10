@@ -1,18 +1,15 @@
+import { getBrowserLocalStorage } from "../../../platform/browser/browserStorageGateway.ts";
+
 export type MappingObjectMode = "app" | "web";
 
 const CLASSIFICATION_OBJECT_MODE_KEY = "patina:classification-object-mode";
-
-function getStorage(): Storage | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage;
-}
 
 function isMappingObjectMode(value: string | null): value is MappingObjectMode {
   return value === "app" || value === "web";
 }
 
 export function readClassificationObjectMode(): MappingObjectMode {
-  const storage = getStorage();
+  const storage = getBrowserLocalStorage();
   if (!storage) return "app";
 
   try {
@@ -24,7 +21,7 @@ export function readClassificationObjectMode(): MappingObjectMode {
 }
 
 export function rememberClassificationObjectMode(mode: MappingObjectMode) {
-  const storage = getStorage();
+  const storage = getBrowserLocalStorage();
   if (!storage) return;
 
   try {

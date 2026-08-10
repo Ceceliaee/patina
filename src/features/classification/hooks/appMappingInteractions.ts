@@ -12,7 +12,7 @@ import {
 
 type SaveStatus = "idle" | "saving" | "saved";
 
-export interface AppMappingNameEditState {
+interface AppMappingNameEditState {
   draftState: ClassificationDraftState;
   nameDrafts: Record<string, string>;
   nameEditSnapshots: Record<string, AppOverride | null>;
@@ -20,7 +20,7 @@ export interface AppMappingNameEditState {
   skipNextNameBlurExe: string | null;
 }
 
-export interface WebDomainNameEditState {
+interface WebDomainNameEditState {
   draftState: ClassificationDraftState;
   webNameDrafts: Record<string, string>;
   webNameEditSnapshots: Record<string, WebDomainOverride | null>;
@@ -28,7 +28,7 @@ export interface WebDomainNameEditState {
   skipNextWebNameBlurDomain: string | null;
 }
 
-export interface AppMappingSaveFlowInput {
+interface AppMappingSaveFlowInput {
   savedState: ClassificationDraftState | null;
   draftState: ClassificationDraftState | null;
   webDomainCandidates: ObservedWebDomainCandidate[];
@@ -36,14 +36,14 @@ export interface AppMappingSaveFlowInput {
   saving: boolean;
 }
 
-export interface AppMappingSaveFlowDeps {
+interface AppMappingSaveFlowDeps {
   commitDraftChanges: (
     saved: ClassificationDraftState,
     draft: ClassificationDraftState,
   ) => Promise<void>;
 }
 
-export interface AppMappingBootstrapSnapshot {
+interface AppMappingBootstrapSnapshot {
   observedWebDomains: ObservedWebDomainCandidate[];
   loadedOverrides: ClassificationDraftState["overrides"];
   loadedWebDomainOverrides: ClassificationDraftState["webDomainOverrides"];
@@ -53,7 +53,7 @@ export interface AppMappingBootstrapSnapshot {
   loadedDeletedCategories: ClassificationDraftState["deletedCategories"];
 }
 
-export interface AppMappingSaveFlowResult {
+interface AppMappingSaveFlowResult {
   accepted: boolean;
   skippedReason: "missing-state" | "no-changes" | "saving" | null;
   nextSavedState: ClassificationDraftState | null;
@@ -64,13 +64,13 @@ export interface AppMappingSaveFlowResult {
   error: unknown | null;
 }
 
-export interface DeleteObservedSessionsDeps {
+interface DeleteObservedSessionsDeps {
   confirmDelete: () => Promise<boolean>;
   deleteObservedAppSessions: (exeName: string, scope: "today" | "all") => Promise<void>;
   onSessionsDeleted?: () => void;
 }
 
-export interface DeleteObservedSessionsFlowResult {
+interface DeleteObservedSessionsFlowResult {
   deleted: boolean;
 }
 

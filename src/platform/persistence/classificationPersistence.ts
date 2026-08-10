@@ -13,12 +13,12 @@ import {
   type ActivityReadPath,
 } from "./activityReadModelGateway.ts";
 
-export interface SettingKeyValueRow {
+interface SettingKeyValueRow {
   key: string;
   value: string;
 }
 
-export interface SettingKeyRow {
+interface SettingKeyRow {
   key: string;
 }
 
@@ -26,7 +26,7 @@ interface RawSessionExeNameRow {
   exe_name: string;
 }
 
-export interface RawObservedSessionCandidateRow {
+interface RawObservedSessionCandidateRow {
   record_id: number;
   origin: TimeRecordOrigin;
   exe_name: string;
@@ -36,7 +36,7 @@ export interface RawObservedSessionCandidateRow {
   capacity_end_time: number | null;
 }
 
-export interface SessionExeNameRow {
+interface SessionExeNameRow {
   exeName: string;
 }
 
@@ -75,7 +75,7 @@ export interface RecordedAppCatalogQueryInput {
   limit: number;
 }
 
-export interface RecordedAppCatalogQuery {
+interface RecordedAppCatalogQuery {
   sql: string;
   params: Array<string | number>;
 }
@@ -274,7 +274,7 @@ export async function loadObservedSessionStats(
   return buildObservedSessionStats(candidates, sinceMs, nowMs);
 }
 
-export function escapeSqlLikePattern(value: string): string {
+function escapeSqlLikePattern(value: string): string {
   return value
     .replace(/\\/g, "\\\\")
     .replace(/%/g, "\\%")

@@ -113,7 +113,7 @@ export function normalizeWebDomainOverride(
   return hasMeaningfulValue ? next : null;
 }
 
-export function areClassificationOverridesEqual(
+function areClassificationOverridesEqual(
   left: AppOverride | null,
   right: AppOverride | null,
 ): boolean {
@@ -128,7 +128,7 @@ export function areClassificationOverridesEqual(
     && normalizedLeft.captureTitle === normalizedRight.captureTitle;
 }
 
-export function areWebDomainOverridesEqual(
+function areWebDomainOverridesEqual(
   left: WebDomainOverride | null,
   right: WebDomainOverride | null,
 ): boolean {

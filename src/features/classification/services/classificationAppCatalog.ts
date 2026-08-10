@@ -14,16 +14,16 @@ import type { ObservedAppCandidate } from "./classificationStore.ts";
 import type { UserAssignableAppCategory } from "../../../shared/classification/categoryTokens.ts";
 
 export const CLASSIFICATION_APP_CATALOG_CARD_LIMIT = 60;
-export const CLASSIFICATION_APP_CATALOG_RAW_PAGE_LIMIT = 120;
+const CLASSIFICATION_APP_CATALOG_RAW_PAGE_LIMIT = 120;
 export const CLASSIFICATION_APP_CATALOG_MAX_RAW_PAGES = 4;
 
-export interface ClassificationAppCatalogBatchInput {
+interface ClassificationAppCatalogBatchInput {
   cursor: RecordedAppCatalogCursor | null;
   searchQuery: string;
   seenExeNames: readonly string[];
 }
 
-export interface ClassificationAppCatalogBatchDeps {
+interface ClassificationAppCatalogBatchDeps {
   loadRecordedPage: (input: {
     cursor: RecordedAppCatalogCursor | null;
     searchQuery: string;
@@ -31,7 +31,7 @@ export interface ClassificationAppCatalogBatchDeps {
   }) => Promise<RecordedAppCatalogPage>;
 }
 
-export interface ClassificationAppCatalogBatchResult {
+interface ClassificationAppCatalogBatchResult {
   candidates: ObservedAppCandidate[];
   displayNameRanks: Record<string, number>;
   nextCursor: RecordedAppCatalogCursor | null;
@@ -44,12 +44,12 @@ interface ClassificationAppCatalogLoadAllInput {
   onBatch: (candidates: ObservedAppCandidate[], hasMore: boolean) => void;
 }
 
-export interface ClassificationAppCatalogLoadResult {
+interface ClassificationAppCatalogLoadResult {
   candidates: ObservedAppCandidate[];
   sourceRevision: number;
 }
 
-export type ClassificationAppCatalogSnapshotStatus =
+type ClassificationAppCatalogSnapshotStatus =
   | "cold"
   | "ready"
   | "refreshing"
@@ -61,7 +61,7 @@ export interface CompleteAppCatalogSnapshot {
   completedAtMs: number;
 }
 
-export interface ClassificationAppCatalogSnapshotState {
+interface ClassificationAppCatalogSnapshotState {
   status: ClassificationAppCatalogSnapshotStatus;
   committed: CompleteAppCatalogSnapshot | null;
   requestGeneration: number;

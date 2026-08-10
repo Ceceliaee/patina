@@ -38,21 +38,12 @@ type ClassificationBootstrapSnapshot = {
   loadedDeletedCategories: ClassificationDraftState["deletedCategories"];
 };
 
-export function normalizeHexColor(colorValue: string | undefined): string | undefined {
+function normalizeHexColor(colorValue: string | undefined): string | undefined {
   const raw = (colorValue ?? "").trim();
   if (!raw) return undefined;
   const normalized = raw.startsWith("#") ? raw : `#${raw}`;
   if (!/^#[0-9A-Fa-f]{6}$/.test(normalized)) return undefined;
   return normalized.toUpperCase();
-}
-
-export function fallbackDisplayName(exeName: string): string {
-  return exeName
-    .replace(/\.exe$/i, "")
-    .split(/[_\-\s.]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
 }
 
 export function buildAppMappingOverride(params: AppMappingOverrideParams): AppOverride | null {

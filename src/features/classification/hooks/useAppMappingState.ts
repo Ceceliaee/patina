@@ -62,7 +62,7 @@ import {
 import { useClassificationAppCatalog } from "./useClassificationAppCatalog.ts";
 
 
-export interface UseAppMappingStateOptions {
+interface UseAppMappingStateOptions {
   icons: Record<string, string>;
   onDirtyChange?: (dirty: boolean) => void;
   onOverridesChanged?: () => void;

@@ -89,7 +89,7 @@ export interface ClassificationBootstrapDeps {
   loadDeletedCategories: () => Promise<AppCategory[]>;
 }
 
-export interface PreparedImportedClassification {
+interface PreparedImportedClassification {
   mutations: ClassificationSettingMutation[];
   result: ImportedClassificationResult;
   applyRuntime: () => void;

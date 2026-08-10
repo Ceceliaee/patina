@@ -2,8 +2,8 @@ import {
   getAppIcon,
   getCachedAppIconsForExecutables,
   loadAppIconsForExecutables,
-  resolveAppIconKeys,
 } from "../../../platform/persistence/appIconRuntimeCache.ts";
+import { resolveAppIconKeys } from "../../../shared/classification/appIconIdentity.ts";
 
 let classificationPresentationIcons: Record<string, string> = {};
 

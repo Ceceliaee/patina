@@ -63,7 +63,7 @@ export type { ObservedWebDomainCandidate };
 
 type DeleteAppSessionScope = "today" | "all";
 
-export interface AppOverrideTransitionResult {
+interface AppOverrideTransitionResult {
   canonicalExe: string | null;
   override: AppOverride | null;
   mutations: ClassificationSettingMutation[];
@@ -503,24 +503,6 @@ export async function loadCategoryLabelOverrides(): Promise<Record<string, strin
   }
 
   return overrides;
-}
-
-export async function saveCategoryLabelOverride(
-  category: AppCategory,
-  label: string | null,
-): Promise<void> {
-  const key = `${CATEGORY_LABEL_OVERRIDE_KEY_PREFIX}${category}`;
-  if (!isPersistableLabelOverrideCategory(category)) {
-    await deleteSettingValue(key);
-    return;
-  }
-  const normalizedLabel = normalizeCategoryLabel(label ?? undefined);
-  if (!normalizedLabel) {
-    await deleteSettingValue(key);
-    return;
-  }
-
-  await upsertSettingValue(key, normalizedLabel);
 }
 
 function buildSaveCategoryLabelOverrideMutations(

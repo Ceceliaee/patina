@@ -2,6 +2,7 @@ import { useCallback, useMemo } from "react";
 import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
 import { useIconThemeColors } from "../../../shared/hooks/useIconThemeColors";
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
+import { resolveStableDomainColor } from "../../../shared/classification/domainColor.ts";
 import {
   isExtendedCategory,
   normalizeCategoryLabelInput,
@@ -51,30 +52,13 @@ export function cloneObservedWebDomainCandidates(
   return observed.map((candidate) => ({ ...candidate }));
 }
 
-export function resolveUserAssignableCategory(
+function resolveUserAssignableCategory(
   category: AppCategory | undefined,
 ): UserAssignableAppCategory {
   if (category && (isExtendedCategory(category) || USER_ASSIGNABLE_CATEGORY_SET.has(category))) {
     return category as UserAssignableAppCategory;
   }
   return "other";
-}
-
-function stableDomainColor(normalizedDomain: string) {
-  const palette = [
-    "#36AC7E",
-    "#4790CF",
-    "#6F7AE6",
-    "#B07E55",
-    "#35A69E",
-    "#C56A73",
-    "#8C6FA1",
-  ];
-  let hash = 0;
-  for (const char of normalizedDomain) {
-    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-  }
-  return palette[hash % palette.length];
 }
 
 export function useAppMappingDerivedState({
@@ -213,7 +197,7 @@ export function useAppMappingDerivedState({
     if (category !== "other") {
       return resolveCategoryColor(category);
     }
-    return stableDomainColor(candidate.normalizedDomain);
+    return resolveStableDomainColor(candidate.normalizedDomain);
   }, [draftWebDomainOverrides, resolveCategoryColor, resolveWebDomainCategory, webDomainIconThemeColors]);
 
   const resolveWebDomainEnabled = useCallback((candidate: ObservedWebDomainCandidate) => (

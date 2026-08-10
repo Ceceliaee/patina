@@ -3,14 +3,14 @@ import type { AppCategory } from "../../shared/classification/categoryTokens.ts"
 export type CandidateFilter = "all" | "other" | "classified" | "excluded";
 export type { ObservedAppCandidate } from "./services/classificationStore";
 
-export interface QuickAppClassificationTarget {
+interface QuickAppClassificationTarget {
   kind: "app";
   exeName: string;
   displayName: string;
   category: AppCategory;
 }
 
-export interface QuickWebClassificationTarget {
+interface QuickWebClassificationTarget {
   kind: "web";
   normalizedDomain: string;
   displayName: string;
