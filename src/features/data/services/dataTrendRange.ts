@@ -3,7 +3,11 @@ import type { SessionRange } from "../../../shared/lib/sessionReadCompiler.ts";
 import type { UiText } from "../../../shared/i18n/index.ts";
 import {
   addLocalDays,
+  countInclusiveLocalDays,
   formatLocalDateKey,
+  getIsoWeek,
+  maxLocalDate,
+  minLocalDate,
   parseLocalDateKey,
   startOfLocalDay,
 } from "../../../shared/lib/localDate.ts";
@@ -37,7 +41,7 @@ export interface DataTrendRangeDraft {
   range: ResolvedDataTrendRange | null;
 }
 
-export const DATA_ROLLING_TREND_RANGES: DataRollingTrendRange[] = [7, 30, 365];
+const DATA_ROLLING_TREND_RANGES: DataRollingTrendRange[] = [7, 30, 365];
 export const DATA_TREND_PICKER_MODES: DataTrendPickerMode[] = ["custom", "week", "month", "year"];
 export const DEFAULT_DATA_TREND_RANGE_SELECTION: DataTrendRangeSelection = {
   kind: "rolling",
@@ -46,39 +50,12 @@ export const DEFAULT_DATA_TREND_RANGE_SELECTION: DataTrendRangeSelection = {
 
 export {
   addLocalDays,
+  countInclusiveLocalDays,
   parseLocalDateKey,
   startOfLocalDay,
 };
 
-export const toLocalDateKey = formatLocalDateKey;
-
-function minDate(left: Date, right: Date): Date {
-  return left.getTime() <= right.getTime() ? left : right;
-}
-
-function maxDate(left: Date, right: Date): Date {
-  return left.getTime() >= right.getTime() ? left : right;
-}
-
-export function countInclusiveLocalDays(startDateKey: string, endDateKey: string): number {
-  const start = parseLocalDateKey(startDateKey);
-  const end = parseLocalDateKey(endDateKey);
-  if (!start || !end || start > end) return 0;
-  let count = 0;
-  for (let cursor = start; cursor <= end; cursor = addLocalDays(cursor, 1)) count += 1;
-  return count;
-}
-
-function getIsoWeek(date: Date): { week: number; year: number } {
-  const utc = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const weekday = utc.getUTCDay() || 7;
-  utc.setUTCDate(utc.getUTCDate() + 4 - weekday);
-  const yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1));
-  return {
-    week: Math.ceil((((utc.getTime() - yearStart.getTime()) / 86400000) + 1) / 7),
-    year: utc.getUTCFullYear(),
-  };
-}
+const toLocalDateKey = formatLocalDateKey;
 
 function getRollingLabel(days: DataRollingTrendRange, uiText: UiText): string {
   if (days === 7) return uiText.data.pastSevenDays;
@@ -174,7 +151,7 @@ function resolveBounds(
   granularity: "day" | "month",
 ): ResolvedDataTrendRange {
   const today = startOfLocalDay(new Date(nowMs));
-  const end = minDate(requestedEnd, today);
+  const end = minLocalDate(requestedEnd, today);
   const startDateKey = toLocalDateKey(start);
   const endDateKey = toLocalDateKey(end);
   const nextDay = addLocalDays(end, 1).getTime();
@@ -198,10 +175,10 @@ export function resolveDataTrendRange(
 ): ResolvedDataTrendRange {
   const today = startOfLocalDay(new Date(nowMs));
   if (selection.kind === "all") {
-    const left = minDate(parseLocalDateKey(selection.startDateKey) ?? today, today);
-    const right = minDate(parseLocalDateKey(selection.endDateKey) ?? today, today);
-    const earliest = minDate(left, right);
-    const latest = maxDate(left, right);
+    const left = minLocalDate(parseLocalDateKey(selection.startDateKey) ?? today, today);
+    const right = minLocalDate(parseLocalDateKey(selection.endDateKey) ?? today, today);
+    const earliest = minLocalDate(left, right);
+    const latest = maxLocalDate(left, right);
     const start = new Date(earliest.getFullYear(), earliest.getMonth(), 1);
     const end = new Date(latest.getFullYear(), latest.getMonth() + 1, 0);
     return resolveBounds(
@@ -234,7 +211,7 @@ export function resolveDataTrendRange(
     const right = parseLocalDateKey(selection.endDateKey) ?? today;
     const start = left <= right ? left : right;
     const end = left <= right ? right : left;
-    const dayCount = countInclusiveLocalDays(toLocalDateKey(start), toLocalDateKey(minDate(end, today)));
+    const dayCount = countInclusiveLocalDays(toLocalDateKey(start), toLocalDateKey(minLocalDate(end, today)));
     return resolveBounds(
       selection,
       start,
@@ -245,7 +222,7 @@ export function resolveDataTrendRange(
     );
   }
 
-  const anchor = minDate(parseLocalDateKey(selection.anchorDateKey) ?? today, today);
+  const anchor = minLocalDate(parseLocalDateKey(selection.anchorDateKey) ?? today, today);
   if (selection.kind === "week") {
     const mondayOffset = (anchor.getDay() + 6) % 7;
     const start = addLocalDays(anchor, -mondayOffset);

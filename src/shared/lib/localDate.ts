@@ -46,6 +46,35 @@ export function addLocalMonths(date: Date, delta: number): Date {
   return new Date(date.getFullYear(), date.getMonth() + delta, 1);
 }
 
+export function minLocalDate(left: Date, right: Date): Date {
+  return left.getTime() <= right.getTime() ? left : right;
+}
+
+export function maxLocalDate(left: Date, right: Date): Date {
+  return left.getTime() >= right.getTime() ? left : right;
+}
+
+export function countInclusiveLocalDays(startDateKey: string, endDateKey: string): number {
+  const start = parseLocalDateKey(startDateKey);
+  const end = parseLocalDateKey(endDateKey);
+  if (!start || !end || start > end) return 0;
+
+  let count = 0;
+  for (let cursor = start; cursor <= end; cursor = addLocalDays(cursor, 1)) count += 1;
+  return count;
+}
+
+export function getIsoWeek(date: Date): { week: number; year: number } {
+  const utc = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const weekday = utc.getUTCDay() || 7;
+  utc.setUTCDate(utc.getUTCDate() + 4 - weekday);
+  const yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1));
+  return {
+    week: Math.ceil((((utc.getTime() - yearStart.getTime()) / 86_400_000) + 1) / 7),
+    year: utc.getUTCFullYear(),
+  };
+}
+
 export function moveLocalDateByCalendarKey(date: Date, key: string): Date | null {
   const mondayFirstDay = (date.getDay() + 6) % 7;
   const dayOffset = key === "ArrowRight"
