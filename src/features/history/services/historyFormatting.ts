@@ -8,13 +8,13 @@ export interface HistoryChartPoint {
   hours: number;
 }
 
-export interface HistoryCategoryDistributionSource {
+interface HistoryCategoryDistributionSource {
   exeName: string;
   appName: string;
   duration: number;
 }
 
-export interface HistoryCategoryDistributionItem {
+interface HistoryCategoryDistributionItem {
   key: string;
   label: string;
   duration: number;

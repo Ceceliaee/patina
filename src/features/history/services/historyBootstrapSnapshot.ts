@@ -1,4 +1,8 @@
 import type { HistorySession } from "../../../shared/types/sessions.ts";
+import {
+  isFiniteNumber,
+  isObjectRecord as isRecord,
+} from "../../../shared/lib/runtimeTypeGuards.ts";
 import type { AggregateSessionRecord } from "../../../platform/persistence/sessionReadRepository.ts";
 import type {
   WebActivitySegment,
@@ -21,7 +25,7 @@ export interface HistoryBootstrapIdentity {
   webActivityEnabled: boolean;
 }
 
-export interface HistoryBootstrapSnapshot {
+interface HistoryBootstrapSnapshot {
   version: typeof HISTORY_BOOTSTRAP_SNAPSHOT_VERSION;
   createdAtMs: number;
   identity: HistoryBootstrapIdentity;
@@ -55,14 +59,6 @@ const runSerializedHistoryBootstrapWrite = createSerializedJobRunner();
 
 function getPayloadByteLength(payload: string): number {
   return new TextEncoder().encode(payload).byteLength;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
 }
 
 function isNullableFiniteNumber(value: unknown): value is number | null {

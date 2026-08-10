@@ -108,11 +108,3 @@ export async function loadHistorySnapshotWithCache(
   HISTORY_SNAPSHOT_PROMISES.set(promiseKey, snapshotPromise);
   return snapshotPromise;
 }
-
-export async function prewarmHistorySnapshotCache(
-  date: Date = new Date(),
-  rollingDayCount: number = 7,
-  options: HistorySnapshotLoadOptions = {},
-): Promise<HistorySnapshot> {
-  return loadHistorySnapshotWithCache(date, rollingDayCount, undefined, options);
-}

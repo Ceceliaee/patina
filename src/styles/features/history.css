@@ -601,16 +601,6 @@
   min-width: 0;
 }
 
-.history-horizontal-timeline-lane {
-  gap: 0;
-}
-
-.history-horizontal-timeline-lane .history-horizontal-timeline-track {
-  height: 32px;
-  --qp-timeline-segment-height: 18px;
-  border-radius: var(--qp-radius-control);
-}
-
 .history-timeline-lane-duration {
   color: var(--qp-text-tertiary);
   font-size: 11px;

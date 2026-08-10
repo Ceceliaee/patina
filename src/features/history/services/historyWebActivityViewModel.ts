@@ -1,4 +1,5 @@
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
+import { resolveStableDomainColor } from "../../../shared/classification/domainColor.ts";
 import type { AppCategory } from "../../../shared/classification/categoryTokens.ts";
 import type { UiText } from "../../../shared/i18n/index.ts";
 import type {
@@ -16,7 +17,7 @@ import {
   type HistoryTimelineViewModel,
 } from "./historyTimelineViewModel.ts";
 
-export interface WebDomainDistributionItem {
+interface WebDomainDistributionItem {
   key: string;
   domain: string;
   label: string;
@@ -50,7 +51,7 @@ export interface WebTimelineItem {
   }>;
 }
 
-export function isWebDomainIncludedInStatistics(
+function isWebDomainIncludedInStatistics(
   normalizedDomain: string,
   overrides: Record<string, WebDomainOverride>,
 ): boolean {
@@ -64,23 +65,6 @@ export function filterWebActivitySegmentsForStatistics(
   return segments.filter((segment) => (
     isWebDomainIncludedInStatistics(segment.normalizedDomain, overrides)
   ));
-}
-
-function stableDomainColor(normalizedDomain: string) {
-  const palette = [
-    "#36AC7E",
-    "#4790CF",
-    "#6F7AE6",
-    "#B07E55",
-    "#35A69E",
-    "#C56A73",
-    "#8C6FA1",
-  ];
-  let hash = 0;
-  for (const char of normalizedDomain) {
-    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-  }
-  return palette[hash % palette.length];
 }
 
 function clampSegmentToRange(segment: WebActivitySegment, startMs: number, endMs: number, nowMs: number) {
@@ -119,7 +103,7 @@ function resolveWebColor(
   const iconColor = iconThemeColors[normalizedDomain];
   if (iconColor) return iconColor;
   if (category !== "other") return AppClassification.getCategoryColor(category);
-  return stableDomainColor(normalizedDomain);
+  return resolveStableDomainColor(normalizedDomain);
 }
 
 function preferFaviconUrl(current: string | null, candidate: string | null): string | null {

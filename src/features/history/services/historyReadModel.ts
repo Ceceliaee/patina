@@ -62,7 +62,7 @@ export interface HistorySnapshot {
   webDomainOverrides: Record<string, WebDomainOverride>;
 }
 
-export interface HistoryReadModel {
+interface HistoryReadModel {
   // Exact-session geometry for the timeline and active span only. Summary UI
   // must use the aggregate-aware fields below so display thresholds never
   // change statistical totals and hour buckets remain visible.

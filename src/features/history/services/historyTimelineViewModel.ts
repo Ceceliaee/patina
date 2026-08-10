@@ -1,4 +1,5 @@
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
+import { resolveAppIconKeys } from "../../../shared/classification/appIconIdentity.ts";
 import type { AppCategory } from "../../../shared/classification/categoryTokens.ts";
 import type { UiText } from "../../../shared/i18n/index.ts";
 import type { CompiledSession } from "../../../shared/lib/sessionReadCompiler.ts";
@@ -17,10 +18,10 @@ const MINUTE_BOUNDARY_SNAP_MS = 1_000;
 const MIN_VISIBLE_TIMELINE_SEGMENT_MS = 30_000;
 
 export type HistoryTimelineDisplayMode = "app" | "category" | "web";
-export type HistoryTimelineSourceKind = "app" | "web";
-export type HistoryTimelineZoomHours = number;
+type HistoryTimelineSourceKind = "app" | "web";
+type HistoryTimelineZoomHours = number;
 export const DEFAULT_HISTORY_TIMELINE_ZOOM_HOURS: HistoryTimelineZoomHours = 4;
-export const MIN_HISTORY_TIMELINE_VIEWPORT_DURATION_MS = HOUR_MS;
+const MIN_HISTORY_TIMELINE_VIEWPORT_DURATION_MS = HOUR_MS;
 export const MAX_HISTORY_TIMELINE_VIEWPORT_DURATION_MS = DAY_MS;
 
 export interface HistoryTimelineViewport {
@@ -29,9 +30,9 @@ export interface HistoryTimelineViewport {
   durationMs: number;
 }
 
-export type HistoryTimelineAxisTick = TimelineAxisTick;
+type HistoryTimelineAxisTick = TimelineAxisTick;
 
-export interface HistoryTimelineTitleSample {
+interface HistoryTimelineTitleSample {
   title: string;
   secondaryText?: string | null;
   startTime: number;
@@ -56,7 +57,7 @@ export interface HistoryTimelineSourceItem {
   isLive: boolean;
 }
 
-export interface HistoryTimelineSegment {
+interface HistoryTimelineSegment {
   id: string;
   sourceId: string;
   timelineKey: string;
@@ -81,7 +82,7 @@ export interface HistoryTimelineSegment {
   isLive: boolean;
 }
 
-export interface HistoryTimelineLegendItem {
+interface HistoryTimelineLegendItem {
   key: string;
   label: string;
   duration: number;
@@ -371,7 +372,10 @@ export function buildAppTimelineSources(
       sourceKey: session.appKey,
       sourceLabel: session.displayName,
       sourceColor: resolveAppSourceColor(session, iconThemeColors),
-      iconKeys: Array.from(new Set([session.exeName, session.appKey].filter(Boolean))),
+      iconKeys: Array.from(new Set([
+        ...resolveAppIconKeys(session.exeName),
+        session.appKey,
+      ].filter(Boolean))),
       category: mapped.category,
       categoryLabel: AppClassification.getCategoryLabel(mapped.category, uiText),
       categoryColor: AppClassification.getCategoryColor(mapped.category),
