@@ -18,8 +18,8 @@ App note en: TBD.
 
 ### Added
 
-- 设置页的本地与 WebDAV 备份入口新增互斥的每日或每周定时备份；首次安装默认关闭，并预设为每周五 21:00 保存到 Patina 备份目录。WebDAV 新备份经远端回读验证后才会替换上一份自动备份，只保留当前目标最新一份有效备份，不清理手动备份或其他目标文件。Refs [#40](https://github.com/Ceceliaee/patina/issues/40)
-- 设置页的数据导出新增可关闭的每日或每周定时导出，可沿用所选格式和字段；首次安装默认关闭，并预设为每日 21:00 保存到 Patina 导出目录。Refs [#46](https://github.com/Ceceliaee/patina/issues/46)
+- 设置页新增本地与 WebDAV 定时备份，可按每日或每周自动执行。Refs [#40](https://github.com/Ceceliaee/patina/issues/40)
+- 设置页新增定时数据导出，可按每日或每周将所选格式和字段自动导出到指定目录。Refs [#46](https://github.com/Ceceliaee/patina/issues/46)
 - Data 的一级时间范围现在可以从“近 7 天”继续向左切换到“总计”；应用或网页趋势会按当前所选对象的最早至最晚记录展示，多选时采用覆盖所有已选对象的最广范围。Refs [#6](https://github.com/Ceceliaee/patina/issues/6)
 - Data 现在可以在“应用、分类、网页”之间切换，并按应用分类查看时长、趋势和热力图；分类多选与“总计”会覆盖所有所选分类成员应用的最广记录范围，网页同步关闭时仍保留应用和分类视图。Refs [#6](https://github.com/Ceceliaee/patina/issues/6), [#62](https://github.com/Ceceliaee/patina/issues/62)
 - History 和 Data 的网页图标现在可以通过右键菜单直接更改网站名称，以及设置、更改或清除分类；未分类网站会显示与应用一致的提示，同时保留原有双击详情和 Data 选择行为。Refs [#6](https://github.com/Ceceliaee/patina/issues/6)
@@ -28,8 +28,7 @@ App note en: TBD.
 
 - 前端页面、系统托盘、原生提醒和 Markdown 导出的本地化文案现在使用统一语言规则；切换中文或英文后，日期、数字、状态文案和延迟加载页面会保持当前应用语言，不再混用系统语言或旧语言缓存。Refs [#61](https://github.com/Ceceliaee/patina/issues/61)
 - 系统托盘图标现在会根据 Windows 任务栏的明暗环境和当前追踪中/已暂停状态自动切换；追踪中突出箭头与圆点，暂停时降低对比度，即使 Patina 应用主题与系统主题不同也能保持清晰、可辨。Refs [#63](https://github.com/Ceceliaee/patina/issues/63)
-- 手动本地备份与 WebDAV 备份统一使用 `Patina-backup-YYYYMMDD-HHmmss.zip`；自动备份使用带 `scheduled` 标识的文件名，便于区分来源且不会覆盖同名文件。Refs [#40](https://github.com/Ceceliaee/patina/issues/40)
-- 手动数据导出按范围使用 `Patina-export-YYYYMMDD.格式` 或 `Patina-export-YYYYMMDD-YYYYMMDD.格式`；自动导出使用带 `scheduled` 标识的文件名，便于按日期识别和交给其他工具处理。Refs [#46](https://github.com/Ceceliaee/patina/issues/46)
+- 备份与数据导出的文件名现在会明确区分手动操作和定时任务，并使用日期或时间标识结果。Refs [#40](https://github.com/Ceceliaee/patina/issues/40), [#46](https://github.com/Ceceliaee/patina/issues/46)
 
 ### Fixed
 
