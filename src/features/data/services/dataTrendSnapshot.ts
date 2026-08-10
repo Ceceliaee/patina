@@ -2,7 +2,6 @@ import {
   getSessionSummariesInRangeByLocalDay,
   getSessionSummariesInRangeByLocalMonth,
 } from "../../../platform/persistence/sessionReadRepository.ts";
-import { getLocaleText } from "../../../shared/i18n/runtime.ts";
 import type { UiText } from "../../../shared/i18n/index.ts";
 import type { AggregateSessionRecord } from "../../../platform/persistence/sessionReadRepository.ts";
 import {
@@ -12,6 +11,7 @@ import {
 } from "./dataTrendRange.ts";
 import { getCachedDataIconsForExecutables } from "./dataIconService.ts";
 import { registerDataHeavyCacheClearer } from "./dataCacheLifecycle.ts";
+import { touchBoundedDataCacheEntry } from "./dataLruCache.ts";
 
 export interface DataTrendSnapshot {
   fetchedAtMs: number;
@@ -54,14 +54,7 @@ function getCachedDataIconMap(
 }
 
 function touchSnapshotCacheEntry(key: string, snapshot: DataTrendSnapshot): void {
-  snapshotCache.delete(key);
-  snapshotCache.set(key, snapshot);
-
-  while (snapshotCache.size > DATA_TREND_SNAPSHOT_CACHE_LIMIT) {
-    const oldestKey = snapshotCache.keys().next().value;
-    if (!oldestKey) break;
-    snapshotCache.delete(oldestKey);
-  }
+  touchBoundedDataCacheEntry(snapshotCache, key, snapshot, DATA_TREND_SNAPSHOT_CACHE_LIMIT);
 }
 
 export function getCachedDataTrendSnapshot(range: ResolvedDataTrendRange): DataTrendSnapshot | null {
@@ -72,7 +65,7 @@ export function getCachedDataTrendSnapshot(range: ResolvedDataTrendRange): DataT
   return { ...snapshot, range };
 }
 
-export function setDataTrendSnapshotCache(snapshot: DataTrendSnapshot): void {
+function setDataTrendSnapshotCache(snapshot: DataTrendSnapshot): void {
   touchSnapshotCacheEntry(snapshot.range.cacheKey, snapshot);
 }
 
@@ -116,10 +109,6 @@ export async function loadDataTrendSnapshot(
     }
     return snapshot;
   });
-}
-
-export function prewarmDefaultDataTrendSnapshot(nowMs: number = Date.now()) {
-  return loadDataTrendSnapshot({ kind: "rolling", days: 7 }, nowMs, getLocaleText("zh-CN"));
 }
 
 export function getDataTrendSnapshotCacheSizeForTests(): number {
