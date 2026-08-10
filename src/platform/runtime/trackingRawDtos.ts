@@ -1,3 +1,4 @@
+import { isObjectRecord as isRecord } from "../../shared/lib/runtimeTypeGuards.ts";
 import type {
   CurrentTrackingSnapshot,
   SustainedParticipationAppIdentity,
@@ -17,7 +18,7 @@ import type {
   TrackingWindowSnapshot,
 } from "../../shared/types/tracking.ts";
 
-export interface RawTrackingWindowSnapshot {
+interface RawTrackingWindowSnapshot {
   hwnd: string;
   root_owner_hwnd: string;
   process_id: number;
@@ -29,7 +30,7 @@ export interface RawTrackingWindowSnapshot {
   idle_time_ms: number;
 }
 
-export interface RawSustainedParticipationSignalSnapshot {
+interface RawSustainedParticipationSignalSnapshot {
   is_available: boolean;
   is_active: boolean;
   signal_source: SustainedParticipationSignalSource | null;
@@ -38,12 +39,12 @@ export interface RawSustainedParticipationSignalSnapshot {
   playback_type: "unknown" | "audio" | "video" | "image" | null;
 }
 
-export interface RawSustainedParticipationSignalEvaluationSnapshot {
+interface RawSustainedParticipationSignalEvaluationSnapshot {
   signal: RawSustainedParticipationSignalSnapshot;
   match_result: SustainedParticipationSignalMatchResult;
 }
 
-export interface RawSustainedParticipationDiagnosticsSnapshot {
+interface RawSustainedParticipationDiagnosticsSnapshot {
   state: SustainedParticipationState;
   reason: SustainedParticipationStatusReason;
   window_identity: SustainedParticipationAppIdentity | null;
@@ -54,7 +55,7 @@ export interface RawSustainedParticipationDiagnosticsSnapshot {
   audio_session: RawSustainedParticipationSignalEvaluationSnapshot;
 }
 
-export interface RawTrackingStatusSnapshot {
+interface RawTrackingStatusSnapshot {
   is_tracking_active: boolean;
   sustained_participation_eligible: boolean;
   sustained_participation_active: boolean;
@@ -65,7 +66,7 @@ export interface RawTrackingStatusSnapshot {
   sustained_participation_diagnostics: RawSustainedParticipationDiagnosticsSnapshot;
 }
 
-export interface RawCurrentTrackingSnapshot {
+interface RawCurrentTrackingSnapshot {
   window: RawTrackingWindowSnapshot;
   status: RawTrackingStatusSnapshot;
   sampled_at_ms?: number;
@@ -74,7 +75,7 @@ export interface RawCurrentTrackingSnapshot {
   probe_diagnostics?: RawTrackingRuntimeProbeDiagnostics;
 }
 
-export interface RawTrackingRuntimeProbeDiagnostics {
+interface RawTrackingRuntimeProbeDiagnostics {
   last_successful_sample_at_ms?: number | null;
   fallback_started_at_ms?: number | null;
   fallback_count?: number;
@@ -83,19 +84,15 @@ export interface RawTrackingRuntimeProbeDiagnostics {
   last_recovery_attempt_at_ms?: number | null;
 }
 
-export interface RawTrackingDataChangedPayload {
+interface RawTrackingDataChangedPayload {
   reason: string;
   changed_at_ms: number;
 }
 
-export interface RawTrackerHealthRuntimeSnapshot {
+interface RawTrackerHealthRuntimeSnapshot {
   last_heartbeat_ms: number | null;
   last_successful_sample_ms: number | null;
   last_watchdog_seal_sample_ms: number | null;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 function isEnumValue<T extends string>(value: unknown, allowed: readonly T[]): value is T {
@@ -115,7 +112,7 @@ export function isRawTrackingWindowSnapshot(value: unknown): value is RawTrackin
     && typeof value.idle_time_ms === "number";
 }
 
-export function isRawTrackingStatusSnapshot(value: unknown): value is RawTrackingStatusSnapshot {
+function isRawTrackingStatusSnapshot(value: unknown): value is RawTrackingStatusSnapshot {
   return isRecord(value)
     && typeof value.is_tracking_active === "boolean"
     && typeof value.sustained_participation_eligible === "boolean"
@@ -151,7 +148,7 @@ export function isRawTrackingStatusSnapshot(value: unknown): value is RawTrackin
     && isRawSustainedParticipationDiagnosticsSnapshot(value.sustained_participation_diagnostics);
 }
 
-export function isRawSustainedParticipationSignalSnapshot(
+function isRawSustainedParticipationSignalSnapshot(
   value: unknown,
 ): value is RawSustainedParticipationSignalSnapshot {
   return isRecord(value)
@@ -189,7 +186,7 @@ export function isRawSustainedParticipationSignalSnapshot(
     );
 }
 
-export function isRawSustainedParticipationSignalEvaluationSnapshot(
+function isRawSustainedParticipationSignalEvaluationSnapshot(
   value: unknown,
 ): value is RawSustainedParticipationSignalEvaluationSnapshot {
   return isRecord(value)
@@ -202,7 +199,7 @@ export function isRawSustainedParticipationSignalEvaluationSnapshot(
     ] as const);
 }
 
-export function isRawSustainedParticipationDiagnosticsSnapshot(
+function isRawSustainedParticipationDiagnosticsSnapshot(
   value: unknown,
 ): value is RawSustainedParticipationDiagnosticsSnapshot {
   return isRecord(value)
@@ -286,7 +283,7 @@ export function isRawCurrentTrackingSnapshot(value: unknown): value is RawCurren
     );
 }
 
-export function isRawTrackingRuntimeProbeDiagnostics(
+function isRawTrackingRuntimeProbeDiagnostics(
   value: unknown,
 ): value is RawTrackingRuntimeProbeDiagnostics {
   return isRecord(value)
@@ -325,7 +322,7 @@ export function isRawTrackingDataChangedPayload(value: unknown): value is RawTra
     && typeof value.changed_at_ms === "number";
 }
 
-export function isRawTrackerHealthRuntimeSnapshot(
+function isRawTrackerHealthRuntimeSnapshot(
   value: unknown,
 ): value is RawTrackerHealthRuntimeSnapshot {
   return isRecord(value)
@@ -340,7 +337,7 @@ export function isRawTrackerHealthRuntimeSnapshot(
     );
 }
 
-export function mapRawTrackingWindowSnapshot(
+function mapRawTrackingWindowSnapshot(
   raw: RawTrackingWindowSnapshot,
 ): TrackingWindowSnapshot {
   return {
@@ -393,7 +390,7 @@ function mapRawSustainedParticipationDiagnosticsSnapshot(
   };
 }
 
-export function mapRawTrackingStatusSnapshot(
+function mapRawTrackingStatusSnapshot(
   raw: RawTrackingStatusSnapshot,
 ): TrackingStatusSnapshot {
   return {
@@ -410,7 +407,7 @@ export function mapRawTrackingStatusSnapshot(
   };
 }
 
-export function mapRawCurrentTrackingSnapshot(
+function mapRawCurrentTrackingSnapshot(
   raw: RawCurrentTrackingSnapshot,
 ): CurrentTrackingSnapshot {
   return {
@@ -438,7 +435,7 @@ function mapRawTrackingRuntimeProbeDiagnostics(
   };
 }
 
-export function mapRawTrackingDataChangedPayload(
+function mapRawTrackingDataChangedPayload(
   raw: RawTrackingDataChangedPayload,
 ): TrackingDataChangedPayload {
   return {
@@ -447,7 +444,7 @@ export function mapRawTrackingDataChangedPayload(
   };
 }
 
-export function mapRawTrackerHealthRuntimeSnapshot(
+function mapRawTrackerHealthRuntimeSnapshot(
   raw: RawTrackerHealthRuntimeSnapshot,
 ): TrackerHealthRuntimeSnapshot {
   return {

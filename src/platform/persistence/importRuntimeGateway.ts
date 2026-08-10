@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { isPlainRecord as isRecord } from "../../shared/lib/runtimeTypeGuards.ts";
 import type { ClassificationSettingMutation } from "./classificationSettingsGateway.ts";
 
 export interface ImportPreviewError {
@@ -45,10 +46,6 @@ export interface ImportDeleteReport {
 export interface DestructureReport {
   outputPath: string;
   recordsWritten: number;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function hasFields(

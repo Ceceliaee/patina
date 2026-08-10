@@ -1,13 +1,18 @@
 import { invokeWithCommandError } from "./commandError.ts";
+import {
+  isFiniteNumber,
+  isNullableString,
+  isPlainRecord as isRecord,
+} from "../../shared/lib/runtimeTypeGuards.ts";
 
 export type ActivityReadPath = "projection" | "facts" | "hybrid";
 
-export interface ActivityCatalogCursor {
+interface ActivityCatalogCursor {
   lastSeenMs: number;
   rawExeName: string;
 }
 
-export interface ActivityCatalogRow {
+interface ActivityCatalogRow {
   rawExeName: string;
   appName: string;
   lastSeenMs: number;
@@ -16,7 +21,7 @@ export interface ActivityCatalogRow {
   hasImportBucketRecords: boolean;
 }
 
-export interface ActivityCatalogPage {
+interface ActivityCatalogPage {
   rows: ActivityCatalogRow[];
   nextCursor: ActivityCatalogCursor | null;
   hasMore: boolean;
@@ -25,14 +30,14 @@ export interface ActivityCatalogPage {
   sourceRevision: number;
 }
 
-export interface ActivityAggregateRecord {
+interface ActivityAggregateRecord {
   appName: string;
   exeName: string;
   startTime: number;
   endTime: number;
 }
 
-export interface ActivityAggregateRange {
+interface ActivityAggregateRange {
   records: ActivityAggregateRecord[];
   readPath: ActivityReadPath;
   fallbackReason: string | null;
@@ -40,28 +45,6 @@ export interface ActivityAggregateRange {
   projectionRowCount: number;
   factRowCount: number;
   hasActiveSession: boolean;
-}
-
-export interface ActivityReadModelStatus {
-  sourceRevision: number;
-  appCatalogState: string;
-  activityHourlyState: string;
-  activityCoverageStartMs: number | null;
-  activityCoverageEndMs: number | null;
-  dirtyAppCount: number;
-  dirtyRangeCount: number;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-function isNullableString(value: unknown): value is string | null {
-  return typeof value === "string" || value === null;
 }
 
 function isReadPath(value: unknown): value is ActivityReadPath {
@@ -122,20 +105,6 @@ export function parseActivityAggregateRange(value: unknown): ActivityAggregateRa
   return value as unknown as ActivityAggregateRange;
 }
 
-export function parseActivityReadModelStatus(value: unknown): ActivityReadModelStatus {
-  if (!isRecord(value)
-    || !isFiniteNumber(value.sourceRevision)
-    || typeof value.appCatalogState !== "string"
-    || typeof value.activityHourlyState !== "string"
-    || !(value.activityCoverageStartMs === null || isFiniteNumber(value.activityCoverageStartMs))
-    || !(value.activityCoverageEndMs === null || isFiniteNumber(value.activityCoverageEndMs))
-    || !isFiniteNumber(value.dirtyAppCount)
-    || !isFiniteNumber(value.dirtyRangeCount)) {
-    throw new Error("Received invalid activity model status payload");
-  }
-  return value as unknown as ActivityReadModelStatus;
-}
-
 export async function loadActivityCatalogPage(input: {
   cursor: ActivityCatalogCursor | null;
   searchQuery: string;
@@ -155,11 +124,5 @@ export async function loadActivityAggregateRange(
   return parseActivityAggregateRange(await invokeWithCommandError(
     "cmd_get_activity_aggregate_range",
     { startMs, endMs, bucketBoundariesMs: bucketBoundariesMs ?? null },
-  ));
-}
-
-export async function loadActivityReadModelStatus(): Promise<ActivityReadModelStatus> {
-  return parseActivityReadModelStatus(await invokeWithCommandError(
-    "cmd_get_activity_read_model_status",
   ));
 }

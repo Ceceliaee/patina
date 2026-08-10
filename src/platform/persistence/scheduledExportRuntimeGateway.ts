@@ -1,15 +1,20 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type Event } from "@tauri-apps/api/event";
+import {
+  isFiniteNumber,
+  isNullableString,
+  isPlainRecord as isRecord,
+} from "../../shared/lib/runtimeTypeGuards.ts";
 
 import {
   isDataExportProtocolField,
   type DataExportProtocolField,
 } from "./dataExportGateway.ts";
 
-export type ScheduledExportCadence = "daily" | "weekly";
-export type ScheduledExportFormat = "csv" | "markdown" | "parquet" | "sqlite";
-export type ScheduledExportRunStatus = "running" | "retry_wait" | "succeeded" | "failed" | "superseded";
-export type ScheduledExportRunPhase = "claimed" | "written" | "validated" | "published" | "succeeded";
+type ScheduledExportCadence = "daily" | "weekly";
+type ScheduledExportFormat = "csv" | "markdown" | "parquet" | "sqlite";
+type ScheduledExportRunStatus = "running" | "retry_wait" | "succeeded" | "failed" | "superseded";
+type ScheduledExportRunPhase = "claimed" | "written" | "validated" | "published" | "succeeded";
 
 export interface ScheduledExportConfigInput {
   enabled: boolean;
@@ -21,13 +26,13 @@ export interface ScheduledExportConfigInput {
   selectedFields: DataExportProtocolField[];
 }
 
-export interface ScheduledExportConfig extends ScheduledExportConfigInput {
+interface ScheduledExportConfig extends ScheduledExportConfigInput {
   planGeneration: string;
   scheduleAnchorAtMs: number;
   updatedAtMs: number;
 }
 
-export interface ScheduledExportRun {
+interface ScheduledExportRun {
   runKey: string;
   planGeneration: string;
   cadence: ScheduledExportCadence;
@@ -62,14 +67,6 @@ export interface ScheduledExportSnapshot {
   activeRun: ScheduledExportRun | null;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
 function isNonNegativeSafeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
@@ -90,10 +87,6 @@ function isAttemptCount(value: unknown): value is number {
     && Number.isInteger(value)
     && value >= 1
     && value <= 3;
-}
-
-function isNullableString(value: unknown): value is string | null {
-  return value === null || typeof value === "string";
 }
 
 function isNullableSha256(value: unknown): value is string | null {

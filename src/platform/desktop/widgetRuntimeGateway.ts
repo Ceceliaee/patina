@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { isFiniteNumber } from "../../shared/lib/runtimeTypeGuards.ts";
 import { listen } from "@tauri-apps/api/event";
 import {
   cursorPosition,
@@ -9,9 +10,9 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 const WIDGET_RUNTIME_COLLAPSED_EVENT = "widget-runtime-collapsed";
 const WIDGET_RUNTIME_SHOWN_EVENT = "widget-runtime-shown";
 
-export type WidgetSide = "left" | "right";
+type WidgetSide = "left" | "right";
 
-export type AppWindowLabel = "main" | "widget";
+type AppWindowLabel = "main" | "widget";
 
 interface RawWidgetPlacement {
   monitor: RawWidgetMonitorAffinity | null;
@@ -49,12 +50,12 @@ interface RawWidgetPhysicalRect {
   height: number;
 }
 
-export interface WidgetMonitorAffinity {
+interface WidgetMonitorAffinity {
   name: string | null;
   workArea: WidgetPhysicalRect;
 }
 
-export interface WidgetPhysicalRect {
+interface WidgetPhysicalRect {
   x: number;
   y: number;
   width: number;
@@ -72,7 +73,7 @@ export interface WidgetPlacement {
   anchorY: number;
 }
 
-export interface WidgetBootstrapSettings {
+interface WidgetBootstrapSettings {
   trackingPaused: string | null;
   themeMode: string | null;
   language: string | null;
@@ -80,7 +81,7 @@ export interface WidgetBootstrapSettings {
   colorSchemeDark: string | null;
 }
 
-export interface WidgetAppOverrideRow {
+interface WidgetAppOverrideRow {
   key: string;
   value: string;
 }
@@ -92,10 +93,6 @@ export interface WidgetBootstrapSnapshot {
 
 function isWidgetSide(value: unknown): value is WidgetSide {
   return value === "left" || value === "right";
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
 }
 
 function isRawWidgetPhysicalRect(value: unknown): value is RawWidgetPhysicalRect {
@@ -188,7 +185,7 @@ function mapRawWidgetPlacement(raw: RawWidgetPlacement): WidgetPlacement {
   };
 }
 
-export function parseWidgetPlacement(value: unknown): WidgetPlacement | null {
+function parseWidgetPlacement(value: unknown): WidgetPlacement | null {
   return isRawWidgetPlacement(value) ? mapRawWidgetPlacement(value) : null;
 }
 

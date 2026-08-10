@@ -14,8 +14,10 @@ import type {
   ToolTimer,
   ToolTimerLap,
 } from "../../shared/types/tools.ts";
-
-type RawRecord = Record<string, unknown>;
+import {
+  isNullableString,
+  isPlainRecord as isRecord,
+} from "../../shared/lib/runtimeTypeGuards.ts";
 
 interface RawToolRuntimeSettings {
   default_countdown_minutes: number;
@@ -114,20 +116,12 @@ const POMODORO_PHASES = new Set(["focus", "short_break", "long_break"]);
 const POMODORO_STATUSES = new Set(["idle", "running", "paused", "completed"]);
 const TOOL_ALERT_KINDS = new Set(["reminder", "countdown", "pomodoro", "software_reminder"]);
 
-function isRecord(value: unknown): value is RawRecord {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
 function isNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
 function isNullableNumber(value: unknown): value is number | null {
   return value === null || isNumber(value);
-}
-
-function isNullableString(value: unknown): value is string | null {
-  return value === null || typeof value === "string";
 }
 
 function isStringEnum<T extends string>(value: unknown, allowed: ReadonlySet<string>): value is T {

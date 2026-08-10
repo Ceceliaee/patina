@@ -8,14 +8,6 @@ let persistedColors: Map<string, string> | null = null;
 let flushScheduled = false;
 let storeGeneration = 0;
 
-function getLocalStorage(): Storage | null {
-  try {
-    return typeof window === "undefined" ? null : window.localStorage;
-  } catch {
-    return null;
-  }
-}
-
 function fingerprintIconSource(iconSource: string): string {
   const cached = iconSourceFingerprintCache.get(iconSource);
   if (cached) return cached;
@@ -48,7 +40,7 @@ function hydratePersistedColors(): Map<string, string> {
   if (persistedColors) return persistedColors;
 
   persistedColors = new Map<string, string>();
-  const storage = getLocalStorage();
+  const storage = getBrowserLocalStorage();
   if (!storage) return persistedColors;
 
   try {
@@ -85,7 +77,7 @@ function hydratePersistedColors(): Map<string, string> {
 
 function flushPersistedColors(): void {
   flushScheduled = false;
-  const storage = getLocalStorage();
+  const storage = getBrowserLocalStorage();
   if (!storage || !persistedColors) return;
 
   try {
@@ -149,7 +141,7 @@ export const __iconThemeColorStoreInternals = {
     persistedColors = new Map<string, string>();
     iconSourceFingerprintCache.clear();
     try {
-      getLocalStorage()?.removeItem(ICON_THEME_COLOR_STORAGE_KEY);
+      getBrowserLocalStorage()?.removeItem(ICON_THEME_COLOR_STORAGE_KEY);
     } catch {
       // Test cleanup is best-effort when storage is unavailable.
     }
@@ -158,3 +150,4 @@ export const __iconThemeColorStoreInternals = {
   flushPersistedColors,
   storageKey: ICON_THEME_COLOR_STORAGE_KEY,
 };
+import { getBrowserLocalStorage } from "../browser/browserStorageGateway.ts";

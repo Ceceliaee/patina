@@ -1,4 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
+import {
+  isFiniteNumber as isNumber,
+  isNullableString,
+  isStringArray,
+} from "../../shared/lib/runtimeTypeGuards.ts";
 
 interface RawWindowsProcessResourceSnapshot {
   handle_count: number;
@@ -139,14 +144,6 @@ declare global {
   }
 }
 
-function isNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
-
 function isRawProcessResources(value: unknown): value is RawWindowsProcessResourceSnapshot {
   if (!value || typeof value !== "object") {
     return false;
@@ -172,10 +169,6 @@ function isRawCacheStats(value: unknown): value is RawProcessDetailsCacheStats {
 
 function isNullableNumber(value: unknown): value is number | null {
   return value === null || isNumber(value);
-}
-
-function isNullableString(value: unknown): value is string | null {
-  return value === null || typeof value === "string";
 }
 
 function isRawLimitStats(value: unknown): value is RawToolAlertStats {

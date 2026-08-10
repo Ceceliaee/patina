@@ -30,7 +30,7 @@ export const DEFAULT_DATA_EXPORT_PROTOCOL_FIELDS = [
   "page_title",
 ] as const;
 
-export const ANALYSIS_DATA_EXPORT_PROTOCOL_FIELDS = [
+const ANALYSIS_DATA_EXPORT_PROTOCOL_FIELDS = [
   "category_id",
   "local_date",
   "local_week",
@@ -42,7 +42,7 @@ export const ANALYSIS_DATA_EXPORT_PROTOCOL_FIELDS = [
   "source_name",
 ] as const;
 
-export const ADVANCED_DATA_EXPORT_PROTOCOL_FIELDS = [
+const ADVANCED_DATA_EXPORT_PROTOCOL_FIELDS = [
   "session_id",
   "web_segment_id",
   "continuity_group_start_time",

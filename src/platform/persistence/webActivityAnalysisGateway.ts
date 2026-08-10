@@ -1,4 +1,5 @@
 import { invokeWithCommandError } from "./commandError.ts";
+import { isPlainRecord as isRecord } from "../../shared/lib/runtimeTypeGuards.ts";
 
 export interface WebActivityAggregateRecord {
   normalizedDomain: string;
@@ -22,11 +23,7 @@ const MAX_WEB_ACTIVITY_BUCKETS_PER_REQUEST = 400;
 const MAX_WEB_ACTIVITY_SNAPSHOT_ATTEMPTS = 2;
 export const MAX_WEB_ACTIVITY_DOMAINS_PER_REQUEST = 7;
 
-export type WebActivityDomainFilter = string | readonly string[] | null;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+type WebActivityDomainFilter = string | readonly string[] | null;
 
 function isFiniteNonNegativeNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;

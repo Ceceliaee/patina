@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export interface CommandError {
+interface CommandError {
   code: string;
   message: string;
   retryable: boolean;

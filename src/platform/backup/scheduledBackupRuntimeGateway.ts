@@ -1,15 +1,19 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type Event } from "@tauri-apps/api/event";
+import {
+  isNullableString,
+  isPlainRecord as isRecord,
+} from "../../shared/lib/runtimeTypeGuards.ts";
 
-export type ScheduledBackupCadence = "daily" | "weekly";
-export type ScheduledBackupRunStatus = "running" | "retry_wait" | "succeeded" | "failed";
-export type ScheduledBackupTargetInput =
+type ScheduledBackupCadence = "daily" | "weekly";
+type ScheduledBackupRunStatus = "running" | "retry_wait" | "succeeded" | "failed";
+type ScheduledBackupTargetInput =
   | { kind: "local"; targetDir: string }
   | { kind: "webdav" };
-export type ScheduledBackupTarget =
+type ScheduledBackupTarget =
   | { kind: "local"; targetDir: string }
   | { kind: "webdav"; targetIdentity: string };
-export type ScheduledBackupRunPhase =
+type ScheduledBackupRunPhase =
   | "claimed"
   | "staged"
   | "uploaded"
@@ -25,14 +29,14 @@ export interface ScheduledBackupConfigInput {
   target: ScheduledBackupTargetInput;
 }
 
-export interface ScheduledBackupConfig extends Omit<ScheduledBackupConfigInput, "target"> {
+interface ScheduledBackupConfig extends Omit<ScheduledBackupConfigInput, "target"> {
   target: ScheduledBackupTarget;
   targetGeneration: string;
   scheduleAnchorAtMs: number;
   updatedAtMs: number;
 }
 
-export interface ScheduledBackupRun {
+interface ScheduledBackupRun {
   runKey: string;
   targetGeneration: string;
   targetKind: "local" | "webdav";
@@ -58,22 +62,15 @@ export interface ScheduledBackupRun {
 
 export interface ScheduledBackupSnapshot {
   config: ScheduledBackupConfig;
+  defaultLocalTargetDir: string;
   nextExecutionAtMs: number | null;
   recentSuccess: ScheduledBackupRun | null;
   recentFailure: ScheduledBackupRun | null;
   activeRun: ScheduledBackupRun | null;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
 function isNullableNumber(value: unknown): value is number | null {
   return value === null || typeof value === "number";
-}
-
-function isNullableString(value: unknown): value is string | null {
-  return value === null || typeof value === "string";
 }
 
 function parseConfig(value: unknown): ScheduledBackupConfig {
@@ -145,11 +142,15 @@ function parseRun(value: unknown): ScheduledBackupRun | null {
 }
 
 export function parseScheduledBackupSnapshot(value: unknown): ScheduledBackupSnapshot {
-  if (!isRecord(value) || !isNullableNumber(value.nextExecutionAtMs)) {
+  if (!isRecord(value)
+    || typeof value.defaultLocalTargetDir !== "string"
+    || value.defaultLocalTargetDir.trim() === ""
+    || !isNullableNumber(value.nextExecutionAtMs)) {
     throw new Error("Received invalid scheduled backup snapshot");
   }
   return {
     config: parseConfig(value.config),
+    defaultLocalTargetDir: value.defaultLocalTargetDir,
     nextExecutionAtMs: value.nextExecutionAtMs,
     recentSuccess: parseRun(value.recentSuccess),
     recentFailure: parseRun(value.recentFailure),

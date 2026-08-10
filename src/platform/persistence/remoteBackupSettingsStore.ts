@@ -20,7 +20,7 @@ export interface PersistedRemoteBackupConfig {
   lastBackupAtMs: number | null;
 }
 
-export interface RemoteBackupConfigPatch {
+interface RemoteBackupConfigPatch {
   url: string;
   username: string;
   remoteDir?: string;

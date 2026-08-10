@@ -1,4 +1,4 @@
-export interface SqlWriteExecutor {
+interface SqlWriteExecutor {
   execute(query: string, values?: unknown[]): Promise<unknown>;
 }
 

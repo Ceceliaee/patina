@@ -1,10 +1,7 @@
-import {
-  clearAllSessionWindowTitles as clearAllSessionWindowTitlesViaCommand,
-  deleteSessionsBefore as deleteSessionsBeforeViaCommand,
-} from "./persistenceWriteRuntimeGateway.ts";
+import { deleteSessionsBefore as deleteSessionsBeforeViaCommand } from "./persistenceWriteRuntimeGateway.ts";
 import { getDB } from "./sqlite.ts";
 
-export interface SettingRow {
+interface SettingRow {
   key: string;
   value: string;
 }
@@ -31,8 +28,4 @@ export async function loadAllSettingRows(): Promise<SettingRow[]> {
 
 export async function deleteSessionsBefore(cutoffTime: number): Promise<void> {
   await deleteSessionsBeforeViaCommand(cutoffTime);
-}
-
-export async function clearAllSessionWindowTitles(): Promise<void> {
-  await clearAllSessionWindowTitlesViaCommand();
 }

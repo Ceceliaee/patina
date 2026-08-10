@@ -1,6 +1,7 @@
 import type { UpdateErrorStage, UpdateSnapshot, UpdateStatus } from "../../shared/types/update.ts";
+import { isObjectRecord as isRecord } from "../../shared/lib/runtimeTypeGuards.ts";
 
-export interface RawUpdateSnapshot {
+interface RawUpdateSnapshot {
   current_version: string;
   status: UpdateStatus;
   latest_version: string | null;
@@ -12,10 +13,6 @@ export interface RawUpdateSnapshot {
   total_bytes: number | null;
   release_page_url: string | null;
   asset_download_url: string | null;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 function isUpdateStatus(value: unknown): value is UpdateStatus {
@@ -39,7 +36,7 @@ function isUpdateErrorStage(value: unknown): value is UpdateErrorStage {
   ].includes(value);
 }
 
-export function isRawUpdateSnapshot(value: unknown): value is RawUpdateSnapshot {
+function isRawUpdateSnapshot(value: unknown): value is RawUpdateSnapshot {
   return isRecord(value)
     && typeof value.current_version === "string"
     && isUpdateStatus(value.status)
@@ -54,7 +51,7 @@ export function isRawUpdateSnapshot(value: unknown): value is RawUpdateSnapshot 
     && (typeof value.asset_download_url === "string" || value.asset_download_url === null);
 }
 
-export function mapRawUpdateSnapshot(raw: RawUpdateSnapshot): UpdateSnapshot {
+function mapRawUpdateSnapshot(raw: RawUpdateSnapshot): UpdateSnapshot {
   return {
     currentVersion: raw.current_version,
     status: raw.status,

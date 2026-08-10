@@ -1,6 +1,6 @@
 import { invokeWithCommandError } from "./commandError.ts";
 
-export interface RemoteBackupSettingsPatchPayload {
+interface RemoteBackupSettingsPatchPayload {
   url: string;
   username: string;
   remoteDir?: string;
@@ -9,10 +9,6 @@ export interface RemoteBackupSettingsPatchPayload {
 
 export async function deleteSessionsBefore(cutoffTime: number): Promise<void> {
   await invokeWithCommandError("cmd_delete_sessions_before", { cutoffTime });
-}
-
-export async function clearAllSessionWindowTitles(): Promise<void> {
-  await invokeWithCommandError("cmd_clear_all_session_window_titles");
 }
 
 export async function deleteSessionsByExeNames(exeNames: string[]): Promise<void> {
@@ -29,10 +25,6 @@ export async function deleteSessionsByExeNamesBetween(
     startTime,
     endTime,
   });
-}
-
-export async function deleteWebActivitySegmentsBefore(cutoffTime: number): Promise<void> {
-  await invokeWithCommandError("cmd_delete_web_activity_segments_before", { cutoffTime });
 }
 
 export async function deleteWebActivitySegmentsByDomain(

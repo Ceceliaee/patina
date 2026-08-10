@@ -1,7 +1,4 @@
-import {
-  deleteWebActivitySegmentsBefore as deleteWebActivitySegmentsBeforeViaCommand,
-  deleteWebActivitySegmentsByDomain as deleteWebActivitySegmentsByDomainViaCommand,
-} from "./persistenceWriteRuntimeGateway.ts";
+import { deleteWebActivitySegmentsByDomain as deleteWebActivitySegmentsByDomainViaCommand } from "./persistenceWriteRuntimeGateway.ts";
 import { getDB } from "./sqlite.ts";
 import type {
   ObservedWebDomainCandidate,
@@ -119,10 +116,6 @@ export async function getWebActivitySegmentsInRange(
   );
 
   return rows.map(mapRawWebActivitySegment);
-}
-
-export async function deleteWebActivitySegmentsBefore(cutoffTime: number): Promise<void> {
-  await deleteWebActivitySegmentsBeforeViaCommand(cutoffTime);
 }
 
 export async function deleteWebActivitySegmentsByDomain(normalizedDomain: string): Promise<void> {

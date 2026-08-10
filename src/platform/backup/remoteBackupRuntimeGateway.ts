@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { isObjectRecord as isRecord } from "../../shared/lib/runtimeTypeGuards.ts";
 import { parseBackupPreview, type BackupPreview } from "./backupRuntimeGateway.ts";
 
 export interface WebDavBackupConfig {
@@ -56,19 +57,15 @@ export interface RemoteBackupEntry {
   iconCacheCount: number;
 }
 
-export interface RemoteBackupUploadResult {
+interface RemoteBackupUploadResult {
   entry: RemoteBackupEntry;
   indexUpdated: boolean;
   indexMessage: string | null;
 }
 
-export interface RemoteBackupDownloadResult {
+interface RemoteBackupDownloadResult {
   path: string;
   preview: BackupPreview;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object";
 }
 
 function isRawRemoteBackupEntry(value: unknown): value is RawRemoteBackupEntry {
@@ -152,6 +149,13 @@ export async function deleteWebDavBackupSecret(): Promise<void> {
 
 export async function hasWebDavBackupSecret(): Promise<boolean> {
   return invoke<boolean>("cmd_has_webdav_backup_secret");
+}
+
+export async function revealWebDavBackupSecret(): Promise<string | null> {
+  const result = await invoke<unknown>("cmd_reveal_webdav_backup_secret");
+  if (result === null) return null;
+  if (typeof result === "string") return result;
+  throw new Error("Received invalid WebDAV secret payload");
 }
 
 export async function testWebDavBackupTarget(config: WebDavBackupConfig, password?: string): Promise<boolean> {

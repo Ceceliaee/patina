@@ -1,21 +1,21 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
-export interface CurrentWindowForegroundState {
+interface CurrentWindowForegroundState {
   visible: boolean;
   focused: boolean;
   foregroundLike: boolean;
 }
 
-export type MainWindowReadyOutcome = "stale" | "duplicate" | "hidden" | "revealed";
+type MainWindowReadyOutcome = "stale" | "duplicate" | "hidden" | "revealed";
 
-export interface MainWindowReadyResult {
+interface MainWindowReadyResult {
   outcome: MainWindowReadyOutcome;
   generation: number;
   loadEpoch: number;
 }
 
-export interface MainWindowRenderToken {
+interface MainWindowRenderToken {
   generation: number;
   loadEpoch: number;
 }

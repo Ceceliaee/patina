@@ -1,5 +1,6 @@
 import { getDB } from "./sqlite.ts";
 import { AppClassification } from "../../shared/classification/appClassification.ts";
+import { resolveAppIconKeys } from "../../shared/classification/appIconIdentity.ts";
 import type { HistorySession, TitleSampleDetail } from "../../shared/types/sessions.ts";
 import {
   resolveNativeSessionPrecedence,
@@ -31,7 +32,7 @@ interface RawIconCacheRow {
   icon_base64: string;
 }
 
-export interface RawAggregateSessionCandidateRow {
+interface RawAggregateSessionCandidateRow {
   record_id?: number;
   origin?: TimeRecordOrigin;
   app_name: string;
@@ -93,24 +94,8 @@ export function mapRawAggregateSessionCandidates(
     }));
 }
 
-function collectIconLookupKeys(exeName: string): string[] {
-  const rawExe = exeName.trim();
-  if (!rawExe) return [];
-
-  const lowerExe = rawExe.toLowerCase();
-  const normalizedExe = AppClassification.normalizeExecutable(rawExe);
-  const canonicalExe = AppClassification.resolveCanonicalExecutable(rawExe);
-
-  return Array.from(new Set([
-    rawExe,
-    lowerExe,
-    normalizedExe,
-    canonicalExe,
-  ].filter(Boolean)));
-}
-
 function addIconAliasesToMap(map: Record<string, string>, exeName: string, iconBase64: string): void {
-  for (const key of collectIconLookupKeys(exeName)) {
+  for (const key of resolveAppIconKeys(exeName)) {
     map[key] = iconBase64;
   }
 }
@@ -123,7 +108,7 @@ function addIconRowToMap(map: Record<string, string>, row: RawIconCacheRow): voi
 }
 
 function readIconFromMap(map: Record<string, string>, exeName: string): string | null {
-  for (const key of collectIconLookupKeys(exeName)) {
+  for (const key of resolveAppIconKeys(exeName)) {
     const icon = map[key];
     if (icon) return icon;
   }
@@ -131,23 +116,9 @@ function readIconFromMap(map: Record<string, string>, exeName: string): string |
   return null;
 }
 
-export async function getIconMap(): Promise<Record<string, string>> {
-  const db = await getDB();
-  const results = await db.select<RawIconCacheRow[]>(
-    "SELECT exe_name, icon_base64 FROM icon_cache",
-  );
-  const map: Record<string, string> = {};
-
-  for (const row of results) {
-    addIconRowToMap(map, row);
-  }
-
-  return map;
-}
-
 export async function getIconsForExecutables(exeNames: string[]): Promise<Record<string, string>> {
   const lookupKeys = Array.from(new Set(
-    exeNames.flatMap((exeName) => collectIconLookupKeys(exeName)),
+    exeNames.flatMap((exeName) => resolveAppIconKeys(exeName)),
   ));
   const map: Record<string, string> = {};
 
