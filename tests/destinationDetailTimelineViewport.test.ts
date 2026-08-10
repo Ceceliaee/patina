@@ -21,6 +21,7 @@ import {
   rememberDestinationDetailTimelineZoomHours,
   saveDetailMinSecs,
 } from "../src/features/destination/services/destinationDetailPreferenceStorage.ts";
+import { MemoryStorage, withWindowValue } from "./helpers/browserTestGlobals.ts";
 
 let passed = 0;
 
@@ -28,36 +29,6 @@ function runTest(name: string, fn: () => void) {
   fn();
   passed += 1;
   console.log(`PASS ${name}`);
-}
-
-class MemoryStorage {
-  private values = new Map<string, string>();
-
-  getItem(key: string) {
-    return this.values.get(key) ?? null;
-  }
-
-  setItem(key: string, value: string) {
-    this.values.set(key, value);
-  }
-}
-
-function withWindowValue(value: unknown, fn: () => void) {
-  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
-  Object.defineProperty(globalThis, "window", {
-    configurable: true,
-    value,
-  });
-
-  try {
-    fn();
-  } finally {
-    if (descriptor) {
-      Object.defineProperty(globalThis, "window", descriptor);
-    } else {
-      delete (globalThis as { window?: unknown }).window;
-    }
-  }
 }
 
 function at(hour: number, minute = 0, second = 0) {

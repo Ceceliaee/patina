@@ -30,61 +30,16 @@ const buildHistoryTimelineViewModel = (input: HistoryTimelineInput) => (
   buildHistoryTimelineViewModelRaw({ ...input, uiText: getLocaleText("zh-CN") })
 );
 import type { CompiledSession } from "../src/shared/lib/sessionReadCompiler.ts";
-import { createTestHarness } from "./helpers/trackingTestHarness.ts";
+import { createTestHarness } from "./helpers/testHarness.ts";
+import {
+  MemoryStorage,
+  withWindowStorage,
+  withWindowValue,
+} from "./helpers/browserTestGlobals.ts";
 
 const harness = createTestHarness();
 const runTest = harness.run;
 const HOUR_MS = 60 * 60_000;
-
-class MemoryStorage {
-  private values = new Map<string, string>();
-
-  get length() {
-    return this.values.size;
-  }
-
-  clear() {
-    this.values.clear();
-  }
-
-  getItem(key: string) {
-    return this.values.get(key) ?? null;
-  }
-
-  key(index: number) {
-    return Array.from(this.values.keys())[index] ?? null;
-  }
-
-  removeItem(key: string) {
-    this.values.delete(key);
-  }
-
-  setItem(key: string, value: string) {
-    this.values.set(key, value);
-  }
-}
-
-function withWindowValue(value: unknown, fn: () => void) {
-  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
-  Object.defineProperty(globalThis, "window", {
-    configurable: true,
-    value,
-  });
-
-  try {
-    fn();
-  } finally {
-    if (descriptor) {
-      Object.defineProperty(globalThis, "window", descriptor);
-    } else {
-      delete (globalThis as { window?: unknown }).window;
-    }
-  }
-}
-
-function withWindowStorage(storage: MemoryStorage, fn: () => void) {
-  withWindowValue({ localStorage: storage }, fn);
-}
 
 function makeCompiledSession(overrides: Partial<CompiledSession> = {}): CompiledSession {
   const startTime = overrides.startTime ?? new Date(2026, 0, 2, 9, 0, 0, 0).getTime();

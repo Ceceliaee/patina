@@ -1,6 +1,8 @@
 import type { HistorySession } from "../../src/shared/types/sessions.ts";
 import type { TrackedWindow } from "../../src/shared/types/tracking.ts";
 
+export { createTestHarness } from "./testHarness.ts";
+
 export function makeWindow(overrides: Partial<TrackedWindow> = {}): TrackedWindow {
   return {
     hwnd: "0x100",
@@ -33,42 +35,5 @@ export function makeSession(overrides: Partial<HistorySession> = {}): HistorySes
     ...session,
     continuityGroupStartTime:
       session.continuityGroupStartTime ?? session.startTime,
-  };
-}
-
-export function createTestHarness() {
-  let passed = 0;
-  const pending: Promise<void>[] = [];
-
-  return {
-    run(name: string, fn: () => void | Promise<void>) {
-      try {
-        const result = fn();
-        if (result && typeof (result as Promise<void>).then === "function") {
-          pending.push(
-            Promise.resolve(result)
-              .then(() => {
-                passed += 1;
-                console.log(`PASS ${name}`);
-              })
-              .catch((error) => {
-                console.error(`FAIL ${name}`);
-                throw error;
-              }),
-          );
-          return;
-        }
-
-        passed += 1;
-        console.log(`PASS ${name}`);
-      } catch (error) {
-        console.error(`FAIL ${name}`);
-        throw error;
-      }
-    },
-    async finish(label: string) {
-      await Promise.all(pending);
-      console.log(`Passed ${passed} ${label} tests`);
-    },
   };
 }

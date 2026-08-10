@@ -13,10 +13,8 @@ import { getLocaleText } from "../src/shared/i18n/runtime.ts";
 import {
   shouldDeleteSessionByStartTime,
 } from "../src/features/settings/services/sessionCleanupPolicy.ts";
-import {
-  createTestHarness,
-  makeSession,
-} from "./helpers/trackingTestHarness.ts";
+import { makeSession } from "./helpers/trackingTestHarness.ts";
+import { createTestHarness } from "./helpers/testHarness.ts";
 
 const harness = createTestHarness();
 const runTest = harness.run;

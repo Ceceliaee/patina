@@ -48,6 +48,7 @@ import {
   rememberToolsTimerMode,
 } from "../src/features/tools/services/toolsLayoutPreferenceStorage.ts";
 import { createToolsRuntimeSnapshotStore } from "../src/features/tools/services/toolsRuntimeSnapshotStore.ts";
+import { MemoryStorage, withWindowStorage } from "./helpers/browserTestGlobals.ts";
 
 const labels: ToolsViewModelLabels = {
   timerIdle: "Not started",
@@ -157,52 +158,6 @@ function classificationCatalog(
 }
 
 let passed = 0;
-
-class MemoryStorage {
-  private values = new Map<string, string>();
-
-  get length() {
-    return this.values.size;
-  }
-
-  clear() {
-    this.values.clear();
-  }
-
-  getItem(key: string) {
-    return this.values.get(key) ?? null;
-  }
-
-  key(index: number) {
-    return Array.from(this.values.keys())[index] ?? null;
-  }
-
-  removeItem(key: string) {
-    this.values.delete(key);
-  }
-
-  setItem(key: string, value: string) {
-    this.values.set(key, value);
-  }
-}
-
-function withWindowStorage(storage: MemoryStorage, fn: () => void) {
-  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
-  Object.defineProperty(globalThis, "window", {
-    configurable: true,
-    value: { localStorage: storage },
-  });
-
-  try {
-    fn();
-  } finally {
-    if (descriptor) {
-      Object.defineProperty(globalThis, "window", descriptor);
-    } else {
-      delete (globalThis as { window?: unknown }).window;
-    }
-  }
-}
 
 async function runTest(name: string, fn: () => Promise<void> | void) {
   await fn();
