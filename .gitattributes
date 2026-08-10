@@ -1,0 +1,3 @@
+# Generated i18n outputs are byte-compared by the quality gate.
+src/shared/i18n/generated/*.ts text eol=lf
+src-tauri/src/domain/localization/generated.rs text eol=lf
