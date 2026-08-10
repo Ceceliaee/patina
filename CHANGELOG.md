@@ -18,33 +18,33 @@ App note en: TBD.
 
 ### Added
 
-- 设置页新增本地与 WebDAV 定时备份，可按每日或每周自动执行。Refs [#40](https://github.com/Ceceliaee/patina/issues/40)
-- 设置页新增定时数据导出，可按每日或每周将所选格式和字段自动导出到指定目录。Refs [#46](https://github.com/Ceceliaee/patina/issues/46)
-- Data 新增按分类查看时长、趋势和热力图，并支持查看所选应用、分类或网页的完整记录范围。Refs [#6](https://github.com/Ceceliaee/patina/issues/6)
-- History 和 Data 新增网页快捷改名与分类操作。Refs [#6](https://github.com/Ceceliaee/patina/issues/6)
+- 设置页新增本地与 WebDAV 定时备份，可按每日或每周自动执行；自动备份只轮换同一目标的自动文件，不影响手动备份。Refs [#40](https://github.com/Ceceliaee/patina/issues/40)
+- 设置页新增定时数据导出，可按每日或每周将所选格式和字段保存到指定目录，便于日报或其他自动化工具继续处理。Refs [#46](https://github.com/Ceceliaee/patina/issues/46)
+- Data 新增分类趋势模式和“总计”范围，可按分类查看时长、趋势和热力图，也可查看所选应用、分类或网页的完整记录范围。Refs [#6](https://github.com/Ceceliaee/patina/issues/6)
+- History 和 Data 的网页图标新增快捷菜单，可直接调整网站名称，以及设置、更改或清除分类。Refs [#6](https://github.com/Ceceliaee/patina/issues/6)
 
 ### Changed
 
-- 页面、系统托盘、原生提醒和 Markdown 导出现在统一使用应用内所选语言。Refs [#61](https://github.com/Ceceliaee/patina/issues/61)
-- 系统托盘图标会根据任务栏明暗和当前追踪状态自动切换，提高辨识度。Refs [#63](https://github.com/Ceceliaee/patina/issues/63)
-- 备份与数据导出的文件名现在会明确区分手动操作和定时任务，并使用日期或时间标识结果。Refs [#40](https://github.com/Ceceliaee/patina/issues/40), [#46](https://github.com/Ceceliaee/patina/issues/46)
-- WebDAV 远程地址现在要求使用 HTTPS，仅字面回环地址允许 HTTP。
+- 页面、系统托盘、原生提醒和 Markdown 导出现在统一使用应用内所选语言；切换语言后，日期、数字和延迟加载页面不再混用系统语言或旧语言缓存。Refs [#61](https://github.com/Ceceliaee/patina/issues/61)
+- 系统托盘图标会根据 Windows 任务栏明暗和当前追踪中或已暂停状态自动切换，在应用主题与系统主题不一致时仍保持清晰。Refs [#63](https://github.com/Ceceliaee/patina/issues/63)
+- 备份与数据导出的文件名现在会明确区分手动操作和定时任务，并加入日期或时间，便于查找、排序和交给其他工具处理。Refs [#40](https://github.com/Ceceliaee/patina/issues/40), [#46](https://github.com/Ceceliaee/patina/issues/46)
+- WebDAV 远程地址现在要求使用 HTTPS，仅字面回环地址允许 HTTP，避免远程凭据通过明文连接传输。
 
 ### Fixed
 
-- 修复挂件在多显示器、混合缩放和左右屏幕边缘上的吸附方向与位置恢复错误。Refs [#55](https://github.com/Ceceliaee/patina/issues/55), [#64](https://github.com/Ceceliaee/patina/issues/64)
-- 修复标题栏和侧边栏应用图标显示模糊的问题。
-- 修复 Data 热力图读取失败后可能持续加载或显示为空活动的问题。
-- 修复更改数据或缓存目录时可能误判目标或留下不完整迁移的问题。Refs [#20](https://github.com/Ceceliaee/patina/issues/20)
+- 修复挂件在多显示器、混合缩放和左右屏幕边缘之间拖动时，可能吸附到错误方向或恢复到错误位置的问题。Refs [#55](https://github.com/Ceceliaee/patina/issues/55), [#64](https://github.com/Ceceliaee/patina/issues/64)
+- 修复标题栏和侧边栏放大低分辨率应用图标后显示模糊的问题，改用对应的高分辨率资源。
+- 修复 Data 热力图读取失败后可能持续加载或被误认为没有活动的问题；现在会显示可重试的错误状态，并保留其他已加载内容。
+- 修复更改数据或缓存目录时，路径别名、写入探测或失败清理可能误判目标并留下不完整迁移的问题。Refs [#20](https://github.com/Ceceliaee/patina/issues/20)
 
 ### Removed
 
 ### Internal
 
-- 建立前后端统一的本地化契约、翻译工具与硬编码门禁。
-- 收紧存储迁移和 WebDAV 安全边界，并补齐定时任务运行时验证。Refs [#20](https://github.com/Ceceliaee/patina/issues/20), [#40](https://github.com/Ceceliaee/patina/issues/40), [#46](https://github.com/Ceceliaee/patina/issues/46)
-- 新增关键 mutation、质量热点和测试治理门禁，减少死代码与重复实现回归。
-- 发布流程新增安装包 SHA-256 校验和 GitHub Artifact Attestation。
+- 建立前端与 Rust 共用的本地化契约、语言注册表和翻译校验工具，并新增硬编码文案门禁。
+- 收紧存储迁移路径判定、WebDAV 凭据与传输边界，并补齐定时任务和文件名冲突的真实运行时验证。Refs [#20](https://github.com/Ceceliaee/patina/issues/20), [#40](https://github.com/Ceceliaee/patina/issues/40), [#46](https://github.com/Ceceliaee/patina/issues/46)
+- 新增关键 mutation、质量热点、测试套件治理和未使用导出检查，减少脆弱源码字符串测试、死代码与重复实现回归。
+- 发布流程新增最终安装包 SHA-256 回读校验和 GitHub Artifact Attestation，验证失败时会阻断 Release。
 
 ## [1.9.2] - 2026-08-05
 
