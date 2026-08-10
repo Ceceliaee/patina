@@ -66,7 +66,7 @@ export interface DestinationDetailDayViewModel {
   lastEndTime: number | null;
 }
 
-export interface DestinationDetailDayDependencies {
+interface DestinationDetailDayDependencies {
   getAppSessions: (date: Date) => Promise<HistorySession[]>;
   getWebSegments: (startMs: number, endMs: number) => Promise<WebActivitySegment[]>;
 }

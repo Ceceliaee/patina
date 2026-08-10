@@ -27,9 +27,9 @@ export interface DestinationDetailTimelineViewport {
   durationMs: number;
 }
 
-export type DestinationDetailTimelineAxisTick = TimelineAxisTick;
+type DestinationDetailTimelineAxisTick = TimelineAxisTick;
 
-export interface DestinationDetailTimelineSegment {
+interface DestinationDetailTimelineSegment {
   id: string;
   startTime: number;
   endTime: number;
@@ -52,7 +52,7 @@ function getDayDurationMs(dayStartMs: number, dayEndMs: number) {
   return Math.max(1, dayEndMs - dayStartMs);
 }
 
-export function getDestinationDetailZoomDurationMs(
+function getDestinationDetailZoomDurationMs(
   zoomHours: number,
   dayStartMs: number,
   dayEndMs: number,

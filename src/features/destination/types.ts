@@ -1,6 +1,6 @@
 import type { TrackerHealthSnapshot } from "../../shared/types/tracking.ts";
 
-export type DestinationDetailMode = "app" | "web";
+type DestinationDetailMode = "app" | "web";
 
 export interface DestinationDetailTarget {
   mode: DestinationDetailMode;

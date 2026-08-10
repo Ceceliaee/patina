@@ -1,4 +1,4 @@
-import { useLocale, useLocaleText, type Locale } from "../../../shared/i18n/index.ts";
+import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode, } from "react";
 import QuietStepperSlider from "../../../shared/components/QuietStepperSlider.tsx";
 import {
@@ -7,6 +7,7 @@ import { formatDuration } from "../../../shared/lib/durationFormatting.ts";
 import type {
   DestinationDetailDayViewModel,
 } from "../services/destinationDetailReadModel.ts";
+import { formatDestinationTime as formatTime } from "../services/destinationTimeFormatting.ts";
 import {
   buildDestinationDetailTimelineAxisTicks,
   buildDestinationDetailTimelineSegments,
@@ -27,15 +28,6 @@ interface Props {
   toolbarAside: ReactNode;
   onViewportChange: (viewport: DestinationDetailTimelineViewport) => void;
   onZoomHoursChange: (zoomHours: number) => void;
-}
-
-function formatTime(timestamp: number, dayEndMs: number, locale: Locale) {
-  if (timestamp === dayEndMs) return "24:00";
-  return new Date(timestamp).toLocaleTimeString(locale, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
 }
 
 interface DragSession {

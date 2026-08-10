@@ -1,4 +1,4 @@
-import { useLocale, useLocaleText, type Locale } from "../../../shared/i18n/index.ts";
+import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
 import { useEffect, useId, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import QuietAnchoredPopover from "../../../shared/components/QuietAnchoredPopover.tsx";
@@ -13,6 +13,7 @@ import {
   clipDestinationDetailActivitiesToViewport,
   type DestinationDetailTimelineViewport,
 } from "../services/destinationDetailTimelineViewport.ts";
+import { formatDestinationTime as formatTime } from "../services/destinationTimeFormatting.ts";
 
 interface Props {
   day: DestinationDetailDayViewModel;
@@ -25,15 +26,6 @@ interface Props {
 interface OpenActivityDetails {
   activity: DestinationDetailActivity;
   anchor: HTMLButtonElement;
-}
-
-function formatTime(timestamp: number, dayEndMs: number, locale: Locale) {
-  if (timestamp === dayEndMs) return "24:00";
-  return new Date(timestamp).toLocaleTimeString(locale, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
 }
 
 export default function DestinationDetailRecords({
