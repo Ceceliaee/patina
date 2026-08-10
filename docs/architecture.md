@@ -76,12 +76,22 @@ Rust 拥有运行时主链、写侧副作用，以及需要跨启动维护一致
 
 ### 3.7 例外必须显式且尽量变薄
 
-稳定期允许存在少量兼容壳、转发层或历史适配层，但前提是：
+长期默认是一个能力只有一个当前实现和一个真实 owner。完成替换时，应迁移调用方并删除被替代实现；不得为了降低眼前改动量，长期并排保留“旧实现 + 新实现”。
+
+源码名称必须表达业务语义或边界差异，不表达实现的新旧顺序：
+
+- 不使用 `fooV2`、`foo_v3`、`NewFoo`、`NextFoo`、`FooLatest` 等函数、类型、模块、service 或 command 名称
+- 不用 `LegacyFoo`、`CompatFoo` 把临时兼容逻辑伪装成长期 owner；确实读取旧格式时，名称必须指向具体边界，例如冻结的备份格式 reader，并附带退出条件
+- 两种行为确实需要同时存在时，按领域语义命名，例如按来源、策略、格式或能力区分，而不是按 `V1 / V2` 区分
+- 版本号只用于真正被版本化的外部或持久化事实，例如发布版本、协议版本、备份格式、数据库 schema 和 migration；不得用这些必要版本事实为普通实现并行化提供借口
+
+默认不新增兼容壳、转发层或历史适配层。只有已发布数据、外部协议、跨版本升级或仍在支持窗口内的真实调用方要求兼容时，才允许例外存在，并且必须满足：
 
 - 它确实在服务兼容或平滑迁移
 - 它不承接新的厚逻辑
 - 它有明确 owner
-- 它不会重新把边界变模糊
+- 它有可验证的退出条件和删除时机
+- 它不会重新把边界变模糊，也不会形成 `V1 -> V2 -> V3` 转发链
 
 如果一个“临时例外”开始承接新功能，它就不再是例外，而是在制造新的遗留层。
 
@@ -119,6 +129,7 @@ Tauri application command 采用显式、默认拒绝的窗口授权模型：
 - `src-tauri/permissions/window-commands.toml` 和 `src-tauri/capabilities/{default,widget}.json` 只授予精确命令，不使用 application command 通配符或 default allow-all。
 - main window 与 Widget 分别使用独立 permission set；Widget 只读取专用 bootstrap/icon/placement/tracker 快照并执行必要窗口操作，不获得 plugin SQL load/select/execute。
 - 删除、恢复、密钥、存储迁移和更新安装等敏感 command 即使 capability 配错，也必须在 Rust handler 内根据真实 `WebviewWindow` label 做 caller guard；前端按钮不是安全边界。
+- 存储迁移编排归 `data/storage_migration.rs`，真实路径身份与无破坏写探针归 `data/storage_path_safety.rs`，staging/替换/旧数据清理的 reparse-safe 删除策略归 `data/storage_migration_cleanup.rs`；三者均默认拒绝无法确认的路径，破坏性清理前必须重新比较数据根和 WebView 根的交叉真实身份。
 - manifest、permission sets、capabilities、前端调用和 Rust `invoke_handler` 注册必须由静态 checker 保持一致，并由真实 main/Widget runtime denial matrix 证明边界没有只停留在配置文本。
 
 ### 4.3 本地数据读取通道
@@ -163,8 +174,9 @@ Tauri application command 采用显式、默认拒绝的窗口授权模型：
 - 冻结的旧格式 reader 是带丢弃窗口的兼容壳，不得成为新增数据域的长期 owner
 - 自动备份的时间声明、重试与调和决策归备份专用 `engine/backup_scheduler.rs`；目标执行、运行账本和保留策略分别归 `data/scheduled_backup.rs` 与其 repository，不为未来定时导出提前建立通用任务框架
 - WebDAV 自动备份只有在本地快照校验、不可覆盖上传、远端全量回读校验和索引发布全部完成后才可记为成功；旧自动对象必须在新备份成立后，凭精确路径、来源、目标身份与 ETag 等所有权证据清理，证据不足时保留对象并记录警告
-- WebDAV 地址、用户名和远端目录可作为非秘密配置持久化；密码只由平台凭据存储 owner 读取，不得进入 SQLite、IPC 返回值、事件载荷、远端索引或日志
+- WebDAV 地址、用户名和远端目录可作为非秘密配置持久化；密码不得进入 SQLite、事件载荷、远端索引或日志。唯一允许返回密码的 IPC 是 main window 用户明确点击“显示密码”触发的 `cmd_reveal_webdav_backup_secret`：handler 必须执行真实窗口 caller guard，前端不得在打开弹窗时预取，隐藏或关闭弹窗后必须清除已读取的明文预览；Widget 和其他窗口不得获得该命令
 - 自动导出的日历周期、到期槽位、补跑与重试决策归导出专用 `engine/export_scheduler.rs`；配置与运行账本归 `data/repositories/scheduled_export.rs`，文件生成、格式校验、不可覆盖发布和崩溃对账归 `data/scheduled_export.rs`，不得与自动备份合并成通用任务框架
+- `app/scheduled_task_runtime.rs` 只共享目录选择、唤醒/轮询和状态事件发送这些无业务语义的运行机制；备份与导出的 state 类型、锁边界、错误分类、调度策略和数据动作必须继续分离
 
 ### 4.4 浏览器扩展伴生边界
 
@@ -441,6 +453,7 @@ src-tauri/src/
 
 - Windows API 细节
 - 前台窗口、图标、电源事件等平台能力
+- 系统 wall clock 等外部环境事实；领域决策需要确定性时应接收注入时间，而不是在 domain 内直接读取时钟
 - 未来其他平台的隔离落点
 
 目标是：

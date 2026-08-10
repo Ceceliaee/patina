@@ -89,6 +89,10 @@
 - `platform/*` 只承接外部环境边界，不做“难题收容所”
 - Rust 核心逻辑优先留在 `engine / domain / data`
 
+代码演进采用“替换并收口”，不采用“追加一个版本”。新增或重构函数、类型、模块、service、command 时，不得以 `V2 / V3`、`New / Next / Latest` 等后缀或前缀区分实现；应按真实业务语义命名，并把调用方迁移到唯一当前实现。`Legacy / Compat` 只允许出现在明确、薄且有退出条件的兼容边界，不能成为业务层长期命名。Review 发现同一能力存在版本号函数链时，默认要求先判断 owner、迁移调用方并删除被替代实现，而不是继续增加下一版。
+
+这条规则不限制真实版本事实：SemVer、Git tag、Web Activity 协议版本、备份格式版本、数据库 schema 版本和 migration 编号仍按各自长期政策维护。测试 fixture 可以引用这些真实版本，但生产实现名称不能仅因“更新过一次”就携带版本号。
+
 判断一项结构优化是否值得做，先看它是否真正降低了：
 
 - 回归风险
@@ -201,6 +205,8 @@ Rust 默认门槛包含边界检查器自测、`npm run check:rust-boundaries`�
 
 工具链版本必须保持单一来源：Node 由仓库根目录 `.node-version` 定义，Rust 由根目录 `rust-toolchain.toml` 定义。CI 应直接读取或安装这两个文件声明的工具链，不得在 workflow 中重复硬编码 Node 或 Rust 版本。`package.json` 的 `engines` 与 `devEngines` 只镜像根配置决定的 Node/npm 事实，其中 `devEngines` 必须对开发 runtime 与 package manager 使用精确版本和 `onFail: error`，让错误工具链在 `npm install`、`npm ci` 与 `npm run` 前失败；`@types/node` 主版本必须与 `.node-version` 的 Node 主版本一致。依赖安装脚本只允许使用精确包版本的 `allowScripts` 条目，不得用包名级宽泛许可。默认测试必须检查这些镜像声明、Node 类型主版本、脚本许可和所有 workflow 的 `.node-version` 引用没有漂移；升级工具链后运行完整门槛验证。
 
+CI 引用的第三方 GitHub Actions 必须固定到完整 commit SHA，并在行尾保留对应主版本注释供自动升级工具识别。可移动的 `@vN` 标签只能用于人工核验新版本指向，不能作为 workflow 的长期执行引用；SHA 更新必须与该 Action 的官方 tag/release 对照后单独审查。
+
 ### 5.1 测试分层与稳定性治理
 
 测试长期按六层管理：unit/model、integration/contract、structural/SSR、browser、desktop runtime、performance/release。同一功能可以出现在多层，但每层必须保护不同事实：低层覆盖状态组合和不变量，browser 覆盖真实 DOM 与交互，desktop runtime 覆盖 Tauri、WebView2、IPC、plugin、进程和落盘边界，performance/release 负责预算与产物，不互相冒充。
@@ -208,6 +214,8 @@ Rust 默认门槛包含边界检查器自测、`npm run check:rust-boundaries`�
 `npm test` 是全部快速确定性 TypeScript 测试的稳定入口。coverage 风险域和其余快速测试是互斥分区，并集必须等于全部快速入口。真实浏览器 smoke 进入默认 `check`，Tauri runtime smoke 保持独立 CI job 和风险追加入口。普通确定性顶层测试在一次默认门禁中只能执行一次；coverage、mutation 和 runtime 的特殊语义不能作为宽泛重复豁免。
 
 新增测试必须能说明真实 owner、所属层级和独有失败模式。顶层 `tests/*.test.ts` 必须有且只有一个叶子脚本 owner，并能从快速、browser、runtime 或明确专项入口到达。删除测试前必须证明已有更稳定的替代保护，或证明它没有独有失败模式；测试数量和 coverage 百分比本身都不能作为删除理由。
+
+测试不得通过直接读取 `src/**` 或 `src-tauri/src/**` 文件文本、搜索实现片段或统计源码字符串来冒充行为覆盖。跨语言生成/导出字段契约是唯一允许的窄例外，例外必须精确到测试文件和源文件，并同时登记 owner、保留理由与退出条件；静态架构、命名和 source-shape 事实应由专用检查器及其自测负责。
 
 测试同步遵守以下规则：
 
@@ -239,15 +247,21 @@ Rust 默认门槛包含边界检查器自测、`npm run check:rust-boundaries`�
 
 `check:ipc-contracts` 静态比对前端生产调用、Rust `invoke_handler`、application command manifest、main/Widget permission set、capability 引用和敏感 caller guard，任何未注册调用、未分类 custom command、错误窗口授权、无 guard 敏感命令或非精确动态命令名都会失败。确需封装的动态调用必须落在精确 allowlist，并由检查器自测覆盖；不能使用目录级、前缀级或通配符豁免。
 
+WebDAV 已保存密码的显示是凭据边界的唯一明文返回例外：只能由 main window 的 `cmd_reveal_webdav_backup_secret` 在用户点击显示按钮时按当前 app profile 读取，必须列入敏感 caller guard 清单。browser 测试要证明打开弹窗不会预取、点击后才显示、再次隐藏会清除明文预览；desktop runtime 要证明 Widget capability 拒绝该命令。任何自动预取、跨 profile 读取、日志记录或持久化都视为安全回归。
+
 `check:hotspots` 是高风险热点增长门禁。Rust 统计以剔除 `#[cfg(test)]` 后的生产非空行数为口径，避免大量测试 fixture 掩盖生产职责；它不要求一次性拆掉所有历史大文件，但会锁住当前最高风险热点的增长预算。如果超过预算，必须先按 owner 拆分、补验证，或带理由更新预算。
+
+已完成集中整改的高风险 owner 应使用精确预算（当前值即上限），而不是继续保留增长余量。页面协调、启动生命周期、存储路径安全与新增共享原语属于这一类；新增职责必须先按 owner 拆分，不能用上调精确预算吸收。
 
 `check:quiet-pro-style-debt` 对现存的任意 radius 写法使用精确文件级基线：新增债务失败，债务减少但未同步收紧基线也失败。长期目标仍是把视觉角色收敛到 Quiet Pro token，而不是把基线当永久许可。
 
 `check:rust-boundaries` 扫描 Rust 高吸力层并先剥离 `#[cfg(test)]` 模块。它阻止 `commands/*`、`app/*` 与 `lib.rs` 直接写 SQL，阻止 `commands/*` 承接 SQLite pool 类型，阻止 Rust `app/*` 直连 repository 或 pool，阻止 `platform/*` 反向依赖 `data/*` / `app/*`，阻止 `domain/*` 依赖 `data/*` / `platform/*`，并阻止 `engine/*` 依赖 app、data、repository、pool、SQL、等待数据库或原始 Windows API。生产路径必须让 SQL 留在 `data/*`，Windows API 实现留在 `platform/*`，领域决策留在 `domain/*`，跨边界数据组合留在 `app/*`；engine 可以调用 platform 暴露的窄能力来编排桌面行为，但不能把 Win32 实现吸入自身。检查器自测与空债务基线共同保证新增反向依赖立即失败。
 
-`test:coverage` 对 tracking effects/policy、Dashboard/History read model、Web heatmap retry state、Web aggregate gateway、SQLite transaction 与结构化 command error 等核心风险域设置语句、分支、函数和行覆盖率硬阈值。除 aggregate coverage 外，高风险 owner 必须逐文件满足声明阈值；报告必须列出具体失败文件，不能让高覆盖文件平均掉低覆盖 owner。覆盖率是风险证据，不替代行为断言；新增高风险 owner 时应同步扩展 include，而不是用无关低风险文件稀释分母。
+`test:coverage` 对 tracking effects/policy、Dashboard/History read model、启动预热生命周期、Data heatmap retry snapshot、Web aggregate gateway、SQLite transaction 与结构化 command error 等核心风险域设置语句、分支、函数和行覆盖率硬阈值。除 aggregate coverage 外，高风险 owner 必须逐文件满足声明阈值；报告必须列出具体失败文件，不能让高覆盖文件平均掉低覆盖 owner。覆盖率是风险证据，不替代行为断言；新增高风险 owner 时应同步扩展 include，而不是用无关低风险文件稀释分母。
 
-`test:mutation` 对并发等待、批处理完整性、序列化、重试语义、错误 DTO 解析以及权限分类、Widget SQL 拒绝、caller guard、heatmap retry generation、aggregate revision mismatch 和 bridge recovery 执行少量关键变异。每个 mutant 必须修改真实生产模块并由现有行为断言杀死；不能用只测试测试脚本自身的伪 mutant 计分，也不能删除 mutant 而不提供覆盖同一错误模式的替代证据。
+`test:mutation` 对并发等待、批处理完整性、序列化、重试语义、错误 DTO 解析以及权限分类、Widget SQL 拒绝、caller guard、存储路径重叠/探针所有权、WebView 执行期与跨根身份复核、staging reparse 拒绝、WebDAV 明文边界、凭据 profile/原生 blob 安全、启动 controller identity、heatmap 失败结算/retry generation、aggregate revision mismatch 和 bridge recovery 执行少量关键变异。每个 mutant 必须修改真实生产模块并由现有行为断言杀死；不能用只测试测试脚本自身的伪 mutant 计分，也不能删除 mutant 而不提供覆盖同一错误模式的替代证据。
+
+`npm run quality:exports` 是导出面和死代码的审计入口，不是默认阻断门禁。报告必须区分 production-internal、test-only 与 fully-unreferenced；内部只用的声明应去掉无意义 `export`，test-only 是可见性复查信号，fully-unreferenced 必须逐项判断动态加载、协议注册、生成入口和真实死代码。不得仅凭静态报告批量删除，也不得通过宽泛忽略目录清零报告。
 
 压缩 SQLite migration 基线时，必须同时保留旧版本数据库直升保护：新安装可以走当前压缩基线，已安装旧数据库在归一化 `_sqlx_migrations` 前必须先完成幂等的 legacy schema repair，并用 Rust 自动化测试覆盖缺列补齐、历史数据保留、必要回填、active session 归一化和不完整 schema 不误标为当前基线。
 
@@ -257,6 +271,8 @@ Rust 默认门槛包含边界检查器自测、`npm run check:rust-boundaries`�
 - 当前 `Patina` 数据库 schema migration、legacy schema repair、基线归一化和已安装数据库直升保护，属于升级可信链路，不应因为名字里带 `legacy` 或 `migration` 就当作可清理兼容代码删除。
 
 如果要移除第二类代码，必须先证明它不再承担已发布版本数据库升级职责，并以明确执行单、风险说明和自动化测试覆盖，而不是把它混入普通兼容清理。
+
+除上述升级可信链路外，新需求默认不得通过复制当前实现并追加 `V2 / V3`、`new / next / latest` 名称落地。临时兼容确实不可避免时，PR 或执行单必须写明具体兼容对象、唯一当前 owner、删除条件、最晚复核点和覆盖该退出条件的测试；缺少其中任一项，不接受新增兼容层。
 
 `test:ui-smoke` 是当前仓库的最小 UI smoke 防线。它不依赖真实 Tauri runtime，而是通过 stub Tauri API、SSR 渲染 AppShell，并确认主导航和 Dashboard 首屏可以被构建与渲染。
 

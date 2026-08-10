@@ -64,6 +64,8 @@ These instructions apply to all UI work unless the user gives an explicit task-s
 - `platform/*` is for explicit external-environment boundaries, not a generic dump for hard problems.
 - Do not reintroduce exited root layers such as `src/lib/` or `src/types/`.
 - Treat compatibility shells and forwarding layers as explicit exceptions that should stay thin.
+- Default to one canonical implementation per capability. Do not add compatibility code unless an actual released-data, external-protocol, upgrade, or supported-caller boundary requires it and has a documented exit condition.
+- Do not version ordinary function, type, module, service, or command names with `V2` / `V3`, `New` / `Next` / `Latest`, or similar recency markers. Name simultaneous variants by domain semantics; real release, protocol, backup-format, schema, and migration versions remain valid version facts.
 - Treat files under `docs/archive/` as historical context, not the default source of truth.
 
 ## Product And Priority Direction
