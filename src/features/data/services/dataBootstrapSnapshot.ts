@@ -1,4 +1,8 @@
 import type { AppLanguage } from "../../../shared/settings/appSettings.ts";
+import {
+  isObjectRecord as isRecord,
+  isStringArray,
+} from "../../../shared/lib/runtimeTypeGuards.ts";
 import { SUPPORTED_LOCALES } from "../../../shared/i18n/generated/contract.ts";
 import {
   clearDataBootstrapSnapshotPayload,
@@ -42,14 +46,6 @@ const defaultDeps: DataBootstrapSnapshotDeps = {
 
 let cachedSnapshot: DataBootstrapSnapshot | null = null;
 let lastSaveAtMs = 0;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
 
 function isValidAppOption(value: unknown) {
   return isRecord(value)

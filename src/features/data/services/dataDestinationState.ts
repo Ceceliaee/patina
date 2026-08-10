@@ -35,19 +35,19 @@ export interface DataDestinationTrendSummary {
   activeDayCount: number;
 }
 
-export type DataDestinationSelectionOutcome =
+type DataDestinationSelectionOutcome =
   | "replaced"
   | "added"
   | "removed"
   | "limit-reached"
   | "last-item";
 
-export interface DataDestinationSelectionResult {
+interface DataDestinationSelectionResult {
   keys: string[];
   outcome: DataDestinationSelectionOutcome;
 }
 
-export interface DataDestinationSelectionSnapshot {
+interface DataDestinationSelectionSnapshot {
   appKeys: string[];
   webKeys: string[];
   mode: DataDestinationDetailMode;

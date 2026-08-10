@@ -7,7 +7,7 @@ export const DATA_NAVIGATION_PERFORMANCE_MARKS = {
   complete: "patina:data-navigation:complete",
 } as const;
 
-export type DataNavigationPerformanceStage =
+type DataNavigationPerformanceStage =
   Exclude<keyof typeof DATA_NAVIGATION_PERFORMANCE_MARKS, "intent">;
 
 function getPerformance() {

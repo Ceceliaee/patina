@@ -1,4 +1,4 @@
-export type DataHeavyCacheOwner =
+type DataHeavyCacheOwner =
   | "heatmap-read-model"
   | "trend-snapshot"
   | "web-activity-snapshot";

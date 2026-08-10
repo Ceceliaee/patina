@@ -16,7 +16,7 @@ import {
   type DataBootstrapSnapshot,
 } from "./dataBootstrapSnapshot.ts";
 
-export interface DataFirstScreenPrewarmOptions {
+interface DataFirstScreenPrewarmOptions {
   mappingVersion: number;
   uiLanguage: AppLanguage;
   reason: "foreground-opened" | "data-opened";

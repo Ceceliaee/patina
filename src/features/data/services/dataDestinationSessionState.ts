@@ -1,6 +1,6 @@
 import type { DataDestinationTrendOption } from "./dataDestinationState.ts";
 
-export interface DataDestinationSessionSelectionState {
+interface DataDestinationSessionSelectionState {
   appKeys: string[];
   categoryKeys: string[];
   webKeys: string[];
