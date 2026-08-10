@@ -565,7 +565,7 @@ mod tests {
             period_end_ms: 2,
             format: ScheduledExportFormat::Csv,
             selected_fields: vec!["record_type".to_string()],
-            target_path: "C:\\Exports\\patina-activity-20260808.csv".to_string(),
+            target_path: "C:\\Exports\\Patina-scheduled-export-20260808.csv".to_string(),
             staging_path: Some("C:\\Exports\\.staging.csv".to_string()),
             phase: "claimed".to_string(),
             status: "running".to_string(),

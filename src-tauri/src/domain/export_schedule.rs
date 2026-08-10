@@ -2,7 +2,7 @@ use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime, Weekday};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-pub const DEFAULT_EXPORT_LOCAL_TIME_MINUTES: u16 = 2 * 60;
+pub const DEFAULT_EXPORT_LOCAL_TIME_MINUTES: u16 = 21 * 60;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -200,10 +200,10 @@ impl LogicalExportPeriod {
     pub fn compact_file_stem(self) -> String {
         let start = self.start_date.format("%Y%m%d");
         if self.end_date_exclusive == self.start_date.succ_opt().expect("valid next date") {
-            format!("patina-activity-{start}")
+            format!("Patina-scheduled-export-{start}")
         } else {
             format!(
-                "patina-activity-{start}-{}",
+                "Patina-scheduled-export-{start}-{}",
                 self.end_inclusive().format("%Y%m%d")
             )
         }
@@ -387,7 +387,10 @@ mod tests {
         let period = period_for_slot(slot, ScheduledExportCadence::Daily).unwrap();
         assert_eq!(period.start_key(), "2026-08-08");
         assert_eq!(period.end_key(), "2026-08-08");
-        assert_eq!(period.compact_file_stem(), "patina-activity-20260808");
+        assert_eq!(
+            period.compact_file_stem(),
+            "Patina-scheduled-export-20260808"
+        );
     }
 
     #[test]
@@ -401,7 +404,7 @@ mod tests {
         assert_eq!(period.end_key(), "2026-08-02");
         assert_eq!(
             period.compact_file_stem(),
-            "patina-activity-20260727-20260802"
+            "Patina-scheduled-export-20260727-20260802"
         );
     }
 

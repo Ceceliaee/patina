@@ -7,7 +7,8 @@ use crate::domain::backup_schedule::{
     ScheduledBackupTargetInput, DEFAULT_LOCAL_TIME_MINUTES, SCHEDULED_BACKUP_KEEP_COUNT,
 };
 use crate::engine::backup_scheduler::{decide_action, SchedulerAction};
-use chrono::{Local, LocalResult, NaiveDate, NaiveDateTime, TimeZone, Utc};
+use crate::platform::app_paths::{self, AppProfile};
+use chrono::{Local, LocalResult, NaiveDate, NaiveDateTime, TimeZone};
 use sqlx::{Pool, Sqlite};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -20,7 +21,7 @@ const CLEANUP_RETRY_INTERVAL_MS: i64 = 30 * 60 * 1000;
 pub async fn get_snapshot(app: &AppHandle) -> Result<ScheduledBackupSnapshot, String> {
     let pool = crate::data::sqlite_pool::wait_for_sqlite_pool(app).await?;
     let config = load_or_create_config(app, &pool).await?;
-    snapshot_from_config(&pool, config).await
+    snapshot_from_config(&pool, config, default_local_target_dir(app)?).await
 }
 
 pub async fn save_config(
@@ -37,7 +38,9 @@ pub async fn save_config(
             }
         }
         ScheduledBackupTargetInput::WebDav => {
-            let target = remote_backup::load_scheduled_webdav_target(&pool).await?;
+            let target =
+                remote_backup::load_scheduled_webdav_target(app_paths::app_profile(app), &pool)
+                    .await?;
             ScheduledBackupTarget::WebDav {
                 target_identity: remote_backup::scheduled_target_identity(&target),
             }
@@ -77,7 +80,7 @@ pub async fn save_config(
         updated_at_ms: now_ms,
     };
     repository::save_config(&pool, &next).await?;
-    snapshot_from_config(&pool, next).await
+    snapshot_from_config(&pool, next, default_local_target_dir(app)?).await
 }
 
 pub async fn tick(app: &AppHandle) -> Result<bool, String> {
@@ -125,7 +128,7 @@ pub async fn tick(app: &AppHandle) -> Result<bool, String> {
                 if success.cleanup_warning.is_some()
                     && now_ms.saturating_sub(success.updated_at_ms) >= CLEANUP_RETRY_INTERVAL_MS
                 {
-                    finish_success_maintenance(&pool, &config, &success.run_key, now_ms).await;
+                    finish_success_maintenance(app, &pool, &config, &success.run_key, now_ms).await;
                     return Ok(true);
                 }
             }
@@ -136,9 +139,15 @@ pub async fn tick(app: &AppHandle) -> Result<bool, String> {
             if repository::load_run(&pool, &run.run_key)
                 .await?
                 .is_some_and(|reconciled| reconciled.status == "succeeded")
-                && apply_retention(&pool, &config, &run.run_key, now_ms)
-                    .await
-                    .is_err()
+                && apply_retention(
+                    app_paths::app_profile(app),
+                    &pool,
+                    &config,
+                    &run.run_key,
+                    now_ms,
+                )
+                .await
+                .is_err()
             {
                 repository::set_cleanup_warning(
                     &pool,
@@ -282,7 +291,7 @@ async fn reconcile_published_run(
         .await?
         .ok_or_else(|| "reconciled scheduled backup run disappeared".to_string())?;
     if reconciled.status == "succeeded" {
-        finish_success_maintenance(pool, config, run_key, now_ms).await;
+        finish_success_maintenance(app, pool, config, run_key, now_ms).await;
     }
     Ok(())
 }
@@ -294,17 +303,14 @@ async fn load_or_create_config(
     if let Some(config) = repository::load_config(pool).await? {
         return Ok(config);
     }
-    let paths = crate::platform::storage_paths::resolve_storage_paths(app)?;
-    let target = normalize_target_directory(&paths.backup_dir.to_string_lossy())?;
+    let target = default_local_target_dir(app)?;
     let now = Local::now();
     let config = ScheduledBackupConfig {
         enabled: false,
-        cadence: ScheduledBackupCadence::Daily,
-        weekday: None,
+        cadence: ScheduledBackupCadence::Weekly,
+        weekday: Some(5),
         local_time_minutes: DEFAULT_LOCAL_TIME_MINUTES,
-        target: ScheduledBackupTarget::Local {
-            target_dir: target.to_string_lossy().to_string(),
-        },
+        target: ScheduledBackupTarget::Local { target_dir: target },
         target_generation: new_generation(),
         schedule_anchor_at_ms: now.timestamp_millis(),
         updated_at_ms: now.timestamp_millis(),
@@ -313,9 +319,19 @@ async fn load_or_create_config(
     Ok(config)
 }
 
+fn default_local_target_dir(app: &AppHandle) -> Result<String, String> {
+    let paths = crate::platform::storage_paths::resolve_storage_paths(app)?;
+    Ok(
+        normalize_target_directory(&paths.backup_dir.to_string_lossy())?
+            .to_string_lossy()
+            .to_string(),
+    )
+}
+
 async fn snapshot_from_config(
     pool: &Pool<Sqlite>,
     config: ScheduledBackupConfig,
+    default_local_target_dir: String,
 ) -> Result<ScheduledBackupSnapshot, String> {
     let next_execution_at_ms = next_slot_after(Local::now().naive_local(), &config)
         .and_then(|slot| local_datetime_ms(slot.local_datetime()));
@@ -325,6 +341,7 @@ async fn snapshot_from_config(
         repository::load_recent_by_status(pool, &config.target_generation, "failed").await?;
     Ok(ScheduledBackupSnapshot {
         config,
+        default_local_target_dir,
         next_execution_at_ms,
         recent_success,
         recent_failure,
@@ -339,13 +356,10 @@ fn new_run(
 ) -> ScheduledBackupRun {
     let (target_kind, target_path) = match &config.target {
         ScheduledBackupTarget::Local { target_dir } => {
-            let first_path =
-                candidate_paths(&PathBuf::from(target_dir), slot, &config.target_generation)
-                    .into_iter()
-                    .find(|path| !path.exists())
-                    .unwrap_or_else(|| {
-                        PathBuf::from(target_dir).join("scheduled-backup-conflict.zip")
-                    });
+            let first_path = candidate_paths(&PathBuf::from(target_dir), slot)
+                .into_iter()
+                .find(|path| !path.exists())
+                .unwrap_or_else(|| PathBuf::from(target_dir).join("scheduled-backup-conflict.zip"));
             (
                 "local".to_string(),
                 first_path.to_string_lossy().to_string(),
@@ -481,7 +495,9 @@ async fn cleanup_owned_webdav_failure(
     let Ok(Some(run)) = repository::load_run(pool, run_key).await else {
         return;
     };
-    let Ok(target) = remote_backup::load_scheduled_webdav_target(pool).await else {
+    let Ok(target) =
+        remote_backup::load_scheduled_webdav_target(app_paths::app_profile(app), pool).await
+    else {
         return;
     };
     if remote_backup::scheduled_target_identity(&target) != *target_identity {
@@ -510,7 +526,7 @@ fn new_generation() -> String {
 }
 
 fn now_ms() -> i64 {
-    Utc::now().timestamp_millis().max(0)
+    crate::platform::clock::unix_timestamp_millis_i64()
 }
 
 pub fn normalize_target_directory(path: &str) -> Result<PathBuf, String> {
@@ -524,16 +540,8 @@ pub fn normalize_target_directory(path: &str) -> Result<PathBuf, String> {
         .map_err(|error| format!("failed to access scheduled backup directory: {error}"))
 }
 
-pub fn candidate_paths(
-    target_dir: &Path,
-    slot: LogicalBackupSlot,
-    generation: &str,
-) -> Vec<PathBuf> {
-    let date = slot.date.format("%Y%m%d");
-    let hours = slot.local_time_minutes / 60;
-    let minutes = slot.local_time_minutes % 60;
-    let generation_prefix = generation.chars().take(8).collect::<String>();
-    let stem = format!("Patina-scheduled-backup-{date}-{hours:02}{minutes:02}-{generation_prefix}");
+pub fn candidate_paths(target_dir: &Path, slot: LogicalBackupSlot) -> Vec<PathBuf> {
+    let stem = format!("Patina-scheduled-backup-{}", slot.compact_timestamp());
     (1..=MAX_NAME_CANDIDATES)
         .map(|index| {
             if index == 1 {
@@ -577,7 +585,7 @@ async fn execute_local_run(
 ) -> Result<ScheduledBackupRun, RunExecutionFailure> {
     let target_dir =
         normalize_target_directory(target_dir).map_err(RunExecutionFailure::BeforePublication)?;
-    let candidates = candidate_paths(&target_dir, slot, &run.target_generation);
+    let candidates = candidate_paths(&target_dir, slot);
     let mut last_collision = false;
     for candidate in candidates {
         if candidate.exists() {
@@ -596,7 +604,7 @@ async fn execute_local_run(
                 repository::mark_succeeded(pool, &run.run_key, &hash, size, now_ms)
                     .await
                     .map_err(RunExecutionFailure::AfterPublication)?;
-                finish_success_maintenance(pool, config, &run.run_key, now_ms).await;
+                finish_success_maintenance(app, pool, config, &run.run_key, now_ms).await;
                 return repository::load_run(pool, &run.run_key)
                     .await
                     .map_err(RunExecutionFailure::AfterPublication)?
@@ -630,7 +638,7 @@ async fn execute_webdav_run(
     now_ms: i64,
 ) -> Result<ScheduledBackupRun, RunExecutionFailure> {
     let _transfer_guard = remote_backup::lock_remote_transfer().await;
-    let target = remote_backup::load_scheduled_webdav_target(pool)
+    let target = remote_backup::load_scheduled_webdav_target(app_paths::app_profile(app), pool)
         .await
         .map_err(RunExecutionFailure::BeforePublication)?;
     let expected_identity = match &config.target {
@@ -700,20 +708,55 @@ async fn execute_webdav_run(
                             .to_string(),
                     ));
                 }
-                let remote_path = if current.target_path == "pending://webdav" {
-                    remote_backup::scheduled_remote_backup_path(&target, &current)
+                let upload = if current.target_path == "pending://webdav" {
+                    let mut selected = None;
+                    for remote_path in
+                        remote_backup::scheduled_remote_backup_paths(&target, &current)
+                    {
+                        repository::update_target_path(
+                            pool,
+                            &current.run_key,
+                            &remote_path,
+                            now_ms,
+                        )
+                        .await
+                        .map_err(RunExecutionFailure::BeforePublication)?;
+                        match remote_backup::upload_scheduled_snapshot(
+                            &target,
+                            &staging,
+                            &remote_path,
+                            size,
+                            false,
+                        )
+                        .await
+                        {
+                            Ok(upload) => {
+                                selected = Some(upload);
+                                break;
+                            }
+                            Err(error) if error == "remote_name_conflict" => continue,
+                            Err(error) => {
+                                return Err(RunExecutionFailure::BeforePublication(error));
+                            }
+                        }
+                    }
+                    selected.ok_or_else(|| {
+                        RunExecutionFailure::BeforePublication(
+                            "scheduled WebDAV backup could not allocate a unique filename after 99 attempts"
+                                .to_string(),
+                        )
+                    })?
                 } else {
-                    current.target_path.clone()
+                    remote_backup::upload_scheduled_snapshot(
+                        &target,
+                        &staging,
+                        &current.target_path,
+                        size,
+                        true,
+                    )
+                    .await
+                    .map_err(RunExecutionFailure::BeforePublication)?
                 };
-                if current.target_path != remote_path {
-                    repository::update_target_path(pool, &current.run_key, &remote_path, now_ms)
-                        .await
-                        .map_err(RunExecutionFailure::BeforePublication)?;
-                }
-                let upload =
-                    remote_backup::upload_scheduled_snapshot(&target, &staging, &remote_path, size)
-                        .await
-                        .map_err(RunExecutionFailure::BeforePublication)?;
                 created_remote_in_this_execution = upload.created_new;
                 repository::mark_uploaded(pool, &current.run_key, upload.etag.as_deref(), now_ms)
                     .await
@@ -800,7 +843,7 @@ async fn execute_webdav_run(
                 if let Some(staging) = current.staging_path.as_deref() {
                     let _ = remote_backup::cleanup_scheduled_temp(app, Path::new(staging));
                 }
-                finish_success_maintenance(pool, config, &current.run_key, now_ms).await;
+                finish_success_maintenance(app, pool, config, &current.run_key, now_ms).await;
             }
             "succeeded" => return Ok(current),
             _ => {
@@ -818,12 +861,13 @@ async fn execute_webdav_run(
 }
 
 async fn finish_success_maintenance(
+    app: &AppHandle,
     pool: &Pool<Sqlite>,
     config: &ScheduledBackupConfig,
     run_key: &str,
     now_ms: i64,
 ) {
-    if apply_retention(pool, config, run_key, now_ms)
+    if apply_retention(app_paths::app_profile(app), pool, config, run_key, now_ms)
         .await
         .is_err()
     {
@@ -883,6 +927,7 @@ pub async fn reconcile_running_run(
 }
 
 pub async fn apply_retention(
+    profile: AppProfile,
     pool: &Pool<Sqlite>,
     config: &ScheduledBackupConfig,
     newest_run_key: &str,
@@ -893,7 +938,15 @@ pub async fn apply_retention(
             apply_local_retention(pool, config, target_dir, newest_run_key, now_ms).await
         }
         ScheduledBackupTarget::WebDav { target_identity } => {
-            apply_webdav_retention(pool, config, target_identity, newest_run_key, now_ms).await
+            apply_webdav_retention(
+                profile,
+                pool,
+                config,
+                target_identity,
+                newest_run_key,
+                now_ms,
+            )
+            .await
         }
     }
 }
@@ -937,13 +990,14 @@ async fn apply_local_retention(
 }
 
 async fn apply_webdav_retention(
+    profile: AppProfile,
     pool: &Pool<Sqlite>,
     config: &ScheduledBackupConfig,
     target_identity: &str,
     newest_run_key: &str,
     now_ms: i64,
 ) -> Result<(), String> {
-    let target = remote_backup::load_scheduled_webdav_target(pool).await?;
+    let target = remote_backup::load_scheduled_webdav_target(profile, pool).await?;
     if remote_backup::scheduled_target_identity(&target) != target_identity {
         return Err("configuration_changed".to_string());
     }
@@ -1128,13 +1182,13 @@ mod tests {
             date: NaiveDate::from_ymd_opt(2026, 8, 9).unwrap(),
             local_time_minutes: 125,
         };
-        let paths = candidate_paths(Path::new("C:\\Backups"), slot, "abcdef123456");
+        let paths = candidate_paths(Path::new("C:\\Backups"), slot);
         assert!(paths[0]
             .to_string_lossy()
-            .ends_with("Patina-scheduled-backup-20260809-0205-abcdef12.zip"));
+            .ends_with("Patina-scheduled-backup-20260809-020500.zip"));
         assert!(paths[1]
             .to_string_lossy()
-            .ends_with("Patina-scheduled-backup-20260809-0205-abcdef12-02.zip"));
+            .ends_with("Patina-scheduled-backup-20260809-020500-02.zip"));
         assert_eq!(paths.len(), 99);
     }
 

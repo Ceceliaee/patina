@@ -60,12 +60,14 @@ fn export_file_name(format: &str, start_date: &str, end_date: &str) -> Option<St
         "markdown" => "md",
         _ => return None,
     };
-    Some(format!(
-        "patina-activity-{}-{}.{}",
-        compact_date(start_date)?,
-        compact_date(end_date)?,
-        extension,
-    ))
+    let start = compact_date(start_date)?;
+    let end = compact_date(end_date)?;
+    let date_range = if start == end {
+        start
+    } else {
+        format!("{start}-{end}")
+    };
+    Some(format!("Patina-export-{date_range}.{extension}"))
 }
 
 #[tauri::command]
@@ -104,7 +106,7 @@ mod tests {
     use super::export_file_name;
 
     #[test]
-    fn export_file_names_use_activity_range_and_format_extension() {
+    fn export_file_names_use_range_and_format_extension() {
         for (format, extension) in [
             ("csv", "csv"),
             ("markdown", "md"),
@@ -113,9 +115,17 @@ mod tests {
         ] {
             assert_eq!(
                 export_file_name(format, "2026-07-01", "2026-07-12"),
-                Some(format!("patina-activity-20260701-20260712.{extension}")),
+                Some(format!("Patina-export-20260701-20260712.{extension}")),
             );
         }
+    }
+
+    #[test]
+    fn single_day_export_file_names_do_not_repeat_the_date() {
+        assert_eq!(
+            export_file_name("csv", "2026-07-12", "2026-07-12"),
+            Some("Patina-export-20260712.csv".to_string()),
+        );
     }
 
     #[test]

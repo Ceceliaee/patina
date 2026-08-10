@@ -7,7 +7,7 @@ use crate::domain::export_schedule::{
     DEFAULT_EXPORT_LOCAL_TIME_MINUTES,
 };
 use crate::engine::export_scheduler::{decide_action, ExportSchedulerAction};
-use chrono::{Local, LocalResult, NaiveDate, NaiveDateTime, TimeZone, Utc};
+use chrono::{Local, LocalResult, NaiveDate, NaiveDateTime, TimeZone};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use sha2::{Digest, Sha256};
 use sqlx::sqlite::SqliteConnectOptions;
@@ -17,6 +17,8 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
+
+const MAX_EXPORT_NAME_CANDIDATES: u8 = 99;
 
 pub async fn get_snapshot(app: &AppHandle) -> Result<ScheduledExportSnapshot, String> {
     let pool = crate::data::sqlite_pool::wait_for_sqlite_pool(app).await?;
@@ -312,8 +314,8 @@ async fn load_or_create_config(
     let now_ms = current_time_ms();
     let config = ScheduledExportConfig {
         enabled: false,
-        cadence: ScheduledExportCadence::Weekly,
-        weekday: Some(1),
+        cadence: ScheduledExportCadence::Daily,
+        weekday: None,
         local_time_minutes: DEFAULT_EXPORT_LOCAL_TIME_MINUTES,
         target_dir: default_dir.to_string_lossy().to_string(),
         format: ScheduledExportFormat::Csv,
@@ -400,12 +402,11 @@ fn new_run(
     let period = period_for_slot(slot, config.cadence)
         .ok_or_else(|| "scheduled export period could not be calculated".to_string())?;
     let (period_start_ms, period_end_ms) = period_epoch_bounds(period)?;
-    let file_name = format!(
-        "{}.{}",
-        period.compact_file_stem(),
-        config.format.extension()
-    );
-    let target_path = PathBuf::from(&config.target_dir).join(file_name);
+    let target_path = first_available_export_target_path(
+        Path::new(&config.target_dir),
+        &period.compact_file_stem(),
+        config.format.extension(),
+    )?;
     let staging_name = format!(
         ".patina-scheduled-export-{}.{}.part",
         Uuid::new_v4().simple(),
@@ -438,6 +439,26 @@ fn new_run(
         completed_at_ms: None,
         updated_at_ms: now_ms,
     })
+}
+
+fn first_available_export_target_path(
+    target_dir: &Path,
+    file_stem: &str,
+    extension: &str,
+) -> Result<PathBuf, String> {
+    (1..=MAX_EXPORT_NAME_CANDIDATES)
+        .map(|candidate| {
+            let suffix = if candidate == 1 {
+                String::new()
+            } else {
+                format!("-{candidate:02}")
+            };
+            target_dir.join(format!("{file_stem}{suffix}.{extension}"))
+        })
+        .find(|path| !path.exists())
+        .ok_or_else(|| {
+            "scheduled export could not allocate a unique filename after 99 attempts".to_string()
+        })
 }
 
 fn validate_fields(fields: &[String]) -> Result<Vec<String>, String> {
@@ -892,7 +913,7 @@ fn new_generation() -> String {
 }
 
 fn current_time_ms() -> i64 {
-    Utc::now().timestamp_millis().max(0)
+    crate::platform::clock::unix_timestamp_millis_i64()
 }
 
 #[cfg(test)]
@@ -961,6 +982,26 @@ mod tests {
         );
         assert!(target.is_dir());
         assert!(is_regular_file(&staging));
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn scheduled_export_only_adds_a_suffix_when_the_normal_name_exists() {
+        let dir = temp_dir("name-collision");
+        let stem = "Patina-scheduled-export-20260808";
+        assert_eq!(
+            first_available_export_target_path(&dir, stem, "csv").unwrap(),
+            dir.join("Patina-scheduled-export-20260808.csv")
+        );
+        fs::write(
+            dir.join("Patina-scheduled-export-20260808.csv"),
+            b"existing",
+        )
+        .unwrap();
+        assert_eq!(
+            first_available_export_target_path(&dir, stem, "csv").unwrap(),
+            dir.join("Patina-scheduled-export-20260808-02.csv")
+        );
         fs::remove_dir_all(dir).unwrap();
     }
 

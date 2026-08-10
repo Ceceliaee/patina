@@ -1,7 +1,7 @@
 use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime, Weekday};
 use serde::{Deserialize, Serialize};
 
-pub const DEFAULT_LOCAL_TIME_MINUTES: u16 = 2 * 60;
+pub const DEFAULT_LOCAL_TIME_MINUTES: u16 = 21 * 60;
 pub(crate) const SCHEDULED_BACKUP_KEEP_COUNT: u8 = 1;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -195,6 +195,7 @@ pub struct ScheduledBackupRun {
 #[serde(rename_all = "camelCase")]
 pub struct ScheduledBackupSnapshot {
     pub config: ScheduledBackupConfig,
+    pub default_local_target_dir: String,
     pub next_execution_at_ms: Option<i64>,
     pub recent_success: Option<ScheduledBackupRun>,
     pub recent_failure: Option<ScheduledBackupRun>,
@@ -220,6 +221,12 @@ impl LogicalBackupSlot {
 
     pub fn date_key(self) -> String {
         self.date.format("%Y-%m-%d").to_string()
+    }
+
+    pub fn compact_timestamp(self) -> String {
+        let hours = self.local_time_minutes / 60;
+        let minutes = self.local_time_minutes % 60;
+        format!("{}-{hours:02}{minutes:02}00", self.date.format("%Y%m%d"))
     }
 
     pub fn run_key(self, generation: &str) -> String {
@@ -394,6 +401,15 @@ mod tests {
             slot.run_key("generation"),
             "scheduled-backup:generation:2026-08-09:0205"
         );
+    }
+
+    #[test]
+    fn file_timestamp_includes_seconds_without_exposing_internal_identity() {
+        let slot = LogicalBackupSlot {
+            date: NaiveDate::from_ymd_opt(2026, 8, 9).unwrap(),
+            local_time_minutes: 21 * 60,
+        };
+        assert_eq!(slot.compact_timestamp(), "20260809-210000");
     }
 
     #[test]
