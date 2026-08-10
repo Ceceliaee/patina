@@ -8,7 +8,7 @@ import {
 
 const APP_OVERRIDE_KEY_PREFIX = "__app_override::";
 
-export interface WidgetRuntimeBootstrapSnapshot {
+interface WidgetRuntimeBootstrapSnapshot {
   settings: AppSettings;
 }
 

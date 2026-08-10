@@ -2,7 +2,7 @@ import { createElement, type ComponentType } from "react";
 
 export type PreloadableView = "history" | "settings" | "mapping" | "data" | "tools" | "about";
 
-export interface LazyViewChunkPreloadOptions {
+interface LazyViewChunkPreloadOptions {
   views?: PreloadableView[];
   initialDelayMs?: number;
   staggerMs?: number;

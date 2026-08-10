@@ -9,9 +9,9 @@ import type {
   TrackingWindowSnapshot,
 } from "../../shared/types/tracking.ts";
 
-export type WidgetStatusTone = "tracking" | "tracking-sustained" | "paused" | "idle" | "error";
+type WidgetStatusTone = "tracking" | "tracking-sustained" | "paused" | "idle" | "error";
 
-export interface WidgetViewModel {
+interface WidgetViewModel {
   statusTone: WidgetStatusTone;
   statusLabel: string;
   appName: string;

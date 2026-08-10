@@ -29,7 +29,7 @@ function prepareViewData(view: View): Promise<unknown> {
   return Promise.resolve();
 }
 
-export function getPreloadableNavigationView(view: View): PreloadableView | null {
+function getPreloadableNavigationView(view: View): PreloadableView | null {
   switch (view) {
     case "about":
     case "data":

@@ -37,15 +37,6 @@ type HistoryRuntimeSnapshotDeps = {
   ) => void;
 };
 
-type DataTrendRuntimeSnapshotDeps = {
-  ensureProcessMapperRuntimeReady: () => Promise<void>;
-  loadDataTrendSnapshot: (
-    selection: DataTrendRangeSelection,
-    nowMs: number,
-    uiText: UiText,
-  ) => Promise<DataTrendSnapshot>;
-};
-
 const dashboardRuntimeSnapshotDeps: DashboardRuntimeSnapshotDeps = {
   ensureProcessMapperRuntimeReady,
   loadDashboardSnapshot,
@@ -120,14 +111,4 @@ export async function loadDataTrendRuntimeSnapshot(
     "../../features/data/services/dataTrendSnapshot.ts"
   );
   return loadDataTrendSnapshot(selection, nowMs, uiText);
-}
-
-export async function loadDataTrendRuntimeSnapshotWithDeps(
-  selection: DataTrendRangeSelection,
-  nowMs: number,
-  uiText: UiText,
-  deps: DataTrendRuntimeSnapshotDeps,
-): Promise<DataTrendSnapshot> {
-  await deps.ensureProcessMapperRuntimeReady();
-  return deps.loadDataTrendSnapshot(selection, nowMs, uiText);
 }

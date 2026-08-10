@@ -22,7 +22,7 @@ import {
 } from "./appSettingsRuntimeService.ts";
 import { initializeProcessMapperRuntime } from "./processMapperRuntimeService.ts";
 
-export interface AppRuntimeBootstrapSnapshot {
+interface AppRuntimeBootstrapSnapshot {
   settings: AppSettings;
   activeWindow: TrackingWindowSnapshot | null;
   trackingStatus: TrackingStatusSnapshot;

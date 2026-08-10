@@ -21,7 +21,7 @@ interface FrontendCacheDiagnostics {
   historyWebFaviconRuntime: ReturnType<typeof getHistoryWebFaviconRuntimeCacheStats>;
 }
 
-export interface AppResourceDiagnosticsSnapshot extends ResourceDiagnosticsSnapshot {
+interface AppResourceDiagnosticsSnapshot extends ResourceDiagnosticsSnapshot {
   frontendCaches: FrontendCacheDiagnostics;
 }
 

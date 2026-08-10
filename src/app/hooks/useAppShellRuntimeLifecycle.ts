@@ -12,7 +12,7 @@ import {
 } from "../services/startupWarmupService.ts";
 
 const DATA_FOREGROUND_PREWARM_DELAY_MS = 1_200;
-export const BACKGROUND_CACHE_RELEASE_DELAY_MS = LONG_BACKGROUND_DELAY_MS;
+const BACKGROUND_CACHE_RELEASE_DELAY_MS = LONG_BACKGROUND_DELAY_MS;
 
 interface AppShellRuntimeLifecycleOptions {
   backgroundOptimization: boolean;
