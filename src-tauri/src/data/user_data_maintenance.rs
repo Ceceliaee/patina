@@ -16,17 +16,6 @@ pub async fn delete_sessions_before<R: Runtime>(
     .await
 }
 
-pub async fn clear_all_session_window_titles<R: Runtime>(
-    app: &AppHandle<R>,
-) -> Result<(), SqliteOperationError> {
-    run_recoverable_sqlite_write(
-        app,
-        "failed to clear session window titles",
-        |pool| async move { clear_all_session_window_titles_in_pool(&pool).await },
-    )
-    .await
-}
-
 pub async fn delete_sessions_by_exe_names<R: Runtime>(
     app: &AppHandle<R>,
     exe_names: Vec<String>,
@@ -71,16 +60,6 @@ pub async fn delete_sessions_by_exe_names_between<R: Runtime>(
             }
         },
     )
-    .await
-}
-
-pub async fn delete_web_activity_segments_before<R: Runtime>(
-    app: &AppHandle<R>,
-    cutoff_time: i64,
-) -> Result<(), SqliteOperationError> {
-    run_recoverable_sqlite_write(app, "failed to delete web activity", move |pool| async move {
-        delete_web_activity_segments_before_in_pool(&pool, cutoff_time).await
-    })
     .await
 }
 
@@ -185,36 +164,6 @@ async fn delete_sessions_before_in_pool(
     tx.commit().await.map_err(|error| {
         SqliteOperationError::from_sqlx("commit historical activity cleanup", error)
     })
-}
-
-async fn clear_all_session_window_titles_in_pool(
-    pool: &Pool<Sqlite>,
-) -> Result<(), SqliteOperationError> {
-    let mut tx = pool
-        .begin()
-        .await
-        .map_err(|error| SqliteOperationError::from_sqlx("start title cleanup", error))?;
-
-    sqlx::query("DELETE FROM session_title_samples")
-        .execute(&mut *tx)
-        .await
-        .map_err(|error| SqliteOperationError::from_sqlx("delete title samples", error))?;
-    sqlx::query("UPDATE sessions SET window_title = '' WHERE COALESCE(window_title, '') <> ''")
-        .execute(&mut *tx)
-        .await
-        .map_err(|error| SqliteOperationError::from_sqlx("clear session window titles", error))?;
-    sqlx::query(
-        "UPDATE import_exact_sessions SET window_title = '' WHERE COALESCE(window_title, '') <> ''",
-    )
-    .execute(&mut *tx)
-    .await
-    .map_err(|error| {
-        SqliteOperationError::from_sqlx("clear imported session window titles", error)
-    })?;
-
-    tx.commit()
-        .await
-        .map_err(|error| SqliteOperationError::from_sqlx("commit title cleanup", error))
 }
 
 async fn delete_sessions_by_exe_names_in_pool(
@@ -378,20 +327,6 @@ async fn refresh_import_batch_counts(
     .await
     .map(|_| ())
     .map_err(|error| SqliteOperationError::from_sqlx("delete empty import batches", error))
-}
-
-async fn delete_web_activity_segments_before_in_pool(
-    pool: &Pool<Sqlite>,
-    cutoff_time: i64,
-) -> Result<(), SqliteOperationError> {
-    sqlx::query("DELETE FROM web_activity_segments WHERE start_time < ?")
-        .bind(cutoff_time)
-        .execute(pool)
-        .await
-        .map(|_| ())
-        .map_err(|error| {
-            SqliteOperationError::from_sqlx("delete web activity before cutoff", error)
-        })
 }
 
 #[cfg(test)]
@@ -755,154 +690,6 @@ mod tests {
             assert_eq!(external_count, 1);
             assert!(app_override.is_some());
             assert!(app_icon.is_some());
-        });
-    }
-
-    #[test]
-    fn clear_all_session_window_titles_removes_sample_rows() {
-        tauri::async_runtime::block_on(async {
-            let pool = setup_test_db().await;
-            sqlx::query(
-                "INSERT INTO sessions (id, app_name, exe_name, window_title, start_time) VALUES (?, ?, ?, ?, ?)",
-            )
-            .bind(1_i64)
-            .bind("Editor")
-            .bind("editor.exe")
-            .bind("Project")
-            .bind(1000_i64)
-            .execute(&pool)
-            .await
-            .unwrap();
-            sqlx::query(
-                "INSERT INTO session_title_samples (session_id, title, start_time) VALUES (?, ?, ?)",
-            )
-            .bind(1_i64)
-            .bind("Project")
-            .bind(1000_i64)
-            .execute(&pool)
-            .await
-            .unwrap();
-            sqlx::query(
-                "INSERT INTO import_batches (
-                    id, imported_at, source_name, source_kind, file_fingerprint
-                 ) VALUES (?, ?, ?, ?, ?)",
-            )
-            .bind("batch-1")
-            .bind(1000_i64)
-            .bind("external.csv")
-            .bind("patina-csv")
-            .bind("batch-fingerprint")
-            .execute(&pool)
-            .await
-            .unwrap();
-            sqlx::query(
-                "INSERT INTO import_exact_sessions (
-                    batch_id, fingerprint, app_name, exe_name, window_title,
-                    start_time, end_time, duration
-                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            )
-            .bind("batch-1")
-            .bind("record-fingerprint")
-            .bind("Imported Editor")
-            .bind("editor.exe")
-            .bind("Imported Project")
-            .bind(2000_i64)
-            .bind(3000_i64)
-            .bind(1000_i64)
-            .execute(&pool)
-            .await
-            .unwrap();
-
-            clear_all_session_window_titles_in_pool(&pool)
-                .await
-                .unwrap();
-
-            let title: String = sqlx::query("SELECT window_title FROM sessions WHERE id = 1")
-                .fetch_one(&pool)
-                .await
-                .unwrap()
-                .get("window_title");
-            let sample_count: i64 =
-                sqlx::query("SELECT COUNT(*) AS count FROM session_title_samples")
-                    .fetch_one(&pool)
-                    .await
-                    .unwrap()
-                    .get("count");
-            let imported_row = sqlx::query(
-                "SELECT window_title, duration FROM import_exact_sessions WHERE id = 1",
-            )
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-            assert_eq!(title, "");
-            assert_eq!(sample_count, 0);
-            assert_eq!(imported_row.get::<String, _>("window_title"), "");
-            assert_eq!(imported_row.get::<i64, _>("duration"), 1000);
-        });
-    }
-
-    #[test]
-    fn clear_all_session_window_titles_rolls_back_every_owner_on_failure() {
-        tauri::async_runtime::block_on(async {
-            let pool = setup_test_db().await;
-            sqlx::query(
-                "INSERT INTO sessions (id, app_name, exe_name, window_title, start_time)
-                 VALUES (1, 'Editor', 'editor.exe', 'Native title', 1000)",
-            )
-            .execute(&pool)
-            .await
-            .unwrap();
-            sqlx::query(
-                "INSERT INTO session_title_samples (session_id, title, start_time)
-                 VALUES (1, 'Native title', 1000)",
-            )
-            .execute(&pool)
-            .await
-            .unwrap();
-            sqlx::query(
-                "INSERT INTO import_exact_sessions (
-                    batch_id, fingerprint, app_name, exe_name, window_title,
-                    start_time, end_time, duration
-                 ) VALUES ('batch-1', 'record-1', 'Imported', 'editor.exe',
-                           'Imported title', 2000, 3000, 1000)",
-            )
-            .execute(&pool)
-            .await
-            .unwrap();
-            sqlx::query(
-                "CREATE TRIGGER fail_imported_title_cleanup
-                 BEFORE UPDATE OF window_title ON import_exact_sessions
-                 BEGIN SELECT RAISE(ABORT, 'forced failure'); END",
-            )
-            .execute(&pool)
-            .await
-            .unwrap();
-
-            assert!(clear_all_session_window_titles_in_pool(&pool)
-                .await
-                .is_err());
-
-            let native_title: String =
-                sqlx::query("SELECT window_title FROM sessions WHERE id = 1")
-                    .fetch_one(&pool)
-                    .await
-                    .unwrap()
-                    .get("window_title");
-            let sample_count: i64 =
-                sqlx::query("SELECT COUNT(*) AS count FROM session_title_samples")
-                    .fetch_one(&pool)
-                    .await
-                    .unwrap()
-                    .get("count");
-            let imported_title: String =
-                sqlx::query("SELECT window_title FROM import_exact_sessions WHERE id = 1")
-                    .fetch_one(&pool)
-                    .await
-                    .unwrap()
-                    .get("window_title");
-            assert_eq!(native_title, "Native title");
-            assert_eq!(sample_count, 1);
-            assert_eq!(imported_title, "Imported title");
         });
     }
 }

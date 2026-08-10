@@ -37,17 +37,6 @@ pub async fn cmd_delete_sessions_before<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn cmd_clear_all_session_window_titles<R: Runtime>(
-    app: AppHandle<R>,
-    window: WebviewWindow<R>,
-) -> Result<(), CommandErrorDto> {
-    require_main_window(&window)?;
-    user_data_maintenance::clear_all_session_window_titles(&app)
-        .await
-        .map_err(Into::into)
-}
-
-#[tauri::command]
 pub async fn cmd_delete_sessions_by_exe_names<R: Runtime>(
     exe_names: Vec<String>,
     app: AppHandle<R>,
@@ -73,18 +62,6 @@ pub async fn cmd_delete_sessions_by_exe_names_between<R: Runtime>(
     )
     .await
     .map_err(Into::into)
-}
-
-#[tauri::command]
-pub async fn cmd_delete_web_activity_segments_before<R: Runtime>(
-    cutoff_time: i64,
-    app: AppHandle<R>,
-    window: WebviewWindow<R>,
-) -> Result<(), CommandErrorDto> {
-    require_main_window(&window)?;
-    user_data_maintenance::delete_web_activity_segments_before(&app, cutoff_time)
-        .await
-        .map_err(Into::into)
 }
 
 #[tauri::command]

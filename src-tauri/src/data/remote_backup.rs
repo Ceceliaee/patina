@@ -2,6 +2,7 @@ use crate::data::backup;
 use crate::data::repositories::remote_backup_settings;
 use crate::domain::backup::BackupPreview;
 use crate::domain::backup_schedule::ScheduledBackupRun;
+use crate::platform::app_paths::{self, AppProfile};
 use crate::platform::credentials;
 use crate::platform::storage_paths;
 use crate::platform::webdav::{WebDavClient, WebDavConfig};
@@ -11,7 +12,6 @@ use sqlx::{Pool, Sqlite};
 use std::cmp::Reverse;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::AppHandle;
 use tokio::sync::Mutex;
 
@@ -21,7 +21,7 @@ const INDEX_PRODUCT: &str = "Patina";
 const MAX_BACKUP_LIST_ITEMS: usize = 50;
 const MAX_INDEX_BACKUP_ITEMS: usize = 5_000;
 const MAX_INDEX_WRITE_ATTEMPTS: usize = 3;
-static REMOTE_BACKUP_COUNTER: AtomicU64 = AtomicU64::new(0);
+const MAX_REMOTE_NAME_CANDIDATES: u8 = 99;
 static REMOTE_INDEX_LOCK: Mutex<()> = Mutex::const_new(());
 static REMOTE_TRANSFER_LOCK: Mutex<()> = Mutex::const_new(());
 
@@ -109,22 +109,29 @@ fn config_to_webdav(config: WebDavBackupConfigDto) -> Result<WebDavConfig, Strin
 }
 
 fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or_default()
+    crate::platform::clock::unix_timestamp_millis_u64()
 }
 
 fn remote_backup_id() -> String {
-    format!(
-        "{}-{:04}",
-        Local::now().format("%Y%m%d-%H%M%S-%3f"),
-        REMOTE_BACKUP_COUNTER.fetch_add(1, Ordering::Relaxed) % 10_000
-    )
+    Local::now().format("%Y%m%d-%H%M%S").to_string()
 }
 
 fn remote_backup_file_name(id: &str) -> String {
     format!("Patina-backup-{id}.zip")
+}
+
+fn remote_backup_name_candidates(base_id: &str) -> Vec<(String, String)> {
+    (1..=MAX_REMOTE_NAME_CANDIDATES)
+        .map(|candidate| {
+            let id = if candidate == 1 {
+                base_id.to_string()
+            } else {
+                format!("{base_id}-{candidate:02}")
+            };
+            let file_name = remote_backup_file_name(&id);
+            (id, file_name)
+        })
+        .collect()
 }
 
 fn remote_path(remote_dir: &str, file_name: &str) -> String {
@@ -336,29 +343,37 @@ fn build_entry(
     }
 }
 
-fn webdav_client(config: WebDavBackupConfigDto) -> Result<(WebDavConfig, WebDavClient), String> {
+fn webdav_client(
+    profile: AppProfile,
+    config: WebDavBackupConfigDto,
+) -> Result<(WebDavConfig, WebDavClient), String> {
     let config = config_to_webdav(config)?;
-    let password = credentials::read_webdav_backup_password()?
+    let password = credentials::read_webdav_backup_password(profile)?
         .ok_or_else(|| "WebDAV password is missing".to_string())?;
     let client = WebDavClient::new(&config, password)?;
     Ok((config, client))
 }
 
 fn webdav_client_with_password(
+    profile: AppProfile,
     config: WebDavBackupConfigDto,
     password: Option<String>,
 ) -> Result<(WebDavConfig, WebDavClient), String> {
     let config = config_to_webdav(config)?;
     let password = match password {
         Some(password) if !password.is_empty() => password,
-        _ => credentials::read_webdav_backup_password()?
+        _ => credentials::read_webdav_backup_password(profile)?
             .ok_or_else(|| "WebDAV password is missing".to_string())?,
     };
     let client = WebDavClient::new(&config, password)?;
     Ok((config, client))
 }
 
-pub fn save_webdav_backup_secret(username: String, password: String) -> Result<(), String> {
+pub fn save_webdav_backup_secret(
+    profile: AppProfile,
+    username: String,
+    password: String,
+) -> Result<(), String> {
     let username = username.trim();
     if username.is_empty() {
         return Err("WebDAV username cannot be empty".to_string());
@@ -366,22 +381,27 @@ pub fn save_webdav_backup_secret(username: String, password: String) -> Result<(
     if password.is_empty() {
         return Err("WebDAV password cannot be empty".to_string());
     }
-    credentials::save_webdav_backup_password(username, &password)
+    credentials::save_webdav_backup_password(profile, username, &password)
 }
 
-pub fn delete_webdav_backup_secret() -> Result<(), String> {
-    credentials::delete_webdav_backup_password()
+pub fn delete_webdav_backup_secret(profile: AppProfile) -> Result<(), String> {
+    credentials::delete_webdav_backup_password(profile)
 }
 
-pub fn has_webdav_backup_secret() -> Result<bool, String> {
-    credentials::has_webdav_backup_password()
+pub fn has_webdav_backup_secret(profile: AppProfile) -> Result<bool, String> {
+    credentials::has_webdav_backup_password(profile)
+}
+
+pub fn reveal_webdav_backup_secret(profile: AppProfile) -> Result<Option<String>, String> {
+    credentials::read_webdav_backup_password(profile)
 }
 
 pub async fn test_webdav_backup_target(
+    profile: AppProfile,
     config: WebDavBackupConfigDto,
     password: Option<String>,
 ) -> Result<WebDavTestResult, String> {
-    let (config, client) = webdav_client_with_password(config, password)?;
+    let (config, client) = webdav_client_with_password(profile, config, password)?;
     client.ping(&config.remote_dir).await?;
     Ok(WebDavTestResult { ok: true })
 }
@@ -391,12 +411,13 @@ pub async fn upload_webdav_backup(
     config: WebDavBackupConfigDto,
 ) -> Result<RemoteBackupUploadResult, String> {
     let _transfer_guard = REMOTE_TRANSFER_LOCK.lock().await;
-    let (config, client) = webdav_client(config)?;
+    let profile = app_paths::app_profile(&app);
+    let (config, client) = webdav_client(profile, config)?;
     client.ensure_dir(&config.remote_dir).await?;
 
-    let id = remote_backup_id();
-    let file_name = remote_backup_file_name(&id);
-    let local_path = temp_backup_path(&app, &file_name)?;
+    let base_id = remote_backup_id();
+    let local_file_name = remote_backup_file_name(&base_id);
+    let local_path = temp_backup_path(&app, &local_file_name)?;
     let temp_dir = local_path
         .parent()
         .map(Path::to_path_buf)
@@ -408,8 +429,24 @@ pub async fn upload_webdav_backup(
         let size_bytes = fs::metadata(&local_path)
             .map_err(|error| format!("failed to read local backup metadata: {error}"))?
             .len();
-        let remote_path = remote_path(&config.remote_dir, &file_name);
-        client.upload_file(&local_path, &remote_path).await?;
+        let mut selected = None;
+        for (id, file_name) in remote_backup_name_candidates(&base_id) {
+            let candidate_path = remote_path(&config.remote_dir, &file_name);
+            match client
+                .upload_file_create_new(&local_path, &candidate_path)
+                .await
+            {
+                Ok(()) => {
+                    selected = Some((id, file_name, candidate_path));
+                    break;
+                }
+                Err(error) if error == "remote_name_conflict" => continue,
+                Err(error) => return Err(error),
+            }
+        }
+        let (id, file_name, remote_path) = selected.ok_or_else(|| {
+            "WebDAV backup could not allocate a unique filename after 99 attempts".to_string()
+        })?;
         Ok::<_, String>(build_entry(
             id,
             file_name,
@@ -451,9 +488,10 @@ pub async fn upload_webdav_backup(
 }
 
 pub async fn list_webdav_backups(
+    profile: AppProfile,
     config: WebDavBackupConfigDto,
 ) -> Result<Vec<RemoteBackupEntry>, String> {
-    let (config, client) = webdav_client(config)?;
+    let (config, client) = webdav_client(profile, config)?;
     let mut index = load_index(&client, &config.remote_dir).await?;
     index
         .backups
@@ -473,7 +511,8 @@ pub async fn download_webdav_backup(
         return Err("remote backup id cannot be empty".to_string());
     }
 
-    let (config, client) = webdav_client(config)?;
+    let profile = app_paths::app_profile(&app);
+    let (config, client) = webdav_client(profile, config)?;
     let index = load_index(&client, &config.remote_dir).await?;
     let entry = index
         .backups
@@ -546,18 +585,20 @@ pub(crate) enum ScheduledRemotePruneOutcome {
     Conflict,
 }
 
+#[derive(Debug)]
 pub(crate) struct ScheduledRemoteUploadOutcome {
     pub etag: Option<String>,
     pub created_new: bool,
 }
 
 pub(crate) async fn load_scheduled_webdav_target(
+    profile: AppProfile,
     pool: &Pool<Sqlite>,
 ) -> Result<ScheduledWebDavTarget, String> {
     let config = remote_backup_settings::load_config(pool)
         .await?
         .ok_or_else(|| "webdav_not_configured".to_string())?;
-    let password = credentials::read_webdav_backup_password()?
+    let password = credentials::read_webdav_backup_password(profile)?
         .ok_or_else(|| "credential_missing".to_string())?;
     let client = WebDavClient::new(&config, password)?;
     Ok(ScheduledWebDavTarget { config, client })
@@ -571,6 +612,31 @@ pub(crate) fn scheduled_target_identity(target: &ScheduledWebDavTarget) -> Strin
     remote_backup_settings::target_identity(&target.config)
 }
 
+pub(crate) fn scheduled_remote_backup_paths(
+    target: &ScheduledWebDavTarget,
+    run: &ScheduledBackupRun,
+) -> Vec<String> {
+    let hours = run.logical_time_minutes / 60;
+    let minutes = run.logical_time_minutes % 60;
+    let timestamp = format!(
+        "{}-{hours:02}{minutes:02}00",
+        run.logical_date.replace('-', "")
+    );
+    (1..=MAX_REMOTE_NAME_CANDIDATES)
+        .map(|candidate| {
+            let suffix = if candidate == 1 {
+                String::new()
+            } else {
+                format!("-{candidate:02}")
+            };
+            remote_path(
+                &target.config.remote_dir,
+                &format!("Patina-scheduled-backup-{timestamp}{suffix}.zip"),
+            )
+        })
+        .collect()
+}
+
 fn scheduled_remote_backup_id(run: &ScheduledBackupRun) -> String {
     let hours = run.logical_time_minutes / 60;
     let minutes = run.logical_time_minutes % 60;
@@ -579,16 +645,6 @@ fn scheduled_remote_backup_id(run: &ScheduledBackupRun) -> String {
     format!(
         "scheduled-{date}-{hours:02}{minutes:02}-{generation}-a{}",
         run.attempt_count
-    )
-}
-
-pub(crate) fn scheduled_remote_backup_path(
-    target: &ScheduledWebDavTarget,
-    run: &ScheduledBackupRun,
-) -> String {
-    remote_path(
-        &target.config.remote_dir,
-        &format!("Patina-{}.zip", scheduled_remote_backup_id(run)),
     )
 }
 
@@ -618,9 +674,13 @@ pub(crate) async fn upload_scheduled_snapshot(
     local_path: &Path,
     remote_path: &str,
     expected_size: u64,
+    allow_existing: bool,
 ) -> Result<ScheduledRemoteUploadOutcome, String> {
     target.client.ensure_dir(&target.config.remote_dir).await?;
     if let Some(metadata) = target.client.object_metadata(remote_path).await? {
+        if !allow_existing {
+            return Err("remote_name_conflict".to_string());
+        }
         if metadata
             .size_bytes
             .is_some_and(|size| size != expected_size)
@@ -962,6 +1022,25 @@ mod tests {
     }
 
     #[test]
+    fn manual_remote_name_candidates_only_add_a_suffix_on_collision() {
+        let candidates = remote_backup_name_candidates("20260603-213000");
+        assert_eq!(
+            candidates[0],
+            (
+                "20260603-213000".to_string(),
+                "Patina-backup-20260603-213000.zip".to_string()
+            )
+        );
+        assert_eq!(
+            candidates[1],
+            (
+                "20260603-213000-02".to_string(),
+                "Patina-backup-20260603-213000-02.zip".to_string()
+            )
+        );
+    }
+
+    #[test]
     fn temp_cleanup_removes_file_and_empty_directory() {
         let root = std::env::temp_dir().join(format!(
             "patina-remote-backup-cleanup-empty-{}",
@@ -1110,6 +1189,22 @@ mod tests {
         }
     }
 
+    #[test]
+    fn scheduled_remote_names_hide_internal_generation_and_attempt_data() {
+        let target = scheduled_target("http://127.0.0.1:1/dav".to_string());
+        let candidates = scheduled_remote_backup_paths(&target, &scheduled_run());
+        assert_eq!(
+            candidates[0],
+            "/Patina/Patina-scheduled-backup-20260809-020000.zip"
+        );
+        assert_eq!(
+            candidates[1],
+            "/Patina/Patina-scheduled-backup-20260809-020000-02.zip"
+        );
+        assert!(!candidates[0].contains("-a1"));
+        assert!(!candidates[0].contains(&scheduled_run().target_generation));
+    }
+
     #[tokio::test]
     async fn scheduled_upload_does_not_claim_a_preexisting_object_as_new() {
         let (url, captured) = spawn_canned_server(vec![
@@ -1124,8 +1219,40 @@ mod tests {
             uuid::Uuid::new_v4().simple()
         ));
         fs::write(&path, vec![0_u8; 42]).unwrap();
+        let error = upload_scheduled_snapshot(
+            &scheduled_target(url),
+            &path,
+            "/Patina/owned.zip",
+            42,
+            false,
+        )
+        .await
+        .unwrap_err();
+        let _ = fs::remove_file(path);
+
+        assert_eq!(error, "remote_name_conflict");
+        let requests = captured.await.unwrap();
+        assert_eq!(requests.len(), 2);
+        assert!(requests[0].starts_with("MKCOL "));
+        assert!(requests[1].starts_with("HEAD "));
+    }
+
+    #[tokio::test]
+    async fn scheduled_upload_can_resume_an_already_selected_object() {
+        let (url, captured) = spawn_canned_server(vec![
+            "HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                .to_string(),
+            "HTTP/1.1 200 OK\r\nContent-Length: 42\r\nETag: \"preexisting\"\r\nConnection: close\r\n\r\n"
+                .to_string(),
+        ])
+        .await;
+        let path = std::env::temp_dir().join(format!(
+            "patina-scheduled-resume-{}.zip",
+            uuid::Uuid::new_v4().simple()
+        ));
+        fs::write(&path, vec![0_u8; 42]).unwrap();
         let outcome =
-            upload_scheduled_snapshot(&scheduled_target(url), &path, "/Patina/owned.zip", 42)
+            upload_scheduled_snapshot(&scheduled_target(url), &path, "/Patina/owned.zip", 42, true)
                 .await
                 .unwrap();
         let _ = fs::remove_file(path);

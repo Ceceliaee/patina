@@ -831,6 +831,12 @@
           "markdownDescription": "Enables the cmd_resume_timer command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_reveal_webdav_backup_secret command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-reveal-webdav-backup-secret",
+          "markdownDescription": "Enables the cmd_reveal_webdav_backup_secret command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_save_data_bootstrap_snapshot_payload command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-save-data-bootstrap-snapshot-payload",
@@ -1447,6 +1453,12 @@
           "type": "string",
           "const": "deny-cmd-resume-timer",
           "markdownDescription": "Denies the cmd_resume_timer command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_reveal_webdav_backup_secret command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-reveal-webdav-backup-secret",
+          "markdownDescription": "Denies the cmd_reveal_webdav_backup_secret command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_save_data_bootstrap_snapshot_payload command without any pre-configured scope.",

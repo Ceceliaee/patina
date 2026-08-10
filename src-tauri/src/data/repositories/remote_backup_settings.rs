@@ -1,8 +1,7 @@
 use crate::data::repositories::tracker_settings::load_setting_value;
-use crate::platform::webdav::{normalize_remote_dir, WebDavConfig};
+use crate::platform::webdav::{normalize_base_url, normalize_remote_dir, WebDavConfig};
 use sha2::{Digest, Sha256};
 use sqlx::{Pool, Sqlite};
-use url::Url;
 
 pub const WEBDAV_BACKUP_URL_KEY: &str = "webdav_backup_url";
 pub const WEBDAV_BACKUP_USERNAME_KEY: &str = "webdav_backup_username";
@@ -41,19 +40,10 @@ pub fn normalize_config(
     if username.is_empty() {
         return Err("WebDAV username cannot be empty".to_string());
     }
-    let mut url = Url::parse(raw_url.trim())
-        .map_err(|error| format!("invalid WebDAV server address: {error}"))?;
-    if !matches!(url.scheme(), "http" | "https") {
-        return Err("WebDAV server address must use http or https".to_string());
-    }
-    if !url.username().is_empty() || url.password().is_some() {
-        return Err("WebDAV server address must not contain credentials".to_string());
-    }
-    url.set_query(None);
-    url.set_fragment(None);
+    let url = normalize_base_url(raw_url)?;
 
     Ok(WebDavConfig {
-        url: url.to_string(),
+        url,
         username: username.to_string(),
         remote_dir: normalize_remote_dir(raw_remote_dir)?,
     })
@@ -88,6 +78,13 @@ mod tests {
         assert_eq!(target_identity(&first), target_identity(&same));
         assert_ne!(target_identity(&first), target_identity(&other));
         assert_eq!(target_identity(&first).len(), 64);
+    }
+
+    #[test]
+    fn persisted_config_rejects_cleartext_non_loopback_transport() {
+        let error = normalize_config("http://example.com/dav", "alice", "/Patina").unwrap_err();
+        assert!(error.contains("must use HTTPS"));
+        assert!(normalize_config("http://127.0.0.1:8080/dav", "alice", "/Patina").is_ok());
     }
 
     #[tokio::test]

@@ -70,29 +70,52 @@ pub async fn cmd_preview_backup(backup_path: String) -> Result<BackupPreview, St
 pub fn cmd_save_webdav_backup_secret(
     username: String,
     password: String,
+    app: AppHandle,
     window: WebviewWindow,
 ) -> Result<(), String> {
     require_main_window_string(&window)?;
-    remote_backup::save_webdav_backup_secret(username, password)
+    remote_backup::save_webdav_backup_secret(
+        crate::platform::app_paths::app_profile(&app),
+        username,
+        password,
+    )
 }
 
 #[tauri::command]
-pub fn cmd_delete_webdav_backup_secret(window: WebviewWindow) -> Result<(), String> {
+pub fn cmd_delete_webdav_backup_secret(
+    app: AppHandle,
+    window: WebviewWindow,
+) -> Result<(), String> {
     require_main_window_string(&window)?;
-    remote_backup::delete_webdav_backup_secret()
+    remote_backup::delete_webdav_backup_secret(crate::platform::app_paths::app_profile(&app))
 }
 
 #[tauri::command]
-pub fn cmd_has_webdav_backup_secret() -> Result<bool, String> {
-    remote_backup::has_webdav_backup_secret()
+pub fn cmd_has_webdav_backup_secret(app: AppHandle) -> Result<bool, String> {
+    remote_backup::has_webdav_backup_secret(crate::platform::app_paths::app_profile(&app))
+}
+
+#[tauri::command]
+pub fn cmd_reveal_webdav_backup_secret(
+    app: AppHandle,
+    window: WebviewWindow,
+) -> Result<Option<String>, String> {
+    require_main_window_string(&window)?;
+    remote_backup::reveal_webdav_backup_secret(crate::platform::app_paths::app_profile(&app))
 }
 
 #[tauri::command]
 pub async fn cmd_test_webdav_backup_target(
     config: WebDavBackupConfigDto,
     password: Option<String>,
+    app: AppHandle,
 ) -> Result<WebDavTestResult, String> {
-    remote_backup::test_webdav_backup_target(config, password).await
+    remote_backup::test_webdav_backup_target(
+        crate::platform::app_paths::app_profile(&app),
+        config,
+        password,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -106,8 +129,9 @@ pub async fn cmd_upload_webdav_backup(
 #[tauri::command]
 pub async fn cmd_list_webdav_backups(
     config: WebDavBackupConfigDto,
+    app: AppHandle,
 ) -> Result<Vec<RemoteBackupEntry>, String> {
-    remote_backup::list_webdav_backups(config).await
+    remote_backup::list_webdav_backups(crate::platform::app_paths::app_profile(&app), config).await
 }
 
 #[tauri::command]

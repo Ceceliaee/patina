@@ -1,5 +1,6 @@
 use futures_util::StreamExt;
 use reqwest::{redirect::Policy, Body, Method, StatusCode, Url};
+use std::net::IpAddr;
 use std::path::Path;
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
@@ -46,12 +47,28 @@ fn parse_base_url(raw: &str) -> Result<Url, String> {
     if url.scheme() != "https" && url.scheme() != "http" {
         return Err("WebDAV server address must use http or https".to_string());
     }
+    if url.scheme() == "http" {
+        let is_literal_loopback = url
+            .host_str()
+            .and_then(|host| host.trim_matches(['[', ']']).parse::<IpAddr>().ok())
+            .is_some_and(|address| address.is_loopback());
+        if !is_literal_loopback {
+            return Err(
+                "WebDAV server address must use HTTPS; HTTP is allowed only for literal loopback addresses"
+                    .to_string(),
+            );
+        }
+    }
     if !url.username().is_empty() || url.password().is_some() {
         return Err("WebDAV server address must not contain credentials".to_string());
     }
     url.set_query(None);
     url.set_fragment(None);
     Ok(url)
+}
+
+pub fn normalize_base_url(raw: &str) -> Result<String, String> {
+    Ok(parse_base_url(raw)?.to_string())
 }
 
 pub fn normalize_remote_dir(raw: &str) -> Result<String, String> {
@@ -291,25 +308,10 @@ impl WebDavClient {
         }
     }
 
-    pub async fn upload_file(&self, local_path: &Path, remote_path: &str) -> Result<(), String> {
-        self.upload_file_with_policy(local_path, remote_path, false)
-            .await
-    }
-
     pub async fn upload_file_create_new(
         &self,
         local_path: &Path,
         remote_path: &str,
-    ) -> Result<(), String> {
-        self.upload_file_with_policy(local_path, remote_path, true)
-            .await
-    }
-
-    async fn upload_file_with_policy(
-        &self,
-        local_path: &Path,
-        remote_path: &str,
-        create_new: bool,
     ) -> Result<(), String> {
         let file = tokio::fs::File::open(local_path)
             .await
@@ -323,11 +325,10 @@ impl WebDavClient {
             return Err("local backup exceeds the WebDAV transfer size limit".to_string());
         }
         let body = Body::wrap_stream(ReaderStream::new(file));
-        let mut request = self.request(Method::PUT, remote_path).await?;
-        if create_new {
-            request = request.header(reqwest::header::IF_NONE_MATCH, "*");
-        }
-        let response = request
+        let response = self
+            .request(Method::PUT, remote_path)
+            .await?
+            .header(reqwest::header::IF_NONE_MATCH, "*")
             .header("Content-Type", "application/zip")
             .header("Content-Length", size)
             .body(body)
@@ -567,6 +568,15 @@ mod tests {
         assert!(parse_base_url("https://user:secret@example.com/dav").is_err());
         assert!(parse_base_url("file:///tmp/dav").is_err());
         assert!(parse_base_url("https://example.com/dav").is_ok());
+    }
+
+    #[test]
+    fn base_url_requires_https_except_for_literal_loopback_hosts() {
+        assert!(parse_base_url("http://example.com/dav").is_err());
+        assert!(parse_base_url("http://localhost/dav").is_err());
+        assert!(parse_base_url("http://127.0.0.1:8080/dav").is_ok());
+        assert!(parse_base_url("http://127.42.0.9:8080/dav").is_ok());
+        assert!(parse_base_url("http://[::1]:8080/dav").is_ok());
     }
 
     #[test]

@@ -16,6 +16,8 @@ pub mod settings_payload_service;
 pub mod sqlite_error;
 pub mod sqlite_pool;
 pub mod storage_migration;
+mod storage_migration_cleanup;
+mod storage_path_safety;
 pub mod storage_restart;
 pub mod tools_store;
 pub mod tracking_pause_service;
