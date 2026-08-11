@@ -550,7 +550,7 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
           return triggers.length > 0
             && triggers.every((trigger) => {
               const label = trigger.getAttribute('aria-label');
-              const selectedValue = trigger.textContent?.trim();
+              const selectedValue = trigger.querySelector('.qp-select-label-current')?.textContent?.trim();
               return Boolean(label?.includes(' 的分类: ') && selectedValue && label.endsWith(selectedValue));
             });
         })()

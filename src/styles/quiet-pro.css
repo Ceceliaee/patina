@@ -307,6 +307,18 @@
   align-items: center;
 }
 
+@media (max-width: 639px) {
+  .qp-page-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .qp-page-header-right {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
 .qp-panel-elevated {
   background: var(--qp-bg-elevated);
   border: 1px solid var(--qp-border-subtle);
@@ -1725,89 +1737,6 @@
   min-height: 38px;
   padding: 0 10px;
   font-size: 0.84rem;
-}
-
-.qp-select-root {
-  position: relative;
-}
-
-.qp-select-trigger {
-  width: 100%;
-  min-height: 34px;
-  padding: 0 10px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  text-align: left;
-  font-size: 0.84rem;
-  font-weight: 600;
-}
-
-.qp-select-trigger:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.qp-select-caret {
-  color: var(--qp-text-tertiary);
-  transition: transform var(--qp-motion-fast) var(--qp-motion-ease);
-}
-
-.qp-select-caret-open {
-  transform: rotate(180deg);
-}
-
-.qp-select-menu {
-  position: fixed;
-  z-index: 90;
-  margin: 0;
-  padding: 6px;
-  list-style: none;
-  border-radius: var(--qp-radius-control);
-  border: 1px solid var(--qp-border-subtle);
-  background: var(--qp-bg-panel);
-  box-shadow: var(--qp-shadow-overlay);
-  overflow-y: auto;
-  scrollbar-gutter: stable;
-}
-
-.qp-select-menu-top {
-  transform-origin: bottom center;
-}
-
-.qp-select-menu-bottom {
-  transform-origin: top center;
-}
-
-.qp-select-option {
-  width: 100%;
-  min-height: 32px;
-  border: 1px solid transparent;
-  border-radius: var(--qp-radius-button);
-  background: transparent;
-  color: var(--qp-text-secondary);
-  text-align: left;
-  padding: 0 9px;
-  font-size: 0.8rem;
-  font-weight: 550;
-}
-
-.qp-select-option-highlighted,
-.qp-select-option:hover {
-  background: var(--qp-bg-elevated);
-  color: var(--qp-text-primary);
-}
-
-.qp-select-option-selected {
-  border-color: color-mix(in srgb, var(--qp-accent-default) 22%, var(--qp-border-subtle));
-  background: var(--qp-accent-muted);
-  color: var(--qp-accent-default);
-}
-
-.qp-select-option[aria-disabled="true"] {
-  color: var(--qp-text-disabled);
-  cursor: not-allowed;
 }
 
 .qp-switch {

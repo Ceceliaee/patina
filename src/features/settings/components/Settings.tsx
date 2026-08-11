@@ -1,8 +1,9 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { Save, RefreshCw, Settings2, } from "lucide-react";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 
 import type { SettingsPageProps } from "../types";
+import type { AppLanguage } from "../../../shared/settings/appSettings.ts";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
 import QuietButton from "../../../shared/components/QuietButton";
 import SettingsAppearancePanel from "./SettingsAppearancePanel";
@@ -13,6 +14,7 @@ import SettingsTrackingPanel from "./SettingsTrackingPanel";
 import { useSettingsPageState } from "../hooks/useSettingsPageState";
 import { useWebActivitySetupState } from "../hooks/useWebActivitySetupState";
 import { useSettingsImportState } from "../hooks/useSettingsImportState.ts";
+import { prepareSettingsLanguagePreview } from "../services/settingsLanguagePreview.ts";
 
 const SettingsDataExportDialog = lazy(() => import("./SettingsDataExportDialog.tsx"));
 const SettingsDataImportDialog = lazy(() => import("./SettingsDataImportDialog.tsx"));
@@ -31,6 +33,14 @@ export default function Settings({
 }: SettingsPageProps) {
   const UI_TEXT = useLocaleText();
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [languageSelectionPending, setLanguageSelectionPending] = useState(false);
+  const languageSelectionPendingRef = useRef(false);
+  const languageSelectionRevisionRef = useRef(0);
+  const registerSaveHandler = useCallback((handler: (() => Promise<boolean>) | null) => {
+    onRegisterSaveHandler?.(handler
+      ? async () => languageSelectionPendingRef.current ? false : handler()
+      : null);
+  }, [onRegisterSaveHandler]);
   const importState = useSettingsImportState(
     onToast,
     onPrepareImportCategories,
@@ -81,12 +91,33 @@ export default function Settings({
     onColorSchemeSaved,
     onDirtyChange,
     onToast,
-    onRegisterSaveHandler,
+    onRegisterSaveHandler: registerSaveHandler,
   });
   const { showWebActivityHelp } = useWebActivitySetupState({
     savedSettings,
     draftSettings,
   });
+  const handleLanguageChange = useCallback(async (nextLanguage: AppLanguage) => {
+    if (languageSelectionPendingRef.current || draftSettings?.language === nextLanguage) return;
+    const revision = ++languageSelectionRevisionRef.current;
+    languageSelectionPendingRef.current = true;
+    setLanguageSelectionPending(true);
+    try {
+      const result = await prepareSettingsLanguagePreview(nextLanguage);
+      if (revision !== languageSelectionRevisionRef.current) return;
+      if (result.ready) {
+        handleChange("language", nextLanguage);
+        return;
+      }
+      console.error(`[i18n] failed to prepare settings language ${nextLanguage}`, result.error);
+      onToast?.(UI_TEXT.settings.languageLoadFailed, "error");
+    } finally {
+      if (revision === languageSelectionRevisionRef.current) {
+        languageSelectionPendingRef.current = false;
+        setLanguageSelectionPending(false);
+      }
+    }
+  }, [draftSettings?.language, handleChange, onToast, UI_TEXT]);
 
   useEffect(() => {
     if (!draftSettings) return;
@@ -99,6 +130,8 @@ export default function Settings({
   }, [draftSettings, onColorSchemePreview, onLanguagePreview, onThemeModePreview]);
 
   useEffect(() => () => {
+    languageSelectionRevisionRef.current += 1;
+    languageSelectionPendingRef.current = false;
     onThemeModePreview?.(null);
     onColorSchemePreview?.(null);
     onLanguagePreview?.(null);
@@ -134,7 +167,7 @@ export default function Settings({
         title={UI_TEXT.settings.title}
         subtitle={UI_TEXT.settings.subtitle}
         rightSlot={(
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center justify-end gap-2.5">
             <div
               className={`qp-status ${
                 saveStatus !== "saving" && hasUnsavedChanges ? "qp-status-danger" : ""
@@ -162,7 +195,7 @@ export default function Settings({
             <QuietButton
               size="large"
               onClick={handleCancel}
-              disabled={!hasUnsavedChanges || saveStatus === "saving"}
+              disabled={!hasUnsavedChanges || saveStatus === "saving" || languageSelectionPending}
               className="settings-header-button rounded-[8px]"
             >
               {UI_TEXT.settings.cancel}
@@ -171,7 +204,7 @@ export default function Settings({
               tone="primary"
               size="large"
               onClick={() => void handleSave()}
-              disabled={!hasUnsavedChanges || saveStatus === "saving"}
+              disabled={!hasUnsavedChanges || saveStatus === "saving" || languageSelectionPending}
               busy={saveStatus === "saving"}
               className="settings-header-button rounded-[8px]"
             >
@@ -210,7 +243,8 @@ export default function Settings({
             themeMode={draftSettings.themeMode}
             onThemeModeChange={(nextThemeMode) => handleChange("themeMode", nextThemeMode)}
             language={draftSettings.language}
-            onLanguageChange={(nextLanguage) => handleChange("language", nextLanguage)}
+            onLanguageChange={(nextLanguage) => { void handleLanguageChange(nextLanguage); }}
+            languageDisabled={languageSelectionPending}
             colorSchemeLight={draftSettings.colorSchemeLight}
             onColorSchemeLightChange={(nextColorScheme) => handleChange("colorSchemeLight", nextColorScheme)}
             colorSchemeDark={draftSettings.colorSchemeDark}

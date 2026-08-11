@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { getLocaleText } from "../src/shared/i18n/runtime.ts";
+import type { AppLanguage } from "../src/shared/settings/appSettings.ts";
 import type { BackupPreview } from "../src/features/settings/services/settingsRuntimeAdapterService.ts";
 import { parseBackupPreview } from "../src/platform/backup/backupRuntimeGateway.ts";
 import { parseScheduledBackupSnapshot } from "../src/platform/backup/scheduledBackupRuntimeGateway.ts";
@@ -36,6 +37,7 @@ import {
   toUserVisibleStoragePath,
 } from "../src/features/settings/services/storagePathDisplay.ts";
 import { formatRemoteBackupTargetSummary } from "../src/features/settings/services/remoteBackupTargetSummary.ts";
+import { prepareSettingsLanguagePreview } from "../src/features/settings/services/settingsLanguagePreview.ts";
 
 const ZH_TEXT = getLocaleText("zh-CN");
 
@@ -49,7 +51,7 @@ interface AppSettings {
   closeBehavior: "exit" | "tray";
   minimizeBehavior: "taskbar" | "widget";
   themeMode: "light" | "dark" | "system";
-  language: "zh-CN" | "en-US";
+  language: AppLanguage;
   hourlyActivityChartMode: "total" | "category";
   dynamicEffects: boolean;
   colorSchemeLight:
@@ -551,6 +553,24 @@ await runTest("normalizeSettingsRecord accepts UI language and falls back to Chi
   assert.equal(normalizeSettingsRecord({ language: "en-US" }).language, "en-US");
   assert.equal(normalizeSettingsRecord({ language: "EN-us" }).language, "en-US");
   assert.equal(normalizeSettingsRecord({ language: "fr-FR" }).language, "zh-CN");
+});
+
+await runTest("settings language preview only accepts a locale after its packaged resources load", async () => {
+  const loaded: AppLanguage[] = [];
+  assert.deepEqual(
+    await prepareSettingsLanguagePreview("en-US", async (language) => {
+      loaded.push(language);
+    }),
+    { ready: true, error: null },
+  );
+  assert.deepEqual(loaded, ["en-US"]);
+
+  const loadError = new Error("locale chunk unavailable");
+  const failed = await prepareSettingsLanguagePreview("en-US", async () => {
+    throw loadError;
+  });
+  assert.equal(failed.ready, false);
+  assert.strictEqual(failed.error, loadError);
 });
 
 await runTest("normalizeSettingsRecord accepts hourly activity chart modes and falls back to total", () => {

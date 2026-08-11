@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import QuietBadge from "../../../shared/components/QuietBadge";
 import QuietDialog from "../../../shared/components/QuietDialog";
 import QuietButton from "../../../shared/components/QuietButton";
+import QuietSelect from "../../../shared/components/QuietSelect";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
 import QuietSwitch from "../../../shared/components/QuietSwitch";
 import SettingsPanelHeader from "./SettingsPanelHeader";
@@ -17,6 +18,7 @@ type SettingsAppearancePanelProps = {
   onThemeModeChange: (nextThemeMode: ThemeMode) => void;
   language: AppLanguage;
   onLanguageChange: (nextLanguage: AppLanguage) => void;
+  languageDisabled?: boolean;
   colorSchemeLight: ColorScheme;
   onColorSchemeLightChange: (nextColorScheme: ColorScheme) => void;
   colorSchemeDark: ColorScheme;
@@ -32,6 +34,7 @@ export default function SettingsAppearancePanel({
   onThemeModeChange,
   language,
   onLanguageChange,
+  languageDisabled = false,
   colorSchemeLight,
   onColorSchemeLightChange,
   colorSchemeDark,
@@ -162,11 +165,14 @@ export default function SettingsAppearancePanel({
           </p>
         </div>
 
-        <QuietSegmentedFilter
+        <QuietSelect
           value={language}
           options={languageOptions}
           onChange={onLanguageChange}
-          className="md:self-end md:justify-self-end"
+          ariaLabel={UI_TEXT.settings.languageLabel}
+          disabled={languageDisabled}
+          density="compact"
+          className="max-w-full justify-self-start md:self-end md:justify-self-end"
         />
       </div>
 

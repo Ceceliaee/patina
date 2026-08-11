@@ -4,7 +4,7 @@ import { delay, evaluate, jsonString, waitForAnimationFrames, waitForExpression 
 import { SETTINGS_MARKER } from "./constants.ts";
 
 export async function runSettingsScenarios(context: BrowserSmokeContext) {
-  const { client, sessionId, runTest } = context;
+  const { appUrl, client, sessionId, runTest } = context;
 
   await runTest("settings cold navigation keeps the current view until its final state is ready", async () => {
     assert.equal(
@@ -174,6 +174,507 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       true,
     );
     await waitForExpression(client!, sessionId, "!document.querySelector('.settings-color-scheme-list')");
+  });
+
+  await runTest("settings language select switches, persists, and restores all production locales", async () => {
+    const openSettings = async (label: string) => {
+      await waitForExpression(
+        client!,
+        sessionId,
+        `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(label))} + ']'))`,
+        15_000,
+      );
+      await evaluate(client!, sessionId, `
+        document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(label))} + ']')?.click()
+      `);
+      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-select-trigger'))`);
+    };
+
+    let languageTriggerWidth: number | null = null;
+    const chooseLanguage = async (currentAriaLabel: string, targetLabel: string) => {
+      assert.equal(
+        await evaluate(client!, sessionId, `
+          (() => {
+            const trigger = document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify(currentAriaLabel))} + ']');
+            trigger?.scrollIntoView({ block: "center" });
+            return Boolean(trigger);
+          })()
+        `),
+        true,
+      );
+      await waitForAnimationFrames(client!, sessionId);
+      assert.equal(
+        await evaluate(client!, sessionId, `
+          (() => {
+            const trigger = document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify(currentAriaLabel))} + ']');
+            trigger?.click();
+            return Boolean(trigger);
+          })()
+        `),
+        true,
+      );
+      await waitForExpression(client!, sessionId, `(() => {
+        const trigger = document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify(currentAriaLabel))} + ']');
+        const listboxId = trigger?.getAttribute("aria-controls");
+        return Boolean(listboxId && document.getElementById(listboxId));
+      })()`);
+      await waitForExpression(
+        client!,
+        sessionId,
+        `(() => {
+          const trigger = document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify(currentAriaLabel))} + ']');
+          const listboxId = trigger?.getAttribute("aria-controls");
+          const menu = listboxId ? document.getElementById(listboxId) : null;
+          return Boolean(menu && getComputedStyle(menu).visibility !== "hidden");
+        })()`,
+        15_000,
+        "compact language menu should finish measuring before it becomes visible",
+      );
+      const selectA11yState = JSON.parse(String(await evaluate(client!, sessionId, `
+        JSON.stringify((() => {
+          const trigger = document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify(currentAriaLabel))} + ']');
+          const controls = trigger?.getAttribute("aria-controls");
+          const listbox = controls ? document.getElementById(controls) : null;
+          const triggerRect = trigger?.getBoundingClientRect();
+          const menuRect = listbox?.getBoundingClientRect();
+          const triggerStyle = trigger ? getComputedStyle(trigger) : null;
+          const menuStyle = listbox ? getComputedStyle(listbox) : null;
+          const labelStackRect = trigger?.querySelector('.qp-select-label-stack')?.getBoundingClientRect();
+          const caretRect = trigger?.querySelector('.qp-select-caret')?.getBoundingClientRect();
+          const options = Array.from(listbox?.querySelectorAll('[role="option"]') ?? []);
+          const optionStyles = options.map((option) => getComputedStyle(option));
+          const selectedOption = listbox?.querySelector('[role="option"][aria-selected="true"]');
+          const compactSegmentSelected = document.querySelector('.qp-segmented-filter-compact .qp-segmented-filter-item-selected');
+          const compactSegmentDefault = document.querySelector('.qp-segmented-filter-compact .qp-segmented-filter-item:not(.qp-segmented-filter-item-selected)');
+          const defaultOption = listbox?.querySelector('[role="option"][aria-selected="false"]');
+          return {
+            hasPopup: trigger?.getAttribute("aria-haspopup"),
+            expanded: trigger?.getAttribute("aria-expanded"),
+            controls: trigger?.getAttribute("aria-controls"),
+            listboxId: listbox?.id,
+            selectedCount: options.filter((option) => option.getAttribute("aria-selected") === "true").length,
+            menuContainsViewport: Boolean(menuRect && menuRect.left >= 0 && menuRect.right <= innerWidth + 1),
+            menuCoversTrigger: Boolean(menuRect && triggerRect && menuRect.width + 0.5 >= triggerRect.width),
+            triggerWidth: triggerRect ? Math.round(triggerRect.width) : 0,
+            triggerHeight: triggerRect ? Math.round(triggerRect.height) : 0,
+            triggerHorizontalChrome: triggerRect && labelStackRect && caretRect
+              ? Math.round(triggerRect.width - labelStackRect.width - caretRect.width)
+              : 0,
+            triggerFontSize: triggerStyle?.fontSize ?? null,
+            triggerFontWeight: triggerStyle?.fontWeight ?? null,
+            triggerMatchesPreviousSelectedText: Boolean(
+              triggerStyle
+              && compactSegmentSelected
+              && triggerStyle.color === getComputedStyle(compactSegmentSelected).color
+            ),
+            menuWidth: menuRect ? Math.round(menuRect.width) : 0,
+            menuHeight: menuRect ? Math.round(menuRect.height) : 0,
+            menuGap: menuRect && triggerRect
+              ? Math.round(menuRect.top >= triggerRect.bottom
+                ? menuRect.top - triggerRect.bottom
+                : triggerRect.top - menuRect.bottom)
+              : 0,
+            menuPadding: menuStyle?.paddingTop ?? null,
+            optionHeights: options.map((option) => Math.round(option.getBoundingClientRect().height)),
+            optionFontSizes: [...new Set(optionStyles.map((style) => style.fontSize))],
+            optionFontWeights: [...new Set(optionStyles.map((style) => style.fontWeight))],
+            selectedMatchesPreviousSelectedText: Boolean(
+              selectedOption
+              && compactSegmentSelected
+              && getComputedStyle(selectedOption).color === getComputedStyle(compactSegmentSelected).color
+            ),
+            defaultMatchesPreviousDefaultText: Boolean(
+              defaultOption
+              && compactSegmentDefault
+              && getComputedStyle(defaultOption).color === getComputedStyle(compactSegmentDefault).color
+            ),
+          };
+        })())
+      `))) as {
+        hasPopup: string | null;
+        expanded: string | null;
+        controls: string | null;
+        listboxId: string | null;
+        selectedCount: number;
+        menuContainsViewport: boolean;
+        menuCoversTrigger: boolean;
+        triggerWidth: number;
+        triggerHeight: number;
+        triggerHorizontalChrome: number;
+        triggerFontSize: string | null;
+        triggerFontWeight: string | null;
+        triggerMatchesPreviousSelectedText: boolean;
+        menuWidth: number;
+        menuHeight: number;
+        menuGap: number;
+        menuPadding: string | null;
+        optionHeights: number[];
+        optionFontSizes: string[];
+        optionFontWeights: string[];
+        selectedMatchesPreviousSelectedText: boolean;
+        defaultMatchesPreviousDefaultText: boolean;
+      };
+      assert.equal(selectA11yState.hasPopup, "listbox");
+      assert.equal(selectA11yState.expanded, "true");
+      assert.equal(selectA11yState.controls, selectA11yState.listboxId);
+      assert.equal(selectA11yState.selectedCount, 1);
+      assert.equal(selectA11yState.menuContainsViewport, true);
+      assert.equal(selectA11yState.menuCoversTrigger, true);
+      assert.ok(selectA11yState.triggerWidth > 0 && selectA11yState.triggerWidth <= 220);
+      assert.equal(selectA11yState.triggerHeight, 28);
+      assert.equal(selectA11yState.triggerHorizontalChrome, 24);
+      languageTriggerWidth ??= selectA11yState.triggerWidth;
+      assert.equal(selectA11yState.triggerWidth, languageTriggerWidth);
+      assert.equal(selectA11yState.triggerFontSize, "11px");
+      assert.equal(selectA11yState.triggerFontWeight, "650");
+      assert.equal(selectA11yState.triggerMatchesPreviousSelectedText, true);
+      assert.ok(
+        selectA11yState.menuWidth >= selectA11yState.triggerWidth
+        && selectA11yState.menuWidth <= 220,
+      );
+      assert.equal(
+        selectA11yState.menuHeight,
+        Math.min(selectA11yState.optionHeights.reduce((total, height) => total + height, 10), 220),
+      );
+      assert.equal(selectA11yState.menuGap, 4);
+      assert.equal(selectA11yState.menuPadding, "4px");
+      assert.deepEqual(selectA11yState.optionHeights, [28, 28]);
+      assert.deepEqual(selectA11yState.optionFontSizes, ["11px"]);
+      assert.deepEqual(selectA11yState.optionFontWeights, ["650"]);
+      assert.equal(selectA11yState.selectedMatchesPreviousSelectedText, true);
+      assert.equal(selectA11yState.defaultMatchesPreviousDefaultText, true);
+      assert.deepEqual(
+        await evaluate(client!, sessionId, `
+          (() => {
+            const trigger = document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify(currentAriaLabel))} + ']');
+            const listboxId = trigger?.getAttribute("aria-controls");
+            const listbox = listboxId ? document.getElementById(listboxId) : null;
+            return Array.from(listbox?.querySelectorAll('[role="option"]') ?? [])
+              .map((option) => option.textContent?.trim());
+          })()
+        `),
+        ["简体中文", "English"],
+      );
+      assert.equal(
+        await evaluate(client!, sessionId, `
+          (() => {
+            const trigger = document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify(currentAriaLabel))} + ']');
+            const listboxId = trigger?.getAttribute("aria-controls");
+            const listbox = listboxId ? document.getElementById(listboxId) : null;
+            const option = Array.from(listbox?.querySelectorAll('[role="option"]') ?? [])
+              .find((node) => node.textContent?.trim() === ${jsonString(targetLabel)});
+            option?.click();
+            return Boolean(option);
+          })()
+        `),
+        true,
+      );
+    };
+
+    await openSettings("设置");
+    await chooseLanguage("语言: 简体中文", "English");
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.documentElement.lang === "en-US"
+        && Boolean(document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify("Language: English"))} + ']'))`,
+      15_000,
+      "English locale chunk should load from the language selector",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1`),
+      true,
+      "language selector should not introduce horizontal overflow",
+    );
+    for (const viewport of [
+      { width: 1280, height: 820, deviceScaleFactor: 1, mobile: false },
+      { width: 900, height: 760, deviceScaleFactor: 1.5, mobile: false },
+      { width: 390, height: 844, deviceScaleFactor: 1, mobile: true },
+    ]) {
+      await client!.command("Emulation.setDeviceMetricsOverride", viewport, sessionId);
+      await evaluate(client!, sessionId, `
+        document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify("Language: English"))} + ']')
+          ?.scrollIntoView({ block: "center" })
+      `);
+      await waitForAnimationFrames(client!, sessionId);
+      const layoutState = JSON.parse(String(await evaluate(client!, sessionId, `
+        JSON.stringify((() => {
+          const trigger = document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify("Language: English"))} + ']');
+          const label = trigger?.querySelector("span");
+          const caret = trigger?.querySelector("svg");
+          const triggerRect = trigger?.getBoundingClientRect();
+          const labelStackRect = trigger?.querySelector('.qp-select-label-stack')?.getBoundingClientRect();
+          const labelRect = label?.getBoundingClientRect();
+          const caretRect = caret?.getBoundingClientRect();
+          const headerLeftRect = document.querySelector(".qp-page-header-left")?.getBoundingClientRect();
+          const headerRight = document.querySelector(".qp-page-header-right");
+          const headerRightRect = headerRight?.getBoundingClientRect();
+          const title = document.querySelector(".qp-page-header-title");
+          const titleRect = title?.getBoundingClientRect();
+          const titleFontSize = title ? Number.parseFloat(getComputedStyle(title).fontSize) : 0;
+          return {
+            noPageOverflow: document.documentElement.scrollWidth <= innerWidth + 1,
+            triggerInsideViewport: Boolean(triggerRect && triggerRect.left >= -1 && triggerRect.right <= innerWidth + 1),
+            triggerUsesCompactSize: Boolean(
+              triggerRect
+              && labelStackRect
+              && caretRect
+              && triggerRect.width <= 220
+              && Math.abs(triggerRect.height - 28) <= 0.5
+              && Math.abs(triggerRect.width - labelStackRect.width - caretRect.width - 24) <= 0.5
+            ),
+            labelClearsCaret: Boolean(labelRect && caretRect && labelRect.right <= caretRect.left + 1),
+            titleStaysReadable: Boolean(titleRect && titleFontSize && titleRect.height <= titleFontSize * 1.7),
+            headerActionsFit: Boolean(headerRight && headerRight.scrollWidth <= headerRight.clientWidth + 1),
+            headerRegionsDoNotOverlap: Boolean(
+              headerLeftRect
+              && headerRightRect
+              && (
+                headerLeftRect.right <= headerRightRect.left + 1
+                || headerLeftRect.bottom <= headerRightRect.top + 1
+                || headerRightRect.bottom <= headerLeftRect.top + 1
+              )
+            ),
+          };
+        })())
+      `))) as {
+        noPageOverflow: boolean;
+        triggerInsideViewport: boolean;
+        triggerUsesCompactSize: boolean;
+        labelClearsCaret: boolean;
+        titleStaysReadable: boolean;
+        headerActionsFit: boolean;
+        headerRegionsDoNotOverlap: boolean;
+      };
+      assert.deepEqual(layoutState, {
+        noPageOverflow: true,
+        triggerInsideViewport: true,
+        triggerUsesCompactSize: true,
+        labelClearsCaret: true,
+        titleStaysReadable: true,
+        headerActionsFit: true,
+        headerRegionsDoNotOverlap: true,
+      });
+      await evaluate(client!, sessionId, `
+        document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify("Language: English"))} + ']')?.click()
+      `);
+      await waitForExpression(client!, sessionId, `(() => {
+        const trigger = document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify("Language: English"))} + ']');
+        const listboxId = trigger?.getAttribute("aria-controls");
+        const listbox = listboxId ? document.getElementById(listboxId) : null;
+        return Boolean(listbox && getComputedStyle(listbox).visibility !== "hidden");
+      })()`);
+      assert.equal(
+        await evaluate(client!, sessionId, `
+          (() => {
+            const trigger = document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify("Language: English"))} + ']');
+            const listboxId = trigger?.getAttribute("aria-controls");
+            const rect = listboxId ? document.getElementById(listboxId)?.getBoundingClientRect() : null;
+            return Boolean(rect && rect.left >= 0 && rect.right <= innerWidth + 1 && rect.top >= 0 && rect.bottom <= innerHeight + 1);
+          })()
+        `),
+        true,
+      );
+      await evaluate(client!, sessionId, `
+        document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify("Language: English"))} + ']')?.click()
+      `);
+      await waitForExpression(
+        client!,
+        sessionId,
+        `document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify("Language: English"))} + ']')?.getAttribute("aria-expanded") === "false"`,
+      );
+    }
+    await client!.command("Emulation.setDeviceMetricsOverride", {
+      width: 1280,
+      height: 820,
+      deviceScaleFactor: 1,
+      mobile: false,
+    }, sessionId);
+    await waitForAnimationFrames(client!, sessionId);
+    assert.notEqual(
+      await evaluate(client!, sessionId, `JSON.parse(localStorage.getItem("__time_tracker_smoke_settings") ?? "{}").language ?? null`),
+      "en-US",
+      "language preview must not persist before Save",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const cancel = Array.from(document.querySelectorAll("button"))
+            .find((button) => button.textContent?.trim() === "Cancel" && !button.disabled);
+          cancel?.click();
+          return Boolean(cancel);
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.documentElement.lang === "zh-CN"
+        && Boolean(document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify("语言: 简体中文"))} + ']'))`,
+      15_000,
+      "Cancel should restore the saved locale",
+    );
+    assert.notEqual(
+      await evaluate(client!, sessionId, `JSON.parse(localStorage.getItem("__time_tracker_smoke_settings") ?? "{}").language ?? null`),
+      "en-US",
+    );
+
+    await chooseLanguage("语言: 简体中文", "English");
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.documentElement.lang === "en-US"
+        && Boolean(document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify("Language: English"))} + ']'))`,
+      15_000,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const save = Array.from(document.querySelectorAll("button"))
+            .find((button) => button.textContent?.trim() === "Save");
+          save?.click();
+          return Boolean(save);
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString("Settings updated")})`);
+    assert.equal(
+      await evaluate(client!, sessionId, `JSON.parse(localStorage.getItem("__time_tracker_smoke_settings") ?? "{}").language`),
+      "en-US",
+    );
+
+    await client!.command("Page.navigate", { url: appUrl }, sessionId);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.documentElement.lang === "en-US"
+        && Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("Settings"))} + ']'))`,
+      15_000,
+      "saved English locale should survive a reload",
+    );
+    for (const destination of [
+      { label: "Today", view: "dashboard" },
+      { label: "History", view: "history" },
+      { label: "Data", view: "data" },
+      { label: "Classification", view: "mapping" },
+      { label: "Tools", view: "tools" },
+      { label: "Settings", view: "settings" },
+      { label: "About", view: "about" },
+    ]) {
+      assert.equal(
+        await evaluate(client!, sessionId, `
+          (() => {
+            const destination = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(destination.label))} + ']');
+            destination?.click();
+            return Boolean(destination);
+          })()
+        `),
+        true,
+      );
+      await waitForExpression(
+        client!,
+        sessionId,
+        `document.querySelector("main.qp-canvas")?.dataset.presentedView === ${jsonString(destination.view)}`,
+        15_000,
+        `English ${destination.view} view should settle`,
+      );
+      assert.deepEqual(
+        JSON.parse(String(await evaluate(client!, sessionId, `JSON.stringify({
+          lang: document.documentElement.lang,
+          hasHeading: Boolean(document.querySelector("main h1")?.textContent?.trim()),
+          noReplacementCharacter: !document.body.innerText.includes("\\uFFFD"),
+          noPageOverflow: document.documentElement.scrollWidth <= innerWidth + 1,
+        })`))),
+        {
+          lang: "en-US",
+          hasHeading: true,
+          noReplacementCharacter: true,
+          noPageOverflow: true,
+        },
+      );
+    }
+    await openSettings("Settings");
+
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const trigger = document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify("Language: English"))} + ']');
+          if (!trigger) return false;
+          trigger.focus();
+          trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+          return true;
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(client!, sessionId, `document.activeElement?.getAttribute("role") === "listbox"`);
+    const activeOptionText = async () => evaluate(client!, sessionId, `
+      (() => {
+        const id = document.activeElement?.getAttribute("aria-activedescendant");
+        return id ? document.getElementById(id)?.textContent?.trim() ?? null : null;
+      })()
+    `);
+    await evaluate(client!, sessionId, `document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }))`);
+    await waitForAnimationFrames(client!, sessionId);
+    assert.equal(await activeOptionText(), "简体中文");
+    await evaluate(client!, sessionId, `document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }))`);
+    await waitForAnimationFrames(client!, sessionId);
+    assert.equal(await activeOptionText(), "English");
+    await evaluate(client!, sessionId, `document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }))`);
+    await waitForAnimationFrames(client!, sessionId);
+    assert.equal(await activeOptionText(), "简体中文");
+    await evaluate(client!, sessionId, `document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "简", bubbles: true }))`);
+    await waitForAnimationFrames(client!, sessionId);
+    assert.equal(await activeOptionText(), "简体中文");
+    await evaluate(client!, sessionId, `document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true }))`);
+    await waitForAnimationFrames(client!, sessionId);
+    assert.equal(await activeOptionText(), "English");
+    await evaluate(client!, sessionId, `document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify("Language: English"))} + ']')?.getAttribute("aria-expanded") === "false"
+        && document.activeElement?.matches('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify("Language: English"))} + ']')`,
+      15_000,
+      "Escape should remove the portal and restore trigger focus",
+    );
+    await evaluate(client!, sessionId, `
+      document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    `);
+    await waitForExpression(client!, sessionId, `document.activeElement?.getAttribute("role") === "listbox"`);
+    await evaluate(client!, sessionId, `
+      document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
+    `);
+    await waitForAnimationFrames(client!, sessionId);
+    await evaluate(client!, sessionId, `
+      document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.documentElement.lang === "zh-CN"
+        && Boolean(document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify("语言: 简体中文"))} + ']'))`,
+      15_000,
+      "keyboard selection should restore Simplified Chinese",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const save = Array.from(document.querySelectorAll("button"))
+            .find((button) => button.textContent?.trim() === "保存");
+          save?.click();
+          return Boolean(save);
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString("配置已更新")})`);
+    assert.equal(
+      await evaluate(client!, sessionId, `JSON.parse(localStorage.getItem("__time_tracker_smoke_settings") ?? "{}").language`),
+      "zh-CN",
+    );
   });
 
   await runTest("start minimized stays editable and persists while launch at login is off", async () => {

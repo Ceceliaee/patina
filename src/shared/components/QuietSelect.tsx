@@ -24,6 +24,7 @@ interface QuietSelectProps<T extends string | number> {
   onChange: (value: T) => void;
   ariaLabel: string;
   disabled?: boolean;
+  density?: "regular" | "compact";
   className?: string;
 }
 
@@ -36,6 +37,7 @@ interface SelectMenuPosition {
 }
 
 const MENU_GAP = 6;
+const COMPACT_MENU_GAP = 4;
 const VIEWPORT_PADDING = 8;
 const DEFAULT_MENU_MAX_HEIGHT = 220;
 const TYPEAHEAD_RESET_MS = 500;
@@ -71,6 +73,7 @@ export default function QuietSelect<T extends string | number>({
   onChange,
   ariaLabel,
   disabled = false,
+  density = "regular",
   className,
 }: QuietSelectProps<T>) {
   const [open, setOpen] = useState(false);
@@ -110,11 +113,16 @@ export default function QuietSelect<T extends string | number>({
 
     const rect = trigger.getBoundingClientRect();
     const menuHeight = measuredHeight ?? listRef.current?.offsetHeight ?? DEFAULT_MENU_MAX_HEIGHT;
-    const width = Math.max(rect.width, 120);
-    const belowTop = rect.bottom + MENU_GAP;
-    const aboveTop = rect.top - menuHeight - MENU_GAP;
+    const baseWidth = density === "compact" ? rect.width : Math.max(rect.width, 120);
+    const width = Math.min(
+      baseWidth,
+      Math.max(window.innerWidth - VIEWPORT_PADDING * 2, 1),
+    );
+    const menuGap = density === "compact" ? COMPACT_MENU_GAP : MENU_GAP;
+    const belowTop = rect.bottom + menuGap;
+    const aboveTop = rect.top - menuHeight - menuGap;
     const spaceBelow = window.innerHeight - belowTop - VIEWPORT_PADDING;
-    const spaceAbove = rect.top - MENU_GAP - VIEWPORT_PADDING;
+    const spaceAbove = rect.top - menuGap - VIEWPORT_PADDING;
     const shouldFlip = spaceBelow < menuHeight && spaceAbove > spaceBelow;
     const availableSpace = Math.max(shouldFlip ? spaceAbove : spaceBelow, 96);
     const maxHeight = Math.min(DEFAULT_MENU_MAX_HEIGHT, availableSpace);
@@ -130,7 +138,7 @@ export default function QuietSelect<T extends string | number>({
       maxHeight,
       placement: shouldFlip ? "top" : "bottom",
     };
-  }, []);
+  }, [density]);
 
   const updateMenuPosition = useCallback((measuredHeight?: number) => {
     const nextPosition = resolveMenuPosition(measuredHeight);
@@ -151,9 +159,9 @@ export default function QuietSelect<T extends string | number>({
   }, [resolveMenuPosition]);
 
   const openMenu = useCallback(() => {
-    setMenuPosition(resolveMenuPosition());
+    setMenuPosition(density === "compact" ? null : resolveMenuPosition());
     setOpen(true);
-  }, [resolveMenuPosition]);
+  }, [density, resolveMenuPosition]);
 
   useEffect(() => {
     if (!open) return;
@@ -357,7 +365,7 @@ export default function QuietSelect<T extends string | number>({
       aria-labelledby={`${listboxId}-trigger`}
       aria-activedescendant={highlightedIndex >= 0 ? `${listboxId}-option-${highlightedIndex}` : undefined}
       onKeyDown={handleListKeyDown}
-      className={`qp-select-menu qp-select-menu-${menuPosition?.placement ?? "bottom"}`}
+      className={`qp-select-menu qp-select-menu-${menuPosition?.placement ?? "bottom"} qp-select-menu-density-${density}`}
       style={menuStyle}
     >
       {options.map((option, index) => {
@@ -392,7 +400,7 @@ export default function QuietSelect<T extends string | number>({
   return (
     <div
       ref={rootRef}
-      className={`qp-select-root ${className ?? ""}`}
+      className={`qp-select-root qp-select-root-${density} ${className ?? ""}`}
     >
       <button
         ref={triggerRef}
@@ -411,9 +419,18 @@ export default function QuietSelect<T extends string | number>({
           }
         }}
         onKeyDown={handleKeyDown}
-        className="qp-control qp-select-trigger"
+        className={`qp-control qp-select-trigger qp-select-trigger-${density}`}
       >
-        <span className="truncate">{selectedOption?.label ?? ""}</span>
+        <span className="qp-select-label-stack" aria-hidden="true">
+          {options.map((option) => (
+            <span
+              key={String(option.value)}
+              className={`qp-select-label ${option.value === value ? "qp-select-label-current" : ""}`}
+            >
+              {option.label}
+            </span>
+          ))}
+        </span>
         <ChevronDown size={14} className={`qp-select-caret ${open ? "qp-select-caret-open" : ""}`} />
       </button>
       {menu ? createPortal(menu, document.body) : null}
