@@ -142,6 +142,8 @@ npm run i18n:export-kit -- ru-RU Русский --from en-US
 
 翻译者只编辑黄色的 `Translation` 和 `Translator note / question` 列。`⟦count⟧` 等占位符可以按目标语序移动，但不能删除、增加或改名。消息的业务分支和目标语言复数类别会展开为独立行，翻译者不需要理解内部 AST。
 
+机器翻译、生成式翻译和简繁字符转换都只能产生审校草稿，不能直接成为生产资源。生产验收必须由熟悉目标地区软件语境的审校者结合真实界面逐项确认：原意没有偏移、当地术语自然一致、按钮与危险操作不会误导、同屏上下文读起来连贯，并覆盖长文本和窄窗口。`i18n:review` 只记录某个 source hash 已被明确签署，不能代替母语审校，也不能把自动化通过解释成文案准确。如果暂时没有可信审校能力，或维护者在实际界面中发现系统性疑问，应保持该 locale 不进入生产注册表，或在尚未发布时完整撤回。
+
 收到文件后先生成可审查资源，不注册生产语言：
 
 ```powershell
@@ -160,6 +162,21 @@ npm run check:full
 ```
 
 导入命令要求维护者在命令行再次明确目标 locale、原生名称、方向和参考 locale；导入器逐项对照工作簿，不能让回传文件自行决定将注册哪个语言。`--apply` 使用与 `i18n:new` 相同的原子事务，首次创建资源目录、注册 locale，并把 review 状态保留为 `PENDING`。它拒绝覆盖已注册或已存在的 locale。XLSX 与 `exceljs` 都只属于开发工具链，不进入 Patina 前端、Rust 二进制或安装包。
+
+### 5.3 前端资源装载与 locale 激活
+
+生成器为每个生产 locale 输出独立资源模块，并生成只包含明确动态 import 的 loader manifest。标准原文 `zh-CN` 作为同步可用的初始资源进入默认启动图；其他语言只在已保存设置、预览选择或窗口恢复实际需要时加载。每个 locale chunk 都应有稳定 owner、独立 bundle 预算和构建图断言，不能落入无 owner support aggregate，也不能让新增语言继续线性抬高初始 localization runtime。
+
+前端运行时遵守以下契约：
+
+- 已完成资源按 locale 缓存；同一 locale 的并发首次请求合并为同一个 in-flight Promise；
+- `LocaleProvider` 只对当前仍有效的请求结果提交状态，较早请求即使较晚完成也不得覆盖新选择；
+- `text`、有效 locale、`document.lang` 与 `document.dir` 在目标资源可用后一起切换；等待期间继续呈现最后一个可用 locale，不显示空白或混合状态；
+- 目标资源加载失败时保留最后一个可用 locale，记录可诊断错误，并阻止 Settings 保存一个未实际展示的目标语言；
+- 主窗口和 Widget 通过同一 Provider/runtime 契约装载资源，feature 与业务代码不得直接读取 generated locale 模块；
+- 缺失消息仍按标准原文回退，但“整个目标 locale 资源无法加载”属于激活失败，不能伪装成一次成功切换。
+
+修改生成器、loader、缓存或激活顺序时，至少验证 manifest 与注册表一致、同 locale 请求合并、快速连续切换、当前请求失败、Widget/主窗口契约以及 locale chunk 的构建图归属。
 
 ## 6. Rust 原生表面
 

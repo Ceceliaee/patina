@@ -1,5 +1,5 @@
 import { type ComponentProps, useCallback, useState } from "react";
-import { useLocaleText } from "../shared/i18n/index.ts";
+import { useLocale, useLocaleText } from "../shared/i18n/index.ts";
 import AppSidebar from "./components/AppSidebar";
 import AppTitleBar from "./components/AppTitleBar";
 import AppViewOutlet from "./components/AppViewOutlet.tsx";
@@ -79,12 +79,10 @@ type AppWindowState = ReturnType<typeof useAppWindowState>;
 
 export default function AppShellContent({
   appWindowState,
-  settingsLanguagePreview,
   setSettingsLanguagePreview,
   windowTracking,
 }: {
   appWindowState: AppWindowState;
-  settingsLanguagePreview: AppLanguage | null;
   setSettingsLanguagePreview: (language: AppLanguage | null) => void;
   windowTracking: WindowTrackingState;
 }) {
@@ -128,7 +126,7 @@ export default function AppShellContent({
     syncTick,
     trackerHealth,
   } = windowTracking;
-  const uiTextLanguage = settingsLanguagePreview ?? appSettings.language;
+  const uiTextLanguage = useLocale();
   const uiText = useLocaleText();
   const dynamicEffects = appSettings.dynamicEffects;
   const quietMotionMode = useQuietMotionPreference(dynamicEffects);

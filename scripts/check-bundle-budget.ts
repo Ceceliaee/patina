@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
+import { LOCALE_REGISTRY } from "../locales/registry.ts";
 
 const ASSETS_DIR = "dist/assets";
 const INDEX_HTML_PATH = "dist/index.html";
@@ -23,9 +24,23 @@ const INITIAL_CHUNK_BUDGETS = [
   { label: "browser storage gateway", pattern: /^browserStorageGateway-.*\.js$/, gzipKiB: 0.21 },
   // Data category analysis plus scheduled backup/export add bilingual trust and
   // control labels while the global initial and total budgets stay fixed.
-  { label: "localization", pattern: /^runtime-.*\.js$/, gzipKiB: 25.7 },
+  { label: "localization", pattern: /^runtime-.*\.js$/, gzipKiB: 7.4 },
   { label: "classification", pattern: /^appClassification-.*\.js$/, gzipKiB: 6 },
 ] as const;
+
+const LOCALE_CHUNK_GZIP_BUDGETS = {
+  "zh-CN": 9.9,
+  "en-US": 9.4,
+} as const satisfies Record<keyof typeof LOCALE_REGISTRY, number>;
+const LOCALE_CHUNK_BUDGETS = Object.entries(LOCALE_CHUNK_GZIP_BUDGETS).map(
+  ([locale, gzipKiB]) => ({
+    label: locale,
+    pattern: new RegExp(`^locale-${locale}-.*\\.js$`),
+    gzipKiB,
+  }),
+);
+const SOURCE_LOCALE = Object.entries(LOCALE_REGISTRY).find(([, metadata]) => metadata.source)?.[0];
+if (!SOURCE_LOCALE) throw new Error("Bundle budget check requires one source locale.");
 
 const LAZY_PAGE_CHUNK_BUDGETS = [
   { label: "Settings", pattern: /^Settings-.*\.js$/, gzipKiB: 24 },
@@ -232,6 +247,7 @@ function main() {
     !matchesAnyBudget(item.file, LAZY_PAGE_CHUNK_BUDGETS)
     && !matchesAnyBudget(item.file, LAZY_SECONDARY_CHUNK_BUDGETS)
     && !matchesAnyBudget(item.file, LAZY_SHARED_UI_CHUNK_BUDGETS)
+    && !matchesAnyBudget(item.file, LOCALE_CHUNK_BUDGETS)
   ));
 
   const violations: string[] = [];
@@ -268,6 +284,18 @@ function main() {
   checkChunkBudgets("lazy page", lazyJsAssets, LAZY_PAGE_CHUNK_BUDGETS, violations);
   checkChunkBudgets("lazy secondary", lazyJsAssets, LAZY_SECONDARY_CHUNK_BUDGETS, violations);
   checkChunkBudgets("lazy shared UI", lazyJsAssets, LAZY_SHARED_UI_CHUNK_BUDGETS, violations);
+  checkChunkBudgets("locale", jsAssets, LOCALE_CHUNK_BUDGETS, violations);
+
+  for (const budget of LOCALE_CHUNK_BUDGETS) {
+    const asset = findBudgetAsset(jsAssets, budget);
+    if (!asset) continue;
+    const expectedInitial = budget.label === SOURCE_LOCALE;
+    if (initialAssetNames.has(asset.file) !== expectedInitial) {
+      violations.push(
+        `locale ${budget.label} must ${expectedInitial ? "be" : "not be"} in the default initial graph`,
+      );
+    }
+  }
 
   const lazySupportGzipBytes = sumGzipBytes(lazySupportAssets);
   if (lazySupportGzipBytes > budgetHeadroomLimitBytes(LAZY_SUPPORT_CHUNKS_GZIP_BUDGET_KI_B)) {
@@ -350,6 +378,13 @@ function main() {
     const asset = findBudgetAsset(lazyJsAssets, budget);
     if (asset) {
       console.log(`- ${budget.label}: ${formatKiB(asset.gzipBytes)} KiB gzip`);
+    }
+  }
+  console.log("locale chunks:");
+  for (const budget of LOCALE_CHUNK_BUDGETS) {
+    const asset = findBudgetAsset(jsAssets, budget);
+    if (asset) {
+      console.log(`- ${budget.label}: ${formatKiB(asset.gzipBytes)} KiB gzip${initialAssetNames.has(asset.file) ? " (initial)" : " (lazy)"}`);
     }
   }
   console.log(`lazy support chunks: ${formatKiB(lazySupportGzipBytes)} KiB gzip`);

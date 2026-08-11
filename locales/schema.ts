@@ -4011,6 +4011,12 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
+  "settings.languageLoadFailed": {
+    "description": "Shown when a packaged locale resource cannot be loaded and the current language remains active.",
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
   "settings.languageOptions.enUS": {
     "kind": "string",
     "params": [],

@@ -215,6 +215,7 @@ export const MESSAGES = {
   },
   "settings.languageHint": "切换界面显示语言。",
   "settings.languageLabel": "语言",
+  "settings.languageLoadFailed": "语言资源加载失败，已保留当前语言。",
   "settings.languageOptions.enUS": "English",
   "settings.languageOptions.zhCN": "中文",
   "settings.launchAtLoginHint": "系统登录后自动启动应用。",

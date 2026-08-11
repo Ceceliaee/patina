@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getLocaleText } from "../src/shared/i18n/runtime.ts";
+import { SUPPORTED_LOCALES, type Locale, type UiText } from "../src/shared/i18n/generated/contract.ts";
+import { loadLocaleText } from "../src/shared/i18n/runtime.ts";
 import { resolveQuietMotionMode } from "../src/shared/motion/quietMotion.ts";
 
-const COPY = { "zh-CN": getLocaleText("zh-CN"), "en-US": getLocaleText("en-US") } as const;
+const COPY = Object.fromEntries(await Promise.all(
+  SUPPORTED_LOCALES.map(async (locale) => [locale, await loadLocaleText(locale)] as const),
+)) as Record<Locale, UiText>;
 
 function collectCopyKeyPaths(value: unknown, prefix = ""): string[] {
   if (typeof value === "function" || value === null || typeof value !== "object") {
@@ -35,9 +38,9 @@ test("motion preference keeps reduced motion above enhanced motion", () => {
   }), "enhanced");
 });
 
-test("Chinese and English copy packages keep the same key structure", () => {
-  assert.deepEqual(
-    collectCopyKeyPaths(COPY["en-US"]).sort(),
-    collectCopyKeyPaths(COPY["zh-CN"]).sort(),
-  );
+test("production locale copy packages keep the same key structure", () => {
+  const sourceShape = collectCopyKeyPaths(COPY["zh-CN"]).sort();
+  for (const locale of SUPPORTED_LOCALES) {
+    assert.deepEqual(collectCopyKeyPaths(COPY[locale]).sort(), sourceShape);
+  }
 });

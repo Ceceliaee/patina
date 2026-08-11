@@ -224,6 +224,7 @@ export const MESSAGES = {
   },
   "settings.languageHint": "Change the interface language.",
   "settings.languageLabel": "Language",
+  "settings.languageLoadFailed": "The language resources could not be loaded. The current language was kept.",
   "settings.languageOptions.enUS": "English",
   "settings.languageOptions.zhCN": "中文",
   "settings.launchAtLoginHint": "Start the app automatically after Windows sign-in.",

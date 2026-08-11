@@ -759,6 +759,7 @@ export interface UiText {
     "increaseMinute": (label: string) => string;
     "languageHint": string;
     "languageLabel": string;
+    "languageLoadFailed": string;
     "languageOptions": {
       "enUS": string;
       "zhCN": string;

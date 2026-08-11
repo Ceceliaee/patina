@@ -57,6 +57,12 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           const normalizedId = id.replaceAll("\\", "/");
+          const localeResourceMatch = normalizedId.match(
+            /\/src\/shared\/i18n\/generated\/locales\/([^/?]+)\.ts(?:\?.*)?$/,
+          );
+          if (localeResourceMatch) {
+            return `locale-${localeResourceMatch[1]}`;
+          }
           if (!id.includes("node_modules")) {
             return undefined;
           }

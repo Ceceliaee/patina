@@ -12,11 +12,12 @@ import {
   readLastActiveView,
   rememberLastActiveView,
 } from "../src/app/services/updateRelaunchViewStorage.ts";
-import { getLocaleText } from "../src/shared/i18n/runtime.ts";
+import { getLocaleText, loadLocaleText } from "../src/shared/i18n/runtime.ts";
 import type { UpdateSnapshot } from "../src/shared/types/update.ts";
 import { MemoryStorage, withWindowStorage } from "./helpers/browserTestGlobals.ts";
 
 const ZH_TEXT = getLocaleText("zh-CN");
+const EN_TEXT = await loadLocaleText("en-US");
 const buildUpdateStatusPanelModel = (
   snapshot: UpdateSnapshot,
   isChecking: boolean,
@@ -189,7 +190,7 @@ runTest("confirm dialog localizes structured release notes", () => {
     status: "available",
     latestVersion: "0.2.0",
     releaseNotes: "zh-CN: 改进应用映射与备份恢复。\nen-US: Improved app mapping and backup restore.",
-  }), getLocaleText("en-US"), "en-US");
+  }), EN_TEXT, "en-US");
 
   assert.equal(model.notesPreview, "Improved app mapping and backup restore.");
 });

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { AppLanguage } from "../shared/settings/appSettings.ts";
 import { LocaleProvider } from "../shared/i18n/index.ts";
 import UpdateDialogProvider from "./providers/UpdateDialogProvider.tsx";
@@ -13,13 +13,15 @@ export default function AppShellLocaleRoot() {
   });
   const [settingsLanguagePreview, setSettingsLanguagePreview] = useState<AppLanguage | null>(null);
   const locale = settingsLanguagePreview ?? windowTracking.appSettings.language;
+  const handleLocaleLoadError = useCallback((failedLocale: AppLanguage) => {
+    setSettingsLanguagePreview((current) => current === failedLocale ? null : current);
+  }, []);
 
   return (
-    <LocaleProvider locale={locale}>
+    <LocaleProvider locale={locale} onLocaleLoadError={handleLocaleLoadError}>
       <UpdateDialogProvider>
         <AppShellContent
           appWindowState={appWindowState}
-          settingsLanguagePreview={settingsLanguagePreview}
           setSettingsLanguagePreview={setSettingsLanguagePreview}
           windowTracking={windowTracking}
         />

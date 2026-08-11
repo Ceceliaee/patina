@@ -1,5 +1,6 @@
 import type { AppLanguage } from "../../../shared/settings/appSettings.ts";
-import { getLocaleText } from "../../../shared/i18n/runtime.ts";
+import type { UiText } from "../../../shared/i18n/generated/contract.ts";
+import { loadLocaleText } from "../../../shared/i18n/runtime.ts";
 import {
   buildDataAppTrendViewModelFromAggregate,
   buildDataTrendAggregateContext,
@@ -24,6 +25,7 @@ interface DataFirstScreenPrewarmOptions {
 }
 
 interface DataFirstScreenPrewarmDeps {
+  loadLocaleText: typeof loadLocaleText;
   loadTrendSnapshot: typeof loadDataTrendSnapshot;
   prewarmRecentHeatmap: typeof prewarmRecentDataHeatmapCache;
   saveBootstrapSnapshot: typeof saveDataBootstrapSnapshot;
@@ -35,6 +37,7 @@ const DEFAULT_PREWARM_THROTTLE_MS = 5 * 60 * 1000;
 const DEFAULT_TREND_SELECTION = { kind: "rolling", days: 7 } as const;
 
 const defaultDeps: DataFirstScreenPrewarmDeps = {
+  loadLocaleText,
   loadTrendSnapshot: loadDataTrendSnapshot,
   prewarmRecentHeatmap: prewarmRecentDataHeatmapCache,
   saveBootstrapSnapshot: saveDataBootstrapSnapshot,
@@ -61,13 +64,14 @@ function buildBootstrapSnapshot(
   trendSnapshot: DataTrendSnapshot,
   heatmapSnapshot: Awaited<ReturnType<typeof prewarmRecentDataHeatmapCache>>,
   options: DataFirstScreenPrewarmOptions,
+  uiText: UiText,
   nowMs: number,
 ): DataBootstrapSnapshot {
   const trendAggregateContext = buildDataTrendAggregateContext(
     trendSnapshot.sessions,
     trendSnapshot.range,
     trendSnapshot.fetchedAtMs,
-    getLocaleText(options.uiLanguage),
+    uiText,
     options.uiLanguage,
   );
 
@@ -84,7 +88,7 @@ function buildBootstrapSnapshot(
       heatmapSnapshot.sessions,
       "recent",
       nowMs,
-      getLocaleText(options.uiLanguage),
+      uiText,
       options.uiLanguage,
     ),
     earliestStartTime: heatmapSnapshot.earliestStartTime,
@@ -118,15 +122,16 @@ export async function prewarmDataFirstScreen(
   lastPrewarmAtMs = nowMs;
   pendingPrewarm = (async () => {
     try {
+      const uiText = await resolvedDeps.loadLocaleText(options.uiLanguage);
       const [trendSnapshot, heatmapSnapshot] = await Promise.all([
         resolvedDeps.loadTrendSnapshot(
           DEFAULT_TREND_SELECTION,
           nowMs,
-          getLocaleText(options.uiLanguage),
+          uiText,
         ),
         resolvedDeps.prewarmRecentHeatmap(nowMs),
       ]);
-      const snapshot = buildBootstrapSnapshot(trendSnapshot, heatmapSnapshot, options, nowMs);
+      const snapshot = buildBootstrapSnapshot(trendSnapshot, heatmapSnapshot, options, uiText, nowMs);
       await resolvedDeps.saveBootstrapSnapshot(snapshot);
       return snapshot;
     } catch (error) {

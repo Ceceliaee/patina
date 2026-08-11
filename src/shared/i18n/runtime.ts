@@ -1,4 +1,10 @@
-import { FRONTEND_MESSAGE_KEYS, FRONTEND_MESSAGE_PARAMS, FRONTEND_RESOURCES } from "./generated/resources.ts";
+import {
+  FRONTEND_LOCALE_LOADERS,
+  FRONTEND_MESSAGE_KEYS,
+  FRONTEND_MESSAGE_PARAMS,
+  FRONTEND_SOURCE_RESOURCES,
+  SOURCE_LOCALE,
+} from "./generated/resources.ts";
 import type { Locale, UiText } from "./generated/contract.ts";
 
 type RuntimeValue = string | number | boolean | null | undefined | readonly RuntimeValue[];
@@ -6,6 +12,7 @@ type RuntimeArgs = Record<string, RuntimeValue>;
 type ExpressionNode = Record<string, unknown>;
 
 const localeTextCache = new Map<Locale, UiText>();
+const localeTextLoadCache = new Map<Locale, Promise<UiText>>();
 const pluralRulesCache = new Map<Locale, Intl.PluralRules>();
 const monthFormatCache = new Map<string, Intl.DateTimeFormat>();
 const numberFormatCache = new Map<string, Intl.NumberFormat>();
@@ -107,8 +114,7 @@ function assignNested(target: Record<string, unknown>, key: string, value: unkno
   cursor[segments[segments.length - 1]] = value;
 }
 
-function compileLocale(locale: Locale): UiText {
-  const flat = FRONTEND_RESOURCES[locale] as readonly unknown[];
+function compileLocale(locale: Locale, flat: readonly unknown[]): UiText {
   const output: Record<string, unknown> = {};
   for (let index = 0; index < FRONTEND_MESSAGE_KEYS.length; index += 1) {
     const key = FRONTEND_MESSAGE_KEYS[index];
@@ -124,13 +130,55 @@ function compileLocale(locale: Locale): UiText {
 }
 
 export function getLocaleText(locale: Locale): UiText {
-  let text = localeTextCache.get(locale);
-  if (!text) {
-    text = compileLocale(locale);
-    localeTextCache.set(locale, text);
-  }
+  const text = localeTextCache.get(locale);
+  if (!text) throw new Error(`Locale ${locale} is not loaded. Call loadLocaleText(locale) first.`);
   return text;
 }
+
+export function getLoadedLocaleText(locale: Locale): UiText | null {
+  return localeTextCache.get(locale) ?? null;
+}
+
+export function loadLocaleText(locale: Locale): Promise<UiText> {
+  const cached = localeTextCache.get(locale);
+  if (cached) return Promise.resolve(cached);
+  const inFlight = localeTextLoadCache.get(locale);
+  if (inFlight) return inFlight;
+
+  const request = FRONTEND_LOCALE_LOADERS[locale]().then((flat) => {
+    const text = compileLocale(locale, flat);
+    localeTextCache.set(locale, text);
+    return text;
+  }).finally(() => {
+    if (localeTextLoadCache.get(locale) === request) localeTextLoadCache.delete(locale);
+  });
+  localeTextLoadCache.set(locale, request);
+  return request;
+}
+
+export type LocaleActivationResult =
+  | { status: "ready"; locale: Locale; text: UiText }
+  | { status: "stale"; locale: Locale }
+  | { status: "failed"; locale: Locale; error: unknown };
+
+export async function resolveLocaleActivation(
+  locale: Locale,
+  isCurrent: () => boolean,
+  load: (locale: Locale) => Promise<UiText> = loadLocaleText,
+): Promise<LocaleActivationResult> {
+  try {
+    const text = await load(locale);
+    return isCurrent()
+      ? { status: "ready", locale, text }
+      : { status: "stale", locale };
+  } catch (error) {
+    return isCurrent()
+      ? { status: "failed", locale, error }
+      : { status: "stale", locale };
+  }
+}
+
+localeTextCache.set(SOURCE_LOCALE, compileLocale(SOURCE_LOCALE, FRONTEND_SOURCE_RESOURCES));
 
 export function formatNumber(locale: Locale, value: number, options?: Intl.NumberFormatOptions): string {
   const key = `${locale}:${JSON.stringify(options ?? {})}`;

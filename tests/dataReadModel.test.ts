@@ -43,7 +43,7 @@ import {
   pickPreferredAppName,
   scoreDisplayNameForStats,
 } from "../src/shared/lib/displayNameScoring.ts";
-import { getLocaleText } from "../src/shared/i18n/runtime.ts";
+import { getLocaleText, loadLocaleText } from "../src/shared/i18n/runtime.ts";
 import { resolveDataTrendRange } from "../src/features/data/services/dataTrendRange.ts";
 
 const ZH_TEXT = getLocaleText("zh-CN");
@@ -912,13 +912,18 @@ await runTest("data first screen prewarm saves a bootstrap snapshot", async () =
     getSessionSummariesInRange: async () => sessions,
   });
   let savedSnapshot: DataBootstrapSnapshot | null = null;
+  const loadedLocales: string[] = [];
 
   const snapshot = await prewarmDataFirstScreen({
     mappingVersion: 3,
     reason: "foreground-opened",
-    uiLanguage: "zh-CN",
+    uiLanguage: "en-US",
     nowMs,
   }, {
+    loadLocaleText: async (locale) => {
+      loadedLocales.push(locale);
+      return loadLocaleText(locale);
+    },
     loadTrendSnapshot: async () => trendSnapshot,
     prewarmRecentHeatmap: async () => ({
       earliestStartTime: sessions[0].startTime,
@@ -936,6 +941,8 @@ await runTest("data first screen prewarm saves a bootstrap snapshot", async () =
   });
 
   assert.equal(snapshot?.mappingVersion, 3);
+  assert.equal(snapshot?.uiLanguage, "en-US");
+  assert.deepEqual(loadedLocales, ["en-US"]);
   assert.equal(savedSnapshot?.overviewTrendViewModel.totalDuration, 60 * 60 * 1000);
   assert.equal(savedSnapshot?.appTrendViewModel.selectedApps[0]?.appName, "Cursor");
   assert.ok(savedSnapshot?.heatmapRows.length);
@@ -986,6 +993,8 @@ await runTest("data first screen prewarm dedupes pending matching work and throt
     uiLanguage: "zh-CN",
     nowMs,
   }, deps);
+  await Promise.resolve();
+  assert.ok(releaseLoad);
   releaseLoad?.();
   await Promise.all([first, second]);
 
