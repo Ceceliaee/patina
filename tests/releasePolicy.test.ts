@@ -352,8 +352,8 @@ function testReleaseWorkflowSplitsQualityGatesBeforePublish() {
   assert.match(workflow, /if: steps\.r2\.outputs\.enabled == 'true'/);
   assert.match(workflow, /run: npm run check$/m);
   assert.match(workflow, /run: npm run check:rust$/m);
-  assert.match(workflow, /uses: actions\/upload-artifact@[0-9a-f]{40} # v4/);
-  assert.match(workflow, /uses: actions\/download-artifact@[0-9a-f]{40} # v4/);
+  assert.match(workflow, /uses: actions\/upload-artifact@[0-9a-f]{40} # v7/);
+  assert.match(workflow, /uses: actions\/download-artifact@[0-9a-f]{40} # v8/);
   assert.match(workflow, /name: Prepare release assets/);
   assert.match(workflow, /name: Verify release assets/);
   assert.match(workflow, /name: Attest Windows installer/);
@@ -460,6 +460,86 @@ function testWorkflowsPinThirdPartyActionsToReviewedCommits() {
       usesCount,
       `${workflowPath} must pin every Action to a commit and retain its reviewed major version`,
     );
+  }
+}
+
+function testWorkflowsUseReviewedNode24ActionRevisions() {
+  const workflows = [
+    ".github/workflows/pr-intake.yml",
+    ".github/workflows/verify.yml",
+    ".github/workflows/prepare-release.yml",
+  ].map((workflowPath) => ({
+    path: workflowPath,
+    source: readFileSync(workflowPath, "utf8"),
+  }));
+  const reviewedActions = [
+    {
+      action: "actions/checkout",
+      reference: "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6",
+      expectedCount: 19,
+    },
+    {
+      action: "actions/setup-node",
+      reference: "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6",
+      expectedCount: 12,
+    },
+    {
+      action: "actions/upload-artifact",
+      reference: "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7",
+      expectedCount: 4,
+    },
+    {
+      action: "actions/download-artifact",
+      reference: "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8",
+      expectedCount: 3,
+    },
+    {
+      action: "actions/attest",
+      reference: "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4",
+      expectedCount: 1,
+    },
+    {
+      action: "softprops/action-gh-release",
+      reference: "softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3",
+      expectedCount: 1,
+    },
+  ];
+
+  const workflowActionCount = workflows.reduce(
+    (count, workflow) => count + (workflow.source.match(/^\s+uses:/gm)?.length ?? 0),
+    0,
+  );
+  const reviewedActionCount = reviewedActions.reduce(
+    (count, reviewedAction) => count + reviewedAction.expectedCount,
+    0,
+  );
+  assert.equal(
+    workflowActionCount,
+    reviewedActionCount,
+    "every workflow Action must have a reviewed Node 24 revision",
+  );
+
+  for (const reviewedAction of reviewedActions) {
+    const references = workflows.flatMap((workflow) =>
+      workflow.source
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith(`uses: ${reviewedAction.action}@`))
+        .map((line) => ({ line, path: workflow.path })),
+    );
+
+    assert.equal(
+      references.length,
+      reviewedAction.expectedCount,
+      `${reviewedAction.action} must keep its reviewed workflow occurrence count`,
+    );
+    for (const reference of references) {
+      assert.equal(
+        reference.line,
+        `uses: ${reviewedAction.reference}`,
+        `${reference.path} must use the reviewed Node 24 revision of ${reviewedAction.action}`,
+      );
+    }
   }
 }
 
@@ -670,6 +750,7 @@ testReleaseWorkflowAttestsVerifiedFinalInstallerWithMinimumPermissions();
 testToolchainContractsStayAligned();
 testWorkflowsUseNodeVersionFileAsSingleSource();
 testWorkflowsPinThirdPartyActionsToReviewedCommits();
+testWorkflowsUseReviewedNode24ActionRevisions();
 testVersionFilesValidationPassesWhenAllVersionsMatch();
 testVersionFilesValidationCatchesPackageJsonMismatch();
 testVersionFilesValidationCatchesPackageLockRootMismatch();
