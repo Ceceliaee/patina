@@ -150,7 +150,8 @@ pub async fn fetch_all_software_reminder_rules_for_backup(
     let rows = sqlx::query(
         "SELECT id, app_name, exe_name, limit_ms, message, created_at, updated_at,
                 disabled_at, last_fired_date_key
-         FROM tool_software_reminder_rules
+         FROM tool_activity_reminder_rules
+         WHERE target_kind = 'app'
          ORDER BY id ASC",
     )
     .fetch_all(pool)
@@ -174,7 +175,7 @@ pub async fn fetch_all_software_reminder_rules_for_backup(
 }
 
 pub async fn clear_for_restore(tx: &mut Transaction<'_, Sqlite>) -> Result<(), String> {
-    sqlx::query("DELETE FROM tool_software_reminder_rules")
+    sqlx::query("DELETE FROM tool_activity_reminder_rules")
         .execute(&mut **tx)
         .await
         .map_err(|error| {
@@ -214,14 +215,16 @@ pub async fn insert_for_restore(
 ) -> Result<(), String> {
     for rule in software_reminder_rules {
         sqlx::query(
-            "INSERT INTO tool_software_reminder_rules (
-                id, app_name, exe_name, limit_ms, message, created_at, updated_at,
+            "INSERT INTO tool_activity_reminder_rules (
+                id, target_kind, app_name, exe_name, category_id, normalized_domain,
+                label_snapshot, limit_ms, message, created_at, updated_at,
                 disabled_at, last_fired_date_key
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             ) VALUES (?, 'app', ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(rule.id)
         .bind(&rule.app_name)
         .bind(&rule.exe_name)
+        .bind(&rule.app_name)
         .bind(rule.limit_ms)
         .bind(&rule.message)
         .bind(rule.created_at)
@@ -342,8 +345,8 @@ pub async fn insert_missing_for_restore(
 ) -> Result<(), String> {
     for rule in software_reminder_rules {
         let exists: Option<i64> = sqlx::query_scalar(
-            "SELECT id FROM tool_software_reminder_rules
-             WHERE app_name = ? AND exe_name IS ? AND created_at = ?
+            "SELECT id FROM tool_activity_reminder_rules
+             WHERE target_kind = 'app' AND app_name = ? AND exe_name IS ? AND created_at = ?
              LIMIT 1",
         )
         .bind(&rule.app_name)
@@ -354,13 +357,15 @@ pub async fn insert_missing_for_restore(
         .map_err(|error| format!("failed to inspect software reminder rule merge: {error}"))?;
         if exists.is_none() {
             sqlx::query(
-                "INSERT INTO tool_software_reminder_rules (
-                    app_name, exe_name, limit_ms, message, created_at, updated_at,
+                "INSERT INTO tool_activity_reminder_rules (
+                    target_kind, app_name, exe_name, category_id, normalized_domain,
+                    label_snapshot, limit_ms, message, created_at, updated_at,
                     disabled_at, last_fired_date_key
-                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                 ) VALUES ('app', ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)",
             )
             .bind(&rule.app_name)
             .bind(&rule.exe_name)
+            .bind(&rule.app_name)
             .bind(rule.limit_ms)
             .bind(&rule.message)
             .bind(rule.created_at)
@@ -532,12 +537,12 @@ pub async fn insert_missing_for_restore(
 mod tests {
     use super::*;
     use crate::data::repositories::tools::{
-        add_timer_lap, complete_due_pomodoro_phase, create_reminder, create_software_reminder_rule,
+        add_timer_lap, complete_due_pomodoro_phase, create_activity_reminder_rule, create_reminder,
         start_pomodoro, start_timer,
     };
     use crate::data::schema;
     use crate::domain::backup::{BackupToolTimer, BackupToolTimerLap};
-    use crate::domain::tools::TimerMode;
+    use crate::domain::tools::{ActivityReminderTarget, TimerMode};
     use sqlx::{Executor, SqlitePool};
 
     async fn setup_test_db() -> SqlitePool {
@@ -547,6 +552,9 @@ mod tests {
             .unwrap();
         pool.execute(schema::TOOLS_TABLES_SCHEMA_SQL).await.unwrap();
         pool.execute(schema::SOFTWARE_REMINDER_RULES_SCHEMA_SQL)
+            .await
+            .unwrap();
+        pool.execute(schema::ACTIVITY_REMINDER_RULES_SCHEMA_SQL)
             .await
             .unwrap();
         pool
@@ -567,10 +575,13 @@ mod tests {
             complete_due_pomodoro_phase(&pool, "2026-06-07", 2_100)
                 .await
                 .unwrap();
-            create_software_reminder_rule(
+            create_activity_reminder_rule(
                 &pool,
+                &ActivityReminderTarget::App {
+                    app_name: "Editor".to_string(),
+                    exe_name: Some("editor.exe".to_string()),
+                },
                 "Editor",
-                Some("editor.exe"),
                 60_000,
                 "Take a break",
                 1_000,

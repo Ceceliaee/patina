@@ -1,7 +1,7 @@
 use crate::data::tools_store::SqliteToolsStore;
 use crate::domain::tools::{ToolAlert, ToolsRuntimeSnapshot};
 use crate::engine::tools::{
-    self, CreateSoftwareReminderRuleRequest, StartPomodoroRequest, StartTimerRequest,
+    self, CreateActivityReminderRuleRequest, StartPomodoroRequest, StartTimerRequest,
 };
 use tauri::{App, AppHandle, Listener, Runtime};
 
@@ -53,18 +53,18 @@ pub(crate) async fn cancel_reminder<R: Runtime>(
     tools::cancel_reminder(app, &store(app), reminder_id).await
 }
 
-pub(crate) async fn create_software_reminder_rule<R: Runtime>(
+pub(crate) async fn create_activity_reminder_rule<R: Runtime>(
     app: &AppHandle<R>,
-    request: CreateSoftwareReminderRuleRequest,
+    request: CreateActivityReminderRuleRequest,
 ) -> Result<ToolsRuntimeSnapshot, String> {
-    tools::create_software_reminder_rule(app, &store(app), request).await
+    tools::create_activity_reminder_rule(app, &store(app), request).await
 }
 
-pub(crate) async fn disable_software_reminder_rule<R: Runtime>(
+pub(crate) async fn disable_activity_reminder_rule<R: Runtime>(
     app: &AppHandle<R>,
     rule_id: i64,
 ) -> Result<ToolsRuntimeSnapshot, String> {
-    tools::disable_software_reminder_rule(app, &store(app), rule_id).await
+    tools::disable_activity_reminder_rule(app, &store(app), rule_id).await
 }
 
 pub(crate) async fn start_timer<R: Runtime>(

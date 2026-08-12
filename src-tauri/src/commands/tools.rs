@@ -1,7 +1,8 @@
 use crate::app::tools;
-use crate::domain::tools::{TimerMode, ToolAlert, ToolsRuntimeSnapshot};
+use crate::domain::classification::{canonical_exe, normalize_domain_key};
+use crate::domain::tools::{ActivityReminderTarget, TimerMode, ToolAlert, ToolsRuntimeSnapshot};
 use crate::engine::tools::{
-    CreateSoftwareReminderRuleRequest, StartPomodoroRequest, StartTimerRequest,
+    CreateActivityReminderRuleRequest, StartPomodoroRequest, StartTimerRequest,
 };
 use serde::Deserialize;
 use tauri::AppHandle;
@@ -15,11 +16,93 @@ pub struct CreateReminderDto {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CreateSoftwareReminderRuleDto {
-    app_name: String,
-    exe_name: Option<String>,
+#[serde(deny_unknown_fields)]
+pub struct CreateActivityReminderRuleDto {
+    target: ActivityReminderTargetDto,
+    label_snapshot: String,
     limit_ms: i64,
     message: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
+enum ActivityReminderTargetDto {
+    App {
+        #[serde(rename = "appName")]
+        app_name: String,
+        #[serde(rename = "exeName")]
+        exe_name: Option<String>,
+    },
+    Category {
+        #[serde(rename = "categoryId")]
+        category_id: String,
+    },
+    Web {
+        #[serde(rename = "normalizedDomain")]
+        normalized_domain: String,
+    },
+}
+
+impl TryFrom<CreateActivityReminderRuleDto> for CreateActivityReminderRuleRequest {
+    type Error = String;
+
+    fn try_from(input: CreateActivityReminderRuleDto) -> Result<Self, Self::Error> {
+        if !(60_000..=86_400_000).contains(&input.limit_ms) {
+            return Err("activity reminder limit must be between 1 and 1440 minutes".to_string());
+        }
+        let message = bounded_text(input.message, 500, "activity reminder message")?;
+        let label_snapshot = bounded_required_text(
+            input.label_snapshot,
+            160,
+            "activity reminder label snapshot",
+        )?;
+        let target = match input.target {
+            ActivityReminderTargetDto::App { app_name, exe_name } => {
+                let app_name = bounded_required_text(app_name, 160, "activity reminder app")?;
+                let exe_name = exe_name
+                    .as_deref()
+                    .map(canonical_exe)
+                    .filter(|value| !value.is_empty())
+                    .map(|value| bounded_required_text(value, 260, "activity reminder executable"))
+                    .transpose()?;
+                ActivityReminderTarget::App { app_name, exe_name }
+            }
+            ActivityReminderTargetDto::Category { category_id } => {
+                let category_id =
+                    bounded_required_text(category_id, 128, "activity reminder category")?;
+                ActivityReminderTarget::Category { category_id }
+            }
+            ActivityReminderTargetDto::Web { normalized_domain } => {
+                let normalized_domain = normalize_domain_key(&normalized_domain);
+                let normalized_domain =
+                    bounded_required_text(normalized_domain, 253, "activity reminder web domain")?;
+                ActivityReminderTarget::Web { normalized_domain }
+            }
+        };
+        Ok(Self {
+            target,
+            label_snapshot,
+            limit_ms: input.limit_ms,
+            message,
+        })
+    }
+}
+
+fn bounded_text(value: String, max_len: usize, field: &str) -> Result<String, String> {
+    let value = value.trim().to_string();
+    if value.chars().count() > max_len {
+        return Err(format!("{field} is too long"));
+    }
+    Ok(value)
+}
+
+fn bounded_required_text(value: String, max_len: usize, field: &str) -> Result<String, String> {
+    let value = bounded_text(value, max_len, field)?;
+    if value.is_empty() {
+        return Err(format!("{field} is required"));
+    }
+    Ok(value)
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -71,28 +154,19 @@ pub async fn cmd_cancel_reminder(
 }
 
 #[tauri::command]
-pub async fn cmd_create_software_reminder_rule(
-    input: CreateSoftwareReminderRuleDto,
+pub async fn cmd_create_activity_reminder_rule(
+    input: CreateActivityReminderRuleDto,
     app: AppHandle,
 ) -> Result<ToolsRuntimeSnapshot, String> {
-    tools::create_software_reminder_rule(
-        &app,
-        CreateSoftwareReminderRuleRequest {
-            app_name: input.app_name,
-            exe_name: input.exe_name,
-            limit_ms: input.limit_ms,
-            message: input.message,
-        },
-    )
-    .await
+    tools::create_activity_reminder_rule(&app, input.try_into()?).await
 }
 
 #[tauri::command]
-pub async fn cmd_disable_software_reminder_rule(
+pub async fn cmd_disable_activity_reminder_rule(
     rule_id: i64,
     app: AppHandle,
 ) -> Result<ToolsRuntimeSnapshot, String> {
-    tools::disable_software_reminder_rule(&app, rule_id).await
+    tools::disable_activity_reminder_rule(&app, rule_id).await
 }
 
 #[tauri::command]
@@ -166,4 +240,64 @@ pub async fn cmd_skip_pomodoro_phase(app: AppHandle) -> Result<ToolsRuntimeSnaps
 #[tauri::command]
 pub async fn cmd_reset_pomodoro(app: AppHandle) -> Result<ToolsRuntimeSnapshot, String> {
     tools::reset_pomodoro(&app).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn valid_input(target: serde_json::Value) -> serde_json::Value {
+        json!({
+            "target": target,
+            "labelSnapshot": "Target",
+            "limitMs": 60_000,
+            "message": ""
+        })
+    }
+
+    #[test]
+    fn activity_target_dto_rejects_mixed_and_unknown_fields() {
+        assert!(
+            serde_json::from_value::<CreateActivityReminderRuleDto>(valid_input(json!({
+                "kind": "category",
+                "categoryId": "development",
+                "appName": "Editor"
+            })))
+            .is_err()
+        );
+        assert!(
+            serde_json::from_value::<CreateActivityReminderRuleDto>(valid_input(json!({
+                "kind": "unknown",
+                "value": "x"
+            })))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn activity_target_dto_normalizes_and_bounds_input() {
+        let input = serde_json::from_value::<CreateActivityReminderRuleDto>(valid_input(json!({
+            "kind": "web",
+            "normalizedDomain": " Example.COM. "
+        })))
+        .unwrap();
+        let request = CreateActivityReminderRuleRequest::try_from(input).unwrap();
+        assert_eq!(
+            request.target,
+            ActivityReminderTarget::Web {
+                normalized_domain: "example.com".to_string()
+            }
+        );
+
+        let oversized = "x".repeat(501);
+        let input = serde_json::from_value::<CreateActivityReminderRuleDto>(json!({
+            "target": { "kind": "app", "appName": "Editor", "exeName": "EDITOR.EXE" },
+            "labelSnapshot": "Editor",
+            "limitMs": 86_400_001_i64,
+            "message": oversized
+        }))
+        .unwrap();
+        assert!(CreateActivityReminderRuleRequest::try_from(input).is_err());
+    }
 }

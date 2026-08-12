@@ -1,8 +1,8 @@
 use crate::domain::localization::{self, LocalizationState};
 use crate::domain::tools::{
-    CompletedPomodoroNotification, CompletedTimerNotification, PomodoroPhase, PomodoroStatus,
-    SoftwareReminderNotification, TimerMode, TimerStatus, ToolAlert, ToolAlertKind, ToolReminder,
-    ToolsRuntimeSnapshot,
+    ActivityReminderNotification, ActivityReminderTarget, CompletedPomodoroNotification,
+    CompletedTimerNotification, PomodoroPhase, PomodoroStatus, TimerMode, TimerStatus, ToolAlert,
+    ToolAlertKind, ToolReminder, ToolsRuntimeSnapshot,
 };
 use chrono::{Local, Utc};
 use serde::Serialize;
@@ -13,12 +13,14 @@ use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::Notify;
 use tokio::time::{sleep, Duration};
 
+mod activity_notifications;
+
 pub const TOOLS_RUNTIME_CHANGED_EVENT: &str = "tools-runtime-changed";
 pub const TOOLS_ALERT_EVENT: &str = "tools-alert";
 const TOOLS_RUNTIME_MIN_WAKE_MS: i64 = 250;
 const TOOLS_RUNTIME_IDLE_WAKE_MS: i64 = 60_000;
 const TOOLS_RUNTIME_ACTIVE_MAX_WAKE_MS: i64 = 60_000;
-const TOOLS_RUNTIME_SOFTWARE_REMINDER_WAKE_MS: i64 = 10_000;
+const TOOLS_RUNTIME_ACTIVITY_REMINDER_WAKE_MS: i64 = 10_000;
 const TOOLS_RUNTIME_ERROR_WAKE_MS: u64 = 5_000;
 const TOOLS_ALERT_LIMIT: usize = 32;
 
@@ -40,7 +42,7 @@ pub struct ToolsRuntimeState {
 }
 
 impl ToolsRuntimeState {
-    fn snapshot(&self) -> ToolsRuntimeSnapshot {
+    pub(crate) fn snapshot(&self) -> ToolsRuntimeSnapshot {
         match self.inner.lock() {
             Ok(guard) => guard.clone(),
             Err(poisoned) => poisoned.into_inner().clone(),
@@ -142,9 +144,9 @@ pub struct StartPomodoroRequest {
 }
 
 #[derive(Clone, Debug)]
-pub struct CreateSoftwareReminderRuleRequest {
-    pub app_name: String,
-    pub exe_name: Option<String>,
+pub struct CreateActivityReminderRuleRequest {
+    pub target: ActivityReminderTarget,
+    pub label_snapshot: String,
     pub limit_ms: i64,
     pub message: String,
 }
@@ -153,8 +155,8 @@ pub struct CreateSoftwareReminderRuleRequest {
 pub enum ToolsMutation {
     CreateReminder { label: String, scheduled_at: i64 },
     CancelReminder { reminder_id: i64 },
-    CreateSoftwareReminderRule(CreateSoftwareReminderRuleRequest),
-    DisableSoftwareReminderRule { rule_id: i64 },
+    CreateActivityReminderRule(CreateActivityReminderRuleRequest),
+    DisableActivityReminderRule { rule_id: i64 },
     StartTimer(StartTimerRequest),
     PauseTimer,
     ResumeTimer,
@@ -170,7 +172,7 @@ pub enum ToolsMutation {
 #[derive(Clone, Debug, Default)]
 pub struct ToolsTickEvents {
     pub reminders: Vec<ToolReminder>,
-    pub software_reminders: Vec<SoftwareReminderNotification>,
+    pub activity_reminders: Vec<ActivityReminderNotification>,
     pub completed_timer: Option<CompletedTimerNotification>,
     pub completed_pomodoro: Option<CompletedPomodoroNotification>,
     pub state_changed: bool,
@@ -298,21 +300,21 @@ pub async fn cancel_reminder<R: Runtime>(
     .await
 }
 
-pub async fn create_software_reminder_rule<R: Runtime>(
+pub async fn create_activity_reminder_rule<R: Runtime>(
     app: &AppHandle<R>,
     store: &impl ToolsStore,
-    request: CreateSoftwareReminderRuleRequest,
+    request: CreateActivityReminderRuleRequest,
 ) -> Result<ToolsRuntimeSnapshot, String> {
     apply_mutation_and_refresh(
         app,
         store,
-        ToolsMutation::CreateSoftwareReminderRule(request),
+        ToolsMutation::CreateActivityReminderRule(request),
         now_ms(),
     )
     .await
 }
 
-pub async fn disable_software_reminder_rule<R: Runtime>(
+pub async fn disable_activity_reminder_rule<R: Runtime>(
     app: &AppHandle<R>,
     store: &impl ToolsStore,
     rule_id: i64,
@@ -320,7 +322,7 @@ pub async fn disable_software_reminder_rule<R: Runtime>(
     apply_mutation_and_refresh(
         app,
         store,
-        ToolsMutation::DisableSoftwareReminderRule { rule_id },
+        ToolsMutation::DisableActivityReminderRule { rule_id },
         now_ms(),
     )
     .await
@@ -453,7 +455,7 @@ fn notify_tick_events<R: Runtime + 'static>(app: &AppHandle<R>, events: ToolsTic
     let locale = localizer.locale();
     let ToolsTickEvents {
         reminders: fired_reminders,
-        software_reminders: fired_software_reminders,
+        activity_reminders: fired_activity_reminders,
         completed_timer,
         completed_pomodoro,
         ..
@@ -477,35 +479,13 @@ fn notify_tick_events<R: Runtime + 'static>(app: &AppHandle<R>, events: ToolsTic
     }
 
     let current_date_key = date_key();
-    for reminder in fired_software_reminders {
-        let limit_minutes = (reminder.limit_ms / 60_000).max(1);
-        let usage_minutes = (reminder.usage_ms / 60_000).max(limit_minutes);
-        let body = if reminder.message.trim().is_empty() {
-            localization::format_text(
-                locale,
-                "native.tools.softwareReminderDefaultBody",
-                &[
-                    ("appName", reminder.app_name.clone()),
-                    ("usageMinutes", usage_minutes.to_string()),
-                    ("limitMinutes", limit_minutes.to_string()),
-                ],
-            )
-        } else {
-            reminder.message
-        };
-        send_tool_alert(
-            app,
-            ToolAlert {
-                id: format!(
-                    "software-reminder:{}:{}",
-                    reminder.rule_id, current_date_key
-                ),
-                kind: ToolAlertKind::SoftwareReminder,
-                title: localization::text(locale, "native.tools.softwareReminderTitle"),
-                body,
-                occurred_at: now,
-            },
-        );
+    for alert in activity_notifications::build_activity_reminder_alerts(
+        fired_activity_reminders,
+        locale,
+        &current_date_key,
+        now,
+    ) {
+        send_tool_alert(app, alert);
     }
 
     if let Some(completed_timer) = completed_timer {
@@ -627,12 +607,12 @@ fn compute_next_tools_wake(
     date_boundary_ms: i64,
     current_date_key: &str,
 ) -> Duration {
-    let has_pending_software_reminder = snapshot
-        .software_reminder_rules
+    let has_pending_activity_reminder = snapshot
+        .activity_reminder_rules
         .iter()
         .any(|rule| rule.last_fired_date_key.as_deref() != Some(current_date_key));
-    let mut max_delay_ms = if has_pending_software_reminder {
-        TOOLS_RUNTIME_SOFTWARE_REMINDER_WAKE_MS
+    let mut max_delay_ms = if has_pending_activity_reminder {
+        TOOLS_RUNTIME_ACTIVITY_REMINDER_WAKE_MS
     } else {
         TOOLS_RUNTIME_IDLE_WAKE_MS
     };
@@ -724,7 +704,7 @@ fn next_day_start_ms() -> i64 {
 mod tests {
     use super::*;
     use crate::domain::tools::{
-        ToolPomodoroRun, ToolReminder, ToolSoftwareReminderRule, ToolTimer,
+        ActivityReminderTarget, ToolActivityReminderRule, ToolPomodoroRun, ToolReminder, ToolTimer,
     };
 
     fn duration_ms(duration: Duration) -> u64 {
@@ -924,18 +904,22 @@ mod tests {
     }
 
     #[test]
-    fn tools_wake_keeps_software_reminder_on_slow_poll() {
+    fn tools_wake_keeps_activity_reminder_on_slow_poll() {
         let snapshot = ToolsRuntimeSnapshot {
-            software_reminder_rules: vec![ToolSoftwareReminderRule {
+            activity_reminder_rules: vec![ToolActivityReminderRule {
                 id: 1,
-                app_name: "Editor".to_string(),
-                exe_name: Some("editor.exe".to_string()),
+                target: ActivityReminderTarget::App {
+                    app_name: "Editor".to_string(),
+                    exe_name: Some("editor.exe".to_string()),
+                },
+                label_snapshot: "Editor".to_string(),
                 limit_ms: 60_000,
                 message: "Break".to_string(),
                 created_at: 1_000,
                 updated_at: 1_000,
                 disabled_at: None,
                 last_fired_date_key: None,
+                suspension_reason: None,
             }],
             ..ToolsRuntimeSnapshot::default()
         };
@@ -943,23 +927,27 @@ mod tests {
 
         assert_eq!(
             duration_ms(delay),
-            TOOLS_RUNTIME_SOFTWARE_REMINDER_WAKE_MS as u64
+            TOOLS_RUNTIME_ACTIVITY_REMINDER_WAKE_MS as u64
         );
     }
 
     #[test]
-    fn tools_wake_ignores_software_reminders_already_fired_today() {
+    fn tools_wake_ignores_activity_reminders_already_fired_today() {
         let snapshot = ToolsRuntimeSnapshot {
-            software_reminder_rules: vec![ToolSoftwareReminderRule {
+            activity_reminder_rules: vec![ToolActivityReminderRule {
                 id: 1,
-                app_name: "Editor".to_string(),
-                exe_name: Some("editor.exe".to_string()),
+                target: ActivityReminderTarget::App {
+                    app_name: "Editor".to_string(),
+                    exe_name: Some("editor.exe".to_string()),
+                },
+                label_snapshot: "Editor".to_string(),
                 limit_ms: 60_000,
                 message: "Break".to_string(),
                 created_at: 1_000,
                 updated_at: 1_000,
                 disabled_at: None,
                 last_fired_date_key: Some("2026-06-29".to_string()),
+                suspension_reason: None,
             }],
             ..ToolsRuntimeSnapshot::default()
         };
