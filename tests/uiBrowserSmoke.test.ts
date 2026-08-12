@@ -22,6 +22,7 @@ import { runHistoryScenarios } from "./uiBrowserSmoke/historyScenarios.ts";
 import { runDataScenarios } from "./uiBrowserSmoke/dataScenarios.ts";
 import { runLocaleScenarios } from "./uiBrowserSmoke/localeScenarios.ts";
 import { runWidgetScenarios } from "./uiBrowserSmoke/widgetScenarios.ts";
+import { runScrollRegionScenarios } from "./uiBrowserSmoke/scrollRegionScenarios.ts";
 
 let passed = 0;
 
@@ -41,13 +42,14 @@ let primaryError: unknown = null;
 const cleanupErrors: unknown[] = [];
 const dataOnly = process.argv.includes("--data-only");
 const historyWebTimelineOnly = process.argv.includes("--history-web-timeline-only");
+const scrollRegionOnly = process.argv.includes("--scroll-region-only");
+const widgetOnly = process.argv.includes("--widget-only");
 const historyWebTimelineTests = new Set([
   "history excludes hidden domains from rows and favicon requests, then restores retained history",
   "history timeline cycles app category and web while zoom stays synchronized",
   "history timeline removes web mode when Web Sync is disabled",
   "history web timeline keeps an explicit empty state without inferred browser time",
 ]);
-
 const server = await createServer({
   configFile: "vite.config.ts",
   logLevel: "error",
@@ -140,7 +142,11 @@ try {
 
   await runStartupScenarios(smokeContext);
 
-  if (dataOnly) {
+  if (scrollRegionOnly) {
+    await runScrollRegionScenarios(smokeContext);
+  } else if (widgetOnly) {
+    await runWidgetScenarios(smokeContext);
+  } else if (dataOnly) {
     await runDataScenarios(smokeContext, { continuityOnly: true });
   } else if (historyWebTimelineOnly) {
     await waitForExpression(
@@ -152,6 +158,8 @@ try {
     );
     await runHistoryScenarios(smokeContext);
   } else {
+    await runScrollRegionScenarios(smokeContext);
+
     await runAboutScenarios(smokeContext);
 
     await runToolsScenarios(smokeContext);
