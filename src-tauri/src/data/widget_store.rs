@@ -1,7 +1,9 @@
 use crate::data::repositories::{widget_runtime, widget_state};
 use crate::data::sqlite_pool::wait_for_sqlite_pool;
-use crate::domain::widget::WidgetPlacement;
-use crate::engine::widget::{WidgetPlacementStore, WidgetStoreFuture};
+use crate::domain::widget::{WidgetExpansionPreference, WidgetPlacement};
+use crate::engine::widget::{
+    WidgetExpansionPreferenceStore, WidgetPlacementStore, WidgetStoreFuture,
+};
 use sqlx::{Pool, Sqlite};
 use tauri::{AppHandle, Runtime};
 
@@ -38,6 +40,27 @@ impl WidgetPlacementStore for SqliteWidgetPlacementStore {
     fn save_placement(&self, placement: WidgetPlacement) -> WidgetStoreFuture<'_, ()> {
         Box::pin(async move {
             widget_state::save_widget_placement(&self.pool, placement)
+                .await
+                .map_err(|error| error.to_string())
+        })
+    }
+}
+
+impl WidgetExpansionPreferenceStore for SqliteWidgetPlacementStore {
+    fn load_expansion_preference(&self) -> WidgetStoreFuture<'_, WidgetExpansionPreference> {
+        Box::pin(async move {
+            widget_state::load_widget_expansion_preference(&self.pool)
+                .await
+                .map_err(|error| error.to_string())
+        })
+    }
+
+    fn save_expansion_preference(
+        &self,
+        preference: WidgetExpansionPreference,
+    ) -> WidgetStoreFuture<'_, ()> {
+        Box::pin(async move {
+            widget_state::save_widget_expansion_preference(&self.pool, preference)
                 .await
                 .map_err(|error| error.to_string())
         })

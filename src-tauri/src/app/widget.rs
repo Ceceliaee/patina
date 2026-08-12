@@ -2,11 +2,15 @@ use crate::app::state::WidgetWindowLifecycleState;
 use crate::data::widget_store::SqliteWidgetPlacementStore;
 use crate::domain::widget::{
     match_widget_monitor, resolve_widget_drag_placement, resolve_widget_placement,
-    select_widget_monitor, select_widget_monitor_for_release, WidgetMonitorAffinity,
-    WidgetPhysicalPoint, WidgetPhysicalRect, WidgetPlacement, WidgetSide,
+    select_widget_monitor, select_widget_monitor_for_release, WidgetExpansionPreference,
+    WidgetMonitorAffinity, WidgetPhysicalPoint, WidgetPhysicalRect, WidgetPlacement, WidgetSide,
+    WidgetStatusSnapshot,
 };
+use crate::engine::tools::ToolsRuntimeState;
+use crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshotState;
 use crate::engine::widget as widget_engine;
 use crate::platform::storage_paths;
+use crate::platform::windows::fullscreen;
 #[cfg(debug_assertions)]
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
@@ -19,13 +23,14 @@ pub(crate) const WIDGET_WINDOW_LABEL: &str = "widget";
 pub(crate) const WIDGET_RUNTIME_COLLAPSED_EVENT: &str = "widget-runtime-collapsed";
 pub(crate) const WIDGET_RUNTIME_SHOWN_EVENT: &str = "widget-runtime-shown";
 const WIDGET_TITLE: &str = "Patina Widget";
-const WIDGET_EXPANDED_LOGICAL_WIDTH_WITH_OBJECT: u32 = 228;
-const WIDGET_EXPANDED_LOGICAL_WIDTH_COMPACT: u32 = 184;
+const WIDGET_EXPANDED_LOGICAL_WIDTH_BASE: u32 = 244;
+const WIDGET_TOOL_SLOT_LOGICAL_WIDTH: u32 = 68;
 const WIDGET_EXPANDED_LOGICAL_HEIGHT: u32 = 48;
 const WIDGET_COLLAPSED_LOGICAL_WIDTH: u32 = 64;
 const WIDGET_COLLAPSED_LOGICAL_HEIGHT: u32 = 48;
 const WIDGET_COLLAPSED_VISIBLE_LOGICAL_WIDTH: u32 = 64;
 const WIDGET_DESTROY_AFTER_IDLE_SECS: u64 = 3 * 60;
+const WIDGET_FULLSCREEN_POLL_MS: u64 = 400;
 #[cfg(debug_assertions)]
 static E2E_WIDGET_SHOW_FAILURE_COUNT: AtomicUsize = AtomicUsize::new(0);
 
@@ -42,6 +47,124 @@ pub(crate) async fn save_widget_placement<R: Runtime>(
 ) -> Result<(), String> {
     let store = SqliteWidgetPlacementStore::from_app(app).await?;
     widget_engine::save_widget_placement(&store, placement).await
+}
+
+pub(crate) async fn load_widget_expansion_preference<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<WidgetExpansionPreference, String> {
+    let store = SqliteWidgetPlacementStore::from_app(app).await?;
+    widget_engine::load_widget_expansion_preference(&store).await
+}
+
+pub(crate) async fn save_widget_expansion_preference<R: Runtime>(
+    app: &AppHandle<R>,
+    preference: WidgetExpansionPreference,
+) -> Result<(), String> {
+    let store = SqliteWidgetPlacementStore::from_app(app).await?;
+    widget_engine::save_widget_expansion_preference(&store, preference).await
+}
+
+pub(crate) fn get_widget_status_snapshot<R: Runtime>(app: &AppHandle<R>) -> WidgetStatusSnapshot {
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let active_session = app
+        .state::<TrackingRuntimeSnapshotState>()
+        .snapshot()
+        .and_then(|snapshot| snapshot.active_session);
+    let tools = app.state::<ToolsRuntimeState>().snapshot();
+    widget_engine::build_widget_status_snapshot(active_session, tools, now_ms)
+}
+
+pub(crate) fn start_widget_fullscreen_watcher<R: Runtime + 'static>(app: AppHandle<R>) {
+    tauri::async_runtime::spawn(async move {
+        let mut suppressed_monitor: Option<WidgetPhysicalRect> = None;
+
+        loop {
+            tokio::time::sleep(Duration::from_millis(WIDGET_FULLSCREEN_POLL_MS)).await;
+            let lifecycle = app.state::<WidgetWindowLifecycleState>();
+            if suppressed_monitor.is_none() && !lifecycle.is_visible_desired() {
+                continue;
+            }
+            let widget_window = app.get_webview_window(WIDGET_WINDOW_LABEL);
+            let widget_window_handle = widget_window
+                .as_ref()
+                .and_then(|window| window.hwnd().ok())
+                .map(|handle| handle.0 as usize);
+            let foreground_fullscreen_monitor =
+                fullscreen::foreground_fullscreen_monitor(widget_window_handle);
+
+            if let Some(widget_monitor) = suppressed_monitor {
+                if foreground_fullscreen_monitor == Some(widget_monitor) {
+                    continue;
+                }
+
+                if is_main_window_visible(&app) || !lifecycle.is_visible_desired() {
+                    suppressed_monitor = None;
+                    continue;
+                }
+
+                let placement = match load_widget_placement(&app).await {
+                    Ok(placement) => placement,
+                    Err(error) => {
+                        eprintln!("[widget] failed to load placement after fullscreen: {error}");
+                        continue;
+                    }
+                };
+                let pinned = match load_widget_expansion_preference(&app).await {
+                    Ok(preference) => preference.is_pinned(),
+                    Err(error) => {
+                        eprintln!("[widget] failed to load pin state after fullscreen: {error}");
+                        continue;
+                    }
+                };
+                let tool_slot_count = get_widget_status_snapshot(&app).tools.len() as u8;
+                if is_main_window_visible(&app) || !lifecycle.is_visible_desired() {
+                    suppressed_monitor = None;
+                    continue;
+                }
+                if let Err(error) = apply_widget_layout_internal(
+                    &app,
+                    None,
+                    placement,
+                    pinned,
+                    false,
+                    tool_slot_count,
+                    false,
+                )
+                .await
+                {
+                    eprintln!("[widget] failed to restore after fullscreen: {error}");
+                    continue;
+                }
+                suppressed_monitor = None;
+                continue;
+            }
+
+            let Some(fullscreen_monitor) = foreground_fullscreen_monitor else {
+                continue;
+            };
+            let Some(window) = widget_window else {
+                continue;
+            };
+            if window.is_visible().ok() != Some(true) || is_main_window_visible(&app) {
+                continue;
+            }
+            let Some(widget_monitor) = window
+                .current_monitor()
+                .ok()
+                .flatten()
+                .map(|monitor| monitor_physical_rect(&monitor))
+            else {
+                continue;
+            };
+            if fullscreen_monitor != widget_monitor {
+                continue;
+            }
+
+            emit_widget_runtime_collapsed(&app);
+            park_widget_window(&window);
+            suppressed_monitor = Some(widget_monitor);
+        }
+    });
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -72,12 +195,25 @@ pub(crate) async fn show_widget_window_for_minimize<R: Runtime + 'static>(
 ) -> Result<(), String> {
     fail_widget_show_for_e2e_if_requested()?;
     let placement = load_widget_placement(app).await?;
-    apply_widget_layout_internal(app, preferred_monitor, placement, false, false, false, true).await
+    let pinned = load_widget_expansion_preference(app).await?.is_pinned();
+    let tool_slot_count = get_widget_status_snapshot(app).tools.len() as u8;
+    apply_widget_layout_internal(
+        app,
+        preferred_monitor,
+        placement,
+        pinned,
+        false,
+        tool_slot_count,
+        true,
+    )
+    .await
 }
 
 pub(crate) async fn finalize_widget_drag<R: Runtime + 'static>(
     app: &AppHandle<R>,
     captured_release_point: Option<WidgetPhysicalPoint>,
+    expanded: bool,
+    tool_slot_count: u8,
 ) -> Result<WidgetPlacement, String> {
     if is_main_window_visible(app) {
         close_widget_window(app);
@@ -116,8 +252,12 @@ pub(crate) async fn finalize_widget_drag<R: Runtime + 'static>(
         .or_else(|| select_widget_monitor(&window_rect, &affinities))
         .ok_or_else(|| "failed to select a target monitor after widget drag".to_string())?;
     let target_monitor = monitors[target_index].clone();
-    let placement_rect =
-        normalize_widget_drag_rect_for_target(window_rect, target_monitor.scale_factor());
+    let placement_rect = normalize_widget_drag_rect_for_target(
+        window_rect,
+        target_monitor.scale_factor(),
+        expanded,
+        tool_slot_count,
+    );
     let placement = release_point.map_or_else(
         || resolve_widget_placement(placement_rect, affinities[target_index].clone()),
         |point| {
@@ -130,9 +270,9 @@ pub(crate) async fn finalize_widget_drag<R: Runtime + 'static>(
         app,
         Some(target_monitor),
         placement.clone(),
+        expanded,
         false,
-        false,
-        false,
+        tool_slot_count,
         false,
     )
     .await?;
@@ -143,9 +283,11 @@ pub(crate) async fn finalize_widget_drag<R: Runtime + 'static>(
 fn normalize_widget_drag_rect_for_target(
     window_rect: WidgetPhysicalRect,
     target_scale_factor: f64,
+    expanded: bool,
+    tool_slot_count: u8,
 ) -> WidgetPhysicalRect {
     let target_size = resolve_widget_physical_size(
-        resolve_widget_logical_size(false, false),
+        resolve_widget_logical_size(expanded, tool_slot_count),
         target_scale_factor,
     );
     WidgetPhysicalRect::new(
@@ -169,7 +311,7 @@ fn widget_physical_point(x: f64, y: f64) -> Option<WidgetPhysicalPoint> {
 pub(crate) async fn set_widget_window_expanded<R: Runtime + 'static>(
     app: &AppHandle<R>,
     expanded: bool,
-    show_object_slot: bool,
+    tool_slot_count: u8,
 ) -> Result<(), String> {
     let placement = load_widget_placement(app).await?;
     apply_widget_layout_internal(
@@ -178,10 +320,24 @@ pub(crate) async fn set_widget_window_expanded<R: Runtime + 'static>(
         placement,
         expanded,
         expanded,
-        show_object_slot,
+        tool_slot_count,
         false,
     )
     .await
+}
+
+pub(crate) async fn set_widget_pinned<R: Runtime + 'static>(
+    app: &AppHandle<R>,
+    pinned: bool,
+    tool_slot_count: u8,
+) -> Result<(), String> {
+    let preference = if pinned {
+        WidgetExpansionPreference::Pinned
+    } else {
+        WidgetExpansionPreference::AutoCollapse
+    };
+    set_widget_window_expanded(app, true, tool_slot_count).await?;
+    save_widget_expansion_preference(app, preference).await
 }
 
 pub(crate) fn is_widget_window_visible<R: Runtime>(app: &AppHandle<R>) -> bool {
@@ -289,6 +445,15 @@ fn widget_monitor_affinity(monitor: &Monitor) -> WidgetMonitorAffinity {
     )
 }
 
+fn monitor_physical_rect(monitor: &Monitor) -> WidgetPhysicalRect {
+    WidgetPhysicalRect::new(
+        monitor.position().x,
+        monitor.position().y,
+        monitor.size().width,
+        monitor.size().height,
+    )
+}
+
 fn apply_widget_bounds<R: Runtime>(
     window: &WebviewWindow<R>,
     bounds: WidgetPhysicalBounds,
@@ -314,7 +479,7 @@ async fn apply_widget_layout_internal<R: Runtime + 'static>(
     placement: WidgetPlacement,
     expanded: bool,
     focus_after_show: bool,
-    show_object_slot: bool,
+    tool_slot_count: u8,
     allow_visible_main_window: bool,
 ) -> Result<(), String> {
     if !allow_visible_main_window && is_main_window_visible(app) {
@@ -323,7 +488,7 @@ async fn apply_widget_layout_internal<R: Runtime + 'static>(
     }
 
     let monitor = resolve_widget_monitor(app, preferred_monitor, &placement)?;
-    let logical_size = resolve_widget_logical_size(expanded, show_object_slot);
+    let logical_size = resolve_widget_logical_size(expanded, tool_slot_count);
     let bounds = resolve_widget_bounds(&monitor, &placement, logical_size);
     let lifecycle = app.state::<WidgetWindowLifecycleState>();
 
@@ -466,13 +631,11 @@ fn apply_e2e_widget_browser_args<R: Runtime>(
     ))
 }
 
-fn resolve_widget_logical_size(expanded: bool, show_object_slot: bool) -> WidgetLogicalSize {
+fn resolve_widget_logical_size(expanded: bool, tool_slot_count: u8) -> WidgetLogicalSize {
     if expanded {
-        let width = if show_object_slot {
-            WIDGET_EXPANDED_LOGICAL_WIDTH_WITH_OBJECT
-        } else {
-            WIDGET_EXPANDED_LOGICAL_WIDTH_COMPACT
-        };
+        let width = WIDGET_EXPANDED_LOGICAL_WIDTH_BASE.saturating_add(
+            WIDGET_TOOL_SLOT_LOGICAL_WIDTH.saturating_mul(u32::from(tool_slot_count.min(2))),
+        );
         WidgetLogicalSize {
             width,
             height: WIDGET_EXPANDED_LOGICAL_HEIGHT,
@@ -580,7 +743,8 @@ mod tests {
     #[test]
     fn mixed_dpi_drag_anchor_uses_the_target_widget_height() {
         let dragged_at_150_percent = WidgetPhysicalRect::new(2200, 650, 96, 72);
-        let target_rect = normalize_widget_drag_rect_for_target(dragged_at_150_percent, 1.25);
+        let target_rect =
+            normalize_widget_drag_rect_for_target(dragged_at_150_percent, 1.25, false, 0);
         assert_eq!(target_rect, WidgetPhysicalRect::new(2200, 650, 80, 60));
 
         let target_monitor = WidgetMonitorAffinity::new(
@@ -598,7 +762,7 @@ mod tests {
             2400,
             1300,
             &placement,
-            resolve_widget_physical_size(resolve_widget_logical_size(false, false), 1.25),
+            resolve_widget_physical_size(resolve_widget_logical_size(false, 0), 1.25),
         );
 
         assert_eq!(final_bounds.y, 650);
@@ -654,9 +818,9 @@ mod tests {
             1040,
             &WidgetPlacement::new(WidgetSide::Left, 0.5),
             WidgetPhysicalSize {
-                width: 228,
+                width: 244,
                 height: 48,
-                visible_width: 228,
+                visible_width: 244,
             },
         );
         assert_eq!(
@@ -664,7 +828,7 @@ mod tests {
             WidgetPhysicalBounds {
                 x: 0,
                 y: 496,
-                width: 228,
+                width: 244,
                 height: 48,
             }
         );
@@ -676,17 +840,17 @@ mod tests {
             1040,
             &WidgetPlacement::new(WidgetSide::Right, 0.0),
             WidgetPhysicalSize {
-                width: 228,
+                width: 244,
                 height: 48,
-                visible_width: 228,
+                visible_width: 244,
             },
         );
-        assert_eq!(right.x, 1692);
+        assert_eq!(right.x, 1676);
         assert_eq!(right.y, 0);
     }
 
     #[test]
-    fn widget_bounds_snap_to_expected_compact_expanded_width() {
+    fn widget_bounds_snap_to_expected_one_tool_expanded_width() {
         let right = resolve_widget_bounds_from_work_area(
             0,
             0,
@@ -694,15 +858,15 @@ mod tests {
             1040,
             &WidgetPlacement::new(WidgetSide::Right, 0.0),
             WidgetPhysicalSize {
-                width: 184,
+                width: 312,
                 height: 48,
-                visible_width: 184,
+                visible_width: 312,
             },
         );
 
-        assert_eq!(right.x, 1736);
+        assert_eq!(right.x, 1608);
         assert_eq!(right.y, 0);
-        assert_eq!(right.width, 184);
+        assert_eq!(right.width, 312);
     }
 
     #[test]
@@ -710,7 +874,7 @@ mod tests {
         let cases = [
             (
                 false,
-                false,
+                0,
                 1.0,
                 WidgetPhysicalSize {
                     width: 64,
@@ -720,7 +884,7 @@ mod tests {
             ),
             (
                 false,
-                false,
+                0,
                 1.25,
                 WidgetPhysicalSize {
                     width: 80,
@@ -730,7 +894,7 @@ mod tests {
             ),
             (
                 false,
-                false,
+                0,
                 1.5,
                 WidgetPhysicalSize {
                     width: 96,
@@ -740,7 +904,7 @@ mod tests {
             ),
             (
                 false,
-                false,
+                0,
                 2.0,
                 WidgetPhysicalSize {
                     width: 128,
@@ -750,88 +914,108 @@ mod tests {
             ),
             (
                 true,
-                false,
+                0,
                 1.0,
                 WidgetPhysicalSize {
-                    width: 184,
+                    width: 244,
                     height: 48,
-                    visible_width: 184,
+                    visible_width: 244,
                 },
             ),
             (
                 true,
-                false,
+                0,
                 1.25,
                 WidgetPhysicalSize {
-                    width: 230,
+                    width: 305,
                     height: 60,
-                    visible_width: 230,
+                    visible_width: 305,
                 },
             ),
             (
                 true,
-                false,
+                0,
                 1.5,
                 WidgetPhysicalSize {
-                    width: 276,
+                    width: 366,
                     height: 72,
-                    visible_width: 276,
+                    visible_width: 366,
                 },
             ),
             (
                 true,
-                false,
+                0,
                 2.0,
                 WidgetPhysicalSize {
-                    width: 368,
+                    width: 488,
                     height: 96,
-                    visible_width: 368,
+                    visible_width: 488,
                 },
             ),
             (
                 true,
-                true,
+                1,
                 1.0,
                 WidgetPhysicalSize {
-                    width: 228,
+                    width: 312,
                     height: 48,
-                    visible_width: 228,
+                    visible_width: 312,
                 },
             ),
             (
                 true,
-                true,
+                1,
                 1.25,
                 WidgetPhysicalSize {
-                    width: 285,
+                    width: 390,
                     height: 60,
-                    visible_width: 285,
+                    visible_width: 390,
                 },
             ),
             (
                 true,
-                true,
+                1,
                 1.5,
                 WidgetPhysicalSize {
-                    width: 342,
+                    width: 468,
                     height: 72,
-                    visible_width: 342,
+                    visible_width: 468,
                 },
             ),
             (
                 true,
-                true,
+                1,
                 2.0,
                 WidgetPhysicalSize {
-                    width: 456,
+                    width: 624,
                     height: 96,
-                    visible_width: 456,
+                    visible_width: 624,
+                },
+            ),
+            (
+                true,
+                2,
+                1.0,
+                WidgetPhysicalSize {
+                    width: 380,
+                    height: 48,
+                    visible_width: 380,
+                },
+            ),
+            (
+                true,
+                2,
+                2.0,
+                WidgetPhysicalSize {
+                    width: 760,
+                    height: 96,
+                    visible_width: 760,
                 },
             ),
         ];
 
-        for (expanded, show_object_slot, scale_factor, expected) in cases {
-            let logical_size = resolve_widget_logical_size(expanded, show_object_slot);
+        for (expanded, tool_slot_count, scale_factor, expected) in cases {
+            let logical_size = resolve_widget_logical_size(expanded, tool_slot_count);
             assert_eq!(
                 resolve_widget_physical_size(logical_size, scale_factor),
                 expected
@@ -850,7 +1034,7 @@ mod tests {
             (3840, 2160),
         ];
         let scales = [1.0_f64, 1.25, 1.5, 2.0];
-        let states = [(false, false), (true, false), (true, true)];
+        let states = [(false, 0), (true, 0), (true, 1), (true, 2)];
         let sides = [WidgetSide::Left, WidgetSide::Right];
         let anchors = [0.0_f64, 0.5, 1.0];
         let mut case_count = 0;
@@ -860,8 +1044,8 @@ mod tests {
                 let taskbar_height = (48.0 * scale_factor).round() as u32;
                 let work_height = resolution_height.saturating_sub(taskbar_height);
 
-                for (expanded, show_object_slot) in states {
-                    let logical_size = resolve_widget_logical_size(expanded, show_object_slot);
+                for (expanded, tool_slot_count) in states {
+                    let logical_size = resolve_widget_logical_size(expanded, tool_slot_count);
                     let physical_size = resolve_widget_physical_size(logical_size, scale_factor);
 
                     for side in sides {
@@ -899,13 +1083,12 @@ mod tests {
             }
         }
 
-        assert_eq!(case_count, 432);
+        assert_eq!(case_count, 576);
     }
 
     #[test]
     fn widget_bounds_preserve_negative_monitor_origins() {
-        let physical_size =
-            resolve_widget_physical_size(resolve_widget_logical_size(true, true), 1.5);
+        let physical_size = resolve_widget_physical_size(resolve_widget_logical_size(true, 1), 1.5);
         let left = resolve_widget_bounds_from_work_area(
             -2560,
             -1440,

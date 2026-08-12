@@ -5,6 +5,74 @@ pub const DEFAULT_WIDGET_ANCHOR_Y: f64 = 0.28;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub enum WidgetExpansionPreference {
+    #[default]
+    AutoCollapse,
+    Pinned,
+}
+
+impl WidgetExpansionPreference {
+    pub const fn is_pinned(self) -> bool {
+        matches!(self, Self::Pinned)
+    }
+
+    pub const fn as_storage_value(self) -> &'static str {
+        match self {
+            Self::AutoCollapse => "auto_collapse",
+            Self::Pinned => "pinned",
+        }
+    }
+
+    pub fn from_storage_value(value: &str) -> Self {
+        match value.trim() {
+            "pinned" => Self::Pinned,
+            _ => Self::AutoCollapse,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WidgetToolKind {
+    Stopwatch,
+    Countdown,
+    Pomodoro,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WidgetToolState {
+    Running,
+    Paused,
+    Completed,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct WidgetTrackingProjection {
+    pub app_name: String,
+    pub exe_name: String,
+    pub elapsed_ms: i64,
+    pub running: bool,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct WidgetToolProjection {
+    pub kind: WidgetToolKind,
+    pub state: WidgetToolState,
+    pub value_ms: i64,
+    pub counts_down: bool,
+    pub visible_until_ms: Option<i64>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct WidgetStatusSnapshot {
+    pub tracking: Option<WidgetTrackingProjection>,
+    pub tools: Vec<WidgetToolProjection>,
+    pub sampled_at_ms: i64,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub enum WidgetSide {
     Left,
     #[default]

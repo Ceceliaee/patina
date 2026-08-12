@@ -10,6 +10,7 @@ const THEME_MODE_KEY: &str = "theme_mode";
 const LANGUAGE_KEY: &str = "language";
 const COLOR_SCHEME_LIGHT_KEY: &str = "color_scheme_light";
 const COLOR_SCHEME_DARK_KEY: &str = "color_scheme_dark";
+const WIDGET_EXPANSION_PREFERENCE_KEY: &str = "widget_expansion_preference";
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct WidgetBootstrapSettings {
@@ -29,6 +30,7 @@ pub struct WidgetAppOverrideRow {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct WidgetBootstrapSnapshot {
     pub settings: WidgetBootstrapSettings,
+    pub pinned: bool,
     pub app_overrides: Vec<WidgetAppOverrideRow>,
 }
 
@@ -39,7 +41,7 @@ pub async fn load_widget_bootstrap_snapshot(
     let setting_rows = sqlx::query(
         "SELECT key, value
          FROM settings
-         WHERE key IN (?, ?, ?, ?, ?)
+         WHERE key IN (?, ?, ?, ?, ?, ?)
          ORDER BY key ASC",
     )
     .bind(TRACKING_PAUSED_KEY)
@@ -47,6 +49,7 @@ pub async fn load_widget_bootstrap_snapshot(
     .bind(LANGUAGE_KEY)
     .bind(COLOR_SCHEME_LIGHT_KEY)
     .bind(COLOR_SCHEME_DARK_KEY)
+    .bind(WIDGET_EXPANSION_PREFERENCE_KEY)
     .fetch_all(&mut *transaction)
     .await?;
     let app_override_rows = sqlx::query(
@@ -74,6 +77,10 @@ pub async fn load_widget_bootstrap_snapshot(
             color_scheme_light: settings_by_key.remove(COLOR_SCHEME_LIGHT_KEY),
             color_scheme_dark: settings_by_key.remove(COLOR_SCHEME_DARK_KEY),
         },
+        pinned: settings_by_key
+            .remove(WIDGET_EXPANSION_PREFERENCE_KEY)
+            .as_deref()
+            .is_some_and(|value| value == "pinned"),
         app_overrides: app_override_rows
             .into_iter()
             .map(|row| WidgetAppOverrideRow {
@@ -109,6 +116,7 @@ mod tests {
                  ('language', 'en-US'),
                  ('color_scheme_light', 'notion'),
                  ('color_scheme_dark', 'nord'),
+                 ('widget_expansion_preference', 'pinned'),
                  ('web_activity_token', 'must-not-leak'),
                  ('remote_status_bridge_token', 'must-not-leak'),
                  ('__app_override::editor.exe', '{\"displayName\":\"Editor\"}'),
@@ -127,6 +135,7 @@ mod tests {
                 Some("notion")
             );
             assert_eq!(snapshot.settings.color_scheme_dark.as_deref(), Some("nord"));
+            assert!(snapshot.pinned);
             assert_eq!(
                 snapshot.app_overrides,
                 vec![WidgetAppOverrideRow {
@@ -145,6 +154,7 @@ mod tests {
             let snapshot = load_widget_bootstrap_snapshot(&pool).await.unwrap();
 
             assert_eq!(snapshot.settings, WidgetBootstrapSettings::default());
+            assert!(!snapshot.pinned);
             assert!(snapshot.app_overrides.is_empty());
         });
     }

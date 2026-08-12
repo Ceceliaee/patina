@@ -2,7 +2,7 @@ use crate::app::{main_window, tray, widget};
 use crate::data::{
     icon_cache_service, repositories::widget_runtime::WidgetBootstrapSnapshot, widget_store,
 };
-use crate::domain::widget::{WidgetPhysicalPoint, WidgetPlacement};
+use crate::domain::widget::{WidgetPhysicalPoint, WidgetPlacement, WidgetStatusSnapshot};
 use crate::platform::windows::input;
 use tauri::AppHandle;
 
@@ -29,18 +29,34 @@ pub async fn cmd_get_widget_icon(
 #[tauri::command]
 pub async fn cmd_finalize_widget_drag(
     release_position: Option<WidgetPhysicalPoint>,
+    expanded: bool,
+    tool_slot_count: u8,
     app: AppHandle,
 ) -> Result<WidgetPlacement, String> {
-    widget::finalize_widget_drag(&app, release_position).await
+    widget::finalize_widget_drag(&app, release_position, expanded, tool_slot_count).await
 }
 
 #[tauri::command]
 pub async fn cmd_set_widget_expanded(
     expanded: bool,
-    show_object_slot: bool,
+    tool_slot_count: u8,
     app: AppHandle,
 ) -> Result<(), String> {
-    widget::set_widget_window_expanded(&app, expanded, show_object_slot).await
+    widget::set_widget_window_expanded(&app, expanded, tool_slot_count).await
+}
+
+#[tauri::command]
+pub fn cmd_get_widget_status_snapshot(app: AppHandle) -> WidgetStatusSnapshot {
+    widget::get_widget_status_snapshot(&app)
+}
+
+#[tauri::command]
+pub async fn cmd_set_widget_pinned(
+    pinned: bool,
+    tool_slot_count: u8,
+    app: AppHandle,
+) -> Result<(), String> {
+    widget::set_widget_pinned(&app, pinned, tool_slot_count).await
 }
 
 #[tauri::command]
@@ -51,11 +67,6 @@ pub fn cmd_show_main_window(app: AppHandle) {
 #[tauri::command]
 pub fn cmd_hide_widget_window(app: AppHandle) {
     main_window::close_widget_for_main_activity(&app);
-}
-
-#[tauri::command]
-pub async fn cmd_toggle_tracking_paused(app: AppHandle) -> Result<(), String> {
-    tray::toggle_tracking_paused(app).await
 }
 
 #[tauri::command]

@@ -1,6 +1,7 @@
 pub mod app_metadata;
 pub mod audio;
 pub mod foreground;
+pub mod fullscreen;
 pub mod handles;
 pub mod icon;
 pub mod input;
