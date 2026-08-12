@@ -323,6 +323,86 @@ fn version_eight_draft_triggers_are_reinstalled_without_touching_facts() {
                 .fetch_all(&pool)
                 .await
                 .unwrap();
-        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+    });
+}
+
+#[test]
+fn version_twelve_activity_rule_upgrade_preserves_every_legacy_field() {
+    tauri::async_runtime::block_on(async {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        for migration in schema::tracker_migrations()
+            .into_iter()
+            .filter(|migration| migration.version <= 12)
+        {
+            pool.execute(migration.sql.as_ref()).await.unwrap();
+        }
+        pool.execute(
+            "CREATE TABLE _sqlx_migrations (
+                version BIGINT PRIMARY KEY,
+                description TEXT NOT NULL,
+                installed_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                success BOOLEAN NOT NULL,
+                checksum BLOB NOT NULL,
+                execution_time BIGINT NOT NULL
+            )",
+        )
+        .await
+        .unwrap();
+        for (version, description, checksum) in expected_migration_metadata()
+            .into_iter()
+            .filter(|(version, _, _)| *version <= 12)
+        {
+            sqlx::query(
+                "INSERT INTO _sqlx_migrations(version, description, success, checksum, execution_time)
+                 VALUES (?, ?, 1, ?, 0)",
+            )
+            .bind(version)
+            .bind(description)
+            .bind(checksum)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        sqlx::query(
+            "INSERT INTO tool_software_reminder_rules (
+                id, app_name, exe_name, limit_ms, message, created_at, updated_at,
+                disabled_at, last_fired_date_key
+             ) VALUES (42, 'Editor', 'EDITOR.EXE', 1800000, 'Break', 100, 200, 300, '2026-08-11')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        prepare_pool_schema(&pool, Path::new("version-12-patina.db"))
+            .await
+            .unwrap();
+
+        let old_table_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'tool_software_reminder_rules'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(old_table_count, 0);
+        let row = sqlx::query(
+            "SELECT id, target_kind, app_name, exe_name, label_snapshot, limit_ms,
+                    message, created_at, updated_at, disabled_at, last_fired_date_key
+             FROM tool_activity_reminder_rules",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(row.get::<i64, _>("id"), 42);
+        assert_eq!(row.get::<String, _>("target_kind"), "app");
+        assert_eq!(row.get::<String, _>("app_name"), "Editor");
+        assert_eq!(row.get::<String, _>("exe_name"), "EDITOR.EXE");
+        assert_eq!(row.get::<String, _>("label_snapshot"), "Editor");
+        assert_eq!(row.get::<i64, _>("limit_ms"), 1_800_000);
+        assert_eq!(row.get::<String, _>("message"), "Break");
+        assert_eq!(row.get::<i64, _>("created_at"), 100);
+        assert_eq!(row.get::<i64, _>("updated_at"), 200);
+        assert_eq!(row.get::<i64, _>("disabled_at"), 300);
+        assert_eq!(row.get::<String, _>("last_fired_date_key"), "2026-08-11");
     });
 }

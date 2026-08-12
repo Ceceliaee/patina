@@ -40,6 +40,38 @@ async fn table_indexes(pool: &Pool<Sqlite>, table: &str) -> Result<BTreeSet<Stri
         .collect())
 }
 
+pub async fn has_activity_reminder_rules_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let columns = table_columns(pool, "tool_activity_reminder_rules").await?;
+    let indexes = table_indexes(pool, "tool_activity_reminder_rules").await?;
+    let legacy_columns = table_columns(pool, "tool_software_reminder_rules").await?;
+    Ok([
+        "id",
+        "target_kind",
+        "app_name",
+        "exe_name",
+        "category_id",
+        "normalized_domain",
+        "label_snapshot",
+        "limit_ms",
+        "message",
+        "created_at",
+        "updated_at",
+        "disabled_at",
+        "last_fired_date_key",
+    ]
+    .iter()
+    .all(|column| columns.contains(*column))
+        && [
+            "idx_tool_activity_reminder_rules_active",
+            "idx_tool_activity_reminder_rules_app",
+            "idx_tool_activity_reminder_rules_category",
+            "idx_tool_activity_reminder_rules_web",
+        ]
+        .iter()
+        .all(|index| indexes.contains(*index))
+        && legacy_columns.is_empty())
+}
+
 pub async fn has_scheduled_backup_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
     let config_columns = table_columns(pool, "scheduled_backup_config").await?;
     let run_columns = table_columns(pool, "scheduled_backup_runs").await?;

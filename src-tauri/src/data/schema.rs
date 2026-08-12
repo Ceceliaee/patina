@@ -24,6 +24,9 @@ pub const SCHEDULED_BACKUP_TARGETS_MIGRATION_VERSION: i64 = 11;
 pub const SCHEDULED_BACKUP_TARGETS_MIGRATION_DESCRIPTION: &str = "extend_scheduled_backup_targets";
 pub const SCHEDULED_EXPORT_MIGRATION_VERSION: i64 = 12;
 pub const SCHEDULED_EXPORT_MIGRATION_DESCRIPTION: &str = "create_scheduled_export_tables";
+pub const ACTIVITY_REMINDER_RULES_MIGRATION_VERSION: i64 = 13;
+pub const ACTIVITY_REMINDER_RULES_MIGRATION_DESCRIPTION: &str =
+    "generalize_activity_reminder_rules";
 
 pub const CURRENT_BASELINE_SCHEMA_SQL: &str = "
     CREATE TABLE IF NOT EXISTS sessions (
@@ -181,6 +184,77 @@ pub const SOFTWARE_REMINDER_RULES_SCHEMA_SQL: &str = "
 
     CREATE INDEX IF NOT EXISTS idx_tool_software_reminder_rules_active
     ON tool_software_reminder_rules(disabled_at, app_name, exe_name);
+";
+
+pub const ACTIVITY_REMINDER_RULES_SCHEMA_SQL: &str = "
+    CREATE TABLE IF NOT EXISTS tool_software_reminder_rules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        app_name TEXT NOT NULL,
+        exe_name TEXT,
+        limit_ms INTEGER NOT NULL CHECK(limit_ms BETWEEN 60000 AND 86400000),
+        message TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        disabled_at INTEGER,
+        last_fired_date_key TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS tool_activity_reminder_rules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        target_kind TEXT NOT NULL CHECK(target_kind IN ('app', 'category', 'web')),
+        app_name TEXT,
+        exe_name TEXT,
+        category_id TEXT,
+        normalized_domain TEXT,
+        label_snapshot TEXT NOT NULL,
+        limit_ms INTEGER NOT NULL CHECK(limit_ms BETWEEN 60000 AND 86400000),
+        message TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        disabled_at INTEGER,
+        last_fired_date_key TEXT,
+        CHECK(
+            (target_kind = 'app'
+                AND app_name IS NOT NULL AND TRIM(app_name) <> ''
+                AND category_id IS NULL AND normalized_domain IS NULL)
+            OR
+            (target_kind = 'category'
+                AND app_name IS NULL AND exe_name IS NULL
+                AND category_id IS NOT NULL AND TRIM(category_id) <> ''
+                AND normalized_domain IS NULL)
+            OR
+            (target_kind = 'web'
+                AND app_name IS NULL AND exe_name IS NULL AND category_id IS NULL
+                AND normalized_domain IS NOT NULL AND TRIM(normalized_domain) <> '')
+        )
+    );
+
+    INSERT OR IGNORE INTO tool_activity_reminder_rules (
+        id, target_kind, app_name, exe_name, category_id, normalized_domain,
+        label_snapshot, limit_ms, message, created_at, updated_at, disabled_at,
+        last_fired_date_key
+    )
+    SELECT id, 'app', app_name, NULLIF(TRIM(exe_name), ''), NULL, NULL,
+           app_name, limit_ms, message, created_at, updated_at, disabled_at,
+           last_fired_date_key
+    FROM tool_software_reminder_rules;
+
+    DROP TABLE tool_software_reminder_rules;
+
+    CREATE INDEX IF NOT EXISTS idx_tool_activity_reminder_rules_active
+    ON tool_activity_reminder_rules(disabled_at, target_kind);
+
+    CREATE INDEX IF NOT EXISTS idx_tool_activity_reminder_rules_app
+    ON tool_activity_reminder_rules(target_kind, exe_name COLLATE NOCASE, app_name COLLATE NOCASE)
+    WHERE disabled_at IS NULL AND target_kind = 'app';
+
+    CREATE INDEX IF NOT EXISTS idx_tool_activity_reminder_rules_category
+    ON tool_activity_reminder_rules(target_kind, category_id)
+    WHERE disabled_at IS NULL AND target_kind = 'category';
+
+    CREATE INDEX IF NOT EXISTS idx_tool_activity_reminder_rules_web
+    ON tool_activity_reminder_rules(target_kind, normalized_domain)
+    WHERE disabled_at IS NULL AND target_kind = 'web';
 ";
 
 pub const WEB_ACTIVITY_SCHEMA_SQL: &str = "
@@ -1059,6 +1133,12 @@ pub fn tracker_migrations() -> Vec<Migration> {
             version: SCHEDULED_EXPORT_MIGRATION_VERSION,
             description: SCHEDULED_EXPORT_MIGRATION_DESCRIPTION,
             sql: SCHEDULED_EXPORT_SCHEMA_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: ACTIVITY_REMINDER_RULES_MIGRATION_VERSION,
+            description: ACTIVITY_REMINDER_RULES_MIGRATION_DESCRIPTION,
+            sql: ACTIVITY_REMINDER_RULES_SCHEMA_SQL,
             kind: MigrationKind::Up,
         },
     ]

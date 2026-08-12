@@ -528,7 +528,7 @@ async fn validate_counts(source: &Path, target_pool: &Pool<Sqlite>) -> Result<()
         "tool_timer_laps",
         "tool_pomodoro_runs",
         "tool_daily_stats",
-        "tool_software_reminder_rules",
+        "tool_activity_reminder_rules",
         "web_activity_segments",
         "web_favicon_cache",
     ] {

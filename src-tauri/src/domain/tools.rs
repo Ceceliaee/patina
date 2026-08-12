@@ -145,7 +145,7 @@ pub enum ToolAlertKind {
     Reminder,
     Countdown,
     Pomodoro,
-    SoftwareReminder,
+    ActivityReminder,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -181,16 +181,40 @@ pub struct ToolReminder {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub struct ToolSoftwareReminderRule {
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ActivityReminderTarget {
+    App {
+        app_name: String,
+        exe_name: Option<String>,
+    },
+    Category {
+        category_id: String,
+    },
+    Web {
+        normalized_domain: String,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ActivityReminderSuspensionReason {
+    SourceDisabled,
+    TargetExcluded,
+    TargetDeleted,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ToolActivityReminderRule {
     pub id: i64,
-    pub app_name: String,
-    pub exe_name: Option<String>,
+    pub target: ActivityReminderTarget,
+    pub label_snapshot: String,
     pub limit_ms: i64,
     pub message: String,
     pub created_at: i64,
     pub updated_at: i64,
     pub disabled_at: Option<i64>,
     pub last_fired_date_key: Option<String>,
+    pub suspension_reason: Option<ActivityReminderSuspensionReason>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -279,9 +303,10 @@ pub struct CompletedPomodoroNotification {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SoftwareReminderNotification {
+pub struct ActivityReminderNotification {
     pub rule_id: i64,
-    pub app_name: String,
+    pub target: ActivityReminderTarget,
+    pub target_label: String,
     pub limit_ms: i64,
     pub usage_ms: i64,
     pub message: String,
@@ -342,7 +367,7 @@ impl ToolPomodoroRun {
 pub struct ToolsRuntimeSnapshot {
     pub settings: ToolRuntimeSettings,
     pub reminders: Vec<ToolReminder>,
-    pub software_reminder_rules: Vec<ToolSoftwareReminderRule>,
+    pub activity_reminder_rules: Vec<ToolActivityReminderRule>,
     pub current_timer: Option<ToolTimer>,
     pub timer_laps: Vec<ToolTimerLap>,
     pub current_pomodoro: Option<ToolPomodoroRun>,

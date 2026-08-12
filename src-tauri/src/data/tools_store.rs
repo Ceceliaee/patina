@@ -20,19 +20,19 @@ impl<R: Runtime> SqliteToolsStore<R> {
     ) -> Result<ToolsTickEvents, String> {
         let pool = wait_for_sqlite_pool(&self.app).await?;
         let reminders = tools::fire_due_reminders(&pool, now_ms).await?;
-        let software_reminders =
-            tools::fire_due_software_reminders(&pool, date_key, day_start_ms, now_ms).await?;
+        let activity_reminders =
+            tools::fire_due_activity_reminders(&pool, date_key, day_start_ms, now_ms).await?;
         let completed_timer = tools::complete_due_countdown(&pool, now_ms).await?;
         let completed_pomodoro =
             tools::complete_due_pomodoro_phase(&pool, date_key, now_ms).await?;
         let state_changed = !reminders.is_empty()
-            || !software_reminders.is_empty()
+            || !activity_reminders.is_empty()
             || completed_timer.is_some()
             || completed_pomodoro.is_some();
 
         Ok(ToolsTickEvents {
             reminders,
-            software_reminders,
+            activity_reminders,
             completed_timer,
             completed_pomodoro,
             state_changed,
@@ -59,19 +59,19 @@ impl<R: Runtime> ToolsStore for SqliteToolsStore<R> {
                 ToolsMutation::CancelReminder { reminder_id } => {
                     tools::cancel_reminder(&pool, reminder_id, now_ms).await?;
                 }
-                ToolsMutation::CreateSoftwareReminderRule(request) => {
-                    tools::create_software_reminder_rule(
+                ToolsMutation::CreateActivityReminderRule(request) => {
+                    tools::create_activity_reminder_rule(
                         &pool,
-                        &request.app_name,
-                        request.exe_name.as_deref(),
+                        &request.target,
+                        &request.label_snapshot,
                         request.limit_ms,
                         &request.message,
                         now_ms,
                     )
                     .await?;
                 }
-                ToolsMutation::DisableSoftwareReminderRule { rule_id } => {
-                    tools::disable_software_reminder_rule(&pool, rule_id, now_ms).await?;
+                ToolsMutation::DisableActivityReminderRule { rule_id } => {
+                    tools::disable_activity_reminder_rule(&pool, rule_id, now_ms).await?;
                 }
                 ToolsMutation::StartTimer(request) => {
                     tools::start_timer(

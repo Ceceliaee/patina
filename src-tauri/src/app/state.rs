@@ -581,6 +581,13 @@ struct WidgetWindowLifecycle {
 }
 
 impl WidgetWindowLifecycleState {
+    pub(crate) fn is_visible_desired(&self) -> bool {
+        match self.inner.lock() {
+            Ok(guard) => guard.desired_visible,
+            Err(poisoned) => poisoned.into_inner().desired_visible,
+        }
+    }
+
     pub(crate) fn show_existing(&self) {
         match self.inner.lock() {
             Ok(mut guard) => {
