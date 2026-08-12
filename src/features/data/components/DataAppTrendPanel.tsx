@@ -310,7 +310,7 @@ function DataAppTrendPanel({
           >
             <div className="data-app-sidebar" data-hint="">
               <div className="data-app-search" />
-              <div className="data-app-list data-app-trend-list" />
+              <div className="data-app-list data-app-trend-list qp-scroll-region" />
             </div>
             <div className="data-app-chart-column">
               <div className="data-app-metric-strip">
@@ -351,7 +351,7 @@ function DataAppTrendPanel({
             <div
               key={hasSearchQuery ? "searching" : "all"}
               ref={listRef}
-              className="data-app-list data-app-trend-list"
+              className="data-app-list data-app-trend-list qp-scroll-region"
               aria-label={listAriaLabel}
               aria-description={interactionHint}
             >

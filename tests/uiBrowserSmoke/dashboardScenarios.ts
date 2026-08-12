@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { mkdir, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import {
   evaluate,
@@ -10,6 +12,16 @@ import {
 
 export async function runDashboardScenarios(context: BrowserSmokeContext) {
   const { client, sessionId, runTest } = context;
+  const captureDashboardScreenshot = async (fileName: string) => {
+    const captureDir = process.env.PATINA_DASHBOARD_SCREENSHOT_DIR?.trim();
+    if (!captureDir) return;
+    const result = await client!.command("Page.captureScreenshot", {
+      format: "png",
+      fromSurface: true,
+    }, sessionId) as { data: string };
+    await mkdir(captureDir, { recursive: true });
+    await writeFile(resolve(captureDir, fileName), Buffer.from(result.data, "base64"));
+  };
 
   await runTest("dashboard viewport has no horizontal overflow", async () => {
     for (const width of [900, 1100, 1280]) {
@@ -33,6 +45,43 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
         document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
       `);
     }
+  });
+
+  await runTest("dashboard keeps card gutters consistent at compact desktop heights", async () => {
+    await client!.command("Emulation.setDeviceMetricsOverride", {
+      width: 1102,
+      height: 738,
+      deviceScaleFactor: 1.25,
+      mobile: false,
+    }, sessionId);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector(".dashboard-pulse-card"))`);
+    await captureDashboardScreenshot("dashboard-compact-125-percent.png");
+
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const focus = document.querySelector(".dashboard-focus-card")?.getBoundingClientRect();
+          const pulse = document.querySelector(".dashboard-pulse-card")?.getBoundingClientRect();
+          const right = document.querySelector(".dashboard-top-apps-list")
+            ?.parentElement?.getBoundingClientRect();
+          if (!focus || !pulse || !right) return false;
+          const columnGap = right.left - focus.right;
+          const rowGap = pulse.top - focus.bottom;
+          return Math.abs(columnGap - rowGap) <= 0.5;
+        })()
+      `),
+      true,
+      "visible card gutters should use the same Quiet Pro spacing rhythm",
+    );
+
+    await client!.command("Emulation.setDeviceMetricsOverride", {
+      width: 1280,
+      height: 820,
+      deviceScaleFactor: 1,
+      mobile: false,
+    }, sessionId);
+    await waitForAnimationFrames(client!, sessionId, 2);
+    await captureDashboardScreenshot("dashboard-default.png");
   });
 
   await runTest("dashboard focus donut keeps a restrained ring weight", async () => {

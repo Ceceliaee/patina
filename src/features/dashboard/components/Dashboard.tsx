@@ -206,7 +206,7 @@ export default function Dashboard({
       />
 
       <div className="flex gap-4 md:gap-5 flex-1 min-h-0 overflow-hidden dashboard-workspace">
-        <div className="w-5/12 flex flex-col gap-4 md:gap-5 min-h-0 dashboard-left-column">
+        <div className="w-5/12 flex flex-col gap-4 md:gap-5 min-h-0 dashboard-left-column qp-scroll-region">
           <div
             ref={focusCardRef}
             className="qp-panel p-5 relative overflow-hidden shrink-0 min-h-[250px] dashboard-focus-card"
@@ -291,7 +291,7 @@ export default function Dashboard({
             </div>
           </header>
 
-          <div className="dashboard-top-apps-list flex-1 overflow-y-auto pr-1 md:pr-2 space-y-2.5 custom-scrollbar">
+          <div className="dashboard-top-apps-list flex-1 overflow-y-auto pr-1 md:pr-2 space-y-2.5 qp-scroll-region">
             {topApplications.length === 0 && (
               <div className="h-full flex flex-col items-center justify-center text-[var(--qp-text-tertiary)] gap-2">
                 <Monitor size={32} className="opacity-40" />

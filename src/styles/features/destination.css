@@ -265,7 +265,6 @@
   min-height: 0;
   flex: 1 1 322px;
   overflow-y: auto;
-  scrollbar-gutter: stable;
   overscroll-behavior: contain;
   margin: 0;
   padding: 0 4px 0 0;

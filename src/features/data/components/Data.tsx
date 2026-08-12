@@ -1530,7 +1530,7 @@ export default function Data({
         subtitle={UI_TEXT.data.subtitle}
       />
 
-      <div className="data-page-scroll min-h-0 flex-1 overflow-y-auto pr-1 custom-scrollbar">
+      <div className="data-page-scroll min-h-0 flex-1 overflow-y-auto pr-1 qp-scroll-region qp-scroll-region-stable">
         <div className="data-dashboard-grid">
           <div className="qp-panel p-5 data-overview">
             <DataTrendPanel

@@ -84,7 +84,7 @@ export default function DestinationDetailRecords({
 
   return (
     <>
-      <ol className="destination-detail-records">
+      <ol className="destination-detail-records qp-scroll-region">
         {visibleActivities.map((activity) => {
           const start = formatTime(activity.startTime, day.dayEndMs, locale);
           const end = formatTime(activity.endTime, day.dayEndMs, locale);

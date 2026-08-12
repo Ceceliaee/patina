@@ -319,7 +319,9 @@ function DataHeatmapPanel({
         <div className="data-heatmap data-heatmap-calendar mt-5">
           <div className="data-heatmap-content">
             <div
-              className={loading ? "data-heatmap-scroll data-heatmap-loading-state" : "data-heatmap-scroll"}
+              className={loading
+                ? "data-heatmap-scroll data-heatmap-loading-state qp-scroll-region"
+                : "data-heatmap-scroll qp-scroll-region"}
               style={{ "--data-heatmap-week-count": rows.length } as CSSProperties}
             >
             <div className="data-heatmap-months" aria-hidden>

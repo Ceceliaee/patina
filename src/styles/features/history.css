@@ -543,7 +543,6 @@
 .history-timeline-lanes-scroll {
   height: 250px;
   overflow-y: auto;
-  scrollbar-gutter: stable;
   overscroll-behavior: contain;
   padding-right: 4px;
 }
@@ -719,7 +718,6 @@
   background: var(--qp-bg-canvas);
   box-shadow: var(--qp-shadow-overlay);
   overflow-y: auto;
-  scrollbar-gutter: stable;
   padding: 10px;
 }
 

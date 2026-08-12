@@ -62,7 +62,7 @@ export function HistoryTimelineList({
   }
 
   return (
-    <div className={`history-timeline-list flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1 ${className}`.trim()}>
+    <div className={`history-timeline-list flex-1 overflow-y-auto qp-scroll-region space-y-2 pr-1 ${className}`.trim()}>
       {timelineSessions.map((session) => {
           const mapped = AppClassification.mapApp(session.exeName, { appName: session.displayName });
           const overrideColor = AppClassification.getUserOverride(session.exeName)?.color;
@@ -173,7 +173,7 @@ export function HistoryWebTimelineList({
   }
 
   return (
-    <div className={`history-timeline-list flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1 ${className}`.trim()}>
+    <div className={`history-timeline-list flex-1 overflow-y-auto qp-scroll-region space-y-2 pr-1 ${className}`.trim()}>
       {items.map((item) => {
           const titleSampleDetails: TimelineDetailTitle[] = item.titleSampleDetails;
           const hasDetails = titleSampleDetails.length > 0;

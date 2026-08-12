@@ -114,7 +114,7 @@ export default function HistoryDayDistributionPanel({
           className="history-day-distribution-mode-switch"
         />
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-1 pt-2">
+      <div className="flex-1 min-h-0 overflow-y-auto qp-scroll-region pr-1 pt-2">
         {showQuietPlaceholder ? (
           <p
             className="text-[var(--qp-text-tertiary)] text-xs text-center mt-8"
