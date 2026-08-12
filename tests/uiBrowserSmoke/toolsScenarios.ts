@@ -15,6 +15,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
         (() => {
           localStorage.setItem("patina:last-active-view", "dashboard");
           localStorage.setItem("__time_tracker_tools_snapshot_delay_ms", "900");
+          document.documentElement.dataset.patinaSmokeReload = "tools-cold";
           location.reload();
           return true;
         })()
@@ -24,7 +25,8 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']'))`,
+      `document.documentElement.dataset.patinaSmokeReload !== "tools-cold"
+        && Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']'))`,
     );
     assert.equal(
       await evaluate(client!, sessionId, `
@@ -74,13 +76,15 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       (() => {
         localStorage.setItem("patina:last-active-view", "dashboard");
         localStorage.setItem("__time_tracker_tools_snapshot_delay_ms", "900");
+        document.documentElement.dataset.patinaSmokeReload = "tools-stale-ensure";
         location.reload();
       })()
     `);
     await waitForExpression(
       client!,
       sessionId,
-      `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']'))`,
+      `document.documentElement.dataset.patinaSmokeReload !== "tools-stale-ensure"
+        && Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']'))`,
     );
     assert.equal(
       await evaluate(client!, sessionId, `
@@ -111,13 +115,15 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       (() => {
         localStorage.setItem("patina:last-active-view", "dashboard");
         localStorage.setItem("__time_tracker_reject_tools_snapshot", "1");
+        document.documentElement.dataset.patinaSmokeReload = "tools-cold-failure";
         location.reload();
       })()
     `);
     await waitForExpression(
       client!,
       sessionId,
-      `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']'))`,
+      `document.documentElement.dataset.patinaSmokeReload !== "tools-cold-failure"
+        && Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']'))`,
     );
     await evaluate(client!, sessionId, `
       document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']')?.click()
@@ -212,10 +218,178 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       true,
     );
 
+    const iconModeGeometry = await evaluate(client!, sessionId, `
+      (() => {
+        const rect = (node) => {
+          const value = node?.getBoundingClientRect();
+          return value ? { x: value.x, y: value.y, width: value.width, height: value.height } : null;
+        };
+        const rail = document.querySelector('[data-tools-navigation-mode="icons"]');
+        const tabs = Array.from(document.querySelectorAll('.tools-section-tab'));
+        return {
+          rail: rect(rail),
+          tabs: tabs.map(rect),
+          panel: rect(document.querySelector('.tools-active-panel')),
+        };
+      })()
+    `);
+    const settingsHoverTargets = await evaluate(client!, sessionId, `
+      (() => {
+        const center = (node) => {
+          const rect = node?.getBoundingClientRect();
+          return rect ? { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 } : null;
+        };
+        const settings = document.querySelector('.tools-section-settings-tab');
+        const settingsSurface = settings?.querySelector('.tools-section-tab-icon');
+        const menu = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(COPY["zh-CN"].accessibility.sidebar.navigationLabels))} + ']');
+        const settingsRect = settings?.getBoundingClientRect();
+        const surfaceRect = settingsSurface?.getBoundingClientRect();
+        const menuRect = menu?.getBoundingClientRect();
+        return {
+          settingsCenter: center(settings),
+          defaultSurfaceBackground: settingsSurface ? getComputedStyle(settingsSurface).backgroundColor : null,
+          settingsRect: settingsRect ? { width: settingsRect.width, height: settingsRect.height } : null,
+          surfaceRect: surfaceRect ? { width: surfaceRect.width, height: surfaceRect.height } : null,
+          menuRect: menuRect ? { width: menuRect.width, height: menuRect.height } : null,
+        };
+      })()
+    `) as {
+      settingsCenter: { x: number; y: number } | null;
+      defaultSurfaceBackground: string | null;
+      settingsRect: { width: number; height: number } | null;
+      surfaceRect: { width: number; height: number } | null;
+      menuRect: { width: number; height: number } | null;
+    };
+    assert.deepEqual(settingsHoverTargets.settingsRect, { width: 54, height: 42 });
+    assert.deepEqual(settingsHoverTargets.surfaceRect, settingsHoverTargets.menuRect);
+    assert.ok(settingsHoverTargets.settingsCenter, "expected the Tools settings hover target");
+    await client!.command("Input.dispatchMouseEvent", {
+      type: "mouseMoved",
+      x: settingsHoverTargets.settingsCenter!.x,
+      y: settingsHoverTargets.settingsCenter!.y,
+    }, sessionId);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `(() => {
+        const surface = document.querySelector('.tools-section-settings-tab .tools-section-tab-icon');
+        return surface
+          && getComputedStyle(surface).backgroundColor !== ${jsonString(JSON.stringify(settingsHoverTargets.defaultSurfaceBackground))};
+      })()`,
+      undefined,
+      "Tools settings hover should be visible only on the compact icon surface",
+    );
+    assert.deepEqual(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const settings = document.querySelector('.tools-section-settings-tab');
+          const surface = settings?.querySelector('.tools-section-tab-icon');
+          if (!settings || !surface) return null;
+          const settingsStyle = getComputedStyle(settings);
+          const surfaceStyle = getComputedStyle(surface);
+          const tokenProbe = document.createElement('span');
+          tokenProbe.style.background = 'var(--qp-bg-elevated)';
+          tokenProbe.style.color = 'var(--qp-text-secondary)';
+          document.body.append(tokenProbe);
+          const tokenStyle = getComputedStyle(tokenProbe);
+          const surfaceUsesNeutralTokens = surfaceStyle.backgroundColor === tokenStyle.backgroundColor
+            && surfaceStyle.color === tokenStyle.color;
+          tokenProbe.remove();
+          return {
+            settingsIsTransparent: settingsStyle.backgroundColor === 'rgba(0, 0, 0, 0)'
+              && settingsStyle.borderColor === 'rgba(0, 0, 0, 0)',
+            surfaceUsesNeutralTokens,
+            tooltipVisible: Boolean(document.querySelector('[role="tooltip"]')),
+          };
+        })()
+      `),
+      {
+        settingsIsTransparent: true,
+        surfaceUsesNeutralTokens: true,
+        tooltipVisible: false,
+      },
+    );
+    await client!.command("Input.dispatchMouseEvent", { type: "mouseMoved", x: 0, y: 0 }, sessionId);
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const toggle = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(COPY["zh-CN"].accessibility.sidebar.navigationLabels))} + ']');
+          toggle?.click();
+          return Boolean(toggle);
+        })()
+      `),
+      true,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector('[data-tools-navigation-mode="labeled"]')
+        && document.querySelectorAll('[data-tools-section-label]').length === 3`,
+      undefined,
+      "Menu should reveal all three Tools section labels",
+    );
+    const labeledModeState = await evaluate(client!, sessionId, `
+      (() => {
+        const rect = (node) => {
+          const value = node?.getBoundingClientRect();
+          return value ? { x: value.x, y: value.y, width: value.width, height: value.height } : null;
+        };
+        const rail = document.querySelector('[data-tools-navigation-mode="labeled"]');
+        const tabs = Array.from(document.querySelectorAll('.tools-section-tab'));
+        const sectionTabs = tabs.slice(0, 3);
+        const labels = Array.from(document.querySelectorAll('[data-tools-section-label]'));
+        const settingsTab = tabs.at(-1);
+        return {
+          geometry: {
+            rail: rect(rail),
+            tabs: tabs.map(rect),
+            panel: rect(document.querySelector('.tools-active-panel')),
+          },
+          labels: labels.map((node) => node.textContent),
+          labelsFit: labels.every((node) => node.scrollWidth <= node.clientWidth + 1),
+          iconSizes: sectionTabs.map((button) => button.querySelector('svg')?.getAttribute('width')),
+          settingsIconSize: settingsTab?.querySelector('svg')?.getAttribute('width'),
+          settingsHasLabel: Boolean(settingsTab?.querySelector('[data-tools-section-label]')),
+          activeSection: sectionTabs.find((button) => button.getAttribute('aria-pressed') === 'true')?.getAttribute('aria-label'),
+        };
+      })()
+    `) as {
+      geometry: unknown;
+      labels: string[];
+      labelsFit: boolean;
+      iconSizes: Array<string | null>;
+      settingsIconSize: string | null | undefined;
+      settingsHasLabel: boolean;
+      activeSection: string | null | undefined;
+    };
+    assert.deepEqual(labeledModeState.geometry, iconModeGeometry);
+    assert.deepEqual(labeledModeState.labels, [
+      TOOLS_TEXT.remindersTitle,
+      TOOLS_TEXT.timerTitle,
+      TOOLS_TEXT.pomodoroTitle,
+    ]);
+    assert.equal(labeledModeState.labelsFit, true);
+    assert.deepEqual(labeledModeState.iconSizes, ["15", "15", "15"]);
+    assert.equal(labeledModeState.settingsIconSize, "17");
+    assert.equal(labeledModeState.settingsHasLabel, false);
+    assert.equal(labeledModeState.activeSection, TOOLS_TEXT.remindersTitle);
+
+    await evaluate(client!, sessionId, `
+      document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(COPY["zh-CN"].accessibility.sidebar.navigationLabels))} + ']')?.click()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector('[data-tools-navigation-mode="icons"]')
+        && document.querySelectorAll('[data-tools-section-label]').length === 0`,
+    );
+
     for (const marker of [
       TOOLS_TEXT.remindersTitle,
       TOOLS_TEXT.reminderModeEvent,
-      TOOLS_TEXT.reminderModeSoftware,
+      TOOLS_TEXT.reminderModeApp,
+      TOOLS_TEXT.reminderModeCategory,
+      TOOLS_TEXT.reminderModeWeb,
     ] as const) {
       assert.equal(
         await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString(marker)})`),
@@ -357,10 +531,10 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const software = Array.from(document.querySelectorAll('button'))
-            .find((node) => node.textContent?.trim() === ${jsonString(TOOLS_TEXT.reminderModeSoftware)});
-          if (!software) return false;
-          software.click();
+          const appMode = Array.from(document.querySelectorAll('button'))
+            .find((node) => node.textContent?.trim() === ${jsonString(TOOLS_TEXT.reminderModeApp)});
+          if (!appMode) return false;
+          appMode.click();
           return true;
         })()
       `),
@@ -369,7 +543,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `document.body.innerText.includes(${jsonString(TOOLS_TEXT.softwareReminderEmpty)})`,
+      `document.body.innerText.includes(${jsonString(TOOLS_TEXT.activityReminderEmpty)})`,
     );
 
     assert.equal(
@@ -556,5 +730,43 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       0,
       "Tools section rail should stay icon-only after switching sections",
     );
+  });
+
+  await runTest("Tools settings remains an accessible localized empty dialog", async () => {
+    const triggerLabel = COPY["zh-CN"].tools.settingsTitle;
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const trigger = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(triggerLabel))} + ']');
+        if (!(trigger instanceof HTMLButtonElement)) return false;
+        trigger.focus();
+        trigger.click();
+        return true;
+      })()
+    `), true);
+    await waitForExpression(client!, sessionId, `
+      document.querySelector('[role="dialog"] .qp-dialog-title')?.textContent?.trim()
+        === ${jsonString(COPY["zh-CN"].tools.settingsTitle)}
+      && document.activeElement?.classList.contains('qp-dialog-title')
+    `, 15_000, "Tools settings dialog initial focus");
+
+    const dialog = await evaluate(client!, sessionId, `
+      (() => ({
+        empty: document.querySelector('.tools-settings-empty')?.textContent?.trim() ?? null,
+        hasSwitch: Boolean(document.querySelector('[role="dialog"] [role="switch"]')),
+        hasTaskbarCopy: document.querySelector('[role="dialog"]')?.textContent?.includes('任务栏') ?? false,
+      }))()
+    `) as { empty: string | null; hasSwitch: boolean; hasTaskbarCopy: boolean };
+    assert.deepEqual(dialog, {
+      empty: COPY["zh-CN"].tools.settingsEmpty,
+      hasSwitch: false,
+      hasTaskbarCopy: false,
+    });
+
+    await evaluate(client!, sessionId, `
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+    `);
+    await waitForExpression(client!, sessionId, `!document.querySelector('[role="dialog"]')`);
+    await waitForExpression(client!, sessionId, `document.activeElement?.getAttribute('aria-label') === ${jsonString(triggerLabel)}`,
+      15_000, "Tools settings focus restoration");
   });
 }

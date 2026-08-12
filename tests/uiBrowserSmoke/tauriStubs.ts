@@ -14,7 +14,7 @@ function tauriStubFor(path: string) {
       let foregroundState = { visible: true, focused: false };
       globalThis.__TIME_TRACKER_SET_FOREGROUND_STATE = (nextState) => {
         foregroundState = { ...foregroundState, ...nextState };
-        for (const listener of foregroundListeners) listener();
+        for (const listener of foregroundListeners) listener({ payload: foregroundState.focused });
         for (const listener of resizeListeners) listener();
       };
       globalThis.__PATINA_EMIT_SCALE_FACTOR_CHANGED = (scaleFactor) => {
@@ -115,6 +115,7 @@ function tauriStubFor(path: string) {
               color_scheme_light: settings.color_scheme_light ?? null,
               color_scheme_dark: settings.color_scheme_dark ?? null,
             },
+            pinned: widgetParams.get("widgetPinned") === "1",
             app_overrides: Object.entries(settings)
               .filter(([key]) => key.startsWith("__app_override::"))
               .sort(([left], [right]) => left.localeCompare(right))
@@ -129,9 +130,53 @@ function tauriStubFor(path: string) {
           };
         }
         if (isWidgetSmoke && command === "cmd_get_widget_icon") {
-          return widgetParams.get("widgetObject") === "1"
+          return widgetParams.get("widgetTracking") !== "0"
             ? "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
             : null;
+        }
+        if (isWidgetSmoke && command === "cmd_get_widget_status_snapshot") {
+          const toolCount = Math.max(0, Math.min(2, Number(widgetParams.get("widgetTools") ?? 0)));
+          const tools = [
+            {
+              kind: "stopwatch",
+              state: "running",
+              value_ms: 1_104_000,
+              counts_down: false,
+              visible_until_ms: null,
+            },
+            {
+              kind: "pomodoro",
+              state: "running",
+              value_ms: 271_000,
+              counts_down: true,
+              visible_until_ms: null,
+            },
+          ].slice(0, toolCount);
+          if (globalThis.__PATINA_WIDGET_TRACKING_OVERRIDE) {
+            return globalThis.__PATINA_WIDGET_TRACKING_OVERRIDE.widgetStatus;
+          }
+          return {
+            tracking: widgetParams.get("widgetTracking") === "0" ? null : {
+              app_name: "Chrome",
+              exe_name: "chrome.exe",
+              elapsed_ms: 6_120_000,
+              running: true,
+            },
+            tools,
+            sampled_at_ms: Date.now(),
+          };
+        }
+        if (
+          isWidgetSmoke
+          && command === "cmd_set_widget_pinned"
+        ) {
+          const delayMs = Number(widgetParams.get("widgetPinDelayMs") ?? 0);
+          if (Number.isFinite(delayMs) && delayMs > 0) {
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+          }
+          if (widgetParams.get("widgetPinFailure") === "1") {
+            throw new Error("forced widget pin persistence failure");
+          }
         }
         if (isWidgetSmoke && command === "cmd_get_tracker_health_snapshot") {
           const now = Date.now();
@@ -142,6 +187,9 @@ function tauriStubFor(path: string) {
           };
         }
         if (isWidgetSmoke && command === "get_current_tracking_snapshot") {
+          if (globalThis.__PATINA_WIDGET_TRACKING_OVERRIDE) {
+            return globalThis.__PATINA_WIDGET_TRACKING_OVERRIDE.currentTrackingSnapshot;
+          }
           const unavailableSignal = {
             signal: {
               is_available: false,
@@ -229,6 +277,22 @@ function tauriStubFor(path: string) {
         if (command === "cmd_test_webdav_backup_target") {
           return { ok: true };
         }
+        if (command === "cmd_get_update_snapshot") {
+          const override = localStorage.getItem("__time_tracker_update_snapshot_override");
+          return override ? JSON.parse(override) : {
+            current_version: "0.0.0",
+            status: "idle",
+            latest_version: null,
+            release_notes: null,
+            release_date: null,
+            error_message: null,
+            error_stage: null,
+            downloaded_bytes: null,
+            total_bytes: null,
+            release_page_url: null,
+            asset_download_url: null,
+          };
+        }
         if (command === "cmd_get_tools_snapshot") {
           const toolsSnapshotDelayMs = Number(
             globalThis.__TIME_TRACKER_TOOLS_SNAPSHOT_DELAY_MS
@@ -241,6 +305,10 @@ function tauriStubFor(path: string) {
           if (localStorage.getItem("__time_tracker_reject_tools_snapshot") === "1") {
             throw new Error("tools snapshot rejected by browser smoke fixture");
           }
+          const override = localStorage.getItem("__time_tracker_tools_snapshot_override");
+          if (override) {
+            return JSON.parse(override);
+          }
           return {
             settings: {
               default_countdown_minutes: 25,
@@ -250,7 +318,7 @@ function tauriStubFor(path: string) {
               pomodoro_long_break_every: 4,
             },
             reminders: [],
-            software_reminder_rules: [],
+            activity_reminder_rules: [],
             current_timer: null,
             timer_laps: [],
             current_pomodoro: null,

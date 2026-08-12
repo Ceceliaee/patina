@@ -873,7 +873,11 @@ try {
   );
   const finalizedWidgetPlacement = await evaluate(
     client,
-    `window.__TAURI_INTERNALS__.invoke("cmd_finalize_widget_drag", { releasePosition: null })`,
+    `window.__TAURI_INTERNALS__.invoke("cmd_finalize_widget_drag", {
+      releasePosition: null,
+      expanded: false,
+      toolSlotCount: 0
+    })`,
   ) as {
     monitor?: {
       name?: string | null;
@@ -925,7 +929,9 @@ try {
       releasePosition: {
         x: ${finalizedWorkArea?.x ?? 0},
         y: ${(finalizedWidgetPosition.y ?? 0) + Math.floor((finalizedWidgetSize.height ?? 1) / 2)}
-      }
+      },
+      expanded: false,
+      toolSlotCount: 0
     })`,
   ) as typeof finalizedWidgetPlacement;
   assert.equal(leftWidgetPlacement.side, "left");
@@ -973,13 +979,149 @@ try {
     true,
     "the collapsed anchor must straddle the widget window's left edge",
   );
+  await evaluate(
+    widgetClient,
+    `document.querySelector('.widget-pill-anchor')?.click()`,
+  );
+  await waitFor(
+    "real widget expanded status bar",
+    async () => evaluate(
+      widgetClient!,
+      `document.querySelector('.widget-shell')?.classList.contains('widget-shell-expanded') === true
+        && document.querySelectorAll('.widget-pill-actions button').length === 2`,
+    ),
+    10_000,
+  );
+  const expandedLeftWidgetSize = await evaluate(
+    client,
+    `window.__TAURI_INTERNALS__.invoke("plugin:window|outer_size", { label: "widget" })`,
+  ) as { width?: number; height?: number };
+  assert.ok(
+    (expandedLeftWidgetSize.width ?? 0) > (finalizedWidgetSize.width ?? 0),
+    "expanded Widget must allocate the stable tracking and action bar",
+  );
+  const expandedLeftEvidence = await evaluate(
+    widgetClient,
+    `(() => {
+      const tray = document.querySelector('.widget-pill-tray')?.getBoundingClientRect();
+      const tracking = document.querySelector('.widget-pill-tracking-core')?.getBoundingClientRect();
+      const actions = document.querySelector('.widget-pill-actions')?.getBoundingClientRect();
+      const anchor = document.querySelector('.widget-pill-anchor')?.getBoundingClientRect();
+      const pinIconElement = document.querySelector('.widget-pin-icon');
+      const pinIcon = pinIconElement?.getBoundingClientRect();
+      const trackingText = document.querySelector('.widget-pill-tracking-time')?.textContent?.trim() ?? '';
+      return {
+        trayVisible: Boolean(tray && tray.left >= 0 && tray.right <= innerWidth),
+        pinIconVisible: Boolean(pinIcon && pinIcon.left >= 0 && pinIcon.right <= innerWidth
+          && pinIcon.top >= 0 && pinIcon.bottom <= innerHeight),
+        pinIconIsCanonical: pinIconElement?.classList.contains('lucide-pin') === true,
+        orderedInward: Boolean(anchor && actions && tracking
+          && anchor.right <= actions.left + 0.5
+          && actions.right <= tracking.left + 0.5),
+        trackingText,
+        pauseButtonCount: Array.from(document.querySelectorAll('button')).filter(
+          (button) => /pause|暂停/i.test(button.getAttribute('aria-label') ?? '')
+        ).length,
+      };
+    })()` ,
+  ) as {
+    trayVisible?: boolean;
+    pinIconVisible?: boolean;
+    pinIconIsCanonical?: boolean;
+    orderedInward?: boolean;
+    trackingText?: string;
+    pauseButtonCount?: number;
+  };
+  assert.equal(expandedLeftEvidence.trayVisible, true);
+  assert.equal(expandedLeftEvidence.pinIconVisible, true);
+  assert.equal(expandedLeftEvidence.pinIconIsCanonical, true);
+  assert.equal(expandedLeftEvidence.orderedInward, true);
+  assert.match(expandedLeftEvidence.trackingText ?? "", /^(?:—|\d{2}:\d{2})$/);
+  assert.equal(expandedLeftEvidence.pauseButtonCount, 0);
+
+  const expandedDragPlacement = await evaluate(
+    widgetClient,
+    `window.__TAURI_INTERNALS__.invoke("cmd_finalize_widget_drag", {
+      releasePosition: {
+        x: ${(finalizedWorkArea?.x ?? 0) + (finalizedWorkArea?.width ?? 1) - 1},
+        y: ${(finalizedWidgetPosition.y ?? 0) + Math.floor((expandedLeftWidgetSize.height ?? 1) / 2)}
+      },
+      expanded: true,
+      toolSlotCount: 0
+    })`,
+  ) as typeof finalizedWidgetPlacement;
+  assert.equal(expandedDragPlacement.side, "right");
+  const [expandedDragPosition, expandedDragSize] = await Promise.all([
+    evaluate(
+      client,
+      `window.__TAURI_INTERNALS__.invoke("plugin:window|outer_position", { label: "widget" })`,
+    ) as Promise<{ x?: number; y?: number }>,
+    evaluate(
+      client,
+      `window.__TAURI_INTERNALS__.invoke("plugin:window|outer_size", { label: "widget" })`,
+    ) as Promise<{ width?: number; height?: number }>,
+  ]);
+  assert.equal(
+    (expandedDragPosition.x ?? 0) + (expandedDragSize.width ?? 0),
+    (finalizedWorkArea?.x ?? 0) + (finalizedWorkArea?.width ?? 0),
+    "expanded widget drag must snap its native window back to the chosen screen edge",
+  );
+  await waitFor(
+    "expanded widget DOM mirrors native drag side",
+    async () => evaluate(
+      widgetClient!,
+      `document.querySelector('.widget-shell')?.classList.contains('widget-shell-right') === true`,
+    ),
+    10_000,
+  );
+
+  await evaluate(widgetClient, `document.querySelector('.widget-pill-pin-action')?.click()`);
+  await waitFor(
+    "native widget pin persistence",
+    async () => {
+      const bootstrap = await evaluate(
+        widgetClient!,
+        `window.__TAURI_INTERNALS__.invoke("cmd_get_widget_bootstrap_snapshot")`,
+      ) as { pinned?: boolean };
+      return bootstrap.pinned === true ? true : null;
+    },
+    10_000,
+  );
+  assert.equal(
+    await evaluate(widgetClient, `document.querySelector('.widget-pill-pin-action')?.classList.contains('qp-icon-action-pressed')`),
+    false,
+    "pinned state must not add persistent selected chrome",
+  );
+  await evaluate(widgetClient, `document.querySelector('.widget-pill-pin-action')?.click()`);
+  await waitFor(
+    "native widget unpin persistence",
+    async () => {
+      const bootstrap = await evaluate(
+        widgetClient!,
+        `window.__TAURI_INTERNALS__.invoke("cmd_get_widget_bootstrap_snapshot")`,
+      ) as { pinned?: boolean };
+      return bootstrap.pinned === false ? true : null;
+    },
+    10_000,
+  );
+  await evaluate(widgetClient, `document.querySelector('.widget-pill-anchor')?.click()`);
+  await waitFor(
+    "real widget collapse after unpin",
+    async () => evaluate(
+      widgetClient!,
+      `document.querySelector('.widget-shell')?.classList.contains('widget-shell-collapsed') === true`,
+    ),
+    10_000,
+  );
   const rightWidgetPlacement = await evaluate(
     client,
     `window.__TAURI_INTERNALS__.invoke("cmd_finalize_widget_drag", {
       releasePosition: {
         x: ${(finalizedWorkArea?.x ?? 0) + (finalizedWorkArea?.width ?? 1) - 1},
         y: ${(finalizedWidgetPosition.y ?? 0) + Math.floor((finalizedWidgetSize.height ?? 1) / 2)}
-      }
+      },
+      expanded: false,
+      toolSlotCount: 0
     })`,
   ) as typeof finalizedWidgetPlacement;
   assert.equal(rightWidgetPlacement.side, "right");
@@ -1022,7 +1164,9 @@ try {
       releasePosition: {
         x: ${finalizedWorkArea?.x ?? 0},
         y: ${(finalizedWidgetPosition.y ?? 0) + Math.floor((finalizedWidgetSize.height ?? 1) / 2)}
-      }
+      },
+      expanded: false,
+      toolSlotCount: 0
     })`,
   ) as typeof finalizedWidgetPlacement;
   assert.equal(restoredLeftWidgetPlacement.side, "left");
@@ -1050,10 +1194,19 @@ try {
     `window.__TAURI_INTERNALS__.invoke("cmd_get_widget_bootstrap_snapshot")`,
   ) as {
     settings?: Record<string, string | null>;
+    pinned?: boolean;
     app_overrides?: unknown[];
   };
   assert.equal(typeof widgetBootstrap.settings, "object");
+  assert.equal(typeof widgetBootstrap.pinned, "boolean");
   assert.ok(Array.isArray(widgetBootstrap.app_overrides));
+  const widgetStatus = await evaluate(
+    widgetClient,
+    `window.__TAURI_INTERNALS__.invoke("cmd_get_widget_status_snapshot")`,
+  ) as { tracking?: unknown; tools?: unknown[]; sampled_at_ms?: number };
+  assert.ok(widgetStatus.tracking === null || typeof widgetStatus.tracking === "object");
+  assert.ok(Array.isArray(widgetStatus.tools));
+  assert.equal(typeof widgetStatus.sampled_at_ms, "number");
 
   for (const deniedExpression of [
     `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
@@ -1135,7 +1288,9 @@ try {
   // Freeze the isolated tracker before asserting read-model contents. A live
   // foreground sample is valid here, so the test waits for projections to
   // drain instead of assuming the source revision will remain zero.
-  await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_toggle_tracking_paused")`);
+  await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
+    mutations: [{ key: "tracking_paused", value: "1" }],
+  })`);
 
   let readySourceRevision: number | null = null;
   let readySourceRevisionPolls = 0;
