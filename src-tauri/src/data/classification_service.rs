@@ -248,8 +248,8 @@ mod tests {
                 enabled: false,
             }]
         );
-        assert_eq!(outcome.app_title_changes[0].enabled, true);
-        assert_eq!(outcome.web_domain_title_changes[0].enabled, true);
+        assert!(outcome.app_title_changes[0].enabled);
+        assert!(outcome.web_domain_title_changes[0].enabled);
     }
 
     #[test]

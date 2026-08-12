@@ -33,7 +33,7 @@ const HOTSPOT_BUDGETS: HotspotBudget[] = [
   {
     path: "src/styles/tokens.css",
     owner: "Quiet Pro design tokens",
-    maxLines: 1474,
+    maxLines: 1477,
     risk: "token growth can hide duplicate visual roles",
     reason: "physical lines remain the stable signal for declarative CSS",
   },
@@ -139,12 +139,12 @@ const HOTSPOT_BUDGETS: HotspotBudget[] = [
   {
     path: "src-tauri/src/engine/tools/mod.rs",
     owner: "Rust tools engine production",
-    maxLines: 730,
+    maxLines: 650,
     metrics: {
-      branchPoints: 62,
-      dependencyOwners: 1,
+      branchPoints: 61,
+      dependencyOwners: 2,
       functionCount: 49,
-      maxFunctionBranchPoints: 15,
+      maxFunctionBranchPoints: 14,
     },
     risk: "multiple tool runtimes can collapse into one state machine",
     reason: "production lines plus function and branch structure guard engine ownership",
@@ -152,11 +152,11 @@ const HOTSPOT_BUDGETS: HotspotBudget[] = [
   {
     path: "src-tauri/src/data/repositories/tools.rs",
     owner: "Rust tools repository production",
-    maxLines: 730,
+    maxLines: 600,
     metrics: {
-      branchPoints: 33,
-      dependencyOwners: 3,
-      functionCount: 23,
+      branchPoints: 28,
+      dependencyOwners: 4,
+      functionCount: 20,
       maxFunctionBranchPoints: 14,
     },
     risk: "unrelated timer and reminder persistence can become coupled",

@@ -197,7 +197,7 @@ pub struct BackupPreview {
     pub tool_timer_lap_count: usize,
     pub tool_pomodoro_run_count: usize,
     pub tool_daily_stats_count: usize,
-    pub tool_software_reminder_rule_count: usize,
+    pub tool_activity_reminder_rule_count: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -284,7 +284,7 @@ impl BackupPayload {
             tool_timer_lap_count: self.tool_timer_laps.len(),
             tool_pomodoro_run_count: self.tool_pomodoro_runs.len(),
             tool_daily_stats_count: self.tool_daily_stats.len(),
-            tool_software_reminder_rule_count: self.tool_software_reminder_rules.len(),
+            tool_activity_reminder_rule_count: self.tool_software_reminder_rules.len(),
         }
     }
 }

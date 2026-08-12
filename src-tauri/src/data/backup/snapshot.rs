@@ -16,6 +16,10 @@ use tauri::AppHandle;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
+mod restore;
+
+pub(super) use restore::restore_snapshot_backup;
+
 pub(super) const SNAPSHOT_FORMAT: &str = "PatinaSQLiteSnapshot-1";
 const MANIFEST_ENTRY: &str = "manifest.json";
 const CHECKSUMS_ENTRY: &str = "checksums.json";
@@ -98,7 +102,8 @@ struct SnapshotCounts {
     tool_timer_laps: usize,
     tool_pomodoro_runs: usize,
     tool_daily_stats: usize,
-    tool_software_reminder_rules: usize,
+    #[serde(alias = "toolSoftwareReminderRules")]
+    tool_activity_reminder_rules: usize,
     scheduled_backup_config: usize,
     scheduled_backup_runs: usize,
     scheduled_export_config: usize,
@@ -293,7 +298,7 @@ async fn count_table(pool: &Pool<Sqlite>, table: &str) -> Result<usize, String> 
         "tool_timer_laps" => "SELECT COUNT(*) FROM tool_timer_laps",
         "tool_pomodoro_runs" => "SELECT COUNT(*) FROM tool_pomodoro_runs",
         "tool_daily_stats" => "SELECT COUNT(*) FROM tool_daily_stats",
-        "tool_software_reminder_rules" => "SELECT COUNT(*) FROM tool_software_reminder_rules",
+        "tool_activity_reminder_rules" => "SELECT COUNT(*) FROM tool_activity_reminder_rules",
         "scheduled_backup_config" => "SELECT COUNT(*) FROM scheduled_backup_config",
         "scheduled_backup_runs" => "SELECT COUNT(*) FROM scheduled_backup_runs",
         "scheduled_export_config" => "SELECT COUNT(*) FROM scheduled_export_config",
@@ -323,7 +328,7 @@ async fn read_counts(pool: &Pool<Sqlite>) -> Result<SnapshotCounts, String> {
         tool_timer_laps: count_table(pool, "tool_timer_laps").await?,
         tool_pomodoro_runs: count_table(pool, "tool_pomodoro_runs").await?,
         tool_daily_stats: count_table(pool, "tool_daily_stats").await?,
-        tool_software_reminder_rules: count_table(pool, "tool_software_reminder_rules").await?,
+        tool_activity_reminder_rules: count_table(pool, "tool_activity_reminder_rules").await?,
         scheduled_backup_config: count_table(pool, "scheduled_backup_config").await?,
         scheduled_backup_runs: count_table(pool, "scheduled_backup_runs").await?,
         scheduled_export_config: count_table(pool, "scheduled_export_config").await?,
@@ -377,7 +382,7 @@ fn preview_from_manifest(manifest: &SnapshotManifest, supported: bool) -> Backup
         tool_timer_lap_count: manifest.counts.tool_timer_laps,
         tool_pomodoro_run_count: manifest.counts.tool_pomodoro_runs,
         tool_daily_stats_count: manifest.counts.tool_daily_stats,
-        tool_software_reminder_rule_count: manifest.counts.tool_software_reminder_rules,
+        tool_activity_reminder_rule_count: manifest.counts.tool_activity_reminder_rules,
     }
 }
 
@@ -827,6 +832,7 @@ pub(super) async fn extract_snapshot_archive(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sqlx::Executor;
 
     #[test]
     fn snapshot_format_is_explicit_and_not_the_legacy_format() {
@@ -941,14 +947,13 @@ mod tests {
             .nth(1)
             .expect("previous migration")
             .0;
-        sqlx::query("DROP TABLE scheduled_export_runs")
+        pool.execute(crate::data::schema::SOFTWARE_REMINDER_RULES_SCHEMA_SQL)
+            .await
+            .expect("restore the version 12 software reminder table");
+        sqlx::query("DROP TABLE tool_activity_reminder_rules")
             .execute(&pool)
             .await
-            .expect("remove current scheduled export runs table");
-        sqlx::query("DROP TABLE scheduled_export_config")
-            .execute(&pool)
-            .await
-            .expect("remove current scheduled export config table");
+            .expect("remove the version 13 activity reminder table");
         sqlx::query("DELETE FROM _sqlx_migrations WHERE version = ?")
             .bind(removed_version)
             .execute(&pool)

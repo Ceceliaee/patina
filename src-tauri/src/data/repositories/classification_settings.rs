@@ -1,13 +1,12 @@
 use crate::data::sqlite_error::SqliteOperationError;
-use sqlx::{Pool, Sqlite, Transaction};
+use crate::domain::classification::{
+    ClassificationSnapshot, CATEGORY_COLOR_OVERRIDE_KEY_PREFIX, CATEGORY_DEFINITION_KEY_PREFIX,
+    CATEGORY_LABEL_OVERRIDE_KEY_PREFIX, DELETED_CATEGORY_KEY_PREFIX,
+};
+pub use crate::domain::classification::{APP_OVERRIDE_KEY_PREFIX, WEB_DOMAIN_OVERRIDE_KEY_PREFIX};
+use sqlx::{Pool, Row, Sqlite, Transaction};
 
-pub const APP_OVERRIDE_KEY_PREFIX: &str = "__app_override::";
-pub const WEB_DOMAIN_OVERRIDE_KEY_PREFIX: &str = "__web_domain_override::";
-const CATEGORY_COLOR_OVERRIDE_KEY_PREFIX: &str = "__category_color_override::";
-const CATEGORY_LABEL_OVERRIDE_KEY_PREFIX: &str = "__category_label_override::";
 const CATEGORY_DEFAULT_COLOR_ASSIGNMENT_KEY_PREFIX: &str = "__category_default_color_assignment::";
-const CATEGORY_DEFINITION_KEY_PREFIX: &str = "__custom_category::";
-const DELETED_CATEGORY_KEY_PREFIX: &str = "__deleted_category::";
 const MIGRATION_KEY_PREFIX: &str = "__classification_manual_confirmation_migration::";
 const MAX_SETTING_KEY_LEN: usize = 256;
 const MAX_SETTING_VALUE_LEN: usize = 4096;
@@ -16,6 +15,57 @@ const MAX_SETTING_VALUE_LEN: usize = 4096;
 pub struct ClassificationSettingMutation {
     pub key: String,
     pub value: Option<String>,
+}
+
+pub async fn load_classification_snapshot(
+    pool: &Pool<Sqlite>,
+) -> Result<ClassificationSnapshot, String> {
+    let rows = load_classification_setting_rows(pool).await?;
+    Ok(ClassificationSnapshot::from_settings(rows))
+}
+
+pub async fn load_classification_snapshot_in_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+) -> Result<ClassificationSnapshot, String> {
+    let rows = sqlx::query(&classification_settings_query())
+        .bind(format!("{APP_OVERRIDE_KEY_PREFIX}%"))
+        .bind(format!("{WEB_DOMAIN_OVERRIDE_KEY_PREFIX}%"))
+        .bind(format!("{CATEGORY_LABEL_OVERRIDE_KEY_PREFIX}%"))
+        .bind(format!("{CATEGORY_COLOR_OVERRIDE_KEY_PREFIX}%"))
+        .bind(format!("{CATEGORY_DEFINITION_KEY_PREFIX}%"))
+        .bind(format!("{DELETED_CATEGORY_KEY_PREFIX}%"))
+        .fetch_all(&mut **tx)
+        .await
+        .map_err(|error| format!("failed to read classification settings: {error}"))?;
+    Ok(ClassificationSnapshot::from_settings(rows.into_iter().map(
+        |row| (row.get::<String, _>("key"), row.get::<String, _>("value")),
+    )))
+}
+
+async fn load_classification_setting_rows(
+    pool: &Pool<Sqlite>,
+) -> Result<Vec<(String, String)>, String> {
+    let rows = sqlx::query(&classification_settings_query())
+        .bind(format!("{APP_OVERRIDE_KEY_PREFIX}%"))
+        .bind(format!("{WEB_DOMAIN_OVERRIDE_KEY_PREFIX}%"))
+        .bind(format!("{CATEGORY_LABEL_OVERRIDE_KEY_PREFIX}%"))
+        .bind(format!("{CATEGORY_COLOR_OVERRIDE_KEY_PREFIX}%"))
+        .bind(format!("{CATEGORY_DEFINITION_KEY_PREFIX}%"))
+        .bind(format!("{DELETED_CATEGORY_KEY_PREFIX}%"))
+        .fetch_all(pool)
+        .await
+        .map_err(|error| format!("failed to read classification settings: {error}"))?;
+    Ok(rows
+        .into_iter()
+        .map(|row| (row.get::<String, _>("key"), row.get::<String, _>("value")))
+        .collect())
+}
+
+fn classification_settings_query() -> String {
+    "SELECT key, value FROM settings
+     WHERE key = 'language'
+        OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ?"
+        .to_string()
 }
 
 pub async fn commit_classification_setting_mutations(

@@ -1,4 +1,4 @@
-use crate::domain::tracking::TrackingStatusSnapshot;
+use crate::domain::tracking::{ActiveSessionSnapshot, TrackingStatusSnapshot};
 use crate::platform::windows::foreground::WindowInfo;
 use serde::Serialize;
 use std::sync::Mutex;
@@ -37,6 +37,7 @@ pub struct TrackingRuntimeSnapshot {
     pub probe_status: TrackingRuntimeProbeStatus,
     pub degraded_reason: Option<String>,
     pub probe_diagnostics: TrackingRuntimeProbeDiagnostics,
+    pub active_session: Option<ActiveSessionSnapshot>,
 }
 
 #[derive(Debug, Default)]
@@ -61,6 +62,21 @@ impl TrackingRuntimeSnapshotState {
         match self.inner.lock() {
             Ok(guard) => guard.clone(),
             Err(poisoned) => poisoned.into_inner().clone(),
+        }
+    }
+
+    pub fn replace_active_session(&self, active_session: Option<ActiveSessionSnapshot>) {
+        match self.inner.lock() {
+            Ok(mut guard) => {
+                if let Some(snapshot) = guard.as_mut() {
+                    snapshot.active_session = active_session;
+                }
+            }
+            Err(poisoned) => {
+                if let Some(snapshot) = poisoned.into_inner().as_mut() {
+                    snapshot.active_session = active_session;
+                }
+            }
         }
     }
 }
@@ -93,6 +109,7 @@ mod tests {
             probe_status: TrackingRuntimeProbeStatus::Ok,
             degraded_reason: None,
             probe_diagnostics: TrackingRuntimeProbeDiagnostics::default(),
+            active_session: None,
         };
 
         state.replace(snapshot.clone());

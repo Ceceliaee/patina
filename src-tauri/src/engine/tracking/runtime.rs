@@ -1,6 +1,5 @@
 use super::pause_state::TrackingPauseRuntimeState;
 use super::ports::{SharedTrackingDataStore, TrackingDataStore};
-use super::runtime_snapshot::{TrackingRuntimeSnapshot, TrackingRuntimeSnapshotState};
 use super::session_timeout::{
     seal_active_sessions_for_continuity_timeout,
     seal_active_sessions_for_passive_participation_timeout,
@@ -28,6 +27,8 @@ mod exclusion;
 mod loop_state;
 #[path = "runtime/power_lifecycle.rs"]
 mod power_lifecycle;
+#[path = "runtime/snapshot_projection.rs"]
+mod snapshot_projection;
 #[path = "runtime/support.rs"]
 mod support;
 #[path = "runtime/window_polling.rs"]
@@ -38,9 +39,13 @@ use loop_state::{
     TrackingSettingsCache,
 };
 use power_lifecycle::apply_power_lifecycle_event;
+use snapshot_projection::{
+    clear_active_session_snapshot, refresh_active_session_snapshot_if_changed,
+    should_emit_tracking_status_changed, update_runtime_snapshot_state,
+};
 pub use support::emit_tracking_data_changed;
 use support::{log_tracker_error, now_ms};
-use window_polling::{poll_active_window_with_timeout, WindowPollOutcome};
+use window_polling::poll_active_window_with_timeout;
 
 // Owner ledger: run() owns runtime loop orchestration only. Polling,
 // loop-state loading, power lifecycle handling, and event support stay in the
@@ -122,6 +127,7 @@ pub async fn run<R: Runtime>(
             pending_continuity = None;
             last_window = Some(tracked_window);
             last_tracking_status = Some(tracking_state.tracking_status);
+            clear_active_session_snapshot(&app);
             sleep(Duration::from_secs(1)).await;
             continue;
         }
@@ -140,6 +146,7 @@ pub async fn run<R: Runtime>(
             pending_continuity = None;
             last_window = None;
             last_tracking_status = Some(tracking_state.tracking_status);
+            clear_active_session_snapshot(&app);
             sleep(Duration::from_secs(1)).await;
             continue;
         }
@@ -194,6 +201,7 @@ pub async fn run<R: Runtime>(
 
             last_window = Some(tracked_window);
             last_tracking_status = Some(tracking_state.tracking_status);
+            clear_active_session_snapshot(&app);
             sleep(Duration::from_secs(1)).await;
             continue;
         }
@@ -225,6 +233,7 @@ pub async fn run<R: Runtime>(
 
             last_window = Some(tracked_window);
             last_tracking_status = Some(tracking_state.tracking_status);
+            clear_active_session_snapshot(&app);
             sleep(Duration::from_secs(1)).await;
             continue;
         }
@@ -277,45 +286,14 @@ pub async fn run<R: Runtime>(
         );
         last_window = Some(tracked_window);
         last_tracking_status = Some(tracking_state.tracking_status);
+        refresh_active_session_snapshot_if_changed(
+            &app,
+            data.as_ref(),
+            did_emit_tracking_data_changed,
+        )
+        .await;
         sleep(Duration::from_secs(1)).await;
     }
-}
-
-fn update_runtime_snapshot_state<R: Runtime>(
-    app: &AppHandle<R>,
-    window: &tracker::WindowInfo,
-    status: &TrackingStatusSnapshot,
-    sampled_at_ms: i64,
-    poll_outcome: &WindowPollOutcome,
-) {
-    if let Some(state) = app.try_state::<TrackingRuntimeSnapshotState>() {
-        state.replace(TrackingRuntimeSnapshot {
-            window: window.clone(),
-            status: status.clone(),
-            sampled_at_ms,
-            probe_status: poll_outcome.probe_status,
-            degraded_reason: poll_outcome.degraded_reason.clone(),
-            probe_diagnostics: poll_outcome.probe_diagnostics.clone(),
-        });
-    }
-}
-
-fn should_emit_tracking_status_changed(
-    previous: Option<&TrackingStatusSnapshot>,
-    next: &TrackingStatusSnapshot,
-) -> bool {
-    let Some(previous) = previous else {
-        return false;
-    };
-
-    previous.is_tracking_active != next.is_tracking_active
-        || previous.sustained_participation_eligible != next.sustained_participation_eligible
-        || previous.sustained_participation_active != next.sustained_participation_active
-        || previous.sustained_participation_kind != next.sustained_participation_kind
-        || previous.sustained_participation_state != next.sustained_participation_state
-        || previous.sustained_participation_signal_source
-            != next.sustained_participation_signal_source
-        || previous.sustained_participation_reason != next.sustained_participation_reason
 }
 
 pub async fn handle_power_lifecycle_event<R: Runtime>(

@@ -282,10 +282,13 @@ impl WindowTransitionDecision {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct ActiveSessionSnapshot {
+    pub app_name: String,
+    pub exe_name: String,
     pub start_time: i64,
     pub continuity_group_start_time: i64,
+    pub closed_duration_ms: i64,
 }
 
 #[cfg(test)]

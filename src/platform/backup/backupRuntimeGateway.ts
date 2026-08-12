@@ -23,6 +23,7 @@ interface RawBackupPreview {
   tool_timer_lap_count?: number;
   tool_pomodoro_run_count?: number;
   tool_daily_stats_count?: number;
+  tool_activity_reminder_rule_count?: number;
   tool_software_reminder_rule_count?: number;
 }
 
@@ -49,7 +50,7 @@ export interface BackupPreview {
   toolTimerLapCount: number;
   toolPomodoroRunCount: number;
   toolDailyStatsCount: number;
-  toolSoftwareReminderRuleCount: number;
+  toolActivityReminderRuleCount: number;
 }
 
 export type BackupRestoreStrategy = "replace" | "merge";
@@ -81,6 +82,7 @@ function isRawBackupPreview(value: unknown): value is RawBackupPreview {
     && (record.tool_timer_lap_count === undefined || typeof record.tool_timer_lap_count === "number")
     && (record.tool_pomodoro_run_count === undefined || typeof record.tool_pomodoro_run_count === "number")
     && (record.tool_daily_stats_count === undefined || typeof record.tool_daily_stats_count === "number")
+    && (record.tool_activity_reminder_rule_count === undefined || typeof record.tool_activity_reminder_rule_count === "number")
     && (record.tool_software_reminder_rule_count === undefined || typeof record.tool_software_reminder_rule_count === "number");
 }
 
@@ -108,7 +110,8 @@ function mapRawBackupPreview(raw: RawBackupPreview): BackupPreview {
     toolTimerLapCount: raw.tool_timer_lap_count ?? 0,
     toolPomodoroRunCount: raw.tool_pomodoro_run_count ?? 0,
     toolDailyStatsCount: raw.tool_daily_stats_count ?? 0,
-    toolSoftwareReminderRuleCount: raw.tool_software_reminder_rule_count ?? 0,
+    toolActivityReminderRuleCount:
+      raw.tool_activity_reminder_rule_count ?? raw.tool_software_reminder_rule_count ?? 0,
   };
 }
 

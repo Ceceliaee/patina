@@ -1,7 +1,4 @@
-use crate::data::sqlite_pool::{
-    acquire_sqlite_maintenance, checkpoint_sqlite_pool, open_single_connection_sqlite_pool,
-    prepare_pool_schema, replace_product_db_from_candidate, wait_for_sqlite_pool,
-};
+use crate::data::sqlite_pool::{acquire_sqlite_maintenance, wait_for_sqlite_pool};
 #[cfg(test)]
 use crate::domain::backup::BackupPayload;
 use crate::domain::backup::BackupPreview;
@@ -9,7 +6,7 @@ use crate::domain::backup::BackupPreview;
 use crate::domain::backup::{BackupMeta, CURRENT_BACKUP_SCHEMA_VERSION, CURRENT_BACKUP_VERSION};
 #[cfg(test)]
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tauri::AppHandle;
 use tokio::sync::Mutex;
 
@@ -28,11 +25,9 @@ static BACKUP_SNAPSHOT_LOCK: Mutex<()> = Mutex::const_new(());
 #[cfg(test)]
 use archive::encode_backup_archive;
 use archive::read_backup_payload;
-use import_data::{load_external_import_backup_from_pool, merge_external_import_backup_in_tx};
 use paths::resolve_backup_path;
-use payload::load_backup_payload_from_pool;
 use prepared_source::prepare_backup_source;
-use restore_payload::{restore_backup_payload, restore_backup_payload_in_tx};
+use restore_payload::restore_backup_payload;
 
 pub use paths::{pick_backup_file, pick_backup_save_file};
 pub use payload::RestoreStrategy;
@@ -75,7 +70,7 @@ pub async fn restore_backup(
     let prepared = prepare_backup_source(&backup_path, Some(expected_content_sha256.trim()))?;
 
     if snapshot::is_snapshot_archive(&prepared.path)? {
-        return restore_snapshot_backup(&prepared.path, &app, strategy).await;
+        return snapshot::restore_snapshot_backup(&prepared.path, &app, strategy).await;
     }
 
     let payload = read_backup_payload(&prepared.path)?;
@@ -87,62 +82,6 @@ pub async fn restore_backup(
     let pool = wait_for_sqlite_pool(&app).await?;
     restore_backup_payload(&pool, &payload, strategy).await?;
     Ok(())
-}
-
-async fn restore_snapshot_backup(
-    backup_path: &Path,
-    app: &AppHandle,
-    strategy: RestoreStrategy,
-) -> Result<(), String> {
-    let extracted = snapshot::extract_snapshot_archive(backup_path, true).await?;
-    if !extracted.preview.restore_supported {
-        return Err(extracted.preview.restore_message.clone());
-    }
-
-    let candidate_pool = open_single_connection_sqlite_pool(&extracted.db_path, false).await?;
-    if let Err(error) = prepare_pool_schema(&candidate_pool, &extracted.db_path).await {
-        candidate_pool.close().await;
-        return Err(error);
-    }
-    if let Err(error) = snapshot::validate_current_schema(&candidate_pool).await {
-        candidate_pool.close().await;
-        return Err(error);
-    }
-    if let Err(error) = snapshot::validate_sqlite(&candidate_pool, true).await {
-        candidate_pool.close().await;
-        return Err(error);
-    }
-    if let Err(error) = checkpoint_sqlite_pool(&candidate_pool).await {
-        candidate_pool.close().await;
-        return Err(error);
-    }
-
-    match strategy {
-        RestoreStrategy::Replace => {
-            candidate_pool.close().await;
-            replace_product_db_from_candidate(app, &extracted.db_path).await
-        }
-        RestoreStrategy::Merge => {
-            let payload_result =
-                load_backup_payload_from_pool(&candidate_pool, &extracted.preview.app_version)
-                    .await;
-            let import_result = load_external_import_backup_from_pool(&candidate_pool).await;
-            candidate_pool.close().await;
-            let payload = payload_result?;
-            let import_backup = import_result?;
-            let pool = wait_for_sqlite_pool(app).await?;
-            let mut tx = pool
-                .begin()
-                .await
-                .map_err(|error| format!("failed to start snapshot merge transaction: {error}"))?;
-            restore_backup_payload_in_tx(&mut tx, &payload, RestoreStrategy::Merge).await?;
-            merge_external_import_backup_in_tx(&mut tx, &import_backup).await?;
-            tx.commit()
-                .await
-                .map_err(|error| format!("failed to commit snapshot merge: {error}"))?;
-            Ok(())
-        }
-    }
 }
 
 pub async fn preview_backup(backup_path: String) -> Result<BackupPreview, String> {
@@ -170,6 +109,7 @@ mod tests {
     use crate::data::schema as db_schema;
     use crate::domain::backup::{BackupIconCache, BackupSession, BackupSetting, BackupTitleSample};
     use sqlx::{Executor, SqlitePool};
+    use std::path::Path;
 
     #[test]
     fn backup_file_name_uses_timestamp_zip_format() {
@@ -597,6 +537,9 @@ mod tests {
             .await
             .unwrap();
         pool.execute(db_schema::SOFTWARE_REMINDER_RULES_SCHEMA_SQL)
+            .await
+            .unwrap();
+        pool.execute(db_schema::ACTIVITY_REMINDER_RULES_SCHEMA_SQL)
             .await
             .unwrap();
         pool.execute(db_schema::WEB_ACTIVITY_SCHEMA_SQL)

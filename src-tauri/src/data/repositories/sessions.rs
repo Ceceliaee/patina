@@ -159,19 +159,35 @@ pub async fn load_active_session(
     pool: &Pool<Sqlite>,
 ) -> Result<Option<ActiveSessionSnapshot>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT start_time,
-                COALESCE(continuity_group_start_time, start_time) AS continuity_group_start_time
-         FROM sessions
-         WHERE end_time IS NULL
-         ORDER BY start_time DESC, id DESC
-         LIMIT 1",
+        "WITH active AS (
+             SELECT id, app_name, exe_name, start_time,
+                    COALESCE(continuity_group_start_time, start_time) AS continuity_group_start_time
+             FROM sessions
+             WHERE end_time IS NULL
+             ORDER BY start_time DESC, id DESC
+             LIMIT 1
+         )
+         SELECT active.app_name, active.exe_name, active.start_time,
+                active.continuity_group_start_time,
+                COALESCE((
+                    SELECT SUM(MAX(0, closed.end_time - closed.start_time))
+                    FROM sessions closed
+                    WHERE closed.end_time IS NOT NULL
+                      AND LOWER(closed.exe_name) = LOWER(active.exe_name)
+                      AND COALESCE(closed.continuity_group_start_time, closed.start_time)
+                          = active.continuity_group_start_time
+                ), 0) AS closed_duration_ms
+         FROM active",
     )
     .fetch_optional(pool)
     .await?;
 
     Ok(row.map(|row| ActiveSessionSnapshot {
+        app_name: row.get("app_name"),
+        exe_name: row.get("exe_name"),
         start_time: row.get("start_time"),
         continuity_group_start_time: row.get("continuity_group_start_time"),
+        closed_duration_ms: row.get("closed_duration_ms"),
     }))
 }
 
@@ -449,6 +465,31 @@ mod exclusion_tests {
             .await
             .unwrap();
         pool
+    }
+
+    #[test]
+    fn active_session_projection_sums_closed_segments_in_continuity_group() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            sqlx::query(
+                "INSERT INTO sessions (
+                    app_name, exe_name, start_time, end_time, duration,
+                    continuity_group_start_time
+                 ) VALUES ('Code', 'Code.exe', 1000, 3000, 2000, 1000),
+                          ('Chat', 'QQ.exe', 3000, 5000, 2000, 3000),
+                          ('Code', 'code.exe', 5000, NULL, NULL, 1000)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+
+            let active = load_active_session(&pool).await.unwrap().unwrap();
+            assert_eq!(active.app_name, "Code");
+            assert_eq!(active.exe_name, "code.exe");
+            assert_eq!(active.start_time, 5_000);
+            assert_eq!(active.continuity_group_start_time, 1_000);
+            assert_eq!(active.closed_duration_ms, 2_000);
+        });
     }
 
     #[test]

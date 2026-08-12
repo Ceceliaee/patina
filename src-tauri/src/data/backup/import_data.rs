@@ -262,7 +262,8 @@ mod tests {
     use crate::data::backup::payload::RestoreStrategy;
     use crate::data::backup::restore_payload::restore_backup_payload_in_tx;
     use crate::data::schema::{
-        CURRENT_BASELINE_SCHEMA_SQL, IMPORT_DATA_ISOLATION_SCHEMA_SQL, IMPORT_DATA_SCHEMA_SQL,
+        ACTIVITY_REMINDER_RULES_SCHEMA_SQL, CURRENT_BASELINE_SCHEMA_SQL,
+        IMPORT_DATA_ISOLATION_SCHEMA_SQL, IMPORT_DATA_SCHEMA_SQL,
         SOFTWARE_REMINDER_RULES_SCHEMA_SQL, TOOLS_TABLES_SCHEMA_SQL, WEB_ACTIVITY_SCHEMA_SQL,
         WEB_FAVICON_CACHE_SCHEMA_SQL,
     };
@@ -277,6 +278,9 @@ mod tests {
         pool.execute(CURRENT_BASELINE_SCHEMA_SQL).await.unwrap();
         pool.execute(TOOLS_TABLES_SCHEMA_SQL).await.unwrap();
         pool.execute(SOFTWARE_REMINDER_RULES_SCHEMA_SQL)
+            .await
+            .unwrap();
+        pool.execute(ACTIVITY_REMINDER_RULES_SCHEMA_SQL)
             .await
             .unwrap();
         pool.execute(WEB_ACTIVITY_SCHEMA_SQL).await.unwrap();

@@ -196,8 +196,8 @@ const SOURCE_CONTRACT_MUTANTS: SourceContractMutant[] = [
   {
     name: "main-only command is reclassified as widget-shared",
     source: WINDOW_PERMISSIONS_SOURCE,
-    search: '  "cmd_toggle_tracking_paused",\n  "cmd_is_primary_mouse_button_down",\n]',
-    replacement: '  "cmd_toggle_tracking_paused",\n  "cmd_is_primary_mouse_button_down",\n  "cmd_restore_backup",\n]',
+    search: '  "cmd_hide_widget_window",\n  "cmd_is_primary_mouse_button_down",\n]',
+    replacement: '  "cmd_hide_widget_window",\n  "cmd_is_primary_mouse_button_down",\n  "cmd_restore_backup",\n]',
     verify: verifyWindowPermissionContract,
   },
   {
