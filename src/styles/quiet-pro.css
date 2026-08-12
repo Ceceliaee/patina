@@ -28,7 +28,7 @@
 .app-titlebar-brand {
   display: inline-flex;
   flex: 0 0 auto;
-  min-width: 180px;
+  min-width: 0;
   align-items: center;
   gap: 8px;
   padding: 0 12px;
@@ -58,6 +58,41 @@
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.app-titlebar-update-entry {
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid var(--qp-border-subtle);
+  border-radius: var(--qp-radius-button);
+  background: var(--qp-bg-elevated);
+  padding: 0 8px;
+  color: var(--qp-text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  transition:
+    border-color var(--qp-motion-fast) var(--qp-motion-ease),
+    background-color var(--qp-motion-fast) var(--qp-motion-ease),
+    color var(--qp-motion-fast) var(--qp-motion-ease);
+}
+
+.app-titlebar-update-entry:hover {
+  border-color: var(--qp-border-strong);
+  background: var(--qp-bg-panel);
+  color: var(--qp-text-primary);
+}
+
+.app-titlebar-update-entry:active {
+  background: var(--qp-bg-canvas);
+}
+
+.app-titlebar-update-entry:focus-visible {
+  outline-offset: 1px;
 }
 
 .app-titlebar-drag-region {
@@ -624,7 +659,6 @@
   max-height: 170px;
   gap: 3px;
   overflow-y: auto;
-  scrollbar-gutter: stable;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -699,6 +733,36 @@
 .qp-nav-item {
   border: 1px solid transparent;
   background: transparent;
+}
+
+.qp-nav-item:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--qp-accent-default) 42%, transparent);
+  outline-offset: 2px;
+}
+
+.qp-nav-item-content {
+  display: flex;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.qp-nav-item-content-labeled {
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.qp-nav-item-label {
+  display: block;
+  max-width: calc(100% - 4px);
+  color: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .qp-nav-item:hover:not(.qp-nav-item-active) {
@@ -1051,7 +1115,6 @@
   max-height: 400px;
   gap: 6px;
   overflow-y: auto;
-  scrollbar-gutter: stable;
   padding-right: 2px;
 }
 
@@ -1595,14 +1658,12 @@
   margin-top: 10px;
   max-height: min(440px, calc(100vh - 220px));
   overflow-y: auto;
-  scrollbar-gutter: stable;
   padding-right: 2px;
 }
 
 .qp-theme-dialog-body {
   max-height: min(360px, calc(100vh - 220px));
   overflow-y: auto;
-  scrollbar-gutter: stable;
 }
 
 .qp-dialog-header {

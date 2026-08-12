@@ -7,7 +7,15 @@ import {
 import { applyWidgetBootstrapSnapshot } from "../src/app/widget/widgetBootstrapService.ts";
 import { buildWidgetViewModel as buildWidgetViewModelRaw, isWidgetSelfWindow } from "../src/app/widget/widgetViewModel.ts";
 import { getLocaleText } from "../src/shared/i18n/runtime.ts";
-import { parseWidgetBootstrapSnapshot } from "../src/platform/desktop/widgetRuntimeGateway.ts";
+import {
+  parseWidgetBootstrapSnapshot,
+  parseWidgetStatusSnapshot,
+} from "../src/platform/desktop/widgetRuntimeGateway.ts";
+import {
+  buildWidgetStatusViewModel,
+  formatWidgetToolDuration,
+  formatWidgetTrackingDuration,
+} from "../src/app/widget/widgetStatusViewModel.ts";
 import { ProcessMapper } from "../src/shared/classification/processMapper.ts";
 import type { AppSettings } from "../src/shared/settings/appSettings.ts";
 import type {
@@ -157,8 +165,6 @@ await runTest("buildWidgetViewModel maps healthy active tracking to tracking sta
   assert.equal(viewModel.statusTone, "tracking");
   assert.equal(viewModel.statusLabel, "\u8ffd\u8e2a\u4e2d");
   assert.equal(viewModel.appName, "Chrome");
-  assert.equal(viewModel.pauseActionLabel, "\u6682\u505c");
-  assert.equal(viewModel.showObjectSlot, true);
   assert.equal(viewModel.objectIconKey, "chrome.exe");
 });
 
@@ -180,7 +186,6 @@ await runTest("buildWidgetViewModel distinguishes sustained participation tracki
 
   assert.equal(viewModel.statusTone, "tracking-sustained");
   assert.equal(viewModel.statusLabel, "\u6301\u7eed\u8bb0\u5f55");
-  assert.equal(viewModel.showObjectSlot, true);
   assert.equal(viewModel.objectIconKey, "chrome.exe");
 });
 
@@ -202,7 +207,6 @@ await runTest("buildWidgetViewModel keeps sustained participation active after g
 
   assert.equal(viewModel.statusTone, "tracking-sustained");
   assert.equal(viewModel.statusLabel, "\u6301\u7eed\u8bb0\u5f55");
-  assert.equal(viewModel.showObjectSlot, true);
   assert.equal(viewModel.objectIconKey, "chrome.exe");
 });
 
@@ -216,8 +220,6 @@ await runTest("buildWidgetViewModel prioritizes paused state", () => {
 
   assert.equal(viewModel.statusTone, "paused");
   assert.equal(viewModel.statusLabel, "\u5df2\u6682\u505c");
-  assert.equal(viewModel.pauseActionLabel, "\u6062\u590d");
-  assert.equal(viewModel.showObjectSlot, false);
   assert.equal(viewModel.objectIconKey, null);
 });
 
@@ -230,7 +232,6 @@ await runTest("buildWidgetViewModel treats afk or inactive tracking as idle", ()
   );
   assert.equal(idleViewModel.statusTone, "idle");
   assert.equal(idleViewModel.statusLabel, "\u7a7a\u95f2");
-  assert.equal(idleViewModel.showObjectSlot, false);
 
   const inactiveViewModel = buildWidgetViewModel(
     ACTIVE_WINDOW,
@@ -239,7 +240,6 @@ await runTest("buildWidgetViewModel treats afk or inactive tracking as idle", ()
     BASE_TRACKER_HEALTH,
   );
   assert.equal(inactiveViewModel.statusTone, "idle");
-  assert.equal(inactiveViewModel.showObjectSlot, false);
 });
 
 await runTest("buildWidgetViewModel hides untracked foreground apps behind idle copy", () => {
@@ -253,8 +253,6 @@ await runTest("buildWidgetViewModel hides untracked foreground apps behind idle 
   assert.equal(viewModel.statusTone, "idle");
   assert.equal(viewModel.statusLabel, "\u7a7a\u95f2");
   assert.equal(viewModel.appName, "\u5f53\u524d\u5e94\u7528\u672a\u8ffd\u8e2a");
-  assert.equal(viewModel.helperText, "\u5f53\u524d\u7a97\u53e3\u4e0d\u5199\u5165\u8bb0\u5f55");
-  assert.equal(viewModel.showObjectSlot, false);
 });
 
 await runTest("buildWidgetViewModel prioritizes stale tracker health as error", () => {
@@ -267,7 +265,6 @@ await runTest("buildWidgetViewModel prioritizes stale tracker health as error", 
 
   assert.equal(viewModel.statusTone, "error");
   assert.equal(viewModel.statusLabel, "\u5f02\u5e38");
-  assert.equal(viewModel.showObjectSlot, false);
 });
 
 await runTest("buildWidgetViewModel keeps short probe fallback silent", () => {
@@ -281,7 +278,6 @@ await runTest("buildWidgetViewModel keeps short probe fallback silent", () => {
 
   assert.equal(viewModel.statusTone, "tracking");
   assert.equal(viewModel.statusLabel, "\u8ffd\u8e2a\u4e2d");
-  assert.equal(viewModel.showObjectSlot, true);
 });
 
 await runTest("buildWidgetViewModel maps hard degraded probe to existing error lamp", () => {
@@ -295,13 +291,12 @@ await runTest("buildWidgetViewModel maps hard degraded probe to existing error l
 
   assert.equal(viewModel.statusTone, "error");
   assert.equal(viewModel.statusLabel, "\u5f02\u5e38");
-  assert.equal(viewModel.helperText, "\u8ffd\u8e2a\u72b6\u6001\u6682\u672a\u540c\u6b65");
-  assert.equal(viewModel.showObjectSlot, false);
 });
 
-await runTest("isWidgetSelfWindow detects widget chrome without matching real apps", () => {
+await runTest("isWidgetSelfWindow detects Patina chrome without matching similarly titled apps", () => {
   assert.equal(isWidgetSelfWindow(WIDGET_WINDOW), true);
-  assert.equal(isWidgetSelfWindow(PATINA_MAIN_WINDOW), false);
+  assert.equal(isWidgetSelfWindow(PATINA_MAIN_WINDOW), true);
+  assert.equal(isWidgetSelfWindow({ ...WIDGET_WINDOW, exeName: "chrome.exe" }), false);
   assert.equal(isWidgetSelfWindow(ACTIVE_WINDOW), false);
 });
 
@@ -377,6 +372,7 @@ await runTest("parseWidgetBootstrapSnapshot rejects incomplete native payloads",
       color_scheme_light: "default",
       color_scheme_dark: "default",
     },
+    pinned: false,
     app_overrides: [{ key: "__app_override::editor.exe", value: 42 }],
   }), null);
 });
@@ -390,6 +386,7 @@ await runTest("applyWidgetBootstrapSnapshot restores only widget settings and ap
       color_scheme_light: "notion",
       color_scheme_dark: "nord",
     },
+    pinned: true,
     app_overrides: [
       {
         key: "__app_override::editor.exe",
@@ -410,10 +407,74 @@ await runTest("applyWidgetBootstrapSnapshot restores only widget settings and ap
   assert.equal(bootstrap.settings.language, "en-US");
   assert.equal(bootstrap.settings.colorSchemeLight, "notion");
   assert.equal(bootstrap.settings.colorSchemeDark, "nord");
+  assert.equal(bootstrap.pinned, true);
   assert.equal(bootstrap.settings.webActivityToken, "");
   assert.equal(ProcessMapper.map("editor.exe").name, "Quiet Editor");
   assert.equal(ProcessMapper.shouldTrack("editor.exe"), false);
   ProcessMapper.clearUserOverrides();
+});
+
+await runTest("widget clocks keep tracking minute-only and tools second-accurate", () => {
+  assert.equal(formatWidgetTrackingDuration(6_138_999), "01:42");
+  assert.equal(formatWidgetTrackingDuration(500_000_000), "99:59");
+  assert.equal(formatWidgetToolDuration(1_104_000), "18:24");
+  assert.equal(formatWidgetToolDuration(3_661_000), "01:01:01");
+
+  const viewModel = buildWidgetStatusViewModel({
+    tracking: { appName: "Code", exeName: "code.exe", elapsedMs: 6_120_000, running: true },
+    tools: [
+      {
+        kind: "stopwatch",
+        state: "running",
+        valueMs: 1_100_000,
+        countsDown: false,
+        visibleUntilMs: null,
+      },
+      {
+        kind: "pomodoro",
+        state: "running",
+        valueMs: 275_000,
+        countsDown: true,
+        visibleUntilMs: null,
+      },
+    ],
+    sampledAtMs: 10_000,
+  }, 4_000);
+  assert.equal(viewModel.trackingTimeText, "01:42");
+  assert.deepEqual(viewModel.tools.map((tool) => tool.timeText), ["18:24", "04:31"]);
+
+  assert.equal(buildWidgetStatusViewModel(null, 10_000).trackingTimeText, "—");
+  assert.equal(buildWidgetStatusViewModel({
+    tracking: null,
+    tools: [],
+    sampledAtMs: 500_000_000,
+  }, 10_000).trackingTimeText, "—");
+});
+
+await runTest("widget status parser enforces the two semantic tool slots", () => {
+  const base = {
+    tracking: null,
+    sampled_at_ms: 10_000,
+  };
+  const timer = {
+    kind: "stopwatch",
+    state: "running",
+    value_ms: 1_000,
+    counts_down: false,
+    visible_until_ms: null,
+  };
+  const pomodoro = {
+    kind: "pomodoro",
+    state: "paused",
+    value_ms: 2_000,
+    counts_down: true,
+    visible_until_ms: null,
+  };
+  assert.ok(parseWidgetStatusSnapshot({ ...base, tools: [timer, pomodoro] }));
+  assert.ok(parseWidgetStatusSnapshot({ ...base, tools: [pomodoro] }));
+  assert.equal(parseWidgetStatusSnapshot({ ...base, tools: [pomodoro, timer] }), null);
+  assert.equal(parseWidgetStatusSnapshot({ ...base, tools: [timer, timer] }), null);
+  assert.equal(parseWidgetStatusSnapshot({ ...base, tools: [timer, pomodoro, pomodoro] }), null);
 });
 
 console.log(`Passed ${passed} widget view model tests`);

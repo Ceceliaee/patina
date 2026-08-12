@@ -21,7 +21,7 @@ export function useWidgetObjectIcon(objectIconKey: string | null) {
       })
       .catch((error) => {
         if (!cancelled) {
-          console.warn("load widget object icon failed", error);
+        console.warn("widget:icon", error);
         }
       });
 

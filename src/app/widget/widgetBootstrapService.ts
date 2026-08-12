@@ -10,6 +10,7 @@ const APP_OVERRIDE_KEY_PREFIX = "__app_override::";
 
 interface WidgetRuntimeBootstrapSnapshot {
   settings: AppSettings;
+  pinned: boolean;
 }
 
 export function applyWidgetBootstrapSnapshot(
@@ -30,6 +31,7 @@ export function applyWidgetBootstrapSnapshot(
 
   return {
     settings: normalizeWidgetBootstrapSettings(snapshot.settings),
+    pinned: snapshot.pinned,
   };
 }
 

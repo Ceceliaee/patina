@@ -5,9 +5,12 @@ import type {
 
 interface WidgetWindowControllerDeps {
   loadPlacement: () => Promise<WidgetPlacement | null>;
-  persistExpanded: (expanded: boolean, showObjectSlot: boolean) => Promise<void>;
-  applyLayout: (expanded: boolean, showObjectSlot: boolean) => Promise<void>;
-  finalizeDrag: (releasePosition: WidgetPhysicalPoint | null) => Promise<WidgetPlacement | null>;
+  applyLayout: (expanded: boolean, toolSlotCount: number) => Promise<void>;
+  finalizeDrag: (
+    releasePosition: WidgetPhysicalPoint | null,
+    expanded: boolean,
+    toolSlotCount: number,
+  ) => Promise<WidgetPlacement | null>;
   schedule: (callback: () => void, delayMs: number) => number;
   clearScheduled: (handle: number) => void;
   onPlacementChange?: (placement: WidgetPlacement) => void;
@@ -47,15 +50,18 @@ function normalizePlacement(nextPlacement: WidgetPlacement): WidgetPlacement {
 }
 
 export function createWidgetWindowController(
-  initialShowObjectSlot: boolean,
+  initialPinned: boolean,
+  initialToolSlotCount: number,
   deps: WidgetWindowControllerDeps,
 ) {
   let placement = DEFAULT_WIDGET_PLACEMENT;
   let placementRevision = 0;
-  let expanded = false;
-  let showObjectSlot = initialShowObjectSlot;
+  let expanded = initialPinned;
+  let pinned = initialPinned;
+  let toolSlotCount = initialToolSlotCount;
   let applyingRuntimeLayout = false;
   let userDragActive = false;
+  let collapseAfterDragFinalize = false;
   let runtimeHidden = false;
   let scaleRefreshPending = false;
   let collapsedDragSettlePending = false;
@@ -134,12 +140,12 @@ export function createWidgetWindowController(
 
   async function runRuntimeLayout(
     nextExpanded: boolean,
-    nextShowObjectSlot: boolean,
+    nextToolSlotCount: number,
   ) {
     applyingRuntimeLayout = true;
     clearLayoutReleaseTimer();
     try {
-      await deps.applyLayout(nextExpanded, nextShowObjectSlot);
+      await deps.applyLayout(nextExpanded, nextToolSlotCount);
     } finally {
       releaseRuntimeLayoutOnNextTask();
     }
@@ -157,15 +163,14 @@ export function createWidgetWindowController(
     }
 
     scaleRefreshPending = false;
-    void runRuntimeLayout(expanded, showObjectSlot).catch((error) => {
-      deps.onWarning?.("apply widget DPI layout failed", error);
+    void runRuntimeLayout(expanded, toolSlotCount).catch((error) => {
+      deps.onWarning?.("widget:dpi", error);
     });
   }
 
   async function finalizeMove(generation: number) {
     if (
-      expanded
-      || runtimeHidden
+      runtimeHidden
       || userDragActive
       || generation !== dragGeneration
     ) {
@@ -176,17 +181,15 @@ export function createWidgetWindowController(
       ? await dragReleasePosition.point
       : null;
     if (
-      expanded
-      || runtimeHidden
+      runtimeHidden
       || userDragActive
       || generation !== dragGeneration
     ) {
       return;
     }
-    const nextPlacement = await deps.finalizeDrag(releasePosition);
+    const nextPlacement = await deps.finalizeDrag(releasePosition, expanded, toolSlotCount);
     if (
       !nextPlacement
-      || expanded
       || runtimeHidden
       || userDragActive
       || generation !== dragGeneration
@@ -204,7 +207,7 @@ export function createWidgetWindowController(
     clearLayoutReleaseTimer();
     void finalizeMove(generation)
       .catch((error) => {
-        deps.onWarning?.("finalize widget drag failed", error);
+        deps.onWarning?.("widget:drag", error);
       })
       .finally(() => {
         const completedGeneration = finalizeInFlightGeneration;
@@ -219,19 +222,23 @@ export function createWidgetWindowController(
         if (
           queuedGeneration !== null
           && queuedGeneration === dragGeneration
-          && !expanded
           && !runtimeHidden
           && !userDragActive
         ) {
           startFinalizeMove(queuedGeneration);
+          return;
+        }
+
+        if (collapseAfterDragFinalize && expanded && !pinned && !runtimeHidden) {
+          collapseAfterDragFinalize = false;
+          collapse();
         }
       });
   }
 
   function requestFinalizeMove(generation: number) {
     if (
-      expanded
-      || runtimeHidden
+      runtimeHidden
       || userDragActive
       || generation !== dragGeneration
     ) {
@@ -255,7 +262,7 @@ export function createWidgetWindowController(
         setPlacement(loadedPlacement);
       }
     } catch (error) {
-      deps.onWarning?.("load widget placement failed", error);
+      deps.onWarning?.("widget:placement", error);
     }
   }
 
@@ -268,8 +275,8 @@ export function createWidgetWindowController(
     clearCollapseRuntimeTimer();
     clearCollapsedDragSettlePending();
     setExpanded(true);
-    void deps.persistExpanded(true, showObjectSlot).catch((error) => {
-      deps.onWarning?.("widget expand failed", error);
+    void runRuntimeLayout(true, toolSlotCount).catch((error) => {
+      deps.onWarning?.("widget:expand", error);
     });
   }
 
@@ -285,22 +292,19 @@ export function createWidgetWindowController(
     clearCollapseRuntimeTimer();
     collapseRuntimeHandle = deps.schedule(() => {
       collapseRuntimeHandle = null;
-      void deps.persistExpanded(false, showObjectSlot).catch((error) => {
-        deps.onWarning?.("widget collapse failed", error);
+      void runRuntimeLayout(false, toolSlotCount).catch((error) => {
+        deps.onWarning?.("widget:collapse", error);
       });
     }, COLLAPSE_ANIMATION_MS);
   }
 
   function beginUserDrag() {
-    if (expanded) {
-      return;
-    }
-
     runtimeHidden = false;
     dragGeneration += 1;
     userDragActive = true;
     queuedFinalizeGeneration = null;
     dragReleasePosition = null;
+    collapseAfterDragFinalize = false;
     clearCollapsedDragSettlePending();
     clearDragTimer();
   }
@@ -312,6 +316,7 @@ export function createWidgetWindowController(
     scaleRefreshPending = false;
     queuedFinalizeGeneration = null;
     dragReleasePosition = null;
+    collapseAfterDragFinalize = false;
     clearDragTimer();
     clearCollapsedDragSettlePending();
     clearCollapseRuntimeTimer();
@@ -326,6 +331,9 @@ export function createWidgetWindowController(
     runtimeHidden = false;
     if (runtimePlacement) {
       setPlacement(runtimePlacement);
+    }
+    if (pinned && !expanded) {
+      setExpanded(true);
     }
   }
 
@@ -355,7 +363,17 @@ export function createWidgetWindowController(
   }
 
   function handleFocusChanged(focused: boolean) {
-    if (!focused && expanded) {
+    if (focused) {
+      collapseAfterDragFinalize = false;
+      return;
+    }
+
+    if (!focused && expanded && !pinned) {
+      if (userDragActive || finalizeInFlightGeneration !== null || collapsedDragSettlePending) {
+        collapseAfterDragFinalize = true;
+        return;
+      }
+
       collapse();
     }
   }
@@ -364,7 +382,6 @@ export function createWidgetWindowController(
     if (
       runtimeHidden
       || applyingRuntimeLayout
-      || expanded
       || !collapsedDragSettlePending
     ) {
       return;
@@ -387,16 +404,24 @@ export function createWidgetWindowController(
     schedulePendingScaleRefresh();
   }
 
-  function setShowObjectSlot(nextShowObjectSlot: boolean) {
-    const previousShowObjectSlot = showObjectSlot;
-    showObjectSlot = nextShowObjectSlot;
-    if (!expanded || previousShowObjectSlot === nextShowObjectSlot) {
+  function setToolSlotCount(nextToolSlotCount: number) {
+    const normalized = Math.max(0, Math.min(2, Math.trunc(nextToolSlotCount)));
+    const previousToolSlotCount = toolSlotCount;
+    toolSlotCount = normalized;
+    if (!expanded || previousToolSlotCount === normalized) {
       return;
     }
 
-    void runRuntimeLayout(true, nextShowObjectSlot).catch((error) => {
-      deps.onWarning?.("apply widget slot layout failed", error);
+    void runRuntimeLayout(true, normalized).catch((error) => {
+      deps.onWarning?.("widget:slots", error);
     });
+  }
+
+  function setPinned(nextPinned: boolean) {
+    pinned = nextPinned;
+    if (nextPinned) {
+      collapseAfterDragFinalize = false;
+    }
   }
 
   function dispose() {
@@ -406,6 +431,7 @@ export function createWidgetWindowController(
     scaleRefreshPending = false;
     queuedFinalizeGeneration = null;
     dragReleasePosition = null;
+    collapseAfterDragFinalize = false;
     clearDragTimer();
     clearCollapsedDragSettlePending();
     clearLayoutReleaseTimer();
@@ -421,13 +447,15 @@ export function createWidgetWindowController(
     getState: () => ({
       placement,
       expanded,
-      showObjectSlot,
+      pinned,
+      toolSlotCount,
     }),
     handleFocusChanged,
     handleScaleFactorChanged,
     handleWindowMoved,
     initialize,
-    setShowObjectSlot,
+    setPinned,
+    setToolSlotCount,
     syncCollapsedFromRuntime,
     syncShownFromRuntime,
     toggleExpanded,

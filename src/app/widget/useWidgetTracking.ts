@@ -19,6 +19,11 @@ import {
 import { startTrackerHealthPolling } from "../services/trackerHealthPollingService.ts";
 import { resolveTrackingDataChangedEffects } from "../hooks/trackingDataChangedPolicy.ts";
 import { loadWidgetRuntimeBootstrapSnapshot } from "./widgetBootstrapService.ts";
+import {
+  getWidgetStatusSnapshot,
+  onWidgetToolsChanged,
+  type WidgetStatusSnapshot,
+} from "../../platform/desktop/widgetRuntimeGateway.ts";
 
 interface WidgetTrackingSnapshot {
   activeWindow: TrackingWindowSnapshot | null;
@@ -31,6 +36,10 @@ const EMPTY_TRACKING_SNAPSHOT: WidgetTrackingSnapshot = {
   trackingStatus: DEFAULT_TRACKING_STATUS,
   trackingRuntimeProbeStatus: null,
 };
+
+function warnWidgetRefresh(error: unknown) {
+  console.warn("widget:refresh", error);
+}
 
 async function loadWidgetTrackingSnapshot(): Promise<WidgetTrackingSnapshot> {
   const snapshot = await getCurrentTrackingSnapshot();
@@ -63,6 +72,8 @@ export function useWidgetTracking() {
     useState<TrackingRuntimeProbeStatus | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [classificationReady, setClassificationReady] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const [widgetStatus, setWidgetStatus] = useState<WidgetStatusSnapshot | null>(null);
   const [trackerHealth, setTrackerHealth] = useState<TrackerHealthSnapshot>(() => (
     resolveTrackerHealth(null, Date.now(), TRACKER_HEARTBEAT_STALE_AFTER_MS)
   ));
@@ -82,6 +93,7 @@ export function useWidgetTracking() {
       const bootstrap = await loadWidgetRuntimeBootstrapSnapshot();
       if (cancelled) return;
       setAppSettings(bootstrap.settings);
+      setPinned(bootstrap.pinned);
       setClassificationReady(true);
     };
 
@@ -89,65 +101,77 @@ export function useWidgetTracking() {
       applyTrackingSnapshot(await loadWidgetTrackingSnapshot());
     };
 
+    const refreshWidgetStatus = async () => {
+      const next = await getWidgetStatusSnapshot();
+      if (!cancelled) setWidgetStatus(next);
+    };
+
+    const guardRefresh = (request: Promise<unknown>) => request.catch((error) => {
+      if (!cancelled) warnWidgetRefresh(error);
+    });
+
     const init = async () => {
       try {
-        const [activeWindowUnlisten, trackingDataUnlisten, appSettingsUnlisten] =
+        const [
+          activeWindowUnlisten,
+          trackingDataUnlisten,
+          appSettingsUnlisten,
+          toolsUnlisten,
+        ] =
           await Promise.all([
             onActiveWindowChanged(async (window) => {
               if (cancelled) return;
               setActiveWindow(window);
-              await refreshTracking().catch((error) => {
-                if (!cancelled) {
-                  console.warn("Failed to refresh widget tracking snapshot", error);
-                }
-              });
+              await guardRefresh(refreshTracking());
+              await guardRefresh(refreshWidgetStatus());
             }),
             onTrackingDataChanged(async (payload) => {
               const effects = resolveTrackingDataChangedEffects(payload.reason);
               const refreshes: Promise<unknown>[] = [];
               if (effects.shouldRefresh) {
                 refreshes.push(refreshTracking());
+                refreshes.push(refreshWidgetStatus());
               }
               if (effects.shouldSyncPauseSetting) {
                 refreshes.push(refreshBootstrap());
               }
-              await Promise.all(refreshes).catch((error) => {
-                if (!cancelled) {
-                  console.warn("Failed to refresh widget after tracking change", error);
-                }
-              });
+              await guardRefresh(Promise.all(refreshes));
             }),
             onAppSettingsChanged(async () => {
-              await refreshBootstrap().catch((error) => {
-                if (!cancelled) {
-                  console.warn("Failed to refresh widget settings", error);
-                }
-              });
+              await guardRefresh(refreshBootstrap());
+            }),
+            onWidgetToolsChanged(() => {
+              void guardRefresh(refreshWidgetStatus());
             }),
           ]);
         if (cancelled) {
           activeWindowUnlisten();
           trackingDataUnlisten();
           appSettingsUnlisten();
+          toolsUnlisten();
           return;
         }
         unlisteners.push(
           activeWindowUnlisten,
           trackingDataUnlisten,
           appSettingsUnlisten,
+          toolsUnlisten,
         );
 
-        const [bootstrap, trackingSnapshot] = await Promise.all([
+        const [bootstrap, trackingSnapshot, statusSnapshot] = await Promise.all([
           loadWidgetRuntimeBootstrapSnapshot(),
           loadWidgetTrackingSnapshot(),
+          getWidgetStatusSnapshot(),
         ]);
         if (cancelled) return;
         setAppSettings(bootstrap.settings);
+        setPinned(bootstrap.pinned);
         setClassificationReady(true);
         applyTrackingSnapshot(trackingSnapshot);
+        setWidgetStatus(statusSnapshot);
       } catch (error) {
         if (cancelled) return;
-        console.error("Widget tracking init error", error);
+        console.error("widget:init", error);
         setClassificationReady(true);
       }
     };
@@ -175,5 +199,7 @@ export function useWidgetTracking() {
     classificationReady,
     trackerHealth,
     trackingRuntimeProbeStatus,
+    pinned,
+    widgetStatus,
   };
 }

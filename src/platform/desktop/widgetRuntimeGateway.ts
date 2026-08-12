@@ -35,7 +35,29 @@ interface RawWidgetAppOverrideRow {
 
 interface RawWidgetBootstrapSnapshot {
   settings: RawWidgetBootstrapSettings;
+  pinned: boolean;
   app_overrides: RawWidgetAppOverrideRow[];
+}
+
+interface RawWidgetTrackingProjection {
+  app_name: string;
+  exe_name: string;
+  elapsed_ms: number;
+  running: boolean;
+}
+
+interface RawWidgetToolProjection {
+  kind: "stopwatch" | "countdown" | "pomodoro";
+  state: "running" | "paused" | "completed";
+  value_ms: number;
+  counts_down: boolean;
+  visible_until_ms: number | null;
+}
+
+interface RawWidgetStatusSnapshot {
+  tracking: RawWidgetTrackingProjection | null;
+  tools: RawWidgetToolProjection[];
+  sampled_at_ms: number;
 }
 
 interface RawWidgetMonitorAffinity {
@@ -88,7 +110,29 @@ interface WidgetAppOverrideRow {
 
 export interface WidgetBootstrapSnapshot {
   settings: WidgetBootstrapSettings;
+  pinned: boolean;
   appOverrides: WidgetAppOverrideRow[];
+}
+
+export interface WidgetTrackingProjection {
+  appName: string;
+  exeName: string;
+  elapsedMs: number;
+  running: boolean;
+}
+
+export interface WidgetToolProjection {
+  kind: "stopwatch" | "countdown" | "pomodoro";
+  state: "running" | "paused" | "completed";
+  valueMs: number;
+  countsDown: boolean;
+  visibleUntilMs: number | null;
+}
+
+export interface WidgetStatusSnapshot {
+  tracking: WidgetTrackingProjection | null;
+  tools: WidgetToolProjection[];
+  sampledAtMs: number;
 }
 
 function isWidgetSide(value: unknown): value is WidgetSide {
@@ -163,6 +207,7 @@ function isRawWidgetBootstrapSnapshot(value: unknown): value is RawWidgetBootstr
 
   const record = value as Record<string, unknown>;
   return isRawWidgetBootstrapSettings(record.settings)
+    && typeof record.pinned === "boolean"
     && Array.isArray(record.app_overrides)
     && record.app_overrides.every(isRawWidgetAppOverrideRow);
 }
@@ -202,11 +247,82 @@ export function parseWidgetBootstrapSnapshot(value: unknown): WidgetBootstrapSna
       colorSchemeLight: value.settings.color_scheme_light,
       colorSchemeDark: value.settings.color_scheme_dark,
     },
+    pinned: value.pinned,
     appOverrides: value.app_overrides.map((row) => ({
       key: row.key,
       value: row.value,
     })),
   };
+}
+
+function isRawWidgetTrackingProjection(value: unknown): value is RawWidgetTrackingProjection {
+  return Boolean(value)
+    && typeof value === "object"
+    && typeof (value as RawWidgetTrackingProjection).app_name === "string"
+    && typeof (value as RawWidgetTrackingProjection).exe_name === "string"
+    && isFiniteNumber((value as RawWidgetTrackingProjection).elapsed_ms)
+    && (value as RawWidgetTrackingProjection).elapsed_ms >= 0
+    && typeof (value as RawWidgetTrackingProjection).running === "boolean";
+}
+
+function isRawWidgetToolProjection(value: unknown): value is RawWidgetToolProjection {
+  if (!value || typeof value !== "object") return false;
+  const raw = value as RawWidgetToolProjection;
+  return ["stopwatch", "countdown", "pomodoro"].includes(raw.kind)
+    && ["running", "paused", "completed"].includes(raw.state)
+    && isFiniteNumber(raw.value_ms)
+    && raw.value_ms >= 0
+    && typeof raw.counts_down === "boolean"
+    && (raw.visible_until_ms === null || isFiniteNumber(raw.visible_until_ms));
+}
+
+export function parseWidgetStatusSnapshot(value: unknown): WidgetStatusSnapshot | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as RawWidgetStatusSnapshot;
+  if (
+    !(raw.tracking === null || isRawWidgetTrackingProjection(raw.tracking))
+    || !Array.isArray(raw.tools)
+    || raw.tools.length > 2
+    || !raw.tools.every(isRawWidgetToolProjection)
+    || !isFiniteNumber(raw.sampled_at_ms)
+  ) {
+    return null;
+  }
+  const timerTools = raw.tools.filter((tool) => tool.kind !== "pomodoro");
+  const pomodoroTools = raw.tools.filter((tool) => tool.kind === "pomodoro");
+  if (
+    timerTools.length > 1
+    || pomodoroTools.length > 1
+    || (raw.tools.length === 2 && raw.tools[1]?.kind !== "pomodoro")
+  ) {
+    return null;
+  }
+  return {
+    tracking: raw.tracking
+      ? {
+          appName: raw.tracking.app_name,
+          exeName: raw.tracking.exe_name,
+          elapsedMs: raw.tracking.elapsed_ms,
+          running: raw.tracking.running,
+        }
+      : null,
+    tools: raw.tools.map((tool) => ({
+      kind: tool.kind,
+      state: tool.state,
+      valueMs: tool.value_ms,
+      countsDown: tool.counts_down,
+      visibleUntilMs: tool.visible_until_ms,
+    })),
+    sampledAtMs: raw.sampled_at_ms,
+  };
+}
+
+export async function getWidgetStatusSnapshot(): Promise<WidgetStatusSnapshot> {
+  const snapshot = parseWidgetStatusSnapshot(
+    await invoke<unknown>("cmd_get_widget_status_snapshot"),
+  );
+  if (!snapshot) throw new Error("invalid widget status snapshot");
+  return snapshot;
 }
 
 export async function getWidgetBootstrapSnapshot(): Promise<WidgetBootstrapSnapshot> {
@@ -229,8 +345,14 @@ export async function getWidgetIcon(exeName: string): Promise<string | null> {
 
 export async function finalizeWidgetDrag(
   releasePosition: WidgetPhysicalPoint | null,
+  expanded: boolean,
+  toolSlotCount: number,
 ): Promise<WidgetPlacement | null> {
-  const payload = await invoke<unknown>("cmd_finalize_widget_drag", { releasePosition });
+  const payload = await invoke<unknown>("cmd_finalize_widget_drag", {
+    releasePosition,
+    expanded,
+    toolSlotCount,
+  });
   return parseWidgetPlacement(payload);
 }
 
@@ -259,12 +381,23 @@ export async function getCurrentCursorPhysicalPosition(): Promise<WidgetPhysical
 
 export async function setWidgetExpanded(
   expanded: boolean,
-  showObjectSlot: boolean,
+  toolSlotCount: number,
 ): Promise<void> {
   await invoke("cmd_set_widget_expanded", {
     expanded,
-    showObjectSlot,
+    toolSlotCount,
   });
+}
+
+export async function setWidgetPinned(
+  pinned: boolean,
+  toolSlotCount: number,
+): Promise<void> {
+  await invoke("cmd_set_widget_pinned", { pinned, toolSlotCount });
+}
+
+export async function onWidgetToolsChanged(handler: () => void): Promise<() => void> {
+  return listen("tools-runtime-changed", handler);
 }
 
 export async function showMainWindow(): Promise<void> {

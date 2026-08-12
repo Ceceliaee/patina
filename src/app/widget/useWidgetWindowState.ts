@@ -9,6 +9,7 @@ import {
   onWidgetRuntimeShown,
   setCurrentWidgetWindowFocusable,
   setWidgetExpanded,
+  setWidgetPinned,
   type WidgetPlacement,
 } from "../../platform/desktop/widgetRuntimeGateway";
 import {
@@ -25,11 +26,18 @@ interface WidgetWindowStateOptions {
 }
 
 export function useWidgetWindowState(
-  showObjectSlot: boolean,
+  initialPinned: boolean,
+  toolSlotCount: number,
   options: WidgetWindowStateOptions = {},
 ) {
   const [placement, setPlacementState] = useState<WidgetPlacement>(DEFAULT_WIDGET_PLACEMENT);
-  const [expanded, setExpandedState] = useState(false);
+  const [expanded, setExpandedState] = useState(initialPinned);
+  const [pinned, setPinnedState] = useState(initialPinned);
+  const [pinSaveFailed, setPinSaveFailed] = useState(false);
+  const pinnedRef = useRef(initialPinned);
+  const desiredPinnedRef = useRef(initialPinned);
+  const toolSlotCountRef = useRef(toolSlotCount);
+  const pinMutationRef = useRef<Promise<boolean> | null>(null);
   const [collapsing, setCollapsing] = useState(false);
   const collapseVisualTimerRef = useRef<number | null>(null);
   const onCollapsedDragSettledRef = useRef(options.onCollapsedDragSettled);
@@ -48,9 +56,9 @@ export function useWidgetWindowState(
     onRuntimeShownRef.current = options.onRuntimeShown;
   }, [options.onCollapsedDragSettled, options.onRuntimeCollapsed, options.onRuntimeShown]);
 
-  const controller = useMemo(() => createWidgetWindowController(showObjectSlot, {
+  const initialToolSlotCountRef = useRef(toolSlotCount);
+  const controller = useMemo(() => createWidgetWindowController(initialPinned, initialToolSlotCountRef.current, {
     loadPlacement: getWidgetPlacement,
-    persistExpanded: setWidgetExpanded,
     applyLayout: setWidgetExpanded,
     finalizeDrag: finalizeWidgetDrag,
     schedule: (callback, delayMs) => window.setTimeout(callback, delayMs),
@@ -88,14 +96,14 @@ export function useWidgetWindowState(
     onWarning: (message, error) => {
       console.warn(message, error);
     },
-  }), [showObjectSlot]);
+  }), [initialPinned]);
 
   useEffect(() => {
     let cancelled = false;
     const unlistenPromises: Array<Promise<() => void>> = [];
 
     void setCurrentWidgetWindowFocusable(true).catch((error) => {
-      console.warn("widget set focusable failed", error);
+      console.warn("widget:focus", error);
     });
 
     void controller.initialize().then(() => {
@@ -139,8 +147,48 @@ export function useWidgetWindowState(
   }, [controller]);
 
   useEffect(() => {
-    controller.setShowObjectSlot(showObjectSlot);
-  }, [controller, showObjectSlot]);
+    toolSlotCountRef.current = toolSlotCount;
+    controller.setToolSlotCount(toolSlotCount);
+  }, [controller, toolSlotCount]);
+
+  const updatePinned = (nextPinned: boolean) => {
+    desiredPinnedRef.current = nextPinned;
+    if (pinMutationRef.current) return pinMutationRef.current;
+    setPinSaveFailed(false);
+    const mutation = (async () => {
+      while (pinnedRef.current !== desiredPinnedRef.current) {
+        const requestedPinned = desiredPinnedRef.current;
+        try {
+          await setWidgetPinned(requestedPinned, toolSlotCountRef.current);
+        } catch (error) {
+          desiredPinnedRef.current = pinnedRef.current;
+          setPinSaveFailed(true);
+          console.warn("widget:pin", error);
+          return false;
+        }
+
+        pinnedRef.current = requestedPinned;
+        controller.setPinned(requestedPinned);
+        setPinnedState(requestedPinned);
+      }
+      return true;
+    })()
+      .finally(() => {
+        pinMutationRef.current = null;
+      });
+    pinMutationRef.current = mutation;
+    return mutation;
+  };
+
+  const toggleExpandedFromAnchor = () => {
+    if (controller.getState().expanded && desiredPinnedRef.current) {
+      void updatePinned(false).then((saved) => {
+        if (saved) controller.collapse();
+      });
+      return;
+    }
+    controller.toggleExpanded();
+  };
 
   return {
     beginUserDrag: controller.beginUserDrag,
@@ -149,7 +197,10 @@ export function useWidgetWindowState(
     expand: controller.expand,
     expanded,
     collapsing,
+    pinned,
+    pinSaveFailed,
     placement,
-    toggleExpanded: controller.toggleExpanded,
+    toggleExpanded: toggleExpandedFromAnchor,
+    togglePinned: () => updatePinned(!desiredPinnedRef.current),
   };
 }

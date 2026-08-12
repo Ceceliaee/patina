@@ -1,26 +1,32 @@
 import { useEffect, useRef, useState } from "react";
 import type { MouseEvent, PointerEvent } from "react";
-import { Pause, Play, SquareArrowOutUpRight } from "lucide-react";
-import QuietIconAction from "../../shared/components/QuietIconAction";
+import {
+  Clock3,
+  Pin,
+  SquareArrowOutUpRight,
+  Timer,
+} from "lucide-react";
 import {
   isCursorInsideCurrentWidgetWindow,
   getCurrentCursorPhysicalPosition,
   isPrimaryMouseButtonDown,
   showMainWindow,
   startCurrentWidgetWindowDrag,
+  type WidgetStatusSnapshot,
 } from "../../platform/desktop/widgetRuntimeGateway";
-import { toggleTrackingPaused } from "../../platform/runtime/trackingRuntimeGateway";
 import type { TrackingStatusSnapshot, TrackingWindowSnapshot } from "../../shared/types/tracking";
 import { useAppThemeMode } from "../hooks/useAppThemeMode.ts";
 import { useWidgetObjectIcon } from "../hooks/useWidgetObjectIcon";
 import { useWidgetTracking } from "./useWidgetTracking.ts";
 import { useWidgetWindowState } from "./useWidgetWindowState";
 import { buildWidgetViewModel, isWidgetSelfWindow } from "./widgetViewModel";
+import { buildWidgetStatusViewModel } from "./widgetStatusViewModel.ts";
 import { LocaleProvider, useLocaleText } from "../../shared/i18n/index.ts";
 
 interface WidgetDisplaySnapshot {
   activeWindow: TrackingWindowSnapshot | null;
   trackingStatus: TrackingStatusSnapshot;
+  widgetStatus: WidgetStatusSnapshot | null;
 }
 
 const COLLAPSED_DRAG_HOLD_MS = 120;
@@ -29,6 +35,7 @@ const STALE_HOVER_ENTER_GUARD_MS = 80;
 
 export default function WidgetShell() {
   const widgetTracking = useWidgetTracking();
+  if (!widgetTracking.classificationReady) return null;
   return (
     <LocaleProvider locale={widgetTracking.appSettings.language}>
       <LocalizedWidgetShell widgetTracking={widgetTracking} />
@@ -46,9 +53,10 @@ function LocalizedWidgetShell({
     activeWindow,
     trackingStatus,
     appSettings,
-    classificationReady,
     trackerHealth,
     trackingRuntimeProbeStatus,
+    pinned: initialPinned,
+    widgetStatus,
   } = widgetTracking;
 
   useAppThemeMode(appSettings.themeMode, appSettings.colorSchemeLight, appSettings.colorSchemeDark);
@@ -56,6 +64,8 @@ function LocalizedWidgetShell({
   const [dragging, setDragging] = useState(false);
   const [hoverRevealActive, setHoverRevealActive] = useState(false);
   const [suppressHoverReveal, setSuppressHoverReveal] = useState(false);
+  const [statusElapsedMs, setStatusElapsedMs] = useState(0);
+  const statusClockBaseRef = useRef(performance.now());
 
   useEffect(() => {
     if (isWidgetSelfWindow(activeWindow)) {
@@ -65,38 +75,37 @@ function LocalizedWidgetShell({
     setLastNonWidgetSnapshot({
       activeWindow,
       trackingStatus,
+      widgetStatus,
     });
-  }, [activeWindow, trackingStatus]);
+  }, [activeWindow, trackingStatus, widgetStatus]);
 
   const displaySnapshot = isWidgetSelfWindow(activeWindow) && lastNonWidgetSnapshot
     ? lastNonWidgetSnapshot
     : {
       activeWindow,
       trackingStatus,
+      widgetStatus,
     };
 
-  const viewModel = classificationReady
-    ? buildWidgetViewModel(
-      displaySnapshot.activeWindow,
-      displaySnapshot.trackingStatus,
-      appSettings,
-      trackerHealth,
-      trackingRuntimeProbeStatus,
-      uiText,
-    )
-    : {
-      statusTone: "idle" as const,
-      statusLabel: uiText.widget.loadingStatus,
-      appName: uiText.widget.loadingAppName,
-      helperText: uiText.widget.loadingHelper,
-      pauseActionLabel: uiText.widget.pauseTracking,
-      showObjectSlot: false,
-      objectIconKey: null,
-    };
+  const viewModel = buildWidgetViewModel(
+    displaySnapshot.activeWindow,
+    displaySnapshot.trackingStatus,
+    appSettings,
+    trackerHealth,
+    trackingRuntimeProbeStatus,
+    uiText,
+  );
 
   const statusTitle = `${viewModel.statusLabel} | ${viewModel.appName}`;
-  const objectIcon = useWidgetObjectIcon(viewModel.objectIconKey);
-  const showObjectSlot = viewModel.showObjectSlot && Boolean(objectIcon);
+  const displayWidgetStatus = displaySnapshot.widgetStatus;
+  useEffect(() => {
+    statusClockBaseRef.current = performance.now();
+    setStatusElapsedMs(0);
+  }, [displayWidgetStatus]);
+  const statusViewModel = buildWidgetStatusViewModel(displayWidgetStatus, statusElapsedMs);
+  const trackingIconKey = displayWidgetStatus?.tracking?.exeName ?? viewModel.objectIconKey;
+  const objectIcon = useWidgetObjectIcon(trackingIconKey);
+  const toolSlotCount = statusViewModel.tools.length;
   const objectSlotTitle = uiText.accessibility.widget.currentApp(viewModel.appName);
   const dragHoldTimerRef = useRef<number | null>(null);
   const dragPointerIdRef = useRef<number | null>(null);
@@ -126,9 +135,7 @@ function LocalizedWidgetShell({
           setSuppressHoverReveal(false);
         }
       })
-      .catch((error) => {
-        console.warn("check widget cursor position failed", error);
-      });
+      .catch(() => undefined);
   };
 
   const finishPostDragSettle = () => {
@@ -145,13 +152,26 @@ function LocalizedWidgetShell({
     endUserDrag,
     expanded,
     placement,
+    pinned,
+    pinSaveFailed,
     toggleExpanded,
-  } = useWidgetWindowState(showObjectSlot, {
+    togglePinned,
+  } = useWidgetWindowState(initialPinned, toolSlotCount, {
     onCollapsedDragSettled: finishPostDragSettle,
     onRuntimeCollapsed: suppressHoverRevealUntilPointerLeaves,
     onRuntimeShown: suppressHoverRevealUntilPointerLeaves,
   });
   const renderExpanded = expanded || collapsing;
+
+  useEffect(() => {
+    if (!expanded) return undefined;
+    const updateClock = () => {
+      setStatusElapsedMs(Math.max(0, performance.now() - statusClockBaseRef.current));
+    };
+    updateClock();
+    const interval = window.setInterval(updateClock, 1_000);
+    return () => window.clearInterval(interval);
+  }, [expanded]);
 
   const clearDragHoldTimer = () => {
     if (dragHoldTimerRef.current !== null) {
@@ -203,9 +223,8 @@ function LocalizedWidgetShell({
 
           pollCollapsedDragRelease();
         })
-        .catch((error) => {
+        .catch(() => {
           stopCollapsedDrag();
-          console.warn("poll widget drag release failed", error);
         });
     }, DRAG_RELEASE_POLL_MS);
   };
@@ -243,7 +262,7 @@ function LocalizedWidgetShell({
   };
 
   const handleCollapsedDragPointerDown = (event: PointerEvent<HTMLButtonElement>) => {
-    if (renderExpanded || event.button !== 0) {
+    if (event.button !== 0) {
       return;
     }
 
@@ -262,7 +281,7 @@ function LocalizedWidgetShell({
         .catch((error) => {
           suppressNextToggleRef.current = false;
           stopCollapsedDrag();
-          console.warn("start widget drag failed", error);
+              console.warn("widget:drag-start", error);
         });
     }, COLLAPSED_DRAG_HOLD_MS);
   };
@@ -307,57 +326,85 @@ function LocalizedWidgetShell({
       onPointerLeave={clearHoverRevealSuppression}
     >
       <div className={`widget-pill-shell qp-panel widget-pill-shell-${viewModel.statusTone}`}>
+        <span className="sr-only" role="status" aria-live="polite">
+          {pinSaveFailed ? uiText.settings.saveFailed : ""}
+        </span>
         <div
-          className={`widget-pill-tray ${
-            renderExpanded && showObjectSlot ? "widget-pill-tray-with-object" : "widget-pill-tray-actions-only"
-          }`}
+          className="widget-pill-tray"
           aria-hidden={!expanded}
         >
-          {renderExpanded && showObjectSlot ? (
-            <div
-              className="widget-pill-object-slot"
-              aria-hidden={!expanded}
-            >
-              <div
-                className="widget-pill-object"
-                aria-label={objectSlotTitle}
-                role="img"
-              >
-                <img src={objectIcon ?? ""} className="widget-pill-object-icon" alt="" />
-              </div>
+          <div className="widget-pill-tool-slots" aria-hidden={!expanded}>
+            {statusViewModel.tools.map((tool) => {
+              const label = tool.kind === "pomodoro"
+                ? uiText.tools.pomodoroTitle
+                : uiText.tools.timerTitle;
+              const value = tool.state === "completed"
+                ? uiText.tools.timerStatus.completed
+                : tool.timeText;
+              return (
+                <div
+                  key={tool.kind}
+                  className={`widget-pill-tool-slot widget-pill-tool-slot-${tool.state}`}
+                  aria-label={`${label} ${value}`}
+                >
+                  {tool.kind === "pomodoro"
+                    ? <Clock3 size={14} strokeWidth={1.8} aria-hidden />
+                    : <Timer size={14} strokeWidth={1.8} aria-hidden />}
+                  <span className="widget-pill-time">
+                    {value}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {toolSlotCount > 0 ? <span className="widget-pill-separator" aria-hidden /> : null}
+
+          <div className="widget-pill-tracking-core" aria-label={`${objectSlotTitle} ${statusViewModel.trackingTimeText}`}>
+            <div className="widget-pill-object" aria-hidden>
+              {objectIcon ? (
+                <img src={objectIcon} className="widget-pill-object-icon" alt="" />
+              ) : (
+                <span className="widget-pill-object-fallback" />
+              )}
             </div>
-          ) : null}
+            <span className="widget-pill-time widget-pill-tracking-time">
+              {statusViewModel.trackingTimeText}
+            </span>
+          </div>
 
           <div className="widget-pill-actions">
-            <QuietIconAction
-              icon={appSettings.trackingPaused
-                ? <Play size={15} strokeWidth={2} />
-                : <Pause size={15} strokeWidth={2} />}
-              title={viewModel.pauseActionLabel}
-              ariaLabel={viewModel.pauseActionLabel}
-              className="widget-pill-action"
-              showTooltip={false}
-              disabled={!expanded}
-              onClick={() => {
-                void toggleTrackingPaused().catch((error) => {
-                  console.warn("toggle tracking paused failed", error);
-                });
-              }}
-            />
-
-            <QuietIconAction
-              icon={<SquareArrowOutUpRight size={15} strokeWidth={1.8} />}
-              title={uiText.accessibility.widget.openMainWindow}
-              ariaLabel={uiText.accessibility.widget.openMainWindow}
-              className="widget-pill-action"
-              showTooltip={false}
+            <button
+              type="button"
+              aria-label={uiText.accessibility.widget.openMainWindow}
+              className="qp-icon-action qp-icon-action-neutral widget-pill-action"
               disabled={!expanded}
               onClick={() => {
                 void showMainWindow().catch((error) => {
-                  console.warn("show main window failed", error);
+                  console.warn("widget:open", error);
                 });
               }}
-            />
+            >
+              <SquareArrowOutUpRight size={15} strokeWidth={1.8} />
+            </button>
+
+            <button
+              type="button"
+              aria-label={uiText.accessibility.widget.pin}
+              aria-pressed={pinned}
+              className="qp-icon-action qp-icon-action-neutral widget-pill-action widget-pill-pin-action"
+              disabled={!expanded}
+              onClick={() => {
+                void togglePinned();
+              }}
+            >
+              <Pin
+                className={`widget-pin-icon ${pinned ? "widget-pin-icon-filled" : ""}`}
+                size={15}
+                strokeWidth={1.8}
+                aria-hidden
+              />
+            </button>
           </div>
         </div>
 
