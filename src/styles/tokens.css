@@ -56,6 +56,9 @@
   --qp-text-disabled: var(--color-text-disabled);
   --qp-scrollbar-default: var(--color-scrollbar-default);
   --qp-scrollbar-hover: var(--color-scrollbar-hover);
+  --qp-scrollbar-size: 10px;
+  --qp-scrollbar-button-size: 10px;
+  --qp-scrollbar-thumb-inset: 2px;
   --qp-control-thumb: #ffffff;
   --qp-chart-cursor: rgba(101, 114, 135, 0.12);
   --qp-chart-grid: rgba(156, 168, 186, 0.25);
@@ -81,7 +84,7 @@
   --qp-motion-ease: cubic-bezier(0.2, 0, 0, 1);
 
   --qp-widget-height: 48px;
-  --qp-widget-expanded-width: 228px;
+  --qp-widget-tool-slot-width: 68px;
   --qp-widget-collapsed-width: 64px;
   --qp-widget-collapsed-visible-width: 64px;
   --qp-widget-edge-overlap: 0px;

@@ -283,33 +283,6 @@ html[data-window-label="main"] #root {
   gap: 6px;
 }
 
-/* scrollbars */
-.custom-scrollbar {
-  scrollbar-gutter: stable;
-}
-
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--qp-scrollbar-default);
-  border-radius: 999px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--qp-scrollbar-hover);
-}
-
-.custom-scrollbar::-webkit-scrollbar {
-  width: 5px;
-}
-
 html[data-window-label="widget"],
 body[data-window-label="widget"],
 #root[data-window-label="widget"] {
@@ -519,36 +492,14 @@ body[data-window-label="widget"] {
   outline-offset: -2px;
 }
 
-.widget-pill-object-slot {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  width: var(--qp-widget-action-size);
-  height: var(--qp-widget-action-size);
-}
-
 .widget-pill-object {
   display: flex;
   align-items: center;
   justify-content: center;
   width: var(--qp-widget-action-size);
   height: var(--qp-widget-action-size);
-  border-radius: var(--qp-radius-control);
   color: var(--qp-widget-tone, var(--qp-text-secondary));
-  background: transparent;
-  border: 1px solid transparent;
-  box-shadow: none;
   overflow: hidden;
-  transition:
-    border-color var(--qp-motion-fast) var(--qp-motion-ease),
-    background-color var(--qp-motion-fast) var(--qp-motion-ease),
-    color var(--qp-motion-fast) var(--qp-motion-ease);
-}
-
-.widget-pill-object-slot:hover .widget-pill-object {
-  background: color-mix(in srgb, var(--qp-widget-tone, var(--qp-bg-elevated)) 12%, var(--qp-bg-panel));
-  color: var(--qp-widget-tone, var(--qp-text-secondary));
 }
 
 .widget-pill-object-icon {
@@ -558,33 +509,60 @@ body[data-window-label="widget"] {
 }
 
 .widget-pill-object-fallback {
+  position: relative;
+  width: 15px;
+  height: 12px;
+  border: 1.5px solid currentColor;
+  border-radius: var(--qp-radius-timeline-segment);
   opacity: 0.78;
 }
 
+.widget-pill-object-fallback::after {
+  content: "";
+  position: absolute;
+  inset: 3px -1.5px auto;
+  border-top: 1.5px solid currentColor;
+}
+
+.widget-pin-icon {
+  display: block;
+  width: 15px;
+  height: 15px;
+  fill: none;
+}
+
+.widget-pin-icon-filled {
+  fill: currentColor;
+}
+
 .widget-pill-tray {
-  display: flex;
-  flex: 1 1 auto;
+  display: grid;
   min-width: 0;
   height: 38px;
   align-items: center;
-  justify-content: flex-end;
-  gap: var(--qp-widget-action-gap);
+  column-gap: var(--qp-widget-action-gap);
   border-radius: 999px;
   border: 1px solid var(--qp-border-subtle);
   background: color-mix(in srgb, var(--qp-bg-panel) 96%, var(--qp-bg-canvas));
   box-shadow: none;
   overflow: hidden;
-  padding: 0 7px;
+  padding: 0 6px;
   transition:
     opacity var(--qp-motion-base) var(--qp-motion-ease),
     transform var(--qp-motion-base) var(--qp-motion-ease);
 }
 
 .widget-shell-left .widget-pill-tray {
+  grid-template-areas: "actions tracking separator tools";
+  grid-template-columns: auto auto auto auto;
+  justify-content: start;
   transform-origin: left center;
 }
 
 .widget-shell-right .widget-pill-tray {
+  grid-template-areas: "tools separator tracking actions";
+  grid-template-columns: auto auto auto auto;
+  justify-content: end;
   transform-origin: right center;
 }
 
@@ -607,7 +585,6 @@ body[data-window-label="widget"] {
   left: calc(
     var(--qp-widget-expanded-edge-inset) + var(--qp-widget-peek-size) + var(--qp-widget-expanded-gap)
   );
-  justify-content: flex-start;
   right: var(--qp-widget-expanded-edge-inset);
 }
 
@@ -616,14 +593,6 @@ body[data-window-label="widget"] {
   right: calc(
     var(--qp-widget-expanded-edge-inset) + var(--qp-widget-peek-size) + var(--qp-widget-expanded-gap)
   );
-}
-
-.widget-shell-expanded .widget-pill-tray-actions-only {
-  justify-content: center;
-}
-
-.widget-shell-expanded .widget-pill-tray-with-object {
-  justify-content: center;
 }
 
 .widget-shell-collapsed .widget-pill-tray {
@@ -657,11 +626,78 @@ body[data-window-label="widget"] {
 }
 
 .widget-pill-actions {
+  grid-area: actions;
   display: flex;
   flex-shrink: 0;
   align-items: center;
   gap: var(--qp-widget-action-gap);
   overflow: visible;
+}
+
+.widget-shell-left .widget-pill-actions {
+  flex-direction: row-reverse;
+}
+
+.widget-pill-tracking-core {
+  grid-area: tracking;
+  display: flex;
+  height: var(--qp-widget-action-size);
+  align-items: center;
+  gap: 2px;
+  color: var(--qp-text-primary);
+}
+
+.widget-pill-time {
+  min-width: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.widget-pill-tracking-time {
+  width: 36px;
+  font-weight: 650;
+}
+
+.widget-pill-tool-slots {
+  grid-area: tools;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.widget-shell-left .widget-pill-tool-slots {
+  flex-direction: row;
+}
+
+.widget-shell-right .widget-pill-tool-slots {
+  flex-direction: row;
+}
+
+.widget-pill-tool-slot {
+  display: flex;
+  width: var(--qp-widget-tool-slot-width);
+  height: var(--qp-widget-action-size);
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--qp-text-secondary);
+}
+
+.widget-pill-tool-slot-paused {
+  color: var(--qp-text-tertiary);
+}
+
+.widget-pill-tool-slot-completed {
+  color: var(--qp-success);
+}
+
+.widget-pill-separator {
+  grid-area: separator;
+  width: 1px;
+  height: 16px;
+  background: var(--qp-border-subtle);
 }
 
 .widget-shell-collapsed .widget-pill-actions {
