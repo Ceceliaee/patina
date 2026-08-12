@@ -3,8 +3,7 @@ export type TimerMode = "stopwatch" | "countdown";
 export type TimerStatus = "idle" | "running" | "paused" | "completed";
 export type PomodoroPhase = "focus" | "short_break" | "long_break";
 export type PomodoroStatus = "idle" | "running" | "paused" | "completed";
-export type ToolAlertKind = "reminder" | "countdown" | "pomodoro" | "software_reminder";
-
+export type ToolAlertKind = "reminder" | "countdown" | "pomodoro" | "activity_reminder";
 export interface ToolRuntimeSettings {
   defaultCountdownMinutes: number;
   pomodoroFocusMinutes: number;
@@ -23,21 +22,45 @@ export interface ToolReminder {
   cancelledAt: number | null;
 }
 
-export interface ToolSoftwareReminderRule {
+export type ActivityReminderTarget =
+  | { kind: "app"; appName: string; exeName: string | null }
+  | { kind: "category"; categoryId: string }
+  | { kind: "web"; normalizedDomain: string };
+
+export type ActivityReminderSuspensionReason =
+  | "source_disabled"
+  | "target_excluded"
+  | "target_deleted";
+
+export interface ToolActivityReminderRule {
   id: number;
-  appName: string;
-  exeName: string | null;
+  target: ActivityReminderTarget;
+  labelSnapshot: string;
   limitMs: number;
   message: string;
   createdAt: number;
   updatedAt: number;
   disabledAt: number | null;
   lastFiredDateKey: string | null;
+  suspensionReason: ActivityReminderSuspensionReason | null;
 }
 
-export interface ToolSoftwareReminderAppCandidate {
+export interface ActivityReminderAppCandidate {
   appName: string;
   exeName: string;
+  lastSeenAt: number;
+}
+
+export interface ActivityReminderCategoryCandidate {
+  categoryId: string;
+  label: string;
+  color: string;
+}
+
+export interface ActivityReminderWebCandidate {
+  normalizedDomain: string;
+  label: string;
+  faviconUrl: string | null;
   lastSeenAt: number;
 }
 
@@ -84,7 +107,7 @@ export interface ToolPomodoroRun {
 export interface ToolsRuntimeSnapshot {
   settings: ToolRuntimeSettings;
   reminders: ToolReminder[];
-  softwareReminderRules: ToolSoftwareReminderRule[];
+  activityReminderRules: ToolActivityReminderRule[];
   currentTimer: ToolTimer | null;
   timerLaps: ToolTimerLap[];
   currentPomodoro: ToolPomodoroRun | null;
@@ -106,9 +129,9 @@ export interface CreateReminderInput {
   scheduledAt: number;
 }
 
-export interface CreateSoftwareReminderRuleInput {
-  appName: string;
-  exeName?: string | null;
+export interface CreateActivityReminderRuleInput {
+  target: ActivityReminderTarget;
+  labelSnapshot: string;
   limitMs: number;
   message: string;
 }

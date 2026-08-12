@@ -7,9 +7,10 @@ import type {
   ToolPomodoroRun,
   ToolAlert,
   ToolAlertKind,
+  ActivityReminderTarget,
   ToolReminder,
   ToolRuntimeSettings,
-  ToolSoftwareReminderRule,
+  ToolActivityReminderRule,
   ToolsRuntimeSnapshot,
   ToolTimer,
   ToolTimerLap,
@@ -37,16 +38,22 @@ interface RawToolReminder {
   cancelled_at: number | null;
 }
 
-interface RawToolSoftwareReminderRule {
+type RawActivityReminderTarget =
+  | { kind: "app"; app_name: string; exe_name: string | null }
+  | { kind: "category"; category_id: string }
+  | { kind: "web"; normalized_domain: string };
+
+interface RawToolActivityReminderRule {
   id: number;
-  app_name: string;
-  exe_name: string | null;
+  target: RawActivityReminderTarget;
+  label_snapshot: string;
   limit_ms: number;
   message: string;
   created_at: number;
   updated_at: number;
   disabled_at: number | null;
   last_fired_date_key: string | null;
+  suspension_reason: "source_disabled" | "target_excluded" | "target_deleted" | null;
 }
 
 interface RawToolTimer {
@@ -100,7 +107,7 @@ interface RawToolAlert {
 interface RawToolsRuntimeSnapshot {
   settings: RawToolRuntimeSettings;
   reminders: RawToolReminder[];
-  software_reminder_rules: RawToolSoftwareReminderRule[];
+  activity_reminder_rules: RawToolActivityReminderRule[];
   current_timer: RawToolTimer | null;
   timer_laps: RawToolTimerLap[];
   current_pomodoro: RawToolPomodoroRun | null;
@@ -114,7 +121,12 @@ const TIMER_MODES = new Set(["stopwatch", "countdown"]);
 const TIMER_STATUSES = new Set(["idle", "running", "paused", "completed"]);
 const POMODORO_PHASES = new Set(["focus", "short_break", "long_break"]);
 const POMODORO_STATUSES = new Set(["idle", "running", "paused", "completed"]);
-const TOOL_ALERT_KINDS = new Set(["reminder", "countdown", "pomodoro", "software_reminder"]);
+const TOOL_ALERT_KINDS = new Set(["reminder", "countdown", "pomodoro", "activity_reminder"]);
+const ACTIVITY_REMINDER_SUSPENSION_REASONS = new Set([
+  "source_disabled",
+  "target_excluded",
+  "target_deleted",
+]);
 
 function isNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -148,17 +160,33 @@ function isRawToolReminder(value: unknown): value is RawToolReminder {
     && isNullableNumber(value.cancelled_at);
 }
 
-function isRawToolSoftwareReminderRule(value: unknown): value is RawToolSoftwareReminderRule {
+function isRawActivityReminderTarget(value: unknown): value is RawActivityReminderTarget {
+  if (!isRecord(value) || typeof value.kind !== "string") return false;
+  if (value.kind === "app") {
+    return typeof value.app_name === "string" && isNullableString(value.exe_name);
+  }
+  if (value.kind === "category") {
+    return typeof value.category_id === "string";
+  }
+  if (value.kind === "web") {
+    return typeof value.normalized_domain === "string";
+  }
+  return false;
+}
+
+function isRawToolActivityReminderRule(value: unknown): value is RawToolActivityReminderRule {
   if (!isRecord(value)) return false;
   return isNumber(value.id)
-    && typeof value.app_name === "string"
-    && isNullableString(value.exe_name)
+    && isRawActivityReminderTarget(value.target)
+    && typeof value.label_snapshot === "string"
     && isNumber(value.limit_ms)
     && typeof value.message === "string"
     && isNumber(value.created_at)
     && isNumber(value.updated_at)
     && isNullableNumber(value.disabled_at)
-    && isNullableString(value.last_fired_date_key);
+    && isNullableString(value.last_fired_date_key)
+    && (value.suspension_reason === null
+      || isStringEnum(value.suspension_reason, ACTIVITY_REMINDER_SUSPENSION_REASONS));
 }
 
 function isRawToolTimer(value: unknown): value is RawToolTimer {
@@ -209,8 +237,8 @@ function isRawToolsRuntimeSnapshot(value: unknown): value is RawToolsRuntimeSnap
   return isRawToolRuntimeSettings(value.settings)
     && Array.isArray(value.reminders)
     && value.reminders.every(isRawToolReminder)
-    && Array.isArray(value.software_reminder_rules)
-    && value.software_reminder_rules.every(isRawToolSoftwareReminderRule)
+    && Array.isArray(value.activity_reminder_rules)
+    && value.activity_reminder_rules.every(isRawToolActivityReminderRule)
     && (value.current_timer === null || isRawToolTimer(value.current_timer))
     && Array.isArray(value.timer_laps)
     && value.timer_laps.every(isRawToolTimerLap)
@@ -251,17 +279,28 @@ function mapToolReminder(raw: RawToolReminder): ToolReminder {
   };
 }
 
-function mapToolSoftwareReminderRule(raw: RawToolSoftwareReminderRule): ToolSoftwareReminderRule {
+function mapActivityReminderTarget(raw: RawActivityReminderTarget): ActivityReminderTarget {
+  if (raw.kind === "app") {
+    return { kind: "app", appName: raw.app_name, exeName: raw.exe_name };
+  }
+  if (raw.kind === "category") {
+    return { kind: "category", categoryId: raw.category_id };
+  }
+  return { kind: "web", normalizedDomain: raw.normalized_domain };
+}
+
+function mapToolActivityReminderRule(raw: RawToolActivityReminderRule): ToolActivityReminderRule {
   return {
     id: raw.id,
-    appName: raw.app_name,
-    exeName: raw.exe_name,
+    target: mapActivityReminderTarget(raw.target),
+    labelSnapshot: raw.label_snapshot,
     limitMs: raw.limit_ms,
     message: raw.message,
     createdAt: raw.created_at,
     updatedAt: raw.updated_at,
     disabledAt: raw.disabled_at,
     lastFiredDateKey: raw.last_fired_date_key,
+    suspensionReason: raw.suspension_reason,
   };
 }
 
@@ -329,7 +368,7 @@ export function parseToolsRuntimeSnapshot(value: unknown): ToolsRuntimeSnapshot 
   return {
     settings: mapToolRuntimeSettings(value.settings),
     reminders: value.reminders.map(mapToolReminder),
-    softwareReminderRules: value.software_reminder_rules.map(mapToolSoftwareReminderRule),
+    activityReminderRules: value.activity_reminder_rules.map(mapToolActivityReminderRule),
     currentTimer: value.current_timer ? mapToolTimer(value.current_timer) : null,
     timerLaps: value.timer_laps.map(mapToolTimerLap),
     currentPomodoro: value.current_pomodoro ? mapToolPomodoroRun(value.current_pomodoro) : null,

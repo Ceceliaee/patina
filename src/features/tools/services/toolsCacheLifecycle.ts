@@ -1,5 +1,5 @@
-import { clearSoftwareReminderAppCandidateCache } from "./softwareReminderAppCandidates.ts";
+import { clearActivityReminderTargetCandidateCache } from "./activityReminderTargetCandidates.ts";
 
 export function clearToolsPageCaches(): void {
-  clearSoftwareReminderAppCandidateCache();
+  clearActivityReminderTargetCandidateCache();
 }

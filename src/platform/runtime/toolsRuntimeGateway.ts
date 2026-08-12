@@ -2,7 +2,7 @@ import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { listen as tauriListen, type Event } from "@tauri-apps/api/event";
 import type {
   CreateReminderInput,
-  CreateSoftwareReminderRuleInput,
+  CreateActivityReminderRuleInput,
   StartPomodoroInput,
   StartTimerInput,
   ToolAlert,
@@ -80,19 +80,19 @@ export function createToolsRuntimeGateway(deps: ToolsRuntimeGatewayDeps) {
       return invokeToolsSnapshot("cmd_cancel_reminder", { reminderId });
     },
 
-    createSoftwareReminderRule(input: CreateSoftwareReminderRuleInput): Promise<ToolsRuntimeSnapshot> {
-      return invokeToolsSnapshot("cmd_create_software_reminder_rule", {
+    createActivityReminderRule(input: CreateActivityReminderRuleInput): Promise<ToolsRuntimeSnapshot> {
+      return invokeToolsSnapshot("cmd_create_activity_reminder_rule", {
         input: {
-          appName: input.appName,
-          exeName: input.exeName ?? null,
+          target: input.target,
+          labelSnapshot: input.labelSnapshot,
           limitMs: input.limitMs,
           message: input.message,
         },
       });
     },
 
-    disableSoftwareReminderRule(ruleId: number): Promise<ToolsRuntimeSnapshot> {
-      return invokeToolsSnapshot("cmd_disable_software_reminder_rule", { ruleId });
+    disableActivityReminderRule(ruleId: number): Promise<ToolsRuntimeSnapshot> {
+      return invokeToolsSnapshot("cmd_disable_activity_reminder_rule", { ruleId });
     },
 
     startTimer(input: StartTimerInput): Promise<ToolsRuntimeSnapshot> {
@@ -162,8 +162,8 @@ export const onToolAlert = defaultToolsRuntimeGateway.onToolAlert;
 export const onToolsRuntimeChanged = defaultToolsRuntimeGateway.onToolsRuntimeChanged;
 export const createReminder = defaultToolsRuntimeGateway.createReminder;
 export const cancelReminder = defaultToolsRuntimeGateway.cancelReminder;
-export const createSoftwareReminderRule = defaultToolsRuntimeGateway.createSoftwareReminderRule;
-export const disableSoftwareReminderRule = defaultToolsRuntimeGateway.disableSoftwareReminderRule;
+export const createActivityReminderRule = defaultToolsRuntimeGateway.createActivityReminderRule;
+export const disableActivityReminderRule = defaultToolsRuntimeGateway.disableActivityReminderRule;
 export const startTimer = defaultToolsRuntimeGateway.startTimer;
 export const pauseTimer = defaultToolsRuntimeGateway.pauseTimer;
 export const resumeTimer = defaultToolsRuntimeGateway.resumeTimer;

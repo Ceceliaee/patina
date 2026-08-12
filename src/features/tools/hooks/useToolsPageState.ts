@@ -3,24 +3,32 @@ import { useLocale, type UiText } from "../../../shared/i18n/index.ts";
 import type {
   StartPomodoroInput,
   TimerMode,
-  ToolSoftwareReminderAppCandidate,
+  ActivityReminderTarget,
+  ActivityReminderAppCandidate,
+  ActivityReminderCategoryCandidate,
+  ActivityReminderWebCandidate,
   ToolsRuntimeSnapshot,
 } from "../../../shared/types/tools.ts";
 import type {
   PomodoroViewModel,
   ReminderRowViewModel,
-  SoftwareReminderRuleRowViewModel,
+  ActivityReminderRuleRowViewModel,
   TimerViewModel,
   ToolsSection,
 } from "../types.ts";
 import { ToolsRuntimeService } from "../services/toolsRuntimeService.ts";
 import { toolsRuntimeSnapshotStore } from "../services/toolsRuntimeSnapshotStore.ts";
-import { loadSoftwareReminderAppCandidates } from "../services/softwareReminderAppCandidates.ts";
+import {
+  loadActivityReminderAppCandidates,
+  loadActivityReminderCategoryCandidates,
+  loadActivityReminderWebCandidates,
+  subscribeActivityReminderTargetCandidateInvalidation,
+} from "../services/activityReminderTargetCandidates.ts";
 import { buildToolsViewModelLabels } from "../services/toolsLabels.ts";
 import {
   buildPomodoroViewModel,
   buildReminderRows,
-  buildSoftwareReminderRuleRows,
+  buildActivityReminderRuleRows,
   buildTimerViewModel,
 } from "../services/toolsViewModel.ts";
 
@@ -33,7 +41,7 @@ const DEFAULT_SNAPSHOT: ToolsRuntimeSnapshot = {
     pomodoroLongBreakEvery: 4,
   },
   reminders: [],
-  softwareReminderRules: [],
+  activityReminderRules: [],
   currentTimer: null,
   timerLaps: [],
   currentPomodoro: null,
@@ -43,7 +51,9 @@ const DEFAULT_SNAPSHOT: ToolsRuntimeSnapshot = {
 };
 
 const EMPTY_REMINDER_ROWS: ReminderRowViewModel[] = [];
-const EMPTY_SOFTWARE_REMINDER_RULE_ROWS: SoftwareReminderRuleRowViewModel[] = [];
+const EMPTY_ACTIVITY_REMINDER_RULE_ROWS: ActivityReminderRuleRowViewModel[] = [];
+type ActivityCandidateMode = "app" | "category" | "web";
+type CandidateLoadState = "idle" | "loading" | "ready" | "error";
 
 interface UseToolsPageStateOptions {
   activeSection?: ToolsSection;
@@ -63,8 +73,15 @@ export function useToolsPageState({
   const [loadError, setLoadError] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [busyAction, setBusyAction] = useState<string | null>(null);
-  const [softwareReminderAppCandidates, setSoftwareReminderAppCandidates] = useState<ToolSoftwareReminderAppCandidate[]>([]);
-  const [softwareReminderAppCandidatesLoaded, setSoftwareReminderAppCandidatesLoaded] = useState(false);
+  const [activityReminderAppCandidates, setActivityReminderAppCandidates] = useState<ActivityReminderAppCandidate[]>([]);
+  const [activityReminderCategoryCandidates, setActivityReminderCategoryCandidates] = useState<ActivityReminderCategoryCandidate[]>([]);
+  const [activityReminderWebCandidates, setActivityReminderWebCandidates] = useState<ActivityReminderWebCandidate[]>([]);
+  const [candidateRevision, setCandidateRevision] = useState(0);
+  const [activityReminderCandidateLoadState, setActivityReminderCandidateLoadState] = useState<
+    Record<ActivityCandidateMode, CandidateLoadState>
+  >({ app: "idle", category: "idle", web: "idle" });
+  const loadedCandidateModesRef = useRef(new Set<ActivityCandidateMode>());
+  const candidateRequestIdsRef = useRef({ app: 0, category: 0, web: 0 });
   const mountedRef = useRef(true);
   const refreshRequestRef = useRef(0);
 
@@ -115,30 +132,53 @@ export function useToolsPageState({
   }, [refreshSnapshot]);
 
   useEffect(() => {
-    setSoftwareReminderAppCandidatesLoaded(false);
-  }, [locale]);
+    loadedCandidateModesRef.current.delete("category");
+    candidateRequestIdsRef.current.category += 1;
+    setActivityReminderCandidateLoadState((current) => ({ ...current, category: "idle" }));
+  }, [locale, uiText]);
 
-  useEffect(() => {
-    if (activeSection !== "reminders" || softwareReminderAppCandidatesLoaded) {
-      return undefined;
+  useEffect(() => subscribeActivityReminderTargetCandidateInvalidation(() => {
+    loadedCandidateModesRef.current.clear();
+    candidateRequestIdsRef.current.app += 1;
+    candidateRequestIdsRef.current.category += 1;
+    candidateRequestIdsRef.current.web += 1;
+    setActivityReminderCandidateLoadState({ app: "idle", category: "idle", web: "idle" });
+    setCandidateRevision((current) => current + 1);
+  }), []);
+
+  const activateActivityReminderMode = useCallback(async (mode: ActivityCandidateMode) => {
+    if (loadedCandidateModesRef.current.has(mode)) return;
+    const requestId = candidateRequestIdsRef.current[mode] + 1;
+    candidateRequestIdsRef.current[mode] = requestId;
+    setActivityReminderCandidateLoadState((current) => ({ ...current, [mode]: "loading" }));
+    try {
+      if (mode === "app") {
+        const candidates = await loadActivityReminderAppCandidates();
+        if (candidateRequestIdsRef.current.app !== requestId || !mountedRef.current) return;
+        setActivityReminderAppCandidates(candidates);
+      } else if (mode === "category") {
+        const candidates = await loadActivityReminderCategoryCandidates(uiText);
+        if (candidateRequestIdsRef.current.category !== requestId || !mountedRef.current) return;
+        setActivityReminderCategoryCandidates(candidates);
+      } else {
+        const candidates = await loadActivityReminderWebCandidates();
+        if (candidateRequestIdsRef.current.web !== requestId || !mountedRef.current) return;
+        setActivityReminderWebCandidates(candidates);
+      }
+      loadedCandidateModesRef.current.add(mode);
+      setActivityReminderCandidateLoadState((current) => ({ ...current, [mode]: "ready" }));
+    } catch (error) {
+      console.warn(`load ${mode} activity reminder candidates failed`, error);
+      if (candidateRequestIdsRef.current[mode] === requestId && mountedRef.current) {
+        setActivityReminderCandidateLoadState((current) => ({ ...current, [mode]: "error" }));
+      }
     }
+  }, [uiText]);
 
-    let cancelled = false;
-    void loadSoftwareReminderAppCandidates(locale)
-      .then((candidates) => {
-        if (!cancelled) {
-          setSoftwareReminderAppCandidates(candidates);
-          setSoftwareReminderAppCandidatesLoaded(true);
-        }
-      })
-      .catch((error) => {
-        console.warn("load software reminder app candidates failed", error);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeSection, locale, softwareReminderAppCandidatesLoaded]);
+  const retryActivityReminderCandidates = useCallback((mode: ActivityCandidateMode) => {
+    loadedCandidateModesRef.current.delete(mode);
+    void activateActivityReminderMode(mode);
+  }, [activateActivityReminderMode]);
 
   const labels = useMemo(() => buildToolsViewModelLabels(uiText), [uiText]);
   const inactiveTimerViewModel = useMemo<TimerViewModel>(
@@ -153,10 +193,10 @@ export function useToolsPageState({
     () => activeSection === "reminders" ? buildReminderRows(snapshot, nowMs, labels) : EMPTY_REMINDER_ROWS,
     [activeSection, labels, nowMs, snapshot],
   );
-  const softwareReminderRuleRows = useMemo(
+  const activityReminderRuleRows = useMemo(
     () => activeSection === "reminders"
-      ? buildSoftwareReminderRuleRows(snapshot, labels)
-      : EMPTY_SOFTWARE_REMINDER_RULE_ROWS,
+      ? buildActivityReminderRuleRows(snapshot, labels)
+      : EMPTY_ACTIVITY_REMINDER_RULE_ROWS,
     [activeSection, labels, snapshot],
   );
   const timerViewModel = useMemo(
@@ -172,51 +212,60 @@ export function useToolsPageState({
     [activeSection, inactivePomodoroViewModel, labels, nowMs, snapshot],
   );
 
-  const runAction = useCallback(async (
+  const executeAction = useCallback(async (
     actionKey: string,
     action: () => Promise<ToolsRuntimeSnapshot>,
   ) => {
-    if (busyAction) return;
+    if (busyAction) return false;
     setBusyAction(actionKey);
     try {
       const nextSnapshot = await action();
       toolsRuntimeSnapshotStore.publishSnapshot(nextSnapshot);
+      return true;
     } catch (error) {
       console.warn(`tools action failed: ${actionKey}`, error);
       onError?.(uiText.tools.actionFailed);
+      return false;
     } finally {
       setBusyAction(null);
     }
   }, [busyAction, onError, uiText]);
 
-  const createReminder = useCallback((label: string, scheduledAt: number) => runAction(
+  const runAction = useCallback(async (
+    actionKey: string,
+    action: () => Promise<ToolsRuntimeSnapshot>,
+  ) => {
+    await executeAction(actionKey, action);
+  }, [executeAction]);
+
+  const createReminder = useCallback((label: string, scheduledAt: number) => executeAction(
     "create-reminder",
     () => ToolsRuntimeService.createReminder({ label, scheduledAt }),
-  ), [runAction]);
+  ), [executeAction]);
 
   const cancelReminder = useCallback((id: number) => runAction(
     `cancel-reminder:${id}`,
     () => ToolsRuntimeService.cancelReminder(id),
   ), [runAction]);
 
-  const createSoftwareReminderRule = useCallback((
-    appName: string,
-    exeName: string | null,
+  const createActivityReminderRule = useCallback((
+    target: ActivityReminderTarget,
+    labelSnapshot: string,
     limitMinutes: number,
     message: string,
-  ) => runAction(
-    "create-software-reminder",
-    () => ToolsRuntimeService.createSoftwareReminderRule({
-      appName,
-      exeName,
+  ) => executeAction(
+    "create-activity-reminder",
+    () => ToolsRuntimeService.createActivityReminderRule({
+      target,
+      labelSnapshot,
       limitMs: Math.max(1, limitMinutes) * 60_000,
       message,
     }),
-  ), [runAction]);
+  ), [executeAction]);
 
-  const disableSoftwareReminderRule = useCallback((id: number) => runAction(
-    `disable-software-reminder:${id}`,
-    () => ToolsRuntimeService.disableSoftwareReminderRule(id),
+  const disableActivityReminderRule = useCallback((id: number) => runAction(
+    `disable-activity-reminder:${id}`,
+    () => ToolsRuntimeService.disableActivityReminderRule(id),
   ), [runAction]);
 
   const startTimer = useCallback((mode: TimerMode, durationMinutes: number, label?: string) => runAction(
@@ -256,15 +305,21 @@ export function useToolsPageState({
     snapshot,
     nowMs,
     busyAction,
-    softwareReminderAppCandidates,
+    activityReminderAppCandidates,
+    activityReminderCategoryCandidates,
+    activityReminderWebCandidates,
+    activityReminderCandidateRevision: candidateRevision,
+    activityReminderCandidateLoadState,
+    activateActivityReminderMode,
+    retryActivityReminderCandidates,
     reminderRows,
-    softwareReminderRuleRows,
+    activityReminderRuleRows,
     timerViewModel,
     pomodoroViewModel,
     createReminder,
     cancelReminder,
-    createSoftwareReminderRule,
-    disableSoftwareReminderRule,
+    createActivityReminderRule,
+    disableActivityReminderRule,
     startTimer,
     pauseTimer,
     resumeTimer,

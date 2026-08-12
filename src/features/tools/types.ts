@@ -4,7 +4,7 @@ export type ToolsSection = "reminders" | "timer" | "pomodoro";
 type LegacyToolsSection = "timing";
 type TimingMode = "reminder" | "timer";
 type ToolsOpenTimingMode = TimingMode | TimerMode;
-export type ReminderMode = "event" | "software";
+export type ReminderMode = "event" | "app" | "category" | "web";
 export type ReminderFormMode = "relative" | "absolute";
 
 export interface ToolsOpenTarget {
@@ -28,13 +28,17 @@ export interface ReminderRowViewModel {
   canCancel: boolean;
 }
 
-export interface SoftwareReminderRuleRowViewModel {
+export interface ActivityReminderRuleRowViewModel {
   id: number;
-  appLabel: string;
+  kind: Exclude<ReminderMode, "event">;
+  targetKey: string;
+  targetLabel: string;
   exeName: string | null;
+  faviconUrl: string | null;
   limitLabel: string;
   message: string;
   statusLabel: string;
+  suspensionReason: "source_disabled" | "target_excluded" | "target_deleted" | null;
 }
 
 export interface TimerViewModel {
@@ -65,8 +69,8 @@ export interface ToolsViewModelLabels {
   chipCountdown: string;
   chipStopwatch: string;
   chipReminder: string;
-  softwareReminderActive: string;
-  softwareReminderDailyLimit: (minutes: number) => string;
+  activityReminderActive: string;
+  activityReminderDailyLimit: (minutes: number) => string;
   dueNow: string;
   completedToday: (count: number) => string;
   cycle: (index: number, every: number) => string;

@@ -1,9 +1,9 @@
 import {
   addTimerLap,
   cancelReminder,
-  createSoftwareReminderRule,
+  createActivityReminderRule,
   createReminder,
-  disableSoftwareReminderRule,
+  disableActivityReminderRule,
   dismissToolAlert,
   getToolAlerts,
   getToolsSnapshot,
@@ -23,9 +23,9 @@ import {
 export const ToolsRuntimeService = {
   addTimerLap,
   cancelReminder,
-  createSoftwareReminderRule,
+  createActivityReminderRule,
   createReminder,
-  disableSoftwareReminderRule,
+  disableActivityReminderRule,
   dismissToolAlert,
   getToolAlerts,
   getToolsSnapshot,

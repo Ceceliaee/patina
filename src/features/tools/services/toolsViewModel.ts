@@ -1,16 +1,14 @@
 import type {
   PomodoroPhase,
-  ToolSoftwareReminderRule,
   ToolPomodoroRun,
   ToolReminder,
   ToolsRuntimeSnapshot,
   ToolTimer,
 } from "../../../shared/types/tools.ts";
-import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import type {
   PomodoroViewModel,
   ReminderRowViewModel,
-  SoftwareReminderRuleRowViewModel,
+  ActivityReminderRuleRowViewModel,
   TimerViewModel,
   ToolStatusChipViewModel,
   ToolsViewModelLabels,
@@ -103,28 +101,34 @@ export function buildReminderRows(
   });
 }
 
-function formatSoftwareReminderAppLabel(rule: ToolSoftwareReminderRule): string {
-  if (!rule.exeName) {
-    return rule.appName;
-  }
-
-  const mapped = AppClassification.mapApp(rule.exeName, { appName: rule.appName });
-  const appName = mapped.name.trim() || rule.appName;
-  return appName;
-}
-
-export function buildSoftwareReminderRuleRows(
+export function buildActivityReminderRuleRows(
   snapshot: ToolsRuntimeSnapshot,
-  labels: Pick<ToolsViewModelLabels, "softwareReminderActive" | "softwareReminderDailyLimit">,
-): SoftwareReminderRuleRowViewModel[] {
-  return snapshot.softwareReminderRules.map((rule) => ({
-    id: rule.id,
-    appLabel: formatSoftwareReminderAppLabel(rule),
-    exeName: rule.exeName,
-    limitLabel: labels.softwareReminderDailyLimit(Math.max(1, Math.round(rule.limitMs / MS_PER_MINUTE))),
-    message: rule.message,
-    statusLabel: labels.softwareReminderActive,
-  }));
+  labels: Pick<ToolsViewModelLabels, "activityReminderActive" | "activityReminderDailyLimit">,
+): ActivityReminderRuleRowViewModel[] {
+  return snapshot.activityReminderRules.map((rule) => {
+    const targetLabel = rule.labelSnapshot
+      || (rule.target.kind === "app"
+        ? rule.target.appName
+        : rule.target.kind === "category"
+          ? rule.target.categoryId
+          : rule.target.normalizedDomain);
+    return {
+      id: rule.id,
+      kind: rule.target.kind,
+      targetKey: rule.target.kind === "app"
+        ? (rule.target.exeName ?? rule.target.appName)
+        : rule.target.kind === "category"
+          ? rule.target.categoryId
+          : rule.target.normalizedDomain,
+      targetLabel,
+      exeName: rule.target.kind === "app" ? rule.target.exeName : null,
+      faviconUrl: null,
+      limitLabel: labels.activityReminderDailyLimit(Math.max(1, Math.round(rule.limitMs / MS_PER_MINUTE))),
+      message: rule.message,
+      statusLabel: labels.activityReminderActive,
+      suspensionReason: rule.suspensionReason,
+    };
+  });
 }
 
 export function buildTimerViewModel(

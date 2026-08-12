@@ -43,7 +43,7 @@ function isToolsSection(value: string | null): value is ToolsSection {
 }
 
 function isReminderMode(value: string | null): value is ReminderMode {
-  return value === "event" || value === "software";
+  return value === "event" || value === "app" || value === "category" || value === "web";
 }
 
 function isReminderFormMode(value: string | null): value is ReminderFormMode {
@@ -67,7 +67,18 @@ export function rememberToolsTimerMode(mode: TimerMode) {
 }
 
 export function readToolsReminderMode(): ReminderMode {
-  return readStoredValue(TOOLS_REMINDER_MODE_KEY, "event", isReminderMode);
+  const storage = getBrowserLocalStorage();
+  if (!storage) return "event";
+  try {
+    const value = storage.getItem(TOOLS_REMINDER_MODE_KEY);
+    if (value === "software") {
+      rememberStoredValue(TOOLS_REMINDER_MODE_KEY, "app");
+      return "app";
+    }
+    return isReminderMode(value) ? value : "event";
+  } catch {
+    return "event";
+  }
 }
 
 export function rememberToolsReminderMode(mode: ReminderMode) {
