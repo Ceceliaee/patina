@@ -50,7 +50,7 @@ export function shouldOpenUpdateDialogForSnapshot(snapshot: UpdateSnapshot): boo
     ));
 }
 
-export function shouldShowSidebarUpdateEntry(snapshot: UpdateSnapshot): boolean {
+export function shouldShowCompactUpdateEntry(snapshot: UpdateSnapshot): boolean {
   return snapshot.status === "available"
     || snapshot.status === "downloaded"
     || snapshot.status === "downloading"

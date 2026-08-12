@@ -108,6 +108,7 @@ export const MESSAGES = {
       ]
     }
   },
+  "accessibility.sidebar.navigationLabels": "Navigation labels",
   "accessibility.settings.colorScheme": "Color scheme",
   "accessibility.settings.copyWebActivityPort": "Copy web sync port",
   "accessibility.settings.copyWebActivityToken": "Copy web sync Token",
@@ -189,6 +190,7 @@ export const MESSAGES = {
   },
   "accessibility.widget.expand": "Expand widget",
   "accessibility.widget.openMainWindow": "Open main window",
+  "accessibility.widget.pin": "Pin widget open",
   "accessibility.widget.toggle": {
     "$type": "message",
     "body": {

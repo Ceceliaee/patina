@@ -1,18 +1,19 @@
 import { useLocaleText } from "../../shared/i18n/index.ts";
-import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
-import { ArrowUpCircle, Monitor, Clock, Settings2, Sparkles, BarChart3, Info, ToolCase } from "lucide-react";
+import QuietIconAction from "../../shared/components/QuietIconAction";
+import { useEffect, useRef, type CSSProperties } from "react";
+import { Monitor, Clock, Settings2, Sparkles, BarChart3, Info, Menu, ToolCase } from "lucide-react";
 import appIconUrl from "../../../src-tauri/icons/128x128@2x.png";
 
+import type { SidebarNavigationMode } from "../services/sidebarNavigationPreferenceStorage.ts";
 import type { View } from "../types/view";
 
-interface Props {
+export interface AppSidebarProps {
   currentView: View;
+  navigationMode: SidebarNavigationMode;
+  onNavigationModeToggle: () => void;
   onPrepareNavigate?: (view: View) => boolean;
   onNavigate: (view: View) => boolean | void | Promise<boolean | void>;
   onPreviewNavigate?: (view: View) => void;
-  footerContent?: ReactNode;
-  showUpdateEntry?: boolean;
-  onOpenUpdateDialog?: () => void;
 }
 
 type AppRegionStyle = CSSProperties & { WebkitAppRegion?: "drag" | "no-drag" };
@@ -21,14 +22,14 @@ const NO_DRAG_STYLE: AppRegionStyle = { WebkitAppRegion: "no-drag" };
 
 export default function AppSidebar({
   currentView,
+  navigationMode,
+  onNavigationModeToggle,
   onPrepareNavigate,
   onNavigate,
   onPreviewNavigate,
-  footerContent,
-  showUpdateEntry = false,
-  onOpenUpdateDialog,
-}: Props) {
+}: AppSidebarProps) {
   const UI_TEXT = useLocaleText();
+  const isLabeled = navigationMode === "labeled";
   const navItems = [
     { id: "dashboard" as View, icon: Monitor, label: UI_TEXT.dashboard.title },
     { id: "history" as View, icon: Clock, label: UI_TEXT.history.title },
@@ -72,13 +73,18 @@ export default function AppSidebar({
   return (
     <aside
       className="qp-canvas w-[88px] md:w-[96px] shrink-0 flex flex-col items-center py-5 md:py-6 gap-5"
+      data-sidebar-navigation-mode={navigationMode}
       style={NO_DRAG_STYLE}
     >
       <div className="w-10 h-10 rounded-[10px] flex items-center justify-center border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-panel)]">
         <img src={appIconUrl} alt="" draggable={false} className="h-6 w-6 object-contain" />
       </div>
 
-      <nav className="relative flex flex-col gap-2.5 mt-1 w-full px-2" style={navStyle}>
+      <nav
+        className="relative flex flex-col gap-2.5 mt-1 w-full px-2"
+        data-sidebar-primary-nav=""
+        style={navStyle}
+      >
         {activeNavIndex >= 0 ? (
           <>
             <span className="qp-nav-active-bg pointer-events-none" />
@@ -96,34 +102,39 @@ export default function AppSidebar({
               onPointerDown={() => onPreviewNavigate?.(item.id)}
               onClick={() => handleNavClick(item.id)}
               aria-label={item.label}
+              aria-current={isActive ? "page" : undefined}
+              data-sidebar-nav-item={item.id}
               className={`qp-nav-item h-10 w-full rounded-[10px] transition-colors relative flex items-center justify-center ${
                 isActive
                   ? "qp-nav-item-active"
                   : "text-[var(--qp-text-tertiary)] hover:text-[var(--qp-text-secondary)]"
               }`}
             >
-              <span className="relative z-10 flex items-center justify-center">
-                <item.icon size={18} strokeWidth={2.15} />
+              <span
+                className={`qp-nav-item-content relative z-10 ${isLabeled ? "qp-nav-item-content-labeled" : ""}`.trim()}
+              >
+                <item.icon size={isLabeled ? 15 : 18} strokeWidth={2.15} />
+                {isLabeled ? (
+                  <span className="qp-nav-item-label" data-sidebar-nav-label="" aria-hidden="true">
+                    {item.label}
+                  </span>
+                ) : null}
               </span>
             </button>
           );
         })}
       </nav>
 
-      <div className="mt-auto flex w-full flex-col items-center gap-2 px-2">
-        {footerContent}
-        {showUpdateEntry ? (
-          <button
-            type="button"
-            onClick={onOpenUpdateDialog}
-            className="qp-chip flex h-7 w-[66px] items-center justify-center rounded-[8px] border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-elevated)] px-0 text-[var(--qp-text-secondary)] transition-colors hover:border-[var(--qp-border-strong)] hover:bg-[var(--qp-bg-panel)] hover:text-[var(--qp-text-primary)] active:border-[var(--qp-border-strong)] active:bg-[var(--qp-bg-panel)]"
-          >
-            <span className="inline-flex w-full items-center justify-center gap-1 pl-px text-[10px] leading-none font-medium">
-              <ArrowUpCircle size={11} strokeWidth={1.85} className="shrink-0" />
-              <span className="block leading-none">{UI_TEXT.update.sidebarEntry}</span>
-            </span>
-          </button>
-        ) : null}
+      <div className="mt-auto flex w-full flex-col items-center gap-1 px-2" data-sidebar-footer="">
+        <QuietIconAction
+          icon={<Menu size={16} strokeWidth={1.9} />}
+          title={UI_TEXT.accessibility.sidebar.navigationLabels}
+          ariaLabel={UI_TEXT.accessibility.sidebar.navigationLabels}
+          pressed={isLabeled}
+          showPressedStyle={false}
+          showTooltip={false}
+          onClick={onNavigationModeToggle}
+        />
       </div>
     </aside>
   );

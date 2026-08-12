@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import type { UpdateSnapshot } from "../../shared/types/update";
 import { useUpdateDialog } from "./useUpdateDialog";
 
-interface SidebarUpdateEntry {
+interface TitleBarUpdateEntry {
   showUpdateEntry: boolean;
   onOpenUpdateDialog: () => void;
 }
@@ -24,7 +24,7 @@ export function useAppShellUpdateEntry() {
     isChecking,
     isInstalling,
     dialogOpen,
-    shouldShowSidebarEntry,
+    shouldShowCompactEntry,
     openUpdateDialog,
     checkForUpdates,
     openReleasePage,
@@ -35,8 +35,8 @@ export function useAppShellUpdateEntry() {
     await checkForUpdates(false);
   }, [checkForUpdates]);
 
-  const sidebarUpdateEntry: SidebarUpdateEntry = {
-    showUpdateEntry: shouldShowSidebarEntry,
+  const titleBarUpdateEntry: TitleBarUpdateEntry = {
+    showUpdateEntry: shouldShowCompactEntry,
     onOpenUpdateDialog: openUpdateDialog,
   };
 
@@ -52,7 +52,7 @@ export function useAppShellUpdateEntry() {
   };
 
   return {
-    sidebarUpdateEntry,
+    titleBarUpdateEntry,
     settingsUpdateEntry,
   };
 }

@@ -8,7 +8,7 @@ import {
   onUpdateSnapshotChanged,
 } from "../../platform/runtime/updateRuntimeGateway";
 import { openExternalUrl } from "../../platform/desktop/externalUrlGateway";
-import { shouldShowSidebarUpdateEntry } from "../../features/update/services/updateViewModel";
+import { shouldShowCompactUpdateEntry } from "../../features/update/services/updateViewModel";
 import {
   clearPendingUpdateRelaunchViewRestore,
   markPendingUpdateRelaunchViewRestore,
@@ -159,7 +159,7 @@ export function useUpdateState() {
     isChecking,
     isInstalling,
     dialogOpen,
-    shouldShowSidebarEntry: shouldShowSidebarUpdateEntry(snapshot),
+    shouldShowCompactEntry: shouldShowCompactUpdateEntry(snapshot),
     openDialog: () => setDialogOpen(true),
     closeDialog: () => setDialogOpen(false),
     checkForUpdates: runUpdateCheck,

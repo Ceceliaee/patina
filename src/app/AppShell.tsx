@@ -56,13 +56,14 @@ import {
 import { createPreloadableViewComponent } from "./services/viewChunkPreloadService.ts";
 import { useAppWindowState } from "./hooks/useAppWindowState.ts";
 import { useAppShellRuntimeLifecycle } from "./hooks/useAppShellRuntimeLifecycle.ts";
-import ToolsSidebarStatusEntry from "../features/tools/components/ToolsSidebarStatusEntry.tsx";
+import ToolsStatusEntry from "../features/tools/components/ToolsStatusEntry.tsx";
 import ToolAlertDialog from "../features/tools/components/ToolAlertDialog.tsx";
 import type { ToolsOpenTarget } from "../features/tools/types.ts";
 import {
   parseLocalDateKey,
   startOfLocalDay,
 } from "../shared/lib/localDate.ts";
+import { useAppSidebarState } from "./hooks/useAppSidebarState.ts";
 
 type HistoryDateRequest = { dateKey: string; requestId: number };
 
@@ -87,7 +88,7 @@ export default function AppShellContent({
   windowTracking: WindowTrackingState;
 }) {
   const { confirm, dialogs } = useQuietDialogs();
-  const { sidebarUpdateEntry, settingsUpdateEntry } = useAppShellUpdateEntry();
+  const { titleBarUpdateEntry, settingsUpdateEntry } = useAppShellUpdateEntry();
   const {
     currentView,
     prepareNavigate,
@@ -227,6 +228,12 @@ export default function AppShellContent({
   const handleSidebarPreviewNavigate = useCallback((nextView: View) => {
     preloadNavigationView(nextView, "preview");
   }, []);
+  const { navigationMode, sidebarProps } = useAppSidebarState({
+    currentView: viewPresentation.presentedView,
+    onPrepareNavigate: prepareNavigate,
+    onNavigate: handleSidebarNavigate,
+    onPreviewNavigate: handleSidebarPreviewNavigate,
+  });
   const quickClassificationCallbacks = {
     onOverridesChanged: handleMappingOverridesChanged,
     onQuickActionError: handleQuickActionError,
@@ -241,20 +248,17 @@ export default function AppShellContent({
         isWindowMaximized ? "qp-app-frame-maximized" : "",
       ].filter(Boolean).join(" ")}
     >
-      <AppTitleBar isMaximized={isWindowMaximized} />
+      <AppTitleBar
+        isMaximized={isWindowMaximized}
+        toolsStatusEntry={<ToolsStatusEntry onOpenSection={handleToolsStatusChipOpen} />}
+        {...titleBarUpdateEntry}
+      />
 
       <div className="qp-shell flex-1 min-h-0 p-4 md:p-5 lg:p-6 flex gap-4 md:gap-5 lg:gap-6 overflow-hidden">
         <QuietToastStack toasts={toasts} />
         <ToolAlertDialog />
         {dialogs}
-        <AppSidebar
-          currentView={viewPresentation.presentedView}
-          onPrepareNavigate={prepareNavigate}
-          onNavigate={handleSidebarNavigate}
-          onPreviewNavigate={handleSidebarPreviewNavigate}
-          footerContent={<ToolsSidebarStatusEntry onOpenSection={handleToolsStatusChipOpen} />}
-          {...sidebarUpdateEntry}
-        />
+        <AppSidebar {...sidebarProps} />
 
         <AppViewOutlet
           {...viewPresentation.outletProps}
@@ -322,6 +326,7 @@ export default function AppShellContent({
                 initialTarget={toolsInitialTarget}
                 onInitialTargetConsumed={handleToolsInitialTargetConsumed}
                 icons={icons}
+                showNavigationLabels={navigationMode === "labeled"}
                 onToast={pushToast}
               />
             ),

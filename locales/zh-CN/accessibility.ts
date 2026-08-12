@@ -108,6 +108,7 @@ export const MESSAGES = {
       ]
     }
   },
+  "accessibility.sidebar.navigationLabels": "导航名称",
   "accessibility.settings.colorScheme": "配色方案",
   "accessibility.settings.copyWebActivityPort": "复制网页同步端口",
   "accessibility.settings.copyWebActivityToken": "复制网页同步 Token",
@@ -189,6 +190,7 @@ export const MESSAGES = {
   },
   "accessibility.widget.expand": "展开挂件",
   "accessibility.widget.openMainWindow": "打开主窗口",
+  "accessibility.widget.pin": "固定展开挂件",
   "accessibility.widget.toggle": {
     "$type": "message",
     "body": {

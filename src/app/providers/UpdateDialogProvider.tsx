@@ -9,7 +9,7 @@ interface UpdateDialogContextValue {
   isChecking: boolean;
   isInstalling: boolean;
   dialogOpen: boolean;
-  shouldShowSidebarEntry: boolean;
+  shouldShowCompactEntry: boolean;
   openUpdateDialog: () => void;
   closeUpdateDialog: () => void;
   checkForUpdates: (silent: boolean) => Promise<UpdateSnapshot>;
@@ -32,7 +32,7 @@ export default function UpdateDialogProvider({ children }: UpdateDialogProviderP
     isChecking: updateState.isChecking,
     isInstalling: updateState.isInstalling,
     dialogOpen: updateState.dialogOpen,
-    shouldShowSidebarEntry: updateState.shouldShowSidebarEntry,
+    shouldShowCompactEntry: updateState.shouldShowCompactEntry,
     openUpdateDialog: () => {
       if (shouldOpenUpdateDialogForSnapshot(updateState.snapshot)) {
         updateState.openDialog();

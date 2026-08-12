@@ -13,6 +13,7 @@ interface Props {
   showTooltip?: boolean;
   tooltipPlacement?: QuietTooltipPlacement;
   pressed?: boolean;
+  showPressedStyle?: boolean;
   onClick?: () => void;
 }
 
@@ -26,6 +27,7 @@ export default function QuietIconAction({
   showTooltip = true,
   tooltipPlacement = "top",
   pressed,
+  showPressedStyle = true,
   onClick,
 }: Props) {
   const button = (
@@ -35,7 +37,7 @@ export default function QuietIconAction({
       aria-pressed={pressed}
       disabled={disabled}
       onClick={onClick}
-      className={`qp-icon-action qp-icon-action-${tone} ${pressed ? "qp-icon-action-pressed" : ""} ${className ?? ""}`.trim()}
+      className={`qp-icon-action qp-icon-action-${tone} ${pressed && showPressedStyle ? "qp-icon-action-pressed" : ""} ${className ?? ""}`.trim()}
     >
       {icon}
     </button>
