@@ -177,7 +177,7 @@ export default function QuietDialog({
             </div>
             {headerAside ? <div className="qp-dialog-header-aside">{headerAside}</div> : null}
             </header>
-            {children && <div className="qp-dialog-body">{children}</div>}
+            {children && <div className="qp-dialog-body qp-scroll-region">{children}</div>}
             {actions && <footer className="qp-dialog-actions">{actions}</footer>}
           </div>
         </div>

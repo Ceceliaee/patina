@@ -365,7 +365,7 @@ export default function QuietSelect<T extends string | number>({
       aria-labelledby={`${listboxId}-trigger`}
       aria-activedescendant={highlightedIndex >= 0 ? `${listboxId}-option-${highlightedIndex}` : undefined}
       onKeyDown={handleListKeyDown}
-      className={`qp-select-menu qp-select-menu-${menuPosition?.placement ?? "bottom"} qp-select-menu-density-${density}`}
+      className={`qp-select-menu qp-scroll-region qp-select-menu-${menuPosition?.placement ?? "bottom"} qp-select-menu-density-${density}`}
       style={menuStyle}
     >
       {options.map((option, index) => {

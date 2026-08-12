@@ -9,7 +9,6 @@
   border-radius: var(--qp-radius-panel);
   background: var(--qp-bg-canvas);
   box-shadow: var(--qp-shadow-overlay);
-  scrollbar-gutter: stable;
   overscroll-behavior: contain;
   padding: 10px;
 }

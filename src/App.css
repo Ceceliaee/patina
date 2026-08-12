@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./styles/tokens.css";
+@import "./styles/components/quiet-scroll-region.css";
 @import "./styles/quiet-pro.css";
 @import "./styles/components/quiet-select.css";
 @import "./styles/components/quiet-actions.css";

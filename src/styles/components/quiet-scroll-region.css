@@ -1,0 +1,103 @@
+/*
+ * Quiet Pro scroll regions keep native browser scrolling as the behavioral owner.
+ * The base class provides appearance and an auto gutter; stable geometry is an
+ * explicit, evidence-backed modifier.
+ */
+.qp-scroll-region {
+  scrollbar-gutter: auto;
+}
+
+.qp-scroll-region-stable {
+  scrollbar-gutter: stable;
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  .qp-scroll-region {
+    scrollbar-color: var(--qp-scrollbar-default) transparent;
+    scrollbar-width: auto;
+  }
+}
+
+.qp-scroll-region::-webkit-scrollbar {
+  width: var(--qp-scrollbar-size);
+  height: var(--qp-scrollbar-size);
+}
+
+.qp-scroll-region::-webkit-scrollbar-track,
+.qp-scroll-region::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.qp-scroll-region::-webkit-scrollbar-thumb {
+  min-width: calc(var(--qp-scrollbar-size) * 2);
+  min-height: calc(var(--qp-scrollbar-size) * 2);
+  border: var(--qp-scrollbar-thumb-inset) solid transparent;
+  border-radius: var(--qp-radius-control);
+  background: var(--qp-scrollbar-default);
+  background-clip: content-box;
+}
+
+.qp-scroll-region::-webkit-scrollbar-thumb:hover {
+  background-color: var(--qp-scrollbar-hover);
+}
+
+.qp-scroll-region::-webkit-scrollbar-thumb:active {
+  background-color: color-mix(in srgb, var(--qp-scrollbar-hover) 76%, var(--qp-text-primary));
+}
+
+.qp-scroll-region::-webkit-scrollbar-button:single-button:vertical {
+  display: block;
+  width: var(--qp-scrollbar-size);
+  height: var(--qp-scrollbar-button-size);
+  background-color: transparent;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 6px 6px;
+}
+
+.qp-scroll-region::-webkit-scrollbar-button:single-button:vertical:decrement {
+  background-image:
+    linear-gradient(135deg, transparent 46%, var(--qp-scrollbar-default) 47% 57%, transparent 58%),
+    linear-gradient(45deg, transparent 46%, var(--qp-scrollbar-default) 47% 57%, transparent 58%);
+  background-position: calc(50% - 2px) 55%, calc(50% + 2px) 55%;
+  background-size: 5px 5px;
+}
+
+.qp-scroll-region::-webkit-scrollbar-button:single-button:vertical:increment {
+  background-image:
+    linear-gradient(45deg, transparent 46%, var(--qp-scrollbar-default) 47% 57%, transparent 58%),
+    linear-gradient(135deg, transparent 46%, var(--qp-scrollbar-default) 47% 57%, transparent 58%);
+  background-position: calc(50% - 2px) 45%, calc(50% + 2px) 45%;
+  background-size: 5px 5px;
+}
+
+.qp-scroll-region::-webkit-scrollbar-button:single-button:vertical:hover {
+  --qp-scrollbar-default: var(--qp-scrollbar-hover);
+}
+
+.qp-scroll-region::-webkit-scrollbar-button:single-button:vertical:active {
+  --qp-scrollbar-default: color-mix(in srgb, var(--qp-scrollbar-hover) 76%, var(--qp-text-primary));
+}
+
+@media (forced-colors: active) {
+  .qp-scroll-region {
+    scrollbar-color: auto;
+    forced-color-adjust: auto;
+  }
+
+  .qp-scroll-region::-webkit-scrollbar-track,
+  .qp-scroll-region::-webkit-scrollbar-corner {
+    background: Canvas;
+  }
+
+  .qp-scroll-region::-webkit-scrollbar-thumb {
+    border-color: Canvas;
+    background: ButtonText;
+    background-clip: content-box;
+  }
+
+  .qp-scroll-region::-webkit-scrollbar-button:single-button:vertical {
+    --qp-scrollbar-default: ButtonText;
+    background-color: Canvas;
+  }
+}

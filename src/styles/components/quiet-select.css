@@ -83,7 +83,6 @@
   background: var(--qp-bg-panel);
   box-shadow: var(--qp-shadow-overlay);
   overflow-y: auto;
-  scrollbar-gutter: stable;
 }
 
 .qp-select-menu-top {

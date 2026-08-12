@@ -180,6 +180,7 @@ export default function QuietAnchoredPopover({
       data-placement={position?.placement}
       className={[
         "qp-anchored-popover",
+        "qp-scroll-region",
         position ? `qp-anchored-popover-${position.placement}` : "",
         "qp-motion-popover-enter",
         className ?? "",

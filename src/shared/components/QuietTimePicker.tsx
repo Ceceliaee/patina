@@ -247,7 +247,7 @@ export default function QuietTimePicker({
       </div>
       <div className="qp-time-picker-columns">
         <div className="qp-time-picker-column">
-          <div className="qp-time-picker-list" role="listbox" aria-label={UI_TEXT.time.hours}>
+          <div className="qp-time-picker-list qp-scroll-region" role="listbox" aria-label={UI_TEXT.time.hours}>
             {HOURS.map((hour) => {
               const selected = hour === selectedTime.hour;
               return (
@@ -271,7 +271,7 @@ export default function QuietTimePicker({
           </div>
         </div>
         <div className="qp-time-picker-column">
-          <div className="qp-time-picker-list" role="listbox" aria-label={UI_TEXT.time.minutes}>
+          <div className="qp-time-picker-list qp-scroll-region" role="listbox" aria-label={UI_TEXT.time.minutes}>
             {MINUTES.map((minute) => {
               const selected = minute === selectedTime.minute;
               return (
