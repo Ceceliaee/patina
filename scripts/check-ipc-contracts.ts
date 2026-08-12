@@ -41,9 +41,10 @@ const WIDGET_COMMAND_ALLOWLIST = new Set([
   "cmd_get_widget_placement",
   "cmd_finalize_widget_drag",
   "cmd_set_widget_expanded",
+  "cmd_get_widget_status_snapshot",
+  "cmd_set_widget_pinned",
   "cmd_show_main_window",
   "cmd_hide_widget_window",
-  "cmd_toggle_tracking_paused",
   "cmd_is_primary_mouse_button_down",
 ]);
 

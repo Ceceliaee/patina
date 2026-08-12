@@ -405,16 +405,16 @@
           "markdownDescription": "Enables the cmd_commit_classification_settings command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_create_activity_reminder_rule command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-create-activity-reminder-rule",
+          "markdownDescription": "Enables the cmd_create_activity_reminder_rule command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_create_reminder command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-create-reminder",
           "markdownDescription": "Enables the cmd_create_reminder command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the cmd_create_software_reminder_rule command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-create-software-reminder-rule",
-          "markdownDescription": "Enables the cmd_create_software_reminder_rule command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_delete_import_batch command without any pre-configured scope.",
@@ -471,10 +471,10 @@
           "markdownDescription": "Enables the cmd_destructure_external_data command without any pre-configured scope."
         },
         {
-          "description": "Enables the cmd_disable_software_reminder_rule command without any pre-configured scope.",
+          "description": "Enables the cmd_disable_activity_reminder_rule command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-cmd-disable-software-reminder-rule",
-          "markdownDescription": "Enables the cmd_disable_software_reminder_rule command without any pre-configured scope."
+          "const": "allow-cmd-disable-activity-reminder-rule",
+          "markdownDescription": "Enables the cmd_disable_activity_reminder_rule command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_dismiss_tool_alert command without any pre-configured scope.",
@@ -619,6 +619,12 @@
           "type": "string",
           "const": "allow-cmd-get-widget-placement",
           "markdownDescription": "Enables the cmd_get_widget_placement command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_widget_status_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-widget-status-snapshot",
+          "markdownDescription": "Enables the cmd_get_widget_status_snapshot command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_has_webdav_backup_secret command without any pre-configured scope.",
@@ -915,6 +921,12 @@
           "markdownDescription": "Enables the cmd_set_widget_expanded command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_set_widget_pinned command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-set-widget-pinned",
+          "markdownDescription": "Enables the cmd_set_widget_pinned command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_show_main_window command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-show-main-window",
@@ -943,12 +955,6 @@
           "type": "string",
           "const": "allow-cmd-test-webdav-backup-target",
           "markdownDescription": "Enables the cmd_test_webdav_backup_target command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the cmd_toggle_tracking_paused command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-toggle-tracking-paused",
-          "markdownDescription": "Enables the cmd_toggle_tracking_paused command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_upload_webdav_backup command without any pre-configured scope.",
@@ -1029,16 +1035,16 @@
           "markdownDescription": "Denies the cmd_commit_classification_settings command without any pre-configured scope."
         },
         {
+          "description": "Denies the cmd_create_activity_reminder_rule command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-create-activity-reminder-rule",
+          "markdownDescription": "Denies the cmd_create_activity_reminder_rule command without any pre-configured scope."
+        },
+        {
           "description": "Denies the cmd_create_reminder command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-create-reminder",
           "markdownDescription": "Denies the cmd_create_reminder command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the cmd_create_software_reminder_rule command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-create-software-reminder-rule",
-          "markdownDescription": "Denies the cmd_create_software_reminder_rule command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_delete_import_batch command without any pre-configured scope.",
@@ -1095,10 +1101,10 @@
           "markdownDescription": "Denies the cmd_destructure_external_data command without any pre-configured scope."
         },
         {
-          "description": "Denies the cmd_disable_software_reminder_rule command without any pre-configured scope.",
+          "description": "Denies the cmd_disable_activity_reminder_rule command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-cmd-disable-software-reminder-rule",
-          "markdownDescription": "Denies the cmd_disable_software_reminder_rule command without any pre-configured scope."
+          "const": "deny-cmd-disable-activity-reminder-rule",
+          "markdownDescription": "Denies the cmd_disable_activity_reminder_rule command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_dismiss_tool_alert command without any pre-configured scope.",
@@ -1243,6 +1249,12 @@
           "type": "string",
           "const": "deny-cmd-get-widget-placement",
           "markdownDescription": "Denies the cmd_get_widget_placement command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_widget_status_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-widget-status-snapshot",
+          "markdownDescription": "Denies the cmd_get_widget_status_snapshot command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_has_webdav_backup_secret command without any pre-configured scope.",
@@ -1539,6 +1551,12 @@
           "markdownDescription": "Denies the cmd_set_widget_expanded command without any pre-configured scope."
         },
         {
+          "description": "Denies the cmd_set_widget_pinned command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-set-widget-pinned",
+          "markdownDescription": "Denies the cmd_set_widget_pinned command without any pre-configured scope."
+        },
+        {
           "description": "Denies the cmd_show_main_window command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-show-main-window",
@@ -1567,12 +1585,6 @@
           "type": "string",
           "const": "deny-cmd-test-webdav-backup-target",
           "markdownDescription": "Denies the cmd_test_webdav_backup_target command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the cmd_toggle_tracking_paused command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-toggle-tracking-paused",
-          "markdownDescription": "Denies the cmd_toggle_tracking_paused command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_upload_webdav_backup command without any pre-configured scope.",
