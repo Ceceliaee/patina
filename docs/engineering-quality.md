@@ -255,6 +255,8 @@ WebDAV 已保存密码的显示是凭据边界的唯一明文返回例外：只�
 
 `check:quiet-pro-style-debt` 对现存的任意 radius 写法使用精确文件级基线：新增债务失败，债务减少但未同步收紧基线也失败。长期目标仍是把视觉角色收敛到 Quiet Pro token，而不是把基线当永久许可。
 
+同一门禁也保护 Quiet Pro 滚动区域的单一 owner：生产源码不得继续引用 `.custom-scrollbar`，不得在 `src/styles/components/quiet-scroll-region.css` 之外声明 `scrollbar-gutter` 或 `::-webkit-scrollbar*`。`npm run check:quiet-pro-style-debt:self-test` 使用虚拟对抗样本证明旧 class、feature 私有 gutter 和 page-local pseudo 会失败，同时允许 canonical 实现与普通 `overflow` 布局；默认 `npm run check` 必须先运行 self-test，再运行真实仓库扫描。运行时的 auto/stable、按钮、键盘、DPI 与 forced-colors 行为仍由 browser smoke 负责，静态门禁不能替代真实行为测试。
+
 `check:rust-boundaries` 扫描 Rust 高吸力层并先剥离 `#[cfg(test)]` 模块。它阻止 `commands/*`、`app/*` 与 `lib.rs` 直接写 SQL，阻止 `commands/*` 承接 SQLite pool 类型，阻止 Rust `app/*` 直连 repository 或 pool，阻止 `platform/*` 反向依赖 `data/*` / `app/*`，阻止 `domain/*` 依赖 `data/*` / `platform/*`，并阻止 `engine/*` 依赖 app、data、repository、pool、SQL、等待数据库或原始 Windows API。生产路径必须让 SQL 留在 `data/*`，Windows API 实现留在 `platform/*`，领域决策留在 `domain/*`，跨边界数据组合留在 `app/*`；engine 可以调用 platform 暴露的窄能力来编排桌面行为，但不能把 Win32 实现吸入自身。检查器自测与空债务基线共同保证新增反向依赖立即失败。
 
 `test:coverage` 对 tracking effects/policy、Dashboard/History read model、启动预热生命周期、Data heatmap retry snapshot、Web aggregate gateway、SQLite transaction 与结构化 command error 等核心风险域设置语句、分支、函数和行覆盖率硬阈值。除 aggregate coverage 外，高风险 owner 必须逐文件满足声明阈值；报告必须列出具体失败文件，不能让高覆盖文件平均掉低覆盖 owner。覆盖率是风险证据，不替代行为断言；新增高风险 owner 时应同步扩展 include，而不是用无关低风险文件稀释分母。

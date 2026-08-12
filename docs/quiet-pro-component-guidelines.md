@@ -340,6 +340,16 @@ Quiet Pro 不鼓励“这个页面再发明一个更顺眼的新档位”。
 - 替代标题
 - 没有语义必要的“彩色点缀”
 
+### 9.5.1 桌面挂件状态栏
+
+桌面挂件是 `app/*` 拥有的低噪音状态表面，不是第二套工具控制台。展开态遵循以下稳定边界：
+
+- 当前追踪应用、分钟级可信追踪时长、打开动作和固定动作始终占据稳定位置；状态不可信时显示 `—`，不自行推断活动时间。
+- Timer 与 Pomodoro 使用两个固定语义槽，保留秒级显示并只向屏幕内侧增减；工具状态不能替换追踪状态，也不使用第二行或汇总数量。
+- 固定状态只通过线框/实心图钉和 `aria-pressed` 表达，不使用持续选中背景、发光或额外胶囊。
+- 左右吸附必须由同一个镜像布局表达；零、一个、两个工具状态的边缘控件位置保持不变，不能加入单侧宽度、负边距或位移补偿。
+- 挂件只在同屏真正全屏时暂时隐藏；普通窗口、桌面和标准最大化窗口不应触发抑制，隐藏过程不得改变固定偏好或吸附位置。
+
 ### 9.6 共享组件准入与 owner
 
 组件是否进入 `shared/*`，先看长期语义和 owner，不看 JSX 是否相似。
@@ -527,6 +537,41 @@ Dashboard、History 与 Data 的应用/网页对象详情统一使用 `destinati
 - 菜单至少与触发器等宽；原生名称需要更多空间时可按内容扩展，但触发器和菜单均最多 220px，并始终受消费者可用宽度与视口安全边距约束；
 - 触发器和选项文字保持单行；达到菜单宽度上限后使用省略，不通过增加行高或撑宽整页容纳长名称；完整名称仍必须通过可访问名称和选项文本读取；
 - `compact` 必须由共享 `QuietSelect` 的正式 density 契约提供；feature 只能决定布局宽度和对齐，不得用页面私有后代选择器覆盖触发器、菜单或选项内部样式。
+
+### 9.17 滚动容器与滚动条
+
+滚动容器的首要职责是保证内容可达，并让占用空间反映真实溢出状态。Quiet Pro 使用浏览器与 WebView2 的原生滚动状态机，不创建 React 或 JavaScript 自绘 scrollbar。
+
+共享 class 合同如下：
+
+- `.qp-scroll-region` 是唯一 canonical appearance owner，提供 10px 原生 lane、内缩的中性 thumb、竖向上下按钮渐进增强和系统高对比度回退；它不拥有 `overflow`、高度、padding 或 overscroll。
+- `.qp-scroll-region` 默认使用 `scrollbar-gutter: auto`。没有溢出时 scrollbar 与 lane 一起消失，可用空间完整归还内容；出现溢出时只占一个语义 lane。
+- `.qp-scroll-region-stable` 只改变 gutter 策略，必须与 `.qp-scroll-region` 同时使用。它只适用于 overflow 出现前后宽度变化会破坏真实信息几何的消费者，并必须有对应 browser geometry test。
+- feature 继续拥有真实 scroll owner 的尺寸、flex/grid、业务 padding、`overflow-*` 与 `overscroll-behavior`；不得在 feature CSS 复制 scrollbar pseudo 或直接声明 gutter。
+
+输入与可访问性合同如下：
+
+- wheel、触控板、thumb drag、track click、Home、End、PageUp、PageDown 和方向键继续使用原生行为；不得创建 `role="scrollbar"` 或拦截这些按键来模拟滚动。
+- 竖向顶部和底部按钮是 Chromium/WebView2 progressive enhancement，不进入 Tab 顺序，也不是唯一滚动入口；引擎不支持 button pseudo 时，其他原生路径必须保持完整。
+- 不给所有 scroll region 无差别增加 `tabIndex=0`。内部已有可聚焦内容时使用正常焦点路径；纯阅读区域只有在键盘用户确实需要滚动时才增加可聚焦语义和可访问名称。
+- Dialog、Popover、Select 与候选菜单继续由自己的 owner 决定 `overscroll-behavior: contain`、焦点陷阱、Escape 和焦点恢复，不能为了统一外观形成双滚动 owner。
+
+视觉与平台合同如下：
+
+- thumb 与按钮只使用 `--qp-scrollbar-default`、`--qp-scrollbar-hover` 及其克制 active 混合，不使用 accent、发光、阴影或出现动画；track 保持透明。
+- 几何 token 只在 `tokens.css` 定义一次。任何尺寸调整必须验证 100%、125%、150% 和 200% DPI，以及短 Popover 对可视内容高度的影响。
+- `forced-colors: active` 时使用系统色并允许系统接管 scrollbar color；不能让低对比主题变量造成不可见 thumb 或按钮。
+- 当前横向 scrollbar 复用 thumb 与 track appearance，但不提供左右按钮，也不永久保留底部 gutter。
+
+明确禁止：
+
+- 隐藏承载重要内容的 scrollbar；
+- 使用 `.custom-scrollbar` 或兼容 alias；
+- 在 canonical CSS 之外新增 `scrollbar-gutter` 或 `::-webkit-scrollbar*`；
+- 仅以“视觉更整齐”为由使用 stable；
+- 用页面 padding 重复补偿已经存在的 scrollbar lane。
+
+当前 Data 页面是首个 stable 消费者，其趋势图宽度由 browser test 保护。新增 stable 消费者时，测试必须先证明 auto 会造成用户可见的几何回归，并验证 fits 与 overflow 两种状态下目标宽度保持一致。
 
 ---
 
