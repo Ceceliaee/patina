@@ -44,3 +44,10 @@ test("production locale copy packages keep the same key structure", () => {
     assert.deepEqual(collectCopyKeyPaths(COPY[locale]).sort(), sourceShape);
   }
 });
+
+test("sidebar navigation mode copy remains explicit in every production locale", () => {
+  for (const locale of SUPPORTED_LOCALES) {
+    const sidebarCopy = COPY[locale].accessibility.sidebar;
+    assert.ok(sidebarCopy.navigationLabels.trim());
+  }
+});

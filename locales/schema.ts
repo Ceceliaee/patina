@@ -323,6 +323,13 @@ export const MESSAGE_SCHEMA = {
     ],
     "surface": "frontend"
   },
+  "accessibility.sidebar.navigationLabels": {
+    "description": "Stable accessible name for the sidebar button that switches between icon-only navigation and navigation with visible page names.",
+    "kind": "string",
+    "params": [],
+    "surface": "frontend",
+    "translatorNote": "Navigation labels means visible page names in the primary sidebar; it does not mean classification tags or captured window titles."
+  },
   "accessibility.settings.colorScheme": {
     "kind": "string",
     "params": [],
@@ -547,6 +554,11 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "accessibility.widget.openMainWindow": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "accessibility.widget.pin": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3401,6 +3413,43 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "native"
   },
+  "native.tools.activityReminderAppTitle": {
+    "kind": "string",
+    "params": [],
+    "surface": "native"
+  },
+  "native.tools.activityReminderCategoryTitle": {
+    "kind": "string",
+    "params": [],
+    "surface": "native"
+  },
+  "native.tools.activityReminderDefaultBody": {
+    "kind": "message",
+    "params": [
+      {
+        "name": "targetName",
+        "type": "string",
+        "optional": false
+      },
+      {
+        "name": "usageMinutes",
+        "type": "integer",
+        "optional": false
+      },
+      {
+        "name": "limitMinutes",
+        "type": "integer",
+        "optional": false
+      }
+    ],
+    "pluralArgs": ["usageMinutes", "limitMinutes"],
+    "surface": "native"
+  },
+  "native.tools.activityReminderWebTitle": {
+    "kind": "string",
+    "params": [],
+    "surface": "native"
+  },
   "native.tools.countdownDefaultBody": {
     "kind": "string",
     "params": [],
@@ -3437,33 +3486,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "native"
   },
   "native.tools.reminderTitle": {
-    "kind": "string",
-    "params": [],
-    "surface": "native"
-  },
-  "native.tools.softwareReminderDefaultBody": {
-    "kind": "message",
-    "params": [
-      {
-        "name": "appName",
-        "type": "string",
-        "optional": false
-      },
-      {
-        "name": "usageMinutes",
-        "type": "integer",
-        "optional": false
-      },
-      {
-        "name": "limitMinutes",
-        "type": "integer",
-        "optional": false
-      }
-    ],
-    "pluralArgs": ["usageMinutes", "limitMinutes"],
-    "surface": "native"
-  },
-  "native.tools.softwareReminderTitle": {
     "kind": "string",
     "params": [],
     "surface": "native"
@@ -4814,6 +4836,71 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
+  "tools.activityReminderAppPlaceholder": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "tools.activityReminderCandidatesLoadFailed": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "tools.activityReminderCategoryPlaceholder": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "tools.activityReminderDisable": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "tools.activityReminderEmpty": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "tools.activityReminderRulesTitle": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "tools.activityReminderSuspension.source_disabled": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "tools.activityReminderSuspension.target_deleted": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "tools.activityReminderSuspension.target_excluded": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "tools.activityReminderTargetLabel": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "tools.activityReminderTargetRequired": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "tools.activityReminderWebPlaceholder": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "tools.activityReminderWebSourceEmpty": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
   "tools.alertDismiss": {
     "kind": "string",
     "params": [],
@@ -5060,12 +5147,22 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
+  "tools.reminderModeApp": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "tools.reminderModeCategory": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
   "tools.reminderModeRelative": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "tools.reminderModeSoftware": {
+  "tools.reminderModeWeb": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5110,6 +5207,16 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
+  "tools.settingsEmpty": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "tools.settingsTitle": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
   "tools.shortBreakDuration": {
     "kind": "string",
     "params": [],
@@ -5120,27 +5227,12 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "tools.softwareReminderActive": {
+  "tools.activityReminderActive": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "tools.softwareReminderAppLabel": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.softwareReminderAppPlaceholder": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.softwareReminderAppRequired": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.softwareReminderDailyLimit": {
+  "tools.activityReminderDailyLimit": {
     "kind": "message",
     "params": [
       {
@@ -5151,37 +5243,22 @@ export const MESSAGE_SCHEMA = {
     ],
     "surface": "frontend"
   },
-  "tools.softwareReminderDisable": {
+  "tools.activityReminderDurationInvalid": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "tools.softwareReminderDurationInvalid": {
+  "tools.activityReminderDurationLabel": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "tools.softwareReminderDurationLabel": {
+  "tools.activityReminderMessageLabel": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "tools.softwareReminderEmpty": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.softwareReminderMessageLabel": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.softwareReminderMessagePlaceholder": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.softwareReminderRulesTitle": {
+  "tools.activityReminderMessagePlaceholder": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5592,11 +5669,6 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "widget.clickToResume": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "widget.currentActivityRecording": {
     "kind": "string",
     "params": [],
@@ -5652,22 +5724,7 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "widget.pause": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "widget.paused": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "widget.pauseTracking": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "widget.resume": {
     "kind": "string",
     "params": [],
     "surface": "frontend"

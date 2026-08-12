@@ -109,6 +109,9 @@ export interface UiText {
       "toggleTrackingPaused": string;
       "toggleWebActivity": string;
     };
+    "sidebar": {
+      "navigationLabels": string;
+    };
     "titleBar": {
       "close": string;
       "maximize": string;
@@ -138,6 +141,7 @@ export interface UiText {
       "currentApp": (appName: string) => string;
       "expand": string;
       "openMainWindow": string;
+      "pin": string;
       "toggle": (expanded: boolean, statusTitle: string) => string;
     };
   };
@@ -919,6 +923,27 @@ export interface UiText {
     "absoluteDateLabel": string;
     "absoluteTimeLabel": string;
     "actionFailed": string;
+    "activityReminderActive": string;
+    "activityReminderAppPlaceholder": string;
+    "activityReminderCandidatesLoadFailed": string;
+    "activityReminderCategoryPlaceholder": string;
+    "activityReminderDailyLimit": (minutes: number) => string;
+    "activityReminderDisable": string;
+    "activityReminderDurationInvalid": string;
+    "activityReminderDurationLabel": string;
+    "activityReminderEmpty": string;
+    "activityReminderMessageLabel": string;
+    "activityReminderMessagePlaceholder": string;
+    "activityReminderRulesTitle": string;
+    "activityReminderSuspension": {
+      "source_disabled": string;
+      "target_deleted": string;
+      "target_excluded": string;
+    };
+    "activityReminderTargetLabel": string;
+    "activityReminderTargetRequired": string;
+    "activityReminderWebPlaceholder": string;
+    "activityReminderWebSourceEmpty": string;
     "alertDismiss": string;
     "alertOccurredAt": (value: string) => string;
     "alertPausePomodoro": string;
@@ -963,9 +988,11 @@ export interface UiText {
     "reminderLabel": string;
     "reminderLabelPlaceholder": string;
     "reminderModeAbsolute": string;
+    "reminderModeApp": string;
+    "reminderModeCategory": string;
     "reminderModeEvent": string;
     "reminderModeRelative": string;
-    "reminderModeSoftware": string;
+    "reminderModeWeb": string;
     "reminderStatus": {
       "cancelled": string;
       "fired": string;
@@ -976,20 +1003,10 @@ export interface UiText {
     "reset": string;
     "resume": string;
     "retry": string;
+    "settingsEmpty": string;
+    "settingsTitle": string;
     "shortBreakDuration": string;
     "skipPhase": string;
-    "softwareReminderActive": string;
-    "softwareReminderAppLabel": string;
-    "softwareReminderAppPlaceholder": string;
-    "softwareReminderAppRequired": string;
-    "softwareReminderDailyLimit": (minutes: number) => string;
-    "softwareReminderDisable": string;
-    "softwareReminderDurationInvalid": string;
-    "softwareReminderDurationLabel": string;
-    "softwareReminderEmpty": string;
-    "softwareReminderMessageLabel": string;
-    "softwareReminderMessagePlaceholder": string;
-    "softwareReminderRulesTitle": string;
     "start": string;
     "statusChip": {
       "break": string;
@@ -1071,7 +1088,6 @@ export interface UiText {
     "upToDate": string;
   };
   "widget": {
-    "clickToResume": string;
     "currentActivityRecording": string;
     "currentApp": string;
     "currentAppNotTracked": string;
@@ -1083,10 +1099,7 @@ export interface UiText {
     "loadingHelper": string;
     "loadingStatus": string;
     "noTrackableActivity": string;
-    "pause": string;
     "paused": string;
-    "pauseTracking": string;
-    "resume": string;
     "sustainedTracking": string;
     "tracking": string;
     "trackingNotSynced": string;

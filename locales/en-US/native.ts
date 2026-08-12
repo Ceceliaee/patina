@@ -132,6 +132,36 @@ export const MESSAGES = {
       ]
     }
   },
+  "native.tools.activityReminderAppTitle": "App reminder",
+  "native.tools.activityReminderCategoryTitle": "Category reminder",
+  "native.tools.activityReminderDefaultBody": {
+    "$type": "message",
+    "body": {
+      "$op": "concat",
+      "parts": [
+        { "$op": "arg", "name": "targetName" },
+        " has been active for ",
+        {
+          "$op": "plural",
+          "arg": "usageMinutes",
+          "cases": {
+            "one": { "$op": "concat", "parts": [{ "$op": "arg", "name": "usageMinutes" }, " minute"] },
+            "other": { "$op": "concat", "parts": [{ "$op": "arg", "name": "usageMinutes" }, " minutes"] }
+          }
+        },
+        ", reaching the ",
+        {
+          "$op": "plural",
+          "arg": "limitMinutes",
+          "cases": {
+            "one": { "$op": "concat", "parts": [{ "$op": "arg", "name": "limitMinutes" }, "-minute daily limit"] },
+            "other": { "$op": "concat", "parts": [{ "$op": "arg", "name": "limitMinutes" }, "-minute daily limit"] }
+          }
+        }
+      ]
+    }
+  },
+  "native.tools.activityReminderWebTitle": "Web reminder",
   "native.tools.breakEnded": "Break complete",
   "native.tools.countdownDefaultBody": "The countdown is complete",
   "native.tools.countdownTitle": "Countdown finished",
@@ -141,38 +171,6 @@ export const MESSAGES = {
   "native.tools.nextShortBreak": "Next: short break",
   "native.tools.reminderDefaultBody": "Time is up",
   "native.tools.reminderTitle": "Reminder",
-  "native.tools.softwareReminderDefaultBody": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "",
-        {
-          "$op": "arg",
-          "name": "appName"
-        },
-        " has been used for ",
-        {
-          "$op": "plural",
-          "arg": "usageMinutes",
-          "cases": {
-            "one": { "$op": "concat", "parts": [{ "$op": "arg", "name": "usageMinutes" }, " minute"] },
-            "other": { "$op": "concat", "parts": [{ "$op": "arg", "name": "usageMinutes" }, " minutes"] }
-          }
-        },
-        " today, reaching the ",
-        {
-          "$op": "plural",
-          "arg": "limitMinutes",
-          "cases": {
-            "one": { "$op": "concat", "parts": [{ "$op": "arg", "name": "limitMinutes" }, "-minute limit"] },
-            "other": { "$op": "concat", "parts": [{ "$op": "arg", "name": "limitMinutes" }, "-minute limit"] }
-          }
-        }
-      ]
-    }
-  },
-  "native.tools.softwareReminderTitle": "Software reminder",
   "native.tray.disableTitle": "Block titles",
   "native.tray.enableTitle": "Record titles",
   "native.tray.pause": "Pause tracking",
