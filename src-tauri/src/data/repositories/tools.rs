@@ -1,13 +1,19 @@
 use crate::domain::tools::{
     CompletedPomodoroNotification, CompletedTimerNotification, PomodoroPhase, PomodoroStatus,
-    ReminderStatus, SoftwareReminderNotification, TimerMode, TimerStatus, ToolPomodoroRun,
-    ToolReminder, ToolRuntimeSettings, ToolSoftwareReminderRule, ToolTimer, ToolTimerLap,
+    ReminderStatus, TimerMode, TimerStatus, ToolPomodoroRun, ToolReminder, ToolRuntimeSettings,
+    ToolTimer, ToolTimerLap,
 };
 use sqlx::{Pool, Sqlite, Transaction};
 
+mod activity_reminders;
 mod backup_restore;
 mod read;
 
+pub use activity_reminders::{
+    create_activity_reminder_rule, disable_activity_reminder_rule, fire_due_activity_reminders,
+    merge_activity_reminder_rules,
+};
+pub(crate) use read::fetch_all_activity_reminder_rules;
 pub use read::fetch_tools_snapshot;
 
 pub use backup_restore::{
@@ -18,9 +24,8 @@ pub use backup_restore::{
 };
 
 use read::{
-    fetch_active_software_reminder_rules_tx, fetch_latest_pomodoro, fetch_latest_timer,
-    fetch_pomodoro_by_id, fetch_reminder_by_id, fetch_software_reminder_rule_by_id,
-    fetch_software_usage_ms_today_tx, fetch_timer_by_id, map_reminder_row, map_timer_lap_row,
+    fetch_latest_pomodoro, fetch_latest_timer, fetch_pomodoro_by_id, fetch_reminder_by_id,
+    fetch_timer_by_id, map_reminder_row, map_timer_lap_row,
 };
 
 pub async fn load_tool_runtime_settings(
@@ -77,66 +82,6 @@ pub async fn cancel_reminder(
     Ok(())
 }
 
-pub async fn create_software_reminder_rule(
-    pool: &Pool<Sqlite>,
-    app_name: &str,
-    exe_name: Option<&str>,
-    limit_ms: i64,
-    message: &str,
-    now_ms: i64,
-) -> Result<ToolSoftwareReminderRule, String> {
-    let app_name = app_name.trim();
-    if app_name.is_empty() {
-        return Err("software reminder app is required".to_string());
-    }
-
-    let exe_name = exe_name.map(str::trim).filter(|value| !value.is_empty());
-    let safe_limit_ms = limit_ms.max(60_000);
-    let message = message.trim();
-    let safe_message = if message.is_empty() {
-        "休息一下".to_string()
-    } else {
-        message.to_string()
-    };
-
-    let result = sqlx::query(
-        "INSERT INTO tool_software_reminder_rules (
-            app_name, exe_name, limit_ms, message, created_at, updated_at, disabled_at,
-            last_fired_date_key
-         ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)",
-    )
-    .bind(app_name)
-    .bind(exe_name)
-    .bind(safe_limit_ms)
-    .bind(&safe_message)
-    .bind(now_ms)
-    .bind(now_ms)
-    .execute(pool)
-    .await
-    .map_err(|error| format!("failed to create software reminder rule: {error}"))?;
-
-    fetch_software_reminder_rule_by_id(pool, result.last_insert_rowid()).await
-}
-
-pub async fn disable_software_reminder_rule(
-    pool: &Pool<Sqlite>,
-    rule_id: i64,
-    now_ms: i64,
-) -> Result<(), String> {
-    sqlx::query(
-        "UPDATE tool_software_reminder_rules
-         SET disabled_at = ?, updated_at = ?
-         WHERE id = ? AND disabled_at IS NULL",
-    )
-    .bind(now_ms)
-    .bind(now_ms)
-    .bind(rule_id)
-    .execute(pool)
-    .await
-    .map_err(|error| format!("failed to disable software reminder rule: {error}"))?;
-    Ok(())
-}
-
 pub async fn fire_due_reminders(
     pool: &Pool<Sqlite>,
     now_ms: i64,
@@ -185,58 +130,6 @@ pub async fn fire_due_reminders(
             reminder
         })
         .collect())
-}
-
-pub async fn fire_due_software_reminders(
-    pool: &Pool<Sqlite>,
-    date_key: &str,
-    day_start_ms: i64,
-    now_ms: i64,
-) -> Result<Vec<SoftwareReminderNotification>, String> {
-    let mut tx = pool
-        .begin()
-        .await
-        .map_err(|error| format!("failed to start software reminder transaction: {error}"))?;
-    let rules = fetch_active_software_reminder_rules_tx(&mut tx).await?;
-    let mut notifications = Vec::new();
-
-    for rule in rules {
-        if rule.last_fired_date_key.as_deref() == Some(date_key) {
-            continue;
-        }
-
-        let usage_ms =
-            fetch_software_usage_ms_today_tx(&mut tx, &rule, day_start_ms, now_ms).await?;
-        if usage_ms < rule.limit_ms {
-            continue;
-        }
-
-        sqlx::query(
-            "UPDATE tool_software_reminder_rules
-             SET last_fired_date_key = ?, updated_at = ?
-             WHERE id = ? AND disabled_at IS NULL",
-        )
-        .bind(date_key)
-        .bind(now_ms)
-        .bind(rule.id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|error| format!("failed to mark software reminder fired: {error}"))?;
-
-        notifications.push(SoftwareReminderNotification {
-            rule_id: rule.id,
-            app_name: rule.app_name,
-            limit_ms: rule.limit_ms,
-            usage_ms,
-            message: rule.message,
-        });
-    }
-
-    tx.commit()
-        .await
-        .map_err(|error| format!("failed to commit software reminder transaction: {error}"))?;
-
-    Ok(notifications)
 }
 
 pub async fn start_timer(
@@ -728,6 +621,7 @@ async fn increment_daily_pomodoro_stat_tx(
 mod tests {
     use super::*;
     use crate::data::schema as db_schema;
+    use crate::domain::tools::{ActivityReminderSuspensionReason, ActivityReminderTarget};
     use sqlx::{Executor, SqlitePool};
 
     async fn setup_test_db() -> SqlitePool {
@@ -739,6 +633,12 @@ mod tests {
             .await
             .unwrap();
         pool.execute(db_schema::SOFTWARE_REMINDER_RULES_SCHEMA_SQL)
+            .await
+            .unwrap();
+        pool.execute(db_schema::ACTIVITY_REMINDER_RULES_SCHEMA_SQL)
+            .await
+            .unwrap();
+        pool.execute(db_schema::WEB_ACTIVITY_SCHEMA_SQL)
             .await
             .unwrap();
         pool
@@ -783,7 +683,7 @@ mod tests {
     }
 
     #[test]
-    fn software_reminder_counts_today_usage_and_active_session_once() {
+    fn app_activity_reminder_counts_today_usage_and_active_session_once() {
         tauri::async_runtime::block_on(async {
             let pool = setup_test_db().await;
             sqlx::query(
@@ -807,10 +707,13 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
-            create_software_reminder_rule(
+            create_activity_reminder_rule(
                 &pool,
+                &ActivityReminderTarget::App {
+                    app_name: "Editor".to_string(),
+                    exe_name: Some("editor.exe".to_string()),
+                },
                 "Editor",
-                Some("editor.exe"),
                 60_000,
                 "Take a break",
                 900,
@@ -818,10 +721,10 @@ mod tests {
             .await
             .unwrap();
 
-            let first = fire_due_software_reminders(&pool, "2026-06-07", 0, 70_000)
+            let first = fire_due_activity_reminders(&pool, "2026-06-07", 0, 70_000)
                 .await
                 .unwrap();
-            let second = fire_due_software_reminders(&pool, "2026-06-07", 0, 71_000)
+            let second = fire_due_activity_reminders(&pool, "2026-06-07", 0, 71_000)
                 .await
                 .unwrap();
 
@@ -829,6 +732,476 @@ mod tests {
             assert_eq!(first[0].usage_ms, 70_000);
             assert_eq!(first[0].message, "Take a break");
             assert!(second.is_empty());
+        });
+    }
+
+    #[test]
+    fn activity_usage_clips_cross_midnight_active_and_future_segments() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            sqlx::query(
+                "INSERT INTO settings (key, value) VALUES ('web_activity_enabled', 'true')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO sessions (
+                    app_name, exe_name, window_title, start_time, end_time, duration,
+                    continuity_group_start_time
+                 ) VALUES
+                    ('Editor', 'editor.exe', 'Before midnight', -30_000, 30_000, 60_000, -30_000),
+                    ('Editor', 'editor.exe', 'Active', 60_000, NULL, NULL, 60_000),
+                    ('Editor', 'editor.exe', 'Future', 100_000, 120_000, 20_000, 100_000)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO web_activity_segments (
+                    browser_client_id, browser_kind, browser_exe_name, domain,
+                    normalized_domain, start_time, end_time, duration, source, created_at, updated_at
+                 ) VALUES
+                    ('client', 'chromium', 'chrome.exe', 'Example.com', 'example.com',
+                     -20_000, 40_000, 60_000, 'browser-extension', 0, 40_000),
+                    ('client', 'chromium', 'chrome.exe', 'Example.com', 'example.com',
+                     70_000, NULL, NULL, 'browser-extension', 70_000, 70_000),
+                    ('client', 'chromium', 'chrome.exe', 'Example.com', 'example.com',
+                     110_000, 130_000, 20_000, 'browser-extension', 110_000, 130_000)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            create_activity_reminder_rule(
+                &pool,
+                &ActivityReminderTarget::App {
+                    app_name: "Editor".to_string(),
+                    exe_name: Some("editor.exe".to_string()),
+                },
+                "Editor",
+                60_000,
+                "",
+                1,
+            )
+            .await
+            .unwrap();
+            create_activity_reminder_rule(
+                &pool,
+                &ActivityReminderTarget::Web {
+                    normalized_domain: "example.com".to_string(),
+                },
+                "Example",
+                60_000,
+                "",
+                2,
+            )
+            .await
+            .unwrap();
+
+            let fired = fire_due_activity_reminders(&pool, "2026-06-07", 0, 100_000)
+                .await
+                .unwrap();
+
+            assert_eq!(fired.len(), 2);
+            assert_eq!(fired[0].usage_ms, 70_000);
+            assert_eq!(fired[1].usage_ms, 70_000);
+        });
+    }
+
+    #[test]
+    fn category_rules_reclassify_existing_sessions_at_evaluation_time() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            sqlx::query(
+                "INSERT INTO sessions (
+                    app_name, exe_name, window_title, start_time, end_time, duration,
+                    continuity_group_start_time
+                 ) VALUES ('Editor', 'editor.exe', 'Doc', 0, 70_000, 70_000, 0)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            create_activity_reminder_rule(
+                &pool,
+                &ActivityReminderTarget::Category {
+                    category_id: "development".to_string(),
+                },
+                "Development",
+                60_000,
+                "",
+                1,
+            )
+            .await
+            .unwrap();
+
+            assert!(fire_due_activity_reminders(&pool, "2026-06-07", 0, 80_000)
+                .await
+                .unwrap()
+                .is_empty());
+            sqlx::query(
+                "INSERT INTO settings (key, value) VALUES (
+                    '__app_override::editor.exe',
+                    '{\"category\":\"development\",\"enabled\":true}'
+                 )",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+
+            let fired = fire_due_activity_reminders(&pool, "2026-06-07", 0, 80_000)
+                .await
+                .unwrap();
+            assert_eq!(fired.len(), 1);
+            assert_eq!(fired[0].usage_ms, 70_000);
+        });
+    }
+
+    #[test]
+    fn web_activity_rules_reject_unobserved_or_excluded_domains() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            let target = ActivityReminderTarget::Web {
+                normalized_domain: "example.com".to_string(),
+            };
+            let unobserved =
+                create_activity_reminder_rule(&pool, &target, "Example", 60_000, "", 1)
+                    .await
+                    .unwrap_err();
+            assert!(unobserved.contains("has not been observed"));
+
+            sqlx::query(
+                "INSERT INTO web_activity_segments (
+                    browser_client_id, browser_kind, browser_exe_name, domain,
+                    normalized_domain, start_time, end_time, duration, source, created_at, updated_at
+                 ) VALUES ('client', 'chromium', 'chrome.exe', 'Example.com',
+                           'example.com', 0, 10, 10, 'browser-extension', 0, 10)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO settings (key, value) VALUES (
+                    '__web_domain_override::example.com', '{\"enabled\":false}'
+                 )",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            let excluded = create_activity_reminder_rule(&pool, &target, "Example", 60_000, "", 2)
+                .await
+                .unwrap_err();
+            assert!(excluded.contains("unavailable"));
+        });
+    }
+
+    #[test]
+    fn activity_rule_suspensions_follow_current_source_and_target_settings() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            sqlx::query(
+                "INSERT INTO web_activity_segments (
+                    browser_client_id, browser_kind, browser_exe_name, domain,
+                    normalized_domain, start_time, end_time, duration, source, created_at, updated_at
+                 ) VALUES ('client', 'chromium', 'chrome.exe', 'Example.com',
+                           'example.com', 0, 10, 10, 'browser-extension', 0, 10)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            let category = create_activity_reminder_rule(
+                &pool,
+                &ActivityReminderTarget::Category {
+                    category_id: "development".to_string(),
+                },
+                "Development",
+                60_000,
+                "",
+                1,
+            )
+            .await
+            .unwrap();
+            let web = create_activity_reminder_rule(
+                &pool,
+                &ActivityReminderTarget::Web {
+                    normalized_domain: "example.com".to_string(),
+                },
+                "Example",
+                60_000,
+                "",
+                2,
+            )
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO settings (key, value) VALUES
+                    ('__deleted_category::development', '1'),
+                    ('web_activity_enabled', 'false'),
+                    ('__web_domain_override::example.com', '{\"enabled\":false}')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+
+            let snapshot = fetch_tools_snapshot(&pool, 10, "2026-06-07").await.unwrap();
+            let category_rule = snapshot
+                .activity_reminder_rules
+                .iter()
+                .find(|rule| rule.id == category.id)
+                .unwrap();
+            let web_rule = snapshot
+                .activity_reminder_rules
+                .iter()
+                .find(|rule| rule.id == web.id)
+                .unwrap();
+            assert_eq!(
+                category_rule.suspension_reason,
+                Some(ActivityReminderSuspensionReason::TargetDeleted)
+            );
+            assert_eq!(
+                web_rule.suspension_reason,
+                Some(ActivityReminderSuspensionReason::SourceDisabled)
+            );
+
+            sqlx::query("UPDATE settings SET value = 'true' WHERE key = 'web_activity_enabled'")
+                .execute(&pool)
+                .await
+                .unwrap();
+            let resumed_source = fetch_tools_snapshot(&pool, 11, "2026-06-07").await.unwrap();
+            let web_rule = resumed_source
+                .activity_reminder_rules
+                .iter()
+                .find(|rule| rule.id == web.id)
+                .unwrap();
+            assert_eq!(
+                web_rule.suspension_reason,
+                Some(ActivityReminderSuspensionReason::TargetExcluded)
+            );
+        });
+    }
+
+    #[test]
+    fn category_and_web_activity_reminders_share_usage_facts_and_respect_exclusions() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            sqlx::query(
+                "INSERT INTO settings (key, value) VALUES
+                    ('__app_override::editor.exe', '{\"category\":\"development\",\"enabled\":true}'),
+                    ('__app_override::excluded.exe', '{\"category\":\"development\",\"track\":false}'),
+                    ('web_activity_enabled', 'true')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO sessions (
+                    app_name, exe_name, window_title, start_time, end_time, duration,
+                    continuity_group_start_time
+                 ) VALUES
+                    ('Editor', 'editor.exe', 'Doc', 0, 70_000, 70_000, 0),
+                    ('Excluded', 'excluded.exe', 'Hidden', 0, 90_000, 90_000, 0)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO web_activity_segments (
+                    browser_client_id, browser_kind, browser_exe_name, domain,
+                    normalized_domain, start_time, end_time, duration, source, created_at, updated_at
+                 ) VALUES ('client', 'chromium', 'chrome.exe', 'Example.com',
+                           'example.com', 0, 80_000, 80_000, 'browser-extension', 0, 80_000)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+
+            create_activity_reminder_rule(
+                &pool,
+                &ActivityReminderTarget::Category {
+                    category_id: "development".to_string(),
+                },
+                "Development",
+                60_000,
+                "",
+                900,
+            )
+            .await
+            .unwrap();
+            create_activity_reminder_rule(
+                &pool,
+                &ActivityReminderTarget::Web {
+                    normalized_domain: "example.com".to_string(),
+                },
+                "Example",
+                60_000,
+                "Web break",
+                901,
+            )
+            .await
+            .unwrap();
+
+            let first = fire_due_activity_reminders(&pool, "2026-06-07", 0, 100_000)
+                .await
+                .unwrap();
+            let second = fire_due_activity_reminders(&pool, "2026-06-07", 0, 101_000)
+                .await
+                .unwrap();
+
+            assert_eq!(first.len(), 2);
+            assert_eq!(first[0].usage_ms, 70_000);
+            assert_eq!(first[1].usage_ms, 80_000);
+            assert!(second.is_empty());
+        });
+    }
+
+    #[test]
+    fn one_tick_evaluates_one_hundred_mixed_activity_rules() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            sqlx::query(
+                "INSERT INTO settings (key, value) VALUES
+                    ('__app_override::editor.exe', '{\"category\":\"development\",\"enabled\":true}'),
+                    ('web_activity_enabled', 'true')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO sessions (
+                    app_name, exe_name, window_title, start_time, end_time, duration,
+                    continuity_group_start_time
+                 ) VALUES ('Editor', 'editor.exe', 'Doc', 0, 70_000, 70_000, 0)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO web_activity_segments (
+                    browser_client_id, browser_kind, browser_exe_name, domain,
+                    normalized_domain, start_time, end_time, duration, source, created_at, updated_at
+                 ) VALUES ('client', 'chromium', 'chrome.exe', 'Example.com',
+                           'example.com', 0, 80_000, 80_000, 'browser-extension', 0, 80_000)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+
+            for index in 0..100 {
+                let target = match index % 3 {
+                    0 => ActivityReminderTarget::App {
+                        app_name: "Editor".to_string(),
+                        exe_name: Some("editor.exe".to_string()),
+                    },
+                    1 => ActivityReminderTarget::Category {
+                        category_id: "development".to_string(),
+                    },
+                    _ => ActivityReminderTarget::Web {
+                        normalized_domain: "example.com".to_string(),
+                    },
+                };
+                create_activity_reminder_rule(&pool, &target, "Target", 60_000, "", index)
+                    .await
+                    .unwrap();
+            }
+
+            let fired = fire_due_activity_reminders(&pool, "2026-06-07", 0, 100_000)
+                .await
+                .unwrap();
+            assert_eq!(fired.len(), 100);
+        });
+    }
+
+    #[test]
+    fn snapshot_merge_preserves_all_activity_targets_and_is_idempotent() {
+        tauri::async_runtime::block_on(async {
+            let source = setup_test_db().await;
+            sqlx::query(
+                "INSERT INTO web_activity_segments (
+                    browser_client_id, browser_kind, browser_exe_name, domain,
+                    normalized_domain, start_time, end_time, duration, source, created_at, updated_at
+                 ) VALUES ('client', 'chromium', 'chrome.exe', 'Example.com',
+                           'example.com', 0, 10, 10, 'browser-extension', 0, 10)",
+            )
+            .execute(&source)
+            .await
+            .unwrap();
+            create_activity_reminder_rule(
+                &source,
+                &ActivityReminderTarget::App {
+                    app_name: "Editor".to_string(),
+                    exe_name: Some("editor.exe".to_string()),
+                },
+                "My editor",
+                60_000,
+                "App break",
+                1_000,
+            )
+            .await
+            .unwrap();
+            let category = create_activity_reminder_rule(
+                &source,
+                &ActivityReminderTarget::Category {
+                    category_id: "development".to_string(),
+                },
+                "Development",
+                120_000,
+                "Category break",
+                1_001,
+            )
+            .await
+            .unwrap();
+            disable_activity_reminder_rule(&source, category.id, 1_100)
+                .await
+                .unwrap();
+            create_activity_reminder_rule(
+                &source,
+                &ActivityReminderTarget::Web {
+                    normalized_domain: "example.com".to_string(),
+                },
+                "Example",
+                180_000,
+                "Web break",
+                1_002,
+            )
+            .await
+            .unwrap();
+            let rules = read::fetch_all_activity_reminder_rules(&source)
+                .await
+                .unwrap();
+
+            let target = setup_test_db().await;
+            sqlx::query(
+                "INSERT INTO tool_activity_reminder_rules (
+                    id, target_kind, app_name, exe_name, category_id, normalized_domain,
+                    label_snapshot, limit_ms, message, created_at, updated_at
+                 ) VALUES (1, 'web', NULL, NULL, NULL, 'existing.test',
+                           'Existing', 60000, '', 9, 9)",
+            )
+            .execute(&target)
+            .await
+            .unwrap();
+            for _ in 0..2 {
+                let mut tx = target.begin().await.unwrap();
+                merge_activity_reminder_rules(&mut tx, &rules)
+                    .await
+                    .unwrap();
+                tx.commit().await.unwrap();
+            }
+
+            let rows: Vec<(String, String, Option<i64>)> = sqlx::query_as(
+                "SELECT target_kind, label_snapshot, disabled_at
+                 FROM tool_activity_reminder_rules ORDER BY created_at, id",
+            )
+            .fetch_all(&target)
+            .await
+            .unwrap();
+            assert_eq!(rows.len(), 4);
+            assert!(rows
+                .iter()
+                .any(|row| row.0 == "app" && row.1 == "My editor"));
+            assert!(rows
+                .iter()
+                .any(|row| row.0 == "category" && row.2 == Some(1_100)));
+            assert!(rows.iter().any(|row| row.0 == "web" && row.1 == "Example"));
         });
     }
 
