@@ -186,7 +186,7 @@ function buildPreview(overrides: Partial<BackupPreview> = {}): BackupPreview {
     toolTimerLapCount: 0,
     toolPomodoroRunCount: 0,
     toolDailyStatsCount: 0,
-    toolSoftwareReminderRuleCount: 0,
+    toolActivityReminderRuleCount: 0,
     ...overrides,
   };
 }
