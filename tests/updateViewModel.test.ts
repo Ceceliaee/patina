@@ -3,7 +3,7 @@ import {
   buildUpdateConfirmDialogModel as buildUpdateConfirmDialogModelRaw,
   buildUpdateStatusPanelModel as buildUpdateStatusPanelModelRaw,
   shouldOpenUpdateDialogForSnapshot,
-  shouldShowSidebarUpdateEntry,
+  shouldShowCompactUpdateEntry,
 } from "../src/features/update/services/updateViewModel.ts";
 import {
   clearPendingUpdateRelaunchViewRestore,
@@ -52,7 +52,7 @@ function runTest(name: string, fn: () => void) {
   console.log(`PASS ${name}`);
 }
 
-runTest("available uses download action and shows sidebar entry", () => {
+runTest("available uses download action and shows the compact shell entry", () => {
   const snapshot = makeSnapshot({
     status: "available",
     latestVersion: "0.1.1",
@@ -63,18 +63,18 @@ runTest("available uses download action and shows sidebar entry", () => {
   assert.equal(panel.primaryAction.label, "立即下载");
   assert.equal(panel.primaryAction.action, "open_confirm");
   assert.equal(panel.secondaryAction, null);
-  assert.equal(shouldShowSidebarUpdateEntry(snapshot), true);
+  assert.equal(shouldShowCompactUpdateEntry(snapshot), true);
   assert.equal(panel.progress, null);
 });
 
-runTest("up-to-date uses check action without sidebar entry", () => {
+runTest("up-to-date uses check action without the compact shell entry", () => {
   const snapshot = makeSnapshot({ status: "up_to_date" });
   const panel = buildUpdateStatusPanelModel(snapshot, false, false);
 
   assert.equal(panel.primaryAction.label, "检查更新");
   assert.equal(panel.primaryAction.action, "check");
   assert.equal(panel.secondaryAction, null);
-  assert.equal(shouldShowSidebarUpdateEntry(snapshot), false);
+  assert.equal(shouldShowCompactUpdateEntry(snapshot), false);
 });
 
 runTest("download error prefers direct package download and keeps retry secondary action", () => {
@@ -104,7 +104,7 @@ runTest("check error falls back to release page", () => {
   assert.equal(panel.statusDetail?.includes("github.com"), false);
   assert.equal(panel.primaryAction.action, "open_release_page");
   assert.equal(panel.secondaryAction?.action, "check");
-  assert.equal(shouldShowSidebarUpdateEntry(makeSnapshot({
+  assert.equal(shouldShowCompactUpdateEntry(makeSnapshot({
     status: "error",
     errorStage: "check",
     errorMessage: "failed to check updates: network offline",
@@ -128,7 +128,7 @@ runTest("downloading builds determinate progress when total is known", () => {
 
   assert.equal(panel.progress?.valueText, "50%");
   assert.equal(panel.progress?.indeterminate, false);
-  assert.equal(shouldShowSidebarUpdateEntry(makeSnapshot({ status: "downloading" })), true);
+  assert.equal(shouldShowCompactUpdateEntry(makeSnapshot({ status: "downloading" })), true);
 });
 
 runTest("download preparation does not show a misleading partial progress bar", () => {
@@ -236,7 +236,7 @@ runTest("install error keeps retry install as primary action", () => {
   assert.equal(panel.primaryAction.action, "open_confirm");
   assert.equal(panel.primaryAction.label, "再次安装");
   assert.equal(panel.secondaryAction?.action, "open_download_url");
-  assert.equal(shouldShowSidebarUpdateEntry(snapshot), false);
+  assert.equal(shouldShowCompactUpdateEntry(snapshot), false);
 });
 
 runTest("update relaunch view storage persists current keys", () => {
