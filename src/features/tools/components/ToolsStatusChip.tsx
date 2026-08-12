@@ -1,6 +1,6 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
 import type { LucideIcon } from "lucide-react";
-import QuietTooltip from "../../../shared/components/QuietTooltip.tsx";
+import QuietTooltip, { type QuietTooltipPlacement } from "../../../shared/components/QuietTooltip.tsx";
 
 
 interface ToolsStatusChipProps {
@@ -9,6 +9,7 @@ interface ToolsStatusChipProps {
   onClick: () => void;
   className?: string;
   iconOnly?: boolean;
+  tooltipPlacement?: QuietTooltipPlacement;
 }
 
 export default function ToolsStatusChip({
@@ -17,10 +18,11 @@ export default function ToolsStatusChip({
   onClick,
   className,
   iconOnly = false,
+  tooltipPlacement = "top",
 }: ToolsStatusChipProps) {
   const UI_TEXT = useLocaleText();
   return (
-    <QuietTooltip label={label} placement="top">
+    <QuietTooltip label={label} placement={tooltipPlacement}>
       <button
         type="button"
         onClick={onClick}

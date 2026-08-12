@@ -1,5 +1,5 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
-import { AlarmClock, BellRing, Timer, ToolCase } from "lucide-react";
+import { AlarmClock, BellRing, Settings, Timer, ToolCase } from "lucide-react";
 import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import QuietBadge from "../../../shared/components/QuietBadge.tsx";
 import QuietButton from "../../../shared/components/QuietButton.tsx";
@@ -19,10 +19,12 @@ import type { ToolsOpenTarget, ToolsSection } from "../types.ts";
 import PomodoroToolPanel from "./PomodoroToolPanel.tsx";
 import ReminderToolPanel from "./ReminderToolPanel.tsx";
 import TimerToolPanel from "./TimerToolPanel.tsx";
+import ToolsSettingsDialog from "./ToolsSettingsDialog.tsx";
 
 interface ToolsProps {
   initialTarget?: ToolsOpenTarget | null;
   icons: Record<string, string>;
+  showNavigationLabels?: boolean;
   onInitialTargetConsumed?: () => void;
   onToast?: (message: string, tone?: QuietToastTone) => void;
 }
@@ -53,6 +55,7 @@ function addVisitedSection(current: ReadonlySet<ToolsSection>, section: ToolsSec
 export default function Tools({
   initialTarget = null,
   icons,
+  showNavigationLabels = false,
   onInitialTargetConsumed,
   onToast,
 }: ToolsProps) {
@@ -64,6 +67,7 @@ export default function Tools({
     () => new Set([initialTarget ? normalizeToolsSection(initialTarget) : readToolsSection()]),
   );
   const [selectedTimerMode, setSelectedTimerMode] = useState<TimerMode>(readToolsTimerMode);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const handleError = useCallback((message: string) => {
     onToast?.(message, "error");
   }, [onToast]);
@@ -73,9 +77,9 @@ export default function Tools({
     uiText: UI_TEXT,
   });
   const toolsIconExeNames = useMemo(() => [
-    ...state.softwareReminderAppCandidates.map((candidate) => candidate.exeName),
-    ...state.softwareReminderRuleRows.map((row) => row.exeName),
-  ], [state.softwareReminderAppCandidates, state.softwareReminderRuleRows]);
+    ...state.activityReminderAppCandidates.map((candidate) => candidate.exeName),
+    ...state.activityReminderRuleRows.map((row) => row.exeName),
+  ], [state.activityReminderAppCandidates, state.activityReminderRuleRows]);
   const toolsIcons = useRequestedAppIcons({
     baseIcons: icons,
     exeNames: toolsIconExeNames,
@@ -166,11 +170,12 @@ export default function Tools({
         </div>
       ) : null}
 
-      {state.hasSnapshot ? <div className="tools-page-body">
+      {state.hasSnapshot ? <div className="tools-page-body qp-scroll-region">
         <div className="tools-workspace">
           <aside
             className="tools-section-rail tools-section-rail-shell"
             aria-label={UI_TEXT.tools.title}
+            data-tools-navigation-mode={showNavigationLabels ? "labeled" : "icons"}
             style={sectionRailStyle}
           >
             {activeSectionIndex >= 0 ? (
@@ -187,14 +192,37 @@ export default function Tools({
                   aria-pressed={selected}
                   onClick={() => handleSectionChange(section.id)}
                   aria-label={section.title}
-                  className={selected ? "tools-section-tab tools-section-tab-active" : "tools-section-tab"}
+                  className={[
+                    "tools-section-tab",
+                    selected ? "tools-section-tab-active" : "",
+                    showNavigationLabels ? "tools-section-tab-labeled" : "",
+                  ].filter(Boolean).join(" ")}
                 >
                   <span className="tools-section-tab-icon">
-                    <Icon size={17} />
+                    <Icon size={showNavigationLabels ? 15 : 17} />
                   </span>
+                  {showNavigationLabels ? (
+                    <span
+                      className="tools-section-tab-copy"
+                      data-tools-section-label=""
+                      aria-hidden="true"
+                    >
+                      {section.title}
+                    </span>
+                  ) : null}
                 </button>
               );
             })}
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              aria-label={UI_TEXT.tools.settingsTitle}
+              className="tools-section-tab tools-section-settings-tab"
+            >
+              <span className="tools-section-tab-icon">
+                <Settings size={17} />
+              </span>
+            </button>
           </aside>
 
           <div className="tools-active-panel">
@@ -202,14 +230,20 @@ export default function Tools({
               <div className={activeSection === "reminders" ? "tools-section-pane" : "tools-section-pane tools-section-pane-hidden"} data-tools-section="reminders">
                 <ReminderToolPanel
                   reminderRows={state.reminderRows}
-                  softwareReminderRuleRows={state.softwareReminderRuleRows}
-                  softwareReminderAppCandidates={state.softwareReminderAppCandidates}
+                  activityReminderRuleRows={state.activityReminderRuleRows}
+                  activityReminderAppCandidates={state.activityReminderAppCandidates}
+                  activityReminderCategoryCandidates={state.activityReminderCategoryCandidates}
+                  activityReminderWebCandidates={state.activityReminderWebCandidates}
                   icons={toolsIcons}
                   busyAction={state.busyAction}
                   onCreateReminder={state.createReminder}
                   onCancelReminder={state.cancelReminder}
-                  onCreateSoftwareReminderRule={state.createSoftwareReminderRule}
-                  onDisableSoftwareReminderRule={state.disableSoftwareReminderRule}
+                  onCreateActivityReminderRule={state.createActivityReminderRule}
+                  onDisableActivityReminderRule={state.disableActivityReminderRule}
+                  onActivityModeActivated={state.activateActivityReminderMode}
+                  activityReminderCandidateRevision={state.activityReminderCandidateRevision}
+                  activityReminderCandidateLoadState={state.activityReminderCandidateLoadState}
+                  onRetryActivityReminderCandidates={state.retryActivityReminderCandidates}
                 />
               </div>
             ) : null}
@@ -246,6 +280,10 @@ export default function Tools({
           </div>
         </div>
       </div> : null}
+      <ToolsSettingsDialog
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlarmClock, BellRing, Timer } from "lucide-react";
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import type { ToolsRuntimeSnapshot } from "../../../shared/types/tools.ts";
 import { buildToolsViewModelLabels } from "../services/toolsLabels.ts";
 import { toolsRuntimeSnapshotStore } from "../services/toolsRuntimeSnapshotStore.ts";
@@ -7,7 +8,7 @@ import { buildToolsStatusChipViewModels } from "../services/toolsViewModel.ts";
 import type { ToolStatusChipViewModel, ToolsOpenTarget } from "../types.ts";
 import ToolsStatusChip from "./ToolsStatusChip.tsx";
 
-interface ToolsSidebarStatusEntryProps {
+interface ToolsStatusEntryProps {
   onOpenSection: (target: ToolsOpenTarget) => void;
 }
 
@@ -28,9 +29,9 @@ function hasToolsStatusChip(snapshot: ToolsRuntimeSnapshot | null) {
   );
 }
 
-export default function ToolsSidebarStatusEntry({
+export default function ToolsStatusEntry({
   onOpenSection,
-}: ToolsSidebarStatusEntryProps) {
+}: ToolsStatusEntryProps) {
   const uiText = useLocaleText();
   const [snapshot, setSnapshot] = useState<ToolsRuntimeSnapshot | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -76,7 +77,12 @@ export default function ToolsSidebarStatusEntry({
   }
 
   return (
-    <div className="tools-status-chip-sidebar" role="group">
+    <div
+      className="tools-status-entry-titlebar"
+      data-titlebar-tools-status=""
+      role="group"
+      aria-label={uiText.tools.title}
+    >
       {statusChips.map((statusChip) => (
         <ToolsStatusChip
           key={`${statusChip.targetSection}:${statusChip.targetTimerMode ?? "default"}`}
@@ -86,11 +92,11 @@ export default function ToolsSidebarStatusEntry({
             section: statusChip.targetSection,
             timerMode: statusChip.targetTimerMode,
           })}
-          className="tools-status-chip-sidebar-item"
+          className="tools-status-entry-titlebar-item"
           iconOnly
+          tooltipPlacement="bottom"
         />
       ))}
     </div>
   );
 }
-import { useLocaleText } from "../../../shared/i18n/index.ts";
