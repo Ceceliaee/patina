@@ -316,7 +316,7 @@ export default function QuickClassificationSurface({
           {categoryMenuOpen && !loading ? (
             <div
               ref={categoryMenuRef}
-              className="quick-classification-menu quick-classification-category-menu custom-scrollbar"
+              className="quick-classification-menu quick-classification-category-menu qp-scroll-region"
               role="menu"
               aria-label={UI_TEXT.mapping.quickCategoryMenuLabel}
               style={{ left: categoryPosition.left, top: categoryPosition.top }}

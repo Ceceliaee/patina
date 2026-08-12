@@ -186,7 +186,7 @@ export default function SettingsDataImportDialog({
               </div>
             ) : null}
             {preview.errors.length > 0 ? (
-              <ul className="settings-import-errors">
+              <ul className="settings-import-errors qp-scroll-region">
                 {preview.errors.map((error) => (
                   <li key={`${error.line}-${error.message}`}>{importText.lineError(error.line, error.message)}</li>
                 ))}

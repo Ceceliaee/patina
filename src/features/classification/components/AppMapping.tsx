@@ -288,7 +288,7 @@ export default function AppMapping(props: Props) {
                 {UI_TEXT.mapping.webEmptyState}
               </div>
             ) : (
-              <div className="h-full overflow-y-auto custom-scrollbar pr-1">
+              <div className="h-full overflow-y-auto qp-scroll-region pr-1">
                 <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
                   {filteredWebDomainCandidates.map((candidate) => {
                     const displayName = resolveWebDomainDisplayName(candidate);
@@ -349,7 +349,7 @@ export default function AppMapping(props: Props) {
             </div>
           </div>
         ) : (
-          <div key={contentPaneKey} className="qp-classification-object-pane h-full overflow-y-auto custom-scrollbar pr-1">
+          <div key={contentPaneKey} className="qp-classification-object-pane h-full overflow-y-auto qp-scroll-region pr-1">
             <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
               {filteredCandidates.map((candidate) => {
                 const displayName = resolveEffectiveDisplayName(candidate);
@@ -429,7 +429,7 @@ export default function AppMapping(props: Props) {
           </>
         )}
       >
-        <div className="qp-category-dialog-body custom-scrollbar">
+        <div className="qp-category-dialog-body qp-scroll-region">
           <CategoryColorControls
             categories={categoryControlCategories}
             colorFormat={colorFormat}

@@ -56,7 +56,7 @@ export default function AboutFeedbackDialog({
       description={copy.description}
       onClose={close}
       initialFocusRef={githubButtonRef}
-      surfaceClassName="about-feedback-dialog-surface"
+      surfaceClassName="about-feedback-dialog-surface qp-scroll-region"
     >
       <button
         type="button"

@@ -214,7 +214,7 @@ export default function Settings({
         )}
       />
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+      <div className="flex-1 overflow-y-auto qp-scroll-region pr-2">
         <div className="grid grid-cols-1 gap-4 md:gap-5">
           <SettingsTrackingPanel
             timelineMergeGapControl={{

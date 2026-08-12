@@ -15,7 +15,6 @@
   max-height: min(272px, calc(100vh - 24px));
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-gutter: stable;
 }
 
 .quick-classification-menu-item {

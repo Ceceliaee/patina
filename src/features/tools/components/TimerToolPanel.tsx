@@ -217,7 +217,7 @@ export default function TimerToolPanel({
             {snapshot.timerLaps.length === 0 ? (
               <div className="tools-empty-state">{UI_TEXT.tools.lapsEmpty}</div>
             ) : (
-              <div className="tools-lap-list">
+              <div className="tools-lap-list qp-scroll-region">
                 {snapshot.timerLaps.map((lap) => (
                   <div key={lap.id} className="tools-lap-row">
                     <div>

@@ -126,7 +126,7 @@ export default function About({
         subtitle={UI_TEXT.about.subtitle}
       />
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+      <div className="flex-1 overflow-y-auto qp-scroll-region pr-2">
         <AboutPanel
           appVersion={appVersion}
           effectiveUpdateSnapshot={effectiveUpdateSnapshot}

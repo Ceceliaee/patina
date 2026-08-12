@@ -226,7 +226,7 @@ export default function SettingsAppearancePanel({
         )}
       >
         {activeLibrary ? (
-          <div className="qp-theme-dialog-body">
+          <div className="qp-theme-dialog-body qp-scroll-region">
             <div className="settings-color-scheme-list" role="group" aria-label={activeLibraryOption?.label}>
               {COLOR_SCHEME_OPTIONS[activeLibrary].map((option) => {
                 const selected = option.value === activeColorScheme;

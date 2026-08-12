@@ -201,7 +201,7 @@ export default function PomodoroToolPanel({
         </div>
       </div>
 
-      <div className="tools-subpanel tools-pomodoro-rules">
+      <div className="tools-subpanel tools-pomodoro-rules qp-scroll-region">
         <div className="tools-subpanel-header">
           <div className="tools-subpanel-title-action">
             <h3>{UI_TEXT.tools.pomodoroSettings}</h3>

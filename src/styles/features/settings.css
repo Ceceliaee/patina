@@ -395,7 +395,6 @@
 .settings-web-activity-help-dialog .qp-dialog-body {
   max-height: min(640px, calc(100vh - 178px));
   overflow-y: auto;
-  scrollbar-gutter: stable;
   padding-right: 3px;
 }
 
@@ -688,7 +687,6 @@
 .settings-data-export-dialog-surface .qp-dialog-body {
   max-height: min(560px, calc(100vh - 176px));
   overflow-y: auto;
-  scrollbar-gutter: stable;
   padding-right: 3px;
 }
 
@@ -806,7 +804,6 @@
   height: min(380px, calc(100vh - 260px));
   max-height: min(380px, calc(100vh - 260px));
   overflow-y: auto;
-  scrollbar-gutter: stable;
   padding-right: 3px;
 }
 
@@ -1267,7 +1264,6 @@
 .settings-import-errors {
   max-height: 120px;
   overflow-y: auto;
-  scrollbar-gutter: stable;
   padding-left: 18px;
 }
 
@@ -1460,7 +1456,6 @@
 .settings-scheduled-backup-dialog .qp-dialog-body {
   max-height: min(68vh, 660px);
   overflow-y: auto;
-  scrollbar-gutter: stable;
 }
 
 .settings-scheduled-backup {
