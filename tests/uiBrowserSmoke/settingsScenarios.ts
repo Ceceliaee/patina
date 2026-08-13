@@ -688,9 +688,12 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       client!,
       sessionId,
       `document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify("Language: English"))} + ']')?.getAttribute("aria-expanded") === "true"
-        && Boolean(document.querySelector('[role="listbox"]'))`,
+        && (() => {
+          const listbox = document.querySelector('[role="listbox"]');
+          return Boolean(listbox && getComputedStyle(listbox).visibility !== "hidden");
+        })()`,
       15_000,
-      "language trigger should open the listbox",
+      "language trigger should open and finish measuring the listbox",
     );
     assert.equal(
       await evaluate(client!, sessionId, `

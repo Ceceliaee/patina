@@ -1347,11 +1347,17 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
       }, sessionId);
       await client!.command("Input.dispatchMouseEvent", {
         type: "mouseMoved",
-        x: repeatedDragState.x + Math.sign(dragDeltaX),
+        x: repeatedDragState.x + Math.sign(dragDeltaX) * 8,
         y: repeatedDragState.y,
         button: "left",
         buttons: 1,
       }, sessionId);
+      await waitForExpression(
+        client!,
+        sessionId,
+        `document.querySelector(".history-timeline-zoom-dialog-timeline")
+          ?.classList.contains("history-timeline-zoom-dialog-timeline-dragging") === true`,
+      );
       await client!.command("Input.dispatchMouseEvent", {
         type: "mouseMoved",
         x: repeatedDragState.x + dragDeltaX,
@@ -1359,13 +1365,6 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
         button: "left",
         buttons: 1,
       }, sessionId);
-      const comparison = dragDeltaX > 0 ? "<" : ">";
-      await waitForExpression(
-        client!,
-        sessionId,
-        `Number(document.querySelector(".history-timeline-zoom-dialog-timeline .history-horizontal-timeline")
-          ?.getAttribute("data-history-timeline-window-start")) ${comparison} ${repeatedDragState.windowStart}`,
-      );
       await client!.command("Input.dispatchMouseEvent", {
         type: "mouseReleased",
         x: repeatedDragState.x + dragDeltaX,
@@ -1374,6 +1373,13 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
         buttons: 0,
         clickCount: 1,
       }, sessionId);
+      const comparison = dragDeltaX > 0 ? "<" : ">";
+      await waitForExpression(
+        client!,
+        sessionId,
+        `Number(document.querySelector(".history-timeline-zoom-dialog-timeline .history-horizontal-timeline")
+          ?.getAttribute("data-history-timeline-window-start")) ${comparison} ${repeatedDragState.windowStart}`,
+      );
       await waitForExpression(
         client!,
         sessionId,
