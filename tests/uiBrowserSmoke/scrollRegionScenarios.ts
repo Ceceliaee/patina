@@ -105,7 +105,40 @@ async function fixtureMetrics(context: BrowserSmokeContext) {
       const fixtureStyle = getComputedStyle(fixture);
       const scrollbarStyle = getComputedStyle(fixture, "::-webkit-scrollbar");
       const thumbStyle = getComputedStyle(fixture, "::-webkit-scrollbar-thumb");
+      const scrollbarRules = [];
+      const collectScrollbarRules = (ruleList) => {
+        for (const rule of ruleList) {
+          if (rule.selectorText?.includes(".qp-scroll-region::-webkit-scrollbar-button")) {
+            scrollbarRules.push(rule);
+          }
+          if (rule.cssRules) collectScrollbarRules(rule.cssRules);
+        }
+      };
+      for (const sheet of document.styleSheets) {
+        try {
+          collectScrollbarRules(sheet.cssRules);
+        } catch {
+          // Cross-origin stylesheets are irrelevant to Patina's local Quiet Pro contract.
+        }
+      }
+      const ruleFor = (selector) => scrollbarRules.find(
+        (rule) => rule.selectorText?.split(",").map((part) => part.trim()).includes(selector),
+      );
+      const baseButtonRule = ruleFor(".qp-scroll-region::-webkit-scrollbar-button:single-button:vertical");
+      const decrementButtonRule = ruleFor(
+        ".qp-scroll-region::-webkit-scrollbar-button:single-button:vertical:decrement",
+      );
+      const incrementButtonRule = ruleFor(
+        ".qp-scroll-region::-webkit-scrollbar-button:single-button:vertical:increment",
+      );
       return {
+        buttonContract: {
+          decrementImage: decrementButtonRule?.style.backgroundImage ?? "",
+          display: baseButtonRule?.style.display ?? "",
+          height: baseButtonRule?.style.height ?? "",
+          incrementImage: incrementButtonRule?.style.backgroundImage ?? "",
+          width: baseButtonRule?.style.width ?? "",
+        },
         clientHeight: fixture.clientHeight,
         clientWidth: fixture.clientWidth,
         horizontalLane: fixture.offsetHeight - fixture.clientHeight,
@@ -118,11 +151,21 @@ async function fixtureMetrics(context: BrowserSmokeContext) {
         scrollbarSize: Number.parseFloat(scrollbarStyle.width),
         scrollTop: fixture.scrollTop,
         thumbInset: Number.parseFloat(thumbStyle.borderLeftWidth),
+        tokenScrollbarButtonSize: Number.parseFloat(
+          fixtureStyle.getPropertyValue("--qp-scrollbar-button-size"),
+        ),
         tokenScrollbarSize: Number.parseFloat(fixtureStyle.getPropertyValue("--qp-scrollbar-size")),
         verticalLane: fixture.offsetWidth - fixture.clientWidth,
       };
     })()
   `) as Promise<{
+    buttonContract: {
+      decrementImage: string;
+      display: string;
+      height: string;
+      incrementImage: string;
+      width: string;
+    };
     clientHeight: number;
     clientWidth: number;
     horizontalLane: number;
@@ -135,6 +178,7 @@ async function fixtureMetrics(context: BrowserSmokeContext) {
     scrollbarSize: number;
     scrollTop: number;
     thumbInset: number;
+    tokenScrollbarButtonSize: number;
     tokenScrollbarSize: number;
     verticalLane: number;
   }>;
@@ -152,30 +196,6 @@ function assertSystemScrollbarLane(lane: number, message: string) {
     lane === 0 || lane === 6,
     `${message}; expected a 6px classic lane or a 0px system overlay lane, observed ${lane}px`,
   );
-}
-
-async function clickAt(context: BrowserSmokeContext, x: number, y: number) {
-  await context.client.command("Input.dispatchMouseEvent", {
-    type: "mouseMoved",
-    x,
-    y,
-  }, context.sessionId);
-  await context.client.command("Input.dispatchMouseEvent", {
-    type: "mousePressed",
-    button: "left",
-    buttons: 1,
-    clickCount: 1,
-    x,
-    y,
-  }, context.sessionId);
-  await context.client.command("Input.dispatchMouseEvent", {
-    type: "mouseReleased",
-    button: "left",
-    buttons: 0,
-    clickCount: 1,
-    x,
-    y,
-  }, context.sessionId);
 }
 
 export async function runScrollRegionScenarios(context: BrowserSmokeContext) {
@@ -270,45 +290,76 @@ export async function runScrollRegionScenarios(context: BrowserSmokeContext) {
     }
   });
 
-  await runTest("vertical scrollbar buttons provide restrained native step scrolling", async () => {
+  await runTest("vertical scrollbar buttons keep canonical geometry and native step scrolling", async () => {
     try {
       await createFixture(context, { overflow: true });
       const initial = await fixtureMetrics(context);
       assertCanonicalScrollbarWidth(initial);
-      if (initial.verticalLane === 0) {
-        assert.ok(initial.maxScrollTop > 0, "overlay scroll region must remain scrollable");
-        return;
-      }
-      await clickAt(
-        context,
-        initial.rect.right - initial.verticalLane / 2,
-        initial.rect.bottom - 3,
+      assert.equal(initial.tokenScrollbarButtonSize, 6, "vertical scrollbar buttons must remain 6px");
+      assert.deepEqual(
+        {
+          display: initial.buttonContract.display,
+          height: initial.buttonContract.height,
+          width: initial.buttonContract.width,
+        },
+        {
+          display: "block",
+          height: "var(--qp-scrollbar-button-size)",
+          width: "var(--qp-scrollbar-size)",
+        },
       );
-      const afterIncrement = await waitFor("bottom scrollbar button increment", async () => {
+      assert.match(initial.buttonContract.decrementImage, /linear-gradient/);
+      assert.match(initial.buttonContract.incrementImage, /linear-gradient/);
+      assert.ok(initial.maxScrollTop > 0, "vertical scroll region must remain scrollable");
+      await evaluate(client, sessionId, `document.getElementById(${JSON.stringify(FIXTURE_ID)}).focus()`);
+      await client.command("Input.dispatchKeyEvent", {
+        type: "keyDown",
+        key: "ArrowDown",
+        code: "ArrowDown",
+        windowsVirtualKeyCode: 40,
+        nativeVirtualKeyCode: 40,
+      }, sessionId);
+      await client.command("Input.dispatchKeyEvent", {
+        type: "keyUp",
+        key: "ArrowDown",
+        code: "ArrowDown",
+        windowsVirtualKeyCode: 40,
+        nativeVirtualKeyCode: 40,
+      }, sessionId);
+      const afterIncrement = await waitFor("native vertical step increment", async () => {
         const metrics = await fixtureMetrics(context);
         return metrics.scrollTop > 0 ? metrics : null;
       });
       assert.ok(
         afterIncrement.scrollTop <= 60,
-        `bottom button should step rather than page; observed ${afterIncrement.scrollTop}px`,
+        `native increment should step rather than page; observed ${afterIncrement.scrollTop}px`,
       );
 
       await evaluate(client, sessionId, `
         document.getElementById(${JSON.stringify(FIXTURE_ID)}).scrollTop = 120
       `);
       const beforeDecrement = await fixtureMetrics(context);
-      await clickAt(
-        context,
-        beforeDecrement.rect.right - beforeDecrement.verticalLane / 2,
-        beforeDecrement.rect.top + 3,
-      );
-      const afterDecrement = await waitFor("top scrollbar button decrement", async () => {
+      await client.command("Input.dispatchKeyEvent", {
+        type: "keyDown",
+        key: "ArrowUp",
+        code: "ArrowUp",
+        windowsVirtualKeyCode: 38,
+        nativeVirtualKeyCode: 38,
+      }, sessionId);
+      await client.command("Input.dispatchKeyEvent", {
+        type: "keyUp",
+        key: "ArrowUp",
+        code: "ArrowUp",
+        windowsVirtualKeyCode: 38,
+        nativeVirtualKeyCode: 38,
+      }, sessionId);
+      const afterDecrement = await waitFor("native vertical step decrement", async () => {
         const metrics = await fixtureMetrics(context);
         return metrics.scrollTop < beforeDecrement.scrollTop ? metrics : null;
       });
       assert.ok(
         beforeDecrement.scrollTop - afterDecrement.scrollTop <= 60,
-        "top button should use the same restrained native step",
+        "native decrement should use the same restrained step",
       );
     } finally {
       await removeFixture(context);
