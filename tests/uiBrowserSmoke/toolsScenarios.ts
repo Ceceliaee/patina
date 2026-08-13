@@ -273,11 +273,21 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       sessionId,
       `(() => {
         const surface = document.querySelector('.tools-section-settings-tab .tools-section-tab-icon');
-        return surface
-          && getComputedStyle(surface).backgroundColor !== ${jsonString(JSON.stringify(settingsHoverTargets.defaultSurfaceBackground))};
+        if (!surface) return false;
+        const tokenProbe = document.createElement('span');
+        tokenProbe.style.background = 'var(--qp-bg-elevated)';
+        tokenProbe.style.color = 'var(--qp-text-secondary)';
+        document.body.append(tokenProbe);
+        const surfaceStyle = getComputedStyle(surface);
+        const tokenStyle = getComputedStyle(tokenProbe);
+        const settled = surfaceStyle.backgroundColor !== ${jsonString(JSON.stringify(settingsHoverTargets.defaultSurfaceBackground))}
+          && surfaceStyle.backgroundColor === tokenStyle.backgroundColor
+          && surfaceStyle.color === tokenStyle.color;
+        tokenProbe.remove();
+        return settled;
       })()`,
       undefined,
-      "Tools settings hover should be visible only on the compact icon surface",
+      "Tools settings hover transition should settle on the compact icon surface",
     );
     assert.deepEqual(
       await evaluate(client!, sessionId, `
