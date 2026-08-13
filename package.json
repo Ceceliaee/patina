@@ -1,7 +1,7 @@
 {
   "name": "patina",
   "private": true,
-  "version": "1.9.3",
+  "version": "1.9.4",
   "type": "module",
   "engines": {
     "node": "24.18.0",

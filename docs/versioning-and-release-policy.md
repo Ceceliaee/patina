@@ -22,7 +22,7 @@
 
 截至当前发布线：
 
-- 代码版本为 `1.9.3`
+- 代码版本为 `1.9.4`
 - 稳定发布线为 `1.x`
 - 仓库已进入公开稳定阶段，后续版本按标准 `SemVer` 管理
 - 默认通过推送 `vX.Y.Z` / `vX.Y.Z-prerelease` 版本 tag 自动触发 GitHub Actions 工作流 [prepare-release.yml](../.github/workflows/prepare-release.yml) 中的 `Publish Release` 流程；必要时也可手动触发已有 tag 的发布流程补跑
@@ -248,6 +248,9 @@ App note: 一句话概括应用内更新提示要显示的变化。
 - 优先写用户能感知到的结果，不先写实现手段、模块名或重构过程
 - 如果条目修复了 GitHub issue，必须在对应 `Fixed` 条目中带上 issue 编号或链接，例如 `[#1](https://github.com/Ceceliaee/patina/issues/1)`，方便从发布说明追溯到问题上下文
 - changelog 的追踪引用只关联具体 GitHub issue 或 pull request，不关联 GitHub Project、项目看板或 Project item；如果没有对应 issue 或 pull request，则不为凑引用而误链、补建或关联看板
+- 当引用适用于整条 changelog 条目时，沿用 `1.9.3` 的格式：正文结束后另写 `Refs ...`，不加括号，例如 `- 修复……。Refs [#1](https://github.com/Ceceliaee/patina/issues/1)`
+- 只有当条目继续描述另一个独立结果、而引用必须明确限定在前一段结果时，才在对应句末使用括号形式 `(Refs ...)`；遇到这种情况应优先拆成两条，避免引用范围含混
+- 上述引用格式适用于 `Unreleased` 和后续版本；不得仅为统一格式改写已经发布的历史版本
 - 一条尽量只表达一个结果，避免把多个层次不同的变化揉成一条长句
 - `Added` 只写新增能力或新增入口，不把“补了支持逻辑”误写成新增功能
 - `Changed` 只写用户可感知的行为调整、体验变化或默认值变化

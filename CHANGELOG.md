@@ -18,22 +18,41 @@ App note en: TBD.
 
 ### Added
 
-- 桌面挂件新增可持久化的常驻展开状态：展开栏始终保留当前应用与分钟级追踪时长，并可同时显示 Timer 与 Pomodoro 两个秒级工具状态；真正全屏时会在同一显示器自动隐藏并在退出后恢复。
-- Tools 提醒器新增按应用分类和网页域名设置每日累计提醒；分类只统计桌面应用记录，网页只统计本地 Web Sync 已记录片段，并保留既有应用提醒规则。
+### Changed
+
+### Fixed
+
+### Removed
+
+### Internal
+
+## [1.9.4] - 2026-08-13
+
+Release: 新增分类与网页累计提醒、常驻挂件状态和侧栏文字模式，统一滚动区域与语言选择，并修复挂件左侧布局。
+App note: 新增分类和网页累计提醒、常驻挂件状态与侧栏文字模式，并优化滚动区域、语言选择及挂件布局。
+App note en: Adds category and website reminders, persistent widget status, labeled navigation, and refined scrolling.
+
+### Added
+
+- 桌面挂件新增可持久化的常驻展开状态：展开栏始终保留当前应用与分钟级追踪时长，并可同时显示 Timer 与 Pomodoro 两个秒级工具状态；真正全屏时会在同一显示器自动隐藏并在退出后恢复。Refs [#48](https://github.com/Ceceliaee/patina/issues/48), [#69](https://github.com/Ceceliaee/patina/issues/69)
+- Tools 提醒器新增按应用分类和网页域名设置每日累计提醒；分类只统计桌面应用记录，网页只统计本地 Web Sync 已记录片段，并保留既有应用提醒规则。Refs [#14](https://github.com/Ceceliaee/patina/issues/14)
+- 主侧栏和 Tools 内导航新增图标与文字显示切换，并会记住最近选择；工具状态与更新提示移至标题栏，侧栏底部只保留显示模式入口。Refs [#70](https://github.com/Ceceliaee/patina/issues/70)
 
 ### Changed
 
 - 设置页语言选择改为可扩展的下拉列表，继续支持即时预览、取消恢复、保存和重载，并以每种语言的原生名称展示选项。
+- 统一 Dashboard 卡片间距和 Quiet Pro 滚动区域：滚动条只在内容溢出时出现并提供上下滚动入口，无溢出时归还占用空间；今天页应用排行在滚动时仍保留卡片与滚动条之间的内容间距。
 
 ### Fixed
 
-- 修复挂件吸附到屏幕左侧后展开内容偏心的问题；左右两侧在无工具、一个工具和两个工具时现在使用镜像等价的布局（Refs [#71](https://github.com/Ceceliaee/patina/issues/71)）。
+- 修复挂件吸附到屏幕左侧后展开内容偏心的问题；左右两侧在无工具、一个工具和两个工具时现在使用镜像等价的布局。Refs [#71](https://github.com/Ceceliaee/patina/issues/71)
 
 ### Removed
 
 ### Internal
 
 - 前端按语言拆分并按需加载本地化资源，默认启动不再随内置语言数量线性装入全部语言内容。
+- 开发启动入口默认使用独立的应用身份和数据目录，并在 debug 构建误用正式身份时拒绝打开持久化目录，避免开发迁移影响已安装版本。
 
 ## [1.9.3] - 2026-08-10
 
