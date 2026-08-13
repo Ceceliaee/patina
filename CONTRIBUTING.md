@@ -184,6 +184,10 @@ npm run tauri dev
 npm run build
 ```
 
+`npm run tauri dev` automatically uses `src-tauri/tauri.dev.conf.json`. Do not
+start a debug build with the production identifier: development and installed
+editions are designed to coexist with separate data and single-instance scopes.
+
 ## 4. Branch And Commit Workflow
 
 ### 4.1 Create A Branch From The Latest `main`
@@ -894,6 +898,10 @@ npm ci
 npm run tauri dev
 npm run build
 ```
+
+`npm run tauri dev` 会自动加载 `src-tauri/tauri.dev.conf.json`。请勿让 debug
+构建使用正式版 identifier；开发版与安装版应使用彼此隔离的数据目录和单实例作用域，
+并可同时运行。
 
 ### 4. 分支与提交工作流
 

@@ -59,11 +59,68 @@ pub fn app_profile<R: Runtime>(app: &AppHandle<R>) -> AppProfile {
 }
 
 pub fn product_roaming_data_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
+    #[cfg(debug_assertions)]
+    {
+        let isolated_root = isolated_e2e_root()?;
+        ensure_persistent_profile_isolated(app_profile(app), isolated_root.is_some())?;
+        if let Some(root) = isolated_root {
+            return Ok(root.join("data"));
+        }
+    }
+
     Ok(roaming_root(app)?.join(app_profile(app).product_folder()))
 }
 
 pub fn product_webview_data_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
+    #[cfg(debug_assertions)]
+    {
+        let isolated_root = isolated_e2e_root()?;
+        ensure_persistent_profile_isolated(app_profile(app), isolated_root.is_some())?;
+        if let Some(root) = isolated_root {
+            return Ok(root.join("webview"));
+        }
+    }
+
     Ok(local_root(app)?.join(app_profile(app).webview_product_folder()))
+}
+
+#[cfg(any(debug_assertions, test))]
+fn persistent_profile_is_allowed(
+    profile: AppProfile,
+    debug_build: bool,
+    has_isolated_override: bool,
+) -> bool {
+    !debug_build || profile != AppProfile::Production || has_isolated_override
+}
+
+#[cfg(debug_assertions)]
+fn ensure_persistent_profile_isolated(
+    profile: AppProfile,
+    has_isolated_override: bool,
+) -> Result<(), String> {
+    if persistent_profile_is_allowed(profile, cfg!(debug_assertions), has_isolated_override) {
+        return Ok(());
+    }
+
+    Err(
+        "refusing to open production Patina data from a debug build; start development with `npm run tauri dev` so src-tauri/tauri.dev.conf.json is applied"
+            .to_string(),
+    )
+}
+
+#[cfg(debug_assertions)]
+fn isolated_e2e_root() -> Result<Option<PathBuf>, String> {
+    if std::env::var("PATINA_E2E").as_deref() != Ok("1") {
+        return Ok(None);
+    }
+
+    let root = std::env::var_os("PATINA_E2E_DATA_ROOT")
+        .map(PathBuf::from)
+        .ok_or_else(|| "PATINA_E2E_DATA_ROOT is required when PATINA_E2E=1".to_string())?;
+    if !root.is_absolute() {
+        return Err("PATINA_E2E_DATA_ROOT must be absolute".to_string());
+    }
+    Ok(Some(root))
 }
 
 fn roaming_root<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
@@ -131,6 +188,35 @@ mod tests {
 
         #[cfg(not(debug_assertions))]
         assert_eq!(AppProfile::Production.webview_product_folder(), "Patina");
+    }
+
+    #[test]
+    fn debug_build_requires_an_isolated_persistent_profile() {
+        assert!(!persistent_profile_is_allowed(
+            AppProfile::Production,
+            true,
+            false,
+        ));
+        assert!(persistent_profile_is_allowed(
+            AppProfile::Production,
+            true,
+            true,
+        ));
+        assert!(persistent_profile_is_allowed(AppProfile::Dev, true, false,));
+        assert!(persistent_profile_is_allowed(
+            AppProfile::Local,
+            true,
+            false,
+        ));
+    }
+
+    #[test]
+    fn release_build_can_use_the_production_profile() {
+        assert!(persistent_profile_is_allowed(
+            AppProfile::Production,
+            false,
+            false,
+        ));
     }
 
     #[test]

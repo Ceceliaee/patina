@@ -42,7 +42,7 @@
     "test:persistence": "node --experimental-strip-types --experimental-specifier-resolution=node tests/persistenceTransaction.test.ts && node --experimental-strip-types --experimental-specifier-resolution=node tests/activityReadModelGateway.test.ts",
     "test:dashboard-snapshot": "node --experimental-strip-types --experimental-specifier-resolution=node tests/dashboardSnapshotLoader.test.ts",
     "test:fast:covered": "npm run test:tracking && npm run test:replay && npm run test:history-timeline && npm run test:persistence && npm run test:dashboard-snapshot && npm run test:data && npm run test:warmup",
-    "test:fast:remaining": "npm run test:i18n && npm run test:update && npm run test:settings && npm run test:import && npm run test:widget && npm run test:classification && npm run test:icon-colors && npm run test:dashboard-icons && npm run test:data-range && npm run test:data-chart && npm run test:interaction && npm run test:release && npm run test:export && npm run test:pr-intake && npm run test:background-return && npm run test:tools && npm run test:toast && npm run test:preload && npm run test:tracker-health && npm run test:ui-smoke && npm run test:shared-primitives",
+    "test:fast:remaining": "npm run test:i18n && npm run test:update && npm run test:settings && npm run test:import && npm run test:widget && npm run test:classification && npm run test:icon-colors && npm run test:dashboard-icons && npm run test:data-range && npm run test:data-chart && npm run test:interaction && npm run test:release && npm run test:export && npm run test:pr-intake && npm run test:background-return && npm run test:tools && npm run test:toast && npm run test:preload && npm run test:tracker-health && npm run test:ui-smoke && npm run test:shared-primitives && npm run test:tauri-profile",
     "test:coverage": "c8 --all --clean --reporter=text --reporter=json-summary --report-dir=artifacts/coverage --include=src/app/hooks/trackingDataChangedPolicy.ts --include=src/app/hooks/trackingDataChangedRuntime.ts --include=src/app/services/startupWarmupService.ts --include=src/features/dashboard/services/dashboardReadModel.ts --include=src/features/history/services/historyReadModel.ts --include=src/features/data/services/dataHeatmapSnapshot.ts --include=src/features/data/services/dataWebActivityReadModel.ts --include=src/features/data/services/dataWebHeatmapRequestState.ts --include=src/platform/persistence/webActivityAnalysisGateway.ts --include=src/platform/persistence/sqliteTransactions.ts --include=src/platform/persistence/commandError.ts --check-coverage --lines=80 --functions=80 --branches=75 --statements=80 npm run test:fast:covered && npm run check:coverage-thresholds",
     "test:mutation": "node --experimental-strip-types scripts/check-critical-mutations.ts",
     "test:interaction": "node --experimental-strip-types --experimental-specifier-resolution=node tests/interactionFlows.test.ts",
@@ -51,7 +51,7 @@
     "test:pr-intake": "node --experimental-strip-types --experimental-specifier-resolution=node tests/prIntakeGate.test.ts",
     "test:warmup": "node --experimental-strip-types --experimental-specifier-resolution=node tests/startupWarmupService.test.ts",
     "test:background-return": "node --experimental-strip-types --experimental-specifier-resolution=node tests/backgroundReturnHomePolicy.test.ts",
-    "test:tools": "node --experimental-strip-types --experimental-specifier-resolution=node tests/toolsRuntime.test.ts",
+    "test:tools": "node --experimental-strip-types --experimental-specifier-resolution=node tests/toolsRuntime.test.ts && node --experimental-strip-types --experimental-specifier-resolution=node tests/activityReminderTargetOptions.test.ts",
     "test:toast": "node --experimental-strip-types --experimental-specifier-resolution=node tests/toastQueueRuntime.test.ts",
     "test:preload": "node --experimental-strip-types --experimental-specifier-resolution=node tests/viewChunkPreloadService.test.ts",
     "test:tracker-health": "node --experimental-strip-types --experimental-specifier-resolution=node tests/trackerHealthPollingService.test.ts",
@@ -60,6 +60,7 @@
     "test:i18n": "node --experimental-strip-types --experimental-specifier-resolution=node tests/i18nContract.test.ts && node --experimental-strip-types --experimental-specifier-resolution=node tests/i18nTranslationKit.test.ts",
     "test:ui-browser-smoke": "node --experimental-strip-types --experimental-specifier-resolution=node tests/uiBrowserSmoke.test.ts",
     "test:tauri-runtime-smoke": "node --experimental-strip-types --experimental-specifier-resolution=node tests/tauriRuntimeSmoke.test.ts",
+    "test:tauri-profile": "node --experimental-strip-types --experimental-specifier-resolution=node tests/tauriProfileIsolation.test.ts",
     "check:types": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.quality.json",
     "check:lint": "eslint . --max-warnings 0",
     "check:coverage-thresholds": "node --experimental-strip-types scripts/check-coverage-thresholds.ts",
@@ -114,7 +115,7 @@
     "release:verify-assets": "node --experimental-strip-types scripts/release.ts verify-release-assets",
     "release:check": "npm run check:full && npm run release:validate-changelog",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "node --experimental-strip-types scripts/tauri-cli.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.2",
