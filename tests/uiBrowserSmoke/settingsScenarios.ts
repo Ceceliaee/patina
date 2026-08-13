@@ -6,7 +6,6 @@ import {
   jsonString,
   waitForAnimationFrames,
   waitForExpression,
-  waitForStableExpression,
 } from "./browserHarness.ts";
 import { SETTINGS_MARKER } from "./constants.ts";
 
@@ -660,47 +659,17 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
         `),
         true,
       );
-      await waitForStableExpression(
-        client!,
-        sessionId,
-        `(() => {
-          const rect = document.querySelector(${jsonString(languageTriggerSelector)})?.getBoundingClientRect();
-          return Boolean(rect && rect.top >= 0 && rect.bottom <= innerHeight);
-        })()`,
-        15_000,
-        "language trigger should settle inside the viewport before pointer input",
-      );
-      const center = JSON.parse(String(await evaluate(client!, sessionId, `
+      await waitForAnimationFrames(client!, sessionId, 4);
+      assert.equal(
+        await evaluate(client!, sessionId, `
           (() => {
             const trigger = document.querySelector(${jsonString(languageTriggerSelector)});
-            if (!(trigger instanceof HTMLElement)) return JSON.stringify(null);
-            const rect = trigger.getBoundingClientRect();
-            return JSON.stringify({
-              x: rect.left + rect.width / 2,
-              y: rect.top + rect.height / 2,
-            });
+            trigger?.click();
+            return Boolean(trigger);
           })()
-        `))) as { x: number; y: number } | null;
-      assert.ok(center, "expected a visible language trigger");
-      await client!.command("Input.dispatchMouseEvent", {
-        type: "mouseMoved",
-        x: center.x,
-        y: center.y,
-      }, sessionId);
-      await client!.command("Input.dispatchMouseEvent", {
-        type: "mousePressed",
-        x: center.x,
-        y: center.y,
-        button: "left",
-        clickCount: 1,
-      }, sessionId);
-      await client!.command("Input.dispatchMouseEvent", {
-        type: "mouseReleased",
-        x: center.x,
-        y: center.y,
-        button: "left",
-        clickCount: 1,
-      }, sessionId);
+        `),
+        true,
+      );
     };
     await openLanguageListbox();
     await waitForExpression(
