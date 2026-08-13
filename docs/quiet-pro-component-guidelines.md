@@ -544,7 +544,7 @@ Dashboard、History 与 Data 的应用/网页对象详情统一使用 `destinati
 
 共享 class 合同如下：
 
-- `.qp-scroll-region` 是唯一 canonical appearance owner，提供与 v1.9.3 桌面界面一致的 6px 原生 lane 与中性 thumb、竖向上下按钮渐进增强和系统高对比度回退；它不拥有 `overflow`、高度、padding 或 overscroll。
+- `.qp-scroll-region` 是唯一 canonical appearance owner，提供与 v1.9.3 桌面界面一致的 6px 原生 scrollbar 视觉规格与中性 thumb、竖向上下按钮渐进增强和系统高对比度回退；传统滚动条占用 6px lane，系统 overlay scrollbar 可不占布局宽度；它不拥有 `overflow`、高度、padding 或 overscroll。
 - `.qp-scroll-region` 默认使用 `scrollbar-gutter: auto`。没有溢出时 scrollbar 与 lane 一起消失，可用空间完整归还内容；出现溢出时只占一个语义 lane。
 - `.qp-scroll-region-stable` 只改变 gutter 策略，必须与 `.qp-scroll-region` 同时使用。它只适用于 overflow 出现前后宽度变化会破坏真实信息几何的消费者，并必须有对应 browser geometry test。
 - feature 继续拥有真实 scroll owner 的尺寸、flex/grid、业务 padding、`overflow-*` 与 `overscroll-behavior`；不得在 feature CSS 复制 scrollbar pseudo 或直接声明 gutter。

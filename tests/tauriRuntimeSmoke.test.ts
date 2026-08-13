@@ -1003,6 +1003,21 @@ try {
     (expandedLeftWidgetSize.width ?? 0) > (finalizedWidgetSize.width ?? 0),
     "expanded Widget must allocate the stable tracking and action bar",
   );
+  await waitFor(
+    "expanded widget layout after native window resize",
+    async () => evaluate(
+      widgetClient!,
+      `(async () => {
+        for (let frame = 0; frame < 4; frame += 1) {
+          await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+        }
+        const tray = document.querySelector('.widget-pill-tray')?.getBoundingClientRect();
+        const viewportWidth = document.documentElement.clientWidth;
+        return Boolean(tray && tray.left >= -0.5 && tray.right <= viewportWidth + 0.5);
+      })()`,
+    ),
+    10_000,
+  );
   const expandedLeftEvidence = await evaluate(
     widgetClient,
     `(() => {
@@ -1013,10 +1028,12 @@ try {
       const pinIconElement = document.querySelector('.widget-pin-icon');
       const pinIcon = pinIconElement?.getBoundingClientRect();
       const trackingText = document.querySelector('.widget-pill-tracking-time')?.textContent?.trim() ?? '';
+      const viewportWidth = document.documentElement.clientWidth;
+      const viewportHeight = document.documentElement.clientHeight;
       return {
-        trayVisible: Boolean(tray && tray.left >= 0 && tray.right <= innerWidth),
-        pinIconVisible: Boolean(pinIcon && pinIcon.left >= 0 && pinIcon.right <= innerWidth
-          && pinIcon.top >= 0 && pinIcon.bottom <= innerHeight),
+        trayVisible: Boolean(tray && tray.left >= -0.5 && tray.right <= viewportWidth + 0.5),
+        pinIconVisible: Boolean(pinIcon && pinIcon.left >= -0.5 && pinIcon.right <= viewportWidth + 0.5
+          && pinIcon.top >= -0.5 && pinIcon.bottom <= viewportHeight + 0.5),
         pinIconIsCanonical: pinIconElement?.classList.contains('lucide-pin') === true,
         orderedInward: Boolean(anchor && actions && tracking
           && anchor.right <= actions.left + 0.5
