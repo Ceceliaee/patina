@@ -4,6 +4,7 @@ import {
   loadActivityReminderWebCatalog,
 } from "../../../platform/persistence/activityReminderCatalogGateway.ts";
 import { getCategoryToken } from "../../../shared/classification/categoryTokens.ts";
+import { ProcessMapper } from "../../../shared/classification/processMapper.ts";
 import type { UiText } from "../../../shared/i18n/index.ts";
 import type {
   ActivityReminderAppCandidate,
@@ -42,7 +43,7 @@ export async function loadActivityReminderCategoryCandidates(
     return {
       categoryId: candidate.categoryId,
       label: candidate.labelOverride ?? token.label,
-      color: candidate.colorOverride ?? token.color,
+      color: candidate.colorOverride ?? ProcessMapper.getDefaultCategoryColor(candidate.categoryId),
     };
   });
 }

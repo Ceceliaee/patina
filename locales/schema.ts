@@ -4896,11 +4896,6 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "tools.activityReminderWebSourceEmpty": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "tools.alertDismiss": {
     "kind": "string",
     "params": [],

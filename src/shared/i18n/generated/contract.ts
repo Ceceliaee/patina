@@ -943,7 +943,6 @@ export interface UiText {
     "activityReminderTargetLabel": string;
     "activityReminderTargetRequired": string;
     "activityReminderWebPlaceholder": string;
-    "activityReminderWebSourceEmpty": string;
     "alertDismiss": string;
     "alertOccurredAt": (value: string) => string;
     "alertPausePomodoro": string;

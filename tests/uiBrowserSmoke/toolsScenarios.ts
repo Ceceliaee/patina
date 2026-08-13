@@ -545,6 +545,139 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       sessionId,
       `document.body.innerText.includes(${jsonString(TOOLS_TEXT.activityReminderEmpty)})`,
     );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('input[aria-label=' + ${jsonString(JSON.stringify(TOOLS_TEXT.activityReminderAppPlaceholder))} + ']'))`,
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const input = document.querySelector('input[aria-label=' + ${jsonString(JSON.stringify(TOOLS_TEXT.activityReminderAppPlaceholder))} + ']');
+          if (!(input instanceof HTMLInputElement)) return false;
+          input.focus();
+          return true;
+        })()
+      `),
+      true,
+      "missing the activity reminder app search field",
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Boolean(document.querySelector('.tools-activity-target-candidate-list[role="listbox"]'))`,
+    );
+    assert.deepEqual(
+      JSON.parse(String(await evaluate(client!, sessionId, `JSON.stringify((() => {
+        const search = document.querySelector('.tools-activity-target-search');
+        const list = document.querySelector('.tools-activity-target-candidate-list');
+        const listStyle = list ? getComputedStyle(list) : null;
+        const inlineBorders = listStyle
+          ? Number.parseFloat(listStyle.borderLeftWidth) + Number.parseFloat(listStyle.borderRightWidth)
+          : 0;
+        return {
+          hasSearchIcon: Boolean(search?.querySelector('svg')),
+          scrollbarLane: list ? list.offsetWidth - list.clientWidth - inlineBorders : null,
+          usesQuietScrollRegion: list?.classList.contains('qp-scroll-region') ?? false,
+          usesStableGutter: list?.classList.contains('qp-scroll-region-stable') ?? false,
+          startsWithoutActiveOption: !list?.querySelector('.tools-activity-target-option-active'),
+          nativeDatalistCount: document.querySelectorAll('datalist').length,
+        };
+      })())`))),
+      {
+        hasSearchIcon: true,
+        scrollbarLane: 6,
+        usesQuietScrollRegion: true,
+        usesStableGutter: true,
+        startsWithoutActiveOption: true,
+        nativeDatalistCount: 0,
+      },
+      "activity reminder targets should use the previous Quiet Pro search picker shell",
+    );
+    await evaluate(client!, sessionId, `
+      document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'ArrowDown',
+        bubbles: true,
+        cancelable: true,
+      }));
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelectorAll('.tools-activity-target-option-active').length === 1`,
+    );
+    await evaluate(client!, sessionId, `
+      document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Escape',
+        bubbles: true,
+        cancelable: true,
+      }));
+    `);
+    await waitForExpression(client!, sessionId, `!document.querySelector('.tools-activity-target-candidate-list')`);
+
+    for (const [modeLabel, placeholder] of [
+      [TOOLS_TEXT.reminderModeCategory, TOOLS_TEXT.activityReminderCategoryPlaceholder],
+      [TOOLS_TEXT.reminderModeWeb, TOOLS_TEXT.activityReminderWebPlaceholder],
+    ] as const) {
+      assert.equal(
+        await evaluate(client!, sessionId, `
+          (() => {
+            const mode = Array.from(document.querySelectorAll('button'))
+              .find((node) => node.textContent?.trim() === ${jsonString(modeLabel)});
+            if (!mode) return false;
+            mode.click();
+            return true;
+          })()
+        `),
+        true,
+      );
+      await waitForExpression(
+        client!,
+        sessionId,
+        `Boolean(document.querySelector('input[aria-label=' + ${jsonString(JSON.stringify(placeholder))} + ']'))`,
+      );
+      assert.equal(
+        await evaluate(
+          client!,
+          sessionId,
+          `Boolean(document.querySelector('input[aria-label=' + ${jsonString(JSON.stringify(placeholder))} + ']')?.closest('.tools-activity-target-search'))`,
+        ),
+        true,
+        `${modeLabel} should reuse the activity reminder search picker shell`,
+      );
+      if (modeLabel === TOOLS_TEXT.reminderModeCategory) {
+        await evaluate(client!, sessionId, `
+          document.querySelector('input[aria-label=' + ${jsonString(JSON.stringify(placeholder))} + ']')?.focus()
+        `);
+        await waitForExpression(
+          client!,
+          sessionId,
+          `Boolean(document.querySelector('.tools-activity-target-candidate-list .tools-activity-category-dot'))`,
+        );
+        assert.equal(
+          await evaluate(client!, sessionId, `
+            (() => {
+              const markers = Array.from(document.querySelectorAll('[data-activity-category-marker]'));
+              const colors = markers
+                .map((marker) => marker.querySelector('.tools-activity-category-dot'))
+                .filter(Boolean)
+                .map((dot) => getComputedStyle(dot).backgroundColor);
+              return markers.length >= 2
+                && markers.every((marker) => {
+                  const style = getComputedStyle(marker);
+                  return style.borderTopStyle !== 'none'
+                    && style.borderTopColor !== 'rgba(0, 0, 0, 0)'
+                    && style.backgroundColor !== 'rgba(0, 0, 0, 0)';
+                })
+                && colors.every((color) => color !== 'rgba(0, 0, 0, 0)')
+                && new Set(colors).size >= 2;
+            })()
+          `),
+          true,
+          "category targets should keep the Quiet Pro icon tile and use distinct semantic colors",
+        );
+      }
+    }
 
     assert.equal(
       await evaluate(client!, sessionId, `

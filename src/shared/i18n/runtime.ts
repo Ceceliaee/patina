@@ -119,8 +119,8 @@ function compileLocale(locale: Locale, flat: readonly unknown[]): UiText {
   for (let index = 0; index < FRONTEND_MESSAGE_KEYS.length; index += 1) {
     const key = FRONTEND_MESSAGE_KEYS[index];
     const resource = flat[index];
-    const parameterNames = FRONTEND_MESSAGE_PARAMS[index] as readonly string[] | null;
-    if (parameterNames !== null) {
+    const parameterNames = FRONTEND_MESSAGE_PARAMS[index] as readonly string[] | undefined;
+    if (parameterNames) {
       assignNested(output, key, (...values: RuntimeValue[]) => formatMessageDescriptor(locale, { $type: "message", body: resource }, parameterNames, values));
     } else {
       assignNested(output, key, resource);

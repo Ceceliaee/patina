@@ -152,10 +152,9 @@ function tauriStubFor(path: string) {
               visible_until_ms: null,
             },
           ].slice(0, toolCount);
-          if (globalThis.__PATINA_WIDGET_TRACKING_OVERRIDE) {
-            return globalThis.__PATINA_WIDGET_TRACKING_OVERRIDE.widgetStatus;
-          }
-          return {
+          const override = globalThis.__PATINA_WIDGET_TRACKING_OVERRIDE;
+          const responseDelayMs = Number(override?.responseDelayMs ?? 0);
+          const status = override?.widgetStatus ?? {
             tracking: widgetParams.get("widgetTracking") === "0" ? null : {
               app_name: "Chrome",
               exe_name: "chrome.exe",
@@ -165,6 +164,71 @@ function tauriStubFor(path: string) {
             tools,
             sampled_at_ms: Date.now(),
           };
+          const tracking = override?.currentTrackingSnapshot ?? {
+            window: {
+              hwnd: "1",
+              root_owner_hwnd: "1",
+              process_id: 7,
+              window_class: "Chrome_WidgetWin_1",
+              title: "Docs",
+              exe_name: "chrome.exe",
+              process_path: "C:/Program Files/Google/Chrome/Application/chrome.exe",
+              is_afk: false,
+              idle_time_ms: 0,
+            },
+            status: {
+              is_tracking_active: true,
+              sustained_participation_eligible: false,
+              sustained_participation_active: false,
+              sustained_participation_kind: null,
+              sustained_participation_state: "inactive",
+              sustained_participation_signal_source: null,
+              sustained_participation_reason: "no-signal",
+              sustained_participation_diagnostics: {
+                state: "inactive",
+                reason: "no-signal",
+                window_identity: null,
+                effective_signal_source: null,
+                last_match_at_ms: null,
+                grace_deadline_ms: null,
+                system_media: {
+                  signal: {
+                    is_available: false,
+                    is_active: false,
+                    signal_source: null,
+                    source_app_id: null,
+                    source_app_identity: null,
+                    playback_type: null,
+                  },
+                  match_result: "unavailable",
+                },
+                audio_session: {
+                  signal: {
+                    is_available: false,
+                    is_active: false,
+                    signal_source: null,
+                    source_app_id: null,
+                    source_app_identity: null,
+                    playback_type: null,
+                  },
+                  match_result: "unavailable",
+                },
+              },
+            },
+            sampled_at_ms: Date.now(),
+            probe_status: "ok",
+          };
+          const presentation = {
+            window: tracking.window,
+            tracking_status: tracking.status,
+            tracking_sampled_at_ms: tracking.sampled_at_ms ?? Date.now(),
+            tracking_probe_status: tracking.probe_status ?? "ok",
+            status,
+          };
+          if (Number.isFinite(responseDelayMs) && responseDelayMs > 0) {
+            await new Promise((resolve) => setTimeout(resolve, responseDelayMs));
+          }
+          return presentation;
         }
         if (
           isWidgetSmoke

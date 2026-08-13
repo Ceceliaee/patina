@@ -1,9 +1,8 @@
 import { BellRing, Plus, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import QuietButton from "../../../shared/components/QuietButton.tsx";
 import QuietDatePicker from "../../../shared/components/QuietDatePicker.tsx";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter.tsx";
-import QuietSelect from "../../../shared/components/QuietSelect.tsx";
 import QuietTimePicker from "../../../shared/components/QuietTimePicker.tsx";
 import { useLocaleText } from "../../../shared/i18n/index.ts";
 import type {
@@ -25,6 +24,7 @@ import type {
   ReminderMode,
   ReminderRowViewModel,
 } from "../types.ts";
+import ActivityReminderTargetPicker from "./ActivityReminderTargetPicker.tsx";
 
 interface ReminderToolPanelProps {
   reminderRows: ReminderRowViewModel[];
@@ -190,49 +190,16 @@ function ActivityReminderPanel({
     }
   };
 
-  const targetField = mode === "category" ? (
-    <QuietSelect
-      value={targetValue}
-      options={[
-        { value: "", label: UI_TEXT.tools.activityReminderCategoryPlaceholder, disabled: true },
-        ...categoryCandidates.map((candidate) => ({
-          value: candidate.categoryId,
-          label: candidate.label,
-        })),
-      ]}
-      onChange={(value) => {
-        updateDraft({ targetValue: value, validationMessage: null });
-      }}
-      ariaLabel={UI_TEXT.tools.activityReminderCategoryPlaceholder}
-      className="tools-activity-category-select"
-    />
-  ) : (
-    <>
-      <input
-        className="qp-input"
-        value={targetValue}
-        list={`activity-reminder-${mode}-targets`}
-        onChange={(event) => {
-          updateDraft({ targetValue: event.target.value, validationMessage: null });
-        }}
-        placeholder={mode === "app"
-          ? UI_TEXT.tools.activityReminderAppPlaceholder
-          : UI_TEXT.tools.activityReminderWebPlaceholder}
-        aria-label={mode === "app"
-          ? UI_TEXT.tools.activityReminderAppPlaceholder
-          : UI_TEXT.tools.activityReminderWebPlaceholder}
-      />
-      <datalist id={`activity-reminder-${mode}-targets`}>
-        {mode === "app"
-          ? appCandidates.map((candidate) => (
-            <option key={candidate.exeName} value={candidate.exeName}>{candidate.appName}</option>
-          ))
-          : webCandidates.map((candidate) => (
-            <option key={candidate.normalizedDomain} value={candidate.normalizedDomain}>{candidate.label}</option>
-          ))}
-      </datalist>
-    </>
-  );
+  const targetPlaceholder = mode === "app"
+    ? UI_TEXT.tools.activityReminderAppPlaceholder
+    : mode === "category"
+      ? UI_TEXT.tools.activityReminderCategoryPlaceholder
+      : UI_TEXT.tools.activityReminderWebPlaceholder;
+  const targetLabel = mode === "app"
+    ? UI_TEXT.tools.reminderModeApp
+    : mode === "category"
+      ? UI_TEXT.tools.reminderModeCategory
+      : UI_TEXT.tools.reminderModeWeb;
 
   return (
     <>
@@ -241,13 +208,22 @@ function ActivityReminderPanel({
           <h3>{UI_TEXT.tools.newReminder}</h3>
         </div>
         <div className="tools-reminder-form tools-software-reminder-form">
-          <label className="tools-form-field">
-            <span>{UI_TEXT.tools.activityReminderTargetLabel}</span>
-            {targetField}
-            {mode === "web" && candidateLoadState === "ready" && webCandidates.length === 0 ? (
-              <small className="tools-form-hint">{UI_TEXT.tools.activityReminderWebSourceEmpty}</small>
-            ) : null}
-          </label>
+          <div className="tools-form-field">
+            <span>{targetLabel}</span>
+            <ActivityReminderTargetPicker
+              mode={mode}
+              value={targetValue}
+              appCandidates={appCandidates}
+              categoryCandidates={categoryCandidates}
+              webCandidates={webCandidates}
+              icons={icons}
+              placeholder={targetPlaceholder}
+              ariaLabel={targetPlaceholder}
+              onChange={(value) => {
+                updateDraft({ targetValue: value, validationMessage: null });
+              }}
+            />
+          </div>
           {candidateLoadState === "error" ? (
             <div className="tools-candidate-load-error" role="status">
               <span>{UI_TEXT.tools.activityReminderCandidatesLoadFailed}</span>
@@ -325,10 +301,15 @@ function ActivityReminderPanel({
                   <div className="tools-reminder-row-main tools-software-rule-main">
                     <span
                       className="data-app-option-icon"
+                      data-activity-category-marker={category ? "" : undefined}
                       aria-hidden
-                      style={category ? { color: category.color } : undefined}
+                      style={category ? {
+                        "--activity-category-color": category.color,
+                      } as CSSProperties : undefined}
                     >
-                      {icon || webCandidate?.faviconUrl ? (
+                      {category ? (
+                        <span className="tools-activity-category-dot" />
+                      ) : icon || webCandidate?.faviconUrl ? (
                         <img src={icon ?? webCandidate?.faviconUrl ?? undefined} alt="" draggable={false} />
                       ) : appInitial(currentLabel)}
                     </span>
