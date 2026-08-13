@@ -683,29 +683,34 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
         true,
       );
     };
+    const focusVisibleLanguageListbox = async (message: string) => {
+      await waitForExpression(
+        client!,
+        sessionId,
+        `document.querySelector(${jsonString(languageTriggerSelector)})?.getAttribute("aria-expanded") === "true"
+          && (() => {
+            const listbox = document.querySelector(${jsonString(languageListboxSelector)});
+            return Boolean(listbox && getComputedStyle(listbox).visibility !== "hidden");
+          })()`,
+        15_000,
+        message,
+      );
+      assert.equal(
+        await evaluate(client!, sessionId, `
+          (() => {
+            const listbox = document.querySelector(${jsonString(languageListboxSelector)});
+            if (!(listbox instanceof HTMLElement)) return false;
+            listbox.focus();
+            return document.activeElement === listbox;
+          })()
+        `),
+        true,
+        "language listbox should accept focus before keyboard navigation",
+      );
+    };
     await openLanguageListbox();
-    await waitForExpression(
-      client!,
-      sessionId,
-      `document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify("Language: English"))} + ']')?.getAttribute("aria-expanded") === "true"
-        && (() => {
-          const listbox = document.querySelector('[role="listbox"]');
-          return Boolean(listbox && getComputedStyle(listbox).visibility !== "hidden");
-        })()`,
-      15_000,
+    await focusVisibleLanguageListbox(
       "language trigger should open and finish measuring the listbox",
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (() => {
-          const listbox = document.querySelector(${jsonString(languageListboxSelector)});
-          if (!(listbox instanceof HTMLElement)) return false;
-          listbox.focus();
-          return document.activeElement === listbox;
-        })()
-      `),
-      true,
-      "language listbox should accept focus before keyboard navigation",
     );
     const activeOptionText = async () => evaluate(client!, sessionId, `
       (() => {
@@ -737,12 +742,8 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       15_000,
       "Escape should remove the portal and restore trigger focus",
     );
-    await openLanguageListbox();
-    await waitForExpression(
-      client!,
-      sessionId,
-      `document.activeElement?.getAttribute("role") === "listbox"`,
-      15_000,
+    await dispatchSelectKey(context, languageTriggerSelector, "Enter");
+    await focusVisibleLanguageListbox(
       "language listbox should reopen from restored trigger focus",
     );
     await dispatchSelectKey(context, languageListboxSelector, "Home");
