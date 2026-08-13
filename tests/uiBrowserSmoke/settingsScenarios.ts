@@ -211,6 +211,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
 
   await runTest("settings language select switches, persists, and restores all production locales", async () => {
     const openSettings = async (label: string) => {
+      const languageAriaLabel = label === "Settings" ? "Language: English" : "语言: 简体中文";
       await waitForExpression(
         client!,
         sessionId,
@@ -220,7 +221,15 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       await evaluate(client!, sessionId, `
         document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(label))} + ']')?.click()
       `);
-      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-select-trigger'))`);
+      await waitForExpression(
+        client!,
+        sessionId,
+        `document.querySelector("main.qp-canvas")?.dataset.presentedView === "settings"
+          && Boolean(document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify(languageAriaLabel))} + ']'))`,
+        15_000,
+        `${label} should finish presenting before the language selector is used`,
+      );
+      await waitForAnimationFrames(client!, sessionId);
     };
 
     let languageTriggerWidth: number | null = null;
