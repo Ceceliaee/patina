@@ -46,7 +46,7 @@
   right: 8px;
   left: 8px;
   z-index: 0;
-  height: 42px;
+  height: var(--qp-row-height);
   border: 1px solid color-mix(in srgb, var(--qp-accent-default) 34%, var(--qp-border-subtle));
   border-radius: var(--qp-radius-control);
   background: var(--qp-accent-muted);
@@ -57,8 +57,10 @@
   position: relative;
   z-index: 1;
   display: flex;
-  min-height: 42px;
+  height: var(--qp-row-height);
+  min-height: var(--qp-row-height);
   min-width: 0;
+  flex: 0 0 var(--qp-row-height);
   align-items: center;
   justify-content: center;
   flex-direction: column;
