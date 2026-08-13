@@ -692,10 +692,12 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       15_000,
       "language trigger should open the listbox",
     );
-    assert.equal(
-      await evaluate(client!, sessionId, `document.activeElement?.getAttribute("role") === "listbox"`),
-      true,
-      "opened language listbox should receive focus",
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.activeElement?.getAttribute("role") === "listbox"`,
+      15_000,
+      "opened language listbox should receive focus after its layout effect",
     );
     const activeOptionText = async () => evaluate(client!, sessionId, `
       (() => {
