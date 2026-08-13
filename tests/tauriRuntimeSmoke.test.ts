@@ -262,7 +262,7 @@ function verifyDatabase(dbPath: string) {
     "assert {'target_kind', 'target_identity'} <= scheduled_columns, scheduled_columns",
     "assert {'target_kind', 'remote_etag'} <= run_columns, run_columns",
     "assert scheduled_export[:5] == (0, 'daily', None, 1260, 'csv'), scheduled_export",
-    "normalize_path = lambda value: value.replace('\\\\', '/').lower().removeprefix('//?/')",
+    "normalize_path = lambda value: os.path.normcase(os.path.realpath(value)).replace('\\\\', '/').removeprefix('//?/')",
     "scheduled_export_target = normalize_path(scheduled_export[5])",
     "expected_export_target = normalize_path(os.path.join(os.path.dirname(sys.argv[1]), 'exports'))",
     "assert scheduled_export_target == expected_export_target, (scheduled_export_target, expected_export_target)",
