@@ -296,6 +296,8 @@ await runTest("buildWidgetViewModel maps hard degraded probe to existing error l
 await runTest("isWidgetSelfWindow detects Patina chrome without matching similarly titled apps", () => {
   assert.equal(isWidgetSelfWindow(WIDGET_WINDOW), true);
   assert.equal(isWidgetSelfWindow(PATINA_MAIN_WINDOW), true);
+  assert.equal(isWidgetSelfWindow({ ...WIDGET_WINDOW, title: "工具 - Patina" }), true);
+  assert.equal(isWidgetSelfWindow({ ...WIDGET_WINDOW, title: "" }), true);
   assert.equal(isWidgetSelfWindow({ ...WIDGET_WINDOW, exeName: "chrome.exe" }), false);
   assert.equal(isWidgetSelfWindow(ACTIVE_WINDOW), false);
 });

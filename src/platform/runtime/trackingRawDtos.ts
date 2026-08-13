@@ -407,6 +407,12 @@ function mapRawTrackingStatusSnapshot(
   };
 }
 
+export function parseTrackingStatusSnapshot(value: unknown): TrackingStatusSnapshot | null {
+  return isRawTrackingStatusSnapshot(value)
+    ? mapRawTrackingStatusSnapshot(value)
+    : null;
+}
+
 function mapRawCurrentTrackingSnapshot(
   raw: RawCurrentTrackingSnapshot,
 ): CurrentTrackingSnapshot {

@@ -2,6 +2,15 @@ import { invoke } from "@tauri-apps/api/core";
 import { isFiniteNumber } from "../../shared/lib/runtimeTypeGuards.ts";
 import { listen } from "@tauri-apps/api/event";
 import {
+  parseTrackingStatusSnapshot,
+  parseTrackingWindowSnapshot,
+} from "../runtime/trackingRawDtos.ts";
+import type {
+  TrackingRuntimeProbeStatus,
+  TrackingStatusSnapshot,
+  TrackingWindowSnapshot,
+} from "../../shared/types/tracking.ts";
+import {
   cursorPosition,
   getCurrentWindow,
 } from "@tauri-apps/api/window";
@@ -58,6 +67,14 @@ interface RawWidgetStatusSnapshot {
   tracking: RawWidgetTrackingProjection | null;
   tools: RawWidgetToolProjection[];
   sampled_at_ms: number;
+}
+
+interface RawWidgetPresentationSnapshot {
+  window: unknown;
+  tracking_status: unknown;
+  tracking_sampled_at_ms: number;
+  tracking_probe_status: TrackingRuntimeProbeStatus;
+  status: unknown;
 }
 
 interface RawWidgetMonitorAffinity {
@@ -133,6 +150,14 @@ export interface WidgetStatusSnapshot {
   tracking: WidgetTrackingProjection | null;
   tools: WidgetToolProjection[];
   sampledAtMs: number;
+}
+
+export interface WidgetPresentationSnapshot {
+  activeWindow: TrackingWindowSnapshot;
+  trackingStatus: TrackingStatusSnapshot;
+  trackingSampledAtMs: number;
+  trackingProbeStatus: TrackingRuntimeProbeStatus;
+  status: WidgetStatusSnapshot;
 }
 
 function isWidgetSide(value: unknown): value is WidgetSide {
@@ -317,11 +342,52 @@ export function parseWidgetStatusSnapshot(value: unknown): WidgetStatusSnapshot 
   };
 }
 
-export async function getWidgetStatusSnapshot(): Promise<WidgetStatusSnapshot> {
-  const snapshot = parseWidgetStatusSnapshot(
+const TRACKING_PROBE_STATUSES = new Set<TrackingRuntimeProbeStatus>([
+  "ok",
+  "timeout-fallback",
+  "timeout-inactive",
+  "backing-off-fallback",
+  "backing-off-inactive",
+  "recovery-attempted-fallback",
+  "recovery-attempted-inactive",
+  "hard-degraded-fallback",
+  "hard-degraded-inactive",
+  "task-failed-fallback",
+  "task-failed-inactive",
+]);
+
+export function parseWidgetPresentationSnapshot(
+  value: unknown,
+): WidgetPresentationSnapshot | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as RawWidgetPresentationSnapshot;
+  const activeWindow = parseTrackingWindowSnapshot(raw.window);
+  const trackingStatus = parseTrackingStatusSnapshot(raw.tracking_status);
+  const status = parseWidgetStatusSnapshot(raw.status);
+  if (
+    !activeWindow
+    || !trackingStatus
+    || !status
+    || !isFiniteNumber(raw.tracking_sampled_at_ms)
+    || !TRACKING_PROBE_STATUSES.has(raw.tracking_probe_status)
+  ) {
+    return null;
+  }
+
+  return {
+    activeWindow,
+    trackingStatus,
+    trackingSampledAtMs: raw.tracking_sampled_at_ms,
+    trackingProbeStatus: raw.tracking_probe_status,
+    status,
+  };
+}
+
+export async function getWidgetPresentationSnapshot(): Promise<WidgetPresentationSnapshot> {
+  const snapshot = parseWidgetPresentationSnapshot(
     await invoke<unknown>("cmd_get_widget_status_snapshot"),
   );
-  if (!snapshot) throw new Error("invalid widget status snapshot");
+  if (!snapshot) throw new Error("invalid widget presentation snapshot");
   return snapshot;
 }
 

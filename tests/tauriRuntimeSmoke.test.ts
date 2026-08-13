@@ -238,11 +238,12 @@ function measureRuntimeProcessTree() {
 
 function verifyDatabase(dbPath: string) {
   const script = [
-    "import sqlite3, sys",
+    "import os, sqlite3, sys",
     "db = sqlite3.connect(sys.argv[1])",
     "integrity = db.execute('PRAGMA integrity_check').fetchone()[0]",
     "value = db.execute(\"SELECT value FROM settings WHERE key='refresh_interval_secs'\").fetchone()",
     "migration = db.execute('SELECT MAX(version) FROM _sqlx_migrations').fetchone()",
+    "widget_sessions = db.execute(\"SELECT COUNT(*) FROM sessions WHERE lower(exe_name) = 'patina.exe' AND window_title = 'Patina Widget'\").fetchone()[0]",
     "states = dict(db.execute('SELECT model_name, state FROM read_model_state'))",
     "scheduled = db.execute('SELECT enabled, cadence, weekday, local_time_minutes, retention_count FROM scheduled_backup_config WHERE id = 1').fetchone()",
     "scheduled_columns = {row[1] for row in db.execute('PRAGMA table_info(scheduled_backup_config)')}",
@@ -254,15 +255,17 @@ function verifyDatabase(dbPath: string) {
     "db.close()",
     "assert integrity == 'ok', integrity",
     "assert value == ('77',), value",
-    "assert migration == (12,), migration",
+    "assert widget_sessions == 0, widget_sessions",
+    "assert migration == (13,), migration",
     "assert states == {'app_catalog': 'ready', 'activity_hourly': 'ready'}, states",
     "assert scheduled == (0, 'weekly', 5, 1260, 1), scheduled",
     "assert {'target_kind', 'target_identity'} <= scheduled_columns, scheduled_columns",
     "assert {'target_kind', 'remote_etag'} <= run_columns, run_columns",
     "assert scheduled_export[:5] == (0, 'daily', None, 1260, 'csv'), scheduled_export",
-    "scheduled_export_target = scheduled_export[5].replace('\\\\', '/').lower()",
-    "assert scheduled_export_target.endswith('/patina/exports'), scheduled_export_target",
-    "assert 'com.ceceliaee.patina' not in scheduled_export_target, scheduled_export_target",
+    "normalize_path = lambda value: value.replace('\\\\', '/').lower().removeprefix('//?/')",
+    "scheduled_export_target = normalize_path(scheduled_export[5])",
+    "expected_export_target = normalize_path(os.path.join(os.path.dirname(sys.argv[1]), 'exports'))",
+    "assert scheduled_export_target == expected_export_target, (scheduled_export_target, expected_export_target)",
     "assert {'format', 'selected_fields_json', 'plan_generation', 'schedule_anchor_at_ms'} <= scheduled_export_columns, scheduled_export_columns",
     "assert {'logical_start_date', 'logical_end_date', 'phase', 'status', 'sha256'} <= scheduled_export_run_columns, scheduled_export_run_columns",
     "assert {'recorded_app_catalog', 'activity_hourly_effective', 'activity_summary_dirty_ranges', 'app_catalog_dirty_keys', 'web_activity_revision', 'scheduled_backup_config', 'scheduled_backup_runs', 'scheduled_export_config', 'scheduled_export_runs'} <= tables, tables",
@@ -1200,13 +1203,27 @@ try {
   assert.equal(typeof widgetBootstrap.settings, "object");
   assert.equal(typeof widgetBootstrap.pinned, "boolean");
   assert.ok(Array.isArray(widgetBootstrap.app_overrides));
-  const widgetStatus = await evaluate(
+  const widgetPresentation = await evaluate(
     widgetClient,
     `window.__TAURI_INTERNALS__.invoke("cmd_get_widget_status_snapshot")`,
-  ) as { tracking?: unknown; tools?: unknown[]; sampled_at_ms?: number };
-  assert.ok(widgetStatus.tracking === null || typeof widgetStatus.tracking === "object");
-  assert.ok(Array.isArray(widgetStatus.tools));
-  assert.equal(typeof widgetStatus.sampled_at_ms, "number");
+  ) as {
+    window?: { exe_name?: string };
+    tracking_status?: { is_tracking_active?: boolean };
+    tracking_sampled_at_ms?: number;
+    status?: { tracking?: unknown; tools?: unknown[]; sampled_at_ms?: number };
+  };
+  assert.equal(typeof widgetPresentation.window?.exe_name, "string");
+  assert.equal(
+    typeof widgetPresentation.tracking_status?.is_tracking_active,
+    "boolean",
+  );
+  assert.equal(typeof widgetPresentation.tracking_sampled_at_ms, "number");
+  assert.ok(
+    widgetPresentation.status?.tracking === null
+      || typeof widgetPresentation.status?.tracking === "object",
+  );
+  assert.ok(Array.isArray(widgetPresentation.status?.tools));
+  assert.equal(typeof widgetPresentation.status?.sampled_at_ms, "number");
 
   for (const deniedExpression of [
     `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {

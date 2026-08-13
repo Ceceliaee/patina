@@ -1,4 +1,5 @@
 use super::session_identity::WindowTrackingCandidate;
+use crate::domain::widget::WIDGET_WINDOW_TITLE;
 
 pub fn should_track(exe_name: &str) -> bool {
     let lower_name = exe_name.to_lowercase();
@@ -93,6 +94,11 @@ pub(super) fn is_lifecycle_utility_window(window: WindowTrackingCandidate<'_>) -
     }
 
     has_lifecycle_metadata_signal(window.title)
+}
+
+pub(super) fn is_patina_widget_window(window: WindowTrackingCandidate<'_>) -> bool {
+    window.exe_name.trim().eq_ignore_ascii_case("patina.exe")
+        && window.title.trim() == WIDGET_WINDOW_TITLE
 }
 
 fn is_lifecycle_utility_process(lower_name: &str) -> bool {

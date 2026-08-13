@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 
 pub const DEFAULT_WIDGET_ANCHOR_Y: f64 = 0.28;
+pub const WIDGET_WINDOW_TITLE: &str = "Patina Widget";
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

@@ -406,6 +406,103 @@ export async function runWidgetScenarios(context: BrowserSmokeContext) {
   await runTest("widget interaction keeps the previous external app and timer visible", async () => {
     await navigateToWidget(context, "right", 0);
     await expandWidget(context, "right", 0);
+    await evaluate(client, sessionId, `(() => {
+      globalThis.__PATINA_SET_WIDGET_APP = (appName, exeName, elapsedMs, responseDelayMs = 0) => {
+        const unavailableSignal = {
+          signal: {
+            is_available: false,
+            is_active: false,
+            signal_source: null,
+            source_app_id: null,
+            source_app_identity: null,
+            playback_type: null,
+          },
+          match_result: 'unavailable',
+        };
+        const windowSnapshot = {
+          hwnd: String(Date.now()),
+          root_owner_hwnd: String(Date.now()),
+          process_id: 8,
+          window_class: 'Chrome_WidgetWin_1',
+          title: appName,
+          exe_name: exeName,
+          process_path: 'C:/Program Files/' + appName + '/' + exeName,
+          is_afk: false,
+          idle_time_ms: 0,
+        };
+        globalThis.__PATINA_WIDGET_TRACKING_OVERRIDE = {
+          responseDelayMs,
+          currentTrackingSnapshot: {
+            window: windowSnapshot,
+            status: {
+              is_tracking_active: true,
+              sustained_participation_eligible: false,
+              sustained_participation_active: false,
+              sustained_participation_kind: null,
+              sustained_participation_state: 'inactive',
+              sustained_participation_signal_source: null,
+              sustained_participation_reason: 'no-signal',
+              sustained_participation_diagnostics: {
+                state: 'inactive',
+                reason: 'no-signal',
+                window_identity: null,
+                effective_signal_source: null,
+                last_match_at_ms: null,
+                grace_deadline_ms: null,
+                system_media: unavailableSignal,
+                audio_session: unavailableSignal,
+              },
+            },
+            sampled_at_ms: Date.now(),
+            probe_status: 'ok',
+          },
+          widgetStatus: {
+            tracking: {
+              app_name: appName,
+              exe_name: exeName,
+              elapsed_ms: elapsedMs,
+              running: true,
+            },
+            tools: [],
+            sampled_at_ms: Date.now(),
+          },
+        };
+        globalThis.__PATINA_EMIT_TAURI_EVENT('active-window-changed', windowSnapshot);
+      };
+      globalThis.__PATINA_SET_WIDGET_APP('PixPin', 'PixPin.exe', 62_000);
+    })()`);
+    await waitForExpression(client, sessionId, `
+      document.querySelector('.widget-pill-tracking-core')?.getAttribute('aria-label')?.toLowerCase().includes('pixpin')
+    `, 15_000, "PixPin widget projection");
+    await evaluate(
+      client,
+      sessionId,
+      `globalThis.__PATINA_SET_WIDGET_APP('Codex', 'ChatGPT.exe', 122_000)`,
+    );
+    await waitForExpression(client, sessionId, `
+      /codex|chatgpt/i.test(document.querySelector('.widget-pill-tracking-core')?.getAttribute('aria-label') ?? '')
+    `, 15_000, "PixPin to Codex widget projection");
+    await evaluate(
+      client,
+      sessionId,
+      `globalThis.__PATINA_SET_WIDGET_APP('PixPin', 'PixPin.exe', 62_000, 180)`,
+    );
+    await delay(20);
+    await evaluate(
+      client,
+      sessionId,
+      `globalThis.__PATINA_SET_WIDGET_APP('Codex', 'ChatGPT.exe', 122_000, 0)`,
+    );
+    await waitForExpression(client, sessionId, `
+      /codex|chatgpt/i.test(document.querySelector('.widget-pill-tracking-core')?.getAttribute('aria-label') ?? '')
+    `, 15_000, "newest widget projection wins");
+    await delay(220);
+    assert.match(
+      await evaluate(client, sessionId, `
+        document.querySelector('.widget-pill-tracking-core')?.getAttribute('aria-label') ?? ''
+      `) as string,
+      /codex|chatgpt/i,
+    );
     const before = await evaluate(client, sessionId, `(() => ({
       label: document.querySelector('.widget-pill-tracking-core')?.getAttribute('aria-label'),
       time: document.querySelector('.widget-pill-tracking-time')?.textContent?.trim(),

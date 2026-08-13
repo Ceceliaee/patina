@@ -15,7 +15,10 @@ use crate::data::repositories::{sessions, tracker_settings};
 use crate::domain::tracking::TrackingDataChangedPayload;
 #[cfg(test)]
 use crate::domain::tracking::TRACKING_REASON_TRACKING_PAUSED_SEALED;
-use crate::domain::tracking::{TrackingStatusSnapshot, TRACKING_REASON_STATUS_CHANGED};
+use crate::domain::tracking::{
+    is_tracking_control_surface_window, TrackingStatusSnapshot, WindowTrackingCandidate,
+    TRACKING_REASON_STATUS_CHANGED,
+};
 use crate::platform::windows::foreground as tracker;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
@@ -46,6 +49,29 @@ use snapshot_projection::{
 pub use support::emit_tracking_data_changed;
 use support::{log_tracker_error, now_ms};
 use window_polling::poll_active_window_with_timeout;
+
+fn should_preserve_tracking_projection(window: &tracker::WindowInfo) -> bool {
+    !window.is_afk
+        && is_tracking_control_surface_window(WindowTrackingCandidate::from_window_fields(
+            &window.exe_name,
+            &window.title,
+            &window.window_class,
+            window.is_afk,
+        ))
+}
+
+fn emit_tracking_loop_change<R: Runtime>(
+    app: &AppHandle<R>,
+    tracking_data_change_reason: Option<&'static str>,
+    did_change_tracking_status: bool,
+    changed_at_ms: i64,
+) {
+    let reason = tracking_data_change_reason
+        .or_else(|| did_change_tracking_status.then_some(TRACKING_REASON_STATUS_CHANGED));
+    if let Some(reason) = reason {
+        let _ = emit_tracking_data_changed(app, reason, changed_at_ms as u64);
+    }
+}
 
 // Owner ledger: run() owns runtime loop orchestration only. Polling,
 // loop-state loading, power lifecycle handling, and event support stay in the
@@ -94,6 +120,10 @@ pub async fn run<R: Runtime>(
             &mut timestamp_persist_state,
         )
         .await;
+        if should_preserve_tracking_projection(&window_info) {
+            sleep(Duration::from_secs(1)).await;
+            continue;
+        }
         let (tracking_state, next_sustained_participation_state) = load_tracking_loop_state(
             data.as_ref(),
             &pause_state,
@@ -114,39 +144,41 @@ pub async fn run<R: Runtime>(
             &poll_outcome,
         );
         if tracking_state.tracking_paused {
-            match seal_active_sessions_for_tracking_pause(data.as_ref(), now_ms).await {
-                Ok(Some(reason)) => {
-                    let _ = emit_tracking_data_changed(&app, reason, now_ms as u64);
-                }
-                Ok(None) => {}
-                Err(error) => {
-                    log_tracker_error(format!("failed to seal session while paused: {error}"));
-                }
-            }
+            let change_reason =
+                match seal_active_sessions_for_tracking_pause(data.as_ref(), now_ms).await {
+                    Ok(reason) => reason,
+                    Err(error) => {
+                        log_tracker_error(format!("failed to seal session while paused: {error}"));
+                        None
+                    }
+                };
 
             pending_continuity = None;
             last_window = Some(tracked_window);
             last_tracking_status = Some(tracking_state.tracking_status);
             clear_active_session_snapshot(&app);
+            if let Some(reason) = change_reason {
+                let _ = emit_tracking_data_changed(&app, reason, now_ms as u64);
+            }
             sleep(Duration::from_secs(1)).await;
             continue;
         }
 
         if !tracking_state.app_tracking_enabled {
-            if let Some(reason) = exclusion::seal_excluded_app_session(
+            let change_reason = exclusion::seal_excluded_app_session(
                 data.as_ref(),
                 &tracked_window.exe_name,
                 now_ms,
             )
-            .await
-            {
-                let _ = emit_tracking_data_changed(&app, reason, now_ms as u64);
-            }
+            .await;
 
             pending_continuity = None;
             last_window = None;
             last_tracking_status = Some(tracking_state.tracking_status);
             clear_active_session_snapshot(&app);
+            if let Some(reason) = change_reason {
+                let _ = emit_tracking_data_changed(&app, reason, now_ms as u64);
+            }
             sleep(Duration::from_secs(1)).await;
             continue;
         }
@@ -180,7 +212,7 @@ pub async fn run<R: Runtime>(
             &tracked_window,
             &tracking_state.tracking_status,
         ) {
-            match seal_active_sessions_for_passive_participation_timeout(
+            let change_reason = match seal_active_sessions_for_passive_participation_timeout(
                 data.as_ref(),
                 &tracked_window,
                 now_ms,
@@ -188,20 +220,21 @@ pub async fn run<R: Runtime>(
             )
             .await
             {
-                Ok(Some(reason)) => {
-                    let _ = emit_tracking_data_changed(&app, reason, now_ms as u64);
-                }
-                Ok(None) => {}
+                Ok(reason) => reason,
                 Err(error) => {
                     log_tracker_error(format!(
                         "failed to seal session for passive participation timeout: {error}"
                     ));
+                    None
                 }
-            }
+            };
 
             last_window = Some(tracked_window);
             last_tracking_status = Some(tracking_state.tracking_status);
             clear_active_session_snapshot(&app);
+            if let Some(reason) = change_reason {
+                let _ = emit_tracking_data_changed(&app, reason, now_ms as u64);
+            }
             sleep(Duration::from_secs(1)).await;
             continue;
         }
@@ -212,7 +245,7 @@ pub async fn run<R: Runtime>(
             tracking_state.continuity_window_secs,
             &tracking_state.tracking_status,
         ) {
-            match seal_active_sessions_for_continuity_timeout(
+            let change_reason = match seal_active_sessions_for_continuity_timeout(
                 data.as_ref(),
                 &tracked_window,
                 now_ms,
@@ -220,62 +253,54 @@ pub async fn run<R: Runtime>(
             )
             .await
             {
-                Ok(Some(reason)) => {
-                    let _ = emit_tracking_data_changed(&app, reason, now_ms as u64);
-                }
-                Ok(None) => {}
+                Ok(reason) => reason,
                 Err(error) => {
                     log_tracker_error(format!(
                         "failed to seal session for continuity timeout: {error}"
                     ));
+                    None
                 }
-            }
+            };
 
             last_window = Some(tracked_window);
             last_tracking_status = Some(tracking_state.tracking_status);
             clear_active_session_snapshot(&app);
+            if let Some(reason) = change_reason {
+                let _ = emit_tracking_data_changed(&app, reason, now_ms as u64);
+            }
             sleep(Duration::from_secs(1)).await;
             continue;
         }
 
-        let did_emit_active_window_changed =
+        let did_change_active_window =
             tracker::has_meaningful_change(last_emitted_window.as_ref(), &window_info);
-        if did_emit_active_window_changed {
-            let _ = app.emit("active-window-changed", &tracked_window);
-            last_emitted_window = Some(window_info.clone());
-        }
 
-        let mut did_emit_tracking_data_changed = false;
-        match transition::apply_window_transition_with_title_policy(
-            data.as_ref(),
-            last_window.as_ref(),
-            &tracked_window,
-            now_ms,
-            continuity_group_start_time,
-            tracking_state.capture_window_title,
-            active_session::start_session_for_transition,
-        )
-        .await
-        {
-            Ok(Some(reason)) => {
-                let _ = emit_tracking_data_changed(&app, reason, now_ms as u64);
-                did_emit_tracking_data_changed = true;
-            }
-            Ok(None) => {}
-            Err(error) => {
-                log_tracker_error(format!("failed to apply window transition: {error}"));
-            }
-        }
+        let tracking_data_change_reason =
+            match transition::apply_window_transition_with_title_policy(
+                data.as_ref(),
+                last_window.as_ref(),
+                &tracked_window,
+                now_ms,
+                continuity_group_start_time,
+                tracking_state.capture_window_title,
+                active_session::start_session_for_transition,
+            )
+            .await
+            {
+                Ok(reason) => reason,
+                Err(error) => {
+                    log_tracker_error(format!("failed to apply window transition: {error}"));
+                    None
+                }
+            };
+        let did_change_tracking_data = tracking_data_change_reason.is_some();
 
-        if !did_emit_active_window_changed
-            && !did_emit_tracking_data_changed
+        let did_change_tracking_status = !did_change_active_window
+            && !did_change_tracking_data
             && should_emit_tracking_status_changed(
                 last_tracking_status.as_ref(),
                 &tracking_state.tracking_status,
-            )
-        {
-            let _ = emit_tracking_data_changed(&app, TRACKING_REASON_STATUS_CHANGED, now_ms as u64);
-        }
+            );
 
         pending_continuity = continuity::resolve_next_pending_continuity(
             pending_continuity,
@@ -284,14 +309,20 @@ pub async fn run<R: Runtime>(
             &tracked_window,
             now_ms,
         );
+        refresh_active_session_snapshot_if_changed(&app, data.as_ref(), did_change_tracking_data)
+            .await;
+        if did_change_active_window {
+            let _ = app.emit("active-window-changed", &tracked_window);
+            last_emitted_window = Some(window_info.clone());
+        }
         last_window = Some(tracked_window);
         last_tracking_status = Some(tracking_state.tracking_status);
-        refresh_active_session_snapshot_if_changed(
+        emit_tracking_loop_change(
             &app,
-            data.as_ref(),
-            did_emit_tracking_data_changed,
-        )
-        .await;
+            tracking_data_change_reason,
+            did_change_tracking_status,
+            now_ms,
+        );
         sleep(Duration::from_secs(1)).await;
     }
 }
@@ -436,6 +467,70 @@ mod tests {
         assert!(!transition::is_trackable_window(Some(&wallpaper_shell)));
         assert!(!transition::is_trackable_window(Some(&wallpaper_host)));
         assert!(transition::is_trackable_window(Some(&wallpaper_app)));
+    }
+
+    #[test]
+    fn patina_widget_interaction_preserves_the_previous_tracking_session() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            let data = data_store(&pool);
+            let pixpin = make_window(&[
+                ("exe_name", "PixPin.exe"),
+                ("title", "PixPin"),
+                ("process_path", r"C:\Program Files\PixPin\PixPin.exe"),
+            ]);
+            let widget = make_window(&[
+                ("exe_name", "Patina.exe"),
+                ("title", crate::domain::widget::WIDGET_WINDOW_TITLE),
+                ("process_path", r"C:\Program Files\Patina\Patina.exe"),
+            ]);
+            let codex = make_window(&[
+                ("exe_name", "ChatGPT.exe"),
+                ("title", "ChatGPT"),
+                (
+                    "process_path",
+                    r"C:\Program Files\WindowsApps\OpenAI.Codex\ChatGPT.exe",
+                ),
+            ]);
+
+            assert!(active_session::start_session(&pool, &pixpin, 1_000)
+                .await
+                .unwrap());
+            assert!(should_preserve_tracking_projection(&widget));
+            let afk_widget = tracker::WindowInfo {
+                is_afk: true,
+                idle_time_ms: 60_000,
+                ..widget.clone()
+            };
+            assert!(!should_preserve_tracking_projection(&afk_widget));
+            assert_eq!(
+                transition::apply_window_transition(
+                    &data,
+                    Some(&pixpin),
+                    &codex,
+                    3_000,
+                    3_000,
+                    active_session::start_session_for_transition,
+                )
+                .await
+                .unwrap(),
+                Some("session-transition")
+            );
+
+            let sessions: Vec<(String, i64, Option<i64>)> = sqlx::query_as(
+                "SELECT exe_name, start_time, end_time FROM sessions ORDER BY start_time ASC",
+            )
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+            assert_eq!(
+                sessions,
+                vec![
+                    ("PixPin.exe".into(), 1_000, Some(3_000)),
+                    ("ChatGPT.exe".into(), 3_000, None),
+                ]
+            );
+        });
     }
 
     #[test]

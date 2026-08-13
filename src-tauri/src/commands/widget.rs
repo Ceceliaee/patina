@@ -2,7 +2,7 @@ use crate::app::{main_window, tray, widget};
 use crate::data::{
     icon_cache_service, repositories::widget_runtime::WidgetBootstrapSnapshot, widget_store,
 };
-use crate::domain::widget::{WidgetPhysicalPoint, WidgetPlacement, WidgetStatusSnapshot};
+use crate::domain::widget::{WidgetPhysicalPoint, WidgetPlacement};
 use crate::platform::windows::input;
 use tauri::AppHandle;
 
@@ -46,8 +46,10 @@ pub async fn cmd_set_widget_expanded(
 }
 
 #[tauri::command]
-pub fn cmd_get_widget_status_snapshot(app: AppHandle) -> WidgetStatusSnapshot {
-    widget::get_widget_status_snapshot(&app)
+pub fn cmd_get_widget_status_snapshot(
+    app: AppHandle,
+) -> Result<widget::WidgetPresentationSnapshot, String> {
+    widget::get_widget_presentation_snapshot(&app)
 }
 
 #[tauri::command]

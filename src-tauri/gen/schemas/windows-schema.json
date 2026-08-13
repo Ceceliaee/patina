@@ -417,6 +417,12 @@
           "markdownDescription": "Enables the cmd_create_reminder command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_create_software_reminder_rule command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-create-software-reminder-rule",
+          "markdownDescription": "Enables the cmd_create_software_reminder_rule command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_delete_import_batch command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-delete-import-batch",
@@ -475,6 +481,12 @@
           "type": "string",
           "const": "allow-cmd-disable-activity-reminder-rule",
           "markdownDescription": "Enables the cmd_disable_activity_reminder_rule command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_disable_software_reminder_rule command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-disable-software-reminder-rule",
+          "markdownDescription": "Enables the cmd_disable_software_reminder_rule command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_dismiss_tool_alert command without any pre-configured scope.",
@@ -1047,6 +1059,12 @@
           "markdownDescription": "Denies the cmd_create_reminder command without any pre-configured scope."
         },
         {
+          "description": "Denies the cmd_create_software_reminder_rule command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-create-software-reminder-rule",
+          "markdownDescription": "Denies the cmd_create_software_reminder_rule command without any pre-configured scope."
+        },
+        {
           "description": "Denies the cmd_delete_import_batch command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-delete-import-batch",
@@ -1105,6 +1123,12 @@
           "type": "string",
           "const": "deny-cmd-disable-activity-reminder-rule",
           "markdownDescription": "Denies the cmd_disable_activity_reminder_rule command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_disable_software_reminder_rule command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-disable-software-reminder-rule",
+          "markdownDescription": "Denies the cmd_disable_software_reminder_rule command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_dismiss_tool_alert command without any pre-configured scope.",

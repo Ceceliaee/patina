@@ -1,16 +1,21 @@
 use crate::app::state::WidgetWindowLifecycleState;
 use crate::data::widget_store::SqliteWidgetPlacementStore;
+use crate::domain::tracking::{ActiveSessionSnapshot, TrackingStatusSnapshot};
 use crate::domain::widget::{
     match_widget_monitor, resolve_widget_drag_placement, resolve_widget_placement,
     select_widget_monitor, select_widget_monitor_for_release, WidgetExpansionPreference,
     WidgetMonitorAffinity, WidgetPhysicalPoint, WidgetPhysicalRect, WidgetPlacement, WidgetSide,
-    WidgetStatusSnapshot,
+    WidgetStatusSnapshot, WIDGET_WINDOW_TITLE,
 };
 use crate::engine::tools::ToolsRuntimeState;
-use crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshotState;
+use crate::engine::tracking::runtime_snapshot::{
+    TrackingRuntimeProbeStatus, TrackingRuntimeSnapshotState,
+};
 use crate::engine::widget as widget_engine;
 use crate::platform::storage_paths;
+use crate::platform::windows::foreground::WindowInfo;
 use crate::platform::windows::fullscreen;
+use serde::Serialize;
 #[cfg(debug_assertions)]
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
@@ -22,7 +27,6 @@ use tauri::{
 pub(crate) const WIDGET_WINDOW_LABEL: &str = "widget";
 pub(crate) const WIDGET_RUNTIME_COLLAPSED_EVENT: &str = "widget-runtime-collapsed";
 pub(crate) const WIDGET_RUNTIME_SHOWN_EVENT: &str = "widget-runtime-shown";
-const WIDGET_TITLE: &str = "Patina Widget";
 const WIDGET_EXPANDED_LOGICAL_WIDTH_BASE: u32 = 244;
 const WIDGET_TOOL_SLOT_LOGICAL_WIDTH: u32 = 68;
 const WIDGET_EXPANDED_LOGICAL_HEIGHT: u32 = 48;
@@ -33,6 +37,15 @@ const WIDGET_DESTROY_AFTER_IDLE_SECS: u64 = 3 * 60;
 const WIDGET_FULLSCREEN_POLL_MS: u64 = 400;
 #[cfg(debug_assertions)]
 static E2E_WIDGET_SHOW_FAILURE_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct WidgetPresentationSnapshot {
+    pub window: WindowInfo,
+    pub tracking_status: TrackingStatusSnapshot,
+    pub tracking_sampled_at_ms: i64,
+    pub tracking_probe_status: TrackingRuntimeProbeStatus,
+    pub status: WidgetStatusSnapshot,
+}
 
 pub(crate) async fn load_widget_placement<R: Runtime>(
     app: &AppHandle<R>,
@@ -72,6 +85,44 @@ pub(crate) fn get_widget_status_snapshot<R: Runtime>(app: &AppHandle<R>) -> Widg
         .and_then(|snapshot| snapshot.active_session);
     let tools = app.state::<ToolsRuntimeState>().snapshot();
     widget_engine::build_widget_status_snapshot(active_session, tools, now_ms)
+}
+
+pub(crate) fn get_widget_presentation_snapshot<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<WidgetPresentationSnapshot, String> {
+    let tracking = app
+        .state::<TrackingRuntimeSnapshotState>()
+        .snapshot()
+        .ok_or_else(|| "tracking runtime snapshot is not ready".to_string())?;
+    if !widget_tracking_identity_is_consistent(&tracking.window, tracking.active_session.as_ref()) {
+        return Err("widget presentation snapshot is settling".to_string());
+    }
+    let tools = app.state::<ToolsRuntimeState>().snapshot();
+    let status = widget_engine::build_widget_status_snapshot(
+        tracking.active_session,
+        tools,
+        chrono::Utc::now().timestamp_millis(),
+    );
+
+    Ok(WidgetPresentationSnapshot {
+        window: tracking.window,
+        tracking_status: tracking.status,
+        tracking_sampled_at_ms: tracking.sampled_at_ms,
+        tracking_probe_status: tracking.probe_status,
+        status,
+    })
+}
+
+fn widget_tracking_identity_is_consistent(
+    window: &WindowInfo,
+    active_session: Option<&ActiveSessionSnapshot>,
+) -> bool {
+    active_session.is_none_or(|session| {
+        session
+            .exe_name
+            .trim()
+            .eq_ignore_ascii_case(window.exe_name.trim())
+    })
 }
 
 pub(crate) fn start_widget_fullscreen_watcher<R: Runtime + 'static>(app: AppHandle<R>) {
@@ -517,7 +568,7 @@ async fn apply_widget_layout_internal<R: Runtime + 'static>(
         WIDGET_WINDOW_LABEL,
         WebviewUrl::App("index.html".into()),
     )
-    .title(WIDGET_TITLE)
+    .title(WIDGET_WINDOW_TITLE)
     .position(logical_x, logical_y)
     .inner_size(
         f64::from(logical_size.width),
@@ -722,12 +773,55 @@ mod tests {
     use super::{
         normalize_widget_drag_rect_for_target, resolve_widget_bounds_from_work_area,
         resolve_widget_logical_size, resolve_widget_physical_size, widget_physical_point,
-        WidgetPhysicalBounds, WidgetPhysicalSize,
+        widget_tracking_identity_is_consistent, WidgetPhysicalBounds, WidgetPhysicalSize,
     };
+    use crate::domain::tracking::ActiveSessionSnapshot;
     use crate::domain::widget::{
         resolve_widget_drag_placement, WidgetMonitorAffinity, WidgetPhysicalPoint,
         WidgetPhysicalRect, WidgetPlacement, WidgetSide,
     };
+    use crate::platform::windows::foreground::WindowInfo;
+
+    fn tracking_window(exe_name: &str) -> WindowInfo {
+        WindowInfo {
+            hwnd: "0x100".into(),
+            root_owner_hwnd: "0x100".into(),
+            process_id: 123,
+            window_class: "Chrome_WidgetWin_1".into(),
+            title: "Window".into(),
+            exe_name: exe_name.into(),
+            process_path: format!(r"C:\Program Files\{exe_name}"),
+            is_afk: false,
+            idle_time_ms: 0,
+        }
+    }
+
+    fn active_session(exe_name: &str) -> ActiveSessionSnapshot {
+        ActiveSessionSnapshot {
+            app_name: exe_name.trim_end_matches(".exe").into(),
+            exe_name: exe_name.into(),
+            start_time: 1_000,
+            continuity_group_start_time: 1_000,
+            closed_duration_ms: 0,
+        }
+    }
+
+    #[test]
+    fn widget_presentation_rejects_cross_application_snapshot_tearing() {
+        let codex = tracking_window("ChatGPT.exe");
+        let pixpin = active_session("PixPin.exe");
+        let matching = active_session("chatgpt.EXE");
+
+        assert!(!widget_tracking_identity_is_consistent(
+            &codex,
+            Some(&pixpin)
+        ));
+        assert!(widget_tracking_identity_is_consistent(
+            &codex,
+            Some(&matching)
+        ));
+        assert!(widget_tracking_identity_is_consistent(&codex, None));
+    }
 
     #[test]
     fn widget_cursor_coordinates_round_to_bounded_physical_points() {

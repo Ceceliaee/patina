@@ -202,9 +202,14 @@ pub fn is_trackable_window(window: Option<WindowTrackingCandidate<'_>>) -> bool 
     !window.exe_name.is_empty()
         && !window.is_afk
         && super::process_filters::should_track(window.exe_name)
+        && !is_tracking_control_surface_window(window)
         && !super::process_filters::is_desktop_shell_window(window)
         && super::process_filters::is_trackable_explorer_window(window)
         && !super::process_filters::is_lifecycle_utility_window(window)
+}
+
+pub fn is_tracking_control_surface_window(window: WindowTrackingCandidate<'_>) -> bool {
+    super::process_filters::is_patina_widget_window(window)
 }
 
 #[cfg(test)]

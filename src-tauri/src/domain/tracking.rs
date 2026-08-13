@@ -24,13 +24,14 @@ pub use sustained_identity::*;
 #[cfg(test)]
 mod tests {
     use super::{
-        is_trackable_window, resolve_sustained_participation_kind, resolve_tracking_status,
-        should_track, signal_matches_window, source_app_id_identity,
-        sustained_participation_app_identity, SustainedParticipationAppIdentity,
-        SustainedParticipationKind, SustainedParticipationSignalSnapshot,
-        SustainedParticipationSignalSource, SystemMediaPlaybackType, TrackingDataChangedPayload,
-        TrackingStatusResolutionInput, WindowSessionIdentity, WindowTrackingCandidate,
-        WindowTransitionDecision, TRACKING_REASON_STARTUP_SEALED, TRACKING_REASON_STATUS_CHANGED,
+        is_trackable_window, is_tracking_control_surface_window,
+        resolve_sustained_participation_kind, resolve_tracking_status, should_track,
+        signal_matches_window, source_app_id_identity, sustained_participation_app_identity,
+        SustainedParticipationAppIdentity, SustainedParticipationKind,
+        SustainedParticipationSignalSnapshot, SustainedParticipationSignalSource,
+        SystemMediaPlaybackType, TrackingDataChangedPayload, TrackingStatusResolutionInput,
+        WindowSessionIdentity, WindowTrackingCandidate, WindowTransitionDecision,
+        TRACKING_REASON_STARTUP_SEALED, TRACKING_REASON_STATUS_CHANGED,
         TRACKING_REASON_TRACKING_PAUSED_SEALED, TRACKING_REASON_WATCHDOG_SEALED,
     };
 
@@ -425,5 +426,36 @@ mod tests {
 
         assert!(!is_trackable_window(Some(installer)));
         assert!(is_trackable_window(Some(app)));
+    }
+
+    #[test]
+    fn trackable_window_rejects_only_the_owned_patina_widget_window() {
+        let widget = WindowTrackingCandidate::from_window_fields(
+            "Patina.exe",
+            crate::domain::widget::WIDGET_WINDOW_TITLE,
+            "Chrome_WidgetWin_1",
+            false,
+        );
+        let main_window = WindowTrackingCandidate::from_window_fields(
+            "Patina.exe",
+            "Patina",
+            "Chrome_WidgetWin_1",
+            false,
+        );
+        let similarly_titled_external_window = WindowTrackingCandidate::from_window_fields(
+            "chrome.exe",
+            crate::domain::widget::WIDGET_WINDOW_TITLE,
+            "Chrome_WidgetWin_1",
+            false,
+        );
+
+        assert!(!is_trackable_window(Some(widget)));
+        assert!(is_tracking_control_surface_window(widget));
+        assert!(!is_tracking_control_surface_window(main_window));
+        assert!(!is_tracking_control_surface_window(
+            similarly_titled_external_window
+        ));
+        assert!(is_trackable_window(Some(main_window)));
+        assert!(is_trackable_window(Some(similarly_titled_external_window)));
     }
 }

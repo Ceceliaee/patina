@@ -18,19 +18,8 @@ interface WidgetViewModel {
   objectIconKey: string | null;
 }
 
-const WIDGET_SELF_WINDOW_TITLES = new Set([
-  "patina",
-  "patina widget",
-  "time tracking",
-]);
-
 export function isWidgetSelfWindow(activeWindow: TrackingWindowSnapshot | null): boolean {
-  if (!activeWindow) {
-    return false;
-  }
-
-  return activeWindow.exeName.trim().toLowerCase() === "patina.exe"
-    && WIDGET_SELF_WINDOW_TITLES.has(activeWindow.title.trim().toLowerCase());
+  return activeWindow?.exeName.trim().toLowerCase() === "patina.exe";
 }
 
 function resolveTrackableAppName(activeWindow: TrackingWindowSnapshot | null): string | null {

@@ -4,7 +4,9 @@ use super::super::sustained_participation::{
     SustainedParticipationStatusInput,
 };
 use super::support::log_tracker_error;
-use crate::domain::tracking::TrackingStatusSnapshot;
+use crate::domain::tracking::{
+    is_trackable_window, TrackingStatusSnapshot, WindowTrackingCandidate,
+};
 use crate::engine::tracking::pause_state::TrackingPauseRuntimeState;
 use crate::engine::tracking::ports::{
     TrackingDataStore, TRACKER_LAST_HEARTBEAT_KEY, TRACKER_LAST_SUCCESSFUL_SAMPLE_KEY,
@@ -146,8 +148,15 @@ pub(super) async fn load_tracking_loop_state(
             audio_signal: &audio_signal,
         });
     let tracked_window = apply_tracking_mode_window_state(window_info.clone(), &tracking_status);
+    let window_is_trackable =
+        is_trackable_window(Some(WindowTrackingCandidate::from_window_fields(
+            &tracked_window.exe_name,
+            &tracked_window.title,
+            &tracked_window.window_class,
+            tracked_window.is_afk,
+        )));
 
-    if !app_tracking_enabled {
+    if !app_tracking_enabled || !window_is_trackable {
         tracking_status = TrackingStatusSnapshot::default();
         next_sustained_participation_state = SustainedParticipationRuntimeState::default();
     }
@@ -532,6 +541,46 @@ mod tests {
             assert!(!state.app_tracking_enabled);
             assert!(!state.capture_window_title);
             assert!(!state.tracking_status.is_tracking_active);
+        });
+    }
+
+    #[test]
+    fn patina_widget_is_inactive_without_disabling_patina_app_tracking() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            let data = TrackingRuntimeDataStore::new(pool);
+            let pause_state = TrackingPauseRuntimeState::default();
+            let title_state = TitleRecordingRuntimeState::default();
+            let mut cache = TrackingSettingsCache::default();
+            let window = tracker::WindowInfo {
+                hwnd: "0x200".into(),
+                root_owner_hwnd: "0x200".into(),
+                process_id: 456,
+                window_class: "Chrome_WidgetWin_1".into(),
+                title: crate::domain::widget::WIDGET_WINDOW_TITLE.into(),
+                exe_name: "Patina.exe".into(),
+                process_path: r"C:\Program Files\Patina\Patina.exe".into(),
+                is_afk: false,
+                idle_time_ms: 0,
+            };
+
+            let (state, _) = load_tracking_loop_state(
+                &data,
+                &pause_state,
+                &title_state,
+                &window,
+                1_000,
+                &SustainedParticipationRuntimeState::default(),
+                &mut cache,
+            )
+            .await;
+
+            assert!(state.app_tracking_enabled);
+            assert!(!state.tracking_status.is_tracking_active);
+            assert_eq!(
+                state.tracked_window.title,
+                crate::domain::widget::WIDGET_WINDOW_TITLE
+            );
         });
     }
 }
