@@ -84,6 +84,92 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
     await captureDashboardScreenshot("dashboard-default.png");
   });
 
+  await runTest("dashboard app ranking only reserves space for a real scrollbar", async () => {
+    const fits = await evaluate(client!, sessionId, `
+      (() => {
+        const list = document.querySelector(".dashboard-top-apps-list");
+        const row = list?.firstElementChild;
+        if (!(list instanceof HTMLElement) || !(row instanceof HTMLElement)) return null;
+        const listRect = list.getBoundingClientRect();
+        const rowRect = row.getBoundingClientRect();
+        return {
+          fits: list.scrollHeight <= list.clientHeight + 1,
+          lane: list.offsetWidth - list.clientWidth,
+          paddingRight: Number.parseFloat(getComputedStyle(list).paddingRight),
+          rightGap: listRect.right - rowRect.right,
+        };
+      })()
+    `) as {
+      fits: boolean;
+      lane: number;
+      paddingRight: number;
+      rightGap: number;
+    } | null;
+    assert.ok(fits, "dashboard app ranking should expose a measurable row");
+    assert.equal(fits.fits, true, "browser fixture should cover the no-overflow state");
+    assert.equal(fits.lane, 0, "a fitting app ranking must return the scrollbar lane");
+    assert.equal(fits.paddingRight, 0, "feature padding must not recreate a returned scrollbar lane");
+    assert.ok(Math.abs(fits.rightGap) <= 0.5, "fitting rows should reach the list content edge");
+
+    try {
+      await evaluate(client!, sessionId, `
+        (() => {
+          const list = document.querySelector(".dashboard-top-apps-list");
+          if (!(list instanceof HTMLElement)) return false;
+          list.style.flex = "0 0 100px";
+          list.style.height = "100px";
+          return true;
+        })()
+      `);
+      await waitForExpression(client!, sessionId, `
+        (() => {
+          const list = document.querySelector(".dashboard-top-apps-list");
+          return list instanceof HTMLElement
+            && list.scrollHeight > list.clientHeight
+            && Number.parseFloat(getComputedStyle(list).paddingRight) === 8;
+        })()
+      `);
+      const overflow = await evaluate(client!, sessionId, `
+        (() => {
+          const list = document.querySelector(".dashboard-top-apps-list");
+          const row = list?.firstElementChild;
+          if (!(list instanceof HTMLElement) || !(row instanceof HTMLElement)) return null;
+          const listRect = list.getBoundingClientRect();
+          const rowRect = row.getBoundingClientRect();
+          return {
+            lane: list.offsetWidth - list.clientWidth,
+            paddingRight: Number.parseFloat(getComputedStyle(list).paddingRight),
+            rightGap: listRect.right - rowRect.right,
+          };
+        })()
+      `) as { lane: number; paddingRight: number; rightGap: number } | null;
+      assert.ok(overflow, "overflowing app ranking should expose scrollbar geometry");
+      assert.equal(overflow.lane, 6, "overflow should consume the canonical scrollbar lane");
+      assert.equal(overflow.paddingRight, 8, "overflowing cards should keep their content breathing room");
+      assert.ok(
+        Math.abs(overflow.rightGap - overflow.lane - overflow.paddingRight) <= 0.5,
+        "overflowing rows should reserve one scrollbar lane plus content breathing room",
+      );
+    } finally {
+      await evaluate(client!, sessionId, `
+        (() => {
+          const list = document.querySelector(".dashboard-top-apps-list");
+          if (!(list instanceof HTMLElement)) return;
+          list.style.removeProperty("flex");
+          list.style.removeProperty("height");
+        })()
+      `);
+      await waitForExpression(client!, sessionId, `
+        (() => {
+          const list = document.querySelector(".dashboard-top-apps-list");
+          return list instanceof HTMLElement
+            && list.scrollHeight <= list.clientHeight + 1
+            && Number.parseFloat(getComputedStyle(list).paddingRight) === 0;
+        })()
+      `);
+    }
+  });
+
   await runTest("dashboard focus donut keeps a restrained ring weight", async () => {
     assert.equal(
       await evaluate(client!, sessionId, `

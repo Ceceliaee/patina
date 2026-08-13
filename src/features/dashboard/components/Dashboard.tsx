@@ -1,6 +1,6 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { getCategoryToken } from "../../../shared/classification/categoryTokens.ts";
-import { useEffect, useMemo, useRef, useState, } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, } from "react";
 import { Layers3, Monitor, Minus, TrendingDown, TrendingUp } from "lucide-react";
 
 import { useIconThemeColors } from "../../../shared/hooks/useIconThemeColors";
@@ -163,7 +163,9 @@ export default function Dashboard({
       ? TrendingDown
       : Minus;
   const focusCardRef = useRef<HTMLDivElement | null>(null);
+  const topAppsListRef = useRef<HTMLDivElement | null>(null);
   const [focusCategoryLimit, setFocusCategoryLimit] = useState(FOCUS_CATEGORY_LIMIT);
+  const [topAppsListOverflows, setTopAppsListOverflows] = useState(false);
   const [quickOverrides, setQuickOverrides] = useState<Record<string, AppOverride | null>>({});
   const localizedCategoryDist = useMemo(
     () => categoryDist.map((item) => ({
@@ -195,6 +197,19 @@ export default function Dashboard({
     observer.observe(card);
     return () => observer.disconnect();
   }, []);
+  useLayoutEffect(() => {
+    const list = topAppsListRef.current;
+    if (!list) return;
+
+    const updateOverflow = () => {
+      setTopAppsListOverflows(list.scrollHeight > list.clientHeight + 1);
+    };
+    updateOverflow();
+
+    const observer = new ResizeObserver(updateOverflow);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [topApplications.length]);
   const quickClassificationRequest = quickClassification.request;
 
   return (
@@ -291,7 +306,10 @@ export default function Dashboard({
             </div>
           </header>
 
-          <div className="dashboard-top-apps-list flex-1 overflow-y-auto pr-1 md:pr-2 space-y-2.5 qp-scroll-region">
+          <div
+            ref={topAppsListRef}
+            className={`dashboard-top-apps-list flex-1 overflow-y-auto space-y-2.5 qp-scroll-region ${topAppsListOverflows ? "pr-1 md:pr-2" : ""}`.trim()}
+          >
             {topApplications.length === 0 && (
               <div className="h-full flex flex-col items-center justify-center text-[var(--qp-text-tertiary)] gap-2">
                 <Monitor size={32} className="opacity-40" />

@@ -102,6 +102,7 @@ async function fixtureMetrics(context: BrowserSmokeContext) {
       const fixture = document.getElementById(${JSON.stringify(FIXTURE_ID)});
       if (!fixture) return null;
       const rect = fixture.getBoundingClientRect();
+      const thumbStyle = getComputedStyle(fixture, "::-webkit-scrollbar-thumb");
       return {
         clientHeight: fixture.clientHeight,
         clientWidth: fixture.clientWidth,
@@ -113,6 +114,7 @@ async function fixtureMetrics(context: BrowserSmokeContext) {
         rect: { top: rect.top, right: rect.right, bottom: rect.bottom },
         scrollLeft: fixture.scrollLeft,
         scrollTop: fixture.scrollTop,
+        thumbInset: Number.parseFloat(thumbStyle.borderLeftWidth),
         verticalLane: fixture.offsetWidth - fixture.clientWidth,
       };
     })()
@@ -127,6 +129,7 @@ async function fixtureMetrics(context: BrowserSmokeContext) {
     rect: { top: number; right: number; bottom: number };
     scrollLeft: number;
     scrollTop: number;
+    thumbInset: number;
     verticalLane: number;
   }>;
 }
@@ -168,7 +171,8 @@ export async function runScrollRegionScenarios(context: BrowserSmokeContext) {
         document.querySelector("[data-scroll-region-fixture-content]").style.height = "520px"
       `);
       const overflow = await fixtureMetrics(context);
-      assert.equal(overflow.verticalLane, 10, "overflow should consume exactly the semantic scrollbar lane");
+      assert.equal(overflow.verticalLane, 6, "overflow should match the v1.9.3 scrollbar lane");
+      assert.equal(overflow.thumbInset, 0, "the 6px lane should keep the full historical thumb width");
 
       await evaluate(client, sessionId, `
         document.querySelector("[data-scroll-region-fixture-content]").style.height = "80px"
@@ -184,13 +188,13 @@ export async function runScrollRegionScenarios(context: BrowserSmokeContext) {
     try {
       await createFixture(context, { stable: true });
       const fits = await fixtureMetrics(context);
-      assert.equal(fits.verticalLane, 10);
+      assert.equal(fits.verticalLane, 6);
 
       await evaluate(client, sessionId, `
         document.querySelector("[data-scroll-region-fixture-content]").style.height = "520px"
       `);
       const overflow = await fixtureMetrics(context);
-      assert.equal(overflow.verticalLane, 10);
+      assert.equal(overflow.verticalLane, 6);
       assert.equal(overflow.clientWidth, fits.clientWidth);
     } finally {
       await removeFixture(context);
@@ -247,7 +251,11 @@ export async function runScrollRegionScenarios(context: BrowserSmokeContext) {
     try {
       await createFixture(context, { overflow: true });
       const initial = await fixtureMetrics(context);
-      await clickAt(context, initial.rect.right - 5, initial.rect.bottom - 5);
+      await clickAt(
+        context,
+        initial.rect.right - initial.verticalLane / 2,
+        initial.rect.bottom - 3,
+      );
       const afterIncrement = await waitFor("bottom scrollbar button increment", async () => {
         const metrics = await fixtureMetrics(context);
         return metrics.scrollTop > 0 ? metrics : null;
@@ -261,7 +269,11 @@ export async function runScrollRegionScenarios(context: BrowserSmokeContext) {
         document.getElementById(${JSON.stringify(FIXTURE_ID)}).scrollTop = 120
       `);
       const beforeDecrement = await fixtureMetrics(context);
-      await clickAt(context, beforeDecrement.rect.right - 5, beforeDecrement.rect.top + 5);
+      await clickAt(
+        context,
+        beforeDecrement.rect.right - beforeDecrement.verticalLane / 2,
+        beforeDecrement.rect.top + 3,
+      );
       const afterDecrement = await waitFor("top scrollbar button decrement", async () => {
         const metrics = await fixtureMetrics(context);
         return metrics.scrollTop < beforeDecrement.scrollTop ? metrics : null;
@@ -280,7 +292,7 @@ export async function runScrollRegionScenarios(context: BrowserSmokeContext) {
       await createFixture(context, { axis: "horizontal", overflow: true });
       const metrics = await fixtureMetrics(context);
       assert.equal(metrics.verticalLane, 0);
-      assert.equal(metrics.horizontalLane, 10);
+      assert.equal(metrics.horizontalLane, 6);
       assert.ok(metrics.maxScrollLeft > 0);
       assert.equal(metrics.maxScrollTop, 0);
     } finally {
@@ -301,8 +313,13 @@ export async function runScrollRegionScenarios(context: BrowserSmokeContext) {
         const metrics = await fixtureMetrics(context);
         assert.equal(
           metrics.verticalLane,
-          10,
-          `scrollbar lane should remain 10 CSS px at ${deviceScaleFactor} device scale`,
+          6,
+          `scrollbar lane should remain 6 CSS px at ${deviceScaleFactor} device scale`,
+        );
+        assert.equal(
+          metrics.thumbInset,
+          0,
+          `scrollbar thumb inset should remain 0 CSS px at ${deviceScaleFactor} device scale`,
         );
         await captureFixtureScreenshot(
           context,

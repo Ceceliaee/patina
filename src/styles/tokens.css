@@ -56,9 +56,9 @@
   --qp-text-disabled: var(--color-text-disabled);
   --qp-scrollbar-default: var(--color-scrollbar-default);
   --qp-scrollbar-hover: var(--color-scrollbar-hover);
-  --qp-scrollbar-size: 10px;
-  --qp-scrollbar-button-size: 10px;
-  --qp-scrollbar-thumb-inset: 2px;
+  --qp-scrollbar-size: 6px;
+  --qp-scrollbar-button-size: 6px;
+  --qp-scrollbar-thumb-inset: 0px;
   --qp-control-thumb: #ffffff;
   --qp-chart-cursor: rgba(101, 114, 135, 0.12);
   --qp-chart-grid: rgba(156, 168, 186, 0.25);
