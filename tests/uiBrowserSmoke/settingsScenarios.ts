@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
-import { delay, evaluate, jsonString, waitForAnimationFrames, waitForExpression } from "./browserHarness.ts";
+import {
+  delay,
+  evaluate,
+  jsonString,
+  waitForAnimationFrames,
+  waitForExpression,
+  waitForStableExpression,
+} from "./browserHarness.ts";
 import { SETTINGS_MARKER } from "./constants.ts";
 
 type SelectKeyboardKey = "Enter" | "ArrowUp" | "ArrowDown" | "Home" | "End" | "Escape" | "简";
@@ -642,11 +649,31 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     const languageTriggerSelector = '.qp-select-trigger[aria-label="Language: English"]';
     const languageListboxSelector = '[role="listbox"]';
     const openLanguageListbox = async () => {
+      assert.equal(
+        await evaluate(client!, sessionId, `
+          (() => {
+            const trigger = document.querySelector(${jsonString(languageTriggerSelector)});
+            if (!(trigger instanceof HTMLElement)) return false;
+            trigger.scrollIntoView({ block: "center" });
+            return true;
+          })()
+        `),
+        true,
+      );
+      await waitForStableExpression(
+        client!,
+        sessionId,
+        `(() => {
+          const rect = document.querySelector(${jsonString(languageTriggerSelector)})?.getBoundingClientRect();
+          return Boolean(rect && rect.top >= 0 && rect.bottom <= innerHeight);
+        })()`,
+        15_000,
+        "language trigger should settle inside the viewport before pointer input",
+      );
       const center = JSON.parse(String(await evaluate(client!, sessionId, `
           (() => {
             const trigger = document.querySelector(${jsonString(languageTriggerSelector)});
             if (!(trigger instanceof HTMLElement)) return JSON.stringify(null);
-            trigger.scrollIntoView({ block: "center" });
             const rect = trigger.getBoundingClientRect();
             return JSON.stringify({
               x: rect.left + rect.width / 2,
@@ -655,7 +682,6 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
           })()
         `))) as { x: number; y: number } | null;
       assert.ok(center, "expected a visible language trigger");
-      await waitForAnimationFrames(client!, sessionId);
       await client!.command("Input.dispatchMouseEvent", {
         type: "mouseMoved",
         x: center.x,
