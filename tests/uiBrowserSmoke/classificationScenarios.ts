@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
-import { delay, evaluate, jsonString, waitForExpression } from "./browserHarness.ts";
+import { delay, evaluate, jsonString, waitForExpression, waitForStableExpression } from "./browserHarness.ts";
 
 export async function runClassificationScenarios(context: BrowserSmokeContext) {
   const { client, sessionId, runTest } = context;
@@ -362,12 +362,14 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
       `),
       true,
     );
-    await waitForExpression(
+    await waitForStableExpression(
       client!,
       sessionId,
-      `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("分类"))} + ']'))`,
+      `document.readyState === "complete"
+        && document.querySelector("main.qp-canvas")?.dataset.presentedView === "dashboard"
+        && Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("分类"))} + ']'))`,
       15_000,
-      "Rebuilt main WebView should become interactive",
+      "Rebuilt main WebView should settle on Dashboard before classification sampling",
     );
 
     assert.equal(
