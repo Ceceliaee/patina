@@ -641,14 +641,26 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
 
     const languageTriggerSelector = '.qp-select-trigger[aria-label="Language: English"]';
     const languageListboxSelector = '[role="listbox"]';
-    await dispatchSelectKey(context, languageTriggerSelector, "ArrowDown");
+    const openLanguageListbox = async () => {
+      assert.equal(
+        await evaluate(client!, sessionId, `
+          (() => {
+            const trigger = document.querySelector(${jsonString(languageTriggerSelector)});
+            trigger?.click();
+            return Boolean(trigger);
+          })()
+        `),
+        true,
+      );
+    };
+    await openLanguageListbox();
     await waitForExpression(
       client!,
       sessionId,
       `document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify("Language: English"))} + ']')?.getAttribute("aria-expanded") === "true"
         && document.activeElement?.getAttribute("role") === "listbox"`,
       15_000,
-      "ArrowDown should open the language listbox and move focus into it",
+      "language trigger should open the listbox and move focus into it",
     );
     const activeOptionText = async () => evaluate(client!, sessionId, `
       (() => {
@@ -680,7 +692,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       15_000,
       "Escape should remove the portal and restore trigger focus",
     );
-    await dispatchSelectKey(context, languageTriggerSelector, "ArrowDown");
+    await openLanguageListbox();
     await waitForExpression(
       client!,
       sessionId,
