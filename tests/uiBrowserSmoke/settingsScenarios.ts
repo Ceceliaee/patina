@@ -3,37 +3,29 @@ import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import { delay, evaluate, jsonString, waitForAnimationFrames, waitForExpression } from "./browserHarness.ts";
 import { SETTINGS_MARKER } from "./constants.ts";
 
-type SelectKeyboardKey = "Enter" | "ArrowUp" | "ArrowDown" | "Home" | "End" | "Escape";
-
-const SELECT_KEYBOARD_INPUT = {
-  Enter: { code: "Enter", keyCode: 13, text: "\r" },
-  ArrowUp: { code: "ArrowUp", keyCode: 38 },
-  ArrowDown: { code: "ArrowDown", keyCode: 40 },
-  Home: { code: "Home", keyCode: 36 },
-  End: { code: "End", keyCode: 35 },
-  Escape: { code: "Escape", keyCode: 27 },
-} as const;
+type SelectKeyboardKey = "Enter" | "ArrowUp" | "ArrowDown" | "Home" | "End" | "Escape" | "简";
 
 async function dispatchSelectKey(
   context: Pick<BrowserSmokeContext, "client" | "sessionId">,
   key: SelectKeyboardKey,
 ) {
-  const input = SELECT_KEYBOARD_INPUT[key];
-  await context.client.command("Input.dispatchKeyEvent", {
-    type: "keyDown",
-    key,
-    code: input.code,
-    ...("text" in input ? { text: input.text, unmodifiedText: input.text } : {}),
-    windowsVirtualKeyCode: input.keyCode,
-    nativeVirtualKeyCode: input.keyCode,
-  }, context.sessionId);
-  await context.client.command("Input.dispatchKeyEvent", {
-    type: "keyUp",
-    key,
-    code: input.code,
-    windowsVirtualKeyCode: input.keyCode,
-    nativeVirtualKeyCode: input.keyCode,
-  }, context.sessionId);
+  assert.equal(
+    await evaluate(context.client, context.sessionId, `
+      (() => {
+        const active = document.activeElement;
+        if (!(active instanceof HTMLElement)) return false;
+        const event = new KeyboardEvent("keydown", {
+          key: ${jsonString(key)},
+          bubbles: true,
+          cancelable: true,
+        });
+        active.dispatchEvent(event);
+        return event.defaultPrevented;
+      })()
+    `),
+    true,
+    `${key} should be handled by the focused select control`,
+  );
 }
 
 export async function runSettingsScenarios(context: BrowserSmokeContext) {
@@ -674,7 +666,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     await dispatchSelectKey(context, "Home");
     await waitForAnimationFrames(client!, sessionId);
     assert.equal(await activeOptionText(), "简体中文");
-    await evaluate(client!, sessionId, `document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "简", bubbles: true }))`);
+    await dispatchSelectKey(context, "简");
     await waitForAnimationFrames(client!, sessionId);
     assert.equal(await activeOptionText(), "简体中文");
     await dispatchSelectKey(context, "End");
