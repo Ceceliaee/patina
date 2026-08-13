@@ -643,7 +643,19 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
         },
       );
     }
-    await openSettings("Settings");
+    await evaluate(client!, sessionId, `localStorage.setItem("patina:last-active-view", "settings")`);
+    await client!.command("Page.navigate", { url: appUrl }, sessionId);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.documentElement.lang === "en-US"
+        && document.querySelector("main.qp-canvas")?.dataset.presentedView === "settings"
+        && document.querySelector("main.qp-canvas")?.dataset.viewTransitionState === "settled"
+        && Boolean(document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify("Language: English"))} + ']'))`,
+      15_000,
+      "rebuilt English Settings view should settle before keyboard interaction",
+    );
+    await waitForAnimationFrames(client!, sessionId, 4);
 
     const languageTriggerSelector = '.qp-select-trigger[aria-label="Language: English"]';
     const languageListboxSelector = '[role="listbox"]';
@@ -676,9 +688,14 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       client!,
       sessionId,
       `document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify("Language: English"))} + ']')?.getAttribute("aria-expanded") === "true"
-        && document.activeElement?.getAttribute("role") === "listbox"`,
+        && Boolean(document.querySelector('[role="listbox"]'))`,
       15_000,
-      "language trigger should open the listbox and move focus into it",
+      "language trigger should open the listbox",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `document.activeElement?.getAttribute("role") === "listbox"`),
+      true,
+      "opened language listbox should receive focus",
     );
     const activeOptionText = async () => evaluate(client!, sessionId, `
       (() => {
