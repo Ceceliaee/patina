@@ -3,6 +3,39 @@ import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import { delay, evaluate, jsonString, waitForAnimationFrames, waitForExpression } from "./browserHarness.ts";
 import { SETTINGS_MARKER } from "./constants.ts";
 
+type SelectKeyboardKey = "Enter" | "ArrowUp" | "ArrowDown" | "Home" | "End" | "Escape";
+
+const SELECT_KEYBOARD_INPUT = {
+  Enter: { code: "Enter", keyCode: 13, text: "\r" },
+  ArrowUp: { code: "ArrowUp", keyCode: 38 },
+  ArrowDown: { code: "ArrowDown", keyCode: 40 },
+  Home: { code: "Home", keyCode: 36 },
+  End: { code: "End", keyCode: 35 },
+  Escape: { code: "Escape", keyCode: 27 },
+} as const;
+
+async function dispatchSelectKey(
+  context: Pick<BrowserSmokeContext, "client" | "sessionId">,
+  key: SelectKeyboardKey,
+) {
+  const input = SELECT_KEYBOARD_INPUT[key];
+  await context.client.command("Input.dispatchKeyEvent", {
+    type: "keyDown",
+    key,
+    code: input.code,
+    ...("text" in input ? { text: input.text, unmodifiedText: input.text } : {}),
+    windowsVirtualKeyCode: input.keyCode,
+    nativeVirtualKeyCode: input.keyCode,
+  }, context.sessionId);
+  await context.client.command("Input.dispatchKeyEvent", {
+    type: "keyUp",
+    key,
+    code: input.code,
+    windowsVirtualKeyCode: input.keyCode,
+    nativeVirtualKeyCode: input.keyCode,
+  }, context.sessionId);
+}
+
 export async function runSettingsScenarios(context: BrowserSmokeContext) {
   const { appUrl, client, sessionId, runTest } = context;
 
@@ -603,35 +636,42 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
           const trigger = document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify("Language: English"))} + ']');
           if (!trigger) return false;
           trigger.focus();
-          trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-          return true;
+          return document.activeElement === trigger;
         })()
       `),
       true,
     );
-    await waitForExpression(client!, sessionId, `document.activeElement?.getAttribute("role") === "listbox"`);
+    await dispatchSelectKey(context, "Enter");
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify("Language: English"))} + ']')?.getAttribute("aria-expanded") === "true"
+        && document.activeElement?.getAttribute("role") === "listbox"`,
+      15_000,
+      "Enter should open the language listbox and move focus into it",
+    );
     const activeOptionText = async () => evaluate(client!, sessionId, `
       (() => {
         const id = document.activeElement?.getAttribute("aria-activedescendant");
         return id ? document.getElementById(id)?.textContent?.trim() ?? null : null;
       })()
     `);
-    await evaluate(client!, sessionId, `document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }))`);
+    await dispatchSelectKey(context, "ArrowUp");
     await waitForAnimationFrames(client!, sessionId);
     assert.equal(await activeOptionText(), "简体中文");
-    await evaluate(client!, sessionId, `document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }))`);
+    await dispatchSelectKey(context, "ArrowDown");
     await waitForAnimationFrames(client!, sessionId);
     assert.equal(await activeOptionText(), "English");
-    await evaluate(client!, sessionId, `document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }))`);
+    await dispatchSelectKey(context, "Home");
     await waitForAnimationFrames(client!, sessionId);
     assert.equal(await activeOptionText(), "简体中文");
     await evaluate(client!, sessionId, `document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "简", bubbles: true }))`);
     await waitForAnimationFrames(client!, sessionId);
     assert.equal(await activeOptionText(), "简体中文");
-    await evaluate(client!, sessionId, `document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true }))`);
+    await dispatchSelectKey(context, "End");
     await waitForAnimationFrames(client!, sessionId);
     assert.equal(await activeOptionText(), "English");
-    await evaluate(client!, sessionId, `document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    await dispatchSelectKey(context, "Escape");
     await waitForExpression(
       client!,
       sessionId,
@@ -640,17 +680,17 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       15_000,
       "Escape should remove the portal and restore trigger focus",
     );
-    await evaluate(client!, sessionId, `
-      document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    `);
-    await waitForExpression(client!, sessionId, `document.activeElement?.getAttribute("role") === "listbox"`);
-    await evaluate(client!, sessionId, `
-      document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
-    `);
+    await dispatchSelectKey(context, "Enter");
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.activeElement?.getAttribute("role") === "listbox"`,
+      15_000,
+      "language listbox should reopen from restored trigger focus",
+    );
+    await dispatchSelectKey(context, "Home");
     await waitForAnimationFrames(client!, sessionId);
-    await evaluate(client!, sessionId, `
-      document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    `);
+    await dispatchSelectKey(context, "Enter");
     await waitForExpression(
       client!,
       sessionId,
