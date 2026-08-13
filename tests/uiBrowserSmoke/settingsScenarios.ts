@@ -642,16 +642,39 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     const languageTriggerSelector = '.qp-select-trigger[aria-label="Language: English"]';
     const languageListboxSelector = '[role="listbox"]';
     const openLanguageListbox = async () => {
-      assert.equal(
-        await evaluate(client!, sessionId, `
+      const center = JSON.parse(String(await evaluate(client!, sessionId, `
           (() => {
             const trigger = document.querySelector(${jsonString(languageTriggerSelector)});
-            trigger?.click();
-            return Boolean(trigger);
+            if (!(trigger instanceof HTMLElement)) return JSON.stringify(null);
+            trigger.scrollIntoView({ block: "center" });
+            const rect = trigger.getBoundingClientRect();
+            return JSON.stringify({
+              x: rect.left + rect.width / 2,
+              y: rect.top + rect.height / 2,
+            });
           })()
-        `),
-        true,
-      );
+        `))) as { x: number; y: number } | null;
+      assert.ok(center, "expected a visible language trigger");
+      await waitForAnimationFrames(client!, sessionId);
+      await client!.command("Input.dispatchMouseEvent", {
+        type: "mouseMoved",
+        x: center.x,
+        y: center.y,
+      }, sessionId);
+      await client!.command("Input.dispatchMouseEvent", {
+        type: "mousePressed",
+        x: center.x,
+        y: center.y,
+        button: "left",
+        clickCount: 1,
+      }, sessionId);
+      await client!.command("Input.dispatchMouseEvent", {
+        type: "mouseReleased",
+        x: center.x,
+        y: center.y,
+        button: "left",
+        clickCount: 1,
+      }, sessionId);
     };
     await openLanguageListbox();
     await waitForExpression(
