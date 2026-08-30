@@ -59,6 +59,7 @@ import {
   buildQuickAppOverride,
   buildQuickWebDomainOverride,
   isQuickClassificationUnclassified,
+  resolveQuickClassificationOverride,
 } from "../src/features/classification/services/quickClassification.ts";
 import {
   createQuickAppClassificationTarget,
@@ -184,6 +185,23 @@ await runTest("quick app classification preserves unrelated override fields", ()
     enabled: true,
     updatedAt: 2,
   });
+});
+
+await runTest("quick app classification resolves persisted overrides by canonical executable identity", () => {
+  const override = {
+    category: "office" as const,
+    displayName: "Microsoft PowerPoint",
+    enabled: true,
+  };
+
+  assert.equal(resolveQuickClassificationOverride({
+    loadedOverrides: { "powerpnt.exe": override },
+    loadedWebDomainOverrides: {},
+  }, createQuickAppClassificationTarget({
+    exeName: "POWERPNT.EXE",
+    displayName: "Microsoft PowerPoint",
+    category: "office",
+  })), override);
 });
 
 await runTest("quick app name restore clears only the display name", () => {

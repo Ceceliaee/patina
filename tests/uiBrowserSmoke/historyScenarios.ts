@@ -594,9 +594,11 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const trigger = document.querySelector(
+          const trigger = Array.from(document.querySelectorAll(
             '.history-app-distribution-card .history-day-distribution-detail-trigger[aria-haspopup="menu"]',
-          );
+          )).find((node) => node.getAttribute("aria-label")?.includes(
+            "Extremely Long Research Workbench Application Name",
+          ));
           if (!(trigger instanceof HTMLButtonElement)) return false;
           window.__historyQuickMenuTrace = { sawCategoryMenu: false };
           window.__historyQuickMenuObserver = new MutationObserver(() => {
@@ -647,6 +649,72 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
     await evaluate(client!, sessionId, `
       Array.from(document.querySelectorAll(
         '.quick-classification-menu[role="menu"] > .quick-classification-menu-item',
+      )).find((item) => item.textContent?.trim() === "更改名称")?.click()
+    `);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-dialog-surface input'))`);
+    await evaluate(client!, sessionId, `
+      (() => {
+        const input = document.querySelector('.qp-dialog-surface input');
+        if (!(input instanceof HTMLInputElement)) return false;
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        setter?.call(input, "Research Desk");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        return true;
+      })()
+    `);
+    await evaluate(client!, sessionId, `
+      Array.from(document.querySelectorAll('.qp-dialog-surface button'))
+        .find((button) => button.textContent?.trim() === "保存")?.click()
+    `);
+    await waitForExpression(
+      client!,
+      sessionId,
+      `document.querySelector('.history-app-distribution-card')?.textContent?.includes("Research Desk")`,
+    );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Array.from(document.querySelectorAll(".qp-toast-message")).at(-1)?.textContent?.trim() === "已保存"`,
+    );
+    const savedAppRename = JSON.parse(String(await evaluate(client!, sessionId, `
+      JSON.stringify((globalThis.__TIME_TRACKER_CLASSIFICATION_MUTATIONS ?? [])
+        .filter((mutation) => mutation.key === "__app_override::deep-research-workbench.exe")
+        .at(-1) ?? null)
+    `))) as { key: string; value: string | null } | null;
+    assert.ok(savedAppRename);
+    const savedAppRenameValue = JSON.parse(savedAppRename.value ?? "null");
+    assert.deepEqual(savedAppRenameValue, {
+      category: "office",
+      displayName: "Research Desk",
+      color: null,
+      track: true,
+      captureTitle: true,
+      enabled: true,
+      updatedAt: savedAppRenameValue.updatedAt,
+    });
+
+    await evaluate(client!, sessionId, `
+      (() => {
+        const trigger = Array.from(document.querySelectorAll(
+          '.history-app-distribution-card .history-day-distribution-detail-trigger[aria-haspopup="menu"]',
+        )).find((node) => node.getAttribute("aria-label")?.includes("Research Desk"));
+        if (!(trigger instanceof HTMLButtonElement)) return false;
+        const rect = trigger.getBoundingClientRect();
+        trigger.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          button: 2,
+          clientX: rect.left + rect.width / 2,
+          clientY: rect.top + rect.height / 2,
+        }));
+        return true;
+      })()
+    `);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-classification-menu[role="menu"]'))`);
+    await evaluate(client!, sessionId, `
+      Array.from(document.querySelectorAll(
+        '.quick-classification-menu[role="menu"] > .quick-classification-menu-item',
       )).find((item) => item.textContent?.includes("分类"))?.click()
     `);
     await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-classification-category-menu'))`);
@@ -659,8 +727,22 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `Boolean(document.querySelector('.history-day-distribution-name-row .qp-badge'))`,
+      `Boolean(document.querySelector('.history-day-distribution-name-row .qp-badge'))
+        && document.querySelector('.history-app-distribution-card')?.textContent?.includes("Research Desk")`,
     );
+    await waitForExpression(
+      client!,
+      sessionId,
+      `Array.from(document.querySelectorAll(".qp-toast-message")).at(-1)?.textContent?.trim() === "已保存"`,
+    );
+    const savedAppCategory = JSON.parse(String(await evaluate(client!, sessionId, `
+      JSON.stringify((globalThis.__TIME_TRACKER_CLASSIFICATION_MUTATIONS ?? [])
+        .filter((mutation) => mutation.key === "__app_override::deep-research-workbench.exe")
+        .at(-1) ?? null)
+    `))) as { key: string; value: string | null } | null;
+    assert.ok(savedAppCategory);
+    assert.equal(JSON.parse(savedAppCategory.value ?? "null")?.displayName, "Research Desk");
+    assert.equal(JSON.parse(savedAppCategory.value ?? "null")?.category, null);
     const historyBadgeMetrics = JSON.parse(String(await evaluate(client!, sessionId, `
         (() => {
           const badge = document.querySelector('.history-day-distribution-name-row .qp-badge');

@@ -842,7 +842,7 @@ function tauriStubFor(path: string) {
           {
             id: 901,
             app_name: "Extremely Long Research Workbench Application Name",
-            exe_name: "deep-research-workbench.exe",
+            exe_name: "DEEP-RESEARCH-WORKBENCH.EXE",
             window_title: "Extremely detailed project brief",
             start_time: timing.start,
             end_time: timing.end,

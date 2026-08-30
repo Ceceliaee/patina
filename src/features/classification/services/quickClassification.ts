@@ -7,6 +7,7 @@ import {
 } from "../../../shared/classification/categoryTokens.ts";
 import type { AppOverride } from "../../../shared/classification/processMapper.ts";
 import type { WebDomainOverride } from "../../../shared/types/webActivity.ts";
+import { resolveCanonicalExecutable } from "../../../shared/classification/processNormalization.ts";
 import {
   ClassificationService,
   type ClassificationBootstrapData,
@@ -93,9 +94,14 @@ export function resolveQuickClassificationOverride(
   bootstrap: Pick<ClassificationBootstrapData, "loadedOverrides" | "loadedWebDomainOverrides">,
   target: QuickClassificationTarget,
 ): QuickClassificationOverride | null {
-  return target.kind === "app"
-    ? bootstrap.loadedOverrides[target.exeName] ?? null
-    : bootstrap.loadedWebDomainOverrides[target.normalizedDomain] ?? null;
+  if (target.kind === "web") {
+    return bootstrap.loadedWebDomainOverrides[target.normalizedDomain] ?? null;
+  }
+
+  const canonicalExe = resolveCanonicalExecutable(target.exeName);
+  return bootstrap.loadedOverrides[canonicalExe]
+    ?? bootstrap.loadedOverrides[target.exeName]
+    ?? null;
 }
 
 export function buildQuickClassificationOverride(

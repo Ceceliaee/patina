@@ -286,6 +286,7 @@ export default function QuickClassificationSurface({
             type="button"
             className="quick-classification-menu-item"
             role="menuitem"
+            disabled={loading || categoryLoadFailed || saving}
             onClick={() => setRenameOpen(true)}
           >
             <span>{UI_TEXT.mapping.quickRename}</span>

@@ -191,9 +191,9 @@ export default function AppShellContent({
     void saveHourlyActivityChartModeSetting(nextValue).catch(console.warn);
   }, [setAppSettings]);
 
-  const handleMappingOverridesChanged = () => {
+  const handleMappingOverridesChanged = (message = uiText.app.mappingUpdated) => {
     onMappingOverridesChanged();
-    pushToast(uiText.app.mappingUpdated, "success");
+    pushToast(message, "success");
   };
 
   const handleQuickActionError = (message: string) => {
@@ -235,7 +235,7 @@ export default function AppShellContent({
     onPreviewNavigate: handleSidebarPreviewNavigate,
   });
   const quickClassificationCallbacks = {
-    onOverridesChanged: handleMappingOverridesChanged,
+    onOverridesChanged: () => handleMappingOverridesChanged(uiText.common.saved),
     onQuickActionError: handleQuickActionError,
   };
 
