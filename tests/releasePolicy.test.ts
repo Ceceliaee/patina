@@ -11,27 +11,14 @@ import {
   prepareReleaseAssets,
   renderSha256Sums,
   renderReleaseNotes,
-  readVersionPolicyCurrentCodeVersion,
   renderUpdaterNotes,
   selectSignedInstallerCandidates,
   sha256File,
-  syncVersionPolicyCurrentCodeVersion,
   validatePreparedReleaseAssetValues,
   validateReleaseNoteVisibleChangeCount,
   validateReleaseVersionFilesText,
-  validateVersionPolicyCurrentCodeVersionText,
   verifyReleaseAssets,
 } from "../scripts/release.ts";
-
-const versionPolicyExcerpt = [
-  "## 3. 当前仓库现实",
-  "",
-  "截至当前仓库状态：",
-  "",
-  "- 代码版本为 `0.4.2`",
-  "- 稳定发布线处于 `0.4.x`",
-  "",
-].join("\n");
 
 function versionFileFixture(version = "1.6.0") {
   return {
@@ -66,11 +53,6 @@ function versionFileFixture(version = "1.6.0") {
       `version = "${version}"`,
       "dependencies = []",
     ].join("\n"),
-    versionPolicy: [
-      "## 3. 当前仓库现实",
-      "",
-      `- 代码版本为 \`${version}\``,
-    ].join("\n"),
     changelog: [
       "# Changelog",
       "",
@@ -79,29 +61,6 @@ function versionFileFixture(version = "1.6.0") {
       "Release: Ready.",
     ].join("\n"),
   };
-}
-
-function testSyncsCurrentCodeVersion() {
-  const updated = syncVersionPolicyCurrentCodeVersion(versionPolicyExcerpt, "0.4.3");
-  assert.equal(readVersionPolicyCurrentCodeVersion(updated), "0.4.3");
-  assert.match(updated, /- 代码版本为 `0\.4\.3`/);
-  assert.match(updated, /- 稳定发布线处于 `0\.4\.x`/);
-}
-
-function testSupportsPrereleaseVersion() {
-  const updated = syncVersionPolicyCurrentCodeVersion(versionPolicyExcerpt, "0.5.0-beta.1");
-  assert.equal(readVersionPolicyCurrentCodeVersion(updated), "0.5.0-beta.1");
-}
-
-function testMissingPolicyVersionIsNull() {
-  assert.equal(readVersionPolicyCurrentCodeVersion("## empty"), null);
-}
-
-function testStalePolicyVersionFailsValidation() {
-  assert.equal(
-    validateVersionPolicyCurrentCodeVersionText(versionPolicyExcerpt, "0.4.3"),
-    "docs/versioning-and-release-policy.md current code version is 0.4.2, expected 0.4.3",
-  );
 }
 
 function testUpdaterNotesKeepLocalizedVariants() {
@@ -600,15 +559,6 @@ function testVersionFilesValidationCatchesCargoMismatch() {
   ]);
 }
 
-function testVersionFilesValidationCatchesPolicyMismatch() {
-  const files = versionFileFixture();
-  files.versionPolicy = versionPolicyExcerpt;
-
-  assert.deepEqual(validateReleaseVersionFilesText(files, "1.6.0"), [
-    "docs/versioning-and-release-policy.md current code version is 0.4.2, expected 1.6.0",
-  ]);
-}
-
 function testVersionFilesValidationCatchesMissingChangelogSection() {
   const files = versionFileFixture();
   files.changelog = "# Changelog\n\n## [1.5.9] - 2026-06-12";
@@ -726,10 +676,6 @@ async function testPrepareAndVerifyReleaseAssetsDetectTampering() {
   }
 }
 
-testSyncsCurrentCodeVersion();
-testSupportsPrereleaseVersion();
-testMissingPolicyVersionIsNull();
-testStalePolicyVersionFailsValidation();
 testUpdaterNotesKeepLocalizedVariants();
 testUpdaterNotesFallsBackToAppNote();
 testUpdaterEndpointsKeepGithubFirstAndPreserveMirrors();
@@ -756,7 +702,6 @@ testVersionFilesValidationCatchesPackageJsonMismatch();
 testVersionFilesValidationCatchesPackageLockRootMismatch();
 testVersionFilesValidationCatchesTauriConfigMismatch();
 testVersionFilesValidationCatchesCargoMismatch();
-testVersionFilesValidationCatchesPolicyMismatch();
 testVersionFilesValidationCatchesMissingChangelogSection();
 testVersionFilesValidationRejectsInvalidVersion();
 testDependencyAuditKeepsOfflineModeExplicitAndNetworkFree();

@@ -38,7 +38,7 @@
 
 - `Tauri` 桌面应用
 - 时间追踪与工作陪伴型工具
-- 以 `Dashboard / History / Data / App Mapping / Tools / Settings / About` 为核心工作面的产品
+- 以 `Dashboard / History / Data / Classification / Tools / Settings / About` 为核心工作面的产品
 - 以更新状态、备份恢复、桌面挂件等能力作为低噪音支持面的产品
 
 因此 UI 默认应更接近：
@@ -340,15 +340,7 @@ Quiet Pro 不鼓励“这个页面再发明一个更顺眼的新档位”。
 - 替代标题
 - 没有语义必要的“彩色点缀”
 
-### 9.5.1 桌面挂件状态栏
-
-桌面挂件是 `app/*` 拥有的低噪音状态表面，不是第二套工具控制台。展开态遵循以下稳定边界：
-
-- 当前追踪应用、分钟级可信追踪时长、打开动作和固定动作始终占据稳定位置；状态不可信时显示 `—`，不自行推断活动时间。
-- Timer 与 Pomodoro 使用两个固定语义槽，保留秒级显示并只向屏幕内侧增减；工具状态不能替换追踪状态，也不使用第二行或汇总数量。
-- 固定状态只通过线框/实心图钉和 `aria-pressed` 表达，不使用持续选中背景、发光或额外胶囊。
-- 左右吸附必须由同一个镜像布局表达；零、一个、两个工具状态的边缘控件位置保持不变，不能加入单侧宽度、负边距或位移补偿。
-- 挂件只在同屏真正全屏时暂时隐藏；普通窗口、桌面和标准最大化窗口不应触发抑制，隐藏过程不得改变固定偏好或吸附位置。
+Feature 私有表面也必须使用同一状态语义，但其布局和交互细节由最近的代码与测试 owner 维护。例如桌面挂件由 `src/app/widget/*`、对应样式和 `tests/uiBrowserSmoke/widgetScenarios.ts` 负责，本文不保存第二份行为清单。
 
 ### 9.6 共享组件准入与 owner
 
@@ -445,135 +437,21 @@ Quiet Pro 组件工作的默认顺序是：
 - **确实没有规范**：允许设计探索，确认后再决定是否进入共享层。
 - **只在一个 feature 成立的组合**：即使确认，也可以保留在 feature 内；“成为规范”不等于必须进入 `shared/*`。
 
-### 9.11 日期与范围控件索引
+### 9.11 跨页面交互原型与机器 owner
 
-日期与范围控件必须按交互目标选择，不按页面位置或截图相似度选择：
+跨页面复用的 Dialog、Popover、Tooltip、Select、日期与范围控件优先由 `src/shared/components/Quiet*.tsx` 拥有实现契约；feature wrapper 只组合领域数据和文案，不能复制焦点、关闭、定位或键盘状态机。
 
-| 组件 | 稳定职责 | 应使用的场景 | 不应采用的做法 |
-|---|---|---|---|
-| `QuietRangeControl` | 左箭头—中心标签—右箭头的紧凑导航外壳；统一尺寸、边框、状态和可访问关系 | 周、月、年、近几天、单日等前后导航；中心标签可为静态状态，也可打开选择弹层 | 在页面内手工拼三个按钮，或复制 class 模拟外观 |
-| `QuietCalendar` | 单月日历内容、月份导航、日期格语义与日期边界 | History 日历、单日选择器及其他需要相同月份内容的界面 | 为新页面复制一份日期网格或单独维护星期顺序 |
-| `QuietDatePicker` | 单日选择的触发器、popover 生命周期、outside click、Escape、焦点和 `QuietCalendar` 组合 | 普通日期输入；需要“范围控件外壳 + 历史日历内容”时，通过明确变体组合 `QuietRangeControl` 与 `QuietCalendar` | 把输入型日期按钮硬塞进范围导航，再用页面 CSS 覆盖冲突状态 |
-| `QuietDateRangePicker` | 开始和结束日期的范围选择状态机 | 自定义时间范围 | 用两个互不协调的单日选择器重新实现范围规则 |
-| `HistoryCalendarPopover` | History feature 的日期导航包装与业务状态 | History 页面自身 | 将它整体搬进其他 feature；其他消费者应复用其下层 `QuietCalendar` 内容契约 |
+长期通用契约只有：
 
-对象详情弹窗的日期控件采用以下组合：
+- overlay 打开后建立明确焦点，支持 Escape 与外部关闭语义，关闭后把焦点还给触发点；Dialog 需要焦点陷阱，非模态 Popover 不伪装成 Dialog；
+- listbox、menu、calendar 和分段选择使用正确 role、单一可操作焦点与键盘移动，视觉选中不能代替语义状态；
+- icon-only 入口必须有可访问名称、可见焦点和足够命中区，不能只靠 hover tooltip 解释；
+- 日期、范围、时区和 locale 语义由共享组件与领域 resolver 分工，feature 不自行复制日期算法；
+- 共享原型的键盘、焦点、关闭、定位、viewport 和消费者场景由 `tests/uiBrowserSmoke/*Scenarios.ts` 保护；新增独有失败模式先补可重复测试。
 
-- 外壳：`QuietRangeControl`
-- 单日选择与弹层生命周期：`QuietDatePicker`
-- 日历内容：与 History 相同的 `QuietCalendar`
-- 日期数据和前后日导航：`destination` feature 自己的状态 owner
+滚动区域的唯一视觉 owner 是 `src/styles/components/quiet-scroll-region.css` 中的 `.qp-scroll-region`。feature 拥有尺寸、padding、`overflow-*` 和 overscroll，不得复制 scrollbar pseudo、创建 JavaScript 自绘滚动条或使用已退出的 `.custom-scrollbar`。`.qp-scroll-region-stable` 只适用于 overflow 前后宽度变化会破坏真实信息几何且有 browser geometry test 的消费者；forced-colors、原生键盘/指针路径和系统 overlay scrollbar 必须保持可用。
 
-这个组合是“共享视觉与交互原型、保留 feature 业务 owner”的标准示例。以后遇到类似场景，应先检查能否按层组合现有组件，不应从页面截图重新实现。
-
-### 9.12 锚点信息弹层
-
-需要在不改变列表行高的前提下补充标题、网址、时间等次级信息时，使用 `QuietAnchoredPopover` 作为稳定弹层外壳：
-
-- `QuietAnchoredPopover` 只负责 portal、锚点定位、窗口边缘收敛、outside click、Escape、滚动关闭和共享 Quiet Pro chrome；
-- feature 继续拥有触发条件、标题、列表内容、字段顺序与业务状态，不把业务数据结构放进共享组件；
-- 触发器使用 `aria-expanded` 与 `aria-controls`；焦点按设计保留在触发器，因此弹层使用 disclosure 对应的非 Dialog 语义；
-- 弹层打开不得撑高列表行、改变滚动容器尺寸，或把内容以内联抽屉插入原列表；
-- 标题与网址同时存在时，标题在上、网址在下；时长与时间范围置于独立的右侧信息列，长文本允许在弹层内部换行；
-- 不用 `QuietTooltip` 承载需要点击、阅读或包含多条记录的内容，也不复制 History 的 feature 私有定位状态机。
-
-对象详情中的“标题详情”是当前标准消费者。History 页面级时间线仍由 History owner 维护；对象详情弹窗内的记录弹层统一复用共享外壳并由 `destination` 拥有数据与触发状态。
-
-### 9.13 工作台列表卡片与紧凑 disclosure
-
-History 时间线列表与对象详情这类高密度、可扫读的工作台列表，共用以下稳定外壳：
-
-- `qp-workbench-list-card` 负责中性背景、边框、控制级圆角与克制的 hover 反馈；feature 只负责行内数据排列，不再各自复制卡片 chrome；
-- `qp-compact-disclosure` 用于紧邻计数徽标的 18px 圆形详情入口，只打开锚点信息弹层，不把整张卡片变成展开触发器；
-- 卡片可因业务不同省略图标、色条或第二行时间，但边框、圆角、背景和 disclosure 反馈必须一致；
-- 高密度列表应明确可视行数并只让列表本身滚动，不能依赖露出半张卡片暗示仍有内容。
-
-### 9.14 对象详情弹窗与图标入口
-
-Dashboard、History 与 Data 的应用/网页对象详情统一使用 `destination` feature 提供的同一弹窗、读模型、时间轴、列表、偏好与文案契约：
-
-- 入口只绑定对象图标，不把整行或整张卡片变成详情触发器；鼠标双击图标打开，键盘聚焦图标后按 Enter 打开；
-- 图标入口使用 `button` 或等价可访问控件，必须有独立 `aria-label`、`focus-visible` 状态与 `cursor: pointer`；图标外的时间轴色块仍使用普通箭头，除非它自身支持拖动；
-- 来源页面只提供稳定对象标识、显示名称、图标、颜色、初始日期和运行时版本；详情内容与导航状态由 `destination` owner 读取和维护；
-- 弹窗顶栏与时间轴固定，只有下方详情列表滚动；切换日期、来源页面或对象时保持弹窗外框尺寸稳定，不清空为白屏或整块 loading；
-- 双击时使用 pointer-down 预备的对象快照，避免第二次 click 先改变单选状态再打开错误对象；关闭后恢复来源选择、滚动位置与触发器焦点；
-- 应用与网页使用同一结构。网页可补充标题和网址，应用可补充活动与标题计数，但卡片 chrome、行高、disclosure 和日期控件不得分叉；
-- Web Sync 关闭时不出现网页入口；不可用状态必须由来源页诚实隐藏或由弹窗明确表达，不能伪装成零活动。
-
-### 9.15 分段控件与单选列表的选择边界
-
-控件原型由选择集合的性质决定，不能靠压缩字号、间距或文案来延长错误原型的寿命：
-
-- 固定、少量、短小且需要同时比较的闭合集合使用 segmented control，例如主题模式；
-- 会继续扩展、原生名称长度不可控，或用户只需确认当前值并偶尔更换的单选集合使用 select/listbox，例如界面语言；
-- 同一项设置不能根据当前选项数量在 segmented 与 select 之间动态切换，避免版本升级后交互形态漂移；
-- listbox 必须完整支持打开、方向键、Home/End、typeahead、Enter 选择、Escape 关闭、选中语义和焦点恢复；
-- 语言选项使用注册表中的原生名称，不用国旗，也不为单一地区变体显示技术 locale tag；将来同一语言出现多个地区变体时，先使用各自语言中的完整地区名称；
-- 选项首次需要异步准备时，保留最后一个可用值；目标内容就绪后再更新可见内容、locale、`document.lang` 与 `document.dir`，加载失败不得静默保存未实际展示的值。
-
-### 9.16 Select / Listbox 密度规范
-
-`QuietSelect` 使用两档稳定密度。密度由所在任务决定，不按选项数量或当前语言动态变化：
-
-- `regular` 用于分类映射、对话框表单和其他需要明确输入面的场景；沿用 34px 触发器、32px 选项和现有表单排版；
-- `compact` 用于 Settings 这类低频、行内、只需确认当前值的偏好控件；其视觉密度继承原有紧凑 segmented control，不得把普通表单下拉直接撑满设置控制列。
-
-`compact` 的固定视觉契约如下：
-
-| 角色 | 尺寸与排版 | 颜色与状态 |
-|---|---|---|
-| 触发器 | 高度 28px；水平内边距 8px；内容间距 6px；字号 11px；字重 650；行高 1 | 当前值使用 `--qp-text-secondary`；背景、边框与圆角继续使用 `control` token |
-| 展开箭头 | 12px，不参与主信息竞争 | 使用 `--qp-text-tertiary`；展开时只做短旋转反馈 |
-| 菜单 | 与触发器间距 4px；内边距 4px；宽度不小于触发器 | 使用 `--qp-bg-panel`、`--qp-border-subtle`、`--qp-radius-control` 与 `--qp-shadow-overlay` |
-| 选项 | 最小高度 28px；水平内边距 8px；字号 11px；字重 650；单行显示 | 默认 `--qp-text-tertiary`；hover / 键盘高亮使用 `--qp-text-primary` 与 `--qp-bg-elevated` |
-| 已选项 | 与普通选项同尺寸 | 使用 `--qp-text-secondary` 与中性 `--qp-bg-elevated`；不使用强调色描边制造第二层卡片 |
-| 禁用状态 | 尺寸不变 | 使用 `--qp-text-disabled`，并保留不可操作光标和语义 |
-
-宽度和响应式规则如下：
-
-- `compact` 触发器的内在宽度由全部选项中实际渲染最宽的一项决定，不由当前值决定，也不允许默认 `width: 100%` 填满空白控制列；切换选项时宽度必须保持稳定；
-- 触发器宽度等于最宽选项文字宽度，加左右各 8px 内边距、6px 内容间距、12px 箭头和边框；消费者只能提供可用空间上限与对齐，不能为视觉整齐预留固定空白宽度；
-- Settings 的语言选择器桌面双列布局右对齐，堆叠布局回到说明文字下方左对齐；宽度随生产 locale 注册表中的原生名称自动更新；
-- 菜单至少与触发器等宽；原生名称需要更多空间时可按内容扩展，但触发器和菜单均最多 220px，并始终受消费者可用宽度与视口安全边距约束；
-- 触发器和选项文字保持单行；达到菜单宽度上限后使用省略，不通过增加行高或撑宽整页容纳长名称；完整名称仍必须通过可访问名称和选项文本读取；
-- `compact` 必须由共享 `QuietSelect` 的正式 density 契约提供；feature 只能决定布局宽度和对齐，不得用页面私有后代选择器覆盖触发器、菜单或选项内部样式。
-
-### 9.17 滚动容器与滚动条
-
-滚动容器的首要职责是保证内容可达，并让占用空间反映真实溢出状态。Quiet Pro 使用浏览器与 WebView2 的原生滚动状态机，不创建 React 或 JavaScript 自绘 scrollbar。
-
-共享 class 合同如下：
-
-- `.qp-scroll-region` 是唯一 canonical appearance owner，提供与 v1.9.3 桌面界面一致的 6px 原生 scrollbar 视觉规格与中性 thumb、竖向上下按钮渐进增强和系统高对比度回退；传统滚动条占用 6px lane，系统 overlay scrollbar 可不占布局宽度；它不拥有 `overflow`、高度、padding 或 overscroll。
-- `.qp-scroll-region` 默认使用 `scrollbar-gutter: auto`。没有溢出时 scrollbar 与 lane 一起消失，可用空间完整归还内容；出现溢出时只占一个语义 lane。
-- `.qp-scroll-region-stable` 只改变 gutter 策略，必须与 `.qp-scroll-region` 同时使用。它只适用于 overflow 出现前后宽度变化会破坏真实信息几何的消费者，并必须有对应 browser geometry test。
-- feature 继续拥有真实 scroll owner 的尺寸、flex/grid、业务 padding、`overflow-*` 与 `overscroll-behavior`；不得在 feature CSS 复制 scrollbar pseudo 或直接声明 gutter。
-
-输入与可访问性合同如下：
-
-- wheel、触控板、thumb drag、track click、Home、End、PageUp、PageDown 和方向键继续使用原生行为；不得创建 `role="scrollbar"` 或拦截这些按键来模拟滚动。
-- 竖向顶部和底部按钮是 Chromium/WebView2 progressive enhancement，不进入 Tab 顺序，也不是唯一滚动入口；引擎不支持 button pseudo 时，其他原生路径必须保持完整。
-- 不给所有 scroll region 无差别增加 `tabIndex=0`。内部已有可聚焦内容时使用正常焦点路径；纯阅读区域只有在键盘用户确实需要滚动时才增加可聚焦语义和可访问名称。
-- Dialog、Popover、Select 与候选菜单继续由自己的 owner 决定 `overscroll-behavior: contain`、焦点陷阱、Escape 和焦点恢复，不能为了统一外观形成双滚动 owner。
-
-视觉与平台合同如下：
-
-- thumb 与按钮只使用 `--qp-scrollbar-default`、`--qp-scrollbar-hover` 及其克制 active 混合，不使用 accent、发光、阴影或出现动画；track 保持透明。
-- 几何 token 只在 `tokens.css` 定义一次。任何尺寸调整必须验证 100%、125%、150% 和 200% DPI，以及短 Popover 对可视内容高度的影响。
-- `forced-colors: active` 时使用系统色并允许系统接管 scrollbar color；不能让低对比主题变量造成不可见 thumb 或按钮。
-- 当前横向 scrollbar 复用 thumb 与 track appearance，但不提供左右按钮，也不永久保留底部 gutter。
-
-明确禁止：
-
-- 隐藏承载重要内容的 scrollbar；
-- 使用 `.custom-scrollbar` 或兼容 alias；
-- 在 canonical CSS 之外新增 `scrollbar-gutter` 或 `::-webkit-scrollbar*`；
-- 仅以“视觉更整齐”为由使用 stable；
-- 用页面 padding 重复补偿已经存在的 scrollbar lane。
-
-当前 Data 页面是首个 stable 消费者，其趋势图宽度由 browser test 保护。新增 stable 消费者时，测试必须先证明 auto 会造成用户可见的几何回归，并验证 fits 与 overflow 两种状态下目标宽度保持一致。
-
----
+单个 feature 的卡片布局、挂件状态、具体日期入口、详情弹窗内容和消费者选择规则归最近的 feature 源码与测试。只有跨页面契约发生变化时才更新本文。
 
 ## 10. 排版、密度与数据展示
 
@@ -645,11 +523,6 @@ Quiet Pro 的动效应当：
 
 ---
 
-## 13. 给 Codex 与后续协作者的默认约束
+## 13. Review 门槛
 
-在本文语境下，默认执行约束是：
-
-- 不为单页需要新增一次性视觉规则
-- 不把 Quiet Pro 当成“只能保守不能优化”的借口，而是当成可复用系统
-- UI 问题修复时仍应遵守 [`issue-fix-boundary-guardrails.md`](./issue-fix-boundary-guardrails.md) 与 [`architecture.md`](./architecture.md) 的 owner 规则
-- 如果某个方案明显偏离 Quiet Pro，应先停下确认，而不是直接落地
+UI review 同时检查 owner、token、状态、键盘、焦点、可访问性和可重复测试。明显偏离 Quiet Pro 或需要新视觉方向时先确认；可见 UI PR 的截图只通过仓库外附件提供，不能提交审查媒体或用截图替代测试。

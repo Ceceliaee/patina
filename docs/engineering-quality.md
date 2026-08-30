@@ -104,108 +104,48 @@
 
 ## 4.5 外部 PR 准入门禁
 
-外部 PR 的价值不在于“有人写了代码”，而在于它是否降低维护者把一个已接受问题安全落地主干的成本。
+外部 PR 先判断是否降低维护者安全落地一个已接受问题的成本，再进入逐行 review。完整贡献者政策由 [`../CONTRIBUTING.md`](../CONTRIBUTING.md) 拥有，PR 模板负责采集，`scripts/pr-intake-policy.ts` 与 `scripts/check-pr-intake.ts` 负责执行，`tests/prIntakeGate.test.ts` 负责门禁反例；本文只拥有风险模型。
 
-因此外部 PR 必须先通过准入门禁，再进入完整人工 review。维护者第一轮只判断方向、范围、owner、体量、风险和验证；未通过准入门禁的 PR 不做逐行审查。
+可进入人工 review 的最小范围是“一个已接受问题 + 必需改动 + 风险匹配验证”，并同时满足：
 
-PR 范围的长期定义是：
+- 已接受的 Issue、Project item 或维护者明确接受的 scope 可审计；
+- Scope Boundary、Owner Check、Risk Review 和 Validation 完整；
+- 文件和用户可见行为都属于已声明范围，代码位于真实 owner；
+- UI 符合 Quiet Pro，通过 GitHub user-attachments 或其他仓库外 HTTPS 地址提供截图，并有可重复测试；
+- tracking、SQLite、备份、恢复、清理、导出、migration、持久化、截屏采集和本机/网络接口等风险有对应专项测试。
 
-> 一个已被接受的问题，加上为解决它必须改动的最小代码集合，加上对应验证。
+以下门禁失败时停止逐行 review：无接受范围、无关改动、错误 owner、主要 UI 需重做、样式或用户文案绕过 owner、风险无测试、功能 PR 修改或削弱质量门禁、编码污染、仓库内审查截图/GIF/视频/evidence-media、手工维护内容超过 1000 行或 25 个文件而未按 owner/行为拆分，或维护者需要重写主要实现。结果分类为 `Mergeable`、`Needs Author Changes`、`Not Accepted` 或 `Declined`。
 
-换言之，功能相关不等于范围正确。只有同时满足下面条件的改动才算在范围内：
+门禁是自动、label-free 且不可由 PR 正文或作者声明绕过。它使用可信 base 与 PR head 的三点 diff，不执行贡献者修改后的门禁脚本或 package scripts；普通本地 `npm run check` 不能代替 PR intake。Draft PR 可暂不运行，ready for review 后必须全部满足。平台要求的首次 Actions 批准只允许 workflow 启动，不表示 scope 获批。
 
-- 对应已接受的 issue、Project item，或维护者明确接受的 scope。
-- PR 模板完整写清 Scope Boundary、Owner Check、Risk Review 和 Validation。
-- 每个改动文件都是解决该问题所必需。
-- 每个用户可见行为都已经写入 scope 或验收条件。
-- 代码落在真实 owner 下，并符合 [`architecture.md`](./architecture.md) 的边界。
-- UI 改动符合 [`quiet-pro-component-guidelines.md`](./quiet-pro-component-guidelines.md)。
-- 新增风险有对应测试或维护者明确接受的验证说明。
+测试必须真正覆盖命中的风险域并能被默认测试图或 Cargo module tree 到达。未注册测试、无关 smoke、只删除断言或只写“已测试”都不是正向证据。capability、permission set 或 application command manifest 变化还必须提供已登记的真实 Tauri main/Widget denial matrix。
 
-PR 默认分为四类：
+## 4.6 Prose 质量
 
-- `Mergeable`：范围清楚、owner 正确、风险可验证、只需小修，可以进入人工 review。
-- `Needs Author Changes`：方向可能可接受，但 scope、owner、体量、UI 或测试未过门禁；退回作者修改，不做完整 review。
-- `Not Accepted`：当前代码形态需要维护者重写主要实现、重做主要 UI、迁移 owner，或只是原型演示；不合并代码。
-- `Declined`：方向本身不符合产品、架构、安全或许可边界；关闭或明确不采纳。
+工程 prose 必须服务长期理解和可执行判断，而不是保留会话过程。文档、注释、review、changelog 和贡献者说明默认遵守：
 
-以下情况属于一票否决，不能直接合并：
+- 保留 actor、触发条件、义务、禁止、例外、失败行为、原因和验证证据；
+- 不把 `must` 弱化成 `should`，不把 scoped default 改写成绝对规则；
+- Public JSDoc 只记录调用者无法从签名直接得知的返回、失败、所有权、时序、副作用和兼容性契约；
+- 内部注释只解释非局部不变量、平台限制、安全理由或反直觉决策，不逐行复述实现；
+- 诊断信息必须指出失败对象、可操作原因和下一步，不使用无上下文的“失败”或“出错”；
+- 删除代码逐行复述、实现过程日记、review 辩解、无证据质量声明和 chain-of-thought 残留；
+- 用户可见产品文案和翻译继续服从 [`localization.md`](./localization.md)，不能由通用 prose 整理绕过消息契约；
+- 长期事实更新真实 owner；working note 与 archive 不能成为第二来源。
 
-- 没有已接受范围的大功能 PR。
-- PR 混入无关重构、格式化、命名整理、依赖升级或其他 owner 的改动。
-- 主要实现落在错误 owner，合并后会制造长期边界问题。
-- 主要 UI 不符合 Quiet Pro，需要维护者重做。
-- 新增独立 CSS、硬编码颜色、圆角、阴影、边框或其他样式逃逸。
-- 用户可见文案、placeholder、title 或 accessibility 文案绕过 copy owner，直接写在实现文件中。
-- 涉及 tracking、SQLite、备份、恢复、清理、导出、迁移、设置持久化、截屏采集或本机/网络接口，但没有覆盖新增风险的测试。
-- 功能 PR 修改质量门禁脚本、CI workflow、bundle budget 或 hotspot budget，尤其是顺手放宽预算。
-- 功能 PR 从 `npm run check` 可达链路中移除既有检查、测试，或用弱命令替换既有验证。
-- 文本文件引入 UTF-8 BOM、mojibake 标记或其他编码污染。
-- 手工维护内容超过 1000 行或超过 25 个文件，且没有按行为、owner 或可独立验证阶段拆分。
-- 维护者预计需要重写核心实现超过 30%。
-- PR 的主要价值只是证明某个功能可以做，而不是提供可维护代码。
-
-外部 PR 的范围必须有可审计上下文：已接受的 issue、Project item，或维护者明确接受的 scope。PR 正文、评论、关联 issue 和作者自述只能解释范围，不能绕过准入门禁。
-
-自动准入门禁不使用 label 作为放行机制。当前硬门槛是：
-
-- 触发 `oversized-manual-diff` 或 `too-many-manual-files` 时，作者必须按行为、owner 或可独立验证阶段拆分 PR。
-- 触发 `risk-path-without-tests` 时，作者必须补充匹配风险域的专项测试，或由维护者另开维护者拥有的后续工作处理。
-
-错误 owner、退休目录回流、未归属 shared styles、硬编码 Quiet Pro 样式、未完成 contributor checklist 等硬门禁不能通过评论、PR 正文或 label 放行。
-
-PR intake 是独立于普通代码验证的准入 workflow。它需要三点 base/head PR diff 和 PR 正文才能给出有效判断；本地 `npm run check` 不应假装替代这个门禁。workflow 必须 checkout 可信 base revision，只读取 PR head，不执行贡献者修改后的门禁脚本或 package scripts。质量 checker、CI workflow 与 performance benchmark budget 属于维护者门禁，功能 PR 不应顺手修改；`package.json` 验证图不得删除既有命令段、测试、coverage include 或阈值。capability、permission set 或 application command manifest 发生变化时，PR 必须同时提供已登记的真实 Tauri main/Widget denial matrix 证据。脚本自身由 `test:pr-intake` 覆盖，真正的 PR 准入在 GitHub Actions 的 `PR Intake` workflow 中执行。普通 `Verify` workflow 只应在 `PR Intake` 成功后验证外部 PR；`main` push 仍可直接验证。
-
-GitHub 可能仍要求维护者批准首次外部贡献者的 Actions。这个平台级批准只允许 workflow 启动，不等于 scope 批准，也不能绕过准入门禁。
-
-Draft PR 暂不运行准入 job；标记为 ready for review 后，必须满足当前模板与全部准入规则。
-
-“有测试”不等于“覆盖风险”。准入脚本按风险域匹配测试：例如导出核心改动需要 `tests/export*` 或对应 Rust export 测试，settings persistence 改动需要 settings/persistence 相关测试，截屏采集改动需要 Rust command/engine 层测试覆盖设置、保留期、采集和文件路径安全。TypeScript 测试还必须能从正常的 `npm run check` 链路到达；独立 Rust 测试文件必须能被 Cargo 自动发现或被 crate module tree 引用，内联 Rust 测试必须实际新增测试函数。未注册测试、无关测试、只删除旧断言或只改宽泛 smoke 测试都不能算作正向覆盖。
-
-这类 PR 可以礼貌感谢作者投入，但不能为了保留贡献痕迹而合入 `main`。如果作者愿意按准入门禁重做，可以进入 `Needs Author Changes`；如果不愿或方向不接受，应保持 `Not Accepted` 或 `Declined`。
-
-公开贡献者规则写在 [`../CONTRIBUTING.md`](../CONTRIBUTING.md)。后续自动化门禁、PR 模板和 GitHub Actions 应服务同一套准入标准，而不是另起一套判断口径。
+本地 Agent 工作流可以辅助 prose 与文档生命周期工作，但本文与 `AGENTS.md` 必须独立提供完整规则。`.agents/` 和 `skills-lock.json` 不属于仓库质量门禁输入，其具体工具名称、清单和路由不得复制到长期文档。
 
 ---
 
 ## 5. 默认验证门槛
 
-默认最低验证门槛是：
+默认前端与文档质量入口是 `npm run check`；Rust、架构边界、依赖或发布级复核使用 `npm run check:full`。`package.json` 是当前命令组合、顺序与叶子测试的唯一 owner，长期 prose 不复制其执行图。门禁不得从顶层入口静默移除既有检查、测试、coverage include 或阈值。
 
-- `npm run check`
+`check:full` 必须在默认门槛之外验证 Rust 边界、格式、编译、测试、clippy 与依赖安全。依赖审计只允许经 Windows target 依赖树证明不可达的精确 advisory；受控离线模式仍须运行本地快照和例外可达性校验，但不能替代发布 CI 的联网新鲜度。
 
-它串行执行：
+工具链版本的 owner 是根 `.node-version` 与 `rust-toolchain.toml`。CI 读取这些文件；`package.json` 的 engine 声明只能作为受测试的镜像。第三方 GitHub Actions 固定到完整 commit SHA，并保留对应主版本注释；可移动 tag 不能成为长期执行引用。
 
-- `npm run check:types`
-- `npm run check:lint`
-- `npm run check:naming`
-- `npm run check:architecture:self-test`
-- `npm run check:architecture`
-- `npm run check:ipc-contracts:self-test`
-- `npm run check:ipc-contracts`
-- `npm run check:hotspots`
-- `npm run check:quiet-pro-style-debt`
-- `npm run check:test-governance:self-test`
-- `npm run check:test-governance`
-- `npm run check:tests`
-- `npm run check:frontend`
-
-`check:tests` 将 coverage 风险域、其余快速确定性测试、关键 mutation 和真实浏览器 smoke 组合成唯一执行图。coverage 已经执行过的普通测试不会在同一次门禁中再次执行。`check:frontend` 只负责生产构建与 bundle budget，不再复制测试入口。具体叶子测试由 `package.json` 维护，本文不复制易漂移的文件清单。
-
-默认完整质量门槛是：
-
-- `npm run check:full`
-
-它在前端验证链之外继续执行：
-
-- `npm run check:rust`
-- `npm run check:dependencies`
-
-Rust 默认门槛包含边界检查器自测、`npm run check:rust-boundaries`、`cargo check --locked`、Rust 测试与 `cargo clippy --locked -- -D warnings`，其中 clippy 通过 `npm run check:rust:clippy` 单独暴露，便于局部复查。依赖门禁同时运行 `npm audit` 与固定版本的 `cargo-audit`；CI 必须显式安装仓库要求的 `cargo-audit` 版本，允许项只能是经 Windows target 依赖树证明不可达的精确 advisory，不得用宽泛忽略掩盖当前目标可达漏洞。受控无网络环境可以显式设置 `PATINA_DEPENDENCY_AUDIT_OFFLINE=1`，此时门禁必须强制 RustSec `--no-fetch` 和 npm `--offline`，仍执行精确例外可达性校验；该模式只证明本地 advisory 数据库快照下的结果，不能替代发布 CI 的联网新鲜度检查。
-
-工具链版本必须保持单一来源：Node 由仓库根目录 `.node-version` 定义，Rust 由根目录 `rust-toolchain.toml` 定义。CI 应直接读取或安装这两个文件声明的工具链，不得在 workflow 中重复硬编码 Node 或 Rust 版本。`package.json` 的 `engines` 与 `devEngines` 只镜像根配置决定的 Node/npm 事实，其中 `devEngines` 必须对开发 runtime 与 package manager 使用精确版本和 `onFail: error`，让错误工具链在 `npm install`、`npm ci` 与 `npm run` 前失败；`@types/node` 主版本必须与 `.node-version` 的 Node 主版本一致。依赖安装脚本只允许使用精确包版本的 `allowScripts` 条目，不得用包名级宽泛许可。默认测试必须检查这些镜像声明、Node 类型主版本、脚本许可和所有 workflow 的 `.node-version` 引用没有漂移；升级工具链后运行完整门槛验证。
-
-CI 引用的第三方 GitHub Actions 必须固定到完整 commit SHA，并在行尾保留对应主版本注释供自动升级工具识别。可移动的 `@vN` 标签只能用于人工核验新版本指向，不能作为 workflow 的长期执行引用；SHA 更新必须与该 Action 的官方 tag/release 对照后单独审查。
+风险追加验证、当前命令名与其组合关系由下面的风险路由和 `package.json` 共同决定，不能用文档中的旧叶子清单覆盖机器事实。
 
 ### 5.1 测试分层与稳定性治理
 
@@ -239,50 +179,17 @@ CI 引用的第三方 GitHub Actions 必须固定到完整 commit SHA，并在�
 
 当前仓库默认 CI gate 与 release workflow 的质量校验入口统一为 `npm run check:full`。
 
-`check:naming` 是前端边界的轻量命名防线。它默认扫描 `src/app/**`、`src/features/**`、`src/shared/types/**` 与 `src/shared/lib/**`，阻止 tracking / update IPC、backup preview、widget placement、settings persistence 与 SQLite read row 的常见 raw 字段和 `RawXxx` 协议类型重新扩散到业务层。Raw DTO、协议字段与数据库字段应继续留在 `src/platform/**`、`src-tauri/**`、测试 fixture 或明确的 read model 内部边界。
+机器 gate 按失败类型分工，具体扫描路径、allowlist、预算和执行顺序由 `scripts/*`、测试与 `package.json` 拥有：
 
-`check:types` 是 TypeScript 静态门槛。它先检查生产 `src` 与 Vite 配置，再通过 `tsconfig.quality.json` 覆盖 `scripts/**/*.ts` 与 `tests/**/*.ts`。测试脚本允许比生产源码更宽的 unused / implicit-any 口径，但必须保持可解析、模块可解析、结构类型可检查，避免测试 fixture 长期漂离真实契约。
+- 类型、命名、前端/Rust owner 和 IPC/capability gate 保护编译契约、依赖方向、command 注册、permission set 与敏感 caller guard；例外必须精确且有自测，不能使用目录或前缀通配。
+- hotspot、Quiet Pro style debt 与 bundle gate 保护已经确认的结构和性能预算；功能 PR 不能为通过检查顺手上调，债务减少时应收紧机器基线。
+- coverage 与 mutation 保护选定的高风险生产 owner；coverage 不能用平均值掩盖低覆盖文件，mutation 必须修改真实生产代码并由行为断言杀死。
+- SSR smoke、真实 browser smoke 与 Tauri runtime smoke 分别保护构建渲染、DOM/交互和真实 IPC/plugin/落盘边界，任何一层都不能冒充另一层。
+- 导出面和死代码报告是审计信号，不是批量删除授权；逐项排除动态加载、协议注册、生成入口和 test-only 可见性后才能删除。
 
-`check:architecture` 是基于 TypeScript AST 的前端 owner 边界防线。它扫描静态 import、动态 import、重导出与直接 `invoke`，默认覆盖 `src/app`、`src/features`、`src/shared` 与 `src/platform`：阻止 shared 反向依赖 app / features / platform，阻止 platform 反向依赖 app / features，并阻止 `src/features/*/components/**` 与 `src/features/*/hooks/**` 直接绕过 feature-owned service 访问 platform、Tauri API 或 `invoke`。`src/app/**` 不应直接 import `@tauri-apps/api`；前端生产代码不应重新调用低层 SQLite write helper；`src/app/components/**` 与 `src/app/hooks/**` 不应直接访问 `platform/persistence/**`。main window capability 不应包含 `sql:allow-execute`。检查器自测必须证明多行语法、动态路径与测试例外不会绕过规则。
+升级可信链路是受保护边界：当前 schema migration、legacy schema repair、基线归一化和已安装数据库直升保护不能因名称含 `legacy` 或 `migration` 被当作普通兼容代码清理。移除前必须证明不再承担已发布版本升级职责，并通过独立执行单、风险说明和自动化测试。旧产品身份、旧路径、旧 localStorage key 或旧备份格式等迁移窗口兼容，只有在承诺窗口结束、用户提醒和退出验证完成后才能删除。
 
-`check:ipc-contracts` 静态比对前端生产调用、Rust `invoke_handler`、application command manifest、main/Widget permission set、capability 引用和敏感 caller guard，任何未注册调用、未分类 custom command、错误窗口授权、无 guard 敏感命令或非精确动态命令名都会失败。确需封装的动态调用必须落在精确 allowlist，并由检查器自测覆盖；不能使用目录级、前缀级或通配符豁免。
-
-WebDAV 已保存密码的显示是凭据边界的唯一明文返回例外：只能由 main window 的 `cmd_reveal_webdav_backup_secret` 在用户点击显示按钮时按当前 app profile 读取，必须列入敏感 caller guard 清单。browser 测试要证明打开弹窗不会预取、点击后才显示、再次隐藏会清除明文预览；desktop runtime 要证明 Widget capability 拒绝该命令。任何自动预取、跨 profile 读取、日志记录或持久化都视为安全回归。
-
-`check:hotspots` 是高风险热点增长门禁。Rust 统计以剔除 `#[cfg(test)]` 后的生产非空行数为口径，避免大量测试 fixture 掩盖生产职责；它不要求一次性拆掉所有历史大文件，但会锁住当前最高风险热点的增长预算。如果超过预算，必须先按 owner 拆分、补验证，或带理由更新预算。
-
-已完成集中整改的高风险 owner 应使用精确预算（当前值即上限），而不是继续保留增长余量。页面协调、启动生命周期、存储路径安全与新增共享原语属于这一类；新增职责必须先按 owner 拆分，不能用上调精确预算吸收。
-
-`check:quiet-pro-style-debt` 对现存的任意 radius 写法使用精确文件级基线：新增债务失败，债务减少但未同步收紧基线也失败。长期目标仍是把视觉角色收敛到 Quiet Pro token，而不是把基线当永久许可。
-
-同一门禁也保护 Quiet Pro 滚动区域的单一 owner：生产源码不得继续引用 `.custom-scrollbar`，不得在 `src/styles/components/quiet-scroll-region.css` 之外声明 `scrollbar-gutter` 或 `::-webkit-scrollbar*`。`npm run check:quiet-pro-style-debt:self-test` 使用虚拟对抗样本证明旧 class、feature 私有 gutter 和 page-local pseudo 会失败，同时允许 canonical 实现与普通 `overflow` 布局；默认 `npm run check` 必须先运行 self-test，再运行真实仓库扫描。运行时的 auto/stable、按钮、键盘、DPI 与 forced-colors 行为仍由 browser smoke 负责，静态门禁不能替代真实行为测试。
-
-`check:rust-boundaries` 扫描 Rust 高吸力层并先剥离 `#[cfg(test)]` 模块。它阻止 `commands/*`、`app/*` 与 `lib.rs` 直接写 SQL，阻止 `commands/*` 承接 SQLite pool 类型，阻止 Rust `app/*` 直连 repository 或 pool，阻止 `platform/*` 反向依赖 `data/*` / `app/*`，阻止 `domain/*` 依赖 `data/*` / `platform/*`，并阻止 `engine/*` 依赖 app、data、repository、pool、SQL、等待数据库或原始 Windows API。生产路径必须让 SQL 留在 `data/*`，Windows API 实现留在 `platform/*`，领域决策留在 `domain/*`，跨边界数据组合留在 `app/*`；engine 可以调用 platform 暴露的窄能力来编排桌面行为，但不能把 Win32 实现吸入自身。检查器自测与空债务基线共同保证新增反向依赖立即失败。
-
-`test:coverage` 对 tracking effects/policy、Dashboard/History read model、启动预热生命周期、Data heatmap retry snapshot、Web aggregate gateway、SQLite transaction 与结构化 command error 等核心风险域设置语句、分支、函数和行覆盖率硬阈值。除 aggregate coverage 外，高风险 owner 必须逐文件满足声明阈值；报告必须列出具体失败文件，不能让高覆盖文件平均掉低覆盖 owner。覆盖率是风险证据，不替代行为断言；新增高风险 owner 时应同步扩展 include，而不是用无关低风险文件稀释分母。
-
-`test:mutation` 对并发等待、批处理完整性、序列化、重试语义、错误 DTO 解析以及权限分类、Widget SQL 拒绝、caller guard、存储路径重叠/探针所有权、WebView 执行期与跨根身份复核、staging reparse 拒绝、WebDAV 明文边界、凭据 profile/原生 blob 安全、启动 controller identity、heatmap 失败结算/retry generation、aggregate revision mismatch 和 bridge recovery 执行少量关键变异。每个 mutant 必须修改真实生产模块并由现有行为断言杀死；不能用只测试测试脚本自身的伪 mutant 计分，也不能删除 mutant 而不提供覆盖同一错误模式的替代证据。
-
-`npm run quality:exports` 是导出面和死代码的审计入口，不是默认阻断门禁。报告必须区分 production-internal、test-only 与 fully-unreferenced；内部只用的声明应去掉无意义 `export`，test-only 是可见性复查信号，fully-unreferenced 必须逐项判断动态加载、协议注册、生成入口和真实死代码。不得仅凭静态报告批量删除，也不得通过宽泛忽略目录清零报告。
-
-压缩 SQLite migration 基线时，必须同时保留旧版本数据库直升保护：新安装可以走当前压缩基线，已安装旧数据库在归一化 `_sqlx_migrations` 前必须先完成幂等的 legacy schema repair，并用 Rust 自动化测试覆盖缺列补齐、历史数据保留、必要回填、active session 归一化和不完整 schema 不误标为当前基线。
-
-兼容清理必须区分两类代码：
-
-- 历史产品身份、旧目录、旧本地存储键、旧远端目录、旧备份格式等“迁移窗口兼容”，可以在承诺窗口结束、发布说明充分提醒且验证通过后退出。
-- 当前 `Patina` 数据库 schema migration、legacy schema repair、基线归一化和已安装数据库直升保护，属于升级可信链路，不应因为名字里带 `legacy` 或 `migration` 就当作可清理兼容代码删除。
-
-如果要移除第二类代码，必须先证明它不再承担已发布版本数据库升级职责，并以明确执行单、风险说明和自动化测试覆盖，而不是把它混入普通兼容清理。
-
-除上述升级可信链路外，新需求默认不得通过复制当前实现并追加 `V2 / V3`、`new / next / latest` 名称落地。临时兼容确实不可避免时，PR 或执行单必须写明具体兼容对象、唯一当前 owner、删除条件、最晚复核点和覆盖该退出条件的测试；缺少其中任一项，不接受新增兼容层。
-
-`test:ui-smoke` 是当前仓库的最小 UI smoke 防线。它不依赖真实 Tauri runtime，而是通过 stub Tauri API、SSR 渲染 AppShell，并确认主导航和 Dashboard 首屏可以被构建与渲染。
-
-`test:ui-browser-smoke` 是真实浏览器/Vite 页面防线。它启动本地 Vite server，用 headless Edge/Chrome 打开主界面，在 stub Tauri API 下检查 Dashboard、主导航、Settings、原生图表交互、Data 失败恢复、控制台 error 与基础横向溢出。场景失败必须保留场景名，并附带页面状态、控制台和网络错误；Vite/浏览器异常退出不能退化为无根因超时。成功、失败和最后一个场景都必须关闭 server、浏览器进程与隔离 profile。
-
-`test:tauri-runtime-smoke` 是 Windows 上的真实 Tauri/WebView2 防线。它以隔离的数据目录构建并启动 debug 应用，覆盖真实 command、Rust event、plugin SQL 读写、capability 拒绝、结构化错误和 SQLite 落盘完整性，并在结束后清理子进程与临时目录。它是高风险 runtime/IPC 变更的追加门禁，并在 CI 中独立超时执行，不能被 stub browser smoke 替代。
-
-`check:bundle` 是保守 bundle 预算防线。它在生产构建之后检查入口、页面、secondary runtime、shared UI、copy source attribution、lazy support 与总 gzip 体积。每个 hard budget 的实际值必须至少保留 `3%` 余量；刚好低于预算仍视为失败，且不能通过上调预算、复制共享依赖或删除可访问性与本地化内容过关。
+WebDAV 密码明文返回仍是窄安全例外：仅 main window 在用户明确点击显示时可通过有 caller guard 的 command 读取；不得预取、跨 profile、记录、持久化或授权 Widget，隐藏和关闭后必须清除前端明文。
 
 ### 5.2 Bundle 长期治理与预算变更
 
@@ -367,19 +274,7 @@ Bundle 治理的目标不是让构建产物永远不增长，而是让代码只�
 - widget 隐藏路径如果启用资源回收，应先保持即时 park 以保护收起手感，再通过 generation/token 防护做延迟销毁，避免旧 timer 销毁新唤出的 widget
 - 后台优化这类会释放 UI WebView 的资源策略必须默认关闭；用户可见文案不暴露具体等待阈值，内部实现用统一阈值和 generation/token 防护，确保短时间重复打开关闭仍走快速复用路径
 
-当前仓库已经有可复用示例：
-
-- `npm run perf:history-read-model`
-- `npm run perf:dashboard-read-model`
-- `npm run perf:data-read-model`
-- `npm run perf:data-history-browser`
-- `npm run perf:sqlite-query-plan`
-- `npm run perf:startup-bootstrap`
-- `npm run perf:stable`
-
-它们不是唯一性能脚本，但代表默认口径：先固定场景，再做前后对照，而不是靠主观感觉宣称“更快了”。`perf:stable` 串行重复运行整套性能场景，聚合 average、p50、p95 与 max，并以任一子进程失败、预算超限或 SQLite table scan 为失败；不得用并发运行基准制造虚假的吞吐或尾延迟结果。
-这些脚本的输出必须明确预算，并在任一测量项超过预算时以非零退出码失败；如果某个脚本只是在比较参考路径和完整现状路径，输出必须说清它不是直接优化收益对照。
-`perf:data-history-browser` 使用 stub Tauri 数据，只测导航与渲染路径，不代表真实 SQLite I/O。Dashboard → Data 必须使用应用发出的稳定生命周期 mark，按 `intent -> chunk-ready -> root-mounted -> structure-active -> read-model-ready -> complete` 顺序测量；`active` 只表示主结构已经可交互，`complete` 必须等待可信 trend read model、overview heatmap、destination heatmap 和下半页内容提交，不能通过删掉真实加载或轮询一个过早 DOM 节点改变定义。`perf:sqlite-query-plan` 使用临时合成 SQLite 数据，只用于判断 query shape 和候选 index 是否值得进入单独 migration 执行单。
+性能入口与场景清单由 `package.json` 和 benchmark 脚本拥有。长期口径是固定场景后比较 average、p50、p95 与 max，以子进程失败、预算超限或不允许的 SQLite table scan 为失败；不得并发运行制造虚假吞吐，也不得把 stub browser 路径描述成真实 SQLite I/O。生命周期测量必须等待可信 read model 与实际内容提交，不能通过删除加载工作或轮询过早 DOM 节点改善数字。
 
 ---
 
@@ -400,56 +295,21 @@ Bundle 治理的目标不是让构建产物永远不增长，而是让代码只�
 
 ---
 
-## 7. 文档与归档规则
+## 7. 本地化质量路由
 
-### 本地化质量门禁
+本地化契约、用户可见文案或原生表面变更必须通过 i18n self-test 与真实仓库检查，覆盖 key、参数、CLDR 复数类别、source-review hash、generated stale 和硬编码。结构性变更使用 `npm run check:full`；只改翻译时至少运行 i18n、类型与命中的界面测试。完整 schema、XLSX 不可信输入、生成和贡献流程由 [`localization.md`](./localization.md) 拥有。
 
-任何本地化契约、用户可见文案或原生表面变更必须通过 `npm run check:i18n:self-test` 与 `npm run check:i18n`。检查链必须覆盖缺失/多余 key、参数、locale 的 CLDR 复数类别、source-review hash、生成产物陈旧和用户可见硬编码。
+## 8. 文档质量边界
 
-前端与 Rust 使用同一份 `ru-RU` 非生产夹具验证代表性基数复数结果。不得手写俄语复数公式，也不得以任意 TypeScript 函数代替声明式消息。硬编码例外只能精确到文件和值，必须写 owner 和原因，并由 stale-exception 检查自动清理压力。
-
-结构性本地化变更最终运行 `npm run check:full`。只改翻译且未触及 schema 或 native 表面时，至少运行 i18n 检查、类型检查和命中的界面测试。完整贡献流程见 [`localization.md`](./localization.md)。
-
-外部翻译工作簿是未可信开发输入。导入必须验证工作簿格式版本、schema/source fingerprint、完整 unit 集合、不可变列、公式、占位符和目标 locale 的 CLDR 结果，并先输出到非生产审查目录。工作簿身份不能自授权：维护者必须在命令行显式给出参考语言、目标语言、原生名称和文字方向并逐项核对。返回的原始 XLSX 不作为可直接打开的审查载体；先由 CLI 通过 OPC/XML 白名单、外部关系、嵌入部件和资源上限检查，再生成纯 TypeScript 资源供审查。只有维护者显式使用 `--apply` 才可通过带跨进程锁与失败回滚的注册事务新增 locale；导入动作不能自动签署 source review。
-
----
-
-
-工程质量文档长期采用两层结构：
-
-- top-level `docs/`：只保留当前有效的长期规则
-- `docs/archive/`：保留已经完成使命的阶段专项文档、执行清单与历史背景
-
-如果以后再出现新的工程质量专项，应放在：
-
-- `docs/working/`
-
-专项完成后：
-
-- 把阶段事实回写进本文
-- 把执行文档移入 `docs/archive/`
-
-不要让 top-level `docs/` 长期堆积阶段性执行单。
-
----
-
-## 8. 协作约束
-
-后续协作默认遵守这些约束：
-
-- 先解决真实工程问题，再回写文档
-- 不把阶段性收口误写成长期完成
-- 不把一次成功的局部优化夸大成“整体问题已解决”
-- 不把 archive 当作默认依据；archive 只提供历史上下文
-- 当长期规则变化时，优先更新本文，而不是继续扩写新的阶段规则文档
-
----
+长期 prose 只更新真实 active owner；一次性计划放在 `docs/working/`，完成后归档。完整生命周期、编码和 archive 边界由根 [`AGENTS.md`](../AGENTS.md) 直接拥有，工程门禁不能依赖 ignored Agent 状态。
 
 ## 9. 与其他长期文档的关系
 
-- 产品边界与优先级：见 [`product-principles-and-scope.md`](./product-principles-and-scope.md) 与 [`roadmap-and-prioritization.md`](./roadmap-and-prioritization.md)
-- 结构与 owner 边界：见 [`architecture.md`](./architecture.md)
-- 稳定期修复边界：见 [`issue-fix-boundary-guardrails.md`](./issue-fix-boundary-guardrails.md)
-- 版本、发布与升级链：见 [`versioning-and-release-policy.md`](./versioning-and-release-policy.md)
+- 产品边界与优先级：[`product-principles-and-scope.md`](./product-principles-and-scope.md) 与 [`roadmap-and-prioritization.md`](./roadmap-and-prioritization.md)
+- 结构与 owner：[`architecture.md`](./architecture.md)
+- 稳定期修复决策：[`issue-fix-boundary-guardrails.md`](./issue-fix-boundary-guardrails.md)
+- UI 质量：[`quiet-pro-component-guidelines.md`](./quiet-pro-component-guidelines.md)
+- 版本、发布与升级：[`versioning-and-release-policy.md`](./versioning-and-release-policy.md)
+- Web Activity 协议：[`web-activity-protocol.md`](./web-activity-protocol.md)
 
-本文只负责工程质量总规则，不重复承载产品、架构或发布策略的完整细则。
+本文只拥有风险模型、质量 gate 与验证原则，不重复其他 owner 的完整契约。

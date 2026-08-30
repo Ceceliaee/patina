@@ -14,11 +14,9 @@ const TAURI_DEV_CONFIG_PATH = path.join(ROOT, "src-tauri", "tauri.dev.conf.json"
 const TAURI_LOCAL_CONFIG_PATH = path.join(ROOT, "src-tauri", "tauri.local.conf.json");
 const CARGO_TOML_PATH = path.join(ROOT, "src-tauri", "Cargo.toml");
 const CARGO_LOCK_PATH = path.join(ROOT, "src-tauri", "Cargo.lock");
-const VERSION_POLICY_PATH = path.join(ROOT, "docs", "versioning-and-release-policy.md");
 
 const VERSION_PATTERN =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9A-Za-z-][0-9A-Za-z-]*))*))?$/;
-const VERSION_POLICY_CURRENT_CODE_VERSION_PATTERN = /(- 代码版本为 `)([^`]+)(`)/;
 const GITHUB_UPDATER_ENDPOINT =
   "https://github.com/Ceceliaee/patina/releases/latest/download/latest.json";
 const SHA256_SUMS_FILE_NAME = "SHA256SUMS.txt";
@@ -188,37 +186,6 @@ function withUpdaterDefaults(config) {
   };
 }
 
-export function syncVersionPolicyCurrentCodeVersion(content, version) {
-  assertVersion(version);
-
-  if (!VERSION_POLICY_CURRENT_CODE_VERSION_PATTERN.test(content)) {
-    fail("could not find current code version in docs/versioning-and-release-policy.md");
-  }
-
-  return content.replace(
-    VERSION_POLICY_CURRENT_CODE_VERSION_PATTERN,
-    `$1${version}$3`,
-  );
-}
-
-export function readVersionPolicyCurrentCodeVersion(content) {
-  return VERSION_POLICY_CURRENT_CODE_VERSION_PATTERN.exec(content)?.[2] ?? null;
-}
-
-export function validateVersionPolicyCurrentCodeVersionText(content, version) {
-  const policyVersion = readVersionPolicyCurrentCodeVersion(content);
-
-  if (!policyVersion) {
-    return "docs/versioning-and-release-policy.md is missing current code version";
-  }
-
-  if (policyVersion !== version) {
-    return `docs/versioning-and-release-policy.md current code version is ${policyVersion}, expected ${version}`;
-  }
-
-  return null;
-}
-
 function jsonValue(content, filePath, selector) {
   try {
     return selector(JSON.parse(content)) ?? null;
@@ -306,8 +273,6 @@ export function validateReleaseVersionFilesText(files, version) {
   }
 
   const packageLockVersions = readPackageLockVersionsText(files.packageLockJson ?? "");
-  const versionPolicyError = validateVersionPolicyCurrentCodeVersionText(files.versionPolicy ?? "", version);
-
   const checks = [
     versionFileError(
       "package.json",
@@ -356,7 +321,6 @@ export function validateReleaseVersionFilesText(files, version) {
       readCargoLockPackageVersionText(files.cargoLock ?? "", "patina"),
       version,
     ),
-    versionPolicyError,
     hasChangelogVersionSectionText(files.changelog ?? "", version)
       ? null
       : `CHANGELOG.md is missing "## [${version}] - YYYY-MM-DD"`,
@@ -382,19 +346,12 @@ async function validateReleaseVersionFiles(version) {
     tauriLocalConfig: await readText(TAURI_LOCAL_CONFIG_PATH),
     cargoToml: await readText(CARGO_TOML_PATH),
     cargoLock: await readText(CARGO_LOCK_PATH),
-    versionPolicy: await readText(VERSION_POLICY_PATH),
     changelog: await readText(CHANGELOG_PATH),
   }, version);
 
   if (errors.length > 0) {
     fail(`version files are not ready for ${version}:\n- ${errors.join("\n- ")}`);
   }
-}
-
-async function updateVersionPolicyCurrentCodeVersion(version) {
-  const versionPolicy = await readText(VERSION_POLICY_PATH);
-  const updatedVersionPolicy = syncVersionPolicyCurrentCodeVersion(versionPolicy, version);
-  await writeFile(VERSION_POLICY_PATH, updatedVersionPolicy, "utf8");
 }
 
 async function syncVersion(version) {
@@ -431,7 +388,6 @@ async function syncVersion(version) {
   );
 
   await writeFile(CARGO_TOML_PATH, updatedCargoToml, "utf8");
-  await updateVersionPolicyCurrentCodeVersion(version);
 }
 
 async function resolveTargetVersion(version) {
@@ -572,8 +528,6 @@ async function validateChangelog(version) {
   const parsed = await parseChangelog(version);
   assertFinalField("Release", parsed.release, parsed.version);
   assertFinalField("App note", parsed.appNote, parsed.version);
-  await validateVersionPolicyCurrentCodeVersion(parsed.version);
-
   if (parsed.release.length > MAX_RELEASE_NOTE_LENGTH) {
     fail(`CHANGELOG.md ${parsed.version} Release is too long; keep it short`);
   }
@@ -589,15 +543,6 @@ async function validateChangelog(version) {
   const visibleChangeCountError = validateReleaseNoteVisibleChangeCount(parsed);
   if (visibleChangeCountError) {
     fail(visibleChangeCountError);
-  }
-}
-
-async function validateVersionPolicyCurrentCodeVersion(version) {
-  const versionPolicy = await readText(VERSION_POLICY_PATH);
-  const error = validateVersionPolicyCurrentCodeVersionText(versionPolicy, version);
-
-  if (error) {
-    fail(error);
   }
 }
 

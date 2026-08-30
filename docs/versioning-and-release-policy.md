@@ -20,9 +20,8 @@
 
 ## 3. 当前仓库现实
 
-截至当前发布线：
+当前发布线的长期事实：
 
-- 代码版本为 `1.9.4`
 - 稳定发布线为 `1.x`
 - 仓库已进入公开稳定阶段，后续版本按标准 `SemVer` 管理
 - 默认通过推送 `vX.Y.Z` / `vX.Y.Z-prerelease` 版本 tag 自动触发 GitHub Actions 工作流 [prepare-release.yml](../.github/workflows/prepare-release.yml) 中的 `Publish Release` 流程；必要时也可手动触发已有 tag 的发布流程补跑
@@ -42,12 +41,11 @@
 - `package-lock.json` 的 `version`
 - `src-tauri/tauri.conf.json` 的 `version`
 - `src-tauri/Cargo.toml` 中 `[package].version`
-- 本文件第 3 节中的当前代码版本说明
 - Git tag
 - GitHub Release 标题
 - 更新通道中的 `latest.json`
 
-上面这项文档同步不是新的版本来源，而是防止长期规则与仓库现实漂移：只要本文保留“代码版本为 `X.Y.Z`”这类当前状态字段，每次准备正式发布时都必须随版本文件一起更新。
+长期政策不保存当前版本副本。发布 validator 负责比较版本文件、tag、Release 与 updater manifest，避免靠人工同步 prose。
 
 统一规则：
 
@@ -129,18 +127,6 @@
 看完范围后，再按最终进入发布的实际变化选择 `PATCH`、`MINOR` 或 `MAJOR`。
 如果这一段时间里包含用户可感知的新入口、重要行为变化、关键 UX 改进或发布级结构收口，即使最后一轮改动只是小修，也不应只按最后一轮改动决定为 `PATCH`。
 如果范围内只有向后兼容的小范围修复、回归修复、构建修复或非行为级 UI 微调，才使用 `PATCH`。
-
-## 6.2 `1.0.0` 之前的历史策略
-
-本节只用于理解 `0.x` 历史版本，不再作为当前发布判断依据。
-
-在 `0.x` 阶段，曾建议按下面规则升级：
-
-- `PATCH`：小范围 bug 修复、回归修复、构建修复、非行为级 UI 微调
-- `MINOR`：用户可感知的新功能、重要行为变化、关键 `UX` 改进、发布级结构收口
-- `MAJOR`：仅在真正定义稳定兼容边界后再考虑；`1.0.0` 之前通常不使用
-
----
 
 ## 7. 已发布版本的不可变规则
 
@@ -404,7 +390,7 @@ GitHub Actions 生成正式发布资产后、发布 GitHub Release 前，还必�
 
 - `npm run release:check`
 
-`npm run check` 当前包含 SSR UI smoke 与真实浏览器/Vite UI smoke；后者会启动 headless Edge/Chrome，并在本地 stub Tauri API 下检查主界面、导航和 Settings 主题弹窗。
+`package.json` 拥有 `npm run check` 的当前执行图；本文只规定发布必须通过该入口，不复述其叶子任务。
 
 默认不在本地手工生成 `dist-release`、安装包或 `latest.json`。
 `write-release-notes`、`npm run tauri build -- --bundles nsis` 与 `npm run release:prepare-assets`
@@ -416,71 +402,21 @@ GitHub Actions 生成正式发布资产后、发布 GitHub Release 前，还必�
 
 ---
 
-## 10.1 远程推送授权边界
+## 10.1 授权与事项引用
 
-任何 `git push` 都是独立的远程写入动作，包括分支推送与 tag 推送。长期采用以下授权规则：
-
-- 只有用户在当前任务中明确表达“推到仓库或远端”的意图，才允许执行 `git push`。“推到仓库”“全部推到仓库”“推送到远端”“推到 `origin/main`”都属于明确远端授权；应按目的地语义判断，不机械匹配某一句固定短语。
-- **“推到本地”只表示创建本地提交，不允许执行 `git push`。**
-- “完成”“提交”“归档”“同步”“继续”等表述，单独出现时均不构成推送授权；必须同时出现清楚的仓库或远端目的地。
-- 推送授权不跨任务继承，也不覆盖授权推送之后新产生的改动。后续新增改动必须再次取得明确的远端推送授权。
-- “全部”用于决定范围，而不是决定动作类型：用户说“全部推到仓库”时，默认把当前全部未提交改动按可审查边界拆成逻辑提交并推送到 `origin/main`；没有全量范围词时，只处理当前明确确认的任务范围。
-- 普通仓库推送授权不自动包含创建或推送版本 tag、发布 Release、强制推送、修改 Issue 或 Project 等动作，这些仍需各自的明确授权。
-- 只读查看或持续监看已经触发的 GitHub Actions 不属于推送，也不能反向解释为新的推送授权。
-
-如果用户没有表达明确的仓库或远端推送意图，可以完成本地编辑、验证和按需提交，但必须把未推送状态明确告知用户，不得为了“任务闭环”自行推送。
-
----
-
-## 10.2 提交中的事项引用格式
-
-提交与 GitHub Issue 有关时，沿用仓库既有的简洁列表格式：
-
-- 提交标题只写简短的约定式标题，不在标题末尾加入 `(Refs #55)`。
-- 在提交正文中另起一段写 `Refs #55`。
-- GitHub 提交列表会用可展开的正文入口显示该引用，标题仍保持干净。
-- 不使用 `Closes`、`Fixes`、`Resolves` 等会自动关闭事项的关键词，除非用户明确要求关闭。
-- 已经推送的历史提交即使格式不一致，也不为此重写远端历史；从后续提交开始遵守正文引用格式。
-
-示例：
-
-```text
-fix(widget): harden DPI layout and minimize handoff
-
-Refs #26
-```
-
----
+远程 push、commit scope、Issue 引用和自动关闭关键词统一由根 [`AGENTS.md`](../AGENTS.md) 与 [`CONTRIBUTING.md`](../CONTRIBUTING.md) 拥有。发布流程只增加两项边界：普通分支 push 授权不包含创建或推送 tag，普通仓库 push 也不包含发布 GitHub Release；这两项必须在当前任务中获得各自明确授权。
 
 ## 11. 默认发布流程
 
-默认发布流程应与当前 GitHub Actions 工作流保持一致：
+1. 找到最近已发布版本，审查其后完整 commit 与 diff，再按实际范围选择 SemVer；不能只看最后一轮局部改动。
+2. 在本地同步所有版本文件并整理 changelog。长期政策文档不保存当前版本值。
+3. 运行版本一致性、changelog 和 `npm run release:check`；正式资产由 workflow 生成，本地默认不创建 `dist-release`、安装包或 updater 产物。
+4. 只有获得当前任务的远程 push 授权后才推送准备提交；创建和推送 `vX.Y.Z` tag 还需要单独的 tag 或发布授权。
+5. [`prepare-release.yml`](../.github/workflows/prepare-release.yml) 从 tag 对应 commit 校验版本与 changelog，拒绝已有 Release，生成并独立验证安装包、校验和与 updater manifest，完成 attestation 后以禁止覆盖的方式创建 GitHub Release。
+6. GitHub Release 成立后再同步 R2 镜像；镜像失败不能撤销、覆盖或改变 GitHub Release 主事实，updater 继续优先使用 GitHub endpoint。
+7. `workflow_dispatch` 只补跑“tag 已存在且 Release 不存在”的失败流程，不创建 commit、tag 或版本文件；Release 已存在时必须失败并按不可变规则准备新版本。
 
-1. 确认最近一个已发布版本，并查看该版本之后的完整 commit 与 diff 范围。
-2. 基于完整发布范围判断目标版本号，避免只根据最后一轮局部改动预设 `PATCH` 或 `MINOR`。
-3. 在本地同步版本文件、更新本文第 3 节当前代码版本并整理 changelog。
-4. 在本地运行 `npm run release:validate-version-files -- <version>`、`npm run release:validate-changelog -- <version>` 和 `npm run release:check`，完成发布前验证。
-5. 只有用户在当前任务中明确要求推到仓库或远端后，才将准备发布所需提交推送出去；“推到本地”只允许创建本地提交。提交信息推荐使用 `chore: prepare vX.Y.Z release`。
-6. 推送对应的 `vX.Y.Z` 版本 tag 还必须同时获得明确的 tag 或发布授权；普通的仓库推送请求本身不自动授权创建或推送 tag。
-7. 工作流 checkout 到 tag 对应 commit，并校验版本文件、changelog 和长期版本文档与 tag 版本一致。
-8. 工作流按规范化 tag 维度串行执行，并在构建前确认对应 GitHub Release 尚不存在；已存在 Release 时必须失败，不能对同一 tag 重新构建或覆盖附件。
-9. `publish` job 下载 release notes 与 Tauri bundle，在同一个 runner 中生成最终公开安装包、`SHA256SUMS.txt` 和 GitHub 版 `latest.json`。
-10. `publish` job 通过独立 release asset gate 后，对最终公开安装包生成 Artifact Attestation；校验或 attestation 失败时不得创建 GitHub Release。
-11. `publish` job 保存精确的 release assets artifact，并以禁止覆盖同名文件的方式发布包含安装包、`SHA256SUMS.txt` 和 `latest.json` 的 GitHub Release。
-12. GitHub Release 成功后，单一 `r2` job 检查镜像 secrets；配置完整时依次生成 R2 版 `latest.json`、上传当前版本安装包和 `latest.json`、清理旧 R2 镜像，未配置时安全跳过同步。R2 不上传 `SHA256SUMS.txt`、attestation bundle 或浏览器扩展包。
-13. R2 同步失败不撤销或覆盖已经成立的 GitHub Release 主发布事实；应用 updater 继续优先使用 GitHub endpoint。
-
-如果只是把版本号、changelog、发布脚本或 release 说明准备好并推到 `main`，提交信息应避免让人误以为已经发布完成。推荐使用能表达准备状态的提交信息，例如 `chore: prepare vX.Y.Z release`。默认不再使用 GitHub Actions 自动生成 `release: vX.Y.Z` 版本提交。
-
-`workflow_dispatch` 只用于补跑“已有 tag、但尚未形成 GitHub Release”的失败流程。手动触发时输入不带 `v` 的版本号；如果对应 `vX.Y.Z` tag 不存在，工作流必须失败并提示先完成发布准备提交和 tag 推送。如果对应 Release 已存在，无论附件是否完整，工作流都必须失败，不允许重新构建、补传或覆盖该版本资产；维护者应先判断失败是否已经形成公开发布事实，并按已发布版本不可变规则准备新版本。手动触发不应同步版本文件、创建 commit、创建 tag 或推送分支。
-
-默认发布执行到 `vX.Y.Z` tag 已推送、`Publish Release` 工作流已触发即可。除非用户明确要求或正在排查发布流水线失败，不需要等待 GitHub Actions 完整构建、签名、上传和发布结束。
-
-默认不在本地创建 `dist-release` 或 `updater-publish` 目录；它们属于工作流内部的临时产物目录。
-
-如果以后工作流调整，本文应同步更新到新的长期稳定流程，而不是继续写过期步骤名。
-
----
+默认协作在 tag 推送并确认发布 workflow 已触发后即可结束；只有用户要求或正在排查失败时才持续监看。浏览器扩展商店与扩展 Release 由 `patina-web-sync` 仓库负责，不进入 Patina 主应用发布流程。
 
 ## 12. 什么时候更新本文
 
@@ -492,23 +428,12 @@ Refs #26
 - 更新通道或安装包策略变化
 - 产品阶段或发布线再次变化，例如从当前 `1.x` 稳定期进入新的兼容阶段或维护模式
 
-如果只是一次具体发布，默认不应频繁修改本文；但本文第 3 节中的当前代码版本说明是例外，正式发布准备时必须随版本文件同步更新。
+一次具体发布只更新版本文件、changelog 和机器 owner，不修改本文。本文不保存当前版本。
 
 ---
 
-## 13. 给 Codex 与后续协作者的默认约束
+## 13. 长期维护门槛
 
-默认执行约束如下：
-
-- 任何分支或版本标签的 `git push` 都以用户在当前任务中明确表达仓库或远端推送意图为必要条件；“推到本地”只允许本地提交，远端授权不跨任务或后续改动继承
-- 版本号、tag、Release 标题与更新通道必须一致
-- 发布前不跳过最低验证门槛
-- 不默认创建或推送发布 tag；只有用户明确要求发布、打 tag 或触发发布工作流时，才执行真正发布动作
-- 准备发布但尚未发布时，提交信息应表达“准备”而不是“已发布”；默认使用 `chore: prepare vX.Y.Z release`
-- GitHub Actions 不应生成 release commit、配置 commit author、同步版本文件、创建 tag 或推送 `HEAD` 到分支
-- `workflow_dispatch` 不应绕过已有 tag 边界，只能补跑已有 tag 的发布流程
-- 推送 `vX.Y.Z` tag 并确认 `Publish Release` 已触发后即可结束默认发布协作；不要默认等待 Actions 约 15 分钟的完整构建过程
-- 默认不在本地手工构建安装包、生成 `dist-release` 或更新 updater 产物；正式出包以 GitHub Actions 为准
-- changelog 应优先记录用户可理解的变化，不写成 commit 列表
-- 架构级收口、关键边界调整与发布级修复，必须在发布说明里留下清楚但克制的痕迹
-- 如果工作流、脚本或版本线发生变化，应先更新长期规则文档，再把临时经验留给未来猜
+- 版本文件、tag、Release 标题、安装包与 updater manifest 保持同一版本语义。
+- changelog 和 release notes 面向用户解释实际变化，不写成 commit 清单。
+- 发布策略、资产契约、兼容窗口或 workflow 阶段变化时更新本文；单次发布状态只更新机器 owner。

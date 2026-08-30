@@ -16,13 +16,6 @@
 
 如果一次性执行单、临时修复方案或局部实现习惯与本文件冲突，以本文件为准。
 
-历史迁移背景与上一轮收口记录保留在：
-
-- [`archive/architecture-target.md`](./archive/architecture-target.md)
-- [`archive/architecture-migration-checklist.md`](./archive/architecture-migration-checklist.md)
-
----
-
 ## 2. 系统现实
 
 `Patina` 不是普通 Web 应用，而是一个：
@@ -550,73 +543,33 @@ Rust 侧允许为了稳定演进保留少量入口协调或兼容封装，但规
 
 ---
 
-## 7. 新增代码决策顺序
+## 7. 新增代码 owner 与落点
 
-新增代码时，先不要问“放哪里最方便”，而是按下面顺序判断 owner。
+新增代码先判断真实 owner，再选择最小作用域；不能先选一个方便目录，再为其补理由。
 
-### 7.1 前端 owner 判断顺序
+| 问题 | 前端落点 |
+| --- | --- |
+| 某个 feature 私有的 UI、状态、hook、service 或读模型 | `features/*` 下对应 owner |
+| 稳定、低上下文依赖且跨 feature 的类型、纯函数或组件 | `shared/*` |
+| Tauri、SQLite、本地桌面环境等外部适配 | `platform/*` |
+| 应用启动、壳层或跨 feature 编排 | `app/*` |
 
-1. 它是不是某个 feature 私有的 UI、状态或服务？
-2. 如果不是，它是不是稳定的跨 feature 共享能力？
-3. 如果不是，它是不是前端与外部环境打交道的边界适配？
-4. 如果不是，它是不是应用壳层或跨 feature 编排？
+| 问题 | Rust 落点 |
+| --- | --- |
+| Tauri 命令入口与参数映射 | `commands/*`，保持薄 |
+| 应用装配、生命周期或 runtime 协调 | `app/*` |
+| Windows、系统 API 与其他平台事实 | `platform/*` |
+| 核心行为流程 | `engine/*` |
+| 领域语义与稳定契约 | `domain/*` |
+| SQLite、仓储、migration 与数据边界 | `data/*` |
 
-默认映射：
+补充边界：
 
-- feature 私有能力：进 `features/*`
-- 稳定共享能力：进 `shared/*`
-- 外部环境适配：进 `platform/*`
-- 壳层 / 编排：进 `app/*`
+- settings 页面私有保存、清理、备份与恢复流程归 `features/settings/*`；应用启动读取偏好和 tracker health 协调归 `app/services/*`；原始 persistence adapter 归 `platform/persistence/*`。
+- 持续参与识别按 `platform/windows/* -> domain/tracking* -> engine/tracking/*` 的 owner 链收口，不回流到 `commands/*`、`lib.rs` 或前端本地规则。
+- 不能明确证明共享时，先留在 feature 或最小 owner；不能明确证明平台边界时，不进入 `platform/*`。
 
-### 7.2 Rust owner 判断顺序
-
-1. 它是不是 Tauri 命令入口或参数映射？
-2. 如果不是，它是不是应用装配或 runtime 协调？
-3. 如果不是，它是不是平台 API 细节？
-4. 如果不是，它是不是核心行为流程？
-5. 如果不是，它是不是领域语义或稳定契约？
-6. 如果不是，它是不是数据边界与仓储实现？
-
-默认映射：
-
-- 命令入口：进 `commands/*`
-- 装配 / 协调：进 `app/*`
-- 平台细节：进 `platform/*`
-- 核心行为：进 `engine/*`
-- 领域语义：进 `domain/*`
-- 数据细节：进 `data/*`
-
----
-
-## 8. 新增代码落点规则
-
-### 8.1 前端
-
-- 页面私有 UI：进对应 `features/*/components`
-- 页面私有状态编排：进对应 `features/*/hooks`
-- 页面私有服务与读模型入口：进对应 `features/*/services`
-- 应用壳层、启动链路、跨 feature 协调：进 `app/*`
-- settings 页面保存、cleanup、backup、restore 等页面私有流程：进 `features/settings/*`
-- 应用启动读取当前设置、tracker health 读取与 `min_session_secs` 这类应用级偏好协调：进 `app/services/*` 对 `platform/persistence/*` 的薄封装
-- 原始 settings persistence adapter：进 `platform/persistence/*`，不进 `shared/*`
-- 共享组件、共享类型、共享纯函数：进 `shared/*`
-- Tauri / SQLite / 本地桌面环境适配：优先进 `platform/*`
-
-### 8.2 Rust
-
-- Tauri 命令入口：进 `commands/*`
-- 应用装配与 runtime 协调：进 `app/*`
-- 平台 API 细节：进 `platform/*`
-- 核心行为流程：进 `engine/*`
-- 领域模型与语义：进 `domain/*`
-- sqlite 与仓储：进 `data/*`
-- 持续参与识别相关的状态机、信号融合、identity 归一与诊断快照：继续按 `platform/windows/* -> domain/tracking.rs / domain/tracking/* -> engine/tracking/sustained_participation.rs / runtime.rs` 的 owner 链收口，不回流到 `commands/*`、`lib.rs` 或前端本地规则
-
-不确定时，优先放在最小作用域，而不是优先抽公共层。
-
----
-
-## 9. 禁止事项
+## 8. 禁止事项
 
 - 不为了目录整齐做大规模无收益迁移
 - 不恢复根层 `src/lib/*`
@@ -631,7 +584,7 @@ Rust 侧允许为了稳定演进保留少量入口协调或兼容封装，但规
 
 ---
 
-## 10. 当前重点防守区
+## 9. 当前重点防守区
 
 当前稳定期最需要防止回流的高风险区域包括：
 
@@ -652,7 +605,7 @@ Rust 侧允许为了稳定演进保留少量入口协调或兼容封装，但规
 
 ---
 
-## 11. 如何判断架构在健康落地
+## 10. 如何判断架构在健康落地
 
 当下面这些现象稳定存在时，可以认为架构在健康落地：
 
@@ -671,44 +624,13 @@ Rust 侧允许为了稳定演进保留少量入口协调或兼容封装，但规
 
 ---
 
-## 12. 最低验证门槛
+## 11. 最低验证门槛
 
-稳定期不是要求每次都做最重验证，而是要求对关键边界变化至少做与风险匹配的最小验证。
+验证强度按改动风险选择：前端与文档默认入口是 `npm run check`；Rust、结构边界或发布级复核使用 `npm run check:full`。`package.json` 是命令组合与叶子执行图的唯一 owner，本文不复制该清单；具体风险追加规则见 [`engineering-quality.md`](./engineering-quality.md)。
 
-默认规则：
+边界门禁必须覆盖静态与动态 import、重导出、直接 IPC 调用和剥离测试模块后的 Rust 生产依赖。例外只能是精确、可审计且有自测的局部例外，不能使用目录级通配豁免。真实 runtime、IPC 注册或 capability 变更还需要真实 Tauri runtime smoke，静态一致性不能代替运行时证据。
 
-- 改动页面展示、读模型、分类映射、tracking 前端边界时，至少运行当前仓库已有的前端验证链
-- 改动运行时主链、IPC 契约、Rust 核心行为时，至少运行能覆盖该链路的现有验证，而不是只看类型通过
-- 只改文档时，不要求运行构建或测试，但不能让文档与仓库现状失真
-
-当前仓库里，前端关键路径变更的默认最小验证可参考：
-
-- `npm run check`
-- `npm test`（仅在局部开发时快速验证全部确定性 TypeScript 测试）
-
-结构性改动、Rust 边界改动或发布前复核默认继续使用：
-
-- `npm run check:full`
-
-边界门禁的当前入口包括：
-
-- `npm run check:types`
-- `npm run check:architecture`
-- `npm run check:architecture:self-test`
-- `npm run check:naming`
-- `npm run check:ipc-contracts`
-- `npm run check:ipc-contracts:self-test`
-- `npm run check:hotspots`
-- `npm run check:rust-boundaries`
-- `npm run check:rust-boundaries:self-test`
-
-前端边界门禁必须解析静态 import、动态 import、重导出和直接 IPC 调用；Rust 边界门禁必须剥离测试模块后检查生产依赖。两者的例外只能是精确、可审计且带自测的局部例外，不接受目录级通配豁免。真实 runtime、IPC 注册或 capability 变更还应运行 `npm run test:tauri-runtime-smoke`，验证静态一致性之外的真实 WebView2/Tauri 行为。
-
-如果某次结构性改动无法通过这些最小验证之一，应优先解释风险或补验证，而不是直接跳过。
-
----
-
-## 13. 与其他长期文档的关系
+## 12. 与其他长期文档的关系
 
 本文件回答“代码结构应该如何长期收敛”。
 
@@ -723,21 +645,10 @@ Rust 侧允许为了稳定演进保留少量入口协调或兼容封装，但规
 
 ### 本地化 owner 边界
 
-- `locales/` 是前端与 Rust 中立的唯一人工编辑源，包含 schema、生产注册表、review manifest 与按 locale 拆分的声明式 bundle。
-- `src/shared/i18n/` 只拥有前端 Provider、纯格式化 runtime 和生成接口；不得重新成为翻译源。
-- `src-tauri/src/domain/localization/` 拥有 Rust locale、回退、插值与 CLDR 复数语义；`app/tray`、`engine/tools` 和 `data/export` 只能作为调用方。
-- `scripts/i18n/` 拥有验证、生成、新语言脚手架、外部翻译 XLSX 交接和硬编码门禁；XLSX 依赖只存在于开发工具链，不得进入 `src/*` 或 Rust 产品依赖。
-- `generated` 文件是构建边界，不是人工 owner；前端和 Rust 产物必须从同一 schema、注册表和 locale 资源生成。
-- locale 必须作为显示派生和缓存的显式输入。语言无关 read model 不应为了方便携带本地化字符串。
+本地化的人工源、生成边界、前端与 Rust runtime owner 统一由 [`localization.md`](./localization.md) 定义。架构层只要求 locale 作为显示派生和缓存的显式输入，语言无关 read model 不携带本地化字符串，generated 文件不成为人工 owner。
 
----
+## 13. 执行约束
 
-## 14. 给 Codex 与后续协作者的执行约束
-
-- 按本文件方向收敛，但不要做一次性全仓库重构
-- 优先在当前任务真正触及的区域里推进一小步
-- 新增前端外部环境适配时，优先判断是否应落到 `platform/*`
-- 新增 Rust 核心逻辑时，优先判断是否应落到 `engine / domain / data`
-- 如果某次任务涉及边界归属不清，先按 [`issue-fix-boundary-guardrails.md`](./issue-fix-boundary-guardrails.md) 做分流，再决定是否直接实现
-- 如果需要历史迁移背景或上一轮收口记录，再回看归档架构文档，而不是把本文件重新写回迁移清单
-- 如果某次任务需要引入兼容壳或临时例外，必须优先证明它不会成为新的长期落点
+- 按本文件方向在当前任务触及的范围内渐进收敛，不做一次性全仓库重构。
+- owner 不清时先按 [`issue-fix-boundary-guardrails.md`](./issue-fix-boundary-guardrails.md) 分流。
+- 兼容壳或临时例外必须证明真实兼容边界、owner 和退出条件，不能成为新的长期落点。
