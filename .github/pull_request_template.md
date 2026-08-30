@@ -59,11 +59,14 @@ Call out changes to tracking, local data, privacy, security, migrations, backup,
 
 ## UI Review
 
-<!-- For visible UI changes, attach screenshots. Write N/A when there is no visible UI impact. -->
+<!-- For visible UI changes, attach screenshots through GitHub user-attachments or another repository-external HTTPS host. Write N/A when there is no visible UI impact. -->
 
 - [ ] No UI changes
 - [ ] UI follows Quiet Pro
-- [ ] Screenshots attached
+- [ ] Screenshots attached externally
+- Affected states:
+- Keyboard and focus:
+- Repeatable test or existing owner test:
 
 ## Validation
 
@@ -88,6 +91,7 @@ Additional validation:
 <!--
 Add before/after screenshots for visible UI changes.
 Include relevant empty, disabled, error, narrow-layout, light-theme, or dark-theme states when applicable.
+Use GitHub user-attachments or another repository-external HTTPS host. Do not commit review screenshots, GIFs, videos, or an evidence-media directory to this repository; repository blob/raw links do not count as evidence.
 Write `N/A` if the change has no visible UI impact.
 -->
 
@@ -103,6 +107,7 @@ Write `N/A` if the change has no visible UI impact.
 - [ ] I did not weaken package validation scripts or change quality gate scripts, CI workflows, bundle budgets, or hotspot budgets unless the maintainer explicitly requested that maintenance work.
 - [ ] User-facing copy is owned by the relevant copy domain, not hardcoded inline in JSX.
 - [ ] Risk-bearing behavior has focused tests that match the changed risk area.
+- [ ] I did not commit screenshots, GIFs, videos, or other review-evidence media to the repository.
 - [ ] I rebased onto the latest `main`, or confirmed that the branch is compatible with it.
 - [ ] I documented security behavior for any local or network interface.
 - [ ] I used `Refs #N` instead of an issue-closing keyword unless explicitly requested.

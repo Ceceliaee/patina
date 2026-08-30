@@ -125,5 +125,5 @@ body:
     id: evidence
     attributes:
       label: "Additional Context / 补充信息"
-      description: "Add redacted screenshots, logs, timing details, or other useful context. / 可以添加已脱敏截图、日志、发生时间或其他有用信息。"
+      description: "Optionally attach redacted screenshots through the GitHub issue, plus logs, timing details, or other useful context. / 可通过 GitHub issue 选择性附加已脱敏截图，也可提供日志、发生时间或其他有用信息。"
       placeholder: "Optional. Please redact sensitive information before posting. / 可选。发布前请先脱敏。"

@@ -182,6 +182,43 @@ export interface IntakeFailure {
   detail?: string;
 }
 
+const REVIEW_MEDIA_EXTENSION = /\.(?:png|apng|jpe?g|gif|webp|avif|bmp|svg|tiff?|heic|heif|mp4|m4v|mov|webm|mkv|avi|wmv|flv|mpe?g)$/i;
+const REVIEW_MEDIA_PATH_HINT = /(?:^|[\/_.-])(?:review|evidence|before|after|demo|screenshot|screen[-_]?recording)(?=$|[\/_.-])/i;
+
+function isAllowedProductMediaPath(path: string) {
+  return /^src\/features\/[^/]+\/assets\//.test(path) || /^src-tauri\/icons\//.test(path);
+}
+
+export function isRepositoryReviewMediaAddition(file: ChangedFile) {
+  const addsPath = /^(?:A|C|R)/.test(file.status);
+  return addsPath
+    && REVIEW_MEDIA_EXTENSION.test(file.path)
+    && (REVIEW_MEDIA_PATH_HINT.test(file.path) || !isAllowedProductMediaPath(file.path));
+}
+
+function isAllowedExternalScreenshotUrl(value: string) {
+  try {
+    const url = new URL(value.replace(/[)>.,;]+$/, ""));
+    if (url.protocol !== "https:") return false;
+    if (url.hostname === "raw.githubusercontent.com") return false;
+    if (url.hostname === "github.com") {
+      return /^\/user-attachments\/assets\//.test(url.pathname);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function hasExternalScreenshot(section: string) {
+  const urls = section.match(/https:\/\/[^\s"'<>]+/gi) ?? [];
+  return urls.some((url) => {
+    const cleaned = url.replace(/[)>.,;]+$/, "");
+    return isAllowedExternalScreenshotUrl(cleaned)
+      && (/\.(?:png|jpe?g|webp)(?:\?|#|$)/i.test(cleaned) || /github\.com\/user-attachments\/assets\//i.test(cleaned));
+  });
+}
+
 export function isUiImplementationPath(path: string) {
   return (
     /^src\/features\/.*\.(tsx|css)$/.test(path) ||
@@ -226,6 +263,13 @@ function hasCheckedItem(section: string, label: string) {
   return new RegExp(`^-\\s*\\[[xX]\\]\\s*${escaped}(?:\\s|$)`, "im").test(section);
 }
 
+function hasRepeatableUiValidation(section: string) {
+  const match = stripComments(section).match(/^-\s*Repeatable test or existing owner test:\s*(\S.*)$/im);
+  if (!match) return false;
+  return /(?:`?npm run\s+[\w:-]+|`?node\s+|`?cargo test\b|(?:^|\s)(?:tests?|src)\/\S+test\S*)/i.test(match[1])
+    || /\b(?:existing owner|browser|structural) test\s*(?::|=|-)\s*\S+/i.test(match[1]);
+}
+
 export function evaluatePullRequestBody(
   body: string | undefined,
   required: boolean,
@@ -239,6 +283,15 @@ export function evaluatePullRequestBody(
       message: "Missing pull request body.",
       detail: "Use the pull request template and complete the intake sections before requesting review.",
     }];
+  }
+
+  const repositoryReviewMedia = changedFiles.filter(isRepositoryReviewMediaAddition);
+  if (repositoryReviewMedia.length > 0) {
+    failures.push({
+      rule: "repository-review-media-added",
+      message: "Review screenshots, GIFs, and videos must not be added to the repository.",
+      detail: `Attach review evidence outside the repository. Added media: ${repositoryReviewMedia.map((file) => file.path).join(", ")}`,
+    });
   }
 
   for (const section of REQUIRED_BODY_SECTIONS) {
@@ -271,12 +324,16 @@ export function evaluatePullRequestBody(
   if (changedFiles.some((file) => isUiImplementationPath(file.path))) {
     const ui = getBodySection(body, "UI Review");
     const screenshots = stripComments(getBodySection(body, "Screenshots"));
-    const hasScreenshot = /(?:!\[[^\]]*\]\(https:\/\/|<img\b[^>]*\bsrc=["']https:\/\/|https:\/\/\S+\.(?:png|jpe?g|webp)\b)/i.test(screenshots);
-    if (!hasCheckedItem(ui, "UI follows Quiet Pro") || !hasCheckedItem(ui, "Screenshots attached") || !hasScreenshot) {
+    const hasUiReview = hasCheckedItem(ui, "UI follows Quiet Pro")
+      && hasCheckedItem(ui, "Screenshots attached externally")
+      && hasLabeledValue(ui, "Affected states")
+      && hasLabeledValue(ui, "Keyboard and focus")
+      && hasRepeatableUiValidation(ui);
+    if (!hasUiReview || !hasExternalScreenshot(screenshots)) {
       failures.push({
         rule: "missing-ui-evidence",
-        message: "Visible UI changes require Quiet Pro confirmation and screenshots.",
-        detail: "Check UI follows Quiet Pro and Screenshots attached, then add rendered UI image links under Screenshots.",
+        message: "Visible UI changes require Quiet Pro confirmation and externally hosted screenshots.",
+        detail: "Check Quiet Pro and external screenshots, list affected states and keyboard/focus behavior, name a repeatable command or existing owner test, then add GitHub user-attachments or repository-external HTTPS image links. Repository blob/raw URLs do not count.",
       });
     }
   }

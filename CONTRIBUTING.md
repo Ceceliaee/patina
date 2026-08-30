@@ -108,7 +108,7 @@ Before requesting review, confirm:
 - every changed file is necessary for that problem;
 - new behavior is placed under the real owner, not the easiest temporary
   directory;
-- UI changes follow Quiet Pro and include screenshots;
+- UI changes follow Quiet Pro and include externally hosted screenshots;
 - the change does not add standalone CSS, hardcoded visual styles, or a new
   visual direction outside the design system;
 - user-facing labels, placeholders, titles, and accessibility text are added to
@@ -501,7 +501,10 @@ Refs #123
 
 - [ ] No UI changes
 - [ ] UI follows Quiet Pro
-- [ ] Screenshots attached
+- [ ] Screenshots attached externally
+- Affected states:
+- Keyboard and focus:
+- Repeatable test or existing owner test:
 
 ## Validation
 
@@ -511,7 +514,10 @@ Refs #123
 
 ## Screenshots
 
-Add before/after screenshots for visible UI changes.
+Add before/after screenshots for visible UI changes through GitHub
+`user-attachments` or another repository-external HTTPS host. Do not commit
+review screenshots, GIFs, videos, or an evidence-media directory to the
+repository; repository blob/raw links do not count as evidence.
 ```
 
 Keep the description readable. Explain behavior and risk before implementation
@@ -537,7 +543,7 @@ Issue state changes are explicit maintainer actions. A pull request should not
 close, reopen, label, or otherwise mutate an issue unless the maintainer asks
 for that action.
 
-### 7.4 Include Screenshots For UI Changes
+### 7.4 Include External Screenshots For UI Changes
 
 For visible UI changes, include screenshots showing:
 
@@ -545,6 +551,18 @@ For visible UI changes, include screenshots showing:
 - important empty, disabled, or error states when applicable;
 - light and dark themes when the visual role changes;
 - narrow layouts when the change affects responsive behavior.
+
+Attach these screenshots through GitHub `user-attachments` or another
+repository-external HTTPS host. Never add review screenshots, GIFs, videos, or
+an evidence-media directory to the repository. A URL pointing to a blob or raw
+file in this repository is still repository-hosted evidence and does not
+satisfy the intake gate. Product-owned icons and feature assets remain in their
+real code owners and are not review evidence.
+
+Also list the affected visual/interaction states, keyboard or focus behavior
+(`N/A` with a reason is acceptable when unaffected), and the repeatable command
+or existing owner test that protects the change. A screenshot alone does not
+prove interactive behavior.
 
 ## 8. Rebase Before Review Or Merge
 
@@ -726,7 +744,7 @@ Before requesting review:
 - [ ] I ran `npm run check`.
 - [ ] I ran `npm run check:full` if Rust, tracking, SQLite, runtime, or
       architecture boundaries changed.
-- [ ] I included screenshots for visible UI changes.
+- [ ] I attached screenshots externally for visible UI changes and did not commit review media.
 - [ ] I documented security behavior for any local or network interface.
 - [ ] I used `Refs #N` instead of an issue-closing keyword.
 - [ ] I rebased if `main` changed or GitHub reports conflicts.
@@ -841,7 +859,7 @@ Pull Request 只有先通过项目准入门禁，才算准备好进入维护者 
 - Pull Request 只解决一个完整、连贯的问题；
 - 每个改动文件都是解决该问题所必需；
 - 新行为放在真实 owner 下，而不是临时放在最方便的目录；
-- UI 改动符合 Quiet Pro，并提供截图；
+- UI 改动符合 Quiet Pro，并提供托管在仓库外的截图；
 - 没有新增独立 CSS、硬编码视觉样式，或设计系统之外的新视觉方向；
 - 用户可见文案、placeholder、title 和 accessibility 文案放在对应 copy owner 中，
   而不是写成 JSX 内联字面量；
@@ -1196,7 +1214,10 @@ Refs #123
 
 - [ ] No UI changes
 - [ ] UI follows Quiet Pro
-- [ ] Screenshots attached
+- [ ] Screenshots attached externally
+- Affected states:
+- Keyboard and focus:
+- Repeatable test or existing owner test:
 
 ## Validation
 
@@ -1206,7 +1227,9 @@ Refs #123
 
 ## Screenshots
 
-Add before/after screenshots for visible UI changes.
+通过 GitHub `user-attachments` 或其他仓库外 HTTPS 地址提供可见 UI 改动的
+before/after 截图。不要把审查截图、GIF、视频或证据媒体目录提交进仓库；指向本仓库
+blob/raw 文件的链接也不算有效证据。
 ```
 
 正文应保持可读。先解释行为和风险，再说明实现细节。
@@ -1230,7 +1253,7 @@ Resolves #4
 issue 状态变化属于维护者的显式操作。除非维护者明确要求，否则 Pull Request
 不应关闭、重新打开、添加标签或以其他方式修改 issue 状态。
 
-#### 7.4 UI 改动需要截图
+#### 7.4 UI 改动需要仓库外截图
 
 对于可见的 UI 改动，请提供能够展示以下内容的截图：
 
@@ -1238,6 +1261,14 @@ issue 状态变化属于维护者的显式操作。除非维护者明确要求�
 - 适用时的重要 empty、disabled 或 error 状态；
 - 视觉角色变化时的浅色和深色主题；
 - 改动影响响应式行为时的窄布局。
+
+这些截图必须通过 GitHub `user-attachments` 或其他仓库外 HTTPS 地址提供。不要把
+审查截图、GIF、视频或证据媒体目录提交进仓库。指向本仓库 blob/raw 文件的 URL
+仍属于仓库内证据，不能通过准入门禁。产品真实使用的图标和 feature assets 继续由
+对应代码 owner 管理，不属于审查证据。
+
+同时列出受影响的视觉/交互状态、键盘或焦点行为（未受影响时可写带原因的 `N/A`），
+以及保护该改动的可重复命令或现有 owner test。截图本身不能证明交互行为正确。
 
 ### 8. Review 或合并前进行 rebase
 
@@ -1408,7 +1439,7 @@ Review 时应按以下顺序检查：
 - [ ] 我为承担风险的行为补充了匹配风险域的专项测试。
 - [ ] 我运行了 `npm run check`。
 - [ ] 如果修改 Rust、tracking、SQLite、runtime 或架构边界，我运行了 `npm run check:full`。
-- [ ] 对于可见 UI 改动，我提供了截图。
+- [ ] 对于可见 UI 改动，我在仓库外提供了截图，且没有提交审查媒体。
 - [ ] 对于本机或网络接口，我说明了安全行为。
 - [ ] 我使用 `Refs #N`，没有使用 issue 自动关闭关键词。
 - [ ] 如果 `main` 已变化或 GitHub 提示冲突，我执行了 rebase。

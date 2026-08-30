@@ -29,11 +29,14 @@ const VALID_BODY = [
   "## UI Review",
   "- [ ] No UI changes",
   "- [x] UI follows Quiet Pro",
-  "- [x] Screenshots attached",
+  "- [x] Screenshots attached externally",
+  "- Affected states: default, hover, focus, and disabled",
+  "- Keyboard and focus: existing behavior preserved",
+  "- Repeatable test or existing owner test: `npm run test:settings` existing owner test",
   "## Validation",
   "- [x] `npm run check`",
   "## Screenshots",
-  "![Rendered UI](https://example.com/rendered-ui.png)",
+  "![Rendered UI](https://github.com/user-attachments/assets/00000000-0000-0000-0000-000000000000)",
   "## Contributor Checklist",
   "- [x] This pull request is linked to an accepted issue, Project item, or explicit maintainer-approved scope.",
   "- [x] Every changed file is necessary for the accepted problem.",
@@ -102,12 +105,81 @@ function testIncompleteTemplateFieldsFail() {
 }
 
 function testVisibleUiRequiresScreenshotEvidence() {
-  const body = VALID_BODY.replace("![Rendered UI](https://example.com/rendered-ui.png)", "N/A");
+  const body = VALID_BODY.replace("![Rendered UI](https://github.com/user-attachments/assets/00000000-0000-0000-0000-000000000000)", "N/A");
   assert.ok(ruleNames({
     pullRequestBody: body,
     requirePullRequestBody: true,
     changedFiles: [changedFile({ path: "src/features/settings/components/Settings.tsx" })],
   }).includes("missing-ui-evidence"));
+}
+
+function testVisibleUiRequiresQuietProConfirmation() {
+  const body = VALID_BODY.replace("- [x] UI follows Quiet Pro", "- [ ] UI follows Quiet Pro");
+  assert.ok(ruleNames({
+    pullRequestBody: body,
+    requirePullRequestBody: true,
+    changedFiles: [changedFile({ path: "src/features/settings/components/Settings.tsx" })],
+  }).includes("missing-ui-evidence"));
+}
+
+function testVisibleUiRequiresRepeatableValidation() {
+  for (const vagueEvidence of ["screenshots only", "existing owner test"]) {
+    const body = VALID_BODY.replace(
+      "- Repeatable test or existing owner test: `npm run test:settings` existing owner test",
+      `- Repeatable test or existing owner test: ${vagueEvidence}`,
+    );
+    assert.ok(ruleNames({
+      pullRequestBody: body,
+      requirePullRequestBody: true,
+      changedFiles: [changedFile({ path: "src/features/settings/components/Settings.tsx" })],
+    }).includes("missing-ui-evidence"));
+  }
+}
+
+function testRepositoryBlobAndRawUrlsDoNotCountAsScreenshotEvidence() {
+  for (const url of [
+    "https://github.com/Ceceliaee/patina/blob/main/docs/settings.png",
+    "https://raw.githubusercontent.com/Ceceliaee/patina/main/docs/settings.png",
+  ]) {
+    const body = VALID_BODY.replace(
+      "https://github.com/user-attachments/assets/00000000-0000-0000-0000-000000000000",
+      url,
+    );
+    assert.ok(ruleNames({
+      pullRequestBody: body,
+      requirePullRequestBody: true,
+      changedFiles: [changedFile({ path: "src/features/settings/components/Settings.tsx" })],
+    }).includes("missing-ui-evidence"));
+  }
+}
+
+function testRepositoryReviewMediaAdditionsFail() {
+  for (const path of [
+    "docs/review-evidence/settings-before.png",
+    "docs/review-evidence/settings-before.avif",
+    "demo/settings-flow.mp4",
+    "demo/settings-flow.mkv",
+  ]) {
+    assert.ok(ruleNames({
+      pullRequestBody: VALID_BODY,
+      requirePullRequestBody: true,
+      changedFiles: [changedFile({ path, status: "A", binary: true })],
+    }).includes("repository-review-media-added"));
+  }
+}
+
+function testProductMediaAssetsRemainAllowed() {
+  assert.deepEqual(ruleNames({
+    pullRequestBody: VALID_BODY,
+    requirePullRequestBody: true,
+    changedFiles: [changedFile({ path: "src/features/about/assets/support-badge.png", status: "A", binary: true })],
+  }), []);
+
+  assert.ok(ruleNames({
+    pullRequestBody: VALID_BODY,
+    requirePullRequestBody: true,
+    changedFiles: [changedFile({ path: "src/features/about/assets/review-before.png", status: "A", binary: true })],
+  }).includes("repository-review-media-added"));
 }
 
 function testOversizedManualDiffFails() {
@@ -637,6 +709,11 @@ testMissingAcceptedScopeFails();
 testUncheckedContributorChecklistFails();
 testIncompleteTemplateFieldsFail();
 testVisibleUiRequiresScreenshotEvidence();
+testVisibleUiRequiresQuietProConfirmation();
+testVisibleUiRequiresRepeatableValidation();
+testRepositoryBlobAndRawUrlsDoNotCountAsScreenshotEvidence();
+testRepositoryReviewMediaAdditionsFail();
+testProductMediaAssetsRemainAllowed();
 testOversizedManualDiffFails();
 testLockfileDoesNotCountTowardManualDiff();
 testSuspiciousOwnerAndStyleEscapesFail();
@@ -660,4 +737,4 @@ testVerifyRunsAfterSuccessfulIntake();
 testValidationChainCanGrowButCannotBeWeakened();
 testLegacyPrTemplateCanBeSkipped();
 
-console.log("Passed 28 PR intake gate tests");
+console.log("Passed 33 PR intake gate tests");
