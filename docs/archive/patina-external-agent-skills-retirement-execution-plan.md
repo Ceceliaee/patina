@@ -1,9 +1,9 @@
 # Patina 外部 Agent Skills 有序退场执行方案
 
-> Status: Complete  
-> Created: 2026-08-30  
-> Last updated: 2026-08-30  
-> Execution owner: Codex（仅在用户明确授权执行后）  
+> Status: Complete
+> Created: 2026-08-30
+> Last updated: 2026-08-30
+> Execution owner: Codex（仅在用户明确授权执行后）
 > Long-term owners affected: [`AGENTS.md`](../../AGENTS.md)、[`docs/architecture.md`](../architecture.md)、[`docs/engineering-quality.md`](../engineering-quality.md)、[`docs/quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)；这些 owner 本轮原则上不改动
 
 ## 0. 文档定位和使用方式

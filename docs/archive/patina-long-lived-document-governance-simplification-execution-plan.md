@@ -1,10 +1,10 @@
 # Patina 长期文档治理与简化执行方案
 
-> Status: Complete  
-> Created: 2026-08-30  
-> Last updated: 2026-08-30  
-> Execution owner: Patina 维护者与当前获授权的仓库协作者  
-> Long-term owners affected: `AGENTS.md`、`CONTRIBUTING.md`、根级 `README.md`、顶层 `docs/*.md`、相关检查脚本与工作流  
+> Status: Complete
+> Created: 2026-08-30
+> Last updated: 2026-08-30
+> Execution owner: Patina 维护者与当前获授权的仓库协作者
+> Long-term owners affected: `AGENTS.md`、`CONTRIBUTING.md`、根级 `README.md`、顶层 `docs/*.md`、相关检查脚本与工作流
 > Lifecycle: Complete；长期结论已回写 active owner，本文仅作为冻结执行记录保留在 `docs/archive/`
 
 ## 0. 执行摘要
