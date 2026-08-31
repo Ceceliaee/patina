@@ -363,12 +363,6 @@
           "markdownDescription": "Enables the cmd_check_for_updates command without any pre-configured scope."
         },
         {
-          "description": "Enables the cmd_clear_all_session_window_titles command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-clear-all-session-window-titles",
-          "markdownDescription": "Enables the cmd_clear_all_session_window_titles command without any pre-configured scope."
-        },
-        {
           "description": "Enables the cmd_clear_data_bootstrap_snapshot_payload command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-clear-data-bootstrap-snapshot-payload",
@@ -417,12 +411,6 @@
           "markdownDescription": "Enables the cmd_create_reminder command without any pre-configured scope."
         },
         {
-          "description": "Enables the cmd_create_software_reminder_rule command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-create-software-reminder-rule",
-          "markdownDescription": "Enables the cmd_create_software_reminder_rule command without any pre-configured scope."
-        },
-        {
           "description": "Enables the cmd_delete_import_batch command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-delete-import-batch",
@@ -453,12 +441,6 @@
           "markdownDescription": "Enables the cmd_delete_sessions_by_exe_names_between command without any pre-configured scope."
         },
         {
-          "description": "Enables the cmd_delete_web_activity_segments_before command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-delete-web-activity-segments-before",
-          "markdownDescription": "Enables the cmd_delete_web_activity_segments_before command without any pre-configured scope."
-        },
-        {
           "description": "Enables the cmd_delete_web_activity_segments_by_domain command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-delete-web-activity-segments-by-domain",
@@ -481,12 +463,6 @@
           "type": "string",
           "const": "allow-cmd-disable-activity-reminder-rule",
           "markdownDescription": "Enables the cmd_disable_activity_reminder_rule command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the cmd_disable_software_reminder_rule command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-disable-software-reminder-rule",
-          "markdownDescription": "Enables the cmd_disable_software_reminder_rule command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_dismiss_tool_alert command without any pre-configured scope.",
@@ -1005,12 +981,6 @@
           "markdownDescription": "Denies the cmd_check_for_updates command without any pre-configured scope."
         },
         {
-          "description": "Denies the cmd_clear_all_session_window_titles command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-clear-all-session-window-titles",
-          "markdownDescription": "Denies the cmd_clear_all_session_window_titles command without any pre-configured scope."
-        },
-        {
           "description": "Denies the cmd_clear_data_bootstrap_snapshot_payload command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-clear-data-bootstrap-snapshot-payload",
@@ -1059,12 +1029,6 @@
           "markdownDescription": "Denies the cmd_create_reminder command without any pre-configured scope."
         },
         {
-          "description": "Denies the cmd_create_software_reminder_rule command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-create-software-reminder-rule",
-          "markdownDescription": "Denies the cmd_create_software_reminder_rule command without any pre-configured scope."
-        },
-        {
           "description": "Denies the cmd_delete_import_batch command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-delete-import-batch",
@@ -1095,12 +1059,6 @@
           "markdownDescription": "Denies the cmd_delete_sessions_by_exe_names_between command without any pre-configured scope."
         },
         {
-          "description": "Denies the cmd_delete_web_activity_segments_before command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-delete-web-activity-segments-before",
-          "markdownDescription": "Denies the cmd_delete_web_activity_segments_before command without any pre-configured scope."
-        },
-        {
           "description": "Denies the cmd_delete_web_activity_segments_by_domain command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-delete-web-activity-segments-by-domain",
@@ -1123,12 +1081,6 @@
           "type": "string",
           "const": "deny-cmd-disable-activity-reminder-rule",
           "markdownDescription": "Denies the cmd_disable_activity_reminder_rule command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the cmd_disable_software_reminder_rule command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-disable-software-reminder-rule",
-          "markdownDescription": "Denies the cmd_disable_software_reminder_rule command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_dismiss_tool_alert command without any pre-configured scope.",

@@ -27,7 +27,7 @@ export type ActivityReminderTarget =
   | { kind: "category"; categoryId: string }
   | { kind: "web"; normalizedDomain: string };
 
-export type ActivityReminderSuspensionReason =
+type ActivityReminderSuspensionReason =
   | "source_disabled"
   | "target_excluded"
   | "target_deleted";

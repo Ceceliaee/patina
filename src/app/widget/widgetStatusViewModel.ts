@@ -3,13 +3,13 @@ import type {
   WidgetToolProjection,
 } from "../../platform/desktop/widgetRuntimeGateway.ts";
 
-export interface WidgetToolSlotViewModel {
+interface WidgetToolSlotViewModel {
   kind: WidgetToolProjection["kind"];
   state: WidgetToolProjection["state"];
   timeText: string;
 }
 
-export interface WidgetStatusViewModel {
+interface WidgetStatusViewModel {
   trackingTimeText: string;
   tools: WidgetToolSlotViewModel[];
 }

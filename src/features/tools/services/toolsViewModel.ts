@@ -183,14 +183,6 @@ export function buildPomodoroViewModel(
   };
 }
 
-export function buildToolsStatusChipViewModel(
-  snapshot: ToolsRuntimeSnapshot,
-  nowMs: number,
-  labels: ToolsViewModelLabels,
-): ToolStatusChipViewModel | null {
-  return buildToolsStatusChipViewModels(snapshot, nowMs, labels)[0] ?? null;
-}
-
 type SortableToolStatusChipViewModel = ToolStatusChipViewModel & {
   sortIndex: number;
   sortStartedAtMs: number;

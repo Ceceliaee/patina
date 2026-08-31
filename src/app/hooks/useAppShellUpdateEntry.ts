@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import type { UpdateSnapshot } from "../../shared/types/update";
-import { useUpdateDialog } from "./useUpdateDialog";
+import { useUpdateDialog } from "../providers/UpdateDialogProvider";
 
 interface TitleBarUpdateEntry {
   showUpdateEntry: boolean;

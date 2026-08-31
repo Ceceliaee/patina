@@ -1,7 +1,7 @@
 import { loadLocaleText } from "../../../shared/i18n/runtime.ts";
 import type { AppLanguage } from "../../../shared/settings/appSettings.ts";
 
-export interface SettingsLanguagePreviewResult {
+interface SettingsLanguagePreviewResult {
   ready: boolean;
   error: unknown | null;
 }

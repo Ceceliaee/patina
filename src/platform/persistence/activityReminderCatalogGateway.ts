@@ -23,8 +23,8 @@ const CATEGORY_LABEL_PREFIX = "__category_label_override::";
 const CATEGORY_COLOR_PREFIX = "__category_color_override::";
 const CATEGORY_DEFINITION_PREFIX = "__custom_category::";
 const DELETED_CATEGORY_PREFIX = "__deleted_category::";
-export const ACTIVITY_REMINDER_WEB_CANDIDATE_LOOKBACK_DAYS = 30;
-export const ACTIVITY_REMINDER_WEB_CANDIDATE_LIMIT = 120;
+const ACTIVITY_REMINDER_WEB_CANDIDATE_LOOKBACK_DAYS = 30;
+const ACTIVITY_REMINDER_WEB_CANDIDATE_LIMIT = 120;
 
 function parseObject<T extends object>(value: string): T | null {
   try {
@@ -39,7 +39,7 @@ function normalizeDomain(value: string): string {
   return value.trim().replace(/\.$/, "").toLocaleLowerCase();
 }
 
-export interface ActivityReminderCatalogSnapshot {
+interface ActivityReminderCatalogSnapshot {
   apps: Array<{ appName: string; exeName: string; lastSeenAt: number }>;
   categories: Array<{ categoryId: AppCategory; labelOverride: string | null; colorOverride: string | null }>;
   webDomains: Array<{
@@ -149,17 +149,4 @@ export async function loadActivityReminderWebCatalog(): Promise<ActivityReminder
     .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null);
 
   return webDomains;
-}
-
-export async function loadActivityReminderCatalogSnapshot(): Promise<ActivityReminderCatalogSnapshot> {
-  const [apps, categories, webDomains] = await Promise.all([
-    loadActivityReminderAppCatalog(),
-    loadActivityReminderCategoryCatalog(),
-    loadActivityReminderWebCatalog(),
-  ]);
-  return {
-    apps,
-    categories,
-    webDomains,
-  };
 }

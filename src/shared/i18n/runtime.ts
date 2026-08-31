@@ -156,7 +156,7 @@ export function loadLocaleText(locale: Locale): Promise<UiText> {
   return request;
 }
 
-export type LocaleActivationResult =
+type LocaleActivationResult =
   | { status: "ready"; locale: Locale; text: UiText }
   | { status: "stale"; locale: Locale }
   | { status: "failed"; locale: Locale; error: unknown };

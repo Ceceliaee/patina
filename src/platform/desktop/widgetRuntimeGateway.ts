@@ -131,7 +131,7 @@ export interface WidgetBootstrapSnapshot {
   appOverrides: WidgetAppOverrideRow[];
 }
 
-export interface WidgetTrackingProjection {
+interface WidgetTrackingProjection {
   appName: string;
   exeName: string;
   elapsedMs: number;
@@ -152,7 +152,7 @@ export interface WidgetStatusSnapshot {
   sampledAtMs: number;
 }
 
-export interface WidgetPresentationSnapshot {
+interface WidgetPresentationSnapshot {
   activeWindow: TrackingWindowSnapshot;
   trackingStatus: TrackingStatusSnapshot;
   trackingSampledAtMs: number;
@@ -356,7 +356,7 @@ const TRACKING_PROBE_STATUSES = new Set<TrackingRuntimeProbeStatus>([
   "task-failed-inactive",
 ]);
 
-export function parseWidgetPresentationSnapshot(
+function parseWidgetPresentationSnapshot(
   value: unknown,
 ): WidgetPresentationSnapshot | null {
   if (!value || typeof value !== "object") return null;

@@ -12,12 +12,6 @@ import type {
   ActivityReminderWebCandidate,
 } from "../../../shared/types/tools.ts";
 
-export interface ActivityReminderTargetCandidates {
-  apps: ActivityReminderAppCandidate[];
-  categories: ActivityReminderCategoryCandidate[];
-  webDomains: ActivityReminderWebCandidate[];
-}
-
 let appCatalogPromise: ReturnType<typeof loadActivityReminderAppCatalog> | null = null;
 let categoryCatalogPromise: ReturnType<typeof loadActivityReminderCategoryCatalog> | null = null;
 let webCatalogPromise: ReturnType<typeof loadActivityReminderWebCatalog> | null = null;
@@ -54,21 +48,6 @@ export async function loadActivityReminderWebCandidates(): Promise<ActivityRemin
     throw error;
   });
   return (await webCatalogPromise).map((candidate) => ({ ...candidate }));
-}
-
-export async function loadActivityReminderTargetCandidates(
-  uiText: UiText,
-): Promise<ActivityReminderTargetCandidates> {
-  const [apps, categories, webDomains] = await Promise.all([
-    loadActivityReminderAppCandidates(),
-    loadActivityReminderCategoryCandidates(uiText),
-    loadActivityReminderWebCandidates(),
-  ]);
-  return {
-    apps,
-    categories,
-    webDomains,
-  };
 }
 
 export function clearActivityReminderTargetCandidateCache(): void {

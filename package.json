@@ -126,7 +126,6 @@
     "@tauri-apps/plugin-sql": "^2.3.2",
     "esbuild": "0.28.1",
     "lucide-react": "^1.7.0",
-    "postcss": "8.5.25",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "tailwindcss": "^4.2.2"
