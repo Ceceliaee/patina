@@ -479,6 +479,7 @@ mod tests {
                 title: "Editor".into(),
                 exe_name: "Code.exe".into(),
                 process_path: r"C:\Program Files\Code\Code.exe".into(),
+                app_user_model_id: String::new(),
                 is_afk: false,
                 idle_time_ms: 0,
             };
@@ -523,6 +524,7 @@ mod tests {
                 title: "Alma".into(),
                 exe_name: "alma-0.0.750-win-x64.exe".into(),
                 process_path: r"C:\Program Files\Alma\alma-0.0.750-win-x64.exe".into(),
+                app_user_model_id: String::new(),
                 is_afk: false,
                 idle_time_ms: 0,
             };
@@ -560,6 +562,7 @@ mod tests {
                 title: crate::domain::widget::WIDGET_WINDOW_TITLE.into(),
                 exe_name: "Patina.exe".into(),
                 process_path: r"C:\Program Files\Patina\Patina.exe".into(),
+                app_user_model_id: String::new(),
                 is_afk: false,
                 idle_time_ms: 0,
             };

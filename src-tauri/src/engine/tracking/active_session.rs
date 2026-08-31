@@ -11,7 +11,12 @@ pub(crate) async fn start_session_with_continuity_group_start_time(
     continuity_group_start_time: i64,
 ) -> Result<bool, TrackingDataError> {
     let continuity_group_start_time = continuity_group_start_time.min(start_time);
-    let app_name = metadata::map_app_name(&window.exe_name, &window.process_path);
+    let app_name = metadata::map_app_name(
+        &window.exe_name,
+        &window.process_path,
+        &window.app_user_model_id,
+    )
+    .await;
     let did_start = data
         .start_session(
             &app_name,
@@ -27,8 +32,10 @@ pub(crate) async fn start_session_with_continuity_group_start_time(
 
     if !window.exe_name.is_empty() {
         let data = data.clone_store();
+        let process_id = window.process_id;
         let exe_name = window.exe_name.clone();
         let process_path = window.process_path.clone();
+        let app_user_model_id = window.app_user_model_id.clone();
         let window_class = window.window_class.clone();
         let hwnd = window.hwnd.clone();
         let root_owner_hwnd = window.root_owner_hwnd.clone();
@@ -36,11 +43,15 @@ pub(crate) async fn start_session_with_continuity_group_start_time(
         tauri::async_runtime::spawn(async move {
             if let Err(error) = metadata::ensure_icon_cache(
                 data.as_ref(),
-                &exe_name,
-                &process_path,
-                &window_class,
-                &root_owner_hwnd,
-                &hwnd,
+                metadata::IconMetadataSource {
+                    process_id,
+                    exe_name: &exe_name,
+                    process_path: &process_path,
+                    app_user_model_id: &app_user_model_id,
+                    window_class: &window_class,
+                    root_owner_hwnd: &root_owner_hwnd,
+                    hwnd: &hwnd,
+                },
             )
             .await
             {

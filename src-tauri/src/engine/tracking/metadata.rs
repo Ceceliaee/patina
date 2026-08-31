@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, OnceLock};
 use tokio::sync::Semaphore;
 const ICON_NEGATIVE_CACHE_TTL_MS: i64 = 60 * 60 * 1000;
+const PACKAGED_ICON_NEGATIVE_CACHE_TTL_MS: i64 = 30 * 1000;
 const ICON_NEGATIVE_CACHE_LIMIT: usize = 512;
 const ICON_CACHE_CONCURRENCY_LIMIT: usize = 2;
 
@@ -12,6 +13,7 @@ const ICON_CACHE_CONCURRENCY_LIMIT: usize = 2;
 struct IconNegativeCacheEntry {
     last_failed_at_ms: i64,
     last_accessed_at_ms: i64,
+    ttl_ms: i64,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -22,8 +24,20 @@ pub struct IconNegativeCacheStats {
     pub oldest_age_ms: Option<i64>,
 }
 
-pub fn map_app_name(exe_name: &str, process_path: &str) -> String {
-    if let Some(display_name) = app_metadata::resolve_process_display_name(process_path) {
+pub async fn map_app_name(exe_name: &str, process_path: &str, app_user_model_id: &str) -> String {
+    let display_name = if app_user_model_id.trim().is_empty() {
+        app_metadata::resolve_process_display_name(process_path)
+    } else {
+        let process_path_owned = process_path.to_string();
+        let app_user_model_id_owned = app_user_model_id.to_string();
+        tauri::async_runtime::spawn_blocking(move || {
+            app_metadata::resolve_app_display_name(&process_path_owned, &app_user_model_id_owned)
+        })
+        .await
+        .ok()
+        .flatten()
+    };
+    if let Some(display_name) = display_name {
         let normalized = normalize_display_name(&display_name);
         if !normalized.is_empty() {
             return normalized;
@@ -33,15 +47,36 @@ pub fn map_app_name(exe_name: &str, process_path: &str) -> String {
     fallback_app_name(exe_name)
 }
 
-pub async fn ensure_icon_cache(
+pub(crate) struct IconMetadataSource<'a> {
+    pub process_id: u32,
+    pub exe_name: &'a str,
+    pub process_path: &'a str,
+    pub app_user_model_id: &'a str,
+    pub window_class: &'a str,
+    pub root_owner_hwnd: &'a str,
+    pub hwnd: &'a str,
+}
+
+pub(crate) async fn ensure_icon_cache(
     data: &dyn TrackingDataStore,
-    exe_name: &str,
-    process_path: &str,
-    window_class: &str,
-    root_owner_hwnd: &str,
-    hwnd: &str,
+    source: IconMetadataSource<'_>,
 ) -> Result<(), TrackingDataError> {
-    if should_skip_icon_attempt(exe_name, process_path, window_class, now_ms()) {
+    let IconMetadataSource {
+        process_id,
+        exe_name,
+        process_path,
+        app_user_model_id,
+        window_class,
+        root_owner_hwnd,
+        hwnd,
+    } = source;
+    if should_skip_icon_attempt(
+        exe_name,
+        process_path,
+        app_user_model_id,
+        window_class,
+        now_ms(),
+    ) {
         return Ok(());
     }
 
@@ -57,15 +92,34 @@ pub async fn ensure_icon_cache(
         return Ok(());
     }
 
-    let base64_icon = app_metadata::resolve_icon_base64(
-        process_path,
-        exe_name,
-        window_class,
-        root_owner_hwnd,
-        hwnd,
-    );
+    let process_path_owned = process_path.to_string();
+    let exe_name_owned = exe_name.to_string();
+    let app_user_model_id_owned = app_user_model_id.to_string();
+    let window_class_owned = window_class.to_string();
+    let root_owner_hwnd_owned = root_owner_hwnd.to_string();
+    let hwnd_owned = hwnd.to_string();
+    let base64_icon = tauri::async_runtime::spawn_blocking(move || {
+        app_metadata::resolve_icon_base64(
+            process_id,
+            &process_path_owned,
+            &exe_name_owned,
+            &app_user_model_id_owned,
+            &window_class_owned,
+            &root_owner_hwnd_owned,
+            &hwnd_owned,
+        )
+    })
+    .await
+    .ok()
+    .flatten();
     let Some(base64_icon) = base64_icon else {
-        remember_icon_failure(exe_name, process_path, window_class, now_ms());
+        remember_icon_failure(
+            exe_name,
+            process_path,
+            app_user_model_id,
+            window_class,
+            now_ms(),
+        );
         return Ok(());
     };
 
@@ -115,39 +169,55 @@ fn icon_cache_semaphore() -> &'static Arc<Semaphore> {
 fn should_skip_icon_attempt(
     exe_name: &str,
     process_path: &str,
+    app_user_model_id: &str,
     window_class: &str,
     now_ms: i64,
 ) -> bool {
-    let key = icon_negative_cache_key(exe_name, process_path, window_class);
+    let key = icon_negative_cache_key(exe_name, process_path, app_user_model_id, window_class);
     let Ok(mut cache) = icon_negative_cache().lock() else {
         return false;
     };
     should_skip_icon_attempt_in_cache(&mut cache, &key, now_ms)
 }
 
-fn remember_icon_failure(exe_name: &str, process_path: &str, window_class: &str, now_ms: i64) {
+fn remember_icon_failure(
+    exe_name: &str,
+    process_path: &str,
+    app_user_model_id: &str,
+    window_class: &str,
+    now_ms: i64,
+) {
     if let Ok(mut cache) = icon_negative_cache().lock() {
         remember_icon_failure_in_cache(
             &mut cache,
-            icon_negative_cache_key(exe_name, process_path, window_class),
+            icon_negative_cache_key(exe_name, process_path, app_user_model_id, window_class),
+            if app_user_model_id.trim().is_empty() {
+                ICON_NEGATIVE_CACHE_TTL_MS
+            } else {
+                PACKAGED_ICON_NEGATIVE_CACHE_TTL_MS
+            },
             now_ms,
         );
     }
 }
 
-fn icon_negative_cache_key(exe_name: &str, process_path: &str, window_class: &str) -> String {
+fn icon_negative_cache_key(
+    exe_name: &str,
+    process_path: &str,
+    app_user_model_id: &str,
+    window_class: &str,
+) -> String {
     format!(
-        "{}|{}|{}",
+        "{}|{}|{}|{}",
         exe_name.trim().to_ascii_lowercase(),
         process_path.trim().to_ascii_lowercase(),
+        app_user_model_id.trim().to_ascii_lowercase(),
         window_class.trim().to_ascii_lowercase()
     )
 }
 
 fn cleanup_icon_negative_cache(cache: &mut HashMap<String, IconNegativeCacheEntry>, now_ms: i64) {
-    cache.retain(|_, entry| {
-        now_ms.saturating_sub(entry.last_failed_at_ms) < ICON_NEGATIVE_CACHE_TTL_MS
-    });
+    cache.retain(|_, entry| now_ms.saturating_sub(entry.last_failed_at_ms) < entry.ttl_ms);
 
     while cache.len() > ICON_NEGATIVE_CACHE_LIMIT {
         let Some(oldest_key) = cache
@@ -171,7 +241,7 @@ fn should_skip_icon_attempt_in_cache(
     let Some(entry) = cache.get_mut(key) else {
         return false;
     };
-    if now_ms.saturating_sub(entry.last_failed_at_ms) >= ICON_NEGATIVE_CACHE_TTL_MS {
+    if now_ms.saturating_sub(entry.last_failed_at_ms) >= entry.ttl_ms {
         cache.remove(key);
         return false;
     }
@@ -183,6 +253,7 @@ fn should_skip_icon_attempt_in_cache(
 fn remember_icon_failure_in_cache(
     cache: &mut HashMap<String, IconNegativeCacheEntry>,
     key: String,
+    ttl_ms: i64,
     now_ms: i64,
 ) {
     cleanup_icon_negative_cache(cache, now_ms);
@@ -191,6 +262,7 @@ fn remember_icon_failure_in_cache(
         IconNegativeCacheEntry {
             last_failed_at_ms: now_ms,
             last_accessed_at_ms: now_ms,
+            ttl_ms,
         },
     );
     cleanup_icon_negative_cache(cache, now_ms);
@@ -277,23 +349,29 @@ fn now_ms() -> i64 {
 mod tests {
     use super::{
         icon_negative_cache_key, remember_icon_failure_in_cache, should_skip_icon_attempt_in_cache,
-        IconNegativeCacheEntry, ICON_NEGATIVE_CACHE_LIMIT,
+        IconNegativeCacheEntry, ICON_NEGATIVE_CACHE_LIMIT, ICON_NEGATIVE_CACHE_TTL_MS,
+        PACKAGED_ICON_NEGATIVE_CACHE_TTL_MS,
     };
     use std::collections::HashMap;
 
     #[test]
     fn icon_negative_cache_uses_normalized_identity() {
         assert_eq!(
-            icon_negative_cache_key(" App.EXE ", r" C:\Apps\App.exe ", " MainClass "),
-            "app.exe|c:\\apps\\app.exe|mainclass"
+            icon_negative_cache_key(
+                " App.EXE ",
+                r" C:\Apps\App.exe ",
+                " Publisher.App!Main ",
+                " MainClass "
+            ),
+            "app.exe|c:\\apps\\app.exe|publisher.app!main|mainclass"
         );
     }
 
     #[test]
     fn icon_negative_cache_suppresses_recent_failures() {
         let mut cache = HashMap::<String, IconNegativeCacheEntry>::new();
-        let key = icon_negative_cache_key("Missing.exe", "", "MainClass");
-        remember_icon_failure_in_cache(&mut cache, key.clone(), 10_000);
+        let key = icon_negative_cache_key("Missing.exe", "", "", "MainClass");
+        remember_icon_failure_in_cache(&mut cache, key.clone(), ICON_NEGATIVE_CACHE_TTL_MS, 10_000);
 
         assert!(should_skip_icon_attempt_in_cache(&mut cache, &key, 20_000));
         assert!(!should_skip_icon_attempt_in_cache(
@@ -304,8 +382,8 @@ mod tests {
     #[test]
     fn icon_negative_cache_prunes_expired_entries_on_access() {
         let mut cache = HashMap::<String, IconNegativeCacheEntry>::new();
-        let key = icon_negative_cache_key("Old.exe", "", "MainClass");
-        remember_icon_failure_in_cache(&mut cache, key.clone(), 10_000);
+        let key = icon_negative_cache_key("Old.exe", "", "", "MainClass");
+        remember_icon_failure_in_cache(&mut cache, key.clone(), ICON_NEGATIVE_CACHE_TTL_MS, 10_000);
 
         assert!(!should_skip_icon_attempt_in_cache(
             &mut cache, &key, 3_700_001
@@ -319,7 +397,8 @@ mod tests {
         for index in 0..(ICON_NEGATIVE_CACHE_LIMIT + 1) {
             remember_icon_failure_in_cache(
                 &mut cache,
-                icon_negative_cache_key(&format!("Missing{index}.exe"), "", "MainClass"),
+                icon_negative_cache_key(&format!("Missing{index}.exe"), "", "", "MainClass"),
+                ICON_NEGATIVE_CACHE_TTL_MS,
                 index as i64,
             );
         }
@@ -327,8 +406,28 @@ mod tests {
         assert_eq!(cache.len(), ICON_NEGATIVE_CACHE_LIMIT);
         assert!(!should_skip_icon_attempt_in_cache(
             &mut cache,
-            &icon_negative_cache_key("Missing0.exe", "", "MainClass"),
+            &icon_negative_cache_key("Missing0.exe", "", "", "MainClass"),
             2_000
         ));
+    }
+
+    #[test]
+    fn packaged_icon_failure_retries_after_short_ttl() {
+        let mut cache = HashMap::<String, IconNegativeCacheEntry>::new();
+        let key = icon_negative_cache_key(
+            "WinStore.App.exe",
+            r"C:\WindowsApps\Store\WinStore.App.exe",
+            "Microsoft.WindowsStore_8wekyb3d8bbwe!App",
+            "ApplicationFrameWindow",
+        );
+        remember_icon_failure_in_cache(
+            &mut cache,
+            key.clone(),
+            PACKAGED_ICON_NEGATIVE_CACHE_TTL_MS,
+            10_000,
+        );
+
+        assert!(should_skip_icon_attempt_in_cache(&mut cache, &key, 20_000));
+        assert!(!should_skip_icon_attempt_in_cache(&mut cache, &key, 40_001));
     }
 }

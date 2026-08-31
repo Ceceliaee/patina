@@ -377,6 +377,7 @@ mod tests {
             title: "Window".into(),
             exe_name: "QQ.exe".into(),
             process_path: r"C:\Program Files\QQ\QQ.exe".into(),
+            app_user_model_id: String::new(),
             is_afk: false,
             idle_time_ms: 0,
         };

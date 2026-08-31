@@ -323,6 +323,7 @@ fn inactive_window() -> tracker::WindowInfo {
         title: String::new(),
         exe_name: String::new(),
         process_path: String::new(),
+        app_user_model_id: String::new(),
         is_afk: false,
         idle_time_ms: 0,
     }
@@ -377,6 +378,7 @@ mod tests {
             title: "Window".into(),
             exe_name: exe_name.into(),
             process_path: format!(r"C:\Program Files\{exe_name}"),
+            app_user_model_id: String::new(),
             is_afk: false,
             idle_time_ms: 0,
         }

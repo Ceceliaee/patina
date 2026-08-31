@@ -371,7 +371,9 @@ async fn build_snapshot_payload<R: Runtime>(
     let app_name = metadata::map_app_name(
         &runtime_snapshot.window.exe_name,
         &runtime_snapshot.window.process_path,
-    );
+        &runtime_snapshot.window.app_user_model_id,
+    )
+    .await;
     let icon_data = load_icon_for_exe(store, &runtime_snapshot.window.exe_name).await;
     let icon_hash = compute_icon_hash(icon_data.as_deref());
 

@@ -9,7 +9,7 @@ use std::sync::{Mutex, OnceLock};
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     CreateCompatibleDC, GetDC, GetDIBits, GetObjectA, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB,
-    DIB_RGB_COLORS,
+    DIB_RGB_COLORS, HBITMAP,
 };
 use windows::Win32::UI::Shell::ExtractIconExW;
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -84,13 +84,17 @@ fn get_icon_base64_uncached(exe_path: &str) -> Option<String> {
 
 pub fn get_window_icon_base64(hwnd_text: &str) -> Option<String> {
     let hwnd = parse_hwnd(hwnd_text)?;
+    get_window_icon_base64_from_hwnd(hwnd)
+}
+
+pub(crate) fn get_window_icon_base64_from_hwnd(hwnd: HWND) -> Option<String> {
     unsafe {
         let hicon = query_window_icon_handle(hwnd)?;
         hicon_to_base64(hicon)
     }
 }
 
-fn parse_hwnd(hwnd_text: &str) -> Option<HWND> {
+pub(crate) fn parse_hwnd(hwnd_text: &str) -> Option<HWND> {
     let trimmed = hwnd_text.trim();
     if trimmed.is_empty() {
         return None;
@@ -151,10 +155,19 @@ unsafe fn hicon_to_base64(hicon: HICON) -> Option<String> {
     let color_bitmap = OwnedBitmap::new(icon_info.hbmColor)?;
     let _mask_bitmap = OwnedBitmap::new(icon_info.hbmMask);
 
+    bitmap_to_base64(color_bitmap.raw())
+}
+
+pub(crate) fn owned_hbitmap_to_base64(bitmap: HBITMAP) -> Option<String> {
+    let bitmap = OwnedBitmap::new(bitmap)?;
+    unsafe { bitmap_to_base64(bitmap.raw()) }
+}
+
+unsafe fn bitmap_to_base64(bitmap: HBITMAP) -> Option<String> {
     // GetObjectA works for BITMAP (no string fields, identical to W variant)
     let mut bm: BITMAP = std::mem::zeroed();
     let got = GetObjectA(
-        color_bitmap.raw().into(),
+        bitmap.into(),
         std::mem::size_of::<BITMAP>() as i32,
         Some(&mut bm as *mut _ as *mut _),
     );
@@ -187,7 +200,7 @@ unsafe fn hicon_to_base64(hicon: HICON) -> Option<String> {
     let mut pixels: Vec<u8> = vec![0u8; (width * height * 4) as usize];
     let lines = GetDIBits(
         mem_dc.raw(),
-        color_bitmap.raw(),
+        bitmap,
         0,
         height,
         Some(pixels.as_mut_ptr() as *mut _),

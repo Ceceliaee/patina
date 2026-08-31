@@ -22,6 +22,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 use crate::platform::windows::handles::OwnedHandle;
+use crate::platform::windows::packaged_app::{self, HostedAppResolution};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct WindowInfo {
@@ -32,6 +33,8 @@ pub struct WindowInfo {
     pub title: String,
     pub exe_name: String,
     pub process_path: String,
+    #[serde(default, skip_serializing)]
+    pub app_user_model_id: String,
     pub is_afk: bool,
     pub idle_time_ms: u32,
 }
@@ -67,6 +70,7 @@ pub fn has_meaningful_change(previous: Option<&WindowInfo>, next: &WindowInfo) -
     previous.title != next.title
         || previous.exe_name != next.exe_name
         || previous.process_path != next.process_path
+        || previous.app_user_model_id != next.app_user_model_id
         || previous.hwnd != next.hwnd
         || previous.root_owner_hwnd != next.root_owner_hwnd
         || previous.process_id != next.process_id
@@ -107,7 +111,15 @@ pub fn get_active_window() -> WindowInfo {
 
         let title = get_window_title(hwnd);
         let window_class = get_window_class(hwnd);
-        let (process_id, exe_name, process_path) = get_process_info(root_owner_hwnd);
+        let (root_process_id, root_exe_name, root_process_path) = get_process_info(root_owner_hwnd);
+        let hosted_resolution =
+            packaged_app::resolve_hosted_app(root_owner_hwnd, root_process_id, &root_exe_name);
+        let (process_id, exe_name, process_path, app_user_model_id) = project_hosted_app_process(
+            root_process_id,
+            root_exe_name,
+            root_process_path,
+            hosted_resolution,
+        );
         if !has_resolved_window_process(process_id, &exe_name) {
             return build_inactive_window(idle_time, is_afk);
         }
@@ -123,6 +135,7 @@ pub fn get_active_window() -> WindowInfo {
             title,
             exe_name,
             process_path,
+            app_user_model_id,
             is_afk,
             idle_time_ms: idle_time,
         }
@@ -138,8 +151,33 @@ fn build_inactive_window(idle_time_ms: u32, is_afk: bool) -> WindowInfo {
         title: String::new(),
         exe_name: String::new(),
         process_path: String::new(),
+        app_user_model_id: String::new(),
         is_afk,
         idle_time_ms,
+    }
+}
+
+fn project_hosted_app_process(
+    root_process_id: u32,
+    root_exe_name: String,
+    root_process_path: String,
+    resolution: HostedAppResolution,
+) -> (u32, String, String, String) {
+    match resolution {
+        HostedAppResolution::Resolved(app) => (
+            app.process_id,
+            app.exe_name,
+            app.process_path,
+            app.app_user_model_id,
+        ),
+        HostedAppResolution::NotApplicable
+        | HostedAppResolution::Unavailable
+        | HostedAppResolution::Ambiguous => (
+            root_process_id,
+            root_exe_name,
+            root_process_path,
+            String::new(),
+        ),
     }
 }
 
@@ -454,6 +492,7 @@ mod tests {
         should_treat_window_as_inactive, write_cached_process_details,
         PROCESS_DETAILS_CACHE_MAX_ENTRIES,
     };
+    use crate::platform::windows::packaged_app::{HostedAppResolution, ResolvedHostedApp};
     use windows::Win32::Foundation::HWND;
 
     fn cache_test_guard() -> std::sync::MutexGuard<'static, ()> {
@@ -491,6 +530,49 @@ mod tests {
         assert!(!has_resolved_window_process(0, ""));
         assert!(!has_resolved_window_process(42, ""));
         assert!(has_resolved_window_process(42, "Code.exe"));
+    }
+
+    #[test]
+    fn hosted_app_projection_replaces_only_application_process_identity() {
+        let projected = super::project_hosted_app_process(
+            10,
+            "ApplicationFrameHost.exe".to_string(),
+            r"C:\Windows\System32\ApplicationFrameHost.exe".to_string(),
+            HostedAppResolution::Resolved(ResolvedHostedApp {
+                process_id: 20,
+                exe_name: "WinStore.App.exe".to_string(),
+                process_path: r"C:\Program Files\WindowsApps\Store\WinStore.App.exe".to_string(),
+                app_user_model_id: "Microsoft.WindowsStore_8wekyb3d8bbwe!App".to_string(),
+            }),
+        );
+
+        assert_eq!(projected.0, 20);
+        assert_eq!(projected.1, "WinStore.App.exe");
+        assert_eq!(projected.3, "Microsoft.WindowsStore_8wekyb3d8bbwe!App");
+    }
+
+    #[test]
+    fn failed_hosted_app_projection_keeps_filtered_host_identity() {
+        let projected = super::project_hosted_app_process(
+            10,
+            "ApplicationFrameHost.exe".to_string(),
+            r"C:\Windows\System32\ApplicationFrameHost.exe".to_string(),
+            HostedAppResolution::Unavailable,
+        );
+
+        assert_eq!(projected.0, 10);
+        assert_eq!(projected.1, "ApplicationFrameHost.exe");
+        assert!(projected.3.is_empty());
+    }
+
+    #[test]
+    fn internal_app_user_model_id_does_not_change_window_ipc_shape() {
+        let mut snapshot = build_inactive_window(0, false);
+        snapshot.app_user_model_id = "Publisher.App!Main".to_string();
+
+        let serialized = serde_json::to_value(snapshot).unwrap();
+        assert!(serialized.get("app_user_model_id").is_none());
+        assert!(serialized.get("exe_name").is_some());
     }
 
     #[test]

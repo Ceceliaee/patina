@@ -217,6 +217,7 @@ mod title_policy_tests {
                 title: "Wallpaper Engine".into(),
                 exe_name: "wallpaper32.exe".into(),
                 process_path: "C:/wallpaper32.exe".into(),
+                app_user_model_id: String::new(),
                 is_afk: false,
                 idle_time_ms: 0,
             };
@@ -241,5 +242,121 @@ mod title_policy_tests {
             assert_eq!(row.get::<String, _>("window_title"), "");
             assert_eq!(row.get::<Option<i64>, _>("end_time"), None);
         });
+    }
+}
+
+#[cfg(test)]
+mod packaged_app_transition_tests {
+    use super::*;
+
+    fn window(exe_name: &str, process_id: u32, root: &str, aumid: &str) -> tracker::WindowInfo {
+        tracker::WindowInfo {
+            hwnd: root.into(),
+            root_owner_hwnd: root.into(),
+            process_id,
+            window_class: "ApplicationFrameWindow".into(),
+            title: "Window".into(),
+            exe_name: exe_name.into(),
+            process_path: format!(r"C:\Program Files\WindowsApps\{exe_name}"),
+            app_user_model_id: aumid.into(),
+            is_afk: false,
+            idle_time_ms: 0,
+        }
+    }
+
+    #[test]
+    fn unresolved_host_stays_out_of_tracking() {
+        let host = window("ApplicationFrameHost.exe", 10, "0x100", "");
+
+        assert!(!is_trackable_window(Some(&host)));
+    }
+
+    #[test]
+    fn resolved_hosted_app_uses_existing_tracking_entry() {
+        let store = window(
+            "WinStore.App.exe",
+            20,
+            "0x100",
+            "Microsoft.WindowsStore_8wekyb3d8bbwe!App",
+        );
+
+        assert!(is_trackable_window(Some(&store)));
+        let decision = plan_window_transition(None, &store, 1_000);
+        assert!(decision.should_start_next);
+        assert!(!decision.should_end_previous);
+    }
+
+    #[test]
+    fn same_packaged_executable_instance_change_does_not_split_session() {
+        let previous = window(
+            "WinStore.App.exe",
+            20,
+            "0x100",
+            "Microsoft.WindowsStore_8wekyb3d8bbwe!App",
+        );
+        let next = window(
+            "WinStore.App.exe",
+            21,
+            "0x200",
+            "Microsoft.WindowsStore_8wekyb3d8bbwe!App",
+        );
+
+        let decision = plan_window_transition(Some(&previous), &next, 2_000);
+        assert!(!decision.should_end_previous);
+        assert!(!decision.should_start_next);
+        assert!(decision.should_refresh_metadata);
+    }
+
+    #[test]
+    fn different_packaged_apps_create_a_session_boundary() {
+        let store = window(
+            "WinStore.App.exe",
+            20,
+            "0x100",
+            "Microsoft.WindowsStore_8wekyb3d8bbwe!App",
+        );
+        let calculator = window(
+            "CalculatorApp.exe",
+            30,
+            "0x200",
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe!App",
+        );
+
+        let decision = plan_window_transition(Some(&store), &calculator, 2_000);
+        assert!(decision.should_end_previous);
+        assert!(decision.should_start_next);
+    }
+
+    #[test]
+    fn packaged_and_win32_apps_use_the_same_session_boundary() {
+        let store = window(
+            "WinStore.App.exe",
+            20,
+            "0x100",
+            "Microsoft.WindowsStore_8wekyb3d8bbwe!App",
+        );
+        let chrome = window("chrome.exe", 40, "0x300", "");
+
+        let decision = plan_window_transition(Some(&store), &chrome, 2_000);
+        assert!(decision.should_end_previous);
+        assert!(decision.should_start_next);
+    }
+
+    #[test]
+    fn packaged_app_entering_afk_uses_existing_idle_boundary() {
+        let previous = window(
+            "WinStore.App.exe",
+            20,
+            "0x100",
+            "Microsoft.WindowsStore_8wekyb3d8bbwe!App",
+        );
+        let mut afk = previous.clone();
+        afk.is_afk = true;
+        afk.idle_time_ms = 5_000;
+
+        let decision = plan_window_transition(Some(&previous), &afk, 10_000);
+        assert!(decision.should_end_previous);
+        assert!(!decision.should_start_next);
+        assert_eq!(decision.end_time_override, Some(5_000));
     }
 }

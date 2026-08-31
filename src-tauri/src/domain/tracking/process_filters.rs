@@ -316,3 +316,15 @@ fn is_likely_system_process(lower_name: &str) -> bool {
         || lower_name.ends_with("systray.exe")
         || matches!(lower_name, "svchost.exe" | "dllhost.exe")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::should_track;
+
+    #[test]
+    fn application_frame_host_remains_untrackable() {
+        assert!(!should_track("ApplicationFrameHost.exe"));
+        assert!(!should_track("applicationframehost.exe"));
+        assert!(should_track("WinStore.App.exe"));
+    }
+}
