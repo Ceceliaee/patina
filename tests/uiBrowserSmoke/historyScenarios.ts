@@ -1378,6 +1378,7 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
       x: dragStartX + 100,
       y: dragStartY,
       button: "left",
+      buttons: 0,
       clickCount: 1,
     }, sessionId);
     await waitForExpression(
