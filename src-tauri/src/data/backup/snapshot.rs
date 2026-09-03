@@ -340,6 +340,7 @@ pub(super) async fn validate_current_schema(pool: &Pool<Sqlite>) -> Result<(), S
     let (head, fingerprint) = migration_metadata(pool).await?;
     if head != current_migration_head()
         || expected_migration_fingerprint(head).as_deref() != Some(fingerprint.as_str())
+        || !crate::data::schema_contracts::has_web_activity_session_schema(pool).await?
     {
         return Err("restored sqlite snapshot did not reach the current schema".to_string());
     }
@@ -947,13 +948,13 @@ mod tests {
             .nth(1)
             .expect("previous migration")
             .0;
-        pool.execute(crate::data::schema::SOFTWARE_REMINDER_RULES_SCHEMA_SQL)
+        pool.execute("DROP TRIGGER trg_native_session_web_boundary")
             .await
-            .expect("restore the version 12 software reminder table");
-        sqlx::query("DROP TABLE tool_activity_reminder_rules")
+            .expect("remove the version 14 boundary trigger");
+        sqlx::query("DROP TABLE web_activity_native_sessions")
             .execute(&pool)
             .await
-            .expect("remove the version 13 activity reminder table");
+            .expect("remove the version 14 native web relation table");
         sqlx::query("DELETE FROM _sqlx_migrations WHERE version = ?")
             .bind(removed_version)
             .execute(&pool)

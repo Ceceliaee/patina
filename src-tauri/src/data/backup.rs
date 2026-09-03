@@ -73,11 +73,12 @@ pub async fn restore_backup(
         return snapshot::restore_snapshot_backup(&prepared.path, &app, strategy).await;
     }
 
-    let payload = read_backup_payload(&prepared.path)?;
+    let mut payload = read_backup_payload(&prepared.path)?;
     let restore_safety = payload.restore_safety();
     if !restore_safety.supported {
         return Err(restore_safety.message);
     }
+    restore_payload::seal_interrupted_payload_activity(&mut payload);
 
     let pool = wait_for_sqlite_pool(&app).await?;
     restore_backup_payload(&pool, &payload, strategy).await?;

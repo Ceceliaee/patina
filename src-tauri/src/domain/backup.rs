@@ -47,6 +47,8 @@ pub struct BackupIconCache {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BackupWebActivitySegment {
+    #[serde(default)]
+    pub native_session_id: Option<i64>,
     pub id: i64,
     pub browser_client_id: String,
     pub browser_kind: String,

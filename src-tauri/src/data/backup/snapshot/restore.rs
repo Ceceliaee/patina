@@ -34,6 +34,22 @@ pub(in crate::data::backup) async fn restore_snapshot_backup(
         candidate_pool.close().await;
         return Err(error);
     }
+    let cutoff = (extracted.preview.exported_at_ms.min(i64::MAX as u64) as i64)
+        .min(crate::platform::clock::unix_timestamp_millis_i64());
+    let sealed = async {
+        crate::data::repositories::sessions::seal_interrupted_session(&candidate_pool, cutoff)
+            .await?;
+        crate::data::repositories::web_activity::seal_interrupted_segments(&candidate_pool, cutoff)
+            .await?;
+        Ok::<(), sqlx::Error>(())
+    }
+    .await;
+    if let Err(error) = sealed {
+        candidate_pool.close().await;
+        return Err(format!(
+            "failed to seal interrupted backup activity: {error}"
+        ));
+    }
     if let Err(error) = checkpoint_sqlite_pool(&candidate_pool).await {
         candidate_pool.close().await;
         return Err(error);
