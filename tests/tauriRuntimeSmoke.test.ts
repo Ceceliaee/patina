@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { verifyTrackingBoundaries } from "./tauriRuntimeSmoke/timing.ts";
+import { focusTimingProcess, verifyTrackingBoundaries } from "./tauriRuntimeSmoke/timing.ts";
 import { verifyRestoreBoundary } from "./tauriRuntimeSmoke/restore.ts";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -1695,6 +1695,7 @@ try {
   await waitFor("isolated binary stopped before restart", () => isResidualRuntimeBinaryRunning() ? null : true,10_000);
   const stoppedAt = Date.now();
   const restartedAt = Date.now();
+  const restartLogIndex = logs.length;
   appProcess = spawn(RUNTIME_BINARY_PATH, [], {
     cwd:process.cwd(),
     env:{...process.env,PATINA_E2E:"1",PATINA_E2E_SINGLE_INSTANCE:"1",PATINA_E2E_DATA_ROOT:root,
@@ -1714,10 +1715,23 @@ try {
   assert.ok(recovered.end_time! >= interrupted.sampled_at && recovered.end_time! <= stoppedAt);
   assert.equal(recovered.duration,recovered.end_time!-interrupted.start_time);
   await evaluate(client,`window.__TAURI_INTERNALS__.invoke("cmd_show_main_window")`);
+  await waitFor("frontend bootstrap after process restart", () =>
+    logs.slice(restartLogIndex).join("").includes("event=frontend-ready") || null,
+  WEBVIEW_STARTUP_TIMEOUT_MS);
+  // Bootstrap reapplies the supported persisted AFK threshold. Only afterward
+  // restore the test's temporary allowance for a runner without human input.
+  await evaluate(client,`window.__TAURI_INTERNALS__.invoke("cmd_set_afk_threshold",{thresholdSecs:86400})`);
+  assert.ok(appProcess.pid);
+  focusTimingProcess(appProcess.pid);
   const freshAfterRestart = await waitFor("fresh native session after real process restart",async()=> {
+    const snapshot = await evaluate(client!,`window.__TAURI_INTERNALS__.invoke("get_current_tracking_snapshot")`) as {window:{exe_name:string};status:{is_tracking_active:boolean};probe_status:string};
+    if (snapshot.window.exe_name.toLowerCase() !== "patina.exe" || !snapshot.status.is_tracking_active || snapshot.probe_status !== "ok") return null;
     const rows = await evaluate(client!,`window.__TAURI_INTERNALS__.invoke("plugin:sql|select",{db:"sqlite:patina.db",query:"SELECT id,start_time FROM sessions WHERE end_time IS NULL",values:[]})`) as Array<{id:number;start_time:number}>;
     return rows[0] ?? null;
-  },15_000);
+  },15_000).catch(async error => {
+    console.error("TIMING_RESTART_DIAGNOSTIC",JSON.stringify(await evaluate(client!,`window.__TAURI_INTERNALS__.invoke("get_current_tracking_snapshot")`)));
+    throw error;
+  });
   assert.notEqual(freshAfterRestart.id,interrupted.id);
   assert.ok(freshAfterRestart.start_time>=restartedAt);
   console.log(`PASS real ${exitMode}-exit recovery: persisted sample seals old session, restart creates a fresh interval`);

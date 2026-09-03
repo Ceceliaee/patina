@@ -9,6 +9,12 @@ import { verifyMediaTimeout } from "./media.ts";
 type Invoke = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
 type Session = { id: number; start_time: number; end_time: number | null };
 
+export function focusTimingProcess(pid: number) {
+  const result = spawnSync("powershell.exe", ["-NoProfile", "-File", fileURLToPath(new URL("./focusProcess.ps1", import.meta.url)), "-TargetProcessId", String(pid)], {encoding:"utf8", windowsHide:true, timeout:15_000});
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+}
+
 export async function verifyTrackingBoundaries(invoke: Invoke, bridgePort: number, evaluateInMain: (expression: string) => Promise<unknown>) {
   // Foreground automation does not create human input. Keep the isolated run
   // active until the explicit AFK boundary scenario below changes the threshold.
@@ -39,24 +45,22 @@ export async function verifyTrackingBoundaries(invoke: Invoke, bridgePort: numbe
   const override = (track: boolean | null) => invoke("cmd_commit_classification_settings", {
     mutations: [{ key: `__app_override::${browserExe}`, value: track === null ? null : JSON.stringify({ category:null, displayName:null, color:null, track, captureTitle:true, enabled:true, updatedAt:Date.now() }) }],
   });
-  const nativeProcess = spawnSync("powershell.exe", ["-NoProfile", "-Command", "Get-CimInstance Win32_Process -Filter \"Name='patina.exe'\" | Where-Object { $_.ExecutablePath -eq $env:PATINA_TIMING_TEST_BINARY } | Select-Object -ExpandProperty ProcessId"], {
-    encoding:"utf8", windowsHide:true, timeout:5_000,
+  const nativeProcess = spawnSync("powershell.exe", ["-NoProfile", "-Command", "Get-Process patina -ErrorAction Stop | Where-Object { $_.Path -eq $env:PATINA_TIMING_TEST_BINARY } | Select-Object -ExpandProperty Id"], {
+    encoding:"utf8", windowsHide:true, timeout:15_000,
     env:{...process.env,PATINA_TIMING_TEST_BINARY:resolve("src-tauri/target/runtime-smoke/debug/patina.exe")},
   });
-  assert.equal(nativeProcess.status,0,nativeProcess.stderr);
+  assert.ifError(nativeProcess.error);
+  assert.equal(nativeProcess.status,0,nativeProcess.stderr || nativeProcess.stdout);
   assert.match(nativeProcess.stdout.trim(),/^\d+$/,"exactly one isolated runtime binary must exist");
   const mainPid = Number(nativeProcess.stdout.trim());
-  const powerWindow = spawnSync("powershell.exe", ["-NoProfile", "-File", fileURLToPath(new URL("./focusProcess.ps1", import.meta.url)), "-TargetProcessId", String(mainPid), "-VerifyPowerWindow"], {encoding:"utf8",windowsHide:true,timeout:5_000});
-  assert.equal(powerWindow.status, 0, powerWindow.stderr || String(powerWindow.error));
+  const powerWindow = spawnSync("powershell.exe", ["-NoProfile", "-File", fileURLToPath(new URL("./focusProcess.ps1", import.meta.url)), "-TargetProcessId", String(mainPid), "-VerifyPowerWindow"], {encoding:"utf8",windowsHide:true,timeout:15_000});
+  assert.ifError(powerWindow.error);
+  assert.equal(powerWindow.status, 0, powerWindow.stderr || powerWindow.stdout);
   console.log("PASS native power observer is hidden and receives top-level broadcasts");
   const browser = await launchBrowser({ headless: false, extensionDebugging: Boolean(process.env.PATINA_TIMING_EXTENSION_PATH) });
-  const focusProcess = (pid: number) => {
-    const result = spawnSync("powershell.exe", ["-NoProfile", "-File", fileURLToPath(new URL("./focusProcess.ps1", import.meta.url)), "-TargetProcessId", String(pid)], {encoding:"utf8", windowsHide:true, timeout:5_000});
-    assert.equal(result.status, 0, result.stderr || String(result.error));
-  };
-  const focusMain = async () => { await invoke("cmd_show_main_window"); focusProcess(mainPid); };
+  const focusMain = async () => { await invoke("cmd_show_main_window"); focusTimingProcess(mainPid); };
   const focusBrowser = async () => {
-    focusProcess(browser.browser.pid!);
+    focusTimingProcess(browser.browser.pid!);
     await browserClient!.command("Page.bringToFront");
   };
   let browserClient: CdpConnection | null = null;
