@@ -1,11 +1,8 @@
 use super::pause_state::TrackingPauseRuntimeState;
 use super::ports::{SharedTrackingDataStore, TrackingDataStore};
-use super::session_timeout::{
-    seal_active_sessions_for_continuity_timeout,
-    seal_active_sessions_for_passive_participation_timeout,
-    seal_active_sessions_for_tracking_pause, should_seal_sustained_participation,
-    should_suspend_active_tracking,
-};
+use super::runtime_snapshot::TrackingRuntimeSnapshotState;
+#[cfg(test)]
+use super::session_timeout::seal_active_sessions_for_tracking_pause;
 use super::sustained_participation::SustainedParticipationRuntimeState;
 use super::title_state::TitleRecordingRuntimeState;
 use super::{active_session, continuity, startup, transition, watchdog};
@@ -38,9 +35,10 @@ mod support;
 mod window_polling;
 
 use loop_state::{
-    load_tracking_loop_state, persist_tracker_runtime_timestamps, TrackerTimestampPersistState,
-    TrackingSettingsCache,
+    load_tracking_loop_state, persist_tracker_runtime_timestamps, record_committed_sample,
+    TrackerTimestampPersistState, TrackingSettingsCache,
 };
+#[cfg(test)]
 use power_lifecycle::apply_power_lifecycle_event;
 use snapshot_projection::{
     clear_active_session_snapshot, refresh_active_session_snapshot_if_changed,
@@ -104,26 +102,79 @@ pub async fn run<R: Runtime>(
     let mut sustained_participation_state = SustainedParticipationRuntimeState::default();
     let mut timestamp_persist_state = TrackerTimestampPersistState::default();
     let mut settings_cache = TrackingSettingsCache::default();
+    let snapshot_state = app.state::<TrackingRuntimeSnapshotState>();
 
     loop {
+        let generation = snapshot_state.lifecycle_generation();
         let poll_outcome = poll_active_window_with_timeout().await;
-        let window_info = poll_outcome.window.clone();
-        let now_ms = now_ms();
-        health_state.note_heartbeat(now_ms);
-        if poll_outcome.is_successful_sample() {
-            health_state.note_successful_sample(now_ms);
-        }
-        persist_tracker_runtime_timestamps(
+        let transition_guard = snapshot_state.transition.lock().await;
+        if let Err(error) = power_lifecycle::flush_pending_power_stop_and_publish(
+            &app,
             data.as_ref(),
-            now_ms,
-            poll_outcome.is_successful_sample(),
-            &mut timestamp_persist_state,
+            &snapshot_state,
         )
-        .await;
-        if should_preserve_tracking_projection(&window_info) {
+        .await
+        {
+            log_tracker_error(error);
+            drop(transition_guard);
             sleep(Duration::from_secs(1)).await;
             continue;
         }
+        if !snapshot_state.accepts_sample(generation) {
+            last_window = None;
+            pending_continuity = None;
+            sustained_participation_state = SustainedParticipationRuntimeState::default();
+            last_tracking_status = None;
+            drop(transition_guard);
+            sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+        if snapshot_state
+            .snapshot()
+            .is_some_and(|snapshot| snapshot.generation != generation)
+        {
+            // A stop/resume may finish between polls; previous media grace and
+            // continuity are not evidence for the new lifecycle.
+            last_window = None;
+            pending_continuity = None;
+            sustained_participation_state = SustainedParticipationRuntimeState::default();
+            last_tracking_status = None;
+        }
+        let window_info = poll_outcome.window.clone();
+        let now_ms = now_ms();
+        if let Some(last_sample) = health_state.snapshot().last_successful_sample_ms {
+            if now_ms < last_sample || now_ms.saturating_sub(last_sample) > 8_000 {
+                let ended = data
+                    .end_active_sessions(last_sample)
+                    .await
+                    .map_err(|error| error.to_string())?;
+                clear_active_session_snapshot(&app);
+                if ended {
+                    let _ = emit_tracking_data_changed(
+                        &app,
+                        "session-ended-stale-sample",
+                        last_sample as u64,
+                    );
+                }
+                last_window = None;
+                pending_continuity = None;
+                sustained_participation_state = SustainedParticipationRuntimeState::default();
+                last_tracking_status = None;
+                if now_ms < last_sample {
+                    drop(transition_guard);
+                    sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            }
+        }
+        health_state.note_heartbeat(now_ms);
+        persist_tracker_runtime_timestamps(
+            data.as_ref(),
+            now_ms,
+            false,
+            &mut timestamp_persist_state,
+        )
+        .await;
         let (tracking_state, next_sustained_participation_state) = load_tracking_loop_state(
             data.as_ref(),
             &pause_state,
@@ -135,57 +186,71 @@ pub async fn run<R: Runtime>(
         )
         .await;
         sustained_participation_state = next_sustained_participation_state;
-        let tracked_window = tracking_state.tracked_window;
+        if should_preserve_tracking_projection(&window_info) && !tracking_state.tracking_paused {
+            record_committed_sample(
+                data.as_ref(),
+                &health_state,
+                now_ms,
+                poll_outcome.is_successful_sample(),
+                &mut timestamp_persist_state,
+            )
+            .await;
+            drop(transition_guard);
+            sleep(Duration::from_secs(1)).await;
+            continue;
+        }
         update_runtime_snapshot_state(
             &app,
-            &tracked_window,
+            &tracking_state.tracked_window,
             &tracking_state.tracking_status,
             now_ms,
             &poll_outcome,
+            generation,
         );
-        if tracking_state.tracking_paused {
-            let change_reason =
-                match seal_active_sessions_for_tracking_pause(data.as_ref(), now_ms).await {
-                    Ok(reason) => reason,
-                    Err(error) => {
-                        log_tracker_error(format!("failed to seal session while paused: {error}"));
-                        None
-                    }
-                };
-
-            pending_continuity = None;
-            last_window = Some(tracked_window);
-            last_tracking_status = Some(tracking_state.tracking_status);
-            clear_active_session_snapshot(&app);
-            if let Some(reason) = change_reason {
-                let _ = emit_tracking_data_changed(&app, reason, now_ms as u64);
-            }
-            sleep(Duration::from_secs(1)).await;
-            continue;
-        }
-
-        if !tracking_state.app_tracking_enabled {
-            let change_reason = exclusion::seal_excluded_app_session(
+        let stopped = match tracking_state
+            .seal_stop(
                 data.as_ref(),
-                &tracked_window.exe_name,
+                last_window.as_ref(),
+                last_tracking_status.as_ref(),
                 now_ms,
+                poll_outcome.is_successful_sample(),
+            )
+            .await
+        {
+            Ok(stopped) => stopped,
+            Err(error) => {
+                log_tracker_error(format!("failed to seal tracking boundary: {error}"));
+                clear_active_session_snapshot(&app);
+                drop(transition_guard);
+                sleep(Duration::from_secs(1)).await;
+                continue;
+            }
+        };
+        let tracked_window = tracking_state.tracked_window;
+        if let Some(stopped) = stopped {
+            record_committed_sample(
+                data.as_ref(),
+                &health_state,
+                now_ms,
+                poll_outcome.is_successful_sample(),
+                &mut timestamp_persist_state,
             )
             .await;
-
             pending_continuity = None;
-            last_window = None;
+            last_window = tracking_state
+                .app_tracking_enabled
+                .then_some(tracked_window);
             last_tracking_status = Some(tracking_state.tracking_status);
             clear_active_session_snapshot(&app);
-            if let Some(reason) = change_reason {
+            if let Some(reason) = stopped.change_reason {
                 let _ = emit_tracking_data_changed(&app, reason, now_ms as u64);
             }
+            drop(transition_guard);
             sleep(Duration::from_secs(1)).await;
             continue;
         }
-
         if !poll_outcome.is_successful_sample() {
-            last_window = Some(tracked_window);
-            last_tracking_status = Some(tracking_state.tracking_status);
+            drop(transition_guard);
             sleep(Duration::from_secs(1)).await;
             continue;
         }
@@ -206,72 +271,6 @@ pub async fn run<R: Runtime>(
         )
         .await;
 
-        if should_seal_sustained_participation(
-            last_window.as_ref(),
-            last_tracking_status.as_ref(),
-            &tracked_window,
-            &tracking_state.tracking_status,
-        ) {
-            let change_reason = match seal_active_sessions_for_passive_participation_timeout(
-                data.as_ref(),
-                &tracked_window,
-                now_ms,
-                tracking_state.sustained_participation_secs,
-            )
-            .await
-            {
-                Ok(reason) => reason,
-                Err(error) => {
-                    log_tracker_error(format!(
-                        "failed to seal session for passive participation timeout: {error}"
-                    ));
-                    None
-                }
-            };
-
-            last_window = Some(tracked_window);
-            last_tracking_status = Some(tracking_state.tracking_status);
-            clear_active_session_snapshot(&app);
-            if let Some(reason) = change_reason {
-                let _ = emit_tracking_data_changed(&app, reason, now_ms as u64);
-            }
-            sleep(Duration::from_secs(1)).await;
-            continue;
-        }
-
-        if should_suspend_active_tracking(
-            last_window.as_ref(),
-            &tracked_window,
-            tracking_state.continuity_window_secs,
-            &tracking_state.tracking_status,
-        ) {
-            let change_reason = match seal_active_sessions_for_continuity_timeout(
-                data.as_ref(),
-                &tracked_window,
-                now_ms,
-                tracking_state.continuity_window_secs,
-            )
-            .await
-            {
-                Ok(reason) => reason,
-                Err(error) => {
-                    log_tracker_error(format!(
-                        "failed to seal session for continuity timeout: {error}"
-                    ));
-                    None
-                }
-            };
-
-            last_window = Some(tracked_window);
-            last_tracking_status = Some(tracking_state.tracking_status);
-            clear_active_session_snapshot(&app);
-            if let Some(reason) = change_reason {
-                let _ = emit_tracking_data_changed(&app, reason, now_ms as u64);
-            }
-            sleep(Duration::from_secs(1)).await;
-            continue;
-        }
-
         let did_change_active_window =
             tracker::has_meaningful_change(last_emitted_window.as_ref(), &window_info);
 
@@ -290,9 +289,20 @@ pub async fn run<R: Runtime>(
                 Ok(reason) => reason,
                 Err(error) => {
                     log_tracker_error(format!("failed to apply window transition: {error}"));
-                    None
+                    clear_active_session_snapshot(&app);
+                    drop(transition_guard);
+                    sleep(Duration::from_secs(1)).await;
+                    continue;
                 }
             };
+        record_committed_sample(
+            data.as_ref(),
+            &health_state,
+            now_ms,
+            poll_outcome.is_successful_sample(),
+            &mut timestamp_persist_state,
+        )
+        .await;
         let did_change_tracking_data = tracking_data_change_reason.is_some();
 
         let did_change_tracking_status = !did_change_active_window
@@ -309,8 +319,12 @@ pub async fn run<R: Runtime>(
             &tracked_window,
             now_ms,
         );
-        refresh_active_session_snapshot_if_changed(&app, data.as_ref(), did_change_tracking_data)
-            .await;
+        let needs_projection = did_change_tracking_data
+            || snapshot_state
+                .snapshot()
+                .and_then(|snapshot| snapshot.active_session)
+                .is_none();
+        refresh_active_session_snapshot_if_changed(&app, data.as_ref(), needs_projection).await;
         if did_change_active_window {
             let _ = app.emit("active-window-changed", &tracked_window);
             last_emitted_window = Some(window_info.clone());
@@ -323,6 +337,7 @@ pub async fn run<R: Runtime>(
             did_change_tracking_status,
             now_ms,
         );
+        drop(transition_guard);
         sleep(Duration::from_secs(1)).await;
     }
 }
@@ -330,17 +345,10 @@ pub async fn run<R: Runtime>(
 pub async fn handle_power_lifecycle_event<R: Runtime>(
     app: AppHandle<R>,
     data: &dyn TrackingDataStore,
-    state: &str,
-    timestamp_ms: i64,
 ) -> Result<(), String> {
-    let reason = apply_power_lifecycle_event(data, state, timestamp_ms)
-        .await
-        .map_err(|error| format!("power lifecycle transition failed: {error}"))?;
-
-    if let Some(reason) = reason {
-        let _ = emit_tracking_data_changed(&app, reason, timestamp_ms as u64);
-    }
-
+    let snapshot_state = app.state::<TrackingRuntimeSnapshotState>();
+    let _guard = snapshot_state.transition.lock().await;
+    power_lifecycle::flush_pending_power_stop_and_publish(&app, data, &snapshot_state).await?;
     Ok(())
 }
 
@@ -1212,7 +1220,7 @@ mod tests {
                 .unwrap());
             tracker_settings::save_tracker_timestamp(
                 &pool,
-                tracker_settings::TRACKER_LAST_HEARTBEAT_KEY,
+                crate::engine::tracking::ports::TRACKER_LAST_SUCCESSFUL_SAMPLE_KEY,
                 8_000,
             )
             .await
@@ -1250,7 +1258,7 @@ mod tests {
                 .unwrap());
             tracker_settings::save_tracker_timestamp(
                 &pool,
-                tracker_settings::TRACKER_LAST_HEARTBEAT_KEY,
+                crate::engine::tracking::ports::TRACKER_LAST_SUCCESSFUL_SAMPLE_KEY,
                 8_000,
             )
             .await
@@ -1288,7 +1296,7 @@ mod tests {
                 .unwrap());
             tracker_settings::save_tracker_timestamp(
                 &pool,
-                tracker_settings::TRACKER_LAST_HEARTBEAT_KEY,
+                crate::engine::tracking::ports::TRACKER_LAST_SUCCESSFUL_SAMPLE_KEY,
                 8_000,
             )
             .await

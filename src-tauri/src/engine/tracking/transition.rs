@@ -44,11 +44,18 @@ pub(crate) async fn apply_window_transition_with_title_policy(
     capture_window_title: bool,
     start_session: StartSessionFn,
 ) -> Result<Option<&'static str>, TrackingDataError> {
+    let mut persisted_window = next_window.clone();
+    if !capture_window_title {
+        persisted_window.title.clear();
+    }
     let decision = plan_window_transition(previous_window, next_window, now_ms);
     if !decision.has_mutation_plan() {
+        if !is_trackable_window(Some(next_window)) {
+            return Ok(None);
+        }
         return recover_missing_active_session(
             data,
-            next_window,
+            &persisted_window,
             now_ms,
             next_continuity_group_start_time,
             start_session,
@@ -56,10 +63,6 @@ pub(crate) async fn apply_window_transition_with_title_policy(
         .await;
     }
 
-    let mut persisted_window = next_window.clone();
-    if !capture_window_title {
-        persisted_window.title.clear();
-    }
     let mut did_mutate = false;
 
     if decision.should_end_previous {
@@ -98,12 +101,13 @@ pub(crate) async fn recover_missing_active_session(
     continuity_group_start_time: i64,
     start_session: StartSessionFn,
 ) -> Result<Option<&'static str>, TrackingDataError> {
-    if !is_trackable_window(Some(window)) {
-        return Ok(None);
-    }
-
-    if data.load_active_session().await?.is_some() {
-        return Ok(None);
+    if let Some(active) = data.load_active_session().await? {
+        if active.exe_name.eq_ignore_ascii_case(&window.exe_name) {
+            return Ok(data
+                .refresh_active_session_metadata(&window.exe_name, &window.title, now_ms)
+                .await?
+                .then_some("session-metadata-refreshed"));
+        }
     }
 
     if start_session(data, window, now_ms, continuity_group_start_time).await? {
@@ -192,6 +196,167 @@ fn to_tracking_candidate(window: &tracker::WindowInfo) -> WindowTrackingCandidat
         &window.window_class,
         window.is_afk,
     )
+}
+
+#[cfg(test)]
+mod failure_recovery_tests {
+    use super::*;
+    use crate::data::{repositories::sessions, schema, tracking_runtime::TrackingRuntimeDataStore};
+    use crate::engine::tracking::active_session::start_session_for_transition;
+    use sqlx::{Executor, SqlitePool};
+
+    fn window(exe: &str, title: &str) -> tracker::WindowInfo {
+        tracker::WindowInfo {
+            hwnd: "1".into(),
+            root_owner_hwnd: "1".into(),
+            process_id: 1,
+            window_class: "Window".into(),
+            title: title.into(),
+            exe_name: exe.into(),
+            process_path: String::new(),
+            app_user_model_id: String::new(),
+            is_afk: false,
+            idle_time_ms: 0,
+        }
+    }
+
+    #[test]
+    fn failed_end_is_retried_and_failed_start_recovers_using_the_latest_window() {
+        tauri::async_runtime::block_on(async {
+            let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+            pool.execute(schema::CURRENT_BASELINE_SCHEMA_SQL)
+                .await
+                .unwrap();
+            let data = TrackingRuntimeDataStore::new(pool.clone());
+            let a = window("a.exe", "A");
+            let b = window("b.exe", "B");
+            let c = window("c.exe", "C");
+            sessions::start_session(&pool, "A", "a.exe", "A", 1_000, 1_000)
+                .await
+                .unwrap();
+            pool.execute("CREATE TRIGGER reject_end BEFORE UPDATE OF end_time ON sessions BEGIN SELECT RAISE(FAIL, 'injected end failure'); END").await.unwrap();
+            assert!(apply_window_transition(
+                &data,
+                Some(&a),
+                &b,
+                5_000,
+                5_000,
+                start_session_for_transition
+            )
+            .await
+            .is_err());
+            assert_eq!(
+                data.load_active_session().await.unwrap().unwrap().exe_name,
+                "a.exe"
+            );
+            pool.execute("DROP TRIGGER reject_end").await.unwrap();
+            pool.execute("CREATE TRIGGER reject_start BEFORE INSERT ON sessions BEGIN SELECT RAISE(FAIL, 'injected start failure'); END").await.unwrap();
+            assert!(apply_window_transition(
+                &data,
+                Some(&a),
+                &b,
+                6_000,
+                6_000,
+                start_session_for_transition
+            )
+            .await
+            .is_err());
+            assert!(data.load_active_session().await.unwrap().is_none());
+            pool.execute("DROP TRIGGER reject_start").await.unwrap();
+            apply_window_transition(
+                &data,
+                Some(&a),
+                &c,
+                7_000,
+                7_000,
+                start_session_for_transition,
+            )
+            .await
+            .unwrap();
+            let rows: Vec<(String, i64, Option<i64>)> =
+                sqlx::query_as("SELECT exe_name, start_time, end_time FROM sessions ORDER BY id")
+                    .fetch_all(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(
+                rows,
+                vec![
+                    ("a.exe".into(), 1_000, Some(6_000)),
+                    ("c.exe".into(), 7_000, None)
+                ]
+            );
+        });
+    }
+
+    #[test]
+    fn recovery_reconciles_wrong_app_and_retries_title_with_privacy_policy() {
+        tauri::async_runtime::block_on(async {
+            let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+            pool.execute(schema::CURRENT_BASELINE_SCHEMA_SQL)
+                .await
+                .unwrap();
+            let data = TrackingRuntimeDataStore::new(pool.clone());
+            let b = window("b.exe", "private title");
+            sessions::start_session(&pool, "A", "a.exe", "A", 1_000, 1_000)
+                .await
+                .unwrap();
+            apply_window_transition_with_title_policy(
+                &data,
+                Some(&b),
+                &b,
+                5_000,
+                5_000,
+                false,
+                start_session_for_transition,
+            )
+            .await
+            .unwrap();
+            let title: String =
+                sqlx::query_scalar("SELECT window_title FROM sessions WHERE end_time IS NULL")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(title, "");
+            assert_eq!(
+                data.load_active_session().await.unwrap().unwrap().exe_name,
+                "b.exe"
+            );
+            pool.execute("CREATE TRIGGER reject_title BEFORE UPDATE OF window_title ON sessions BEGIN SELECT RAISE(FAIL, 'injected title failure'); END").await.unwrap();
+            assert!(apply_window_transition(
+                &data,
+                Some(&b),
+                &b,
+                6_000,
+                5_000,
+                start_session_for_transition
+            )
+            .await
+            .is_err());
+            pool.execute("DROP TRIGGER reject_title").await.unwrap();
+            apply_window_transition(
+                &data,
+                Some(&b),
+                &b,
+                7_000,
+                5_000,
+                start_session_for_transition,
+            )
+            .await
+            .unwrap();
+            let title: String =
+                sqlx::query_scalar("SELECT window_title FROM sessions WHERE end_time IS NULL")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(title, "private title");
+            let count: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE exe_name = 'b.exe'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(count, 1);
+        });
+    }
 }
 
 #[cfg(test)]

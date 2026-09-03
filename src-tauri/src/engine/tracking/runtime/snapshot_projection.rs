@@ -8,7 +8,7 @@ use tauri::{AppHandle, Manager, Runtime};
 
 pub(super) fn clear_active_session_snapshot<R: Runtime>(app: &AppHandle<R>) {
     if let Some(state) = app.try_state::<TrackingRuntimeSnapshotState>() {
-        state.replace_active_session(None);
+        state.invalidate_activity();
     }
 }
 
@@ -42,9 +42,11 @@ pub(super) fn update_runtime_snapshot_state<R: Runtime>(
     status: &TrackingStatusSnapshot,
     sampled_at_ms: i64,
     poll_outcome: &WindowPollOutcome,
+    generation: u64,
 ) {
     if let Some(state) = app.try_state::<TrackingRuntimeSnapshotState>() {
         state.replace(TrackingRuntimeSnapshot {
+            generation,
             window: window.clone(),
             status: status.clone(),
             sampled_at_ms,

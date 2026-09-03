@@ -75,8 +75,9 @@ pub(super) async fn persist_tracker_runtime_timestamps(
             .await
         {
             log_tracker_error(format!("failed to save tracker heartbeat: {error}"));
+        } else {
+            state.last_heartbeat_persisted_at_ms = Some(now_ms);
         }
-        state.last_heartbeat_persisted_at_ms = Some(now_ms);
     }
 
     if did_successfully_sample_window
@@ -90,8 +91,9 @@ pub(super) async fn persist_tracker_runtime_timestamps(
             .await
         {
             log_tracker_error(format!("failed to save tracker sample timestamp: {error}"));
+        } else {
+            state.last_successful_sample_persisted_at_ms = Some(now_ms);
         }
-        state.last_successful_sample_persisted_at_ms = Some(now_ms);
     }
 }
 
@@ -148,15 +150,17 @@ pub(super) async fn load_tracking_loop_state(
             audio_signal: &audio_signal,
         });
     let tracked_window = apply_tracking_mode_window_state(window_info.clone(), &tracking_status);
-    let window_is_trackable =
+    // AFK is handled by the timing policy and seal_stop. Keep its terminal
+    // sustained state so the session closes at the sustained deadline.
+    let window_identity_is_trackable =
         is_trackable_window(Some(WindowTrackingCandidate::from_window_fields(
             &tracked_window.exe_name,
             &tracked_window.title,
             &tracked_window.window_class,
-            tracked_window.is_afk,
+            false,
         )));
 
-    if !app_tracking_enabled || !window_is_trackable {
+    if !app_tracking_enabled || !window_identity_is_trackable {
         tracking_status = TrackingStatusSnapshot::default();
         next_sustained_participation_state = SustainedParticipationRuntimeState::default();
     }
@@ -335,6 +339,56 @@ mod tests {
     }
 
     #[test]
+    fn afk_window_preserves_expired_sustained_state_until_sealing() {
+        tauri::async_runtime::block_on(async {
+            use crate::domain::tracking::{
+                resolve_sustained_participation_identity_key, SustainedParticipationKind,
+                SustainedParticipationState,
+            };
+            let data = TrackingRuntimeDataStore::new(setup_test_db().await);
+            let window = tracker::WindowInfo {
+                hwnd: "0x100".into(),
+                root_owner_hwnd: "0x100".into(),
+                process_id: 123,
+                window_class: "Chrome_WidgetWin_1".into(),
+                title: "Media".into(),
+                exe_name: "chrome.exe".into(),
+                process_path: r"C:\Program Files\Google\Chrome\Application\chrome.exe".into(),
+                app_user_model_id: String::new(),
+                is_afk: true,
+                idle_time_ms: 901_000,
+            };
+            let previous = SustainedParticipationRuntimeState {
+                identity_key: resolve_sustained_participation_identity_key(
+                    &window.exe_name,
+                    &window.process_path,
+                ),
+                last_match_at_ms: Some(999_000),
+                last_kind: Some(SustainedParticipationKind::Audio),
+                ..Default::default()
+            };
+            let (state, next) = load_tracking_loop_state(
+                &data,
+                &TrackingPauseRuntimeState::default(),
+                &TitleRecordingRuntimeState::default(),
+                &window,
+                1_000_000,
+                &previous,
+                &mut TrackingSettingsCache::default(),
+            )
+            .await;
+
+            assert!(state.tracked_window.is_afk);
+            assert!(!state.tracking_status.is_tracking_active);
+            assert_eq!(
+                state.tracking_status.sustained_participation_state,
+                SustainedParticipationState::Expired
+            );
+            assert_eq!(next.identity_key, previous.identity_key);
+        });
+    }
+
+    #[test]
     fn tracking_settings_default_sustained_participation_matches_release_profile() {
         tauri::async_runtime::block_on(async {
             let pool = setup_test_db().await;
@@ -357,15 +411,31 @@ mod tests {
 
             assert!(!load_tracking_paused(&data, &pause_state, 1_000).await);
 
-            tracker_settings::save_tracking_paused_setting(&pool, true)
-                .await
-                .unwrap();
+            crate::data::repositories::app_settings::commit_app_setting_mutations(
+                &pool,
+                &[
+                    crate::data::repositories::app_settings::AppSettingMutation {
+                        key: "tracking_paused".into(),
+                        value: "1".into(),
+                    },
+                ],
+            )
+            .await
+            .unwrap();
             assert!(!load_tracking_paused(&data, &pause_state, 2_000).await);
             assert!(load_tracking_paused(&data, &pause_state, 61_000).await);
 
-            tracker_settings::save_tracking_paused_setting(&pool, false)
-                .await
-                .unwrap();
+            crate::data::repositories::app_settings::commit_app_setting_mutations(
+                &pool,
+                &[
+                    crate::data::repositories::app_settings::AppSettingMutation {
+                        key: "tracking_paused".into(),
+                        value: "0".into(),
+                    },
+                ],
+            )
+            .await
+            .unwrap();
             assert!(load_tracking_paused(&data, &pause_state, 62_000).await);
             assert!(!load_tracking_paused(&data, &pause_state, 122_000).await);
         });
@@ -585,5 +655,73 @@ mod tests {
                 crate::domain::widget::WIDGET_WINDOW_TITLE
             );
         });
+    }
+}
+
+pub(super) async fn record_committed_sample(
+    data: &dyn TrackingDataStore,
+    health: &crate::engine::tracking::watchdog::RuntimeHealthState,
+    now_ms: i64,
+    successful: bool,
+    persisted: &mut TrackerTimestampPersistState,
+) {
+    if successful {
+        health.note_successful_sample(now_ms);
+        persist_tracker_runtime_timestamps(data, now_ms, true, persisted).await;
+    }
+}
+
+pub(super) struct TrackingStop {
+    pub change_reason: Option<&'static str>,
+}
+
+impl TrackingLoopState {
+    pub(super) async fn seal_stop(
+        &self,
+        data: &dyn TrackingDataStore,
+        previous_window: Option<&tracker::WindowInfo>,
+        previous_status: Option<&TrackingStatusSnapshot>,
+        now_ms: i64,
+        successful_sample: bool,
+    ) -> Result<Option<TrackingStop>, crate::engine::tracking::ports::TrackingDataError> {
+        use super::super::session_timeout::*;
+        let reason = if self.tracking_paused {
+            seal_active_sessions_for_tracking_pause(data, now_ms).await?
+        } else if !self.app_tracking_enabled {
+            super::exclusion::seal_excluded_app_session(data, now_ms).await?
+        } else if !successful_sample {
+            return Ok(None);
+        } else if should_seal_sustained_participation(
+            previous_window,
+            previous_status,
+            &self.tracked_window,
+            &self.tracking_status,
+        ) {
+            seal_active_sessions_for_passive_participation_timeout(
+                data,
+                &self.tracked_window,
+                now_ms,
+                self.sustained_participation_secs,
+            )
+            .await?
+        } else if should_suspend_active_tracking(
+            previous_window,
+            &self.tracked_window,
+            self.continuity_window_secs,
+            &self.tracking_status,
+        ) {
+            seal_active_sessions_for_continuity_timeout(
+                data,
+                &self.tracked_window,
+                now_ms,
+                self.continuity_window_secs,
+            )
+            .await?
+        } else {
+            return Ok(None);
+        };
+        Ok(Some(TrackingStop {
+            change_reason: reason,
+        }))
     }
 }
