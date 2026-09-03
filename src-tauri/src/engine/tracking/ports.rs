@@ -51,12 +51,8 @@ pub trait TrackingDataStore: Send + Sync {
         &'a self,
         exe_name: &'a str,
     ) -> TrackingDataFuture<'a, bool>;
-    fn end_active_session_for_exe<'a>(
-        &'a self,
-        exe_name: &'a str,
-        end_time: i64,
-    ) -> TrackingDataFuture<'a, bool>;
-    fn load_tracker_heartbeat_timestamp(&self) -> TrackingDataFuture<'_, Option<i64>>;
+    fn load_tracker_successful_sample_timestamp(&self) -> TrackingDataFuture<'_, Option<i64>>;
+    fn seal_interrupted_web_activity(&self, now_ms: i64) -> TrackingDataFuture<'_, bool>;
     fn save_startup_self_heal<'a>(
         &'a self,
         timestamp_ms: i64,

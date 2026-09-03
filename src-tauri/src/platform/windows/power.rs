@@ -10,9 +10,9 @@ use windows::Win32::System::RemoteDesktop::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, PostQuitMessage,
-    RegisterClassW, TranslateMessage, HWND_MESSAGE, MSG, PBT_APMRESUMEAUTOMATIC,
-    PBT_APMRESUMESUSPEND, PBT_APMSUSPEND, WINDOW_EX_STYLE, WM_DESTROY, WM_POWERBROADCAST,
-    WM_WTSSESSION_CHANGE, WNDCLASSW,
+    RegisterClassW, TranslateMessage, MSG, PBT_APMRESUMEAUTOMATIC, PBT_APMRESUMESUSPEND,
+    PBT_APMSUSPEND, WINDOW_EX_STYLE, WM_DESTROY, WM_POWERBROADCAST, WM_WTSSESSION_CHANGE,
+    WNDCLASSW,
 };
 
 static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
@@ -63,7 +63,9 @@ pub fn start(app_handle: AppHandle) {
             0,
             0,
             0,
-            Some(HWND_MESSAGE),
+            // Power broadcasts reach top-level windows, not message-only ones.
+            // No WS_VISIBLE style is set, so this observer remains hidden.
+            None,
             None,
             Some(instance),
             None,

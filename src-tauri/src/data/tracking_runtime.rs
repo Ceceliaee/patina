@@ -65,14 +65,6 @@ impl TrackingRuntimeDataStore {
         tracker_settings::load_tracking_enabled_setting_for_app(&self.pool, exe_name).await
     }
 
-    pub async fn end_active_session_for_exe(
-        &self,
-        exe_name: &str,
-        end_time: i64,
-    ) -> Result<bool, TrackingRuntimeDataError> {
-        sessions::end_active_session_for_exe(&self.pool, exe_name, end_time).await
-    }
-
     pub async fn load_tracker_timestamp(
         &self,
         key: &str,
@@ -80,11 +72,13 @@ impl TrackingRuntimeDataStore {
         tracker_settings::load_tracker_timestamp(&self.pool, key).await
     }
 
-    pub async fn load_tracker_heartbeat_timestamp(
+    pub async fn load_tracker_successful_sample_timestamp(
         &self,
     ) -> Result<Option<i64>, TrackingRuntimeDataError> {
-        self.load_tracker_timestamp(tracker_settings::TRACKER_LAST_HEARTBEAT_KEY)
-            .await
+        self.load_tracker_timestamp(
+            crate::engine::tracking::ports::TRACKER_LAST_SUCCESSFUL_SAMPLE_KEY,
+        )
+        .await
     }
 
     pub async fn save_startup_self_heal(
@@ -180,6 +174,13 @@ fn tracking_data_error(error: impl std::fmt::Display) -> TrackingDataError {
 }
 
 impl TrackingDataStore for TrackingRuntimeDataStore {
+    fn seal_interrupted_web_activity(&self, now_ms: i64) -> TrackingDataFuture<'_, bool> {
+        Box::pin(async move {
+            crate::data::repositories::web_activity::seal_interrupted_segments(&self.pool, now_ms)
+                .await
+                .map_err(tracking_data_error)
+        })
+    }
     fn clone_store(&self) -> SharedTrackingDataStore {
         Arc::new(self.clone())
     }
@@ -250,21 +251,9 @@ impl TrackingDataStore for TrackingRuntimeDataStore {
         })
     }
 
-    fn end_active_session_for_exe<'a>(
-        &'a self,
-        exe_name: &'a str,
-        end_time: i64,
-    ) -> TrackingDataFuture<'a, bool> {
+    fn load_tracker_successful_sample_timestamp(&self) -> TrackingDataFuture<'_, Option<i64>> {
         Box::pin(async move {
-            TrackingRuntimeDataStore::end_active_session_for_exe(self, exe_name, end_time)
-                .await
-                .map_err(tracking_data_error)
-        })
-    }
-
-    fn load_tracker_heartbeat_timestamp(&self) -> TrackingDataFuture<'_, Option<i64>> {
-        Box::pin(async move {
-            TrackingRuntimeDataStore::load_tracker_heartbeat_timestamp(self)
+            TrackingRuntimeDataStore::load_tracker_successful_sample_timestamp(self)
                 .await
                 .map_err(tracking_data_error)
         })

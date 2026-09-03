@@ -2,7 +2,6 @@ use crate::domain::settings::parse_boolean_setting;
 use crate::domain::tracking::resolve_app_override_executable;
 use sqlx::{Pool, Row, Sqlite};
 
-pub const TRACKER_LAST_HEARTBEAT_KEY: &str = "__tracker_last_heartbeat_ms";
 pub const TRACKER_LAST_STARTUP_SELF_HEAL_AT_KEY: &str = "__tracker_last_startup_self_heal_at_ms";
 pub const TRACKER_LAST_STARTUP_SELF_HEAL_SUMMARY_KEY: &str =
     "__tracker_last_startup_self_heal_summary";
@@ -38,14 +37,6 @@ pub async fn load_title_recording_enabled(pool: &Pool<Sqlite>) -> Result<bool, s
         .as_deref()
         .map(|raw| parse_boolean_setting(raw, true))
         .unwrap_or(true))
-}
-
-pub async fn save_tracking_paused_setting(
-    pool: &Pool<Sqlite>,
-    tracking_paused: bool,
-) -> Result<(), sqlx::Error> {
-    let value = if tracking_paused { "1" } else { "0" };
-    save_setting_value(pool, TRACKING_PAUSED_KEY, value).await
 }
 
 pub async fn load_capture_window_title_setting_for_app(
