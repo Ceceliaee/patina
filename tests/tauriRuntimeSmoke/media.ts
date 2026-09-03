@@ -4,7 +4,13 @@ import { CdpConnection, waitFor } from "../uiBrowserSmoke/browserHarness.ts";
 type Snapshot = {
   sampled_at_ms: number;
   window: { idle_time_ms: number };
-  status: { sustained_participation_active: boolean };
+  status: {
+    sustained_participation_active: boolean;
+    sustained_participation_diagnostics: {
+      system_media: { signal: { is_available: boolean } };
+      audio_session: { signal: { is_available: boolean } };
+    };
+  };
   active_session: { id: number } | null;
 };
 
@@ -28,7 +34,7 @@ export async function verifyMediaTimeout(
   });
   assert.equal(audio.exceptionDetails, undefined);
   try {
-    const matched = await waitFor("real Chrome audio session matches sustained participation", async () => {
+    const matched = await waitFor("real browser audio session matches sustained participation", async () => {
       const snapshot = await invoke("get_current_tracking_snapshot") as Snapshot;
       if (!snapshot.status.sustained_participation_active) return null;
       const rows=await invoke("plugin:sql|select",{db:"sqlite:patina.db",query:"SELECT id FROM sessions WHERE end_time IS NULL",values:[]}) as Array<{id:number}>;
@@ -36,16 +42,29 @@ export async function verifyMediaTimeout(
     }, 15_000).catch(async error=>{
       const snapshot=await invoke("get_current_tracking_snapshot") as Snapshot;
       console.error("TIMING_MEDIA_DIAGNOSTIC",JSON.stringify(snapshot.status));
+      const diagnostics = snapshot.status.sustained_participation_diagnostics;
+      if (
+        process.env.PATINA_RUNTIME_SMOKE_ALLOW_MISSING_MEDIA_PROVIDER === "1"
+        && !diagnostics.system_media.signal.is_available
+        && !diagnostics.audio_session.signal.is_available
+      ) {
+        console.log("SKIP real browser audio session: Windows runner exposes no system-media or audio-session provider");
+        return null;
+      }
       throw error;
     });
+    if (!matched) return;
     const threshold = Math.floor(matched.window.idle_time_ms / 1000) + 3;
-    const expectedEnd = matched.sampled_at_ms - matched.window.idle_time_ms + threshold * 1000;
     await invoke("cmd_set_afk_threshold", { thresholdSecs: 0 });
     await invoke("cmd_commit_app_settings", { mutations: [{ key: "idle_timeout_secs", value: String(threshold) }] });
     const ended = await waitFor("real sustained-participation timeout", async () => {
       const rows = await invoke("plugin:sql|select", { db: "sqlite:patina.db", query: "SELECT end_time FROM sessions WHERE id=?", values: [matched.active_session!.id] }) as Array<{end_time:number|null}>;
       return rows[0]?.end_time === null ? null : rows[0];
     }, 15_000);
+    // Input can occur after the first matched snapshot. The expiration snapshot
+    // carries the same Windows idle sample that resolved the persisted cutoff.
+    const expiration = await invoke("get_current_tracking_snapshot") as Snapshot;
+    const expectedEnd = expiration.sampled_at_ms - expiration.window.idle_time_ms + threshold * 1000;
     assert.ok(Math.abs(ended.end_time! - expectedEnd) < 250,
       `media cutoff must use its own threshold, expected ${expectedEnd}, got ${ended.end_time}`);
     const overhang = await invoke("plugin:sql|select", { db: "sqlite:patina.db", query: "SELECT w.id FROM web_activity_segments w JOIN web_activity_native_sessions r ON r.segment_id=w.id WHERE r.session_id=? AND w.end_time>w.start_time AND w.end_time>?", values: [matched.active_session!.id, ended.end_time] });

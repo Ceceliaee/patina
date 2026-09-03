@@ -154,3 +154,7 @@ jobs:
 
       - name: Run isolated runtime smoke
         run: npm run test:tauri-runtime-smoke
+        env:
+          # GitHub-hosted Windows runners expose no interactive media-session provider.
+          # The smoke still fails on an available provider that does not match the browser.
+          PATINA_RUNTIME_SMOKE_ALLOW_MISSING_MEDIA_PROVIDER: "1"
