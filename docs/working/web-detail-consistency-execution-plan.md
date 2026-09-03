@@ -1,9 +1,9 @@
 # 网页详情与总览一致性执行方案
 
-> Status: Draft  
-> Created: 2026-09-03  
-> Last updated: 2026-09-03  
-> Execution owner: History / destination / Data read models  
+> Status: Draft
+> Created: 2026-09-03
+> Last updated: 2026-09-03
+> Execution owner: History / destination / Data read models
 > Long-term owners affected: `docs/architecture.md`, `docs/engineering-quality.md`, `docs/quiet-pro-component-guidelines.md`，仅在稳定契约实际改变时更新
 
 实施顺序：先完成[应用与网页计时准确性方案](../archive/activity-timing-accuracy-execution-plan.md)及适用验证，再开始本文的代码实施。本轮只准备执行文档，不修改代码。本文不保存私有 Project 的内容、字段、排序或截图。

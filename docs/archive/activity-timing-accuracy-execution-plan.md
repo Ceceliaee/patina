@@ -1,9 +1,9 @@
 # 应用与网页计时准确性执行方案
 
-> Status: Complete  
-> Created: 2026-09-03  
-> Last updated: 2026-09-03  
-> Execution owner: Patina tracking / Web Activity  
+> Status: Complete
+> Created: 2026-09-03
+> Last updated: 2026-09-03
+> Execution owner: Patina tracking / Web Activity
 > Long-term owners affected: `docs/architecture.md`, `docs/web-activity-protocol.md`, `engine/tracking`, `engine/web_activity`, `data`
 
 本文保存 2026-09-03 完成的实现与验证证据。长期契约由下列 active owner 维护；未运行的平台组合及其验证责任见第 8.6 节，不把归档记录作为新的实现依据。
