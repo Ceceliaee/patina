@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { verifyTrackingBoundaries } from "./tauriRuntimeSmoke/timing.ts";
+import { verifyRestoreBoundary } from "./tauriRuntimeSmoke/restore.ts";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -88,12 +90,12 @@ async function findWidgetTarget(port: number, mainWebSocketDebuggerUrl: string) 
   }
 }
 
-async function evaluate(client: CdpConnection, expression: string) {
+async function evaluate(client: CdpConnection, expression: string, timeoutMs?: number) {
   const response = await client.command("Runtime.evaluate", {
     expression,
     awaitPromise: true,
     returnByValue: true,
-  });
+  }, undefined, timeoutMs);
   if (response.exceptionDetails) throw new Error(JSON.stringify(response.exceptionDetails));
   return (response.result as { value?: unknown } | undefined)?.value;
 }
@@ -256,7 +258,7 @@ function verifyDatabase(dbPath: string) {
     "assert integrity == 'ok', integrity",
     "assert value == ('77',), value",
     "assert widget_sessions == 0, widget_sessions",
-    "assert migration == (13,), migration",
+    "assert migration == (14,), migration",
     "assert states == {'app_catalog': 'ready', 'activity_hourly': 'ready'}, states",
     "assert scheduled == (0, 'weekly', 5, 1260, 1), scheduled",
     "assert {'target_kind', 'target_identity'} <= scheduled_columns, scheduled_columns",
@@ -995,10 +997,12 @@ try {
     ),
     10_000,
   );
-  const expandedLeftWidgetSize = await evaluate(
-    client,
-    `window.__TAURI_INTERNALS__.invoke("plugin:window|outer_size", { label: "widget" })`,
-  ) as { width?: number; height?: number };
+  const expandedLeftWidgetSize = await waitFor("native widget expansion acknowledged", async () => {
+    const size = await evaluate(client!,
+      `window.__TAURI_INTERNALS__.invoke("plugin:window|outer_size", { label: "widget" })`,
+    ) as { width?: number; height?: number };
+    return (size.width ?? 0) > (finalizedWidgetSize.width ?? 0) ? size : null;
+  }, 10_000);
   assert.ok(
     (expandedLeftWidgetSize.width ?? 0) > (finalizedWidgetSize.width ?? 0),
     "expanded Widget must allocate the stable tracking and action bar",
@@ -1318,6 +1322,19 @@ try {
 
   const storage = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_get_storage_snapshot")`);
   assert.equal(typeof storage, "object");
+
+  assert.ok(webActivityBridgePort);
+  await verifyTrackingBoundaries((command, args = {}) => evaluate(client!,
+    `window.__TAURI_INTERNALS__.invoke(${JSON.stringify(command)}, ${JSON.stringify(args)})`), webActivityBridgePort,
+    async expression => {
+      if (process.env.PATINA_TIMING_MANUAL_POWER !== "1") return evaluate(client!,expression);
+      // A pre-sleep CDP request can lose its response. Poll through a short-lived
+      // connection so a stale transport cannot consume the whole manual deadline.
+      const target = await findMainTarget(devtoolsPort);
+      if (!target) throw new Error("Manual power WebView temporarily unavailable");
+      const probe = await CdpConnection.connect(target.webSocketDebuggerUrl!);
+      try { return await evaluate(probe,expression,5_000); } finally { probe.close(); }
+    });
 
   // Freeze the isolated tracker before asserting read-model contents. A live
   // foreground sample is valid here, so the test waits for projections to
@@ -1655,6 +1672,56 @@ try {
   `) as { code?: string; retryable?: boolean };
   assert.equal(structuredError.code, "SQLITE_INVALID_INPUT");
   assert.equal(structuredError.retryable, false);
+
+  await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {mutations:[{key:"tracking_paused",value:"0"}]})`);
+  await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_show_main_window")`);
+  await verifyRestoreBoundary((command,args={})=>evaluate(client!,`window.__TAURI_INTERNALS__.invoke(${JSON.stringify(command)},${JSON.stringify(args)})`),root);
+  for (const exitMode of ["forced", "normal"]) {
+  const interrupted = await waitFor(`active session with persisted successful sample before ${exitMode} exit`, async () => {
+    const rows = await evaluate(client!, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {db:"sqlite:patina.db",query:"SELECT s.id,s.start_time,CAST(v.value AS INTEGER) AS sampled_at FROM sessions s JOIN settings v ON v.key='__tracker_last_successful_sample_ms' WHERE s.end_time IS NULL AND CAST(v.value AS INTEGER)>=s.start_time",values:[]})`) as Array<{id:number;start_time:number;sampled_at:number}>;
+    return rows[0] ?? null;
+  },15_000);
+  if (exitMode === "normal") {
+    await evaluate(client!,`window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings",{mutations:[{key:"close_behavior",value:"exit"},{key:"minimize_behavior",value:"taskbar"}]})`);
+    await evaluate(client!,`window.__TAURI_INTERNALS__.invoke("cmd_set_desktop_behavior",{closeBehavior:"exit",minimizeBehavior:"taskbar"})`);
+    await evaluate(client!,`setTimeout(()=>{void window.__TAURI_INTERNALS__.invoke("plugin:window|close",{label:"main"})},0); true`);
+  }
+  client.close();
+  client = null;
+  if (exitMode === "forced") {
+    stopProcessTree(appProcess);
+    stopResidualRuntimeBinary();
+  }
+  await waitFor("isolated binary stopped before restart", () => isResidualRuntimeBinaryRunning() ? null : true,10_000);
+  const stoppedAt = Date.now();
+  const restartedAt = Date.now();
+  appProcess = spawn(RUNTIME_BINARY_PATH, [], {
+    cwd:process.cwd(),
+    env:{...process.env,PATINA_E2E:"1",PATINA_E2E_SINGLE_INSTANCE:"1",PATINA_E2E_DATA_ROOT:root,
+      PATINA_E2E_FRONTEND_URL:frontendUrl,PATINA_E2E_DEVTOOLS_PORT:String(devtoolsPort),
+      TAURI_CONFIG:tauriConfigOverrideJson,WEBVIEW2_USER_DATA_FOLDER:join(root,"webview-user-data")},
+    stdio:["ignore","pipe","pipe"],
+  });
+  appProcess.stdout?.on("data",captureAppLog);
+  appProcess.stderr?.on("data",captureAppLog);
+  const restartedTarget = await waitFor(`main WebView after ${exitMode}-exit recovery`,()=>findMainTarget(devtoolsPort),WEBVIEW_STARTUP_TIMEOUT_MS);
+  client = await CdpConnection.connect(restartedTarget.webSocketDebuggerUrl!);
+  await waitFor("Tauri IPC after process restart",()=>evaluate(client!,"Boolean(window.__TAURI_INTERNALS__?.invoke)"),15_000);
+  const recovered = await waitFor("startup seals interrupted session before new tracking",async()=> {
+    const rows = await evaluate(client!,`window.__TAURI_INTERNALS__.invoke("plugin:sql|select",{db:"sqlite:patina.db",query:"SELECT end_time,duration FROM sessions WHERE id=?",values:[${interrupted.id}]})`) as Array<{end_time:number|null;duration:number}>;
+    return rows[0]?.end_time !== null ? rows[0] : null;
+  },15_000);
+  assert.ok(recovered.end_time! >= interrupted.sampled_at && recovered.end_time! <= stoppedAt);
+  assert.equal(recovered.duration,recovered.end_time!-interrupted.start_time);
+  await evaluate(client,`window.__TAURI_INTERNALS__.invoke("cmd_show_main_window")`);
+  const freshAfterRestart = await waitFor("fresh native session after real process restart",async()=> {
+    const rows = await evaluate(client!,`window.__TAURI_INTERNALS__.invoke("plugin:sql|select",{db:"sqlite:patina.db",query:"SELECT id,start_time FROM sessions WHERE end_time IS NULL",values:[]})`) as Array<{id:number;start_time:number}>;
+    return rows[0] ?? null;
+  },15_000);
+  assert.notEqual(freshAfterRestart.id,interrupted.id);
+  assert.ok(freshAfterRestart.start_time>=restartedAt);
+  console.log(`PASS real ${exitMode}-exit recovery: persisted sample seals old session, restart creates a fresh interval`);
+  }
 
   console.log("PASS real Tauri runtime command/event/SQLite/capability smoke");
 } catch (error) {
