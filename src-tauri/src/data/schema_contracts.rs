@@ -1,6 +1,17 @@
 use sqlx::{Pool, Row, Sqlite};
 use std::collections::BTreeSet;
 
+pub async fn has_web_activity_session_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let columns = table_columns(pool, "web_activity_native_sessions").await?;
+    let indexes = table_indexes(pool, "web_activity_native_sessions").await?;
+    let trigger: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = 'trg_native_session_web_boundary'")
+        .fetch_one(pool).await.map_err(|error| error.to_string())?;
+    Ok(columns.contains("segment_id")
+        && columns.contains("session_id")
+        && indexes.contains("idx_web_activity_native_session")
+        && trigger == 1)
+}
+
 pub async fn has_web_activity_revision_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
     let rows = sqlx::query("PRAGMA table_info(web_activity_revision)")
         .fetch_all(pool)

@@ -147,11 +147,12 @@ pub async fn load_web_activity_aggregate_range_from_pool(
     .await
     .map_err(|error| format!("failed to read web activity source revision: {error}"))?;
 
-    let mut segment_query =
-        QueryBuilder::<Sqlite>::new("SELECT normalized_domain, start_time, COALESCE(end_time, ");
+    let mut segment_query = QueryBuilder::<Sqlite>::new(
+        "SELECT normalized_domain, start_time, COALESCE(end_time, MIN(updated_at + 45000, ",
+    );
     segment_query
         .push_bind(now_ms)
-        .push(") effective_end_time FROM web_activity_segments WHERE ");
+        .push(")) effective_end_time FROM web_activity_segments WHERE ");
     if let Some(domains) = domain_filter.as_ref() {
         segment_query.push("normalized_domain IN (");
         let mut separated = segment_query.separated(", ");
@@ -163,9 +164,9 @@ pub async fn load_web_activity_aggregate_range_from_pool(
     segment_query
         .push("start_time < ")
         .push_bind(end_ms)
-        .push(" AND COALESCE(end_time, ")
+        .push(" AND COALESCE(end_time, MIN(updated_at + 45000, ")
         .push_bind(now_ms)
-        .push(") > ")
+        .push(")) > ")
         .push_bind(start_ms);
     let segment_rows = segment_query
         .build()
@@ -400,6 +401,91 @@ mod tests {
                 },
             ],
         );
+    }
+
+    #[test]
+    fn handoff_facts_preserve_gaps_zero_fragments_and_fixed_cutoffs_in_the_sql_reader() {
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Facts {
+            case: String,
+            native: Vec<(i64, i64)>,
+            web: Vec<(i64, Option<i64>, i64)>,
+            boundaries: Vec<i64>,
+            now: i64,
+            expected_buckets: Vec<i64>,
+        }
+        let fixtures: Vec<Facts> = serde_json::from_str(include_str!(
+            "../../../tests/fixtures/activity-timing-facts.json"
+        ))
+        .unwrap();
+        tauri::async_runtime::block_on(async {
+            for facts in fixtures {
+                let pool = setup_test_db().await;
+                for (start, end, updated) in facts.web {
+                    let cutoff = end.unwrap_or(facts.now.min(updated + 45_000)).max(start);
+                    assert!(
+                        cutoff == start
+                            || facts.native.iter().any(|&(a, b)| a <= start && cutoff <= b),
+                        "{}: webpage outside native interval",
+                        facts.case
+                    );
+                    sqlx::query("INSERT INTO web_activity_segments(browser_client_id,browser_kind,browser_exe_name,domain,normalized_domain,start_time,end_time,duration,source,created_at,updated_at) VALUES('fixture','chrome','chrome.exe','fixture.test','fixture.test',?,?,?,'test',?,?)")
+                        .bind(start).bind(end).bind(end.map(|end| end-start)).bind(start).bind(updated)
+                        .execute(&pool).await.unwrap();
+                }
+                let result = load_web_activity_aggregate_range_from_pool(
+                    &pool,
+                    facts.boundaries[0],
+                    *facts.boundaries.last().unwrap(),
+                    &facts.boundaries,
+                    None,
+                    None,
+                    facts.now,
+                )
+                .await
+                .unwrap();
+                let actual = facts.boundaries[..facts.boundaries.len() - 1]
+                    .iter()
+                    .map(|start| {
+                        result
+                            .records
+                            .iter()
+                            .filter(|row| row.bucket_start_ms == *start)
+                            .map(|row| row.duration_ms)
+                            .sum::<i64>()
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(actual, facts.expected_buckets, "{}", facts.case);
+            }
+        });
+    }
+
+    #[test]
+    fn a_stalled_expiry_worker_cannot_make_readers_extend_an_observation_forever() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            sqlx::query("INSERT INTO web_activity_segments(browser_client_id,browser_kind,browser_exe_name,domain,normalized_domain,start_time,source,created_at,updated_at) VALUES('a','chrome','chrome.exe','example.test','example.test',1000,'test',1000,2000)")
+                .execute(&pool).await.unwrap();
+            let result = load_web_activity_aggregate_range_from_pool(
+                &pool,
+                0,
+                600_000,
+                &[0, 600_000],
+                None,
+                None,
+                600_000,
+            )
+            .await
+            .unwrap();
+            assert_eq!(result.records.len(), 1);
+            assert_eq!(result.records[0].duration_ms, 46_000);
+            let end: Option<i64> = sqlx::query_scalar("SELECT end_time FROM web_activity_segments")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            assert_eq!(end, None);
+        });
     }
 
     #[test]

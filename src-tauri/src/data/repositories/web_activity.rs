@@ -1,9 +1,11 @@
 use crate::domain::backup::{BackupWebActivitySegment, BackupWebFaviconCache};
 use crate::domain::web_activity::{
     parse_domain_override_capture_title, parse_domain_override_enabled, WebActivitySegmentInput,
-    WEB_ACTIVITY_SOURCE_BROWSER_EXTENSION, WEB_DOMAIN_OVERRIDE_KEY_PREFIX,
+    WEB_ACTIVITY_OBSERVATION_TTL_MS, WEB_ACTIVITY_SOURCE_BROWSER_EXTENSION,
+    WEB_DOMAIN_OVERRIDE_KEY_PREFIX,
 };
 use sqlx::{Pool, Row, Sqlite, Transaction};
+use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
 struct ActiveWebActivitySegment {
@@ -15,6 +17,8 @@ struct ActiveWebActivitySegment {
     url: Option<String>,
     title: Option<String>,
     start_time: i64,
+    updated_at: i64,
+    native_session_id: Option<i64>,
 }
 
 pub async fn load_domain_recording_enabled(
@@ -55,10 +59,58 @@ pub async fn upsert_active_segment(
     timestamp_ms: i64,
 ) -> Result<bool, sqlx::Error> {
     let mut tx = pool.begin().await?;
+    let mut persisted_input = input.clone();
+    let settings: Vec<(String, String)> = sqlx::query_as("SELECT key, value FROM settings WHERE key IN ('tracking_paused', 'web_activity_enabled', 'title_recording_enabled', ?, ?)")
+        .bind(format!("__app_override::{}", input.browser_exe_name.to_ascii_lowercase()))
+        .bind(format!("{WEB_DOMAIN_OVERRIDE_KEY_PREFIX}{}", input.normalized_domain))
+        .fetch_all(&mut *tx).await?;
+    for (key, value) in settings {
+        let denied = match key.as_str() {
+            "title_recording_enabled" => {
+                if !crate::domain::settings::parse_boolean_setting(&value, true) {
+                    persisted_input.title = None;
+                }
+                false
+            }
+            "tracking_paused" => crate::domain::settings::parse_boolean_setting(&value, false),
+            "web_activity_enabled" => {
+                !crate::domain::settings::parse_boolean_setting(&value, false)
+            }
+            key if key.starts_with(WEB_DOMAIN_OVERRIDE_KEY_PREFIX) => {
+                if !parse_domain_override_capture_title(&value) {
+                    persisted_input.title = None;
+                }
+                !parse_domain_override_enabled(&value)
+            }
+            _ => {
+                serde_json::from_str::<serde_json::Value>(&value)
+                    .ok()
+                    .and_then(|value| value.get("track").and_then(|track| track.as_bool()))
+                    == Some(false)
+            }
+        };
+        if denied {
+            return Ok(false);
+        }
+    }
+    let input = &persisted_input;
+    let matching_session: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ? AND end_time IS NULL AND LOWER(exe_name) = LOWER(?) AND start_time <= ?)"
+    ).bind(input.native_session_id).bind(&input.browser_exe_name).bind(timestamp_ms)
+        .fetch_one(&mut *tx).await?;
+    if !matching_session {
+        return Ok(false);
+    }
     let active = load_active_segment_tx(&mut tx).await?;
 
     if let Some(active) = active {
-        if is_same_segment_identity(&active, input) {
+        if timestamp_ms < active.updated_at {
+            return Ok(false);
+        }
+        let expires_at = active
+            .updated_at
+            .saturating_add(WEB_ACTIVITY_OBSERVATION_TTL_MS);
+        if is_same_segment_identity(&active, input) && timestamp_ms <= expires_at {
             sqlx::query(
                 "UPDATE web_activity_segments
                  SET domain = ?,
@@ -82,13 +134,19 @@ pub async fn upsert_active_segment(
             )
             .await?;
             tx.commit().await?;
-            return Ok(false);
+            return Ok(timestamp_ms != active.updated_at);
         }
 
-        finish_segment_tx(&mut tx, active.id, active.start_time, timestamp_ms).await?;
+        finish_segment_tx(
+            &mut tx,
+            active.id,
+            active.start_time,
+            timestamp_ms.min(expires_at),
+        )
+        .await?;
     }
 
-    sqlx::query(
+    let inserted = sqlx::query(
         "INSERT INTO web_activity_segments (
              browser_client_id,
              browser_kind,
@@ -119,6 +177,12 @@ pub async fn upsert_active_segment(
     .execute(&mut *tx)
     .await?;
 
+    bind_native_session_tx(
+        &mut tx,
+        inserted.last_insert_rowid(),
+        Some(input.native_session_id),
+    )
+    .await?;
     upsert_favicon_cache_tx(
         &mut tx,
         &input.normalized_domain,
@@ -136,13 +200,77 @@ pub async fn end_active_segment(
     timestamp_ms: i64,
 ) -> Result<bool, sqlx::Error> {
     let mut tx = pool.begin().await?;
-    let active = load_active_segment_tx(&mut tx).await?;
+    let changed = end_active_segment_tx(&mut tx, timestamp_ms).await?;
+    tx.commit().await?;
+    Ok(changed)
+}
+
+pub(crate) async fn end_active_segment_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    timestamp_ms: i64,
+) -> Result<bool, sqlx::Error> {
+    let active = load_active_segment_tx(tx).await?;
     let Some(active) = active else {
-        tx.rollback().await?;
         return Ok(false);
     };
 
-    finish_segment_tx(&mut tx, active.id, active.start_time, timestamp_ms).await?;
+    finish_segment_tx(
+        tx,
+        active.id,
+        active.start_time,
+        timestamp_ms.min(
+            active
+                .updated_at
+                .saturating_add(WEB_ACTIVITY_OBSERVATION_TTL_MS),
+        ),
+    )
+    .await?;
+    Ok(true)
+}
+
+pub async fn seal_interrupted_segments(
+    pool: &Pool<Sqlite>,
+    now_ms: i64,
+) -> Result<bool, sqlx::Error> {
+    let result = sqlx::query("UPDATE web_activity_segments SET end_time = CASE WHEN updated_at BETWEEN start_time AND ? THEN updated_at ELSE start_time END, duration = CASE WHEN updated_at BETWEEN start_time AND ? THEN updated_at - start_time ELSE 0 END WHERE end_time IS NULL")
+        .bind(now_ms).bind(now_ms).execute(pool).await?;
+    Ok(result.rows_affected() > 0)
+}
+
+pub async fn expire_active_segment(pool: &Pool<Sqlite>, now_ms: i64) -> Result<bool, sqlx::Error> {
+    let result = sqlx::query("UPDATE web_activity_segments SET end_time = MAX(start_time, updated_at + ?), duration = MAX(0, updated_at + ? - start_time) WHERE end_time IS NULL AND updated_at + ? < ?")
+        .bind(WEB_ACTIVITY_OBSERVATION_TTL_MS).bind(WEB_ACTIVITY_OBSERVATION_TTL_MS).bind(WEB_ACTIVITY_OBSERVATION_TTL_MS).bind(now_ms)
+        .execute(pool).await?;
+    Ok(result.rows_affected() > 0)
+}
+
+pub async fn end_active_segment_for_source(
+    pool: &Pool<Sqlite>,
+    client: &str,
+    native_session_id: i64,
+    now_ms: i64,
+) -> Result<bool, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    let Some(active) = load_active_segment_tx(&mut tx).await? else {
+        return Ok(false);
+    };
+    if active.browser_client_id != client
+        || active.native_session_id != Some(native_session_id)
+        || now_ms < active.updated_at
+    {
+        return Ok(false);
+    }
+    finish_segment_tx(
+        &mut tx,
+        active.id,
+        active.start_time,
+        now_ms.min(
+            active
+                .updated_at
+                .saturating_add(WEB_ACTIVITY_OBSERVATION_TTL_MS),
+        ),
+    )
+    .await?;
     tx.commit().await?;
     Ok(true)
 }
@@ -166,7 +294,17 @@ pub async fn end_active_segment_for_domain(
         tx.rollback().await?;
         return Ok(false);
     }
-    finish_segment_tx(&mut tx, active.id, active.start_time, timestamp_ms).await?;
+    finish_segment_tx(
+        &mut tx,
+        active.id,
+        active.start_time,
+        timestamp_ms.min(
+            active
+                .updated_at
+                .saturating_add(WEB_ACTIVITY_OBSERVATION_TTL_MS),
+        ),
+    )
+    .await?;
     tx.commit().await?;
     Ok(true)
 }
@@ -175,7 +313,7 @@ pub async fn fetch_all_for_backup(
     pool: &Pool<Sqlite>,
 ) -> Result<Vec<BackupWebActivitySegment>, String> {
     let rows = sqlx::query(
-        "SELECT id, browser_client_id, browser_kind, browser_exe_name, domain,
+        "SELECT id, (SELECT session_id FROM web_activity_native_sessions WHERE segment_id = web_activity_segments.id) AS native_session_id, browser_client_id, browser_kind, browser_exe_name, domain,
                 normalized_domain, url, title, favicon_url, start_time, end_time,
                 duration, source, created_at, updated_at
          FROM web_activity_segments
@@ -188,6 +326,7 @@ pub async fn fetch_all_for_backup(
     Ok(rows
         .into_iter()
         .map(|row| BackupWebActivitySegment {
+            native_session_id: row.get("native_session_id"),
             id: row.get("id"),
             browser_client_id: row.get("browser_client_id"),
             browser_kind: row.get("browser_kind"),
@@ -275,14 +414,15 @@ pub async fn clear_for_restore(tx: &mut Transaction<'_, Sqlite>) -> Result<(), S
 pub async fn insert_for_restore(
     tx: &mut Transaction<'_, Sqlite>,
     segments: &[BackupWebActivitySegment],
+    session_id_map: &HashMap<i64, i64>,
 ) -> Result<(), String> {
     for segment in segments {
-        sqlx::query(
+        let inserted = sqlx::query(
             "INSERT INTO web_activity_segments (
                 id, browser_client_id, browser_kind, browser_exe_name, domain,
                 normalized_domain, url, title, favicon_url, start_time, end_time,
                 duration, source, created_at, updated_at
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(segment.id)
         .bind(&segment.browser_client_id)
@@ -302,6 +442,17 @@ pub async fn insert_for_restore(
         .execute(&mut **tx)
         .await
         .map_err(|error| format!("failed to restore web activity: {error}"))?;
+        if inserted.rows_affected() > 0 {
+            bind_native_session_tx(
+                tx,
+                inserted.last_insert_rowid(),
+                segment
+                    .native_session_id
+                    .and_then(|id| session_id_map.get(&id).copied()),
+            )
+            .await
+            .map_err(|error| format!("failed to restore native web relation: {error}"))?;
+        }
         upsert_favicon_cache_tx(
             tx,
             &segment.normalized_domain,
@@ -318,9 +469,10 @@ pub async fn insert_for_restore(
 pub async fn insert_missing_for_restore(
     tx: &mut Transaction<'_, Sqlite>,
     segments: &[BackupWebActivitySegment],
+    session_id_map: &HashMap<i64, i64>,
 ) -> Result<(), String> {
     for segment in segments {
-        sqlx::query(
+        let inserted = sqlx::query(
             "INSERT INTO web_activity_segments (
                 browser_client_id, browser_kind, browser_exe_name, domain,
                 normalized_domain, url, title, favicon_url, start_time, end_time,
@@ -361,6 +513,17 @@ pub async fn insert_missing_for_restore(
         .execute(&mut **tx)
         .await
         .map_err(|error| format!("failed to merge restore web activity: {error}"))?;
+        if inserted.rows_affected() > 0 {
+            bind_native_session_tx(
+                tx,
+                inserted.last_insert_rowid(),
+                segment
+                    .native_session_id
+                    .and_then(|id| session_id_map.get(&id).copied()),
+            )
+            .await
+            .map_err(|error| format!("failed to restore native web relation: {error}"))?;
+        }
         insert_missing_favicon_cache_tx(
             tx,
             &segment.normalized_domain,
@@ -374,12 +537,45 @@ pub async fn insert_missing_for_restore(
     Ok(())
 }
 
+async fn bind_native_session_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    segment_id: i64,
+    session_id: Option<i64>,
+) -> Result<(), sqlx::Error> {
+    if let Some(session_id) = session_id {
+        sqlx::query(
+            "INSERT INTO web_activity_native_sessions (segment_id, session_id) VALUES (?, ?)",
+        )
+        .bind(segment_id)
+        .bind(session_id)
+        .execute(&mut **tx)
+        .await?;
+        // Merge may retain a shorter, already closed native session. Binding a
+        // new child must enforce that existing boundary without updating its parent.
+        let boundary: Option<(i64, i64)> = sqlx::query_as(
+            "SELECT w.start_time, MIN(COALESCE(w.end_time, w.updated_at + ?), s.end_time)
+             FROM web_activity_segments w JOIN sessions s ON s.id = ?
+             WHERE w.id = ? AND s.end_time IS NOT NULL
+               AND (w.end_time IS NULL OR w.end_time > MAX(w.start_time, s.end_time))",
+        )
+        .bind(WEB_ACTIVITY_OBSERVATION_TTL_MS)
+        .bind(session_id)
+        .bind(segment_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+        if let Some((start, end)) = boundary {
+            finish_segment_tx(tx, segment_id, start, end).await?;
+        }
+    }
+    Ok(())
+}
+
 async fn load_active_segment_tx(
     tx: &mut Transaction<'_, Sqlite>,
 ) -> Result<Option<ActiveWebActivitySegment>, sqlx::Error> {
     let row = sqlx::query(
         "SELECT id, browser_client_id, browser_kind, browser_exe_name, normalized_domain,
-                url, title, start_time
+                url, title, start_time, updated_at, (SELECT session_id FROM web_activity_native_sessions WHERE segment_id = web_activity_segments.id) AS native_session_id
          FROM web_activity_segments
          WHERE end_time IS NULL
          ORDER BY start_time DESC, id DESC
@@ -397,6 +593,8 @@ async fn load_active_segment_tx(
         url: row.get("url"),
         title: row.get("title"),
         start_time: row.get("start_time"),
+        updated_at: row.get("updated_at"),
+        native_session_id: row.get("native_session_id"),
     }))
 }
 
@@ -482,7 +680,8 @@ fn is_same_segment_identity(
     active: &ActiveWebActivitySegment,
     input: &WebActivitySegmentInput,
 ) -> bool {
-    active.browser_client_id == input.browser_client_id
+    active.native_session_id == Some(input.native_session_id)
+        && active.browser_client_id == input.browser_client_id
         && active.browser_kind == input.browser_kind
         && active
             .browser_exe_name
@@ -506,10 +705,321 @@ mod tests {
         pool.execute(db_schema::WEB_ACTIVITY_SCHEMA_SQL)
             .await
             .unwrap();
+        pool.execute(db_schema::WEB_ACTIVITY_SESSION_SCHEMA_SQL)
+            .await
+            .unwrap();
+        super::super::sessions::start_session(&pool, "Chrome", "chrome.exe", "", 0, 0)
+            .await
+            .unwrap();
         pool.execute(db_schema::WEB_FAVICON_CACHE_SCHEMA_SQL)
             .await
             .unwrap();
         pool
+    }
+
+    fn timing_input(domain: &str) -> WebActivitySegmentInput {
+        WebActivitySegmentInput {
+            native_session_id: 2,
+            browser_client_id: "timing-test".into(),
+            browser_kind: "edge".into(),
+            browser_exe_name: "msedge.exe".into(),
+            domain: domain.into(),
+            normalized_domain: domain.into(),
+            url: Some(format!("https://{domain}")),
+            title: None,
+            favicon_url: None,
+        }
+    }
+
+    #[test]
+    fn observations_expire_without_bridging_a_gap_and_duplicate_requests_are_idempotent() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            let page = input("example.test", "Page");
+            assert!(upsert_active_segment(&pool, &page, 2_000).await.unwrap());
+            assert!(!upsert_active_segment(&pool, &page, 2_000).await.unwrap());
+            assert!(!expire_active_segment(&pool, 47_000).await.unwrap());
+            assert!(expire_active_segment(&pool, 47_001).await.unwrap());
+            assert!(!expire_active_segment(&pool, 48_000).await.unwrap());
+            assert!(upsert_active_segment(&pool, &page, 602_000).await.unwrap());
+            super::super::sessions::end_active_sessions(&pool, 603_000)
+                .await
+                .unwrap();
+            let rows: Vec<(i64, i64, i64)> = sqlx::query_as(
+                "SELECT start_time,end_time,duration FROM web_activity_segments ORDER BY id",
+            )
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+            assert_eq!(
+                rows,
+                vec![(2_000, 47_000, 45_000), (602_000, 603_000, 1_000)]
+            );
+        });
+    }
+
+    #[test]
+    fn browser_switch_and_source_scoped_stops_cannot_reuse_an_old_session() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            let page = input("example.test", "Page");
+            upsert_active_segment(&pool, &page, 2_000).await.unwrap();
+            assert!(
+                !end_active_segment_for_source(&pool, "other-profile", 1, 3_000)
+                    .await
+                    .unwrap()
+            );
+            assert!(!end_active_segment_for_source(&pool, "client", 2, 3_000)
+                .await
+                .unwrap());
+            super::super::sessions::start_session(&pool, "Edge", "msedge.exe", "", 8_000, 8_000)
+                .await
+                .unwrap();
+            let ended: i64 = sqlx::query_scalar("SELECT end_time FROM web_activity_segments")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            assert_eq!(ended, 8_000);
+            assert!(!upsert_active_segment(&pool, &page, 9_000).await.unwrap());
+            super::super::sessions::start_session(
+                &pool,
+                "Chrome",
+                "chrome.exe",
+                "",
+                18_000,
+                18_000,
+            )
+            .await
+            .unwrap();
+            assert!(!upsert_active_segment(&pool, &page, 19_000).await.unwrap());
+            let resumed = WebActivitySegmentInput {
+                native_session_id: 3,
+                ..page
+            };
+            assert!(!upsert_active_segment(&pool, &resumed, 17_000)
+                .await
+                .unwrap());
+            assert!(upsert_active_segment(&pool, &resumed, 19_000)
+                .await
+                .unwrap());
+            assert!(!end_active_segment_for_source(&pool, "client", 1, 20_000)
+                .await
+                .unwrap());
+            assert!(end_active_segment_for_source(&pool, "client", 3, 20_000)
+                .await
+                .unwrap());
+            let rows: Vec<(i64, i64)> =
+                sqlx::query_as("SELECT start_time,end_time FROM web_activity_segments ORDER BY id")
+                    .fetch_all(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(rows, vec![(2_000, 8_000), (19_000, 20_000)]);
+        });
+    }
+
+    #[test]
+    fn native_web_boundary_failure_rolls_back_facts_and_revision_together() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            pool.execute(db_schema::WEB_ACTIVITY_REVISION_SCHEMA_SQL)
+                .await
+                .unwrap();
+            upsert_active_segment(&pool, &input("example.test", "A"), 2_000)
+                .await
+                .unwrap();
+            let revision: i64 =
+                sqlx::query_scalar("SELECT source_revision FROM web_activity_revision")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            pool.execute("CREATE TRIGGER fail_web_seal BEFORE UPDATE OF end_time ON web_activity_segments BEGIN SELECT RAISE(ABORT, 'injected web seal failure'); END").await.unwrap();
+            assert!(super::super::sessions::end_active_sessions(&pool, 5_000)
+                .await
+                .is_err());
+            let native_end: Option<i64> =
+                sqlx::query_scalar("SELECT end_time FROM sessions WHERE id=1")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            let web_end: Option<i64> =
+                sqlx::query_scalar("SELECT end_time FROM web_activity_segments")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            let after: i64 =
+                sqlx::query_scalar("SELECT source_revision FROM web_activity_revision")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!((native_end, web_end, after), (None, None, revision));
+            pool.execute("DROP TRIGGER fail_web_seal").await.unwrap();
+            assert!(super::super::sessions::end_active_sessions(&pool, 5_000)
+                .await
+                .unwrap());
+            assert!(!super::super::sessions::end_active_sessions(&pool, 5_000)
+                .await
+                .unwrap());
+            let duration: i64 = sqlx::query_scalar("SELECT duration FROM web_activity_segments")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            assert_eq!(duration, 3_000);
+        });
+    }
+
+    #[test]
+    fn interrupted_observation_uses_last_observation_and_rejects_future_evidence() {
+        tauri::async_runtime::block_on(async {
+            for (observed, expected) in [(8_000, 8_000), (30_000, 2_000)] {
+                let pool = setup_test_db().await;
+                let page = input("example.test", "A");
+                upsert_active_segment(&pool, &page, 2_000).await.unwrap();
+                upsert_active_segment(&pool, &page, observed).await.unwrap();
+                assert!(seal_interrupted_segments(&pool, 20_000).await.unwrap());
+                assert!(!seal_interrupted_segments(&pool, 40_000).await.unwrap());
+                let end: i64 = sqlx::query_scalar("SELECT end_time FROM web_activity_segments")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+                assert_eq!(end, expected);
+            }
+        });
+    }
+
+    #[test]
+    fn restore_clips_new_web_children_to_an_already_closed_mapped_parent() {
+        tauri::async_runtime::block_on(async {
+            let source = setup_test_db().await;
+            upsert_active_segment(&source, &input("example.test", "A"), 2_000)
+                .await
+                .unwrap();
+            super::super::sessions::end_active_sessions(&source, 8_000)
+                .await
+                .unwrap();
+            let backup = fetch_all_for_backup(&source).await.unwrap();
+            let target = setup_test_db().await;
+            super::super::sessions::end_active_sessions(&target, 4_000)
+                .await
+                .unwrap();
+            let mut tx = target.begin().await.unwrap();
+            insert_missing_for_restore(&mut tx, &backup, &HashMap::from([(1, 1)]))
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+            let row: (i64, i64) =
+                sqlx::query_as("SELECT end_time,duration FROM web_activity_segments")
+                    .fetch_one(&target)
+                    .await
+                    .unwrap();
+            assert_eq!(row, (4_000, 2_000));
+            assert_eq!(
+                fetch_all_for_backup(&source).await.unwrap()[0].end_time,
+                Some(8_000)
+            );
+        });
+    }
+
+    #[test]
+    fn restored_web_relation_remaps_ids_and_cascades_without_deleting_web_history() {
+        tauri::async_runtime::block_on(async {
+            let source = setup_test_db().await;
+            upsert_active_segment(&source, &input("example.test", "A"), 2_000)
+                .await
+                .unwrap();
+            let backup = fetch_all_for_backup(&source).await.unwrap();
+            assert_eq!(backup[0].native_session_id, Some(1));
+            let target = setup_test_db().await;
+            super::super::sessions::start_session(
+                &target,
+                "Chrome",
+                "chrome.exe",
+                "another",
+                1_000,
+                1_000,
+            )
+            .await
+            .unwrap();
+            let mut tx = target.begin().await.unwrap();
+            insert_missing_for_restore(&mut tx, &backup, &HashMap::from([(1, 2)]))
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+            super::super::sessions::end_active_sessions(&target, 5_000)
+                .await
+                .unwrap();
+            let row: (i64,i64) = sqlx::query_as("SELECT session_id,duration FROM web_activity_native_sessions JOIN web_activity_segments ON segment_id=id").fetch_one(&target).await.unwrap();
+            assert_eq!(row, (2, 3_000));
+            target
+                .execute("DELETE FROM sessions WHERE id=2")
+                .await
+                .unwrap();
+            let links: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM web_activity_native_sessions")
+                    .fetch_one(&target)
+                    .await
+                    .unwrap();
+            let duration: i64 = sqlx::query_scalar("SELECT duration FROM web_activity_segments")
+                .fetch_one(&target)
+                .await
+                .unwrap();
+            assert_eq!((links, duration), (0, 3_000));
+        });
+    }
+
+    #[test]
+    fn web_timing_requires_a_matching_native_session() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            pool.execute("DELETE FROM sessions").await.unwrap();
+            assert!(
+                !upsert_active_segment(&pool, &timing_input("example.test"), 2_000)
+                    .await
+                    .unwrap()
+            );
+            super::super::sessions::start_session(&pool, "Chrome", "chrome.exe", "", 1_000, 1_000)
+                .await
+                .unwrap();
+            assert!(
+                !upsert_active_segment(&pool, &timing_input("example.test"), 2_000)
+                    .await
+                    .unwrap()
+            );
+        });
+    }
+
+    #[test]
+    fn native_backdate_clips_all_current_web_fragments_and_preserves_unowned_history() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            // An imported/historical row can share browser and timestamps, without
+            // proving that it was captured by this running native session.
+            pool.execute("INSERT INTO web_activity_segments (browser_client_id,browser_kind,browser_exe_name,domain,normalized_domain,start_time,end_time,duration,source,created_at,updated_at) VALUES ('old','edge','msedge.exe','old.test','old.test',20000,30000,10000,'browser-extension',20000,30000)").await.unwrap();
+            super::super::sessions::start_session(&pool, "Edge", "msedge.exe", "", 1_000, 1_000)
+                .await
+                .unwrap();
+            for (domain, time) in [("a.test", 2_000), ("b.test", 20_000), ("c.test", 40_000)] {
+                upsert_active_segment(&pool, &timing_input(domain), time)
+                    .await
+                    .unwrap();
+            }
+            super::super::sessions::end_active_sessions(&pool, 10_000)
+                .await
+                .unwrap();
+            let rows: Vec<(String, Option<i64>)> =
+                sqlx::query_as("SELECT domain, duration FROM web_activity_segments ORDER BY id")
+                    .fetch_all(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(
+                rows,
+                vec![
+                    ("old.test".into(), Some(10_000)),
+                    ("a.test".into(), Some(8_000)),
+                    ("b.test".into(), Some(0)),
+                    ("c.test".into(), Some(0))
+                ]
+            );
+        });
     }
 
     #[test]
@@ -529,6 +1039,7 @@ mod tests {
             .unwrap();
             let backup = vec![
                 BackupWebActivitySegment {
+                    native_session_id: None,
                     id: 10,
                     browser_client_id: "a".into(),
                     browser_kind: "chromium".into(),
@@ -546,6 +1057,7 @@ mod tests {
                     updated_at: 200,
                 },
                 BackupWebActivitySegment {
+                    native_session_id: None,
                     id: 11,
                     browser_client_id: "other".into(),
                     browser_kind: "chromium".into(),
@@ -564,7 +1076,9 @@ mod tests {
                 },
             ];
             let mut tx = pool.begin().await.unwrap();
-            insert_missing_for_restore(&mut tx, &backup).await.unwrap();
+            insert_missing_for_restore(&mut tx, &backup, &HashMap::new())
+                .await
+                .unwrap();
             tx.commit().await.unwrap();
             let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM web_activity_segments")
                 .fetch_one(&pool)
@@ -621,6 +1135,7 @@ mod tests {
 
     fn input(domain: &str, title: &str) -> WebActivitySegmentInput {
         WebActivitySegmentInput {
+            native_session_id: 1,
             browser_client_id: "client".into(),
             browser_kind: "chrome".into(),
             browser_exe_name: "chrome.exe".into(),
@@ -650,7 +1165,7 @@ mod tests {
                     .unwrap()
             );
             assert!(
-                !upsert_active_segment(&pool, &input("github.com", "Issue"), 2_000)
+                upsert_active_segment(&pool, &input("github.com", "Issue"), 2_000)
                     .await
                     .unwrap()
             );

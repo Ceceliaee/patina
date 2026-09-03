@@ -1,0 +1,66 @@
+[
+  {
+    "case": "excluded-application-gap",
+    "contracts": ["A01", "A02", "A03", "A10", "T05", "T16", "T17"],
+    "native": [[1000, 5000], [15000, 20000]],
+    "web": [[2000, 5000, 5000], [16000, 20000, 20000]],
+    "boundaries": [0, 10000, 20000], "now": 20000,
+    "expectedBuckets": [3000, 4000]
+  },
+  {
+    "case": "native-backdate-with-zero-fragments",
+    "contracts": ["T02", "T06", "T13", "T20"],
+    "native": [[1000, 10000]],
+    "web": [[2000, 10000, 10000], [20000, 20000, 20000], [40000, 40000, 40000]],
+    "boundaries": [0, 50000], "now": 50000,
+    "expectedBuckets": [8000]
+  },
+  {
+    "case": "unknown-restart-evidence",
+    "contracts": ["A06", "T11"],
+    "native": [[1000, 1000], [20000, 22000]],
+    "web": [[1000, 1000, 1000], [21000, 22000, 22000]],
+    "boundaries": [0, 20000, 25000], "now": 25000,
+    "expectedBuckets": [0, 1000]
+  },
+  {
+    "case": "watchdog-or-power-gap",
+    "contracts": ["A07", "A08", "A09", "T07", "T12", "T19"],
+    "native": [[1000, 8000], [20000, 23000]],
+    "web": [[2000, 8000, 8000], [21000, 23000, 23000]],
+    "boundaries": [0, 10000, 20000, 30000], "now": 30000,
+    "expectedBuckets": [6000, 0, 2000]
+  },
+  {
+    "case": "browser-switch",
+    "contracts": ["T01", "T03", "T09"],
+    "native": [[1000, 8000], [8000, 20000]],
+    "web": [[2000, 8000, 8000], [10000, 20000, 20000]],
+    "boundaries": [0, 8000, 20000], "now": 20000,
+    "expectedBuckets": [6000, 10000]
+  },
+  {
+    "case": "expired-observation-and-fresh-return",
+    "contracts": ["T04", "T15"],
+    "native": [[1000, 700000]],
+    "web": [[2000, 47000, 47000], [602000, 603000, 603000]],
+    "boundaries": [0, 100000, 600000, 700000], "now": 700000,
+    "expectedBuckets": [45000, 0, 1000]
+  },
+  {
+    "case": "open-observation-fixed-cutoff",
+    "contracts": ["A10", "T04", "T16"],
+    "native": [[1000, 600000]],
+    "web": [[2000, null, 3000]],
+    "boundaries": [0, 600000], "now": 600000,
+    "expectedBuckets": [46000]
+  },
+  {
+    "case": "midnight-half-open-boundary",
+    "contracts": ["T14", "T16"],
+    "native": [[86360000, 86440000]],
+    "web": [[86370000, 86430000, 86430000]],
+    "boundaries": [0, 86400000, 172800000], "now": 172800000,
+    "expectedBuckets": [30000, 30000]
+  }
+]

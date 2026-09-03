@@ -799,6 +799,7 @@ mod tests {
 
     fn active_session(exe_name: &str) -> ActiveSessionSnapshot {
         ActiveSessionSnapshot {
+            id: 1,
             app_name: exe_name.trim_end_matches(".exe").into(),
             exe_name: exe_name.into(),
             start_time: 1_000,

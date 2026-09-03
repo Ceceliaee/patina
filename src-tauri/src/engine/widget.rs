@@ -233,6 +233,7 @@ mod tests {
     fn widget_projection_keeps_tracking_and_fixed_tool_slots_together() {
         let now_ms = 100_000;
         let active_session = ActiveSessionSnapshot {
+            id: 1,
             app_name: "Visual Studio Code".to_string(),
             exe_name: "Code.exe".to_string(),
             start_time: 90_000,

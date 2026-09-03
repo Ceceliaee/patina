@@ -155,6 +155,26 @@ pub async fn normalize_closed_session_durations(pool: &Pool<Sqlite>) -> Result<u
     Ok(result.rows_affected())
 }
 
+pub(crate) async fn seal_interrupted_session(
+    pool: &Pool<Sqlite>,
+    upper_bound_ms: i64,
+) -> Result<(), sqlx::Error> {
+    if let Some(active) = load_active_session(pool).await? {
+        let sample = super::tracker_settings::load_tracker_timestamp(
+            pool,
+            crate::engine::tracking::ports::TRACKER_LAST_SUCCESSFUL_SAMPLE_KEY,
+        )
+        .await?;
+        let end = crate::domain::tracking::resolve_interrupted_session_end(
+            active.start_time,
+            sample,
+            upper_bound_ms,
+        );
+        end_active_sessions(pool, end).await?;
+    }
+    Ok(())
+}
+
 pub async fn load_active_session(
     pool: &Pool<Sqlite>,
 ) -> Result<Option<ActiveSessionSnapshot>, sqlx::Error> {
@@ -167,7 +187,7 @@ pub async fn load_active_session(
              ORDER BY start_time DESC, id DESC
              LIMIT 1
          )
-         SELECT active.app_name, active.exe_name, active.start_time,
+         SELECT active.id, active.app_name, active.exe_name, active.start_time,
                 active.continuity_group_start_time,
                 COALESCE((
                     SELECT SUM(MAX(0, closed.end_time - closed.start_time))
@@ -183,6 +203,7 @@ pub async fn load_active_session(
     .await?;
 
     Ok(row.map(|row| ActiveSessionSnapshot {
+        id: row.get("id"),
         app_name: row.get("app_name"),
         exe_name: row.get("exe_name"),
         start_time: row.get("start_time"),
@@ -307,7 +328,7 @@ pub async fn disable_active_title(
     Ok(changed || !window_title.is_empty())
 }
 
-async fn end_active_sessions_tx(
+pub(crate) async fn end_active_sessions_tx(
     tx: &mut Transaction<'_, Sqlite>,
     raw_end_time: i64,
 ) -> Result<bool, sqlx::Error> {
@@ -353,6 +374,7 @@ pub async fn refresh_active_session_metadata(
     window_title: &str,
     timestamp_ms: i64,
 ) -> Result<bool, sqlx::Error> {
+    let mut tx = pool.begin().await?;
     let Some(row) = sqlx::query(
         "SELECT id,
                 start_time,
@@ -363,7 +385,7 @@ pub async fn refresh_active_session_metadata(
          ORDER BY start_time DESC, id DESC
          LIMIT 1",
     )
-    .fetch_optional(pool)
+    .fetch_optional(&mut *tx)
     .await?
     else {
         return Ok(false);
@@ -377,7 +399,6 @@ pub async fn refresh_active_session_metadata(
         return Ok(false);
     }
 
-    let mut tx = pool.begin().await?;
     sqlx::query(
         "UPDATE sessions
          SET window_title = ?

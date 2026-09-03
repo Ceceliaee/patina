@@ -189,11 +189,12 @@ pub async fn finish_active_title_sample_tx(
         "UPDATE session_title_samples
          SET end_time = CASE WHEN ? < start_time THEN start_time ELSE ? END
          WHERE session_id = ?
-           AND end_time IS NULL",
+           AND (end_time IS NULL OR end_time > MAX(start_time, ?))",
     )
     .bind(raw_end_time)
     .bind(raw_end_time)
     .bind(session_id)
+    .bind(raw_end_time)
     .execute(&mut **tx)
     .await?;
 

@@ -20,6 +20,31 @@ impl SqliteWebActivityStore {
 }
 
 impl WebActivityStore for SqliteWebActivityStore {
+    fn expire_active_segment(&self, now_ms: i64) -> WebActivityStoreFuture<'_, bool> {
+        Box::pin(async move {
+            web_activity::expire_active_segment(&self.pool, now_ms)
+                .await
+                .map_err(|error| error.to_string())
+        })
+    }
+
+    fn seal_source<'a>(
+        &'a self,
+        client: &'a str,
+        native_session_id: i64,
+        now_ms: i64,
+    ) -> WebActivityStoreFuture<'a, bool> {
+        Box::pin(async move {
+            web_activity::end_active_segment_for_source(
+                &self.pool,
+                client,
+                native_session_id,
+                now_ms,
+            )
+            .await
+            .map_err(|error| error.to_string())
+        })
+    }
     fn load_domain_recording_enabled<'a>(
         &'a self,
         normalized_domain: &'a str,

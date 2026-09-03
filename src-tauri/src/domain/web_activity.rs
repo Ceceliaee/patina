@@ -4,6 +4,8 @@ use url::Url;
 pub const WEB_ACTIVITY_CHANGED_REASON: &str = "web-activity-changed";
 pub const WEB_ACTIVITY_SOURCE_BROWSER_EXTENSION: &str = "browser-extension";
 pub const WEB_DOMAIN_OVERRIDE_KEY_PREFIX: &str = "__web_domain_override::";
+// The extension alarm runs every 30 seconds; allow 15 seconds of scheduling jitter.
+pub const WEB_ACTIVITY_OBSERVATION_TTL_MS: i64 = 45_000;
 
 const MAX_BROWSER_CLIENT_ID_CHARS: usize = 128;
 const MAX_BROWSER_KIND_CHARS: usize = 32;
@@ -67,6 +69,7 @@ pub struct SanitizedWebActivityInput {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WebActivitySegmentInput {
+    pub native_session_id: i64,
     pub browser_client_id: String,
     pub browser_kind: String,
     pub browser_exe_name: String,
@@ -78,8 +81,13 @@ pub struct WebActivitySegmentInput {
 }
 
 impl WebActivitySegmentInput {
-    pub fn from_sanitized(input: SanitizedWebActivityInput, browser_exe_name: String) -> Self {
+    pub fn from_sanitized(
+        input: SanitizedWebActivityInput,
+        browser_exe_name: String,
+        native_session_id: i64,
+    ) -> Self {
         Self {
+            native_session_id,
             browser_client_id: input.browser_client_id,
             browser_kind: input.browser_kind,
             browser_exe_name,
@@ -191,10 +199,6 @@ pub fn resolve_web_activity_browser_family(exe_name: &str) -> Option<WebActivity
     None
 }
 
-pub fn is_supported_browser_exe(exe_name: &str) -> bool {
-    resolve_web_activity_browser_family(exe_name).is_some()
-}
-
 pub fn parse_domain_override_enabled(raw_value: &str) -> bool {
     serde_json::from_str::<WebDomainOverrideStorageValue>(raw_value)
         .ok()
@@ -284,17 +288,17 @@ mod tests {
 
     #[test]
     fn supported_browser_exe_excludes_opera_gx() {
-        assert!(is_supported_browser_exe("opera.exe"));
-        assert!(!is_supported_browser_exe("opera_gx.exe"));
+        assert!(resolve_web_activity_browser_family("opera.exe").is_some());
+        assert!(!resolve_web_activity_browser_family("opera_gx.exe").is_some());
     }
 
     #[test]
     fn supported_browser_exe_includes_confirmed_360_browsers() {
-        assert!(is_supported_browser_exe("360ChromeX.exe"));
-        assert!(is_supported_browser_exe(" 360chromex.exe "));
-        assert!(is_supported_browser_exe("360SE.exe"));
-        assert!(is_supported_browser_exe(" 360se.exe "));
-        assert!(!is_supported_browser_exe("360chrome.exe"));
+        assert!(resolve_web_activity_browser_family("360ChromeX.exe").is_some());
+        assert!(resolve_web_activity_browser_family(" 360chromex.exe ").is_some());
+        assert!(resolve_web_activity_browser_family("360SE.exe").is_some());
+        assert!(resolve_web_activity_browser_family(" 360se.exe ").is_some());
+        assert!(!resolve_web_activity_browser_family("360chrome.exe").is_some());
     }
 
     #[test]

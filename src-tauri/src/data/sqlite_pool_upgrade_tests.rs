@@ -8,6 +8,68 @@ use super::sqlite_pool::{
 use sqlx::{Executor, Row, SqlitePool};
 use std::path::Path;
 
+#[test]
+fn version_13_upgrade_preserves_unowned_web_history_and_relation_queries_use_indexes() {
+    tauri::async_runtime::block_on(async {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        for migration in schema::tracker_migrations()
+            .into_iter()
+            .filter(|m| m.version <= 13)
+        {
+            pool.execute(migration.sql).await.unwrap();
+        }
+        pool.execute("CREATE TABLE _sqlx_migrations(version BIGINT PRIMARY KEY, description TEXT NOT NULL, installed_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, success BOOLEAN NOT NULL, checksum BLOB NOT NULL, execution_time BIGINT NOT NULL)").await.unwrap();
+        for (version, description, checksum) in expected_migration_metadata()
+            .into_iter()
+            .filter(|(v, _, _)| *v <= 13)
+        {
+            sqlx::query("INSERT INTO _sqlx_migrations(version,description,success,checksum,execution_time) VALUES(?,?,1,?,0)").bind(version).bind(description).bind(checksum).execute(&pool).await.unwrap();
+        }
+        pool.execute("INSERT INTO sessions(id,app_name,exe_name,start_time,end_time,duration) VALUES(1,'Edge','msedge.exe',1000,10000,9000);
+            INSERT INTO web_activity_segments(id,browser_client_id,browser_kind,browser_exe_name,domain,normalized_domain,start_time,end_time,duration,source,created_at,updated_at) VALUES(1,'old','edge','msedge.exe','example.com','example.com',2000,20000,18000,'browser-extension',2000,20000)").await.unwrap();
+        for _ in 0..2 {
+            prepare_pool_schema(&pool, Path::new("version-13-synthetic.db"))
+                .await
+                .unwrap();
+            let history: (i64, i64, i64) = sqlx::query_as(
+                "SELECT start_time,end_time,duration FROM web_activity_segments WHERE id=1",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(history, (2000, 20000, 18000));
+            let associations: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM web_activity_native_sessions")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(
+                associations, 0,
+                "upgrade must not infer a parent from overlapping intervals"
+            );
+        }
+        let plan: Vec<(i64,i64,i64,String)> = sqlx::query_as("EXPLAIN QUERY PLAN SELECT segment_id FROM web_activity_native_sessions WHERE session_id=1").fetch_all(&pool).await.unwrap();
+        assert!(
+            plan.iter()
+                .any(|row| row.3.contains("idx_web_activity_native_session")),
+            "{plan:?}"
+        );
+        let active_plan: Vec<(i64,i64,i64,String)> = sqlx::query_as("EXPLAIN QUERY PLAN UPDATE web_activity_segments SET end_time=updated_at+45000 WHERE end_time IS NULL AND updated_at+45000<100000").fetch_all(&pool).await.unwrap();
+        assert!(
+            active_plan
+                .iter()
+                .any(|row| row.3.contains("idx_web_activity_segments_single_active")),
+            "{active_plan:?}"
+        );
+        let bad_reference = sqlx::query(
+            "INSERT INTO web_activity_native_sessions(segment_id,session_id) VALUES(1,999)",
+        )
+        .execute(&pool)
+        .await;
+        assert!(bad_reference.is_err());
+    });
+}
+
 async fn create_supported_legacy_schema(pool: &SqlitePool) {
     pool.execute(
         "CREATE TABLE sessions (
@@ -323,7 +385,10 @@ fn version_eight_draft_triggers_are_reinstalled_without_touching_facts() {
                 .fetch_all(&pool)
                 .await
                 .unwrap();
-        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+        assert_eq!(
+            versions,
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+        );
     });
 }
 

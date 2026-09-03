@@ -106,13 +106,13 @@ export async function getWebActivitySegmentsInRange(
             title,
             NULL AS favicon_url,
             start_time,
-            end_time,
-            COALESCE(duration, MAX(0, ? - start_time)) AS duration
+            COALESCE(end_time, MAX(start_time, MIN(?, updated_at + 45000))) AS end_time,
+            COALESCE(duration, MAX(0, MIN(?, updated_at + 45000) - start_time)) AS duration
      FROM web_activity_segments
      WHERE start_time < ?
-       AND COALESCE(end_time, ?) > ?
+       AND COALESCE(end_time, MIN(?, updated_at + 45000)) > ?
      ORDER BY start_time ASC, id ASC`,
-    [now, endMs, now, startMs],
+    [now, now, endMs, now, startMs],
   );
 
   return rows.map(mapRawWebActivitySegment);
@@ -132,7 +132,7 @@ export async function loadObservedWebDomainStats(
   const rows = await db.select<RawObservedWebDomainStatRow[]>(
     `SELECT segment.normalized_domain AS normalized_domain,
             MAX(COALESCE(segment.domain, segment.normalized_domain)) AS domain,
-            SUM(COALESCE(segment.duration, MAX(0, ? - segment.start_time))) AS total_duration,
+            SUM(COALESCE(segment.duration, MAX(0, MIN(?, segment.updated_at + 45000) - segment.start_time))) AS total_duration,
             MAX(segment.start_time) AS last_seen_ms,
             MAX(favicon_cache.favicon_url) AS favicon_url,
             MAX(segment.title) AS title
