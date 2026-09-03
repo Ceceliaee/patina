@@ -107,6 +107,29 @@ pub async fn commit_app_setting_mutations(
         .execute(&mut *tx)
         .await
         .map_err(|error| SqliteOperationError::from_sqlx("save app setting", error))?;
+        if mutation.key == "tracking_paused"
+            && crate::domain::settings::parse_boolean_setting(&mutation.value, false)
+        {
+            super::sessions::end_active_sessions_tx(
+                &mut tx,
+                crate::platform::clock::unix_timestamp_millis_i64(),
+            )
+            .await
+            .map_err(|error| SqliteOperationError::from_sqlx("seal paused tracking", error))?;
+        }
+        if (mutation.key == WEB_ACTIVITY_ENABLED_KEY
+            && !crate::domain::settings::parse_boolean_setting(&mutation.value, false))
+            || (mutation.key == WEB_ACTIVITY_TOKEN_KEY && mutation.value.trim().is_empty())
+        {
+            super::web_activity::end_active_segment_tx(
+                &mut tx,
+                crate::platform::clock::unix_timestamp_millis_i64(),
+            )
+            .await
+            .map_err(|error| {
+                SqliteOperationError::from_sqlx("seal disabled web tracking", error)
+            })?;
+        }
     }
 
     tx.commit().await.map_err(|error| {
@@ -462,6 +485,150 @@ mod tests {
             assert_eq!(settings.url, "wss://worker.example/ws");
             assert_eq!(settings.token, "secret");
             assert_eq!(settings.machine_id, "machine-1");
+        });
+    }
+    #[test]
+    fn disabling_web_recording_seals_only_web_and_rolls_back_on_failure() {
+        tauri::async_runtime::block_on(async {
+            for (key, value) in [("web_activity_enabled", "0"), ("web_activity_token", "")] {
+                let pool = setup_test_db().await;
+                for migration in crate::data::schema::tracker_migrations() {
+                    pool.execute(migration.sql).await.unwrap();
+                }
+                let start = crate::platform::clock::unix_timestamp_millis_i64() - 5_000;
+                pool.execute("INSERT INTO settings(key,value) VALUES('web_activity_enabled','1'),('web_activity_token','test')").await.unwrap();
+                super::super::sessions::start_session(
+                    &pool,
+                    "Chrome",
+                    "chrome.exe",
+                    "",
+                    start,
+                    start,
+                )
+                .await
+                .unwrap();
+                sqlx::query("INSERT INTO web_activity_segments(browser_client_id,browser_kind,browser_exe_name,domain,normalized_domain,start_time,source,created_at,updated_at) VALUES('test','chrome','chrome.exe','example.com','example.com',?,'browser-extension',?,?)")
+                    .bind(start).bind(start).bind(start).execute(&pool).await.unwrap();
+                pool.execute("CREATE TRIGGER reject_web_stop BEFORE UPDATE OF end_time ON web_activity_segments BEGIN SELECT RAISE(ABORT,'failure'); END").await.unwrap();
+                let mutation = AppSettingMutation {
+                    key: key.into(),
+                    value: value.into(),
+                };
+                assert!(commit_app_setting_mutations(&pool, &[mutation.clone()])
+                    .await
+                    .is_err());
+                let saved: String = sqlx::query_scalar("SELECT value FROM settings WHERE key=?")
+                    .bind(key)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    saved,
+                    if key == "web_activity_enabled" {
+                        "1"
+                    } else {
+                        "test"
+                    }
+                );
+                pool.execute("DROP TRIGGER reject_web_stop").await.unwrap();
+                let before = crate::platform::clock::unix_timestamp_millis_i64();
+                commit_app_setting_mutations(&pool, &[mutation])
+                    .await
+                    .unwrap();
+                let after = crate::platform::clock::unix_timestamp_millis_i64();
+                let end: Option<i64> =
+                    sqlx::query_scalar("SELECT end_time FROM web_activity_segments")
+                        .fetch_one(&pool)
+                        .await
+                        .unwrap();
+                assert!(end.is_some_and(|end| end >= before && end <= after));
+                assert!(super::super::sessions::load_active_session(&pool)
+                    .await
+                    .unwrap()
+                    .is_some());
+                commit_app_setting_mutations(
+                    &pool,
+                    &[AppSettingMutation {
+                        key: key.into(),
+                        value: saved,
+                    }],
+                )
+                .await
+                .unwrap();
+                let restored_end: Option<i64> =
+                    sqlx::query_scalar("SELECT end_time FROM web_activity_segments")
+                        .fetch_one(&pool)
+                        .await
+                        .unwrap();
+                assert_eq!(restored_end, end);
+            }
+        });
+    }
+
+    #[test]
+    fn pause_commits_with_native_boundary_and_failure_rolls_both_back() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            super::super::sessions::start_session(&pool, "A", "a.exe", "A", 1_000, 1_000)
+                .await
+                .unwrap();
+            sqlx::query("CREATE TRIGGER reject_pause_end BEFORE UPDATE OF end_time ON sessions BEGIN SELECT RAISE(ABORT, 'failure'); END").execute(&pool).await.unwrap();
+            let pause = AppSettingMutation {
+                key: "tracking_paused".into(),
+                value: "1".into(),
+            };
+            assert!(commit_app_setting_mutations(&pool, &[pause.clone()])
+                .await
+                .is_err());
+            let setting: Option<String> =
+                sqlx::query_scalar("SELECT value FROM settings WHERE key='tracking_paused'")
+                    .fetch_optional(&pool)
+                    .await
+                    .unwrap();
+            assert!(setting.is_none());
+            assert!(super::super::sessions::load_active_session(&pool)
+                .await
+                .unwrap()
+                .is_some());
+            sqlx::query("DROP TRIGGER reject_pause_end")
+                .execute(&pool)
+                .await
+                .unwrap();
+            commit_app_setting_mutations(&pool, &[pause]).await.unwrap();
+            let end: i64 = sqlx::query_scalar("SELECT end_time FROM sessions WHERE id=1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            assert!(end >= 1_000);
+            commit_app_setting_mutations(
+                &pool,
+                &[AppSettingMutation {
+                    key: "tracking_paused".into(),
+                    value: "0".into(),
+                }],
+            )
+            .await
+            .unwrap();
+            assert!(super::super::sessions::load_active_session(&pool)
+                .await
+                .unwrap()
+                .is_none());
+            super::super::sessions::start_session(
+                &pool,
+                "A",
+                "a.exe",
+                "A",
+                end + 1_000,
+                end + 1_000,
+            )
+            .await
+            .unwrap();
+            let times: Vec<(i64, Option<i64>)> =
+                sqlx::query_as("SELECT start_time,end_time FROM sessions ORDER BY id")
+                    .fetch_all(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(times, vec![(1_000, Some(end)), (end + 1_000, None)]);
         });
     }
 }

@@ -38,7 +38,17 @@ async fn toggle_tracking_pause_setting_in_pool(
     let current = tracker_settings::load_tracking_paused_setting(pool).await?;
     let next = !current;
 
-    tracker_settings::save_tracking_paused_setting(pool, next).await?;
+    crate::data::repositories::app_settings::commit_app_setting_mutations(
+        pool,
+        &[
+            crate::data::repositories::app_settings::AppSettingMutation {
+                key: "tracking_paused".into(),
+                value: if next { "1".into() } else { "0".into() },
+            },
+        ],
+    )
+    .await
+    .map_err(|error| sqlx::Error::Protocol(error.to_string()))?;
 
     Ok(TrackingPauseSettingChange {
         tracking_paused: next,

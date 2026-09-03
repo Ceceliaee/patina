@@ -210,6 +210,9 @@ pub(crate) fn ensure_tray_visible<R: Runtime>(app: &AppHandle<R>) -> Result<(), 
 pub(crate) async fn toggle_tracking_paused<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
     let settings_commit_state = app.state::<crate::app::state::AppSettingsCommitState>();
     let _settings_commit_guard = settings_commit_state.lock().await;
+    let tracking =
+        app.state::<crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshotState>();
+    let _transition = tracking.transition.lock().await;
     let change = tracking_pause_service::toggle_tracking_pause_setting(&app).await?;
 
     apply_tracking_pause_setting_change(&app, change.tracking_paused, change.reason)
@@ -221,6 +224,8 @@ pub(crate) fn apply_tracking_pause_setting_change<R: Runtime>(
     reason: &'static str,
 ) -> Result<(), String> {
     update_tracking_pause_runtime_state(app, tracking_paused);
+    app.state::<crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshotState>()
+        .note_tracking_policy_change();
     if let Err(error) = refresh_tray_icon(app, None) {
         eprintln!("[tray] failed to update tracking state icon: {error}");
     }

@@ -262,12 +262,16 @@ mod tests {
             pool.execute(db_schema::WEB_ACTIVITY_SCHEMA_SQL)
                 .await
                 .unwrap();
-            sessions::start_session(&pool, "QQ", "QQ.exe", "Chat", 1_000, 1_000)
+            pool.execute(db_schema::WEB_ACTIVITY_SESSION_SCHEMA_SQL)
+                .await
+                .unwrap();
+            sessions::start_session(&pool, "Chrome", "chrome.exe", "Chat", 1_000, 1_000)
                 .await
                 .unwrap();
             web_activity::upsert_active_segment(
                 &pool,
                 &crate::domain::web_activity::WebActivitySegmentInput {
+                    native_session_id: 1,
                     browser_client_id: "client".into(),
                     browser_kind: "chrome".into(),
                     browser_exe_name: "chrome.exe".into(),
@@ -284,7 +288,7 @@ mod tests {
 
             let outcome = ClassificationCommitOutcome {
                 app_title_changes: vec![TitleRecordingPolicyChange {
-                    identity: "qq.exe".into(),
+                    identity: "chrome.exe".into(),
                     enabled: false,
                 }],
                 web_domain_title_changes: vec![TitleRecordingPolicyChange {
@@ -323,15 +327,19 @@ mod tests {
             pool.execute(db_schema::WEB_ACTIVITY_SCHEMA_SQL)
                 .await
                 .unwrap();
+            pool.execute(db_schema::WEB_ACTIVITY_SESSION_SCHEMA_SQL)
+                .await
+                .unwrap();
             pool.execute(db_schema::WEB_FAVICON_CACHE_SCHEMA_SQL)
                 .await
                 .unwrap();
-            sessions::start_session(&pool, "QQ", "QQ.exe", "Chat", 1_000, 1_000)
+            sessions::start_session(&pool, "Chrome", "chrome.exe", "Chat", 1_000, 1_000)
                 .await
                 .unwrap();
             web_activity::upsert_active_segment(
                 &pool,
                 &crate::domain::web_activity::WebActivitySegmentInput {
+                    native_session_id: 1,
                     browser_client_id: "client".into(),
                     browser_kind: "chrome".into(),
                     browser_exe_name: "chrome.exe".into(),
@@ -350,7 +358,7 @@ mod tests {
                 &pool,
                 &ClassificationCommitOutcome {
                     app_recording_changes: vec![AppRecordingPolicyChange {
-                        exe_name: "qq.exe".into(),
+                        exe_name: "chrome.exe".into(),
                         enabled: false,
                     }],
                     web_domain_recording_changes: vec![WebDomainRecordingPolicyChange {
@@ -368,7 +376,7 @@ mod tests {
                 applied,
                 RecordingPolicyApplyOutcome {
                     app_sealed: true,
-                    web_sealed: true,
+                    web_sealed: false,
                 }
             );
             let active_sessions: i64 =

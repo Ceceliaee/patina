@@ -12,6 +12,8 @@ pub async fn apply_recording_policy_changes<R: Runtime>(
     app: &AppHandle<R>,
     outcome: &ClassificationCommitOutcome,
 ) -> Result<(), String> {
+    let tracking =
+        app.state::<crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshotState>();
     let changed_at_ms = now_ms();
     if !outcome.app_title_changes.is_empty() {
         if let Some(state) =
@@ -21,6 +23,17 @@ pub async fn apply_recording_policy_changes<R: Runtime>(
         }
     }
     let applied = apply_recording_policy_changes_in_data(app, outcome, changed_at_ms).await?;
+    if applied.app_sealed {
+        let data = crate::data::tracking_runtime::shared_from_app(app).await?;
+        let active = data
+            .load_active_session()
+            .await
+            .map_err(|error| error.to_string())?;
+        if active.is_none() {
+            tracking.note_tracking_policy_change();
+        }
+        tracking.replace_active_session(active);
+    }
 
     if applied.app_sealed {
         let _ = emit_tracking_data_changed(

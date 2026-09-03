@@ -69,7 +69,7 @@ pub fn setup(
     media::start_signal_source();
     crate::app::web_activity_bridge::start(app.handle().clone());
     crate::app::remote_status_bridge::start(app.handle().clone());
-    crate::app::web_activity::spawn_startup_repair(app.handle().clone());
+    crate::app::web_activity::spawn_observation_expiry(app.handle().clone());
     crate::data::activity_read_model::spawn_background_worker(app.handle().clone());
     crate::app::widget::start_widget_fullscreen_watcher(app.handle().clone());
 

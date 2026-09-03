@@ -118,10 +118,21 @@ pub async fn cmd_commit_app_settings(
     };
     let settings_commit_state = app.state::<AppSettingsCommitState>();
     let _settings_commit_guard = settings_commit_state.lock().await;
+    let tracking =
+        app.state::<crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshotState>();
+    let _transition = tracking.transition.lock().await;
 
     commit_app_setting_mutations_with_recovery(&app, &mutations)
         .await
         .map_err(CommandErrorDto::from)?;
+    if mutations.iter().any(|mutation| {
+        matches!(
+            mutation.key.as_str(),
+            "web_activity_enabled" | "web_activity_token" | "web_activity_port"
+        )
+    }) {
+        tracking.note_tracking_policy_change();
+    }
     if let Some(tracking_paused) = tracking_pause_setting {
         tray::apply_tracking_pause_setting_change(
             &app,
@@ -160,6 +171,9 @@ pub async fn cmd_commit_classification_settings(
         .map(ClassificationSettingMutation::from)
         .collect::<Vec<_>>();
 
+    let tracking =
+        app.state::<crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshotState>();
+    let _transition = tracking.transition.lock().await;
     let outcome = commit_classification_setting_mutations_with_recovery(&app, &mutations)
         .await
         .map_err(CommandErrorDto::from)?;

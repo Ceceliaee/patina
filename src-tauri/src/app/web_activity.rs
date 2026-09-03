@@ -21,9 +21,10 @@ async fn record_active_tab_for_app<R: Runtime>(
     settings: &WebActivitySettings,
     payload: BrowserActiveTabPayload,
     now_ms: i64,
+    generation: u64,
 ) -> Result<bool, String> {
     let store = SqliteWebActivityStore::from_app(app).await?;
-    web_activity_engine::record_active_tab(app, &store, settings, payload, now_ms).await
+    web_activity_engine::record_active_tab(app, &store, settings, payload, now_ms, generation).await
 }
 
 pub(crate) async fn seal_active_segment_for_app<R: Runtime>(
@@ -34,12 +35,12 @@ pub(crate) async fn seal_active_segment_for_app<R: Runtime>(
     web_activity_engine::seal_active_segment(&store, now_ms).await
 }
 
-async fn seal_if_tracking_inactive_for_app<R: Runtime>(
+async fn expire_observation_for_app<R: Runtime>(
     app: &AppHandle<R>,
     now_ms: i64,
 ) -> Result<bool, String> {
     let store = SqliteWebActivityStore::from_app(app).await?;
-    web_activity_engine::seal_if_tracking_inactive(app, &store, now_ms).await
+    web_activity_engine::expire_active_segment(&store, now_ms).await
 }
 
 pub async fn handle_http_request<R: Runtime>(
@@ -64,6 +65,9 @@ pub async fn handle_http_request<R: Runtime>(
     }
 
     let now_ms = crate::app::runtime::now_ms() as i64;
+    let generation = app
+        .state::<crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshotState>()
+        .lifecycle_generation();
     let settings = match load_runtime_settings(&app).await {
         Ok(settings) => settings,
         Err(error) => {
@@ -87,7 +91,6 @@ pub async fn handle_http_request<R: Runtime>(
     }
 
     if !settings.enabled {
-        let _ = seal_active_segment_for_app(&app, now_ms).await;
         return WebActivityBridgeHttpResponse::json(
             409,
             json!({
@@ -112,7 +115,7 @@ pub async fn handle_http_request<R: Runtime>(
         }
     };
 
-    match record_active_tab_for_app(&app, &settings, payload, now_ms).await {
+    match record_active_tab_for_app(&app, &settings, payload, now_ms, generation).await {
         Ok(changed) => {
             if changed {
                 emit_web_activity_changed(&app, now_ms);
@@ -132,27 +135,37 @@ pub async fn handle_http_request<R: Runtime>(
 }
 
 pub fn spawn_foreground_sync<R: Runtime + 'static>(app: AppHandle<R>) {
+    let gate = app.state::<WebActivityRuntimeState>().maintenance.clone();
+    let Ok(guard) = gate.try_lock_owned() else {
+        return;
+    };
     tauri::async_runtime::spawn(async move {
+        let _guard = guard;
         if let Err(error) = sync_foreground_state(app).await {
             eprintln!("[web-activity] failed to sync foreground state: {error}");
         }
     });
 }
 
-pub fn spawn_startup_repair<R: Runtime + 'static>(app: AppHandle<R>) {
+pub fn spawn_observation_expiry<R: Runtime + 'static>(app: AppHandle<R>) {
     tauri::async_runtime::spawn(async move {
-        let now_ms = crate::app::runtime::now_ms() as i64;
-        match seal_active_segment_for_app(&app, now_ms).await {
-            Ok(true) => emit_web_activity_changed(&app, now_ms),
-            Ok(false) => {}
-            Err(error) => eprintln!("[web-activity] failed to repair active segment: {error}"),
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            spawn_foreground_sync(app.clone());
         }
     });
 }
 
 pub async fn sync_foreground_state<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    if app
+        .state::<crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshotState>()
+        .snapshot()
+        .is_none()
+    {
+        return Ok(());
+    }
     let now_ms = crate::app::runtime::now_ms() as i64;
-    if seal_if_tracking_inactive_for_app(&app, now_ms).await? {
+    if expire_observation_for_app(&app, now_ms).await? {
         emit_web_activity_changed(&app, now_ms);
     }
     Ok(())
