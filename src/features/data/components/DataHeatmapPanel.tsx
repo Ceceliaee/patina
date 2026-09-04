@@ -37,15 +37,16 @@ interface DataHeatmapPanelProps {
   onRetry: () => void;
 }
 
-function formatHeatmapShortDate(dateKey: string, locale: string) {
-  return new Date(`${dateKey}T00:00:00`).toLocaleDateString(locale, {
+function formatHeatmapShortDate(dateKey: string, formatter: Intl.DateTimeFormat) {
+  return formatter.format(new Date(`${dateKey}T00:00:00`));
+}
+
+function buildWeeklyHeatmapCells(rows: HeatmapWeek[], text: UiText["data"], locale: string) {
+  const formatter = new Intl.DateTimeFormat(locale, {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   });
-}
-
-function buildWeeklyHeatmapCells(rows: HeatmapWeek[], text: UiText["data"], locale: string) {
   const weeklyCells = rows.map((week) => {
     const inRangeCells = week.cells.filter((cell) => !cell.isOutsideYear);
     const visibleCells = inRangeCells.filter((cell) => !cell.isFuture);
@@ -58,7 +59,7 @@ function buildWeeklyHeatmapCells(rows: HeatmapWeek[], text: UiText["data"], loca
     const firstCell = labelCells[0];
     const lastCell = labelCells[labelCells.length - 1];
     const dateLabel = firstCell && lastCell
-      ? `${formatHeatmapShortDate(firstCell.date, locale)} - ${formatHeatmapShortDate(lastCell.date, locale)}`
+      ? `${formatHeatmapShortDate(firstCell.date, formatter)} - ${formatHeatmapShortDate(lastCell.date, formatter)}`
       : week.key;
     const isOutsideYear = inRangeCells.length === 0;
     const isFuture = !isOutsideYear && visibleCells.length === 0;
