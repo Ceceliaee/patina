@@ -377,6 +377,7 @@ try {
   });
   const captureAppLog = (chunk: unknown) => {
     const text = String(chunk);
+    process.stdout.write(text);
     logs.push(text);
     appLogTail = `${appLogTail}${text}`.slice(-4_096);
     if (/Running[\s\S]*patina\.exe/i.test(appLogTail)) {
@@ -386,6 +387,7 @@ try {
   appProcess.stdout?.on("data", captureAppLog);
   appProcess.stderr?.on("data", captureAppLog);
 
+  console.log("PATINA_RUNTIME_PHASE cold-build-and-launch");
   await waitFor(
     "Tauri cold build and process launch",
     () => {
@@ -398,6 +400,7 @@ try {
     COLD_BUILD_TIMEOUT_MS,
   );
 
+  console.log("PATINA_RUNTIME_PHASE webview-startup");
   const target = await waitFor(
     "Patina main WebView CDP target",
     () => findMainTarget(devtoolsPort),
@@ -408,6 +411,7 @@ try {
     `Tauri runtime loaded unexpected frontend URL: ${target.url ?? "missing URL"}`,
   );
   client = await CdpConnection.connect(target.webSocketDebuggerUrl!);
+  console.log("PATINA_RUNTIME_PHASE runtime-assertions");
   await client.command("Runtime.enable");
   await client.command("Page.enable");
   await client.command("Log.enable");
@@ -1660,9 +1664,9 @@ try {
 
   console.log("PASS real Tauri runtime command/event/SQLite/capability smoke");
 } catch (error) {
-  console.error(logs.join(""));
   primaryError = error;
 } finally {
+  console.log("PATINA_RUNTIME_PHASE cleanup");
   try {
     await closeNetServer(bridgePortBlocker);
     bridgePortBlocker = null;

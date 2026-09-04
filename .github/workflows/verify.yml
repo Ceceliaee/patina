@@ -53,7 +53,7 @@ jobs:
           node-version-file: .node-version
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --timing
 
       - name: Run frontend quality gate
         run: npm run check
@@ -102,7 +102,7 @@ jobs:
         run: rustup toolchain install --no-self-update
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --timing
 
       - name: Run Rust quality gate
         run: npm run check:rust
@@ -122,7 +122,8 @@ jobs:
       github.event.workflow_run.event == 'pull_request') ||
       (github.event_name == 'workflow_dispatch' && inputs.pr_number != '')
     runs-on: windows-latest
-    timeout-minutes: 12
+    # Include runner setup and dependency installation before the runtime step.
+    timeout-minutes: 25
 
     steps:
       - name: Checkout push revision
@@ -150,7 +151,10 @@ jobs:
         run: rustup toolchain install --no-self-update
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --timing
 
       - name: Run isolated runtime smoke
+        # The test reserves eight minutes for a cold Rust build; leave time for
+        # WebView startup, assertions and cleanup without sharing the setup budget.
+        timeout-minutes: 15
         run: npm run test:tauri-runtime-smoke
