@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { runNpmAudit } from "./npm-audit.ts";
 
 const MANIFEST = "src-tauri/Cargo.toml";
 const LOCKFILE = "src-tauri/Cargo.lock";
@@ -127,9 +128,7 @@ const npmExecutable = process.env.npm_execpath;
 if (!npmExecutable) {
   throw new Error("npm_execpath is unavailable; run this gate through npm run check:dependencies");
 }
-const npmAuditArgs = [npmExecutable, "audit", "--audit-level=low"];
-if (OFFLINE) npmAuditArgs.push("--offline");
-const npmAudit = run(process.execPath, npmAuditArgs);
-if (npmAudit.status !== 0) process.exit(npmAudit.status ?? 1);
+const npmAuditStatus = await runNpmAudit(npmExecutable, { offline: OFFLINE });
+if (npmAuditStatus !== 0) process.exit(npmAuditStatus);
 
 console.log(`Dependency audit passed${OFFLINE ? " in explicit offline mode" : ""}.`);

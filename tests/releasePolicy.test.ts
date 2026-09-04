@@ -578,7 +578,7 @@ function testDependencyAuditKeepsOfflineModeExplicitAndNetworkFree() {
   const source = readFileSync("scripts/audit-dependencies.ts", "utf8");
   assert.match(source, /PATINA_DEPENDENCY_AUDIT_OFFLINE === "1"/);
   assert.match(source, /if \(OFFLINE\) rustAuditArgs\.push\("--no-fetch"\)/);
-  assert.match(source, /if \(OFFLINE\) npmAuditArgs\.push\("--offline"\)/);
+  assert.match(source, /runNpmAudit\(npmExecutable, \{ offline: OFFLINE \}\)/);
 }
 
 async function testPrepareAndVerifyReleaseAssetsDetectTampering() {

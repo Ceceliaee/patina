@@ -53,7 +53,7 @@ jobs:
           node-version-file: .node-version
 
       - name: Install dependencies
-        run: npm ci --timing
+        run: npm ci --no-audit --timing
 
       - name: Run frontend quality gate
         run: npm run check
@@ -102,7 +102,7 @@ jobs:
         run: rustup toolchain install --no-self-update
 
       - name: Install dependencies
-        run: npm ci --timing
+        run: npm ci --no-audit --timing
 
       - name: Run Rust quality gate
         run: npm run check:rust
@@ -151,7 +151,7 @@ jobs:
         run: rustup toolchain install --no-self-update
 
       - name: Install dependencies
-        run: npm ci --timing
+        run: npm ci --no-audit --timing
 
       - name: Run isolated runtime smoke
         # The test reserves eight minutes for a cold Rust build; leave time for
