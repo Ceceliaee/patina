@@ -34,6 +34,7 @@ pub struct WebActivityAggregateRangeDto {
 
 #[derive(Clone, Debug)]
 struct WebActivitySegmentSlice {
+    source_key: (String, String, String),
     normalized_domain: String,
     start_ms: i64,
     end_ms: i64,
@@ -60,11 +61,24 @@ fn validate_aggregate_input(
 }
 
 fn aggregate_segments(
-    segments: Vec<WebActivitySegmentSlice>,
+    mut segments: Vec<WebActivitySegmentSlice>,
     bucket_boundaries_ms: &[i64],
 ) -> Vec<WebActivityAggregateRecordDto> {
     let mut durations = BTreeMap::<(String, i64), i64>::new();
-    for segment in segments {
+    segments.sort_by_key(|segment| (segment.start_ms, segment.end_ms));
+    let mut source_ends = BTreeMap::new();
+    for mut segment in segments {
+        let key = (
+            segment.source_key.clone(),
+            segment.normalized_domain.clone(),
+        );
+        if let Some(end) = source_ends.get(&key) {
+            segment.start_ms = segment.start_ms.max(*end);
+        }
+        if segment.end_ms <= segment.start_ms {
+            continue;
+        }
+        source_ends.insert(key, segment.end_ms);
         let mut bucket_index = bucket_boundaries_ms
             .partition_point(|boundary| *boundary <= segment.start_ms)
             .saturating_sub(1);
@@ -148,7 +162,7 @@ pub async fn load_web_activity_aggregate_range_from_pool(
     .map_err(|error| format!("failed to read web activity source revision: {error}"))?;
 
     let mut segment_query = QueryBuilder::<Sqlite>::new(
-        "SELECT normalized_domain, start_time, COALESCE(end_time, MIN(updated_at + 45000, ",
+        "SELECT browser_client_id, browser_kind, browser_exe_name, normalized_domain, start_time, COALESCE(end_time, MIN(updated_at + 45000, ",
     );
     segment_query
         .push_bind(now_ms)
@@ -179,8 +193,13 @@ pub async fn load_web_activity_aggregate_range_from_pool(
         .filter_map(|row| {
             let normalized_domain = row.get::<String, _>("normalized_domain");
             let start_ms = row.get::<i64, _>("start_time");
-            let end_ms = row.get::<i64, _>("effective_end_time");
+            let end_ms = row.get::<i64, _>("effective_end_time").min(now_ms);
             (end_ms > start_ms).then_some(WebActivitySegmentSlice {
+                source_key: (
+                    row.get("browser_client_id"),
+                    row.get("browser_kind"),
+                    row.get("browser_exe_name"),
+                ),
                 normalized_domain,
                 start_ms,
                 end_ms,
@@ -275,6 +294,48 @@ mod tests {
         pool
     }
 
+    #[tokio::test]
+    async fn aggregate_unions_each_browser_source_without_filling_gaps() {
+        let pool = setup_test_db().await;
+        for (client, start, end) in [
+            ("a", 0, 60000),
+            ("a", 60800, 120800),
+            ("a", 0, 60000),
+            ("a", 10000, 20000),
+            ("b", 0, 60000),
+        ] {
+            sqlx::query("INSERT INTO web_activity_segments(browser_client_id,browser_kind,browser_exe_name,domain,normalized_domain,start_time,end_time,duration,source,created_at,updated_at) VALUES(?,'chrome','chrome.exe','example.test','example.test',?,?,?,'test',0,0)")
+                .bind(client).bind(start).bind(end).bind(end-start).execute(&pool).await.unwrap();
+        }
+        let result = load_web_activity_aggregate_range_from_pool(
+            &pool,
+            0,
+            200000,
+            &[0, 60000, 60800, 200000],
+            Some("example.test"),
+            None,
+            200000,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            result
+                .records
+                .iter()
+                .map(|r| (r.bucket_start_ms, r.duration_ms))
+                .collect::<Vec<_>>(),
+            vec![(0, 120000), (60800, 60000)]
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM web_activity_segments")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            5
+        );
+        pool.close().await;
+    }
+
     #[test]
     fn aggregate_input_requires_exact_strict_boundaries_with_a_bounded_bucket_count() {
         assert!(validate_aggregate_input(0, 20, &[0, 10, 20]).is_ok());
@@ -328,11 +389,13 @@ mod tests {
         let records = aggregate_segments(
             vec![
                 WebActivitySegmentSlice {
+                    source_key: Default::default(),
                     normalized_domain: "example.com".into(),
                     start_ms: 5,
                     end_ms: 15,
                 },
                 WebActivitySegmentSlice {
+                    source_key: Default::default(),
                     normalized_domain: "other.test".into(),
                     start_ms: -10,
                     end_ms: 4,
@@ -368,11 +431,13 @@ mod tests {
         let records = aggregate_segments(
             vec![
                 WebActivitySegmentSlice {
+                    source_key: Default::default(),
                     normalized_domain: "example.com".into(),
                     start_ms: -5,
                     end_ms: 12,
                 },
                 WebActivitySegmentSlice {
+                    source_key: Default::default(),
                     normalized_domain: "example.com".into(),
                     start_ms: 18,
                     end_ms: 35,
