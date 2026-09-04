@@ -447,6 +447,8 @@ await runTest("normalizeSettingsRecord accepts current minimize behavior values"
   assert.equal(defaultSettings.colorSchemeLight, "default");
   assert.equal(defaultSettings.colorSchemeDark, "default");
   assert.equal(defaultSettings.minSessionSecs, 300);
+  assert.equal(normalizeSettingsRecord({ min_session_secs: "0" }).minSessionSecs, 0);
+  assert.equal(normalizeSettingsRecord({ min_session_secs: "600" }).minSessionSecs, 600);
   assert.equal(defaultSettings.webActivityEnabled, false);
   assert.equal(defaultSettings.webActivityPort, 12345);
   assert.equal(defaultSettings.webActivityToken, "");

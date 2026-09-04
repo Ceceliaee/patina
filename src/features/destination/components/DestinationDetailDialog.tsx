@@ -202,7 +202,7 @@ export default function DestinationDetailDialog({
                       onChange={detail.setFocusedDateKey}
                       ariaLabel={UI_TEXT.date.pickDate}
                       className="destination-detail-date-trigger"
-                      displayLabel={formatDateControlLabel(detail.focusedDateKey, UI_TEXT, locale)}
+                      displayLabel={formatDateControlLabel(displayDay.dateKey, UI_TEXT, locale)}
                       showCalendarIcon={false}
                       maxDate={detail.todayDateKey}
                       dayNavigation={{

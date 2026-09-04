@@ -36,9 +36,10 @@ export function runHistoryReadModelTests() {
       daySessions: makeInterruptedSameAppSessions(),
     });
 
-    assert.equal(view.timelineSessions.length, 1);
-    assert.equal(view.timelineSessions[0].duration, 120_000);
-    assert.equal(view.timelineSessions[0].endTime, 150_000);
+    assert.equal(view.timelineSessions.length, 2);
+    assert.equal(view.timelineSessions.reduce((sum, row) => sum + (row.duration ?? 0), 0), 150_000);
+    assert.equal(view.timelineSessions.find(row => row.appKey === "qq.exe")?.duration, 120_000);
+    assert.equal(view.timelineSessions.find(row => row.appKey === "qq.exe")?.endTime, 150_000);
     const qqSummary = view.appSummary.find((item) => item.exeName === "QQ.exe");
 
     assert.ok(qqSummary);
@@ -59,7 +60,7 @@ export function runHistoryReadModelTests() {
       mergeThresholdSecs: 10,
     });
 
-    assert.equal(mergedView.timelineSessions.length, 1);
+    assert.equal(mergedView.timelineSessions.length, 2);
     assert.equal(splitView.timelineSessions.length, 3);
     assert.equal(
       mergedView.appSummary.reduce((sum, item) => sum + item.duration, 0),
@@ -105,10 +106,10 @@ export function runHistoryReadModelTests() {
     });
     const qqSummary = view.appSummary.find((item) => item.exeName === "QQ.exe");
 
-    assert.equal(view.timelineSessions.length, 1);
-    assert.equal(view.timelineSessions[0].startTime, 0);
-    assert.equal(view.timelineSessions[0].endTime, 180_000);
-    assert.equal(view.timelineSessions[0].duration, 120_000);
+    assert.equal(view.timelineSessions.length, 2);
+    assert.equal(view.timelineSessions.find(row => row.appKey === "zoom.exe")?.startTime, 0);
+    assert.equal(view.timelineSessions.find(row => row.appKey === "zoom.exe")?.endTime, 180_000);
+    assert.equal(view.timelineSessions.find(row => row.appKey === "zoom.exe")?.duration, 120_000);
     assert.ok(qqSummary);
     assert.equal(qqSummary.duration, 60_000);
   });
@@ -247,11 +248,11 @@ export function runHistoryReadModelTests() {
       minSessionSecs: 30,
     });
 
-    assert.equal(baseView.timelineSessions.length, 1);
+    assert.equal(baseView.timelineSessions.length, 2);
     assert.equal(thresholdView.timelineSessions.length, 1);
-    assert.equal(baseView.timelineSessions[0].duration, 40_000);
+    assert.equal(baseView.timelineSessions.find(row => row.appKey === "vscodium.exe")?.duration, 40_000);
     assert.equal(thresholdView.timelineSessions[0].duration, 40_000);
-    assert.equal(baseView.timelineSessions[0].endTime, 42_000);
+    assert.equal(baseView.timelineSessions.find(row => row.appKey === "vscodium.exe")?.endTime, 42_000);
     assert.equal(thresholdView.timelineSessions[0].endTime, 42_000);
   });
 }

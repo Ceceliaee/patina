@@ -12,18 +12,15 @@ import {
   parseLocalDateKey,
 } from "../../../shared/lib/localDate.ts";
 import {
-  getWebActivityTimelineItemEndTime,
+  compileWebActivitySegments,
   mergeWebActivityTimelineItemsByDomain,
 } from "../../../shared/lib/webActivityTimelineCompiler.ts";
 import { materializeLiveSessions } from "../../../shared/lib/readModelCore.ts";
 import {
   buildTimelineSessions,
   compileSessions,
-  type TimelineSession,
 } from "../../../shared/lib/sessionReadCompiler.ts";
 import type { DestinationDetailTarget } from "../types.ts";
-
-const ADJACENT_DETAIL_RECORD_GAP_MS = 1_000;
 
 export interface DestinationDetailRecord {
   id: string;
@@ -38,6 +35,7 @@ export interface DestinationDetailRecord {
   secondaryText: string | null;
   url: string | null;
   current: boolean;
+  intervals?: Array<{ startTime: number; endTime: number }>;
 }
 
 export interface DestinationDetailActivity {
@@ -81,6 +79,7 @@ interface UnpositionedDetailRecord {
   secondaryText: string | null;
   url: string | null;
   current: boolean;
+  sourceKey?: string;
 }
 
 interface WebDetailActivityCandidate {
@@ -138,7 +137,8 @@ function canMergeDetailRecords(
     && previous.activityId === current.activityId
     && previous.secondaryText === current.secondaryText
     && previous.url === current.url
-    && current.startTime - previous.endTime <= ADJACENT_DETAIL_RECORD_GAP_MS;
+    && previous.sourceKey === current.sourceKey
+    && current.startTime === previous.endTime;
 }
 
 function normalizeDetailRecords(
@@ -159,11 +159,7 @@ function normalizeDetailRecords(
 
   for (const record of sorted) {
     const previous = nonOverlapping[nonOverlapping.length - 1];
-    const startTime = previous
-      ? Math.max(record.startTime, previous.endTime)
-      : record.startTime;
-    if (record.endTime <= startTime) continue;
-    const clipped = { ...record, startTime };
+    const clipped = { ...record };
 
     if (previous && canMergeDetailRecords(previous, clipped)) {
       previous.endTime = Math.max(previous.endTime, clipped.endTime);
@@ -233,7 +229,6 @@ function resolveMaterializedSessionEnd(session: HistorySession) {
 }
 
 interface AppDetailActivityMembership {
-  activity: TimelineSession;
   activityId: string;
   sourceActivityIds: string[];
 }
@@ -252,15 +247,15 @@ function buildAppDetailActivityMemberships(
     minSessionSecs: 0,
   });
   const detailActivities = buildTimelineSessions(
-    compiled,
+    compiled.filter((session) => identityKeys.has(normalizeIdentityKey(session.appKey))),
     mergeThresholdSecs,
-  ).filter((activity) => identityKeys.has(normalizeIdentityKey(activity.appKey)));
+  );
   const memberships = new Map<string, AppDetailActivityMembership>();
 
   for (const activity of detailActivities) {
     const sourceActivityIds = activity.sourceIds.map((sourceId) => `app:${sourceId}`);
     const activityId = `app:${activity.appKey}:${activity.startTime}:${activity.sourceIds.join(",")}`;
-    const membership = { activity, activityId, sourceActivityIds };
+    const membership = { activityId, sourceActivityIds };
     for (const sourceId of activity.sourceIds) {
       memberships.set(String(sourceId), membership);
     }
@@ -285,18 +280,18 @@ function buildAppDetailRecords(
     mergeThresholdSecs,
   );
   const records: UnpositionedDetailRecord[] = [];
-  const activityMemberships = new Map<string, AppDetailActivityMembership>();
-  for (const membership of memberships.values()) {
-    activityMemberships.set(membership.activityId, membership);
-  }
 
   for (const session of sessions) {
     const membership = memberships.get(String(session.id));
     if (!membership) continue;
     const sessionEnd = resolveMaterializedSessionEnd(session);
-    const { activity, activityId, sourceActivityIds } = membership;
+    const { activityId, sourceActivityIds } = membership;
 
-    const samples = activity.titleSampleDetails
+    const compiledSession = compileSessions([session], {
+      startMs: dayStartMs, endMs: clipEndMs, minSessionSecs: 0,
+    })[0];
+    const sessionTitles = compiledSession?.titleSampleDetails ?? [];
+    const samples = sessionTitles
       .map((sample, index) => ({
         ...sample,
         index,
@@ -319,7 +314,7 @@ function buildAppDetailRecords(
         sourceActivityIds,
         startTime: session.startTime,
         endTime: sessionEnd,
-        title: cleanOptionalText(activity.displayTitle),
+        title: cleanOptionalText(compiledSession?.displayTitle),
         secondaryText: null,
         url: null,
         current: session.endTime === null,
@@ -327,9 +322,6 @@ function buildAppDetailRecords(
       continue;
     }
 
-    const fallbackTitle = activity.titleSampleDetails.length === 0
-      ? cleanOptionalText(activity.displayTitle)
-      : null;
     let cursor = session.startTime;
     for (const sample of samples) {
       if (sample.startTime > cursor) {
@@ -339,7 +331,7 @@ function buildAppDetailRecords(
           sourceActivityIds,
           startTime: cursor,
           endTime: sample.startTime,
-          title: fallbackTitle,
+          title: null,
           secondaryText: null,
           url: null,
           current: false,
@@ -369,7 +361,7 @@ function buildAppDetailRecords(
         sourceActivityIds,
         startTime: cursor,
         endTime: sessionEnd,
-        title: fallbackTitle,
+        title: null,
         secondaryText: null,
         url: null,
         current: session.endTime === null,
@@ -377,45 +369,12 @@ function buildAppDetailRecords(
     }
   }
 
-  const normalizedRecords = normalizeDetailRecords(
+  return normalizeDetailRecords(
     records,
     dayStartMs,
     clipEndMs,
     dayEndMs,
   );
-  const normalizedDetailRecords = normalizeDetailRecords(
-    Array.from(activityMemberships.values()).flatMap((membership) => (
-      membership.activity.titleSampleDetails.map((sample, index) => ({
-        id: `${membership.activityId}:title:${index}`,
-        activityId: membership.activityId,
-        sourceActivityIds: membership.sourceActivityIds,
-        startTime: sample.startTime,
-        endTime: sample.endTime,
-        title: cleanOptionalText(sample.title),
-        secondaryText: null,
-        url: null,
-        current: membership.activity.isLive
-          && sample.endTime >= (membership.activity.endTime ?? membership.activity.startTime),
-      }))
-    )),
-    dayStartMs,
-    clipEndMs,
-    dayEndMs,
-  );
-  const detailRecordsByActivityId = new Map<string, DestinationDetailRecord[]>();
-  for (const record of normalizedDetailRecords) {
-    const current = detailRecordsByActivityId.get(record.activityId);
-    if (current) {
-      current.push(record);
-    } else {
-      detailRecordsByActivityId.set(record.activityId, [record]);
-    }
-  }
-
-  return {
-    records: normalizedRecords,
-    detailRecordsByActivityId,
-  };
 }
 
 function buildWebDetailRecords(
@@ -428,18 +387,20 @@ function buildWebDetailRecords(
   mergeThresholdSecs: number,
 ) {
   const normalizedDomain = normalizeIdentityKey(target.key);
-  const candidates = segments.flatMap<WebDetailActivityCandidate>((segment) => {
-    const endTime = segment.endTime ?? Math.max(segment.startTime, nowMs);
+  const candidates = compileWebActivitySegments(segments, dayStartMs, clipEndMs, nowMs)
+    .filter(segment => segment.normalizedDomain === normalizedDomain)
+    .flatMap<WebDetailActivityCandidate>((segment) => {
     const record = clipRecord({
       id: `web:${segment.id}`,
       activityId: `web:${segment.id}`,
-      sourceActivityIds: [`web:${segment.id}`],
+      sourceActivityIds: segment.sourceIds.map(id => `web:${id}`),
+      sourceKey: JSON.stringify([segment.browserClientId, segment.browserKind, segment.browserExeName]),
       startTime: segment.startTime,
-      endTime,
+      endTime: segment.endTime,
       title: cleanOptionalText(segment.title),
       secondaryText: cleanOptionalText(segment.url),
       url: cleanOptionalText(segment.url),
-      current: segment.endTime === null,
+      current: segment.isLive,
     }, dayStartMs, clipEndMs);
     if (!record) return [];
 
@@ -460,17 +421,13 @@ function buildWebDetailRecords(
       ...current,
       id: `${current.id}_${next.id}`,
       startTime: Math.min(current.startTime, next.startTime),
-      endTime: Math.max(
-        getWebActivityTimelineItemEndTime(current),
-        getWebActivityTimelineItemEndTime(next),
-      ),
+      endTime: Math.max(current.endTime, next.endTime),
       duration: current.duration + next.duration,
       current: current.current || next.current,
       records: [...current.records, ...next.records],
     }),
   );
   const records = merged
-    .filter((candidate) => candidate.normalizedDomain === normalizedDomain)
     .flatMap((candidate) => candidate.records.map((record) => ({
       ...record,
       activityId: candidate.id,
@@ -484,12 +441,11 @@ function buildDayViewModel(
   dayStartMs: number,
   dayEndMs: number,
   records: DestinationDetailRecord[],
-  detailRecordsByActivityId?: Map<string, DestinationDetailRecord[]>,
 ): DestinationDetailDayViewModel {
-  const activities = buildDetailActivities(records).map((activity) => {
-    const detailRecords = detailRecordsByActivityId?.get(activity.id);
-    return detailRecords ? { ...activity, detailRecords } : activity;
-  });
+  const activities = buildDetailActivities(records).map(activity => ({
+    ...activity,
+    detailRecords: groupTitleRecords(activity.records).filter(record => record.title),
+  }));
   return {
     dateKey,
     dayStartMs,
@@ -498,8 +454,31 @@ function buildDayViewModel(
     activities,
     totalDuration: records.reduce((total, record) => total + record.duration, 0),
     firstStartTime: records[0]?.startTime ?? null,
-    lastEndTime: records[records.length - 1]?.endTime ?? null,
+    lastEndTime: records.reduce<number | null>((end, record) => Math.max(end ?? record.endTime, record.endTime), null),
   };
+}
+
+function groupTitleRecords(records: readonly DestinationDetailRecord[]) {
+  const groups: DestinationDetailRecord[] = [];
+  for (const record of records) {
+    const intervals = record.intervals ?? [{ startTime: record.startTime, endTime: record.endTime }];
+    const previous = groups[groups.length - 1];
+    if (previous && previous.title === record.title
+      && previous.secondaryText === record.secondaryText && previous.url === record.url) {
+      previous.startTime = Math.min(previous.startTime, record.startTime);
+      previous.endTime = Math.max(previous.endTime, record.endTime);
+      previous.duration += record.duration;
+      previous.intervals!.push(...intervals);
+      previous.current ||= record.current;
+      previous.sourceActivityIds = Array.from(new Set([
+        ...(previous.sourceActivityIds ?? [previous.id]),
+        ...(record.sourceActivityIds ?? [record.id]),
+      ]));
+    } else {
+      groups.push({ ...record, intervals: [...intervals] });
+    }
+  }
+  return groups;
 }
 
 export function getDestinationDetailTitleRecords(
@@ -541,8 +520,7 @@ export async function loadDestinationDetailDay(
       dateKey,
       bounds.startMs,
       bounds.requestedEndMs,
-      detail.records,
-      detail.detailRecordsByActivityId,
+      detail,
     );
   }
 

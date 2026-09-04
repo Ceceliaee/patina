@@ -7,6 +7,7 @@ import type {
   WebDomainOverride,
 } from "../../../shared/types/webActivity.ts";
 import {
+  compileWebActivitySegments,
   getWebActivityTimelineItemEndTime,
   mergeWebActivityTimelineItemsByDomain,
 } from "../../../shared/lib/webActivityTimelineCompiler.ts";
@@ -30,6 +31,7 @@ interface WebDomainDistributionItem {
 
 export interface WebTimelineItem {
   id: string;
+  sourceIds: number[];
   domain: string;
   normalizedDomain: string;
   label: string;
@@ -173,13 +175,13 @@ export function buildHistoryWebTimelineSources({
   iconThemeColors?: Record<string, string>;
   uiText: UiText;
 }): HistoryTimelineSourceItem[] {
-  return filterWebActivitySegmentsForStatistics(segments, overrides)
+  return compileWebActivitySegments(filterWebActivitySegmentsForStatistics(segments, overrides), 0, nowMs, nowMs)
     .map<HistoryTimelineSourceItem>((segment) => {
       const category = resolveWebCategory(segment.normalizedDomain, overrides);
       const endTime = Math.max(segment.startTime, segment.endTime ?? nowMs);
       const title = segment.title?.trim() ?? "";
       return {
-        id: String(segment.id),
+        id: segment.sourceIds.join("_"),
         sourceKind: "web",
         sourceKey: segment.normalizedDomain,
         sourceLabel: resolveWebLabel(segment, overrides),
@@ -203,7 +205,7 @@ export function buildHistoryWebTimelineSources({
           endTime,
           ...(title ? {} : { isUntitled: true }),
         }],
-        isLive: segment.endTime === null,
+        isLive: segment.isLive,
       };
     });
 }
@@ -278,6 +280,7 @@ function getWebTitleSamples(titleSampleDetails: WebTimelineItem["titleSampleDeta
 }
 
 function mergeWebTimelineItems(current: WebTimelineItem, next: WebTimelineItem): WebTimelineItem {
+  const sourceIds = Array.from(new Set([...current.sourceIds, ...next.sourceIds]));
   const currentEnd = getWebActivityTimelineItemEndTime(current);
   const nextEnd = getWebActivityTimelineItemEndTime(next);
   const titleSampleDetails = mergeWebTitleSampleDetails(
@@ -287,12 +290,13 @@ function mergeWebTimelineItems(current: WebTimelineItem, next: WebTimelineItem):
 
   return {
     ...current,
-    id: `${current.id}_${next.id}`,
+    id: sourceIds.join("_"),
+    sourceIds,
     faviconUrl: preferFaviconUrl(current.faviconUrl, next.faviconUrl),
     startTime: Math.min(current.startTime, next.startTime),
     endTime: current.endTime === null || next.endTime === null ? null : Math.max(currentEnd, nextEnd),
     duration: current.duration + next.duration,
-    mergedCount: current.mergedCount + next.mergedCount,
+    mergedCount: sourceIds.length,
     titleSamples: getWebTitleSamples(titleSampleDetails),
     titleSampleDetails,
   };
@@ -321,7 +325,7 @@ export function buildWebDomainDistribution(
   const groups = new Map<string, Omit<WebDomainDistributionItem, "percentage">>();
   let totalDuration = 0;
 
-  for (const segment of segments) {
+  for (const segment of compileWebActivitySegments(segments, range.startMs, range.endMs, nowMs)) {
     if (!isWebDomainIncludedInStatistics(segment.normalizedDomain, overrides)) continue;
 
     const clipped = clampSegmentToRange(segment, range.startMs, range.endMs, nowMs);
@@ -372,15 +376,17 @@ export function buildWebTimelineItems(
   minSessionSecs: number = 0,
   webDomainFavicons: Record<string, string> = {},
 ): WebTimelineItem[] {
-  const items = filterWebActivitySegmentsForStatistics(segments, overrides)
+  const items = compileWebActivitySegments(filterWebActivitySegmentsForStatistics(segments, overrides), range.startMs, range.endMs, nowMs)
     .map((segment) => {
       const clipped = clampSegmentToRange(segment, range.startMs, range.endMs, nowMs);
       if (clipped.duration <= 0) return null;
+      if (segment.isLive) clipped.endTime = null;
       const category = resolveWebCategory(segment.normalizedDomain, overrides);
       const titleSample = getWebTimelineTitleSample(segment, clipped);
       const titleSampleDetails: WebTimelineItem["titleSampleDetails"] = [titleSample];
       return {
-        id: String(segment.id),
+        id: segment.sourceIds.join("_"),
+        sourceIds: segment.sourceIds,
         domain: segment.domain || segment.normalizedDomain,
         normalizedDomain: segment.normalizedDomain,
         label: resolveWebLabel(segment, overrides),
@@ -390,7 +396,7 @@ export function buildWebTimelineItems(
         duration: clipped.duration,
         color: resolveWebColor(segment.normalizedDomain, category, overrides, iconThemeColors),
         category,
-        mergedCount: 1,
+        mergedCount: segment.sourceIds.length,
         titleSamples: getWebTitleSamples(titleSampleDetails),
         titleSampleDetails,
       } satisfies WebTimelineItem;

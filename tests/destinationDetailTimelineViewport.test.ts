@@ -238,6 +238,9 @@ runTest("detail minimum duration owns an independent preference", () => {
       "300",
     );
     assert.equal(storage.getItem("patina:data-detail-min-secs"), null);
+    saveDetailMinSecs(0);
+    assert.equal(readDetailMinSecs(), 0);
+    assert.equal(storage.getItem("patina:destination-detail-min-secs:v1"), "0");
 
     storage.setItem(
       "patina:destination-detail-min-secs:v1",
@@ -292,7 +295,7 @@ runTest("detail timeline builds viewport-relative ticks and clipped segments", (
   );
 });
 
-runTest("detail timeline applies the visibility floor after read-model grouping", () => {
+runTest("detail timeline keeps short grouped activities at a zero threshold", () => {
   const day = makeDay();
   const records = [
     makeRecord("ten-seconds", at(9), at(9, 0, 10)),
@@ -324,7 +327,8 @@ runTest("detail timeline applies the visibility floor after read-model grouping"
     },
   ], viewport, 0);
 
-  assert.equal(segments.length, 1);
+  assert.equal(segments.length, 2);
+  assert.equal(segments[1]?.duration, 29000);
   assert.equal(segments[0]?.startTime, at(9));
   assert.equal(segments[0]?.endTime, at(9, 0, 30));
   assert.equal(segments[0]?.duration, 30_000);

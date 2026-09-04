@@ -580,7 +580,7 @@ runTest("web timeline filters short rows after domain merge like app timeline", 
   assert.equal(longItems[0].mergedCount, 2);
 });
 
-runTest("web timeline preserves domain switches between same-domain rows", () => {
+runTest("web timeline groups nearby domain visits without dropping the intervening domain", () => {
   const items = buildWebTimelineItems([
     makeSegment({
       id: 1,
@@ -608,15 +608,16 @@ runTest("web timeline preserves domain switches between same-domain rows", () =>
     }),
   ], { startMs: 0, endMs: 20_000 }, 20_000, {}, {}, 60);
 
-  assert.equal(items.length, 3);
+  assert.equal(items.length, 2);
   assert.deepEqual(
     items.map((item) => item.normalizedDomain),
-    ["github.com", "docs.rs", "github.com"],
+    ["docs.rs", "github.com"],
   );
   assert.deepEqual(
     items.map((item) => item.id),
-    ["3", "2", "1"],
+    ["2", "1_3"],
   );
+  assert.equal(items.reduce((sum, item) => sum + item.duration, 0), 12000);
 });
 
 runTest("web timeline keeps untitled domain rows explainable without counting titles", () => {

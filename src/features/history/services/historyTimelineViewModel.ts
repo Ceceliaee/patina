@@ -15,7 +15,6 @@ const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 const HALF_HOUR_MS = 30 * MINUTE_MS;
 const MINUTE_BOUNDARY_SNAP_MS = 1_000;
-const MIN_VISIBLE_TIMELINE_SEGMENT_MS = 30_000;
 
 export type HistoryTimelineDisplayMode = "app" | "category" | "web";
 type HistoryTimelineSourceKind = "app" | "web";
@@ -768,10 +767,6 @@ function mergeContiguousDominantMinuteSegments(
   });
 }
 
-function keepVisibleTimelineSegments(segments: HistoryTimelineSegment[]) {
-  return segments.filter((segment) => segment.duration >= MIN_VISIBLE_TIMELINE_SEGMENT_MS);
-}
-
 function buildDominantMinuteSegments(
   segments: HistoryTimelineSegment[],
   dayStartMs: number,
@@ -786,9 +781,7 @@ function buildDominantMinuteSegments(
     .map((bucket) => buildMinuteSegment(bucket, viewport.startMs, viewportDurationMs, mode))
     .filter((segment): segment is HistoryTimelineSegment => Boolean(segment));
 
-  return keepVisibleTimelineSegments(
-    mergeContiguousDominantMinuteSegments(minuteSegments, mergeThresholdMs),
-  );
+  return mergeContiguousDominantMinuteSegments(minuteSegments, mergeThresholdMs);
 }
 
 function buildLegendItems(
@@ -890,8 +883,11 @@ export function buildHistoryTimelineViewModelFromSources({
 
   return {
     segments,
-    lanes: buildTimelineLanes(segments, mode),
-    legendItems: buildLegendItems(segments, mode),
+    lanes: buildTimelineLanes(rawSegments, mode).map(lane => ({
+      ...lane,
+      segments: mergeContiguousDominantMinuteSegments(lane.segments, mergeThresholdMs),
+    })),
+    legendItems: buildLegendItems(rawSegments, mode),
     axisTicks: buildTimelineAxisTicks(viewport, dayStartMs, dayEndMs),
     dayStartMs,
     dayEndMs,

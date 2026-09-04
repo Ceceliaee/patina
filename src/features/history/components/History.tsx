@@ -113,7 +113,7 @@ interface Props {
   onQuickActionError: (message: string) => void;
 }
 
-const TIMELINE_MIN_SESSION_MINUTES_RANGE = { min: 1, max: 10 } as const;
+const TIMELINE_MIN_SESSION_MINUTES_RANGE = { min: 0, max: 10 } as const;
 const clampMinute = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const startOfDay = startOfLocalDay;
 const startOfMonth = startOfLocalMonth;
@@ -817,7 +817,7 @@ export default function History({
     : daySummaryView;
 
   const minSessionMinutes = clampMinute(
-    Math.max(1, Math.round(minSessionSecs / 60)),
+    Math.round(minSessionSecs / 60),
     TIMELINE_MIN_SESSION_MINUTES_RANGE.min,
     TIMELINE_MIN_SESSION_MINUTES_RANGE.max,
   );

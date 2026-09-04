@@ -17,7 +17,6 @@ const DAY_HOURS = 24;
 const MIN_VIEWPORT_HOURS = 1;
 const WHEEL_ZOOM_STEP_HOURS = 0.2;
 const WHEEL_NOISE_THRESHOLD_PX = 0.5;
-const MIN_VISIBLE_TIMELINE_SEGMENT_MS = 30_000;
 
 export const DEFAULT_DESTINATION_DETAIL_ZOOM_HOURS = 24;
 
@@ -257,10 +256,10 @@ export function buildDestinationDetailTimelineAxisTicks(
 export function buildDestinationDetailTimelineSegments(
   activities: readonly DestinationDetailActivity[],
   viewport: DestinationDetailTimelineViewport,
-  minimumDurationMs = MIN_VISIBLE_TIMELINE_SEGMENT_MS,
+  minimumDurationMs = 0,
 ): DestinationDetailTimelineSegment[] {
   const visibleMinimumDurationMs = Math.max(
-    MIN_VISIBLE_TIMELINE_SEGMENT_MS,
+    0,
     Number.isFinite(minimumDurationMs) ? minimumDurationMs : 0,
   );
 
@@ -286,15 +285,20 @@ export function buildDestinationDetailTimelineSegments(
 function clipRecordToViewport(
   record: DestinationDetailRecord,
   viewport: DestinationDetailTimelineViewport,
-) {
-  const startTime = Math.max(record.startTime, viewport.startMs);
-  const endTime = Math.min(record.endTime, viewport.endMs);
-  if (endTime <= startTime) return null;
+): DestinationDetailRecord | null {
+  const intervals = (record.intervals ?? [record]).map(interval => ({
+    startTime: Math.max(interval.startTime, viewport.startMs),
+    endTime: Math.min(interval.endTime, viewport.endMs),
+  })).filter(interval => interval.endTime > interval.startTime);
+  if (intervals.length === 0) return null;
+  const startTime = intervals.reduce((start, interval) => Math.min(start, interval.startTime), intervals[0].startTime);
+  const endTime = intervals.reduce((end, interval) => Math.max(end, interval.endTime), intervals[0].endTime);
   return {
     ...record,
     startTime,
     endTime,
-    duration: endTime - startTime,
+    intervals,
+    duration: intervals.reduce((sum, interval) => sum + interval.endTime - interval.startTime, 0),
   };
 }
 
@@ -314,7 +318,7 @@ export function clipDestinationDetailActivitiesToViewport(
     return [{
       ...activity,
       startTime: records[0]?.startTime ?? activity.startTime,
-      endTime: records[records.length - 1]?.endTime ?? activity.endTime,
+      endTime: records.reduce((end, record) => Math.max(end, record.endTime), records[0].endTime),
       duration: records.reduce((total, record) => total + record.duration, 0),
       records,
       ...(detailRecords ? { detailRecords } : {}),

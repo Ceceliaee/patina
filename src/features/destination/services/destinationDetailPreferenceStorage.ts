@@ -10,7 +10,7 @@ const LEGACY_DETAIL_MIN_SECS_KEY = "patina:data-detail-min-secs";
 
 const DEFAULT_DETAIL_MIN_SECS = 60;
 export const DETAIL_MIN_SECS_RANGE = {
-  min: 60,
+  min: 0,
   max: 600,
 } as const;
 

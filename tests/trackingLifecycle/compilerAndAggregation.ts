@@ -201,7 +201,8 @@ export function runCompilerAndAggregationTests() {
     });
     const timeline = buildTimelineSessions(compiled, 180);
 
-    assert.equal(timeline.length, 1);
+    assert.equal(timeline.length, 2);
+    assert.equal(timeline[1].duration, 30_000);
     assert.equal(timeline[0].startTime, 0);
     assert.equal(timeline[0].endTime, 150_000);
     assert.equal(timeline[0].duration, 120_000);
@@ -446,10 +447,11 @@ export function runCompilerAndAggregationTests() {
     });
     const timeline = buildTimelineSessions(compiled, 10);
 
-    assert.equal(timeline.length, 1);
+    assert.equal(timeline.length, 2);
     assert.equal(timeline[0].startTime, 0);
     assert.equal(timeline[0].endTime, 180_000);
     assert.equal(timeline[0].duration, 120_000);
+    assert.equal(timeline[1].duration, 60_000);
   });
 
   runTest("day compilation clips cross-day sessions to the selected date", () => {

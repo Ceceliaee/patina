@@ -745,7 +745,7 @@ runTest("category legend groups sessions by category duration", () => {
   }
 });
 
-runTest("timeline hides merged segments under thirty seconds", () => {
+runTest("timeline retains merged segments under thirty seconds", () => {
   const dayStart = new Date(2026, 0, 2, 0, 0, 0, 0).getTime();
   const firstMinuteStart = dayStart + 9 * 60 * 60_000 + 33 * 60_000;
   const secondMinuteStart = firstMinuteStart + 60_000;
@@ -770,8 +770,9 @@ runTest("timeline hides merged segments under thirty seconds", () => {
     mergeThresholdSecs: 60,
   });
 
-  assert.equal(viewModel.segments.length, 0);
-  assert.equal(viewModel.legendItems.length, 0);
+  assert.equal(viewModel.segments.length, 1);
+  assert.equal(viewModel.segments[0].duration, 29000);
+  assert.equal(viewModel.legendItems[0].duration, 29000);
 });
 
 runTest("timeline keeps merged segments at thirty seconds", () => {
@@ -805,7 +806,7 @@ runTest("timeline keeps merged segments at thirty seconds", () => {
   assert.equal(viewModel.segments[0]?.duration, 30_000);
 });
 
-runTest("timeline hides tiny midnight carryover after clipping", () => {
+runTest("timeline retains tiny midnight carryover after clipping", () => {
   const selectedDate = new Date(2026, 0, 2);
   const dayStart = new Date(2026, 0, 2, 0, 0, 0, 0).getTime();
   const sessionStart = new Date(2026, 0, 1, 23, 59, 55, 0).getTime();
@@ -821,7 +822,8 @@ runTest("timeline hides tiny midnight carryover after clipping", () => {
     mode: "app",
   });
 
-  assert.equal(viewModel.segments.length, 0);
+  assert.equal(viewModel.segments.length, 1);
+  assert.equal(viewModel.segments[0].duration, 5000);
 });
 
 runTest("timeline merges continuous dominant minutes for the same app", () => {
@@ -930,6 +932,8 @@ runTest("timeline assigns each minute to the longest app and records short switc
   assert.equal(viewModel.segments[0]?.sourceKey, "vscodium.exe");
   assert.equal(viewModel.segments[0]?.startTime, minuteStart);
   assert.equal(viewModel.segments[0]?.endTime, minuteStart + 120_000);
+  assert.equal(viewModel.lanes.reduce((sum, lane) => sum + lane.duration, 0), 120000);
+  assert.equal(viewModel.legendItems.reduce((sum, item) => sum + item.duration, 0), 120000);
   assert.deepEqual(
     [...(viewModel.segments[0]?.alternateLabels ?? [])].sort(),
     ["Chrome", "Snow Shot"].sort(),

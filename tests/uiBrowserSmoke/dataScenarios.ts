@@ -2457,6 +2457,7 @@ export async function runDataScenarios(
           return JSON.stringify({
             displayedDate: content.dataset.destinationDetailDisplayedDate,
             requestedDate: content.dataset.destinationDetailRequestedDate,
+            dateLabel: document.querySelector(".destination-detail-date-trigger")?.textContent,
             timelineRect: {
               width: timelineRect.width,
               height: timelineRect.height,
@@ -2471,6 +2472,7 @@ export async function runDataScenarios(
     ))) as {
       displayedDate: string;
       requestedDate: string;
+      dateLabel: string;
       timelineRect: { width: number; height: number };
       recordsRect: { width: number; height: number };
     };
@@ -2519,6 +2521,7 @@ export async function runDataScenarios(
               busy: content.getAttribute("aria-busy"),
               displayedDate: content.dataset.destinationDetailDisplayedDate,
               requestedDate: content.dataset.destinationDetailRequestedDate,
+              dateLabel: document.querySelector(".destination-detail-date-trigger")?.textContent,
               hasTimelinePlaceholder: Boolean(document.querySelector(
                 ".destination-detail-timeline-placeholder",
               )),
@@ -2540,6 +2543,7 @@ export async function runDataScenarios(
         busy: string | null;
         displayedDate: string;
         requestedDate: string;
+        dateLabel: string;
         hasTimelinePlaceholder: boolean;
         hasRecordsPlaceholder: boolean;
         timelineRect: { width: number; height: number };
@@ -2547,6 +2551,7 @@ export async function runDataScenarios(
       };
       assert.ok(retainedDetailDuringDelayedNavigation);
       assert.equal(retainedDetailDuringDelayedNavigation.busy, "true");
+      assert.equal(retainedDetailDuringDelayedNavigation.dateLabel, detailBeforeDelayedDayNavigation.dateLabel);
       assert.equal(
         retainedDetailDuringDelayedNavigation.displayedDate,
         detailBeforeDelayedDayNavigation.displayedDate,
@@ -2935,6 +2940,54 @@ export async function runDataScenarios(
       45_000,
       "restore detail minimum activity duration",
     );
+    const minimumControlSelector = ".destination-detail-duration-controls";
+    const originalMinimum = Number(await evaluate(client!, sessionId,
+      `parseInt(document.querySelector("${minimumControlSelector}")?.textContent ?? "", 10)`));
+    let currentMinimum = originalMinimum;
+    for (const targetMinimum of [0, 1, 0, 9, 10, originalMinimum]) {
+      while (currentMinimum !== targetMinimum) {
+        const direction = currentMinimum < targetMinimum ? 1 : -1;
+        await evaluate(client!, sessionId,
+          `document.querySelector("${minimumControlSelector}")?.querySelectorAll("button")[${direction > 0 ? 1 : 0}]?.click()`);
+        currentMinimum += direction;
+        await waitForExpression(client!, sessionId,
+          `parseInt(document.querySelector("${minimumControlSelector}")?.textContent ?? "", 10) === ${currentMinimum}`);
+      }
+      assert.equal(await evaluate(client!, sessionId, `(() => {
+        const buttons = document.querySelector("${minimumControlSelector}")?.querySelectorAll("button");
+        return buttons?.[0]?.disabled === ${targetMinimum === 0}
+          && buttons?.[1]?.disabled === ${targetMinimum === 10};
+      })()`), true);
+    }
+    await evaluate(client!, sessionId, `(() => {
+      const barrier = { entered: false, finished: false };
+      barrier.promise = new Promise(resolve => { barrier.release = resolve; });
+      globalThis.__PATINA_DETAIL_READ_BARRIER = barrier;
+      globalThis.__PATINA_DETAIL_TEST_BARRIER = barrier;
+      document.querySelectorAll(".destination-detail-day-actions .qp-range-control-arrow")[0].click();
+    })()`);
+    try {
+      await waitForExpression(client!, sessionId, `globalThis.__PATINA_DETAIL_TEST_BARRIER.entered`);
+      await evaluate(client!, sessionId,
+        `document.querySelectorAll(".destination-detail-day-actions .qp-range-control-arrow")[1].click()`);
+      await waitForExpression(client!, sessionId, `(() => {
+        const content = document.querySelector(".destination-detail-day-content");
+        return content?.getAttribute("aria-busy") === "false"
+          && content.dataset.destinationDetailDisplayedDate === ${jsonString(detailBeforeDelayedDayNavigation.displayedDate)};
+      })()`);
+      await evaluate(client!, sessionId, `globalThis.__PATINA_DETAIL_TEST_BARRIER.release()`);
+      await waitForExpression(client!, sessionId, `globalThis.__PATINA_DETAIL_TEST_BARRIER.finished`);
+      await waitForAnimationFrames(client!, sessionId, 2);
+      assert.equal(await evaluate(client!, sessionId,
+        `document.querySelector(".destination-detail-day-content")?.dataset.destinationDetailDisplayedDate`),
+      detailBeforeDelayedDayNavigation.displayedDate);
+    } finally {
+      await evaluate(client!, sessionId, `(() => {
+        globalThis.__PATINA_DETAIL_TEST_BARRIER?.release();
+        delete globalThis.__PATINA_DETAIL_TEST_BARRIER;
+        delete globalThis.__PATINA_DETAIL_READ_BARRIER;
+      })()`);
+    }
     const detailDayNavigationContract = await evaluate(client!, sessionId, `
         (() => {
           const controls = document.querySelector(

@@ -81,12 +81,12 @@ export function useDestinationDetail({
     )
       .then((viewModel) => {
         if (cancelled || requestRef.current !== requestKey) return;
-        startTransition(() => setDayState({
+        startTransition(() => setDayState((current) => cancelled || requestRef.current !== requestKey ? current : ({
           requestKey,
           viewModel,
           status: "ready",
           error: null,
-        }));
+        })));
       })
       .catch((error: unknown) => {
         if (cancelled || requestRef.current !== requestKey) return;

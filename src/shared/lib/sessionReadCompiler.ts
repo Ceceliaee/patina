@@ -526,71 +526,37 @@ export function buildTimelineSessions(
   sessions: CompiledSession[],
   mergeThresholdSecs: number = 180,
 ): TimelineSession[] {
-  if (sessions.length === 0) return [];
-
   const mergeThresholdMs = Math.max(0, mergeThresholdSecs) * 1000;
   const result: TimelineSession[] = [];
-  let i = 0;
+  const lastGroupByApp = new Map<string, TimelineSession>();
 
-  while (i < sessions.length) {
-    const current: TimelineSession = {
-      ...sessions[i],
-      titleSamples: [...sessions[i].titleSamples],
-      titleSampleDetails: sessions[i].titleSampleDetails.map((sample) => ({ ...sample })),
-    };
-    let j = i + 1;
-
-    while (j < sessions.length) {
-      const nextCandidate = sessions[j];
-      const prevSession = sessions[j - 1];
-      const prevEnd = prevSession.endTime ?? prevSession.startTime;
-      const gapToNext = nextCandidate.startTime - prevEnd;
-
-      if (gapToNext > mergeThresholdMs) {
-        break;
-      }
-
-      if (nextCandidate.appKey === current.appKey) {
-        const currentEnd = current.endTime ?? current.startTime;
-        const gapFromCurrent = nextCandidate.startTime - currentEnd;
-        const sharesContinuityGroup =
-          current.continuityGroupStartTime ===
-          nextCandidate.continuityGroupStartTime;
-
-        if (sharesContinuityGroup || gapFromCurrent <= mergeThresholdMs) {
-          current.endTime = Math.max(currentEnd, nextCandidate.endTime ?? nextCandidate.startTime);
-          current.duration = Math.max(0, current.duration ?? 0) + Math.max(0, nextCandidate.duration ?? 0);
-          current.continuityGroupStartTime = Math.min(
-            current.continuityGroupStartTime,
-            nextCandidate.continuityGroupStartTime,
-          );
-          current.mergedCount += nextCandidate.mergedCount;
-          current.titleSampleDetails = mergeTitleSampleDetails(
-            current.titleSampleDetails,
-            nextCandidate.titleSampleDetails,
-          );
-          current.titleSamples = titleSamplesFromDetails(current.titleSampleDetails);
-          current.sourceIds = [...current.sourceIds, ...nextCandidate.sourceIds];
-          current.diagnosticCodes = mergeDiagnosticCodes(current.diagnosticCodes, nextCandidate.diagnosticCodes);
-          current.suspiciousDuration += nextCandidate.suspiciousDuration;
-          current.isLive = current.isLive || nextCandidate.isLive;
-          current.displayTitle = summarizeTitleSamples(current.titleSamples);
-          current.windowTitle = current.displayTitle;
-          i = j;
-          j += 1;
-          continue;
-        }
-
-        break;
-      }
-
-      j += 1;
+  for (const session of sessions) {
+    const current = lastGroupByApp.get(session.appKey);
+    const currentEnd = current?.endTime ?? current?.startTime ?? 0;
+    const sharesContinuityGroup = current?.continuityGroupStartTime === session.continuityGroupStartTime;
+    if (!current || (!sharesContinuityGroup && session.startTime - currentEnd > mergeThresholdMs)) {
+      const group: TimelineSession = {
+        ...session,
+        titleSamples: [...session.titleSamples],
+        titleSampleDetails: session.titleSampleDetails.map(sample => ({ ...sample })),
+      };
+      result.push(group);
+      lastGroupByApp.set(session.appKey, group);
+      continue;
     }
-
-    result.push(current);
-    i += 1;
+    current.endTime = Math.max(currentEnd, session.endTime ?? session.startTime);
+    current.duration = Math.max(0, current.duration ?? 0) + Math.max(0, session.duration ?? 0);
+    current.continuityGroupStartTime = Math.min(current.continuityGroupStartTime, session.continuityGroupStartTime);
+    current.mergedCount += session.mergedCount;
+    current.titleSampleDetails = mergeTitleSampleDetails(current.titleSampleDetails, session.titleSampleDetails);
+    current.titleSamples = titleSamplesFromDetails(current.titleSampleDetails);
+    current.sourceIds = [...current.sourceIds, ...session.sourceIds];
+    current.diagnosticCodes = mergeDiagnosticCodes(current.diagnosticCodes, session.diagnosticCodes);
+    current.suspiciousDuration += session.suspiciousDuration;
+    current.isLive ||= session.isLive;
+    current.displayTitle = summarizeTitleSamples(current.titleSamples);
+    current.windowTitle = current.displayTitle;
   }
-
   return result;
 }
 

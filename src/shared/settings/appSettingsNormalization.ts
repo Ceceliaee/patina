@@ -13,7 +13,7 @@ import { SUPPORTED_LOCALES } from "../i18n/generated/contract.ts";
 const IDLE_TIMEOUT_SECONDS_RANGE = { min: 300, max: 1800, step: 60 } as const;
 const TIMELINE_MERGE_GAP_SECONDS_RANGE = { min: 60, max: 300, step: 60 } as const;
 const REFRESH_INTERVAL_OPTIONS = [1, 3];
-const MIN_SESSION_SECONDS_RANGE = { min: 60, max: 600, step: 60 } as const;
+const MIN_SESSION_SECONDS_RANGE = { min: 0, max: 600, step: 60 } as const;
 const WEB_ACTIVITY_PORT_RANGE = { min: 1024, max: 65535 } as const;
 
 const LIGHT_COLOR_SCHEMES = new Set<string>([

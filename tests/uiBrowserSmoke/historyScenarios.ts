@@ -894,6 +894,25 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
       `),
       true,
     );
+    const minimumControlSelector = ".history-timeline-dialog-duration-controls";
+    const originalMinimum = Number(await evaluate(client!, sessionId,
+      `parseInt(document.querySelector("${minimumControlSelector}")?.textContent ?? "", 10)`));
+    let currentMinimum = originalMinimum;
+    for (const targetMinimum of [0, 1, 0, 9, 10, originalMinimum]) {
+      while (currentMinimum !== targetMinimum) {
+        const direction = currentMinimum < targetMinimum ? 1 : -1;
+        await evaluate(client!, sessionId,
+          `document.querySelector("${minimumControlSelector}")?.querySelectorAll("button")[${direction > 0 ? 1 : 0}]?.click()`);
+        currentMinimum += direction;
+        await waitForExpression(client!, sessionId,
+          `parseInt(document.querySelector("${minimumControlSelector}")?.textContent ?? "", 10) === ${currentMinimum}`);
+      }
+      assert.equal(await evaluate(client!, sessionId, `(() => {
+        const buttons = document.querySelector("${minimumControlSelector}")?.querySelectorAll("button");
+        return buttons?.[0]?.disabled === ${targetMinimum === 0}
+          && buttons?.[1]?.disabled === ${targetMinimum === 10};
+      })()`), true);
+    }
     const initialDialogDateState = JSON.parse(String(await evaluate(client!, sessionId, `
       (() => {
         const previousButton = document.querySelector(".history-timeline-dialog-date-previous");

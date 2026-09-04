@@ -1143,6 +1143,13 @@ function tauriStubFor(path: string) {
             return historyTitleSampleRows();
           }
           if (normalizedQuery.includes("from sessions")) {
+            if (globalThis.__PATINA_DETAIL_READ_BARRIER) {
+              const barrier = globalThis.__PATINA_DETAIL_READ_BARRIER;
+              globalThis.__PATINA_DETAIL_READ_BARRIER = null;
+              barrier.entered = true;
+              await barrier.promise;
+              barrier.finished = true;
+            }
             if (normalizedQuery.includes("effective_end_time")) {
               return historySessionRows().map((row) => ({
                 record_id: row.id,

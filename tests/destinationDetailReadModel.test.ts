@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   getDestinationDetailTitleRecords,
   loadDestinationDetailDay,
@@ -8,6 +9,9 @@ import type {
 } from "../src/features/destination/types.ts";
 import type { HistorySession } from "../src/shared/types/sessions.ts";
 import type { WebActivitySegment } from "../src/shared/types/webActivity.ts";
+import { buildWebDomainDistribution, buildWebTimelineItems } from "../src/features/history/services/historyWebActivityViewModel.ts";
+import { buildTimelineSessions, compileSessions } from "../src/shared/lib/sessionReadCompiler.ts";
+import { clipDestinationDetailActivitiesToViewport } from "../src/features/destination/services/destinationDetailTimelineViewport.ts";
 
 let passed = 0;
 
@@ -261,7 +265,7 @@ await runTest("app detail does not count the application name as a window title"
   );
 
   assert.equal(day.activities[0]?.records[0]?.title, null);
-  assert.deepEqual(day.activities[0]?.detailRecords, undefined);
+  assert.deepEqual(day.activities[0]?.detailRecords, []);
   assert.deepEqual(
     day.activities[0] ? getDestinationDetailTitleRecords(day.activities[0]) : null,
     [],
@@ -452,7 +456,7 @@ await runTest("web detail merges same-domain fragments before minimum-duration f
   );
 });
 
-await runTest("web detail keeps same-domain fragments separate when another domain interrupts them", async () => {
+await runTest("web detail groups its own fragments across a short domain interruption", async () => {
   const day = await loadDestinationDetailDay(
     webTarget(),
     "2026-05-20",
@@ -482,11 +486,8 @@ await runTest("web detail keeps same-domain fragments separate when another doma
     },
   );
 
-  assert.equal(day.activities.length, 2);
-  assert.deepEqual(
-    day.activities.map((activity) => activity.duration),
-    [60_000, 60_000],
-  );
+  assert.equal(day.activities.length, 1);
+  assert.deepEqual(day.activities.map((activity) => activity.duration), [120_000]);
 });
 
 await runTest("invalid detail dates fail before either repository is queried", async () => {
@@ -505,6 +506,167 @@ await runTest("invalid detail dates fail before either repository is queried", a
     /Invalid local date key/,
   );
   assert.equal(calls, 0);
+});
+
+await runTest("web views conserve source-scoped intervals through gaps, overlaps and switches", async () => {
+  const start = at(9);
+  const fixtures = [
+    { rows: [[0, 60000], [60800, 120800]], expected: 120000 },
+    { rows: [[0, 600000], [300000, 900000]], expected: 900000 },
+    { rows: [[0, 60000], [0, 60000], [10000, 20000]], expected: 60000 },
+    { rows: [[0, 60000], [60000, 120000], [120000, 120000]], expected: 120000 },
+  ];
+  for (const { rows, expected } of fixtures) {
+    const input = rows.map(([a, b], index) => makeWebSegment({ id: index + 1, startTime: start + a, endTime: start + b }));
+    for (const segments of [input, [...input].reverse()]) {
+      for (const gap of [0, 60, 600]) {
+        const day = await loadDestinationDetailDay(webTarget(), "2026-05-20", at(12), gap, {
+          getAppSessions: async () => [], getWebSegments: async () => segments,
+        });
+        const range = { startMs: at(0), endMs: at(12) };
+        assert.equal(day.totalDuration, expected);
+        assert.equal(buildWebDomainDistribution(segments, range, at(12))[0]?.duration, expected);
+        assert.equal(buildWebTimelineItems(segments, range, at(12), {}, {}, gap, 0)
+          .reduce((sum, row) => sum + row.duration, 0), expected);
+      }
+    }
+  }
+  const segments = [makeWebSegment({ id: 1, startTime: start, endTime: start + 60000 }),
+    makeWebSegment({ id: 2, browserClientId: "independent", startTime: start, endTime: start + 60000 })];
+  const day = await loadDestinationDetailDay(webTarget(), "2026-05-20", at(12), 60, {
+    getAppSessions: async () => [], getWebSegments: async () => segments,
+  });
+  assert.equal(day.totalDuration, 120000, "independent browser sources remain additive");
+});
+
+await runTest("application merging preserves the intervening app and title gap", async () => {
+  const start = at(9);
+  const sessions = [
+    makeSession({ id: 1, startTime: start, endTime: start + 60000, windowTitle: "Editor" }),
+    makeSession({ id: 2, exeName: "chrome.exe", appName: "Chrome", startTime: start + 60000, endTime: start + 80000 }),
+    makeSession({ id: 3, startTime: start + 80000, endTime: start + 200000, windowTitle: "Editor" }),
+  ];
+  const compiled = compileSessions(sessions, { startMs: at(0), endMs: at(12), minSessionSecs: 0 });
+  const timeline = buildTimelineSessions(compiled, 60);
+  assert.equal(timeline.reduce((sum, row) => sum + (row.duration ?? 0), 0), 200000);
+  assert.equal(timeline.find(row => row.appKey === "chrome.exe")?.duration, 20000);
+  const day = await loadDestinationDetailDay(appTarget(), "2026-05-20", at(12), 60, {
+    getAppSessions: async () => sessions, getWebSegments: async () => [],
+  });
+  assert.equal(day.totalDuration, 180000);
+  assert.equal(getDestinationDetailTitleRecords(day.activities[0]).reduce((sum, row) => sum + row.duration, 0), 180000);
+  assert.deepEqual(clipDestinationDetailActivitiesToViewport(day.activities, {
+    startMs: start + 60000, endMs: start + 80000, durationMs: 20000,
+  }), []);
+});
+
+await runTest("group boundaries, clipping and minimum filters conserve web facts", async () => {
+  const start = at(9);
+  for (const gap of [59999, 60000, 60001]) {
+    const segments = [0, 60000 + gap].map((offset, index) => makeWebSegment({
+      id: index + 1, startTime: start + offset, endTime: start + offset + 60000,
+    }));
+    const day = await loadDestinationDetailDay(webTarget(), "2026-05-20", at(12), 60, {
+      getAppSessions: async () => [], getWebSegments: async () => segments,
+    });
+    assert.equal(day.activities.length, gap <= 60000 ? 1 : 2);
+    assert.equal(day.totalDuration, 120000);
+    const viewport = { startMs: start + 30000, endMs: start + 60000 + gap + 30000, durationMs: gap + 60000 };
+    assert.equal(clipDestinationDetailActivitiesToViewport(day.activities, viewport)
+      .reduce((sum, row) => sum + row.duration, 0), 60000);
+  }
+  for (const durations of [[700000, 100000, 340000, 160000, 220000, 400000], [110000, 110000, 40000]]) {
+    let cursor = start;
+    const segments = durations.map((duration, index) => {
+      const segment = makeWebSegment({ id: index + 1, startTime: cursor, endTime: cursor + duration });
+      cursor += duration + 70000;
+      return segment;
+    });
+    const range = { startMs: at(0), endMs: at(12) };
+    const all = buildWebTimelineItems(segments, range, at(12), {}, {}, 60, 0);
+    assert.equal(all.reduce((sum, row) => sum + row.duration, 0), durations.reduce((a, b) => a + b, 0));
+    if (durations.length === 6) {
+      assert.equal(all.reduce((sum, row) => sum + Math.floor(row.duration / 60000), 0), 28);
+      assert.equal(buildWebDomainDistribution(segments, range, at(12))[0].duration, 1920000);
+    } else {
+      assert.equal(buildWebTimelineItems(segments, range, at(12), {}, {}, 60, 60)
+        .reduce((sum, row) => sum + row.duration, 0), 220000);
+    }
+  }
+});
+
+await runTest("short web facts and midnight cuts remain exact in detail", async () => {
+  for (const duration of [1000, 20000, 29999, 30000]) {
+    const day = await loadDestinationDetailDay(webTarget(), "2026-05-20", at(12), 60, {
+      getAppSessions: async () => [],
+      getWebSegments: async () => [makeWebSegment({ startTime: at(9), endTime: at(9) + duration })],
+    });
+    assert.equal(clipDestinationDetailActivitiesToViewport(day.activities, {
+      startMs: at(0), endMs: at(12), durationMs: at(12) - at(0),
+    })[0].duration, duration);
+  }
+  const midnight = at(0, 0, 21);
+  for (const dateKey of ["2026-05-20", "2026-05-21"]) {
+    const day = await loadDestinationDetailDay(webTarget(), dateKey, at(12, 0, 21), 60, {
+      getAppSessions: async () => [],
+      getWebSegments: async () => [makeWebSegment({ startTime: midnight - 30000, endTime: midnight + 30000 })],
+    });
+    assert.equal(day.totalDuration, 30000);
+  }
+});
+
+await runTest("detail and History consume the upstream timing facts without extending cutoffs", async () => {
+  const fixtures = JSON.parse(readFileSync(new URL("./fixtures/activity-timing-facts.json", import.meta.url), "utf8")) as Array<{
+    web: Array<[number, number | null, number]>; now: number; expectedBuckets: number[];
+  }>;
+  for (const fixture of fixtures) {
+    const offset = at(0);
+    const segments = fixture.web.map(([start, end, updatedAt], index) => makeWebSegment({
+      // Match the repository's already-materialized observation cutoff.
+      id: index + 1, startTime: offset + start, endTime: offset + (end ?? Math.min(fixture.now, updatedAt + 45000)),
+    }));
+    const now = offset + fixture.now;
+    const days = await Promise.all(["2026-05-20", "2026-05-21"].map(date =>
+      loadDestinationDetailDay(webTarget(), date, now, 60, {
+        getAppSessions: async () => [], getWebSegments: async () => segments,
+      })));
+    const expected = fixture.expectedBuckets.reduce((a, b) => a + b, 0);
+    assert.equal(days.reduce((sum, day) => sum + day.totalDuration, 0), expected);
+    assert.equal(buildWebDomainDistribution(segments, { startMs: offset, endMs: now }, now)
+      .reduce((sum, row) => sum + row.duration, 0), expected);
+  }
+});
+
+await runTest("long alternating chains retain every object and stop across a real gap", async () => {
+  const start = at(9);
+  const segments = Array.from({ length: 200 }, (_, index) => makeWebSegment({
+    id: index + 1,
+    normalizedDomain: index % 2 ? "other.example" : "github.com",
+    startTime: start + index * 1000 + (index >= 100 ? 61000 : 0),
+    endTime: start + (index + 1) * 1000 + (index >= 100 ? 61000 : 0),
+  }));
+  const list = buildWebTimelineItems(segments, { startMs: start, endMs: at(12) }, at(12), {}, {}, 60, 0);
+  assert.equal(list.length, 4);
+  assert.equal(list.reduce((sum, row) => sum + row.duration, 0), 200000);
+  const day = await loadDestinationDetailDay(webTarget(), "2026-05-20", at(12), 60, {
+    getAppSessions: async () => [], getWebSegments: async () => segments,
+  });
+  assert.equal(day.activities.length, 2);
+  assert.equal(day.totalDuration, 100000);
+});
+
+await runTest("detail preserves explicit participation anchors without needing intervening apps", async () => {
+  const start = at(9);
+  const sessions = [
+    makeSession({ id: 1, startTime: start, endTime: start + 60000, continuityGroupStartTime: start }),
+    makeSession({ id: 2, exeName: "other.exe", startTime: start + 60000, endTime: start + 120000 }),
+    makeSession({ id: 3, startTime: start + 120000, endTime: start + 180000, continuityGroupStartTime: start }),
+  ];
+  const day = await loadDestinationDetailDay(appTarget(), "2026-05-20", at(12), 10, {
+    getAppSessions: async () => sessions, getWebSegments: async () => [],
+  });
+  assert.equal(day.activities.length, 1);
+  assert.equal(day.totalDuration, 120000);
 });
 
 console.log(`Passed ${passed} data destination detail read-model tests`);
