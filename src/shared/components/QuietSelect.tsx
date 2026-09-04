@@ -220,14 +220,18 @@ export default function QuietSelect<T extends string | number>({
     return () => document.removeEventListener("keydown", handleDocumentKeyDown);
   }, [open]);
 
+  const selectedEnabledIndex = options.findIndex((option) => option.value === value && !option.disabled);
+  const initialHighlightedIndex = selectedEnabledIndex >= 0
+    ? selectedEnabledIndex
+    : options.findIndex((option) => !option.disabled);
+
   useEffect(() => {
     if (!open) {
       setHighlightedIndex(-1);
       return;
     }
-    const selectedIndex = options.findIndex((option) => option.value === value && !option.disabled);
-    setHighlightedIndex(selectedIndex >= 0 ? selectedIndex : options.findIndex((option) => !option.disabled));
-  }, [open, options, value]);
+    setHighlightedIndex(initialHighlightedIndex);
+  }, [open, initialHighlightedIndex, value]);
 
   useLayoutEffect(() => {
     if (!menuReady) return undefined;

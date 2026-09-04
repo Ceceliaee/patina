@@ -45,6 +45,34 @@ async function dispatchSelectKey(
 export async function runSettingsScenarios(context: BrowserSmokeContext) {
   const { appUrl, client, sessionId, runTest } = context;
 
+  await runTest("select keyboard highlight survives equivalent options after parent refresh", async () => {
+    await evaluate(client, sessionId, `(async () => {
+      const fixture = await import("/tests/uiBrowserSmoke/selectFixture.ts");
+      window.__selectRefreshFixture = fixture.mountSelectFixture();
+    })()`);
+    const trigger = '#select-refresh-fixture button[aria-haspopup="listbox"]';
+    const listbox = '.qp-select-menu[role="listbox"]';
+    const activeText = `(() => {
+      const id = document.querySelector(${jsonString(listbox)})?.getAttribute("aria-activedescendant");
+      return id ? document.getElementById(id)?.textContent : null;
+    })()`;
+    try {
+      await waitForExpression(client, sessionId, `document.querySelector('#select-refresh-fixture')?.dataset.revision === "0"`);
+      await dispatchSelectKey(context, trigger, "Enter");
+      await waitForExpression(client, sessionId, `${activeText} === "Second"`);
+      await dispatchSelectKey(context, listbox, "Home");
+      await waitForExpression(client, sessionId, `${activeText} === "First"`);
+      await evaluate(client, sessionId, `window.__selectRefreshFixture.render(1)`);
+      await waitForExpression(client, sessionId, `document.querySelector('#select-refresh-fixture')?.dataset.revision === "1"`);
+      await waitForAnimationFrames(client, sessionId);
+      assert.equal(await evaluate(client, sessionId, activeText), "First");
+      await dispatchSelectKey(context, listbox, "Enter");
+      await waitForExpression(client, sessionId, `document.querySelector('#select-refresh-fixture')?.dataset.chosen === "first"`);
+    } finally {
+      await evaluate(client, sessionId, `window.__selectRefreshFixture.dispose(); delete window.__selectRefreshFixture;`);
+    }
+  });
+
   await runTest("settings cold navigation keeps the current view until its final state is ready", async () => {
     assert.equal(
       await evaluate(client!, sessionId, `
@@ -690,7 +718,10 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
         `document.querySelector(${jsonString(languageTriggerSelector)})?.getAttribute("aria-expanded") === "true"
           && (() => {
             const listbox = document.querySelector(${jsonString(languageListboxSelector)});
-            return Boolean(listbox && getComputedStyle(listbox).visibility !== "hidden");
+            const activeId = listbox?.getAttribute("aria-activedescendant");
+            const activeOption = activeId ? document.getElementById(activeId) : null;
+            return Boolean(listbox && getComputedStyle(listbox).visibility !== "hidden"
+              && activeOption?.getAttribute("aria-selected") === "true");
           })()`,
         15_000,
         message,
@@ -747,7 +778,13 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       "language listbox should reopen from restored trigger focus",
     );
     await dispatchSelectKey(context, languageListboxSelector, "Home");
-    await waitForAnimationFrames(client!, sessionId);
+    await waitForExpression(client!, sessionId, `
+      (() => {
+        const listbox = document.querySelector(${jsonString(languageListboxSelector)});
+        const activeId = listbox?.getAttribute("aria-activedescendant");
+        return Boolean(activeId && document.getElementById(activeId)?.textContent?.trim() === "简体中文");
+      })()
+    `, 15_000, "Home should commit the first language option before Enter");
     await dispatchSelectKey(context, languageListboxSelector, "Enter");
     await waitForExpression(
       client!,
