@@ -47,7 +47,7 @@ export async function removeIsolatedBrowserDataDir(path: string) {
   );
 }
 
-export function resolveBrowserPath() {
+function resolveBrowserPath() {
   const explicitPath = process.env.TIME_TRACKER_BROWSER_PATH;
   if (explicitPath) {
     return explicitPath;
@@ -121,16 +121,16 @@ function readDevToolsPort(userDataDir: string) {
   }
 }
 
-export async function launchBrowser(options: { headless?: boolean; extensionDebugging?: boolean } = {}) {
+export async function launchBrowser() {
   const browserPath = resolveBrowserPath();
   const userDataDir = mkdtempSync(join(tmpdir(), "time-tracker-browser-smoke-"));
   assertIsolatedTempPath(userDataDir, "time-tracker-browser-smoke-");
   const browser = spawn(browserPath, [
-    ...(options.headless === false ? [] : ["--headless=new"]),
+    "--headless=new",
     "--disable-gpu",
     "--no-first-run",
     "--no-default-browser-check",
-    ...(options.extensionDebugging ? ["--enable-unsafe-extension-debugging"] : ["--disable-extensions"]),
+    "--disable-extensions",
     "--remote-debugging-port=0",
     `--user-data-dir=${userDataDir}`,
     "about:blank",
