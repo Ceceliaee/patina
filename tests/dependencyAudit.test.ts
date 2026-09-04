@@ -12,7 +12,7 @@ async function scenario(results: Array<typeof success>, expectedStatus: number, 
     offline,
     execute: (args) => {
       assert.ok(args.includes("--audit-level=low"));
-      assert.ok(args.includes("--fetch-timeout=60000"));
+      assert.ok(args.includes("--fetch-timeout=120000"));
       assert.equal(args.includes("--offline"), offline);
       return results[Math.min(calls++, results.length - 1)];
     },

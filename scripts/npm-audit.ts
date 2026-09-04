@@ -23,10 +23,10 @@ export async function runNpmAudit(npmExecutable: string, options: {
   report?: (text: string) => void;
 } = {}): Promise<number> {
   const execute = options.execute ?? ((args) => spawnSync(process.execPath, args, {
-    cwd: process.cwd(), encoding: "utf8", shell: false, timeout: 90_000,
+    cwd: process.cwd(), encoding: "utf8", shell: false, timeout: 150_000,
   }));
   const report = options.report ?? ((text) => process.stdout.write(text));
-  const args = [npmExecutable, "audit", "--audit-level=low", "--json", "--fetch-timeout=60000", "--fetch-retries=0"];
+  const args = [npmExecutable, "audit", "--audit-level=low", "--json", "--fetch-timeout=120000", "--fetch-retries=0"];
   if (options.offline) args.push("--offline");
   for (let attempt = 1; attempt <= 3; attempt++) {
     const result = execute(args);
