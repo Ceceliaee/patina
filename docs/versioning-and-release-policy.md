@@ -421,8 +421,6 @@ GitHub Actions 生成正式发布资产后、发布 GitHub Release 前，还必�
 6. GitHub Release 成立后再同步 R2 镜像；镜像失败不能撤销、覆盖或改变 GitHub Release 主事实，updater 继续优先使用 GitHub endpoint。
 7. 发布模式的 `workflow_dispatch` 只补跑“tag 已存在且 Release 不存在”的失败流程，不创建 commit、tag 或版本文件；Release 已存在时必须失败并按不可变规则准备新版本。
 
-`workflow_dispatch` 的 `validation_only=true` 模式从被选中的固定 commit 构建并验证候选资产，不要求新 tag，不创建 Release、attestation 或 R2 对象；候选资产仅保留在 Actions artifacts。该模式不得覆盖或追加已发布同版本的 Release 资产。
-
 默认协作在 tag 推送并确认发布 workflow 已触发后即可结束；只有用户要求或正在排查失败时才持续监看。浏览器扩展商店与扩展 Release 由 `patina-web-sync` 仓库负责，不进入 Patina 主应用发布流程。
 
 ## 12. 什么时候更新本文

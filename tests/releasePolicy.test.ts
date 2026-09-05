@@ -361,15 +361,14 @@ function testDualArchitectureWorkflowBoundaries() {
   assert.match(workflow, /target: aarch64-pc-windows-msvc/);
   assert.match(workflow, /runner: windows-11-arm/);
   assert.match(workflow, /--bundles nsis --target \$\{\{ matrix.target \}\}/);
-  assert.match(workflow, /source=\$\{\{ github.sha \}\}/);
-  for (const step of ["Confirm release tag", "Ensure release does not already exist", "Attest Windows installer", "Attest ARM64 installer", "Publish GitHub Release"]) {
-    assert.ok(workflow.includes(`- name: ${step}\n        if: inputs.validation_only != true`));
-  }
-  assert.match(workflow, /r2:\n    if: inputs.validation_only != true/);
   assert.match(workflow, /subject-path: dist-release\/Patina_\$\{\{ needs.resolve.outputs.version \}\}_arm64-setup.exe/);
   const mirror = workflow.slice(workflow.indexOf("      - name: Upload R2 updater mirror"));
-  assert.ok(mirror.indexOf("R2 digest mismatch") < mirror.indexOf('"s3://$env:R2_BUCKET/latest.json"'));
-  assert.ok(mirror.indexOf("R2 manifest upload failed") < mirror.indexOf("Clean old R2 updater mirrors"));
+  const digestIndex = mirror.indexOf("R2 digest mismatch");
+  const manifestIndex = mirror.indexOf('"s3://$env:R2_BUCKET/latest.json"');
+  const uploadFailureIndex = mirror.indexOf("R2 manifest upload failed");
+  const cleanupIndex = mirror.indexOf("Clean old R2 updater mirrors");
+  assert.ok([digestIndex, manifestIndex, uploadFailureIndex, cleanupIndex].every((index) => index >= 0));
+  assert.ok(digestIndex < manifestIndex && manifestIndex < uploadFailureIndex && uploadFailureIndex < cleanupIndex);
 }
 
 function testToolchainContractsStayAligned() {

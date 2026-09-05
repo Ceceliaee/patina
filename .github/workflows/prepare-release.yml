@@ -7,11 +7,6 @@ on:
         description: "Existing version tag to publish, for example 1.6.1"
         required: true
         type: string
-      validation_only:
-        description: "Build and verify the selected revision without publishing or updating R2"
-        required: false
-        default: false
-        type: boolean
   push:
     tags:
       - "v[0-9]*.[0-9]*.[0-9]*"
@@ -31,7 +26,6 @@ jobs:
     outputs:
       version: ${{ steps.release.outputs.version }}
       tag: ${{ steps.release.outputs.tag }}
-      source: ${{ steps.release.outputs.source }}
 
     steps:
       - name: Checkout
@@ -61,15 +55,9 @@ jobs:
 
           "version=$version" >> $env:GITHUB_OUTPUT
           "tag=v$version" >> $env:GITHUB_OUTPUT
-          if ("${{ inputs.validation_only }}" -eq "true") {
-            "source=${{ github.sha }}" >> $env:GITHUB_OUTPUT
-          } else {
-            "source=v$version" >> $env:GITHUB_OUTPUT
-          }
           Write-Host "Resolved release version: $version"
 
       - name: Confirm release tag
-        if: inputs.validation_only != true
         shell: pwsh
         run: |
           $tag = "${{ steps.release.outputs.tag }}"
@@ -85,7 +73,6 @@ jobs:
           }
 
       - name: Ensure release does not already exist
-        if: inputs.validation_only != true
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -133,7 +120,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ needs.resolve.outputs.source }}
+          ref: ${{ needs.resolve.outputs.tag }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -153,7 +140,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ needs.resolve.outputs.source }}
+          ref: ${{ needs.resolve.outputs.tag }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -173,7 +160,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ needs.resolve.outputs.source }}
+          ref: ${{ needs.resolve.outputs.tag }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -201,7 +188,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ needs.resolve.outputs.source }}
+          ref: ${{ needs.resolve.outputs.tag }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -235,7 +222,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ needs.resolve.outputs.source }}
+          ref: ${{ needs.resolve.outputs.tag }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -286,7 +273,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ needs.resolve.outputs.source }}
+          ref: ${{ needs.resolve.outputs.tag }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -355,7 +342,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ needs.resolve.outputs.source }}
+          ref: ${{ needs.resolve.outputs.tag }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -396,13 +383,11 @@ jobs:
           npm run release:verify-assets -- $version release-inputs dist-release ${{ github.repository }}
 
       - name: Attest Windows installer
-        if: inputs.validation_only != true
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-path: dist-release/Patina_${{ needs.resolve.outputs.version }}_x64-setup.exe
 
       - name: Attest ARM64 installer
-        if: inputs.validation_only != true
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-path: dist-release/Patina_${{ needs.resolve.outputs.version }}_arm64-setup.exe
@@ -420,7 +405,6 @@ jobs:
           retention-days: 7
 
       - name: Publish GitHub Release
-        if: inputs.validation_only != true
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
@@ -436,7 +420,6 @@ jobs:
             dist-release/latest.json
 
   r2:
-    if: inputs.validation_only != true
     name: Sync R2 updater mirror
     runs-on: windows-latest
     needs: [resolve, publish]
@@ -479,7 +462,7 @@ jobs:
         if: steps.r2.outputs.enabled == 'true'
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ needs.resolve.outputs.source }}
+          ref: ${{ needs.resolve.outputs.tag }}
           fetch-depth: 0
 
       - name: Set up Node
