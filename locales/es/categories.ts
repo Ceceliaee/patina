@@ -1,0 +1,27 @@
+// es locale resource. Pure data only.
+export const MESSAGES = {
+  "categories.ai": "IA",
+  "categories.browser": "Navegador",
+  "categories.communication": "Comunicación",
+  "categories.custom": "Personalizado",
+  "categories.design": "Diseño",
+  "categories.development": "Desarrollo",
+  "categories.game": "Juegos",
+  "categories.music": "Música",
+  "categories.office": "Oficina",
+  "categories.other": "Otros",
+  "categories.short.browser": "Navegador",
+  "categories.short.communication": "Chat",
+  "categories.short.design": "Diseño",
+  "categories.short.development": "Desarrollo",
+  "categories.short.game": "Juegos",
+  "categories.short.music": "Música",
+  "categories.short.office": "Oficina",
+  "categories.short.other": "Otros",
+  "categories.short.system": "Sistema",
+  "categories.short.utility": "Herramientas",
+  "categories.short.video": "Vídeo",
+  "categories.system": "Sistema",
+  "categories.utility": "Utilidades",
+  "categories.video": "Vídeo"
+} as const;
