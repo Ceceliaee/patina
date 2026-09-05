@@ -10,4 +10,5 @@ export const FRONTEND_MESSAGE_PARAMS = [,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,["dateKe
 export const FRONTEND_LOCALE_LOADERS = {
   "zh-CN": () => Promise.resolve(FRONTEND_SOURCE_RESOURCES),
   "en-US": () => import("./locales/en-US.ts").then((module) => module.FRONTEND_LOCALE_RESOURCES),
+  "es": () => import("./locales/es.ts").then((module) => module.FRONTEND_LOCALE_RESOURCES),
 } as const satisfies Record<Locale, () => Promise<readonly unknown[]>>;

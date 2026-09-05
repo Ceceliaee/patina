@@ -142,6 +142,43 @@ mod tests {
     }
 
     #[test]
+    fn spanish_native_messages_and_cardinals_are_available() {
+        let locale = Locale::from_tag(Some("es"));
+        assert_eq!(locale.tag(), "es");
+        assert_eq!(text(locale, "native.tray.quit"), "Salir de Patina");
+        assert_eq!(
+            format_text(
+                locale,
+                "native.tools.activityReminderDefaultBody",
+                &[
+                    ("targetName", "Patina".into()),
+                    ("usageMinutes", "1".into()),
+                    ("limitMinutes", "1".into())
+                ]
+            ),
+            "Patina ha estado activo durante 1 minuto, alcanzando el límite diario de 1 minuto"
+        );
+        for (count, category) in [
+            (0, "other"),
+            (1, "one"),
+            (2, "other"),
+            (21, "other"),
+            (1_000_000, "many"),
+        ] {
+            assert_eq!(cardinal_category("es", count).unwrap(), category);
+            let prefix = if count == 1 { "Registro" } else { "Registros" };
+            assert_eq!(
+                format_text(
+                    locale,
+                    "native.export.records",
+                    &[("count", count.to_string())]
+                ),
+                format!("{prefix}: {count}")
+            );
+        }
+    }
+
+    #[test]
     fn formatter_substitutes_named_arguments_and_preserves_missing_ones() {
         assert_eq!(
             format_text(

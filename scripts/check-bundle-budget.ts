@@ -31,6 +31,7 @@ const INITIAL_CHUNK_BUDGETS = [
 const LOCALE_CHUNK_GZIP_BUDGETS = {
   "zh-CN": 9.9,
   "en-US": 9.4,
+  "es": 10.75,
 } as const satisfies Record<keyof typeof LOCALE_REGISTRY, number>;
 const LOCALE_CHUNK_BUDGETS = Object.entries(LOCALE_CHUNK_GZIP_BUDGETS).map(
   ([locale, gzipKiB]) => ({

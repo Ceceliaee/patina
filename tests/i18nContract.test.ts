@@ -34,6 +34,21 @@ const firstEnglishRequest = loadLocaleText("en-US");
 const secondEnglishRequest = loadLocaleText("en-US");
 assert.strictEqual(firstEnglishRequest, secondEnglishRequest);
 const englishText = await firstEnglishRequest;
+const spanishText = await loadLocaleText("es");
+assert.equal(spanishText.dashboard.tracking("Code"), "Registrando: Code");
+for (const [count, category] of [[0, "other"], [1, "one"], [2, "other"], [21, "other"], [1000000, "many"]] as const) {
+  assert.equal(cardinalPluralCategory("es", count), category);
+  assert.equal(spanishText.data.selectedObjectCount(count), `${count} ${count === 1 ? "elemento" : "elementos"}`);
+}
+assert.equal(formatNumber("es", 12345.67), "12.345,67");
+assert.equal(spanishText.date.yearMonthLabel(2026, 8), "agosto 2026");
+assert.equal(spanishText.backup.restoreMessage("backup.restore.supported", [], "English fallback"), "Esta versión puede restaurar esta copia de forma segura.");
+assert.equal(spanishText.backup.restoreMessage("backup.restore.schemaTooNew", [], "English fallback"), "Esta copia usa una estructura de base de datos más reciente. Actualiza primero la aplicación.");
+assert.equal(spanishText.backup.restoreMessage("backup.restore.versionTooNew", ["9"], "English fallback"), "El formato de esta copia es más reciente (9). Actualiza primero la aplicación.");
+assert.equal(spanishText.backup.restoreMessage("backup.restore.versionTooOld", [], "English fallback"), "Esta copia antigua está fuera del período de compatibilidad para la migración.");
+assert.equal(spanishText.backup.restoreMessage("unknown", [], "Future reason"), "Future reason");
+assert.equal(spanishText.export.exportDone(1), "Exportado: 1 registro");
+assert.equal(spanishText.history.sessionCount(1), "1 registro");
 
 assert.equal(getLocaleText("zh-CN").dashboard.tracking("Code"), "正在追踪：Code");
 assert.strictEqual(getLocaleText("en-US"), englishText);

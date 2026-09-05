@@ -11,5 +11,11 @@ export const LOCALE_REGISTRY = {
     "source": false,
     "direction": "ltr",
     "production": true
+  },
+  "es": {
+    "label": "Español",
+    "source": false,
+    "direction": "ltr",
+    "production": true
   }
 } as const;

@@ -18,6 +18,8 @@ App note en: TBD.
 
 ### Added
 
+- 新增西班牙语 Español，覆盖桌面界面、托盘、提醒和语言相关导出。Refs [#76](https://github.com/Ceceliaee/patina/issues/76)
+
 ### Changed
 
 ### Fixed

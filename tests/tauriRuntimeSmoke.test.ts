@@ -1598,6 +1598,19 @@ try {
     { key: "tracking_paused", value: "1" },
   ]);
   await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
+    mutations: [{ key: "language", value: "es" }],
+  })`);
+  const spanishSettingRows = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
+    db: "sqlite:patina.db",
+    query: "SELECT key, value FROM settings WHERE key IN (?, ?, ?) ORDER BY key",
+    values: ["language", "tracking_paused", "title_recording_enabled"],
+  })`);
+  assert.deepEqual(spanishSettingRows, [
+    { key: "language", value: "es" },
+    { key: "title_recording_enabled", value: "0" },
+    { key: "tracking_paused", value: "1" },
+  ]);
+  await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
     mutations: [
       { key: "language", value: "zh-CN" },
       { key: "tracking_paused", value: "0" },

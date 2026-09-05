@@ -8,6 +8,7 @@ import {
   waitForExpression,
 } from "./browserHarness.ts";
 import { SETTINGS_MARKER } from "./constants.ts";
+import { LOCALE_METADATA, SUPPORTED_LOCALES } from "../../src/shared/i18n/generated/contract.ts";
 
 type SelectKeyboardKey = "Enter" | "ArrowUp" | "ArrowDown" | "Home" | "End" | "Escape" | "简";
 
@@ -414,7 +415,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       );
       assert.equal(selectA11yState.menuGap, 4);
       assert.equal(selectA11yState.menuPadding, "4px");
-      assert.deepEqual(selectA11yState.optionHeights, [28, 28]);
+      assert.deepEqual(selectA11yState.optionHeights, SUPPORTED_LOCALES.map(() => 28));
       assert.deepEqual(selectA11yState.optionFontSizes, ["11px"]);
       assert.deepEqual(selectA11yState.optionFontWeights, ["650"]);
       assert.equal(selectA11yState.selectedMatchesPreviousSelectedText, true);
@@ -429,7 +430,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
               .map((option) => option.textContent?.trim());
           })()
         `),
-        ["简体中文", "English"],
+        SUPPORTED_LOCALES.map((locale) => LOCALE_METADATA[locale].label),
       );
       assert.equal(
         await evaluate(client!, sessionId, `
@@ -763,7 +764,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     assert.equal(await activeOptionText(), "简体中文");
     await dispatchSelectKey(context, languageListboxSelector, "End");
     await waitForAnimationFrames(client!, sessionId);
-    assert.equal(await activeOptionText(), "English");
+    assert.equal(await activeOptionText(), "Español");
     await dispatchSelectKey(context, languageListboxSelector, "Escape");
     await waitForExpression(
       client!,
@@ -810,6 +811,17 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       await evaluate(client!, sessionId, `JSON.parse(localStorage.getItem("__time_tracker_smoke_settings") ?? "{}").language`),
       "zh-CN",
     );
+    await chooseLanguage("语言: 简体中文", "Español");
+    await waitForExpression(client!, sessionId, "document.documentElement.lang === 'es'");
+    assert.equal(await evaluate(client!, sessionId, "JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') ?? '{}').language"), "zh-CN", "Spanish preview must not persist before Save");
+    await evaluate(client!, sessionId, "Array.from(document.querySelectorAll('button')).find(n => n.textContent?.trim() === 'Guardar')?.click()");
+    await waitForExpression(client!, sessionId, "JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') ?? '{}').language === 'es'");
+    await client!.command("Page.navigate", { url: appUrl }, sessionId);
+    await waitForExpression(client!, sessionId, "document.documentElement.lang === 'es' && Boolean(document.querySelector('.qp-select-trigger[aria-label=\"Idioma: Español\"]'))");
+    await chooseLanguage("Idioma: Español", "简体中文");
+    await waitForExpression(client!, sessionId, "document.documentElement.lang === 'zh-CN'");
+    await evaluate(client!, sessionId, "Array.from(document.querySelectorAll('button')).find(n => n.textContent?.trim() === '保存')?.click()");
+    await waitForExpression(client!, sessionId, "JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') ?? '{}').language === 'zh-CN'");
   });
 
   await runTest("start minimized stays editable and persists while launch at login is off", async () => {
