@@ -133,6 +133,12 @@ Patina currently focuses on personal local time records:
 
 It is not currently aimed at team collaboration, account systems, cloud sync, multi-platform sync, or heavy AI insights.
 
+## Windows Installer Architecture
+
+Releases with ARM64 support provide `Patina_<version>_x64-setup.exe` for Intel/AMD x64 devices and `Patina_<version>_arm64-setup.exe` for Windows ARM64 devices, such as Snapdragon PCs. Check **Settings → System → About → System type** if you are unsure. Download the matching installer from the [release page](https://github.com/Ceceliaee/patina/releases).
+
+Automatic updates retain the installed application's architecture. An x64 installation on Windows ARM continues receiving x64 updates. Each release includes `SHA256SUMS.txt` and installer provenance verification instructions.
+
 ## Build From Source
 
 ### Requirements
@@ -165,6 +171,8 @@ Installers are generated under:
 ```text
 src-tauri/target/release/bundle/
 ```
+
+An explicit `--target x86_64-pc-windows-msvc` or `--target aarch64-pc-windows-msvc` build writes to `src-tauri/target/<target>/release/bundle/`. ARM64 builds require the matching Rust target and MSVC ARM64 build tools. Release automation builds and validates both targets before publication.
 
 ## Tech Stack
 

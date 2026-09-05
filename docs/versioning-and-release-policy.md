@@ -319,27 +319,32 @@ GitHub Release 正文必须来自 `CHANGELOG.md` 对应版本节，但不是机�
 
 GitHub Release 中的 Windows 安装包附件统一使用无空格文件名，例如：
 
-- `Patina_1.0.1_x64-setup.exe`
+- `Patina_<version>_x64-setup.exe`
+- `Patina_<version>_arm64-setup.exe`
 
 每次正式发布还必须携带根级 `SHA256SUMS.txt`：
 
-- 校验文件只记录最终公开的 `Patina_<version>_x64-setup.exe`，不记录 Tauri bundle 中间路径或 `latest.json`。
+- 校验文件按 x64、ARM64 顺序恰好记录两个最终公开安装包，不记录 Tauri bundle 中间路径或 `latest.json`。
 - 记录格式固定为 64 位小写 SHA-256、两个空格和无路径前缀的安装包文件名，并以单个 LF 换行结束。
-- SHA-256 必须在公开文件完成复制与重命名后，从 `dist-release/Patina_<version>_x64-setup.exe` 重新读取计算。
+- SHA-256 必须在公开文件完成复制与重命名后，分别从 `dist-release/` 中两个最终公开安装包重新读取计算。
 - 发布工作流必须同时比较 Tauri 输入安装包与最终公开安装包的摘要；字节不一致时不得发布。
 - `SHA256SUMS.txt` 只证明文件字节一致性，不单独证明发布者身份或软件绝对安全。
 
 最终公开安装包还必须生成 GitHub Artifact Attestation：
 
-- attestation subject 必须是最终公开的 `dist-release/Patina_<version>_x64-setup.exe`，不能是原始 bundle 路径或目录 glob。
+- 两个安装包分别生成 attestation；每个 subject 必须是 `dist-release/` 下对应最终公开安装包的明确路径，不能是原始 bundle 路径或目录 glob。
 - attestation 必须在独立发布资产校验通过后、GitHub Release 对外发布前生成；生成失败必须阻断 Release。
 - attestation 用于把安装包摘要与 Patina 仓库、源码引用和发布工作流关联，不替代 Tauri updater 签名或 Windows Authenticode。
 
 Patina Web Sync 浏览器扩展由独立公开仓库 [`patina-web-sync`](https://github.com/Ceceliaee/patina-web-sync) 发布，不再作为 Patina Release 的必备附件。
 
-Patina Release 只发布主应用安装包、`SHA256SUMS.txt`、`latest.json` 与更新通道所需资产。浏览器扩展的安装来源、版本号、商店素材、三店提交、AMO 公开 listed XPI 与扩展 release asset 由 `patina-web-sync` 仓库负责。
+Patina Release 只发布 x64 与 ARM64 两个主应用安装包、`SHA256SUMS.txt`、`latest.json` 与更新通道所需资产。浏览器扩展的安装来源、版本号、商店素材、三店提交、AMO 公开 listed XPI 与扩展 release asset 由 `patina-web-sync` 仓库负责。
 
 浏览器扩展的用户配置说明由 Patina README 与 Patina 设置页承载。Patina 设置页应指向 `patina-web-sync` 的发布页或商店入口，并继续说明本机端口与 token 配置步骤。
+
+双架构使用同一版本和源码引用，分别构建 `x86_64-pc-windows-msvc` 与 `aarch64-pc-windows-msvc`。一份 `latest.json` 同时包含 `windows-x86_64` 与 `windows-aarch64`，任一路构建、验证或证明失败均阻断公开发布。应用自动更新按已安装应用架构选包；ARM 设备上的 x64 应用继续取得 x64 更新，不自动迁移架构。
+
+发布说明提供两个安装包的直链、设备架构选择和各自的校验命令。ARM64 以原生 CI、自动化测试和资产验证为发布门槛，不以实体设备人工验收作为发布前置；首次发布须说明实体设备人工验证未执行，不将自动化覆盖之外的真实桌面行为描述为已验证。
 
 ### Patina Web Sync 跨仓签收契约
 
@@ -363,7 +368,7 @@ GitHub Release 继续作为正式发布源、主下载入口和主更新清单�
 
 - R2 endpoint 排在 GitHub endpoint 之后
 - R2 版 `latest.json` 中的安装包 URL 指向 R2 镜像对象
-- R2 默认只保留当前版本安装包和根路径 `latest.json`
+- R2 默认只保留当前版本的两个安装包和根路径 `latest.json`；两个包上传并回读校验成功后才更新根清单，清单成功后才清理旧版本。
 - R2 不同步浏览器扩展包；浏览器扩展由 `patina-web-sync` 独立发布
 - GitHub Releases 继续保留完整历史版本
 - R2 未配置、同步失败或被停用时，不改变 GitHub Release 的主发布事实
@@ -382,9 +387,9 @@ GitHub Release 继续作为正式发布源、主下载入口和主更新清单�
 
 GitHub Actions 生成正式发布资产后、发布 GitHub Release 前，还必须执行：
 
-- `npm run release:verify-assets -- <version> <bundle-dir> <output-dir> <repository> windows-x86_64`
+- `npm run release:verify-assets -- <version> <bundle-dir> <output-dir> <repository>`
 
-该 gate 必须重新读取磁盘产物，并验证唯一 `.exe/.exe.sig` 配对、输入与最终安装包 SHA-256、`SHA256SUMS.txt`、`latest.json` 版本、平台、下载 URL 和 updater signature。生成命令成功不能代替独立校验命令成功。
+该 gate 必须重新读取磁盘产物。`<bundle-dir>` 下使用 `x64/` 与 `arm64/` 两个子目录，每个目录包含 `Patina.exe` 和 `nsis/` 下唯一 `.exe/.exe.sig` 配对；校验主程序 PE 架构、输入与最终安装包 SHA-256、完整 `SHA256SUMS.txt`、`latest.json` 版本、平台、下载 URL，并使用配置中的 updater 公钥验证最终安装包签名。生成命令成功不能代替独立校验命令成功。
 
 如果是正式准备发布，还应完成：
 
@@ -414,7 +419,9 @@ GitHub Actions 生成正式发布资产后、发布 GitHub Release 前，还必�
 4. 只有获得当前任务的远程 push 授权后才推送准备提交；创建和推送 `vX.Y.Z` tag 还需要单独的 tag 或发布授权。
 5. [`prepare-release.yml`](../.github/workflows/prepare-release.yml) 从 tag 对应 commit 校验版本与 changelog，拒绝已有 Release，生成并独立验证安装包、校验和与 updater manifest，完成 attestation 后以禁止覆盖的方式创建 GitHub Release。
 6. GitHub Release 成立后再同步 R2 镜像；镜像失败不能撤销、覆盖或改变 GitHub Release 主事实，updater 继续优先使用 GitHub endpoint。
-7. `workflow_dispatch` 只补跑“tag 已存在且 Release 不存在”的失败流程，不创建 commit、tag 或版本文件；Release 已存在时必须失败并按不可变规则准备新版本。
+7. 发布模式的 `workflow_dispatch` 只补跑“tag 已存在且 Release 不存在”的失败流程，不创建 commit、tag 或版本文件；Release 已存在时必须失败并按不可变规则准备新版本。
+
+`workflow_dispatch` 的 `validation_only=true` 模式从被选中的固定 commit 构建并验证候选资产，不要求新 tag，不创建 Release、attestation 或 R2 对象；候选资产仅保留在 Actions artifacts。该模式不得覆盖或追加已发布同版本的 Release 资产。
 
 默认协作在 tag 推送并确认发布 workflow 已触发后即可结束；只有用户要求或正在排查失败时才持续监看。浏览器扩展商店与扩展 Release 由 `patina-web-sync` 仓库负责，不进入 Patina 主应用发布流程。
 
