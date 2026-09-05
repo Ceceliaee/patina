@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   frontend:
-    name: Frontend quality gate
+    name: Frontend checks
     if: >-
       github.event_name == 'push' ||
       (github.event_name == 'workflow_run' &&
@@ -66,8 +66,8 @@ jobs:
           path: artifacts/coverage
           if-no-files-found: error
 
-  rust:
-    name: Rust quality gate (${{ matrix.arch }})
+  rust-quality:
+    name: Rust checks (${{ matrix.arch }})
     if: >-
       github.event_name == 'push' ||
       (github.event_name == 'workflow_run' &&
@@ -130,7 +130,7 @@ jobs:
       - name: Audit npm and Rust dependencies
         run: npm run check:dependencies
 
-  tauri-runtime:
+  tauri-runtime-smoke:
     name: Tauri runtime smoke (${{ matrix.arch }})
     if: >-
       github.event_name == 'push' ||

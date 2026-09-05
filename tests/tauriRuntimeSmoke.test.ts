@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { createServer as createHttpServer } from "node:http";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -307,7 +309,39 @@ let primaryError: unknown = null;
 const cleanupErrors: unknown[] = [];
 let databaseMutationCompleted = false;
 
+// Temporary ARM rollout acceptance probe; remove after cloud validation.
+const updaterPort = await reservePort();
+const updaterBase = `http://127.0.0.1:${updaterPort}`;
+const updaterSigning = generateKeyPairSync("ed25519");
+const updaterKeyId = Buffer.alloc(8, 17);
+const updaterPublicKey = Buffer.from(`untrusted comment: rollout probe\n${Buffer.concat([
+  Buffer.from("Ed"), updaterKeyId,
+  updaterSigning.publicKey.export({ type: "spki", format: "der" }).subarray(-32),
+]).toString("base64")}\n`).toString("base64");
+const updaterPayload = Buffer.from("Patina rollout download verification fixture");
+const updaterSig = sign(null, createHash("blake2b512").update(updaterPayload).digest(), updaterSigning.privateKey);
+const updaterGlobalSig = sign(null, Buffer.concat([updaterSig, Buffer.from("timestamp:0")]), updaterSigning.privateKey);
+const updaterSignature = Buffer.from(`untrusted comment: fixture\n${Buffer.concat([Buffer.from("ED"), updaterKeyId, updaterSig]).toString("base64")}\ntrusted comment: timestamp:0\n${updaterGlobalSig.toString("base64")}\n`).toString("base64");
+let updaterProbeMode = "idle";
+const updaterRequests: string[] = [];
+const updaterServer = createHttpServer((request, response) => {
+  updaterRequests.push(request.url ?? "");
+  if (request.url === "/latest.json") {
+    if (updaterProbeMode === "idle") { response.writeHead(204).end(); return; }
+    const platforms = Object.fromEntries(["windows-x86_64", "windows-aarch64"].map((platform) => [platform, {
+      signature: updaterSignature, url: `${updaterBase}/${platform}.exe`,
+    }]));
+    if (updaterProbeMode === "missing-platform") delete platforms[process.arch === "arm64" ? "windows-aarch64" : "windows-x86_64"];
+    response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ version: "99.0.0", platforms }));
+    return;
+  }
+  if (updaterProbeMode === "download-failure") { response.writeHead(503).end(); return; }
+  const payload = updaterProbeMode === "corrupt" ? Buffer.from("corrupted") : updaterPayload;
+  response.writeHead(200, { "Content-Type": "application/octet-stream", "Content-Length": payload.length }).end(payload);
+});
+
 try {
+  await new Promise<void>((resolve, reject) => { updaterServer.once("error", reject); updaterServer.listen(updaterPort, "127.0.0.1", resolve); });
   // Exercise the WebView against production-shaped static assets. A Vite dev
   // server sends hundreds of transformed modules and can exceed the product
   // readiness watchdog on a busy hosted runner even after graph warmup.
@@ -345,6 +379,7 @@ try {
 
   const tauriConfigOverride = {
     identifier: "com.ceceliaee.patina.runtime-smoke",
+    plugins: { updater: { endpoints: [`${updaterBase}/latest.json`], pubkey: updaterPublicKey } },
     build: {
       beforeDevCommand: "",
       devUrl: frontendUrl,
@@ -1675,11 +1710,33 @@ try {
   assert.equal(structuredError.code, "SQLITE_INVALID_INPUT");
   assert.equal(structuredError.retryable, false);
 
+  const checkUpdate = () => evaluate(client!, `window.__TAURI_INTERNALS__.invoke("cmd_check_for_updates", { silent: false })`) as Promise<{status: string; asset_download_url?: string; error_stage?: string}>;
+  const downloadUpdate = () => evaluate(client!, `window.__TAURI_INTERNALS__.invoke("cmd_download_update")`) as Promise<{status: string; error_stage?: string}>;
+  updaterProbeMode = "available";
+  const availableUpdate = await checkUpdate();
+  assert.equal(availableUpdate.status, "available");
+  const expectedPlatform = process.arch === "arm64" ? "windows-aarch64" : "windows-x86_64";
+  assert.equal(availableUpdate.asset_download_url, `${updaterBase}/${expectedPlatform}.exe`);
+  assert.equal((await downloadUpdate()).status, "downloaded");
+  assert.ok(updaterRequests.includes(`/${expectedPlatform}.exe`));
+  assert.ok(!updaterRequests.includes(`/${process.arch === "arm64" ? "windows-x86_64" : "windows-aarch64"}.exe`));
+  for (const mode of ["corrupt", "download-failure"]) {
+    updaterProbeMode = mode;
+    assert.equal((await checkUpdate()).status, "available");
+    const failedDownload = await downloadUpdate();
+    assert.equal(failedDownload.status, "error");
+    assert.equal(failedDownload.error_stage, "download");
+  }
+  updaterProbeMode = "missing-platform";
+  assert.equal((await checkUpdate()).status, "error");
+  console.log(`PASS temporary real updater selection, signature, corruption and network probe (${expectedPlatform})`);
   console.log("PASS real Tauri runtime command/event/SQLite/capability smoke");
 } catch (error) {
   primaryError = error;
 } finally {
   console.log("PATINA_RUNTIME_PHASE cleanup");
+  updaterServer.closeAllConnections();
+  await new Promise<void>((resolve) => updaterServer.close(() => resolve()));
   try {
     await closeNetServer(bridgePortBlocker);
     bridgePortBlocker = null;

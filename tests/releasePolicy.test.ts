@@ -294,8 +294,8 @@ function testReleaseWorkflowSplitsQualityGatesBeforePublish() {
   assert.match(workflow, /^  changelog:/m);
   assert.match(workflow, /^  release-notes:/m);
   assert.match(workflow, /^  frontend:/m);
-  assert.match(workflow, /^  rust:/m);
-  assert.match(workflow, /^  build:/m);
+  assert.match(workflow, /^  rust-quality:/m);
+  assert.match(workflow, /^  windows-build:/m);
   assert.match(workflow, /^  publish:/m);
   assert.match(workflow, /^  r2:/m);
   assert.doesNotMatch(workflow, /^  release-assets:/m);
@@ -303,8 +303,8 @@ function testReleaseWorkflowSplitsQualityGatesBeforePublish() {
   assert.doesNotMatch(workflow, /^  r2-config:/m);
   assert.doesNotMatch(workflow, /^  r2-upload:/m);
   assert.doesNotMatch(workflow, /^  r2-clean:/m);
-  assert.match(workflow, /needs: \[resolve, version-files, changelog, release-notes, frontend, rust\]/);
-  assert.match(workflow, /needs: \[resolve, release-notes, build\]/);
+  assert.match(workflow, /needs: \[resolve, version-files, changelog, release-notes, frontend, rust-quality\]/);
+  assert.match(workflow, /needs: \[resolve, release-notes, windows-build\]/);
   assert.match(workflow, /needs: \[resolve, publish\]/);
   assert.match(workflow, /if: steps\.r2\.outputs\.enabled == 'true'/);
   assert.match(workflow, /run: npm run check$/m);

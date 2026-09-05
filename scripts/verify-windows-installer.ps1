@@ -32,9 +32,8 @@ try {
   Invoke-BoundedInstaller $installers[0].FullName "/S /D=$installRoot"
   $installedExe = Join-Path $installRoot 'Patina.exe'
   if (-not (Test-Path -LiteralPath $installedExe)) { throw 'Installed executable missing' }
-  if ((Get-FileHash $installedExe).Hash -ne (Get-FileHash (Join-Path $bundleRoot 'Patina.exe')).Hash) {
-    throw 'Installed executable differs from build output'
-  }
+  # Tauri patches the bundled executable's package-type marker before NSIS compression.
+  $installedDigest = (Get-FileHash $installedExe).Hash
   node --experimental-strip-types --input-type=module -e "import { readFileSync } from 'node:fs'; import { verifyPeArchitecture } from './scripts/release.ts'; verifyPeArchitecture(readFileSync(process.argv[1]), process.argv[2]);" $installedExe $Platform
   if ($LASTEXITCODE -ne 0) { throw 'Installed architecture mismatch' }
 
@@ -59,8 +58,8 @@ try {
   # Reinstall exercises NSIS replacement without changing the app data identity.
   Invoke-BoundedInstaller $installers[0].FullName "/S /D=$installRoot"
   if ((Get-FileHash $dbPath).Hash -ne $databaseDigest) { throw 'Installer modified existing database bytes' }
-  if ((Get-FileHash $installedExe).Hash -ne (Get-FileHash (Join-Path $bundleRoot 'Patina.exe')).Hash) {
-    throw 'Reinstalled executable differs from build output'
+  if ((Get-FileHash $installedExe).Hash -ne $installedDigest) {
+    throw 'Reinstalled executable differs from the first installation'
   }
   $uninstallers = @(Get-ChildItem -LiteralPath $installRoot -Filter '*uninstall*.exe')
   if ($uninstallers.Count -ne 1) { throw 'Expected exactly one uninstaller' }
