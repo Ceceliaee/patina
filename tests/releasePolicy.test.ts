@@ -2,8 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import path from "node:path";
 import {
+  WINDOWS_RELEASE_TARGETS,
+  buildMirrorManifest,
+  verifyPeArchitecture,
+  verifyUpdaterSignature,
   buildReleaseInstallerName,
   buildUpdaterEndpoints,
   fieldValue,
@@ -120,7 +125,7 @@ function testSha256SumsRoundTripUsesCanonicalFormat() {
   const rendered = renderSha256Sums(digest, fileName);
 
   assert.equal(rendered, `${digest}  ${fileName}\n`);
-  assert.deepEqual(parseSha256SumsText(rendered), { digest, fileName });
+  assert.deepEqual(parseSha256SumsText(rendered), [{ digest, fileName }]);
 }
 
 function testSha256SumsRejectInvalidContent() {
@@ -133,8 +138,8 @@ function testSha256SumsRejectInvalidContent() {
   assert.throws(() => parseSha256SumsText(`${digest}  Patina_1.9.3_x64-setup.exe\r\n`), /LF/);
   assert.throws(() => parseSha256SumsText(`${digest} Patina_1.9.3_x64-setup.exe\n`), /two spaces/);
   assert.throws(
-    () => parseSha256SumsText(`${digest}  Patina_1.9.3_x64-setup.exe\n${digest}  extra.exe\n`),
-    /exactly one record/,
+    () => parseSha256SumsText(`${digest}  Patina_1.9.3_x64-setup.exe\n${digest}  Patina_1.9.3_x64-setup.exe\n`),
+    /duplicate/,
   );
 }
 
@@ -151,32 +156,21 @@ function testSignedInstallerSelectionRequiresOnePair() {
     /multiple/,
   );
   assert.throws(() => selectSignedInstallerCandidates([`${installer}.sig`]), /matching/);
+  assert.throws(() => selectSignedInstallerCandidates([installer, `${installer}.sig`, "extra.exe"]), /exactly one/);
 }
 
-function preparedReleaseValues(overrides = {}) {
+function preparedReleaseValues() {
   const version = "1.9.3";
-  const installerName = buildReleaseInstallerName(version);
-  const digest = "b".repeat(64);
-  const signature = "test-updater-signature";
-
+  const assets = WINDOWS_RELEASE_TARGETS.map(({ platform }, index) => ({
+    platform, sourceDigest: String(index).repeat(64), finalDigest: String(index).repeat(64), signature: `signature-${platform}`,
+  }));
   return {
-    version,
-    repository: "Ceceliaee/patina",
-    target: "windows-x86_64",
-    sourceDigest: digest,
-    finalDigest: digest,
-    checksumContent: renderSha256Sums(digest, installerName),
-    signature,
-    latest: {
-      version,
-      platforms: {
-        "windows-x86_64": {
-          signature,
-          url: `https://github.com/Ceceliaee/patina/releases/download/v${version}/${installerName}`,
-        },
-      },
-    },
-    ...overrides,
+    version, repository: "Ceceliaee/patina", assets,
+    checksumContent: assets.map((asset) => renderSha256Sums(asset.finalDigest, buildReleaseInstallerName(version, asset.platform))).join(""),
+    latest: { version, platforms: Object.fromEntries(assets.map((asset) => [asset.platform, {
+      signature: asset.signature,
+      url: `https://github.com/Ceceliaee/patina/releases/download/v${version}/${buildReleaseInstallerName(version, asset.platform)}`,
+    }])) },
   };
 }
 
@@ -185,7 +179,8 @@ function testPreparedReleaseValuesPassWhenAligned() {
 }
 
 function testPreparedReleaseValuesReportDrift() {
-  const values = preparedReleaseValues({ finalDigest: "c".repeat(64) });
+  const values = preparedReleaseValues();
+  values.assets[0].finalDigest = "c".repeat(64);
   values.latest.version = "1.9.2";
   values.latest.platforms["windows-x86_64"].signature = "wrong-signature";
   values.latest.platforms["windows-x86_64"].url = "https://example.com/wrong.exe";
@@ -243,7 +238,10 @@ function testReleaseNotesOnlyMentionPatinaInstaller() {
     bullets: [],
   });
 
-  assert.match(notes, /Windows 安装包/);
+  assert.match(notes, /Windows 设备/);
+  assert.match(notes, /https:\/\/github.com\/Ceceliaee\/patina\/releases\/download\/v1\.9\.3\/Patina_1\.9\.3_arm64-setup\.exe/);
+  assert.match(notes, /Get-FileHash \.\\Patina_1\.9\.3_arm64-setup\.exe -Algorithm SHA256/);
+  assert.doesNotMatch(notes, /<version>/);
   assert.match(notes, /SHA256SUMS\.txt/);
   assert.match(notes, /Get-FileHash \.\\Patina_1\.9\.3_x64-setup\.exe -Algorithm SHA256/);
   assert.match(notes, /gh attestation verify \.\\Patina_1\.9\.3_x64-setup\.exe --repo Ceceliaee\/patina/);
@@ -357,6 +355,24 @@ function testReleaseWorkflowAttestsVerifiedFinalInstallerWithMinimumPermissions(
   assert.match(publishJob, /overwrite_files: false/);
 }
 
+function testDualArchitectureWorkflowBoundaries() {
+  const workflow = readFileSync(".github/workflows/prepare-release.yml", "utf8");
+  assert.match(workflow, /name: tauri-bundle-\$\{\{ matrix.arch \}\}/);
+  assert.match(workflow, /target: aarch64-pc-windows-msvc/);
+  assert.match(workflow, /runner: windows-11-arm/);
+  assert.match(workflow, /--bundles nsis --target \$\{\{ matrix.target \}\}/);
+  assert.match(workflow, /source=\$\{\{ github.sha \}\}/);
+  for (const step of ["Confirm release tag", "Ensure release does not already exist", "Attest Windows installer", "Attest ARM64 installer", "Publish GitHub Release"]) {
+    assert.ok(workflow.includes(`- name: ${step}\n        if: inputs.validation_only != true`));
+  }
+  assert.match(workflow, /r2:\n    if: inputs.validation_only != true/);
+  assert.match(workflow, /subject-path: dist-release\/Patina_\$\{\{ needs.resolve.outputs.version \}\}_arm64-setup.exe/);
+  const mirror = workflow.slice(workflow.indexOf("      - name: Upload R2 updater mirror"));
+  assert.ok(mirror.indexOf("R2 digest mismatch") < mirror.indexOf('"s3://$env:R2_BUCKET/latest.json"'));
+  assert.ok(mirror.indexOf("R2 manifest upload failed") < mirror.indexOf("Clean old R2 updater mirrors"));
+  assert.match(workflow, /verify-windows-installer.ps1/);
+}
+
 function testToolchainContractsStayAligned() {
   const nodeVersion = readFileSync(".node-version", "utf8").trim();
   const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
@@ -455,7 +471,7 @@ function testWorkflowsUseReviewedNode24ActionRevisions() {
     {
       action: "actions/attest",
       reference: "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4",
-      expectedCount: 1,
+      expectedCount: 2,
     },
     {
       action: "softprops/action-gh-release",
@@ -581,101 +597,115 @@ function testDependencyAuditKeepsOfflineModeExplicitAndNetworkFree() {
   assert.match(source, /runNpmAudit\(npmExecutable, \{ offline: OFFLINE \}\)/);
 }
 
+function peFixture(platform: string) {
+  const bytes = Buffer.alloc(128);
+  bytes.write("MZ"); bytes.writeUInt32LE(64, 0x3c); bytes.writeUInt32LE(0x4550, 64);
+  bytes.writeUInt16LE(WINDOWS_RELEASE_TARGETS.find((entry) => entry.platform === platform)!.machine, 68);
+  return bytes;
+}
+
+function signingFixture() {
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const keyId = Buffer.alloc(8, 7);
+  const key = Buffer.concat([Buffer.from("Ed"), keyId, publicKey.export({ format: "der", type: "spki" }).subarray(-32)]);
+  return {
+    publicKey: Buffer.from(`untrusted comment: test key\n${key.toString("base64")}\n`).toString("base64"),
+    signature(bytes: Buffer) {
+      const sig = sign(null, createHash("blake2b512").update(bytes).digest(), privateKey);
+      const packet = Buffer.concat([Buffer.from("ED"), keyId, sig]);
+      const comment = "timestamp:0";
+      const global = sign(null, Buffer.concat([sig, Buffer.from(comment)]), privateKey);
+      return Buffer.from(`untrusted comment: test\n${packet.toString("base64")}\ntrusted comment: ${comment}\n${global.toString("base64")}\n`).toString("base64");
+    },
+  };
+}
+
+function testArchitectureAndMirrorContracts() {
+  assert.equal(buildReleaseInstallerName("1.9.3", "windows-aarch64"), "Patina_1.9.3_arm64-setup.exe");
+  assert.throws(() => buildReleaseInstallerName("1.9.3", "linux-x86_64"), /unsupported/);
+  for (const { platform } of WINDOWS_RELEASE_TARGETS) verifyPeArchitecture(peFixture(platform), platform);
+  assert.throws(() => verifyPeArchitecture(peFixture("windows-x86_64"), "windows-aarch64"), /architecture/);
+  assert.throws(() => verifyPeArchitecture(Buffer.alloc(12), "windows-aarch64"), /DOS/);
+  const malformed = peFixture("windows-aarch64"); malformed.writeUInt32LE(0xffffffff, 0x3c);
+  assert.throws(() => verifyPeArchitecture(malformed, "windows-aarch64"), /offset/);
+  const values = preparedReleaseValues();
+  const mirror = buildMirrorManifest(values.latest, values.repository, "https://example.com/patina/");
+  for (const { platform } of WINDOWS_RELEASE_TARGETS) {
+    assert.equal(mirror.platforms[platform].signature, values.latest.platforms[platform].signature);
+    assert.equal(mirror.platforms[platform].url, `https://example.com/patina/releases/v1.9.3/${buildReleaseInstallerName("1.9.3", platform)}`);
+    assert.match(values.latest.platforms[platform].url, /^https:\/\/github.com/);
+  }
+  assert.throws(() => buildMirrorManifest(values.latest, values.repository, "http://example.com"), /HTTPS/);
+  delete values.latest.platforms["windows-aarch64"];
+  assert.ok(validatePreparedReleaseAssetValues(values).some((error) => error.includes("platforms")));
+  assert.throws(() => buildMirrorManifest(values.latest, values.repository, "https://example.com"), /both/);
+}
+
 async function testPrepareAndVerifyReleaseAssetsDetectTampering() {
   const version = JSON.parse(readFileSync("package.json", "utf8")).version;
   const testRoot = await mkdtemp(path.join(os.tmpdir(), "patina-release-assets-"));
-  const bundleDir = path.join(testRoot, "bundle", "nsis");
+  const bundleDir = path.join(testRoot, "bundle");
   const outputDir = path.join(testRoot, "dist-release");
-  const sourceInstaller = path.join(bundleDir, "Patina-test-setup.exe");
-  const sourceSignature = `${sourceInstaller}.sig`;
-
+  const signing = signingFixture();
+  const prepare = () => prepareReleaseAssets(version, bundleDir, outputDir, "Ceceliaee/patina");
+  const verifyAssets = () => verifyReleaseAssets(version, bundleDir, outputDir, "Ceceliaee/patina", signing.publicKey);
   try {
-    await mkdir(bundleDir, { recursive: true });
-    await writeFile(sourceInstaller, Buffer.from([0, 1, 2, 3, 254, 255]));
-    await writeFile(sourceSignature, "fixture-updater-signature\n", "utf8");
-
-    await prepareReleaseAssets(
-      version,
-      path.join(testRoot, "bundle"),
-      outputDir,
-      "Ceceliaee/patina",
-      "windows-x86_64",
-    );
-    await verifyReleaseAssets(
-      version,
-      path.join(testRoot, "bundle"),
-      outputDir,
-      "Ceceliaee/patina",
-      "windows-x86_64",
-    );
-
-    const releaseInstaller = path.join(outputDir, buildReleaseInstallerName(version));
-    const digest = await sha256File(releaseInstaller);
-    assert.equal(
-      await readFile(path.join(outputDir, "SHA256SUMS.txt"), "utf8"),
-      renderSha256Sums(digest, buildReleaseInstallerName(version)),
-    );
-
-    await writeFile(releaseInstaller, Buffer.from([0, 1, 2, 3, 254, 0]));
-    await assert.rejects(
-      verifyReleaseAssets(
-        version,
-        path.join(testRoot, "bundle"),
-        outputDir,
-        "Ceceliaee/patina",
-        "windows-x86_64",
-      ),
-      /does not match source installer/,
-    );
-
-    await prepareReleaseAssets(
-      version,
-      path.join(testRoot, "bundle"),
-      outputDir,
-      "Ceceliaee/patina",
-      "windows-x86_64",
-    );
-    await writeFile(path.join(outputDir, "SHA256SUMS.txt"), `${"0".repeat(64)}  wrong.exe\n`, "utf8");
-    await assert.rejects(
-      verifyReleaseAssets(
-        version,
-        path.join(testRoot, "bundle"),
-        outputDir,
-        "Ceceliaee/patina",
-        "windows-x86_64",
-      ),
-      /records wrong\.exe/,
-    );
-
-    await prepareReleaseAssets(
-      version,
-      path.join(testRoot, "bundle"),
-      outputDir,
-      "Ceceliaee/patina",
-      "windows-x86_64",
-    );
+    for (const { arch, platform } of WINDOWS_RELEASE_TARGETS) {
+      const dir = path.join(bundleDir, arch, "nsis");
+      await mkdir(dir, { recursive: true });
+      const bytes = Buffer.from(`installer payload ${platform}`);
+      await writeFile(path.join(dir, "Patina-setup.exe"), bytes);
+      await writeFile(path.join(dir, "Patina-setup.exe.sig"), signing.signature(bytes));
+      await writeFile(path.join(bundleDir, arch, "Patina.exe"), peFixture(platform));
+    }
+    await prepare(); await verifyAssets();
     const latestPath = path.join(outputDir, "latest.json");
-    const latest = JSON.parse(await readFile(latestPath, "utf8"));
-    latest.platforms["windows-x86_64"].url = "https://example.com/wrong.exe";
-    await writeFile(latestPath, `${JSON.stringify(latest, null, 2)}\n`, "utf8");
-    await assert.rejects(
-      verifyReleaseAssets(
-        version,
-        path.join(testRoot, "bundle"),
-        outputDir,
-        "Ceceliaee/patina",
-        "windows-x86_64",
-      ),
-      /expected https:\/\/github\.com/,
-    );
+    const goodLatest = JSON.parse(await readFile(latestPath, "utf8"));
+    const sums = parseSha256SumsText(await readFile(path.join(outputDir, "SHA256SUMS.txt"), "utf8"));
+    assert.equal(sums.length, 2);
+    for (const { platform } of WINDOWS_RELEASE_TARGETS) {
+      const installer = path.join(outputDir, buildReleaseInstallerName(version, platform));
+      assert.equal(sums.find((entry) => entry.fileName === path.basename(installer))?.digest, await sha256File(installer));
+      await writeFile(installer, "tampered");
+      await assert.rejects(verifyAssets(), /signature verification failed/);
+      await prepare();
+    }
+    const armFile = path.join(outputDir, buildReleaseInstallerName(version, "windows-aarch64"));
+    await assert.rejects(verifyUpdaterSignature(armFile, goodLatest.platforms["windows-x86_64"].signature, signing.publicKey), /verification failed/);
+    await assert.rejects(verifyUpdaterSignature(armFile, goodLatest.platforms["windows-aarch64"].signature, signingFixture().publicKey), /verification failed/);
+    for (const mutate of [
+      (latest) => { delete latest.platforms["windows-aarch64"]; },
+      (latest) => { latest.platforms.extra = latest.platforms["windows-x86_64"]; },
+      (latest) => { latest.platforms["windows-aarch64"].url = latest.platforms["windows-x86_64"].url; },
+      (latest) => { latest.platforms["windows-aarch64"].signature = latest.platforms["windows-x86_64"].signature; },
+      (latest) => { latest.version = "0.0.1"; },
+    ]) {
+      const changed = structuredClone(goodLatest); mutate(changed);
+      await writeFile(latestPath, JSON.stringify(changed));
+      await assert.rejects(verifyAssets(), /validation failed/);
+    }
+    await prepare();
+    await writeFile(path.join(outputDir, "SHA256SUMS.txt"), renderSha256Sums("0".repeat(64), "wrong.exe"));
+    await assert.rejects(verifyAssets(), /canonical order/);
+    await prepare();
+    await writeFile(path.join(outputDir, "extra.exe"), "extra");
+    await assert.rejects(verifyAssets(), /exactly the two/);
+    await rm(path.join(outputDir, "extra.exe"));
+    await writeFile(path.join(bundleDir, "arm64", "Patina.exe"), peFixture("windows-x86_64"));
+    await assert.rejects(prepare(), /architecture/);
+    await writeFile(path.join(bundleDir, "arm64", "Patina.exe"), peFixture("windows-aarch64"));
+    await writeFile(path.join(bundleDir, "arm64", "nsis", "Patina-setup.exe.sig"), "  \n");
+    await assert.rejects(prepare(), /signature file is empty/);
+    await rm(path.join(bundleDir, "arm64", "nsis", "Patina-setup.exe.sig"));
+    await assert.rejects(prepare(), /could not find/);
   } finally {
-    const resolvedRoot = path.resolve(testRoot);
-    const resolvedTemp = path.resolve(os.tmpdir());
-    assert.ok(resolvedRoot.startsWith(`${resolvedTemp}${path.sep}`));
-    await rm(resolvedRoot, { recursive: true, force: true });
+    const root = path.resolve(testRoot);
+    assert.ok(root.startsWith(`${path.resolve(os.tmpdir())}${path.sep}`));
+    await rm(root, { recursive: true, force: true });
   }
 }
 
+testArchitectureAndMirrorContracts();
 testUpdaterNotesKeepLocalizedVariants();
 testUpdaterNotesFallsBackToAppNote();
 testUpdaterEndpointsKeepGithubFirstAndPreserveMirrors();
@@ -693,6 +723,7 @@ testReleaseVisibleChangeCountRejectsTooManyUserFacingItems();
 testReleaseWorkflowDoesNotPublishBrowserExtensionAssets();
 testReleaseWorkflowSplitsQualityGatesBeforePublish();
 testReleaseWorkflowAttestsVerifiedFinalInstallerWithMinimumPermissions();
+testDualArchitectureWorkflowBoundaries();
 testToolchainContractsStayAligned();
 testWorkflowsUseNodeVersionFileAsSingleSource();
 testWorkflowsPinThirdPartyActionsToReviewedCommits();

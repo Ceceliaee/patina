@@ -113,7 +113,7 @@
     "release:validate-version-files": "node --experimental-strip-types scripts/release.ts validate-version-files",
     "release:validate-changelog": "node --experimental-strip-types scripts/release.ts validate-changelog",
     "release:notes": "node --experimental-strip-types scripts/release.ts print-release-notes",
-    "release:latest": "node --experimental-strip-types scripts/release.ts write-latest-json",
+    "release:mirror-manifest": "node --experimental-strip-types scripts/release.ts mirror-manifest",
     "release:prepare-assets": "node --experimental-strip-types scripts/release.ts prepare-release-assets",
     "release:verify-assets": "node --experimental-strip-types scripts/release.ts verify-release-assets",
     "release:check": "npm run check:full && npm run release:validate-changelog",

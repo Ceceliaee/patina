@@ -1,9 +1,9 @@
 import { spawnSync } from "node:child_process";
+import { WINDOWS_RELEASE_TARGETS } from "./release.ts";
 import { runNpmAudit } from "./npm-audit.ts";
 
 const MANIFEST = "src-tauri/Cargo.toml";
 const LOCKFILE = "src-tauri/Cargo.lock";
-const WINDOWS_TARGET = "x86_64-pc-windows-msvc";
 const OFFLINE = process.env.PATINA_DEPENDENCY_AUDIT_OFFLINE === "1";
 
 const LOCK_ONLY_ADVISORIES = [
@@ -35,13 +35,16 @@ function run(command: string, args: string[], capture = false) {
   return result;
 }
 
+for (const { target } of WINDOWS_RELEASE_TARGETS) {
 for (const exception of LOCK_ONLY_ADVISORIES) {
   const result = run("cargo", [
     "tree",
     "--manifest-path",
     MANIFEST,
     "--target",
-    WINDOWS_TARGET,
+    target,
+    "--locked",
+    ...(OFFLINE ? ["--offline"] : []),
     "-i",
     exception.crate,
   ], true);
@@ -56,6 +59,8 @@ for (const exception of LOCK_ONLY_ADVISORIES) {
     if (result.stderr) console.error(result.stderr);
     process.exit(1);
   }
+}
+
 }
 
 interface CargoAuditReport {

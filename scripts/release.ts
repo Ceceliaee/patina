@@ -1,5 +1,5 @@
 import { createReadStream } from "node:fs";
-import { createHash } from "node:crypto";
+import { createHash, createPublicKey, verify } from "node:crypto";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
@@ -48,12 +48,23 @@ function assertVersion(version) {
   }
 }
 
-export function buildReleaseInstallerName(version) {
+export const WINDOWS_RELEASE_TARGETS = [
+  { arch: "x64", target: "x86_64-pc-windows-msvc", platform: "windows-x86_64", machine: 0x8664 },
+  { arch: "arm64", target: "aarch64-pc-windows-msvc", platform: "windows-aarch64", machine: 0xaa64 },
+] as const;
+
+export function releaseTarget(platform: string) {
+  const target = WINDOWS_RELEASE_TARGETS.find((entry) => entry.platform === platform);
+  if (!target) throw new Error(`unsupported release platform: ${platform}`);
+  return target;
+}
+
+export function buildReleaseInstallerName(version, platform = "windows-x86_64") {
   if (!version || !VERSION_PATTERN.test(version)) {
     throw new Error(`invalid SemVer version "${version ?? ""}"`);
   }
 
-  return `Patina_${version}_x64-setup.exe`;
+  return `Patina_${version}_${releaseTarget(platform).arch}-setup.exe`;
 }
 
 function assertSafeFileName(fileName) {
@@ -64,6 +75,7 @@ function assertSafeFileName(fileName) {
     || path.basename(fileName) !== fileName
     || fileName.includes("/")
     || fileName.includes("\\")
+    || /[\s:<>"|?*\x00-\x1f]/.test(fileName)
   ) {
     throw new Error(`unsafe release asset file name "${fileName ?? ""}"`);
   }
@@ -88,11 +100,12 @@ export function parseSha256SumsText(content) {
   }
 
   const lines = content.split("\n");
-  if (lines.length !== 2 || lines[1] !== "") {
-    throw new Error(`${SHA256_SUMS_FILE_NAME} must contain exactly one record and one trailing newline`);
+  if (lines.length < 2 || lines.pop() !== "") {
+    throw new Error(`${SHA256_SUMS_FILE_NAME} must contain records and one trailing newline`);
   }
 
-  const match = lines[0].match(/^([0-9a-f]{64})  (.+)$/);
+  const records = lines.map((line) => {
+  const match = line.match(/^([0-9a-f]{64})  (.+)$/);
   if (!match) {
     throw new Error(`${SHA256_SUMS_FILE_NAME} must use "<lowercase sha256><two spaces><file name>" format`);
   }
@@ -100,6 +113,11 @@ export function parseSha256SumsText(content) {
   const [, digest, fileName] = match;
   assertSafeFileName(fileName);
   return { digest, fileName };
+  });
+  if (new Set(records.map((entry) => entry.fileName)).size !== records.length) {
+    throw new Error(`${SHA256_SUMS_FILE_NAME} contains duplicate files`);
+  }
+  return records;
 }
 
 export function selectSignedInstallerCandidates(entries) {
@@ -118,6 +136,9 @@ export function selectSignedInstallerCandidates(entries) {
   const installerFilePath = signatureFilePath.replace(/\.sig$/i, "");
   if (!sortedEntries.includes(installerFilePath)) {
     throw new Error(`could not find installer matching ${signatureFilePath}`);
+  }
+  if (sortedEntries.filter((entry) => /\.exe$/i.test(entry)).length !== 1) {
+    throw new Error("expected exactly one installer in bundle directory");
   }
 
   return { installerFilePath, signatureFilePath };
@@ -548,9 +569,6 @@ async function validateChangelog(version) {
 
 export function renderReleaseNotes(parsed) {
   const visibleSections = releaseNoteVisibleSections(parsed);
-  const releaseInstallerName = parsed.version
-    ? buildReleaseInstallerName(parsed.version)
-    : "Patina_<version>_x64-setup.exe";
   const lines = [parsed.release, ""];
 
   for (const section of visibleSections) {
@@ -560,9 +578,22 @@ export function renderReleaseNotes(parsed) {
   lines.push(
     "### 下载",
     "",
-    "- Windows 安装包：请下载本页面附件中的 `.exe` 安装包。",
-    `- SHA-256：下载 \`${SHA256_SUMS_FILE_NAME}\` 后，可在 PowerShell 中运行 \`Get-FileHash .\\${releaseInstallerName} -Algorithm SHA256\` 并比对摘要。`,
-    `- 构建来源：安装 GitHub CLI 后，可运行 \`gh attestation verify .\\${releaseInstallerName} --repo Ceceliaee/patina\`。`,
+    "| Windows 设备 | 安装包 |",
+    "| --- | --- |",
+    ...WINDOWS_RELEASE_TARGETS.map(({ arch, platform }) => {
+      const name = parsed.version ? buildReleaseInstallerName(parsed.version, platform) : `Patina_<version>_${arch}-setup.exe`;
+      const label = arch === "x64" ? "Intel / AMD x64" : "ARM64（如骁龙设备）";
+      return `| ${label} | ${parsed.version ? `[${name}](${buildReleaseInstallerUrl(parsed.version, "Ceceliaee/patina", platform)})` : name} |`;
+    }),
+    "",
+    "不确定设备架构时，可在 Windows「设置 → 系统 → 关于 → 系统类型」中查看。自动更新保持当前已安装应用的架构。",
+    "",
+    `下载 \`${SHA256_SUMS_FILE_NAME}\`，运行与所选安装包对应的 PowerShell 命令，并比对文件中的摘要。构建来源验证需要安装 GitHub CLI。`,
+    "",
+    ...WINDOWS_RELEASE_TARGETS.flatMap(({ arch, platform }) => {
+      const name = parsed.version ? buildReleaseInstallerName(parsed.version, platform) : `Patina_<version>_${arch}-setup.exe`;
+      return [`**${arch}**`, "", "```powershell", `Get-FileHash .\\${name} -Algorithm SHA256`, `gh attestation verify .\\${name} --repo Ceceliaee/patina`, "```", ""];
+    }),
     "",
   );
 
@@ -581,34 +612,6 @@ async function printReleaseNotes(version) {
   const parsed = await parseChangelog(version);
   await validateChangelog(version);
   process.stdout.write(renderReleaseNotes(parsed));
-}
-
-async function writeLatestJson(version, assetUrl, signature, outputPath, target = "windows-x86_64") {
-  const parsed = await parseChangelog(version);
-  await validateChangelog(version);
-
-  if (!assetUrl) {
-    fail("missing updater asset URL");
-  }
-
-  if (!signature) {
-    fail("missing updater signature");
-  }
-
-  const latest = {
-    version,
-    notes: renderUpdaterNotes(parsed),
-    pub_date: new Date().toISOString(),
-    platforms: {
-      [target]: {
-        signature,
-        url: assetUrl,
-      },
-    },
-  };
-
-  await mkdir(path.dirname(outputPath), { recursive: true });
-  await writeJson(outputPath, latest);
 }
 
 async function findSignedInstaller(bundleDir) {
@@ -644,172 +647,144 @@ async function readDirRecursive(rootDir) {
   return files.flat();
 }
 
-function buildReleaseInstallerUrl(version, repository) {
-  const releaseInstallerName = buildReleaseInstallerName(version);
-  const tagName = `v${version}`;
-  return `https://github.com/${repository}/releases/download/${tagName}/${encodeURIComponent(releaseInstallerName)}`;
+export function buildReleaseInstallerUrl(version, repository, platform = "windows-x86_64") {
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository ?? "")) {
+    throw new Error("invalid release repository");
+  }
+  return `https://github.com/${repository}/releases/download/v${version}/${buildReleaseInstallerName(version, platform)}`;
 }
 
-export function validatePreparedReleaseAssetValues({
-  version,
-  repository,
-  target,
-  sourceDigest,
-  finalDigest,
-  checksumContent,
-  latest,
-  signature,
-}) {
-  const errors = [];
-  const releaseInstallerName = buildReleaseInstallerName(version);
-  let checksum;
-
-  try {
-    checksum = parseSha256SumsText(checksumContent);
-  } catch (error) {
-    errors.push(error.message);
+export function verifyPeArchitecture(bytes: Buffer, platform: string) {
+  const expected = releaseTarget(platform).machine;
+  if (bytes.length < 64 || bytes.toString("ascii", 0, 2) !== "MZ") throw new Error("invalid PE DOS header");
+  const offset = bytes.readUInt32LE(0x3c);
+  if (offset < 64 || offset > bytes.length - 24 || bytes.readUInt32LE(offset) !== 0x4550) {
+    throw new Error("invalid PE signature or offset");
   }
+  if (bytes.readUInt16LE(offset + 4) !== expected) throw new Error(`PE architecture does not match ${platform}`);
+}
 
-  if (sourceDigest !== finalDigest) {
-    errors.push(`final installer SHA-256 ${finalDigest} does not match source installer SHA-256 ${sourceDigest}`);
+export async function verifyUpdaterSignature(installerPath: string, signature: string, publicKey: string) {
+  const keyLines = Buffer.from(publicKey.trim(), "base64").toString("utf8").trim().split(/\r?\n/);
+  const sigLines = Buffer.from(signature.trim(), "base64").toString("utf8").trim().split(/\r?\n/);
+  const key = Buffer.from(keyLines[1] ?? "", "base64");
+  const packet = Buffer.from(sigLines[1] ?? "", "base64");
+  if (key.length !== 42 || packet.length !== 74 || key.toString("ascii", 0, 2) !== "Ed"
+    || !packet.subarray(2, 10).equals(key.subarray(2, 10))
+    || !sigLines[2]?.startsWith("trusted comment: ")) throw new Error("invalid updater signature/key packet");
+  const algorithm = packet.toString("ascii", 0, 2);
+  if (algorithm !== "ED") throw new Error("expected prehashed minisign updater signature");
+  const digest = createHash("blake2b512");
+  for await (const chunk of createReadStream(installerPath)) digest.update(chunk);
+  const edKey = createPublicKey({
+    key: Buffer.concat([Buffer.from("302a300506032b6570032100", "hex"), key.subarray(10)]),
+    format: "der", type: "spki",
+  });
+  if (!verify(null, digest.digest(), edKey, packet.subarray(10))
+    || !verify(null, Buffer.concat([packet.subarray(10), Buffer.from(sigLines[2].slice(17))]),
+      edKey, Buffer.from(sigLines[3] ?? "", "base64"))) {
+    throw new Error(`updater signature verification failed: ${installerPath}`);
   }
+}
 
-  if (checksum?.fileName !== releaseInstallerName) {
-    errors.push(`${SHA256_SUMS_FILE_NAME} records ${checksum?.fileName ?? "no file"}, expected ${releaseInstallerName}`);
+export function validatePreparedReleaseAssetValues({ version, repository, assets, checksumContent, latest }) {
+  const errors: string[] = [];
+  const expectedNames = WINDOWS_RELEASE_TARGETS.map(({ platform }) => buildReleaseInstallerName(version, platform));
+  let checksums: Array<{ digest: string; fileName: string }> = [];
+  try { checksums = parseSha256SumsText(checksumContent); } catch (error) { errors.push(error.message); }
+  if (JSON.stringify(checksums.map((entry) => entry.fileName)) !== JSON.stringify(expectedNames)) {
+    errors.push(`${SHA256_SUMS_FILE_NAME} must record exactly the two installers in canonical order`);
   }
-
-  if (checksum?.digest !== finalDigest) {
-    errors.push(`${SHA256_SUMS_FILE_NAME} records SHA-256 ${checksum?.digest ?? "none"}, expected ${finalDigest}`);
+  if (!latest || latest.version !== version) errors.push(`latest.json version must be ${version}`);
+  const platforms = WINDOWS_RELEASE_TARGETS.map((entry) => entry.platform);
+  if (JSON.stringify(Object.keys(latest?.platforms ?? {}).sort()) !== JSON.stringify([...platforms].sort())) {
+    errors.push("latest.json must contain exactly the supported platforms");
   }
-
-  if (!latest || typeof latest !== "object" || Array.isArray(latest)) {
-    errors.push("latest.json must contain a JSON object");
-    return errors;
+  if (!Array.isArray(assets) || assets.length !== 2 || new Set(assets.map((asset) => asset.platform)).size !== 2) {
+    errors.push("expected exactly two distinct source assets");
   }
-
-  if (latest.version !== version) {
-    errors.push(`latest.json version is ${latest.version ?? "missing"}, expected ${version}`);
+  for (const { platform } of WINDOWS_RELEASE_TARGETS) {
+    const asset = assets?.find((entry) => entry.platform === platform);
+    if (!asset) { errors.push(`missing source asset ${platform}`); continue; }
+    const name = buildReleaseInstallerName(version, platform);
+    if (!SHA256_PATTERN.test(asset.finalDigest) || asset.sourceDigest !== asset.finalDigest) {
+      errors.push(`${name} does not match source installer SHA-256`);
+    }
+    if (checksums.find((entry) => entry.fileName === name)?.digest !== asset.finalDigest) {
+      errors.push(`${SHA256_SUMS_FILE_NAME} records SHA-256 inconsistent with ${name}`);
+    }
+    if (!asset.signature || latest?.platforms?.[platform]?.signature !== asset.signature) {
+      errors.push(`${platform} updater signature does not match source`);
+    }
+    const url = buildReleaseInstallerUrl(version, repository, platform);
+    if (latest?.platforms?.[platform]?.url !== url) errors.push(`${platform} expected ${url}`);
   }
-
-  const platform = latest.platforms?.[target];
-  if (!platform || typeof platform !== "object" || Array.isArray(platform)) {
-    errors.push(`latest.json is missing platforms.${target}`);
-    return errors;
-  }
-
-  if (platform.signature !== signature) {
-    errors.push(`latest.json platforms.${target}.signature does not match the Tauri updater signature`);
-  }
-
-  const expectedUrl = buildReleaseInstallerUrl(version, repository);
-  if (platform.url !== expectedUrl) {
-    errors.push(`latest.json platforms.${target}.url is ${platform.url ?? "missing"}, expected ${expectedUrl}`);
-  }
-
   return errors;
 }
 
-export async function verifyReleaseAssets(
-  version,
-  bundleDir,
-  outputDir,
-  repository,
-  target = "windows-x86_64",
-) {
-  const resolvedVersion = await resolveTargetVersion(version);
-  if (!bundleDir) {
-    fail("missing bundle directory");
-  }
-
-  if (!outputDir) {
-    fail("missing output directory");
-  }
-
-  if (!repository) {
-    fail("missing repository slug");
-  }
-
-  const { installerFilePath, signature } = await findSignedInstaller(bundleDir);
-  const releaseInstallerName = buildReleaseInstallerName(resolvedVersion);
-  const releaseInstallerPath = path.join(outputDir, releaseInstallerName);
-  const checksumPath = path.join(outputDir, SHA256_SUMS_FILE_NAME);
-  const latestJsonPath = path.join(outputDir, "latest.json");
-
-  const [sourceDigest, finalDigest, checksumContent, latestContent] = await Promise.all([
-    sha256File(installerFilePath),
-    sha256File(releaseInstallerPath),
-    readText(checksumPath),
-    readText(latestJsonPath),
-  ]);
-
-  let latest;
-  try {
-    latest = JSON.parse(latestContent);
-  } catch (error) {
-    throw new Error(`latest.json is not valid JSON: ${error.message}`);
-  }
-
-  const errors = validatePreparedReleaseAssetValues({
-    version: resolvedVersion,
-    repository,
-    target,
-    sourceDigest,
-    finalDigest,
-    checksumContent,
-    latest,
-    signature,
-  });
-
-  if (errors.length > 0) {
-    throw new Error(`release asset validation failed:\n- ${errors.join("\n- ")}`);
-  }
-
-  console.log(`release: verified version=${resolvedVersion}`);
-  console.log(`release: verified installer=${releaseInstallerName}`);
-  console.log(`release: verified sha256=${finalDigest}`);
+async function readReleaseInputs(version, bundleDir) {
+  return Promise.all(WINDOWS_RELEASE_TARGETS.map(async ({ arch, platform }) => {
+    const inputDir = path.join(bundleDir, arch);
+    const signed = await findSignedInstaller(path.join(inputDir, "nsis"));
+    await readFile(path.join(inputDir, "Patina.exe")).then((bytes) => verifyPeArchitecture(bytes, platform));
+    return { ...signed, platform, fileName: buildReleaseInstallerName(version, platform) };
+  }));
 }
 
-export async function prepareReleaseAssets(
-  version,
-  bundleDir,
-  outputDir,
-  repository,
-  target = "windows-x86_64",
-) {
-  const resolvedVersion = await resolveTargetVersion(version);
-  await validateChangelog(resolvedVersion);
-
-  if (!bundleDir) {
-    fail("missing bundle directory");
+export async function verifyReleaseAssets(version, bundleDir, outputDir, repository, publicKey?: string) {
+  assertVersion(version);
+  const inputs = await readReleaseInputs(version, bundleDir);
+  const key = publicKey ?? JSON.parse(await readText(TAURI_CONFIG_PATH)).plugins.updater.pubkey;
+  const assets = await Promise.all(inputs.map(async (input) => {
+    const finalPath = path.join(outputDir, input.fileName);
+    await verifyUpdaterSignature(finalPath, input.signature, key);
+    return { ...input, sourceDigest: await sha256File(input.installerFilePath), finalDigest: await sha256File(finalPath) };
+  }));
+  const latest = JSON.parse(await readText(path.join(outputDir, "latest.json")));
+  const checksumContent = await readText(path.join(outputDir, SHA256_SUMS_FILE_NAME));
+  const errors = validatePreparedReleaseAssetValues({ version, repository, assets, checksumContent, latest });
+  const exeNames = (await readDirRecursive(outputDir)).filter((file) => /\.exe$/i.test(file));
+  if (exeNames.length !== 2 || exeNames.some((file) => !inputs.some((input) => path.resolve(file) === path.resolve(outputDir, input.fileName)))) {
+    errors.push("output must contain exactly the two final installers");
   }
+  if (errors.length) throw new Error(`release asset validation failed:\n- ${errors.join("\n- ")}`);
+  console.log(`release: verified both Windows architectures for ${version}`);
+}
 
-  if (!outputDir) {
-    fail("missing output directory");
-  }
-
-  if (!repository) {
-    fail("missing repository slug");
-  }
-
-  const { installerFilePath, signature } = await findSignedInstaller(bundleDir);
-  const releaseInstallerName = buildReleaseInstallerName(resolvedVersion);
-  const releaseInstallerPath = path.join(outputDir, releaseInstallerName);
-  const assetUrl = buildReleaseInstallerUrl(resolvedVersion, repository);
-  const latestJsonPath = path.join(outputDir, "latest.json");
-  const checksumPath = path.join(outputDir, SHA256_SUMS_FILE_NAME);
-
+export async function prepareReleaseAssets(version, bundleDir, outputDir, repository) {
+  assertVersion(version);
+  await validateChangelog(version);
+  const inputs = await readReleaseInputs(version, bundleDir);
+  const parsed = await parseChangelog(version);
+  const latest = { version, notes: renderUpdaterNotes(parsed), pub_date: new Date().toISOString(), platforms: {} };
+  const sums: string[] = [];
   await mkdir(outputDir, { recursive: true });
-  await copyFile(installerFilePath, releaseInstallerPath);
-  const [sourceDigest, finalDigest] = await Promise.all([
-    sha256File(installerFilePath),
-    sha256File(releaseInstallerPath),
-  ]);
-  if (sourceDigest !== finalDigest) {
-    throw new Error(`copied installer SHA-256 ${finalDigest} does not match source installer SHA-256 ${sourceDigest}`);
+  for (const input of inputs) {
+    const finalPath = path.join(outputDir, input.fileName);
+    await copyFile(input.installerFilePath, finalPath);
+    const digest = await sha256File(finalPath);
+    if (digest !== await sha256File(input.installerFilePath)) throw new Error(`copied installer differs: ${input.fileName}`);
+    sums.push(renderSha256Sums(digest, input.fileName));
+    latest.platforms[input.platform] = { signature: input.signature, url: buildReleaseInstallerUrl(version, repository, input.platform) };
   }
+  await writeFile(path.join(outputDir, SHA256_SUMS_FILE_NAME), sums.join(""), "utf8");
+  await writeJson(path.join(outputDir, "latest.json"), latest);
+}
 
-  await writeFile(checksumPath, renderSha256Sums(finalDigest, releaseInstallerName), "utf8");
-  await writeLatestJson(resolvedVersion, assetUrl, signature, latestJsonPath, target);
+export function buildMirrorManifest(latest, repository, baseUrl: string) {
+  const base = new URL(baseUrl);
+  if (base.protocol !== "https:" || base.username || base.password || base.search || base.hash) throw new Error("mirror base must be a plain HTTPS URL");
+  const result = structuredClone(latest);
+  assertVersion(result.version);
+  if (JSON.stringify(Object.keys(result.platforms ?? {}).sort()) !== JSON.stringify(WINDOWS_RELEASE_TARGETS.map((entry) => entry.platform).sort())) {
+    throw new Error("mirror requires both Windows platforms");
+  }
+  for (const { platform } of WINDOWS_RELEASE_TARGETS) {
+    const entry = result.platforms[platform];
+    if (!entry.signature || entry.url !== buildReleaseInstallerUrl(result.version, repository, platform)) throw new Error(`invalid GitHub manifest entry ${platform}`);
+    entry.url = `${base.href.replace(/\/$/, "")}/releases/v${result.version}/${buildReleaseInstallerName(result.version, platform)}`;
+  }
+  return result;
 }
 
 function help() {
@@ -819,9 +794,9 @@ function help() {
   node --experimental-strip-types scripts/release.ts validate-changelog <version>
   node --experimental-strip-types scripts/release.ts print-release-notes <version>
   node --experimental-strip-types scripts/release.ts write-release-notes <version> <output>
-  node --experimental-strip-types scripts/release.ts write-latest-json <version> <asset-url> <signature> <output> [target]
-  node --experimental-strip-types scripts/release.ts prepare-release-assets <version> <bundle-dir> <output-dir> <repository> [target]
-  node --experimental-strip-types scripts/release.ts verify-release-assets <version> <bundle-dir> <output-dir> <repository> [target]
+  node --experimental-strip-types scripts/release.ts mirror-manifest <github-latest> <repository> <base-url> <output>
+  node --experimental-strip-types scripts/release.ts prepare-release-assets <version> <bundle-dir> <output-dir> <repository>
+  node --experimental-strip-types scripts/release.ts verify-release-assets <version> <bundle-dir> <output-dir> <repository>
 `);
 }
 
@@ -844,14 +819,14 @@ async function main() {
     case "write-release-notes":
       await writeReleaseNotes(args[0], args[1]);
       break;
-    case "write-latest-json":
-      await writeLatestJson(args[0], args[1], args[2], args[3], args[4]);
+    case "mirror-manifest":
+      await writeJson(args[3], buildMirrorManifest(JSON.parse(await readText(args[0])), args[1], args[2]));
       break;
     case "prepare-release-assets":
-      await prepareReleaseAssets(args[0], args[1], args[2], args[3], args[4]);
+      await prepareReleaseAssets(args[0], args[1], args[2], args[3]);
       break;
     case "verify-release-assets":
-      await verifyReleaseAssets(args[0], args[1], args[2], args[3], args[4]);
+      await verifyReleaseAssets(args[0], args[1], args[2], args[3]);
       break;
     default:
       help();

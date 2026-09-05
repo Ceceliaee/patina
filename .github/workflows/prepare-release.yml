@@ -7,6 +7,11 @@ on:
         description: "Existing version tag to publish, for example 1.6.1"
         required: true
         type: string
+      validation_only:
+        description: "Build and verify the selected revision without publishing or updating R2"
+        required: false
+        default: false
+        type: boolean
   push:
     tags:
       - "v[0-9]*.[0-9]*.[0-9]*"
@@ -26,6 +31,7 @@ jobs:
     outputs:
       version: ${{ steps.release.outputs.version }}
       tag: ${{ steps.release.outputs.tag }}
+      source: ${{ steps.release.outputs.source }}
 
     steps:
       - name: Checkout
@@ -55,9 +61,15 @@ jobs:
 
           "version=$version" >> $env:GITHUB_OUTPUT
           "tag=v$version" >> $env:GITHUB_OUTPUT
+          if ("${{ inputs.validation_only }}" -eq "true") {
+            "source=${{ github.sha }}" >> $env:GITHUB_OUTPUT
+          } else {
+            "source=v$version" >> $env:GITHUB_OUTPUT
+          }
           Write-Host "Resolved release version: $version"
 
       - name: Confirm release tag
+        if: inputs.validation_only != true
         shell: pwsh
         run: |
           $tag = "${{ steps.release.outputs.tag }}"
@@ -73,6 +85,7 @@ jobs:
           }
 
       - name: Ensure release does not already exist
+        if: inputs.validation_only != true
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -120,7 +133,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ needs.resolve.outputs.tag }}
+          ref: ${{ needs.resolve.outputs.source }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -140,7 +153,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ needs.resolve.outputs.tag }}
+          ref: ${{ needs.resolve.outputs.source }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -160,7 +173,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ needs.resolve.outputs.tag }}
+          ref: ${{ needs.resolve.outputs.source }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -188,7 +201,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ needs.resolve.outputs.tag }}
+          ref: ${{ needs.resolve.outputs.source }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -204,15 +217,25 @@ jobs:
         run: npm run check
 
   rust:
-    name: Rust release quality gate
-    runs-on: windows-latest
+    name: Rust release quality gate (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+          - arch: arm64
+            runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
     needs: resolve
 
     steps:
       - name: Checkout release tag
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ needs.resolve.outputs.tag }}
+          ref: ${{ needs.resolve.outputs.source }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -222,7 +245,15 @@ jobs:
           cache: npm
 
       - name: Set up Rust from rust-toolchain.toml
-        run: rustup toolchain install --no-self-update
+        shell: pwsh
+        run: |
+          rustup set default-host ${{ matrix.target }}
+          if ($LASTEXITCODE -ne 0) { throw "Rust host configuration failed" }
+          rustup toolchain install --no-self-update
+          if ($LASTEXITCODE -ne 0) { throw "Rust installation failed" }
+          $hostInfo = rustc -vV
+          $hostInfo
+          if ($hostInfo -notcontains "host: ${{ matrix.target }}") { throw "Rust host architecture mismatch" }
 
       - name: Install dependencies
         run: npm ci
@@ -230,16 +261,35 @@ jobs:
       - name: Run Rust quality gate
         run: npm run check:rust
 
+      - name: Run isolated runtime smoke
+        run: npm run test:tauri-runtime-smoke
+
+      - name: Install RustSec audit tool
+        run: cargo install cargo-audit --version 0.22.2 --locked
+
+      - name: Audit dependencies
+        run: npm run check:dependencies
+
   build:
-    name: Build Tauri bundle
-    runs-on: windows-latest
+    name: Build Tauri bundle (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+          - arch: arm64
+            runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
     needs: [resolve, version-files, changelog, release-notes, frontend, rust]
 
     steps:
       - name: Checkout release tag
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ needs.resolve.outputs.tag }}
+          ref: ${{ needs.resolve.outputs.source }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -249,7 +299,15 @@ jobs:
           cache: npm
 
       - name: Set up Rust from rust-toolchain.toml
-        run: rustup toolchain install --no-self-update
+        shell: pwsh
+        run: |
+          rustup set default-host ${{ matrix.target }}
+          if ($LASTEXITCODE -ne 0) { throw "Rust host configuration failed" }
+          rustup toolchain install --no-self-update
+          if ($LASTEXITCODE -ne 0) { throw "Rust installation failed" }
+          $hostInfo = rustc -vV
+          $hostInfo
+          if ($hostInfo -notcontains "host: ${{ matrix.target }}") { throw "Rust host architecture mismatch" }
 
       - name: Install dependencies
         run: npm ci
@@ -264,18 +322,29 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
       - name: Build Tauri bundle
-        run: npm run tauri build -- --bundles nsis
+        run: npm run tauri build -- --bundles nsis --target ${{ matrix.target }}
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
+      - name: Verify installer lifecycle
+        shell: pwsh
+        run: ./scripts/verify-windows-installer.ps1 -Target '${{ matrix.target }}' -Platform 'windows-${{ matrix.arch == 'arm64' && 'aarch64' || 'x86_64' }}'
+
+      - name: Stage Tauri bundle
+        shell: pwsh
+        run: |
+          $root = "src-tauri/target/${{ matrix.target }}/release"
+          New-Item -ItemType Directory -Force bundle-artifact/nsis | Out-Null
+          Copy-Item "$root/Patina.exe" bundle-artifact/Patina.exe
+          Copy-Item "$root/bundle/nsis/*.exe" bundle-artifact/nsis
+          Copy-Item "$root/bundle/nsis/*.exe.sig" bundle-artifact/nsis
+
       - name: Upload Tauri bundle
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: tauri-bundle
-          path: |
-            src-tauri/target/release/bundle/nsis/*.exe
-            src-tauri/target/release/bundle/nsis/*.exe.sig
+          name: tauri-bundle-${{ matrix.arch }}
+          path: bundle-artifact
           if-no-files-found: error
           retention-days: 7
 
@@ -293,7 +362,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ needs.resolve.outputs.tag }}
+          ref: ${{ needs.resolve.outputs.source }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -304,8 +373,29 @@ jobs:
       - name: Download Tauri bundle
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: tauri-bundle
-          path: src-tauri/target/release/bundle/nsis
+          pattern: tauri-bundle-*
+          path: bundle-downloads
+
+      - name: Arrange architecture inputs
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release-inputs | Out-Null
+          Move-Item -LiteralPath bundle-downloads/tauri-bundle-x64 -Destination release-inputs/x64
+          Move-Item -LiteralPath bundle-downloads/tauri-bundle-arm64 -Destination release-inputs/arm64
+
+      - name: Reject ARM64 installer on x64 Windows
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem release-inputs/arm64/nsis -Filter '*.exe')
+          if ($installers.Count -ne 1) { throw "Expected one ARM64 installer" }
+          $destination = Join-Path $env:RUNNER_TEMP 'patina-rejected-arm64'
+          $process = Start-Process -FilePath $installers[0].FullName -ArgumentList "/S /D=$destination" -WindowStyle Hidden -PassThru
+          if (-not $process.WaitForExit(180000)) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            throw "Wrong-architecture installer timed out"
+          }
+          if ($process.ExitCode -ne 1633) { throw "Expected architecture rejection, got $($process.ExitCode)" }
+          if (Test-Path (Join-Path $destination 'Patina.exe')) { throw "Wrong-architecture application was installed" }
 
       - name: Download release notes
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -318,18 +408,25 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force dist-release | Out-Null
           $version = "${{ needs.resolve.outputs.version }}"
-          npm run release:prepare-assets -- $version src-tauri/target/release/bundle dist-release ${{ github.repository }} windows-x86_64
+          npm run release:prepare-assets -- $version release-inputs dist-release ${{ github.repository }}
 
       - name: Verify release assets
         shell: pwsh
         run: |
           $version = "${{ needs.resolve.outputs.version }}"
-          npm run release:verify-assets -- $version src-tauri/target/release/bundle dist-release ${{ github.repository }} windows-x86_64
+          npm run release:verify-assets -- $version release-inputs dist-release ${{ github.repository }}
 
       - name: Attest Windows installer
+        if: inputs.validation_only != true
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-path: dist-release/Patina_${{ needs.resolve.outputs.version }}_x64-setup.exe
+
+      - name: Attest ARM64 installer
+        if: inputs.validation_only != true
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: dist-release/Patina_${{ needs.resolve.outputs.version }}_arm64-setup.exe
 
       - name: Upload release assets
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -337,12 +434,14 @@ jobs:
           name: release-assets
           path: |
             dist-release/Patina_${{ needs.resolve.outputs.version }}_x64-setup.exe
+            dist-release/Patina_${{ needs.resolve.outputs.version }}_arm64-setup.exe
             dist-release/SHA256SUMS.txt
             dist-release/latest.json
           if-no-files-found: error
           retention-days: 7
 
       - name: Publish GitHub Release
+        if: inputs.validation_only != true
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
@@ -353,10 +452,12 @@ jobs:
           overwrite_files: false
           files: |
             dist-release/Patina_${{ needs.resolve.outputs.version }}_x64-setup.exe
+            dist-release/Patina_${{ needs.resolve.outputs.version }}_arm64-setup.exe
             dist-release/SHA256SUMS.txt
             dist-release/latest.json
 
   r2:
+    if: inputs.validation_only != true
     name: Sync R2 updater mirror
     runs-on: windows-latest
     needs: [resolve, publish]
@@ -399,7 +500,7 @@ jobs:
         if: steps.r2.outputs.enabled == 'true'
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ needs.resolve.outputs.tag }}
+          ref: ${{ needs.resolve.outputs.source }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -434,18 +535,7 @@ jobs:
           R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
         run: |
           New-Item -ItemType Directory -Force dist-release/r2 | Out-Null
-          $version = "${{ needs.resolve.outputs.version }}"
-          $installerName = "Patina_${version}_x64-setup.exe"
-          $r2BaseUrl = $env:R2_PUBLIC_BASE_URL.TrimEnd("/")
-          $r2InstallerUrl = "$r2BaseUrl/releases/v$version/$installerName"
-          $githubLatest = Get-Content "dist-release/latest.json" -Raw | ConvertFrom-Json
-          $signature = $githubLatest.platforms.'windows-x86_64'.signature
-
-          if (-not $signature) {
-            throw "Could not read updater signature from dist-release/latest.json."
-          }
-
-          npm run release:latest -- $version $r2InstallerUrl $signature dist-release/r2/latest.json windows-x86_64
+          node --experimental-strip-types scripts/release.ts mirror-manifest dist-release/latest.json '${{ github.repository }}' "$env:R2_PUBLIC_BASE_URL" dist-release/r2/latest.json
 
       - name: Upload R2 updater mirror
         if: steps.r2.outputs.enabled == 'true'
@@ -458,14 +548,17 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: |
           $version = "${{ needs.resolve.outputs.version }}"
-          $installerName = "Patina_${version}_x64-setup.exe"
           $r2Endpoint = "https://$env:R2_ACCOUNT_ID.r2.cloudflarestorage.com"
-
-          aws s3 cp `
-            "dist-release/$installerName" `
-            "s3://$env:R2_BUCKET/releases/v$version/$installerName" `
-            --endpoint-url $r2Endpoint `
-            --content-type "application/octet-stream"
+          $latest = Get-Content dist-release/r2/latest.json -Raw | ConvertFrom-Json
+          foreach ($entry in $latest.platforms.PSObject.Properties) {
+            $installerName = [IO.Path]::GetFileName(([uri]$entry.Value.url).AbsolutePath)
+            aws s3 cp "dist-release/$installerName" "s3://$env:R2_BUCKET/releases/v$version/$installerName" --endpoint-url $r2Endpoint --content-type "application/octet-stream"
+            if ($LASTEXITCODE -ne 0) { throw "R2 installer upload failed: $installerName" }
+            $readback = Join-Path $env:RUNNER_TEMP $installerName
+            aws s3 cp "s3://$env:R2_BUCKET/releases/v$version/$installerName" $readback --endpoint-url $r2Endpoint
+            if ($LASTEXITCODE -ne 0) { throw "R2 installer readback failed: $installerName" }
+            if ((Get-FileHash $readback).Hash -ne (Get-FileHash "dist-release/$installerName").Hash) { throw "R2 digest mismatch: $installerName" }
+          }
 
           aws s3 cp `
             "dist-release/r2/latest.json" `
@@ -473,6 +566,7 @@ jobs:
             --endpoint-url $r2Endpoint `
             --content-type "application/json" `
             --cache-control "no-cache"
+          if ($LASTEXITCODE -ne 0) { throw "R2 manifest upload failed" }
 
       - name: Clean old R2 updater mirrors
         if: steps.r2.outputs.enabled == 'true'
@@ -493,10 +587,12 @@ jobs:
             --delimiter "/" `
             --endpoint-url $r2Endpoint | ConvertFrom-Json
 
+          if ($LASTEXITCODE -ne 0) { throw "R2 listing failed" }
           $prefixes = @($objects.CommonPrefixes | ForEach-Object { $_.Prefix })
           foreach ($prefix in $prefixes) {
             if ($prefix -and $prefix -ne $currentPrefix) {
               Write-Host "Removing old R2 mirror prefix: $prefix"
               aws s3 rm "s3://$env:R2_BUCKET/$prefix" --recursive --endpoint-url $r2Endpoint
+              if ($LASTEXITCODE -ne 0) { throw "R2 cleanup failed: $prefix" }
             }
           }
