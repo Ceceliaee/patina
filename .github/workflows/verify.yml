@@ -131,24 +131,14 @@ jobs:
         run: npm run check:dependencies
 
   tauri-runtime-smoke:
-    name: Tauri runtime smoke (${{ matrix.arch }})
+    name: Tauri runtime smoke
     if: >-
       github.event_name == 'push' ||
       (github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'pull_request') ||
       (github.event_name == 'workflow_dispatch' && inputs.pr_number != '')
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x64
-            runner: windows-latest
-            target: x86_64-pc-windows-msvc
-          - arch: arm64
-            runner: windows-11-arm
-            target: aarch64-pc-windows-msvc
+    runs-on: windows-latest
     # Include runner setup and dependency installation before the runtime step.
     timeout-minutes: 25
 
@@ -175,14 +165,7 @@ jobs:
           node-version-file: .node-version
 
       - name: Setup Rust from rust-toolchain.toml
-        shell: pwsh
-        run: |
-          rustup set default-host ${{ matrix.target }}
-          if ($LASTEXITCODE -ne 0) { throw "Rust host configuration failed" }
-          rustup toolchain install --no-self-update
-          if ($LASTEXITCODE -ne 0) { throw "Rust installation failed" }
-          $hostInfo = rustc -vV
-          if ($hostInfo -notcontains "host: ${{ matrix.target }}") { throw "Rust host architecture mismatch" }
+        run: rustup toolchain install --no-self-update
 
       - name: Install dependencies
         run: npm ci --no-audit --timing

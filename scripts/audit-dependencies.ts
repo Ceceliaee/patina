@@ -36,31 +36,30 @@ function run(command: string, args: string[], capture = false) {
 }
 
 for (const { target } of WINDOWS_RELEASE_TARGETS) {
-for (const exception of LOCK_ONLY_ADVISORIES) {
-  const result = run("cargo", [
-    "tree",
-    "--manifest-path",
-    MANIFEST,
-    "--target",
-    target,
-    "--locked",
-    ...(OFFLINE ? ["--offline"] : []),
-    "-i",
-    exception.crate,
-  ], true);
-  const reachableLines = (result.stdout ?? "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  if (result.status !== 0 || reachableLines.length > 0) {
-    console.error(`Dependency audit exception is no longer safe: ${exception.id} ${exception.crate}`);
-    console.error(exception.reason);
-    if (result.stdout) console.error(result.stdout);
-    if (result.stderr) console.error(result.stderr);
-    process.exit(1);
+  for (const exception of LOCK_ONLY_ADVISORIES) {
+    const result = run("cargo", [
+      "tree",
+      "--manifest-path",
+      MANIFEST,
+      "--target",
+      target,
+      "--locked",
+      ...(OFFLINE ? ["--offline"] : []),
+      "-i",
+      exception.crate,
+    ], true);
+    const reachableLines = (result.stdout ?? "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (result.status !== 0 || reachableLines.length > 0) {
+      console.error(`Dependency audit exception is no longer safe: ${exception.id} ${exception.crate}`);
+      console.error(exception.reason);
+      if (result.stdout) console.error(result.stdout);
+      if (result.stderr) console.error(result.stderr);
+      process.exit(1);
+    }
   }
-}
-
 }
 
 interface CargoAuditReport {

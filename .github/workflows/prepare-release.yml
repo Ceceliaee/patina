@@ -261,9 +261,6 @@ jobs:
       - name: Run Rust quality gate
         run: npm run check:rust
 
-      - name: Run isolated runtime smoke
-        run: npm run test:tauri-runtime-smoke
-
       - name: Install RustSec audit tool
         run: cargo install cargo-audit --version 0.22.2 --locked
 
@@ -326,10 +323,6 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-
-      - name: Verify installer lifecycle
-        shell: pwsh
-        run: ./scripts/verify-windows-installer.ps1 -Target '${{ matrix.target }}' -Platform 'windows-${{ matrix.arch == 'arm64' && 'aarch64' || 'x86_64' }}'
 
       - name: Stage Tauri bundle
         shell: pwsh

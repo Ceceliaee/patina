@@ -105,14 +105,14 @@ export function parseSha256SumsText(content) {
   }
 
   const records = lines.map((line) => {
-  const match = line.match(/^([0-9a-f]{64})  (.+)$/);
-  if (!match) {
-    throw new Error(`${SHA256_SUMS_FILE_NAME} must use "<lowercase sha256><two spaces><file name>" format`);
-  }
+    const match = line.match(/^([0-9a-f]{64})  (.+)$/);
+    if (!match) {
+      throw new Error(`${SHA256_SUMS_FILE_NAME} must use "<lowercase sha256><two spaces><file name>" format`);
+    }
 
-  const [, digest, fileName] = match;
-  assertSafeFileName(fileName);
-  return { digest, fileName };
+    const [, digest, fileName] = match;
+    assertSafeFileName(fileName);
+    return { digest, fileName };
   });
   if (new Set(records.map((entry) => entry.fileName)).size !== records.length) {
     throw new Error(`${SHA256_SUMS_FILE_NAME} contains duplicate files`);

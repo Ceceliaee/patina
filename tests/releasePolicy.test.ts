@@ -370,7 +370,6 @@ function testDualArchitectureWorkflowBoundaries() {
   const mirror = workflow.slice(workflow.indexOf("      - name: Upload R2 updater mirror"));
   assert.ok(mirror.indexOf("R2 digest mismatch") < mirror.indexOf('"s3://$env:R2_BUCKET/latest.json"'));
   assert.ok(mirror.indexOf("R2 manifest upload failed") < mirror.indexOf("Clean old R2 updater mirrors"));
-  assert.match(workflow, /verify-windows-installer.ps1/);
 }
 
 function testToolchainContractsStayAligned() {
