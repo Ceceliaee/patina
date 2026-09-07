@@ -626,7 +626,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `document.documentElement.lang === "en-US"
+      `document.documentElement?.lang === "en-US"
         && Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("Settings"))} + ']'))`,
       15_000,
       "saved English locale should survive a reload",
@@ -677,7 +677,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `document.documentElement.lang === "en-US"
+      `document.documentElement?.lang === "en-US"
         && document.querySelector("main.qp-canvas")?.dataset.presentedView === "settings"
         && document.querySelector("main.qp-canvas")?.dataset.viewTransitionState === "settled"
         && Boolean(document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify("Language: English"))} + ']'))`,
@@ -817,7 +817,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     await evaluate(client!, sessionId, "Array.from(document.querySelectorAll('button')).find(n => n.textContent?.trim() === 'Guardar')?.click()");
     await waitForExpression(client!, sessionId, "JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') ?? '{}').language === 'es'");
     await client!.command("Page.navigate", { url: appUrl }, sessionId);
-    await waitForExpression(client!, sessionId, "document.documentElement.lang === 'es' && Boolean(document.querySelector('.qp-select-trigger[aria-label=\"Idioma: Español\"]'))");
+    await waitForExpression(client!, sessionId, "document.documentElement?.lang === 'es' && Boolean(document.querySelector('.qp-select-trigger[aria-label=\"Idioma: Español\"]'))");
     await chooseLanguage("Idioma: Español", "简体中文");
     await waitForExpression(client!, sessionId, "document.documentElement.lang === 'zh-CN'");
     await evaluate(client!, sessionId, "Array.from(document.querySelectorAll('button')).find(n => n.textContent?.trim() === '保存')?.click()");
