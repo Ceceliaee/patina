@@ -53,6 +53,17 @@ export function setHistorySnapshotCache(
     const oldestKey = HISTORY_SNAPSHOT_CACHE.keys().next().value;
     if (!oldestKey) break;
     HISTORY_SNAPSHOT_CACHE.delete(oldestKey);
+    pruneHistorySnapshotCacheVersion(oldestKey);
+  }
+}
+
+function pruneHistorySnapshotCacheVersion(cacheKey: string): void {
+  if (
+    !HISTORY_SNAPSHOT_CACHE.has(cacheKey)
+    && !HISTORY_SNAPSHOT_PROMISES.has(`${cacheKey}:details-0`)
+    && !HISTORY_SNAPSHOT_PROMISES.has(`${cacheKey}:details-1`)
+  ) {
+    HISTORY_SNAPSHOT_CACHE_VERSIONS.delete(cacheKey);
   }
 }
 
@@ -72,6 +83,7 @@ export function getHistorySnapshotCacheStats() {
     entries: HISTORY_SNAPSHOT_CACHE.size,
     limit: HISTORY_SNAPSHOT_CACHE_LIMIT,
     pendingEntries: HISTORY_SNAPSHOT_PROMISES.size,
+    versionEntries: HISTORY_SNAPSHOT_CACHE_VERSIONS.size,
   };
 }
 
@@ -102,6 +114,7 @@ export async function loadHistorySnapshotWithCache(
     .finally(() => {
       if (HISTORY_SNAPSHOT_PROMISES.get(promiseKey) === snapshotPromise) {
         HISTORY_SNAPSHOT_PROMISES.delete(promiseKey);
+        pruneHistorySnapshotCacheVersion(cacheKey);
       }
     });
 

@@ -13,6 +13,7 @@ import { buildHistoryCategoryDistribution } from "../src/features/history/servic
 import {
   clearHistorySnapshotCache,
   getHistorySnapshotCache,
+  getHistorySnapshotCacheStats,
   loadHistorySnapshotWithCache,
   setHistorySnapshotCache,
 } from "../src/features/history/services/historySnapshotCache.ts";
@@ -895,6 +896,101 @@ await runTest("cleared History requests cannot repopulate cache or evict newer i
   dayResolvers[1]([makeSession({ id: 2 })]);
   await Promise.all([freshLoad, dedupedFreshLoad]);
   assert.equal(getHistorySnapshotCache(date, 7, false)?.daySessions[0]?.id, 2);
+});
+
+await runTest("History releases evicted metadata without allowing late requests to republish", async () => {
+  const emptyDeps = {
+    getSessionsInRange: async () => [],
+    getWebActivitySegmentsInRange: async () => [],
+    getWebFaviconsForDomains: async () => ({}),
+    loadWebDomainOverrides: async () => ({}),
+  };
+  const date = new Date(2026, 0, 2);
+  const snapshot = await loadHistorySnapshot(date, 7, {
+    ...emptyDeps,
+    getHistoryByDate: async () => [makeSession({ id: 2 })],
+  }, { includeWebActivity: false });
+  const releases: Array<(sessions: HistorySession[]) => void> = [];
+  const deps = {
+    ...emptyDeps,
+    getHistoryByDate: () => new Promise<HistorySession[]>((resolve) => releases.push(resolve)),
+    getDaySessionsInRange: () => new Promise<HistorySession[]>((resolve) => releases.push(resolve)),
+  };
+  const pending = [true, false].map((includeTitleDetails) => loadHistorySnapshotWithCache(
+    date, 7, deps, { includeWebActivity: false, includeTitleDetails },
+  ));
+  setHistorySnapshotCache(snapshot, date, 7, false);
+  for (let day = 3; day < 1003; day += 1) {
+    setHistorySnapshotCache(snapshot, new Date(2026, 0, day), 7, false);
+  }
+  assert.deepEqual(getHistorySnapshotCacheStats(), {
+    entries: 7, limit: 7, pendingEntries: 2, versionEntries: 8,
+  });
+  releases[0]([makeSession({ id: 1 })]);
+  await pending[0];
+  assert.equal(getHistorySnapshotCache(date, 7, false), null);
+  assert.equal(getHistorySnapshotCacheStats().versionEntries, 8);
+  releases[1]([makeSession({ id: 1 })]);
+  await pending[1];
+  assert.equal(getHistorySnapshotCache(date, 7, false), null);
+  assert.deepEqual(getHistorySnapshotCacheStats(), {
+    entries: 7, limit: 7, pendingEntries: 0, versionEntries: 7,
+  });
+});
+
+await runTest("History rejection releases evicted metadata and permits a fresh retry", async () => {
+  const date = new Date(2026, 0, 2);
+  const deps = {
+    getHistoryByDate: async () => [makeSession({ id: 2 })],
+    getSessionsInRange: async () => [],
+    getWebActivitySegmentsInRange: async () => [],
+    getWebFaviconsForDomains: async () => ({}),
+    loadWebDomainOverrides: async () => ({}),
+  };
+  const snapshot = await loadHistorySnapshot(date, 7, deps, { includeWebActivity: false });
+  let rejectLoad: (error: Error) => void = () => { throw new Error("load was not started"); };
+  const pending = loadHistorySnapshotWithCache(date, 7, {
+    ...deps,
+    getHistoryByDate: () => new Promise<HistorySession[]>((_resolve, reject) => { rejectLoad = reject; }),
+  }, { includeWebActivity: false });
+  const rejection = assert.rejects(pending, /cancelled read/);
+  setHistorySnapshotCache(snapshot, date, 7, false);
+  for (let day = 3; day < 11; day += 1) {
+    setHistorySnapshotCache(snapshot, new Date(2026, 0, day), 7, false);
+  }
+  rejectLoad(new Error("cancelled read"));
+  await rejection;
+  assert.equal(getHistorySnapshotCacheStats().versionEntries, 7);
+  assert.equal(getHistorySnapshotCacheStats().pendingEntries, 0);
+  await loadHistorySnapshotWithCache(date, 7, deps, { includeWebActivity: false });
+  assert.equal(getHistorySnapshotCache(date, 7, false)?.daySessions[0]?.id, 2);
+  assert.equal(getHistorySnapshotCacheStats().versionEntries, 7);
+});
+
+await runTest("History reinsertion preserves its version while an evicted request is pending", async () => {
+  const date = new Date(2026, 0, 2);
+  const deps = {
+    getHistoryByDate: async () => [makeSession({ id: 2 })],
+    getSessionsInRange: async () => [],
+    getWebActivitySegmentsInRange: async () => [],
+    getWebFaviconsForDomains: async () => ({}),
+    loadWebDomainOverrides: async () => ({}),
+  };
+  const snapshot = await loadHistorySnapshot(date, 7, deps, { includeWebActivity: false });
+  setHistorySnapshotCache(snapshot, date, 7, false);
+  let release: (sessions: HistorySession[]) => void = () => { throw new Error("load was not started"); };
+  const pending = loadHistorySnapshotWithCache(date, 7, {
+    ...deps,
+    getHistoryByDate: () => new Promise<HistorySession[]>((resolve) => { release = resolve; }),
+  }, { includeWebActivity: false });
+  for (let day = 3; day < 11; day += 1) {
+    setHistorySnapshotCache(snapshot, new Date(2026, 0, day), 7, false);
+  }
+  setHistorySnapshotCache(snapshot, date, 7, false);
+  release([makeSession({ id: 1 })]);
+  await pending;
+  assert.equal(getHistorySnapshotCache(date, 7, false)?.daySessions[0]?.id, 2);
+  assert.equal(getHistorySnapshotCacheStats().versionEntries, 7);
 });
 
 console.log(`Passed ${passed} history read model tests`);
