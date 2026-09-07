@@ -468,28 +468,7 @@ src-tauri/src/
 - watchdog / self-heal / updater 等核心流程
 - 与平台事件、数据边界对接的行为编排
 
-tracking 相关逻辑应继续在：
-
-```text
-engine/tracking/
-  runtime.rs
-  transition.rs
-  active_session.rs
-  continuity.rs
-  session_timeout.rs
-  sustained_participation.rs
-  watchdog.rs
-  startup.rs
-  metadata.rs
-  runtime/
-    loop_state.rs
-    power_lifecycle.rs
-    support.rs
-    window_polling.rs
-```
-
-这一结构中演进，而不是回流到单个超厚文件或入口层。
-`runtime.rs` 保持主循环编排；持续参与、连续性、封口、轮询、电源生命周期等细节优先留在相邻 owner 模块内。
+tracking 相关逻辑在 [`engine/tracking/`](../src-tauri/src/engine/tracking/) 内按职责演进，不回流到单个超厚文件或入口层。`runtime.rs` 保持主循环编排；持续参与、连续性、封口、轮询、电源生命周期等细节优先留在相邻 owner 模块。当前模块清单由源码目录持有。
 
 `engine/tracking` 统一决定应用的有效活动区间，协调转换、暂停、排除、电源、watchdog 和恢复边界。转换失败不得推进已提交状态；失效资格必须先反映到快照，旧采样、请求和持续参与状态不得跨停止边界复用。中断恢复使用最后成功采样，普通心跳不证明活动；证据缺失或无效时以会话起点结束，不补记停机时间。
 
@@ -638,7 +617,7 @@ Rust 侧允许为了稳定演进保留少量入口协调或兼容封装，但规
 
 ## 11. 最低验证门槛
 
-验证强度按改动风险选择：前端与文档默认入口是 `npm run check`；Rust、结构边界或发布级复核使用 `npm run check:full`。`package.json` 是命令组合与叶子执行图的唯一 owner，本文不复制该清单；具体风险追加规则见 [`engineering-quality.md`](./engineering-quality.md)。
+默认验证入口、风险追加和证据有效性由 [`engineering-quality.md`](./engineering-quality.md#5-默认验证门槛) 定义；命令组合由 [`package.json`](../package.json) 持有。本文只补充架构检查必须保护的事实。
 
 边界门禁必须覆盖静态与动态 import、重导出、直接 IPC 调用和剥离测试模块后的 Rust 生产依赖。例外只能是精确、可审计且有自测的局部例外，不能使用目录级通配豁免。真实 runtime、IPC 注册或 capability 变更还需要真实 Tauri runtime smoke，静态一致性不能代替运行时证据。
 

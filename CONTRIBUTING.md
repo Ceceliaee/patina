@@ -266,8 +266,12 @@ Commit reviewability rules:
   additions and deletions, triggers mandatory split review.
 - Touching more than 25 files also triggers mandatory split review.
 - Split by behavior, owner, or independently reviewable stage by default.
-- If the change is genuinely indivisible, discuss the scope before
-  implementation; otherwise expect the intake size gate to require splitting.
+- An oversized commit requires explicit approval after explaining why it
+  cannot reasonably be split. Commit approval does not waive the external PR
+  intake size gate; discuss an indivisible PR scope before implementation.
+- Documentation and wholly new files are exempt from the per-commit
+  1,000-line limit, not the 25-file limit or external PR intake. Do not split
+  a single document, new file, or tightly coupled new files merely for line count.
 - Lockfiles, generated files, snapshots, bulk assets, and mechanical migration
   output may be excluded from the manually maintained line count.
 - Isolate excluded generated or mechanical changes in a separate commit when
@@ -276,10 +280,13 @@ Commit reviewability rules:
 - Keep each commit buildable or independently verifiable where practical.
 - One Project item may produce multiple commits and should not be compressed
   into one oversized commit.
+- Keep subjects focused and changes related unless the user requests one commit.
 
 Do not use issue-closing keywords such as `Closes`, `Fixes`, or `Resolves`
 unless the maintainer explicitly asks to close the issue. Reference related
-issues with:
+issues in a separate commit-body paragraph, never in the subject. Use a concise
+conventional subject, and do not rewrite pushed history to normalize older
+subjects. For example:
 
 ```text
 Refs #4
@@ -423,7 +430,8 @@ for the full release workflow.
 
 ### 6.4 Documentation-Only Changes
 
-Documentation-only pull requests do not require a full build by default.
+Documentation-only pull requests use documentation checks and any validation required by changed policies or operational claims under
+[`docs/engineering-quality.md`](docs/engineering-quality.md#5-默认验证门槛).
 Check:
 
 - links;
@@ -997,15 +1005,18 @@ commit 可审查性规则：
 - 手工维护内容的变更超过 1000 行（新增行与删除行之和）时，必须进行拆分复核。
 - 涉及超过 25 个文件时，也必须进行拆分复核。
 - 默认按行为、owner 或可以独立审查的阶段拆成多个连贯 commit。
-- Pull Request 确实无法合理拆分时，应在实现前讨论清楚 scope；否则体量门禁会要求拆分。
+- 超大 commit 需要说明无法合理拆分的原因并取得明确批准。单个 commit 的批准不豁免外部 PR 体量门禁；不可拆分的 PR 范围应在实现前讨论。
+- 文档和全新文件不受单个 commit 的 1000 行限制，但仍受 25 文件限制和外部 PR 准入规则约束。不要仅为满足行数拆分单个文档、新文件或紧密关联的一组新文件。
 - lockfile、生成文件、快照、批量资源和机械 migration 输出可以不计入手工维护行数。
 - 在可行时，应把排除计数的生成或机械变更单独提交。
 - 不要为了满足数字限制而按文件随意切块。
 - 每个 commit 在可行时应能够独立构建或验证。
 - 一个 Project item 可以对应多个 commit，不应把整个工作项压缩成一个超大 commit。
+- 除非用户要求合为一个 commit，否则保持标题聚焦、改动相关。
 
 除非维护者明确要求关闭 issue，否则不要使用 `Closes`、`Fixes` 或 `Resolves`
-等自动关闭关键词。引用相关 issue 时请使用：
+等自动关闭关键词。相关 issue 引用放在 commit 正文的独立段落中，不放进标题。
+标题使用简洁的规范格式；不要为了统一旧标题而重写已推送历史。例如：
 
 ```text
 Refs #4
@@ -1137,7 +1148,7 @@ npm run release:check
 
 #### 6.4 仅文档改动
 
-仅文档改动默认不要求运行完整构建。请检查：
+仅文档改动按 [`docs/engineering-quality.md`](docs/engineering-quality.md#5-默认验证门槛) 运行文档检查，并验证改动涉及的政策或操作说明。另请检查：
 
 - 链接；
 - 命令名称；
