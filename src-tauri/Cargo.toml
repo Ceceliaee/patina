@@ -18,6 +18,10 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+[[example]]
+name = "windows-resource-sample"
+path = "../scripts/perf/windows-resource-sample.rs"
+
 [dependencies]
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
