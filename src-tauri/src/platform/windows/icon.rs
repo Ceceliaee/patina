@@ -152,8 +152,8 @@ unsafe fn hicon_to_base64(hicon: HICON) -> Option<String> {
     if GetIconInfo(hicon, &mut icon_info).is_err() {
         return None;
     }
-    let color_bitmap = OwnedBitmap::new(icon_info.hbmColor)?;
     let _mask_bitmap = OwnedBitmap::new(icon_info.hbmMask);
+    let color_bitmap = OwnedBitmap::new(icon_info.hbmColor)?;
 
     bitmap_to_base64(color_bitmap.raw())
 }
@@ -311,6 +311,55 @@ fn now_ms() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn monochrome_icon_conversion_releases_mask_bitmaps() {
+        const CHILD_ENV: &str = "PATINA_ICON_RESOURCE_TEST_CHILD";
+        if std::env::var_os(CHILD_ENV).is_none() {
+            // GDI counts belong to the process; isolate them from parallel tests.
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "platform::windows::icon::tests::monochrome_icon_conversion_releases_mask_bitmaps",
+                    "--nocapture",
+                ])
+                .env(CHILD_ENV, "1")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+
+        use windows::Win32::System::Threading::{
+            GetCurrentProcess, GetGuiResources, GR_GDIOBJECTS,
+        };
+        use windows::Win32::UI::WindowsAndMessaging::CreateIcon;
+        unsafe {
+            let mask = [0xff_u8; 128];
+            let pixels = [0_u8; 128];
+            let icon = OwnedIcon::new(
+                CreateIcon(None, 32, 32, 1, 1, mask.as_ptr(), pixels.as_ptr()).unwrap(),
+            )
+            .unwrap();
+            let mut info = Default::default();
+            GetIconInfo(icon.raw(), &mut info).unwrap();
+            assert!(info.hbmColor.is_invalid());
+            let mask_guard = OwnedBitmap::new(info.hbmMask).unwrap();
+            let before = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
+            assert!(before > 0);
+            for _ in 0..64 {
+                assert!(hicon_to_base64(icon.raw()).is_none());
+            }
+            let after = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
+            assert_eq!(after, before, "monochrome conversion retained GDI objects");
+            drop(mask_guard);
+        }
+    }
 
     fn cache_test_guard() -> std::sync::MutexGuard<'static, ()> {
         static CACHE_TEST_LOCK: std::sync::OnceLock<std::sync::Mutex<()>> =
