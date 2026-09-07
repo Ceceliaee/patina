@@ -898,7 +898,7 @@ await runTest("cleared History requests cannot repopulate cache or evict newer i
   assert.equal(getHistorySnapshotCache(date, 7, false)?.daySessions[0]?.id, 2);
 });
 
-await runTest("History releases evicted metadata without allowing late requests to republish", async () => {
+await runTest("History bounds cache storage and blocks both late detail modes after eviction", async () => {
   const emptyDeps = {
     getSessionsInRange: async () => [],
     getWebActivitySegmentsInRange: async () => [],
@@ -920,25 +920,27 @@ await runTest("History releases evicted metadata without allowing late requests 
     date, 7, deps, { includeWebActivity: false, includeTitleDetails },
   ));
   setHistorySnapshotCache(snapshot, date, 7, false);
+  const deduped = loadHistorySnapshotWithCache(date, 7, deps, { includeWebActivity: false });
+  assert.equal(releases.length, 2);
   for (let day = 3; day < 1003; day += 1) {
     setHistorySnapshotCache(snapshot, new Date(2026, 0, day), 7, false);
   }
   assert.deepEqual(getHistorySnapshotCacheStats(), {
-    entries: 7, limit: 7, pendingEntries: 2, versionEntries: 8,
+    entries: 7, limit: 7, pendingEntries: 2,
   });
   releases[0]([makeSession({ id: 1 })]);
-  await pending[0];
+  assert.equal(await deduped, await pending[0]);
   assert.equal(getHistorySnapshotCache(date, 7, false), null);
-  assert.equal(getHistorySnapshotCacheStats().versionEntries, 8);
+  assert.equal(getHistorySnapshotCacheStats().pendingEntries, 1);
   releases[1]([makeSession({ id: 1 })]);
   await pending[1];
   assert.equal(getHistorySnapshotCache(date, 7, false), null);
   assert.deepEqual(getHistorySnapshotCacheStats(), {
-    entries: 7, limit: 7, pendingEntries: 0, versionEntries: 7,
+    entries: 7, limit: 7, pendingEntries: 0,
   });
 });
 
-await runTest("History rejection releases evicted metadata and permits a fresh retry", async () => {
+await runTest("History rejection releases the pending request and permits a fresh retry", async () => {
   const date = new Date(2026, 0, 2);
   const deps = {
     getHistoryByDate: async () => [makeSession({ id: 2 })],
@@ -960,14 +962,13 @@ await runTest("History rejection releases evicted metadata and permits a fresh r
   }
   rejectLoad(new Error("cancelled read"));
   await rejection;
-  assert.equal(getHistorySnapshotCacheStats().versionEntries, 7);
   assert.equal(getHistorySnapshotCacheStats().pendingEntries, 0);
   await loadHistorySnapshotWithCache(date, 7, deps, { includeWebActivity: false });
   assert.equal(getHistorySnapshotCache(date, 7, false)?.daySessions[0]?.id, 2);
-  assert.equal(getHistorySnapshotCacheStats().versionEntries, 7);
+  assert.equal(getHistorySnapshotCacheStats().entries, 7);
 });
 
-await runTest("History reinsertion preserves its version while an evicted request is pending", async () => {
+await runTest("History reinsertion prevents an evicted request from overwriting the new snapshot", async () => {
   const date = new Date(2026, 0, 2);
   const deps = {
     getHistoryByDate: async () => [makeSession({ id: 2 })],
@@ -990,7 +991,7 @@ await runTest("History reinsertion preserves its version while an evicted reques
   release([makeSession({ id: 1 })]);
   await pending;
   assert.equal(getHistorySnapshotCache(date, 7, false)?.daySessions[0]?.id, 2);
-  assert.equal(getHistorySnapshotCacheStats().versionEntries, 7);
+  assert.equal(getHistorySnapshotCacheStats().entries, 7);
 });
 
 console.log(`Passed ${passed} history read model tests`);

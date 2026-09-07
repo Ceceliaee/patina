@@ -7,9 +7,8 @@ import {
 
 const HISTORY_SNAPSHOT_CACHE_LIMIT = 7;
 const HISTORY_SNAPSHOT_CACHE = new Map<string, HistorySnapshot>();
-const HISTORY_SNAPSHOT_PROMISES = new Map<string, Promise<HistorySnapshot>>();
-const HISTORY_SNAPSHOT_CACHE_VERSIONS = new Map<string, number>();
-let historySnapshotCacheEpoch = 0;
+type PendingSnapshot = { promise: Promise<HistorySnapshot>; canPublish: boolean };
+const HISTORY_SNAPSHOT_PROMISES = new Map<string, PendingSnapshot>();
 
 function formatHistorySnapshotCacheKey(
   date: Date,
@@ -42,10 +41,10 @@ export function setHistorySnapshotCache(
   includeWebActivity: boolean = true,
 ): void {
   const cacheKey = formatHistorySnapshotCacheKey(date, rollingDayCount, includeWebActivity);
-  HISTORY_SNAPSHOT_CACHE_VERSIONS.set(
-    cacheKey,
-    (HISTORY_SNAPSHOT_CACHE_VERSIONS.get(cacheKey) ?? 0) + 1,
-  );
+  for (const detailMode of [0, 1]) {
+    const pending = HISTORY_SNAPSHOT_PROMISES.get(`${cacheKey}:details-${detailMode}`);
+    if (pending) pending.canPublish = false;
+  }
   HISTORY_SNAPSHOT_CACHE.delete(cacheKey);
   HISTORY_SNAPSHOT_CACHE.set(cacheKey, snapshot);
 
@@ -53,25 +52,12 @@ export function setHistorySnapshotCache(
     const oldestKey = HISTORY_SNAPSHOT_CACHE.keys().next().value;
     if (!oldestKey) break;
     HISTORY_SNAPSHOT_CACHE.delete(oldestKey);
-    pruneHistorySnapshotCacheVersion(oldestKey);
-  }
-}
-
-function pruneHistorySnapshotCacheVersion(cacheKey: string): void {
-  if (
-    !HISTORY_SNAPSHOT_CACHE.has(cacheKey)
-    && !HISTORY_SNAPSHOT_PROMISES.has(`${cacheKey}:details-0`)
-    && !HISTORY_SNAPSHOT_PROMISES.has(`${cacheKey}:details-1`)
-  ) {
-    HISTORY_SNAPSHOT_CACHE_VERSIONS.delete(cacheKey);
   }
 }
 
 export function clearHistorySnapshotCache(): void {
-  historySnapshotCacheEpoch += 1;
   HISTORY_SNAPSHOT_CACHE.clear();
   HISTORY_SNAPSHOT_PROMISES.clear();
-  HISTORY_SNAPSHOT_CACHE_VERSIONS.clear();
 }
 
 export function getHistorySnapshotCacheSizeForTests(): number {
@@ -83,7 +69,6 @@ export function getHistorySnapshotCacheStats() {
     entries: HISTORY_SNAPSHOT_CACHE.size,
     limit: HISTORY_SNAPSHOT_CACHE_LIMIT,
     pendingEntries: HISTORY_SNAPSHOT_PROMISES.size,
-    versionEntries: HISTORY_SNAPSHOT_CACHE_VERSIONS.size,
   };
 }
 
@@ -97,27 +82,24 @@ export async function loadHistorySnapshotWithCache(
   const cacheKey = formatHistorySnapshotCacheKey(date, rollingDayCount, includeWebActivity);
   const promiseKey = `${cacheKey}:details-${(options.includeTitleDetails ?? true) ? 1 : 0}`;
   const pending = HISTORY_SNAPSHOT_PROMISES.get(promiseKey);
-  if (pending) return pending;
+  if (pending) return pending.promise;
 
-  const loadStartedAtEpoch = historySnapshotCacheEpoch;
-  const loadStartedAtCacheVersion = HISTORY_SNAPSHOT_CACHE_VERSIONS.get(cacheKey) ?? 0;
-  const snapshotPromise = loadHistorySnapshot(date, rollingDayCount, deps, options)
-    .then((snapshot) => {
-      if (
-        historySnapshotCacheEpoch === loadStartedAtEpoch
-        && (HISTORY_SNAPSHOT_CACHE_VERSIONS.get(cacheKey) ?? 0) === loadStartedAtCacheVersion
-      ) {
-        setHistorySnapshotCache(snapshot, date, rollingDayCount, includeWebActivity);
-      }
-      return snapshot;
-    })
-    .finally(() => {
-      if (HISTORY_SNAPSHOT_PROMISES.get(promiseKey) === snapshotPromise) {
-        HISTORY_SNAPSHOT_PROMISES.delete(promiseKey);
-        pruneHistorySnapshotCacheVersion(cacheKey);
-      }
-    });
+  const request: PendingSnapshot = {
+    canPublish: true,
+    promise: loadHistorySnapshot(date, rollingDayCount, deps, options)
+      .then((snapshot) => {
+        if (request.canPublish && HISTORY_SNAPSHOT_PROMISES.get(promiseKey) === request) {
+          setHistorySnapshotCache(snapshot, date, rollingDayCount, includeWebActivity);
+        }
+        return snapshot;
+      })
+      .finally(() => {
+        if (HISTORY_SNAPSHOT_PROMISES.get(promiseKey) === request) {
+          HISTORY_SNAPSHOT_PROMISES.delete(promiseKey);
+        }
+      }),
+  };
 
-  HISTORY_SNAPSHOT_PROMISES.set(promiseKey, snapshotPromise);
-  return snapshotPromise;
+  HISTORY_SNAPSHOT_PROMISES.set(promiseKey, request);
+  return request.promise;
 }
