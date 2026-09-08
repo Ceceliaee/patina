@@ -500,6 +500,7 @@ export interface UiText {
         "label": string;
       };
     };
+    "fieldsSectionTitle": string;
     "formatCSV": string;
     "formatCSVHint": string;
     "formatLabel": string;
@@ -606,6 +607,8 @@ export interface UiText {
     "categoryControl": string;
     "categoryDialogDescription": string;
     "categoryDialogTitle": string;
+    "categoryFilter": string;
+    "categoryFilterReset": string;
     "categorySelectLabel": (label: string) => string;
     "color": string;
     "createCategoryAction": string;
@@ -618,6 +621,7 @@ export interface UiText {
     "deleteCategory": (label: string) => string;
     "deleteCategoryDetail": (label: string) => string;
     "deleteCategoryTitle": string;
+    "deleteFailed": string;
     "deleteWebDomainHistoryDetail": (label: string) => string;
     "deleteWebDomainHistoryTitle": string;
     "deleteWebRecords": string;
@@ -665,13 +669,18 @@ export interface UiText {
     "restoreStats": string;
     "retry": string;
     "save": string;
+    "saveFailed": string;
     "saving": string;
     "searchNoResults": string;
     "statsEnabled": string;
     "subtitle": string;
     "title": string;
+    "titleCaptureOffHint": string;
+    "titleCaptureOnHint": string;
     "titleNotRecorded": string;
     "titleRecorded": string;
+    "trackingOffHint": string;
+    "trackingOnHint": string;
     "unsaved": string;
     "webEmptyState": string;
     "webSearchPlaceholder": string;
