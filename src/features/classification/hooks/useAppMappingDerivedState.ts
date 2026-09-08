@@ -11,6 +11,7 @@ import {
   type UserAssignableAppCategory,
 } from "../../../shared/classification/categoryTokens";
 import type { CandidateFilter, ObservedAppCandidate } from "../types";
+import { collectCandidateCategories } from "../services/classificationCandidateFiltering.ts";
 import type {
   ObservedWebDomainCandidate,
   WebDomainOverride,
@@ -39,6 +40,7 @@ interface UseAppMappingDerivedStateParams {
   webNameEditSnapshots: Record<string, WebDomainOverride | null>;
   filter: CandidateFilter;
   searchQuery: string;
+  categoryFilter: UserAssignableAppCategory | null;
   webActivityEnabled: boolean;
 }
 
@@ -77,6 +79,7 @@ export function useAppMappingDerivedState({
   webNameEditSnapshots,
   filter,
   searchQuery,
+  categoryFilter,
   webActivityEnabled,
 }: UseAppMappingDerivedStateParams) {
   const locale = useLocale();
@@ -213,6 +216,7 @@ export function useAppMappingDerivedState({
       candidates,
       filter,
       searchQuery,
+      categoryFilter,
       resolveMappedCategory,
       resolveTrackingEnabled,
       resolveEffectiveDisplayName: resolveSortDisplayName,
@@ -223,6 +227,7 @@ export function useAppMappingDerivedState({
       candidates,
       filter,
       searchQuery,
+      categoryFilter,
       resolveCategoryLabel,
       resolveMappedCategory,
       resolveSortDisplayName,
@@ -241,6 +246,7 @@ export function useAppMappingDerivedState({
 
     const normalizedQuery = searchQuery.trim().toLocaleLowerCase(locale);
     return webDomainCandidates
+      .filter((candidate) => !categoryFilter || resolveWebDomainCategory(candidate) === categoryFilter)
       .filter((candidate) => {
         const category = resolveWebDomainCategory(candidate);
         const recordingEnabled = resolveWebDomainEnabled(candidate);
@@ -274,6 +280,7 @@ export function useAppMappingDerivedState({
   }, [
     filter,
     searchQuery,
+    categoryFilter,
     resolveWebDomainCategory,
     resolveWebDomainEnabled,
     resolveCategoryLabel,
@@ -343,6 +350,15 @@ export function useAppMappingDerivedState({
     [orderedAssignableCategories, resolveCategoryLabel],
   );
 
+  const appFilterCategories = useMemo(
+    () => collectCandidateCategories(candidates, resolveMappedCategory),
+    [candidates, resolveMappedCategory],
+  );
+  const webFilterCategories = useMemo(
+    () => collectCandidateCategories(webDomainCandidates, resolveWebDomainCategory),
+    [webDomainCandidates, resolveWebDomainCategory],
+  );
+
   const categoryControlCategories = useMemo<AppCategory[]>(() => {
     const manageable = [
       ...activeSeededCategories.filter((category) => category !== "other"),
@@ -361,6 +377,8 @@ export function useAppMappingDerivedState({
     filteredWebDomainCandidates,
     webDomainCounts,
     candidateCategoryOptions,
+    appFilterCategories,
+    webFilterCategories,
     categoryControlCategories,
     resolveCategoryColor,
     resolveCategoryLabel,

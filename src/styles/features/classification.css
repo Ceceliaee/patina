@@ -1,3 +1,75 @@
+.qp-category-filter-popover {
+  width: min(168px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+}
+
+.qp-category-filter-popover .qp-search-field {
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.qp-category-filter-list {
+  min-height: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.qp-category-filter-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--qp-radius-button);
+  background: transparent;
+  color: var(--qp-text-secondary);
+  text-align: left;
+  font-size: 12px;
+}
+
+.qp-category-filter-option:hover,
+.qp-category-filter-option:active,
+.qp-category-filter-option-active {
+  background: var(--qp-bg-elevated);
+  color: var(--qp-text-primary);
+}
+
+.qp-category-filter-option[aria-selected="true"] {
+  font-weight: 600;
+}
+
+.qp-category-filter-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  forced-color-adjust: none;
+}
+
+.qp-category-filter-label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.qp-category-filter-option svg {
+  flex-shrink: 0;
+}
+
+.qp-category-filter-empty {
+  margin: 0;
+  padding: 4px 8px;
+  color: var(--qp-text-tertiary);
+  font-size: 12px;
+}
+
 .quick-classification-menu {
   position: fixed;
   z-index: 140;
@@ -75,4 +147,150 @@
 
 .quick-classification-restore-name {
   align-self: flex-start;
+}
+.qp-app-mapping-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, max(640px, calc((100% - 32px) / 3))), 1fr));
+  gap: 8px 16px;
+}
+
+.qp-app-mapping-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  min-width: 0;
+  min-height: 80px;
+  padding: 12px 16px;
+  border: 1px solid var(--qp-border-subtle);
+  border-radius: var(--qp-radius-control);
+  background: var(--qp-bg-elevated);
+}
+
+.qp-app-mapping-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.qp-app-mapping-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 40px;
+  height: 40px;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: var(--qp-radius-button);
+  background: var(--qp-bg-panel);
+  color: var(--qp-text-secondary);
+}
+
+.qp-app-mapping-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.qp-app-mapping-details {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.qp-app-mapping-name-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.qp-app-identity-tooltip {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.qp-app-mapping-name,
+.qp-app-mapping-exe {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qp-app-mapping-name {
+  padding: 0 8px;
+  color: var(--qp-text-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.qp-app-mapping-exe {
+  max-width: 100%;
+  padding-inline: 0;
+  border-width: 0;
+  line-height: 16px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.qp-app-mapping-exe-line {
+  display: flex;
+  padding: 0 8px;
+}
+
+.qp-app-mapping-name:focus-visible,
+.qp-app-mapping-exe:focus-visible {
+  outline: 2px solid var(--qp-accent-default);
+  outline-offset: 2px;
+}
+
+.qp-app-mapping-name-input {
+  min-width: 0;
+  width: 100%;
+  padding: 2px 6px;
+}
+
+.qp-app-mapping-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.qp-app-mapping-category {
+  width: 132px;
+  max-width: 100%;
+}
+
+.qp-app-mapping-controls .qp-icon-action,
+.qp-app-mapping-controls .qp-color-trigger-swatch-only {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+}
+
+.qp-app-mapping-actions {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.qp-app-mapping-notice {
+  margin-bottom: 8px;
+  color: var(--qp-text-secondary);
+  font-size: 12px;
+}
+
+.qp-app-mapping-error {
+  color: var(--qp-danger);
+  font-size: 13px;
 }

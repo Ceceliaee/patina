@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
+import { runClassificationAppLayoutScenarios } from "./classificationAppLayoutScenarios.ts";
+import { runClassificationCategoryFilterScenarios } from "./classificationCategoryFilterScenarios.ts";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import { delay, evaluate, jsonString, waitForExpression, waitForStableExpression } from "./browserHarness.ts";
 
 export async function runClassificationScenarios(context: BrowserSmokeContext) {
+  await runClassificationAppLayoutScenarios(context);
+  await runClassificationCategoryFilterScenarios(context);
   const { client, sessionId, runTest } = context;
+  const readColor = `(node => node ? '#' + node.style.backgroundColor.match(/\\d+/g).slice(0, 3).map(value => Number(value).toString(16).padStart(2, '0')).join('').toUpperCase() : null)`;
   const pressArrowDown = async () => {
     await client!.command("Input.dispatchKeyEvent", {
       type: "keyDown",
@@ -37,7 +42,7 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
             const exeName = card.getAttribute('data-classification-app') ?? '';
             return [exeName, {
               icon: card.querySelector('img')?.getAttribute('src') ?? null,
-              color: card.querySelector('.qp-color-trigger-value')?.textContent?.trim() ?? null,
+              color: ${readColor}(card.querySelector('.qp-color-trigger-swatch')) ?? null,
             }];
           }));
           const key = JSON.stringify(snapshot);
@@ -378,8 +383,8 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
           const samples = [];
           let last = "";
           const sample = () => {
-            const values = Array.from(document.querySelectorAll('.qp-color-trigger-value'))
-              .map((node) => node.textContent?.trim() ?? '')
+            const values = Array.from(document.querySelectorAll('.qp-color-trigger-swatch'))
+              .map((node) => ${readColor}(node) ?? '')
               .filter(Boolean);
             const key = JSON.stringify(values);
             if (values.length > 0 && key !== last) {
@@ -405,8 +410,8 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
     );
     await waitForExpression(client!, sessionId, `
       (() => {
-        const values = Array.from(document.querySelectorAll('.qp-color-trigger-value'))
-          .map((node) => node.textContent?.trim() ?? '');
+        const values = Array.from(document.querySelectorAll('.qp-color-trigger-swatch'))
+          .map((node) => ${readColor}(node) ?? '');
         return values.includes('#E34A3A') && values.includes('#257F62');
       })()
     `, undefined, "Classification should synchronously reuse icon theme colors");
@@ -460,7 +465,7 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
         const card = document.querySelector('[data-classification-app="classification-only.exe"]');
         return document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") === "mapping"
           && card?.querySelector('img')?.getAttribute('src')?.includes('C15B2A')
-          && card?.querySelector('.qp-color-trigger-value')?.textContent?.trim() === '#C15B2A';
+          && ${readColor}(card?.querySelector('.qp-color-trigger-swatch')) === '#C15B2A';
       })()
     `, 15_000, "Classification-only assets should be complete on first paint");
     await delay(80);
@@ -569,7 +574,7 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         Array.from(document.querySelectorAll("button"))
-          .some((button) => button.textContent?.trim() === "删除应用记录")
+          .some((button) => button.getAttribute("aria-label") === "删除应用记录")
       `),
       true,
       "imported and native candidates should expose the same record controls",
@@ -602,7 +607,7 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
     const originalColor = String(await evaluate(
       client!,
       sessionId,
-      `document.querySelector('.qp-color-trigger-value')?.textContent?.trim() ?? ''`,
+      `${readColor}(document.querySelector('.qp-color-trigger-swatch')) ?? ''`,
     ));
     assert.deepEqual(
       await evaluate(client!, sessionId, `
@@ -663,7 +668,7 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
         window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
       })()
     `);
-    await waitForExpression(client!, sessionId, `document.querySelector('.qp-color-trigger-value')?.textContent?.trim() === '#00FF00'`);
+    await waitForExpression(client!, sessionId, `${readColor}(document.querySelector('.qp-color-trigger-swatch')) === '#00FF00'`);
     await evaluate(client!, sessionId, `
       (() => {
         const input = document.querySelector('input[aria-label="十六进制颜色值"]');
@@ -676,7 +681,7 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `document.querySelector('.qp-color-trigger-value')?.textContent?.trim() === ${jsonString(originalColor)}`,
+      `${readColor}(document.querySelector('.qp-color-trigger-swatch')) === ${jsonString(originalColor)}`,
     );
     await evaluate(client!, sessionId, `
       (() => {
@@ -1007,7 +1012,7 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
       (() => {
         const all = Array.from(document.querySelectorAll(".qp-classification-count-filter button"))
           .find((node) => node.textContent?.trim().startsWith("全部"));
-        const search = document.querySelector('input[placeholder="搜索应用或分类"]');
+        const search = document.querySelector('input[placeholder="搜索应用"]');
         const filterRect = all?.getBoundingClientRect();
         const searchRect = search?.getBoundingClientRect();
         return filterRect && searchRect
@@ -1062,7 +1067,7 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
       (() => {
         const all = Array.from(document.querySelectorAll(".qp-classification-count-filter button"))
           .find((node) => node.textContent?.trim().startsWith("全部"));
-        const search = document.querySelector('input[placeholder="搜索应用或分类"]');
+        const search = document.querySelector('input[placeholder="搜索应用"]');
         const filterRect = all?.getBoundingClientRect();
         const searchRect = search?.getBoundingClientRect();
         return filterRect && searchRect
@@ -1109,7 +1114,7 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
       assert.equal(
         await evaluate(client!, sessionId, `
           (() => {
-            const input = document.querySelector('input[placeholder="搜索应用或分类"]');
+            const input = document.querySelector('input[placeholder="搜索应用"]');
             if (!(input instanceof HTMLInputElement)) return false;
             const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
             setter?.call(input, ${jsonString(value)});

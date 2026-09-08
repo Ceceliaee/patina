@@ -1,11 +1,12 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
-import { Captions, CaptionsOff, ListPlus, ListX, PencilLine, RotateCcw, Trash2 } from "lucide-react";
+import { Captions, CaptionsOff, ListPlus, ListX, PencilLine, Trash2 } from "lucide-react";
 import type { ObservedAppCandidate } from "../types";
 import type { UserAssignableAppCategory } from "../../../shared/classification/categoryTokens";
 import type { ColorDisplayFormat } from "../../../shared/lib/colorFormatting";
 import QuietSelect from "../../../shared/components/QuietSelect";
 import QuietColorField from "../../../shared/components/QuietColorField";
-import QuietInlineAction from "../../../shared/components/QuietInlineAction";
+import { useLayoutEffect, useRef, useState } from "react";
+import QuietTooltip from "../../../shared/components/QuietTooltip";
 import QuietIconAction from "../../../shared/components/QuietIconAction";
 import QuietBadge from "../../../shared/components/QuietBadge";
 
@@ -36,6 +37,27 @@ interface AppMappingCandidateCardProps {
   onDeleteAllSessions: () => void;
 }
 
+function IdentityText({ text, className, badge = false }: { text: string; className: string; badge?: boolean }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [truncated, setTruncated] = useState(false);
+  useLayoutEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const measure = () => setTruncated(node.scrollWidth > node.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [text]);
+  return (
+    <QuietTooltip label={text} disabled={!truncated} className="qp-app-identity-tooltip">
+      {badge
+        ? <QuietBadge ref={ref} className={className} tabIndex={truncated ? 0 : undefined}>{text}</QuietBadge>
+        : <span ref={ref} className={className} tabIndex={truncated ? 0 : undefined}>{text}</span>}
+    </QuietTooltip>
+  );
+}
+
 export default function AppMappingCandidateCard({
   candidate,
   icon,
@@ -62,140 +84,129 @@ export default function AppMappingCandidateCard({
   onDeleteAllSessions,
 }: AppMappingCandidateCardProps) {
   const UI_TEXT = useLocaleText();
+  const editButtonRef = useRef<HTMLButtonElement>(null);
+  const deleteButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreDeleteFocus = useRef(false);
+  const rowRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!isBusy && restoreDeleteFocus.current) {
+      restoreDeleteFocus.current = false;
+      if (document.activeElement === document.body) deleteButtonRef.current?.focus();
+    }
+  }, [isBusy]);
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    const page = row?.closest('[data-classification-content-state]');
+    return () => {
+      if (!row?.contains(document.activeElement)) return;
+      const fallback = row.nextElementSibling?.querySelector<HTMLButtonElement>('button:not(:disabled)')
+        ?? row.previousElementSibling?.querySelector<HTMLButtonElement>('button:not(:disabled)');
+      const search = page?.querySelector<HTMLInputElement>('input');
+      window.requestAnimationFrame(() => {
+        const target = fallback?.isConnected ? fallback : search;
+        if (document.activeElement === document.body && target?.isConnected) target.focus();
+      });
+    };
+  }, []);
   return (
-    <div
-      data-classification-app={candidate.exeName}
-      className="relative rounded-[12px] border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-elevated)] px-4 py-3.5"
-    >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-3">
-          <div
-            className="mt-0.5 h-10 w-10 rounded-[8px] border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-panel)] p-1.5"
-            style={{ boxShadow: `0 0 0 2px ${displayColor}22` }}
-          >
-            {icon ? (
-              <img src={icon} className="h-full w-full object-contain" alt="" />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-[var(--qp-text-tertiary)]">
-                {(displayName || candidate.exeName).slice(0, 1).toUpperCase()}
-              </div>
-            )}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="inline-flex max-w-full items-center gap-1">
-              {isEditingName ? (
-                <input
-                  id={`app-name-${candidate.exeName}`}
-                  value={inputValue}
-                  autoFocus
-                  disabled={isBusy}
-                  onChange={(event) => {
-                    onNameDraftChange(event.target.value);
-                  }}
-                  onBlur={onNameBlur}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.currentTarget.blur();
-                      return;
-                    }
-                    if (event.key === "Escape") {
-                      onNameEditCancel();
-                    }
-                  }}
-                  className="qp-input max-w-[240px] truncate px-2 py-1 text-[15px]"
-                />
-              ) : (
-                <span className="truncate rounded-[8px] px-2 py-1 text-[15px] font-semibold text-[var(--qp-text-primary)]">
-                  {displayName}
-                </span>
-              )}
-              <QuietIconAction
-                icon={<PencilLine size={13} />}
-                title={UI_TEXT.mapping.editAppName}
+    <div ref={rowRef} data-classification-app={candidate.exeName} className="qp-app-mapping-row" role="group" aria-label={displayName}>
+      <div className="qp-app-mapping-identity">
+        <div className="qp-app-mapping-icon" style={{ boxShadow: `0 0 0 2px ${displayColor}22` }}>
+          {icon ? <img src={icon} alt="" /> : <span>{(displayName || candidate.exeName).slice(0, 1).toUpperCase()}</span>}
+        </div>
+        <div className="qp-app-mapping-details">
+          <div className="qp-app-mapping-name-line">
+            {isEditingName ? (
+              <input
+                id={`app-name-${candidate.exeName}`}
+                aria-label={UI_TEXT.mapping.editAppName}
+                value={inputValue}
+                autoFocus
                 disabled={isBusy}
-                onClick={onStartNameEdit}
+                onChange={(event) => onNameDraftChange(event.target.value)}
+                onBlur={onNameBlur}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    event.currentTarget.blur();
+                    editButtonRef.current?.focus();
+                  }
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onNameEditCancel();
+                    editButtonRef.current?.focus();
+                  }
+                }}
+                className="qp-input qp-app-mapping-name-input"
               />
-            </div>
-            <div className="mt-1 flex flex-wrap items-center gap-2 px-2">
-              <QuietBadge>
-                {candidate.exeName}
-              </QuietBadge>
-              {!titleCaptureEnabled && (
-                <QuietBadge tone="subtle">
-                  {UI_TEXT.mapping.titleNotRecorded}
-                </QuietBadge>
-              )}
-              {!trackingEnabled && (
-                <QuietBadge tone="warning">
-                  {UI_TEXT.mapping.noStats}
-                </QuietBadge>
-              )}
-            </div>
+            ) : <IdentityText text={displayName} className="qp-app-mapping-name" />}
+            <QuietIconAction
+              buttonRef={editButtonRef}
+              icon={<PencilLine size={14} />}
+              title={UI_TEXT.mapping.editAppName}
+              disabled={isBusy}
+              onClick={onStartNameEdit}
+            />
+            {!trackingEnabled && <QuietBadge tone="warning">{UI_TEXT.mapping.noStats}</QuietBadge>}
+          </div>
+          <div className="qp-app-mapping-exe-line">
+            <IdentityText text={candidate.exeName} className="qp-app-mapping-exe" badge />
           </div>
         </div>
-        <div className="flex min-w-0 flex-col gap-2 items-end">
-          <div className="flex flex-nowrap items-center gap-2">
-            <div className="order-2 flex max-w-full flex-wrap items-center gap-2 rounded-[8px] border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-panel)] px-2 py-1.5">
-              <QuietColorField
-                color={displayColor}
-                format={colorFormat}
-                fixedValueSlot
-                disabled={isBusy}
-                onChange={(nextColor) => onColorAssign(nextColor)}
-                onFormatChange={onColorFormatChange}
-                title={UI_TEXT.mapping.color}
-              />
-
-              <QuietIconAction
-                icon={<RotateCcw size={13} />}
-                disabled={isBusy}
-                className="qp-icon-action-dimmed"
-                onClick={() => onColorAssign(null)}
-                title={UI_TEXT.mapping.restoreDefaultColor}
-              />
-            </div>
-            <QuietSelect
-              value={assignedCategory}
-              ariaLabel={UI_TEXT.mapping.categorySelectLabel(displayName)}
-              disabled={isBusy}
-              className="order-1 min-w-[132px]"
-              onChange={(value) => onCategoryAssign(String(value))}
-              options={categoryOptions}
-            />
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <QuietInlineAction
-              disabled={isBusy || !globalTitleEnabled}
-              onClick={onToggleTitleCapture}
-              tone={titleCaptureEnabled ? "neutral" : "accent"}
-              title={!globalTitleEnabled
-                ? UI_TEXT.mapping.globalTitleDisabled
-                : titleCaptureEnabled
-                  ? UI_TEXT.mapping.disableTitleCapture
-                  : UI_TEXT.mapping.enableTitleCapture}
-              leadingIcon={titleCaptureEnabled ? <CaptionsOff size={12} /> : <Captions size={12} />}
-            >
-              {titleCaptureEnabled ? UI_TEXT.mapping.titleNotRecorded : UI_TEXT.mapping.titleRecorded}
-            </QuietInlineAction>
-            <QuietInlineAction
-              disabled={isBusy}
-              onClick={onToggleTracking}
-              tone={trackingEnabled ? "warning" : "accent"}
-              title={trackingEnabled ? UI_TEXT.mapping.disableTracking : UI_TEXT.mapping.enableTracking}
-              leadingIcon={trackingEnabled ? <ListX size={12} /> : <ListPlus size={12} />}
-            >
-              {trackingEnabled ? UI_TEXT.mapping.excludeStats : UI_TEXT.mapping.restoreStats}
-            </QuietInlineAction>
-            <QuietInlineAction
-              disabled={isBusy}
-              onClick={onDeleteAllSessions}
-              tone="danger"
-              title={UI_TEXT.mapping.deleteAppRecords}
-              leadingIcon={<Trash2 size={12} />}
-            >
-              {UI_TEXT.mapping.deleteAppRecords}
-            </QuietInlineAction>
-          </div>
+      </div>
+      <div className="qp-app-mapping-controls">
+        <QuietSelect
+          value={assignedCategory}
+          ariaLabel={UI_TEXT.mapping.categorySelectLabel(displayName)}
+          disabled={isBusy}
+          className="qp-app-mapping-category"
+          onChange={(value) => onCategoryAssign(String(value))}
+          options={categoryOptions}
+        />
+        <div className="qp-app-mapping-actions">
+        <QuietColorField
+          color={displayColor}
+          format={colorFormat}
+          presentation="swatch"
+          disabled={isBusy}
+          onChange={onColorAssign}
+          onFormatChange={onColorFormatChange}
+          title={UI_TEXT.mapping.color}
+          resetAction={{ label: UI_TEXT.mapping.restoreDefaultColor, onReset: () => onColorAssign(null) }}
+        />
+          <QuietIconAction
+            icon={titleCaptureEnabled ? <Captions size={16} /> : <CaptionsOff size={16} />}
+            ariaLabel={UI_TEXT.mapping.titleRecorded}
+            title={!globalTitleEnabled ? UI_TEXT.mapping.globalTitleDisabled : titleCaptureEnabled ? UI_TEXT.mapping.titleCaptureOnHint : UI_TEXT.mapping.titleCaptureOffHint}
+            describedBy={!globalTitleEnabled ? "classification-global-title-disabled" : undefined}
+            pressed={titleCaptureEnabled}
+            showPressedStyle={false}
+            disabled={isBusy || !globalTitleEnabled}
+            onClick={onToggleTitleCapture}
+          />
+          <QuietIconAction
+            icon={trackingEnabled ? <ListX size={16} /> : <ListPlus size={16} />}
+            ariaLabel={UI_TEXT.mapping.excludeStats}
+            title={trackingEnabled ? UI_TEXT.mapping.trackingOnHint : UI_TEXT.mapping.trackingOffHint}
+            pressed={!trackingEnabled}
+            showPressedStyle={false}
+            tone={trackingEnabled ? "warning" : "accent"}
+            disabled={isBusy}
+            onClick={onToggleTracking}
+          />
+          <QuietIconAction
+            icon={<Trash2 size={16} />}
+            title={UI_TEXT.mapping.deleteAppRecords}
+            tone="danger"
+            className="qp-app-mapping-delete"
+            buttonRef={deleteButtonRef}
+            disabled={isBusy}
+            onClick={() => {
+              restoreDeleteFocus.current = true;
+              onDeleteAllSessions();
+            }}
+          />
         </div>
       </div>
     </div>

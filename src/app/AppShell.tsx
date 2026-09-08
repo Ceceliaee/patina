@@ -368,6 +368,7 @@ export default function AppShellContent({
                 key="mapping"
                 icons={icons}
                 onRegisterSaveHandler={registerMappingSaveHandler}
+                titleRecordingEnabled={appSettings.titleRecordingEnabled}
                 onDirtyChange={setMappingDirty}
                 onOverridesChanged={handleMappingOverridesChanged}
                 onSessionsDeleted={() => {

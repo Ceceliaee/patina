@@ -8,6 +8,7 @@ import QuietPageHeader from "../../../shared/components/QuietPageHeader";
 import QuietSearchField from "../../../shared/components/QuietSearchField";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
 import CategoryColorControls from "./CategoryColorControls";
+import CategoryFilterButton from "./CategoryFilterButton.tsx";
 import AppMappingCandidateCard from "./AppMappingCandidateCard";
 import WebDomainMappingCard from "./WebDomainMappingCard";
 import { useAppMappingState } from "../hooks/useAppMappingState";
@@ -53,11 +54,15 @@ export default function AppMapping(props: Props) {
     savedState,
     filter,
     setFilter,
+    categoryFilter,
+    setCategoryFilter,
+    categoryFilterOptions,
     searchQuery,
     setSearchQuery,
     counts,
     webDomainCounts,
     saveStatus,
+    actionError,
     saving,
     hasUnsavedChanges,
     handleCancel,
@@ -114,7 +119,7 @@ export default function AppMapping(props: Props) {
     handleDeleteAllSessions,
     handleDeleteWebDomainHistory,
     applyCategoryColor,
-  } = useAppMappingState(props);
+  } = useAppMappingState({ ...props, objectMode: webActivityEnabled ? objectMode : "app" });
 
   useEffect(() => {
     if (webActivityEnabled || objectMode !== "web") return;
@@ -142,7 +147,7 @@ export default function AppMapping(props: Props) {
     setObjectMode(mode);
     rememberClassificationObjectMode(mode);
   };
-  const contentPaneKey = `${effectiveObjectMode}:${filter}`;
+  const contentPaneKey = `${effectiveObjectMode}:${filter}:${categoryFilter ?? ""}`;
   return (
     <div
       className="flex h-full min-w-0 flex-col gap-4 md:gap-5 overflow-hidden"
@@ -201,6 +206,7 @@ export default function AppMapping(props: Props) {
         )}
       />
 
+      {actionError && <p role="alert" className="qp-app-mapping-error">{actionError === "save" ? UI_TEXT.mapping.saveFailed : UI_TEXT.mapping.deleteFailed}</p>}
       <section className="qp-panel p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3">
@@ -225,7 +231,7 @@ export default function AppMapping(props: Props) {
               })}
             />
             <QuietSearchField
-              className="w-[220px]"
+              className="w-[160px]"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder={searchPlaceholder}
@@ -245,6 +251,12 @@ export default function AppMapping(props: Props) {
                 <RefreshCw size={13} aria-hidden />
               </QuietButton>
             )}
+            <CategoryFilterButton
+              value={categoryFilter}
+              options={categoryFilterOptions}
+              onChange={setCategoryFilter}
+              disabled={!activeCatalogReady || filter === "other"}
+            />
             {webActivityEnabled && (
               <QuietSegmentedFilter
                 value={effectiveObjectMode}
@@ -350,7 +362,8 @@ export default function AppMapping(props: Props) {
           </div>
         ) : (
           <div key={contentPaneKey} className="qp-classification-object-pane h-full overflow-y-auto qp-scroll-region pr-1">
-            <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
+            {!titleRecordingEnabled && <p id="classification-global-title-disabled" className="qp-app-mapping-notice">{UI_TEXT.mapping.globalTitleDisabled}</p>}
+            <div className="qp-app-mapping-list">
               {filteredCandidates.map((candidate) => {
                 const displayName = resolveEffectiveDisplayName(candidate);
                 const displayColor = resolveCandidateColor(candidate);

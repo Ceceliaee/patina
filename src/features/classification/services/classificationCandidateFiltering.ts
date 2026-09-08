@@ -6,6 +6,7 @@ interface FilterAndSortCandidatesParams {
   candidates: ObservedAppCandidate[];
   filter: CandidateFilter;
   searchQuery?: string;
+  categoryFilter?: UserAssignableAppCategory | null;
   resolveMappedCategory: (candidate: ObservedAppCandidate) => UserAssignableAppCategory;
   resolveTrackingEnabled?: (candidate: ObservedAppCandidate) => boolean;
   resolveEffectiveDisplayName: (candidate: ObservedAppCandidate) => string;
@@ -17,6 +18,7 @@ export function filterAndSortCandidates({
   candidates,
   filter,
   searchQuery,
+  categoryFilter,
   resolveMappedCategory,
   resolveTrackingEnabled,
   resolveEffectiveDisplayName,
@@ -26,6 +28,7 @@ export function filterAndSortCandidates({
   const collator = new Intl.Collator(locale, { numeric: true, sensitivity: "base" });
   const normalizedQuery = searchQuery?.trim().toLocaleLowerCase(locale) ?? "";
   return candidates
+    .filter((candidate) => !categoryFilter || resolveMappedCategory(candidate) === categoryFilter)
     .filter((candidate) => {
       const category = resolveMappedCategory(candidate);
       const trackingEnabled = resolveTrackingEnabled?.(candidate) ?? true;
@@ -49,4 +52,11 @@ export function filterAndSortCandidates({
       collator.compare(resolveEffectiveDisplayName(left), resolveEffectiveDisplayName(right))
       || collator.compare(left.exeName, right.exeName)
     ));
+}
+
+export function collectCandidateCategories<T>(
+  candidates: readonly T[],
+  resolveCategory: (candidate: T) => UserAssignableAppCategory,
+): Set<UserAssignableAppCategory> {
+  return new Set(candidates.map(resolveCategory).filter((category) => category !== "other"));
 }

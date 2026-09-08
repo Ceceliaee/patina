@@ -44,6 +44,7 @@ const dataOnly = process.argv.includes("--data-only");
 const historyWebTimelineOnly = process.argv.includes("--history-web-timeline-only");
 const scrollRegionOnly = process.argv.includes("--scroll-region-only");
 const widgetOnly = process.argv.includes("--widget-only");
+const classificationOnly = process.argv.includes("--classification-only");
 const historyWebTimelineTests = new Set([
   "history excludes hidden domains from rows and favicon requests, then restores retained history",
   "history timeline cycles app category and web while zoom stays synchronized",
@@ -142,7 +143,12 @@ try {
 
   await runStartupScenarios(smokeContext);
 
-  if (scrollRegionOnly) {
+  if (process.argv.includes("--category-filter-only")) {
+    const { runClassificationCategoryFilterScenarios } = await import("./uiBrowserSmoke/classificationCategoryFilterScenarios.ts");
+    await runClassificationCategoryFilterScenarios(smokeContext);
+  } else if (classificationOnly) {
+    await runClassificationScenarios(smokeContext);
+  } else if (scrollRegionOnly) {
     await runScrollRegionScenarios(smokeContext);
   } else if (widgetOnly) {
     await runWidgetScenarios(smokeContext);

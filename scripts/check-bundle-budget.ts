@@ -24,14 +24,14 @@ const INITIAL_CHUNK_BUDGETS = [
   { label: "browser storage gateway", pattern: /^browserStorageGateway-.*\.js$/, gzipKiB: 0.21 },
   // Data category analysis plus scheduled backup/export add bilingual trust and
   // control labels while the global initial and total budgets stay fixed.
-  { label: "localization", pattern: /^runtime-.*\.js$/, gzipKiB: 7.4 },
+  { label: "localization", pattern: /^runtime-.*\.js$/, gzipKiB: 7.42 },
   { label: "classification", pattern: /^appClassification-.*\.js$/, gzipKiB: 6 },
 ] as const;
 
 const LOCALE_CHUNK_GZIP_BUDGETS = {
-  "zh-CN": 9.9,
-  "en-US": 9.4,
-  "es": 10.75,
+  "zh-CN": 9.99,
+  "en-US": 9.50,
+  "es": 10.80,
 } as const satisfies Record<keyof typeof LOCALE_REGISTRY, number>;
 const LOCALE_CHUNK_BUDGETS = Object.entries(LOCALE_CHUNK_GZIP_BUDGETS).map(
   ([locale, gzipKiB]) => ({
@@ -83,6 +83,8 @@ const LAZY_SECONDARY_CHUNK_BUDGETS = [
 // Stable cross-feature owners stay lazy and receive their own narrow budget
 // instead of consuming the allowance for unowned support chunks.
 const LAZY_SHARED_UI_CHUNK_BUDGETS = [
+  // Classification and destination detail share the positioned overlay owner.
+  { label: "QuietAnchoredPopover", pattern: /^QuietAnchoredPopover-.*\.js$/, gzipKiB: 1.21 },
   { label: "QuietCalendar", pattern: /^QuietCalendar-.*\.js$/, gzipKiB: 1.3 },
   { label: "QuietSegmentedFilter", pattern: /^QuietSegmentedFilter-.*\.js$/, gzipKiB: 0.8 },
   { label: "QuietSearchField", pattern: /^QuietSearchField-.*\.js$/, gzipKiB: 0.5 },

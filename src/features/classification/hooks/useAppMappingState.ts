@@ -60,9 +60,11 @@ import {
   useAppMappingDerivedState,
 } from "./useAppMappingDerivedState.ts";
 import { useClassificationAppCatalog } from "./useClassificationAppCatalog.ts";
+import type { MappingObjectMode } from "../services/classificationLayoutPreferenceStorage.ts";
 
 
 interface UseAppMappingStateOptions {
+  objectMode: MappingObjectMode;
   icons: Record<string, string>;
   onDirtyChange?: (dirty: boolean) => void;
   onOverridesChanged?: () => void;
@@ -72,6 +74,7 @@ interface UseAppMappingStateOptions {
 }
 
 export function useAppMappingState({
+  objectMode,
   icons,
   onDirtyChange,
   onOverridesChanged,
@@ -101,9 +104,17 @@ export function useAppMappingState({
   const [webNameDrafts, setWebNameDrafts] = useState<Record<string, string>>({});
   const [webNameEditSnapshots, setWebNameEditSnapshots] = useState<Record<string, WebDomainOverride | null>>({});
   const [editingWebDomain, setEditingWebDomain] = useState<string | null>(null);
-  const [filter, setFilter] = useState<CandidateFilter>("all");
+  const [filter, setBaseFilter] = useState<CandidateFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState<UserAssignableAppCategory | null>(null);
+  const categoryFilterMode = useRef(objectMode);
+  const setFilter = useCallback((next: CandidateFilter) => {
+    setBaseFilter(next);
+    if (next === "other") setCategoryFilter(null);
+  }, []);
   const [searchQuery, setSearchQuery] = useState("");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [actionError, setActionError] = useState<"save" | "delete" | null>(null);
+  const deletingAppRecordsRef = useRef(false);
   const [saving, setSaving] = useState(false);
   const [deletingSessionsExe, setDeletingSessionsExe] = useState<string | null>(null);
   const [showCategoryDialog, setShowCategoryDialog] = useState(false);
@@ -228,6 +239,8 @@ export function useAppMappingState({
     filteredWebDomainCandidates,
     webDomainCounts,
     candidateCategoryOptions,
+    appFilterCategories,
+    webFilterCategories,
     categoryControlCategories,
     resolveCategoryColor,
     resolveCategoryLabel,
@@ -261,8 +274,26 @@ export function useAppMappingState({
     webNameEditSnapshots,
     filter,
     searchQuery,
+    categoryFilter,
     webActivityEnabled,
   });
+
+  const availableFilterCategories = objectMode === "app" ? appFilterCategories : webFilterCategories;
+  const categoryFilterReady = !loading && draftState !== null && savedState !== null
+    && (objectMode === "web" || appCatalog.hasSnapshot);
+  useEffect(() => {
+    if (!categoryFilterReady) return;
+    const modeChanged = categoryFilterMode.current !== objectMode;
+    categoryFilterMode.current = objectMode;
+    if (categoryFilter && (
+      !candidateCategoryOptions.some((option) => option.value === categoryFilter)
+      || (modeChanged && !availableFilterCategories.has(categoryFilter))
+    )) setCategoryFilter(null);
+  }, [availableFilterCategories, candidateCategoryOptions, categoryFilter, categoryFilterReady, objectMode]);
+
+  const categoryFilterOptions = candidateCategoryOptions
+    .filter((option) => availableFilterCategories.has(option.value) || option.value === categoryFilter)
+    .map((option) => ({ ...option, color: resolveCategoryColor(option.value) }));
 
   const refreshWebDomainCandidates = useCallback(async () => {
     const observedWebDomains = await ClassificationService.loadObservedWebDomainCandidates();
@@ -622,6 +653,9 @@ export function useAppMappingState({
   ]);
 
   const handleDeleteAllSessions = useCallback(async (candidate: ObservedAppCandidate) => {
+    if (deletingAppRecordsRef.current) return;
+    deletingAppRecordsRef.current = true;
+    setActionError(null);
     const displayName = resolveEffectiveDisplayName(candidate);
     setDeletingSessionsExe(candidate.exeName);
     try {
@@ -658,7 +692,11 @@ export function useAppMappingState({
       });
       setEditingNameExe((current) => (current === candidate.exeName ? null : current));
       await appCatalog.reload();
+    } catch (error) {
+      console.warn("delete app records failed", error);
+      setActionError("delete");
     } finally {
+      deletingAppRecordsRef.current = false;
       setDeletingSessionsExe(null);
     }
   }, [appCatalog, confirm, onSessionsDeleted, resolveEffectiveDisplayName, UI_TEXT]);
@@ -714,6 +752,7 @@ export function useAppMappingState({
     if (!savedState || !draftState) return false;
     if (!hasUnsavedChanges) return true;
     if (saving) return false;
+    setActionError(null);
     setSaving(true);
     setSaveStatus("saving");
     try {
@@ -749,13 +788,15 @@ export function useAppMappingState({
         window.setTimeout(() => setSaveStatus("idle"), 1800);
       }
       if (!result.accepted && !result.skippedReason) {
+        setActionError("save");
         if (result.error) {
-          console.error("save app mapping failed", result.error);
+          console.warn("save app mapping failed", result.error);
         }
       }
       return result.accepted;
     } catch (error) {
-      console.error("save app mapping failed", error);
+      console.warn("save app mapping failed", error);
+      setActionError("save");
       setSaveStatus("idle");
       return false;
     } finally {
@@ -772,6 +813,7 @@ export function useAppMappingState({
 
   const handleCancel = useCallback(() => {
     if (!savedState || !hasUnsavedChanges || saving) return;
+    setActionError(null);
     setDraftState(savedState);
     setNameDrafts({});
     setNameEditSnapshots({});
@@ -812,11 +854,15 @@ export function useAppMappingState({
     savedState,
     filter,
     setFilter,
+    categoryFilter,
+    setCategoryFilter,
+    categoryFilterOptions,
     searchQuery,
     setSearchQuery,
     counts,
     webDomainCounts,
     saveStatus,
+    actionError,
     saving,
     hasUnsavedChanges,
     handleCancel,

@@ -726,6 +726,7 @@ function tauriStubFor(path: string) {
           storeSettings(settings);
         }
         if (command === "cmd_commit_classification_settings") {
+          if (globalThis.__PATINA_REJECT_CLASSIFICATION_SAVE) throw new Error("Classification save rejected by fixture");
           const settings = loadStoredSettings();
           for (const mutation of payload.mutations ?? []) {
             globalThis.__TIME_TRACKER_CLASSIFICATION_MUTATIONS.push(mutation);
@@ -736,6 +737,13 @@ function tauriStubFor(path: string) {
             }
           }
           storeSettings(settings);
+        }
+        if (command === "cmd_delete_sessions_by_exe_names") {
+          if (globalThis.__PATINA_REJECT_APP_DELETE) throw new Error("App deletion rejected by fixture");
+          if (globalThis.__PATINA_HOLD_APP_DELETE) {
+            await new Promise(resolve => { globalThis.__PATINA_RELEASE_APP_DELETE = resolve; });
+          }
+          return null;
         }
         if (command === "cmd_save_history_bootstrap_snapshot_payload") {
           const settings = loadStoredSettings();
@@ -1143,6 +1151,10 @@ function tauriStubFor(path: string) {
             return historyTitleSampleRows();
           }
           if (normalizedQuery.includes("from sessions")) {
+            if (normalizedQuery.startsWith("select distinct exe_name")) {
+              return classificationCatalogRows([0, "", 0, 0, 0, 0, "", 1000])
+                .map((row) => ({ exe_name: row.exe_name }));
+            }
             if (globalThis.__PATINA_DETAIL_READ_BARRIER) {
               const barrier = globalThis.__PATINA_DETAIL_READ_BARRIER;
               globalThis.__PATINA_DETAIL_READ_BARRIER = null;

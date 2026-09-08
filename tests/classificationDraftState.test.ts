@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { collectCandidateCategories } from "../src/features/classification/services/classificationCandidateFiltering.ts";
 import {
   buildLegacyExtendedCategoryId,
   createCategoryId,
@@ -113,6 +114,45 @@ async function runTest(name: string, fn: () => Promise<void> | void) {
   passed += 1;
   console.log(`PASS ${name}`);
 }
+
+await runTest("category filtering intersects base filters and search without changing counts or candidate identities", () => {
+  const candidates = [buildCandidate("a.exe", "Alpha"), buildCandidate("b.exe", "Beta"),
+    buildCandidate("c.exe", "Gamma"), buildCandidate("d.exe", "Delta")];
+  const categories: UserAssignableAppCategory[] = ["development", "office", "development", "other"];
+  const resolveMappedCategory = (candidate: ObservedAppCandidate) => categories[candidates.indexOf(candidate)];
+  const common = { candidates, resolveMappedCategory,
+    resolveTrackingEnabled: (candidate: ObservedAppCandidate) => candidate.exeName !== "c.exe",
+    resolveEffectiveDisplayName: (candidate: ObservedAppCandidate) => candidate.appName,
+    resolveCategoryLabel: () => "Same label" };
+  for (const filter of ["all", "classified", "other", "excluded"] as const) {
+    const original = filterAndSortCandidates({ ...common, filter });
+    assert.deepEqual(filterAndSortCandidates({ ...common, filter, categoryFilter: null }), original);
+    for (const categoryFilter of ["development", "office"] as const) {
+      const actual = filterAndSortCandidates({ ...common, filter, categoryFilter });
+      assert.deepEqual(actual, original.filter((candidate) => resolveMappedCategory(candidate) === categoryFilter));
+      assert.ok(actual.every((candidate) => candidates.includes(candidate)));
+    }
+  }
+  assert.deepEqual(filterAndSortCandidates({ ...common, filter: "all", categoryFilter: "development", searchQuery: "Beta" }), []);
+  assert.deepEqual(filterAndSortCandidates({ ...common, filter: "excluded", categoryFilter: "development", searchQuery: "Gamma" }), [candidates[2]]);
+  assert.deepEqual([...collectCandidateCategories(candidates, resolveMappedCategory)], ["development", "office"]);
+  // Names never participate in ID matching; reassignments immediately change the derived membership.
+  categories[0] = "office";
+  assert.deepEqual(filterAndSortCandidates({ ...common, filter: "all", categoryFilter: "development" }), []);
+  assert.deepEqual([...collectCandidateCategories(candidates.slice(0, 2), resolveMappedCategory)], ["office"]);
+  categories[0] = "development";
+  assert.deepEqual(filterAndSortCandidates({ ...common, filter: "all", categoryFilter: "development" }), [candidates[0]]);
+  const customCategory = createCategoryId();
+  categories[0] = customCategory;
+  for (const locale of ["zh-CN", "en-US", "es"] as const) {
+    assert.deepEqual(filterAndSortCandidatesRaw({ ...common, locale, filter: "all", categoryFilter: customCategory,
+      resolveCategoryLabel: () => "Renamed 分类", searchQuery: "RENAMED" }), [candidates[0]]);
+  }
+  const webCandidates = [{ domain: "a.example", category: "office" as const },
+    { domain: "b.example", category: customCategory }, { domain: "c.example", category: "other" as const }];
+  assert.deepEqual([...collectCandidateCategories(webCandidates, (candidate) => candidate.category)], ["office", customCategory]);
+  assert.equal(collectCandidateCategories([], resolveMappedCategory).size, 0);
+});
 
 await runTest("quick app targets keep business identity separate from menu placement", () => {
   assert.deepEqual(createQuickAppClassificationTarget({
