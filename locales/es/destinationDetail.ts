@@ -71,7 +71,7 @@ export const MESSAGES = {
         },
         "right": "app"
       },
-      "then": "Detalles de la aplicación",
+      "then": "Detalles de la app",
       "else": "Detalles del sitio web"
     }
   },
@@ -129,7 +129,7 @@ export const MESSAGES = {
     }
   },
   "destinationDetail.noActivityInWindow": "No hay actividad de este elemento en la ventana de tiempo actual",
-  "destinationDetail.objectTypeApp": "Aplicación",
+  "destinationDetail.objectTypeApp": "App",
   "destinationDetail.objectTypeWeb": "Sitio web",
   "destinationDetail.open": {
     "$type": "message",

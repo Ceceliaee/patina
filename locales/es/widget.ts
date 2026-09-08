@@ -1,8 +1,8 @@
 // es locale resource. Pure data only.
 export const MESSAGES = {
   "widget.currentActivityRecording": "Se está registrando la actividad actual",
-  "widget.currentApp": "Aplicación actual",
-  "widget.currentAppNotTracked": "La aplicación actual no se registra",
+  "widget.currentApp": "App actual",
+  "widget.currentAppNotTracked": "La app actual no se registra",
   "widget.currentlyIdle": "Inactivo ahora",
   "widget.currentSustainedRecording": "La actividad actual sigue contando",
   "widget.error": "Error",

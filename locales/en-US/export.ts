@@ -1,5 +1,6 @@
 // en-US export locale resource. Pure data only.
 export const MESSAGES = {
+  "export.fieldsSectionTitle": "Configure Fields",
   "export.collapseFieldGroup": "Collapse",
   "export.configFields": "Configure Fields",
   "export.configFieldsCount": {

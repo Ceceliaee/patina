@@ -1,5 +1,7 @@
 // Canonical language-neutral message contract. Do not derive this file from a locale at build time.
 export const MESSAGE_SCHEMA = {
+
+
   "about.description": {
     "kind": "string",
     "params": [],
@@ -2698,6 +2700,18 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
+  "mapping.categoryFilter": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend",
+    "description": "Classification category filter control and results."
+},
+  "mapping.categoryFilterReset": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend",
+    "description": "Classification category filter control and results."
+},
   "mapping.categoryControl": {
     "kind": "string",
     "params": [],
@@ -5753,5 +5767,12 @@ export const MESSAGE_SCHEMA = {
     "kind": "string",
     "params": [],
     "surface": "frontend"
-  }
+  },
+  "mapping.saveFailed": { "kind": "string", "params": [], "surface": "frontend" },
+  "mapping.deleteFailed": { "kind": "string", "params": [], "surface": "frontend" },
+  "mapping.titleCaptureOnHint": { "kind": "string", "params": [], "surface": "frontend" },
+  "mapping.titleCaptureOffHint": { "kind": "string", "params": [], "surface": "frontend" },
+  "mapping.trackingOnHint": { "kind": "string", "params": [], "surface": "frontend" },
+  "mapping.trackingOffHint": { "kind": "string", "params": [], "surface": "frontend" },
+  "export.fieldsSectionTitle": { "kind": "string", "params": [], "surface": "frontend", "description": "Heading above the selected export field count; distinct from the configure button." }
 } as const;

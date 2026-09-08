@@ -1,7 +1,17 @@
 // zh-CN mapping locale resource. Pure data only.
 export const MESSAGES = {
-  "mapping.appSearchPlaceholder": "搜索应用或分类",
+  "mapping.saveFailed": "保存失败，请重试。",
+  "mapping.deleteFailed": "删除记录未完成，请重试。",
+
+  "mapping.titleCaptureOnHint": "标题记录已开启，点击关闭",
+  "mapping.titleCaptureOffHint": "标题记录已关闭，点击开启",
+  "mapping.trackingOnHint": "停止追踪并隐藏历史",
+  "mapping.trackingOffHint": "恢复追踪与历史",
+
+  "mapping.appSearchPlaceholder": "搜索应用",
   "mapping.cancel": "取消",
+  "mapping.categoryFilter": "筛选分类",
+  "mapping.categoryFilterReset": "清除分类筛选",
   "mapping.categoryControl": "管理分类",
   "mapping.categoryDialogDescription": "新建分类并调整颜色",
   "mapping.categoryDialogTitle": "管理分类",

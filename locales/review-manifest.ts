@@ -459,7 +459,7 @@ export const LOCALE_SOURCE_REVIEWS = {
     "mapping.emptyState": "a6ba195c180af94c",
     "mapping.searchNoResults": "27e694f9f41295e7",
     "mapping.webEmptyState": "decf99c06f52c634",
-    "mapping.appSearchPlaceholder": "5ba67989669d6062",
+    "mapping.appSearchPlaceholder": "190fe4ccaac64f7d",
     "mapping.webSearchPlaceholder": "7b07dc0fd2afc44f",
     "mapping.objectModeApp": "c77f8dcf5e373dbe",
     "mapping.objectModeWeb": "2280e7eed4fa37ee",
@@ -998,7 +998,16 @@ export const LOCALE_SOURCE_REVIEWS = {
     "tools.activityReminderDurationLabel": "bd57f2dd90b77675",
     "tools.activityReminderMessageLabel": "c57ca790991b695c",
     "tools.activityReminderMessagePlaceholder": "ee557e9295e770c8",
-    "tools.activityReminderCandidatesLoadFailed": "872c3cbeed8db20a"
+    "tools.activityReminderCandidatesLoadFailed": "872c3cbeed8db20a",
+    "mapping.categoryFilter": "c12738e8a122d9e4",
+    "mapping.titleCaptureOnHint": "1aa4bb8a0350ca9d",
+    "mapping.titleCaptureOffHint": "0d5021bb7c1c575b",
+    "mapping.trackingOnHint": "bdc115711739168f",
+    "mapping.trackingOffHint": "a5d71e15ce820be9",
+    "mapping.categoryFilterReset": "43b5899097dc3450",
+    "mapping.saveFailed": "79fdd568fc406536",
+    "mapping.deleteFailed": "b55210839c4712d3",
+    "export.fieldsSectionTitle": "178bc06fb2f81766"
   },
   "es": {
     "about.description": "f16fb3f9d1381864",
@@ -1456,7 +1465,7 @@ export const LOCALE_SOURCE_REVIEWS = {
     "history.webTimelineUntitledPage": "e28f86f8fc410786",
     "hourlyActivityChart.activeMinutes": "ab007976d3832248",
     "hourlyActivityChart.remainingCategories": "9364210ea42b82ff",
-    "mapping.appSearchPlaceholder": "5ba67989669d6062",
+    "mapping.appSearchPlaceholder": "190fe4ccaac64f7d",
     "mapping.cancel": "4fa6cdbf13079926",
     "mapping.categoryControl": "5acce38005031b3e",
     "mapping.categoryDialogDescription": "53ed391e10c0a78c",
@@ -1998,6 +2007,15 @@ export const LOCALE_SOURCE_REVIEWS = {
     "widget.trackingNotSynced": "4c286c5a364a8ad5",
     "widget.trackingPaused": "3f1c661b6b8b95df",
     "widget.trackingService": "23203fcb5c59568f",
-    "widget.windowExcluded": "3096985b6b061a38"
+    "widget.windowExcluded": "3096985b6b061a38",
+    "mapping.categoryFilter": "c12738e8a122d9e4",
+    "mapping.titleCaptureOnHint": "1aa4bb8a0350ca9d",
+    "mapping.titleCaptureOffHint": "0d5021bb7c1c575b",
+    "mapping.trackingOnHint": "bdc115711739168f",
+    "mapping.trackingOffHint": "a5d71e15ce820be9",
+    "mapping.categoryFilterReset": "43b5899097dc3450",
+    "mapping.saveFailed": "79fdd568fc406536",
+    "mapping.deleteFailed": "b55210839c4712d3",
+    "export.fieldsSectionTitle": "178bc06fb2f81766"
   }
 } as const;

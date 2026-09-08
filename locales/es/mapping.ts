@@ -1,7 +1,17 @@
 // es locale resource. Pure data only.
 export const MESSAGES = {
-  "mapping.appSearchPlaceholder": "Buscar aplicaciones o categorías",
+  "mapping.saveFailed": "No se pudieron guardar los cambios. Inténtalo de nuevo.",
+  "mapping.deleteFailed": "No se pudo completar la eliminación de los registros. Inténtalo de nuevo.",
+
+  "mapping.titleCaptureOnHint": "El registro de títulos está activado. Haz clic para desactivarlo.",
+  "mapping.titleCaptureOffHint": "El registro de títulos está desactivado. Haz clic para activarlo.",
+  "mapping.trackingOnHint": "Detener seguimiento y ocultar historial",
+  "mapping.trackingOffHint": "Reanudar seguimiento y mostrar historial",
+
+  "mapping.appSearchPlaceholder": "Buscar apps",
   "mapping.cancel": "Cancelar",
+  "mapping.categoryFilter": "Filtrar por categoría",
+  "mapping.categoryFilterReset": "Borrar filtro de categoría",
   "mapping.categoryControl": "Gestionar categorías",
   "mapping.categoryDialogDescription": "Crea categorías y ajusta sus colores",
   "mapping.categoryDialogTitle": "Gestionar categorías",
@@ -30,16 +40,16 @@ export const MESSAGES = {
     "body": {
       "$op": "concat",
       "parts": [
-        "Todos los registros de la aplicación ",
+        "Todos los registros de la app ",
         {
           "$op": "arg",
           "name": "label"
         },
-        ", incluidos los de Patina y los importados, se eliminarán. No se modificarán los registros de otras aplicaciones ni sus datos importados."
+        ", incluidos los de Patina y los importados, se eliminarán. No se modificarán los registros de otras apps ni sus datos importados."
       ]
     }
   },
-  "mapping.deleteAppSessionsTitle": "Eliminar registros de la aplicación",
+  "mapping.deleteAppSessionsTitle": "Eliminar registros de la app",
   "mapping.deleteCategory": {
     "$type": "message",
     "body": {
@@ -88,9 +98,9 @@ export const MESSAGES = {
   "mapping.disableTitleCapture": "Dejar de registrar títulos",
   "mapping.disableTracking": "Detener el registro y ocultar el historial existente",
   "mapping.disableWebTracking": "Detener el registro y ocultar el historial existente",
-  "mapping.editAppName": "Editar nombre de la aplicación",
+  "mapping.editAppName": "Editar nombre de la app",
   "mapping.editWebDomainName": "Editar nombre del sitio web",
-  "mapping.emptyState": "Ninguna aplicación coincide con el filtro actual",
+  "mapping.emptyState": "Ninguna app coincide con el filtro actual",
   "mapping.enableTitleCapture": "Reanudar registro de títulos",
   "mapping.enableTracking": "Reanudar el registro y mostrar el historial existente",
   "mapping.enableWebTracking": "Reanudar el registro y mostrar el historial existente",
@@ -103,7 +113,7 @@ export const MESSAGES = {
   "mapping.loadFailed": "No se pudieron cargar los datos de clasificación.",
   "mapping.loading": "Cargando...",
   "mapping.noStats": "Excluido",
-  "mapping.objectModeApp": "Aplicaciones",
+  "mapping.objectModeApp": "Apps",
   "mapping.objectModeWeb": "Web",
   "mapping.quickCategoryMenuLabel": "Categorías disponibles",
   "mapping.quickChangeCategory": "Cambiar categoría",
@@ -144,7 +154,7 @@ export const MESSAGES = {
       ]
     }
   },
-  "mapping.renameCategoryDescription": "Las aplicaciones y los sitios web de esta categoría mostrarán el nuevo nombre.",
+  "mapping.renameCategoryDescription": "Las apps y los sitios web de esta categoría mostrarán el nuevo nombre.",
   "mapping.renameCategoryDuplicateDetail": {
     "$type": "message",
     "body": {
@@ -167,9 +177,9 @@ export const MESSAGES = {
   "mapping.retry": "Reintentar",
   "mapping.save": "Guardar",
   "mapping.saving": "Guardando...",
-  "mapping.searchNoResults": "No se encontraron aplicaciones coincidentes",
+  "mapping.searchNoResults": "No se encontraron apps coincidentes",
   "mapping.statsEnabled": "Incluido",
-  "mapping.subtitle": "Gestiona reglas de aplicaciones y sitios web",
+  "mapping.subtitle": "Gestiona reglas de apps y sitios web",
   "mapping.title": "Clasificación",
   "mapping.titleNotRecorded": "No registrar títulos",
   "mapping.titleRecorded": "Registrar títulos",

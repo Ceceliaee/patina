@@ -108,7 +108,7 @@ export const MESSAGES = {
       ]
     }
   },
-  "native.export.field.app_name": "Nombre de la aplicación",
+  "native.export.field.app_name": "Nombre de la app",
   "native.export.field.browser_client_id": "ID del cliente del navegador",
   "native.export.field.browser_exe_name": "Ejecutable del navegador",
   "native.export.field.browser_kind": "Tipo de navegador",
@@ -216,7 +216,7 @@ export const MESSAGES = {
       ]
     }
   },
-  "native.tools.activityReminderAppTitle": "Recordatorio de aplicación",
+  "native.tools.activityReminderAppTitle": "Recordatorio de app",
   "native.tools.activityReminderCategoryTitle": "Recordatorio de categoría",
   "native.tools.activityReminderDefaultBody": {
     "$type": "message",

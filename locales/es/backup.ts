@@ -5,7 +5,7 @@ export const MESSAGES = {
     "body": {
       "$op": "concat",
       "parts": [
-        "Versión de la aplicación: ",
+        "Versión de la app: ",
         {
           "$op": "arg",
           "name": "version"

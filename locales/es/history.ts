@@ -16,11 +16,11 @@ export const MESSAGES = {
       ]
     }
   },
-  "history.appDistribution": "Distribución por aplicación",
+  "history.appDistribution": "Distribución por app",
   "history.dailyHourlyActivity": "Actividad diaria",
   "history.dayDistribution": "Distribución diaria",
   "history.daySummary": "Resumen del día",
-  "history.distributionByApp": "Aplicaciones",
+  "history.distributionByApp": "Apps",
   "history.distributionByCategory": "Categorías",
   "history.distributionByWeb": "Web",
   "history.emptyDay": "No hay registros de este día",
@@ -59,7 +59,7 @@ export const MESSAGES = {
   "history.openTimeline": "Abrir cronología",
   "history.openTimelineZoom": "Abrir escala de la cronología",
   "history.pastSevenDays": "Últimos 7 días",
-  "history.peakHour": "Hora de mayor actividad",
+  "history.peakHour": "Hora pico",
   "history.sessionCount": {
     "$type": "message",
     "body": {
@@ -95,13 +95,13 @@ export const MESSAGES = {
     }
   },
   "history.showHourlyActivityByCategory": "Mostrar por categoría",
-  "history.showTimelineByApp": "Mostrar por aplicación",
+  "history.showTimelineByApp": "Mostrar por app",
   "history.showTimelineByCategory": "Mostrar por categoría",
   "history.showTimelineByWeb": "Mostrar por sitio web",
   "history.showTotalHourlyActivity": "Mostrar actividad total",
   "history.subtitle": "Consulta los registros diarios",
   "history.timeline": "Cronología",
-  "history.timelineAppLanes": "Filas de aplicaciones",
+  "history.timelineAppLanes": "Filas de apps",
   "history.timelineAxis": "Cronología del día",
   "history.timelineCategoryLanes": "Filas de categorías",
   "history.timelineDecreaseHours": "Reducir una hora",
@@ -140,7 +140,7 @@ export const MESSAGES = {
       ]
     }
   },
-  "history.timelineTabApp": "Aplicaciones",
+  "history.timelineTabApp": "Apps",
   "history.timelineTabWeb": "Web",
   "history.timelineWebLanes": "Filas de sitios web",
   "history.timelineWindowHours": "Ventana de tiempo en horas",

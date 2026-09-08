@@ -34,7 +34,7 @@ export const MESSAGES = {
     }
   },
   "toast.backupPreviewFailed": "No se pudo mostrar la vista previa de la copia. Comprueba el archivo e inténtalo de nuevo.",
-  "toast.backupRestoreFailed": "La restauración no se completó. La aplicación conservó o restauró los datos originales cuando fue posible; conserva los registros de diagnóstico si se solicita reiniciar o no se puede escribir.",
+  "toast.backupRestoreFailed": "La restauración no se completó. La app conservó o restauró los datos originales cuando fue posible; conserva los registros de diagnóstico si se solicita reiniciar o no se puede escribir.",
   "toast.backupRestoreSuccess": "Copia restaurada. Actualizando.",
   "toast.cleanupFailed": "No se pudieron eliminar los registros del historial. Inténtalo más tarde.",
   "toast.cleanupSuccess": "Registros del historial eliminados.",

@@ -52,7 +52,7 @@ export const MESSAGES = {
   "dashboard.showTotalHourlyActivity": "Mostrar actividad total",
   "dashboard.subtitle": "Consulta la actividad de hoy",
   "dashboard.title": "Hoy",
-  "dashboard.topApps": "Aplicaciones más usadas",
+  "dashboard.topApps": "Apps más usadas",
   "dashboard.topAppsBadge": {
     "$type": "message",
     "body": {

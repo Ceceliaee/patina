@@ -13,7 +13,7 @@ export const MESSAGES = {
   "accessibility.color.lightnessChannel": "Luminosidad",
   "accessibility.color.redChannel": "Canal rojo",
   "accessibility.color.saturationChannel": "Saturación",
-  "accessibility.data.appTrendRange": "Seleccionar intervalo de tendencia de aplicaciones",
+  "accessibility.data.appTrendRange": "Seleccionar intervalo de tendencia de apps",
   "accessibility.data.categoryTrendRange": "Seleccionar intervalo de tendencia de categorías",
   "accessibility.data.earlierRange": "Ir al intervalo anterior",
   "accessibility.data.heatmapCell": {
@@ -36,7 +36,7 @@ export const MESSAGES = {
     }
   },
   "accessibility.data.heatmapRange": "Seleccionar intervalo del mapa de calor",
-  "accessibility.data.longerAppTrendRange": "Ampliar intervalo de tendencia de aplicaciones",
+  "accessibility.data.longerAppTrendRange": "Ampliar intervalo de tendencia de apps",
   "accessibility.data.longerTrendRange": "Ampliar intervalo de tendencia",
   "accessibility.data.newerRange": "Ir al intervalo siguiente",
   "accessibility.data.nextPickerMode": "Siguiente modo de intervalo",
@@ -45,7 +45,7 @@ export const MESSAGES = {
   "accessibility.data.previousPickerMode": "Modo de intervalo anterior",
   "accessibility.data.previousPickerMonth": "Mes anterior",
   "accessibility.data.resetTrendRange": "Restablecer a los últimos 7 días",
-  "accessibility.data.shorterAppTrendRange": "Reducir intervalo de tendencia de aplicaciones",
+  "accessibility.data.shorterAppTrendRange": "Reducir intervalo de tendencia de apps",
   "accessibility.data.shorterTrendRange": "Reducir intervalo de tendencia",
   "accessibility.data.trendRange": "Seleccionar intervalo de tendencia",
   "accessibility.data.trendSummary": "Resumen de tendencia",
@@ -179,7 +179,7 @@ export const MESSAGES = {
     "body": {
       "$op": "concat",
       "parts": [
-        "Aplicación actual: ",
+        "App actual: ",
         {
           "$op": "arg",
           "name": "appName"

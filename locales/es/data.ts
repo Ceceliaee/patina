@@ -4,18 +4,18 @@ export const MESSAGES = {
   "data.activityHeatmapHint": "Intensidad de actividad diaria",
   "data.activityTrend": "Tendencia de actividad",
   "data.allTime": "Todo el período",
-  "data.appHeatmap": "Mapa de calor de aplicaciones",
+  "data.appHeatmap": "Mapa de calor de apps",
   "data.applyRange": "Aplicar",
-  "data.appSearchPlaceholder": "Buscar aplicaciones",
-  "data.appTrend": "Tendencias de aplicaciones",
+  "data.appSearchPlaceholder": "Buscar apps",
+  "data.appTrend": "Tendencias de apps",
   "data.appTrendActiveDays": "Días activos",
-  "data.appTrendAppList": "Lista de aplicaciones",
-  "data.appTrendAverage": "Promedio diario",
-  "data.appTrendEmpty": "No hay datos de aplicaciones en este intervalo",
-  "data.appTrendNoMatch": "No hay aplicaciones coincidentes",
+  "data.appTrendAppList": "Lista de apps",
+  "data.appTrendAverage": "Prom. diario",
+  "data.appTrendEmpty": "No hay datos de apps en este intervalo",
+  "data.appTrendNoMatch": "No hay apps coincidentes",
   "data.appTrendPeakDay": "Día de mayor actividad",
   "data.appTrendTotal": "Total",
-  "data.appTrendUsage": "Tiempo en aplicaciones",
+  "data.appTrendUsage": "Tiempo en apps",
   "data.categoryHeatmap": "Mapa de calor de categorías",
   "data.categoryInteractionHint": "Enter para seleccionar · Ctrl para varias",
   "data.categoryMemberCount": {
@@ -33,9 +33,9 @@ export const MESSAGES = {
           "$op": "plural",
           "arg": "count",
           "cases": {
-            "one": "aplicación",
-            "other": "aplicaciones",
-            "many": "aplicaciones"
+            "one": "app",
+            "other": "apps",
+            "many": "apps"
           }
         },
         ""
@@ -44,7 +44,7 @@ export const MESSAGES = {
   },
   "data.categorySearchPlaceholder": "Buscar categorías",
   "data.categoryTrend": "Tendencias de categorías",
-  "data.categoryTrendCategoryList": "Lista de categorías de aplicaciones",
+  "data.categoryTrendCategoryList": "Lista de categorías de apps",
   "data.categoryTrendEmpty": "No hay datos de categorías en este intervalo",
   "data.categoryTrendNoMatch": "No hay categorías coincidentes",
   "data.customDayCount": {
@@ -81,8 +81,8 @@ export const MESSAGES = {
       }
     }
   },
-  "data.dailyAverage": "Promedio diario",
-  "data.destinationApp": "Aplicaciones",
+  "data.dailyAverage": "Prom. diario",
+  "data.destinationApp": "Apps",
   "data.destinationCategory": "Categorías",
   "data.destinationMode": "Seleccionar tipo de actividad",
   "data.destinationWeb": "Web",
@@ -91,7 +91,7 @@ export const MESSAGES = {
   "data.heatmapError": "El mapa de calor no está disponible temporalmente",
   "data.heatmapWeekly": "Semanal",
   "data.interactionHint": "Doble clic para detalles · Ctrl para seleccionar",
-  "data.monthlyAverage": "Promedio mensual",
+  "data.monthlyAverage": "Prom. mensual",
   "data.notStarted": "Sin iniciar",
   "data.pastSevenDays": "Últimos 7 días",
   "data.pastThirtyDays": "Últimos 30 días",
@@ -196,6 +196,6 @@ export const MESSAGES = {
       "name": "year"
     }
   },
-  "data.yearlyAverage": "Promedio mensual",
+  "data.yearlyAverage": "Prom. mensual",
   "data.yearlyAverageHint": "Basado en los meses del último año"
 } as const;

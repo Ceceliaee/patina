@@ -1,6 +1,6 @@
 // es locale resource. Pure data only.
 export const MESSAGES = {
-  "update.appUpdate": "Actualizaciones de la aplicación",
+  "update.appUpdate": "Actualizaciones de la app",
   "update.checkAgain": "Comprobar de nuevo",
   "update.checkErrorDetail": "No se pudo acceder al manifiesto de actualización. Puede que tu red no permita acceder a GitHub. Inténtalo más tarde o descarga manualmente.",
   "update.checkFailed": "No se pudieron comprobar las actualizaciones",
@@ -15,7 +15,7 @@ export const MESSAGES = {
   "update.dialogDownloading": "Descargando actualización",
   "update.dialogDownloadingDetail": "Se está descargando el paquete. Al terminar, aparecerá la confirmación de instalación.",
   "update.dialogInstalling": "Instalando actualización",
-  "update.dialogInstallingDetail": "La instalación ha comenzado. Mantén la aplicación abierta; se reiniciará al terminar.",
+  "update.dialogInstallingDetail": "La instalación ha comenzado. Mantén la app abierta; se reiniciará al terminar.",
   "update.downloadedBytes": {
     "$type": "message",
     "body": {
@@ -91,8 +91,8 @@ export const MESSAGES = {
   "update.installFailed": "La instalación de la actualización falló",
   "update.installFailedDialog": "Error de instalación",
   "update.installing": "Instalando actualización...",
-  "update.installingProgress": "Instalando actualización. La aplicación se reiniciará pronto.",
-  "update.installRestartDetail": "La aplicación se reiniciará después de la instalación.",
+  "update.installingProgress": "Instalando actualización. La app se reiniciará pronto.",
+  "update.installRestartDetail": "La app se reiniciará después de la instalación.",
   "update.later": "Más tarde",
   "update.manualDownload": "Descarga manual",
   "update.notChecked": "Sin comprobar",

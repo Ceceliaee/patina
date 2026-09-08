@@ -1,5 +1,6 @@
 // zh-CN export locale resource. Pure data only.
 export const MESSAGES = {
+  "export.fieldsSectionTitle": "配置字段",
   "export.collapseFieldGroup": "折叠",
   "export.configFields": "配置字段",
   "export.configFieldsCount": {

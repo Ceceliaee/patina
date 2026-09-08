@@ -1,15 +1,15 @@
 // es locale resource. Pure data only.
 export const MESSAGES = {
   "settings.appearanceTitle": "Apariencia",
-  "settings.backgroundOptimizationHint": "Libera memoria de la interfaz principal cuando está inactiva en segundo plano. Volver a abrirla puede ser algo más lento.",
-  "settings.backgroundOptimizationLabel": "Ahorro de memoria en segundo plano",
-  "settings.backupExportAction": "Crear copia de seguridad",
-  "settings.backupExportHint": "Exporta una instantánea de los datos actuales.",
+  "settings.backgroundOptimizationHint": "Libera memoria de la interfaz cuando está inactiva en segundo plano. Reabrirla puede tardar más.",
+  "settings.backgroundOptimizationLabel": "Ahorrar memoria",
+  "settings.backupExportAction": "Crear copia",
+  "settings.backupExportHint": "Guarda una copia de tus datos.",
   "settings.backupExporting": "Creando copia...",
-  "settings.backupExportTitle": "Crear copia de seguridad",
+  "settings.backupExportTitle": "Copia de seguridad",
   "settings.backupRestoreAction": "Restaurar",
   "settings.backupRestoreActionHelp": "Formato anterior: copia de datos estructurados\nFormato actual: instantánea de datos SQLite\nRestauración del formato anterior disponible hasta: 18 de octubre de 2026",
-  "settings.backupRestoreActionHint": "Restaura datos desde una copia de seguridad.",
+  "settings.backupRestoreActionHint": "Recupera datos de una copia.",
   "settings.backupRestoreActionTitle": "Restaurar",
   "settings.backupRestoreHint": "Crea una copia local de los datos. Al restaurar, puedes reemplazar los datos actuales o combinarlos.",
   "settings.backupRestoreTitle": "Copias de seguridad y restauración",
@@ -29,7 +29,7 @@ export const MESSAGES = {
     "body": {
       "$op": "concat",
       "parts": [
-        "Todos los registros de aplicaciones y sitios web de ",
+        "Todos los registros de apps y sitios web de ",
         {
           "$op": "arg",
           "name": "label"
@@ -39,7 +39,7 @@ export const MESSAGES = {
     }
   },
   "settings.cleanupConfirmTitle": "Confirmar eliminación del historial",
-  "settings.cleanupHint": "Elimina los registros de aplicaciones y sitios web de la fecha seleccionada y anteriores, incluidos los importados. Esta acción no se puede deshacer.",
+  "settings.cleanupHint": "Elimina los registros de apps y sitios web de la fecha seleccionada y anteriores, incluidos los importados. Esta acción no se puede deshacer.",
   "settings.cleanupNow": "Eliminar",
   "settings.cleanupRangeLabel": "Fecha límite de eliminación",
   "settings.cleanupRangeLabels": {
@@ -52,12 +52,12 @@ export const MESSAGES = {
   },
   "settings.cleanupRunning": "Eliminando...",
   "settings.cleanupTitle": "Eliminar registros del historial",
-  "settings.closeToTrayHint": "Oculta la ventana principal y sigue funcionando en segundo plano al cerrarla.",
+  "settings.closeToTrayHint": "Al cerrar, oculta la ventana y mantiene la app en segundo plano.",
   "settings.closeToTrayLabel": "Cerrar a la bandeja",
   "settings.colorSchemeDialogDescription": "Vista previa inmediata. Confirma para guardar.",
   "settings.colorSchemeDialogFallbackTitle": "Tema",
-  "settings.colorSchemeHint": "Ajusta por separado los colores de los temas claro y oscuro.",
-  "settings.colorSchemeLabel": "Paleta de colores",
+  "settings.colorSchemeHint": "Personaliza los colores de cada tema por separado.",
+  "settings.colorSchemeLabel": "Colores",
   "settings.colorSchemeSaving": "Guardando",
   "settings.confirmRangeFallback": "intervalo seleccionado",
   "settings.dataExportAction": "Exportar",
@@ -81,10 +81,10 @@ export const MESSAGES = {
       ]
     }
   },
-  "settings.dataImport.categorizedAppsLabel": "Aplicaciones con categorías",
-  "settings.dataImport.categoryConflictNote": "Las aplicaciones con varias categorías quedan sin clasificar y se pueden asignar después.",
+  "settings.dataImport.categorizedAppsLabel": "Apps con categorías",
+  "settings.dataImport.categoryConflictNote": "Las apps con varias categorías quedan sin clasificar y se pueden asignar después.",
   "settings.dataImport.conflictedAppsLabel": "Conflictos de categorías",
-  "settings.dataImport.csvHint": "Elige un archivo CSV canónico para importar.",
+  "settings.dataImport.csvHint": "Elige un CSV con el formato requerido por Patina.",
   "settings.dataImport.csvTitle": "Importar CSV",
   "settings.dataImport.deleteBatchAction": {
     "$type": "message",
@@ -159,8 +159,8 @@ export const MESSAGES = {
     }
   },
   "settings.dataImport.destructureFormatsHint": "Formatos admitidos:\nArchivos CSV (.csv): Tai\nArchivos SQLite (.db, .sqlite): Tai, Taix",
-  "settings.dataImport.destructureHint": "Convierte un archivo externo en un CSV canónico.",
-  "settings.dataImport.destructureTitle": "Herramienta de conversión",
+  "settings.dataImport.destructureHint": "Convierte un archivo externo al formato CSV de Patina.",
+  "settings.dataImport.destructureTitle": "Convertir archivo",
   "settings.dataImport.destructureSuccess": {
     "$type": "message",
     "body": {
@@ -216,8 +216,8 @@ export const MESSAGES = {
     }
   },
   "settings.dataImport.detailSeparator": ": ",
-  "settings.dataImport.dialogDescription": "Importa un CSV canónico o convierte primero los datos externos.",
-  "settings.dataImport.dialogTitle": "Elegir método de importación",
+  "settings.dataImport.dialogDescription": "Importa un CSV compatible o convierte datos externos.",
+  "settings.dataImport.dialogTitle": "Importar datos",
   "settings.dataImport.duplicateLabel": "Registros duplicados",
   "settings.dataImport.errorLabel": "Registros no válidos",
   "settings.dataImport.exactLabel": "Registros exactos",
@@ -303,12 +303,12 @@ export const MESSAGES = {
       ]
     }
   },
-  "settings.dynamicEffectsHint": "Muestra animaciones al cambiar de vista y al interactuar.",
-  "settings.dynamicEffectsLabel": "Efectos dinámicos",
+  "settings.dynamicEffectsHint": "Anima las transiciones y las interacciones.",
+  "settings.dynamicEffectsLabel": "Animaciones",
   "settings.globalTitleHint": "Guarda los títulos de ventanas y páginas web en los detalles del historial de actividad.",
   "settings.globalTitleLabel": "Registro global de títulos",
   "settings.idle": "Guardado",
-  "settings.idleTimeoutHint": "Sigue contando el tiempo si la aplicación actual tiene audio u otras señales similares.",
+  "settings.idleTimeoutHint": "Sigue contando el tiempo si la app actual tiene audio u otras señales similares.",
   "settings.idleTimeoutLabel": "Continuar contando",
   "settings.importRecordCount": {
     "$type": "message",
@@ -364,11 +364,11 @@ export const MESSAGES = {
   "settings.languageLoadFailed": "Idioma no disponible. Se mantiene el idioma actual.",
   "settings.languageOptions.enUS": "English",
   "settings.languageOptions.zhCN": "中文",
-  "settings.launchAtLoginHint": "Inicia la aplicación automáticamente al iniciar sesión en Windows.",
+  "settings.launchAtLoginHint": "Abre la app al iniciar sesión en Windows.",
   "settings.launchAtLoginLabel": "Iniciar con Windows",
   "settings.loadFailed": "No se pudo cargar la configuración.",
   "settings.loading": "Cargando configuración...",
-  "settings.minimizeToWidgetHint": "Oculta la ventana principal y muestra el widget lateral al minimizar.",
+  "settings.minimizeToWidgetHint": "Al minimizar, oculta la ventana y muestra el widget lateral.",
   "settings.minimizeToWidgetLabel": "Minimizar al widget",
   "settings.minuteValue": {
     "$type": "message",
@@ -445,11 +445,11 @@ export const MESSAGES = {
   },
   "settings.saving": "Guardando...",
   "settings.servicesTitle": "Servicios",
-  "settings.startMinimizedHint": "Oculta la ventana principal en la bandeja del sistema después de iniciar.",
+  "settings.startMinimizedHint": "Inicia en la bandeja, sin mostrar la ventana principal.",
   "settings.startMinimizedLabel": "Iniciar en segundo plano",
   "settings.storage.changePathAction": "Cambiar ubicación",
-  "settings.storage.dataDirectoryLabel": "Carpeta de datos",
-  "settings.storage.installDirectoryLabel": "Carpeta de instalación",
+  "settings.storage.dataDirectoryLabel": "Datos",
+  "settings.storage.installDirectoryLabel": "Instalación",
   "settings.storage.openDirectoryAction": "Abrir carpeta",
   "settings.storage.restartAndApplyAction": "Reiniciar y aplicar",
   "settings.storage.restoreDefaultPathAction": "Restaurar ubicación predeterminada",
@@ -493,7 +493,7 @@ export const MESSAGES = {
     }
   },
   "settings.storage.storageDataMigrationConfirmTitle": "Cambiar carpeta de datos",
-  "settings.storage.storageDirectorySummary": "La carpeta de instalación depende de dónde se instaló la aplicación; las carpetas de datos y caché se pueden ajustar por separado.",
+  "settings.storage.storageDirectorySummary": "La ubicación de la app determina la ruta de instalación. Las rutas de datos y caché se pueden cambiar por separado.",
   "settings.storage.storageDirectoryTitle": "Rutas locales",
   "settings.storage.storageMigrationFailed": "No se pudo preparar el reinicio. Comprueba la carpeta de destino.",
   "settings.storage.storageOpenDirectoryFailed": "No se pudo abrir esa carpeta.",
@@ -541,16 +541,16 @@ export const MESSAGES = {
   "settings.storage.webviewCacheClearConfirmTitle": "¿Reiniciar y borrar la caché?",
   "settings.storage.webviewCacheClearFailed": "No se pudo preparar la limpieza de caché. Inténtalo de nuevo.",
   "settings.storage.webviewCacheClearTitle": "Borrar caché",
-  "settings.storage.webviewCacheDirectoryLabel": "Carpeta de caché",
+  "settings.storage.webviewCacheDirectoryLabel": "Caché",
   "settings.subtitle": "Ajusta las preferencias generales de funcionamiento",
-  "settings.themeLibraryOptions.dark": "Tema oscuro",
-  "settings.themeLibraryOptions.light": "Tema claro",
-  "settings.themeModeHint": "Claro, oscuro o según la apariencia del sistema.",
-  "settings.themeModeLabel": "Modo de tema",
+  "settings.themeLibraryOptions.dark": "Oscuro",
+  "settings.themeLibraryOptions.light": "Claro",
+  "settings.themeModeHint": "Elige claro, oscuro o según el sistema.",
+  "settings.themeModeLabel": "Tema",
   "settings.themeModeOptions.dark": "Oscuro",
   "settings.themeModeOptions.light": "Claro",
   "settings.themeModeOptions.system": "Sistema",
-  "settings.timelineMergeGapHint": "Detiene el registro tras la inactividad; los cambios breves de aplicación mantienen la continuidad de la cronología.",
+  "settings.timelineMergeGapHint": "Detiene el registro tras la inactividad; los cambios breves de app mantienen la continuidad de la cronología.",
   "settings.timelineMergeGapLabel": "Tiempo de continuidad de actividad",
   "settings.title": "Configuración",
   "settings.tracking": "Registro",
@@ -564,7 +564,7 @@ export const MESSAGES = {
   "settings.webActivityHelpCopiedAction": "Copiado",
   "settings.webActivityHelpCopyPortAction": "Copiar puerto",
   "settings.webActivityHelpCopyTokenAction": "Copiar Token",
-  "settings.webActivityHelpDescription": "Patina Web Sync envía la página web activa a la aplicación local de Patina.",
+  "settings.webActivityHelpDescription": "Patina Web Sync envía la página web activa a la app local de Patina.",
   "settings.webActivityHelpNote": "Cuando Patina Web Sync está activado y conectado:\n• Sincroniza automáticamente la dirección, el título y el icono del sitio web de la pestaña activa.\n• No lee el contenido de la página, valores de formularios, capturas de pantalla ni el portapapeles.\n• No examina ni importa el historial del navegador.\n• Las ventanas privadas no se guardan en los registros web.",
   "settings.webActivityHelpSteps": [
     {

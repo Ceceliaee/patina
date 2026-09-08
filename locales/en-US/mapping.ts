@@ -1,7 +1,17 @@
 // en-US mapping locale resource. Pure data only.
 export const MESSAGES = {
-  "mapping.appSearchPlaceholder": "Search apps or categories",
+  "mapping.saveFailed": "Could not save changes. Try again.",
+  "mapping.deleteFailed": "Could not finish deleting records. Try again.",
+
+  "mapping.titleCaptureOnHint": "Title recording is on. Click to turn it off.",
+  "mapping.titleCaptureOffHint": "Title recording is off. Click to turn it on.",
+  "mapping.trackingOnHint": "Stop tracking and hide history",
+  "mapping.trackingOffHint": "Resume tracking and show history",
+
+  "mapping.appSearchPlaceholder": "Search apps",
   "mapping.cancel": "Cancel",
+  "mapping.categoryFilter": "Filter by category",
+  "mapping.categoryFilterReset": "Clear category filter",
   "mapping.categoryControl": "Manage categories",
   "mapping.categoryDialogDescription": "Create categories and adjust category colors",
   "mapping.categoryDialogTitle": "Manage categories",
