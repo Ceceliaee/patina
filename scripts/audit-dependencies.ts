@@ -1,4 +1,6 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { collectRustAuditFindings, type CargoAuditReport } from "./rust-audit-report.ts";
 import { WINDOWS_RELEASE_TARGETS } from "./release.ts";
 import { runNpmAudit } from "./npm-audit.ts";
 
@@ -7,6 +9,11 @@ const LOCKFILE = "src-tauri/Cargo.lock";
 const OFFLINE = process.env.PATINA_DEPENDENCY_AUDIT_OFFLINE === "1";
 
 const LOCK_ONLY_ADVISORIES = [
+  {
+    id: "RUSTSEC-2024-0429",
+    crate: "glib@0.18.5",
+    reason: "GTK dependency is not reachable on either Windows release target",
+  },
   {
     id: "RUSTSEC-2023-0071",
     crate: "rsa@0.9.10",
@@ -62,15 +69,6 @@ for (const { target } of WINDOWS_RELEASE_TARGETS) {
   }
 }
 
-interface CargoAuditReport {
-  vulnerabilities?: {
-    list?: Array<{
-      advisory?: { id?: string };
-      package?: { name?: string; version?: string };
-    }>;
-  };
-}
-
 const rustAuditArgs = ["audit", "--file", LOCKFILE, "--json"];
 if (OFFLINE) rustAuditArgs.push("--no-fetch");
 const rustAudit = run("cargo", rustAuditArgs, true);
@@ -96,7 +94,7 @@ const configuredExceptions = new Set(
 const observedExceptions = new Set<string>();
 const unexpectedVulnerabilities: string[] = [];
 
-for (const vulnerability of auditReport.vulnerabilities?.list ?? []) {
+for (const vulnerability of collectRustAuditFindings(auditReport, readFileSync(LOCKFILE, "utf8"))) {
   const id = vulnerability.advisory?.id ?? "UNKNOWN_ADVISORY";
   const crateName = vulnerability.package?.name ?? "UNKNOWN_CRATE";
   const version = vulnerability.package?.version ?? "UNKNOWN_VERSION";
@@ -125,7 +123,7 @@ if (unexpectedVulnerabilities.length > 0 || staleExceptions.length > 0) {
 }
 
 console.log(
-  `Rust dependency audit passed: 0 Windows-reachable vulnerabilities; ${observedExceptions.size} exact lock-only advisories verified unreachable.`,
+  `Rust dependency audit passed: no unexcepted vulnerabilities or unsound findings; ${observedExceptions.size} exact lock-only advisories verified unreachable on Windows.`,
 );
 
 const npmExecutable = process.env.npm_execpath;

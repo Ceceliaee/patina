@@ -1,5 +1,24 @@
 import assert from "node:assert/strict";
 import { runNpmAudit } from "../scripts/npm-audit.ts";
+import { collectRustAuditFindings } from "../scripts/rust-audit-report.ts";
+
+const cleanRustReport = { vulnerabilities: { list: [] }, warnings: {} };
+const crateLock = (name: string, version: string) => `[[package]]\nname = "${name}"\nversion = "${version}"\n`;
+for (const version of ["2.0.0", "2.10.3", "2.11.0"]) {
+  assert.equal(collectRustAuditFindings(cleanRustReport, crateLock("tauri", version))[0]?.advisory?.id, "GHSA-7gmj-67g7-phm9");
+}
+for (const version of ["2.11.1", "2.11.5", "2.12.0"]) {
+  assert.deepEqual(collectRustAuditFindings(cleanRustReport, crateLock("tauri", version)), []);
+}
+assert.equal(collectRustAuditFindings(cleanRustReport, crateLock("thrift", "0.17.0")).length, 1);
+assert.equal(collectRustAuditFindings(cleanRustReport, crateLock("thrift", "0.22.0")).length, 1);
+assert.deepEqual(collectRustAuditFindings(cleanRustReport, crateLock("thrift", "0.23.0")), []);
+const unsound = { advisory: { id: "RUSTSEC-example" }, package: { name: "example", version: "1.0.0" } };
+assert.deepEqual(collectRustAuditFindings({ ...cleanRustReport, warnings: { unsound: [unsound] } }, ""), [unsound]);
+assert.deepEqual(collectRustAuditFindings({ vulnerabilities: { list: [unsound] }, warnings: {} }, ""), [unsound]);
+assert.throws(() => collectRustAuditFindings({}, ""), /Incomplete/);
+assert.throws(() => collectRustAuditFindings(cleanRustReport, crateLock("tauri", "2.11.1-rc.1")), /Unsupported/);
+console.log("PASS Rust audit: GitHub-only version ranges, unsound findings and incomplete reports");
 
 const failure = (report: unknown) => ({ status: 1, stdout: JSON.stringify(report), stderr: "" });
 const timeout = failure({ message: "network timeout at: https://registry.npmjs.org/-/npm/v1/security/advisories/bulk" });
