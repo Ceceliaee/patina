@@ -95,6 +95,24 @@
   color: var(--qp-danger);
 }
 
+.qp-icon-action-warning {
+  color: var(--qp-warning);
+}
+
+.qp-icon-action-warning:hover:not(:disabled),
+.qp-icon-action-warning:active:not(:disabled) {
+  background: color-mix(in srgb, var(--qp-warning) 10%, transparent);
+}
+
+.qp-icon-action-accent {
+  color: var(--qp-accent-default);
+}
+
+.qp-icon-action-accent:hover:not(:disabled),
+.qp-icon-action-accent:active:not(:disabled) {
+  background: var(--qp-accent-muted);
+}
+
 .qp-icon-action-danger:hover:not(:disabled),
 .qp-icon-action-danger:active:not(:disabled) {
   background: color-mix(in srgb, var(--qp-danger) 10%, transparent);

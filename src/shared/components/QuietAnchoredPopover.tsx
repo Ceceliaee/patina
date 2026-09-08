@@ -6,6 +6,7 @@ import {
   useState,
   type CSSProperties,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 
@@ -26,6 +27,7 @@ interface QuietAnchoredPopoverProps {
   children: ReactNode;
   className?: string;
   horizontalAnchorRatio?: number;
+  initialFocusRef?: RefObject<HTMLElement | null>;
 }
 
 const POPOVER_GAP = 8;
@@ -93,6 +95,7 @@ export default function QuietAnchoredPopover({
   children,
   className,
   horizontalAnchorRatio = 0.5,
+  initialFocusRef,
 }: QuietAnchoredPopoverProps) {
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const onCloseRef = useRef(onClose);
@@ -100,6 +103,22 @@ export default function QuietAnchoredPopover({
     null,
   );
   onCloseRef.current = onClose;
+  const ready = open && position !== null;
+  useEffect(() => {
+    if (!ready || !initialFocusRef) return;
+    let frame = 0;
+    const focusVisibleTarget = () => {
+      const target = initialFocusRef.current;
+      if (!target?.isConnected) return;
+      if (getComputedStyle(target).visibility === "hidden") {
+        frame = requestAnimationFrame(focusVisibleTarget);
+        return;
+      }
+      target.focus({ preventScroll: true });
+    };
+    frame = requestAnimationFrame(focusVisibleTarget);
+    return () => cancelAnimationFrame(frame);
+  }, [ready, initialFocusRef]);
 
   const updatePosition = useCallback(() => {
     const popover = popoverRef.current;

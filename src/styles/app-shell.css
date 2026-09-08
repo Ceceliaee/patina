@@ -63,6 +63,25 @@ html[data-window-label="main"] #root {
   border-color: var(--qp-border-strong);
 }
 
+.qp-color-trigger-swatch-only {
+  justify-content: center;
+  width: 32px;
+  min-height: 32px;
+  padding: 6px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.qp-color-trigger-swatch-only:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--qp-bg-panel);
+}
+
+.qp-color-trigger:focus-visible {
+  outline: 2px solid var(--qp-accent-default);
+  outline-offset: 2px;
+}
+
 .qp-color-trigger:disabled {
   cursor: not-allowed;
   opacity: 0.58;
@@ -122,6 +141,12 @@ html[data-window-label="main"] #root {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.qp-color-popover-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .qp-color-popover-title {

@@ -1,7 +1,7 @@
-import type { ReactNode } from "react";
+import type { ReactNode, Ref, MouseEventHandler } from "react";
 import QuietTooltip, { type QuietTooltipPlacement } from "./QuietTooltip";
 
-type QuietIconActionTone = "neutral" | "danger";
+type QuietIconActionTone = "neutral" | "danger" | "warning" | "accent";
 
 interface Props {
   icon: ReactNode;
@@ -14,7 +14,11 @@ interface Props {
   tooltipPlacement?: QuietTooltipPlacement;
   pressed?: boolean;
   showPressedStyle?: boolean;
-  onClick?: () => void;
+  onClick?: MouseEventHandler<HTMLButtonElement>;
+  buttonRef?: Ref<HTMLButtonElement>;
+  expanded?: boolean;
+  controls?: string;
+  describedBy?: string;
 }
 
 export default function QuietIconAction({
@@ -29,10 +33,18 @@ export default function QuietIconAction({
   pressed,
   showPressedStyle = true,
   onClick,
+  buttonRef,
+  expanded,
+  controls,
+  describedBy,
 }: Props) {
   const button = (
     <button
       type="button"
+      ref={buttonRef}
+      aria-expanded={expanded}
+      aria-controls={controls}
+      aria-describedby={describedBy}
       aria-label={ariaLabel ?? title}
       aria-pressed={pressed}
       disabled={disabled}

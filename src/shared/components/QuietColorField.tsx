@@ -10,8 +10,9 @@ import {
   type CSSProperties,
 } from "react";
 import { createPortal } from "react-dom";
-import { Pipette } from "lucide-react";
+import { Pipette, RotateCcw } from "lucide-react";
 import QuietTooltip from "./QuietTooltip";
+import QuietIconAction from "./QuietIconAction";
 import {
   hexToHsl,
   hexToRgb,
@@ -31,6 +32,8 @@ interface Props {
   disabled?: boolean;
   title?: string;
   fixedValueSlot?: boolean;
+  presentation?: "value" | "swatch";
+  resetAction?: { label: string; onReset: () => void };
   onChange: (nextColor: string) => void;
   onFormatChange: (nextFormat: ColorDisplayFormat) => void;
 }
@@ -90,6 +93,8 @@ export default function QuietColorField({
   disabled = false,
   title,
   fixedValueSlot = false,
+  presentation = "value",
+  resetAction,
   onChange,
   onFormatChange,
 }: Props) {
@@ -107,6 +112,7 @@ export default function QuietColorField({
   const [hexDraft, setHexDraft] = useState(normalizedColor);
   const formatPanelId = useId();
   const titleId = useId();
+  const popoverId = useId();
 
   useEffect(() => {
     setHexDraft(normalizedColor);
@@ -298,6 +304,9 @@ export default function QuietColorField({
       type="button"
       disabled={disabled}
       aria-label={title ?? UI_TEXT.accessibility.color.color}
+      aria-haspopup="dialog"
+      aria-expanded={open && !disabled}
+      aria-controls={open && !disabled ? popoverId : undefined}
       onClick={() => {
         if (disabled) return;
         setOpen((previousOpen) => {
@@ -311,10 +320,10 @@ export default function QuietColorField({
           return true;
         });
       }}
-      className={`qp-color-trigger ${fixedValueSlot ? "qp-color-trigger-fixed-slot" : ""}`}
+      className={`qp-color-trigger ${presentation === "swatch" ? "qp-color-trigger-swatch-only" : fixedValueSlot ? "qp-color-trigger-fixed-slot" : ""}`}
     >
       <span className="qp-color-trigger-swatch" style={{ backgroundColor: normalizedColor }} aria-hidden />
-      <span className="qp-color-trigger-value">{normalizedColor}</span>
+      {presentation === "value" && <span className="qp-color-trigger-value">{normalizedColor}</span>}
     </button>
   );
   const eyedropperLabel = supportsEyedropper
@@ -332,6 +341,7 @@ export default function QuietColorField({
       {open && !disabled && createPortal(
         <div
           ref={popoverRef}
+          id={popoverId}
           className={`qp-color-popover ${position.placement === "top" ? "qp-color-popover-top" : "qp-color-popover-bottom"}`}
           role="dialog"
           aria-labelledby={titleId}
@@ -346,17 +356,27 @@ export default function QuietColorField({
             >
               {UI_TEXT.accessibility.color.color}
             </div>
-            <QuietTooltip label={eyedropperLabel}>
-              <button
-                type="button"
-                className="qp-color-eyedropper"
-                aria-label={eyedropperLabel}
-                onClick={() => void pickByEyedropper()}
-                disabled={!supportsEyedropper}
-              >
-                <Pipette size={14} />
-              </button>
-            </QuietTooltip>
+            <div className="qp-color-popover-actions">
+              {resetAction && (
+                <QuietIconAction
+                  icon={<RotateCcw size={14} />}
+                  title={resetAction.label}
+                  disabled={disabled}
+                  onClick={resetAction.onReset}
+                />
+              )}
+              <QuietTooltip label={eyedropperLabel}>
+                <button
+                  type="button"
+                  className="qp-color-eyedropper"
+                  aria-label={eyedropperLabel}
+                  onClick={() => void pickByEyedropper()}
+                  disabled={!supportsEyedropper}
+                >
+                  <Pipette size={14} />
+                </button>
+              </QuietTooltip>
+            </div>
           </div>
 
           <div
