@@ -60,7 +60,7 @@
 
 .history-day-summary-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.64fr);
   gap: 18px;
   margin-top: 18px;
   align-items: end;

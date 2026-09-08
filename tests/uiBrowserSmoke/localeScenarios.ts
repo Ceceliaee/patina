@@ -339,7 +339,7 @@ export async function runLocaleScenarios(context: BrowserSmokeContext) {
       await evaluate(client, sessionId, "Array.from(document.querySelectorAll('button')).find(n => n.textContent?.trim() === 'Exportar')?.click()");
       await waitForExpression(client, sessionId, "Boolean(document.querySelector('.settings-data-export-format-grid'))");
       assert.equal(await evaluate(client, sessionId, "document.querySelector('.settings-data-export-range-label')?.textContent?.trim()"), "Este mes");
-      assert.equal(await evaluate(client, sessionId, "Array.from(document.querySelectorAll('.settings-data-export-format-option span')).every(n => n.textContent?.startsWith('Adecuado para'))"), true);
+      assert.equal(await evaluate(client, sessionId, "Array.from(document.querySelectorAll('.settings-data-export-format-option span')).every(n => n.textContent?.startsWith('Para '))"), true);
       await evaluate(client, sessionId, "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
       await waitForExpression(client, sessionId, "!document.querySelector('[role=\"dialog\"]')");
     } finally {

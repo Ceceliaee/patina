@@ -421,7 +421,7 @@ export default function SettingsDataExportDialog({ open, onClose, onToast }: Pro
           <section className="settings-data-export-section">
             <div className="settings-data-export-section-header">
               <div className="min-w-0">
-                <p className="settings-data-export-section-title">{UI_TEXT.export.configFields}</p>
+                <p className="settings-data-export-section-title">{UI_TEXT.export.fieldsSectionTitle}</p>
                 <p className={`settings-data-export-section-hint ${selectedFields.length === 0 ? "text-[var(--qp-danger)]" : ""}`}>
                   {UI_TEXT.export.configFieldsCount(selectedFields.length, SETTINGS_DATA_EXPORT_FIELD_KEYS.length)}
                 </p>
