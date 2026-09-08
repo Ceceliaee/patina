@@ -23,7 +23,7 @@ name = "windows-resource-sample"
 path = "../scripts/perf/windows-resource-sample.rs"
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2.11.5", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-autostart = "2"
@@ -47,8 +47,8 @@ crc32fast = "1.4"
 sha2 = "0.10"
 uuid = { version = "1.23.5", features = ["v4"] }
 zip = { version = "4.6.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
-arrow = { version = "54", default-features = false, features = ["ipc"] }
-parquet = { version = "54", default-features = false, features = ["arrow"] }
+arrow = { version = "59.3", default-features = false, features = ["ipc"] }
+parquet = { version = "59.3", default-features = false, features = ["arrow"] }
 csv = "1.3"
 icu_locale = "2.0"
 icu_plurals = { version = "2.0", features = ["compiled_data"] }
