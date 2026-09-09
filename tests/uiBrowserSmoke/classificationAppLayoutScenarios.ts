@@ -37,7 +37,7 @@ export async function runClassificationAppLayoutScenarios({ client, sessionId, r
     await runTest("compact application rows retain density, geometry and accessible icon controls", async () => {
       for (const [locale, theme] of [["zh-CN", "light"], ["en-US", "dark"], ["es", "light"]]) {
         await reload(locale, theme);
-        for (const width of [720, 1024, 1280, 1600, 1920, 2560, 3840]) {
+        for (const width of [720, 1024, 1100, 1280, 1600, 1920, 2560, 3840]) {
           await client!.command("Emulation.setDeviceMetricsOverride", { width, height: 820, deviceScaleFactor: 1, mobile: false }, sessionId);
           await waitForExpression(client!, sessionId, `innerWidth===${width}`);
           const geometry = await evaluate(client!, sessionId, `(() => {
@@ -59,6 +59,12 @@ export async function runClassificationAppLayoutScenarios({ client, sessionId, r
           assert.equal(geometry.iconLabels, true);
           assert.equal(geometry.centered, true);
           assert.equal(await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('[data-classification-app]')).every(row => {
+            const category = row.querySelector('.qp-app-mapping-category').getBoundingClientRect();
+            const actions = row.querySelector('.qp-app-mapping-actions').getBoundingClientRect();
+            const identity = row.querySelector('.qp-app-mapping-identity').getBoundingClientRect();
+            return category.bottom <= actions.top && identity.right <= category.left;
+          })`), true, `stack only the controls: ${locale} ${width}`);
+          assert.equal(await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('[data-classification-app]')).every(row => {
             const textLeft = selector => {
               const node = row.querySelector(selector);
               const style = getComputedStyle(node);
@@ -67,15 +73,16 @@ export async function runClassificationAppLayoutScenarios({ client, sessionId, r
             return Math.abs(textLeft('.qp-app-mapping-name') - textLeft('.qp-app-mapping-exe')) < 1;
           })`), true, `identity text alignment: ${locale} ${width}`);
           if (width === 1280) {
-            assert.equal(geometry.columns, 1);
-            assert.ok(geometry.height <= 84, JSON.stringify(geometry));
-            assert.ok(geometry.visible >= 5, JSON.stringify(geometry));
+            assert.equal(geometry.columns, 2);
+            assert.ok(geometry.height <= 96, JSON.stringify(geometry));
+            assert.ok(geometry.visible >= 6, JSON.stringify(geometry));
             console.log(`Application layout ${locale} 1280x820: ${JSON.stringify(geometry)}`);
           }
-          if (width === 1920) assert.equal(geometry.columns, 2);
+          if (width === 1100) assert.equal(geometry.columns, 2);
+          if (width === 1920) assert.equal(geometry.columns, 3);
           if (width >= 2560) assert.equal(geometry.columns, 3);
         }
-        for (const [listWidth, expectedColumns] of [[1295, 1], [1296, 2], [1951, 2], [1952, 3], [2800, 3]]) {
+        for (const [listWidth, expectedColumns] of [[815, 1], [816, 2], [1231, 2], [1232, 3], [2800, 3]]) {
           const chromeWidth = await evaluate(client!, sessionId, `innerWidth-document.querySelector('.qp-app-mapping-list').getBoundingClientRect().width`) as number;
           const width = Math.round(listWidth + chromeWidth);
           await client!.command("Emulation.setDeviceMetricsOverride", { width, height: 820, deviceScaleFactor: 1.5, mobile: false }, sessionId);
@@ -154,11 +161,11 @@ export async function runClassificationAppLayoutScenarios({ client, sessionId, r
       await waitForExpression(client!, sessionId, `document.querySelector(${jsonString(row + ' .qp-app-mapping-delete')})?.disabled===false`);
       assert.equal(await evaluate(client!, sessionId, `document.querySelector('[role="alert"]')`), null);
     });
-    await runTest("application identity keeps its original badge and tint with keyboard-safe editing and exclusion", async () => {
+    await runTest("application identity keeps plain filename typography and icon tint with keyboard-safe editing and exclusion", async () => {
       await reload("zh-CN", "light");
       assert.equal(await evaluate(client!, sessionId, `getComputedStyle(document.querySelector(${jsonString(row + ' .qp-app-mapping-icon')})).boxShadow.includes('18, 52, 86')`), true);
-      assert.equal(await evaluate(client!, sessionId, `document.querySelector(${jsonString(row + ' .qp-app-mapping-exe')}).classList.contains('qp-badge')`), true);
-      assert.deepEqual(await evaluate(client!, sessionId, `(() => {const s=getComputedStyle(document.querySelector(${jsonString(row + ' .qp-app-mapping-exe')}));return [s.fontSize,s.fontWeight,s.borderTopColor,s.backgroundColor];})()`), ["11px", "500", "rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]);
+      assert.equal(await evaluate(client!, sessionId, `document.querySelector(${jsonString(row + ' .qp-app-mapping-exe')}).classList.contains('qp-badge')`), false);
+      assert.deepEqual(await evaluate(client!, sessionId, `(() => {const s=getComputedStyle(document.querySelector(${jsonString(row + ' .qp-app-mapping-exe')}));return [s.fontSize,s.fontWeight,s.borderTopWidth,s.borderTopLeftRadius,s.backgroundColor];})()`), ["11px", "500", "0px", "0px", "rgba(0, 0, 0, 0)"]);
       assert.equal(await evaluate(client!, sessionId, `getComputedStyle(document.querySelector(${jsonString(color)})).borderTopColor`), "rgba(0, 0, 0, 0)");
       await click(`${row} [aria-label="修改应用名称"]`);
       await waitForExpression(client!, sessionId, `Boolean(document.querySelector(${jsonString(row + ' input')}))`);
@@ -183,10 +190,13 @@ export async function runClassificationAppLayoutScenarios({ client, sessionId, r
       assert.equal(await evaluate(client!, sessionId, `document.querySelector(${jsonString(row)}).textContent.includes('已排除')`), true);
       await click(`${row} [aria-label="排除统计"]`);
       await waitForExpression(client!, sessionId, `!document.querySelector(${jsonString(row)})`);
-      await client!.command("Emulation.setDeviceMetricsOverride", { width: 720, height: 820, deviceScaleFactor: 1.5, mobile: false }, sessionId);
+      await client!.command("Emulation.setDeviceMetricsOverride", { width: 1100, height: 820, deviceScaleFactor: 1.5, mobile: false }, sessionId);
       const origin = await evaluate(client!, sessionId, "performance.timeOrigin");
       await evaluate(client!, sessionId, `localStorage.removeItem('__time_tracker_enable_classification_catalog_fixture');location.reload()`);
-      await waitForExpression(client!, sessionId, `performance.timeOrigin!==${origin} && Boolean(document.querySelector('.qp-app-mapping-exe[tabindex="0"]'))`);
+      await waitForExpression(client!, sessionId, `performance.timeOrigin!==${origin} && Boolean(document.querySelector('.qp-app-mapping-exe'))`);
+      // Give the existing filename a deterministic overflow constraint, independent of column breakpoints.
+      await evaluate(client!, sessionId, `document.querySelector('[data-classification-app="deep-research-workbench.exe"] .qp-app-mapping-details').style.maxWidth='100px'`);
+      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-app-mapping-exe[tabindex="0"]'))`);
       const filename = await evaluate(client!, sessionId, `(() => {const n=document.querySelector('.qp-app-mapping-exe[tabindex="0"]');n.focus();return n.textContent;})()`);
       await waitForExpression(client!, sessionId, `document.querySelector('[role="tooltip"]')?.textContent===${jsonString(String(filename))}`);
       await key("Escape", 27);

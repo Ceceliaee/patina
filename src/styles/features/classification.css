@@ -150,7 +150,7 @@
 }
 .qp-app-mapping-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, max(640px, calc((100% - 32px) / 3))), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, max(400px, calc((100% - 32px) / 3))), 1fr));
   gap: 8px 16px;
 }
 
@@ -224,7 +224,7 @@
 }
 
 .qp-app-mapping-name {
-  padding: 0 8px;
+  padding: 0 0 0 8px;
   color: var(--qp-text-primary);
   font-size: 15px;
   font-weight: 600;
@@ -232,11 +232,10 @@
 
 .qp-app-mapping-exe {
   max-width: 100%;
-  padding-inline: 0;
-  border-width: 0;
+  color: var(--qp-text-secondary);
+  font-size: 11px;
+  font-weight: 500;
   line-height: 16px;
-  border-color: transparent;
-  background: transparent;
 }
 
 .qp-app-mapping-exe-line {
@@ -258,10 +257,10 @@
 
 .qp-app-mapping-controls {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
+  justify-content: center;
+  gap: 4px;
   min-width: 0;
   margin-left: auto;
 }

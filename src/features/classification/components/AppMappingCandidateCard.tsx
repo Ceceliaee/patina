@@ -37,7 +37,7 @@ interface AppMappingCandidateCardProps {
   onDeleteAllSessions: () => void;
 }
 
-function IdentityText({ text, className, badge = false }: { text: string; className: string; badge?: boolean }) {
+function IdentityText({ text, className }: { text: string; className: string }) {
   const ref = useRef<HTMLSpanElement>(null);
   const [truncated, setTruncated] = useState(false);
   useLayoutEffect(() => {
@@ -51,9 +51,7 @@ function IdentityText({ text, className, badge = false }: { text: string; classN
   }, [text]);
   return (
     <QuietTooltip label={text} disabled={!truncated} className="qp-app-identity-tooltip">
-      {badge
-        ? <QuietBadge ref={ref} className={className} tabIndex={truncated ? 0 : undefined}>{text}</QuietBadge>
-        : <span ref={ref} className={className} tabIndex={truncated ? 0 : undefined}>{text}</span>}
+      <span ref={ref} className={className} tabIndex={truncated ? 0 : undefined}>{text}</span>
     </QuietTooltip>
   );
 }
@@ -151,7 +149,7 @@ export default function AppMappingCandidateCard({
             {!trackingEnabled && <QuietBadge tone="warning">{UI_TEXT.mapping.noStats}</QuietBadge>}
           </div>
           <div className="qp-app-mapping-exe-line">
-            <IdentityText text={candidate.exeName} className="qp-app-mapping-exe" badge />
+            <IdentityText text={candidate.exeName} className="qp-app-mapping-exe" />
           </div>
         </div>
       </div>
