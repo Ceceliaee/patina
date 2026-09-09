@@ -82,7 +82,7 @@ export async function runClassificationAppLayoutScenarios({ client, sessionId, r
           if (width === 1920) assert.equal(geometry.columns, 3);
           if (width >= 2560) assert.equal(geometry.columns, 3);
         }
-        for (const [listWidth, expectedColumns] of [[815, 1], [816, 2], [1231, 2], [1232, 3], [2800, 3]]) {
+        for (const [listWidth, expectedColumns] of [[807, 1], [808, 2], [1215, 2], [1216, 3], [2800, 3]]) {
           const chromeWidth = await evaluate(client!, sessionId, `innerWidth-document.querySelector('.qp-app-mapping-list').getBoundingClientRect().width`) as number;
           const width = Math.round(listWidth + chromeWidth);
           await client!.command("Emulation.setDeviceMetricsOverride", { width, height: 820, deviceScaleFactor: 1.5, mobile: false }, sessionId);
@@ -90,7 +90,7 @@ export async function runClassificationAppLayoutScenarios({ client, sessionId, r
           const layout = await evaluate(client!, sessionId, `(() => {const n=document.querySelector('.qp-app-mapping-list');const s=getComputedStyle(n);return {width:n.getBoundingClientRect().width,columns:s.gridTemplateColumns.split(' ').length,gap:s.columnGap};})()`) as { width: number; columns: number; gap: string };
           assert.equal(layout.width, listWidth);
           assert.equal(layout.columns, expectedColumns, `${locale} ${JSON.stringify(layout)}`);
-          assert.equal(layout.gap, "16px");
+          assert.equal(layout.gap, "8px");
         }
       }
     });
