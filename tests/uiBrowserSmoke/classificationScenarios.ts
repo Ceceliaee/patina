@@ -907,9 +907,13 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
       true,
     );
     await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-category-dialog-surface'))`);
-    for (const [width, columns] of [[360, 1], [500, 2], [1100, 3]]) {
+    // Keep viewport samples away from the column boundary, where the native
+    // scrollbar width can change how many 200px cards fit.
+    for (const [width, columns] of [[360, 1], [540, 2], [1100, 3]]) {
       await client!.command("Emulation.setDeviceMetricsOverride", { width, height: 820, deviceScaleFactor: 1, mobile: false }, sessionId);
       await waitForExpression(client!, sessionId, `innerWidth===${width}`);
+      await waitForExpression(client!, sessionId, `getComputedStyle(document.querySelector('.qp-category-management-grid')).gridTemplateColumns.split(' ').length===${columns}`,
+        undefined, `category grid should settle to ${columns} columns at ${width}px`);
       assert.equal(await evaluate(client!, sessionId, `getComputedStyle(document.querySelector('.qp-category-management-grid')).gridTemplateColumns.split(' ').length`), columns);
       assert.equal(await evaluate(client!, sessionId, `Array.from(document.querySelector('.qp-category-management-grid').children).every(n=>n.scrollWidth<=n.clientWidth)`), true);
     }
