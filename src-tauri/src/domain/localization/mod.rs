@@ -179,6 +179,50 @@ mod tests {
     }
 
     #[test]
+    fn russian_production_messages_preserve_cardinals_and_user_names() {
+        let locale = Locale::from_tag(Some("ru-RU"));
+        assert_eq!(locale.tag(), "ru-RU");
+        assert_eq!(text(locale, "native.tray.quit"), "Выйти из Patina");
+        for (count, noun, minute) in [
+            (0, "записей", "минут"),
+            (1, "запись", "минута"),
+            (2, "записи", "минуты"),
+            (4, "записи", "минуты"),
+            (5, "записей", "минут"),
+            (11, "записей", "минут"),
+            (12, "записей", "минут"),
+            (14, "записей", "минут"),
+            (21, "запись", "минута"),
+            (22, "записи", "минуты"),
+            (25, "записей", "минут"),
+            (101, "запись", "минута"),
+            (111, "записей", "минут"),
+            (1_000_000, "записей", "минут"),
+        ] {
+            assert_eq!(
+                format_text(
+                    locale,
+                    "native.export.records",
+                    &[("count", count.to_string())]
+                ),
+                format!("{count} {noun}")
+            );
+            assert_eq!(format_text(locale, "native.tools.activityReminderDefaultBody", &[
+                ("targetName", "Code / 文档".into()),
+                ("usageMinutes", count.to_string()), ("limitMinutes", count.to_string()),
+            ]), format!("Активность «Code / 文档» за сегодня: {count} {minute}. Достигнут дневной лимит: {count} {minute}."));
+        }
+        assert_eq!(
+            format_text(
+                locale,
+                "native.export.duration",
+                &[("hours", "0".into()), ("minutes", "0".into())]
+            ),
+            "0 ч 0 мин"
+        );
+    }
+
+    #[test]
     fn formatter_substitutes_named_arguments_and_preserves_missing_ones() {
         assert_eq!(
             format_text(

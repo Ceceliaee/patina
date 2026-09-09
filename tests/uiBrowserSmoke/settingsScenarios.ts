@@ -764,7 +764,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     assert.equal(await activeOptionText(), "简体中文");
     await dispatchSelectKey(context, languageListboxSelector, "End");
     await waitForAnimationFrames(client!, sessionId);
-    assert.equal(await activeOptionText(), "Español");
+    assert.equal(await activeOptionText(), LOCALE_METADATA[SUPPORTED_LOCALES[SUPPORTED_LOCALES.length - 1]].label);
     await dispatchSelectKey(context, languageListboxSelector, "Escape");
     await waitForExpression(
       client!,
@@ -818,7 +818,18 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     await waitForExpression(client!, sessionId, "JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') ?? '{}').language === 'es'");
     await client!.command("Page.navigate", { url: appUrl }, sessionId);
     await waitForExpression(client!, sessionId, "document.documentElement?.lang === 'es' && Boolean(document.querySelector('.qp-select-trigger[aria-label=\"Idioma: Español\"]'))");
-    await chooseLanguage("Idioma: Español", "简体中文");
+    await chooseLanguage("Idioma: Español", "Русский");
+    await waitForExpression(client!, sessionId, "document.documentElement.lang === 'ru-RU'");
+    assert.equal(await evaluate(client!, sessionId, "JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') ?? '{}').language"), "es", "Russian preview must not persist before Save");
+    await evaluate(client!, sessionId, "Array.from(document.querySelectorAll('button')).find(n => n.textContent?.trim() === 'Отмена')?.click()");
+    await waitForExpression(client!, sessionId, "document.documentElement.lang === 'es'");
+    await chooseLanguage("Idioma: Español", "Русский");
+    await waitForExpression(client!, sessionId, "document.documentElement.lang === 'ru-RU'");
+    await evaluate(client!, sessionId, "Array.from(document.querySelectorAll('button')).find(n => n.textContent?.trim() === 'Сохранить')?.click()");
+    await waitForExpression(client!, sessionId, "JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') ?? '{}').language === 'ru-RU'");
+    await client!.command("Page.navigate", { url: appUrl }, sessionId);
+    await waitForExpression(client!, sessionId, "document.documentElement?.lang === 'ru-RU' && Boolean(document.querySelector('.qp-select-trigger[aria-label=\"Язык: Русский\"]'))");
+    await chooseLanguage("Язык: Русский", "简体中文");
     await waitForExpression(client!, sessionId, "document.documentElement.lang === 'zh-CN'");
     await evaluate(client!, sessionId, "Array.from(document.querySelectorAll('button')).find(n => n.textContent?.trim() === '保存')?.click()");
     await waitForExpression(client!, sessionId, "JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') ?? '{}').language === 'zh-CN'");

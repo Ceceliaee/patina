@@ -18,6 +18,7 @@ App note en: TBD.
 
 ### Added
 
+- 新增俄语 Русский，覆盖桌面界面、托盘、提醒和语言相关导出；语言顺序统一为中、英、俄、西。Refs [#61](https://github.com/Ceceliaee/patina/issues/61)
 - 新增 Windows ARM64 原生安装包及对应自动更新，保留 x64 发行支持。ARM64 通过构建与自动化验证，尚未经实体 ARM 设备人工测试。Refs [#74](https://github.com/Ceceliaee/patina/issues/74)
 - 新增西班牙语 Español，覆盖桌面界面、托盘、提醒和语言相关导出。Refs [#76](https://github.com/Ceceliaee/patina/issues/76)
 - 分类页新增分类快捷筛选，可与应用／网页模式、分类状态和搜索组合使用。

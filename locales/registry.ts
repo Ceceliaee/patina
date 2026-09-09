@@ -12,6 +12,12 @@ export const LOCALE_REGISTRY = {
     "direction": "ltr",
     "production": true
   },
+  "ru-RU": {
+    "label": "Русский",
+    "source": false,
+    "direction": "ltr",
+    "production": true
+  },
   "es": {
     "label": "Español",
     "source": false,

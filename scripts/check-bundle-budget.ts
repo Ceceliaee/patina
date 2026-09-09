@@ -22,15 +22,16 @@ const INITIAL_CHUNK_BUDGETS = [
   { label: "tauri", pattern: /^tauri-.*\.js$/, gzipKiB: 6 },
   { label: "runtime type guards", pattern: /^runtimeTypeGuards-.*\.js$/, gzipKiB: 0.2 },
   { label: "browser storage gateway", pattern: /^browserStorageGateway-.*\.js$/, gzipKiB: 0.21 },
-  // Data category analysis plus scheduled backup/export add bilingual trust and
-  // control labels while the global initial and total budgets stay fixed.
-  { label: "localization", pattern: /^runtime-.*\.js$/, gzipKiB: 7.42 },
+  // Production locale metadata lives here; translated text stays in its own
+  // locale chunk. Initial and total graph budgets remain unchanged.
+  { label: "localization", pattern: /^runtime-.*\.js$/, gzipKiB: 7.46 },
   { label: "classification", pattern: /^appClassification-.*\.js$/, gzipKiB: 6 },
 ] as const;
 
 const LOCALE_CHUNK_GZIP_BUDGETS = {
   "zh-CN": 9.99,
   "en-US": 9.50,
+  "ru-RU": 12.75,
   "es": 10.80,
 } as const satisfies Record<keyof typeof LOCALE_REGISTRY, number>;
 const LOCALE_CHUNK_BUDGETS = Object.entries(LOCALE_CHUNK_GZIP_BUDGETS).map(

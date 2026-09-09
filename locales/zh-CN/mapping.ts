@@ -30,7 +30,7 @@ export const MESSAGES = {
   },
   "mapping.color": "颜色",
   "mapping.createCategoryAction": "新建分类",
-  "mapping.createCategoryDescription": "建议中文 2 字，英文 1 个词。",
+  "mapping.createCategoryDescription": "名称尽量简短，便于识别。",
   "mapping.createCategoryPlaceholder": "例如：学习",
   "mapping.createCategoryTitle": "新建分类",
   "mapping.deleteAppRecords": "删除应用记录",

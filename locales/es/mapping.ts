@@ -30,7 +30,7 @@ export const MESSAGES = {
   },
   "mapping.color": "Color",
   "mapping.createCategoryAction": "Nueva categoría",
-  "mapping.createCategoryDescription": "Se recomienda un nombre breve de una palabra.",
+  "mapping.createCategoryDescription": "Usa un nombre breve y fácil de reconocer.",
   "mapping.createCategoryPlaceholder": "Ejemplo: Estudio",
   "mapping.createCategoryTitle": "Nueva categoría",
   "mapping.deleteAppRecords": "Eliminar registros",

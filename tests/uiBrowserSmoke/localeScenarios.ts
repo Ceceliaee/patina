@@ -321,25 +321,30 @@ export async function runLocaleScenarios(context: BrowserSmokeContext) {
     await waitForExpression(client!, sessionId, "!document.querySelector('[role=\"dialog\"]')");
   });
 
-  await runTest("Spanish pages and export remain usable in the minimum window", async () => {
+  for (const localeCase of [
+    { locale: "es", labels: ["Hoy", "Historial", "Datos", "Clasificación", "Herramientas", "Configuración", "Acerca de"], exportTitle: "Exportación e importación", exportAction: "Exportar", month: "Este mes", hintPrefix: "Para " },
+    { locale: "ru-RU", labels: ["Сегодня", "История", "Данные", "Категории", "Инструменты", "Настройки", "О программе"], exportTitle: "Экспорт и импорт", exportAction: "Экспорт", month: "Этот месяц", hintPrefix: "Для " },
+  ]) await runTest(`${localeCase.locale} pages and export remain usable in the minimum window`, async () => {
+    const { locale, labels } = localeCase;
     const script = await client.command("Page.addScriptToEvaluateOnNewDocument", {
-      source: "globalThis.__TIME_TRACKER_SMOKE_LANGUAGE = 'es';",
+      source: `globalThis.__TIME_TRACKER_SMOKE_LANGUAGE = ${jsonString(locale)};`,
     }, sessionId) as { identifier: string };
     try {
       await client.command("Page.navigate", { url: appUrl }, sessionId);
-      await waitForExpression(client, sessionId, "document.documentElement.lang === 'es' && Boolean(document.querySelector('[aria-label=\"Historial\"]'))", 45000);
-      for (const [label, view] of [["Hoy", "dashboard"], ["Historial", "history"], ["Datos", "data"], ["Clasificación", "mapping"], ["Herramientas", "tools"], ["Configuración", "settings"], ["Acerca de", "about"]]) {
+      await waitForExpression(client, sessionId, `document.documentElement.lang === ${jsonString(locale)} && Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(labels[1]))} + ']'))`, 45000);
+      for (const [index, view] of ["dashboard", "history", "data", "mapping", "tools", "settings", "about"].entries()) {
+        const label = labels[index];
         await evaluate(client, sessionId, `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(label))} + ']')?.click()`);
         await waitForExpression(client, sessionId, `document.querySelector('main.qp-canvas')?.dataset.presentedView === ${jsonString(view)} && document.querySelector('main.qp-canvas')?.dataset.viewTransitionState === 'settled'`);
-        assert.equal(await evaluate(client, sessionId, "document.documentElement.lang"), "es");
+        assert.equal(await evaluate(client, sessionId, "document.documentElement.lang"), locale);
         assert.ok(await evaluate(client, sessionId, "document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1"), `${label} must not overflow horizontally`);
       }
-      await evaluate(client, sessionId, "document.querySelector('[aria-label=\"Configuración\"]')?.click()");
-      await waitForExpression(client, sessionId, "document.body.innerText.includes('Exportación e importación')");
-      await evaluate(client, sessionId, "Array.from(document.querySelectorAll('button')).find(n => n.textContent?.trim() === 'Exportar')?.click()");
+      await evaluate(client, sessionId, `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(labels[5]))} + ']')?.click()`);
+      await waitForExpression(client, sessionId, `document.body.innerText.includes(${jsonString(localeCase.exportTitle)})`);
+      await evaluate(client, sessionId, `Array.from(document.querySelectorAll('button')).find(n => n.textContent?.trim() === ${jsonString(localeCase.exportAction)})?.click()`);
       await waitForExpression(client, sessionId, "Boolean(document.querySelector('.settings-data-export-format-grid'))");
-      assert.equal(await evaluate(client, sessionId, "document.querySelector('.settings-data-export-range-label')?.textContent?.trim()"), "Este mes");
-      assert.equal(await evaluate(client, sessionId, "Array.from(document.querySelectorAll('.settings-data-export-format-option span')).every(n => n.textContent?.startsWith('Para '))"), true);
+      assert.equal(await evaluate(client, sessionId, "document.querySelector('.settings-data-export-range-label')?.textContent?.trim()"), localeCase.month);
+      assert.equal(await evaluate(client, sessionId, `Array.from(document.querySelectorAll('.settings-data-export-format-option span')).every(n => n.textContent?.startsWith(${jsonString(localeCase.hintPrefix)}))`), true);
       await evaluate(client, sessionId, "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
       await waitForExpression(client, sessionId, "!document.querySelector('[role=\"dialog\"]')");
     } finally {

@@ -35,6 +35,34 @@ const secondEnglishRequest = loadLocaleText("en-US");
 assert.strictEqual(firstEnglishRequest, secondEnglishRequest);
 const englishText = await firstEnglishRequest;
 const spanishText = await loadLocaleText("es");
+assert.deepEqual([...SUPPORTED_LOCALES], ["zh-CN", "en-US", "ru-RU", "es"]);
+const russianText = await loadLocaleText("ru-RU");
+assert.equal(russianText.dashboard.tracking("Code"), "Учёт времени: Code");
+for (const [count, noun, hours] of [
+  [0, "объектов", "часов"], [1, "объект", "час"], [2, "объекта", "часа"],
+  [4, "объекта", "часа"], [5, "объектов", "часов"], [11, "объектов", "часов"],
+  [12, "объектов", "часов"], [14, "объектов", "часов"], [21, "объект", "час"],
+  [22, "объекта", "часа"], [25, "объектов", "часов"], [101, "объект", "час"],
+  [111, "объектов", "часов"], [1000000, "объектов", "часов"],
+] as const) {
+  assert.equal(russianText.data.selectedObjectCount(count), `${count} ${noun}`);
+  assert.equal(russianText.destinationDetail.timelineHoursValue(count), `${count} ${hours}`);
+  assert.equal(russianText.history.sessionCount(count), `Записей: ${count}`);
+  assert.equal(russianText.export.exportDone(count), `Экспортировано записей: ${count}`);
+}
+assert.equal(formatNumber("ru-RU", 12345.67), "12\u00a0345,67");
+assert.equal(russianText.date.yearMonthLabel(2026, 8), "август 2026");
+assert.equal(formatDate("ru-RU", Date.UTC(2026, 7, 31), { day: "numeric", month: "short", timeZone: "UTC" }), "31 авг.");
+assert.equal(formatDate("ru-RU", Date.UTC(2026, 8, 1), { day: "numeric", month: "short", timeZone: "UTC" }), "1 сент.");
+assert.equal(formatDate("ru-RU", Date.UTC(2026, 7, 31), { weekday: "long", timeZone: "UTC" }), "понедельник");
+assert.equal(formatDate("ru-RU", Date.UTC(2026, 8, 9), { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }), "9 сентября 2026 г.");
+for (const [key, args, expected] of [
+  ["backup.restore.supported", [], "Текущая версия может безопасно восстановить эту копию."],
+  ["backup.restore.schemaTooNew", [], "Эта копия использует более новую структуру базы данных. Сначала обновите приложение."],
+  ["backup.restore.versionTooNew", ["9"], "Эта копия имеет более новый формат (9). Сначала обновите приложение."],
+  ["backup.restore.versionTooOld", [], "Срок поддержки переноса данных из этой старой копии истёк."],
+  ["unknown", [], "Future reason"],
+] as const) assert.equal(russianText.backup.restoreMessage(key, [...args], "Future reason"), expected);
 assert.equal(spanishText.dashboard.tracking("Code"), "Registrando: Code");
 for (const [count, category] of [[0, "other"], [1, "one"], [2, "other"], [21, "other"], [1000000, "many"]] as const) {
   assert.equal(cardinalPluralCategory("es", count), category);
