@@ -704,6 +704,10 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
       true,
       "the category submenu should remain inside the viewport",
     );
+    // The submenu focuses its selected item on the next frame. Let that
+    // focus scroll finish before sending real wheel input.
+    await waitForExpression(client!, sessionId, `document.activeElement?.matches('.quick-classification-category-menu [aria-checked="true"]')`);
+    await waitForAnimationFrames(client!, sessionId, 2);
     const categoryMenuCenter = await evaluate(client!, sessionId, `
       (() => {
         const menu = document.querySelector('.quick-classification-category-menu');
@@ -717,6 +721,16 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
       })()
     `) as { x: number; y: number; canScroll: boolean } | null;
     assert.equal(categoryMenuCenter?.canScroll, true, "the category submenu fixture should overflow");
+    await client!.command("Input.dispatchMouseEvent", {
+      type: "mouseMoved",
+      x: categoryMenuCenter!.x,
+      y: categoryMenuCenter!.y,
+    }, sessionId);
+    await waitForExpression(client!, sessionId, `(() => {
+      const menu = document.querySelector('.quick-classification-category-menu');
+      return menu?.contains(document.elementFromPoint(${categoryMenuCenter!.x}, ${categoryMenuCenter!.y}));
+    })()`);
+    await waitForAnimationFrames(client!, sessionId, 2);
     await client!.command("Input.dispatchMouseEvent", {
       type: "mouseWheel",
       x: categoryMenuCenter!.x,
