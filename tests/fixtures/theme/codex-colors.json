@@ -1,0 +1,372 @@
+[
+  {
+    "variant": "light",
+    "scheme": "catppuccin",
+    "contrast": 0,
+    "expected": {
+      "--qp-bg-app": "#eff1f5",
+      "--qp-bg-canvas": "#eff1f5",
+      "--qp-bg-panel": "#f2f3f7"
+    }
+  },
+  {
+    "variant": "light",
+    "scheme": "catppuccin",
+    "contrast": 40,
+    "expected": {
+      "--qp-bg-app": "#e9ebf0",
+      "--qp-bg-canvas": "#eff1f5",
+      "--qp-bg-panel": "#f2f4f7"
+    }
+  },
+  {
+    "variant": "light",
+    "scheme": "catppuccin",
+    "contrast": 45,
+    "expected": {
+      "--qp-bg-app": "#e8ebef",
+      "--qp-bg-canvas": "#eff1f5",
+      "--qp-bg-panel": "#f2f4f7"
+    }
+  },
+  {
+    "variant": "light",
+    "scheme": "catppuccin",
+    "contrast": 44,
+    "expected": {
+      "--qp-bg-app": "#e9ebf0",
+      "--qp-bg-canvas": "#eff1f5",
+      "--qp-bg-panel": "#f2f4f7"
+    }
+  },
+  {
+    "variant": "light",
+    "scheme": "catppuccin",
+    "contrast": 46,
+    "expected": {
+      "--qp-bg-app": "#e8eaef",
+      "--qp-bg-canvas": "#eff1f5",
+      "--qp-bg-panel": "#f2f4f7"
+    }
+  },
+  {
+    "variant": "light",
+    "scheme": "catppuccin",
+    "contrast": 100,
+    "expected": {
+      "--qp-bg-app": "#dee0e6",
+      "--qp-bg-canvas": "#eff1f5",
+      "--qp-bg-panel": "#f2f4f7"
+    }
+  },
+  {
+    "variant": "dark",
+    "scheme": "catppuccin",
+    "contrast": 0,
+    "expected": {
+      "--qp-bg-app": "#1c1c2b",
+      "--qp-bg-canvas": "#1e1e2e",
+      "--qp-bg-panel": "#202030"
+    }
+  },
+  {
+    "variant": "dark",
+    "scheme": "catppuccin",
+    "contrast": 40,
+    "expected": {
+      "--qp-bg-app": "#1a1a28",
+      "--qp-bg-canvas": "#1e1e2e",
+      "--qp-bg-panel": "#242435"
+    }
+  },
+  {
+    "variant": "dark",
+    "scheme": "catppuccin",
+    "contrast": 60,
+    "expected": {
+      "--qp-bg-app": "#191927",
+      "--qp-bg-canvas": "#1e1e2e",
+      "--qp-bg-panel": "#262738"
+    }
+  },
+  {
+    "variant": "dark",
+    "scheme": "catppuccin",
+    "contrast": 59,
+    "expected": {
+      "--qp-bg-app": "#191927",
+      "--qp-bg-canvas": "#1e1e2e",
+      "--qp-bg-panel": "#262737"
+    }
+  },
+  {
+    "variant": "dark",
+    "scheme": "catppuccin",
+    "contrast": 61,
+    "expected": {
+      "--qp-bg-app": "#191927",
+      "--qp-bg-canvas": "#1e1e2e",
+      "--qp-bg-panel": "#272738"
+    }
+  },
+  {
+    "variant": "dark",
+    "scheme": "catppuccin",
+    "contrast": 100,
+    "expected": {
+      "--qp-bg-app": "#171724",
+      "--qp-bg-canvas": "#1e1e2e",
+      "--qp-bg-panel": "#303042"
+    }
+  },
+  {
+    "variant": "dark",
+    "scheme": "vercel",
+    "contrast": 0,
+    "expected": {
+      "--qp-bg-app": "#000000",
+      "--qp-bg-canvas": "#000000",
+      "--qp-bg-panel": "#020202"
+    }
+  },
+  {
+    "variant": "dark",
+    "scheme": "vercel",
+    "contrast": 40,
+    "expected": {
+      "--qp-bg-app": "#000000",
+      "--qp-bg-canvas": "#000000",
+      "--qp-bg-panel": "#080808"
+    }
+  },
+  {
+    "variant": "dark",
+    "scheme": "vercel",
+    "contrast": 50,
+    "expected": {
+      "--qp-bg-app": "#000000",
+      "--qp-bg-canvas": "#000000",
+      "--qp-bg-panel": "#0a0a0a"
+    }
+  },
+  {
+    "variant": "dark",
+    "scheme": "vercel",
+    "contrast": 59,
+    "expected": {
+      "--qp-bg-app": "#000000",
+      "--qp-bg-canvas": "#000000",
+      "--qp-bg-panel": "#0b0b0b"
+    }
+  },
+  {
+    "variant": "dark",
+    "scheme": "vercel",
+    "contrast": 60,
+    "expected": {
+      "--qp-bg-app": "#000000",
+      "--qp-bg-canvas": "#000000",
+      "--qp-bg-panel": "#0b0b0b"
+    }
+  },
+  {
+    "variant": "dark",
+    "scheme": "vercel",
+    "contrast": 61,
+    "expected": {
+      "--qp-bg-app": "#000000",
+      "--qp-bg-canvas": "#000000",
+      "--qp-bg-panel": "#0c0c0c"
+    }
+  },
+  {
+    "variant": "dark",
+    "scheme": "vercel",
+    "contrast": 100,
+    "expected": {
+      "--qp-bg-app": "#000000",
+      "--qp-bg-canvas": "#000000",
+      "--qp-bg-panel": "#181818"
+    }
+  },
+  {
+    "variant": "light",
+    "scheme": "vercel",
+    "contrast": 0,
+    "expected": {
+      "--qp-bg-app": "#ffffff",
+      "--qp-bg-canvas": "#ffffff",
+      "--qp-bg-panel": "#ffffff"
+    }
+  },
+  {
+    "variant": "light",
+    "scheme": "vercel",
+    "contrast": 40,
+    "expected": {
+      "--qp-bg-app": "#f7f7f7",
+      "--qp-bg-canvas": "#ffffff",
+      "--qp-bg-panel": "#ffffff"
+    }
+  },
+  {
+    "variant": "light",
+    "scheme": "vercel",
+    "contrast": 44,
+    "expected": {
+      "--qp-bg-app": "#f6f6f6",
+      "--qp-bg-canvas": "#ffffff",
+      "--qp-bg-panel": "#ffffff"
+    }
+  },
+  {
+    "variant": "light",
+    "scheme": "vercel",
+    "contrast": 45,
+    "expected": {
+      "--qp-bg-app": "#f6f6f6",
+      "--qp-bg-canvas": "#ffffff",
+      "--qp-bg-panel": "#ffffff"
+    }
+  },
+  {
+    "variant": "light",
+    "scheme": "vercel",
+    "contrast": 46,
+    "expected": {
+      "--qp-bg-app": "#f5f5f5",
+      "--qp-bg-canvas": "#ffffff",
+      "--qp-bg-panel": "#ffffff"
+    }
+  },
+  {
+    "variant": "light",
+    "scheme": "vercel",
+    "contrast": 100,
+    "expected": {
+      "--qp-bg-app": "#e6e6e6",
+      "--qp-bg-canvas": "#ffffff",
+      "--qp-bg-panel": "#ffffff"
+    }
+  },
+  {
+    "variant": "dark",
+    "scheme": "xcode",
+    "contrast": 0,
+    "expected": {
+      "--qp-bg-app": "#1d1d21",
+      "--qp-bg-canvas": "#1f1f24",
+      "--qp-bg-panel": "#212126"
+    }
+  },
+  {
+    "variant": "dark",
+    "scheme": "xcode",
+    "contrast": 40,
+    "expected": {
+      "--qp-bg-app": "#1b1b1f",
+      "--qp-bg-canvas": "#1f1f24",
+      "--qp-bg-panel": "#27272c"
+    }
+  },
+  {
+    "variant": "dark",
+    "scheme": "xcode",
+    "contrast": 60,
+    "expected": {
+      "--qp-bg-app": "#1a1a1e",
+      "--qp-bg-canvas": "#1f1f24",
+      "--qp-bg-panel": "#2a2a2f"
+    }
+  },
+  {
+    "variant": "dark",
+    "scheme": "xcode",
+    "contrast": 59,
+    "expected": {
+      "--qp-bg-app": "#1a1a1e",
+      "--qp-bg-canvas": "#1f1f24",
+      "--qp-bg-panel": "#2a2a2e"
+    }
+  },
+  {
+    "variant": "dark",
+    "scheme": "xcode",
+    "contrast": 61,
+    "expected": {
+      "--qp-bg-app": "#1a1a1e",
+      "--qp-bg-canvas": "#1f1f24",
+      "--qp-bg-panel": "#2a2a2f"
+    }
+  },
+  {
+    "variant": "dark",
+    "scheme": "xcode",
+    "contrast": 100,
+    "expected": {
+      "--qp-bg-app": "#18181c",
+      "--qp-bg-canvas": "#1f1f24",
+      "--qp-bg-panel": "#35353a"
+    }
+  },
+  {
+    "variant": "light",
+    "scheme": "xcode",
+    "contrast": 0,
+    "expected": {
+      "--qp-bg-app": "#ffffff",
+      "--qp-bg-canvas": "#ffffff",
+      "--qp-bg-panel": "#ffffff"
+    }
+  },
+  {
+    "variant": "light",
+    "scheme": "xcode",
+    "contrast": 40,
+    "expected": {
+      "--qp-bg-app": "#f6f6f6",
+      "--qp-bg-canvas": "#ffffff",
+      "--qp-bg-panel": "#ffffff"
+    }
+  },
+  {
+    "variant": "light",
+    "scheme": "xcode",
+    "contrast": 45,
+    "expected": {
+      "--qp-bg-app": "#f5f5f5",
+      "--qp-bg-canvas": "#ffffff",
+      "--qp-bg-panel": "#ffffff"
+    }
+  },
+  {
+    "variant": "light",
+    "scheme": "xcode",
+    "contrast": 44,
+    "expected": {
+      "--qp-bg-app": "#f5f5f5",
+      "--qp-bg-canvas": "#ffffff",
+      "--qp-bg-panel": "#ffffff"
+    }
+  },
+  {
+    "variant": "light",
+    "scheme": "xcode",
+    "contrast": 46,
+    "expected": {
+      "--qp-bg-app": "#f4f4f4",
+      "--qp-bg-canvas": "#ffffff",
+      "--qp-bg-panel": "#ffffff"
+    }
+  },
+  {
+    "variant": "light",
+    "scheme": "xcode",
+    "contrast": 100,
+    "expected": {
+      "--qp-bg-app": "#e4e4e4",
+      "--qp-bg-canvas": "#ffffff",
+      "--qp-bg-panel": "#ffffff"
+    }
+  }
+]

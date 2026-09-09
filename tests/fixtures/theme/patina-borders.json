@@ -1,0 +1,260 @@
+[
+  {
+    "variant": "light",
+    "scheme": "default",
+    "subtle": "#dddddd",
+    "strong": "#c5c5c5"
+  },
+  {
+    "variant": "light",
+    "scheme": "absolutely",
+    "subtle": "color-mix(in srgb, #f9f9f7 84%, #2d2d2b)",
+    "strong": "color-mix(in srgb, #f9f9f7 68%, #2d2d2b)"
+  },
+  {
+    "variant": "light",
+    "scheme": "catppuccin",
+    "subtle": "color-mix(in srgb, #eff1f5 84%, #4c4f69)",
+    "strong": "color-mix(in srgb, #eff1f5 68%, #4c4f69)"
+  },
+  {
+    "variant": "light",
+    "scheme": "everforest",
+    "subtle": "color-mix(in srgb, #fdf6e3 84%, #5c6a72)",
+    "strong": "color-mix(in srgb, #fdf6e3 68%, #5c6a72)"
+  },
+  {
+    "variant": "light",
+    "scheme": "github",
+    "subtle": "color-mix(in srgb, #ffffff 84%, #1f2328)",
+    "strong": "color-mix(in srgb, #ffffff 68%, #1f2328)"
+  },
+  {
+    "variant": "light",
+    "scheme": "gruvbox",
+    "subtle": "color-mix(in srgb, #fbf1c7 84%, #3c3836)",
+    "strong": "color-mix(in srgb, #fbf1c7 68%, #3c3836)"
+  },
+  {
+    "variant": "light",
+    "scheme": "linear",
+    "subtle": "color-mix(in srgb, #fcfcfd 84%, #1b1b1b)",
+    "strong": "color-mix(in srgb, #fcfcfd 68%, #1b1b1b)"
+  },
+  {
+    "variant": "light",
+    "scheme": "notion",
+    "subtle": "color-mix(in srgb, #ffffff 84%, #37352f)",
+    "strong": "color-mix(in srgb, #ffffff 68%, #37352f)"
+  },
+  {
+    "variant": "light",
+    "scheme": "one",
+    "subtle": "color-mix(in srgb, #fafafa 84%, #383a42)",
+    "strong": "color-mix(in srgb, #fafafa 68%, #383a42)"
+  },
+  {
+    "variant": "light",
+    "scheme": "proof",
+    "subtle": "color-mix(in srgb, #f5f3ed 84%, #2f312d)",
+    "strong": "color-mix(in srgb, #f5f3ed 68%, #2f312d)"
+  },
+  {
+    "variant": "light",
+    "scheme": "raycast",
+    "subtle": "color-mix(in srgb, #ffffff 84%, #030303)",
+    "strong": "color-mix(in srgb, #ffffff 68%, #030303)"
+  },
+  {
+    "variant": "light",
+    "scheme": "rose-pine",
+    "subtle": "color-mix(in srgb, #faf4ed 84%, #575279)",
+    "strong": "color-mix(in srgb, #faf4ed 68%, #575279)"
+  },
+  {
+    "variant": "light",
+    "scheme": "solarized",
+    "subtle": "color-mix(in srgb, #fdf6e3 84%, #657b83)",
+    "strong": "color-mix(in srgb, #fdf6e3 68%, #657b83)"
+  },
+  {
+    "variant": "light",
+    "scheme": "vercel",
+    "subtle": "color-mix(in srgb, #ffffff 84%, #171717)",
+    "strong": "color-mix(in srgb, #ffffff 68%, #171717)"
+  },
+  {
+    "variant": "light",
+    "scheme": "vscode-plus",
+    "subtle": "color-mix(in srgb, #ffffff 84%, #000000)",
+    "strong": "color-mix(in srgb, #ffffff 68%, #000000)"
+  },
+  {
+    "variant": "light",
+    "scheme": "xcode",
+    "subtle": "color-mix(in srgb, #ffffff 84%, #000000d9)",
+    "strong": "color-mix(in srgb, #ffffff 68%, #000000d9)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "default",
+    "subtle": "#404040",
+    "strong": "#5f5f5f"
+  },
+  {
+    "variant": "dark",
+    "scheme": "absolutely",
+    "subtle": "color-mix(in srgb, #2d2d2b 70%, #f9f9f7)",
+    "strong": "color-mix(in srgb, #2d2d2b 54%, #f9f9f7)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "ayu",
+    "subtle": "color-mix(in srgb, #0b0e14 70%, #bfbdb6)",
+    "strong": "color-mix(in srgb, #0b0e14 54%, #bfbdb6)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "catppuccin",
+    "subtle": "color-mix(in srgb, #1e1e2e 70%, #cdd6f4)",
+    "strong": "color-mix(in srgb, #1e1e2e 54%, #cdd6f4)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "dracula",
+    "subtle": "color-mix(in srgb, #282a36 70%, #f8f8f2)",
+    "strong": "color-mix(in srgb, #282a36 54%, #f8f8f2)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "everforest",
+    "subtle": "color-mix(in srgb, #2d353b 70%, #d3c6aa)",
+    "strong": "color-mix(in srgb, #2d353b 54%, #d3c6aa)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "github",
+    "subtle": "color-mix(in srgb, #0d1117 70%, #e6edf3)",
+    "strong": "color-mix(in srgb, #0d1117 54%, #e6edf3)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "gruvbox",
+    "subtle": "color-mix(in srgb, #282828 70%, #ebdbb2)",
+    "strong": "color-mix(in srgb, #282828 54%, #ebdbb2)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "linear",
+    "subtle": "color-mix(in srgb, #0f0f11 70%, #e3e4e6)",
+    "strong": "color-mix(in srgb, #0f0f11 54%, #e3e4e6)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "lobster",
+    "subtle": "color-mix(in srgb, #111827 70%, #e4e4e7)",
+    "strong": "color-mix(in srgb, #111827 54%, #e4e4e7)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "material",
+    "subtle": "color-mix(in srgb, #212121 70%, #eeffff)",
+    "strong": "color-mix(in srgb, #212121 54%, #eeffff)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "matrix",
+    "subtle": "color-mix(in srgb, #040805 70%, #b8ffca)",
+    "strong": "color-mix(in srgb, #040805 54%, #b8ffca)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "monokai",
+    "subtle": "color-mix(in srgb, #272822 70%, #f8f8f2)",
+    "strong": "color-mix(in srgb, #272822 54%, #f8f8f2)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "night-owl",
+    "subtle": "color-mix(in srgb, #011627 70%, #d6deeb)",
+    "strong": "color-mix(in srgb, #011627 54%, #d6deeb)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "nord",
+    "subtle": "color-mix(in srgb, #2e3440 70%, #d8dee9)",
+    "strong": "color-mix(in srgb, #2e3440 54%, #d8dee9)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "notion",
+    "subtle": "color-mix(in srgb, #191919 70%, #d9d9d8)",
+    "strong": "color-mix(in srgb, #191919 54%, #d9d9d8)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "one",
+    "subtle": "color-mix(in srgb, #282c34 70%, #abb2bf)",
+    "strong": "color-mix(in srgb, #282c34 54%, #abb2bf)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "oscurange",
+    "subtle": "color-mix(in srgb, #0b0b0f 70%, #e6e6e6)",
+    "strong": "color-mix(in srgb, #0b0b0f 54%, #e6e6e6)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "raycast",
+    "subtle": "color-mix(in srgb, #101010 70%, #fefefe)",
+    "strong": "color-mix(in srgb, #101010 54%, #fefefe)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "rose-pine",
+    "subtle": "color-mix(in srgb, #232136 70%, #e0def4)",
+    "strong": "color-mix(in srgb, #232136 54%, #e0def4)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "sentry",
+    "subtle": "color-mix(in srgb, #2d2935 70%, #e6dff9)",
+    "strong": "color-mix(in srgb, #2d2935 54%, #e6dff9)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "solarized",
+    "subtle": "color-mix(in srgb, #002b36 70%, #839496)",
+    "strong": "color-mix(in srgb, #002b36 54%, #839496)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "temple",
+    "subtle": "color-mix(in srgb, #02120c 70%, #c7e6da)",
+    "strong": "color-mix(in srgb, #02120c 54%, #c7e6da)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "tokyo-night",
+    "subtle": "color-mix(in srgb, #1a1b26 70%, #a9b1d6)",
+    "strong": "color-mix(in srgb, #1a1b26 54%, #a9b1d6)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "vercel",
+    "subtle": "color-mix(in srgb, #000000 70%, #ededed)",
+    "strong": "color-mix(in srgb, #000000 54%, #ededed)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "vscode-plus",
+    "subtle": "color-mix(in srgb, #1e1e1e 70%, #d4d4d4)",
+    "strong": "color-mix(in srgb, #1e1e1e 54%, #d4d4d4)"
+  },
+  {
+    "variant": "dark",
+    "scheme": "xcode",
+    "subtle": "color-mix(in srgb, #1f1f24 70%, #ffffffd9)",
+    "strong": "color-mix(in srgb, #1f1f24 54%, #ffffffd9)"
+  }
+]
