@@ -149,8 +149,16 @@ export async function runClassificationCategoryFilterScenarios({ client, session
       assert.equal(await evaluate(client!, sessionId, `document.querySelector('.qp-category-search input').value`), '工具');
       await input('');
       await waitForExpression(client!, sessionId, `document.querySelectorAll('[data-classification-app]').length === 2`);
-      for (const width of [720,1024,1280,1920]) {
+      const placements = [
+        { width: 720 }, { width: 1024 }, { width: 1280 }, { width: 1920 },
+        { width: 720, edge: 'left' }, { width: 720, edge: 'right' },
+      ];
+      for (const { width, edge } of placements) {
         await client!.command('Emulation.setDeviceMetricsOverride', {width,height:820,deviceScaleFactor:1,mobile:false}, sessionId);
+        if (edge) {
+          await evaluate(client!, sessionId, `document.querySelector('.qp-category-search').style.cssText =
+            ${jsonString(`position: fixed; top: 100px; ${edge}: 0`)};`);
+        }
         if (width >= 1024) {
           assert.equal(await evaluate(client!, sessionId, `(() => {
             const search=document.querySelector('.qp-category-search').getBoundingClientRect();
@@ -164,12 +172,23 @@ export async function runClassificationCategoryFilterScenarios({ client, session
         await waitForExpression(client!, sessionId, `(() => {
           const popover=document.querySelector('.qp-category-filter-popover').getBoundingClientRect();
           const search=document.querySelector('.qp-category-search').getBoundingClientRect();
-          return popover.left>=0 && popover.right<=innerWidth && popover.bottom<=innerHeight
-            && Math.abs(popover.left+popover.width/2-search.left-search.width/2)<1;
-        })()`);
+          const centeredLeft=search.left+search.width/2-popover.width/2;
+          const expectedLeft=Math.max(12, Math.min(innerWidth-popover.width-12, centeredLeft));
+          return popover.left>=12 && popover.right<=innerWidth-12 && popover.bottom<=innerHeight-12
+            && Math.abs(popover.left-expectedLeft)<1;
+        })()`, 15_000, `category popover at viewport ${width}, edge ${edge ?? 'none'}`).catch(async (error: unknown) => {
+          const geometry = await evaluate(client!, sessionId, `({
+            viewport: [innerWidth, innerHeight],
+            popover: document.querySelector('.qp-category-filter-popover')?.getBoundingClientRect().toJSON(),
+            search: document.querySelector('.qp-category-search')?.getBoundingClientRect().toJSON(),
+            animations: document.getAnimations().map(a => ({state:a.playState, time:a.currentTime})),
+          })`);
+          throw new Error(`Category popover geometry: ${JSON.stringify(geometry)}`, { cause: error });
+        });
         await key('Escape',27);
         await waitForExpression(client!, sessionId, `!document.querySelector('.qp-category-filter-popover')`);
         assert.equal(await evaluate(client!, sessionId, `document.activeElement?.classList.contains('qp-category-filter-trigger')`), true);
+        if (edge) await evaluate(client!, sessionId, `document.querySelector('.qp-category-search').style.cssText = ''`);
       }
       await open();
       await key('Tab',9);
