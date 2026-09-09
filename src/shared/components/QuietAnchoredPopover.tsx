@@ -139,11 +139,14 @@ export default function QuietAnchoredPopover({
 
     setPosition(null);
     updatePosition();
-    if (typeof ResizeObserver === "undefined") return undefined;
-    const observer = new ResizeObserver(updatePosition);
-    observer.observe(anchor);
-    if (popoverRef.current) observer.observe(popoverRef.current);
-    return () => observer.disconnect();
+    // ResizeObserver misses position-only shifts from responsive layout or transforms.
+    let frame = 0;
+    const trackAnchor = () => {
+      updatePosition();
+      frame = requestAnimationFrame(trackAnchor);
+    };
+    frame = requestAnimationFrame(trackAnchor);
+    return () => cancelAnimationFrame(frame);
   }, [anchor, open, updatePosition]);
 
   useEffect(() => {
@@ -161,7 +164,6 @@ export default function QuietAnchoredPopover({
       event.stopPropagation();
       onCloseRef.current();
     };
-    const handleResize = () => updatePosition();
     const handleScroll = (event: Event) => {
       const target = event.target;
       if (target instanceof Node && popoverRef.current?.contains(target)) {
@@ -172,15 +174,13 @@ export default function QuietAnchoredPopover({
 
     document.addEventListener("pointerdown", handlePointerDown, true);
     document.addEventListener("keydown", handleKeyDown, true);
-    window.addEventListener("resize", handleResize);
     window.addEventListener("scroll", handleScroll, true);
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown, true);
       document.removeEventListener("keydown", handleKeyDown, true);
-      window.removeEventListener("resize", handleResize);
       window.removeEventListener("scroll", handleScroll, true);
     };
-  }, [anchor, open, updatePosition]);
+  }, [anchor, open]);
 
   if (!open || !anchor || typeof document === "undefined") return null;
 

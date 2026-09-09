@@ -169,13 +169,18 @@ export async function runClassificationCategoryFilterScenarios({ client, session
           })()`), true, `single toolbar row at ${width}`);
         }
         await open();
+        if (width === 1024) {
+          // A responsive layout can move a fixed-size anchor after the resize event.
+          await evaluate(client!, sessionId, `document.querySelector('.qp-category-search').style.transform = 'translate(28px, 20px)'`);
+        }
         await waitForExpression(client!, sessionId, `(() => {
           const popover=document.querySelector('.qp-category-filter-popover').getBoundingClientRect();
           const search=document.querySelector('.qp-category-search').getBoundingClientRect();
           const centeredLeft=search.left+search.width/2-popover.width/2;
           const expectedLeft=Math.max(12, Math.min(innerWidth-popover.width-12, centeredLeft));
           return popover.left>=12 && popover.right<=innerWidth-12 && popover.bottom<=innerHeight-12
-            && Math.abs(popover.left-expectedLeft)<1;
+            && Math.abs(popover.left-expectedLeft)<1
+            && Math.abs(popover.top-search.bottom-8)<1;
         })()`, 15_000, `category popover at viewport ${width}, edge ${edge ?? 'none'}`).catch(async (error: unknown) => {
           const geometry = await evaluate(client!, sessionId, `({
             viewport: [innerWidth, innerHeight],
@@ -188,7 +193,7 @@ export async function runClassificationCategoryFilterScenarios({ client, session
         await key('Escape',27);
         await waitForExpression(client!, sessionId, `!document.querySelector('.qp-category-filter-popover')`);
         assert.equal(await evaluate(client!, sessionId, `document.activeElement?.classList.contains('qp-category-filter-trigger')`), true);
-        if (edge) await evaluate(client!, sessionId, `document.querySelector('.qp-category-search').style.cssText = ''`);
+        if (edge || width === 1024) await evaluate(client!, sessionId, `document.querySelector('.qp-category-search').style.cssText = ''`);
       }
       await open();
       await key('Tab',9);
