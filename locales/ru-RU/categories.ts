@@ -1,0 +1,27 @@
+// ru-RU locale resource. Pure data only.
+export const MESSAGES = {
+  "categories.ai": "ИИ",
+  "categories.browser": "Браузер",
+  "categories.communication": "Общение",
+  "categories.custom": "Свой вариант",
+  "categories.design": "Дизайн",
+  "categories.development": "Разработка",
+  "categories.game": "Игры",
+  "categories.music": "Музыка",
+  "categories.office": "Офис",
+  "categories.other": "Прочее",
+  "categories.short.browser": "Браузер",
+  "categories.short.communication": "Общение",
+  "categories.short.design": "Дизайн",
+  "categories.short.development": "Разработка",
+  "categories.short.game": "Игры",
+  "categories.short.music": "Музыка",
+  "categories.short.office": "Офис",
+  "categories.short.other": "Без кат.",
+  "categories.short.system": "Система",
+  "categories.short.utility": "Инструменты",
+  "categories.short.video": "Видео",
+  "categories.system": "Система",
+  "categories.utility": "Утилиты",
+  "categories.video": "Видео"
+} as const;
