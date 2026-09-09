@@ -12,6 +12,7 @@ interface ConfirmDialogOptions {
 }
 
 interface PromptDialogOptions {
+  surfaceClassName?: string;
   title: string;
   description?: string;
   placeholder?: string;
@@ -80,6 +81,7 @@ export function useQuietDialogs() {
 
       {promptState && (
         <QuietPromptDialog
+          surfaceClassName={promptState.surfaceClassName}
           open={promptState.open}
           title={promptState.title}
           description={promptState.description}

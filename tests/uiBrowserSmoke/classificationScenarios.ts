@@ -907,6 +907,14 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
       true,
     );
     await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-category-dialog-surface'))`);
+    for (const [width, columns] of [[360, 1], [500, 2], [1100, 3]]) {
+      await client!.command("Emulation.setDeviceMetricsOverride", { width, height: 820, deviceScaleFactor: 1, mobile: false }, sessionId);
+      await waitForExpression(client!, sessionId, `innerWidth===${width}`);
+      assert.equal(await evaluate(client!, sessionId, `getComputedStyle(document.querySelector('.qp-category-management-grid')).gridTemplateColumns.split(' ').length`), columns);
+      assert.equal(await evaluate(client!, sessionId, `Array.from(document.querySelector('.qp-category-management-grid').children).every(n=>n.scrollWidth<=n.clientWidth)`), true);
+    }
+    await client!.command("Emulation.setDeviceMetricsOverride", { width: 1280, height: 820, deviceScaleFactor: 1, mobile: false }, sessionId);
+    assert.equal(await evaluate(client!, sessionId, `document.querySelectorAll('.qp-category-management-grid .qp-color-trigger-value').length`), 0);
     await waitForExpression(
       client!,
       sessionId,
@@ -919,6 +927,13 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
       0,
       "category dialog should not reveal a row tooltip on open",
     );
+    const swatchPosition = await evaluate(client!, sessionId, `(() => {const r=document.querySelector('.qp-category-management-grid .qp-color-trigger').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`) as { x: number; y: number };
+    await client!.command("Input.dispatchMouseEvent", { type: "mouseMoved", ...swatchPosition }, sessionId);
+    assert.equal(await evaluate(client!, sessionId, `(() => {
+      const n=document.querySelector('.qp-category-management-grid .qp-color-trigger');
+      const style=getComputedStyle(n), card=document.querySelector('.qp-category-management-grid').firstElementChild;
+      return n.matches(':hover') && style.backgroundColor!==getComputedStyle(card).backgroundColor && style.borderTopColor==='rgba(0, 0, 0, 0)' && n.getAttribute('aria-label')==='颜色';
+    })()`), true, "category swatch hover stays visible on its card without a border");
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
@@ -930,6 +945,16 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
       true,
     );
     await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-color-popover'))`);
+    await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.qp-color-popover button')).find(n=>n.textContent.trim()==='HEX').click()`);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-color-popover input[aria-label="十六进制颜色值"]'))`);
+    await evaluate(client!, sessionId, `(() => {
+      const input=document.querySelector('.qp-color-popover input[aria-label="十六进制颜色值"]');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'#123456');
+      input.dispatchEvent(new Event('input',{bubbles:true}));
+    })()`);
+    await waitForExpression(client!, sessionId, `document.querySelector('.qp-category-management-grid .qp-color-trigger-swatch').style.backgroundColor==='rgb(18, 52, 86)'`);
+    await evaluate(client!, sessionId, `document.querySelector('.qp-color-popover [aria-label="恢复默认颜色"]').click()`);
+    await waitForExpression(client!, sessionId, `document.querySelector('.qp-color-popover input[aria-label="十六进制颜色值"]').value!=='#123456'`);
     await evaluate(client!, sessionId, `
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     `);

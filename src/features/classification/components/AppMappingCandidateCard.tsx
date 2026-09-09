@@ -142,6 +142,7 @@ export default function AppMappingCandidateCard({
             <QuietIconAction
               buttonRef={editButtonRef}
               icon={<PencilLine size={14} />}
+              className="qp-icon-action-dimmed"
               title={UI_TEXT.mapping.editAppName}
               disabled={isBusy}
               onClick={onStartNameEdit}

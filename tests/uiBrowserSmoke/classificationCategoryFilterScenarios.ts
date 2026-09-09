@@ -164,7 +164,8 @@ export async function runClassificationCategoryFilterScenarios({ client, session
         await waitForExpression(client!, sessionId, `(() => {
           const popover=document.querySelector('.qp-category-filter-popover').getBoundingClientRect();
           const search=document.querySelector('.qp-category-search').getBoundingClientRect();
-          return popover.left>=0 && popover.right<=innerWidth && popover.bottom<=innerHeight && Math.abs(popover.left-search.left)<1;
+          return popover.left>=0 && popover.right<=innerWidth && popover.bottom<=innerHeight
+            && Math.abs(popover.left+popover.width/2-search.left-search.width/2)<1;
         })()`);
         await key('Escape',27);
         await waitForExpression(client!, sessionId, `!document.querySelector('.qp-category-filter-popover')`);

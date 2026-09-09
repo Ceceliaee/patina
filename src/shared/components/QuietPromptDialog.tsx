@@ -3,6 +3,7 @@ import QuietDialog from "./QuietDialog";
 import QuietButton from "./QuietButton";
 
 interface QuietPromptDialogProps {
+  surfaceClassName?: string;
   open: boolean;
   title: string;
   description?: string;
@@ -17,6 +18,7 @@ interface QuietPromptDialogProps {
 }
 
 export default function QuietPromptDialog({
+  surfaceClassName,
   open,
   title,
   description,
@@ -33,6 +35,7 @@ export default function QuietPromptDialog({
 
   return (
     <QuietDialog
+      surfaceClassName={surfaceClassName}
       open={open}
       title={title}
       description={description}

@@ -1,5 +1,5 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
-import { PencilLine, RotateCcw, Trash2 } from "lucide-react";
+import { PencilLine, Trash2 } from "lucide-react";
 import type { AppCategory } from "../../../shared/classification/categoryTokens";
 import QuietColorField from "../../../shared/components/QuietColorField";
 import QuietIconAction from "../../../shared/components/QuietIconAction";
@@ -33,7 +33,7 @@ export default function CategoryColorControls({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+    <div className="qp-category-management-grid">
       {categories.map((category) => {
         const label = getCategoryLabel(category);
         const color = getCategoryColor(category);
@@ -44,10 +44,15 @@ export default function CategoryColorControls({
             className="rounded-[10px] border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-panel)] px-3 py-2.5"
           >
             <div className="flex items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-2">
-                <span
-                  className="h-3.5 w-3.5 shrink-0 rounded-full border border-[var(--qp-bg-panel)]"
-                  style={{ backgroundColor: color }}
+              <div className="flex min-w-0 items-center gap-1">
+                <QuietColorField
+                  color={color}
+                  format={colorFormat}
+                  presentation="swatch"
+                  onChange={(nextColor) => onApplyColor(category, nextColor)}
+                  onFormatChange={onColorFormatChange}
+                  title={UI_TEXT.mapping.color}
+                  resetAction={{ label: UI_TEXT.mapping.restoreDefaultColor, onReset: () => onApplyColor(category, null) }}
                 />
                 <span className="min-w-0 truncate text-sm font-semibold text-[var(--qp-text-primary)]">{label}</span>
                 <QuietIconAction
@@ -59,21 +64,6 @@ export default function CategoryColorControls({
               </div>
 
               <div className="flex shrink-0 items-center gap-1.5">
-                <QuietColorField
-                  color={color}
-                  format={colorFormat}
-                  onChange={(nextColor) => onApplyColor(category, nextColor)}
-                  onFormatChange={onColorFormatChange}
-                  title={UI_TEXT.mapping.color}
-                />
-
-                <QuietIconAction
-                  icon={<RotateCcw size={13} />}
-                  className="qp-icon-action-dimmed"
-                  onClick={() => onApplyColor(category, null)}
-                  title={UI_TEXT.mapping.restoreDefaultColor}
-                />
-
                 <QuietIconAction
                   icon={<Trash2 size={12} />}
                   tone="danger"
