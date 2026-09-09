@@ -1,3 +1,4 @@
+import { runThemeContrastScenarios } from "./themeContrastScenarios.ts";
 import assert from "node:assert/strict";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import {
@@ -243,6 +244,8 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     );
     await waitForExpression(client!, sessionId, "!document.querySelector('.settings-color-scheme-list')");
   });
+
+  await runThemeContrastScenarios(context);
 
   await runTest("settings language select switches, persists, and restores all production locales", async () => {
     const openSettings = async (label: string) => {

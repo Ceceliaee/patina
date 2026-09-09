@@ -20,9 +20,9 @@ type SettingsAppearancePanelProps = {
   onLanguageChange: (nextLanguage: AppLanguage) => void;
   languageDisabled?: boolean;
   colorSchemeLight: ColorScheme;
-  onColorSchemeLightChange: (nextColorScheme: ColorScheme) => void;
   colorSchemeDark: ColorScheme;
-  onColorSchemeDarkChange: (nextColorScheme: ColorScheme) => void;
+  onColorSchemeLightChange: (scheme: ColorScheme) => void;
+  onColorSchemeDarkChange: (scheme: ColorScheme) => void;
   dynamicEffects: boolean;
   onDynamicEffectsChange: (nextChecked: boolean) => void;
   onConfirmColorSchemeChange: (library: ThemeLibrary) => Promise<boolean>;
@@ -36,8 +36,8 @@ export default function SettingsAppearancePanel({
   onLanguageChange,
   languageDisabled = false,
   colorSchemeLight,
-  onColorSchemeLightChange,
   colorSchemeDark,
+  onColorSchemeLightChange,
   onColorSchemeDarkChange,
   dynamicEffects,
   onDynamicEffectsChange,
@@ -45,6 +45,7 @@ export default function SettingsAppearancePanel({
   colorSchemeConfirming,
 }: SettingsAppearancePanelProps) {
   const UI_TEXT = useLocaleText();
+  const confirmationPendingRef = useRef(false);
   const selectedSchemeRef = useRef<HTMLButtonElement>(null);
   const [activeLibrary, setActiveLibrary] = useState<ThemeLibrary | null>(null);
   const [dialogSnapshot, setDialogSnapshot] = useState<{
@@ -69,7 +70,10 @@ export default function SettingsAppearancePanel({
   ];
   const activeLibraryOption = themeLibraryOptions.find((option) => option.value === activeLibrary);
   const activeColorScheme = activeLibrary === "dark" ? colorSchemeDark : colorSchemeLight;
-  const changeActiveColorScheme = activeLibrary === "dark" ? onColorSchemeDarkChange : onColorSchemeLightChange;
+  const changeActiveColorScheme = (scheme: ColorScheme) => {
+    if (!activeLibrary || confirmationPendingRef.current || colorSchemeConfirming) return;
+    (activeLibrary === "dark" ? onColorSchemeDarkChange : onColorSchemeLightChange)(scheme);
+  };
 
   const openColorSchemeDialog = (library: ThemeLibrary) => {
     setDialogSnapshot({
@@ -80,12 +84,9 @@ export default function SettingsAppearancePanel({
   };
 
   const closeColorSchemeDialog = () => {
+    if (confirmationPendingRef.current || colorSchemeConfirming) return;
     if (dialogSnapshot) {
-      if (dialogSnapshot.library === "dark") {
-        onColorSchemeDarkChange(dialogSnapshot.colorScheme);
-      } else {
-        onColorSchemeLightChange(dialogSnapshot.colorScheme);
-      }
+      (dialogSnapshot.library === "dark" ? onColorSchemeDarkChange : onColorSchemeLightChange)(dialogSnapshot.colorScheme);
     }
 
     setDialogSnapshot(null);
@@ -93,11 +94,16 @@ export default function SettingsAppearancePanel({
   };
 
   const handleConfirmColorScheme = async () => {
-    if (!activeLibrary) return;
-    const accepted = await onConfirmColorSchemeChange(activeLibrary);
-    if (accepted) {
-      setDialogSnapshot(null);
-      setActiveLibrary(null);
+    if (!activeLibrary || confirmationPendingRef.current || colorSchemeConfirming) return;
+    confirmationPendingRef.current = true;
+    try {
+      const accepted = await onConfirmColorSchemeChange(activeLibrary);
+      if (accepted) {
+        setDialogSnapshot(null);
+        setActiveLibrary(null);
+      }
+    } finally {
+      confirmationPendingRef.current = false;
     }
   };
 
@@ -236,6 +242,7 @@ export default function SettingsAppearancePanel({
                     ref={selected ? selectedSchemeRef : undefined}
                     type="button"
                     aria-pressed={selected}
+                    disabled={colorSchemeConfirming}
                     onClick={() => changeActiveColorScheme(option.value)}
                     className={`settings-color-scheme-option ${
                       selected ? "settings-color-scheme-option-selected" : ""

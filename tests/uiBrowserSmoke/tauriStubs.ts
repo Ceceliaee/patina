@@ -719,6 +719,10 @@ function tauriStubFor(path: string) {
           };
         }
         if (command === "cmd_commit_app_settings") {
+          if (globalThis.__PATINA_REJECT_THEME_SAVE) throw new Error("Theme save rejected by fixture");
+          if (globalThis.__PATINA_HOLD_THEME_SAVE) {
+            await new Promise(resolve => { globalThis.__PATINA_RELEASE_THEME_SAVE = resolve; });
+          }
           const settings = loadStoredSettings();
           for (const mutation of payload.mutations ?? []) {
             settings[mutation.key] = mutation.value;

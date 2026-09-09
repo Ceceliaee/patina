@@ -1,3 +1,5 @@
+import { deriveTheme } from "../../shared/theme/deriveTheme.ts";
+import { getThemePreset } from "../../shared/theme/themePresets.ts";
 import { useLayoutEffect } from "react";
 import type { ColorScheme, ThemeMode } from "../../shared/settings/appSettings.ts";
 
@@ -16,6 +18,10 @@ function applyDocumentTheme(themeMode: ThemeMode, effectiveTheme: EffectiveTheme
   root.dataset.themeMode = themeMode;
   root.dataset.theme = effectiveTheme;
   root.dataset.colorScheme = colorScheme;
+  for (const [key, value] of Object.entries(deriveTheme(effectiveTheme, colorScheme, null))) {
+    root.style.setProperty(key, value);
+  }
+  root.dataset.themeContrast = String(getThemePreset(effectiveTheme, colorScheme).contrast);
   root.style.colorScheme = effectiveTheme;
 }
 
@@ -37,6 +43,7 @@ export function isDocumentThemeApplied(
   return root.dataset.themeMode === themeMode
     && root.dataset.theme === effectiveTheme
     && root.dataset.colorScheme === colorScheme
+    && root.dataset.themeContrast === String(getThemePreset(effectiveTheme, colorScheme).contrast)
     && root.style.colorScheme === effectiveTheme;
 }
 
@@ -47,7 +54,8 @@ export function useAppThemeMode(
 ) {
   useLayoutEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-      applyDocumentTheme(themeMode, "light", colorSchemeLight);
+      const dark = themeMode === "dark";
+      applyDocumentTheme(themeMode, dark ? "dark" : "light", dark ? colorSchemeDark : colorSchemeLight);
       return undefined;
     }
 
@@ -71,5 +79,5 @@ export function useAppThemeMode(
     return () => {
       mediaQuery.removeEventListener("change", syncTheme);
     };
-  }, [colorSchemeDark, colorSchemeLight, themeMode]);
+  }, [ colorSchemeDark, colorSchemeLight, themeMode]);
 }

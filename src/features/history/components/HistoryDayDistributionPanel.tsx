@@ -236,7 +236,7 @@ export default function HistoryDayDistributionPanel({
                     <span className="font-normal opacity-70"> · {formatDistributionPercentage(item.percentage)}</span>
                   </span>
                 </div>
-                <div className="h-1.5 bg-[var(--qp-track-muted)] rounded-full overflow-hidden">
+                <div className="h-1.5 bg-[var(--qp-chart-track)] rounded-full overflow-hidden">
                   <div
                     className="history-day-distribution-progress h-full rounded-full"
                     style={{

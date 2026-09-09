@@ -212,12 +212,23 @@ Quiet Pro 不鼓励“这个页面再发明一个更顺眼的新档位”。
 
 `src/App.css` 长期只作为样式入口，汇总导入 `src/styles/` 下的 CSS-only 文件。当前样式 owner 口径为：
 
-- `src/styles/tokens.css`：Quiet Pro token、主题 scheme 与语义变量
+- `src/styles/tokens.css`：Quiet Pro 几何、字体、动效 token 与 Tailwind 颜色别名
+- `src/shared/theme/`：主题预设、默认对比度与颜色派生；`useAppThemeMode` 将结果应用到主窗口及 Widget 的 `--qp-*`
 - `src/styles/quiet-pro.css`：可复用组件原型
 - `src/styles/app-shell.css`：应用壳层、通用页面与响应式规则
 - `src/styles/features/*`：对应 feature 的局部样式
 
-主题 swatch 与可选主题列表这类结构化主题数据不应留在页面组件内部，优先放在稳定的 shared settings/theme owner 中，再由页面组件消费。
+主题色样和预设默认对比度由 [themePresets.ts](../src/shared/theme/themePresets.ts) 持有；[colorSchemeOptions.ts](../src/shared/settings/colorSchemeOptions.ts) 保留可选项及显示名称。颜色计算和 Patina 语义映射由 [deriveTheme.ts](../src/shared/theme/deriveTheme.ts) 持有，组件消费 `--qp-*`，不再维护逐主题 CSS 色板。
+
+浅色和深色分别保存主题预设，颜色派生采用各预设默认对比度，不提供用户对比度选项，也不读取或保存自定义覆盖值。普通与强调边框保留 Patina 各主题既有配色，由预设持有；主按钮文字保持白色。
+
+Codex 参考用于校正命名主题的基础调色板和背景派生，不替换 Patina 的文字、滑条、开关、滚动条和交互状态配色规则。默认主题保留 Patina 原有整套颜色。控件继续消费既有语义 token，保持原来的混色比例和明暗层级。
+
+统计进度条的未填充底色使用独立的 `--qp-chart-track`，保持轻淡；设置滑条继续使用 `--qp-track-muted`，两者不互相改变对比度。
+
+内层卡片底色在浅色和深色下均略暗于所在面板，以表达嵌入关系；浅色保留柔和色差，避免与面板同色。具体混色由颜色派生 owner 维护。
+
+预览只影响当前窗口草稿；取消、Escape 或遮罩关闭恢复打开弹窗时的配色。确认保存当前模式的配色，并通过现有设置事件同步 Widget，不提交其他设置草稿。保存期间锁定编辑与关闭；写入失败保留草稿供重试或取消。
 
 ---
 

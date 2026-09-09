@@ -143,7 +143,12 @@ try {
 
   await runStartupScenarios(smokeContext);
 
-  if (process.argv.includes("--category-filter-only")) {
+  if (process.argv.includes("--theme-only")) {
+    const { runThemeContrastScenarios } = await import("./uiBrowserSmoke/themeContrastScenarios.ts");
+    await evaluate(client!, sessionId, `document.querySelector('[aria-label="设置"]')?.click()`);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.settings-theme-entry'))`);
+    await runThemeContrastScenarios(smokeContext);
+  } else if (process.argv.includes("--category-filter-only")) {
     const { runClassificationCategoryFilterScenarios } = await import("./uiBrowserSmoke/classificationCategoryFilterScenarios.ts");
     await runClassificationCategoryFilterScenarios(smokeContext);
   } else if (classificationOnly) {

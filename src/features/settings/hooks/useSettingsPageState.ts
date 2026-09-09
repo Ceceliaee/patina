@@ -342,7 +342,7 @@ export function useSettingsPageState({
       }
       setSaveStatus(result.nextSaveStatus);
       if (result.nextSaveStatus === "saved") {
-        window.setTimeout(() => setSaveStatus("idle"), 1800);
+        window.setTimeout(() => setSaveStatus((current) => current === "saved" ? "idle" : current), 1800);
       }
       if (result.toastKind === "runtime-sync-warning") {
         notify(UI_TEXT.toast.settingsRuntimeSyncPartial, "warning");
@@ -384,7 +384,7 @@ export function useSettingsPageState({
       });
       onColorSchemeSaved?.(nextSavedSettings);
       setSaveStatus("saved");
-      window.setTimeout(() => setSaveStatus("idle"), 1800);
+      window.setTimeout(() => setSaveStatus((current) => current === "saved" ? "idle" : current), 1800);
       if (result.runtimeSync === "failed") {
         notify(UI_TEXT.toast.settingsRuntimeSyncPartial, "warning");
       } else {

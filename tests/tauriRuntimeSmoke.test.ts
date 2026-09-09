@@ -967,6 +967,40 @@ try {
     ),
     10_000,
   );
+  const appearanceRead = `({
+    contrast: document.documentElement.dataset.themeContrast,
+    scheme: document.documentElement.dataset.colorScheme,
+    surface: document.documentElement.style.getPropertyValue('--qp-bg-canvas'),
+    border: document.documentElement.style.getPropertyValue('--qp-border-subtle'),
+  })`;
+  for (const [scheme, contrast] of [["catppuccin", "45"], ["vercel", "40"], ["default", "45"]]) {
+    await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
+      mutations: [
+        { key: "color_scheme_light", value: "${scheme}" }
+      ]
+    })`);
+    await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:event|emit", {
+      event: "app-settings-changed", payload: { colorSchemeLight: "${scheme}" }
+    })`);
+    const expectedContrast = contrast || "45";
+    for (const connection of [client, widgetClient]) {
+      await waitFor("saved theme synchronizes across WebViews", async () => {
+        const appearance = await evaluate(connection!, appearanceRead) as { contrast: string; scheme: string };
+        return appearance.contrast === expectedContrast && appearance.scheme === scheme;
+      }, 10_000);
+    }
+    assert.deepEqual(await evaluate(widgetClient, appearanceRead), await evaluate(client, appearanceRead));
+    await widgetClient.command("Page.reload", { ignoreCache: true });
+    await waitFor("widget theme restores from the database", async () => {
+      try {
+        const appearance = await evaluate(widgetClient!, appearanceRead) as { contrast: string; scheme: string };
+        return appearance.contrast === expectedContrast && appearance.scheme === scheme;
+      } catch { return false; }
+    }, 10_000);
+    assert.deepEqual(await evaluate(widgetClient, appearanceRead), await evaluate(client, appearanceRead));
+  }
+  console.log("PATINA_THEME_RUNTIME_REPORT", JSON.stringify({ savedSync: true, widgetReload: true, presetDefault: true }));
+
   await waitFor(
     "widget DOM side matches the native left-edge placement",
     async () => evaluate(
@@ -1674,6 +1708,45 @@ try {
   `) as { code?: string; retryable?: boolean };
   assert.equal(structuredError.code, "SQLITE_INVALID_INPUT");
   assert.equal(structuredError.retryable, false);
+
+  await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", { mutations: [
+    { key: "theme_mode", value: "dark" },
+    { key: "color_scheme_dark", value: "catppuccin" }
+  ] })`);
+  widgetClient?.close();
+  widgetClient = null;
+  client.close();
+  client = null;
+  stopProcessTree(appProcess);
+  await waitFor("old runtime process exits before restart", () => !isResidualRuntimeBinaryRunning(), 10_000);
+  appProcess = spawn(RUNTIME_BINARY_PATH, [], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PATINA_E2E: "1",
+      PATINA_E2E_SINGLE_INSTANCE: "1",
+      PATINA_E2E_DATA_ROOT: root,
+      PATINA_E2E_FRONTEND_URL: frontendUrl,
+      PATINA_E2E_DEVTOOLS_PORT: String(devtoolsPort),
+      TAURI_CONFIG: tauriConfigOverrideJson,
+      WEBVIEW2_USER_DATA_FOLDER: join(root, "webview-user-data"),
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
+  appProcess.stdout?.on("data", captureAppLog);
+  appProcess.stderr?.on("data", captureAppLog);
+  const restartedTarget = await waitFor("theme cold restart WebView", () => findMainTarget(devtoolsPort), WEBVIEW_STARTUP_TIMEOUT_MS);
+  client = await CdpConnection.connect(restartedTarget.webSocketDebuggerUrl!);
+  await waitFor("theme survives full process restart", async () => {
+    try {
+      return await evaluate(client!, `document.documentElement.dataset.theme === 'dark'
+        && document.documentElement.dataset.colorScheme === 'catppuccin'
+        && document.documentElement.dataset.themeContrast === '60'
+        && document.documentElement.style.getPropertyValue('--qp-bg-canvas') === '#1e1e2e'`);
+    } catch { return false; }
+  }, 10_000);
+  console.log("PATINA_THEME_COLD_RESTART_REPORT", JSON.stringify({ processRestart: true, presetContrast: 60, savedScheme: "catppuccin" }));
 
   console.log("PASS real Tauri runtime command/event/SQLite/capability smoke");
 } catch (error) {

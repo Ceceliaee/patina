@@ -422,7 +422,7 @@ export default function Dashboard({
                       <div className="dashboard-top-app-duration font-semibold text-[var(--qp-text-primary)] text-sm tabular-nums">
                         {formatDashboardDuration(app.duration)}
                       </div>
-                      <div className="w-20 h-1.5 bg-[var(--qp-track-muted)] rounded-full mt-2.5 overflow-hidden">
+                      <div className="w-20 h-1.5 bg-[var(--qp-chart-track)] rounded-full mt-2.5 overflow-hidden">
                         <div
                           className="dashboard-top-app-progress h-full rounded-full"
                           style={{

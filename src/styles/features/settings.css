@@ -106,7 +106,7 @@
     color var(--qp-motion-fast) var(--qp-motion-ease);
 }
 
-.settings-color-scheme-option:hover {
+.settings-color-scheme-option:hover:not(:disabled) {
   border-color: var(--qp-border-strong);
   color: var(--qp-text-primary);
 }
