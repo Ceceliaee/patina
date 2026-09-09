@@ -29,7 +29,7 @@ export async function runClassificationCategoryFilterScenarios({ client, session
         await evaluate(client!, sessionId, `document.querySelector('[data-sidebar-nav-item="mapping"]').click()`);
         await waitForExpression(client!, sessionId, `document.querySelector('.qp-category-filter-trigger')?.disabled === false`);
         await evaluate(client!, sessionId, `document.querySelector('.qp-category-filter-trigger').click()`);
-        await waitForExpression(client!, sessionId, `document.activeElement?.getAttribute('role') === 'combobox' && document.querySelectorAll('.qp-category-filter-option').length === 30`);
+        await waitForExpression(client!, sessionId, `document.activeElement?.getAttribute('role') === 'listbox' && document.querySelectorAll('.qp-category-filter-option').length === 30`);
         assert.equal(await evaluate(client!, sessionId, `(() => {
           const node = document.querySelector('.qp-category-filter-popover');
           const list = document.querySelector('.qp-category-filter-list');
@@ -64,9 +64,8 @@ export async function runClassificationCategoryFilterScenarios({ client, session
       await waitForExpression(client!, sessionId, `Boolean(document.querySelector('main'))`);
     }
   });
-  await runTest("classification category filter composes with drafts, search, modes and keyboard", async () => {
+  await runTest("category shortcuts fill the sole search field without an independent filter", async () => {
     const settingsBefore = await evaluate(client!, sessionId, `localStorage.getItem('__time_tracker_smoke_settings')`);
-    const modeBefore = await evaluate(client!, sessionId, `localStorage.getItem('patina:classification-object-mode')`);
     const script = await client!.command("Page.addScriptToEvaluateOnNewDocument", {
       source: "globalThis.__TIME_TRACKER_ENABLE_WEB_FIXTURE = true;",
     }, sessionId) as { identifier: string };
@@ -81,168 +80,109 @@ export async function runClassificationCategoryFilterScenarios({ client, session
         node?.click(); return Boolean(node);
       })()`), true, label);
     };
-    const input = async (selector: string, value: string) => {
+    const input = async (value: string) => {
       await evaluate(client!, sessionId, `(() => {
-        const node = document.querySelector(${jsonString(selector)});
+        const node = document.querySelector('.qp-category-search input');
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(node, ${jsonString(value)});
         node.dispatchEvent(new Event('input', { bubbles: true }));
       })()`);
     };
-    const key = async (keyName: string, keyCode: number, modifiers = 0) => {
-      for (const type of ["keyDown", "keyUp"]) {
-        await client!.command("Input.dispatchKeyEvent", {
-          type, key: keyName, code: keyName, windowsVirtualKeyCode: keyCode, modifiers,
-        }, sessionId);
-      }
+    const key = async (keyName: string, keyCode: number) => {
+      for (const type of ["keyDown", "keyUp"]) await client!.command("Input.dispatchKeyEvent", {
+        type, key: keyName, code: keyName, windowsVirtualKeyCode: keyCode,
+      }, sessionId);
     };
     const open = async () => {
-      await click(".qp-category-filter-trigger");
-      await waitForExpression(client!, sessionId, `document.activeElement?.getAttribute('aria-label') === '搜索分类'`);
+      await click('.qp-category-filter-trigger');
+      await waitForExpression(client!, sessionId, `document.activeElement?.getAttribute('role') === 'listbox'`);
+      assert.equal(await evaluate(client!, sessionId, `document.querySelectorAll('.qp-category-filter-popover input').length`), 0);
     };
-    const option = async (label: string) => {
-      assert.equal(await evaluate(client!, sessionId, `(() => {
-        const node = Array.from(document.querySelectorAll('.qp-category-filter-option'))
-          .find(n => n.textContent.trim() === ${jsonString(label)});
-        node?.click(); return Boolean(node);
-      })()`), true, label);
+    const choose = async (label: string) => {
+      await button(label);
       await waitForExpression(client!, sessionId, `!document.querySelector('.qp-category-filter-popover')`);
+      assert.equal(await evaluate(client!, sessionId, `document.querySelector('.qp-category-search input').value`), label);
+      assert.equal(await evaluate(client!, sessionId, `document.activeElement === document.querySelector('.qp-category-search input')`), true);
     };
     try {
+      const origin = await evaluate(client!, sessionId, "performance.timeOrigin");
       await evaluate(client!, sessionId, `(() => {
-        const settings = JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') ?? '{}');
-        settings.language = 'zh-CN'; settings.web_activity_enabled = '1';
-        settings['__app_override::cursor.exe'] = JSON.stringify({category:'development', enabled:true});
-        settings['__app_override::deep-research-workbench.exe'] = JSON.stringify({category:'office', enabled:true});
-        settings['__web_domain_override::stable.example'] = JSON.stringify({category:'development', enabled:true});
-        settings['__web_domain_override::docs.example'] = JSON.stringify({category:'utility', enabled:true});
-        localStorage.setItem('__time_tracker_smoke_settings', JSON.stringify(settings));
-        localStorage.setItem('patina:last-active-view', 'dashboard');
+        const settings = {language:'zh-CN', web_activity_enabled:'1'};
+        settings['__app_override::cursor.exe'] = JSON.stringify({category:'development',enabled:true});
+        settings['__app_override::deep-research-workbench.exe'] = JSON.stringify({category:'office',displayName:'开发助手',enabled:true});
+        settings['__web_domain_override::stable.example'] = JSON.stringify({category:'development',enabled:true});
+        settings['__web_domain_override::docs.example'] = JSON.stringify({category:'utility',enabled:true});
+        localStorage.setItem('__time_tracker_smoke_settings',JSON.stringify(settings));
+        localStorage.setItem('patina:classification-object-mode','app');
+        localStorage.setItem('patina:last-active-view','mapping');
         location.reload();
       })()`);
-      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('[aria-label="分类"]'))`);
-      await click('[aria-label="分类"]');
-      await waitForExpression(client!, sessionId, `document.querySelector('[data-classification-content-state]')?.dataset.classificationContentState === 'ready'`);
-      await button("应用");
-      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('[data-classification-app="cursor.exe"]'))`);
-      await open();
-      assert.deepEqual(await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.qp-category-filter-option')).map(n => n.textContent.trim())`),
-        ["开发", "办公"]);
-      await key("ArrowDown", 40);
-      await key("ArrowUp", 38);
-      await key("Enter", 13);
-      await waitForExpression(client!, sessionId, `document.querySelectorAll('[data-classification-app]').length === 1`);
-      assert.equal(await evaluate(client!, sessionId, `document.querySelector('[data-classification-app]')?.dataset.classificationApp`), "cursor.exe");
-      assert.equal(await evaluate(client!, sessionId, `document.activeElement?.classList.contains('qp-category-filter-trigger')`), true);
+      await waitForExpression(client!, sessionId, `performance.timeOrigin !== ${origin} && document.querySelector('.qp-category-filter-trigger')?.disabled === false`);
       assert.equal(await evaluate(client!, sessionId, `(() => {
-        const trigger = document.querySelector('.qp-category-filter-trigger');
-        const reset = document.querySelector('.qp-category-filter-reset');
-        return !trigger.classList.contains('qp-icon-action-pressed') && Boolean(reset)
-          && reset.getBoundingClientRect().right <= trigger.getBoundingClientRect().left;
+        const search=document.querySelector('.qp-category-search').getBoundingClientRect();
+        const trigger=document.querySelector('.qp-category-filter-trigger').getBoundingClientRect();
+        return trigger.left>=search.left && trigger.right<=search.right && trigger.top>=search.top && trigger.bottom<=search.bottom;
       })()`), true);
-      assert.equal(await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('button')).find(n => n.textContent.trim() === '保存')?.disabled`), true);
-
-      await input('input[placeholder="搜索应用"]', "no-match-needle");
-      await waitForExpression(client!, sessionId, `document.body.innerText.includes('没有找到匹配的应用')`);
+      await input('no-match');
       await open();
-      assert.equal(await evaluate(client!, sessionId, `document.querySelectorAll('.qp-category-filter-option').length`), 2);
-      await input('.qp-category-filter-popover input', "missing category");
-      await waitForExpression(client!, sessionId, `document.querySelectorAll('.qp-category-filter-option').length === 0`);
-      await key("ArrowDown", 40);
-      await key("Enter", 13);
-      await key("Escape", 27);
-      await click(".qp-category-filter-reset");
-      assert.equal(await evaluate(client!, sessionId, `document.querySelector('.qp-category-filter-reset') === null`), true);
-      assert.equal(await evaluate(client!, sessionId, `document.activeElement?.classList.contains('qp-category-filter-trigger')`), true);
-      assert.equal(await evaluate(client!, sessionId, `document.querySelector('input[placeholder="搜索应用"]').value`), "no-match-needle");
-      await input('input[placeholder="搜索应用"]', "");
+      assert.deepEqual(await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.qp-category-filter-option')).map(n=>n.textContent.trim())`), ['开发','办公']);
+      await key('Enter',13);
+      await waitForExpression(client!, sessionId, `document.querySelectorAll('[data-classification-app]').length === 2`);
+      assert.equal(await evaluate(client!, sessionId, `document.querySelector('.qp-category-search input').value`), '开发');
+      assert.equal(await evaluate(client!, sessionId, `document.querySelector('.qp-category-filter-reset')`), null);
+      assert.equal(await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('button')).find(n=>n.textContent.trim()==='保存')?.disabled`), true);
       await open();
-      await option("开发");
-
-      // Editing the sole member must leave a clearable selected empty category.
-      await click('[data-classification-app="cursor.exe"] .qp-select-trigger');
-      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-select-menu'))`);
-      await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.qp-select-menu [role="option"]')).find(n => n.textContent.trim() === '办公')?.click()`);
-      await waitForExpression(client!, sessionId, `document.body.innerText.includes('当前筛选暂无应用')`);
-      assert.equal(await evaluate(client!, sessionId, `document.querySelector('.qp-category-filter-trigger')?.getAttribute('aria-label')`), "筛选分类 · 开发");
+      await choose('办公');
+      await waitForExpression(client!, sessionId, `document.querySelectorAll('[data-classification-app]').length === 1`);
+      await input('cursor.exe');
+      await waitForExpression(client!, sessionId, `document.querySelector('[data-classification-app]')?.dataset.classificationApp === 'cursor.exe'`);
+      await input('');
+      await waitForExpression(client!, sessionId, `document.querySelectorAll('[data-classification-app]').length === 2`);
       await open();
-      assert.equal(await evaluate(client!, sessionId, `document.querySelector('.qp-category-filter-option[aria-selected="true"]')?.textContent.trim()`), "开发");
-      await key("Escape", 27);
-      await button("取消");
-      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('[data-classification-app="cursor.exe"]'))`);
-
-      await button("管理分类");
-      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('[aria-label="重命名分类：开发"]'))`);
-      await click('[aria-label="重命名分类：开发"]');
-      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-dialog-input'))`);
-      await input('.qp-dialog-input', "研发分类");
-      await button("确认");
-      await waitForExpression(client!, sessionId, `!document.querySelector('.qp-dialog-input')`);
-      await button("关闭");
-      await waitForExpression(client!, sessionId, `document.querySelector('.qp-category-filter-trigger')?.getAttribute('aria-label') === '筛选分类 · 研发分类'`);
-      await button("管理分类");
-      await button("新建分类");
-      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-dialog-input'))`);
-      await input('.qp-dialog-input', "空分类");
-      await button("确认");
-      await waitForExpression(client!, sessionId, `!document.querySelector('.qp-dialog-input')`);
-      await button("关闭");
+      await choose('办公');
+      await button('网页');
       await open();
-      assert.equal(await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.qp-category-filter-option')).some(n => n.textContent.includes('空分类'))`), false);
-      await key("Escape", 27);
-      await button("管理分类");
-      await click('[aria-label="删除分类：研发分类"]');
-      await waitForExpression(client!, sessionId, `Array.from(document.querySelectorAll('button')).some(n => n.textContent.trim() === '继续')`);
-      await button("继续");
-      await button("关闭");
-      await waitForExpression(client!, sessionId, `document.querySelector('.qp-category-filter-trigger')?.getAttribute('aria-pressed') === 'false'`);
-      await button("取消");
-      await open();
-      await option("开发");
-
-      await button("网页");
-      await waitForExpression(client!, sessionId, `document.body.innerText.includes('stable.example') && !document.body.innerText.includes('docs.example')`);
-      await open();
-      assert.deepEqual(await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.qp-category-filter-option')).map(n => n.textContent.trim())`),
-        ["开发", "工具"]);
-      await option("工具");
+      assert.equal(await evaluate(client!, sessionId, `document.querySelector('.qp-category-search input').value`), '办公');
+      assert.deepEqual(await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.qp-category-filter-option')).map(n=>n.textContent.trim())`), ['开发','工具']);
+      await choose('工具');
       await waitForExpression(client!, sessionId, `document.body.innerText.includes('docs.example') && !document.body.innerText.includes('stable.example')`);
-      await button("应用");
-      await waitForExpression(client!, sessionId, `document.querySelector('.qp-category-filter-trigger')?.getAttribute('aria-pressed') === 'false'`);
-      await open();
-      await option("开发");
-      await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.qp-classification-count-filter button')).find(n => n.textContent.startsWith('未分类'))?.click()`);
-      await waitForExpression(client!, sessionId, `document.querySelector('.qp-category-filter-trigger')?.disabled === true`);
-      assert.equal(await evaluate(client!, sessionId, `document.querySelector('.qp-category-filter-trigger')?.getAttribute('aria-pressed')`), "false");
-      await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.qp-classification-count-filter button')).find(n => n.textContent.startsWith('全部'))?.click()`);
-
-      for (const width of [720, 1280, 1920]) {
-        await client!.command("Emulation.setDeviceMetricsOverride", { width, height: 820, deviceScaleFactor: 1, mobile: false }, sessionId);
+      await button('应用');
+      assert.equal(await evaluate(client!, sessionId, `document.querySelector('.qp-category-search input').value`), '工具');
+      await input('');
+      await waitForExpression(client!, sessionId, `document.querySelectorAll('[data-classification-app]').length === 2`);
+      for (const width of [720,1024,1280,1920]) {
+        await client!.command('Emulation.setDeviceMetricsOverride', {width,height:820,deviceScaleFactor:1,mobile:false}, sessionId);
+        if (width >= 1024) {
+          assert.equal(await evaluate(client!, sessionId, `(() => {
+            const search=document.querySelector('.qp-category-search').getBoundingClientRect();
+            const filters=document.querySelector('.qp-classification-count-filter').getBoundingClientRect();
+            const mode=Array.from(document.querySelectorAll('button')).find(n=>n.textContent.trim()==='应用').getBoundingClientRect();
+            const center=r=>r.top+r.height/2;
+            return Math.abs(center(search)-center(filters))<1 && Math.abs(center(search)-center(mode))<1;
+          })()`), true, `single toolbar row at ${width}`);
+        }
         await open();
         await waitForExpression(client!, sessionId, `(() => {
-          const rect = document.querySelector('.qp-category-filter-popover')?.getBoundingClientRect();
-          return rect && rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight;
+          const popover=document.querySelector('.qp-category-filter-popover').getBoundingClientRect();
+          const search=document.querySelector('.qp-category-search').getBoundingClientRect();
+          return popover.left>=0 && popover.right<=innerWidth && popover.bottom<=innerHeight && Math.abs(popover.left-search.left)<1;
         })()`);
-        await key("Escape", 27);
+        await key('Escape',27);
         await waitForExpression(client!, sessionId, `!document.querySelector('.qp-category-filter-popover')`);
+        assert.equal(await evaluate(client!, sessionId, `document.activeElement?.classList.contains('qp-category-filter-trigger')`), true);
       }
       await open();
-      await key("Tab", 9);
+      await key('Tab',9);
       await waitForExpression(client!, sessionId, `!document.querySelector('.qp-category-filter-popover')`);
-      assert.equal(await evaluate(client!, sessionId, `document.activeElement?.isConnected && !document.activeElement?.classList.contains('qp-category-filter-trigger')`), true);
     } finally {
-      await client!.command("Page.removeScriptToEvaluateOnNewDocument", { identifier: script.identifier }, sessionId);
-      await client!.command("Emulation.setDeviceMetricsOverride", { width: 1280, height: 820, deviceScaleFactor: 1, mobile: false }, sessionId);
+      await client!.command('Page.removeScriptToEvaluateOnNewDocument', {identifier:script.identifier}, sessionId);
+      await client!.command('Emulation.setDeviceMetricsOverride', {width:1280,height:820,deviceScaleFactor:1,mobile:false}, sessionId);
       await evaluate(client!, sessionId, `(() => {
-        const settings = ${JSON.stringify(settingsBefore)};
-        if (settings === null) localStorage.removeItem('__time_tracker_smoke_settings');
-        else localStorage.setItem('__time_tracker_smoke_settings', settings);
-        const mode = ${JSON.stringify(modeBefore)};
-        if (mode === null) localStorage.removeItem('patina:classification-object-mode');
-        else localStorage.setItem('patina:classification-object-mode', mode);
-        localStorage.setItem('patina:last-active-view', 'dashboard');
+        const settings=${JSON.stringify(settingsBefore)};
+        if(settings===null) localStorage.removeItem('__time_tracker_smoke_settings'); else localStorage.setItem('__time_tracker_smoke_settings',settings);
+        localStorage.setItem('patina:last-active-view','dashboard');
         location.reload();
       })()`);
-      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('[aria-label="分类"]'))`);
+      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('main'))`);
     }
   });
 }

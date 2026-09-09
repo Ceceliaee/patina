@@ -608,7 +608,6 @@ export interface UiText {
     "categoryDialogDescription": string;
     "categoryDialogTitle": string;
     "categoryFilter": string;
-    "categoryFilterReset": string;
     "categorySelectLabel": (label: string) => string;
     "color": string;
     "createCategoryAction": string;

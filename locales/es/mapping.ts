@@ -11,7 +11,6 @@ export const MESSAGES = {
   "mapping.appSearchPlaceholder": "Buscar apps",
   "mapping.cancel": "Cancelar",
   "mapping.categoryFilter": "Filtrar por categoría",
-  "mapping.categoryFilterReset": "Borrar filtro de categoría",
   "mapping.categoryControl": "Gestionar categorías",
   "mapping.categoryDialogDescription": "Crea categorías y ajusta sus colores",
   "mapping.categoryDialogTitle": "Gestionar categorías",
@@ -185,5 +184,5 @@ export const MESSAGES = {
   "mapping.titleRecorded": "Registrar títulos",
   "mapping.unsaved": "Cambios sin guardar",
   "mapping.webEmptyState": "Ningún sitio web coincide con el filtro actual",
-  "mapping.webSearchPlaceholder": "Buscar sitios web o categorías"
+  "mapping.webSearchPlaceholder": "Buscar sitios web"
 } as const;

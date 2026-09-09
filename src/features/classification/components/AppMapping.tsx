@@ -5,10 +5,9 @@ import { ListX, RefreshCw, Save, Sparkles, SlidersHorizontal } from "lucide-reac
 import QuietDialog from "../../../shared/components/QuietDialog";
 import QuietButton from "../../../shared/components/QuietButton";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
-import QuietSearchField from "../../../shared/components/QuietSearchField";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
 import CategoryColorControls from "./CategoryColorControls";
-import CategoryFilterButton from "./CategoryFilterButton.tsx";
+import CategorySearchField from "./CategorySearchField.tsx";
 import AppMappingCandidateCard from "./AppMappingCandidateCard";
 import WebDomainMappingCard from "./WebDomainMappingCard";
 import { useAppMappingState } from "../hooks/useAppMappingState";
@@ -54,9 +53,7 @@ export default function AppMapping(props: Props) {
     savedState,
     filter,
     setFilter,
-    categoryFilter,
-    setCategoryFilter,
-    categoryFilterOptions,
+    categorySearchOptions,
     searchQuery,
     setSearchQuery,
     counts,
@@ -147,7 +144,7 @@ export default function AppMapping(props: Props) {
     setObjectMode(mode);
     rememberClassificationObjectMode(mode);
   };
-  const contentPaneKey = `${effectiveObjectMode}:${filter}:${categoryFilter ?? ""}`;
+  const contentPaneKey = `${effectiveObjectMode}:${filter}`;
   return (
     <div
       className="flex h-full min-w-0 flex-col gap-4 md:gap-5 overflow-hidden"
@@ -230,12 +227,11 @@ export default function AppMapping(props: Props) {
                 };
               })}
             />
-            <QuietSearchField
-              className="w-[160px]"
+            <CategorySearchField
+              options={categorySearchOptions}
               value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
+              onChange={setSearchQuery}
               placeholder={searchPlaceholder}
-              aria-label={searchPlaceholder}
               disabled={!activeCatalogReady}
             />
           </div>
@@ -251,12 +247,6 @@ export default function AppMapping(props: Props) {
                 <RefreshCw size={13} aria-hidden />
               </QuietButton>
             )}
-            <CategoryFilterButton
-              value={categoryFilter}
-              options={categoryFilterOptions}
-              onChange={setCategoryFilter}
-              disabled={!activeCatalogReady || filter === "other"}
-            />
             {webActivityEnabled && (
               <QuietSegmentedFilter
                 value={effectiveObjectMode}

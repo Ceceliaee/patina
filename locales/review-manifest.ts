@@ -460,7 +460,7 @@ export const LOCALE_SOURCE_REVIEWS = {
     "mapping.searchNoResults": "27e694f9f41295e7",
     "mapping.webEmptyState": "decf99c06f52c634",
     "mapping.appSearchPlaceholder": "190fe4ccaac64f7d",
-    "mapping.webSearchPlaceholder": "7b07dc0fd2afc44f",
+    "mapping.webSearchPlaceholder": "81a3f25b2e03d80f",
     "mapping.objectModeApp": "c77f8dcf5e373dbe",
     "mapping.objectModeWeb": "2280e7eed4fa37ee",
     "mapping.createCategoryTitle": "8af1913677f7fc99",
@@ -1004,7 +1004,6 @@ export const LOCALE_SOURCE_REVIEWS = {
     "mapping.titleCaptureOffHint": "0d5021bb7c1c575b",
     "mapping.trackingOnHint": "bdc115711739168f",
     "mapping.trackingOffHint": "a5d71e15ce820be9",
-    "mapping.categoryFilterReset": "43b5899097dc3450",
     "mapping.saveFailed": "79fdd568fc406536",
     "mapping.deleteFailed": "b55210839c4712d3",
     "export.fieldsSectionTitle": "178bc06fb2f81766"
@@ -1536,7 +1535,7 @@ export const LOCALE_SOURCE_REVIEWS = {
     "mapping.titleRecorded": "23c4b915aa985ba1",
     "mapping.unsaved": "3d791da25bb4d5ee",
     "mapping.webEmptyState": "decf99c06f52c634",
-    "mapping.webSearchPlaceholder": "7b07dc0fd2afc44f",
+    "mapping.webSearchPlaceholder": "81a3f25b2e03d80f",
     "native.category.ai": "9ceb1c5eb8b8f85b",
     "native.category.browser": "695f5ddf191a7bce",
     "native.category.communication": "46d8af0964b87655",
@@ -2013,7 +2012,6 @@ export const LOCALE_SOURCE_REVIEWS = {
     "mapping.titleCaptureOffHint": "0d5021bb7c1c575b",
     "mapping.trackingOnHint": "bdc115711739168f",
     "mapping.trackingOffHint": "a5d71e15ce820be9",
-    "mapping.categoryFilterReset": "43b5899097dc3450",
     "mapping.saveFailed": "79fdd568fc406536",
     "mapping.deleteFailed": "b55210839c4712d3",
     "export.fieldsSectionTitle": "178bc06fb2f81766"

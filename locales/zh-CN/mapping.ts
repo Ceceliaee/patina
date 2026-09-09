@@ -11,7 +11,6 @@ export const MESSAGES = {
   "mapping.appSearchPlaceholder": "搜索应用",
   "mapping.cancel": "取消",
   "mapping.categoryFilter": "筛选分类",
-  "mapping.categoryFilterReset": "清除分类筛选",
   "mapping.categoryControl": "管理分类",
   "mapping.categoryDialogDescription": "新建分类并调整颜色",
   "mapping.categoryDialogTitle": "管理分类",
@@ -185,5 +184,5 @@ export const MESSAGES = {
   "mapping.titleRecorded": "记录标题",
   "mapping.unsaved": "有未保存更改",
   "mapping.webEmptyState": "当前筛选暂无网页",
-  "mapping.webSearchPlaceholder": "搜索网页或分类"
+  "mapping.webSearchPlaceholder": "搜索网页"
 } as const;

@@ -104,13 +104,7 @@ export function useAppMappingState({
   const [webNameDrafts, setWebNameDrafts] = useState<Record<string, string>>({});
   const [webNameEditSnapshots, setWebNameEditSnapshots] = useState<Record<string, WebDomainOverride | null>>({});
   const [editingWebDomain, setEditingWebDomain] = useState<string | null>(null);
-  const [filter, setBaseFilter] = useState<CandidateFilter>("all");
-  const [categoryFilter, setCategoryFilter] = useState<UserAssignableAppCategory | null>(null);
-  const categoryFilterMode = useRef(objectMode);
-  const setFilter = useCallback((next: CandidateFilter) => {
-    setBaseFilter(next);
-    if (next === "other") setCategoryFilter(null);
-  }, []);
+  const [filter, setFilter] = useState<CandidateFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [actionError, setActionError] = useState<"save" | "delete" | null>(null);
@@ -274,25 +268,12 @@ export function useAppMappingState({
     webNameEditSnapshots,
     filter,
     searchQuery,
-    categoryFilter,
     webActivityEnabled,
   });
 
   const availableFilterCategories = objectMode === "app" ? appFilterCategories : webFilterCategories;
-  const categoryFilterReady = !loading && draftState !== null && savedState !== null
-    && (objectMode === "web" || appCatalog.hasSnapshot);
-  useEffect(() => {
-    if (!categoryFilterReady) return;
-    const modeChanged = categoryFilterMode.current !== objectMode;
-    categoryFilterMode.current = objectMode;
-    if (categoryFilter && (
-      !candidateCategoryOptions.some((option) => option.value === categoryFilter)
-      || (modeChanged && !availableFilterCategories.has(categoryFilter))
-    )) setCategoryFilter(null);
-  }, [availableFilterCategories, candidateCategoryOptions, categoryFilter, categoryFilterReady, objectMode]);
-
-  const categoryFilterOptions = candidateCategoryOptions
-    .filter((option) => availableFilterCategories.has(option.value) || option.value === categoryFilter)
+  const categorySearchOptions = candidateCategoryOptions
+    .filter((option) => availableFilterCategories.has(option.value))
     .map((option) => ({ ...option, color: resolveCategoryColor(option.value) }));
 
   const refreshWebDomainCandidates = useCallback(async () => {
@@ -854,9 +835,7 @@ export function useAppMappingState({
     savedState,
     filter,
     setFilter,
-    categoryFilter,
-    setCategoryFilter,
-    categoryFilterOptions,
+    categorySearchOptions,
     searchQuery,
     setSearchQuery,
     counts,

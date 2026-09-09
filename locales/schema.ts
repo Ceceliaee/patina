@@ -2706,12 +2706,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend",
     "description": "Classification category filter control and results."
 },
-  "mapping.categoryFilterReset": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend",
-    "description": "Classification category filter control and results."
-},
   "mapping.categoryControl": {
     "kind": "string",
     "params": [],
