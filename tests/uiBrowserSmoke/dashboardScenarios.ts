@@ -721,16 +721,10 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
       })()
     `) as { x: number; y: number; canScroll: boolean } | null;
     assert.equal(categoryMenuCenter?.canScroll, true, "the category submenu fixture should overflow");
-    await client!.command("Input.dispatchMouseEvent", {
-      type: "mouseMoved",
-      x: categoryMenuCenter!.x,
-      y: categoryMenuCenter!.y,
-    }, sessionId);
-    await waitForExpression(client!, sessionId, `(() => {
+    assert.equal(await evaluate(client!, sessionId, `(() => {
       const menu = document.querySelector('.quick-classification-category-menu');
       return menu?.contains(document.elementFromPoint(${categoryMenuCenter!.x}, ${categoryMenuCenter!.y}));
-    })()`);
-    await waitForAnimationFrames(client!, sessionId, 2);
+    })()`), true, "wheel coordinates should hit the category submenu");
     await client!.command("Input.dispatchMouseEvent", {
       type: "mouseWheel",
       x: categoryMenuCenter!.x,

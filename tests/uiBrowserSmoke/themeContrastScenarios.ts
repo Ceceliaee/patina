@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
-import { evaluate, waitForExpression } from "./browserHarness.ts";
+import { evaluate, waitFor, waitForExpression } from "./browserHarness.ts";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 
 export async function runThemeContrastScenarios({ client, sessionId, runTest }: BrowserSmokeContext) {
@@ -10,6 +10,19 @@ export async function runThemeContrastScenarios({ client, sessionId, runTest }: 
   const controls = JSON.parse(readFileSync(new URL("../fixtures/theme/patina-controls.json", import.meta.url), "utf8")) as Array<{variant: string; scheme: string; expected: Record<string, string>}>;
   const read = (expression: string) => evaluate(client, sessionId, expression);
   const wait = (expression: string) => waitForExpression(client, sessionId, expression, 15_000, expression);
+  const reloadAndWait = async (expression: string) => {
+    const previousOrigin = await read("performance.timeOrigin");
+    await client.command("Page.reload", {}, sessionId);
+    await waitFor("reloaded theme view", async () => {
+      try {
+        const ready = await read(`performance.timeOrigin !== ${previousOrigin} && (${expression})`);
+        return ready ? true : null;
+      } catch (error) {
+        if (String(error).includes("Inspected target navigated or closed")) return null;
+        throw error;
+      }
+    }, 15_000);
+  };
   const open = async (dark = false) => {
     await read(`document.querySelectorAll('.settings-theme-entry')[${dark ? 1 : 0}].click()`);
     await wait(`document.activeElement?.matches('.settings-color-scheme-option[aria-pressed="true"]')`);
@@ -100,8 +113,7 @@ export async function runThemeContrastScenarios({ client, sessionId, runTest }: 
         })); localStorage.setItem('patina:last-active-view', 'dashboard');`);
         await client.command("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: sample.variant }] }, sessionId);
         await client.command("Emulation.setDeviceMetricsOverride", { width: sample.width, height: 760, deviceScaleFactor: sample.scale, mobile: false }, sessionId);
-        await client.command("Page.reload", {}, sessionId);
-        await wait(`document.documentElement.dataset.themeContrast === '${sample.contrast}' && Boolean(document.querySelector('.dashboard-top-app-progress'))`);
+        await reloadAndWait(`document.documentElement.dataset.themeContrast === '${sample.contrast}' && Boolean(document.querySelector('.dashboard-top-app-progress'))`);
         if (sample.contrast >= 40) {
           const separation = await read(`(() => {
             const row = document.querySelector('.dashboard-top-app-progress').parentElement.parentElement.parentElement;
@@ -138,8 +150,7 @@ export async function runThemeContrastScenarios({ client, sessionId, runTest }: 
         const dashboardScreenshot = await client.command("Page.captureScreenshot", { format: "png" }, sessionId) as { data: string };
         writeFileSync(join(evidence, `${sample.variant}-${sample.scheme}-${sample.locale}-dashboard.png`), Buffer.from(dashboardScreenshot.data, "base64"));
         await read(`localStorage.setItem('patina:last-active-view', 'settings')`);
-        await client.command("Page.reload", {}, sessionId);
-        await wait(`document.documentElement.dataset.themeContrast === '${sample.contrast}' && document.documentElement.dataset.theme === '${sample.variant}' && Boolean(document.querySelector('.settings-theme-entry'))`);
+        await reloadAndWait(`document.documentElement.dataset.themeContrast === '${sample.contrast}' && document.documentElement.dataset.theme === '${sample.variant}' && Boolean(document.querySelector('.settings-theme-entry'))`);
         const expectedControls = controls.find(row => row.variant === sample.variant && row.scheme === sample.scheme)!.expected;
         assert.equal(await read(`(() => {
           const input = document.querySelector('input[type="range"]');
@@ -186,8 +197,7 @@ export async function runThemeContrastScenarios({ client, sessionId, runTest }: 
       await read(`localStorage.setItem('__time_tracker_smoke_settings', ${JSON.stringify(initial)});`);
       await client.command("Emulation.setEmulatedMedia", { features: [] }, sessionId);
       await client.command("Emulation.setDeviceMetricsOverride", { width: 1280, height: 820, deviceScaleFactor: 1, mobile: false }, sessionId);
-      await client.command("Page.reload", {}, sessionId);
-      await wait(`Boolean(document.querySelector('.settings-theme-entry')) && document.documentElement.lang === 'zh-CN'`);
+      await reloadAndWait(`Boolean(document.querySelector('.settings-theme-entry')) && document.documentElement.lang === 'zh-CN'`);
     }
   });
 
