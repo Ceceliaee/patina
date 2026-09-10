@@ -186,13 +186,18 @@ runTest("confirm dialog model includes notes preview", () => {
 });
 
 runTest("confirm dialog localizes structured release notes", () => {
-  const model = buildUpdateConfirmDialogModelRaw(makeSnapshot({
+  const snapshot = makeSnapshot({
     status: "available",
     latestVersion: "0.2.0",
     releaseNotes: "zh-CN: 改进应用映射与备份恢复。\nen-US: Improved app mapping and backup restore.",
-  }), EN_TEXT, "en-US");
+  });
+  const model = buildUpdateConfirmDialogModelRaw(snapshot, EN_TEXT, "en-US");
 
   assert.equal(model.notesPreview, "Improved app mapping and backup restore.");
+  for (const locale of ["ru-RU", "es"] as const) {
+    const fallbackModel = buildUpdateConfirmDialogModelRaw(snapshot, EN_TEXT, locale);
+    assert.equal(fallbackModel.notesPreview, "Improved app mapping and backup restore.");
+  }
 });
 
 runTest("confirm dialog shows progress while downloading", () => {

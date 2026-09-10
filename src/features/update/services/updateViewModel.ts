@@ -79,7 +79,7 @@ function resolveLocalizedReleaseNotes(releaseNotes: string, locale: Locale): str
     }
   }
 
-  return localizedNotes[locale] ?? localizedNotes[SUPPORTED_LOCALES[0]] ?? releaseNotes;
+  return localizedNotes[locale] ?? localizedNotes["en-US"] ?? localizedNotes[SUPPORTED_LOCALES[0]] ?? releaseNotes;
 }
 
 function formatByteCount(value: number): string {
