@@ -18,29 +18,42 @@ App note en: TBD.
 
 ### Added
 
-- 新增俄语 Русский，覆盖桌面界面、托盘、提醒和语言相关导出；语言顺序统一为中、英、俄、西。Refs [#61](https://github.com/Ceceliaee/patina/issues/61)
+### Changed
+
+### Fixed
+
+### Removed
+
+### Internal
+
+## [1.9.6] - 2026-09-10
+
+Release: 新增俄语、西班牙语与 Windows ARM64 支持，重整分类页，并提升主题、安全性和长期运行稳定性。
+App note: 新增俄语、西班牙语和 Windows ARM64，分类与主题体验更完善，并修复缓存、图标及依赖安全问题。
+App note en: Adds Russian, Spanish, and Windows ARM64 support, with improved classification, themes, security, and stability.
+
+### Added
+
+- 新增俄语 Русский 和西班牙语 Español，覆盖桌面界面、托盘、提醒和语言相关导出。Refs [#61](https://github.com/Ceceliaee/patina/issues/61), [#76](https://github.com/Ceceliaee/patina/issues/76)
 - 新增 Windows ARM64 原生安装包及对应自动更新，保留 x64 发行支持。ARM64 通过构建与自动化验证，尚未经实体 ARM 设备人工测试。Refs [#74](https://github.com/Ceceliaee/patina/issues/74)
-- 新增西班牙语 Español，覆盖桌面界面、托盘、提醒和语言相关导出。Refs [#76](https://github.com/Ceceliaee/patina/issues/76)
-- 分类页新增分类快捷筛选，可与应用／网页模式、分类状态和搜索组合使用。
+- 分类页搜索框新增分类快捷入口，可与应用／网页模式、分类状态和文字搜索组合使用，并采用更简短的搜索提示。
 
 ### Changed
 
 - 分类页应用管理改为紧凑行，按窗口及缩放后的可用空间自动排列一至三列；颜色、标题记录、排除与恢复、删除改用图标入口，保留精确颜色编辑、恢复默认和键盘操作。
-- 精简分类页搜索提示及西班牙语界面文案，统一常用缩写，缩短设置、备份恢复和导入导出说明，减少窄窗口下的文字换行。
+- 校正各配色主题的基础颜色与背景层级，保留原有控件对比度、主按钮白字、侧栏悬停反馈和轻淡的统计进度条底色；主窗口与挂件使用同一套颜色派生。
 
 ### Fixed
 
 - 升级 Tauri，修复本地来源识别漏洞；更新 Parquet 导出依赖以移除存在安全告警的 Thrift，并更新受影响的随机数及事件通知依赖。
-- 修复分类页未正确接收全局标题记录设置的问题；全局关闭时禁用单项标题开关并显示原因，同时保留单项偏好。
-- 补齐分类页保存和应用记录删除失败时的可见提示，保留失败后的重试入口，并防止重复提交删除。
-- 修复反复切换历史日期时缓存元数据持续累积的问题，并保留缓存清空后及新快照写入后对旧请求结果的隔离。
-- 修复读取 Windows 单色图标时未释放掩码位图的问题，避免重复读取导致 GDI 资源泄漏。
+- 分类页现在正确遵循全局标题记录设置，并在保存或删除应用记录失败时保留可见提示和重试入口，同时防止重复提交删除。
 
 ### Removed
 
 ### Internal
 
 - 依赖审计纳入 RustSec `unsound` 警告及已知的 GitHub 独有漏洞检查；glib 的精确例外持续校验 Windows x64、ARM64 依赖树不可达。
+- 收紧长期运行资源生命周期，释放被逐出的历史快照元数据和 Windows 单色图标掩码位图，并隔离缓存清空或新快照写入后的旧请求结果。
 - 新增 Windows 进程树资源采样工具，用于检查内存、句柄和线程的长期变化。
 
 ## [1.9.5] - 2026-09-04
