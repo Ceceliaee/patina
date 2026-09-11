@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import type { ChildProcess } from "node:child_process";
-import { createServer } from "vite";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createServer, type ViteDevServer } from "vite";
 import {
+  assertIsolatedTempPath,
   CdpConnection,
   evaluate,
   getBrowserWebSocketUrl,
@@ -51,19 +55,23 @@ const historyWebTimelineTests = new Set([
   "history timeline removes web mode when Web Sync is disabled",
   "history web timeline keeps an explicit empty state without inferred browser time",
 ]);
-const server = await createServer({
-  configFile: "vite.config.ts",
-  logLevel: "error",
-  plugins: [tauriBrowserSmokeStubPlugin()],
-  server: {
-    host: "127.0.0.1",
-    port: 0,
-    strictPort: false,
-    hmr: false,
-  },
-});
+const viteCacheDir = mkdtempSync(join(tmpdir(), "patina-vite-smoke-"));
+let server: ViteDevServer | null = null;
 
 try {
+  server = await createServer({
+    configFile: "vite.config.ts",
+    cacheDir: viteCacheDir,
+    logLevel: "error",
+    plugins: [tauriBrowserSmokeStubPlugin()],
+    server: {
+      host: "127.0.0.1",
+      port: 0,
+      strictPort: false,
+      hmr: false,
+    },
+  });
+
   await server.listen();
   const appUrl = server.resolvedUrls?.local[0] ?? "";
   assert.ok(appUrl, "Vite did not expose a local URL");
@@ -244,11 +252,17 @@ try {
     }
   }
   try {
-    const httpServer = server.httpServer;
-    await server.close();
+    const httpServer = server?.httpServer;
+    await server?.close();
     if (httpServer?.listening) {
       throw new Error("Vite browser smoke server remained listening after close");
     }
+  } catch (error) {
+    cleanupErrors.push(error);
+  }
+  try {
+    assertIsolatedTempPath(viteCacheDir, "patina-vite-smoke-");
+    rmSync(viteCacheDir, { recursive: true, force: true });
   } catch (error) {
     cleanupErrors.push(error);
   }

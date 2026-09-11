@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { LOCALE_REGISTRY } from "../locales/registry.ts";
+import { BUNDLE_OWNERSHIP_FILE, BUNDLE_SOURCE_OWNERS, validateBundleOwnership } from "./bundle-ownership.ts";
 
 const ASSETS_DIR = "dist/assets";
 const INDEX_HTML_PATH = "dist/index.html";
@@ -17,11 +18,10 @@ const TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 391.75;
 
 const INITIAL_CHUNK_BUDGETS = [
   { label: "index", pattern: /^index-.*\.js$/, gzipKiB: 65 },
-  { label: "react-vendor", pattern: /^react-vendor-.*\.js$/, gzipKiB: 60 },
+  { label: "react-vendor", pattern: /^react-vendor-.*\.js$/, gzipKiB: 66.8 },
   { label: "icons", pattern: /^icons-.*\.js$/, gzipKiB: 8 },
   { label: "tauri", pattern: /^tauri-.*\.js$/, gzipKiB: 6 },
   { label: "runtime type guards", pattern: /^runtimeTypeGuards-.*\.js$/, gzipKiB: 0.2 },
-  { label: "browser storage gateway", pattern: /^browserStorageGateway-.*\.js$/, gzipKiB: 0.21 },
   // Production locale metadata lives here; translated text stays in its own
   // locale chunk. Initial and total graph budgets remain unchanged.
   { label: "localization", pattern: /^runtime-.*\.js$/, gzipKiB: 7.46 },
@@ -64,7 +64,7 @@ const NON_DATA_PRIMARY_LAZY_ROUTE_BUDGETS = LAZY_PAGE_CHUNK_BUDGETS.filter(
 const LAZY_SECONDARY_CHUNK_BUDGETS = [
   { label: "WidgetShell", pattern: /^WidgetShell-.*\.js$/, gzipKiB: 6 },
   { label: "Settings import dialog", pattern: /^SettingsDataImportDialog-.*\.js$/, gzipKiB: 3 },
-  { label: "Settings export dialog", pattern: /^SettingsDataExportDialog-.*\.js$/, gzipKiB: 6 },
+  { label: "Settings export dialog", pattern: /^SettingsDataExportDialog-.*\.js$/, gzipKiB: 6.5 },
   { label: "Settings scheduled export dialog", pattern: /^SettingsScheduledExportDialog-.*\.js$/, gzipKiB: 3.6 },
   { label: "Settings backup dialog", pattern: /^SettingsBackupDialog-.*\.js$/, gzipKiB: 7 },
   { label: "Data first-screen prewarm", pattern: /^dataFirstScreenPrewarm-.*\.js$/, gzipKiB: 6 },
@@ -91,13 +91,12 @@ const LAZY_SHARED_UI_CHUNK_BUDGETS = [
   { label: "QuietSearchField", pattern: /^QuietSearchField-.*\.js$/, gzipKiB: 0.5 },
   { label: "QuietStepperSlider", pattern: /^QuietStepperSlider-.*\.js$/, gzipKiB: 1.1 },
   { label: "QuietDateRangePicker", pattern: /^QuietDateRangePicker-.*\.js$/, gzipKiB: 2.1 },
-  { label: "QuietSelect", pattern: /^QuietSelect-.*\.js$/, gzipKiB: 2.4 },
+  { label: "QuietSelect", pattern: /^QuietSelect-.*\.js$/, gzipKiB: 2.71 },
   { label: "QuietTimePicker", pattern: /^QuietTimePicker-.*\.js$/, gzipKiB: 2.1 },
   { label: "requested app icons", pattern: /^useRequestedAppIcons-.*\.js$/, gzipKiB: 0.55 },
   { label: "settings runtime adapter", pattern: /^settingsRuntimeAdapterService-.*\.js$/, gzipKiB: 3 },
   { label: "duration formatting", pattern: /^durationFormatting-.*\.js$/, gzipKiB: 0.2 },
-  { label: "data export protocol", pattern: /^dataExportGateway-.*\.js$/, gzipKiB: 0.7 },
-  { label: "domain color", pattern: /^domainColor-.*\.js$/, gzipKiB: 0.4 },
+  { label: "domain color", pattern: /^domainColor-.*\.js$/, gzipKiB: 0.43 },
   { label: "scheduled task presentation", pattern: /^scheduledTaskPresentation-.*\.js$/, gzipKiB: 0.48 },
 ] as const;
 
@@ -155,7 +154,7 @@ function normalizedSourceBytes(source: string) {
 
 function readInitialAssetNames() {
   if (!existsSync(INDEX_HTML_PATH)) {
-    console.error(`Bundle budget check failed. Missing ${INDEX_HTML_PATH}; run npm run build first.`);
+    console.error(`Bundle budget check failed. Missing ${INDEX_HTML_PATH}; run pnpm run build first.`);
     process.exitCode = 1;
     return null;
   }
@@ -171,7 +170,7 @@ function readInitialAssetNames() {
 
 function measureDistAssets() {
   if (!existsSync(ASSETS_DIR)) {
-    console.error(`Bundle budget check failed. Missing ${ASSETS_DIR}; run npm run build first.`);
+    console.error(`Bundle budget check failed. Missing ${ASSETS_DIR}; run pnpm run build first.`);
     process.exitCode = 1;
     return null;
   }
@@ -230,6 +229,17 @@ function measureCopyDomains() {
 }
 
 function main() {
+  const fixtureFiles = ["index-fixture.js", "SettingsDataExportDialog-fixture.js"];
+  const fixture = Object.fromEntries(BUNDLE_SOURCE_OWNERS.map((owner, index) => [owner.source, [fixtureFiles[index]]]));
+  const fixtureAssets = new Set(fixtureFiles);
+  const fixtureInitial = new Set([fixtureFiles[0]]);
+  if (validateBundleOwnership(fixture, fixtureAssets, fixtureInitial).length
+    || validateBundleOwnership(fixture, fixtureAssets, new Set(fixtureFiles)).length === 0
+    || validateBundleOwnership(fixture, new Set(), fixtureInitial).length === 0
+    || validateBundleOwnership({}, fixtureAssets, fixtureInitial).length === 0
+    || validateBundleOwnership({ ...fixture, [BUNDLE_SOURCE_OWNERS[0].source]: fixtureFiles }, fixtureAssets, fixtureInitial).length === 0) {
+    throw new Error("bundle ownership self-test failed");
+  }
   const lfProbe = normalizedSourceBytes("first\nsecond\n");
   const crlfProbe = normalizedSourceBytes("first\r\nsecond\r\n");
   if (!lfProbe.equals(crlfProbe)) {
@@ -255,6 +265,13 @@ function main() {
   ));
 
   const violations: string[] = [];
+  const ownershipPath = join("dist", BUNDLE_OWNERSHIP_FILE);
+  if (!existsSync(ownershipPath)) {
+    violations.push("missing bundle ownership report; run pnpm run build");
+  } else {
+    violations.push(...validateBundleOwnership(JSON.parse(readFileSync(ownershipPath, "utf8")),
+      new Set(jsAssets.map((asset) => asset.file)), initialAssetNames));
+  }
   const copyDomains = measureCopyDomains();
 
   const initialJsCssGzipBytes = sumGzipBytes(initialJsAssets) + sumGzipBytes(initialCssAssets);

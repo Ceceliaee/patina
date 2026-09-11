@@ -4,28 +4,13 @@
   "version": "1.9.6",
   "type": "module",
   "engines": {
-    "node": "24.18.0",
-    "npm": "11.16.0"
-  },
-  "devEngines": {
-    "runtime": {
-      "name": "node",
-      "version": "24.18.0",
-      "onFail": "error"
-    },
-    "packageManager": {
-      "name": "npm",
-      "version": "11.16.0",
-      "onFail": "error"
-    }
-  },
-  "allowScripts": {
-    "esbuild@0.28.1": true
+    "node": "24.21.0",
+    "pnpm": "12.3.4"
   },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "test": "npm run test:fast:covered && npm run test:fast:remaining",
+    "test": "pnpm run test:fast:covered && pnpm run test:fast:remaining",
     "test:tracking": "node --experimental-strip-types --experimental-specifier-resolution=node tests/trackingLifecycle.test.ts",
     "test:replay": "node --experimental-strip-types --experimental-specifier-resolution=node tests/trackingReplay.test.ts",
     "test:history-timeline": "node --experimental-strip-types --experimental-specifier-resolution=node tests/historyTimelineViewModel.test.ts && node --experimental-strip-types --experimental-specifier-resolution=node tests/historyWebActivityViewModel.test.ts && node --experimental-strip-types --experimental-specifier-resolution=node tests/historyReadModel.test.ts && node --experimental-strip-types --experimental-specifier-resolution=node tests/historyFormatting.test.ts",
@@ -41,9 +26,9 @@
     "test:data-chart": "node --experimental-strip-types --experimental-specifier-resolution=node tests/dataChartInteraction.test.ts",
     "test:persistence": "node --experimental-strip-types --experimental-specifier-resolution=node tests/persistenceTransaction.test.ts && node --experimental-strip-types --experimental-specifier-resolution=node tests/activityReadModelGateway.test.ts",
     "test:dashboard-snapshot": "node --experimental-strip-types --experimental-specifier-resolution=node tests/dashboardSnapshotLoader.test.ts",
-    "test:fast:covered": "npm run test:tracking && npm run test:replay && npm run test:history-timeline && npm run test:persistence && npm run test:dashboard-snapshot && npm run test:data && npm run test:warmup",
-    "test:fast:remaining": "npm run test:i18n && npm run test:update && npm run test:settings && npm run test:import && npm run test:widget && npm run test:classification && npm run test:icon-colors && npm run test:dashboard-icons && npm run test:data-range && npm run test:data-chart && npm run test:interaction && npm run test:release && npm run test:export && npm run test:pr-intake && npm run test:dependency-audit && npm run test:background-return && npm run test:tools && npm run test:toast && npm run test:preload && npm run test:tracker-health && npm run test:ui-smoke && npm run test:shared-primitives && npm run test:tauri-profile",
-    "test:coverage": "c8 --all --clean --reporter=text --reporter=json-summary --report-dir=artifacts/coverage --include=src/app/hooks/trackingDataChangedPolicy.ts --include=src/app/hooks/trackingDataChangedRuntime.ts --include=src/app/services/startupWarmupService.ts --include=src/features/dashboard/services/dashboardReadModel.ts --include=src/features/history/services/historyReadModel.ts --include=src/features/data/services/dataHeatmapSnapshot.ts --include=src/features/data/services/dataWebActivityReadModel.ts --include=src/features/data/services/dataWebHeatmapRequestState.ts --include=src/platform/persistence/webActivityAnalysisGateway.ts --include=src/platform/persistence/sqliteTransactions.ts --include=src/platform/persistence/commandError.ts --check-coverage --lines=80 --functions=80 --branches=75 --statements=80 npm run test:fast:covered && npm run check:coverage-thresholds",
+    "test:fast:covered": "pnpm run test:tracking && pnpm run test:replay && pnpm run test:history-timeline && pnpm run test:persistence && pnpm run test:dashboard-snapshot && pnpm run test:data && pnpm run test:warmup",
+    "test:fast:remaining": "pnpm run test:i18n && pnpm run test:update && pnpm run test:settings && pnpm run test:import && pnpm run test:widget && pnpm run test:classification && pnpm run test:icon-colors && pnpm run test:dashboard-icons && pnpm run test:data-range && pnpm run test:data-chart && pnpm run test:interaction && pnpm run test:release && pnpm run test:export && pnpm run test:pr-intake && pnpm run test:dependency-audit && pnpm run test:background-return && pnpm run test:tools && pnpm run test:toast && pnpm run test:preload && pnpm run test:tracker-health && pnpm run test:ui-smoke && pnpm run test:shared-primitives && pnpm run test:tauri-profile",
+    "test:coverage": "c8 --all --clean --reporter=text --reporter=json-summary --report-dir=artifacts/coverage --include=src/app/hooks/trackingDataChangedPolicy.ts --include=src/app/hooks/trackingDataChangedRuntime.ts --include=src/app/services/startupWarmupService.ts --include=src/features/dashboard/services/dashboardReadModel.ts --include=src/features/history/services/historyReadModel.ts --include=src/features/data/services/dataHeatmapSnapshot.ts --include=src/features/data/services/dataWebActivityReadModel.ts --include=src/features/data/services/dataWebHeatmapRequestState.ts --include=src/platform/persistence/webActivityAnalysisGateway.ts --include=src/platform/persistence/sqliteTransactions.ts --include=src/platform/persistence/commandError.ts --check-coverage --lines=80 --functions=80 --branches=75 --statements=80 pnpm run test:fast:covered && pnpm run check:coverage-thresholds",
     "test:mutation": "node --experimental-strip-types scripts/check-critical-mutations.ts",
     "test:interaction": "node --experimental-strip-types --experimental-specifier-resolution=node tests/interactionFlows.test.ts",
     "test:release": "node --experimental-strip-types --experimental-specifier-resolution=node tests/releasePolicy.test.ts",
@@ -93,13 +78,13 @@
     "check:dependencies": "node --experimental-strip-types scripts/audit-dependencies.ts",
     "quality:hotspots": "node --experimental-strip-types scripts/report-code-quality-hotspots.ts",
     "quality:exports": "node --experimental-strip-types scripts/report-unused-exports.ts",
-    "check:tests": "npm run test:coverage && npm run test:fast:remaining && npm run test:mutation && npm run test:ui-browser-smoke",
-    "check:frontend": "npm run build && npm run check:bundle",
+    "check:tests": "pnpm run test:coverage && pnpm run test:fast:remaining && pnpm run test:mutation && pnpm run test:ui-browser-smoke",
+    "check:frontend": "pnpm run build && pnpm run check:bundle",
     "check:rust:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --locked -- -D warnings",
     "check:rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check",
-    "check:rust": "npm run check:rust-boundaries:self-test && npm run check:rust-boundaries && npm run check:rust:fmt && cargo check --manifest-path src-tauri/Cargo.toml --locked --quiet && cargo test --manifest-path src-tauri/Cargo.toml --locked --quiet && npm run check:rust:clippy",
-    "check:full": "npm run check && npm run check:rust && npm run check:dependencies",
-    "check": "npm run check:i18n:self-test && npm run check:i18n && npm run check:docs:self-test && npm run check:docs && npm run check:types && npm run check:lint && npm run check:coverage-thresholds:self-test && npm run check:naming && npm run check:architecture:self-test && npm run check:architecture && npm run check:ipc-contracts:self-test && npm run check:ipc-contracts && npm run check:hotspots:self-test && npm run check:hotspots && npm run check:quiet-pro-style-debt:self-test && npm run check:quiet-pro-style-debt && npm run check:test-governance:self-test && npm run check:test-governance && npm run check:tests && npm run check:frontend",
+    "check:rust": "pnpm run check:rust-boundaries:self-test && pnpm run check:rust-boundaries && pnpm run check:rust:fmt && cargo check --manifest-path src-tauri/Cargo.toml --locked --quiet && cargo test --manifest-path src-tauri/Cargo.toml --locked --quiet && pnpm run check:rust:clippy",
+    "check:full": "pnpm run check && pnpm run check:rust && pnpm run check:dependencies",
+    "check": "pnpm run check:toolchain && pnpm run check:i18n:self-test && pnpm run check:i18n && pnpm run check:docs:self-test && pnpm run check:docs && pnpm run check:types && pnpm run check:lint && pnpm run check:coverage-thresholds:self-test && pnpm run check:naming && pnpm run check:architecture:self-test && pnpm run check:architecture && pnpm run check:ipc-contracts:self-test && pnpm run check:ipc-contracts && pnpm run check:hotspots:self-test && pnpm run check:hotspots && pnpm run check:quiet-pro-style-debt:self-test && pnpm run check:quiet-pro-style-debt && pnpm run check:test-governance:self-test && pnpm run check:test-governance && pnpm run check:tests && pnpm run check:frontend",
     "perf:history-read-model": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/perf/history-read-model-benchmark.ts",
     "perf:dashboard-read-model": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/perf/dashboard-read-model-benchmark.ts",
     "perf:data-read-model": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/perf/data-read-model-benchmark.ts",
@@ -117,40 +102,38 @@
     "release:mirror-manifest": "node --experimental-strip-types scripts/release.ts mirror-manifest",
     "release:prepare-assets": "node --experimental-strip-types scripts/release.ts prepare-release-assets",
     "release:verify-assets": "node --experimental-strip-types scripts/release.ts verify-release-assets",
-    "release:check": "npm run check:full && npm run release:validate-changelog",
+    "release:check": "pnpm run check:full && pnpm run release:validate-changelog",
     "preview": "vite preview",
-    "tauri": "node --experimental-strip-types scripts/tauri-cli.ts"
+    "tauri": "node --experimental-strip-types scripts/tauri-cli.ts",
+    "preinstall": "node --experimental-strip-types scripts/check-toolchain.ts",
+    "check:toolchain": "node --experimental-strip-types scripts/check-toolchain.ts"
   },
   "dependencies": {
-    "@tailwindcss/vite": "^4.2.2",
+    "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/api": "^2.11.1",
-    "@tauri-apps/plugin-opener": "^2",
-    "@tauri-apps/plugin-sql": "^2.3.2",
-    "esbuild": "0.28.1",
-    "lucide-react": "^1.7.0",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "tailwindcss": "^4.2.2"
+    "@tauri-apps/plugin-opener": "^2.5.5",
+    "@tauri-apps/plugin-sql": "^2.4.1",
+    "esbuild": "0.28.2",
+    "lucide-react": "1.44.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@tauri-apps/cli": "^2",
-    "@types/node": "^24.13.3",
-    "@types/react": "^19.1.8",
-    "@types/react-dom": "^19.1.6",
-    "@vitejs/plugin-react": "6.0.3",
-    "c8": "11.0.0",
-    "eslint": "^10.8.0",
+    "@tauri-apps/cli": "^2.11.4",
+    "@types/node": "^24.13.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "c8": "12.0.0",
+    "eslint": "^10.10.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "exceljs": "^4.4.0",
     "saxes": "^6.0.0",
-    "typescript": "~5.8.3",
-    "typescript-eslint": "^8.64.0",
-    "vite": "8.1.4"
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.70.0",
+    "vite": "8.2.2"
   },
-  "overrides": {
-    "exceljs": {
-      "uuid": "^11.1.1"
-    }
-  }
+  "packageManager": "pnpm@12.3.4"
 }

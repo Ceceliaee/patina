@@ -1,0 +1,9 @@
+packages:
+  - .
+engineStrict: true
+verifyDepsBeforeRun: error
+minimumReleaseAge: 1440
+allowBuilds:
+  esbuild: true
+overrides:
+  'exceljs>uuid': ^11.1.1

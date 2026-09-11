@@ -1,6 +1,7 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { BUNDLE_OWNERSHIP_FILE, BUNDLE_SOURCE_OWNERS } from "./scripts/bundle-ownership.ts";
 
 const host = process.env.TAURI_DEV_HOST;
 const LUCIDE_ICON_MODULE_ALIASES: Record<string, string> = {
@@ -33,7 +34,7 @@ function useDirectLucideIconModules() {
           return statement;
         }
         return names.map((name) => (
-          `import ${name} from "lucide-react/dist/esm/icons/${toKebabCaseIconName(name)}.js";`
+          `import ${name} from "lucide-react/dist/esm/icons/${toKebabCaseIconName(name)}.mjs";`
         )).join("\n");
       });
       return transformed === code ? null : { code: transformed, map: null };
@@ -41,9 +42,24 @@ function useDirectLucideIconModules() {
   };
 }
 
+function recordBundleOwnership(): Plugin {
+  return {
+    name: "patina-bundle-ownership",
+    generateBundle(_options, bundle) {
+      const ownership = Object.fromEntries(BUNDLE_SOURCE_OWNERS.map(({ source }) => [
+        source,
+        Object.values(bundle).filter((output) => output.type === "chunk"
+          && Object.keys(output.modules).some((id) => id.replaceAll("\\", "/").endsWith(`/${source}`)))
+          .map((output) => output.fileName.replace(/^assets\//, "")),
+      ]));
+      this.emitFile({ type: "asset", fileName: BUNDLE_OWNERSHIP_FILE, source: JSON.stringify(ownership) });
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [useDirectLucideIconModules(), tailwindcss(), react()],
+  plugins: [useDirectLucideIconModules(), tailwindcss(), react(), recordBundleOwnership()],
   optimizeDeps: {
     // Keep Vite dep-scan anchored to the app entry so Tauri build artifacts
     // under src-tauri/target are not treated as extra HTML entrypoints.
@@ -71,7 +87,7 @@ export default defineConfig({
             normalizedId.includes("/node_modules/lucide-react/dist/esm/")
             && (
               !normalizedId.includes("/node_modules/lucide-react/dist/esm/icons/")
-              || normalizedId.endsWith("/node_modules/lucide-react/dist/esm/icons/rotate-ccw.js")
+              || normalizedId.endsWith("/node_modules/lucide-react/dist/esm/icons/rotate-ccw.mjs")
             )
           ) {
             return "icons";
@@ -117,7 +133,7 @@ export default defineConfig({
       : undefined,
     watch: {
       // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      ignored: ["**/src-tauri/**", "**/artifacts/**"],
     },
   },
 });

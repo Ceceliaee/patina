@@ -1,8 +1,8 @@
 const SETTINGS_TOKEN_BYTES = 24;
 
-type FillRandomValues = (bytes: Uint8Array) => Uint8Array;
+type FillRandomValues = (bytes: Uint8Array<ArrayBuffer>) => Uint8Array<ArrayBuffer>;
 
-function fillSecureRandomValues(bytes: Uint8Array) {
+function fillSecureRandomValues(bytes: Uint8Array<ArrayBuffer>) {
   if (!globalThis.crypto?.getRandomValues) {
     throw new Error("secure random values are unavailable");
   }
