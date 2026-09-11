@@ -11,7 +11,7 @@ import {
 } from "./core.ts";
 
 function usage(): never {
-  throw new Error("Usage: npm run i18n:review -- <locale-tag> (--all | --key <message-key>)");
+  throw new Error("Usage: pnpm run i18n:review <locale-tag> (--all | --key <message-key>)");
 }
 
 const args = process.argv.slice(2);

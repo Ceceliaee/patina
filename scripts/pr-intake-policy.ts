@@ -266,7 +266,7 @@ function hasCheckedItem(section: string, label: string) {
 function hasRepeatableUiValidation(section: string) {
   const match = stripComments(section).match(/^-\s*Repeatable test or existing owner test:\s*(\S.*)$/im);
   if (!match) return false;
-  return /(?:`?npm run\s+[\w:-]+|`?node\s+|`?cargo test\b|(?:^|\s)(?:tests?|src)\/\S+test\S*)/i.test(match[1])
+  return /(?:`?pnpm run\s+[\w:-]+|`?node\s+|`?cargo test\b|(?:^|\s)(?:tests?|src)\/\S+test\S*)/i.test(match[1])
     || /\b(?:existing owner|browser|structural) test\s*(?::|=|-)\s*\S+/i.test(match[1]);
 }
 
@@ -318,7 +318,7 @@ export function evaluatePullRequestBody(
   for (const label of ["Tracking correctness", "Local data safety", "Privacy or security", "Compatibility and migration", "Failure and recovery behavior"]) {
     if (!hasLabeledValue(risk, label)) incomplete.push(`Risk Review must complete ${label} (use N/A when unaffected)`);
   }
-  if (!hasCheckedItem(getBodySection(body, "Validation"), "`npm run check`")) incomplete.push("Validation must confirm npm run check was run");
+  if (!hasCheckedItem(getBodySection(body, "Validation"), "`pnpm run check`")) incomplete.push("Validation must confirm pnpm run check was run");
   if (incomplete.length > 0) failures.push({ rule: "incomplete-pr-sections", message: "Required PR template fields are incomplete.", detail: incomplete.join("\n") });
 
   if (changedFiles.some((file) => isUiImplementationPath(file.path))) {

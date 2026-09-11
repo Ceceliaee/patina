@@ -47,16 +47,21 @@ jobs:
         with:
           ref: refs/pull/${{ inputs.pr_number }}/head
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
       - name: Setup Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: npm ci --no-audit --timing
+        run: pnpm install --frozen-lockfile
 
       - name: Run frontend quality gate
-        run: npm run check
+        run: pnpm run check
 
       - name: Upload core risk coverage
         if: always()
@@ -103,10 +108,15 @@ jobs:
         with:
           ref: refs/pull/${{ inputs.pr_number }}/head
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
       - name: Setup Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Setup Rust from rust-toolchain.toml
         shell: pwsh
@@ -119,16 +129,16 @@ jobs:
           if ($hostInfo -notcontains "host: ${{ matrix.target }}") { throw "Rust host architecture mismatch" }
 
       - name: Install dependencies
-        run: npm ci --no-audit --timing
+        run: pnpm install --frozen-lockfile
 
       - name: Run Rust quality gate
-        run: npm run check:rust
+        run: pnpm run check:rust
 
       - name: Install RustSec audit tool
         run: cargo install cargo-audit --version 0.22.2 --locked
 
-      - name: Audit npm and Rust dependencies
-        run: npm run check:dependencies
+      - name: Audit JavaScript and Rust dependencies
+        run: pnpm run check:dependencies
 
   tauri-runtime-smoke:
     name: Tauri runtime smoke
@@ -159,19 +169,24 @@ jobs:
         with:
           ref: refs/pull/${{ inputs.pr_number }}/head
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
       - name: Setup Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Setup Rust from rust-toolchain.toml
         run: rustup toolchain install --no-self-update
 
       - name: Install dependencies
-        run: npm ci --no-audit --timing
+        run: pnpm install --frozen-lockfile
 
       - name: Run isolated runtime smoke
         # The test reserves eight minutes for a cold Rust build; leave time for
         # WebView startup, assertions and cleanup without sharing the setup budget.
         timeout-minutes: 15
-        run: npm run test:tauri-runtime-smoke
+        run: pnpm run test:tauri-runtime-smoke

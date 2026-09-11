@@ -8,7 +8,6 @@ import { fileURLToPath } from "node:url";
 const ROOT = process.cwd();
 const CHANGELOG_PATH = path.join(ROOT, "CHANGELOG.md");
 const PACKAGE_JSON_PATH = path.join(ROOT, "package.json");
-const PACKAGE_LOCK_PATH = path.join(ROOT, "package-lock.json");
 const TAURI_CONFIG_PATH = path.join(ROOT, "src-tauri", "tauri.conf.json");
 const TAURI_DEV_CONFIG_PATH = path.join(ROOT, "src-tauri", "tauri.dev.conf.json");
 const TAURI_LOCAL_CONFIG_PATH = path.join(ROOT, "src-tauri", "tauri.local.conf.json");
@@ -170,13 +169,9 @@ async function writeJson(filePath, value) {
   await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
-async function updateJsonVersion(filePath, version, updateLockRoot = false) {
+async function updateJsonVersion(filePath, version) {
   const json = JSON.parse(await readText(filePath));
   json.version = version;
-
-  if (updateLockRoot && json.packages?.[""]) {
-    json.packages[""].version = version;
-  }
 
   await writeJson(filePath, json);
 }
@@ -219,22 +214,6 @@ function jsonValue(content, filePath, selector) {
 
 export function readPackageJsonVersionText(content) {
   return jsonValue(content, "package.json", (json) => json.version);
-}
-
-export function readPackageLockVersionsText(content) {
-  const parsed = jsonValue(content, "package-lock.json", (json) => ({
-    version: json.version ?? null,
-    rootPackageVersion: json.packages?.[""]?.version ?? null,
-  }));
-
-  if (parsed && typeof parsed === "object" && "error" in parsed) {
-    return parsed;
-  }
-
-  return parsed ?? {
-    version: null,
-    rootPackageVersion: null,
-  };
 }
 
 export function readTauriConfigVersionText(content, filePath = "src-tauri/tauri.conf.json") {
@@ -293,28 +272,11 @@ export function validateReleaseVersionFilesText(files, version) {
     return [`invalid SemVer version "${version}"`];
   }
 
-  const packageLockVersions = readPackageLockVersionsText(files.packageLockJson ?? "");
   const checks = [
     versionFileError(
       "package.json",
       readPackageJsonVersionText(files.packageJson ?? ""),
       version,
-    ),
-    versionFileError(
-      "package-lock.json",
-      packageLockVersions && typeof packageLockVersions === "object" && "error" in packageLockVersions
-        ? packageLockVersions
-        : packageLockVersions.version,
-      version,
-      "version",
-    ),
-    versionFileError(
-      'package-lock.json packages[""]',
-      packageLockVersions && typeof packageLockVersions === "object" && "error" in packageLockVersions
-        ? packageLockVersions
-        : packageLockVersions.rootPackageVersion,
-      version,
-      "version",
     ),
     versionFileError(
       "src-tauri/tauri.conf.json",
@@ -361,7 +323,6 @@ async function validateReleaseVersionFiles(version) {
 
   const errors = validateReleaseVersionFilesText({
     packageJson: await readText(PACKAGE_JSON_PATH),
-    packageLockJson: await readText(PACKAGE_LOCK_PATH),
     tauriConfig: await readText(TAURI_CONFIG_PATH),
     tauriDevConfig: await readText(TAURI_DEV_CONFIG_PATH),
     tauriLocalConfig: await readText(TAURI_LOCAL_CONFIG_PATH),
@@ -379,7 +340,6 @@ async function syncVersion(version) {
   assertVersion(version);
 
   await updateJsonVersion(PACKAGE_JSON_PATH, version);
-  await updateJsonVersion(PACKAGE_LOCK_PATH, version, true);
 
   const tauriConfig = withUpdaterDefaults(JSON.parse(await readText(TAURI_CONFIG_PATH)));
   tauriConfig.version = version;
@@ -575,25 +535,21 @@ export function renderReleaseNotes(parsed) {
     lines.push(`### ${RELEASE_NOTE_SECTION_TITLES[section.heading]}`, "", ...section.bullets, "");
   }
 
+  const installerBadges = WINDOWS_RELEASE_TARGETS.map(({ arch, platform }) => {
+    const name = parsed.version ? buildReleaseInstallerName(parsed.version, platform) : `Patina_<version>_${arch}-setup.exe`;
+    if (!parsed.version) return name;
+
+    const displayArch = arch === "arm64" ? "ARM64" : arch;
+    const badge = `https://img.shields.io/badge/Setup-${displayArch}-1683a7?logo=windows11&logoColor=white`;
+    return `[![Setup ${displayArch}](${badge})](${buildReleaseInstallerUrl(parsed.version, "Ceceliaee/patina", platform)})`;
+  });
+
   lines.push(
     "### 下载",
     "",
-    "| Windows 设备 | 安装包 |",
+    "| 系统 | 下载 |",
     "| --- | --- |",
-    ...WINDOWS_RELEASE_TARGETS.map(({ arch, platform }) => {
-      const name = parsed.version ? buildReleaseInstallerName(parsed.version, platform) : `Patina_<version>_${arch}-setup.exe`;
-      const label = arch === "x64" ? "Intel / AMD x64" : "ARM64（如骁龙设备）";
-      return `| ${label} | ${parsed.version ? `[${name}](${buildReleaseInstallerUrl(parsed.version, "Ceceliaee/patina", platform)})` : name} |`;
-    }),
-    "",
-    "不确定设备架构时，可在 Windows「设置 → 系统 → 关于 → 系统类型」中查看。自动更新保持当前已安装应用的架构。",
-    "",
-    `下载 \`${SHA256_SUMS_FILE_NAME}\`，运行与所选安装包对应的 PowerShell 命令，并比对文件中的摘要。构建来源验证需要安装 GitHub CLI。`,
-    "",
-    ...WINDOWS_RELEASE_TARGETS.flatMap(({ arch, platform }) => {
-      const name = parsed.version ? buildReleaseInstallerName(parsed.version, platform) : `Patina_<version>_${arch}-setup.exe`;
-      return [`**${arch}**`, "", "```powershell", `Get-FileHash .\\${name} -Algorithm SHA256`, `gh attestation verify .\\${name} --repo Ceceliaee/patina`, "```", ""];
-    }),
+    `| Windows | ${installerBadges.join("<br>")} |`,
     "",
   );
 

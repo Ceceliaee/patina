@@ -230,17 +230,21 @@ jobs:
           }
           Write-Host "Applied test-only validation fixes from $validationCommit to $env:RELEASE_TAG."
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
       - name: Set up Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
-          cache: npm
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Run frontend quality gate
-        run: npm run check
+        run: pnpm run check
 
   rust-quality:
     name: Rust checks (${{ matrix.arch }})
@@ -264,11 +268,15 @@ jobs:
           ref: ${{ needs.resolve.outputs.tag }}
           fetch-depth: 0
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
       - name: Set up Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
-          cache: npm
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Set up Rust from rust-toolchain.toml
         shell: pwsh
@@ -282,16 +290,16 @@ jobs:
           if ($hostInfo -notcontains "host: ${{ matrix.target }}") { throw "Rust host architecture mismatch" }
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Run Rust quality gate
-        run: npm run check:rust
+        run: pnpm run check:rust
 
       - name: Install RustSec audit tool
         run: cargo install cargo-audit --version 0.22.2 --locked
 
       - name: Audit dependencies
-        run: npm run check:dependencies
+        run: pnpm run check:dependencies
 
   windows-build:
     name: Build Windows installer (${{ matrix.arch }})
@@ -315,11 +323,15 @@ jobs:
           ref: ${{ needs.resolve.outputs.tag }}
           fetch-depth: 0
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
       - name: Set up Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
-          cache: npm
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Set up Rust from rust-toolchain.toml
         shell: pwsh
@@ -333,7 +345,7 @@ jobs:
           if ($hostInfo -notcontains "host: ${{ matrix.target }}") { throw "Rust host architecture mismatch" }
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Ensure updater signing key exists
         shell: pwsh
@@ -345,7 +357,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
       - name: Build Tauri bundle
-        run: npm run tauri build -- --bundles nsis --target ${{ matrix.target }}
+        run: pnpm run tauri build --bundles nsis --target ${{ matrix.target }}
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -413,13 +425,13 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force dist-release | Out-Null
           $version = "${{ needs.resolve.outputs.version }}"
-          npm run release:prepare-assets -- $version release-inputs dist-release ${{ github.repository }}
+          node --experimental-strip-types scripts/release.ts prepare-release-assets $version release-inputs dist-release ${{ github.repository }}
 
       - name: Verify release assets
         shell: pwsh
         run: |
           $version = "${{ needs.resolve.outputs.version }}"
-          npm run release:verify-assets -- $version release-inputs dist-release ${{ github.repository }}
+          node --experimental-strip-types scripts/release.ts verify-release-assets $version release-inputs dist-release ${{ github.repository }}
 
       - name: Attest Windows installer
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4

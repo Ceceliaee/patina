@@ -103,7 +103,7 @@ fn ensure_persistent_profile_isolated(
     }
 
     Err(
-        "refusing to open production Patina data from a debug build; start development with `npm run tauri dev` so src-tauri/tauri.dev.conf.json is applied"
+        "refusing to open production Patina data from a debug build; start development with `pnpm run tauri dev` so src-tauri/tauri.dev.conf.json is applied"
             .to_string(),
     )
 }

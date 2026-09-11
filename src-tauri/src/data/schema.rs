@@ -1659,7 +1659,7 @@ mod query_plan_diagnostics {
     }
 
     #[tokio::test]
-    #[ignore = "run with npm run perf:sqlite-query-plan"]
+    #[ignore = "run with pnpm run perf:sqlite-query-plan"]
     async fn session_range_query_plan_report() {
         let pool = create_pool().await;
         seed_sessions(&pool).await;

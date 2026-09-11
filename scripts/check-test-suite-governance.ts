@@ -41,7 +41,7 @@ const REQUIRED_SCRIPTS = [
 const ALLOWED_IGNORED_TESTS = new Map([
   [
     "src-tauri/src/data/schema.rs::session_range_query_plan_report",
-    "run with npm run perf:sqlite-query-plan",
+    "run with pnpm run perf:sqlite-query-plan",
   ],
 ]);
 const ALLOWED_SOURCE_TEXT_READS = new Map<string, SourceTextReadException>([
@@ -79,9 +79,9 @@ function directTestReferences(command: string) {
 }
 
 function referencedScripts(command: string) {
-  const references = [...command.matchAll(/\bnpm(?:\.cmd)?\s+run(?:-script)?\s+([A-Za-z0-9:_-]+)/g)]
+  const references = [...command.matchAll(/\bpnpm(?:\.(?:cmd|exe))?\s+run(?:-script)?\s+([A-Za-z0-9:_-]+)/g)]
     .map((match) => match[1]);
-  for (const match of command.matchAll(/\bnpm(?:\.cmd)?\s+(test|start|stop|restart)\b/g)) {
+  for (const match of command.matchAll(/\bpnpm(?:\.(?:cmd|exe))?\s+(test|start|stop|restart)\b/g)) {
     references.push(match[1]);
   }
   return references;
@@ -100,7 +100,7 @@ function expandScript(
   }
   const command = scripts[root];
   if (command === undefined) {
-    failures.push(`referenced npm script does not exist: ${root}`);
+    failures.push(`referenced pnpm script does not exist: ${root}`);
     return counts;
   }
   for (const test of directTestReferences(command)) {
@@ -224,7 +224,7 @@ function audit(input: AuditInput): AuditResult {
   const leafOwners = new Map<string, string[]>();
 
   for (const script of REQUIRED_SCRIPTS) {
-    if (input.scripts[script] === undefined) failures.push(`required npm script is missing: ${script}`);
+    if (input.scripts[script] === undefined) failures.push(`required pnpm script is missing: ${script}`);
   }
 
   for (const [script, command] of Object.entries(input.scripts)) {
@@ -260,20 +260,20 @@ function audit(input: AuditInput): AuditResult {
       failures.push(`quick test must belong to exactly one fast partition: ${test} (covered=${covered}, remaining=${remaining})`);
     }
     if ((fastCounts.get(test) ?? 0) !== 1) {
-      failures.push(`npm test must execute quick test exactly once: ${test} (count=${fastCounts.get(test) ?? 0})`);
+      failures.push(`pnpm test must execute quick test exactly once: ${test} (count=${fastCounts.get(test) ?? 0})`);
     }
     if ((checkCounts.get(test) ?? 0) !== 1) {
-      failures.push(`npm run check must execute deterministic test exactly once: ${test} (count=${checkCounts.get(test) ?? 0})`);
+      failures.push(`pnpm run check must execute deterministic test exactly once: ${test} (count=${checkCounts.get(test) ?? 0})`);
     }
   }
   if ((fastCounts.get(BROWSER_TEST) ?? 0) !== 0 || (fastCounts.get(RUNTIME_TEST) ?? 0) !== 0) {
-    failures.push("npm test must not include browser or desktop runtime smoke tests");
+    failures.push("pnpm test must not include browser or desktop runtime smoke tests");
   }
   if ((checkCounts.get(BROWSER_TEST) ?? 0) !== 1) {
-    failures.push(`npm run check must execute browser smoke exactly once (count=${checkCounts.get(BROWSER_TEST) ?? 0})`);
+    failures.push(`pnpm run check must execute browser smoke exactly once (count=${checkCounts.get(BROWSER_TEST) ?? 0})`);
   }
   if ((checkCounts.get(RUNTIME_TEST) ?? 0) !== 0) {
-    failures.push("npm run check must keep desktop runtime smoke in its independent CI job");
+    failures.push("pnpm run check must keep desktop runtime smoke in its independent CI job");
   }
 
   for (const [path, source] of input.testSources) {
@@ -337,17 +337,17 @@ function runSelfTest() {
     scripts: {
       "leaf:a": "node tests/a.test.ts",
       "leaf:b": "node tests/b.test.ts",
-      "test:fast:covered": "npm run leaf:a",
-      "test:fast:remaining": "npm run leaf:b",
-      test: "npm run test:fast:covered && npm run test:fast:remaining",
-      "test:coverage": "c8 npm run test:fast:covered",
+      "test:fast:covered": "pnpm run leaf:a",
+      "test:fast:remaining": "pnpm run leaf:b",
+      test: "pnpm run test:fast:covered && pnpm run test:fast:remaining",
+      "test:coverage": "c8 pnpm run test:fast:covered",
       "test:mutation": "node scripts/mutation.ts",
       "test:ui-browser-smoke": "node tests/uiBrowserSmoke.test.ts",
       "test:tauri-runtime-smoke": "node tests/tauriRuntimeSmoke.test.ts",
       "check:test-governance": "node scripts/check-test-suite-governance.ts",
       "check:test-governance:self-test": "node scripts/check-test-suite-governance.ts --self-test",
-      "check:tests": "npm run test:coverage && npm run test:fast:remaining && npm run test:mutation && npm run test:ui-browser-smoke",
-      check: "npm run check:test-governance && npm run check:tests",
+      "check:tests": "pnpm run test:coverage && pnpm run test:fast:remaining && pnpm run test:mutation && pnpm run test:ui-browser-smoke",
+      check: "pnpm run check:test-governance && pnpm run check:tests",
     },
     testFiles: ["tests/a.test.ts", "tests/b.test.ts", BROWSER_TEST, RUNTIME_TEST],
     testSources: new Map([
@@ -358,7 +358,7 @@ function runSelfTest() {
     ]),
     rustSources: new Map([[
       "src-tauri/src/data/schema.rs",
-      '#[ignore = "run with npm run perf:sqlite-query-plan"]\nasync fn session_range_query_plan_report() {}',
+      '#[ignore = "run with pnpm run perf:sqlite-query-plan"]\nasync fn session_range_query_plan_report() {}',
     ]]),
     allowedIgnoredTests: new Map(ALLOWED_IGNORED_TESTS),
     allowedSourceTextReads: new Map(),
@@ -366,12 +366,15 @@ function runSelfTest() {
 
   const valid = audit(base);
   if (valid.failures.length > 0) throw new Error(`valid governance fixture failed:\n${valid.failures.join("\n")}`);
+  const windows = audit({ ...base, scripts: Object.fromEntries(Object.entries(base.scripts).map(([name, command]) => [name, command.replaceAll("pnpm run", "pnpm.exe run")])) });
+  if (windows.failures.length > 0) throw new Error(windows.failures.join("\n"));
+  expectFailure(audit({ ...base, scripts: { ...base.scripts, check: "pnpm.cmd run missing -- argument" } }), "script does not exist");
 
   expectFailure(audit({ ...base, testFiles: [...base.testFiles, "tests/orphan.test.ts"] }), "no leaf script owner");
   expectFailure(audit({ ...base, scripts: { ...base.scripts, "leaf:a-copy": "node tests/a.test.ts" } }), "multiple leaf script owners");
   expectFailure(audit({
     ...base,
-    scripts: { ...base.scripts, "check:tests": `${base.scripts["check:tests"]} && npm test` },
+    scripts: { ...base.scripts, "check:tests": `${base.scripts["check:tests"]} && pnpm test` },
   }), "deterministic test exactly once");
   expectFailure(audit({
     ...base,
@@ -407,9 +410,9 @@ function runSelfTest() {
     rustSources: new Map([[
       "src-tauri/src/data/schema.rs",
       [
-        '#[ignore = "run with npm run perf:sqlite-query-plan"]',
+        '#[ignore = "run with pnpm run perf:sqlite-query-plan"]',
         "async fn session_range_query_plan_report() {}",
-        '#[ignore = "run with npm run perf:sqlite-query-plan"]',
+        '#[ignore = "run with pnpm run perf:sqlite-query-plan"]',
         "async fn unreviewed_copy_of_the_ignored_test() {}",
       ].join("\n"),
     ]]),
@@ -418,7 +421,7 @@ function runSelfTest() {
     ...base,
     rustSources: new Map([[
       "src-tauri/src/data/schema.rs",
-      '#[ignore = "run with npm run perf:sqlite-query-plan"]\nconst NOT_A_TEST: bool = true;',
+      '#[ignore = "run with pnpm run perf:sqlite-query-plan"]\nconst NOT_A_TEST: bool = true;',
     ]]),
   }), "could not be bound to a test function");
 }
@@ -447,7 +450,7 @@ function inventory(): AuditInput {
 
 runSelfTest();
 if (process.argv.includes("--self-test")) {
-  console.log("Test suite governance self-test passed (10 adversarial cases)");
+  console.log("Test suite governance self-test passed");
   process.exit(0);
 }
 

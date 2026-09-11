@@ -199,7 +199,7 @@ export async function generateI18n(write: boolean): Promise<void> {
       if (current !== content) stale.push(path);
     }
   }
-  if (stale.length > 0) throw new Error(`Generated i18n output is stale:\n${stale.join("\n")}\nRun npm run i18n:generate.`);
+  if (stale.length > 0) throw new Error(`Generated i18n output is stale:\n${stale.join("\n")}\nRun pnpm run i18n:generate.`);
   if (write) console.log(`Generated ${Object.keys(MESSAGE_SCHEMA).length} locale contract entries from ${LOCALES_ROOT}`);
   else console.log(`i18n contract and generated output are current (${stableStringify(Object.keys(files))})`);
 }

@@ -32,9 +32,9 @@ const VALID_BODY = [
   "- [x] Screenshots attached externally",
   "- Affected states: default, hover, focus, and disabled",
   "- Keyboard and focus: existing behavior preserved",
-  "- Repeatable test or existing owner test: `npm run test:settings` existing owner test",
+  "- Repeatable test or existing owner test: `pnpm run test:settings` existing owner test",
   "## Validation",
-  "- [x] `npm run check`",
+  "- [x] `pnpm run check`",
   "## Screenshots",
   "![Rendered UI](https://github.com/user-attachments/assets/00000000-0000-0000-0000-000000000000)",
   "## Contributor Checklist",
@@ -125,7 +125,7 @@ function testVisibleUiRequiresQuietProConfirmation() {
 function testVisibleUiRequiresRepeatableValidation() {
   for (const vagueEvidence of ["screenshots only", "existing owner test"]) {
     const body = VALID_BODY.replace(
-      "- Repeatable test or existing owner test: `npm run test:settings` existing owner test",
+      "- Repeatable test or existing owner test: `pnpm run test:settings` existing owner test",
       `- Repeatable test or existing owner test: ${vagueEvidence}`,
     );
     assert.ok(ruleNames({
@@ -195,7 +195,7 @@ function testLockfileDoesNotCountTowardManualDiff() {
     pullRequestBody: VALID_BODY,
     requirePullRequestBody: true,
     changedFiles: [changedFile({
-      path: "package-lock.json",
+      path: "pnpm-lock.yaml",
       additions: 10_000,
       deletions: 10_000,
     })],
@@ -649,7 +649,7 @@ function testWorkflowRunsTrustedBaseGate() {
   assert.match(workflow, /cancel-in-progress: true/);
   assert.doesNotMatch(workflow, /\b(?:labeled|unlabeled)\b/);
   assert.doesNotMatch(workflow, /labels-env|PR_LABELS_JSON/);
-  assert.doesNotMatch(workflow, /npm ci/);
+  assert.doesNotMatch(workflow, /pnpm install --frozen-lockfile/);
   assert.doesNotMatch(workflow, /--head HEAD(?:\s|$)/m);
 }
 
@@ -664,10 +664,10 @@ function testVerifyRunsAfterSuccessfulIntake() {
 
 function testValidationChainCanGrowButCannotBeWeakened() {
   const baseScripts = {
-    check: "npm run check:frontend && npm run check:types && npm run check:rust",
-    "check:frontend": "npm run test:settings && npm run build",
+    check: "pnpm run check:frontend && pnpm run check:types && pnpm run check:rust",
+    "check:frontend": "pnpm run test:settings && pnpm run build",
     "check:types": "tsc --noEmit",
-    "check:rust": "npm run check:rust-boundaries && cargo test --quiet && npm run check:clippy",
+    "check:rust": "pnpm run check:rust-boundaries && cargo test --quiet && pnpm run check:clippy",
     "check:rust-boundaries": "node scripts/check-rust-boundaries.ts",
     "check:clippy": "cargo clippy -- -D warnings",
     "test:settings": "node tests/settingsPageState.test.ts",
@@ -676,9 +676,14 @@ function testValidationChainCanGrowButCannotBeWeakened() {
   const strongerScripts = {
     ...baseScripts,
     "test:new": "node tests/newBehavior.test.ts",
-    "check:frontend": `${baseScripts["check:frontend"]} && npm run test:new`,
+    "check:frontend": `${baseScripts["check:frontend"]} && pnpm run test:new`,
   };
   assert.deepEqual(findValidationChainRegressions(baseScripts, strongerScripts), []);
+  const windowsScripts = { ...baseScripts, check: baseScripts.check.replaceAll("pnpm run", "pnpm.exe run") };
+  assert.deepEqual(findValidationChainRegressions(baseScripts, windowsScripts), []);
+  const shorthandScripts = { ...baseScripts, check: "pnpm.cmd test", test: baseScripts.check };
+  assert.deepEqual(findValidationChainRegressions(baseScripts, shorthandScripts), []);
+  assert.ok(findValidationChainRegressions(shorthandScripts, { ...shorthandScripts, test: "echo skipped" }).length);
 
   const weakenedScripts = {
     ...baseScripts,
@@ -689,7 +694,7 @@ function testValidationChainCanGrowButCannotBeWeakened() {
 
   const rustTestsRemoved = {
     ...baseScripts,
-    "check:rust": "npm run check:rust-boundaries && npm run check:clippy",
+    "check:rust": "pnpm run check:rust-boundaries && pnpm run check:clippy",
   };
   assert.ok(findValidationChainRegressions(baseScripts, rustTestsRemoved)
     .some((failure) => failure.rule === "validation-chain-weakened"));

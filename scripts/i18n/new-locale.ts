@@ -10,7 +10,7 @@ export function validateLocaleTag(tag: string): string {
   return canonical;
 }
 
-function usage(): never { throw new Error("Usage: npm run i18n:new -- <locale-tag> <native-label> [--from <locale>] [--direction ltr|rtl]"); }
+function usage(): never { throw new Error("Usage: pnpm run i18n:new <locale-tag> <native-label> [--from <locale>] [--direction ltr|rtl]"); }
 
 type NewLocaleOptions = {
   direction: "ltr" | "rtl";
@@ -187,7 +187,7 @@ if (process.argv.includes("--self-test")) {
 
   const stagingRoot = join(LOCALES_ROOT, `.i18n-new-${tag}`);
   applyLocaleTransaction({ originalRegistry, originalReview, nextRegistry, nextReview, registryPath, reviewPath, sourceRoot, stagingRoot, targetRoot });
-  console.log(`Created and registered ${tag} (${label}) from ${source}. Translate locales/${tag}, explicitly review it with npm run i18n:review -- ${tag} --all, then generate and check.`);
+  console.log(`Created and registered ${tag} (${label}) from ${source}. Translate locales/${tag}, explicitly review it with pnpm run i18n:review ${tag} --all, then generate and check.`);
 }
 }
 

@@ -28,14 +28,6 @@ import {
 function versionFileFixture(version = "1.6.0") {
   return {
     packageJson: JSON.stringify({ version }),
-    packageLockJson: JSON.stringify({
-      version,
-      packages: {
-        "": {
-          version,
-        },
-      },
-    }),
     tauriConfig: JSON.stringify({ version }),
     tauriDevConfig: JSON.stringify({ version }),
     tauriLocalConfig: JSON.stringify({ version }),
@@ -238,13 +230,15 @@ function testReleaseNotesOnlyMentionPatinaInstaller() {
     bullets: [],
   });
 
-  assert.match(notes, /Windows 设备/);
+  assert.match(notes, /\| 系统 \| 下载 \|/);
+  assert.match(notes, /\| Windows \| .*Setup-x64.*<br>.*Setup-ARM64/);
+  assert.match(notes, /\[!\[Setup x64\]\(https:\/\/img\.shields\.io\/badge\/Setup-x64-1683a7\?logo=windows11&logoColor=white\)\]/);
   assert.match(notes, /https:\/\/github.com\/Ceceliaee\/patina\/releases\/download\/v1\.9\.3\/Patina_1\.9\.3_arm64-setup\.exe/);
-  assert.match(notes, /Get-FileHash \.\\Patina_1\.9\.3_arm64-setup\.exe -Algorithm SHA256/);
   assert.doesNotMatch(notes, /<version>/);
-  assert.match(notes, /SHA256SUMS\.txt/);
-  assert.match(notes, /Get-FileHash \.\\Patina_1\.9\.3_x64-setup\.exe -Algorithm SHA256/);
-  assert.match(notes, /gh attestation verify \.\\Patina_1\.9\.3_x64-setup\.exe --repo Ceceliaee\/patina/);
+  assert.doesNotMatch(notes, /不确定设备架构/);
+  assert.doesNotMatch(notes, /下载 `SHA256SUMS\.txt`/);
+  assert.doesNotMatch(notes, /Get-FileHash/);
+  assert.doesNotMatch(notes, /gh attestation verify/);
   assert.doesNotMatch(notes, /patina-chromium-extension/);
   assert.doesNotMatch(notes, /patina-firefox-extension/);
 }
@@ -277,8 +271,8 @@ function testReleaseVisibleChangeCountRejectsTooManyUserFacingItems() {
 function testReleaseWorkflowDoesNotPublishBrowserExtensionAssets() {
   const workflow = readFileSync(".github/workflows/prepare-release.yml", "utf8");
 
-  assert.doesNotMatch(workflow, /npm run extension:chromium:package/);
-  assert.doesNotMatch(workflow, /npm run extension:firefox:sign/);
+  assert.doesNotMatch(workflow, /pnpm run extension:chromium:package/);
+  assert.doesNotMatch(workflow, /pnpm run extension:firefox:sign/);
   assert.doesNotMatch(workflow, /CHROMIUM_EXTENSION_ASSET|FIREFOX_EXTENSION_ASSET/);
   assert.doesNotMatch(workflow, /patina-chromium-extension|patina-firefox-extension/);
   assert.match(workflow, /dist-release\/Patina_\$\{\{ needs\.resolve\.outputs\.version \}\}_x64-setup\.exe/);
@@ -307,8 +301,8 @@ function testReleaseWorkflowSplitsQualityGatesBeforePublish() {
   assert.match(workflow, /needs: \[resolve, release-notes, windows-build\]/);
   assert.match(workflow, /needs: \[resolve, publish\]/);
   assert.match(workflow, /if: steps\.r2\.outputs\.enabled == 'true'/);
-  assert.match(workflow, /run: npm run check$/m);
-  assert.match(workflow, /run: npm run check:rust$/m);
+  assert.match(workflow, /run: pnpm run check$/m);
+  assert.match(workflow, /run: pnpm run check:rust$/m);
   assert.match(workflow, /uses: actions\/upload-artifact@[0-9a-f]{40} # v7/);
   assert.match(workflow, /uses: actions\/download-artifact@[0-9a-f]{40} # v8/);
   assert.match(workflow, /name: Prepare release assets/);
@@ -318,7 +312,7 @@ function testReleaseWorkflowSplitsQualityGatesBeforePublish() {
   assert.match(workflow, /name: Check R2 mirror configuration/);
   assert.match(workflow, /name: Upload R2 updater mirror/);
   assert.match(workflow, /name: Clean old R2 updater mirrors/);
-  assert.doesNotMatch(workflow, /run: npm run release:check/);
+  assert.doesNotMatch(workflow, /run: pnpm run release:check/);
 }
 
 function testReleaseWorkflowRestrictsValidationOverlayToTests() {
@@ -390,29 +384,15 @@ function testDualArchitectureWorkflowBoundaries() {
 function testToolchainContractsStayAligned() {
   const nodeVersion = readFileSync(".node-version", "utf8").trim();
   const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
-  const packageLock = JSON.parse(readFileSync("package-lock.json", "utf8"));
-  const rootLockPackage = packageLock.packages[""];
-
   assert.equal(packageJson.engines.node, nodeVersion);
-  assert.equal(packageJson.devEngines.runtime.name, "node");
-  assert.equal(packageJson.devEngines.runtime.version, nodeVersion);
-  assert.equal(packageJson.devEngines.runtime.onFail, "error");
-  assert.equal(rootLockPackage.engines.node, nodeVersion);
-
-  const npmVersion = packageJson.engines.npm;
-  assert.equal(packageJson.devEngines.packageManager.name, "npm");
-  assert.equal(packageJson.devEngines.packageManager.version, npmVersion);
-  assert.equal(packageJson.devEngines.packageManager.onFail, "error");
-  assert.equal(rootLockPackage.engines.npm, npmVersion);
+  assert.equal(packageJson.packageManager, `pnpm@${packageJson.engines.pnpm}`);
+  assert.equal(packageJson.engines.npm, undefined);
 
   const nodeMajor = nodeVersion.split(".")[0];
   const nodeTypesMajor = packageJson.devDependencies["@types/node"].match(/\d+/)?.[0];
   assert.equal(nodeTypesMajor, nodeMajor);
 
-  const esbuildVersion = packageJson.dependencies.esbuild;
-  assert.deepEqual(packageJson.allowScripts, {
-    [`esbuild@${esbuildVersion}`]: true,
-  });
+
 }
 
 function testWorkflowsUseNodeVersionFileAsSingleSource() {
@@ -462,6 +442,11 @@ function testWorkflowsUseReviewedNode24ActionRevisions() {
     source: readFileSync(workflowPath, "utf8"),
   }));
   const reviewedActions = [
+    {
+      action: "pnpm/action-setup",
+      reference: "pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6",
+      expectedCount: 6,
+    },
     {
       action: "actions/checkout",
       reference: "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6",
@@ -545,22 +530,6 @@ function testVersionFilesValidationCatchesPackageJsonMismatch() {
   ]);
 }
 
-function testVersionFilesValidationCatchesPackageLockRootMismatch() {
-  const files = versionFileFixture();
-  files.packageLockJson = JSON.stringify({
-    version: "1.6.0",
-    packages: {
-      "": {
-        version: "1.5.9",
-      },
-    },
-  });
-
-  assert.deepEqual(validateReleaseVersionFilesText(files, "1.6.0"), [
-    'package-lock.json packages[""] version is 1.5.9, expected 1.6.0',
-  ]);
-}
-
 function testVersionFilesValidationCatchesTauriConfigMismatch() {
   const files = versionFileFixture();
   files.tauriDevConfig = JSON.stringify({ version: "1.5.9" });
@@ -608,7 +577,7 @@ function testDependencyAuditKeepsOfflineModeExplicitAndNetworkFree() {
   const source = readFileSync("scripts/audit-dependencies.ts", "utf8");
   assert.match(source, /PATINA_DEPENDENCY_AUDIT_OFFLINE === "1"/);
   assert.match(source, /if \(OFFLINE\) rustAuditArgs\.push\("--no-fetch"\)/);
-  assert.match(source, /runNpmAudit\(npmExecutable, \{ offline: OFFLINE \}\)/);
+  assert.match(source, /runPnpmAudit\(pnpmExecutable, \{ offline: OFFLINE \}\)/);
 }
 
 function peFixture(platform: string) {
@@ -745,7 +714,7 @@ testWorkflowsPinThirdPartyActionsToReviewedCommits();
 testWorkflowsUseReviewedNode24ActionRevisions();
 testVersionFilesValidationPassesWhenAllVersionsMatch();
 testVersionFilesValidationCatchesPackageJsonMismatch();
-testVersionFilesValidationCatchesPackageLockRootMismatch();
+
 testVersionFilesValidationCatchesTauriConfigMismatch();
 testVersionFilesValidationCatchesCargoMismatch();
 testVersionFilesValidationCatchesMissingChangelogSection();

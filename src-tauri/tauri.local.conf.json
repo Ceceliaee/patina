@@ -5,7 +5,7 @@
   "version": "1.9.6",
   "identifier": "com.ceceliaee.patina.local",
   "build": {
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "pnpm run build",
     "frontendDist": "../dist"
   },
   "app": {

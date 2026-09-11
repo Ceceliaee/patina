@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { collectRustAuditFindings, type CargoAuditReport } from "./rust-audit-report.ts";
 import { WINDOWS_RELEASE_TARGETS } from "./release.ts";
-import { runNpmAudit } from "./npm-audit.ts";
+import { runPnpmAudit } from "./pnpm-audit.ts";
 
 const MANIFEST = "src-tauri/Cargo.toml";
 const LOCKFILE = "src-tauri/Cargo.lock";
@@ -126,11 +126,11 @@ console.log(
   `Rust dependency audit passed: no unexcepted vulnerabilities or unsound findings; ${observedExceptions.size} exact lock-only advisories verified unreachable on Windows.`,
 );
 
-const npmExecutable = process.env.npm_execpath;
-if (!npmExecutable) {
-  throw new Error("npm_execpath is unavailable; run this gate through npm run check:dependencies");
+const pnpmExecutable = process.env.npm_execpath;
+if (!pnpmExecutable) {
+  throw new Error("npm_execpath is unavailable; run this gate through pnpm run check:dependencies");
 }
-const npmAuditStatus = await runNpmAudit(npmExecutable, { offline: OFFLINE });
-if (npmAuditStatus !== 0) process.exit(npmAuditStatus);
+const pnpmAuditStatus = await runPnpmAudit(pnpmExecutable, { offline: OFFLINE });
+if (pnpmAuditStatus !== 0) process.exit(pnpmAuditStatus);
 
 console.log(`Dependency audit passed${OFFLINE ? " in explicit offline mode" : ""}.`);

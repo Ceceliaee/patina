@@ -22,7 +22,7 @@ function canonicalLocale(value: string): string {
 export function parseExportOptions(args: string[]): ExportOptions {
   const target = args[0] ? canonicalLocale(args[0]) : "";
   const label = args[1] && !args[1].startsWith("--") ? args[1].trim() : "";
-  if (!target || !label) throw new Error("Usage: npm run i18n:export-kit -- <target-locale> <native-label> [--from <locale>] [--direction ltr|rtl] [--output <file.xlsx>]");
+  if (!target || !label) throw new Error("Usage: pnpm run i18n:export-kit <target-locale> <native-label> [--from <locale>] [--direction ltr|rtl] [--output <file.xlsx>]");
   const valueAfter = (flag: string): string | undefined => {
     const index = args.indexOf(flag);
     return index < 0 ? undefined : args[index + 1];

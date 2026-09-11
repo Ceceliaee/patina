@@ -110,7 +110,7 @@ function parseArgs(argv: string[]): CliOptions {
 
 function isGeneratedOrLockPath(path: string) {
   return (
-    path === "package-lock.json" ||
+    path === "pnpm-lock.yaml" ||
     path === "Cargo.lock" ||
     path === "src-tauri/Cargo.lock" ||
     path === "skills-lock.json" ||
@@ -243,9 +243,10 @@ function collectValidationGraph(scripts: Record<string, string>) {
     }
     reachable.add(name);
 
-    for (const match of command.matchAll(/(?:^|\s)npm\s+run\s+([\w:-]+)/g)) {
+    for (const match of command.matchAll(/(?:^|\s)pnpm(?:\.(?:cmd|exe))?\s+run\s+([\w:-]+)/g)) {
       visit(match[1]);
     }
+    if (/(?:^|\s)pnpm(?:\.(?:cmd|exe))?\s+test\b/.test(command)) visit("test");
 
     for (const match of command.matchAll(/\btests\/[\w./-]+\.(?:test|spec)\.(?:ts|tsx)\b/g)) {
       registered.add(normalizePath(match[0]));
@@ -320,7 +321,7 @@ export function findValidationChainRegressions(
         .split(/&&/)
         .map((segment) => segment.trim())
         .filter(Boolean)
-        .filter((segment) => !/^npm\s+run\s+[\w:-]+(?:\s|$)/.test(segment));
+        .filter((segment) => !/^pnpm(?:\.(?:cmd|exe))?\s+(?:run\s+[\w:-]+|test)(?:\s|$)/.test(segment));
       return headCommand && directSegments.some((segment) => !headCommand.includes(segment));
     });
 
@@ -786,7 +787,7 @@ function runSelfTest() {
     "- Keyboard and focus: N/A, no visible UI change",
     "- Repeatable test or existing owner test: N/A, no visible UI change",
     "## Validation",
-    "- [x] `npm run check`",
+    "- [x] `pnpm run check`",
     "## Contributor Checklist",
     "- [x] This pull request is linked to an accepted issue, Project item, or explicit maintainer-approved scope.",
   ].join("\n\n");

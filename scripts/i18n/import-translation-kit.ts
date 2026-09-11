@@ -29,7 +29,7 @@ interface ImportOptions {
 
 export function parseImportOptions(args: string[]): ImportOptions {
   const input = args[0] && !args[0].startsWith("--") ? resolve(args[0]) : "";
-  const usage = "Usage: npm run i18n:import-kit -- <translation-kit.xlsx> --target <locale> --label <native-label> --direction <ltr|rtl> --from <locale> [--output <directory> | --apply]";
+  const usage = "Usage: pnpm run i18n:import-kit <translation-kit.xlsx> --target <locale> --label <native-label> --direction <ltr|rtl> --from <locale> [--output <directory> | --apply]";
   if (!input) throw new Error(usage);
   const known = new Set(["--output", "--apply", "--target", "--label", "--direction", "--from"]);
   let output: string | undefined;
@@ -143,7 +143,7 @@ export async function importTranslationKit(options: ImportOptions): Promise<stri
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
-    console.log(`Imported and registered ${target}. Review the locale in-app, then run npm run i18n:review -- ${target} --all.`);
+    console.log(`Imported and registered ${target}. Review the locale in-app, then run pnpm run i18n:review ${target} --all.`);
     return join(LOCALES_ROOT, target);
   }
 
