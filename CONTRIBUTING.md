@@ -119,7 +119,7 @@ Before requesting review, confirm:
 - quality gate scripts, CI workflows, bundle budgets, and hotspot budgets are
   not changed inside a feature pull request unless the maintainer explicitly
   asked for that maintenance work;
-- existing tests and checks remain reachable from the normal `npm run check`
+- existing tests and checks remain reachable from the normal `pnpm run check`
   validation chain; new focused tests may extend that chain but must not replace
   or remove existing validation;
 - the diff is small enough to review, or has been split by behavior, owner, or
@@ -155,7 +155,7 @@ checks run for pull requests only after `PR Intake` succeeds. Focused tests
 are matched by risk area. For example, export implementation changes need
 `tests/export*` or Rust export tests; settings persistence changes need
 settings or persistence tests. A TypeScript test counts only when it is reachable
-from the repository's normal `npm run check` validation chain. An unrelated or
+from the repository's normal `pnpm run check` validation chain. An unrelated or
 unregistered test file does not satisfy the risk gate. A separate Rust test file
 must be Cargo-discoverable or referenced by the crate's module tree; inline Rust
 tests must add an actual test function. Deleting old assertions or
@@ -171,20 +171,20 @@ scope approval before marking the pull request ready for review.
 
 ### 3.4 Install Dependencies
 
-Use the lock file when preparing a contribution:
+Use Node from `.node-version` and the exact pnpm version in `package.json#packageManager`. Install that pnpm version with `npm install --global pnpm@<version>` if needed. Use the committed lockfile when preparing a contribution:
 
 ```bash
-npm ci
+pnpm install --frozen-lockfile
 ```
 
 Useful development commands:
 
 ```bash
-npm run tauri dev
-npm run build
+pnpm run tauri dev
+pnpm run build
 ```
 
-`npm run tauri dev` automatically uses `src-tauri/tauri.dev.conf.json`. Do not
+`pnpm run tauri dev` automatically uses `src-tauri/tauri.dev.conf.json`. Do not
 start a debug build with the production identifier: development and installed
 editions are designed to coexist with separate data and single-instance scopes.
 
@@ -388,7 +388,7 @@ requesting review.
 For frontend, UI, settings, read-model, or general code changes:
 
 ```bash
-npm run check
+pnpm run check
 ```
 
 This includes type-aware linting, naming/architecture/IPC checks and their
@@ -402,7 +402,7 @@ For Rust changes, architecture boundary changes, runtime work, SQLite work, or
 changes that touch tracking correctness:
 
 ```bash
-npm run check:full
+pnpm run check:full
 ```
 
 This includes the frontend validation chain and:
@@ -411,18 +411,18 @@ This includes the frontend validation chain and:
 - `cargo check --locked`;
 - Rust tests;
 - `cargo clippy --locked -- -D warnings`;
-- npm and Rust dependency vulnerability gates.
+- JavaScript and Rust dependency vulnerability gates.
 
 For IPC registration, capability, plugin SQL, or real desktop-runtime changes,
-also run `npm run test:tauri-runtime-smoke` on Windows. For performance-sensitive
-read-model, SQLite-query, or navigation work, also run `npm run perf:stable`.
+also run `pnpm run test:tauri-runtime-smoke` on Windows. For performance-sensitive
+read-model, SQLite-query, or navigation work, also run `pnpm run perf:stable`.
 
 ### 6.3 Release Validation
 
 For release, changelog, updater, version, tag, or packaging changes:
 
 ```bash
-npm run release:check
+pnpm run release:check
 ```
 
 Follow [`docs/versioning-and-release-policy.md`](docs/versioning-and-release-policy.md)
@@ -516,8 +516,8 @@ Refs #123
 
 ## Validation
 
-- [ ] `npm run check`
-- [ ] `npm run check:full` when Rust or architecture boundaries changed
+- [ ] `pnpm run check`
+- [ ] `pnpm run check:full` when Rust or architecture boundaries changed
 - [ ] Added or updated focused tests
 
 ## Screenshots
@@ -749,8 +749,8 @@ Before requesting review:
 - [ ] I did not change quality gate scripts, CI workflows, bundle budgets, or hotspot budgets unless the maintainer explicitly requested that maintenance work.
 - [ ] User-facing copy is owned by the relevant copy domain, not hardcoded inline in JSX.
 - [ ] I added focused tests for the risk-bearing behavior.
-- [ ] I ran `npm run check`.
-- [ ] I ran `npm run check:full` if Rust, tracking, SQLite, runtime, or
+- [ ] I ran `pnpm run check`.
+- [ ] I ran `pnpm run check:full` if Rust, tracking, SQLite, runtime, or
       architecture boundaries changed.
 - [ ] I attached screenshots externally for visible UI changes and did not commit review media.
 - [ ] I documented security behavior for any local or network interface.
@@ -875,7 +875,7 @@ Pull Request 只有先通过项目准入门禁，才算准备好进入维护者 
   截屏采集、本机或网络接口的改动，包含对应风险的专项测试；
 - 功能 PR 不改质量门禁脚本、CI workflow、bundle budget 或 hotspot budget，除非维护者
   明确要求做这类维护工作；
-- 既有测试和检查仍然能从正常的 `npm run check` 链路到达；新增专项测试可以扩展该链路，
+- 既有测试和检查仍然能从正常的 `pnpm run check` 链路到达；新增专项测试可以扩展该链路，
   但不能替换或移除既有验证；
 - diff 足够小，便于 review；否则已经按行为、owner 或可独立验证阶段拆分。
 
@@ -900,7 +900,7 @@ contributor checklist 等仍然是硬失败。
 head，不执行贡献者修改过的门禁代码或 package scripts。普通 `Verify` workflow 只在
 `PR Intake` 成功后验证外部 PR。专项测试按风险域匹配。例如导出实现改动需要
 `tests/export*` 或 Rust export 测试；settings persistence 改动需要 settings 或
-persistence 测试。TypeScript 测试只有接入仓库正常的 `npm run check` 验证链才算覆盖。
+persistence 测试。TypeScript 测试只有接入仓库正常的 `pnpm run check` 验证链才算覆盖。
 独立 Rust 测试文件必须能被 Cargo 自动发现或被 crate module tree 引用；内联 Rust 测试
 必须实际新增测试函数。无关或未注册的测试文件不能满足风险门禁。只删除旧断言，或只修改宽泛 smoke 测试而没有
 为对应风险域增加正向覆盖，也不能算通过。
@@ -912,20 +912,20 @@ Draft PR 不运行准入 job。请先完成模板并获得范围批准，再将 
 
 #### 3.4 安装依赖
 
-准备贡献时，请使用 lock 文件安装依赖：
+使用 `.node-version` 指定的 Node 和 `package.json#packageManager` 固定的 pnpm 版本。需要安装 pnpm 时，执行 `npm install --global pnpm@<版本>`。准备贡献时，使用已提交的锁文件安装依赖：
 
 ```bash
-npm ci
+pnpm install --frozen-lockfile
 ```
 
 常用开发命令：
 
 ```bash
-npm run tauri dev
-npm run build
+pnpm run tauri dev
+pnpm run build
 ```
 
-`npm run tauri dev` 会自动加载 `src-tauri/tauri.dev.conf.json`。请勿让 debug
+`pnpm run tauri dev` 会自动加载 `src-tauri/tauri.dev.conf.json`。请勿让 debug
 构建使用正式版 identifier；开发版与安装版应使用彼此隔离的数据目录和单实例作用域，
 并可同时运行。
 
@@ -1108,7 +1108,7 @@ UI 改动必须遵守 Quiet Pro 基线：
 对于前端、UI、设置、读模型或一般代码改动：
 
 ```bash
-npm run check
+pnpm run check
 ```
 
 它包含类型感知 lint、命名/架构/IPC 检查及其自测、核心风险域覆盖率与
@@ -1121,7 +1121,7 @@ npm run check
 或涉及 tracking 正确性的改动：
 
 ```bash
-npm run check:full
+pnpm run check:full
 ```
 
 它包含前端验证链，以及：
@@ -1130,18 +1130,18 @@ npm run check:full
 - `cargo check --locked`；
 - Rust 测试；
 - `cargo clippy --locked -- -D warnings`；
-- npm 与 Rust 依赖漏洞门禁。
+- JavaScript 与 Rust 依赖漏洞门禁。
 
 如果改动 IPC 注册、capability、plugin SQL 或真实桌面 runtime，还应在 Windows
-运行 `npm run test:tauri-runtime-smoke`。如果改动性能敏感的 read model、SQLite
-查询或导航路径，还应运行 `npm run perf:stable`。
+运行 `pnpm run test:tauri-runtime-smoke`。如果改动性能敏感的 read model、SQLite
+查询或导航路径，还应运行 `pnpm run perf:stable`。
 
 #### 6.3 发布验证
 
 对于 release、changelog、updater、版本、tag 或打包改动：
 
 ```bash
-npm run release:check
+pnpm run release:check
 ```
 
 完整发布流程见 [`docs/versioning-and-release-policy.md`](docs/versioning-and-release-policy.md)。
@@ -1232,8 +1232,8 @@ Refs #123
 
 ## Validation
 
-- [ ] `npm run check`
-- [ ] `npm run check:full` when Rust or architecture boundaries changed
+- [ ] `pnpm run check`
+- [ ] `pnpm run check:full` when Rust or architecture boundaries changed
 - [ ] Added or updated focused tests
 
 ## Screenshots
@@ -1448,8 +1448,8 @@ Review 时应按以下顺序检查：
 - [ ] 除非维护者明确要求，我没有修改质量门禁脚本、CI workflow、bundle budget 或 hotspot budget。
 - [ ] 用户可见文案由对应 copy domain 管理，没有写成 JSX 内联字面量。
 - [ ] 我为承担风险的行为补充了匹配风险域的专项测试。
-- [ ] 我运行了 `npm run check`。
-- [ ] 如果修改 Rust、tracking、SQLite、runtime 或架构边界，我运行了 `npm run check:full`。
+- [ ] 我运行了 `pnpm run check`。
+- [ ] 如果修改 Rust、tracking、SQLite、runtime 或架构边界，我运行了 `pnpm run check:full`。
 - [ ] 对于可见 UI 改动，我在仓库外提供了截图，且没有提交审查媒体。
 - [ ] 对于本机或网络接口，我说明了安全行为。
 - [ ] 我使用 `Refs #N`，没有使用 issue 自动关闭关键词。

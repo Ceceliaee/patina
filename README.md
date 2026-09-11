@@ -137,33 +137,34 @@ It is not currently aimed at team collaboration, account systems, cloud sync, mu
 
 Releases with ARM64 support provide `Patina_<version>_x64-setup.exe` for Intel/AMD x64 devices and `Patina_<version>_arm64-setup.exe` for Windows ARM64 devices, such as Snapdragon PCs. Check **Settings → System → About → System type** if you are unsure. Download the matching installer from the [release page](https://github.com/Ceceliaee/patina/releases).
 
-Automatic updates retain the installed application's architecture. An x64 installation on Windows ARM continues receiving x64 updates. Each release includes `SHA256SUMS.txt` and installer provenance verification instructions.
+Automatic updates retain the installed application's architecture. An x64 installation on Windows ARM continues receiving x64 updates. Each release includes `SHA256SUMS.txt`; CI verifies and attests both installers before publishing.
 
 ## Build From Source
 
 ### Requirements
 
 - [Rust](https://www.rust-lang.org/tools/install)
-- [Node.js](https://nodejs.org/) 18+
+- [Node.js](https://nodejs.org/) at the version in [`.node-version`](.node-version)
+- pnpm at the version in [`package.json#packageManager`](package.json); see [dependency setup](CONTRIBUTING.md#34-install-dependencies)
 
 ### Install Dependencies
 
 ```bash
 git clone https://github.com/Ceceliaee/patina.git
 cd patina
-npm install
+pnpm install --frozen-lockfile
 ```
 
 ### Run In Development
 
 ```bash
-npm run tauri dev
+pnpm run tauri dev
 ```
 
 ### Build Installer
 
 ```bash
-npm run tauri build
+pnpm run tauri build
 ```
 
 Installers are generated under:

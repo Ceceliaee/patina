@@ -138,26 +138,27 @@ Patina 目前专注于个人本地时间记录：
 ### 环境要求
 
 - [Rust](https://www.rust-lang.org/tools/install)
-- [Node.js](https://nodejs.org/) 18+
+- [Node.js](https://nodejs.org/)，版本以 [`.node-version`](.node-version) 为准
+- pnpm，版本以 [`package.json#packageManager`](package.json) 为准；安装方式见[贡献指南](CONTRIBUTING.md#zh-cn)
 
 ### 安装依赖
 
 ```bash
 git clone https://github.com/Ceceliaee/patina.git
 cd patina
-npm install
+pnpm install --frozen-lockfile
 ```
 
 ### 开发运行
 
 ```bash
-npm run tauri dev
+pnpm run tauri dev
 ```
 
 ### 构建安装包
 
 ```bash
-npm run tauri build
+pnpm run tauri build
 ```
 
 安装包会生成在：

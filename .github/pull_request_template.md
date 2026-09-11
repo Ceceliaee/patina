@@ -75,11 +75,11 @@ Check the commands that were run. See CONTRIBUTING.md for the required validatio
 Focused tests must match the changed risk area; unrelated tests do not satisfy the intake gate.
 -->
 
-- [ ] `npm run check`
-- [ ] `npm run check:full` for Rust, tracking, SQLite, runtime, or architecture-boundary changes
-- [ ] `npm run test:tauri-runtime-smoke` for IPC registration, capability, plugin SQL, or desktop-runtime changes
-- [ ] `npm run perf:stable` for performance-sensitive read-model, SQLite-query, or navigation changes
-- [ ] `npm run release:check` for release, changelog, updater, version, tag, or packaging changes
+- [ ] `pnpm run check`
+- [ ] `pnpm run check:full` for Rust, tracking, SQLite, runtime, or architecture-boundary changes
+- [ ] `pnpm run test:tauri-runtime-smoke` for IPC registration, capability, plugin SQL, or desktop-runtime changes
+- [ ] `pnpm run perf:stable` for performance-sensitive read-model, SQLite-query, or navigation changes
+- [ ] `pnpm run release:check` for release, changelog, updater, version, tag, or packaging changes
 - [ ] Added or updated focused tests for the changed behavior
 
 Additional validation:

@@ -524,7 +524,7 @@ Rust 侧允许为了稳定演进保留少量入口协调或兼容封装，但规
 安装版、日常开发版和隔离验证版可以同时运行，但必须是不同的运行身份，而不是共享同一身份后再靠调用纪律避让：
 
 - 正式安装版使用 `com.ceceliaee.patina` 与 `Patina` 数据目录。
-- `npm run tauri dev` 必须自动合并 `src-tauri/tauri.dev.conf.json`，使用 `com.ceceliaee.patina.dev`、`Patina Dev` 数据目录和独立单实例作用域。
+- `pnpm run tauri dev` 必须自动合并 `src-tauri/tauri.dev.conf.json`，使用 `com.ceceliaee.patina.dev`、`Patina Dev` 数据目录和独立单实例作用域。
 - 本地 release 验证需要独立身份时使用 `src-tauri/tauri.local.conf.json`，不得把普通 debug 构建指向正式版数据。
 - `platform/app_paths.rs` 是运行身份到数据、缓存路径映射的唯一 owner；调用方不得自行拼接正式版、开发版目录。
 - debug 构建若仍携带正式版身份，必须在接触数据 anchor、SQLite、备份或 WebView 持久化之前失败关闭；只有显式提供绝对隔离根目录的自动化测试可例外。

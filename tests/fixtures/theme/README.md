@@ -15,7 +15,7 @@ The remaining direct comparisons cover surface-under, surface and panel. Named t
 
 Text hierarchy, slider tracks, switches, muted accents, disabled states, scrollbars and chart helpers retain Patina's prior mixing rules. Corrected preset seeds feed those rules without adopting Codex control contrast. Primary button text stays white.
 
-When updating the reference, bind the new version and hashes first, independently recalculate expected outputs from its loader/functions, review mapping changes, then run `npm run test:settings`. Do not regenerate expected colors by calling the function being tested.
+When updating the reference, bind the new version and hashes first, independently recalculate expected outputs from its loader/functions, review mapping changes, then run `pnpm run test:settings`. Do not regenerate expected colors by calling the function being tested.
 
 Named themes' nested cards use Patina's surface mapping: light blends surface-under 30% toward panel; dark blends surface 25% toward panel. This keeps nested rows darker than their panel in both modes, with a softer light fill. The mapping is covered separately from Codex equivalence.
 

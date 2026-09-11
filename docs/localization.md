@@ -27,7 +27,7 @@ schema 条目可增加语言无关的 `description` 和 `translatorNote`。翻�
 - locale 是显式运行时输入；React 通过 `LocaleProvider` 和 hook 获取，纯函数显式接收 locale 或 `UiText`。
 - 语言相关缓存必须包含 locale；优先缓存语言无关数据。
 - 业务代码不得读取 `locales/`，也不得直接读取 generated 资源表。
-- generated 文件不可手改；修改源后运行 `npm run i18n:generate`。
+- generated 文件不可手改；修改源后运行 `pnpm run i18n:generate`。
 - 用户可见文案、无障碍标签、托盘、原生提醒和 Markdown 展示字段都受同一契约约束。
 - 协议字段、数据库字段、导入标识、程序名、URL、HEX/RGB/HSL 等数据不得机械本地化。
 - 未登记硬编码会失败；例外必须精确到文件和值，并写明 owner 与原因。
@@ -75,10 +75,10 @@ schema 声明参数名和类型，资源使用 `arg` 与 `concat`：
 
 1. 在 `locales/schema.ts` 新增或调整语言无关定义，明确 `frontend` 或 `native` 表面。
 2. 在每个生产 locale 的相应资源 bundle 中添加相同 key。
-3. 若标准原文 `zh-CN` 的语义发生变化，重新人工复核其他语言，再运行 `npm run i18n:review -- <locale> --key <message-key>` 明确确认该条翻译；不得直接手改 hash。
-4. 运行 `npm run i18n:generate`。
+3. 若标准原文 `zh-CN` 的语义发生变化，重新人工复核其他语言，再运行 `pnpm run i18n:review <locale> --key <message-key>` 明确确认该条翻译；不得直接手改 hash。
+4. 运行 `pnpm run i18n:generate`。
 5. 业务调用方只使用生成的 `UiText` 或 Rust localizer API。
-6. 运行 `npm run check:i18n:self-test`、`npm run check:i18n` 和命中的功能测试。
+6. 运行 `pnpm run check:i18n:self-test`、`pnpm run check:i18n` 和命中的功能测试。
 
 不要通过修改 generated 文件、复制中英文分支或扩大硬编码例外来让检查通过。
 
@@ -89,13 +89,13 @@ schema 声明参数名和类型，资源使用 `arg` 与 `concat`：
 以俄语为例：
 
 ```powershell
-npm run i18n:new -- ru-RU Русский
+pnpm run i18n:new ru-RU Русский
 ```
 
 可先检查预计改动而不写文件：
 
 ```powershell
-npm run i18n:new -- ru-RU Русский --dry-run
+pnpm run i18n:new ru-RU Русский --dry-run
 ```
 
 该命令会：
@@ -113,12 +113,12 @@ npm run i18n:new -- ru-RU Русский --dry-run
 生成后完成整个 locale 目录的翻译，特别检查复数消息，再执行：
 
 ```powershell
-npm run i18n:review -- ru-RU --all
-npm run i18n:generate
-npm run check:i18n:self-test
-npm run check:i18n
-npm test
-npm run check:rust
+pnpm run i18n:review ru-RU --all
+pnpm run i18n:generate
+pnpm run check:i18n:self-test
+pnpm run check:i18n
+pnpm test
+pnpm run check:rust
 ```
 
 语言选择器、前端 `Locale` 类型、Rust `Locale` enum、资源表和方向元数据均由注册表生成；新增现有契约可表达的语言不需要修改 React 组件或 Rust 业务模块。
@@ -130,7 +130,7 @@ npm run check:rust
 外部翻译者不需要安装开发环境，也不应接触 TypeScript 资源或消息 DSL。维护者可从任意已注册参考语言生成任意规范 BCP 47 目标语言的工作簿：
 
 ```powershell
-npm run i18n:export-kit -- ru-RU Русский --from en-US
+pnpm run i18n:export-kit ru-RU Русский --from en-US
 ```
 
 其他语言使用相同命令；例如 RTL 语言可增加 `--direction rtl`。工具不会写死俄语规则，而是由目标 locale 的 `Intl.PluralRules` 展开其 CLDR 类别。默认文件写入 `artifacts/i18n/`，也可用 `--output <file.xlsx>` 指定位置。
@@ -153,7 +153,7 @@ npm run i18n:export-kit -- ru-RU Русский --from en-US
 收到文件后先生成可审查资源，不注册生产语言：
 
 ```powershell
-npm run i18n:import-kit -- artifacts/i18n/patina-ru-RU-from-en-US-translation-kit.xlsx --target ru-RU --label Русский --direction ltr --from en-US
+pnpm run i18n:import-kit artifacts/i18n/patina-ru-RU-from-en-US-translation-kit.xlsx --target ru-RU --label Русский --direction ltr --from en-US
 ```
 
 可用 `--output <directory>` 指定审查目录。导入器会拒绝过期 fingerprint、缺失或额外行、被修改的参考列、漏译、占位符错误、意外公式、富文本、外部关系或嵌入对象、异常或过大的 XLSX 容器和不符合目标 locale CLDR 规则的结果。返回工作簿仍应按不可信输入处理：先用导入器验证并生成干净的可审查资源，不把直接打开陌生 XLSX 当作审查前置步骤。
@@ -161,10 +161,10 @@ npm run i18n:import-kit -- artifacts/i18n/patina-ru-RU-from-en-US-translation-ki
 完成代码审查和母语界面验收后，才显式应用：
 
 ```powershell
-npm run i18n:import-kit -- path/to/completed-kit.xlsx --target ru-RU --label Русский --direction ltr --from en-US --apply
-npm run i18n:review -- ru-RU --all
-npm run i18n:generate
-npm run check:full
+pnpm run i18n:import-kit path/to/completed-kit.xlsx --target ru-RU --label Русский --direction ltr --from en-US --apply
+pnpm run i18n:review ru-RU --all
+pnpm run i18n:generate
+pnpm run check:full
 ```
 
 导入命令要求维护者在命令行再次明确目标 locale、原生名称、方向和参考 locale；导入器逐项对照工作簿，不能让回传文件自行决定将注册哪个语言。`--apply` 使用与 `i18n:new` 相同的原子事务，首次创建资源目录、注册 locale，并把 review 状态保留为 `PENDING`。它拒绝覆盖已注册或已存在的 locale。XLSX 与 `exceljs` 都只属于开发工具链，不进入 Patina 前端、Rust 二进制或安装包。
@@ -209,11 +209,11 @@ DSL validator 会同时检查操作数类型和值域。例如数值必须有限
 
 ## 8. 验证入口
 
-- `npm run test:i18n`：前端格式化、CLDR 夹具、通用翻译包往返、篡改和占位符反例。
-- `npm run check:i18n:self-test`：validator、硬编码门禁和新语言命令的反例。
-- `npm run check:i18n`：资源完整性、参数、CLDR 类别、source-review hash、generated stale 和硬编码。
-- `npm run check:types`：生成类型与调用方一致性。
-- `npm run check:rust`：Rust 格式化、测试、边界和 clippy。
-- `npm run check:full`：结构性本地化修改的最终门槛。
+- `pnpm run test:i18n`：前端格式化、CLDR 夹具、通用翻译包往返、篡改和占位符反例。
+- `pnpm run check:i18n:self-test`：validator、硬编码门禁和新语言命令的反例。
+- `pnpm run check:i18n`：资源完整性、参数、CLDR 类别、source-review hash、generated stale 和硬编码。
+- `pnpm run check:types`：生成类型与调用方一致性。
+- `pnpm run check:rust`：Rust 格式化、测试、边界和 clippy。
+- `pnpm run check:full`：结构性本地化修改的最终门槛。
 
 任何检查失败都应修复 owner 或契约，不应直接修改生成产物。

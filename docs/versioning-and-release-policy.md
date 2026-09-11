@@ -38,7 +38,6 @@
 每次发布时，下列位置必须保持同一个版本语义：
 
 - `package.json` 的 `version`
-- `package-lock.json` 的 `version`
 - `src-tauri/tauri.conf.json` 的 `version`
 - `src-tauri/Cargo.toml` 中 `[package].version`
 - Git tag
@@ -347,7 +346,7 @@ Patina Release 只发布 x64 与 ARM64 两个主应用安装包、`SHA256SUMS.tx
 
 双架构使用同一版本和源码引用，分别构建 `x86_64-pc-windows-msvc` 与 `aarch64-pc-windows-msvc`。一份 `latest.json` 同时包含 `windows-x86_64` 与 `windows-aarch64`，任一路构建、验证或证明失败均阻断公开发布。应用自动更新按已安装应用架构选包；ARM 设备上的 x64 应用继续取得 x64 更新，不自动迁移架构。
 
-发布说明提供两个安装包的直链、设备架构选择和各自的校验命令。ARM64 以原生 CI、自动化测试和资产验证为发布门槛，不以实体设备人工验收作为发布前置；首次发布须说明实体设备人工验证未执行，不将自动化覆盖之外的真实桌面行为描述为已验证。
+发布说明通过 Windows 下载表提供两个安装包的直链与架构标签，不重复展示校验步骤；`SHA256SUMS.txt` 和 GitHub Artifact Attestation 仍由发布资产与工作流承载。ARM64 以原生 CI、自动化测试和资产验证为发布门槛，不以实体设备人工验收作为发布前置，也不将自动化覆盖之外的真实桌面行为描述为已验证。
 
 ### Patina Web Sync 跨仓签收契约
 
@@ -384,24 +383,24 @@ GitHub Release 继续作为正式发布源、主下载入口和主更新清单�
 
 发布前至少应完成以下验证：
 
-- `npm run release:validate-version-files -- <version>` 或工作流中的等价校验
-- `npm run release:validate-changelog -- <version>` 或工作流中的等价校验
-- `npm run check`
+- `pnpm run release:validate-version-files <version>` 或工作流中的等价校验
+- `pnpm run release:validate-changelog <version>` 或工作流中的等价校验
+- `pnpm run check`
 
 GitHub Actions 生成正式发布资产后、发布 GitHub Release 前，还必须执行：
 
-- `npm run release:verify-assets -- <version> <bundle-dir> <output-dir> <repository>`
+- `pnpm run release:verify-assets <version> <bundle-dir> <output-dir> <repository>`
 
 该 gate 必须重新读取磁盘产物。`<bundle-dir>` 下使用 `x64/` 与 `arm64/` 两个子目录，每个目录包含 `Patina.exe` 和 `nsis/` 下唯一 `.exe/.exe.sig` 配对；校验主程序 PE 架构、输入与最终安装包 SHA-256、完整 `SHA256SUMS.txt`、`latest.json` 版本、平台、下载 URL，并使用配置中的 updater 公钥验证最终安装包签名。生成命令成功不能代替独立校验命令成功。
 
 如果是正式准备发布，还应完成：
 
-- `npm run release:check`
+- `pnpm run release:check`
 
-`package.json` 拥有 `npm run check` 的当前执行图；本文只规定发布必须通过该入口，不复述其叶子任务。
+`package.json` 拥有 `pnpm run check` 的当前执行图；本文只规定发布必须通过该入口，不复述其叶子任务。
 
 默认不在本地手工生成 `dist-release`、安装包或 `latest.json`。
-`write-release-notes`、`npm run tauri build -- --bundles nsis` 与 `npm run release:prepare-assets`
+`write-release-notes`、`pnpm run tauri build --bundles nsis` 与 `pnpm run release:prepare-assets`
 默认属于 GitHub Actions 工作流 [`prepare-release.yml`](../.github/workflows/prepare-release.yml)
 中的 `Publish Release` 流程，只有在明确需要排查发布流水线问题时才例外。
 浏览器商店提交、AMO 公开 listed XPI 获取与扩展 GitHub Release 不属于 Patina 主应用发布流程；它们由 `patina-web-sync` 仓库负责。
@@ -418,11 +417,13 @@ GitHub Actions 生成正式发布资产后、发布 GitHub Release 前，还必�
 
 1. 找到最近已发布版本，审查其后完整 commit 与 diff，再按实际范围选择 SemVer；不能只看最后一轮局部改动。
 2. 在本地同步所有版本文件并整理 changelog。长期政策文档不保存当前版本值。
-3. 运行版本一致性、changelog 和 `npm run release:check`；正式资产由 workflow 生成，本地默认不创建 `dist-release`、安装包或 updater 产物。
+3. 运行版本一致性、changelog 和 `pnpm run release:check`；正式资产由 workflow 生成，本地默认不创建 `dist-release`、安装包或 updater 产物。
 4. 只有获得当前任务的远程 push 授权后才推送准备提交；创建和推送 `vX.Y.Z` tag 还需要单独的 tag 或发布授权。
 5. [`prepare-release.yml`](../.github/workflows/prepare-release.yml) 从 tag 对应 commit 校验版本与 changelog，拒绝已有 Release，生成并独立验证安装包、校验和与 updater manifest，完成 attestation 后以禁止覆盖的方式创建 GitHub Release。
 6. GitHub Release 成立后再同步 R2 镜像；镜像失败不能撤销、覆盖或改变 GitHub Release 主事实，updater 继续优先使用 GitHub endpoint。
 7. 发布模式的 `workflow_dispatch` 只补跑“tag 已存在且 Release 不存在”的失败流程，不创建 commit、tag 或版本文件；Release 已存在时必须失败并按不可变规则准备新版本。若失败来自 tag 内测试工具的时序问题，可通过可选 `validation_ref` 指定 tag 后的完整 commit SHA；工作流只接受从该 tag 演进且仅修改 `tests/` 的提交，只在前端验证 job 中叠加这些测试修复，版本校验、changelog、安装包、签名和发布资产仍严格来自原 tag。
+
+补跑时使用目标 tag 对应的 workflow 版本，例如 `gh workflow run prepare-release.yml --ref v<version> -f version=<version>`。迁移前使用 npm 的 tag 沿用其原始 workflow；当前 pnpm workflow 消费包含 pnpm 声明和锁文件的 tag，不增加管理器兼容分支。
 
 默认协作在 tag 推送并确认发布 workflow 已触发后即可结束；只有用户要求或正在排查失败时才持续监看。浏览器扩展商店与扩展 Release 由 `patina-web-sync` 仓库负责，不进入 Patina 主应用发布流程。
 

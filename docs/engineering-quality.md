@@ -44,7 +44,7 @@
 
 以下门禁失败时停止逐行 review：无接受范围、无关改动、错误 owner、主要 UI 需重做、样式或用户文案绕过 owner、风险无测试、功能 PR 修改或削弱质量门禁、编码污染、仓库内审查截图/GIF/视频/evidence-media、手工维护内容超过 1000 行或 25 个文件而未按 owner/行为拆分，或维护者需要重写主要实现。结果分类为 `Mergeable`、`Needs Author Changes`、`Not Accepted` 或 `Declined`。
 
-门禁是自动、label-free 且不可由 PR 正文或作者声明绕过。它使用可信 base 与 PR head 的三点 diff，不执行贡献者修改后的门禁脚本或 package scripts；普通本地 `npm run check` 不能代替 PR intake。Draft PR 可暂不运行，ready for review 后必须全部满足。平台要求的首次 Actions 批准只允许 workflow 启动，不表示 scope 获批。
+门禁是自动、label-free 且不可由 PR 正文或作者声明绕过。它使用可信 base 与 PR head 的三点 diff，不执行贡献者修改后的门禁脚本或 package scripts；普通本地 `pnpm run check` 不能代替 PR intake。Draft PR 可暂不运行，ready for review 后必须全部满足。平台要求的首次 Actions 批准只允许 workflow 启动，不表示 scope 获批。
 
 测试必须真正覆盖命中的风险域并能被默认测试图或 Cargo module tree 到达。未注册测试、无关 smoke、只删除断言或只写“已测试”都不是正向证据。capability、permission set 或 application command manifest 变化还必须提供已登记的真实 Tauri main/Widget denial matrix。
 
@@ -67,11 +67,13 @@
 
 ## 5. 默认验证门槛
 
-本地验证按实际改动选择：纯文档运行 `npm run check:docs`，并核对修改部分的事实、UTF-8、链接和义务；文档治理或验证政策变化追加 `npm run check:docs:self-test` 及受影响规则的正反场景。检查器、模板或操作说明变化还需验证其真实使用路径，不能仅因文件是 Markdown 就免除对应风险。纯文档不默认运行应用构建、browser 或 Rust 全套验证。前端行为改动仍以 `npm run check` 为默认入口；Rust、架构实现边界、依赖或发布级复核使用 `npm run check:full`。`package.json` 是当前命令组合、顺序与叶子测试的唯一 owner，长期 prose 不复制其执行图。门禁不得从顶层入口静默移除既有检查、测试、coverage include 或阈值。
+本地验证按实际改动选择：纯文档运行 `pnpm run check:docs`，并核对修改部分的事实、UTF-8、链接和义务；文档治理或验证政策变化追加 `pnpm run check:docs:self-test` 及受影响规则的正反场景。检查器、模板或操作说明变化还需验证其真实使用路径，不能仅因文件是 Markdown 就免除对应风险。纯文档不默认运行应用构建、browser 或 Rust 全套验证。前端行为改动仍以 `pnpm run check` 为默认入口；Rust、架构实现边界、依赖或发布级复核使用 `pnpm run check:full`。`package.json` 是当前命令组合、顺序与叶子测试的唯一 owner，长期 prose 不复制其执行图。门禁不得从顶层入口静默移除既有检查、测试、coverage include 或阈值。
 
 `check:full` 必须在默认门槛之外验证 Rust 边界、格式、编译、测试、clippy 与依赖安全。依赖审计只允许经 Windows target 依赖树证明不可达的精确 advisory；受控离线模式仍须运行本地快照和例外可达性校验，但不能替代发布 CI 的联网新鲜度。
 
-工具链版本的 owner 是根 `.node-version` 与 `rust-toolchain.toml`。CI 读取这些文件；`package.json` 的 engine 声明只能作为受测试的镜像。第三方 GitHub Actions 固定到完整 commit SHA，并保留对应主版本注释；可移动 tag 不能成为长期执行引用。
+Node 与 Rust 工具链版本分别由根 `.node-version` 与 `rust-toolchain.toml` 拥有；pnpm 版本由 `package.json#packageManager` 拥有。CI 读取这些来源，`engines` 保持受测试的精确镜像。安装布局、依赖构建脚本许可和 override 由 `pnpm-workspace.yaml` 拥有；冻结安装消费唯一 JS 锁文件 `pnpm-lock.yaml`，仓库仍使用 npm registry。第三方 GitHub Actions 固定到完整 commit SHA，并保留对应主版本注释；可移动 tag 不能成为长期执行引用。
+
+JS 离线审计只接受最近 24 小时内成功联网审计生成、且 SHA-256 与当前 pnpm 锁文件一致的本地报告。报告缺失、过期、损坏或锁文件变化均失败；Rust 离线快照及例外可达性校验继续执行。
 
 风险追加验证、当前命令名与其组合关系由下面的风险路由和 `package.json` 共同决定，不能用文档中的旧叶子清单覆盖机器事实。
 
@@ -81,7 +83,7 @@
 
 测试长期按六层管理：unit/model、integration/contract、structural/SSR、browser、desktop runtime、performance/release。同一功能可以出现在多层，但每层必须保护不同事实：低层覆盖状态组合和不变量，browser 覆盖真实 DOM 与交互，desktop runtime 覆盖 Tauri、WebView2、IPC、plugin、进程和落盘边界，performance/release 负责预算与产物，不互相冒充。
 
-`npm test` 是全部快速确定性 TypeScript 测试的稳定入口。coverage 风险域和其余快速测试是互斥分区，并集必须等于全部快速入口。真实浏览器 smoke 进入默认 `check`，Tauri runtime smoke 保持独立 CI job 和风险追加入口。普通确定性顶层测试在一次默认门禁中只能执行一次；coverage、mutation 和 runtime 的特殊语义不能作为宽泛重复豁免。
+`pnpm test` 是全部快速确定性 TypeScript 测试的稳定入口。coverage 风险域和其余快速测试是互斥分区，并集必须等于全部快速入口。真实浏览器 smoke 进入默认 `check`，Tauri runtime smoke 保持独立 CI job 和风险追加入口。普通确定性顶层测试在一次默认门禁中只能执行一次；coverage、mutation 和 runtime 的特殊语义不能作为宽泛重复豁免。
 
 默认 browser smoke 使用 headless 模式。Tauri runtime smoke 保留真实应用、窗口生命周期、IPC、权限和数据库验证，可在本机或 CI 按风险需要运行，无需额外的桌面操作确认或启动开关。计时专项不引入反复切换真实应用与浏览器前台、播放媒体或依赖真实活动会话的退出重启自动化测试；计时逻辑、数据边界和恢复规则由确定性测试覆盖，实际 Windows 交互由人工验收补充。
 
@@ -103,13 +105,13 @@
 
 命中风险时追加验证：
 
-- 改动 Rust tracking 主链、数据边界或恢复路径：追加 `npm run check:rust`
-- 改动 IPC 注册、capability、SQLite plugin 或真实桌面运行时：追加 `npm run test:tauri-runtime-smoke`
-- 性能敏感的 read model、SQLite 查询或导航路径：追加 `npm run perf:stable`
-- 改动 release / changelog / updater：追加 `npm run release:validate-changelog`
-- 准备正式发布：本地执行 `npm run release:check`，安装包构建与 updater 产物生成默认交给 GitHub Actions
+- 改动 Rust tracking 主链、数据边界或恢复路径：追加 `pnpm run check:rust`
+- 改动 IPC 注册、capability、SQLite plugin 或真实桌面运行时：追加 `pnpm run test:tauri-runtime-smoke`
+- 性能敏感的 read model、SQLite 查询或导航路径：追加 `pnpm run perf:stable`
+- 改动 release / changelog / updater：追加 `pnpm run release:validate-changelog`
+- 准备正式发布：本地执行 `pnpm run release:check`，安装包构建与 updater 产物生成默认交给 GitHub Actions
 
-当前仓库默认 CI gate 与 release workflow 的质量校验入口统一为 `npm run check:full`。
+当前仓库默认 CI gate 与 release workflow 的质量校验入口统一为 `pnpm run check:full`。
 
 机器 gate 按失败类型分工，具体扫描路径、allowlist、预算和执行顺序由 `scripts/*`、测试与 `package.json` 拥有：
 
@@ -223,13 +225,13 @@ Bundle 治理的目标不是让构建产物永远不增长，而是让代码只�
 
 当这些区域发生变化时，默认要先补验证或测量，再谈整理和优化。
 
-备份与恢复链路的最低风险证据包括：快照一致性与摘要校验、危险 ZIP 路径和资源上限拒绝、覆盖恢复中断回滚、合并事务回滚与重复导入幂等、父子 ID 重映射、当前数据冲突优先，以及 WebDAV 下载后重新走正式 preview。涉及文件切换或格式分派时，默认运行 `npm run check:full`，不能只用成功路径证明安全。
+备份与恢复链路的最低风险证据包括：快照一致性与摘要校验、危险 ZIP 路径和资源上限拒绝、覆盖恢复中断回滚、合并事务回滚与重复导入幂等、父子 ID 重映射、当前数据冲突优先，以及 WebDAV 下载后重新走正式 preview。涉及文件切换或格式分派时，默认运行 `pnpm run check:full`，不能只用成功路径证明安全。
 
 ---
 
 ## 7. 本地化质量路由
 
-本地化契约、用户可见文案或原生表面变更必须通过 i18n self-test 与真实仓库检查，覆盖 key、参数、CLDR 复数类别、source-review hash、generated stale 和硬编码。结构性变更使用 `npm run check:full`；只改翻译时至少运行 i18n、类型与命中的界面测试。完整 schema、XLSX 不可信输入、生成和贡献流程由 [`localization.md`](./localization.md) 拥有。
+本地化契约、用户可见文案或原生表面变更必须通过 i18n self-test 与真实仓库检查，覆盖 key、参数、CLDR 复数类别、source-review hash、generated stale 和硬编码。结构性变更使用 `pnpm run check:full`；只改翻译时至少运行 i18n、类型与命中的界面测试。完整 schema、XLSX 不可信输入、生成和贡献流程由 [`localization.md`](./localization.md) 拥有。
 
 ## 8. 文档质量边界
 
