@@ -39,7 +39,7 @@ tokio = { version = "1.50.0", features = ["rt-multi-thread", "time", "net", "syn
 tokio-util = { version = "0.7", features = ["io"] }
 tokio-tungstenite = { version = "0.28", features = ["rustls-tls-native-roots"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
-tauri-plugin-sql = { version = "2", features = ["sqlite"] }
+tauri-plugin-sql = { version = "2.4.1", features = ["sqlite"] }
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
 url = "2"
 rfd = "0.15.4"
