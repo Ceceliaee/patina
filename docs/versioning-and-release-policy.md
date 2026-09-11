@@ -422,7 +422,7 @@ GitHub Actions 生成正式发布资产后、发布 GitHub Release 前，还必�
 4. 只有获得当前任务的远程 push 授权后才推送准备提交；创建和推送 `vX.Y.Z` tag 还需要单独的 tag 或发布授权。
 5. [`prepare-release.yml`](../.github/workflows/prepare-release.yml) 从 tag 对应 commit 校验版本与 changelog，拒绝已有 Release，生成并独立验证安装包、校验和与 updater manifest，完成 attestation 后以禁止覆盖的方式创建 GitHub Release。
 6. GitHub Release 成立后再同步 R2 镜像；镜像失败不能撤销、覆盖或改变 GitHub Release 主事实，updater 继续优先使用 GitHub endpoint。
-7. 发布模式的 `workflow_dispatch` 只补跑“tag 已存在且 Release 不存在”的失败流程，不创建 commit、tag 或版本文件；Release 已存在时必须失败并按不可变规则准备新版本。
+7. 发布模式的 `workflow_dispatch` 只补跑“tag 已存在且 Release 不存在”的失败流程，不创建 commit、tag 或版本文件；Release 已存在时必须失败并按不可变规则准备新版本。若失败来自 tag 内测试工具的时序问题，可通过可选 `validation_ref` 指定 tag 后的完整 commit SHA；工作流只接受从该 tag 演进且仅修改 `tests/` 的提交，只在前端验证 job 中叠加这些测试修复，版本校验、changelog、安装包、签名和发布资产仍严格来自原 tag。
 
 默认协作在 tag 推送并确认发布 workflow 已触发后即可结束；只有用户要求或正在排查失败时才持续监看。浏览器扩展商店与扩展 Release 由 `patina-web-sync` 仓库负责，不进入 Patina 主应用发布流程。
 

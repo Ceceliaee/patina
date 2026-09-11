@@ -321,6 +321,22 @@ function testReleaseWorkflowSplitsQualityGatesBeforePublish() {
   assert.doesNotMatch(workflow, /run: npm run release:check/);
 }
 
+function testReleaseWorkflowRestrictsValidationOverlayToTests() {
+  const workflow = readFileSync(".github/workflows/prepare-release.yml", "utf8");
+  const frontendStart = workflow.indexOf("\n  frontend:");
+  const rustStart = workflow.indexOf("\n  rust-quality:", frontendStart);
+  const frontend = workflow.slice(frontendStart, rustStart);
+
+  assert.match(workflow, /validation_ref:\n        description: "Optional full commit SHA with test-only fixes/);
+  assert.match(frontend, /if: github\.event_name == 'workflow_dispatch' && inputs\.validation_ref != ''/);
+  assert.match(frontend, /VALIDATION_REF: \$\{\{ inputs\.validation_ref \}\}/);
+  assert.match(frontend, /\^\[0-9a-fA-F\]\{40\}\$/);
+  assert.match(frontend, /git merge-base --is-ancestor \$releaseCommit \$validationCommit/);
+  assert.match(frontend, /\$_ -notlike 'tests\/\*'/);
+  assert.match(frontend, /git restore --source=\$validationCommit --worktree -- tests/);
+  assert.doesNotMatch(workflow.slice(rustStart), /VALIDATION_REF|validation_ref/);
+}
+
 function testReleaseWorkflowAttestsVerifiedFinalInstallerWithMinimumPermissions() {
   const workflow = readFileSync(".github/workflows/prepare-release.yml", "utf8");
   const publishStart = workflow.indexOf("\n  publish:");
@@ -720,6 +736,7 @@ testReleaseVisibleChangeCountIgnoresInternal();
 testReleaseVisibleChangeCountRejectsTooManyUserFacingItems();
 testReleaseWorkflowDoesNotPublishBrowserExtensionAssets();
 testReleaseWorkflowSplitsQualityGatesBeforePublish();
+testReleaseWorkflowRestrictsValidationOverlayToTests();
 testReleaseWorkflowAttestsVerifiedFinalInstallerWithMinimumPermissions();
 testDualArchitectureWorkflowBoundaries();
 testToolchainContractsStayAligned();

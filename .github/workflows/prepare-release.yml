@@ -7,6 +7,10 @@ on:
         description: "Existing version tag to publish, for example 1.6.1"
         required: true
         type: string
+      validation_ref:
+        description: "Optional full commit SHA with test-only fixes to overlay during frontend validation"
+        required: false
+        type: string
   push:
     tags:
       - "v[0-9]*.[0-9]*.[0-9]*"
@@ -190,6 +194,41 @@ jobs:
         with:
           ref: ${{ needs.resolve.outputs.tag }}
           fetch-depth: 0
+
+      - name: Apply test-only validation fixes
+        if: github.event_name == 'workflow_dispatch' && inputs.validation_ref != ''
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+          VALIDATION_REF: ${{ inputs.validation_ref }}
+        run: |
+          if ($env:VALIDATION_REF -notmatch '^[0-9a-fA-F]{40}$') {
+            throw "validation_ref must be a full 40-character commit SHA."
+          }
+
+          git fetch --no-tags origin $env:VALIDATION_REF
+          if ($LASTEXITCODE -ne 0) { throw "Could not fetch validation_ref $env:VALIDATION_REF." }
+
+          $validationCommit = (git rev-parse "$env:VALIDATION_REF^{commit}").Trim()
+          $releaseCommit = (git rev-list -n 1 $env:RELEASE_TAG).Trim()
+          git merge-base --is-ancestor $releaseCommit $validationCommit
+          if ($LASTEXITCODE -ne 0) {
+            throw "validation_ref must descend from the release tag commit."
+          }
+
+          $changedPaths = @(git diff --name-only $releaseCommit $validationCommit | Where-Object { $_ })
+          if ($changedPaths.Count -eq 0) { throw "validation_ref does not change the release tag." }
+          $invalidPaths = @($changedPaths | Where-Object { $_ -notlike 'tests/*' })
+          if ($invalidPaths.Count -gt 0) {
+            throw "validation_ref changes non-test paths: $($invalidPaths -join ', ')"
+          }
+
+          git restore --source=$validationCommit --worktree -- tests
+          $appliedPaths = @(git diff --name-only | Where-Object { $_ })
+          if ($appliedPaths.Count -eq 0 -or @($appliedPaths | Where-Object { $_ -notlike 'tests/*' }).Count -gt 0) {
+            throw "Test-only validation overlay was not applied cleanly."
+          }
+          Write-Host "Applied test-only validation fixes from $validationCommit to $env:RELEASE_TAG."
 
       - name: Set up Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
