@@ -47,8 +47,12 @@ jobs:
         with:
           ref: refs/pull/${{ inputs.pr_number }}/head
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - name: Install pinned pnpm
+        shell: pwsh
+        run: |
+          $packageManager = (Get-Content package.json -Raw | ConvertFrom-Json).packageManager
+          npm install --global $packageManager
+          if ($LASTEXITCODE -ne 0) { throw "pnpm installation failed" }
 
       - name: Setup Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -108,8 +112,12 @@ jobs:
         with:
           ref: refs/pull/${{ inputs.pr_number }}/head
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - name: Install pinned pnpm
+        shell: pwsh
+        run: |
+          $packageManager = (Get-Content package.json -Raw | ConvertFrom-Json).packageManager
+          npm install --global $packageManager
+          if ($LASTEXITCODE -ne 0) { throw "pnpm installation failed" }
 
       - name: Setup Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -169,8 +177,12 @@ jobs:
         with:
           ref: refs/pull/${{ inputs.pr_number }}/head
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - name: Install pinned pnpm
+        shell: pwsh
+        run: |
+          $packageManager = (Get-Content package.json -Raw | ConvertFrom-Json).packageManager
+          npm install --global $packageManager
+          if ($LASTEXITCODE -ne 0) { throw "pnpm installation failed" }
 
       - name: Setup Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6

@@ -443,11 +443,6 @@ function testWorkflowsUseReviewedNode24ActionRevisions() {
   }));
   const reviewedActions = [
     {
-      action: "pnpm/action-setup",
-      reference: "pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6",
-      expectedCount: 6,
-    },
-    {
       action: "actions/checkout",
       reference: "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6",
       expectedCount: 19,
