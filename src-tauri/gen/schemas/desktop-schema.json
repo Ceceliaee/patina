@@ -519,6 +519,12 @@
           "markdownDescription": "Enables the cmd_get_activity_read_model_status command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_get_legacy_classification_apps command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-legacy-classification-apps",
+          "markdownDescription": "Enables the cmd_get_legacy_classification_apps command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_get_main_window_render_token command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-get-main-window-render-token",
@@ -1135,6 +1141,12 @@
           "type": "string",
           "const": "deny-cmd-get-activity-read-model-status",
           "markdownDescription": "Denies the cmd_get_activity_read_model_status command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_legacy_classification_apps command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-legacy-classification-apps",
+          "markdownDescription": "Denies the cmd_get_legacy_classification_apps command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_get_main_window_render_token command without any pre-configured scope.",

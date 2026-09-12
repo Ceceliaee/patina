@@ -211,6 +211,9 @@ export interface UiText {
     "hidePassword": string;
     "loading": string;
     "processing": string;
+    "readFailed": string;
+    "refreshFailed": string;
+    "retry": string;
     "save": string;
     "saved": string;
     "saving": string;
@@ -568,8 +571,6 @@ export interface UiText {
       "remainingLegendItems": (count: number) => string;
       "remainingLegendItemsHint": (labels: string[]) => string;
     };
-    "loadFailed": string;
-    "loading": string;
     "noData": string;
     "openTimeline": string;
     "openTimelineZoom": string;
@@ -1021,12 +1022,12 @@ export interface UiText {
     "reminderTimeInvalid": string;
     "reset": string;
     "resume": string;
-    "retry": string;
     "settingsEmpty": string;
     "settingsTitle": string;
     "shortBreakDuration": string;
     "skipPhase": string;
     "start": string;
+    "stateRefreshPending": string;
     "statusChip": {
       "break": string;
       "countdown": string;
