@@ -7,10 +7,43 @@ use sqlx::{Pool, Row, Sqlite, Transaction};
 use std::collections::BTreeMap;
 
 const HOURLY_SCHEMA_VERSION: i64 = 1;
-const HOURLY_ALGORITHM_VERSION: i64 = 1;
+const HOURLY_ALGORITHM_VERSION: i64 = 2;
 const HOURLY_FINGERPRINT: &str = "epoch-hour-v1";
 const BACKFILL_BATCH_MS: i64 = 7 * 24 * HOUR_MS;
 const DIRTY_REBUILD_BATCH_SIZE: i64 = 128;
+// The schema permits at most one open session. Pin its partial index so a covering
+// index cannot turn this bounded probe into a scan of the closed-session history.
+const ACTIVE_SESSION_START_SQL: &str = "SELECT start_time
+     FROM sessions INDEXED BY idx_sessions_single_active
+     WHERE end_time IS NULL LIMIT 1";
+const PROJECTION_RANGE_SQL: &str =
+    "SELECT bucket_start_ms, bucket_end_ms, raw_exe_name, display_app_name,
+            effective_duration_ms
+     FROM activity_hourly_effective
+     WHERE bucket_start_ms >= ? AND bucket_start_ms < ? AND bucket_end_ms > ?
+     ORDER BY bucket_start_ms ASC, app_key ASC, origin ASC, source_id ASC";
+const FACT_CANDIDATES_SQL: &str =
+    "SELECT record_id, origin, app_name, exe_name, window_title, start_ms, end_ms, capacity_end_ms,
+            source_id
+     FROM (
+       SELECT id record_id, 'native' origin, app_name, exe_name, window_title, start_time start_ms,
+              COALESCE(end_time, ?) end_ms, NULL capacity_end_ms,
+              'native' source_id, 0 origin_rank
+       FROM sessions
+       WHERE start_time < ? AND (end_time > ? OR (end_time IS NULL AND ? > ?))
+         AND (? = 0 OR end_time IS NOT NULL)
+       UNION ALL
+       SELECT id, 'import_exact', app_name, exe_name, window_title, start_time, end_time, NULL,
+              batch_id, 1
+       FROM import_exact_sessions WHERE start_time < ? AND end_time > ?
+       UNION ALL
+       SELECT id, 'import_bucket', COALESCE(NULLIF(app_name, ''), exe_name), exe_name, '',
+              bucket_start_time, bucket_start_time + duration,
+              bucket_start_time + 3600000, batch_id, 2
+       FROM import_time_buckets
+       WHERE bucket_start_time < ? AND bucket_start_time + 3600000 > ?
+     )
+     ORDER BY start_ms ASC, origin_rank ASC, record_id ASC, end_ms ASC";
 
 #[derive(Clone, Debug)]
 struct CandidateValue {
@@ -394,25 +427,39 @@ async fn replace_projection_range(
     .map_err(|error| format!("failed to clear hourly projection range: {error}"))?;
     let timestamp_ms = now_ms();
     for ((bucket_start_ms, app_key, origin, source_id), row) in rows {
-        sqlx::query(
-            "INSERT INTO activity_hourly_effective(
-               bucket_start_ms, bucket_end_ms, app_key, raw_exe_name, display_app_name,
-               origin, source_id, effective_duration_ms, computed_revision, updated_at_ms
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(bucket_start_ms)
-        .bind(bucket_start_ms + HOUR_MS)
-        .bind(app_key)
-        .bind(row.raw_exe_name)
-        .bind(row.display_app_name)
-        .bind(origin.as_str())
-        .bind(source_id)
-        .bind(row.duration_ms)
-        .bind(source_revision)
-        .bind(timestamp_ms)
-        .execute(&mut **tx)
-        .await
-        .map_err(|error| format!("failed to insert hourly projection row: {error}"))?;
+        // Native facts remain additive when they overlap. Capacity rows preserve that total
+        // without fabricating activity in the next hour or retaining every session identity.
+        let mut remaining_ms = row.duration_ms;
+        let mut capacity_index = 0;
+        while remaining_ms > 0 {
+            let duration_ms = remaining_ms.min(HOUR_MS);
+            let row_source_id = if origin == ActivityOrigin::Native {
+                format!("native:{capacity_index}")
+            } else {
+                source_id.clone()
+            };
+            sqlx::query(
+                "INSERT INTO activity_hourly_effective(
+                   bucket_start_ms, bucket_end_ms, app_key, raw_exe_name, display_app_name,
+                   origin, source_id, effective_duration_ms, computed_revision, updated_at_ms
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(bucket_start_ms)
+            .bind(bucket_start_ms + HOUR_MS)
+            .bind(&app_key)
+            .bind(&row.raw_exe_name)
+            .bind(&row.display_app_name)
+            .bind(origin.as_str())
+            .bind(row_source_id)
+            .bind(duration_ms)
+            .bind(source_revision)
+            .bind(timestamp_ms)
+            .execute(&mut **tx)
+            .await
+            .map_err(|error| format!("failed to insert hourly projection row: {error}"))?;
+            remaining_ms -= duration_ms;
+            capacity_index += 1;
+        }
     }
     Ok(())
 }
@@ -447,14 +494,11 @@ pub(super) async fn load_range(
         ),
         Ok(None) | Err(_) => (false, None, None, 0),
     };
-    let active_start = sqlx::query_scalar::<_, Option<i64>>(
-        "SELECT MIN(start_time) FROM sessions
-         WHERE end_time IS NULL AND start_time < ?",
-    )
-    .bind(end_ms)
-    .fetch_one(&mut *tx)
-    .await
-    .map_err(|error| format!("failed to inspect active session overlay: {error}"))?;
+    let active_start = sqlx::query_scalar::<_, i64>(ACTIVE_SESSION_START_SQL)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|error| format!("failed to inspect active session overlay: {error}"))?
+        .filter(|active_start| *active_start < end_ms);
 
     let mut fact_intervals = Vec::new();
     let mut outside_projection_coverage = false;
@@ -532,17 +576,12 @@ pub(super) async fn load_range(
 
     let mut projection_unavailable = false;
     let projection_rows = if ready {
-        match sqlx::query(
-            "SELECT bucket_start_ms, bucket_end_ms, raw_exe_name, display_app_name,
-                    effective_duration_ms
-             FROM activity_hourly_effective
-             WHERE bucket_start_ms < ? AND bucket_end_ms > ?
-             ORDER BY bucket_start_ms ASC, app_key ASC, origin ASC, source_id ASC",
-        )
-        .bind(end_ms)
-        .bind(start_ms)
-        .fetch_all(&mut *tx)
-        .await
+        match sqlx::query(PROJECTION_RANGE_SQL)
+            .bind(floor_to_hour(start_ms))
+            .bind(end_ms)
+            .bind(start_ms)
+            .fetch_all(&mut *tx)
+            .await
         {
             Ok(rows) => rows,
             Err(error) => {
@@ -645,42 +684,25 @@ async fn load_fact_candidates(
     end_ms: i64,
     closed_only: bool,
 ) -> Result<Vec<OwnedActivityRange<CandidateValue>>, String> {
+    // Import buckets allocate the hour's remaining capacity. A partial query must include
+    // native/exact facts elsewhere in that hour before clipping the resolved geometry.
+    let start_ms = floor_to_hour(start_ms);
+    let end_ms = ceil_to_hour(end_ms);
     let current_ms = now_ms();
-    let rows = sqlx::query(
-        "SELECT record_id, origin, app_name, exe_name, window_title, start_ms, end_ms, capacity_end_ms,
-                source_id
-         FROM (
-           SELECT id record_id, 'native' origin, app_name, exe_name, window_title, start_time start_ms,
-                  COALESCE(end_time, ?) end_ms, NULL capacity_end_ms,
-                  'native:' || id source_id, 0 origin_rank
-           FROM sessions
-           WHERE start_time < ? AND COALESCE(end_time, ?) > ?
-             AND (? = 0 OR end_time IS NOT NULL)
-           UNION ALL
-           SELECT id, 'import_exact', app_name, exe_name, window_title, start_time, end_time, NULL,
-                  batch_id, 1
-           FROM import_exact_sessions WHERE start_time < ? AND end_time > ?
-           UNION ALL
-           SELECT id, 'import_bucket', COALESCE(NULLIF(app_name, ''), exe_name), exe_name, '',
-                  bucket_start_time, bucket_start_time + duration,
-                  bucket_start_time + 3600000, batch_id, 2
-           FROM import_time_buckets
-           WHERE bucket_start_time < ? AND bucket_start_time + 3600000 > ?
-         )
-         ORDER BY start_ms ASC, origin_rank ASC, record_id ASC, end_ms ASC",
-    )
-    .bind(current_ms)
-    .bind(end_ms)
-    .bind(current_ms)
-    .bind(start_ms)
-    .bind(i64::from(closed_only))
-    .bind(end_ms)
-    .bind(start_ms)
-    .bind(end_ms)
-    .bind(start_ms)
-    .fetch_all(&mut **tx)
-    .await
-    .map_err(|error| format!("failed to load activity facts for projection: {error}"))?;
+    let rows = sqlx::query(FACT_CANDIDATES_SQL)
+        .bind(current_ms)
+        .bind(end_ms)
+        .bind(start_ms)
+        .bind(current_ms)
+        .bind(start_ms)
+        .bind(i64::from(closed_only))
+        .bind(end_ms)
+        .bind(start_ms)
+        .bind(end_ms)
+        .bind(start_ms)
+        .fetch_all(&mut **tx)
+        .await
+        .map_err(|error| format!("failed to load activity facts for projection: {error}"))?;
     let mut candidates = Vec::with_capacity(rows.len());
     for row in rows {
         let app_name: String = row.get("app_name");
@@ -742,6 +764,18 @@ async fn current_revision(tx: &mut Transaction<'_, Sqlite>) -> Result<i64, Strin
         .await
         .map_err(|error| format!("failed to read source revision: {error}"))
 }
+
+#[cfg(test)]
+#[path = "hourly_contract_tests.rs"]
+mod contract_tests;
+
+#[cfg(test)]
+#[path = "hourly_recovery_tests.rs"]
+mod recovery_tests;
+
+#[cfg(test)]
+#[path = "hourly_benchmark.rs"]
+mod benchmark;
 
 #[cfg(test)]
 mod tests {
@@ -853,7 +887,7 @@ mod tests {
         .await
         .unwrap();
         sqlx::query(
-            "UPDATE read_model_state SET state = 'ready', coverage_start_ms = 0,
+            "UPDATE read_model_state SET state = 'ready', algorithm_version = 2, coverage_start_ms = 0,
                     coverage_end_ms = 3600000 WHERE model_name = 'activity_hourly'",
         )
         .execute(&pool)
@@ -912,7 +946,7 @@ mod tests {
             .unwrap();
         }
         sqlx::query(
-            "UPDATE read_model_state SET state = 'ready', coverage_start_ms = 0,
+            "UPDATE read_model_state SET state = 'ready', algorithm_version = 2, coverage_start_ms = 0,
                     coverage_end_ms = 3600000 WHERE model_name = 'activity_hourly'",
         )
         .execute(&pool)
@@ -970,6 +1004,8 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap();
+        let facts = load_range(&pool, 0, HOUR_MS, &[]).await.unwrap();
+        assert_eq!(facts.read_path, "facts");
         initialize_backfill(&pool).await.unwrap();
         process_backfill_batch(&pool, 0, 3600000).await.unwrap();
         finish_backfill(&pool).await.unwrap();
@@ -1004,6 +1040,17 @@ mod tests {
 
         let projected = load_range(&pool, 0, HOUR_MS, &[]).await.unwrap();
         assert_eq!(projected.read_path, "projection");
+        assert_eq!(projected.fact_row_count, 0);
+        for result in [&facts, &projected] {
+            let mut by_app = BTreeMap::<&str, i64>::new();
+            for record in &result.records {
+                *by_app.entry(&record.exe_name).or_default() += record.end_time - record.start_time;
+            }
+            assert_eq!(
+                by_app,
+                BTreeMap::from([("exact.exe", 2_700_000), ("native.exe", 900_000),])
+            );
+        }
         assert_eq!(
             projected
                 .records

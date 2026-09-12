@@ -175,11 +175,9 @@ pub(crate) async fn seal_interrupted_session(
     Ok(())
 }
 
-pub async fn load_active_session(
-    pool: &Pool<Sqlite>,
-) -> Result<Option<ActiveSessionSnapshot>, sqlx::Error> {
-    let row = sqlx::query(
-        "WITH active AS (
+// NOCASE enables the existing executable index; LOWER retains legacy matching,
+// including distinct suffixes after an embedded NUL.
+const LOAD_ACTIVE_SESSION_SQL: &str = "WITH active AS (
              SELECT id, app_name, exe_name, start_time,
                     COALESCE(continuity_group_start_time, start_time) AS continuity_group_start_time
              FROM sessions
@@ -193,14 +191,19 @@ pub async fn load_active_session(
                     SELECT SUM(MAX(0, closed.end_time - closed.start_time))
                     FROM sessions closed
                     WHERE closed.end_time IS NOT NULL
+                      AND closed.exe_name = active.exe_name COLLATE NOCASE
                       AND LOWER(closed.exe_name) = LOWER(active.exe_name)
                       AND COALESCE(closed.continuity_group_start_time, closed.start_time)
                           = active.continuity_group_start_time
                 ), 0) AS closed_duration_ms
-         FROM active",
-    )
-    .fetch_optional(pool)
-    .await?;
+         FROM active";
+
+pub async fn load_active_session(
+    pool: &Pool<Sqlite>,
+) -> Result<Option<ActiveSessionSnapshot>, sqlx::Error> {
+    let row = sqlx::query(LOAD_ACTIVE_SESSION_SQL)
+        .fetch_optional(pool)
+        .await?;
 
     Ok(row.map(|row| ActiveSessionSnapshot {
         id: row.get("id"),
@@ -511,6 +514,103 @@ mod exclusion_tests {
             assert_eq!(active.continuity_group_start_time, 1_000);
             assert_eq!(active.closed_duration_ms, 2_000);
         });
+    }
+
+    #[tokio::test]
+    async fn active_session_projection_preserves_sqlite_matching_and_legacy_groups() {
+        let pool = setup_test_db().await;
+        for (active_exe, matching_exe, excluded_exe, active_group, expected) in [
+            ("code.exe", "CODE.exe", "other.exe", Some(1_000), 3_500),
+            ("Code.exe\0a", "CODE.exe\0a", "CODE.exe\0b", None, 3_500),
+            ("Äpp.exe", "ÄPP.exe", "äpp.exe", None, 3_500),
+        ] {
+            sqlx::query("DELETE FROM sessions")
+                .execute(&pool)
+                .await
+                .unwrap();
+            assert!(load_active_session(&pool).await.unwrap().is_none());
+            for (exe, start, end, group) in [
+                (matching_exe, 1_000, 3_000, None),
+                // Restored groups need not precede every segment's start.
+                (matching_exe, 500, 2_000, Some(1_000)),
+                (matching_exe, 4_000, 4_000, Some(1_000)),
+                (matching_exe, 5_000, 4_000, Some(1_000)),
+                (matching_exe, 1_000, 9_000, Some(2_000)),
+                (excluded_exe, 1_000, 9_000, Some(1_000)),
+            ] {
+                sqlx::query(
+                    "INSERT INTO sessions(app_name, exe_name, start_time, end_time,
+                         duration, continuity_group_start_time) VALUES ('Closed', ?, ?, ?, 99999, ?)",
+                )
+                .bind(exe)
+                .bind(start)
+                .bind(end)
+                .bind(group)
+                .execute(&pool)
+                .await
+                .unwrap();
+            }
+            sqlx::query(
+                "INSERT INTO sessions(app_name, exe_name, start_time, continuity_group_start_time)
+                 VALUES ('Active', ?, ?, ?)",
+            )
+            .bind(active_exe)
+            .bind(if active_group.is_some() {
+                10_000
+            } else {
+                1_000
+            })
+            .bind(active_group)
+            .execute(&pool)
+            .await
+            .unwrap();
+            let active = load_active_session(&pool).await.unwrap().unwrap();
+            assert_eq!(active.exe_name, active_exe);
+            assert_eq!(active.continuity_group_start_time, 1_000);
+            assert_eq!(active.closed_duration_ms, expected, "{active_exe:?}");
+        }
+        pool.close().await;
+    }
+
+    #[tokio::test]
+    async fn active_session_projection_seeks_closed_executable_with_current_schema() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        crate::data::sqlite_pool::prepare_pool_schema(
+            &pool,
+            std::path::Path::new("active-session-plan-memory.db"),
+        )
+        .await
+        .unwrap();
+        pool.execute(
+            "WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i + 1 FROM n WHERE i < 20000)
+             INSERT INTO sessions(app_name, exe_name, start_time, end_time, duration)
+             SELECT 'Historical', 'historical-' || (i % 20) || '.exe', i * 1000, i * 1000 + 500, 500
+             FROM n;
+             INSERT INTO sessions(app_name, exe_name, start_time, continuity_group_start_time)
+             VALUES ('Active', 'new-active.exe', 30000000, 30000000);
+             ANALYZE sessions;",
+        )
+        .await
+        .unwrap();
+        let plan: Vec<String> =
+            sqlx::query(&format!("EXPLAIN QUERY PLAN {LOAD_ACTIVE_SESSION_SQL}"))
+                .fetch_all(&pool)
+                .await
+                .unwrap()
+                .iter()
+                .map(|row| row.get("detail"))
+                .collect();
+        assert!(
+            plan.iter().any(|line| {
+                line.contains("SEARCH closed USING INDEX idx_sessions_exe_usage_time")
+                    && line.contains("exe_name=?")
+            }),
+            "{plan:?}"
+        );
+        let active = load_active_session(&pool).await.unwrap().unwrap();
+        assert_eq!(active.exe_name, "new-active.exe");
+        assert_eq!(active.closed_duration_ms, 0);
+        pool.close().await;
     }
 
     #[test]

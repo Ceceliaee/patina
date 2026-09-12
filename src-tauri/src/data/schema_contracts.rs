@@ -1,6 +1,21 @@
 use sqlx::{Pool, Row, Sqlite};
 use std::collections::BTreeSet;
 
+pub async fn has_session_range_index(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let index = sqlx::query("SELECT \"unique\", partial FROM pragma_index_list('sessions') WHERE name = 'idx_sessions_end_start'")
+        .fetch_optional(pool).await.map_err(|error| error.to_string())?;
+    let Some(index) = index else { return Ok(false) };
+    let columns: Vec<String> = sqlx::query_scalar(
+        "SELECT name FROM pragma_index_info('idx_sessions_end_start') ORDER BY seqno",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|error| error.to_string())?;
+    Ok(index.get::<i64, _>("unique") == 0
+        && index.get::<i64, _>("partial") == 0
+        && columns == ["end_time", "start_time"])
+}
+
 pub async fn has_web_activity_session_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
     let columns = table_columns(pool, "web_activity_native_sessions").await?;
     let indexes = table_indexes(pool, "web_activity_native_sessions").await?;

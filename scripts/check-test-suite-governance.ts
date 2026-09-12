@@ -43,6 +43,10 @@ const ALLOWED_IGNORED_TESTS = new Map([
     "src-tauri/src/data/schema.rs::session_range_query_plan_report",
     "run with pnpm run perf:sqlite-query-plan",
   ],
+  [
+    "src-tauri/src/data/activity_read_model/hourly_benchmark.rs::hourly_maintenance_capacity_report",
+    "run with pnpm run perf:activity-maintenance",
+  ],
 ]);
 const ALLOWED_SOURCE_TEXT_READS = new Map<string, SourceTextReadException>([
   [
@@ -360,7 +364,10 @@ function runSelfTest() {
       "src-tauri/src/data/schema.rs",
       '#[ignore = "run with pnpm run perf:sqlite-query-plan"]\nasync fn session_range_query_plan_report() {}',
     ]]),
-    allowedIgnoredTests: new Map(ALLOWED_IGNORED_TESTS),
+    allowedIgnoredTests: new Map([[
+      "src-tauri/src/data/schema.rs::session_range_query_plan_report",
+      "run with pnpm run perf:sqlite-query-plan",
+    ]]),
     allowedSourceTextReads: new Map(),
   };
 

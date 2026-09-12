@@ -1,7 +1,7 @@
 mod catalog;
 mod hourly;
 
-use crate::data::sqlite_pool::wait_for_sqlite_pool;
+use crate::data::sqlite_pool::{optimize_query_statistics, wait_for_sqlite_pool};
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Row, Sqlite};
 use std::collections::BTreeMap;
@@ -127,7 +127,13 @@ fn aggregate_records_into_boundaries(
     validate_aggregate_boundaries(start_ms, end_ms, boundaries)?;
     let mut aggregated: BTreeMap<(usize, String), (String, i64)> = BTreeMap::new();
     for record in records {
-        for (index, pair) in boundaries.windows(2).enumerate() {
+        let first_bucket = boundaries
+            .partition_point(|boundary| *boundary <= record.start_time)
+            .saturating_sub(1);
+        for (index, pair) in boundaries.windows(2).enumerate().skip(first_bucket) {
+            if pair[0] >= record.end_time {
+                break;
+            }
             let clipped_start = record.start_time.max(pair[0]);
             let clipped_end = record.end_time.min(pair[1]);
             let duration_ms = clipped_end - clipped_start;
@@ -274,7 +280,13 @@ pub(crate) async fn maintain_once(pool: &Pool<Sqlite>) -> Result<bool, String> {
     if catalog::maintain_once(pool).await? {
         return Ok(true);
     }
-    hourly::maintain_once(pool).await
+    if hourly::maintain_once(pool).await? {
+        return Ok(true);
+    }
+    if let Err(error) = optimize_query_statistics(pool).await {
+        eprintln!("[sql] query statistics optimization deferred: {error}");
+    }
+    Ok(false)
 }
 
 pub(crate) fn now_ms() -> i64 {
@@ -285,6 +297,132 @@ pub(crate) fn now_ms() -> i64 {
 mod tests {
     use super::*;
     use crate::domain::activity_read_model::HOUR_MS;
+
+    #[tokio::test]
+    async fn idle_statistics_follow_empty_install_and_growth_without_invalidating_read_models() {
+        use sqlx::Executor;
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        crate::data::sqlite_pool::prepare_pool_schema(
+            &pool,
+            std::path::Path::new("statistics-lifecycle.db"),
+        )
+        .await
+        .unwrap();
+        let empty_samples: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM sqlite_stat4 WHERE idx='idx_sessions_end_start'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(empty_samples, 0);
+        for (offset, count) in [(0, 1000), (1000, 20000)] {
+            sqlx::query(
+                "WITH RECURSIVE n(i) AS (VALUES(0) UNION ALL SELECT i+1 FROM n WHERE i+1<?)
+                INSERT INTO sessions(app_name,exe_name,start_time,end_time,duration)
+                SELECT 'Editor','editor.exe',(i+?)*1000,(i+?)*1000+500,500 FROM n",
+            )
+            .bind(count)
+            .bind(offset)
+            .bind(offset)
+            .execute(&pool)
+            .await
+            .unwrap();
+            let mut idle = false;
+            for _ in 0..1000 {
+                if !maintain_once(&pool).await.unwrap() {
+                    idle = true;
+                    break;
+                }
+            }
+            assert!(idle);
+            for index in ["idx_sessions_date", "idx_sessions_end_start"] {
+                let samples: i64 =
+                    sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_stat4 WHERE idx=?")
+                        .bind(index)
+                        .fetch_one(&pool)
+                        .await
+                        .unwrap();
+                assert!(
+                    samples > 0,
+                    "missing histogram after {count} rows for {index}"
+                );
+            }
+            let stat: String = sqlx::query_scalar(
+                "SELECT stat FROM sqlite_stat1 WHERE idx='idx_sessions_end_start'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(
+                stat.split_whitespace()
+                    .next()
+                    .unwrap()
+                    .parse::<i64>()
+                    .unwrap(),
+                offset + count
+            );
+        }
+        let changes: i64 = sqlx::query_scalar("SELECT total_changes()")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        crate::data::repositories::scheduled_backup::load_config(&pool)
+            .await
+            .unwrap();
+        crate::data::repositories::scheduled_export::load_config(&pool)
+            .await
+            .unwrap();
+        for _ in 0..3 {
+            let debug_sql = format!(
+                "PRAGMA optimize({})",
+                crate::data::sqlite_pool::QUERY_STATISTICS_OPTIMIZE_MASK | 1
+            );
+            let pending: Vec<String> = sqlx::query_scalar(&debug_sql)
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+            assert!(
+                pending.is_empty(),
+                "unchanged closed history must not request repeated ANALYZE: {pending:?}"
+            );
+            assert!(!maintain_once(&pool).await.unwrap());
+        }
+        assert!(!maintain_once(&pool).await.unwrap());
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT total_changes()")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            changes
+        );
+        let before: Vec<(String, String, Option<String>)> = sqlx::query_as(
+            "SELECT model_name,state,last_error_code FROM read_model_state ORDER BY model_name",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        pool.execute("DELETE FROM sqlite_stat1; DELETE FROM sqlite_stat4; ANALYZE sqlite_schema; PRAGMA query_only=ON").await.unwrap();
+        assert!(optimize_query_statistics(&pool)
+            .await
+            .unwrap_err()
+            .contains("readonly"));
+        assert!(
+            !maintain_once(&pool).await.unwrap(),
+            "optimization failure is not a read-model failure"
+        );
+        let after: Vec<(String, String, Option<String>)> = sqlx::query_as(
+            "SELECT model_name,state,last_error_code FROM read_model_state ORDER BY model_name",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(after, before);
+        pool.close().await;
+    }
 
     #[test]
     fn page_shaped_boundaries_reduce_records_without_changing_duration() {
@@ -338,5 +476,28 @@ mod tests {
     #[test]
     fn invalid_page_boundaries_fail_closed() {
         assert!(aggregate_records_into_boundaries(Vec::new(), 0, 10, &[0, 5, 5, 10]).is_err());
+    }
+
+    #[test]
+    fn page_shaping_clips_straddling_records_and_ignores_outside_or_empty_intervals() {
+        let records =
+            [(-20, 100), (10, 50), (100, 120), (40, 40), (60, 20)].map(|(start_time, end_time)| {
+                ActivityAggregateRecordDto {
+                    app_name: "Editor".into(),
+                    exe_name: "editor.exe".into(),
+                    start_time,
+                    end_time,
+                }
+            });
+        let result =
+            aggregate_records_into_boundaries(records.into(), 0, 100, &[0, 10, 50, 100]).unwrap();
+        let mut buckets = BTreeMap::<i64, i64>::new();
+        for record in result {
+            *buckets.entry(record.start_time).or_default() += record.end_time - record.start_time;
+        }
+        assert_eq!(
+            buckets.into_iter().collect::<Vec<_>>(),
+            [(0, 10), (10, 80), (50, 50)]
+        );
     }
 }
