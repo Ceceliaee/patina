@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { getLocaleText } from "../../src/shared/i18n/runtime.ts";
+import { getLocaleText, loadLocaleText } from "../../src/shared/i18n/runtime.ts";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import {
   delay,
@@ -11,6 +11,304 @@ import {
 } from "./browserHarness.ts";
 
 const COPY = { "zh-CN": getLocaleText("zh-CN") } as const;
+
+export async function runDataReadFailureScenarios(context: BrowserSmokeContext) {
+  const { appUrl, client, sessionId, runTest } = context;
+  const metric = `document.querySelector('.data-trend-inline-metric strong')?.textContent?.trim()`;
+  const openData = async () => {
+    const previousDocument = await evaluate(client, sessionId, `performance.timeOrigin`);
+    await client.command("Page.navigate", { url: appUrl }, sessionId);
+    await waitForExpression(client, sessionId, `performance.timeOrigin !== ${previousDocument} && document.readyState === 'complete'`);
+    await waitForExpression(client, sessionId, `Boolean(document.querySelector('[aria-label="数据"]'))`);
+    await evaluate(client, sessionId, `document.querySelector('[aria-label="数据"]').click()`);
+    await waitForExpression(client, sessionId, `Boolean(document.querySelector('.data-trend-panel'))`);
+  };
+  const refresh = async () => {
+    await evaluate(client, sessionId, `globalThis.__PATINA_EMIT_TAURI_EVENT('tracking-data-changed', { reason: 'session-transition', changed_at_ms: Date.now() })`);
+  };
+  const pressEnter = async () => {
+    await client.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", text: "\r", unmodifiedText: "\r", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 }, sessionId);
+    await client.command("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, sessionId);
+  };
+
+  await runTest("data cold read failures are local, announced, and recover through keyboard retry", async () => {
+    await evaluate(client, sessionId, `localStorage.setItem('__patina_reject_aggregate_kind', 'week')`);
+    try {
+      await openData();
+      await waitForExpression(client, sessionId, `Boolean(document.querySelector('[data-trend-read-error]'))`);
+      await waitForExpression(client, sessionId, `Boolean(document.querySelector('.data-overview .data-heatmap-weeks'))`);
+      assert.ok(String(await evaluate(client, sessionId, `document.querySelector('[data-trend-read-error]')?.textContent`)).includes(COPY["zh-CN"].common.readFailed));
+      assert.equal(await evaluate(client, sessionId, metric), "-");
+      assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('.data-app-panel .data-web-error button'))`), true);
+      await evaluate(client, sessionId, `localStorage.removeItem('__patina_reject_aggregate_kind')`);
+      for (const sample of [
+        { panel: ".data-overview", error: "[data-trend-read-error]", ready: `${metric} === '1h 0m'` },
+        { panel: ".data-app-panel", error: ".data-web-error", ready: `Boolean(document.querySelector('.data-app-panel .data-app-option'))` },
+      ]) {
+        await evaluate(client, sessionId, `globalThis.__PATINA_PENDING_AGGREGATES = [];
+          globalThis.__PATINA_AGGREGATE_HOOK = (request) => request.bucketCount === 8
+            ? new Promise(resolve => globalThis.__PATINA_PENDING_AGGREGATES.push({ resolve }))
+            : undefined;
+          document.querySelector('${sample.panel} ${sample.error} button').focus()`);
+        await pressEnter();
+        await waitForExpression(client, sessionId, `globalThis.__PATINA_PENDING_AGGREGATES.length > 0`);
+        assert.equal(await evaluate(client, sessionId, `document.activeElement?.matches('${sample.panel} .data-trend-range-trigger')`), true,
+          `${sample.panel}: cold keyboard retry must transfer focus before its read completes`);
+        await evaluate(client, sessionId, `globalThis.__PATINA_AGGREGATE_HOOK = undefined;
+          globalThis.__PATINA_PENDING_AGGREGATES.forEach(entry => entry.resolve())`);
+        await waitForExpression(client, sessionId, `${sample.ready} && !document.querySelector('${sample.panel} ${sample.error}')`);
+        assert.equal(await evaluate(client, sessionId, `document.activeElement?.matches('${sample.panel} .data-trend-range-trigger')`), true);
+      }
+    } finally {
+      await evaluate(client, sessionId, `localStorage.removeItem('__patina_reject_aggregate_kind');
+        globalThis.__PATINA_AGGREGATE_HOOK = undefined;
+        globalThis.__PATINA_PENDING_AGGREGATES?.forEach(entry => entry.resolve())`);
+    }
+  });
+
+  await runTest("data same-query refresh failures retain the last successful metrics", async () => {
+    const before = await evaluate(client, sessionId, metric);
+    await evaluate(client, sessionId, `globalThis.__PATINA_AGGREGATE_HOOK = async (request) => {
+      if (request.bucketCount === 8) throw new Error('Injected data refresh failure');
+    }`);
+    await refresh();
+    await waitForExpression(client, sessionId, `Boolean(document.querySelector('[data-trend-read-error]'))`);
+    assert.equal(await evaluate(client, sessionId, metric), before);
+    assert.ok(String(await evaluate(client, sessionId, `document.querySelector('[data-trend-read-error]')?.textContent`)).includes(COPY["zh-CN"].common.refreshFailed));
+    await evaluate(client, sessionId, `document.querySelector('[data-trend-read-error] button').focus()`);
+    await pressEnter();
+    await waitForExpression(client, sessionId, `Boolean(document.querySelector('[data-trend-read-error]'))`);
+    assert.equal(await evaluate(client, sessionId, metric), before);
+    assert.equal(await evaluate(client, sessionId, `document.activeElement?.matches('.data-overview .data-trend-range-trigger')`), true,
+      "a failed keyboard retry keeps focus in its trend panel");
+    try {
+      for (const sample of [
+        { panel: ".data-overview", error: "[data-trend-read-error]", other: ".data-app-panel" },
+        { panel: ".data-app-panel", error: ".data-app-refresh-status", other: ".data-overview" },
+      ]) {
+        await waitForExpression(client, sessionId, `Boolean(document.querySelector('${sample.panel} ${sample.error} button'))`);
+        await evaluate(client, sessionId, `globalThis.__PATINA_PENDING_AGGREGATES = [];
+          globalThis.__PATINA_AGGREGATE_HOOK = (request) => request.bucketCount === 8
+            ? new Promise(resolve => globalThis.__PATINA_PENDING_AGGREGATES.push({ resolve }))
+            : undefined;
+          document.querySelector('${sample.panel} ${sample.error} button').focus()`);
+        await pressEnter();
+        await waitForExpression(client, sessionId, `globalThis.__PATINA_PENDING_AGGREGATES.length > 0`);
+        assert.equal(await evaluate(client, sessionId, `document.activeElement?.matches('${sample.panel} .data-trend-range-trigger')`), true,
+          `${sample.panel}: warm keyboard retry must transfer focus before its read completes`);
+        await evaluate(client, sessionId, `document.querySelector('${sample.other} .data-trend-range-trigger').focus();
+          globalThis.__PATINA_AGGREGATE_HOOK = undefined;
+          globalThis.__PATINA_PENDING_AGGREGATES.forEach(entry => entry.resolve())`);
+        await waitForExpression(client, sessionId, `!document.querySelector('${sample.panel} ${sample.error}')`);
+        assert.equal(await evaluate(client, sessionId, `document.activeElement?.matches('${sample.other} .data-trend-range-trigger')`), true,
+          `${sample.panel}: completed retry must not steal focus after the user moves away`);
+        assert.equal(await evaluate(client, sessionId, metric), before);
+      }
+    } finally {
+      await evaluate(client, sessionId, `globalThis.__PATINA_AGGREGATE_HOOK = undefined;
+        globalThis.__PATINA_PENDING_AGGREGATES?.forEach(entry => entry.resolve())`);
+    }
+  });
+
+  await runTest("data heatmap refresh failure preserves the current cells and each panel retries independently", async () => {
+    await openData();
+    await waitForExpression(client, sessionId, `['.data-overview', '.data-app-panel'].every((panel) =>
+      document.querySelectorAll(panel + ' [data-heatmap-date]').length > 0
+        && !document.querySelector(panel + ' .data-heatmap-loading-state')
+        && !document.querySelector(panel + ' .data-heatmap-refresh-status'))`);
+    const cells = `Array.from(document.querySelectorAll('.data-overview [data-heatmap-date]')).map((cell) => [cell.dataset.heatmapDate, cell.getAttribute('aria-label'), cell.style.getPropertyValue('--heatmap-intensity')])`;
+    const before = await evaluate(client, sessionId, cells);
+    await evaluate(client, sessionId, `globalThis.__PATINA_AGGREGATE_HOOK = async (request) => {
+      if (request.bucketCount > 100) throw new Error('Injected warm heatmap failure');
+    }`);
+    await refresh();
+    await waitForExpression(client, sessionId, `['.data-overview', '.data-app-panel'].every((panel) =>
+      Boolean(document.querySelector(panel + ' .data-heatmap-refresh-status')))`);
+    assert.deepEqual(await evaluate(client, sessionId, cells), before);
+    assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('[data-trend-read-error]'))`), false);
+    await evaluate(client, sessionId, `globalThis.__PATINA_AGGREGATE_HOOK = undefined;
+      document.querySelector('.data-overview .data-heatmap-refresh-status button').focus()`);
+    await pressEnter();
+    await waitForExpression(client, sessionId, `!document.querySelector('.data-overview .data-heatmap-refresh-status') && !document.querySelector('.data-overview .data-heatmap-loading-state')`);
+    assert.equal(await evaluate(client, sessionId, `document.activeElement?.matches('.data-overview .data-heatmap-range-control button:not(:disabled), .data-overview .data-heatmap-panel')`), true,
+      "keyboard retry must leave focus on its heatmap controls when the retry button disappears");
+    assert.deepEqual(await evaluate(client, sessionId, cells), before);
+    assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('.data-app-panel .data-heatmap-refresh-status'))`), true,
+      "retrying the overview must not silently clear the destination panel's failed read");
+    await evaluate(client, sessionId, `document.querySelector('.data-app-panel .data-heatmap-refresh-status button').focus()`);
+    await pressEnter();
+    await waitForExpression(client, sessionId, `!document.querySelector('.data-app-panel .data-heatmap-refresh-status')`);
+    assert.equal(await evaluate(client, sessionId, `document.activeElement?.matches('.data-app-panel .data-heatmap-range-control button:not(:disabled), .data-app-panel .data-heatmap-panel')`), true);
+
+    await evaluate(client, sessionId, `globalThis.__PATINA_AGGREGATE_HOOK = async (request) => {
+      if (request.bucketCount > 100) throw new Error('Injected heatmap keyboard retry failure');
+    }`);
+    await refresh();
+    await waitForExpression(client, sessionId, `['.data-overview', '.data-app-panel'].every((panel) =>
+      Boolean(document.querySelector(panel + ' .data-heatmap-refresh-status')))`);
+    await evaluate(client, sessionId, `globalThis.__PATINA_PENDING_AGGREGATES = [];
+      globalThis.__PATINA_AGGREGATE_HOOK = (request) => request.bucketCount > 100
+        ? new Promise(resolve => globalThis.__PATINA_PENDING_AGGREGATES.push({ request, resolve }))
+        : undefined;
+      document.querySelector('.data-overview .data-heatmap-refresh-status button').focus()`);
+    await pressEnter();
+    await waitForExpression(client, sessionId, `globalThis.__PATINA_PENDING_AGGREGATES.length > 0`);
+    await evaluate(client, sessionId, `document.querySelector('.data-overview .data-trend-range-trigger').focus();
+      globalThis.__PATINA_AGGREGATE_HOOK = undefined;
+      globalThis.__PATINA_PENDING_AGGREGATES.forEach(entry => entry.resolve({ records: [], readPath: 'projection', fallbackReason: null, sourceRevision: 5, projectionRowCount: 0, factRowCount: 0, hasActiveSession: false }))`);
+    await waitForExpression(client, sessionId, `(() => {
+      const cells = Array.from(document.querySelectorAll('.data-overview [data-heatmap-date]'));
+      return cells.length > 0 && cells.every(cell => Number(cell.style.getPropertyValue('--heatmap-intensity')) === 0);
+    })()`);
+    assert.equal(await evaluate(client, sessionId, `document.activeElement?.matches('.data-overview .data-trend-range-trigger')`), true,
+      "a resolved heatmap retry must not steal focus after the user moves to a different control");
+  });
+
+  await runTest("data heatmap selection ignores superseded success and failure after returning to recent data", async () => {
+    for (const outcome of ["success", "failure"]) {
+      await openData();
+      await waitForExpression(client, sessionId, `Boolean(document.querySelector('.data-overview .data-heatmap-weeks')) && !document.querySelector('.data-overview .data-heatmap-loading-state')`);
+      const cells = `Array.from(document.querySelectorAll('.data-overview [data-heatmap-date]')).map((cell) => [cell.dataset.heatmapDate, cell.getAttribute('aria-label'), cell.style.getPropertyValue('--heatmap-intensity')])`;
+      const before = await evaluate(client, sessionId, cells);
+      await evaluate(client, sessionId, `
+        globalThis.__PATINA_PENDING_AGGREGATES = [];
+        const recentStart = globalThis.__PATINA_AGGREGATE_READS.find((request) => request.bucketCount > 100).startMs;
+        globalThis.__PATINA_AGGREGATE_HOOK = (request) => request.bucketCount > 100 && request.startMs !== recentStart
+          ? new Promise((resolve, reject) => globalThis.__PATINA_PENDING_AGGREGATES.push({ request, resolve, reject }))
+          : undefined;
+        document.querySelector('.data-overview .data-heatmap-range-control [aria-label="切到更早范围"]').click();
+      `);
+      await waitForExpression(client, sessionId, `globalThis.__PATINA_PENDING_AGGREGATES.length > 0`);
+      assert.notDeepEqual(await evaluate(client, sessionId, cells), before,
+        "the pending year must not display the recent range's cells");
+      await evaluate(client, sessionId, `document.querySelector('.data-overview .data-heatmap-range-control [aria-label="切到较新范围"]').click()`);
+      await waitForExpression(client, sessionId, `document.querySelector('.data-overview .data-heatmap-range-control .qp-range-control-label')?.textContent === '近一年' && !document.querySelector('.data-overview .data-heatmap-loading-state')`);
+      await evaluate(client, sessionId, outcome === "failure"
+        ? `globalThis.__PATINA_PENDING_AGGREGATES.forEach((entry) => entry.reject(new Error('Superseded heatmap range')))`
+        : `globalThis.__PATINA_PENDING_AGGREGATES.forEach((entry) => entry.resolve({ records: [], readPath: 'projection', fallbackReason: null, sourceRevision: 4, projectionRowCount: 0, factRowCount: 0, hasActiveSession: false }))`);
+      await waitForAnimationFrames(client, sessionId, 2);
+      assert.deepEqual(await evaluate(client, sessionId, cells), before);
+      assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('.data-overview .data-heatmap-panel [role="status"]'))`), false);
+      await evaluate(client, sessionId, `globalThis.__PATINA_AGGREGATE_HOOK = undefined`);
+    }
+  });
+
+  await runTest("data range changes ignore slow successes and late failures from superseded queries", async () => {
+    const advance = async () => {
+      await evaluate(client, sessionId, `document.querySelector('.data-overview [aria-label="扩大趋势范围"]').click()`);
+    };
+    for (const outcome of ["success", "failure"]) {
+      await openData();
+      await waitForExpression(client, sessionId, `${metric} === '1h 0m'`);
+      await evaluate(client, sessionId, `
+        globalThis.__PATINA_PENDING_AGGREGATES = [];
+        globalThis.__PATINA_AGGREGATE_HOOK = (request) => request.bucketCount === 31
+          ? new Promise((resolve, reject) => globalThis.__PATINA_PENDING_AGGREGATES.push({ request, resolve, reject }))
+          : undefined;
+      `);
+      await advance();
+      await waitForExpression(client, sessionId, `globalThis.__PATINA_PENDING_AGGREGATES.length > 0`);
+      assert.equal(await evaluate(client, sessionId, metric), "-", "thirty-day title must not display a seven-day snapshot");
+      await advance();
+      await waitForExpression(client, sessionId, `document.querySelector('.data-overview .data-trend-range-trigger')?.textContent === '近一年' && ${metric} === '1h 0m'`);
+      await evaluate(client, sessionId, outcome === "failure"
+        ? `globalThis.__PATINA_PENDING_AGGREGATES.forEach((entry) => entry.reject(new Error('Superseded data range')))`
+        : `globalThis.__PATINA_PENDING_AGGREGATES.forEach((entry) => entry.resolve({ records: [], readPath: 'projection', fallbackReason: null, sourceRevision: 4, projectionRowCount: 0, factRowCount: 0, hasActiveSession: false }))`);
+      await waitForAnimationFrames(client, sessionId, 2);
+      assert.equal(await evaluate(client, sessionId, metric), "1h 0m");
+      assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('[data-trend-read-error]'))`), false);
+      assert.equal(await evaluate(client, sessionId, `document.querySelector('.data-overview .data-trend-range-trigger')?.textContent`), COPY["zh-CN"].data.recentYear);
+      await evaluate(client, sessionId, `globalThis.__PATINA_AGGREGATE_HOOK = undefined;
+        document.querySelector('.data-overview [aria-label="缩短趋势范围"]').click()`);
+      await waitForExpression(client, sessionId, `document.querySelector('.data-overview .data-trend-range-trigger')?.textContent === '近 30 天'`);
+      await evaluate(client, sessionId, `document.querySelector('.data-overview [aria-label="缩短趋势范围"]').click()`);
+      await waitForExpression(client, sessionId, `document.querySelector('.data-overview .data-trend-range-trigger')?.textContent === '近 7 天' && ${metric} === '1h 0m'`);
+    }
+    await openData();
+  });
+
+  await runTest("data cached ranges follow locale and local-day changes without changing selection", async () => {
+    await openData();
+    const ready = `document.querySelector('.data-trend-panel')?.getAttribute('aria-busy') === 'false'
+      && document.querySelector('.data-app-grid')?.getAttribute('aria-busy') === 'false'
+      && Boolean(document.querySelector('.data-overview [data-heatmap-date]'))`;
+    const selected = `Array.from(document.querySelectorAll('.data-app-option[aria-pressed="true"]')).map(node => node.getAttribute('data-destination-key'))`;
+    const values = `Array.from(document.querySelectorAll('.data-trend-inline-metric strong, .data-app-metric strong')).map(node => node.textContent)`;
+    await waitForExpression(client, sessionId, ready);
+    const selectedBefore = await evaluate(client, sessionId, selected) as string[];
+    const valuesBefore = await evaluate(client, sessionId, values);
+    const settingsBefore = await evaluate(client, sessionId, `localStorage.getItem('__time_tracker_smoke_settings')`);
+    const sidebarMode = await evaluate(client, sessionId, `localStorage.getItem('patina:sidebar-navigation-mode')`);
+    try {
+      for (const locale of ["en-US", "zh-CN"] as const) {
+        await evaluate(client, sessionId, `(() => {
+          const settings = JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') ?? '{}');
+          settings.language = ${jsonString(locale)};
+          localStorage.setItem('__time_tracker_smoke_settings', JSON.stringify(settings));
+          globalThis.__PATINA_EMIT_TAURI_EVENT('app-settings-changed', { language: ${jsonString(locale)} });
+        })()`);
+        const copy = await loadLocaleText(locale);
+        await waitForExpression(client, sessionId, `document.documentElement.lang === ${jsonString(locale)} && ${ready}
+          && Array.from(document.querySelectorAll('.data-trend-range-trigger')).every(node => node.textContent === ${jsonString(copy.data.pastSevenDays)})`);
+        assert.deepEqual(await evaluate(client, sessionId, values), valuesBefore,
+          "changing locale must remap cached labels without changing durations");
+        assert.deepEqual(await evaluate(client, sessionId, selected), selectedBefore);
+        assert.equal(await evaluate(client, sessionId, `document.querySelector('.data-overview .data-heatmap-range-control .qp-range-control-label')?.textContent`), copy.data.recentYear);
+      }
+      const nextDay = await evaluate(client, sessionId, `(() => {
+        const NativeDate = Date;
+        const next = new NativeDate();
+        next.setDate(next.getDate() + ((8 - next.getDay()) % 7 || 7));
+        next.setHours(12, 0, 0, 0);
+        const now = next.getTime();
+        const dateKey = [next.getFullYear(), String(next.getMonth() + 1).padStart(2, '0'), String(next.getDate()).padStart(2, '0')].join('-');
+        globalThis.__PATINA_RESTORE_DATA_DATE = () => { globalThis.Date = NativeDate; };
+        globalThis.Date = new Proxy(NativeDate, {
+          construct(target, args, newTarget) { return Reflect.construct(target, args.length ? args : [now], newTarget); },
+          get(target, key) { return key === 'now' ? () => now : Reflect.get(target, key); }
+        });
+        globalThis.__PATINA_ROLLOVER_READS = [];
+        globalThis.__PATINA_AGGREGATE_HOOK = (request) => request.bucketCount > 0
+          ? new Promise(resolve => globalThis.__PATINA_ROLLOVER_READS.push({ request, resolve }))
+          : undefined;
+        document.querySelector('[data-sidebar-footer] button').click();
+        return { now, dateKey, tick: dateKey.slice(5) };
+      })()`) as { now: number; dateKey: string; tick: string };
+      await waitForAnimationFrames(client, sessionId, 2);
+      assert.equal(await evaluate(client, sessionId, metric), "-",
+        "the new seven-day range must hide the previous local-day metric until its read completes");
+      await waitForExpression(client, sessionId, `globalThis.__PATINA_ROLLOVER_READS.some(entry => entry.request.bucketCount === 8)
+        && globalThis.__PATINA_ROLLOVER_READS.some(entry => entry.request.bucketCount > 100)`, 5_000,
+      "Data must refresh both local-date owners after a sidebar render without a tracking event");
+      assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('.data-overview .data-heatmap-loading-state'))`), true,
+        "crossing a week boundary must not retain the previous heatmap range");
+      await evaluate(client, sessionId, `globalThis.__PATINA_ROLLOVER_READS.forEach(entry => entry.resolve({
+        records: [
+          { appName: 'Cursor', exeName: 'cursor.exe', startTime: ${nextDay.now - 1_200_000}, endTime: ${nextDay.now - 600_000} },
+          { appName: 'Research', exeName: 'deep-research-workbench.exe', startTime: ${nextDay.now - 600_000}, endTime: ${nextDay.now} }
+        ], readPath: 'projection', fallbackReason: null, sourceRevision: 6, projectionRowCount: 2, factRowCount: 0, hasActiveSession: false
+      }))`);
+      await waitForExpression(client, sessionId, `${ready} && ${metric} === '20m'`);
+      assert.deepEqual(await evaluate(client, sessionId, selected), selectedBefore);
+      assert.equal(await evaluate(client, sessionId, `document.querySelector('.data-app-metric strong')?.textContent`), `${selectedBefore.length * 10}m`);
+      for (const panel of [".data-overview", ".data-app-panel"]) {
+        assert.equal(await evaluate(client, sessionId, `Array.from(document.querySelectorAll('${panel} .qp-native-trend-hit')).at(-1)?.getAttribute('aria-label')?.includes(${jsonString(nextDay.tick)})`), true,
+          `${panel}: the last chart date must match the new local-day data`);
+        assert.equal(await evaluate(client, sessionId, `document.querySelector('${panel} .data-trend-range-trigger')?.textContent`), COPY["zh-CN"].data.pastSevenDays);
+        assert.equal(await evaluate(client, sessionId, `document.querySelector('${panel} [data-heatmap-date="${nextDay.dateKey}"]')?.getAttribute('aria-label')?.includes('${panel === ".data-overview" ? 20 : selectedBefore.length * 10}m')`), true,
+          `${panel}: the new heatmap date must expose the corresponding duration`);
+      }
+    } finally {
+      await evaluate(client, sessionId, `globalThis.__PATINA_RESTORE_DATA_DATE?.();
+        delete globalThis.__PATINA_RESTORE_DATA_DATE;
+        globalThis.__PATINA_AGGREGATE_HOOK = undefined;
+        globalThis.__PATINA_ROLLOVER_READS?.forEach(entry => entry.resolve());
+        localStorage.setItem('__time_tracker_smoke_settings', ${jsonString(String(settingsBefore))});
+        ${sidebarMode === null ? "localStorage.removeItem('patina:sidebar-navigation-mode')" : `localStorage.setItem('patina:sidebar-navigation-mode', ${jsonString(String(sidebarMode))})`};`);
+      await openData();
+    }
+  });
+}
 
 const VISIBLE_DESTINATION_DETAIL_POPOVER = `(() => {
   const popover = document.querySelector(".destination-detail-record-popover");
@@ -25,6 +323,38 @@ export async function runDataScenarios(
   options: { continuityOnly?: boolean } = {},
 ) {
   const { appUrl, client, sessionId, runTest } = context;
+  const assertQuickClassificationKeyboard = async (listSelector: string, supported = true) => {
+    const selectedKeys = `Array.from(document.querySelectorAll('${listSelector} button[aria-pressed="true"]')).map(button => button.getAttribute('data-destination-key'))`;
+    const before = await evaluate(client, sessionId, selectedKeys);
+    for (const selector of supported
+      ? [`${listSelector} button[aria-haspopup="menu"]`, '.data-app-selected-icon[aria-haspopup="menu"]']
+      : [`${listSelector} button`]) {
+      for (const shortcut of [
+        { key: "ContextMenu", code: "ContextMenu", windowsVirtualKeyCode: 93, modifiers: 0 },
+        { key: "F10", code: "F10", windowsVirtualKeyCode: 121, modifiers: 8 },
+      ]) {
+        await evaluate(client, sessionId, `document.querySelector('${selector}').focus()`);
+        await client.command("Input.dispatchKeyEvent", { type: "keyDown", ...shortcut }, sessionId);
+        await client.command("Input.dispatchKeyEvent", { type: "keyUp", ...shortcut }, sessionId);
+        if (supported) {
+          await waitForExpression(client, sessionId, `document.querySelector('.quick-classification-menu[role="menu"]')?.contains(document.activeElement)`);
+          assert.equal(await evaluate(client, sessionId, `document.querySelector('${selector}')?.getAttribute('aria-expanded')`), "true");
+          assert.deepEqual(await evaluate(client, sessionId, selectedKeys), before, "opening a keyboard menu must not change selection");
+          assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('.destination-detail-dialog'))`), false);
+          await client.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, sessionId);
+          await client.command("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, sessionId);
+          await waitForExpression(client, sessionId, `!document.querySelector('.quick-classification-menu[role="menu"]')
+            && document.activeElement === document.querySelector('${selector}')`);
+        } else {
+          await waitForAnimationFrames(client, sessionId, 2);
+          assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('.quick-classification-menu, .destination-detail-dialog'))`), false,
+            "category shortcuts must not open object classification or details");
+          assert.equal(await evaluate(client, sessionId, `document.activeElement === document.querySelector('${selector}')`), true);
+        }
+        assert.deepEqual(await evaluate(client, sessionId, selectedKeys), before);
+      }
+    }
+  };
 
   await runTest("data trend range picker applies custom ranges and resets to last seven days", async () => {
     await client!.command("Emulation.setDeviceMetricsOverride", {
@@ -500,6 +830,13 @@ export async function runDataScenarios(
   });
 
   await runTest("monthly data trend axes show every month", async () => {
+    const sevenDayPresentation = `JSON.stringify({
+      ranges: Array.from(document.querySelectorAll('.data-trend-range-trigger')).map(node => node.textContent),
+      metrics: Array.from(document.querySelectorAll('.data-trend-inline-metric, .data-app-metric')).map(node => node.textContent),
+      selection: Array.from(document.querySelectorAll('.data-app-option[aria-pressed="true"]')).map(node => node.getAttribute('data-destination-key')),
+      selectedIcons: Array.from(document.querySelectorAll('.data-app-selected-icon')).map(node => node.getAttribute('data-selection-key')),
+      series: document.querySelectorAll('.data-app-chart .qp-native-trend-line').length
+    })`;
     await evaluate(client!, sessionId, `
       document.querySelector(".data-app-panel .data-trend-range-reset")?.click()
     `);
@@ -559,6 +896,10 @@ export async function runDataScenarios(
       );
     }
 
+    await waitForExpression(client, sessionId, `document.querySelector('.data-trend-panel')?.getAttribute('aria-busy') === 'false'
+      && document.querySelector('.data-app-grid')?.getAttribute('aria-busy') === 'false'`);
+    const before = await evaluate(client, sessionId, sevenDayPresentation);
+
     for (const panelSelector of [".data-overview", ".data-app-panel"]) {
       for (const expectedLabel of ["近 30 天", "近一年"]) {
         assert.equal(
@@ -607,6 +948,8 @@ export async function runDataScenarios(
       true,
       "activity and destination trends should render all twelve month labels",
     );
+    assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('.data-trend-chart.data-chart-openable, .data-app-chart.data-chart-openable'))`), false,
+      "monthly aggregates cannot navigate to an invented daily history date");
 
     for (const panelSelector of [".data-overview", ".data-app-panel"]) {
       for (const expectedLabel of ["近 30 天", "近 7 天"]) {
@@ -632,6 +975,40 @@ export async function runDataScenarios(
             ?.textContent?.trim() === ${jsonString(expectedLabel)}`,
         );
       }
+    }
+    await waitForExpression(client, sessionId, `document.querySelector('.data-trend-panel')?.getAttribute('aria-busy') === 'false'
+      && document.querySelector('.data-app-grid')?.getAttribute('aria-busy') === 'false'`);
+    assert.equal(await evaluate(client, sessionId, sevenDayPresentation), before,
+      "seven-day titles, metrics and selected objects must agree after the annual round trip");
+
+    for (const selector of [".data-trend-chart", ".data-app-chart"]) {
+      await evaluate(client, sessionId, `document.querySelector('${selector}').scrollIntoView({ block: 'center' })`);
+      const point = await evaluate(client, sessionId, `(() => {
+        const hits = document.querySelectorAll('${selector} .qp-native-trend-hit');
+        const index = 2, hit = hits[index], rect = hit.getBoundingClientRect();
+        const date = new Date(); date.setDate(date.getDate() - hits.length + 1 + index);
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, label: hit.getAttribute('aria-label'),
+          dateKey: [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-'),
+          dateLabel: date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }) };
+      })()`) as { x: number; y: number; label: string; dateKey: string; dateLabel: string };
+      await client.command("Input.dispatchMouseEvent", { type: "mouseMoved", x: point.x, y: point.y }, sessionId);
+      await waitForExpression(client, sessionId, `document.querySelector('${selector} .qp-chart-tooltip-label')?.textContent === ${jsonString(point.label)}`);
+      for (const clickCount of [1, 2]) {
+        await client.command("Input.dispatchMouseEvent", { type: "mousePressed", button: "left", buttons: 1, clickCount, x: point.x, y: point.y }, sessionId);
+        await client.command("Input.dispatchMouseEvent", { type: "mouseReleased", button: "left", buttons: 0, clickCount, x: point.x, y: point.y }, sessionId);
+      }
+      await waitForExpression(client, sessionId, `document.querySelector('.history-date-label')?.textContent === ${jsonString(point.dateLabel)}`,
+        undefined, `${selector} real double click opens its active date in History`);
+      await evaluate(client, sessionId, `document.querySelector('.history-date-label').click()`);
+      await waitForExpression(client, sessionId, `document.querySelector('.history-calendar-popover [data-selected="true"]')?.getAttribute('data-calendar-date') === ${jsonString(point.dateKey)}`);
+      await client.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, sessionId);
+      await client.command("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, sessionId);
+      await waitForExpression(client, sessionId, `!document.querySelector('.history-calendar-popover')`);
+      await evaluate(client, sessionId, `document.querySelector('[aria-label="数据"]').click()`);
+      await waitForExpression(client, sessionId, `document.querySelector('.data-trend-panel')?.getAttribute('aria-busy') === 'false'
+        && document.querySelector('.data-app-grid')?.getAttribute('aria-busy') === 'false'`);
+      assert.equal(await evaluate(client, sessionId, sevenDayPresentation), before,
+        "returning from chart navigation restores matching cached data, range titles and selection");
     }
   });
 
@@ -1084,6 +1461,7 @@ export async function runDataScenarios(
     assert.equal(initialState.selectedMarkerBackground, "rgba(0, 0, 0, 0)");
     assert.equal(initialState.heatmapTitle, "分类热力图");
     assert.equal(initialState.hasTooltipTitle, false);
+    await assertQuickClassificationKeyboard('[aria-label="应用分类列表"]', false);
 
     assert.equal(await evaluate(client!, sessionId, `
       (() => {
@@ -1531,6 +1909,7 @@ export async function runDataScenarios(
       45_000,
       "data quick classification target",
     );
+    const metricsBefore = await evaluate(client, sessionId, `Array.from(document.querySelectorAll('.data-app-metric, .data-app-panel .data-trend-range-trigger')).map(node => node.textContent)`);
     const openingState = JSON.parse(String(await evaluate(client!, sessionId, `
       (() => {
         const list = document.querySelector('[aria-label="应用列表"]');
@@ -1703,6 +2082,10 @@ export async function runDataScenarios(
       sessionId,
       `document.activeElement?.matches('.data-app-selected-icon[aria-haspopup="menu"]')`,
     );
+    await assertQuickClassificationKeyboard('[aria-label="应用列表"]');
+    assert.deepEqual(await evaluate(client, sessionId, `Array.from(document.querySelectorAll('.data-app-option[aria-pressed="true"]')).map(node => node.getAttribute('data-destination-key'))`), openingState.selectedKeys);
+    assert.deepEqual(await evaluate(client, sessionId, `Array.from(document.querySelectorAll('.data-app-metric, .data-app-panel .data-trend-range-trigger')).map(node => node.textContent)`), metricsBefore,
+      "app classification changes must preserve the selected objects' metrics and range title");
   });
 
   await runTest("data web icons reuse quick classification without changing selection", async () => {
@@ -1720,6 +2103,7 @@ export async function runDataScenarios(
       45_000,
       "data web quick classification target",
     );
+    const metricsBefore = await evaluate(client, sessionId, `Array.from(document.querySelectorAll('.data-app-metric, .data-app-panel .data-trend-range-trigger')).map(node => node.textContent)`);
     const openingState = JSON.parse(String(await evaluate(client!, sessionId, `
       (() => {
         const list = document.querySelector('[aria-label="网页列表"]');
@@ -1850,13 +2234,49 @@ export async function runDataScenarios(
       { selectedKeys: selectedKeysBeforeTopIconMenu, detailOpen: false },
       "the selected-web icon must reuse the menu without changing selection or opening details",
     );
-    await evaluate(client!, sessionId, `
-      document.querySelector('.quick-classification-menu[role="menu"]')?.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
-      )
-    `);
-    await waitForExpression(client!, sessionId, `!document.querySelector('.quick-classification-menu[role="menu"]')`);
+    await evaluate(client!, sessionId, `(() => {
+      const request = window.requestAnimationFrame;
+      const cancel = window.cancelAnimationFrame;
+      const frames = new Map();
+      let next = 0;
+      window.requestAnimationFrame = (callback) => { const id = --next; frames.set(id, callback); return id; };
+      window.cancelAnimationFrame = (id) => { if (id < 0) frames.delete(id); else cancel.call(window, id); };
+      globalThis.__PATINA_RELEASE_CLASSIFICATION_CLOSE_FRAMES = () => {
+        window.requestAnimationFrame = request;
+        window.cancelAnimationFrame = cancel;
+        delete globalThis.__PATINA_RELEASE_CLASSIFICATION_CLOSE_FRAMES;
+        const count = frames.size;
+        for (const callback of frames.values()) callback(performance.now());
+        return count;
+      };
+    })()`);
+    try {
+      await evaluate(client!, sessionId, `
+        document.querySelector('.quick-classification-menu[role="menu"]')?.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+        )
+      `);
+      await waitForExpression(client!, sessionId, `!document.querySelector('.quick-classification-menu[role="menu"]')`);
+      const focusAfterOldClose = await evaluate(client!, sessionId, `(() => {
+        const list = document.querySelector('[aria-label="网页列表"] button[aria-haspopup="menu"]');
+        const top = document.querySelector('.data-app-selected-icon[aria-haspopup="menu"]');
+        list.focus();
+        const queuedFrames = globalThis.__PATINA_RELEASE_CLASSIFICATION_CLOSE_FRAMES();
+        return { listConnected: list.isConnected, focusStayedOnList: document.activeElement === list,
+          focusMovedToTop: document.activeElement === top, activeClass: document.activeElement?.className,
+          listKey: list.dataset.destinationKey, topKey: top.dataset.destinationKey, queuedFrames };
+      })()`) as { listConnected: boolean; focusStayedOnList: boolean };
+      assert.equal(focusAfterOldClose.listConnected, true);
+      assert.equal(focusAfterOldClose.focusStayedOnList, true,
+        `closing the previous menu must not steal focus from the next keyboard target: ${JSON.stringify(focusAfterOldClose)}`);
+    } finally {
+      await evaluate(client!, sessionId, `globalThis.__PATINA_RELEASE_CLASSIFICATION_CLOSE_FRAMES?.()`);
+    }
 
+    await assertQuickClassificationKeyboard('[aria-label="网页列表"]');
+    assert.deepEqual(await evaluate(client, sessionId, `Array.from(document.querySelectorAll('.data-app-option[aria-pressed="true"]')).map(node => node.getAttribute('data-destination-key'))`), openingState.selectedKeys);
+    assert.deepEqual(await evaluate(client, sessionId, `Array.from(document.querySelectorAll('.data-app-metric, .data-app-panel .data-trend-range-trigger')).map(node => node.textContent)`), metricsBefore,
+      "web classification changes must preserve the selected objects' metrics and range title");
     await evaluate(client!, sessionId, `
       (() => {
         const group = document.querySelector('[aria-label="选择时间去向类型"]');
@@ -3664,9 +4084,11 @@ export async function runDataScenarios(
     await evaluate(client!, sessionId, `
       (() => {
         localStorage.removeItem("__time_tracker_reject_heatmap_query");
-        document.querySelector(".data-overview .data-heatmap-panel [role=status] button")?.click();
+        document.querySelector(".data-overview .data-heatmap-panel [role=status] button")?.focus();
       })()
     `);
+    await client!.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", text: "\r", unmodifiedText: "\r", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 }, sessionId);
+    await client!.command("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, sessionId);
     await waitForExpression(
       client!,
       sessionId,
@@ -3676,6 +4098,8 @@ export async function runDataScenarios(
       45_000,
       "activity heatmap retry success",
     );
+    assert.equal(await evaluate(client!, sessionId, `document.activeElement?.matches('.data-overview .data-heatmap-range-control button:not(:disabled), .data-overview .data-heatmap-panel')`), true,
+      "cold heatmap keyboard retry must retain a focus target in the same panel");
 
     const destinationRetry = await evaluate(client!, sessionId, `
       (() => {
@@ -3782,7 +4206,7 @@ export async function runDataScenarios(
     await waitForExpression(
       client!,
       sessionId,
-      `document.querySelector(".data-app-panel")?.textContent?.includes("更新失败，显示上次结果")`,
+      `document.querySelector(".data-app-refresh-status")?.textContent?.includes(${jsonString(COPY["zh-CN"].common.refreshFailed)})`,
       45_000,
       "non-blocking web trend refresh error",
     );
@@ -3830,7 +4254,7 @@ export async function runDataScenarios(
     await waitForExpression(
       client!,
       sessionId,
-      `!document.querySelector(".data-app-panel")?.textContent?.includes("更新失败，显示上次结果")
+      `!document.querySelector(".data-app-refresh-status")?.textContent?.includes(${jsonString(COPY["zh-CN"].common.refreshFailed)})
         && document.querySelector(".data-app-grid")?.getAttribute("aria-busy") === "false"`,
       45_000,
       "web trend refresh retry success",
