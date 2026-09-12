@@ -150,6 +150,14 @@ function DataHeatmapPanel({
   const selectedHeatmapViewLabel = selectedHeatmapView === "recent"
     ? UI_TEXT.data.recentYear
     : String(selectedHeatmapView);
+  const handleRetry = (event: MouseEvent<HTMLButtonElement>) => {
+    if (document.activeElement === event.currentTarget) {
+      const panel = event.currentTarget.closest<HTMLElement>(".data-heatmap-panel");
+      const target = panel?.querySelector<HTMLElement>(".data-heatmap-range-control button:not(:disabled)") ?? panel;
+      target?.focus();
+    }
+    onRetry();
+  };
   const initialActiveDate = resolveDataHeatmapActiveDate(
     keyboardModel,
     activeHeatmapDatesByViewRef.current.get(selectedHeatmapViewKey) ?? activeHeatmapDateRef.current,
@@ -268,7 +276,7 @@ function DataHeatmapPanel({
   }, [initialActiveDate, rememberActiveDate]);
 
   return (
-    <div className={`data-heatmap-panel ${compact ? "data-heatmap-panel-compact" : ""}`}>
+    <div tabIndex={-1} className={`data-heatmap-panel ${compact ? "data-heatmap-panel-compact" : ""}`}>
       <div className="data-heatmap-panel-header">
         <div className="data-heatmap-panel-heading">
           <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">{resolvedTitle}</h3>
@@ -278,7 +286,7 @@ function DataHeatmapPanel({
               <button
                 type="button"
                 className="qp-inline-action qp-inline-action-accent"
-                onClick={onRetry}
+                onClick={handleRetry}
               >
                 {UI_TEXT.data.webTrendRetry}
               </button>
@@ -312,7 +320,7 @@ function DataHeatmapPanel({
           role="status"
         >
           <span>{errorMessage}</span>
-          <button type="button" className="qp-control" onClick={onRetry}>
+          <button type="button" className="qp-control" onClick={handleRetry}>
             {UI_TEXT.data.webTrendRetry}
           </button>
         </div>

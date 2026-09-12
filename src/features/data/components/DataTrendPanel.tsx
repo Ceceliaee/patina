@@ -19,7 +19,12 @@ interface DataTrendPanelProps {
   allTimeEndDateKey: string;
   allTimeStartDateKey: string;
   selection: DataTrendRangeSelection;
-  viewModel: DataTrendViewModel | null;
+  readState: {
+    viewModel: DataTrendViewModel | null;
+    loading: boolean;
+    error: boolean;
+    retry: () => void;
+  };
   chartRef: Ref<HTMLDivElement>;
   initialDimension: DataChartDimension;
   canOpenHistory: boolean;
@@ -34,7 +39,7 @@ function DataTrendPanel({
   allTimeEndDateKey,
   allTimeStartDateKey,
   selection,
-  viewModel,
+  readState,
   chartRef,
   initialDimension,
   canOpenHistory,
@@ -45,8 +50,9 @@ function DataTrendPanel({
   onMouseLeave,
 }: DataTrendPanelProps) {
   const UI_TEXT = useLocaleText();
+  const { viewModel, loading, error, retry: onRetry } = readState;
   return (
-    <div className="data-trend-panel">
+    <div className="data-trend-panel" aria-busy={loading}>
       <div className="data-trend-header">
         <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">
           {UI_TEXT.data.activityTrend}
@@ -69,6 +75,21 @@ function DataTrendPanel({
           onChange={onSelectionChange}
         />
       </div>
+      {error ? (
+        <div className="data-app-refresh-status mt-3" role="status" data-trend-read-error>
+          <span>{viewModel ? UI_TEXT.common.refreshFailed : UI_TEXT.common.readFailed}</span>
+          <button type="button" className="qp-inline-action qp-inline-action-accent" onClick={(event) => {
+            if (document.activeElement === event.currentTarget) {
+              event.currentTarget.closest(".data-trend-panel")?.querySelector<HTMLElement>(".data-trend-range-trigger")?.focus();
+            }
+            onRetry();
+          }}>
+            {UI_TEXT.common.retry}
+          </button>
+        </div>
+      ) : !viewModel ? (
+        <div className="mt-3 text-xs text-[var(--qp-text-tertiary)]" role="status">{UI_TEXT.common.loading}</div>
+      ) : null}
       <div className="pt-4">
         <div
           ref={chartRef}

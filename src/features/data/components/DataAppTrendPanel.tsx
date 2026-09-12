@@ -146,6 +146,23 @@ function DataAppTrendPanel({
   onMouseLeave,
 }: DataAppTrendPanelProps) {
   const UI_TEXT = useLocaleText();
+  const handleRetry = (event: MouseEvent<HTMLButtonElement>) => {
+    if (document.activeElement === event.currentTarget) {
+      event.currentTarget.closest(".data-app-panel")?.querySelector<HTMLElement>(".data-trend-range-trigger")?.focus();
+    }
+    onRetry();
+  };
+  const handleQuickClassificationKeyDown = (option: DataDestinationTrendOption, event: KeyboardEvent<HTMLButtonElement>) => {
+    if (!supportsQuickClassification || (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10"))) return false;
+    event.preventDefault();
+    const bounds = event.currentTarget.getBoundingClientRect();
+    onQuickClassificationOpen?.(
+      option,
+      { clientX: bounds.left + bounds.width / 2, clientY: bounds.top + bounds.height / 2 },
+      event.currentTarget,
+    );
+    return true;
+  };
   const detailCopy = UI_TEXT.destinationDetail;
   const modeLabels: Record<DataDestinationMode, string> = {
     app: UI_TEXT.data.destinationApp,
@@ -225,21 +242,7 @@ function DataAppTrendPanel({
                         onOptionOpenDetails(option);
                         return;
                       }
-                      if (
-                        supportsQuickClassification
-                        && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))
-                      ) {
-                        event.preventDefault();
-                        const bounds = event.currentTarget.getBoundingClientRect();
-                        onQuickClassificationOpen?.(
-                          option,
-                          {
-                            clientX: bounds.left + bounds.width / 2,
-                            clientY: bounds.top + bounds.height / 2,
-                          },
-                          event.currentTarget,
-                        );
-                      }
+                      handleQuickClassificationKeyDown(option, event);
                     }}
                   >
                     {option.iconUrl ? (
@@ -273,13 +276,13 @@ function DataAppTrendPanel({
               className="data-app-refresh-status"
               role="status"
             >
-              <span>{UI_TEXT.data.webTrendRefreshError}</span>
+              <span>{UI_TEXT.common.refreshFailed}</span>
               <button
                 type="button"
                 className="qp-inline-action qp-inline-action-accent"
-                onClick={onRetry}
+                onClick={handleRetry}
               >
-                {UI_TEXT.data.webTrendRetry}
+                {UI_TEXT.common.retry}
               </button>
             </div>
           ) : null}
@@ -298,12 +301,13 @@ function DataAppTrendPanel({
       {errorMessage ? (
         <div className="data-app-loading data-web-error" role="status">
           <span>{errorMessage}</span>
-          <button type="button" className="qp-control" onClick={onRetry}>
-            {UI_TEXT.data.webTrendRetry}
+          <button type="button" className="qp-control" onClick={handleRetry}>
+            {UI_TEXT.common.retry}
           </button>
         </div>
       ) : !ready ? (
         <div className="relative" aria-busy>
+          <div role="status" className="absolute text-xs text-[var(--qp-text-tertiary)]">{UI_TEXT.common.loading}</div>
           <div
             className="data-app-grid pointer-events-none invisible"
             aria-hidden
@@ -364,22 +368,7 @@ function DataAppTrendPanel({
                 const isSelected = selectedIndex >= 0;
                 const series = selectedIndex >= 0 ? trendSeries[selectedIndex] : null;
                 const handleOptionKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-                  if (
-                    supportsQuickClassification
-                    && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))
-                  ) {
-                    event.preventDefault();
-                    const bounds = event.currentTarget.getBoundingClientRect();
-                    onQuickClassificationOpen?.(
-                      option,
-                      {
-                        clientX: bounds.left + bounds.width / 2,
-                        clientY: bounds.top + bounds.height / 2,
-                      },
-                      event.currentTarget,
-                    );
-                    return;
-                  }
+                  if (handleQuickClassificationKeyDown(option, event)) return;
                   if (event.key !== "Enter" && event.key !== " ") return;
                   event.preventDefault();
                   if (event.ctrlKey) {
