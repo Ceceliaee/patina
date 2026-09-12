@@ -64,6 +64,18 @@
   border-radius: 999px;
 }
 
+.dashboard-focus-ranking-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@container (max-width: 340px) {
+  .dashboard-focus-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+}
+
 .dashboard-focus-delta {
   display: flex;
   align-items: center;

@@ -1,11 +1,10 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { HistorySession } from "../../../shared/types/sessions";
+import { formatLocalDateKey } from "../../../shared/lib/localDate.ts";
 import {
   buildDashboardReadModel,
   loadIconSnapshot,
   type DashboardReadModel,
   type DashboardSnapshot,
-  type ImportedDashboardBucket,
 } from "../services/dashboardReadModel";
 import { getRetryableMissingDashboardIconExecutables } from "../services/dashboardIconRuntimeCache";
 import { getDashboardSnapshotCache } from "../services/dashboardSnapshotCache";
@@ -14,6 +13,13 @@ import type { TrackerHealthSnapshot } from "../../../shared/types/tracking";
 interface UseStatsResult {
   dashboard: DashboardReadModel;
   icons: Record<string, string>;
+  readState: DashboardReadState;
+}
+
+export interface DashboardReadState {
+  status: "loading" | "ready" | "error";
+  hasSnapshot: boolean;
+  retry: () => void;
 }
 
 export function useDashboardStats(
@@ -25,61 +31,54 @@ export function useDashboardStats(
   classificationReady: boolean = true,
   foregroundRefreshEnabled: boolean = true,
 ): UseStatsResult {
-  const initialSnapshot = getDashboardSnapshotCache();
   const hasRequestedInitialSnapshotRef = useRef(false);
-  const [rawSessions, setRawSessions] = useState<HistorySession[]>(
-    () => initialSnapshot?.sessions ?? [],
-  );
-  const [rawYesterdaySessions, setRawYesterdaySessions] = useState<HistorySession[]>(
-    () => initialSnapshot?.yesterdaySessions ?? [],
-  );
-  const [importedBuckets, setImportedBuckets] = useState<ImportedDashboardBucket[]>(
-    () => initialSnapshot?.importedBuckets ?? [],
-  );
-  const [yesterdayImportedBuckets, setYesterdayImportedBuckets] = useState<ImportedDashboardBucket[]>(
-    () => initialSnapshot?.yesterdayImportedBuckets ?? [],
-  );
-  const [aggregateIncludesExactFacts, setAggregateIncludesExactFacts] = useState(
-    () => initialSnapshot?.aggregateIncludesExactFacts ?? false,
-  );
-  const [hasActiveSession, setHasActiveSession] = useState(
-    () => initialSnapshot?.hasActiveSession ?? false,
-  );
-  const [icons, setIcons] = useState<Record<string, string>>(
-    () => initialSnapshot?.icons ?? {},
-  );
-  const [nowMs, setNowMs] = useState(() => initialSnapshot?.fetchedAtMs ?? Date.now());
+  const requestIdRef = useRef(0);
+  const [state, setState] = useState<{
+    dateKey: string;
+    snapshot: DashboardSnapshot | null;
+    status: DashboardReadState["status"];
+  }>(() => {
+    const snapshot = getDashboardSnapshotCache();
+    return { dateKey: formatLocalDateKey(new Date()), snapshot, status: snapshot ? "ready" : "loading" };
+  });
+  const [nowMs, setNowMs] = useState(() => state.snapshot?.fetchedAtMs ?? Date.now());
+  const currentDateKey = formatLocalDateKey(new Date());
+  const snapshot = state.dateKey === currentDateKey ? state.snapshot : null;
+  const rawSessions = snapshot?.sessions ?? EMPTY_SESSIONS;
+  const rawYesterdaySessions = snapshot?.yesterdaySessions ?? EMPTY_SESSIONS;
+  const importedBuckets = snapshot?.importedBuckets ?? EMPTY_BUCKETS;
+  const yesterdayImportedBuckets = snapshot?.yesterdayImportedBuckets ?? EMPTY_BUCKETS;
+  const aggregateIncludesExactFacts = snapshot?.aggregateIncludesExactFacts ?? false;
+  const hasActiveSession = snapshot?.hasActiveSession ?? false;
+  const icons = snapshot?.icons ?? EMPTY_ICONS;
 
   const loadSnapshot = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+    const date = new Date();
+    const dateKey = formatLocalDateKey(date);
+    setState((current) => ({
+      dateKey,
+      snapshot: current.dateKey === dateKey ? current.snapshot : null,
+      status: "loading",
+    }));
     try {
-      const snapshot = await loadDashboardSnapshot(new Date());
-
-      startTransition(() => {
-        setRawSessions(snapshot.sessions);
-        setRawYesterdaySessions(snapshot.yesterdaySessions ?? []);
-        setImportedBuckets(snapshot.importedBuckets ?? []);
-        setYesterdayImportedBuckets(snapshot.yesterdayImportedBuckets ?? []);
-        setAggregateIncludesExactFacts(snapshot.aggregateIncludesExactFacts ?? false);
-        setHasActiveSession(snapshot.hasActiveSession ?? false);
-        setIcons(snapshot.icons);
-        setNowMs(snapshot.fetchedAtMs);
-      });
+      const nextSnapshot = await loadDashboardSnapshot(date);
+      if (requestId !== requestIdRef.current) return;
+      setState({ dateKey, snapshot: nextSnapshot, status: "ready" });
+      setNowMs(nextSnapshot.fetchedAtMs);
     } catch (err) {
-      console.error("Failed to load stats:", err);
+      if (requestId !== requestIdRef.current) return;
+      console.warn("Failed to load stats:", err);
+      setState((current) => ({ ...current, status: "error" }));
     }
   }, [loadDashboardSnapshot]);
 
   useEffect(() => {
-    if (!classificationReady || hasRequestedInitialSnapshotRef.current) return;
+    if (!classificationReady || (hasRequestedInitialSnapshotRef.current && !foregroundRefreshEnabled)) return;
     hasRequestedInitialSnapshotRef.current = true;
-
     void loadSnapshot();
-  }, [classificationReady, loadSnapshot]);
-
-  useEffect(() => {
-    if (refreshKey === 0 || !classificationReady || !foregroundRefreshEnabled) return;
-    void loadSnapshot();
-  }, [classificationReady, foregroundRefreshEnabled, refreshKey, loadSnapshot]);
+    return () => { requestIdRef.current += 1; };
+  }, [classificationReady, currentDateKey, foregroundRefreshEnabled, refreshKey, loadSnapshot]);
 
   useEffect(() => {
     const hasLiveSession = hasActiveSession
@@ -89,6 +88,7 @@ export function useDashboardStats(
     }
 
     const iconExeNames = [...rawSessions, ...importedBuckets].map((session) => session.exeName);
+    let cancelled = false;
 
     const timer = window.setInterval(() => {
       setNowMs(Date.now());
@@ -104,11 +104,15 @@ export function useDashboardStats(
       if (missingIconExeNames.length > 0) {
         void loadIconSnapshot(missingIconExeNames)
           .then((snapshot) => {
+            if (cancelled) return;
             startTransition(() => {
-              setIcons((currentIcons) => ({
-                ...currentIcons,
-                ...snapshot.icons,
-              }));
+              setState((current) => current.snapshot ? ({
+                ...current,
+                snapshot: {
+                  ...current.snapshot,
+                  icons: { ...current.snapshot.icons, ...snapshot.icons },
+                },
+              }) : current);
             });
           })
           .catch((error) => {
@@ -118,6 +122,7 @@ export function useDashboardStats(
     }, refreshIntervalSecs * 1000);
 
     return () => {
+      cancelled = true;
       window.clearInterval(timer);
     };
   }, [aggregateIncludesExactFacts, classificationReady, foregroundRefreshEnabled, hasActiveSession, icons, importedBuckets, loadSnapshot, rawSessions, refreshIntervalSecs, trackerHealth.status]);
@@ -140,5 +145,14 @@ export function useDashboardStats(
   return {
     dashboard,
     icons,
+    readState: {
+      status: state.status,
+      hasSnapshot: Boolean(snapshot) && classificationReady,
+      retry: () => { void loadSnapshot(); },
+    },
   };
 }
+
+const EMPTY_SESSIONS: DashboardSnapshot["sessions"] = [];
+const EMPTY_BUCKETS: NonNullable<DashboardSnapshot["importedBuckets"]> = [];
+const EMPTY_ICONS: Record<string, string> = {};

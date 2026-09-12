@@ -143,7 +143,7 @@ export default function AppShellContent({
   const isDashboardRefreshEnabled = currentView === "dashboard" && isForegroundReady;
   const isHistoryRefreshEnabled = currentView === "history" && isForegroundReady;
   const isDataRefreshEnabled = currentView === "data" && isForegroundReady;
-  const { dashboard, icons } = useDashboardStats(
+  const { dashboard, icons, readState: dashboardReadState } = useDashboardStats(
     appSettings.refreshIntervalSecs,
     refreshSignal,
     trackerHealth,
@@ -269,6 +269,7 @@ export default function AppShellContent({
                 key="dashboard"
                 dashboard={dashboard}
                 icons={icons}
+                readState={dashboardReadState}
                 hourlyActivityChartMode={appSettings.hourlyActivityChartMode}
                 onHourlyActivityChartModeChange={handleHourlyActivityChartModeChange}
                 runtime={{

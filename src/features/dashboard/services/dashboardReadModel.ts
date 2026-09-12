@@ -1,12 +1,7 @@
 import type { AppStat } from "../../../shared/types/app.ts";
 import type { HistorySession } from "../../../shared/types/sessions.ts";
 import type { TrackerHealthSnapshot } from "../../../shared/types/tracking.ts";
-import {
-  getHistoryByDate,
-  getImportedTimeBucketsByDate,
-  getSessionSummariesInRange,
-  type AggregateSessionRecord,
-} from "../../../platform/persistence/sessionReadRepository.ts";
+import type { AggregateSessionRecord } from "../../../platform/persistence/sessionReadRepository.ts";
 import {
   getDashboardIconRuntimeCacheSnapshot,
   loadDashboardIconsForExecutables,
@@ -48,8 +43,6 @@ export interface DashboardSnapshot {
   hasActiveSession?: boolean;
 }
 
-export type ImportedDashboardBucket = AggregateSessionRecord;
-
 interface IconSnapshot {
   fetchedAtMs: number;
   icons: Record<string, string>;
@@ -70,19 +63,13 @@ export interface DashboardReadModel {
 
 interface DashboardSnapshotDependencies {
   now: () => number;
-  getHistoryByDate: typeof getHistoryByDate;
-  getImportedTimeBucketsByDate: typeof getImportedTimeBucketsByDate;
-  getSessionSummariesInRange?: typeof getSessionSummariesInRange;
-  getActivityAggregateRange?: typeof loadActivityAggregateRange;
+  getActivityAggregateRange: typeof loadActivityAggregateRange;
   loadIcons: typeof loadDashboardIconsForExecutables;
   getCachedIcons: typeof getDashboardIconRuntimeCacheSnapshot;
 }
 
 const DASHBOARD_SNAPSHOT_DEPENDENCIES: DashboardSnapshotDependencies = {
   now: Date.now,
-  getHistoryByDate,
-  getImportedTimeBucketsByDate,
-  getSessionSummariesInRange,
   getActivityAggregateRange: loadActivityAggregateRange,
   loadIcons: loadDashboardIconsForExecutables,
   getCachedIcons: getDashboardIconRuntimeCacheSnapshot,
@@ -113,65 +100,28 @@ export async function loadDashboardSnapshotWithDeps(
 ): Promise<DashboardSnapshot> {
   const yesterday = new Date(date);
   yesterday.setDate(yesterday.getDate() - 1);
-  if (deps.getActivityAggregateRange) {
-    const dayRange = getDayRange(date);
-    const yesterdayRange = getDayRange(yesterday);
-    const [dayResponse, yesterdayResponse] = await Promise.all([
-      deps.getActivityAggregateRange(dayRange.startMs, dayRange.endMs),
-      deps.getActivityAggregateRange(yesterdayRange.startMs, yesterdayRange.endMs),
-    ]);
-    const icons = await deps.loadIcons(
-      collectDashboardIconExecutables(dayResponse.records),
-    );
-    return {
-      fetchedAtMs: deps.now(),
-      icons,
-      sessions: [],
-      yesterdaySessions: [],
-      importedBuckets: dayResponse.records,
-      yesterdayImportedBuckets: yesterdayResponse.records,
-      aggregateIncludesExactFacts: true,
-      hasActiveSession: dayResponse.hasActiveSession,
-    };
-  }
-  if (deps.getSessionSummariesInRange) {
-    const dayRange = getDayRange(date);
-    const yesterdayRange = getDayRange(yesterday);
-    const [aggregateSessions, yesterdayAggregateSessions] = await Promise.all([
-      deps.getSessionSummariesInRange(dayRange.startMs, dayRange.endMs),
-      deps.getSessionSummariesInRange(yesterdayRange.startMs, yesterdayRange.endMs),
-    ]);
-    const icons = await deps.loadIcons(
-      collectDashboardIconExecutables(aggregateSessions),
-    );
-    return {
-      fetchedAtMs: deps.now(),
-      icons,
-      sessions: [],
-      yesterdaySessions: [],
-      importedBuckets: aggregateSessions,
-      yesterdayImportedBuckets: yesterdayAggregateSessions,
-      aggregateIncludesExactFacts: true,
-      hasActiveSession: false,
-    };
-  }
-  const [sessions, yesterdaySessions, importedBuckets, yesterdayImportedBuckets] = await Promise.all([
-    deps.getHistoryByDate(date),
-    deps.getHistoryByDate(yesterday),
-    deps.getImportedTimeBucketsByDate(date),
-    deps.getImportedTimeBucketsByDate(yesterday),
+  const dayRange = getDayRange(date);
+  const yesterdayRange = getDayRange(yesterday);
+  const [dayResponse, yesterdayResponse] = await Promise.all([
+    deps.getActivityAggregateRange(dayRange.startMs, dayRange.endMs),
+    deps.getActivityAggregateRange(yesterdayRange.startMs, yesterdayRange.endMs),
   ]);
   const icons = await deps.loadIcons(
-    collectDashboardIconExecutables(sessions, importedBuckets),
-  );
+    collectDashboardIconExecutables(dayResponse.records),
+  ).catch((error: unknown) => {
+    console.warn("Failed to refresh dashboard icons:", error);
+    return deps.getCachedIcons();
+  });
 
   return {
     fetchedAtMs: deps.now(),
     icons,
-    sessions,
-    yesterdaySessions,
-    importedBuckets,
-    yesterdayImportedBuckets,
+    sessions: [],
+    yesterdaySessions: [],
+    importedBuckets: dayResponse.records,
+    yesterdayImportedBuckets: yesterdayResponse.records,
+    aggregateIncludesExactFacts: true,
+    hasActiveSession: dayResponse.hasActiveSession,
   };
 }
 

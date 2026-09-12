@@ -6,6 +6,7 @@ import { Layers3, Monitor, Minus, TrendingDown, TrendingUp } from "lucide-react"
 import { useIconThemeColors } from "../../../shared/hooks/useIconThemeColors";
 import { formatDashboardDuration } from "../services/dashboardFormatting";
 import type { DashboardReadModel } from "../services/dashboardReadModel";
+import type { DashboardReadState } from "../hooks/useDashboardStats.ts";
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import HourlyActivityChart from "../../../shared/charts/HourlyActivityChart";
 import QuietIconAction from "../../../shared/components/QuietIconAction";
@@ -28,6 +29,7 @@ import {
 interface Props {
   dashboard: DashboardReadModel;
   icons: Record<string, string>;
+  readState: DashboardReadState;
   hourlyActivityChartMode: HourlyActivityChartMode;
   onHourlyActivityChartModeChange: (mode: HourlyActivityChartMode) => void;
   runtime: {
@@ -129,6 +131,7 @@ function DashboardFocusDonut({
 export default function Dashboard({
   dashboard,
   icons,
+  readState,
   hourlyActivityChartMode,
   onHourlyActivityChartModeChange,
   runtime,
@@ -137,6 +140,16 @@ export default function Dashboard({
 }: Props) {
   const UI_TEXT = useLocaleText();
   const { refreshKey, mappingVersion, mergeThresholdSecs, trackerHealth } = runtime;
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const returnRetryFocusRef = useRef(false);
+  useLayoutEffect(() => {
+    if (readState.status === "loading" || !returnRetryFocusRef.current) return;
+    if (document.activeElement === document.body) {
+      const target = panelRef.current?.querySelector<HTMLElement>("[data-dashboard-read-error] button") ?? panelRef.current;
+      target?.focus();
+    }
+    returnRetryFocusRef.current = false;
+  }, [readState.status]);
   const detail = useDestinationDetailLauncher();
   const quickClassification = useQuickClassificationLauncher();
   const iconThemeColors = useIconThemeColors(icons);
@@ -196,7 +209,7 @@ export default function Dashboard({
     });
     observer.observe(card);
     return () => observer.disconnect();
-  }, []);
+  }, [readState.hasSnapshot]);
   useLayoutEffect(() => {
     const list = topAppsListRef.current;
     if (!list) return;
@@ -209,18 +222,32 @@ export default function Dashboard({
     const observer = new ResizeObserver(updateOverflow);
     observer.observe(list);
     return () => observer.disconnect();
-  }, [topApplications.length]);
+  }, [readState.hasSnapshot, topApplications.length]);
   const quickClassificationRequest = quickClassification.request;
 
   return (
-    <div className="flex flex-col gap-4 md:gap-5 h-full overflow-hidden">
+    <div ref={panelRef} tabIndex={-1} className="flex flex-col gap-4 md:gap-5 h-full overflow-hidden" data-dashboard-read-state={readState.status}>
       <QuietPageHeader
         icon={<Monitor size={18} />}
         title={UI_TEXT.dashboard.title}
         subtitle={UI_TEXT.dashboard.subtitle}
       />
 
-      <div className="flex gap-4 md:gap-5 flex-1 min-h-0 overflow-hidden dashboard-workspace">
+      {readState.status === "error" ? (
+        <div className="qp-panel flex items-center gap-3 p-4 text-sm text-[var(--qp-text-secondary)]" role="status" data-dashboard-read-error>
+          <span>{readState.hasSnapshot ? UI_TEXT.common.refreshFailed : UI_TEXT.common.readFailed}</span>
+          <button type="button" className="qp-control shrink-0" onClick={(event) => {
+            returnRetryFocusRef.current = document.activeElement === event.currentTarget;
+            readState.retry();
+          }}>{UI_TEXT.common.retry}</button>
+        </div>
+      ) : !readState.hasSnapshot ? (
+        <div className="qp-panel p-5 text-sm text-[var(--qp-text-tertiary)]" role="status" aria-busy>
+          {UI_TEXT.common.loading}
+        </div>
+      ) : null}
+
+      <div hidden={!readState.hasSnapshot} aria-busy={readState.status === "loading"} className={`gap-4 md:gap-5 flex-1 min-h-0 overflow-hidden dashboard-workspace ${readState.hasSnapshot ? "flex" : "!hidden"}`}>
         <div className="w-5/12 flex flex-col gap-4 md:gap-5 min-h-0 dashboard-left-column qp-scroll-region">
           <div
             ref={focusCardRef}
@@ -250,7 +277,7 @@ export default function Dashboard({
                         className="dashboard-focus-ranking-dot"
                         style={{ backgroundColor: cat.color || "var(--qp-accent-default)" }}
                       />
-                      <span className="truncate font-semibold text-[var(--qp-text-secondary)]">{cat.name}</span>
+                      <span className="dashboard-focus-ranking-name font-semibold text-[var(--qp-text-secondary)]">{cat.name}</span>
                     </div>
                     <span className="text-[var(--qp-text-primary)] font-semibold tabular-nums">
                       {formatDashboardDuration(cat.value)}

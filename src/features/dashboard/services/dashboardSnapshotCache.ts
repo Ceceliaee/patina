@@ -2,6 +2,14 @@ import type { DashboardSnapshot } from "./dashboardReadModel.ts";
 
 const DASHBOARD_SNAPSHOT_CACHE_LIMIT = 1;
 const DASHBOARD_SNAPSHOT_CACHE = new Map<string, DashboardSnapshot>();
+let dashboardCacheLoadGeneration = 0;
+
+export function beginDashboardSnapshotCacheLoad(): (snapshot: DashboardSnapshot, date?: Date) => void {
+  const generation = ++dashboardCacheLoadGeneration;
+  return (snapshot, date) => {
+    if (generation === dashboardCacheLoadGeneration) setDashboardSnapshotCache(snapshot, date);
+  };
+}
 
 function formatDashboardSnapshotCacheKey(date: Date): string {
   const localDate = new Date(date);
@@ -32,6 +40,7 @@ export function setDashboardSnapshotCache(snapshot: DashboardSnapshot, date: Dat
 }
 
 export function clearDashboardSnapshotCache(): void {
+  dashboardCacheLoadGeneration += 1;
   DASHBOARD_SNAPSHOT_CACHE.clear();
 }
 
