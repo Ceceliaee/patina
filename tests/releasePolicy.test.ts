@@ -445,48 +445,37 @@ function testWorkflowsUseReviewedNode24ActionRevisions() {
     {
       action: "actions/checkout",
       reference: "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6",
-      expectedCount: 19,
     },
     {
       action: "actions/setup-node",
       reference: "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6",
-      expectedCount: 12,
     },
     {
       action: "actions/upload-artifact",
       reference: "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7",
-      expectedCount: 4,
     },
     {
       action: "actions/download-artifact",
       reference: "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8",
-      expectedCount: 3,
     },
     {
       action: "actions/attest",
       reference: "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4",
-      expectedCount: 2,
     },
     {
       action: "softprops/action-gh-release",
       reference: "softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3",
-      expectedCount: 1,
     },
   ];
 
-  const workflowActionCount = workflows.reduce(
-    (count, workflow) => count + (workflow.source.match(/^\s+uses:/gm)?.length ?? 0),
-    0,
-  );
-  const reviewedActionCount = reviewedActions.reduce(
-    (count, reviewedAction) => count + reviewedAction.expectedCount,
-    0,
-  );
-  assert.equal(
-    workflowActionCount,
-    reviewedActionCount,
-    "every workflow Action must have a reviewed Node 24 revision",
-  );
+  const reviewedReferences = new Set(reviewedActions.map(({ reference }) => `uses: ${reference}`));
+  for (const workflow of workflows) {
+    const uses = workflow.source.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.startsWith("uses:"));
+    assert.ok(uses.length > 0, `${workflow.path} must retain reviewed Actions`);
+    for (const reference of uses) {
+      assert.ok(reviewedReferences.has(reference), `${workflow.path} has an unreviewed Action: ${reference}`);
+    }
+  }
 
   for (const reviewedAction of reviewedActions) {
     const references = workflows.flatMap((workflow) =>
@@ -497,11 +486,7 @@ function testWorkflowsUseReviewedNode24ActionRevisions() {
         .map((line) => ({ line, path: workflow.path })),
     );
 
-    assert.equal(
-      references.length,
-      reviewedAction.expectedCount,
-      `${reviewedAction.action} must keep its reviewed workflow occurrence count`,
-    );
+    assert.ok(references.length > 0, `${reviewedAction.action} must retain reviewed workflow coverage`);
     for (const reference of references) {
       assert.equal(
         reference.line,

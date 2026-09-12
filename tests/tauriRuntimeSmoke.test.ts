@@ -1,10 +1,18 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer as createNetServer, type Server as NetServer } from "node:net";
 import { build as buildVite, preview as previewVite, type PreviewServer } from "vite";
+import type { StorageSnapshot } from "../src/platform/storage/storageRuntimeGateway.ts";
+import {
+  measureTauriRuntime,
+  parseRuntimeMeasurementOptions,
+  prepareRuntimeMeasurements,
+  prepareRuntimeFixture,
+  recordRuntimeMeasurementCleanup,
+} from "../scripts/perf/tauri-runtime-measurements.ts";
 import {
   CdpConnection,
   assertIsolatedTempPath,
@@ -112,15 +120,16 @@ function stopProcessTree(child: ChildProcess) {
   const pid = child.pid;
   if (process.platform === "win32") {
     const result = spawnSync("taskkill.exe", ["/PID", String(pid), "/T", "/F"], {
-      encoding: "utf8",
+      encoding: "utf8", windowsHide: true, timeout: 5_000,
     });
     if ((result.error || result.status !== 0) && isProcessRunning(pid)) {
       try {
         process.kill(pid, "SIGKILL");
-      } catch {
-        // The process may have exited between the liveness check and the fallback.
+      } catch (error) {
+        if (isProcessRunning(pid)) throw new Error(`failed to stop runtime process ${pid}: ${String(error)}`);
       }
     }
+    if (result.error) throw new Error(`runtime process termination helper failed for ${pid}: ${result.error.message}`, { cause: result.error });
   } else {
     child.kill("SIGTERM");
   }
@@ -129,17 +138,21 @@ function stopProcessTree(child: ChildProcess) {
 
 function runRuntimeBinaryProcessCommand(command: string) {
   if (process.platform !== "win32") return null;
-  return spawnSync("powershell.exe", ["-NoProfile", "-Command", command], {
-    encoding: "utf8",
+  const result = spawnSync("powershell.exe", ["-NoProfile", "-Command", command], {
+    encoding: "utf8", windowsHide: true, timeout: 10_000,
     env: {
       ...process.env,
       PATINA_RUNTIME_SMOKE_BINARY: RUNTIME_BINARY_PATH,
     },
   });
+  if (result.error || result.status !== 0) {
+    throw new Error(`runtime-smoke process command failed (exit ${result.status}, signal ${result.signal}): ${result.error?.message || result.stderr || result.stdout}`, { cause: result.error });
+  }
+  return result;
 }
 
 function stopResidualRuntimeBinary() {
-  const result = runRuntimeBinaryProcessCommand(`
+  runRuntimeBinaryProcessCommand(`
     $target = [IO.Path]::GetFullPath($env:PATINA_RUNTIME_SMOKE_BINARY)
     $processes = @(Get-Process patina -ErrorAction SilentlyContinue)
     foreach ($process in $processes) {
@@ -154,9 +167,6 @@ function stopResidualRuntimeBinary() {
     }
     exit 0
   `);
-  if (result?.error) {
-    throw new Error(`failed to stop residual runtime-smoke binary: ${result.stderr || result.stdout}`);
-  }
 }
 
 function isResidualRuntimeBinaryRunning() {
@@ -175,9 +185,6 @@ function isResidualRuntimeBinaryRunning() {
     }
     exit 0
   `);
-  if (result?.error) {
-    throw new Error(`failed to inspect residual runtime-smoke binary: ${result.stderr || result.stdout}`);
-  }
   return result?.stdout.trim() === "running";
 }
 
@@ -226,7 +233,7 @@ function measureRuntimeProcessTree() {
       coverage = $coverage
     } | ConvertTo-Json -Compress
   `);
-  assert.ok(result && !result.error && result.status === 0, result?.stderr || result?.stdout);
+  assert.ok(result, "runtime process measurement requires Windows");
   return JSON.parse(result.stdout.trim()) as {
     rootPid: number;
     processCount: number;
@@ -256,7 +263,7 @@ function verifyDatabase(dbPath: string) {
     "assert integrity == 'ok', integrity",
     "assert value == ('77',), value",
     "assert widget_sessions == 0, widget_sessions",
-    "assert migration == (14,), migration",
+    "assert migration == (15,), migration",
     "assert states == {'app_catalog': 'ready', 'activity_hourly': 'ready'}, states",
     "assert scheduled == (0, 'weekly', 5, 1260, 1), scheduled",
     "assert {'target_kind', 'target_identity'} <= scheduled_columns, scheduled_columns",
@@ -270,8 +277,8 @@ function verifyDatabase(dbPath: string) {
     "assert {'logical_start_date', 'logical_end_date', 'phase', 'status', 'sha256'} <= scheduled_export_run_columns, scheduled_export_run_columns",
     "assert {'recorded_app_catalog', 'activity_hourly_effective', 'activity_summary_dirty_ranges', 'app_catalog_dirty_keys', 'web_activity_revision', 'scheduled_backup_config', 'scheduled_backup_runs', 'scheduled_export_config', 'scheduled_export_runs'} <= tables, tables",
   ].join("; ");
-  const result = spawnSync("python", ["-c", script, dbPath], { encoding: "utf8" });
-  assert.equal(result.status, 0, `database verification failed: ${result.stderr || result.stdout}`);
+  const result = spawnSync("python", ["-c", script, dbPath], { encoding: "utf8", windowsHide: true, timeout: 30_000 });
+  assert.equal(result.status, 0, `database verification failed: ${result.error?.message || result.stderr || result.stdout}`);
 }
 
 function seedWebActivitySegment(dbPath: string) {
@@ -283,10 +290,381 @@ function seedWebActivitySegment(dbPath: string) {
     "db.commit()",
     "db.close()",
   ].join("; ");
-  const result = spawnSync("python", ["-c", script, dbPath], { encoding: "utf8" });
-  assert.equal(result.status, 0, `web activity seed failed: ${result.stderr || result.stdout}`);
+  const result = spawnSync("python", ["-c", script, dbPath], { encoding: "utf8", windowsHide: true, timeout: 10_000 });
+  assert.equal(result.status, 0, `web activity seed failed: ${result.error?.message || result.stderr || result.stdout}`);
 }
 
+async function verifyBackupReplaceRuntime(client: CdpConnection, root: string) {
+  assertIsolatedTempPath(root, "patina-tauri-e2e-");
+  const dbPath = join(root, "data", "patina.db");
+  const storage = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_get_storage_snapshot")`) as StorageSnapshot;
+  assert.equal(realpathSync(storage.paths.databasePath).toLowerCase(), realpathSync(dbPath).toLowerCase());
+  await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
+    mutations: [{ key: "tracking_paused", value: "1" }],
+  })`);
+  const fixtureStart = await evaluate(client, `(() => {
+    const day = new Date(); day.setDate(day.getDate() - 1); day.setHours(12, 0, 0, 0);
+    return day.getTime();
+  })()`) as number;
+  const seed = (name: string, exe: string, start: number, duration: number) => {
+    const result = spawnSync("python", ["-c", [
+      "import sqlite3, sys",
+      "db = sqlite3.connect(sys.argv[1])",
+      "start, duration = int(sys.argv[4]), int(sys.argv[5])",
+      "db.execute('INSERT INTO sessions (app_name, exe_name, window_title, start_time, end_time, duration, continuity_group_start_time) VALUES (?, ?, ?, ?, ?, ?, ?)', (sys.argv[2], sys.argv[3], '', start, start + duration, duration, start))",
+      "db.commit()",
+      "db.close()",
+    ].join("; "), dbPath, name, exe, String(start), String(duration)], { encoding: "utf8", timeout: 10_000 });
+    assert.equal(result.status, 0, `isolated restore fixture seed failed: ${result.stderr || result.stdout}`);
+  };
+  seed("Runtime Restore Original", "runtime-restore-original.exe", fixtureStart, 120_000);
+  const backupPath = join(root, "restore-success.zip");
+  assert.equal(existsSync(backupPath), false);
+  const exportedPath = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_export_backup", {
+    backupPath: ${JSON.stringify(backupPath)},
+  })`);
+  assert.equal(exportedPath, backupPath);
+  const preview = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_preview_backup", {
+    backupPath: ${JSON.stringify(backupPath)},
+  })`) as { hash: string; format_kind: string; restore_supported: boolean };
+  assert.equal(preview.format_kind, "sqlite_snapshot");
+  assert.equal(preview.restore_supported, true);
+  assert.match(preview.hash, /^[a-f0-9]{64}$/);
+  seed("Runtime Restore Added", "runtime-restore-added.exe", fixtureStart + 180_000, 240_000);
+  await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
+    mutations: [{ key: "refresh_interval_secs", value: "88" }],
+  })`);
+  assert.equal(await evaluate(client, `(() => {
+    const nav = document.querySelector('[data-sidebar-nav-item="history"]');
+    if (!nav) return false; nav.click(); return true;
+  })()`), true);
+  await waitFor("History date navigation before restore", async () => evaluate(client,
+    `Boolean(document.querySelector('.history-date-label'))`), 10_000);
+  assert.equal(await evaluate(client, `(() => {
+    const previous = document.querySelector('.history-date-label')?.parentElement?.parentElement?.querySelector(':scope > button');
+    if (!previous) return false; previous.click(); return true;
+  })()`), true);
+  const historyContent = `(() => {
+    const page = document.querySelector('[data-history-content-state]');
+    return { state: page?.getAttribute('data-history-content-state'), text: page?.textContent ?? '' };
+  })()`;
+  await waitFor("History warms the post-backup fixture", async () => {
+    const view = await evaluate(client, historyContent) as { state: string; text: string };
+    return view.state === "ready" && view.text.includes("Runtime Restore Original")
+      && view.text.includes("Runtime Restore Added");
+  }, 10_000);
+
+  // Observe command names through CDP without replacing Tauri's IPC or replies.
+  const cacheClearCommands = new Set<string>();
+  const mutationCommands = new Set<string>();
+  const stopObserving = client.onMessage((message) => {
+    if (message.method !== "Network.requestWillBeSent") return;
+    const request = (message.params as { request?: { url?: string } } | undefined)?.request;
+    if (!request?.url) return;
+    const command = new URL(request.url).pathname.slice(1);
+    if (["cmd_clear_history_bootstrap_snapshot_payload", "cmd_clear_data_bootstrap_snapshot_payload"].includes(command)) {
+      cacheClearCommands.add(command);
+    }
+    if (["cmd_commit_classification_settings", "cmd_delete_sessions_by_exe_names"].includes(command)) {
+      mutationCommands.add(command);
+    }
+  });
+  await client.command("Network.enable");
+  const listener = await evaluate(client, `(async () => {
+    window.__patinaRestoreReasons = [];
+    window.__patinaE2eEvents = [];
+    const handler = window.__TAURI_INTERNALS__.transformCallback(event => window.__patinaRestoreReasons.push(event.payload?.reason));
+    const eventId = await window.__TAURI_INTERNALS__.invoke("plugin:event|listen", {
+      event: "tracking-data-changed", target: { kind: "Any" }, handler,
+    });
+    return { handler, eventId };
+  })()`) as { handler: number; eventId: number };
+  try {
+    // Exercise mutations before replace, which restores this test's original
+    // snapshot afterward. All commands and UI actions use the isolated database.
+    const readSettledStatus = async () => {
+      const state = await waitFor("mutation projections settle", async () => {
+        const value = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_get_activity_read_model_status")`) as {
+          sourceRevision: number; appCatalogState: string; activityHourlyState: string;
+          dirtyAppCount: number; dirtyRangeCount: number;
+        };
+        return value.appCatalogState === "ready" && value.activityHourlyState === "ready"
+          && value.dirtyAppCount === 0 && value.dirtyRangeCount === 0 ? value : null;
+      }, 10_000);
+      return state;
+    };
+    const readFixtureAggregate = async () => evaluate(client,
+      `window.__TAURI_INTERNALS__.invoke("cmd_get_activity_aggregate_range", {
+        startMs: ${fixtureStart}, endMs: ${fixtureStart + 3 * 3_600_000}, bucketBoundariesMs: null,
+      })`) as Promise<{
+        sourceRevision: number;
+        records: Array<{ exeName: string; startTime: number; endTime: number }>;
+      }>;
+    const resetMutationObservation = async () => {
+      cacheClearCommands.clear();
+      mutationCommands.clear();
+      await evaluate(client, `window.__patinaRestoreReasons = []; window.__patinaE2eEvents = []`);
+    };
+    const waitForMutationRefresh = async (reason?: string) => {
+      await waitFor(`mutation cache invalidation${reason ? `: ${reason}` : ""}`, async () => (
+        cacheClearCommands.size === 2 && (!reason || await evaluate(client,
+          `window.__patinaRestoreReasons.includes(${JSON.stringify(reason)})`))
+      ), 10_000);
+    };
+    const waitForHistoryFixture = async (present: string[], absent: string[] = []) => {
+      await waitFor(`History fixture: ${JSON.stringify({ present, absent })}`, async () => {
+        const view = await evaluate(client, historyContent) as { state: string; text: string };
+        return view.state === "ready" && present.every(name => view.text.includes(name))
+          && absent.every(name => !view.text.includes(name));
+      }, 10_000);
+    };
+
+    const csvPath = join(root, "runtime-import.csv");
+    const exactStart = fixtureStart + 3_600_000;
+    writeFileSync(csvPath, [
+      "record_type,start_time,end_time,duration_ms,exe_name,app_name,title,category",
+      `exact_session,${new Date(exactStart).toISOString()},${new Date(exactStart + 360_000).toISOString()},360000,runtime-import-exact.exe,Runtime Import Exact,,`,
+      `hour_bucket,${new Date(fixtureStart + 2 * 3_600_000).toISOString()},,600000,runtime-import-bucket.exe,Runtime Import Bucket,,`,
+      "",
+    ].join("\n"), { encoding: "utf8", flag: "wx" });
+    const importPreview = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_preview_canonical_import", {
+      filePath: ${JSON.stringify(csvPath)},
+    })`) as { filePath: string; fileFingerprint: string; validRecords: number; errorRecords: number };
+    assert.equal(importPreview.filePath, csvPath);
+    assert.equal(importPreview.validRecords, 2);
+    assert.equal(importPreview.errorRecords, 0);
+    assert.match(importPreview.fileFingerprint, /^[a-f0-9]{64}$/);
+    const beforeImport = await readSettledStatus();
+    await resetMutationObservation();
+    const imported = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_canonical_import", {
+      filePath: ${JSON.stringify(csvPath)}, expectedFingerprint: ${JSON.stringify(importPreview.fileFingerprint)},
+      classificationMutations: [],
+    })`) as { batchId: string | null; importedRecords: number; exactSessions: number; hourBuckets: number };
+    assert.ok(imported.batchId);
+    assert.equal(imported.importedRecords, 2);
+    assert.equal(imported.exactSessions, 1);
+    assert.equal(imported.hourBuckets, 1);
+    await waitForMutationRefresh("external-data-imported");
+    await waitForHistoryFixture(["Runtime Import Exact", "Runtime Restore Original"]);
+    const afterImport = await readSettledStatus();
+    assert.ok(afterImport.sourceRevision > beforeImport.sourceRevision);
+    const importedAggregate = await readFixtureAggregate();
+    assert.equal(importedAggregate.sourceRevision, afterImport.sourceRevision);
+    assert.deepEqual(importedAggregate.records.filter(row => row.exeName.startsWith("runtime-import-"))
+      .map(row => ({ exe: row.exeName, duration: row.endTime - row.startTime }))
+      .sort((left, right) => left.exe.localeCompare(right.exe)), [
+      { exe: "runtime-import-bucket.exe", duration: 600_000 },
+      { exe: "runtime-import-exact.exe", duration: 360_000 },
+    ]);
+    const batches = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_list_import_batches")`) as Array<{ id: string; totalRecords: number }>;
+    assert.equal(batches.find(batch => batch.id === imported.batchId)?.totalRecords, 2);
+
+    await resetMutationObservation();
+    assert.deepEqual(await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_delete_import_batch", {
+      batchId: ${JSON.stringify(imported.batchId)},
+    })`), { deletedExactSessions: 1, deletedHourBuckets: 1 });
+    await waitForMutationRefresh("external-import-deleted");
+    await waitForHistoryFixture(["Runtime Restore Original"], ["Runtime Import Exact", "Runtime Import Bucket"]);
+    const afterImportDeletion = await readSettledStatus();
+    assert.ok(afterImportDeletion.sourceRevision > afterImport.sourceRevision);
+    const deletedImportAggregate = await readFixtureAggregate();
+    assert.equal(deletedImportAggregate.sourceRevision, afterImportDeletion.sourceRevision);
+    assert.deepEqual(deletedImportAggregate.records.filter(row => row.exeName.startsWith("runtime-import-")), []);
+    assert.equal((await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_list_import_batches")`) as Array<{ id: string }>)
+      .some(batch => batch.id === imported.batchId), false);
+
+    // These owners invalidate frontend caches through UI callbacks, not a
+    // synthetic tracking-data-changed event. Observe their real IPC requests.
+    const openOriginalClassificationMenu = async () => {
+      assert.equal(await evaluate(client, `(() => {
+        const trigger = Array.from(document.querySelectorAll('.history-day-distribution-detail-trigger'))
+          .find(button => button.getAttribute('aria-label')?.includes('Runtime Restore Original'));
+        if (!trigger) return false;
+        const bounds = trigger.getBoundingClientRect();
+        trigger.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true,
+          clientX: bounds.left + bounds.width / 2, clientY: bounds.top + bounds.height / 2 }));
+        return true;
+      })()`), true);
+      await waitFor("classification category trigger", async () => evaluate(client,
+        `Boolean(document.querySelector('.quick-classification-menu [role="menuitem"][aria-haspopup="menu"]:not(:disabled)'))`), 10_000);
+      await evaluate(client, `document.querySelector('.quick-classification-menu [role="menuitem"][aria-haspopup="menu"]').click()`);
+      await waitFor("classification categories loaded", async () => evaluate(client,
+        `Boolean(document.querySelector('.quick-classification-category-menu [role="menuitemradio"]:not(:disabled)'))`), 10_000);
+    };
+    await resetMutationObservation();
+    await openOriginalClassificationMenu();
+    const selectedCategoryLabel = await evaluate(client, `(() => {
+      const option = document.querySelector('.quick-classification-category-menu [role="menuitemradio"]');
+      const label = option.textContent.trim(); option.click(); return label;
+    })()`) as string;
+    assert.ok(selectedCategoryLabel);
+    await waitForMutationRefresh();
+    assert.equal(mutationCommands.has("cmd_commit_classification_settings"), true);
+    await waitForHistoryFixture(["Runtime Restore Original"]);
+    const overrideRows = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
+      db: "sqlite:patina.db", query: "SELECT value FROM settings WHERE key = ?",
+      values: ["__app_override::runtime-restore-original.exe"],
+    })`) as Array<{ value: string }>;
+    assert.equal(overrideRows.length, 1);
+    assert.equal(JSON.parse(overrideRows[0].value).category, "ai");
+    const afterClassification = await readSettledStatus();
+    assert.equal(afterClassification.sourceRevision, afterImportDeletion.sourceRevision,
+      "classification-only changes must not dirty activity facts");
+    assert.deepEqual(await readFixtureAggregate(), deletedImportAggregate);
+    await openOriginalClassificationMenu();
+    assert.equal(await evaluate(client, `(() => {
+      const selected = document.querySelector('.quick-classification-category-menu [aria-checked="true"]');
+      return selected?.textContent.trim();
+    })()`), selectedCategoryLabel);
+    await evaluate(client, `window.dispatchEvent(new Event('blur'))`);
+
+    await resetMutationObservation();
+    assert.equal(await evaluate(client, `(() => {
+      const nav = document.querySelector('[data-sidebar-nav-item="mapping"]');
+      if (!nav) return false; nav.click(); return true;
+    })()`), true);
+    await waitFor("classification fixture delete control", async () => evaluate(client,
+      `Boolean(document.querySelector('[data-classification-app="runtime-restore-original.exe"] .qp-app-mapping-delete:not(:disabled)'))`), 10_000);
+    await evaluate(client, `document.querySelector('[data-classification-app="runtime-restore-original.exe"] .qp-app-mapping-delete').click()`);
+    await waitFor("isolated fixture deletion confirmation", async () => evaluate(client,
+      `Boolean(Array.from(document.querySelectorAll('[role="dialog"]')).find(dialog =>
+        dialog.textContent.includes('Runtime Restore Original'))?.querySelector('.qp-button-danger:not(:disabled)'))`), 10_000);
+    await evaluate(client, `Array.from(document.querySelectorAll('[role="dialog"]')).find(dialog =>
+      dialog.textContent.includes('Runtime Restore Original')).querySelector('.qp-button-danger').click()`);
+    await waitForMutationRefresh();
+    assert.equal(mutationCommands.has("cmd_delete_sessions_by_exe_names"), true);
+    await waitFor("classification catalog removes deleted fixture", async () => evaluate(client,
+      `document.querySelector('[data-classification-content-state]')?.getAttribute('data-classification-content-state') === 'ready'
+        && !document.querySelector('[data-classification-app="runtime-restore-original.exe"]')`), 10_000);
+    const afterCleanup = await readSettledStatus();
+    assert.ok(afterCleanup.sourceRevision > afterClassification.sourceRevision);
+    const cleanedAggregate = await readFixtureAggregate();
+    assert.equal(cleanedAggregate.sourceRevision, afterCleanup.sourceRevision);
+    assert.deepEqual(cleanedAggregate.records.filter(row => row.exeName === "runtime-restore-original.exe"), []);
+    await evaluate(client, `document.querySelector('[data-sidebar-nav-item="history"]').click()`);
+    await waitFor("History date navigation after cleanup", async () => evaluate(client,
+      `Boolean(document.querySelector('.history-date-label'))`), 10_000);
+    await evaluate(client, `document.querySelector('.history-date-label').parentElement.parentElement.querySelector(':scope > button').click()`);
+    await waitForHistoryFixture(["Runtime Restore Added"], ["Runtime Restore Original"]);
+
+    await resetMutationObservation();
+    await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_restore_backup", {
+      backupPath: ${JSON.stringify(backupPath)}, hash: ${JSON.stringify(preview.hash)}, restoreStrategy: "merge",
+    })`);
+    await waitForMutationRefresh("backup-restored");
+    await waitFor("merge settings refresh event", async () => evaluate(client,
+      `window.__patinaE2eEvents.includes('app-settings-changed')`), 10_000);
+    await waitForHistoryFixture(["Runtime Restore Original", "Runtime Restore Added"]);
+    const afterMerge = await readSettledStatus();
+    assert.ok(afterMerge.sourceRevision > afterCleanup.sourceRevision);
+    const mergedAggregate = await readFixtureAggregate();
+    assert.equal(mergedAggregate.sourceRevision, afterMerge.sourceRevision);
+    assert.deepEqual(mergedAggregate.records.filter(row => row.exeName === "runtime-restore-original.exe")
+      .map(row => row.endTime - row.startTime), [120_000]);
+    assert.deepEqual(await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
+      db: "sqlite:patina.db", query: "SELECT value FROM settings WHERE key = ?", values: ["refresh_interval_secs"],
+    })`), [{ value: "88" }]);
+    console.log("PATINA_MUTATION_RUNTIME_REPORT", JSON.stringify({
+      environment: "isolated debug Tauri/WebView2 with real SQLite", importRecords: 2,
+      importedDurationsMs: [360_000, 600_000], deletedImportBatch: true,
+      classificationCategory: "ai", classificationKeptActivityRevision: true,
+      cleanupViaClassificationUi: true, mergeRestoredNativeDurationMs: 120_000,
+      mergePreservedCurrentSetting: "88", historyRefreshedAfterEachMutation: true,
+      revisions: [beforeImport, afterImport, afterImportDeletion, afterClassification, afterCleanup, afterMerge]
+        .map(state => state.sourceRevision),
+    }));
+    // Replace must apply the backup's paused policy after a different live policy.
+    await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
+      mutations: [{ key: "tracking_paused", value: "0" }],
+    })`);
+    assert.deepEqual(await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
+      db: "sqlite:patina.db", query: "SELECT value FROM settings WHERE key = ?", values: ["tracking_paused"],
+    })`), [{ value: "0" }]);
+    await resetMutationObservation();
+    await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_restore_backup", {
+      backupPath: ${JSON.stringify(backupPath)}, hash: ${JSON.stringify(preview.hash)}, restoreStrategy: "replace",
+    })`);
+    const replaceCompletedAtMs = Date.now();
+    const restored = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
+      db: "sqlite:patina.db",
+      query: "SELECT exe_name, duration FROM sessions WHERE exe_name IN (?, ?) ORDER BY exe_name",
+      values: ["runtime-restore-original.exe", "runtime-restore-added.exe"],
+    })`);
+    assert.deepEqual(restored, [{ exe_name: "runtime-restore-original.exe", duration: 120_000 }]);
+    assert.deepEqual(await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
+      db: "sqlite:patina.db", query: "SELECT value FROM settings WHERE key = ?",
+      values: ["__app_override::runtime-restore-original.exe"],
+    })`), []);
+    assert.deepEqual(await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
+      db: "sqlite:patina.db", query: "SELECT value FROM settings WHERE key = ?", values: ["refresh_interval_secs"],
+    })`), [{ value: "77" }]);
+    assert.deepEqual(await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
+      db: "sqlite:patina.db", query: "SELECT value FROM settings WHERE key = ?", values: ["tracking_paused"],
+    })`), [{ value: "1" }]);
+    await waitFor("restore events and frontend cache invalidation", async () => {
+      const events = await evaluate(client, `window.__patinaRestoreReasons.includes('backup-restored')
+        && window.__patinaE2eEvents.includes('app-settings-changed')`);
+      return events && cacheClearCommands.size === 2;
+    }, 10_000);
+    await waitFor("History replaces its warmed post-backup snapshot", async () => {
+      const view = await evaluate(client, historyContent) as { state: string; text: string };
+      return view.state === "ready" && view.text.includes("Runtime Restore Original")
+        && !view.text.includes("Runtime Restore Added");
+    }, 10_000);
+    await waitFor("restored activity projections rebuild", async () => {
+      const state = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_get_activity_read_model_status")`) as {
+        appCatalogState: string; activityHourlyState: string; dirtyAppCount: number; dirtyRangeCount: number;
+      };
+      return state.appCatalogState === "ready" && state.activityHourlyState === "ready"
+        && state.dirtyAppCount === 0 && state.dirtyRangeCount === 0;
+    }, 10_000);
+    const aggregate = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_get_activity_aggregate_range", {
+      startMs: ${fixtureStart}, endMs: ${fixtureStart + 600_000}, bucketBoundariesMs: null,
+    })`) as { records: Array<{ exeName: string; startTime: number; endTime: number }> };
+    assert.deepEqual(aggregate.records.filter(row => row.exeName.startsWith("runtime-restore-"))
+      .map(row => ({ exe: row.exeName, duration: row.endTime - row.startTime })),
+    [{ exe: "runtime-restore-original.exe", duration: 120_000 }]);
+    const readHeartbeat = async () => {
+      const rows = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
+        db: "sqlite:patina.db", query: "SELECT value FROM settings WHERE key = ?",
+        values: ["__tracker_last_heartbeat_ms"],
+      })`) as Array<{ value: string }>;
+      return Number(rows[0]?.value ?? 0);
+    };
+    await waitFor("paused tracker writes to the restored database", async () => (
+      await readHeartbeat() > replaceCompletedAtMs
+    ), 10_000);
+    const firstRestoredHeartbeat = await readHeartbeat();
+    await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
+      mutations: [{ key: "tracking_paused", value: "0" }],
+    })`);
+    await waitFor("resumed tracker continues writing to the restored database", async () => (
+      await readHeartbeat() > firstRestoredHeartbeat
+    ), 10_000);
+    assert.deepEqual(readdirSync(join(root, "data")).filter(name => name.startsWith(".patina-restore-")), []);
+    console.log("PATINA_BACKUP_REPLACE_RUNTIME_REPORT", JSON.stringify({
+      environment: "isolated debug Tauri/WebView2 with real SQLite",
+      format: preview.format_kind, strategy: "replace", previewHashVerified: true,
+      pluginPoolReadAfterReplace: true, originalDurationMs: 120_000, postBackupFactRemoved: true,
+      frontendCacheClearCommands: [...cacheClearCommands].sort(), historyWarmSnapshotRefreshed: true,
+      projectionRebuilt: true, recoveryFilesCleaned: true,
+      restoredPauseSettingReplacedDifferentLiveValue: true,
+      pausedTrackerPersistedAfterReplace: true, resumedTrackerPersistedAgain: true,
+    }));
+  } finally {
+    stopObserving();
+    await client.command("Network.disable");
+    await evaluate(client, `(async () => {
+      await window.__TAURI_INTERNALS__.invoke("plugin:event|unlisten", {
+        event: "tracking-data-changed", eventId: ${listener.eventId},
+      });
+      window.__TAURI_INTERNALS__.unregisterCallback(${listener.handler});
+      delete window.__patinaRestoreReasons;
+    })()`);
+  }
+}
+
+const measurementOptions = parseRuntimeMeasurementOptions(process.argv.slice(2));
 const frontendPort = await reservePort();
 const devtoolsPort = await reservePort();
 const root = mkdtempSync(join(tmpdir(), "patina-tauri-e2e-"));
@@ -308,6 +686,10 @@ const cleanupErrors: unknown[] = [];
 let databaseMutationCompleted = false;
 
 try {
+  if (measurementOptions) {
+    await prepareRuntimeMeasurements(measurementOptions);
+    await prepareRuntimeFixture(measurementOptions, root);
+  }
   // Exercise the WebView against production-shaped static assets. A Vite dev
   // server sends hundreds of transformed modules and can exceed the product
   // readiness watchdog on a busy hosted runner even after graph warmup.
@@ -431,6 +813,16 @@ try {
     30_000,
   );
 
+  if (measurementOptions) {
+    const processTree = measureRuntimeProcessTree();
+    await measureTauriRuntime(measurementOptions, {
+      evaluate: (expression) => evaluate(client!, expression),
+      rootPid: processTree.rootPid,
+      binaryPath: RUNTIME_BINARY_PATH,
+      dataRoot: root,
+      frontendUrl,
+    });
+  } else {
   bridgePortBlocker = await occupyPort();
   const bridgeBlockerAddress = bridgePortBlocker.address();
   assert.ok(bridgeBlockerAddress && typeof bridgeBlockerAddress === "object");
@@ -1292,6 +1684,7 @@ try {
       db: "sqlite:patina.db",
     })`,
     `window.__TAURI_INTERNALS__.invoke("cmd_get_storage_snapshot")`,
+    `window.__TAURI_INTERNALS__.invoke("cmd_get_legacy_classification_apps", { nowMs: 0 })`,
     `window.__TAURI_INTERNALS__.invoke("cmd_restore_backup", {
       backupPath: "permission-probe.zip",
       hash: "permission-probe",
@@ -1447,6 +1840,16 @@ try {
   assert.equal(catalogPage.readPath, "projection");
   assert.equal(catalogPage.fallbackReason, null);
   assert.equal(catalogPage.sourceRevision, readModelStatus.sourceRevision);
+
+  const legacyApps = await evaluate(client,
+    `window.__TAURI_INTERNALS__.invoke("cmd_get_legacy_classification_apps", { nowMs: Date.now() })`,
+  ) as Array<{ exeName: string; appName: string }>;
+  assert.ok(Array.isArray(legacyApps));
+  for (const app of legacyApps) {
+    assert.deepEqual(Object.keys(app).sort(), ["appName", "exeName"]);
+    assert.equal(typeof app.exeName, "string");
+    assert.equal(typeof app.appName, "string");
+  }
 
   const aggregateRange = await evaluate(
     client,
@@ -1709,12 +2112,12 @@ try {
   assert.equal(structuredError.code, "SQLITE_INVALID_INPUT");
   assert.equal(structuredError.retryable, false);
 
+  await verifyBackupReplaceRuntime(client, root);
+
   await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", { mutations: [
     { key: "theme_mode", value: "dark" },
     { key: "color_scheme_dark", value: "catppuccin" }
   ] })`);
-  widgetClient?.close();
-  widgetClient = null;
   client.close();
   client = null;
   stopProcessTree(appProcess);
@@ -1749,8 +2152,12 @@ try {
   console.log("PATINA_THEME_COLD_RESTART_REPORT", JSON.stringify({ processRestart: true, presetContrast: 60, savedScheme: "catppuccin" }));
 
   console.log("PASS real Tauri runtime command/event/SQLite/capability smoke");
+  }
 } catch (error) {
   primaryError = error;
+  if (measurementOptions && webviewDiagnostics.length > 0) {
+    console.error("PATINA_MEASUREMENT_WEBVIEW_DIAGNOSTICS", webviewDiagnostics.join("\n"));
+  }
 } finally {
   console.log("PATINA_RUNTIME_PHASE cleanup");
   try {
@@ -1769,9 +2176,9 @@ try {
   } catch (error) {
     cleanupErrors.push(error);
   }
-  let appPid: number | null = null;
+  const appPid = appProcess?.pid ?? null;
   try {
-    appPid = appProcess ? stopProcessTree(appProcess) : null;
+    if (appProcess) stopProcessTree(appProcess);
   } catch (error) {
     cleanupErrors.push(error);
   }
@@ -1842,6 +2249,7 @@ try {
 }
 
 const failures = [...(primaryError ? [primaryError] : []), ...cleanupErrors];
+if (measurementOptions) recordRuntimeMeasurementCleanup(measurementOptions, cleanupErrors, primaryError);
 if (failures.length > 0) {
   throw new AggregateError(failures, "Tauri runtime smoke failed");
 }
