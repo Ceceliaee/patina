@@ -338,6 +338,77 @@ mod tests {
         pool
     }
 
+    #[tokio::test]
+    async fn restored_pause_read_failure_is_safe_and_retries_without_waiting() {
+        use futures_util::FutureExt;
+        use std::panic::AssertUnwindSafe;
+
+        let pool = setup_test_db().await;
+        let outcome = AssertUnwindSafe(async {
+            let data = TrackingRuntimeDataStore::new(pool.clone());
+            let pause_state = TrackingPauseRuntimeState::default();
+            pause_state.initialize(&data, 1_000).await.unwrap();
+            assert!(!pause_state.snapshot().unwrap().tracking_paused);
+            pool.execute("INSERT INTO settings(key,value) VALUES('tracking_paused','true')")
+                .await
+                .unwrap();
+            pool.execute("ALTER TABLE settings RENAME TO unavailable_settings")
+                .await
+                .unwrap();
+
+            let error = pause_state.initialize(&data, 2_000).await.unwrap_err();
+            assert!(error.to_string().contains("no such table: settings"));
+            assert!(
+                pause_state.snapshot().unwrap().tracking_paused,
+                "a failed restored pause read must not retain the old unpaused state"
+            );
+            assert!(pause_state.should_verify(2_001, TRACKING_PAUSE_VERIFY_INTERVAL_MS));
+            assert!(
+                load_tracking_paused(&data, &pause_state, 2_001).await,
+                "another failed read must retain safe pause without marking it verified"
+            );
+
+            pool.execute("ALTER TABLE unavailable_settings RENAME TO settings")
+                .await
+                .unwrap();
+            assert!(pause_state.should_verify(2_002, TRACKING_PAUSE_VERIFY_INTERVAL_MS));
+            assert!(load_tracking_paused(&data, &pause_state, 2_002).await);
+            assert!(!pause_state.should_verify(2_003, TRACKING_PAUSE_VERIFY_INTERVAL_MS));
+        })
+        .catch_unwind()
+        .await;
+        pool.close().await;
+        if let Err(panic) = outcome {
+            std::panic::resume_unwind(panic);
+        }
+    }
+
+    #[tokio::test]
+    async fn restored_unpaused_setting_is_available_after_a_successful_refresh() {
+        use futures_util::FutureExt;
+        use std::panic::AssertUnwindSafe;
+
+        let pool = setup_test_db().await;
+        let outcome = AssertUnwindSafe(async {
+            let data = TrackingRuntimeDataStore::new(pool.clone());
+            let pause_state = TrackingPauseRuntimeState::default();
+            pause_state.set_verified(true, 1_000);
+            pool.execute("INSERT INTO settings(key,value) VALUES('tracking_paused','false')")
+                .await
+                .unwrap();
+            pause_state.initialize(&data, 2_000).await.unwrap();
+            assert!(!pause_state.snapshot().unwrap().tracking_paused);
+            assert!(!pause_state.should_verify(2_001, TRACKING_PAUSE_VERIFY_INTERVAL_MS));
+            assert!(!load_tracking_paused(&data, &pause_state, 2_001).await);
+        })
+        .catch_unwind()
+        .await;
+        pool.close().await;
+        if let Err(panic) = outcome {
+            std::panic::resume_unwind(panic);
+        }
+    }
+
     #[test]
     fn afk_window_preserves_expired_sustained_state_until_sealing() {
         tauri::async_runtime::block_on(async {

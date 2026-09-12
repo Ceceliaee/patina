@@ -28,6 +28,30 @@ import { loadAppRuntimeBootstrapSnapshotWithDeps } from "../../src/app/services/
 import { DEFAULT_SETTINGS } from "../../src/shared/settings/appSettings.ts";
 
 export function runRuntimeEffectsTests() {
+  runTest("tracking snapshot read failures preserve visible state and still invalidate data", async () => {
+    for (const fullSnapshot of [false, true]) {
+      const readFailure = new Error("snapshot unavailable during database replacement");
+      const events: string[] = [];
+      const failRead = async () => { throw readFailure; };
+      await applyTrackingDataChangedPayload({ reason: "session-transition", changedAtMs: 1000 }, {
+        loadLatestTrackingPauseSetting: async () => false,
+        loadCurrentWindowSnapshot: failRead,
+        ...(fullSnapshot ? { loadCurrentTrackingSnapshot: failRead } : {}),
+        setAppSettings: () => assert.fail("session transition must not change pause settings"),
+        setActiveWindow: () => assert.fail("a failed read must preserve the visible window"),
+        setTrackingStatus: () => assert.fail("a failed read must preserve the visible status"),
+        setTrackingRuntimeProbeStatus: () => assert.fail("a failed read must preserve the probe status"),
+        warn: (message, error) => {
+          assert.equal(error, readFailure);
+          assert.equal(message, fullSnapshot ? "Failed to sync tracking snapshot" : "Failed to sync active window snapshot");
+          events.push("warn");
+        },
+        bumpSyncTick: () => events.push("refresh"),
+      });
+      assert.deepEqual(events, ["warn", "refresh"]);
+    }
+  });
+
   runTest("app bootstrap preserves loaded settings when process mapper initialization fails", async () => {
     const mapperError = new Error("mapper init failed");
     const trackerHealth = resolveTrackerHealth(10_000, 10_000, 8_000);

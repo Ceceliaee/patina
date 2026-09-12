@@ -114,21 +114,24 @@ export function useAppShellRuntimeLifecycle({
   useEffect(() => {
     if (!classificationReady || !isForegroundReady) return undefined;
 
+    let active = true;
     const timer = window.setTimeout(() => {
-      if (!classificationReady || !isForegroundReady) return;
-
       void import("../../features/data/services/dataFirstScreenPrewarm.ts")
-        .then(({ prewarmDataFirstScreen }) => prewarmDataFirstScreen({
-          mappingVersion,
-          reason: "foreground-opened",
-          uiLanguage: uiTextLanguage,
-        }))
+        .then(({ prewarmDataFirstScreen }) => {
+          if (!active) return;
+          return prewarmDataFirstScreen({
+            mappingVersion,
+            reason: "foreground-opened",
+            uiLanguage: uiTextLanguage,
+          });
+        })
         .catch((error: unknown) => {
           console.warn("load Data first-screen prewarm owner failed", error);
         });
     }, DATA_FOREGROUND_PREWARM_DELAY_MS);
 
     return () => {
+      active = false;
       window.clearTimeout(timer);
     };
   }, [classificationReady, isForegroundReady, mappingVersion, uiTextLanguage]);

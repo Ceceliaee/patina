@@ -245,6 +245,8 @@ pub(crate) fn tracking_pause_event_reason(tracking_paused: bool) -> &'static str
 pub(crate) async fn refresh_tracking_pause_from_storage<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<(), String> {
+    app.state::<TrackingPauseRuntimeState>()
+        .pause_until_verified();
     let tracking_paused = tracking_pause_service::load_tracking_pause_setting(app).await?;
     update_tracking_pause_runtime_state(app, tracking_paused);
     if let Err(error) = refresh_tray_icon(app, None) {

@@ -6,7 +6,7 @@ import {
 import { ensureProcessMapperRuntimeReady } from "./processMapperRuntimeGate.ts";
 import {
   getDashboardSnapshotCache,
-  setDashboardSnapshotCache,
+  beginDashboardSnapshotCacheLoad,
 } from "../../features/dashboard/services/dashboardSnapshotCache.ts";
 import {
   loadHistorySnapshotWithCache,
@@ -37,12 +37,6 @@ type HistoryRuntimeSnapshotDeps = {
   ) => void;
 };
 
-const dashboardRuntimeSnapshotDeps: DashboardRuntimeSnapshotDeps = {
-  ensureProcessMapperRuntimeReady,
-  loadDashboardSnapshot,
-  setDashboardSnapshotCache,
-};
-
 export async function loadDashboardRuntimeSnapshotWithDeps(
   date: Date = new Date(),
   deps: DashboardRuntimeSnapshotDeps,
@@ -54,7 +48,11 @@ export async function loadDashboardRuntimeSnapshotWithDeps(
 }
 
 export async function loadDashboardRuntimeSnapshot(date: Date = new Date()): Promise<DashboardSnapshot> {
-  return loadDashboardRuntimeSnapshotWithDeps(date, dashboardRuntimeSnapshotDeps);
+  return loadDashboardRuntimeSnapshotWithDeps(date, {
+    ensureProcessMapperRuntimeReady,
+    loadDashboardSnapshot,
+    setDashboardSnapshotCache: beginDashboardSnapshotCacheLoad(),
+  });
 }
 
 export async function loadHistoryRuntimeSnapshotWithDeps(

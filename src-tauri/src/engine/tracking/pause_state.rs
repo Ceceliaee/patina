@@ -4,7 +4,7 @@ use std::sync::Mutex;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TrackingPauseRuntimeSnapshot {
     pub tracking_paused: bool,
-    pub last_verified_at_ms: i64,
+    pub last_verified_at_ms: Option<i64>,
 }
 
 #[derive(Debug, Default)]
@@ -18,6 +18,7 @@ impl TrackingPauseRuntimeState {
         data: &dyn TrackingDataStore,
         now_ms: i64,
     ) -> Result<(), TrackingDataError> {
+        self.pause_until_verified();
         let paused = data.load_tracking_paused_setting().await?;
         self.set_verified(paused, now_ms);
         Ok(())
@@ -31,33 +32,40 @@ impl TrackingPauseRuntimeState {
     }
 
     pub fn set_verified(&self, tracking_paused: bool, now_ms: i64) {
-        self.replace(tracking_paused, now_ms);
+        self.replace(tracking_paused, Some(now_ms));
     }
 
     pub fn set_after_write(&self, tracking_paused: bool, now_ms: i64) {
-        self.replace(tracking_paused, now_ms);
+        self.replace(tracking_paused, Some(now_ms));
+    }
+
+    pub fn pause_until_verified(&self) {
+        self.replace(true, None);
     }
 
     pub fn should_verify(&self, now_ms: i64, interval_ms: i64) -> bool {
-        match self.snapshot() {
-            Some(snapshot) => now_ms.saturating_sub(snapshot.last_verified_at_ms) >= interval_ms,
+        match self
+            .snapshot()
+            .and_then(|snapshot| snapshot.last_verified_at_ms)
+        {
+            Some(verified_at_ms) => now_ms.saturating_sub(verified_at_ms) >= interval_ms,
             None => true,
         }
     }
 
-    fn replace(&self, tracking_paused: bool, now_ms: i64) {
+    fn replace(&self, tracking_paused: bool, verified_at_ms: Option<i64>) {
         match self.inner.lock() {
             Ok(mut guard) => {
                 *guard = Some(TrackingPauseRuntimeSnapshot {
                     tracking_paused,
-                    last_verified_at_ms: now_ms,
+                    last_verified_at_ms: verified_at_ms,
                 });
             }
             Err(poisoned) => {
                 let mut guard = poisoned.into_inner();
                 *guard = Some(TrackingPauseRuntimeSnapshot {
                     tracking_paused,
-                    last_verified_at_ms: now_ms,
+                    last_verified_at_ms: verified_at_ms,
                 });
             }
         }
@@ -81,7 +89,7 @@ mod tests {
             state.snapshot(),
             Some(TrackingPauseRuntimeSnapshot {
                 tracking_paused: true,
-                last_verified_at_ms: 1_000,
+                last_verified_at_ms: Some(1_000),
             })
         );
         assert!(!state.should_verify(30_000, 60_000));

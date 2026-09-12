@@ -79,20 +79,25 @@ pub async fn run<R: Runtime>(
     health_state: Arc<watchdog::RuntimeHealthState>,
     data: SharedTrackingDataStore,
 ) -> Result<(), String> {
-    startup::initialize_tracker(&app, data.as_ref())
-        .await
-        .map_err(|error| format!("tracker initialization failed: {error}"))?;
     let pause_state = app.state::<TrackingPauseRuntimeState>();
     let title_state = app.state::<TitleRecordingRuntimeState>();
-    if let Err(error) = pause_state.initialize(data.as_ref(), now_ms()).await {
-        log_tracker_error(format!(
-            "failed to initialize tracking pause state: {error}"
-        ));
-    }
-    if let Err(error) = title_state.initialize(data.as_ref()).await {
-        log_tracker_error(format!(
-            "failed to initialize title recording state: {error}"
-        ));
+    let snapshot_state = app.state::<TrackingRuntimeSnapshotState>();
+    {
+        let _title_guard = title_state.lock_update().await;
+        let _transition_guard = snapshot_state.transition.lock().await;
+        startup::initialize_tracker(&app, data.as_ref())
+            .await
+            .map_err(|error| format!("tracker initialization failed: {error}"))?;
+        if let Err(error) = pause_state.initialize(data.as_ref(), now_ms()).await {
+            log_tracker_error(format!(
+                "failed to initialize tracking pause state: {error}"
+            ));
+        }
+        if let Err(error) = title_state.initialize(data.as_ref()).await {
+            log_tracker_error(format!(
+                "failed to initialize title recording state: {error}"
+            ));
+        }
     }
 
     let mut last_window: Option<tracker::WindowInfo> = None;
@@ -102,8 +107,6 @@ pub async fn run<R: Runtime>(
     let mut sustained_participation_state = SustainedParticipationRuntimeState::default();
     let mut timestamp_persist_state = TrackerTimestampPersistState::default();
     let mut settings_cache = TrackingSettingsCache::default();
-    let snapshot_state = app.state::<TrackingRuntimeSnapshotState>();
-
     loop {
         let generation = snapshot_state.lifecycle_generation();
         let poll_outcome = poll_active_window_with_timeout().await;

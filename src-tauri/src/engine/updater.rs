@@ -31,6 +31,32 @@ pub trait UpdateStateStore: Send + Sync {
 #[derive(Clone)]
 pub struct UpdaterRuntimeState {
     inner: Arc<Mutex<UpdaterStateInner>>,
+    operation: Arc<tokio::sync::Mutex<()>>,
+}
+
+#[derive(Clone, Copy)]
+enum UpdateOperation {
+    Check,
+    Download,
+    Install,
+}
+
+async fn run_update_operation(
+    state: &UpdaterRuntimeState,
+    operation: UpdateOperation,
+    action: impl Future<Output = Result<UpdateSnapshot, String>>,
+) -> Result<UpdateSnapshot, String> {
+    let Ok(_guard) = state.operation.try_lock() else {
+        return Ok(state.snapshot());
+    };
+    let retain_package = state.with_guard(|inner| {
+        inner.snapshot.status == UpdateStatus::Installing
+            || (matches!(operation, UpdateOperation::Check) && inner.downloaded_package.is_some())
+    });
+    if retain_package {
+        return Ok(state.snapshot());
+    }
+    action.await
 }
 
 struct UpdaterStateInner {
@@ -55,6 +81,7 @@ pub struct UpdaterRetainedPackageStats {
 impl UpdaterRuntimeState {
     pub fn new(current_version: String) -> Self {
         Self {
+            operation: Arc::new(tokio::sync::Mutex::new(())),
             inner: Arc::new(Mutex::new(UpdaterStateInner {
                 snapshot: UpdateSnapshot::idle(current_version)
                     .with_fallback_urls(Some(latest_release_page_url()), None),
@@ -161,8 +188,17 @@ impl UpdaterRuntimeState {
         });
     }
 
-    fn take_downloaded_package(&self) -> Option<DownloadedUpdatePackage> {
-        self.with_guard(|inner| inner.downloaded_package.take())
+    fn take_readable_downloaded_package(
+        &self,
+    ) -> Result<(DownloadedUpdatePackage, Vec<u8>), String> {
+        let package = self
+            .with_guard(|inner| inner.downloaded_package.clone())
+            .ok_or_else(|| "update package has not been downloaded".to_string())?;
+        // The operation guard keeps this identity stable while the file is read.
+        let bytes = fs::read(&package.path)
+            .map_err(|error| format!("failed to read downloaded update package: {error}"))?;
+        self.with_guard(|inner| inner.downloaded_package = None);
+        Ok((package, bytes))
     }
 
     fn set_downloaded_package(&self, package: DownloadedUpdatePackage) {
@@ -250,62 +286,65 @@ pub async fn check_for_updates<R: Runtime>(
     store: &impl UpdateStateStore,
     silent: bool,
 ) -> Result<UpdateSnapshot, String> {
-    cleanup_stale_update_packages(app, state.downloaded_package_path().as_deref());
+    run_update_operation(state, UpdateOperation::Check, async {
+        cleanup_stale_update_packages(app, state.downloaded_package_path().as_deref());
 
-    let silent_context = if silent {
-        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-        let last_day = store
-            .load_last_auto_check_day()
-            .await
-            .map_err(|error| format!("failed to read auto update check state: {error}"))?;
-        if last_day.as_deref() == Some(today.as_str()) {
-            return Ok(state.snapshot());
+        let silent_context = if silent {
+            let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+            let last_day = store
+                .load_last_auto_check_day()
+                .await
+                .map_err(|error| format!("failed to read auto update check state: {error}"))?;
+            if last_day.as_deref() == Some(today.as_str()) {
+                return Ok(state.snapshot());
+            }
+            Some(today)
+        } else {
+            None
+        };
+
+        let checking_snapshot = state.set_checking();
+        emit_update_snapshot_changed(app, &checking_snapshot);
+
+        let updater = match app.updater() {
+            Ok(updater) => updater,
+            Err(error) => {
+                let snapshot = state.set_error(
+                    UpdateErrorStage::Check,
+                    format!("failed to initialize updater: {error}"),
+                );
+                emit_update_snapshot_changed(app, &snapshot);
+                return Ok(snapshot);
+            }
+        };
+
+        let update = match updater.check().await {
+            Ok(update) => update,
+            Err(error) => {
+                let snapshot = state.set_error(
+                    UpdateErrorStage::Check,
+                    format!("failed to check updates: {error}"),
+                );
+                emit_update_snapshot_changed(app, &snapshot);
+                return Ok(snapshot);
+            }
+        };
+
+        let snapshot = match update {
+            Some(update) => state.set_available(update),
+            None => state.set_up_to_date(),
+        };
+
+        if let Some(today) = silent_context {
+            if let Err(error) = store.save_last_auto_check_day(&today).await {
+                eprintln!("[updater] failed to persist auto update check state: {error}");
+            }
         }
-        Some(today)
-    } else {
-        None
-    };
 
-    let checking_snapshot = state.set_checking();
-    emit_update_snapshot_changed(app, &checking_snapshot);
-
-    let updater = match app.updater() {
-        Ok(updater) => updater,
-        Err(error) => {
-            let snapshot = state.set_error(
-                UpdateErrorStage::Check,
-                format!("failed to initialize updater: {error}"),
-            );
-            emit_update_snapshot_changed(app, &snapshot);
-            return Ok(snapshot);
-        }
-    };
-
-    let update = match updater.check().await {
-        Ok(update) => update,
-        Err(error) => {
-            let snapshot = state.set_error(
-                UpdateErrorStage::Check,
-                format!("failed to check updates: {error}"),
-            );
-            emit_update_snapshot_changed(app, &snapshot);
-            return Ok(snapshot);
-        }
-    };
-
-    let snapshot = match update {
-        Some(update) => state.set_available(update),
-        None => state.set_up_to_date(),
-    };
-
-    if let Some(today) = silent_context {
-        if let Err(error) = store.save_last_auto_check_day(&today).await {
-            eprintln!("[updater] failed to persist auto update check state: {error}");
-        }
-    }
-
-    emit_update_snapshot_changed(app, &snapshot);
-    Ok(snapshot)
+        emit_update_snapshot_changed(app, &snapshot);
+        Ok(snapshot)
+    })
+    .await
 }
 
 pub async fn run_startup_auto_check<R: Runtime>(
@@ -346,69 +385,72 @@ pub async fn download_pending<R: Runtime>(
     app: &AppHandle<R>,
     state: &UpdaterRuntimeState,
 ) -> Result<UpdateSnapshot, String> {
-    let Some(update) = state.pending_update() else {
-        let snapshot = state.set_error(
-            UpdateErrorStage::Download,
-            "there is no pending update".to_string(),
-        );
-        emit_update_snapshot_changed(app, &snapshot);
-        return Ok(snapshot);
-    };
-
-    let downloading_snapshot = state.set_downloading();
-    emit_update_snapshot_changed(app, &downloading_snapshot);
-
-    let progress_state = Arc::new(Mutex::new(0_u64));
-    let progress_state_for_download = Arc::clone(&progress_state);
-    let app_for_progress = app.clone();
-    let state_for_progress = state.clone();
-
-    let download_result = update
-        .download(
-            move |chunk_length, content_length| {
-                let downloaded_bytes = match progress_state_for_download.lock() {
-                    Ok(mut guard) => {
-                        *guard += chunk_length as u64;
-                        *guard
-                    }
-                    Err(poisoned) => {
-                        let mut guard = poisoned.into_inner();
-                        *guard += chunk_length as u64;
-                        *guard
-                    }
-                };
-                let snapshot =
-                    state_for_progress.set_download_progress(downloaded_bytes, content_length);
-                emit_update_snapshot_changed(&app_for_progress, &snapshot);
-            },
-            move || {},
-        )
-        .await;
-
-    match download_result {
-        Ok(bytes) => {
-            cleanup_stale_update_packages(app, state.downloaded_package_path().as_deref());
-            let package = match write_update_package_to_temp_file(app, &update.version, bytes) {
-                Ok(package) => package,
-                Err(error) => {
-                    let snapshot = state.set_error(UpdateErrorStage::Download, error);
-                    emit_update_snapshot_changed(app, &snapshot);
-                    return Ok(snapshot);
-                }
-            };
-            let snapshot = state.set_downloaded(package);
-            emit_update_snapshot_changed(app, &snapshot);
-            Ok(snapshot)
-        }
-        Err(error) => {
+    run_update_operation(state, UpdateOperation::Download, async {
+        let Some(update) = state.pending_update() else {
             let snapshot = state.set_error(
                 UpdateErrorStage::Download,
-                format!("failed to download update: {error}"),
+                "there is no pending update".to_string(),
             );
             emit_update_snapshot_changed(app, &snapshot);
-            Ok(snapshot)
+            return Ok(snapshot);
+        };
+
+        let downloading_snapshot = state.set_downloading();
+        emit_update_snapshot_changed(app, &downloading_snapshot);
+
+        let progress_state = Arc::new(Mutex::new(0_u64));
+        let progress_state_for_download = Arc::clone(&progress_state);
+        let app_for_progress = app.clone();
+        let state_for_progress = state.clone();
+
+        let download_result = update
+            .download(
+                move |chunk_length, content_length| {
+                    let downloaded_bytes = match progress_state_for_download.lock() {
+                        Ok(mut guard) => {
+                            *guard += chunk_length as u64;
+                            *guard
+                        }
+                        Err(poisoned) => {
+                            let mut guard = poisoned.into_inner();
+                            *guard += chunk_length as u64;
+                            *guard
+                        }
+                    };
+                    let snapshot =
+                        state_for_progress.set_download_progress(downloaded_bytes, content_length);
+                    emit_update_snapshot_changed(&app_for_progress, &snapshot);
+                },
+                move || {},
+            )
+            .await;
+
+        match download_result {
+            Ok(bytes) => {
+                cleanup_stale_update_packages(app, state.downloaded_package_path().as_deref());
+                let package = match write_update_package_to_temp_file(app, &update.version, bytes) {
+                    Ok(package) => package,
+                    Err(error) => {
+                        let snapshot = state.set_error(UpdateErrorStage::Download, error);
+                        emit_update_snapshot_changed(app, &snapshot);
+                        return Ok(snapshot);
+                    }
+                };
+                let snapshot = state.set_downloaded(package);
+                emit_update_snapshot_changed(app, &snapshot);
+                Ok(snapshot)
+            }
+            Err(error) => {
+                let snapshot = state.set_error(
+                    UpdateErrorStage::Download,
+                    format!("failed to download update: {error}"),
+                );
+                emit_update_snapshot_changed(app, &snapshot);
+                Ok(snapshot)
+            }
         }
-    }
+    })
+    .await
 }
 
 pub async fn install_downloaded<R: Runtime>(
@@ -416,6 +458,7 @@ pub async fn install_downloaded<R: Runtime>(
     state: &UpdaterRuntimeState,
     store: &impl UpdateStateStore,
 ) -> Result<UpdateSnapshot, String> {
+    run_update_operation(state, UpdateOperation::Install, async {
     let Some(update) = state.pending_update() else {
         let snapshot = state.set_error(
             UpdateErrorStage::Install,
@@ -424,22 +467,11 @@ pub async fn install_downloaded<R: Runtime>(
         emit_update_snapshot_changed(app, &snapshot);
         return Ok(snapshot);
     };
-    let Some(downloaded_package) = state.take_downloaded_package() else {
-        let snapshot = state.set_error(
-            UpdateErrorStage::Install,
-            "update package has not been downloaded".to_string(),
-        );
-        emit_update_snapshot_changed(app, &snapshot);
-        return Ok(snapshot);
-    };
-    let downloaded_bytes = match fs::read(&downloaded_package.path) {
-        Ok(bytes) => bytes,
-        Err(error) => {
-            state.set_pending_update(update);
-            let snapshot = state.set_error(
-                UpdateErrorStage::Install,
-                format!("failed to read downloaded update package: {error}"),
-            );
+        let (downloaded_package, downloaded_bytes) = match state.take_readable_downloaded_package() {
+            Ok(package) => package,
+            Err(error) => {
+                state.set_pending_update(update);
+                let snapshot = state.set_error(UpdateErrorStage::Install, error);
             emit_update_snapshot_changed(app, &snapshot);
             return Ok(snapshot);
         }
@@ -496,6 +528,7 @@ pub async fn install_downloaded<R: Runtime>(
             Ok(snapshot)
         }
     }
+    }).await
 }
 
 fn update_package_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
@@ -607,11 +640,191 @@ fn now_ms() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        cleanup_stale_update_packages_in_dir, sanitize_update_package_version,
-        write_update_package_to_dir, UPDATE_PACKAGE_FILE_PREFIX,
+        cleanup_stale_update_packages_in_dir, run_update_operation,
+        sanitize_update_package_version, write_update_package_to_dir, UpdateOperation,
+        UpdateStatus, UpdaterRuntimeState, UPDATE_PACKAGE_FILE_PREFIX,
     };
     use std::fs;
     use std::path::PathBuf;
+
+    struct PackageFixture(PathBuf);
+
+    impl PackageFixture {
+        fn new() -> Self {
+            let path =
+                std::env::temp_dir().join(format!("patina-updater-{}", uuid::Uuid::new_v4()));
+            fs::create_dir(&path).unwrap();
+            Self(path)
+        }
+    }
+
+    impl Drop for PackageFixture {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn update_package_fixture_cleans_after_panic() {
+        let fixture = PackageFixture::new();
+        let root = fixture.0.clone();
+        let result = std::panic::catch_unwind(move || {
+            let package = write_update_package_to_dir(&fixture.0, "1.1.0", vec![1, 2, 3]).unwrap();
+            assert!(package.path.exists());
+            panic!("controlled updater fixture failure");
+        });
+        assert!(result.is_err());
+        assert!(
+            !root.exists(),
+            "failed assertions must remove this test's package directory"
+        );
+    }
+
+    #[tokio::test]
+    async fn update_check_in_flight_cannot_overlap_another_operation() {
+        let state = UpdaterRuntimeState::new("1.0.0".into());
+        let (finish, completed) = tokio::sync::oneshot::channel();
+        let check = run_update_operation(&state, UpdateOperation::Check, async {
+            state.set_checking();
+            completed.await.unwrap();
+            Ok(state.set_up_to_date())
+        });
+        tokio::pin!(check);
+        tokio::select! {
+            result = &mut check => panic!("check completed before response: {result:?}"),
+            _ = tokio::task::yield_now() => {}
+        }
+
+        for operation in [
+            UpdateOperation::Check,
+            UpdateOperation::Download,
+            UpdateOperation::Install,
+        ] {
+            let mut called = false;
+            let snapshot = run_update_operation(&state, operation, async {
+                called = true;
+                Ok(state.set_downloading())
+            })
+            .await
+            .unwrap();
+            assert!(
+                !called,
+                "a late check could overwrite the concurrent operation"
+            );
+            assert_eq!(snapshot.status, UpdateStatus::Checking);
+        }
+        finish.send(()).unwrap();
+        assert_eq!(check.await.unwrap().status, UpdateStatus::UpToDate);
+    }
+
+    #[tokio::test]
+    async fn update_check_preserves_downloaded_package_and_install_retry() {
+        let fixture = PackageFixture::new();
+        let state = UpdaterRuntimeState::new("1.0.0".into());
+        let package = write_update_package_to_dir(&fixture.0, "1.1.0", vec![1, 2, 3]).unwrap();
+        let path = package.path.clone();
+        run_update_operation(&state, UpdateOperation::Download, async {
+            Ok(state.set_downloaded(package))
+        })
+        .await
+        .unwrap();
+
+        for fail_install in [false, true] {
+            if fail_install {
+                state.set_error(
+                    super::UpdateErrorStage::Install,
+                    "controlled installer error".into(),
+                );
+            }
+            let mut check_called = false;
+            run_update_operation(&state, UpdateOperation::Check, async {
+                check_called = true;
+                Ok(state.set_up_to_date())
+            })
+            .await
+            .unwrap();
+            assert!(
+                !check_called,
+                "checking must retain the package available for installation"
+            );
+            assert_eq!(fs::read(&path).unwrap(), [1, 2, 3]);
+            assert!(state.retained_package_stats().retained);
+        }
+        let mut install_started = false;
+        run_update_operation(&state, UpdateOperation::Install, async {
+            install_started = true;
+            let (retained, bytes) = state
+                .take_readable_downloaded_package()
+                .expect("install retry package");
+            assert_eq!(bytes, [1, 2, 3]);
+            assert_eq!(fs::read(&retained.path).unwrap(), [1, 2, 3]);
+            state.set_downloaded_package(retained);
+            Ok(state.snapshot())
+        })
+        .await
+        .unwrap();
+        assert!(install_started);
+        let mut download_retried = false;
+        run_update_operation(&state, UpdateOperation::Download, async {
+            download_retried = true;
+            Ok(state.snapshot())
+        })
+        .await
+        .unwrap();
+        assert!(
+            download_retried,
+            "an explicit download can replace a damaged retained package"
+        );
+    }
+
+    #[tokio::test]
+    async fn update_operation_error_and_cancellation_allow_retry() {
+        let state = UpdaterRuntimeState::new("1.0.0".into());
+        assert!(run_update_operation(&state, UpdateOperation::Check, async {
+            Err("controlled failure".into())
+        })
+        .await
+        .is_err());
+        let cancelled = run_update_operation(&state, UpdateOperation::Check, async {
+            std::future::pending::<()>().await;
+            Ok(state.snapshot())
+        });
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(10), cancelled)
+                .await
+                .is_err()
+        );
+        let mut retried = false;
+        run_update_operation(&state, UpdateOperation::Check, async {
+            retried = true;
+            Ok(state.set_up_to_date())
+        })
+        .await
+        .unwrap();
+        assert!(retried);
+    }
+
+    #[test]
+    fn update_unreadable_package_keeps_identity_until_read_succeeds() {
+        let fixture = PackageFixture::new();
+        let state = UpdaterRuntimeState::new("1.0.0".into());
+        let package = write_update_package_to_dir(&fixture.0, "1.1.0", vec![1, 2, 3]).unwrap();
+        let path = package.path.clone();
+        state.set_downloaded(package);
+        fs::remove_file(&path).unwrap();
+        let error = state.take_readable_downloaded_package().unwrap_err();
+        assert!(error.starts_with("failed to read downloaded update package:"));
+        assert!(
+            state.retained_package_stats().retained,
+            "a transient read error cannot consume installation retry state"
+        );
+        assert_eq!(state.downloaded_package_path(), Some(path.clone()));
+        fs::write(&path, [1, 2, 3]).unwrap();
+        let (package, bytes) = state.take_readable_downloaded_package().unwrap();
+        assert_eq!(package.path, path);
+        assert_eq!(bytes, [1, 2, 3]);
+        assert!(!state.retained_package_stats().retained);
+    }
 
     fn temp_dir(label: &str) -> PathBuf {
         let path = std::env::temp_dir().join(format!(
