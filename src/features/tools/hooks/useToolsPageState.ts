@@ -224,7 +224,9 @@ export function useToolsPageState({
       return true;
     } catch (error) {
       console.warn(`tools action failed: ${actionKey}`, error);
-      onError?.(uiText.tools.actionFailed);
+      onError?.(ToolsRuntimeService.isStateRefreshPendingError(error)
+        ? uiText.tools.stateRefreshPending
+        : uiText.tools.actionFailed);
       return false;
     } finally {
       setBusyAction(null);

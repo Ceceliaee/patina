@@ -1,3 +1,4 @@
+import { parseCommandError } from "../../../platform/persistence/commandError.ts";
 import {
   addTimerLap,
   cancelReminder,
@@ -21,6 +22,9 @@ import {
 } from "../../../platform/runtime/toolsRuntimeGateway.ts";
 
 export const ToolsRuntimeService = {
+  isStateRefreshPendingError(error: unknown): boolean {
+    return parseCommandError(error).code === "TOOLS_STATE_REFRESH_PENDING";
+  },
   addTimerLap,
   cancelReminder,
   createActivityReminderRule,

@@ -10,6 +10,69 @@ import {
 } from "./browserHarness.ts";
 import { SETTINGS_MARKER } from "./constants.ts";
 import { LOCALE_METADATA, SUPPORTED_LOCALES } from "../../src/shared/i18n/generated/contract.ts";
+import { getLocaleText } from "../../src/shared/i18n/runtime.ts";
+
+export async function runRemoteBackupRecoveryScenarios({ client, sessionId, runTest }: BrowserSmokeContext) {
+  await runTest("remote backup recovery preserves committed success when temporary cleanup fails", async () => {
+    const originalSettings = await evaluate(client, sessionId, `localStorage.getItem('__time_tracker_smoke_settings')`);
+    try {
+      await evaluate(client, sessionId, `(() => {
+        const settings = JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') ?? '{}');
+        Object.assign(settings, { webdav_backup_url: 'https://fixture.invalid',
+          webdav_backup_username: 'fixture', webdav_backup_remote_dir: '/Patina' });
+        localStorage.setItem('__time_tracker_smoke_settings', JSON.stringify(settings));
+      })()`);
+      for (const mode of ["cleanup-failure", "success", "legacy", "cancel", "incompatible", "restore-failure", "download-failure"]) {
+        await evaluate(client, sessionId, `import('/tests/uiBrowserSmoke/remoteBackupFixture.ts').then(({ mountRemoteBackupProbe }) => {
+          window.__PATINA_REMOTE_BACKUP_RECOVERY_CASE = { mode: ${jsonString(mode)}, downloads: 0, cleanups: 0, restores: [] };
+          window.__remoteBackupProbe = mountRemoteBackupProbe(${mode !== "cancel"});
+        })`);
+        try {
+          await waitForExpression(client, sessionId, `window.__remoteBackupProbe.read().ready`);
+          await evaluate(client, sessionId, `document.querySelector('#remote-backup-recovery-probe button').click()`);
+          await waitForExpression(client, sessionId, `(() => {
+            const probe = window.__remoteBackupProbe.read();
+            const fixture = window.__PATINA_REMOTE_BACKUP_RECOVERY_CASE;
+            return fixture.downloads === 1 && !probe.busy && (fixture.cleanups > 0 || fixture.mode === 'download-failure');
+          })()`);
+          const result = await evaluate(client, sessionId, `({
+            ...window.__remoteBackupProbe.read(), ...window.__PATINA_REMOTE_BACKUP_RECOVERY_CASE
+          })`) as {
+            downloads: number; cleanups: number; restores: Array<{ backupPath: string; restoreStrategy: string; hash: string }>;
+            events: Array<{ kind: string; message?: string; tone?: string }>; errors: string[];
+          };
+          const committed = ["cleanup-failure", "success", "legacy"].includes(mode);
+          assert.equal(result.events.filter(event => event.kind === "reload").length, committed ? 1 : 0, mode);
+          assert.equal(result.restores.length, committed || mode === "restore-failure" ? 1 : 0, mode);
+          assert.equal(result.cleanups, mode === "download-failure" ? 0 : 1, mode);
+          assert.equal(result.events.filter(event => event.kind === "confirm").length,
+            ["download-failure", "incompatible"].includes(mode) ? 0 : 1, mode);
+          if (result.restores.length) assert.deepEqual(result.restores[0], {
+            backupPath: "fixture-only/remote-backup.zip", restoreStrategy: "replace", hash: "fixture-hash",
+          });
+          const notifications = result.events.filter(event => event.kind === "notify");
+          const copy = getLocaleText("zh-CN").toast;
+          if (committed) {
+            assert.deepEqual(notifications, [{ kind: "notify", tone: "success",
+              message: mode === "legacy" ? copy.legacyBackupRestoreSuccess : copy.backupRestoreSuccess }], mode);
+            assert.ok(result.events.findIndex(event => event.kind === "reload") > result.events.findIndex(event => event.kind === "notify"));
+          } else if (mode === "restore-failure" || mode === "download-failure") {
+            assert.deepEqual(notifications, [{ kind: "notify", tone: "error",
+              message: mode === "restore-failure" ? copy.backupRestoreFailed : copy.webDavDownloadFailed }], mode);
+          } else assert.equal(notifications.length, mode === "cancel" ? 0 : 1, mode);
+          assert.deepEqual(result.errors, mode === "cleanup-failure" ? ["cleanup WebDAV backup temp failed"]
+            : mode.endsWith("failure") ? ["restore WebDAV backup failed"] : [], mode);
+        } finally {
+          await evaluate(client, sessionId, `window.__remoteBackupProbe?.dispose(); delete window.__remoteBackupProbe; delete window.__PATINA_REMOTE_BACKUP_RECOVERY_CASE;`);
+        }
+      }
+    } finally {
+      await evaluate(client, sessionId, `${originalSettings === null
+        ? "localStorage.removeItem('__time_tracker_smoke_settings')"
+        : `localStorage.setItem('__time_tracker_smoke_settings', ${jsonString(String(originalSettings))})`}`);
+    }
+  });
+}
 
 type SelectKeyboardKey = "Enter" | "ArrowUp" | "ArrowDown" | "Home" | "End" | "Escape" | "简";
 

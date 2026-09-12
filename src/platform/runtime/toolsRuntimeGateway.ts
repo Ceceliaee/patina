@@ -33,8 +33,15 @@ export function createToolsRuntimeGateway(deps: ToolsRuntimeGatewayDeps) {
     command: string,
     payload?: Record<string, unknown>,
   ): Promise<ToolsRuntimeSnapshot> {
-    const response = await deps.invoke<unknown>(command, payload);
-    return parseToolsRuntimeSnapshot(response);
+    try {
+      const response = await deps.invoke<unknown>(command, payload);
+      return parseToolsRuntimeSnapshot(response);
+    } catch (error) {
+      if (typeof error === "string" && error.startsWith("TOOLS_STATE_REFRESH_PENDING: ")) {
+        throw { code: "TOOLS_STATE_REFRESH_PENDING", message: error, retryable: false };
+      }
+      throw error;
+    }
   }
 
   return {

@@ -316,6 +316,7 @@ export function useRemoteBackupState({
     if (!config || isDownloading) return;
     setIsDownloading(true);
     let downloadedPath: string | null = null;
+    let successMessage: string | null = null;
     try {
       const download = await downloadWebDavBackup(toRuntimeConfig(config), entry.id);
       downloadedPath = download.path;
@@ -338,18 +339,12 @@ export function useRemoteBackupState({
       });
       if (!accepted) return;
       await restoreBackup(download.path, restoreStrategy, download.preview.hash);
-      await deleteRemoteBackupTemp(download.path);
-      downloadedPath = null;
-      notify(
-        download.preview.formatKind === "legacy_structured"
-          ? UI_TEXT.toast.legacyBackupRestoreSuccess
-          : UI_TEXT.toast.backupRestoreSuccess,
-        "success",
-      );
-      reload();
+      successMessage = download.preview.formatKind === "legacy_structured"
+        ? UI_TEXT.toast.legacyBackupRestoreSuccess
+        : UI_TEXT.toast.backupRestoreSuccess;
     } catch (error) {
       console.error("restore WebDAV backup failed", error);
-      notify(UI_TEXT.toast.webDavDownloadFailed, "error");
+      notify(downloadedPath ? UI_TEXT.toast.backupRestoreFailed : UI_TEXT.toast.webDavDownloadFailed, "error");
     } finally {
       if (downloadedPath) {
         try {
@@ -359,6 +354,10 @@ export function useRemoteBackupState({
         }
       }
       setIsDownloading(false);
+    }
+    if (successMessage) {
+      notify(successMessage, "success");
+      reload();
     }
   }, [config, confirm, isDownloading, notify, reload, restoreBackup, UI_TEXT, locale]);
 

@@ -9,6 +9,105 @@ const COPY = { "zh-CN": getLocaleText("zh-CN") } as const;
 export async function runToolsScenarios(context: BrowserSmokeContext) {
   const { client, sessionId, runTest } = context;
 
+  await runTest("Tools pending mutation discourages repeated writes and recovers from a runtime event", async () => {
+    const originalStorage = String(await evaluate(client!, sessionId, `JSON.stringify({ ...localStorage })`));
+    try {
+      await evaluate(client!, sessionId, `
+        localStorage.clear();
+        localStorage.setItem("__time_tracker_smoke_settings", JSON.stringify({ language: "zh-CN" }));
+        localStorage.setItem("patina:last-active-view", "tools");
+        localStorage.setItem("patina:tools-section", "timer");
+        localStorage.setItem("patina:tools-timer-mode", "stopwatch");
+        document.documentElement.dataset.patinaSmokeReload = "tools-action-recovery";
+        location.reload();
+      `);
+      const startSelector = `[aria-label=${JSON.stringify(COPY["zh-CN"].accessibility.tools.startTimer)}]`;
+      const pauseSelector = `[aria-label=${JSON.stringify(COPY["zh-CN"].accessibility.tools.pauseTimer)}]`;
+      await waitForExpression(client!, sessionId, `
+        document.documentElement.dataset.patinaSmokeReload !== "tools-action-recovery"
+          && Boolean(document.querySelector(${jsonString(startSelector)}))
+      `);
+      await evaluate(client!, sessionId, `
+        (() => {
+          globalThis.__PATINA_TOOLS_ACTION_CASE = {
+            error: "TOOLS_STATE_REFRESH_PENDING: private database reconciliation detail",
+            calls: [],
+          };
+          document.querySelector(${jsonString(startSelector)}).focus();
+        })()
+      `);
+      await client!.command("Input.dispatchKeyEvent", {
+        type: "keyDown", key: "Enter", code: "Enter", text: "\r", unmodifiedText: "\r",
+        windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13,
+      }, sessionId);
+      await client!.command("Input.dispatchKeyEvent", {
+        type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13,
+      }, sessionId);
+      await waitForExpression(client!, sessionId, `
+        globalThis.__PATINA_TOOLS_ACTION_CASE.calls.length === 1
+          && Boolean(document.querySelector('.qp-toast[role="alert"]'))
+      `, 10_000, "keyboard start must reach the gateway and present its failure");
+      assert.equal(await evaluate(client!, sessionId, `
+        document.querySelector('.qp-toast[role="alert"] .qp-toast-message')?.textContent
+      `), COPY["zh-CN"].tools.stateRefreshPending, "a pending Tools mutation must not invite another write");
+      assert.deepEqual(await evaluate(client!, sessionId, `({
+        calls: globalThis.__PATINA_TOOLS_ACTION_CASE.calls,
+        retryAdvice: document.body.innerText.includes(${jsonString(COPY["zh-CN"].tools.actionFailed)}),
+        diagnostic: document.body.innerText.includes("private database reconciliation detail"),
+        hasStart: Boolean(document.querySelector(${jsonString(startSelector)})),
+        hasPause: Boolean(document.querySelector(${jsonString(pauseSelector)})),
+      })`), { calls: ["cmd_start_timer"], retryAdvice: false, diagnostic: false, hasStart: true, hasPause: false });
+      await evaluate(client!, sessionId, `
+        (() => {
+          const now = Date.now();
+          const snapshot = {
+            settings: {
+              default_countdown_minutes: 25, pomodoro_focus_minutes: 25,
+              pomodoro_short_break_minutes: 5, pomodoro_long_break_minutes: 15, pomodoro_long_break_every: 4,
+            },
+            reminders: [], activity_reminder_rules: [], timer_laps: [], current_pomodoro: null,
+            today_completed_pomodoros: 0, next_reminder_at: null, sampled_at_ms: now + 1000,
+            current_timer: {
+              id: 42, mode: "stopwatch", label: "Recovered timer", duration_ms: null,
+              accumulated_ms: 0, started_at: now - 5000, paused_at: null, completed_at: null,
+              status: "running", created_at: now - 5000, updated_at: now,
+            },
+          };
+          globalThis.__PATINA_EMIT_TAURI_EVENT("tools-runtime-changed", snapshot);
+        })()
+      `);
+      await waitForExpression(client!, sessionId, `
+        Boolean(document.querySelector(${jsonString(pauseSelector)}))
+          && !document.querySelector(${jsonString(startSelector)})
+          && document.querySelector('.tools-time-display span')?.textContent === ${jsonString(COPY["zh-CN"].tools.timerStatus.running)}
+      `, 10_000, "the backend reconciliation event must restore the actual running timer");
+      await evaluate(client!, sessionId, `
+        globalThis.__PATINA_TOOLS_ACTION_CASE.error = "ordinary database write failed";
+        document.querySelector(${jsonString(pauseSelector)}).click();
+      `);
+      await waitForExpression(client!, sessionId, `
+        [...document.querySelectorAll('.qp-toast[role="alert"]')]
+          .some((node) => node.textContent.includes(${jsonString(COPY["zh-CN"].tools.actionFailed)}))
+      `, 10_000, "ordinary Tools write failure must retain the existing retry advice");
+      assert.deepEqual(await evaluate(client!, sessionId, `({
+        calls: globalThis.__PATINA_TOOLS_ACTION_CASE.calls,
+        running: document.querySelector('.tools-time-display span')?.textContent,
+        diagnostic: document.body.innerText.includes("ordinary database write failed"),
+      })`), { calls: ["cmd_start_timer", "cmd_pause_timer"], running: COPY["zh-CN"].tools.timerStatus.running, diagnostic: false });
+    } finally {
+      await evaluate(client!, sessionId, `
+        localStorage.clear();
+        for (const [key, value] of Object.entries(${originalStorage})) localStorage.setItem(key, value);
+        document.documentElement.dataset.patinaSmokeReload = "tools-action-restored";
+        location.reload();
+      `);
+      await waitForExpression(client!, sessionId, `
+        document.documentElement.dataset.patinaSmokeReload !== "tools-action-restored"
+          && Boolean(document.querySelector('main.qp-canvas'))
+      `);
+    }
+  });
+
   await runTest("Tools cold navigation keeps the current view until a runtime snapshot is ready", async () => {
     assert.equal(
       await evaluate(client!, sessionId, `

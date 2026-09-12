@@ -228,7 +228,7 @@ function ActivityReminderPanel({
             <div className="tools-candidate-load-error" role="status">
               <span>{UI_TEXT.tools.activityReminderCandidatesLoadFailed}</span>
               <QuietButton size="compact" onClick={onRetryCandidates}>
-                {UI_TEXT.tools.retry}
+                {UI_TEXT.common.retry}
               </QuietButton>
             </div>
           ) : null}

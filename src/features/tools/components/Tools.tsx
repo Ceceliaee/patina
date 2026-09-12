@@ -164,7 +164,7 @@ export default function Tools({
           <span>{state.loadError ? UI_TEXT.tools.loadFailed : UI_TEXT.common.loading}</span>
           {state.loadError ? (
             <QuietButton size="regular" onClick={() => { void state.retryLoad(); }}>
-              {UI_TEXT.tools.retry}
+              {UI_TEXT.common.retry}
             </QuietButton>
           ) : null}
         </div>

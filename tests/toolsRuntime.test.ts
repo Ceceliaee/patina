@@ -17,6 +17,7 @@ import {
   rememberToolsTimerMode,
 } from "../src/features/tools/services/toolsLayoutPreferenceStorage.ts";
 import { createToolsRuntimeSnapshotStore } from "../src/features/tools/services/toolsRuntimeSnapshotStore.ts";
+import { ToolsRuntimeService } from "../src/features/tools/services/toolsRuntimeService.ts";
 import type { ToolsViewModelLabels } from "../src/features/tools/types.ts";
 import {
   parseToolAlert,
@@ -317,6 +318,38 @@ await runTest("gateway uses canonical activity reminder commands and payload", a
     command: "cmd_disable_activity_reminder_rule",
     payload: { ruleId: 7 },
   });
+});
+
+await runTest("gateway identifies only the exact Tools refresh-pending marker as a non-retryable command error", async () => {
+  let rejection: unknown = "TOOLS_STATE_REFRESH_PENDING: committed state requires reconciliation";
+  const gateway = createToolsRuntimeGateway({
+    async invoke() { throw rejection; },
+    async listen() { return () => {}; },
+  });
+  await assert.rejects(gateway.startTimer({ mode: "stopwatch" }), (error) => {
+    assert.deepEqual(error, {
+      code: "TOOLS_STATE_REFRESH_PENDING",
+      message: rejection,
+      retryable: false,
+    });
+    assert.equal(ToolsRuntimeService.isStateRefreshPendingError(error), true);
+    return true;
+  });
+  for (const ordinaryError of [
+    "TOOLS_STATE_REFRESH_PENDING_OTHER: ordinary error",
+    "TOOLS_STATE_REFRESH_PENDING",
+    "TOOLS_STATE_REFRESH_PENDING:missing delimiter space",
+    "database write failed",
+    new Error("TOOLS_STATE_REFRESH_PENDING: non-wire error"),
+    { code: "WRITE_FAILED", message: "Ordinary failure", retryable: true },
+  ]) {
+    rejection = ordinaryError;
+    await assert.rejects(gateway.startTimer({ mode: "stopwatch" }), (error) => {
+      assert.equal(error, ordinaryError);
+      assert.equal(ToolsRuntimeService.isStateRefreshPendingError(error), false);
+      return true;
+    });
+  }
 });
 
 console.log(`Passed ${passed} tools runtime tests`);
