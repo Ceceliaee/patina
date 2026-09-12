@@ -125,6 +125,7 @@ pub(super) async fn restore_backup_payload_in_tx(
                 &payload.tool_software_reminder_rules,
             )
             .await?;
+            reset_scheduled_tasks_for_replace_in_tx(tx).await?;
         }
         RestoreStrategy::Merge => {
             repositories::sessions::insert_missing_for_restore(tx, &payload.sessions).await?;
@@ -165,10 +166,84 @@ pub(super) async fn restore_backup_payload_in_tx(
     Ok(())
 }
 
+pub(super) async fn reset_scheduled_tasks_for_replace_in_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+) -> Result<(), String> {
+    let now_ms = crate::platform::clock::unix_timestamp_millis_i64();
+    repositories::scheduled_backup::reset_after_replace_restore(
+        tx,
+        &uuid::Uuid::new_v4().simple().to_string(),
+        now_ms,
+    )
+    .await?;
+    repositories::scheduled_export::reset_after_replace_restore(
+        tx,
+        &uuid::Uuid::new_v4().simple().to_string(),
+        now_ms,
+    )
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use sqlx::Executor;
+
+    #[tokio::test]
+    async fn scheduled_reset_failure_keeps_legacy_replace_facts_and_configuration() {
+        for table in ["scheduled_backup_config", "scheduled_export_config"] {
+            let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+            let outcome = std::panic::AssertUnwindSafe(async {
+                for migration in crate::data::schema::tracker_migrations() {
+                    pool.execute(migration.sql).await.unwrap();
+                }
+                pool.execute("INSERT INTO sessions(app_name,exe_name,start_time,end_time,duration) VALUES('Original','original.exe',0,1000,1000);
+                    INSERT INTO scheduled_backup_config VALUES(1,1,'daily',NULL,0,'local','C:\\backup',NULL,1,'original-backup',0,0);
+                    INSERT INTO scheduled_export_config VALUES(1,1,'daily',NULL,0,'C:\\export','csv','[]','original-export',0,0);").await.unwrap();
+                pool.execute(format!("CREATE TRIGGER reject_reset BEFORE UPDATE ON {table} BEGIN SELECT RAISE(ABORT, 'restore reset denied'); END").as_str()).await.unwrap();
+                let payload: BackupPayload = serde_json::from_value(serde_json::json!({
+                    "version":1,"meta":{"exported_at_ms":10000,"schema_version":8,"app_version":"synthetic"},
+                    "sessions":[{"id":10,"app_name":"Replacement","exe_name":"replacement.exe","start_time":0,"end_time":2000,"duration":2000}],
+                    "settings":[],"icon_cache":[]
+                })).unwrap();
+                let result =
+                    restore_backup_payload(&pool, &payload, RestoreStrategy::Replace).await;
+                assert!(
+                    result.is_err(),
+                    "{table}: replacement committed before required scheduler reset"
+                );
+                assert!(result.unwrap_err().contains("restore reset denied"));
+                let identity: String = sqlx::query_scalar("SELECT exe_name FROM sessions")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+                assert_eq!(identity, "original.exe");
+                let enabled: (i64,i64) = sqlx::query_as("SELECT (SELECT enabled FROM scheduled_backup_config),(SELECT enabled FROM scheduled_export_config)")
+                    .fetch_one(&pool).await.unwrap();
+                assert_eq!(enabled, (1, 1));
+                pool.execute("DROP TRIGGER reject_reset").await.unwrap();
+                restore_backup_payload(&pool, &payload, RestoreStrategy::Replace)
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    sqlx::query_scalar::<_, String>("SELECT exe_name FROM sessions")
+                        .fetch_one(&pool)
+                        .await
+                        .unwrap(),
+                    "replacement.exe"
+                );
+                let enabled: (i64,i64) = sqlx::query_as("SELECT (SELECT enabled FROM scheduled_backup_config),(SELECT enabled FROM scheduled_export_config)")
+                    .fetch_one(&pool).await.unwrap();
+                assert_eq!(enabled, (0, 0));
+            });
+            use futures_util::FutureExt;
+            let outcome = outcome.catch_unwind().await;
+            pool.close().await;
+            if let Err(panic) = outcome {
+                std::panic::resume_unwind(panic);
+            }
+        }
+    }
 
     #[test]
     fn restore_uses_archive_observation_evidence_and_remaps_closed_children() {

@@ -289,6 +289,13 @@ mod tests {
         pool.execute(IMPORT_DATA_ISOLATION_SCHEMA_SQL)
             .await
             .unwrap();
+        for schema in [
+            crate::data::schema::SCHEDULED_BACKUP_SCHEMA_SQL,
+            crate::data::schema::SCHEDULED_BACKUP_TARGETS_SCHEMA_SQL,
+            crate::data::schema::SCHEDULED_EXPORT_SCHEMA_SQL,
+        ] {
+            pool.execute(schema).await.unwrap();
+        }
         pool
     }
 

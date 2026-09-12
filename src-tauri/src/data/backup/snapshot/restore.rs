@@ -34,23 +34,9 @@ pub(in crate::data::backup) async fn restore_snapshot_backup(
         candidate_pool.close().await;
         return Err(error);
     }
-    let cutoff = (extracted.preview.exported_at_ms.min(i64::MAX as u64) as i64)
-        .min(crate::platform::clock::unix_timestamp_millis_i64());
-    let sealed = async {
-        crate::data::repositories::sessions::seal_interrupted_session(&candidate_pool, cutoff)
-            .await?;
-        crate::data::repositories::web_activity::seal_interrupted_segments(&candidate_pool, cutoff)
-            .await?;
-        Ok::<(), sqlx::Error>(())
-    }
-    .await;
-    if let Err(error) = sealed {
-        candidate_pool.close().await;
-        return Err(format!(
-            "failed to seal interrupted backup activity: {error}"
-        ));
-    }
-    if let Err(error) = checkpoint_sqlite_pool(&candidate_pool).await {
+    if let Err(error) =
+        prepare_snapshot_restore(&candidate_pool, extracted.preview.exported_at_ms, strategy).await
+    {
         candidate_pool.close().await;
         return Err(error);
     }
@@ -62,6 +48,36 @@ pub(in crate::data::backup) async fn restore_snapshot_backup(
         }
         RestoreStrategy::Merge => merge_snapshot_backup(candidate_pool, &extracted, app).await,
     }
+}
+
+pub(super) async fn prepare_snapshot_restore(
+    candidate_pool: &sqlx::SqlitePool,
+    exported_at_ms: u64,
+    strategy: RestoreStrategy,
+) -> Result<(), String> {
+    let cutoff = (exported_at_ms.min(i64::MAX as u64) as i64)
+        .min(crate::platform::clock::unix_timestamp_millis_i64());
+    let sealed = async {
+        crate::data::repositories::sessions::seal_interrupted_session(candidate_pool, cutoff)
+            .await?;
+        crate::data::repositories::web_activity::seal_interrupted_segments(candidate_pool, cutoff)
+            .await?;
+        Ok::<(), sqlx::Error>(())
+    }
+    .await;
+    sealed.map_err(|error| format!("failed to seal interrupted backup activity: {error}"))?;
+    if strategy == RestoreStrategy::Replace {
+        let mut tx = candidate_pool
+            .begin()
+            .await
+            .map_err(|error| format!("failed to begin restored schedule reset: {error}"))?;
+        crate::data::backup::restore_payload::reset_scheduled_tasks_for_replace_in_tx(&mut tx)
+            .await?;
+        tx.commit()
+            .await
+            .map_err(|error| format!("failed to commit restored schedule reset: {error}"))?;
+    }
+    checkpoint_sqlite_pool(candidate_pool).await
 }
 
 async fn merge_snapshot_backup(

@@ -555,6 +555,13 @@ mod tests {
         pool.execute(db_schema::IMPORT_DATA_ISOLATION_SCHEMA_SQL)
             .await
             .unwrap();
+        for schema in [
+            db_schema::SCHEDULED_BACKUP_SCHEMA_SQL,
+            db_schema::SCHEDULED_BACKUP_TARGETS_SCHEMA_SQL,
+            db_schema::SCHEDULED_EXPORT_SCHEMA_SQL,
+        ] {
+            pool.execute(schema).await.unwrap();
+        }
         pool
     }
 

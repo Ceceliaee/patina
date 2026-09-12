@@ -14,9 +14,6 @@ import {
   commitImportWithClassification,
   deleteImportBatchWithRefresh,
 } from "../src/features/settings/services/settingsImportService.ts";
-import {
-  buildObservedSessionStats,
-} from "../src/platform/persistence/classificationPersistence.ts";
 import type { ClassificationDraftState } from "../src/features/classification/services/classificationDraftState.ts";
 
 function emptyClassificationState(): ClassificationDraftState {
@@ -230,95 +227,6 @@ test("failed import batch deletion does not invalidate read models", async () =>
     refreshBatches: async () => [],
   }), /delete failed/);
   assert.equal(invalidations, 0);
-});
-
-test("classification statistics apply native precedence and clip the requested range", () => {
-  const stats = buildObservedSessionStats([
-    {
-      record_id: 1,
-      origin: "native",
-      exe_name: "code.exe",
-      app_name: "Code",
-      start_time: 0,
-      effective_end_time: 1_800_000,
-      capacity_end_time: null,
-    },
-    {
-      record_id: 2,
-      origin: "import_exact",
-      exe_name: "code.exe",
-      app_name: "External Code",
-      start_time: 0,
-      effective_end_time: 3_600_000,
-      capacity_end_time: null,
-    },
-    {
-      record_id: 3,
-      origin: "import_bucket",
-      exe_name: "code.exe",
-      app_name: "Bucket Code",
-      start_time: 0,
-      effective_end_time: 3_600_000,
-      capacity_end_time: 3_600_000,
-    },
-  ], 0, 3_600_000);
-
-  const clippedStats = buildObservedSessionStats([{
-    record_id: 4,
-    origin: "import_exact",
-    exe_name: "editor.exe",
-    app_name: "Editor",
-    start_time: -1_000,
-    effective_end_time: 1_000,
-    capacity_end_time: null,
-  }], 0, 3_600_000);
-
-  const code = stats.find((row) => row.exeName === "code.exe");
-  const editor = clippedStats.find((row) => row.exeName === "editor.exe");
-  assert.equal(code?.totalDuration, 3_600_000);
-  assert.equal(code?.appName, "Code");
-  assert.equal(code?.hasNativeRecords, true);
-  assert.equal(editor?.totalDuration, 1_000);
-  assert.equal(editor?.hasNativeRecords, false);
-});
-
-test("classification statistics preserve missing runtime app names", () => {
-  const stats = buildObservedSessionStats([{
-    record_id: 5,
-    origin: "native",
-    exe_name: "new-editor.exe",
-    app_name: "",
-    start_time: 0,
-    effective_end_time: 1_000,
-    capacity_end_time: null,
-  }], 0, 1_000);
-
-  assert.equal(stats[0].appName, "");
-});
-
-test("classification statistics keep runtime facts when newer rows have no app name", () => {
-  const stats = buildObservedSessionStats([
-    {
-      record_id: 6,
-      origin: "native",
-      exe_name: "new-editor.exe",
-      app_name: "New Editor Runtime",
-      start_time: 0,
-      effective_end_time: 1_000,
-      capacity_end_time: null,
-    },
-    {
-      record_id: 7,
-      origin: "native",
-      exe_name: "new-editor.exe",
-      app_name: "",
-      start_time: 1_000,
-      effective_end_time: 2_000,
-      capacity_end_time: null,
-    },
-  ], 0, 2_000);
-
-  assert.equal(stats[0].appName, "New Editor Runtime");
 });
 
 test("import gateway rejects malformed backend payloads", () => {

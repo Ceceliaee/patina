@@ -43,8 +43,8 @@ pub(crate) async fn restore_backup_and_refresh(
         }
     }
     if strategy == RestoreStrategy::Replace {
-        crate::app::scheduled_backup::reset_after_replace_restore_while_locked(&app).await?;
-        crate::app::scheduled_export::reset_after_replace_restore_while_locked(&app).await?;
+        crate::app::scheduled_backup::notify_replace_restore_while_locked(&app);
+        crate::app::scheduled_export::notify_replace_restore_while_locked(&app);
     }
     drop(scheduled_export_guard);
     drop(scheduled_backup_guard);
