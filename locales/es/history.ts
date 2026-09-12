@@ -53,8 +53,6 @@ export const MESSAGES = {
       "separator": ", "
     }
   },
-  "history.loadFailed": "No se pudo actualizar; se muestran los últimos registros disponibles",
-  "history.loading": "Cargando...",
   "history.noData": "Sin datos",
   "history.openTimeline": "Abrir cronología",
   "history.openTimelineZoom": "Abrir escala de la cronología",

@@ -53,8 +53,6 @@ export const MESSAGES = {
       "separator": ", "
     }
   },
-  "history.loadFailed": "Could not refresh; showing the latest available records",
-  "history.loading": "Loading...",
   "history.noData": "No data",
   "history.openTimeline": "Open timeline",
   "history.openTimelineZoom": "Open timeline zoom",

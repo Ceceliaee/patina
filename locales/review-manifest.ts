@@ -401,8 +401,6 @@ export const LOCALE_SOURCE_REVIEWS = {
     "history.appDistribution": "25a7ddb8f4d41e2f",
     "history.noData": "1a73dee2567f8521",
     "history.timeline": "342f67a59bc980a5",
-    "history.loading": "4b31c767d12604ec",
-    "history.loadFailed": "95f09b1e2188c2aa",
     "history.emptyDay": "f2249eccb854e78d",
     "history.activitySegmentCount": "a1ce26c660a5356c",
     "history.titleRowCount": "aed5ef950572e74f",
@@ -805,7 +803,6 @@ export const LOCALE_SOURCE_REVIEWS = {
     "tools.alertPausingPomodoro": "be6915ffa9fbc23b",
     "tools.alertDismiss": "294178bb6afcc28d",
     "tools.loadFailed": "256a2f3460a95946",
-    "tools.retry": "c1e6594c490aeca5",
     "tools.actionFailed": "c32da184c89db5ad",
     "tools.statusChip.focus": "8d8abb75eb68d1fc",
     "tools.statusChip.break": "57b44f572c6296f6",
@@ -1006,7 +1003,11 @@ export const LOCALE_SOURCE_REVIEWS = {
     "mapping.trackingOffHint": "a5d71e15ce820be9",
     "mapping.saveFailed": "79fdd568fc406536",
     "mapping.deleteFailed": "b55210839c4712d3",
-    "export.fieldsSectionTitle": "178bc06fb2f81766"
+    "export.fieldsSectionTitle": "178bc06fb2f81766",
+    "common.readFailed": "6e904ec133f95c2b",
+    "common.refreshFailed": "7e3a0bcc8f93f79a",
+    "common.retry": "c1e6594c490aeca5",
+    "tools.stateRefreshPending": "cafbe82a7df01d9c"
   },
   "es": {
     "about.description": "f16fb3f9d1381864",
@@ -1428,8 +1429,6 @@ export const LOCALE_SOURCE_REVIEWS = {
     "history.horizontalTimeline.emptyDay": "f2249eccb854e78d",
     "history.horizontalTimeline.remainingLegendItems": "1ef92a151de430c2",
     "history.horizontalTimeline.remainingLegendItemsHint": "8b932833742a5795",
-    "history.loadFailed": "95f09b1e2188c2aa",
-    "history.loading": "4b31c767d12604ec",
     "history.noData": "1a73dee2567f8521",
     "history.openTimeline": "7b8e142bd542f6d5",
     "history.openTimelineZoom": "089e8b81b6deeb37",
@@ -1905,7 +1904,6 @@ export const LOCALE_SOURCE_REVIEWS = {
     "tools.reminderTimeInvalid": "c251a9c17e3f4064",
     "tools.reset": "4d52bb3591356db8",
     "tools.resume": "e33c2fdcf83dc658",
-    "tools.retry": "c1e6594c490aeca5",
     "tools.settingsEmpty": "43a32aac10069aac",
     "tools.settingsTitle": "3034ce49d44c1505",
     "tools.shortBreakDuration": "44e82d52139d5ba5",
@@ -2014,7 +2012,11 @@ export const LOCALE_SOURCE_REVIEWS = {
     "mapping.trackingOffHint": "a5d71e15ce820be9",
     "mapping.saveFailed": "79fdd568fc406536",
     "mapping.deleteFailed": "b55210839c4712d3",
-    "export.fieldsSectionTitle": "178bc06fb2f81766"
+    "export.fieldsSectionTitle": "178bc06fb2f81766",
+    "common.readFailed": "6e904ec133f95c2b",
+    "common.refreshFailed": "7e3a0bcc8f93f79a",
+    "common.retry": "c1e6594c490aeca5",
+    "tools.stateRefreshPending": "cafbe82a7df01d9c"
   },
   "ru-RU": {
     "about.description": "f16fb3f9d1381864",
@@ -2437,8 +2439,6 @@ export const LOCALE_SOURCE_REVIEWS = {
     "history.horizontalTimeline.emptyDay": "f2249eccb854e78d",
     "history.horizontalTimeline.remainingLegendItems": "1ef92a151de430c2",
     "history.horizontalTimeline.remainingLegendItemsHint": "8b932833742a5795",
-    "history.loadFailed": "95f09b1e2188c2aa",
-    "history.loading": "4b31c767d12604ec",
     "history.noData": "1a73dee2567f8521",
     "history.openTimeline": "7b8e142bd542f6d5",
     "history.openTimelineZoom": "089e8b81b6deeb37",
@@ -2921,7 +2921,6 @@ export const LOCALE_SOURCE_REVIEWS = {
     "tools.reminderTimeInvalid": "c251a9c17e3f4064",
     "tools.reset": "4d52bb3591356db8",
     "tools.resume": "e33c2fdcf83dc658",
-    "tools.retry": "c1e6594c490aeca5",
     "tools.settingsEmpty": "43a32aac10069aac",
     "tools.settingsTitle": "3034ce49d44c1505",
     "tools.shortBreakDuration": "44e82d52139d5ba5",
@@ -3022,6 +3021,10 @@ export const LOCALE_SOURCE_REVIEWS = {
     "widget.trackingNotSynced": "4c286c5a364a8ad5",
     "widget.trackingPaused": "3f1c661b6b8b95df",
     "widget.trackingService": "23203fcb5c59568f",
-    "widget.windowExcluded": "3096985b6b061a38"
+    "widget.windowExcluded": "3096985b6b061a38",
+    "common.readFailed": "6e904ec133f95c2b",
+    "common.refreshFailed": "7e3a0bcc8f93f79a",
+    "common.retry": "c1e6594c490aeca5",
+    "tools.stateRefreshPending": "cafbe82a7df01d9c"
   }
 } as const;

@@ -53,8 +53,6 @@ export const MESSAGES = {
       "separator": "、"
     }
   },
-  "history.loadFailed": "加载失败，仍显示最近一次记录",
-  "history.loading": "加载中...",
   "history.noData": "暂无数据",
   "history.openTimeline": "打开时间线",
   "history.openTimelineZoom": "打开时间轴缩放",

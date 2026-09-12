@@ -873,6 +873,24 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
+  "common.readFailed": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend",
+    "description": "Panel data could not be read; no valid snapshot exists. Invite the user to retry."
+  },
+  "common.refreshFailed": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend",
+    "description": "The panel keeps its last successful snapshot after a refresh failure."
+  },
+  "common.retry": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend",
+    "description": "Retry the failed read for the current panel and query."
+  },
   "common.processing": {
     "kind": "string",
     "params": [],
@@ -2468,16 +2486,6 @@ export const MESSAGE_SCHEMA = {
         "optional": false
       }
     ],
-    "surface": "frontend"
-  },
-  "history.loadFailed": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "history.loading": {
-    "kind": "string",
-    "params": [],
     "surface": "frontend"
   },
   "history.noData": {
@@ -5205,11 +5213,6 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "tools.retry": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "tools.settingsEmpty": {
     "kind": "string",
     "params": [],
@@ -5267,6 +5270,11 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "tools.start": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "tools.stateRefreshPending": {
     "kind": "string",
     "params": [],
     "surface": "frontend"

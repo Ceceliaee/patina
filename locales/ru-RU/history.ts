@@ -53,8 +53,6 @@ export const MESSAGES = {
       "separator": ", "
     }
   },
-  "history.loadFailed": "Не удалось обновить; показаны последние доступные записи",
-  "history.loading": "Загрузка...",
   "history.noData": "Нет данных",
   "history.openTimeline": "Открыть шкалу времени",
   "history.openTimelineZoom": "Открыть масштаб шкалы времени",
