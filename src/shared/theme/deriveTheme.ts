@@ -10,6 +10,28 @@ const mix = (from: RGB, to: RGB, amount: number): RGB => from.map((channel, inde
 const hex = (rgb: RGB) => `#${rgb.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
 const solid = (rgb: RGB) => `rgb(${rgb.join(", ")})`;
 
+function contrastWithWhite(rgb: RGB): number {
+  const linear = rgb.map((channel) => {
+    const value = channel / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  });
+  return 1.05 / (0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2] + 0.05);
+}
+
+function primaryButtonBackground(accent: string): string {
+  const rgb = parse(accent);
+  if (contrastWithWhite(rgb) >= 4.5) return accent;
+  let insufficient = 0;
+  let sufficient = 1;
+  // Search rounded sRGB blends; the tiny margin never rounds a failing WCAG ratio up.
+  for (let step = 0; step < 24; step += 1) {
+    const amount = (insufficient + sufficient) / 2;
+    if (contrastWithWhite(mix(rgb, BLACK, amount)) >= 4.5001) sufficient = amount;
+    else insufficient = amount;
+  }
+  return hex(mix(rgb, BLACK, sufficient));
+}
+
 // Contrast shaping is intentionally unclamped; clamp only channel blends and alpha.
 function shapeContrast(value: number, dark: boolean): number {
   const baseline = dark ? 60 : 45;
@@ -121,6 +143,7 @@ export function deriveTheme(variant: ThemeVariant, scheme: ColorScheme, override
   const surface = parse(p.surface), ink = parse(p.ink);
   const under = hex(mix(surface, dark ? BLACK : ink, dark ? 0.16 + (value - 60) * 0.0015 : 0.04 + (value - 45) * 0.0012));
   const panel = hex(mix(surface, dark ? ink : WHITE, dark ? 0.03 + c * 0.03 : 0.18 + c * 0.008));
+  const controls = controlColors(variant, scheme);
   return {
     "--qp-bg-app": under,
     "--qp-bg-canvas": p.surface,
@@ -130,7 +153,8 @@ export function deriveTheme(variant: ThemeVariant, scheme: ColorScheme, override
     "--qp-border-subtle": p.borderSubtle,
     "--qp-border-strong": p.borderStrong,
     "--qp-text-on-accent": solid(WHITE),
-    ...controlColors(variant, scheme),
+    ...controls,
+    "--qp-button-primary-bg": primaryButtonBackground(controls["--qp-accent-default"]),
     "--qp-chart-track": `rgba(${ink.join(", ")}, ${(0.04 + c * 0.02).toFixed(3)})`,
   };
 }

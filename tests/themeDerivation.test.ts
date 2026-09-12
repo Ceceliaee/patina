@@ -46,6 +46,49 @@ assert.deepEqual(deriveTheme("dark", widget.colorSchemeDark, null), deriveTheme(
 const channels = (color: string) => color.startsWith("#")
   ? color.slice(1).match(/../g)!.map(value => Number.parseInt(value, 16))
   : color.match(/\d+/g)!.map(Number);
+
+// Independent WCAG calculation: https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html
+function textContrast(foreground: number[], background: number[]): number {
+  const luminance = (color: number[]) => color.reduce((total, channel, index) => {
+    const srgb = channel / 255;
+    const linear = srgb > 0.04045 ? Math.pow((srgb + 0.055) / 1.055, 2.4) : srgb / 12.92;
+    return total + linear * [0.2126, 0.7152, 0.0722][index];
+  }, 0);
+  const values = [luminance(foreground), luminance(background)].sort((a, b) => a - b);
+  return (values[1] + 0.05) / (values[0] + 0.05);
+}
+
+let adjustedPrimaryCount = 0;
+let unchangedPrimaryCount = 0;
+for (const variant of ["light", "dark"] as const) {
+  for (const { value: scheme } of COLOR_SCHEME_OPTIONS[variant]) {
+    const colors = deriveTheme(variant, scheme, null);
+    const accent = channels(getThemePreset(variant, scheme).accent);
+    const background = channels(colors["--qp-button-primary-bg"]);
+    const white = channels(colors["--qp-text-on-accent"]);
+    const label = `${variant}/${scheme}`;
+    assert.equal(colors["--qp-accent-default"], getThemePreset(variant, scheme).accent, `${label}: global accent stays unchanged`);
+    assert.ok(textContrast(white, background) >= 4.5, `${label}: primary text contrast`);
+    for (const retained of [0.92, 0.94, 0.88]) {
+      assert.ok(textContrast(white, background.map(channel => channel * retained)) >= 4.5, `${label}: primary interaction contrast at ${retained}`);
+    }
+    if (textContrast(white, accent) >= 4.5) {
+      unchangedPrimaryCount += 1;
+      assert.equal(colors["--qp-button-primary-bg"], colors["--qp-accent-default"], `${label}: sufficient accent is preserved exactly`);
+    } else {
+      adjustedPrimaryCount += 1;
+      assert.ok(background.every((channel, index) => channel <= accent[index]), `${label}: only darkening is allowed`);
+      const lower = Math.max(...accent.map((channel, index) => channel ? (background[index] - 0.5) / channel : 0));
+      const upper = Math.min(...accent.map((channel, index) => channel ? (background[index] + 0.5) / channel : 1));
+      assert.ok(lower < upper, `${label}: channels share one black blend before rounding`);
+      const nextBrighter = accent.map(channel => Math.round(channel * (upper + 1e-8)));
+      assert.ok(textContrast(white, nextBrighter) < 4.5001, `${label}: the next brighter rounded blend fails the tiny safety margin`);
+    }
+  }
+}
+assert.ok(adjustedPrimaryCount > 0 && unchangedPrimaryCount > 0);
+console.log(`Primary button contrast passed: ${adjustedPrimaryCount} minimally darkened, ${unchangedPrimaryCount} preserved exactly; all normal and interaction states >= 4.5:1`);
+
 for (const scheme of ["default", "absolutely", "catppuccin", "vercel"] as const) {
   for (const variant of ["light", "dark"] as const) {
     const colors = deriveTheme(variant, scheme, null);

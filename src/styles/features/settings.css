@@ -9,16 +9,16 @@
 }
 
 .settings-header-button.qp-button-primary {
-  border-color: color-mix(in srgb, var(--qp-accent-default) 72%, var(--qp-border-strong));
+  border-color: color-mix(in srgb, var(--qp-button-primary-bg) 72%, var(--qp-border-strong));
 }
 
 .settings-header-button.qp-button-primary:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--qp-accent-default) 82%, var(--qp-border-strong));
-  background: color-mix(in srgb, var(--qp-accent-default) 94%, black);
+  border-color: color-mix(in srgb, var(--qp-button-primary-bg) 82%, var(--qp-border-strong));
+  background: color-mix(in srgb, var(--qp-button-primary-bg) 94%, black);
 }
 
 .settings-header-button.qp-button-primary:active:not(:disabled) {
-  background: color-mix(in srgb, var(--qp-accent-default) 88%, black);
+  background: color-mix(in srgb, var(--qp-button-primary-bg) 88%, black);
 }
 
 .settings-header-button:focus-visible,

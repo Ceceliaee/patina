@@ -833,13 +833,13 @@
 
 .qp-button-primary {
   border-radius: var(--qp-radius-control);
-  border: 1px solid color-mix(in srgb, var(--qp-accent-default) 85%, black);
-  background: var(--qp-accent-default);
+  border: 1px solid color-mix(in srgb, var(--qp-button-primary-bg) 85%, black);
+  background: var(--qp-button-primary-bg);
   color: var(--qp-text-on-accent);
 }
 
 .qp-button-primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--qp-accent-default) 92%, black);
+  background: color-mix(in srgb, var(--qp-button-primary-bg) 92%, black);
 }
 
 .qp-button-secondary {
