@@ -333,29 +333,12 @@ export class ClassificationService {
     );
   }
 
-  static async saveCategoryColorOverride(category: AppCategory, colorValue: string | null) {
-    await classificationStore.saveCategoryColorOverride(category, colorValue);
-    ProcessMapper.setCategoryColorOverride(category, colorValue);
-  }
-
   static async removeCategoryDefaultColorAssignment(category: AppCategory) {
     await ProcessMapper.removeCategoryDefaultColorAssignment(category);
   }
 
   static setDeletedCategories(categories: AppCategory[]) {
     ProcessMapper.setDeletedCategories(sanitizeDeletedCategories(categories));
-  }
-
-  static async saveCategoryDefinition(category: ExtendedAppCategory) {
-    await classificationStore.saveCategoryDefinition(category);
-  }
-
-  static async deleteCategoryDefinition(category: ExtendedAppCategory) {
-    await classificationStore.deleteCategoryDefinition(category);
-  }
-
-  static async saveDeletedCategory(category: AppCategory, deleted: boolean) {
-    await classificationStore.saveDeletedCategory(category, deleted);
   }
 
   static async deleteObservedAppSessions(exeName: string, scope: "today" | "all" = "all") {

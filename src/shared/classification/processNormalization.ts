@@ -78,6 +78,10 @@ const LIFECYCLE_ALIAS_NOISE_TOKENS = new Set([
 ]);
 
 const LIFECYCLE_ALIAS_PATTERN = LIFECYCLE_ALIAS_MARKERS.join("|");
+const LIFECYCLE_ALIAS_SUFFIX_PATTERN = new RegExp(
+  `^(.+?)[_\\-. ](?:${LIFECYCLE_ALIAS_PATTERN})(?:[_\\-. ].*)?$`,
+);
+const LIFECYCLE_ALIAS_PREFIX_PATTERN = new RegExp(`^(?:${LIFECYCLE_ALIAS_PATTERN})[_\\-. ](.+)$`);
 const LIFECYCLE_TRACKING_MARKERS = new Set([
   "setup",
   "install",
@@ -434,11 +438,9 @@ function resolveExplicitLifecycleOwner(baseStem: string | null) {
 
 function resolveLifecycleAliasExecutable(normalizedExe: string) {
   const stem = stripExeSuffix(normalizedExe);
-  if (!stem) return null;
+  if (!stem || !/[_\-. ]/.test(stem)) return null;
 
-  const suffixMatch = stem.match(new RegExp(
-    `^(.+?)[_\\-. ](?:${LIFECYCLE_ALIAS_PATTERN})(?:[_\\-. ].*)?$`,
-  ));
+  const suffixMatch = stem.match(LIFECYCLE_ALIAS_SUFFIX_PATTERN);
   if (suffixMatch?.[1]) {
     const baseStem = sanitizeAliasBaseStem(suffixMatch[1]);
     const ownerExe = resolveExplicitLifecycleOwner(baseStem);
@@ -447,7 +449,7 @@ function resolveLifecycleAliasExecutable(normalizedExe: string) {
     }
   }
 
-  const prefixMatch = stem.match(new RegExp(`^(?:${LIFECYCLE_ALIAS_PATTERN})[_\\-. ](.+)$`));
+  const prefixMatch = stem.match(LIFECYCLE_ALIAS_PREFIX_PATTERN);
   if (prefixMatch?.[1]) {
     const baseStem = sanitizeAliasBaseStem(prefixMatch[1]);
     const ownerExe = resolveExplicitLifecycleOwner(baseStem);

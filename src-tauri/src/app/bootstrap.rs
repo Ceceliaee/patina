@@ -121,6 +121,7 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::settings::cmd_set_background_optimization,
         commands::settings::cmd_commit_app_settings,
         commands::settings::cmd_commit_classification_settings,
+        commands::settings::cmd_get_legacy_classification_apps,
         commands::export::cmd_pick_export_save_file,
         commands::export::cmd_export_data,
         commands::export::cmd_get_scheduled_export_snapshot,

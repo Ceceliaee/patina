@@ -6,6 +6,18 @@ use crate::data::sqlite_pool::{reopen_sqlite_pool, wait_for_sqlite_pool};
 use std::collections::HashMap;
 use tauri::{AppHandle, Runtime};
 
+pub async fn load_legacy_classification_apps<R: Runtime>(
+    app: &AppHandle<R>,
+    now_ms: i64,
+) -> Result<Vec<crate::data::repositories::classification_settings::LegacyClassificationApp>, String>
+{
+    let pool = wait_for_sqlite_pool(app).await?;
+    crate::data::repositories::classification_settings::load_legacy_classification_apps(
+        &pool, now_ms,
+    )
+    .await
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AppRecordingPolicyChange {
     pub exe_name: String,

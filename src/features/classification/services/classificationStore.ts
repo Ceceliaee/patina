@@ -3,13 +3,12 @@ import {
   deleteSessionsByExeNamesBetween,
   deleteSettingValue,
   loadDistinctSessionExeNames,
-  loadObservedSessionStats,
+  loadLegacyClassificationApps,
   loadRecordedAppCatalogPage,
   loadSettingValue,
   loadSettingKeysByKeyPrefix,
   loadSettingRowsByKeyPrefix,
   upsertSettingValue,
-  type ObservedSessionStatRow,
   type RecordedAppCatalogQueryInput,
 } from "../../../platform/persistence/classificationPersistence.ts";
 import {
@@ -30,9 +29,7 @@ import {
   type ExtendedAppCategory,
 } from "../../../shared/classification/categoryTokens.ts";
 import {
-  normalizeExecutable,
   resolveCanonicalExecutable,
-  shouldTrackProcess,
 } from "../../../shared/classification/processNormalization.ts";
 import type { ClassificationDraftChangePlan } from "./classificationDraftState.ts";
 import { buildLegacyAutoClassificationOverrides } from "./legacyAutoClassificationMigration.ts";
@@ -212,7 +209,7 @@ function buildLoadedAppOverrides(
 }
 
 export function buildLegacyAutoClassificationMigrationMutations(
-  observed: readonly ObservedAppCandidate[],
+  observed: readonly Pick<ObservedAppCandidate, "exeName" | "appName">[],
   existingOverrides: Readonly<Record<string, AppOverride>>,
   migratedAt: number,
 ): ClassificationSettingMutation[] {
@@ -234,7 +231,7 @@ async function runLegacyAutoClassificationMigration(): Promise<void> {
   const migratedAt = Date.now();
   const [overrideRows, observed, persistedCategoryIds] = await Promise.all([
     loadSettingRowsByKeyPrefix(APP_OVERRIDE_KEY_PREFIX),
-    loadObservedSessionStats(0, migratedAt),
+    loadLegacyClassificationApps(migratedAt),
     loadPersistedCategoryIds(),
   ]);
   const { overrides, transitionMutations } = buildLoadedAppOverrides(overrideRows, persistedCategoryIds);
@@ -258,17 +255,18 @@ async function ensureLegacyAutoClassificationMigration(): Promise<void> {
 
 export async function loadAppOverrides(): Promise<Record<string, AppOverride>> {
   await ensureLegacyAutoClassificationMigration();
-  const [rows, persistedCategoryIds, recordedExeRows] = await Promise.all([
+  const [rows, persistedCategoryIds] = await Promise.all([
     loadSettingRowsByKeyPrefix(APP_OVERRIDE_KEY_PREFIX),
     loadPersistedCategoryIds(),
-    loadDistinctSessionExeNames(),
   ]);
 
   const { overrides, transitionMutations } = buildLoadedAppOverrides(rows, persistedCategoryIds);
-  const cleanup = removeOrphanedAppOverrides(
-    overrides,
-    recordedExeRows.map((row) => row.exeName),
-  );
+  const cleanup = Object.keys(overrides).length === 0
+    ? { overrides, mutations: [] }
+    : removeOrphanedAppOverrides(
+      overrides,
+      (await loadDistinctSessionExeNames()).map((row) => row.exeName),
+    );
 
   await commitClassificationSettingMutations([
     ...transitionMutations,
@@ -453,20 +451,6 @@ export async function loadCategoryColorOverrides(): Promise<Record<string, strin
   return overrides;
 }
 
-export async function saveCategoryColorOverride(
-  category: AppCategory,
-  colorValue: string | null,
-): Promise<void> {
-  const key = `${CATEGORY_COLOR_OVERRIDE_KEY_PREFIX}${category}`;
-  const normalizedColor = normalizeHexColor(colorValue ?? undefined);
-  if (!normalizedColor) {
-    await deleteSettingValue(key);
-    return;
-  }
-
-  await upsertSettingValue(key, normalizedColor);
-}
-
 function buildSaveCategoryColorOverrideMutations(
   category: AppCategory,
   colorValue: string | null,
@@ -578,23 +562,11 @@ export async function loadPersistedCategoryIds(): Promise<ExtendedAppCategory[]>
   return Array.from(categories);
 }
 
-export async function saveCategoryDefinition(category: ExtendedAppCategory): Promise<void> {
-  const key = `${CATEGORY_DEFINITION_KEY_PREFIX}${category}`;
-  await upsertSettingValue(key, String(Date.now()));
-}
-
 function buildSaveCategoryDefinitionMutations(category: ExtendedAppCategory): ClassificationSettingMutation[] {
   return [{
     key: `${CATEGORY_DEFINITION_KEY_PREFIX}${category}`,
     value: String(Date.now()),
   }];
-}
-
-export async function deleteCategoryDefinition(category: ExtendedAppCategory): Promise<void> {
-  await deleteSettingValue(`${CATEGORY_DEFINITION_KEY_PREFIX}${category}`);
-  await deleteSettingValue(`${DELETED_CATEGORY_KEY_PREFIX}${category}`);
-  await deleteSettingValue(`${CATEGORY_LABEL_OVERRIDE_KEY_PREFIX}${category}`);
-  await deleteSettingValue(`${CATEGORY_DEFAULT_COLOR_ASSIGNMENT_KEY_PREFIX}${category}`);
 }
 
 function buildDeleteCategoryDefinitionMutations(category: ExtendedAppCategory): ClassificationSettingMutation[] {
@@ -637,20 +609,6 @@ export function parsePersistedDeletedCategories(
   }
 
   return Array.from(categories);
-}
-
-export async function saveDeletedCategory(category: AppCategory, deleted: boolean): Promise<void> {
-  const key = `${DELETED_CATEGORY_KEY_PREFIX}${category}`;
-  if (!isPersistableDeletedCategory(category)) {
-    await deleteSettingValue(key);
-    return;
-  }
-  if (!deleted) {
-    await deleteSettingValue(key);
-    return;
-  }
-  await upsertSettingValue(key, String(Date.now()));
-  await deleteSettingValue(`${CATEGORY_DEFAULT_COLOR_ASSIGNMENT_KEY_PREFIX}${category}`);
 }
 
 function buildSaveDeletedCategoryMutations(
@@ -718,64 +676,6 @@ export function buildCommitDraftChangePlanSettingMutations(
 
 export async function commitDraftChangePlan(changePlan: ClassificationDraftChangePlan): Promise<void> {
   await commitClassificationSettingMutations(buildCommitDraftChangePlanSettingMutations(changePlan));
-}
-
-export function buildObservedAppCandidates(
-  rows: readonly ObservedSessionStatRow[],
-  limit: number = 120,
-): ObservedAppCandidate[] {
-  const merged = new Map<string, ObservedAppCandidate>();
-  const displayNameRanks = new Map<string, number>();
-
-  for (const row of rows) {
-    const canonicalExe = resolveCanonicalExecutable(row.exeName);
-    if (!canonicalExe || !shouldTrackProcess(row.exeName, { appName: row.appName })) {
-      continue;
-    }
-
-    const isCanonicalExecutable = normalizeExecutable(row.exeName) === canonicalExe;
-    const runtimeAppName = row.appName?.trim() ?? "";
-    const mapped = ProcessMapper.mapWithoutOverride(
-      canonicalExe,
-      isCanonicalExecutable ? { appName: runtimeAppName } : {},
-    );
-    const previous = merged.get(canonicalExe);
-    const duration = Math.max(0, Number(row.totalDuration ?? 0));
-    const lastSeenMs = Math.max(0, Number(row.lastSeenMs ?? 0));
-    const appName = mapped.name;
-    const displayNameRank = isCanonicalExecutable
-      ? (runtimeAppName ? 2 : 1)
-      : 0;
-
-    if (!previous) {
-      merged.set(canonicalExe, {
-        exeName: canonicalExe,
-        appName,
-        totalDuration: duration,
-        lastSeenMs,
-        hasNativeRecords: row.hasNativeRecords,
-      });
-      displayNameRanks.set(canonicalExe, displayNameRank);
-      continue;
-    }
-
-    const previousHadNativeRecords = previous.hasNativeRecords === true;
-    const previousDisplayNameRank = displayNameRanks.get(canonicalExe) ?? 0;
-    previous.totalDuration += duration;
-    previous.lastSeenMs = Math.max(previous.lastSeenMs, lastSeenMs);
-    previous.hasNativeRecords ||= row.hasNativeRecords;
-    if (
-      displayNameRank > previousDisplayNameRank
-      || (displayNameRank === previousDisplayNameRank && !previousHadNativeRecords && row.hasNativeRecords)
-    ) {
-      previous.appName = appName;
-      displayNameRanks.set(canonicalExe, displayNameRank);
-    }
-  }
-
-  return Array.from(merged.values())
-    .sort((a, b) => b.lastSeenMs - a.lastSeenMs || b.totalDuration - a.totalDuration)
-    .slice(0, Math.max(1, limit));
 }
 
 export async function loadAppCatalogPage(input: RecordedAppCatalogQueryInput) {

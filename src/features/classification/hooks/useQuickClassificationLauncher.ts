@@ -46,14 +46,12 @@ export function useQuickClassificationLauncher() {
     if (!activeRequest) return;
     activeRequestRef.current = null;
     setRequest(null);
-    window.requestAnimationFrame(() => {
-      const target = focusTarget?.isConnected
-        ? focusTarget
-        : activeRequest.returnFocusTo?.isConnected
-          ? activeRequest.returnFocusTo
-          : null;
-      target?.focus();
-    });
+    const target = focusTarget?.isConnected
+      ? focusTarget
+      : activeRequest.returnFocusTo?.isConnected
+        ? activeRequest.returnFocusTo
+        : null;
+    target?.focus();
   }, []);
 
   return {

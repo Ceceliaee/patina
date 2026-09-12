@@ -10,6 +10,31 @@ use crate::engine::tracking::title_state::TitleRecordingRuntimeState;
 use serde_json::json;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LegacyClassificationAppDto {
+    exe_name: String,
+    app_name: String,
+}
+
+#[tauri::command]
+pub async fn cmd_get_legacy_classification_apps(
+    app: AppHandle,
+    now_ms: i64,
+) -> Result<Vec<LegacyClassificationAppDto>, CommandErrorDto> {
+    crate::data::classification_service::load_legacy_classification_apps(&app, now_ms)
+        .await
+        .map(|apps| {
+            apps.into_iter()
+                .map(|app| LegacyClassificationAppDto {
+                    exe_name: app.exe_name,
+                    app_name: app.app_name,
+                })
+                .collect()
+        })
+        .map_err(|error| CommandErrorDto::new("CLASSIFICATION_READ_FAILED", error, true))
+}
+
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettingMutationDto {

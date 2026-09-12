@@ -32,17 +32,6 @@ interface RawIconCacheRow {
   icon_base64: string;
 }
 
-interface RawAggregateSessionCandidateRow {
-  record_id?: number;
-  origin?: TimeRecordOrigin;
-  app_name: string;
-  exe_name: string;
-  window_title: string;
-  start_time: number;
-  effective_end_time: number;
-  capacity_end_time?: number | null;
-}
-
 export interface AggregateSessionRecord {
   appName: string;
   exeName: string;
@@ -76,22 +65,6 @@ function mapRawHistorySession(
     continuityGroupStartTime: row.continuity_group_start_time,
     titleSampleDetails,
   };
-}
-
-export function mapRawAggregateSessionCandidates(
-  rows: RawAggregateSessionCandidateRow[],
-): AggregateSessionRecord[] {
-  return rows
-    .filter((row) => AppClassification.shouldTrackProcess(row.exe_name, {
-      appName: row.app_name,
-      windowTitle: row.window_title,
-    }))
-    .map((row) => ({
-      appName: row.app_name,
-      exeName: row.exe_name,
-      startTime: row.start_time,
-      endTime: Math.max(row.start_time, row.effective_end_time),
-    }));
 }
 
 function addIconAliasesToMap(map: Record<string, string>, exeName: string, iconBase64: string): void {
@@ -162,7 +135,7 @@ export async function getSessionsInRange(startMs: number, endMs: number): Promis
               COALESCE(duration, MAX(0, ? - start_time)) AS duration,
               continuity_group_start_time
        FROM sessions
-       WHERE start_time < ? AND COALESCE(end_time, ?) > ?
+       WHERE start_time < ? AND (end_time > ? OR (end_time IS NULL AND ? > ?))
        UNION ALL
        SELECT id, 'import_exact' AS origin, app_name, exe_name, window_title, start_time, end_time,
               duration, start_time AS continuity_group_start_time
@@ -170,7 +143,7 @@ export async function getSessionsInRange(startMs: number, endMs: number): Promis
        WHERE start_time < ? AND end_time > ?
      )
      ORDER BY start_time ASC`,
-    [now, endMs, now, startMs, endMs, startMs],
+    [now, endMs, startMs, now, startMs, endMs, startMs],
   );
 
   const effectiveRows = resolveEffectiveHistoryRows(rows, now);
@@ -217,7 +190,7 @@ export async function getSessionsInRangeWithoutTitleSamples(startMs: number, end
               COALESCE(duration, MAX(0, ? - start_time)) AS duration,
               continuity_group_start_time
        FROM sessions
-       WHERE start_time < ? AND COALESCE(end_time, ?) > ?
+       WHERE start_time < ? AND (end_time > ? OR (end_time IS NULL AND ? > ?))
        UNION ALL
        SELECT id, 'import_exact' AS origin, app_name, exe_name, window_title, start_time, end_time,
               duration, start_time AS continuity_group_start_time
@@ -225,7 +198,7 @@ export async function getSessionsInRangeWithoutTitleSamples(startMs: number, end
        WHERE start_time < ? AND end_time > ?
      )
      ORDER BY start_time ASC`,
-    [now, endMs, now, startMs, endMs, startMs],
+    [now, endMs, startMs, now, startMs, endMs, startMs],
   );
 
   return resolveEffectiveHistoryRows(rows, now).map((row) => mapRawHistorySession(row));
@@ -257,64 +230,6 @@ function resolveEffectiveHistoryRows(
       continuity_group_start_time: range.startTime,
     };
   });
-}
-
-async function loadEffectiveAggregateCandidateRows(
-  startMs: number,
-  endMs: number,
-): Promise<RawAggregateSessionCandidateRow[]> {
-  const db = await getDB();
-  const now = Date.now();
-  const rows = await db.select<RawAggregateSessionCandidateRow[]>(
-    `SELECT record_id, origin, app_name, exe_name, window_title, start_time,
-            effective_end_time, capacity_end_time
-     FROM (
-       SELECT id AS record_id, 'native' AS origin,
-              app_name, exe_name, window_title, start_time,
-              COALESCE(end_time, ?) AS effective_end_time,
-              NULL AS capacity_end_time
-       FROM sessions
-       WHERE start_time < ? AND COALESCE(end_time, ?) > ?
-       UNION ALL
-       SELECT id AS record_id, 'import_exact' AS origin,
-              app_name, exe_name, window_title, start_time,
-              end_time AS effective_end_time,
-              NULL AS capacity_end_time
-       FROM import_exact_sessions
-       WHERE start_time < ? AND end_time > ?
-       UNION ALL
-       SELECT id AS record_id, 'import_bucket' AS origin,
-              COALESCE(NULLIF(app_name, ''), exe_name) AS app_name,
-              exe_name,
-              '' AS window_title,
-              bucket_start_time AS start_time,
-              bucket_start_time + duration AS effective_end_time,
-              bucket_start_time + 3600000 AS capacity_end_time
-       FROM import_time_buckets
-       WHERE bucket_start_time < ? AND bucket_start_time + duration > ?
-     )
-     ORDER BY start_time ASC, origin ASC, record_id ASC`,
-    [now, endMs, now, startMs, endMs, startMs, endMs, startMs],
-  );
-  return resolveNativeSessionPrecedence(rows.map((row, index) => ({
-    key: `${row.origin ?? "native"}:${row.record_id ?? index}:${index}`,
-    origin: row.origin ?? "native",
-    startTime: row.start_time,
-    endTime: row.effective_end_time,
-    capacityEndTime: row.capacity_end_time ?? undefined,
-    value: row,
-  }))).map((range) => ({
-    ...range.value!,
-    start_time: range.startTime,
-    effective_end_time: range.endTime,
-  }));
-}
-
-export async function getSessionSummariesInRange(startMs: number, endMs: number): Promise<AggregateSessionRecord[]> {
-  const response = await loadActivityAggregateRange(startMs, endMs);
-  return response.records.filter((row) => AppClassification.shouldTrackProcess(row.exeName, {
-    appName: row.appName,
-  }));
 }
 
 export async function getSessionSummariesInRangeByLocalDay(
@@ -353,24 +268,6 @@ export async function getSessionSummariesInRangeByLocalMonth(
   return response.records.filter((row) => AppClassification.shouldTrackProcess(row.exeName, {
     appName: row.appName,
   }));
-}
-
-export async function getImportedTimeBucketsInRange(
-  startMs: number,
-  endMs: number,
-): Promise<AggregateSessionRecord[]> {
-  const rows = await loadEffectiveAggregateCandidateRows(startMs, endMs);
-  return mapRawAggregateSessionCandidates(
-    rows.filter((row) => row.origin === "import_bucket"),
-  );
-}
-
-export function getImportedTimeBucketsByDate(date: Date): Promise<AggregateSessionRecord[]> {
-  const start = new Date(date);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(date);
-  end.setHours(24, 0, 0, 0);
-  return getImportedTimeBucketsInRange(start.getTime(), end.getTime());
 }
 
 export async function getEarliestSessionStartTime(): Promise<number | null> {

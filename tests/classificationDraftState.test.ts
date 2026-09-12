@@ -16,7 +16,7 @@ import {
   updateCategoryLabelInDraftState,
 } from "../src/features/classification/hooks/appMappingStateHelpers.ts";
 import {
-  buildObservedAppCandidates,
+  loadAppOverrides,
   buildAppOverrideTransition,
   buildSaveWebDomainOverrideMutations,
   buildLegacyAutoClassificationMigrationMutations,
@@ -469,49 +469,6 @@ await runTest("unknown apps use runtime names and executable fallbacks without a
   assert.equal(ProcessMapper.shouldTrack("new-editor.exe"), true);
 });
 
-await runTest("observed candidate facts never reuse saved display overrides as runtime names", () => {
-  ProcessMapper.setUserOverride("new-editor.exe", {
-    displayName: "My Editor",
-    enabled: true,
-  });
-  try {
-    const [candidate] = buildObservedAppCandidates([{
-      exeName: "new-editor.exe",
-      appName: "",
-      totalDuration: 1_000,
-      lastSeenMs: 2_000,
-      hasNativeRecords: true,
-    }]);
-
-    assert.equal(candidate.exeName, "new-editor.exe");
-    assert.equal(candidate.appName, "New Editor");
-  } finally {
-    ProcessMapper.clearUserOverrides();
-  }
-});
-
-await runTest("observed candidates prefer canonical runtime names over alias process metadata", () => {
-  const [candidate] = buildObservedAppCandidates([
-    {
-      exeName: "Douyin_tray.exe",
-      appName: "Douyin_tray",
-      totalDuration: 1_000,
-      lastSeenMs: 3_000,
-      hasNativeRecords: true,
-    },
-    {
-      exeName: "douyin.exe",
-      appName: "抖音",
-      totalDuration: 1_000,
-      lastSeenMs: 2_000,
-      hasNativeRecords: true,
-    },
-  ]);
-
-  assert.equal(candidate.exeName, "douyin.exe");
-  assert.equal(candidate.appName, "抖音");
-});
-
 await runTest("historical other category overrides remain safely readable as unclassified", () => {
   const parsed = ProcessMapper.fromOverrideStorageValue(JSON.stringify({
     category: "other",
@@ -604,6 +561,92 @@ await runTest("legacy auto-classification migration writes migrated overrides an
     key: "__classification_manual_confirmation_migration::v1",
     value: "789",
   });
+});
+
+await runTest("legacy migration reads bounded identities and preserves failure and orphan cleanup contracts", async () => {
+  const host = globalThis as unknown as { window?: unknown };
+  const previousWindow = host.window;
+  const marker = "__classification_manual_confirmation_migration::v1";
+  const settings = new Map<string, string>();
+  const commits: Array<Array<{ key: string; value: string | null }>> = [];
+  let readFailure = true;
+  let invalidPayload = false;
+  let distinctFailure = true;
+  let commitFailure = false;
+  let identityReads = 0;
+  let distinctReads = 0;
+  let recordedNames = ["Douyin_tray.exe"];
+  host.window = { __TAURI_INTERNALS__: { invoke: async (command: string, args: Record<string, unknown>) => {
+    if (command === "cmd_get_legacy_classification_apps") {
+      identityReads += 1;
+      assert.equal(typeof args.nowMs, "number");
+      if (readFailure) throw { code: "READ_FAILED", message: "controlled candidate read", retryable: true };
+      return invalidPayload ? [{ exeName: "missing-name.exe" }] : [];
+    }
+    if (command === "cmd_commit_classification_settings") {
+      if (commitFailure) throw { code: "COMMIT_FAILED", message: "controlled commit", retryable: true };
+      const mutations = args.mutations as Array<{ key: string; value: string | null }>;
+      commits.push(mutations);
+      for (const mutation of mutations) {
+        if (mutation.value === null) settings.delete(mutation.key);
+        else settings.set(mutation.key, mutation.value);
+      }
+      return;
+    }
+    assert.equal(command, "plugin:sql|select");
+    const query = String(args.query);
+    const values = args.values as string[];
+    if (query.includes("SELECT record_id")) throw new Error("Raw migration fact transfer is forbidden");
+    if (query.includes("SELECT DISTINCT exe_name")) {
+      distinctReads += 1;
+      if (distinctFailure) throw new Error("controlled distinct read");
+      return recordedNames.map(exe_name => ({ exe_name }));
+    }
+    if (query.includes("WHERE key = ?")) return settings.has(values[0]) ? [{ value: settings.get(values[0]) }] : [];
+    assert.ok(query.includes("WHERE key LIKE ?"), query);
+    const prefix = values[0].slice(0, -1);
+    return Array.from(settings, ([key, value]) => ({ key, value })).filter(row => row.key.startsWith(prefix));
+  } } };
+  try {
+    await assert.rejects(loadAppOverrides(), { code: "READ_FAILED" });
+    assert.equal(settings.has(marker), false);
+    assert.equal(commits.length, 0);
+    readFailure = false;
+    invalidPayload = true;
+    await assert.rejects(loadAppOverrides(), /invalid legacy classification/i);
+    assert.equal(settings.has(marker), false);
+    invalidPayload = false;
+    assert.deepEqual(await loadAppOverrides(), {});
+    assert.equal(identityReads, 3);
+    assert.equal(distinctReads, 0, "empty overrides have no consumer for the full recorded-executable scan");
+    assert.equal(commits.length, 1);
+    assert.deepEqual(commits[0].map(row => row.key), [marker]);
+
+    settings.set("__app_override::Douyin_tray.exe", JSON.stringify({ category: "video", enabled: true }));
+    await assert.rejects(loadAppOverrides(), /controlled distinct read/);
+    assert.equal(commits.length, 1, "failed presence reads must not commit transition or orphan cleanup");
+    distinctFailure = false;
+    const retained = await loadAppOverrides();
+    assert.equal(retained["douyin.exe"]?.category, "video");
+    assert.equal(identityReads, 3, "the successful migration is not rerun on ordinary mapping refresh");
+    assert.deepEqual(commits[1].map(row => row.key), ["__app_override::Douyin_tray.exe", "__app_override::douyin.exe"]);
+
+    settings.delete("__app_override::douyin.exe");
+    settings.set("__app_override::Douyin_tray.exe", JSON.stringify({ category: "video", enabled: true }));
+    recordedNames = [];
+    commitFailure = true;
+    await assert.rejects(loadAppOverrides(), { code: "COMMIT_FAILED" });
+    assert.equal(commits.length, 2);
+    assert.equal(settings.has("__app_override::Douyin_tray.exe"), true);
+    commitFailure = false;
+    assert.deepEqual(await loadAppOverrides(), {});
+    assert.deepEqual(commits[2].map(row => [row.key, row.value === null]), [
+      ["__app_override::Douyin_tray.exe", true], ["__app_override::douyin.exe", false], ["__app_override::douyin.exe", true],
+    ], "transition and orphan deletion stay in the same atomic command");
+  } finally {
+    if (previousWindow === undefined) delete host.window;
+    else host.window = previousWindow;
+  }
 });
 
 await runTest("unsupported historical classification overrides are ignored", () => {
