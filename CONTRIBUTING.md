@@ -49,6 +49,11 @@ project direction is explicitly changed first.
 
 ## 3. Before You Start A Change
 
+The coordination requirements below apply to external contributors. Local work
+already authorized by the maintainer follows
+[`AGENTS.md`](AGENTS.md#task-scope-and-continuation) for scope, reassessment, and
+continuation.
+
 ### 3.1 Check The Existing Context
 
 Before implementing a fix or feature:
@@ -63,8 +68,9 @@ Before starting non-trivial or potentially overlapping work, coordinate with
 the maintainer to avoid duplicate or conflicting implementation.
 
 If a fix requires a new shared abstraction, a cross-layer responsibility move,
-or a new compatibility wrapper, pause and explain the design before
-implementing it.
+or a new compatibility wrapper, reassess the owner and discuss the design with
+the maintainer before implementation, following the
+[fix boundary guardrails](docs/issue-fix-boundary-guardrails.md).
 
 ### 3.2 Choose A Suitable Issue
 
@@ -381,7 +387,9 @@ or remote access is a separate product and security decision.
 ## 6. Validation Requirements
 
 Run focused checks while implementing, then run the required validation before
-requesting review.
+requesting review. Validation requirements are owned by
+[`docs/engineering-quality.md`](docs/engineering-quality.md#5-默认验证门槛);
+[`package.json`](package.json) defines each command's checks and execution order.
 
 ### 6.1 Default Code Validation
 
@@ -391,27 +399,14 @@ For frontend, UI, settings, read-model, or general code changes:
 pnpm run check
 ```
 
-This includes type-aware linting, naming/architecture/IPC checks and their
-self-tests, core-risk coverage and mutation gates, focused frontend tests, UI
-smoke tests, a real-browser smoke test, a production build, and hard bundle
-budgets.
-
 ### 6.2 Rust And Architecture Validation
 
-For Rust changes, architecture boundary changes, runtime work, SQLite work, or
-changes that touch tracking correctness:
+For dependency changes, Rust changes, architecture boundary changes, runtime
+work, SQLite work, or changes that touch tracking correctness:
 
 ```bash
 pnpm run check:full
 ```
-
-This includes the frontend validation chain and:
-
-- Rust boundary checks;
-- `cargo check --locked`;
-- Rust tests;
-- `cargo clippy --locked -- -D warnings`;
-- JavaScript and Rust dependency vulnerability gates.
 
 For IPC registration, capability, plugin SQL, or real desktop-runtime changes,
 also run `pnpm run test:tauri-runtime-smoke` on Windows. For performance-sensitive
@@ -419,14 +414,27 @@ read-model, SQLite-query, or navigation work, also run `pnpm run perf:stable`.
 
 ### 6.3 Release Validation
 
-For release, changelog, updater, version, tag, or packaging changes:
+For release, changelog, or updater changes, add this check to the default and
+risk-based validation required by
+[engineering quality](docs/engineering-quality.md#5-默认验证门槛):
+
+```bash
+pnpm run release:validate-changelog
+```
+
+When preparing a formal release, run:
 
 ```bash
 pnpm run release:check
 ```
 
-Follow [`docs/versioning-and-release-policy.md`](docs/versioning-and-release-policy.md)
-for the full release workflow.
+[Release policy](docs/versioning-and-release-policy.md) owns version, tag,
+updater, and packaging contracts. Its
+[release validation requirements](docs/versioning-and-release-policy.md#10-发布前的最低验证门槛)
+also cover version consistency, independent artifact checks, workflow
+responsibilities, and the local-build exception for release-pipeline diagnosis.
+Changes to code, runtime behavior, or workflows retain their applicable
+validation requirements.
 
 ### 6.4 Documentation-Only Changes
 
@@ -516,9 +524,11 @@ Refs #123
 
 ## Validation
 
-- [ ] `pnpm run check`
-- [ ] `pnpm run check:full` when Rust or architecture boundaries changed
-- [ ] Added or updated focused tests
+- [ ] `pnpm run check` for changes that are not documentation-only
+- [ ] `pnpm run check:docs` for documentation-only changes
+- [ ] `pnpm run check:docs:self-test` for documentation-governance or validation-policy changes
+- [ ] Additional validation required by `CONTRIBUTING.md` §6
+- [ ] Added or updated focused tests for changed risks
 
 ## Screenshots
 
@@ -649,7 +659,10 @@ When resolving conflicts:
 2. Keep newer correctness fixes and architecture direction from `main`.
 3. Reapply only the feature-specific behavior needed by the pull request.
 4. Remove unrelated changes that are already superseded by `main`.
-5. Run the required validation again.
+5. Reassess validation evidence under
+   [engineering quality](docs/engineering-quality.md#5-默认验证门槛), rerun checks
+   whose evidence is no longer valid, and ensure valid evidence still covers
+   every required gate for the change.
 
 Ask for help if a conflict touches tracking semantics, SQLite migrations,
 backup or restore behavior, or a boundary you do not fully understand.
@@ -749,9 +762,7 @@ Before requesting review:
 - [ ] I did not change quality gate scripts, CI workflows, bundle budgets, or hotspot budgets unless the maintainer explicitly requested that maintenance work.
 - [ ] User-facing copy is owned by the relevant copy domain, not hardcoded inline in JSX.
 - [ ] I added focused tests for the risk-bearing behavior.
-- [ ] I ran `pnpm run check`.
-- [ ] I ran `pnpm run check:full` if Rust, tracking, SQLite, runtime, or
-      architecture boundaries changed.
+- [ ] I ran the validation required for this change under [§6](#6-validation-requirements).
 - [ ] I attached screenshots externally for visible UI changes and did not commit review media.
 - [ ] I documented security behavior for any local or network interface.
 - [ ] I used `Refs #N` instead of an issue-closing keyword.
@@ -815,6 +826,9 @@ Patina 有意聚焦个人、本地优先的 Windows 桌面使用场景。除非�
 
 ### 3. 开始一项改动之前
 
+下列协调要求适用于外部贡献者。维护者已授权的本地工作，按
+[`AGENTS.md`](AGENTS.md#task-scope-and-continuation) 判断范围、技术重评和任务续接。
+
 #### 3.1 检查现有上下文
 
 开始实现修复或功能前：
@@ -827,8 +841,9 @@ Patina 有意聚焦个人、本地优先的 Windows 桌面使用场景。除非�
 
 开始处理非平凡或可能与现有工作重叠的事项前，应先与维护者协调，避免重复或相互冲突的实现。
 
-如果一项修复需要新增共享抽象、跨层迁移职责或新增兼容壳，请先暂停并解释设计，
-再进入实现。
+如果一项修复需要新增共享抽象、跨层迁移职责或新增兼容壳，请按
+[修复边界守则](docs/issue-fix-boundary-guardrails.md) 重新判断 owner，
+并在实现前与维护者讨论设计。
 
 #### 3.2 选择合适的 issue
 
@@ -1101,7 +1116,9 @@ UI 改动必须遵守 Quiet Pro 基线：
 
 ### 6. 验证要求
 
-实现过程中先运行专项检查，请求 review 前再运行所需的完整验证。
+实现过程中先运行专项检查，请求 review 前再运行所需的完整验证。验证要求由
+[`docs/engineering-quality.md`](docs/engineering-quality.md#5-默认验证门槛) 拥有；
+各命令的检查组成和执行顺序以 [`package.json`](package.json) 为准。
 
 #### 6.1 默认代码验证
 
@@ -1111,26 +1128,14 @@ UI 改动必须遵守 Quiet Pro 基线：
 pnpm run check
 ```
 
-它包含类型感知 lint、命名/架构/IPC 检查及其自测、核心风险域覆盖率与
-变异门禁、前端专项测试、UI smoke 测试、真实浏览器 smoke 测试、生产构建
-和硬性 bundle 预算。
-
 #### 6.2 Rust 与架构验证
 
-对于 Rust 改动、架构边界改动、runtime 工作、SQLite 工作，
+对于依赖改动、Rust 改动、架构边界改动、runtime 工作、SQLite 工作，
 或涉及 tracking 正确性的改动：
 
 ```bash
 pnpm run check:full
 ```
-
-它包含前端验证链，以及：
-
-- Rust 边界检查；
-- `cargo check --locked`；
-- Rust 测试；
-- `cargo clippy --locked -- -D warnings`；
-- JavaScript 与 Rust 依赖漏洞门禁。
 
 如果改动 IPC 注册、capability、plugin SQL 或真实桌面 runtime，还应在 Windows
 运行 `pnpm run test:tauri-runtime-smoke`。如果改动性能敏感的 read model、SQLite
@@ -1138,13 +1143,23 @@ pnpm run check:full
 
 #### 6.3 发布验证
 
-对于 release、changelog、updater、版本、tag 或打包改动：
+对于 release、changelog 或 updater 改动，在
+[工程质量](docs/engineering-quality.md#5-默认验证门槛) 要求的默认门槛和风险追加验证之外运行：
+
+```bash
+pnpm run release:validate-changelog
+```
+
+准备正式发布时运行：
 
 ```bash
 pnpm run release:check
 ```
 
-完整发布流程见 [`docs/versioning-and-release-policy.md`](docs/versioning-and-release-policy.md)。
+[发布规范](docs/versioning-and-release-policy.md) 拥有版本、tag、updater 与打包契约。
+其中的[发布验证要求](docs/versioning-and-release-policy.md#10-发布前的最低验证门槛)
+还规定版本一致性、独立产物检查、工作流职责，以及排查发布流水线时的本地构建例外。
+代码、runtime 行为或工作流变化仍需满足各自适用的验证要求。
 
 #### 6.4 仅文档改动
 
@@ -1232,9 +1247,11 @@ Refs #123
 
 ## Validation
 
-- [ ] `pnpm run check`
-- [ ] `pnpm run check:full` when Rust or architecture boundaries changed
-- [ ] Added or updated focused tests
+- [ ] `pnpm run check` for changes that are not documentation-only
+- [ ] `pnpm run check:docs` for documentation-only changes
+- [ ] `pnpm run check:docs:self-test` for documentation-governance or validation-policy changes
+- [ ] Additional validation required by `CONTRIBUTING.md` §6
+- [ ] Added or updated focused tests for changed risks
 
 ## Screenshots
 
@@ -1356,7 +1373,8 @@ git rebase --abort
 2. 保留 `main` 中更新的正确性修复和架构方向。
 3. 只重新应用 Pull Request 真正需要的 feature 私有行为。
 4. 删除已经被 `main` 取代的无关修改。
-5. 重新运行所需验证。
+5. 按[工程质量](docs/engineering-quality.md#5-默认验证门槛) 重新评估验证证据，
+   重跑证据已失效的检查，并确保有效证据仍覆盖本次改动的全部所需门槛。
 
 如果冲突涉及 tracking 语义、SQLite migration、备份或恢复行为，
 或你并不完全理解的边界，请寻求帮助。
@@ -1448,8 +1466,7 @@ Review 时应按以下顺序检查：
 - [ ] 除非维护者明确要求，我没有修改质量门禁脚本、CI workflow、bundle budget 或 hotspot budget。
 - [ ] 用户可见文案由对应 copy domain 管理，没有写成 JSX 内联字面量。
 - [ ] 我为承担风险的行为补充了匹配风险域的专项测试。
-- [ ] 我运行了 `pnpm run check`。
-- [ ] 如果修改 Rust、tracking、SQLite、runtime 或架构边界，我运行了 `pnpm run check:full`。
+- [ ] 我已按[第 6 节](#6-验证要求) 运行本次改动所需的验证。
 - [ ] 对于可见 UI 改动，我在仓库外提供了截图，且没有提交审查媒体。
 - [ ] 对于本机或网络接口，我说明了安全行为。
 - [ ] 我使用 `Refs #N`，没有使用 issue 自动关闭关键词。

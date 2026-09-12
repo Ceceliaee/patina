@@ -12,7 +12,7 @@
 
 ## 2. 与其他长期文档的关系
 
-- [`architecture.md`](./architecture.md) 定义长期结构边界与最低验证门槛；本文定义哪些变化可以形成正式版本，以及发布前必须怎么验证。
+- [`architecture.md`](./architecture.md) 定义长期结构边界；[`engineering-quality.md`](./engineering-quality.md#5-默认验证门槛) 定义通用验证门槛。本文定义哪些变化可以形成正式版本，以及发布前的额外接受条件。
 - [`issue-fix-boundary-guardrails.md`](./issue-fix-boundary-guardrails.md) 约束日常修复的落点与边界；本文约束这些变化怎样稳定进入发布线。
 - [`roadmap-and-prioritization.md`](./roadmap-and-prioritization.md) 约束当前阶段的优先级；本文约束何时把优先主题固化进正式版本。
 
@@ -129,20 +129,16 @@
 
 ## 7. 已发布版本的不可变规则
 
-如果某个稳定版本已经完成正式发布，应将它视为“已发布版本”：
+发布 tag 一旦存在，就冻结该版本的源码引用；即使 GitHub Release 尚未创建，也不得重指、强推或删除后重建该 tag 来替换源码。对应 GitHub Release 已公开时，才形成正式发布事实；`Publish Release` 工作流以成功创建该公开 Release 为发布完成边界。
 
-- 已存在对应 Git tag，例如 `v1.0.1`
-- 已存在对应 GitHub Release
-- 或已完成 `Publish Release` 工作流对外发布
-
-推送代码到 `main`、合并发布准备提交、更新版本文件或整理 changelog，都不等于版本已经正式发布。正式发布的边界是 tag、GitHub Release 或发布工作流已经对外形成发布事实。
+推送代码到 `main`、合并发布准备提交、更新版本文件或整理 changelog，都不等于版本已经正式发布。
 
 长期规则：
 
-- 已发布的稳定版本不应为了补进后到的小修而被原地覆盖
-- 不应通过重写 tag、强推 tag、删除后重发同版本稳定版来覆盖既有发布
+- 已发布的稳定版本不得为了补进后到的小修而被原地覆盖，也不得删除 Release 后重发同版本稳定版
 - 如果 `1.0.1` 已发布，后续修复默认进入 `1.0.2`
-- 只有目标版本尚未正式发布时，才继续沿用同一版本号准备发布
+- 只有目标版本尚无 tag 和 GitHub Release 时，才可继续沿用同一版本号更改发布内容
+- tag 已存在而 Release 不存在的失败发布，只能按[第 11 节](#11-默认发布流程) 从原 tag 补跑，包括该节限定的 test-only `validation_ref`；产品代码变化必须使用新版本和新 tag。已有 Release 时不得补跑覆盖
 
 ---
 
@@ -202,11 +198,13 @@ App note: 一句话概括应用内更新提示要显示的变化。
 
 ## 8.3 `Release:` 与 `App note:`
 
-每个正式版本节顶部必须包含两个摘要字段：
+每个正式版本节顶部必须包含以下摘要字段：
 
 - `Release:`：给 GitHub Release 使用的简短摘要
 - `App note:`：给简体中文界面使用的一句话说明
 - `App note en:`：给英文界面及其他非中文界面回退使用的一句话说明
+
+这些字段是随版本发布的正文数据：内容由 `CHANGELOG.md` 持有，解析与发布产物生成由 `scripts/release.ts` 持有，不进入 `locales/` 消息资源。仅修改正文按[工程质量的默认门槛与风险路由](./engineering-quality.md#5-默认验证门槛) 运行文档与 changelog 检查，不触发 i18n 生成。承载正文的界面标题、按钮和无障碍文案仍遵守[本地化契约](./localization.md)；修改正文解析、语言选择或展示行为时，仍须按实际代码与本地化风险验证。
 
 写法要求：
 
@@ -381,23 +379,19 @@ GitHub Release 继续作为正式发布源、主下载入口和主更新清单�
 
 ## 10. 发布前的最低验证门槛
 
-发布前至少应完成以下验证：
+正式发布前至少应完成以下验证：
 
 - `pnpm run release:validate-version-files <version>` 或工作流中的等价校验
-- `pnpm run release:validate-changelog <version>` 或工作流中的等价校验
-- `pnpm run check`
+- 本地运行 `pnpm run release:check`
+
+`package.json` 拥有 `release:check` 的检查组成与执行顺序；通用质量门槛由
+[`engineering-quality.md`](./engineering-quality.md#5-默认验证门槛) 拥有。发布工作流还必须从目标 tag 校验版本与 changelog，并覆盖完整质量门槛。
 
 GitHub Actions 生成正式发布资产后、发布 GitHub Release 前，还必须执行：
 
 - `pnpm run release:verify-assets <version> <bundle-dir> <output-dir> <repository>`
 
 该 gate 必须重新读取磁盘产物。`<bundle-dir>` 下使用 `x64/` 与 `arm64/` 两个子目录，每个目录包含 `Patina.exe` 和 `nsis/` 下唯一 `.exe/.exe.sig` 配对；校验主程序 PE 架构、输入与最终安装包 SHA-256、完整 `SHA256SUMS.txt`、`latest.json` 版本、平台、下载 URL，并使用配置中的 updater 公钥验证最终安装包签名。生成命令成功不能代替独立校验命令成功。
-
-如果是正式准备发布，还应完成：
-
-- `pnpm run release:check`
-
-`package.json` 拥有 `pnpm run check` 的当前执行图；本文只规定发布必须通过该入口，不复述其叶子任务。
 
 默认不在本地手工生成 `dist-release`、安装包或 `latest.json`。
 `write-release-notes`、`pnpm run tauri build --bundles nsis` 与 `pnpm run release:prepare-assets`

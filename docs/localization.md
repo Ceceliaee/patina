@@ -28,7 +28,7 @@ schema 条目可增加语言无关的 `description` 和 `translatorNote`。翻�
 - 语言相关缓存必须包含 locale；优先缓存语言无关数据。
 - 业务代码不得读取 `locales/`，也不得直接读取 generated 资源表。
 - generated 文件不可手改；修改源后运行 `pnpm run i18n:generate`。
-- 用户可见文案、无障碍标签、托盘、原生提醒和 Markdown 展示字段都受同一契约约束。
+- 应用界面、无障碍标签、托盘、原生提醒和 Markdown 导出中的消息文案都受同一契约约束；发布说明正文另见[发布规范](./versioning-and-release-policy.md#83-release-与-app-note)。
 - 协议字段、数据库字段、导入标识、程序名、URL、HEX/RGB/HSL 等数据不得机械本地化。
 - 未登记硬编码会失败；例外必须精确到文件和值，并写明 owner 与原因。
 

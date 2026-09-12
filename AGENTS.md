@@ -23,7 +23,7 @@ Apply this file in every repository task. Read the following owners when the tas
 
 - Answer, discuss, review, and plan requests authorize relevant inspection and the requested report or plan; implementation requires an implementation request. For requested changes, carry out in-scope local work and required validation without asking again for authority already established in the task.
 - Resolve routine choices from current owners. A need to reassess the approach is not itself a need for user approval. Ask when missing information materially changes the result or when an action needs authority the task does not provide.
-- Pause only the dependent action when evidence, input, or authority is missing; continue independent authorized work and report the limitation. Incorporate follow-up requirements without discarding unfinished work unless the user changes the objective.
+- Pause only the dependent action when evidence, input, or authority is missing; continue independent authorized work and report the limitation. Answer status or side questions and incorporate follow-up requirements while continuing unfinished work, unless the user pauses, cancels, or changes the objective.
 - Git, Issue, Project, release, and other external actions retain their specific authorization rules below. A workflow or successful check cannot grant that authority.
 
 ## Optional Local Agent Skills

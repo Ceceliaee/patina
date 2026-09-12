@@ -111,7 +111,7 @@ JS 离线审计只接受最近 24 小时内成功联网审计生成、且 SHA-25
 - 改动 release / changelog / updater：追加 `pnpm run release:validate-changelog`
 - 准备正式发布：本地执行 `pnpm run release:check`，安装包构建与 updater 产物生成默认交给 GitHub Actions
 
-当前仓库默认 CI gate 与 release workflow 的质量校验入口统一为 `pnpm run check:full`。
+默认 CI gate 与 release workflow 必须覆盖 `pnpm run check:full` 的全部检查；工作流可拆分为独立 job 执行，具体编排由 `.github/workflows/` 拥有。
 
 机器 gate 按失败类型分工，具体扫描路径、allowlist、预算和执行顺序由 `scripts/*`、测试与 `package.json` 拥有：
 
@@ -231,7 +231,7 @@ Bundle 治理的目标不是让构建产物永远不增长，而是让代码只�
 
 ## 7. 本地化质量路由
 
-本地化契约、用户可见文案或原生表面变更必须通过 i18n self-test 与真实仓库检查，覆盖 key、参数、CLDR 复数类别、source-review hash、generated stale 和硬编码。结构性变更使用 `pnpm run check:full`；只改翻译时至少运行 i18n、类型与命中的界面测试。完整 schema、XLSX 不可信输入、生成和贡献流程由 [`localization.md`](./localization.md) 拥有。
+本地化契约、界面消息文案或原生表面变更必须通过 i18n self-test 与真实仓库检查，覆盖 key、参数、CLDR 复数类别、source-review hash、generated stale 和硬编码。结构性变更使用 `pnpm run check:full`；只改消息资源翻译时至少运行 i18n、类型与命中的界面测试。完整 schema、XLSX 不可信输入、生成和贡献流程由 [`localization.md`](./localization.md) 拥有；发布说明正文与其界面消息的边界由[发布规范](./versioning-and-release-policy.md#83-release-与-app-note) 拥有。
 
 ## 8. 文档质量边界
 
