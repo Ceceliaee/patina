@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   __iconThemeColorInternals,
   configureIconThemeColorPersistence,
+  prewarmIconThemeColors,
 } from "../src/shared/hooks/useIconThemeColors.ts";
 import {
   __iconThemeColorStoreInternals,
@@ -195,6 +196,141 @@ await runTest("failed icon extraction fallbacks remain stable across remounts", 
     __iconThemeColorInternals.readCachedThemeColors({ "example.exe": "broken-icon" }),
     { "example.exe": expected },
   );
+});
+
+await runTest("successful and failed source entries evict old values while retaining recent hits", async () => {
+  for (const extracted of ["#123456", null]) {
+    __iconThemeColorInternals.resetThemeColorCaches();
+    let extractions = 0;
+    const extractor = async () => {
+      extractions += 1;
+      return extracted;
+    };
+    for (let index = 0; index < 256; index += 1) {
+      await __iconThemeColorInternals.resolveThemeColor("app", `source-${index}`, extractor);
+    }
+    const expected = extracted ?? __iconThemeColorInternals.fallbackThemeColor("app");
+    assert.deepEqual(
+      __iconThemeColorInternals.readCachedThemeColors({ app: "source-0" }),
+      { app: expected },
+    );
+    await __iconThemeColorInternals.resolveThemeColor("app", "source-256", extractor);
+    assert.deepEqual(__iconThemeColorInternals.readCachedThemeColors({ app: "source-1" }), {});
+    assert.deepEqual(
+      __iconThemeColorInternals.readCachedThemeColors({ app: "source-0" }),
+      { app: expected },
+    );
+    assert.deepEqual(
+      __iconThemeColorInternals.readCachedThemeColors({ app: "source-256" }),
+      { app: expected },
+    );
+    await __iconThemeColorInternals.resolveThemeColor("app", "source-1", extractor);
+    assert.equal(extractions, 258, "an evicted source is extracted again");
+  }
+});
+
+await runTest("one failed source serves new identifiers without retaining per-identifier state", async () => {
+  __iconThemeColorInternals.resetThemeColorCaches();
+  let extractions = 0;
+  for (let index = 0; index < 600; index += 1) {
+    const identifier = `app-${index}.exe`;
+    assert.equal(
+      await __iconThemeColorInternals.resolveThemeColor(identifier, "shared-broken-source", async () => {
+        extractions += 1;
+        return null;
+      }),
+      __iconThemeColorInternals.fallbackThemeColor(identifier),
+    );
+  }
+  assert.equal(extractions, 1);
+  const freshIdentifier = "not-previously-requested.exe";
+  assert.deepEqual(
+    __iconThemeColorInternals.readCachedThemeColors({ [freshIdentifier]: "shared-broken-source" }),
+    { [freshIdentifier]: __iconThemeColorInternals.fallbackThemeColor(freshIdentifier) },
+  );
+});
+
+await runTest("reset isolates unresolved extraction and persistence from the new request", async () => {
+  __iconThemeColorInternals.resetThemeColorCaches();
+  const persisted: string[] = [];
+  configureIconThemeColorPersistence({ read: () => null, remember: (_source, color) => persisted.push(color) });
+  try {
+    let releaseOld!: (color: string) => void;
+    let releaseNew!: (color: string) => void;
+    const old = __iconThemeColorInternals.resolveThemeColor("app", "shared", () => new Promise((resolve) => {
+      releaseOld = resolve;
+    }));
+    await Promise.resolve();
+    __iconThemeColorInternals.resetThemeColorCaches();
+    let newExtractions = 0;
+    const next = __iconThemeColorInternals.resolveThemeColor("app", "shared", () => {
+      newExtractions += 1;
+      return new Promise((resolve) => { releaseNew = resolve; });
+    });
+    await Promise.resolve();
+    releaseOld("#111111");
+    assert.equal(await old, "#111111");
+    assert.deepEqual(__iconThemeColorInternals.readCachedThemeColors({ app: "shared" }), {});
+    assert.deepEqual(persisted, []);
+    const concurrent = __iconThemeColorInternals.resolveThemeColor("second", "shared", async () => {
+      newExtractions += 1;
+      return "#333333";
+    });
+    releaseNew("#222222");
+    assert.deepEqual(await Promise.all([next, concurrent]), ["#222222", "#222222"]);
+    assert.equal(newExtractions, 1);
+    assert.deepEqual(persisted, ["#222222"]);
+    assert.deepEqual(
+      __iconThemeColorInternals.readCachedThemeColors({ app: "shared" }),
+      { app: "#222222" },
+    );
+  } finally {
+    configureIconThemeColorPersistence(null);
+    __iconThemeColorInternals.resetThemeColorCaches();
+  }
+});
+
+await runTest("prewarming more sources than the cache retains returns every requested color", async () => {
+  const originals = ["Image", "document"].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
+  class TestImage {
+    src = "";
+    naturalWidth = SIZE;
+    naturalHeight = SIZE;
+    async decode() {
+      if (this.src.includes("broken")) throw new Error("fixture decode failure");
+    }
+  }
+  Object.defineProperty(globalThis, "Image", { configurable: true, value: TestImage });
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: {
+      createElement: () => ({
+        getContext: () => ({
+          clearRect: () => undefined,
+          drawImage: () => undefined,
+          getImageData: () => ({ data: createIcon([69, 135, 244]) }),
+        }),
+      }),
+    },
+  });
+  try {
+    for (const sourceKind of ["valid", "broken"]) {
+      __iconThemeColorInternals.resetThemeColorCaches();
+      const icons = Object.fromEntries(Array.from({ length: 300 }, (_, index) => [`app-${index}`, `${sourceKind}-${index}`]));
+      const colors = await prewarmIconThemeColors(icons);
+      assert.equal(Object.keys(colors).length, 300);
+      for (const identifier of Object.keys(icons)) {
+        assert.equal(colors[identifier], sourceKind === "valid" ? "#4587f4" : __iconThemeColorInternals.fallbackThemeColor(identifier));
+      }
+      assert.deepEqual(__iconThemeColorInternals.readCachedThemeColors({ first: icons["app-0"] }), {});
+    }
+  } finally {
+    for (const [key, descriptor] of originals) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+    __iconThemeColorInternals.resetThemeColorCaches();
+  }
 });
 
 await runTest("extracted colors survive a rebuilt WebView and invalidate when the icon changes", async () => {

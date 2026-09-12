@@ -28,21 +28,15 @@ function normalizeRequestedExeNames(exeNames: readonly (string | null | undefine
   return result;
 }
 
-function mergeIconMaps(
+function reuseEqualIconSnapshot(
   currentIcons: Record<string, string>,
   nextIcons: Record<string, string>,
 ): Record<string, string> {
-  let changed = false;
-  const merged = { ...currentIcons };
-
-  for (const [key, icon] of Object.entries(nextIcons)) {
-    if (!key.trim() || !icon || merged[key] === icon) continue;
-
-    merged[key] = icon;
-    changed = true;
-  }
-
-  return changed ? merged : currentIcons;
+  const entries = Object.entries(nextIcons);
+  return Object.keys(currentIcons).length === entries.length
+    && entries.every(([key, icon]) => currentIcons[key] === icon)
+    ? currentIcons
+    : nextIcons;
 }
 
 export function useRequestedAppIcons({
@@ -71,7 +65,8 @@ export function useRequestedAppIcons({
         if (cancelled) return;
 
         startTransition(() => {
-          setLoadedIcons((currentIcons) => mergeIconMaps(currentIcons, nextIcons));
+          // Loaders return the bounded cache snapshot; accumulating old snapshots defeats its eviction.
+          setLoadedIcons((currentIcons) => reuseEqualIconSnapshot(currentIcons, nextIcons));
         });
       })
       .catch((error) => {
