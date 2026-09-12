@@ -416,7 +416,150 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
     }
   };
 
+  await runTest("history renders complete 23 and 25 hour local days without next-day activity", async () => {
+    const storedBefore = await evaluate(client, sessionId, `Object.entries(localStorage)`) as [string, string][];
+    let scriptId: string | null = null;
+    try {
+      await client.command("Emulation.setTimezoneOverride", { timezoneId: "America/New_York" }, sessionId);
+      for (const [monthIndex, day, dayHours] of [[2, 8, 23], [10, 1, 25]]) {
+        const setup = await client.command("Page.addScriptToEvaluateOnNewDocument", { source: `(() => {
+          const RealDate = Date;
+          const dayStart = new RealDate(2026, ${monthIndex}, ${day}).getTime();
+          const dayEnd = new RealDate(2026, ${monthIndex}, ${day + 1}).getTime();
+          const now = new RealDate(2026, ${monthIndex}, ${day + 1}, 12).getTime();
+          globalThis.Date = new Proxy(RealDate, {
+            construct(target, args) { return new target(...(args.length ? args : [now])); },
+            get(target, key) { return key === 'now' ? () => now : Reflect.get(target, key); },
+          });
+          localStorage.clear();
+          localStorage.setItem('__time_tracker_smoke_settings', JSON.stringify({ language: 'zh-CN', web_activity_enabled: '1' }));
+          localStorage.setItem('patina:history-timeline-mode', 'app');
+          localStorage.setItem('patina:history-day-distribution-mode', 'app');
+          localStorage.setItem('patina:history-timeline-zoom-hours', '4');
+          const startTime = dayEnd - 30 * 60_000;
+          const endTime = dayEnd + 30 * 60_000;
+          const session = { id: 9701, origin: 'native', app_name: 'Cursor', exe_name: 'cursor.exe',
+            window_title: 'DST midnight crossing', start_time: startTime, end_time: endTime,
+            duration: endTime - startTime, continuity_group_start_time: startTime };
+          const web = { id: 9702, browser_client_id: 'smoke-dst', browser_kind: 'chrome', browser_exe_name: 'chrome.exe',
+            domain: 'stable.example', normalized_domain: 'stable.example', url: 'https://stable.example/dst',
+            title: 'DST web midnight crossing', favicon_url: null, start_time: startTime, end_time: endTime,
+            duration: endTime - startTime };
+          globalThis.__TIME_TRACKER_ENABLE_WEB_FIXTURE = true;
+          globalThis.__PATINA_SQL_SELECT_HOOK = (query) => {
+            if (query.includes('from session_title_samples')) return [];
+            if (query.includes('from web_activity_segments')) return [web];
+            if (query.includes('min(start_time)')) return [{ earliest_start_time: dayStart }];
+            if (query.includes('from sessions') && !query.startsWith('select distinct')) return query.includes('effective_end_time')
+              ? [{ ...session, record_id: session.id, effective_end_time: endTime, capacity_end_time: null }] : [session];
+          };
+          globalThis.__PATINA_AGGREGATE_HOOK = ({ startMs, endMs }) => ({
+            records: endTime > startMs && startTime < endMs ? [{ appName: 'Cursor', exeName: 'cursor.exe',
+              startTime: Math.max(startTime, startMs), endTime: Math.min(endTime, endMs) }] : [],
+            readPath: 'projection', fallbackReason: null, sourceRevision: 97, projectionRowCount: 1,
+            factRowCount: 0, hasActiveSession: false,
+          });
+        })()` }, sessionId) as { identifier: string };
+        scriptId = setup.identifier;
+        const origin = await evaluate(client, sessionId, "performance.timeOrigin");
+        await client.command("Page.navigate", { url: appUrl }, sessionId);
+        await waitForExpression(client, sessionId, `performance.timeOrigin !== ${origin} && Boolean(document.querySelector('[aria-label="历史"]'))`);
+        assert.equal(await evaluate(client, sessionId, `Intl.DateTimeFormat().resolvedOptions().timeZone`), "America/New_York");
+        await evaluate(client, sessionId, `document.querySelector('[aria-label="历史"]').click()`);
+        await waitForExpression(client, sessionId, `Boolean(document.querySelector('.history-date-label'))`);
+        await evaluate(client, sessionId, `document.querySelector('.history-date-label').parentElement.previousElementSibling.click()`);
+        const dateKey = `2026-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        await waitForExpression(client, sessionId, `document.querySelector('[data-history-content-date="${dateKey}"]')?.getAttribute('data-history-content-state') === 'ready'`);
+        assert.equal(await evaluate(client, sessionId, `document.querySelector('.history-date-label')?.textContent`), DATE_TEXT.yesterday);
+        assert.equal(await evaluate(client, sessionId, `document.querySelector('.history-day-summary-value')?.textContent`), "30m");
+        const overview = ".history-overview-timeline-card .history-horizontal-timeline";
+        const assertTimeline = async (selector: string, label: string) => {
+          const state = await evaluate(client, sessionId, `(() => {
+            const timeline = document.querySelector(${jsonString(selector)});
+            const segment = timeline?.querySelector('.history-horizontal-timeline-segment');
+            const rect = segment?.getBoundingClientRect();
+            return { hours: Number(timeline?.getAttribute('data-history-timeline-zoom-hours')),
+              start: Number(timeline?.getAttribute('data-history-timeline-window-start')),
+              end: Number(timeline?.getAttribute('data-history-timeline-window-end')),
+              segments: timeline?.querySelectorAll('.history-horizontal-timeline-segment').length,
+              label: segment?.querySelector('[aria-label]')?.getAttribute('aria-label'), width: rect?.width ?? 0,
+              expectedStart: new Date(2026, ${monthIndex}, ${day}).getTime(),
+              expectedEnd: new Date(2026, ${monthIndex}, ${day + 1}).getTime() };
+          })()`) as { hours: number; start: number; end: number; segments: number; label: string; width: number; expectedStart: number; expectedEnd: number };
+          assert.equal(state.segments, 1, `${label} must retain its 23:30 local segment`);
+          assert.equal(state.hours, dayHours, `${label} must use the actual local day length`);
+          assert.equal(state.start, state.expectedStart);
+          assert.equal(state.end, state.expectedEnd);
+          assert.match(state.label, /23:30 - 24:00 30m$/);
+          assert.ok(state.label.includes(label));
+          assert.ok(state.width > 0, "the last local half hour must have visible geometry");
+        };
+        await assertTimeline(overview, "Cursor");
+        await evaluate(client, sessionId, `document.querySelector('.history-overview-timeline-card .history-horizontal-timeline-mode-toggle').click()`);
+        await waitForExpression(client, sessionId, `document.querySelector(${jsonString(overview)})?.getAttribute('data-history-timeline-mode') === 'category'`);
+        await evaluate(client, sessionId, `document.querySelector('.history-overview-timeline-card .history-horizontal-timeline-mode-toggle').click()`);
+        await waitForExpression(client, sessionId, `document.querySelector(${jsonString(overview)})?.getAttribute('data-history-timeline-mode') === 'web'
+          && Boolean(document.querySelector(${jsonString(overview)})?.querySelector('.history-horizontal-timeline-segment'))`);
+        await assertTimeline(overview, "stable.example");
+        await evaluate(client, sessionId, `Array.from(document.querySelectorAll('.history-day-distribution-mode-switch button')).find(button => button.textContent === '网页').click()`);
+        await waitForExpression(client, sessionId, `document.querySelector('.history-app-distribution-card')?.textContent?.includes('stable.example')`);
+        assert.equal(await evaluate(client, sessionId, `document.querySelector('.history-day-distribution-detail-trigger').closest('.mb-1').querySelector(':scope > span:last-child').textContent`), "30m · 100%");
+        await evaluate(client, sessionId, `document.querySelector('.history-overview-timeline-card .history-timeline-zoom-open').click()`);
+        await waitForExpression(client, sessionId, `Boolean(document.querySelector('.history-timeline-hour-slider input'))`);
+        assert.equal(await evaluate(client, sessionId, `document.querySelector('.history-timeline-hour-slider input').max`), String(dayHours));
+        await waitForAnimationFrames(client, sessionId, 2);
+        await evaluate(client, sessionId, `document.querySelector('.history-timeline-hour-slider input').focus()`);
+        assert.equal(await evaluate(client, sessionId, `document.activeElement?.matches('.history-timeline-hour-slider input')`), true);
+        await client.command("Input.dispatchKeyEvent", { type: "keyDown", key: "End", code: "End", windowsVirtualKeyCode: 35 }, sessionId);
+        await client.command("Input.dispatchKeyEvent", { type: "keyUp", key: "End", code: "End", windowsVirtualKeyCode: 35 }, sessionId);
+        await waitForExpression(client, sessionId, `document.querySelector('.history-timeline-hour-slider input').value === '${dayHours}'`);
+        await assertTimeline(".history-timeline-zoom-dialog-timeline .history-horizontal-timeline", "stable.example");
+        assert.equal(await evaluate(client, sessionId, `localStorage.getItem('patina:history-timeline-zoom-hours')`), String(dayHours));
+        await evaluate(client, sessionId, `document.querySelector('.history-timeline-zoom-dialog-surface [aria-label="关闭"]').click()`);
+        await waitForExpression(client, sessionId, `!document.querySelector('.history-timeline-zoom-dialog-surface')`);
+        await evaluate(client, sessionId, `document.querySelector('.history-overview-timeline-card .history-timeline-zoom-open').click()`);
+        await waitForExpression(client, sessionId, `document.querySelector('.history-timeline-hour-slider input')?.value === '${dayHours}'`);
+        await assertTimeline(".history-timeline-zoom-dialog-timeline .history-horizontal-timeline", "stable.example");
+        await client.command("Page.removeScriptToEvaluateOnNewDocument", { identifier: scriptId }, sessionId);
+        scriptId = null;
+      }
+    } finally {
+      if (scriptId) await client.command("Page.removeScriptToEvaluateOnNewDocument", { identifier: scriptId }, sessionId);
+      await client.command("Emulation.setTimezoneOverride", { timezoneId: "" }, sessionId);
+      await evaluate(client, sessionId, `(() => { localStorage.clear(); for (const [key, value] of ${JSON.stringify(storedBefore)}) localStorage.setItem(key, value); })()`);
+      const origin = await evaluate(client, sessionId, "performance.timeOrigin");
+      await client.command("Page.navigate", { url: appUrl }, sessionId);
+      await waitForExpression(client, sessionId, `performance.timeOrigin !== ${origin} && Boolean(document.querySelector('main'))`);
+    }
+  });
+
   await runTest("history date picker uses the shared calendar skeleton", async () => {
+    const pressKey = async (key: "Enter" | "Escape" | "ArrowLeft" | "ArrowRight") => {
+      const windowsVirtualKeyCode = { Enter: 13, Escape: 27, ArrowLeft: 37, ArrowRight: 39 }[key];
+      await client.command("Input.dispatchKeyEvent", { type: "keyDown", key, code: key, windowsVirtualKeyCode,
+        ...(key === "Enter" ? { text: "\r", unmodifiedText: "\r", nativeVirtualKeyCode: 13 } : {}) }, sessionId);
+      await client.command("Input.dispatchKeyEvent", { type: "keyUp", key, code: key, windowsVirtualKeyCode }, sessionId);
+    };
+    const openCalendar = async () => {
+      await evaluate(client, sessionId, `document.querySelector('.history-date-label').focus()`);
+      await pressKey("Enter");
+      await waitForExpression(client, sessionId, `document.activeElement?.matches('.history-calendar-popover [data-selected="true"]')`);
+    };
+    const waitForClosedCalendar = async () => {
+      await waitForExpression(client, sessionId, `!document.querySelector('.history-calendar-popover')
+        && document.activeElement?.matches('.history-date-label')`);
+      assert.equal(await evaluate(client, sessionId, `document.querySelector('.history-date-label')?.getAttribute('aria-expanded')`), "false");
+    };
+    const showMonth = async (target: string) => {
+      const visibleMonth = `document.querySelector('.history-calendar-popover [data-calendar-date]:not([data-muted])')?.getAttribute('data-calendar-date')?.slice(0, 7)`;
+      for (let step = 0; step < 24; step += 1) {
+        const current = String(await evaluate(client, sessionId, visibleMonth));
+        if (current === target) return;
+        await evaluate(client, sessionId, `document.querySelector('.history-calendar-popover [aria-label="${current > target ? "上个月" : "下个月"}"]').click()`);
+        await waitForExpression(client, sessionId, `${visibleMonth} !== ${jsonString(current)}`);
+      }
+      assert.fail(`calendar did not reach ${target}`);
+    };
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
@@ -429,18 +572,54 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
       true,
     );
     await waitForExpression(client!, sessionId, `Boolean(document.querySelector(".history-date-label"))`);
+    const dateControls = await evaluate(client!, sessionId, `(() => {
+      const trigger = document.querySelector('.history-date-label');
+      const arrows = Array.from(trigger.parentElement.parentElement.querySelectorAll(':scope > button'));
+      return {
+        names: arrows.map((button) => button.getAttribute('aria-label')),
+        tag: trigger.tagName,
+        expanded: trigger.getAttribute('aria-expanded'),
+        popup: trigger.getAttribute('aria-haspopup'),
+        fontSize: getComputedStyle(trigger).fontSize,
+        fontWeight: getComputedStyle(trigger).fontWeight,
+        lineHeight: getComputedStyle(trigger).lineHeight,
+        height: trigger.getBoundingClientRect().height,
+      };
+    })()`) as { names: string[]; tag: string; expanded: string; popup: string; fontSize: string; fontWeight: string; lineHeight: string; height: number };
+    assert.equal(dateControls.names.length, 2);
+    assert.ok(dateControls.names.every((name) => typeof name === "string" && name.trim().length > 0));
+    assert.equal(dateControls.tag, "BUTTON");
+    assert.equal(dateControls.expanded, "false");
+    assert.equal(dateControls.popup, "dialog");
+    assert.equal(dateControls.fontSize, "12px");
+    assert.equal(dateControls.fontWeight, "600");
+    assert.equal(dateControls.lineHeight, "16px");
+    assert.equal(dateControls.height, 30);
+    const accessibilityTree = await client!.command("Accessibility.getFullAXTree", {}, sessionId) as {
+      nodes: Array<{ role?: { value?: string }; name?: { value?: string } }>;
+    };
+    for (const name of dateControls.names) {
+      assert.ok(accessibilityTree.nodes.some((node) => node.role?.value === "button" && node.name?.value === name),
+        `history date arrow must expose its computed accessible name: ${name}`);
+    }
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
           const trigger = document.querySelector(".history-date-label");
           if (!trigger) return false;
-          trigger.click();
+          trigger.focus();
           return true;
         })()
       `),
       true,
     );
+    await client!.command("Input.dispatchKeyEvent", {
+      type: "keyDown", key: "Enter", code: "Enter", text: "\r", unmodifiedText: "\r", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13,
+    }, sessionId);
+    await client!.command("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, sessionId);
     await waitForExpression(client!, sessionId, `Boolean(document.querySelector(".history-calendar-popover.qp-calendar-popover"))`);
+    assert.equal(await evaluate(client!, sessionId, `document.querySelector('.history-date-label')?.getAttribute('aria-expanded')`), "true");
+    assert.equal(await evaluate(client!, sessionId, `document.querySelector('.history-date-label')?.getAttribute('aria-controls') === document.querySelector('.history-calendar-popover')?.id`), true);
     await waitForExpression(
       client!,
       sessionId,
@@ -481,25 +660,53 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
       `),
       true,
     );
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (() => {
-          const selected = document.querySelector('.history-calendar-popover .qp-calendar-day[data-selected="true"]');
-          if (!selected) return false;
-          selected.click();
-          return true;
-        })()
-      `),
-      true,
-    );
-    await waitForExpression(client!, sessionId, `!document.querySelector(".history-calendar-popover")`);
-    await waitForExpression(
-      client!,
-      sessionId,
-      `document.activeElement?.classList.contains('history-date-label')`,
-      undefined,
-      "history calendar opener focus restoration",
-    );
+    const dates = await evaluate(client, sessionId, `(() => {
+      const today = new Date();
+      const key = date => [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
+      return { today: key(today), yesterday: key(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1)),
+        monthStart: key(new Date(today.getFullYear(), today.getMonth(), 1)),
+        previousMonthEnd: key(new Date(today.getFullYear(), today.getMonth(), 0)),
+        yearStart: key(new Date(today.getFullYear(), 0, 1)), previousYearEnd: key(new Date(today.getFullYear(), 0, 0)) };
+    })()`) as { today: string; yesterday: string; monthStart: string; previousMonthEnd: string; yearStart: string; previousYearEnd: string };
+    await pressKey("ArrowRight");
+    assert.equal(await evaluate(client, sessionId, `document.activeElement?.getAttribute('data-calendar-date')`), dates.today,
+      "calendar keyboard navigation cannot move past today");
+    await pressKey("Escape");
+    await waitForClosedCalendar();
+    assert.equal(await evaluate(client, sessionId, `document.querySelector('.history-date-label')?.textContent`), DATE_TEXT.today);
+    await openCalendar();
+    await pressKey("ArrowLeft");
+    await waitForExpression(client, sessionId, `document.activeElement?.getAttribute('data-calendar-date') === ${jsonString(dates.yesterday)}`,
+      undefined, "ArrowLeft must move actual calendar focus to the previous date");
+    await pressKey("Enter");
+    await waitForClosedCalendar();
+    assert.equal(await evaluate(client, sessionId, `document.querySelector('.history-date-label')?.textContent`), DATE_TEXT.yesterday);
+
+    for (const boundary of [
+      { from: dates.monthStart, to: dates.previousMonthEnd },
+      { from: dates.yearStart, to: dates.previousYearEnd },
+    ]) {
+      await openCalendar();
+      await showMonth(boundary.from.slice(0, 7));
+      await evaluate(client, sessionId, `document.querySelector('[data-calendar-date="${boundary.from}"]').focus()`);
+      await pressKey("ArrowLeft");
+      await waitForExpression(client, sessionId, `document.activeElement?.getAttribute('data-calendar-date') === ${jsonString(boundary.to)}
+        && document.querySelector('.history-calendar-popover [data-calendar-date]:not([data-muted])')?.getAttribute('data-calendar-date')?.startsWith(${jsonString(boundary.to.slice(0, 7))})`,
+        undefined, "calendar focus and visible month must cross the date boundary together");
+      await pressKey("Enter");
+      await waitForClosedCalendar();
+      await openCalendar();
+      assert.equal(await evaluate(client, sessionId, `document.querySelector('.history-calendar-popover [data-selected="true"]')?.getAttribute('data-calendar-date')`), boundary.to);
+      await pressKey("Escape");
+      await waitForClosedCalendar();
+    }
+    await openCalendar();
+    await showMonth(dates.today.slice(0, 7));
+    await evaluate(client, sessionId, `document.querySelector('[data-calendar-date="${dates.today}"]').focus()`);
+    await pressKey("Enter");
+    await waitForClosedCalendar();
+    assert.equal(await evaluate(client, sessionId, `document.querySelector('.history-date-label')?.textContent`), DATE_TEXT.today);
+    assert.equal(await evaluate(client, sessionId, `document.querySelector('.history-date-label').parentElement.nextElementSibling.disabled`), true);
   });
 
   await runTest("history hourly chart toggles category layers", async () => {
@@ -961,29 +1168,124 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
   });
 
   await runTest("history app icons reuse the shared quick classification surface", async () => {
-    await waitForExpression(
-      client!,
-      sessionId,
-      `Boolean(document.querySelector(
-        '.history-app-distribution-card .history-day-distribution-detail-trigger[aria-haspopup="menu"]',
-      ))`,
-    );
-    assert.equal(
+    const settingsBefore = await evaluate(client!, sessionId, `localStorage.getItem('__time_tracker_smoke_settings')`);
+    try {
+      await waitForExpression(
+        client!,
+        sessionId,
+        `Boolean(document.querySelector(
+          '.history-app-distribution-card .history-day-distribution-detail-trigger[aria-haspopup="menu"]',
+        ))`,
+      );
+      assert.equal(
+        await evaluate(client!, sessionId, `
+          (() => {
+            const trigger = Array.from(document.querySelectorAll(
+              '.history-app-distribution-card .history-day-distribution-detail-trigger[aria-haspopup="menu"]',
+            )).find((node) => node.getAttribute("aria-label")?.includes(
+              "Extremely Long Research Workbench Application Name",
+            ));
+            if (!(trigger instanceof HTMLButtonElement)) return false;
+            window.__historyQuickMenuTrace = { sawCategoryMenu: false };
+            window.__historyQuickMenuObserver = new MutationObserver(() => {
+              if (document.querySelector('.quick-classification-category-menu')) {
+                window.__historyQuickMenuTrace.sawCategoryMenu = true;
+              }
+            });
+            window.__historyQuickMenuObserver.observe(document.body, { childList: true, subtree: true });
+            const rect = trigger.getBoundingClientRect();
+            trigger.dispatchEvent(new MouseEvent("contextmenu", {
+              bubbles: true,
+              cancelable: true,
+              button: 2,
+              clientX: rect.left + rect.width / 2,
+              clientY: rect.top + rect.height / 2,
+            }));
+            return !trigger.hasAttribute("title");
+          })()
+        `),
+        true,
+        "history app icons must not expose native title tooltips",
+      );
+      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-classification-menu[role="menu"]'))`);
+      await waitForAnimationFrames(client!, sessionId, 2);
+      assert.deepEqual(
+        await evaluate(client!, sessionId, `
+          (() => {
+            window.__historyQuickMenuObserver?.disconnect();
+            const trace = window.__historyQuickMenuTrace ?? null;
+            delete window.__historyQuickMenuObserver;
+            delete window.__historyQuickMenuTrace;
+            return {
+              labels: Array.from(document.querySelectorAll(
+                '.quick-classification-menu[role="menu"] > .quick-classification-menu-item',
+              )).map((item) => item.textContent?.trim()),
+              sawCategoryMenu: trace?.sawCategoryMenu ?? true,
+              detailOpen: Boolean(document.querySelector('.destination-detail-dialog')),
+            };
+          })()
+        `),
+        {
+          labels: ["更改名称", "更改分类"],
+          sawCategoryMenu: false,
+          detailOpen: false,
+        },
+        "the category submenu must wait for an explicit click without flashing",
+      );
+      await evaluate(client!, sessionId, `
+        Array.from(document.querySelectorAll(
+          '.quick-classification-menu[role="menu"] > .quick-classification-menu-item',
+        )).find((item) => item.textContent?.trim() === "更改名称")?.click()
+      `);
+      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-dialog-surface input'))`);
+      await evaluate(client!, sessionId, `
+        (() => {
+          const input = document.querySelector('.qp-dialog-surface input');
+          if (!(input instanceof HTMLInputElement)) return false;
+          const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+          setter?.call(input, "Research Desk");
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+          return true;
+        })()
+      `);
+      await evaluate(client!, sessionId, `
+        Array.from(document.querySelectorAll('.qp-dialog-surface button'))
+          .find((button) => button.textContent?.trim() === "保存")?.click()
+      `);
+      await waitForExpression(
+        client!,
+        sessionId,
+        `document.querySelector('.history-app-distribution-card')?.textContent?.includes("Research Desk")`,
+      );
+      await waitForExpression(
+        client!,
+        sessionId,
+        `Array.from(document.querySelectorAll(".qp-toast-message")).at(-1)?.textContent?.trim() === "已保存"`,
+      );
+      const savedAppRename = JSON.parse(String(await evaluate(client!, sessionId, `
+        JSON.stringify((globalThis.__TIME_TRACKER_CLASSIFICATION_MUTATIONS ?? [])
+          .filter((mutation) => mutation.key === "__app_override::deep-research-workbench.exe")
+          .at(-1) ?? null)
+      `))) as { key: string; value: string | null } | null;
+      assert.ok(savedAppRename);
+      const savedAppRenameValue = JSON.parse(savedAppRename.value ?? "null");
+      assert.deepEqual(savedAppRenameValue, {
+        category: "office",
+        displayName: "Research Desk",
+        color: null,
+        track: true,
+        captureTitle: true,
+        enabled: true,
+        updatedAt: savedAppRenameValue.updatedAt,
+      });
+
       await evaluate(client!, sessionId, `
         (() => {
           const trigger = Array.from(document.querySelectorAll(
             '.history-app-distribution-card .history-day-distribution-detail-trigger[aria-haspopup="menu"]',
-          )).find((node) => node.getAttribute("aria-label")?.includes(
-            "Extremely Long Research Workbench Application Name",
-          ));
+          )).find((node) => node.getAttribute("aria-label")?.includes("Research Desk"));
           if (!(trigger instanceof HTMLButtonElement)) return false;
-          window.__historyQuickMenuTrace = { sawCategoryMenu: false };
-          window.__historyQuickMenuObserver = new MutationObserver(() => {
-            if (document.querySelector('.quick-classification-category-menu')) {
-              window.__historyQuickMenuTrace.sawCategoryMenu = true;
-            }
-          });
-          window.__historyQuickMenuObserver.observe(document.body, { childList: true, subtree: true });
           const rect = trigger.getBoundingClientRect();
           trigger.dispatchEvent(new MouseEvent("contextmenu", {
             bubbles: true,
@@ -992,178 +1294,95 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
             clientX: rect.left + rect.width / 2,
             clientY: rect.top + rect.height / 2,
           }));
-          return !trigger.hasAttribute("title");
+          return true;
         })()
-      `),
-      true,
-      "history app icons must not expose native title tooltips",
-    );
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-classification-menu[role="menu"]'))`);
-    await waitForAnimationFrames(client!, sessionId, 2);
-    assert.deepEqual(
+      `);
+      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-classification-menu[role="menu"]'))`);
       await evaluate(client!, sessionId, `
-        (() => {
-          window.__historyQuickMenuObserver?.disconnect();
-          const trace = window.__historyQuickMenuTrace ?? null;
-          delete window.__historyQuickMenuObserver;
-          delete window.__historyQuickMenuTrace;
-          return {
-            labels: Array.from(document.querySelectorAll(
-              '.quick-classification-menu[role="menu"] > .quick-classification-menu-item',
-            )).map((item) => item.textContent?.trim()),
-            sawCategoryMenu: trace?.sawCategoryMenu ?? true,
-            detailOpen: Boolean(document.querySelector('.destination-detail-dialog')),
-          };
-        })()
-      `),
-      {
-        labels: ["更改名称", "更改分类"],
-        sawCategoryMenu: false,
-        detailOpen: false,
-      },
-      "the category submenu must wait for an explicit click without flashing",
-    );
-    await evaluate(client!, sessionId, `
-      Array.from(document.querySelectorAll(
-        '.quick-classification-menu[role="menu"] > .quick-classification-menu-item',
-      )).find((item) => item.textContent?.trim() === "更改名称")?.click()
-    `);
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-dialog-surface input'))`);
-    await evaluate(client!, sessionId, `
-      (() => {
-        const input = document.querySelector('.qp-dialog-surface input');
-        if (!(input instanceof HTMLInputElement)) return false;
-        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-        setter?.call(input, "Research Desk");
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-        input.dispatchEvent(new Event("change", { bubbles: true }));
-        return true;
-      })()
-    `);
-    await evaluate(client!, sessionId, `
-      Array.from(document.querySelectorAll('.qp-dialog-surface button'))
-        .find((button) => button.textContent?.trim() === "保存")?.click()
-    `);
-    await waitForExpression(
-      client!,
-      sessionId,
-      `document.querySelector('.history-app-distribution-card')?.textContent?.includes("Research Desk")`,
-    );
-    await waitForExpression(
-      client!,
-      sessionId,
-      `Array.from(document.querySelectorAll(".qp-toast-message")).at(-1)?.textContent?.trim() === "已保存"`,
-    );
-    const savedAppRename = JSON.parse(String(await evaluate(client!, sessionId, `
-      JSON.stringify((globalThis.__TIME_TRACKER_CLASSIFICATION_MUTATIONS ?? [])
-        .filter((mutation) => mutation.key === "__app_override::deep-research-workbench.exe")
-        .at(-1) ?? null)
-    `))) as { key: string; value: string | null } | null;
-    assert.ok(savedAppRename);
-    const savedAppRenameValue = JSON.parse(savedAppRename.value ?? "null");
-    assert.deepEqual(savedAppRenameValue, {
-      category: "office",
-      displayName: "Research Desk",
-      color: null,
-      track: true,
-      captureTitle: true,
-      enabled: true,
-      updatedAt: savedAppRenameValue.updatedAt,
-    });
-
-    await evaluate(client!, sessionId, `
-      (() => {
-        const trigger = Array.from(document.querySelectorAll(
+        Array.from(document.querySelectorAll(
+          '.quick-classification-menu[role="menu"] > .quick-classification-menu-item',
+        )).find((item) => item.textContent?.includes("分类"))?.click()
+      `);
+      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-classification-category-menu'))`);
+      await evaluate(client!, sessionId, `
+        Array.from(document.querySelectorAll(
+          '.quick-classification-category-menu [role="menuitemradio"]',
+        )).find((item) => item.textContent?.includes("未分类"))?.click()
+      `);
+      await waitForExpression(client!, sessionId, `!document.querySelector('.quick-classification-menu[role="menu"]')`);
+      await waitForExpression(
+        client!,
+        sessionId,
+        `Boolean(document.querySelector('.history-day-distribution-name-row .qp-badge'))
+          && document.querySelector('.history-app-distribution-card')?.textContent?.includes("Research Desk")`,
+      );
+      await waitForExpression(
+        client!,
+        sessionId,
+        `Array.from(document.querySelectorAll(".qp-toast-message")).at(-1)?.textContent?.trim() === "已保存"`,
+      );
+      const savedAppCategory = JSON.parse(String(await evaluate(client!, sessionId, `
+        JSON.stringify((globalThis.__TIME_TRACKER_CLASSIFICATION_MUTATIONS ?? [])
+          .filter((mutation) => mutation.key === "__app_override::deep-research-workbench.exe")
+          .at(-1) ?? null)
+      `))) as { key: string; value: string | null } | null;
+      assert.ok(savedAppCategory);
+      assert.equal(JSON.parse(savedAppCategory.value ?? "null")?.displayName, "Research Desk");
+      assert.equal(JSON.parse(savedAppCategory.value ?? "null")?.category, null);
+      const historyBadgeMetrics = JSON.parse(String(await evaluate(client!, sessionId, `
+          (() => {
+            const badge = document.querySelector('.history-day-distribution-name-row .qp-badge');
+            const name = badge?.closest('.history-day-distribution-name-row')
+              ?.querySelector(':scope > span:first-child');
+            if (!(badge instanceof HTMLElement) || !(name instanceof HTMLElement)) return null;
+            const badgeRect = badge.getBoundingClientRect();
+            const nameRect = name.getBoundingClientRect();
+            const style = getComputedStyle(badge);
+            return JSON.stringify({
+              inline: badge.classList.contains('qp-badge-inline'),
+              neutral: badge.classList.contains('qp-badge-neutral'),
+              badgeHeight: badgeRect.height,
+              nameHeight: nameRect.height,
+              fontSize: style.fontSize,
+              fontWeight: style.fontWeight,
+            });
+          })()
+        `))) as {
+        inline: boolean;
+        neutral: boolean;
+        badgeHeight: number;
+        nameHeight: number;
+        fontSize: string;
+        fontWeight: string;
+      };
+      assert.ok(historyBadgeMetrics);
+      assert.equal(historyBadgeMetrics.inline, true);
+      assert.equal(historyBadgeMetrics.neutral, true);
+      assert.ok(
+        Math.abs(historyBadgeMetrics.badgeHeight - historyBadgeMetrics.nameHeight) <= 2,
+        `History should use the compact name-line badge density: ${JSON.stringify(historyBadgeMetrics)}`,
+      );
+      assert.equal(historyBadgeMetrics.fontSize, "9px");
+      assert.equal(historyBadgeMetrics.fontWeight, "500");
+      await waitForExpression(
+        client!,
+        sessionId,
+        `document.activeElement?.matches(
           '.history-app-distribution-card .history-day-distribution-detail-trigger[aria-haspopup="menu"]',
-        )).find((node) => node.getAttribute("aria-label")?.includes("Research Desk"));
-        if (!(trigger instanceof HTMLButtonElement)) return false;
-        const rect = trigger.getBoundingClientRect();
-        trigger.dispatchEvent(new MouseEvent("contextmenu", {
-          bubbles: true,
-          cancelable: true,
-          button: 2,
-          clientX: rect.left + rect.width / 2,
-          clientY: rect.top + rect.height / 2,
-        }));
-        return true;
-      })()
-    `);
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-classification-menu[role="menu"]'))`);
-    await evaluate(client!, sessionId, `
-      Array.from(document.querySelectorAll(
-        '.quick-classification-menu[role="menu"] > .quick-classification-menu-item',
-      )).find((item) => item.textContent?.includes("分类"))?.click()
-    `);
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-classification-category-menu'))`);
-    await evaluate(client!, sessionId, `
-      Array.from(document.querySelectorAll(
-        '.quick-classification-category-menu [role="menuitemradio"]',
-      )).find((item) => item.textContent?.includes("未分类"))?.click()
-    `);
-    await waitForExpression(client!, sessionId, `!document.querySelector('.quick-classification-menu[role="menu"]')`);
-    await waitForExpression(
-      client!,
-      sessionId,
-      `Boolean(document.querySelector('.history-day-distribution-name-row .qp-badge'))
-        && document.querySelector('.history-app-distribution-card')?.textContent?.includes("Research Desk")`,
-    );
-    await waitForExpression(
-      client!,
-      sessionId,
-      `Array.from(document.querySelectorAll(".qp-toast-message")).at(-1)?.textContent?.trim() === "已保存"`,
-    );
-    const savedAppCategory = JSON.parse(String(await evaluate(client!, sessionId, `
-      JSON.stringify((globalThis.__TIME_TRACKER_CLASSIFICATION_MUTATIONS ?? [])
-        .filter((mutation) => mutation.key === "__app_override::deep-research-workbench.exe")
-        .at(-1) ?? null)
-    `))) as { key: string; value: string | null } | null;
-    assert.ok(savedAppCategory);
-    assert.equal(JSON.parse(savedAppCategory.value ?? "null")?.displayName, "Research Desk");
-    assert.equal(JSON.parse(savedAppCategory.value ?? "null")?.category, null);
-    const historyBadgeMetrics = JSON.parse(String(await evaluate(client!, sessionId, `
-        (() => {
-          const badge = document.querySelector('.history-day-distribution-name-row .qp-badge');
-          const name = badge?.closest('.history-day-distribution-name-row')
-            ?.querySelector(':scope > span:first-child');
-          if (!(badge instanceof HTMLElement) || !(name instanceof HTMLElement)) return null;
-          const badgeRect = badge.getBoundingClientRect();
-          const nameRect = name.getBoundingClientRect();
-          const style = getComputedStyle(badge);
-          return JSON.stringify({
-            inline: badge.classList.contains('qp-badge-inline'),
-            neutral: badge.classList.contains('qp-badge-neutral'),
-            badgeHeight: badgeRect.height,
-            nameHeight: nameRect.height,
-            fontSize: style.fontSize,
-            fontWeight: style.fontWeight,
-          });
-        })()
-      `))) as {
-      inline: boolean;
-      neutral: boolean;
-      badgeHeight: number;
-      nameHeight: number;
-      fontSize: string;
-      fontWeight: string;
-    };
-    assert.ok(historyBadgeMetrics);
-    assert.equal(historyBadgeMetrics.inline, true);
-    assert.equal(historyBadgeMetrics.neutral, true);
-    assert.ok(
-      Math.abs(historyBadgeMetrics.badgeHeight - historyBadgeMetrics.nameHeight) <= 2,
-      `History should use the compact name-line badge density: ${JSON.stringify(historyBadgeMetrics)}`,
-    );
-    assert.equal(historyBadgeMetrics.fontSize, "9px");
-    assert.equal(historyBadgeMetrics.fontWeight, "500");
-    await waitForExpression(
-      client!,
-      sessionId,
-      `document.activeElement?.matches(
-        '.history-app-distribution-card .history-day-distribution-detail-trigger[aria-haspopup="menu"]',
-      )`,
-    );
+        )`,
+      );
+    } finally {
+      const origin = await evaluate(client!, sessionId, "performance.timeOrigin");
+      await evaluate(client!, sessionId, `(() => {
+        const settings = ${JSON.stringify(settingsBefore)};
+        if (settings === null) localStorage.removeItem('__time_tracker_smoke_settings');
+        else localStorage.setItem('__time_tracker_smoke_settings', settings);
+        location.reload();
+      })()`);
+      await waitForExpression(client!, sessionId, `performance.timeOrigin !== ${origin} && Boolean(document.querySelector('main'))`,
+        15_000, "restore classification settings after quick-action persistence assertions");
+    }
   });
-
   await runTest("history timeline opens list dialog from timeline axis", async () => {
     await client!.command("Emulation.setDeviceMetricsOverride", {
       width: 2048,
