@@ -101,10 +101,6 @@ export default defineConfig({
             return "react-vendor";
           }
 
-          if (id.includes("framer-motion")) {
-            return "motion";
-          }
-
           if (id.includes("@tauri-apps")) {
             return "tauri";
           }

@@ -18,6 +18,7 @@ const WEBDAV_SOURCE = "src-tauri/src/platform/webdav.rs";
 const CREDENTIALS_SOURCE = "src-tauri/src/platform/credentials.rs";
 const STARTUP_WARMUP_SOURCE = "src/app/services/startupWarmupService.ts";
 const DATA_COMPONENT_SOURCE = "src/features/data/components/Data.tsx";
+const DATA_HEATMAP_SOURCE = "src/features/data/hooks/useDataHeatmapSnapshot.ts";
 const STORAGE_MIGRATION_SOURCE = "src-tauri/src/data/storage_migration.rs";
 const STORAGE_MIGRATION_CLEANUP_SOURCE = "src-tauri/src/data/storage_migration_cleanup.rs";
 
@@ -175,15 +176,9 @@ const SOURCE_CONTRACT_MUTANTS: SourceContractMutant[] = [
   },
   {
     name: "data heatmap rejection loses explicit settled error handling",
-    source: DATA_COMPONENT_SOURCE,
-    search: [
-      "      } catch {",
-      "        if (!cancelled) {",
-      "          setHeatmapError(true);",
-      "        }",
-      "      } finally {",
-    ].join("\n"),
-    replacement: "      } finally {",
+    source: DATA_HEATMAP_SOURCE,
+    search: 'setState((current) => ({ ...current, status: "error" }));',
+    replacement: 'setState((current) => ({ ...current, status: "ready" }));',
     verify: verifyDataHeatmapFailureContract,
   },
   {
@@ -191,7 +186,7 @@ const SOURCE_CONTRACT_MUTANTS: SourceContractMutant[] = [
     source: DATA_COMPONENT_SOURCE,
     search: "&& isDataHeatmapSelectionSettled(yearSessionsView, selectedHeatmapView, heatmapColdError)",
     replacement: "&& yearSessionsView === selectedHeatmapView",
-    verify: verifyDataHeatmapFailureContract,
+    verify: verifyDataHeatmapCompletionContract,
   },
   {
     name: "main-only command is reclassified as widget-shared",
@@ -392,11 +387,12 @@ function verifyStartupWarmupIdentityContract(source: string) {
 }
 
 function verifyDataHeatmapFailureContract(source: string) {
-  const heatmapLoad = source.match(
-    /const loadYearSnapshot = async \(\) => \{[\s\S]*?\n    \};/,
-  )?.[0] ?? "";
-  assert.match(heatmapLoad, /catch \{[\s\S]*?setHeatmapError\(true\)/);
-  assert.match(heatmapLoad, /finally \{[\s\S]*?setHeatmapLoading\(false\)/);
+  assert.match(source, /catch \(error\) \{\s*if \(cancelled\) return;[\s\S]*?setState\(\(current\) => \(\{ \.\.\.current, status: "error" \}\)\)/);
+  assert.match(source, /loading: !matchesQuery \|\| state\.status === "loading"/);
+  assert.match(source, /error: matchesQuery && state\.status === "error"/);
+}
+
+function verifyDataHeatmapCompletionContract(source: string) {
   assert.match(
     source,
     /&& isDataHeatmapSelectionSettled\(yearSessionsView, selectedHeatmapView, heatmapColdError\)/,

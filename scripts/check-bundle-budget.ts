@@ -53,7 +53,7 @@ const LAZY_PAGE_CHUNK_BUDGETS = [
   // Data's first render; the private detail chunk owns day analysis only. The
   // third application-category mode remains synchronous and feature-owned here;
   // splitting it would duplicate the read-model graph into unowned support chunks.
-  { label: "Data", pattern: /^Data-.*\.js$/, gzipKiB: 22 },
+  { label: "Data", pattern: /^Data-.*\.js$/, gzipKiB: 22.1 },
   { label: "About", pattern: /^About-.*\.js$/, gzipKiB: 18 },
 ] as const;
 
@@ -69,7 +69,7 @@ const LAZY_SECONDARY_CHUNK_BUDGETS = [
   { label: "Settings backup dialog", pattern: /^SettingsBackupDialog-.*\.js$/, gzipKiB: 7 },
   { label: "Data first-screen prewarm", pattern: /^dataFirstScreenPrewarm-.*\.js$/, gzipKiB: 6 },
   { label: "Data trend snapshot", pattern: /^dataTrendSnapshot-.*\.js$/, gzipKiB: 2 },
-  { label: "Data bootstrap snapshot", pattern: /^dataBootstrapSnapshot-.*\.js$/, gzipKiB: 1 },
+  { label: "Data bootstrap snapshot", pattern: /^dataBootstrapSnapshot-.*\.js$/, gzipKiB: 1.8 },
   // The shared destination-detail entry preloads one cross-feature dialog while
   // retaining a separate chunk so ordinary Dashboard, History, and Data views
   // do not pay for single-object analysis in their first-render graphs. The

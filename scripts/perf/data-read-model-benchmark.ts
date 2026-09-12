@@ -125,7 +125,7 @@ const measurements = [
     buildDataTrendViewModelFromAggregate(context);
     buildDataAppTrendViewModelFromAggregate(context, null);
   }),
-  measureBenchmark("data-combined-trends-365d", 10, 420, () => {
+  measureBenchmark("data-combined-trends-365d", 10, { averageMs: 420, p95Ms: 150, maxMs: 1680 }, () => {
     const context = buildDataTrendAggregateContext(yearlySessions, 365, nowMs);
     buildDataTrendViewModelFromAggregate(context);
     buildDataAppTrendViewModelFromAggregate(context, null);

@@ -22,19 +22,28 @@ export interface BenchmarkReport {
   metadata?: Record<string, unknown>;
 }
 
+interface BenchmarkBudget {
+  averageMs: number;
+  p95Ms: number;
+  maxMs: number;
+}
+
 export function createBenchmarkMeasurement(
   name: string,
   durations: number[],
-  budgetAverageMs: number,
+  budget: number | BenchmarkBudget,
 ): BenchmarkMeasurement {
   const elapsedMs = durations.reduce((sum, duration) => sum + duration, 0);
   const averageMs = durations.length > 0 ? elapsedMs / durations.length : 0;
   const distribution = summarizeDurations(durations);
+  const budgetAverageMs = typeof budget === "number" ? budget : budget.averageMs;
   const p95Multiplier = durations.length < 50 ? 2 : 1.5;
-  const budgetP95Ms = Math.max(budgetAverageMs * p95Multiplier, budgetAverageMs + 5);
+  const budgetP95Ms = typeof budget === "number"
+    ? Math.max(budgetAverageMs * p95Multiplier, budgetAverageMs + 5)
+    : budget.p95Ms;
   // Max captures one-off GC/scheduler stalls and is intentionally wider than
   // p95, while still turning pathological spikes into a hard failure.
-  const budgetMaxMs = budgetAverageMs * 4;
+  const budgetMaxMs = typeof budget === "number" ? budgetAverageMs * 4 : budget.maxMs;
 
   return {
     name,
@@ -54,7 +63,7 @@ export function createBenchmarkMeasurement(
 export function measureBenchmark(
   name: string,
   iterations: number,
-  budgetAverageMs: number,
+  budget: number | BenchmarkBudget,
   run: () => void,
 ): BenchmarkMeasurement {
   const durations: number[] = [];
@@ -63,13 +72,13 @@ export function measureBenchmark(
     run();
     durations.push(performance.now() - iterationStartedAt);
   }
-  return createBenchmarkMeasurement(name, durations, budgetAverageMs);
+  return createBenchmarkMeasurement(name, durations, budget);
 }
 
 export async function measureAsyncBenchmark(
   name: string,
   iterations: number,
-  budgetAverageMs: number,
+  budget: number | BenchmarkBudget,
   run: () => Promise<void>,
 ): Promise<BenchmarkMeasurement> {
   const durations: number[] = [];
@@ -78,7 +87,7 @@ export async function measureAsyncBenchmark(
     await run();
     durations.push(performance.now() - iterationStartedAt);
   }
-  return createBenchmarkMeasurement(name, durations, budgetAverageMs);
+  return createBenchmarkMeasurement(name, durations, budget);
 }
 
 function percentile(sortedDurations: number[], percentileValue: number): number {
