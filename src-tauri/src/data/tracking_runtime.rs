@@ -4,20 +4,41 @@ use crate::domain::tracking::ActiveSessionSnapshot;
 use crate::engine::tracking::ports::{
     SharedTrackingDataStore, TrackingDataError, TrackingDataFuture, TrackingDataStore,
 };
+use futures_util::future::BoxFuture;
 use sqlx::{Pool, Sqlite};
 use std::sync::Arc;
 use tauri::{AppHandle, Runtime};
 
 pub type TrackingRuntimeDataError = sqlx::Error;
 
+type TrackingPoolSource = Arc<
+    dyn Fn() -> BoxFuture<'static, Result<Pool<Sqlite>, TrackingRuntimeDataError>> + Send + Sync,
+>;
+
+#[cfg(test)]
+#[path = "tracking_runtime/pool_lifecycle_tests.rs"]
+mod pool_lifecycle_tests;
+
 #[derive(Clone)]
 pub struct TrackingRuntimeDataStore {
-    pool: Pool<Sqlite>,
+    source: TrackingPoolSource,
 }
 
 impl TrackingRuntimeDataStore {
+    #[cfg(test)]
     pub fn new(pool: Pool<Sqlite>) -> Self {
-        Self { pool }
+        Self {
+            source: Arc::new(move || {
+                let pool = pool.clone();
+                Box::pin(async move { Ok(pool) })
+            }),
+        }
+    }
+
+    async fn pool(&self) -> Result<Pool<Sqlite>, TrackingRuntimeDataError> {
+        // Restore and recoverable reopen close every clone of the previous pool.
+        // Long-lived stores resolve the currently registered pool for each operation.
+        (self.source)().await
     }
 
     pub async fn save_tracker_timestamp(
@@ -25,51 +46,56 @@ impl TrackingRuntimeDataStore {
         key: &str,
         timestamp_ms: i64,
     ) -> Result<(), TrackingRuntimeDataError> {
-        tracker_settings::save_tracker_timestamp(&self.pool, key, timestamp_ms).await
+        tracker_settings::save_tracker_timestamp(&self.pool().await?, key, timestamp_ms).await
     }
 
     pub async fn load_tracking_paused_setting(&self) -> Result<bool, TrackingRuntimeDataError> {
-        tracker_settings::load_tracking_paused_setting(&self.pool).await
+        tracker_settings::load_tracking_paused_setting(&self.pool().await?).await
     }
 
     pub async fn load_title_recording_enabled(&self) -> Result<bool, TrackingRuntimeDataError> {
-        tracker_settings::load_title_recording_enabled(&self.pool).await
+        tracker_settings::load_title_recording_enabled(&self.pool().await?).await
     }
 
     pub async fn load_timeline_merge_gap_secs(
         &self,
         default_timeline_merge_gap_secs: u64,
     ) -> Result<u64, TrackingRuntimeDataError> {
-        tracker_settings::load_timeline_merge_gap_secs(&self.pool, default_timeline_merge_gap_secs)
-            .await
+        tracker_settings::load_timeline_merge_gap_secs(
+            &self.pool().await?,
+            default_timeline_merge_gap_secs,
+        )
+        .await
     }
 
     pub async fn load_idle_timeout_secs(
         &self,
         default_idle_timeout_secs: u64,
     ) -> Result<u64, TrackingRuntimeDataError> {
-        tracker_settings::load_idle_timeout_secs(&self.pool, default_idle_timeout_secs).await
+        tracker_settings::load_idle_timeout_secs(&self.pool().await?, default_idle_timeout_secs)
+            .await
     }
 
     pub async fn load_capture_window_title_setting_for_app(
         &self,
         exe_name: &str,
     ) -> Result<bool, TrackingRuntimeDataError> {
-        tracker_settings::load_capture_window_title_setting_for_app(&self.pool, exe_name).await
+        tracker_settings::load_capture_window_title_setting_for_app(&self.pool().await?, exe_name)
+            .await
     }
 
     pub async fn load_tracking_enabled_setting_for_app(
         &self,
         exe_name: &str,
     ) -> Result<bool, TrackingRuntimeDataError> {
-        tracker_settings::load_tracking_enabled_setting_for_app(&self.pool, exe_name).await
+        tracker_settings::load_tracking_enabled_setting_for_app(&self.pool().await?, exe_name).await
     }
 
     pub async fn load_tracker_timestamp(
         &self,
         key: &str,
     ) -> Result<Option<i64>, TrackingRuntimeDataError> {
-        tracker_settings::load_tracker_timestamp(&self.pool, key).await
+        tracker_settings::load_tracker_timestamp(&self.pool().await?, key).await
     }
 
     pub async fn load_tracker_successful_sample_timestamp(
@@ -86,14 +112,15 @@ impl TrackingRuntimeDataStore {
         timestamp_ms: i64,
         summary: &str,
     ) -> Result<(), TrackingRuntimeDataError> {
+        let pool = self.pool().await?;
         tracker_settings::save_setting_value(
-            &self.pool,
+            &pool,
             tracker_settings::TRACKER_LAST_STARTUP_SELF_HEAL_AT_KEY,
             &timestamp_ms.to_string(),
         )
         .await?;
         tracker_settings::save_setting_value(
-            &self.pool,
+            &pool,
             tracker_settings::TRACKER_LAST_STARTUP_SELF_HEAL_SUMMARY_KEY,
             summary,
         )
@@ -103,20 +130,20 @@ impl TrackingRuntimeDataStore {
     pub async fn load_active_session(
         &self,
     ) -> Result<Option<ActiveSessionSnapshot>, TrackingRuntimeDataError> {
-        sessions::load_active_session(&self.pool).await
+        sessions::load_active_session(&self.pool().await?).await
     }
 
     pub async fn normalize_closed_session_durations(
         &self,
     ) -> Result<u64, TrackingRuntimeDataError> {
-        sessions::normalize_closed_session_durations(&self.pool).await
+        sessions::normalize_closed_session_durations(&self.pool().await?).await
     }
 
     pub async fn end_active_sessions(
         &self,
         raw_end_time: i64,
     ) -> Result<bool, TrackingRuntimeDataError> {
-        sessions::end_active_sessions(&self.pool, raw_end_time).await
+        sessions::end_active_sessions(&self.pool().await?, raw_end_time).await
     }
 
     pub async fn refresh_active_session_metadata(
@@ -125,8 +152,13 @@ impl TrackingRuntimeDataStore {
         window_title: &str,
         timestamp_ms: i64,
     ) -> Result<bool, TrackingRuntimeDataError> {
-        sessions::refresh_active_session_metadata(&self.pool, exe_name, window_title, timestamp_ms)
-            .await
+        sessions::refresh_active_session_metadata(
+            &self.pool().await?,
+            exe_name,
+            window_title,
+            timestamp_ms,
+        )
+        .await
     }
 
     pub async fn start_session(
@@ -138,7 +170,7 @@ impl TrackingRuntimeDataStore {
         continuity_group_start_time: i64,
     ) -> Result<bool, TrackingRuntimeDataError> {
         sessions::start_session(
-            &self.pool,
+            &self.pool().await?,
             app_name,
             exe_name,
             window_title,
@@ -149,7 +181,7 @@ impl TrackingRuntimeDataStore {
     }
 
     pub async fn is_icon_cached(&self, exe_name: &str) -> Result<bool, TrackingRuntimeDataError> {
-        icon_cache::is_icon_cached(&self.pool, exe_name).await
+        icon_cache::is_icon_cached(&self.pool().await?, exe_name).await
     }
 
     pub async fn upsert_icon(
@@ -158,15 +190,31 @@ impl TrackingRuntimeDataStore {
         icon_base64: &str,
         last_updated: i64,
     ) -> Result<(), TrackingRuntimeDataError> {
-        icon_cache::upsert_icon(&self.pool, exe_name, icon_base64, last_updated).await
+        icon_cache::upsert_icon(&self.pool().await?, exe_name, icon_base64, last_updated).await
     }
 }
 
 pub async fn shared_from_app<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<SharedTrackingDataStore, String> {
-    let pool = wait_for_sqlite_pool(app).await?;
-    Ok(Arc::new(TrackingRuntimeDataStore::new(pool)))
+    let app = app.clone();
+    shared_from_pool_source(Arc::new(move || {
+        let app = app.clone();
+        Box::pin(async move {
+            wait_for_sqlite_pool(&app)
+                .await
+                .map_err(sqlx::Error::Protocol)
+        })
+    }))
+    .await
+    .map_err(|error| error.to_string())
+}
+
+async fn shared_from_pool_source(
+    source: TrackingPoolSource,
+) -> Result<SharedTrackingDataStore, TrackingRuntimeDataError> {
+    source().await?;
+    Ok(Arc::new(TrackingRuntimeDataStore { source }))
 }
 
 fn tracking_data_error(error: impl std::fmt::Display) -> TrackingDataError {
@@ -176,7 +224,8 @@ fn tracking_data_error(error: impl std::fmt::Display) -> TrackingDataError {
 impl TrackingDataStore for TrackingRuntimeDataStore {
     fn seal_interrupted_web_activity(&self, now_ms: i64) -> TrackingDataFuture<'_, bool> {
         Box::pin(async move {
-            crate::data::repositories::web_activity::seal_interrupted_segments(&self.pool, now_ms)
+            let pool = self.pool().await.map_err(tracking_data_error)?;
+            crate::data::repositories::web_activity::seal_interrupted_segments(&pool, now_ms)
                 .await
                 .map_err(tracking_data_error)
         })

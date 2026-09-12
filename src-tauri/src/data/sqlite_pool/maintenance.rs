@@ -2,6 +2,19 @@ use sqlx::{Pool, Row, Sqlite};
 use tokio::sync::{Mutex, MutexGuard};
 
 static SQLITE_MAINTENANCE: Mutex<()> = Mutex::const_new(());
+pub(crate) const QUERY_STATISTICS_OPTIMIZE_MASK: u32 = 0x2;
+
+pub(crate) async fn optimize_query_statistics(pool: &Pool<Sqlite>) -> Result<(), String> {
+    // Check queried tables and indexes without statistics. Retain STAT4 by omitting
+    // the analysis-limit flag, and avoid blind analysis of untouched singleton tables.
+    sqlx::query(&format!(
+        "PRAGMA optimize({QUERY_STATISTICS_OPTIMIZE_MASK})"
+    ))
+    .execute(pool)
+    .await
+    .map(|_| ())
+    .map_err(|error| format!("failed to optimize sqlite query statistics: {error}"))
+}
 
 pub(crate) async fn acquire_sqlite_maintenance() -> MutexGuard<'static, ()> {
     SQLITE_MAINTENANCE.lock().await

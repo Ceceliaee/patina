@@ -15,14 +15,18 @@ use tauri_plugin_sql::{DbInstances, DbPool, MigrationKind};
 use tokio::time::{sleep, Duration};
 
 pub const SQLITE_DB_NAME: &str = "sqlite:patina.db";
-const VALIDATED_SCHEMA_MIGRATION_HEAD: i64 = schema::WEB_ACTIVITY_SESSION_MIGRATION_VERSION;
+const VALIDATED_SCHEMA_MIGRATION_HEAD: i64 = schema::SESSION_RANGE_INDEX_MIGRATION_VERSION;
 mod activity_read_model_schema;
 pub(super) mod import_schema;
 mod maintenance;
 mod restore;
 pub(super) use activity_read_model_schema::has_activity_read_models_schema;
 use import_schema::{has_import_data_schema, has_import_data_v6_schema};
-pub(crate) use maintenance::{acquire_sqlite_maintenance, checkpoint_sqlite_pool};
+#[cfg(test)]
+pub(crate) use maintenance::QUERY_STATISTICS_OPTIMIZE_MASK;
+pub(crate) use maintenance::{
+    acquire_sqlite_maintenance, checkpoint_sqlite_pool, optimize_query_statistics,
+};
 pub(crate) use restore::replace_product_db_from_candidate;
 
 #[derive(Debug)]
@@ -786,6 +790,7 @@ pub(super) async fn has_web_favicon_cache_schema(pool: &Pool<Sqlite>) -> Result<
 
 async fn has_current_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
     let checks = [
+        schema_contracts::has_session_range_index(pool).await?,
         schema_contracts::has_web_activity_session_schema(pool).await?,
         has_current_baseline_schema(pool).await?,
         has_base_tools_schema(pool).await?,
@@ -845,7 +850,8 @@ async fn normalize_current_baseline_migration_history_for_pool(
         + scheduled_backup_migration_count
         + usize::from(schema_contracts::has_scheduled_export_schema(pool).await?)
         + usize::from(schema_contracts::has_activity_reminder_rules_schema(pool).await?)
-        + usize::from(schema_contracts::has_web_activity_session_schema(pool).await?);
+        + usize::from(schema_contracts::has_web_activity_session_schema(pool).await?)
+        + usize::from(schema_contracts::has_session_range_index(pool).await?);
     expected.truncate(expected.len().min(revision_limit));
     if expected.is_empty() {
         return Ok(false);
@@ -1285,7 +1291,7 @@ mod tests {
                     .unwrap();
             assert_eq!(
                 final_versions,
-                vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+                vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
             );
         });
     }

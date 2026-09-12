@@ -8,6 +8,89 @@ use super::sqlite_pool::{
 use sqlx::{Executor, Row, SqlitePool};
 use std::path::Path;
 
+#[tokio::test]
+async fn version_14_upgrade_adds_range_statistics_without_rewriting_existing_migrations() {
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    for migration in schema::tracker_migrations()
+        .into_iter()
+        .filter(|m| m.version <= 14)
+    {
+        pool.execute(migration.sql).await.unwrap();
+    }
+    pool.execute("CREATE TABLE _sqlx_migrations(version BIGINT PRIMARY KEY, description TEXT NOT NULL, installed_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, success BOOLEAN NOT NULL, checksum BLOB NOT NULL, execution_time BIGINT NOT NULL)").await.unwrap();
+    for (version, description, checksum) in expected_migration_metadata()
+        .into_iter()
+        .filter(|(v, _, _)| *v <= 14)
+    {
+        sqlx::query("INSERT INTO _sqlx_migrations(version,description,success,checksum,execution_time) VALUES(?,?,1,?,0)")
+            .bind(version).bind(description).bind(checksum).execute(&pool).await.unwrap();
+    }
+    pool.execute(
+        "WITH RECURSIVE n(i) AS (VALUES(0) UNION ALL SELECT i+1 FROM n WHERE i<1999)
+        INSERT INTO sessions(app_name,exe_name,start_time,end_time,duration)
+        SELECT 'Editor','editor.exe',i*60000,i*60000+30000,30000 FROM n",
+    )
+    .await
+    .unwrap();
+    let prior: Vec<(i64, String, Vec<u8>)> = sqlx::query_as(
+        "SELECT version,description,checksum FROM _sqlx_migrations ORDER BY version",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert!(!super::schema_contracts::has_session_range_index(&pool)
+        .await
+        .unwrap());
+    for _ in 0..2 {
+        prepare_pool_schema(&pool, Path::new("version-14-synthetic.db"))
+            .await
+            .unwrap();
+        let after: Vec<(i64, String, Vec<u8>)> = sqlx::query_as("SELECT version,description,checksum FROM _sqlx_migrations WHERE version<=14 ORDER BY version")
+            .fetch_all(&pool).await.unwrap();
+        assert_eq!(after, prior);
+        assert!(super::schema_contracts::has_session_range_index(&pool)
+            .await
+            .unwrap());
+        for index in ["idx_sessions_date", "idx_sessions_end_start"] {
+            let samples: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_stat4 WHERE idx=?")
+                .bind(index)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            assert!(samples > 0, "missing range distribution for {index}");
+        }
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT MAX(version) FROM _sqlx_migrations")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            15
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT SUM(duration) FROM sessions")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            60_000_000
+        );
+    }
+    pool.execute("DROP INDEX idx_sessions_end_start; CREATE INDEX idx_sessions_end_start ON sessions(start_time,end_time)").await.unwrap();
+    assert!(!super::schema_contracts::has_session_range_index(&pool)
+        .await
+        .unwrap());
+    assert!(
+        prepare_pool_schema(&pool, Path::new("wrong-range-index.db"))
+            .await
+            .unwrap_err()
+            .contains("schema validation failed")
+    );
+    pool.close().await;
+}
+
 #[test]
 fn version_13_upgrade_preserves_unowned_web_history_and_relation_queries_use_indexes() {
     tauri::async_runtime::block_on(async {
@@ -387,7 +470,7 @@ fn version_eight_draft_triggers_are_reinstalled_without_touching_facts() {
                 .unwrap();
         assert_eq!(
             versions,
-            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
         );
     });
 }
