@@ -21,6 +21,7 @@ tauri-build = { version = "2", features = [] }
 [[example]]
 name = "windows-resource-sample"
 path = "../scripts/perf/windows-resource-sample.rs"
+test = true
 
 [dependencies]
 tauri = { version = "2.11.5", features = ["tray-icon"] }

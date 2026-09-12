@@ -10,7 +10,10 @@ use std::{
     time::{Duration, Instant},
 };
 use windows::Win32::{
-    Foundation::{CloseHandle, ERROR_NO_MORE_FILES, FILETIME, HANDLE},
+    Foundation::{
+        CloseHandle, GetLastError, SetLastError, ERROR_NO_MORE_FILES, ERROR_SUCCESS, FILETIME,
+        HANDLE,
+    },
     System::{
         Diagnostics::ToolHelp::{
             CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
@@ -19,10 +22,11 @@ use windows::Win32::{
         ProcessStatus::{
             GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX,
         },
+        SystemInformation::GetSystemTimePreciseAsFileTime,
         Threading::{
-            GetGuiResources, GetProcessHandleCount, GetProcessTimes, OpenProcess, GR_GDIOBJECTS,
-            GR_USEROBJECTS, PROCESS_QUERY_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION,
-            PROCESS_VM_READ,
+            GetGuiResources, GetProcessHandleCount, GetProcessTimes, OpenProcess,
+            GET_GUI_RESOURCES_FLAGS, GR_GDIOBJECTS, GR_USEROBJECTS, PROCESS_QUERY_INFORMATION,
+            PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_VM_READ,
         },
     },
 };
@@ -62,6 +66,10 @@ fn identity(pid: u32) -> windows::core::Result<u64> {
         OwnedHandle(unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid)? });
     Ok(times(handle.0)?.0)
 }
+fn identity_at_snapshot(created: Option<u64>, capture_start: u64) -> Option<u64> {
+    // A newer process may have reused a PID whose parent belongs to the snapshot's old process.
+    created.filter(|time| *time <= capture_start)
+}
 struct Row {
     pid: u32,
     parent: u32,
@@ -70,6 +78,7 @@ struct Row {
     created: Option<u64>,
 }
 fn processes() -> windows::core::Result<Vec<Row>> {
+    let capture_start = ticks(unsafe { GetSystemTimePreciseAsFileTime() });
     let snapshot = OwnedHandle(unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)? });
     let mut entry = PROCESSENTRY32W {
         dwSize: size_of::<PROCESSENTRY32W>() as u32,
@@ -88,7 +97,7 @@ fn processes() -> windows::core::Result<Vec<Row>> {
             parent: entry.th32ParentProcessID,
             threads: entry.cntThreads,
             name: String::from_utf16_lossy(&entry.szExeFile[..end]),
-            created: identity(entry.th32ProcessID).ok(),
+            created: identity_at_snapshot(identity(entry.th32ProcessID).ok(), capture_start),
         });
         status = unsafe { Process32NextW(snapshot.0, &mut entry) };
     }
@@ -103,27 +112,72 @@ fn owned_processes(
     rows: &[Row],
     root: u32,
     created: u64,
-    previous: &HashMap<u32, u64>,
-) -> HashMap<u32, u64> {
-    let mut owned = HashMap::from([(root, created)]);
+    previous: &HashMap<u32, ProcessIdentity>,
+) -> HashMap<u32, ProcessIdentity> {
+    let mut owned = HashMap::from([(root, ProcessIdentity::confirmed(created))]);
     for row in rows {
-        if let Some(time) = row.created {
-            if previous.get(&row.pid) == Some(&time) {
-                owned.insert(row.pid, time);
+        if let Some(previous_identity) = previous.get(&row.pid) {
+            match (row.created, previous_identity.last_confirmed) {
+                (Some(time), Some(previous_time)) if time == previous_time => {
+                    owned.insert(row.pid, ProcessIdentity::confirmed(time));
+                }
+                (None, _) | (_, None) => {
+                    owned.insert(
+                        row.pid,
+                        ProcessIdentity {
+                            last_confirmed: previous_identity.last_confirmed,
+                            current: None,
+                        },
+                    );
+                }
+                _ => {}
             }
         }
     }
     loop {
-        let before = owned.len();
+        let mut changed = false;
         for row in rows {
-            if let (Some(time), Some(parent_time)) = (row.created, owned.get(&row.parent)) {
-                if time >= *parent_time {
-                    owned.entry(row.pid).or_insert(time);
+            if let Some(parent_identity) = owned.get(&row.parent) {
+                match (row.created, parent_identity.current) {
+                    (Some(time), Some(parent_time)) if time >= parent_time => {
+                        let identity = ProcessIdentity::confirmed(time);
+                        if owned.get(&row.pid) != Some(&identity) {
+                            owned.insert(row.pid, identity);
+                            changed = true;
+                        }
+                    }
+                    (None, _) | (_, None) => {
+                        if let std::collections::hash_map::Entry::Vacant(entry) =
+                            owned.entry(row.pid)
+                        {
+                            entry.insert(ProcessIdentity {
+                                last_confirmed: None,
+                                current: None,
+                            });
+                            changed = true;
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
-        if owned.len() == before {
+        if !changed {
             return owned;
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ProcessIdentity {
+    last_confirmed: Option<u64>,
+    current: Option<u64>,
+}
+
+impl ProcessIdentity {
+    fn confirmed(created: u64) -> Self {
+        Self {
+            last_confirmed: Some(created),
+            current: Some(created),
         }
     }
 }
@@ -156,16 +210,22 @@ fn sample(
     let cpu_percent = previous.get(&(row.pid, created)).and_then(|(time, value)| {
         (elapsed > *time).then(|| 100.0 * (cpu - value) / (elapsed - time))
     });
-    let nonzero = |v| if v == 0 { None } else { Some(v) };
     Ok((
         json!({"pid": row.pid, "parentPid": row.parent, "name": row.name, "startedAt": started_at(created),
         "elapsedSeconds": elapsed, "cpuSeconds": cpu, "cpuOneCorePercent": cpu_percent,
         "workingSetBytes": memory.WorkingSetSize, "privateBytes": memory.PrivateUsage,
         "handles": handles, "threads": row.threads,
-        "gdiObjects": nonzero(unsafe { GetGuiResources(handle.0, GR_GDIOBJECTS) }),
-        "userObjects": nonzero(unsafe { GetGuiResources(handle.0, GR_USEROBJECTS) })}),
+        "gdiObjects": gui_objects(handle.0, GR_GDIOBJECTS),
+        "userObjects": gui_objects(handle.0, GR_USEROBJECTS)}),
         cpu,
     ))
+}
+fn gui_objects(handle: HANDLE, flags: GET_GUI_RESOURCES_FLAGS) -> Option<u32> {
+    unsafe {
+        SetLastError(ERROR_SUCCESS);
+        let count = GetGuiResources(handle, flags);
+        (count > 0 || GetLastError() == ERROR_SUCCESS).then_some(count)
+    }
 }
 fn number(value: Option<&String>, default: u64, max: u64) -> Result<u64> {
     let n = value.map(|s| s.parse()).transpose()?.unwrap_or(default);
@@ -197,7 +257,7 @@ fn main() -> Result<()> {
         "durationSeconds":duration.as_secs(), "intervalSeconds":interval.as_secs(),
         "cpuConvention":"one core = 100%; null on first sample or unavailable",
         "memoryConvention":"working-set sum double-counts shared pages",
-        "guiConvention":"zero may mean no objects or API failure; reported as null"})
+        "guiConvention":"zero with no Win32 error is a valid count; failures are null"})
     )?;
     let mut known = HashMap::new();
     let mut previous = HashMap::new();
@@ -216,14 +276,21 @@ fn main() -> Result<()> {
         let mut next = HashMap::new();
         let mut samples = Vec::new();
         for row in &rows {
-            let Some(time) = known.get(&row.pid) else {
+            let Some(identity) = known.get(&row.pid) else {
+                continue;
+            };
+            let Some(time) = identity.current else {
+                samples.push(
+                    json!({"pid":row.pid, "parentPid":row.parent, "name":row.name,
+                    "unavailable":true, "error":"possible descendant identity unavailable"}),
+                );
                 continue;
             };
             let elapsed = clock.elapsed().as_secs_f64();
-            match sample(row, *time, elapsed, &previous) {
+            match sample(row, time, elapsed, &previous) {
                 Ok((value, cpu)) => {
                     samples.push(value);
-                    next.insert((row.pid, *time), (elapsed, cpu));
+                    next.insert((row.pid, time), (elapsed, cpu));
                 }
                 Err(error) => samples
                     .push(json!({"pid":row.pid,"unavailable":true,"error":error.to_string()})),
@@ -248,4 +315,194 @@ fn main() -> Result<()> {
         json!({"kind":"completed", "stopReason":reason,"elapsedSeconds":clock.elapsed().as_secs_f64()})
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row(pid: u32, parent: u32, created: Option<u64>) -> Row {
+        Row {
+            pid,
+            parent,
+            created,
+            threads: 1,
+            name: "synthetic.exe".into(),
+        }
+    }
+
+    #[test]
+    fn unreadable_child_and_its_descendant_remain_missing_measurements() {
+        let rows = [row(1, 0, Some(10)), row(2, 1, None), row(3, 2, Some(30))];
+        let selected = owned_processes(&rows, 1, 10, &HashMap::new());
+        assert_eq!(
+            selected,
+            HashMap::from([
+                (1, ProcessIdentity::confirmed(10)),
+                (
+                    2,
+                    ProcessIdentity {
+                        last_confirmed: None,
+                        current: None
+                    }
+                ),
+                (
+                    3,
+                    ProcessIdentity {
+                        last_confirmed: None,
+                        current: None
+                    }
+                ),
+            ])
+        );
+    }
+
+    #[test]
+    fn known_orphan_with_unreadable_identity_cannot_silently_disappear() {
+        let previous = HashMap::from([
+            (1, ProcessIdentity::confirmed(10)),
+            (2, ProcessIdentity::confirmed(20)),
+        ]);
+        let rows = [row(1, 0, Some(10)), row(2, 9, None)];
+        let selected = owned_processes(&rows, 1, 10, &previous);
+        assert_eq!(
+            selected.get(&2),
+            Some(&ProcessIdentity {
+                last_confirmed: Some(20),
+                current: None
+            })
+        );
+        let recovered = owned_processes(
+            &[row(1, 0, Some(10)), row(2, 9, Some(20))],
+            1,
+            10,
+            &selected,
+        );
+        assert_eq!(recovered.get(&2), Some(&ProcessIdentity::confirmed(20)));
+        let reused = owned_processes(
+            &[row(1, 0, Some(10)), row(2, 9, Some(40))],
+            1,
+            10,
+            &selected,
+        );
+        assert_eq!(reused, HashMap::from([(1, ProcessIdentity::confirmed(10))]));
+    }
+
+    #[test]
+    fn reused_pid_and_process_older_than_its_apparent_parent_are_excluded() {
+        let previous = HashMap::from([
+            (1, ProcessIdentity::confirmed(10)),
+            (2, ProcessIdentity::confirmed(20)),
+        ]);
+        let rows = [row(1, 0, Some(10)), row(2, 9, Some(40)), row(3, 1, Some(5))];
+        assert_eq!(
+            owned_processes(&rows, 1, 10, &previous),
+            HashMap::from([(1, ProcessIdentity::confirmed(10))])
+        );
+    }
+
+    #[test]
+    fn uncertain_parent_chain_recovers_even_when_rows_are_in_child_first_order() {
+        let first = owned_processes(
+            &[row(1, 0, Some(10)), row(2, 1, None), row(3, 2, Some(30))],
+            1,
+            10,
+            &HashMap::new(),
+        );
+        let recovered = owned_processes(
+            &[
+                row(3, 2, Some(30)),
+                row(2, 1, Some(20)),
+                row(1, 0, Some(10)),
+            ],
+            1,
+            10,
+            &first,
+        );
+        assert_eq!(
+            recovered,
+            HashMap::from([
+                (1, ProcessIdentity::confirmed(10)),
+                (2, ProcessIdentity::confirmed(20)),
+                (3, ProcessIdentity::confirmed(30)),
+            ])
+        );
+        let orphaned = owned_processes(&[row(1, 0, Some(10)), row(3, 9, Some(30))], 1, 10, &first);
+        assert_eq!(
+            orphaned.get(&3),
+            Some(&ProcessIdentity {
+                last_confirmed: None,
+                current: None
+            })
+        );
+    }
+
+    #[test]
+    fn snapshot_parent_cannot_attribute_a_process_created_after_capture_started() {
+        let previous = HashMap::from([
+            (1, ProcessIdentity::confirmed(10)),
+            (2, ProcessIdentity::confirmed(20)),
+        ]);
+        let captured = owned_processes(
+            &[
+                row(1, 0, identity_at_snapshot(Some(10), 25)),
+                row(2, 1, identity_at_snapshot(Some(40), 25)),
+            ],
+            1,
+            10,
+            &previous,
+        );
+        assert_eq!(
+            captured.get(&2),
+            Some(&ProcessIdentity {
+                last_confirmed: Some(20),
+                current: None
+            })
+        );
+        let next_snapshot = owned_processes(
+            &[
+                row(1, 0, identity_at_snapshot(Some(10), 60)),
+                row(2, 9, identity_at_snapshot(Some(40), 60)),
+            ],
+            1,
+            10,
+            &captured,
+        );
+        assert_eq!(
+            next_snapshot,
+            HashMap::from([(1, ProcessIdentity::confirmed(10))])
+        );
+
+        let new_child = owned_processes(
+            &[
+                row(1, 0, Some(10)),
+                row(3, 1, identity_at_snapshot(Some(40), 25)),
+            ],
+            1,
+            10,
+            &HashMap::new(),
+        );
+        assert_eq!(new_child.get(&3).unwrap().current, None);
+        let next_snapshot = owned_processes(
+            &[
+                row(1, 0, Some(10)),
+                row(3, 1, identity_at_snapshot(Some(40), 60)),
+            ],
+            1,
+            10,
+            &new_child,
+        );
+        assert_eq!(next_snapshot.get(&3), Some(&ProcessIdentity::confirmed(40)));
+    }
+
+    #[test]
+    fn gui_counts_distinguish_valid_processes_from_invalid_handles() {
+        let current = unsafe { windows::Win32::System::Threading::GetCurrentProcess() };
+        unsafe { SetLastError(windows::Win32::Foundation::ERROR_INVALID_DATA) };
+        let gdi = gui_objects(current, GR_GDIOBJECTS);
+        let user = gui_objects(current, GR_USEROBJECTS);
+        assert!(gdi.is_some() && user.is_some());
+        assert_eq!(gui_objects(HANDLE::default(), GR_GDIOBJECTS), None);
+        println!("RESOURCE_GUI_API_OBSERVATION gdi={gdi:?} user={user:?} invalid_handle=None");
+    }
 }
