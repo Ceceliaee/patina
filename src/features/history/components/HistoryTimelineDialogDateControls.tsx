@@ -6,6 +6,7 @@ import { formatDateLabel } from "../services/historyFormatting.ts";
 
 interface HistoryTimelineDialogDateControlsProps {
   selectedDate: Date;
+  requestedDate: Date;
   isToday: boolean;
   className?: string;
   onChangeDate: (delta: number) => void;
@@ -13,15 +14,16 @@ interface HistoryTimelineDialogDateControlsProps {
 
 export default function HistoryTimelineDialogDateControls({
   selectedDate,
+  requestedDate,
   isToday,
   className = "",
   onChangeDate,
 }: HistoryTimelineDialogDateControlsProps) {
   const UI_TEXT = useLocaleText();
   const locale = useLocale();
-  const previousDateLabel = formatDateLabel(addLocalDays(selectedDate, -1), UI_TEXT, locale);
+  const previousDateLabel = formatDateLabel(addLocalDays(requestedDate, -1), UI_TEXT, locale);
   const currentDateLabel = formatDateLabel(selectedDate, UI_TEXT, locale);
-  const nextDateLabel = formatDateLabel(addLocalDays(selectedDate, 1), UI_TEXT, locale);
+  const nextDateLabel = formatDateLabel(addLocalDays(requestedDate, 1), UI_TEXT, locale);
 
   return (
     <div className={`history-timeline-dialog-date-switch ${className}`.trim()} role="group" aria-label={UI_TEXT.date.pickDate}>

@@ -1,3 +1,9 @@
+.history-date-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1rem;
+}
+
 .history-overview-timeline-card {
   flex: 0 0 auto;
 }

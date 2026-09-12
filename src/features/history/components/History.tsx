@@ -1,7 +1,7 @@
 import type { Locale, UiText } from "../../../shared/i18n/index.ts";
 import { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef, } from "react";
 import type { CSSProperties } from "react";
-import { Clock, Expand, Minus, Plus, Tags, X, ZoomIn } from "lucide-react";
+import { Expand, Minus, Plus, Tags, X, ZoomIn } from "lucide-react";
 
 import {
   buildHistoryCategoryDistribution,
@@ -20,12 +20,10 @@ import { AppClassification } from "../../../shared/classification/appClassificat
 import HistoryHorizontalTimeline from "./HistoryHorizontalTimeline.tsx";
 import QuietIconAction from "../../../shared/components/QuietIconAction";
 import QuietDialog from "../../../shared/components/QuietDialog";
-import QuietPageHeader from "../../../shared/components/QuietPageHeader";
 import QuietSegmentedFilter, { type QuietSegmentedFilterOption } from "../../../shared/components/QuietSegmentedFilter";
 import type { HourlyActivityChartMode } from "../../../shared/settings/appSettings.ts";
 import {
   getHistoryTimelineZoomDurationMs,
-  MAX_HISTORY_TIMELINE_VIEWPORT_DURATION_MS,
   normalizeHistoryTimelineViewport,
   normalizeHistoryTimelineViewportAroundFocus,
   snapHistoryTimelineFocusToNearestHalfHour,
@@ -50,6 +48,7 @@ import {
 } from "../services/historyWebActivityViewModel.ts";
 import { useHistoryTimelineMode } from "../hooks/useHistoryTimelineMode.ts";
 import {
+  hasMeaningfulHistoryContent,
   shouldHideTimelineContent,
   useHistoryTimelineViews,
 } from "../hooks/useHistoryTimelineViews.ts";
@@ -75,7 +74,7 @@ import {
   HistoryWebTimelineList,
 } from "./HistoryTimelineLists.tsx";
 import HistoryHourlyActivityPanel from "./HistoryHourlyActivityPanel.tsx";
-import HistoryDateNavigator from "./HistoryDateNavigator.tsx";
+import HistoryDateHeader from "./HistoryDateHeader.tsx";
 import HistoryTimelineDialogDateControls from "./HistoryTimelineDialogDateControls.tsx";
 import HistoryTimelineZoomDialog from "./HistoryTimelineZoomDialog.tsx";
 import { useHistoryDestinationDetailEntry } from "../hooks/useHistoryDestinationDetailEntry.tsx";
@@ -224,6 +223,7 @@ export default function History({
   const [calendarPosition, setCalendarPosition] = useState({ left: 0, top: 0 });
   const {
     contentState,
+    retry,
     nowMs,
     rawDaySessions,
     rawDayAggregateSessions,
@@ -233,7 +233,9 @@ export default function History({
     aggregateIncludesExactFacts,
     setNowMs,
     snapshotIcons,
+    requestedDateKey,
     visibleDateKey,
+    visibleMappingVersion,
     webDomainFavicons,
     webFaviconsReady,
     webDomainOverrides,
@@ -314,7 +316,7 @@ export default function History({
   const [timelineViewport, setTimelineViewport] = useState<HistoryTimelineViewport>(() => (
     normalizeHistoryTimelineViewport({
       selectedDate: initialDate,
-      requestedDurationMs: getHistoryTimelineZoomDurationMs(readHistoryTimelineZoomHours()),
+      requestedDurationMs: getHistoryTimelineZoomDurationMs(readHistoryTimelineZoomHours(), initialDate),
       requestedStartMs: startOfDay(initialDate).getTime(),
     })
   ));
@@ -346,7 +348,7 @@ export default function History({
     timelineViewportWasPannedRef.current = false;
     setTimelineViewport(normalizeHistoryTimelineViewport({
       selectedDate: date,
-      requestedDurationMs: getHistoryTimelineZoomDurationMs(readHistoryTimelineZoomHours()),
+      requestedDurationMs: getHistoryTimelineZoomDurationMs(readHistoryTimelineZoomHours(), date),
       requestedStartMs: startOfDay(date).getTime(),
     }));
   }, []);
@@ -587,7 +589,7 @@ export default function History({
   }, [timelineDetailsPopover, updateTimelineDetailsPopoverPosition]);
 
   const isToday = selectedDate.toDateString() === today.toDateString();
-  const showQuietPlaceholder = visibleDateKey === null && contentState === "cold-loading";
+  const showQuietPlaceholder = visibleDateKey === null;
   const showTimelineQuietPlaceholder = shouldHideTimelineContent({
     showQuietPlaceholder,
     contentState,
@@ -596,9 +598,6 @@ export default function History({
     mode: effectiveHistoryTimelineMode,
     webDataReady: webSnapshotReady,
   });
-  const contentPlaceholderMessage = contentState === "error"
-    ? historyCopy.loadFailed
-    : "";
   const historyView = useMemo(
     () => (void mappingVersion, buildHistoryReadModel({
       daySessions: rawDaySessions,
@@ -623,12 +622,13 @@ export default function History({
     hourlyCategoryActivity,
   } = historyView;
   const selectedDayRange = useMemo(() => {
-    const startMs = startOfDay(presentedDate).getTime();
+    const dayStart = startOfDay(presentedDate);
     return {
-      startMs,
-      endMs: startMs + 24 * 60 * 60 * 1000,
+      startMs: dayStart.getTime(),
+      endMs: addLocalDays(dayStart, 1).getTime(),
     };
   }, [presentedDate]);
+  const selectedDayDurationMs = selectedDayRange.endMs - selectedDayRange.startMs;
   const {
     fullDayView: visibleHistoryTimelineView,
     zoomView: timelineZoomTimelineView,
@@ -841,8 +841,8 @@ export default function History({
     });
   }, [nowMs, presentedDate]);
   const handleTimelineZoomChange = (requestedHours: number) => {
-    const nextZoomHours = Math.min(24, Math.max(1, requestedHours));
-    const nextDurationMs = getHistoryTimelineZoomDurationMs(nextZoomHours);
+    const nextDurationMs = getHistoryTimelineZoomDurationMs(requestedHours, presentedDate);
+    const nextZoomHours = nextDurationMs / (60 * 60_000);
     if (Math.abs(nextDurationMs - timelineViewport.durationMs) < 1) return;
 
     const currentCenterMs = timelineViewport.startMs
@@ -856,7 +856,7 @@ export default function History({
       focusTimeMs,
     });
 
-    if (nextZoomHours === 24) {
+    if (nextDurationMs >= selectedDayDurationMs) {
       timelineViewportWasPannedRef.current = false;
     }
     rememberHistoryTimelineZoomHours(nextZoomHours);
@@ -871,12 +871,12 @@ export default function History({
     } else {
       const nextZoomHours = nextViewport.durationMs / (60 * 60_000);
       rememberHistoryTimelineZoomHours(nextZoomHours);
-      if (nextViewport.durationMs >= MAX_HISTORY_TIMELINE_VIEWPORT_DURATION_MS) {
+      if (nextViewport.durationMs >= selectedDayDurationMs) {
         timelineViewportWasPannedRef.current = false;
       }
     }
     setTimelineViewport(nextViewport);
-  }, []);
+  }, [selectedDayDurationMs]);
   const {
     isDragging: timelineViewportIsDragging,
     cancelInteraction: cancelTimelineViewportInteraction,
@@ -910,7 +910,7 @@ export default function History({
     const nextZoomHours = readHistoryTimelineZoomHours();
     const nextViewport = normalizeHistoryTimelineViewportAroundFocus({
       selectedDate: presentedDate,
-      durationMs: getHistoryTimelineZoomDurationMs(nextZoomHours),
+      durationMs: getHistoryTimelineZoomDurationMs(nextZoomHours, presentedDate),
       focusTimeMs: getInitialTimelineZoomFocusMs(),
     });
     setTimelineViewport(nextViewport);
@@ -1049,7 +1049,7 @@ export default function History({
         showQuietPlaceholder: showQuietPlaceholder || (
           dayDistributionView.mode === "web" && !webVisualsReady
         ),
-        placeholderMessage: contentPlaceholderMessage,
+        placeholderMessage: "",
         onModeChange: handleDayDistributionModeChange,
         onDestinationDetailIntentStart: destinationDetail.prepare,
         onDestinationDetailOpen: destinationDetail.open,
@@ -1067,27 +1067,33 @@ export default function History({
       className="flex-1 min-h-0 flex flex-col gap-4 md:gap-5 h-full overflow-hidden"
       data-history-content-state={contentState}
       data-history-content-date={visibleDateKey ?? ""}
+      data-history-requested-date={requestedDateKey}
+      data-history-content-mapping-version={visibleMappingVersion ?? ""}
+      data-history-requested-mapping-version={mappingVersion}
+      data-history-content-meaningful={hasMeaningfulHistoryContent({
+        contentState,
+        visibleDateKey,
+        requestedDateKey,
+        visibleMappingVersion,
+        requestedMappingVersion: mappingVersion,
+        timelineContentHidden: showTimelineQuietPlaceholder,
+        timelineSegmentCount: visibleHistoryTimelineView.segments.length,
+      })}
     >
-      <QuietPageHeader
-        icon={<Clock size={18} />}
-        title={UI_TEXT.history.title}
-        subtitle={UI_TEXT.history.subtitle}
-        rightSlot={(
-          <HistoryDateNavigator
-            datePickerRef={datePickerRef}
-            calendarPopoverRef={calendarPopoverRef}
-            selectedDate={presentedDate}
-            today={today}
-            isToday={isToday}
-            calendarOpen={calendarOpen}
-            calendarPosition={calendarPosition}
-            calendarMonth={calendarMonth}
-            onCalendarMonthChange={setCalendarMonth}
-            onChangeDate={changeDate}
-            onOpenDatePicker={openDatePicker}
-            onSelectCalendarDate={selectCalendarDate}
-          />
-        )}
+      <HistoryDateHeader
+        datePickerRef={datePickerRef}
+        calendarPopoverRef={calendarPopoverRef}
+        presentedDate={presentedDate}
+        readState={{ failed: contentState === "error", hasSnapshot: visibleDateKey !== null, requestedDate: selectedDate, retry }}
+        today={today}
+        isToday={isToday}
+        calendarOpen={calendarOpen}
+        calendarPosition={calendarPosition}
+        calendarMonth={calendarMonth}
+        onCalendarMonthChange={setCalendarMonth}
+        onChangeDate={changeDate}
+        onOpenDatePicker={openDatePicker}
+        onSelectCalendarDate={selectCalendarDate}
       />
 
       <div className="qp-panel p-5 history-overview-timeline-card">
@@ -1097,7 +1103,7 @@ export default function History({
           title={historyCopy.timelineAxis}
           actions={showQuietPlaceholder ? null : timelineAxisActions}
           showEmptyMessage
-          emptyMessage={showTimelineQuietPlaceholder ? contentPlaceholderMessage : undefined}
+          emptyMessage={showTimelineQuietPlaceholder ? "" : undefined}
         />
       </div>
 
@@ -1163,6 +1169,7 @@ export default function History({
             </div>
             <HistoryTimelineDialogDateControls
               selectedDate={presentedDate}
+              requestedDate={selectedDate}
               isToday={isToday}
               onChangeDate={changeDate}
               className="history-timeline-dialog-date-controls"

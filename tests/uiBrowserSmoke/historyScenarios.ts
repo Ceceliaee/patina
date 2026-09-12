@@ -10,6 +10,383 @@ import {
   waitForExpression,
 } from "./browserHarness.ts";
 import { DATE_TEXT, HISTORY_TITLE_DETAIL_COUNT } from "./constants.ts";
+import { getLocaleText } from "../../src/shared/i18n/runtime.ts";
+import { navigationExpression } from "../../scripts/perf/tauri-runtime-measurements.ts";
+
+export async function runHistoryReadFailureScenarios(context: BrowserSmokeContext) {
+  const { appUrl, client, sessionId, runTest } = context;
+  const copy = getLocaleText("zh-CN");
+  const state = `document.querySelector('[data-history-content-state]')?.getAttribute('data-history-content-state')`;
+  const date = `document.querySelector('[data-history-content-date]')?.getAttribute('data-history-content-date')`;
+  const metric = `document.querySelector('.history-day-summary-value')?.textContent`;
+  const error = `document.querySelector('[data-history-read-error]')`;
+  const pressEnter = async () => {
+    await client.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", text: "\r", unmodifiedText: "\r", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 }, sessionId);
+    await client.command("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, sessionId);
+  };
+  const withFixture = async (mode: "ready" | "reject" | "pending", operation: () => Promise<void>) => {
+    const storedBefore = await evaluate(client, sessionId, "Object.entries(localStorage)");
+    const { identifier } = await client.command("Page.addScriptToEvaluateOnNewDocument", { source: `(() => {
+      const RealDate = Date;
+      const now = new RealDate(2026, 8, 12, 12).getTime();
+      globalThis.Date = new Proxy(RealDate, {
+        construct(target, args) { return new target(...(args.length ? args : [now])); },
+        get(target, key) { return key === 'now' ? () => now : Reflect.get(target, key); },
+      });
+      localStorage.clear();
+      localStorage.setItem('patina:last-active-view', 'history');
+      localStorage.setItem('__time_tracker_smoke_settings', JSON.stringify({ language: 'zh-CN', web_activity_enabled: '0', tracking_paused: '1' }));
+      const records = [[12, 60], [11, 20], [10, 40]].map(([day, minutes]) => ({
+        appName: 'Cursor', exeName: 'cursor.exe', startTime: new Date(2026, 8, day, 9).getTime(),
+        endTime: new Date(2026, 8, day, 9, minutes).getTime(),
+      }));
+      globalThis.__PATINA_HISTORY_MODE = ${jsonString(mode)};
+      globalThis.__PATINA_HISTORY_PENDING = [];
+      globalThis.__PATINA_HISTORY_BOOTSTRAP_PENDING = [];
+      globalThis.__PATINA_HISTORY_RESULT = ({ startMs, endMs }) => ({
+        records: records.filter(record => record.endTime > startMs && record.startTime < endMs)
+          .map(record => ({ ...record, startTime: Math.max(startMs, record.startTime), endTime: Math.min(endMs, record.endTime) })),
+        readPath: 'projection', fallbackReason: null, sourceRevision: 101, projectionRowCount: 3,
+        factRowCount: 0, hasActiveSession: false,
+      });
+      globalThis.__PATINA_AGGREGATE_HOOK = request => {
+        if (request.bucketCount > 0) return;
+        if (globalThis.__PATINA_HISTORY_MODE === 'reject') throw new Error('Injected History core read failure');
+        if (globalThis.__PATINA_HISTORY_MODE === 'pending') return new Promise((resolve, reject) => {
+          globalThis.__PATINA_HISTORY_PENDING.push({ request, resolve, reject });
+        });
+        return globalThis.__PATINA_HISTORY_RESULT(request);
+      };
+      globalThis.__PATINA_SQL_SELECT_HOOK = (query, params) => {
+        if (params[0] === 'history.bootstrap_snapshot.v1') return new Promise(resolve => {
+          globalThis.__PATINA_HISTORY_BOOTSTRAP_PENDING.push(resolve);
+        });
+        if (query.includes('from session_title_samples')) return [];
+        if (query.includes('from sessions') && !query.startsWith('select distinct') && !query.includes('min(start_time)')) {
+          if (params.length !== 7) throw new Error('Unexpected History session-range SQL parameters');
+          const matchingRecords = records.filter(record => record.startTime < params[1] && record.endTime > params[2]);
+          globalThis.__PATINA_HISTORY_SQL_READS ??= [];
+          globalThis.__PATINA_HISTORY_SQL_READS.push({ params, returnedStarts: matchingRecords.map(record => record.startTime) });
+          return matchingRecords.map((record, index) => ({ id: 9800 + index, record_id: 9800 + index, origin: 'native',
+            app_name: record.appName, exe_name: record.exeName, window_title: 'History failure fixture',
+            start_time: record.startTime, end_time: record.endTime, effective_end_time: record.endTime,
+            capacity_end_time: null, duration: record.endTime - record.startTime,
+            continuity_group_start_time: record.startTime }));
+        }
+      };
+    })()` }, sessionId) as { identifier: string };
+    try {
+      const origin = await evaluate(client, sessionId, "performance.timeOrigin");
+      await client.command("Page.navigate", { url: appUrl }, sessionId);
+      await waitForExpression(client, sessionId, `performance.timeOrigin !== ${origin} && Boolean(document.querySelector('[data-history-content-state]'))`);
+      await operation();
+    } catch (failure) {
+      const observation = await evaluate(client, sessionId, `({
+        history: { ...document.querySelector('[data-history-content-state]')?.dataset },
+        error: document.querySelector('[data-history-read-error]')?.textContent,
+        metric: document.querySelector('.history-day-summary-value')?.textContent,
+        focus: document.activeElement?.outerHTML,
+        calendar: Boolean(document.querySelector('.history-calendar-popover')),
+        mode: globalThis.__PATINA_HISTORY_MODE,
+        reads: globalThis.__PATINA_AGGREGATE_READS?.slice(-6),
+        sqlReads: globalThis.__PATINA_HISTORY_SQL_READS?.slice(-4),
+      })`).catch(error => ({ diagnosticError: String(error) }));
+      throw new AggregateError([failure, new Error(`History fixture before cleanup: ${JSON.stringify(observation)}`)], "History read failure scenario failed");
+    } finally {
+      await client.command("Page.removeScriptToEvaluateOnNewDocument", { identifier }, sessionId);
+      await evaluate(client, sessionId, `(() => { localStorage.clear(); for (const [key, value] of ${JSON.stringify(storedBefore)}) localStorage.setItem(key, value); })()`);
+      const origin = await evaluate(client, sessionId, "performance.timeOrigin");
+      await client.command("Page.navigate", { url: appUrl }, sessionId);
+      await waitForExpression(client, sessionId, `performance.timeOrigin !== ${origin} && Boolean(document.querySelector('main'))`);
+    }
+  };
+  const releaseReads = async () => {
+    await evaluate(client, sessionId, `(() => {
+      globalThis.__PATINA_HISTORY_MODE = 'ready';
+      for (const pending of globalThis.__PATINA_HISTORY_PENDING.splice(0)) pending.resolve(globalThis.__PATINA_HISTORY_RESULT(pending.request));
+    })()`);
+  };
+  const beginKeyboardRetry = async () => {
+    await evaluate(client, sessionId, `globalThis.__PATINA_HISTORY_MODE = 'pending'; ${error}.querySelector('button').focus()`);
+    await pressEnter();
+    await waitForExpression(client, sessionId, `globalThis.__PATINA_HISTORY_PENDING.length >= 2`);
+    assert.equal(await evaluate(client, sessionId, `document.activeElement?.matches('.history-date-label')`), true);
+  };
+  const assertError = async (message: string) => {
+    assert.equal(await evaluate(client, sessionId, `${error}?.getAttribute('role')`), "status");
+    assert.ok(String(await evaluate(client, sessionId, `${error}?.textContent`)).includes(message));
+    assert.equal(await evaluate(client, sessionId, `${error}?.querySelector('button')?.textContent`), copy.common.retry);
+  };
+  const meaningful = `document.querySelector('[data-history-content-state]')?.getAttribute('data-history-content-meaningful')`;
+  const startMeasuredWarmNavigation = async () => {
+    await waitForExpression(client, sessionId, `${state} === 'ready'`);
+    await evaluate(client, sessionId, `globalThis.__PATINA_HISTORY_MODE = 'pending'; document.querySelector('[data-sidebar-nav-item="dashboard"]').click()`);
+    await waitForExpression(client, sessionId, `!document.querySelector('[data-history-content-state]')`);
+    await evaluate(client, sessionId, `(() => {
+      globalThis.__PATINA_HISTORY_NAVIGATION = { status: 'pending', startedAt: performance.now() };
+      (${navigationExpression("history")}).then(result => {
+        globalThis.__PATINA_HISTORY_NAVIGATION = { status: 'completed', ...result };
+      }, error => { globalThis.__PATINA_HISTORY_NAVIGATION = { status: 'failed', error: String(error) }; });
+      return true;
+    })()`);
+    await waitForExpression(client, sessionId, `${state} === 'refreshing' && ${meaningful} === 'true' && globalThis.__PATINA_HISTORY_PENDING.length >= 2`);
+    await waitForAnimationFrames(client, sessionId, 3);
+  };
+
+  await runTest("history measurement records matching cached content while its fresh read remains pending", async () => {
+    await withFixture("ready", async () => {
+      await startMeasuredWarmNavigation();
+      assert.equal(await evaluate(client, sessionId, `globalThis.__PATINA_HISTORY_NAVIGATION.status`), "pending");
+      const beforeReleaseMs = Number(await evaluate(client, sessionId, `performance.now() - globalThis.__PATINA_HISTORY_NAVIGATION.startedAt`));
+      await releaseReads();
+      await waitForExpression(client, sessionId, `globalThis.__PATINA_HISTORY_NAVIGATION.status === 'completed'`);
+      const result = await evaluate(client, sessionId, `globalThis.__PATINA_HISTORY_NAVIGATION`) as {
+        meaningfulContentMs: number; meaningfulContentState: string; meaningfulDateKey: string; freshCompleteMs: number; completeMs: number;
+      };
+      assert.equal(result.meaningfulContentState, "refreshing");
+      assert.equal(result.meaningfulDateKey, "2026-09-12");
+      assert.ok(result.meaningfulContentMs < beforeReleaseMs);
+      assert.ok(result.freshCompleteMs >= beforeReleaseMs - 1);
+      assert.equal(result.freshCompleteMs, result.completeMs);
+    });
+  });
+
+  await runTest("history measurement rejects retained content after a terminal refresh failure", async () => {
+    await withFixture("ready", async () => {
+      await startMeasuredWarmNavigation();
+      await evaluate(client, sessionId, `(() => {
+        globalThis.__PATINA_HISTORY_MODE = 'reject';
+        for (const pending of globalThis.__PATINA_HISTORY_PENDING.splice(0)) pending.reject(new Error('Injected measured refresh failure'));
+      })()`);
+      await waitForExpression(client, sessionId, `${state} === 'error' && ${meaningful} === 'false'`);
+      await waitForExpression(client, sessionId, `globalThis.__PATINA_HISTORY_NAVIGATION.status === 'failed'`, 20_000);
+      assert.match(String(await evaluate(client, sessionId, `globalThis.__PATINA_HISTORY_NAVIGATION.error`)), /content timed out: history/);
+    });
+  });
+
+  await runTest("history meaningful marker rejects a retained wrong day and an old classification identity", async () => {
+    await withFixture("ready", async () => {
+      await waitForExpression(client, sessionId, `${state} === 'ready' && ${meaningful} === 'true'`);
+      await evaluate(client, sessionId, `globalThis.__PATINA_HISTORY_MODE = 'pending'; document.querySelector('.history-date-label').parentElement.parentElement.querySelector(':scope > button').click()`);
+      await waitForExpression(client, sessionId, `${state} === 'refreshing' && document.querySelector('[data-history-requested-date="2026-09-11"]') && ${date} === '2026-09-12'`);
+      assert.equal(await evaluate(client, sessionId, meaningful), "false");
+      await releaseReads();
+      await waitForExpression(client, sessionId, `${state} === 'ready' && ${date} === '2026-09-11' && ${meaningful} === 'true'`);
+      await evaluate(client, sessionId, `(() => {
+        globalThis.__PATINA_HISTORY_MODE = 'pending';
+        const trigger = Array.from(document.querySelectorAll('.history-day-distribution-detail-trigger')).find(button => button.getAttribute('aria-label')?.includes('Cursor'));
+        if (!trigger) throw new Error('classification fixture trigger missing');
+        const bounds = trigger.getBoundingClientRect();
+        trigger.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: bounds.left + bounds.width / 2, clientY: bounds.top + bounds.height / 2 }));
+      })()`);
+      await waitForExpression(client, sessionId, `Boolean(document.querySelector('.quick-classification-menu [aria-haspopup="menu"]:not(:disabled)'))`);
+      await evaluate(client, sessionId, `document.querySelector('.quick-classification-menu [aria-haspopup="menu"]').click()`);
+      await waitForExpression(client, sessionId, `Boolean(document.querySelector('.quick-classification-category-menu [role="menuitemradio"]:not(:disabled)'))`);
+      await evaluate(client, sessionId, `document.querySelector('.quick-classification-category-menu [role="menuitemradio"]').click()`);
+      await waitForExpression(client, sessionId, `(() => { const root = document.querySelector('[data-history-content-state]');
+        return root.dataset.historyContentState === 'refreshing' && root.dataset.historyContentMappingVersion !== root.dataset.historyRequestedMappingVersion; })()`);
+      assert.equal(await evaluate(client, sessionId, meaningful), "false");
+      await releaseReads();
+      await waitForExpression(client, sessionId, `${state} === 'ready' && ${meaningful} === 'true'`);
+    });
+  });
+
+  await runTest("history meaningful marker distinguishes cold and aggregate-only bootstrap axes from real timeline facts", async () => {
+    for (const withFacts of [false, true]) await withFixture("pending", async () => {
+      await waitForExpression(client, sessionId, `${state} === 'cold-loading' && globalThis.__PATINA_HISTORY_BOOTSTRAP_PENDING.length > 0`);
+      assert.equal(await evaluate(client, sessionId, meaningful), "false");
+      await evaluate(client, sessionId, `(() => {
+        const startTime = new Date(2026, 8, 12, 9).getTime(), endTime = startTime + 60 * 60_000;
+        const sessions = ${withFacts} ? [{ id: 9800, appName: 'Cursor', exeName: 'cursor.exe', windowTitle: '', startTime, endTime,
+          duration: endTime - startTime, continuityGroupStartTime: startTime, titleSampleDetails: [] }] : [];
+        const payload = JSON.stringify({ version: 1, createdAtMs: Date.now(),
+          identity: { dateKey: '2026-09-12', mappingVersion: 0, webActivityEnabled: false },
+          snapshot: { fetchedAtMs: Date.now(), icons: {}, daySessions: sessions, weeklySessions: [],
+            dayAggregateSessions: [{ appName: 'Cursor', exeName: 'cursor.exe', startTime, endTime }], weeklyAggregateSessions: [],
+            aggregateIncludesExactFacts: true, dayWebSegments: [], webDomainFavicons: {}, webDomainOverrides: {} } });
+        for (const resolve of globalThis.__PATINA_HISTORY_BOOTSTRAP_PENDING.splice(0)) resolve([{ value: payload }]);
+      })()`);
+      await waitForExpression(client, sessionId, `${state} === 'bootstrap'`);
+      assert.equal(await evaluate(client, sessionId, meaningful), String(withFacts));
+      assert.equal(Number(await evaluate(client, sessionId, `document.querySelectorAll('.history-overview-timeline-card .history-horizontal-timeline-segment').length`)) > 0, withFacts);
+      await releaseReads();
+      await waitForExpression(client, sessionId, `${state} === 'ready' && ${meaningful} === 'true'`);
+    });
+  });
+
+  await runTest("history cold failure is not empty data and keyboard retry preserves user focus", async () => {
+    await withFixture("reject", async () => {
+      await waitForExpression(client, sessionId, `${state} === 'error'`);
+      assert.equal(await evaluate(client, sessionId, metric), "—", "a failed read cannot assert a zero total");
+      await assertError(copy.common.readFailed);
+      assert.equal(await evaluate(client, sessionId, `document.querySelector('.history-horizontal-timeline-empty')?.textContent`), "");
+      await beginKeyboardRetry();
+      await evaluate(client, sessionId, `document.querySelector('.history-date-label').parentElement.previousElementSibling.focus()`);
+      await releaseReads();
+      await waitForExpression(client, sessionId, `${state} === 'ready' && ${metric} === '1h 0m' && ${date} === '2026-09-12'`);
+      assert.equal(await evaluate(client, sessionId, `document.activeElement === document.querySelector('.history-date-label').parentElement.previousElementSibling`), true);
+      assert.equal(await evaluate(client, sessionId, `Boolean(${error})`), false);
+    });
+  });
+
+  await runTest("history warm failure retains the same day and retries without a duplicate request", async () => {
+    await withFixture("ready", async () => {
+      await waitForExpression(client, sessionId, `${state} === 'ready' && ${metric} === '1h 0m'`);
+      await evaluate(client, sessionId, `globalThis.__PATINA_HISTORY_MODE = 'reject';
+        globalThis.__PATINA_EMIT_TAURI_EVENT('tracking-data-changed', { reason: 'session-transition', changed_at_ms: Date.now() })`);
+      await waitForExpression(client, sessionId, `${state} === 'error'`);
+      assert.equal(await evaluate(client, sessionId, metric), "1h 0m");
+      assert.equal(await evaluate(client, sessionId, date), "2026-09-12");
+      await assertError(copy.common.refreshFailed);
+      await beginKeyboardRetry();
+      await pressEnter();
+      assert.equal(await evaluate(client, sessionId, `globalThis.__PATINA_HISTORY_PENDING.length`), 2);
+      assert.equal(await evaluate(client, sessionId, metric), "1h 0m");
+      await releaseReads();
+      await waitForExpression(client, sessionId, `${state} === 'ready' && !Boolean(${error})`);
+    });
+  });
+
+  await runTest("history failed date retry keeps requested and presented dates separate", async () => {
+    await withFixture("ready", async () => {
+      await waitForExpression(client, sessionId, `${state} === 'ready' && ${metric} === '1h 0m'`);
+      await evaluate(client, sessionId, `globalThis.__PATINA_HISTORY_MODE = 'reject';
+        document.querySelector('.history-date-label').parentElement.previousElementSibling.click()`);
+      await waitForExpression(client, sessionId, `${state} === 'error'`);
+      assert.equal(await evaluate(client, sessionId, date), "2026-09-12");
+      assert.equal(await evaluate(client, sessionId, `document.querySelector('.history-date-label').textContent`), DATE_TEXT.today);
+      assert.equal(await evaluate(client, sessionId, metric), "1h 0m");
+      await assertError(copy.common.refreshFailed);
+      assert.ok(String(await evaluate(client, sessionId, `${error}?.textContent`)).includes(DATE_TEXT.yesterday));
+      assert.equal(await evaluate(client, sessionId, `document.querySelector('.history-date-label').parentElement.nextElementSibling.getAttribute('aria-label')`),
+        copy.accessibility.history.nextDay(DATE_TEXT.today), "the next-date action must name its requested target while the previous presentation is retained");
+      await beginKeyboardRetry();
+      assert.equal(await evaluate(client, sessionId, metric), "1h 0m");
+      assert.equal(await evaluate(client, sessionId, date), "2026-09-12");
+      await releaseReads();
+      await waitForExpression(client, sessionId, `${state} === 'ready' && ${metric} === '20m' && ${date} === '2026-09-11'`);
+      assert.equal(await evaluate(client, sessionId, `document.querySelector('.history-date-label').textContent`), DATE_TEXT.yesterday);
+
+      await evaluate(client, sessionId, `globalThis.__PATINA_HISTORY_MODE = 'reject';
+        document.querySelector('.history-date-label').parentElement.nextElementSibling.click()`);
+      await waitForExpression(client, sessionId, `${state} === 'error'`);
+      await beginKeyboardRetry();
+      await evaluate(client, sessionId, `globalThis.__PATINA_HISTORY_MODE = 'ready';
+        document.querySelector('.history-date-label').parentElement.previousElementSibling.click()`);
+      await waitForExpression(client, sessionId, `${state} === 'ready' && ${metric} === '20m' && ${date} === '2026-09-11'`);
+      await releaseReads();
+      await waitForAnimationFrames(client, sessionId, 2);
+      assert.equal(await evaluate(client, sessionId, metric), "20m", "late successful retry must not put today's data under yesterday's title");
+      assert.equal(await evaluate(client, sessionId, date), "2026-09-11");
+      assert.equal(await evaluate(client, sessionId, `Boolean(${error})`), false);
+
+      await evaluate(client, sessionId, `globalThis.__PATINA_HISTORY_MODE = 'reject';
+        globalThis.__PATINA_EMIT_TAURI_EVENT('tracking-data-changed', { reason: 'session-transition', changed_at_ms: Date.now() })`);
+      await waitForExpression(client, sessionId, `${state} === 'error'`);
+      await beginKeyboardRetry();
+      await evaluate(client, sessionId, `document.querySelector('[aria-label="关于"]').click()`);
+      await waitForExpression(client, sessionId, `!Boolean(document.querySelector('[data-history-content-state]'))`);
+      await evaluate(client, sessionId, `(() => {
+        globalThis.__PATINA_HISTORY_MODE = 'ready';
+        for (const pending of globalThis.__PATINA_HISTORY_PENDING.splice(0)) pending.reject(new Error('History read failed after unmount'));
+      })()`);
+      await waitForAnimationFrames(client, sessionId, 2);
+      await evaluate(client, sessionId, `document.querySelector('[aria-label="历史"]').click()`);
+      await waitForExpression(client, sessionId, `${state} === 'ready' && ${metric} === '1h 0m' && ${date} === '2026-09-12'`);
+      assert.equal(await evaluate(client, sessionId, `Boolean(${error})`), false);
+    });
+  });
+
+  await runTest("history dialog date actions name the requested target after a failed read", async () => {
+    await withFixture("ready", async () => {
+      await waitForExpression(client, sessionId, `${state} === 'ready' && ${date} === '2026-09-12'`);
+      await evaluate(client, sessionId, `document.querySelector('.history-timeline-open').focus()`);
+      await pressEnter();
+      await waitForExpression(client, sessionId, `Boolean(document.querySelector('.history-timeline-dialog-surface'))`);
+      await evaluate(client, sessionId, `globalThis.__PATINA_HISTORY_MODE = 'reject';
+        document.querySelector('.history-timeline-dialog-date-previous').focus()`);
+      await pressEnter();
+      await waitForExpression(client, sessionId, `${state} === 'error' && ${error}?.textContent.includes(${jsonString(DATE_TEXT.yesterday)})`);
+      const failedControls = await evaluate(client, sessionId, `({
+        presentedLabel: document.querySelector('.history-timeline-dialog-date-label').textContent.trim(),
+        previousTarget: document.querySelector('.history-timeline-dialog-date-previous').getAttribute('aria-label'),
+        nextTarget: document.querySelector('.history-timeline-dialog-date-next').getAttribute('aria-label'),
+        nextDisabled: document.querySelector('.history-timeline-dialog-date-next').disabled,
+      })`);
+      await evaluate(client, sessionId, `globalThis.__PATINA_HISTORY_MODE = 'ready';
+        document.querySelector('.history-timeline-dialog-date-next').focus()`);
+      await pressEnter();
+      await waitForExpression(client, sessionId, `${state} === 'ready' && !Boolean(${error})`);
+      assert.deepEqual({ controls: failedControls, clickedNextDate: await evaluate(client, sessionId, date) }, {
+        controls: {
+          presentedLabel: DATE_TEXT.today,
+          previousTarget: copy.accessibility.history.previousDay("9月10日"),
+          nextTarget: copy.accessibility.history.nextDay(DATE_TEXT.today),
+          nextDisabled: false,
+        },
+        clickedNextDate: "2026-09-12",
+      });
+    });
+  });
+
+  await runTest("history failed cross-month read reopens a keyboard-selectable requested date", async () => {
+    await withFixture("ready", async () => {
+      await waitForExpression(client, sessionId, `${state} === 'ready' && ${date} === '2026-09-12'`);
+      await evaluate(client, sessionId, `globalThis.__PATINA_HISTORY_MODE = 'reject'`);
+      for (let previousDay = 1; previousDay <= 13; previousDay += 1) {
+        const requestedLabel = previousDay === 1 ? DATE_TEXT.yesterday
+          : new Date(2026, 8, 12 - previousDay).toLocaleDateString("zh-CN", { month: "short", day: "numeric" });
+        await evaluate(client, sessionId, `document.querySelector('.history-date-label').parentElement.previousElementSibling.click()`);
+        await waitForExpression(client, sessionId, `${state} === 'error' && ${error}?.textContent.includes(${jsonString(requestedLabel)})`);
+      }
+      assert.equal(await evaluate(client, sessionId, date), "2026-09-12");
+      assert.equal(await evaluate(client, sessionId, metric), "1h 0m");
+      assert.ok(String(await evaluate(client, sessionId, `${error}?.textContent`)).includes("8月30日"));
+      await evaluate(client, sessionId, `document.querySelector('.history-date-label').focus()`);
+      await pressEnter();
+      await waitForExpression(client, sessionId, `Boolean(document.querySelector('.history-calendar-popover'))`);
+      await waitForAnimationFrames(client, sessionId, 2);
+      assert.deepEqual(await evaluate(client, sessionId, `(() => {
+        const calendar = document.querySelector('.history-calendar-popover');
+        return {
+          month: calendar.querySelector('[data-calendar-date]:not([data-muted])')?.getAttribute('data-calendar-date')?.slice(0, 7),
+          selected: Array.from(calendar.querySelectorAll('[data-selected="true"]')).map(day => day.getAttribute('data-calendar-date')),
+          focused: document.activeElement?.getAttribute('data-calendar-date'),
+          tabbableDays: calendar.querySelectorAll('.qp-calendar-day[tabindex="0"]').length,
+        };
+      })()`), { month: "2026-08", selected: ["2026-08-30"], focused: "2026-08-30", tabbableDays: 1 });
+      await client.command("Input.dispatchKeyEvent", { type: "keyDown", key: "ArrowRight", code: "ArrowRight", windowsVirtualKeyCode: 39 }, sessionId);
+      await client.command("Input.dispatchKeyEvent", { type: "keyUp", key: "ArrowRight", code: "ArrowRight", windowsVirtualKeyCode: 39 }, sessionId);
+      await waitForExpression(client, sessionId, `document.activeElement?.getAttribute('data-calendar-date') === '2026-08-31'`);
+      await evaluate(client, sessionId, `globalThis.__PATINA_HISTORY_MODE = 'ready'`);
+      await pressEnter();
+      await waitForExpression(client, sessionId, `${state} === 'empty' && ${date} === '2026-08-31' && !Boolean(${error})
+        && !document.querySelector('.history-calendar-popover') && document.activeElement?.matches('.history-date-label')`);
+      assert.equal(await evaluate(client, sessionId, meaningful), "true");
+    });
+  });
+
+  await runTest("history late persisted bootstrap cannot erase a terminal read failure", async () => {
+    await withFixture("reject", async () => {
+      await waitForExpression(client, sessionId, `${state} === 'error' && globalThis.__PATINA_HISTORY_BOOTSTRAP_PENDING.length > 0`);
+      await evaluate(client, sessionId, `(() => {
+        const startTime = new Date(2026, 8, 12, 1).getTime();
+        const endTime = startTime + 3 * 60 * 60_000;
+        const payload = JSON.stringify({ version: 1, createdAtMs: Date.now(),
+          identity: { dateKey: '2026-09-12', mappingVersion: 0, webActivityEnabled: false },
+          snapshot: { fetchedAtMs: Date.now(), icons: {}, daySessions: [], weeklySessions: [],
+            dayAggregateSessions: [{ appName: 'Cursor', exeName: 'cursor.exe', startTime, endTime }],
+            weeklyAggregateSessions: [], aggregateIncludesExactFacts: true,
+            dayWebSegments: [], webDomainFavicons: {}, webDomainOverrides: {} } });
+        for (const resolve of globalThis.__PATINA_HISTORY_BOOTSTRAP_PENDING.splice(0)) resolve([{ value: payload }]);
+      })()`);
+      await waitForAnimationFrames(client, sessionId, 2);
+      assert.equal(await evaluate(client, sessionId, state), "error", "late bootstrap must not replace the final error with bootstrap state");
+      assert.equal(await evaluate(client, sessionId, metric), "—");
+      await assertError(copy.common.readFailed);
+    });
+  });
+}
 
 export async function runHistoryScenarios(context: BrowserSmokeContext) {
   const { appUrl, client, sessionId, runTest } = context;

@@ -96,9 +96,10 @@ export function useHistorySnapshotRuntime({
   selectedDate,
   webActivityEnabled,
 }: UseHistorySnapshotRuntimeOptions) {
+  const requestDateKey = formatHistoryDateCacheKey(selectedDate);
   const [initialSnapshotState] = useState(() => {
     const identity: HistoryBootstrapIdentity = {
-      dateKey: formatHistoryDateCacheKey(selectedDate),
+      dateKey: requestDateKey,
       mappingVersion,
       webActivityEnabled,
     };
@@ -152,12 +153,14 @@ export function useHistorySnapshotRuntime({
     return "cold-loading";
   });
   const visibleDateKeyRef = useRef<string | null>(
-    initialVisibleSnapshot ? formatHistoryDateCacheKey(selectedDate) : null,
+    initialVisibleSnapshot ? requestDateKey : null,
   );
   const visibleMappingVersionRef = useRef<number | null>(
     initialVisibleSnapshot ? mappingVersion : null,
   );
   const requestGenerationRef = useRef(0);
+  const [retryKey, setRetryKey] = useState(0);
+  const retry = useCallback(() => setRetryKey((key) => key + 1), []);
   const visibleDayWebSegments = useMemo(() => (
     filterWebActivitySegmentsForStatistics(rawDayWebSegments, webDomainOverrides)
   ), [rawDayWebSegments, webDomainOverrides]);
@@ -216,7 +219,6 @@ export function useHistorySnapshotRuntime({
     const requestGeneration = requestGenerationRef.current + 1;
     requestGenerationRef.current = requestGeneration;
     const requestDate = new Date(selectedDate);
-    const requestDateKey = formatHistoryDateCacheKey(requestDate);
     const requestIdentity: HistoryBootstrapIdentity = {
       dateKey: requestDateKey,
       mappingVersion,
@@ -226,6 +228,7 @@ export function useHistorySnapshotRuntime({
     const bootstrapSnapshot = getCachedHistoryBootstrapSnapshot(requestIdentity)?.snapshot ?? null;
     const seedSnapshot = getHistorySeedSnapshot(requestDate);
     let hasUsableSnapshot = false;
+    let freshReadSettled = false;
 
     if (cachedSnapshot) {
       hasUsableSnapshot = true;
@@ -253,7 +256,7 @@ export function useHistorySnapshotRuntime({
       if (hasUsableSnapshot) return;
 
       const persisted = await loadPersistedHistoryBootstrapSnapshot();
-      if (requestGenerationRef.current !== requestGeneration) return;
+      if (freshReadSettled || requestGenerationRef.current !== requestGeneration) return;
       if (visibleDateKeyRef.current === requestDateKey) return;
       if (
         persisted
@@ -272,6 +275,7 @@ export function useHistorySnapshotRuntime({
           includeWebActivity: webActivityEnabled,
           includeTitleDetails: false,
         });
+        freshReadSettled = true;
         if (requestGenerationRef.current !== requestGeneration) return;
 
         const nextState = snapshot.daySessions.length > 0
@@ -300,6 +304,7 @@ export function useHistorySnapshotRuntime({
           console.warn("History title detail enrichment failed", error);
         });
       } catch (error) {
+        freshReadSettled = true;
         if (requestGenerationRef.current !== requestGeneration) return;
         console.warn("History snapshot refresh failed", error);
         setContentState("error");
@@ -321,6 +326,8 @@ export function useHistorySnapshotRuntime({
     mappingVersion,
     refreshEnabled,
     refreshKey,
+    requestDateKey,
+    retryKey,
     selectedDate,
     webActivityEnabled,
   ]);
@@ -348,6 +355,7 @@ export function useHistorySnapshotRuntime({
 
   return {
     contentState,
+    retry,
     nowMs,
     rawDaySessions,
     rawDayAggregateSessions,
@@ -358,7 +366,9 @@ export function useHistorySnapshotRuntime({
     aggregateIncludesExactFacts,
     setNowMs,
     snapshotIcons,
+    requestedDateKey: requestDateKey,
     visibleDateKey: visibleDateKeyRef.current,
+    visibleMappingVersion: visibleMappingVersionRef.current,
     webDomainFavicons,
     webFaviconsReady,
     webDomainOverrides,

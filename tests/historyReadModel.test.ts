@@ -8,6 +8,7 @@ import {
   loadHistorySnapshot,
   loadHistoryWebFaviconsForSegments,
   resetHistoryWebFaviconRuntimeCacheForTests,
+  type AggregateSessionRecord,
 } from "../src/features/history/services/historyReadModel.ts";
 import { buildHistoryCategoryDistribution } from "../src/features/history/services/historyFormatting.ts";
 import {
@@ -65,6 +66,18 @@ function makeWebSegment(overrides: Partial<WebActivitySegment> = {}): WebActivit
   };
 }
 
+function makeAggregateRange(records: AggregateSessionRecord[] = []) {
+  return {
+    records,
+    readPath: "projection" as const,
+    fallbackReason: null,
+    sourceRevision: 1,
+    projectionRowCount: records.length,
+    factRowCount: 0,
+    hasActiveSession: false,
+  };
+}
+
 let passed = 0;
 
 async function runTest(name: string, fn: () => Promise<void>) {
@@ -81,7 +94,7 @@ async function runTest(name: string, fn: () => Promise<void>) {
 
 await runTest("history snapshot keeps app sessions when optional web reads fail", async () => {
   const daySession = makeSession({ id: 1 });
-  const weeklySession = makeSession({ id: 2 });
+  const aggregate = { appName: "Music", exeName: "music.exe", startTime: 1_000, endTime: 2_000 };
   const originalWarn = console.warn;
   let warning = "";
   console.warn = (message?: unknown) => {
@@ -91,7 +104,8 @@ await runTest("history snapshot keeps app sessions when optional web reads fail"
   try {
     const snapshot = await loadHistorySnapshot(new Date(2026, 0, 2), 7, {
       getHistoryByDate: async () => [daySession],
-      getSessionsInRange: async () => [weeklySession],
+      getSessionsInRange: async () => [],
+      getActivityAggregateRange: async () => makeAggregateRange([aggregate]),
       getWebActivitySegmentsInRange: async () => {
         throw new Error("no such table: web_activity_segments");
       },
@@ -104,7 +118,8 @@ await runTest("history snapshot keeps app sessions when optional web reads fail"
     });
 
     assert.deepEqual(snapshot.daySessions, [daySession]);
-    assert.deepEqual(snapshot.weeklySessions, [weeklySession]);
+    assert.deepEqual(snapshot.weeklySessions, []);
+    assert.deepEqual(snapshot.weeklyAggregateSessions, [aggregate]);
     assert.deepEqual(snapshot.dayWebSegments, []);
     assert.deepEqual(snapshot.webDomainFavicons, {});
     assert.deepEqual(snapshot.webDomainOverrides, {});
@@ -118,6 +133,7 @@ await runTest("history snapshot skips all web reads when web activity is disable
   let webReadCount = 0;
   const snapshot = await loadHistorySnapshot(new Date(2026, 0, 2), 7, {
     getHistoryByDate: async () => [makeSession()],
+    getActivityAggregateRange: async () => makeAggregateRange(),
     getSessionsInRange: async () => [],
     getWebActivitySegmentsInRange: async () => {
       webReadCount += 1;
@@ -153,7 +169,7 @@ await runTest("hour buckets feed History summaries without becoming timeline ses
   const snapshot = await loadHistorySnapshot(selectedDate, 7, {
     getHistoryByDate: async () => [],
     getSessionsInRange: async () => [],
-    getImportedTimeBucketsInRange: async () => [aggregate],
+    getActivityAggregateRange: async () => makeAggregateRange([aggregate]),
     getWebActivitySegmentsInRange: async () => [],
     getWebFaviconsForDomains: async () => ({}),
     loadWebDomainOverrides: async () => ({}),
@@ -163,6 +179,7 @@ await runTest("hour buckets feed History summaries without becoming timeline ses
     weeklySessions: snapshot.weeklySessions,
     dayAggregateSessions: snapshot.dayAggregateSessions,
     weeklyAggregateSessions: snapshot.weeklyAggregateSessions,
+    aggregateIncludesExactFacts: snapshot.aggregateIncludesExactFacts,
     trackerHealth: resolveTrackerHealth(bucketStart + 3_600_000, bucketStart + 3_600_000, 8_000),
     selectedDate,
     nowMs: bucketStart + 3_600_000,
@@ -187,6 +204,79 @@ await runTest("hour buckets feed History summaries without becoming timeline ses
   assert.equal(categoryDistribution[0]?.percentage, 100);
   assert.equal(readModel.hourlyActivity[10]?.minutes, 30);
   assert.equal(readModel.weekly.reduce((total, day) => total + day.totalDuration, 0), 30 * 60_000);
+});
+
+await runTest("history forwards fractional-offset day bounds and preserves canonical aggregate results", async () => {
+  const originalTimezone = process.env.TZ;
+  try {
+    for (const fixture of [
+      { timezone: "Asia/Kolkata", start: "2026-01-01T18:30:00Z", importedMinutes: 0 },
+      { timezone: "Asia/Kathmandu", start: "2026-01-01T18:15:00Z", importedMinutes: 30 },
+    ]) {
+      process.env.TZ = fixture.timezone;
+      const selectedDate = new Date(2026, 0, 2);
+      const startMs = Date.parse(fixture.start);
+      const endMs = startMs + 24 * 3_600_000;
+      const calls: number[][] = [];
+      // The canonical reader has already applied native occupancy across the
+      // whole UTC hour before clipping its imported prefix to the local day.
+      const records = fixture.importedMinutes === 0 ? [] : [{
+        appName: "Music",
+        exeName: "music.exe",
+        startTime: startMs,
+        endTime: startMs + fixture.importedMinutes * 60_000,
+      }];
+      const snapshot = await loadHistorySnapshot(selectedDate, 7, {
+        getHistoryByDate: async () => [],
+        getSessionsInRange: async () => {
+          throw new Error("canonical aggregate results must not trigger weekly fact reads");
+        },
+        getActivityAggregateRange: async (start, end) => {
+          calls.push([start, end]);
+          return makeAggregateRange(start === startMs ? records : []);
+        },
+        getWebActivitySegmentsInRange: async () => [],
+        getWebFaviconsForDomains: async () => ({}),
+        loadWebDomainOverrides: async () => ({}),
+      }, { includeWebActivity: false });
+      assert.deepEqual(calls[0], [startMs, endMs], fixture.timezone);
+      assert.equal(calls.length, 2);
+      assert.deepEqual(snapshot.dayAggregateSessions, records);
+      const nowMs = endMs - 1;
+      const model = buildHistoryReadModel({
+        ...snapshot,
+        trackerHealth: resolveTrackerHealth(nowMs, nowMs, 8_000),
+        selectedDate,
+        nowMs,
+        minSessionSecs: 0,
+        mergeThresholdSecs: 0,
+      });
+      assert.equal(model.summaryActiveDurationMs, fixture.importedMinutes * 60_000, fixture.timezone);
+      assert.equal(model.timelineSessions.length, 0);
+      assert.deepEqual(snapshot.weeklySessions, []);
+    }
+  } finally {
+    if (originalTimezone === undefined) delete process.env.TZ;
+    else process.env.TZ = originalTimezone;
+  }
+});
+
+await runTest("history rejects failed canonical aggregates without substituting exact facts", async () => {
+  let factReads = 0;
+  await assert.rejects(loadHistorySnapshot(new Date(2026, 0, 2), 7, {
+    getHistoryByDate: async () => [makeSession()],
+    getSessionsInRange: async () => {
+      factReads += 1;
+      return [makeSession()];
+    },
+    getActivityAggregateRange: async () => {
+      throw new Error("aggregate read failed");
+    },
+    getWebActivitySegmentsInRange: async () => [],
+    getWebFaviconsForDomains: async () => ({}),
+    loadWebDomainOverrides: async () => ({}),
+  }, { includeWebActivity: false }), /aggregate read failed/);
+  assert.equal(factReads, 0);
 });
 
 await runTest("persistent aggregate summaries do not double count exact timeline facts", async () => {
@@ -247,6 +337,7 @@ await runTest("history core snapshot defers title samples until detail enrichmen
       coreReadCount += 1;
       return [lightweightSession];
     },
+    getActivityAggregateRange: async () => makeAggregateRange(),
     getSessionsInRange: async () => [],
     getWebActivitySegmentsInRange: async () => [],
     getWebFaviconsForDomains: async () => ({}),
@@ -667,6 +758,7 @@ await runTest("history favicon enrichment fails independently from the core snap
   try {
     const deps = {
       getHistoryByDate: async () => [],
+      getActivityAggregateRange: async () => makeAggregateRange(),
       getSessionsInRange: async () => [],
       getWebActivitySegmentsInRange: async () => [webSegment],
       getWebFaviconsForDomains: async () => {
@@ -698,6 +790,7 @@ await runTest("history favicon enrichment dedupes requests and keeps a bounded s
   let releaseLoad: ((favicons: Record<string, string>) => void) | null = null;
   const deps = {
     getHistoryByDate: async () => [],
+    getActivityAggregateRange: async () => makeAggregateRange(),
     getSessionsInRange: async () => [],
     getWebActivitySegmentsInRange: async () => [],
     getWebFaviconsForDomains: async () => {
@@ -754,6 +847,7 @@ await runTest("history favicon runtime cache evicts old domains and rejects over
 
   await loadHistoryWebFaviconsForSegments(segments, {
     getHistoryByDate: async () => [],
+    getActivityAggregateRange: async () => makeAggregateRange(),
     getSessionsInRange: async () => [],
     getWebActivitySegmentsInRange: async () => [],
     getWebFaviconsForDomains: async () => favicons,
@@ -769,7 +863,7 @@ await runTest("history favicon runtime cache evicts old domains and rejects over
   assert.equal(getCachedHistoryWebFaviconsForSegments([segments[69]])[oversizedDomain], undefined);
 });
 
-await runTest("history snapshot uses lightweight weekly loader when provided", async () => {
+await runTest("history snapshot uses canonical aggregates without loading weekly facts", async () => {
   const daySession = makeSession({
     id: 1,
     titleSampleDetails: [{
@@ -778,34 +872,35 @@ await runTest("history snapshot uses lightweight weekly loader when provided", a
       endTime: new Date(2026, 0, 2, 10, 0, 0, 0).getTime(),
     }],
   });
-  const weeklySession = makeSession({ id: 2, titleSampleDetails: [] });
-  let weeklyLoadCount = 0;
+  const aggregate = { appName: "Music", exeName: "music.exe", startTime: 1_000, endTime: 2_000 };
+  let aggregateLoadCount = 0;
 
   const snapshot = await loadHistorySnapshot(new Date(2026, 0, 2), 7, {
     getHistoryByDate: async () => [daySession],
     getSessionsInRange: async () => {
       throw new Error("full weekly session loader should not run");
     },
-    getWeeklySessionsInRange: async () => {
-      weeklyLoadCount += 1;
-      return [weeklySession];
+    getActivityAggregateRange: async () => {
+      aggregateLoadCount += 1;
+      return makeAggregateRange([aggregate]);
     },
     getWebActivitySegmentsInRange: async () => [],
     getWebFaviconsForDomains: async () => ({}),
     loadWebDomainOverrides: async () => ({}),
   });
 
-  assert.equal(weeklyLoadCount, 1);
+  assert.equal(aggregateLoadCount, 2);
   assert.equal(snapshot.daySessions[0].titleSampleDetails?.length, 1);
-  assert.deepEqual(snapshot.weeklySessions, [weeklySession]);
-  assert.deepEqual(snapshot.weeklySessions[0].titleSampleDetails, []);
+  assert.deepEqual(snapshot.weeklySessions, []);
+  assert.deepEqual(snapshot.weeklyAggregateSessions, [aggregate]);
+  assert.equal(snapshot.aggregateIncludesExactFacts, true);
 });
 
 await runTest("history snapshot cache dedupes matching in-flight loads", async () => {
   const daySession = makeSession({ id: 1 });
-  const weeklySession = makeSession({ id: 2 });
+  const aggregate = { appName: "Music", exeName: "music.exe", startTime: 1_000, endTime: 2_000 };
   let dayLoadCount = 0;
-  let weeklyLoadCount = 0;
+  let aggregateLoadCount = 0;
   let releaseDayLoad: (() => void) | null = null;
   const deps = {
     getHistoryByDate: async () => {
@@ -816,8 +911,11 @@ await runTest("history snapshot cache dedupes matching in-flight loads", async (
       return [daySession];
     },
     getSessionsInRange: async () => {
-      weeklyLoadCount += 1;
-      return [weeklySession];
+      throw new Error("weekly facts must not load");
+    },
+    getActivityAggregateRange: async () => {
+      aggregateLoadCount += 1;
+      return makeAggregateRange([aggregate]);
     },
     getWebActivitySegmentsInRange: async () => [],
     getWebFaviconsForDomains: async () => ({}),
@@ -832,9 +930,10 @@ await runTest("history snapshot cache dedupes matching in-flight loads", async (
 
   assert.equal(firstSnapshot, secondSnapshot);
   assert.deepEqual(firstSnapshot.daySessions, [daySession]);
-  assert.deepEqual(firstSnapshot.weeklySessions, [weeklySession]);
+  assert.deepEqual(firstSnapshot.weeklySessions, []);
+  assert.deepEqual(firstSnapshot.weeklyAggregateSessions, [aggregate]);
   assert.equal(dayLoadCount, 1);
-  assert.equal(weeklyLoadCount, 1);
+  assert.equal(aggregateLoadCount, 2);
 });
 
 await runTest("history snapshot cache keeps different dates separate while pending", async () => {
@@ -844,6 +943,7 @@ await runTest("history snapshot cache keeps different dates separate while pendi
       dayLoadCount += 1;
       return [makeSession({ id: date.getDate() })];
     },
+    getActivityAggregateRange: async () => makeAggregateRange(),
     getSessionsInRange: async () => [],
     getWebActivitySegmentsInRange: async () => [],
     getWebFaviconsForDomains: async () => ({}),
@@ -870,6 +970,7 @@ await runTest("cleared History requests cannot repopulate cache or evict newer i
         dayResolvers.push(resolve);
       });
     },
+    getActivityAggregateRange: async () => makeAggregateRange(),
     getSessionsInRange: async () => [],
     getWebActivitySegmentsInRange: async () => [],
     getWebFaviconsForDomains: async () => ({}),
@@ -900,6 +1001,7 @@ await runTest("cleared History requests cannot repopulate cache or evict newer i
 
 await runTest("History bounds cache storage and blocks both late detail modes after eviction", async () => {
   const emptyDeps = {
+    getActivityAggregateRange: async () => makeAggregateRange(),
     getSessionsInRange: async () => [],
     getWebActivitySegmentsInRange: async () => [],
     getWebFaviconsForDomains: async () => ({}),
@@ -944,6 +1046,7 @@ await runTest("History rejection releases the pending request and permits a fres
   const date = new Date(2026, 0, 2);
   const deps = {
     getHistoryByDate: async () => [makeSession({ id: 2 })],
+    getActivityAggregateRange: async () => makeAggregateRange(),
     getSessionsInRange: async () => [],
     getWebActivitySegmentsInRange: async () => [],
     getWebFaviconsForDomains: async () => ({}),
@@ -972,6 +1075,7 @@ await runTest("History reinsertion prevents an evicted request from overwriting 
   const date = new Date(2026, 0, 2);
   const deps = {
     getHistoryByDate: async () => [makeSession({ id: 2 })],
+    getActivityAggregateRange: async () => makeAggregateRange(),
     getSessionsInRange: async () => [],
     getWebActivitySegmentsInRange: async () => [],
     getWebFaviconsForDomains: async () => ({}),

@@ -1,5 +1,6 @@
 import {
   DEFAULT_HISTORY_TIMELINE_ZOOM_HOURS,
+  MAX_HISTORY_TIMELINE_ZOOM_HOURS,
   type HistoryTimelineDisplayMode,
 } from "./historyTimelineViewModel.ts";
 import { getBrowserLocalStorage } from "../../../platform/browser/browserStorageGateway.ts";
@@ -39,7 +40,7 @@ export function getNextHistoryTimelineMode(
 function parseHistoryTimelineZoomHours(value: string | null): number | null {
   if (value === null || value.trim() === "") return null;
   const numericValue = Number(value);
-  return Number.isFinite(numericValue) && numericValue >= 1 && numericValue <= 24
+  return Number.isFinite(numericValue) && numericValue >= 1 && numericValue <= MAX_HISTORY_TIMELINE_ZOOM_HOURS
     ? numericValue
     : null;
 }
@@ -81,7 +82,7 @@ export function readHistoryTimelineZoomHours(): number {
 
 export function rememberHistoryTimelineZoomHours(zoomHours: number) {
   const storage = getBrowserLocalStorage();
-  if (!storage || !Number.isFinite(zoomHours) || zoomHours < 1 || zoomHours > 24) return;
+  if (!storage || !Number.isFinite(zoomHours) || zoomHours < 1 || zoomHours > MAX_HISTORY_TIMELINE_ZOOM_HOURS) return;
 
   try {
     storage.setItem(HISTORY_TIMELINE_ZOOM_HOURS_KEY, String(Number(zoomHours.toFixed(4))));

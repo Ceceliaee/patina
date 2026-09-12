@@ -52,6 +52,29 @@ export function shouldHideTimelineContent({
     || (mode === "web" && !webDataReady);
 }
 
+export function hasMeaningfulHistoryContent({
+  contentState,
+  visibleDateKey,
+  requestedDateKey,
+  visibleMappingVersion,
+  requestedMappingVersion,
+  timelineContentHidden,
+  timelineSegmentCount,
+}: {
+  contentState: HistoryContentState;
+  visibleDateKey: string | null;
+  requestedDateKey: string;
+  visibleMappingVersion: number | null;
+  requestedMappingVersion: number;
+  timelineContentHidden: boolean;
+  timelineSegmentCount: number;
+}) {
+  if (visibleDateKey !== requestedDateKey || visibleMappingVersion !== requestedMappingVersion
+    || timelineContentHidden) return false;
+  if (contentState === "bootstrap") return timelineSegmentCount > 0;
+  return contentState === "refreshing" || contentState === "ready" || contentState === "empty";
+}
+
 export function useHistoryTimelineViews({
   sessions,
   webSegments,

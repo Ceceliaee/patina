@@ -7,6 +7,7 @@ import {
 
 
 interface HistoryCalendarPopoverProps {
+  id: string;
   open: boolean;
   triggerRef: RefObject<HTMLDivElement | null>;
   popoverRef: RefObject<HTMLDivElement | null>;
@@ -22,6 +23,7 @@ interface HistoryCalendarPopoverProps {
 }
 
 export default function HistoryCalendarPopover({
+  id,
   open,
   triggerRef,
   popoverRef,
@@ -36,16 +38,19 @@ export default function HistoryCalendarPopover({
   const [focusedDate, setFocusedDate] = useState(selectedDate);
 
   useEffect(() => {
+    if (open) setFocusedDate(selectedDate);
+  }, [open, selectedDate]);
+
+  useEffect(() => {
     if (!open) return undefined;
-    setFocusedDate(selectedDate);
-    const selectedDateKey = formatLocalDateKey(selectedDate);
+    const focusedDateKey = formatLocalDateKey(focusedDate);
     const frame = window.requestAnimationFrame(() => {
       popoverRef.current
-        ?.querySelector<HTMLElement>(`[data-calendar-date="${selectedDateKey}"]`)
+        ?.querySelector<HTMLElement>(`[data-calendar-date="${focusedDateKey}"]`)
         ?.focus();
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [open, popoverRef, selectedDate]);
+  }, [focusedDate, open, popoverRef]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -60,6 +65,7 @@ export default function HistoryCalendarPopover({
   return createPortal(
     open ? (
         <div
+          id={id}
           ref={popoverRef}
           className="qp-calendar-popover history-calendar-popover qp-motion-popover-enter"
           role="dialog"

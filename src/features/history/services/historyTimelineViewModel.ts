@@ -3,6 +3,7 @@ import { resolveAppIconKeys } from "../../../shared/classification/appIconIdenti
 import type { AppCategory } from "../../../shared/classification/categoryTokens.ts";
 import type { UiText } from "../../../shared/i18n/index.ts";
 import type { CompiledSession } from "../../../shared/lib/sessionReadCompiler.ts";
+import { addLocalDays, startOfLocalDay } from "../../../shared/lib/localDate.ts";
 import {
   buildTimelineAxisTicks,
   snapTimelineFocusToNearestInterval,
@@ -12,7 +13,6 @@ import { mergeContiguousTimelineSegments } from "../../../shared/lib/timelineSeg
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
-const DAY_MS = 24 * HOUR_MS;
 const HALF_HOUR_MS = 30 * MINUTE_MS;
 const MINUTE_BOUNDARY_SNAP_MS = 1_000;
 
@@ -21,7 +21,7 @@ type HistoryTimelineSourceKind = "app" | "web";
 type HistoryTimelineZoomHours = number;
 export const DEFAULT_HISTORY_TIMELINE_ZOOM_HOURS: HistoryTimelineZoomHours = 4;
 const MIN_HISTORY_TIMELINE_VIEWPORT_DURATION_MS = HOUR_MS;
-export const MAX_HISTORY_TIMELINE_VIEWPORT_DURATION_MS = DAY_MS;
+export const MAX_HISTORY_TIMELINE_ZOOM_HOURS = 25;
 
 export interface HistoryTimelineViewport {
   startMs: number;
@@ -136,12 +136,11 @@ interface BuildHistoryTimelineViewModelFromSourcesParams {
 }
 
 function getFullDayRange(date: Date) {
-  const dayStart = new Date(date);
-  dayStart.setHours(0, 0, 0, 0);
+  const dayStart = startOfLocalDay(date);
 
   return {
     dayStartMs: dayStart.getTime(),
-    dayEndMs: dayStart.getTime() + DAY_MS,
+    dayEndMs: addLocalDays(dayStart, 1).getTime(),
   };
 }
 
@@ -155,16 +154,11 @@ function clampNumber(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-export function getHistoryTimelineZoomDurationMs(zoomHours: number) {
-  if (!Number.isFinite(zoomHours)) {
-    return MAX_HISTORY_TIMELINE_VIEWPORT_DURATION_MS;
-  }
-
-  return clampNumber(
-    zoomHours * HOUR_MS,
-    MIN_HISTORY_TIMELINE_VIEWPORT_DURATION_MS,
-    MAX_HISTORY_TIMELINE_VIEWPORT_DURATION_MS,
-  );
+export function getHistoryTimelineZoomDurationMs(zoomHours: number, selectedDate: Date) {
+  return normalizeHistoryTimelineViewport({
+    selectedDate,
+    requestedDurationMs: zoomHours * HOUR_MS,
+  }).durationMs;
 }
 
 export function normalizeHistoryTimelineViewport({
@@ -180,7 +174,7 @@ export function normalizeHistoryTimelineViewport({
   const safeRequestedDurationMs = typeof requestedDurationMs === "number"
     && Number.isFinite(requestedDurationMs)
     ? requestedDurationMs
-    : MAX_HISTORY_TIMELINE_VIEWPORT_DURATION_MS;
+    : dayEndMs - dayStartMs;
   const durationMs = clampNumber(
     safeRequestedDurationMs,
     MIN_HISTORY_TIMELINE_VIEWPORT_DURATION_MS,
@@ -257,11 +251,10 @@ export function zoomHistoryTimelineViewportAroundAnchor({
 }) {
   const safeAnchorRatio = clampRatio(anchorRatio);
   const anchorTimeMs = viewport.startMs + safeAnchorRatio * viewport.durationMs;
-  const durationMs = clampNumber(
-    Number.isFinite(requestedDurationMs) ? requestedDurationMs : viewport.durationMs,
-    MIN_HISTORY_TIMELINE_VIEWPORT_DURATION_MS,
-    MAX_HISTORY_TIMELINE_VIEWPORT_DURATION_MS,
-  );
+  const durationMs = normalizeHistoryTimelineViewport({
+    selectedDate,
+    requestedDurationMs: Number.isFinite(requestedDurationMs) ? requestedDurationMs : viewport.durationMs,
+  }).durationMs;
 
   return normalizeHistoryTimelineViewport({
     selectedDate,
@@ -862,7 +855,6 @@ export function buildHistoryTimelineViewModelFromSources({
   const { dayStartMs, dayEndMs } = getFullDayRange(selectedDate);
   const viewport = requestedViewport ?? normalizeHistoryTimelineViewport({
     selectedDate,
-    requestedDurationMs: MAX_HISTORY_TIMELINE_VIEWPORT_DURATION_MS,
     requestedStartMs: dayStartMs,
   });
   const visibleEndMs = resolveVisibleEndMs(selectedDate, nowMs, dayStartMs, dayEndMs);
@@ -896,7 +888,7 @@ export function buildHistoryTimelineViewModelFromSources({
     viewportDurationMs,
     zoomHours: viewportDurationMs / HOUR_MS,
     visibleEndMs,
-    visibleEndRatio: clampRatio((visibleEndMs - dayStartMs) / DAY_MS),
+    visibleEndRatio: clampRatio((visibleEndMs - dayStartMs) / (dayEndMs - dayStartMs)),
   };
 }
 

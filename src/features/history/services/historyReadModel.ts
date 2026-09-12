@@ -6,7 +6,6 @@ import type {
 } from "../../../shared/types/webActivity.ts";
 import {
   getHistoryByDate,
-  getImportedTimeBucketsInRange,
   getSessionsInRange,
   getSessionsInRangeWithoutTitleSamples,
   type AggregateSessionRecord,
@@ -82,9 +81,7 @@ export interface HistorySnapshotDeps {
   getHistoryByDate: typeof getHistoryByDate;
   getSessionsInRange: typeof getSessionsInRange;
   getDaySessionsInRange?: typeof getSessionsInRangeWithoutTitleSamples;
-  getWeeklySessionsInRange?: typeof getSessionsInRangeWithoutTitleSamples;
-  getImportedTimeBucketsInRange?: typeof getImportedTimeBucketsInRange;
-  getActivityAggregateRange?: typeof loadActivityAggregateRange;
+  getActivityAggregateRange: typeof loadActivityAggregateRange;
   getWebActivitySegmentsInRange: typeof getWebActivitySegmentsInRange;
   getWebFaviconsForDomains: typeof getWebFaviconsForDomains;
   loadWebDomainOverrides: typeof loadWebDomainOverrides;
@@ -99,8 +96,6 @@ const DEFAULT_HISTORY_SNAPSHOT_DEPS: HistorySnapshotDeps = {
   getHistoryByDate,
   getSessionsInRange,
   getDaySessionsInRange: getSessionsInRangeWithoutTitleSamples,
-  getWeeklySessionsInRange: getSessionsInRangeWithoutTitleSamples,
-  getImportedTimeBucketsInRange,
   getActivityAggregateRange: loadActivityAggregateRange,
   getWebActivitySegmentsInRange,
   getWebFaviconsForDomains,
@@ -225,14 +220,12 @@ function collectHistoryIconExecutables(...sessionGroups: HistoryIconRecord[][]):
 
 function getCachedHistoryIconMap(
   daySessions: HistorySession[],
-  weeklySessions: HistorySession[],
   dayAggregateSessions: AggregateSessionRecord[],
   weeklyAggregateSessions: AggregateSessionRecord[],
 ): Record<string, string> {
   return getCachedHistoryIconsForExecutables(
     collectHistoryIconExecutables(
       daySessions,
-      weeklySessions,
       dayAggregateSessions,
       weeklyAggregateSessions,
     ),
@@ -367,28 +360,20 @@ export async function loadHistorySnapshot(
   const includeTitleDetails = options.includeTitleDetails ?? true;
   const loadDaySessions = includeTitleDetails
     ? () => deps.getHistoryByDate(date)
-    : () => (deps.getDaySessionsInRange ?? deps.getWeeklySessionsInRange ?? deps.getSessionsInRange)(
+    : () => (deps.getDaySessionsInRange ?? deps.getSessionsInRange)(
       selectedDayRange.startMs,
       selectedDayRange.endMs,
     );
-  const aggregateIncludesExactFacts = Boolean(deps.getActivityAggregateRange);
-  const loadAggregateSessions = deps.getActivityAggregateRange
-    ? async (startMs: number, endMs: number) => (
-      await deps.getActivityAggregateRange!(startMs, endMs)
-    ).records
-    : deps.getImportedTimeBucketsInRange
-      ?? (async () => [] as AggregateSessionRecord[]);
+  const loadAggregateSessions = async (startMs: number, endMs: number) => (
+    await deps.getActivityAggregateRange(startMs, endMs)
+  ).records;
   const [
     daySessions,
-    weeklySessions,
     dayAggregateSessions,
     weeklyAggregateSessions,
     webSnapshotPart,
   ] = await Promise.all([
     loadDaySessions(),
-    aggregateIncludesExactFacts
-      ? Promise.resolve([] as HistorySession[])
-      : (deps.getWeeklySessionsInRange ?? deps.getSessionsInRange)(weeklyRangeStart, weeklyRangeEnd),
     loadAggregateSessions(selectedDayRange.startMs, selectedDayRange.endMs),
     loadAggregateSessions(weeklyRangeStart, weeklyRangeEnd),
     includeWebActivity
@@ -401,7 +386,6 @@ export async function loadHistorySnapshot(
   ]);
   const icons = getCachedHistoryIconMap(
     daySessions,
-    weeklySessions,
     dayAggregateSessions,
     weeklyAggregateSessions,
   );
@@ -410,10 +394,10 @@ export async function loadHistorySnapshot(
     fetchedAtMs: Date.now(),
     icons,
     daySessions,
-    weeklySessions,
+    weeklySessions: [],
     dayAggregateSessions,
     weeklyAggregateSessions,
-    aggregateIncludesExactFacts,
+    aggregateIncludesExactFacts: true,
     dayWebSegments: webSnapshotPart.dayWebSegments,
     webDomainFavicons: webSnapshotPart.webDomainFavicons,
     webDomainOverrides: webSnapshotPart.webDomainOverrides,

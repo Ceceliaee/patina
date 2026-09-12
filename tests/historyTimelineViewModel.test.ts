@@ -13,6 +13,7 @@ import {
 import {
   buildHistoryTimelineViewModel as buildHistoryTimelineViewModelRaw,
   DEFAULT_HISTORY_TIMELINE_ZOOM_HOURS,
+  getHistoryTimelineZoomDurationMs,
   normalizeHistoryTimelineViewport,
   normalizeHistoryTimelineViewportAroundFocus,
   panHistoryTimelineViewport,
@@ -21,7 +22,7 @@ import {
   snapHistoryTimelineFocusToNearestHalfHour,
   zoomHistoryTimelineViewportAroundAnchor,
 } from "../src/features/history/services/historyTimelineViewModel.ts";
-import { shouldHideTimelineContent } from "../src/features/history/hooks/useHistoryTimelineViews.ts";
+import { hasMeaningfulHistoryContent, shouldHideTimelineContent } from "../src/features/history/hooks/useHistoryTimelineViews.ts";
 import { ProcessMapper } from "../src/shared/classification/processMapper.ts";
 import { getLocaleText } from "../src/shared/i18n/runtime.ts";
 
@@ -75,6 +76,33 @@ function makeCompiledSession(overrides: Partial<CompiledSession> = {}): Compiled
   };
 }
 
+runTest("meaningful History content requires the requested identity and usable timeline content", () => {
+  const visible = {
+    contentState: "refreshing" as const,
+    visibleDateKey: "2026-09-12",
+    requestedDateKey: "2026-09-12",
+    visibleMappingVersion: 3,
+    requestedMappingVersion: 3,
+    timelineContentHidden: false,
+    timelineSegmentCount: 1,
+  };
+  for (const contentState of ["refreshing", "ready", "empty"] as const) {
+    assert.equal(hasMeaningfulHistoryContent({ ...visible, contentState }), true);
+    assert.equal(hasMeaningfulHistoryContent({ ...visible, contentState, timelineSegmentCount: 0 }), true);
+  }
+  assert.equal(hasMeaningfulHistoryContent({ ...visible, contentState: "bootstrap" }), true);
+  assert.equal(hasMeaningfulHistoryContent({ ...visible, contentState: "bootstrap", timelineSegmentCount: 0 }), false);
+  for (const change of [
+    { visibleDateKey: "2026-09-11" },
+    { visibleDateKey: null },
+    { visibleMappingVersion: 2 },
+    { visibleMappingVersion: null },
+    { timelineContentHidden: true },
+    { contentState: "cold-loading" as const },
+    { contentState: "error" as const },
+  ]) assert.equal(hasMeaningfulHistoryContent({ ...visible, ...change }), false);
+});
+
 runTest("empty timeline keeps a stable axis", () => {
   const viewModel = buildHistoryTimelineViewModel({
     sessions: [],
@@ -90,6 +118,71 @@ runTest("empty timeline keeps a stable axis", () => {
     ["00:00", "06:00", "12:00", "18:00", "24:00"],
   );
 });
+
+for (const [monthIndex, day, dayHours] of [[2, 8, 23], [10, 1, 25]]) {
+  runTest(`timeline covers the actual ${dayHours}-hour New York local day`, () => {
+    const previousTimezone = process.env.TZ;
+    process.env.TZ = "America/New_York";
+    try {
+      const selectedDate = new Date(2026, monthIndex, day);
+      const nextDay = new Date(2026, monthIndex, day + 1);
+      const dayEndMs = nextDay.getTime();
+      assert.equal(dayEndMs - selectedDate.getTime(), dayHours * HOUR_MS);
+      const lastHour = makeCompiledSession({
+        startTime: dayEndMs - HOUR_MS,
+        endTime: dayEndMs,
+      });
+      const nextDaySession = makeCompiledSession({
+        id: 2,
+        appName: "Next day only",
+        exeName: "next-day.exe",
+        startTime: dayEndMs,
+        endTime: dayEndMs + HOUR_MS,
+      });
+      const viewModel = buildHistoryTimelineViewModel({
+        sessions: [lastHour, nextDaySession],
+        selectedDate,
+        nowMs: dayEndMs + HOUR_MS,
+        mode: "app",
+      });
+      assert.equal(viewModel.dayEndMs, dayEndMs);
+      assert.equal(viewModel.viewportDurationMs, dayHours * HOUR_MS);
+      assert.equal(viewModel.viewportEndMs, dayEndMs);
+      assert.equal(viewModel.segments.length, 1);
+      assert.equal(viewModel.segments[0].startTime, dayEndMs - HOUR_MS);
+      assert.equal(viewModel.segments[0].endTime, dayEndMs);
+      assert.equal(viewModel.segments[0].duration, HOUR_MS);
+      assert.equal(viewModel.segments[0].endRatio, 1);
+      assert.equal(viewModel.axisTicks.at(-1)?.label, "24:00");
+
+      const liveView = buildHistoryTimelineViewModel({
+        sessions: [], selectedDate, nowMs: dayEndMs - HOUR_MS, mode: "app",
+      });
+      assert.equal(liveView.visibleEndRatio, (dayHours - 1) / dayHours);
+
+      const fullDay = normalizeHistoryTimelineViewport({ selectedDate });
+      assert.deepEqual(fullDay, {
+        startMs: selectedDate.getTime(), endMs: dayEndMs, durationMs: dayHours * HOUR_MS,
+      });
+      const zoomedOut = zoomHistoryTimelineViewportAroundAnchor({
+        selectedDate,
+        viewport: normalizeHistoryTimelineViewport({ selectedDate, requestedDurationMs: 4 * HOUR_MS }),
+        anchorRatio: 0.5,
+        requestedDurationMs: 30 * HOUR_MS,
+      });
+      assert.deepEqual(zoomedOut, fullDay);
+      assert.equal(getHistoryTimelineZoomDurationMs(25, selectedDate), dayHours * HOUR_MS);
+      assert.equal(panHistoryTimelineViewportForKey({
+        selectedDate,
+        viewport: normalizeHistoryTimelineViewport({ selectedDate, requestedDurationMs: HOUR_MS }),
+        key: "End",
+      })?.endMs, dayEndMs);
+    } finally {
+      if (previousTimezone === undefined) delete process.env.TZ;
+      else process.env.TZ = previousTimezone;
+    }
+  });
+}
 
 runTest("day distribution mode persists locally", () => {
   assert.equal(readHistoryDayDistributionMode(), "app");
@@ -164,7 +257,11 @@ runTest("timeline window hours persist continuous zoom values with a four-hour d
     window.localStorage.setItem("patina:history-timeline-zoom-hours", "category");
     assert.equal(readHistoryTimelineZoomHours(), 4);
 
-    for (const invalidValue of ["", "0.99", "24.01", "NaN", "Infinity"]) {
+    rememberHistoryTimelineZoomHours(25);
+    assert.equal(readHistoryTimelineZoomHours(), 25);
+    assert.equal(getHistoryTimelineZoomDurationMs(25, new Date(2026, 0, 2)), 24 * HOUR_MS);
+
+    for (const invalidValue of ["", "0.99", "25.01", "NaN", "Infinity"]) {
       window.localStorage.setItem("patina:history-timeline-zoom-hours", invalidValue);
       assert.equal(readHistoryTimelineZoomHours(), 4);
     }

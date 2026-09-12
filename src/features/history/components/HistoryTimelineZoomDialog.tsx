@@ -71,7 +71,7 @@ export default function HistoryTimelineZoomDialog({
               ariaLabel={UI_TEXT.history.timelineWindowHours}
               value={zoomHours}
               min={1}
-              max={24}
+              max={(viewModel.dayEndMs - viewModel.dayStartMs) / (60 * 60_000)}
               step={0.2}
               integerButtons
               displayValue={UI_TEXT.history.timelineHoursValue(displayedZoomHours)}
