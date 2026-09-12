@@ -265,7 +265,9 @@ pub(super) async fn fetch_timer_by_id(pool: &Pool<Sqlite>, id: i64) -> Result<To
     .map(map_timer_row)
 }
 
-pub(super) async fn fetch_latest_timer(pool: &Pool<Sqlite>) -> Result<Option<ToolTimer>, String> {
+pub(super) async fn fetch_latest_timer<'e>(
+    executor: impl sqlx::Executor<'e, Database = Sqlite>,
+) -> Result<Option<ToolTimer>, String> {
     sqlx::query(
         "SELECT id, mode, label, duration_ms, accumulated_ms, started_at, paused_at,
                 completed_at, status, created_at, updated_at
@@ -273,7 +275,7 @@ pub(super) async fn fetch_latest_timer(pool: &Pool<Sqlite>) -> Result<Option<Too
          ORDER BY updated_at DESC, id DESC
          LIMIT 1",
     )
-    .fetch_optional(pool)
+    .fetch_optional(executor)
     .await
     .map_err(|error| format!("failed to read current timer: {error}"))
     .map(|row| row.map(map_timer_row))
@@ -315,8 +317,8 @@ pub(super) async fn fetch_pomodoro_by_id(
     .map(map_pomodoro_row)
 }
 
-pub(super) async fn fetch_latest_pomodoro(
-    pool: &Pool<Sqlite>,
+pub(super) async fn fetch_latest_pomodoro<'e>(
+    executor: impl sqlx::Executor<'e, Database = Sqlite>,
 ) -> Result<Option<ToolPomodoroRun>, String> {
     sqlx::query(
         "SELECT id, phase, status, cycle_index, focus_ms, short_break_ms, long_break_ms,
@@ -326,7 +328,7 @@ pub(super) async fn fetch_latest_pomodoro(
          ORDER BY updated_at DESC, id DESC
          LIMIT 1",
     )
-    .fetch_optional(pool)
+    .fetch_optional(executor)
     .await
     .map_err(|error| format!("failed to read current pomodoro: {error}"))
     .map(|row| row.map(map_pomodoro_row))

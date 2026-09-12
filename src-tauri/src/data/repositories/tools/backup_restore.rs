@@ -572,9 +572,11 @@ mod tests {
             start_pomodoro(&pool, 1_000, 500, 700, 4, 1_000)
                 .await
                 .unwrap();
-            complete_due_pomodoro_phase(&pool, "2026-06-07", 2_100)
+            let mut tick = pool.begin().await.unwrap();
+            complete_due_pomodoro_phase(&mut tick, "2026-06-07", 2_100)
                 .await
                 .unwrap();
+            tick.commit().await.unwrap();
             create_activity_reminder_rule(
                 &pool,
                 &ActivityReminderTarget::App {

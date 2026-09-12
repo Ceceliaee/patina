@@ -83,13 +83,9 @@ pub async fn cancel_reminder(
 }
 
 pub async fn fire_due_reminders(
-    pool: &Pool<Sqlite>,
+    tx: &mut Transaction<'_, Sqlite>,
     now_ms: i64,
 ) -> Result<Vec<ToolReminder>, String> {
-    let mut tx = pool
-        .begin()
-        .await
-        .map_err(|error| format!("failed to start reminder transaction: {error}"))?;
     let rows = sqlx::query(
         "SELECT id, label, scheduled_at, created_at, status, fired_at, cancelled_at
          FROM tool_reminders
@@ -98,7 +94,7 @@ pub async fn fire_due_reminders(
     )
     .bind(ReminderStatus::Scheduled.as_str())
     .bind(now_ms)
-    .fetch_all(&mut *tx)
+    .fetch_all(&mut **tx)
     .await
     .map_err(|error| format!("failed to load due reminders: {error}"))?;
 
@@ -113,14 +109,10 @@ pub async fn fire_due_reminders(
         .bind(now_ms)
         .bind(reminder.id)
         .bind(ReminderStatus::Scheduled.as_str())
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await
         .map_err(|error| format!("failed to mark reminder fired: {error}"))?;
     }
-
-    tx.commit()
-        .await
-        .map_err(|error| format!("failed to commit reminder transaction: {error}"))?;
 
     Ok(reminders
         .into_iter()
@@ -302,10 +294,10 @@ pub async fn add_timer_lap(
 }
 
 pub async fn complete_due_countdown(
-    pool: &Pool<Sqlite>,
+    tx: &mut Transaction<'_, Sqlite>,
     now_ms: i64,
 ) -> Result<Option<CompletedTimerNotification>, String> {
-    let Some(timer) = fetch_latest_timer(pool).await? else {
+    let Some(timer) = fetch_latest_timer(&mut **tx).await? else {
         return Ok(None);
     };
     if !timer.is_countdown_due(now_ms) {
@@ -331,7 +323,7 @@ pub async fn complete_due_countdown(
     .bind(now_ms)
     .bind(timer.id)
     .bind(TimerStatus::Running.as_str())
-    .execute(pool)
+    .execute(&mut **tx)
     .await
     .map_err(|error| format!("failed to complete countdown: {error}"))?;
 
@@ -453,34 +445,43 @@ pub async fn skip_pomodoro_phase(
     date_key: &str,
     now_ms: i64,
 ) -> Result<Option<CompletedPomodoroNotification>, String> {
-    advance_pomodoro_phase(pool, date_key, now_ms, false, false).await
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| format!("failed to start pomodoro transaction: {error}"))?;
+    let Some(run) = fetch_latest_pomodoro(&mut *tx).await? else {
+        return Ok(None);
+    };
+    let outcome = advance_pomodoro_phase(&mut tx, run, date_key, now_ms, false, false).await?;
+    tx.commit()
+        .await
+        .map_err(|error| format!("failed to commit pomodoro transaction: {error}"))?;
+    Ok(outcome)
 }
 
 pub async fn complete_due_pomodoro_phase(
-    pool: &Pool<Sqlite>,
+    tx: &mut Transaction<'_, Sqlite>,
     date_key: &str,
     now_ms: i64,
 ) -> Result<Option<CompletedPomodoroNotification>, String> {
-    let Some(run) = fetch_latest_pomodoro(pool).await? else {
+    let Some(run) = fetch_latest_pomodoro(&mut **tx).await? else {
         return Ok(None);
     };
     if !run.is_phase_due(now_ms) {
         return Ok(None);
     }
 
-    advance_pomodoro_phase(pool, date_key, now_ms, true, true).await
+    advance_pomodoro_phase(tx, run, date_key, now_ms, true, true).await
 }
 
 async fn advance_pomodoro_phase(
-    pool: &Pool<Sqlite>,
+    tx: &mut Transaction<'_, Sqlite>,
+    run: ToolPomodoroRun,
     date_key: &str,
     now_ms: i64,
     count_focus_completion: bool,
     start_next_phase: bool,
 ) -> Result<Option<CompletedPomodoroNotification>, String> {
-    let Some(run) = fetch_latest_pomodoro(pool).await? else {
-        return Ok(None);
-    };
     if run.status == PomodoroStatus::Idle || run.status == PomodoroStatus::Completed {
         return Ok(None);
     }
@@ -515,10 +516,6 @@ async fn advance_pomodoro_phase(
     let next_started_at = start_next_phase.then_some(now_ms);
     let next_paused_at = (!start_next_phase).then_some(now_ms);
 
-    let mut tx = pool
-        .begin()
-        .await
-        .map_err(|error| format!("failed to start pomodoro transaction: {error}"))?;
     sqlx::query(
         "UPDATE tool_pomodoro_runs
          SET phase = ?,
@@ -540,18 +537,14 @@ async fn advance_pomodoro_phase(
     .bind(next_completed_focus_count)
     .bind(now_ms)
     .bind(run.id)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await
     .map_err(|error| format!("failed to advance pomodoro phase: {error}"))?;
 
     let counted_focus = count_focus_completion && run.phase == PomodoroPhase::Focus;
     if counted_focus {
-        increment_daily_pomodoro_stat_tx(&mut tx, date_key, now_ms).await?;
+        increment_daily_pomodoro_stat_tx(tx, date_key, now_ms).await?;
     }
-
-    tx.commit()
-        .await
-        .map_err(|error| format!("failed to commit pomodoro transaction: {error}"))?;
 
     Ok(Some(CompletedPomodoroNotification {
         run_id: run.id,
@@ -623,6 +616,50 @@ mod tests {
     use crate::data::schema as db_schema;
     use crate::domain::tools::{ActivityReminderSuspensionReason, ActivityReminderTarget};
     use sqlx::{Executor, SqlitePool};
+
+    async fn fire_due_reminders(
+        pool: &Pool<Sqlite>,
+        now_ms: i64,
+    ) -> Result<Vec<ToolReminder>, String> {
+        let mut tx = pool.begin().await.map_err(|error| error.to_string())?;
+        let result = super::fire_due_reminders(&mut tx, now_ms).await?;
+        tx.commit().await.map_err(|error| error.to_string())?;
+        Ok(result)
+    }
+
+    async fn fire_due_activity_reminders(
+        pool: &Pool<Sqlite>,
+        date_key: &str,
+        day_start_ms: i64,
+        now_ms: i64,
+    ) -> Result<Vec<crate::domain::tools::ActivityReminderNotification>, String> {
+        let mut tx = pool.begin().await.map_err(|error| error.to_string())?;
+        let result =
+            super::fire_due_activity_reminders(&mut tx, date_key, day_start_ms, now_ms).await?;
+        tx.commit().await.map_err(|error| error.to_string())?;
+        Ok(result)
+    }
+
+    async fn complete_due_countdown(
+        pool: &Pool<Sqlite>,
+        now_ms: i64,
+    ) -> Result<Option<CompletedTimerNotification>, String> {
+        let mut tx = pool.begin().await.map_err(|error| error.to_string())?;
+        let result = super::complete_due_countdown(&mut tx, now_ms).await?;
+        tx.commit().await.map_err(|error| error.to_string())?;
+        Ok(result)
+    }
+
+    async fn complete_due_pomodoro_phase(
+        pool: &Pool<Sqlite>,
+        date_key: &str,
+        now_ms: i64,
+    ) -> Result<Option<CompletedPomodoroNotification>, String> {
+        let mut tx = pool.begin().await.map_err(|error| error.to_string())?;
+        let result = super::complete_due_pomodoro_phase(&mut tx, date_key, now_ms).await?;
+        tx.commit().await.map_err(|error| error.to_string())?;
+        Ok(result)
+    }
 
     async fn setup_test_db() -> SqlitePool {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

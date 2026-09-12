@@ -186,11 +186,6 @@ pub async fn tick(app: &AppHandle) -> Result<bool, String> {
     Ok(true)
 }
 
-pub async fn reset_after_replace_restore(app: &AppHandle) -> Result<(), String> {
-    let pool = crate::data::sqlite_pool::wait_for_sqlite_pool(app).await?;
-    repository::reset_after_replace_restore(&pool, &new_generation(), now_ms()).await
-}
-
 pub async fn refresh_webdav_target_after_settings_change(app: &AppHandle) -> Result<bool, String> {
     let pool = crate::data::sqlite_pool::wait_for_sqlite_pool(app).await?;
     let Some(mut config) = repository::load_config(&pool).await? else {

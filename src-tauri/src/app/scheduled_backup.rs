@@ -78,14 +78,10 @@ pub(crate) async fn refresh_webdav_target_while_locked(app: &AppHandle) -> Resul
     Ok(())
 }
 
-pub(crate) async fn reset_after_replace_restore_while_locked(
-    app: &AppHandle,
-) -> Result<(), String> {
+pub(crate) fn notify_replace_restore_while_locked(app: &AppHandle) {
     let state = app.state::<ScheduledBackupRuntimeState>();
-    crate::data::scheduled_backup::reset_after_replace_restore(app).await?;
     state.wake();
     emit_changed(app);
-    Ok(())
 }
 
 fn emit_changed(app: &AppHandle) {

@@ -2,7 +2,7 @@ use crate::domain::backup_schedule::{
     ScheduledBackupCadence, ScheduledBackupConfig, ScheduledBackupRun, ScheduledBackupTarget,
     SCHEDULED_BACKUP_KEEP_COUNT,
 };
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, Row, Sqlite, Transaction};
 
 pub async fn load_config(pool: &Pool<Sqlite>) -> Result<Option<ScheduledBackupConfig>, String> {
     let row = sqlx::query(
@@ -561,14 +561,10 @@ pub async fn cancel_active_runs(
 }
 
 pub async fn reset_after_replace_restore(
-    pool: &Pool<Sqlite>,
+    tx: &mut Transaction<'_, Sqlite>,
     new_generation: &str,
     now_ms: i64,
 ) -> Result<(), String> {
-    let mut tx = pool
-        .begin()
-        .await
-        .map_err(|error| format!("failed to begin scheduled backup restore reset: {error}"))?;
     sqlx::query(
         "UPDATE scheduled_backup_config
          SET enabled = 0, target_generation = ?, schedule_anchor_at_ms = ?, updated_at_ms = ?
@@ -577,18 +573,15 @@ pub async fn reset_after_replace_restore(
     .bind(new_generation)
     .bind(now_ms)
     .bind(now_ms)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await
     .map_err(|error| format!("failed to pause scheduled backup after restore: {error}"))?;
     sqlx::query("DELETE FROM scheduled_backup_runs")
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await
         .map_err(|error| {
             format!("failed to clear scheduled backup runtime after restore: {error}")
         })?;
-    tx.commit()
-        .await
-        .map_err(|error| format!("failed to commit scheduled backup restore reset: {error}"))?;
     Ok(())
 }
 

@@ -1,7 +1,7 @@
 use crate::domain::export_schedule::{
     ScheduledExportCadence, ScheduledExportConfig, ScheduledExportFormat, ScheduledExportRun,
 };
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, Row, Sqlite, Transaction};
 
 pub async fn load_config(pool: &Pool<Sqlite>) -> Result<Option<ScheduledExportConfig>, String> {
     let row = sqlx::query(
@@ -405,14 +405,10 @@ pub async fn mark_superseded(
 }
 
 pub async fn reset_after_replace_restore(
-    pool: &Pool<Sqlite>,
+    tx: &mut Transaction<'_, Sqlite>,
     new_generation: &str,
     now_ms: i64,
 ) -> Result<(), String> {
-    let mut tx = pool
-        .begin()
-        .await
-        .map_err(|error| format!("failed to begin scheduled export restore reset: {error}"))?;
     sqlx::query(
         "UPDATE scheduled_export_config
          SET enabled = 0, plan_generation = ?, schedule_anchor_at_ms = ?, updated_at_ms = ?
@@ -421,7 +417,7 @@ pub async fn reset_after_replace_restore(
     .bind(new_generation)
     .bind(now_ms)
     .bind(now_ms)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await
     .map_err(|error| format!("failed to pause scheduled export after restore: {error}"))?;
     sqlx::query(
@@ -434,12 +430,9 @@ pub async fn reset_after_replace_restore(
     )
     .bind(now_ms)
     .bind(now_ms)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await
     .map_err(|error| format!("failed to stop scheduled export after restore: {error}"))?;
-    tx.commit()
-        .await
-        .map_err(|error| format!("failed to commit scheduled export restore reset: {error}"))?;
     Ok(())
 }
 
@@ -699,9 +692,11 @@ mod tests {
         save_config(&pool, &config()).await.unwrap();
         claim_run(&pool, &run()).await.unwrap();
 
-        reset_after_replace_restore(&pool, "generation-after-restore", 500)
+        let mut tx = pool.begin().await.unwrap();
+        reset_after_replace_restore(&mut tx, "generation-after-restore", 500)
             .await
             .unwrap();
+        tx.commit().await.unwrap();
 
         let restored = load_config(&pool).await.unwrap().unwrap();
         assert!(!restored.enabled);

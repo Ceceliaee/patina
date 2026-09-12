@@ -169,25 +169,19 @@ fn normalize_activity_target(
 }
 
 pub async fn fire_due_activity_reminders(
-    pool: &Pool<Sqlite>,
+    tx: &mut Transaction<'_, Sqlite>,
     date_key: &str,
     day_start_ms: i64,
     now_ms: i64,
 ) -> Result<Vec<ActivityReminderNotification>, String> {
-    let mut tx = pool
-        .begin()
-        .await
-        .map_err(|error| format!("failed to start activity reminder transaction: {error}"))?;
-    let rules = fetch_active_activity_reminder_rules_tx(&mut tx).await?;
+    let rules = fetch_active_activity_reminder_rules_tx(tx).await?;
     let classification =
-        crate::data::repositories::classification_settings::load_classification_snapshot_in_tx(
-            &mut tx,
-        )
-        .await?;
+        crate::data::repositories::classification_settings::load_classification_snapshot_in_tx(tx)
+            .await?;
     let web_activity_enabled = sqlx::query_scalar::<_, String>(
         "SELECT value FROM settings WHERE key = 'web_activity_enabled' LIMIT 1",
     )
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await
     .map_err(|error| format!("failed to read web activity setting: {error}"))?
     .is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true"));
@@ -204,12 +198,12 @@ pub async fn fire_due_activity_reminders(
                 && matches!(rule.target, ActivityReminderTarget::Web { .. })
         });
     let session_facts = if needs_session_facts {
-        fetch_session_usage_facts_tx(&mut tx, day_start_ms, now_ms).await?
+        fetch_session_usage_facts_tx(tx, day_start_ms, now_ms).await?
     } else {
         Vec::new()
     };
     let web_facts = if needs_web_facts {
-        fetch_web_usage_facts_tx(&mut tx, day_start_ms, now_ms).await?
+        fetch_web_usage_facts_tx(tx, day_start_ms, now_ms).await?
     } else {
         Vec::new()
     };
@@ -285,7 +279,7 @@ pub async fn fire_due_activity_reminders(
         .bind(now_ms)
         .bind(rule.id)
         .bind(date_key)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await
         .map_err(|error| format!("failed to mark activity reminder fired: {error}"))?;
         if update.rows_affected() == 0 {
@@ -301,10 +295,6 @@ pub async fn fire_due_activity_reminders(
             message: rule.message,
         });
     }
-
-    tx.commit()
-        .await
-        .map_err(|error| format!("failed to commit activity reminder transaction: {error}"))?;
 
     Ok(notifications)
 }

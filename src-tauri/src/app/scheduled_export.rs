@@ -62,14 +62,10 @@ pub(crate) async fn lock_for_restore(app: &AppHandle) -> OwnedMutexGuard<()> {
     state.run_lock.clone().lock_owned().await
 }
 
-pub(crate) async fn reset_after_replace_restore_while_locked(
-    app: &AppHandle,
-) -> Result<(), String> {
+pub(crate) fn notify_replace_restore_while_locked(app: &AppHandle) {
     let state = app.state::<ScheduledExportRuntimeState>();
-    crate::data::scheduled_export::reset_after_replace_restore(app).await?;
     state.wake();
     emit_changed(app);
-    Ok(())
 }
 
 fn emit_changed(app: &AppHandle) {

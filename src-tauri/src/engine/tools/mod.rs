@@ -8,7 +8,7 @@ use chrono::{Local, Utc};
 use serde::Serialize;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Mutex;
+use std::sync::{Mutex, PoisonError};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::Notify;
 use tokio::time::{sleep, Duration};
@@ -19,15 +19,9 @@ pub const TOOLS_RUNTIME_CHANGED_EVENT: &str = "tools-runtime-changed";
 pub const TOOLS_ALERT_EVENT: &str = "tools-alert";
 const TOOLS_RUNTIME_MIN_WAKE_MS: i64 = 250;
 const TOOLS_RUNTIME_IDLE_WAKE_MS: i64 = 60_000;
-const TOOLS_RUNTIME_ACTIVE_MAX_WAKE_MS: i64 = 60_000;
 const TOOLS_RUNTIME_ACTIVITY_REMINDER_WAKE_MS: i64 = 10_000;
 const TOOLS_RUNTIME_ERROR_WAKE_MS: u64 = 5_000;
 const TOOLS_ALERT_LIMIT: usize = 32;
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-struct ToolsTickOutcome {
-    state_changed: bool,
-}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ToolAlertQueueStats {
@@ -39,50 +33,51 @@ pub struct ToolAlertQueueStats {
 pub struct ToolsRuntimeState {
     inner: Mutex<ToolsRuntimeSnapshot>,
     alerts: Mutex<Vec<ToolAlert>>,
+    // Serialize store operations so a late read cannot acknowledge a newer write.
+    refresh_pending: tokio::sync::Mutex<bool>,
 }
 
 impl ToolsRuntimeState {
+    async fn fetch_snapshot(
+        &self,
+        store: &impl ToolsStore,
+    ) -> Result<ToolsRuntimeSnapshot, String> {
+        let snapshot = store.fetch_snapshot(now_ms(), date_key()).await?;
+        self.replace(snapshot.clone());
+        Ok(snapshot)
+    }
+
     pub(crate) fn snapshot(&self) -> ToolsRuntimeSnapshot {
-        match self.inner.lock() {
-            Ok(guard) => guard.clone(),
-            Err(poisoned) => poisoned.into_inner().clone(),
-        }
+        self.inner
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     fn replace(&self, snapshot: ToolsRuntimeSnapshot) {
-        match self.inner.lock() {
-            Ok(mut guard) => {
-                *guard = snapshot;
-            }
-            Err(poisoned) => {
-                let mut guard = poisoned.into_inner();
-                *guard = snapshot;
-            }
-        }
+        *self.inner.lock().unwrap_or_else(PoisonError::into_inner) = snapshot;
     }
 
     fn push_alert(&self, alert: ToolAlert) {
-        match self.alerts.lock() {
-            Ok(mut guard) => push_unique_alert(&mut guard, alert),
-            Err(poisoned) => {
-                let mut guard = poisoned.into_inner();
-                push_unique_alert(&mut guard, alert);
-            }
-        }
+        push_unique_alert(
+            &mut self.alerts.lock().unwrap_or_else(PoisonError::into_inner),
+            alert,
+        );
     }
 
     fn alerts(&self) -> Vec<ToolAlert> {
-        match self.alerts.lock() {
-            Ok(guard) => guard.clone(),
-            Err(poisoned) => poisoned.into_inner().clone(),
-        }
+        self.alerts
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     fn alert_stats(&self) -> ToolAlertQueueStats {
-        let entries = match self.alerts.lock() {
-            Ok(guard) => guard.len(),
-            Err(poisoned) => poisoned.into_inner().len(),
-        };
+        let entries = self
+            .alerts
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .len();
 
         ToolAlertQueueStats {
             entries,
@@ -91,13 +86,10 @@ impl ToolsRuntimeState {
     }
 
     fn dismiss_alert(&self, alert_id: &str) {
-        match self.alerts.lock() {
-            Ok(mut guard) => guard.retain(|alert| alert.id != alert_id),
-            Err(poisoned) => {
-                let mut guard = poisoned.into_inner();
-                guard.retain(|alert| alert.id != alert_id);
-            }
-        }
+        self.alerts
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .retain(|alert| alert.id != alert_id);
     }
 }
 
@@ -234,7 +226,14 @@ pub async fn get_snapshot<R: Runtime>(
     app: &AppHandle<R>,
     store: &impl ToolsStore,
 ) -> Result<ToolsRuntimeSnapshot, String> {
-    load_snapshot(app, store).await
+    let state = app.state::<ToolsRuntimeState>();
+    let mut pending = state.refresh_pending.lock().await;
+    let snapshot = state.fetch_snapshot(store).await?;
+    if *pending {
+        emit_tools_snapshot(app, &snapshot);
+        *pending = false;
+    }
+    Ok(snapshot)
 }
 
 pub fn get_alerts<R: Runtime>(app: &AppHandle<R>) -> Vec<ToolAlert> {
@@ -415,12 +414,16 @@ async fn recover_after_startup<R: Runtime + 'static>(
     app: &AppHandle<R>,
     store: &impl ToolsStore,
 ) -> Result<(), String> {
+    let state = app.state::<ToolsRuntimeState>();
+    let mut pending = state.refresh_pending.lock().await;
+    *pending = true;
     let now = now_ms();
     let events = store
         .recover_after_startup(now, date_key(), day_start_ms())
         .await?;
     notify_tick_events(app, events, now);
-    refresh_snapshot(app, store).await?;
+    emit_tools_snapshot(app, &state.fetch_snapshot(store).await?);
+    *pending = false;
     Ok(())
 }
 
@@ -428,24 +431,34 @@ async fn tick_and_refresh_if_changed<R: Runtime + 'static>(
     app: &AppHandle<R>,
     store: &impl ToolsStore,
 ) -> Result<(), String> {
-    let outcome = tick_and_notify(app, store, now_ms()).await?;
-    if outcome.state_changed {
-        refresh_snapshot(app, store).await?;
-    }
-    Ok(())
+    let state = app.state::<ToolsRuntimeState>();
+    tick_and_refresh_state(
+        &state,
+        store,
+        |events, now| notify_tick_events(app, events, now),
+        |snapshot| emit_tools_snapshot(app, snapshot),
+    )
+    .await
 }
 
-async fn tick_and_notify<R: Runtime + 'static>(
-    app: &AppHandle<R>,
+async fn tick_and_refresh_state(
+    state: &ToolsRuntimeState,
     store: &impl ToolsStore,
-    now: i64,
-) -> Result<ToolsTickOutcome, String> {
+    emit_events: impl FnOnce(ToolsTickEvents, i64),
+    emit_snapshot: impl FnOnce(&ToolsRuntimeSnapshot),
+) -> Result<(), String> {
+    let mut pending = state.refresh_pending.lock().await;
+    let retry_refresh = *pending;
+    *pending = true;
+    let now = now_ms();
     let events = store.tick(now, date_key(), day_start_ms()).await?;
-    let changed = events.state_changed;
-    notify_tick_events(app, events, now);
-    Ok(ToolsTickOutcome {
-        state_changed: changed,
-    })
+    *pending = retry_refresh || events.state_changed;
+    emit_events(events, now);
+    if *pending {
+        emit_snapshot(&state.fetch_snapshot(store).await?);
+        *pending = false;
+    }
+    Ok(())
 }
 
 fn notify_tick_events<R: Runtime + 'static>(app: &AppHandle<R>, events: ToolsTickEvents, now: i64) {
@@ -531,39 +544,10 @@ fn notify_tick_events<R: Runtime + 'static>(app: &AppHandle<R>, events: ToolsTic
     }
 }
 
-async fn load_snapshot<R: Runtime>(
-    app: &AppHandle<R>,
-    store: &impl ToolsStore,
-) -> Result<ToolsRuntimeSnapshot, String> {
-    let snapshot = store.fetch_snapshot(now_ms(), date_key()).await?;
-
-    if let Some(state) = app.try_state::<ToolsRuntimeState>() {
-        state.replace(snapshot.clone());
-    }
-
-    Ok(snapshot)
-}
-
-async fn refresh_snapshot<R: Runtime>(
-    app: &AppHandle<R>,
-    store: &impl ToolsStore,
-) -> Result<ToolsRuntimeSnapshot, String> {
-    let snapshot = load_snapshot(app, store).await?;
-
-    if let Err(error) = app.emit(TOOLS_RUNTIME_CHANGED_EVENT, &snapshot) {
+fn emit_tools_snapshot<R: Runtime>(app: &AppHandle<R>, snapshot: &ToolsRuntimeSnapshot) {
+    if let Err(error) = app.emit(TOOLS_RUNTIME_CHANGED_EVENT, snapshot) {
         eprintln!("[tools] failed to emit tools snapshot: {error}");
     }
-
-    Ok(snapshot)
-}
-
-async fn refresh_snapshot_after_tool_change<R: Runtime>(
-    app: &AppHandle<R>,
-    store: &impl ToolsStore,
-) -> Result<ToolsRuntimeSnapshot, String> {
-    let snapshot = refresh_snapshot(app, store).await?;
-    notify_tools_runtime(app);
-    Ok(snapshot)
 }
 
 async fn apply_mutation_and_refresh<R: Runtime>(
@@ -572,8 +556,56 @@ async fn apply_mutation_and_refresh<R: Runtime>(
     mutation: ToolsMutation,
     now: i64,
 ) -> Result<ToolsRuntimeSnapshot, String> {
-    store.apply_mutation(mutation, now, date_key()).await?;
-    refresh_snapshot_after_tool_change(app, store).await
+    let state = app.state::<ToolsRuntimeState>();
+    apply_mutation_and_refresh_state(
+        &state,
+        store,
+        mutation,
+        now,
+        |snapshot| emit_tools_snapshot(app, snapshot),
+        || notify_tools_runtime(app),
+    )
+    .await
+}
+
+async fn apply_mutation_and_refresh_state(
+    state: &ToolsRuntimeState,
+    store: &impl ToolsStore,
+    mutation: ToolsMutation,
+    now: i64,
+    emit_snapshot: impl FnOnce(&ToolsRuntimeSnapshot),
+    wake: impl FnOnce(),
+) -> Result<ToolsRuntimeSnapshot, String> {
+    let mut pending = state
+        .refresh_pending
+        .try_lock()
+        .map_err(|_| "a tools operation is already in progress".to_string())?;
+    if *pending {
+        wake();
+        return Err(
+            "TOOLS_STATE_REFRESH_PENDING: previous tools change is awaiting snapshot recovery"
+                .into(),
+        );
+    }
+    // Repository errors can occur after a write, so every outcome needs reconciliation.
+    *pending = true;
+    let mutation_result = store.apply_mutation(mutation, now, date_key()).await;
+    wake();
+    let snapshot = state.fetch_snapshot(store).await.map_err(|read_error| {
+        let outcome = match &mutation_result {
+            Ok(()) => "tools change committed".to_string(),
+            Err(error) => format!("tools change outcome uncertain: {error}"),
+        };
+        let error = format!(
+            "TOOLS_STATE_REFRESH_PENDING: {outcome}; snapshot refresh failed: {read_error}"
+        );
+        eprintln!("[tools] {error}");
+        error
+    })?;
+    emit_snapshot(&snapshot);
+    *pending = false;
+    mutation_result?;
+    Ok(snapshot)
 }
 
 fn send_tool_alert<R: Runtime + 'static>(app: &AppHandle<R>, alert: ToolAlert) {
@@ -611,15 +643,11 @@ fn compute_next_tools_wake(
         .activity_reminder_rules
         .iter()
         .any(|rule| rule.last_fired_date_key.as_deref() != Some(current_date_key));
-    let mut max_delay_ms = if has_pending_activity_reminder {
+    let max_delay_ms = if has_pending_activity_reminder {
         TOOLS_RUNTIME_ACTIVITY_REMINDER_WAKE_MS
     } else {
         TOOLS_RUNTIME_IDLE_WAKE_MS
     };
-    if snapshot_has_runtime_boundary_work(snapshot) {
-        max_delay_ms = max_delay_ms.min(TOOLS_RUNTIME_ACTIVE_MAX_WAKE_MS);
-    }
-
     let mut delay_ms = max_delay_ms;
     if let Some(next_reminder_at) = snapshot.next_reminder_at {
         delay_ms = delay_ms.min(next_reminder_at.saturating_sub(now_ms));
@@ -642,20 +670,6 @@ fn compute_next_tools_wake(
 
     let clamped_ms = delay_ms.clamp(TOOLS_RUNTIME_MIN_WAKE_MS, max_delay_ms);
     Duration::from_millis(clamped_ms as u64)
-}
-
-fn snapshot_has_runtime_boundary_work(snapshot: &ToolsRuntimeSnapshot) -> bool {
-    snapshot.next_reminder_at.is_some()
-        || snapshot
-            .current_timer
-            .as_ref()
-            .map(|timer| timer.mode == TimerMode::Countdown && timer.status == TimerStatus::Running)
-            .unwrap_or(false)
-        || snapshot
-            .current_pomodoro
-            .as_ref()
-            .map(|pomodoro| pomodoro.status == PomodoroStatus::Running)
-            .unwrap_or(false)
 }
 
 fn now_ms() -> i64 {
@@ -706,20 +720,256 @@ mod tests {
     use crate::domain::tools::{
         ActivityReminderTarget, ToolActivityReminderRule, ToolPomodoroRun, ToolReminder, ToolTimer,
     };
+    use std::cell::Cell;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[derive(Default)]
+    struct ControlledToolsStore {
+        mutations: AtomicUsize,
+        commits: AtomicUsize,
+        failed_reads: AtomicUsize,
+        mutation_error: bool,
+        hold_first_mutation: bool,
+        release_mutation: Notify,
+    }
+
+    impl ToolsStore for ControlledToolsStore {
+        fn apply_mutation(&self, _: ToolsMutation, _: i64, _: String) -> ToolsStoreFuture<'_, ()> {
+            Box::pin(async {
+                let mutation_index = self.mutations.fetch_add(1, Ordering::SeqCst);
+                self.commits.fetch_add(1, Ordering::SeqCst);
+                if self.hold_first_mutation && mutation_index == 0 {
+                    self.release_mutation.notified().await;
+                }
+                if self.mutation_error {
+                    Err("controlled read-back failure after insert".into())
+                } else {
+                    Ok(())
+                }
+            })
+        }
+
+        fn recover_after_startup(
+            &self,
+            now: i64,
+            day: String,
+            start: i64,
+        ) -> ToolsStoreFuture<'_, ToolsTickEvents> {
+            self.tick(now, day, start)
+        }
+
+        fn tick(&self, _: i64, _: String, _: i64) -> ToolsStoreFuture<'_, ToolsTickEvents> {
+            Box::pin(async { Ok(ToolsTickEvents::default()) })
+        }
+
+        fn fetch_snapshot(&self, _: i64, _: String) -> ToolsStoreFuture<'_, ToolsRuntimeSnapshot> {
+            Box::pin(async {
+                if self
+                    .failed_reads
+                    .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+                        count.checked_sub(1)
+                    })
+                    .is_ok()
+                {
+                    return Err("controlled snapshot failure".into());
+                }
+                Ok(ToolsRuntimeSnapshot {
+                    next_reminder_at: (self.commits.load(Ordering::SeqCst) > 0).then_some(10_000),
+                    ..ToolsRuntimeSnapshot::default()
+                })
+            })
+        }
+    }
+
+    fn reminder_mutation() -> ToolsMutation {
+        ToolsMutation::CreateReminder {
+            label: "fixture".into(),
+            scheduled_at: 10_000,
+        }
+    }
+
+    #[tokio::test]
+    async fn tools_in_flight_mutation_does_not_queue_a_duplicate_write() {
+        let state = ToolsRuntimeState::default();
+        let store = ControlledToolsStore {
+            hold_first_mutation: true,
+            ..Default::default()
+        };
+        let first = apply_mutation_and_refresh_state(
+            &state,
+            &store,
+            reminder_mutation(),
+            1_000,
+            |_| {},
+            || {},
+        );
+        tokio::pin!(first);
+        tokio::select! {
+            result = &mut first => panic!("mutation completed before release: {result:?}"),
+            _ = tokio::task::yield_now() => {}
+        }
+        assert_eq!(store.mutations.load(Ordering::SeqCst), 1);
+        let repeated = apply_mutation_and_refresh_state(
+            &state,
+            &store,
+            reminder_mutation(),
+            1_001,
+            |_| {},
+            || {},
+        )
+        .await;
+        assert!(repeated.is_err());
+        assert_eq!(store.mutations.load(Ordering::SeqCst), 1);
+        store.release_mutation.notify_one();
+        first.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn tools_committed_mutation_wakes_even_when_snapshot_fails() {
+        let state = ToolsRuntimeState::default();
+        let store = ControlledToolsStore {
+            failed_reads: AtomicUsize::new(1),
+            ..Default::default()
+        };
+        let wakes = Cell::new(0);
+        let result = apply_mutation_and_refresh_state(
+            &state,
+            &store,
+            reminder_mutation(),
+            1_000,
+            |_| panic!("failed read must not publish a snapshot"),
+            || wakes.set(wakes.get() + 1),
+        )
+        .await;
+        assert!(result.is_err());
+        assert_eq!(store.commits.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            wakes.get(),
+            1,
+            "a committed reminder must wake the old idle loop"
+        );
+        assert!(result.unwrap_err().contains("committed"));
+    }
+
+    #[tokio::test]
+    async fn tools_failed_refresh_blocks_repeat_write_and_reconciles_unchanged_tick() {
+        let state = ToolsRuntimeState::default();
+        let store = ControlledToolsStore {
+            failed_reads: AtomicUsize::new(2),
+            ..Default::default()
+        };
+        assert!(apply_mutation_and_refresh_state(
+            &state,
+            &store,
+            reminder_mutation(),
+            1_000,
+            |_| {},
+            || {}
+        )
+        .await
+        .is_err());
+        assert!(apply_mutation_and_refresh_state(
+            &state,
+            &store,
+            reminder_mutation(),
+            1_001,
+            |_| {},
+            || {}
+        )
+        .await
+        .is_err());
+        assert_eq!(
+            store.mutations.load(Ordering::SeqCst),
+            1,
+            "retry cannot insert the committed reminder again"
+        );
+        assert!(
+            tick_and_refresh_state(&state, &store, |_, _| {}, |_| panic!("read still fails"))
+                .await
+                .is_err()
+        );
+        let published = Cell::new(0);
+        tick_and_refresh_state(
+            &state,
+            &store,
+            |events, _| assert!(!events.state_changed),
+            |snapshot| {
+                assert_eq!(snapshot.next_reminder_at, Some(10_000));
+                published.set(published.get() + 1);
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            published.get(),
+            1,
+            "successful reconciliation must reach existing event subscribers"
+        );
+        assert_eq!(state.snapshot().next_reminder_at, Some(10_000));
+        apply_mutation_and_refresh_state(&state, &store, reminder_mutation(), 1_002, |_| {}, || {})
+            .await
+            .unwrap();
+        assert_eq!(store.mutations.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn tools_store_error_after_insert_is_reconciled_without_hiding_error() {
+        let state = ToolsRuntimeState::default();
+        let store = ControlledToolsStore {
+            mutation_error: true,
+            ..Default::default()
+        };
+        let published = Cell::new(0);
+        let wakes = Cell::new(0);
+        let result = apply_mutation_and_refresh_state(
+            &state,
+            &store,
+            reminder_mutation(),
+            1_000,
+            |_| published.set(published.get() + 1),
+            || wakes.set(wakes.get() + 1),
+        )
+        .await;
+        assert_eq!(
+            result.unwrap_err(),
+            "controlled read-back failure after insert"
+        );
+        assert_eq!(store.commits.load(Ordering::SeqCst), 1);
+        assert_eq!(published.get(), 1);
+        assert_eq!(wakes.get(), 1);
+        assert_eq!(state.snapshot().next_reminder_at, Some(10_000));
+    }
+
+    #[tokio::test]
+    async fn tools_uncertain_write_and_failed_read_report_pending_with_both_errors() {
+        let state = ToolsRuntimeState::default();
+        let store = ControlledToolsStore {
+            mutation_error: true,
+            failed_reads: AtomicUsize::new(1),
+            ..Default::default()
+        };
+        let result = apply_mutation_and_refresh_state(
+            &state,
+            &store,
+            reminder_mutation(),
+            1_000,
+            |_| panic!("failed read must not publish"),
+            || {},
+        )
+        .await;
+        let error = result.unwrap_err();
+        assert!(error.starts_with("TOOLS_STATE_REFRESH_PENDING:"));
+        assert!(error.contains("controlled read-back failure after insert"));
+        assert!(error.contains("controlled snapshot failure"));
+        tick_and_refresh_state(&state, &store, |_, _| {}, |_| {})
+            .await
+            .unwrap();
+        assert_eq!(state.snapshot().next_reminder_at, Some(10_000));
+        assert_eq!(store.mutations.load(Ordering::SeqCst), 1);
+    }
 
     fn duration_ms(duration: Duration) -> u64 {
         duration.as_millis() as u64
-    }
-
-    #[test]
-    fn tools_tick_outcome_preserves_store_change_signal() {
-        assert!(!ToolsTickOutcome::default().state_changed);
-        assert!(
-            ToolsTickOutcome {
-                state_changed: true,
-            }
-            .state_changed
-        );
     }
 
     #[test]

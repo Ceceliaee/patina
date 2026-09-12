@@ -133,11 +133,6 @@ pub async fn tick(app: &AppHandle) -> Result<bool, String> {
     Ok(true)
 }
 
-pub async fn reset_after_replace_restore(app: &AppHandle) -> Result<(), String> {
-    let pool = crate::data::sqlite_pool::wait_for_sqlite_pool(app).await?;
-    repository::reset_after_replace_restore(&pool, &new_generation(), current_time_ms()).await
-}
-
 async fn claim_and_execute(
     app: &AppHandle,
     pool: &Pool<Sqlite>,
