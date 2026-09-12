@@ -1,5 +1,6 @@
-import { startTransition, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocaleText } from "../../../shared/i18n/index.ts";
+import { formatLocalDateKey } from "../../../shared/lib/localDate.ts";
 import {
   getCachedDataTrendSnapshot,
   type DataTrendSnapshot,
@@ -10,7 +11,6 @@ import {
 } from "../services/dataTrendRange.ts";
 import { scheduleDataWorkAfterFirstPaint } from "../services/dataFirstPaintScheduler.ts";
 
-const CACHED_DATA_REFRESH_DELAY_MS = 320;
 const CACHED_DATA_REFRESH_IDLE_TIMEOUT_MS = 1_500;
 
 interface UseDataTrendSnapshotParams {
@@ -24,17 +24,10 @@ interface UseDataTrendSnapshotParams {
   deferCachedRefresh?: boolean;
 }
 
-function areDataTrendSnapshotsEquivalent(
-  left: DataTrendSnapshot | null,
-  right: DataTrendSnapshot,
-): boolean {
-  return Boolean(
-    left
-    && left.fetchedAtMs === right.fetchedAtMs
-    && left.range.cacheKey === right.range.cacheKey
-    && left.sessions === right.sessions
-    && left.icons === right.icons,
-  );
+interface TrendReadState {
+  queryKey: string;
+  snapshot: DataTrendSnapshot | null;
+  status: "loading" | "ready" | "error";
 }
 
 export function useDataTrendSnapshot({
@@ -44,15 +37,18 @@ export function useDataTrendSnapshot({
   loadSnapshot,
 }: UseDataTrendSnapshotParams) {
   const UI_TEXT = useLocaleText();
+  const currentDateKey = formatLocalDateKey(new Date());
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [retryKey, setRetryKey] = useState(0);
+  const retry = useCallback(() => setRetryKey((value) => value + 1), []);
   const resolvedRange = useMemo(
     () => resolveDataTrendRange(selection, nowMs, UI_TEXT),
     [selection, nowMs, UI_TEXT],
   );
-  const cached = getCachedDataTrendSnapshot(resolvedRange);
-  const [snapshot, setSnapshot] = useState<DataTrendSnapshot | null>(cached);
-  const [loading, setLoading] = useState(!cached);
-  const [hasFetchedOnce, setHasFetchedOnce] = useState(Boolean(cached));
+  const [state, setState] = useState<TrendReadState>(() => {
+    const snapshot = getCachedDataTrendSnapshot(resolvedRange);
+    return { queryKey: resolvedRange.cacheKey, snapshot, status: snapshot ? "ready" : "loading" };
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -60,51 +56,53 @@ export function useDataTrendSnapshot({
     const nextNowMs = Date.now();
     const nextRange = resolveDataTrendRange(selection, nextNowMs, UI_TEXT);
     const nextCached = getCachedDataTrendSnapshot(nextRange);
-    if (nextCached) {
-      setSnapshot((current) => (
-        areDataTrendSnapshotsEquivalent(current, nextCached) ? current : nextCached
-      ));
-      setNowMs((current) => current === nextCached.fetchedAtMs ? current : nextCached.fetchedAtMs);
-      setHasFetchedOnce(true);
-      setLoading(false);
-    } else {
-      setLoading(true);
-    }
+    setNowMs(nextNowMs);
+    setState((current) => ({
+      queryKey: nextRange.cacheKey,
+      snapshot: current.queryKey === nextRange.cacheKey ? current.snapshot ?? nextCached : nextCached,
+      status: "loading",
+    }));
 
-    const loadFreshSnapshot = () => {
-      void loadSnapshot(selection, nextNowMs, UI_TEXT).then((nextSnapshot) => {
+    const loadFreshSnapshot = async () => {
+      try {
+        const nextSnapshot = await loadSnapshot(selection, nextNowMs, UI_TEXT);
         if (cancelled) return;
-        startTransition(() => {
-          setSnapshot(nextSnapshot);
-          setNowMs(nextSnapshot.fetchedAtMs);
-          setHasFetchedOnce(true);
-        });
-      }).finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+        setState({ queryKey: nextRange.cacheKey, snapshot: nextSnapshot, status: "ready" });
+      } catch (error) {
+        if (cancelled) return;
+        console.warn("Failed to read data trend:", error);
+        setState((current) => ({ ...current, status: "error" }));
+      }
     };
 
-    if (nextCached && deferCachedRefresh) {
+    if (nextCached && deferCachedRefresh && retryKey === 0) {
       cancelScheduledLoad = scheduleDataWorkAfterFirstPaint(
-        loadFreshSnapshot,
+        () => { void loadFreshSnapshot(); },
         CACHED_DATA_REFRESH_IDLE_TIMEOUT_MS,
-        CACHED_DATA_REFRESH_DELAY_MS,
       );
     } else {
-      loadFreshSnapshot();
+      void loadFreshSnapshot();
     }
 
     return () => {
       cancelled = true;
       cancelScheduledLoad?.();
     };
-  }, [deferCachedRefresh, loadSnapshot, refreshKey, selection, UI_TEXT]);
+  }, [currentDateKey, deferCachedRefresh, loadSnapshot, refreshKey, retryKey, selection, UI_TEXT]);
+
+  // Check identity during render, before effects, so a new range never displays the previous range's data.
+  const matchesQuery = state.queryKey === resolvedRange.cacheKey;
+  const snapshot = useMemo(() => matchesQuery && state.snapshot
+    ? { ...state.snapshot, range: resolvedRange }
+    : null, [matchesQuery, resolvedRange, state.snapshot]);
 
   return {
-    hasFetchedOnce,
-    loading,
+    hasFetchedOnce: Boolean(snapshot),
+    loading: !matchesQuery || state.status === "loading",
+    error: matchesQuery && state.status === "error",
     nowMs,
     resolvedRange,
+    retry,
     snapshot,
   };
 }

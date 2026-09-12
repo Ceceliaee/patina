@@ -20,7 +20,7 @@ import {
   loadDataTrendSnapshot as loadDataTrendSnapshotRaw,
   type DataTrendSnapshotDependencies,
 } from "../src/features/data/services/dataTrendSnapshot.ts";
-import { getLocaleText } from "../src/shared/i18n/runtime.ts";
+import { getLocaleText, loadLocaleText } from "../src/shared/i18n/runtime.ts";
 
 const ZH_TEXT = getLocaleText("zh-CN");
 const resolveDataTrendRange = (selection: DataTrendRangeSelection, atMs: number) => (
@@ -336,6 +336,54 @@ await runTest("trend snapshots dedupe matching in-flight range loads and cache t
   assert.equal(first.sessions, second.sessions);
   assert.equal(loadCount, 1);
   assert.equal(getCachedDataTrendSnapshot(first.range)?.sessions, first.sessions);
+});
+
+await runTest("matching date bounds keep day and month source buckets in separate caches and requests", async () => {
+  const dailyRows = [{ exeName: "editor.exe", appName: "Editor", startTime: 1, endTime: 2 }];
+  const monthlyRows = [{ exeName: "editor.exe", appName: "Editor", startTime: 1, endTime: 3 }];
+  let dayCalls = 0;
+  let monthCalls = 0;
+  const deps: DataTrendSnapshotDependencies = {
+    getSessionSummariesInRange: async () => { dayCalls += 1; return dailyRows; },
+    getSessionSummariesInRangeByLocalMonth: async () => { monthCalls += 1; return monthlyRows; },
+  };
+  const dailySelection = { kind: "month", anchorDateKey: "2026-05-01" } as const;
+  const monthlySelection = { kind: "all", startDateKey: "2026-05-01", endDateKey: "2026-05-20" } as const;
+  const [daily, monthly] = await Promise.all([
+    loadDataTrendSnapshot(dailySelection, nowMs, deps),
+    loadDataTrendSnapshot(monthlySelection, nowMs, deps),
+  ]);
+  assert.equal(daily.range.startMs, monthly.range.startMs);
+  assert.equal(daily.range.endMs, monthly.range.endMs);
+  assert.notEqual(daily.range.cacheKey, monthly.range.cacheKey);
+  assert.deepEqual([dayCalls, monthCalls], [1, 1]);
+  assert.equal(getCachedDataTrendSnapshot(daily.range)?.sessions, dailyRows);
+  assert.equal(getCachedDataTrendSnapshot(monthly.range)?.sessions, monthlyRows);
+  const englishRange = resolveDataTrendRangeRaw(dailySelection, nowMs, await loadLocaleText("en-US"));
+  assert.equal(englishRange.cacheKey, daily.range.cacheKey);
+  assert.equal(getCachedDataTrendSnapshot(englishRange)?.range.label, englishRange.label);
+  assert.equal(getCachedDataTrendSnapshot(englishRange)?.sessions, dailyRows);
+});
+
+await runTest("failed trend reads can retry and invalidated pending reads cannot refill the cache", async () => {
+  const selection = { kind: "rolling", days: 7 } as const;
+  await assert.rejects(loadDataTrendSnapshot(selection, nowMs, {
+    getSessionSummariesInRange: async () => { throw new Error("Injected read failure"); },
+  }), /Injected read failure/);
+  assert.equal(getCachedDataTrendSnapshot(resolveDataTrendRange(selection, nowMs)), null);
+  let release: (() => void) | undefined;
+  const pending = loadDataTrendSnapshot(selection, nowMs, {
+    getSessionSummariesInRange: () => new Promise((resolve) => { release = () => resolve([]); }),
+  });
+  clearDataTrendSnapshotCache();
+  release?.();
+  await pending;
+  assert.equal(getCachedDataTrendSnapshot(resolveDataTrendRange(selection, nowMs)), null);
+  const retried = await loadDataTrendSnapshot(selection, nowMs, { getSessionSummariesInRange: async () => [] });
+  assert.equal(getCachedDataTrendSnapshot(retried.range)?.sessions, retried.sessions);
+  const tomorrowRange = resolveDataTrendRange(selection, nowMs + 86_400_000);
+  assert.notEqual(tomorrowRange.cacheKey, retried.range.cacheKey);
+  assert.equal(getCachedDataTrendSnapshot(tomorrowRange), null);
 });
 
 await runTest("trend snapshot cache keeps a small LRU set", async () => {

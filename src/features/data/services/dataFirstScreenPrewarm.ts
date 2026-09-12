@@ -14,6 +14,7 @@ import {
 } from "./dataTrendSnapshot.ts";
 import {
   saveDataBootstrapSnapshot,
+  getDataBootstrapSnapshotMutationVersion,
   type DataBootstrapSnapshot,
 } from "./dataBootstrapSnapshot.ts";
 
@@ -45,9 +46,9 @@ const defaultDeps: DataFirstScreenPrewarmDeps = {
   warn: console.warn,
 };
 
-let pendingPrewarm: Promise<DataBootstrapSnapshot | null> | null = null;
-let lastPrewarmKey: string | null = null;
-let lastPrewarmAtMs = 0;
+type PrewarmRequest = { key: string; version: number; promise: Promise<DataBootstrapSnapshot | null> };
+let pendingPrewarm: PrewarmRequest | null = null;
+let lastPrewarm: { key: string; version: number; atMs: number } | null = null;
 
 function buildPrewarmKey(options: DataFirstScreenPrewarmOptions, nowMs: number): string {
   const date = new Date(nowMs);
@@ -102,27 +103,33 @@ export async function prewarmDataFirstScreen(
   const resolvedDeps = { ...defaultDeps, ...deps };
   const nowMs = options.nowMs ?? resolvedDeps.nowMs();
   const prewarmKey = buildPrewarmKey(options, nowMs);
+  const version = getDataBootstrapSnapshotMutationVersion();
 
   if (
     pendingPrewarm
-    && lastPrewarmKey === prewarmKey
+    && pendingPrewarm.key === prewarmKey
+    && pendingPrewarm.version === version
   ) {
-    return pendingPrewarm;
+    return pendingPrewarm.promise;
   }
 
   if (
-    lastPrewarmKey === prewarmKey
-    && lastPrewarmAtMs > 0
-    && nowMs - lastPrewarmAtMs < DEFAULT_PREWARM_THROTTLE_MS
+    lastPrewarm?.key === prewarmKey
+    && lastPrewarm.version === version
+    && nowMs - lastPrewarm.atMs >= 0
+    && nowMs - lastPrewarm.atMs < DEFAULT_PREWARM_THROTTLE_MS
   ) {
     return null;
   }
 
-  lastPrewarmKey = prewarmKey;
-  lastPrewarmAtMs = nowMs;
-  pendingPrewarm = (async () => {
+  const request: PrewarmRequest = { key: prewarmKey, version, promise: Promise.resolve(null) };
+  pendingPrewarm = request;
+  const isCurrent = () => pendingPrewarm === request
+    && getDataBootstrapSnapshotMutationVersion() === version;
+  request.promise = (async () => {
     try {
       const uiText = await resolvedDeps.loadLocaleText(options.uiLanguage);
+      if (!isCurrent()) return null;
       const [trendSnapshot, heatmapSnapshot] = await Promise.all([
         resolvedDeps.loadTrendSnapshot(
           DEFAULT_TREND_SELECTION,
@@ -131,22 +138,28 @@ export async function prewarmDataFirstScreen(
         ),
         resolvedDeps.prewarmRecentHeatmap(nowMs),
       ]);
+      if (!isCurrent()) return null;
       const snapshot = buildBootstrapSnapshot(trendSnapshot, heatmapSnapshot, options, uiText, nowMs);
-      await resolvedDeps.saveBootstrapSnapshot(snapshot);
+      const save = resolvedDeps.saveBootstrapSnapshot(snapshot);
+      const saveVersion = getDataBootstrapSnapshotMutationVersion();
+      request.version = saveVersion;
+      if (!await save || pendingPrewarm !== request || getDataBootstrapSnapshotMutationVersion() !== saveVersion) {
+        return null;
+      }
+      lastPrewarm = { key: prewarmKey, version: saveVersion, atMs: nowMs };
       return snapshot;
     } catch (error) {
       resolvedDeps.warn("Data first screen prewarm failed", error);
       return null;
     } finally {
-      pendingPrewarm = null;
+      if (pendingPrewarm === request) pendingPrewarm = null;
     }
   })();
 
-  return pendingPrewarm;
+  return request.promise;
 }
 
 export function resetDataFirstScreenPrewarmForTests(): void {
   pendingPrewarm = null;
-  lastPrewarmKey = null;
-  lastPrewarmAtMs = 0;
+  lastPrewarm = null;
 }

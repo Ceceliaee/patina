@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { ProcessMapper } from "../src/shared/classification/processMapper.ts";
-import { mapRawAggregateSessionCandidates } from "../src/platform/persistence/sessionReadRepository.ts";
 import {
   buildActivityHeatmap as buildActivityHeatmapRaw,
   buildDataAppTrendViewModelFromAggregate,
@@ -35,6 +34,8 @@ import {
 } from "../src/features/data/services/dataTrendSnapshot.ts";
 import {
   loadPersistedDataBootstrapSnapshot,
+  clearDataBootstrapSnapshot,
+  getCachedDataBootstrapSnapshot,
   resetDataBootstrapSnapshotForTests,
   saveDataBootstrapSnapshot,
   type DataBootstrapSnapshot,
@@ -79,6 +80,13 @@ const loadDataTrendSnapshot = (
 ) => loadDataTrendSnapshotRaw(selection, atMs, ZH_TEXT, deps);
 
 let passed = 0;
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
+}
 
 async function runTest(name: string, fn: () => Promise<void> | void) {
   resetDataBootstrapSnapshotForTests();
@@ -562,46 +570,6 @@ await runTest("selected app derivation from shared aggregate does not mutate ove
   assert.equal(cursor.selectedApps[0]?.appName, "Cursor");
 });
 
-await runTest("aggregate repository mapping keeps a minimal effective time slice", () => {
-  const rows = mapRawAggregateSessionCandidates([{
-    app_name: "Cursor",
-    exe_name: "cursor.exe",
-    window_title: "README.md",
-    start_time: 10_000,
-    effective_end_time: 8_000,
-  }]);
-
-  assert.deepEqual(rows, [{
-    appName: "Cursor",
-    exeName: "cursor.exe",
-    startTime: 10_000,
-    endTime: 10_000,
-  }]);
-  assert.deepEqual(Object.keys(rows[0]).sort(), ["appName", "endTime", "exeName", "startTime"]);
-});
-
-await runTest("aggregate repository mapping filters legacy lifecycle noise using title metadata", () => {
-  const rows = mapRawAggregateSessionCandidates([
-    {
-      app_name: "Alma",
-      exe_name: "alma-0.0.750-win-x64.exe",
-      window_title: "Alma 安装",
-      start_time: 10_000,
-      effective_end_time: 20_000,
-    },
-    {
-      app_name: "Alma",
-      exe_name: "alma.exe",
-      window_title: "Alma",
-      start_time: 20_000,
-      effective_end_time: 30_000,
-    },
-  ]);
-
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0].exeName, "alma.exe");
-});
-
 await runTest("activity trend clips sessions at range boundaries", () => {
   const nowMs = new Date(2026, 4, 8, 12, 0, 0).getTime();
   const rows = buildDataTrendViewModel([
@@ -875,6 +843,97 @@ await runTest("data bootstrap snapshot rejects persisted app options without sou
   assert.equal(cleared, true);
 });
 
+await runTest("data bootstrap rejects damaged first-render fields before publishing cache", async () => {
+  const damagedFields: Array<[string, unknown?]> = [
+    ["overviewTrendViewModel", {}],
+    ["overviewTrendViewModel.chartAxis"],
+    ["overviewTrendViewModel.chartAxis.ticks", [0, "bad"]],
+    ["overviewTrendViewModel.chartAxis.domainMax", null],
+    ["overviewTrendViewModel.metricLabels"],
+    ["overviewTrendViewModel.metricLabels.total", {}],
+    ["overviewTrendViewModel.chartData"],
+    ["overviewTrendViewModel.chartData.0", null],
+    ["overviewTrendViewModel.chartData.0.hours", null],
+    ["overviewTrendViewModel.totalDuration", {}],
+    ["appTrendViewModel", { appOptions: [], selectedApps: [] }],
+    ["appTrendViewModel.range"],
+    ["appTrendViewModel.range.selection"],
+    ["appTrendViewModel.range.selection", { kind: "rolling", days: 0 }],
+    ["appTrendViewModel.range.selection", { kind: "custom", startDateKey: "2026-02-30", endDateKey: "2026-05-08" }],
+    ["appTrendViewModel.summary"],
+    ["appTrendViewModel.summary.activeDayCount", {}],
+    ["appTrendViewModel.chartAxis.ticks", null],
+    ["appTrendViewModel.chartRows"],
+    ["appTrendViewModel.chartRows.0", null],
+    ["appTrendViewModel.chartRows.0.label", {}],
+    ["appTrendViewModel.chartRows.0.series0"],
+    ["appTrendViewModel.chartRows.0.series0", {}],
+    ["appTrendViewModel.appOptions.0.appName"],
+    ["appTrendViewModel.appOptions.0.exeName", {}],
+    ["appTrendViewModel.selectedApps.0.averageDuration", null],
+    ["appTrendViewModel.peakDay", { duration: {} }],
+    ["heatmapRows.0.cells"],
+    ["heatmapRows.0.cells.0", null],
+    ["heatmapRows.0.cells.0.date", "2026-02-30"],
+    ["heatmapRows.0.cells.0.label", {}],
+    ["heatmapRows.0.cells.0.duration", null],
+    ["heatmapRows.0.monthLabel", {}],
+  ];
+  for (const [path, replacement] of damagedFields) {
+    resetDataBootstrapSnapshotForTests();
+    const snapshot = makeBootstrapSnapshot();
+    const seeded = await loadPersistedDataBootstrapSnapshot({
+      loadPayload: async () => JSON.stringify(snapshot),
+      clearPayload: async () => { throw new Error("valid fixture was discarded"); },
+      warn: () => { throw new Error("unexpected seed warning"); },
+    });
+    assert.ok(seeded, path);
+    const parts = path.split(".");
+    const field = parts.pop()!;
+    const owner = parts.reduce((value, key) => value[key] as Record<string, unknown>, snapshot as unknown as Record<string, unknown>);
+    if (replacement === undefined) delete owner[field];
+    else owner[field] = replacement;
+    let clears = 0;
+    const loaded = await loadPersistedDataBootstrapSnapshot({
+      loadPayload: async () => JSON.stringify(snapshot),
+      clearPayload: async () => { clears += 1; },
+      warn: () => { throw new Error(`unexpected warning for ${path}`); },
+    });
+    assert.equal(loaded === null, true, path);
+    assert.equal(getCachedDataBootstrapSnapshot() === null, true, path);
+    assert.equal(clears, 1, path);
+  }
+});
+
+await runTest("data bootstrap retains valid empty and calendar range first-render models", async () => {
+  const nowMs = new Date(2026, 4, 8, 12).getTime();
+  const selections = [
+    { kind: "rolling", days: 7 },
+    { kind: "rolling", days: 30 },
+    { kind: "rolling", days: 365 },
+    { kind: "custom", startDateKey: "2026-02-01", endDateKey: "2026-05-08" },
+    { kind: "all", startDateKey: "2026-02-01", endDateKey: "2026-05-08" },
+    { kind: "week", anchorDateKey: "2026-05-08" },
+    { kind: "month", anchorDateKey: "2026-05-08" },
+    { kind: "year", anchorDateKey: "2026-05-08" },
+  ] as const;
+  for (const selection of selections) {
+    resetDataBootstrapSnapshotForTests();
+    const range = resolveDataTrendRange(selection, nowMs, ZH_TEXT);
+    const snapshot = makeBootstrapSnapshot({
+      overviewTrendViewModel: buildDataTrendViewModel([], range, nowMs),
+      appTrendViewModel: buildDataAppTrendViewModel([], range, nowMs, null),
+      heatmapRows: buildActivityHeatmap([], 2026, nowMs),
+    });
+    const loaded = await loadPersistedDataBootstrapSnapshot({
+      loadPayload: async () => JSON.stringify(snapshot),
+      clearPayload: async () => { throw new Error("valid builder snapshot was discarded"); },
+      warn: () => { throw new Error("unexpected warning"); },
+    });
+    assert.deepEqual(loaded, snapshot, JSON.stringify(selection));
+  }
+});
+
 await runTest("data bootstrap snapshot refuses oversized payloads", async () => {
   const warnings: string[] = [];
   let saved = false;
@@ -898,6 +957,231 @@ await runTest("data bootstrap snapshot refuses oversized payloads", async () => 
   assert.equal(didSave, false);
   assert.equal(saved, false);
   assert.equal(warnings.length, 1);
+});
+
+await runTest("late Data bootstrap reads cannot undo clear or a newer snapshot", async () => {
+  for (const oldResult of [JSON.stringify(makeBootstrapSnapshot()), "invalid-json", null, new Error("read failed")]) {
+    for (const writeNewSnapshot of [false, true]) {
+      resetDataBootstrapSnapshotForTests();
+      const gate = deferred<string | null>();
+      const started = deferred<void>();
+      let persisted: string | null = "old";
+      let clears = 0;
+      const deps = {
+        loadPayload: () => { started.resolve(); return gate.promise; },
+        clearPayload: async () => { clears += 1; persisted = null; },
+        savePayload: async (payload: string) => { persisted = payload; },
+        warn: () => { throw new Error("stale failures must not warn or clear newer state"); },
+      };
+      const loading = loadPersistedDataBootstrapSnapshot(deps);
+      await started.promise;
+      const clearing = clearDataBootstrapSnapshot(deps);
+      const fresh = makeBootstrapSnapshot({ mappingVersion: 99 });
+      const saving = writeNewSnapshot
+        ? saveDataBootstrapSnapshot(fresh, { minSaveIntervalMs: 0 }, deps)
+        : Promise.resolve(false);
+      if (oldResult instanceof Error) gate.reject(oldResult);
+      else gate.resolve(oldResult);
+      const [loaded] = await Promise.all([loading, clearing, saving]);
+      assert.equal(loaded, writeNewSnapshot ? fresh : null);
+      assert.equal(getCachedDataBootstrapSnapshot(), writeNewSnapshot ? fresh : null);
+      assert.equal(persisted, writeNewSnapshot ? JSON.stringify(fresh) : null);
+      assert.equal(clears, 1);
+    }
+  }
+});
+
+await runTest("Data bootstrap storage orders old save, clear and new save", async () => {
+  const gate = deferred<void>();
+  const started = deferred<void>();
+  const writes: string[] = [];
+  let persisted: string | null = null;
+  const deps = {
+    savePayload: async (payload: string) => {
+      const version = JSON.parse(payload).mappingVersion;
+      if (version === 1) { started.resolve(); await gate.promise; }
+      writes.push(`save-${version}`);
+      persisted = payload;
+    },
+    clearPayload: async () => { writes.push("clear"); persisted = null; },
+    warn: () => { throw new Error("unexpected storage failure"); },
+  };
+  const oldSave = saveDataBootstrapSnapshot(makeBootstrapSnapshot({ mappingVersion: 1 }), {}, deps);
+  await started.promise;
+  const clearing = clearDataBootstrapSnapshot(deps);
+  const fresh = makeBootstrapSnapshot({ mappingVersion: 2 });
+  const newSave = saveDataBootstrapSnapshot(fresh, {}, deps);
+  gate.resolve();
+  await Promise.all([oldSave, clearing, newSave]);
+  assert.deepEqual(writes, ["save-1", "clear", "save-2"]);
+  assert.equal(getCachedDataBootstrapSnapshot(), fresh);
+  assert.equal(persisted, JSON.stringify(fresh));
+});
+
+await runTest("Data bootstrap retries failed storage and persists changed identity inside the throttle", async () => {
+  let attempts = 0;
+  const deps = {
+    savePayload: async () => { attempts += 1; if (attempts === 1) throw new Error("storage initializing"); },
+    warn: () => {},
+  };
+  const snapshot = makeBootstrapSnapshot();
+  assert.equal(await saveDataBootstrapSnapshot(snapshot, { nowMs: 1_000 }, deps), false);
+  assert.equal(await saveDataBootstrapSnapshot(snapshot, { nowMs: 1_001 }, deps), true);
+  assert.equal(await saveDataBootstrapSnapshot(snapshot, { nowMs: 1_002 }, deps), false);
+  assert.equal(await saveDataBootstrapSnapshot({ ...snapshot, uiLanguage: "en-US" }, { nowMs: 1_003 }, deps), true);
+  assert.equal(attempts, 3);
+});
+
+await runTest("Data bootstrap failed clear releases storage for a fresh save and load", async () => {
+  let persisted: string | null = "old";
+  const deps = {
+    clearPayload: async () => { throw new Error("storage initializing"); },
+    savePayload: async (payload: string) => { persisted = payload; },
+    loadPayload: async () => persisted,
+    warn: () => {},
+  };
+  await clearDataBootstrapSnapshot(deps);
+  const fresh = makeBootstrapSnapshot({ mappingVersion: 44 });
+  assert.equal(await saveDataBootstrapSnapshot(fresh, {}, deps), true);
+  assert.deepEqual(await loadPersistedDataBootstrapSnapshot(deps), fresh);
+  assert.equal(persisted, JSON.stringify(fresh));
+});
+
+await runTest("Data bootstrap applies the UTF-8 budget before throttling and before loading", async () => {
+  const snapshot = makeBootstrapSnapshot();
+  const oversized = makeBootstrapSnapshot({
+    heatmapRows: [{ key: "week", monthLabel: "界".repeat(90_000), cells: [] }],
+  });
+  const payload = JSON.stringify(oversized);
+  assert.ok(payload.length < 256 * 1024);
+  assert.ok(Buffer.byteLength(payload, "utf8") > 256 * 1024);
+  let writes = 0;
+  let clears = 0;
+  const deps = {
+    savePayload: async () => { writes += 1; },
+    clearPayload: async () => { clears += 1; },
+    loadPayload: async () => payload,
+    warn: () => {},
+  };
+  await saveDataBootstrapSnapshot(snapshot, { nowMs: 1_000 }, deps);
+  assert.equal(await saveDataBootstrapSnapshot(oversized, { nowMs: 1_001 }, deps), false);
+  assert.equal(getCachedDataBootstrapSnapshot(), snapshot);
+  assert.equal(writes, 1);
+  assert.equal(await loadPersistedDataBootstrapSnapshot(deps), null);
+  assert.equal(clears, 1);
+});
+
+await runTest("Data prewarm clear and changed identities reject old work without dropping newer pending work", async () => {
+  for (const [change, oldCompletesFirst] of [
+    ["clear", true], ["clear", false],
+    ["mapping-and-language", true], ["mapping-and-language", false],
+  ] as const) {
+    resetDataBootstrapSnapshotForTests();
+    resetDataFirstScreenPrewarmForTests();
+    const nowMs = new Date(2026, 4, 8, 12).getTime();
+    const gates = [deferred<DataTrendSnapshot>(), deferred<DataTrendSnapshot>()];
+    const started = [deferred<void>(), deferred<void>()];
+    const range = resolveDataTrendRange({ kind: "rolling", days: 7 }, nowMs, ZH_TEXT);
+    const trend = { fetchedAtMs: nowMs, range, sessions: [], icons: {} };
+    const saves: DataBootstrapSnapshot[] = [];
+    let loads = 0;
+    const deps = {
+      loadLocaleText: async () => ZH_TEXT,
+      loadTrendSnapshot: () => { const index = loads++; started[index].resolve(); return gates[index].promise; },
+      prewarmRecentHeatmap: async () => ({ earliestStartTime: null, range: getHeatmapRange("recent", nowMs), cacheKey: "recent", sessions: [] }),
+      saveBootstrapSnapshot: async (snapshot: DataBootstrapSnapshot) => { saves.push(snapshot); return true; },
+      warn: () => { throw new Error("unexpected prewarm failure"); },
+    };
+    const options = { mappingVersion: 1, uiLanguage: "zh-CN" as const, reason: "data-opened" as const, nowMs };
+    const old = prewarmDataFirstScreen(options, deps);
+    await started[0].promise;
+    if (change === "clear") await clearDataBootstrapSnapshot({ clearPayload: async () => {} });
+    const nextOptions = change === "clear" ? options : { ...options, mappingVersion: 2, uiLanguage: "en-US" as const };
+    const fresh = prewarmDataFirstScreen(nextOptions, deps);
+    await started[1].promise;
+    let deduped: Promise<DataBootstrapSnapshot | null>;
+    if (oldCompletesFirst) {
+      gates[0].resolve(trend);
+      assert.equal(await old, null);
+      deduped = prewarmDataFirstScreen(nextOptions, deps);
+      gates[1].resolve(trend);
+    } else {
+      deduped = prewarmDataFirstScreen(nextOptions, deps);
+      gates[1].resolve(trend);
+      await fresh;
+      gates[0].resolve(trend);
+      assert.equal(await old, null);
+    }
+    const [result, same] = await Promise.all([fresh, deduped]);
+    assert.equal(same, result);
+    assert.equal(loads, 2);
+    assert.equal(saves.length, 1);
+    assert.equal(result?.mappingVersion, nextOptions.mappingVersion);
+    assert.equal(result?.uiLanguage, nextOptions.uiLanguage);
+  }
+});
+
+await runTest("Data prewarm failures retry immediately and late persistence cannot reinstate a cleared success", async () => {
+  const nowMs = new Date(2026, 4, 8, 12).getTime();
+  const gate = deferred<void>();
+  const saveStarted = deferred<void>();
+  let attempts = 0;
+  let saves = 0;
+  const deps = {
+    loadLocaleText: async () => { if (++attempts === 1) throw new Error("locale initializing"); return ZH_TEXT; },
+    loadTrendSnapshot: async () => ({ fetchedAtMs: nowMs, range: resolveDataTrendRange({ kind: "rolling", days: 7 }, nowMs, ZH_TEXT), sessions: [], icons: {} }),
+    prewarmRecentHeatmap: async () => ({ earliestStartTime: null, range: getHeatmapRange("recent", nowMs), cacheKey: "recent", sessions: [] }),
+    saveBootstrapSnapshot: async () => { if (++saves === 1) { saveStarted.resolve(); await gate.promise; } return true; },
+    warn: () => {},
+  };
+  const options = { mappingVersion: 1, uiLanguage: "zh-CN" as const, reason: "data-opened" as const, nowMs };
+  assert.equal(await prewarmDataFirstScreen(options, deps), null);
+  const retry = prewarmDataFirstScreen(options, deps);
+  await saveStarted.promise;
+  await clearDataBootstrapSnapshot({ clearPayload: async () => {} });
+  gate.resolve();
+  assert.equal(await retry, null);
+  assert.ok(await prewarmDataFirstScreen(options, deps));
+  assert.equal(attempts, 3);
+  assert.equal(saves, 2);
+});
+
+await runTest("Data prewarm dedupes while its real save is pending and retries a failed save", async () => {
+  const nowMs = new Date(2026, 4, 8, 12).getTime();
+  const gate = deferred<void>();
+  const saveStarted = deferred<void>();
+  let loads = 0;
+  let saves = 0;
+  const deps = {
+    loadLocaleText: async () => ZH_TEXT,
+    loadTrendSnapshot: async () => {
+      loads += 1;
+      return { fetchedAtMs: nowMs, range: resolveDataTrendRange({ kind: "rolling", days: 7 }, nowMs, ZH_TEXT), sessions: [], icons: {} };
+    },
+    prewarmRecentHeatmap: async () => ({ earliestStartTime: null, range: getHeatmapRange("recent", nowMs), cacheKey: "recent", sessions: [] }),
+    saveBootstrapSnapshot: (snapshot: DataBootstrapSnapshot) => saveDataBootstrapSnapshot(snapshot, { nowMs }, {
+      savePayload: async () => {
+        if (++saves === 1) {
+          saveStarted.resolve();
+          await gate.promise;
+          throw new Error("storage initializing");
+        }
+      },
+      warn: () => {},
+    }),
+    warn: () => {},
+  };
+  const options = { mappingVersion: 1, uiLanguage: "zh-CN" as const, reason: "data-opened" as const, nowMs };
+  const first = prewarmDataFirstScreen(options, deps);
+  await saveStarted.promise;
+  const same = prewarmDataFirstScreen(options, deps);
+  gate.resolve();
+  assert.deepEqual(await Promise.all([first, same]), [null, null]);
+  assert.equal(loads, 1);
+  assert.equal(saves, 1);
+  assert.ok(await prewarmDataFirstScreen(options, deps));
+  assert.equal(loads, 2);
+  assert.equal(saves, 2);
 });
 
 await runTest("data first screen prewarm saves a bootstrap snapshot", async () => {

@@ -164,7 +164,8 @@ function resolveBounds(
     dayCount: countInclusiveLocalDays(startDateKey, endDateKey),
     label,
     granularity,
-    cacheKey: `${startDateKey}:${endDateKey}`,
+    // All-time reads use month buckets; other views retain day facts for active-day and peak-day metrics.
+    cacheKey: `${selection.kind === "all" ? "month" : "day"}:${startDateKey}:${endDateKey}`,
   };
 }
 

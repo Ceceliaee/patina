@@ -1,4 +1,10 @@
 import assert from "node:assert/strict";
+import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import Database from "@tauri-apps/plugin-sql";
+import {
+  getSessionsInRange,
+  getSessionsInRangeWithoutTitleSamples,
+} from "../src/platform/persistence/sessionReadRepository.ts";
 import {
   createSerializedJobRunner,
   executeWriteBatchWithExecutor,
@@ -48,6 +54,51 @@ function assertNoTransactionControlStatements(executor: FakeWriteExecutor) {
     false,
   );
 }
+
+await runTest("History SQL preserves open and half-open boundaries with native import precedence", async () => {
+  const db = new DatabaseSync(":memory:");
+  const originalSelect = Database.prototype.select;
+  const originalNow = Date.now;
+  try {
+    db.exec(`
+      CREATE TABLE sessions(id INTEGER PRIMARY KEY, app_name TEXT, exe_name TEXT, window_title TEXT,
+        start_time INTEGER, end_time INTEGER, duration INTEGER, continuity_group_start_time INTEGER);
+      CREATE TABLE import_exact_sessions(id INTEGER PRIMARY KEY, app_name TEXT, exe_name TEXT,
+        window_title TEXT, start_time INTEGER, end_time INTEGER, duration INTEGER);
+      CREATE TABLE session_title_samples(id INTEGER PRIMARY KEY,session_id INTEGER,title TEXT,start_time INTEGER,end_time INTEGER);
+      CREATE INDEX idx_sessions_date ON sessions(start_time);
+      CREATE INDEX idx_sessions_end_start ON sessions(end_time,start_time);
+      INSERT INTO sessions VALUES
+        (1,'Editor','editor.exe','before',-1000,0,1000,-1000),
+        (2,'Editor','editor.exe','closed',0,1000,1000,0),
+        (3,'Editor','editor.exe','at end',3000,4000,1000,3000),
+        (4,'Editor','editor.exe','open',8000,NULL,NULL,8000);
+      INSERT INTO import_exact_sessions VALUES(1,'Imported','imported.exe','imported',500,3500,3000);
+      INSERT INTO session_title_samples VALUES(1,2,'closed title',0,1000);
+    `);
+    Date.now = () => 10_000;
+    Database.prototype.select = async function <T>(query: string, values?: unknown[]): Promise<T> {
+      return db.prepare(query).all(...(values ?? []) as SQLInputValue[]) as T;
+    };
+    for (const load of [getSessionsInRangeWithoutTitleSamples, getSessionsInRange]) {
+      const rows = await load(0, 3000);
+      assert.deepEqual(rows.map(row => [row.exeName, row.startTime, row.endTime, row.duration]), [
+        ["editor.exe", 0, 1000, 1000],
+        ["imported.exe", 1000, 3500, 2500],
+      ]);
+      assert.deepEqual((await load(8000, 9000)).map(row => [row.startTime, row.endTime, row.duration]), [[8000, null, 2000]]);
+      assert.deepEqual(await load(10_000, 11_000), []);
+      assert.deepEqual((await load(-1000, 0)).map(row => row.id), [1]);
+    }
+    assert.deepEqual((await getSessionsInRange(0, 3000))[0]?.titleSampleDetails, [
+      { title: "closed title", startTime: 0, endTime: 1000 },
+    ]);
+  } finally {
+    Database.prototype.select = originalSelect;
+    Date.now = originalNow;
+    db.close();
+  }
+});
 
 await runTest("executeWriteBatchWithExecutor executes all operations in order", async () => {
   const executor = new FakeWriteExecutor();
