@@ -13,39 +13,70 @@ on:
     inputs:
       pr_number:
         description: Pull request number to verify after maintainer review
-        required: false
+        required: true
         type: string
 
 permissions:
   contents: read
 
 jobs:
-  frontend:
-    name: Frontend checks
+  candidate:
+    name: Resolve and verify immutable candidate
     if: >-
       github.event_name == 'push' ||
       (github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'pull_request') ||
-      (github.event_name == 'workflow_dispatch' && inputs.pr_number != '')
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    outputs:
+      head_sha: ${{ steps.verify.outputs.head_sha }}
+    steps:
+      - name: Checkout trusted workflow revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup trusted Node runtime
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+
+      - name: Recheck fixed candidate with trusted base intake
+        id: verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERIFY_WORKFLOW_REF: ${{ github.workflow_ref }}
+        run: node --experimental-strip-types scripts/check-verify-candidate.ts
+
+  frontend:
+    name: Frontend checks
+    needs: candidate
     runs-on: windows-latest
 
     steps:
-      - name: Checkout push revision
-        if: github.event_name == 'push'
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-
-      - name: Checkout pull request revision
-        if: github.event_name == 'workflow_run'
+      - name: Checkout verified candidate
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: refs/pull/${{ github.event.workflow_run.pull_requests[0].number }}/head
+          ref: ${{ needs.candidate.outputs.head_sha }}
+          persist-credentials: false
 
-      - name: Checkout manually selected pull request revision
-        if: github.event_name == 'workflow_dispatch' && inputs.pr_number != ''
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: refs/pull/${{ inputs.pr_number }}/head
+      - name: Assert verified candidate before executing repository code
+        shell: pwsh
+        env:
+          VERIFIED_HEAD_SHA: ${{ needs.candidate.outputs.head_sha }}
+        run: |
+          $actual = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $actual -cne $env:VERIFIED_HEAD_SHA) { throw "Verified candidate HEAD mismatch" }
+          Write-Output "Executing verified candidate $actual"
 
       - name: Install pinned pnpm
         shell: pwsh
@@ -58,8 +89,7 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
+          package-manager-cache: false
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -77,12 +107,7 @@ jobs:
 
   rust-quality:
     name: Rust checks (${{ matrix.arch }})
-    if: >-
-      github.event_name == 'push' ||
-      (github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'pull_request') ||
-      (github.event_name == 'workflow_dispatch' && inputs.pr_number != '')
+    needs: candidate
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -96,21 +121,20 @@ jobs:
             target: aarch64-pc-windows-msvc
 
     steps:
-      - name: Checkout push revision
-        if: github.event_name == 'push'
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-
-      - name: Checkout pull request revision
-        if: github.event_name == 'workflow_run'
+      - name: Checkout verified candidate
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: refs/pull/${{ github.event.workflow_run.pull_requests[0].number }}/head
+          ref: ${{ needs.candidate.outputs.head_sha }}
+          persist-credentials: false
 
-      - name: Checkout manually selected pull request revision
-        if: github.event_name == 'workflow_dispatch' && inputs.pr_number != ''
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: refs/pull/${{ inputs.pr_number }}/head
+      - name: Assert verified candidate before executing repository code
+        shell: pwsh
+        env:
+          VERIFIED_HEAD_SHA: ${{ needs.candidate.outputs.head_sha }}
+        run: |
+          $actual = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $actual -cne $env:VERIFIED_HEAD_SHA) { throw "Verified candidate HEAD mismatch" }
+          Write-Output "Executing verified candidate $actual"
 
       - name: Install pinned pnpm
         shell: pwsh
@@ -123,8 +147,7 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
+          package-manager-cache: false
 
       - name: Setup Rust from rust-toolchain.toml
         shell: pwsh
@@ -150,32 +173,26 @@ jobs:
 
   tauri-runtime-smoke:
     name: Tauri runtime smoke
-    if: >-
-      github.event_name == 'push' ||
-      (github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'pull_request') ||
-      (github.event_name == 'workflow_dispatch' && inputs.pr_number != '')
+    needs: candidate
     runs-on: windows-latest
     # Include runner setup and dependency installation before the runtime step.
     timeout-minutes: 25
 
     steps:
-      - name: Checkout push revision
-        if: github.event_name == 'push'
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-
-      - name: Checkout pull request revision
-        if: github.event_name == 'workflow_run'
+      - name: Checkout verified candidate
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: refs/pull/${{ github.event.workflow_run.pull_requests[0].number }}/head
+          ref: ${{ needs.candidate.outputs.head_sha }}
+          persist-credentials: false
 
-      - name: Checkout manually selected pull request revision
-        if: github.event_name == 'workflow_dispatch' && inputs.pr_number != ''
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: refs/pull/${{ inputs.pr_number }}/head
+      - name: Assert verified candidate before executing repository code
+        shell: pwsh
+        env:
+          VERIFIED_HEAD_SHA: ${{ needs.candidate.outputs.head_sha }}
+        run: |
+          $actual = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $actual -cne $env:VERIFIED_HEAD_SHA) { throw "Verified candidate HEAD mismatch" }
+          Write-Output "Executing verified candidate $actual"
 
       - name: Install pinned pnpm
         shell: pwsh
@@ -188,8 +205,7 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
+          package-manager-cache: false
 
       - name: Setup Rust from rust-toolchain.toml
         run: rustup toolchain install --no-self-update

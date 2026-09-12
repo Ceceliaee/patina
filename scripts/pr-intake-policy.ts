@@ -14,6 +14,7 @@ export const KNOWN_FEATURE_OWNERS = new Set([
 
 export const QUALITY_GATE_PATH_PATTERNS = [
   /^scripts\/check-.*\.ts$/,
+  /^scripts\/pr-intake-policy\.ts$/,
   /^scripts\/perf\/.*benchmark.*\.ts$/,
   /^\.github\/workflows\/[^/]+\.ya?ml$/,
 ] as const;
@@ -255,7 +256,7 @@ function hasMeaningfulText(section: string) {
 
 function hasLabeledValue(section: string, label: string) {
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`^-\\s*${escaped}:\\s*\\S.+$`, "im").test(stripComments(section));
+  return new RegExp(`^-[\\t ]*${escaped}:[\\t ]*\\S[^\\r\\n]*$`, "im").test(stripComments(section));
 }
 
 function hasCheckedItem(section: string, label: string) {
@@ -268,6 +269,30 @@ function hasRepeatableUiValidation(section: string) {
   if (!match) return false;
   return /(?:`?pnpm run\s+[\w:-]+|`?node\s+|`?cargo test\b|(?:^|\s)(?:tests?|src)\/\S+test\S*)/i.test(match[1])
     || /\b(?:existing owner|browser|structural) test\s*(?::|=|-)\s*\S+/i.test(match[1]);
+}
+
+const DOCUMENTATION_GOVERNANCE_PATHS = new Set([
+  "AGENTS.md",
+  "CONTRIBUTING.md",
+  "docs/engineering-quality.md",
+  ".github/pull_request_template.md",
+]);
+
+function isRepositoryDocumentationPath(path: string) {
+  return DOCUMENTATION_GOVERNANCE_PATHS.has(path)
+    || /^(?:README(?:\.zh-CN)?|CHANGELOG)\.md$/.test(path)
+    || /^docs\/(?:[^./\\][^/\\]*\/)*[^./\\][^/\\]*\.md$/.test(path);
+}
+
+function isDocumentationOnlyDiff(changedFiles: ChangedFile[]) {
+  return changedFiles.length > 0 && changedFiles.every((file) => {
+    if (file.binary || !/^(?:A|M|D|[RC](?:0?\d{1,2}|100))$/.test(file.status)) return false;
+    if (!isRepositoryDocumentationPath(file.path)) return false;
+    // The CLI emits deletions + additions for moves; explicit rename/copy input
+    // must preserve the source path so moving code cannot qualify as docs-only.
+    if (/^[RC]/.test(file.status) && !file.oldPath) return false;
+    return file.oldPath === undefined || isRepositoryDocumentationPath(file.oldPath);
+  });
 }
 
 export function evaluatePullRequestBody(
@@ -318,7 +343,20 @@ export function evaluatePullRequestBody(
   for (const label of ["Tracking correctness", "Local data safety", "Privacy or security", "Compatibility and migration", "Failure and recovery behavior"]) {
     if (!hasLabeledValue(risk, label)) incomplete.push(`Risk Review must complete ${label} (use N/A when unaffected)`);
   }
-  if (!hasCheckedItem(getBodySection(body, "Validation"), "`pnpm run check`")) incomplete.push("Validation must confirm pnpm run check was run");
+  const validation = stripComments(getBodySection(body, "Validation"));
+  if (!hasCheckedItem(validation, "`pnpm run check`")) {
+    if (!isDocumentationOnlyDiff(changedFiles)) {
+      incomplete.push("Validation must confirm pnpm run check was run; check:docs is only accepted for a known, nonempty repository-documentation diff");
+    } else {
+      if (!hasCheckedItem(validation, "`pnpm run check:docs`")) incomplete.push("Validation must confirm pnpm run check:docs or pnpm run check was run");
+      const changesGovernance = changedFiles.some((file) =>
+        DOCUMENTATION_GOVERNANCE_PATHS.has(file.path) || (file.oldPath !== undefined && DOCUMENTATION_GOVERNANCE_PATHS.has(file.oldPath)),
+      );
+      if (changesGovernance && !hasCheckedItem(validation, "`pnpm run check:docs:self-test`")) {
+        incomplete.push("Documentation governance or validation policy changes must also confirm pnpm run check:docs:self-test was run");
+      }
+    }
+  }
   if (incomplete.length > 0) failures.push({ rule: "incomplete-pr-sections", message: "Required PR template fields are incomplete.", detail: incomplete.join("\n") });
 
   if (changedFiles.some((file) => isUiImplementationPath(file.path))) {

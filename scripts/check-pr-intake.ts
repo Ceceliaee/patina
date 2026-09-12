@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { sep } from "node:path";
@@ -46,7 +47,7 @@ function git(args: string[]) {
   return execFileSync("git", args, {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
-  }).trimEnd();
+  });
 }
 
 function parseArgs(argv: string[]): CliOptions {
@@ -129,34 +130,51 @@ function matchesRiskAreaTest(path: string, area: (typeof RISK_AREAS)[number]) {
 }
 
 function parseNameStatus(output: string): ChangedFile[] {
-  if (!output.trim()) {
+  if (output === "") {
     return [];
   }
 
-  return output.split(/\r?\n/).map((line) => {
-    const parts = line.split("\t");
-    const status = parts[0];
-
-    return {
-      status,
-      path: normalizePath(parts[1]),
-      additions: 0,
-      deletions: 0,
-    };
-  });
+  const fields = output.split("\0");
+  if (fields.pop() !== "" || fields.length % 2 !== 0) {
+    throw new Error("Malformed Git --name-status -z output: expected complete status/path records.");
+  }
+  const files: ChangedFile[] = [];
+  const paths = new Set<string>();
+  for (let index = 0; index < fields.length; index += 2) {
+    const status = fields[index];
+    const path = fields[index + 1];
+    if (!/^[ADMTUXB]$/.test(status) || !path || paths.has(path)) {
+      throw new Error("Malformed Git --name-status -z output: invalid status, empty path, or duplicate path.");
+    }
+    paths.add(path);
+    files.push({ status, path, additions: 0, deletions: 0 });
+  }
+  return files;
 }
 
 function parseNumstat(output: string) {
   const stats = new Map<string, Pick<ChangedFile, "additions" | "deletions" | "binary">>();
 
-  if (!output.trim()) {
+  if (output === "") {
     return stats;
   }
 
-  for (const line of output.split(/\r?\n/)) {
-    const [additionsText, deletionsText, ...pathParts] = line.split("\t");
-    const path = normalizePath(pathParts.join("\t"));
-    const binary = additionsText === "-" || deletionsText === "-";
+  const records = output.split("\0");
+  if (records.pop() !== "") {
+    throw new Error("Malformed Git --numstat -z output: expected complete NUL-terminated records.");
+  }
+  for (const record of records) {
+    const firstTab = record.indexOf("\t");
+    const secondTab = record.indexOf("\t", firstTab + 1);
+    const additionsText = record.slice(0, firstTab);
+    const deletionsText = record.slice(firstTab + 1, secondTab);
+    const path = record.slice(secondTab + 1);
+    const binary = additionsText === "-" && deletionsText === "-";
+    const validCount = (value: string) => /^(?:0|[1-9]\d*)$/.test(value) && Number.isSafeInteger(Number(value));
+    if (firstTab < 0 || secondTab < 0 || !path || stats.has(path)
+      || (!binary && (!validCount(additionsText) || !validCount(deletionsText)))) {
+      throw new Error("Malformed Git --numstat -z output: invalid counts, empty path, or duplicate path.");
+    }
 
     stats.set(path, {
       additions: binary ? 0 : Number(additionsText),
@@ -174,13 +192,16 @@ function loadChangedFiles(base?: string, head?: string): ChangedFile[] {
   }
 
   const range = diffRange(base, head);
-  const files = parseNameStatus(git(["diff", "--no-renames", "--name-status", range]));
-  const stats = parseNumstat(git(["diff", "--no-renames", "--numstat", range]));
-
-  return files.map((file) => ({
-    ...file,
-    ...(stats.get(file.path) ?? {}),
-  }));
+  const files = parseNameStatus(git(["diff", "--no-renames", "--name-status", "-z", range]));
+  const stats = parseNumstat(git(["diff", "--no-renames", "--numstat", "-z", range]));
+  if (stats.size !== files.length) {
+    throw new Error("Git diff metadata is incomplete: name-status and numstat file counts differ.");
+  }
+  return files.map((file) => {
+    const fileStats = stats.get(file.path);
+    if (!fileStats) throw new Error(`Git diff metadata is missing numstat for ${JSON.stringify(file.path)}.`);
+    return { ...file, ...fileStats };
+  });
 }
 
 function loadAddedLines(base?: string, head?: string, changedFiles: ChangedFile[] = []) {
@@ -303,6 +324,28 @@ function loadRegisteredRustTests(head: string | undefined, changedFiles: Changed
   return registered;
 }
 
+function expandValidationSteps(scripts: Record<string, string>, name: string, parents = new Set<string>()): string[] | null {
+  if (parents.has(name) || !scripts[name]) return null;
+  const steps: string[] = [];
+  const chain = new Set([...parents, name]);
+  for (const value of scripts[name].split("&&")) {
+    const segment = value.trim();
+    // Only an argv sequence joined by && is understood here. Other shell
+    // syntax requires a maintainer change, not an inferred execution graph.
+    if (!/^[\w./:=@,+-]+(?:[ \t]+[\w./:=@,+-]+)*$/.test(segment)) return null;
+    const normalized = segment.replace(/[ \t]+/g, " ");
+    const call = normalized.match(/^pnpm(?:\.(?:cmd|exe))? (?:run ([\w:-]+)|(test))$/);
+    if (call) {
+      const nested = expandValidationSteps(scripts, call[1] ?? call[2], chain);
+      if (!nested) return null;
+      steps.push(...nested);
+    } else {
+      steps.push(normalized);
+    }
+  }
+  return steps;
+}
+
 export function findValidationChainRegressions(
   baseScripts: Record<string, string>,
   headScripts: Record<string, string>,
@@ -313,17 +356,24 @@ export function findValidationChainRegressions(
     .filter((name) => !headGraph.reachableScripts.has(name));
   const missingTests = [...baseGraph.registeredTypeScriptTests]
     .filter((path) => !headGraph.registeredTypeScriptTests.has(path));
-  const weakenedCommands = [...baseGraph.reachableScripts]
-    .filter((name) => {
-      const baseCommand = baseScripts[name] ?? "";
-      const headCommand = headScripts[name] ?? "";
-      const directSegments = baseCommand
-        .split(/&&/)
-        .map((segment) => segment.trim())
-        .filter(Boolean)
-        .filter((segment) => !/^pnpm(?:\.(?:cmd|exe))?\s+(?:run\s+[\w:-]+|test)(?:\s|$)/.test(segment));
-      return headCommand && directSegments.some((segment) => !headCommand.includes(segment));
-    });
+  const trustedSteps = new Set([...baseGraph.reachableScripts]
+    .flatMap((name) => expandValidationSteps(baseScripts, name) ?? []));
+  const allowedAddition = (step: string) => trustedSteps.has(step)
+    || /^node(?: --(?:experimental-strip-types|experimental-specifier-resolution=node|test))* tests\/[\w./-]+\.(?:test|spec)\.(?:ts|tsx)$/.test(step);
+  const weakenedCommands = [...headGraph.reachableScripts].filter((name) => {
+    if (headScripts[name] === baseScripts[name]) return false;
+    const headSteps = expandValidationSteps(headScripts, name);
+    if (!headSteps) return true;
+    if (!baseGraph.reachableScripts.has(name)) return headSteps.some((step) => !allowedAddition(step));
+    const baseSteps = expandValidationSteps(baseScripts, name);
+    if (!baseSteps) return true;
+    let preserved = 0;
+    for (const step of headSteps) {
+      if (step === baseSteps[preserved]) preserved += 1;
+      else if (!allowedAddition(step)) return true;
+    }
+    return preserved !== baseSteps.length;
+  });
 
   if (missingScripts.length === 0 && missingTests.length === 0 && weakenedCommands.length === 0) {
     return [];
@@ -337,13 +387,13 @@ export function findValidationChainRegressions(
     details.push(`Tests no longer reachable: ${missingTests.slice(0, 12).join(", ")}`);
   }
   if (weakenedCommands.length > 0) {
-    details.push(`Existing validation command segments removed or replaced: ${weakenedCommands.slice(0, 12).join(", ")}`);
+    details.push(`Validation execution changed or uses unsupported shell syntax: ${weakenedCommands.slice(0, 12).join(", ")}`);
   }
 
   return [{
     rule: "validation-chain-weakened",
     message: "The normal validation chain was weakened.",
-    detail: `${details.join("\n")}. Feature PRs may add focused validation, but must not remove or replace existing checks.`,
+    detail: `${details.join("\n")}. Preserve existing checks in order. Add focused Node test calls through && or complete pnpm run/test calls; other command changes require maintainer-owned validation policy.`,
   }];
 }
 
@@ -759,6 +809,16 @@ function formatFailures(failures: IntakeFailure[]) {
 }
 
 function runSelfTest() {
+  const unusualPath = "docs/中文\tline\nquote\"back\\slash.md";
+  assert.deepEqual(parseNameStatus(`M\0${unusualPath}\0`), [{ path: unusualPath, status: "M", additions: 0, deletions: 0 }]);
+  assert.deepEqual(parseNumstat(`2\t1\t${unusualPath}\0`).get(unusualPath), { additions: 2, deletions: 1, binary: false });
+  assert.deepEqual(parseNumstat("-\t-\tdocs/binary.md\0").get("docs/binary.md"), { additions: 0, deletions: 0, binary: true });
+  for (const output of ["M\tdocs/a.md\n", "M\0docs/a.md", "M\0\0", "?\0docs/a.md\0", "M\0docs/a.md\0M\0docs/a.md\0"]) {
+    assert.throws(() => parseNameStatus(output), /Malformed Git --name-status/);
+  }
+  for (const output of ["1\t0\tdocs/a.md", "1\tdocs/a.md\0", "1\t0\t\0", "-\t0\tdocs/a.md\0", "NaN\t0\tdocs/a.md\0", "1\t0\tdocs/a.md\0".repeat(2)]) {
+    assert.throws(() => parseNumstat(output), /Malformed Git --numstat/);
+  }
   const passingBody = [
     "## Purpose",
     "Improve a focused behavior.",

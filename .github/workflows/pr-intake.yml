@@ -29,6 +29,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Fetch pull request head without checking it out
         env:
@@ -43,6 +44,7 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
+          package-manager-cache: false
 
       - name: Run trusted pull request intake gate
         env:
