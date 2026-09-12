@@ -19,11 +19,11 @@ import { runStartupScenarios } from "./uiBrowserSmoke/startupScenarios.ts";
 import { runAboutScenarios } from "./uiBrowserSmoke/aboutScenarios.ts";
 import { runToolsScenarios } from "./uiBrowserSmoke/toolsScenarios.ts";
 import { runNavigationScenarios } from "./uiBrowserSmoke/navigationScenarios.ts";
-import { runSettingsScenarios } from "./uiBrowserSmoke/settingsScenarios.ts";
+import { runRemoteBackupRecoveryScenarios, runSettingsScenarios } from "./uiBrowserSmoke/settingsScenarios.ts";
 import { runClassificationScenarios } from "./uiBrowserSmoke/classificationScenarios.ts";
-import { runDashboardScenarios } from "./uiBrowserSmoke/dashboardScenarios.ts";
-import { runHistoryScenarios } from "./uiBrowserSmoke/historyScenarios.ts";
-import { runDataScenarios } from "./uiBrowserSmoke/dataScenarios.ts";
+import { runDashboardReadFailureScenarios, runDashboardScenarios } from "./uiBrowserSmoke/dashboardScenarios.ts";
+import { runHistoryReadFailureScenarios, runHistoryScenarios } from "./uiBrowserSmoke/historyScenarios.ts";
+import { runDataReadFailureScenarios, runDataScenarios } from "./uiBrowserSmoke/dataScenarios.ts";
 import { runLocaleScenarios } from "./uiBrowserSmoke/localeScenarios.ts";
 import { runWidgetScenarios } from "./uiBrowserSmoke/widgetScenarios.ts";
 import { runScrollRegionScenarios } from "./uiBrowserSmoke/scrollRegionScenarios.ts";
@@ -151,7 +151,12 @@ try {
 
   await runStartupScenarios(smokeContext);
 
-  if (process.argv.includes("--theme-only")) {
+  if (process.argv.includes("--read-failure-only")) {
+    await runRemoteBackupRecoveryScenarios(smokeContext);
+    await runDashboardReadFailureScenarios(smokeContext);
+    await runDataReadFailureScenarios(smokeContext);
+    await runHistoryReadFailureScenarios(smokeContext);
+  } else if (process.argv.includes("--theme-only")) {
     const { runThemeContrastScenarios } = await import("./uiBrowserSmoke/themeContrastScenarios.ts");
     await evaluate(client!, sessionId, `document.querySelector('[aria-label="设置"]')?.click()`);
     await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.settings-theme-entry'))`);
@@ -186,6 +191,7 @@ try {
     await runNavigationScenarios(smokeContext);
 
     await runSettingsScenarios(smokeContext);
+    await runRemoteBackupRecoveryScenarios(smokeContext);
 
     await runClassificationScenarios(smokeContext);
 
@@ -194,6 +200,10 @@ try {
     await runHistoryScenarios(smokeContext);
 
     await runDataScenarios(smokeContext);
+
+    await runDashboardReadFailureScenarios(smokeContext);
+    await runDataReadFailureScenarios(smokeContext);
+    await runHistoryReadFailureScenarios(smokeContext);
 
     await runLocaleScenarios(smokeContext);
 

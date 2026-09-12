@@ -186,26 +186,30 @@ export async function stopBrowser(browser: ChildProcess) {
   if (browser.exitCode !== null) return;
 
   const pid = browser.pid;
+  let terminationError: Error | undefined;
   if (process.platform === "win32" && browser.pid) {
     const result = spawnSync("taskkill.exe", ["/PID", String(browser.pid), "/T", "/F"], {
-      encoding: "utf8",
+      encoding: "utf8", windowsHide: true, timeout: 5_000,
     });
+    terminationError = result.error;
     if ((result.error || result.status !== 0) && isProcessRunning(browser.pid)) {
       const fallback = spawnSync("powershell.exe", [
         "-NoProfile",
         "-Command",
         "Stop-Process -Id $env:PATINA_BROWSER_SMOKE_PID -Force",
       ], {
-        encoding: "utf8",
+        encoding: "utf8", windowsHide: true, timeout: 5_000,
         env: {
           ...process.env,
           PATINA_BROWSER_SMOKE_PID: String(browser.pid),
         },
       });
+      terminationError = fallback.error ?? terminationError;
       if ((fallback.error || fallback.status !== 0) && isProcessRunning(browser.pid)) {
-        throw new Error(
-          `failed to stop browser process ${browser.pid}: ${fallback.stderr || fallback.stdout || result.stderr || result.stdout}`,
-        );
+        try { browser.kill("SIGKILL"); }
+        catch (error) {
+          throw new Error(`failed to stop browser process ${browser.pid}: ${String(error)}; ${fallback.error?.message || fallback.stderr || fallback.stdout || result.error?.message || result.stderr || result.stdout}`);
+        }
       }
     }
   } else {
@@ -217,6 +221,7 @@ export async function stopBrowser(browser: ChildProcess) {
     () => browser.exitCode !== null || (pid && !isProcessRunning(pid)) ? true : null,
     5_000,
   );
+  if (terminationError) throw new Error(`browser termination helper failed for ${pid}: ${terminationError.message}`, { cause: terminationError });
 }
 
 function isProcessRunning(pid: number) {

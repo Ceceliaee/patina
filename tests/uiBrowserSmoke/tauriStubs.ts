@@ -1,6 +1,28 @@
 import type { Plugin } from "vite";
 import { HISTORY_TITLE_DETAIL_COUNT } from "./constants.ts";
 
+const settingsFixtureSource = `
+  const SETTINGS_STORAGE_KEY = "__time_tracker_smoke_settings";
+  function loadStoredSettings() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) ?? "{}");
+      if (stored.__browser_smoke_seeded) return stored;
+      const seeded = {
+        "__app_override::cursor.exe": JSON.stringify({ category: "development", enabled: true }),
+        "__app_override::deep-research-workbench.exe": JSON.stringify({ category: "office", enabled: true }),
+        "web_activity_enabled": "1",
+        "web_activity_token": "smoke-token",
+        ...stored,
+        __browser_smoke_seeded: "1",
+      };
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(seeded));
+      return seeded;
+    } catch {
+      return {};
+    }
+  }
+`;
+
 function tauriStubFor(path: string) {
   if (path === "@tauri-apps/api/window") {
     return `
@@ -75,27 +97,13 @@ function tauriStubFor(path: string) {
 
   if (path === "@tauri-apps/api/core") {
     return `
-      const SETTINGS_STORAGE_KEY = "__time_tracker_smoke_settings";
+      ${settingsFixtureSource}
       globalThis.__TIME_TRACKER_CLASSIFICATION_MUTATIONS ??= [];
       globalThis.__PATINA_IMPORT_BATCHES ??= [];
       globalThis.__PATINA_INVOKED_COMMANDS ??= [];
       globalThis.__PATINA_MAIN_WINDOW_GENERATION__ ??= 1;
       globalThis.__PATINA_MAIN_WINDOW_LOAD_EPOCH__ ??= 1;
       globalThis.__PATINA_WEBDAV_SECRET ??= null;
-
-      function loadStoredSettings() {
-        try {
-          return {
-            "__app_override::cursor.exe": JSON.stringify({ category: "development", enabled: true }),
-            "__app_override::deep-research-workbench.exe": JSON.stringify({ category: "office", enabled: true }),
-            "web_activity_enabled": "1",
-            "web_activity_token": "smoke-token",
-            ...JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) ?? "{}"),
-          };
-        } catch {
-          return {};
-        }
-      }
 
       function storeSettings(settings) {
         localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
@@ -341,6 +349,29 @@ function tauriStubFor(path: string) {
         if (command === "cmd_test_webdav_backup_target") {
           return { ok: true };
         }
+        if (globalThis.__PATINA_REMOTE_BACKUP_RECOVERY_CASE) {
+          const fixture = globalThis.__PATINA_REMOTE_BACKUP_RECOVERY_CASE;
+          if (command === "cmd_download_webdav_backup") {
+            fixture.downloads += 1;
+            if (fixture.mode === "download-failure") throw new Error("fixture download failed");
+            return { path: "fixture-only/remote-backup.zip", preview: {
+              hash: "fixture-hash", format_kind: fixture.mode === "legacy" ? "legacy_structured" : "sqlite_snapshot",
+              version: 1, exported_at_ms: 1, schema_version: 1, app_version: "test",
+              restore_supported: fixture.mode !== "incompatible", restore_message: "fixture preview",
+              session_count: 1, title_sample_count: 0, setting_count: 0, icon_cache_count: 0,
+            } };
+          }
+          if (command === "cmd_restore_backup") {
+            fixture.restores.push(payload);
+            if (fixture.mode === "restore-failure") throw new Error("fixture restore failed");
+            return null;
+          }
+          if (command === "cmd_delete_remote_backup_temp") {
+            fixture.cleanups += 1;
+            if (fixture.mode === "cleanup-failure") throw new Error("fixture temporary file is locked");
+            return null;
+          }
+        }
         if (command === "cmd_get_update_snapshot") {
           const override = localStorage.getItem("__time_tracker_update_snapshot_override");
           return override ? JSON.parse(override) : {
@@ -356,6 +387,12 @@ function tauriStubFor(path: string) {
             release_page_url: null,
             asset_download_url: null,
           };
+        }
+        if (globalThis.__PATINA_TOOLS_ACTION_CASE
+          && (command === "cmd_start_timer" || command === "cmd_pause_timer")) {
+          const fixture = globalThis.__PATINA_TOOLS_ACTION_CASE;
+          fixture.calls.push(command);
+          throw fixture.error;
         }
         if (command === "cmd_get_tools_snapshot") {
           const toolsSnapshotDelayMs = Number(
@@ -475,6 +512,20 @@ function tauriStubFor(path: string) {
           };
         }
         if (command === "cmd_get_activity_aggregate_range") {
+          const request = {
+            startMs: Number(payload.startMs ?? 0),
+            endMs: Number(payload.endMs ?? 0),
+            bucketCount: Array.isArray(payload.bucketBoundariesMs) ? payload.bucketBoundariesMs.length : 0,
+          };
+          globalThis.__PATINA_AGGREGATE_READS ??= [];
+          globalThis.__PATINA_AGGREGATE_READS.push(request);
+          const rejectKind = localStorage.getItem("__patina_reject_aggregate_kind");
+          if ((rejectKind === "dashboard" && request.bucketCount === 0)
+            || (rejectKind === "week" && request.bucketCount === 8)) {
+            throw new Error("Injected activity aggregate read failure");
+          }
+          const override = await globalThis.__PATINA_AGGREGATE_HOOK?.(request);
+          if (override) return override;
           const historyQueryDelayMs = Number(
             globalThis.__TIME_TRACKER_HISTORY_QUERY_DELAY_MS
               ?? localStorage.getItem("__time_tracker_history_query_delay_ms")
@@ -494,7 +545,9 @@ function tauriStubFor(path: string) {
           ) {
             throw new Error("Injected activity heatmap aggregate failure");
           }
-          const duration = Math.max(0, Math.min(30 * 60 * 1000, end - start));
+          const duration = localStorage.getItem("__patina_empty_aggregate") === "1"
+            ? 0
+            : Math.max(0, Math.min(30 * 60 * 1000, end - start));
           return {
             records: duration > 0 ? [
               { appName: "Cursor", exeName: "cursor.exe", startTime: start, endTime: start + duration },
@@ -729,6 +782,7 @@ function tauriStubFor(path: string) {
           }
           storeSettings(settings);
         }
+        if (command === "cmd_get_legacy_classification_apps") return [];
         if (command === "cmd_commit_classification_settings") {
           if (globalThis.__PATINA_REJECT_CLASSIFICATION_SAVE) throw new Error("Classification save rejected by fixture");
           const settings = loadStoredSettings();
@@ -811,21 +865,7 @@ function tauriStubFor(path: string) {
 
   if (path === "@tauri-apps/plugin-sql") {
     return `
-      const SETTINGS_STORAGE_KEY = "__time_tracker_smoke_settings";
-
-      function loadStoredSettings() {
-        try {
-          return {
-            "__app_override::cursor.exe": JSON.stringify({ category: "development", enabled: true }),
-            "__app_override::deep-research-workbench.exe": JSON.stringify({ category: "office", enabled: true }),
-            "web_activity_enabled": "1",
-            "web_activity_token": "smoke-token",
-            ...JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) ?? "{}"),
-          };
-        } catch {
-          return {};
-        }
-      }
+      ${settingsFixtureSource}
 
       function smokeSessionTiming() {
         const now = new Date();
@@ -1026,6 +1066,8 @@ function tauriStubFor(path: string) {
 
         async select(query, params = []) {
           const normalizedQuery = String(query ?? "").toLowerCase();
+          const override = await globalThis.__PATINA_SQL_SELECT_HOOK?.(normalizedQuery, params);
+          if (override !== undefined) return override;
           const classificationQueryDelayMs = Number(
             globalThis.__TIME_TRACKER_CLASSIFICATION_QUERY_DELAY_MS
               ?? localStorage.getItem("__time_tracker_classification_query_delay_ms")

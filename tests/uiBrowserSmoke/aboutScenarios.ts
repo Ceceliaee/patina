@@ -36,12 +36,10 @@ export async function runAboutScenarios(context: BrowserSmokeContext) {
       presentedView: document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") ?? null,
       aboutMounted: Boolean(document.querySelector(".about-center-panel")),
       dashboardMounted: Boolean(document.querySelector(".dashboard-workspace")),
-      showsLoadingCopy: document.body.innerText.includes("加载中..."),
     })`))) as {
       presentedView: string | null;
       aboutMounted: boolean;
       dashboardMounted: boolean;
-      showsLoadingCopy: boolean;
     };
     assert.ok(
       pendingState.presentedView === "dashboard" || pendingState.presentedView === "about",
@@ -53,7 +51,6 @@ export async function runAboutScenarios(context: BrowserSmokeContext) {
         : pendingState.dashboardMounted,
       true,
     );
-    assert.equal(pendingState.showsLoadingCopy, false);
 
     await waitForExpression(
       client!,
@@ -62,6 +59,11 @@ export async function runAboutScenarios(context: BrowserSmokeContext) {
         && Boolean(document.querySelector(".about-center-panel"))`,
       15_000,
       "About static content should present without waiting for shared bootstrap",
+    );
+    assert.equal(
+      await evaluate(client!, sessionId, `document.querySelector("main.qp-canvas")?.innerText.includes("加载中...")`),
+      false,
+      "the presented About page must not wait on Dashboard's independent data read",
     );
     await evaluate(client!, sessionId, `localStorage.removeItem("__time_tracker_settings_query_delay_ms")`);
   });
