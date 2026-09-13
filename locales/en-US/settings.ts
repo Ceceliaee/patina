@@ -1,5 +1,14 @@
 // en-US settings locale resource. Pure data only.
 export const MESSAGES = {
+"settings.webDavUploadTitle": "Upload remote backup",
+"settings.webDavUploadDescription": "Confirm the destination and file name before uploading.",
+"settings.webDavUploadAction": "Upload",
+"settings.webDavFileName": "File name",
+"settings.webDavInvalidFileName": "Enter a valid ZIP file name without a path or reserved characters.",
+"settings.webDavNameConflict": "A file with this name already exists. Choose another name and try again.",
+"settings.webDavTargetChanged": "The backup configuration changed. Close this dialog and confirm the destination again.",
+"settings.webDavDirectoryFailed": "Could not prepare the remote folder. Check the server address, folder permissions, and network.",
+"settings.webDavUploadUncertain": "Upload success could not be confirmed. Check the remote folder and network. Existing files will not be overwritten; local data is unchanged.",
   "settings.appearanceTitle": "Appearance",
   "settings.backgroundOptimizationHint": "Release main UI memory while idle in the background. Reopening may feel slightly slower.",
   "settings.backgroundOptimizationLabel": "Low-footprint background",

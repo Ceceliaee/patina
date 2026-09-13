@@ -24,15 +24,16 @@ const INITIAL_CHUNK_BUDGETS = [
   { label: "runtime type guards", pattern: /^runtimeTypeGuards-.*\.js$/, gzipKiB: 0.2 },
   // Production locale metadata lives here; translated text stays in its own
   // locale chunk. Initial and total graph budgets remain unchanged.
-  { label: "localization", pattern: /^runtime-.*\.js$/, gzipKiB: 7.46 },
+  { label: "localization", pattern: /^runtime-.*\.js$/, gzipKiB: 7.55 },
   { label: "classification", pattern: /^appClassification-.*\.js$/, gzipKiB: 6 },
 ] as const;
 
+// WebDAV upload confirmation and failure messages retain the 3% owner headroom.
 const LOCALE_CHUNK_GZIP_BUDGETS = {
-  "zh-CN": 9.99,
-  "en-US": 9.50,
-  "ru-RU": 12.75,
-  "es": 10.80,
+  "zh-CN": 10.20,
+  "en-US": 9.70,
+  "ru-RU": 12.95,
+  "es": 10.95,
 } as const satisfies Record<keyof typeof LOCALE_REGISTRY, number>;
 const LOCALE_CHUNK_BUDGETS = Object.entries(LOCALE_CHUNK_GZIP_BUDGETS).map(
   ([locale, gzipKiB]) => ({

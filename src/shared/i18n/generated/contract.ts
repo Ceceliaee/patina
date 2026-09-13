@@ -895,15 +895,24 @@ export interface UiText {
     "webDavDeleteAction": string;
     "webDavDeleteDetail": string;
     "webDavDeleteTitle": string;
+    "webDavDirectoryFailed": string;
     "webDavEdit": string;
+    "webDavFileName": string;
+    "webDavInvalidFileName": string;
+    "webDavNameConflict": string;
     "webDavPassword": string;
     "webDavRemoteBackupsDescription": string;
     "webDavRemoteBackupsEmpty": string;
     "webDavRemoteBackupsTitle": string;
     "webDavRestoreSelected": string;
     "webDavServerUrl": string;
+    "webDavTargetChanged": string;
     "webDavTestConnection": string;
     "webDavTesting": string;
+    "webDavUploadAction": string;
+    "webDavUploadDescription": string;
+    "webDavUploadTitle": string;
+    "webDavUploadUncertain": string;
     "webDavUsername": string;
   };
   "time": {

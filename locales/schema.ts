@@ -4633,6 +4633,15 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
+"settings.webDavUploadTitle": {"kind": "string", "params": [], "surface": "frontend"},
+"settings.webDavUploadDescription": {"kind": "string", "params": [], "surface": "frontend"},
+"settings.webDavUploadAction": {"kind": "string", "params": [], "surface": "frontend"},
+"settings.webDavFileName": {"kind": "string", "params": [], "surface": "frontend"},
+"settings.webDavInvalidFileName": {"kind": "string", "params": [], "surface": "frontend"},
+"settings.webDavNameConflict": {"kind": "string", "params": [], "surface": "frontend"},
+"settings.webDavTargetChanged": {"kind": "string", "params": [], "surface": "frontend"},
+"settings.webDavDirectoryFailed": {"kind": "string", "params": [], "surface": "frontend"},
+"settings.webDavUploadUncertain": {"kind": "string", "params": [], "surface": "frontend"},
   "settings.webDavRemoteBackupsTitle": {
     "kind": "string",
     "params": [],

@@ -1,5 +1,14 @@
 // ru-RU locale resource. Pure data only.
 export const MESSAGES = {
+"settings.webDavUploadTitle": "Загрузка резервной копии",
+"settings.webDavUploadDescription": "Проверьте папку и имя файла перед загрузкой.",
+"settings.webDavUploadAction": "Загрузить",
+"settings.webDavFileName": "Имя файла",
+"settings.webDavInvalidFileName": "Введите допустимое имя ZIP-файла без пути и запрещённых символов.",
+"settings.webDavNameConflict": "Файл с таким именем уже существует. Измените имя и повторите попытку.",
+"settings.webDavTargetChanged": "Настройки резервного копирования изменились. Закройте окно и проверьте папку заново.",
+"settings.webDavDirectoryFailed": "Не удалось подготовить удалённую папку. Проверьте адрес сервера, права доступа и сеть.",
+"settings.webDavUploadUncertain": "Не удалось подтвердить загрузку. Проверьте удалённую папку и сеть. Существующие файлы не будут перезаписаны, локальные данные не изменены.",
   "settings.appearanceTitle": "Внешний вид",
   "settings.backgroundOptimizationHint": "Освобождать память интерфейса при простое в фоне. Окно может открываться немного дольше.",
   "settings.backgroundOptimizationLabel": "Экономия памяти в фоне",

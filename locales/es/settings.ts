@@ -1,5 +1,14 @@
 // es locale resource. Pure data only.
 export const MESSAGES = {
+"settings.webDavUploadTitle": "Subir copia de seguridad",
+"settings.webDavUploadDescription": "Confirma la ubicación y el nombre del archivo antes de subirlo.",
+"settings.webDavUploadAction": "Subir",
+"settings.webDavFileName": "Nombre del archivo",
+"settings.webDavInvalidFileName": "Introduce un nombre ZIP válido, sin rutas ni caracteres reservados.",
+"settings.webDavNameConflict": "Ya existe un archivo con este nombre. Cámbialo e inténtalo de nuevo.",
+"settings.webDavTargetChanged": "La configuración ha cambiado. Cierra el diálogo y confirma de nuevo la ubicación.",
+"settings.webDavDirectoryFailed": "No se pudo preparar la carpeta remota. Comprueba la dirección, los permisos y la red.",
+"settings.webDavUploadUncertain": "No se pudo confirmar la subida. Comprueba la carpeta remota y la red. No se sobrescribirán archivos; los datos locales no han cambiado.",
   "settings.appearanceTitle": "Apariencia",
   "settings.backgroundOptimizationHint": "Libera memoria de la interfaz cuando está inactiva en segundo plano. Reabrirla puede tardar más.",
   "settings.backgroundOptimizationLabel": "Ahorrar memoria",

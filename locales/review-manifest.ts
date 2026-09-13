@@ -1007,7 +1007,16 @@ export const LOCALE_SOURCE_REVIEWS = {
     "common.readFailed": "6e904ec133f95c2b",
     "common.refreshFailed": "7e3a0bcc8f93f79a",
     "common.retry": "c1e6594c490aeca5",
-    "tools.stateRefreshPending": "cafbe82a7df01d9c"
+    "tools.stateRefreshPending": "cafbe82a7df01d9c",
+    "settings.webDavUploadTitle": "e6262dbf7fa72b03",
+    "settings.webDavUploadDescription": "67b5bd58e2cad3b6",
+    "settings.webDavUploadAction": "dc6bf0742fdf5402",
+    "settings.webDavFileName": "586fab9c94693859",
+    "settings.webDavInvalidFileName": "044ed490c028d60e",
+    "settings.webDavNameConflict": "0c4478a5cdead0e3",
+    "settings.webDavTargetChanged": "9884aad455561c36",
+    "settings.webDavDirectoryFailed": "804b1a8d20ced762",
+    "settings.webDavUploadUncertain": "089e1e07eae4913a"
   },
   "es": {
     "about.description": "f16fb3f9d1381864",
@@ -2016,7 +2025,16 @@ export const LOCALE_SOURCE_REVIEWS = {
     "common.readFailed": "6e904ec133f95c2b",
     "common.refreshFailed": "7e3a0bcc8f93f79a",
     "common.retry": "c1e6594c490aeca5",
-    "tools.stateRefreshPending": "cafbe82a7df01d9c"
+    "tools.stateRefreshPending": "cafbe82a7df01d9c",
+    "settings.webDavUploadTitle": "e6262dbf7fa72b03",
+    "settings.webDavUploadDescription": "67b5bd58e2cad3b6",
+    "settings.webDavUploadAction": "dc6bf0742fdf5402",
+    "settings.webDavFileName": "586fab9c94693859",
+    "settings.webDavInvalidFileName": "044ed490c028d60e",
+    "settings.webDavNameConflict": "0c4478a5cdead0e3",
+    "settings.webDavTargetChanged": "9884aad455561c36",
+    "settings.webDavDirectoryFailed": "804b1a8d20ced762",
+    "settings.webDavUploadUncertain": "089e1e07eae4913a"
   },
   "ru-RU": {
     "about.description": "f16fb3f9d1381864",
@@ -3025,6 +3043,15 @@ export const LOCALE_SOURCE_REVIEWS = {
     "common.readFailed": "6e904ec133f95c2b",
     "common.refreshFailed": "7e3a0bcc8f93f79a",
     "common.retry": "c1e6594c490aeca5",
-    "tools.stateRefreshPending": "cafbe82a7df01d9c"
+    "tools.stateRefreshPending": "cafbe82a7df01d9c",
+    "settings.webDavUploadTitle": "e6262dbf7fa72b03",
+    "settings.webDavUploadDescription": "67b5bd58e2cad3b6",
+    "settings.webDavUploadAction": "dc6bf0742fdf5402",
+    "settings.webDavFileName": "586fab9c94693859",
+    "settings.webDavInvalidFileName": "044ed490c028d60e",
+    "settings.webDavNameConflict": "0c4478a5cdead0e3",
+    "settings.webDavTargetChanged": "9884aad455561c36",
+    "settings.webDavDirectoryFailed": "804b1a8d20ced762",
+    "settings.webDavUploadUncertain": "089e1e07eae4913a"
   }
 } as const;
