@@ -684,6 +684,9 @@ export function useAppMappingState({
   }, [appCatalog, confirm, onSessionsDeleted, resolveEffectiveDisplayName, UI_TEXT]);
 
   const handleDeleteWebDomainHistory = useCallback(async (candidate: ObservedWebDomainCandidate) => {
+    if (deletingAppRecordsRef.current) return;
+    deletingAppRecordsRef.current = true;
+    setActionError(null);
     const displayName = resolveWebDomainDisplayName(candidate);
     setDeletingSessionsExe(candidate.normalizedDomain);
     try {
@@ -699,7 +702,11 @@ export function useAppMappingState({
       await ClassificationService.deleteObservedWebDomainHistory(candidate.normalizedDomain);
       await refreshWebDomainCandidates();
       onSessionsDeleted?.();
+    } catch (error) {
+      console.warn("delete web records failed", error);
+      setActionError("delete");
     } finally {
+      deletingAppRecordsRef.current = false;
       setDeletingSessionsExe(null);
     }
   }, [confirm, onSessionsDeleted, refreshWebDomainCandidates, resolveWebDomainDisplayName, UI_TEXT]);

@@ -204,6 +204,7 @@ export default function AppMapping(props: Props) {
       />
 
       {actionError && <p role="alert" className="qp-app-mapping-error">{actionError === "save" ? UI_TEXT.mapping.saveFailed : UI_TEXT.mapping.deleteFailed}</p>}
+      {!titleRecordingEnabled && <p id="classification-global-title-disabled" className="qp-app-mapping-notice">{UI_TEXT.mapping.globalTitleDisabled}</p>}
       <section className="qp-panel p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3">
@@ -291,7 +292,7 @@ export default function AppMapping(props: Props) {
               </div>
             ) : (
               <div className="h-full overflow-y-auto qp-scroll-region pr-1">
-                <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
+                <div className="qp-app-mapping-list">
                   {filteredWebDomainCandidates.map((candidate) => {
                     const displayName = resolveWebDomainDisplayName(candidate);
                     const displayColor = resolveWebDomainColor(candidate);
@@ -352,7 +353,6 @@ export default function AppMapping(props: Props) {
           </div>
         ) : (
           <div key={contentPaneKey} className="qp-classification-object-pane h-full overflow-y-auto qp-scroll-region pr-1">
-            {!titleRecordingEnabled && <p id="classification-global-title-disabled" className="qp-app-mapping-notice">{UI_TEXT.mapping.globalTitleDisabled}</p>}
             <div className="qp-app-mapping-list">
               {filteredCandidates.map((candidate) => {
                 const displayName = resolveEffectiveDisplayName(candidate);

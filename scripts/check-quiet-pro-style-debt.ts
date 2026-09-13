@@ -7,7 +7,6 @@ const ARBITRARY_RADIUS_BASELINE: Record<string, number> = {
   "src/features/update/components/UpdateStatusPanel.tsx": 0,
   "src/shared/components/QuietStepperSlider.tsx": 0,
   "src/features/dashboard/components/Dashboard.tsx": 2,
-  "src/features/classification/components/WebDomainMappingCard.tsx": 4,
   "src/features/classification/components/AppMapping.tsx": 4,
   "src/features/classification/components/CategoryColorControls.tsx": 1,
   "src/features/settings/components/Settings.tsx": 3,

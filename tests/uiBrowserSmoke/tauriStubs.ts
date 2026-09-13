@@ -803,6 +803,17 @@ function tauriStubFor(path: string) {
           }
           return null;
         }
+        if (command === "cmd_delete_web_activity_segments_by_domain") {
+          globalThis.__PATINA_WEB_DELETE_CALLS = [...(globalThis.__PATINA_WEB_DELETE_CALLS ?? []), payload.normalizedDomain];
+          if (globalThis.__PATINA_REJECT_WEB_DELETE) throw new Error("Web deletion rejected by fixture");
+          if (globalThis.__PATINA_HOLD_WEB_DELETE) {
+            await new Promise(resolve => { globalThis.__PATINA_RELEASE_WEB_DELETE = resolve; });
+          }
+          if (Array.isArray(globalThis.__PATINA_CLASSIFICATION_WEB_ROWS)) {
+            globalThis.__PATINA_CLASSIFICATION_WEB_ROWS = globalThis.__PATINA_CLASSIFICATION_WEB_ROWS.filter(row => row.normalized_domain !== payload.normalizedDomain);
+          }
+          return null;
+        }
         if (command === "cmd_save_history_bootstrap_snapshot_payload") {
           const settings = loadStoredSettings();
           settings["history.bootstrap_snapshot.v1"] = String(payload.payload ?? "");
@@ -931,6 +942,7 @@ function tauriStubFor(path: string) {
       }
 
       function historyWebActivityRows() {
+        if (Array.isArray(globalThis.__PATINA_CLASSIFICATION_WEB_ROWS)) return globalThis.__PATINA_CLASSIFICATION_WEB_ROWS;
         const dataDetailFixtureEnabled = (
           globalThis.__TIME_TRACKER_ENABLE_DATA_WEB_DETAIL_FIXTURE === true
         );

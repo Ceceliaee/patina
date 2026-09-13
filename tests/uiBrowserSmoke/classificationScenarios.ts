@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { runClassificationWebLayoutScenarios } from "./classificationWebLayoutScenarios.ts";
 import { runClassificationAppLayoutScenarios } from "./classificationAppLayoutScenarios.ts";
 import { runClassificationCategoryFilterScenarios } from "./classificationCategoryFilterScenarios.ts";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
@@ -7,6 +8,7 @@ import { delay, evaluate, jsonString, waitForExpression, waitForStableExpression
 export async function runClassificationScenarios(context: BrowserSmokeContext) {
   await runClassificationAppLayoutScenarios(context);
   await runClassificationCategoryFilterScenarios(context);
+  await runClassificationWebLayoutScenarios(context);
   const { client, sessionId, runTest } = context;
   const readColor = `(node => node ? '#' + node.style.backgroundColor.match(/\\d+/g).slice(0, 3).map(value => Number(value).toString(16).padStart(2, '0')).join('').toUpperCase() : null)`;
   const pressArrowDown = async () => {

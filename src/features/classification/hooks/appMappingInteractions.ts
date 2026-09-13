@@ -198,6 +198,7 @@ export function syncWebDomainNameDraft(
     color: current?.color,
     displayName,
     enabled: current?.enabled !== false,
+    captureTitle: current?.captureTitle !== false,
     updatedAt: current?.updatedAt,
   });
 
