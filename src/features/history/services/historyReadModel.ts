@@ -108,8 +108,7 @@ let warnedWebFaviconFallback = false;
 const HISTORY_WEB_FAVICON_RUNTIME_CACHE_LIMIT = 64;
 const HISTORY_WEB_FAVICON_REFRESH_INTERVAL_MS = 30_000;
 const HISTORY_WEB_FAVICON_SOURCE_MAX_CHARS = 8_192;
-const historyWebFaviconRuntimeCache = new Map<string, string>();
-const historyWebFaviconResolvedAt = new Map<string, number>();
+const historyWebFaviconRuntimeCache = new Map<string, { favicon: string; resolvedAtMs: number }>();
 let pendingHistoryWebFaviconRefresh: Promise<void> | null = null;
 
 function normalizeHistoryWebDomain(domain: string): string {
@@ -122,24 +121,6 @@ function collectHistoryWebDomains(dayWebSegments: WebActivitySegment[]): string[
       .map((segment) => normalizeHistoryWebDomain(segment.normalizedDomain))
       .filter(Boolean),
   ));
-}
-
-function touchHistoryWebFaviconDomain(domain: string, resolvedAtMs: number): void {
-  historyWebFaviconResolvedAt.delete(domain);
-  historyWebFaviconResolvedAt.set(domain, resolvedAtMs);
-
-  const favicon = historyWebFaviconRuntimeCache.get(domain);
-  if (favicon) {
-    historyWebFaviconRuntimeCache.delete(domain);
-    historyWebFaviconRuntimeCache.set(domain, favicon);
-  }
-
-  while (historyWebFaviconResolvedAt.size > HISTORY_WEB_FAVICON_RUNTIME_CACHE_LIMIT) {
-    const oldestDomain = historyWebFaviconResolvedAt.keys().next().value;
-    if (!oldestDomain) break;
-    historyWebFaviconResolvedAt.delete(oldestDomain);
-    historyWebFaviconRuntimeCache.delete(oldestDomain);
-  }
 }
 
 function rememberHistoryWebFaviconRefresh(
@@ -156,12 +137,16 @@ function rememberHistoryWebFaviconRefresh(
 
   for (const domain of domains) {
     const favicon = normalizedFavicons.get(domain) ?? "";
-    if (favicon && favicon.length <= HISTORY_WEB_FAVICON_SOURCE_MAX_CHARS) {
-      historyWebFaviconRuntimeCache.set(domain, favicon);
-    } else {
-      historyWebFaviconRuntimeCache.delete(domain);
+    historyWebFaviconRuntimeCache.delete(domain);
+    historyWebFaviconRuntimeCache.set(domain, {
+      favicon: favicon.length <= HISTORY_WEB_FAVICON_SOURCE_MAX_CHARS ? favicon : "",
+      resolvedAtMs,
+    });
+    while (historyWebFaviconRuntimeCache.size > HISTORY_WEB_FAVICON_RUNTIME_CACHE_LIMIT) {
+      const oldestDomain = historyWebFaviconRuntimeCache.keys().next().value;
+      if (!oldestDomain) break;
+      historyWebFaviconRuntimeCache.delete(oldestDomain);
     }
-    touchHistoryWebFaviconDomain(domain, resolvedAtMs);
   }
 }
 
@@ -170,7 +155,7 @@ export function getCachedHistoryWebFaviconsForSegments(
 ): Record<string, string> {
   const favicons: Record<string, string> = {};
   for (const domain of collectHistoryWebDomains(dayWebSegments)) {
-    const favicon = historyWebFaviconRuntimeCache.get(domain);
+    const favicon = historyWebFaviconRuntimeCache.get(domain)?.favicon;
     if (favicon) favicons[domain] = favicon;
   }
   return favicons;
@@ -180,21 +165,20 @@ export function areHistoryWebFaviconsResolvedForSegments(
   dayWebSegments: WebActivitySegment[],
 ): boolean {
   return collectHistoryWebDomains(dayWebSegments).every((domain) => (
-    historyWebFaviconResolvedAt.has(domain)
+    historyWebFaviconRuntimeCache.has(domain)
   ));
 }
 
 export function resetHistoryWebFaviconRuntimeCacheForTests(): void {
   historyWebFaviconRuntimeCache.clear();
-  historyWebFaviconResolvedAt.clear();
   pendingHistoryWebFaviconRefresh = null;
 }
 
 export function getHistoryWebFaviconRuntimeCacheStats() {
   return {
-    entries: historyWebFaviconRuntimeCache.size,
+    entries: Array.from(historyWebFaviconRuntimeCache.values()).filter((entry) => entry.favicon).length,
     limit: HISTORY_WEB_FAVICON_RUNTIME_CACHE_LIMIT,
-    resolvedDomains: historyWebFaviconResolvedAt.size,
+    resolvedDomains: historyWebFaviconRuntimeCache.size,
     pendingRefresh: pendingHistoryWebFaviconRefresh !== null,
   };
 }
@@ -261,7 +245,7 @@ async function loadOptionalWebFaviconMap(
   }
 
   const domainsToRefresh = domains.filter((domain) => (
-    requestedAtMs - (historyWebFaviconResolvedAt.get(domain) ?? 0)
+    requestedAtMs - (historyWebFaviconRuntimeCache.get(domain)?.resolvedAtMs ?? 0)
       >= HISTORY_WEB_FAVICON_REFRESH_INTERVAL_MS
   ));
   if (domainsToRefresh.length === 0) {
