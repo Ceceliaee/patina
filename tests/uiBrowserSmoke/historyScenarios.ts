@@ -11,7 +11,6 @@ import {
 } from "./browserHarness.ts";
 import { DATE_TEXT, HISTORY_TITLE_DETAIL_COUNT } from "./constants.ts";
 import { getLocaleText } from "../../src/shared/i18n/runtime.ts";
-import { navigationExpression } from "../../scripts/perf/tauri-runtime-measurements.ts";
 
 export async function runHistoryReadFailureScenarios(context: BrowserSmokeContext) {
   const { appUrl, client, sessionId, runTest } = context;
@@ -118,49 +117,38 @@ export async function runHistoryReadFailureScenarios(context: BrowserSmokeContex
     assert.equal(await evaluate(client, sessionId, `${error}?.querySelector('button')?.textContent`), copy.common.retry);
   };
   const meaningful = `document.querySelector('[data-history-content-state]')?.getAttribute('data-history-content-meaningful')`;
-  const startMeasuredWarmNavigation = async () => {
+  const startWarmNavigation = async () => {
     await waitForExpression(client, sessionId, `${state} === 'ready'`);
     await evaluate(client, sessionId, `globalThis.__PATINA_HISTORY_MODE = 'pending'; document.querySelector('[data-sidebar-nav-item="dashboard"]').click()`);
     await waitForExpression(client, sessionId, `!document.querySelector('[data-history-content-state]')`);
-    await evaluate(client, sessionId, `(() => {
-      globalThis.__PATINA_HISTORY_NAVIGATION = { status: 'pending', startedAt: performance.now() };
-      (${navigationExpression("history")}).then(result => {
-        globalThis.__PATINA_HISTORY_NAVIGATION = { status: 'completed', ...result };
-      }, error => { globalThis.__PATINA_HISTORY_NAVIGATION = { status: 'failed', error: String(error) }; });
-      return true;
-    })()`);
+    await evaluate(client, sessionId, `document.querySelector('[data-sidebar-nav-item="history"]').click()`);
     await waitForExpression(client, sessionId, `${state} === 'refreshing' && ${meaningful} === 'true' && globalThis.__PATINA_HISTORY_PENDING.length >= 2`);
-    await waitForAnimationFrames(client, sessionId, 3);
+    assert.equal(await evaluate(client, sessionId, date), "2026-09-12");
+    assert.equal(await evaluate(client, sessionId, metric), "1h 0m");
+    assert.equal(await evaluate(client, sessionId, `document.querySelector('.history-horizontal-timeline')?.checkVisibility()`), true);
   };
 
-  await runTest("history measurement records matching cached content while its fresh read remains pending", async () => {
+  await runTest("history warm navigation retains matching content until fresh reads complete", async () => {
     await withFixture("ready", async () => {
-      await startMeasuredWarmNavigation();
-      assert.equal(await evaluate(client, sessionId, `globalThis.__PATINA_HISTORY_NAVIGATION.status`), "pending");
-      const beforeReleaseMs = Number(await evaluate(client, sessionId, `performance.now() - globalThis.__PATINA_HISTORY_NAVIGATION.startedAt`));
+      await startWarmNavigation();
       await releaseReads();
-      await waitForExpression(client, sessionId, `globalThis.__PATINA_HISTORY_NAVIGATION.status === 'completed'`);
-      const result = await evaluate(client, sessionId, `globalThis.__PATINA_HISTORY_NAVIGATION`) as {
-        meaningfulContentMs: number; meaningfulContentState: string; meaningfulDateKey: string; freshCompleteMs: number; completeMs: number;
-      };
-      assert.equal(result.meaningfulContentState, "refreshing");
-      assert.equal(result.meaningfulDateKey, "2026-09-12");
-      assert.ok(result.meaningfulContentMs < beforeReleaseMs);
-      assert.ok(result.freshCompleteMs >= beforeReleaseMs - 1);
-      assert.equal(result.freshCompleteMs, result.completeMs);
+      await waitForExpression(client, sessionId, `${state} === 'ready' && ${meaningful} === 'true'`);
+      assert.equal(await evaluate(client, sessionId, date), "2026-09-12");
+      assert.equal(await evaluate(client, sessionId, metric), "1h 0m");
     });
   });
 
-  await runTest("history measurement rejects retained content after a terminal refresh failure", async () => {
+  await runTest("history warm navigation exposes refresh failure while retaining its content", async () => {
     await withFixture("ready", async () => {
-      await startMeasuredWarmNavigation();
+      await startWarmNavigation();
       await evaluate(client, sessionId, `(() => {
         globalThis.__PATINA_HISTORY_MODE = 'reject';
-        for (const pending of globalThis.__PATINA_HISTORY_PENDING.splice(0)) pending.reject(new Error('Injected measured refresh failure'));
+        for (const pending of globalThis.__PATINA_HISTORY_PENDING.splice(0)) pending.reject(new Error('Injected refresh failure'));
       })()`);
       await waitForExpression(client, sessionId, `${state} === 'error' && ${meaningful} === 'false'`);
-      await waitForExpression(client, sessionId, `globalThis.__PATINA_HISTORY_NAVIGATION.status === 'failed'`, 20_000);
-      assert.match(String(await evaluate(client, sessionId, `globalThis.__PATINA_HISTORY_NAVIGATION.error`)), /content timed out: history/);
+      assert.equal(await evaluate(client, sessionId, date), "2026-09-12");
+      assert.equal(await evaluate(client, sessionId, metric), "1h 0m");
+      assert.equal(await evaluate(client, sessionId, `${error}?.querySelector('button')?.textContent`), copy.common.retry);
     });
   });
 

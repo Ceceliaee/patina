@@ -96,7 +96,6 @@
     "perf:activity-maintenance": "cargo test --manifest-path src-tauri/Cargo.toml --locked hourly_maintenance_capacity_report -- --ignored --nocapture",
     "perf:stable": "node --experimental-strip-types scripts/perf/stable-benchmark-suite.ts",
     "perf:resources": "cargo run --manifest-path src-tauri/Cargo.toml --example windows-resource-sample --",
-    "perf:tauri-runtime": "pnpm run test:tauri-runtime-smoke --measure",
     "release:sync-version": "node --experimental-strip-types scripts/release.ts sync-version",
     "release:validate-version-files": "node --experimental-strip-types scripts/release.ts validate-version-files",
     "release:validate-changelog": "node --experimental-strip-types scripts/release.ts validate-changelog",

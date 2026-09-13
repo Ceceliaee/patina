@@ -7,13 +7,6 @@ import { createServer as createNetServer, type Server as NetServer } from "node:
 import { build as buildVite, preview as previewVite, type PreviewServer } from "vite";
 import type { StorageSnapshot } from "../src/platform/storage/storageRuntimeGateway.ts";
 import {
-  measureTauriRuntime,
-  parseRuntimeMeasurementOptions,
-  prepareRuntimeMeasurements,
-  prepareRuntimeFixture,
-  recordRuntimeMeasurementCleanup,
-} from "../scripts/perf/tauri-runtime-measurements.ts";
-import {
   CdpConnection,
   assertIsolatedTempPath,
   waitFor,
@@ -664,7 +657,7 @@ async function verifyBackupReplaceRuntime(client: CdpConnection, root: string) {
   }
 }
 
-const measurementOptions = parseRuntimeMeasurementOptions(process.argv.slice(2));
+assert.equal(process.argv.length, 2, "Tauri runtime smoke does not accept arguments");
 const frontendPort = await reservePort();
 const devtoolsPort = await reservePort();
 const root = mkdtempSync(join(tmpdir(), "patina-tauri-e2e-"));
@@ -686,10 +679,6 @@ const cleanupErrors: unknown[] = [];
 let databaseMutationCompleted = false;
 
 try {
-  if (measurementOptions) {
-    await prepareRuntimeMeasurements(measurementOptions);
-    await prepareRuntimeFixture(measurementOptions, root);
-  }
   // Exercise the WebView against production-shaped static assets. A Vite dev
   // server sends hundreds of transformed modules and can exceed the product
   // readiness watchdog on a busy hosted runner even after graph warmup.
@@ -813,16 +802,6 @@ try {
     30_000,
   );
 
-  if (measurementOptions) {
-    const processTree = measureRuntimeProcessTree();
-    await measureTauriRuntime(measurementOptions, {
-      evaluate: (expression) => evaluate(client!, expression),
-      rootPid: processTree.rootPid,
-      binaryPath: RUNTIME_BINARY_PATH,
-      dataRoot: root,
-      frontendUrl,
-    });
-  } else {
   bridgePortBlocker = await occupyPort();
   const bridgeBlockerAddress = bridgePortBlocker.address();
   assert.ok(bridgeBlockerAddress && typeof bridgeBlockerAddress === "object");
@@ -2152,12 +2131,8 @@ try {
   console.log("PATINA_THEME_COLD_RESTART_REPORT", JSON.stringify({ processRestart: true, presetContrast: 60, savedScheme: "catppuccin" }));
 
   console.log("PASS real Tauri runtime command/event/SQLite/capability smoke");
-  }
 } catch (error) {
   primaryError = error;
-  if (measurementOptions && webviewDiagnostics.length > 0) {
-    console.error("PATINA_MEASUREMENT_WEBVIEW_DIAGNOSTICS", webviewDiagnostics.join("\n"));
-  }
 } finally {
   console.log("PATINA_RUNTIME_PHASE cleanup");
   try {
@@ -2249,7 +2224,6 @@ try {
 }
 
 const failures = [...(primaryError ? [primaryError] : []), ...cleanupErrors];
-if (measurementOptions) recordRuntimeMeasurementCleanup(measurementOptions, cleanupErrors, primaryError);
 if (failures.length > 0) {
   throw new AggregateError(failures, "Tauri runtime smoke failed");
 }
