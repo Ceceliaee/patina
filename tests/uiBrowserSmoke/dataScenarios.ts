@@ -280,8 +280,9 @@ export async function runDataReadFailureScenarios(context: BrowserSmokeContext) 
       await waitForExpression(client, sessionId, `globalThis.__PATINA_ROLLOVER_READS.some(entry => entry.request.bucketCount === 8)
         && globalThis.__PATINA_ROLLOVER_READS.some(entry => entry.request.bucketCount > 100)`, 5_000,
       "Data must refresh both local-date owners after a sidebar render without a tracking event");
-      assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('.data-overview .data-heatmap-loading-state'))`), true,
-        "crossing a week boundary must not retain the previous heatmap range");
+      await waitForExpression(client, sessionId,
+        `Boolean(document.querySelector('.data-overview .data-heatmap-loading-state'))`, 5_000,
+        "crossing a week boundary must not retain the previous heatmap range after React commits");
       await evaluate(client, sessionId, `globalThis.__PATINA_ROLLOVER_READS.forEach(entry => entry.resolve({
         records: [
           { appName: 'Cursor', exeName: 'cursor.exe', startTime: ${nextDay.now - 1_200_000}, endTime: ${nextDay.now - 600_000} },
