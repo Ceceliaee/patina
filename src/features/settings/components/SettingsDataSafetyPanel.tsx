@@ -1,5 +1,5 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
-import { lazy, Suspense, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   BrushCleaning, Database, FolderPen, FileArchive, FileDown, FileUp, FolderOpen, CircleAlert, RefreshCw, RotateCcw, Trash2, X, } from "lucide-react";
 
@@ -15,6 +15,7 @@ import type { BackupRestoreStrategy } from "../services/settingsRuntimeAdapterSe
 import type { StorageSnapshot } from "../services/settingsRuntimeAdapterService.ts";
 import type { RemoteBackupEntry, RemoteBackupState } from "../hooks/useRemoteBackupState.ts";
 import SettingsRemoteBackupPanel from "./SettingsRemoteBackupPanel";
+import SettingsRemoteUploadDialog from "./SettingsRemoteUploadDialog";
 import QuietStepperSlider from "../../../shared/components/QuietStepperSlider.tsx";
 import SettingsPanelHeader from "./SettingsPanelHeader";
 import { toEbwebviewCachePath } from "../services/storagePathDisplay.ts";
@@ -181,14 +182,25 @@ export default function SettingsDataSafetyPanel({
   const UI_TEXT = useLocaleText();
   const cacheClearCancelRef = useRef<HTMLButtonElement>(null);
   const localRestoreRef = useRef<HTMLButtonElement>(null);
+  const backupButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreButtonRef = useRef<HTMLButtonElement>(null);
+  const wasRemoteListOpen = useRef(false);
   const selectedRestoreStrategyRef = useRef<HTMLButtonElement>(null);
   const [strategyDialogOpen, setStrategyDialogOpen] = useState(false);
   const [restoreStrategySource, setRestoreStrategySource] = useState<"local" | "remote">("local");
   const [pendingRemoteRestoreEntry, setPendingRemoteRestoreEntry] = useState<RemoteBackupEntry | null>(null);
   const [backupTargetDialogOpen, setBackupTargetDialogOpen] = useState(false);
+  const [uploadTarget, setUploadTarget] = useState<RemoteBackupState["config"]>(null);
   const [restoreSourceDialogOpen, setRestoreSourceDialogOpen] = useState(false);
   const [cacheClearDialogOpen, setCacheClearDialogOpen] = useState(false);
   const [historyCleanupDialogOpen, setHistoryCleanupDialogOpen] = useState(false);
+  useEffect(() => {
+    const closed = wasRemoteListOpen.current && !remoteBackup.restoreDialogOpen;
+    wasRemoteListOpen.current = remoteBackup.restoreDialogOpen;
+    if (!closed || strategyDialogOpen) return;
+    const frame = requestAnimationFrame(() => restoreButtonRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [remoteBackup.restoreDialogOpen, strategyDialogOpen]);
   const hasRemoteBackupTarget = Boolean(remoteBackup.config && remoteBackup.hasSecret);
   const restoreStrategyOptions: Array<{ value: BackupRestoreStrategy; label: string; tooltip: string }> = [
     {
@@ -281,6 +293,7 @@ export default function SettingsDataSafetyPanel({
     setStrategyDialogOpen(false);
     setPendingRemoteRestoreEntry(null);
     onClearPendingRestoreBackup();
+    requestAnimationFrame(() => restoreButtonRef.current?.focus());
   };
 
   const restartAndClearWebviewCacheFromDialog = () => {
@@ -368,6 +381,7 @@ export default function SettingsDataSafetyPanel({
                     </p>
                   </div>
                   <QuietButton
+                    ref={backupButtonRef}
                     size="regular"
                     onClick={handleBackupAction}
                     disabled={busy}
@@ -406,6 +420,7 @@ export default function SettingsDataSafetyPanel({
                     </p>
                   </div>
                   <QuietButton
+                    ref={restoreButtonRef}
                     size="regular"
                     onClick={handleRestoreAction}
                     disabled={busy}
@@ -607,11 +622,13 @@ export default function SettingsDataSafetyPanel({
             }}
             onRemoteBackup={() => {
               setBackupTargetDialogOpen(false);
-              void remoteBackup.uploadBackup();
+              if (remoteBackup.config) setUploadTarget({ ...remoteBackup.config });
             }}
           />
         </Suspense>
       ) : null}
+      {uploadTarget ? <SettingsRemoteUploadDialog target={uploadTarget} remoteBackup={remoteBackup}
+        onClose={() => { setUploadTarget(null); requestAnimationFrame(() => backupButtonRef.current?.focus()); }} /> : null}
 
       <QuietDialog
         open={restoreSourceDialogOpen}

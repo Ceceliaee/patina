@@ -1,5 +1,5 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
-import { Cloud, Eye, EyeOff } from "lucide-react";
+import { Cloud, Eye, EyeOff, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import QuietActionRow from "../../../shared/components/QuietActionRow";
 import QuietDialog from "../../../shared/components/QuietDialog";
@@ -15,9 +15,10 @@ interface SettingsRemoteBackupPanelProps {
 
 function stripFixedRemoteDirSuffix(url: string): string {
   const trimmed = url.trim();
+  const withoutTrailingSlash = trimmed.replace(/\/+$/, "");
   const suffix = DEFAULT_WEBDAV_REMOTE_DIR;
-  if (!trimmed.endsWith(suffix)) return trimmed;
-  return trimmed.slice(0, -suffix.length).replace(/\/+$/, "/");
+  if (!withoutTrailingSlash.endsWith(suffix)) return trimmed;
+  return withoutTrailingSlash.slice(0, -suffix.length).replace(/\/+$/, "/");
 }
 
 function formatBytes(bytes: number): string {
@@ -34,9 +35,9 @@ function formatBytes(bytes: number): string {
 
 function buildInitialDraft(remoteBackup: RemoteBackupState): RemoteBackupFormDraft {
   return {
-    url: stripFixedRemoteDirSuffix(remoteBackup.config?.url ?? ""),
+    url: remoteBackup.config?.url ?? "",
     username: remoteBackup.config?.username ?? "",
-    remoteDir: DEFAULT_WEBDAV_REMOTE_DIR,
+    remoteDir: remoteBackup.config?.remoteDir ?? DEFAULT_WEBDAV_REMOTE_DIR,
     password: "",
   };
 }
@@ -256,12 +257,11 @@ export default function SettingsRemoteBackupPanel({
                 onChange={(event) => setDraft((current) => ({
                   ...current,
                   url: stripFixedRemoteDirSuffix(event.target.value),
-                  remoteDir: DEFAULT_WEBDAV_REMOTE_DIR,
                 }))}
                 disabled={busy}
                 autoComplete="off"
               />
-              <span>{DEFAULT_WEBDAV_REMOTE_DIR}</span>
+              <span>{draft.remoteDir}</span>
             </div>
           </label>
           <label className="grid gap-1.5 text-xs font-semibold text-[var(--qp-text-secondary)]">
@@ -309,15 +309,13 @@ export default function SettingsRemoteBackupPanel({
         description={UI_TEXT.settings.webDavRemoteBackupsDescription}
         onClose={remoteBackup.closeRestoreDialog}
         closeOnBackdrop={!remoteBackup.isDownloading}
-        actions={(
-          <QuietButton
-            size="large"
-            onClick={remoteBackup.closeRestoreDialog}
-            disabled={remoteBackup.isDownloading}
-            className="rounded-[8px]"
-          >
-            {UI_TEXT.common.close}
-          </QuietButton>
+        headerAside={(
+          <div className="settings-dialog-header-actions">
+            <button type="button" className="qp-dialog-close-button" aria-label={UI_TEXT.common.close}
+              disabled={remoteBackup.isDownloading} onClick={remoteBackup.closeRestoreDialog}>
+              <X size={16} aria-hidden="true" />
+            </button>
+          </div>
         )}
       >
         <div className="grid max-h-[420px] gap-3 overflow-y-auto pr-1 qp-scroll-region">

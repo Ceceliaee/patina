@@ -121,9 +121,10 @@ pub async fn cmd_test_webdav_backup_target(
 #[tauri::command]
 pub async fn cmd_upload_webdav_backup(
     config: WebDavBackupConfigDto,
+    file_name: String,
     app: AppHandle,
 ) -> Result<RemoteBackupUploadResult, String> {
-    remote_backup::upload_webdav_backup(app, config).await
+    remote_backup::upload_webdav_backup(app, config, file_name).await
 }
 
 #[tauri::command]

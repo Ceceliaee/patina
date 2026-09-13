@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { verifyWebDavRuntime } from "./tauriWebDavRuntime.ts";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -1670,6 +1671,10 @@ try {
       restoreStrategy: "replace",
     })`,
     `window.__TAURI_INTERNALS__.invoke("cmd_reveal_webdav_backup_secret")`,
+    `window.__TAURI_INTERNALS__.invoke("cmd_upload_webdav_backup", {
+      config: { url: "http://127.0.0.1:1/dav", username: "permission-probe", remoteDir: "/Patina" },
+      fileName: "permission-probe.zip",
+    })`,
     `window.__TAURI_INTERNALS__.invoke("cmd_delete_sessions_before", {
       cutoffTime: 0,
     })`,
@@ -2092,6 +2097,7 @@ try {
   assert.equal(structuredError.retryable, false);
 
   await verifyBackupReplaceRuntime(client, root);
+  await verifyWebDavRuntime((expression) => evaluate(client!, expression));
 
   await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", { mutations: [
     { key: "theme_mode", value: "dark" },

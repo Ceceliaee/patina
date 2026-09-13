@@ -163,8 +163,8 @@ export async function testWebDavBackupTarget(config: WebDavBackupConfig, passwor
   return result.ok === true;
 }
 
-export async function uploadWebDavBackup(config: WebDavBackupConfig): Promise<RemoteBackupUploadResult> {
-  const result = await invoke<unknown>("cmd_upload_webdav_backup", { config });
+export async function uploadWebDavBackup(config: WebDavBackupConfig, fileName: string): Promise<RemoteBackupUploadResult> {
+  const result = await invoke<unknown>("cmd_upload_webdav_backup", { config, fileName });
   return parseUploadResult(result);
 }
 

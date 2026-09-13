@@ -6,7 +6,6 @@ use crate::platform::app_paths::{self, AppProfile};
 use crate::platform::credentials;
 use crate::platform::storage_paths;
 use crate::platform::webdav::{WebDavClient, WebDavConfig};
-use chrono::Local;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};
 use std::cmp::Reverse;
@@ -113,25 +112,11 @@ fn now_ms() -> u64 {
 }
 
 fn remote_backup_id() -> String {
-    Local::now().format("%Y%m%d-%H%M%S").to_string()
+    uuid::Uuid::new_v4().to_string()
 }
 
 fn remote_backup_file_name(id: &str) -> String {
     format!("Patina-backup-{id}.zip")
-}
-
-fn remote_backup_name_candidates(base_id: &str) -> Vec<(String, String)> {
-    (1..=MAX_REMOTE_NAME_CANDIDATES)
-        .map(|candidate| {
-            let id = if candidate == 1 {
-                base_id.to_string()
-            } else {
-                format!("{base_id}-{candidate:02}")
-            };
-            let file_name = remote_backup_file_name(&id);
-            (id, file_name)
-        })
-        .collect()
 }
 
 fn remote_path(remote_dir: &str, file_name: &str) -> String {
@@ -312,6 +297,34 @@ fn validate_backup_file_name(file_name: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_upload_file_name(file_name: &str) -> Result<(), String> {
+    let stem = file_name.strip_suffix(".zip").unwrap_or_default();
+    let device = stem
+        .split('.')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_uppercase();
+    let reserved = matches!(device.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || ["COM", "LPT"].iter().any(|prefix| {
+            device.strip_prefix(prefix).is_some_and(|suffix| {
+                matches!(
+                    suffix,
+                    "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"
+                )
+            })
+        });
+    if validate_backup_file_name(file_name).is_err()
+        || stem.trim().is_empty()
+        || file_name.len() > 240
+        || file_name.trim() != file_name
+        || file_name.chars().any(|c| "<>:\"|?*".contains(c))
+        || reserved
+    {
+        return Err("webdav_invalid_file_name".into());
+    }
+    Ok(())
+}
+
 fn build_entry(
     id: String,
     file_name: String,
@@ -409,7 +422,9 @@ pub async fn test_webdav_backup_target(
 pub async fn upload_webdav_backup(
     app: AppHandle,
     config: WebDavBackupConfigDto,
+    file_name: String,
 ) -> Result<RemoteBackupUploadResult, String> {
+    validate_upload_file_name(&file_name)?;
     let _transfer_guard = REMOTE_TRANSFER_LOCK.lock().await;
     let profile = app_paths::app_profile(&app);
     let (config, client) = webdav_client(profile, config)?;
@@ -429,26 +444,12 @@ pub async fn upload_webdav_backup(
         let size_bytes = fs::metadata(&local_path)
             .map_err(|error| format!("failed to read local backup metadata: {error}"))?
             .len();
-        let mut selected = None;
-        for (id, file_name) in remote_backup_name_candidates(&base_id) {
-            let candidate_path = remote_path(&config.remote_dir, &file_name);
-            match client
-                .upload_file_create_new(&local_path, &candidate_path)
-                .await
-            {
-                Ok(()) => {
-                    selected = Some((id, file_name, candidate_path));
-                    break;
-                }
-                Err(error) if error == "remote_name_conflict" => continue,
-                Err(error) => return Err(error),
-            }
-        }
-        let (id, file_name, remote_path) = selected.ok_or_else(|| {
-            "WebDAV backup could not allocate a unique filename after 99 attempts".to_string()
-        })?;
+        let remote_path = remote_path(&config.remote_dir, &file_name);
+        client
+            .upload_file_create_new(&local_path, &remote_path)
+            .await?;
         Ok::<_, String>(build_entry(
-            id,
+            base_id,
             file_name,
             remote_path,
             size_bytes,
@@ -1022,22 +1023,28 @@ mod tests {
     }
 
     #[test]
-    fn manual_remote_name_candidates_only_add_a_suffix_on_collision() {
-        let candidates = remote_backup_name_candidates("20260603-213000");
-        assert_eq!(
-            candidates[0],
-            (
-                "20260603-213000".to_string(),
-                "Patina-backup-20260603-213000.zip".to_string()
-            )
-        );
-        assert_eq!(
-            candidates[1],
-            (
-                "20260603-213000-02".to_string(),
-                "Patina-backup-20260603-213000-02.zip".to_string()
-            )
-        );
+    fn manual_upload_names_and_identity_are_independent() {
+        assert_ne!(remote_backup_id(), remote_backup_id());
+        for name in [
+            "工作备份.zip",
+            "my backup.zip",
+            "Patina-backup-20260603-213000.zip",
+        ] {
+            validate_upload_file_name(name).unwrap();
+        }
+        for name in [
+            "",
+            ".zip",
+            "../other.zip",
+            "C:other.zip",
+            "folder\\other.zip",
+            "CON.zip",
+            "LPT1.zip",
+            "backup?.zip",
+            " backup.zip",
+        ] {
+            assert!(validate_upload_file_name(name).is_err(), "{name}");
+        }
     }
 
     #[test]
@@ -1208,8 +1215,8 @@ mod tests {
     #[tokio::test]
     async fn scheduled_upload_does_not_claim_a_preexisting_object_as_new() {
         let (url, captured) = spawn_canned_server(vec![
-            "HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                .to_string(),
+            "HTTP/1.1 207 Multi-Status\r\nContent-Length: 219\r\nConnection: close\r\n\r\n<d:multistatus xmlns:d=\"DAV:\"><d:response><d:href>/dav/</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>".to_string(),
+            "HTTP/1.1 201 Created\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string(),
             "HTTP/1.1 200 OK\r\nContent-Length: 42\r\nETag: \"preexisting\"\r\nConnection: close\r\n\r\n"
                 .to_string(),
         ])
@@ -1232,16 +1239,17 @@ mod tests {
 
         assert_eq!(error, "remote_name_conflict");
         let requests = captured.await.unwrap();
-        assert_eq!(requests.len(), 2);
-        assert!(requests[0].starts_with("MKCOL "));
-        assert!(requests[1].starts_with("HEAD "));
+        assert_eq!(requests.len(), 3);
+        assert!(requests[0].starts_with("PROPFIND "));
+        assert!(requests[1].starts_with("MKCOL "));
+        assert!(requests[2].starts_with("HEAD "));
     }
 
     #[tokio::test]
     async fn scheduled_upload_can_resume_an_already_selected_object() {
         let (url, captured) = spawn_canned_server(vec![
-            "HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                .to_string(),
+            "HTTP/1.1 207 Multi-Status\r\nContent-Length: 219\r\nConnection: close\r\n\r\n<d:multistatus xmlns:d=\"DAV:\"><d:response><d:href>/dav/</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>".to_string(),
+            "HTTP/1.1 201 Created\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string(),
             "HTTP/1.1 200 OK\r\nContent-Length: 42\r\nETag: \"preexisting\"\r\nConnection: close\r\n\r\n"
                 .to_string(),
         ])
@@ -1260,9 +1268,10 @@ mod tests {
         assert!(!outcome.created_new);
         assert_eq!(outcome.etag.as_deref(), Some("\"preexisting\""));
         let requests = captured.await.unwrap();
-        assert_eq!(requests.len(), 2);
-        assert!(requests[0].starts_with("MKCOL "));
-        assert!(requests[1].starts_with("HEAD "));
+        assert_eq!(requests.len(), 3);
+        assert!(requests[0].starts_with("PROPFIND "));
+        assert!(requests[1].starts_with("MKCOL "));
+        assert!(requests[2].starts_with("HEAD "));
     }
 
     #[test]

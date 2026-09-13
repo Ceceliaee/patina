@@ -1,4 +1,5 @@
 import { runThemeContrastScenarios } from "./themeContrastScenarios.ts";
+import { runRemoteBackupUploadScenarios } from "./remoteBackupUploadScenarios.ts";
 import assert from "node:assert/strict";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import {
@@ -1293,6 +1294,12 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       deviceScaleFactor: 1,
       mobile: false,
     }, sessionId);
+    await evaluate(client!, sessionId, `document.querySelector('[role="dialog"] input').focus()`);
+    for (const character of "https://fixture.invalid/dav/tt/") {
+      await client!.command("Input.insertText", { text: character }, sessionId);
+    }
+    assert.equal(await evaluate(client!, sessionId, `document.querySelector('[role="dialog"] input').value`),
+      "https://fixture.invalid/dav/tt/", "Typing each slash must preserve the editable server address");
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
@@ -1320,6 +1327,8 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     await waitForExpression(client!, sessionId, "!document.querySelector('[role=\"dialog\"]')");
     await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString("编辑")})`);
   });
+
+  await runRemoteBackupUploadScenarios(context);
 
   await runTest("settings WebDAV password reveals only after an explicit click and clears when hidden", async () => {
     assert.equal(

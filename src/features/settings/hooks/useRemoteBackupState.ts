@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { isValidRemoteBackupFileName, sameRemoteBackupTarget } from "../services/remoteBackupUploadDraft.ts";
 import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
 import type { QuietToastTone } from "../../../shared/types/toast";
 
@@ -66,7 +67,7 @@ export interface RemoteBackupState {
   saveConfig: (draft: RemoteBackupFormDraft) => Promise<boolean>;
   deleteConfig: () => Promise<void>;
   testConfig: (draft?: RemoteBackupFormDraft) => Promise<boolean>;
-  uploadBackup: () => Promise<void>;
+  uploadBackup: (fileName: string, target: WebDavBackupConfig) => Promise<string | null>;
   openRestoreDialog: () => Promise<void>;
   closeRestoreDialog: () => void;
   restoreEntry: (entry: RemoteBackupEntry, restoreStrategy: BackupRestoreStrategy) => Promise<void>;
@@ -116,6 +117,7 @@ export function useRemoteBackupState({
   const [isTesting, setIsTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const uploadLock = useRef(false);
   const [isListing, setIsListing] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<"unknown" | "ok" | "failed">("unknown");
@@ -263,18 +265,26 @@ export function useRemoteBackupState({
     }
   }, [confirm, notify, UI_TEXT]);
 
-  const uploadBackup = useCallback(async () => {
-    if (isUploading) return;
+  const uploadBackup = useCallback(async (fileName: string, target: WebDavBackupConfig): Promise<string | null> => {
+    if (uploadLock.current) return UI_TEXT.settings.backupExporting;
     if (!config || !hasSecret) {
       setConfigDialogOpen(true);
       notify(UI_TEXT.toast.webDavMissingConfig, "warning");
-      return;
+      return UI_TEXT.toast.webDavMissingConfig;
     }
+    if (!sameRemoteBackupTarget(config, target)) return UI_TEXT.settings.webDavTargetChanged;
+    if (!isValidRemoteBackupFileName(fileName)) return UI_TEXT.settings.webDavInvalidFileName;
+    uploadLock.current = true;
     setIsUploading(true);
     try {
-      const result = await uploadWebDavBackup(toRuntimeConfig(config));
-      await saveRemoteBackupLastBackupAt(result.entry.createdAtMs);
-      setConfig({ ...config, lastBackupAtMs: result.entry.createdAtMs });
+      const result = await uploadWebDavBackup(target, fileName);
+      try {
+        await saveRemoteBackupLastBackupAt(result.entry.createdAtMs);
+        setConfig((current) => current && sameRemoteBackupTarget(current, target)
+          ? { ...current, lastBackupAtMs: result.entry.createdAtMs } : current);
+      } catch (error) {
+        console.error("save remote backup success time failed", error);
+      }
       setConnectionStatus("ok");
       notify(
         result.indexUpdated
@@ -282,14 +292,20 @@ export function useRemoteBackupState({
           : UI_TEXT.toast.webDavUploadIndexWarning(result.entry.fileName),
         result.indexUpdated ? "success" : "warning",
       );
+      return null;
     } catch (error) {
-      console.error("upload WebDAV backup failed", error);
       setConnectionStatus("failed");
-      notify(UI_TEXT.toast.webDavUploadFailed, "error");
+      const reason = String(error);
+      if (reason.includes("remote_name_conflict")) return UI_TEXT.settings.webDavNameConflict;
+      if (reason.includes("webdav_invalid_file_name")) return UI_TEXT.settings.webDavInvalidFileName;
+      if (reason.includes("webdav_directory_")) return UI_TEXT.settings.webDavDirectoryFailed;
+      console.error("upload WebDAV backup failed", error);
+      return UI_TEXT.settings.webDavUploadUncertain;
     } finally {
+      uploadLock.current = false;
       setIsUploading(false);
     }
-  }, [config, hasSecret, isUploading, notify, UI_TEXT]);
+  }, [config, hasSecret, notify, UI_TEXT]);
 
   const openRestoreDialog = useCallback(async () => {
     if (!config || !hasSecret) {
@@ -382,7 +398,7 @@ export function useRemoteBackupState({
     testConfig,
     uploadBackup,
     openRestoreDialog,
-    closeRestoreDialog: () => setRestoreDialogOpen(false),
+    closeRestoreDialog: () => { if (!isDownloading) setRestoreDialogOpen(false); },
     restoreEntry,
   };
 }

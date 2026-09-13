@@ -37,6 +37,7 @@ import {
   toUserVisibleStoragePath,
 } from "../src/features/settings/services/storagePathDisplay.ts";
 import { formatRemoteBackupTargetSummary } from "../src/features/settings/services/remoteBackupTargetSummary.ts";
+import { defaultRemoteBackupFileName, isValidRemoteBackupFileName, sameRemoteBackupTarget } from "../src/features/settings/services/remoteBackupUploadDraft.ts";
 import { prepareSettingsLanguagePreview } from "../src/features/settings/services/settingsLanguagePreview.ts";
 
 const ZH_TEXT = getLocaleText("zh-CN");
@@ -1194,6 +1195,18 @@ await runTest("scheduled export errors retain stable actionable categories", () 
     "permission_denied",
   );
   assert.equal(getScheduledExportErrorCode("raw SQL details"), "export_failed");
+});
+
+await runTest("remote upload drafts preserve user names and bind the confirmed target", () => {
+  assert.equal(defaultRemoteBackupFileName(new Date(2026, 8, 13, 9, 5, 2)), "Patina-backup-20260913-090502.zip");
+  for (const name of ["工作备份.zip", "my backup.zip", "100%.zip"]) assert.equal(isValidRemoteBackupFileName(name), true, name);
+  for (const name of ["", ".zip", "../x.zip", "folder/x.zip", "CON.zip", "COM1.zip", "LPT².zip", "备份?.zip", " x.zip", "a".repeat(241) + ".zip"]) {
+    assert.equal(isValidRemoteBackupFileName(name), false, name);
+  }
+  const target = { url: "https://example.test/dav/tt", username: "user", remoteDir: "/Patina" };
+  assert.equal(sameRemoteBackupTarget(target, { ...target }), true);
+  assert.equal(sameRemoteBackupTarget(target, { ...target, url: "https://example.test/dav/other" }), false);
+  assert.equal(formatRemoteBackupTargetSummary({ ...target, lastBackupAtMs: null }), "https://example.test/dav/tt/Patina");
 });
 
 console.log(`Passed ${passed} settings page state tests`);

@@ -1,0 +1,111 @@
+import assert from "node:assert/strict";
+import type { BrowserSmokeContext } from "./scenarioTypes.ts";
+import { evaluate, waitForExpression, waitForAnimationFrames } from "./browserHarness.ts";
+
+export async function runRemoteBackupUploadScenarios({ client, sessionId, runTest }: BrowserSmokeContext) {
+  const clickText = async (text: string, scope = "button") => {
+    await waitForExpression(client, sessionId, `[...document.querySelectorAll(${JSON.stringify(scope)})].some(node => (node.querySelector('p')?.textContent ?? node.textContent).trim() === ${JSON.stringify(text)})`);
+    assert.equal(await evaluate(client, sessionId, `(() => {
+      const button = [...document.querySelectorAll(${JSON.stringify(scope)})].find(node => (node.querySelector('p')?.textContent ?? node.textContent).trim() === ${JSON.stringify(text)});
+      if (!button) return false; button.click(); return true;
+    })()`), true, text);
+    await waitForAnimationFrames(client, sessionId);
+  };
+  const openUpload = async () => {
+    await clickText("备份");
+    await clickText("WebDAV 备份", '[role="dialog"] .settings-dialog-action-trigger');
+    await waitForExpression(client, sessionId, `document.body.innerText.includes("上传远程备份")`);
+  };
+  await runTest("WebDAV confirmation cancels without upload and preserves explicit names on conflict", async () => {
+    await evaluate(client, sessionId, `globalThis.__PATINA_REMOTE_UPLOAD_CASE = { uploads: [], entries: [], error: 'remote_name_conflict' }`);
+    await openUpload();
+    assert.equal(await evaluate(client, sessionId, `globalThis.__PATINA_REMOTE_UPLOAD_CASE.uploads.length`), 0);
+    assert.equal(await evaluate(client, sessionId, `document.activeElement?.tagName`), "INPUT");
+    await clickText("取消", '[role="dialog"] button');
+    await waitForExpression(client, sessionId, `document.activeElement?.textContent.trim() === '备份'`);
+    assert.equal(await evaluate(client, sessionId, `globalThis.__PATINA_REMOTE_UPLOAD_CASE.uploads.length`), 0);
+    await openUpload();
+    await client.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, sessionId);
+    await waitForExpression(client, sessionId, `!document.querySelector('[role="dialog"]')`);
+    assert.equal(await evaluate(client, sessionId, `globalThis.__PATINA_REMOTE_UPLOAD_CASE.uploads.length`), 0);
+    await openUpload();
+    await client.command("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true }, sessionId);
+    await waitForAnimationFrames(client, sessionId);
+    assert.equal(await evaluate(client, sessionId, `document.documentElement.scrollWidth <= innerWidth + 1`), true);
+    await client.command("Emulation.setDeviceMetricsOverride", { width: 1280, height: 820, deviceScaleFactor: 1, mobile: false }, sessionId);
+    await evaluate(client, sessionId, `(() => {
+      const input = document.querySelector('[role="dialog"] input');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '../invalid.zip');
+      input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    })()`);
+    await waitForExpression(client, sessionId, `document.querySelector('[role="dialog"] input').getAttribute('aria-invalid') === 'true'`);
+    assert.equal(await evaluate(client, sessionId, `[...document.querySelectorAll('[role="dialog"] button')].find(node => node.textContent.trim() === '上传').disabled`), true);
+    await evaluate(client, sessionId, `(() => {
+      const input = document.querySelector('[role="dialog"] input');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '工作备份.zip');
+      input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    })()`);
+    await waitForAnimationFrames(client, sessionId);
+    await evaluate(client, sessionId, `document.querySelector('[role="dialog"] input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, isComposing: true }))`);
+    assert.equal(await evaluate(client, sessionId, `globalThis.__PATINA_REMOTE_UPLOAD_CASE.uploads.length`), 0);
+    await client.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, sessionId);
+    await waitForExpression(client, sessionId, `globalThis.__PATINA_REMOTE_UPLOAD_CASE.uploads.length === 1`);
+    await evaluate(client, sessionId, `[...document.querySelectorAll('[role="dialog"] button')].find(node => node.textContent.trim() === '上传').click()`);
+    assert.equal(await evaluate(client, sessionId, `globalThis.__PATINA_REMOTE_UPLOAD_CASE.uploads.length`), 1);
+    await client.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, sessionId);
+    assert.equal(await evaluate(client, sessionId, `document.body.innerText.includes('上传远程备份')`), true);
+    const payload = await evaluate(client, sessionId, `globalThis.__PATINA_REMOTE_UPLOAD_CASE.uploads[0]`) as { fileName: string; config: { remoteDir: string } };
+    assert.equal(payload.fileName, "工作备份.zip");
+    assert.equal(payload.config.remoteDir, "/Patina");
+    await evaluate(client, sessionId, `globalThis.__PATINA_REMOTE_UPLOAD_CASE.release()`);
+    await waitForExpression(client, sessionId, `document.body.innerText.includes('此目录已有同名文件')`);
+    assert.equal(await evaluate(client, sessionId, `document.querySelector('[role="dialog"] input').value`), "工作备份.zip");
+    await evaluate(client, sessionId, `globalThis.__PATINA_REMOTE_UPLOAD_CASE.error = null`);
+    await clickText("上传", '[role="dialog"] button');
+    await waitForExpression(client, sessionId, `globalThis.__PATINA_REMOTE_UPLOAD_CASE.uploads.length === 2`);
+    await evaluate(client, sessionId, `globalThis.__PATINA_REMOTE_UPLOAD_CASE.release()`);
+    await waitForExpression(client, sessionId, `!document.body.innerText.includes('上传远程备份')`);
+    await waitForExpression(client, sessionId, `document.activeElement?.textContent.trim() === '备份'`);
+  });
+  await runTest("remote backup list uses the shared header close without a footer", async () => {
+    await clickText("恢复");
+    await clickText("WebDAV 恢复", '[role="dialog"] button');
+    await waitForExpression(client, sessionId, `document.body.innerText.includes('工作备份.zip') && Boolean(document.querySelector('[role="dialog"] .qp-dialog-close-button'))`);
+    assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('[role="dialog"] .qp-dialog-actions'))`), false);
+    assert.equal(await evaluate(client, sessionId, `document.activeElement?.tagName`), "H3");
+    const priorDownloads = await evaluate(client, sessionId, `globalThis.__PATINA_INVOKED_COMMANDS.filter(entry => entry.command === 'cmd_download_webdav_backup').length`);
+    await clickText("恢复", '[role="dialog"] button');
+    await waitForExpression(client, sessionId, `Boolean(document.querySelector('[role="dialog"] .qp-dialog-actions'))`);
+    await clickText("取消", '[role="dialog"] button');
+    await waitForExpression(client, sessionId, `document.activeElement?.textContent.trim() === '恢复'`);
+    assert.equal(await evaluate(client, sessionId, `globalThis.__PATINA_INVOKED_COMMANDS.filter(entry => entry.command === 'cmd_download_webdav_backup').length`), priorDownloads);
+    await clickText("恢复");
+    await clickText("WebDAV 恢复", '[role="dialog"] button');
+    await waitForExpression(client, sessionId, `Boolean(document.querySelector('[role="dialog"] .qp-dialog-close-button'))`);
+    await evaluate(client, sessionId, `document.querySelector('[role="dialog"] .qp-dialog-close-button').click()`);
+    await waitForExpression(client, sessionId, `!document.querySelector('[role="dialog"]')`);
+    await waitForExpression(client, sessionId, `document.activeElement?.textContent.trim() === '恢复'`);
+    await evaluate(client, sessionId, `globalThis.__PATINA_REMOTE_UPLOAD_CASE.sample = globalThis.__PATINA_REMOTE_UPLOAD_CASE.entries[0]; globalThis.__PATINA_REMOTE_UPLOAD_CASE.entries = []`);
+    await clickText("恢复");
+    await clickText("WebDAV 恢复", '[role="dialog"] button');
+    await waitForExpression(client, sessionId, `document.body.innerText.includes('远端暂无可用备份')`);
+    await client.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, sessionId);
+    await waitForExpression(client, sessionId, `!document.querySelector('[role="dialog"]')`);
+    await evaluate(client, sessionId, `globalThis.__PATINA_REMOTE_UPLOAD_CASE.entries = Array.from({ length: 30 }, (_, index) => ({ ...globalThis.__PATINA_REMOTE_UPLOAD_CASE.sample, id: 'long-' + index, fileName: '备份-' + index + '.zip' }))`);
+    await clickText("恢复");
+    await clickText("WebDAV 恢复", '[role="dialog"] button');
+    await waitForExpression(client, sessionId, `document.body.innerText.includes('备份-29.zip')`);
+    await client.command("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true }, sessionId);
+    await waitForAnimationFrames(client, sessionId);
+    assert.equal(await evaluate(client, sessionId, `(() => { const region = document.querySelector('[role="dialog"] .qp-dialog-body > .qp-scroll-region'); return region.scrollHeight > region.clientHeight && document.documentElement.scrollWidth <= innerWidth + 1; })()`), true);
+    assert.equal(await evaluate(client, sessionId, `document.querySelectorAll('[role="dialog"] .qp-dialog-close-button[aria-label="关闭"]').length`), 1);
+    await client.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 }, sessionId);
+    assert.equal(await evaluate(client, sessionId, `Boolean(document.activeElement?.closest('[role="dialog"]'))`), true);
+    await client.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9, modifiers: 8 }, sessionId);
+    assert.equal(await evaluate(client, sessionId, `Boolean(document.activeElement?.closest('[role="dialog"]'))`), true);
+    await evaluate(client, sessionId, `document.querySelector('[role="dialog"] .qp-dialog-close-button').click()`);
+    await waitForExpression(client, sessionId, `!document.querySelector('[role="dialog"]')`);
+    await client.command("Emulation.setDeviceMetricsOverride", { width: 1280, height: 820, deviceScaleFactor: 1, mobile: false }, sessionId);
+    await evaluate(client, sessionId, `delete globalThis.__PATINA_REMOTE_UPLOAD_CASE`);
+  });
+}

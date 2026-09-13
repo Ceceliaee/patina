@@ -6,6 +6,8 @@ use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
 
+mod collection;
+
 const MAX_TRANSFER_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_TEXT_RESPONSE_BYTES: usize = 2 * 1024 * 1024;
 const REQUEST_TIMEOUT_SECONDS: u64 = 90;
@@ -40,6 +42,24 @@ fn parse_base_url(raw: &str) -> Result<Url, String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Err("WebDAV server address cannot be empty".to_string());
+    }
+    let raw_path = trimmed
+        .split_once("://")
+        .and_then(|(_, rest)| rest.find('/').map(|start| &rest[start..]))
+        .unwrap_or("")
+        .split(['?', '#'])
+        .next()
+        .unwrap_or("");
+    if trimmed.contains('\\')
+        || trimmed.chars().any(char::is_control)
+        || raw_path.split('/').any(|part| {
+            let decoded = percent_encoding::percent_decode_str(part).decode_utf8_lossy();
+            matches!(decoded.as_ref(), "." | "..")
+                || decoded.contains(['/', '\\'])
+                || decoded.chars().any(char::is_control)
+        })
+    {
+        return Err("WebDAV server address contains unsupported path segments".into());
     }
 
     let mut url =
@@ -144,9 +164,15 @@ impl WebDavClient {
             .build()
             .map_err(|error| format!("failed to create WebDAV client: {error}"))?;
 
+        let mut base_url = parse_base_url(&config.url)?;
+        let path = format!(
+            "/{}",
+            split_path(base_url.path()).collect::<Vec<_>>().join("/")
+        );
+        base_url.set_path(&path);
         Ok(Self {
             client,
-            base_url: parse_base_url(&config.url)?,
+            base_url,
             username: config.username.trim().to_string(),
             password,
         })
@@ -155,24 +181,11 @@ impl WebDavClient {
     fn remote_url(&self, remote_path: &str) -> Result<Url, String> {
         validate_remote_path(remote_path)?;
         let mut url = self.base_url.clone();
-        let base_segments = url
-            .path_segments()
-            .map(|segments| {
-                segments
-                    .filter(|segment| !segment.is_empty())
-                    .map(str::to_string)
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-
         {
             let mut segments = url
                 .path_segments_mut()
                 .map_err(|_| "WebDAV server address cannot be used as a base URL".to_string())?;
-            segments.clear();
-            for segment in base_segments {
-                segments.push(&segment);
-            }
+            segments.pop_if_empty();
             for segment in split_path(remote_path) {
                 segments.push(segment);
             }
@@ -198,29 +211,106 @@ impl WebDavClient {
     }
 
     pub async fn ensure_dir(&self, remote_dir: &str) -> Result<(), String> {
+        tokio::time::timeout(
+            Duration::from_secs(REQUEST_TIMEOUT_SECONDS),
+            self.prepare_directory(remote_dir),
+        )
+        .await
+        .map_err(|_| "webdav_directory_timeout".to_string())?
+    }
+
+    async fn is_collection(&self, url: &Url) -> Result<bool, String> {
+        let response = self
+            .client
+            .request(
+                Method::from_bytes(b"PROPFIND").map_err(|_| "webdav_directory_method")?,
+                url.clone(),
+            )
+            .basic_auth(&self.username, Some(&self.password))
+            .header("Depth", "0")
+            .header("Content-Type", "application/xml; charset=utf-8")
+            .body("<d:propfind xmlns:d=\"DAV:\"><d:prop><d:resourcetype/></d:prop></d:propfind>")
+            .send()
+            .await
+            .map_err(|_| "webdav_directory_network".to_string())?;
+        if response.status() == StatusCode::NOT_FOUND {
+            return Ok(false);
+        }
+        if response.status() != StatusCode::MULTI_STATUS {
+            return Err(format!(
+                "webdav_directory_http_{}",
+                response.status().as_u16()
+            ));
+        }
+        let mut bytes = Vec::new();
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|_| "webdav_directory_network".to_string())?;
+            if bytes.len() + chunk.len() > 64 * 1024 {
+                return Err("webdav_directory_response_too_large".into());
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        let xml = std::str::from_utf8(&bytes).map_err(|_| "webdav_directory_invalid_response")?;
+        if !collection::confirms_collection(xml, url)? {
+            return Err("webdav_directory_not_collection".into());
+        }
+        Ok(true)
+    }
+
+    async fn prepare_directory(&self, remote_dir: &str) -> Result<(), String> {
         let normalized = normalize_remote_dir(remote_dir)?;
-        let mut current = String::new();
+        let mut anchor = self.base_url.clone();
+        if !anchor.path().ends_with('/') {
+            anchor.set_path(&format!("{}/", anchor.path()));
+        }
+        let mut missing = Vec::new();
+        while !self.is_collection(&anchor).await? {
+            if anchor.path() == "/" || missing.len() >= 64 {
+                return Err("webdav_directory_no_anchor".into());
+            }
+            missing.push(anchor.clone());
+            anchor
+                .path_segments_mut()
+                .map_err(|_| "webdav_directory_invalid_url")?
+                .pop_if_empty()
+                .pop()
+                .push("");
+        }
+        missing.reverse();
+        let mut current = self.base_url.clone();
         for segment in split_path(&normalized) {
-            current.push('/');
-            current.push_str(segment);
+            current
+                .path_segments_mut()
+                .map_err(|_| "webdav_directory_invalid_url")?
+                .pop_if_empty()
+                .push(segment)
+                .push("");
+            missing.push(current.clone());
+        }
+        if missing.len() > 64 {
+            return Err("webdav_directory_too_deep".into());
+        }
+        for url in missing {
             let response = self
+                .client
                 .request(
-                    Method::from_bytes(b"MKCOL").map_err(|error| error.to_string())?,
-                    &current,
+                    Method::from_bytes(b"MKCOL").map_err(|_| "webdav_directory_method")?,
+                    url.clone(),
                 )
-                .await?
+                .basic_auth(&self.username, Some(&self.password))
                 .send()
                 .await
-                .map_err(|error| format!("failed to create WebDAV directory: {error}"))?;
-            let status = response.status();
-            if status == StatusCode::CREATED
-                || status == StatusCode::METHOD_NOT_ALLOWED
-                || status == StatusCode::OK
-                || status == StatusCode::CONFLICT
-            {
-                continue;
+                .map_err(|_| "webdav_directory_network")?;
+            match response.status() {
+                StatusCode::CREATED => {}
+                StatusCode::METHOD_NOT_ALLOWED | StatusCode::CONFLICT => {
+                    if !self.is_collection(&url).await? {
+                        return Err("webdav_directory_missing_parent".into());
+                    }
+                }
+                status => return Err(format!("webdav_directory_http_{}", status.as_u16())),
             }
-            return Err(format!("failed to create WebDAV directory: HTTP {status}"));
         }
         Ok(())
     }
@@ -338,10 +428,12 @@ impl WebDavClient {
         let status = response.status();
         if status == StatusCode::PRECONDITION_FAILED {
             Err("remote_name_conflict".to_string())
-        } else if status.is_success() {
+        } else if status == StatusCode::CREATED {
             Ok(())
         } else {
-            Err(format!("failed to upload WebDAV backup: HTTP {status}"))
+            Err(format!(
+                "failed to confirm new WebDAV backup: HTTP {status}"
+            ))
         }
     }
 
@@ -547,6 +639,43 @@ mod tests {
         path
     }
 
+    fn collection_response(path: &str) -> String {
+        let body = format!("<d:multistatus xmlns:d=\"DAV:\"><d:response><d:href>{path}</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>");
+        format!(
+            "HTTP/1.1 207 Multi-Status\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    }
+
+    #[tokio::test]
+    async fn missing_base_directory_is_created_before_patina() {
+        let (url, captured) = spawn_canned_server(vec![
+            "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into(),
+            collection_response("/dav/"),
+            "HTTP/1.1 201 Created\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into(),
+            "HTTP/1.1 201 Created\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into(),
+        ])
+        .await;
+        client(format!("{url}/tt"))
+            .ensure_dir("/Patina")
+            .await
+            .unwrap();
+        let requests = captured.await.unwrap();
+        assert!(requests[0].starts_with("PROPFIND /dav/tt/ "));
+        assert!(requests[1].starts_with("PROPFIND /dav/ "));
+        assert!(requests[2].starts_with("MKCOL /dav/tt/ "));
+        assert!(requests[3].starts_with("MKCOL /dav/tt/Patina/ "));
+    }
+
+    #[tokio::test]
+    async fn directory_conflict_is_not_connection_success() {
+        let (url, _) = spawn_canned_server(vec![
+            "HTTP/1.1 409 Conflict\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into(),
+        ])
+        .await;
+        assert!(client(url).ping("/Patina").await.is_err());
+    }
+
     #[test]
     fn normalize_remote_dir_applies_default_and_slashes() {
         assert_eq!(normalize_remote_dir("").unwrap(), "/Patina");
@@ -554,6 +683,99 @@ mod tests {
             normalize_remote_dir("Patina/backups/").unwrap(),
             "/Patina/backups"
         );
+    }
+
+    #[test]
+    fn encoded_base_paths_are_preserved_and_unsafe_segments_are_rejected() {
+        let client = client("https://example.test/dav/%E5%B7%A5%E4%BD%9C%20files/".into());
+        assert_eq!(
+            client.remote_url("/Patina/100%.zip").unwrap().as_str(),
+            "https://example.test/dav/%E5%B7%A5%E4%BD%9C%20files/Patina/100%25.zip"
+        );
+        for path in ["../other", "%2e%2e/other", "a%2fb", "a%5Cb", "a%00b"] {
+            assert!(
+                parse_base_url(&format!("https://example.test/dav/{path}")).is_err(),
+                "{path}"
+            );
+        }
+    }
+
+    #[test]
+    fn repeated_and_trailing_slashes_keep_the_existing_target() {
+        for base in [
+            "https://example.test/dav/tt",
+            "https://example.test/dav/tt/",
+            "https://example.test//dav///tt//",
+        ] {
+            assert_eq!(
+                client(base.into())
+                    .remote_url("/Patina/backup.zip")
+                    .unwrap()
+                    .as_str(),
+                "https://example.test/dav/tt/Patina/backup.zip"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn directory_probe_rejects_non_dav_and_file_responses() {
+        for response in [
+            "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into(),
+            "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into(),
+            collection_response("/unrelated/"),
+            collection_response("/dav/").replace("<d:collection/>", "                "),
+        ] {
+            let (url, captured) = spawn_canned_server(vec![response]).await;
+            assert!(client(url).ensure_dir("/Patina").await.is_err());
+            assert_eq!(captured.await.unwrap().len(), 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn existing_nested_target_does_not_require_parent_access() {
+        let (url, captured) = spawn_canned_server(vec![
+            collection_response("/dav/user/files/"),
+            "HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                .into(),
+            collection_response("/dav/user/files/Patina/"),
+        ])
+        .await;
+        client(format!("{url}/user/files"))
+            .ensure_dir("/Patina")
+            .await
+            .unwrap();
+        let requests = captured.await.unwrap();
+        assert_eq!(requests.len(), 3);
+        assert!(requests.iter().all(|request| request
+            .lines()
+            .next()
+            .unwrap()
+            .contains("/dav/user/files/")));
+    }
+
+    #[tokio::test]
+    async fn missing_multiple_parents_are_created_in_order() {
+        let not_found =
+            "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string();
+        let created =
+            "HTTP/1.1 201 Created\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string();
+        let (url, captured) = spawn_canned_server(vec![
+            not_found.clone(),
+            not_found,
+            collection_response("/dav/"),
+            created.clone(),
+            created.clone(),
+            created,
+        ])
+        .await;
+        client(format!("{url}/a/b"))
+            .ensure_dir("/Patina")
+            .await
+            .unwrap();
+        let requests = captured.await.unwrap();
+        assert!(requests[3].starts_with("MKCOL /dav/a/ "));
+        assert!(requests[4].starts_with("MKCOL /dav/a/b/ "));
+        assert!(requests[5].starts_with("MKCOL /dav/a/b/Patina/ "));
     }
 
     #[test]

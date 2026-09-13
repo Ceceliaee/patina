@@ -349,6 +349,21 @@ function tauriStubFor(path: string) {
         if (command === "cmd_test_webdav_backup_target") {
           return { ok: true };
         }
+        if (globalThis.__PATINA_REMOTE_UPLOAD_CASE) {
+          const fixture = globalThis.__PATINA_REMOTE_UPLOAD_CASE;
+          if (command === "cmd_upload_webdav_backup") {
+            fixture.uploads.push(payload);
+            await new Promise((resolve) => { fixture.release = resolve; });
+            if (fixture.error) throw new Error(fixture.error);
+            const entry = { id: "upload-fixture", fileName: payload.fileName,
+              remotePath: "/Patina/" + payload.fileName, createdAtMs: 1, sizeBytes: 100,
+              appVersion: "test", backupVersion: 1, schemaVersion: 1, sessionCount: 1,
+              titleSampleCount: 0, settingCount: 0, iconCacheCount: 0, formatKind: "sqlite_snapshot" };
+            fixture.entries = [entry];
+            return { entry, indexUpdated: true };
+          }
+          if (command === "cmd_list_webdav_backups") return fixture.entries;
+        }
         if (globalThis.__PATINA_REMOTE_BACKUP_RECOVERY_CASE) {
           const fixture = globalThis.__PATINA_REMOTE_BACKUP_RECOVERY_CASE;
           if (command === "cmd_download_webdav_backup") {
