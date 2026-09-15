@@ -145,6 +145,10 @@ export function useAppMappingDerivedState({
     draftOverrides[candidate.exeName]?.captureTitle !== false
   ), [draftOverrides]);
 
+  const resolveGroupTrackingEnabled = useCallback((candidate: ObservedAppCandidate) => (
+    candidate.memberCandidates?.some(resolveTrackingEnabled) ?? resolveTrackingEnabled(candidate)
+  ), [resolveTrackingEnabled]);
+
   const resolveCandidateColor = useCallback((candidate: ObservedAppCandidate) => {
     const overrideColor = draftOverrides[candidate.exeName]?.color;
     if (overrideColor) return overrideColor;
@@ -215,7 +219,7 @@ export function useAppMappingDerivedState({
       filter,
       searchQuery,
       resolveMappedCategory,
-      resolveTrackingEnabled,
+      resolveTrackingEnabled: resolveGroupTrackingEnabled,
       resolveEffectiveDisplayName: resolveSortDisplayName,
       resolveCategoryLabel,
       locale,
@@ -227,14 +231,14 @@ export function useAppMappingDerivedState({
       resolveCategoryLabel,
       resolveMappedCategory,
       resolveSortDisplayName,
-      resolveTrackingEnabled,
+      resolveGroupTrackingEnabled,
       locale,
     ],
   );
 
   const counts = useMemo(
-    () => countClassificationCandidates(candidates, resolveTrackingEnabled, resolveMappedCategory),
-    [candidates, resolveMappedCategory, resolveTrackingEnabled],
+    () => countClassificationCandidates(candidates, resolveGroupTrackingEnabled, resolveMappedCategory),
+    [candidates, resolveMappedCategory, resolveGroupTrackingEnabled],
   );
 
   const filteredWebDomainCandidates = useMemo(() => {

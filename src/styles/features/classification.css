@@ -338,3 +338,43 @@
 .qp-category-management-grid .qp-icon-action-dimmed:focus-visible:not(:disabled) {
   color: var(--qp-text-secondary);
 }
+.qp-app-link-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% + 8px);
+  padding-inline: 4px;
+  margin-inline: -4px;
+  cursor: pointer;
+  border-radius: var(--qp-radius-button);
+}
+.qp-app-link-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qp-app-link-trigger > svg { flex-shrink: 0; transform: translateY(2px); }
+.qp-app-link-trigger:hover, .qp-app-link-trigger:active {
+  background: var(--qp-bg-panel);
+}
+.qp-app-link-option:is(button):hover, .qp-app-link-action:hover,
+.qp-app-link-controls .qp-icon-action-neutral:is(:hover, :active):not(:disabled) {
+  background: var(--qp-bg-elevated);
+}
+.qp-app-link-trigger:focus-visible, .qp-app-link-popover button:focus-visible {
+  outline: 2px solid var(--qp-accent-default);
+  outline-offset: 2px;
+}
+.qp-app-link-popover { display: flex; flex-direction: column; overflow: hidden; width: min(240px, calc(100vw - 24px)); padding: 12px; font-size: 12px; }
+.qp-app-link-popover > :not(.qp-app-link-list) { flex-shrink: 0; }
+.qp-app-link-popover .qp-search-field { width: 100%; margin-block: 8px; }
+.qp-app-link-list { min-height: 0; padding-right: 6px; margin-right: -6px; overflow-x: hidden; overflow-y: auto; overflow-wrap: anywhere; overscroll-behavior: contain; }
+.qp-app-link-option, .qp-app-link-action {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 4px 0; text-align: left;
+  border-radius: var(--qp-radius-button);
+}
+.qp-app-link-option > span { flex: 1; min-width: 0; }
+.qp-app-link-option img { width: 16px; height: 16px; flex-shrink: 0; object-fit: contain; }
+.qp-app-link-option:disabled { opacity: 0.6; }
+.qp-app-link-member { gap: 4px; }
+.qp-app-link-member > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qp-app-link-controls { display: flex; flex-shrink: 0; gap: 0; }
+.qp-app-link-main-icon { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex-shrink: 0; }
+.qp-app-link-main-icon, .qp-app-link-controls { margin-right: -6px; }
+.qp-app-link-controls .qp-icon-action { width: 24px; height: 24px; flex-shrink: 0; }

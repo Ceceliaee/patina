@@ -41,6 +41,7 @@ export function filterAndSortCandidates({
         resolveEffectiveDisplayName(candidate),
         candidate.appName,
         candidate.exeName,
+        candidate.searchText ?? "",
         resolveCategoryLabel?.(category) ?? category,
         category,
       ].join(" ").toLocaleLowerCase(locale).includes(normalizedQuery);

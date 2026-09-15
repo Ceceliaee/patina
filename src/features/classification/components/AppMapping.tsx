@@ -9,6 +9,7 @@ import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilte
 import CategoryColorControls from "./CategoryColorControls";
 import CategorySearchField from "./CategorySearchField.tsx";
 import AppMappingCandidateCard from "./AppMappingCandidateCard";
+import LinkedAppMenu from "./LinkedAppMenu.tsx";
 import WebDomainMappingCard from "./WebDomainMappingCard";
 import { useAppMappingState } from "../hooks/useAppMappingState";
 import type { CandidateFilter } from "../types";
@@ -44,6 +45,8 @@ export default function AppMapping(props: Props) {
     },
   ];
   const {
+    allAppCandidates,
+    handleAppLink,
     dialogs,
     icons,
     loading,
@@ -369,6 +372,11 @@ export default function AppMapping(props: Props) {
                     key={candidate.exeName}
                     candidate={candidate}
                     icon={icons[candidate.exeName]}
+                    identityContent={<LinkedAppMenu parent={candidate} candidates={allAppCandidates}
+                      links={draftState?.appLinks ?? {}} icons={icons} disabled={isBusy}
+                      globalTitleEnabled={titleRecordingEnabled} name={resolveEffectiveDisplayName}
+                      tracking={resolveTrackingEnabled} titleCapture={resolveTitleCaptureEnabled}
+                      onLink={handleAppLink} onTracking={handleTrackingToggle} onTitle={handleTitleCaptureToggle} />}
                     displayName={displayName}
                     displayColor={displayColor}
                     assignedCategory={assignedCategory}

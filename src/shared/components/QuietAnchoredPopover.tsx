@@ -27,6 +27,7 @@ interface QuietAnchoredPopoverProps {
   children: ReactNode;
   className?: string;
   horizontalAnchorRatio?: number;
+  horizontalAlign?: "start" | "center";
   initialFocusRef?: RefObject<HTMLElement | null>;
 }
 
@@ -50,6 +51,7 @@ function resolvePosition(
   anchorRect: DOMRect,
   popoverRect: DOMRect,
   horizontalAnchorRatio: number,
+  horizontalAlign: "start" | "center",
 ): QuietAnchoredPopoverPosition {
   const availableBelow = window.innerHeight
     - anchorRect.bottom
@@ -76,8 +78,8 @@ function resolvePosition(
   return {
     left: clamp(
       anchorRect.left
-        + anchorRect.width / 2
-        - popoverRect.width * horizontalAnchorRatio,
+        + (horizontalAlign === "start" ? 0 : anchorRect.width / 2
+          - popoverRect.width * horizontalAnchorRatio),
       VIEWPORT_PADDING,
       maxLeft,
     ),
@@ -95,6 +97,7 @@ export default function QuietAnchoredPopover({
   children,
   className,
   horizontalAnchorRatio = 0.5,
+  horizontalAlign = "center",
   initialFocusRef,
 }: QuietAnchoredPopoverProps) {
   const popoverRef = useRef<HTMLDivElement | null>(null);
@@ -127,9 +130,10 @@ export default function QuietAnchoredPopover({
       anchor.getBoundingClientRect(),
       popover.getBoundingClientRect(),
       clamp(horizontalAnchorRatio, 0, 1),
+      horizontalAlign,
     );
     setPosition((current) => positionsMatch(current, next) ? current : next);
-  }, [anchor, horizontalAnchorRatio, open]);
+  }, [anchor, horizontalAnchorRatio, horizontalAlign, open]);
 
   useLayoutEffect(() => {
     if (!open || !anchor) {

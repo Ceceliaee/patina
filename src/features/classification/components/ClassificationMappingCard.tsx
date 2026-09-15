@@ -11,6 +11,7 @@ import QuietBadge from "../../../shared/components/QuietBadge";
 
 
 interface ClassificationMappingCardProps {
+  identityContent?: ReactNode;
   identity: string;
   kind: "app" | "web";
   fallbackIcon?: ReactNode;
@@ -87,6 +88,7 @@ export default function ClassificationMappingCard({
   onToggleTitleCapture,
   onToggleTracking,
   onDeleteAllSessions,
+  identityContent,
 }: ClassificationMappingCardProps) {
   const UI_TEXT = useLocaleText();
   const editButtonRef = useRef<HTMLButtonElement>(null);
@@ -157,7 +159,7 @@ export default function ClassificationMappingCard({
             {!trackingEnabled && <QuietBadge tone="warning">{UI_TEXT.mapping.noStats}</QuietBadge>}
           </div>
           <div className="qp-app-mapping-exe-line">
-            <IdentityText text={identity} className="qp-app-mapping-exe" />
+            {identityContent ?? <IdentityText text={identity} className="qp-app-mapping-exe" />}
           </div>
         </div>
       </div>
@@ -197,7 +199,6 @@ export default function ClassificationMappingCard({
             title={trackingEnabled ? UI_TEXT.mapping.trackingOnHint : UI_TEXT.mapping.trackingOffHint}
             pressed={!trackingEnabled}
             showPressedStyle={false}
-            tone={trackingEnabled ? "warning" : "accent"}
             disabled={isBusy}
             onClick={onToggleTracking}
           />

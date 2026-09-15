@@ -124,6 +124,8 @@ function tauriStubFor(path: string) {
               color_scheme_dark: settings.color_scheme_dark ?? null,
             },
             pinned: widgetParams.get("widgetPinned") === "1",
+            app_links: Object.entries(settings).filter(([key]) => key.startsWith("__app_link::"))
+              .map(([key, value]) => ({ key, value })),
             app_overrides: Object.entries(settings)
               .filter(([key]) => key.startsWith("__app_override::"))
               .sort(([left], [right]) => left.localeCompare(right))
@@ -803,6 +805,12 @@ function tauriStubFor(path: string) {
           const settings = loadStoredSettings();
           for (const mutation of payload.mutations ?? []) {
             globalThis.__TIME_TRACKER_CLASSIFICATION_MUTATIONS.push(mutation);
+            if (mutation.key.startsWith('__app_link::')) {
+              const change = JSON.parse(mutation.value);
+              if (change.parent === null) delete settings[mutation.key];
+              else settings[mutation.key] = change.parent;
+              continue;
+            }
             if (mutation.value === null) {
               delete settings[mutation.key];
             } else {
@@ -1170,6 +1178,10 @@ function tauriStubFor(path: string) {
             }
             const requestedExecutables = new Set(params.map((value) => String(value).toLowerCase()));
             return [
+              ...[0, 1].map((index) => ({
+                exe_name: "catalog-00" + index + ".exe",
+                icon_base64: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='48' height='48' fill='" + (index ? 'blue' : 'red') + "'/%3E%3C/svg%3E",
+              })),
               {
                 exe_name: "cursor.exe",
                 icon_base64: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2248%22%20height%3D%2248%22%3E%3Crect%20width%3D%2248%22%20height%3D%2248%22%20fill%3D%22%23E34A3A%22%2F%3E%3C%2Fsvg%3E",

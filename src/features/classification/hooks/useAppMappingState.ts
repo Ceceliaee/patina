@@ -1,3 +1,5 @@
+import { changeAppLink, isLinkedIdentity } from "../../../shared/classification/appLinks.ts";
+import { groupLinkedAppCatalog, seedLinkedAppName } from "../services/linkedAppCatalog.ts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocaleText } from "../../../shared/i18n/index.ts";
 
@@ -188,9 +190,21 @@ export function useAppMappingState({
   const appCatalog = useClassificationAppCatalog({
     enabled: draftState !== null,
   });
+  const groupedCandidates = useMemo(() => groupLinkedAppCatalog(appCatalog.candidates,
+    draftState?.appLinks ?? {}, draftOverrides), [appCatalog.candidates, draftState?.appLinks, draftOverrides]);
+  const handleAppLink = useCallback((member: string, parent: ObservedAppCandidate | null) => {
+    setDraftState((current) => {
+      if (!current) return current;
+      const next = cloneClassificationDraftState(current);
+      next.appLinks = changeAppLink(current.appLinks ?? {}, member, parent?.exeName ?? null);
+      seedLinkedAppName(next, current, savedState, parent, appCatalog.candidates);
+      return next;
+    });
+    setSaveStatus("idle");
+  }, [savedState, appCatalog.candidates]);
   const candidateIconExeNames = useMemo(
-    () => appCatalog.candidates.map((candidate) => candidate.exeName),
-    [appCatalog.candidates],
+    () => [...new Set([...appCatalog.candidates, ...groupedCandidates].map((candidate) => candidate.exeName))],
+    [appCatalog.candidates, groupedCandidates],
   );
   const cachedClassificationIcons = useMemo(
     () => getCachedClassificationIconsForExecutables(candidateIconExeNames),
@@ -253,7 +267,7 @@ export function useAppMappingState({
     resolveWebDomainAutoDisplayName,
     resolveWebDomainDisplayNameFromOverride,
   } = useAppMappingDerivedState({
-    candidates: appCatalog.candidates,
+    candidates: groupedCandidates,
     webDomainCandidates,
     iconThemeColors,
     draftOverrides,
@@ -283,6 +297,7 @@ export function useAppMappingState({
       setClassificationBootstrapCache({
         observedWebDomains: cloneObservedWebDomainCandidates(observedWebDomains),
         loadedOverrides: { ...savedState.overrides },
+        loadedAppLinks: { ...savedState.appLinks },
         loadedWebDomainOverrides: { ...savedState.webDomainOverrides },
         loadedCategoryColorOverrides: { ...savedState.categoryColorOverrides },
         loadedCategoryLabelOverrides: { ...savedState.categoryLabelOverrides },
@@ -644,7 +659,7 @@ export function useAppMappingState({
       const result = await deleteObservedCandidateSessionsWithDeps(candidate, {
         confirmDelete: () => confirm({
           title: UI_TEXT.mapping.deleteAppSessionsTitle,
-          description: UI_TEXT.mapping.deleteAppSessionsDetail(displayName),
+          description: UI_TEXT.mapping.deleteAppSessionsDetail(`${displayName} (${candidate.exeName})`),
           confirmLabel: UI_TEXT.dialog.confirmDanger,
           danger: true,
         }),
@@ -657,10 +672,12 @@ export function useAppMappingState({
         return;
       }
       setSavedState((current) => (
-        current ? updateAppOverrideInDraftState(current, candidate.exeName, null) : current
+        current && !isLinkedIdentity(candidate.exeName, current.appLinks ?? {})
+          ? updateAppOverrideInDraftState(current, candidate.exeName, null) : current
       ));
       setDraftState((current) => (
-        current ? updateAppOverrideInDraftState(current, candidate.exeName, null) : current
+        current && !isLinkedIdentity(candidate.exeName, current.appLinks ?? {})
+          ? updateAppOverrideInDraftState(current, candidate.exeName, null) : current
       ));
       setNameDrafts((current) => {
         const next = { ...current };
@@ -834,6 +851,8 @@ export function useAppMappingState({
   }, [handleWebNameCommit]);
 
   return {
+    allAppCandidates: appCatalog.candidates,
+    handleAppLink,
     dialogs,
     icons: mappingIcons,
     loading,

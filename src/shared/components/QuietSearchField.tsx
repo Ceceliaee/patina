@@ -13,7 +13,7 @@ const QuietSearchField = forwardRef<HTMLInputElement, QuietSearchFieldProps>(fun
 }, ref) {
   return (
     <label className={`data-app-search qp-search-field ${className ?? ""}`.trim()}>
-      <Search size={14} aria-hidden />
+      <Search size={14} className="shrink-0" aria-hidden />
       <input
         {...inputProps}
         ref={ref}

@@ -165,7 +165,7 @@ export async function runClassificationAppLayoutScenarios({ client, sessionId, r
       await reload("zh-CN", "light");
       assert.equal(await evaluate(client!, sessionId, `getComputedStyle(document.querySelector(${jsonString(row + ' .qp-app-mapping-icon')})).boxShadow.includes('18, 52, 86')`), true);
       assert.equal(await evaluate(client!, sessionId, `document.querySelector(${jsonString(row + ' .qp-app-mapping-exe')}).classList.contains('qp-badge')`), false);
-      assert.deepEqual(await evaluate(client!, sessionId, `(() => {const s=getComputedStyle(document.querySelector(${jsonString(row + ' .qp-app-mapping-exe')}));return [s.fontSize,s.fontWeight,s.borderTopWidth,s.borderTopLeftRadius,s.backgroundColor];})()`), ["11px", "500", "0px", "0px", "rgba(0, 0, 0, 0)"]);
+      assert.deepEqual(await evaluate(client!, sessionId, `(() => {const s=getComputedStyle(document.querySelector(${jsonString(row + ' .qp-app-mapping-exe')}));return [s.fontSize,s.fontWeight,s.borderTopWidth,s.borderTopLeftRadius,s.backgroundColor];})()`), ["11px", "500", "0px", "8px", "rgba(0, 0, 0, 0)"]);
       assert.equal(await evaluate(client!, sessionId, `getComputedStyle(document.querySelector(${jsonString(color)})).borderTopColor`), "rgba(0, 0, 0, 0)");
       await click(`${row} [aria-label="修改应用名称"]`);
       await waitForExpression(client!, sessionId, `Boolean(document.querySelector(${jsonString(row + ' input')}))`);
@@ -196,11 +196,12 @@ export async function runClassificationAppLayoutScenarios({ client, sessionId, r
       await waitForExpression(client!, sessionId, `performance.timeOrigin!==${origin} && Boolean(document.querySelector('.qp-app-mapping-exe'))`);
       // Give the existing filename a deterministic overflow constraint, independent of column breakpoints.
       await evaluate(client!, sessionId, `document.querySelector('[data-classification-app="deep-research-workbench.exe"] .qp-app-mapping-details').style.maxWidth='100px'`);
-      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-app-mapping-exe[tabindex="0"]'))`);
-      const filename = await evaluate(client!, sessionId, `(() => {const n=document.querySelector('.qp-app-mapping-exe[tabindex="0"]');n.focus();return n.textContent;})()`);
-      await waitForExpression(client!, sessionId, `document.querySelector('[role="tooltip"]')?.textContent===${jsonString(String(filename))}`);
+      const filename = await evaluate(client!, sessionId, `(() => {const n=document.querySelector('[data-classification-app="deep-research-workbench.exe"] .qp-app-link-trigger');n.focus();return n.textContent;})()`);
+      await key("Enter", 13);
+      await waitForExpression(client!, sessionId, `document.querySelector('.qp-app-link-popover')?.textContent.includes(${jsonString(String(filename))})`);
+      assert.equal(await evaluate(client!, sessionId, `Boolean(document.querySelector('[role="tooltip"]'))`), false);
       await key("Escape", 27);
-      await waitForExpression(client!, sessionId, `!document.querySelector('[role="tooltip"]')`);
+      await waitForExpression(client!, sessionId, `!document.querySelector('.qp-app-link-popover') && document.activeElement.classList.contains('qp-app-link-trigger')`);
     });
   } catch (error) {
     console.error("Application layout failure state", await evaluate(client!, sessionId, `({text:document.body.innerText.slice(-500),focus:document.activeElement?.outerHTML.slice(0,700),expanded:document.querySelector(${jsonString(color)})?.outerHTML})`));

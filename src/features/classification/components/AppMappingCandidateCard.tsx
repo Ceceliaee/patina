@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useLocaleText } from "../../../shared/i18n/index.ts";
 import type { ObservedAppCandidate } from "../types";
 import type { UserAssignableAppCategory } from "../../../shared/classification/categoryTokens";
@@ -5,6 +6,7 @@ import type { ColorDisplayFormat } from "../../../shared/lib/colorFormatting";
 import ClassificationMappingCard from "./ClassificationMappingCard";
 
 interface AppMappingCandidateCardProps {
+  identityContent?: ReactNode;
   candidate: ObservedAppCandidate;
   icon?: string;
   displayName: string;
