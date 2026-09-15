@@ -183,8 +183,21 @@ function isResidualRuntimeBinaryRunning() {
   return result?.stdout.trim() === "running";
 }
 
-function measureRuntimeProcessTree() {
-  const result = runRuntimeBinaryProcessCommand(`
+type RuntimeProcessMeasurement = {
+  rootPid: number;
+  processCount: number;
+  workingSetBytes: number;
+  privateUsageBytes: number;
+  coverage: "root_only" | "root_and_descendants";
+};
+
+function measureRuntimeProcessTree(
+  runCommand = runRuntimeBinaryProcessCommand,
+  includeDescendants = true,
+): RuntimeProcessMeasurement {
+  let result;
+  try {
+    result = runCommand(`
     $target = [IO.Path]::GetFullPath($env:PATINA_RUNTIME_SMOKE_BINARY)
     $rootProcess = @(Get-Process patina -ErrorAction SilentlyContinue) | Where-Object {
       try { $_.Path -and [IO.Path]::GetFullPath($_.Path) -ieq $target } catch { $false }
@@ -193,7 +206,7 @@ function measureRuntimeProcessTree() {
     $ids = [Collections.Generic.HashSet[int]]::new()
     [void]$ids.Add([int]$rootProcess.Id)
     $coverage = 'root_only'
-    try {
+    ${includeDescendants ? `try {
       $processRows = @(Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId -ErrorAction Stop)
       do {
         $added = $false
@@ -208,7 +221,7 @@ function measureRuntimeProcessTree() {
       # Process-tree enumeration is a diagnostic enhancement. Some Windows
       # sessions stop CIM while the test is running; retain the exact root
       # measurement instead of failing unrelated runtime assertions.
-    }
+    }` : ""}
     $workingSet = 0L
     $privateUsage = 0L
     $measured = 0
@@ -227,15 +240,19 @@ function measureRuntimeProcessTree() {
       privateUsageBytes = $privateUsage
       coverage = $coverage
     } | ConvertTo-Json -Compress
-  `);
+    `);
+  } catch (error) {
+    if (includeDescendants && error instanceof Error
+      && (error.cause as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT") {
+      // A hung CIM query cannot reach the PowerShell catch above. Retry only
+      // the root measurement, without enumerating descendants; keep failures
+      // of that measurement fatal and report its reduced coverage explicitly.
+      return measureRuntimeProcessTree(runCommand, false);
+    }
+    throw error;
+  }
   assert.ok(result, "runtime process measurement requires Windows");
-  return JSON.parse(result.stdout.trim()) as {
-    rootPid: number;
-    processCount: number;
-    workingSetBytes: number;
-    privateUsageBytes: number;
-    coverage: "root_only" | "root_and_descendants";
-  };
+  return JSON.parse(result.stdout.trim()) as RuntimeProcessMeasurement;
 }
 
 function verifyDatabase(dbPath: string) {
@@ -1960,6 +1977,33 @@ try {
     privateUsageBytes: resourceDiagnostics.process_resources?.private_usage_bytes ?? null,
     comparison: "absolute diagnostic only; before/after payload retention is measured by perf:activity-read-model",
   }));
+  const processQueryTimeout = new Error("injected process query timeout", {
+    cause: Object.assign(new Error("spawnSync powershell.exe ETIMEDOUT"), { code: "ETIMEDOUT" }),
+  });
+  let processQueryAttempts = 0;
+  const rootOnlyMemory = measureRuntimeProcessTree((command) => {
+    if (++processQueryAttempts === 1) throw processQueryTimeout;
+    return runRuntimeBinaryProcessCommand(command);
+  });
+  assert.equal(processQueryAttempts, 2);
+  assert.equal(rootOnlyMemory.coverage, "root_only");
+  assert.equal(rootOnlyMemory.processCount, 1);
+  assert.ok(rootOnlyMemory.workingSetBytes > 0);
+  assert.ok(rootOnlyMemory.privateUsageBytes > 0);
+  processQueryAttempts = 0;
+  assert.throws(() => measureRuntimeProcessTree(() => {
+    processQueryAttempts += 1;
+    throw processQueryTimeout;
+  }), (error) => error === processQueryTimeout);
+  assert.equal(processQueryAttempts, 2, "a failed root measurement must remain fatal");
+  processQueryAttempts = 0;
+  const processQueryFailure = new Error("runtime smoke root process not found");
+  assert.throws(() => measureRuntimeProcessTree(() => {
+    processQueryAttempts += 1;
+    throw processQueryFailure;
+  }), (error) => error === processQueryFailure);
+  assert.equal(processQueryAttempts, 1, "non-timeout failures must not be retried");
+  console.log("PASS runtime process measurement timeout fallback and failure propagation");
   const processTreeMemory = measureRuntimeProcessTree();
   assert.ok(processTreeMemory.processCount >= 1);
   assert.ok(processTreeMemory.workingSetBytes > 0);
