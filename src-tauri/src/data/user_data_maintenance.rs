@@ -214,6 +214,14 @@ async fn delete_sessions_by_exe_names_in_pool(
         let Some(canonical_exe) = canonical_override_executable(exe_name) else {
             continue;
         };
+        if crate::data::repositories::app_links::is_linked_identity(&mut tx, &canonical_exe)
+            .await
+            .map_err(|error| {
+                SqliteOperationError::from_sqlx("retain linked application identity", error)
+            })?
+        {
+            continue;
+        }
         sqlx::query("DELETE FROM icon_cache WHERE LOWER(exe_name) = ?")
             .bind(&canonical_exe)
             .execute(&mut *tx)
@@ -524,6 +532,25 @@ mod tests {
             assert!(editor_icon.is_some());
             assert_eq!(batch_row.get::<i64, _>("exact_session_count"), 0);
             assert_eq!(batch_row.get::<i64, _>("hour_bucket_count"), 1);
+        });
+    }
+
+    #[test]
+    fn deleting_linked_root_records_retains_identity_and_member_records() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            pool.execute("INSERT INTO settings(key,value) VALUES ('__app_link::child.exe','root.exe'), ('__app_override::root.exe','{\"displayName\":\"Root\"}')").await.unwrap();
+            pool.execute("INSERT INTO sessions(app_name,exe_name,start_time,end_time,duration) VALUES ('Root','root.exe',0,1000,1000), ('Child','child.exe',1000,3000,2000)").await.unwrap();
+            delete_sessions_by_exe_names_in_pool(&pool, &["root.exe".into()])
+                .await
+                .unwrap();
+            let rows: Vec<String> = sqlx::query_scalar("SELECT exe_name FROM sessions")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+            assert_eq!(rows, vec!["child.exe"]);
+            let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM settings WHERE key IN ('__app_link::child.exe','__app_override::root.exe')").fetch_one(&pool).await.unwrap();
+            assert_eq!(count, 2);
         });
     }
 

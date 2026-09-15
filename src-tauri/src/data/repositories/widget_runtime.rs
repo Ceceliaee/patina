@@ -32,6 +32,7 @@ pub struct WidgetBootstrapSnapshot {
     pub settings: WidgetBootstrapSettings,
     pub pinned: bool,
     pub app_overrides: Vec<WidgetAppOverrideRow>,
+    pub app_links: Vec<WidgetAppOverrideRow>,
 }
 
 pub async fn load_widget_bootstrap_snapshot(
@@ -62,6 +63,17 @@ pub async fn load_widget_bootstrap_snapshot(
     .bind(APP_OVERRIDE_KEY_PREFIX)
     .fetch_all(&mut *transaction)
     .await?;
+    let app_links = sqlx::query(
+        "SELECT key,value FROM settings WHERE substr(key,1,12)='__app_link::' ORDER BY key",
+    )
+    .fetch_all(&mut *transaction)
+    .await?
+    .into_iter()
+    .map(|row| WidgetAppOverrideRow {
+        key: row.get("key"),
+        value: row.get("value"),
+    })
+    .collect();
     transaction.commit().await?;
 
     let mut settings_by_key = setting_rows
@@ -70,6 +82,7 @@ pub async fn load_widget_bootstrap_snapshot(
         .collect::<HashMap<_, _>>();
 
     Ok(WidgetBootstrapSnapshot {
+        app_links,
         settings: WidgetBootstrapSettings {
             tracking_paused: settings_by_key.remove(TRACKING_PAUSED_KEY),
             theme_mode: settings_by_key.remove(THEME_MODE_KEY),

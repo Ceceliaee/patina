@@ -37,6 +37,7 @@ pub async fn insert_for_restore(
             .map_err(|error| format!("failed to restore settings: {error}"))?;
     }
 
+    super::app_links::validate_in_tx(tx).await?;
     Ok(())
 }
 
@@ -53,5 +54,6 @@ pub async fn insert_missing_for_restore(
             .map_err(|error| format!("failed to merge restore settings: {error}"))?;
     }
 
+    super::app_links::validate_in_tx(tx).await?;
     Ok(())
 }

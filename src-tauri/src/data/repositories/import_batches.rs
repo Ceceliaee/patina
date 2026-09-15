@@ -121,7 +121,11 @@ pub async fn delete(pool: &Pool<Sqlite>, batch_id: &str) -> Result<ImportDeleteR
         .map_err(|error| {
             format!("failed to inspect remaining imported application records: {error}")
         })?;
-        if has_remaining_external_records {
+        if has_remaining_external_records
+            || super::app_links::is_linked_identity(&mut tx, &exe_name)
+                .await
+                .map_err(|error| format!("inspect linked application identity: {error}"))?
+        {
             continue;
         }
 

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { verifyWebDavRuntime } from "./tauriWebDavRuntime.ts";
+import { verifyLinkedApplicationsRuntime } from "./tauriLinkedApplicationsRuntime.ts";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -1735,6 +1736,7 @@ try {
 
   const storage = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_get_storage_snapshot")`);
   assert.equal(typeof storage, "object");
+  await verifyLinkedApplicationsRuntime((expression) => evaluate(client!, expression));
 
   // Freeze the isolated tracker before asserting read-model contents. A live
   // foreground sample is valid here, so the test waits for projections to
@@ -2137,6 +2139,7 @@ try {
   console.log("PATINA_THEME_COLD_RESTART_REPORT", JSON.stringify({ processRestart: true, presetContrast: 60, savedScheme: "catppuccin" }));
 
   console.log("PASS real Tauri runtime command/event/SQLite/capability smoke");
+  await verifyLinkedApplicationsRuntime((expression) => evaluate(client!, expression), true);
 } catch (error) {
   primaryError = error;
 } finally {

@@ -77,6 +77,7 @@ pub struct ResolvedCategory {
 
 #[derive(Clone, Debug, Default)]
 pub struct ClassificationSnapshot {
+    app_links: HashMap<String, String>,
     app_overrides: HashMap<String, ClassificationOverride>,
     web_overrides: HashMap<String, ClassificationOverride>,
     label_overrides: HashMap<String, String>,
@@ -90,6 +91,10 @@ impl ClassificationSnapshot {
     pub fn from_settings(rows: impl IntoIterator<Item = (String, String)>) -> Self {
         let mut snapshot = Self::default();
         for (key, value) in rows {
+            if let Some(member) = key.strip_prefix("__app_link::") {
+                snapshot.app_links.insert(member.to_string(), value);
+                continue;
+            }
             if key == "language" {
                 snapshot.locale = Locale::from_tag(Some(&value));
                 continue;
@@ -168,6 +173,14 @@ impl ClassificationSnapshot {
         if !self.is_app_enabled(&canonical) {
             return None;
         }
+        let association_key = crate::domain::tracking::resolve_app_override_executable(&canonical)
+            .unwrap_or_else(|| canonical.clone());
+        let canonical = self
+            .app_links
+            .get(&canonical)
+            .or_else(|| self.app_links.get(&association_key))
+            .cloned()
+            .unwrap_or(canonical);
         let raw_category = self
             .app_overrides
             .get(&canonical)
@@ -371,6 +384,28 @@ mod tests {
             classification.resolve_session_category("code.exe").id,
             "other"
         );
+    }
+
+    #[test]
+    fn linked_member_inherits_category_but_keeps_its_own_exclusion() {
+        let classification = snapshot(&[
+            ("__app_link::b.exe", "a.exe"),
+            (
+                "__app_override::a.exe",
+                r#"{"category":"office","track":false}"#,
+            ),
+            ("__app_override::b.exe", r#"{"category":"development"}"#),
+        ]);
+        assert_eq!(
+            classification
+                .resolve_tracked_session_category("b.exe")
+                .unwrap()
+                .id,
+            "office"
+        );
+        assert!(classification
+            .resolve_tracked_session_category("a.exe")
+            .is_none());
     }
 
     #[test]

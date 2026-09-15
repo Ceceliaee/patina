@@ -345,6 +345,14 @@ pub(super) async fn validate_current_schema(pool: &Pool<Sqlite>) -> Result<(), S
         return Err("restored sqlite snapshot did not reach the current schema".to_string());
     }
     read_counts(pool).await?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| format!("validate restored associations: {e}"))?;
+    crate::data::repositories::app_links::validate_in_tx(&mut tx).await?;
+    tx.rollback()
+        .await
+        .map_err(|e| format!("finish restored association validation: {e}"))?;
     Ok(())
 }
 

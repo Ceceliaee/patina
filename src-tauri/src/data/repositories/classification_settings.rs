@@ -182,6 +182,7 @@ async fn load_classification_setting_rows(
 fn classification_settings_query() -> String {
     "SELECT key, value FROM settings
      WHERE key = 'language'
+        OR substr(key,1,12) = '__app_link::'
         OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ?"
         .to_string()
 }
@@ -213,6 +214,10 @@ pub async fn apply_classification_setting_mutations_in_tx(
 ) -> Result<(), SqliteOperationError> {
     for mutation in mutations {
         validate_classification_setting_mutation(mutation)?;
+        if mutation.key.starts_with(super::app_links::APP_LINK_PREFIX) {
+            super::app_links::apply_change(tx, &mutation.key, mutation.value.as_deref()).await?;
+            continue;
+        }
         if let Some(value) = &mutation.value {
             sqlx::query(
                 "INSERT INTO settings (key, value) VALUES (?, ?)
@@ -235,6 +240,11 @@ pub async fn apply_classification_setting_mutations_in_tx(
                 })?;
         }
     }
+    super::app_links::validate_in_tx(tx)
+        .await
+        .map_err(|message| {
+            SqliteOperationError::invalid_input("validate application associations", message)
+        })?;
     Ok(())
 }
 
@@ -277,6 +287,7 @@ fn is_allowed_classification_setting_key(key: &str) -> bool {
     }
 
     [
+        super::app_links::APP_LINK_PREFIX,
         APP_OVERRIDE_KEY_PREFIX,
         WEB_DOMAIN_OVERRIDE_KEY_PREFIX,
         CATEGORY_COLOR_OVERRIDE_KEY_PREFIX,
