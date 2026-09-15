@@ -1,3 +1,5 @@
+import { AppClassification } from "../../../shared/classification/appClassification.ts";
+import type { AppLinks } from "../../../shared/classification/appLinks.ts";
 import { ProcessMapper } from "../../../shared/classification/processMapper.ts";
 import type { AppOverride } from "../../../shared/classification/processMapper.ts";
 import {
@@ -47,6 +49,7 @@ export type { AppOverride } from "../../../shared/classification/processMapper.t
 export type { ClassificationDraftState } from "./classificationDraftState.ts";
 
 export interface ClassificationBootstrapData {
+  loadedAppLinks?: AppLinks;
   observedWebDomains: ObservedWebDomainCandidate[];
   loadedOverrides: Record<string, AppOverride>;
   loadedWebDomainOverrides: Record<string, WebDomainOverride>;
@@ -80,6 +83,7 @@ export interface ClassificationCommitDeps {
 }
 
 export interface ClassificationBootstrapDeps {
+  loadAppLinks?: () => Promise<AppLinks>;
   loadObservedWebDomainCandidates: () => Promise<ObservedWebDomainCandidate[]>;
   loadAppOverrides: () => Promise<Record<string, AppOverride>>;
   loadWebDomainOverrides: () => Promise<Record<string, WebDomainOverride>>;
@@ -136,6 +140,7 @@ const classificationAppCatalogSnapshotStore = new ClassificationAppCatalogSnapsh
   }),
 });
 const defaultClassificationBootstrapDeps: ClassificationBootstrapDeps = {
+  loadAppLinks: () => classificationStore.loadAppLinks(),
   loadObservedWebDomainCandidates: () => ClassificationService.loadObservedWebDomainCandidates(),
   loadAppOverrides: () => classificationStore.loadAppOverrides(),
   loadWebDomainOverrides: () => classificationStore.loadWebDomainOverrides(),
@@ -221,6 +226,7 @@ export class ClassificationService {
     const generationAtRequestStart = classificationBootstrapGeneration;
     const request = (async () => {
       const [
+        loadedAppLinks,
         loadedOverrides,
         loadedCategoryColorOverrides,
         loadedCategoryLabelOverrides,
@@ -228,6 +234,7 @@ export class ClassificationService {
         loadedDeletedCategories,
         webClassificationData,
       ] = await Promise.all([
+        deps.loadAppLinks?.() ?? Promise.resolve({}),
         deps.loadAppOverrides(),
         deps.loadCategoryColorOverrides(),
         deps.loadCategoryLabelOverrides(),
@@ -239,6 +246,7 @@ export class ClassificationService {
       const sanitizedDeletedCategories = sanitizeDeletedCategories(loadedDeletedCategories ?? []);
 
       const bootstrap = {
+        loadedAppLinks,
         observedWebDomains: webClassificationData.observedWebDomains,
         loadedOverrides,
         loadedWebDomainOverrides: webClassificationData.loadedWebDomainOverrides,
@@ -288,6 +296,7 @@ export class ClassificationService {
   }
 
   static applyBootstrapToProcessMapper(bootstrap: ClassificationBootstrapData): void {
+    AppClassification.setAppLinks(bootstrap.loadedAppLinks ?? {});
     ProcessMapper.setUserOverrides(bootstrap.loadedOverrides);
     ProcessMapper.setCategoryColorOverrides(bootstrap.loadedCategoryColorOverrides);
     ProcessMapper.setCategoryLabelOverrides(bootstrap.loadedCategoryLabelOverrides);
@@ -299,6 +308,14 @@ export class ClassificationService {
   }
 
   static async saveAppOverride(exeName: string, override: AppOverride | null) {
+    if (!override?.displayName && AppClassification.getLinkedAppKeys(exeName).length > 1
+      && AppClassification.resolveStatisticalApp(exeName) === resolveCanonicalExecutable(exeName)) {
+      await this.ensureAppCatalogLoaded();
+      const candidate = this.getAppCatalogSnapshot().committed?.candidates
+        .find((item) => item.exeName === resolveCanonicalExecutable(exeName));
+      override = { ...override, enabled: true, displayName: AppClassification.mapAppWithoutOverride(exeName,
+        { appName: candidate?.appName }).name };
+    }
     await classificationStore.saveAppOverride(exeName, override);
     ProcessMapper.setUserOverride(exeName, override);
     const canonicalExe = resolveCanonicalExecutable(exeName);
@@ -344,7 +361,9 @@ export class ClassificationService {
   static async deleteObservedAppSessions(exeName: string, scope: "today" | "all" = "all") {
     await classificationStore.deleteObservedAppSessions(exeName, scope);
     if (scope === "all") {
-      ProcessMapper.setUserOverride(exeName, null);
+      if (AppClassification.getLinkedAppKeys(exeName).length === 1) {
+        ProcessMapper.setUserOverride(exeName, null);
+      }
       this.invalidateBootstrapCache();
       this.invalidateAppCatalog();
     }
@@ -367,6 +386,7 @@ export class ClassificationService {
   ): Promise<PreparedImportedClassification> {
     const bootstrap = await this.loadClassificationBootstrap();
     const saved: ClassificationDraftState = {
+      appLinks: { ...bootstrap.loadedAppLinks },
       overrides: { ...bootstrap.loadedOverrides },
       webDomainOverrides: { ...bootstrap.loadedWebDomainOverrides },
       categoryColorOverrides: { ...bootstrap.loadedCategoryColorOverrides },
@@ -414,6 +434,7 @@ export async function commitDraftChangesWithDeps(
 ): Promise<void> {
   const changePlan = buildClassificationDraftChangePlan(saved, draft);
   await deps.commitChangePlan(changePlan);
+  AppClassification.setAppLinks(draft.appLinks ?? {});
   deps.setUserOverrides(draft.overrides);
   deps.setCategoryColorOverrides(draft.categoryColorOverrides);
   deps.setCategoryLabelOverrides(draft.categoryLabelOverrides);

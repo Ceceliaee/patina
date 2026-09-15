@@ -1,3 +1,4 @@
+import { APP_LINK_KEY_PREFIX, validateAppLinks, type AppLinks } from "../../../shared/classification/appLinks.ts";
 import {
   deleteSessionsByExeNames,
   deleteSessionsByExeNamesBetween,
@@ -49,6 +50,8 @@ const DELETED_CATEGORY_KEY_PREFIX = "__deleted_category::";
 const USER_ASSIGNABLE_CATEGORY_SET = new Set<string>(USER_ASSIGNABLE_CATEGORIES);
 
 export interface ObservedAppCandidate {
+  searchText?: string;
+  memberCandidates?: ObservedAppCandidate[];
   exeName: string;
   appName: string;
   totalDuration: number;
@@ -265,7 +268,8 @@ export async function loadAppOverrides(): Promise<Record<string, AppOverride>> {
     ? { overrides, mutations: [] }
     : removeOrphanedAppOverrides(
       overrides,
-      (await loadDistinctSessionExeNames()).map((row) => row.exeName),
+      [...(await loadDistinctSessionExeNames()).map((row) => row.exeName),
+        ...Object.entries(await loadAppLinks()).flat()],
     );
 
   await commitClassificationSettingMutations([
@@ -274,6 +278,13 @@ export async function loadAppOverrides(): Promise<Record<string, AppOverride>> {
   ]);
 
   return cleanup.overrides;
+}
+
+export async function loadAppLinks(): Promise<AppLinks> {
+  const rows = await loadSettingRowsByKeyPrefix(APP_LINK_KEY_PREFIX);
+  const links = Object.fromEntries(rows.map((row) => [row.key.slice(APP_LINK_KEY_PREFIX.length), row.value]));
+  validateAppLinks(links);
+  return links;
 }
 
 export function removeOrphanedAppOverrides(
@@ -675,7 +686,12 @@ export function buildCommitDraftChangePlanSettingMutations(
 }
 
 export async function commitDraftChangePlan(changePlan: ClassificationDraftChangePlan): Promise<void> {
-  await commitClassificationSettingMutations(buildCommitDraftChangePlanSettingMutations(changePlan));
+  await commitClassificationSettingMutations([
+    ...buildCommitDraftChangePlanSettingMutations(changePlan),
+    ...(changePlan.appLinkChanges ?? []).map(({ member, parent, previous }) => ({
+      key: `${APP_LINK_KEY_PREFIX}${member}`, value: JSON.stringify({ parent, previous }),
+    })),
+  ]);
 }
 
 export async function loadAppCatalogPage(input: RecordedAppCatalogQueryInput) {

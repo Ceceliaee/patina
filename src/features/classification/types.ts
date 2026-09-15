@@ -1,4 +1,5 @@
 import type { AppCategory } from "../../shared/classification/categoryTokens.ts";
+import { AppClassification } from "../../shared/classification/appClassification.ts";
 
 export type CandidateFilter = "all" | "other" | "classified" | "excluded";
 export type { ObservedAppCandidate } from "./services/classificationStore";
@@ -43,7 +44,7 @@ export function createQuickAppClassificationTarget({
   }
   return {
     kind: "app",
-    exeName: normalizedExeName,
+    exeName: AppClassification.resolveStatisticalApp(normalizedExeName),
     displayName: displayName.trim() || normalizedExeName,
     category,
   };

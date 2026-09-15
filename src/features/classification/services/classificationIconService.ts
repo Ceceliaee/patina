@@ -1,9 +1,10 @@
 import {
-  getAppIcon,
   getCachedAppIconsForExecutables,
   loadAppIconsForExecutables,
 } from "../../../platform/persistence/appIconRuntimeCache.ts";
-import { resolveAppIconKeys } from "../../../shared/classification/appIconIdentity.ts";
+import { resolveExecutableIconKeys } from "../../../shared/classification/appIconIdentity.ts";
+import { AppClassification } from "../../../shared/classification/appClassification.ts";
+import { getIconsForExecutables } from "../../../platform/persistence/sessionReadRepository.ts";
 
 let classificationPresentationIcons: Record<string, string> = {};
 
@@ -12,7 +13,7 @@ function rememberRequestedIcon(
   exeName: string,
   icon: string,
 ) {
-  for (const key of resolveAppIconKeys(exeName)) {
+  for (const key of resolveExecutableIconKeys(exeName)) {
     icons[key] = icon;
   }
 }
@@ -22,7 +23,7 @@ export function getCachedClassificationIconsForExecutables(
 ): Record<string, string> {
   const icons = getCachedAppIconsForExecutables(exeNames);
   for (const exeName of exeNames) {
-    const icon = getAppIcon(classificationPresentationIcons, exeName);
+    const icon = resolveExecutableIconKeys(exeName).map((key) => classificationPresentationIcons[key]).find(Boolean);
     if (icon) rememberRequestedIcon(icons, exeName, icon);
   }
   return icons;
@@ -33,6 +34,13 @@ export async function loadClassificationIconsForExecutables(
   deps?: Parameters<typeof loadAppIconsForExecutables>[1],
 ): Promise<Record<string, string>> {
   classificationPresentationIcons = await loadAppIconsForExecutables(exeNames, deps);
+  // The editor needs each executable's own icon before an unlink draft is saved.
+  const members = exeNames.filter((exeName) => AppClassification.resolveStatisticalApp(exeName)
+    !== AppClassification.resolveCanonicalExecutable(exeName));
+  if (members.length > 0) {
+    const memberIcons = await (deps?.loadIcons ?? getIconsForExecutables)(members, "executable");
+    classificationPresentationIcons = { ...classificationPresentationIcons, ...memberIcons };
+  }
   return getCachedClassificationIconsForExecutables(exeNames);
 }
 

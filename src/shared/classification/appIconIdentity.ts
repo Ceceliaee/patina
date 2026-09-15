@@ -1,6 +1,13 @@
 import { AppClassification } from "./appClassification.ts";
 
 export function resolveAppIconKeys(exeName: string): string[] {
+  const canonicalExe = AppClassification.resolveCanonicalExecutable(exeName);
+  const parent = AppClassification.resolveStatisticalApp(exeName);
+  if (parent !== canonicalExe) return [parent];
+  return resolveExecutableIconKeys(exeName);
+}
+
+export function resolveExecutableIconKeys(exeName: string): string[] {
   const rawExe = exeName.trim();
   if (!rawExe) return [];
 

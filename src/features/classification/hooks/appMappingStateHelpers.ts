@@ -30,6 +30,7 @@ type WebDomainOverrideParams = {
 };
 
 type ClassificationBootstrapSnapshot = {
+  loadedAppLinks?: ClassificationDraftState["appLinks"];
   loadedOverrides: ClassificationDraftState["overrides"];
   loadedWebDomainOverrides: ClassificationDraftState["webDomainOverrides"];
   loadedCategoryColorOverrides: ClassificationDraftState["categoryColorOverrides"];
@@ -110,6 +111,7 @@ export function createAppMappingDraftState(
   bootstrap: ClassificationBootstrapSnapshot,
 ): ClassificationDraftState {
   return cloneClassificationDraftState({
+    appLinks: bootstrap.loadedAppLinks ?? {},
     overrides: bootstrap.loadedOverrides,
     webDomainOverrides: bootstrap.loadedWebDomainOverrides ?? {},
     categoryColorOverrides: bootstrap.loadedCategoryColorOverrides,

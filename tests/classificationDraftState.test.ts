@@ -997,6 +997,7 @@ await runTest("buildClassificationDraftChangePlan captures state diffs", () => {
   });
 
   assert.deepEqual(buildClassificationDraftChangePlan(saved, draft), {
+    appLinkChanges: [],
     overrideUpserts: [
       {
         exeName: "chrome.exe",
@@ -1072,6 +1073,7 @@ await runTest("createAppMappingDraftState clones bootstrap snapshots", () => {
   assert.deepEqual(snapshot.loadedPersistedCategoryIds, [categoryId]);
   assert.deepEqual(snapshot.loadedDeletedCategories, ["music"]);
   assert.deepEqual(cloned, {
+    appLinks: {},
     overrides: {
       "chrome.exe": {
         enabled: true,

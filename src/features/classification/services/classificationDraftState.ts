@@ -6,8 +6,10 @@ import {
 } from "../../../shared/classification/categoryTokens.ts";
 import type { AppOverride } from "../../../shared/classification/processMapper.ts";
 import type { WebDomainOverride } from "../../../shared/types/webActivity.ts";
+import { validateAppLinks, type AppLinks } from "../../../shared/classification/appLinks.ts";
 
 export interface ClassificationDraftState {
+  appLinks?: AppLinks;
   overrides: Record<string, AppOverride>;
   webDomainOverrides: Record<string, WebDomainOverride>;
   categoryColorOverrides: Record<string, string>;
@@ -17,6 +19,7 @@ export interface ClassificationDraftState {
 }
 
 export interface ClassificationDraftChangePlan {
+  appLinkChanges?: Array<{ member: string; parent: string | null; previous: string | null }>;
   overrideUpserts: Array<{ exeName: string; override: AppOverride | null }>;
   webDomainOverrideUpserts: Array<{ normalizedDomain: string; override: WebDomainOverride | null }>;
   categoryColorUpdates: Array<{ category: AppCategory; colorValue: string | null }>;
@@ -52,6 +55,7 @@ export function cloneClassificationDraftState(state: ClassificationDraftState): 
   }
 
   return {
+    appLinks: { ...state.appLinks },
     overrides,
     webDomainOverrides,
     categoryColorOverrides: { ...state.categoryColorOverrides },
@@ -147,6 +151,7 @@ export function hasClassificationDraftChanges(
   saved: ClassificationDraftState,
   draft: ClassificationDraftState,
 ): boolean {
+  if (!areStringMapsEqual(saved.appLinks ?? {}, draft.appLinks ?? {})) return true;
   if (!areStringMapsEqual(saved.categoryColorOverrides, draft.categoryColorOverrides)) {
     return true;
   }
@@ -191,6 +196,10 @@ export function buildClassificationDraftChangePlan(
   saved: ClassificationDraftState,
   draft: ClassificationDraftState,
 ): ClassificationDraftChangePlan {
+  validateAppLinks(draft.appLinks ?? {});
+  const appLinkChanges = [...new Set([...Object.keys(saved.appLinks ?? {}), ...Object.keys(draft.appLinks ?? {})])]
+    .filter((member) => saved.appLinks?.[member] !== draft.appLinks?.[member])
+    .map((member) => ({ member, parent: draft.appLinks?.[member] ?? null, previous: saved.appLinks?.[member] ?? null }));
   const sanitizedSavedDeletedCategories = sanitizeDeletedCategories(saved.deletedCategories);
   const sanitizedDraftDeletedCategories = sanitizeDeletedCategories(draft.deletedCategories);
 
@@ -279,6 +288,7 @@ export function buildClassificationDraftChangePlan(
   }
 
   return {
+    appLinkChanges,
     overrideUpserts,
     webDomainOverrideUpserts,
     categoryColorUpdates,

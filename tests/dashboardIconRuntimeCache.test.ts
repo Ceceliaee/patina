@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { AppClassification } from "../src/shared/classification/appClassification.ts";
 import {
   getDashboardIcon,
   getRetryableMissingDashboardIconExecutables,
@@ -122,6 +123,25 @@ await runTest("classification keeps its complete presentation snapshot beyond th
 
   const remounted = getCachedClassificationIconsForExecutables(exeNames);
   assert.equal(exeNames.every((exeName) => Boolean(remounted[exeName])), true);
+});
+
+await runTest("classification retains original member icons while saved links remain active", async () => {
+  AppClassification.setAppLinks({ "child.exe": "parent.exe" });
+  try {
+    const modes: string[] = [];
+    const icons = await loadClassificationIconsForExecutables(["parent.exe", "child.exe"], {
+      loadIcons: async (_requested, identity = "statistical") => {
+        modes.push(identity);
+        return identity === "executable" ? { "child.exe": "CHILD" } : { "parent.exe": "PARENT" };
+      },
+    });
+    assert.deepEqual(modes, ["statistical", "executable"]);
+    assert.equal(icons["parent.exe"], "PARENT");
+    assert.equal(icons["child.exe"], "CHILD");
+    assert.equal(getCachedClassificationIconsForExecutables(["child.exe"])["child.exe"], "CHILD");
+  } finally {
+    AppClassification.setAppLinks({});
+  }
 });
 
 console.log(`Passed ${passed} dashboard icon runtime cache tests`);

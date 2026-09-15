@@ -1,3 +1,4 @@
+import type { AppLinks } from "../../../shared/classification/appLinks.ts";
 import type { ObservedAppCandidate } from "../services/classificationStore.ts";
 import type { AppOverride } from "../services/classificationService.ts";
 import type { ObservedWebDomainCandidate, WebDomainOverride } from "../../../shared/types/webActivity.ts";
@@ -46,6 +47,7 @@ interface AppMappingSaveFlowDeps {
 interface AppMappingBootstrapSnapshot {
   observedWebDomains: ObservedWebDomainCandidate[];
   loadedOverrides: ClassificationDraftState["overrides"];
+  loadedAppLinks?: AppLinks;
   loadedWebDomainOverrides: ClassificationDraftState["webDomainOverrides"];
   loadedCategoryColorOverrides: ClassificationDraftState["categoryColorOverrides"];
   loadedCategoryLabelOverrides: ClassificationDraftState["categoryLabelOverrides"];
@@ -159,9 +161,9 @@ export function syncAppMappingNameDraft(
 ): AppMappingNameEditState {
   const current = state.draftState.overrides[candidate.exeName] ?? null;
   const trimmedDisplayName = nextInputValue.trim();
-  const displayName = trimmedDisplayName && trimmedDisplayName !== autoDisplayName
-    ? trimmedDisplayName
-    : undefined;
+  const linkedRoot = Object.values(state.draftState.appLinks ?? {}).includes(candidate.exeName);
+  const displayName = linkedRoot ? (trimmedDisplayName || autoDisplayName)
+    : trimmedDisplayName && trimmedDisplayName !== autoDisplayName ? trimmedDisplayName : undefined;
   const nextOverride = buildAppMappingOverride({
     category: current?.category,
     color: current?.color,
@@ -320,6 +322,7 @@ export async function saveAppMappingStateWithDeps(
       nextBootstrap: {
         observedWebDomains: input.webDomainCandidates.map((candidate) => ({ ...candidate })),
         loadedOverrides: { ...nextDraftState.overrides },
+        loadedAppLinks: { ...nextDraftState.appLinks },
         loadedWebDomainOverrides: { ...nextDraftState.webDomainOverrides },
         loadedCategoryColorOverrides: { ...nextDraftState.categoryColorOverrides },
         loadedCategoryLabelOverrides: { ...nextDraftState.categoryLabelOverrides },

@@ -1,6 +1,6 @@
 import { getDB } from "./sqlite.ts";
 import { AppClassification } from "../../shared/classification/appClassification.ts";
-import { resolveAppIconKeys } from "../../shared/classification/appIconIdentity.ts";
+import { resolveAppIconKeys, resolveExecutableIconKeys } from "../../shared/classification/appIconIdentity.ts";
 import type { HistorySession, TitleSampleDetail } from "../../shared/types/sessions.ts";
 import {
   resolveNativeSessionPrecedence,
@@ -67,21 +67,21 @@ function mapRawHistorySession(
   };
 }
 
-function addIconAliasesToMap(map: Record<string, string>, exeName: string, iconBase64: string): void {
-  for (const key of resolveAppIconKeys(exeName)) {
+function addIconAliasesToMap(map: Record<string, string>, exeName: string, iconBase64: string, resolveKeys = resolveAppIconKeys): void {
+  for (const key of resolveKeys(exeName)) {
     map[key] = iconBase64;
   }
 }
 
-function addIconRowToMap(map: Record<string, string>, row: RawIconCacheRow): void {
+function addIconRowToMap(map: Record<string, string>, row: RawIconCacheRow, resolveKeys = resolveAppIconKeys): void {
   const rawExe = (row.exe_name ?? "").trim();
   if (!rawExe || !row.icon_base64) return;
 
-  addIconAliasesToMap(map, rawExe, row.icon_base64);
+  addIconAliasesToMap(map, rawExe, row.icon_base64, resolveKeys);
 }
 
-function readIconFromMap(map: Record<string, string>, exeName: string): string | null {
-  for (const key of resolveAppIconKeys(exeName)) {
+function readIconFromMap(map: Record<string, string>, exeName: string, resolveKeys = resolveAppIconKeys): string | null {
+  for (const key of resolveKeys(exeName)) {
     const icon = map[key];
     if (icon) return icon;
   }
@@ -89,9 +89,10 @@ function readIconFromMap(map: Record<string, string>, exeName: string): string |
   return null;
 }
 
-export async function getIconsForExecutables(exeNames: string[]): Promise<Record<string, string>> {
+export async function getIconsForExecutables(exeNames: string[], identity: "statistical" | "executable" = "statistical"): Promise<Record<string, string>> {
+  const resolveKeys = identity === "executable" ? resolveExecutableIconKeys : resolveAppIconKeys;
   const lookupKeys = Array.from(new Set(
-    exeNames.flatMap((exeName) => resolveAppIconKeys(exeName)),
+    exeNames.flatMap((exeName) => resolveKeys(exeName)),
   ));
   const map: Record<string, string> = {};
 
@@ -110,14 +111,14 @@ export async function getIconsForExecutables(exeNames: string[]): Promise<Record
     );
 
     for (const row of rows) {
-      addIconRowToMap(map, row);
+      addIconRowToMap(map, row, resolveKeys);
     }
   }
 
   for (const exeName of exeNames) {
-    const icon = readIconFromMap(map, exeName);
+    const icon = readIconFromMap(map, exeName, resolveKeys);
     if (icon) {
-      addIconAliasesToMap(map, exeName, icon);
+      addIconAliasesToMap(map, exeName, icon, resolveKeys);
     }
   }
 

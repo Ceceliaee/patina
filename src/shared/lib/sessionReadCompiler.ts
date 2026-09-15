@@ -232,7 +232,9 @@ function prepareSession(
   context: SessionCompilationContext,
 ): CompiledSession {
   const rawEndTime = Math.max(session.startTime, getSessionRawEndTime(session));
-  const displayName = resolveCompiledDisplayName(session, appKey, context);
+  const statisticalKey = AppClassification.resolveStatisticalApp(appKey);
+  const displayName = statisticalKey !== appKey ? AppClassification.mapApp(statisticalKey).name
+    : resolveCompiledDisplayName(session, appKey, context);
   const cleanedTitle = cleanWindowTitle(session.windowTitle, session.exeName);
   const normalizedTitle = normalizeTitle(cleanedTitle, displayName);
   const rawTitleSamples = session.titleSampleDetails ?? [];
@@ -479,7 +481,8 @@ export function buildNormalizedAppStats(sessions: CompiledSession[]): AppStat[] 
   for (const session of sessions) {
     const duration = Math.max(0, session.duration ?? 0);
     const suspiciousDuration = Math.max(0, session.suspiciousDuration);
-    const existing = totals.get(session.appKey);
+    const statisticalKey = AppClassification.resolveStatisticalApp(session.appKey);
+    const existing = totals.get(statisticalKey);
 
     if (existing) {
       existing.totalDuration += duration;
@@ -494,10 +497,10 @@ export function buildNormalizedAppStats(sessions: CompiledSession[]): AppStat[] 
       continue;
     }
 
-    totals.set(session.appKey, {
+    totals.set(statisticalKey, {
       appName: session.displayName,
       appNameRank: session.displayNameRank,
-      exeName: resolveStatsExeName(session),
+      exeName: statisticalKey !== session.appKey ? statisticalKey : resolveStatsExeName(session),
       totalDuration: duration,
       suspiciousDuration: suspiciousDuration,
     });
