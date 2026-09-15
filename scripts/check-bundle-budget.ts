@@ -14,7 +14,9 @@ const INITIAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 310;
 // Data used to be part of the initial graph. It now has its own route and runtime
 // budgets, so this unchanged aggregate tracks the remaining primary lazy routes.
 const NON_DATA_PRIMARY_LAZY_ROUTES_GZIP_BUDGET_KI_B = 86.5;
-const TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 391.75;
+// Linked-application editing and shared identity add 3.54 KiB gzip over the
+// same-toolchain 378.26 KiB baseline. Retain the global 3% headroom contract.
+const TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 395;
 
 const INITIAL_CHUNK_BUDGETS = [
   { label: "index", pattern: /^index-.*\.js$/, gzipKiB: 65 },
@@ -28,12 +30,12 @@ const INITIAL_CHUNK_BUDGETS = [
   { label: "classification", pattern: /^appClassification-.*\.js$/, gzipKiB: 6 },
 ] as const;
 
-// WebDAV upload confirmation and failure messages retain the 3% owner headroom.
+// Linked-application controls add 0.05–0.07 KiB per translated locale.
 const LOCALE_CHUNK_GZIP_BUDGETS = {
   "zh-CN": 10.20,
-  "en-US": 9.70,
-  "ru-RU": 12.95,
-  "es": 10.95,
+  "en-US": 9.78,
+  "ru-RU": 13.04,
+  "es": 11.04,
 } as const satisfies Record<keyof typeof LOCALE_REGISTRY, number>;
 const LOCALE_CHUNK_BUDGETS = Object.entries(LOCALE_CHUNK_GZIP_BUDGETS).map(
   ([locale, gzipKiB]) => ({

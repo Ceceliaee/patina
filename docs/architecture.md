@@ -145,6 +145,8 @@ Tauri application command 采用显式、默认拒绝的窗口授权模型：
 
 前端通过 `platform/persistence/activityReadModelGateway.ts` 调用 typed Rust command，并继续在 feature service 内应用用户分类、别名和页面展示规则；这些可编辑规则不固化进活动汇总表。
 
+应用关联使用独立的成员到主程序设置，不修改 canonical executable 或原始会话。前端 `shared/classification/appLinks.ts` 拥有归属验证与解析，`AppClassification` 提供统计展示入口；Rust classification snapshot 在分类统计中解析归属。配置 repository 在同一事务中检查预期旧归属与最终完整关系，拒绝自身关联、嵌套和循环。来源优先级、时间裁剪与原程序排除先于归属聚合，精确明细保留原程序边界。备份恢复验证合并后的完整关系；清理记录保留仍被关联引用的展示配置和图标。
+
 这条通道不是默认自由边界，而是显式受控边界。规则如下：
 
 - 页面组件不能直接写 SQL
