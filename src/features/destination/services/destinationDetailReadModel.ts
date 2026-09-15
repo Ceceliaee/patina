@@ -1,3 +1,4 @@
+import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import {
   getHistoryByDate,
 } from "../../../platform/persistence/sessionReadRepository.ts";
@@ -240,7 +241,7 @@ function buildAppDetailActivityMemberships(
   clipEndMs: number,
   mergeThresholdSecs: number,
 ) {
-  const identityKeys = new Set(target.identityKeys.map(normalizeIdentityKey));
+  const identityKeys = new Set(target.identityKeys.flatMap((key) => AppClassification.getLinkedAppKeys(key)).map(normalizeIdentityKey));
   const compiled = compileSessions([...sessions], {
     startMs: dayStartMs,
     endMs: clipEndMs,
@@ -285,6 +286,7 @@ function buildAppDetailRecords(
     const membership = memberships.get(String(session.id));
     if (!membership) continue;
     const sessionEnd = resolveMaterializedSessionEnd(session);
+    const secondaryText = AppClassification.getLinkedAppKeys(session.exeName).length > 1 ? session.exeName : null;
     const { activityId, sourceActivityIds } = membership;
 
     const compiledSession = compileSessions([session], {
@@ -315,7 +317,7 @@ function buildAppDetailRecords(
         startTime: session.startTime,
         endTime: sessionEnd,
         title: cleanOptionalText(compiledSession?.displayTitle),
-        secondaryText: null,
+        secondaryText,
         url: null,
         current: session.endTime === null,
       });
@@ -332,7 +334,7 @@ function buildAppDetailRecords(
           startTime: cursor,
           endTime: sample.startTime,
           title: null,
-          secondaryText: null,
+          secondaryText,
           url: null,
           current: false,
         });
@@ -347,7 +349,7 @@ function buildAppDetailRecords(
         startTime: sampleStartTime,
         endTime: sample.endTime,
         title: cleanOptionalText(sample.title),
-        secondaryText: null,
+        secondaryText,
         url: null,
         current: session.endTime === null && sample.endTime >= sessionEnd,
       });
@@ -362,7 +364,7 @@ function buildAppDetailRecords(
         startTime: cursor,
         endTime: sessionEnd,
         title: null,
-        secondaryText: null,
+        secondaryText,
         url: null,
         current: session.endTime === null,
       });

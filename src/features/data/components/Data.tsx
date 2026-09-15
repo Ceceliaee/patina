@@ -13,6 +13,7 @@ import {
   buildDataTrendAggregateContext,
   buildDataTrendViewModelFromAggregate,
   buildDataTrendViewModel,
+  toAppPanelOption,
   type DataAppTrendViewModel,
 } from "../services/dataReadModel.ts";
 import {
@@ -117,27 +118,6 @@ const DEFAULT_DATA_APP_CHART_AXIS: DataAppTrendViewModel["chartAxis"] = {
   ticks: [0, 1, 2, 3],
 };
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
-
-function toAppPanelOption(
-  app: DataAppTrendViewModel["appOptions"][number],
-  icons: Record<string, string>,
-): DataDestinationTrendOption {
-  const mapped = AppClassification.mapApp(app.exeName, { appName: app.appName });
-  return {
-    key: app.appKey,
-    identityKeys: app.sourceAppKeys?.length ? [...app.sourceAppKeys] : [app.appKey],
-    exeName: app.exeName,
-    classificationCategory: mapped.category,
-    unclassified: mapped.category === "other",
-    displayName: app.appName,
-    secondaryText: app.exeName,
-    iconUrl: icons[app.exeName] ?? null,
-    totalDuration: app.totalDuration,
-    percentage: app.percentage,
-    averageDuration: app.averageDuration,
-    activeDayCount: app.activeDayCount,
-  };
-}
 
 function toCategoryPanelOption(
   category: DataCategoryTrendViewModel["categoryOptions"][number],
@@ -492,7 +472,7 @@ export default function Data({
       return;
     }
     const reconciled = reconcileDataDestinationSelection(
-      selectedAppKeys,
+      selectedAppKeys.map((key) => AppClassification.resolveStatisticalApp(key)),
       dedupedAppOptions.map((app) => app.appKey),
     );
     appSelectionRevisionRef.current = mappingVersion;

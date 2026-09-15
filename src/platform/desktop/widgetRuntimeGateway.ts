@@ -46,6 +46,7 @@ interface RawWidgetBootstrapSnapshot {
   settings: RawWidgetBootstrapSettings;
   pinned: boolean;
   app_overrides: RawWidgetAppOverrideRow[];
+  app_links: RawWidgetAppOverrideRow[];
 }
 
 interface RawWidgetTrackingProjection {
@@ -129,6 +130,7 @@ export interface WidgetBootstrapSnapshot {
   settings: WidgetBootstrapSettings;
   pinned: boolean;
   appOverrides: WidgetAppOverrideRow[];
+  appLinks: WidgetAppOverrideRow[];
 }
 
 interface WidgetTrackingProjection {
@@ -234,7 +236,9 @@ function isRawWidgetBootstrapSnapshot(value: unknown): value is RawWidgetBootstr
   return isRawWidgetBootstrapSettings(record.settings)
     && typeof record.pinned === "boolean"
     && Array.isArray(record.app_overrides)
-    && record.app_overrides.every(isRawWidgetAppOverrideRow);
+    && record.app_overrides.every(isRawWidgetAppOverrideRow)
+    && Array.isArray(record.app_links)
+    && record.app_links.every(isRawWidgetAppOverrideRow);
 }
 
 function mapRawWidgetPlacement(raw: RawWidgetPlacement): WidgetPlacement {
@@ -273,6 +277,7 @@ export function parseWidgetBootstrapSnapshot(value: unknown): WidgetBootstrapSna
       colorSchemeDark: value.settings.color_scheme_dark,
     },
     pinned: value.pinned,
+    appLinks: value.app_links.map((row) => ({ key: row.key, value: row.value })),
     appOverrides: value.app_overrides.map((row) => ({
       key: row.key,
       value: row.value,

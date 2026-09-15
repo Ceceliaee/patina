@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { AppClassification } from "../../shared/classification/appClassification.ts";
 import type { MouseEvent, PointerEvent } from "react";
 import {
   Clock3,
@@ -103,7 +104,8 @@ function LocalizedWidgetShell({
     setStatusElapsedMs(0);
   }, [displayWidgetStatus]);
   const statusViewModel = buildWidgetStatusViewModel(displayWidgetStatus, statusElapsedMs);
-  const trackingIconKey = displayWidgetStatus?.tracking?.exeName ?? viewModel.objectIconKey;
+  const trackingExe = displayWidgetStatus?.tracking?.exeName ?? viewModel.objectIconKey;
+  const trackingIconKey = trackingExe ? AppClassification.resolveStatisticalApp(trackingExe) : null;
   const objectIcon = useWidgetObjectIcon(trackingIconKey);
   const toolSlotCount = statusViewModel.tools.length;
   const objectSlotTitle = uiText.accessibility.widget.currentApp(viewModel.appName);

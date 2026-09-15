@@ -61,7 +61,8 @@ export function resolveStatisticalDataAppKey(session: AggregateSessionRecord): s
   }
 
   const appKey = AppClassification.resolveCanonicalExecutable(session.exeName);
-  return appKey && AppClassification.isAppTrackingEnabledByUser(appKey) ? appKey : null;
+  return appKey && AppClassification.isAppTrackingEnabledByUser(appKey)
+    ? AppClassification.resolveStatisticalApp(appKey) : null;
 }
 
 export function getHeatmapRange(selection: HeatmapSelection, nowMs: number): HeatmapRange {

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { AppClassification } from "../src/shared/classification/appClassification.ts";
 import {
   getWidgetIconCacheSizeForTests,
   loadWidgetObjectIconWithDeps,
@@ -389,6 +390,7 @@ await runTest("applyWidgetBootstrapSnapshot restores only widget settings and ap
       color_scheme_dark: "nord",
     },
     pinned: true,
+    app_links: [{ key: "__app_link::child.exe", value: "editor.exe" }],
     app_overrides: [
       {
         key: "__app_override::editor.exe",
@@ -413,6 +415,9 @@ await runTest("applyWidgetBootstrapSnapshot restores only widget settings and ap
   assert.equal(bootstrap.settings.webActivityToken, "");
   assert.equal(ProcessMapper.map("editor.exe").name, "Quiet Editor");
   assert.equal(ProcessMapper.shouldTrack("editor.exe"), false);
+  assert.equal(AppClassification.mapApp("child.exe").name, "Quiet Editor");
+  assert.equal(AppClassification.resolveStatisticalApp("child.exe"), "editor.exe");
+  AppClassification.setAppLinks({});
   ProcessMapper.clearUserOverrides();
 });
 

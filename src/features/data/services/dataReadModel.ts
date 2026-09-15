@@ -21,7 +21,27 @@ import { pickPreferredAppName } from "../../../shared/lib/displayNameScoring.ts"
 import {
   resolveStatisticalDataAppKey,
 } from "./dataHeatmapReadModel.ts";
-import type { DataDestinationTrendSummary } from "./dataDestinationState.ts";
+import type { DataDestinationTrendSummary, DataDestinationTrendOption } from "./dataDestinationState.ts";
+
+export function toAppPanelOption(
+  app: DataAppTrendViewModel["appOptions"][number], icons: Record<string, string>,
+): DataDestinationTrendOption {
+  const mapped = AppClassification.mapApp(app.exeName, { appName: app.appName });
+  return {
+    key: app.appKey,
+    identityKeys: app.sourceAppKeys?.length ? [...app.sourceAppKeys] : [app.appKey],
+    exeName: app.exeName,
+    classificationCategory: mapped.category,
+    unclassified: mapped.category === "other",
+    displayName: app.appName,
+    secondaryText: app.exeName,
+    iconUrl: icons[app.exeName] ?? null,
+    totalDuration: app.totalDuration,
+    percentage: app.percentage,
+    averageDuration: app.averageDuration,
+    activeDayCount: app.activeDayCount,
+  };
+}
 
 export {
   buildActivityHeatmap,

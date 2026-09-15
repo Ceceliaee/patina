@@ -1,3 +1,4 @@
+import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import type { DailySummary, HistorySession } from "../../../shared/types/sessions.ts";
 import type { TrackerHealthSnapshot } from "../../../shared/types/tracking.ts";
 import type {
@@ -199,7 +200,7 @@ function collectHistoryIconExecutables(...sessionGroups: HistoryIconRecord[][]):
     }
   }
 
-  return result;
+  return [...new Set(result.flatMap((key) => [key, AppClassification.resolveStatisticalApp(key)]))];
 }
 
 function getCachedHistoryIconMap(

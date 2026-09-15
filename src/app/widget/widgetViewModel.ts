@@ -56,7 +56,7 @@ function buildActiveTrackingViewModel(
     statusTone: options.statusTone,
     statusLabel: options.statusLabel,
     appName: trackableAppName ?? text.currentApp,
-    objectIconKey: activeWindow ? AppClassification.resolveCanonicalExecutable(activeWindow.exeName) : null,
+    objectIconKey: activeWindow ? AppClassification.resolveStatisticalApp(activeWindow.exeName) : null,
   };
 }
 

@@ -341,6 +341,9 @@ function resolveAppSourceColor(
   session: CompiledSession,
   iconThemeColors: Record<string, string>,
 ) {
+  const parent = AppClassification.resolveStatisticalApp(session.appKey);
+  if (parent !== session.appKey) return AppClassification.getUserOverride(parent)?.color
+    ?? iconThemeColors[parent] ?? AppClassification.mapApp(parent).color;
   const overrideColor = AppClassification.getUserOverride(session.appKey)?.color
     ?? AppClassification.getUserOverride(session.exeName)?.color;
   const mapped = AppClassification.mapApp(session.appKey, { appName: session.displayName });
@@ -366,7 +369,7 @@ export function buildAppTimelineSources(
       sourceColor: resolveAppSourceColor(session, iconThemeColors),
       iconKeys: Array.from(new Set([
         ...resolveAppIconKeys(session.exeName),
-        session.appKey,
+        AppClassification.resolveStatisticalApp(session.appKey),
       ].filter(Boolean))),
       category: mapped.category,
       categoryLabel: AppClassification.getCategoryLabel(mapped.category, uiText),
