@@ -1016,7 +1016,13 @@ export const LOCALE_SOURCE_REVIEWS = {
     "settings.webDavNameConflict": "0c4478a5cdead0e3",
     "settings.webDavTargetChanged": "9884aad455561c36",
     "settings.webDavDirectoryFailed": "804b1a8d20ced762",
-    "settings.webDavUploadUncertain": "089e1e07eae4913a"
+    "settings.webDavUploadUncertain": "089e1e07eae4913a",
+    "mapping.linkedApps": "958d26f3cee4db27",
+    "mapping.addLinkedApp": "adcb5f3e26c8afd3",
+    "mapping.mainApp": "bfca60b539810636",
+    "mapping.unlinkApp": "dc8f07311fccea45",
+    "mapping.backToLinkedApps": "74f91c7ca613a7d4",
+    "mapping.individualControls": "fa430a17e7f2d167"
   },
   "es": {
     "about.description": "f16fb3f9d1381864",
@@ -2034,7 +2040,13 @@ export const LOCALE_SOURCE_REVIEWS = {
     "settings.webDavNameConflict": "0c4478a5cdead0e3",
     "settings.webDavTargetChanged": "9884aad455561c36",
     "settings.webDavDirectoryFailed": "804b1a8d20ced762",
-    "settings.webDavUploadUncertain": "089e1e07eae4913a"
+    "settings.webDavUploadUncertain": "089e1e07eae4913a",
+    "mapping.linkedApps": "958d26f3cee4db27",
+    "mapping.addLinkedApp": "adcb5f3e26c8afd3",
+    "mapping.mainApp": "bfca60b539810636",
+    "mapping.unlinkApp": "dc8f07311fccea45",
+    "mapping.backToLinkedApps": "74f91c7ca613a7d4",
+    "mapping.individualControls": "fa430a17e7f2d167"
   },
   "ru-RU": {
     "about.description": "f16fb3f9d1381864",
@@ -3052,6 +3064,12 @@ export const LOCALE_SOURCE_REVIEWS = {
     "settings.webDavNameConflict": "0c4478a5cdead0e3",
     "settings.webDavTargetChanged": "9884aad455561c36",
     "settings.webDavDirectoryFailed": "804b1a8d20ced762",
-    "settings.webDavUploadUncertain": "089e1e07eae4913a"
+    "settings.webDavUploadUncertain": "089e1e07eae4913a",
+    "mapping.linkedApps": "958d26f3cee4db27",
+    "mapping.addLinkedApp": "adcb5f3e26c8afd3",
+    "mapping.mainApp": "bfca60b539810636",
+    "mapping.unlinkApp": "dc8f07311fccea45",
+    "mapping.backToLinkedApps": "74f91c7ca613a7d4",
+    "mapping.individualControls": "fa430a17e7f2d167"
   }
 } as const;

@@ -609,7 +609,9 @@ export interface UiText {
     "remainingCategories": string;
   };
   "mapping": {
+    "addLinkedApp": string;
     "appSearchPlaceholder": string;
+    "backToLinkedApps": string;
     "cancel": string;
     "categoryControl": string;
     "categoryDialogDescription": string;
@@ -648,8 +650,11 @@ export interface UiText {
     };
     "globalTitleDisabled": string;
     "idle": string;
+    "individualControls": string;
+    "linkedApps": string;
     "loadFailed": string;
     "loading": string;
+    "mainApp": string;
     "noStats": string;
     "objectModeApp": string;
     "objectModeWeb": string;
@@ -687,6 +692,7 @@ export interface UiText {
     "titleRecorded": string;
     "trackingOffHint": string;
     "trackingOnHint": string;
+    "unlinkApp": string;
     "unsaved": string;
     "webEmptyState": string;
     "webSearchPlaceholder": string;

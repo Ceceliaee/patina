@@ -1,5 +1,11 @@
 // zh-CN mapping locale resource. Pure data only.
 export const MESSAGES = {
+  "mapping.linkedApps": "关联应用",
+  "mapping.addLinkedApp": "添加应用",
+  "mapping.mainApp": "主程序",
+  "mapping.unlinkApp": "解除关联",
+  "mapping.backToLinkedApps": "返回关联应用",
+  "mapping.individualControls": "标题、追踪和删除仅作用于所选程序",
   "mapping.saveFailed": "保存失败，请重试。",
   "mapping.deleteFailed": "删除记录未完成，请重试。",
 

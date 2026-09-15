@@ -1,5 +1,11 @@
 // ru-RU locale resource. Pure data only.
 export const MESSAGES = {
+  "mapping.linkedApps": "Связанные приложения",
+  "mapping.addLinkedApp": "Добавить приложение",
+  "mapping.mainApp": "Основное приложение",
+  "mapping.unlinkApp": "Отвязать приложение",
+  "mapping.backToLinkedApps": "Назад к связанным приложениям",
+  "mapping.individualControls": "Запись заголовков, отслеживание и удаление относятся только к выбранной программе",
   "mapping.saveFailed": "Не удалось сохранить изменения. Повторите попытку.",
   "mapping.deleteFailed": "Не удалось завершить удаление записей. Повторите попытку.",
   "mapping.titleCaptureOnHint": "Запись заголовков включена. Нажмите, чтобы отключить.",

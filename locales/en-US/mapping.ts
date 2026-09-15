@@ -1,5 +1,11 @@
 // en-US mapping locale resource. Pure data only.
 export const MESSAGES = {
+  "mapping.linkedApps": "Linked applications",
+  "mapping.addLinkedApp": "Add application",
+  "mapping.mainApp": "Main application",
+  "mapping.unlinkApp": "Unlink application",
+  "mapping.backToLinkedApps": "Back to linked applications",
+  "mapping.individualControls": "Title recording, tracking and deletion apply only to the selected program",
   "mapping.saveFailed": "Could not save changes. Try again.",
   "mapping.deleteFailed": "Could not finish deleting records. Try again.",
 

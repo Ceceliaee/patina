@@ -1,5 +1,11 @@
 // es locale resource. Pure data only.
 export const MESSAGES = {
+  "mapping.linkedApps": "Aplicaciones vinculadas",
+  "mapping.addLinkedApp": "Añadir aplicación",
+  "mapping.mainApp": "Aplicación principal",
+  "mapping.unlinkApp": "Desvincular aplicación",
+  "mapping.backToLinkedApps": "Volver a aplicaciones vinculadas",
+  "mapping.individualControls": "Los títulos, el seguimiento y la eliminación solo afectan al programa seleccionado",
   "mapping.saveFailed": "No se pudieron guardar los cambios. Inténtalo de nuevo.",
   "mapping.deleteFailed": "No se pudo completar la eliminación de los registros. Inténtalo de nuevo.",
 

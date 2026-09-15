@@ -1,5 +1,11 @@
 // Canonical language-neutral message contract. Do not derive this file from a locale at build time.
 export const MESSAGE_SCHEMA = {
+  "mapping.linkedApps": { "kind": "string", "params": [], "surface": "frontend" },
+  "mapping.addLinkedApp": { "kind": "string", "params": [], "surface": "frontend" },
+  "mapping.mainApp": { "kind": "string", "params": [], "surface": "frontend" },
+  "mapping.unlinkApp": { "kind": "string", "params": [], "surface": "frontend" },
+  "mapping.backToLinkedApps": { "kind": "string", "params": [], "surface": "frontend" },
+  "mapping.individualControls": { "kind": "string", "params": [], "surface": "frontend" },
 
 
   "about.description": {
