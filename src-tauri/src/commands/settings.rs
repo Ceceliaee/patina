@@ -207,6 +207,29 @@ pub async fn cmd_commit_classification_settings(
         .map_err(|error| CommandErrorDto::new("CLASSIFICATION_APPLY_FAILED", error, false))
 }
 
+#[tauri::command]
+pub async fn cmd_get_web_links(
+    app: AppHandle,
+    start_ms: Option<i64>,
+    end_ms: Option<i64>,
+    now_ms: Option<i64>,
+) -> Result<crate::data::repositories::web_links::WebLinksSnapshot, String> {
+    let pool = crate::data::sqlite_pool::wait_for_sqlite_pool(&app).await?;
+    match (start_ms, end_ms) {
+        (None, None) => crate::data::repositories::web_links::snapshot(&pool).await,
+        (Some(start), Some(end)) => {
+            crate::data::repositories::web_links::snapshot_range(
+                &pool,
+                start,
+                end,
+                now_ms.unwrap_or_else(|| chrono::Utc::now().timestamp_millis()),
+            )
+            .await
+        }
+        _ => Err("incomplete website detail range".into()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

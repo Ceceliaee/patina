@@ -1,6 +1,7 @@
 use crate::data::sqlite_pool::wait_for_sqlite_pool;
 use crate::domain::web_activity::normalize_domain;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use sqlx::{Pool, QueryBuilder, Row, Sqlite};
 use std::collections::{BTreeMap, BTreeSet};
 use tauri::{AppHandle, Runtime};
@@ -26,6 +27,7 @@ pub struct WebActivityDomainCoverageDto {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WebActivityAggregateRangeDto {
+    pub web_links: crate::data::repositories::web_links::WebLinksSnapshot,
     pub records: Vec<WebActivityAggregateRecordDto>,
     pub domain_coverage: Vec<WebActivityDomainCoverageDto>,
     pub source_revision: String,
@@ -154,6 +156,38 @@ pub async fn load_web_activity_aggregate_range_from_pool(
         .begin()
         .await
         .map_err(|error| format!("failed to begin web activity aggregate snapshot: {error}"))?;
+    let web_links = crate::data::repositories::web_links::snapshot_in_tx(&mut transaction).await?;
+    let website_rules = &web_links.rules;
+    let domain_filter = if let Some(selected) = domain_filter {
+        if selected
+            .iter()
+            .any(|key| key.starts_with(crate::domain::web_links::LINK_GROUP_PREFIX))
+        {
+            Some(
+                web_links
+                    .domains
+                    .iter()
+                    .filter(|domain| {
+                        selected.contains(domain)
+                            || selected.contains(&crate::domain::web_links::resolve_owner(
+                                domain,
+                                website_rules,
+                            ))
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>(),
+            )
+        } else {
+            Some(selected)
+        }
+    } else {
+        None
+    };
+    let domain_filter_json = domain_filter
+        .as_ref()
+        .map(serde_json::to_string)
+        .transpose()
+        .map_err(|error| error.to_string())?;
     let source_revision = sqlx::query_scalar::<_, i64>(
         "SELECT source_revision FROM web_activity_revision WHERE id = 1",
     )
@@ -167,13 +201,11 @@ pub async fn load_web_activity_aggregate_range_from_pool(
     segment_query
         .push_bind(now_ms)
         .push(")) effective_end_time FROM web_activity_segments WHERE ");
-    if let Some(domains) = domain_filter.as_ref() {
-        segment_query.push("normalized_domain IN (");
-        let mut separated = segment_query.separated(", ");
-        for domain in domains {
-            separated.push_bind(domain);
-        }
-        separated.push_unseparated(") AND ");
+    if let Some(domains) = domain_filter_json.as_ref() {
+        segment_query
+            .push("normalized_domain IN (SELECT value FROM json_each(")
+            .push_bind(domains)
+            .push(")) AND ");
     }
     segment_query
         .push("start_time < ")
@@ -207,16 +239,14 @@ pub async fn load_web_activity_aggregate_range_from_pool(
         })
         .collect();
 
-    let domain_coverage = if let Some(domains) = domain_filter.as_ref() {
+    let domain_coverage = if let Some(domains) = domain_filter_json.as_ref() {
         let mut coverage_query = QueryBuilder::<Sqlite>::new(
             "SELECT normalized_domain, MIN(start_time) earliest_recorded_start_ms \
-             FROM web_activity_segments WHERE normalized_domain IN (",
+             FROM web_activity_segments WHERE normalized_domain IN (SELECT value FROM json_each(",
         );
-        let mut separated = coverage_query.separated(", ");
-        for domain in domains {
-            separated.push_bind(domain);
-        }
-        separated.push_unseparated(") GROUP BY normalized_domain");
+        coverage_query
+            .push_bind(domains)
+            .push(")) GROUP BY normalized_domain");
         let coverage_rows = coverage_query
             .build()
             .fetch_all(&mut *transaction)
@@ -238,10 +268,15 @@ pub async fn load_web_activity_aggregate_range_from_pool(
         .await
         .map_err(|error| format!("failed to commit web activity aggregate snapshot: {error}"))?;
 
+    let grouping_hash = format!(
+        "{:x}",
+        Sha256::digest(serde_json::to_vec(&web_links).map_err(|error| error.to_string())?)
+    );
     Ok(WebActivityAggregateRangeDto {
+        web_links,
         records: aggregate_segments(segments, bucket_boundaries_ms),
         domain_coverage,
-        source_revision: source_revision.to_string(),
+        source_revision: format!("{source_revision}:{grouping_hash}"),
         snapshot_now_ms: now_ms,
     })
 }
@@ -292,6 +327,104 @@ mod tests {
             .await
             .unwrap();
         pool
+    }
+
+    #[tokio::test]
+    async fn website_filter_snapshot_and_revision_preserve_raw_facts() {
+        let pool = setup_test_db().await;
+        for (index, domain) in [
+            "www.example.com",
+            "mail.example.com",
+            "a.mail.example.com",
+            "other.com",
+        ]
+        .iter()
+        .enumerate()
+        {
+            let start = index as i64 * 1000;
+            sqlx::query("INSERT INTO web_activity_segments(browser_client_id,browser_kind,browser_exe_name,domain,normalized_domain,start_time,end_time,duration,source,created_at,updated_at) VALUES('a','chrome','chrome.exe',?,?,?, ?,1000,'test',0,0)")
+                .bind(domain).bind(domain).bind(start).bind(start+1000).execute(&pool).await.unwrap();
+        }
+        let before = load_web_activity_aggregate_range_from_pool(
+            &pool,
+            0,
+            10000,
+            &[0, 10000],
+            None,
+            None,
+            10000,
+        )
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO settings(key,value) VALUES('__web_site::example.com',?)")
+            .bind(r#"{"members":["www.example.com","a.mail.example.com"]}"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let after = load_web_activity_aggregate_range_from_pool(
+            &pool,
+            0,
+            10000,
+            &[0, 10000],
+            None,
+            None,
+            10000,
+        )
+        .await
+        .unwrap();
+        assert_ne!(before.source_revision, after.source_revision);
+        assert_eq!(
+            before
+                .records
+                .iter()
+                .map(|row| row.duration_ms)
+                .sum::<i64>(),
+            after.records.iter().map(|row| row.duration_ms).sum::<i64>()
+        );
+        assert!(after
+            .web_links
+            .domains
+            .contains(&"a.mail.example.com".into()));
+        assert!(after.web_links.domains.contains(&"example.com".into()));
+        let website = load_web_activity_aggregate_range_from_pool(
+            &pool,
+            0,
+            10000,
+            &[0, 10000],
+            Some("site:example.com"),
+            None,
+            10000,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            website
+                .records
+                .iter()
+                .map(|row| row.duration_ms)
+                .sum::<i64>(),
+            2000
+        );
+        assert!(website
+            .records
+            .iter()
+            .all(|row| row.normalized_domain != "mail.example.com"));
+        let raw = sqlx::query_scalar::<_, String>(
+            "SELECT normalized_domain FROM web_activity_segments ORDER BY start_time",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            raw,
+            vec![
+                "www.example.com",
+                "mail.example.com",
+                "a.mail.example.com",
+                "other.com"
+            ]
+        );
+        pool.close().await;
     }
 
     #[tokio::test]
@@ -610,7 +743,7 @@ mod tests {
                     earliest_recorded_start_ms: 5,
                 }],
             );
-            assert_eq!(result.source_revision, "2");
+            assert_eq!(result.source_revision.split(':').next(), Some("2"));
             assert_eq!(result.snapshot_now_ms, 25);
         });
     }

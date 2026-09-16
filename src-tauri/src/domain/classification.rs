@@ -80,6 +80,7 @@ pub struct ClassificationSnapshot {
     app_links: HashMap<String, String>,
     app_overrides: HashMap<String, ClassificationOverride>,
     web_overrides: HashMap<String, ClassificationOverride>,
+    web_sites: crate::domain::web_links::WebLinkRules,
     label_overrides: HashMap<String, String>,
     color_overrides: HashMap<String, String>,
     custom_categories: HashSet<String>,
@@ -91,6 +92,12 @@ impl ClassificationSnapshot {
     pub fn from_settings(rows: impl IntoIterator<Item = (String, String)>) -> Self {
         let mut snapshot = Self::default();
         for (key, value) in rows {
+            if let Some(root) = key.strip_prefix(crate::domain::web_links::SETTING_PREFIX) {
+                if let Ok(rule) = serde_json::from_str(&value) {
+                    snapshot.web_sites.insert(root.to_string(), rule);
+                }
+                continue;
+            }
             if let Some(member) = key.strip_prefix("__app_link::") {
                 snapshot.app_links.insert(member.to_string(), value);
                 continue;
@@ -208,10 +215,17 @@ impl ClassificationSnapshot {
         if !self.is_web_domain_enabled(&domain) {
             return None;
         }
-        let raw_category = self
-            .web_overrides
-            .get(&domain)
-            .and_then(|value| value.category.clone())
+        let owner = crate::domain::web_links::resolve_owner(&domain, &self.web_sites);
+        let raw_category =
+            if let Some(root) = owner.strip_prefix(crate::domain::web_links::LINK_GROUP_PREFIX) {
+                self.web_sites
+                    .get(root)
+                    .and_then(|rule| rule.category.clone())
+            } else {
+                self.web_overrides
+                    .get(&domain)
+                    .and_then(|value| value.category.clone())
+            }
             .unwrap_or_else(|| "other".to_string());
         Some(self.resolve_category(raw_category))
     }

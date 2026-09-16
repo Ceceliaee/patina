@@ -121,6 +121,7 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::settings::cmd_set_background_optimization,
         commands::settings::cmd_commit_app_settings,
         commands::settings::cmd_commit_classification_settings,
+        commands::settings::cmd_get_web_links,
         commands::settings::cmd_get_legacy_classification_apps,
         commands::export::cmd_pick_export_save_file,
         commands::export::cmd_export_data,
@@ -231,6 +232,8 @@ fn register_runtime_hooks(
             )
             .map_err(std::io::Error::other)?;
             tauri::async_runtime::block_on(data::sqlite_pool::initialize_app_sqlite(app.handle()))
+                .map_err(std::io::Error::other)?;
+            tauri::async_runtime::block_on(data::app_settings_service::migrate_legacy_web_links(app.handle()))
                 .map_err(std::io::Error::other)?;
             let mut should_clear_update_reopen_intent = false;
             let startup = match tauri::async_runtime::block_on(

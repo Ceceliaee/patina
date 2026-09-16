@@ -163,6 +163,7 @@ pub(super) async fn restore_backup_payload_in_tx(
             .await?;
         }
     }
+    repositories::web_links::migrate_legacy_web_grouping(tx).await?;
     Ok(())
 }
 

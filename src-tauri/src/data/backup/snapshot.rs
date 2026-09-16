@@ -350,7 +350,8 @@ pub(super) async fn validate_current_schema(pool: &Pool<Sqlite>) -> Result<(), S
         .await
         .map_err(|e| format!("validate restored associations: {e}"))?;
     crate::data::repositories::app_links::validate_in_tx(&mut tx).await?;
-    tx.rollback()
+    crate::data::repositories::web_links::migrate_legacy_web_grouping(&mut tx).await?;
+    tx.commit()
         .await
         .map_err(|e| format!("finish restored association validation: {e}"))?;
     Ok(())

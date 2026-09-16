@@ -32,6 +32,13 @@ pub async fn commit_app_setting_mutations_with_recovery<R: Runtime>(
     }
 }
 
+pub async fn migrate_legacy_web_links<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    let pool = wait_for_sqlite_pool(app).await?;
+    let mut tx = pool.begin().await.map_err(|error| error.to_string())?;
+    super::repositories::web_links::migrate_legacy_web_grouping(&mut tx).await?;
+    tx.commit().await.map_err(|error| error.to_string())
+}
+
 pub async fn load_desktop_behavior_startup_state<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<DesktopBehaviorStartupState, String> {

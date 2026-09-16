@@ -38,6 +38,7 @@ pub async fn insert_for_restore(
     }
 
     super::app_links::validate_in_tx(tx).await?;
+    super::web_links::load_in_tx(tx).await?;
     Ok(())
 }
 
@@ -55,5 +56,6 @@ pub async fn insert_missing_for_restore(
     }
 
     super::app_links::validate_in_tx(tx).await?;
+    super::web_links::load_in_tx(tx).await?;
     Ok(())
 }

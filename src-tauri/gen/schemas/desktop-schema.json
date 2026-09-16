@@ -597,6 +597,12 @@
           "markdownDescription": "Enables the cmd_get_web_activity_bridge_snapshot command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_get_web_links command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-web-links",
+          "markdownDescription": "Enables the cmd_get_web_links command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_get_widget_bootstrap_snapshot command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-get-widget-bootstrap-snapshot",
@@ -1219,6 +1225,12 @@
           "type": "string",
           "const": "deny-cmd-get-web-activity-bridge-snapshot",
           "markdownDescription": "Denies the cmd_get_web_activity_bridge_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_web_links command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-web-links",
+          "markdownDescription": "Denies the cmd_get_web_links command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_get_widget_bootstrap_snapshot command without any pre-configured scope.",

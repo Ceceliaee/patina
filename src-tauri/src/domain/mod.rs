@@ -11,4 +11,5 @@ pub mod tools;
 pub mod tracking;
 pub mod update;
 pub mod web_activity;
+pub mod web_links;
 pub mod widget;

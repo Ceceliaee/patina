@@ -183,6 +183,7 @@ fn classification_settings_query() -> String {
     "SELECT key, value FROM settings
      WHERE key = 'language'
         OR substr(key,1,12) = '__app_link::'
+        OR substr(key,1,12) = '__web_site::'
         OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ?"
         .to_string()
 }
@@ -214,6 +215,13 @@ pub async fn apply_classification_setting_mutations_in_tx(
 ) -> Result<(), SqliteOperationError> {
     for mutation in mutations {
         validate_classification_setting_mutation(mutation)?;
+        if mutation
+            .key
+            .starts_with(crate::domain::web_links::SETTING_PREFIX)
+        {
+            super::web_links::apply_change(tx, &mutation.key, mutation.value.as_deref()).await?;
+            continue;
+        }
         if mutation.key.starts_with(super::app_links::APP_LINK_PREFIX) {
             super::app_links::apply_change(tx, &mutation.key, mutation.value.as_deref()).await?;
             continue;
@@ -245,6 +253,9 @@ pub async fn apply_classification_setting_mutations_in_tx(
         .map_err(|message| {
             SqliteOperationError::invalid_input("validate application associations", message)
         })?;
+    super::web_links::load_in_tx(tx).await.map_err(|message| {
+        SqliteOperationError::invalid_input("validate website associations", message)
+    })?;
     Ok(())
 }
 
@@ -259,7 +270,11 @@ fn validate_classification_setting_mutation(
     }
 
     if let Some(value) = &mutation.value {
-        if value.len() > MAX_SETTING_VALUE_LEN {
+        if value.len() > MAX_SETTING_VALUE_LEN
+            && !mutation
+                .key
+                .starts_with(crate::domain::web_links::SETTING_PREFIX)
+        {
             return Err(SqliteOperationError::invalid_input(
                 "validate classification setting",
                 format!("value is too large for key `{}`", mutation.key),
@@ -288,6 +303,7 @@ fn is_allowed_classification_setting_key(key: &str) -> bool {
 
     [
         super::app_links::APP_LINK_PREFIX,
+        crate::domain::web_links::SETTING_PREFIX,
         APP_OVERRIDE_KEY_PREFIX,
         WEB_DOMAIN_OVERRIDE_KEY_PREFIX,
         CATEGORY_COLOR_OVERRIDE_KEY_PREFIX,
