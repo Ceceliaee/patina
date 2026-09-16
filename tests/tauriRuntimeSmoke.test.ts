@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { verifyWebDavRuntime } from "./tauriWebDavRuntime.ts";
 import { verifyLinkedApplicationsRuntime } from "./tauriLinkedApplicationsRuntime.ts";
+import { verifyWebLinksRuntime } from "./tauriWebLinksRuntime.ts";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -821,6 +822,7 @@ try {
     30_000,
   );
 
+  await verifyWebLinksRuntime((expression) => evaluate(client!, expression));
   bridgePortBlocker = await occupyPort();
   const bridgeBlockerAddress = bridgePortBlocker.address();
   assert.ok(bridgeBlockerAddress && typeof bridgeBlockerAddress === "object");
@@ -1683,6 +1685,7 @@ try {
     })`,
     `window.__TAURI_INTERNALS__.invoke("cmd_get_storage_snapshot")`,
     `window.__TAURI_INTERNALS__.invoke("cmd_get_legacy_classification_apps", { nowMs: 0 })`,
+    `window.__TAURI_INTERNALS__.invoke("cmd_get_web_links")`,
     `window.__TAURI_INTERNALS__.invoke("cmd_restore_backup", {
       backupPath: "permission-probe.zip",
       hash: "permission-probe",
@@ -1913,7 +1916,7 @@ try {
       { normalizedDomain: "example.com", earliestRecordedStartMs: 1000 },
     ],
   });
-  assert.match(webAggregateRange.sourceRevision, /^(0|[1-9]\d*)$/);
+  assert.match(webAggregateRange.sourceRevision, /^(0|[1-9]\d*):[a-f0-9]{64}$/);
   assert.equal(Number.isSafeInteger(webAggregateRange.snapshotNowMs), true);
   const multiWebAggregateRange = await evaluate(
     client,
@@ -2184,6 +2187,7 @@ try {
 
   console.log("PASS real Tauri runtime command/event/SQLite/capability smoke");
   await verifyLinkedApplicationsRuntime((expression) => evaluate(client!, expression), true);
+  await verifyWebLinksRuntime((expression) => evaluate(client!, expression), true);
 } catch (error) {
   primaryError = error;
 } finally {

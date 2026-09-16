@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import { evaluate, jsonString, waitForExpression } from "./browserHarness.ts";
+import { runWebLinksScenarios } from "./webLinksScenarios.ts";
 
-export async function runClassificationWebLayoutScenarios({ client, sessionId, runTest }: BrowserSmokeContext) {
+export async function runClassificationWebLayoutScenarios(context: BrowserSmokeContext) {
+  const { client, sessionId, runTest } = context;
+  await runWebLinksScenarios(context);
   await runTest("web classification shares compact cards, responsive spacing and accessible actions", async () => {
     const previousSettings = await evaluate(client!, sessionId, `localStorage.getItem('__time_tracker_smoke_settings')`) as string | null;
     const domains = ['stable.example', 'docs.example', 'long-domain-name-for-classification.example'];

@@ -1,8 +1,9 @@
 export const BUNDLE_OWNERSHIP_FILE = ".vite/bundle-ownership.json";
 
-export const BUNDLE_SOURCE_OWNERS = [
+export const BUNDLE_SOURCE_OWNERS: Array<{ source: string; chunk?: string; initial: boolean }> = [
   { source: "src/platform/browser/browserStorageGateway.ts", chunk: "index", initial: true },
   { source: "src/platform/persistence/dataExportGateway.ts", chunk: "SettingsDataExportDialog", initial: false },
+  { source: "src/shared/components/QuietSelect.tsx", initial: false },
 ] as const;
 
 export function validateBundleOwnership(report: unknown, assets: Set<string>, initial: Set<string>): string[] {
@@ -14,9 +15,9 @@ export function validateBundleOwnership(report: unknown, assets: Set<string>, in
       return [`${owner.source} must have exactly one emitted chunk owner`];
     }
     const file = files[0];
-    if (!assets.has(file) || !file.startsWith(`${owner.chunk}-`) || !file.endsWith(".js")
+    if (!assets.has(file) || (owner.chunk !== undefined && !file.startsWith(`${owner.chunk}-`)) || !file.endsWith(".js")
       || initial.has(file) !== owner.initial) {
-      return [`${owner.source} must remain in the ${owner.initial ? "initial" : "lazy"} ${owner.chunk} chunk`];
+      return [`${owner.source} must remain in its ${owner.initial ? "initial" : "lazy"} ${owner.chunk ?? "source-owned"} chunk`];
     }
     return [];
   });

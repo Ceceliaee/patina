@@ -799,12 +799,28 @@ function tauriStubFor(path: string) {
           }
           storeSettings(settings);
         }
+        if (command === "cmd_get_web_links") {
+          const settings = loadStoredSettings();
+          const rules = Object.fromEntries(Object.entries(settings).filter(([key]) => key.startsWith('__web_site::')).map(([key, value]) => [key.slice(12), JSON.parse(value)]));
+          const { default: Database } = await import("@tauri-apps/plugin-sql");
+          const rows = await (await Database.load("sqlite:patina.db")).select("SELECT * FROM web_activity_segments", []);
+          const domains = [...new Set([...rows.map(row => row.normalized_domain), ...Object.keys(rules), ...Object.values(rules).flatMap(rule => rule.members ?? [])])];
+          const overrides = Object.fromEntries(Object.entries(settings).filter(([key]) => key.startsWith("__web_domain_override::")).map(([key,value]) => [key.slice(23),JSON.parse(value)]));
+          const segments = rows.map(row => ({ id: row.id, browserClientId: row.browser_client_id, browserKind: row.browser_kind, browserExeName: row.browser_exe_name, domain: row.domain, normalizedDomain: row.normalized_domain, url: row.url, title: row.title, faviconUrl: row.favicon_url ?? null, startTime: row.start_time, endTime: row.end_time, duration: row.duration }));
+          return { domains, rules, overrides, ...(payload.startMs === undefined ? {} : { segments }) };
+        }
         if (command === "cmd_get_legacy_classification_apps") return [];
         if (command === "cmd_commit_classification_settings") {
           if (globalThis.__PATINA_REJECT_CLASSIFICATION_SAVE) throw new Error("Classification save rejected by fixture");
           const settings = loadStoredSettings();
           for (const mutation of payload.mutations ?? []) {
             globalThis.__TIME_TRACKER_CLASSIFICATION_MUTATIONS.push(mutation);
+            if (mutation.key.startsWith('__web_site::')) {
+              const change = JSON.parse(mutation.value);
+              if (change.next === null) delete settings[mutation.key];
+              else settings[mutation.key] = JSON.stringify(change.next);
+              continue;
+            }
             if (mutation.key.startsWith('__app_link::')) {
               const change = JSON.parse(mutation.value);
               if (change.parent === null) delete settings[mutation.key];

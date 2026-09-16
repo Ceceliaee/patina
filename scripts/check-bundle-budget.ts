@@ -10,13 +10,20 @@ const COPY_DOMAINS_DIR = "locales/zh-CN";
 const KI_B = 1024;
 const MIN_BUDGET_HEADROOM_RATIO = 0.03;
 
+function sourceChunkPattern(source: string): RegExp {
+  const path = join("dist", BUNDLE_OWNERSHIP_FILE);
+  const files: unknown = existsSync(path) ? JSON.parse(readFileSync(path, "utf8"))[source] : null;
+  if (!Array.isArray(files) || files.length !== 1 || typeof files[0] !== "string") return /$^/;
+  return new RegExp(`^${files[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
+}
+
 const INITIAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 310;
 // Data used to be part of the initial graph. It now has its own route and runtime
 // budgets, so this unchanged aggregate tracks the remaining primary lazy routes.
 const NON_DATA_PRIMARY_LAZY_ROUTES_GZIP_BUDGET_KI_B = 86.5;
-// Linked-application editing and shared identity add 3.54 KiB gzip over the
-// same-toolchain 378.26 KiB baseline. Retain the global 3% headroom contract.
-const TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 395;
+// Website grouping adds 4.19 KiB over the same-toolchain 381.80 KiB baseline.
+// The bounded owner decision retains 3% headroom and no future-feature reserve.
+const TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 398;
 
 const INITIAL_CHUNK_BUDGETS = [
   { label: "index", pattern: /^index-.*\.js$/, gzipKiB: 65 },
@@ -26,16 +33,16 @@ const INITIAL_CHUNK_BUDGETS = [
   { label: "runtime type guards", pattern: /^runtimeTypeGuards-.*\.js$/, gzipKiB: 0.2 },
   // Production locale metadata lives here; translated text stays in its own
   // locale chunk. Initial and total graph budgets remain unchanged.
-  { label: "localization", pattern: /^runtime-.*\.js$/, gzipKiB: 7.55 },
+  { label: "localization", pattern: /^runtime-.*\.js$/, gzipKiB: 7.65 },
   { label: "classification", pattern: /^appClassification-.*\.js$/, gzipKiB: 6 },
 ] as const;
 
-// Linked-application controls add 0.05–0.07 KiB per translated locale.
+// Website scope and exact-domain controls add 0.12–0.15 KiB per locale.
 const LOCALE_CHUNK_GZIP_BUDGETS = {
-  "zh-CN": 10.20,
-  "en-US": 9.78,
-  "ru-RU": 13.04,
-  "es": 11.04,
+  "zh-CN": 10.4,
+  "en-US": 9.9,
+  "ru-RU": 13.2,
+  "es": 11.2,
 } as const satisfies Record<keyof typeof LOCALE_REGISTRY, number>;
 const LOCALE_CHUNK_BUDGETS = Object.entries(LOCALE_CHUNK_GZIP_BUDGETS).map(
   ([locale, gzipKiB]) => ({
@@ -49,14 +56,14 @@ if (!SOURCE_LOCALE) throw new Error("Bundle budget check requires one source loc
 
 const LAZY_PAGE_CHUNK_BUDGETS = [
   { label: "Settings", pattern: /^Settings-.*\.js$/, gzipKiB: 24 },
-  { label: "AppMapping", pattern: /^AppMapping-.*\.js$/, gzipKiB: 18 },
+  { label: "AppMapping", pattern: /^AppMapping-.*\.js$/, gzipKiB: 18.5 },
   { label: "History", pattern: /^History-.*\.js$/, gzipKiB: 18.7 },
   { label: "Tools", pattern: /^Tools-.*\.js$/, gzipKiB: 18 },
   // The destination analysis panel and its range control are both part of
   // Data's first render; the private detail chunk owns day analysis only. The
   // third application-category mode remains synchronous and feature-owned here;
   // splitting it would duplicate the read-model graph into unowned support chunks.
-  { label: "Data", pattern: /^Data-.*\.js$/, gzipKiB: 22.1 },
+  { label: "Data", pattern: /^Data-.*\.js$/, gzipKiB: 22.25 },
   { label: "About", pattern: /^About-.*\.js$/, gzipKiB: 18 },
 ] as const;
 
@@ -94,7 +101,7 @@ const LAZY_SHARED_UI_CHUNK_BUDGETS = [
   { label: "QuietSearchField", pattern: /^QuietSearchField-.*\.js$/, gzipKiB: 0.5 },
   { label: "QuietStepperSlider", pattern: /^QuietStepperSlider-.*\.js$/, gzipKiB: 1.1 },
   { label: "QuietDateRangePicker", pattern: /^QuietDateRangePicker-.*\.js$/, gzipKiB: 2.1 },
-  { label: "QuietSelect", pattern: /^QuietSelect-.*\.js$/, gzipKiB: 2.71 },
+  { label: "QuietSelect", pattern: sourceChunkPattern("src/shared/components/QuietSelect.tsx"), gzipKiB: 2.8 },
   { label: "QuietTimePicker", pattern: /^QuietTimePicker-.*\.js$/, gzipKiB: 2.1 },
   { label: "requested app icons", pattern: /^useRequestedAppIcons-.*\.js$/, gzipKiB: 0.55 },
   { label: "settings runtime adapter", pattern: /^settingsRuntimeAdapterService-.*\.js$/, gzipKiB: 3 },
@@ -232,7 +239,7 @@ function measureCopyDomains() {
 }
 
 function main() {
-  const fixtureFiles = ["index-fixture.js", "SettingsDataExportDialog-fixture.js"];
+  const fixtureFiles = ["index-fixture.js", "SettingsDataExportDialog-fixture.js", "QuietSwitch-fixture.js"];
   const fixture = Object.fromEntries(BUNDLE_SOURCE_OWNERS.map((owner, index) => [owner.source, [fixtureFiles[index]]]));
   const fixtureAssets = new Set(fixtureFiles);
   const fixtureInitial = new Set([fixtureFiles[0]]);

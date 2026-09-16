@@ -434,6 +434,9 @@ async function importWebAggregateMutation(mutated: boolean) {
     'import { invokeWithCommandError } from "./commandError.ts";',
     "const invokeWithCommandError = async () => { throw new Error('unconfigured invoke'); };",
   ).replace(
+    '"./webLinksGateway.ts"',
+    JSON.stringify(pathToFileURL(resolve("src/platform/persistence/webLinksGateway.ts")).href),
+  ).replace(
     'import { isPlainRecord as isRecord } from "../../shared/lib/runtimeTypeGuards.ts";',
     'const isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);',
   );
