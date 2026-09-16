@@ -42,7 +42,7 @@ export const MESSAGES = {
   "toast.legacyBackupRestoreSuccess": "Копия прежнего формата восстановлена. Создайте новую резервную копию снимка данных SQLite.",
   "toast.releaseNotesOpenFailed": "Не удалось открыть описание выпуска.",
   "toast.repositoryOpenFailed": "Не удалось открыть ссылку GitHub.",
-  "toast.settingsRuntimeSyncPartial": "Настройки сохранены. Часть изменений вступит в силу после следующего обновления интерфейса.",
+  "toast.settingsRuntimeSyncPartial": "Настройки сохранены, но некоторые изменения не удалось применить. Перезапустите приложение.",
   "toast.supportOpenFailed": "Не удалось открыть ссылку для поддержки.",
   "toast.webDavConfigDeleted": "Настройки WebDAV удалены.",
   "toast.webDavConfigDeleteFailed": "Не удалось удалить настройки WebDAV. Повторите позже.",

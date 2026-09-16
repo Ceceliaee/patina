@@ -117,6 +117,7 @@ export interface UiText {
       "toggleLaunchAtLogin": string;
       "toggleMinimizeToWidget": string;
       "toggleRemoteStatusBridge": string;
+      "toggleShowTrayIcon": string;
       "toggleStartMinimized": string;
       "toggleTrackingPaused": string;
       "toggleWebActivity": string;
@@ -840,6 +841,8 @@ export interface UiText {
     "scheduledBackupCleanupWarning": string;
     "scheduledBackupLabels": Record<string | number, string>;
     "servicesTitle": string;
+    "showTrayIconHint": string;
+    "showTrayIconLabel": string;
     "startMinimizedHint": string;
     "startMinimizedLabel": string;
     "storage": {

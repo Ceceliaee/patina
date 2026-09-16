@@ -3713,6 +3713,21 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
+  "settings.showTrayIconLabel": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "settings.showTrayIconHint": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "accessibility.settings.toggleShowTrayIcon": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
   "settings.closeToTrayHint": {
     "kind": "string",
     "params": [],

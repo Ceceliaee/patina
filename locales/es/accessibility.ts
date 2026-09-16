@@ -1,5 +1,6 @@
 // es locale resource. Pure data only.
 export const MESSAGES = {
+  "accessibility.settings.toggleShowTrayIcon": "Activar o desactivar el icono de la bandeja",
   "accessibility.color.blueChannel": "Canal azul",
   "accessibility.color.color": "Color",
   "accessibility.color.colorFormat": "Formato de color",
@@ -119,7 +120,7 @@ export const MESSAGES = {
   "accessibility.settings.showRemoteMachineId": "Mostrar ID del dispositivo",
   "accessibility.settings.showServiceToken": "Mostrar Token",
   "accessibility.settings.toggleBackgroundOptimization": "Activar o desactivar el ahorro de memoria en segundo plano",
-  "accessibility.settings.toggleCloseToTray": "Activar o desactivar cerrar a la bandeja",
+  "accessibility.settings.toggleCloseToTray": "Activar o desactivar ocultar al cerrar",
   "accessibility.settings.toggleGlobalTitle": "Activar o desactivar el registro global de títulos",
   "accessibility.settings.toggleLaunchAtLogin": "Activar o desactivar el inicio de la aplicación con Windows",
   "accessibility.settings.toggleMinimizeToWidget": "Activar o desactivar minimizar al widget",

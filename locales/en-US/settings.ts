@@ -1,5 +1,7 @@
 // en-US settings locale resource. Pure data only.
 export const MESSAGES = {
+  "settings.showTrayIconHint": "Hide the tray icon when turned off.",
+  "settings.showTrayIconLabel": "Show tray icon",
 "settings.webDavUploadTitle": "Upload remote backup",
 "settings.webDavUploadDescription": "Confirm the destination and file name before uploading.",
 "settings.webDavUploadAction": "Upload",
@@ -62,7 +64,7 @@ export const MESSAGES = {
   "settings.cleanupRunning": "Clearing...",
   "settings.cleanupTitle": "Clear history records",
   "settings.closeToTrayHint": "Hide the main window and keep running in the background when closed.",
-  "settings.closeToTrayLabel": "Close to tray",
+  "settings.closeToTrayLabel": "Hide on close",
   "settings.colorSchemeDialogDescription": "Preview immediately. Confirm to save.",
   "settings.colorSchemeDialogFallbackTitle": "Theme",
   "settings.colorSchemeHint": "Adjust light and dark theme colors separately.",
@@ -317,7 +319,7 @@ export const MESSAGES = {
   },
   "settings.saving": "Saving...",
   "settings.servicesTitle": "Services",
-  "settings.startMinimizedHint": "Hide the main window in the system tray after startup.",
+  "settings.startMinimizedHint": "Hide the main window after startup.",
   "settings.startMinimizedLabel": "Launch silently",
   "settings.storage.changePathAction": "Change location",
   "settings.storage.dataDirectoryLabel": "Data folder",

@@ -1,5 +1,6 @@
 // en-US accessibility locale resource. Pure data only.
 export const MESSAGES = {
+  "accessibility.settings.toggleShowTrayIcon": "Toggle tray icon visibility",
   "accessibility.color.blueChannel": "Blue channel",
   "accessibility.color.color": "Color",
   "accessibility.color.colorFormat": "Color format",
@@ -119,7 +120,7 @@ export const MESSAGES = {
   "accessibility.settings.showRemoteMachineId": "Show device ID",
   "accessibility.settings.showServiceToken": "Show token",
   "accessibility.settings.toggleBackgroundOptimization": "Toggle low-footprint background",
-  "accessibility.settings.toggleCloseToTray": "Toggle close to tray",
+  "accessibility.settings.toggleCloseToTray": "Toggle hide on close",
   "accessibility.settings.toggleGlobalTitle": "Toggle global titles",
   "accessibility.settings.toggleLaunchAtLogin": "Toggle launch at login",
   "accessibility.settings.toggleMinimizeToWidget": "Toggle minimize to widget",

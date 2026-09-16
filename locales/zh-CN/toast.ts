@@ -42,7 +42,7 @@ export const MESSAGES = {
   "toast.legacyBackupRestoreSuccess": "旧版备份已恢复。请立即创建一份新的 SQLite 数据快照备份。",
   "toast.releaseNotesOpenFailed": "未能打开更新说明链接。",
   "toast.repositoryOpenFailed": "未能打开 GitHub 链接。",
-  "toast.settingsRuntimeSyncPartial": "设置已保存，部分运行状态会在下次刷新后生效。",
+  "toast.settingsRuntimeSyncPartial": "设置已保存，部分更改未能生效，请重启应用。",
   "toast.supportOpenFailed": "未能打开赞助链接。",
   "toast.webDavConfigDeleted": "WebDAV 配置已删除。",
   "toast.webDavConfigDeleteFailed": "WebDAV 配置删除失败，可稍后重试。",

@@ -1,5 +1,6 @@
 // zh-CN accessibility locale resource. Pure data only.
 export const MESSAGES = {
+  "accessibility.settings.toggleShowTrayIcon": "切换托盘图标显示",
   "accessibility.color.blueChannel": "蓝色通道",
   "accessibility.color.color": "颜色",
   "accessibility.color.colorFormat": "颜色格式",
@@ -119,7 +120,7 @@ export const MESSAGES = {
   "accessibility.settings.showRemoteMachineId": "显示本机标识",
   "accessibility.settings.showServiceToken": "显示 Token",
   "accessibility.settings.toggleBackgroundOptimization": "切换低耗后台",
-  "accessibility.settings.toggleCloseToTray": "切换关闭到托盘",
+  "accessibility.settings.toggleCloseToTray": "切换关闭时隐藏",
   "accessibility.settings.toggleGlobalTitle": "切换全局标题",
   "accessibility.settings.toggleLaunchAtLogin": "切换开机自启动",
   "accessibility.settings.toggleMinimizeToWidget": "切换最小化到挂件",

@@ -1,5 +1,7 @@
 // ru-RU locale resource. Pure data only.
 export const MESSAGES = {
+  "settings.showTrayIconHint": "При отключении значок в трее скрывается.",
+  "settings.showTrayIconLabel": "Показывать значок в трее",
 "settings.webDavUploadTitle": "Загрузка резервной копии",
 "settings.webDavUploadDescription": "Проверьте папку и имя файла перед загрузкой.",
 "settings.webDavUploadAction": "Загрузить",
@@ -62,7 +64,7 @@ export const MESSAGES = {
   "settings.cleanupRunning": "Очистка…",
   "settings.cleanupTitle": "Очистить историю",
   "settings.closeToTrayHint": "При закрытии скрывать главное окно и продолжать работу в фоне.",
-  "settings.closeToTrayLabel": "Закрывать в трей",
+  "settings.closeToTrayLabel": "Скрывать при закрытии",
   "settings.colorSchemeDialogDescription": "Изменения видны сразу. Подтвердите, чтобы сохранить.",
   "settings.colorSchemeDialogFallbackTitle": "Тема",
   "settings.colorSchemeHint": "Настраивайте цвета светлой и тёмной тем отдельно.",
@@ -470,7 +472,7 @@ export const MESSAGES = {
   },
   "settings.saving": "Сохранение...",
   "settings.servicesTitle": "Службы",
-  "settings.startMinimizedHint": "После запуска скрывать главное окно в системном трее.",
+  "settings.startMinimizedHint": "Скрывать главное окно после запуска.",
   "settings.startMinimizedLabel": "Запускать в фоне",
   "settings.storage.changePathAction": "Изменить расположение",
   "settings.storage.dataDirectoryLabel": "Папка данных",

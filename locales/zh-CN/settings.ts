@@ -1,5 +1,7 @@
 // zh-CN settings locale resource. Pure data only.
 export const MESSAGES = {
+  "settings.showTrayIconHint": "关闭后隐藏托盘图标。",
+  "settings.showTrayIconLabel": "显示托盘图标",
 "settings.webDavUploadTitle": "上传远程备份",
 "settings.webDavUploadDescription": "确认保存位置和文件名后上传。",
 "settings.webDavUploadAction": "上传",
@@ -62,7 +64,7 @@ export const MESSAGES = {
   "settings.cleanupRunning": "正在清理...",
   "settings.cleanupTitle": "清理历史记录",
   "settings.closeToTrayHint": "关闭窗口时隐藏主窗口，并继续在后台运行。",
-  "settings.closeToTrayLabel": "关闭到托盘",
+  "settings.closeToTrayLabel": "关闭时隐藏",
   "settings.colorSchemeDialogDescription": "选择后即时预览，确认后保存。",
   "settings.colorSchemeDialogFallbackTitle": "主题",
   "settings.colorSchemeHint": "分别调整浅色和深色主题配色。",
@@ -308,7 +310,7 @@ export const MESSAGES = {
   },
   "settings.saving": "正在保存...",
   "settings.servicesTitle": "服务",
-  "settings.startMinimizedHint": "启动后隐藏主窗口进入托盘。",
+  "settings.startMinimizedHint": "启动后隐藏主窗口。",
   "settings.startMinimizedLabel": "静默启动",
   "settings.storage.changePathAction": "更改目录",
   "settings.storage.dataDirectoryLabel": "数据目录",

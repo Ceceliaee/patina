@@ -42,7 +42,7 @@ export const MESSAGES = {
   "toast.legacyBackupRestoreSuccess": "Legacy backup restored. Create a new SQLite data snapshot backup now.",
   "toast.releaseNotesOpenFailed": "Could not open release notes.",
   "toast.repositoryOpenFailed": "Could not open GitHub link.",
-  "toast.settingsRuntimeSyncPartial": "Settings were saved. Some runtime state will apply after the next refresh.",
+  "toast.settingsRuntimeSyncPartial": "Settings were saved, but some changes could not be applied. Restart the app.",
   "toast.supportOpenFailed": "Could not open support link.",
   "toast.webDavConfigDeleted": "WebDAV configuration deleted.",
   "toast.webDavConfigDeleteFailed": "Could not delete WebDAV configuration. Try again later.",

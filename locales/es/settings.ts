@@ -1,5 +1,7 @@
 // es locale resource. Pure data only.
 export const MESSAGES = {
+  "settings.showTrayIconHint": "Al desactivarlo, se oculta el icono de la bandeja.",
+  "settings.showTrayIconLabel": "Mostrar icono en la bandeja",
 "settings.webDavUploadTitle": "Subir copia de seguridad",
 "settings.webDavUploadDescription": "Confirma la ubicación y el nombre del archivo antes de subirlo.",
 "settings.webDavUploadAction": "Subir",
@@ -62,7 +64,7 @@ export const MESSAGES = {
   "settings.cleanupRunning": "Eliminando...",
   "settings.cleanupTitle": "Eliminar registros del historial",
   "settings.closeToTrayHint": "Al cerrar, oculta la ventana y mantiene la app en segundo plano.",
-  "settings.closeToTrayLabel": "Cerrar a la bandeja",
+  "settings.closeToTrayLabel": "Ocultar al cerrar",
   "settings.colorSchemeDialogDescription": "Vista previa inmediata. Confirma para guardar.",
   "settings.colorSchemeDialogFallbackTitle": "Tema",
   "settings.colorSchemeHint": "Personaliza los colores de cada tema por separado.",
@@ -454,7 +456,7 @@ export const MESSAGES = {
   },
   "settings.saving": "Guardando...",
   "settings.servicesTitle": "Servicios",
-  "settings.startMinimizedHint": "Inicia en la bandeja, sin mostrar la ventana principal.",
+  "settings.startMinimizedHint": "Ocultar la ventana principal al iniciar.",
   "settings.startMinimizedLabel": "Iniciar en segundo plano",
   "settings.storage.changePathAction": "Cambiar ubicación",
   "settings.storage.dataDirectoryLabel": "Datos",

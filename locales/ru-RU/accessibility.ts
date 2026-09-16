@@ -1,5 +1,6 @@
 // ru-RU locale resource. Pure data only.
 export const MESSAGES = {
+  "accessibility.settings.toggleShowTrayIcon": "Переключить отображение значка в трее",
   "accessibility.color.blueChannel": "Синий канал",
   "accessibility.color.color": "Цвет",
   "accessibility.color.colorFormat": "Формат цвета",
@@ -119,7 +120,7 @@ export const MESSAGES = {
   "accessibility.settings.showRemoteMachineId": "Показать ID устройства",
   "accessibility.settings.showServiceToken": "Показать токен",
   "accessibility.settings.toggleBackgroundOptimization": "Переключить экономию памяти в фоне",
-  "accessibility.settings.toggleCloseToTray": "Переключить сворачивание в трей при закрытии",
+  "accessibility.settings.toggleCloseToTray": "Переключить скрытие при закрытии",
   "accessibility.settings.toggleGlobalTitle": "Переключить глобальную запись заголовков",
   "accessibility.settings.toggleLaunchAtLogin": "Переключить запуск приложения при входе в Windows",
   "accessibility.settings.toggleMinimizeToWidget": "Переключить сворачивание в виджет",
