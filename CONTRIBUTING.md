@@ -194,6 +194,20 @@ pnpm run build
 start a debug build with the production identifier: development and installed
 editions are designed to coexist with separate data and single-instance scopes.
 
+Debug builds disable single-instance recovery by default. To test reopening with
+the tray icon hidden, stop the existing development process and run the following
+in PowerShell from the repository root:
+
+```powershell
+$env:PATINA_E2E_SINGLE_INSTANCE = "1"
+pnpm run tauri dev
+```
+
+Keep that terminal running. In another PowerShell at the repository root, set the
+same environment variable and run `& .\src-tauri\target\debug\patina.exe` to reveal
+the existing development window. The installed app's Start menu entry cannot
+reopen a development instance.
+
 ## 4. Branch And Commit Workflow
 
 ### 4.1 Create A Branch From The Latest `main`
@@ -943,6 +957,18 @@ pnpm run build
 `pnpm run tauri dev` 会自动加载 `src-tauri/tauri.dev.conf.json`。请勿让 debug
 构建使用正式版 identifier；开发版与安装版应使用彼此隔离的数据目录和单实例作用域，
 并可同时运行。
+
+Debug 构建默认关闭单实例唤回。验证隐藏托盘后的重新打开时，先停止已有开发进程，
+再从仓库根目录的 PowerShell 启动：
+
+```powershell
+$env:PATINA_E2E_SINGLE_INSTANCE = "1"
+pnpm run tauri dev
+```
+
+保留该终端运行，在另一个位于仓库根目录的 PowerShell 设置同一环境变量，
+执行 `& .\src-tauri\target\debug\patina.exe`，即可唤回已有开发窗口。
+开始菜单中的安装版入口不能唤回开发版。
 
 ### 4. 分支与提交工作流
 
