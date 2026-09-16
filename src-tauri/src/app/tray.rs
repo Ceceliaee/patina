@@ -1,11 +1,11 @@
 use crate::app::main_window;
 use crate::app::runtime::now_ms;
-use crate::app::state::{AppExitState, DesktopBehaviorState, TraySafetyState};
+use crate::app::state::{AppExitState, BackgroundEntryState, DesktopBehaviorState};
 use crate::app::widget;
 use crate::data::app_settings_service::{self, AppSettingMutation};
 use crate::data::tracking_pause_service;
 use crate::domain::localization::{Locale, LocalizationState};
-use crate::domain::settings::{CloseBehavior, DesktopBehaviorSettings};
+use crate::domain::settings::DesktopBehaviorSettings;
 use crate::engine::tracking::{
     pause_state::TrackingPauseRuntimeState, runtime as tracking_runtime,
     title_state::TitleRecordingRuntimeState,
@@ -163,48 +163,74 @@ fn tray_menu_labels(locale: Locale, tracking_paused: bool, title_enabled: bool) 
 }
 
 fn should_redirect_close_to_tray(settings: DesktopBehaviorSettings, exit_requested: bool) -> bool {
-    !exit_requested
-        && settings.close_behavior == CloseBehavior::Tray
-        && settings.should_keep_tray_visible()
+    !exit_requested && settings.should_keep_running_in_background()
 }
 
 pub(crate) fn show_main_window<R: Runtime + 'static>(
     app: &AppHandle<R>,
     reason: main_window::MainWindowShowReason,
 ) -> bool {
+    if app.state::<AppExitState>().is_exit_requested() {
+        return false;
+    }
     let accepted = main_window::show_main_window(app, reason);
-    let settings = app.state::<DesktopBehaviorState>().snapshot();
-    apply_tray_visibility(app, settings);
+    if !accepted && !app.state::<AppExitState>().is_exit_requested() {
+        if let Err(error) = ensure_tray_visible(app) {
+            eprintln!("[tray] failed to expose recovery entry: {error}");
+        }
+    }
+    if let Err(error) = apply_tray_visibility(app) {
+        eprintln!("[tray] failed to apply visibility: {error}");
+    }
     accepted
 }
 
 pub(crate) fn on_main_window_revealed<R: Runtime>(app: &AppHandle<R>) {
-    app.state::<TraySafetyState>().clear_forced_visibility();
-    let settings = app.state::<DesktopBehaviorState>().snapshot();
-    apply_tray_visibility(app, settings);
-}
-
-pub(crate) fn apply_tray_visibility<R: Runtime>(
-    app: &AppHandle<R>,
-    settings: DesktopBehaviorSettings,
-) {
-    if let Some(tray) = app.tray_by_id(TRAY_ID) {
-        let should_show = settings.should_keep_tray_visible()
-            || app.state::<TraySafetyState>().is_forced_visible();
-        if let Err(error) = tray.set_visible(should_show) {
-            eprintln!("[tray] failed to apply visibility: {error}");
-        }
+    app.state::<BackgroundEntryState>()
+        .clear_forced_visibility();
+    if let Err(error) = apply_tray_visibility(app) {
+        eprintln!("[tray] failed to apply visibility: {error}");
     }
 }
 
-pub(crate) fn ensure_tray_visible<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
-    let tray = app
-        .tray_by_id(TRAY_ID)
-        .ok_or_else(|| "main tray is unavailable".to_string())?;
-    tray.set_visible(true)
-        .map_err(|error| format!("failed to show main tray: {error}"))?;
-    app.state::<TraySafetyState>().force_visible();
+pub(crate) fn apply_tray_visibility<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    // Serialize creation and visibility on the native event loop. Read the latest
+    // snapshot there so a queued refresh cannot reapply an older preference.
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    let handle = app.clone();
+    app.run_on_main_thread(move || {
+        let result = apply_current_tray_visibility(&handle);
+        let _ = sender.send(result);
+    })
+    .map_err(|error| format!("failed to schedule tray visibility: {error}"))?;
+    receiver
+        .recv()
+        .map_err(|error| format!("tray visibility response lost: {error}"))?
+}
+
+fn apply_current_tray_visibility<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    let settings = app.state::<DesktopBehaviorState>().snapshot();
+    let entry = app.state::<BackgroundEntryState>();
+    let should_show = entry.is_forced_visible()
+        || (settings.should_keep_tray_visible()
+            || (settings.show_tray_icon && entry.keeps_running()));
+    if should_show && app.tray_by_id(TRAY_ID).is_none() {
+        create_tray(app).map_err(|error| format!("failed to create main tray: {error}"))?;
+    }
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        tray.set_visible(should_show)
+            .map_err(|error| format!("failed to set main tray visibility: {error}"))?;
+    }
+    eprintln!(
+        "[tray] visibility-applied visible={should_show} created={}",
+        app.tray_by_id(TRAY_ID).is_some()
+    );
     Ok(())
+}
+
+pub(crate) fn ensure_tray_visible<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    app.state::<BackgroundEntryState>().force_visible();
+    apply_tray_visibility(app)
 }
 
 pub(crate) async fn toggle_tracking_paused<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
@@ -457,6 +483,19 @@ pub(crate) fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         state.set_enabled(title_enabled);
     }
 
+    apply_current_tray_visibility(app).map_err(std::io::Error::other)?;
+    start_taskbar_theme_watcher(app);
+    Ok(())
+}
+
+fn create_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+    let locale = app.state::<LocalizationState>().locale();
+    let tracking_paused = app
+        .state::<TrackingPauseRuntimeState>()
+        .snapshot()
+        .map(|snapshot| snapshot.tracking_paused)
+        .unwrap_or(false);
+    let title_enabled = app.state::<TitleRecordingRuntimeState>().is_enabled();
     let menu = build_tray_menu(app, locale, tracking_paused, title_enabled)?;
 
     let observed_theme = tray_icon_theme::current_taskbar_theme();
@@ -489,7 +528,6 @@ pub(crate) fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     if let Some(state) = app.try_state::<TrayIconRuntimeState>() {
         state.lock_appearance().applied_variant = applied_initial_variant;
     }
-    start_taskbar_theme_watcher(app);
     Ok(())
 }
 
@@ -504,6 +542,19 @@ fn prepare_tray_icon_variant<R: Runtime>(
 }
 
 fn refresh_tray_icon<R: Runtime>(
+    app: &AppHandle<R>,
+    observed_theme: Option<TaskbarTheme>,
+) -> Result<(), String> {
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    let handle = app.clone();
+    app.run_on_main_thread(move || {
+        let _ = sender.send(refresh_tray_icon_on_main_thread(&handle, observed_theme));
+    })
+    .map_err(|error| error.to_string())?;
+    receiver.recv().map_err(|error| error.to_string())?
+}
+
+fn refresh_tray_icon_on_main_thread<R: Runtime>(
     app: &AppHandle<R>,
     observed_theme: Option<TaskbarTheme>,
 ) -> Result<(), String> {
@@ -532,9 +583,10 @@ fn refresh_tray_icon<R: Runtime>(
 
     let icon = load_tray_icon(variant)
         .map_err(|error| format!("failed to decode {variant:?} icon: {error}"))?;
-    let tray = app
-        .tray_by_id(TRAY_ID)
-        .ok_or_else(|| "main tray is unavailable".to_string())?;
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+        // Hidden startup has no native tray yet; creation uses the current state.
+        return Ok(());
+    };
     tray.set_icon(Some(icon))
         .map_err(|error| format!("failed to apply {variant:?} icon: {error}"))?;
     appearance.applied_variant = Some(variant);
@@ -553,8 +605,15 @@ fn start_taskbar_theme_watcher<R: Runtime>(app: &AppHandle<R>) {
 
     let app_handle = app.clone();
     match TaskbarThemeWatcher::start(move |theme| {
-        if let Err(error) = refresh_tray_icon(&app_handle, Some(theme)) {
-            eprintln!("[tray] failed to update icon after Windows theme change: {error}");
+        let handle = app_handle.clone();
+        // The exit handler joins this watcher on the event loop. Never make the
+        // watcher wait for that same loop to apply a cosmetic update.
+        if let Err(error) = app_handle.run_on_main_thread(move || {
+            if let Err(error) = refresh_tray_icon_on_main_thread(&handle, Some(theme)) {
+                eprintln!("[tray] failed to update icon after Windows theme change: {error}");
+            }
+        }) {
+            eprintln!("[tray] failed to schedule Windows theme change: {error}");
         }
     }) {
         Ok(watcher) => *watcher_slot = Some(watcher),
@@ -917,6 +976,49 @@ mod tests {
                 ],
                 expected.map(str::to_owned)
             );
+        }
+    }
+
+    #[test]
+    fn hidden_tray_does_not_change_close_or_launch_policy() {
+        for close in ["tray", "exit"] {
+            for minimize in ["widget", "taskbar"] {
+                for visible in [false, true] {
+                    let mut settings = DesktopBehaviorSettings::default()
+                        .with_raw_desktop_behavior(close, minimize);
+                    settings.show_tray_icon = visible;
+                    assert_eq!(
+                        should_redirect_close_to_tray(settings, false),
+                        close == "tray"
+                    );
+                    assert!(!should_redirect_close_to_tray(settings, true));
+                    assert_eq!(
+                        settings.should_keep_tray_visible(),
+                        visible && close == "tray"
+                    );
+                    for minimized in [false, true] {
+                        for optimized in [false, true] {
+                            let settings = settings
+                                .with_launch_behavior(false, minimized)
+                                .with_background_optimization(optimized);
+                            let mut reference = settings;
+                            reference.show_tray_icon = !visible;
+                            for source in [
+                                crate::domain::settings::StartupSource::Manual,
+                                crate::domain::settings::StartupSource::Autostart,
+                                crate::domain::settings::StartupSource::UpdateRestart,
+                                crate::domain::settings::StartupSource::StorageRestart,
+                                crate::domain::settings::StartupSource::SettingsRecovery,
+                            ] {
+                                assert_eq!(
+                                    settings.startup_ui_strategy(source),
+                                    reference.startup_ui_strategy(source)
+                                );
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

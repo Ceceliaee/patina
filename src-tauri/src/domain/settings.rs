@@ -30,6 +30,7 @@ pub enum MinimizeBehavior {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DesktopBehaviorSettings {
+    pub show_tray_icon: bool,
     pub close_behavior: CloseBehavior,
     pub minimize_behavior: MinimizeBehavior,
     pub launch_at_login: bool,
@@ -210,6 +211,7 @@ impl RemoteStatusBridgeSettings {
 impl Default for DesktopBehaviorSettings {
     fn default() -> Self {
         Self {
+            show_tray_icon: true,
             close_behavior: CloseBehavior::Tray,
             minimize_behavior: MinimizeBehavior::Widget,
             launch_at_login: DEFAULT_LAUNCH_AT_LOGIN,
@@ -232,6 +234,7 @@ impl DesktopBehaviorSettings {
         }
     }
 
+    #[cfg(test)]
     pub fn with_raw_desktop_behavior(self, close_behavior: &str, minimize_behavior: &str) -> Self {
         self.with_desktop_behavior(
             parse_close_behavior(close_behavior),
@@ -281,8 +284,12 @@ impl DesktopBehaviorSettings {
             .with_background_optimization(background_optimization)
     }
 
-    pub fn should_keep_tray_visible(self) -> bool {
+    pub fn should_keep_running_in_background(self) -> bool {
         self.close_behavior == CloseBehavior::Tray
+    }
+
+    pub fn should_keep_tray_visible(self) -> bool {
+        self.show_tray_icon && self.should_keep_running_in_background()
     }
 
     pub fn should_optimize_background_resources(self) -> bool {

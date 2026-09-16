@@ -75,6 +75,17 @@ pub fn setup(
 
     let app_handle = app.handle().clone();
     main_window::ensure_main_window(&app_handle).map_err(std::io::Error::other)?;
+    use tauri::Manager;
+    app_handle
+        .state::<crate::app::state::DesktopBehaviorState>()
+        .replace(startup.settings);
+    if startup.settings.startup_ui_strategy(startup.source)
+        != crate::domain::settings::StartupUiStrategy::Show
+    {
+        app_handle
+            .state::<crate::app::state::BackgroundEntryState>()
+            .begin_startup();
+    }
     setup_tray(&app_handle)?;
     if !desktop_behavior::apply_startup_desktop_behavior(
         &app_handle,

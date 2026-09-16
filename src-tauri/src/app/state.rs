@@ -22,28 +22,17 @@ pub(crate) struct DesktopBehaviorState {
 }
 
 impl DesktopBehaviorState {
+    pub(crate) fn update_desktop(&self, saved: DesktopBehaviorSettings) {
+        let mut current = self.inner.lock().unwrap_or_else(|error| error.into_inner());
+        current.close_behavior = saved.close_behavior;
+        current.minimize_behavior = saved.minimize_behavior;
+        current.show_tray_icon = saved.show_tray_icon;
+    }
+
     pub(crate) fn snapshot(&self) -> DesktopBehaviorSettings {
         match self.inner.lock() {
             Ok(guard) => *guard,
             Err(poisoned) => *poisoned.into_inner(),
-        }
-    }
-
-    pub(crate) fn update_desktop_from_raw(
-        &self,
-        close_behavior: &str,
-        minimize_behavior: &str,
-    ) -> DesktopBehaviorSettings {
-        match self.inner.lock() {
-            Ok(mut guard) => {
-                *guard = guard.with_raw_desktop_behavior(close_behavior, minimize_behavior);
-                *guard
-            }
-            Err(poisoned) => {
-                let mut guard = poisoned.into_inner();
-                *guard = guard.with_raw_desktop_behavior(close_behavior, minimize_behavior);
-                *guard
-            }
         }
     }
 
@@ -112,22 +101,42 @@ impl AppExitState {
     }
 }
 
-#[derive(Debug, Default)]
-pub(crate) struct TraySafetyState {
-    forced_visible: AtomicBool,
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum BackgroundEntry {
+    #[default]
+    None,
+    Startup,
+    Recovery,
 }
 
-impl TraySafetyState {
+#[derive(Debug, Default)]
+pub(crate) struct BackgroundEntryState {
+    inner: Mutex<BackgroundEntry>,
+}
+
+impl BackgroundEntryState {
+    fn read(&self) -> BackgroundEntry {
+        *self.inner.lock().unwrap_or_else(|error| error.into_inner())
+    }
+
+    pub(crate) fn begin_startup(&self) {
+        *self.inner.lock().unwrap_or_else(|error| error.into_inner()) = BackgroundEntry::Startup;
+    }
+
     pub(crate) fn force_visible(&self) {
-        self.forced_visible.store(true, Ordering::Relaxed);
+        *self.inner.lock().unwrap_or_else(|error| error.into_inner()) = BackgroundEntry::Recovery;
     }
 
     pub(crate) fn clear_forced_visibility(&self) {
-        self.forced_visible.store(false, Ordering::Relaxed);
+        *self.inner.lock().unwrap_or_else(|error| error.into_inner()) = BackgroundEntry::None;
     }
 
     pub(crate) fn is_forced_visible(&self) -> bool {
-        self.forced_visible.load(Ordering::Relaxed)
+        self.read() == BackgroundEntry::Recovery
+    }
+
+    pub(crate) fn keeps_running(&self) -> bool {
+        self.read() != BackgroundEntry::None
     }
 }
 
@@ -678,9 +687,9 @@ impl WidgetWindowLifecycleState {
 #[cfg(test)]
 mod tests {
     use super::{
-        AppSettingsCommitState, MainWindowLifecycleState, MainWindowReadyDecision,
-        MainWindowRenderState, MainWindowRenderToken, MainWindowShowDecision,
-        MainWindowTimeoutDecision, TraySafetyState, WidgetWindowLifecycleState,
+        AppSettingsCommitState, BackgroundEntryState, MainWindowLifecycleState,
+        MainWindowReadyDecision, MainWindowRenderState, MainWindowRenderToken,
+        MainWindowShowDecision, MainWindowTimeoutDecision, WidgetWindowLifecycleState,
     };
 
     fn begin_window_creation(state: &MainWindowLifecycleState) -> u64 {
@@ -696,8 +705,22 @@ mod tests {
     }
 
     #[test]
+    fn hidden_startup_residency_does_not_force_a_tray_icon() {
+        let state = BackgroundEntryState::default();
+        state.begin_startup();
+        assert!(state.keeps_running());
+        assert!(!state.is_forced_visible());
+        state.force_visible();
+        assert!(state.keeps_running());
+        assert!(state.is_forced_visible());
+        state.clear_forced_visibility();
+        assert!(!state.keeps_running());
+        assert!(!state.is_forced_visible());
+    }
+
+    #[test]
     fn tray_safety_visibility_is_explicit_and_reversible() {
-        let state = TraySafetyState::default();
+        let state = BackgroundEntryState::default();
         assert!(!state.is_forced_visible());
 
         state.force_visible();

@@ -1,6 +1,6 @@
 use crate::app::main_window;
-use crate::app::state::DesktopBehaviorState;
-use crate::app::tray::{apply_tray_visibility, ensure_tray_visible, show_main_window};
+use crate::app::state::{BackgroundEntryState, DesktopBehaviorState};
+use crate::app::tray::{apply_tray_visibility, show_main_window};
 use crate::data::app_settings_service;
 use crate::domain::settings::{DesktopBehaviorSettings, StartupSource, StartupUiStrategy};
 use tauri::{AppHandle, Manager, Runtime};
@@ -37,14 +37,13 @@ pub(crate) fn apply_autostart<R: Runtime>(
     Ok(())
 }
 
-pub(crate) fn set_desktop_behavior<R: Runtime>(
+pub(crate) async fn apply_saved_desktop_behavior<R: Runtime>(
     app: &AppHandle<R>,
-    state: &DesktopBehaviorState,
-    close_behavior: &str,
-    minimize_behavior: &str,
-) {
-    let next = state.update_desktop_from_raw(close_behavior, minimize_behavior);
-    apply_tray_visibility(app, next);
+) -> Result<(), String> {
+    let settings = app_settings_service::load_desktop_behavior_settings(app).await?;
+    let state = app.state::<DesktopBehaviorState>();
+    state.update_desktop(settings);
+    apply_tray_visibility(app)
 }
 
 pub(crate) fn set_launch_behavior<R: Runtime>(
@@ -108,8 +107,9 @@ fn start_in_tray<R: Runtime + 'static>(
     app: &AppHandle<R>,
     optimize_background_resources: bool,
 ) -> bool {
-    if let Err(error) = ensure_tray_visible(app) {
-        eprintln!("[startup] failed to expose tray recovery entry: {error}");
+    app.state::<BackgroundEntryState>().begin_startup();
+    if let Err(error) = apply_tray_visibility(app) {
+        eprintln!("[startup] failed to apply tray visibility: {error}");
         return show_main_window(app, main_window::MainWindowShowReason::StartupRecovery);
     }
 
@@ -129,9 +129,7 @@ pub(crate) async fn refresh_desktop_behavior_from_storage<R: Runtime>(
     if let Err(error) = apply_autostart(&app, next.launch_at_login) {
         eprintln!("[tray] failed to apply autostart setting after settings refresh: {error}");
     }
-    apply_tray_visibility(&app, next);
-
-    Ok(())
+    apply_tray_visibility(&app)
 }
 
 #[cfg(test)]

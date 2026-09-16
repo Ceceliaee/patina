@@ -1,10 +1,11 @@
 use crate::data::sqlite_error::SqliteOperationError;
 use crate::domain::settings::{
-    DesktopBehaviorSettings, RemoteStatusBridgeSettings, WebActivityBridgeSettings,
-    WebActivitySettings,
+    parse_boolean_setting, DesktopBehaviorSettings, RemoteStatusBridgeSettings,
+    WebActivityBridgeSettings, WebActivitySettings,
 };
 use sqlx::{Pool, Row, Sqlite};
 
+const SHOW_TRAY_ICON_KEY: &str = "show_tray_icon";
 const CLOSE_BEHAVIOR_KEY: &str = "close_behavior";
 const MINIMIZE_BEHAVIOR_KEY: &str = "minimize_behavior";
 const LAUNCH_AT_LOGIN_KEY: &str = "launch_at_login";
@@ -29,7 +30,8 @@ pub struct AppSettingMutation {
 pub async fn load_desktop_behavior_settings(
     pool: &Pool<Sqlite>,
 ) -> Result<DesktopBehaviorSettings, sqlx::Error> {
-    let rows = sqlx::query("SELECT key, value FROM settings WHERE key IN (?, ?, ?, ?, ?)")
+    let rows = sqlx::query("SELECT key, value FROM settings WHERE key IN (?, ?, ?, ?, ?, ?)")
+        .bind(SHOW_TRAY_ICON_KEY)
         .bind(CLOSE_BEHAVIOR_KEY)
         .bind(MINIMIZE_BEHAVIOR_KEY)
         .bind(LAUNCH_AT_LOGIN_KEY)
@@ -38,6 +40,7 @@ pub async fn load_desktop_behavior_settings(
         .fetch_all(pool)
         .await?;
 
+    let mut show_tray_icon = true;
     let mut close_behavior_raw: Option<String> = None;
     let mut minimize_behavior_raw: Option<String> = None;
     let mut launch_at_login_raw: Option<String> = None;
@@ -49,6 +52,7 @@ pub async fn load_desktop_behavior_settings(
         let value: String = row.get("value");
 
         match key.as_str() {
+            SHOW_TRAY_ICON_KEY => show_tray_icon = parse_boolean_setting(&value, true),
             CLOSE_BEHAVIOR_KEY => close_behavior_raw = Some(value),
             MINIMIZE_BEHAVIOR_KEY => {
                 minimize_behavior_raw = Some(value);
@@ -66,13 +70,15 @@ pub async fn load_desktop_behavior_settings(
         }
     }
 
-    Ok(DesktopBehaviorSettings::from_storage_values(
+    let mut settings = DesktopBehaviorSettings::from_storage_values(
         close_behavior_raw.as_deref(),
         minimize_behavior_raw.as_deref(),
         launch_at_login_raw.as_deref(),
         start_minimized_raw.as_deref(),
         background_optimization_raw.as_deref(),
-    ))
+    );
+    settings.show_tray_icon = show_tray_icon;
+    Ok(settings)
 }
 
 pub async fn load_language_setting(pool: &Pool<Sqlite>) -> Result<Option<String>, sqlx::Error> {
@@ -168,6 +174,7 @@ fn is_allowed_app_setting_key(key: &str) -> bool {
             | "min_session_secs"
             | "tracking_paused"
             | "title_recording_enabled"
+            | "show_tray_icon"
             | "close_behavior"
             | "minimize_behavior"
             | "theme_mode"
@@ -356,6 +363,59 @@ mod tests {
             assert_eq!(
                 load_setting(&pool, "dynamic_effects").await,
                 Some("0".to_string())
+            );
+        });
+    }
+
+    #[test]
+    fn tray_preference_round_trips_without_changing_residency() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            assert!(
+                load_desktop_behavior_settings(&pool)
+                    .await
+                    .unwrap()
+                    .show_tray_icon
+            );
+            for (value, expected) in [
+                ("0", false),
+                ("1", true),
+                ("invalid", true),
+                ("false", false),
+            ] {
+                commit_app_setting_mutations(
+                    &pool,
+                    &[AppSettingMutation {
+                        key: "show_tray_icon".into(),
+                        value: value.into(),
+                    }],
+                )
+                .await
+                .unwrap();
+                let settings = load_desktop_behavior_settings(&pool).await.unwrap();
+                assert_eq!(settings.show_tray_icon, expected);
+                assert!(settings.should_keep_running_in_background());
+            }
+            let result = commit_app_setting_mutations(
+                &pool,
+                &[
+                    AppSettingMutation {
+                        key: "show_tray_icon".into(),
+                        value: "1".into(),
+                    },
+                    AppSettingMutation {
+                        key: "unrecognized_setting".into(),
+                        value: "1".into(),
+                    },
+                ],
+            )
+            .await;
+            assert!(result.is_err());
+            assert!(
+                !load_desktop_behavior_settings(&pool)
+                    .await
+                    .unwrap()
+                    .show_tray_icon
             );
         });
     }

@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::app::{
     runtime,
     state::{
-        AppExitState, AppSettingsCommitState, DesktopBehaviorState, MainWindowLifecycleState,
-        TraySafetyState, WidgetWindowLifecycleState,
+        AppExitState, AppSettingsCommitState, BackgroundEntryState, DesktopBehaviorState,
+        MainWindowLifecycleState, WidgetWindowLifecycleState,
     },
     tray,
 };
@@ -77,7 +77,7 @@ fn register_managed_state_and_plugins(
         .manage(DesktopBehaviorState::default())
         .manage(AppSettingsCommitState::default())
         .manage(AppExitState::default())
-        .manage(TraySafetyState::default())
+        .manage(BackgroundEntryState::default())
         .manage(AppRestartState::default())
         .manage(MainWindowLifecycleState::default())
         .manage(WidgetWindowLifecycleState::default())
@@ -295,15 +295,15 @@ pub(crate) fn handle_run_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
     match event {
         tauri::RunEvent::ExitRequested { api, .. } => {
             let exit_requested = app.state::<AppExitState>().is_exit_requested();
-            let keep_tray_visible = should_keep_app_running_without_windows(
+            let keep_running = should_keep_app_running_without_windows(
                 app.state::<DesktopBehaviorState>()
                     .snapshot()
-                    .should_keep_tray_visible(),
-                app.state::<TraySafetyState>().is_forced_visible(),
+                    .should_keep_running_in_background(),
+                app.state::<BackgroundEntryState>().keeps_running(),
                 exit_requested,
             );
 
-            if keep_tray_visible {
+            if keep_running {
                 api.prevent_exit();
             }
         }

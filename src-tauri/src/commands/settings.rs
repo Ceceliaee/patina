@@ -82,19 +82,10 @@ fn last_app_setting_value<'a>(mutations: &'a [AppSettingMutation], key: &str) ->
 }
 
 #[tauri::command]
-pub fn cmd_set_desktop_behavior(
-    close_behavior: String,
-    minimize_behavior: String,
-    app: AppHandle,
-    desktop_behavior_state: State<DesktopBehaviorState>,
-) -> Result<(), String> {
-    desktop_behavior::set_desktop_behavior(
-        &app,
-        &desktop_behavior_state,
-        &close_behavior,
-        &minimize_behavior,
-    );
-    Ok(())
+pub async fn cmd_set_desktop_behavior(app: AppHandle) -> Result<(), String> {
+    let commit_state = app.state::<AppSettingsCommitState>();
+    let _guard = commit_state.lock().await;
+    desktop_behavior::apply_saved_desktop_behavior(&app).await
 }
 
 #[tauri::command]
@@ -173,6 +164,16 @@ pub async fn cmd_commit_app_settings(
     }
     if let Some(language) = language_setting {
         tray::apply_language_setting_change(&app, &language)
+            .map_err(|error| CommandErrorDto::new("SETTINGS_APPLY_FAILED", error, false))?;
+    }
+    if mutations.iter().any(|mutation| {
+        matches!(
+            mutation.key.as_str(),
+            "show_tray_icon" | "close_behavior" | "minimize_behavior"
+        )
+    }) {
+        desktop_behavior::apply_saved_desktop_behavior(&app)
+            .await
             .map_err(|error| CommandErrorDto::new("SETTINGS_APPLY_FAILED", error, false))?;
     }
     app.emit("app-settings-changed", json!({}))
