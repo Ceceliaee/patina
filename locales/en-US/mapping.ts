@@ -1,5 +1,10 @@
 // en-US mapping locale resource. Pure data only.
 export const MESSAGES = {
+  "mapping.webLinks": "Linked websites",
+  "mapping.addLinkedWebDomain": "Add website",
+  "mapping.backToLinkedWebDomains": "Back to linked websites",
+  "mapping.mainWebDomain": "Main website",
+
   "mapping.linkedApps": "Linked applications",
   "mapping.addLinkedApp": "Add application",
   "mapping.mainApp": "Main application",

@@ -1,5 +1,10 @@
 // ru-RU locale resource. Pure data only.
 export const MESSAGES = {
+  "mapping.webLinks": "Связанные сайты",
+  "mapping.addLinkedWebDomain": "Добавить сайт",
+  "mapping.backToLinkedWebDomains": "Назад к связанным сайтам",
+  "mapping.mainWebDomain": "Основной сайт",
+
   "mapping.linkedApps": "Связанные приложения",
   "mapping.addLinkedApp": "Добавить приложение",
   "mapping.mainApp": "Основное приложение",

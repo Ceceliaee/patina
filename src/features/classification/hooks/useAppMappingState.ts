@@ -7,6 +7,8 @@ import { useIconThemeColors } from "../../../shared/hooks/useIconThemeColors";
 import { useRequestedAppIcons } from "../../../shared/hooks/useRequestedAppIcons.ts";
 import { useQuietDialogs } from "../../../shared/hooks/useQuietDialogs";
 import type { ColorDisplayFormat } from "../../../shared/lib/colorFormatting";
+import { refreshKnownWebDomains } from "../../../shared/classification/webLinks.ts";
+import { loadWebDomainOverrides } from "../services/classificationStore.ts";
 import {
   ClassificationService,
   type AppOverride,
@@ -291,14 +293,22 @@ export function useAppMappingState({
     .map((option) => ({ ...option, color: resolveCategoryColor(option.value) }));
 
   const refreshWebDomainCandidates = useCallback(async () => {
-    const observedWebDomains = await ClassificationService.loadObservedWebDomainCandidates();
+    const [observedWebDomains, freshWebOverrides] = await Promise.all([
+      ClassificationService.loadObservedWebDomainCandidates(),
+      loadWebDomainOverrides(),
+    ]);
     setWebDomainCandidates(observedWebDomains);
+    const refresh = (current: ClassificationDraftState | null) => current ? {
+      ...current, webDomainOverrides: refreshKnownWebDomains(current.webDomainOverrides, freshWebOverrides),
+    } : current;
+    setSavedState(refresh);
+    setDraftState(refresh);
     if (savedState) {
       setClassificationBootstrapCache({
         observedWebDomains: cloneObservedWebDomainCandidates(observedWebDomains),
         loadedOverrides: { ...savedState.overrides },
         loadedAppLinks: { ...savedState.appLinks },
-        loadedWebDomainOverrides: { ...savedState.webDomainOverrides },
+        loadedWebDomainOverrides: refreshKnownWebDomains(savedState.webDomainOverrides, freshWebOverrides),
         loadedCategoryColorOverrides: { ...savedState.categoryColorOverrides },
         loadedCategoryLabelOverrides: { ...savedState.categoryLabelOverrides },
         loadedPersistedCategoryIds: [...savedState.persistedCategoryIds],
@@ -709,7 +719,7 @@ export function useAppMappingState({
     try {
       const confirmed = await confirm({
         title: UI_TEXT.mapping.deleteWebDomainHistoryTitle,
-        description: UI_TEXT.mapping.deleteWebDomainHistoryDetail(displayName),
+        description: UI_TEXT.mapping.deleteWebDomainHistoryDetail(displayName === candidate.normalizedDomain ? displayName : `${displayName} (${candidate.normalizedDomain})`),
         confirmLabel: UI_TEXT.dialog.confirmDanger,
         danger: true,
       });
@@ -880,6 +890,9 @@ export function useAppMappingState({
     appCatalogRefreshError: appCatalog.refreshError,
     appCatalogRetry: appCatalog.retry,
     filteredWebDomainCandidates,
+    webDomainCandidates,
+    draftWebDomainOverrides,
+    updateWebDomainOverride,
     showCategoryDialog,
     setShowCategoryDialog,
     colorFormat,

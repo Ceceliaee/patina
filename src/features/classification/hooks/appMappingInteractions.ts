@@ -100,7 +100,10 @@ function withUpdatedWebDomainOverride(
   nextOverride: WebDomainOverride | null,
 ): ClassificationDraftState {
   const nextOverrides = { ...state.webDomainOverrides };
-  if (!nextOverride) {
+  const metadata = state.webDomainOverrides[normalizedDomain];
+  if (metadata?.siteRule || metadata?.knownDomain !== undefined) {
+    nextOverrides[normalizedDomain] = { knownDomain: metadata.knownDomain, ...(metadata.siteRule ? { siteRule: metadata.siteRule } : {}), ...nextOverride };
+  } else if (!nextOverride) {
     delete nextOverrides[normalizedDomain];
   } else {
     nextOverrides[normalizedDomain] = nextOverride;

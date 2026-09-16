@@ -11,6 +11,7 @@ import QuietBadge from "../../../shared/components/QuietBadge";
 
 
 interface ClassificationMappingCardProps {
+  hideRecordControls?: boolean;
   identityContent?: ReactNode;
   identity: string;
   kind: "app" | "web";
@@ -41,7 +42,7 @@ interface ClassificationMappingCardProps {
   onDeleteAllSessions: () => void;
 }
 
-function IdentityText({ text, className }: { text: string; className: string }) {
+export function IdentityText({ text, className }: { text: string; className: string }) {
   const ref = useRef<HTMLSpanElement>(null);
   const [truncated, setTruncated] = useState(false);
   useLayoutEffect(() => {
@@ -89,6 +90,7 @@ export default function ClassificationMappingCard({
   onToggleTracking,
   onDeleteAllSessions,
   identityContent,
+  hideRecordControls = false,
 }: ClassificationMappingCardProps) {
   const UI_TEXT = useLocaleText();
   const editButtonRef = useRef<HTMLButtonElement>(null);
@@ -183,7 +185,7 @@ export default function ClassificationMappingCard({
           title={UI_TEXT.mapping.color}
           resetAction={{ label: UI_TEXT.mapping.restoreDefaultColor, onReset: () => onColorAssign(null) }}
         />
-          <QuietIconAction
+          {!hideRecordControls && <><QuietIconAction
             icon={titleCaptureEnabled ? <Captions size={16} /> : <CaptionsOff size={16} />}
             ariaLabel={UI_TEXT.mapping.titleRecorded}
             title={!globalTitleEnabled ? UI_TEXT.mapping.globalTitleDisabled : titleCaptureEnabled ? UI_TEXT.mapping.titleCaptureOnHint : UI_TEXT.mapping.titleCaptureOffHint}
@@ -214,6 +216,7 @@ export default function ClassificationMappingCard({
               onDeleteAllSessions();
             }}
           />
+          </>}
         </div>
       </div>
     </div>

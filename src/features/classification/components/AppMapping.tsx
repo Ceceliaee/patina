@@ -1,5 +1,5 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ListX, RefreshCw, Save, Sparkles, SlidersHorizontal } from "lucide-react";
 
 import QuietDialog from "../../../shared/components/QuietDialog";
@@ -11,6 +11,7 @@ import CategorySearchField from "./CategorySearchField.tsx";
 import AppMappingCandidateCard from "./AppMappingCandidateCard";
 import LinkedAppMenu from "./LinkedAppMenu.tsx";
 import WebDomainMappingCard from "./WebDomainMappingCard";
+import { webDisplayDomain } from "../../../shared/classification/webLinks.ts";
 import { useAppMappingState } from "../hooks/useAppMappingState";
 import type { CandidateFilter } from "../types";
 import {
@@ -31,6 +32,8 @@ interface Props {
 
 export default function AppMapping(props: Props) {
   const UI_TEXT = useLocaleText();
+  const [webLinksIdentity, setWebLinksIdentity] = useState<string | null>(null);
+  const mappingRoot = useRef<HTMLDivElement>(null);
   const { webActivityEnabled = false, titleRecordingEnabled = true } = props;
   const [objectMode, setObjectMode] = useState<MappingObjectMode>(readClassificationObjectMode);
   const filterOptions: Array<{ value: CandidateFilter; label: ReactNode; showCount?: boolean; ariaLabel?: string }> = [
@@ -74,6 +77,9 @@ export default function AppMapping(props: Props) {
     appCatalogRefreshError,
     appCatalogRetry,
     filteredWebDomainCandidates,
+    webDomainCandidates,
+    draftWebDomainOverrides,
+    updateWebDomainOverride,
     showCategoryDialog,
     setShowCategoryDialog,
     colorFormat,
@@ -148,8 +154,15 @@ export default function AppMapping(props: Props) {
     rememberClassificationObjectMode(mode);
   };
   const contentPaneKey = `${effectiveObjectMode}:${filter}`;
+  useEffect(() => {
+    if (webLinksIdentity && !filteredWebDomainCandidates.some(candidate => candidate.normalizedDomain === webLinksIdentity)) {
+      setWebLinksIdentity(null);
+      if (document.activeElement === document.body) mappingRoot.current?.querySelector<HTMLInputElement>(".qp-category-search input")?.focus();
+    }
+  }, [filteredWebDomainCandidates, webLinksIdentity]);
   return (
     <div
+      ref={mappingRoot}
       className="flex h-full min-w-0 flex-col gap-4 md:gap-5 overflow-hidden"
       data-classification-content-state={contentState}
     >
@@ -302,13 +315,14 @@ export default function AppMapping(props: Props) {
                     const assignedCategory = resolveWebDomainCategory(candidate);
                     const recordingEnabled = resolveWebDomainEnabled(candidate);
                     const titleCaptureEnabled = resolveWebDomainTitleCaptureEnabled(candidate);
-                    const isBusy = saving || deletingSessionsExe === candidate.normalizedDomain;
+                    const isBusy = saving || deletingSessionsExe !== null;
                     const isEditingName = editingWebDomain === candidate.normalizedDomain;
                     const inputValue = webNameDrafts[candidate.normalizedDomain] ?? displayName;
 
                     return (
                       <WebDomainMappingCard
-                        key={candidate.normalizedDomain}
+                        grouping={{ openIdentity: webLinksIdentity, onOpenIdentity: setWebLinksIdentity, candidates: webDomainCandidates, overrides: draftWebDomainOverrides, onChange: updateWebDomainOverride, onDelete: candidate => { void handleDeleteWebDomainHistory(candidate); } }}
+                          key={webDisplayDomain(candidate.normalizedDomain)}
                         candidate={candidate}
                         displayName={displayName}
                         displayColor={displayColor}

@@ -6,6 +6,7 @@ import {
 } from "../../../shared/classification/categoryTokens.ts";
 import type { AppOverride } from "../services/classificationService.ts";
 import type { WebDomainOverride } from "../../../shared/types/webActivity.ts";
+import { webLinkParent } from "../../../shared/classification/webLinks.ts";
 import {
   cloneClassificationDraftState,
   type ClassificationDraftState,
@@ -153,9 +154,16 @@ export function deleteCategoryFromDraftState(
       color: override.color,
       displayName: override.displayName,
       enabled: override.enabled !== false,
+      captureTitle: override.captureTitle !== false,
       updatedAt: override.updatedAt,
     });
-    if (nextOverride) nextWebDomainOverrides[normalizedDomain] = nextOverride;
+    if (nextOverride || override.siteRule || override.knownDomain !== undefined) {
+      nextWebDomainOverrides[normalizedDomain] = {
+        knownDomain: override.knownDomain,
+        ...(override.siteRule ? { siteRule: override.siteRule } : {}),
+        ...nextOverride,
+      };
+    }
   }
 
   const nextCategoryColorOverrides = { ...current.categoryColorOverrides };
@@ -284,8 +292,9 @@ export function updateWebDomainOverrideInDraftState(
   nextOverride: WebDomainOverride | null,
 ): ClassificationDraftState {
   const nextOverrides = { ...current.webDomainOverrides };
-  if (!nextOverride) delete nextOverrides[normalizedDomain];
-  else nextOverrides[normalizedDomain] = nextOverride;
+  const knownDomain = current.webDomainOverrides[normalizedDomain]?.knownDomain;
+  if (!nextOverride && (webLinkParent(normalizedDomain) || knownDomain === undefined)) delete nextOverrides[normalizedDomain];
+  else nextOverrides[normalizedDomain] = { knownDomain, ...(current.webDomainOverrides[normalizedDomain]?.siteRule ? { siteRule: current.webDomainOverrides[normalizedDomain].siteRule } : {}), ...nextOverride };
   return { ...current, webDomainOverrides: nextOverrides };
 }
 

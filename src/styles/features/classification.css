@@ -321,6 +321,7 @@
 .qp-app-mapping-actions {
   display: flex;
   align-items: center;
+  min-width: 112px;
   gap: 0;
 }
 

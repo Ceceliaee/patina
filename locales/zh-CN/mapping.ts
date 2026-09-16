@@ -1,5 +1,10 @@
 // zh-CN mapping locale resource. Pure data only.
 export const MESSAGES = {
+  "mapping.webLinks": "关联网页",
+  "mapping.addLinkedWebDomain": "添加网页",
+  "mapping.backToLinkedWebDomains": "返回关联网页",
+  "mapping.mainWebDomain": "主网页",
+
   "mapping.linkedApps": "关联应用",
   "mapping.addLinkedApp": "添加应用",
   "mapping.mainApp": "主程序",

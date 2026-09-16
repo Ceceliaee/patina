@@ -610,8 +610,10 @@ export interface UiText {
   };
   "mapping": {
     "addLinkedApp": string;
+    "addLinkedWebDomain": string;
     "appSearchPlaceholder": string;
     "backToLinkedApps": string;
+    "backToLinkedWebDomains": string;
     "cancel": string;
     "categoryControl": string;
     "categoryDialogDescription": string;
@@ -655,6 +657,7 @@ export interface UiText {
     "loadFailed": string;
     "loading": string;
     "mainApp": string;
+    "mainWebDomain": string;
     "noStats": string;
     "objectModeApp": string;
     "objectModeWeb": string;
@@ -695,6 +698,7 @@ export interface UiText {
     "unlinkApp": string;
     "unsaved": string;
     "webEmptyState": string;
+    "webLinks": string;
     "webSearchPlaceholder": string;
   };
   "settings": {

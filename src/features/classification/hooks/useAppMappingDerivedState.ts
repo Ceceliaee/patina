@@ -1,3 +1,4 @@
+import { groupWebCandidates } from "../../../shared/classification/webLinks.ts";
 import { useCallback, useMemo } from "react";
 import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
 import { useIconThemeColors } from "../../../shared/hooks/useIconThemeColors";
@@ -82,18 +83,19 @@ export function useAppMappingDerivedState({
 }: UseAppMappingDerivedStateParams) {
   const locale = useLocale();
   const UI_TEXT = useLocaleText();
+  const groupedWebDomainCandidates = useMemo(() => groupWebCandidates(webDomainCandidates, draftWebDomainOverrides), [webDomainCandidates, draftWebDomainOverrides]);
   const webDomainIcons = useMemo(() => {
     if (!webActivityEnabled) return {};
 
     const next: Record<string, string> = {};
-    for (const candidate of webDomainCandidates) {
+    for (const candidate of groupedWebDomainCandidates) {
       const faviconUrl = candidate.faviconUrl?.trim();
       if (faviconUrl) {
         next[candidate.normalizedDomain] = faviconUrl;
       }
     }
     return next;
-  }, [webActivityEnabled, webDomainCandidates]);
+  }, [webActivityEnabled, groupedWebDomainCandidates]);
   const webDomainIconThemeColors = useIconThemeColors(webDomainIcons);
 
   const resolveCategoryColor = useCallback((category: AppCategory) => (
@@ -206,7 +208,9 @@ export function useAppMappingDerivedState({
   }, [draftWebDomainOverrides, resolveCategoryColor, resolveWebDomainCategory, webDomainIconThemeColors]);
 
   const resolveWebDomainEnabled = useCallback((candidate: ObservedWebDomainCandidate) => (
-    draftWebDomainOverrides[candidate.normalizedDomain]?.enabled !== false
+    candidate.memberCandidates?.length
+      ? candidate.memberCandidates.some(member => draftWebDomainOverrides[member.normalizedDomain]?.enabled !== false)
+      : draftWebDomainOverrides[candidate.normalizedDomain]?.enabled !== false
   ), [draftWebDomainOverrides]);
 
   const resolveWebDomainTitleCaptureEnabled = useCallback((candidate: ObservedWebDomainCandidate) => (
@@ -245,7 +249,7 @@ export function useAppMappingDerivedState({
     if (!webActivityEnabled) return [];
 
     const normalizedQuery = searchQuery.trim().toLocaleLowerCase(locale);
-    return webDomainCandidates
+    return groupedWebDomainCandidates
       .filter((candidate) => {
         const category = resolveWebDomainCategory(candidate);
         const recordingEnabled = resolveWebDomainEnabled(candidate);
@@ -264,6 +268,7 @@ export function useAppMappingDerivedState({
           candidate.domain,
           candidate.normalizedDomain,
           candidate.title ?? "",
+          ...(candidate.memberCandidates ?? []).map(member => member.normalizedDomain),
           categoryLabel,
           category,
         ].join(" ").toLocaleLowerCase(locale);
@@ -284,20 +289,20 @@ export function useAppMappingDerivedState({
     resolveCategoryLabel,
     resolveWebDomainSortDisplayName,
     webActivityEnabled,
-    webDomainCandidates,
+    groupedWebDomainCandidates,
     locale,
   ]);
 
   const webDomainCounts = useMemo(() => {
     if (!webActivityEnabled) return { all: 0, other: 0, classified: 0, excluded: 0 };
 
-    const includedCandidates = webDomainCandidates.filter((candidate) => resolveWebDomainEnabled(candidate));
+    const includedCandidates = groupedWebDomainCandidates.filter((candidate) => resolveWebDomainEnabled(candidate));
     const all = includedCandidates.length;
     const other = includedCandidates.filter((candidate) => resolveWebDomainCategory(candidate) === "other").length;
-    const excluded = webDomainCandidates.filter((candidate) => !resolveWebDomainEnabled(candidate)).length;
+    const excluded = groupedWebDomainCandidates.filter((candidate) => !resolveWebDomainEnabled(candidate)).length;
     const classified = Math.max(0, all - other);
     return { all, other, classified, excluded };
-  }, [resolveWebDomainCategory, resolveWebDomainEnabled, webActivityEnabled, webDomainCandidates]);
+  }, [resolveWebDomainCategory, resolveWebDomainEnabled, webActivityEnabled, groupedWebDomainCandidates]);
 
   const extendedCategoryOptions = useMemo(() => {
     const deletedSet = new Set(draftDeletedCategories);

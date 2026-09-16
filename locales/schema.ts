@@ -1,5 +1,10 @@
 // Canonical language-neutral message contract. Do not derive this file from a locale at build time.
 export const MESSAGE_SCHEMA = {
+  "mapping.webLinks": { "kind": "string", "params": [], "surface": "frontend", "description": "Website grouping and exact-domain controls" },
+  "mapping.addLinkedWebDomain": { "kind": "string", "params": [], "surface": "frontend", "description": "Add an observed website to this parent" },
+  "mapping.backToLinkedWebDomains": { "kind": "string", "params": [], "surface": "frontend", "description": "Return from the website picker" },
+  "mapping.mainWebDomain": { "kind": "string", "params": [], "surface": "frontend", "description": "Accessible label for the parent website" },
+
   "mapping.linkedApps": { "kind": "string", "params": [], "surface": "frontend" },
   "mapping.addLinkedApp": { "kind": "string", "params": [], "surface": "frontend" },
   "mapping.mainApp": { "kind": "string", "params": [], "surface": "frontend" },
