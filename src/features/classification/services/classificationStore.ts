@@ -1,4 +1,6 @@
 import { APP_LINK_KEY_PREFIX, validateAppLinks, type AppLinks } from "../../../shared/classification/appLinks.ts";
+import { loadWebLinksOverrides } from "../../../platform/persistence/webLinksGateway.ts";
+import { siteRuleFromOverride, webLinkParent, WEB_LINK_SETTING_PREFIX } from "../../../shared/classification/webLinks.ts";
 import {
   deleteSessionsByExeNames,
   deleteSessionsByExeNamesBetween,
@@ -143,15 +145,7 @@ function normalizeWebDomainOverride(override: WebDomainOverride | null | undefin
   return hasMeaningfulValue ? normalized : null;
 }
 
-function parseWebDomainOverrideStorageValue(rawValue: string): WebDomainOverride | null {
-  if (!rawValue.trim()) return null;
-  try {
-    const parsed = JSON.parse(rawValue) as WebDomainOverride;
-    return normalizeWebDomainOverride(parsed);
-  } catch {
-    return null;
-  }
-}
+
 
 function toWebDomainOverrideStorageValue(override: WebDomainOverride): string {
   return JSON.stringify({
@@ -319,22 +313,7 @@ export function removeOrphanedAppOverrides(
 }
 
 export async function loadWebDomainOverrides(): Promise<Record<string, WebDomainOverride>> {
-  const rows = await loadSettingRowsByKeyPrefix(WEB_DOMAIN_OVERRIDE_KEY_PREFIX);
-
-  const overrides: Record<string, WebDomainOverride> = {};
-  for (const row of rows) {
-    const normalizedDomain = normalizeWebDomainKey(row.key.slice(WEB_DOMAIN_OVERRIDE_KEY_PREFIX.length));
-    if (!normalizedDomain) {
-      continue;
-    }
-    const override = parseWebDomainOverrideStorageValue(row.value);
-    if (!override) {
-      continue;
-    }
-    overrides[normalizedDomain] = override;
-  }
-
-  return overrides;
+  return loadWebLinksOverrides();
 }
 
 export function buildAppOverrideTransition(
@@ -438,6 +417,16 @@ export async function saveWebDomainOverride(
   normalizedDomain: string,
   override: WebDomainOverride | null,
 ): Promise<void> {
+  const root = webLinkParent(normalizedDomain);
+  if (root) {
+    const previous = siteRuleFromOverride((await loadWebDomainOverrides())[normalizedDomain]);
+    if (!previous || !override?.siteRule) throw new Error("Website grouping changed; reload before saving");
+    if (JSON.stringify(previous.members) !== JSON.stringify([...override.siteRule.members].sort())) {
+      throw new Error("Website grouping changed; reload before saving");
+    }
+    await commitClassificationSettingMutations([{ key: `${WEB_LINK_SETTING_PREFIX}${root}`, value: JSON.stringify({ previous, next: siteRuleFromOverride(override) }) }]);
+    return;
+  }
   await commitClassificationSettingMutations(
     buildSaveWebDomainOverrideMutations(normalizedDomain, override),
   );
@@ -656,6 +645,11 @@ export function buildCommitDraftChangePlanSettingMutations(
   }
 
   for (const update of changePlan.webDomainOverrideUpserts) {
+    const root = webLinkParent(update.normalizedDomain);
+    if (root) {
+      mutations.push({ key: `${WEB_LINK_SETTING_PREFIX}${root}`, value: JSON.stringify({ previous: siteRuleFromOverride(update.previous), next: siteRuleFromOverride(update.override) }) });
+      continue;
+    }
     mutations.push(...buildSaveWebDomainOverrideMutations(update.normalizedDomain, update.override));
   }
 

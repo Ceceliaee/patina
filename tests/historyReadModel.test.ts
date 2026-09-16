@@ -78,6 +78,14 @@ function makeAggregateRange(records: AggregateSessionRecord[] = []) {
   };
 }
 
+await assert.rejects(() => loadHistorySnapshot(new Date(2026, 0, 2), 7, {
+  getHistoryByDate: async () => [], getSessionsInRange: async () => [],
+  getActivityAggregateRange: async () => makeAggregateRange(),
+  getWebActivitySegmentsInRange: async () => [], getWebFaviconsForDomains: async () => ({}),
+  loadWebDomainOverrides: async () => ({}),
+  loadWebSnapshot: async () => { throw new Error("website snapshot unavailable"); },
+}), /website snapshot unavailable/, "atomic website failure must not masquerade as an empty successful day");
+
 let passed = 0;
 
 async function runTest(name: string, fn: () => Promise<void>) {

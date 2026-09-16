@@ -1,3 +1,4 @@
+import { resolveWebOwner, webDisplayDomain } from "../../../shared/classification/webLinks.ts";
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import { resolveStableDomainColor } from "../../../shared/classification/domainColor.ts";
 import type { AppCategory } from "../../../shared/classification/categoryTokens.ts";
@@ -85,12 +86,13 @@ function resolveWebCategory(
   normalizedDomain: string,
   overrides: Record<string, WebDomainOverride>,
 ): AppCategory {
-  return overrides[normalizedDomain]?.category ?? "other";
+  return overrides[resolveWebOwner(normalizedDomain, overrides)]?.category ?? "other";
 }
 
 function resolveWebLabel(segment: WebActivitySegment, overrides: Record<string, WebDomainOverride>): string {
-  return overrides[segment.normalizedDomain]?.displayName?.trim()
-    || segment.domain
+  const owner = resolveWebOwner(segment.normalizedDomain, overrides);
+  return overrides[owner]?.displayName?.trim()
+    || (owner !== segment.normalizedDomain ? webDisplayDomain(owner) : segment.domain)
     || segment.normalizedDomain;
 }
 
@@ -100,7 +102,7 @@ function resolveWebColor(
   overrides: Record<string, WebDomainOverride>,
   iconThemeColors: Record<string, string>,
 ): string {
-  const overrideColor = overrides[normalizedDomain]?.color;
+  const overrideColor = overrides[resolveWebOwner(normalizedDomain, overrides)]?.color;
   if (overrideColor) return overrideColor;
   const iconColor = iconThemeColors[normalizedDomain];
   if (iconColor) return iconColor;
@@ -331,7 +333,7 @@ export function buildWebDomainDistribution(
     const clipped = clampSegmentToRange(segment, range.startMs, range.endMs, nowMs);
     if (clipped.duration <= 0) continue;
 
-    const key = segment.normalizedDomain;
+    const key = resolveWebOwner(segment.normalizedDomain, overrides);
     const current = groups.get(key);
     totalDuration += clipped.duration;
 
@@ -349,7 +351,7 @@ export function buildWebDomainDistribution(
     const faviconUrl = resolveWebFaviconUrl(segment, webDomainFavicons);
     groups.set(key, {
       key,
-      domain: segment.domain || key,
+      domain: webDisplayDomain(key),
       label,
       duration: clipped.duration,
       color: resolveWebColor(key, category, overrides, iconThemeColors),

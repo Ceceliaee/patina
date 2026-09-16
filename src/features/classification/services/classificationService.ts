@@ -2,6 +2,7 @@ import { AppClassification } from "../../../shared/classification/appClassificat
 import type { AppLinks } from "../../../shared/classification/appLinks.ts";
 import { ProcessMapper } from "../../../shared/classification/processMapper.ts";
 import type { AppOverride } from "../../../shared/classification/processMapper.ts";
+import { WebLinksReadError } from "../../../platform/persistence/webLinksGateway.ts";
 import {
   type AppCategory,
   type ExtendedAppCategory,
@@ -167,6 +168,7 @@ async function loadOptionalWebClassificationData(
       loadedWebDomainOverrides,
     };
   } catch (error) {
+    if (error instanceof WebLinksReadError) throw error;
     if (!warnedWebClassificationFallback) {
       warnedWebClassificationFallback = true;
       console.warn("Web domain classification data is unavailable; continuing with app classification only.", error);

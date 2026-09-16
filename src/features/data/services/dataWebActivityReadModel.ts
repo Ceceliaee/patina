@@ -1,3 +1,5 @@
+import { webLinksOverrides } from "../../../platform/persistence/webLinksGateway.ts";
+import { resolveWebOwner, webDisplayDomain } from "../../../shared/classification/webLinks.ts";
 import type { Locale, UiText } from "../../../shared/i18n/index.ts";
 import { formatDuration } from "../../../shared/lib/durationFormatting.ts";
 import {
@@ -191,18 +193,29 @@ async function loadRangeSnapshot({
   const loadStartedAtEpoch = snapshotCacheEpoch;
 
   const snapshotPromise = (async () => {
-    const [aggregate, overrides] = await Promise.all([
-      deps.loadAggregateRange(startMs, endMs, bucketBoundariesMs, normalizedDomains),
-      deps.loadOverrides().catch((): Record<string, WebDomainOverride> => ({})),
-    ]);
+    const aggregate = await deps.loadAggregateRange(startMs, endMs, bucketBoundariesMs, normalizedDomains);
+    const overrides: Record<string, WebDomainOverride> = aggregate.webLinks ? webLinksOverrides(aggregate.webLinks) : await deps.loadOverrides().catch(() => ({}));
     const domains = Array.from(new Set(
       aggregate.records
         .filter((record) => overrides[record.normalizedDomain]?.enabled !== false)
         .map((record) => record.normalizedDomain),
     ));
-    const favicons = await deps.loadFavicons(domains).catch(() => ({}));
+    const favicons: Record<string, string> = await deps.loadFavicons(domains).catch(() => ({}));
+    for (const domain of [...domains].sort()) {
+      const owner = resolveWebOwner(domain, overrides);
+      if (!favicons[owner] && favicons[domain]) favicons[owner] = favicons[domain];
+    }
+    const coverage = new Map<string, number>();
+    for (const item of aggregate.domainCoverage) {
+      if (overrides[item.normalizedDomain]?.enabled === false) continue;
+      const owner = resolveWebOwner(item.normalizedDomain, overrides);
+      coverage.set(owner, Math.min(coverage.get(owner) ?? Infinity, item.earliestRecordedStartMs));
+    }
     const snapshot: DataWebActivitySnapshot = {
       ...aggregate,
+      records: aggregate.records.filter(record => overrides[record.normalizedDomain]?.enabled !== false)
+        .map(record => ({ ...record, normalizedDomain: resolveWebOwner(record.normalizedDomain, overrides) })),
+      domainCoverage: [...coverage].map(([normalizedDomain, earliestRecordedStartMs]) => ({ normalizedDomain, earliestRecordedStartMs })),
       overrides,
       favicons,
     };
@@ -245,8 +258,9 @@ function buildDomainAggregates({
   for (const record of records) {
     const override = overrides[record.normalizedDomain];
     if (override?.enabled === false || record.durationMs <= 0) continue;
+    const owner = resolveWebOwner(record.normalizedDomain, overrides);
     const dateKey = formatLocalDateKey(new Date(record.bucketStartMs));
-    const bucket = domainBuckets.get(record.normalizedDomain) ?? {
+    const bucket = domainBuckets.get(owner) ?? {
       dayDurations: new Map<string, number>(),
       monthDurations: new Map<string, number>(),
       totalDuration: 0,
@@ -255,7 +269,7 @@ function buildDomainAggregates({
     const monthKey = getMonthKey(dateKey);
     bucket.monthDurations.set(monthKey, (bucket.monthDurations.get(monthKey) ?? 0) + record.durationMs);
     bucket.totalDuration += record.durationMs;
-    domainBuckets.set(record.normalizedDomain, bucket);
+    domainBuckets.set(owner, bucket);
   }
 
   const totalWebDuration = Array.from(domainBuckets.values())
@@ -272,7 +286,7 @@ function buildDomainAggregates({
 
   return Array.from(domainBuckets, ([normalizedDomain, bucket]) => ({
     normalizedDomain,
-    displayName: overrides[normalizedDomain]?.displayName?.trim() || normalizedDomain,
+    displayName: overrides[normalizedDomain]?.displayName?.trim() || webDisplayDomain(normalizedDomain),
     category: overrides[normalizedDomain]?.category ?? "other",
     unclassified: !overrides[normalizedDomain]?.category
       || overrides[normalizedDomain]?.category === "other",
@@ -301,7 +315,7 @@ export function buildDataWebTrendViewModel(
   const selectedAggregates = Array.from(new Set(input.selectedDomains))
     .map((domain): DataWebDomainAggregate => aggregateByDomain.get(domain) ?? ({
       normalizedDomain: domain,
-      displayName: input.overrides[domain]?.displayName?.trim() || domain,
+      displayName: input.overrides[domain]?.displayName?.trim() || webDisplayDomain(domain),
       category: input.overrides[domain]?.category ?? "other",
       unclassified: !input.overrides[domain]?.category
         || input.overrides[domain]?.category === "other",

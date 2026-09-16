@@ -1,4 +1,5 @@
 import { invokeWithCommandError } from "./commandError.ts";
+import { parseWebLinksSnapshot, type WebLinksSnapshot } from "./webLinksGateway.ts";
 import { isPlainRecord as isRecord } from "../../shared/lib/runtimeTypeGuards.ts";
 
 export interface WebActivityAggregateRecord {
@@ -13,6 +14,7 @@ export interface WebActivityDomainCoverage {
 }
 
 export interface WebActivityAggregateRange {
+  webLinks?: WebLinksSnapshot;
   records: WebActivityAggregateRecord[];
   domainCoverage: WebActivityDomainCoverage[];
   sourceRevision: string;
@@ -70,7 +72,7 @@ export function parseWebActivityAggregateRange(value: unknown): WebActivityAggre
     || !Array.isArray(value.domainCoverage)
     || !value.domainCoverage.every(isDomainCoverage)
     || typeof value.sourceRevision !== "string"
-    || !/^(0|[1-9]\d*)$/u.test(value.sourceRevision)
+    || !/^(0|[1-9]\d*)(?::[a-f0-9]{64})?$/u.test(value.sourceRevision)
     || !isFiniteNonNegativeNumber(value.snapshotNowMs)) {
     throw new Error("Received invalid web activity aggregate payload");
   }
@@ -103,6 +105,7 @@ export function parseWebActivityAggregateRange(value: unknown): WebActivityAggre
   });
 
   return {
+    ...(value.webLinks === undefined ? {} : { webLinks: parseWebLinksSnapshot(value.webLinks) }),
     records,
     domainCoverage,
     sourceRevision: value.sourceRevision,
@@ -170,6 +173,7 @@ async function loadWebActivityAggregateRangeAttempt(
   const coverageMap = new Map<string, WebActivityDomainCoverage>();
   const snapshotNowMs = Date.now();
   let sourceRevision: string | null = null;
+  let webLinks: WebLinksSnapshot | undefined;
 
   for (let boundaryIndex = 0; boundaryIndex < bucketBoundariesMs.length - 1; boundaryIndex += MAX_WEB_ACTIVITY_BUCKETS_PER_REQUEST) {
     const chunkBoundaries = bucketBoundariesMs.slice(
@@ -190,6 +194,7 @@ async function loadWebActivityAggregateRangeAttempt(
       throw new WebActivitySnapshotChangedError();
     }
     sourceRevision = chunk.sourceRevision;
+    webLinks = chunk.webLinks;
 
     for (const record of chunk.records) {
       const key = `${record.normalizedDomain}\u0000${record.bucketStartMs}`;
@@ -212,6 +217,7 @@ async function loadWebActivityAggregateRangeAttempt(
   }
 
   return {
+    ...(webLinks ? { webLinks } : {}),
     records: Array.from(recordMap.values()).sort((left, right) => (
       left.normalizedDomain.localeCompare(right.normalizedDomain)
       || left.bucketStartMs - right.bucketStartMs

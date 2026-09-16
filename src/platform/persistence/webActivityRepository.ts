@@ -1,5 +1,6 @@
 import { deleteWebActivitySegmentsByDomain as deleteWebActivitySegmentsByDomainViaCommand } from "./persistenceWriteRuntimeGateway.ts";
 import { getDB } from "./sqlite.ts";
+import { loadWebLinksOverrides } from "./webLinksGateway.ts";
 import type {
   ObservedWebDomainCandidate,
   WebActivitySegment,
@@ -30,46 +31,16 @@ interface RawObservedWebDomainStatRow {
   title: string | null;
 }
 
-interface RawSettingRow {
-  key: string;
-  value: string;
-}
-
 interface RawWebFaviconRow {
   normalized_domain: string;
   favicon_url: string;
 }
 
-const WEB_DOMAIN_OVERRIDE_KEY_PREFIX = "__web_domain_override::";
 const WEB_FAVICON_QUERY_BATCH_SIZE = 900;
 
 function normalizeWebDomainKey(value: string): string | null {
   const normalized = value.trim().replace(/\.$/, "").toLocaleLowerCase();
   return normalized ? normalized : null;
-}
-
-function normalizeHexColor(colorValue: string | undefined): string | undefined {
-  const raw = (colorValue ?? "").trim();
-  if (!raw) return undefined;
-  const normalized = raw.startsWith("#") ? raw : `#${raw}`;
-  if (!/^#[0-9A-Fa-f]{6}$/.test(normalized)) return undefined;
-  return normalized.toUpperCase();
-}
-
-function normalizeWebDomainOverride(value: WebDomainOverride | null | undefined): WebDomainOverride | null {
-  if (!value) return null;
-  const normalized: WebDomainOverride = {};
-  if (value.category) normalized.category = value.category;
-  if (value.displayName?.trim()) normalized.displayName = value.displayName.trim();
-  const color = normalizeHexColor(value.color);
-  if (color) normalized.color = color;
-  if (value.enabled === false) normalized.enabled = false;
-  if (value.captureTitle === false) normalized.captureTitle = false;
-  if (typeof value.updatedAt === "number") normalized.updatedAt = value.updatedAt;
-  return normalized.category || normalized.displayName || normalized.color
-      || normalized.enabled === false || normalized.captureTitle === false
-    ? normalized
-    : null;
 }
 
 function mapRawWebActivitySegment(row: RawWebActivitySegmentRow): WebActivitySegment {
@@ -192,24 +163,5 @@ export async function getWebFaviconsForDomains(domains: string[]): Promise<Recor
 }
 
 export async function loadWebDomainOverrides(): Promise<Record<string, WebDomainOverride>> {
-  const db = await getDB();
-  const rows = await db.select<RawSettingRow[]>(
-    "SELECT key, value FROM settings WHERE key LIKE ?",
-    [`${WEB_DOMAIN_OVERRIDE_KEY_PREFIX}%`],
-  );
-  const overrides: Record<string, WebDomainOverride> = {};
-
-  for (const row of rows) {
-    const normalizedDomain = row.key.slice(WEB_DOMAIN_OVERRIDE_KEY_PREFIX.length).trim().toLocaleLowerCase();
-    if (!normalizedDomain) continue;
-    try {
-      const parsed = JSON.parse(row.value) as WebDomainOverride;
-      const override = normalizeWebDomainOverride(parsed);
-      if (override) overrides[normalizedDomain] = override;
-    } catch {
-      // Ignore malformed historical rows; the classification page will rewrite valid values.
-    }
-  }
-
-  return overrides;
+  return loadWebLinksOverrides();
 }

@@ -16,6 +16,10 @@ export interface WebActivitySegment {
 }
 
 export interface WebDomainOverride {
+  /** Catalog identity supplied by Rust; not persisted as a user override. */
+  knownDomain?: boolean;
+  /** Present only on a site: identity. Recording controls remain on raw domains. */
+  siteRule?: import("../classification/webLinks.ts").WebLinkRule;
   category?: UserAssignableAppCategory;
   displayName?: string;
   color?: string;
@@ -25,6 +29,7 @@ export interface WebDomainOverride {
 }
 
 export interface ObservedWebDomainCandidate {
+  memberCandidates?: ObservedWebDomainCandidate[];
   normalizedDomain: string;
   domain: string;
   totalDuration: number;

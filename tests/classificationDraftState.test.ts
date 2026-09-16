@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { WebLinksReadError } from "../src/platform/persistence/webLinksGateway.ts";
 import { collectCandidateCategories } from "../src/features/classification/services/classificationCandidateFiltering.ts";
 import {
   buildLegacyExtendedCategoryId,
@@ -1386,6 +1387,10 @@ await runTest("classification bootstrap keeps app rules when optional web reads 
     assert.equal(bootstrap.loadedCategoryLabelOverrides.development, "Dev Tools");
     assert.deepEqual(bootstrap.loadedDeletedCategories, ["music"]);
     assert.match(warning, /Web domain classification data is unavailable/);
+    await assert.rejects(() => ClassificationService.loadClassificationBootstrap({
+      ...deps, loadObservedWebDomainCandidates: async () => [],
+      loadWebDomainOverrides: async () => { throw new WebLinksReadError("rules unavailable"); },
+    }), /rules unavailable/);
   } finally {
     console.warn = originalWarn;
   }

@@ -75,6 +75,8 @@ export function buildQuickWebDomainOverride(
     : current?.displayName;
 
   const next: WebDomainOverride = { updatedAt };
+  if (current?.siteRule) next.siteRule = current.siteRule;
+  if (current?.knownDomain !== undefined) next.knownDomain = current.knownDomain;
   if (category && category !== "other") next.category = category;
   if (displayName?.trim()) next.displayName = displayName.trim();
   if (current?.color) next.color = current.color;
@@ -85,7 +87,7 @@ export function buildQuickWebDomainOverride(
     || next.displayName
     || next.color
     || next.enabled === false
-    || next.captureTitle === false,
+    || next.captureTitle === false || next.siteRule,
   );
   return hasMeaningfulOverride ? next : null;
 }

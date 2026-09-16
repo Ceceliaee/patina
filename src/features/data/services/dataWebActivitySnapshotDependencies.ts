@@ -7,7 +7,7 @@ export interface DataWebActivitySnapshotDependencies {
     endMs: number,
     bucketBoundariesMs: number[],
     normalizedDomains: readonly string[] | null,
-  ) => Promise<Pick<WebActivityAggregateRange, "records" | "domainCoverage">>;
+  ) => Promise<Pick<WebActivityAggregateRange, "records" | "domainCoverage" | "webLinks">>;
   loadOverrides: () => Promise<Record<string, WebDomainOverride>>;
   loadFavicons: (domains: string[]) => Promise<Record<string, string>>;
 }

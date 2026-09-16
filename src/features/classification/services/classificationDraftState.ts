@@ -7,6 +7,7 @@ import {
 import type { AppOverride } from "../../../shared/classification/processMapper.ts";
 import type { WebDomainOverride } from "../../../shared/types/webActivity.ts";
 import { validateAppLinks, type AppLinks } from "../../../shared/classification/appLinks.ts";
+import { siteRuleFromOverride } from "../../../shared/classification/webLinks.ts";
 
 export interface ClassificationDraftState {
   appLinks?: AppLinks;
@@ -21,7 +22,7 @@ export interface ClassificationDraftState {
 export interface ClassificationDraftChangePlan {
   appLinkChanges?: Array<{ member: string; parent: string | null; previous: string | null }>;
   overrideUpserts: Array<{ exeName: string; override: AppOverride | null }>;
-  webDomainOverrideUpserts: Array<{ normalizedDomain: string; override: WebDomainOverride | null }>;
+  webDomainOverrideUpserts: Array<{ normalizedDomain: string; override: WebDomainOverride | null; previous?: WebDomainOverride | null }>;
   categoryColorUpdates: Array<{ category: AppCategory; colorValue: string | null }>;
   categoryLabelUpdates: Array<{ category: AppCategory; label: string | null }>;
   persistedCategoryIdsToAdd: ExtendedAppCategory[];
@@ -51,7 +52,7 @@ export function cloneClassificationDraftState(state: ClassificationDraftState): 
   }
   const webDomainOverrides: Record<string, WebDomainOverride> = {};
   for (const [normalizedDomain, override] of Object.entries(state.webDomainOverrides ?? {})) {
-    webDomainOverrides[normalizedDomain] = { ...override };
+    webDomainOverrides[normalizedDomain] = { ...override, ...(override.siteRule ? { siteRule: { ...override.siteRule, members: [...override.siteRule.members] } } : {}) };
   }
 
   return {
@@ -101,6 +102,8 @@ export function normalizeWebDomainOverride(
 ): WebDomainOverride | null {
   if (!override) return null;
   const next: WebDomainOverride = {};
+  if (override.knownDomain !== undefined) next.knownDomain = override.knownDomain;
+  if (override.siteRule) next.siteRule = { ...override.siteRule, members: [...override.siteRule.members] };
   if (override.category) next.category = override.category;
   if (override.displayName?.trim()) next.displayName = override.displayName.trim();
   if (override.color) next.color = override.color;
@@ -112,7 +115,7 @@ export function normalizeWebDomainOverride(
     || next.displayName
     || next.color
     || next.enabled === false
-    || next.captureTitle === false,
+    || next.captureTitle === false || next.siteRule,
   );
   return hasMeaningfulValue ? next : null;
 }
@@ -140,7 +143,8 @@ function areWebDomainOverridesEqual(
   const normalizedRight = normalizeWebDomainOverride(right);
   if (!normalizedLeft && !normalizedRight) return true;
   if (!normalizedLeft || !normalizedRight) return false;
-  return normalizedLeft.category === normalizedRight.category
+  return JSON.stringify(siteRuleFromOverride(normalizedLeft)) === JSON.stringify(siteRuleFromOverride(normalizedRight))
+    && normalizedLeft.category === normalizedRight.category
     && normalizedLeft.displayName === normalizedRight.displayName
     && normalizedLeft.color === normalizedRight.color
     && normalizedLeft.enabled === normalizedRight.enabled
@@ -228,7 +232,7 @@ export function buildClassificationDraftChangePlan(
     if (areWebDomainOverridesEqual(savedOverride, draftOverride)) {
       continue;
     }
-    webDomainOverrideUpserts.push({ normalizedDomain, override: draftOverride });
+    webDomainOverrideUpserts.push({ normalizedDomain, override: draftOverride, previous: savedOverride });
   }
 
   const categoryColorUpdates: ClassificationDraftChangePlan["categoryColorUpdates"] = [];

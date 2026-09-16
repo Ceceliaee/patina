@@ -16,7 +16,7 @@ import {
 import { createSerializedJobRunner } from "../../../platform/persistence/sqliteTransactions.ts";
 import type { HistorySnapshot } from "./historyReadModel.ts";
 
-const HISTORY_BOOTSTRAP_SNAPSHOT_VERSION = 1;
+const HISTORY_BOOTSTRAP_SNAPSHOT_VERSION = 2;
 const HISTORY_BOOTSTRAP_SNAPSHOT_MAX_BYTES = 256 * 1024;
 
 export interface HistoryBootstrapIdentity {
@@ -129,6 +129,10 @@ function isWebDomainOverride(value: unknown): value is WebDomainOverride {
     && (value.enabled === undefined || typeof value.enabled === "boolean")
     && (value.captureTitle === undefined || typeof value.captureTitle === "boolean")
     && (value.updatedAt === undefined || isFiniteNumber(value.updatedAt))
+    && (value.knownDomain === undefined || typeof value.knownDomain === "boolean")
+    && (value.siteRule === undefined || (isRecord(value.siteRule)
+      && Array.isArray(value.siteRule.members)
+      && value.siteRule.members.every(member => typeof member === "string")))
   );
 }
 
@@ -204,6 +208,8 @@ function sanitizeWebActivitySegment(segment: WebActivitySegment): WebActivitySeg
 
 function sanitizeWebDomainOverride(override: WebDomainOverride): WebDomainOverride {
   return {
+    ...(override.knownDomain === undefined ? {} : { knownDomain: override.knownDomain }),
+    ...(override.siteRule === undefined ? {} : { siteRule: { ...override.siteRule, members: [...override.siteRule.members] } }),
     ...(override.category === undefined ? {} : { category: override.category }),
     ...(override.displayName === undefined ? {} : { displayName: override.displayName }),
     ...(override.color === undefined ? {} : { color: override.color }),

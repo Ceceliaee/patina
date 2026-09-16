@@ -1,3 +1,5 @@
+import { resolveWebOwner, webLinkParent } from "../../../shared/classification/webLinks.ts";
+import { loadWebGroupedRange } from "../../../platform/persistence/webLinksGateway.ts";
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import {
   getHistoryByDate,
@@ -7,7 +9,7 @@ import {
 } from "../../../platform/persistence/webActivityRepository.ts";
 import type { HistorySession } from "../../../shared/types/sessions.ts";
 import type { TrackerHealthStatus } from "../../../shared/types/tracking.ts";
-import type { WebActivitySegment } from "../../../shared/types/webActivity.ts";
+import type { WebActivitySegment, WebDomainOverride } from "../../../shared/types/webActivity.ts";
 import {
   addLocalDays,
   parseLocalDateKey,
@@ -68,6 +70,7 @@ export interface DestinationDetailDayViewModel {
 interface DestinationDetailDayDependencies {
   getAppSessions: (date: Date) => Promise<HistorySession[]>;
   getWebSegments: (startMs: number, endMs: number) => Promise<WebActivitySegment[]>;
+  getWebSnapshot?: typeof loadWebGroupedRange;
 }
 
 interface UnpositionedDetailRecord {
@@ -96,6 +99,7 @@ interface WebDetailActivityCandidate {
 const defaultDayDependencies: DestinationDetailDayDependencies = {
   getAppSessions: getHistoryByDate,
   getWebSegments: getWebActivitySegmentsInRange,
+  getWebSnapshot: loadWebGroupedRange,
 };
 
 function cleanOptionalText(value: string | null | undefined) {
@@ -387,10 +391,12 @@ function buildWebDetailRecords(
   dayEndMs: number,
   nowMs: number,
   mergeThresholdSecs: number,
+  overrides: Record<string, WebDomainOverride> = {},
 ) {
   const normalizedDomain = normalizeIdentityKey(target.key);
   const candidates = compileWebActivitySegments(segments, dayStartMs, clipEndMs, nowMs)
-    .filter(segment => segment.normalizedDomain === normalizedDomain)
+    .filter(segment => overrides[segment.normalizedDomain]?.enabled !== false
+      && (webLinkParent(normalizedDomain) ? resolveWebOwner(segment.normalizedDomain, overrides) === normalizedDomain : segment.normalizedDomain === normalizedDomain))
     .flatMap<WebDetailActivityCandidate>((segment) => {
     const record = clipRecord({
       id: `web:${segment.id}`,
@@ -526,7 +532,9 @@ export async function loadDestinationDetailDay(
     );
   }
 
-  const segments = await dependencies.getWebSegments(bounds.startMs, bounds.endMs);
+  const snapshot = dependencies.getWebSnapshot ? await dependencies.getWebSnapshot(bounds.startMs, bounds.endMs, nowMs) : null;
+  const segments = snapshot?.segments ?? await dependencies.getWebSegments(bounds.startMs, bounds.endMs);
+  const overrides = snapshot?.overrides ?? {};
   return buildDayViewModel(
     dateKey,
     bounds.startMs,
@@ -539,6 +547,7 @@ export async function loadDestinationDetailDay(
       bounds.requestedEndMs,
       nowMs,
       mergeThresholdSecs,
+      overrides,
     ),
   );
 }

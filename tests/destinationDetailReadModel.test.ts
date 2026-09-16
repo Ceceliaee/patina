@@ -669,4 +669,19 @@ await runTest("detail preserves explicit participation anchors without needing i
   assert.equal(day.totalDuration, 120000);
 });
 
+await runTest("website detail selects future members from the atomic snapshot and preserves raw URLs", async () => {
+  const domains = ["www.example.com", "mail.example.com", "new.example.com", "hidden.example.com"];
+  const segments = domains.map((domain, i) => makeWebSegment({ id: i + 1, domain, normalizedDomain: domain,
+    startTime: at(9, i * 2), endTime: at(9, i * 2 + 1), duration: 60000, url: `https://${domain}/page` }));
+  const overrides = Object.fromEntries(domains.map(domain => [domain, { knownDomain: true, enabled: domain !== "hidden.example.com" }]));
+  const grouped = { ...overrides, "site:example.com": { siteRule: { members: ["www.example.com", "new.example.com", "hidden.example.com"] } } };
+  const target = { ...webTarget(), key: "site:example.com", identityKeys: ["www.example.com"] };
+  const detail = await loadDestinationDetailDay(target, "2026-05-20", at(12), 0, {
+    getAppSessions: async () => [], getWebSegments: async () => { throw new Error("Separate facts must not be read"); },
+    getWebSnapshot: async () => ({ segments, overrides: grouped }),
+  });
+  assert.equal(detail.totalDuration, 120000);
+  assert.deepEqual(detail.records.map(row => row.url), ["https://www.example.com/page", "https://new.example.com/page"]);
+});
+
 console.log(`Passed ${passed} data destination detail read-model tests`);

@@ -1,3 +1,4 @@
+import { loadWebGroupedRange } from "../../../platform/persistence/webLinksGateway.ts";
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import type { DailySummary, HistorySession } from "../../../shared/types/sessions.ts";
 import type { TrackerHealthSnapshot } from "../../../shared/types/tracking.ts";
@@ -86,6 +87,7 @@ export interface HistorySnapshotDeps {
   getWebActivitySegmentsInRange: typeof getWebActivitySegmentsInRange;
   getWebFaviconsForDomains: typeof getWebFaviconsForDomains;
   loadWebDomainOverrides: typeof loadWebDomainOverrides;
+  loadWebSnapshot?: typeof loadWebGroupedRange;
 }
 
 export interface HistorySnapshotLoadOptions {
@@ -101,6 +103,7 @@ const DEFAULT_HISTORY_SNAPSHOT_DEPS: HistorySnapshotDeps = {
   getWebActivitySegmentsInRange,
   getWebFaviconsForDomains,
   loadWebDomainOverrides,
+  loadWebSnapshot: loadWebGroupedRange,
 };
 
 let warnedWebHistoryFallback = false;
@@ -293,6 +296,10 @@ async function loadOptionalWebSnapshotPart(
   deps: HistorySnapshotDeps,
   selectedDayRange: { startMs: number; endMs: number },
 ): Promise<Pick<HistorySnapshot, "dayWebSegments" | "webDomainFavicons" | "webDomainOverrides">> {
+  if (deps.loadWebSnapshot) {
+    const snapshot = await deps.loadWebSnapshot(selectedDayRange.startMs, selectedDayRange.endMs);
+    return { dayWebSegments: snapshot.segments, webDomainOverrides: snapshot.overrides, webDomainFavicons: {} };
+  }
   try {
     const [dayWebSegments, webDomainOverrides] = await Promise.all([
       deps.getWebActivitySegmentsInRange(selectedDayRange.startMs, selectedDayRange.endMs),
