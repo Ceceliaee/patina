@@ -263,6 +263,8 @@ export default function Settings({
                 nextChecked ? "widget" : "taskbar",
               );
             }}
+            showTrayIconChecked={draftSettings.showTrayIcon}
+            onShowTrayIconChange={(nextChecked) => handleChange("showTrayIcon", nextChecked)}
             closeToTrayChecked={draftSettings.closeBehavior === "tray"}
             onCloseToTrayChange={(nextChecked) => {
               handleChange(

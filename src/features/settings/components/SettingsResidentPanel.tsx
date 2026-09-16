@@ -7,6 +7,8 @@ import SettingsPanelHeader from "./SettingsPanelHeader";
 type SettingsResidentPanelProps = {
   minimizeToWidgetChecked: boolean;
   onMinimizeToWidgetChange: (nextChecked: boolean) => void;
+  showTrayIconChecked: boolean;
+  onShowTrayIconChange: (nextChecked: boolean) => void;
   closeToTrayChecked: boolean;
   onCloseToTrayChange: (nextChecked: boolean) => void;
   backgroundOptimizationChecked: boolean;
@@ -20,6 +22,8 @@ type SettingsResidentPanelProps = {
 export default function SettingsResidentPanel({
   minimizeToWidgetChecked,
   onMinimizeToWidgetChange,
+  showTrayIconChecked,
+  onShowTrayIconChange,
   closeToTrayChecked,
   onCloseToTrayChange,
   backgroundOptimizationChecked,
@@ -66,6 +70,22 @@ export default function SettingsResidentPanel({
               checked={closeToTrayChecked}
               onChange={onCloseToTrayChange}
               ariaLabel={UI_TEXT.accessibility.settings.toggleCloseToTray}
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--qp-text-tertiary)]">
+            {UI_TEXT.settings.showTrayIconLabel}
+          </label>
+          <div className="mt-2 flex items-start justify-between gap-4">
+            <p className="text-sm leading-relaxed text-[var(--qp-text-secondary)]">
+              {UI_TEXT.settings.showTrayIconHint}
+            </p>
+            <QuietSwitch
+              checked={showTrayIconChecked}
+              onChange={onShowTrayIconChange}
+              ariaLabel={UI_TEXT.accessibility.settings.toggleShowTrayIcon}
             />
           </div>
         </div>

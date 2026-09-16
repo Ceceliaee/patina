@@ -49,6 +49,7 @@ interface AppSettings {
   minSessionSecs: number;
   trackingPaused: boolean;
   titleRecordingEnabled: boolean;
+  showTrayIcon: boolean;
   closeBehavior: "exit" | "tray";
   minimizeBehavior: "taskbar" | "widget";
   themeMode: "light" | "dark" | "system";
@@ -135,6 +136,7 @@ const BASE_SETTINGS: AppSettings = {
   minSessionSecs: 60,
   trackingPaused: false,
   titleRecordingEnabled: true,
+  showTrayIcon: true,
   closeBehavior: "tray",
   minimizeBehavior: "taskbar",
   themeMode: "light",
@@ -229,6 +231,38 @@ await runTest("buildSettingsPatch only keeps changed keys", () => {
     webActivityToken: "secret",
     backgroundOptimization: true,
   });
+});
+
+await runTest("tray visibility defaults preserve old settings and normalize saved preferences", () => {
+  assert.equal(normalizeSettingsRecord({}).showTrayIcon, true);
+  for (const raw of ["0", "false", "off", "no"]) {
+    assert.equal(normalizeSettingsRecord({ show_tray_icon: raw }).showTrayIcon, false);
+  }
+  assert.equal(normalizeSettingsRecord({ show_tray_icon: "invalid" }).showTrayIcon, true);
+  const saved = normalizeSettingsRecord({});
+  assert.deepEqual(SettingsRuntimeAdapterService.buildSettingsPatch(saved, { ...saved, showTrayIcon: false }), {
+    showTrayIcon: false,
+  });
+});
+
+await runTest("tray apply failure keeps the committed preference and warns instead of reporting a failed write", async () => {
+  const saved = normalizeSettingsRecord({});
+  const result = await saveSettingsPageStateWithDeps({
+    savedSettings: saved,
+    draftSettings: { ...saved, showTrayIcon: false },
+    appVersion: "test", hasUnsavedChanges: true, saveStatus: "idle",
+  }, {
+    buildPatch: SettingsRuntimeAdapterService.buildSettingsPatch,
+    commitPatch: (patch) => commitSettingsPatchWithDeps(patch, {
+      persistPatch: async () => { throw { code: "SETTINGS_APPLY_FAILED", message: "tray unavailable", retryable: false }; },
+      notifySettingsChanged: async () => {},
+      syncTimelineMergeGap: async () => { throw new Error("unrelated synchronization"); },
+    }),
+  });
+  assert.equal(result.accepted, true);
+  assert.equal(result.nextSavedSettings?.showTrayIcon, false);
+  assert.equal(result.toastKind, "runtime-sync-warning");
+  assert.deepEqual(result.runtimeSyncErrors, ["tray unavailable"]);
 });
 
 await runTest("commitSettingsPatchWithDeps returns not-needed for empty patches", async () => {

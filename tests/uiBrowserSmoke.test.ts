@@ -156,6 +156,8 @@ try {
     await runDashboardReadFailureScenarios(smokeContext);
     await runDataReadFailureScenarios(smokeContext);
     await runHistoryReadFailureScenarios(smokeContext);
+  } else if (process.argv.includes("--settings-only")) {
+    await runSettingsScenarios(smokeContext);
   } else if (process.argv.includes("--theme-only")) {
     const { runThemeContrastScenarios } = await import("./uiBrowserSmoke/themeContrastScenarios.ts");
     await evaluate(client!, sessionId, `document.querySelector('[aria-label="设置"]')?.click()`);

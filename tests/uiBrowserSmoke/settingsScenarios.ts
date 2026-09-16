@@ -185,6 +185,49 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     await evaluate(client!, sessionId, `localStorage.removeItem("__time_tracker_settings_query_delay_ms")`);
   });
 
+  await runTest("tray visibility switch preserves drafts and distinguishes write and apply failures", async () => {
+    const selector = '[role="switch"][aria-label="切换托盘图标显示"]';
+    const checked = `document.querySelector(${jsonString(selector)})?.getAttribute('aria-checked')`;
+    const persisted = `JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') ?? '{}').show_tray_icon`;
+    const clickAction = async (text: string) => evaluate(client, sessionId,
+      `Array.from(document.querySelectorAll('button')).find(b => b.textContent?.trim() === ${jsonString(text)} && !b.disabled)?.click()`);
+    const toggle = async () => {
+      await evaluate(client, sessionId, `document.querySelector(${jsonString(selector)}).click()`);
+    };
+    await waitForExpression(client, sessionId, `${checked} === 'true'`);
+    const original = await evaluate(client, sessionId, persisted);
+    try {
+      await evaluate(client, sessionId, `(() => { const control = document.querySelector(${jsonString(selector)}); control.scrollIntoView(); control.focus(); })()`);
+      await client.command('Input.dispatchKeyEvent', { type: 'keyDown', key: ' ', code: 'Space', windowsVirtualKeyCode: 32 }, sessionId);
+      await client.command('Input.dispatchKeyEvent', { type: 'keyUp', key: ' ', code: 'Space', windowsVirtualKeyCode: 32 }, sessionId);
+      await waitForExpression(client, sessionId, `${checked} === 'false'`);
+      assert.equal(await evaluate(client, sessionId, persisted), original);
+      await clickAction('取消');
+      await waitForExpression(client, sessionId, `${checked} === 'true'`);
+      await toggle();
+      await evaluate(client, sessionId, `globalThis.__PATINA_REJECT_TRAY_SAVE = true`);
+      await clickAction('保存');
+      await waitForExpression(client, sessionId, `document.body.innerText.includes(${jsonString(getLocaleText('zh-CN').settings.saveFailed)})`);
+      assert.equal(await evaluate(client, sessionId, persisted), original);
+      await evaluate(client, sessionId, `delete globalThis.__PATINA_REJECT_TRAY_SAVE; globalThis.__PATINA_REJECT_TRAY_APPLY = true;`);
+      await clickAction('保存');
+      await waitForExpression(client, sessionId, `${persisted} === '0'`);
+      await waitForExpression(client, sessionId, `document.body.innerText.includes(${jsonString(getLocaleText('zh-CN').toast.settingsRuntimeSyncPartial)})`);
+      assert.equal(await evaluate(client, sessionId, checked), 'false');
+      await evaluate(client, sessionId, `delete globalThis.__PATINA_REJECT_TRAY_APPLY`);
+      await toggle();
+      await clickAction('保存');
+      await waitForExpression(client, sessionId, `${persisted} === '1'`);
+      const copy = String(await evaluate(client, sessionId, 'document.body.innerText'));
+      assert.ok(copy.includes('关闭时隐藏'));
+      assert.ok(copy.includes('启动后隐藏主窗口。'));
+      assert.ok(copy.includes('关闭后隐藏托盘图标。'));
+      assert.ok(!copy.includes('退出 Patina'));
+    } finally {
+      await evaluate(client, sessionId, `delete globalThis.__PATINA_REJECT_TRAY_SAVE; delete globalThis.__PATINA_REJECT_TRAY_APPLY;`);
+    }
+  });
+
   await runTest("settings cold failure is explicit and retryable", async () => {
     assert.equal(
       await evaluate(client!, sessionId, `

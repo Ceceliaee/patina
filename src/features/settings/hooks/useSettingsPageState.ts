@@ -346,6 +346,8 @@ export function useSettingsPageState({
       }
       if (result.toastKind === "runtime-sync-warning") {
         notify(UI_TEXT.toast.settingsRuntimeSyncPartial, "warning");
+      } else if (result.toastKind === "save-failed") {
+        notify(UI_TEXT.settings.saveFailed, "error");
       } else {
         notify(UI_TEXT.settings.saved, "success");
       }

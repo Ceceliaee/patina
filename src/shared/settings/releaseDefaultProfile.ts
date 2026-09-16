@@ -7,6 +7,7 @@ interface ReleaseDefaultSettingsProfile {
   minSessionSecs: number;
   trackingPaused: boolean;
   titleRecordingEnabled: boolean;
+  showTrayIcon: boolean;
   closeBehavior: "exit" | "tray";
   minimizeBehavior: "taskbar" | "widget";
   themeMode: "light" | "dark" | "system";
@@ -78,6 +79,7 @@ export const RELEASE_DEFAULT_SETTINGS: ReleaseDefaultSettingsProfile = {
   minSessionSecs: 300,
   trackingPaused: false,
   titleRecordingEnabled: true,
+  showTrayIcon: true,
   closeBehavior: "tray",
   minimizeBehavior: "widget",
   themeMode: "light",

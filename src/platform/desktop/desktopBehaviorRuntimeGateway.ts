@@ -1,14 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { CloseBehavior, MinimizeBehavior } from "../../shared/settings/appSettings";
 
-export async function setDesktopBehavior(
-  closeBehavior: CloseBehavior,
-  minimizeBehavior: MinimizeBehavior,
-): Promise<void> {
-  await invoke("cmd_set_desktop_behavior", {
-    closeBehavior,
-    minimizeBehavior,
-  });
+export async function setDesktopBehavior(): Promise<void> {
+  await invoke("cmd_set_desktop_behavior");
 }
 
 export async function setLaunchBehavior(

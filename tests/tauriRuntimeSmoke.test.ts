@@ -999,6 +999,14 @@ try {
   assert.equal(initialMainWindowVisible, false, "fresh-install start minimized should keep the main window hidden");
   assert.match(logs.join(""), /\[startup\] source=manual strategy=start-in-tray-optimized/);
 
+  assert.match(logs.join(""), /\[tray\] visibility-applied visible=true created=true/);
+  await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
+    mutations: [{ key: "show_tray_icon", value: "0" }, { key: "close_behavior", value: "exit" }],
+  })`);
+  await waitFor("hidden tray applied before last WebView destruction", () =>
+    /\[tray\] visibility-applied visible=false created=true/.test(logs.join("")), 10_000);
+  const hiddenTrayLogStart = logs.join("").length;
+
   let destroyCommandError: string | null = null;
   try {
     await evaluate(
@@ -1077,6 +1085,20 @@ try {
     `window.__PATINA_MAIN_WINDOW_GENERATION__`,
   ));
   assert.match(logs.join(""), /reason=single-instance[\s\S]*result=visible/);
+
+  assert.doesNotMatch(logs.join("").slice(hiddenTrayLogStart), /visibility-applied visible=true/,
+    "single-instance recovery must preserve the hidden tray preference");
+  for (const value of ["1", "0", "1"]) {
+    const logStart = logs.join("").length;
+    await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
+      mutations: [{ key: "show_tray_icon", value: "${value}" }, { key: "close_behavior", value: "tray" }],
+    })`);
+    await waitFor("tray preference applies immediately", () => logs.join("").slice(logStart)
+      .includes(`visibility-applied visible=${value === "1"} created=true`), 10_000);
+  }
+  console.log("PATINA_TRAY_VISIBILITY_REPORT", JSON.stringify({
+    hiddenLastWindowResidency: true, hiddenSingleInstanceRecovery: true, repeatedVisibilityToggle: true,
+  }));
 
   const trayRevealStartedAt = Date.now();
   await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_show_main_window")`);
@@ -2150,12 +2172,14 @@ try {
 
   await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", { mutations: [
     { key: "theme_mode", value: "dark" },
-    { key: "color_scheme_dark", value: "catppuccin" }
+    { key: "color_scheme_dark", value: "catppuccin" },
+    { key: "show_tray_icon", value: "0" }
   ] })`);
   client.close();
   client = null;
   stopProcessTree(appProcess);
   await waitFor("old runtime process exits before restart", () => !isResidualRuntimeBinaryRunning(), 10_000);
+  const restartLogStart = logs.join("").length;
   appProcess = spawn(RUNTIME_BINARY_PATH, [], {
     cwd: process.cwd(),
     env: {
@@ -2183,6 +2207,19 @@ try {
         && document.documentElement.style.getPropertyValue('--qp-bg-canvas') === '#1e1e2e'`);
     } catch { return false; }
   }, 10_000);
+  await waitFor("cold restart suppresses tray creation", () => logs.join("").slice(restartLogStart)
+    .includes("visibility-applied visible=false created=false"), 10_000);
+  assert.doesNotMatch(logs.join("").slice(restartLogStart), /visibility-applied visible=true/);
+  const hiddenPreference = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
+    db: "sqlite:patina.db", query: "SELECT value FROM settings WHERE key = ?", values: ["show_tray_icon"],
+  })`);
+  assert.deepEqual(hiddenPreference, [{ value: "0" }]);
+  await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
+    mutations: [{ key: "show_tray_icon", value: "1" }, { key: "close_behavior", value: "tray" }],
+  })`);
+  await waitFor("first enable creates native tray", () => logs.join("").slice(restartLogStart)
+    .includes("visibility-applied visible=true created=true"), 10_000);
+  console.log("PATINA_TRAY_COLD_RESTART_REPORT", JSON.stringify({ hiddenPreferencePersisted: true, hiddenStartupCreatesNoIcon: true, firstEnableCreatesIcon: true }));
   console.log("PATINA_THEME_COLD_RESTART_REPORT", JSON.stringify({ processRestart: true, presetContrast: 60, savedScheme: "catppuccin" }));
 
   console.log("PASS real Tauri runtime command/event/SQLite/capability smoke");

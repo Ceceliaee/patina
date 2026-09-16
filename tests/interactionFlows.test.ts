@@ -46,6 +46,7 @@ const BASE_SETTINGS: AppSettings = {
   minSessionSecs: 60,
   trackingPaused: false,
   titleRecordingEnabled: true,
+  showTrayIcon: true,
   closeBehavior: "tray",
   minimizeBehavior: "taskbar",
   themeMode: "light",

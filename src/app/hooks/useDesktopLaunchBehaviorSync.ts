@@ -9,11 +9,8 @@ import {
 export function useDesktopLaunchBehaviorSync(appSettings: AppSettings, enabled: boolean = true) {
   useEffect(() => {
     if (!enabled) return;
-    void setDesktopBehavior(
-      appSettings.closeBehavior,
-      appSettings.minimizeBehavior,
-    ).catch(console.warn);
-  }, [appSettings.closeBehavior, appSettings.minimizeBehavior, enabled]);
+    void setDesktopBehavior().catch(console.warn);
+  }, [appSettings.closeBehavior, appSettings.minimizeBehavior, appSettings.showTrayIcon, enabled]);
 
   useEffect(() => {
     if (!enabled) return;

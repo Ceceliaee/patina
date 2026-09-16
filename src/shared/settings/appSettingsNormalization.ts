@@ -226,6 +226,7 @@ export function normalizeSettingsRecord(
       record.title_recording_enabled,
       DEFAULT_SETTINGS.titleRecordingEnabled,
     ),
+    showTrayIcon: parseBooleanSetting(record.show_tray_icon, DEFAULT_SETTINGS.showTrayIcon),
     closeBehavior: normalizeCloseBehavior(record.close_behavior),
     minimizeBehavior: normalizeMinimizeBehavior(record.minimize_behavior),
     themeMode: normalizeThemeMode(record.theme_mode),

@@ -789,6 +789,9 @@ function tauriStubFor(path: string) {
           };
         }
         if (command === "cmd_commit_app_settings") {
+          if (globalThis.__PATINA_REJECT_TRAY_SAVE && (payload.mutations ?? []).some(m => m.key === 'show_tray_icon')) {
+            throw { code: 'SQLITE_WRITE_FAILED', message: 'fixture write failure', retryable: false };
+          }
           if (globalThis.__PATINA_REJECT_THEME_SAVE) throw new Error("Theme save rejected by fixture");
           if (globalThis.__PATINA_HOLD_THEME_SAVE) {
             await new Promise(resolve => { globalThis.__PATINA_RELEASE_THEME_SAVE = resolve; });
@@ -798,6 +801,9 @@ function tauriStubFor(path: string) {
             settings[mutation.key] = mutation.value;
           }
           storeSettings(settings);
+          if (globalThis.__PATINA_REJECT_TRAY_APPLY && (payload.mutations ?? []).some(m => m.key === 'show_tray_icon')) {
+            throw { code: 'SETTINGS_APPLY_FAILED', message: 'fixture tray failure', retryable: false };
+          }
         }
         if (command === "cmd_get_web_links") {
           const settings = loadStoredSettings();

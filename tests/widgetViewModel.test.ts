@@ -47,6 +47,7 @@ const BASE_SETTINGS: AppSettings = {
   minSessionSecs: 120,
   trackingPaused: false,
   titleRecordingEnabled: true,
+  showTrayIcon: true,
   closeBehavior: "exit",
   minimizeBehavior: "widget",
   themeMode: "light",

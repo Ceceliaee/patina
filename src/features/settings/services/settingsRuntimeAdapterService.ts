@@ -1,3 +1,4 @@
+import { parseCommandError } from "../../../platform/persistence/commandError.ts";
 import {
   clearSessionsBefore,
   saveAppSettingsPatch,
@@ -331,9 +332,17 @@ export async function commitSettingsPatchWithDeps(
     };
   }
 
-  await deps.persistPatch(patch as AppSettingsPatch);
-
   const runtimeSyncErrors: string[] = [];
+  try {
+    await deps.persistPatch(patch as AppSettingsPatch);
+  } catch (error) {
+    const commandError = parseCommandError(error);
+    if (commandError.code !== "SETTINGS_APPLY_FAILED" && commandError.code !== "SETTINGS_EVENT_FAILED") {
+      throw error;
+    }
+    // These command errors occur only after the transaction has committed.
+    runtimeSyncErrors.push(commandError.message);
+  }
   try {
     await deps.notifySettingsChanged(patch);
   } catch (error) {
