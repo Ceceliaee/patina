@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from "react";
 import "./App.css";
 import AppShell from "./app/AppShellLocaleRoot";
+import { installAppIconEvents } from "./platform/runtime/appIconEventGateway.ts";
 import {
   hideWidgetWindow,
   isCurrentWindowVisibleAndFocused,
@@ -27,6 +28,7 @@ if (typeof document !== "undefined") {
 }
 
 export default function App() {
+  useEffect(installAppIconEvents, []);
   useEffect(() => {
     if (CURRENT_WINDOW_LABEL !== "main") {
       return;

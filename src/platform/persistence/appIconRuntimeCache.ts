@@ -1,6 +1,7 @@
 import { AppClassification } from "../../shared/classification/appClassification.ts";
 import { resolveAppIconKeys } from "../../shared/classification/appIconIdentity.ts";
 import { getIconsForExecutables } from "./sessionReadRepository.ts";
+import { appIconChangeAffects, subscribeAppIconChanges } from "../../shared/hooks/appIconChanges.ts";
 
 type LoadIconsForExecutables = typeof getIconsForExecutables;
 
@@ -21,10 +22,16 @@ const MISSING_ICON_RETRY_CACHE_LIMIT = 256;
 const appIconCache = new Map<string, string>();
 const missingIconRetryState = new Map<string, MissingIconRetryState>();
 let pendingIconRefresh: Promise<void> | null = null;
+let cacheGeneration = 0;
 
-function nowFromDeps(deps: AppIconRuntimeCacheDeps): number {
-  return deps.nowMs?.() ?? Date.now();
+export function invalidateAppIcons(exeName: string | null): void {
+  cacheGeneration += 1;
+  for (const cache of [appIconCache, missingIconRetryState]) {
+    for (const key of cache.keys()) if (appIconChangeAffects(exeName, [key])) cache.delete(key);
+  }
 }
+
+subscribeAppIconChanges(invalidateAppIcons);
 
 function normalizeRequestedExecutables(exeNames: string[]): string[] {
   const seen = new Set<string>();
@@ -64,16 +71,11 @@ function readIcon(icons: Record<string, string>, exeName: string): string | null
 }
 
 function readRuntimeIcon(exeName: string): string | null {
-  for (const key of resolveAppIconKeys(exeName)) {
-    const icon = appIconCache.get(key);
-    if (!icon) continue;
-
-    appIconCache.delete(key);
-    appIconCache.set(key, icon);
-    return icon;
-  }
-
-  return null;
+  const key = resolveAppIconKeys(exeName).find((key) => appIconCache.has(key));
+  if (!key) return null;
+  const icon = appIconCache.get(key)!;
+  setRuntimeIconCacheEntry(key, icon);
+  return icon;
 }
 
 function rememberIconAliases(icons: Record<string, string>, exeName: string, icon: string): void {
@@ -150,9 +152,7 @@ function markIconRefreshResult(
   return expandedIcons;
 }
 
-export function getAppIcon(icons: Record<string, string>, exeName: string): string | null {
-  return readIcon(icons, exeName);
-}
+export { readIcon as getAppIcon };
 
 export function hasAppIconForExecutable(
   icons: Record<string, string>,
@@ -214,11 +214,11 @@ export async function loadAppIconsForExecutables(
     return getAppIconRuntimeCacheSnapshot();
   }
 
-  if (pendingIconRefresh) {
+  while (pendingIconRefresh) {
     await pendingIconRefresh;
   }
 
-  const nowMs = nowFromDeps(deps);
+  const nowMs = deps.nowMs?.() ?? Date.now();
   const missingExeNames = getRetryableMissingAppIconExecutables(
     requestedExeNames,
     {},
@@ -230,12 +230,15 @@ export async function loadAppIconsForExecutables(
   }
 
   const loadIcons = deps.loadIcons ?? getIconsForExecutables;
+  const generation = cacheGeneration;
   let refreshedIcons: Record<string, string> = {};
   const refresh = loadIcons(missingExeNames)
     .then((foundIcons) => {
+      if (generation !== cacheGeneration) return;
       refreshedIcons = markIconRefreshResult(missingExeNames, foundIcons, nowMs);
     })
     .catch((error) => {
+      if (generation !== cacheGeneration) return;
       markIconRefreshResult(missingExeNames, {}, nowMs);
       throw error;
     });
@@ -250,6 +253,7 @@ export async function loadAppIconsForExecutables(
     }
   }
 
+  if (generation !== cacheGeneration) return loadAppIconsForExecutables(exeNames, deps);
   return {
     ...getAppIconRuntimeCacheSnapshot(),
     ...refreshedIcons,
@@ -257,6 +261,7 @@ export async function loadAppIconsForExecutables(
 }
 
 export function resetAppIconRuntimeCacheForTests(): void {
+  cacheGeneration += 1;
   appIconCache.clear();
   missingIconRetryState.clear();
   pendingIconRefresh = null;

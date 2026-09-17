@@ -1,22 +1,20 @@
-import { useEffect, useState } from "react";
+import { useAppIconRevision } from "../../shared/hooks/appIconChanges.ts";
+import { useEffect, useMemo, useState } from "react";
 import { loadWidgetObjectIcon } from "../widget/widgetIconService.ts";
 
 export function useWidgetObjectIcon(objectIconKey: string | null) {
-  const [icon, setIcon] = useState<string | null>(null);
+  const names = useMemo(() => objectIconKey ? [objectIconKey] : [], [objectIconKey]);
+  const revision = useAppIconRevision(names);
+  const [loaded, setLoaded] = useState<{ key: string | null; icon: string | null }>({ key: null, icon: null });
 
   useEffect(() => {
-    if (!objectIconKey) {
-      setIcon(null);
-      return;
-    }
+    if (!objectIconKey) return;
 
     let cancelled = false;
-    setIcon(null);
-
     void loadWidgetObjectIcon(objectIconKey)
       .then((nextIcon) => {
         if (!cancelled) {
-          setIcon(nextIcon);
+          setLoaded({ key: objectIconKey, icon: nextIcon });
         }
       })
       .catch((error) => {
@@ -28,7 +26,7 @@ export function useWidgetObjectIcon(objectIconKey: string | null) {
     return () => {
       cancelled = true;
     };
-  }, [objectIconKey]);
+  }, [objectIconKey, revision]);
 
-  return objectIconKey ? icon : null;
+  return objectIconKey && loaded.key === objectIconKey ? loaded.icon : null;
 }

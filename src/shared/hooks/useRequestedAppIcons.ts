@@ -1,4 +1,5 @@
-import { startTransition, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useEffect, useMemo, useEffectEvent, useState } from "react";
+import { useAppIconRevision } from "./appIconChanges.ts";
 
 type LoadRequestedAppIcons = (exeNames: string[]) => Promise<Record<string, string>>;
 
@@ -47,13 +48,9 @@ export function useRequestedAppIcons({
   onError,
 }: UseRequestedAppIconsOptions): Record<string, string> {
   const requestedExeNames = useMemo(() => normalizeRequestedExeNames(exeNames), [exeNames]);
-  const requestKey = requestedExeNames.join("\u0000");
+  const iconRevision = useAppIconRevision(requestedExeNames);
   const [loadedIcons, setLoadedIcons] = useState<Record<string, string>>({});
-  const onErrorRef = useRef(onError);
-
-  useEffect(() => {
-    onErrorRef.current = onError;
-  }, [onError]);
+  const reportError = useEffectEvent((error: unknown) => onError?.(error));
 
   useEffect(() => {
     if (!enabled || requestedExeNames.length === 0) return undefined;
@@ -71,13 +68,13 @@ export function useRequestedAppIcons({
       })
       .catch((error) => {
         if (cancelled) return;
-        onErrorRef.current?.(error);
+        reportError(error);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [enabled, loadIcons, requestedExeNames, requestKey]);
+  }, [enabled, loadIcons, requestedExeNames, iconRevision]);
 
   return useMemo(() => ({
     ...baseIcons,

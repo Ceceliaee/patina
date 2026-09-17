@@ -1,8 +1,9 @@
+import { publishAppIconChange } from "../src/shared/hooks/appIconChanges.ts";
 import assert from "node:assert/strict";
 import { AppClassification } from "../src/shared/classification/appClassification.ts";
 import {
   getWidgetIconCacheSizeForTests,
-  loadWidgetObjectIconWithDeps,
+  loadWidgetObjectIcon,
   resetWidgetIconCacheForTests,
 } from "../src/app/widget/widgetIconService.ts";
 import { applyWidgetBootstrapSnapshot } from "../src/app/widget/widgetBootstrapService.ts";
@@ -304,16 +305,16 @@ await runTest("isWidgetSelfWindow detects Patina chrome without matching similar
   assert.equal(isWidgetSelfWindow(ACTIVE_WINDOW), false);
 });
 
-await runTest("loadWidgetObjectIconWithDeps returns null for missing icon keys", async () => {
+await runTest("loadWidgetObjectIcon returns null for missing icon keys", async () => {
   resetWidgetIconCacheForTests();
-  const icon = await loadWidgetObjectIconWithDeps("missing.exe", {
+  const icon = await loadWidgetObjectIcon("missing.exe", {
     getIcon: async () => null,
   });
 
   assert.equal(icon, null);
 });
 
-await runTest("loadWidgetObjectIconWithDeps reuses cached icons per executable", async () => {
+await runTest("loadWidgetObjectIcon reuses cached icons per executable", async () => {
   resetWidgetIconCacheForTests();
   let loadCount = 0;
   const deps = {
@@ -323,13 +324,13 @@ await runTest("loadWidgetObjectIconWithDeps reuses cached icons per executable",
     },
   };
 
-  assert.equal(await loadWidgetObjectIconWithDeps("chrome.exe", deps), "chrome.exe-icon");
-  assert.equal(await loadWidgetObjectIconWithDeps("Chrome.EXE", deps), "chrome.exe-icon");
-  assert.equal(await loadWidgetObjectIconWithDeps("cursor.exe", deps), "cursor.exe-icon");
+  assert.equal(await loadWidgetObjectIcon("chrome.exe", deps), "chrome.exe-icon");
+  assert.equal(await loadWidgetObjectIcon("Chrome.EXE", deps), "chrome.exe-icon");
+  assert.equal(await loadWidgetObjectIcon("cursor.exe", deps), "cursor.exe-icon");
   assert.equal(loadCount, 2);
 });
 
-await runTest("loadWidgetObjectIconWithDeps retries after failed icon load", async () => {
+await runTest("loadWidgetObjectIcon retries after failed icon load", async () => {
   resetWidgetIconCacheForTests();
   let loadCount = 0;
   const deps = {
@@ -343,14 +344,14 @@ await runTest("loadWidgetObjectIconWithDeps retries after failed icon load", asy
   };
 
   await assert.rejects(
-    () => loadWidgetObjectIconWithDeps("chrome.exe", deps),
+    () => loadWidgetObjectIcon("chrome.exe", deps),
     /db busy/,
   );
-  assert.equal(await loadWidgetObjectIconWithDeps("chrome.exe", deps), "chrome-icon");
+  assert.equal(await loadWidgetObjectIcon("chrome.exe", deps), "chrome-icon");
   assert.equal(loadCount, 2);
 });
 
-await runTest("loadWidgetObjectIconWithDeps caps the widget icon cache", async () => {
+await runTest("loadWidgetObjectIcon caps the widget icon cache", async () => {
   resetWidgetIconCacheForTests();
   const deps = {
     getIcon: async (exeName: string) => `${exeName}-icon`,
@@ -358,7 +359,7 @@ await runTest("loadWidgetObjectIconWithDeps caps the widget icon cache", async (
 
   for (let index = 0; index < 20; index += 1) {
     assert.equal(
-      await loadWidgetObjectIconWithDeps(`app-${index}.exe`, deps),
+      await loadWidgetObjectIcon(`app-${index}.exe`, deps),
       `app-${index}.exe-icon`,
     );
   }
@@ -483,6 +484,26 @@ await runTest("widget status parser enforces the two semantic tool slots", () =>
   assert.equal(parseWidgetStatusSnapshot({ ...base, tools: [pomodoro, timer] }), null);
   assert.equal(parseWidgetStatusSnapshot({ ...base, tools: [timer, timer] }), null);
   assert.equal(parseWidgetStatusSnapshot({ ...base, tools: [timer, pomodoro, pomodoro] }), null);
+});
+
+await runTest("widget icon change reloads pending stale requests without clearing unrelated entries", async () => {
+  await loadWidgetObjectIcon("unrelated-widget.exe", { getIcon: async () => "unrelated-icon" });
+  let release!: (icon: string) => void;
+  let calls = 0;
+  const pending = loadWidgetObjectIcon("refresh-widget.exe", { getIcon: async () => {
+    calls += 1;
+    if (calls === 1) return new Promise<string>((resolve) => { release = resolve; });
+    return "new-icon";
+  } });
+  publishAppIconChange("refresh-widget.exe");
+  release("old-icon");
+  assert.equal(await pending, "new-icon");
+  assert.equal(calls, 2);
+  assert.equal(await loadWidgetObjectIcon("unrelated-widget.exe", { getIcon: async () => {
+    throw new Error("unrelated cached entry must be retained");
+  } }), "unrelated-icon");
+  publishAppIconChange("refresh-widget.exe");
+  assert.equal(await loadWidgetObjectIcon("refresh-widget.exe", { getIcon: async () => "next-icon" }), "next-icon");
 });
 
 console.log(`Passed ${passed} widget view model tests`);

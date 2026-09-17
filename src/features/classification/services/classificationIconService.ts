@@ -1,3 +1,4 @@
+import { subscribeAppIconChanges } from "../../../shared/hooks/appIconChanges.ts";
 import {
   getCachedAppIconsForExecutables,
   loadAppIconsForExecutables,
@@ -7,6 +8,8 @@ import { AppClassification } from "../../../shared/classification/appClassificat
 import { getIconsForExecutables } from "../../../platform/persistence/sessionReadRepository.ts";
 
 let classificationPresentationIcons: Record<string, string> = {};
+let generation = 0;
+subscribeAppIconChanges(() => { generation += 1; classificationPresentationIcons = {}; });
 
 function rememberRequestedIcon(
   icons: Record<string, string>,
@@ -33,14 +36,17 @@ export async function loadClassificationIconsForExecutables(
   exeNames: string[],
   deps?: Parameters<typeof loadAppIconsForExecutables>[1],
 ): Promise<Record<string, string>> {
-  classificationPresentationIcons = await loadAppIconsForExecutables(exeNames, deps);
+  const revision = generation;
+  let icons = await loadAppIconsForExecutables(exeNames, deps);
   // The editor needs each executable's own icon before an unlink draft is saved.
   const members = exeNames.filter((exeName) => AppClassification.resolveStatisticalApp(exeName)
     !== AppClassification.resolveCanonicalExecutable(exeName));
   if (members.length > 0) {
     const memberIcons = await (deps?.loadIcons ?? getIconsForExecutables)(members, "executable");
-    classificationPresentationIcons = { ...classificationPresentationIcons, ...memberIcons };
+    icons = { ...icons, ...memberIcons };
   }
+  if (revision !== generation) return loadClassificationIconsForExecutables(exeNames, deps);
+  classificationPresentationIcons = icons;
   return getCachedClassificationIconsForExecutables(exeNames);
 }
 

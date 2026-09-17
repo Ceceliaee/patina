@@ -1,3 +1,4 @@
+import { publishAppIconChange } from "../../src/shared/hooks/appIconChanges.ts";
 import { createElement, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { useRequestedAppIcons } from "../../src/shared/hooks/useRequestedAppIcons.ts";
@@ -28,6 +29,7 @@ export function createRequestedIconsProbe() {
     return null;
   }
   return {
+    change: (name: string | null) => publishAppIconChange(name),
     render: (names: string[]) => root.render(createElement(Probe, { names })),
     read: () => ({ icons: current, commits, errors: [...errors], requests: pending.map(({ names }) => names) }),
     resolve: (index: number, value: Record<string, string>) => pending[index].resolve(value),

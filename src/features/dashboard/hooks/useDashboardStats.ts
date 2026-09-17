@@ -1,3 +1,4 @@
+import { appIconChangeAffects, subscribeAppIconChanges } from "../../../shared/hooks/appIconChanges.ts";
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatLocalDateKey } from "../../../shared/lib/localDate.ts";
 import {
@@ -50,7 +51,9 @@ export function useDashboardStats(
   const yesterdayImportedBuckets = snapshot?.yesterdayImportedBuckets ?? EMPTY_BUCKETS;
   const aggregateIncludesExactFacts = snapshot?.aggregateIncludesExactFacts ?? false;
   const hasActiveSession = snapshot?.hasActiveSession ?? false;
+  const iconNames = useMemo(() => [...rawSessions, ...importedBuckets].map((item) => item.exeName), [rawSessions, importedBuckets]);
   const icons = snapshot?.icons ?? EMPTY_ICONS;
+
 
   const loadSnapshot = useCallback(async () => {
     const requestId = ++requestIdRef.current;
@@ -81,51 +84,29 @@ export function useDashboardStats(
   }, [classificationReady, currentDateKey, foregroundRefreshEnabled, refreshKey, loadSnapshot]);
 
   useEffect(() => {
-    const hasLiveSession = hasActiveSession
-      || rawSessions.some((session) => session.endTime === null);
-    if (!classificationReady || !foregroundRefreshEnabled || !hasLiveSession || trackerHealth.status !== "healthy") {
-      return;
-    }
-
-    const iconExeNames = [...rawSessions, ...importedBuckets].map((session) => session.exeName);
+    if (!classificationReady) return;
     let cancelled = false;
-
-    const timer = window.setInterval(() => {
-      setNowMs(Date.now());
-      if (aggregateIncludesExactFacts) {
-        void loadSnapshot();
-      }
-
-      const missingIconExeNames = getRetryableMissingDashboardIconExecutables(
-        iconExeNames,
-        icons,
-      );
-
-      if (missingIconExeNames.length > 0) {
-        void loadIconSnapshot(missingIconExeNames)
-          .then((snapshot) => {
-            if (cancelled) return;
-            startTransition(() => {
-              setState((current) => current.snapshot ? ({
-                ...current,
-                snapshot: {
-                  ...current.snapshot,
-                  icons: { ...current.snapshot.icons, ...snapshot.icons },
-                },
-              }) : current);
-            });
-          })
-          .catch((error) => {
-            console.warn("Failed to refresh icon cache:", error);
-          });
-      }
-    }, refreshIntervalSecs * 1000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
+    const refreshIcons = (names: string[]) => {
+      if (!names.length) return;
+      void loadIconSnapshot(names).then((next) => {
+        if (cancelled) return;
+        startTransition(() => setState((current) => current.snapshot ? {
+          ...current, snapshot: { ...current.snapshot, icons: { ...current.snapshot.icons, ...next.icons } },
+        } : current));
+      }).catch(console.warn);
     };
-  }, [aggregateIncludesExactFacts, classificationReady, foregroundRefreshEnabled, hasActiveSession, icons, importedBuckets, loadSnapshot, rawSessions, refreshIntervalSecs, trackerHealth.status]);
+    const stop = subscribeAppIconChanges((exe) => {
+      if (appIconChangeAffects(exe, iconNames)) refreshIcons(iconNames);
+    });
+    const hasLiveSession = hasActiveSession || rawSessions.some((session) => session.endTime === null);
+    const timer = foregroundRefreshEnabled && hasLiveSession && trackerHealth.status === "healthy"
+      ? window.setInterval(() => {
+        setNowMs(Date.now());
+        if (aggregateIncludesExactFacts) void loadSnapshot();
+        refreshIcons(getRetryableMissingDashboardIconExecutables(iconNames, icons));
+      }, refreshIntervalSecs * 1000) : undefined;
+    return () => { cancelled = true; stop(); window.clearInterval(timer); };
+  }, [aggregateIncludesExactFacts, classificationReady, foregroundRefreshEnabled, hasActiveSession, icons, iconNames, loadSnapshot, rawSessions, refreshIntervalSecs, trackerHealth.status]);
 
   const dashboard = useMemo(
     () => buildDashboardReadModel(

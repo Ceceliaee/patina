@@ -12,6 +12,7 @@ import {
 } from "../src/features/history/services/historyLayoutPreferenceStorage.ts";
 import {
   buildHistoryTimelineViewModel as buildHistoryTimelineViewModelRaw,
+  buildAppTimelineSources,
   DEFAULT_HISTORY_TIMELINE_ZOOM_HOURS,
   getHistoryTimelineZoomDurationMs,
   normalizeHistoryTimelineViewport,
@@ -1272,6 +1273,20 @@ runTest("timeline preserves app switches between same app segments", () => {
     viewModel.segments.map((segment) => segment.sourceKey),
     ["cursor.exe", "chrome.exe", "cursor.exe"],
   );
+});
+
+runTest("icon color changes respect the user's explicit color", () => {
+  const sessions = [makeCompiledSession()];
+  const read = (color: string) => buildAppTimelineSources(sessions, { "cursor.exe": color }, getLocaleText("zh-CN"))[0].sourceColor;
+  try {
+    assert.equal(read("#112233"), "#112233");
+    assert.equal(read("#334455"), "#334455");
+    ProcessMapper.setUserOverrides({ "cursor.exe": { color: "#ABCDEF", enabled: true } });
+    assert.equal(read("#112233"), "#ABCDEF");
+    assert.equal(read("#334455"), "#ABCDEF");
+  } finally {
+    ProcessMapper.clearUserOverrides();
+  }
 });
 
 await harness.finish("history timeline view model");

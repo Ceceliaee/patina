@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { verifyWebDavRuntime } from "./tauriWebDavRuntime.ts";
+import { verifyAppIconRuntime } from "./tauriAppIconRuntime.ts";
 import { verifyLinkedApplicationsRuntime } from "./tauriLinkedApplicationsRuntime.ts";
 import { verifyWebLinksRuntime } from "./tauriWebLinksRuntime.ts";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
@@ -368,6 +369,7 @@ async function verifyBackupReplaceRuntime(client: CdpConnection, root: string) {
   }, 10_000);
 
   // Observe command names through CDP without replacing Tauri's IPC or replies.
+  await verifyAppIconRuntime((expression) => evaluate(client, expression), dbPath);
   const cacheClearCommands = new Set<string>();
   const mutationCommands = new Set<string>();
   const stopObserving = client.onMessage((message) => {
