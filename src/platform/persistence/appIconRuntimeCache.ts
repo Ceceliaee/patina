@@ -6,8 +6,8 @@ import { appIconChangeAffects, subscribeAppIconChanges } from "../../shared/hook
 type LoadIconsForExecutables = typeof getIconsForExecutables;
 
 interface MissingIconRetryState {
-  attempts: number;
   nextRetryAtMs: number;
+  delayIndex: number;
 }
 
 export interface AppIconRuntimeCacheDeps {
@@ -17,7 +17,6 @@ export interface AppIconRuntimeCacheDeps {
 
 const MISSING_ICON_RETRY_DELAYS_MS = [2_000, 5_000, 15_000, 60_000] as const;
 const APP_ICON_RUNTIME_CACHE_LIMIT = 256;
-const MISSING_ICON_RETRY_CACHE_LIMIT = 256;
 
 const appIconCache = new Map<string, string>();
 const missingIconRetryState = new Map<string, MissingIconRetryState>();
@@ -41,7 +40,7 @@ function normalizeRequestedExecutables(exeNames: string[]): string[] {
     const rawExe = exeName.trim();
     if (!rawExe) continue;
 
-    const retryKey = resolveAppIconRetryKey(rawExe);
+    const retryKey = AppClassification.resolveCanonicalExecutable(rawExe);
     if (seen.has(retryKey)) continue;
 
     seen.add(retryKey);
@@ -49,16 +48,6 @@ function normalizeRequestedExecutables(exeNames: string[]): string[] {
   }
 
   return result;
-}
-
-function resolveAppIconRetryKey(exeName: string): string {
-  const canonicalExe = AppClassification.resolveCanonicalExecutable(exeName);
-  return canonicalExe || AppClassification.normalizeExecutable(exeName);
-}
-
-function retryDelayForAttempts(attempts: number): number {
-  const index = Math.min(Math.max(attempts - 1, 0), MISSING_ICON_RETRY_DELAYS_MS.length - 1);
-  return MISSING_ICON_RETRY_DELAYS_MS[index];
 }
 
 function readIcon(icons: Record<string, string>, exeName: string): string | null {
@@ -74,7 +63,7 @@ function readRuntimeIcon(exeName: string): string | null {
   const key = resolveAppIconKeys(exeName).find((key) => appIconCache.has(key));
   if (!key) return null;
   const icon = appIconCache.get(key)!;
-  setRuntimeIconCacheEntry(key, icon);
+  rememberCacheEntry(appIconCache, key, icon);
   return icon;
 }
 
@@ -84,41 +73,20 @@ function rememberIconAliases(icons: Record<string, string>, exeName: string, ico
   }
 }
 
-function setRuntimeIconCacheEntry(key: string, icon: string): void {
-  appIconCache.delete(key);
-  appIconCache.set(key, icon);
-
-  while (appIconCache.size > APP_ICON_RUNTIME_CACHE_LIMIT) {
-    const oldestKey = appIconCache.keys().next().value;
-    if (!oldestKey) break;
-    appIconCache.delete(oldestKey);
+function rememberCacheEntry<T>(cache: Map<string, T>, key: string, value: T): void {
+  cache.delete(key);
+  cache.set(key, value);
+  if (cache.size > APP_ICON_RUNTIME_CACHE_LIMIT) {
+    cache.delete(cache.keys().next().value!);
   }
 }
 
 function mergeIntoRuntimeCache(icons: Record<string, string>): void {
   for (const [key, icon] of Object.entries(icons)) {
     if (key.trim() && icon) {
-      setRuntimeIconCacheEntry(key, icon);
+      rememberCacheEntry(appIconCache, key, icon);
     }
   }
-}
-
-function expandRequestedIconAliases(
-  requestedExeNames: string[],
-  foundIcons: Record<string, string>,
-): Record<string, string> {
-  const expandedIcons = { ...foundIcons };
-  mergeIntoRuntimeCache(foundIcons);
-
-  for (const exeName of requestedExeNames) {
-    const icon = readIcon(expandedIcons, exeName) ?? readRuntimeIcon(exeName);
-    if (icon) {
-      rememberIconAliases(expandedIcons, exeName, icon);
-    }
-  }
-
-  mergeIntoRuntimeCache(expandedIcons);
-  return expandedIcons;
 }
 
 function markIconRefreshResult(
@@ -126,29 +94,28 @@ function markIconRefreshResult(
   foundIcons: Record<string, string>,
   nowMs: number,
 ): Record<string, string> {
-  const expandedIcons = expandRequestedIconAliases(requestedExeNames, foundIcons);
+  const expandedIcons = { ...foundIcons };
 
   for (const exeName of requestedExeNames) {
-    const retryKey = resolveAppIconRetryKey(exeName);
-    if (readIcon(expandedIcons, exeName) ?? readRuntimeIcon(exeName)) {
+    const retryKey = AppClassification.resolveCanonicalExecutable(exeName);
+    const icon = readIcon(expandedIcons, exeName) ?? readRuntimeIcon(exeName);
+    if (icon) {
+      rememberIconAliases(expandedIcons, exeName, icon);
       missingIconRetryState.delete(retryKey);
       continue;
     }
 
-    const previous = missingIconRetryState.get(retryKey);
-    const attempts = (previous?.attempts ?? 0) + 1;
-    missingIconRetryState.delete(retryKey);
-    missingIconRetryState.set(retryKey, {
-      attempts,
-      nextRetryAtMs: nowMs + retryDelayForAttempts(attempts),
+    const delayIndex = Math.min(
+      (missingIconRetryState.get(retryKey)?.delayIndex ?? -1) + 1,
+      MISSING_ICON_RETRY_DELAYS_MS.length - 1,
+    );
+    rememberCacheEntry(missingIconRetryState, retryKey, {
+      delayIndex,
+      nextRetryAtMs: nowMs + MISSING_ICON_RETRY_DELAYS_MS[delayIndex],
     });
-    while (missingIconRetryState.size > MISSING_ICON_RETRY_CACHE_LIMIT) {
-      const oldestKey = missingIconRetryState.keys().next().value;
-      if (!oldestKey) break;
-      missingIconRetryState.delete(oldestKey);
-    }
   }
 
+  mergeIntoRuntimeCache(expandedIcons);
   return expandedIcons;
 }
 
@@ -173,11 +140,10 @@ export function getRetryableMissingAppIconExecutables(
       continue;
     }
 
-    const retryKey = resolveAppIconRetryKey(exeName);
+    const retryKey = AppClassification.resolveCanonicalExecutable(exeName);
     const retryState = missingIconRetryState.get(retryKey);
     if (retryState && retryState.nextRetryAtMs > nowMs) {
-      missingIconRetryState.delete(retryKey);
-      missingIconRetryState.set(retryKey, retryState);
+      rememberCacheEntry(missingIconRetryState, retryKey, retryState);
       continue;
     }
 
@@ -272,7 +238,7 @@ export function getAppIconRuntimeCacheStats() {
     entries: appIconCache.size,
     limit: APP_ICON_RUNTIME_CACHE_LIMIT,
     missingRetryEntries: missingIconRetryState.size,
-    missingRetryLimit: MISSING_ICON_RETRY_CACHE_LIMIT,
+    missingRetryLimit: APP_ICON_RUNTIME_CACHE_LIMIT,
     pendingRefresh: pendingIconRefresh !== null,
   };
 }

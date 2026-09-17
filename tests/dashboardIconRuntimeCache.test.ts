@@ -11,6 +11,7 @@ import {
 } from "../src/features/dashboard/services/dashboardIconRuntimeCache.ts";
 import {
   getAppIconRuntimeCacheStats,
+  getAppIconRuntimeCacheSnapshot,
 } from "../src/platform/persistence/appIconRuntimeCache.ts";
 import {
   getCachedClassificationIconsForExecutables,
@@ -67,14 +68,15 @@ await runTest("dashboard icon cache backs off missing icons instead of retrying 
   };
 
   await loadDashboardIconsForExecutables(["Missing.exe"], deps);
-  await loadDashboardIconsForExecutables(["Missing.exe"], deps);
-
-  assert.deepEqual(calls, [["Missing.exe"]]);
-
-  nowMs += 2_001;
-  await loadDashboardIconsForExecutables(["Missing.exe"], deps);
-
-  assert.deepEqual(calls, [["Missing.exe"], ["Missing.exe"]]);
+  for (const [index, delay] of [2_000, 5_000, 15_000, 60_000, 60_000].entries()) {
+    nowMs += delay - 1;
+    await loadDashboardIconsForExecutables(["Missing.exe"], deps);
+    assert.equal(calls.length, index + 1, "missing icons wait for the full retry delay");
+    nowMs += 1;
+    await loadDashboardIconsForExecutables(["Missing.exe"], deps);
+    assert.equal(calls.length, index + 2, "retry delay saturates at one minute");
+  }
+  assert.ok(calls.every((names) => names.length === 1 && names[0] === "Missing.exe"));
 });
 
 await runTest("dashboard icon missing detector respects caller-owned icon maps", () => {
@@ -89,6 +91,18 @@ await runTest("dashboard icon missing detector respects caller-owned icon maps",
 });
 
 await runTest("dashboard icon runtime cache keeps bounded icon and retry entries", async () => {
+  const deps = {
+    loadIcons: async (names: string[]) => Object.fromEntries(names.map((name) => [name, `icon:${name}`])),
+  };
+  await loadDashboardIconsForExecutables(Array.from({ length: 256 }, (_, index) => `app${index}.exe`), deps);
+  await loadDashboardIconsForExecutables(["app0.exe"], deps);
+  await loadDashboardIconsForExecutables(["app256.exe"], deps);
+  const snapshot = getAppIconRuntimeCacheSnapshot();
+  assert.equal(snapshot["app0.exe"], "icon:app0.exe", "recently read icons survive eviction");
+  assert.equal(snapshot["app1.exe"], undefined, "the oldest unused icon is evicted");
+  assert.equal(snapshot["app256.exe"], "icon:app256.exe");
+  resetDashboardIconRuntimeCacheForTests();
+
   await loadDashboardIconsForExecutables(
     Array.from({ length: 300 }, (_, index) => `Found${index}.exe`),
     {
