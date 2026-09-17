@@ -843,6 +843,39 @@ runTest("category legend groups sessions by category duration", () => {
   }
 });
 
+runTest("switching timeline mode uses category labels and colors without changing totals", () => {
+  const start = new Date(2026, 0, 2, 9).getTime();
+  ProcessMapper.setUserOverrides({
+    "cursor.exe": { category: "development", color: "#112233", enabled: true },
+    "vscodium.exe": { category: "development", color: "#445566", enabled: true },
+  });
+  try {
+    const input = {
+      sessions: [
+        makeCompiledSession({ startTime: start, endTime: start + HOUR_MS }),
+        makeCompiledSession({ id: 2, exeName: "vscodium.exe", displayName: "VSCodium",
+          startTime: start + HOUR_MS, endTime: start + 3 * HOUR_MS }),
+      ],
+      selectedDate: new Date(2026, 0, 2),
+      nowMs: new Date(2026, 0, 3).getTime(),
+    };
+    const app = buildHistoryTimelineViewModel({ ...input, mode: "app" });
+    const category = buildHistoryTimelineViewModel({ ...input, mode: "category" });
+    assert.deepEqual(app.legendItems.map(({ label, color }) => [label, color]), [
+      ["VSCodium", "#445566"], ["Cursor", "#112233"],
+    ]);
+    assert.deepEqual(category.legendItems, [{
+      key: "development", category: "development",
+      label: ProcessMapper.getCategoryLabel("development", getLocaleText("zh-CN")),
+      color: ProcessMapper.getCategoryColor("development"),
+      duration: 3 * HOUR_MS, percentage: 100,
+    }]);
+    assert.deepEqual(buildHistoryTimelineViewModel({ ...input, mode: "app" }).legendItems, app.legendItems);
+  } finally {
+    ProcessMapper.clearUserOverrides();
+  }
+});
+
 runTest("timeline retains merged segments under thirty seconds", () => {
   const dayStart = new Date(2026, 0, 2, 0, 0, 0, 0).getTime();
   const firstMinuteStart = dayStart + 9 * 60 * 60_000 + 33 * 60_000;

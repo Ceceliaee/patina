@@ -2943,6 +2943,11 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
       nativeVirtualKeyCode: 13,
     }, sessionId);
     await waitForExpression(client!, sessionId, `${overviewMode} === "category"`);
+    await waitForExpression(client!, sessionId, `(() => {
+      const items = Array.from(document.querySelectorAll('.history-overview-timeline-card .history-horizontal-timeline-legend-item'));
+      return items.some(item => item.querySelector('.history-horizontal-timeline-legend-label')?.textContent === '开发')
+        && items.every(item => !['Cursor', 'Google Chrome', 'Chrome'].includes(item.querySelector('.history-horizontal-timeline-legend-label')?.textContent ?? ''));
+    })()`, 15_000, "category legend shows category names instead of representative apps");
     assert.equal(
       await evaluate(
         client!,

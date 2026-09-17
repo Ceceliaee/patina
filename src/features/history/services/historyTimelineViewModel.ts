@@ -798,10 +798,10 @@ function buildLegendItems(
 
     groups.set(key, {
       key,
-      label: segment.label,
+      label: mode === "category" ? segment.categoryLabel : segment.label,
       duration: segment.duration,
       percentage: 0,
-      color: segment.color,
+      color: mode === "category" ? segment.categoryColor : segment.color,
       category: segment.category,
     });
   }
