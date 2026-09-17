@@ -77,19 +77,22 @@ pub async fn delete_web_activity_segments_by_domain<R: Runtime>(
         "failed to delete web activity by domain",
         move |pool| {
             let normalized_domain = normalized_domain.clone();
-            async move {
-                sqlx::query("DELETE FROM web_activity_segments WHERE normalized_domain = ?")
-                    .bind(normalized_domain)
-                    .execute(&pool)
-                    .await
-                    .map(|_| ())
-                    .map_err(|error| {
-                        SqliteOperationError::from_sqlx("delete web activity by domain", error)
-                    })
-            }
+            async move { delete_web_activity_by_domain_in_pool(&pool, &normalized_domain).await }
         },
     )
     .await
+}
+
+async fn delete_web_activity_by_domain_in_pool(
+    pool: &Pool<Sqlite>,
+    normalized_domain: &str,
+) -> Result<(), SqliteOperationError> {
+    sqlx::query("DELETE FROM web_activity_segments WHERE normalized_domain = ?")
+        .bind(normalized_domain)
+        .execute(pool)
+        .await
+        .map(|_| ())
+        .map_err(|error| SqliteOperationError::from_sqlx("delete web activity by domain", error))
 }
 
 fn non_empty_values(values: Vec<String>) -> Vec<String> {
@@ -344,6 +347,154 @@ mod tests {
     use super::*;
     use crate::data::schema as db_schema;
     use sqlx::{Executor, Row, SqlitePool};
+
+    #[tokio::test]
+    async fn deleted_web_domains_keep_preferences_without_recreating_history() {
+        use crate::data::repositories::{settings, web_activity, web_links};
+        use crate::domain::backup::BackupSetting;
+        use crate::domain::web_activity::WebActivitySegmentInput;
+        let pool = setup_test_db().await;
+        for schema in [
+            db_schema::WEB_ACTIVITY_SESSION_SCHEMA_SQL,
+            db_schema::WEB_ACTIVITY_REVISION_SCHEMA_SQL,
+            db_schema::WEB_FAVICON_CACHE_SCHEMA_SQL,
+        ] {
+            pool.execute(schema).await.unwrap();
+        }
+        let mut tx = pool.begin().await.unwrap();
+        settings::insert_missing_for_restore(
+            &mut tx,
+            &[
+                BackupSetting {
+                    key: "__web_domain_override::example.com".into(),
+                    value: r#"{"category":"development","captureTitle":false}"#.into(),
+                },
+                BackupSetting {
+                    key: "__web_domain_override::excluded.test".into(),
+                    value: r#"{"enabled":false}"#.into(),
+                },
+                BackupSetting {
+                    key: "__web_site::example.com".into(),
+                    value: r#"{"members":["member.example.com"]}"#.into(),
+                },
+            ],
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        assert!(
+            web_links::snapshot(&pool).await.unwrap().domains.is_empty(),
+            "restored preferences and links alone are not recorded activity"
+        );
+        crate::data::repositories::sessions::start_session(&pool, "Chrome", "chrome.exe", "", 0, 0)
+            .await
+            .unwrap();
+        let session: i64 = sqlx::query_scalar("SELECT id FROM sessions WHERE end_time IS NULL")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let page = WebActivitySegmentInput {
+            native_session_id: session,
+            browser_client_id: "deletion-test".into(),
+            browser_kind: "chrome".into(),
+            browser_exe_name: "chrome.exe".into(),
+            domain: "example.com".into(),
+            normalized_domain: "example.com".into(),
+            url: None,
+            title: Some("Private".into()),
+            favicon_url: None,
+        };
+        web_activity::upsert_active_segment(&pool, &page, 1_000)
+            .await
+            .unwrap();
+        web_activity::upsert_active_segment(&pool, &page, 2_000)
+            .await
+            .unwrap();
+        let before = web_links::snapshot(&pool).await.unwrap();
+        assert_eq!(before.domains, ["example.com"]);
+        let revision: i64 = sqlx::query_scalar("SELECT source_revision FROM web_activity_revision")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        delete_web_activity_by_domain_in_pool(&pool, "example.com")
+            .await
+            .unwrap();
+        let after = web_links::snapshot(&pool).await.unwrap();
+        assert!(after.domains.is_empty());
+        assert_eq!(after.overrides, before.overrides);
+        assert_eq!(
+            serde_json::to_value(after.rules).unwrap(),
+            serde_json::to_value(before.rules).unwrap()
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM web_activity_native_sessions")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            0
+        );
+        assert!(
+            sqlx::query_scalar::<_, i64>("SELECT source_revision FROM web_activity_revision")
+                .fetch_one(&pool)
+                .await
+                .unwrap()
+                > revision
+        );
+        web_activity::upsert_active_segment(&pool, &page, 9_000)
+            .await
+            .unwrap();
+        let timing: (i64, Option<String>) =
+            sqlx::query_as("SELECT start_time,title FROM web_activity_segments")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            timing,
+            (9_000, None),
+            "new observation starts anew and preserves title preference"
+        );
+        web_activity::end_active_segment_for_domain(&pool, "example.com", 9_000)
+            .await
+            .unwrap();
+        let zero: i64 = sqlx::query_scalar("SELECT duration FROM web_activity_segments")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(zero, 0);
+        assert_eq!(
+            web_links::snapshot(&pool).await.unwrap().domains,
+            ["example.com"],
+            "zero duration is still a real stored record"
+        );
+        for index in 0..125 {
+            let domain = format!("old-{index:03}.test");
+            let mut old = page.clone();
+            old.domain = domain.clone();
+            old.normalized_domain = domain;
+            web_activity::upsert_active_segment(&pool, &old, 10_000 + index)
+                .await
+                .unwrap();
+        }
+        assert_eq!(
+            web_links::snapshot(&pool).await.unwrap().domains.len(),
+            126,
+            "catalog is not the recent 120 candidate window"
+        );
+        delete_web_activity_by_domain_in_pool(&pool, "example.com")
+            .await
+            .unwrap();
+        assert_eq!(web_links::snapshot(&pool).await.unwrap().domains.len(), 125);
+        pool.execute("CREATE TRIGGER reject_web_delete BEFORE DELETE ON web_activity_segments BEGIN SELECT RAISE(ABORT, 'fixture'); END").await.unwrap();
+        assert!(delete_web_activity_by_domain_in_pool(&pool, "old-000.test")
+            .await
+            .is_err());
+        assert_eq!(web_links::snapshot(&pool).await.unwrap().domains.len(), 125);
+        let query_plan: Vec<(i64, i64, i64, String)> = sqlx::query_as("EXPLAIN QUERY PLAN SELECT DISTINCT normalized_domain FROM web_activity_segments ORDER BY normalized_domain").fetch_all(&pool).await.unwrap();
+        assert!(query_plan.iter().any(|row| row
+            .3
+            .contains("COVERING INDEX idx_web_activity_segments_domain_time")));
+        pool.close().await;
+    }
 
     async fn setup_test_db() -> SqlitePool {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

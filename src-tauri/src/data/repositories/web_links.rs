@@ -392,6 +392,7 @@ pub struct WebLinksSnapshot {
     pub segments: Option<Vec<WebActivityDetailSegment>>,
     pub rules: WebLinkRules,
     pub overrides: BTreeMap<String, serde_json::Value>,
+    /// Domains with stored activity, independent of the recent candidate limit.
     pub domains: Vec<String>,
 }
 
@@ -408,18 +409,17 @@ pub async fn snapshot_in_tx(tx: &mut Transaction<'_, Sqlite>) -> Result<WebLinks
         .into_iter()
         .filter_map(|(key, value)| serde_json::from_str(&value).ok().map(|value| (key, value)))
         .collect();
-    let domains: Vec<String> = sqlx::query_scalar("SELECT DISTINCT normalized_domain FROM web_activity_segments UNION SELECT substr(key,24) FROM settings WHERE substr(key,1,23)='__web_domain_override::'")
-        .fetch_all(&mut **tx).await.map_err(|e| e.to_string())?;
-    let mut domains: std::collections::BTreeSet<_> = domains.into_iter().collect();
-    for (parent, rule) in &rules {
-        domains.insert(parent.clone());
-        domains.extend(rule.members.iter().flatten().cloned());
-    }
+    let domains: Vec<String> = sqlx::query_scalar(
+        "SELECT DISTINCT normalized_domain FROM web_activity_segments ORDER BY normalized_domain",
+    )
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(|e| e.to_string())?;
     Ok(WebLinksSnapshot {
         segments: None,
         rules,
         overrides,
-        domains: domains.into_iter().collect(),
+        domains,
     })
 }
 

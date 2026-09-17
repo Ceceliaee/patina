@@ -373,6 +373,7 @@ export class ClassificationService {
 
   static async deleteObservedWebDomainHistory(normalizedDomain: string) {
     await classificationStore.deleteObservedWebDomainHistory(normalizedDomain);
+    this.invalidateBootstrapCache();
   }
 
   static hasDraftChanges(saved: ClassificationDraftState, draft: ClassificationDraftState): boolean {

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { verifyWebDavRuntime } from "./tauriWebDavRuntime.ts";
 import { verifyAppIconRuntime } from "./tauriAppIconRuntime.ts";
 import { verifyLinkedApplicationsRuntime } from "./tauriLinkedApplicationsRuntime.ts";
-import { verifyWebLinksRuntime } from "./tauriWebLinksRuntime.ts";
+import { deleteWebHistoryRuntime, verifyWebLinksRuntime } from "./tauriWebLinksRuntime.ts";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -2171,6 +2171,7 @@ try {
 
   await verifyBackupReplaceRuntime(client, root);
   await verifyWebDavRuntime((expression) => evaluate(client!, expression));
+  await deleteWebHistoryRuntime((expression) => evaluate(client!, expression));
 
   await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", { mutations: [
     { key: "theme_mode", value: "dark" },

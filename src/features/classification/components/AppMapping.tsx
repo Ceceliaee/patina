@@ -24,7 +24,7 @@ interface Props {
   icons: Record<string, string>;
   onDirtyChange?: (dirty: boolean) => void;
   onOverridesChanged?: () => void;
-  onSessionsDeleted?: () => void;
+  onSessionsDeleted?: (kind?: "web") => void;
   onRegisterSaveHandler?: (handler: (() => Promise<boolean>) | null) => void;
   webActivityEnabled?: boolean;
   titleRecordingEnabled?: boolean;
@@ -154,12 +154,16 @@ export default function AppMapping(props: Props) {
     rememberClassificationObjectMode(mode);
   };
   const contentPaneKey = `${effectiveObjectMode}:${filter}`;
+  const previousDeletion = useRef(deletingSessionsExe);
   useEffect(() => {
-    if (webLinksIdentity && !filteredWebDomainCandidates.some(candidate => candidate.normalizedDomain === webLinksIdentity)) {
-      setWebLinksIdentity(null);
-      if (document.activeElement === document.body) mappingRoot.current?.querySelector<HTMLInputElement>(".qp-category-search input")?.focus();
+    const deletionFinished = previousDeletion.current !== null && deletingSessionsExe === null;
+    previousDeletion.current = deletingSessionsExe;
+    const closedLink = webLinksIdentity && !filteredWebDomainCandidates.some(candidate => candidate.normalizedDomain === webLinksIdentity);
+    if (closedLink) setWebLinksIdentity(null);
+    if ((closedLink || (deletionFinished && effectiveObjectMode === "web")) && document.activeElement === document.body) {
+      mappingRoot.current?.querySelector<HTMLInputElement>(".qp-category-search input")?.focus();
     }
-  }, [filteredWebDomainCandidates, webLinksIdentity]);
+  }, [filteredWebDomainCandidates, webLinksIdentity, deletingSessionsExe, effectiveObjectMode]);
   return (
     <div
       ref={mappingRoot}
@@ -219,7 +223,7 @@ export default function AppMapping(props: Props) {
         )}
       />
 
-      {actionError && <p role="alert" className="qp-app-mapping-error">{actionError === "save" ? UI_TEXT.mapping.saveFailed : UI_TEXT.mapping.deleteFailed}</p>}
+      {actionError && <p role="alert" className="qp-app-mapping-error">{actionError === "refresh" ? <>{UI_TEXT.common.refreshFailed} <QuietButton onClick={retryLoading}>{UI_TEXT.common.retry}</QuietButton></> : actionError === "save" ? UI_TEXT.mapping.saveFailed : UI_TEXT.mapping.deleteFailed}</p>}
       {!titleRecordingEnabled && <p id="classification-global-title-disabled" className="qp-app-mapping-notice">{UI_TEXT.mapping.globalTitleDisabled}</p>}
       <section className="qp-panel p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">

@@ -1447,20 +1447,21 @@ await runTest("classification bootstrap shares one in-flight read across warmup 
 
 await runTest("classification bootstrap invalidation rejects an in-flight pre-delete snapshot", async () => {
   ClassificationService.invalidateBootstrapCache();
+  let historyDeleted = false;
   let overrideReads = 0;
   let releaseStaleOverrides!: (value: Record<string, AppOverride>) => void;
   const staleOverrides = new Promise<Record<string, AppOverride>>((resolve) => {
     releaseStaleOverrides = resolve;
   });
   const deps: ClassificationBootstrapDeps = {
-    loadObservedWebDomainCandidates: async () => [],
+    loadObservedWebDomainCandidates: async () => historyDeleted ? [] : [{ normalizedDomain: "example.com", domain: "example.com", totalDuration: 100, lastSeenMs: 100, faviconUrl: null, title: null }],
     loadAppOverrides: async () => {
       overrideReads += 1;
       return overrideReads === 1
         ? staleOverrides
         : { "fresh.exe": { enabled: true, displayName: "Fresh" } };
     },
-    loadWebDomainOverrides: async () => ({}),
+    loadWebDomainOverrides: async () => ({ "example.com": { captureTitle: false, ...(historyDeleted ? {} : { knownDomain: true }) } }),
     loadCategoryColorOverrides: async () => ({}),
     loadCategoryLabelOverrides: async () => ({}),
     loadPersistedCategoryIds: async () => [],
@@ -1469,6 +1470,7 @@ await runTest("classification bootstrap invalidation rejects an in-flight pre-de
 
   const staleRequest = ClassificationService.loadClassificationBootstrap(deps);
   await Promise.resolve();
+  historyDeleted = true;
   ClassificationService.invalidateBootstrapCache();
   releaseStaleOverrides({ "stale.exe": { enabled: true, displayName: "Stale" } });
   const resolved = await staleRequest;
@@ -1476,6 +1478,8 @@ await runTest("classification bootstrap invalidation rejects an in-flight pre-de
   assert.equal(overrideReads, 2);
   assert.equal(resolved.loadedOverrides["fresh.exe"]?.displayName, "Fresh");
   assert.equal(ClassificationService.getBootstrapCache()?.loadedOverrides["fresh.exe"]?.displayName, "Fresh");
+  assert.deepEqual(resolved.observedWebDomains, []);
+  assert.deepEqual(resolved.loadedWebDomainOverrides["example.com"], { captureTitle: false });
 });
 
 await runTest("late classification refresh cannot overwrite a newer saved bootstrap", async () => {

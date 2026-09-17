@@ -10,10 +10,11 @@ export async function runClassificationWebLayoutScenarios(context: BrowserSmokeC
     const previousSettings = await evaluate(client!, sessionId, `localStorage.getItem('__time_tracker_smoke_settings')`) as string | null;
     const domains = ['stable.example', 'docs.example', 'long-domain-name-for-classification.example'];
     const rows = domains.map((domain, index) => ({id:1901+index,browser_client_id:'smoke-browser',browser_kind:'chrome',browser_exe_name:'chrome.exe',domain,normalized_domain:domain,url:`https://${domain}/work`,title:'Work',favicon_url:null,start_time:Date.now()-600000,end_time:Date.now()-300000,duration:300000}));
-    const fixture = await client!.command("Page.addScriptToEvaluateOnNewDocument", { source: `globalThis.__PATINA_CLASSIFICATION_WEB_ROWS = ${JSON.stringify(rows)};` }, sessionId) as { identifier: string };
+    let fixture = await client!.command("Page.addScriptToEvaluateOnNewDocument", { source: `globalThis.__PATINA_CLASSIFICATION_WEB_ROWS = ${JSON.stringify(rows)};` }, sessionId) as { identifier: string };
     const origin = await evaluate(client!, sessionId, "performance.timeOrigin");
     await evaluate(client!, sessionId, `(() => {
       const settings = {language:'zh-CN',web_activity_enabled:'1',title_recording_enabled:'1'};
+      settings['__web_domain_override::deleted.example'] = JSON.stringify({displayName:'Previously deleted',category:'office',captureTitle:false});
       for (const domain of ['stable.example','docs.example','long-domain-name-for-classification.example']) {
         settings['__web_domain_override::'+domain] = JSON.stringify({category:'development',enabled:true,color:'#123456'});
       }
@@ -134,10 +135,25 @@ export async function runClassificationWebLayoutScenarios(context: BrowserSmokeC
     assert.deepEqual(await evaluate(client!,sessionId,'globalThis.__PATINA_WEB_DELETE_CALLS'),['stable.example','stable.example']);
     await evaluate(client!,sessionId,'globalThis.__PATINA_RELEASE_WEB_DELETE()');
     await waitForExpression(client!,sessionId,`!document.querySelector(${jsonString(row)})`);
+    await waitForExpression(client!,sessionId,`document.body.textContent.includes('历史记录已清理。')`);
+    assert.equal(await evaluate(client!,sessionId,`document.activeElement===document.querySelector('.qp-category-search input')`), true, 'deleting the focused card returns keyboard navigation to classification search');
+    assert.equal(await evaluate(client!,sessionId,`Boolean(JSON.parse(localStorage.getItem('__time_tracker_smoke_settings'))['__web_domain_override::stable.example'])`), true);
+    assert.equal(await evaluate(client!,sessionId,`document.querySelector('.qp-classification-count-filter').textContent.includes('全部 (2)')`), true);
+    await client!.command("Page.removeScriptToEvaluateOnNewDocument", {identifier:fixture.identifier}, sessionId);
+    fixture = await client!.command("Page.addScriptToEvaluateOnNewDocument", { source: `globalThis.__PATINA_CLASSIFICATION_WEB_ROWS = ${JSON.stringify(rows.slice(1))};` }, sessionId) as { identifier: string };
     const disabledOrigin=await evaluate(client!,sessionId,'performance.timeOrigin');
     await evaluate(client!,sessionId,`(() => {const settings=JSON.parse(localStorage.getItem('__time_tracker_smoke_settings'));settings.title_recording_enabled='0';localStorage.setItem('__time_tracker_smoke_settings',JSON.stringify(settings));location.reload();})()`);
-    await waitForExpression(client!,sessionId,`performance.timeOrigin!==${disabledOrigin} && document.querySelectorAll('[data-classification-web]').length===3`);
+    await waitForExpression(client!,sessionId,`performance.timeOrigin!==${disabledOrigin} && document.querySelectorAll('[data-classification-web]').length===2`);
+    assert.equal(await evaluate(client!,sessionId,`Boolean(document.querySelector(${jsonString(row)}))`), false, 'deleted preferences stay invisible after reload');
     assert.equal(await evaluate(client!,sessionId,`[...document.querySelectorAll('[data-classification-web] [aria-label="记录标题"]')].every(n=>n.disabled && document.getElementById(n.getAttribute('aria-describedby'))?.textContent)`),true);
+    await evaluate(client!,sessionId,'globalThis.__PATINA_REJECT_WEB_LINKS_READ=true');
+    await click('[data-classification-web="docs.example"] .qp-app-mapping-delete');
+    await button('继续');
+    await waitForExpression(client!,sessionId,`document.querySelector('.qp-app-mapping-error')?.textContent.includes('刷新失败')`);
+    assert.equal(await evaluate(client!,sessionId,`globalThis.__PATINA_CLASSIFICATION_WEB_ROWS.some(r=>r.normalized_domain==='docs.example')`), false, 'delete committed despite refresh failure');
+    await evaluate(client!,sessionId,'globalThis.__PATINA_REJECT_WEB_LINKS_READ=false');
+    await button('重试');
+    await waitForExpression(client!,sessionId,`!document.querySelector('.qp-app-mapping-error') && document.querySelectorAll('[data-classification-web]').length===1`);
     await client!.command("Page.removeScriptToEvaluateOnNewDocument", {identifier:fixture.identifier}, sessionId);
     await evaluate(client!, sessionId, `localStorage.setItem('patina:classification-object-mode','app')`);
     await evaluate(client!, sessionId, `${previousSettings === null ? "localStorage.removeItem('__time_tracker_smoke_settings')" : `localStorage.setItem('__time_tracker_smoke_settings',${jsonString(previousSettings)})`}`);

@@ -72,7 +72,7 @@ interface UseAppMappingStateOptions {
   icons: Record<string, string>;
   onDirtyChange?: (dirty: boolean) => void;
   onOverridesChanged?: () => void;
-  onSessionsDeleted?: () => void;
+  onSessionsDeleted?: (kind?: "web") => void;
   onRegisterSaveHandler?: (handler: (() => Promise<boolean>) | null) => void;
   webActivityEnabled?: boolean;
 }
@@ -111,7 +111,7 @@ export function useAppMappingState({
   const [filter, setFilter] = useState<CandidateFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
-  const [actionError, setActionError] = useState<"save" | "delete" | null>(null);
+  const [actionError, setActionError] = useState<"save" | "delete" | "refresh" | null>(null);
   const deletingAppRecordsRef = useRef(false);
   const [saving, setSaving] = useState(false);
   const [deletingSessionsExe, setDeletingSessionsExe] = useState<string | null>(null);
@@ -131,14 +131,19 @@ export function useAppMappingState({
       }
       try {
         const bootstrap = await ClassificationService.loadClassificationBootstrap();
-        const nextWebDomainCandidates = cloneObservedWebDomainCandidates(bootstrap.observedWebDomains);
-        const nextState = createAppMappingDraftState(bootstrap);
-        setClassificationBootstrapCache(bootstrap);
         if (cancelled) return;
         setLoadError(false);
-        setWebDomainCandidates(nextWebDomainCandidates);
-        if (!hasUnsavedChangesRef.current) {
-          setSavedState(cloneClassificationDraftState(nextState));
+        setActionError(null);
+        setWebDomainCandidates(cloneObservedWebDomainCandidates(bootstrap.observedWebDomains));
+        if (hasUnsavedChangesRef.current) {
+          const refresh = (current: ClassificationDraftState | null) => current ? {
+            ...current, webDomainOverrides: refreshKnownWebDomains(current.webDomainOverrides, bootstrap.loadedWebDomainOverrides),
+          } : current;
+          setSavedState(refresh);
+          setDraftState(refresh);
+        } else {
+          const nextState = createAppMappingDraftState(bootstrap);
+          setSavedState(nextState);
           setDraftState(cloneClassificationDraftState(nextState));
           setNameEditSnapshots({});
           setEditingNameExe(null);
@@ -149,8 +154,9 @@ export function useAppMappingState({
         }
       } catch (error) {
         console.warn("load app mapping bootstrap failed", error);
-        if (!cancelled && !hadCacheAtStart) {
-          setLoadError(true);
+        if (!cancelled) {
+          if (!hadCacheAtStart) setLoadError(true);
+          else setActionError("refresh");
         }
       } finally {
         if (!cancelled && !hadCacheAtStart) {
@@ -303,20 +309,7 @@ export function useAppMappingState({
     } : current;
     setSavedState(refresh);
     setDraftState(refresh);
-    if (savedState) {
-      setClassificationBootstrapCache({
-        observedWebDomains: cloneObservedWebDomainCandidates(observedWebDomains),
-        loadedOverrides: { ...savedState.overrides },
-        loadedAppLinks: { ...savedState.appLinks },
-        loadedWebDomainOverrides: refreshKnownWebDomains(savedState.webDomainOverrides, freshWebOverrides),
-        loadedCategoryColorOverrides: { ...savedState.categoryColorOverrides },
-        loadedCategoryLabelOverrides: { ...savedState.categoryLabelOverrides },
-        loadedPersistedCategoryIds: [...savedState.persistedCategoryIds],
-        loadedDeletedCategories: [...savedState.deletedCategories],
-      });
-    }
-    return observedWebDomains;
-  }, [savedState]);
+  }, []);
 
   const updateOverride = useCallback((exeName: string, nextOverride: AppOverride | null) => {
     setDraftState((current) => {
@@ -727,8 +720,13 @@ export function useAppMappingState({
         return;
       }
       await ClassificationService.deleteObservedWebDomainHistory(candidate.normalizedDomain);
-      await refreshWebDomainCandidates();
-      onSessionsDeleted?.();
+      onSessionsDeleted?.("web");
+      try {
+        await refreshWebDomainCandidates();
+      } catch (error) {
+        console.warn("refresh web records after deletion failed", error);
+        setActionError("refresh");
+      }
     } catch (error) {
       console.warn("delete web records failed", error);
       setActionError("delete");

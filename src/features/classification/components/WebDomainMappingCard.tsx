@@ -36,9 +36,7 @@ interface WebDomainMappingCardProps {
 export default function WebDomainMappingCard({ candidate, grouping, recordingEnabled, onToggleRecording, onDeleteHistory, ...props }: WebDomainMappingCardProps) {
   const UI_TEXT = useLocaleText();
   const parent = webLinkParent(candidate.normalizedDomain);
-  const original = parent ? grouping.candidates.find(value => value.normalizedDomain === candidate.domain)
-    ?? candidate.memberCandidates?.find(value => grouping.candidates.some(raw => raw.normalizedDomain === value.normalizedDomain)) : candidate;
-  const primary = original ?? candidate;
+  const primary = parent ? { ...candidate, normalizedDomain: parent, domain: parent } : candidate;
   const rawOverride = grouping.overrides[primary.normalizedDomain] ?? {};
   return (
     <ClassificationMappingCard

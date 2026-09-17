@@ -16,7 +16,7 @@ export interface WebActivitySegment {
 }
 
 export interface WebDomainOverride {
-  /** Catalog identity supplied by Rust; not persisted as a user override. */
+  /** Stored activity exists for this domain; supplied by Rust, never persisted as a preference. */
   knownDomain?: boolean;
   /** Present only on a site: identity. Recording controls remain on raw domains. */
   siteRule?: import("../classification/webLinks.ts").WebLinkRule;

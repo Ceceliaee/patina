@@ -372,13 +372,13 @@ export default function AppShellContent({
                 titleRecordingEnabled={appSettings.titleRecordingEnabled}
                 onDirtyChange={setMappingDirty}
                 onOverridesChanged={handleMappingOverridesChanged}
-                onSessionsDeleted={() => {
+                onSessionsDeleted={(kind) => {
                   clearDashboardSnapshotCache();
                   void clearHistoryCachesAfterDataChange();
                   clearDataHeavyCaches();
                   void clearDataBootstrapCache();
                   setReadModelRefreshState(applySessionDeletionReadModelRefresh);
-                  pushToast(uiText.app.historyDeleted, "success");
+                  pushToast(kind === "web" ? uiText.toast.cleanupSuccess : uiText.app.historyDeleted, "success");
                 }}
                 webActivityEnabled={appSettings.webActivityEnabled}
               />

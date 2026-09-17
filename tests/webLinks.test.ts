@@ -5,6 +5,17 @@ import { buildClassificationDraftChangePlan, cloneClassificationDraftState, hasC
 import { buildCommitDraftChangePlanSettingMutations } from "../src/features/classification/services/classificationStore.ts";
 import { deleteCategoryFromDraftState, updateWebDomainOverrideInDraftState } from "../src/features/classification/hooks/appMappingStateHelpers.ts";
 import { buildWebDomainDistribution } from "../src/features/history/services/historyWebActivityViewModel.ts";
+import { webLinksOverrides } from "../src/platform/persistence/webLinksGateway.ts";
+
+const deletedPreferences = { displayName: "Deleted site", category: "development" as const, captureTitle: false };
+const afterDeletion = webLinksOverrides({ domains: ["old.example.com"], rules: {}, overrides: { "example.com": deletedPreferences } });
+assert.deepEqual(groupWebCandidates([], afterDeletion).map(card => card.normalizedDomain), ["old.example.com"], "persisted preferences are not evidence of history; older recorded domains remain manageable");
+const refreshedDeletion = refreshKnownWebDomains({ "example.com": { ...deletedPreferences, knownDomain: true } }, {});
+assert.deepEqual(groupWebCandidates([], refreshedDeletion), [], "a fresh snapshot clears stale existence even when an unsaved preference remains");
+assert.equal(refreshedDeletion["example.com"].displayName, deletedPreferences.displayName);
+const emptyLink = { "site:example.com": { siteRule: { members: ["member.example.com"] } } };
+assert.deepEqual(groupWebCandidates([], emptyLink)[0].memberCandidates?.map(card => card.normalizedDomain), ["example.com", "member.example.com"], "history deletion preserves both ends of a manageable relationship");
+assert.deepEqual(groupWebCandidates([], { "excluded.example.com": { enabled: false } }).map(card => card.normalizedDomain), ["excluded.example.com"]);
 
 const raw: Record<string, WebDomainOverride> = {
   "www.example.com": { knownDomain: true, displayName: "Original", category: "development" },

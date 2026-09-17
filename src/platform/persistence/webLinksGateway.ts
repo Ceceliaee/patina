@@ -6,6 +6,7 @@ import { isAppCategory } from "../../shared/classification/categoryTokens.ts";
 
 export interface WebLinksSnapshot {
   segments?: WebActivitySegment[];
+  /** All domains with stored activity; settings and relationship references live separately. */
   domains: string[];
   rules: Record<string, WebLinkRule>;
   overrides: Record<string, WebDomainOverride>;

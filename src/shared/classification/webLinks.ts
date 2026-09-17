@@ -50,8 +50,8 @@ export function siteRuleFromOverride(override: WebDomainOverride | null | undefi
 export function refreshKnownWebDomains(current: Record<string, WebDomainOverride>, fresh: Record<string, WebDomainOverride>): Record<string, WebDomainOverride> {
   const next = { ...current };
   for (const [domain, override] of Object.entries(current)) {
-    if (fresh[domain]) next[domain] = { ...override, knownDomain: fresh[domain].knownDomain };
-    else if (!webLinkParent(domain) && !override.displayName && !override.category && !override.color
+    next[domain] = { ...override, knownDomain: fresh[domain]?.knownDomain };
+    if (!fresh[domain] && !webLinkParent(domain) && !override.displayName && !override.category && !override.color
       && override.enabled !== false && override.captureTitle !== false) delete next[domain];
   }
   for (const [domain, override] of Object.entries(fresh)) {
@@ -62,9 +62,17 @@ export function refreshKnownWebDomains(current: Record<string, WebDomainOverride
 
 export function groupWebCandidates(candidates: readonly ObservedWebDomainCandidate[], overrides: Record<string, WebDomainOverride>): ObservedWebDomainCandidate[] {
   const all = new Map(candidates.map(candidate => [candidate.normalizedDomain, candidate]));
+  const include = (domain: string) => {
+    if (!all.has(domain)) all.set(domain, { normalizedDomain: domain, domain, totalDuration: 0, lastSeenMs: 0, faviconUrl: null, title: null });
+  };
   for (const [domain, override] of Object.entries(overrides)) {
     if (!webLinkParent(domain) && (override.knownDomain || override.enabled === false)) {
-      if (!all.has(domain)) all.set(domain, { normalizedDomain: domain, domain, totalDuration: 0, lastSeenMs: 0, faviconUrl: null, title: null });
+      include(domain);
+    }
+    const parent = webLinkParent(domain);
+    if (parent && override.siteRule) {
+      include(parent);
+      override.siteRule.members.forEach(include);
     }
   }
   const grouped = new Map<string, ObservedWebDomainCandidate>();
@@ -77,11 +85,6 @@ export function groupWebCandidates(candidates: readonly ObservedWebDomainCandida
       current.memberCandidates?.push(candidate);
     } else {
       grouped.set(key, webLinkParent(key) ? { ...candidate, normalizedDomain: key, domain: webDisplayDomain(key), totalDuration: overrides[candidate.normalizedDomain]?.enabled === false ? 0 : candidate.totalDuration, memberCandidates: [candidate] } : { ...candidate });
-    }
-  }
-  for (const [key, override] of Object.entries(overrides)) {
-    if (webLinkParent(key) && override.siteRule?.members && !grouped.has(key)) {
-      grouped.set(key, { normalizedDomain: key, domain: webDisplayDomain(key), totalDuration: 0, lastSeenMs: 0, faviconUrl: null, title: null, memberCandidates: [] });
     }
   }
   for (const candidate of grouped.values()) {

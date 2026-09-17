@@ -385,7 +385,8 @@ mod tests {
             .web_links
             .domains
             .contains(&"a.mail.example.com".into()));
-        assert!(after.web_links.domains.contains(&"example.com".into()));
+        assert!(!after.web_links.domains.contains(&"example.com".into()));
+        assert!(after.web_links.rules.contains_key("example.com"));
         let website = load_web_activity_aggregate_range_from_pool(
             &pool,
             0,

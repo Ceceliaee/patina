@@ -91,6 +91,26 @@ export async function runWebLinksScenarios({ client, sessionId, runTest }: Brows
       await button("添加网页");
       await button("www.example.com");
       await waitForExpression(client!, sessionId, "Boolean(document.querySelector('[data-classification-web=\"site:mail.example.com\"]'))");
+      await escape();
+      await button("保存");
+      await waitForExpression(client!, sessionId, "Boolean(JSON.parse(localStorage.getItem('__time_tracker_smoke_settings'))['__web_site::mail.example.com'])");
+      await client!.command("Page.removeScriptToEvaluateOnNewDocument", { identifier: fixture.identifier }, sessionId);
+      const withoutParent = [...rows, future].filter(row => row.normalized_domain !== "mail.example.com");
+      fixture = await client!.command("Page.addScriptToEvaluateOnNewDocument", { source: `globalThis.__PATINA_CLASSIFICATION_WEB_ROWS=${JSON.stringify(withoutParent)};` }, sessionId) as { identifier: string };
+      await reload(4);
+      await click('[data-classification-web="site:mail.example.com"] .qp-app-mapping-delete');
+      await waitForExpression(client!, sessionId, "Boolean(document.querySelector('[role=dialog]'))");
+      assert.equal(await evaluate(client!, sessionId, "document.querySelector('[role=dialog]').textContent.includes('mail.example.com')"), true);
+      await button("继续");
+      await waitForExpression(client!, sessionId, "globalThis.__PATINA_WEB_DELETE_CALLS?.length===1 && !document.querySelector('[data-classification-web=\"site:mail.example.com\"] .qp-app-mapping-delete')?.disabled");
+      assert.deepEqual(await evaluate(client!, sessionId, "globalThis.__PATINA_WEB_DELETE_CALLS"), ["mail.example.com"], "missing parent never retargets deletion to the remaining member");
+      assert.equal(await evaluate(client!, sessionId, "globalThis.__PATINA_CLASSIFICATION_WEB_ROWS.some(row=>row.normalized_domain==='www.example.com')"), true);
+      await client!.command("Page.removeScriptToEvaluateOnNewDocument", { identifier: fixture.identifier }, sessionId);
+      fixture = await client!.command("Page.addScriptToEvaluateOnNewDocument", { source: `globalThis.__PATINA_CLASSIFICATION_WEB_ROWS=${JSON.stringify(withoutParent.filter(row => row.normalized_domain !== "www.example.com"))};` }, sessionId) as { identifier: string };
+      await reload(4);
+      await click('[data-classification-web="site:mail.example.com"] .qp-app-link-trigger');
+      await click('.qp-web-grouping-popover [aria-label="解除关联: www.example.com"]');
+      await waitForExpression(client!, sessionId, "document.querySelectorAll('[data-classification-web]').length===3");
     } finally {
       await client!.command("Page.removeScriptToEvaluateOnNewDocument", { identifier: fixture.identifier }, sessionId);
       await evaluate(client!, sessionId, `${previous === null ? "localStorage.removeItem('__time_tracker_smoke_settings')" : `localStorage.setItem('__time_tracker_smoke_settings',${jsonString(previous)})`};localStorage.setItem('patina:classification-object-mode','app')`);

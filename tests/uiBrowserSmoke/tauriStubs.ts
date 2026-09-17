@@ -806,11 +806,12 @@ function tauriStubFor(path: string) {
           }
         }
         if (command === "cmd_get_web_links") {
+          if (globalThis.__PATINA_REJECT_WEB_LINKS_READ) throw new Error("Web snapshot rejected by fixture");
           const settings = loadStoredSettings();
           const rules = Object.fromEntries(Object.entries(settings).filter(([key]) => key.startsWith('__web_site::')).map(([key, value]) => [key.slice(12), JSON.parse(value)]));
           const { default: Database } = await import("@tauri-apps/plugin-sql");
           const rows = await (await Database.load("sqlite:patina.db")).select("SELECT * FROM web_activity_segments", []);
-          const domains = [...new Set([...rows.map(row => row.normalized_domain), ...Object.keys(rules), ...Object.values(rules).flatMap(rule => rule.members ?? [])])];
+          const domains = [...new Set(rows.map(row => row.normalized_domain))];
           const overrides = Object.fromEntries(Object.entries(settings).filter(([key]) => key.startsWith("__web_domain_override::")).map(([key,value]) => [key.slice(23),JSON.parse(value)]));
           const segments = rows.map(row => ({ id: row.id, browserClientId: row.browser_client_id, browserKind: row.browser_kind, browserExeName: row.browser_exe_name, domain: row.domain, normalizedDomain: row.normalized_domain, url: row.url, title: row.title, faviconUrl: row.favicon_url ?? null, startTime: row.start_time, endTime: row.end_time, duration: row.duration }));
           return { domains, rules, overrides, ...(payload.startMs === undefined ? {} : { segments }) };
