@@ -2,12 +2,13 @@ use crate::data::repositories::{icon_cache, sessions, tracker_settings};
 use crate::data::sqlite_pool::wait_for_sqlite_pool;
 use crate::domain::tracking::ActiveSessionSnapshot;
 use crate::engine::tracking::ports::{
-    SharedTrackingDataStore, TrackingDataError, TrackingDataFuture, TrackingDataStore,
+    IconCacheRead, SharedTrackingDataStore, TrackingDataError, TrackingDataFuture,
+    TrackingDataStore,
 };
 use futures_util::future::BoxFuture;
 use sqlx::{Pool, Sqlite};
 use std::sync::Arc;
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Emitter, Runtime};
 
 pub type TrackingRuntimeDataError = sqlx::Error;
 
@@ -19,15 +20,21 @@ type TrackingPoolSource = Arc<
 #[path = "tracking_runtime/pool_lifecycle_tests.rs"]
 mod pool_lifecycle_tests;
 
+#[cfg(test)]
+#[path = "tracking_runtime/icon_refresh_tests.rs"]
+mod icon_refresh_tests;
+
 #[derive(Clone)]
 pub struct TrackingRuntimeDataStore {
     source: TrackingPoolSource,
+    icon_changed: Arc<dyn Fn(&str) + Send + Sync>,
 }
 
 impl TrackingRuntimeDataStore {
     #[cfg(test)]
     pub fn new(pool: Pool<Sqlite>) -> Self {
         Self {
+            icon_changed: Arc::new(|_| {}),
             source: Arc::new(move || {
                 let pool = pool.clone();
                 Box::pin(async move { Ok(pool) })
@@ -179,42 +186,39 @@ impl TrackingRuntimeDataStore {
         )
         .await
     }
-
-    pub async fn is_icon_cached(&self, exe_name: &str) -> Result<bool, TrackingRuntimeDataError> {
-        icon_cache::is_icon_cached(&self.pool().await?, exe_name).await
-    }
-
-    pub async fn upsert_icon(
-        &self,
-        exe_name: &str,
-        icon_base64: &str,
-        last_updated: i64,
-    ) -> Result<(), TrackingRuntimeDataError> {
-        icon_cache::upsert_icon(&self.pool().await?, exe_name, icon_base64, last_updated).await
-    }
 }
 
 pub async fn shared_from_app<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<SharedTrackingDataStore, String> {
-    let app = app.clone();
-    shared_from_pool_source(Arc::new(move || {
-        let app = app.clone();
+    let pool_app = app.clone();
+    let event_app = app.clone();
+    let source: TrackingPoolSource = Arc::new(move || {
+        let app = pool_app.clone();
         Box::pin(async move {
             wait_for_sqlite_pool(&app)
                 .await
                 .map_err(sqlx::Error::Protocol)
         })
+    });
+    source().await.map_err(|error| error.to_string())?;
+    Ok(Arc::new(TrackingRuntimeDataStore {
+        source,
+        icon_changed: Arc::new(move |exe| {
+            let _ = event_app.emit("app-icon-changed", exe);
+        }),
     }))
-    .await
-    .map_err(|error| error.to_string())
 }
 
+#[cfg(test)]
 async fn shared_from_pool_source(
     source: TrackingPoolSource,
 ) -> Result<SharedTrackingDataStore, TrackingRuntimeDataError> {
     source().await?;
-    Ok(Arc::new(TrackingRuntimeDataStore { source }))
+    Ok(Arc::new(TrackingRuntimeDataStore {
+        source,
+        icon_changed: Arc::new(|_| {}),
+    }))
 }
 
 fn tracking_data_error(error: impl std::fmt::Display) -> TrackingDataError {
@@ -384,24 +388,32 @@ impl TrackingDataStore for TrackingRuntimeDataStore {
         })
     }
 
-    fn is_icon_cached<'a>(&'a self, exe_name: &'a str) -> TrackingDataFuture<'a, bool> {
+    fn read_icon_cache<'a>(&'a self, exe_name: &'a str) -> TrackingDataFuture<'a, IconCacheRead> {
         Box::pin(async move {
-            TrackingRuntimeDataStore::is_icon_cached(self, exe_name)
-                .await
-                .map_err(tracking_data_error)
-        })
-    }
-
-    fn upsert_icon<'a>(
-        &'a self,
-        exe_name: &'a str,
-        icon_base64: &'a str,
-        last_updated: i64,
-    ) -> TrackingDataFuture<'a, ()> {
-        Box::pin(async move {
-            TrackingRuntimeDataStore::upsert_icon(self, exe_name, icon_base64, last_updated)
-                .await
-                .map_err(tracking_data_error)
+            let snapshot = icon_cache::read_icon_cache(
+                self.pool().await.map_err(tracking_data_error)?,
+                exe_name,
+            )
+            .await
+            .map_err(tracking_data_error)?;
+            let last_updated = snapshot.last_updated;
+            let notify = self.icon_changed.clone();
+            let exe = exe_name.to_owned();
+            Ok(IconCacheRead {
+                last_updated,
+                confirm: Box::new(move |icon, time| {
+                    Box::pin(async move {
+                        let changed = snapshot
+                            .confirm(&icon, time)
+                            .await
+                            .map_err(tracking_data_error)?;
+                        if changed {
+                            notify(&exe);
+                        }
+                        Ok(changed)
+                    })
+                }),
+            })
         })
     }
 }

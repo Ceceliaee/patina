@@ -47,6 +47,48 @@ async fn tracking_pool() -> SqlitePool {
 }
 
 #[test]
+fn session_creation_does_not_wait_for_icon_cache_work() {
+    tauri::async_runtime::block_on(async {
+        let pool = tracking_pool().await;
+        let store = TrackingRuntimeDataStore::new(pool.clone());
+        let guard = icon_cache::acquire_icon_cache_maintenance(&pool).await;
+        let window = crate::platform::windows::foreground::WindowInfo {
+            hwnd: String::new(),
+            root_owner_hwnd: String::new(),
+            process_id: 0,
+            window_class: String::new(),
+            title: "fixture".into(),
+            exe_name: "blocked-icon-fixture.exe".into(),
+            process_path: String::new(),
+            app_user_model_id: String::new(),
+            is_afk: false,
+            idle_time_ms: 0,
+        };
+        let start = std::time::Instant::now();
+        let started = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            crate::engine::tracking::active_session::start_session_with_continuity_group_start_time(
+                &store, &window, 100, 100,
+            ),
+        )
+        .await
+        .expect("session must not await the blocked icon task")
+        .unwrap();
+        println!(
+            "ICON_REFRESH_SESSION samples=1 elapsed_us={} icon_task=blocked",
+            start.elapsed().as_micros()
+        );
+        assert!(started);
+        assert_eq!(
+            store.load_active_session().await.unwrap().unwrap().exe_name,
+            window.exe_name
+        );
+        drop(guard);
+        pool.close().await;
+    });
+}
+
+#[test]
 fn tracking_runtime_store_and_watchdog_clone_follow_registered_pool_replacement() {
     tauri::async_runtime::block_on(async {
         let instances = Arc::new(DbInstances::default());
@@ -119,12 +161,19 @@ fn tracking_runtime_store_and_watchdog_clone_follow_registered_pool_replacement(
             .as_deref(),
             Some("resumed"),
         );
-        assert!(!tracker.is_icon_cached("editor.exe").await.unwrap());
-        tracker
-            .upsert_icon("editor.exe", "isolated-icon", 5_000)
+        let cached = tracker.read_icon_cache("editor.exe").await.unwrap();
+        assert_eq!(cached.last_updated, None);
+        (cached.confirm)("isolated-icon".into(), 5_000)
             .await
             .unwrap();
-        assert!(tracker.is_icon_cached("editor.exe").await.unwrap());
+        assert_eq!(
+            tracker
+                .read_icon_cache("editor.exe")
+                .await
+                .unwrap()
+                .last_updated,
+            Some(Some(5_000))
+        );
         assert!(tracker
             .start_session("Editor", "editor.exe", "after restore", 6_000, 6_000)
             .await
@@ -219,5 +268,39 @@ fn tracking_runtime_store_recovers_after_closed_pool_gap_and_another_registratio
             Some(12_000),
         );
         next.close().await;
+    });
+}
+
+#[test]
+fn icon_confirmation_notifies_only_content_changes_and_cannot_follow_a_replaced_pool() {
+    tauri::async_runtime::block_on(async {
+        let pool = tracking_pool().await;
+        let notifications = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut store = TrackingRuntimeDataStore::new(pool.clone());
+        let count = notifications.clone();
+        store.icon_changed = Arc::new(move |_| {
+            count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        });
+        let missing = store.read_icon_cache("app.exe").await.unwrap();
+        assert!((missing.confirm)("icon".into(), 100).await.unwrap());
+        assert_eq!(notifications.load(std::sync::atomic::Ordering::SeqCst), 1);
+        let existing = store.read_icon_cache("app.exe").await.unwrap();
+        assert!(!(existing.confirm)("icon".into(), 200).await.unwrap());
+        assert_eq!(notifications.load(std::sync::atomic::Ordering::SeqCst), 1);
+        let previous = store.read_icon_cache("app.exe").await.unwrap();
+        pool.close().await;
+        let replacement = tracking_pool().await;
+        let replacement_source = replacement.clone();
+        store.source = Arc::new(move || {
+            let pool = replacement_source.clone();
+            Box::pin(async move { Ok(pool) })
+        });
+        assert!((previous.confirm)("obsolete".into(), 300).await.is_err());
+        assert_eq!(
+            store.read_icon_cache("app.exe").await.unwrap().last_updated,
+            None
+        );
+        assert_eq!(notifications.load(std::sync::atomic::Ordering::SeqCst), 1);
+        replacement.close().await;
     });
 }

@@ -170,6 +170,8 @@ async fn delete_sessions_by_exe_names_in_pool(
     pool: &Pool<Sqlite>,
     exe_names: &[String],
 ) -> Result<(), SqliteOperationError> {
+    let _icon_maintenance =
+        crate::data::repositories::icon_cache::acquire_icon_cache_maintenance(pool).await;
     let placeholders = in_clause_placeholders(exe_names.len());
     let mut tx = pool
         .begin()

@@ -66,6 +66,7 @@ pub(super) async fn restore_backup_payload(
     payload: &BackupPayload,
     strategy: RestoreStrategy,
 ) -> Result<(), String> {
+    let _icon_maintenance = repositories::icon_cache::acquire_icon_cache_maintenance(pool).await;
     let mut tx = pool
         .begin()
         .await

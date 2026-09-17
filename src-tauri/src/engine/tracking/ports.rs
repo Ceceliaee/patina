@@ -11,6 +11,12 @@ pub type TrackingDataFuture<'a, T> =
     Pin<Box<dyn Future<Output = Result<T, TrackingDataError>> + Send + 'a>>;
 pub type SharedTrackingDataStore = Arc<dyn TrackingDataStore>;
 
+pub struct IconCacheRead {
+    /// Outer None means absent; inner None is an existing icon with unknown age.
+    pub last_updated: Option<Option<i64>>,
+    pub confirm: Box<dyn FnOnce(String, i64) -> TrackingDataFuture<'static, bool> + Send>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TrackingDataError {
     message: String,
@@ -75,11 +81,5 @@ pub trait TrackingDataStore: Send + Sync {
         start_time: i64,
         continuity_group_start_time: i64,
     ) -> TrackingDataFuture<'a, bool>;
-    fn is_icon_cached<'a>(&'a self, exe_name: &'a str) -> TrackingDataFuture<'a, bool>;
-    fn upsert_icon<'a>(
-        &'a self,
-        exe_name: &'a str,
-        icon_base64: &'a str,
-        last_updated: i64,
-    ) -> TrackingDataFuture<'a, ()>;
+    fn read_icon_cache<'a>(&'a self, exe_name: &'a str) -> TrackingDataFuture<'a, IconCacheRead>;
 }

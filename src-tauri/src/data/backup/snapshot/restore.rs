@@ -99,6 +99,8 @@ async fn merge_snapshot_backup(
     let activity_rules = activity_rules_result?;
     let import_backup = import_result?;
     let pool = wait_for_sqlite_pool(app).await?;
+    let _icon_maintenance =
+        crate::data::repositories::icon_cache::acquire_icon_cache_maintenance(&pool).await;
     let mut tx = pool
         .begin()
         .await

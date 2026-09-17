@@ -4,6 +4,7 @@ use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, OnceLock};
 use tokio::sync::Semaphore;
+pub(crate) const ICON_REFRESH_INTERVAL_MS: i64 = 30 * 24 * 60 * 60 * 1000;
 const ICON_NEGATIVE_CACHE_TTL_MS: i64 = 60 * 60 * 1000;
 const PACKAGED_ICON_NEGATIVE_CACHE_TTL_MS: i64 = 30 * 1000;
 const ICON_NEGATIVE_CACHE_LIMIT: usize = 512;
@@ -47,6 +48,7 @@ pub async fn map_app_name(exe_name: &str, process_path: &str, app_user_model_id:
     fallback_app_name(exe_name)
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct IconMetadataSource<'a> {
     pub process_id: u32,
     pub exe_name: &'a str,
@@ -61,70 +63,130 @@ pub(crate) async fn ensure_icon_cache(
     data: &dyn TrackingDataStore,
     source: IconMetadataSource<'_>,
 ) -> Result<(), TrackingDataError> {
+    ensure_icon_cache_with(
+        data,
+        source,
+        now_ms,
+        icon_cache_semaphore(),
+        || async move {
+            let process_path = source.process_path.to_owned();
+            let exe_name = source.exe_name.to_owned();
+            let app_user_model_id = source.app_user_model_id.to_owned();
+            let window_class = source.window_class.to_owned();
+            let root_owner_hwnd = source.root_owner_hwnd.to_owned();
+            let hwnd = source.hwnd.to_owned();
+            tauri::async_runtime::spawn_blocking(move || {
+                app_metadata::resolve_icon_base64(
+                    source.process_id,
+                    &process_path,
+                    &exe_name,
+                    &app_user_model_id,
+                    &window_class,
+                    &root_owner_hwnd,
+                    &hwnd,
+                )
+            })
+            .await
+            .ok()
+            .flatten()
+        },
+    )
+    .await
+}
+
+fn icon_needs_refresh(last_updated: Option<Option<i64>>, now: i64) -> bool {
+    match last_updated.flatten() {
+        Some(time) if time > 0 && time <= now => {
+            now.saturating_sub(time) >= ICON_REFRESH_INTERVAL_MS
+        }
+        _ => true,
+    }
+}
+
+pub(crate) async fn ensure_icon_cache_with<F, Fut>(
+    data: &dyn TrackingDataStore,
+    source: IconMetadataSource<'_>,
+    clock: impl Fn() -> i64,
+    semaphore: &Arc<Semaphore>,
+    extract: F,
+) -> Result<(), TrackingDataError>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Option<String>>,
+{
     let IconMetadataSource {
-        process_id,
         exe_name,
         process_path,
         app_user_model_id,
         window_class,
-        root_owner_hwnd,
-        hwnd,
+        ..
     } = source;
     if should_skip_icon_attempt(
         exe_name,
         process_path,
         app_user_model_id,
         window_class,
-        now_ms(),
+        clock(),
     ) {
         return Ok(());
     }
-
     let Some(_in_flight) = IconCacheInFlightGuard::try_start(exe_name) else {
         return Ok(());
     };
-
-    let Ok(_permit) = icon_cache_semaphore().clone().try_acquire_owned() else {
+    let Ok(_permit) = semaphore.clone().try_acquire_owned() else {
         return Ok(());
     };
-
-    if data.is_icon_cached(exe_name).await? {
+    let snapshot = match data.read_icon_cache(exe_name).await {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            remember_icon_failure(
+                exe_name,
+                process_path,
+                app_user_model_id,
+                window_class,
+                true,
+                clock(),
+            );
+            return Err(error);
+        }
+    };
+    if !icon_needs_refresh(snapshot.last_updated, clock()) {
         return Ok(());
     }
-
-    let process_path_owned = process_path.to_string();
-    let exe_name_owned = exe_name.to_string();
-    let app_user_model_id_owned = app_user_model_id.to_string();
-    let window_class_owned = window_class.to_string();
-    let root_owner_hwnd_owned = root_owner_hwnd.to_string();
-    let hwnd_owned = hwnd.to_string();
-    let base64_icon = tauri::async_runtime::spawn_blocking(move || {
-        app_metadata::resolve_icon_base64(
-            process_id,
-            &process_path_owned,
-            &exe_name_owned,
-            &app_user_model_id_owned,
-            &window_class_owned,
-            &root_owner_hwnd_owned,
-            &hwnd_owned,
-        )
-    })
-    .await
-    .ok()
-    .flatten();
-    let Some(base64_icon) = base64_icon else {
+    let refreshing = snapshot.last_updated.is_some();
+    let result = match extract().await {
+        Some(icon) if !icon.trim().is_empty() => (snapshot.confirm)(icon, clock()).await,
+        _ => {
+            remember_icon_failure(
+                exe_name,
+                process_path,
+                app_user_model_id,
+                window_class,
+                refreshing,
+                clock(),
+            );
+            return Ok(());
+        }
+    };
+    if let Err(error) = result {
         remember_icon_failure(
             exe_name,
             process_path,
             app_user_model_id,
             window_class,
-            now_ms(),
+            refreshing,
+            clock(),
         );
-        return Ok(());
-    };
-
-    data.upsert_icon(exe_name, &base64_icon, now_ms()).await?;
-
+        return Err(error);
+    }
+    if let Ok(mut cache) = icon_negative_cache().lock() {
+        cache.remove(&icon_negative_cache_key(
+            exe_name,
+            process_path,
+            app_user_model_id,
+            window_class,
+        ));
+    }
     Ok(())
 }
 
@@ -185,13 +247,14 @@ fn remember_icon_failure(
     process_path: &str,
     app_user_model_id: &str,
     window_class: &str,
+    refreshing: bool,
     now_ms: i64,
 ) {
     if let Ok(mut cache) = icon_negative_cache().lock() {
         remember_icon_failure_in_cache(
             &mut cache,
             icon_negative_cache_key(exe_name, process_path, app_user_model_id, window_class),
-            if app_user_model_id.trim().is_empty() {
+            if refreshing || app_user_model_id.trim().is_empty() {
                 ICON_NEGATIVE_CACHE_TTL_MS
             } else {
                 PACKAGED_ICON_NEGATIVE_CACHE_TTL_MS
@@ -347,6 +410,26 @@ fn now_ms() -> i64 {
 
 #[cfg(test)]
 mod tests {
+    use super::{icon_needs_refresh, ICON_REFRESH_INTERVAL_MS};
+    #[test]
+    fn freshness_boundaries_and_invalid_times() {
+        let now = ICON_REFRESH_INTERVAL_MS + 10;
+        assert!(!icon_needs_refresh(Some(Some(11)), now));
+        assert!(icon_needs_refresh(Some(Some(10)), now));
+        assert!(icon_needs_refresh(Some(Some(9)), now));
+        for time in [
+            None,
+            Some(None),
+            Some(Some(0)),
+            Some(Some(-1)),
+            Some(Some(now + 1)),
+            Some(Some(i64::MIN)),
+        ] {
+            assert!(icon_needs_refresh(time, now));
+        }
+        assert!(icon_needs_refresh(Some(Some(1)), i64::MAX));
+    }
+
     use super::{
         icon_negative_cache_key, remember_icon_failure_in_cache, should_skip_icon_attempt_in_cache,
         IconNegativeCacheEntry, ICON_NEGATIVE_CACHE_LIMIT, ICON_NEGATIVE_CACHE_TTL_MS,
