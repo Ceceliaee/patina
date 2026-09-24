@@ -24,7 +24,8 @@ pub async fn export_to_csv(
 
     let sessions = load_sessions(pool, filter).await?;
     let web = load_web_activity(pool, filter).await?;
-    let total_rows = (sessions.len() + web.len()) as u64;
+    let anonymous = super::common::load_anonymous_activity(pool, filter).await?;
+    let total_rows = (sessions.len() + web.len() + anonymous.len()) as u64;
 
     let temp_path = unique_temp_path(output_path, "csv")?;
     let write_result = (|| -> Result<(), String> {
@@ -49,6 +50,15 @@ pub async fn export_to_csv(
                 .map_err(|e| format!("failed to write csv row: {e}"))?;
         }
 
+        for row in &anonymous {
+            let values = fields.iter().map(|field| {
+                super::common::anonymous_field_value(field, row, &classification)
+                    .unwrap_or_default()
+            });
+            writer
+                .write_record(values)
+                .map_err(|error| format!("failed to write anonymous csv row: {error}"))?;
+        }
         writer
             .flush()
             .map_err(|e| format!("failed to flush csv writer: {e}"))?;

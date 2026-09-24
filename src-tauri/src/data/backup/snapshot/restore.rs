@@ -62,6 +62,8 @@ pub(super) async fn prepare_snapshot_restore(
             .await?;
         crate::data::repositories::web_activity::seal_interrupted_segments(candidate_pool, cutoff)
             .await?;
+        crate::data::repositories::anonymous_activity::seal_interrupted(candidate_pool, cutoff)
+            .await?;
         Ok::<(), sqlx::Error>(())
     }
     .await;
@@ -90,6 +92,12 @@ async fn merge_snapshot_backup(
     let activity_rules_result =
         crate::data::repositories::tools::fetch_all_activity_reminder_rules(&candidate_pool).await;
     let import_result = load_external_import_backup_from_pool(&candidate_pool).await;
+    let anonymous_result = crate::data::repositories::anonymous_activity::read_range(
+        &candidate_pool,
+        i64::MIN,
+        i64::MAX,
+    )
+    .await;
     candidate_pool.close().await;
 
     let mut payload = payload_result?;
@@ -98,6 +106,8 @@ async fn merge_snapshot_backup(
     payload.tool_software_reminder_rules.clear();
     let activity_rules = activity_rules_result?;
     let import_backup = import_result?;
+    let anonymous =
+        anonymous_result.map_err(|error| format!("failed to read anonymous backup: {error}"))?;
     let pool = wait_for_sqlite_pool(app).await?;
     let _icon_maintenance =
         crate::data::repositories::icon_cache::acquire_icon_cache_maintenance(&pool).await;
@@ -109,6 +119,9 @@ async fn merge_snapshot_backup(
     crate::data::repositories::tools::merge_activity_reminder_rules(&mut tx, &activity_rules)
         .await?;
     merge_external_import_backup_in_tx(&mut tx, &import_backup).await?;
+    crate::data::repositories::anonymous_activity::merge_for_restore(&mut tx, &anonymous)
+        .await
+        .map_err(|error| format!("failed to merge anonymous backup: {error}"))?;
     tx.commit()
         .await
         .map_err(|error| format!("failed to commit snapshot merge: {error}"))?;

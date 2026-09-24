@@ -135,6 +135,13 @@ mod tests {
         .execute(&pool)
         .await
         .expect("settings table should be created");
+        sqlx::query(
+            "CREATE TABLE anonymous_activity(id TEXT PRIMARY KEY, start_time INTEGER NOT NULL,
+            end_time INTEGER, observed_until INTEGER NOT NULL, is_web INTEGER NOT NULL)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
 
         pool
     }
@@ -222,6 +229,118 @@ mod tests {
 
     fn field_list(fields: &[&str]) -> Vec<String> {
         fields.iter().map(|field| field.to_string()).collect()
+    }
+
+    #[tokio::test]
+    async fn anonymous_exports_preserve_time_without_named_identity_in_all_formats() {
+        let pool = source_pool().await;
+        sqlx::query("INSERT INTO anonymous_activity(id,start_time,end_time,observed_until,is_web) VALUES('opaque-id',1000,61000,61000,1)")
+            .execute(&pool).await.unwrap();
+        let fields = field_list(&[
+            "record_type",
+            "start_time",
+            "end_time",
+            "duration_ms",
+            "app_name",
+            "exe_name",
+            "window_title",
+            "domain",
+            "url",
+            "page_title",
+            "browser_client_id",
+            "session_id",
+        ]);
+        let csv = output_path("csv");
+        assert_eq!(
+            csv_exporter::export_to_csv(&pool, csv.to_str().unwrap(), None, None, Some(&fields))
+                .await
+                .unwrap(),
+            1
+        );
+        let content = std::fs::read_to_string(&csv).unwrap();
+        assert!(content.contains("anonymous_web,"), "{content}");
+        assert!(content.contains(",60000,,,,,,,,"), "{content}");
+        assert!(!content.contains("opaque-id"));
+        std::fs::remove_file(csv).unwrap();
+
+        let markdown = output_path("md");
+        assert_eq!(
+            markdown_exporter::export_to_markdown(
+                &pool,
+                markdown.to_str().unwrap(),
+                None,
+                None,
+                Some(&fields)
+            )
+            .await
+            .unwrap(),
+            1
+        );
+        let content = std::fs::read_to_string(&markdown).unwrap();
+        assert!(content.contains("anonymous\\_web"));
+        assert!(content.contains("60000"));
+        assert!(!content.contains("opaque-id"));
+        std::fs::remove_file(markdown).unwrap();
+
+        let sqlite = output_path("sqlite");
+        assert_eq!(
+            sqlite_exporter::export_to_sqlite(
+                &pool,
+                sqlite.to_str().unwrap(),
+                None,
+                None,
+                Some(&fields)
+            )
+            .await
+            .unwrap(),
+            1
+        );
+        let exported = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                SqliteConnectOptions::new()
+                    .filename(&sqlite)
+                    .read_only(true),
+            )
+            .await
+            .unwrap();
+        let row = sqlx::query("SELECT * FROM anonymous_activity")
+            .fetch_one(&exported)
+            .await
+            .unwrap();
+        assert_eq!(row.get::<String, _>("record_type"), "anonymous_web");
+        assert_eq!(row.get::<i64, _>("duration_ms"), 60000);
+        for field in &fields[4..] {
+            assert!(row.get::<Option<String>, _>(field.as_str()).is_none());
+        }
+        exported.close().await;
+        std::fs::remove_file(sqlite).unwrap();
+
+        let parquet = output_path("parquet");
+        assert_eq!(
+            parquet_exporter::export_to_parquet(
+                &pool,
+                parquet.to_str().unwrap(),
+                Some(&fields),
+                None,
+                None
+            )
+            .await
+            .unwrap(),
+            1
+        );
+        let mut reader =
+            ParquetRecordBatchReaderBuilder::try_new(std::fs::File::open(&parquet).unwrap())
+                .unwrap()
+                .build()
+                .unwrap();
+        let batch = reader.next().unwrap().unwrap();
+        assert_eq!(batch.num_rows(), 1);
+        for column in &batch.columns()[4..] {
+            assert_eq!(column.null_count(), 1);
+        }
+        drop(reader);
+        std::fs::remove_file(parquet).unwrap();
     }
 
     #[tokio::test]

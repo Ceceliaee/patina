@@ -41,8 +41,16 @@ pub async fn export_to_parquet(
 
     let sessions = load_sessions(pool, filter).await?;
     let web = load_web_activity(pool, filter).await?;
-    let total_rows = (sessions.len() + web.len()) as u64;
-    let batch = build_record_batch(&fields, schema, &sessions, &web, &classification)?;
+    let anonymous = super::common::load_anonymous_activity(pool, filter).await?;
+    let total_rows = (sessions.len() + web.len() + anonymous.len()) as u64;
+    let batch = build_record_batch(
+        &fields,
+        schema,
+        &sessions,
+        &web,
+        &anonymous,
+        &classification,
+    )?;
 
     let temp_path = unique_temp_path(output_path, "parquet")?;
     let write_result = (|| -> Result<(), String> {
@@ -253,6 +261,7 @@ fn build_record_batch(
     schema: Schema,
     sessions: &[SessionRow],
     web: &[WebRow],
+    anonymous: &[super::common::AnonymousExportRow],
     classification: &ExportClassification,
 ) -> Result<RecordBatch, String> {
     let mut columns: Vec<Arc<dyn arrow::array::Array>> = Vec::with_capacity(fields.len());
@@ -260,14 +269,18 @@ fn build_record_batch(
     for &name in fields {
         let array: Arc<dyn arrow::array::Array> = match field_data_type(name) {
             DataType::Utf8 => {
-                let values: Vec<Option<String>> = sessions
-                    .iter()
-                    .map(|row| session_string_value(name, row, classification))
-                    .chain(
-                        web.iter()
-                            .map(|row| web_string_value(name, row, classification)),
-                    )
-                    .collect();
+                let values: Vec<Option<String>> =
+                    sessions
+                        .iter()
+                        .map(|row| session_string_value(name, row, classification))
+                        .chain(
+                            web.iter()
+                                .map(|row| web_string_value(name, row, classification)),
+                        )
+                        .chain(anonymous.iter().map(|row| {
+                            super::common::anonymous_field_value(name, row, classification)
+                        }))
+                        .collect();
                 Arc::new(StringArray::from(values))
             }
             DataType::Int64 => {
@@ -275,6 +288,10 @@ fn build_record_batch(
                     .iter()
                     .map(|row| session_i64_value(name, row))
                     .chain(web.iter().map(|row| web_i64_value(name, row)))
+                    .chain(anonymous.iter().map(|row| {
+                        super::common::anonymous_field_value(name, row, classification)
+                            .and_then(|value| value.parse().ok())
+                    }))
                     .collect();
                 Arc::new(Int64Array::from(values))
             }
@@ -283,6 +300,12 @@ fn build_record_batch(
                     .iter()
                     .map(|row| duration_minutes(row.duration))
                     .chain(web.iter().map(|row| duration_minutes(row.duration)))
+                    .chain(anonymous.iter().map(|row| {
+                        Some(
+                            (row.end_time.unwrap_or(row.observed_until) - row.start_time) as f64
+                                / 60_000.0,
+                        )
+                    }))
                     .collect();
                 Arc::new(Float64Array::from(values))
             }

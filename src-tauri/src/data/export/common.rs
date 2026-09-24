@@ -121,6 +121,64 @@ pub fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
 
 pub type ExportClassification = ClassificationSnapshot;
 
+pub type AnonymousExportRow =
+    crate::data::repositories::anonymous_activity::AnonymousActivityRecord;
+
+pub async fn load_anonymous_activity(
+    pool: &Pool<Sqlite>,
+    filter: ExportTimeFilter,
+) -> Result<Vec<AnonymousExportRow>, String> {
+    let mut rows = crate::data::repositories::anonymous_activity::read_range(
+        pool,
+        filter.start_time.unwrap_or(i64::MIN),
+        filter.end_time.unwrap_or(i64::MAX),
+    )
+    .await
+    .map_err(|error| format!("failed to read anonymous export activity: {error}"))?;
+    for row in &mut rows {
+        row.end_time = Some(
+            row.end_time
+                .unwrap_or(row.observed_until)
+                .min(filter.effective_now_ms)
+                .max(row.start_time),
+        );
+    }
+    Ok(rows)
+}
+
+pub fn anonymous_field_value(
+    field: &str,
+    row: &AnonymousExportRow,
+    classification: &ExportClassification,
+) -> Option<String> {
+    let end = row.end_time.unwrap_or(row.observed_until);
+    let duration = (end - row.start_time).max(0);
+    Some(match field {
+        "record_type" => if row.is_web {
+            "anonymous_web"
+        } else {
+            "anonymous"
+        }
+        .into(),
+        "category_id" | "source_key" => "anonymous".into(),
+        "category" | "source_name" => crate::domain::localization::text(
+            crate::domain::localization::Locale::from_tag(Some(classification.language())),
+            "native.export.anonymousActivity",
+        ),
+        "category_color" => "#8F98A8".into(),
+        "start_time" => ms_to_datetime_str(row.start_time),
+        "end_time" => ms_to_datetime_str(end),
+        "duration_ms" => duration.to_string(),
+        "duration_minutes" => (duration as f64 / 60_000.0).to_string(),
+        "local_date" => ms_to_local_date(row.start_time),
+        "local_week" => ms_to_local_week(row.start_time),
+        "local_month" => ms_to_local_month(row.start_time),
+        "weekday" => ms_to_local_weekday(row.start_time).to_string(),
+        "start_hour" => ms_to_local_hour(row.start_time).to_string(),
+        _ => return None,
+    })
+}
+
 pub async fn load_export_classification(
     pool: &Pool<Sqlite>,
 ) -> Result<ExportClassification, String> {

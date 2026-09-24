@@ -88,6 +88,7 @@ struct SnapshotRestoreManifest {
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
 struct SnapshotCounts {
+    anonymous_activity: usize,
     sessions: usize,
     title_samples: usize,
     import_batches: usize,
@@ -284,6 +285,7 @@ fn expected_migration_fingerprint(head: i64) -> Option<String> {
 
 async fn count_table(pool: &Pool<Sqlite>, table: &str) -> Result<usize, String> {
     let query = match table {
+        "anonymous_activity" => "SELECT COUNT(*) FROM anonymous_activity",
         "sessions" => "SELECT COUNT(*) FROM sessions",
         "session_title_samples" => "SELECT COUNT(*) FROM session_title_samples",
         "import_batches" => "SELECT COUNT(*) FROM import_batches",
@@ -314,6 +316,14 @@ async fn count_table(pool: &Pool<Sqlite>, table: &str) -> Result<usize, String> 
 
 async fn read_counts(pool: &Pool<Sqlite>) -> Result<SnapshotCounts, String> {
     Ok(SnapshotCounts {
+        anonymous_activity: if crate::data::repositories::anonymous_activity::is_available(pool)
+            .await
+            .map_err(|error| error.to_string())?
+        {
+            count_table(pool, "anonymous_activity").await?
+        } else {
+            0
+        },
         sessions: count_table(pool, "sessions").await?,
         title_samples: count_table(pool, "session_title_samples").await?,
         import_batches: count_table(pool, "import_batches").await?,
@@ -973,6 +983,17 @@ mod tests {
             .execute(&pool)
             .await
             .expect("insert external hour bucket");
+            crate::data::repositories::anonymous_activity::observe(&pool, 30, true)
+                .await
+                .unwrap();
+            crate::data::repositories::anonymous_activity::seal(&pool, 60)
+                .await
+                .unwrap();
+            let anonymous =
+                crate::data::repositories::anonymous_activity::read_range(&pool, 0, 100)
+                    .await
+                    .unwrap();
+            assert_eq!(read_counts(&pool).await.unwrap().anonymous_activity, 1);
 
             let preview = write_snapshot_archive(&pool, &archive_path, "test")
                 .await
@@ -1008,6 +1029,12 @@ mod tests {
             .expect("read extracted external rows");
             assert_eq!(value, "preserved");
             assert_eq!(external_counts, (1, 1, 1));
+            assert_eq!(
+                crate::data::repositories::anonymous_activity::read_range(&restored_pool, 0, 100)
+                    .await
+                    .unwrap(),
+                anonymous
+            );
         })
         .catch_unwind()
         .await;

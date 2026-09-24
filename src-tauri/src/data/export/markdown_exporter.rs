@@ -40,6 +40,7 @@ struct WebRow {
 }
 
 enum ActivityRow {
+    Anonymous(super::common::AnonymousExportRow),
     Session(SessionRow),
     Web(WebRow),
 }
@@ -47,6 +48,7 @@ enum ActivityRow {
 impl ActivityRow {
     fn start_time(&self) -> i64 {
         match self {
+            Self::Anonymous(row) => row.start_time,
             Self::Session(row) => row.start_time,
             Self::Web(row) => row.start_time,
         }
@@ -54,6 +56,9 @@ impl ActivityRow {
 
     fn duration(&self) -> Option<i64> {
         match self {
+            Self::Anonymous(row) => {
+                Some(row.end_time.unwrap_or(row.observed_until) - row.start_time)
+            }
             Self::Session(row) => row.duration,
             Self::Web(row) => row.duration,
         }
@@ -86,6 +91,12 @@ pub async fn export_to_markdown(
                 .map(ActivityRow::Web),
         )
         .collect::<Vec<_>>();
+    rows.extend(
+        super::common::load_anonymous_activity(pool, filter)
+            .await?
+            .into_iter()
+            .map(ActivityRow::Anonymous),
+    );
     rows.sort_by_key(ActivityRow::start_time);
 
     let document = render_document(
@@ -183,6 +194,10 @@ fn render_document(
 
 fn field_value(field: &str, row: &ActivityRow, classification: &ExportClassification) -> String {
     match row {
+        ActivityRow::Anonymous(row) => {
+            super::common::anonymous_field_value(field, row, classification)
+                .unwrap_or_else(empty_value)
+        }
         ActivityRow::Session(row) => {
             let category = classification.resolve_session_category(&row.exe_name);
             match field {

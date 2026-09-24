@@ -141,6 +141,13 @@ async fn delete_sessions_before_in_pool(
         .execute(&mut *tx)
         .await
         .map_err(|error| SqliteOperationError::from_sqlx("delete historical sessions", error))?;
+    sqlx::query("DELETE FROM anonymous_activity WHERE start_time < ?")
+        .bind(cutoff_time)
+        .execute(&mut *tx)
+        .await
+        .map_err(|error| {
+            SqliteOperationError::from_sqlx("delete historical anonymous activity", error)
+        })?;
     sqlx::query("DELETE FROM import_exact_sessions WHERE start_time < ?")
         .bind(cutoff_time)
         .execute(&mut *tx)
@@ -549,7 +556,69 @@ mod tests {
         )
         .await
         .unwrap();
+        pool.execute(db_schema::ACTIVITY_READ_MODELS_SCHEMA_SQL)
+            .await
+            .unwrap();
+        pool.execute(crate::data::repositories::anonymous_activity::SCHEMA_SQL)
+            .await
+            .unwrap();
         pool
+    }
+
+    #[test]
+    fn anonymous_cleanup_uses_time_not_guessed_identity_and_rolls_back() {
+        tauri::async_runtime::block_on(async {
+            use crate::data::repositories::anonymous_activity;
+            let pool = setup_test_db().await;
+            anonymous_activity::observe(&pool, 1_000, false)
+                .await
+                .unwrap();
+            anonymous_activity::seal(&pool, 2_000).await.unwrap();
+            anonymous_activity::observe(&pool, 3_000, true)
+                .await
+                .unwrap();
+            anonymous_activity::seal(&pool, 4_000).await.unwrap();
+            delete_sessions_by_exe_names_in_pool(&pool, &["secret.exe".into()])
+                .await
+                .unwrap();
+            delete_web_activity_by_domain_in_pool(&pool, "secret.test")
+                .await
+                .unwrap();
+            assert_eq!(
+                anonymous_activity::read_range(&pool, 0, 5_000)
+                    .await
+                    .unwrap()
+                    .len(),
+                2
+            );
+            pool.execute("CREATE TRIGGER reject_anonymous_delete BEFORE DELETE ON anonymous_activity BEGIN SELECT RAISE(ABORT, 'fixture'); END").await.unwrap();
+            pool.execute("INSERT INTO sessions(app_name,exe_name,window_title,start_time,end_time,duration) VALUES('Ordinary','ordinary.exe','title',1000,2000,1000)").await.unwrap();
+            assert!(delete_sessions_before_in_pool(&pool, 3_000).await.is_err());
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM sessions")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap(),
+                1
+            );
+            pool.execute("DROP TRIGGER reject_anonymous_delete")
+                .await
+                .unwrap();
+            delete_sessions_before_in_pool(&pool, 3_000).await.unwrap();
+            let remaining = anonymous_activity::read_range(&pool, 0, 5_000)
+                .await
+                .unwrap();
+            assert_eq!(remaining.len(), 1);
+            assert_eq!(remaining[0].start_time, 3_000);
+            assert!(remaining[0].is_web);
+            delete_sessions_before_in_pool(&pool, i64::MAX)
+                .await
+                .unwrap();
+            assert!(anonymous_activity::read_range(&pool, 0, 5_000)
+                .await
+                .unwrap()
+                .is_empty());
+        });
     }
 
     #[test]

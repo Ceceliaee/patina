@@ -90,7 +90,9 @@ pub async fn export_to_sqlite(
     let copy_result = async {
         let session_count = copy_sessions(pool, &dst, filter, &resolved, &classification).await?;
         let web_count = copy_web(pool, &dst, filter, &resolved, &classification).await?;
-        Ok::<u64, String>((session_count + web_count) as u64)
+        let anonymous_count =
+            copy_anonymous(pool, &dst, filter, selected_fields, &classification).await?;
+        Ok::<u64, String>((session_count + web_count + anonymous_count) as u64)
     }
     .await;
     dst.close().await;
@@ -105,6 +107,59 @@ pub async fn export_to_sqlite(
 
     replace_output_file(&temp_path, output_path)?;
     Ok(row_count)
+}
+
+async fn copy_anonymous(
+    pool: &Pool<Sqlite>,
+    dst: &Pool<Sqlite>,
+    filter: ExportTimeFilter,
+    selected_fields: Option<&[String]>,
+    classification: &ExportClassification,
+) -> Result<usize, String> {
+    let fields = resolve_export_fields(selected_fields)?;
+    let rows = super::common::load_anonymous_activity(pool, filter).await?;
+    let columns = fields
+        .iter()
+        .map(|field| {
+            let kind = match *field {
+                "duration_ms" | "weekday" | "start_hour" | "session_id" | "web_segment_id" => {
+                    "INTEGER"
+                }
+                "duration_minutes" => "REAL",
+                _ => "TEXT",
+            };
+            format!("{field} {kind}")
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut tx = dst.begin().await.map_err(|error| error.to_string())?;
+    sqlx::query(&format!(
+        "CREATE TABLE anonymous_activity (id INTEGER PRIMARY KEY AUTOINCREMENT, {columns})"
+    ))
+    .execute(&mut *tx)
+    .await
+    .map_err(|error| error.to_string())?;
+    let placeholders = vec!["?"; fields.len()].join(", ");
+    let insert = format!(
+        "INSERT INTO anonymous_activity ({}) VALUES ({placeholders})",
+        fields.join(", ")
+    );
+    for row in &rows {
+        let mut query = sqlx::query(&insert);
+        for field in &fields {
+            query = query.bind(super::common::anonymous_field_value(
+                field,
+                row,
+                classification,
+            ));
+        }
+        query
+            .execute(&mut *tx)
+            .await
+            .map_err(|error| error.to_string())?;
+    }
+    tx.commit().await.map_err(|error| error.to_string())?;
+    Ok(rows.len())
 }
 
 fn resolve_sqlite_fields(selected_fields: Option<&[String]>) -> Result<ResolvedFields, String> {
