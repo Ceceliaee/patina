@@ -1,5 +1,7 @@
 // Canonical language-neutral message contract. Do not derive this file from a locale at build time.
 export const MESSAGE_SCHEMA = {
+  "native.export.anonymousActivity": { "kind": "string", "params": [], "surface": "native", "description": "Anonymous activity label in exported data; identity fields remain empty." },
+  "common.anonymousActivity": { "kind": "string", "params": [], "surface": "frontend", "description": "Single anonymous activity identity; duration is retained without application or website identity." },
   "mapping.webLinks": { "kind": "string", "params": [], "surface": "frontend", "description": "Website grouping and exact-domain controls" },
   "mapping.addLinkedWebDomain": { "kind": "string", "params": [], "surface": "frontend", "description": "Add an observed website to this parent" },
   "mapping.backToLinkedWebDomains": { "kind": "string", "params": [], "surface": "frontend", "description": "Return from the website picker" },
@@ -5809,7 +5811,7 @@ export const MESSAGE_SCHEMA = {
   "mapping.deleteFailed": { "kind": "string", "params": [], "surface": "frontend" },
   "mapping.titleCaptureOnHint": { "kind": "string", "params": [], "surface": "frontend" },
   "mapping.titleCaptureOffHint": { "kind": "string", "params": [], "surface": "frontend" },
-  "mapping.trackingOnHint": { "kind": "string", "params": [], "surface": "frontend" },
-  "mapping.trackingOffHint": { "kind": "string", "params": [], "surface": "frontend" },
+  "mapping.trackingOnHint": { "kind": "string", "params": [], "surface": "frontend", "description": "Enable anonymous timing: retain duration without recording identity and hide existing named history." },
+  "mapping.trackingOffHint": { "kind": "string", "params": [], "surface": "frontend", "description": "Restore named tracking and show existing named history; past anonymous activity remains anonymous." },
   "export.fieldsSectionTitle": { "kind": "string", "params": [], "surface": "frontend", "description": "Heading above the selected export field count; distinct from the configure button." }
 } as const;

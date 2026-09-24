@@ -1,5 +1,6 @@
 // ru-RU locale resource. Pure data only.
 export const MESSAGES = {
+  "common.anonymousActivity": "Анонимная активность",
   "common.cancel": "Отмена",
   "common.close": "Закрыть",
   "common.confirm": "Подтвердить",

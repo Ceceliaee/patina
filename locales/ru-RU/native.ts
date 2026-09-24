@@ -1,5 +1,6 @@
 // ru-RU locale resource. Pure data only.
 export const MESSAGES = {
+  "native.export.anonymousActivity": "Анонимная активность",
   "native.category.ai": "ИИ",
   "native.category.browser": "Браузер",
   "native.category.communication": "Общение",

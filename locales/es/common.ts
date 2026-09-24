@@ -1,5 +1,6 @@
 // es locale resource. Pure data only.
 export const MESSAGES = {
+  "common.anonymousActivity": "Actividad anónima",
   "common.cancel": "Cancelar",
   "common.close": "Cerrar",
   "common.confirm": "Confirmar",

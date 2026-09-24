@@ -205,6 +205,7 @@ export interface UiText {
     "video": string;
   };
   "common": {
+    "anonymousActivity": string;
     "cancel": string;
     "close": string;
     "confirm": string;

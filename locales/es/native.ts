@@ -1,5 +1,6 @@
 // es locale resource. Pure data only.
 export const MESSAGES = {
+  "native.export.anonymousActivity": "Actividad anónima",
   "native.category.ai": "IA",
   "native.category.browser": "Navegador",
   "native.category.communication": "Comunicación",
