@@ -484,6 +484,10 @@ tracking 相关逻辑在 [`engine/tracking/`](../src-tauri/src/engine/tracking/)
 
 `engine/web_activity` 根据原生追踪资格处理网页观察，跨仓契约见 [Web Activity 协议](./web-activity-protocol.md)。详情只消费有效事实；轻量工具由自己的 owner 决定时间语义。
 
+匿名活动由 `data/repositories/anonymous_activity.rs` 保存独立 UUID、时间边界与网页子集标记，不保存具名外键或身份。具名封口与匿名开始共享事务；暂停、空闲和恢复沿用追踪边界。匿名心跳只推进有效观察，关闭区间进入既有小时投影脏区维护。读侧使用 `activity:anonymous` 作为派生展示键，不能把该键当作可配置应用、域名或图标查询目标。备份合并按 UUID 幂等，恢复追踪不反向识别匿名事实；身份删除不触碰匿名时间，按时间清理与全量清理覆盖匿名记录。
+
+新增事实表通过追加迁移进入现有库，不回填过去的排除空白。新版恢复旧快照时，匿名集合为空；不扩展冻结的旧备份 writer。旧程序不能被视为新 schema 的安全写入器；回退须使用升级前备份与对应版本的正式恢复路径，不能直接让旧程序续写升级后的数据库。
+
 ### 6.6 `domain/`
 
 `domain/*` 负责：
