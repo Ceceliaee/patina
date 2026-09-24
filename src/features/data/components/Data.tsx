@@ -1,6 +1,8 @@
 import { useLocaleText, type UiText } from "../../../shared/i18n/index.ts";
 import { type MouseEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, } from "react";
 import { BarChart3 } from "lucide-react";
+import { OTHER_CATEGORY_FIXED_COLOR } from "../../../shared/classification/categoryTokens.ts";
+import { isAnonymousActivity } from "../../../shared/classification/anonymousActivity.ts";
 
 import {
   getIconThemeFallbackColor,
@@ -603,7 +605,7 @@ export default function Data({
       classificationCategory: domain.category,
       unclassified: domain.unclassified,
       displayName: domain.displayName,
-      secondaryText: domain.normalizedDomain,
+      secondaryText: isAnonymousActivity(domain.normalizedDomain) ? "" : domain.normalizedDomain,
       iconUrl: domain.faviconUrl,
       totalDuration: domain.totalDuration,
       percentage: domain.percentage,
@@ -688,6 +690,7 @@ export default function Data({
     buildDataDestinationTrendSeries(
       destinationPanelSelectedOptions,
       (option) => {
+        if (isAnonymousActivity(option.key)) return OTHER_CATEGORY_FIXED_COLOR;
         if (isCategoryDestination && option.accentColor) {
           return option.accentColor;
         }
@@ -708,6 +711,7 @@ export default function Data({
     const selectedSeries = destinationTrendSeries.find((series) => (
       series.key === option.key && mode === presentedDestinationMode
     ));
+    if (isAnonymousActivity(option.key)) return OTHER_CATEGORY_FIXED_COLOR;
     if (option.accentColor) {
       return selectedSeries?.color ?? option.accentColor;
     }

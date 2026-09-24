@@ -1,4 +1,5 @@
 import { webLinksOverrides } from "../../../platform/persistence/webLinksGateway.ts";
+import { isAnonymousActivity } from "../../../shared/classification/anonymousActivity.ts";
 import { resolveWebOwner, webDisplayDomain } from "../../../shared/classification/webLinks.ts";
 import type { Locale, UiText } from "../../../shared/i18n/index.ts";
 import { formatDuration } from "../../../shared/lib/durationFormatting.ts";
@@ -242,6 +243,7 @@ function formatMonthLabel(monthKey: string, uiText: UiText) {
 }
 
 function buildDomainAggregates({
+  uiText,
   range,
   records,
   domainCoverage,
@@ -286,10 +288,10 @@ function buildDomainAggregates({
 
   return Array.from(domainBuckets, ([normalizedDomain, bucket]) => ({
     normalizedDomain,
-    displayName: overrides[normalizedDomain]?.displayName?.trim() || webDisplayDomain(normalizedDomain),
-    category: overrides[normalizedDomain]?.category ?? "other",
-    unclassified: !overrides[normalizedDomain]?.category
-      || overrides[normalizedDomain]?.category === "other",
+    displayName: isAnonymousActivity(normalizedDomain) ? uiText.common.anonymousActivity : overrides[normalizedDomain]?.displayName?.trim() || webDisplayDomain(normalizedDomain),
+    category: isAnonymousActivity(normalizedDomain) ? "anonymous" as const : overrides[normalizedDomain]?.category ?? "other",
+    unclassified: !isAnonymousActivity(normalizedDomain) && (!overrides[normalizedDomain]?.category
+      || overrides[normalizedDomain]?.category === "other"),
     faviconUrl: favicons[normalizedDomain] ?? null,
     totalDuration: bucket.totalDuration,
     percentage: totalWebDuration > 0 ? (bucket.totalDuration / totalWebDuration) * 100 : 0,

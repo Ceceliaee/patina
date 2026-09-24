@@ -1,5 +1,7 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
-import { Globe2, Monitor } from "lucide-react";
+import { EyeOff, Globe2, Monitor } from "lucide-react";
+import { isAnonymousActivity } from "../../../shared/classification/anonymousActivity.ts";
+import { ANONYMOUS_ACTIVITY_STYLE } from "../../../shared/charts/AnonymousActivityPattern.tsx";
 
 import QuietSegmentedFilter, { type QuietSegmentedFilterOption } from "../../../shared/components/QuietSegmentedFilter";
 import type { AppCategory } from "../../../shared/classification/categoryTokens.ts";
@@ -201,7 +203,7 @@ export default function HistoryDayDistributionPanel({
                           }
                         }}
                       >
-                        {item.iconSrc ? (
+                        {isAnonymousActivity(item.key) ? <EyeOff size={14} className="text-[var(--qp-text-secondary)]" aria-hidden="true" /> : item.iconSrc ? (
                           <img src={item.iconSrc} className="h-3.5 w-3.5 object-contain" alt="" />
                         ) : item.kind === "web" ? (
                           <Globe2 size={14} className="text-[var(--qp-text-tertiary)]" aria-hidden="true" />
@@ -212,7 +214,7 @@ export default function HistoryDayDistributionPanel({
                     ) : (
                       <span
                         className="h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: item.color }}
+                        style={{ backgroundColor: item.color, ...(item.category === "anonymous" ? ANONYMOUS_ACTIVITY_STYLE : {}) }}
                         aria-hidden="true"
                       />
                     )}
@@ -241,6 +243,7 @@ export default function HistoryDayDistributionPanel({
                     className="history-day-distribution-progress h-full rounded-full"
                     style={{
                       backgroundColor: item.color,
+                      ...(isAnonymousActivity(item.key) || item.category === "anonymous" ? ANONYMOUS_ACTIVITY_STYLE : {}),
                       width: `${item.percentage}%`,
                     }}
                   />

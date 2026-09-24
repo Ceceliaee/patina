@@ -16,6 +16,7 @@ import {
 import { formatDestinationTime as formatTime } from "../services/destinationTimeFormatting.ts";
 
 interface Props {
+  anonymous?: boolean;
   day: DestinationDetailDayViewModel;
   minimumDurationMs: number;
   mode: "app" | "web";
@@ -29,6 +30,7 @@ interface OpenActivityDetails {
 }
 
 export default function DestinationDetailRecords({
+  anonymous = false,
   day,
   minimumDurationMs,
   mode,
@@ -102,7 +104,7 @@ export default function DestinationDetailRecords({
               >
                 <span className="destination-detail-record-copy">
                   <strong>{objectName}</strong>
-                  {mode === "app" ? (
+                  {mode === "app" && !anonymous ? (
                     <span className="qp-workbench-list-meta destination-detail-record-meta">
                       <span>{UI_TEXT.history.activitySegmentCount(
                         activity.activityCount ?? activity.records.length,

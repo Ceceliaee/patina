@@ -1,4 +1,6 @@
 import { formatDuration } from "../services/historyFormatting.ts";
+import { EyeOff } from "lucide-react";
+import { ANONYMOUS_ACTIVITY_STYLE } from "../../../shared/charts/AnonymousActivityPattern.tsx";
 import type {
   HistoryTimelineDisplayMode,
   HistoryTimelineLane,
@@ -46,6 +48,7 @@ export default function HistoryTimelineLaneList({
         ) : (
           <div className="history-timeline-lanes-list" role="list">
             {viewModel.lanes.map((lane) => {
+              const anonymous = lane.category === "anonymous";
               const iconSrc = resolveLaneIcon(lane, sourceIcons);
               const laneViewModel: HistoryTimelineViewModel = {
                 ...viewModel,
@@ -62,12 +65,14 @@ export default function HistoryTimelineLaneList({
                   aria-label={`${lane.label} ${formatDuration(lane.duration)}`}
                 >
                   <div className="history-timeline-lane-identity">
-                    {iconSrc ? (
+                    {anonymous && mode !== "category" ? (
+                      <EyeOff className="history-timeline-lane-icon text-[var(--qp-text-secondary)]" aria-hidden="true" />
+                    ) : iconSrc ? (
                       <img src={iconSrc} className="history-timeline-lane-icon" alt="" />
                     ) : (
                       <span
                         className="history-timeline-lane-dot"
-                        style={{ backgroundColor: lane.color }}
+                        style={{ backgroundColor: lane.color, ...(anonymous ? ANONYMOUS_ACTIVITY_STYLE : {}) }}
                         aria-hidden="true"
                       />
                     )}

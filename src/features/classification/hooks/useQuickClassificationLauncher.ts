@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from "react";
+import { isAnonymousActivity } from "../../../shared/classification/anonymousActivity.ts";
 import { preloadQuickClassificationEntry } from "../components/QuickClassificationEntry.tsx";
 import {
   resolveQuickClassificationElementAnchor,
@@ -20,6 +21,7 @@ export function useQuickClassificationLauncher() {
     anchor: QuickClassificationAnchor,
     returnFocusTo: HTMLElement | null,
   ) => {
+    if (target.category === "anonymous" || (target.kind === "app" && isAnonymousActivity(target.exeName))) return;
     preload();
     const nextRequest = { target, anchor, returnFocusTo };
     activeRequestRef.current = nextRequest;

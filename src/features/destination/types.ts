@@ -1,4 +1,5 @@
 import type { TrackerHealthSnapshot } from "../../shared/types/tracking.ts";
+import { isAnonymousActivity } from "../../shared/classification/anonymousActivity.ts";
 
 type DestinationDetailMode = "app" | "web";
 
@@ -42,6 +43,6 @@ export function createDestinationDetailTarget(
     key,
     identityKeys: identityKeys.length > 0 ? identityKeys : [key],
     displayName: target.displayName.trim() || target.key,
-    secondaryText: target.secondaryText.trim() || target.key,
+    secondaryText: isAnonymousActivity(key) ? "" : target.secondaryText.trim() || target.key,
   };
 }

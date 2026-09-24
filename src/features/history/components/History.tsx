@@ -190,6 +190,14 @@ function cleanTimelineDetailTitles(samples: TimelineDetailTitle[], appName: stri
     .filter((sample) => sample.isUntitled || sample.title);
 }
 
+const MILLISECONDS_PER_HOUR = 60 * 60_000;
+
+function historyAppDisplayName(exeName: string, appName: string, uiText: UiText) {
+  const mapped = AppClassification.mapApp(exeName, { appName });
+  return mapped.category === "anonymous" ? uiText.common.anonymousActivity
+    : AppClassification.getUserOverride(exeName)?.displayName?.trim() || appName.trim() || mapped.name;
+}
+
 export default function History({
   uiText: UI_TEXT,
   locale,
@@ -650,7 +658,7 @@ export default function History({
     formatTimelineWindowBoundary(timelineViewport.startMs, selectedDayRange.endMs, locale),
     formatTimelineWindowBoundary(timelineViewport.endMs, selectedDayRange.endMs, locale),
   );
-  const timelineZoomHours = timelineViewport.durationMs / (60 * 60_000);
+  const timelineZoomHours = timelineViewport.durationMs / MILLISECONDS_PER_HOUR;
   const appDistributionItems = useMemo<HistoryDayDistributionItem[]>(
     () => {
       void mappingVersion;
@@ -659,7 +667,7 @@ export default function History({
         const appOverride = AppClassification.getUserOverride(app.exeName);
         const overrideColor = appOverride?.color;
         const accentColor = overrideColor ?? iconThemeColors[app.exeName] ?? mapped.color;
-        const appName = appOverride?.displayName?.trim() || app.appName.trim() || mapped.name;
+        const appName = historyAppDisplayName(app.exeName, app.appName, UI_TEXT);
         return {
           key: app.exeName,
           label: appName,
@@ -668,7 +676,7 @@ export default function History({
           color: accentColor,
           iconSrc: historyIcons[app.exeName],
           kind: "app",
-          quickClassificationTarget: createQuickAppClassificationTarget({
+          quickClassificationTarget: mapped.category === "anonymous" ? undefined : createQuickAppClassificationTarget({
             exeName: app.exeName,
             displayName: appName,
             category: mapped.category,
@@ -677,7 +685,7 @@ export default function History({
         };
       });
     },
-    [appSummary, historyIcons, iconThemeColors, mappingVersion],
+    [appSummary, historyIcons, iconThemeColors, mappingVersion, UI_TEXT],
   );
   const categoryDistributionItems = useMemo<HistoryDayDistributionItem[]>(() => {
     return buildHistoryCategoryDistribution(appSummary, (app) => {
@@ -703,14 +711,14 @@ export default function History({
       )
         .map((item) => ({
           key: item.key,
-          label: item.label,
+          label: item.category === "anonymous" ? UI_TEXT.common.anonymousActivity : item.label,
           duration: item.duration,
           percentage: item.percentage,
           color: item.color,
           iconSrc: item.faviconUrl ?? undefined,
           category: item.category,
           kind: "web" as const,
-          quickClassificationTarget: createQuickWebClassificationTarget({
+          quickClassificationTarget: item.category === "anonymous" ? undefined : createQuickWebClassificationTarget({
             normalizedDomain: item.key,
             displayName: item.label,
             category: item.category,
@@ -726,6 +734,7 @@ export default function History({
       webDomainFavicons,
       webDomainIconThemeColors,
       webDomainOverrides,
+      UI_TEXT,
     ],
   );
   const webTimelineItems = useMemo(
@@ -842,7 +851,7 @@ export default function History({
   }, [nowMs, presentedDate]);
   const handleTimelineZoomChange = (requestedHours: number) => {
     const nextDurationMs = getHistoryTimelineZoomDurationMs(requestedHours, presentedDate);
-    const nextZoomHours = nextDurationMs / (60 * 60_000);
+    const nextZoomHours = nextDurationMs / MILLISECONDS_PER_HOUR;
     if (Math.abs(nextDurationMs - timelineViewport.durationMs) < 1) return;
 
     const currentCenterMs = timelineViewport.startMs
@@ -869,7 +878,7 @@ export default function History({
     if (reason === "pan") {
       timelineViewportWasPannedRef.current = true;
     } else {
-      const nextZoomHours = nextViewport.durationMs / (60 * 60_000);
+      const nextZoomHours = nextViewport.durationMs / MILLISECONDS_PER_HOUR;
       rememberHistoryTimelineZoomHours(nextZoomHours);
       if (nextViewport.durationMs >= selectedDayDurationMs) {
         timelineViewportWasPannedRef.current = false;

@@ -1,7 +1,8 @@
 import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
 import type { UiText } from "../../../shared/i18n/index.ts";
 import { useState, type CSSProperties } from "react";
-import { Minus, Plus, X } from "lucide-react";
+import { EyeOff, Minus, Plus, X } from "lucide-react";
+import { isAnonymousActivity } from "../../../shared/classification/anonymousActivity.ts";
 import QuietDatePicker from "../../../shared/components/QuietDatePicker.tsx";
 import QuietDialog from "../../../shared/components/QuietDialog.tsx";
 import {
@@ -123,7 +124,7 @@ export default function DestinationDetailDialog({
       title={(
         <span className="destination-detail-title">
           <span className="destination-detail-title-icon" aria-hidden>
-            {target.iconUrl ? (
+            {isAnonymousActivity(target.key) ? <EyeOff size={18} aria-hidden="true" /> : target.iconUrl ? (
               <img src={target.iconUrl} alt="" />
             ) : (
               target.displayName.trim()[0]?.toUpperCase() || "?"
@@ -180,6 +181,7 @@ export default function DestinationDetailDialog({
                   </div>
                 ) : null}
                 <DestinationDetailTimeline
+                  anonymous={isAnonymousActivity(target.key)}
                   key={timelineIdentity}
                   objectName={target.displayName}
                   color={target.color}
@@ -267,6 +269,7 @@ export default function DestinationDetailDialog({
               day={displayDay}
               minimumDurationMs={minSessionMinutes * 60_000}
               mode={target.mode}
+              anonymous={isAnonymousActivity(target.key)}
               objectName={target.displayName}
               viewport={timelineViewport}
             />

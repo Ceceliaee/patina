@@ -1,4 +1,5 @@
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
+import { isAnonymousActivity } from "../../../shared/classification/anonymousActivity.ts";
 import type { SessionRange } from "../../../shared/lib/sessionReadCompiler.ts";
 import type { Locale, UiText } from "../../../shared/i18n/index.ts";
 import type { AggregateSessionRecord } from "../../../platform/persistence/sessionReadRepository.ts";
@@ -34,7 +35,7 @@ export function toAppPanelOption(
     classificationCategory: mapped.category,
     unclassified: mapped.category === "other",
     displayName: app.appName,
-    secondaryText: app.exeName,
+    secondaryText: isAnonymousActivity(app.exeName) ? "" : app.exeName,
     iconUrl: icons[app.exeName] ?? null,
     totalDuration: app.totalDuration,
     percentage: app.percentage,
@@ -694,7 +695,7 @@ export function buildDataAppTrendViewModelFromAggregate(
   const mergedOptions: DataAppTrendBucket[] = mergeDataAppDurationBuckets(aggregate.appBuckets).map((item) => ({
     appKey: item.appKey,
     sourceAppKeys: item.sourceAppKeys,
-    appName: item.appName,
+    appName: isAnonymousActivity(item.appKey) ? uiText.common.anonymousActivity : item.appName,
     exeName: item.exeName,
     totalDuration: item.totalDuration,
     percentage: totalAppDuration > 0 ? (item.totalDuration / totalAppDuration) * 100 : 0,

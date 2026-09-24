@@ -1,5 +1,6 @@
 import { resolveWebOwner, webDisplayDomain } from "../../../shared/classification/webLinks.ts";
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
+import { isAnonymousActivity } from "../../../shared/classification/anonymousActivity.ts";
 import { resolveStableDomainColor } from "../../../shared/classification/domainColor.ts";
 import type { AppCategory } from "../../../shared/classification/categoryTokens.ts";
 import type { UiText } from "../../../shared/i18n/index.ts";
@@ -86,6 +87,7 @@ function resolveWebCategory(
   normalizedDomain: string,
   overrides: Record<string, WebDomainOverride>,
 ): AppCategory {
+  if (isAnonymousActivity(normalizedDomain)) return "anonymous";
   return overrides[resolveWebOwner(normalizedDomain, overrides)]?.category ?? "other";
 }
 
@@ -186,21 +188,21 @@ export function buildHistoryWebTimelineSources({
         id: segment.sourceIds.join("_"),
         sourceKind: "web",
         sourceKey: segment.normalizedDomain,
-        sourceLabel: resolveWebLabel(segment, overrides),
+        sourceLabel: isAnonymousActivity(segment.normalizedDomain) ? uiText.common.anonymousActivity : resolveWebLabel(segment, overrides),
         sourceColor: resolveWebColor(
           segment.normalizedDomain,
           category,
           overrides,
           iconThemeColors,
         ),
-        iconKeys: [segment.normalizedDomain],
+        iconKeys: isAnonymousActivity(segment.normalizedDomain) ? [] : [segment.normalizedDomain],
         category,
         categoryLabel: AppClassification.getCategoryLabel(category, uiText),
         categoryColor: AppClassification.getCategoryColor(category),
         fallbackTitle: title,
         startTime: segment.startTime,
         endTime,
-        titleSampleDetails: [{
+        titleSampleDetails: isAnonymousActivity(segment.normalizedDomain) ? [] : [{
           title,
           ...(segment.url?.trim() ? { secondaryText: segment.url.trim() } : {}),
           startTime: segment.startTime,
@@ -385,7 +387,7 @@ export function buildWebTimelineItems(
       if (segment.isLive) clipped.endTime = null;
       const category = resolveWebCategory(segment.normalizedDomain, overrides);
       const titleSample = getWebTimelineTitleSample(segment, clipped);
-      const titleSampleDetails: WebTimelineItem["titleSampleDetails"] = [titleSample];
+      const titleSampleDetails: WebTimelineItem["titleSampleDetails"] = isAnonymousActivity(segment.normalizedDomain) ? [] : [titleSample];
       return {
         id: segment.sourceIds.join("_"),
         sourceIds: segment.sourceIds,

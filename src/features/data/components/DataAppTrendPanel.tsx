@@ -1,4 +1,6 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
+import { EyeOff } from "lucide-react";
+import { isAnonymousActivity } from "../../../shared/classification/anonymousActivity.ts";
 import { memo, useLayoutEffect, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode, type Ref, type RefObject, } from "react";
 import NativeTrendChart from "../../../shared/charts/NativeTrendChart.tsx";
 import QuietSearchField from "../../../shared/components/QuietSearchField";
@@ -146,6 +148,7 @@ function DataAppTrendPanel({
   onMouseLeave,
 }: DataAppTrendPanelProps) {
   const UI_TEXT = useLocaleText();
+  const canClassify = (option: DataDestinationTrendOption) => supportsQuickClassification && !isAnonymousActivity(option.key);
   const handleRetry = (event: MouseEvent<HTMLButtonElement>) => {
     if (document.activeElement === event.currentTarget) {
       event.currentTarget.closest(".data-app-panel")?.querySelector<HTMLElement>(".data-trend-range-trigger")?.focus();
@@ -153,7 +156,7 @@ function DataAppTrendPanel({
     onRetry();
   };
   const handleQuickClassificationKeyDown = (option: DataDestinationTrendOption, event: KeyboardEvent<HTMLButtonElement>) => {
-    if (!supportsQuickClassification || (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10"))) return false;
+    if (!canClassify(option) || (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10"))) return false;
     event.preventDefault();
     const bounds = event.currentTarget.getBoundingClientRect();
     onQuickClassificationOpen?.(
@@ -207,15 +210,15 @@ function DataAppTrendPanel({
                     data-selection-key={option.key}
                     key={option.key}
                     aria-label={detailCopy.open(option.displayName)}
-                    aria-keyshortcuts={supportsQuickClassification ? "Enter Shift+F10" : "Enter"}
-                    aria-haspopup={supportsQuickClassification ? "menu" : undefined}
-                    aria-expanded={supportsQuickClassification
+                    aria-keyshortcuts={canClassify(option) ? "Enter Shift+F10" : "Enter"}
+                    aria-haspopup={canClassify(option) ? "menu" : undefined}
+                    aria-expanded={canClassify(option)
                       ? activeQuickClassificationTargetKey === (option.exeName
                         ? `app:${option.exeName}`
                         : `web:${option.normalizedDomain}`)
                       : undefined}
-                    onPointerEnter={supportsQuickClassification ? onQuickClassificationPreload : undefined}
-                    onFocus={supportsQuickClassification ? onQuickClassificationPreload : undefined}
+                    onPointerEnter={canClassify(option) ? onQuickClassificationPreload : undefined}
+                    onFocus={canClassify(option) ? onQuickClassificationPreload : undefined}
                     onMouseDown={(event) => {
                       if (event.button === 0 && event.detail === 1) {
                         onOptionIntentStart(option, event.currentTarget);
@@ -226,7 +229,7 @@ function DataAppTrendPanel({
                       event.stopPropagation();
                       onOptionOpenDetails(option);
                     }}
-                    onContextMenu={supportsQuickClassification ? (event) => {
+                    onContextMenu={canClassify(option) ? (event) => {
                       event.preventDefault();
                       event.stopPropagation();
                       onQuickClassificationOpen?.(
@@ -245,7 +248,7 @@ function DataAppTrendPanel({
                       handleQuickClassificationKeyDown(option, event);
                     }}
                   >
-                    {option.iconUrl ? (
+                    {isAnonymousActivity(option.key) ? <EyeOff size={16} aria-hidden="true" /> : option.iconUrl ? (
                       <img
                         src={option.iconUrl}
                         alt=""
@@ -410,7 +413,7 @@ function DataAppTrendPanel({
                       event.stopPropagation();
                       onOptionOpenDetails(option);
                     }}
-                    onContextMenu={supportsQuickClassification ? (event) => {
+                    onContextMenu={canClassify(option) ? (event) => {
                       const target = event.target as HTMLElement;
                       if (!target.closest("[data-destination-detail-trigger]")) return;
                       event.preventDefault();
@@ -421,15 +424,15 @@ function DataAppTrendPanel({
                         event.currentTarget,
                       );
                     } : undefined}
-                    onPointerEnter={supportsQuickClassification ? onQuickClassificationPreload : undefined}
-                    onFocus={supportsQuickClassification ? onQuickClassificationPreload : undefined}
+                    onPointerEnter={canClassify(option) ? onQuickClassificationPreload : undefined}
+                    onFocus={canClassify(option) ? onQuickClassificationPreload : undefined}
                     onKeyDown={handleOptionKeyDown}
                     aria-pressed={isSelected}
-                    aria-keyshortcuts={supportsQuickClassification
+                    aria-keyshortcuts={canClassify(option)
                       ? "Enter Space Control+Enter Control+Space Shift+F10"
                       : "Enter Space Control+Enter Control+Space"}
-                    aria-haspopup={supportsQuickClassification ? "menu" : undefined}
-                    aria-expanded={supportsQuickClassification
+                    aria-haspopup={canClassify(option) ? "menu" : undefined}
+                    aria-expanded={canClassify(option)
                       ? activeQuickClassificationTargetKey === (option.exeName
                         ? `app:${option.exeName}`
                         : `web:${option.normalizedDomain}`)
@@ -445,7 +448,7 @@ function DataAppTrendPanel({
                       } as CSSProperties : undefined}
                       aria-hidden
                     >
-                      {option.accentColor ? (
+                      {isAnonymousActivity(option.key) ? <EyeOff size={16} aria-hidden="true" /> : option.accentColor ? (
                         <span className="data-category-color-marker" />
                       ) : option.iconUrl ? (
                         <img src={option.iconUrl} alt="" draggable={false} />

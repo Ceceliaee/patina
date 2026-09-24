@@ -1,5 +1,5 @@
 import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
-import { ChevronDown, ChevronRight, ChevronUp, Globe2 } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp, EyeOff, Globe2 } from "lucide-react";
 
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import { formatDuration, formatTime } from "../services/historyFormatting.ts";
@@ -92,7 +92,7 @@ export function HistoryTimelineList({
                 style={{ backgroundColor: accentColor }}
               />
               <div className="w-8 h-8 rounded-[8px] bg-[var(--qp-bg-panel)] border border-[var(--qp-border-subtle)] flex items-center justify-center flex-shrink-0 overflow-hidden p-1.5">
-                {icons[displayExe] ? (
+                {mapped.category === "anonymous" ? <EyeOff size={18} className="text-[var(--qp-text-secondary)]" aria-hidden="true" /> : icons[displayExe] ? (
                   <img src={icons[displayExe]} className="w-full h-full object-contain" alt="" />
                 ) : (
                   <div className="text-[10px] font-semibold opacity-35 text-[var(--qp-text-secondary)]">{mapped.category[0].toUpperCase()}</div>
@@ -101,9 +101,9 @@ export function HistoryTimelineList({
               <div className="flex min-w-0 flex-1 items-center gap-1.5">
                 <div className="flex min-w-0 flex-1 items-end gap-1.5">
                   <div className="min-w-0 truncate text-sm font-semibold text-[var(--qp-text-primary)]">
-                    {session.displayName}
+                    {mapped.category === "anonymous" ? UI_TEXT.common.anonymousActivity : session.displayName}
                   </div>
-                  <span className="qp-workbench-list-meta">
+                  {mapped.category !== "anonymous" && <span className="qp-workbench-list-meta">
                     <span>
                       {UI_TEXT.history.activitySegmentCount(session.mergedCount)}
                     </span>
@@ -111,7 +111,7 @@ export function HistoryTimelineList({
                     <span>
                       {UI_TEXT.history.titleRowCount(titleSampleDetails.length)}
                     </span>
-                  </span>
+                  </span>}
                   {hasDetails && (
                     <button
                       type="button"
@@ -192,7 +192,7 @@ export function HistoryWebTimelineList({
                 style={{ backgroundColor: item.color }}
               />
               <div className="w-8 h-8 rounded-[8px] bg-[var(--qp-bg-panel)] border border-[var(--qp-border-subtle)] flex items-center justify-center flex-shrink-0 overflow-hidden p-1.5">
-                {item.faviconUrl ? (
+                {item.category === "anonymous" ? <EyeOff size={15} aria-hidden="true" /> : item.faviconUrl ? (
                   <img src={item.faviconUrl} className="w-full h-full object-contain" alt="" />
                 ) : (
                   <Globe2 size={15} className="text-[var(--qp-text-tertiary)]" aria-hidden="true" />
@@ -201,7 +201,7 @@ export function HistoryWebTimelineList({
               <div className="flex min-w-0 flex-1 items-center gap-1.5">
                 <div className="flex min-w-0 flex-1 items-end gap-1.5">
                   <div className="min-w-0 truncate text-sm font-semibold text-[var(--qp-text-primary)]">
-                    {item.label}
+                    {item.category === "anonymous" ? UI_TEXT.common.anonymousActivity : item.label}
                   </div>
                   {titleCount > 0 && (
                     <span className="qp-workbench-list-meta">

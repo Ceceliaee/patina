@@ -3,6 +3,7 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import {
   QuietTimelineSegment, QuietTimelineTrack, type QuietTimelineTrackStyle, } from "../../../shared/components/QuietTimelineTrack.tsx";
 import QuietTooltip from "../../../shared/components/QuietTooltip.tsx";
+import { ANONYMOUS_ACTIVITY_STYLE } from "../../../shared/charts/AnonymousActivityPattern.tsx";
 
 import { formatDuration, formatTime } from "../services/historyFormatting.ts";
 import type {
@@ -112,7 +113,7 @@ export default function HistoryHorizontalTimeline({
         <span key={item.key} className="history-horizontal-timeline-legend-more-tooltip-item">
           <span
             className="history-horizontal-timeline-legend-more-tooltip-dot"
-            style={{ backgroundColor: item.color }}
+            style={{ backgroundColor: item.color, ...(item.category === "anonymous" ? ANONYMOUS_ACTIVITY_STYLE : {}) }}
           />
           <span className="history-horizontal-timeline-legend-more-tooltip-label">
             {item.label}
@@ -149,7 +150,7 @@ export default function HistoryHorizontalTimeline({
                   <span key={item.key} className="history-horizontal-timeline-legend-item">
                     <span
                       className="history-horizontal-timeline-legend-dot"
-                      style={{ backgroundColor: item.color }}
+                      style={{ backgroundColor: item.color, ...(item.category === "anonymous" ? ANONYMOUS_ACTIVITY_STYLE : {}) }}
                       aria-hidden="true"
                     />
                     <span className="history-horizontal-timeline-legend-label">{item.label}</span>
@@ -208,6 +209,7 @@ export default function HistoryHorizontalTimeline({
               key={segment.id}
               ariaLabel={ariaLabel}
               color={segmentColor}
+              anonymous={segment.category === "anonymous"}
               leftRatio={segment.startRatio}
               widthRatio={segment.widthRatio}
               tooltip={(

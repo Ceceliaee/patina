@@ -1,4 +1,5 @@
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
+import { isAnonymousActivity } from "../../../shared/classification/anonymousActivity.ts";
 import { resolveAppIconKeys } from "../../../shared/classification/appIconIdentity.ts";
 import type { AppCategory } from "../../../shared/classification/categoryTokens.ts";
 import type { UiText } from "../../../shared/i18n/index.ts";
@@ -365,7 +366,7 @@ export function buildAppTimelineSources(
       id: String(session.id),
       sourceKind: "app",
       sourceKey: session.appKey,
-      sourceLabel: session.displayName,
+      sourceLabel: isAnonymousActivity(session.appKey) ? uiText.common.anonymousActivity : session.displayName,
       sourceColor: resolveAppSourceColor(session, iconThemeColors),
       iconKeys: Array.from(new Set([
         ...resolveAppIconKeys(session.exeName),
@@ -758,7 +759,7 @@ function mergeContiguousDominantMinuteSegments(
 ) {
   return mergeContiguousTimelineSegments(segments, {
     mergeThresholdMs,
-    getKey: (segment) => segment.timelineKey,
+    getKey: (segment) => segment.category === "anonymous" ? `${segment.timelineKey}:${segment.sourceId}` : segment.timelineKey,
     merge: mergeAdjacentTimelineSegments,
   });
 }

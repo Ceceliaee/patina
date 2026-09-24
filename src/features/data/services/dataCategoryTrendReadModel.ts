@@ -150,7 +150,7 @@ function resolveSelectedCategoryBuckets(
   const selected = Array.from(new Set(selectedCategoryKeys)).flatMap((key) => {
     const existing = buckets.find((bucket) => bucket.category === key);
     if (existing) return [existing];
-    return isAppCategory(key) ? [createEmptyCategoryBucket(key, context)] : [];
+    return isAppCategory(key) || key === "anonymous" ? [createEmptyCategoryBucket(key, context)] : [];
   });
   if (selected.length === 0 && buckets[0]) {
     selected.push(buckets[0]);
@@ -305,7 +305,7 @@ export function resolveDataCategorySourceAppKeys(
   sessions: readonly AggregateSessionRecord[],
   selectedCategoryKeys: readonly string[],
 ): string[] {
-  const selected = new Set(selectedCategoryKeys.filter(isAppCategory));
+  const selected = new Set(selectedCategoryKeys.filter((key) => isAppCategory(key) || key === "anonymous"));
   if (selected.size === 0) return [];
   const appKeys = new Set<string>();
   for (const session of sessions) {

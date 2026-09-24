@@ -20,6 +20,7 @@ import {
 } from "../services/destinationDetailTimelineViewport.ts";
 
 interface Props {
+  anonymous?: boolean;
   objectName: string;
   color: string;
   day: DestinationDetailDayViewModel;
@@ -73,6 +74,7 @@ function viewportsMatch(
 }
 
 export default function DestinationDetailTimeline({
+  anonymous = false,
   objectName,
   color,
   day,
@@ -340,6 +342,7 @@ export default function DestinationDetailTimeline({
             return (
               <QuietTimelineSegment
                 key={segment.id}
+                anonymous={anonymous}
                 ariaLabel={ariaLabel}
                 color={color}
                 leftRatio={segment.startRatio}

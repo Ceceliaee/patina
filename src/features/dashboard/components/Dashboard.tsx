@@ -1,7 +1,9 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { getCategoryToken } from "../../../shared/classification/categoryTokens.ts";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, } from "react";
-import { Layers3, Monitor, Minus, TrendingDown, TrendingUp } from "lucide-react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, } from "react";
+import { EyeOff, Layers3, Monitor, Minus, TrendingDown, TrendingUp } from "lucide-react";
+import { isAnonymousActivity } from "../../../shared/classification/anonymousActivity.ts";
+import AnonymousActivityPattern, { ANONYMOUS_ACTIVITY_STYLE } from "../../../shared/charts/AnonymousActivityPattern.tsx";
 
 import { useIconThemeColors } from "../../../shared/hooks/useIconThemeColors";
 import { formatDashboardDuration } from "../services/dashboardFormatting";
@@ -82,6 +84,7 @@ function DashboardFocusDonut({
 }) {
   const UI_TEXT = useLocaleText();
   const total = categoryDist.reduce((sum, item) => sum + Math.max(0, item.value), 0);
+  const anonymousPatternId = useId();
   let consumed = 0;
 
   return (
@@ -91,6 +94,7 @@ function DashboardFocusDonut({
       role="img"
       viewBox="0 0 112 112"
     >
+      <AnonymousActivityPattern id={anonymousPatternId} />
       <circle
         cx={DONUT_CENTER}
         cy={DONUT_CENTER}
@@ -116,7 +120,7 @@ function DashboardFocusDonut({
             cy={DONUT_CENTER}
             fill="none"
             r={DONUT_RADIUS}
-            stroke={item.color || "var(--qp-accent-default)"}
+            stroke={item.category === "anonymous" ? `url(#${anonymousPatternId})` : item.color || "var(--qp-accent-default)"}
             strokeDasharray={`${dashLength} ${DONUT_CIRCUMFERENCE - dashLength}`}
             strokeDashoffset={dashOffset}
             strokeWidth={DONUT_STROKE_WIDTH}
@@ -275,7 +279,7 @@ export default function Dashboard({
                     <div className="min-w-0 flex items-center gap-2">
                       <span
                         className="dashboard-focus-ranking-dot"
-                        style={{ backgroundColor: cat.color || "var(--qp-accent-default)" }}
+                        style={{ backgroundColor: cat.color || "var(--qp-accent-default)", ...(cat.category === "anonymous" ? ANONYMOUS_ACTIVITY_STYLE : {}) }}
                       />
                       <span className="dashboard-focus-ranking-name font-semibold text-[var(--qp-text-secondary)]">{cat.name}</span>
                     </div>
@@ -354,7 +358,8 @@ export default function Dashboard({
                   ? appOverride?.category ?? "other"
                   : AppClassification.mapApp(app.exeName, { appName: app.name }).category;
                 const isUnclassified = effectiveCategory === "other";
-                const displayName = appOverride?.displayName?.trim() || app.name;
+                const anonymous = isAnonymousActivity(app.exeName);
+                const displayName = anonymous ? UI_TEXT.common.anonymousActivity : appOverride?.displayName?.trim() || app.name;
                 const accentColor = overrideColor ?? iconThemeColors[app.exeName] ?? app.color;
                 const createDetailRequest = () => ({
                     target: createDestinationDetailTarget({
@@ -362,7 +367,7 @@ export default function Dashboard({
                       key: app.exeName,
                       identityKeys: [app.exeName],
                       displayName,
-                      secondaryText: app.exeName,
+                      secondaryText: anonymous ? "" : app.exeName,
                       iconUrl: icons[app.exeName] ?? null,
                       color: accentColor,
                     }),
@@ -394,17 +399,18 @@ export default function Dashboard({
                           boxShadow: `0 0 0 2px ${accentColor}22`,
                         }}
                         aria-label={UI_TEXT.destinationDetail.open(displayName)}
-                        aria-keyshortcuts="Enter Shift+F10"
-                        aria-haspopup="menu"
-                        aria-expanded={quickClassification.request?.target.kind === "app"
+                        aria-keyshortcuts={anonymous ? "Enter" : "Enter Shift+F10"}
+                        aria-haspopup={anonymous ? undefined : "menu"}
+                        aria-expanded={!anonymous && quickClassification.request?.target.kind === "app"
                           && quickClassification.request.target.exeName === app.exeName}
-                        onPointerEnter={quickClassification.preload}
-                        onFocus={quickClassification.preload}
+                        onPointerEnter={anonymous ? undefined : quickClassification.preload}
+                        onFocus={anonymous ? undefined : quickClassification.preload}
                         onPointerDown={(event) => {
                           if (event.button === 0) prepareDetail(event.currentTarget);
                         }}
                         onDoubleClick={(event) => openDetail(event.currentTarget)}
                         onContextMenu={(event) => {
+                          if (anonymous) return;
                           event.preventDefault();
                           quickClassification.openAtPointer(
                             quickTarget,
@@ -422,13 +428,13 @@ export default function Dashboard({
                             openDetail(event.currentTarget);
                             return;
                           }
-                          if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+                          if (!anonymous && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) {
                             event.preventDefault();
                             quickClassification.openAtElement(quickTarget, event.currentTarget);
                           }
                         }}
                       >
-                        {icons[app.exeName] ? (
+                        {anonymous ? <EyeOff size={20} className="text-[var(--qp-text-secondary)]" aria-hidden="true" /> : icons[app.exeName] ? (
                           <img src={icons[app.exeName]} className="w-full h-full object-contain" alt="" />
                         ) : (
                           <div className="text-xs font-semibold opacity-40 text-[var(--qp-text-secondary)]">{app.categoryInitial}</div>
@@ -454,6 +460,7 @@ export default function Dashboard({
                           className="dashboard-top-app-progress h-full rounded-full"
                           style={{
                             backgroundColor: accentColor,
+                            ...(anonymous ? ANONYMOUS_ACTIVITY_STYLE : {}),
                             width: `${app.percentage}%`,
                           }}
                         />
