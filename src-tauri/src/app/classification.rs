@@ -15,7 +15,11 @@ pub async fn apply_recording_policy_changes<R: Runtime>(
     let tracking =
         app.state::<crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshotState>();
     let changed_at_ms = now_ms();
-    if !outcome.app_title_changes.is_empty() {
+    if !outcome.app_recording_changes.is_empty()
+        || !outcome.app_title_changes.is_empty()
+        || !outcome.web_domain_recording_changes.is_empty()
+        || !outcome.web_domain_title_changes.is_empty()
+    {
         if let Some(state) =
             app.try_state::<crate::engine::tracking::title_state::TitleRecordingRuntimeState>()
         {

@@ -39,6 +39,17 @@ pub async fn load_title_recording_enabled(pool: &Pool<Sqlite>) -> Result<bool, s
         .unwrap_or(true))
 }
 
+pub async fn has_anonymous_web_rules(pool: &Pool<Sqlite>) -> Result<bool, sqlx::Error> {
+    let values: Vec<String> = sqlx::query_scalar(
+        "SELECT value FROM settings WHERE substr(key, 1, 23) = '__web_domain_override::'",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(values
+        .iter()
+        .any(|value| !crate::domain::web_activity::parse_domain_override_enabled(value)))
+}
+
 pub async fn load_capture_window_title_setting_for_app(
     pool: &Pool<Sqlite>,
     exe_name: &str,

@@ -141,7 +141,7 @@ fn has_exceeded_sustained_participation_window(
         && i64::from(window.idle_time_ms) > sustained_participation_window_ms
 }
 
-fn resolve_continuity_window_end_time(
+pub(super) fn resolve_continuity_window_end_time(
     now_ms: i64,
     idle_time_ms: u32,
     continuity_window_secs: u64,
@@ -149,7 +149,7 @@ fn resolve_continuity_window_end_time(
     now_ms - i64::from(idle_time_ms) + continuity_window_ms(continuity_window_secs)
 }
 
-fn resolve_sustained_participation_end_time(
+pub(super) fn resolve_sustained_participation_end_time(
     now_ms: i64,
     idle_time_ms: u32,
     sustained_participation_secs: u64,

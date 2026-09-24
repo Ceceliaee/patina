@@ -16,6 +16,34 @@ use crate::platform::windows::foreground as tracker;
 use std::collections::HashMap;
 
 const TRACKER_TIMESTAMP_PERSIST_INTERVAL_MS: i64 = 3_000;
+
+/// A stale or reversed clock cannot extend the last committed activity interval.
+pub(super) async fn seal_stale_sample<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    data: &dyn TrackingDataStore,
+    health: &super::super::watchdog::RuntimeHealthState,
+    now_ms: i64,
+) -> Result<Option<bool>, String> {
+    let Some(last_sample) = health.snapshot().last_successful_sample_ms else {
+        return Ok(None);
+    };
+    if now_ms >= last_sample && now_ms.saturating_sub(last_sample) <= 8_000 {
+        return Ok(None);
+    }
+    let ended = data
+        .end_active_sessions(last_sample)
+        .await
+        .map_err(|error| error.to_string())?;
+    super::snapshot_projection::clear_active_session_snapshot(app);
+    if ended {
+        let _ = super::emit_tracking_data_changed(
+            app,
+            "session-ended-stale-sample",
+            last_sample as u64,
+        );
+    }
+    Ok(Some(now_ms < last_sample))
+}
 const TRACKING_SETTINGS_CACHE_TTL_MS: i64 = 5_000;
 const CAPTURE_WINDOW_TITLE_CACHE_LIMIT: usize = 256;
 const TRACKING_PAUSE_VERIFY_INTERVAL_MS: i64 = 60_000;
@@ -27,6 +55,7 @@ pub(super) struct TrackingLoopState {
     pub sustained_participation_secs: u64,
     pub tracking_paused: bool,
     pub app_tracking_enabled: bool,
+    pub anonymous_web: bool,
     pub capture_window_title: bool,
     pub tracked_window: tracker::WindowInfo,
     pub tracking_status: TrackingStatusSnapshot,
@@ -110,20 +139,19 @@ pub(super) async fn load_tracking_loop_state(
     let continuity_window_secs = cached_settings.continuity_window_secs;
     let sustained_participation_secs = cached_settings.sustained_participation_secs;
     let tracking_paused = load_tracking_paused(data, pause_state, now_ms).await;
+    let anonymous_web = title_state.is_anonymous_web(window_info, now_ms);
     let app_tracking_enabled = match data
         .load_tracking_enabled_setting_for_app(&window_info.exe_name)
         .await
     {
         Ok(value) => value,
         Err(error) => {
-            log_tracker_error(format!(
-                "failed to load app tracking setting for {}: {error}",
-                window_info.exe_name
-            ));
+            log_tracker_error(format!("failed to load app tracking policy: {error}"));
             false
         }
-    };
-    let capture_window_title = title_state.is_enabled()
+    } && !anonymous_web;
+    let mut capture_window_title = app_tracking_enabled
+        && title_state.is_enabled()
         && settings_cache
             .load_capture_window_title_setting(
                 data,
@@ -132,6 +160,14 @@ pub(super) async fn load_tracking_loop_state(
                 title_state.override_generation(),
             )
             .await;
+
+    if crate::domain::web_activity::resolve_web_activity_browser_family(&window_info.exe_name)
+        .is_some()
+        && data.has_anonymous_web_rules().await.unwrap_or(true)
+        && !title_state.permits_browser_title(window_info, now_ms)
+    {
+        capture_window_title = false;
+    }
 
     let (system_media_signal, audio_signal) =
         load_sustained_participation_signals(window_info, tracking_paused).await;
@@ -160,7 +196,7 @@ pub(super) async fn load_tracking_loop_state(
             false,
         )));
 
-    if !app_tracking_enabled || !window_identity_is_trackable {
+    if !window_identity_is_trackable {
         tracking_status = TrackingStatusSnapshot::default();
         next_sustained_participation_state = SustainedParticipationRuntimeState::default();
     }
@@ -171,6 +207,7 @@ pub(super) async fn load_tracking_loop_state(
             sustained_participation_secs,
             tracking_paused,
             app_tracking_enabled,
+            anonymous_web,
             capture_window_title,
             tracked_window,
             tracking_status,
@@ -598,7 +635,192 @@ mod tests {
     }
 
     #[test]
-    fn excluded_app_disables_runtime_tracking_before_transition_work() {
+    fn anonymous_identity_expiry_respects_earlier_native_idle_boundaries() {
+        tauri::async_runtime::block_on(async {
+            use crate::domain::tracking::SustainedParticipationState;
+            let previous: tracker::WindowInfo = serde_json::from_value(serde_json::json!({
+                "hwnd":"1", "root_owner_hwnd":"1", "process_id":123,
+                "window_class":"Browser", "title":"Private", "exe_name":"chrome.exe",
+                "process_path":"", "is_afk":false, "idle_time_ms":0
+            }))
+            .unwrap();
+            for (afk, expired, paused, idle, now, deadline, expected) in [
+                (true, false, false, 200_000, 400_000, 390_000, 200_000),
+                (false, false, false, 200_000, 400_000, 390_000, 380_000),
+                (true, true, false, 950_000, 1_000_000, 960_000, 950_000),
+                (true, true, false, 950_000, 1_000_000, 940_000, 940_000),
+                (false, false, true, 0, 400_000, 390_000, 390_000),
+            ] {
+                let pool = setup_test_db().await;
+                for schema in [
+                    db_schema::IMPORT_DATA_SCHEMA_SQL,
+                    db_schema::IMPORT_DATA_ISOLATION_SCHEMA_SQL,
+                    db_schema::ACTIVITY_READ_MODELS_SCHEMA_SQL,
+                    crate::data::repositories::anonymous_activity::SCHEMA_SQL,
+                ] {
+                    pool.execute(schema).await.unwrap();
+                }
+                let data = TrackingRuntimeDataStore::new(pool.clone());
+                let mut current = previous.clone();
+                current.is_afk = afk;
+                current.idle_time_ms = idle;
+                let previous_status = TrackingStatusSnapshot {
+                    sustained_participation_active: expired,
+                    ..Default::default()
+                };
+                let state = TrackingLoopState {
+                    continuity_window_secs: 180,
+                    sustained_participation_secs: 900,
+                    tracking_paused: paused,
+                    app_tracking_enabled: true,
+                    anonymous_web: false,
+                    capture_window_title: false,
+                    tracked_window: current,
+                    tracking_status: TrackingStatusSnapshot {
+                        sustained_participation_state: if expired {
+                            SustainedParticipationState::Expired
+                        } else {
+                            SustainedParticipationState::Inactive
+                        },
+                        ..Default::default()
+                    },
+                };
+                data.observe_anonymous_activity(0, true).await.unwrap();
+                data.observe_anonymous_activity(now - 1, true)
+                    .await
+                    .unwrap();
+                let cutoff = state.resolve_anonymous_cutoff(
+                    Some(&previous),
+                    Some(&previous_status),
+                    deadline,
+                    now,
+                );
+                assert_eq!(cutoff, expected);
+                data.seal_anonymous_activity(cutoff).await.unwrap();
+                state
+                    .seal_stop(&data, Some(&previous), Some(&previous_status), now, true)
+                    .await
+                    .unwrap();
+                let row =
+                    crate::data::repositories::anonymous_activity::read_range(&pool, 0, now + 1)
+                        .await
+                        .unwrap();
+                assert_eq!(row.len(), 1);
+                assert_eq!(row[0].end_time, Some(expected));
+            }
+        });
+    }
+
+    #[test]
+    fn unknown_browser_titles_are_suppressed_only_with_anonymous_web_rules() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            let data = TrackingRuntimeDataStore::new(pool.clone());
+            let pause = TrackingPauseRuntimeState::default();
+            let titles = TitleRecordingRuntimeState::default();
+            let mut cache = TrackingSettingsCache::default();
+            let mut window = tracker::WindowInfo {
+                hwnd: "1".into(),
+                root_owner_hwnd: "1".into(),
+                process_id: 123,
+                window_class: "Chrome_WidgetWin_1".into(),
+                title: "Normal - Google Chrome".into(),
+                exe_name: "chrome.exe".into(),
+                process_path: String::new(),
+                app_user_model_id: String::new(),
+                is_afk: false,
+                idle_time_ms: 0,
+            };
+            for (step, expected_title) in [
+                (0, true),
+                (1, false),
+                (2, true),
+                (3, false),
+                (4, true),
+                (5, true),
+            ] {
+                match step {
+                    1 => tracker_settings::save_setting_value(
+                        &pool,
+                        "__web_domain_override::private.test",
+                        r#"{"enabled":false}"#,
+                    )
+                    .await
+                    .unwrap(),
+                    2 => titles.confirm_browser_title(&window, "Normal", 1002),
+                    3 => window.title = "Unknown - Google Chrome".into(),
+                    4 => window.exe_name = "editor.exe".into(),
+                    5 => {
+                        window.exe_name = "chrome.exe".into();
+                        tracker_settings::save_setting_value(
+                            &pool,
+                            "__web_domain_override::private.test",
+                            r#"{"enabled":true}"#,
+                        )
+                        .await
+                        .unwrap();
+                    }
+                    _ => {}
+                }
+                let (state, _) = load_tracking_loop_state(
+                    &data,
+                    &pause,
+                    &titles,
+                    &window,
+                    1000 + step,
+                    &SustainedParticipationRuntimeState::default(),
+                    &mut cache,
+                )
+                .await;
+                assert_eq!(state.capture_window_title, expected_title, "step {step}");
+                assert!(state.tracking_status.is_tracking_active, "step {step}");
+                assert!(
+                    state.app_tracking_enabled,
+                    "unknown identity must still count normal browser time"
+                );
+                data.end_active_sessions(1000 + step).await.unwrap();
+                crate::engine::tracking::transition::apply_window_transition_with_title_policy(
+                    &data,
+                    None,
+                    &state.tracked_window,
+                    1000 + step,
+                    1000 + step,
+                    state.capture_window_title,
+                    crate::engine::tracking::active_session::start_session_for_transition,
+                )
+                .await
+                .unwrap();
+                let persisted: String =
+                    sqlx::query_scalar("SELECT window_title FROM sessions WHERE end_time IS NULL")
+                        .fetch_one(&pool)
+                        .await
+                        .unwrap();
+                assert_eq!(
+                    persisted,
+                    if expected_title {
+                        window.title.as_str()
+                    } else {
+                        ""
+                    },
+                    "persisted step {step}"
+                );
+                let samples: Vec<String> = sqlx::query_scalar("SELECT title FROM session_title_samples WHERE session_id = (SELECT id FROM sessions WHERE end_time IS NULL)")
+                    .fetch_all(&pool).await.unwrap();
+                assert_eq!(
+                    samples,
+                    if expected_title {
+                        vec![window.title.clone()]
+                    } else {
+                        vec![]
+                    },
+                    "title samples step {step}"
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn anonymous_app_preserves_timing_eligibility_without_title_capture() {
         tauri::async_runtime::block_on(async {
             let pool = setup_test_db().await;
             crate::data::repositories::tracker_settings::save_setting_value(
@@ -637,7 +859,8 @@ mod tests {
             .await;
 
             assert!(!state.app_tracking_enabled);
-            assert!(!state.tracking_status.is_tracking_active);
+            assert!(!state.capture_window_title);
+            assert!(state.tracking_status.is_tracking_active);
             assert_eq!(state.tracked_window.exe_name, "Code.exe");
         });
     }
@@ -683,7 +906,7 @@ mod tests {
 
             assert!(!state.app_tracking_enabled);
             assert!(!state.capture_window_title);
-            assert!(!state.tracking_status.is_tracking_active);
+            assert!(state.tracking_status.is_tracking_active);
         });
     }
 
@@ -747,6 +970,49 @@ pub(super) struct TrackingStop {
 }
 
 impl TrackingLoopState {
+    pub(super) fn resolve_anonymous_cutoff(
+        &self,
+        previous_window: Option<&tracker::WindowInfo>,
+        previous_status: Option<&TrackingStatusSnapshot>,
+        cutoff: i64,
+        now_ms: i64,
+    ) -> i64 {
+        use super::super::session_timeout::*;
+        let native_cutoff = if self.tracking_paused {
+            now_ms
+        } else if should_seal_sustained_participation(
+            previous_window,
+            previous_status,
+            &self.tracked_window,
+            &self.tracking_status,
+        ) {
+            resolve_sustained_participation_end_time(
+                now_ms,
+                self.tracked_window.idle_time_ms,
+                self.sustained_participation_secs,
+            )
+        } else if should_suspend_active_tracking(
+            previous_window,
+            &self.tracked_window,
+            self.continuity_window_secs,
+            &self.tracking_status,
+        ) {
+            resolve_continuity_window_end_time(
+                now_ms,
+                self.tracked_window.idle_time_ms,
+                self.continuity_window_secs,
+            )
+        } else {
+            super::super::transition::plan_window_transition(
+                previous_window,
+                &self.tracked_window,
+                now_ms,
+            )
+            .resolved_end_time(now_ms)
+        };
+        cutoff.min(native_cutoff)
+    }
+
     pub(super) async fn seal_stop(
         &self,
         data: &dyn TrackingDataStore,
@@ -758,8 +1024,6 @@ impl TrackingLoopState {
         use super::super::session_timeout::*;
         let reason = if self.tracking_paused {
             seal_active_sessions_for_tracking_pause(data, now_ms).await?
-        } else if !self.app_tracking_enabled {
-            super::exclusion::seal_excluded_app_session(data, now_ms).await?
         } else if !successful_sample {
             return Ok(None);
         } else if should_seal_sustained_participation(

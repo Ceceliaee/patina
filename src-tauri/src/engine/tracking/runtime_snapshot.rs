@@ -34,12 +34,36 @@ pub struct TrackingRuntimeSnapshot {
     #[serde(skip)]
     pub(crate) generation: u64,
     pub window: WindowInfo,
+    #[serde(skip)]
+    pub(crate) source_window: Option<WindowInfo>,
+    pub anonymous: bool,
     pub status: TrackingStatusSnapshot,
     pub sampled_at_ms: i64,
     pub probe_status: TrackingRuntimeProbeStatus,
     pub degraded_reason: Option<String>,
     pub probe_diagnostics: TrackingRuntimeProbeDiagnostics,
     pub active_session: Option<ActiveSessionSnapshot>,
+}
+
+impl TrackingRuntimeSnapshot {
+    pub(crate) fn redact_anonymous(&mut self) {
+        if self.source_window.is_none() {
+            self.source_window = Some(self.window.clone());
+        }
+        self.anonymous = true;
+        self.active_session = None;
+        self.window.title.clear();
+        self.window.exe_name.clear();
+        self.window.process_path.clear();
+        self.window.process_id = 0;
+        self.window.hwnd.clear();
+        self.window.root_owner_hwnd.clear();
+        self.window.window_class.clear();
+        self.window.app_user_model_id.clear();
+    }
+    pub(crate) fn source_window(&self) -> &WindowInfo {
+        self.source_window.as_ref().unwrap_or(&self.window)
+    }
 }
 
 #[derive(Debug, Default)]
@@ -58,6 +82,12 @@ struct TrackingLifecycle {
 }
 
 impl TrackingRuntimeSnapshotState {
+    pub(crate) fn anonymize_activity(&self) {
+        let mut guard = self.inner.lock().unwrap_or_else(|error| error.into_inner());
+        if let Some(snapshot) = guard.as_mut() {
+            snapshot.redact_anonymous();
+        }
+    }
     pub(crate) fn note_tracking_policy_change(&self) {
         let mut lifecycle = self
             .lifecycle
@@ -199,6 +229,8 @@ mod tests {
         let state = TrackingRuntimeSnapshotState::default();
         let snapshot = TrackingRuntimeSnapshot {
             generation: 0,
+            source_window: None,
+            anonymous: false,
             window: make_window(),
             status: TrackingStatusSnapshot::default(),
             sampled_at_ms: 123,
@@ -221,6 +253,8 @@ mod tests {
         let state = TrackingRuntimeSnapshotState::default();
         let mut snapshot = TrackingRuntimeSnapshot {
             generation: 0,
+            source_window: None,
+            anonymous: false,
             window: make_window(),
             status: TrackingStatusSnapshot {
                 is_tracking_active: true,

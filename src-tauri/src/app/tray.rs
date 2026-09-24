@@ -250,6 +250,10 @@ pub(crate) fn apply_tracking_pause_setting_change<R: Runtime>(
     reason: &'static str,
 ) -> Result<(), String> {
     update_tracking_pause_runtime_state(app, tracking_paused);
+    if let Some(state) = app.try_state::<TitleRecordingRuntimeState>() {
+        state.clear_browser_title();
+        state.clear_anonymous_web();
+    }
     app.state::<crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshotState>()
         .note_tracking_policy_change();
     if let Err(error) = refresh_tray_icon(app, None) {

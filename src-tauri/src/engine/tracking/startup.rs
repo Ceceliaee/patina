@@ -2,7 +2,7 @@ use super::ports::{TrackingDataError, TrackingDataStore};
 use crate::domain::tracking::resolve_interrupted_session_end;
 use crate::domain::tracking::{TrackingDataChangedPayload, TRACKING_REASON_STARTUP_SEALED};
 use crate::platform::windows::foreground as tracker;
-use tauri::{AppHandle, Emitter, Runtime};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 const DEFAULT_AFK_THRESHOLD_SECS: u64 = 180;
 
@@ -10,6 +10,10 @@ pub async fn initialize_tracker<R: Runtime>(
     app: &AppHandle<R>,
     data: &dyn TrackingDataStore,
 ) -> Result<(), TrackingDataError> {
+    let title_state = app.state::<super::title_state::TitleRecordingRuntimeState>();
+    let snapshot_state = app.state::<super::runtime_snapshot::TrackingRuntimeSnapshotState>();
+    let _title_guard = title_state.lock_update().await;
+    let _transition_guard = snapshot_state.transition.lock().await;
     let afk_threshold_secs = data
         .load_timeline_merge_gap_secs(DEFAULT_AFK_THRESHOLD_SECS)
         .await?;
@@ -23,6 +27,21 @@ pub async fn initialize_tracker<R: Runtime>(
         repair_notes.push("sealed_interrupted_web_activity".into());
     }
     persist_startup_self_heal_if_needed(data, &repair_notes).await?;
+
+    if let Err(error) = app
+        .state::<super::pause_state::TrackingPauseRuntimeState>()
+        .initialize(data, now_ms())
+        .await
+    {
+        log_startup_error(format!(
+            "failed to initialize tracking pause state: {error}"
+        ));
+    }
+    if let Err(error) = title_state.initialize(data).await {
+        log_startup_error(format!(
+            "failed to initialize title recording state: {error}"
+        ));
+    }
 
     Ok(())
 }

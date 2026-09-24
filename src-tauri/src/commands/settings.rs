@@ -147,6 +147,8 @@ pub async fn cmd_commit_app_settings(
             "web_activity_enabled" | "web_activity_token" | "web_activity_port"
         )
     }) {
+        title_state.clear_browser_title();
+        title_state.clear_anonymous_web();
         tracking.note_tracking_policy_change();
     }
     if let Some(tracking_paused) = tracking_pause_setting {

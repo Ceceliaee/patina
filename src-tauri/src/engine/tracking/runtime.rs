@@ -21,8 +21,8 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::time::{sleep, Duration};
 
-#[path = "runtime/exclusion.rs"]
-mod exclusion;
+#[path = "runtime/anonymous_activity.rs"]
+mod anonymous_activity;
 #[path = "runtime/loop_state.rs"]
 mod loop_state;
 #[path = "runtime/power_lifecycle.rs"]
@@ -82,23 +82,9 @@ pub async fn run<R: Runtime>(
     let pause_state = app.state::<TrackingPauseRuntimeState>();
     let title_state = app.state::<TitleRecordingRuntimeState>();
     let snapshot_state = app.state::<TrackingRuntimeSnapshotState>();
-    {
-        let _title_guard = title_state.lock_update().await;
-        let _transition_guard = snapshot_state.transition.lock().await;
-        startup::initialize_tracker(&app, data.as_ref())
-            .await
-            .map_err(|error| format!("tracker initialization failed: {error}"))?;
-        if let Err(error) = pause_state.initialize(data.as_ref(), now_ms()).await {
-            log_tracker_error(format!(
-                "failed to initialize tracking pause state: {error}"
-            ));
-        }
-        if let Err(error) = title_state.initialize(data.as_ref()).await {
-            log_tracker_error(format!(
-                "failed to initialize title recording state: {error}"
-            ));
-        }
-    }
+    startup::initialize_tracker(&app, data.as_ref())
+        .await
+        .map_err(|error| format!("tracker initialization failed: {error}"))?;
 
     let mut last_window: Option<tracker::WindowInfo> = None;
     let mut last_tracking_status: Option<TrackingStatusSnapshot> = None;
@@ -128,6 +114,8 @@ pub async fn run<R: Runtime>(
             pending_continuity = None;
             sustained_participation_state = SustainedParticipationRuntimeState::default();
             last_tracking_status = None;
+            title_state.clear_browser_title();
+            title_state.clear_anonymous_web();
             drop(transition_guard);
             sleep(Duration::from_secs(1)).await;
             continue;
@@ -139,35 +127,25 @@ pub async fn run<R: Runtime>(
             // A stop/resume may finish between polls; previous media grace and
             // continuity are not evidence for the new lifecycle.
             last_window = None;
+            title_state.clear_browser_title();
+            title_state.clear_anonymous_web();
             pending_continuity = None;
             sustained_participation_state = SustainedParticipationRuntimeState::default();
             last_tracking_status = None;
         }
         let window_info = poll_outcome.window.clone();
         let now_ms = now_ms();
-        if let Some(last_sample) = health_state.snapshot().last_successful_sample_ms {
-            if now_ms < last_sample || now_ms.saturating_sub(last_sample) > 8_000 {
-                let ended = data
-                    .end_active_sessions(last_sample)
-                    .await
-                    .map_err(|error| error.to_string())?;
-                clear_active_session_snapshot(&app);
-                if ended {
-                    let _ = emit_tracking_data_changed(
-                        &app,
-                        "session-ended-stale-sample",
-                        last_sample as u64,
-                    );
-                }
-                last_window = None;
-                pending_continuity = None;
-                sustained_participation_state = SustainedParticipationRuntimeState::default();
-                last_tracking_status = None;
-                if now_ms < last_sample {
-                    drop(transition_guard);
-                    sleep(Duration::from_secs(1)).await;
-                    continue;
-                }
+        if let Some(clock_reversed) =
+            loop_state::seal_stale_sample(&app, data.as_ref(), &health_state, now_ms).await?
+        {
+            last_window = None;
+            pending_continuity = None;
+            sustained_participation_state = SustainedParticipationRuntimeState::default();
+            last_tracking_status = None;
+            if clock_reversed {
+                drop(transition_guard);
+                sleep(Duration::from_secs(1)).await;
+                continue;
             }
         }
         health_state.note_heartbeat(now_ms);
@@ -202,14 +180,27 @@ pub async fn run<R: Runtime>(
             sleep(Duration::from_secs(1)).await;
             continue;
         }
-        update_runtime_snapshot_state(
-            &app,
-            &tracking_state.tracked_window,
-            &tracking_state.tracking_status,
-            now_ms,
-            &poll_outcome,
-            generation,
-        );
+        let anonymous_cutoff = poll_outcome
+            .is_successful_sample()
+            .then(|| title_state.take_invalid_anonymous_web_cutoff(&window_info, now_ms))
+            .flatten()
+            .or_else(|| {
+                (tracking_state.app_tracking_enabled
+                    && snapshot_state.snapshot().is_some_and(|s| s.anonymous))
+                .then_some(now_ms)
+            })
+            .filter(|_| poll_outcome.is_successful_sample());
+        if let Some(cutoff) = anonymous_cutoff {
+            data.seal_anonymous_activity(tracking_state.resolve_anonymous_cutoff(
+                last_window.as_ref(),
+                last_tracking_status.as_ref(),
+                cutoff,
+                now_ms,
+            ))
+            .await
+            .map_err(|error| error.to_string())?;
+        }
+        update_runtime_snapshot_state(&app, &tracking_state, now_ms, &poll_outcome, generation);
         let stopped = match tracking_state
             .seal_stop(
                 data.as_ref(),
@@ -253,6 +244,32 @@ pub async fn run<R: Runtime>(
             continue;
         }
         if !poll_outcome.is_successful_sample() {
+            drop(transition_guard);
+            sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+        if anonymous_cutoff.is_some() {
+            last_window = None;
+            pending_continuity = None;
+        }
+
+        if !tracking_state.app_tracking_enabled && tracking_state.tracking_status.is_tracking_active
+        {
+            if let Err(error) = anonymous_activity::record_sample(
+                &app,
+                data.as_ref(),
+                &health_state,
+                &mut timestamp_persist_state,
+                now_ms,
+                tracking_state.anonymous_web,
+            )
+            .await
+            {
+                log_tracker_error(format!("failed to record anonymous activity: {error}"));
+            }
+            pending_continuity = None;
+            last_window = Some(tracked_window);
+            last_tracking_status = Some(tracking_state.tracking_status);
             drop(transition_guard);
             sleep(Duration::from_secs(1)).await;
             continue;
@@ -322,14 +339,12 @@ pub async fn run<R: Runtime>(
             &tracked_window,
             now_ms,
         );
-        let needs_projection = did_change_tracking_data
-            || snapshot_state
-                .snapshot()
-                .and_then(|snapshot| snapshot.active_session)
-                .is_none();
-        refresh_active_session_snapshot_if_changed(&app, data.as_ref(), needs_projection).await;
+        refresh_active_session_snapshot_if_changed(&app, data.as_ref(), did_change_tracking_data)
+            .await;
         if did_change_active_window {
-            let _ = app.emit("active-window-changed", &tracked_window);
+            if let Some(snapshot) = snapshot_state.snapshot() {
+                let _ = app.emit("active-window-changed", &snapshot.window);
+            }
             last_emitted_window = Some(window_info.clone());
         }
         last_window = Some(tracked_window);

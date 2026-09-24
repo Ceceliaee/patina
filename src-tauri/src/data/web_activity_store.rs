@@ -20,6 +20,33 @@ impl SqliteWebActivityStore {
 }
 
 impl WebActivityStore for SqliteWebActivityStore {
+    fn seal_anonymous(&self, now_ms: i64) -> WebActivityStoreFuture<'_, bool> {
+        Box::pin(async move {
+            crate::data::repositories::anonymous_activity::seal(&self.pool, now_ms)
+                .await
+                .map_err(|error| error.to_string())
+        })
+    }
+    fn record_anonymous(&self, now_ms: i64) -> WebActivityStoreFuture<'_, bool> {
+        Box::pin(async move {
+            crate::data::repositories::anonymous_activity::observe(&self.pool, now_ms, true)
+                .await
+                .map_err(|error| error.to_string())
+        })
+    }
+
+    fn browser_recording_enabled<'a>(
+        &'a self,
+        exe_name: &'a str,
+    ) -> WebActivityStoreFuture<'a, bool> {
+        Box::pin(async move {
+            crate::data::repositories::tracker_settings::load_tracking_enabled_setting_for_app(
+                &self.pool, exe_name,
+            )
+            .await
+            .map_err(|error| error.to_string())
+        })
+    }
     fn expire_active_segment(&self, now_ms: i64) -> WebActivityStoreFuture<'_, bool> {
         Box::pin(async move {
             web_activity::expire_active_segment(&self.pool, now_ms)

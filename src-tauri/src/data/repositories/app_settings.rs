@@ -98,6 +98,10 @@ pub async fn commit_app_setting_mutations(
         return Ok(());
     }
 
+    let anonymous_available = super::anonymous_activity::is_available(pool)
+        .await
+        .map_err(|error| SqliteOperationError::from_sqlx("inspect anonymous activity", error))?;
+
     let mut tx = pool.begin().await.map_err(|error| {
         SqliteOperationError::from_sqlx("start app settings transaction", error)
     })?;
@@ -122,6 +126,16 @@ pub async fn commit_app_setting_mutations(
             )
             .await
             .map_err(|error| SqliteOperationError::from_sqlx("seal paused tracking", error))?;
+            if anonymous_available {
+                super::anonymous_activity::seal_tx(
+                    &mut tx,
+                    crate::platform::clock::unix_timestamp_millis_i64(),
+                )
+                .await
+                .map_err(|error| {
+                    SqliteOperationError::from_sqlx("seal paused anonymous activity", error)
+                })?;
+            }
         }
         if (mutation.key == WEB_ACTIVITY_ENABLED_KEY
             && !crate::domain::settings::parse_boolean_setting(&mutation.value, false))
@@ -135,6 +149,16 @@ pub async fn commit_app_setting_mutations(
             .map_err(|error| {
                 SqliteOperationError::from_sqlx("seal disabled web tracking", error)
             })?;
+            if anonymous_available {
+                super::anonymous_activity::seal_web_tx(
+                    &mut tx,
+                    crate::platform::clock::unix_timestamp_millis_i64(),
+                )
+                .await
+                .map_err(|error| {
+                    SqliteOperationError::from_sqlx("seal disabled anonymous web activity", error)
+                })?;
+            }
         }
     }
 

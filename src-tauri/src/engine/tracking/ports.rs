@@ -47,6 +47,10 @@ pub trait TrackingDataStore: Send + Sync {
     ) -> TrackingDataFuture<'a, ()>;
     fn load_tracking_paused_setting(&self) -> TrackingDataFuture<'_, bool>;
     fn load_title_recording_enabled(&self) -> TrackingDataFuture<'_, bool>;
+    fn has_anonymous_web_rules(&self) -> TrackingDataFuture<'_, bool>;
+    fn observe_anonymous_activity(&self, now_ms: i64, is_web: bool)
+        -> TrackingDataFuture<'_, bool>;
+    fn seal_anonymous_activity(&self, cutoff_ms: i64) -> TrackingDataFuture<'_, bool>;
     fn load_timeline_merge_gap_secs(&self, default_value: u64) -> TrackingDataFuture<'_, u64>;
     fn load_idle_timeout_secs(&self, default_value: u64) -> TrackingDataFuture<'_, u64>;
     fn load_capture_window_title_setting_for_app<'a>(

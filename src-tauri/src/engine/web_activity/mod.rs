@@ -17,6 +17,12 @@ pub type WebActivityStoreFuture<'a, T> =
     Pin<Box<dyn Future<Output = Result<T, String>> + Send + 'a>>;
 
 pub trait WebActivityStore: Send + Sync {
+    fn seal_anonymous(&self, now_ms: i64) -> WebActivityStoreFuture<'_, bool>;
+    fn record_anonymous(&self, now_ms: i64) -> WebActivityStoreFuture<'_, bool>;
+    fn browser_recording_enabled<'a>(
+        &'a self,
+        exe_name: &'a str,
+    ) -> WebActivityStoreFuture<'a, bool>;
     fn expire_active_segment(&self, now_ms: i64) -> WebActivityStoreFuture<'_, bool>;
     fn seal_source<'a>(
         &'a self,
@@ -146,20 +152,21 @@ pub async fn record_active_tab<R: Runtime>(
     let Some(snapshot) = tracking.snapshot() else {
         return Ok(false);
     };
-    let Some(native) = snapshot.active_session.as_ref() else {
-        return Ok(false);
-    };
+    let native = snapshot.active_session.as_ref();
     if entry
         .and_then(|value| value.active_session)
         .map(|value| value.id)
-        != Some(native.id)
+        != native.map(|session| session.id)
         || !accepts_browser_observation(&snapshot, payload.browser_kind.as_deref(), processed_at)
         || !settings.enabled
     {
         return Ok(false);
     }
     let observed_at = payload.captured_at_ms.unwrap_or(now_ms);
-    if observed_at < native.start_time
+    if observed_at
+        < native
+            .map(|session| session.start_time)
+            .unwrap_or(snapshot.sampled_at_ms)
         || observed_at > now_ms
         || now_ms.saturating_sub(observed_at) > 5_000
     {
@@ -168,14 +175,33 @@ pub async fn record_active_tab<R: Runtime>(
     let client = sanitize_browser_client_id(payload.browser_client_id.as_deref());
     runtime.observe_active_tab(&payload, now_ms);
     let Some(mut sanitized) = sanitize_active_tab_payload(payload)? else {
-        return store.seal_source(&client, native.id, observed_at).await;
+        if let Some(titles) = app.try_state::<TitleRecordingRuntimeState>() {
+            titles.clear_browser_title();
+            titles.clear_anonymous_web();
+        }
+        return match native {
+            Some(native) => store.seal_source(&client, native.id, observed_at).await,
+            None => store.seal_anonymous(observed_at).await,
+        };
     };
     if !store
         .load_domain_recording_enabled(&sanitized.normalized_domain)
         .await?
+        || !store
+            .browser_recording_enabled(&snapshot.source_window().exe_name)
+            .await?
     {
-        return store.seal_source(&client, native.id, observed_at).await;
+        if !tracking.accepts_sample(generation) {
+            return Ok(false);
+        }
+        let changed = store.record_anonymous(observed_at).await?;
+        if let Some(titles) = app.try_state::<TitleRecordingRuntimeState>() {
+            titles.confirm_anonymous_web(snapshot.source_window(), observed_at);
+        }
+        tracking.anonymize_activity();
+        return Ok(changed);
     }
+    let confirmed_page_title = sanitized.title.clone();
     let global_title_enabled = app
         .try_state::<TitleRecordingRuntimeState>()
         .map(|state| state.is_enabled())
@@ -192,9 +218,27 @@ pub async fn record_active_tab<R: Runtime>(
     if !tracking.accepts_sample(generation) {
         return Ok(false);
     }
+    if let Some(titles) = app.try_state::<TitleRecordingRuntimeState>() {
+        match confirmed_page_title.as_deref() {
+            Some(title) => {
+                titles.confirm_browser_title(snapshot.source_window(), title, observed_at)
+            }
+            None => {
+                titles.clear_browser_title();
+                titles.clear_anonymous_web();
+            }
+        }
+    }
+    let Some(native) = native else {
+        return Ok(false);
+    };
     let input = WebActivitySegmentInput::from_sanitized(
         sanitized,
-        snapshot.window.exe_name.trim().to_ascii_lowercase(),
+        snapshot
+            .source_window()
+            .exe_name
+            .trim()
+            .to_ascii_lowercase(),
         native.id,
     );
     store.upsert_active_segment(&input, observed_at).await
@@ -206,19 +250,17 @@ fn accepts_browser_observation(
     now_ms: i64,
 ) -> bool {
     use crate::engine::tracking::runtime_snapshot::TrackingRuntimeProbeStatus;
-    let Some(native) = snapshot.active_session.as_ref() else {
-        return false;
-    };
+    let window = snapshot.source_window();
+    let native_valid = snapshot.active_session.as_ref().is_some_and(|native| {
+        now_ms >= native.start_time && native.exe_name.eq_ignore_ascii_case(&window.exe_name)
+    });
     snapshot.status.is_tracking_active
-        && !snapshot.window.is_afk
+        && !window.is_afk
         && snapshot.probe_status == TrackingRuntimeProbeStatus::Ok
         && now_ms >= snapshot.sampled_at_ms
         && now_ms - snapshot.sampled_at_ms <= 8_000
-        && now_ms >= native.start_time
-        && native
-            .exe_name
-            .eq_ignore_ascii_case(&snapshot.window.exe_name)
-        && browser_kind_matches_foreground(kind, &native.exe_name)
+        && (native_valid || snapshot.anonymous)
+        && browser_kind_matches_foreground(kind, &window.exe_name)
 }
 
 fn browser_kind_matches_foreground(kind: Option<&str>, exe: &str) -> bool {
@@ -284,6 +326,8 @@ mod tests {
         })).unwrap();
         let mut snapshot = TrackingRuntimeSnapshot {
             generation: 0,
+            source_window: None,
+            anonymous: false,
             window,
             status: crate::domain::tracking::TrackingStatusSnapshot {
                 is_tracking_active: true,
@@ -325,6 +369,15 @@ mod tests {
         ));
         snapshot.active_session = None;
         assert!(!accepts_browser_observation(&snapshot, None, 3_000));
+        snapshot.redact_anonymous();
+        assert!(accepts_browser_observation(
+            &snapshot,
+            Some("chrome"),
+            3_000
+        ));
+        let public = serde_json::to_string(&snapshot).unwrap();
+        assert!(!public.contains("chrome.exe") && !public.contains("Page"));
+        assert_eq!(snapshot.source_window().exe_name, "chrome.exe");
         assert!(browser_kind_matches_foreground(None, "firefox.exe"));
         assert!(!browser_kind_matches_foreground(Some("edge"), "chrome.exe"));
         assert!(!browser_kind_matches_foreground(None, "code.exe"));

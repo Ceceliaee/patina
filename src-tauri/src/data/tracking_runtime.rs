@@ -150,7 +150,18 @@ impl TrackingRuntimeDataStore {
         &self,
         raw_end_time: i64,
     ) -> Result<bool, TrackingRuntimeDataError> {
-        sessions::end_active_sessions(&self.pool().await?, raw_end_time).await
+        let pool = self.pool().await?;
+        let has_anonymous =
+            crate::data::repositories::anonymous_activity::is_available(&pool).await?;
+        let mut tx = pool.begin().await?;
+        let named = sessions::end_active_sessions_tx(&mut tx, raw_end_time).await?;
+        let anonymous = if has_anonymous {
+            crate::data::repositories::anonymous_activity::seal_tx(&mut tx, raw_end_time).await?
+        } else {
+            false
+        };
+        tx.commit().await?;
+        Ok(named || anonymous)
     }
 
     pub async fn refresh_active_session_metadata(
@@ -226,11 +237,51 @@ fn tracking_data_error(error: impl std::fmt::Display) -> TrackingDataError {
 }
 
 impl TrackingDataStore for TrackingRuntimeDataStore {
+    fn observe_anonymous_activity(
+        &self,
+        now_ms: i64,
+        is_web: bool,
+    ) -> TrackingDataFuture<'_, bool> {
+        Box::pin(async move {
+            let pool = self.pool().await.map_err(tracking_data_error)?;
+            crate::data::repositories::anonymous_activity::observe(&pool, now_ms, is_web)
+                .await
+                .map_err(tracking_data_error)
+        })
+    }
+
+    fn seal_anonymous_activity(&self, cutoff_ms: i64) -> TrackingDataFuture<'_, bool> {
+        Box::pin(async move {
+            let pool = self.pool().await.map_err(tracking_data_error)?;
+            crate::data::repositories::anonymous_activity::seal(&pool, cutoff_ms)
+                .await
+                .map_err(tracking_data_error)
+        })
+    }
+    fn has_anonymous_web_rules(&self) -> TrackingDataFuture<'_, bool> {
+        Box::pin(async move {
+            let pool = self.pool().await.map_err(tracking_data_error)?;
+            tracker_settings::has_anonymous_web_rules(&pool)
+                .await
+                .map_err(tracking_data_error)
+        })
+    }
     fn seal_interrupted_web_activity(&self, now_ms: i64) -> TrackingDataFuture<'_, bool> {
         Box::pin(async move {
             let pool = self.pool().await.map_err(tracking_data_error)?;
+            let anonymous = if crate::data::repositories::anonymous_activity::is_available(&pool)
+                .await
+                .map_err(tracking_data_error)?
+            {
+                crate::data::repositories::anonymous_activity::seal_interrupted(&pool, now_ms)
+                    .await
+                    .map_err(tracking_data_error)?
+            } else {
+                false
+            };
             crate::data::repositories::web_activity::seal_interrupted_segments(&pool, now_ms)
                 .await
+                .map(|changed| changed || anonymous)
                 .map_err(tracking_data_error)
         })
     }
