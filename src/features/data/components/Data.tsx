@@ -690,7 +690,6 @@ export default function Data({
     buildDataDestinationTrendSeries(
       destinationPanelSelectedOptions,
       (option) => {
-        if (isAnonymousActivity(option.key)) return OTHER_CATEGORY_FIXED_COLOR;
         if (isCategoryDestination && option.accentColor) {
           return option.accentColor;
         }

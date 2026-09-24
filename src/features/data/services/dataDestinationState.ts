@@ -1,4 +1,5 @@
-import type { AppCategory } from "../../../shared/classification/categoryTokens.ts";
+import { OTHER_CATEGORY_FIXED_COLOR, type AppCategory } from "../../../shared/classification/categoryTokens.ts";
+import { isAnonymousActivity } from "../../../shared/classification/anonymousActivity.ts";
 
 export type DataDestinationMode = "app" | "category" | "web";
 export type DataDestinationDetailMode = Exclude<DataDestinationMode, "category">;
@@ -143,7 +144,7 @@ export function buildDataDestinationTrendSeries(
     key: option.key,
     dataKey: `series${index}`,
     displayName: option.displayName,
-    color: resolveColor(option),
+    color: isAnonymousActivity(option.key) ? OTHER_CATEGORY_FIXED_COLOR : resolveColor(option),
   }));
 }
 

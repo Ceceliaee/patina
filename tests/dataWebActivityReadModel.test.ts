@@ -318,6 +318,27 @@ await runTest("destination series keep app colors and one stable line style", ()
   ]);
 });
 
+await runTest("anonymous trend series stay gray without consulting app or website icon colors", () => {
+  const options = ["activity:anonymous", "example.com"].map((key) => ({
+    key,
+    identityKeys: [key],
+    displayName: key,
+    secondaryText: "",
+    iconUrl: null,
+    totalDuration: 0,
+    percentage: 0,
+    averageDuration: 0,
+    activeDayCount: 0,
+  }));
+  const resolvedKeys: string[] = [];
+  const series = buildDataDestinationTrendSeries(options, (option) => {
+    resolvedKeys.push(option.key);
+    return "#ff0000";
+  });
+  assert.deepEqual(series.map((item) => item.color), ["#8F98A8", "#ff0000"]);
+  assert.deepEqual(resolvedKeys, ["example.com"]);
+});
+
 await runTest("five identical colors remain solid without synthetic line styles", () => {
   const options = ["a", "b", "c", "d", "e"].map((key) => ({
     key,
