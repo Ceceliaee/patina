@@ -7,7 +7,8 @@ use sqlx::{Pool, Row, Sqlite, Transaction};
 use std::collections::BTreeMap;
 
 const HOURLY_SCHEMA_VERSION: i64 = 1;
-const HOURLY_ALGORITHM_VERSION: i64 = 2;
+const HOURLY_ALGORITHM_VERSION: i64 = 3;
+use crate::domain::activity_read_model::ANONYMOUS_ACTIVITY_KEY as ANONYMOUS_APP_KEY;
 const HOURLY_FINGERPRINT: &str = "epoch-hour-v1";
 const BACKFILL_BATCH_MS: i64 = 7 * 24 * HOUR_MS;
 const DIRTY_REBUILD_BATCH_SIZE: i64 = 128;
@@ -17,7 +18,7 @@ const ACTIVE_SESSION_START_SQL: &str = "SELECT start_time
      FROM sessions INDEXED BY idx_sessions_single_active
      WHERE end_time IS NULL LIMIT 1";
 const PROJECTION_RANGE_SQL: &str =
-    "SELECT bucket_start_ms, bucket_end_ms, raw_exe_name, display_app_name,
+    "SELECT bucket_start_ms, bucket_end_ms, app_key, raw_exe_name, display_app_name,
             effective_duration_ms
      FROM activity_hourly_effective
      WHERE bucket_start_ms >= ? AND bucket_start_ms < ? AND bucket_end_ms > ?
@@ -47,6 +48,7 @@ const FACT_CANDIDATES_SQL: &str =
 
 #[derive(Clone, Debug)]
 struct CandidateValue {
+    anonymous: bool,
     app_name: String,
     exe_name: String,
     source_id: String,
@@ -133,6 +135,8 @@ async fn initialize_backfill(pool: &Pool<Sqlite>) -> Result<(), String> {
         "SELECT MIN(start_ms) start_ms, MAX(end_ms) end_ms
          FROM (
            SELECT start_time start_ms, end_time end_ms FROM sessions WHERE end_time IS NOT NULL
+           UNION ALL
+           SELECT start_time, end_time FROM anonymous_activity WHERE end_time IS NOT NULL
            UNION ALL
            SELECT start_time, end_time FROM import_exact_sessions
            UNION ALL
@@ -381,7 +385,11 @@ async fn replace_projection_range(
         if clipped_end <= clipped_start {
             continue;
         }
-        let Some(app_key) = normalize_app_key(&range.value.exe_name) else {
+        let Some(app_key) = (if range.value.anonymous {
+            Some(ANONYMOUS_APP_KEY.to_string())
+        } else {
+            normalize_app_key(&range.value.exe_name)
+        }) else {
             continue;
         };
         let mut cursor_ms = clipped_start;
@@ -447,7 +455,13 @@ async fn replace_projection_range(
             .bind(bucket_start_ms)
             .bind(bucket_start_ms + HOUR_MS)
             .bind(&app_key)
-            .bind(&row.raw_exe_name)
+            // This derived table requires a nonempty key in its historical exe column.
+            // The reserved key is never written into facts or returned as an executable.
+            .bind(if app_key == ANONYMOUS_APP_KEY {
+                ANONYMOUS_APP_KEY
+            } else {
+                &row.raw_exe_name
+            })
             .bind(&row.display_app_name)
             .bind(origin.as_str())
             .bind(row_source_id)
@@ -499,6 +513,14 @@ pub(super) async fn load_range(
         .await
         .map_err(|error| format!("failed to inspect active session overlay: {error}"))?
         .filter(|active_start| *active_start < end_ms);
+    let anonymous_start = sqlx::query_scalar::<_, i64>(
+        "SELECT start_time FROM anonymous_activity INDEXED BY idx_anonymous_activity_active WHERE end_time IS NULL LIMIT 1",
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|error| format!("failed to inspect anonymous overlay: {error}"))?
+    .filter(|start| *start < end_ms);
+    let active_start = active_start.into_iter().chain(anonymous_start).min();
 
     let mut fact_intervals = Vec::new();
     let mut outside_projection_coverage = false;
@@ -613,8 +635,13 @@ pub(super) async fn load_range(
         }
         let duration_ms: i64 = row.get("effective_duration_ms");
         records.push(ActivityAggregateRecordDto {
+            anonymous: row.get::<String, _>("app_key") == ANONYMOUS_APP_KEY,
             app_name: row.get("display_app_name"),
-            exe_name: row.get("raw_exe_name"),
+            exe_name: if row.get::<String, _>("app_key") == ANONYMOUS_APP_KEY {
+                String::new()
+            } else {
+                row.get("raw_exe_name")
+            },
             start_time: bucket_start_ms,
             end_time: bucket_start_ms + duration_ms,
         });
@@ -632,6 +659,7 @@ pub(super) async fn load_range(
                 continue;
             }
             records.push(ActivityAggregateRecordDto {
+                anonymous: range.value.anonymous,
                 app_name: range.value.app_name,
                 exe_name: range.value.exe_name,
                 start_time: clipped_start,
@@ -723,9 +751,35 @@ async fn load_fact_candidates(
             end_ms: row.get("end_ms"),
             capacity_end_ms: row.get("capacity_end_ms"),
             value: CandidateValue {
+                anonymous: false,
                 app_name,
                 exe_name,
                 source_id: row.get("source_id"),
+            },
+        });
+    }
+    for row in sqlx::query(
+        "SELECT start_time, COALESCE(end_time, observed_until) end_time
+        FROM anonymous_activity WHERE start_time < ? AND COALESCE(end_time, observed_until) > ?
+        AND (? = 0 OR end_time IS NOT NULL)",
+    )
+    .bind(end_ms)
+    .bind(start_ms)
+    .bind(i64::from(closed_only))
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(|error| format!("failed to read anonymous facts: {error}"))?
+    {
+        candidates.push(OwnedActivityRange {
+            origin: ActivityOrigin::Native,
+            start_ms: row.get("start_time"),
+            end_ms: row.get("end_time"),
+            capacity_end_ms: None,
+            value: CandidateValue {
+                anonymous: true,
+                app_name: String::new(),
+                exe_name: String::new(),
+                source_id: "native".into(),
             },
         });
     }
@@ -794,6 +848,9 @@ mod tests {
             .await
             .unwrap();
         pool.execute(ACTIVITY_READ_MODELS_SCHEMA_SQL).await.unwrap();
+        pool.execute(crate::data::repositories::anonymous_activity::SCHEMA_SQL)
+            .await
+            .unwrap();
         pool
     }
 
@@ -887,7 +944,7 @@ mod tests {
         .await
         .unwrap();
         sqlx::query(
-            "UPDATE read_model_state SET state = 'ready', algorithm_version = 2, coverage_start_ms = 0,
+            "UPDATE read_model_state SET state = 'ready', algorithm_version = 3, coverage_start_ms = 0,
                     coverage_end_ms = 3600000 WHERE model_name = 'activity_hourly'",
         )
         .execute(&pool)
@@ -946,7 +1003,7 @@ mod tests {
             .unwrap();
         }
         sqlx::query(
-            "UPDATE read_model_state SET state = 'ready', algorithm_version = 2, coverage_start_ms = 0,
+            "UPDATE read_model_state SET state = 'ready', algorithm_version = 3, coverage_start_ms = 0,
                     coverage_end_ms = 3600000 WHERE model_name = 'activity_hourly'",
         )
         .execute(&pool)

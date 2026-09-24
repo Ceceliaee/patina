@@ -389,6 +389,8 @@ pub async fn migrate_legacy_web_grouping(tx: &mut Transaction<'_, Sqlite>) -> Re
 #[serde(rename_all = "camelCase")]
 pub struct WebLinksSnapshot {
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub anonymous_activity: Option<Vec<super::anonymous_activity::AnonymousActivityRecord>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub segments: Option<Vec<WebActivityDetailSegment>>,
     pub rules: WebLinkRules,
     pub overrides: BTreeMap<String, serde_json::Value>,
@@ -416,6 +418,7 @@ pub async fn snapshot_in_tx(tx: &mut Transaction<'_, Sqlite>) -> Result<WebLinks
     .await
     .map_err(|e| e.to_string())?;
     Ok(WebLinksSnapshot {
+        anonymous_activity: None,
         segments: None,
         rules,
         overrides,
@@ -451,6 +454,14 @@ pub async fn snapshot_range(
     }
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
     let mut snapshot = snapshot_in_tx(&mut tx).await?;
+    snapshot.anonymous_activity = Some(
+        super::anonymous_activity::read_range_tx(&mut tx, start, end)
+            .await
+            .map_err(|error| error.to_string())?
+            .into_iter()
+            .filter(|row| row.is_web)
+            .collect(),
+    );
     snapshot.segments = Some(sqlx::query_as("SELECT id,browser_client_id,browser_kind,browser_exe_name,domain,normalized_domain,url,title,NULL AS favicon_url,start_time,COALESCE(end_time, MAX(start_time, MIN(?, updated_at+45000))) AS end_time,COALESCE(duration, MAX(0, MIN(?, updated_at+45000)-start_time)) AS duration FROM web_activity_segments WHERE start_time < ? AND COALESCE(end_time, MIN(?,updated_at+45000)) > ? ORDER BY start_time,id")
         .bind(now).bind(now).bind(end).bind(now).bind(start).fetch_all(&mut *tx).await.map_err(|error| error.to_string())?);
     Ok(snapshot)

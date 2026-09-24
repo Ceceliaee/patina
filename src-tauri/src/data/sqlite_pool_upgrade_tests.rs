@@ -68,7 +68,7 @@ async fn version_14_upgrade_adds_range_statistics_without_rewriting_existing_mig
                 .fetch_one(&pool)
                 .await
                 .unwrap(),
-            15
+            schema::ANONYMOUS_ACTIVITY_MIGRATION_VERSION
         );
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT SUM(duration) FROM sessions")
@@ -470,7 +470,7 @@ fn version_eight_draft_triggers_are_reinstalled_without_touching_facts() {
                 .unwrap();
         assert_eq!(
             versions,
-            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
         );
     });
 }

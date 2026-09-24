@@ -12,6 +12,7 @@ pub(super) async fn setup_pool() -> SqlitePool {
         IMPORT_DATA_SCHEMA_SQL,
         IMPORT_DATA_ISOLATION_SCHEMA_SQL,
         ACTIVITY_READ_MODELS_SCHEMA_SQL,
+        crate::data::repositories::anonymous_activity::SCHEMA_SQL,
     ] {
         pool.execute(schema).await.unwrap();
     }
@@ -41,6 +42,56 @@ async fn drain(pool: &SqlitePool) {
 }
 
 #[tokio::test]
+async fn anonymous_facts_match_projection_and_partial_ranges_without_identity_or_double_counting() {
+    use crate::data::repositories::anonymous_activity as anonymous;
+    let pool = setup_pool().await;
+    insert_native(&pool, 0, None).await;
+    anonymous::observe(&pool, 10 * 60_000, false).await.unwrap();
+    anonymous::observe(&pool, 20 * 60_000, true).await.unwrap();
+    anonymous::seal(&pool, 30 * 60_000).await.unwrap();
+    insert_native(&pool, 30 * 60_000, Some(35 * 60_000)).await;
+    for projection in [false, true] {
+        if projection {
+            drain(&pool).await;
+        }
+        let result = load_range(&pool, 0, HOUR_MS, &[]).await.unwrap();
+        assert_eq!(total(&result), 35 * 60_000);
+        assert_eq!(
+            result
+                .records
+                .iter()
+                .filter(|record| record.anonymous)
+                .map(|record| record.end_time - record.start_time)
+                .sum::<i64>(),
+            20 * 60_000
+        );
+        assert!(result
+            .records
+            .iter()
+            .filter(|record| record.anonymous)
+            .all(|record| record.exe_name.is_empty() && record.app_name.is_empty()));
+        let partial = load_range(&pool, 15 * 60_000, 25 * 60_000, &[])
+            .await
+            .unwrap();
+        assert_eq!(total(&partial), 10 * 60_000);
+        assert!(partial.records.iter().all(|record| record.anonymous));
+    }
+    sqlx::query("DELETE FROM anonymous_activity")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        total(&load_range(&pool, 0, HOUR_MS, &[]).await.unwrap()),
+        15 * 60_000
+    );
+    drain(&pool).await;
+    assert_eq!(
+        total(&load_range(&pool, 0, HOUR_MS, &[]).await.unwrap()),
+        15 * 60_000
+    );
+}
+
+#[tokio::test]
 async fn native_range_candidates_preserve_boundaries_and_choose_selective_indexes() {
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(1)
@@ -65,6 +116,9 @@ async fn native_range_candidates_preserve_boundaries_and_choose_selective_indexe
     .await
     .unwrap();
     pool.execute(crate::data::schema::SESSION_RANGE_INDEX_SCHEMA_SQL)
+        .await
+        .unwrap();
+    pool.execute(crate::data::repositories::anonymous_activity::SCHEMA_SQL)
         .await
         .unwrap();
     for (start, end, index) in [
@@ -629,7 +683,7 @@ async fn an_algorithm_upgrade_never_exposes_old_rows_and_rebuilds_idempotently()
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(version, 2);
+    assert_eq!(version, HOURLY_ALGORITHM_VERSION);
     assert!(!maintain_once(&pool).await.unwrap());
     pool.execute(
         "UPDATE read_model_state SET timezone_fingerprint = 'unrecognized-hour-policy'

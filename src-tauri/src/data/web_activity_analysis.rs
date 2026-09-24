@@ -1,4 +1,5 @@
 use crate::data::sqlite_pool::wait_for_sqlite_pool;
+use crate::domain::activity_read_model::ANONYMOUS_ACTIVITY_KEY;
 use crate::domain::web_activity::normalize_domain;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -27,11 +28,27 @@ pub struct WebActivityDomainCoverageDto {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WebActivityAggregateRangeDto {
+    pub anonymous_records: Vec<AnonymousWebAggregateRecordDto>,
     pub web_links: crate::data::repositories::web_links::WebLinksSnapshot,
     pub records: Vec<WebActivityAggregateRecordDto>,
     pub domain_coverage: Vec<WebActivityDomainCoverageDto>,
     pub source_revision: String,
     pub snapshot_now_ms: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnonymousWebAggregateRecordDto {
+    pub bucket_start_ms: i64,
+    pub duration_ms: i64,
+}
+
+fn normalize_activity_domain(value: &str) -> Option<String> {
+    if value == ANONYMOUS_ACTIVITY_KEY {
+        Some(value.to_string())
+    } else {
+        normalize_domain(value)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -122,7 +139,7 @@ fn normalize_domain_filter(
         return Err("web activity aggregate domain filters conflict".to_string());
     }
     if let Some(domain) = normalized_domain {
-        return normalize_domain(domain)
+        return normalize_activity_domain(domain)
             .map(|value| Some(vec![value]))
             .ok_or_else(|| "web activity aggregate domain is invalid".to_string());
     }
@@ -134,7 +151,7 @@ fn normalize_domain_filter(
     }
     let mut unique = BTreeSet::new();
     for domain in domains {
-        let normalized = normalize_domain(domain)
+        let normalized = normalize_activity_domain(domain)
             .ok_or_else(|| "web activity aggregate domain is invalid".to_string())?;
         unique.insert(normalized);
     }
@@ -152,6 +169,9 @@ pub async fn load_web_activity_aggregate_range_from_pool(
 ) -> Result<WebActivityAggregateRangeDto, String> {
     validate_aggregate_input(start_ms, end_ms, bucket_boundaries_ms)?;
     let domain_filter = normalize_domain_filter(normalized_domain, normalized_domains)?;
+    let include_anonymous = domain_filter
+        .as_ref()
+        .is_none_or(|domains| domains.iter().any(|key| key == ANONYMOUS_ACTIVITY_KEY));
     let mut transaction = pool
         .begin()
         .await
@@ -239,7 +259,7 @@ pub async fn load_web_activity_aggregate_range_from_pool(
         })
         .collect();
 
-    let domain_coverage = if let Some(domains) = domain_filter_json.as_ref() {
+    let mut domain_coverage = if let Some(domains) = domain_filter_json.as_ref() {
         let mut coverage_query = QueryBuilder::<Sqlite>::new(
             "SELECT normalized_domain, MIN(start_time) earliest_recorded_start_ms \
              FROM web_activity_segments WHERE normalized_domain IN (SELECT value FROM json_each(",
@@ -263,6 +283,53 @@ pub async fn load_web_activity_aggregate_range_from_pool(
         Vec::new()
     };
 
+    if include_anonymous && domain_filter_json.is_some() {
+        let earliest: Option<i64> = sqlx::query_scalar("SELECT MIN(start_time) FROM anonymous_activity WHERE is_web = 1 AND COALESCE(end_time, observed_until) > start_time")
+            .fetch_one(&mut *transaction).await.map_err(|error| error.to_string())?;
+        if let Some(start) = earliest {
+            domain_coverage.push(WebActivityDomainCoverageDto {
+                normalized_domain: crate::domain::activity_read_model::ANONYMOUS_ACTIVITY_KEY
+                    .into(),
+                earliest_recorded_start_ms: start,
+            });
+        }
+    }
+
+    let anonymous_records = if include_anonymous {
+        let anonymous = crate::data::repositories::anonymous_activity::read_range_tx(
+            &mut transaction,
+            start_ms,
+            end_ms,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+        aggregate_segments(
+            anonymous
+                .into_iter()
+                .filter(|row| row.is_web)
+                .map(|row| WebActivitySegmentSlice {
+                    source_key: (String::new(), String::new(), String::new()),
+                    normalized_domain: String::new(),
+                    start_ms: row.start_time,
+                    end_ms: row.end_time.unwrap_or(row.observed_until).min(now_ms),
+                })
+                .collect(),
+            bucket_boundaries_ms,
+        )
+        .into_iter()
+        .map(|row| AnonymousWebAggregateRecordDto {
+            bucket_start_ms: row.bucket_start_ms,
+            duration_ms: row.duration_ms,
+        })
+        .collect()
+    } else {
+        Vec::new()
+    };
+    let anonymous_revision: i64 =
+        sqlx::query_scalar("SELECT source_revision FROM anonymous_activity_revision WHERE id = 1")
+            .fetch_one(&mut *transaction)
+            .await
+            .map_err(|error| error.to_string())?;
     transaction
         .commit()
         .await
@@ -270,9 +337,13 @@ pub async fn load_web_activity_aggregate_range_from_pool(
 
     let grouping_hash = format!(
         "{:x}",
-        Sha256::digest(serde_json::to_vec(&web_links).map_err(|error| error.to_string())?)
+        Sha256::digest(
+            serde_json::to_vec(&(&web_links, anonymous_revision))
+                .map_err(|error| error.to_string())?
+        )
     );
     Ok(WebActivityAggregateRangeDto {
+        anonymous_records,
         web_links,
         records: aggregate_segments(segments, bucket_boundaries_ms),
         domain_coverage,
@@ -326,7 +397,77 @@ mod tests {
         pool.execute(schema::WEB_ACTIVITY_REVISION_SCHEMA_SQL)
             .await
             .unwrap();
+        pool.execute(schema::IMPORT_DATA_SCHEMA_SQL).await.unwrap();
+        pool.execute(schema::IMPORT_DATA_ISOLATION_SCHEMA_SQL)
+            .await
+            .unwrap();
+        pool.execute(schema::ACTIVITY_READ_MODELS_SCHEMA_SQL)
+            .await
+            .unwrap();
+        pool.execute(crate::data::repositories::anonymous_activity::SCHEMA_SQL)
+            .await
+            .unwrap();
         pool
+    }
+
+    #[tokio::test]
+    async fn anonymous_web_subset_preserves_boundaries_and_selection() {
+        let pool = setup_test_db().await;
+        let anonymous = crate::data::repositories::anonymous_activity::observe;
+        anonymous(&pool, 0, false).await.unwrap();
+        anonymous(&pool, 10_000, true).await.unwrap();
+        anonymous(&pool, 20_000, false).await.unwrap();
+        crate::data::repositories::anonymous_activity::seal(&pool, 30_000)
+            .await
+            .unwrap();
+        let all = load_web_activity_aggregate_range_from_pool(
+            &pool,
+            0,
+            30_000,
+            &[0, 15_000, 30_000],
+            None,
+            None,
+            30_000,
+        )
+        .await
+        .unwrap();
+        assert!(all.records.is_empty());
+        assert_eq!(
+            all.anonymous_records
+                .iter()
+                .map(|row| (row.bucket_start_ms, row.duration_ms))
+                .collect::<Vec<_>>(),
+            vec![(0, 5_000), (15_000, 5_000)]
+        );
+        let selected = load_web_activity_aggregate_range_from_pool(
+            &pool,
+            12_000,
+            18_000,
+            &[12_000, 18_000],
+            Some(ANONYMOUS_ACTIVITY_KEY),
+            None,
+            30_000,
+        )
+        .await
+        .unwrap();
+        assert_eq!(selected.anonymous_records[0].duration_ms, 6_000);
+        assert_eq!(
+            selected.domain_coverage[0].earliest_recorded_start_ms,
+            10_000
+        );
+        let named = load_web_activity_aggregate_range_from_pool(
+            &pool,
+            0,
+            30_000,
+            &[0, 30_000],
+            Some("ordinary.test"),
+            None,
+            30_000,
+        )
+        .await
+        .unwrap();
+        assert!(named.anonymous_records.is_empty());
+        assert!(named.domain_coverage.is_empty());
     }
 
     #[tokio::test]

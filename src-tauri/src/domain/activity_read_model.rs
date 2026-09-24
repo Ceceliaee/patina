@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const HOUR_MS: i64 = 60 * 60 * 1000;
+pub const ANONYMOUS_ACTIVITY_KEY: &str = "activity:anonymous";
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum ActivityOrigin {

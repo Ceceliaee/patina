@@ -1,6 +1,22 @@
 use sqlx::{Pool, Row, Sqlite};
 use std::collections::BTreeSet;
 
+pub async fn has_anonymous_activity_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let columns = table_columns(pool, "anonymous_activity").await?;
+    let indexes = table_indexes(pool, "anonymous_activity").await?;
+    let revision_columns = table_columns(pool, "anonymous_activity_revision").await?;
+    let trigger_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger'
+        AND name IN ('trg_anonymous_read_model_insert', 'trg_anonymous_read_model_update', 'trg_anonymous_read_model_delete')")
+        .fetch_one(pool).await.map_err(|error| error.to_string())?;
+    Ok(["id", "start_time", "end_time", "observed_until", "is_web"]
+        .iter()
+        .all(|name| columns.contains(*name))
+        && indexes.contains("idx_anonymous_activity_active")
+        && indexes.contains("idx_anonymous_activity_range")
+        && revision_columns.contains("source_revision")
+        && trigger_count == 3)
+}
+
 pub async fn has_session_range_index(pool: &Pool<Sqlite>) -> Result<bool, String> {
     let index = sqlx::query("SELECT \"unique\", partial FROM pragma_index_list('sessions') WHERE name = 'idx_sessions_end_start'")
         .fetch_optional(pool).await.map_err(|error| error.to_string())?;

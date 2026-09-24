@@ -31,6 +31,7 @@ pub const WEB_ACTIVITY_SESSION_MIGRATION_VERSION: i64 = 14;
 pub const WEB_ACTIVITY_SESSION_MIGRATION_DESCRIPTION: &str = "bind_web_activity_to_native_sessions";
 pub const SESSION_RANGE_INDEX_MIGRATION_VERSION: i64 = 15;
 pub const SESSION_RANGE_INDEX_MIGRATION_DESCRIPTION: &str = "index_session_range_ends";
+pub const ANONYMOUS_ACTIVITY_MIGRATION_VERSION: i64 = 16;
 
 pub const SESSION_RANGE_INDEX_SCHEMA_SQL: &str = "
     CREATE INDEX IF NOT EXISTS idx_sessions_end_start ON sessions(end_time, start_time);
@@ -1180,6 +1181,12 @@ pub fn tracker_migrations() -> Vec<Migration> {
             version: SESSION_RANGE_INDEX_MIGRATION_VERSION,
             description: SESSION_RANGE_INDEX_MIGRATION_DESCRIPTION,
             sql: SESSION_RANGE_INDEX_SCHEMA_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: ANONYMOUS_ACTIVITY_MIGRATION_VERSION,
+            description: "create_anonymous_activity",
+            sql: crate::data::repositories::anonymous_activity::SCHEMA_SQL,
             kind: MigrationKind::Up,
         },
     ]

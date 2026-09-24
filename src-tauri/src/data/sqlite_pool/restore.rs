@@ -420,7 +420,7 @@ mod tests {
                  FROM read_model_state WHERE model_name = 'activity_hourly'",
             ).fetch_one(&recovered).await.unwrap();
             assert_eq!(state.get::<String, _>("state"), "ready");
-            assert_eq!(state.get::<i64, _>("algorithm_version"), 2);
+            assert_eq!(state.get::<i64, _>("algorithm_version"), 3);
             assert_eq!(state.get::<i64, _>("duration"), 2000);
             assert_eq!(state.get::<i64, _>("dirty_ranges"), 0);
         }).catch_unwind().await;

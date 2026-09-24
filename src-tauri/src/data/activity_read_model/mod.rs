@@ -43,6 +43,7 @@ pub struct RecordedAppCatalogPageDto {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActivityAggregateRecordDto {
+    pub anonymous: bool,
     pub app_name: String,
     pub exe_name: String,
     pub start_time: i64,
@@ -125,7 +126,7 @@ fn aggregate_records_into_boundaries(
     boundaries: &[i64],
 ) -> Result<Vec<ActivityAggregateRecordDto>, String> {
     validate_aggregate_boundaries(start_ms, end_ms, boundaries)?;
-    let mut aggregated: BTreeMap<(usize, String), (String, i64)> = BTreeMap::new();
+    let mut aggregated: BTreeMap<(usize, bool, String), (String, i64)> = BTreeMap::new();
     for record in records {
         let first_bucket = boundaries
             .partition_point(|boundary| *boundary <= record.start_time)
@@ -140,7 +141,7 @@ fn aggregate_records_into_boundaries(
             if duration_ms <= 0 {
                 continue;
             }
-            let key = (index, record.exe_name.clone());
+            let key = (index, record.anonymous, record.exe_name.clone());
             let entry = aggregated
                 .entry(key)
                 .or_insert((record.app_name.clone(), 0));
@@ -151,12 +152,13 @@ fn aggregate_records_into_boundaries(
         }
     }
     let mut result = Vec::new();
-    for ((index, exe_name), (app_name, duration_ms)) in aggregated {
+    for ((index, anonymous, exe_name), (app_name, duration_ms)) in aggregated {
         let bucket_duration_ms = boundaries[index + 1] - boundaries[index];
         let mut remaining_ms = duration_ms;
         while remaining_ms > 0 {
             let chunk_ms = remaining_ms.min(bucket_duration_ms);
             result.push(ActivityAggregateRecordDto {
+                anonymous,
                 app_name: app_name.clone(),
                 exe_name: exe_name.clone(),
                 start_time: boundaries[index],
@@ -429,12 +431,14 @@ mod tests {
         let records = vec![
             ActivityAggregateRecordDto {
                 app_name: "Code".into(),
+                anonymous: false,
                 exe_name: "code.exe".into(),
                 start_time: 0,
                 end_time: 10,
             },
             ActivityAggregateRecordDto {
                 app_name: "Code".into(),
+                anonymous: false,
                 exe_name: "code.exe".into(),
                 start_time: 20,
                 end_time: 40,
@@ -450,12 +454,14 @@ mod tests {
         let records = vec![
             ActivityAggregateRecordDto {
                 app_name: "App".into(),
+                anonymous: false,
                 exe_name: "app.exe".into(),
                 start_time: 0,
                 end_time: HOUR_MS,
             },
             ActivityAggregateRecordDto {
                 app_name: "App".into(),
+                anonymous: false,
                 exe_name: "app.exe".into(),
                 start_time: 0,
                 end_time: HOUR_MS,
@@ -484,6 +490,7 @@ mod tests {
             [(-20, 100), (10, 50), (100, 120), (40, 40), (60, 20)].map(|(start_time, end_time)| {
                 ActivityAggregateRecordDto {
                     app_name: "Editor".into(),
+                    anonymous: false,
                     exe_name: "editor.exe".into(),
                     start_time,
                     end_time,
