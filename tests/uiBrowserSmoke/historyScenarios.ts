@@ -404,6 +404,52 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
     }
   };
 
+  await runTest("anonymous timeline dots fill the visible bar instead of the hit area", async () => {
+    const saved = await evaluate(client, sessionId, `JSON.stringify(Object.entries(localStorage))`) as string;
+    try {
+      await evaluate(client, sessionId, `localStorage.setItem('__patina_anonymous_timeline', '1'); localStorage.setItem('__time_tracker_smoke_settings', JSON.stringify({ ...JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') || '{}'), theme_mode: 'system' }))`);
+      await client.command("Page.navigate", { url: appUrl }, sessionId);
+      await waitForExpression(client, sessionId, `Boolean(document.querySelector('[aria-label="历史"]'))`);
+      await evaluate(client, sessionId, `document.querySelector('[aria-label="历史"]').click()`);
+      await waitForExpression(client, sessionId, `Boolean(document.querySelector('.history-timeline-zoom-open')) && [...document.querySelectorAll('.qp-timeline-segment [aria-label]')].some(node => node.getAttribute('aria-label').includes('匿名活动'))`);
+      await evaluate(client, sessionId, `document.querySelector('.history-timeline-zoom-open').click()`);
+      await waitForExpression(client, sessionId, `Boolean(document.querySelector('.history-timeline-lane-track .qp-timeline-segment'))`);
+      assert.equal(await evaluate(client, sessionId, `(() => {
+        const lane = [...document.querySelectorAll('.history-timeline-lane-row')].find(row => row.getAttribute('aria-label')?.startsWith('匿名活动'));
+        return !!lane?.querySelector('.history-timeline-lane-identity svg.lucide-eye-off') && !lane?.querySelector('.history-timeline-lane-dot');
+      })()`), true, 'anonymous application lane uses EyeOff in its application icon slot');
+      for (const theme of ["light", "dark"] as const) {
+        await client.command("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: theme }] }, sessionId);
+        await waitForExpression(client, sessionId, `document.documentElement.dataset.theme === '${theme}'`);
+        const painted = await evaluate(client, sessionId, `(() => {
+          const bars = [...document.querySelectorAll('.history-timeline-zoom-dialog-surface .qp-timeline-segment')];
+          return bars.map(bar => ({
+            anonymous: bar.querySelector('[aria-label]')?.getAttribute('aria-label').includes('匿名活动'),
+            hitPattern: getComputedStyle(bar).backgroundImage,
+            barPattern: getComputedStyle(bar, '::before').backgroundImage,
+            patternSize: getComputedStyle(bar, '::before').backgroundSize,
+            height: parseFloat(getComputedStyle(bar, '::before').height),
+            hitHeight: bar.getBoundingClientRect().height,
+          }));
+        })()`) as Array<{ anonymous: boolean; hitPattern: string; barPattern: string; patternSize: string; height: number; hitHeight: number }>;
+        assert(painted.filter(bar => bar.anonymous).length >= 2, 'overview and lane must both contain anonymous activity');
+        assert(painted.some(bar => !bar.anonymous), 'ordinary activity remains a control');
+        for (const bar of painted) {
+          assert.equal(bar.hitPattern, 'none', 'hit area above and below the visible bar stays unpainted');
+          assert.equal(bar.barPattern.includes('radial-gradient'), bar.anonymous);
+          if (bar.anonymous) assert.equal(bar.patternSize, '6px 6px');
+          assert(bar.height > 0 && bar.height < bar.hitHeight, 'paint stays inside the centered visible bar');
+        }
+        await captureHistoryScreenshot(`anonymous-timeline-${theme}.png`);
+      }
+    } finally {
+      await evaluate(client, sessionId, `localStorage.clear(); for (const [key, value] of ${saved}) localStorage.setItem(key, value);`);
+      await client.command("Emulation.setEmulatedMedia", { features: [] }, sessionId);
+      await client.command("Page.navigate", { url: appUrl }, sessionId);
+      await waitForExpression(client, sessionId, `Boolean(document.querySelector('[aria-label="历史"]'))`);
+    }
+  });
+
   await runTest("history renders complete 23 and 25 hour local days without next-day activity", async () => {
     const storedBefore = await evaluate(client, sessionId, `Object.entries(localStorage)`) as [string, string][];
     let scriptId: string | null = null;

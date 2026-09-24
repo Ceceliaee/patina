@@ -87,7 +87,7 @@ export async function runLinkedApplicationScenarios({ client, sessionId, runTest
           return Math.abs((r.top+r.bottom)/2-(name.top+name.bottom)/2)<1 && r.width>=24 && r.height>=24;
         });
       })()`), true);
-      for (const label of ['记录标题', '排除统计']) {
+      for (const label of ['记录标题', '匿名统计']) {
         const selector = `${member} [aria-label="${label}"]`;
         const before = await evaluate(client!, sessionId, `document.querySelector(${jsonString(selector)}).getAttribute('aria-pressed')`);
         await click(selector);

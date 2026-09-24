@@ -50,4 +50,16 @@ await runTest("malformed aggregate payloads fail closed", () => {
   assert.throws(() => parseActivityAggregateRange({ records: [], readPath: "cache" }));
 });
 
+await runTest("anonymous facts reject named identity at the IPC boundary", () => {
+  const payload = {
+    records: [{ anonymous: true, appName: "", exeName: "", startTime: 10, endTime: 20 }],
+    readPath: "hybrid", fallbackReason: null, sourceRevision: 1,
+    projectionRowCount: 0, factRowCount: 1, hasActiveSession: false,
+  };
+  assert.equal(parseActivityAggregateRange(payload).records[0].anonymous, true);
+  for (const identity of [{ appName: "Secret" }, { exeName: "secret.exe" }]) {
+    assert.throws(() => parseActivityAggregateRange({ ...payload, records: [{ ...payload.records[0], ...identity }] }));
+  }
+});
+
 console.log(`Passed ${passed} activity read-model gateway tests`);

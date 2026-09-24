@@ -565,10 +565,12 @@ function tauriStubFor(path: string) {
           const duration = localStorage.getItem("__patina_empty_aggregate") === "1"
             ? 0
             : Math.max(0, Math.min(30 * 60 * 1000, end - start));
+          const anonymousFixture = localStorage.getItem("__patina_anonymous_activity");
+          const allAnonymous = anonymousFixture === "all";
           return {
             records: duration > 0 ? [
-              { appName: "Cursor", exeName: "cursor.exe", startTime: start, endTime: start + duration },
-              { appName: "Extremely Long Research Workbench Application Name", exeName: "deep-research-workbench.exe", startTime: start + duration, endTime: start + duration * 2 },
+              { appName: allAnonymous ? "" : "Cursor", exeName: allAnonymous ? "" : "cursor.exe", anonymous: allAnonymous, startTime: start, endTime: start + duration },
+              { appName: anonymousFixture ? "" : "Extremely Long Research Workbench Application Name", exeName: anonymousFixture ? "" : "deep-research-workbench.exe", anonymous: Boolean(anonymousFixture), startTime: start + duration, endTime: start + duration * 2 },
             ].filter((record) => record.startTime < end).map((record) => ({
               ...record,
               endTime: Math.min(record.endTime, end),
@@ -942,6 +944,7 @@ function tauriStubFor(path: string) {
 
       function historySessionRows() {
         const timing = smokeSessionTiming();
+        const anonymous = localStorage.getItem('__patina_anonymous_timeline') === '1';
         const earlierEnd = timing.start;
         const earlierStart = Math.max(
           new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 0, 0, 0, 0).getTime(),
@@ -949,10 +952,10 @@ function tauriStubFor(path: string) {
         );
         return [
           {
-            id: 901,
-            app_name: "Extremely Long Research Workbench Application Name",
-            exe_name: "DEEP-RESEARCH-WORKBENCH.EXE",
-            window_title: "Extremely detailed project brief",
+            id: anonymous ? -7000000000000001 : 901,
+            app_name: anonymous ? "" : "Extremely Long Research Workbench Application Name",
+            exe_name: anonymous ? "activity:anonymous" : "DEEP-RESEARCH-WORKBENCH.EXE",
+            window_title: anonymous ? "" : "Extremely detailed project brief",
             start_time: timing.start,
             end_time: timing.end,
             duration: timing.duration,

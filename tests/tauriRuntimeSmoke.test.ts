@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { verifyAnonymousActivityRuntime } from "./tauriAnonymousActivityRuntime.ts";
 import { verifyWebDavRuntime } from "./tauriWebDavRuntime.ts";
 import { verifyAppIconRuntime } from "./tauriAppIconRuntime.ts";
 import { verifyLinkedApplicationsRuntime } from "./tauriLinkedApplicationsRuntime.ts";
@@ -277,7 +278,7 @@ function verifyDatabase(dbPath: string) {
     "assert integrity == 'ok', integrity",
     "assert value == ('77',), value",
     "assert widget_sessions == 0, widget_sessions",
-    "assert migration == (15,), migration",
+    "assert migration == (16,), migration",
     "assert states == {'app_catalog': 'ready', 'activity_hourly': 'ready'}, states",
     "assert scheduled == (0, 'weekly', 5, 1260, 1), scheduled",
     "assert {'target_kind', 'target_identity'} <= scheduled_columns, scheduled_columns",
@@ -1906,6 +1907,7 @@ try {
   assert.equal(aggregateRange.hasActiveSession, false);
 
   const runtimeDatabasePath = join(root, "data", "patina.db");
+  await verifyAnonymousActivityRuntime((expression) => evaluate(client!, expression), root, runtimeDatabasePath);
   seedWebActivitySegment(runtimeDatabasePath);
   const webAggregateRange = await evaluate(
     client,

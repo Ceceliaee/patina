@@ -253,4 +253,13 @@ await runTest("native icon subscription validates payloads and cleans up late re
   }
 });
 
+await runTest("anonymous activity never queries or retries executable icons", async () => {
+  const key = "activity:anonymous";
+  const icons = await loadDashboardIconsForExecutables([key], {
+    loadIcons: async () => { throw new Error("anonymous is not an executable"); },
+  });
+  assert.deepEqual(icons, {});
+  assert.deepEqual(getRetryableMissingDashboardIconExecutables([key], {}), []);
+});
+
 console.log(`Passed ${passed} dashboard icon runtime cache tests`);

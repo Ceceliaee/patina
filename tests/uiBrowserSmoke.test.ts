@@ -50,6 +50,7 @@ const scrollRegionOnly = process.argv.includes("--scroll-region-only");
 const widgetOnly = process.argv.includes("--widget-only");
 const classificationOnly = process.argv.includes("--classification-only");
 const historyWebTimelineTests = new Set([
+  "anonymous timeline dots fill the visible bar instead of the hit area",
   "history excludes hidden domains from rows and favicon requests, then restores retained history",
   "history timeline cycles app category and web while zoom stays synchronized",
   "history timeline removes web mode when Web Sync is disabled",

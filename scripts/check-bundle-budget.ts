@@ -21,9 +21,9 @@ const INITIAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 310;
 // Data used to be part of the initial graph. It now has its own route and runtime
 // budgets, so this unchanged aggregate tracks the remaining primary lazy routes.
 const NON_DATA_PRIMARY_LAZY_ROUTES_GZIP_BUDGET_KI_B = 86.5;
-// Website grouping adds 4.19 KiB over the same-toolchain 381.80 KiB baseline.
-// The bounded owner decision retains 3% headroom and no future-feature reserve.
-const TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 398;
+// Anonymous activity adds 1.46 KiB over the same-toolchain 386.05 KiB baseline.
+// Its scoped budget decision retains 3% headroom without a future-feature reserve.
+const TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 400;
 
 const INITIAL_CHUNK_BUDGETS = [
   { label: "index", pattern: /^index-.*\.js$/, gzipKiB: 65 },
@@ -57,13 +57,13 @@ if (!SOURCE_LOCALE) throw new Error("Bundle budget check requires one source loc
 const LAZY_PAGE_CHUNK_BUDGETS = [
   { label: "Settings", pattern: /^Settings-.*\.js$/, gzipKiB: 24 },
   { label: "AppMapping", pattern: /^AppMapping-.*\.js$/, gzipKiB: 18.5 },
-  { label: "History", pattern: /^History-.*\.js$/, gzipKiB: 18.7 },
+  { label: "History", pattern: /^History-.*\.js$/, gzipKiB: 19.05 },
   { label: "Tools", pattern: /^Tools-.*\.js$/, gzipKiB: 18 },
   // The destination analysis panel and its range control are both part of
   // Data's first render; the private detail chunk owns day analysis only. The
   // third application-category mode remains synchronous and feature-owned here;
   // splitting it would duplicate the read-model graph into unowned support chunks.
-  { label: "Data", pattern: /^Data-.*\.js$/, gzipKiB: 22.25 },
+  { label: "Data", pattern: /^Data-.*\.js$/, gzipKiB: 22.45 },
   { label: "About", pattern: /^About-.*\.js$/, gzipKiB: 18 },
 ] as const;
 

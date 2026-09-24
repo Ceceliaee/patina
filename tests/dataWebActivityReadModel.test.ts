@@ -334,6 +334,15 @@ await runTest("five identical colors remain solid without synthetic line styles"
   assert.equal(series.every((item) => !("strokeDasharray" in item)), true);
 });
 
+await runTest("anonymous website buckets form one identity without copying payload metadata", () => {
+  const input = { records: [], domainCoverage: [], sourceRevision: "1", snapshotNowMs: 2000,
+    anonymousRecords: [{ bucketStartMs: 1000, durationMs: 500, url: "https://private.invalid/secret", title: "private title" }] };
+  const parsed = parseWebActivityAggregateRange(input);
+  assert.deepEqual(parsed.records,[{ normalizedDomain: "activity:anonymous", bucketStartMs:1000, durationMs:500 }]);
+  assert.throws(() => parseWebActivityAggregateRange({ ...input, anonymousRecords: [...input.anonymousRecords,...input.anonymousRecords] }));
+  assert.throws(() => parseWebActivityAggregateRange({ ...input, anonymousRecords: [{ bucketStartMs:1000, durationMs:-1 }] }));
+});
+
 await runTest("web aggregate gateway accepts only the minimal typed payload", () => {
   const result = parseWebActivityAggregateRange({
     records: [{

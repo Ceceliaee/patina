@@ -62,7 +62,7 @@ export async function runClassificationWebLayoutScenarios(context: BrowserSmokeC
       assert.equal(await evaluate(client!,sessionId,`(() => {const n=[...document.querySelectorAll('button')].find(n=>n.textContent.trim()===${jsonString(label)});n?.click();return Boolean(n);})()`),true,label);
     };
     await evaluate(client!,sessionId,`document.querySelector(${jsonString(row+' .qp-app-mapping-category button')}).focus()`);
-    for (const selector of ['.qp-color-trigger','[aria-label="记录标题"]','[aria-label="排除统计"]','.qp-app-mapping-delete']) {
+    for (const selector of ['.qp-color-trigger','[aria-label="记录标题"]','[aria-label="匿名统计"]','.qp-app-mapping-delete']) {
       for (const type of ['keyDown','keyUp']) await client!.command('Input.dispatchKeyEvent',{type,key:'Tab',windowsVirtualKeyCode:9},sessionId);
       assert.equal(await evaluate(client!,sessionId,`document.activeElement===document.querySelector(${jsonString(row+' '+selector)}) && parseFloat(getComputedStyle(document.activeElement).outlineWidth)>0`),true,`web keyboard order ${selector}`);
     }
@@ -83,11 +83,11 @@ export async function runClassificationWebLayoutScenarios(context: BrowserSmokeC
     await waitForExpression(client!, sessionId, `document.activeElement === document.querySelector(${jsonString(row+' .qp-app-mapping-name-line button')})`);
     await click(`${row} [aria-label="记录标题"]`);
     await waitForExpression(client!, sessionId, `document.querySelector(${jsonString(row+' [aria-label="记录标题"]')}).getAttribute('aria-pressed') === 'false'`);
-    await click(`${row} [aria-label="排除统计"]`);
+    await click(`${row} [aria-label="匿名统计"]`);
     await waitForExpression(client!, sessionId, `!document.querySelector(${jsonString(row)})`);
-    await click('.qp-classification-count-filter [aria-label="排除统计"]');
-    await waitForExpression(client!, sessionId, `document.querySelector(${jsonString(row)}).textContent.includes('已排除')`);
-    await click(`${row} [aria-label="排除统计"]`);
+    await click('.qp-classification-count-filter [aria-label="匿名统计"]');
+    await waitForExpression(client!, sessionId, `document.querySelector(${jsonString(row)}).textContent.includes('匿名统计')`);
+    await click(`${row} [aria-label="匿名统计"]`);
     await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.qp-classification-count-filter button')).find(n=>n.textContent.startsWith('全部'))?.click()`);
     await waitForExpression(client!, sessionId, `Boolean(document.querySelector(${jsonString(row)}))`);
     await click(`${row} .qp-app-mapping-delete`);

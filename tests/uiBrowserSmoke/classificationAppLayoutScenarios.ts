@@ -183,12 +183,12 @@ export async function runClassificationAppLayoutScenarios({ client, sessionId, r
       await waitForExpression(client!, sessionId, `document.querySelector('[role="tooltip"]')?.textContent===${jsonString(longName)}`);
       await key("Escape", 27);
       await button("取消");
-      await click(`${row} [aria-label="排除统计"]`);
+      await click(`${row} [aria-label="匿名统计"]`);
       await waitForExpression(client!, sessionId, `!document.querySelector(${jsonString(row)}) && document.activeElement!==document.body`);
-      await click('.qp-classification-count-filter [aria-label="排除统计"]');
-      await waitForExpression(client!, sessionId, `document.querySelector(${jsonString(row + ' [aria-label="排除统计"]')})?.getAttribute('aria-pressed')==='true'`);
-      assert.equal(await evaluate(client!, sessionId, `document.querySelector(${jsonString(row)}).textContent.includes('已排除')`), true);
-      await click(`${row} [aria-label="排除统计"]`);
+      await click('.qp-classification-count-filter [aria-label="匿名统计"]');
+      await waitForExpression(client!, sessionId, `document.querySelector(${jsonString(row + ' [aria-label="匿名统计"]')})?.getAttribute('aria-pressed')==='true'`);
+      assert.equal(await evaluate(client!, sessionId, `document.querySelector(${jsonString(row)}).textContent.includes('匿名统计')`), true);
+      await click(`${row} [aria-label="匿名统计"]`);
       await waitForExpression(client!, sessionId, `!document.querySelector(${jsonString(row)})`);
       await client!.command("Emulation.setDeviceMetricsOverride", { width: 1100, height: 820, deviceScaleFactor: 1.5, mobile: false }, sessionId);
       const origin = await evaluate(client!, sessionId, "performance.timeOrigin");

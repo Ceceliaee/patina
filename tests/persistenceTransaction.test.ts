@@ -66,6 +66,7 @@ await runTest("History SQL preserves open and half-open boundaries with native i
       CREATE TABLE import_exact_sessions(id INTEGER PRIMARY KEY, app_name TEXT, exe_name TEXT,
         window_title TEXT, start_time INTEGER, end_time INTEGER, duration INTEGER);
       CREATE TABLE session_title_samples(id INTEGER PRIMARY KEY,session_id INTEGER,title TEXT,start_time INTEGER,end_time INTEGER);
+      CREATE TABLE anonymous_activity(id TEXT PRIMARY KEY,start_time INTEGER,end_time INTEGER,observed_until INTEGER,is_web INTEGER);
       CREATE INDEX idx_sessions_date ON sessions(start_time);
       CREATE INDEX idx_sessions_end_start ON sessions(end_time,start_time);
       INSERT INTO sessions VALUES
@@ -93,6 +94,12 @@ await runTest("History SQL preserves open and half-open boundaries with native i
     assert.deepEqual((await getSessionsInRange(0, 3000))[0]?.titleSampleDetails, [
       { title: "closed title", startTime: 0, endTime: 1000 },
     ]);
+    db.exec("INSERT INTO anonymous_activity VALUES('opaque',1000,2000,2000,1)");
+    const anonymous = (await getSessionsInRange(0,3000)).filter(row => row.exeName === "activity:anonymous");
+    assert.equal(anonymous.length,1);
+    assert.deepEqual([anonymous[0].startTime,anonymous[0].endTime,anonymous[0].duration],[1000,2000,1000]);
+    assert.equal(anonymous[0].windowTitle,"");
+    assert.deepEqual(anonymous[0].titleSampleDetails,[]);
   } finally {
     Database.prototype.select = originalSelect;
     Date.now = originalNow;

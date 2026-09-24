@@ -7,11 +7,47 @@ import {
   getDayRange,
   getRollingDayRanges,
   makeSession,
+  ProcessMapper,
   runTest,
 } from "./shared.ts";
 import type { HistorySession } from "./shared.ts";
 
 export function runCompilerAndAggregationTests() {
+  runTest("restoring a named app reveals old history without reidentifying anonymous time", () => {
+    const sessions = [
+      makeSession({ id: 1, exeName: "private.exe", appName: "Private", startTime: 0, endTime: 600_000, duration: 600_000 }),
+      makeSession({ id: -1, exeName: "activity:anonymous", appName: "", windowTitle: "", startTime: 600_000, endTime: 900_000, duration: 300_000 }),
+    ];
+    const original = JSON.stringify(sessions);
+    const read = () => buildNormalizedAppStats(compileSessions(sessions, { startMs: 0, endMs: 900_000, minSessionSecs: 0 }));
+    try {
+      ProcessMapper.setUserOverrides({ "private.exe": { track: false } });
+      assert.deepEqual(read().map(row => [row.exeName, row.totalDuration]), [["activity:anonymous", 300_000]]);
+      ProcessMapper.setUserOverrides({ "private.exe": { track: true } });
+      const restored = read();
+      assert.equal(restored.reduce((sum, row) => sum + row.totalDuration, 0), 900_000);
+      assert.equal(restored.find(row => row.exeName === "activity:anonymous")?.totalDuration, 300_000);
+      assert.equal(JSON.stringify(sessions), original);
+    } finally {
+      ProcessMapper.setUserOverrides({});
+    }
+  });
+  runTest("anonymous sources share one total but never bridge idle or named intervals", () => {
+    const key = "activity:anonymous";
+    const sessions = [
+      makeSession({ id: -1, exeName: key, appName: "", windowTitle: "", startTime: 0, endTime: 60_000, duration: 60_000 }),
+      makeSession({ id: 2, exeName: "code.exe", startTime: 60_000, endTime: 70_000, duration: 10_000 }),
+      makeSession({ id: -3, exeName: key, appName: "", windowTitle: "", startTime: 70_000, endTime: 130_000, duration: 60_000 }),
+      makeSession({ id: -4, exeName: key, appName: "", windowTitle: "", startTime: 135_000, endTime: 195_000, duration: 60_000 }),
+    ];
+    const compiled = compileSessions(sessions, { startMs: 0, endMs: 200_000, minSessionSecs: 0 });
+    const anonymous = buildNormalizedAppStats(compiled).filter((row) => row.exeName === key);
+    assert.equal(anonymous.length, 1);
+    assert.equal(anonymous[0].totalDuration, 180_000);
+    const timeline = buildTimelineSessions(compiled, 180).filter((row) => row.exeName === key);
+    assert.deepEqual(timeline.map((row) => [row.startTime, row.endTime]), [[0,60_000], [70_000,130_000], [135_000,195_000]]);
+    assert(timeline.every((row) => row.titleSamples.length === 0));
+  });
   runTest("normalized app stats keep different executables separate even if display names match", () => {
     const sessions: HistorySession[] = [
       makeSession({ id: 1, exeName: "QQ.exe", appName: "QQ", duration: 120_000, endTime: 121_000 }),

@@ -171,7 +171,7 @@ export async function runDashboardReadFailureScenarios(context: BrowserSmokeCont
 }
 
 export async function runDashboardScenarios(context: BrowserSmokeContext) {
-  const { client, sessionId, runTest } = context;
+  const { appUrl, client, sessionId, runTest } = context;
   const captureDashboardScreenshot = async (fileName: string) => {
     const captureDir = process.env.PATINA_DASHBOARD_SCREENSHOT_DIR?.trim();
     if (!captureDir) return;
@@ -182,6 +182,60 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
     await mkdir(captureDir, { recursive: true });
     await writeFile(resolve(captureDir, fileName), Buffer.from(result.data, "base64"));
   };
+
+  await runTest("anonymous activity ranks once with EyeOff and unique chart patterns without a classification menu", async () => {
+    const navigate = async () => {
+      await client.command("Page.navigate", { url: appUrl }, sessionId);
+      await waitForExpression(client, sessionId, `Boolean(document.querySelector('[aria-label="今天"]'))`);
+      await evaluate(client, sessionId, `document.querySelector('[aria-label="今天"]').click()`);
+      await waitForExpression(client, sessionId, `document.querySelector('[data-dashboard-read-state]')?.dataset.dashboardReadState === 'ready'`);
+    };
+    try {
+      await evaluate(client, sessionId, `localStorage.setItem('__patina_anonymous_activity','1')`);
+      await navigate();
+      const result = await evaluate(client, sessionId, `(() => {
+        const root = document.querySelector('.dashboard-workspace');
+        const icon = root.querySelector('svg.lucide-eye-off');
+        const trigger = icon?.closest('button');
+        const patterns = [...root.querySelectorAll('pattern')].map(node => node.id);
+        return { icons: root.querySelectorAll('svg.lucide-eye-off').length, menu: trigger?.getAttribute('aria-haspopup'),
+          total: root.querySelector('.dashboard-focus-total-center span')?.textContent?.trim(),
+          patterns, hasPattern: !!root.querySelector('[stroke^="url(#"]'), text: root.innerText };
+      })()` ) as { icons: number; menu: string | null; total: string; patterns: string[]; hasPattern: boolean; text: string };
+      assert.equal(result.icons, 1);
+      assert.equal(result.menu, null);
+      assert.equal(result.total, '1h 0m');
+      assert.equal(new Set(result.patterns).size, result.patterns.length);
+      assert(result.hasPattern);
+      assert.equal(await evaluate(client, sessionId, `(() => {
+        const patterns = [...document.querySelectorAll('.dashboard-workspace pattern')];
+        return patterns.length > 0 && patterns.every(pattern => !!pattern.querySelector('circle') && !pattern.querySelector('path'));
+      })()`), true, 'anonymous SVG patterns use sparse dots');
+      assert(result.text.includes('匿名活动') && !result.text.includes('activity:anonymous'));
+        await captureDashboardScreenshot('anonymous-dashboard.png');
+        await evaluate(client, sessionId, `document.querySelector('[aria-label="数据"]').click()`);
+        await waitForExpression(client, sessionId, `Boolean(document.querySelector('.data-app-option[data-destination-key="activity:anonymous"]'))`);
+        const anonymousOption = `.data-app-option[data-destination-key="activity:anonymous"]`;
+        assert.equal(await evaluate(client, sessionId, `document.querySelector(${jsonString(anonymousOption)}).getAttribute('aria-haspopup')`), null);
+        assert.equal(await evaluate(client, sessionId, `document.querySelector(${jsonString(anonymousOption)}).querySelectorAll('svg.lucide-eye-off').length`), 1);
+        await evaluate(client, sessionId, `document.querySelector(${jsonString(anonymousOption)}).click()`);
+        await waitForExpression(client, sessionId, `Boolean(document.querySelector('.data-app-selected-icon[data-selection-key="activity:anonymous"]'))`);
+        assert.equal(await evaluate(client, sessionId, `document.querySelector('.data-app-selected-icon[data-selection-key="activity:anonymous"]').getAttribute('aria-haspopup')`), null);
+        await waitForExpression(client, sessionId, `Boolean(document.querySelector('.data-app-panel .qp-native-trend-line'))`);
+        assert.equal(await evaluate(client, sessionId, `getComputedStyle(document.querySelector(${jsonString(anonymousOption)})).getPropertyValue('--data-series-color').trim()`), '#8F98A8');
+        assert.equal(await evaluate(client, sessionId, `document.querySelector('.data-app-panel .qp-native-trend-line').getAttribute('stroke')`), '#8F98A8');
+        await evaluate(client, sessionId, `document.querySelector('.data-app-panel').scrollIntoView({ block: 'start' })`);
+        await captureDashboardScreenshot('anonymous-data.png');
+        await evaluate(client, sessionId, `localStorage.setItem('__patina_anonymous_activity','all')`);
+        await navigate();
+        assert.equal(await evaluate(client, sessionId, `document.querySelectorAll('.dashboard-workspace svg.lucide-eye-off').length`), 1);
+        assert.equal(await evaluate(client, sessionId, `document.querySelector('.dashboard-focus-total-center span')?.textContent?.trim()`), '1h 0m');
+        assert.equal(await evaluate(client, sessionId, `document.querySelector('.dashboard-workspace').innerText.includes('Cursor')`), false);
+    } finally {
+      await evaluate(client, sessionId, `localStorage.removeItem('__patina_anonymous_activity')`);
+      await navigate();
+    }
+  });
 
   await runTest("dashboard viewport has no horizontal overflow", async () => {
     for (const width of [900, 1100, 1280]) {
@@ -335,7 +389,7 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
       await evaluate(client!, sessionId, `
         (() => {
           const ring = document.querySelector(
-            '.dashboard-focus-chart svg[aria-label="专注分布"] circle',
+            '.dashboard-focus-chart svg[aria-label="专注分布"] > circle',
           );
           if (!(ring instanceof SVGCircleElement)) return false;
           const radius = Number(ring.getAttribute("r"));
