@@ -1,5 +1,6 @@
 import { useLocaleText } from "../i18n/index.ts";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import AnonymousActivityPattern from "./AnonymousActivityPattern.tsx";
 import QuietChartTooltip from "../components/QuietChartTooltip.tsx";
 import type { UiText } from "../i18n/index.ts";
 import type {
@@ -106,6 +107,7 @@ export default function HourlyActivityChart({
   padding,
 }: Props) {
   const UI_TEXT = useLocaleText();
+  const anonymousPatternId = useId();
   const chartRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState<ChartSize>({ height: 0, width: 0 });
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -175,6 +177,7 @@ export default function HourlyActivityChart({
           className="block h-full w-full overflow-visible"
           viewBox={`0 0 ${size.width} ${size.height}`}
         >
+          <AnonymousActivityPattern id={anonymousPatternId} />
           {activeIndex !== null ? (
             <rect
               fill="var(--qp-chart-cursor)"
@@ -230,7 +233,7 @@ export default function HourlyActivityChart({
                           segmentHeight,
                           radius,
                         )}
-                        fill={segment.color}
+                        fill={segment.category === "anonymous" ? `url(#${anonymousPatternId})` : segment.color}
                       />
                     );
                   }
@@ -238,7 +241,7 @@ export default function HourlyActivityChart({
                     <rect
                       key={dataKey}
                       className="qp-hourly-chart-bar"
-                      fill={segment.color}
+                      fill={segment.category === "anonymous" ? `url(#${anonymousPatternId})` : segment.color}
                       height={segmentHeight}
                       width={renderedBarWidth}
                       x={x}

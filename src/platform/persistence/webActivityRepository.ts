@@ -1,5 +1,6 @@
 import { deleteWebActivitySegmentsByDomain as deleteWebActivitySegmentsByDomainViaCommand } from "./persistenceWriteRuntimeGateway.ts";
 import { getDB } from "./sqlite.ts";
+import { isAnonymousActivity } from "../../shared/classification/anonymousActivity.ts";
 import { loadWebLinksOverrides } from "./webLinksGateway.ts";
 import type {
   ObservedWebDomainCandidate,
@@ -40,7 +41,7 @@ const WEB_FAVICON_QUERY_BATCH_SIZE = 900;
 
 function normalizeWebDomainKey(value: string): string | null {
   const normalized = value.trim().replace(/\.$/, "").toLocaleLowerCase();
-  return normalized ? normalized : null;
+  return normalized && !isAnonymousActivity(normalized) ? normalized : null;
 }
 
 function mapRawWebActivitySegment(row: RawWebActivitySegmentRow): WebActivitySegment {

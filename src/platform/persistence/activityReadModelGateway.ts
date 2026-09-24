@@ -1,4 +1,5 @@
 import { invokeWithCommandError } from "./commandError.ts";
+import { ANONYMOUS_ACTIVITY_KEY } from "../../shared/classification/anonymousActivity.ts";
 import {
   isFiniteNumber,
   isNullableString,
@@ -31,6 +32,7 @@ interface ActivityCatalogPage {
 }
 
 interface ActivityAggregateRecord {
+  anonymous?: boolean;
   appName: string;
   exeName: string;
   startTime: number;
@@ -85,6 +87,8 @@ function isAggregateRecord(value: unknown): value is ActivityAggregateRecord {
   return isRecord(value)
     && typeof value.appName === "string"
     && typeof value.exeName === "string"
+    && (value.anonymous === undefined || typeof value.anonymous === "boolean")
+    && (value.anonymous !== true || (value.exeName === "" && value.appName === ""))
     && isFiniteNumber(value.startTime)
     && isFiniteNumber(value.endTime)
     && value.endTime >= value.startTime;
@@ -121,8 +125,10 @@ export async function loadActivityAggregateRange(
   endMs: number,
   bucketBoundariesMs?: number[],
 ): Promise<ActivityAggregateRange> {
-  return parseActivityAggregateRange(await invokeWithCommandError(
+  const result = parseActivityAggregateRange(await invokeWithCommandError(
     "cmd_get_activity_aggregate_range",
     { startMs, endMs, bucketBoundariesMs: bucketBoundariesMs ?? null },
   ));
+  return { ...result, records: result.records.map((record) => record.anonymous
+    ? { ...record, exeName: ANONYMOUS_ACTIVITY_KEY, appName: "" } : record) };
 }

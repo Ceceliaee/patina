@@ -1,4 +1,5 @@
 import { invokeWithCommandError } from "./commandError.ts";
+import { ANONYMOUS_ACTIVITY_KEY } from "../../shared/classification/anonymousActivity.ts";
 import { parseWebLinksSnapshot, type WebLinksSnapshot } from "./webLinksGateway.ts";
 import { isPlainRecord as isRecord } from "../../shared/lib/runtimeTypeGuards.ts";
 
@@ -78,6 +79,9 @@ export function parseWebActivityAggregateRange(value: unknown): WebActivityAggre
   }
 
   const recordKeys = new Set<string>();
+  if (value.anonymousRecords !== undefined && (!Array.isArray(value.anonymousRecords)
+    || !value.anonymousRecords.every(row => isRecord(row) && isFiniteNonNegativeNumber(row.bucketStartMs)
+      && isFiniteNonNegativeNumber(row.durationMs)))) throw new Error("Invalid anonymous website aggregate");
   const coverageKeys = new Set<string>();
   const records = value.records.map((record) => {
     const typedRecord = record as WebActivityAggregateRecord;
@@ -103,6 +107,12 @@ export function parseWebActivityAggregateRange(value: unknown): WebActivityAggre
       earliestRecordedStartMs: typedCoverage.earliestRecordedStartMs,
     };
   });
+  for (const row of (value.anonymousRecords ?? []) as Array<{ bucketStartMs: number; durationMs: number }>) {
+    const key = `${ANONYMOUS_ACTIVITY_KEY}\u0000${row.bucketStartMs}`;
+    if (recordKeys.has(key)) throw new Error("Received duplicate anonymous website aggregate");
+    recordKeys.add(key);
+    records.push({ normalizedDomain: ANONYMOUS_ACTIVITY_KEY, bucketStartMs: row.bucketStartMs, durationMs: row.durationMs });
+  }
 
   return {
     ...(value.webLinks === undefined ? {} : { webLinks: parseWebLinksSnapshot(value.webLinks) }),

@@ -1,4 +1,5 @@
 import type { WebActivitySegment } from "../types/webActivity.ts";
+import { isAnonymousActivity } from "../classification/anonymousActivity.ts";
 
 export interface CompiledWebActivitySegment extends WebActivitySegment {
   endTime: number;
@@ -83,7 +84,7 @@ export function mergeWebActivityTimelineItemsByDomain<
     if (
       item.normalizedDomain === current.normalizedDomain
       && gapFromCurrent >= 0
-      && gapFromCurrent <= mergeThresholdMs
+      && gapFromCurrent <= (isAnonymousActivity(item.normalizedDomain) ? 0 : mergeThresholdMs)
     ) {
       merged[groupIndex!] = mergeItems(current, item);
       continue;

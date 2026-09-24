@@ -1,5 +1,6 @@
 import { AppClassification } from "../../shared/classification/appClassification.ts";
 import { resolveAppIconKeys } from "../../shared/classification/appIconIdentity.ts";
+import { isAnonymousActivity } from "../../shared/classification/anonymousActivity.ts";
 import { getIconsForExecutables } from "./sessionReadRepository.ts";
 import { appIconChangeAffects, subscribeAppIconChanges } from "../../shared/hooks/appIconChanges.ts";
 
@@ -38,7 +39,7 @@ function normalizeRequestedExecutables(exeNames: string[]): string[] {
 
   for (const exeName of exeNames) {
     const rawExe = exeName.trim();
-    if (!rawExe) continue;
+    if (!rawExe || isAnonymousActivity(rawExe)) continue;
 
     const retryKey = AppClassification.resolveCanonicalExecutable(rawExe);
     if (seen.has(retryKey)) continue;

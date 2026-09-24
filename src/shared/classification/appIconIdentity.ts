@@ -1,6 +1,8 @@
 import { AppClassification } from "./appClassification.ts";
+import { isAnonymousActivity } from "./anonymousActivity.ts";
 
 export function resolveAppIconKeys(exeName: string): string[] {
+  if (isAnonymousActivity(exeName)) return [];
   const canonicalExe = AppClassification.resolveCanonicalExecutable(exeName);
   const parent = AppClassification.resolveStatisticalApp(exeName);
   if (parent !== canonicalExe) return [parent];
@@ -8,6 +10,7 @@ export function resolveAppIconKeys(exeName: string): string[] {
 }
 
 export function resolveExecutableIconKeys(exeName: string): string[] {
+  if (isAnonymousActivity(exeName)) return [];
   const rawExe = exeName.trim();
   if (!rawExe) return [];
 

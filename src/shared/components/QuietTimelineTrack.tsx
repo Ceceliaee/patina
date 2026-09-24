@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import QuietTooltip from "./QuietTooltip.tsx";
+import { ANONYMOUS_ACTIVITY_BACKGROUND } from "../charts/AnonymousActivityPattern.tsx";
 import type { TimelineAxisTick } from "../lib/timelineAxis.ts";
 
 type TimelineTrackStyle = CSSProperties & Partial<Record<
@@ -8,6 +9,7 @@ type TimelineTrackStyle = CSSProperties & Partial<Record<
 >>;
 
 type TimelineSegmentStyle = CSSProperties & Record<
+  | "--qp-timeline-segment-pattern"
   | "--qp-timeline-segment-left"
   | "--qp-timeline-segment-width"
   | "--qp-timeline-segment-color",
@@ -25,6 +27,7 @@ interface QuietTimelineTrackProps {
 }
 
 interface QuietTimelineSegmentProps {
+  anonymous?: boolean;
   ariaLabel: string;
   color: string;
   leftRatio: number;
@@ -77,6 +80,7 @@ export function QuietTimelineTrack({
 }
 
 export function QuietTimelineSegment({
+  anonymous = false,
   ariaLabel,
   color,
   leftRatio,
@@ -88,6 +92,7 @@ export function QuietTimelineSegment({
   hideOnPointerDown = true,
 }: QuietTimelineSegmentProps) {
   const style: TimelineSegmentStyle = {
+    "--qp-timeline-segment-pattern": anonymous ? ANONYMOUS_ACTIVITY_BACKGROUND : "none",
     "--qp-timeline-segment-left": `${leftRatio * 100}%`,
     "--qp-timeline-segment-width": `${Math.max(0, widthRatio) * 100}%`,
     "--qp-timeline-segment-color": color,

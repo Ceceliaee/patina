@@ -46,6 +46,8 @@
     var(--qp-timeline-segment-color) 88%,
     var(--qp-bg-panel)
   );
+  background-image: var(--qp-timeline-segment-pattern, none);
+  background-size: 6px 6px;
   content: "";
   transform: translateY(-50%);
 }

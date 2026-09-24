@@ -1,6 +1,7 @@
 import type { AppStat } from "../types/app";
 import type { DailySummary, HistorySession, TitleSampleDetail } from "../types/sessions";
 import { AppClassification } from "../classification/appClassification.ts";
+import { isAnonymousActivity } from "../classification/anonymousActivity.ts";
 import { cleanWindowTitle } from "./windowTitleCleaner.ts";
 import { pickPreferredAppName } from "./displayNameScoring.ts";
 
@@ -352,7 +353,7 @@ function buildCompiledSessionBase(
     const gap = session.startTime - previousEnd;
     const sameApp = previous.appKey === session.appKey;
 
-    if (sameApp && gap >= 0 && gap <= directMergeGapMs) {
+    if (sameApp && gap >= 0 && gap <= (isAnonymousActivity(session.appKey) ? 0 : directMergeGapMs)) {
       if (session.displayNameRank > previous.displayNameRank) {
         previous.displayName = session.displayName;
         previous.displayNameRank = session.displayNameRank;
@@ -537,7 +538,9 @@ export function buildTimelineSessions(
     const current = lastGroupByApp.get(session.appKey);
     const currentEnd = current?.endTime ?? current?.startTime ?? 0;
     const sharesContinuityGroup = current?.continuityGroupStartTime === session.continuityGroupStartTime;
-    if (!current || (!sharesContinuityGroup && session.startTime - currentEnd > mergeThresholdMs)) {
+    if (!current || (isAnonymousActivity(session.appKey)
+      ? session.startTime !== currentEnd
+      : !sharesContinuityGroup && session.startTime - currentEnd > mergeThresholdMs)) {
       const group: TimelineSession = {
         ...session,
         titleSamples: [...session.titleSamples],

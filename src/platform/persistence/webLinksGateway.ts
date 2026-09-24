@@ -3,8 +3,18 @@ import type { WebActivitySegment, WebDomainOverride } from "../../shared/types/w
 import type { WebLinkRule } from "../../shared/classification/webLinks.ts";
 import { isPlainRecord } from "../../shared/lib/runtimeTypeGuards.ts";
 import { isAppCategory } from "../../shared/classification/categoryTokens.ts";
+import { ANONYMOUS_ACTIVITY_KEY } from "../../shared/classification/anonymousActivity.ts";
+
+interface AnonymousWebRange {
+  id: string;
+  startTime: number;
+  endTime: number | null;
+  observedUntil: number;
+  isWeb: boolean;
+}
 
 export interface WebLinksSnapshot {
+  anonymousActivity?: AnonymousWebRange[];
   segments?: WebActivitySegment[];
   /** All domains with stored activity; settings and relationship references live separately. */
   domains: string[];
@@ -13,6 +23,11 @@ export interface WebLinksSnapshot {
 }
 
 export function parseWebLinksSnapshot(value: unknown): WebLinksSnapshot {
+  if (isPlainRecord(value) && value.anonymousActivity !== undefined
+    && (!Array.isArray(value.anonymousActivity) || !value.anonymousActivity.every(row => isPlainRecord(row)
+      && typeof row.id === "string" && Number.isSafeInteger(row.startTime)
+      && (row.endTime === null || Number.isSafeInteger(row.endTime))
+      && Number.isSafeInteger(row.observedUntil) && row.isWeb === true))) throw new Error("Invalid anonymous website ranges");
   if (!isPlainRecord(value) || !Array.isArray(value.domains) || !value.domains.every(domain => typeof domain === "string")
     || !isPlainRecord(value.rules) || !isPlainRecord(value.overrides)) throw new Error("Invalid website links snapshot");
   for (const rule of Object.values(value.rules)) {
@@ -68,5 +83,11 @@ export async function loadWebGroupedRange(startMs: number, endMs: number, nowMs 
     && Number.isSafeInteger(segment.duration)
     && (segment.url === null || typeof segment.url === "string")
     && (segment.title === null || typeof segment.title === "string"))) throw new Error("Invalid website detail snapshot");
-  return { segments: snapshot.segments, overrides: webLinksOverrides(snapshot) };
+  const anonymous = (snapshot.anonymousActivity ?? []).map((row, index): WebActivitySegment => {
+    const endTime = Math.min(nowMs, row.endTime ?? row.observedUntil);
+    return { id: -7_000_000_000_000_000 - index, browserClientId: "", browserKind: "", browserExeName: "",
+      domain: "", normalizedDomain: ANONYMOUS_ACTIVITY_KEY, url: null, title: null, faviconUrl: null,
+      startTime: row.startTime, endTime, duration: Math.max(0, endTime - row.startTime) };
+  });
+  return { segments: [...snapshot.segments, ...anonymous], overrides: webLinksOverrides(snapshot) };
 }

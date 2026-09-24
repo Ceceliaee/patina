@@ -1,4 +1,5 @@
 import { getDB } from "./sqlite.ts";
+import { ANONYMOUS_ACTIVITY_KEY } from "../../shared/classification/anonymousActivity.ts";
 import { AppClassification } from "../../shared/classification/appClassification.ts";
 import { resolveAppIconKeys, resolveExecutableIconKeys } from "../../shared/classification/appIconIdentity.ts";
 import type { HistorySession, TitleSampleDetail } from "../../shared/types/sessions.ts";
@@ -138,13 +139,18 @@ export async function getSessionsInRange(startMs: number, endMs: number): Promis
        FROM sessions
        WHERE start_time < ? AND (end_time > ? OR (end_time IS NULL AND ? > ?))
        UNION ALL
+       SELECT -7000000000000000 - rowid, 'native', '', ?, '', start_time,
+              COALESCE(end_time, observed_until), COALESCE(end_time, observed_until) - start_time, start_time
+       FROM anonymous_activity
+       WHERE start_time < ? AND COALESCE(end_time, observed_until) > ?
+       UNION ALL
        SELECT id, 'import_exact' AS origin, app_name, exe_name, window_title, start_time, end_time,
               duration, start_time AS continuity_group_start_time
        FROM import_exact_sessions
        WHERE start_time < ? AND end_time > ?
      )
      ORDER BY start_time ASC`,
-    [now, endMs, startMs, now, startMs, endMs, startMs],
+    [now, endMs, startMs, now, startMs, ANONYMOUS_ACTIVITY_KEY, endMs, startMs, endMs, startMs],
   );
 
   const effectiveRows = resolveEffectiveHistoryRows(rows, now);
@@ -154,7 +160,7 @@ export async function getSessionsInRange(startMs: number, endMs: number): Promis
 
   const samplesBySessionId = new Map<number, TitleSampleDetail[]>();
   const sessionIds = Array.from(new Set(
-    effectiveRows.filter((row) => row.origin === "native").map((row) => row.id),
+    effectiveRows.filter((row) => row.origin === "native" && row.id > 0).map((row) => row.id),
   ));
   const batchSize = 900;
   for (let index = 0; index < sessionIds.length; index += batchSize) {
@@ -277,6 +283,8 @@ export async function getEarliestSessionStartTime(): Promise<number | null> {
     `SELECT MIN(start_time) AS earliest_start_time
      FROM (
        SELECT start_time FROM sessions
+       UNION ALL
+       SELECT start_time FROM anonymous_activity
        UNION ALL
        SELECT start_time FROM import_exact_sessions
        UNION ALL

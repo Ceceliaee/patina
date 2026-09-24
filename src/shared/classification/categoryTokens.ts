@@ -18,8 +18,8 @@ type SeededAppCategory =
   | "system";
 
 export type ExtendedAppCategory = `${typeof EXTENDED_CATEGORY_PREFIX}${string}`;
-export type AppCategory = SeededAppCategory | ExtendedAppCategory;
-export type UserAssignableAppCategory = Exclude<AppCategory, "system">;
+export type AppCategory = SeededAppCategory | ExtendedAppCategory | "anonymous";
+export type UserAssignableAppCategory = Exclude<AppCategory, "system" | "anonymous">;
 
 export const USER_ASSIGNABLE_CATEGORIES: UserAssignableAppCategory[] = [
   "ai",
@@ -191,6 +191,7 @@ export function isAppCategory(category: string): category is AppCategory {
 }
 
 export function getCategoryToken(category: AppCategory, uiText: UiText): CategoryToken {
+  if (category === "anonymous") return { label: uiText.common.anonymousActivity, color: OTHER_CATEGORY_FIXED_COLOR };
   if (category === "system") {
     return { label: uiText.categories.system, color: "#475569" };
   }
