@@ -1,5 +1,6 @@
 use crate::data::import::model::{
     ImportBatchDto, ImportClassificationMutation, ImportCommitReportDto, ImportDeleteReportDto,
+    ParsedCanonicalCsv,
 };
 use crate::data::import::preview::{load_canonical_file, validate_canonical_path};
 use crate::data::repositories::classification_settings::ClassificationSettingMutation;
@@ -7,12 +8,18 @@ use crate::data::repositories::import_batches;
 use crate::data::sqlite_pool::wait_for_sqlite_pool;
 use tauri::{AppHandle, Runtime};
 
-pub async fn commit_canonical_import<R: Runtime>(
-    app: &AppHandle<R>,
+pub struct PreparedCanonicalImport {
+    source_name: String,
+    fingerprint: String,
+    parsed: ParsedCanonicalCsv,
+    classification_mutations: Vec<ClassificationSettingMutation>,
+}
+
+pub async fn prepare_canonical_import(
     file_path: String,
     expected_fingerprint: String,
     classification_mutations: Vec<ImportClassificationMutation>,
-) -> Result<ImportCommitReportDto, String> {
+) -> Result<PreparedCanonicalImport, String> {
     if expected_fingerprint.trim().is_empty() {
         return Err("preview fingerprint is required".to_string());
     }
@@ -24,8 +31,8 @@ pub async fn commit_canonical_import<R: Runtime>(
     let source_name = path
         .file_name()
         .and_then(|value| value.to_str())
-        .ok_or_else(|| "canonical CSV file name is not valid UTF-8".to_string())?;
-    let pool = wait_for_sqlite_pool(app).await?;
+        .ok_or_else(|| "canonical CSV file name is not valid UTF-8".to_string())?
+        .to_string();
     let classification_mutations = classification_mutations
         .into_iter()
         .map(|mutation| ClassificationSettingMutation {
@@ -33,14 +40,27 @@ pub async fn commit_canonical_import<R: Runtime>(
             value: mutation.value,
         })
         .collect::<Vec<_>>();
+    Ok(PreparedCanonicalImport {
+        source_name,
+        fingerprint: actual_fingerprint,
+        parsed,
+        classification_mutations,
+    })
+}
+
+pub async fn commit_canonical_import<R: Runtime>(
+    app: &AppHandle<R>,
+    prepared: PreparedCanonicalImport,
+) -> Result<ImportCommitReportDto, String> {
+    let pool = wait_for_sqlite_pool(app).await?;
     import_batches::commit_records(
         &pool,
-        source_name,
+        &prepared.source_name,
         "patina-csv",
-        &actual_fingerprint,
-        &parsed.records,
-        parsed.errors.len(),
-        &classification_mutations,
+        &prepared.fingerprint,
+        &prepared.parsed.records,
+        prepared.parsed.errors.len(),
+        &prepared.classification_mutations,
     )
     .await
 }

@@ -373,7 +373,11 @@ fn successful_confirmation_survives_database_reopen() {
         let options = sqlx::sqlite::SqliteConnectOptions::new()
             .filename(&path)
             .create_if_missing(true);
-        let pool = SqlitePool::connect_with(options.clone()).await.unwrap();
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options.clone())
+            .await
+            .unwrap();
         pool.execute(schema::CURRENT_BASELINE_SCHEMA_SQL)
             .await
             .unwrap();
@@ -386,8 +390,15 @@ fn successful_confirmation_survives_database_reopen() {
         )
         .await
         .unwrap();
+        // Explicit connection close waits for the single SQLite worker's shutdown
+        // before the fixture is reopened or deleted.
+        pool.acquire().await.unwrap().close().await.unwrap();
         pool.close().await;
-        let reopened = SqlitePool::connect_with(options).await.unwrap();
+        let reopened = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .unwrap();
         let store = TrackingRuntimeDataStore::new(reopened.clone());
         refresh(
             &store,
@@ -405,6 +416,7 @@ fn successful_confirmation_survives_database_reopen() {
                 .last_updated,
             Some(Some(100))
         );
+        reopened.acquire().await.unwrap().close().await.unwrap();
         reopened.close().await;
         std::fs::remove_file(path).unwrap();
     });

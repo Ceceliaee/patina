@@ -2,7 +2,7 @@ use crate::commands::error::CommandErrorDto;
 use crate::commands::window_guard::require_main_window;
 use crate::data::settings_payload_service::{self, RemoteBackupSettingsPatch};
 use crate::data::user_data_maintenance;
-use tauri::{AppHandle, Runtime, WebviewWindow};
+use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -43,9 +43,16 @@ pub async fn cmd_delete_sessions_by_exe_names<R: Runtime>(
     window: WebviewWindow<R>,
 ) -> Result<(), CommandErrorDto> {
     require_main_window(&window)?;
+    let tracking =
+        app.state::<crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshotState>();
+    let _transition = tracking.transition.lock().await;
     user_data_maintenance::delete_sessions_by_exe_names(&app, exe_names)
         .await
-        .map_err(Into::into)
+        .map_err(CommandErrorDto::from)?;
+    // This deletion also removes application overrides.
+    app.state::<crate::engine::tracking::title_state::TitleRecordingRuntimeState>()
+        .invalidate_app_overrides();
+    Ok(())
 }
 
 #[tauri::command]

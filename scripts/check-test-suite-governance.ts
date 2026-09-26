@@ -40,6 +40,10 @@ const REQUIRED_SCRIPTS = [
 ] as const;
 const ALLOWED_IGNORED_TESTS = new Map([
   [
+    "src-tauri/src/engine/tracking/runtime/loop_state.rs::recording_policy_cache_capacity_report",
+    "run with pnpm run perf:tracking-policy",
+  ],
+  [
     "src-tauri/src/data/schema.rs::session_range_query_plan_report",
     "run with pnpm run perf:sqlite-query-plan",
   ],

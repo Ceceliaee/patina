@@ -5,7 +5,8 @@ use super::super::sustained_participation::{
 };
 use super::support::log_tracker_error;
 use crate::domain::tracking::{
-    is_trackable_window, TrackingStatusSnapshot, WindowTrackingCandidate,
+    is_trackable_window, resolve_app_override_executable, TrackingStatusSnapshot,
+    WindowTrackingCandidate,
 };
 use crate::engine::tracking::pause_state::TrackingPauseRuntimeState;
 use crate::engine::tracking::ports::{
@@ -72,6 +73,21 @@ pub(super) struct TrackingSettingsCache {
     settings: Option<CachedTrackingSettings>,
     capture_window_title_by_exe: HashMap<String, CachedCaptureWindowTitleSetting>,
     title_override_generation: u64,
+    app_tracking: Option<(String, CachedPolicy)>,
+    anonymous_web_rules: Option<CachedPolicy>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct CachedPolicy {
+    loaded_at_ms: i64,
+    value: bool,
+}
+
+impl CachedPolicy {
+    fn is_fresh(self, now_ms: i64) -> bool {
+        now_ms >= self.loaded_at_ms
+            && now_ms.saturating_sub(self.loaded_at_ms) < TRACKING_SETTINGS_CACHE_TTL_MS
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -135,21 +151,16 @@ pub(super) async fn load_tracking_loop_state(
     previous_state: &SustainedParticipationRuntimeState,
     settings_cache: &mut TrackingSettingsCache,
 ) -> (TrackingLoopState, SustainedParticipationRuntimeState) {
+    settings_cache.sync_policy_generation(title_state.override_generation());
     let cached_settings = settings_cache.load_tracking_settings(data, now_ms).await;
     let continuity_window_secs = cached_settings.continuity_window_secs;
     let sustained_participation_secs = cached_settings.sustained_participation_secs;
     let tracking_paused = load_tracking_paused(data, pause_state, now_ms).await;
     let anonymous_web = title_state.is_anonymous_web(window_info, now_ms);
-    let app_tracking_enabled = match data
-        .load_tracking_enabled_setting_for_app(&window_info.exe_name)
+    let app_tracking_enabled = settings_cache
+        .load_app_tracking(data, &window_info.exe_name, now_ms)
         .await
-    {
-        Ok(value) => value,
-        Err(error) => {
-            log_tracker_error(format!("failed to load app tracking policy: {error}"));
-            false
-        }
-    } && !anonymous_web;
+        && !anonymous_web;
     let mut capture_window_title = app_tracking_enabled
         && title_state.is_enabled()
         && settings_cache
@@ -163,7 +174,7 @@ pub(super) async fn load_tracking_loop_state(
 
     if crate::domain::web_activity::resolve_web_activity_browser_family(&window_info.exe_name)
         .is_some()
-        && data.has_anonymous_web_rules().await.unwrap_or(true)
+        && settings_cache.load_anonymous_web_rules(data, now_ms).await
         && !title_state.permits_browser_title(window_info, now_ms)
     {
         capture_window_title = false;
@@ -217,6 +228,74 @@ pub(super) async fn load_tracking_loop_state(
 }
 
 impl TrackingSettingsCache {
+    // Policy commits and backup restore invalidate this generation while holding
+    // the same tracking transition lock as the sampling loop.
+    fn sync_policy_generation(&mut self, generation: u64) {
+        if self.title_override_generation != generation {
+            self.capture_window_title_by_exe.clear();
+            self.app_tracking = None;
+            self.anonymous_web_rules = None;
+            self.title_override_generation = generation;
+        }
+    }
+
+    async fn load_app_tracking(
+        &mut self,
+        data: &dyn TrackingDataStore,
+        exe_name: &str,
+        now_ms: i64,
+    ) -> bool {
+        let key = resolve_app_override_executable(exe_name).unwrap_or_default();
+        if let Some((cached_key, cached)) = &self.app_tracking {
+            if *cached_key == key && cached.is_fresh(now_ms) {
+                return cached.value;
+            }
+        }
+        self.app_tracking = None;
+        match data.load_tracking_enabled_setting_for_app(exe_name).await {
+            Ok(value) => {
+                self.app_tracking = Some((
+                    key,
+                    CachedPolicy {
+                        loaded_at_ms: now_ms,
+                        value,
+                    },
+                ));
+                value
+            }
+            Err(error) => {
+                log_tracker_error(format!("failed to load app tracking policy: {error}"));
+                false
+            }
+        }
+    }
+
+    async fn load_anonymous_web_rules(
+        &mut self,
+        data: &dyn TrackingDataStore,
+        now_ms: i64,
+    ) -> bool {
+        if let Some(cached) = self.anonymous_web_rules {
+            if cached.is_fresh(now_ms) {
+                return cached.value;
+            }
+        }
+        self.anonymous_web_rules = None;
+        match data.has_anonymous_web_rules().await {
+            Ok(value) => {
+                self.anonymous_web_rules = Some(CachedPolicy {
+                    loaded_at_ms: now_ms,
+                    value,
+                });
+                value
+            }
+            Err(error) => {
+                log_tracker_error(format!("failed to load anonymous web policy: {error}"));
+                true
+            }
+        }
+    }
+
     async fn load_tracking_settings(
         &mut self,
         data: &dyn TrackingDataStore,
@@ -272,10 +351,7 @@ impl TrackingSettingsCache {
         now_ms: i64,
         override_generation: u64,
     ) -> bool {
-        if self.title_override_generation != override_generation {
-            self.capture_window_title_by_exe.clear();
-            self.title_override_generation = override_generation;
-        }
+        self.sync_policy_generation(override_generation);
         let exe_key = exe_name.trim().to_ascii_lowercase();
         self.cleanup_capture_window_title_cache(now_ms);
         if let Some(cached) = self.capture_window_title_by_exe.get_mut(&exe_key) {
@@ -635,6 +711,152 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "run with pnpm run perf:tracking-policy"]
+    fn recording_policy_cache_capacity_report() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            let data = TrackingRuntimeDataStore::new(pool.clone());
+            for rule_count in [100, 1_000, 10_000] {
+                pool.execute("DELETE FROM settings").await.unwrap();
+                sqlx::query("WITH RECURSIVE n(i) AS (VALUES(0) UNION ALL SELECT i+1 FROM n WHERE i+1<?) INSERT INTO settings(key,value) SELECT '__web_domain_override::site'||i||'.test','{\"enabled\":true}' FROM n")
+                    .bind(rule_count).execute(&pool).await.unwrap();
+                for pair in 0..5 {
+                    // Alternate order, with an independent cache for each arm.
+                    for cached in if pair % 2 == 0 {
+                        [false, true]
+                    } else {
+                        [true, false]
+                    } {
+                        let mut cache = TrackingSettingsCache::default();
+                        let start = std::time::Instant::now();
+                        let mut allowed = 0;
+                        for sample in 0..600 {
+                            let (tracking, anonymous) = if cached {
+                                (
+                                    cache
+                                        .load_app_tracking(&data, "chrome.exe", sample * 1_000)
+                                        .await,
+                                    cache.load_anonymous_web_rules(&data, sample * 1_000).await,
+                                )
+                            } else {
+                                (
+                                    data.load_tracking_enabled_setting_for_app("chrome.exe")
+                                        .await
+                                        .unwrap(),
+                                    data.has_anonymous_web_rules().await.unwrap(),
+                                )
+                            };
+                            allowed += usize::from(tracking && !anonymous);
+                        }
+                        assert_eq!(allowed, 600);
+                        println!(
+                            "POLICY_CACHE_PERF {}",
+                            serde_json::json!({
+                                "rules":rule_count,"pair":pair,"cached":cached,"samples":600,
+                                "elapsed_ms":start.elapsed().as_secs_f64()*1000.0,
+                                "build":"test-debug","storage":"sqlite-in-memory"
+                            })
+                        );
+                    }
+                }
+            }
+        });
+    }
+
+    #[test]
+    fn recording_policy_cache_reuses_reads_and_fails_closed_after_invalidation() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            let data = TrackingRuntimeDataStore::new(pool.clone());
+            let mut cache = TrackingSettingsCache::default();
+            assert!(cache.load_app_tracking(&data, "Code.exe", 1_000).await);
+            assert!(!cache.load_anonymous_web_rules(&data, 1_000).await);
+            pool.execute("ALTER TABLE settings RENAME TO unavailable_settings")
+                .await
+                .unwrap();
+            // A successful hit must not access SQLite, even if it is unavailable.
+            assert!(cache.load_app_tracking(&data, "CODE.EXE", 1_001).await);
+            assert!(cache.load_app_tracking(&data, "\"Code\"", 1_001).await);
+            assert!(!cache.load_anonymous_web_rules(&data, 1_001).await);
+            cache.sync_policy_generation(1);
+            assert!(!cache.load_app_tracking(&data, "Code.exe", 1_002).await);
+            assert!(cache.load_anonymous_web_rules(&data, 1_002).await);
+            assert!(cache.app_tracking.is_none());
+            assert!(cache.anonymous_web_rules.is_none());
+            pool.execute("ALTER TABLE unavailable_settings RENAME TO settings")
+                .await
+                .unwrap();
+            // Failed reads are not cached: recovery is visible on the next sample.
+            assert!(cache.load_app_tracking(&data, "Code.exe", 1_003).await);
+            assert!(!cache.load_anonymous_web_rules(&data, 1_003).await);
+        });
+    }
+
+    #[test]
+    fn recording_policy_cache_expires_on_deadline_clock_reversal_and_app_switch() {
+        tauri::async_runtime::block_on(async {
+            for (next_exe, next_ms) in
+                [("Code.exe", 6_000), ("Code.exe", 999), ("Other.exe", 1_001)]
+            {
+                let pool = setup_test_db().await;
+                let data = TrackingRuntimeDataStore::new(pool.clone());
+                let mut cache = TrackingSettingsCache::default();
+                assert!(cache.load_app_tracking(&data, "Code.exe", 1_000).await);
+                assert!(!cache.load_anonymous_web_rules(&data, 1_000).await);
+                pool.execute("ALTER TABLE settings RENAME TO unavailable_settings")
+                    .await
+                    .unwrap();
+                assert!(!cache.load_app_tracking(&data, next_exe, next_ms).await);
+                if next_ms != 1_001 {
+                    assert!(cache.load_anonymous_web_rules(&data, next_ms).await);
+                }
+            }
+        });
+    }
+
+    #[test]
+    fn recording_policy_generation_applies_exclusion_and_reenable_without_ttl_delay() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            let data = TrackingRuntimeDataStore::new(pool.clone());
+            let mut cache = TrackingSettingsCache::default();
+            for (generation, enabled) in [(0, true), (1, false), (2, true), (3, false)] {
+                tracker_settings::save_setting_value(
+                    &pool,
+                    "__app_override::code.exe",
+                    &format!(r#"{{"track":{enabled}}}"#),
+                )
+                .await
+                .unwrap();
+                tracker_settings::save_setting_value(
+                    &pool,
+                    "__web_domain_override::private.test",
+                    &format!(r#"{{"enabled":{enabled}}}"#),
+                )
+                .await
+                .unwrap();
+                cache.sync_policy_generation(generation);
+                assert_eq!(
+                    cache
+                        .load_app_tracking(&data, "Code.exe", 1_000 + generation as i64)
+                        .await,
+                    enabled
+                );
+                assert_eq!(
+                    cache
+                        .load_anonymous_web_rules(&data, 1_000 + generation as i64)
+                        .await,
+                    !enabled
+                );
+            }
+            pool.execute("DELETE FROM settings WHERE key IN ('__app_override::code.exe', '__web_domain_override::private.test')").await.unwrap();
+            cache.sync_policy_generation(4);
+            assert!(cache.load_app_tracking(&data, "Code.exe", 1_004).await);
+            assert!(!cache.load_anonymous_web_rules(&data, 1_004).await);
+        });
+    }
+
+    #[test]
     fn anonymous_identity_expiry_respects_earlier_native_idle_boundaries() {
         tauri::async_runtime::block_on(async {
             use crate::domain::tracking::SustainedParticipationState;
@@ -761,6 +983,9 @@ mod tests {
                         .unwrap();
                     }
                     _ => {}
+                }
+                if step == 1 || step == 5 {
+                    titles.invalidate_app_overrides();
                 }
                 let (state, _) = load_tracking_loop_state(
                     &data,

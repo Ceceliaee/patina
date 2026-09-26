@@ -94,6 +94,7 @@
     "perf:classification-app-catalog": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/perf/classification-app-catalog-benchmark.ts",
     "perf:activity-read-model": "node --expose-gc --experimental-strip-types --experimental-specifier-resolution=node scripts/perf/activity-read-model-benchmark.ts",
     "perf:activity-maintenance": "cargo test --manifest-path src-tauri/Cargo.toml --locked hourly_maintenance_capacity_report -- --ignored --nocapture",
+    "perf:tracking-policy": "cargo test --manifest-path src-tauri/Cargo.toml --locked recording_policy_cache_capacity_report -- --ignored --nocapture",
     "perf:stable": "node --experimental-strip-types scripts/perf/stable-benchmark-suite.ts",
     "perf:resources": "cargo run --manifest-path src-tauri/Cargo.toml --example windows-resource-sample --",
     "release:sync-version": "node --experimental-strip-types scripts/release.ts sync-version",
