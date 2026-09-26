@@ -97,7 +97,6 @@ export const MESSAGES = {
   "history.showTimelineByCategory": "Mostrar por categoría",
   "history.showTimelineByWeb": "Mostrar por sitio web",
   "history.showTotalHourlyActivity": "Mostrar actividad total",
-  "history.subtitle": "Consulta los registros diarios",
   "history.timeline": "Cronología",
   "history.timelineAppLanes": "Filas de apps",
   "history.timelineAxis": "Cronología del día",

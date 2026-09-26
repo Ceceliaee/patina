@@ -141,7 +141,6 @@ export const MESSAGES = {
   "data.selectionLastItem": "Оставьте выбранным хотя бы один объект",
   "data.selectionLimitReached": "Можно сравнить до 7 объектов",
   "data.shortRangeHint": "Выбранный период короче 7 дней.",
-  "data.subtitle": "Обзор долгосрочной динамики",
   "data.title": "Данные",
   "data.webHeatmap": "Тепловая карта сайтов",
   "data.webNoActivity": "Активность на сайтах не записана",

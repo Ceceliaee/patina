@@ -77,7 +77,6 @@ export const MESSAGES = {
   "history.showTimelineByCategory": "按分类显示",
   "history.showTimelineByWeb": "按网页显示",
   "history.showTotalHourlyActivity": "显示总活动",
-  "history.subtitle": "回看当日活动记录",
   "history.timeline": "时间线",
   "history.timelineAppLanes": "应用分轨",
   "history.timelineAxis": "时间轴",

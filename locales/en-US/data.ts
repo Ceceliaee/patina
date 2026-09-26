@@ -137,7 +137,6 @@ export const MESSAGES = {
   "data.selectionLastItem": "Keep at least 1 item selected",
   "data.selectionLimitReached": "Compare up to 7 items",
   "data.shortRangeHint": "The current range is shorter than 7 days.",
-  "data.subtitle": "Browse long-term trends",
   "data.title": "Data",
   "data.webHeatmap": "Web Heatmap",
   "data.webNoActivity": "No web activity recorded",

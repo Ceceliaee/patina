@@ -50,7 +50,6 @@ export const MESSAGES = {
   "dashboard.sharePrefix": "Доля",
   "dashboard.showHourlyActivityByCategory": "Показать по категориям",
   "dashboard.showTotalHourlyActivity": "Показать общую активность",
-  "dashboard.subtitle": "Обзор активности за сегодня",
   "dashboard.title": "Сегодня",
   "dashboard.topApps": "Популярные прил.",
   "dashboard.topAppsBadge": {

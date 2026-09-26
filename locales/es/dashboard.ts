@@ -50,7 +50,6 @@ export const MESSAGES = {
   "dashboard.sharePrefix": "Proporción",
   "dashboard.showHourlyActivityByCategory": "Mostrar por categoría",
   "dashboard.showTotalHourlyActivity": "Mostrar actividad total",
-  "dashboard.subtitle": "Consulta la actividad de hoy",
   "dashboard.title": "Hoy",
   "dashboard.topApps": "Apps más usadas",
   "dashboard.topAppsBadge": {

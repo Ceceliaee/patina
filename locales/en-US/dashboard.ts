@@ -50,7 +50,6 @@ export const MESSAGES = {
   "dashboard.sharePrefix": "Share",
   "dashboard.showHourlyActivityByCategory": "Show by category",
   "dashboard.showTotalHourlyActivity": "Show total activity",
-  "dashboard.subtitle": "View today's activity",
   "dashboard.title": "Today",
   "dashboard.topApps": "Top Apps",
   "dashboard.topAppsBadge": {

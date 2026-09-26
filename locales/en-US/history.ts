@@ -77,7 +77,6 @@ export const MESSAGES = {
   "history.showTimelineByCategory": "Show by category",
   "history.showTimelineByWeb": "Show by web",
   "history.showTotalHourlyActivity": "Show total activity",
-  "history.subtitle": "Review daily records",
   "history.timeline": "Timeline",
   "history.timelineAppLanes": "App lanes",
   "history.timelineAxis": "Day Timeline",

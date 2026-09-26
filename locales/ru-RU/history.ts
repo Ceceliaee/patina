@@ -76,7 +76,6 @@ export const MESSAGES = {
   "history.showTimelineByCategory": "Показать по категориям",
   "history.showTimelineByWeb": "Показать по сайтам",
   "history.showTotalHourlyActivity": "Показать общую активность",
-  "history.subtitle": "Просмотр записей за день",
   "history.timeline": "Хронология",
   "history.timelineAppLanes": "Дорожки прил.",
   "history.timelineAxis": "Шкала дня",

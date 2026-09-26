@@ -1,14 +1,12 @@
 // ru-RU locale resource. Pure data only.
 export const MESSAGES = {
   "about.description": "Персональный учёт времени на компьютере с локальным хранением данных",
-  "about.feedbackDialog.description": "Для общения присоединяйтесь к каналу QQ; сообщить о проблеме можно в GitHub Issues.",
   "about.feedbackDialog.githubAction": "GitHub Issues",
   "about.feedbackDialog.githubOpening": "Открытие…",
   "about.feedbackDialog.githubTitle": "GitHub Issues",
   "about.feedbackDialog.qqQrAlt": "QR-код канала Patina в QQ",
   "about.feedbackDialog.qqTitle": "Канал QQ",
   "about.feedbackDialog.title": "Обратная связь",
-  "about.subtitle": "Информация о версии приложения",
   "about.supportDialog.description": "Если Patina вам полезна, вы можете поддержать её дальнейшую разработку.",
   "about.supportDialog.kofiTitle": "Ko-fi",
   "about.supportDialog.openKofi": "Открыть Ko-fi",

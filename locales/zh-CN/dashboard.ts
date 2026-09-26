@@ -50,7 +50,6 @@ export const MESSAGES = {
   "dashboard.sharePrefix": "占比",
   "dashboard.showHourlyActivityByCategory": "按分类显示",
   "dashboard.showTotalHourlyActivity": "显示总活动",
-  "dashboard.subtitle": "查看今日活动概览",
   "dashboard.title": "今天",
   "dashboard.topApps": "应用排行",
   "dashboard.topAppsBadge": {

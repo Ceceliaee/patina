@@ -159,7 +159,6 @@ export const MESSAGES = {
   "data.selectionLastItem": "Mantén al menos 1 elemento seleccionado",
   "data.selectionLimitReached": "Compara hasta 7 elementos",
   "data.shortRangeHint": "El intervalo actual es inferior a 7 días.",
-  "data.subtitle": "Consulta tendencias a largo plazo",
   "data.title": "Datos",
   "data.webHeatmap": "Mapa de calor web",
   "data.webNoActivity": "No hay actividad web registrada",
