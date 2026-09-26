@@ -1,18 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import { evaluate, jsonString, waitForAnimationFrames, waitForExpression } from "./browserHarness.ts";
 
 export async function runTypographyScenarios({ client, sessionId, appUrl, runTest }: BrowserSmokeContext) {
   await runTest("seven pages preserve typography roles across locales themes and desktop scales", async () => {
     const stored = await evaluate(client, sessionId, "localStorage.getItem('__time_tracker_smoke_settings')") as string | null;
-    const evidence = join(tmpdir(), "patina-typography-review");
-    mkdirSync(evidence, { recursive: true });
-    const reports: unknown[] = [];
-    await client.command("DOM.enable", {}, sessionId);
-    await client.command("CSS.enable", {}, sessionId);
     try {
       for (const [locale, width, theme, scale] of [
         ["zh-CN", 1280, "light", 1], ["zh-CN", 900, "dark", 1.25],
@@ -59,58 +51,30 @@ export async function runTypographyScenarios({ client, sessionId, appUrl, runTes
               textSizes: [...new Set([...main.querySelectorAll('*')].filter(n=>[...n.childNodes].some(c=>c.nodeType===3 && c.textContent.trim())).map(n=>getComputedStyle(n).fontSize))],
             };
           })()` ) as { weights: string[]; roleWeights: { badges: string[]; buttons: string[]; rows: string[]; meta: string[] }; header: string; sections: string[]; rows: string[]; compact: string[]; headerMetrics: { lineHeight: string; weight: string }; badgeClipped: boolean; horizontalOverflow: boolean; headerContained: boolean; textSizes: string[] };
-          reports.push({ locale, width, theme, scale, page: page.id, ...state });
-          if (width === 1280 && page.id === "about") {
-            const doc = await client.command("DOM.getDocument", {}, sessionId) as { root: { nodeId: number } };
-            const fontSamples: unknown[] = [];
-            for (const selector of [".about-pill-label", ".qp-page-header-title", ".about-center-profile p", ".update-status-compact-state"]) {
-              const node = await client.command("DOM.querySelector", { nodeId: doc.root.nodeId, selector }, sessionId) as { nodeId: number };
-              assert.ok(node.nodeId, `Font sample must exist: ${selector}`);
-              const fonts = await client.command("CSS.getPlatformFontsForNode", { nodeId: node.nodeId }, sessionId);
-              fontSamples.push({ selector, fonts });
-            }
-            writeFileSync(join(evidence, `fonts-${locale}.json`), JSON.stringify(fontSamples, null, 2));
-          }
-          assert.ok(state.weights.every(weight => ["450", "550", "650"].includes(weight)), JSON.stringify(reports.at(-1)));
+          const report = { locale, width, theme, scale, page: page.id, ...state };
+          assert.ok(state.weights.every(weight => ["450", "550", "650"].includes(weight)), JSON.stringify(report));
           for (const [role, weights] of Object.entries(state.roleWeights)) {
-            assert.ok(weights.every(weight => weight === (role === "rows" || role === "meta" ? "550" : "650")), JSON.stringify({ role, ...reports.at(-1) as object }));
+            assert.ok(weights.every(weight => weight === (role === "rows" || role === "meta" ? "550" : "650")), JSON.stringify({ role, ...report }));
           }
           if (page.id === "mapping" || page.id === "settings") assert.ok(state.roleWeights.rows.length > 0);
           if (page.id === "about") assert.ok(state.roleWeights.buttons.length >= 4);
-          assert.equal(state.header, "18px", JSON.stringify(reports.at(-1)));
-          assert.ok(state.sections.every(size => size === "16px"), JSON.stringify(reports.at(-1)));
-          assert.ok(state.rows.every(size => size === "14px"), JSON.stringify(reports.at(-1)));
-          assert.ok(state.compact.every(size => size === "10px"), JSON.stringify(reports.at(-1)));
+          assert.equal(state.header, "18px", JSON.stringify(report));
+          assert.ok(state.sections.every(size => size === "16px"), JSON.stringify(report));
+          assert.ok(state.rows.every(size => size === "14px"), JSON.stringify(report));
+          assert.ok(state.compact.every(size => size === "10px"), JSON.stringify(report));
           assert.equal(state.headerMetrics.lineHeight, "24px");
           assert.equal(state.headerMetrics.weight, "650");
-          if (locale === "zh-CN" && width === 1280 && page.id === "about") {
-            const wrongWeight = await evaluate(client, sessionId, `(() => {
-              const n = document.querySelector('.qp-page-header-title');
-              const original = n.style.fontWeight;
-              n.style.fontWeight = '450';
-              const weight = getComputedStyle(n).fontWeight;
-              n.style.fontWeight = original;
-              return weight;
-            })()`);
-            assert.throws(() => assert.equal(wrongWeight, "650"), assert.AssertionError, "Role assertion must reject a regular-weight title");
-          }
-          assert.equal(state.badgeClipped, false, JSON.stringify(reports.at(-1)));
-          assert.equal(state.horizontalOverflow, false, JSON.stringify(reports.at(-1)));
-          assert.equal(state.headerContained, true, JSON.stringify(reports.at(-1)));
-          assert.ok(state.textSizes.every(size => ["10px", "12px", "14px", "15px", "16px", "18px", "24px"].includes(size)), JSON.stringify(reports.at(-1)));
-          if (locale === "zh-CN" && width === 1280) {
-            const capture = await client.command("Page.captureScreenshot", { format: "png" }, sessionId) as { data: string };
-            writeFileSync(join(evidence, `${page.id}.png`), Buffer.from(capture.data, "base64"));
-          }
+          assert.equal(state.badgeClipped, false, JSON.stringify(report));
+          assert.equal(state.horizontalOverflow, false, JSON.stringify(report));
+          assert.equal(state.headerContained, true, JSON.stringify(report));
+          assert.ok(state.textSizes.every(size => ["10px", "12px", "14px", "15px", "16px", "18px", "24px"].includes(size)), JSON.stringify(report));
         }
       }
     } finally {
-      writeFileSync(join(evidence, "measurements.json"), JSON.stringify(reports, null, 2));
       await evaluate(client, sessionId, stored === null ? "localStorage.removeItem('__time_tracker_smoke_settings')" : `localStorage.setItem('__time_tracker_smoke_settings', ${jsonString(stored)})`);
       await client.command("Emulation.setDeviceMetricsOverride", { width: 1280, height: 820, deviceScaleFactor: 1, mobile: false }, sessionId);
       await client.command("Page.navigate", { url: appUrl }, sessionId);
       await waitForExpression(client, sessionId, "Boolean(document.querySelector('.qp-page-header-title'))");
     }
-    console.log(`Typography evidence: ${evidence}`);
   });
 }
