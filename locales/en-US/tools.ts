@@ -186,7 +186,6 @@ export const MESSAGES = {
   "tools.statusChip.focus": "Focus",
   "tools.statusChip.reminder": "Reminder",
   "tools.statusChip.stopwatch": "Timer",
-  "tools.subtitle": "Start local desktop tools",
   "tools.timerHint": "Timer results are not written to activity records.",
   "tools.timerLabel": "Name",
   "tools.timerLabelPlaceholder": "Optional",

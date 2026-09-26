@@ -186,7 +186,6 @@ export const MESSAGES = {
   "tools.statusChip.focus": "专注",
   "tools.statusChip.reminder": "提醒",
   "tools.statusChip.stopwatch": "计时",
-  "tools.subtitle": "启动本地桌面工具",
   "tools.timerHint": "计时结果不会写入活动记录。",
   "tools.timerLabel": "名称",
   "tools.timerLabelPlaceholder": "可选",

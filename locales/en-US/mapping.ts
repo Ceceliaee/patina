@@ -23,7 +23,6 @@ export const MESSAGES = {
   "mapping.cancel": "Cancel",
   "mapping.categoryFilter": "Filter by category",
   "mapping.categoryControl": "Manage categories",
-  "mapping.categoryDialogDescription": "Create categories and adjust category colors",
   "mapping.categoryDialogTitle": "Manage categories",
   "mapping.categorySelectLabel": {
     "$type": "message",
@@ -41,7 +40,6 @@ export const MESSAGES = {
   },
   "mapping.color": "Color",
   "mapping.createCategoryAction": "New category",
-  "mapping.createCategoryDescription": "Keep the name short and easy to recognize.",
   "mapping.createCategoryPlaceholder": "Example: Study",
   "mapping.createCategoryTitle": "New category",
   "mapping.deleteAppRecords": "Delete records",
@@ -189,7 +187,6 @@ export const MESSAGES = {
   "mapping.saving": "Saving...",
   "mapping.searchNoResults": "No matching apps found",
   "mapping.statsEnabled": "Included",
-  "mapping.subtitle": "Manage app and web rules",
   "mapping.title": "Classification",
   "mapping.titleNotRecorded": "Block titles",
   "mapping.titleRecorded": "Record titles",

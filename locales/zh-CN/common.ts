@@ -1,6 +1,6 @@
 // zh-CN common locale resource. Pure data only.
 export const MESSAGES = {
-  "common.anonymousActivity": "匿名活动",
+  "common.anonymousActivity": "匿名",
   "common.cancel": "取消",
   "common.close": "关闭",
   "common.confirm": "确认",

@@ -23,7 +23,6 @@ export const MESSAGES = {
   "mapping.cancel": "Cancelar",
   "mapping.categoryFilter": "Filtrar por categoría",
   "mapping.categoryControl": "Gestionar categorías",
-  "mapping.categoryDialogDescription": "Crea categorías y ajusta sus colores",
   "mapping.categoryDialogTitle": "Gestionar categorías",
   "mapping.categorySelectLabel": {
     "$type": "message",
@@ -41,7 +40,6 @@ export const MESSAGES = {
   },
   "mapping.color": "Color",
   "mapping.createCategoryAction": "Nueva categoría",
-  "mapping.createCategoryDescription": "Usa un nombre breve y fácil de reconocer.",
   "mapping.createCategoryPlaceholder": "Ejemplo: Estudio",
   "mapping.createCategoryTitle": "Nueva categoría",
   "mapping.deleteAppRecords": "Eliminar registros",
@@ -189,7 +187,6 @@ export const MESSAGES = {
   "mapping.saving": "Guardando...",
   "mapping.searchNoResults": "No se encontraron apps coincidentes",
   "mapping.statsEnabled": "Incluido",
-  "mapping.subtitle": "Gestiona reglas de apps y sitios web",
   "mapping.title": "Clasificación",
   "mapping.titleNotRecorded": "No registrar títulos",
   "mapping.titleRecorded": "Registrar títulos",

@@ -1,6 +1,6 @@
 // en-US native locale resource. Pure data only.
 export const MESSAGES = {
-  "native.export.anonymousActivity": "Anonymous activity",
+  "native.export.anonymousActivity": "Anonymous",
   "native.category.ai": "AI",
   "native.category.browser": "Browser",
   "native.category.communication": "Communication",

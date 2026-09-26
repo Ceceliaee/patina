@@ -1,6 +1,6 @@
 // zh-CN native locale resource. Pure data only.
 export const MESSAGES = {
-  "native.export.anonymousActivity": "匿名活动",
+  "native.export.anonymousActivity": "匿名",
   "native.category.ai": "AI",
   "native.category.browser": "浏览器",
   "native.category.communication": "沟通",

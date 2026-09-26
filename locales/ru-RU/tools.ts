@@ -185,7 +185,6 @@ export const MESSAGES = {
   "tools.statusChip.focus": "Работа",
   "tools.statusChip.reminder": "Напоминание",
   "tools.statusChip.stopwatch": "Таймер",
-  "tools.subtitle": "Запустите локальные инструменты",
   "tools.timerHint": "Результаты таймера не сохраняются в записях активности.",
   "tools.timerLabel": "Название",
   "tools.timerLabelPlaceholder": "Необязательно",

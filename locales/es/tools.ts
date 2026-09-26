@@ -228,7 +228,6 @@ export const MESSAGES = {
   "tools.statusChip.focus": "Concentración",
   "tools.statusChip.reminder": "Recordatorio",
   "tools.statusChip.stopwatch": "Temporizador",
-  "tools.subtitle": "Inicia herramientas locales de escritorio",
   "tools.timerHint": "Los resultados del temporizador no se guardan en los registros de actividad.",
   "tools.timerLabel": "Nombre",
   "tools.timerLabelPlaceholder": "Opcional",

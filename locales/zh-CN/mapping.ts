@@ -23,7 +23,6 @@ export const MESSAGES = {
   "mapping.cancel": "取消",
   "mapping.categoryFilter": "筛选分类",
   "mapping.categoryControl": "管理分类",
-  "mapping.categoryDialogDescription": "新建分类并调整颜色",
   "mapping.categoryDialogTitle": "管理分类",
   "mapping.categorySelectLabel": {
     "$type": "message",
@@ -41,7 +40,6 @@ export const MESSAGES = {
   },
   "mapping.color": "颜色",
   "mapping.createCategoryAction": "新建分类",
-  "mapping.createCategoryDescription": "名称尽量简短，便于识别。",
   "mapping.createCategoryPlaceholder": "例如：学习",
   "mapping.createCategoryTitle": "新建分类",
   "mapping.deleteAppRecords": "删除应用记录",
@@ -189,7 +187,6 @@ export const MESSAGES = {
   "mapping.saving": "正在保存...",
   "mapping.searchNoResults": "没有找到匹配的应用",
   "mapping.statsEnabled": "计入统计",
-  "mapping.subtitle": "管理应用网页规则",
   "mapping.title": "分类",
   "mapping.titleNotRecorded": "屏蔽标题",
   "mapping.titleRecorded": "记录标题",

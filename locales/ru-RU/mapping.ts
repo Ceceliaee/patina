@@ -21,7 +21,6 @@ export const MESSAGES = {
   "mapping.cancel": "Отмена",
   "mapping.categoryFilter": "Фильтр по категории",
   "mapping.categoryControl": "Управление категориями",
-  "mapping.categoryDialogDescription": "Создание категорий и настройка цветов",
   "mapping.categoryDialogTitle": "Управление категориями",
   "mapping.categorySelectLabel": {
     "$type": "message",
@@ -39,7 +38,6 @@ export const MESSAGES = {
   },
   "mapping.color": "Цвет",
   "mapping.createCategoryAction": "Новая категория",
-  "mapping.createCategoryDescription": "Выберите короткое и понятное название.",
   "mapping.createCategoryPlaceholder": "Например: Учёба",
   "mapping.createCategoryTitle": "Новая категория",
   "mapping.deleteAppRecords": "Удалить записи",
@@ -187,7 +185,6 @@ export const MESSAGES = {
   "mapping.saving": "Сохранение...",
   "mapping.searchNoResults": "Подходящих приложений не найдено",
   "mapping.statsEnabled": "Учитывается",
-  "mapping.subtitle": "Правила приложений и сайтов",
   "mapping.title": "Категории",
   "mapping.titleNotRecorded": "Не записывать заголовки",
   "mapping.titleRecorded": "Записывать заголовки",
