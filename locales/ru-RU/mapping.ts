@@ -140,7 +140,6 @@ export const MESSAGES = {
   "mapping.quickRename": "Переименовать",
   "mapping.quickRenamePlaceholder": "Название",
   "mapping.quickRenameTitle": "Переименовать",
-  "mapping.quickRestoreDefaultName": "Вернуть исходное название",
   "mapping.quickSave": "Сохранить",
   "mapping.quickSaveFailed": "Не удалось сохранить. Прежние настройки не изменены.",
   "mapping.quickSaving": "Сохранение…",
@@ -160,7 +159,6 @@ export const MESSAGES = {
       ]
     }
   },
-  "mapping.renameCategoryDescription": "Для приложений и сайтов этой категории будет показано новое название.",
   "mapping.renameCategoryDuplicateDetail": {
     "$type": "message",
     "body": {

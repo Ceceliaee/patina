@@ -142,7 +142,6 @@ export const MESSAGES = {
   "mapping.quickRename": "更改名称",
   "mapping.quickRenamePlaceholder": "名称",
   "mapping.quickRenameTitle": "更改名称",
-  "mapping.quickRestoreDefaultName": "恢复默认名称",
   "mapping.quickSave": "保存",
   "mapping.quickSaveFailed": "保存失败，原有设置未更改。",
   "mapping.quickSaving": "正在保存…",
@@ -162,7 +161,6 @@ export const MESSAGES = {
       ]
     }
   },
-  "mapping.renameCategoryDescription": "已使用该分类的应用和网页会显示新名称。",
   "mapping.renameCategoryDuplicateDetail": {
     "$type": "message",
     "body": {

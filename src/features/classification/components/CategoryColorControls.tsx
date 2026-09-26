@@ -54,7 +54,7 @@ export default function CategoryColorControls({
                   title={UI_TEXT.mapping.color}
                   resetAction={{ label: UI_TEXT.mapping.restoreDefaultColor, onReset: () => onApplyColor(category, null) }}
                 />
-                <span className="min-w-0 truncate text-sm font-semibold text-[var(--qp-text-primary)]">{label}</span>
+                <span className="min-w-0 truncate qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">{label}</span>
                 <QuietIconAction
                   icon={<PencilLine size={13} />}
                   className="qp-icon-action-dimmed"

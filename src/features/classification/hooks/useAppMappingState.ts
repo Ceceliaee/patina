@@ -380,7 +380,6 @@ export function useAppMappingState({
     const categoryLabel = resolveCategoryLabel(category);
     const categoryName = await prompt({
       title: UI_TEXT.mapping.renameCategoryTitle,
-      description: UI_TEXT.mapping.renameCategoryDescription,
       placeholder: UI_TEXT.mapping.renameCategoryPlaceholder,
       initialValue: categoryLabel,
     });

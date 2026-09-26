@@ -376,16 +376,6 @@ export default function QuickClassificationSurface({
             maxLength={80}
             onChange={(event) => setRenameValue(event.target.value)}
           />
-          {currentOverride?.displayName ? (
-            <button
-              type="button"
-              className="qp-inline-action qp-inline-action-neutral quick-classification-restore-name"
-              disabled={saving}
-              onClick={() => setRenameValue("")}
-            >
-              {UI_TEXT.mapping.quickRestoreDefaultName}
-            </button>
-          ) : null}
         </form>
       </QuietDialog>
     </>

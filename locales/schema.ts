@@ -2924,11 +2924,6 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "mapping.quickRestoreDefaultName": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "mapping.quickSave": {
     "kind": "string",
     "params": [],
@@ -2963,11 +2958,6 @@ export const MESSAGE_SCHEMA = {
         "optional": false
       }
     ],
-    "surface": "frontend"
-  },
-  "mapping.renameCategoryDescription": {
-    "kind": "string",
-    "params": [],
     "surface": "frontend"
   },
   "mapping.renameCategoryDuplicateDetail": {

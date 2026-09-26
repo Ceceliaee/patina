@@ -201,7 +201,7 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
     assert.equal(searchFieldStyle.height, 34);
     assert.equal(searchFieldStyle.radius, "10px");
     assert.equal(searchFieldStyle.fontSize, "12px");
-    assert.equal(searchFieldStyle.fontWeight, "600");
+    assert.equal(searchFieldStyle.fontWeight, "550");
     await evaluate(
       client!,
       sessionId,

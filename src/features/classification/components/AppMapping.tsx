@@ -178,7 +178,7 @@ export default function AppMapping(props: Props) {
             <div
               className={`qp-status ${
                 saveStatus !== "saving" && hasUnsavedChanges ? "qp-status-danger" : ""
-              } flex px-3 py-1.5 rounded-[8px] items-center text-xs font-semibold`}
+              } flex px-3 py-1.5 rounded-[8px] items-center qp-text-caption qp-weight-emphasis`}
             >
               {!bootstrapReady && (
                 <span className="text-[var(--qp-text-tertiary)]" aria-hidden>—</span>
@@ -293,7 +293,7 @@ export default function AppMapping(props: Props) {
             className="flex h-full flex-col items-center justify-center gap-3 text-center"
             role="alert"
           >
-            <p className="text-sm font-semibold text-[var(--qp-text-secondary)]">
+            <p className="qp-text-body qp-weight-emphasis text-[var(--qp-text-secondary)]">
               {UI_TEXT.mapping.loadFailed}
             </p>
             <QuietButton size="regular" onClick={retryContent}>
@@ -306,7 +306,7 @@ export default function AppMapping(props: Props) {
         ) : effectiveObjectMode === "web" ? (
           <div key={contentPaneKey} className="qp-classification-object-pane h-full">
             {filteredWebDomainCandidates.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-sm text-[var(--qp-text-tertiary)]">
+              <div className="h-full flex items-center justify-center qp-text-body text-[var(--qp-text-tertiary)]">
                 {UI_TEXT.mapping.webEmptyState}
               </div>
             ) : (
@@ -365,7 +365,7 @@ export default function AppMapping(props: Props) {
           </div>
         ) : filteredCandidates.length === 0 ? (
           <div key={contentPaneKey} className="qp-classification-object-pane h-full">
-            <div className="h-full flex flex-col items-center justify-center gap-3 text-sm text-[var(--qp-text-tertiary)]">
+            <div className="h-full flex flex-col items-center justify-center gap-3 qp-text-body text-[var(--qp-text-tertiary)]">
               {!appCatalogLoading && (
                 <span>{searchQuery.trim() ? UI_TEXT.mapping.searchNoResults : UI_TEXT.mapping.emptyState}</span>
               )}

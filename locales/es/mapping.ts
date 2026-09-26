@@ -142,7 +142,6 @@ export const MESSAGES = {
   "mapping.quickRename": "Cambiar nombre",
   "mapping.quickRenamePlaceholder": "Nombre",
   "mapping.quickRenameTitle": "Cambiar nombre",
-  "mapping.quickRestoreDefaultName": "Restaurar nombre predeterminado",
   "mapping.quickSave": "Guardar",
   "mapping.quickSaveFailed": "No se pudo guardar. La configuración existente no se modificó.",
   "mapping.quickSaving": "Guardando…",
@@ -162,7 +161,6 @@ export const MESSAGES = {
       ]
     }
   },
-  "mapping.renameCategoryDescription": "Las apps y los sitios web de esta categoría mostrarán el nuevo nombre.",
   "mapping.renameCategoryDuplicateDetail": {
     "$type": "message",
     "body": {

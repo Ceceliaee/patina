@@ -656,14 +656,12 @@ export interface UiText {
     "quickRename": string;
     "quickRenamePlaceholder": string;
     "quickRenameTitle": string;
-    "quickRestoreDefaultName": string;
     "quickSave": string;
     "quickSaveFailed": string;
     "quickSaving": string;
     "quickSetCategory": string;
     "quickUnclassified": string;
     "renameCategory": (label: string) => string;
-    "renameCategoryDescription": string;
     "renameCategoryDuplicateDetail": (label: string) => string;
     "renameCategoryDuplicateTitle": string;
     "renameCategoryPlaceholder": string;
