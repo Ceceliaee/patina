@@ -55,7 +55,6 @@ export default function SettingsDataImportDialog({
       <QuietDialog
         open={mainOpen}
         title={view === "preview" ? importText.previewTitle : importText.dialogTitle}
-        description={view === "preview" ? undefined : importText.dialogDescription}
         onClose={onClose}
         closeOnBackdrop={!busy}
         surfaceClassName="settings-data-action-dialog"
@@ -127,12 +126,12 @@ export default function SettingsDataImportDialog({
                     <QuietTooltip
                       label={importText.destructureFormatsHint}
                       placement="top"
-                      tooltipClassName="settings-restore-help-tooltip"
+                      tooltipClassName="settings-help-tooltip"
                       hideOnPointerDown={false}
                     >
                       <button
                         type="button"
-                        className="settings-restore-help"
+                        className="settings-help-icon"
                         aria-label={importText.destructureFormatsHint}
                       >
                         <CircleAlert size={13} aria-hidden="true" />

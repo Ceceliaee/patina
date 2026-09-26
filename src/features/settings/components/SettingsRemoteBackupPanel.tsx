@@ -161,16 +161,11 @@ export default function SettingsRemoteBackupPanel({
   return (
     <>
       <QuietActionRow className="mt-3">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <Cloud size={14} className="text-[var(--qp-text-tertiary)]" />
-              <p className="text-sm font-semibold text-[var(--qp-text-primary)]">
-                {UI_TEXT.settings.remoteBackupTitle}
-              </p>
-            </div>
-            <p className="mt-1 text-xs leading-relaxed text-[var(--qp-text-tertiary)]">
-              {UI_TEXT.settings.remoteBackupHint}
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0 flex items-center gap-1.5">
+            <Cloud size={14} className="text-[var(--qp-text-tertiary)]" />
+            <p className="text-sm font-semibold text-[var(--qp-text-primary)]">
+              {UI_TEXT.settings.remoteBackupTitle}
             </p>
           </div>
 
@@ -211,7 +206,6 @@ export default function SettingsRemoteBackupPanel({
       <QuietDialog
         open={remoteBackup.configDialogOpen}
         title={UI_TEXT.settings.webDavConfigTitle}
-        description={UI_TEXT.settings.webDavConfigDescription}
         onClose={remoteBackup.closeConfigDialog}
         closeOnBackdrop={!busy}
         initialFocusRef={serverUrlRef}

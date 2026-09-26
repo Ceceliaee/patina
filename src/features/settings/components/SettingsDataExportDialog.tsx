@@ -18,7 +18,7 @@ import {
 } from "../services/settingsDataExportFields.ts";
 import {
   buildExportRangeSelection,
-  EXPORT_RANGE_MODES,
+  getAdjacentExportRangeSelection,
   EXPORT_RANGE_PICKER_MODES,
   resolveExportRangeSelection,
   type ExportFormat,
@@ -50,12 +50,12 @@ interface Props {
   onToast?: (message: string, tone?: QuietToastTone) => void;
 }
 
-function getFormatOptions(text: UiText): Array<{ value: ExportFormat; label: string; hint: string }> {
+function getFormatOptions(text: UiText): Array<{ value: ExportFormat; label: string }> {
   return [
-    { value: "csv", label: text.export.formatCSV, hint: text.export.formatCSVHint },
-    { value: "markdown", label: text.export.formatMarkdown, hint: text.export.formatMarkdownHint },
-    { value: "parquet", label: text.export.formatParquet, hint: text.export.formatParquetHint },
-    { value: "sqlite", label: text.export.formatSQLite, hint: text.export.formatSQLiteHint },
+    { value: "csv", label: text.export.formatCSV },
+    { value: "markdown", label: text.export.formatMarkdown },
+    { value: "parquet", label: text.export.formatParquet },
+    { value: "sqlite", label: text.export.formatSQLite },
   ];
 }
 
@@ -154,8 +154,10 @@ export default function SettingsDataExportDialog({ open, onClose, onToast }: Pro
   const UI_TEXT = useLocaleText();
   const initialRangeMode = readExportRangeMode();
   const initialFormat = readExportFormat();
-  const [rangeMode, setRangeMode] = useState<ExportRangeMode>(initialRangeMode);
-  const [rangeSelection, setRangeSelection] = useState<ExportRangeSelection>(() => buildExportRangeSelection(initialRangeMode));
+  const [range, setRange] = useState<{ selection: ExportRangeSelection; calendar: boolean }>(() => ({
+    selection: buildExportRangeSelection(initialRangeMode), calendar: false,
+  }));
+  const rangeSelection = range.selection;
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerMode, setPickerMode] = useState<ExportRangePickerMode>("custom");
   const [pickerLabel, setPickerLabel] = useState(() => getPickerLabels(UI_TEXT).modeLabels.custom);
@@ -195,8 +197,11 @@ export default function SettingsDataExportDialog({ open, onClose, onToast }: Pro
     month: UI_TEXT.export.timeRangeModeMonth,
     year: UI_TEXT.export.timeRangeModeYear,
   };
-  const rangeLabel = getClosedRangeLabel(resolvedTimeRange, rangeLabels, UI_TEXT);
-  const rangeModeIndex = EXPORT_RANGE_MODES.indexOf(rangeMode);
+  const rangeLabel = range.calendar
+    ? getDataStyleRangeLabel(resolvedTimeRange, UI_TEXT)
+    : getClosedRangeLabel(resolvedTimeRange, rangeLabels, UI_TEXT);
+  const previousRange = getAdjacentExportRangeSelection(rangeSelection, -1, Date.now(), range.calendar);
+  const nextRange = getAdjacentExportRangeSelection(rangeSelection, 1, Date.now(), range.calendar);
   const timeRangeErrorMessage = resolvedTimeRange.error === "missingCustomRange"
     ? UI_TEXT.export.timeRangeMissing
     : resolvedTimeRange.error === "invalidCustomRange"
@@ -211,10 +216,9 @@ export default function SettingsDataExportDialog({ open, onClose, onToast }: Pro
     ));
   }, []);
 
-  const applyRangeSelection = useCallback((selection: QuietDateRangePickerSelection) => {
-    setRangeSelection(selection);
+  const applyRangeSelection = useCallback((selection: QuietDateRangePickerSelection, calendar = true) => {
+    setRange({ selection, calendar });
     if (isExportRangeMode(selection.kind)) {
-      setRangeMode(selection.kind);
       rememberExportRangeMode(selection.kind);
     }
     setPickerOpen(false);
@@ -226,17 +230,12 @@ export default function SettingsDataExportDialog({ open, onClose, onToast }: Pro
       const nextMode = EXPORT_RANGE_PICKER_MODES[pickerModeIndex + delta];
       if (nextMode) {
         setPickerMode(nextMode);
-        setPickerLabel(getPickerLabels(UI_TEXT).modeLabels[nextMode]);
       }
       return;
     }
-    const nextMode = EXPORT_RANGE_MODES[rangeModeIndex + delta];
-    if (nextMode) {
-      setRangeMode(nextMode);
-      rememberExportRangeMode(nextMode);
-      setRangeSelection(buildExportRangeSelection(nextMode));
-    }
-  }, [pickerMode, pickerOpen, rangeModeIndex, UI_TEXT]);
+    const next = getAdjacentExportRangeSelection(rangeSelection, delta, Date.now(), range.calendar);
+    if (next) applyRangeSelection(next, range.calendar);
+  }, [pickerMode, pickerOpen, rangeSelection, range.calendar, applyRangeSelection]);
 
   const openPicker = useCallback(() => {
     setPickerMode("custom");
@@ -320,7 +319,6 @@ export default function SettingsDataExportDialog({ open, onClose, onToast }: Pro
       <QuietDialog
         open={open}
         title={UI_TEXT.export.title}
-        description={UI_TEXT.export.dialogDescription}
         onClose={showFieldConfig || scheduledExportOpen ? () => undefined : onClose}
         closeOnBackdrop={!exporting}
         surfaceClassName="settings-data-export-dialog-surface"
@@ -330,6 +328,7 @@ export default function SettingsDataExportDialog({ open, onClose, onToast }: Pro
               icon={<CalendarClock size={16} aria-hidden="true" />}
               title={UI_TEXT.export.scheduledTitle}
               ariaLabel={UI_TEXT.export.scheduledTitle}
+              className="settings-data-export-schedule-action"
               disabled={exporting || scheduledExportOpening || selectedFields.length === 0}
               onClick={() => void openScheduledExport()}
             />
@@ -381,10 +380,10 @@ export default function SettingsDataExportDialog({ open, onClose, onToast }: Pro
                 nextAriaLabel={pickerOpen ? UI_TEXT.export.nextPickerMode : UI_TEXT.export.nextRange}
                 previousDisabled={pickerOpen
                   ? EXPORT_RANGE_PICKER_MODES.indexOf(pickerMode) === 0
-                  : rangeModeIndex === 0}
+                  : !previousRange}
                 nextDisabled={pickerOpen
                   ? EXPORT_RANGE_PICKER_MODES.indexOf(pickerMode) === EXPORT_RANGE_PICKER_MODES.length - 1
-                  : rangeModeIndex === EXPORT_RANGE_MODES.length - 1}
+                  : !nextRange}
                 expanded={pickerOpen}
                 onPrevious={() => shiftRange(-1)}
                 onNext={() => shiftRange(1)}
@@ -412,7 +411,6 @@ export default function SettingsDataExportDialog({ open, onClose, onToast }: Pro
                   onClick={() => changeFormat(option.value)}
                 >
                   <strong>{option.label}</strong>
-                  <span>{option.hint}</span>
                 </button>
               ))}
             </div>

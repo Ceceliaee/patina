@@ -25,20 +25,6 @@ export interface ResolvedExportTimeRange extends QuietResolvedDateRange {
   error: ExportTimeRangeError | null;
 }
 
-interface DateInputRange {
-  startDateKey: string;
-  endDateKey: string;
-}
-
-interface ResolveExportTimeRangeInput {
-  preset: TimeRangePreset;
-  customStart: string;
-  customEnd: string;
-  nowMs?: number;
-}
-
-type TimeRangePreset = "today" | "thisWeek" | "thisMonth" | "thisYear" | "custom";
-
 export const EXPORT_RANGE_MODES: ExportRangeMode[] = ["day", "week", "month", "year"];
 export const EXPORT_RANGE_PICKER_MODES: ExportRangePickerMode[] = ["custom", "week", "month", "year"];
 
@@ -145,48 +131,36 @@ export function resolveExportRangeSelection(
   return buildResolvedRange(selection, start, end, nowMs, String(anchor.getFullYear()));
 }
 
-export function getPresetDateInputs(preset: Exclude<TimeRangePreset, "custom">, nowMs = Date.now()): DateInputRange {
-  const mode = preset === "today"
-    ? "day"
-    : preset === "thisWeek"
-      ? "week"
-      : preset === "thisMonth"
-        ? "month"
-        : "year";
-  const resolved = resolveExportRangeSelection(buildExportRangeSelection(mode, nowMs), nowMs);
-  return {
-    startDateKey: resolved.startDateKey,
-    endDateKey: resolved.endDateKey,
-  };
-}
-
-export function resolveExportTimeRange({
-  preset,
-  customStart,
-  customEnd,
+export function getAdjacentExportRangeSelection(
+  selection: ExportRangeSelection,
+  delta: -1 | 1,
   nowMs = Date.now(),
-}: ResolveExportTimeRangeInput): ResolvedExportTimeRange {
-  const selection: ExportRangeSelection = preset === "custom"
-    ? { kind: "custom", startDateKey: customStart, endDateKey: customEnd }
-    : buildExportRangeSelection(
-      preset === "today" ? "day" : preset === "thisWeek" ? "week" : preset === "thisMonth" ? "month" : "year",
-      nowMs,
-    );
-  const resolved = resolveExportRangeSelection(selection, nowMs);
-  if (selection.kind === "custom" && customStart && customEnd && customStart > customEnd) {
-    return {
-      ...resolved,
-      startTime: null,
-      endTime: null,
-      error: "invalidCustomRange",
-    };
+  calendarRange = false,
+): ExportRangeSelection | null {
+  if (selection.kind !== "custom") {
+    if (calendarRange) {
+      const range = resolveExportRangeSelection(selection, nowMs);
+      const start = parseLocalDateKey(range.startDateKey)!;
+      const next = selection.kind === "year"
+        ? new Date(start.getFullYear() + delta, 0, 1)
+        : selection.kind === "month"
+          ? new Date(start.getFullYear(), start.getMonth() + delta, 1)
+          : addLocalDays(start, delta * (selection.kind === "week" ? 7 : 1));
+      if (next > startOfLocalDay(new Date(nowMs))) return null;
+      return { kind: selection.kind, anchorDateKey: formatLocalDateKey(next) };
+    }
+    const mode = EXPORT_RANGE_MODES[EXPORT_RANGE_MODES.indexOf(selection.kind) + delta];
+    return mode ? buildExportRangeSelection(mode, nowMs) : null;
   }
-  return resolved;
-}
-
-export function countInclusiveDays(startDateKey: string, endDateKey: string): number | null {
-  const start = parseLocalDateKey(startDateKey);
-  const end = parseLocalDateKey(endDateKey);
-  if (!start || !end || start.getTime() > end.getTime()) return null;
-  return countInclusiveLocalDays(startDateKey, endDateKey);
+  const range = resolveExportRangeSelection(selection, nowMs);
+  if (range.error || range.dayCount < 1) return null;
+  const start = parseLocalDateKey(range.startDateKey)!;
+  const end = parseLocalDateKey(range.endDateKey)!;
+  const nextEnd = addLocalDays(end, delta * range.dayCount);
+  if (nextEnd > startOfLocalDay(new Date(nowMs))) return null;
+  return {
+    kind: "custom",
+    startDateKey: formatLocalDateKey(addLocalDays(start, delta * range.dayCount)),
+    endDateKey: formatLocalDateKey(nextEnd),
+  };
 }

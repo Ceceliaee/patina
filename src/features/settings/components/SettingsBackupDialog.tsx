@@ -218,7 +218,6 @@ export default function SettingsBackupDialog({
       <QuietDialog
         open={open}
         title={text.backupTargetTitle}
-        description={text.backupTargetHint}
         onClose={onClose}
         closeOnBackdrop={!busy}
         initialFocusRef={localBackupRef}

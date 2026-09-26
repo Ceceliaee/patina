@@ -118,7 +118,6 @@ export default function SettingsDataExportFieldConfigDialog({ open, selectedFiel
     <QuietDialog
         open={open}
         title={t.configFieldsTitle}
-        description={t.configFieldsHint}
         headerAside={(
           <>
             <QuietTooltip label={t.restoreFormatDefaults} placement="top">
