@@ -56,17 +56,17 @@ function RemoteBackupEntryRow({
     <QuietActionRow>
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-[var(--qp-text-primary)]">{entry.fileName}</p>
-          <p className="mt-1 text-xs leading-relaxed text-[var(--qp-text-tertiary)]">
+          <p className="truncate qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">{entry.fileName}</p>
+          <p className="mt-1 qp-text-caption leading-relaxed text-[var(--qp-text-tertiary)]">
             {new Date(entry.createdAtMs).toLocaleString()} · {formatBytes(entry.sizeBytes)}
           </p>
-          <p className="mt-1 text-xs leading-relaxed text-[var(--qp-text-tertiary)]">
+          <p className="mt-1 qp-text-caption leading-relaxed text-[var(--qp-text-tertiary)]">
             {UI_TEXT.backup.itemCounts(entry.sessionCount, entry.settingCount, entry.iconCacheCount)}
           </p>
           {(entry.importBatchCount > 0
             || entry.importExactSessionCount > 0
             || entry.importTimeBucketCount > 0) && (
-            <p className="mt-1 text-xs leading-relaxed text-[var(--qp-text-tertiary)]">
+            <p className="mt-1 qp-text-caption leading-relaxed text-[var(--qp-text-tertiary)]">
               {UI_TEXT.backup.importItemCounts(
                 entry.importBatchCount,
                 entry.importExactSessionCount,
@@ -164,7 +164,7 @@ export default function SettingsRemoteBackupPanel({
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0 flex items-center gap-1.5">
             <Cloud size={14} className="text-[var(--qp-text-tertiary)]" />
-            <p className="text-sm font-semibold text-[var(--qp-text-primary)]">
+            <p className="qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">
               {UI_TEXT.settings.remoteBackupTitle}
             </p>
           </div>
@@ -242,7 +242,7 @@ export default function SettingsRemoteBackupPanel({
         )}
       >
         <div className="grid gap-4">
-          <label className="grid gap-1.5 text-xs font-semibold text-[var(--qp-text-secondary)]">
+          <label className="grid gap-1.5 qp-text-caption qp-weight-emphasis text-[var(--qp-text-secondary)]">
             {UI_TEXT.settings.webDavServerUrl}
             <div className="settings-webdav-server-input h-9">
               <input
@@ -258,7 +258,7 @@ export default function SettingsRemoteBackupPanel({
               <span>{draft.remoteDir}</span>
             </div>
           </label>
-          <label className="grid gap-1.5 text-xs font-semibold text-[var(--qp-text-secondary)]">
+          <label className="grid gap-1.5 qp-text-caption qp-weight-emphasis text-[var(--qp-text-secondary)]">
             {UI_TEXT.settings.webDavUsername}
             <input
               value={draft.username}
@@ -268,7 +268,7 @@ export default function SettingsRemoteBackupPanel({
               autoComplete="username"
             />
           </label>
-          <label className="grid gap-1.5 text-xs font-semibold text-[var(--qp-text-secondary)]">
+          <label className="grid gap-1.5 qp-text-caption qp-weight-emphasis text-[var(--qp-text-secondary)]">
             {UI_TEXT.settings.webDavPassword}
             <div className="relative w-full">
               <input
@@ -314,7 +314,7 @@ export default function SettingsRemoteBackupPanel({
       >
         <div className="grid max-h-[420px] gap-3 overflow-y-auto pr-1 qp-scroll-region">
           {remoteBackup.entries.length === 0 && (
-            <p className="text-sm leading-relaxed text-[var(--qp-text-tertiary)]">
+            <p className="qp-text-body leading-relaxed text-[var(--qp-text-tertiary)]">
               {UI_TEXT.settings.webDavRemoteBackupsEmpty}
             </p>
           )}

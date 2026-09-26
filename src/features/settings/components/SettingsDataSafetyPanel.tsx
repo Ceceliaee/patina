@@ -1,7 +1,7 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  BrushCleaning, Database, FolderPen, FileArchive, FileDown, FileUp, FolderOpen, CircleAlert, RefreshCw, RotateCcw, Trash2, X, } from "lucide-react";
+  BrushCleaning, Database, FolderPen, FileArchive, FileDown, FileUp, FolderOpen, CircleAlert, CircleHelp, RefreshCw, RotateCcw, Trash2, X, } from "lucide-react";
 
 import QuietSubpanel from "../../../shared/components/QuietSubpanel";
 import QuietActionRow from "../../../shared/components/QuietActionRow";
@@ -319,7 +319,7 @@ export default function SettingsDataSafetyPanel({
         <div className="space-y-5">
           <QuietSubpanel>
             <div className="flex min-h-7 items-center">
-              <p className="flex items-center gap-1.5 text-[15px] font-semibold text-[var(--qp-text-primary)]">
+              <p className="flex items-center gap-1.5 qp-text-group-title qp-weight-emphasis text-[var(--qp-text-primary)]">
                 <span>{UI_TEXT.settings.dataExportTitle}</span>
               </p>
             </div>
@@ -328,7 +328,7 @@ export default function SettingsDataSafetyPanel({
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0 flex items-center gap-1.5">
                     <FileUp size={14} className="text-[var(--qp-text-tertiary)]" />
-                    <p className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.dataExportAction}</p>
+                    <p className="qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">{UI_TEXT.settings.dataExportAction}</p>
                   </div>
                   <QuietButton size="regular" onClick={onOpenDataExport} disabled={busy}>
                     {UI_TEXT.settings.dataExportAction}
@@ -339,7 +339,7 @@ export default function SettingsDataSafetyPanel({
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0 flex items-center gap-1.5">
                     <FileDown size={14} className="text-[var(--qp-text-tertiary)]" />
-                    <p className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.dataImportAction}</p>
+                    <p className="qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">{UI_TEXT.settings.dataImportAction}</p>
                   </div>
                   <QuietButton size="regular" onClick={onOpenDataImport} disabled={busy}>
                     {UI_TEXT.settings.dataImportAction}
@@ -351,7 +351,7 @@ export default function SettingsDataSafetyPanel({
 
           <QuietSubpanel>
             <div className="flex min-h-7 items-center">
-              <p className="text-[15px] font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.backupRestoreTitle}</p>
+              <p className="qp-text-group-title qp-weight-emphasis text-[var(--qp-text-primary)]">{UI_TEXT.settings.backupRestoreTitle}</p>
             </div>
 
             <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -359,7 +359,7 @@ export default function SettingsDataSafetyPanel({
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0 flex items-center gap-1.5">
                     <FileArchive size={14} className="text-[var(--qp-text-tertiary)]" />
-                    <p className="text-sm font-semibold text-[var(--qp-text-primary)]">
+                    <p className="qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">
                       {UI_TEXT.settings.backupExportTitle}
                     </p>
                   </div>
@@ -380,7 +380,7 @@ export default function SettingsDataSafetyPanel({
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0 flex items-center gap-1.5">
                     <RotateCcw size={14} className="text-[var(--qp-text-tertiary)]" />
-                    <p className="text-sm font-semibold text-[var(--qp-text-primary)]">
+                    <p className="qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">
                       {UI_TEXT.settings.backupRestoreActionTitle}
                     </p>
                     <QuietTooltip
@@ -393,7 +393,7 @@ export default function SettingsDataSafetyPanel({
                         className="settings-help-icon"
                         aria-label={UI_TEXT.settings.backupRestoreActionHelp}
                       >
-                        <CircleAlert size={13} aria-hidden="true" />
+                        <CircleHelp size={13} aria-hidden="true" />
                       </button>
                     </QuietTooltip>
                   </div>
@@ -630,33 +630,49 @@ export default function SettingsDataSafetyPanel({
       >
         <div className="grid gap-3 md:grid-cols-2">
           <QuietActionRow className="settings-dialog-action-card">
-            <button
-              ref={localRestoreRef}
-              type="button"
-              onClick={() => {
-                setRestoreSourceDialogOpen(false);
-                void prepareLocalRestore();
-              }}
-              disabled={busy}
-              className="settings-dialog-action-trigger"
-            >
-              <p className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.restoreSourceLocalTitle}</p>
-              <p className="mt-1 text-xs leading-relaxed text-[var(--qp-text-tertiary)]">{UI_TEXT.settings.restoreSourceLocalHint}</p>
-            </button>
+            <div className="settings-dialog-action-composite" data-disabled={busy ? "true" : undefined}>
+              <button
+                ref={localRestoreRef}
+                type="button"
+                onClick={() => {
+                  setRestoreSourceDialogOpen(false);
+                  void prepareLocalRestore();
+                }}
+                disabled={busy}
+                className="settings-dialog-action-hit-target"
+                aria-label={UI_TEXT.settings.restoreSourceLocalTitle}
+              />
+              <div className="settings-dialog-action-copy settings-import-action-heading">
+                <p className="qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">{UI_TEXT.settings.restoreSourceLocalTitle}</p>
+                <QuietTooltip label={UI_TEXT.settings.restoreSourceLocalHint} placement="top" tooltipClassName="settings-help-tooltip" hideOnPointerDown={false}>
+                  <button type="button" className="settings-help-icon" aria-label={UI_TEXT.settings.restoreSourceLocalHint}>
+                    <CircleAlert size={13} aria-hidden="true" />
+                  </button>
+                </QuietTooltip>
+              </div>
+            </div>
           </QuietActionRow>
           <QuietActionRow className="settings-dialog-action-card">
-            <button
-              type="button"
-              onClick={() => {
-                setRestoreSourceDialogOpen(false);
-                void openRemoteRestoreList();
-              }}
-              disabled={busy}
-              className="settings-dialog-action-trigger"
-            >
-              <p className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.settings.restoreSourceRemoteTitle}</p>
-              <p className="mt-1 text-xs leading-relaxed text-[var(--qp-text-tertiary)]">{UI_TEXT.settings.restoreSourceRemoteHint}</p>
-            </button>
+            <div className="settings-dialog-action-composite" data-disabled={busy ? "true" : undefined}>
+              <button
+                type="button"
+                onClick={() => {
+                  setRestoreSourceDialogOpen(false);
+                  void openRemoteRestoreList();
+                }}
+                disabled={busy}
+                className="settings-dialog-action-hit-target"
+                aria-label={UI_TEXT.settings.restoreSourceRemoteTitle}
+              />
+              <div className="settings-dialog-action-copy settings-import-action-heading">
+                <p className="qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">{UI_TEXT.settings.restoreSourceRemoteTitle}</p>
+                <QuietTooltip label={UI_TEXT.settings.restoreSourceRemoteHint} placement="top" tooltipClassName="settings-help-tooltip" hideOnPointerDown={false}>
+                  <button type="button" className="settings-help-icon" aria-label={UI_TEXT.settings.restoreSourceRemoteHint}>
+                    <CircleAlert size={13} aria-hidden="true" />
+                  </button>
+                </QuietTooltip>
+              </div>
+            </div>
           </QuietActionRow>
         </div>
       </QuietDialog>

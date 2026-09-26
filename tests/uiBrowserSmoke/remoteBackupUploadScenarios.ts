@@ -4,16 +4,16 @@ import { evaluate, waitForExpression, waitForAnimationFrames } from "./browserHa
 
 export async function runRemoteBackupUploadScenarios({ client, sessionId, runTest }: BrowserSmokeContext) {
   const clickText = async (text: string, scope = "button") => {
-    await waitForExpression(client, sessionId, `[...document.querySelectorAll(${JSON.stringify(scope)})].some(node => (node.querySelector('p')?.textContent ?? node.textContent).trim() === ${JSON.stringify(text)})`);
+    await waitForExpression(client, sessionId, `[...document.querySelectorAll(${JSON.stringify(scope)})].some(node => (node.getAttribute('aria-label') ?? node.querySelector('p')?.textContent ?? node.textContent).trim() === ${JSON.stringify(text)})`);
     assert.equal(await evaluate(client, sessionId, `(() => {
-      const button = [...document.querySelectorAll(${JSON.stringify(scope)})].find(node => (node.querySelector('p')?.textContent ?? node.textContent).trim() === ${JSON.stringify(text)});
+      const button = [...document.querySelectorAll(${JSON.stringify(scope)})].find(node => (node.getAttribute('aria-label') ?? node.querySelector('p')?.textContent ?? node.textContent).trim() === ${JSON.stringify(text)});
       if (!button) return false; button.click(); return true;
     })()`), true, text);
     await waitForAnimationFrames(client, sessionId);
   };
   const openUpload = async () => {
     await clickText("备份");
-    await clickText("WebDAV 备份", '[role="dialog"] .settings-dialog-action-trigger');
+    await clickText("WebDAV 备份", '[role="dialog"] .settings-dialog-action-hit-target');
     await waitForExpression(client, sessionId, `document.body.innerText.includes("上传远程备份")`);
   };
   await runTest("WebDAV confirmation cancels without upload and preserves explicit names on conflict", async () => {

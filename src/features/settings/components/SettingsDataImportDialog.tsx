@@ -1,5 +1,5 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
-import { CircleAlert, Trash2, X } from "lucide-react";
+import { CircleAlert, CircleHelp, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import QuietActionRow from "../../../shared/components/QuietActionRow.tsx";
 import QuietButton from "../../../shared/components/QuietButton.tsx";
@@ -97,16 +97,23 @@ export default function SettingsDataImportDialog({
         {view === "actions" ? (
           <div className="settings-import-action-list">
             <QuietActionRow className="settings-dialog-action-card">
-              <button
-                type="button"
-                aria-label={importText.csvTitle}
-                disabled={busy}
-                className="settings-dialog-action-trigger"
-                onClick={onChooseCanonicalCsv}
-              >
-                <p className="settings-import-action-title text-sm font-semibold text-[var(--qp-text-primary)]">{importText.csvTitle}</p>
-                <p className="mt-1 text-xs leading-relaxed text-[var(--qp-text-tertiary)]">{importText.csvHint}</p>
-              </button>
+              <div className="settings-dialog-action-composite" data-disabled={busy ? "true" : undefined}>
+                <button
+                  type="button"
+                  aria-label={importText.csvTitle}
+                  disabled={busy}
+                  className="settings-dialog-action-hit-target"
+                  onClick={onChooseCanonicalCsv}
+                />
+                <div className="settings-dialog-action-copy settings-import-action-heading">
+                  <p className="settings-import-action-title qp-text-body qp-weight-emphasis text-[var(--qp-text-primary)]">{importText.csvTitle}</p>
+                  <QuietTooltip label={importText.csvHint} placement="top" tooltipClassName="settings-help-tooltip" hideOnPointerDown={false}>
+                    <button type="button" className="settings-help-icon" aria-label={importText.csvHint}>
+                      <CircleAlert size={13} aria-hidden="true" />
+                    </button>
+                  </QuietTooltip>
+                </div>
+              </div>
             </QuietActionRow>
             <QuietActionRow className="settings-dialog-action-card">
               <div
@@ -122,7 +129,12 @@ export default function SettingsDataImportDialog({
                 />
                 <div className="settings-dialog-action-copy">
                   <div className="settings-import-action-heading">
-                    <p className="settings-import-action-title text-sm font-semibold text-[var(--qp-text-primary)]">{importText.destructureTitle}</p>
+                    <p className="settings-import-action-title qp-text-body qp-weight-emphasis text-[var(--qp-text-primary)]">{importText.destructureTitle}</p>
+                    <QuietTooltip label={importText.destructureHint} placement="top" tooltipClassName="settings-help-tooltip" hideOnPointerDown={false}>
+                      <button type="button" className="settings-help-icon" aria-label={importText.destructureHint}>
+                        <CircleAlert size={13} aria-hidden="true" />
+                      </button>
+                    </QuietTooltip>
                     <QuietTooltip
                       label={importText.destructureFormatsHint}
                       placement="top"
@@ -134,11 +146,11 @@ export default function SettingsDataImportDialog({
                         className="settings-help-icon"
                         aria-label={importText.destructureFormatsHint}
                       >
-                        <CircleAlert size={13} aria-hidden="true" />
+                        <CircleHelp size={13} aria-hidden="true" />
                       </button>
                     </QuietTooltip>
                   </div>
-                  <p className="mt-1 text-xs leading-relaxed text-[var(--qp-text-tertiary)]">{importText.destructureHint}</p>
+
                 </div>
               </div>
             </QuietActionRow>

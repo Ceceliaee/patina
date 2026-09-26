@@ -121,10 +121,10 @@ export default function UpdateStatusPanel({
 
   return (
     <div className={`qp-subpanel ${className ?? ""}`.trim()}>
-      <p className="text-sm font-semibold text-[var(--qp-text-primary)]">{UI_TEXT.update.appUpdate}</p>
-      <p className="mt-2 text-sm font-semibold text-[var(--qp-text-primary)]">{viewModel.statusTitle}</p>
+      <p className="qp-text-body qp-weight-emphasis text-[var(--qp-text-primary)]">{UI_TEXT.update.appUpdate}</p>
+      <p className="mt-2 qp-text-body qp-weight-emphasis text-[var(--qp-text-primary)]">{viewModel.statusTitle}</p>
       {viewModel.statusDetail ? (
-        <p className="mt-1 text-xs leading-relaxed break-words text-[var(--qp-text-secondary)]">
+        <p className="mt-1 qp-text-caption leading-relaxed break-words text-[var(--qp-text-secondary)]">
           {viewModel.statusDetail}
         </p>
       ) : null}
@@ -140,11 +140,11 @@ export default function UpdateStatusPanel({
 
       <div className={`mt-4 flex flex-wrap items-end gap-3 ${showSupportLinks ? "justify-between" : "justify-end"}`}>
         {showSupportLinks ? (
-          <div className="flex items-center gap-1.5 text-xs text-[var(--qp-text-tertiary)]">
+          <div className="flex items-center gap-1.5 qp-text-caption text-[var(--qp-text-tertiary)]">
             <button
               type="button"
               onClick={onOpenReleaseNotes}
-              className="text-xs text-[var(--qp-text-tertiary)] hover:text-[var(--qp-text-secondary)]"
+              className="qp-text-caption text-[var(--qp-text-tertiary)] hover:text-[var(--qp-text-secondary)]"
             >
               {UI_TEXT.update.releaseNotes}
             </button>
@@ -152,7 +152,7 @@ export default function UpdateStatusPanel({
             <button
               type="button"
               onClick={onOpenFeedback}
-              className="text-xs text-[var(--qp-text-tertiary)] hover:text-[var(--qp-text-secondary)]"
+              className="qp-text-caption text-[var(--qp-text-tertiary)] hover:text-[var(--qp-text-secondary)]"
             >
               {UI_TEXT.update.feedback}
             </button>
@@ -160,7 +160,7 @@ export default function UpdateStatusPanel({
             <button
               type="button"
               onClick={onOpenSupport}
-              className="text-xs text-[var(--qp-text-tertiary)] hover:text-[var(--qp-text-secondary)]"
+              className="qp-text-caption text-[var(--qp-text-tertiary)] hover:text-[var(--qp-text-secondary)]"
             >
               {UI_TEXT.update.support}
             </button>

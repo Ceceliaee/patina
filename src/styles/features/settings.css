@@ -41,9 +41,9 @@
 .settings-preference-group-title {
   margin: 0;
   color: var(--qp-text-primary);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 20px;
+  font-size: var(--qp-font-size-group-title);
+  font-weight: var(--qp-font-weight-emphasis);
+  line-height: var(--qp-line-height-group-title);
 }
 
 .settings-preference-row {
@@ -63,9 +63,9 @@
   flex-wrap: wrap;
   gap: 6px;
   color: var(--qp-text-primary);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 20px;
+  font-size: var(--qp-font-size-body);
+  font-weight: var(--qp-font-weight-medium);
+  line-height: var(--qp-line-height-body);
 }
 
 .settings-preference-control {
@@ -193,7 +193,7 @@
 .qp-tooltip.settings-help-tooltip {
   max-width: min(280px, calc(100vw - 16px));
   white-space: pre-line;
-  font-weight: 550;
+  font-weight: var(--qp-font-weight-regular);
   line-height: 1.5;
 }
 
@@ -210,9 +210,9 @@
   padding: 8px 10px;
   text-align: left;
   color: var(--qp-text-secondary);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1;
+  font-size: var(--qp-font-size-body);
+  font-weight: var(--qp-font-weight-medium);
+  line-height: var(--qp-line-height-body);
   transition:
     border-color var(--qp-motion-fast) var(--qp-motion-ease),
     background-color var(--qp-motion-fast) var(--qp-motion-ease),
@@ -280,9 +280,9 @@
 }
 
 .settings-theme-entry-title {
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1;
+  font-size: var(--qp-font-size-caption);
+  font-weight: var(--qp-font-weight-emphasis);
+  line-height: var(--qp-line-height-caption);
 }
 
 .settings-interface-field {
@@ -324,9 +324,9 @@
   gap: 6px;
   margin: 0;
   color: var(--qp-text-primary);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 20px;
+  font-size: var(--qp-font-size-group-title);
+  font-weight: var(--qp-font-weight-emphasis);
+  line-height: var(--qp-line-height-group-title);
 }
 
 .settings-storage-path-list {
@@ -358,16 +358,16 @@
 .settings-storage-path-heading p {
   margin: 0;
   color: var(--qp-text-primary);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.25;
+  font-size: var(--qp-font-size-body);
+  font-weight: var(--qp-font-weight-medium);
+  line-height: var(--qp-line-height-body);
 }
 
 .settings-storage-path-heading span {
   color: var(--qp-text-tertiary);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.3;
+  font-size: var(--qp-font-size-caption);
+  font-weight: var(--qp-font-weight-regular);
+  line-height: var(--qp-line-height-caption);
 }
 
 .settings-storage-path-actions {
@@ -408,9 +408,9 @@
 
 .settings-history-cleanup-range span {
   color: var(--qp-text-secondary);
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 1.3;
+  font-size: var(--qp-font-size-caption);
+  font-weight: var(--qp-font-weight-regular);
+  line-height: var(--qp-line-height-caption);
 }
 
 .settings-history-cleanup-slider {
@@ -447,10 +447,10 @@
   background: var(--qp-bg-elevated);
   padding: 0 6px;
   color: var(--qp-text-tertiary);
-  font-size: 10px;
-  font-weight: 700;
+  font-size: var(--qp-font-size-caption);
+  font-weight: var(--qp-font-weight-emphasis);
   letter-spacing: 0;
-  line-height: 1;
+  line-height: var(--qp-line-height-caption);
   transition:
     border-color var(--qp-motion-fast) var(--qp-motion-ease),
     background-color var(--qp-motion-fast) var(--qp-motion-ease),
@@ -496,8 +496,8 @@
 }
 
 .settings-web-activity-help-dialog .qp-dialog-description {
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: var(--qp-font-size-body);
+  line-height: var(--qp-line-height-body);
 }
 
 .settings-web-activity-help-close {
@@ -538,9 +538,9 @@
   background: color-mix(in srgb, var(--qp-accent-default) 5%, var(--qp-bg-panel));
   padding: 0 7px;
   color: var(--qp-accent-default);
-  font-size: 11px;
-  font-weight: 750;
-  line-height: 1;
+  font-size: var(--qp-font-size-caption);
+  font-weight: var(--qp-font-weight-emphasis);
+  line-height: var(--qp-line-height-caption);
 }
 
 .settings-web-activity-help-step-copy {
@@ -551,16 +551,16 @@
 
 .settings-web-activity-help-step-copy strong {
   color: var(--qp-text-primary);
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.35;
+  font-size: var(--qp-font-size-body);
+  font-weight: var(--qp-font-weight-emphasis);
+  line-height: var(--qp-line-height-body);
 }
 
 .settings-web-activity-help-step-description {
   margin: 0;
   color: var(--qp-text-secondary);
-  font-size: 14px;
-  line-height: 1.55;
+  font-size: var(--qp-font-size-body);
+  line-height: var(--qp-line-height-body);
 }
 
 .settings-web-activity-store-badge-row {
@@ -625,8 +625,8 @@
   background: transparent;
   padding: 0 0 0 13px;
   color: var(--qp-text-secondary);
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
 }
 
 .settings-web-activity-help-detail-list > li::before {
@@ -652,8 +652,8 @@
   position: relative;
   padding-left: 14px;
   color: var(--qp-text-secondary);
-  font-size: 13px;
-  line-height: 1.55;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
 }
 
 .settings-web-activity-help-subdetail-list li::before {
@@ -681,9 +681,9 @@
   background: var(--qp-bg-panel);
   padding: 0 8px;
   color: var(--qp-accent-default);
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 1;
+  font-size: var(--qp-font-size-compact);
+  font-weight: var(--qp-font-weight-emphasis);
+  line-height: var(--qp-line-height-compact);
   text-decoration: none;
   transition:
     border-color var(--qp-motion-fast) var(--qp-motion-ease),
@@ -721,9 +721,9 @@
   background: var(--qp-bg-panel);
   padding: 0 8px;
   color: var(--qp-accent-default);
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 1;
+  font-size: var(--qp-font-size-compact);
+  font-weight: var(--qp-font-weight-emphasis);
+  line-height: var(--qp-line-height-compact);
   transition:
     border-color var(--qp-motion-fast) var(--qp-motion-ease),
     background-color var(--qp-motion-fast) var(--qp-motion-ease),
@@ -753,8 +753,8 @@
   background: var(--qp-bg-panel);
   padding: 12px 14px;
   color: var(--qp-text-tertiary);
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
   white-space: pre-line;
 }
 
@@ -829,16 +829,16 @@
 .settings-data-export-section-title {
   margin: 0;
   color: var(--qp-text-primary);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.3;
+  font-size: var(--qp-font-size-group-title);
+  font-weight: var(--qp-font-weight-emphasis);
+  line-height: var(--qp-line-height-group-title);
 }
 
 .settings-data-export-section-hint {
   margin: 2px 0 0;
   color: var(--qp-text-tertiary);
-  font-size: 11px;
-  line-height: 1.45;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
 }
 
 .settings-data-export-format-section .settings-data-export-section-header {
@@ -868,9 +868,11 @@
 }
 
 .settings-data-export-format-option strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: var(--qp-text-primary);
-  font-size: 12px;
-  line-height: 1.25;
+  font-size: var(--qp-font-size-body);
+  line-height: var(--qp-line-height-body);
 }
 
 .settings-data-export-format-option:hover:not(:disabled) {
@@ -896,8 +898,8 @@
 
 .settings-data-export-result {
   margin: 0;
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
 }
 
 .settings-data-export-result-danger {
@@ -909,8 +911,8 @@
 }
 
 .settings-data-export-field-dialog .qp-dialog-body {
-  height: min(380px, calc(100vh - 260px));
-  max-height: min(380px, calc(100vh - 260px));
+  height: min(440px, calc(100vh - 260px));
+  max-height: min(440px, calc(100vh - 260px));
   overflow-y: auto;
   padding-right: 3px;
 }
@@ -940,8 +942,9 @@
 }
 
 .settings-data-export-field-empty-warning {
-  font-size: 11px;
-  font-weight: 700;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
+  font-weight: var(--qp-font-weight-emphasis);
 }
 
 .settings-data-export-field-header-action {
@@ -996,17 +999,17 @@
 .settings-data-export-field-group-header p {
   margin: 0;
   color: var(--qp-text-primary);
-  font-size: 12px;
-  font-weight: 750;
-  line-height: 1.3;
+  font-size: var(--qp-font-size-group-title);
+  font-weight: var(--qp-font-weight-emphasis);
+  line-height: var(--qp-line-height-group-title);
 }
 
 .settings-data-export-field-group-header span {
   display: block;
   margin-top: 2px;
   color: var(--qp-text-tertiary);
-  font-size: 11px;
-  line-height: 1.4;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
 }
 
 .settings-data-export-field-group-actions {
@@ -1030,10 +1033,10 @@
   background: var(--qp-bg-elevated);
   padding: 0 7px;
   color: var(--qp-text-secondary);
-  font-size: 11px;
+  font-size: var(--qp-font-size-caption);
   font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  line-height: 1;
+  font-weight: var(--qp-font-weight-regular);
+  line-height: var(--qp-line-height-caption);
 }
 
 .settings-data-export-field-group-actions .qp-tooltip-anchor {
@@ -1127,17 +1130,17 @@
 .settings-data-export-field-line strong {
   flex: 0 0 auto;
   color: var(--qp-text-primary);
-  font-size: 12px;
-  font-weight: 750;
-  line-height: 1.3;
+  font-size: var(--qp-font-size-body);
+  font-weight: var(--qp-font-weight-medium);
+  line-height: var(--qp-line-height-body);
 }
 
 .settings-data-export-field-line span {
   min-width: 0;
   overflow: hidden;
   color: var(--qp-text-tertiary);
-  font-size: 11px;
-  line-height: 1.3;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
   text-overflow: ellipsis;
 }
 
@@ -1312,9 +1315,9 @@
 .settings-import-batch-title {
   align-self: center;
   color: var(--qp-text-primary);
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 1.5;
+  font-size: var(--qp-font-size-group-title);
+  font-weight: var(--qp-font-weight-emphasis);
+  line-height: var(--qp-line-height-group-title);
   white-space: nowrap;
 }
 
@@ -1343,8 +1346,8 @@
   min-width: 0;
   align-items: baseline;
   color: var(--qp-text-secondary);
-  font-size: 0.84rem;
-  line-height: 1.5;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
 }
 
 .settings-import-preview-detail-group dt {
@@ -1361,8 +1364,8 @@
 .settings-import-note,
 .settings-import-errors {
   color: var(--qp-text-secondary);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
 }
 
 .settings-import-notes {
@@ -1404,8 +1407,8 @@
 .settings-import-batch-copy small {
   overflow: hidden;
   color: var(--qp-text-tertiary);
-  font-size: 11px;
-  line-height: 1.5;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1444,8 +1447,8 @@
 .settings-scheduled-export-control > span,
 .settings-scheduled-export-directory-label {
   color: var(--qp-text-secondary);
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
 }
 
 .settings-scheduled-export-control .qp-select-root,
@@ -1468,8 +1471,8 @@
   align-items: center;
   gap: 7px;
   color: var(--qp-text-secondary);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
   user-select: text;
 }
 
@@ -1499,8 +1502,8 @@
   min-width: 0;
   align-items: baseline;
   gap: 7px;
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
 }
 
 .settings-scheduled-export-status dt {
@@ -1521,8 +1524,8 @@
   gap: 8px;
   margin: 0;
   color: var(--qp-danger);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
 }
 
 @media (max-width: 640px) {
@@ -1590,8 +1593,8 @@
 
 .settings-scheduled-backup-setting-label {
   color: var(--qp-text-secondary);
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: var(--qp-font-size-body);
+  line-height: var(--qp-line-height-body);
 }
 
 .settings-scheduled-backup-schedule-controls {
@@ -1624,8 +1627,8 @@
   align-items: center;
   gap: 7px;
   color: var(--qp-text-secondary);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
   user-select: text;
 }
 
@@ -1655,8 +1658,8 @@
   min-width: 0;
   align-items: baseline;
   gap: 6px;
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
 }
 
 .settings-scheduled-backup-status > .settings-scheduled-backup-active-run {
@@ -1682,8 +1685,8 @@
   align-items: center;
   gap: 8px;
   margin: 0;
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
 }
 
 .settings-scheduled-backup-loading {

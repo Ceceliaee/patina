@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarClock, Cloud, Folder, RefreshCw, X } from "lucide-react";
+import { CalendarClock, CircleAlert, Cloud, Folder, RefreshCw, X } from "lucide-react";
 
 import QuietActionRow from "../../../shared/components/QuietActionRow";
 import QuietBadge from "../../../shared/components/QuietBadge";
@@ -8,6 +8,7 @@ import QuietDialog from "../../../shared/components/QuietDialog";
 import QuietIconAction from "../../../shared/components/QuietIconAction";
 import QuietSelect from "../../../shared/components/QuietSelect";
 import QuietSwitch from "../../../shared/components/QuietSwitch";
+import QuietTooltip from "../../../shared/components/QuietTooltip";
 import QuietTimePicker from "../../../shared/components/QuietTimePicker";
 import { useLocaleText } from "../../../shared/i18n/index.ts";
 import {
@@ -238,16 +239,24 @@ export default function SettingsBackupDialog({
       >
         <div className={`grid gap-3 ${hasRemoteBackupTarget ? "md:grid-cols-2" : ""}`.trim()}>
           <QuietActionRow className="settings-dialog-action-card settings-backup-target-card">
-            <button
-              ref={localBackupRef}
-              type="button"
-              onClick={onLocalBackup}
-              disabled={busy}
-              className="settings-dialog-action-trigger settings-backup-local-trigger"
-            >
-              <p className="text-sm font-semibold text-[var(--qp-text-primary)]">{text.backupTargetLocalTitle}</p>
-              <p className="mt-1 text-xs leading-relaxed text-[var(--qp-text-tertiary)]">{text.backupTargetLocalHint}</p>
-            </button>
+            <div className="settings-dialog-action-composite settings-backup-local-trigger" data-disabled={busy ? "true" : undefined}>
+              <button
+                ref={localBackupRef}
+                type="button"
+                onClick={onLocalBackup}
+                disabled={busy}
+                className="settings-dialog-action-hit-target"
+                aria-label={text.backupTargetLocalTitle}
+              />
+              <div className="settings-dialog-action-copy settings-import-action-heading">
+                <p className="qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">{text.backupTargetLocalTitle}</p>
+                <QuietTooltip label={text.backupTargetLocalHint} placement="top" tooltipClassName="settings-help-tooltip" hideOnPointerDown={false}>
+                  <button type="button" className="settings-help-icon" aria-label={text.backupTargetLocalHint}>
+                    <CircleAlert size={13} aria-hidden="true" />
+                  </button>
+                </QuietTooltip>
+              </div>
+            </div>
             <div className="settings-backup-schedule-anchor">
               <QuietIconAction
                 icon={<CalendarClock size={16} aria-hidden="true" />}
@@ -260,15 +269,23 @@ export default function SettingsBackupDialog({
           </QuietActionRow>
           {hasRemoteBackupTarget ? (
             <QuietActionRow className="settings-dialog-action-card settings-backup-target-card">
-              <button
-                type="button"
-                onClick={onRemoteBackup}
-                disabled={busy}
-                className="settings-dialog-action-trigger settings-backup-local-trigger"
-              >
-                <p className="text-sm font-semibold text-[var(--qp-text-primary)]">{text.backupTargetRemoteTitle}</p>
-                <p className="mt-1 text-xs leading-relaxed text-[var(--qp-text-tertiary)]">{text.backupTargetRemoteHint}</p>
-              </button>
+              <div className="settings-dialog-action-composite settings-backup-local-trigger" data-disabled={busy ? "true" : undefined}>
+                <button
+                  type="button"
+                  onClick={onRemoteBackup}
+                  disabled={busy}
+                  className="settings-dialog-action-hit-target"
+                  aria-label={text.backupTargetRemoteTitle}
+                />
+                <div className="settings-dialog-action-copy settings-import-action-heading">
+                  <p className="qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">{text.backupTargetRemoteTitle}</p>
+                  <QuietTooltip label={text.backupTargetRemoteHint} placement="top" tooltipClassName="settings-help-tooltip" hideOnPointerDown={false}>
+                    <button type="button" className="settings-help-icon" aria-label={text.backupTargetRemoteHint}>
+                      <CircleAlert size={13} aria-hidden="true" />
+                    </button>
+                  </QuietTooltip>
+                </div>
+              </div>
               <div className="settings-backup-schedule-anchor">
                 <QuietIconAction
                   icon={<CalendarClock size={16} aria-hidden="true" />}

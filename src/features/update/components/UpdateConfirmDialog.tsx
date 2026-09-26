@@ -100,8 +100,8 @@ export default function UpdateConfirmDialog({
       )}
     >
       <div className="space-y-3">
-        <p className="text-sm font-semibold text-[var(--qp-text-primary)]">{viewModel.versionCompareLabel}</p>
-        <p className="text-sm leading-relaxed text-[var(--qp-text-secondary)]">{viewModel.confirmDescription}</p>
+        <p className="qp-text-body qp-weight-emphasis text-[var(--qp-text-primary)]">{viewModel.versionCompareLabel}</p>
+        <p className="qp-text-body leading-relaxed text-[var(--qp-text-secondary)]">{viewModel.confirmDescription}</p>
         {viewModel.progress ? (
           <UpdateProgressBar
             percent={viewModel.progress.percent}
@@ -112,9 +112,9 @@ export default function UpdateConfirmDialog({
         ) : null}
         {viewModel.notesPreview ? (
           <div className="qp-subpanel">
-            <p className="text-xs font-semibold text-[var(--qp-text-tertiary)]">{UI_TEXT.update.releaseNotes}</p>
+            <p className="qp-text-caption qp-weight-emphasis text-[var(--qp-text-tertiary)]">{UI_TEXT.update.releaseNotes}</p>
             <p
-              className="mt-1 break-words text-xs leading-relaxed text-[var(--qp-text-tertiary)]"
+              className="mt-1 break-words qp-text-caption leading-relaxed text-[var(--qp-text-tertiary)]"
               style={{
                 display: "-webkit-box",
                 WebkitLineClamp: 4,

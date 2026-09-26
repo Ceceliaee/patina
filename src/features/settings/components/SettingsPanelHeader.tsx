@@ -14,7 +14,7 @@ export default function SettingsPanelHeader({
   return (
     <div className={`flex items-center gap-2.5 border-b border-[var(--qp-border-subtle)] pb-2 ${className ?? ""}`.trim()}>
       {icon}
-      <h2 className="text-sm font-semibold text-[var(--qp-text-primary)]">{title}</h2>
+      <h2 className="qp-text-section-title qp-weight-emphasis text-[var(--qp-text-primary)]">{title}</h2>
     </div>
   );
 }

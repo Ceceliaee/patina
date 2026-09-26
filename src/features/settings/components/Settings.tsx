@@ -145,7 +145,7 @@ export default function Settings({
           title={UI_TEXT.settings.title}
         />
         <div className="qp-panel flex flex-1 items-center justify-center gap-3 text-[var(--qp-text-tertiary)]">
-          <span className="text-sm font-medium">
+          <span className="qp-text-body qp-weight-medium">
             {loadError ? UI_TEXT.settings.loadFailed : UI_TEXT.settings.loading}
           </span>
           {loadError ? (
@@ -169,7 +169,7 @@ export default function Settings({
             <div
               className={`qp-status ${
                 saveStatus !== "saving" && hasUnsavedChanges ? "qp-status-danger" : ""
-              } flex px-3 py-1.5 rounded-[8px] items-center text-xs font-semibold`}
+              } flex px-3 py-1.5 rounded-[8px] items-center qp-text-caption qp-weight-emphasis`}
             >
               {saveStatus === "saving" && (
                 <span className="text-[var(--qp-accent-default)] flex items-center gap-2">

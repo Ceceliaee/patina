@@ -17,7 +17,7 @@ export default function UpdateProgressBar({
 
   return (
     <div className={className}>
-      <div className="mb-1.5 flex items-center justify-between gap-3 text-[11px] text-[var(--qp-text-tertiary)]">
+      <div className="mb-1.5 flex items-center justify-between gap-3 qp-text-caption text-[var(--qp-text-tertiary)]">
         <span className="min-w-0 flex-1 truncate">{label}</span>
         {valueText ? <span className="shrink-0">{valueText}</span> : null}
       </div>

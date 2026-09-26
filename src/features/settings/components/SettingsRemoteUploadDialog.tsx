@@ -41,8 +41,8 @@ export default function SettingsRemoteUploadDialog({ target, remoteBackup, onClo
       </>}
     >
       <div className="grid gap-4">
-        <p className="break-all text-sm">{formatRemoteBackupTargetSummary(target)}</p>
-        <label className="grid gap-1.5 text-sm">
+        <p className="break-all qp-text-body">{formatRemoteBackupTargetSummary(target)}</p>
+        <label className="grid gap-1.5 qp-text-body">
           {text.settings.webDavFileName}
           <input ref={inputRef} className="qp-input h-9 w-full" value={fileName}
             disabled={remoteBackup.isUploading} aria-invalid={invalid}
@@ -53,7 +53,7 @@ export default function SettingsRemoteUploadDialog({ target, remoteBackup, onClo
               if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(); }
             }} />
         </label>
-        {feedback ? <p id="webdav-upload-feedback" role={invalid || error ? "alert" : "status"} className="text-sm">
+        {feedback ? <p id="webdav-upload-feedback" role={invalid || error ? "alert" : "status"} className="qp-text-body">
           {feedback}
         </p> : null}
       </div>

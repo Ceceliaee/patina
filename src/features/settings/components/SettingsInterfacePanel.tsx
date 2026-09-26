@@ -246,7 +246,7 @@ function InterfaceInlineField({
     <QuietActionRow className={rowClassName}>
       <label
         htmlFor={htmlFor}
-        className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-sm font-semibold text-[var(--qp-text-primary)]"
+        className="flex shrink-0 items-center gap-1.5 whitespace-nowrap qp-text-body qp-weight-emphasis text-[var(--qp-text-primary)]"
       >
         {icon}
         <span>{title}</span>
@@ -407,7 +407,7 @@ export default function SettingsInterfacePanel({
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="settings-web-activity-title-row flex min-w-0 flex-wrap items-center gap-2">
-                  <p className="text-sm font-semibold text-[var(--qp-text-primary)]">
+                  <p className="qp-text-body qp-weight-emphasis text-[var(--qp-text-primary)]">
                     {UI_TEXT.settings.webActivityTitle}
                   </p>
                   {showWebActivityHelp && (
@@ -474,7 +474,7 @@ export default function SettingsInterfacePanel({
           <QuietSubpanel>
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-[var(--qp-text-primary)]">
+                <p className="qp-text-body qp-weight-emphasis text-[var(--qp-text-primary)]">
                   {UI_TEXT.settings.remoteStatusBridgeTitle}
                 </p>
               </div>

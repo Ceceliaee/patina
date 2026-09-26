@@ -379,7 +379,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     assert.equal(ordinaryInputStyles.every((style) => style.minHeight === "34px"), true);
     assert.equal(ordinaryInputStyles.every((style) => style.radius === "10px"), true);
     assert.equal(ordinaryInputStyles.every((style) => style.fontSize === "12px"), true);
-    assert.equal(ordinaryInputStyles.every((style) => style.fontWeight === "600"), true);
+    assert.equal(ordinaryInputStyles.every((style) => style.fontWeight === "550"), true);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
@@ -584,8 +584,8 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       assert.equal(selectA11yState.triggerHorizontalChrome, 24);
       languageTriggerWidth ??= selectA11yState.triggerWidth;
       assert.equal(selectA11yState.triggerWidth, languageTriggerWidth);
-      assert.equal(selectA11yState.triggerFontSize, "11px");
-      assert.equal(selectA11yState.triggerFontWeight, "650");
+      assert.equal(selectA11yState.triggerFontSize, "12px");
+      assert.equal(selectA11yState.triggerFontWeight, "550");
       assert.equal(selectA11yState.triggerMatchesPreviousSelectedText, true);
       assert.ok(
         selectA11yState.menuWidth >= selectA11yState.triggerWidth
@@ -598,8 +598,8 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       assert.equal(selectA11yState.menuGap, 4);
       assert.equal(selectA11yState.menuPadding, "4px");
       assert.deepEqual(selectA11yState.optionHeights, SUPPORTED_LOCALES.map(() => 28));
-      assert.deepEqual(selectA11yState.optionFontSizes, ["11px"]);
-      assert.deepEqual(selectA11yState.optionFontWeights, ["650"]);
+      assert.deepEqual(selectA11yState.optionFontSizes, ["12px"]);
+      assert.deepEqual(selectA11yState.optionFontWeights, ["550"]);
       assert.equal(selectA11yState.selectedMatchesPreviousSelectedText, true);
       assert.equal(selectA11yState.defaultMatchesPreviousDefaultText, true);
       assert.deepEqual(
@@ -1946,7 +1946,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       );
       assert.equal(
         await evaluate(client!, sessionId, `getComputedStyle(document.querySelector('.settings-data-export-range-label')).lineHeight`),
-        "10px",
+        "14px",
       );
       assert.equal(
         await evaluate(client!, sessionId, `getComputedStyle(document.querySelector('.settings-data-export-range-label .qp-range-control-label-text')).translate`),
@@ -2176,16 +2176,13 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.settings-data-export-field-group')).every((node) => node.classList.contains('settings-data-export-field-group-collapsed'))`),
       true,
     );
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (() => {
-          const body = document.querySelector('.settings-data-export-field-dialog .qp-dialog-body');
-          return Boolean(body && body.scrollHeight <= body.clientHeight);
-        })()
-      `),
-      true,
-      "Collapsed field groups should not require scrolling",
-    );
+    const collapsedFieldGeometry = await evaluate(client!, sessionId, `(() => {
+      const body = document.querySelector('.settings-data-export-field-dialog .qp-dialog-body');
+      return { height: body.clientHeight, scrollHeight: body.scrollHeight,
+        groups: [...body.querySelectorAll('.settings-data-export-field-group')].map(n=>n.getBoundingClientRect().height) };
+    })()`) as { height: number; scrollHeight: number; groups: number[] };
+    assert.ok(collapsedFieldGeometry.scrollHeight <= collapsedFieldGeometry.height,
+      `Collapsed field groups should not require scrolling: ${JSON.stringify(collapsedFieldGeometry)}`);
     const collapsedDialogHeight = Number(await evaluate(client!, sessionId, `document.querySelector('.settings-data-export-field-dialog')?.getBoundingClientRect().height ?? 0`));
     await evaluate(client!, sessionId, `document.querySelector('.settings-data-export-field-group-action[aria-label="展开"]')?.click()`);
     await waitForExpression(client!, sessionId, `document.querySelectorAll('.settings-data-export-field-row').length === 8`);
@@ -2422,6 +2419,18 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       true,
     );
     await waitForExpression(client!, sessionId, `document.querySelector('.settings-import-action-list') !== null`);
+    assert.equal(await evaluate(client!, sessionId, `
+      (() => {
+        const list = document.querySelector('.settings-import-action-list');
+        const hints = list?.querySelectorAll('.settings-help-icon');
+        if (hints?.length !== 3 || list.querySelector('button button')) return false;
+        hints[0].focus();
+        hints[0].click();
+        return !document.querySelector('.settings-import-preview');
+      })()
+    `), true, "Import hints must remain independent of the import actions");
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.settings-help-tooltip'))`);
+    await evaluate(client!, sessionId, `document.querySelector('[aria-label="导入 CSV"]')?.focus()`);
     assert.deepEqual(
       await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.settings-import-action-title')).map((node) => node.textContent)`),
       ["导入 CSV", "解构工具"],
