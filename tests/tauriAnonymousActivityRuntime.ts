@@ -16,7 +16,7 @@ export async function verifyAnonymousActivityRuntime(
     "db.commit()",
     "db.close()",
   ].join("; "), databasePath], { encoding: "utf8", windowsHide: true, timeout: 10_000 });
-  assert.equal(seed.status, 0, seed.stderr || seed.stdout);
+  assert.equal(seed.status, 0, `anonymous activity seed failed (signal ${seed.signal}): ${seed.error?.message || seed.stderr || seed.stdout}`);
   const native = await evaluate(`window.__TAURI_INTERNALS__.invoke("cmd_get_activity_aggregate_range", {
     startMs: 0, endMs: 4000, bucketBoundariesMs: [0,4000]
   })`) as { records: Array<{ anonymous: boolean; appName: string; exeName: string; startTime: number; endTime: number }> };

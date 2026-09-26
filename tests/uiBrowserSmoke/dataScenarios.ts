@@ -83,6 +83,15 @@ export async function runDataReadFailureScenarios(context: BrowserSmokeContext) 
       path: document.querySelector('${panel} ${chart} .qp-native-trend-line')?.getAttribute('d'),
       height: document.querySelector('${panel}')?.getBoundingClientRect().height,
     })`;
+    await waitForStableExpression(client, sessionId, `(() => {
+      const container = document.querySelector('${panel} ${chart}');
+      const svg = container?.querySelector('svg');
+      const rect = container?.getBoundingClientRect();
+      return Boolean(svg && rect && container.querySelector('.qp-native-trend-line')
+        && !document.querySelector('.data-heatmap-panel[aria-busy="true"]')
+        && svg.viewBox.baseVal.width === Math.round(rect.width)
+        && svg.viewBox.baseVal.height === Math.round(rect.height));
+    })()`, undefined, "range baseline after chart measurement and heatmap layout");
     const before = await evaluate(client, sessionId, presentation);
     try {
       await evaluate(client, sessionId, `globalThis.__PATINA_PENDING_AGGREGATES = [];
