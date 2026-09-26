@@ -136,8 +136,10 @@ function stopProcessTree(child: ChildProcess) {
 
 function runRuntimeBinaryProcessCommand(command: string) {
   if (process.platform !== "win32") return null;
-  const result = spawnSync("powershell.exe", ["-NoProfile", "-Command", command], {
-    encoding: "utf8", windowsHide: true, timeout: 10_000,
+  // A root-only PowerShell query can exceed ten seconds on hosted Windows.
+  // Keep startup and execution bounded without changing UI wait deadlines.
+  const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], {
+    encoding: "utf8", windowsHide: true, timeout: 30_000,
     env: {
       ...process.env,
       PATINA_RUNTIME_SMOKE_BINARY: RUNTIME_BINARY_PATH,
@@ -1407,9 +1409,12 @@ try {
       }, 10_000);
     }
     assert.deepEqual(await evaluate(widgetClient, appearanceRead), await evaluate(client, appearanceRead));
+    const previousWidgetDocument = await evaluate(widgetClient, "performance.timeOrigin");
     await widgetClient.command("Page.reload", { ignoreCache: true });
     await waitFor("widget theme restores from the database", async () => {
       try {
+        if (!await evaluate(widgetClient!, `performance.timeOrigin !== ${previousWidgetDocument}
+          && Boolean(document.querySelector('.widget-shell'))`)) return false;
         const appearance = await evaluate(widgetClient!, appearanceRead) as { contrast: string; scheme: string };
         return appearance.contrast === expectedContrast && appearance.scheme === scheme;
       } catch { return false; }
