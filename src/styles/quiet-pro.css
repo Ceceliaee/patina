@@ -1673,6 +1673,16 @@
   gap: 6px;
 }
 
+.qp-dialog-header:not(:has(.qp-dialog-description)) {
+  align-items: center;
+}
+
+.qp-dialog-header:not(:has(.qp-dialog-description)) > .qp-dialog-header-aside {
+  display: flex;
+  align-items: center;
+  align-self: center;
+}
+
 .qp-dialog-heading {
   display: grid;
   min-width: 0;

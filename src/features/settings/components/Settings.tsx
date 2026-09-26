@@ -143,7 +143,6 @@ export default function Settings({
         <QuietPageHeader
           icon={<Settings2 size={18} />}
           title={UI_TEXT.settings.title}
-          subtitle={UI_TEXT.settings.subtitle}
         />
         <div className="qp-panel flex flex-1 items-center justify-center gap-3 text-[var(--qp-text-tertiary)]">
           <span className="text-sm font-medium">
@@ -165,7 +164,6 @@ export default function Settings({
       <QuietPageHeader
         icon={<Settings2 size={18} />}
         title={UI_TEXT.settings.title}
-        subtitle={UI_TEXT.settings.subtitle}
         rightSlot={(
           <div className="flex flex-wrap items-center justify-end gap-2.5">
             <div

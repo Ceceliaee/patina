@@ -110,6 +110,15 @@ async function dispatchSelectKey(
 
 export async function runSettingsScenarios(context: BrowserSmokeContext) {
   const { appUrl, client, sessionId, runTest } = context;
+  const assertDialogHeaderCentered = async (selector: string) => {
+    assert.equal(await evaluate(client, sessionId, `(() => {
+      const header = document.querySelector(${jsonString(selector)} + ' .qp-dialog-header');
+      const title = header?.querySelector('.qp-dialog-title')?.getBoundingClientRect();
+      const button = header?.querySelector('button')?.getBoundingClientRect();
+      return !!title && !!button && Math.abs(title.top + title.height / 2 - button.top - button.height / 2) < 0.5;
+    })()`), true, `${selector} header button should be centered with its title`);
+  };
+
 
   await runTest("select keyboard highlight survives equivalent options after parent refresh", async () => {
     await evaluate(client, sessionId, `(async () => {
@@ -219,9 +228,9 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       await clickAction('保存');
       await waitForExpression(client, sessionId, `${persisted} === '1'`);
       const copy = String(await evaluate(client, sessionId, 'document.body.innerText'));
-      assert.ok(copy.includes('关闭时隐藏'));
-      assert.ok(copy.includes('启动后隐藏主窗口。'));
-      assert.ok(copy.includes('关闭后隐藏托盘图标。'));
+      assert.ok(copy.includes('关闭到后台'));
+      assert.ok(copy.includes('静默启动'));
+      assert.ok(copy.includes('显示托盘图标'));
       assert.ok(!copy.includes('退出 Patina'));
     } finally {
       await evaluate(client, sessionId, `delete globalThis.__PATINA_REJECT_TRAY_SAVE; delete globalThis.__PATINA_REJECT_TRAY_APPLY;`);
@@ -280,6 +289,69 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       15_000,
       "Settings retry should restore the form",
     );
+  });
+
+  await runTest("settings preference help is available on focus and dismisses with Escape", async () => {
+    const selector = '.settings-preference-row .settings-help-icon';
+    await waitForExpression(client, sessionId, `document.querySelectorAll('${selector}').length === 4`);
+    try {
+      await evaluate(client, sessionId, `document.querySelector('${selector}').focus()`);
+      await waitForExpression(client, sessionId, `(() => {
+        const button = document.querySelector('${selector}');
+        const tooltip = document.getElementById(button.getAttribute('aria-describedby'));
+        return tooltip?.textContent === button.getAttribute('aria-label');
+      })()`);
+      await client.command('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' }, sessionId);
+      await client.command('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape' }, sessionId);
+      await waitForExpression(client, sessionId, `!document.querySelector('.settings-help-tooltip')`);
+      assert.equal(await evaluate(client, sessionId, `document.activeElement === document.querySelector('${selector}')`), true);
+    } finally {
+      await evaluate(client, sessionId, `document.activeElement?.blur()`);
+    }
+  });
+
+  await runTest("settings storage group headers keep consistent content spacing", async () => {
+    const text = getLocaleText("zh-CN").settings;
+    const titles = [text.dataExportTitle, text.backupRestoreTitle, text.storage.storageDirectoryTitle];
+    const geometry = await evaluate(client, sessionId, `
+      ${JSON.stringify(titles)}.map(title => {
+        const label = [...document.querySelectorAll('.qp-subpanel p')]
+          .find(node => node.textContent.trim() === title);
+        const panel = label?.closest('.qp-subpanel');
+        if (!panel) return null;
+        const header = panel.children[0].getBoundingClientRect();
+        const content = panel.children[1].getBoundingClientRect();
+        const copy = label.getBoundingClientRect();
+        return { height: header.height, gap: content.top - header.bottom,
+          centered: Math.abs(copy.top + copy.height / 2 - header.top - header.height / 2) < 0.5 };
+      })
+    `);
+    assert.deepEqual(geometry, titles.map(() => ({ height: 28, gap: 12, centered: true })));
+  });
+
+  await runTest("storage icon hover stays distinct from its card", async () => {
+    const selector = '.settings-storage-path-row .qp-icon-action-neutral:not(:disabled)';
+    await waitForExpression(client, sessionId, `Boolean(document.querySelector('${selector}'))`);
+    const scroll = await evaluate(client, sessionId, `[...document.querySelectorAll('.qp-scroll-region')].map(node => node.scrollTop)`);
+    try {
+      await evaluate(client, sessionId, `document.querySelector('${selector}').scrollIntoView({ block: 'center' })`);
+      await waitForAnimationFrames(client, sessionId);
+      const point = await evaluate(client, sessionId, `(() => {
+        const rect = document.querySelector('${selector}').getBoundingClientRect();
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+      })()`) as { x: number; y: number };
+      await client.command('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point }, sessionId);
+      await waitForExpression(client, sessionId, `document.querySelector('${selector}').matches(':hover')`);
+      assert.equal(await evaluate(client, sessionId, `(() => {
+        const button = document.querySelector('${selector}');
+        const background = getComputedStyle(button).backgroundColor;
+        return background !== 'rgba(0, 0, 0, 0)' && background !== 'transparent'
+          && background !== getComputedStyle(button.closest('.settings-storage-path-row')).backgroundColor;
+      })()`), true);
+    } finally {
+      await client.command('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 0, y: 0 }, sessionId);
+      await evaluate(client, sessionId, `[...document.querySelectorAll('.qp-scroll-region')].forEach((node, index) => { node.scrollTop = ${JSON.stringify(scroll)}[index]; })`);
+    }
   });
 
   await runTest("settings theme dialog opens and closes in a real browser", async () => {
@@ -600,6 +672,16 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
           const titleRect = title?.getBoundingClientRect();
           const titleFontSize = title ? Number.parseFloat(getComputedStyle(title).fontSize) : 0;
           return {
+            preferenceControlsFit: [...document.querySelectorAll('.settings-preference-row')].every(row => {
+              const rect = row.getBoundingClientRect();
+              const copy = row.querySelector('.settings-preference-copy').getBoundingClientRect();
+              const control = row.querySelector('.settings-preference-control').getBoundingClientRect();
+              const stacked = getComputedStyle(row).flexDirection === 'column';
+              return row.scrollWidth <= row.clientWidth + 1
+                && control.left >= rect.left && control.right <= rect.right + 1
+                && (stacked ? copy.bottom <= control.top : copy.right <= control.left
+                  && Math.abs((copy.top + copy.bottom - control.top - control.bottom) / 2) < 1);
+            }),
             noPageOverflow: document.documentElement.scrollWidth <= innerWidth + 1,
             triggerInsideViewport: Boolean(triggerRect && triggerRect.left >= -1 && triggerRect.right <= innerWidth + 1),
             triggerUsesCompactSize: Boolean(
@@ -625,6 +707,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
           };
         })())
       `))) as {
+        preferenceControlsFit: boolean;
         noPageOverflow: boolean;
         triggerInsideViewport: boolean;
         triggerUsesCompactSize: boolean;
@@ -634,6 +717,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
         headerRegionsDoNotOverlap: boolean;
       };
       assert.deepEqual(layoutState, {
+        preferenceControlsFit: true,
         noPageOverflow: true,
         triggerInsideViewport: true,
         triggerUsesCompactSize: true,
@@ -1299,7 +1383,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       `),
       true,
     );
-    await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString("远程备份")})`);
+    await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString("WebDAV 配置")})`);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
@@ -1460,6 +1544,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       true,
     );
     await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString("选择备份位置")})`);
+    await assertDialogHeaderCentered(".settings-backup-dialog");
     assert.equal(
       await evaluate(client!, sessionId, "Math.round(document.querySelector('.settings-backup-dialog')?.getBoundingClientRect().width ?? 0)"),
       600,
@@ -1799,7 +1884,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     await waitForExpression(client!, sessionId, "!document.querySelector('[role=\"dialog\"]')");
   });
 
-  await runTest("settings data export explains four formats before six field groups", async () => {
+  await runTest("settings data export shows four compact formats before six field groups", async () => {
     assert.deepEqual(
       await evaluate(client!, sessionId, `
         Array.from(document.querySelectorAll('.qp-action-row button'))
@@ -1823,24 +1908,79 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       true,
     );
     await waitForExpression(client!, sessionId, "Boolean(document.querySelector('.settings-data-export-format-grid'))");
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (() => {
-          const copy = document.querySelector('.settings-data-export-range-section .min-w-0')?.getBoundingClientRect();
-          const controls = document.querySelector('.settings-data-export-range-control')?.getBoundingClientRect();
-          return Boolean(copy && controls && Math.abs((copy.top + copy.height / 2) - (controls.top + controls.height / 2)) < 0.5);
-        })()
-      `),
-      true,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `getComputedStyle(document.querySelector('.settings-data-export-range-label')).lineHeight`),
-      "10px",
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `getComputedStyle(document.querySelector('.settings-data-export-range-label .qp-range-control-label-text')).translate`),
-      "0px 0.5px",
-    );
+    await assertDialogHeaderCentered(".settings-data-export-dialog-surface");
+    const originalRangeMode = await evaluate(client, sessionId, `localStorage.getItem('patina:export-range-mode')`) as string | null;
+    try {
+      await evaluate(client, sessionId, `document.querySelector('.settings-data-export-range-label').click()`);
+      await waitForExpression(client, sessionId, `Boolean(document.querySelector('.qp-range-picker'))`);
+      await evaluate(client, sessionId, `document.querySelector('.qp-range-picker .qp-calendar-nav').click()`);
+      const dates = await evaluate(client, sessionId, `(() => {
+        const today = new Date();
+        const key = day => {
+          const date = new Date(today.getFullYear(), today.getMonth() - 1, day);
+          return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
+        };
+        return [key(2), key(4), key(-1), key(1)];
+      })()`) as string[];
+      for (const date of dates.slice(0, 2)) {
+        await evaluate(client, sessionId, `document.querySelector('[data-range-picker-date="${date}"]').click()`);
+      }
+      await evaluate(client, sessionId, `document.querySelector('.qp-range-picker-footer button:last-child').click()`);
+      await waitForExpression(client, sessionId, `!document.querySelector('.qp-range-picker')`);
+      const rangeHint = '.settings-data-export-range-section .settings-data-export-section-hint';
+      await waitForExpression(client, sessionId, `document.querySelector('${rangeHint}').textContent === ${jsonString(`${dates[0]} - ${dates[1]}`)}`);
+      await evaluate(client, sessionId, `document.querySelector('.settings-data-export-range-control button:first-child').click()`);
+      await waitForExpression(client, sessionId, `document.querySelector('${rangeHint}').textContent === ${jsonString(`${dates[2]} - ${dates[3]}`)}`);
+      await evaluate(client, sessionId, `document.querySelector('.settings-data-export-range-control button:last-child').click()`);
+      await waitForExpression(client, sessionId, `document.querySelector('${rangeHint}').textContent === ${jsonString(`${dates[0]} - ${dates[1]}`)}`);
+
+      assert.equal(
+        await evaluate(client!, sessionId, `
+          (() => {
+            const copy = document.querySelector('.settings-data-export-range-section .min-w-0')?.getBoundingClientRect();
+            const controls = document.querySelector('.settings-data-export-range-control')?.getBoundingClientRect();
+            return Boolean(copy && controls && Math.abs((copy.top + copy.height / 2) - (controls.top + controls.height / 2)) < 0.5);
+          })()
+        `),
+        true,
+      );
+      assert.equal(
+        await evaluate(client!, sessionId, `getComputedStyle(document.querySelector('.settings-data-export-range-label')).lineHeight`),
+        "10px",
+      );
+      assert.equal(
+        await evaluate(client!, sessionId, `getComputedStyle(document.querySelector('.settings-data-export-range-label .qp-range-control-label-text')).translate`),
+        "0px 0.5px",
+      );
+      for (const [modeIndex, mode] of ["week", "month", "year"].entries()) {
+        await evaluate(client, sessionId, `document.querySelector('.settings-data-export-range-label').click()`);
+        await waitForExpression(client, sessionId, `Boolean(document.querySelector('.qp-range-picker'))`);
+        for (let step = 0; step <= modeIndex; step += 1) {
+          await evaluate(client, sessionId, `document.querySelector('.settings-data-export-range-control button:last-child').click()`);
+        }
+        await evaluate(client, sessionId, `document.querySelector('.qp-range-picker .qp-calendar-nav').click()`);
+        await evaluate(client, sessionId, `document.querySelector('[data-range-picker-date="${dates[0]}"]').click()`);
+        await evaluate(client, sessionId, `document.querySelector('.qp-range-picker-footer button:last-child').click()`);
+        await waitForExpression(client, sessionId, `!document.querySelector('.qp-range-picker')`);
+        const original = await evaluate(client, sessionId, `document.querySelector('${rangeHint}').textContent`) as string;
+        const expectedStart = await evaluate(client, sessionId, `(() => {
+          const [year, month, day] = ${jsonString(original)}.split(' - ')[0].split('-').map(Number);
+          const date = ${jsonString(mode)} === 'year' ? new Date(year - 1, 0, 1)
+            : ${jsonString(mode)} === 'month' ? new Date(year, month - 2, 1) : new Date(year, month - 1, day - 7);
+          return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
+        })()`) as string;
+        await evaluate(client, sessionId, `document.querySelector('.settings-data-export-range-control button:first-child').click()`);
+        await waitForExpression(client, sessionId, `document.querySelector('${rangeHint}').textContent.startsWith(${jsonString(expectedStart + ' - ')})`);
+        await evaluate(client, sessionId, `document.querySelector('.settings-data-export-range-control button:last-child').click()`);
+        await waitForExpression(client, sessionId, `document.querySelector('${rangeHint}').textContent === ${jsonString(original)}`);
+      }
+    } finally {
+      await evaluate(client, sessionId, `(() => {
+        const original = ${JSON.stringify(originalRangeMode)};
+        if (original === null) localStorage.removeItem('patina:export-range-mode');
+        else localStorage.setItem('patina:export-range-mode', original);
+      })()`);
+    }
     assert.deepEqual(
       await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.settings-data-export-format-option strong')).map((node) => node.textContent)`),
       ["CSV", "Markdown", "Parquet", "SQLite"],
@@ -1857,6 +1997,14 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       true,
       "Settings data export dialog overflowed at 390px",
     );
+    assert.equal(await evaluate(client, sessionId, `(() => {
+      const buttons = [...document.querySelectorAll('.settings-data-export-format-option')];
+      const rects = buttons.map(button => button.getBoundingClientRect());
+      return buttons.length === 4 && buttons.every(button => button.scrollWidth <= button.clientWidth + 1)
+        && rects.every(rect => Math.abs(rect.top - rects[0].top) < 0.5 && Math.abs(rect.width - rects[0].width) < 0.5)
+        && !document.querySelector('.settings-data-export-format-option span');
+    })()`), true, 'four equal format buttons should fit one row without descriptions');
+
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {

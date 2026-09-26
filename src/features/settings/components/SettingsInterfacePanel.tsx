@@ -421,9 +421,6 @@ export default function SettingsInterfacePanel({
                     </button>
                   )}
                 </div>
-                <p className="mt-1 text-sm leading-relaxed text-[var(--qp-text-secondary)]">
-                  {UI_TEXT.settings.webActivityEnabledHint}
-                </p>
               </div>
               <QuietSwitch
                 checked={webActivityEnabled}
@@ -479,9 +476,6 @@ export default function SettingsInterfacePanel({
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-[var(--qp-text-primary)]">
                   {UI_TEXT.settings.remoteStatusBridgeTitle}
-                </p>
-                <p className="mt-1 text-sm leading-relaxed text-[var(--qp-text-secondary)]">
-                  {UI_TEXT.settings.remoteStatusBridgeEnabledHint}
                 </p>
               </div>
               <QuietSwitch
@@ -554,7 +548,6 @@ export default function SettingsInterfacePanel({
       <QuietDialog
         open={webActivityHelpOpen}
         title={UI_TEXT.settings.webActivityHelpTitle}
-        description={UI_TEXT.settings.webActivityHelpDescription}
         onClose={() => setWebActivityHelpOpen(false)}
         surfaceClassName="settings-web-activity-help-dialog"
       >

@@ -1,6 +1,7 @@
 import { LOCALE_METADATA, SUPPORTED_LOCALES, useLocaleText } from "../../../shared/i18n/index.ts";
 import { ChevronRight, Palette } from "lucide-react";
 import { useRef, useState } from "react";
+import QuietActionRow from "../../../shared/components/QuietActionRow";
 import QuietBadge from "../../../shared/components/QuietBadge";
 import QuietDialog from "../../../shared/components/QuietDialog";
 import QuietButton from "../../../shared/components/QuietButton";
@@ -8,6 +9,7 @@ import QuietSelect from "../../../shared/components/QuietSelect";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
 import QuietSwitch from "../../../shared/components/QuietSwitch";
 import SettingsPanelHeader from "./SettingsPanelHeader";
+import { SettingsPreferenceGroup, SettingsPreferenceRow } from "./SettingsPreferenceLayout";
 import type { AppLanguage, ColorScheme, ThemeMode } from "../../../shared/settings/appSettings.ts";
 import {
   COLOR_SCHEME_OPTIONS, type ThemeLibrary, } from "../../../shared/settings/colorSchemeOptions.ts";
@@ -114,98 +116,65 @@ export default function SettingsAppearancePanel({
         title={UI_TEXT.settings.appearanceTitle}
       />
 
-      <div className="mt-5 grid grid-cols-1 items-start gap-3 md:grid-cols-[minmax(0,1fr)_236px] md:gap-4">
-        <div>
-          <label className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--qp-text-tertiary)]">
-            {UI_TEXT.settings.themeModeLabel}
-          </label>
-          <p className="mt-2 text-sm leading-relaxed text-[var(--qp-text-secondary)]">
-            {UI_TEXT.settings.themeModeHint}
-          </p>
-        </div>
-
-        <QuietSegmentedFilter
-          value={themeMode}
-          options={themeModeOptions}
-          onChange={onThemeModeChange}
-          className="md:self-end md:justify-self-end"
-        />
-      </div>
-
-      <div className="mt-5 grid grid-cols-1 items-start gap-3 md:grid-cols-[minmax(0,1fr)_236px] md:gap-4">
-        <div>
-          <label className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--qp-text-tertiary)]">
-            {UI_TEXT.settings.colorSchemeLabel}
-          </label>
-          <p className="mt-2 text-sm leading-relaxed text-[var(--qp-text-secondary)]">
-            {UI_TEXT.settings.colorSchemeHint}
-          </p>
-        </div>
-
-        <div
-          className="settings-theme-entry-list md:self-end md:justify-self-end"
-          role="group"
-          aria-label={UI_TEXT.accessibility.settings.colorScheme}
-        >
-          {themeLibraryOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => openColorSchemeDialog(option.value)}
-              className="settings-theme-entry"
-            >
-              <span className="settings-theme-entry-title">{option.label}</span>
-              <ChevronRight size={14} aria-hidden="true" />
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-5 grid grid-cols-1 items-start gap-3 md:grid-cols-[minmax(0,1fr)_236px] md:gap-4">
-        <div>
-          <label className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--qp-text-tertiary)]">
-            {UI_TEXT.settings.languageLabel}
-          </label>
-          <p className="mt-2 text-sm leading-relaxed text-[var(--qp-text-secondary)]">
-            {UI_TEXT.settings.languageHint}
-          </p>
-        </div>
-
-        <QuietSelect
-          value={language}
-          options={languageOptions}
-          onChange={onLanguageChange}
-          ariaLabel={UI_TEXT.settings.languageLabel}
-          disabled={languageDisabled}
-          density="compact"
-          className="max-w-full justify-self-start md:self-end md:justify-self-end"
-        />
-      </div>
-
-      <div className="mt-5 grid grid-cols-1 items-start gap-3 md:grid-cols-[minmax(0,1fr)_236px] md:gap-4">
-        <div>
-          <label className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--qp-text-tertiary)]">
-            {UI_TEXT.settings.dynamicEffectsLabel}
-            <QuietBadge variant="beta" size="compact">{UI_TEXT.settings.betaLabel}</QuietBadge>
-          </label>
-          <p className="mt-2 text-sm leading-relaxed text-[var(--qp-text-secondary)]">
-            {UI_TEXT.settings.dynamicEffectsHint}
-          </p>
-        </div>
-
-        <div className="md:self-end md:justify-self-end">
-          <QuietSwitch
-            checked={dynamicEffects}
-            ariaLabel={UI_TEXT.settings.dynamicEffectsLabel}
-            onChange={onDynamicEffectsChange}
-          />
-        </div>
+      <div className="mt-5 space-y-5">
+        <SettingsPreferenceGroup title={UI_TEXT.settings.themeGroupTitle}>
+          <QuietActionRow className="settings-preference-list">
+            <SettingsPreferenceRow title={UI_TEXT.settings.themeModeLabel} stacked>
+              <QuietSegmentedFilter
+                value={themeMode}
+                options={themeModeOptions}
+                onChange={onThemeModeChange}
+              />
+            </SettingsPreferenceRow>
+            <SettingsPreferenceRow title={UI_TEXT.settings.colorSchemeLabel} stacked>
+              <div className="settings-theme-entry-list" role="group" aria-label={UI_TEXT.accessibility.settings.colorScheme}>
+                {themeLibraryOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => openColorSchemeDialog(option.value)}
+                    className="settings-theme-entry"
+                  >
+                    <span className="settings-theme-entry-title">{option.label}</span>
+                    <ChevronRight size={14} aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+            </SettingsPreferenceRow>
+          </QuietActionRow>
+        </SettingsPreferenceGroup>
+        <SettingsPreferenceGroup title={UI_TEXT.settings.interfaceGroupTitle}>
+          <QuietActionRow className="settings-preference-list">
+            <SettingsPreferenceRow title={UI_TEXT.settings.languageLabel} stacked>
+              <QuietSelect
+                value={language}
+                options={languageOptions}
+                onChange={onLanguageChange}
+                ariaLabel={UI_TEXT.settings.languageLabel}
+                disabled={languageDisabled}
+                density="compact"
+                className="max-w-full"
+              />
+            </SettingsPreferenceRow>
+            <SettingsPreferenceRow title={(
+              <>
+                {UI_TEXT.settings.dynamicEffectsLabel}
+                <QuietBadge variant="beta" size="compact">{UI_TEXT.settings.betaLabel}</QuietBadge>
+              </>
+            )}>
+              <QuietSwitch
+                checked={dynamicEffects}
+                ariaLabel={UI_TEXT.settings.dynamicEffectsLabel}
+                onChange={onDynamicEffectsChange}
+              />
+            </SettingsPreferenceRow>
+          </QuietActionRow>
+        </SettingsPreferenceGroup>
       </div>
 
       <QuietDialog
         open={activeLibrary !== null}
         title={activeLibraryOption?.label ?? UI_TEXT.settings.colorSchemeDialogFallbackTitle}
-        description={UI_TEXT.settings.colorSchemeDialogDescription}
         onClose={closeColorSchemeDialog}
         initialFocusRef={selectedSchemeRef}
         surfaceClassName="qp-theme-dialog-surface"
