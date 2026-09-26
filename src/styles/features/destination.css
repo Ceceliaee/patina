@@ -397,8 +397,6 @@
 
 .destination-detail-popover-copy span {
   color: var(--qp-text-tertiary);
-  font-size: var(--qp-font-size-caption);
-  line-height: var(--qp-line-height-caption);
 }
 
 .destination-detail-popover-time {
@@ -407,17 +405,13 @@
   justify-items: end;
   gap: 2px;
   color: var(--qp-text-tertiary);
-  font-size: var(--qp-font-size-caption);
   font-variant-numeric: tabular-nums;
-  line-height: var(--qp-line-height-caption);
   text-align: right;
   white-space: nowrap;
 }
 
 .destination-detail-popover-duration {
   color: var(--qp-text-secondary);
-  font-size: var(--qp-font-size-caption);
-  line-height: var(--qp-line-height-caption);
   font-weight: var(--qp-font-weight-medium);
 }
 

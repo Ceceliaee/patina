@@ -329,8 +329,6 @@
 
 .qp-badge-beta.qp-badge-regular {
   padding-inline: 6px;
-  font-size: var(--qp-font-size-caption);
-  line-height: var(--qp-line-height-caption);
 }
 
 .qp-page-header-subtitle {
@@ -498,10 +496,6 @@
   line-height: var(--qp-line-height-caption);
   font-weight: var(--qp-font-weight-emphasis);
   text-align: center;
-}
-
-.qp-calendar-month[data-range="true"] .qp-calendar-title {
-  font-weight: var(--qp-font-weight-emphasis);
 }
 
 .qp-calendar-nav {
@@ -1333,8 +1327,6 @@
 .data-heatmap-panel-compact .data-heatmap-months {
   grid-template-columns: 24px repeat(var(--data-heatmap-week-count, 53), var(--data-heatmap-cell-size));
   padding-bottom: 4px;
-  font-size: var(--qp-font-size-compact);
-  line-height: var(--qp-line-height-compact);
 }
 
 .data-heatmap-panel-compact .data-heatmap-body {
@@ -1343,8 +1335,6 @@
 
 .data-heatmap-panel-compact .data-heatmap-weekdays {
   width: 24px;
-  font-size: var(--qp-font-size-compact);
-  line-height: var(--qp-line-height-compact);
 }
 
 @media (min-width: 1900px) {

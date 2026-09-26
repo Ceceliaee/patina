@@ -787,8 +787,6 @@
 .history-activity-popover-item-secondary {
   min-width: 0;
   color: var(--qp-text-tertiary);
-  font-size: var(--qp-font-size-caption);
-  line-height: var(--qp-line-height-caption);
   overflow-wrap: anywhere;
 }
 
@@ -798,22 +796,16 @@
   justify-items: end;
   gap: 2px;
   color: var(--qp-text-tertiary);
-  font-size: var(--qp-font-size-caption);
   font-variant-numeric: tabular-nums;
-  line-height: var(--qp-line-height-caption);
   text-align: right;
   white-space: nowrap;
 }
 
 .history-activity-popover-item-duration {
   color: var(--qp-text-secondary);
-  font-size: var(--qp-font-size-caption);
-  line-height: var(--qp-line-height-caption);
   font-weight: var(--qp-font-weight-medium);
 }
 
 .history-activity-popover-item-range {
   color: var(--qp-text-tertiary);
-  font-size: var(--qp-font-size-caption);
-  line-height: var(--qp-line-height-caption);
 }

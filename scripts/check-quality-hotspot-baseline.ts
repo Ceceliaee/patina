@@ -26,7 +26,7 @@ const HOTSPOT_BUDGETS: HotspotBudget[] = [
   {
     path: "src/styles/quiet-pro.css",
     owner: "Quiet Pro design system",
-    maxLines: 2008,
+    maxLines: 1998,
     risk: "shared component rules can accumulate feature-local exceptions",
     reason: "physical lines remain the stable signal for declarative CSS",
   },
