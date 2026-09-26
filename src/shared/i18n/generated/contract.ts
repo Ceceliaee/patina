@@ -32,7 +32,6 @@ export interface UiText {
   "about": {
     "description": string;
     "feedbackDialog": {
-      "description": string;
       "githubAction": string;
       "githubOpening": string;
       "githubTitle": string;
@@ -40,7 +39,6 @@ export interface UiText {
       "qqTitle": string;
       "title": string;
     };
-    "subtitle": string;
     "supportDialog": {
       "description": string;
       "kofiTitle": string;
@@ -233,7 +231,6 @@ export interface UiText {
     "sharePrefix": string;
     "showHourlyActivityByCategory": string;
     "showTotalHourlyActivity": string;
-    "subtitle": string;
     "title": string;
     "topApps": string;
     "topAppsBadge": (count: number) => string;
@@ -298,7 +295,6 @@ export interface UiText {
     "selectionLastItem": string;
     "selectionLimitReached": string;
     "shortRangeHint": string;
-    "subtitle": string;
     "title": string;
     "webHeatmap": string;
     "webNoActivity": string;
@@ -372,10 +368,8 @@ export interface UiText {
     "configFields": string;
     "configFieldsCount": (n: number, total: number) => string;
     "configFieldsEmpty": string;
-    "configFieldsHint": string;
     "configFieldsTitle": string;
     "deselectGroupFields": string;
-    "dialogDescription": string;
     "expandFieldGroup": string;
     "exportAction": string;
     "exportDone": (count: number) => string;
@@ -513,14 +507,10 @@ export interface UiText {
     };
     "fieldsSectionTitle": string;
     "formatCSV": string;
-    "formatCSVHint": string;
     "formatLabel": string;
     "formatMarkdown": string;
-    "formatMarkdownHint": string;
     "formatParquet": string;
-    "formatParquetHint": string;
     "formatSQLite": string;
-    "formatSQLiteHint": string;
     "groupActivity": string;
     "groupActivityHint": string;
     "groupAnalysis": string;
@@ -584,7 +574,6 @@ export interface UiText {
     "showTimelineByCategory": string;
     "showTimelineByWeb": string;
     "showTotalHourlyActivity": string;
-    "subtitle": string;
     "timeline": string;
     "timelineAppLanes": string;
     "timelineAxis": string;
@@ -618,13 +607,11 @@ export interface UiText {
     "backToLinkedWebDomains": string;
     "cancel": string;
     "categoryControl": string;
-    "categoryDialogDescription": string;
     "categoryDialogTitle": string;
     "categoryFilter": string;
     "categorySelectLabel": (label: string) => string;
     "color": string;
     "createCategoryAction": string;
-    "createCategoryDescription": string;
     "createCategoryPlaceholder": string;
     "createCategoryTitle": string;
     "deleteAppRecords": string;
@@ -689,7 +676,6 @@ export interface UiText {
     "saving": string;
     "searchNoResults": string;
     "statsEnabled": string;
-    "subtitle": string;
     "title": string;
     "titleCaptureOffHint": string;
     "titleCaptureOnHint": string;
@@ -708,17 +694,13 @@ export interface UiText {
     "backgroundOptimizationHint": string;
     "backgroundOptimizationLabel": string;
     "backupExportAction": string;
-    "backupExportHint": string;
     "backupExporting": string;
     "backupExportTitle": string;
     "backupRestoreAction": string;
     "backupRestoreActionHelp": string;
-    "backupRestoreActionHint": string;
     "backupRestoreActionTitle": string;
-    "backupRestoreHint": string;
     "backupRestoreTitle": string;
     "backupRestoring": string;
-    "backupTargetHint": string;
     "backupTargetLocalHint": string;
     "backupTargetLocalTitle": string;
     "backupTargetRemoteHint": string;
@@ -736,17 +718,12 @@ export interface UiText {
     "cleanupRangeLabels": Record<string | number, string>;
     "cleanupRunning": string;
     "cleanupTitle": string;
-    "closeToTrayHint": string;
     "closeToTrayLabel": string;
-    "colorSchemeDialogDescription": string;
     "colorSchemeDialogFallbackTitle": string;
-    "colorSchemeHint": string;
     "colorSchemeLabel": string;
     "colorSchemeSaving": string;
     "confirmRangeFallback": string;
     "dataExportAction": string;
-    "dataExportActionHint": string;
-    "dataExportHint": string;
     "dataExportTitle": string;
     "dataImport": {
       "availableLabel": string;
@@ -768,7 +745,6 @@ export interface UiText {
       "destructureSuccess": (count: number, path: string) => string;
       "destructureTitle": string;
       "detailSeparator": string;
-      "dialogDescription": string;
       "dialogTitle": string;
       "duplicateLabel": string;
       "errorLabel": string;
@@ -780,11 +756,9 @@ export interface UiText {
       "previewTitle": string;
     };
     "dataImportAction": string;
-    "dataImportActionHint": string;
     "dataSafetyTitle": string;
     "decreaseCleanupRange": string;
     "decreaseMinute": (label: string) => string;
-    "dynamicEffectsHint": string;
     "dynamicEffectsLabel": string;
     "globalTitleHint": string;
     "globalTitleLabel": string;
@@ -794,23 +768,20 @@ export interface UiText {
     "importRecordCount": (count: number) => string;
     "increaseCleanupRange": string;
     "increaseMinute": (label: string) => string;
-    "languageHint": string;
+    "interfaceGroupTitle": string;
     "languageLabel": string;
     "languageLoadFailed": string;
     "languageOptions": {
       "enUS": string;
       "zhCN": string;
     };
-    "launchAtLoginHint": string;
     "launchAtLoginLabel": string;
     "loadFailed": string;
     "loading": string;
-    "minimizeToWidgetHint": string;
     "minimizeToWidgetLabel": string;
     "minuteValue": (minutes: number) => string;
-    "remoteBackupHint": string;
+    "recordingOptionsTitle": string;
     "remoteBackupTitle": string;
-    "remoteStatusBridgeEnabledHint": string;
     "remoteStatusBridgeMachineIdLabel": string;
     "remoteStatusBridgeTitle": string;
     "remoteStatusBridgeTokenLabel": string;
@@ -818,7 +789,6 @@ export interface UiText {
     "residentTitle": string;
     "restoreConfirmDetail": (path: string, summary: string, strategy: string) => string;
     "restoreConfirmTitle": string;
-    "restoreSourceHint": string;
     "restoreSourceLocalHint": string;
     "restoreSourceLocalTitle": string;
     "restoreSourceRemoteHint": string;
@@ -835,6 +805,7 @@ export interface UiText {
       "replace": string;
     };
     "retry": string;
+    "runtimeBehaviorTitle": string;
     "save": string;
     "saved": string;
     "saveFailed": string;
@@ -842,9 +813,7 @@ export interface UiText {
     "scheduledBackupCleanupWarning": string;
     "scheduledBackupLabels": Record<string | number, string>;
     "servicesTitle": string;
-    "showTrayIconHint": string;
     "showTrayIconLabel": string;
-    "startMinimizedHint": string;
     "startMinimizedLabel": string;
     "storage": {
       "changePathAction": string;
@@ -857,7 +826,6 @@ export interface UiText {
       "storageCacheMigrationConfirmTitle": string;
       "storageDataMigrationConfirmDetail": (currentDataRoot: string, targetDataRoot: string) => string;
       "storageDataMigrationConfirmTitle": string;
-      "storageDirectorySummary": string;
       "storageDirectoryTitle": string;
       "storageMigrationFailed": string;
       "storageOpenDirectoryFailed": string;
@@ -871,12 +839,11 @@ export interface UiText {
       "webviewCacheClearTitle": string;
       "webviewCacheDirectoryLabel": string;
     };
-    "subtitle": string;
+    "themeGroupTitle": string;
     "themeLibraryOptions": {
       "dark": string;
       "light": string;
     };
-    "themeModeHint": string;
     "themeModeLabel": string;
     "themeModeOptions": {
       "dark": string;
@@ -885,25 +852,22 @@ export interface UiText {
     };
     "timelineMergeGapHint": string;
     "timelineMergeGapLabel": string;
+    "timeRulesTitle": string;
     "title": string;
     "tracking": string;
     "trackingPanelTitle": string;
-    "trackingPausedHint": string;
     "trackingPausedLabel": string;
     "unsaved": string;
     "webActivityAddressLabel": string;
-    "webActivityEnabledHint": string;
     "webActivityHelpAction": string;
     "webActivityHelpCopiedAction": string;
     "webActivityHelpCopyPortAction": string;
     "webActivityHelpCopyTokenAction": string;
-    "webActivityHelpDescription": string;
     "webActivityHelpNote": string;
     "webActivityHelpSteps": Array<{ title: string; description: string; showStoreBadges?: boolean; details: Array<string | { text: string; links: Array<{ label: string; href: string }> }> }>;
     "webActivityHelpTitle": string;
     "webActivityTitle": string;
     "webActivityTokenLabel": string;
-    "webDavConfigDescription": string;
     "webDavConfigTitle": string;
     "webDavConfigure": string;
     "webDavDeleteAction": string;
@@ -928,6 +892,7 @@ export interface UiText {
     "webDavUploadTitle": string;
     "webDavUploadUncertain": string;
     "webDavUsername": string;
+    "windowBehaviorTitle": string;
   };
   "time": {
     "hours": string;
@@ -1058,7 +1023,6 @@ export interface UiText {
       "reminder": string;
       "stopwatch": string;
     };
-    "subtitle": string;
     "timerHint": string;
     "timerLabel": string;
     "timerLabelPlaceholder": string;
