@@ -48,7 +48,7 @@ const FOCUS_CATEGORY_LIMIT = 4;
 const FOCUS_CATEGORY_EXPANDED_LIMIT = 6;
 const FOCUS_CATEGORY_EXPANDED_WIDTH = 440;
 const DONUT_CENTER = 56;
-const DONUT_RADIUS = 42;
+const DONUT_RADIUS = 47;
 const DONUT_STROKE_WIDTH = 16;
 const DONUT_CIRCUMFERENCE = 2 * Math.PI * DONUT_RADIUS;
 const DONUT_GAP_DEGREES = 4;
@@ -237,7 +237,7 @@ export default function Dashboard({
       />
 
       {readState.status === "error" ? (
-        <div className="qp-panel flex items-center gap-3 p-4 text-sm text-[var(--qp-text-secondary)]" role="status" data-dashboard-read-error>
+        <div className="qp-panel flex items-center gap-3 p-4 qp-text-body text-[var(--qp-text-secondary)]" role="status" data-dashboard-read-error>
           <span>{readState.hasSnapshot ? UI_TEXT.common.refreshFailed : UI_TEXT.common.readFailed}</span>
           <button type="button" className="qp-control shrink-0" onClick={(event) => {
             returnRetryFocusRef.current = document.activeElement === event.currentTarget;
@@ -245,7 +245,7 @@ export default function Dashboard({
           }}>{UI_TEXT.common.retry}</button>
         </div>
       ) : !readState.hasSnapshot ? (
-        <div className="qp-panel p-5 text-sm text-[var(--qp-text-tertiary)]" role="status" aria-busy>
+        <div className="qp-panel p-5 qp-text-body text-[var(--qp-text-tertiary)]" role="status" aria-busy>
           {UI_TEXT.common.loading}
         </div>
       ) : null}
@@ -257,16 +257,16 @@ export default function Dashboard({
             className="qp-panel p-5 relative overflow-hidden shrink-0 min-h-[250px] dashboard-focus-card"
           >
             <div className="dashboard-card-header">
-              <h3 className="text-[var(--qp-text-primary)] font-semibold text-sm">{UI_TEXT.dashboard.focusShare}</h3>
+              <h3 className="text-[var(--qp-text-primary)] qp-weight-emphasis qp-text-section-title">{UI_TEXT.dashboard.focusShare}</h3>
             </div>
             <div className="dashboard-focus-layout">
               <div className="relative w-full h-[185px] dashboard-focus-chart">
                 <DashboardFocusDonut categoryDist={visibleCategoryDist} />
                 <div className="dashboard-focus-total-center absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-[22px] font-semibold text-[var(--qp-text-primary)] tabular-nums">
+                  <span className="qp-text-metric qp-weight-emphasis text-[var(--qp-text-primary)] tabular-nums">
                     {formatDashboardDuration(totalTrackedTime)}
                   </span>
-                  <span className="max-w-[88px] truncate text-[11px] font-semibold text-[var(--qp-text-tertiary)] uppercase tracking-[0.06em]">
+                  <span className="max-w-[88px] truncate qp-text-caption qp-weight-medium text-[var(--qp-text-tertiary)] uppercase tracking-[0.06em]">
                     {UI_TEXT.dashboard.total}
                   </span>
                 </div>
@@ -280,19 +280,19 @@ export default function Dashboard({
                         className="dashboard-focus-ranking-dot"
                         style={{ backgroundColor: cat.color || "var(--qp-accent-default)", ...(cat.category === "anonymous" ? ANONYMOUS_ACTIVITY_STYLE : {}) }}
                       />
-                      <span className="dashboard-focus-ranking-name font-semibold text-[var(--qp-text-secondary)]">{cat.name}</span>
+                      <span className="dashboard-focus-ranking-name qp-weight-medium text-[var(--qp-text-secondary)]">{cat.name}</span>
                     </div>
-                    <span className="text-[var(--qp-text-primary)] font-semibold tabular-nums">
+                    <span className="text-[var(--qp-text-primary)] qp-weight-medium tabular-nums">
                       {formatDashboardDuration(cat.value)}
                     </span>
                   </div>
                 ))}
                 {visibleCategoryDist.length === 0 && (
-                  <div className="text-xs font-medium text-[var(--qp-text-tertiary)]">{UI_TEXT.dashboard.emptyState}</div>
+                  <div className="qp-text-caption qp-weight-medium text-[var(--qp-text-tertiary)]">{UI_TEXT.dashboard.emptyState}</div>
                 )}
               </div>
             </div>
-            <p className="dashboard-focus-delta text-[11px] font-medium text-[var(--qp-text-tertiary)]">
+            <p className="dashboard-focus-delta qp-text-caption qp-weight-medium text-[var(--qp-text-tertiary)]">
               <DayDeltaIcon size={12} strokeWidth={2} />
               {dayDeltaLabel}
             </p>
@@ -300,7 +300,7 @@ export default function Dashboard({
 
           <div className="qp-panel p-5 flex min-h-0 flex-col overflow-hidden dashboard-pulse-card">
             <div className="dashboard-card-header">
-              <h3 className="text-[var(--qp-text-primary)] font-semibold text-sm">
+              <h3 className="text-[var(--qp-text-primary)] qp-weight-emphasis qp-text-section-title">
                 {UI_TEXT.dashboard.hourlyActivity}
               </h3>
               <QuietIconAction
@@ -330,8 +330,8 @@ export default function Dashboard({
 
         <div className="flex-1 qp-panel p-5 flex flex-col overflow-hidden min-h-0">
           <header className="dashboard-card-header mb-4">
-            <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">{UI_TEXT.dashboard.topApps}</h3>
-            <div className="qp-chip px-2.5 py-1 text-[10px] font-semibold text-[var(--qp-text-secondary)]">
+            <h3 className="qp-weight-emphasis text-[var(--qp-text-primary)] qp-text-section-title">{UI_TEXT.dashboard.topApps}</h3>
+            <div className="qp-chip dashboard-top-app-count px-2.5 py-1 qp-weight-emphasis text-[var(--qp-text-secondary)]">
               {UI_TEXT.dashboard.topAppsBadge(topApplications.length)}
             </div>
           </header>
@@ -343,7 +343,7 @@ export default function Dashboard({
             {topApplications.length === 0 && (
               <div className="h-full flex flex-col items-center justify-center text-[var(--qp-text-tertiary)] gap-2">
                 <Monitor size={32} className="opacity-40" />
-                <p className="text-sm font-medium mt-2">{UI_TEXT.dashboard.emptyState}</p>
+                <p className="qp-text-body qp-weight-medium mt-2">{UI_TEXT.dashboard.emptyState}</p>
               </div>
             )}
             {topApplications.map((app) => (
@@ -436,25 +436,23 @@ export default function Dashboard({
                         {anonymous ? <EyeOff size={20} className="text-[var(--qp-text-secondary)]" aria-hidden="true" /> : icons[app.exeName] ? (
                           <img src={icons[app.exeName]} className="w-full h-full object-contain" alt="" />
                         ) : (
-                          <div className="text-xs font-semibold opacity-40 text-[var(--qp-text-secondary)]">{app.categoryInitial}</div>
+                          <div className="qp-text-caption qp-weight-emphasis opacity-40 text-[var(--qp-text-secondary)]">{app.categoryInitial}</div>
                         )}
                       </button>
                       <div className="min-w-0">
-                        <div className="dashboard-top-app-name-row font-semibold text-[var(--qp-text-primary)] text-sm">
+                        <div className="dashboard-top-app-name-row qp-weight-medium text-[var(--qp-text-primary)] qp-text-body">
                           <span className="truncate">{displayName}</span>
                           <QuickClassificationStatus unclassified={isUnclassified} />
-                        </div>
-                        <div className="dashboard-top-app-meta text-[10px] text-[var(--qp-text-tertiary)] font-medium mt-0.5 tabular-nums">
-                          <span>{UI_TEXT.dashboard.sharePrefix} {app.percentage}%</span>
                         </div>
                       </div>
                     </div>
 
-                      <div className="text-right ml-4 flex-shrink-0">
-                      <div className="dashboard-top-app-duration font-semibold text-[var(--qp-text-primary)] text-sm tabular-nums">
-                        {formatDashboardDuration(app.duration)}
+                    <div className="text-right ml-4 flex-shrink-0">
+                      <div className="dashboard-top-app-duration qp-weight-medium text-[var(--qp-text-primary)] qp-text-body tabular-nums whitespace-nowrap">
+                        <span>{formatDashboardDuration(app.duration)}</span>
+                        <span className="qp-weight-regular opacity-70"> · {app.percentage}%</span>
                       </div>
-                      <div className="w-20 h-1.5 bg-[var(--qp-chart-track)] rounded-full mt-2.5 overflow-hidden">
+                      <div className="w-[100px] h-1.5 bg-[var(--qp-chart-track)] rounded-full mt-2.5 ml-auto overflow-hidden">
                         <div
                           className="dashboard-top-app-progress h-full rounded-full"
                           style={{

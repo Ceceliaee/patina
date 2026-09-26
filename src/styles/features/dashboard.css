@@ -18,6 +18,11 @@
   gap: 0.75rem;
 }
 
+.dashboard-top-app-count {
+  font-size: var(--qp-font-size-compact);
+  line-height: var(--qp-line-height-compact);
+}
+
 .dashboard-focus-card {
   container-type: inline-size;
   display: flex;
@@ -54,7 +59,8 @@
   align-items: center;
   gap: 0.75rem;
   min-height: 1.55rem;
-  font-size: 0.6875rem;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
 }
 
 .dashboard-focus-ranking-dot {
@@ -103,7 +109,7 @@
   .dashboard-focus-ranking-row {
     gap: 1rem;
     min-height: 1.8rem;
-    font-size: 0.75rem;
+  line-height: var(--qp-line-height-caption);
   }
 }
 
@@ -120,8 +126,7 @@
   transition: width var(--qp-motion-base) var(--qp-motion-ease);
 }
 
-.dashboard-top-app-name-row,
-.dashboard-top-app-meta {
+.dashboard-top-app-name-row {
   display: flex;
   min-width: 0;
   align-items: center;

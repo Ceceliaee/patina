@@ -385,6 +385,9 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
   });
 
   await runTest("dashboard focus donut keeps a restrained ring weight", async () => {
+    assert.equal(await evaluate(client!, sessionId, `
+      getComputedStyle(document.querySelector('.dashboard-focus-total-center > span')).fontSize
+    `), "24px", "The center total should use the same metric size as the pomodoro countdown");
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
@@ -975,9 +978,9 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
         Boolean(document.querySelector('.dashboard-top-app-name-row .qp-badge')?.textContent?.includes("未分类"))
       `);
       assert.equal(
-        await evaluate(client!, sessionId, `Boolean(document.querySelector('.dashboard-top-app-meta .qp-badge'))`),
+        await evaluate(client!, sessionId, `Boolean(document.querySelector('.dashboard-top-app-meta'))`),
         false,
-        "the unclassified badge belongs beside the app name, not in the share row",
+        "the share should appear beside the duration rather than below the app name",
       );
       assert.equal(
         await evaluate(client!, sessionId, `
@@ -997,8 +1000,11 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
             return badge.classList.contains('qp-badge-regular')
               && badge.classList.contains('qp-badge-neutral')
               && Math.abs(nameRowRect.height - badgeRect.height) <= 2
-              && badgeStyle.fontSize === '11px'
-              && badgeStyle.fontWeight === '500'
+              && badgeStyle.fontSize === '12px'
+              && badgeStyle.fontWeight === '650'
+              && getComputedStyle(duration).fontSize === '14px'
+              && duration.textContent.includes(' · ')
+              && duration.textContent.includes('%')
               && badgeRect.right + 8 <= durationRect.left;
           })()
         `),
