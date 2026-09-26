@@ -100,6 +100,16 @@ await runTest("History SQL preserves open and half-open boundaries with native i
     assert.deepEqual([anonymous[0].startTime,anonymous[0].endTime,anonymous[0].duration],[1000,2000,1000]);
     assert.equal(anonymous[0].windowTitle,"");
     assert.deepEqual(anonymous[0].titleSampleDetails,[]);
+    db.exec("INSERT INTO anonymous_activity VALUES('open',6000,NULL,7000,0)");
+    for (const [start, end] of [[0, 9000], [2000, 6000], [6000, 7000], [7000, 8000]]) {
+      const core = await getSessionsInRangeWithoutTitleSamples(start, end);
+      const detailed = await getSessionsInRange(start, end);
+      assert.deepEqual(
+        core,
+        detailed.map(row => ({ ...row, titleSampleDetails: [] })),
+        "Core refresh and title enrichment must preserve the same activity facts, including anonymous ranges",
+      );
+    }
   } finally {
     Database.prototype.select = originalSelect;
     Date.now = originalNow;

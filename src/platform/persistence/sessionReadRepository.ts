@@ -199,13 +199,18 @@ export async function getSessionsInRangeWithoutTitleSamples(startMs: number, end
        FROM sessions
        WHERE start_time < ? AND (end_time > ? OR (end_time IS NULL AND ? > ?))
        UNION ALL
+       SELECT -7000000000000000 - rowid, 'native', '', ?, '', start_time,
+              COALESCE(end_time, observed_until), COALESCE(end_time, observed_until) - start_time, start_time
+       FROM anonymous_activity
+       WHERE start_time < ? AND COALESCE(end_time, observed_until) > ?
+       UNION ALL
        SELECT id, 'import_exact' AS origin, app_name, exe_name, window_title, start_time, end_time,
               duration, start_time AS continuity_group_start_time
        FROM import_exact_sessions
        WHERE start_time < ? AND end_time > ?
      )
      ORDER BY start_time ASC`,
-    [now, endMs, startMs, now, startMs, endMs, startMs],
+    [now, endMs, startMs, now, startMs, ANONYMOUS_ACTIVITY_KEY, endMs, startMs, endMs, startMs],
   );
 
   return resolveEffectiveHistoryRows(rows, now).map((row) => mapRawHistorySession(row));
