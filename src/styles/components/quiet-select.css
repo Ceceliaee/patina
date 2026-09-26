@@ -17,8 +17,9 @@
   justify-content: space-between;
   gap: 8px;
   text-align: left;
-  font-size: 0.84rem;
-  font-weight: 600;
+  font-size: var(--qp-font-size-body);
+  line-height: var(--qp-line-height-body);
+  font-weight: var(--qp-font-weight-medium);
 }
 
 .qp-select-trigger-compact {
@@ -28,9 +29,9 @@
   padding: 0 8px;
   gap: 6px;
   color: var(--qp-text-secondary);
-  font-size: 11px;
-  font-weight: 650;
-  line-height: 1;
+  font-size: var(--qp-font-size-caption);
+  font-weight: var(--qp-font-weight-medium);
+  line-height: var(--qp-line-height-caption);
 }
 
 .qp-select-label-stack {
@@ -106,8 +107,9 @@
   color: var(--qp-text-secondary);
   text-align: left;
   padding: 0 9px;
-  font-size: 0.8rem;
-  font-weight: 550;
+  font-size: var(--qp-font-size-body);
+  line-height: var(--qp-line-height-body);
+  font-weight: var(--qp-font-weight-medium);
 }
 
 .qp-select-option-highlighted,
@@ -132,9 +134,9 @@
   padding: 0 8px;
   overflow: hidden;
   color: var(--qp-text-tertiary);
-  font-size: 11px;
-  font-weight: 650;
-  line-height: 1;
+  font-size: var(--qp-font-size-caption);
+  font-weight: var(--qp-font-weight-medium);
+  line-height: var(--qp-line-height-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

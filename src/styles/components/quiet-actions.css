@@ -6,9 +6,9 @@
   border-radius: var(--qp-radius-button);
   background: transparent;
   padding: 6px 8px;
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 1;
+  font-size: var(--qp-font-size-body);
+  font-weight: var(--qp-font-weight-emphasis);
+  line-height: var(--qp-line-height-body);
 }
 
 .qp-inline-action:disabled {

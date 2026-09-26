@@ -215,7 +215,7 @@ export default function NativeTrendChart({
               />
               <text
                 fill="var(--qp-text-tertiary)"
-                fontSize="11"
+                fontSize="var(--qp-font-size-caption)"
                 textAnchor="end"
                 x={plotLeft - 8}
                 y={y + 4}
@@ -240,7 +240,7 @@ export default function NativeTrendChart({
               />
               <text
                 fill="var(--qp-text-tertiary)"
-                fontSize="11"
+                fontSize="var(--qp-font-size-caption)"
                 textAnchor={index === 0 ? "start" : index === rows.length - 1 ? "end" : "middle"}
                 x={x}
                 y={plotBottom + 19}

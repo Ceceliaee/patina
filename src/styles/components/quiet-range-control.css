@@ -41,9 +41,9 @@
   padding: 0 10px;
   color: var(--qp-text-secondary);
   font: inherit;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1;
+  font-size: var(--qp-font-size-compact);
+  font-weight: var(--qp-font-weight-emphasis);
+  line-height: var(--qp-line-height-compact);
   text-align: center;
 }
 

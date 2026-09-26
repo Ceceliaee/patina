@@ -277,8 +277,9 @@ export default function HourlyActivityChart({
             return (
               <text
                 key={`tick-${point.hour}`}
+                className="qp-weight-medium"
                 fill="var(--qp-text-tertiary)"
-                fontSize="10"
+                fontSize="var(--qp-font-size-caption)"
                 textAnchor="middle"
                 x={chartLeft + slotWidth * (index + 0.5)}
                 y={chartBottom + 18}

@@ -18,8 +18,9 @@
   margin-bottom: 6px;
   overflow: hidden;
   color: var(--qp-text-tertiary);
-  font-size: 10px;
-  font-weight: 600;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
+  font-weight: var(--qp-font-weight-regular);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -39,7 +40,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  font-size: 11px;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
 }
 
 .qp-chart-tooltip-key {
@@ -67,7 +69,7 @@
 .qp-chart-tooltip-value {
   flex: 0 0 auto;
   color: var(--qp-text-primary);
-  font-weight: 600;
+  font-weight: var(--qp-font-weight-medium);
   font-variant-numeric: tabular-nums;
 }
 

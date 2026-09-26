@@ -54,10 +54,11 @@
 
 .qp-timeline-axis {
   position: relative;
-  height: 18px;
+  height: calc(var(--qp-line-height-caption) + 5px);
   color: var(--qp-text-tertiary);
-  font-size: 9px;
-  font-weight: 700;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
+  font-weight: var(--qp-font-weight-medium);
   font-variant-numeric: tabular-nums;
 }
 

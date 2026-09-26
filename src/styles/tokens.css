@@ -31,6 +31,24 @@
 }
 
 :root {
+  --qp-font-weight-regular: 450;
+  --qp-font-weight-medium: 550;
+  --qp-font-weight-emphasis: 650;
+  --qp-font-size-compact: 0.625rem;
+  --qp-line-height-compact: 0.875rem;
+  --qp-font-size-page-title: 1.125rem;
+  --qp-line-height-page-title: 1.5rem;
+  --qp-font-size-section-title: 1rem;
+  --qp-line-height-section-title: 1.375rem;
+  --qp-font-size-group-title: 0.9375rem;
+  --qp-line-height-group-title: 1.25rem;
+  --qp-font-size-body: 0.875rem;
+  --qp-line-height-body: 1.25rem;
+  --qp-font-size-caption: 0.75rem;
+  --qp-line-height-caption: 1.125rem;
+  --qp-font-size-metric: 1.5rem;
+  --qp-line-height-metric: 1.75rem;
+
   --qp-scrollbar-size: 6px;
   --qp-scrollbar-button-size: 6px;
   --qp-scrollbar-thumb-inset: 0px;
@@ -106,6 +124,9 @@ body {
   background: transparent;
   color: var(--qp-text-primary);
   font-family: var(--font-sans);
+  font-weight: var(--qp-font-weight-regular);
+  font-size: var(--qp-font-size-body);
+  line-height: var(--qp-line-height-body);
   overflow: hidden;
 }
 
@@ -117,22 +138,23 @@ h3 {
   color: var(--qp-text-primary);
 }
 
-h1 {
-  font-size: 1.38rem;
-  font-weight: 620;
-  line-height: 1.25;
-}
-
-h2 {
-  font-size: 1.12rem;
-  font-weight: 600;
-  line-height: 1.32;
-}
-
-h3 {
-  font-size: 0.94rem;
-  font-weight: 600;
-  line-height: 1.36;
+@layer base {
+  strong, b { font-weight: var(--qp-font-weight-emphasis); }
+  h1 {
+    font-size: var(--qp-font-size-page-title);
+    font-weight: var(--qp-font-weight-emphasis);
+    line-height: var(--qp-line-height-page-title);
+  }
+  h2 {
+    font-size: var(--qp-font-size-section-title);
+    font-weight: var(--qp-font-weight-emphasis);
+    line-height: var(--qp-line-height-section-title);
+  }
+  h3 {
+    font-size: var(--qp-font-size-group-title);
+    font-weight: var(--qp-font-weight-emphasis);
+    line-height: var(--qp-line-height-group-title);
+  }
 }
 
 p,
@@ -159,4 +181,30 @@ button {
 :where(button, [role="button"], input, select, textarea):focus-visible {
   outline: 2px solid color-mix(in srgb, var(--qp-accent-default) 58%, white);
   outline-offset: 1px;
+}
+
+@layer utilities {
+  .qp-weight-regular { font-weight: var(--qp-font-weight-regular); }
+  .qp-weight-medium { font-weight: var(--qp-font-weight-medium); }
+  .qp-weight-emphasis { font-weight: var(--qp-font-weight-emphasis); }
+  .qp-text-section-title {
+    font-size: var(--qp-font-size-section-title);
+    line-height: var(--qp-line-height-section-title);
+  }
+  .qp-text-group-title {
+    font-size: var(--qp-font-size-group-title);
+    line-height: var(--qp-line-height-group-title);
+  }
+  .qp-text-body {
+    font-size: var(--qp-font-size-body);
+    line-height: var(--qp-line-height-body);
+  }
+  .qp-text-caption {
+    font-size: var(--qp-font-size-caption);
+    line-height: var(--qp-line-height-caption);
+  }
+  .qp-text-metric {
+    font-size: var(--qp-font-size-metric);
+    line-height: var(--qp-line-height-metric);
+  }
 }

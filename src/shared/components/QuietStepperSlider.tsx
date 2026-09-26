@@ -81,7 +81,7 @@ export default function QuietStepperSlider({
           <Plus size={11} />
         </button>
       </div>
-      <p className="order-3 min-w-[48px] text-center text-xs font-medium tabular-nums text-[var(--qp-text-secondary)]">
+      <p className="order-3 min-w-[48px] text-center qp-text-caption qp-weight-medium tabular-nums text-[var(--qp-text-secondary)]">
         {displayValue}
       </p>
     </div>

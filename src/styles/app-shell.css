@@ -17,7 +17,7 @@ html[data-window-label="main"] #root {
   align-items: flex-start;
   gap: 8px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: var(--qp-font-weight-medium);
   color: var(--qp-text-secondary);
 }
 
@@ -104,9 +104,9 @@ html[data-window-label="main"] #root {
   border: 1px solid var(--qp-border-subtle);
   background: var(--qp-bg-elevated);
   padding: 1px 6px;
-  font-size: 11px;
-  line-height: 1.35;
-  font-weight: 600;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
+  font-weight: var(--qp-font-weight-medium);
 }
 
 .qp-color-trigger-fixed-slot .qp-color-trigger-value {
@@ -150,8 +150,9 @@ html[data-window-label="main"] #root {
 }
 
 .qp-color-popover-title {
-  font-size: 11px;
-  font-weight: 700;
+  line-height: var(--qp-line-height-group-title);
+  font-size: var(--qp-font-size-group-title);
+  font-weight: var(--qp-font-weight-emphasis);
   color: var(--qp-text-secondary);
 }
 
@@ -271,8 +272,9 @@ html[data-window-label="main"] #root {
 }
 
 .qp-color-row-label {
-  font-size: 10px;
-  font-weight: 650;
+  line-height: var(--qp-line-height-caption);
+  font-size: var(--qp-font-size-caption);
+  font-weight: var(--qp-font-weight-medium);
   color: var(--qp-text-tertiary);
 }
 
@@ -291,8 +293,9 @@ html[data-window-label="main"] #root {
   background: var(--qp-bg-panel);
   color: var(--qp-text-primary);
   padding: 0 9px;
-  font-size: 12px;
-  font-weight: 600;
+  line-height: var(--qp-line-height-caption);
+  font-size: var(--qp-font-size-caption);
+  font-weight: var(--qp-font-weight-medium);
 }
 
 .qp-color-triplet-row {
@@ -682,7 +685,7 @@ body[data-window-label="widget"] {
 
 .widget-pill-tracking-time {
   width: 36px;
-  font-weight: 650;
+  font-weight: var(--qp-font-weight-emphasis);
 }
 
 .widget-pill-tool-slots {
