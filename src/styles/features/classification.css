@@ -251,6 +251,10 @@
   min-width: 0;
 }
 
+.qp-app-mapping-name-line > .qp-badge {
+  flex-shrink: 0;
+}
+
 .qp-app-identity-tooltip {
   min-width: 0;
   max-width: 100%;

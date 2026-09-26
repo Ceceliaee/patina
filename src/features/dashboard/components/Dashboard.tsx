@@ -234,7 +234,6 @@ export default function Dashboard({
       <QuietPageHeader
         icon={<Monitor size={18} />}
         title={UI_TEXT.dashboard.title}
-        subtitle={UI_TEXT.dashboard.subtitle}
       />
 
       {readState.status === "error" ? (

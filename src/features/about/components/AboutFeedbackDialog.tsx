@@ -53,7 +53,6 @@ export default function AboutFeedbackDialog({
     <QuietDialog
       open={open}
       title={copy.title}
-      description={copy.description}
       onClose={close}
       initialFocusRef={githubButtonRef}
       surfaceClassName="about-feedback-dialog-surface qp-scroll-region"

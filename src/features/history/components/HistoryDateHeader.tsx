@@ -53,7 +53,6 @@ export default function HistoryDateHeader({
       <QuietPageHeader
         icon={<Clock size={18} />}
         title={UI_TEXT.history.title}
-        subtitle={UI_TEXT.history.subtitle}
         rightSlot={(
           <div className="flex items-center gap-2 shrink-0">
             <button

@@ -411,11 +411,11 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
       await client.command("Page.navigate", { url: appUrl }, sessionId);
       await waitForExpression(client, sessionId, `Boolean(document.querySelector('[aria-label="历史"]'))`);
       await evaluate(client, sessionId, `document.querySelector('[aria-label="历史"]').click()`);
-      await waitForExpression(client, sessionId, `Boolean(document.querySelector('.history-timeline-zoom-open')) && [...document.querySelectorAll('.qp-timeline-segment [aria-label]')].some(node => node.getAttribute('aria-label').includes('匿名活动'))`);
+      await waitForExpression(client, sessionId, `Boolean(document.querySelector('.history-timeline-zoom-open')) && [...document.querySelectorAll('.qp-timeline-segment [aria-label]')].some(node => node.getAttribute('aria-label').includes('匿名'))`);
       await evaluate(client, sessionId, `document.querySelector('.history-timeline-zoom-open').click()`);
       await waitForExpression(client, sessionId, `Boolean(document.querySelector('.history-timeline-lane-track .qp-timeline-segment'))`);
       assert.equal(await evaluate(client, sessionId, `(() => {
-        const lane = [...document.querySelectorAll('.history-timeline-lane-row')].find(row => row.getAttribute('aria-label')?.startsWith('匿名活动'));
+        const lane = [...document.querySelectorAll('.history-timeline-lane-row')].find(row => row.getAttribute('aria-label')?.startsWith('匿名'));
         return !!lane?.querySelector('.history-timeline-lane-identity svg.lucide-eye-off') && !lane?.querySelector('.history-timeline-lane-dot');
       })()`), true, 'anonymous application lane uses EyeOff in its application icon slot');
       for (const theme of ["light", "dark"] as const) {
@@ -424,7 +424,7 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
         const painted = await evaluate(client, sessionId, `(() => {
           const bars = [...document.querySelectorAll('.history-timeline-zoom-dialog-surface .qp-timeline-segment')];
           return bars.map(bar => ({
-            anonymous: bar.querySelector('[aria-label]')?.getAttribute('aria-label').includes('匿名活动'),
+            anonymous: bar.querySelector('[aria-label]')?.getAttribute('aria-label').includes('匿名'),
             hitPattern: getComputedStyle(bar).backgroundImage,
             barPattern: getComputedStyle(bar, '::before').backgroundImage,
             patternSize: getComputedStyle(bar, '::before').backgroundSize,

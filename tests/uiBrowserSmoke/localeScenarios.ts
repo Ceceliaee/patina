@@ -280,7 +280,7 @@ export async function runLocaleScenarios(context: BrowserSmokeContext) {
     );
   });
 
-  await runTest("English data export localizes range and all format descriptions", async () => {
+  await runTest("English data export localizes its range and keeps four format buttons", async () => {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
@@ -309,21 +309,16 @@ export async function runLocaleScenarios(context: BrowserSmokeContext) {
       "This month",
     );
     assert.deepEqual(
-      await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.settings-data-export-format-option span')).map((node) => node.textContent?.trim())`),
-      [
-        "Best for Excel and general spreadsheet work.",
-        "Best for reading, editing, and organizing notes.",
-        "Best for analytics tools and columnar processing.",
-        "Best for local SQL queries and complete archives.",
-      ],
+      await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.settings-data-export-format-option strong')).map((node) => node.textContent?.trim())`),
+      ["CSV", "Markdown", "Parquet", "SQLite"],
     );
     await evaluate(client!, sessionId, `document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
     await waitForExpression(client!, sessionId, "!document.querySelector('[role=\"dialog\"]')");
   });
 
   for (const localeCase of [
-    { locale: "es", labels: ["Hoy", "Historial", "Datos", "Clasificación", "Herramientas", "Configuración", "Acerca de"], exportTitle: "Exportación e importación", exportAction: "Exportar", month: "Este mes", hintPrefix: "Para " },
-    { locale: "ru-RU", labels: ["Сегодня", "История", "Данные", "Категории", "Инструменты", "Настройки", "О программе"], exportTitle: "Экспорт и импорт", exportAction: "Экспорт", month: "Этот месяц", hintPrefix: "Для " },
+    { locale: "es", labels: ["Hoy", "Historial", "Datos", "Clasificación", "Herramientas", "Configuración", "Acerca de"], exportTitle: "Exportación e importación", exportAction: "Exportar", month: "Este mes" },
+    { locale: "ru-RU", labels: ["Сегодня", "История", "Данные", "Категории", "Инструменты", "Настройки", "О программе"], exportTitle: "Экспорт и импорт", exportAction: "Экспорт", month: "Этот месяц" },
   ]) await runTest(`${localeCase.locale} pages and export remain usable in the minimum window`, async () => {
     const { locale, labels } = localeCase;
     const script = await client.command("Page.addScriptToEvaluateOnNewDocument", {
@@ -344,7 +339,7 @@ export async function runLocaleScenarios(context: BrowserSmokeContext) {
       await evaluate(client, sessionId, `Array.from(document.querySelectorAll('button')).find(n => n.textContent?.trim() === ${jsonString(localeCase.exportAction)})?.click()`);
       await waitForExpression(client, sessionId, "Boolean(document.querySelector('.settings-data-export-format-grid'))");
       assert.equal(await evaluate(client, sessionId, "document.querySelector('.settings-data-export-range-label')?.textContent?.trim()"), localeCase.month);
-      assert.equal(await evaluate(client, sessionId, `Array.from(document.querySelectorAll('.settings-data-export-format-option span')).every(n => n.textContent?.startsWith(${jsonString(localeCase.hintPrefix)}))`), true);
+      assert.deepEqual(await evaluate(client, sessionId, `Array.from(document.querySelectorAll('.settings-data-export-format-option')).map(n => n.textContent.trim())`), ['CSV', 'Markdown', 'Parquet', 'SQLite']);
       await evaluate(client, sessionId, "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
       await waitForExpression(client, sessionId, "!document.querySelector('[role=\"dialog\"]')");
     } finally {

@@ -123,7 +123,6 @@ export default function About({
       <QuietPageHeader
         icon={<Info size={18} />}
         title={UI_TEXT.about.title}
-        subtitle={UI_TEXT.about.subtitle}
       />
 
       <div className="flex-1 overflow-y-auto qp-scroll-region pr-2">

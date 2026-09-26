@@ -156,7 +156,6 @@ export default function Tools({
         icon={<ToolCase size={18} />}
         title={UI_TEXT.tools.title}
         titleSuffix={<QuietBadge variant="beta">{UI_TEXT.tools.beta}</QuietBadge>}
-        subtitle={UI_TEXT.tools.subtitle}
       />
 
       {!state.hasSnapshot ? (

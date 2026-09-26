@@ -188,6 +188,17 @@ export async function runClassificationAppLayoutScenarios({ client, sessionId, r
       await click('.qp-classification-count-filter [aria-label="匿名统计"]');
       await waitForExpression(client!, sessionId, `document.querySelector(${jsonString(row + ' [aria-label="匿名统计"]')})?.getAttribute('aria-pressed')==='true'`);
       assert.equal(await evaluate(client!, sessionId, `document.querySelector(${jsonString(row)}).textContent.includes('匿名统计')`), true);
+      await click(`${row} [aria-label="修改应用名称"]`);
+      await inputName();
+      await key("Enter", 13);
+      assert.equal(await evaluate(client!, sessionId, `(() => {
+        const line = document.querySelector(${jsonString(row + ' .qp-app-mapping-name-line')});
+        const badge = line.querySelector('.qp-badge');
+        const name = line.querySelector('.qp-app-mapping-name');
+        return badge.scrollWidth <= badge.clientWidth
+          && badge.getBoundingClientRect().right <= line.getBoundingClientRect().right + 1
+          && name.scrollWidth > name.clientWidth;
+      })()`), true, 'long names truncate while the status badge remains fully visible');
       await click(`${row} [aria-label="匿名统计"]`);
       await waitForExpression(client!, sessionId, `!document.querySelector(${jsonString(row)})`);
       await client!.command("Emulation.setDeviceMetricsOverride", { width: 1100, height: 820, deviceScaleFactor: 1.5, mobile: false }, sessionId);

@@ -1041,7 +1041,7 @@ await runTest("all-time web snapshots use monthly buckets from the first recorde
     },
   });
 
-  assert.equal(snapshot.range.label, "总计");
+  assert.equal(snapshot.range.label, "累计");
   assert.equal(receivedBoundaries[0], startMs);
   assert.equal(receivedBoundaries[1], new Date(2024, 2, 1).getTime());
   assert.equal(receivedBoundaries.at(-1), nowMs);

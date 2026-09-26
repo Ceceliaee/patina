@@ -211,7 +211,7 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
         const patterns = [...document.querySelectorAll('.dashboard-workspace pattern')];
         return patterns.length > 0 && patterns.every(pattern => !!pattern.querySelector('circle') && !pattern.querySelector('path'));
       })()`), true, 'anonymous SVG patterns use sparse dots');
-      assert(result.text.includes('匿名活动') && !result.text.includes('activity:anonymous'));
+      assert(result.text.includes('匿名') && !result.text.includes('匿名活动') && !result.text.includes('activity:anonymous'));
         await captureDashboardScreenshot('anonymous-dashboard.png');
         await evaluate(client, sessionId, `document.querySelector('[aria-label="数据"]').click()`);
         await waitForExpression(client, sessionId, `Boolean(document.querySelector('.data-app-option[data-destination-key="activity:anonymous"]'))`);

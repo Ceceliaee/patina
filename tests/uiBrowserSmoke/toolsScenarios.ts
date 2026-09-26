@@ -273,7 +273,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `document.body.innerText.includes(${jsonString(TOOLS_TEXT.subtitle)})`,
+      `document.querySelector('.qp-page-header-title')?.textContent === ${jsonString(TOOLS_TEXT.title)}`,
     );
     await waitForExpression(
       client!,

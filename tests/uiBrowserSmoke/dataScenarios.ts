@@ -868,7 +868,7 @@ export async function runDataScenarios(
         sessionId,
         `document.querySelector(${jsonString(panelSelector)})
           ?.querySelector(".data-trend-range-trigger")
-          ?.textContent?.trim() === "总计"`,
+          ?.textContent?.trim() === "累计"`,
       );
       assert.equal(
         await evaluate(client!, sessionId, `
@@ -4598,7 +4598,7 @@ export async function runDataScenarios(
       mobile: false,
     }, sessionId);
     await evaluate(client!, sessionId, `document.querySelector('[aria-label="Data"]')?.click()`);
-    await waitForExpression(client!, sessionId, `document.body.innerText.includes("Browse long-term trends")`);
+    await waitForExpression(client!, sessionId, `document.querySelector('.qp-page-header-title')?.textContent === "Data"`);
     await waitForExpression(
       client!,
       sessionId,

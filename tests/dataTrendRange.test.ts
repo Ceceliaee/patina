@@ -81,7 +81,7 @@ await runTest("all-time range spans the first through last recorded months", () 
 
   assert.deepEqual(
     [allTime.startDateKey, allTime.endDateKey, allTime.granularity, allTime.label],
-    ["2024-02-01", "2025-11-30", "month", "总计"],
+    ["2024-02-01", "2025-11-30", "month", "累计"],
   );
 });
 
@@ -183,7 +183,7 @@ await runTest("all-time snapshots request month buckets", async () => {
     endMs: nowMs,
     mode: "month",
   }]);
-  assert.equal(snapshot.range.label, "总计");
+  assert.equal(snapshot.range.label, "累计");
 });
 
 await runTest("natural period arrows preserve the period and may enter but not pass the current period", () => {

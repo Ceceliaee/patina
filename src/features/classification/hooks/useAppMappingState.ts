@@ -336,7 +336,6 @@ export function useAppMappingState({
     const categoryName = await prompt({
       title: UI_TEXT.mapping.createCategoryTitle,
       surfaceClassName: "qp-category-create-dialog",
-      description: UI_TEXT.mapping.createCategoryDescription,
       placeholder: UI_TEXT.mapping.createCategoryPlaceholder,
     });
     if (!categoryName) return;

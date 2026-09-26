@@ -173,7 +173,6 @@ export default function AppMapping(props: Props) {
       <QuietPageHeader
         icon={<Sparkles size={18} />}
         title={UI_TEXT.mapping.title}
-        subtitle={UI_TEXT.mapping.subtitle}
         rightSlot={(
           <div className="flex items-center gap-2.5">
             <div
@@ -435,7 +434,6 @@ export default function AppMapping(props: Props) {
       <QuietDialog
         open={showCategoryDialog}
         title={UI_TEXT.mapping.categoryDialogTitle}
-        description={UI_TEXT.mapping.categoryDialogDescription}
         onClose={() => setShowCategoryDialog(false)}
         surfaceClassName="qp-category-dialog-surface"
         actions={(
