@@ -1,5 +1,11 @@
 // Canonical language-neutral message contract. Do not derive this file from a locale at build time.
 export const MESSAGE_SCHEMA = {
+  "settings.timeRulesTitle": {"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Time rules"},
+  "settings.recordingOptionsTitle": {"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Recording options"},
+  "settings.themeGroupTitle": {"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Theme"},
+  "settings.interfaceGroupTitle": {"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Interface"},
+  "settings.windowBehaviorTitle": {"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Window behavior"},
+  "settings.runtimeBehaviorTitle": {"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Runtime behavior"},
   "native.export.anonymousActivity": { "kind": "string", "params": [], "surface": "native", "description": "Anonymous activity label in exported data; identity fields remain empty." },
   "common.anonymousActivity": { "kind": "string", "params": [], "surface": "frontend", "description": "Single anonymous activity identity; duration is retained without application or website identity." },
   "mapping.webLinks": { "kind": "string", "params": [], "surface": "frontend", "description": "Website grouping and exact-domain controls" },
@@ -16,11 +22,6 @@ export const MESSAGE_SCHEMA = {
 
 
   "about.description": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "about.feedbackDialog.description": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -55,11 +56,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "about.feedbackDialog.title": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "about.subtitle": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -995,11 +991,6 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "dashboard.subtitle": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "dashboard.title": {
     "kind": "string",
     "params": [],
@@ -1338,11 +1329,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.shortRangeHint": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "data.subtitle": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1827,22 +1813,12 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "export.configFieldsHint": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "export.configFieldsTitle": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "export.deselectGroupFields": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "export.dialogDescription": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2203,11 +2179,6 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "export.formatCSVHint": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "export.formatLabel": {
     "kind": "string",
     "params": [],
@@ -2218,27 +2189,12 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "export.formatMarkdownHint": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "export.formatParquet": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "export.formatParquetHint": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "export.formatSQLite": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "export.formatSQLiteHint": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2562,11 +2518,6 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "history.subtitle": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "history.timeline": {
     "kind": "string",
     "params": [],
@@ -2732,11 +2683,6 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "mapping.categoryDialogDescription": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "mapping.categoryDialogTitle": {
     "kind": "string",
     "params": [],
@@ -2759,11 +2705,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "mapping.createCategoryAction": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "mapping.createCategoryDescription": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3086,11 +3027,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "mapping.statsEnabled": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "mapping.subtitle": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3569,11 +3505,6 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "settings.backupExportHint": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "settings.backupExporting": {
     "kind": "string",
     "params": [],
@@ -3594,17 +3525,7 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "settings.backupRestoreActionHint": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "settings.backupRestoreActionTitle": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "settings.backupRestoreHint": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3615,11 +3536,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.backupRestoring": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "settings.backupTargetHint": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3720,17 +3636,7 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "settings.showTrayIconHint": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "accessibility.settings.toggleShowTrayIcon": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "settings.closeToTrayHint": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3740,17 +3646,7 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "settings.colorSchemeDialogDescription": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "settings.colorSchemeDialogFallbackTitle": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "settings.colorSchemeHint": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3771,16 +3667,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.dataExportAction": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "settings.dataExportActionHint": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "settings.dataExportHint": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3910,11 +3796,6 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "settings.dataImport.dialogDescription": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "settings.dataImport.dialogTitle": {
     "kind": "string",
     "params": [],
@@ -3979,11 +3860,6 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "settings.dataImportActionHint": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "settings.dataSafetyTitle": {
     "kind": "string",
     "params": [],
@@ -4003,11 +3879,6 @@ export const MESSAGE_SCHEMA = {
         "optional": false
       }
     ],
-    "surface": "frontend"
-  },
-  "settings.dynamicEffectsHint": {
-    "kind": "string",
-    "params": [],
     "surface": "frontend"
   },
   "settings.dynamicEffectsLabel": {
@@ -4067,11 +3938,6 @@ export const MESSAGE_SCHEMA = {
     ],
     "surface": "frontend"
   },
-  "settings.languageHint": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "settings.languageLabel": {
     "kind": "string",
     "params": [],
@@ -4093,11 +3959,6 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "settings.launchAtLoginHint": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "settings.launchAtLoginLabel": {
     "kind": "string",
     "params": [],
@@ -4109,11 +3970,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.loading": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "settings.minimizeToWidgetHint": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4134,17 +3990,7 @@ export const MESSAGE_SCHEMA = {
     ],
     "surface": "frontend"
   },
-  "settings.remoteBackupHint": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "settings.remoteBackupTitle": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "settings.remoteStatusBridgeEnabledHint": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4196,11 +4042,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.restoreConfirmTitle": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "settings.restoreSourceHint": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4300,11 +4141,6 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "settings.startMinimizedHint": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "settings.startMinimizedLabel": {
     "kind": "string",
     "params": [],
@@ -4378,11 +4214,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.storage.storageDataMigrationConfirmTitle": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "settings.storage.storageDirectorySummary": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4469,22 +4300,12 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "settings.subtitle": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "settings.themeLibraryOptions.dark": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.themeLibraryOptions.light": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "settings.themeModeHint": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4534,11 +4355,6 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "settings.trackingPausedHint": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "settings.trackingPausedLabel": {
     "kind": "string",
     "params": [],
@@ -4550,11 +4366,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.webActivityAddressLabel": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "settings.webActivityEnabledHint": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4575,11 +4386,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.webActivityHelpCopyTokenAction": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "settings.webActivityHelpDescription": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4607,11 +4413,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.webActivityTokenLabel": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "settings.webDavConfigDescription": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5337,11 +5138,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "tools.statusChip.stopwatch": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.subtitle": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
