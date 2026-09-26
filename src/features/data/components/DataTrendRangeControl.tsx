@@ -18,6 +18,8 @@ interface Props {
   allTimeStartDateKey: string;
   ariaLabel: string;
   selection: DataTrendRangeSelection;
+  displayLabel?: string;
+  displaySelection?: DataTrendRangeSelection;
   onChange: (selection: DataTrendRangeSelection) => void;
 }
 
@@ -26,6 +28,8 @@ export default function DataTrendRangeControl({
   allTimeStartDateKey,
   ariaLabel,
   selection,
+  displayLabel,
+  displaySelection = selection,
   onChange,
 }: Props) {
   const UI_TEXT = useLocaleText();
@@ -35,45 +39,23 @@ export default function DataTrendRangeControl({
   const [pickerLabel, setPickerLabel] = useState(UI_TEXT.data.pickerModes.custom);
   const isSpecial = selection.kind !== "all" && selection.kind !== "rolling";
   const nowMs = Date.now();
-  const label = resolveDataTrendRange(selection, nowMs, UI_TEXT).label;
+  const label = displayLabel ?? resolveDataTrendRange(displaySelection, nowMs, UI_TEXT).label;
   const pickerModeIndex = DATA_TREND_PICKER_MODES.indexOf(pickerMode);
 
+  const adjacent = (delta: -1 | 1) => getAdjacentDataTrendRangeSelection(
+    selection, delta, nowMs, UI_TEXT, allTimeStartDateKey, allTimeEndDateKey,
+  );
+  const previousSelection = open ? null : adjacent(-1);
+  const nextSelection = open ? null : adjacent(1);
   const selectAdjacent = (delta: number) => {
     if (open) {
       const mode = DATA_TREND_PICKER_MODES[pickerModeIndex + delta];
       if (mode) setPickerMode(mode);
-      return;
+    } else {
+      const next = delta < 0 ? previousSelection : nextSelection;
+      if (next) onChange(next);
     }
-    const nextSelection = getAdjacentDataTrendRangeSelection(
-      selection,
-      delta < 0 ? -1 : 1,
-      nowMs,
-      UI_TEXT,
-      allTimeStartDateKey,
-      allTimeEndDateKey,
-    );
-    if (nextSelection) onChange(nextSelection);
   };
-  const previousSelection = open
-    ? null
-    : getAdjacentDataTrendRangeSelection(
-      selection,
-      -1,
-      nowMs,
-      UI_TEXT,
-      allTimeStartDateKey,
-      allTimeEndDateKey,
-    );
-  const nextSelection = open
-    ? null
-    : getAdjacentDataTrendRangeSelection(
-      selection,
-      1,
-      nowMs,
-      UI_TEXT,
-      allTimeStartDateKey,
-      allTimeEndDateKey,
-    );
 
   return (
     <>

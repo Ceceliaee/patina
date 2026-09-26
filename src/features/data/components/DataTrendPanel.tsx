@@ -1,5 +1,6 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { memo, type MouseEvent, type Ref } from "react";
+import { useDataPresentation } from "../hooks/useDataPresentation.ts";
 
 import NativeTrendChart from "../../../shared/charts/NativeTrendChart.tsx";
 import {
@@ -50,11 +51,12 @@ function DataTrendPanel({
   onMouseLeave,
 }: DataTrendPanelProps) {
   const UI_TEXT = useLocaleText();
-  const { viewModel, loading, error, retry: onRetry } = readState;
+  const { viewModel: incomingViewModel, loading, error, retry: onRetry } = readState;
+  const viewModel = useDataPresentation(incomingViewModel, Boolean(incomingViewModel), loading && !error);
   return (
     <div className="data-trend-panel" aria-busy={loading}>
       <div className="data-trend-header">
-        <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">
+        <h3 className="qp-weight-emphasis text-[var(--qp-text-primary)] qp-text-section-title">
           {UI_TEXT.data.activityTrend}
         </h3>
         <div className="data-trend-inline-metrics" aria-label={UI_TEXT.accessibility.data.trendSummary}>
@@ -72,6 +74,7 @@ function DataTrendPanel({
           allTimeStartDateKey={allTimeStartDateKey}
           ariaLabel={UI_TEXT.accessibility.data.trendRange}
           selection={selection}
+          displayLabel={viewModel?.rangeLabel}
           onChange={onSelectionChange}
         />
       </div>
@@ -88,7 +91,7 @@ function DataTrendPanel({
           </button>
         </div>
       ) : !viewModel ? (
-        <div className="mt-3 text-xs text-[var(--qp-text-tertiary)]" role="status">{UI_TEXT.common.loading}</div>
+        <div className="mt-3 qp-text-caption text-[var(--qp-text-tertiary)]" role="status">{UI_TEXT.common.loading}</div>
       ) : null}
       <div className="pt-4">
         <div
@@ -96,11 +99,12 @@ function DataTrendPanel({
           className={`data-trend-chart ${
             viewModel
               ? canOpenHistory ? "data-chart-openable" : ""
-              : "data-chart-placeholder flex items-center justify-center text-[var(--qp-text-tertiary)] text-xs"
+              : "data-chart-placeholder flex items-center justify-center text-[var(--qp-text-tertiary)] qp-text-caption"
           }`}
-          onMouseDownCapture={viewModel ? onMouseDownCapture : undefined}
-          onDoubleClickCapture={viewModel ? onDoubleClickCapture : undefined}
-          aria-hidden={viewModel ? undefined : true}
+          onMouseDownCapture={onMouseDownCapture}
+          onDoubleClickCapture={onDoubleClickCapture}
+          inert={!incomingViewModel}
+          aria-hidden={!viewModel}
         >
           {viewModel ? (
             <NativeTrendChart

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { formatLocalDateKey } from "../../../shared/lib/localDate.ts";
 import {
   getCachedDataHeatmapSessions,
@@ -27,7 +27,7 @@ export function useDataHeatmapSnapshot(
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [retryKey, setRetryKey] = useState(0);
   const retry = useCallback(() => setRetryKey((value) => value + 1), []);
-  const queryKey = useMemo(() => getHeatmapSelectionKey(selection, nowMs), [selection, nowMs]);
+  const queryKey = getHeatmapSelectionKey(selection, Date.now());
   const [state, setState] = useState<HeatmapReadState>(() => {
     const sessions = getCachedDataHeatmapSessions(selection, nowMs) ?? null;
     return {

@@ -2,6 +2,7 @@ import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { EyeOff } from "lucide-react";
 import { isAnonymousActivity } from "../../../shared/classification/anonymousActivity.ts";
 import { memo, useLayoutEffect, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode, type Ref, type RefObject, } from "react";
+import { useDataPresentation } from "../hooks/useDataPresentation.ts";
 import NativeTrendChart from "../../../shared/charts/NativeTrendChart.tsx";
 import QuietSearchField from "../../../shared/components/QuietSearchField";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter.tsx";
@@ -95,7 +96,10 @@ function getOptionInitial(displayName: string) {
   return trimmed ? trimmed.charAt(0).toUpperCase() : "?";
 }
 
-function DataAppTrendPanel({
+function DataAppTrendPanel(props: DataAppTrendPanelProps) {
+  const presentation = useDataPresentation(props, props.ready, props.refreshing && !props.errorMessage, props.destinationMode);
+  const retainingPresentation = presentation !== props;
+  const {
   allTimeEndDateKey,
   allTimeStartDateKey,
   onContentCommitted,
@@ -130,11 +134,9 @@ function DataAppTrendPanel({
   initialDimension,
   canOpenHistory,
   errorMessage,
-  refreshing,
   refreshFailed,
   onRetry,
   onDestinationModeChange,
-  onSelectionChange,
   onSearchQueryChange,
   onOptionSelect,
   onOptionIntentStart,
@@ -146,7 +148,7 @@ function DataAppTrendPanel({
   onDoubleClickCapture,
   onMouseMove,
   onMouseLeave,
-}: DataAppTrendPanelProps) {
+  } = presentation;
   const UI_TEXT = useLocaleText();
   const canClassify = (option: DataDestinationTrendOption) => supportsQuickClassification && !isAnonymousActivity(option.key);
   const handleRetry = (event: MouseEvent<HTMLButtonElement>) => {
@@ -184,7 +186,7 @@ function DataAppTrendPanel({
     <div className="qp-panel p-5 data-app-panel relative">
       <div className="data-app-panel-header">
         <div className="data-app-panel-heading">
-          <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">
+          <h3 className="qp-weight-emphasis text-[var(--qp-text-primary)] qp-text-section-title">
             {title}
           </h3>
           {modeOptions.length > 1 ? (
@@ -199,6 +201,7 @@ function DataAppTrendPanel({
           {selectedOptions.length > 0 ? (
             <div
               className="data-app-selected-status"
+              inert={retainingPresentation}
               aria-label={UI_TEXT.data.selectedObjectCount(selectedOptions.length)}
             >
               {selectedOptions.map((option) => (
@@ -295,8 +298,9 @@ function DataAppTrendPanel({
             allTimeEndDateKey={allTimeEndDateKey}
             allTimeStartDateKey={allTimeStartDateKey}
             ariaLabel={rangeAriaLabel}
-            selection={selection}
-            onChange={onSelectionChange}
+            selection={props.selection}
+            displaySelection={selection}
+            onChange={props.onSelectionChange}
           />
         </div>
       </div>
@@ -310,7 +314,7 @@ function DataAppTrendPanel({
         </div>
       ) : !ready ? (
         <div className="relative" aria-busy>
-          <div role="status" className="absolute text-xs text-[var(--qp-text-tertiary)]">{UI_TEXT.common.loading}</div>
+          <div role="status" className="absolute qp-text-caption text-[var(--qp-text-tertiary)]">{UI_TEXT.common.loading}</div>
           <div
             className="data-app-grid pointer-events-none invisible"
             aria-hidden
@@ -337,13 +341,14 @@ function DataAppTrendPanel({
           </div>
         </div>
       ) : filteredOptions.length === 0 && !hasSearchQuery ? (
-        <div className="data-app-loading text-[var(--qp-text-tertiary)] text-xs" role="status">
+        <div className="data-app-loading text-[var(--qp-text-tertiary)] qp-text-caption" role="status">
           {emptyLabel}
         </div>
       ) : (
         <div
           className="data-app-grid"
-          aria-busy={refreshing}
+          aria-busy={props.refreshing}
+          inert={retainingPresentation}
         >
           <div
             className="data-app-sidebar"
@@ -363,7 +368,7 @@ function DataAppTrendPanel({
               aria-description={interactionHint}
             >
               {filteredOptions.length === 0 ? (
-                <div className="data-app-empty text-[var(--qp-text-tertiary)] text-xs">
+                <div className="data-app-empty text-[var(--qp-text-tertiary)] qp-text-caption">
                   {noMatchLabel}
                 </div>
               ) : filteredOptions.map((option) => {
@@ -460,6 +465,7 @@ function DataAppTrendPanel({
                       <span className="data-app-option-name-row">
                         <span className="data-app-option-name">{option.displayName}</span>
                         <QuickClassificationStatus
+                          density="dense"
                           unclassified={Boolean(supportsQuickClassification && option.unclassified)}
                         />
                       </span>

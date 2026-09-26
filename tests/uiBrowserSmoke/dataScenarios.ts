@@ -66,6 +66,55 @@ export async function runDataReadFailureScenarios(context: BrowserSmokeContext) 
     }
   });
 
+  await runTest("data overview and destination range changes keep the chart and matching label until the read commits", async () => {
+    for (const mode of ["overview", "app", "category"]) {
+    const panel = mode === "overview" ? ".data-overview" : ".data-app-panel";
+    const chart = panel === ".data-overview" ? ".data-trend-chart" : ".data-app-chart";
+    const busy = panel === ".data-overview" ? ".data-trend-panel" : ".data-app-grid";
+    await openData();
+    if (mode === "category") {
+      await waitForExpression(client, sessionId, `Boolean(document.querySelector('.data-destination-mode'))`);
+      await evaluate(client, sessionId, `Array.from(document.querySelectorAll('.data-destination-mode button')).find(node => node.textContent === '分类').click()`);
+    }
+    await waitForExpression(client, sessionId, `document.querySelector('${panel} ${busy}')?.getAttribute('aria-busy') === 'false'`);
+    const presentation = `JSON.stringify({
+      label: document.querySelector('${panel} .data-trend-range-trigger')?.textContent,
+      metrics: Array.from(document.querySelectorAll('${panel} .data-trend-inline-metrics, ${panel} .data-app-metric-strip')).map(node => node.textContent),
+      path: document.querySelector('${panel} ${chart} .qp-native-trend-line')?.getAttribute('d'),
+      height: document.querySelector('${panel}')?.getBoundingClientRect().height,
+    })`;
+    const before = await evaluate(client, sessionId, presentation);
+    try {
+      await evaluate(client, sessionId, `globalThis.__PATINA_PENDING_AGGREGATES = [];
+        globalThis.__PATINA_AGGREGATE_HOOK = () => new Promise(resolve =>
+          globalThis.__PATINA_PENDING_AGGREGATES.push({ resolve }));
+        document.querySelector('${panel} .qp-range-control-arrow:last-child').click()`);
+      await waitForExpression(client, sessionId, `globalThis.__PATINA_PENDING_AGGREGATES.length > 0`);
+      await waitForAnimationFrames(client, sessionId, 3);
+      assert.equal(await evaluate(client, sessionId, presentation), before,
+        "a slow range read must not blank the chart, replace metrics, relabel old data, or shift the panel");
+      assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('${panel} ${chart}:not(.data-chart-openable), ${panel} .data-app-grid[inert]'))`), true);
+      // Return before the older request completes: its response must not replace the current range.
+      await evaluate(client, sessionId, `document.querySelector('${panel} .qp-range-control-arrow:first-child').click();
+        globalThis.__PATINA_AGGREGATE_HOOK = undefined;
+        globalThis.__PATINA_PENDING_AGGREGATES.forEach(entry => entry.resolve())`);
+      await waitForExpression(client, sessionId, `document.querySelector('${panel} ${busy}')?.getAttribute('aria-busy') === 'false'`);
+      await waitForAnimationFrames(client, sessionId, 3);
+      assert.equal(await evaluate(client, sessionId, presentation), before);
+      await evaluate(client, sessionId, `document.querySelector('${panel} .qp-range-control-arrow:last-child').click()`);
+      await waitForExpression(client, sessionId, `document.querySelector('${panel} ${busy}')?.getAttribute('aria-busy') === 'false'
+        && document.querySelector('${panel} .data-trend-range-trigger')?.textContent === '近 30 天'`);
+      assert.equal(await evaluate(client, sessionId, `document.querySelectorAll('${panel} ${chart} .qp-native-trend-hit').length`), 30);
+      await evaluate(client, sessionId, `document.querySelector('${panel} .qp-range-control-arrow:first-child').click()`);
+      await waitForExpression(client, sessionId, `document.querySelector('${panel} ${busy}')?.getAttribute('aria-busy') === 'false'
+        && document.querySelector('${panel} .data-trend-range-trigger')?.textContent === '近 7 天'`);
+    } finally {
+      await evaluate(client, sessionId, `globalThis.__PATINA_AGGREGATE_HOOK = undefined;
+        globalThis.__PATINA_PENDING_AGGREGATES?.forEach(entry => entry.resolve())`);
+    }
+    }
+  });
+
   await runTest("data same-query refresh failures retain the last successful metrics", async () => {
     const before = await evaluate(client, sessionId, metric);
     await evaluate(client, sessionId, `globalThis.__PATINA_AGGREGATE_HOOK = async (request) => {
@@ -165,10 +214,13 @@ export async function runDataReadFailureScenarios(context: BrowserSmokeContext) 
   });
 
   await runTest("data heatmap selection ignores superseded success and failure after returning to recent data", async () => {
+    for (const panel of [".data-overview", ".data-app-panel"]) {
     for (const outcome of ["success", "failure"]) {
       await openData();
-      await waitForExpression(client, sessionId, `Boolean(document.querySelector('.data-overview .data-heatmap-weeks')) && !document.querySelector('.data-overview .data-heatmap-loading-state')`);
-      const cells = `Array.from(document.querySelectorAll('.data-overview [data-heatmap-date]')).map((cell) => [cell.dataset.heatmapDate, cell.getAttribute('aria-label'), cell.style.getPropertyValue('--heatmap-intensity')])`;
+      await waitForStableExpression(client, sessionId, `Boolean(document.querySelector('[data-data-content-state="complete"]'))`, 15_000,
+        "both trend selections and their heatmaps finish before starting a year change", 5);
+      await waitForExpression(client, sessionId, `Boolean(document.querySelector('${panel} .data-heatmap-weeks')) && !document.querySelector('${panel} .data-heatmap-loading-state')`);
+      const cells = `Array.from(document.querySelectorAll('${panel} [data-heatmap-date]')).map((cell) => [cell.dataset.heatmapDate, cell.getAttribute('aria-label'), cell.style.getPropertyValue('--heatmap-intensity')])`;
       const before = await evaluate(client, sessionId, cells);
       await evaluate(client, sessionId, `
         globalThis.__PATINA_PENDING_AGGREGATES = [];
@@ -176,20 +228,23 @@ export async function runDataReadFailureScenarios(context: BrowserSmokeContext) 
         globalThis.__PATINA_AGGREGATE_HOOK = (request) => request.bucketCount > 100 && request.startMs !== recentStart
           ? new Promise((resolve, reject) => globalThis.__PATINA_PENDING_AGGREGATES.push({ request, resolve, reject }))
           : undefined;
-        document.querySelector('.data-overview .data-heatmap-range-control [aria-label="切到更早范围"]').click();
+        document.querySelector('${panel} .data-heatmap-range-control [aria-label="切到更早范围"]').click();
       `);
       await waitForExpression(client, sessionId, `globalThis.__PATINA_PENDING_AGGREGATES.length > 0`);
-      assert.notDeepEqual(await evaluate(client, sessionId, cells), before,
-        "the pending year must not display the recent range's cells");
-      await evaluate(client, sessionId, `document.querySelector('.data-overview .data-heatmap-range-control [aria-label="切到较新范围"]').click()`);
-      await waitForExpression(client, sessionId, `document.querySelector('.data-overview .data-heatmap-range-control .qp-range-control-label')?.textContent === '近一年' && !document.querySelector('.data-overview .data-heatmap-loading-state')`);
+      assert.deepEqual(await evaluate(client, sessionId, cells), before,
+        "keep the recent cells visible while a year loads");
+      assert.equal(await evaluate(client, sessionId, `document.querySelector('${panel} .data-heatmap-range-control .qp-range-control-label')?.textContent`), COPY["zh-CN"].data.recentYear,
+        "retained heatmap cells must keep their original range label");
+      await evaluate(client, sessionId, `document.querySelector('${panel} .data-heatmap-range-control [aria-label="切到较新范围"]').click()`);
+      await waitForExpression(client, sessionId, `document.querySelector('${panel} .data-heatmap-range-control .qp-range-control-label')?.textContent === '近一年' && !document.querySelector('${panel} .data-heatmap-loading-state')`);
       await evaluate(client, sessionId, outcome === "failure"
         ? `globalThis.__PATINA_PENDING_AGGREGATES.forEach((entry) => entry.reject(new Error('Superseded heatmap range')))`
         : `globalThis.__PATINA_PENDING_AGGREGATES.forEach((entry) => entry.resolve({ records: [], readPath: 'projection', fallbackReason: null, sourceRevision: 4, projectionRowCount: 0, factRowCount: 0, hasActiveSession: false }))`);
       await waitForAnimationFrames(client, sessionId, 2);
       assert.deepEqual(await evaluate(client, sessionId, cells), before);
-      assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('.data-overview .data-heatmap-panel [role="status"]'))`), false);
+      assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('${panel} .data-heatmap-panel [role="status"]'))`), false);
       await evaluate(client, sessionId, `globalThis.__PATINA_AGGREGATE_HOOK = undefined`);
+    }
     }
   });
 
@@ -208,7 +263,9 @@ export async function runDataReadFailureScenarios(context: BrowserSmokeContext) 
       `);
       await advance();
       await waitForExpression(client, sessionId, `globalThis.__PATINA_PENDING_AGGREGATES.length > 0`);
-      assert.equal(await evaluate(client, sessionId, metric), "-", "thirty-day title must not display a seven-day snapshot");
+      assert.equal(await evaluate(client, sessionId, metric), "1h 0m", "keep the previous metrics while the new range loads");
+      assert.equal(await evaluate(client, sessionId, `document.querySelector('.data-overview .data-trend-range-trigger')?.textContent`), COPY["zh-CN"].data.pastSevenDays,
+        "retained seven-day data must keep its seven-day label");
       await advance();
       await waitForExpression(client, sessionId, `document.querySelector('.data-overview .data-trend-range-trigger')?.textContent === '近一年' && ${metric} === '1h 0m'`);
       await evaluate(client, sessionId, outcome === "failure"
@@ -2006,7 +2063,7 @@ export async function runDataScenarios(
           const nameRect = name.getBoundingClientRect();
           const style = getComputedStyle(badge);
           return JSON.stringify({
-            regular: badge.classList.contains('qp-badge-regular'),
+            inline: badge.classList.contains('qp-badge-inline'),
             neutral: badge.classList.contains('qp-badge-neutral'),
             badgeHeight: badgeRect.height,
             nameHeight: nameRect.height,
@@ -2015,7 +2072,7 @@ export async function runDataScenarios(
           });
         })()
       `))) as {
-      regular: boolean;
+      inline: boolean;
       neutral: boolean;
       badgeHeight: number;
       nameHeight: number;
@@ -2023,14 +2080,14 @@ export async function runDataScenarios(
       fontWeight: string;
     };
     assert.ok(dataBadgeMetrics);
-    assert.equal(dataBadgeMetrics.regular, true);
+    assert.equal(dataBadgeMetrics.inline, true);
     assert.equal(dataBadgeMetrics.neutral, true);
     assert.ok(
       Math.abs(dataBadgeMetrics.badgeHeight - dataBadgeMetrics.nameHeight) <= 2,
       `Data should use the compact name-line badge density: ${JSON.stringify(dataBadgeMetrics)}`,
     );
-    assert.equal(dataBadgeMetrics.fontSize, "11px");
-    assert.equal(dataBadgeMetrics.fontWeight, "500");
+    assert.equal(dataBadgeMetrics.fontSize, "10px");
+    assert.equal(dataBadgeMetrics.fontWeight, "650");
     await waitForExpression(
       client!,
       sessionId,
@@ -2639,8 +2696,8 @@ export async function runDataScenarios(
         hasGeometry: true,
         trackLineHeight: "1px",
         trackLineTop: "31px",
-        axisFontSize: "9px",
-        axisFontWeight: "700",
+        axisFontSize: "12px",
+        axisFontWeight: "550",
         axisLabelTop: "5px",
         hasVerticalGrid: false,
       },
@@ -3261,8 +3318,8 @@ export async function runDataScenarios(
           document.body.append(colorProbe);
           const expectedColor = getComputedStyle(colorProbe).color;
           colorProbe.remove();
-          return style.fontSize === "9px"
-            && style.fontWeight === "600"
+          return style.fontSize === "12px"
+            && style.fontWeight === "450"
             && style.color === expectedColor;
         })()
       `),
@@ -3963,8 +4020,8 @@ export async function runDataScenarios(
     assert.ok(webTitlePopoverPresentation.url.length > 0);
     assert.equal(webTitlePopoverPresentation.titleAboveUrl, true);
     assert.equal(webTitlePopoverPresentation.titleColorMatches, true);
-    assert.equal(webTitlePopoverPresentation.titleFontSize, "11px");
-    assert.equal(webTitlePopoverPresentation.titleFontWeight, "620");
+    assert.equal(webTitlePopoverPresentation.titleFontSize, "12px");
+    assert.equal(webTitlePopoverPresentation.titleFontWeight, "550");
     assert.ok(Math.abs(webTitlePopoverPresentation.width - 568) < 1);
     const expectedPopoverLeft = Math.max(
       12,
@@ -4393,6 +4450,7 @@ export async function runDataScenarios(
       destinationChartViewBoxWidth: number;
       destinationHeatmapTop: number;
       destinationHeatmapCells: number;
+      destinationHeatmapVerticalOverflow: number;
     }> = [];
     for (const width of [2048, 1366, 900, 390]) {
       await client!.command("Emulation.setDeviceMetricsOverride", {
@@ -4454,8 +4512,8 @@ export async function runDataScenarios(
             topScrollInset = children[0].getBoundingClientRect().top
               - scrollOwner.getBoundingClientRect().top;
             scrollOwner.scrollTop = scrollOwner.scrollHeight;
-            bottomScrollInset = children[1].getBoundingClientRect().top
-              - scrollOwner.getBoundingClientRect().top;
+            bottomScrollInset = scrollOwner.getBoundingClientRect().bottom
+              - children[1].getBoundingClientRect().bottom;
             scrollOwner.scrollTop = previousScrollTop;
           }
           return JSON.stringify({
@@ -4503,12 +4561,18 @@ export async function runDataScenarios(
             destinationChartViewBoxWidth: destinationChartSvg?.viewBox.baseVal.width ?? -1,
             destinationHeatmapTop: destinationHeatmap?.getBoundingClientRect().top ?? -1,
             destinationHeatmapCells: destinationHeatmap?.querySelectorAll(".data-heatmap-cell").length ?? 0,
+            destinationHeatmapVerticalOverflow: (() => {
+              const scroll = destinationHeatmap?.querySelector(".data-heatmap-scroll");
+              return scroll ? scroll.scrollHeight - scroll.clientHeight : -1;
+            })(),
           });
         })()
       `))));
     }
 
     assert.deepEqual(layouts.map((layout) => layout.directChildren), [2, 2, 2, 2]);
+    assert.ok(layouts.every((layout) => layout.destinationHeatmapVerticalOverflow === 0),
+      `heatmap should show all seven rows without vertical scrolling: ${JSON.stringify(layouts.map(({ width, destinationHeatmapVerticalOverflow }) => ({ width, destinationHeatmapVerticalOverflow })))}`);
     assert.deepEqual(
       layouts.map((layout) => layout.panelOrder),
       Array.from({ length: 4 }, () => ["overview", "destination"]),
@@ -4548,8 +4612,8 @@ export async function runDataScenarios(
       `destination chart viewBox must track both rendered dimensions; observed ${JSON.stringify(layouts[1])}`,
     );
     assert.ok(
-      Math.abs(layouts[1].topScrollInset - layouts[1].bottomScrollInset) <= 1,
-      `stacked Data panels should keep the same header inset at both scroll limits; observed ${JSON.stringify(layouts[1])}`,
+      Math.abs(layouts[1].bottomScrollInset) <= 1,
+      `stacked Data must stop at the final panel without an empty scroll tail; observed ${JSON.stringify(layouts[1])}`,
     );
     for (const layout of layouts.slice(0, 2)) {
       assert.ok(layout.destinationAnalysisLeft > layout.destinationSidebarLeft);

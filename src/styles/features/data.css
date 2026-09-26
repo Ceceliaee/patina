@@ -78,8 +78,8 @@
   align-items: center;
   gap: 2px;
   color: var(--qp-text-tertiary);
-  font-size: 11px;
-  line-height: 1;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
   white-space: nowrap;
 }
 
@@ -101,9 +101,9 @@
   overflow: hidden;
   padding-inline: 2px;
   color: var(--qp-text-tertiary);
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 14px;
+  font-size: var(--qp-font-size-caption);
+  font-weight: var(--qp-font-weight-regular);
+  line-height: var(--qp-line-height-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -139,10 +139,6 @@
 }
 
 @media (min-width: 901px) and (max-width: 1899px) {
-  .data-page-scroll {
-    padding-bottom: var(--data-stacked-scroll-end-space, 0px);
-  }
-
   .data-dashboard-grid > .data-app-panel {
     display: flex;
     height: var(--data-stacked-panel-height, auto);

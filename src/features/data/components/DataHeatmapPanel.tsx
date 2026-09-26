@@ -1,6 +1,7 @@
 import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
 import type { UiText } from "../../../shared/i18n/index.ts";
 import { memo, type CSSProperties, type FocusEvent, type KeyboardEvent, type MouseEvent, useCallback, useEffect, useMemo, useRef, } from "react";
+import { useDataPresentation } from "../hooks/useDataPresentation.ts";
 import QuietRangeControl from "../../../shared/components/QuietRangeControl.tsx";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
 import { formatDuration } from "../../history/services/historyFormatting";
@@ -113,12 +114,14 @@ function findHeatmapCell(target: EventTarget | null, container: HTMLElement) {
   return cell && container.contains(cell) ? cell : null;
 }
 
-function DataHeatmapPanel({
+function DataHeatmapPanel(props: DataHeatmapPanelProps) {
+  // The final key segment is the range; the prefix identifies the selected objects.
+  const scope = props.selectedHeatmapViewKey.replace(/[^:]*$/, "");
+  const presentation = useDataPresentation(props, !props.loading && !props.errorMessage,
+    !props.errorMessage, scope);
+  const {
   title,
   compact = false,
-  selectedHeatmapView,
-  selectedHeatmapViewKey,
-  rows,
   granularity,
   granularityOptions,
   canSelectOlderHeatmapView,
@@ -126,11 +129,12 @@ function DataHeatmapPanel({
   onGranularityChange,
   onSelectAdjacentHeatmapView,
   onOpenHistoryDate,
-  loading = false,
   errorMessage,
   refreshFailed,
   onRetry,
-}: DataHeatmapPanelProps) {
+  } = props;
+  const { rows, selectedHeatmapView, selectedHeatmapViewKey } = presentation;
+  const loading = props.loading && presentation === props;
   const UI_TEXT = useLocaleText();
   const locale = useLocale();
   const heatmapWeeksRef = useRef<HTMLDivElement | null>(null);
@@ -276,10 +280,10 @@ function DataHeatmapPanel({
   }, [initialActiveDate, rememberActiveDate]);
 
   return (
-    <div tabIndex={-1} className={`data-heatmap-panel ${compact ? "data-heatmap-panel-compact" : ""}`}>
+    <div tabIndex={-1} aria-busy={props.loading} className={`data-heatmap-panel ${compact ? "data-heatmap-panel-compact" : ""}`}>
       <div className="data-heatmap-panel-header">
         <div className="data-heatmap-panel-heading">
-          <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">{resolvedTitle}</h3>
+          <h3 className="qp-weight-emphasis text-[var(--qp-text-primary)] qp-text-section-title">{resolvedTitle}</h3>
           {refreshFailed ? (
             <div className="data-heatmap-refresh-status" role="status">
               <span>{UI_TEXT.data.webTrendRefreshError}</span>
@@ -316,7 +320,7 @@ function DataHeatmapPanel({
 
       {errorMessage ? (
         <div
-          className="mt-5 flex min-h-32 flex-col items-center justify-center gap-2 text-sm text-[var(--qp-text-secondary)]"
+          className="mt-5 flex min-h-32 flex-col items-center justify-center gap-2 qp-text-body text-[var(--qp-text-secondary)]"
           role="status"
         >
           <span>{errorMessage}</span>
