@@ -67,7 +67,7 @@ export async function runLocaleScenarios(context: BrowserSmokeContext) {
         return {
           labels: labels.map((node) => node.textContent),
           fit: labels.every((node) => node.scrollWidth <= node.clientWidth + 1),
-          singleLine: labels.every((node) => node.getBoundingClientRect().height <= 10.5),
+          singleLine: labels.every((node) => node.getBoundingClientRect().height <= parseFloat(getComputedStyle(node).lineHeight) + 0.5),
           geometry: {
             aside: aside && { x: aside.x, width: aside.width, height: aside.height },
             nav: nav && { x: nav.x, width: nav.width, height: nav.height },
@@ -150,6 +150,7 @@ export async function runLocaleScenarios(context: BrowserSmokeContext) {
         railWidth: 72,
         settingsHasLabel: false,
       },
+      JSON.stringify(await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('[data-tools-section-label]')).map(n=>({text:n.textContent,width:n.clientWidth,scroll:n.scrollWidth,font:getComputedStyle(n).fontSize,weight:getComputedStyle(n).fontWeight}))`)),
     );
     await evaluate(client!, sessionId, `document.querySelector('[aria-label="History"]')?.click()`);
     await waitForExpression(

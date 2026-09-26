@@ -27,6 +27,7 @@ import { runDataReadFailureScenarios, runDataScenarios } from "./uiBrowserSmoke/
 import { runLocaleScenarios } from "./uiBrowserSmoke/localeScenarios.ts";
 import { runWidgetScenarios } from "./uiBrowserSmoke/widgetScenarios.ts";
 import { runScrollRegionScenarios } from "./uiBrowserSmoke/scrollRegionScenarios.ts";
+import { runTypographyScenarios } from "./uiBrowserSmoke/typographyScenarios.ts";
 
 let passed = 0;
 
@@ -152,7 +153,16 @@ try {
 
   await runStartupScenarios(smokeContext);
 
-  if (process.argv.includes("--read-failure-only")) {
+  if (process.argv.includes("--typography-only")) {
+    await runTypographyScenarios(smokeContext);
+  } else if (process.argv.includes("--locale-only")) {
+    await runLocaleScenarios(smokeContext);
+  } else if (process.argv.includes("--content-only")) {
+    await runClassificationScenarios(smokeContext);
+    await runDashboardScenarios(smokeContext);
+    await runHistoryScenarios(smokeContext);
+    await runDataScenarios(smokeContext);
+  } else if (process.argv.includes("--read-failure-only")) {
     await runRemoteBackupRecoveryScenarios(smokeContext);
     await runDashboardReadFailureScenarios(smokeContext);
     await runDataReadFailureScenarios(smokeContext);
@@ -185,6 +195,7 @@ try {
     );
     await runHistoryScenarios(smokeContext);
   } else {
+    await runTypographyScenarios(smokeContext);
     await runScrollRegionScenarios(smokeContext);
 
     await runAboutScenarios(smokeContext);
