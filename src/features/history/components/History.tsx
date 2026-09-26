@@ -1005,7 +1005,7 @@ export default function History({
       >
         <Minus size={11} />
       </button>
-      <span className="min-w-[62px] text-center text-xs font-medium tabular-nums text-[var(--qp-text-secondary)]">
+      <span className="min-w-[62px] text-center qp-text-caption qp-weight-medium tabular-nums text-[var(--qp-text-secondary)]">
         {UI_TEXT.settings.minuteValue(minSessionMinutes)}
       </span>
       <button

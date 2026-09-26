@@ -1,7 +1,7 @@
 .history-date-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  line-height: 1rem;
+  font-size: var(--qp-font-size-caption);
+  font-weight: var(--qp-font-weight-emphasis);
+  line-height: var(--qp-line-height-caption);
 }
 
 .history-overview-timeline-card {
@@ -81,16 +81,17 @@
 .history-day-summary-label,
 .history-day-summary-detail span {
   color: var(--qp-text-tertiary);
-  font-size: 11px;
-  font-weight: 650;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
+  font-weight: var(--qp-font-weight-medium);
 }
 
 .history-day-summary-value {
   overflow: hidden;
   color: var(--qp-text-primary);
-  font-size: 18px;
-  font-weight: 750;
-  line-height: 1.05;
+  font-size: var(--qp-font-size-page-title);
+  font-weight: var(--qp-font-weight-emphasis);
+  line-height: var(--qp-line-height-page-title);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -114,8 +115,9 @@
 .history-day-summary-detail strong {
   overflow: hidden;
   color: var(--qp-text-secondary);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: var(--qp-font-size-body);
+  line-height: var(--qp-line-height-body);
+  font-weight: var(--qp-font-weight-medium);
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -176,8 +178,9 @@
   align-items: center;
   gap: 4px;
   color: var(--qp-text-tertiary);
-  font-size: 9px;
-  font-weight: 700;
+  font-size: var(--qp-font-size-compact);
+  line-height: var(--qp-line-height-compact);
+  font-weight: var(--qp-font-weight-medium);
 }
 
 .history-horizontal-timeline-legend-dot {
@@ -207,16 +210,18 @@
   white-space: nowrap;
   cursor: default;
   color: var(--qp-text-tertiary);
-  font-size: 9px;
-  font-weight: 750;
+  font-size: var(--qp-font-size-compact);
+  line-height: var(--qp-line-height-compact);
+  font-weight: var(--qp-font-weight-medium);
 }
 
 .qp-tooltip.history-horizontal-timeline-legend-more-popover {
   max-width: min(320px, calc(100vw - 16px));
   padding: 6px 8px;
   color: var(--qp-text-tertiary);
-  font-size: 9px;
-  font-weight: 700;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
+  font-weight: var(--qp-font-weight-medium);
 }
 
 .history-horizontal-timeline-legend-more-tooltip {
@@ -300,9 +305,9 @@
   min-width: 0;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
-  font-weight: 750;
-  line-height: 1.2;
+  font-size: var(--qp-font-size-caption);
+  font-weight: var(--qp-font-weight-medium);
+  line-height: var(--qp-line-height-caption);
 }
 
 .history-horizontal-timeline-tooltip-dot {
@@ -322,9 +327,9 @@
 .history-horizontal-timeline-tooltip-time {
   margin-top: 4px;
   color: var(--qp-text-tertiary);
-  font-size: 10px;
-  font-weight: 650;
-  line-height: 1.2;
+  font-size: var(--qp-font-size-caption);
+  font-weight: var(--qp-font-weight-regular);
+  line-height: var(--qp-line-height-caption);
   white-space: nowrap;
 }
 
@@ -335,8 +340,9 @@
   align-items: center;
   justify-content: center;
   color: var(--qp-text-tertiary);
-  font-size: 11px;
-  font-weight: 650;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
+  font-weight: var(--qp-font-weight-regular);
 }
 
 .history-timeline-list {
@@ -422,8 +428,9 @@
   min-width: 58px;
   max-width: 92px;
   color: var(--qp-text-secondary);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
+  font-weight: var(--qp-font-weight-emphasis);
   font-variant-numeric: tabular-nums;
   text-align: center;
   text-overflow: ellipsis;
@@ -433,8 +440,9 @@
 .history-timeline-dialog-meta {
   min-width: 0;
   color: var(--qp-text-tertiary);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
+  font-weight: var(--qp-font-weight-regular);
 }
 
 .history-timeline-window-controls,
@@ -456,8 +464,9 @@
   flex: 0 0 auto;
   justify-content: center;
   color: var(--qp-text-tertiary);
-  font-size: 11px;
-  font-weight: 650;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
+  font-weight: var(--qp-font-weight-medium);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -542,8 +551,9 @@
 .history-timeline-lanes-title {
   margin-bottom: 8px;
   color: var(--qp-text-secondary);
-  font-size: 11px;
-  font-weight: 650;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
+  font-weight: var(--qp-font-weight-emphasis);
 }
 
 .history-timeline-lanes-scroll {
@@ -596,8 +606,9 @@
 .history-timeline-lane-label {
   overflow: hidden;
   color: var(--qp-text-secondary);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
+  font-weight: var(--qp-font-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -608,8 +619,9 @@
 
 .history-timeline-lane-duration {
   color: var(--qp-text-tertiary);
-  font-size: 11px;
-  font-weight: 650;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
+  font-weight: var(--qp-font-weight-medium);
   font-variant-numeric: tabular-nums;
   text-align: right;
   white-space: nowrap;
@@ -621,7 +633,8 @@
   align-items: center;
   justify-content: center;
   color: var(--qp-text-tertiary);
-  font-size: 11px;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
   text-align: center;
 }
 
@@ -734,8 +747,9 @@
 .history-activity-popover-title {
   margin-bottom: 7px;
   color: var(--qp-text-primary);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
+  font-weight: var(--qp-font-weight-medium);
 }
 
 .history-activity-popover-list {
@@ -753,8 +767,8 @@
   border-radius: 7px;
   background: var(--qp-bg-panel);
   color: var(--qp-text-secondary);
-  font-size: 10px;
-  line-height: 1.45;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
   overflow-wrap: anywhere;
   padding: 7px 8px;
 }
@@ -773,7 +787,8 @@
 .history-activity-popover-item-secondary {
   min-width: 0;
   color: var(--qp-text-tertiary);
-  font-size: 9px;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
   overflow-wrap: anywhere;
 }
 
@@ -783,20 +798,22 @@
   justify-items: end;
   gap: 2px;
   color: var(--qp-text-tertiary);
-  font-size: 9px;
+  font-size: var(--qp-font-size-caption);
   font-variant-numeric: tabular-nums;
-  line-height: 1.15;
+  line-height: var(--qp-line-height-caption);
   text-align: right;
   white-space: nowrap;
 }
 
 .history-activity-popover-item-duration {
   color: var(--qp-text-secondary);
-  font-size: 10px;
-  font-weight: 650;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
+  font-weight: var(--qp-font-weight-medium);
 }
 
 .history-activity-popover-item-range {
   color: var(--qp-text-tertiary);
-  font-size: 9px;
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
 }

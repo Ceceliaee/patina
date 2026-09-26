@@ -62,7 +62,7 @@ export async function runHistoryReadFailureScenarios(context: BrowserSmokeContex
         });
         if (query.includes('from session_title_samples')) return [];
         if (query.includes('from sessions') && !query.startsWith('select distinct') && !query.includes('min(start_time)')) {
-          if (params.length !== 7) throw new Error('Unexpected History session-range SQL parameters');
+          if (params.length !== 10) throw new Error('Unexpected History session-range SQL parameters');
           const matchingRecords = records.filter(record => record.startTime < params[1] && record.endTime > params[2]);
           globalThis.__PATINA_HISTORY_SQL_READS ??= [];
           globalThis.__PATINA_HISTORY_SQL_READS.push({ params, returnedStarts: matchingRecords.map(record => record.startTime) });
@@ -626,8 +626,8 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
     assert.equal(dateControls.expanded, "false");
     assert.equal(dateControls.popup, "dialog");
     assert.equal(dateControls.fontSize, "12px");
-    assert.equal(dateControls.fontWeight, "600");
-    assert.equal(dateControls.lineHeight, "16px");
+    assert.equal(dateControls.fontWeight, "650");
+    assert.equal(dateControls.lineHeight, "18px");
     assert.equal(dateControls.height, 30);
     const accessibilityTree = await client!.command("Accessibility.getFullAXTree", {}, sessionId) as {
       nodes: Array<{ role?: { value?: string }; name?: { value?: string } }>;
@@ -1396,8 +1396,8 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
         Math.abs(historyBadgeMetrics.badgeHeight - historyBadgeMetrics.nameHeight) <= 2,
         `History should use the compact name-line badge density: ${JSON.stringify(historyBadgeMetrics)}`,
       );
-      assert.equal(historyBadgeMetrics.fontSize, "9px");
-      assert.equal(historyBadgeMetrics.fontWeight, "500");
+      assert.equal(historyBadgeMetrics.fontSize, "10px");
+      assert.equal(historyBadgeMetrics.fontWeight, "650");
       await waitForExpression(
         client!,
         sessionId,
@@ -1628,8 +1628,8 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
           document.body.append(colorProbe);
           const expectedColor = getComputedStyle(colorProbe).color;
           colorProbe.remove();
-          return style.fontSize === "9px"
-            && style.fontWeight === "600"
+          return style.fontSize === "12px"
+            && style.fontWeight === "450"
             && style.color === expectedColor;
         })()
       `),
@@ -2425,8 +2425,8 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
             && Math.abs(leftSpan - 142) < 1
             && Math.abs(leftShare - 1 / 3) < 0.02
             && titleStyle.color === expectedColor
-            && titleStyle.fontSize === '11px'
-            && titleStyle.fontWeight === '620'
+            && titleStyle.fontSize === '12px'
+            && titleStyle.fontWeight === '550'
           );
         })()
       `),

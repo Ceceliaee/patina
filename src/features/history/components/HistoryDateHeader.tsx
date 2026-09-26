@@ -70,7 +70,7 @@ export default function HistoryDateHeader({
                 aria-expanded={calendarOpen}
                 aria-controls={calendarOpen ? calendarId : undefined}
                 onClick={onOpenDatePicker}
-                className="qp-status history-date-label relative inline-flex min-w-[102px] cursor-pointer items-center justify-center px-3 py-1.5 text-center text-[var(--qp-text-secondary)]"
+                className="qp-status history-date-label relative inline-flex min-w-[102px] cursor-pointer items-center justify-center px-3 py-[5px] text-center text-[var(--qp-text-secondary)]"
               >
                 {formatDateLabel(presentedDate, UI_TEXT, locale)}
               </button>
@@ -100,7 +100,7 @@ export default function HistoryDateHeader({
         )}
       />
       {readState.failed && (
-        <div className="qp-panel flex items-center gap-3 p-4 text-sm text-[var(--qp-text-secondary)]" role="status" data-history-read-error>
+        <div className="qp-panel flex items-center gap-3 p-4 qp-text-body text-[var(--qp-text-secondary)]" role="status" data-history-read-error>
           <span>{formatDateLabel(readState.requestedDate, UI_TEXT, locale)} · {readState.hasSnapshot ? UI_TEXT.common.refreshFailed : UI_TEXT.common.readFailed}</span>
           <button type="button" className="qp-control shrink-0" onClick={(event) => {
             if (document.activeElement === event.currentTarget) {

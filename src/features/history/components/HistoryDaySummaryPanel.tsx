@@ -19,7 +19,7 @@ interface HistoryDaySummaryPanelProps {
 export default function HistoryDaySummaryPanel({ copy, view }: HistoryDaySummaryPanelProps) {
   return (
     <div className="qp-panel p-5 history-day-summary-card">
-      <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">{copy.daySummary}</h3>
+      <h3 className="qp-weight-emphasis text-[var(--qp-text-primary)] qp-text-section-title">{copy.daySummary}</h3>
       <div className="history-day-summary-body">
         <div className="history-day-summary-primary">
           <span className="history-day-summary-label">{copy.activeDuration}</span>

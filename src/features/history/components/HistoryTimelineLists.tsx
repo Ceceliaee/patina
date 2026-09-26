@@ -55,7 +55,7 @@ export function HistoryTimelineList({
 
   if (timelineSessions.length === 0) {
     return (
-      <div className={`history-timeline-list-empty flex-1 flex items-center justify-center text-[var(--qp-text-tertiary)] text-sm ${className}`.trim()}>
+      <div className={`history-timeline-list-empty flex-1 flex items-center justify-center text-[var(--qp-text-tertiary)] qp-text-body ${className}`.trim()}>
         {UI_TEXT.history.emptyDay}
       </div>
     );
@@ -95,12 +95,12 @@ export function HistoryTimelineList({
                 {mapped.category === "anonymous" ? <EyeOff size={18} className="text-[var(--qp-text-secondary)]" aria-hidden="true" /> : icons[displayExe] ? (
                   <img src={icons[displayExe]} className="w-full h-full object-contain" alt="" />
                 ) : (
-                  <div className="text-[10px] font-semibold opacity-35 text-[var(--qp-text-secondary)]">{mapped.category[0].toUpperCase()}</div>
+                  <div className="qp-text-caption qp-weight-emphasis opacity-35 text-[var(--qp-text-secondary)]">{mapped.category[0].toUpperCase()}</div>
                 )}
               </div>
               <div className="flex min-w-0 flex-1 items-center gap-1.5">
                 <div className="flex min-w-0 flex-1 items-end gap-1.5">
-                  <div className="min-w-0 truncate text-sm font-semibold text-[var(--qp-text-primary)]">
+                  <div className="min-w-0 truncate qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">
                     {mapped.category === "anonymous" ? UI_TEXT.common.anonymousActivity : session.displayName}
                   </div>
                   {mapped.category !== "anonymous" && <span className="qp-workbench-list-meta">
@@ -139,8 +139,8 @@ export function HistoryTimelineList({
                 </div>
               </div>
               <div className="text-right flex-shrink-0">
-                <div className="text-xs font-semibold text-[var(--qp-text-primary)] tabular-nums">{formatDuration(session.duration || 0)}</div>
-                <div className="text-[10px] text-[var(--qp-text-tertiary)] mt-0.5 tabular-nums">
+                <div className="qp-text-caption qp-weight-medium text-[var(--qp-text-primary)] tabular-nums">{formatDuration(session.duration || 0)}</div>
+                <div className="qp-text-caption text-[var(--qp-text-tertiary)] mt-0.5 tabular-nums">
                   {formatTime(session.startTime, locale)}
                   {session.endTime ? ` - ${formatTime(session.endTime, locale)}` : ` ${UI_TEXT.history.untilNow}`}
                 </div>
@@ -167,7 +167,7 @@ export function HistoryWebTimelineList({
 
   if (items.length === 0) {
     return (
-      <div className={`history-timeline-list-empty flex-1 flex items-center justify-center text-[var(--qp-text-tertiary)] text-sm ${className}`.trim()}>
+      <div className={`history-timeline-list-empty flex-1 flex items-center justify-center text-[var(--qp-text-tertiary)] qp-text-body ${className}`.trim()}>
         {UI_TEXT.history.emptyDay}
       </div>
     );
@@ -200,7 +200,7 @@ export function HistoryWebTimelineList({
               </div>
               <div className="flex min-w-0 flex-1 items-center gap-1.5">
                 <div className="flex min-w-0 flex-1 items-end gap-1.5">
-                  <div className="min-w-0 truncate text-sm font-semibold text-[var(--qp-text-primary)]">
+                  <div className="min-w-0 truncate qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">
                     {item.category === "anonymous" ? UI_TEXT.common.anonymousActivity : item.label}
                   </div>
                   {titleCount > 0 && (
@@ -235,10 +235,10 @@ export function HistoryWebTimelineList({
                 </div>
               </div>
               <div className="text-right flex-shrink-0">
-                <div className="text-xs font-semibold text-[var(--qp-text-primary)] tabular-nums">
+                <div className="qp-text-caption qp-weight-medium text-[var(--qp-text-primary)] tabular-nums">
                   {formatDuration(item.duration || 0)}
                 </div>
-                <div className="text-[10px] text-[var(--qp-text-tertiary)] mt-0.5 tabular-nums">
+                <div className="qp-text-caption text-[var(--qp-text-tertiary)] mt-0.5 tabular-nums">
                   {formatTime(item.startTime, locale)}
                   {item.endTime ? ` - ${formatTime(item.endTime, locale)}` : ` ${UI_TEXT.history.untilNow}`}
                 </div>

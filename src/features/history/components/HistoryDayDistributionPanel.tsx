@@ -108,7 +108,7 @@ export default function HistoryDayDistributionPanel({
   return (
     <>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h3 className="font-semibold text-[var(--qp-text-primary)] text-sm">{title}</h3>
+        <h3 className="qp-weight-emphasis text-[var(--qp-text-primary)] qp-text-section-title">{title}</h3>
         <QuietSegmentedFilter
           value={mode}
           options={modeOptions}
@@ -119,13 +119,13 @@ export default function HistoryDayDistributionPanel({
       <div className="flex-1 min-h-0 overflow-y-auto qp-scroll-region pr-1 pt-2">
         {showQuietPlaceholder ? (
           <p
-            className="text-[var(--qp-text-tertiary)] text-xs text-center mt-8"
+            className="text-[var(--qp-text-tertiary)] qp-text-caption text-center mt-8"
             role="status"
           >
             {placeholderMessage}
           </p>
         ) : items.length === 0 ? (
-          <p className="text-[var(--qp-text-tertiary)] text-xs text-center mt-8">{UI_TEXT.history.noData}</p>
+          <p className="text-[var(--qp-text-tertiary)] qp-text-caption text-center mt-8">{UI_TEXT.history.noData}</p>
         ) : (
           <div className="space-y-4">
             {items.map((item) => {
@@ -134,7 +134,7 @@ export default function HistoryDayDistributionPanel({
               return (
                 <div key={item.key} className="space-y-1.5">
                 <div className="mb-1 flex items-center justify-between gap-3">
-                  <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium leading-[1.2] text-[var(--qp-text-secondary)]">
+                  <span className="flex min-w-0 items-center gap-1.5 qp-text-body qp-weight-medium leading-[var(--qp-line-height-body)] text-[var(--qp-text-secondary)]">
                     {detailTarget ? (
                       <button
                         type="button"
@@ -220,22 +220,22 @@ export default function HistoryDayDistributionPanel({
                     )}
                     <span className="min-w-0 leading-[1.2]">
                       <span className="history-day-distribution-name-row">
-                        <span className="truncate text-xs font-medium leading-[1.2]">{item.label}</span>
+                        <span className="truncate qp-text-caption qp-weight-medium leading-[var(--qp-line-height-caption)]">{item.label}</span>
                         <QuickClassificationStatus
                           density="dense"
                           unclassified={Boolean(item.unclassified)}
                         />
                       </span>
                       {item.subtitle && (
-                        <span className="mt-0.5 block truncate text-[10px] font-normal text-[var(--qp-text-tertiary)]">
+                        <span className="mt-0.5 block truncate qp-text-caption qp-weight-regular text-[var(--qp-text-tertiary)]">
                           {item.subtitle}
                         </span>
                       )}
                     </span>
                   </span>
-                  <span className="shrink-0 text-xs font-medium leading-[1.2] text-[var(--qp-text-tertiary)] tabular-nums">
+                  <span className="shrink-0 qp-text-caption qp-weight-medium leading-[1.2] text-[var(--qp-text-tertiary)] tabular-nums">
                     <span>{formatDuration(item.duration)}</span>
-                    <span className="font-normal opacity-70"> · {formatDistributionPercentage(item.percentage)}</span>
+                    <span className="qp-weight-regular opacity-70"> · {formatDistributionPercentage(item.percentage)}</span>
                   </span>
                 </div>
                 <div className="h-1.5 bg-[var(--qp-chart-track)] rounded-full overflow-hidden">

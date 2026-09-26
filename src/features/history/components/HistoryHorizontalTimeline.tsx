@@ -136,7 +136,7 @@ export default function HistoryHorizontalTimeline({
           {(headingTitle || titleAction) && (
             <div className="history-horizontal-timeline-title-row">
               {headingTitle && (
-                <h3 className="history-horizontal-timeline-title font-semibold text-[var(--qp-text-primary)] text-sm">
+                <h3 className="history-horizontal-timeline-title qp-weight-emphasis text-[var(--qp-text-primary)] qp-text-section-title">
                   {headingTitle}
                 </h3>
               )}
