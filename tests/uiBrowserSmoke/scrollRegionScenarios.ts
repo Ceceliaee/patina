@@ -218,7 +218,10 @@ export async function runScrollRegionScenarios(context: BrowserSmokeContext) {
       await evaluate(client, sessionId, `
         document.querySelector("[data-scroll-region-fixture-content]").style.height = "80px"
       `);
-      const returned = await fixtureMetrics(context);
+      const returned = await waitFor("scrollbar lane to return after layout settles", async () => {
+        const metrics = await fixtureMetrics(context);
+        return metrics.maxScrollTop === 0 && metrics.verticalLane === 0 ? metrics : null;
+      });
       assert.equal(returned.verticalLane, 0, "removing overflow must return the lane to content");
     } finally {
       await removeFixture(context);
