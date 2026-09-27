@@ -41,38 +41,3 @@ export function filterDataAppOptionsForQuery(options: DataAppOption[], query: st
     || app.exeName.toLowerCase().includes(normalizedQuery)
   ));
 }
-
-interface ResolveDataAppSearchSelectionArgs {
-  wasSearching: boolean;
-  isSearching: boolean;
-  selectedAppKey: string | null;
-  selectedApp: DataAppOption | null | undefined;
-  filteredOptions: DataAppOption[];
-}
-
-export function resolveDataAppSearchSelection({
-  wasSearching,
-  isSearching,
-  selectedAppKey,
-  selectedApp,
-  filteredOptions,
-}: ResolveDataAppSearchSelectionArgs): string | null | undefined {
-  if (wasSearching && !isSearching) {
-    return null;
-  }
-
-  if (!isSearching) {
-    return undefined;
-  }
-
-  const selectedKey = selectedApp?.appKey ?? selectedAppKey;
-  const selectedAppKeyIsVisible = Boolean(
-    selectedKey && filteredOptions.some((app) => app.appKey === selectedKey),
-  );
-
-  if (selectedAppKeyIsVisible) {
-    return undefined;
-  }
-
-  return filteredOptions[0]?.appKey;
-}

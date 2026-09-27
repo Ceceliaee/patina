@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import {
   dedupeDataAppOptions,
   filterDataAppOptionsForQuery,
-  resolveDataAppSearchSelection,
 } from "../src/features/data/services/dataAppSearch.ts";
 import type { DataAppOption } from "../src/features/data/services/dataReadModel.ts";
 
@@ -83,30 +82,6 @@ runTest("filterDataAppOptionsForQuery matches app name and executable", () => {
     filterDataAppOptionsForQuery(options, "cursor.exe").map((app) => app.appKey),
     ["cursor.exe"],
   );
-});
-
-runTest("resolveDataAppSearchSelection selects first match when selected app is hidden", () => {
-  const filteredOptions = [
-    makeAppOption({ appKey: "blender.exe", appName: "Blender", exeName: "blender.exe" }),
-  ];
-
-  assert.equal(resolveDataAppSearchSelection({
-    wasSearching: false,
-    isSearching: true,
-    selectedAppKey: "cursor.exe",
-    selectedApp: makeAppOption({ appKey: "cursor.exe" }),
-    filteredOptions,
-  }), "blender.exe");
-});
-
-runTest("resolveDataAppSearchSelection clears explicit selection when search is cleared", () => {
-  assert.equal(resolveDataAppSearchSelection({
-    wasSearching: true,
-    isSearching: false,
-    selectedAppKey: "cursor.exe",
-    selectedApp: makeAppOption({ appKey: "cursor.exe" }),
-    filteredOptions: [],
-  }), null);
 });
 
 console.log(`Passed ${passed} data app search tests`);

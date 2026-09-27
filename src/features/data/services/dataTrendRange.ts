@@ -35,12 +35,6 @@ export interface ResolvedDataTrendRange {
   cacheKey: string;
 }
 
-export interface DataTrendRangeDraft {
-  mode: DataTrendPickerMode;
-  firstDateKey: string | null;
-  range: ResolvedDataTrendRange | null;
-}
-
 const DATA_ROLLING_TREND_RANGES: DataRollingTrendRange[] = [7, 30, 365];
 export const DATA_TREND_PICKER_MODES: DataTrendPickerMode[] = ["custom", "week", "month", "year"];
 export const DEFAULT_DATA_TREND_RANGE_SELECTION: DataTrendRangeSelection = {
@@ -164,8 +158,8 @@ function resolveBounds(
     dayCount: countInclusiveLocalDays(startDateKey, endDateKey),
     label,
     granularity,
-    // All-time reads use month buckets; other views retain day facts for active-day and peak-day metrics.
-    cacheKey: `${selection.kind === "all" ? "month" : "day"}:${startDateKey}:${endDateKey}`,
+    // Chart granularity does not change the daily facts used by summary metrics.
+    cacheKey: `${selection.kind === "all" ? "all:day" : "day"}:${startDateKey}:${endDateKey}`,
   };
 }
 
@@ -267,29 +261,6 @@ export function resolveDataAllTimePresentationRange(
     startDateKey: `${earliestMonthKey}-01`,
     endDateKey: `${latestMonthKey}-01`,
   }, range.endMs, uiText);
-}
-
-export function selectDataTrendDraftDate(
-  draft: DataTrendRangeDraft,
-  dateKey: string,
-  nowMs: number,
-  uiText: UiText,
-): DataTrendRangeDraft {
-  const date = parseLocalDateKey(dateKey);
-  if (!date || date > startOfLocalDay(new Date(nowMs))) return draft;
-  if (draft.mode === "custom") {
-    if (!draft.firstDateKey || draft.range) return { mode: "custom", firstDateKey: dateKey, range: null };
-    return {
-      mode: "custom",
-      firstDateKey: null,
-      range: resolveDataTrendRange({ kind: "custom", startDateKey: draft.firstDateKey, endDateKey: dateKey }, nowMs, uiText),
-    };
-  }
-  return {
-    mode: draft.mode,
-    firstDateKey: null,
-    range: resolveDataTrendRange({ kind: draft.mode, anchorDateKey: dateKey }, nowMs, uiText),
-  };
 }
 
 export function buildDataDayRanges(range: ResolvedDataTrendRange): SessionRange[] {

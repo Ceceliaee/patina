@@ -1,6 +1,5 @@
 import {
   getSessionSummariesInRangeByLocalDay,
-  getSessionSummariesInRangeByLocalMonth,
 } from "../../../platform/persistence/sessionReadRepository.ts";
 import type { UiText } from "../../../shared/i18n/index.ts";
 import type { AggregateSessionRecord } from "../../../platform/persistence/sessionReadRepository.ts";
@@ -22,7 +21,6 @@ export interface DataTrendSnapshot {
 
 export interface DataTrendSnapshotDependencies {
   getSessionSummariesInRange: (startMs: number, endMs: number) => Promise<AggregateSessionRecord[]>;
-  getSessionSummariesInRangeByLocalMonth?: (startMs: number, endMs: number) => Promise<AggregateSessionRecord[]>;
 }
 
 const snapshotCache = new Map<string, DataTrendSnapshot>();
@@ -83,17 +81,13 @@ export async function loadDataTrendSnapshot(
   uiText: UiText,
   deps: DataTrendSnapshotDependencies = {
     getSessionSummariesInRange: getSessionSummariesInRangeByLocalDay,
-    getSessionSummariesInRangeByLocalMonth,
   },
 ): Promise<DataTrendSnapshot> {
   const range = resolveDataTrendRange(selection, nowMs, uiText);
   const pending = sessionPromises.get(range.cacheKey);
   const loadStartedAtEpoch = dataTrendSnapshotCacheEpoch;
   const sessionPromise = pending ?? (() => {
-    const loadSessions = selection.kind === "all"
-      ? deps.getSessionSummariesInRangeByLocalMonth ?? deps.getSessionSummariesInRange
-      : deps.getSessionSummariesInRange;
-    const nextPromise = loadSessions(range.startMs, range.endMs).finally(() => {
+    const nextPromise = deps.getSessionSummariesInRange(range.startMs, range.endMs).finally(() => {
       if (sessionPromises.get(range.cacheKey) === nextPromise) {
         sessionPromises.delete(range.cacheKey);
       }

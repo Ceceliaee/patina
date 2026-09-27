@@ -584,6 +584,46 @@ export async function runDataScenarios(
       true,
       "range calendar should preserve its pre-consolidation geometry",
     );
+    const showingPreviousMonth = await evaluate(client!, sessionId, `
+      (() => {
+        const date = new Date();
+        date.setDate(date.getDate() - 1);
+        const key = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+        if (document.querySelector('[data-range-picker-date="' + key + '"]')) return false;
+        document.querySelector('.qp-range-picker .qp-calendar-nav')?.click();
+        return true;
+      })()
+    `);
+    if (showingPreviousMonth) {
+      await waitForExpression(client!, sessionId, `
+        (() => {
+          const date = new Date();
+          date.setDate(date.getDate() - 1);
+          const key = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+          return Boolean(document.querySelector('[data-range-picker-date="' + key + '"]'));
+        })()
+      `);
+    }
+    for (const delta of [0, -1]) {
+      assert.equal(await evaluate(client!, sessionId, `
+        (() => {
+          const date = new Date();
+          date.setDate(date.getDate() + ${delta});
+          const key = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+          const day = document.querySelector('[data-range-picker-date="' + key + '"]');
+          if (!(day instanceof HTMLButtonElement) || day.disabled) return false;
+          day.click();
+          return true;
+        })()
+      `), true);
+      await waitForExpression(client!, sessionId, delta === 0
+        ? `Array.from(document.querySelectorAll('.qp-range-picker-footer button')).some(node => node.textContent?.trim() === "确定" && node.disabled)`
+        : `document.querySelector('.data-trend-range-trigger[aria-expanded="true"]')?.textContent?.trim() === "2天"`);
+    }
+    if (showingPreviousMonth) {
+      await evaluate(client!, sessionId, `document.querySelector('.qp-range-picker .qp-calendar-nav:last-child')?.click()`);
+      await waitForExpression(client!, sessionId, `document.querySelector('.qp-range-picker .qp-calendar-nav:last-child')?.disabled === true`);
+    }
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {

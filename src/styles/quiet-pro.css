@@ -1396,12 +1396,6 @@
   padding-bottom: 4px;
 }
 
-.data-heatmap-skeleton {
-  flex: 1 1 auto;
-  min-width: 0;
-  height: calc(7 * var(--data-heatmap-cell-size) + 6 * var(--data-heatmap-cell-gap) + 21px);
-}
-
 .data-heatmap-months {
   display: grid;
   width: max-content;
@@ -1448,8 +1442,7 @@
   gap: var(--data-heatmap-cell-gap);
 }
 
-.data-heatmap-cell,
-.data-heatmap-swatch {
+.data-heatmap-cell {
   border: 1px solid color-mix(in srgb, var(--qp-accent-default) 7%, var(--qp-border-subtle));
   border-radius: 4px;
   background: color-mix(
@@ -1508,32 +1501,6 @@
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
-}
-
-.data-heatmap-swatch {
-  display: inline-block;
-  height: 10px;
-  width: 10px;
-}
-
-.data-heatmap-level-0 {
-  --heatmap-intensity: 0;
-}
-
-.data-heatmap-level-1 {
-  --heatmap-intensity: 0.22;
-}
-
-.data-heatmap-level-2 {
-  --heatmap-intensity: 0.44;
-}
-
-.data-heatmap-level-3 {
-  --heatmap-intensity: 0.66;
-}
-
-.data-heatmap-level-4 {
-  --heatmap-intensity: 0.88;
 }
 
 .history-pulse-card {

@@ -156,18 +156,6 @@ function buildDailyBucketBoundaries(startMs: number, endMs: number): number[] {
   return Array.from(new Set(boundaries));
 }
 
-function buildMonthlyBucketBoundaries(startMs: number, endMs: number): number[] {
-  const boundaries = [startMs];
-  const start = new Date(startMs);
-  let cursor = new Date(start.getFullYear(), start.getMonth() + 1, 1);
-  while (cursor.getTime() < endMs) {
-    boundaries.push(cursor.getTime());
-    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
-  }
-  boundaries.push(endMs);
-  return Array.from(new Set(boundaries));
-}
-
 function getTrendSnapshotCacheKey(
   range: ResolvedDataTrendRange,
   normalizedDomains: readonly string[] | null,
@@ -493,9 +481,7 @@ export async function loadDataWebActivitySnapshot({
   uiText: UiText;
 }): Promise<DataWebTrendSnapshot> {
   const range = resolveDataTrendRange(selection, nowMs, uiText);
-  const bucketBoundariesMs = selection.kind === "all"
-    ? buildMonthlyBucketBoundaries(range.startMs, range.endMs)
-    : buildDailyBucketBoundaries(range.startMs, range.endMs);
+  const bucketBoundariesMs = buildDailyBucketBoundaries(range.startMs, range.endMs);
   const cacheKey = getTrendSnapshotCacheKey(range, normalizedDomains, cacheVersion);
   const snapshot = await loadRangeSnapshot({
     startMs: range.startMs,

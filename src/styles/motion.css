@@ -24,8 +24,7 @@
   animation: qp-horizontal-pane-enter var(--qp-motion-enhanced-pane-duration) var(--qp-motion-ease) both;
 }
 
-[data-qp-motion="enhanced"] .data-heatmap-loading-state .data-heatmap-cell,
-[data-qp-motion="enhanced"] .data-heatmap-loading-state .data-heatmap-swatch {
+[data-qp-motion="enhanced"] .data-heatmap-loading-state .data-heatmap-cell {
   background: var(--qp-bg-elevated);
   animation: qp-skeleton-pulse 1.4s ease-in-out infinite;
 }
@@ -62,8 +61,7 @@
 :root[data-qp-motion="reduced"] .tools-section-pane,
 :root[data-qp-motion="reduced"] .tools-mode-content-pane,
 :root[data-qp-motion="reduced"] .qp-classification-object-pane,
-:root[data-qp-motion="reduced"] .data-heatmap-loading-state .data-heatmap-cell,
-:root[data-qp-motion="reduced"] .data-heatmap-loading-state .data-heatmap-swatch {
+:root[data-qp-motion="reduced"] .data-heatmap-loading-state .data-heatmap-cell {
   animation: none !important;
 }
 

@@ -3,9 +3,7 @@ import {
   countInclusiveLocalDays,
   getAdjacentDataTrendRangeSelection as getAdjacentDataTrendRangeSelectionRaw,
   resolveDataTrendRange as resolveDataTrendRangeRaw,
-  selectDataTrendDraftDate as selectDataTrendDraftDateRaw,
   type DataTrendRangeSelection,
-  type DataTrendRangeDraft,
 } from "../src/features/data/services/dataTrendRange.ts";
 import {
   buildMondayFirstCalendarGrid,
@@ -21,6 +19,8 @@ import {
   type DataTrendSnapshotDependencies,
 } from "../src/features/data/services/dataTrendSnapshot.ts";
 import { getLocaleText, loadLocaleText } from "../src/shared/i18n/runtime.ts";
+import { buildDataTrendAggregateContext, buildDataAppTrendViewModelFromAggregate } from "../src/features/data/services/dataReadModel.ts";
+import { buildDataCategoryTrendViewModelFromAggregate } from "../src/features/data/services/dataCategoryTrendReadModel.ts";
 
 const ZH_TEXT = getLocaleText("zh-CN");
 const resolveDataTrendRange = (selection: DataTrendRangeSelection, atMs: number) => (
@@ -40,11 +40,6 @@ const getAdjacentDataTrendRangeSelection = (
   allTimeStartDateKey,
   allTimeEndDateKey,
 );
-const selectDataTrendDraftDate = (
-  draft: DataTrendRangeDraft,
-  dateKey: string,
-  atMs: number,
-) => selectDataTrendDraftDateRaw(draft, dateKey, atMs, ZH_TEXT);
 const loadDataTrendSnapshot = (
   selection: DataTrendRangeSelection,
   atMs: number,
@@ -83,26 +78,6 @@ await runTest("all-time range spans the first through last recorded months", () 
     [allTime.startDateKey, allTime.endDateKey, allTime.granularity, allTime.label],
     ["2024-02-01", "2025-11-30", "month", "累计"],
   );
-});
-
-await runTest("custom selection swaps reverse clicks and permits a short range", () => {
-  let draft: DataTrendRangeDraft = { mode: "custom", firstDateKey: null, range: null };
-  draft = selectDataTrendDraftDate(draft, "2026-05-08", nowMs);
-  draft = selectDataTrendDraftDate(draft, "2026-05-03", nowMs);
-
-  assert.equal(draft.range?.startDateKey, "2026-05-03");
-  assert.equal(draft.range?.endDateKey, "2026-05-08");
-  assert.equal(draft.range?.label, "6天");
-  assert.equal(countInclusiveLocalDays("2026-05-03", "2026-05-08"), 6);
-});
-
-await runTest("custom completed selection restarts on the next click", () => {
-  let draft: DataTrendRangeDraft = { mode: "custom", firstDateKey: "2026-05-03", range: null };
-  draft = selectDataTrendDraftDate(draft, "2026-05-03", nowMs);
-  draft = selectDataTrendDraftDate(draft, "2026-05-10", nowMs);
-
-  assert.equal(draft.firstDateKey, "2026-05-10");
-  assert.equal(draft.range, null);
 });
 
 await runTest("natural week uses Monday through Sunday and ISO cross-year labels", () => {
@@ -161,7 +136,39 @@ await runTest("preset range arrows include all time before seven days", () => {
   );
 });
 
-await runTest("all-time snapshots request month buckets", async () => {
+await runTest("all-time snapshots preserve active days and peak day while charting months", async () => {
+  const hour = 3_600_000;
+  const dailyRows = [[3, 10, 1], [4, 2, 2], [4, 3, 3]].map(([month, day, hours]) => {
+    const startTime = new Date(2026, month, day).getTime();
+    return { exeName: "metric-fixture.exe", appName: "Metric Fixture", startTime, endTime: startTime + hours * hour };
+  });
+  const monthlyRows = [[3, 1], [4, 5]].map(([month, hours]) => {
+    const startTime = new Date(2026, month, 1).getTime();
+    return { exeName: "metric-fixture.exe", appName: "Metric Fixture", startTime, endTime: startTime + hours * hour };
+  });
+  const deps = {
+    getSessionSummariesInRange: async () => dailyRows,
+    getSessionSummariesInRangeByLocalMonth: async () => monthlyRows,
+  };
+  const snapshot = await loadDataTrendSnapshot({
+    kind: "all", startDateKey: "2026-04-10", endDateKey: "2026-05-03",
+  }, nowMs, deps);
+  const context = buildDataTrendAggregateContext(snapshot.sessions, snapshot.range, nowMs, ZH_TEXT, "zh-CN");
+  for (const model of [
+    buildDataAppTrendViewModelFromAggregate(context, ["metric-fixture.exe"]),
+    buildDataCategoryTrendViewModelFromAggregate(context, ["other"]),
+  ]) {
+    assert.equal(model.summary.activeDayCount, 3);
+    assert.equal(model.peakDay?.date, "2026-05-03");
+    assert.equal(model.peakDay?.duration, 3 * hour);
+    assert.equal(model.summary.totalDuration, 6 * hour);
+    assert.equal(model.summary.averageDuration, 3 * hour);
+    assert.deepEqual(model.chartRows.map((row) => row.totalDuration), [hour, 5 * hour]);
+    assert.deepEqual(model.activeDateKeys, ["2026-04-10", "2026-05-02", "2026-05-03"]);
+  }
+});
+
+await runTest("all-time snapshots request day buckets", async () => {
   const calls: Array<{ startMs: number; endMs: number; mode: string }> = [];
   const snapshot = await loadDataTrendSnapshot({
     kind: "all",
@@ -172,16 +179,12 @@ await runTest("all-time snapshots request month buckets", async () => {
       calls.push({ startMs, endMs, mode: "day" });
       return [];
     },
-    getSessionSummariesInRangeByLocalMonth: async (startMs, endMs) => {
-      calls.push({ startMs, endMs, mode: "month" });
-      return [];
-    },
   });
 
   assert.deepEqual(calls, [{
     startMs: new Date(2024, 1, 1).getTime(),
     endMs: nowMs,
-    mode: "month",
+    mode: "day",
   }]);
   assert.equal(snapshot.range.label, "累计");
 });
@@ -338,14 +341,11 @@ await runTest("trend snapshots dedupe matching in-flight range loads and cache t
   assert.equal(getCachedDataTrendSnapshot(first.range)?.sessions, first.sessions);
 });
 
-await runTest("matching date bounds keep day and month source buckets in separate caches and requests", async () => {
+await runTest("matching date bounds retain distinct all-time presentation with daily facts", async () => {
   const dailyRows = [{ exeName: "editor.exe", appName: "Editor", startTime: 1, endTime: 2 }];
-  const monthlyRows = [{ exeName: "editor.exe", appName: "Editor", startTime: 1, endTime: 3 }];
   let dayCalls = 0;
-  let monthCalls = 0;
   const deps: DataTrendSnapshotDependencies = {
     getSessionSummariesInRange: async () => { dayCalls += 1; return dailyRows; },
-    getSessionSummariesInRangeByLocalMonth: async () => { monthCalls += 1; return monthlyRows; },
   };
   const dailySelection = { kind: "month", anchorDateKey: "2026-05-01" } as const;
   const monthlySelection = { kind: "all", startDateKey: "2026-05-01", endDateKey: "2026-05-20" } as const;
@@ -356,9 +356,11 @@ await runTest("matching date bounds keep day and month source buckets in separat
   assert.equal(daily.range.startMs, monthly.range.startMs);
   assert.equal(daily.range.endMs, monthly.range.endMs);
   assert.notEqual(daily.range.cacheKey, monthly.range.cacheKey);
-  assert.deepEqual([dayCalls, monthCalls], [1, 1]);
+  assert.equal(dayCalls, 2);
+  assert.equal(daily.range.granularity, "day");
+  assert.equal(monthly.range.granularity, "month");
   assert.equal(getCachedDataTrendSnapshot(daily.range)?.sessions, dailyRows);
-  assert.equal(getCachedDataTrendSnapshot(monthly.range)?.sessions, monthlyRows);
+  assert.equal(getCachedDataTrendSnapshot(monthly.range)?.sessions, dailyRows);
   const englishRange = resolveDataTrendRangeRaw(dailySelection, nowMs, await loadLocaleText("en-US"));
   assert.equal(englishRange.cacheKey, daily.range.cacheKey);
   assert.equal(getCachedDataTrendSnapshot(englishRange)?.range.label, englishRange.label);

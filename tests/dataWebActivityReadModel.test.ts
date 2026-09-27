@@ -1018,14 +1018,18 @@ await runTest("web snapshot dedupes matching in-flight loads and excludes disabl
   });
 });
 
-await runTest("all-time web snapshots use monthly buckets from the first recorded month", async () => {
+await runTest("all-time web snapshots preserve daily metrics and monthly chart totals", async () => {
   const nowMs = new Date(2026, 4, 20, 12, 0, 0).getTime();
-  const startMs = new Date(2024, 1, 1).getTime();
+  const startMs = new Date(2026, 3, 1).getTime();
+  const hour = 3_600_000;
+  const activity = [[3, 10, 1], [4, 2, 2], [4, 3, 3]].map(([month, day, hours]) => ({
+    atMs: new Date(2026, month, day, 10).getTime(), durationMs: hours * hour,
+  }));
   let receivedBoundaries: number[] = [];
   const snapshot = await loadDataWebActivitySnapshot({
     selection: {
       kind: "all",
-      startDateKey: "2024-02-19",
+      startDateKey: "2026-04-10",
       endDateKey: "2026-05-20",
     },
     nowMs,
@@ -1034,7 +1038,15 @@ await runTest("all-time web snapshots use monthly buckets from the first recorde
         assert.equal(receivedStartMs, startMs);
         assert.equal(receivedEndMs, nowMs);
         receivedBoundaries = bucketBoundariesMs;
-        return { records: [], domainCoverage: [] };
+        return {
+          records: bucketBoundariesMs.slice(0, -1).map((bucketStartMs, index) => ({
+            normalizedDomain: "metric.example",
+            bucketStartMs,
+            durationMs: activity.filter((item) => item.atMs >= bucketStartMs && item.atMs < bucketBoundariesMs[index + 1])
+              .reduce((sum, item) => sum + item.durationMs, 0),
+          })).filter((row) => row.durationMs > 0),
+          domainCoverage: [],
+        };
       },
       loadOverrides: async () => ({}),
       loadFavicons: async () => ({}),
@@ -1043,9 +1055,16 @@ await runTest("all-time web snapshots use monthly buckets from the first recorde
 
   assert.equal(snapshot.range.label, "累计");
   assert.equal(receivedBoundaries[0], startMs);
-  assert.equal(receivedBoundaries[1], new Date(2024, 2, 1).getTime());
+  assert.equal(receivedBoundaries[1], new Date(2026, 3, 2).getTime());
   assert.equal(receivedBoundaries.at(-1), nowMs);
-  assert.equal(receivedBoundaries.length, 29);
+  assert.equal(receivedBoundaries.length, 51);
+  const model = buildDataWebTrendViewModel({ ...snapshot, selectedDomains: ["metric.example"] });
+  assert.equal(model.summary.activeDayCount, 3);
+  assert.equal(model.peakDay?.date, "2026-05-03");
+  assert.equal(model.peakDay?.duration, 3 * hour);
+  assert.equal(model.summary.totalDuration, 6 * hour);
+  assert.equal(model.summary.averageDuration, 3 * hour);
+  assert.deepEqual(model.chartRows.map((row) => row.totalDuration), [hour, 5 * hour]);
 });
 
 await runTest("web heatmap cache identity includes the data revision", async () => {
