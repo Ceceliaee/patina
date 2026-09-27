@@ -7,8 +7,6 @@ import {
 } from "../src/platform/persistence/sessionReadRepository.ts";
 import {
   createSerializedJobRunner,
-  executeWriteBatchWithExecutor,
-  type SqlWriteOperation,
 } from "../src/platform/persistence/sqliteTransactions.ts";
 import {
   isRetryableCommandError,
@@ -20,39 +18,12 @@ import {
   buildRawAppSettingsPatch,
 } from "../src/platform/persistence/appSettingsStore.ts";
 
-class FakeWriteExecutor {
-  executedStatements: Array<{ query: string; values?: unknown[] }> = [];
-  private mutationCount = 0;
-  private readonly failAtMutationNumber: number | null;
-
-  constructor(failAtMutationNumber: number | null = null) {
-    this.failAtMutationNumber = failAtMutationNumber;
-  }
-
-  async execute(query: string, values?: unknown[]): Promise<void> {
-    this.mutationCount += 1;
-    if (this.failAtMutationNumber !== null && this.mutationCount === this.failAtMutationNumber) {
-      throw new Error(`forced failure at mutation ${this.mutationCount}`);
-    }
-
-    this.executedStatements.push({ query, values });
-  }
-}
-
 let passed = 0;
 
 async function runTest(name: string, fn: () => Promise<void> | void) {
   await fn();
   passed += 1;
   console.log(`PASS ${name}`);
-}
-
-function assertNoTransactionControlStatements(executor: FakeWriteExecutor) {
-  const transactionControlStatements = new Set(["BEGIN IMMEDIATE", "COMMIT", "ROLLBACK"]);
-  assert.equal(
-    executor.executedStatements.some((statement) => transactionControlStatements.has(statement.query)),
-    false,
-  );
 }
 
 await runTest("History SQL preserves open and half-open boundaries with native import precedence", async () => {
@@ -115,36 +86,6 @@ await runTest("History SQL preserves open and half-open boundaries with native i
     Date.now = originalNow;
     db.close();
   }
-});
-
-await runTest("executeWriteBatchWithExecutor executes all operations in order", async () => {
-  const executor = new FakeWriteExecutor();
-  const operations: SqlWriteOperation[] = [
-    { query: "INSERT setting A", values: ["a"] },
-    { query: "INSERT setting B", values: ["b"] },
-  ];
-
-  await executeWriteBatchWithExecutor(executor, operations);
-
-  assert.deepEqual(executor.executedStatements, operations);
-  assertNoTransactionControlStatements(executor);
-});
-
-await runTest("executeWriteBatchWithExecutor stops after the first failed operation", async () => {
-  const executor = new FakeWriteExecutor(2);
-  const operations: SqlWriteOperation[] = [
-    { query: "INSERT setting A", values: ["a"] },
-    { query: "INSERT setting B", values: ["b"] },
-    { query: "INSERT setting C", values: ["c"] },
-  ];
-
-  await assert.rejects(
-    executeWriteBatchWithExecutor(executor, operations),
-    /forced failure at mutation 2/,
-  );
-
-  assert.deepEqual(executor.executedStatements, [operations[0]]);
-  assertNoTransactionControlStatements(executor);
 });
 
 await runTest("settings raw patch persists theme mode with snake case key", () => {

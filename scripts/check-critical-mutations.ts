@@ -39,18 +39,6 @@ interface Mutant {
 
 const MUTANTS: Mutant[] = [
   {
-    name: "batch stops awaiting writes",
-    source: SQLITE_SOURCE,
-    search: "await executor.execute(operation.query, operation.values);",
-    replacement: "void executor.execute(operation.query, operation.values);",
-  },
-  {
-    name: "batch executes only first write",
-    source: SQLITE_SOURCE,
-    search: "for (const operation of operations) {",
-    replacement: "for (const operation of operations.slice(0, 1)) {",
-  },
-  {
     name: "serialized runner skips predecessor",
     source: SQLITE_SOURCE,
     search: "await previous;",
@@ -513,22 +501,7 @@ async function withTimeout<T>(promise: Promise<T>, milliseconds = 200): Promise<
 }
 
 async function verifySqlite(module: Record<string, unknown>) {
-  const executeBatch = module.executeWriteBatchWithExecutor as (
-    executor: { execute(query: string): Promise<void> },
-    operations: Array<{ query: string }>,
-  ) => Promise<void>;
   const createRunner = module.createSerializedJobRunner as () => <T>(job: () => Promise<T>) => Promise<T>;
-
-  const writes: string[] = [];
-  await executeBatch({ execute: async (query) => { writes.push(query); } }, [{ query: "a" }, { query: "b" }]);
-  assert.deepEqual(writes, ["a", "b"]);
-
-  await assert.rejects(executeBatch({
-    execute: async (query) => {
-      if (query === "b") throw new Error("stop");
-      writes.push(query);
-    },
-  }, [{ query: "a" }, { query: "b" }, { query: "c" }]), /stop/);
 
   const run = createRunner();
   const order: string[] = [];

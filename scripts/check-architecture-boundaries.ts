@@ -215,8 +215,7 @@ function findArchitectureViolations(files: SourceFile[]): ArchitectureViolation[
       if (
         ts.isIdentifier(node) &&
         (node.text === "executeWrite" || node.text === "executeWriteBatch") &&
-        !file.path.endsWith("src/platform/persistence/sqlite.ts") &&
-        !file.path.endsWith("src/platform/persistence/sqliteTransactions.ts")
+        !file.path.endsWith("src/platform/persistence/sqlite.ts")
       ) {
         addViolation(violations, file, sourceFile, node, "frontend-no-sql-execute-write");
       }
@@ -322,7 +321,7 @@ function runSelfTest() {
       content: "import { invoke } from '@tauri-apps/api/core';",
     },
     {
-      path: "src/platform/persistence/badWrite.ts",
+      path: "src/platform/persistence/sqliteTransactions.ts",
       content: "import { executeWrite } from './sqlite.ts';",
     },
     {
