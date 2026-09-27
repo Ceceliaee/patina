@@ -6,6 +6,14 @@ use crate::domain::activity_read_model::{
 };
 use sqlx::{sqlite::SqliteRow, Pool, Row, Sqlite, Transaction};
 
+const CATALOG_PAGE_SQL: &str = "SELECT raw_exe_name, display_app_name app_name, last_seen_ms,
+                has_native_records, has_import_exact_records, has_import_bucket_records
+         FROM recorded_app_catalog
+         WHERE (? = 0 OR LOWER(raw_exe_name) LIKE ? ESCAPE '\\'
+                        OR LOWER(display_app_name) LIKE ? ESCAPE '\\')
+           AND (? = 0 OR last_seen_ms < ? OR (last_seen_ms = ? AND raw_exe_name > ?))
+         ORDER BY last_seen_ms DESC, raw_exe_name ASC LIMIT ?";
+
 const CATALOG_SCHEMA_VERSION: i64 = 1;
 const CATALOG_ALGORITHM_VERSION: i64 = 1;
 const CATALOG_FINGERPRINT: &str = "executable-v1";
@@ -341,13 +349,6 @@ pub(super) async fn load_page(
         Ok(None) | Err(_) => (false, 0),
     };
 
-    let projection_sql = "SELECT raw_exe_name, display_app_name app_name, last_seen_ms,
-                has_native_records, has_import_exact_records, has_import_bucket_records
-         FROM recorded_app_catalog
-         WHERE (? = 0 OR LOWER(raw_exe_name) LIKE ? ESCAPE '\\'
-                        OR LOWER(display_app_name) LIKE ? ESCAPE '\\')
-           AND (? = 0 OR last_seen_ms < ? OR (last_seen_ms = ? AND raw_exe_name > ?))
-         ORDER BY last_seen_ms DESC, raw_exe_name ASC LIMIT ?";
     let facts_sql = format!(
         "WITH facts AS (
                SELECT {NORMALIZED_KEY_SQL} app_key, exe_name raw_exe_name, app_name,
@@ -381,7 +382,7 @@ pub(super) async fn load_page(
                 AND (? = 0 OR last_seen_ms < ? OR (last_seen_ms = ? AND raw_exe_name > ?))
               ORDER BY last_seen_ms DESC, raw_exe_name ASC LIMIT ?"
     );
-    let requested_sql = if ready { projection_sql } else { &facts_sql };
+    let requested_sql = if ready { CATALOG_PAGE_SQL } else { &facts_sql };
     let requested_search = if ready {
         normalized_search.as_str()
     } else {
@@ -584,6 +585,152 @@ mod tests {
             .unwrap();
         pool.execute(ACTIVITY_READ_MODELS_SCHEMA_SQL).await.unwrap();
         pool
+    }
+
+    #[tokio::test]
+    async fn catalog_pages_preserve_ties_empty_names_and_literal_search() {
+        let pool = setup_pool().await;
+        for (exe, name, time) in [
+            ("alpha.exe", "", 1000),
+            ("bravo.exe", "100%_\\ literal", 1000),
+            ("charlie.exe", "Charlie", 900),
+        ] {
+            sqlx::query("INSERT INTO sessions(app_name, exe_name, start_time, end_time, duration) VALUES (?, ?, ?, ?, 100)")
+                .bind(name).bind(exe).bind(time).bind(time + 100).execute(&pool).await.unwrap();
+        }
+        let first = load_page(&pool, None, String::new(), 2).await.unwrap();
+        assert_eq!(
+            first
+                .rows
+                .iter()
+                .map(|row| row.raw_exe_name.as_str())
+                .collect::<Vec<_>>(),
+            ["alpha.exe", "bravo.exe"]
+        );
+        assert_eq!(first.rows[0].app_name, "");
+        assert!(first.has_more);
+        let second = load_page(&pool, first.next_cursor, String::new(), 2)
+            .await
+            .unwrap();
+        assert_eq!(second.rows[0].raw_exe_name, "charlie.exe");
+        assert!(!second.has_more);
+        for query in ["%", "_", "\\"] {
+            let page = load_page(&pool, None, query.into(), 10).await.unwrap();
+            assert_eq!(page.rows.len(), 1);
+            assert_eq!(page.rows[0].raw_exe_name, "bravo.exe");
+        }
+        assert!(load_page(&pool, None, "' OR 1=1 --".into(), 10)
+            .await
+            .unwrap()
+            .rows
+            .is_empty());
+        sqlx::query("DROP TABLE recorded_app_catalog")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let fallback = load_page(&pool, None, String::new(), 2).await.unwrap();
+        assert_eq!(fallback.read_path, "facts");
+        assert_eq!(fallback.rows.len(), 2);
+        let second = load_page(&pool, fallback.next_cursor, String::new(), 2)
+            .await
+            .unwrap();
+        assert_eq!(second.rows[0].raw_exe_name, "charlie.exe");
+        assert!(!second.has_more);
+        pool.close().await;
+    }
+
+    #[tokio::test]
+    #[ignore = "performance fixture; run with pnpm run perf:classification-app-catalog"]
+    async fn catalog_capacity_report() {
+        use serde_json::json;
+        use std::time::Instant;
+        let pool = setup_pool().await;
+        pool.execute("INSERT INTO import_batches(id, imported_at, source_name, source_kind, source_fingerprint, exact_session_count, hour_bucket_count) VALUES ('perf',1,'fixture','csv','perf',20000,10000)").await.unwrap();
+        pool.execute("WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<79999) INSERT INTO sessions(app_name, exe_name, start_time, end_time, duration) SELECT 'Native App '||(i%1500), printf('catalog-perf-%04d.exe', i%1500), i*1000, i*1000+500, 500 FROM n").await.unwrap();
+        pool.execute("WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<19999) INSERT INTO import_exact_sessions(batch_id, fingerprint, app_name, exe_name, start_time, end_time, duration) SELECT 'perf','exact-'||i,'Imported App '||(i%1500),printf('catalog-perf-%04d.exe',(i+300)%1500),i*1200,i*1200+600,600 FROM n").await.unwrap();
+        pool.execute("WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<9999) INSERT INTO import_time_buckets(batch_id, fingerprint, app_name, exe_name, bucket_start_time, duration) SELECT 'perf','bucket-'||i,'Bucket App '||(i%1500),printf('catalog-perf-%04d.exe',(i+600)%1500),i*3600000,60000 FROM n").await.unwrap();
+        rebuild(&pool).await.unwrap();
+        pool.execute("ANALYZE").await.unwrap();
+        let first = load_page(&pool, None, String::new(), 120).await.unwrap();
+        assert_eq!(first.rows.len(), 120);
+        let mut cursor = first.next_cursor;
+        for _ in 0..8 {
+            cursor = load_page(&pool, cursor, String::new(), 120)
+                .await
+                .unwrap()
+                .next_cursor;
+        }
+        let mut measurements = Vec::new();
+        for (name, deep, search, expected) in [
+            ("classification-catalog-first-page", false, "", 120),
+            ("classification-catalog-deep-page", true, "", 120),
+            ("classification-catalog-search", false, "Native App 1499", 1),
+        ] {
+            let mut durations = Vec::new();
+            for _ in 0..12 {
+                let at = Instant::now();
+                let page = load_page(
+                    &pool,
+                    if deep { cursor.clone() } else { None },
+                    search.into(),
+                    120,
+                )
+                .await
+                .unwrap();
+                durations.push(at.elapsed().as_secs_f64() * 1000.0);
+                assert_eq!(page.read_path, "projection");
+                assert_eq!(page.rows.len(), expected);
+                assert!(page.source_revision > 0);
+            }
+            let plan = fetch_catalog_page_rows(
+                &pool,
+                &format!("EXPLAIN QUERY PLAN {CATALOG_PAGE_SQL}"),
+                search,
+                &format!("%{}%", escape_like_pattern(search)),
+                if deep { cursor.as_ref() } else { None },
+                120,
+            )
+            .await
+            .unwrap();
+            let details: Vec<String> = plan.iter().map(|row| row.get("detail")).collect();
+            let uses_table_scan = details.iter().any(|detail| {
+                detail.contains("SCAN ")
+                    && !detail.contains("USING INDEX")
+                    && !detail.contains("USING COVERING INDEX")
+            });
+            assert!(
+                !uses_table_scan,
+                "unexpected projection table scan: {details:?}"
+            );
+            measurements.push(json!({"name":name,"durations":durations,"returnedRows":expected,"readPath":"projection","queryPlan":details,"usesTableScan":uses_table_scan}));
+        }
+        pool.close().await;
+        // A missing projection must still read facts. Keep this recovery fixture separate
+        // from the large steady-state projection fixture and report its actual size.
+        let fallback_pool = setup_pool().await;
+        fallback_pool.execute("WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<299) INSERT INTO sessions(app_name,exe_name,start_time,end_time,duration) SELECT 'Fallback '||i,printf('fallback-%04d.exe',i),i*1000,i*1000+500,500 FROM n").await.unwrap();
+        rebuild(&fallback_pool).await.unwrap();
+        fallback_pool
+            .execute("DROP TABLE recorded_app_catalog")
+            .await
+            .unwrap();
+        let mut durations = Vec::new();
+        for _ in 0..12 {
+            let at = Instant::now();
+            let page = load_page(&fallback_pool, None, String::new(), 120)
+                .await
+                .unwrap();
+            durations.push(at.elapsed().as_secs_f64() * 1000.0);
+            assert_eq!(page.read_path, "facts");
+            assert_eq!(page.rows.len(), 120);
+            assert!(page.fallback_reason.is_some());
+        }
+        measurements.push(json!({"name":"classification-catalog-fallback","durations":durations,"returnedRows":120,"readPath":"facts","fixtureRows":300}));
+        fallback_pool.close().await;
+        println!(
+            "PATINA_CATALOG_BENCH={}",
+            json!({"measurements":measurements,"metadata":{"nativeRecords":80000,"exactImportRecords":20000,"bucketImportRecords":10000,"distinctApps":1500,"fallbackNativeRecords":300}})
+        );
     }
 
     #[tokio::test]
