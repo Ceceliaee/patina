@@ -1,7 +1,7 @@
 use crate::data::repositories::classification_settings::load_classification_snapshot;
 use crate::domain::classification::ClassificationSnapshot;
 use chrono::{DateTime, Datelike, Timelike};
-use sqlx::{Pool, Sqlite};
+use sqlx::{Pool, Row, Sqlite};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -308,6 +308,115 @@ pub fn replace_output_file(temp_path: &Path, output_path: &str) -> Result<(), St
 
     std::fs::rename(temp_path, output_path)
         .map_err(|e| format!("failed to move export into place: {e}"))
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct SessionRow {
+    pub(super) id: i64,
+    pub(super) app_name: String,
+    pub(super) exe_name: String,
+    pub(super) window_title: Option<String>,
+    pub(super) start_time: i64,
+    pub(super) end_time: Option<i64>,
+    pub(super) duration: Option<i64>,
+    pub(super) continuity_group_start_time: i64,
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct WebRow {
+    pub(super) id: i64,
+    pub(super) browser_client_id: String,
+    pub(super) browser_kind: String,
+    pub(super) browser_exe_name: String,
+    pub(super) domain: String,
+    pub(super) normalized_domain: String,
+    pub(super) url: Option<String>,
+    pub(super) title: Option<String>,
+    pub(super) favicon_url: Option<String>,
+    pub(super) start_time: i64,
+    pub(super) end_time: Option<i64>,
+    pub(super) duration: Option<i64>,
+    pub(super) source: String,
+    pub(super) created_at: i64,
+    pub(super) updated_at: i64,
+}
+
+pub(super) async fn load_sessions(
+    pool: &Pool<Sqlite>,
+    filter: ExportTimeFilter,
+) -> Result<Vec<SessionRow>, String> {
+    let (clause, params) = build_overlap_where_clause(filter);
+    let sql = format!(
+        "SELECT id, app_name, exe_name, window_title, start_time, end_time, duration,
+                COALESCE(continuity_group_start_time, start_time) AS continuity_group_start_time
+         FROM sessions {} ORDER BY id ASC",
+        clause
+    );
+    let mut query = sqlx::query(&sql);
+    for param in params {
+        query = query.bind(param);
+    }
+    let rows = query
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("failed to read sessions: {e}"))?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| SessionRow {
+            id: row.get("id"),
+            app_name: row.get("app_name"),
+            exe_name: row.get("exe_name"),
+            window_title: row.get("window_title"),
+            start_time: row.get("start_time"),
+            end_time: row.get("end_time"),
+            duration: row.get("duration"),
+            continuity_group_start_time: row.get("continuity_group_start_time"),
+        })
+        .collect())
+}
+
+pub(super) async fn load_web_activity(
+    pool: &Pool<Sqlite>,
+    filter: ExportTimeFilter,
+) -> Result<Vec<WebRow>, String> {
+    let (clause, params) = build_overlap_where_clause(filter);
+    let sql = format!(
+        "SELECT id, browser_client_id, browser_kind, browser_exe_name, domain,
+                normalized_domain, url, title, favicon_url, start_time, end_time,
+                duration, source, created_at, updated_at
+         FROM web_activity_segments {} ORDER BY id ASC",
+        clause
+    );
+    let mut query = sqlx::query(&sql);
+    for param in params {
+        query = query.bind(param);
+    }
+    let rows = query
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("failed to read web activity: {e}"))?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| WebRow {
+            id: row.get("id"),
+            browser_client_id: row.get("browser_client_id"),
+            browser_kind: row.get("browser_kind"),
+            browser_exe_name: row.get("browser_exe_name"),
+            domain: row.get("domain"),
+            normalized_domain: row.get("normalized_domain"),
+            url: row.get("url"),
+            title: row.get("title"),
+            favicon_url: row.get("favicon_url"),
+            start_time: row.get("start_time"),
+            end_time: row.get("end_time"),
+            duration: row.get("duration"),
+            source: row.get("source"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        })
+        .collect())
 }
 
 #[cfg(test)]

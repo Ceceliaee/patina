@@ -1,15 +1,15 @@
 use super::common::{
-    build_overlap_where_clause, current_time_ms, load_export_classification, ms_to_datetime_str,
-    ms_to_local_date, ms_to_local_hour, ms_to_local_month, ms_to_local_week, ms_to_local_weekday,
-    replace_output_file, resolve_export_fields, unique_temp_path, ExportClassification,
-    ExportTimeFilter,
+    current_time_ms, load_export_classification, load_sessions, load_web_activity,
+    ms_to_datetime_str, ms_to_local_date, ms_to_local_hour, ms_to_local_month, ms_to_local_week,
+    ms_to_local_weekday, replace_output_file, resolve_export_fields, unique_temp_path,
+    ExportClassification, ExportTimeFilter, SessionRow, WebRow,
 };
 use arrow::array::{Float64Array, Int64Array, StringArray};
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, Sqlite};
 use std::sync::Arc;
 
 pub async fn export_to_parquet(
@@ -145,115 +145,6 @@ pub(crate) fn resolved_parquet_schema(selected_fields: &[String]) -> Result<Sche
             })
             .collect::<Vec<_>>(),
     ))
-}
-
-#[derive(Clone, Debug)]
-struct SessionRow {
-    id: i64,
-    app_name: String,
-    exe_name: String,
-    window_title: Option<String>,
-    start_time: i64,
-    end_time: Option<i64>,
-    duration: Option<i64>,
-    continuity_group_start_time: i64,
-}
-
-#[derive(Clone, Debug)]
-struct WebRow {
-    id: i64,
-    browser_client_id: String,
-    browser_kind: String,
-    browser_exe_name: String,
-    domain: String,
-    normalized_domain: String,
-    url: Option<String>,
-    title: Option<String>,
-    favicon_url: Option<String>,
-    start_time: i64,
-    end_time: Option<i64>,
-    duration: Option<i64>,
-    source: String,
-    created_at: i64,
-    updated_at: i64,
-}
-
-async fn load_sessions(
-    pool: &Pool<Sqlite>,
-    filter: ExportTimeFilter,
-) -> Result<Vec<SessionRow>, String> {
-    let (clause, params) = build_overlap_where_clause(filter);
-    let sql = format!(
-        "SELECT id, app_name, exe_name, window_title, start_time, end_time, duration,
-                COALESCE(continuity_group_start_time, start_time) AS continuity_group_start_time
-         FROM sessions {} ORDER BY id ASC",
-        clause
-    );
-    let mut query = sqlx::query(&sql);
-    for param in params {
-        query = query.bind(param);
-    }
-    let rows = query
-        .fetch_all(pool)
-        .await
-        .map_err(|e| format!("failed to read sessions: {e}"))?;
-
-    Ok(rows
-        .into_iter()
-        .map(|row| SessionRow {
-            id: row.get("id"),
-            app_name: row.get("app_name"),
-            exe_name: row.get("exe_name"),
-            window_title: row.get("window_title"),
-            start_time: row.get("start_time"),
-            end_time: row.get("end_time"),
-            duration: row.get("duration"),
-            continuity_group_start_time: row.get("continuity_group_start_time"),
-        })
-        .collect())
-}
-
-async fn load_web_activity(
-    pool: &Pool<Sqlite>,
-    filter: ExportTimeFilter,
-) -> Result<Vec<WebRow>, String> {
-    let (clause, params) = build_overlap_where_clause(filter);
-    let sql = format!(
-        "SELECT id, browser_client_id, browser_kind, browser_exe_name, domain,
-                normalized_domain, url, title, favicon_url, start_time, end_time,
-                duration, source, created_at, updated_at
-         FROM web_activity_segments {} ORDER BY id ASC",
-        clause
-    );
-    let mut query = sqlx::query(&sql);
-    for param in params {
-        query = query.bind(param);
-    }
-    let rows = query
-        .fetch_all(pool)
-        .await
-        .map_err(|e| format!("failed to read web activity: {e}"))?;
-
-    Ok(rows
-        .into_iter()
-        .map(|row| WebRow {
-            id: row.get("id"),
-            browser_client_id: row.get("browser_client_id"),
-            browser_kind: row.get("browser_kind"),
-            browser_exe_name: row.get("browser_exe_name"),
-            domain: row.get("domain"),
-            normalized_domain: row.get("normalized_domain"),
-            url: row.get("url"),
-            title: row.get("title"),
-            favicon_url: row.get("favicon_url"),
-            start_time: row.get("start_time"),
-            end_time: row.get("end_time"),
-            duration: row.get("duration"),
-            source: row.get("source"),
-            created_at: row.get("created_at"),
-            updated_at: row.get("updated_at"),
-        })
-        .collect())
 }
 
 fn build_record_batch(

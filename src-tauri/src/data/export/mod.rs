@@ -344,6 +344,79 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn csv_and_parquet_preserve_open_rows_order_and_one_sided_bounds() {
+        use arrow::array::{Array, Int64Array, StringArray};
+        let pool = source_pool().await;
+        insert_session(&pool, "First", "", 2000, 2500).await;
+        insert_session(&pool, "Second", "", 2000, 3000).await;
+        insert_session(&pool, "Open", "", 1000, 1200).await;
+        sqlx::query(
+            "UPDATE sessions SET end_time=NULL, duration=NULL, window_title=NULL WHERE id=3",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let fields = field_list(&["session_id", "app_name", "window_title"]);
+        for (start, end, expected) in [
+            (None, None, vec![1_i64, 2, 3]),
+            (Some(2500), None, vec![2, 3]),
+            (None, Some(2000), vec![3]),
+            (Some(2500), Some(3000), vec![2, 3]),
+        ] {
+            let csv = output_path("csv");
+            let parquet = output_path("parquet");
+            let count = csv_exporter::export_to_csv(
+                &pool,
+                csv.to_str().unwrap(),
+                start,
+                end,
+                Some(&fields),
+            )
+            .await
+            .unwrap();
+            assert_eq!(count as usize, expected.len());
+            let text = std::fs::read_to_string(&csv).unwrap();
+            let ids: Vec<i64> = text
+                .lines()
+                .skip(1)
+                .map(|line| line.split(',').next().unwrap().parse().unwrap())
+                .collect();
+            assert_eq!(ids, expected);
+            parquet_exporter::export_to_parquet(
+                &pool,
+                parquet.to_str().unwrap(),
+                Some(&fields),
+                start,
+                end,
+            )
+            .await
+            .unwrap();
+            let file = std::fs::File::open(&parquet).unwrap();
+            let mut reader = ParquetRecordBatchReaderBuilder::try_new(file)
+                .unwrap()
+                .build()
+                .unwrap();
+            let batch = reader.next().unwrap().unwrap();
+            let ids = batch
+                .column(0)
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .unwrap();
+            assert_eq!(ids.values().as_ref(), expected.as_slice());
+            let titles = batch
+                .column(2)
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .unwrap();
+            assert!(titles.is_null(expected.len() - 1));
+            drop(reader);
+            std::fs::remove_file(csv).unwrap();
+            std::fs::remove_file(parquet).unwrap();
+        }
+        pool.close().await;
+    }
+
+    #[tokio::test]
     async fn csv_export_uses_overlap_range_and_sanitizes_text() {
         let pool = source_pool().await;
         insert_session(&pool, "Inside", "=cmd", 1_100, 1_200).await;
