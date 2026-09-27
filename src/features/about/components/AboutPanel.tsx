@@ -1,5 +1,5 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
-import { FileText, Heart, MessageSquare, } from "lucide-react";
+import { FileText, MessageSquare, Rose } from "lucide-react";
 import type { ReactNode } from "react";
 import appIconUrl from "../../../../src-tauri/icons/icon.png";
 import type { UpdateSnapshot } from "../../../shared/types/update";
@@ -76,7 +76,7 @@ export default function AboutPanel({
           </div>
           <div className="about-center-title-row">
             <h2>Patina</h2>
-            <span className="about-center-version-chip">{versionLabel}</span>
+            <span className="about-center-version qp-text-caption qp-weight-emphasis">{versionLabel}</span>
           </div>
           <p>{UI_TEXT.about.description}</p>
         </div>
@@ -102,7 +102,7 @@ export default function AboutPanel({
             onClick={onOpenFeedback}
           />
           <AboutLinkButton
-            icon={<Heart className="about-support-pill-heart" size={14} />}
+            icon={<Rose className="about-support-pill-icon" size={14} />}
             label={UI_TEXT.update.support}
             onClick={onOpenSupportDialog}
           />

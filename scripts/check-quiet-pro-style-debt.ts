@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { extname, join, relative } from "node:path";
 
 const ARBITRARY_RADIUS_BASELINE: Record<string, number> = {
-  "src/app/components/AppSidebar.tsx": 2,
+  "src/app/components/AppSidebar.tsx": 1,
   "src/features/update/components/UpdateStatusPanel.tsx": 0,
   "src/shared/components/QuietStepperSlider.tsx": 0,
   "src/features/dashboard/components/Dashboard.tsx": 2,

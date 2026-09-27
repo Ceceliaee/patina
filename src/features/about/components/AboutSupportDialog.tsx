@@ -1,8 +1,10 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
-import { Heart, X } from "lucide-react";
+import { X } from "lucide-react";
 import wechatRewardDarkUrl from "../assets/wechat-reward-dark.png";
 import wechatRewardLightUrl from "../assets/wechat-reward-light.png";
 import kofiButtonUrl from "../assets/kofi-button.png";
+// Original mark from https://more.ko-fi.com/brand-assets.
+import kofiMarkUrl from "../assets/kofi-mark.avif";
 import QuietDialog from "../../../shared/components/QuietDialog";
 
 
@@ -40,7 +42,10 @@ export default function AboutSupportDialog({
       <div className="about-support-dialog-body">
         <section className="about-support-card">
           <div className="about-support-card-heading">
-            <Heart size={15} aria-hidden />
+            {/* Crop the original reward mark without redrawing or duplicating the source image. */}
+            <svg className="about-support-brand-icon about-wechat-reward-mark" viewBox="798 641 114 114" aria-hidden>
+              <image href={wechatRewardLightUrl} width="1344" height="1344" />
+            </svg>
             <h4>{copy.wechatTitle}</h4>
           </div>
           <div className="about-wechat-reward-frame">
@@ -63,7 +68,7 @@ export default function AboutSupportDialog({
 
         <section className="about-support-card about-support-kofi-card">
           <div className="about-support-card-heading">
-            <Heart size={15} aria-hidden />
+            <img className="about-support-brand-icon" src={kofiMarkUrl} alt="" draggable={false} />
             <h4>{copy.kofiTitle}</h4>
           </div>
           <div className="about-kofi-button-frame">

@@ -76,8 +76,8 @@ export default function AppSidebar({
       data-sidebar-navigation-mode={navigationMode}
       style={NO_DRAG_STYLE}
     >
-      <div className="w-10 h-10 rounded-[10px] flex items-center justify-center border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-panel)]">
-        <img src={appIconUrl} alt="" draggable={false} className="h-6 w-6 object-contain" />
+      <div className="w-10 h-10 flex items-center justify-center">
+        <img src={appIconUrl} alt="" draggable={false} className="h-7 w-7 object-contain" />
       </div>
 
       <nav
