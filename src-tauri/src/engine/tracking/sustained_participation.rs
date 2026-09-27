@@ -367,6 +367,230 @@ fn resolve_inactive_reason(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::tracking::SystemMediaPlaybackType;
+
+    #[test]
+    fn tracking_status_prefers_signal_gated_sustained_participation() {
+        let signal = SustainedParticipationSignalSnapshot {
+            is_available: true,
+            is_active: true,
+            signal_source: Some(SustainedParticipationSignalSource::SystemMedia),
+            source_app_id: Some("Chrome".into()),
+            source_app_identity: Some(SustainedParticipationAppIdentity::Chrome),
+            playback_type: Some(SystemMediaPlaybackType::Video),
+        };
+
+        let no_signal = SustainedParticipationSignalSnapshot::default();
+        let (status, _) = resolve_tracking_status_with_runtime(SustainedParticipationStatusInput {
+            exe_name: "chrome.exe",
+            process_path: r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            idle_time_ms: 500_000,
+            is_afk: false,
+            continuity_window_secs: 180,
+            sustained_participation_secs: 600,
+            tracking_paused: false,
+            now_ms: 1_000_000,
+            previous_state: &SustainedParticipationRuntimeState::default(),
+            system_media_signal: if signal.signal_source
+                == Some(SustainedParticipationSignalSource::AudioSession)
+            {
+                &no_signal
+            } else {
+                &signal
+            },
+            audio_signal: if signal.signal_source
+                == Some(SustainedParticipationSignalSource::AudioSession)
+            {
+                &signal
+            } else {
+                &no_signal
+            },
+        });
+
+        assert!(status.is_tracking_active);
+        assert!(status.sustained_participation_eligible);
+        assert!(status.sustained_participation_active);
+        assert_eq!(
+            status.sustained_participation_kind,
+            Some(SustainedParticipationKind::Audio)
+        );
+    }
+
+    #[test]
+    fn tracking_status_falls_back_to_continuity_without_signal() {
+        let signal = SustainedParticipationSignalSnapshot::default();
+
+        let no_signal = SustainedParticipationSignalSnapshot::default();
+        let (status, _) = resolve_tracking_status_with_runtime(SustainedParticipationStatusInput {
+            exe_name: "zoom.exe",
+            process_path: r"C:\Program Files\Zoom\Zoom.exe",
+            idle_time_ms: 250_000,
+            is_afk: false,
+            continuity_window_secs: 180,
+            sustained_participation_secs: 600,
+            tracking_paused: false,
+            now_ms: 1_000_000,
+            previous_state: &SustainedParticipationRuntimeState::default(),
+            system_media_signal: if signal.signal_source
+                == Some(SustainedParticipationSignalSource::AudioSession)
+            {
+                &no_signal
+            } else {
+                &signal
+            },
+            audio_signal: if signal.signal_source
+                == Some(SustainedParticipationSignalSource::AudioSession)
+            {
+                &signal
+            } else {
+                &no_signal
+            },
+        });
+
+        assert!(!status.is_tracking_active);
+        assert!(!status.sustained_participation_eligible);
+        assert!(!status.sustained_participation_active);
+        assert_eq!(status.sustained_participation_kind, None);
+    }
+
+    #[test]
+    fn tracking_status_accepts_unknown_audio_session_matches() {
+        let signal = SustainedParticipationSignalSnapshot {
+            is_available: true,
+            is_active: true,
+            signal_source: Some(SustainedParticipationSignalSource::AudioSession),
+            source_app_id: Some("PotPlayerMini64.exe".into()),
+            source_app_identity: None,
+            playback_type: None,
+        };
+
+        let no_signal = SustainedParticipationSignalSnapshot::default();
+        let (status, _) = resolve_tracking_status_with_runtime(SustainedParticipationStatusInput {
+            exe_name: "PotPlayerMini64.exe",
+            process_path: r"C:\Program Files\DAUM\PotPlayer\PotPlayerMini64.exe",
+            idle_time_ms: 240_000,
+            is_afk: false,
+            continuity_window_secs: 180,
+            sustained_participation_secs: 600,
+            tracking_paused: false,
+            now_ms: 1_000_000,
+            previous_state: &SustainedParticipationRuntimeState::default(),
+            system_media_signal: if signal.signal_source
+                == Some(SustainedParticipationSignalSource::AudioSession)
+            {
+                &no_signal
+            } else {
+                &signal
+            },
+            audio_signal: if signal.signal_source
+                == Some(SustainedParticipationSignalSource::AudioSession)
+            {
+                &signal
+            } else {
+                &no_signal
+            },
+        });
+
+        assert!(status.is_tracking_active);
+        assert!(status.sustained_participation_eligible);
+        assert!(status.sustained_participation_active);
+        assert_eq!(
+            status.sustained_participation_kind,
+            Some(SustainedParticipationKind::Audio)
+        );
+    }
+
+    #[test]
+    fn tracking_status_accepts_browser_audio_only_matches() {
+        let signal = SustainedParticipationSignalSnapshot {
+            is_available: true,
+            is_active: true,
+            signal_source: Some(SustainedParticipationSignalSource::AudioSession),
+            source_app_id: Some("Chrome.exe".into()),
+            source_app_identity: Some(SustainedParticipationAppIdentity::Chrome),
+            playback_type: None,
+        };
+
+        let no_signal = SustainedParticipationSignalSnapshot::default();
+        let (status, _) = resolve_tracking_status_with_runtime(SustainedParticipationStatusInput {
+            exe_name: "Chrome.exe",
+            process_path: r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            idle_time_ms: 240_000,
+            is_afk: true,
+            continuity_window_secs: 180,
+            sustained_participation_secs: 900,
+            tracking_paused: false,
+            now_ms: 1_000_000,
+            previous_state: &SustainedParticipationRuntimeState::default(),
+            system_media_signal: if signal.signal_source
+                == Some(SustainedParticipationSignalSource::AudioSession)
+            {
+                &no_signal
+            } else {
+                &signal
+            },
+            audio_signal: if signal.signal_source
+                == Some(SustainedParticipationSignalSource::AudioSession)
+            {
+                &signal
+            } else {
+                &no_signal
+            },
+        });
+
+        assert!(status.sustained_participation_active);
+        assert_eq!(
+            status.sustained_participation_kind,
+            Some(SustainedParticipationKind::Audio)
+        );
+    }
+
+    #[test]
+    fn tracking_status_keeps_sustained_participation_active_after_generic_afk_threshold() {
+        let signal = SustainedParticipationSignalSnapshot {
+            is_available: true,
+            is_active: true,
+            signal_source: Some(SustainedParticipationSignalSource::SystemMedia),
+            source_app_id: Some("Zoom".into()),
+            source_app_identity: Some(SustainedParticipationAppIdentity::Zoom),
+            playback_type: Some(SystemMediaPlaybackType::Video),
+        };
+
+        let no_signal = SustainedParticipationSignalSnapshot::default();
+        let (status, _) = resolve_tracking_status_with_runtime(SustainedParticipationStatusInput {
+            exe_name: "zoom.exe",
+            process_path: r"C:\Program Files\Zoom\Zoom.exe",
+            idle_time_ms: 240_000,
+            is_afk: true,
+            continuity_window_secs: 180,
+            sustained_participation_secs: 900,
+            tracking_paused: false,
+            now_ms: 1_000_000,
+            previous_state: &SustainedParticipationRuntimeState::default(),
+            system_media_signal: if signal.signal_source
+                == Some(SustainedParticipationSignalSource::AudioSession)
+            {
+                &no_signal
+            } else {
+                &signal
+            },
+            audio_signal: if signal.signal_source
+                == Some(SustainedParticipationSignalSource::AudioSession)
+            {
+                &signal
+            } else {
+                &no_signal
+            },
+        });
+
+        assert!(status.is_tracking_active);
+        assert!(status.sustained_participation_eligible);
+        assert!(status.sustained_participation_active);
+        assert_eq!(
+            status.sustained_participation_kind,
+            Some(SustainedParticipationKind::Audio)
+        );
+    }
 
     fn make_window(overrides: &[(&str, &str)]) -> tracker::WindowInfo {
         let mut window = tracker::WindowInfo {
