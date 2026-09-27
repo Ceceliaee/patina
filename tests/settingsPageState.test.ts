@@ -18,7 +18,8 @@ import {
 } from "../src/features/settings/hooks/settingsPageStateInteractions.ts";
 import {
   runBackupExportFlow,
-  runBackupRestoreFlow,
+  prepareBackupRestoreFlow,
+  commitPreparedBackupRestoreFlow,
   runSettingsCleanupFlow,
 } from "../src/features/settings/services/settingsPageActions.ts";
 import {
@@ -1019,98 +1020,62 @@ await runTest("runBackupExportFlow normalizes the initial path and stores the ex
   assert.deepEqual(events, ["start", "notify:success", "end"]);
 });
 
-await runTest("runBackupRestoreFlow blocks incompatible backups before confirmation", async () => {
-  let confirmCalls = 0;
-  let restoreCalls = 0;
-  let storedPath = "";
-  const tones: string[] = [];
-
-  const result = await runBackupRestoreFlow({
-    uiText: ZH_TEXT,
-    initialPath: "restore.db",
-    restoreStrategy: "replace",
-    prepareBackupRestore: async () => ({
-      path: "C:/tmp/incompatible.db",
-      preview: buildPreview({ restoreSupported: false }),
-      previewSummary: "",
-      compatible: false,
-      incompatibilityMessage: "schema mismatch",
-    }),
-    setRestorePath: (path) => {
-      storedPath = path;
-    },
-    confirm: async () => {
-      confirmCalls += 1;
-      return true;
-    },
-    restoreBackup: async () => {
-      restoreCalls += 1;
-    },
-    notify: (_message, tone) => {
-      tones.push(tone ?? "info");
-    },
-    reload: () => {
-      throw new Error("reload should not be called");
-    },
-  });
-
-  assert.equal(result, false);
-  assert.equal(storedPath, "C:/tmp/incompatible.db");
-  assert.equal(confirmCalls, 0);
-  assert.equal(restoreCalls, 0);
-  assert.deepEqual(tones, ["warning"]);
+await runTest("restore preparation handles cancellation, incompatibility and preview failure", async () => {
+  for (const outcome of ["cancel", "incompatible", "error"] as const) {
+    const events: string[] = [];
+    const result = await prepareBackupRestoreFlow({
+      uiText: ZH_TEXT,
+      initialPath: "  restore.db  ",
+      prepareBackupRestore: async (path) => {
+        assert.equal(path, "restore.db");
+        if (outcome === "cancel") return null;
+        if (outcome === "error") throw new Error("preview failed");
+        return { path: "incompatible.db", preview: buildPreview({ restoreSupported: false }),
+          previewSummary: "", compatible: false, incompatibilityMessage: "schema mismatch" };
+      },
+      setRestorePath: (path) => events.push(path),
+      notify: (_message, tone) => events.push(tone ?? "info"),
+      onExecutionStart: () => events.push("start"),
+      onExecutionEnd: () => events.push("end"),
+    });
+    assert.equal(result, null);
+    assert.deepEqual(events, outcome === "cancel" ? ["start", "end"]
+      : outcome === "error" ? ["start", "error", "end"]
+        : ["start", "incompatible.db", "warning", "end"]);
+  }
 });
 
-await runTest("runBackupRestoreFlow restores and reloads after confirmation", async () => {
-  const events: string[] = [];
-  let receivedStrategy = "";
-
-  const result = await runBackupRestoreFlow({
-    uiText: ZH_TEXT,
-    initialPath: "restore.db",
-    restoreStrategy: "merge",
-    prepareBackupRestore: async () => ({
-      path: "C:/tmp/restore.db",
-      preview: buildPreview(),
-      previewSummary: "summary",
-      compatible: true,
-    }),
-    setRestorePath: (path) => {
-      events.push(`path:${path}`);
-    },
-    confirm: async () => {
-      events.push("confirm");
-      return true;
-    },
-    restoreBackup: async (path, strategy, hash) => {
-      receivedStrategy = strategy;
-      events.push(`restore:${path}:${hash}`);
-    },
-    notify: (_message, tone) => {
-      events.push(`notify:${tone}`);
-    },
-    reload: () => {
-      events.push("reload");
-    },
-    onExecutionStart: () => {
-      events.push("start");
-    },
-    onExecutionEnd: () => {
-      events.push("end");
-    },
-  });
-
-  assert.equal(result, true);
-  assert.equal(receivedStrategy, "merge");
-  assert.deepEqual(events, [
-    "path:C:/tmp/restore.db",
-    "confirm",
-    "start",
-    `restore:C:/tmp/restore.db:${"a".repeat(64)}`,
-    "notify:success",
-    "reload",
-    "end",
-  ]);
+await runTest("prepared restore preserves preview hash, strategy, cancellation and failure cleanup", async () => {
+  for (const outcome of ["cancel", "success", "error"] as const) {
+    const events: string[] = [];
+    const preparation = await prepareBackupRestoreFlow({
+      uiText: ZH_TEXT,
+      prepareBackupRestore: async () => ({ path: "restore.db", preview: buildPreview(),
+        previewSummary: "summary", compatible: true }),
+      setRestorePath: (path) => events.push(path),
+      notify: () => assert.fail("valid preparation must not notify"),
+    });
+    assert.ok(preparation);
+    const result = await commitPreparedBackupRestoreFlow({
+      uiText: ZH_TEXT, preparation, restoreStrategy: "merge",
+      confirm: async () => { events.push("confirm"); return outcome !== "cancel"; },
+      restoreBackup: async (path, strategy, hash) => {
+        assert.equal(path, preparation.path);
+        assert.equal(strategy, "merge");
+        assert.equal(hash, preparation.preview.hash);
+        events.push("restore");
+        if (outcome === "error") throw new Error("restore failed");
+      },
+      notify: (_message, tone) => events.push(tone ?? "info"),
+      reload: () => events.push("reload"),
+      onExecutionStart: () => events.push("start"),
+      onExecutionEnd: () => events.push("end"),
+    });
+    assert.equal(result, outcome === "success");
+    assert.deepEqual(events, outcome === "cancel" ? ["restore.db", "confirm"]
+      : outcome === "error" ? ["restore.db", "confirm", "start", "restore", "error", "end"]
+        : ["restore.db", "confirm", "start", "restore", "success", "reload", "end"]);
+  }
 });
 
 await runTest("parseScheduledExportSnapshot preserves the saved format and field order", () => {

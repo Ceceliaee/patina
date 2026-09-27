@@ -45,7 +45,6 @@ import {
 import type { Locale, UiText } from "../../../shared/i18n/index.ts";
 import type { CleanupRange } from "../types.ts";
 import {
-  buildSessionCleanupPlan,
   clearSessionsByRangeWithDeps,
 } from "./sessionCleanupPolicy.ts";
 
@@ -193,8 +192,7 @@ export class SettingsRuntimeAdapterService {
   }
 
   static async clearSessionsByRange(range: CleanupRange, nowMs: number = Date.now()): Promise<void> {
-    const cleanupPlan = buildSessionCleanupPlan(range, nowMs);
-    await clearSessionsByRangeWithDeps(cleanupPlan.range, cleanupPlan.nowMs, {
+    await clearSessionsByRangeWithDeps(range, nowMs, {
       clearSessionsBefore,
     });
   }

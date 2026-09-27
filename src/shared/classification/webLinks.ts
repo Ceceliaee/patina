@@ -7,7 +7,7 @@ export interface WebLinkRule {
   color?: string;
 }
 
-export const WEB_LINK_GROUP_PREFIX = "site:";
+const WEB_LINK_GROUP_PREFIX = "site:";
 export const WEB_LINK_SETTING_PREFIX = "__web_site::";
 
 export function webLinkParent(identity: string): string | null {

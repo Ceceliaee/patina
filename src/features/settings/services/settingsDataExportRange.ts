@@ -25,7 +25,7 @@ export interface ResolvedExportTimeRange extends QuietResolvedDateRange {
   error: ExportTimeRangeError | null;
 }
 
-export const EXPORT_RANGE_MODES: ExportRangeMode[] = ["day", "week", "month", "year"];
+const EXPORT_RANGE_MODES: ExportRangeMode[] = ["day", "week", "month", "year"];
 export const EXPORT_RANGE_PICKER_MODES: ExportRangePickerMode[] = ["custom", "week", "month", "year"];
 
 function buildResolvedRange(

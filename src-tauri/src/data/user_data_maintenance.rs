@@ -827,7 +827,18 @@ mod tests {
                 .unwrap();
             }
 
+            sqlx::query("INSERT INTO sessions (id, app_name, exe_name, window_title, start_time, end_time, duration) VALUES (3,'Old active','old.exe','',2999,NULL,NULL), (4,'At boundary','at.exe','',3000,3500,500)").execute(&pool).await.unwrap();
             delete_sessions_before_in_pool(&pool, 3000).await.unwrap();
+            sqlx::query("UPDATE sessions SET end_time=NULL, duration=NULL WHERE id=4")
+                .execute(&pool)
+                .await
+                .unwrap();
+            delete_sessions_before_in_pool(&pool, 3000).await.unwrap();
+            let remaining_ids: Vec<i64> = sqlx::query_scalar("SELECT id FROM sessions ORDER BY id")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+            assert_eq!(remaining_ids, vec![2, 4]);
 
             let native_count: i64 = sqlx::query("SELECT COUNT(*) AS count FROM sessions")
                 .fetch_one(&pool)
@@ -852,7 +863,7 @@ mod tests {
             .fetch_one(&pool)
             .await
             .unwrap();
-            assert_eq!(native_count, 1);
+            assert_eq!(native_count, 2);
             assert_eq!(exact_count, 1);
             assert_eq!(bucket_count, 1);
             assert_eq!(batch.get::<i64, _>("exact_session_count"), 1);

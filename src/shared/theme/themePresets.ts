@@ -1,7 +1,7 @@
 import type { ColorScheme } from "../settings/appSettings.ts";
 
 export type ThemeVariant = "light" | "dark";
-export interface ThemePreset {
+interface ThemePreset {
   surface: string;
   ink: string;
   accent: string;

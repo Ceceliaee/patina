@@ -1,7 +1,7 @@
 import type { WebActivitySegment } from "../types/webActivity.ts";
 import { isAnonymousActivity } from "../classification/anonymousActivity.ts";
 
-export interface CompiledWebActivitySegment extends WebActivitySegment {
+interface CompiledWebActivitySegment extends WebActivitySegment {
   endTime: number;
   sourceIds: number[];
   isLive: boolean;

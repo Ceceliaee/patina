@@ -1193,43 +1193,6 @@
   padding: 0;
 }
 
-.settings-dialog-action-trigger {
-  display: block;
-  width: 100%;
-  min-height: 100%;
-  border: 1px solid var(--qp-border-subtle);
-  border-radius: var(--qp-radius-control);
-  background: var(--qp-bg-panel);
-  padding: 12px;
-  color: inherit;
-  text-align: left;
-  transition:
-    border-color var(--qp-motion-fast) var(--qp-motion-ease),
-    background-color var(--qp-motion-fast) var(--qp-motion-ease),
-    color var(--qp-motion-fast) var(--qp-motion-ease),
-    opacity var(--qp-motion-fast) var(--qp-motion-ease);
-}
-
-.settings-dialog-action-trigger:hover:not(:disabled) {
-  border-color: var(--qp-border-strong);
-  background: var(--qp-bg-elevated);
-}
-
-.settings-dialog-action-trigger:active:not(:disabled) {
-  border-color: var(--qp-border-strong);
-  background: var(--qp-bg-panel);
-}
-
-.settings-dialog-action-trigger:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--qp-accent-default) 42%, transparent);
-  outline-offset: 1px;
-}
-
-.settings-dialog-action-trigger:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
 .settings-dialog-action-composite {
   position: relative;
   min-height: 100%;

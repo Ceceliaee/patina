@@ -40,25 +40,6 @@ type BackupExportFlowOptions = {
   reportError?: ErrorReporter;
 };
 
-type BackupRestoreFlowOptions = {
-  uiText: UiText;
-  initialPath?: string;
-  restoreStrategy: BackupRestoreStrategy;
-  prepareBackupRestore: (initialPath?: string) => Promise<BackupRestorePreparation | null>;
-  setRestorePath: (path: string) => void;
-  confirm: ConfirmAction;
-  restoreBackup: (
-    path: string,
-    restoreStrategy: BackupRestoreStrategy,
-    hash: string,
-  ) => Promise<void>;
-  notify: NotifyAction;
-  reload: () => void;
-  onExecutionStart?: BusyHook;
-  onExecutionEnd?: BusyHook;
-  reportError?: ErrorReporter;
-};
-
 type BackupRestorePrepareFlowOptions = {
   uiText: UiText;
   initialPath?: string;
@@ -138,25 +119,6 @@ export async function runBackupExportFlow(options: BackupExportFlowOptions): Pro
   } finally {
     options.onExecutionEnd?.();
   }
-}
-
-export async function runBackupRestoreFlow(options: BackupRestoreFlowOptions): Promise<boolean> {
-  const preparation = await prepareBackupRestoreFlow({
-    initialPath: options.initialPath,
-    prepareBackupRestore: options.prepareBackupRestore,
-    setRestorePath: options.setRestorePath,
-    notify: options.notify,
-    reportError: options.reportError,
-    uiText: options.uiText,
-  });
-  if (!preparation) {
-    return false;
-  }
-
-  return commitPreparedBackupRestoreFlow({
-    ...options,
-    preparation,
-  });
 }
 
 export async function prepareBackupRestoreFlow(
