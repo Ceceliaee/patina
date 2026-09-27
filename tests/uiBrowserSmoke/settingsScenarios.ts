@@ -2419,6 +2419,9 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       true,
     );
     await waitForExpression(client!, sessionId, `document.querySelector('.settings-import-action-list') !== null`);
+    await waitForExpression(client!, sessionId, `
+      document.activeElement?.id === document.querySelector('[role="dialog"]')?.getAttribute('aria-labelledby')
+    `, undefined, "Import dialog did not establish its initial heading focus");
     assert.equal(await evaluate(client!, sessionId, `
       (() => {
         const list = document.querySelector('.settings-import-action-list');
