@@ -1,7 +1,6 @@
 import {
   applyTrackingDataChangedPayload,
   assert,
-  buildSessionCleanupPlan,
   clearSessionsByRangeWithDeps,
   buildReadModelDiagnostics,
   compileSessions,
@@ -475,22 +474,26 @@ export function runRuntimeEffectsTests() {
     assert.equal(shouldDeleteSessionByStartTime(activeAtCutoff.startTime, cutoffTime), false);
   });
 
-  runTest("cleanup plan makes the current boundary explicit", () => {
-    const nowMs = new Date(2026, 3, 17, 12, 0, 0, 0).getTime();
-    const cleanupPlan = buildSessionCleanupPlan(7, nowMs);
-
-    assert.equal(cleanupPlan.range, 7);
-    assert.equal(cleanupPlan.nowMs, nowMs);
-    assert.equal(cleanupPlan.cutoffTime, resolveSessionStartCleanupCutoffTime(7, nowMs));
-    assert.equal(cleanupPlan.mode, "session-start-before-cutoff");
-    assert.equal(cleanupPlan.deletesSessionsStartingBeforeCutoff, true);
-    assert.equal(cleanupPlan.keepsSessionsStartingAtOrAfterCutoff, true);
-    assert.equal(cleanupPlan.deletesCrossCutoffActiveSessionsByStartTime, true);
+  runTest("cleanup uses calendar days across month and year boundaries and propagates failure", async () => {
+    for (const [now, days, expected] of [
+      [new Date(2026, 0, 3, 12), 7, new Date(2025, 11, 27, 12)],
+      [new Date(2024, 2, 2, 12), 7, new Date(2024, 1, 24, 12)],
+    ] as const) {
+      let calls = 0;
+      await assert.rejects(clearSessionsByRangeWithDeps(days, now.getTime(), {
+        clearSessionsBefore: async (cutoff) => {
+          calls += 1;
+          assert.equal(cutoff, expected.getTime());
+          throw new Error("cleanup failed");
+        },
+      }), /cleanup failed/);
+      assert.equal(calls, 1);
+    }
   });
 
-  runTest("cleanup execution uses the explicit cleanup plan cutoff", async () => {
+  runTest("cleanup execution uses the local calendar cutoff", async () => {
     const nowMs = new Date(2026, 3, 17, 12, 0, 0, 0).getTime();
-    const expectedPlan = buildSessionCleanupPlan(30, nowMs);
+    const expectedCutoff = new Date(2026, 2, 18, 12).getTime();
     let deletedCutoffTime: number | null = null;
 
     await clearSessionsByRangeWithDeps(30, nowMs, {
@@ -499,7 +502,7 @@ export function runRuntimeEffectsTests() {
       },
     });
 
-    assert.equal(deletedCutoffTime, expectedPlan.cutoffTime);
+    assert.equal(deletedCutoffTime, expectedCutoff);
   });
 
   runTest("cleanup deletion removes old active sessions from live read model", () => {

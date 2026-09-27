@@ -22,6 +22,38 @@ import {
 import type { DashboardSnapshot } from "../../src/features/dashboard/services/dashboardReadModel.ts";
 
 export function runReadModelRuntimeTests() {
+  runTest("history runtime forwards cache options only after mapper readiness and stops on failure", async () => {
+    const date = new Date(2026, 4, 20);
+    const options = { includeWebActivity: false, includeTitleDetails: false };
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let loads = 0;
+    const snapshot = {
+      fetchedAtMs: 1, daySessions: [], weeklySessions: [], dayWebSegments: [],
+      icons: {}, webDomainFavicons: {}, webDomainOverrides: {},
+    };
+    const loadHistorySnapshotWithCache = async (
+      receivedDate?: Date, days?: number, deps?: unknown, receivedOptions?: unknown,
+    ) => {
+      loads += 1;
+      assert.equal(receivedDate, date);
+      assert.equal(days, 14);
+      assert.equal(deps, undefined);
+      assert.equal(receivedOptions, options);
+      return snapshot;
+    };
+    const pending = loadHistoryRuntimeSnapshotWithDeps(date, 14, {
+      ensureProcessMapperRuntimeReady: () => gate, loadHistorySnapshotWithCache,
+    }, options);
+    assert.equal(loads, 0);
+    release();
+    assert.equal(await pending, snapshot);
+    await assert.rejects(loadHistoryRuntimeSnapshotWithDeps(date, 14, {
+      ensureProcessMapperRuntimeReady: async () => { throw new Error("mapper unavailable"); },
+      loadHistorySnapshotWithCache,
+    }, options), /mapper unavailable/);
+    assert.equal(loads, 1);
+  });
   runTest("dashboard cache rejects superseded and invalidated loads without rejecting their callers", async () => {
     clearDashboardSnapshotCache();
     const date = new Date("2026-04-18T09:30:00.000Z");
@@ -120,7 +152,7 @@ export function runReadModelRuntimeTests() {
     ]);
   });
 
-  runTest("history runtime snapshot keeps rolling range aligned across loader and cache", async () => {
+  runTest("history runtime snapshot waits for mapper and forwards rolling range to the cache owner", async () => {
     const events: string[] = [];
     const date = new Date("2026-04-18T09:30:00.000Z");
     const snapshot = {
@@ -137,13 +169,9 @@ export function runReadModelRuntimeTests() {
       ensureProcessMapperRuntimeReady: async () => {
         events.push("ensure");
       },
-      loadHistorySnapshot: async (receivedDate, receivedRollingDayCount) => {
+      loadHistorySnapshotWithCache: async (receivedDate, receivedRollingDayCount) => {
         events.push(`load:${receivedDate.toISOString()}:${receivedRollingDayCount}`);
         return snapshot;
-      },
-      setHistorySnapshotCache: (receivedSnapshot, receivedDate, receivedRollingDayCount) => {
-        events.push(`cache:${receivedDate?.toISOString()}:${receivedRollingDayCount}`);
-        assert.equal(receivedSnapshot, snapshot);
       },
     });
 
@@ -151,7 +179,6 @@ export function runReadModelRuntimeTests() {
     assert.deepEqual(events, [
       "ensure",
       `load:${date.toISOString()}:14`,
-      `cache:${date.toISOString()}:14`,
     ]);
   });
 
@@ -220,7 +247,7 @@ export function runReadModelRuntimeTests() {
       ensureProcessMapperRuntimeReady: async () => {
         events.push("history:ensure");
       },
-      loadHistorySnapshot: async (receivedDate, receivedRollingDayCount) => {
+      loadHistorySnapshotWithCache: async (receivedDate, receivedRollingDayCount) => {
         events.push(`history:load:${receivedDate.toISOString()}:${receivedRollingDayCount}`);
         return {
           fetchedAtMs: nowMs,
@@ -231,11 +258,6 @@ export function runReadModelRuntimeTests() {
           webDomainFavicons: {},
           webDomainOverrides: {},
         };
-      },
-      setHistorySnapshotCache: (snapshot, receivedDate, receivedRollingDayCount) => {
-        events.push(`history:cache:${receivedDate?.toISOString()}:${receivedRollingDayCount}`);
-        assert.equal(snapshot.daySessions, sessions);
-        assert.equal(snapshot.weeklySessions, sessions);
       },
     });
 
@@ -264,7 +286,6 @@ export function runReadModelRuntimeTests() {
       `dashboard:cache:${date.toISOString()}`,
       "history:ensure",
       `history:load:${date.toISOString()}:7`,
-      `history:cache:${date.toISOString()}:7`,
     ]);
   });
 
@@ -331,7 +352,7 @@ export function runReadModelRuntimeTests() {
     });
     const historySnapshot = await loadHistoryRuntimeSnapshotWithDeps(date, 7, {
       ensureProcessMapperRuntimeReady: async () => {},
-      loadHistorySnapshot: async () => ({
+      loadHistorySnapshotWithCache: async () => ({
         fetchedAtMs: nowMs,
         daySessions: restoredSessions,
         weeklySessions: restoredSessions,
@@ -340,10 +361,6 @@ export function runReadModelRuntimeTests() {
         webDomainFavicons: {},
         webDomainOverrides: {},
       }),
-      setHistorySnapshotCache: (snapshot) => {
-        assert.equal(snapshot.daySessions, restoredSessions);
-        assert.equal(snapshot.weeklySessions, restoredSessions);
-      },
     });
 
     const dashboard = buildDashboardReadModel(
@@ -422,7 +439,7 @@ export function runReadModelRuntimeTests() {
     });
     const historySnapshot = await loadHistoryRuntimeSnapshotWithDeps(date, 7, {
       ensureProcessMapperRuntimeReady: async () => {},
-      loadHistorySnapshot: async () => ({
+      loadHistorySnapshotWithCache: async () => ({
         fetchedAtMs: nowMs,
         daySessions: sessions,
         weeklySessions: sessions,
@@ -431,9 +448,6 @@ export function runReadModelRuntimeTests() {
         webDomainFavicons: {},
         webDomainOverrides: {},
       }),
-      setHistorySnapshotCache: (snapshot) => {
-        assert.equal(snapshot.daySessions, sessions);
-      },
     });
 
     const dashboard = buildDashboardReadModel(
@@ -512,7 +526,7 @@ export function runReadModelRuntimeTests() {
     });
     const historySnapshot = await loadHistoryRuntimeSnapshotWithDeps(date, 7, {
       ensureProcessMapperRuntimeReady: async () => {},
-      loadHistorySnapshot: async () => ({
+      loadHistorySnapshotWithCache: async () => ({
         fetchedAtMs: nowMs,
         daySessions: sessions,
         weeklySessions: sessions,
@@ -521,10 +535,6 @@ export function runReadModelRuntimeTests() {
         webDomainFavicons: {},
         webDomainOverrides: {},
       }),
-      setHistorySnapshotCache: (snapshot) => {
-        assert.equal(snapshot.daySessions, sessions);
-        assert.equal(snapshot.weeklySessions, sessions);
-      },
     });
 
     const dashboard = buildDashboardReadModel(
@@ -604,7 +614,7 @@ export function runReadModelRuntimeTests() {
     });
     const historySnapshot = await loadHistoryRuntimeSnapshotWithDeps(date, 7, {
       ensureProcessMapperRuntimeReady: async () => {},
-      loadHistorySnapshot: async () => ({
+      loadHistorySnapshotWithCache: async () => ({
         fetchedAtMs: nowMs,
         daySessions: sessions,
         weeklySessions: sessions,
@@ -613,9 +623,6 @@ export function runReadModelRuntimeTests() {
         webDomainFavicons: {},
         webDomainOverrides: {},
       }),
-      setHistorySnapshotCache: (snapshot) => {
-        assert.equal(snapshot.daySessions, sessions);
-      },
     });
 
     const dashboard = buildDashboardReadModel(
@@ -694,7 +701,7 @@ export function runReadModelRuntimeTests() {
     });
     const historySnapshot = await loadHistoryRuntimeSnapshotWithDeps(date, 7, {
       ensureProcessMapperRuntimeReady: async () => {},
-      loadHistorySnapshot: async () => ({
+      loadHistorySnapshotWithCache: async () => ({
         fetchedAtMs: nowMs,
         daySessions: sessions,
         weeklySessions: sessions,
@@ -703,10 +710,6 @@ export function runReadModelRuntimeTests() {
         webDomainFavicons: {},
         webDomainOverrides: {},
       }),
-      setHistorySnapshotCache: (snapshot) => {
-        assert.equal(snapshot.daySessions, sessions);
-        assert.equal(snapshot.weeklySessions, sessions);
-      },
     });
 
     const dashboard = buildDashboardReadModel(
@@ -799,7 +802,7 @@ export function runReadModelRuntimeTests() {
     });
     const historySnapshot = await loadHistoryRuntimeSnapshotWithDeps(date, 7, {
       ensureProcessMapperRuntimeReady: async () => {},
-      loadHistorySnapshot: async () => ({
+      loadHistorySnapshotWithCache: async () => ({
         fetchedAtMs: nowMs,
         daySessions: persistedSessions,
         weeklySessions: persistedSessions,
@@ -808,10 +811,6 @@ export function runReadModelRuntimeTests() {
         webDomainFavicons: {},
         webDomainOverrides: {},
       }),
-      setHistorySnapshotCache: (snapshot) => {
-        assert.equal(snapshot.daySessions, persistedSessions);
-        assert.equal(snapshot.weeklySessions, persistedSessions);
-      },
     });
 
     const dashboard = buildDashboardReadModel(
@@ -904,7 +903,7 @@ export function runReadModelRuntimeTests() {
     });
     const historySnapshot = await loadHistoryRuntimeSnapshotWithDeps(date, 7, {
       ensureProcessMapperRuntimeReady: async () => {},
-      loadHistorySnapshot: async () => ({
+      loadHistorySnapshotWithCache: async () => ({
         fetchedAtMs: nowMs,
         daySessions: sessions,
         weeklySessions: sessions,
@@ -913,10 +912,6 @@ export function runReadModelRuntimeTests() {
         webDomainFavicons: {},
         webDomainOverrides: {},
       }),
-      setHistorySnapshotCache: (snapshot) => {
-        assert.equal(snapshot.daySessions, sessions);
-        assert.equal(snapshot.weeklySessions, sessions);
-      },
     });
 
     const dashboard = buildDashboardReadModel(

@@ -21,22 +21,6 @@ type DashboardRuntimeSnapshotDeps = {
   setDashboardSnapshotCache: (snapshot: DashboardSnapshot, date?: Date) => void;
 };
 
-type HistoryRuntimeSnapshotDeps = {
-  ensureProcessMapperRuntimeReady: () => Promise<void>;
-  loadHistorySnapshot: (
-    date: Date,
-    rollingDayCount?: number,
-    deps?: undefined,
-    options?: HistorySnapshotLoadOptions,
-  ) => Promise<HistorySnapshot>;
-  setHistorySnapshotCache: (
-    snapshot: HistorySnapshot,
-    date?: Date,
-    rollingDayCount?: number,
-    includeWebActivity?: boolean,
-  ) => void;
-};
-
 export async function loadDashboardRuntimeSnapshotWithDeps(
   date: Date = new Date(),
   deps: DashboardRuntimeSnapshotDeps,
@@ -58,18 +42,14 @@ export async function loadDashboardRuntimeSnapshot(date: Date = new Date()): Pro
 export async function loadHistoryRuntimeSnapshotWithDeps(
   date: Date,
   rollingDayCount: number = 7,
-  deps: HistoryRuntimeSnapshotDeps,
+  deps: {
+    ensureProcessMapperRuntimeReady: () => Promise<void>;
+    loadHistorySnapshotWithCache: typeof loadHistorySnapshotWithCache;
+  },
   options: HistorySnapshotLoadOptions = {},
 ): Promise<HistorySnapshot> {
   await deps.ensureProcessMapperRuntimeReady();
-  const snapshot = await deps.loadHistorySnapshot(date, rollingDayCount, undefined, options);
-  deps.setHistorySnapshotCache(
-    snapshot,
-    date,
-    rollingDayCount,
-    options.includeWebActivity ?? true,
-  );
-  return snapshot;
+  return deps.loadHistorySnapshotWithCache(date, rollingDayCount, undefined, options);
 }
 
 export async function loadHistoryRuntimeSnapshot(
@@ -77,8 +57,10 @@ export async function loadHistoryRuntimeSnapshot(
   rollingDayCount: number = 7,
   options: HistorySnapshotLoadOptions = {},
 ): Promise<HistorySnapshot> {
-  await ensureProcessMapperRuntimeReady();
-  return loadHistorySnapshotWithCache(date, rollingDayCount, undefined, options);
+  return loadHistoryRuntimeSnapshotWithDeps(date, rollingDayCount, {
+    ensureProcessMapperRuntimeReady,
+    loadHistorySnapshotWithCache,
+  }, options);
 }
 
 export function getHistoryRuntimeSeedSnapshot(date: Date): HistorySnapshot | null {

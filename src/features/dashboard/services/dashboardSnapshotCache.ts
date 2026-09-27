@@ -1,7 +1,7 @@
 import type { DashboardSnapshot } from "./dashboardReadModel.ts";
 
 const DASHBOARD_SNAPSHOT_CACHE_LIMIT = 1;
-const DASHBOARD_SNAPSHOT_CACHE = new Map<string, DashboardSnapshot>();
+let cachedSnapshot: { key: string; snapshot: DashboardSnapshot } | null = null;
 let dashboardCacheLoadGeneration = 0;
 
 export function beginDashboardSnapshotCacheLoad(): (snapshot: DashboardSnapshot, date?: Date) => void {
@@ -19,38 +19,26 @@ function formatDashboardSnapshotCacheKey(date: Date): string {
 
 export function getDashboardSnapshotCache(date: Date = new Date()): DashboardSnapshot | null {
   const cacheKey = formatDashboardSnapshotCacheKey(date);
-  const snapshot = DASHBOARD_SNAPSHOT_CACHE.get(cacheKey);
-  if (!snapshot) return null;
-
-  DASHBOARD_SNAPSHOT_CACHE.delete(cacheKey);
-  DASHBOARD_SNAPSHOT_CACHE.set(cacheKey, snapshot);
-  return snapshot;
+  return cachedSnapshot?.key === cacheKey ? cachedSnapshot.snapshot : null;
 }
 
 export function setDashboardSnapshotCache(snapshot: DashboardSnapshot, date: Date = new Date()): void {
   const cacheKey = formatDashboardSnapshotCacheKey(date);
-  DASHBOARD_SNAPSHOT_CACHE.delete(cacheKey);
-  DASHBOARD_SNAPSHOT_CACHE.set(cacheKey, snapshot);
-
-  while (DASHBOARD_SNAPSHOT_CACHE.size > DASHBOARD_SNAPSHOT_CACHE_LIMIT) {
-    const oldestKey = DASHBOARD_SNAPSHOT_CACHE.keys().next().value;
-    if (!oldestKey) break;
-    DASHBOARD_SNAPSHOT_CACHE.delete(oldestKey);
-  }
+  cachedSnapshot = { key: cacheKey, snapshot };
 }
 
 export function clearDashboardSnapshotCache(): void {
   dashboardCacheLoadGeneration += 1;
-  DASHBOARD_SNAPSHOT_CACHE.clear();
+  cachedSnapshot = null;
 }
 
 export function getDashboardSnapshotCacheSizeForTests(): number {
-  return DASHBOARD_SNAPSHOT_CACHE.size;
+  return (cachedSnapshot ? 1 : 0);
 }
 
 export function getDashboardSnapshotCacheStats() {
   return {
-    entries: DASHBOARD_SNAPSHOT_CACHE.size,
+    entries: (cachedSnapshot ? 1 : 0),
     limit: DASHBOARD_SNAPSHOT_CACHE_LIMIT,
   };
 }

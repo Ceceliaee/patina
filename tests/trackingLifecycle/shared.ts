@@ -49,7 +49,6 @@ import { applyTrackingDataChangedPayload } from "../../src/app/hooks/trackingDat
 import {
   clearSessionsByRangeWithDeps,
   resolveSessionStartCleanupCutoffTime,
-  buildSessionCleanupPlan,
   shouldDeleteSessionByStartTime,
 } from "../../src/features/settings/services/sessionCleanupPolicy.ts";
 import {
@@ -63,7 +62,6 @@ export {
   buildDailySummaries,
   buildNormalizedAppStats,
   buildReadModelDiagnostics,
-  buildSessionCleanupPlan,
   clearSessionsByRangeWithDeps,
   buildTimelineSessions,
   compileSessions,
