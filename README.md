@@ -122,6 +122,8 @@ Time tracking has long-term value only when the records are trustworthy. Patina 
 - **Title capture control**: window title capture can be disabled per app to reduce unnecessary sensitive information retention.
 - **Local data control**: core data stays local, and backups, restores, and history cleanup are initiated by the user.
 
+Storage locations are remembered per Windows user. See the [storage and recovery contract](docs/architecture.md#存储位置与启动控制状态) before removing old folders or recovering a custom data location.
+
 ## Current Scope
 
 Patina currently focuses on personal local time records:
