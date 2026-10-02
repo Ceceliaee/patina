@@ -1,40 +1,27 @@
 # Patina 远程推送 Worker
 
-这是 Patina 远程推送的最小 Cloudflare Worker 示例。
-
-它通过 `WebSocket` 接收 Patina 的 `snapshot` 消息，并用内存保存每台机器的最新状态。
-
-## 路由
-
-- `/ws`：Patina 使用的 `WebSocket` 接收端。
-- `/state`：读取最新状态的 JSON 接口。
+此目录提供 Cloudflare Worker 接收端。协议、留存、公开读取边界和排障由[远程推送使用指南](../remote-status-bridge.md)维护，部署前先阅读该说明。
 
 ## 部署
 
-1. 点击文档里的 `Deploy to Cloudflare`。
-2. 在部署页填写 `REMOTE_STATUS_BRIDGE_TOKEN`。
-3. 部署完成后，记下 Worker 域名。
-4. 在 Patina 里把接收地址设成 `wss://<your-worker-host>/ws`。
-5. 把 Patina 的 `Token` 设成和 `REMOTE_STATUS_BRIDGE_TOKEN` 相同的值。
-
-也可以手动部署：
+需要具备 Worker 与 Durable Object 部署权限的 Cloudflare 账号和 Node/npm 环境。可使用[使用指南中的一键部署入口](../remote-status-bridge.md)，也可在本目录执行：
 
 ```bash
 npm install
-wrangler secret put REMOTE_STATUS_BRIDGE_TOKEN
+npx wrangler login
+npx wrangler secret put REMOTE_STATUS_BRIDGE_TOKEN
 npm run deploy
 ```
 
+Token 应与 Patina 中填写的值一致。部署配置由 [wrangler.jsonc](wrangler.jsonc) 拥有，命令由 [package.json](package.json) 拥有。部署完成后按使用指南配置 Patina，并通过快照接收时间确认连接。
+
 ## 本地开发
 
-```bash
+在本目录执行以下命令；复制命令使用 PowerShell：
+
+```powershell
 npm install
-cp .dev.vars.example .dev.vars
-npm run dev
+Copy-Item -LiteralPath .dev.vars.example -Destination .dev.vars
 ```
 
-`.dev.vars` 里的 `REMOTE_STATUS_BRIDGE_TOKEN` 要和本地测试客户端发送的 `Token` 一致。
-
-## 说明
-
-这个示例只保留当前状态，不保留历史记录。它不使用 `D1`、`KV`、`Durable Objects` 或 `Grafana Live`。
+在 `.dev.vars` 中配置测试 Token，然后执行 `npm run dev` 启动接收端。使用独立测试客户端和虚构状态验证本地接收，不发送私人活动数据。开发环境的绑定和远端生产存储应分别核对，本地接收成功不代表远端部署已经通过验收。

@@ -30,7 +30,7 @@ Patina records foreground app usage as local, quiet, and trustworthy personal de
 - Records foreground apps automatically, without manually starting or stopping timers.
 - Handles idle, lock, sleep, and abnormal-exit boundaries to keep records more trustworthy.
 - Keeps data local by default, with no account, cloud sync, or server dependency.
-- Lets you manage app names, categories, colors, stats exclusions, and window title capture.
+- Lets you manage app names, categories, colors, anonymous activity statistics, and window title capture.
 - Provides lightweight local tools such as reminders, timers, and Pomodoro.
 - Keeps the interface restrained, clear, and low-interruption for long-term daily use.
 
@@ -73,7 +73,8 @@ Download and install the latest Patina:
 ### Management And Control
 
 - Rename apps and adjust categories, colors, and statistics rules.
-- Exclude apps you do not want in statistics, or disable window title capture for specific apps.
+- Enable [anonymous statistics](docs/product-principles-and-scope.md#73-可管理的应用语义层) for selected apps, recording time without identity or titles.
+- Control window title capture separately for each app; disabling titles does not stop time tracking.
 - Export local backups, restore backups, and clean up historical records.
 
 ### Lightweight Tools
@@ -120,9 +121,7 @@ Time tracking has long-term value only when the records are trustworthy. Patina 
 - **State boundaries**: handles record boundaries after lock, sleep, resume, long-away periods, and abnormal exits.
 - **Effective-duration stats**: rankings, distributions, and totals use effective activity time, not just open spans.
 - **Title capture control**: window title capture can be disabled per app to reduce unnecessary sensitive information retention.
-- **Local data control**: core data stays local, and backups, restores, and history cleanup are initiated by the user.
-
-Storage locations are remembered per Windows user. See the [storage and recovery contract](docs/architecture.md#存储位置与启动控制状态) before removing old folders or recovering a custom data location.
+- **[Local data control](docs/architecture.md#存储位置与启动控制状态)**: core data stays local, and backups, restores, and history cleanup are initiated by the user.
 
 ## Current Scope
 
@@ -175,8 +174,6 @@ src-tauri/target/release/bundle/
 - Backend: Rust
 - Frontend: React + Vite + TypeScript
 - Styling: Tailwind CSS
-- Animation: Framer Motion
-- Charts: Recharts
 - Database: SQLite via `@tauri-apps/plugin-sql`
 - Windows integration: `windows` crate
 

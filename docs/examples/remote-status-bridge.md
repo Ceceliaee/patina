@@ -14,7 +14,11 @@
 6. 填写和 Worker 相同的 `Token`。
 7. 打开远程推送开关并保存。
 
-示例 Worker 位于 `docs/examples/remote-status-bridge-worker`。默认只用内存保存当前状态，不接 `D1`、`KV` 或 `Durable Objects`。
+示例 Worker 位于 `docs/examples/remote-status-bridge-worker`。使用 Durable Object 持久化每台机器的最新状态，并在实例恢复时读取；不保存状态历史序列，也不使用独立的 D1 或 KV。
+
+部署前需要可部署 Worker 和 Durable Object 的 Cloudflare 账号。手动部署与本地开发入口见[示例目录 README](./remote-status-bridge-worker/README.md)。账号权限、服务限制与费用以所用账号为准。
+
+**此示例用于公开状态展示。** Token 只保护 `/ws` 上传鉴权；`/state` 无读取鉴权且允许跨域读取。最新状态包含机器标识、应用名称、图标与时间戳。关闭 Patina 推送或断开连接不会删除远端状态，离线标记也不是删除；示例没有自动过期删除或清理接口。仅供自己读取的需求需要另行实现读取鉴权；需要删除留存数据时，应通过 Cloudflare 的存储管理能力处理并核实结果。
 
 ## 1. 功能定位
 
@@ -211,7 +215,7 @@ Worker 应以 `machineId` 作为机器主键。
 
 当收到同一 `machineId` 的新快照时，用新值覆盖旧值。这个功能本身不需要历史队列。
 
-Worker 是否把当前状态持久化，取决于展示链路需求。只读实时屏幕通常只需要内存状态；需要跨 Worker 实例共享、冷启动恢复或审计时，才需要引入外部存储。
+Worker 是否把当前状态持久化，取决于展示链路需求。内置示例通过 Durable Object 保持最新状态跨实例恢复；自定义接收端可以采用不同存储，但必须自行说明留存和清理行为。
 
 ## 11. 安全边界
 
@@ -265,7 +269,7 @@ curl -s https://<your-worker-host>/state
 }
 ```
 
-`machines` 为空通常表示 Worker 还没有收到有效快照。
+收到有效快照后，`machines` 应出现对应 `machineId`，`lastReceivedAtMs` 随新快照更新。`machines` 为空通常表示尚无已保存快照；已有状态可能来自先前连接，不能只看非空就判定当前连接成功。
 
 ### 12.3 WebSocket 握手示例
 

@@ -80,7 +80,7 @@ Focused tests must match the changed risk area; unrelated tests do not satisfy t
 - [ ] `pnpm run check:docs` for documentation-only changes
 - [ ] `pnpm run check:docs:self-test` for documentation-governance or validation-policy changes
 - [ ] `pnpm run check` for changes that are not documentation-only
-- [ ] `pnpm run check:full` for dependency, Rust, tracking, SQLite, runtime, or architecture-boundary changes
+- [ ] `pnpm run check:full` when required by engineering-quality.md §5
 - [ ] `pnpm run test:tauri-runtime-smoke` for IPC registration, capability, plugin SQL, or desktop-runtime changes
 - [ ] `pnpm run perf:stable` for performance-sensitive read-model, SQLite-query, or navigation changes
 - [ ] `pnpm run release:validate-changelog` for release, changelog, or updater changes

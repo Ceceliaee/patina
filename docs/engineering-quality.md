@@ -67,7 +67,7 @@
 
 ## 5. 默认验证门槛
 
-本地验证按实际改动选择：纯文档运行 `pnpm run check:docs`，并核对修改部分的事实、UTF-8、链接和义务；文档治理或验证政策变化追加 `pnpm run check:docs:self-test` 及受影响规则的正反场景。检查器、模板或操作说明变化还需验证其真实使用路径，不能仅因文件是 Markdown 就免除对应风险。纯文档不默认运行应用构建、browser 或 Rust 全套验证。前端行为改动仍以 `pnpm run check` 为默认入口；Rust、架构实现边界、依赖或发布级复核使用 `pnpm run check:full`。`package.json` 是当前命令组合、顺序与叶子测试的唯一 owner，长期 prose 不复制其执行图。门禁不得从顶层入口静默移除既有检查、测试、coverage include 或阈值。
+本地验证按实际改动选择：纯文档运行 `pnpm run check:docs`，并核对修改部分的事实、UTF-8、链接和义务；文档治理或验证政策变化追加 `pnpm run check:docs:self-test` 及受影响规则的正反场景。检查器、模板或操作说明变化还需验证其真实使用路径，不能仅因文件是 Markdown 就免除对应风险。纯文档不默认运行应用构建、browser 或 Rust 全套验证。前端行为改动仍以 `pnpm run check` 为默认入口；Rust、架构实现边界、依赖或发布级复核使用 `pnpm run check:full`；改变 tracking 正确性、SQLite 数据行为或桌面 runtime 契约也使用该完整门槛。纯展示的前端修改仍按前端行为路由，不能仅因页面展示追踪数据就推定改变 tracking 契约。`package.json` 是当前命令组合、顺序与叶子测试的唯一 owner，长期 prose 不复制其执行图。门禁不得从顶层入口静默移除既有检查、测试、coverage include 或阈值。
 
 `check:full` 必须在默认门槛之外验证 Rust 边界、格式、编译、测试、clippy 与依赖安全。依赖审计只允许经 Windows target 依赖树证明不可达的精确 advisory；受控离线模式仍须运行本地快照和例外可达性校验，但不能替代发布 CI 的联网新鲜度。
 

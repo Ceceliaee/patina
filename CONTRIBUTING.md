@@ -17,8 +17,8 @@ review feedback, and decide whether a change is ready to merge.
 
 ## 1. Start Here
 
-Before writing code, read the documents that define the current project
-direction:
+Start with the product scope. Read the other owners when your change involves
+their subject; this is a task map, not an all-documents prerequisite:
 
 - [`docs/product-principles-and-scope.md`](docs/product-principles-and-scope.md)
 - [`docs/roadmap-and-prioritization.md`](docs/roadmap-and-prioritization.md)
@@ -415,8 +415,8 @@ pnpm run check
 
 ### 6.2 Rust And Architecture Validation
 
-For dependency changes, Rust changes, architecture boundary changes, runtime
-work, SQLite work, or changes that touch tracking correctness:
+When [engineering quality §5](docs/engineering-quality.md#5-默认验证门槛)
+requires full validation for the actual change, run:
 
 ```bash
 pnpm run check:full
@@ -491,69 +491,11 @@ docs: document contribution and PR workflow
 
 ### 7.2 Pull Request Description
 
-Use this structure:
-
-```md
-## Purpose
-
-Explain the user problem or maintenance goal.
-
-Refs #123
-
-## Accepted Scope
-
-- Linked issue / Project item / maintainer approval:
-
-## Changes
-
-- Describe the important behavior changes.
-- Mention the real owner modules that changed.
-
-## Scope Boundary
-
-- In scope:
-- Out of scope:
-
-## Owner Check
-
-- Frontend owner:
-- Rust owner:
-- Why this placement fits:
-
-## Risk Review
-
-- Tracking correctness:
-- Local data safety:
-- Privacy or security:
-- Compatibility:
-
-## UI Review
-
-- [ ] No UI changes
-- [ ] UI follows Quiet Pro
-- [ ] Screenshots attached externally
-- Affected states:
-- Keyboard and focus:
-- Repeatable test or existing owner test:
-
-## Validation
-
-- [ ] `pnpm run check` for changes that are not documentation-only
-- [ ] `pnpm run check:docs` for documentation-only changes
-- [ ] `pnpm run check:docs:self-test` for documentation-governance or validation-policy changes
-- [ ] Additional validation required by `CONTRIBUTING.md` §6
-- [ ] Added or updated focused tests for changed risks
-
-## Screenshots
-
-Add before/after screenshots for visible UI changes through GitHub
-`user-attachments` or another repository-external HTTPS host. Do not commit
-review screenshots, GIFs, videos, or an evidence-media directory to the
-repository; repository blob/raw links do not count as evidence.
-```
-
-Keep the description readable. Explain behavior and risk before implementation
-detail.
+Use the [pull request template](.github/pull_request_template.md), which owns the
+required form. Describe the problem and accepted scope, identify the real owners,
+and explain the changed risks and failure/recovery behavior. Complete the relevant
+UI evidence and validation fields, then the Contributor Checklist. Use a reasoned
+`N/A` for unaffected areas. Keep the description readable and lead with behavior.
 
 ### 7.3 Reference Issues Without Closing Them
 
@@ -812,7 +754,7 @@ Patina 是一个面向个人使用、本地优先的 Windows 桌面时间追踪�
 
 ### 1. 开始之前
 
-开始编写代码前，请先阅读定义当前项目方向的文档：
+先了解产品范围，再按改动涉及的主题读取相应 owner。以下是任务入口，不是所有任务的全量必读清单：
 
 - [`docs/product-principles-and-scope.md`](docs/product-principles-and-scope.md)
 - [`docs/roadmap-and-prioritization.md`](docs/roadmap-and-prioritization.md)
@@ -1156,8 +1098,8 @@ pnpm run check
 
 #### 6.2 Rust 与架构验证
 
-对于依赖改动、Rust 改动、架构边界改动、runtime 工作、SQLite 工作，
-或涉及 tracking 正确性的改动：
+当[工程质量第 5 节](docs/engineering-quality.md#5-默认验证门槛)
+要求本次实际改动运行完整验证时，执行：
 
 ```bash
 pnpm run check:full
@@ -1226,67 +1168,10 @@ docs: document contribution and PR workflow
 
 #### 7.2 Pull Request 正文
 
-使用以下结构：
-
-```md
-## Purpose
-
-Explain the user problem or maintenance goal.
-
-Refs #123
-
-## Accepted Scope
-
-- Linked issue / Project item / maintainer approval:
-
-## Changes
-
-- Describe the important behavior changes.
-- Mention the real owner modules that changed.
-
-## Scope Boundary
-
-- In scope:
-- Out of scope:
-
-## Owner Check
-
-- Frontend owner:
-- Rust owner:
-- Why this placement fits:
-
-## Risk Review
-
-- Tracking correctness:
-- Local data safety:
-- Privacy or security:
-- Compatibility:
-
-## UI Review
-
-- [ ] No UI changes
-- [ ] UI follows Quiet Pro
-- [ ] Screenshots attached externally
-- Affected states:
-- Keyboard and focus:
-- Repeatable test or existing owner test:
-
-## Validation
-
-- [ ] `pnpm run check` for changes that are not documentation-only
-- [ ] `pnpm run check:docs` for documentation-only changes
-- [ ] `pnpm run check:docs:self-test` for documentation-governance or validation-policy changes
-- [ ] Additional validation required by `CONTRIBUTING.md` §6
-- [ ] Added or updated focused tests for changed risks
-
-## Screenshots
-
-通过 GitHub `user-attachments` 或其他仓库外 HTTPS 地址提供可见 UI 改动的
-before/after 截图。不要把审查截图、GIF、视频或证据媒体目录提交进仓库；指向本仓库
-blob/raw 文件的链接也不算有效证据。
-```
-
-正文应保持可读。先解释行为和风险，再说明实现细节。
+使用[真实 PR 模板](.github/pull_request_template.md)，必需表单只在该处维护。
+说明问题与已接受范围、真实 owner、变化的风险及失败恢复行为；填写适用的 UI
+证据和验证字段，再完成 Contributor Checklist。未受影响的领域使用有理由的
+`N/A`。正文先解释行为与风险，再补充必要实现细节。
 
 #### 7.3 引用 issue，但不要自动关闭
 
