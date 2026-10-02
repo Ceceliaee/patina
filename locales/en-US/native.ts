@@ -1,5 +1,6 @@
 // en-US native locale resource. Pure data only.
 export const MESSAGES = {
+  "native.storage.startupFailure": {"$type": "message", "body": {"$op": "concat", "parts": ["The configured storage location could not be opened. Check the drive connection and folder permissions, then restart Patina. Startup has stopped to protect existing data. Details: ", {"$op": "arg", "name": "details"}]}},
   "native.export.anonymousActivity": "Anonymous",
   "native.category.ai": "AI",
   "native.category.browser": "Browser",

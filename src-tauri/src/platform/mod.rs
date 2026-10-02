@@ -1,7 +1,7 @@
 pub mod app_paths;
 pub mod clock;
 pub mod credentials;
-pub mod storage_anchor;
+pub mod storage_control;
 pub mod storage_paths;
 pub mod storage_usage;
 pub mod web_activity_bridge;

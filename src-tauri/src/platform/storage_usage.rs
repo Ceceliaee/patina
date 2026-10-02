@@ -187,8 +187,6 @@ mod tests {
 
     fn storage_paths(data_root: PathBuf, webview_root: PathBuf) -> StoragePaths {
         StoragePaths {
-            data_anchor_dir: data_root.join(".data-anchor"),
-            cache_anchor_dir: data_root.join(".cache-anchor"),
             db_path: data_root.join(SQLITE_DB_FILE_NAME),
             backup_dir: data_root.join("backups"),
             remote_backup_temp_dir: data_root.join("remote-backup-temp"),

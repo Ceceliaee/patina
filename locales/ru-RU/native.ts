@@ -1,5 +1,6 @@
 // ru-RU locale resource. Pure data only.
 export const MESSAGES = {
+  "native.storage.startupFailure": {"$type": "message", "body": {"$op": "concat", "parts": ["Не удалось открыть выбранное расположение данных. Проверьте подключение диска и права доступа к папке, затем перезапустите Patina. Запуск остановлен для защиты существующих данных. Подробности: ", {"$op": "arg", "name": "details"}]}},
   "native.export.anonymousActivity": "Анонимно",
   "native.category.ai": "ИИ",
   "native.category.browser": "Браузер",

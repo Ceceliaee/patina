@@ -1,5 +1,6 @@
 // Canonical language-neutral message contract. Do not derive this file from a locale at build time.
 export const MESSAGE_SCHEMA = {
+  "native.storage.startupFailure": { "kind": "message", "params": [{"name":"details","type":"string","optional":false}], "surface": "native", "description": "Storage preparation failure before the database and locale preferences can be loaded; uses the source locale." },
   "settings.timeRulesTitle": {"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Time rules"},
   "settings.recordingOptionsTitle": {"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Recording options"},
   "settings.themeGroupTitle": {"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Theme"},

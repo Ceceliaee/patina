@@ -1,4 +1,4 @@
-use crate::platform::{app_paths, storage_anchor};
+use crate::platform::{app_paths, storage_control};
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Runtime};
 
@@ -8,8 +8,6 @@ const REMOTE_BACKUP_TEMP_DIR_NAME: &str = "remote-backup-temp";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StoragePaths {
-    pub data_anchor_dir: PathBuf,
-    pub cache_anchor_dir: PathBuf,
     pub data_root: PathBuf,
     pub db_path: PathBuf,
     pub backup_dir: PathBuf,
@@ -21,16 +19,12 @@ pub struct StoragePaths {
 
 impl StoragePaths {
     fn from_roots(
-        data_anchor_dir: PathBuf,
-        cache_anchor_dir: PathBuf,
         data_root: PathBuf,
         webview_root: PathBuf,
         is_custom_data_root: bool,
         is_custom_webview_root: bool,
     ) -> Self {
         Self {
-            data_anchor_dir,
-            cache_anchor_dir,
             db_path: data_root.join(SQLITE_DB_FILE_NAME),
             backup_dir: data_root.join(BACKUP_DIR_NAME),
             remote_backup_temp_dir: data_root.join(REMOTE_BACKUP_TEMP_DIR_NAME),
@@ -52,8 +46,6 @@ pub fn default_storage_paths<R: Runtime>(app: &AppHandle<R>) -> Result<StoragePa
             return Err("PATINA_E2E_DATA_ROOT must be absolute".to_string());
         }
         return Ok(StoragePaths::from_roots(
-            root.join("anchors"),
-            root.join("anchors"),
             root.join("data"),
             root.join("webview"),
             false,
@@ -61,11 +53,7 @@ pub fn default_storage_paths<R: Runtime>(app: &AppHandle<R>) -> Result<StoragePa
         ));
     }
 
-    let data_anchor_dir = storage_anchor::data_anchor_dir(app)?;
-    let cache_anchor_dir = storage_anchor::cache_anchor_dir(app)?;
     Ok(StoragePaths::from_roots(
-        data_anchor_dir,
-        cache_anchor_dir,
         app_paths::product_roaming_data_dir(app)?,
         app_paths::product_webview_data_dir(app)?,
         false,
@@ -74,59 +62,44 @@ pub fn default_storage_paths<R: Runtime>(app: &AppHandle<R>) -> Result<StoragePa
 }
 
 pub fn resolve_storage_paths<R: Runtime>(app: &AppHandle<R>) -> Result<StoragePaths, String> {
-    let default_paths = default_storage_paths(app)?;
-    let data_root = match storage_anchor::read_data_anchor(app) {
-        Ok(Some(anchor)) => anchor.data_root,
-        Ok(None) => default_paths.data_root.clone(),
-        Err(error) => {
-            let _ = storage_anchor::record_maintenance_error(app, error);
-            default_paths.data_root.clone()
-        }
-    };
-    let webview_root = match storage_anchor::read_cache_anchor(app) {
-        Ok(Some(anchor)) => anchor.webview_root,
-        Ok(None) => default_paths.webview_root.clone(),
-        Err(error) => {
-            let _ = storage_anchor::record_maintenance_error(app, error);
-            default_paths.webview_root.clone()
-        }
-    };
-    let is_custom_data_root = !same_path(&data_root, &default_paths.data_root);
-    let is_custom_webview_root = !same_path(&webview_root, &default_paths.webview_root);
-    let resolved_paths = StoragePaths::from_roots(
-        default_paths.data_anchor_dir.clone(),
-        default_paths.cache_anchor_dir.clone(),
-        data_root,
-        webview_root.clone(),
-        is_custom_data_root,
-        is_custom_webview_root,
-    );
-    if resolved_paths.db_path.exists() {
-        return Ok(resolved_paths);
-    }
+    resolve_roots(default_storage_paths(app)?, storage_control::read(app)?)
+}
 
-    if is_custom_data_root {
-        let message = format!(
-            "custom data directory `{}` is unavailable or missing `{}`",
-            resolved_paths.data_root.display(),
-            SQLITE_DB_FILE_NAME
-        );
-        let _ = storage_anchor::record_maintenance_error(app, message.clone());
-        if default_paths.db_path.exists() {
-            return Ok(StoragePaths::from_roots(
-                default_paths.data_anchor_dir,
-                default_paths.cache_anchor_dir,
-                default_paths.data_root,
-                webview_root,
-                false,
-                is_custom_webview_root,
+fn resolve_roots(
+    defaults: StoragePaths,
+    state: storage_control::StorageControl,
+) -> Result<StoragePaths, String> {
+    let custom_data = state.data_root.is_some();
+    let custom_cache = state.webview_root.is_some();
+    let paths = StoragePaths::from_roots(
+        state.data_root.unwrap_or(defaults.data_root),
+        state.webview_root.unwrap_or(defaults.webview_root),
+        custom_data,
+        custom_cache,
+    );
+    if custom_data {
+        let metadata = std::fs::metadata(&paths.db_path).map_err(|e| {
+            format!(
+                "custom database `{}` is unavailable: {e}",
+                paths.db_path.display()
+            )
+        })?;
+        if !metadata.is_file() {
+            return Err(format!(
+                "custom database `{}` is not a file",
+                paths.db_path.display()
             ));
         }
-
-        return Err(message);
     }
-
-    Ok(resolved_paths)
+    if custom_cache {
+        std::fs::read_dir(&paths.webview_root).map_err(|e| {
+            format!(
+                "custom cache directory `{}` is unavailable: {e}",
+                paths.webview_root.display()
+            )
+        })?;
+    }
+    Ok(paths)
 }
 
 pub fn derive_custom_webview_root(data_root: &Path) -> PathBuf {
@@ -165,30 +138,32 @@ fn product_folder_name_eq(left: &str, right: &str) -> bool {
     }
 }
 
-fn same_path(left: &Path, right: &Path) -> bool {
-    path_key(left) == path_key(right)
-}
-
-fn path_key(path: &Path) -> String {
-    let mut key = path.to_string_lossy().replace('\\', "/");
-    while key.len() > 1 && key.ends_with('/') {
-        key.pop();
-    }
-
-    #[cfg(windows)]
-    {
-        key.to_lowercase()
-    }
-
-    #[cfg(not(windows))]
-    {
-        key
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_custom_database_never_uses_existing_default_database() {
+        let root =
+            std::env::temp_dir().join(format!("patina-path-resolution-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join(SQLITE_DB_FILE_NAME), b"different database").unwrap();
+        let defaults = StoragePaths::from_roots(root.clone(), root.clone(), false, false);
+        let state = serde_json::from_value(serde_json::json!({
+            "format":"patina.storage-control.v1", "profile":"dev", "dataRoot":root.join("missing"),
+            "webviewRoot":null, "pending":null, "cleanupFiles":[],
+            "maintenance":{"format":"patina.storage-maintenance-state.v1", "lastWebviewCacheTrimAtMs":null,"lastMaintenanceError":null}
+        })).unwrap();
+        assert!(resolve_roots(defaults, state)
+            .unwrap_err()
+            .contains("custom database"));
+        assert_eq!(
+            std::fs::read(root.join(SQLITE_DB_FILE_NAME)).unwrap(),
+            b"different database"
+        );
+        std::fs::remove_file(root.join(SQLITE_DB_FILE_NAME)).unwrap();
+        std::fs::remove_dir(root).unwrap();
+    }
 
     #[test]
     fn custom_webview_root_uses_product_root_as_webview_parent() {
@@ -217,8 +192,6 @@ mod tests {
     #[test]
     fn storage_paths_keep_remote_temp_under_data_root() {
         let paths = StoragePaths::from_roots(
-            PathBuf::from("C:\\DataAnchor"),
-            PathBuf::from("C:\\CacheAnchor"),
             PathBuf::from("D:\\Patina Data"),
             PathBuf::from("D:\\Patina Data\\webview"),
             true,

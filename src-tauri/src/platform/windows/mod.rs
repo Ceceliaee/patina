@@ -11,3 +11,5 @@ pub mod power;
 pub mod resource;
 pub mod tray_icon_theme;
 pub mod window_activation;
+
+pub mod storage_registry;

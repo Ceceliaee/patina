@@ -993,7 +993,8 @@ export const LOCALE_SOURCE_REVIEWS = {
     "settings.themeGroupTitle": "5b264da79a73b61a",
     "settings.interfaceGroupTitle": "b72f0e46a601e3b1",
     "settings.windowBehaviorTitle": "4e1db14ed17e6456",
-    "settings.runtimeBehaviorTitle": "18cffce351610162"
+    "settings.runtimeBehaviorTitle": "18cffce351610162",
+    "native.storage.startupFailure": "80c0df8f469b2c0e"
   },
   "es": {
     "about.description": "f16fb3f9d1381864",
@@ -1988,7 +1989,8 @@ export const LOCALE_SOURCE_REVIEWS = {
     "settings.themeGroupTitle": "5b264da79a73b61a",
     "settings.interfaceGroupTitle": "b72f0e46a601e3b1",
     "settings.windowBehaviorTitle": "4e1db14ed17e6456",
-    "settings.runtimeBehaviorTitle": "18cffce351610162"
+    "settings.runtimeBehaviorTitle": "18cffce351610162",
+    "native.storage.startupFailure": "80c0df8f469b2c0e"
   },
   "ru-RU": {
     "about.description": "f16fb3f9d1381864",
@@ -2983,6 +2985,7 @@ export const LOCALE_SOURCE_REVIEWS = {
     "settings.themeGroupTitle": "5b264da79a73b61a",
     "settings.interfaceGroupTitle": "b72f0e46a601e3b1",
     "settings.windowBehaviorTitle": "4e1db14ed17e6456",
-    "settings.runtimeBehaviorTitle": "18cffce351610162"
+    "settings.runtimeBehaviorTitle": "18cffce351610162",
+    "native.storage.startupFailure": "80c0df8f469b2c0e"
   }
 } as const;

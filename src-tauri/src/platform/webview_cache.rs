@@ -1,5 +1,5 @@
 use crate::domain::storage::{WebviewCacheEntrySnapshot, WebviewCacheSnapshot};
-use crate::platform::{storage_anchor, storage_paths};
+use crate::platform::{storage_control, storage_paths};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Runtime};
@@ -30,14 +30,14 @@ pub fn webview_cache_snapshot<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<WebviewCacheSnapshot, String> {
     let paths = storage_paths::resolve_storage_paths(app)?;
-    let state = storage_anchor::read_maintenance_state(app)
-        .unwrap_or_else(|_| storage_anchor::StorageMaintenanceState::new());
+    let state = storage_control::read_maintenance_state(app)
+        .unwrap_or_else(|_| storage_control::StorageMaintenanceState::new());
     Ok(snapshot_for_root(&paths.webview_root, &state))
 }
 
 pub fn snapshot_for_root(
     webview_root: &Path,
-    state: &storage_anchor::StorageMaintenanceState,
+    state: &storage_control::StorageMaintenanceState,
 ) -> WebviewCacheSnapshot {
     let entries = allowlisted_cache_paths(webview_root)
         .into_iter()
@@ -435,7 +435,7 @@ mod tests {
             20,
         );
 
-        let snapshot = snapshot_for_root(&root, &storage_anchor::StorageMaintenanceState::new());
+        let snapshot = snapshot_for_root(&root, &storage_control::StorageMaintenanceState::new());
         let _ = fs::remove_dir_all(&root);
 
         assert_eq!(snapshot.reclaimable_size_bytes, 10);

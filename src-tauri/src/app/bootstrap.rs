@@ -227,10 +227,12 @@ fn register_runtime_hooks(
         .on_tray_icon_event(tray::handle_tray_icon_event)
         .on_window_event(tray::handle_window_event)
         .setup(move |app| {
+            crate::platform::storage_control::initialize(app.handle()).map_err(storage_startup_error)?;
             let handled_storage_restart = tauri::async_runtime::block_on(
                 data::storage_migration::run_pending_storage_migration(app.handle()),
             )
-            .map_err(std::io::Error::other)?;
+            .map_err(storage_startup_error)?;
+            crate::platform::storage_paths::resolve_storage_paths(app.handle()).map_err(storage_startup_error)?;
             tauri::async_runtime::block_on(data::sqlite_pool::initialize_app_sqlite(app.handle()))
                 .map_err(std::io::Error::other)?;
             tauri::async_runtime::block_on(data::app_settings_service::migrate_legacy_web_links(app.handle()))
@@ -362,4 +364,19 @@ mod tests {
         ));
         assert!(!should_keep_app_running_without_windows(true, true, true));
     }
+}
+
+fn storage_startup_error(error: String) -> std::io::Error {
+    use crate::domain::localization::{format_text, Locale};
+    let message = format_text(
+        Locale::default(),
+        "native.storage.startupFailure",
+        &[("details", error.clone())],
+    );
+    rfd::MessageDialog::new()
+        .set_title("Patina")
+        .set_description(message)
+        .set_level(rfd::MessageLevel::Error)
+        .show();
+    std::io::Error::other(error)
 }

@@ -5,9 +5,9 @@ import { verifyAppIconRuntime } from "./tauriAppIconRuntime.ts";
 import { verifyLinkedApplicationsRuntime } from "./tauriLinkedApplicationsRuntime.ts";
 import { deleteWebHistoryRuntime, verifyWebLinksRuntime } from "./tauriWebLinksRuntime.ts";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join, sep } from "node:path";
 import { createServer as createNetServer, type Server as NetServer } from "node:net";
 import { build as buildVite, preview as previewVite, type PreviewServer } from "vite";
 import type { StorageSnapshot } from "../src/platform/storage/storageRuntimeGateway.ts";
@@ -762,12 +762,12 @@ try {
       PATINA_E2E: "1",
       PATINA_E2E_SINGLE_INSTANCE: "1",
       PATINA_E2E_DATA_ROOT: root,
+      PATINA_E2E_STORAGE_ID: basename(root),
       PATINA_E2E_FRONTEND_URL: frontendUrl,
       PATINA_E2E_DEVTOOLS_PORT: String(devtoolsPort),
       PATINA_E2E_WIDGET_SHOW_FAILURES: "3",
       CARGO_TARGET_DIR: RUNTIME_TARGET_DIR,
       TAURI_CONFIG: tauriConfigOverrideJson,
-      WEBVIEW2_USER_DATA_FOLDER: join(root, "webview-user-data"),
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -1047,11 +1047,11 @@ try {
       PATINA_E2E: "1",
       PATINA_E2E_SINGLE_INSTANCE: "1",
       PATINA_E2E_DATA_ROOT: root,
+      PATINA_E2E_STORAGE_ID: basename(root),
       PATINA_E2E_FRONTEND_URL: frontendUrl,
       PATINA_E2E_DEVTOOLS_PORT: String(devtoolsPort),
       CARGO_TARGET_DIR: RUNTIME_TARGET_DIR,
       TAURI_CONFIG: tauriConfigOverrideJson,
-      WEBVIEW2_USER_DATA_FOLDER: join(root, "webview-user-data"),
     },
   });
   assert.equal(
@@ -1557,7 +1557,28 @@ try {
     10_000,
   );
 
-  await evaluate(widgetClient, `document.querySelector('.widget-pill-pin-action')?.click()`);
+  const clickWidgetPin = async () => {
+    await widgetClient!.command("Page.bringToFront");
+    await evaluate(widgetClient!, `(() => {
+      const pin = document.querySelector('.widget-pill-pin-action');
+      if (pin?.disabled) document.querySelector('.widget-pill-anchor')?.click();
+    })()`);
+    await waitFor("enabled widget pin action is clicked", async () => evaluate(widgetClient!, `(() => {
+      const pin = document.querySelector('.widget-pill-pin-action');
+      if (!pin || pin.disabled) return false;
+      pin.click();
+      return true;
+    })()`), 10_000);
+  };
+  // Reproduce the focus loss that can collapse an unpinned widget during native drag.
+  await widgetClient.command("Page.bringToFront");
+  await waitFor("widget has native focus before focus-loss control", async () => evaluate(widgetClient!,
+    `window.__TAURI_INTERNALS__.invoke("plugin:window|is_focused", { label: "widget" })`), 10_000);
+  await evaluate(widgetClient, `window.__TAURI_INTERNALS__.invoke("cmd_show_main_window")`);
+  await waitFor("unpinned widget collapses after losing focus", async () => evaluate(widgetClient!,
+    `document.querySelector('.widget-pill-pin-action')?.disabled === true`), 10_000);
+  await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_minimize_main_window")`);
+  await clickWidgetPin();
   await waitFor(
     "native widget pin persistence",
     async () => {
@@ -1574,7 +1595,7 @@ try {
     false,
     "pinned state must not add persistent selected chrome",
   );
-  await evaluate(widgetClient, `document.querySelector('.widget-pill-pin-action')?.click()`);
+  await clickWidgetPin();
   await waitFor(
     "native widget unpin persistence",
     async () => {
@@ -2197,10 +2218,10 @@ try {
       PATINA_E2E: "1",
       PATINA_E2E_SINGLE_INSTANCE: "1",
       PATINA_E2E_DATA_ROOT: root,
+      PATINA_E2E_STORAGE_ID: basename(root),
       PATINA_E2E_FRONTEND_URL: frontendUrl,
       PATINA_E2E_DEVTOOLS_PORT: String(devtoolsPort),
       TAURI_CONFIG: tauriConfigOverrideJson,
-      WEBVIEW2_USER_DATA_FOLDER: join(root, "webview-user-data"),
     },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
@@ -2235,6 +2256,124 @@ try {
   console.log("PASS real Tauri runtime command/event/SQLite/capability smoke");
   await verifyLinkedApplicationsRuntime((expression) => evaluate(client!, expression), true);
   await verifyWebLinksRuntime((expression) => evaluate(client!, expression), true);
+  await evaluate(client!, `localStorage.setItem("patina-storage-migration-proof", "persistent-profile")`);
+  const storageState = () => {
+    const value = spawnSync("reg.exe", ["query", `HKCU\\Software\\Patina\\Storage\\tests\\${basename(root)}`, "/v", "State"],
+      { encoding: "utf8", windowsHide: true });
+    assert.equal(value.status, 0, value.stderr);
+    const binary = value.stdout.match(/State\s+REG_BINARY\s+([a-fA-F0-9]+)/)?.[1];
+    assert.ok(binary);
+    return JSON.parse(Buffer.from(binary, "hex").toString("utf8")) as {
+      dataRoot: string | null; pending: { state: string; sourceDataRoot: string; targetDataRoot: string } | null;
+    };
+  };
+  const storageRestart = async (command: string, args: Record<string, string> = {}, stopAt?: string) => {
+    const oldTarget = (await findMainTarget(devtoolsPort))?.webSocketDebuggerUrl;
+    if (stopAt) writeFileSync(join(root, "storage-pause-request"), stopAt, "utf8");
+    try {
+      await evaluate(client!, `window.__TAURI_INTERNALS__.invoke(${JSON.stringify(command)}, ${JSON.stringify(args)})`);
+    } catch (error) {
+      // A successful restart can destroy the WebView before its IPC response reaches CDP.
+      // The new target and persisted snapshot below are the success evidence.
+      if (!/CDP WebSocket|closed|disconnect/i.test(String(error))) throw error;
+    }
+    client?.close();
+    client = null;
+    if (stopAt) {
+      const paused = await waitFor(`migration reaches ${stopAt}`, () => {
+        const path = join(root, "storage-paused");
+        if (!existsSync(path)) return null;
+        try { return JSON.parse(readFileSync(path, "utf8")) as { pid: number; phase: string }; } catch { return null; }
+      }, 30_000);
+      assert.equal(paused.phase, stopAt);
+      assert.ok(Number.isSafeInteger(paused.pid) && paused.pid > 0);
+      const interrupted = storageState();
+      assert.ok(interrupted.pending);
+      const committed = ["locations-committed", "partial-source-cleanup", "source-cleaned"].includes(stopAt);
+      assert.equal(interrupted.pending.state, committed ? "locations-committed" : "preparing-target");
+      if (committed) assert.equal(interrupted.dataRoot, interrupted.pending.targetDataRoot);
+      else assert.notEqual(interrupted.dataRoot, interrupted.pending.targetDataRoot);
+      assert.equal(existsSync(join(interrupted.pending.sourceDataRoot, "patina.db")), !["partial-source-cleanup", "source-cleaned"].includes(stopAt));
+      runRuntimeBinaryProcessCommand(`
+        $process = Get-Process -Id ${paused.pid} -ErrorAction Stop
+        if ([IO.Path]::GetFullPath($process.Path) -ine [IO.Path]::GetFullPath($env:PATINA_RUNTIME_SMOKE_BINARY)) { throw 'wrong migration process' }
+        Stop-Process -Id $process.Id -Force -ErrorAction Stop
+      `);
+      await waitFor("paused migration process exits", () => !isProcessRunning(paused.pid), 10_000);
+      rmSync(join(root, "storage-paused"));
+      appProcess = spawn(RUNTIME_BINARY_PATH, [], {
+        cwd: process.cwd(),
+        env: {
+          ...process.env, PATINA_E2E: "1", PATINA_E2E_SINGLE_INSTANCE: "1",
+          PATINA_E2E_DATA_ROOT: root, PATINA_E2E_STORAGE_ID: basename(root),
+          PATINA_E2E_FRONTEND_URL: frontendUrl, PATINA_E2E_DEVTOOLS_PORT: String(devtoolsPort),
+          TAURI_CONFIG: tauriConfigOverrideJson,
+        },
+        stdio: ["ignore", "pipe", "pipe"], windowsHide: true,
+      });
+      appProcess.stdout?.on("data", captureAppLog);
+      appProcess.stderr?.on("data", captureAppLog);
+    }
+    const next = await waitFor("storage operation process restart", async () => {
+      const target = await findMainTarget(devtoolsPort);
+      return target?.webSocketDebuggerUrl !== oldTarget ? target : null;
+    }, WEBVIEW_STARTUP_TIMEOUT_MS);
+    client = await CdpConnection.connect(next.webSocketDebuggerUrl!);
+    await waitFor("storage restart IPC ready", async () => {
+      try { return await evaluate(client!, `Boolean(window.__TAURI_INTERNALS__)`); } catch { return false; }
+    }, 10_000);
+    const snapshot = await evaluate(client!, `window.__TAURI_INTERNALS__.invoke("cmd_get_storage_snapshot")`) as StorageSnapshot;
+    const rows = await evaluate(client!, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
+      db: "sqlite:patina.db", query: "SELECT value FROM settings WHERE key = ?", values: ["color_scheme_dark"]
+    })`);
+    assert.deepEqual(rows, [{ value: "catppuccin" }]);
+    assert.deepEqual(await evaluate(client!, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
+      db: "sqlite:patina.db", query: "PRAGMA quick_check", values: []
+    })`), [{ quick_check: "ok" }]);
+    assert.equal(storageState().pending, null);
+    assert.equal(await evaluate(client!, `localStorage.getItem("patina-storage-migration-proof")`), "persistent-profile");
+    assert.ok(existsSync(join(snapshot.paths.webviewRoot, "EBWebView")));
+    return snapshot;
+  };
+  const selectedData = join(root, "relocated-data");
+  let selected = await storageRestart("cmd_restart_and_apply_storage_migration", { targetDataRoot: selectedData });
+  assert.equal(selected.paths.isCustomDataRoot, true);
+  assert.ok(selected.paths.databasePath.toLowerCase().startsWith(selectedData.toLowerCase()));
+  selected = await storageRestart("cmd_restart_and_apply_webview_cache_migration", { targetWebviewRoot: join(root, "relocated-cache") });
+  assert.equal(selected.paths.isCustomDataRoot, true);
+  assert.equal(selected.paths.isCustomWebviewRoot, true);
+  for (const obsolete of [join(root, "data"), join(root, "webview")]) {
+    assertIsolatedTempPath(root, "patina-tauri-e2e-");
+    if (existsSync(obsolete)) {
+      assert.ok(realpathSync(obsolete).toLowerCase().startsWith(realpathSync(root).toLowerCase() + sep));
+      rmSync(obsolete, { recursive: true, force: true });
+    }
+  }
+  selected = await storageRestart("cmd_restart_and_clear_webview_cache");
+  assert.equal(selected.paths.isCustomDataRoot, true);
+  assert.equal(selected.paths.isCustomWebviewRoot, true);
+  selected = await storageRestart("cmd_restart_and_apply_restore_default_storage_migration");
+  assert.equal(selected.paths.isCustomDataRoot, false);
+  assert.equal(selected.paths.isCustomWebviewRoot, true);
+  selected = await storageRestart("cmd_restart_and_apply_restore_default_webview_cache_migration");
+  assert.equal(selected.paths.isCustomWebviewRoot, false);
+  assert.equal(realpathSync(selected.paths.databasePath).toLowerCase(), realpathSync(join(root, "data", "patina.db")).toLowerCase());
+  console.log("PASS registry storage locations survive directory removal and repeated real process restarts");
+  for (const phase of ["copied-db", "validated-target", "promoted-target", "locations-committed", "partial-source-cleanup", "source-cleaned"]) {
+    const before = selected.paths.databasePath;
+    const target = join(root, `interrupted-${phase}`);
+    selected = await storageRestart("cmd_restart_and_apply_storage_migration", { targetDataRoot: target }, phase);
+    assert.ok(selected.paths.databasePath.toLowerCase().startsWith(target.toLowerCase() + sep));
+    if (phase === "locations-committed") {
+      assert.ok(existsSync(before), "commit recovery must preserve the uncleaned source");
+    } else {
+      assert.equal(existsSync(before), false, "successful recovery must finish source cleanup");
+    }
+    console.log(`PASS real process termination and storage recovery at ${phase}`);
+  }
+  selected = await storageRestart("cmd_restart_and_apply_restore_default_storage_migration");
+  assert.equal(selected.paths.isCustomDataRoot, false);
+
 } catch (error) {
   primaryError = error;
 } finally {
@@ -2301,6 +2440,18 @@ try {
     }
   } catch (error) {
     cleanupErrors.push(error);
+  }
+  if (process.platform === "win32") {
+    try {
+      const id = basename(root);
+      assert.match(id, /^patina-tauri-e2e-[a-zA-Z0-9-]+$/);
+      const key = `HKCU\\Software\\Patina\\Storage\\tests\\${id}`;
+      const exists = spawnSync("reg.exe", ["query", key], { encoding: "utf8", windowsHide: true });
+      if (exists.status === 0) {
+        const removed = spawnSync("reg.exe", ["delete", key, "/f"], { encoding: "utf8", windowsHide: true });
+        assert.equal(removed.status, 0, removed.stderr);
+      }
+    } catch (error) { cleanupErrors.push(error); }
   }
   const dbPath = join(root, "data", "patina.db");
   try {

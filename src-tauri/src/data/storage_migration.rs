@@ -9,7 +9,7 @@ use crate::data::{backup, sqlite_pool, storage_restart};
 use crate::domain::storage::{
     StorageMigrationPreview, StorageMigrationRequest, WebviewCacheMigrationRequest,
 };
-use crate::platform::{app_paths, storage_anchor, storage_paths, webview_cache};
+use crate::platform::{app_paths, storage_control, storage_paths, webview_cache};
 use sqlx::{Pool, Sqlite};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -178,37 +178,32 @@ pub async fn schedule_restore_default_webview_cache_migration(
 }
 
 pub async fn run_pending_storage_migration<R: Runtime>(app: &AppHandle<R>) -> Result<bool, String> {
-    let pending = match storage_anchor::read_pending_migration(app) {
-        Ok(pending) => pending,
-        Err(error) => {
-            storage_anchor::discard_unreadable_pending_migration(app, &error)?;
-            return Ok(true);
-        }
-    };
-    let Some(pending) = pending else {
+    let Some(pending) = storage_control::read_pending_migration(app)? else {
         return Ok(false);
     };
-    match execute_pending_storage_migration(app, &pending).await {
-        Ok(()) => {
-            storage_anchor::remove_pending_migration(app)?;
-            Ok(true)
-        }
-        Err(error) => {
-            let _ = storage_anchor::remove_pending_migration(app);
-            let _ = storage_anchor::record_maintenance_error(
-                app,
-                format!("storage migration `{}` failed: {error}", pending.id),
-            );
-            eprintln!("storage migration `{}` failed: {error}", pending.id);
-            Ok(true)
-        }
+    if pending.state == "locations-committed" {
+        // The target is authoritative. Never repeat copying or destructive cleanup after a crash.
+        storage_paths::resolve_storage_paths(app)?;
+        storage_control::record_maintenance_error(app, "A committed storage operation was interrupted; the selected target is active and old files may remain.".into())?;
+        storage_control::remove_pending_migration(app)?;
+        return Ok(true);
     }
+    if let Err(error) = execute_pending_storage_migration(app, &pending).await {
+        let _ = storage_control::record_maintenance_error(app, error.clone());
+        return Err(error);
+    }
+    storage_control::remove_pending_migration(app)?;
+    Ok(true)
 }
+
 async fn execute_pending_storage_migration<R: Runtime>(
     app: &AppHandle<R>,
-    pending: &storage_anchor::PendingStorageMigration,
+    pending: &storage_control::PendingStorageMigration,
 ) -> Result<(), String> {
-    if pending.state != MIGRATION_STATE_PENDING_RESTART {
+    if !matches!(
+        pending.state.as_str(),
+        MIGRATION_STATE_PENDING_RESTART | "preparing-target"
+    ) {
         return Err(format!(
             "unsupported storage migration state `{}`",
             pending.state
@@ -220,74 +215,23 @@ async fn execute_pending_storage_migration<R: Runtime>(
     let data_root_changes = !same_path(&pending.source_data_root, &pending.target_data_root);
     let webview_root_changes = !same_path(&source_webview_root, &pending.target_webview_root);
     let default_paths = storage_paths::default_storage_paths(app)?;
-    let (target_mode, target_webview_mode) = resolve_target_modes(pending, &default_paths);
+    let (mut target_mode, mut target_webview_mode) = resolve_target_modes(pending, &default_paths);
+    let resuming = pending.state == "preparing-target";
+    if resuming {
+        // The durable operation claimed these targets after validation, before any copy.
+        // The source has not been cleaned, so rebuild the target from that source.
+        target_mode = TargetDataRootMode::RestoreDefault;
+        target_webview_mode = TargetWebviewRootMode::RestoreDefault;
+    }
+    if webview_root_changes {
+        validate_target_webview_root_for_execution(
+            &source_paths,
+            &pending.target_webview_root,
+            target_webview_mode,
+        )?;
+    }
     if data_root_changes {
-        ensure_destructive_paths_are_disjoint(
-            &pending.source_data_root,
-            &pending.target_data_root,
-        )?;
-        if !pending
-            .source_data_root
-            .join(storage_paths::SQLITE_DB_FILE_NAME)
-            .exists()
-        {
-            return Err(format!(
-                "source database `{}` is missing",
-                pending
-                    .source_data_root
-                    .join(storage_paths::SQLITE_DB_FILE_NAME)
-                    .display()
-            ));
-        }
-
-        validate_target_data_root(
-            &target_data_validation_paths(
-                storage_anchor::anchor_dir(app)?,
-                &pending.source_data_root,
-                &source_webview_root,
-            ),
-            &pending.target_data_root,
-            target_mode,
-            TargetValidationAccess::CreateAndProbe,
-        )?;
-
-        let staging_root = pending
-            .target_data_root
-            .join(format!(".patina-migration-staging-{}", pending.id));
-        if staging_root.exists() {
-            remove_migration_path_if_safe(&staging_root).map_err(|error| {
-                format!(
-                    "failed to clear migration staging `{}`: {error}",
-                    staging_root.display()
-                )
-            })?;
-        }
-        fs::create_dir_all(&staging_root).map_err(|error| {
-            format!(
-                "failed to create staging dir `{}`: {error}",
-                staging_root.display()
-            )
-        })?;
-
-        let result = copy_and_validate_data_root(&pending.source_data_root, &staging_root).await;
-        if let Err(error) = result {
-            let _ = remove_migration_path_if_safe(&staging_root);
-            return Err(error);
-        }
-
-        promote_staging_root(&staging_root, &pending.target_data_root)?;
-        if let Err(error) =
-            clean_pre_migration_backup(&pending.target_data_root, pending.id.as_str())
-        {
-            let _ = storage_anchor::record_maintenance_error(
-                app,
-                format!(
-                    "storage migration `{}` could not fully clean generated backup in `{}`: {error}",
-                    pending.id,
-                    pending.target_data_root.display()
-                ),
-            );
-        }
+        prepare_data_target(app, pending, &source_webview_root, target_mode).await?;
     }
 
     if webview_root_changes {
@@ -296,6 +240,7 @@ async fn execute_pending_storage_migration<R: Runtime>(
             &pending.target_webview_root,
             target_webview_mode,
         )?;
+        storage_control::mark_target_preparing(app, &pending.id)?;
         webview_cache::migrate_persistent_profile_state(
             &source_webview_root,
             &pending.target_webview_root,
@@ -304,17 +249,23 @@ async fn execute_pending_storage_migration<R: Runtime>(
     }
 
     if pending.clear_webview_cache {
-        webview_cache::clear_regenerable_cache_dirs(&pending.target_webview_root)?;
-        storage_anchor::mark_webview_cache_trimmed(app)?;
+        match webview_cache::clear_regenerable_cache_dirs(&pending.target_webview_root) {
+            Ok(()) => storage_control::mark_webview_cache_trimmed(app)?,
+            // Cache deletion is best effort: an exiting WebView may still hold files.
+            // Preserve the diagnostic without blocking startup on disposable cache.
+            Err(error) => storage_control::record_maintenance_error(app, error)?,
+        }
     }
 
-    storage_restart::switch_anchors(
+    storage_restart::commit_storage_locations(
         app,
         pending,
-        &source_paths,
         !same_path(&pending.target_data_root, &default_paths.data_root),
         !same_path(&pending.target_webview_root, &default_paths.webview_root),
     )?;
+
+    #[cfg(debug_assertions)]
+    pause_migration_for_recovery_test("locations-committed");
 
     if data_root_changes {
         ensure_destructive_paths_are_disjoint(
@@ -328,7 +279,7 @@ async fn execute_pending_storage_migration<R: Runtime>(
         )?;
         if let Err(error) = clean_old_data_payload(&pending.source_data_root, remove_old_data_root)
         {
-            let _ = storage_anchor::record_maintenance_error(
+            let _ = storage_control::record_maintenance_error(
                 app,
                 format!(
                     "storage migration `{}` could not fully clean old data root `{}`: {error}",
@@ -339,13 +290,16 @@ async fn execute_pending_storage_migration<R: Runtime>(
         }
     }
 
+    #[cfg(debug_assertions)]
+    pause_migration_for_recovery_test("source-cleaned");
+
     if webview_root_changes {
         ensure_destructive_paths_are_disjoint(&source_webview_root, &pending.target_webview_root)?;
         if let Err(error) = webview_cache::remove_retired_cache_root(
             &source_webview_root,
             source_paths.is_custom_webview_root,
         ) {
-            let _ = storage_anchor::record_maintenance_error(
+            let _ = storage_control::record_maintenance_error(
                 app,
                 format!(
                     "storage migration `{}` could not fully clean old WebView cache root `{}`: {error}",
@@ -359,8 +313,79 @@ async fn execute_pending_storage_migration<R: Runtime>(
     Ok(())
 }
 
+async fn prepare_data_target<R: Runtime>(
+    app: &AppHandle<R>,
+    pending: &storage_control::PendingStorageMigration,
+    source_webview_root: &Path,
+    target_mode: TargetDataRootMode,
+) -> Result<(), String> {
+    ensure_destructive_paths_are_disjoint(&pending.source_data_root, &pending.target_data_root)?;
+    if !pending
+        .source_data_root
+        .join(storage_paths::SQLITE_DB_FILE_NAME)
+        .exists()
+    {
+        return Err(format!(
+            "source database `{}` is missing",
+            pending
+                .source_data_root
+                .join(storage_paths::SQLITE_DB_FILE_NAME)
+                .display()
+        ));
+    }
+
+    validate_target_data_root(
+        &target_data_validation_paths(&pending.source_data_root, source_webview_root),
+        &pending.target_data_root,
+        target_mode,
+        TargetValidationAccess::CreateAndProbe,
+    )?;
+
+    storage_control::mark_target_preparing(app, &pending.id)?;
+    let staging_root = pending
+        .target_data_root
+        .join(format!(".patina-migration-staging-{}", pending.id));
+    if staging_root.exists() {
+        remove_migration_path_if_safe(&staging_root).map_err(|error| {
+            format!(
+                "failed to clear migration staging `{}`: {error}",
+                staging_root.display()
+            )
+        })?;
+    }
+    fs::create_dir_all(&staging_root).map_err(|error| {
+        format!(
+            "failed to create staging dir `{}`: {error}",
+            staging_root.display()
+        )
+    })?;
+
+    let result = copy_and_validate_data_root(&pending.source_data_root, &staging_root).await;
+    if let Err(error) = result {
+        let _ = remove_migration_path_if_safe(&staging_root);
+        return Err(error);
+    }
+
+    promote_staging_root(&staging_root, &pending.target_data_root)?;
+    #[cfg(debug_assertions)]
+    pause_migration_for_recovery_test("promoted-target");
+    if let Err(error) = clean_pre_migration_backup(&pending.target_data_root, pending.id.as_str()) {
+        let _ = storage_control::record_maintenance_error(
+            app,
+            format!(
+                "storage migration `{}` could not fully clean generated backup in `{}`: {error}",
+                pending.id,
+                pending.target_data_root.display()
+            ),
+        );
+    }
+    Ok(())
+}
+
 async fn copy_and_validate_data_root(source: &Path, staging: &Path) -> Result<(), String> {
     copy_sqlite_files(source, staging)?;
+    #[cfg(debug_assertions)]
+    pause_migration_for_recovery_test("copied-db");
     copy_dir_if_exists(&source.join("backups"), &staging.join("backups"))?;
 
     let target_db = staging.join(storage_paths::SQLITE_DB_FILE_NAME);
@@ -368,6 +393,9 @@ async fn copy_and_validate_data_root(source: &Path, staging: &Path) -> Result<()
     sqlite_pool::prepare_pool_schema(&pool, &target_db).await?;
     validate_counts(source, &pool).await?;
     pool.close().await;
+
+    #[cfg(debug_assertions)]
+    pause_migration_for_recovery_test("validated-target");
 
     Ok(())
 }
@@ -416,6 +444,8 @@ fn clean_old_data_payload(data_root: &Path, remove_container: bool) -> Result<()
             errors.push(error);
         }
     }
+    #[cfg(debug_assertions)]
+    pause_migration_for_recovery_test("partial-source-cleanup");
     for dir_name in ["backups", "remote-backup-temp"] {
         if let Err(error) = remove_path_if_exists(&data_root.join(dir_name)) {
             errors.push(error);
@@ -618,7 +648,7 @@ enum TargetValidationAccess {
 }
 
 fn resolve_target_modes(
-    pending: &storage_anchor::PendingStorageMigration,
+    pending: &storage_control::PendingStorageMigration,
     default_paths: &storage_paths::StoragePaths,
 ) -> (TargetDataRootMode, TargetWebviewRootMode) {
     let data = if same_path(&pending.target_data_root, &default_paths.data_root) {
@@ -687,13 +717,10 @@ fn validate_target_data_root(
 }
 
 fn target_data_validation_paths(
-    anchor_dir: PathBuf,
     source_data_root: &Path,
     source_webview_root: &Path,
 ) -> storage_paths::StoragePaths {
     storage_paths::StoragePaths {
-        data_anchor_dir: anchor_dir.clone(),
-        cache_anchor_dir: anchor_dir,
         data_root: source_data_root.to_path_buf(),
         db_path: source_data_root.join(storage_paths::SQLITE_DB_FILE_NAME),
         backup_dir: storage_paths::backup_dir_for_data_root(source_data_root),
@@ -787,7 +814,7 @@ async fn schedule_pending_storage_migration(
     target_data_root: PathBuf,
     target_webview_root: PathBuf,
 ) -> Result<(), String> {
-    let existing_pending = storage_anchor::read_pending_migration(&app)?;
+    let existing_pending = storage_control::read_pending_migration(&app)?;
     let plan = plan_pending_storage_migration(
         &current,
         existing_pending.as_ref(),
@@ -806,25 +833,25 @@ async fn schedule_pending_storage_migration(
     }
 
     checkpoint_current_database(&app).await?;
-    let pending = storage_anchor::PendingStorageMigration {
-        format: storage_anchor::STORAGE_MIGRATION_PENDING_FORMAT.to_string(),
+    let pending = storage_control::PendingStorageMigration {
+        format: storage_control::STORAGE_MIGRATION_PENDING_FORMAT.to_string(),
         id: plan.migration_id,
         source_data_root: current.data_root,
         target_data_root: plan.target_data_root,
         target_webview_root: plan.target_webview_root,
-        created_at_ms: storage_anchor::now_ms(),
+        created_at_ms: storage_control::now_ms(),
         state: MIGRATION_STATE_PENDING_RESTART.to_string(),
         clear_webview_cache: false,
     };
-    storage_anchor::write_pending_migration(&app, &pending)?;
+    storage_control::write_pending_migration(&app, &pending)?;
 
-    let persisted = storage_anchor::read_pending_migration(&app)?
+    let persisted = storage_control::read_pending_migration(&app)?
         .ok_or_else(|| "storage restart operation was not persisted".to_string())?;
     if persisted.id != pending.id
         || persisted.target_data_root != pending.target_data_root
         || persisted.target_webview_root != pending.target_webview_root
     {
-        let _ = storage_anchor::remove_pending_migration(&app);
+        let _ = storage_control::remove_pending_migration(&app);
         return Err("storage restart operation verification failed".to_string());
     }
 
@@ -840,7 +867,7 @@ struct PendingStorageMigrationPlan {
 
 fn plan_pending_storage_migration(
     current: &storage_paths::StoragePaths,
-    existing_pending: Option<&storage_anchor::PendingStorageMigration>,
+    existing_pending: Option<&storage_control::PendingStorageMigration>,
     requested_target_data_root: PathBuf,
     requested_target_webview_root: PathBuf,
     new_migration_id: String,
@@ -959,8 +986,6 @@ mod tests {
         webview_root: PathBuf,
     ) -> storage_paths::StoragePaths {
         storage_paths::StoragePaths {
-            data_anchor_dir: data_root.join(".data-anchor"),
-            cache_anchor_dir: webview_root.join(".cache-anchor"),
             db_path: data_root.join(storage_paths::SQLITE_DB_FILE_NAME),
             backup_dir: data_root.join("backups"),
             remote_backup_temp_dir: data_root.join("remote-backup-temp"),
@@ -1115,8 +1140,6 @@ mod tests {
     #[test]
     fn target_cannot_be_inside_current_data_root() {
         let current = storage_paths::StoragePaths {
-            data_anchor_dir: PathBuf::from("C:\\DataAnchor"),
-            cache_anchor_dir: PathBuf::from("C:\\CacheAnchor"),
             data_root: PathBuf::from("C:\\Data"),
             db_path: PathBuf::from("C:\\Data\\patina.db"),
             backup_dir: PathBuf::from("C:\\Data\\backups"),
@@ -1140,8 +1163,6 @@ mod tests {
     #[test]
     fn target_data_root_can_share_current_cache_parent() {
         let current = storage_paths::StoragePaths {
-            data_anchor_dir: PathBuf::from("C:\\DataAnchor"),
-            cache_anchor_dir: PathBuf::from("C:\\CacheAnchor"),
             data_root: PathBuf::from("C:\\Data"),
             db_path: PathBuf::from("C:\\Data\\patina.db"),
             backup_dir: PathBuf::from("C:\\Data\\backups"),
@@ -1163,8 +1184,6 @@ mod tests {
     #[test]
     fn target_data_root_cannot_be_inside_current_ebwebview_dir() {
         let current = storage_paths::StoragePaths {
-            data_anchor_dir: PathBuf::from("C:\\DataAnchor"),
-            cache_anchor_dir: PathBuf::from("C:\\CacheAnchor"),
             data_root: PathBuf::from("C:\\Data"),
             db_path: PathBuf::from("C:\\Data\\patina.db"),
             backup_dir: PathBuf::from("C:\\Data\\backups"),
@@ -1202,8 +1221,6 @@ mod tests {
         .unwrap();
 
         let current = storage_paths::StoragePaths {
-            data_anchor_dir: default_root.clone(),
-            cache_anchor_dir: default_root.join("webview-anchor"),
             data_root: current_root.clone(),
             db_path: current_root.join(storage_paths::SQLITE_DB_FILE_NAME),
             backup_dir: current_root.join("backups"),
@@ -1233,8 +1250,6 @@ mod tests {
         fs::create_dir_all(&current_root).unwrap();
 
         let current = storage_paths::StoragePaths {
-            data_anchor_dir: current_root.join(".data-anchor"),
-            cache_anchor_dir: current_root.join(".cache-anchor"),
             data_root: current_root.clone(),
             db_path: current_root.join(storage_paths::SQLITE_DB_FILE_NAME),
             backup_dir: current_root.join("backups"),
@@ -1267,8 +1282,6 @@ mod tests {
         fs::create_dir_all(&current_root).unwrap();
 
         let current = storage_paths::StoragePaths {
-            data_anchor_dir: current_root.join(".data-anchor"),
-            cache_anchor_dir: current_root.join(".cache-anchor"),
             data_root: current_root.clone(),
             db_path: current_root.join(storage_paths::SQLITE_DB_FILE_NAME),
             backup_dir: current_root.join("backups"),
@@ -1304,8 +1317,6 @@ mod tests {
         fs::create_dir_all(&current_root).unwrap();
 
         let current = storage_paths::StoragePaths {
-            data_anchor_dir: current_root.join(".data-anchor"),
-            cache_anchor_dir: current_root.join(".cache-anchor"),
             data_root: current_root.clone(),
             db_path: current_root.join(storage_paths::SQLITE_DB_FILE_NAME),
             backup_dir: current_root.join("backups"),
@@ -1346,7 +1357,7 @@ mod tests {
         .unwrap();
         fs::write(root.join("backups").join("backup.zip"), b"backup").unwrap();
         fs::write(root.join("remote-backup-temp").join("temp.zip"), b"temp").unwrap();
-        fs::write(storage_anchor::data_anchor_path(&root), b"anchor").unwrap();
+        fs::write(root.join("data-anchor.json"), b"anchor").unwrap();
 
         clean_old_data_payload(&root, false).unwrap();
 
@@ -1356,7 +1367,7 @@ mod tests {
             .exists());
         assert!(!root.join("backups").exists());
         assert!(!root.join("remote-backup-temp").exists());
-        assert!(storage_anchor::data_anchor_path(&root).exists());
+        assert!(root.join("data-anchor.json").exists());
         assert!(root.join("webview").join("EBWebView").exists());
         let _ = fs::remove_dir_all(&root);
     }
@@ -1371,7 +1382,7 @@ mod tests {
         fs::create_dir_all(root.join("backups")).unwrap();
         fs::create_dir_all(root.join("webview").join("EBWebView")).unwrap();
         fs::write(root.join(storage_paths::SQLITE_DB_FILE_NAME), b"db").unwrap();
-        fs::write(storage_anchor::data_anchor_path(&root), b"anchor").unwrap();
+        fs::write(root.join("data-anchor.json"), b"anchor").unwrap();
 
         clean_old_data_payload(&root, true).unwrap();
 
@@ -1484,8 +1495,6 @@ mod tests {
     #[test]
     fn pending_merge_keeps_data_target_when_cache_is_scheduled_after_data() {
         let current = storage_paths::StoragePaths {
-            data_anchor_dir: PathBuf::from(r"C:\DataAnchor"),
-            cache_anchor_dir: PathBuf::from(r"C:\CacheAnchor"),
             data_root: PathBuf::from(r"C:\Data\Patina"),
             db_path: PathBuf::from(r"C:\Data\Patina\patina.db"),
             backup_dir: PathBuf::from(r"C:\Data\Patina\backups"),
@@ -1494,8 +1503,8 @@ mod tests {
             is_custom_data_root: false,
             is_custom_webview_root: false,
         };
-        let existing = storage_anchor::PendingStorageMigration {
-            format: storage_anchor::STORAGE_MIGRATION_PENDING_FORMAT.to_string(),
+        let existing = storage_control::PendingStorageMigration {
+            format: storage_control::STORAGE_MIGRATION_PENDING_FORMAT.to_string(),
             id: "migration-1".to_string(),
             source_data_root: current.data_root.clone(),
             target_data_root: PathBuf::from(r"D:\Patina"),
@@ -1523,8 +1532,6 @@ mod tests {
     #[test]
     fn pending_merge_keeps_cache_target_when_data_is_scheduled_after_cache() {
         let current = storage_paths::StoragePaths {
-            data_anchor_dir: PathBuf::from(r"C:\DataAnchor"),
-            cache_anchor_dir: PathBuf::from(r"C:\CacheAnchor"),
             data_root: PathBuf::from(r"C:\Data\Patina"),
             db_path: PathBuf::from(r"C:\Data\Patina\patina.db"),
             backup_dir: PathBuf::from(r"C:\Data\Patina\backups"),
@@ -1533,8 +1540,8 @@ mod tests {
             is_custom_data_root: false,
             is_custom_webview_root: false,
         };
-        let existing = storage_anchor::PendingStorageMigration {
-            format: storage_anchor::STORAGE_MIGRATION_PENDING_FORMAT.to_string(),
+        let existing = storage_control::PendingStorageMigration {
+            format: storage_control::STORAGE_MIGRATION_PENDING_FORMAT.to_string(),
             id: "migration-1".to_string(),
             source_data_root: current.data_root.clone(),
             target_data_root: current.data_root.clone(),
@@ -1616,4 +1623,46 @@ mod tests {
         let normalized = normalize_selected_storage_root("D:\\Patina Data").unwrap();
         assert_eq!(normalized, PathBuf::from("D:\\Patina Data"));
     }
+}
+
+#[cfg(debug_assertions)]
+// Only isolated debug runtime tests can pause a migration. Release builds omit this hook.
+fn pause_migration_for_recovery_test(phase: &str) {
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{Duration, Instant},
+    };
+    if std::env::var("PATINA_E2E").as_deref() != Ok("1") {
+        return;
+    }
+    let Some(root) = std::env::var_os("PATINA_E2E_DATA_ROOT").map(PathBuf::from) else {
+        return;
+    };
+    if !root.is_absolute()
+        || !root.starts_with(std::env::temp_dir())
+        || !root
+            .file_name()
+            .is_some_and(|n| n.to_string_lossy().starts_with("patina-tauri-e2e-"))
+    {
+        return;
+    }
+    let request = root.join("storage-pause-request");
+    if fs::read_to_string(&request).ok().as_deref() != Some(phase) {
+        return;
+    }
+    fs::remove_file(request).expect("consume one-shot migration pause");
+    fs::write(
+        root.join("storage-paused"),
+        serde_json::to_vec(&serde_json::json!({
+            "pid":std::process::id(), "phase":phase
+        }))
+        .unwrap(),
+    )
+    .expect("report migration pause");
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_secs(30) {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    panic!("migration recovery test did not terminate paused process at {phase}");
 }

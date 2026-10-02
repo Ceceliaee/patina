@@ -6,7 +6,7 @@ use crate::domain::storage::{
     StorageMaintenanceSnapshot, StorageMigrationPreview, StorageMigrationRequest,
     StoragePathSnapshot, StorageSnapshot, WebviewCacheMigrationRequest,
 };
-use crate::platform::{storage_anchor, storage_paths, storage_usage, webview_cache};
+use crate::platform::{storage_control, storage_paths, storage_usage, webview_cache};
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 
@@ -159,8 +159,8 @@ pub fn cmd_open_storage_directory(path: String) -> Result<(), String> {
 fn storage_snapshot<R: Runtime>(app: &AppHandle<R>) -> Result<StorageSnapshot, String> {
     let paths = storage_paths::resolve_storage_paths(app)?;
     let install_dir = install_dir()?;
-    let maintenance = storage_anchor::read_maintenance_state(app)
-        .unwrap_or_else(|_| storage_anchor::StorageMaintenanceState::new());
+    let maintenance = storage_control::read_maintenance_state(app)
+        .unwrap_or_else(|_| storage_control::StorageMaintenanceState::new());
 
     Ok(StorageSnapshot {
         paths: StoragePathSnapshot {

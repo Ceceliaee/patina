@@ -1,5 +1,6 @@
 // zh-CN native locale resource. Pure data only.
 export const MESSAGES = {
+  "native.storage.startupFailure": {"$type": "message", "body": {"$op": "concat", "parts": ["无法打开已配置的存储位置。请检查磁盘连接和目录权限，然后重新启动 Patina。为保护已有数据，本次启动已停止。详细信息：", {"$op": "arg", "name": "details"}]}},
   "native.export.anonymousActivity": "匿名",
   "native.category.ai": "AI",
   "native.category.browser": "浏览器",
