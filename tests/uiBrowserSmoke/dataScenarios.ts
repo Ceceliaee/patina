@@ -130,11 +130,21 @@ export async function runDataReadFailureScenarios(context: BrowserSmokeContext) 
       if (request.bucketCount === 8) throw new Error('Injected data refresh failure');
     }`);
     await refresh();
-    await waitForExpression(client, sessionId, `Boolean(document.querySelector('[data-trend-read-error]'))`);
+    // Both cached panels refresh on independent idle callbacks; keep the failure hook until both settle.
+    await waitForExpression(client, sessionId, `Boolean(document.querySelector('[data-trend-read-error]'))
+      && Boolean(document.querySelector('.data-app-refresh-status'))`);
     assert.equal(await evaluate(client, sessionId, metric), before);
     assert.ok(String(await evaluate(client, sessionId, `document.querySelector('[data-trend-read-error]')?.textContent`)).includes(COPY["zh-CN"].common.refreshFailed));
-    await evaluate(client, sessionId, `document.querySelector('[data-trend-read-error] button').focus()`);
+    await evaluate(client, sessionId, `globalThis.__PATINA_PENDING_AGGREGATES = [];
+      globalThis.__PATINA_AGGREGATE_HOOK = (request) => request.bucketCount === 8
+        ? new Promise((resolve, reject) => globalThis.__PATINA_PENDING_AGGREGATES.push({ resolve, reject }))
+        : undefined;
+      document.querySelector('[data-trend-read-error] button').focus()`);
     await pressEnter();
+    await waitForExpression(client, sessionId, `globalThis.__PATINA_PENDING_AGGREGATES.length > 0
+      && !document.querySelector('[data-trend-read-error]')`);
+    await evaluate(client, sessionId, `globalThis.__PATINA_PENDING_AGGREGATES.forEach(entry =>
+      entry.reject(new Error('Injected data retry failure')))`);
     await waitForExpression(client, sessionId, `Boolean(document.querySelector('[data-trend-read-error]'))`);
     assert.equal(await evaluate(client, sessionId, metric), before);
     assert.equal(await evaluate(client, sessionId, `document.activeElement?.matches('.data-overview .data-trend-range-trigger')`), true,
