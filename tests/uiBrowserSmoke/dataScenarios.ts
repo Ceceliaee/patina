@@ -132,7 +132,8 @@ export async function runDataReadFailureScenarios(context: BrowserSmokeContext) 
     await refresh();
     // Both cached panels refresh on independent idle callbacks; keep the failure hook until both settle.
     await waitForExpression(client, sessionId, `Boolean(document.querySelector('[data-trend-read-error]'))
-      && Boolean(document.querySelector('.data-app-refresh-status'))`);
+      && Boolean(document.querySelector('.data-app-panel .data-app-refresh-status'))`,
+    undefined, "both overview and destination refresh failures before replacing the read hook");
     assert.equal(await evaluate(client, sessionId, metric), before);
     assert.ok(String(await evaluate(client, sessionId, `document.querySelector('[data-trend-read-error]')?.textContent`)).includes(COPY["zh-CN"].common.refreshFailed));
     await evaluate(client, sessionId, `globalThis.__PATINA_PENDING_AGGREGATES = [];
