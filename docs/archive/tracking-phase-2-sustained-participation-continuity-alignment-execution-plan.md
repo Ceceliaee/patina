@@ -8,10 +8,10 @@
 
 本文遵循以下长期约束：
 
-- [`docs/architecture.md`](/C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture.md)
-- [`docs/engineering-quality.md`](/C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/engineering-quality.md)
-- [`docs/archive/tracking-phase-2-sustained-participation-execution-plan.md`](/C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/archive/tracking-phase-2-sustained-participation-execution-plan.md)
-- [`docs/archive/tracking-phase-2-gsmtc-primary-fallback-execution-plan.md`](/C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/archive/tracking-phase-2-gsmtc-primary-fallback-execution-plan.md)
+- [`docs/architecture.md`](../architecture.md)
+- [`docs/engineering-quality.md`](../engineering-quality.md)
+- [`docs/archive/tracking-phase-2-sustained-participation-execution-plan.md`](tracking-phase-2-sustained-participation-execution-plan.md)
+- [`docs/archive/tracking-phase-2-gsmtc-primary-fallback-execution-plan.md`](tracking-phase-2-gsmtc-primary-fallback-execution-plan.md)
 
 本文完成后应移动到 `docs/archive/`。
 
@@ -112,10 +112,10 @@
 
 ### 7.1 Owner
 
-- [ ] runtime 连续性判定 owner 在 [`src-tauri/src/engine/tracking/runtime.rs`](/C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/engine/tracking/runtime.rs)
-- [ ] session 切换规划 owner 在 [`src-tauri/src/engine/tracking/transition.rs`](/C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/engine/tracking/transition.rs)
-- [ ] 领域语义与连续性契约 owner 在 [`src-tauri/src/domain/tracking.rs`](/C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/domain/tracking.rs)
-- [ ] 展示归并 owner 仍在 [`src/shared/lib/sessionReadCompiler.ts`](/C:/Users/SYBao/Documents/Code/Time%20Tracking/src/shared/lib/sessionReadCompiler.ts)
+- [ ] runtime 连续性判定 owner 在 [`src-tauri/src/engine/tracking/runtime.rs`](../../src-tauri/src/engine/tracking/runtime.rs)
+- [ ] session 切换规划 owner 在 [`src-tauri/src/engine/tracking/transition.rs`](../../src-tauri/src/engine/tracking/transition.rs)
+- [ ] 领域语义与连续性契约 owner 在 [`src-tauri/src/domain/tracking.rs`](../../src-tauri/src/domain/tracking.rs)
+- [ ] 展示归并 owner 仍在 [`src/shared/lib/sessionReadCompiler.ts`](../../src/shared/lib/sessionReadCompiler.ts)
 
 ### 7.2 不该发生的回流
 

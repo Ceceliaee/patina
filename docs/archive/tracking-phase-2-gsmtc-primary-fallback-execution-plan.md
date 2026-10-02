@@ -8,10 +8,10 @@
 
 本文遵循以下长期约束：
 
-- [`docs/architecture.md`](/C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture.md)
-- [`docs/engineering-quality.md`](/C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/engineering-quality.md)
-- [`docs/archive/tracking-phase-2-sustained-participation-execution-plan.md`](/C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/archive/tracking-phase-2-sustained-participation-execution-plan.md)
-- [`docs/archive/tracking-phase-2-gsmtc-primary-fallback-execution-plan.md`](/C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/archive/tracking-phase-2-gsmtc-primary-fallback-execution-plan.md)
+- [`docs/architecture.md`](../architecture.md)
+- [`docs/engineering-quality.md`](../engineering-quality.md)
+- [`docs/archive/tracking-phase-2-sustained-participation-execution-plan.md`](tracking-phase-2-sustained-participation-execution-plan.md)
+- [`docs/archive/tracking-phase-2-gsmtc-primary-fallback-execution-plan.md`](tracking-phase-2-gsmtc-primary-fallback-execution-plan.md)
 
 本文完成后应移动到 `docs/archive/`。
 
@@ -59,11 +59,11 @@
 
 ### 4.1 Owner 保持不变
 
-- [x] Windows `GSMTC` 采集仍在 [`media.rs`](/C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/platform/windows/media.rs)
-- [x] Windows 音频会话采集仍在 [`audio.rs`](/C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/platform/windows/audio.rs)
-- [x] 前台窗口进程信息仍在 [`foreground.rs`](/C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/platform/windows/foreground.rs)
-- [x] 媒体信号语义与匹配规则仍在 [`tracking.rs`](/C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/domain/tracking.rs)
-- [x] runtime 编排仍在 [`runtime.rs`](/C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/engine/tracking/runtime.rs)
+- [x] Windows `GSMTC` 采集仍在 [`media.rs`](../../src-tauri/src/platform/windows/media.rs)
+- [x] Windows 音频会话采集仍在 [`audio.rs`](../../src-tauri/src/platform/windows/audio.rs)
+- [x] 前台窗口进程信息仍在 [`foreground.rs`](../../src-tauri/src/platform/windows/foreground.rs)
+- [x] 媒体信号语义与匹配规则仍在 [`tracking.rs`](../../src-tauri/src/domain/tracking.rs)
+- [x] runtime 编排仍在 [`runtime.rs`](../../src-tauri/src/engine/tracking/runtime.rs)
 - [x] 前端没有接手媒体判定规则
 
 ### 4.2 没有发生的回流
@@ -127,10 +127,10 @@
 
 ### 6.1 核心修改文件
 
-- [x] [`src-tauri/src/domain/tracking.rs`](/C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/domain/tracking.rs)
-- [x] [`src-tauri/src/platform/windows/media.rs`](/C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/platform/windows/media.rs)
-- [x] [`src-tauri/src/platform/windows/audio.rs`](/C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/platform/windows/audio.rs)
-- [x] [`src-tauri/src/engine/tracking/runtime.rs`](/C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/engine/tracking/runtime.rs)
+- [x] [`src-tauri/src/domain/tracking.rs`](../../src-tauri/src/domain/tracking.rs)
+- [x] [`src-tauri/src/platform/windows/media.rs`](../../src-tauri/src/platform/windows/media.rs)
+- [x] [`src-tauri/src/platform/windows/audio.rs`](../../src-tauri/src/platform/windows/audio.rs)
+- [x] [`src-tauri/src/engine/tracking/runtime.rs`](../../src-tauri/src/engine/tracking/runtime.rs)
 
 ### 6.2 关键收口点
 

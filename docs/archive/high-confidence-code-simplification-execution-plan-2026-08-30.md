@@ -367,7 +367,7 @@ rg -n "postcss" package.json package-lock.json src tests scripts vite.config.ts
 #### Owner 与文件
 
 - [`package.json`](../../package.json)
-- [`package-lock.json`](../../package-lock.json)
+- [`package-lock.json`](https://github.com/Ceceliaee/patina/blob/bbbfababfbc3cccf9aa6c23d3433b471e9661d5f/package-lock.json)
 - 构建 owner：[`vite.config.ts`](../../vite.config.ts)
 
 #### 实施前检查

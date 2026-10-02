@@ -193,12 +193,12 @@
 
 ### 当前已存在的相关落点
 
-- [x] 主窗口关闭/最小化行为目前集中在 [tray.rs](/c:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/app/tray.rs)
-- [x] 桌面行为同步目前集中在 [desktop_behavior.rs](/c:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/app/desktop_behavior.rs)
-- [x] 前端设置枚举当前只有 `taskbar | tray`，定义在 [appSettings.ts](/c:/Users/SYBao/Documents/Code/Time%20Tracking/src/shared/settings/appSettings.ts)
-- [x] Rust 侧最小化枚举当前只有 `Taskbar | Tray`，定义在 [settings.rs](/c:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/domain/settings.rs)
-- [x] 前端 tracking 状态入口已经存在，集中在 [useWindowTracking.ts](/c:/Users/SYBao/Documents/Code/Time%20Tracking/src/app/hooks/useWindowTracking.ts)
-- [x] Rust 侧 tracking 快照命令已经存在，集中在 [tracking.rs](/c:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/commands/tracking.rs)
+- [x] 主窗口关闭/最小化行为目前集中在 [tray.rs](../../src-tauri/src/app/tray.rs)
+- [x] 桌面行为同步目前集中在 [desktop_behavior.rs](../../src-tauri/src/app/desktop_behavior.rs)
+- [x] 前端设置枚举当前只有 `taskbar | tray`，定义在 [appSettings.ts](../../src/shared/settings/appSettings.ts)
+- [x] Rust 侧最小化枚举当前只有 `Taskbar | Tray`，定义在 [settings.rs](../../src-tauri/src/domain/settings.rs)
+- [x] 前端 tracking 状态入口已经存在，集中在 [useWindowTracking.ts](../../src/app/hooks/useWindowTracking.ts)
+- [x] Rust 侧 tracking 快照命令已经存在，集中在 [tracking.rs](../../src-tauri/src/commands/tracking.rs)
 
 ### 架构边界约束
 

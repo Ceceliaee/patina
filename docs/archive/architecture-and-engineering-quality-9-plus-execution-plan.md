@@ -115,7 +115,7 @@
 执行清单：
 
 - [x] 盘点当前所有 Node/TS 测试入口，列出“已被默认脚本覆盖”和“未被默认脚本覆盖”的清单
-- [x] 将 [tests/updateViewModel.test.ts](/c:/Users/SYBao/Documents/Code/Time%20Tracking/tests/updateViewModel.test.ts) 纳入默认前端验证门槛
+- [x] 将 [tests/updateViewModel.test.ts](../../tests/updateViewModel.test.ts) 纳入默认前端验证门槛
 - [x] 明确 `npm test`、`npm run test:replay`、`npm run check` 的职责边界，避免未来继续出现“新增测试但未接线”
 - [x] 如果继续使用分散脚本，新增统一聚合脚本，避免手工记忆多个测试入口
 - [x] 为更新流程、view model、关键页面状态机补一轮测试覆盖缺口盘点
@@ -154,8 +154,8 @@ node --experimental-strip-types --experimental-specifier-resolution=node tests/u
 
 当前重点对象：
 
-- [src/shared/lib/appClassificationFacade.ts](/c:/Users/SYBao/Documents/Code/Time%20Tracking/src/shared/lib/appClassificationFacade.ts)
-- [src/shared/lib/historyReadModelService.ts](/c:/Users/SYBao/Documents/Code/Time%20Tracking/src/shared/lib/historyReadModelService.ts)
+- [src/shared/lib/appClassificationFacade.ts](https://github.com/Ceceliaee/patina/blob/841804074493e383ffcc1a0ad30edad31a350339/src/shared/lib/appClassificationFacade.ts)
+- [src/shared/lib/historyReadModelService.ts](https://github.com/Ceceliaee/patina/blob/841804074493e383ffcc1a0ad30edad31a350339/src/shared/lib/historyReadModelService.ts)
 
 推荐 owner 判断：
 
@@ -204,13 +204,13 @@ npm run check
 
 当前重点对象：
 
-- [src/app/AppShell.tsx](/c:/Users/SYBao/Documents/Code/Time%20Tracking/src/app/AppShell.tsx)
+- [src/app/AppShell.tsx](../../src/app/AppShell.tsx)
 - `app/services/*`
 - `app/hooks/*`
 
 优先处理点：
 
-- [AppShell.tsx](/c:/Users/SYBao/Documents/Code/Time%20Tracking/src/app/AppShell.tsx) 直接调用 `saveSetting`
+- [AppShell.tsx](../../src/app/AppShell.tsx) 直接调用 `saveSetting`
 - 任何 `app/*` 中直接 import `shared/lib/*Persistence*`、`platform/persistence/*`、feature 私有 service 的情况
 
 执行清单：
@@ -251,9 +251,9 @@ npm run check
 
 当前重点对象：
 
-- [src/features/classification/components/AppMapping.tsx](/c:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/classification/components/AppMapping.tsx)
-- [src/features/settings/components/Settings.tsx](/c:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/settings/components/Settings.tsx)
-- [src-tauri/src/engine/tracking/runtime.rs](/c:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/engine/tracking/runtime.rs)
+- [src/features/classification/components/AppMapping.tsx](../../src/features/classification/components/AppMapping.tsx)
+- [src/features/settings/components/Settings.tsx](../../src/features/settings/components/Settings.tsx)
+- [src-tauri/src/engine/tracking/runtime.rs](../../src-tauri/src/engine/tracking/runtime.rs)
 
 原则：
 

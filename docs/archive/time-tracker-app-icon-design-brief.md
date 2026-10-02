@@ -27,7 +27,7 @@
 
 它与其他长期文档的关系如下：
 
-- 与 [`quiet-pro-component-guidelines.md`](./quiet-pro-component-guidelines.md) 互补，`Quiet Pro` 规定整个产品的长期 UI 气质，本文件规定产品标识的专项设计边界。
+- 与 [`quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md) 互补，`Quiet Pro` 规定整个产品的长期 UI 气质，本文件规定产品标识的专项设计边界。
 - 与 [`architecture-target.md`](./architecture-target.md) 互补，架构文档约束代码边界，本文件约束品牌图标资产与 UI 标识的长期方向。
 
 ---

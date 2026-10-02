@@ -161,9 +161,9 @@ ru-RU: one / few / many / other
 - 每个文件同时维护中英文；
 - 英文部分有时通过展开中文对象获得默认值；
 - 动态文案使用任意 TypeScript 函数；
-- [`bundle.ts`](../../src/shared/copy/bundle.ts) 按语言合并全部领域；
-- [`types.ts`](../../src/shared/copy/types.ts) 从 `ZH_CN_UI_TEXT` 推导 `UiText`；
-- [`runtime.ts`](../../src/shared/copy/runtime.ts) 使用可变 `activeUiLanguage` 与 `UI_TEXT` Proxy。
+- [`bundle.ts`](https://github.com/Ceceliaee/patina/blob/3619f9bf93b273526350da943c436864b4501d53/src/shared/copy/bundle.ts) 按语言合并全部领域；
+- [`types.ts`](https://github.com/Ceceliaee/patina/blob/3619f9bf93b273526350da943c436864b4501d53/src/shared/copy/types.ts) 从 `ZH_CN_UI_TEXT` 推导 `UiText`；
+- [`runtime.ts`](https://github.com/Ceceliaee/patina/blob/3619f9bf93b273526350da943c436864b4501d53/src/shared/copy/runtime.ts) 使用可变 `activeUiLanguage` 与 `UI_TEXT` Proxy。
 
 基线盘点任务：
 

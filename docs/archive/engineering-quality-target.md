@@ -16,7 +16,7 @@
 - [`performance-target.md`](./performance-target.md)
 - [`reliability-and-validation-target.md`](./reliability-and-validation-target.md)
 
-如果局部实现习惯与 [`architecture.md`](./architecture.md) 冲突，以 [`architecture.md`](./architecture.md) 为准。
+如果局部实现习惯与 [`architecture.md`](../architecture.md) 冲突，以 [`architecture.md`](../architecture.md) 为准。
 
 ---
 
@@ -166,9 +166,9 @@
 
 不过在当前仓库里，这些内容已经分别由现有文档覆盖：
 
-- 发布质量见 [`versioning-and-release-policy.md`](./versioning-and-release-policy.md)
-- 文档和协作规则见 [`AGENTS.md`](../AGENTS.md) 以及其他长期文档
-- 产品边界见 [`product-principles-and-scope.md`](./product-principles-and-scope.md)
+- 发布质量见 [`versioning-and-release-policy.md`](../versioning-and-release-policy.md)
+- 文档和协作规则见 [`AGENTS.md`](../../AGENTS.md) 以及其他长期文档
+- 产品边界见 [`product-principles-and-scope.md`](../product-principles-and-scope.md)
 
 因此，当前工程质量文档体系里，最值得单独站出来的，仍然是这 3 个核心维度：
 
@@ -183,7 +183,7 @@
 本文只定义工程质量总方向，不承载具体阶段任务。
 当前阶段的执行文档是：
 
-- [`working/engineering-quality-stabilization-checklist.md`](./working/engineering-quality-stabilization-checklist.md)
+- [`working/engineering-quality-stabilization-checklist.md`](./engineering-quality-stabilization-checklist.md)
 
 等当前专项优化阶段完成后，后续可以再判断是否需要把这些规则沉淀成更成熟的长期母规则文档。
 
@@ -233,4 +233,4 @@
 - 先判断当前问题属于哪个专项维度，再决定优化方式
 - 没有测量依据，不做高风险性能微优化
 - 没有验证保护，不做高风险结构整理
-- 任何一类优化都不能破坏 [`architecture.md`](./architecture.md) 的 owner 与边界规则
+- 任何一类优化都不能破坏 [`architecture.md`](../architecture.md) 的 owner 与边界规则

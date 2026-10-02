@@ -6,10 +6,10 @@
 
 它服务于：
 
-- [`../engineering-quality-target.md`](../engineering-quality-target.md)
-- [`../code-quality-target.md`](../code-quality-target.md)
-- [`../performance-target.md`](../performance-target.md)
-- [`../reliability-and-validation-target.md`](../reliability-and-validation-target.md)
+- [`../engineering-quality-target.md`](./engineering-quality-target.md)
+- [`../code-quality-target.md`](./code-quality-target.md)
+- [`../performance-target.md`](./performance-target.md)
+- [`../reliability-and-validation-target.md`](./reliability-and-validation-target.md)
 - [`../architecture.md`](../architecture.md)
 
 它不是长期母文档，也不是纯说明文，而是一份可以逐项勾选、逐阶段推进、最终归档的执行清单。
@@ -24,7 +24,7 @@
 本文当前已完成文档化收口。
 后续仍保留未勾选项，表示真实尚未落地的工程工作，而不表示本文还有待补写的文档空缺。
 
-如果本文与长期规则文档冲突，以 [`../architecture.md`](../architecture.md) 和 [`../engineering-quality-target.md`](../engineering-quality-target.md) 为准；本文应随之更新。
+如果本文与长期规则文档冲突，以 [`../architecture.md`](../architecture.md) 和 [`../engineering-quality-target.md`](./engineering-quality-target.md) 为准；本文应随之更新。
 
 ---
 
@@ -93,7 +93,7 @@
 
 下面这些事项已经基本成立，可以视为当前已完成的基础盘：
 
-- [x] 已有工程质量总览文档 [`../engineering-quality-target.md`](../engineering-quality-target.md)
+- [x] 已有工程质量总览文档 [`../engineering-quality-target.md`](./engineering-quality-target.md)
 - [x] 已有三份专项长期目标文档：代码质量、性能、可靠性与验证
 - [x] 已有当前 working 执行清单，可作为阶段性执行载体
 - [x] 已有基础验证脚本：`npm test`、`npm run test:replay`、`npm run build`

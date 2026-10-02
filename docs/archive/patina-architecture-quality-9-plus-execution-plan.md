@@ -7,7 +7,7 @@
 目标评分：综合真实评分 `9.0+`，架构评分 `9.0+`，工程质量评分 `9.0+`  
 当前基线：2026-06-10 真实审查结论约为综合 `8.0 / 10`，架构 `8.3 / 10`，工程质量 `7.8 / 10`。  
 最终评分：综合 `9.1 / 10`，架构 `9.0 / 10`，工程质量 `9.2 / 10`。  
-后续独立清理文档：[`patina-d10-compatibility-cleanup-plan.md`](../working/patina-d10-compatibility-cleanup-plan.md)
+后续独立清理文档：[`patina-d10-compatibility-cleanup-plan.md`](./patina-d10-compatibility-cleanup-plan.md)
 
 本文是阶段性执行方案的完成记录。本轮先执行 9.0+ 质量提升，不在本文中执行旧 Time Tracker 身份兼容清理；兼容清理到期后直接按独立清理文档执行。
 
@@ -98,7 +98,7 @@
 - [ ] `npm run build` 与 `npm run check:bundle` 仍通过。
 - [ ] 当前日期尚未达到 D+10，或已经达到 D+10 且独立兼容清理文档已完成。
 - [ ] 本轮改动没有新增旧 Time Tracker 身份兼容入口、fallback、迁移壳或页面层判断。
-- [x] [`patina-d10-compatibility-cleanup-plan.md`](../working/patina-d10-compatibility-cleanup-plan.md) 仍能作为后续直接执行依据。
+- [x] [`patina-d10-compatibility-cleanup-plan.md`](./patina-d10-compatibility-cleanup-plan.md) 仍能作为后续直接执行依据。
 - [ ] 高吸力层没有新增厚逻辑。
 - [ ] 重构后的关键 owner 文件有清晰职责说明、局部测试或现有专项测试保护。
 - [ ] 最终审查给出新分数和仍未解决的残余风险。

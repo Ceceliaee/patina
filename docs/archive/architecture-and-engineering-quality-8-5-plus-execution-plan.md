@@ -51,9 +51,9 @@
 - settings owner 回流点：
   - [`../../src/features/settings/services/settingsRuntimeAdapterService.ts`](../../src/features/settings/services/settingsRuntimeAdapterService.ts)
   - [`../../src/app/services/appRuntimeBootstrapService.ts`](../../src/app/services/appRuntimeBootstrapService.ts)
-  - [`../../src/app/services/trackingPauseSettingsRuntimeService.ts`](../../src/app/services/trackingPauseSettingsRuntimeService.ts)
+  - [`../../src/app/services/trackingPauseSettingsRuntimeService.ts`](https://github.com/Ceceliaee/patina/blob/07e69b852f55e0260ef6793e72746df78024db68/src/app/services/trackingPauseSettingsRuntimeService.ts)
   - [`../../src/app/AppShell.tsx`](../../src/app/AppShell.tsx)
-  - [`../../src/shared/lib/settingsPersistenceAdapter.ts`](../../src/shared/lib/settingsPersistenceAdapter.ts)
+  - [`../../src/shared/lib/settingsPersistenceAdapter.ts`](https://github.com/Ceceliaee/patina/blob/07e69b852f55e0260ef6793e72746df78024db68/src/shared/lib/settingsPersistenceAdapter.ts)
 - 前端热点：
   - [`../../src/features/classification/hooks/useAppMappingState.ts`](../../src/features/classification/hooks/useAppMappingState.ts)
   - [`../../src/features/settings/hooks/useSettingsPageState.ts`](../../src/features/settings/hooks/useSettingsPageState.ts)
@@ -188,7 +188,7 @@ cargo test --manifest-path src-tauri/Cargo.toml --quiet
 ## 7.2 重点对象
 
 - [`../../src/features/settings/services/settingsRuntimeAdapterService.ts`](../../src/features/settings/services/settingsRuntimeAdapterService.ts)
-- [`../../src/shared/lib/settingsPersistenceAdapter.ts`](../../src/shared/lib/settingsPersistenceAdapter.ts)
+- [`../../src/shared/lib/settingsPersistenceAdapter.ts`](https://github.com/Ceceliaee/patina/blob/07e69b852f55e0260ef6793e72746df78024db68/src/shared/lib/settingsPersistenceAdapter.ts)
 - [`../../src/platform/persistence/settingsPersistence.ts`](../../src/platform/persistence/settingsPersistence.ts)
 
 执行清单：
@@ -196,7 +196,7 @@ cargo test --manifest-path src-tauri/Cargo.toml --quiet
 - [x] 明确 `settingsRuntimeAdapterService` 中每个方法的真实 owner
 - [x] 把“应用启动读取当前设置”从 settings feature service 中移出
 - [x] 把“tracker health 时间戳读取”从 settings feature service 中移出
-- [x] 评估 [`../../src/shared/lib/settingsPersistenceAdapter.ts`](../../src/shared/lib/settingsPersistenceAdapter.ts) 的最终去向
+- [x] 评估 [`../../src/shared/lib/settingsPersistenceAdapter.ts`](https://github.com/Ceceliaee/patina/blob/07e69b852f55e0260ef6793e72746df78024db68/src/shared/lib/settingsPersistenceAdapter.ts) 的最终去向
 - [x] 方案 A：迁回 `src/platform/persistence/*`
 - [x] 未采用方案 B：拆成 `platform` 原始适配 + `app` 或 `features/settings` 的薄组合层
 - [x] 不允许继续把它保留成“shared 下的 persistence adapter 桶”
@@ -234,7 +234,7 @@ npm run check
 
 - [`../../src/app/AppShell.tsx`](../../src/app/AppShell.tsx)
 - [`../../src/app/services/appRuntimeBootstrapService.ts`](../../src/app/services/appRuntimeBootstrapService.ts)
-- [`../../src/app/services/trackingPauseSettingsRuntimeService.ts`](../../src/app/services/trackingPauseSettingsRuntimeService.ts)
+- [`../../src/app/services/trackingPauseSettingsRuntimeService.ts`](https://github.com/Ceceliaee/patina/blob/07e69b852f55e0260ef6793e72746df78024db68/src/app/services/trackingPauseSettingsRuntimeService.ts)
 
 执行清单：
 
@@ -244,7 +244,7 @@ npm run check
 - [x] 为 `min_session_secs` 选择真实 owner
 - [x] 选项 1：`app/services/*` 的应用级偏好写侧服务
 - [x] 未采用选项 2：`features/history/*` 的 feature 私有写侧服务
-- [x] 删除或吸收 [`../../src/app/services/trackingPauseSettingsRuntimeService.ts`](../../src/app/services/trackingPauseSettingsRuntimeService.ts) 这种仅转发到 settings feature 的薄壳
+- [x] 删除或吸收 [`../../src/app/services/trackingPauseSettingsRuntimeService.ts`](https://github.com/Ceceliaee/patina/blob/07e69b852f55e0260ef6793e72746df78024db68/src/app/services/trackingPauseSettingsRuntimeService.ts) 这种仅转发到 settings feature 的薄壳
 - [x] 保持 `app/*` 只依赖真实环境边界或应用级编排 owner，不直接依赖 settings feature page owner
 
 硬性验收：
