@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { runLinkedAppMenuPerformanceScenario } from "./linkedAppMenuPerformanceScenario.ts";
 import { runLinkedApplicationScenarios } from "./linkedApplicationScenarios.ts";
 import { runClassificationWebLayoutScenarios } from "./classificationWebLayoutScenarios.ts";
 import { runClassificationAppLayoutScenarios } from "./classificationAppLayoutScenarios.ts";
@@ -7,6 +8,7 @@ import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import { delay, evaluate, jsonString, waitForExpression, waitForStableExpression } from "./browserHarness.ts";
 
 export async function runClassificationScenarios(context: BrowserSmokeContext) {
+  await runLinkedAppMenuPerformanceScenario(context);
   await runLinkedApplicationScenarios(context);
   await runClassificationAppLayoutScenarios(context);
   await runClassificationCategoryFilterScenarios(context);

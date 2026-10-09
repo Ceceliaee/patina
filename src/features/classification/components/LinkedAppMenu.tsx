@@ -32,11 +32,13 @@ export default function LinkedAppMenu(props: Props) {
   const [adding, setAdding] = useState(false);
   const [query, setQuery] = useState("");
   const members = Object.keys(props.links).filter((key) => props.links[key] === props.parent.exeName);
-  const byKey = new Map(props.candidates.map((candidate) => [candidate.exeName, candidate]));
+  const candidates = open && !props.disabled ? props.candidates : [];
+  // Closed menus retain their indicator without scanning the complete app catalog.
+  const byKey = new Map(candidates.map((candidate) => [candidate.exeName, candidate]));
   const memberRows = members.map((exeName) => byKey.get(exeName)
     ?? { exeName, appName: exeName, totalDuration: 0, lastSeenMs: 0 });
   const roots = new Set(Object.values(props.links));
-  const available = props.candidates.filter((candidate) => candidate.exeName !== props.parent.exeName
+  const available = (adding ? candidates : []).filter((candidate) => candidate.exeName !== props.parent.exeName
     && !roots.has(candidate.exeName)
     && (!props.links[candidate.exeName] || props.links[candidate.exeName] === props.parent.exeName)
     && `${props.name(candidate)} ${candidate.exeName}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));

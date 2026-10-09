@@ -92,6 +92,7 @@
     "perf:sqlite-query-plan": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/perf/sqlite-query-plan-benchmark.ts",
     "perf:startup-bootstrap": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/perf/startup-bootstrap-benchmark.ts",
     "perf:classification-app-catalog": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/perf/classification-app-catalog-benchmark.ts",
+    "perf:classification-browser": "node --experimental-strip-types scripts/perf/classification-browser-benchmark.ts",
     "perf:activity-read-model": "node --expose-gc --experimental-strip-types --experimental-specifier-resolution=node scripts/perf/activity-read-model-benchmark.ts",
     "perf:activity-maintenance": "cargo test --manifest-path src-tauri/Cargo.toml --locked hourly_maintenance_capacity_report -- --ignored --nocapture",
     "perf:tracking-policy": "cargo test --manifest-path src-tauri/Cargo.toml --locked recording_policy_cache_capacity_report -- --ignored --nocapture",
