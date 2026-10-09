@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { verifyProcessMapperRuntime } from "./processMapperRuntime.ts";
 import { syncAppMappingNameDraft } from "../src/features/classification/hooks/appMappingInteractions.ts";
 import { ClassificationService } from "../src/features/classification/services/classificationService.ts";
 import { changeAppLink, validateAppLinks } from "../src/shared/classification/appLinks.ts";
@@ -103,3 +104,5 @@ try {
   AppClassification.setAppLinks({});
   ProcessMapper.clearUserOverrides();
 }
+
+await verifyProcessMapperRuntime();

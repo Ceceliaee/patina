@@ -91,6 +91,7 @@ function readIconFromMap(map: Record<string, string>, exeName: string, resolveKe
 }
 
 export async function getIconsForExecutables(exeNames: string[], identity: "statistical" | "executable" = "statistical"): Promise<Record<string, string>> {
+  const linksRevision = AppClassification.getAppLinksRevision();
   const resolveKeys = identity === "executable" ? resolveExecutableIconKeys : resolveAppIconKeys;
   const lookupKeys = Array.from(new Set(
     exeNames.flatMap((exeName) => resolveKeys(exeName)),
@@ -110,6 +111,12 @@ export async function getIconsForExecutables(exeNames: string[], identity: "stat
       `SELECT exe_name, icon_base64 FROM icon_cache WHERE LOWER(exe_name) IN (${placeholders})`,
       caseInsensitiveBatchKeys,
     );
+
+    // Rows were selected for the previous identities. Mapping them through a
+    // newer association could overwrite a parent's icon with a child's row.
+    if (identity === "statistical" && linksRevision !== AppClassification.getAppLinksRevision()) {
+      return getIconsForExecutables(exeNames, identity);
+    }
 
     for (const row of rows) {
       addIconRowToMap(map, row, resolveKeys);

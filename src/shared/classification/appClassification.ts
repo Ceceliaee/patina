@@ -12,10 +12,16 @@ import {
 
 export class AppClassification {
   private static links: AppLinks = {};
+  private static linksRevision = 0;
+
+  static getAppLinksRevision(): number {
+    return this.linksRevision;
+  }
 
   static setAppLinks(links: AppLinks): void {
     validateAppLinks(links);
     this.links = { ...links };
+    this.linksRevision += 1;
   }
 
   static resolveStatisticalApp(exeName: string): string {

@@ -92,6 +92,7 @@ export default function DestinationDetailRecords({
           const end = formatTime(activity.endTime, day.dayEndMs, locale);
           const duration = formatDuration(activity.duration);
           const titleCount = getDestinationDetailTitleRecords(activity).length;
+          const activityName = anonymous ? objectName : activity.sourceAppName ?? objectName;
           const expanded = openDetails?.activity.id === activity.id;
           return (
             <li
@@ -100,10 +101,10 @@ export default function DestinationDetailRecords({
             >
               <div
                 className="destination-detail-activity-summary"
-                aria-label={copy.activityAria(start, end, objectName, duration, titleCount)}
+                aria-label={copy.activityAria(start, end, activityName, duration, titleCount)}
               >
                 <span className="destination-detail-record-copy">
-                  <strong>{objectName}</strong>
+                  <strong>{activityName}</strong>
                   {mode === "app" && !anonymous ? (
                     <span className="qp-workbench-list-meta destination-detail-record-meta">
                       <span>{UI_TEXT.history.activitySegmentCount(
@@ -126,7 +127,7 @@ export default function DestinationDetailRecords({
                       className="qp-button-secondary qp-compact-disclosure destination-detail-activity-disclosure"
                       aria-expanded={expanded}
                       aria-controls={expanded ? popoverId : undefined}
-                      aria-label={copy.toggleTitleDetails(expanded, objectName)}
+                      aria-label={copy.toggleTitleDetails(expanded, activityName)}
                       onClick={(event) => toggleDetails(activity, event.currentTarget)}
                     >
                       {expanded

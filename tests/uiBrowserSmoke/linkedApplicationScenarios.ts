@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { verifyDestinationDetailScroll } from "./destinationDetailScrollScenario.ts";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -152,6 +153,24 @@ export async function runLinkedApplicationScenarios({ client, sessionId, runTest
           && n.firstElementChild.style.backgroundColor==='rgb(17, 34, 51)');
       })()`);
     });
+    await runTest("linked destination detail labels member activities with their own names", async () => {
+      await click('.history-timeline-dialog-close');
+      await waitForExpression(client!, sessionId, `!document.querySelector('.history-timeline-dialog-close')`);
+      await evaluate(client!, sessionId, `(() => {
+        const trigger = [...document.querySelectorAll('.history-day-distribution-detail-trigger')]
+          .find(node => node.getAttribute('aria-label')?.includes('Linked Parent'));
+        if (!trigger) throw new Error('linked parent detail trigger missing');
+        trigger.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      })()`);
+      await waitForExpression(client!, sessionId, `(() => {
+        const dialog = document.querySelector('.destination-detail-dialog');
+        const child = [...document.querySelectorAll('.destination-detail-activity-summary')]
+          .find(node => node.querySelector('strong')?.textContent === 'Child');
+        return dialog?.textContent.includes('Linked Parent') && child?.getAttribute('aria-label')?.includes('Child');
+      })()`);
+    });
+    await verifyDestinationDetailScroll({ client, sessionId, runTest });
+    await click('.destination-detail-dialog .qp-dialog-close-button');
   } finally {
     await client!.command("Emulation.setDeviceMetricsOverride", { width: 1280, height: 820, deviceScaleFactor: 1, mobile: false }, sessionId);
     await evaluate(client!, sessionId, `(() => { localStorage.clear(); for(const [k,v] of Object.entries(JSON.parse(${jsonString(String(stored))}))) localStorage.setItem(k,v); })()`);

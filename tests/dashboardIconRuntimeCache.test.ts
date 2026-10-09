@@ -2,6 +2,7 @@ import { invalidateAppIcons } from "../src/platform/persistence/appIconRuntimeCa
 import { publishAppIconChange, subscribeAppIconChanges } from "../src/shared/hooks/appIconChanges.ts";
 import { installAppIconEvents } from "../src/platform/runtime/appIconEventGateway.ts";
 import assert from "node:assert/strict";
+import { getIconsForExecutables } from "../src/platform/persistence/sessionReadRepository.ts";
 import { AppClassification } from "../src/shared/classification/appClassification.ts";
 import {
   getDashboardIcon,
@@ -20,6 +21,38 @@ import {
 } from "../src/features/classification/services/classificationIconService.ts";
 
 let passed = 0;
+
+await (async () => {
+  const host = globalThis as unknown as { window?: unknown };
+  const originalWindow = host.window;
+  let release!: () => void;
+  let entered!: () => void;
+  const reading = new Promise<void>(resolve => { entered = resolve; });
+  const blocked = new Promise<void>(resolve => { release = resolve; });
+  let reads = 0;
+  AppClassification.setAppLinks({});
+  host.window = { __TAURI_INTERNALS__: { invoke: async (command: string, args: { values: string[] }) => {
+    assert.equal(command, "plugin:sql|select");
+    const rows = [{ exe_name: "weixin.exe", icon_base64: "PARENT" }, { exe_name: "wechatappex.exe", icon_base64: "CHILD" }]
+      .filter(row => args.values.includes(row.exe_name));
+    if (++reads === 1) { entered(); await blocked; }
+    return rows;
+  } } };
+  try {
+    const pending = getIconsForExecutables(["weixin.exe", "wechatappex.exe"]);
+    await reading;
+    AppClassification.setAppLinks({ "wechatappex.exe": "weixin.exe" });
+    release();
+    assert.equal((await pending)["weixin.exe"], "PARENT", "a late child row must not overwrite its new parent's icon");
+    const own = await getIconsForExecutables(["wechatappex.exe"], "executable");
+    assert.deepEqual(own, { "wechatappex.exe": "CHILD" });
+    console.log("PASS real icon repository keeps parent identity when association changes during SQL read");
+  } finally {
+    release?.();
+    host.window = originalWindow;
+    AppClassification.setAppLinks({});
+  }
+})();
 
 async function runTest(name: string, fn: () => Promise<void> | void) {
   resetDashboardIconRuntimeCacheForTests();

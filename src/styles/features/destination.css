@@ -266,10 +266,10 @@
   grid-auto-rows: max-content;
   align-content: start;
   gap: 8px;
-  /* Five 56px summaries, their 1px card borders, and four row gaps. */
-  max-height: 322px;
+  /* Whole physical pixels at the standard Windows scale factors keep boundary repainting stable. */
+  max-height: 320px;
   min-height: 0;
-  flex: 1 1 322px;
+  flex: 1 1 320px;
   overflow-y: auto;
   overscroll-behavior: contain;
   margin: 0;

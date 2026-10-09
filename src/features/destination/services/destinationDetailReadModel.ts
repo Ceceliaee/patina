@@ -26,6 +26,7 @@ import {
 import type { DestinationDetailTarget } from "../types.ts";
 
 export interface DestinationDetailRecord {
+  sourceAppName?: string;
   id: string;
   activityId: string;
   sourceActivityIds?: string[];
@@ -42,6 +43,7 @@ export interface DestinationDetailRecord {
 }
 
 export interface DestinationDetailActivity {
+  sourceAppName?: string;
   id: string;
   activityCount?: number;
   startTime: number;
@@ -74,6 +76,7 @@ interface DestinationDetailDayDependencies {
 }
 
 interface UnpositionedDetailRecord {
+  sourceAppName?: string;
   id: string;
   activityId: string;
   sourceActivityIds: string[];
@@ -212,6 +215,7 @@ function buildDetailActivities(
     activitySourceIds.set(record.activityId, sourceIdSet);
     activities.set(record.activityId, {
       id: record.activityId,
+      sourceAppName: record.sourceAppName,
       activityCount: sourceIdSet.size,
       startTime: record.startTime,
       endTime: record.endTime,
@@ -291,6 +295,10 @@ function buildAppDetailRecords(
     if (!membership) continue;
     const sessionEnd = resolveMaterializedSessionEnd(session);
     const secondaryText = AppClassification.getLinkedAppKeys(session.exeName).length > 1 ? session.exeName : null;
+    const sourceAppName = AppClassification.resolveStatisticalApp(session.exeName) !== AppClassification.resolveCanonicalExecutable(session.exeName)
+      ? AppClassification.getUserOverride(session.exeName)?.displayName?.trim()
+        || session.appName.trim() || AppClassification.mapAppWithoutOverride(session.exeName).name
+      : undefined;
     const { activityId, sourceActivityIds } = membership;
 
     const compiledSession = compileSessions([session], {
@@ -318,6 +326,7 @@ function buildAppDetailRecords(
         id: `app:${session.id}`,
         activityId,
         sourceActivityIds,
+        sourceAppName,
         startTime: session.startTime,
         endTime: sessionEnd,
         title: cleanOptionalText(compiledSession?.displayTitle),
@@ -335,6 +344,7 @@ function buildAppDetailRecords(
           id: `app:${session.id}:gap:${cursor}`,
           activityId,
           sourceActivityIds,
+          sourceAppName,
           startTime: cursor,
           endTime: sample.startTime,
           title: null,
@@ -350,6 +360,7 @@ function buildAppDetailRecords(
         id: `app:${session.id}:sample:${sample.index}`,
         activityId,
         sourceActivityIds,
+        sourceAppName,
         startTime: sampleStartTime,
         endTime: sample.endTime,
         title: cleanOptionalText(sample.title),
@@ -365,6 +376,7 @@ function buildAppDetailRecords(
         id: `app:${session.id}:gap:${cursor}`,
         activityId,
         sourceActivityIds,
+        sourceAppName,
         startTime: cursor,
         endTime: sessionEnd,
         title: null,
