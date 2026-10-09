@@ -1,6 +1,10 @@
 // ru-RU locale resource. Pure data only.
 export const MESSAGES = {
-  "mapping.webLinks": "Связанные сайты",
+  "mapping.webIndependent": "Показывать отдельно",
+  "mapping.mergeWebDomain": {"$type": "message", "body": {"$op": "concat", "parts": ["Объединить в ", {"$op": "arg", "name": "domain"}]}},
+  "mapping.deleteWebGroupDetail": {"$type": "message", "body": {"$op": "concat", "parts": ["Удалить историю для ", {"$op": "arg", "name": "count"}, " доменов этой группы: ", {"$op": "arg", "name": "domains"}]}},
+
+  "mapping.webLinks": "Автоматическая группа",
   "mapping.addLinkedWebDomain": "Добавить сайт",
   "mapping.backToLinkedWebDomains": "Назад к связанным сайтам",
   "mapping.mainWebDomain": "Основной сайт",

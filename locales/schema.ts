@@ -1,5 +1,10 @@
 // Canonical language-neutral message contract. Do not derive this file from a locale at build time.
 export const MESSAGE_SCHEMA = {
+
+  "mapping.webIndependent": {"kind": "string", "params": [], "surface": "frontend", "description": "Keep this exact domain outside its automatic website group"},
+  "mapping.mergeWebDomain": {"kind": "message", "params": [{"name": "domain", "type": "string", "optional": false}], "surface": "frontend", "description": "Merge an independent domain into its automatic root group"},
+  "mapping.deleteWebGroupDetail": {"kind": "message", "params": [{"name": "count", "type": "number", "optional": false}, {"name": "domains", "type": "string", "optional": false}], "surface": "frontend", "description": "Confirm deletion of exactly the listed current website group members"},
+
   "native.storage.startupFailure": { "kind": "message", "params": [{"name":"details","type":"string","optional":false}], "surface": "native", "description": "Storage preparation failure before the database and locale preferences can be loaded; uses the source locale." },
   "settings.timeRulesTitle": {"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Time rules"},
   "settings.recordingOptionsTitle": {"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Recording options"},

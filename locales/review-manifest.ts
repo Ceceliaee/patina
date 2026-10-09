@@ -980,7 +980,7 @@ export const LOCALE_SOURCE_REVIEWS = {
     "mapping.unlinkApp": "dc8f07311fccea45",
     "mapping.backToLinkedApps": "74f91c7ca613a7d4",
     "mapping.individualControls": "fa430a17e7f2d167",
-    "mapping.webLinks": "4a8cc5ed829ec786",
+    "mapping.webLinks": "fa126bdf656198e6",
     "mapping.addLinkedWebDomain": "a75715279fd1ba5a",
     "mapping.backToLinkedWebDomains": "9b93271d04f3b56e",
     "mapping.mainWebDomain": "c89c3d1c63fd74a2",
@@ -994,7 +994,10 @@ export const LOCALE_SOURCE_REVIEWS = {
     "settings.interfaceGroupTitle": "b72f0e46a601e3b1",
     "settings.windowBehaviorTitle": "4e1db14ed17e6456",
     "settings.runtimeBehaviorTitle": "18cffce351610162",
-    "native.storage.startupFailure": "80c0df8f469b2c0e"
+    "native.storage.startupFailure": "80c0df8f469b2c0e",
+    "mapping.webIndependent": "545c7dabf30b40aa",
+    "mapping.mergeWebDomain": "c06947bb6009d0d8",
+    "mapping.deleteWebGroupDetail": "67ecda17e088eecc"
   },
   "es": {
     "about.description": "f16fb3f9d1381864",
@@ -1976,7 +1979,7 @@ export const LOCALE_SOURCE_REVIEWS = {
     "mapping.unlinkApp": "dc8f07311fccea45",
     "mapping.backToLinkedApps": "74f91c7ca613a7d4",
     "mapping.individualControls": "fa430a17e7f2d167",
-    "mapping.webLinks": "4a8cc5ed829ec786",
+    "mapping.webLinks": "fa126bdf656198e6",
     "mapping.addLinkedWebDomain": "a75715279fd1ba5a",
     "mapping.backToLinkedWebDomains": "9b93271d04f3b56e",
     "mapping.mainWebDomain": "c89c3d1c63fd74a2",
@@ -1990,7 +1993,10 @@ export const LOCALE_SOURCE_REVIEWS = {
     "settings.interfaceGroupTitle": "b72f0e46a601e3b1",
     "settings.windowBehaviorTitle": "4e1db14ed17e6456",
     "settings.runtimeBehaviorTitle": "18cffce351610162",
-    "native.storage.startupFailure": "80c0df8f469b2c0e"
+    "native.storage.startupFailure": "80c0df8f469b2c0e",
+    "mapping.webIndependent": "545c7dabf30b40aa",
+    "mapping.mergeWebDomain": "c06947bb6009d0d8",
+    "mapping.deleteWebGroupDetail": "67ecda17e088eecc"
   },
   "ru-RU": {
     "about.description": "f16fb3f9d1381864",
@@ -2972,7 +2978,7 @@ export const LOCALE_SOURCE_REVIEWS = {
     "mapping.unlinkApp": "dc8f07311fccea45",
     "mapping.backToLinkedApps": "74f91c7ca613a7d4",
     "mapping.individualControls": "fa430a17e7f2d167",
-    "mapping.webLinks": "4a8cc5ed829ec786",
+    "mapping.webLinks": "fa126bdf656198e6",
     "mapping.addLinkedWebDomain": "a75715279fd1ba5a",
     "mapping.backToLinkedWebDomains": "9b93271d04f3b56e",
     "mapping.mainWebDomain": "c89c3d1c63fd74a2",
@@ -2986,6 +2992,9 @@ export const LOCALE_SOURCE_REVIEWS = {
     "settings.interfaceGroupTitle": "b72f0e46a601e3b1",
     "settings.windowBehaviorTitle": "4e1db14ed17e6456",
     "settings.runtimeBehaviorTitle": "18cffce351610162",
-    "native.storage.startupFailure": "80c0df8f469b2c0e"
+    "native.storage.startupFailure": "80c0df8f469b2c0e",
+    "mapping.webIndependent": "545c7dabf30b40aa",
+    "mapping.mergeWebDomain": "c06947bb6009d0d8",
+    "mapping.deleteWebGroupDetail": "67ecda17e088eecc"
   }
 } as const;

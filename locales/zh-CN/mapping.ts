@@ -1,6 +1,11 @@
 // zh-CN mapping locale resource. Pure data only.
 export const MESSAGES = {
-  "mapping.webLinks": "关联网页",
+
+  "mapping.webIndependent": "独立显示",
+  "mapping.mergeWebDomain": {"$type": "message", "body": {"$op": "concat", "parts": ["合并到 ", {"$op": "arg", "name": "domain"}]}},
+  "mapping.deleteWebGroupDetail": {"$type": "message", "body": {"$op": "concat", "parts": ["将删除组内 ", {"$op": "arg", "name": "count"}, " 个域名的历史：", {"$op": "arg", "name": "domains"}]}},
+
+  "mapping.webLinks": "自动分组",
   "mapping.addLinkedWebDomain": "添加网页",
   "mapping.backToLinkedWebDomains": "返回关联网页",
   "mapping.mainWebDomain": "主网页",

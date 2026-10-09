@@ -1,6 +1,11 @@
 // es locale resource. Pure data only.
 export const MESSAGES = {
-  "mapping.webLinks": "Sitios web vinculados",
+
+  "mapping.webIndependent": "Mostrar por separado",
+  "mapping.mergeWebDomain": {"$type": "message", "body": {"$op": "concat", "parts": ["Combinar en ", {"$op": "arg", "name": "domain"}]}},
+  "mapping.deleteWebGroupDetail": {"$type": "message", "body": {"$op": "concat", "parts": ["Eliminar el historial de ", {"$op": "arg", "name": "count"}, " dominios de este grupo: ", {"$op": "arg", "name": "domains"}]}},
+
+  "mapping.webLinks": "Grupo automático",
   "mapping.addLinkedWebDomain": "Añadir sitio web",
   "mapping.backToLinkedWebDomains": "Volver a sitios vinculados",
   "mapping.mainWebDomain": "Sitio web principal",
