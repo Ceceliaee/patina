@@ -44,7 +44,9 @@ pub struct AnonymousWebAggregateRecordDto {
 }
 
 fn normalize_activity_domain(value: &str) -> Option<String> {
-    if value == ANONYMOUS_ACTIVITY_KEY {
+    if let Some(root) = crate::domain::web_links::group_domain(value) {
+        Some(crate::domain::web_links::group_key(&root))
+    } else if value == ANONYMOUS_ACTIVITY_KEY {
         Some(value.to_string())
     } else {
         normalize_domain(value)
@@ -181,7 +183,7 @@ pub async fn load_web_activity_aggregate_range_from_pool(
     let domain_filter = if let Some(selected) = domain_filter {
         if selected
             .iter()
-            .any(|key| key.starts_with(crate::domain::web_links::LINK_GROUP_PREFIX))
+            .any(|key| crate::domain::web_links::group_domain(key).is_some())
         {
             Some(
                 web_links
@@ -394,6 +396,9 @@ mod tests {
             .await
             .unwrap();
         pool.execute(schema::WEB_ACTIVITY_SCHEMA_SQL).await.unwrap();
+        pool.execute(schema::WEB_FAVICON_CACHE_SCHEMA_SQL)
+            .await
+            .unwrap();
         pool.execute(schema::WEB_ACTIVITY_REVISION_SCHEMA_SQL)
             .await
             .unwrap();
@@ -498,7 +503,7 @@ mod tests {
         .await
         .unwrap();
         sqlx::query("INSERT INTO settings(key,value) VALUES('__web_site::example.com',?)")
-            .bind(r#"{"members":["www.example.com","a.mail.example.com"]}"#)
+            .bind(r#"{"version":2,"exceptions":["mail.example.com"]}"#)
             .execute(&pool)
             .await
             .unwrap();
@@ -533,7 +538,7 @@ mod tests {
             0,
             10000,
             &[0, 10000],
-            Some("site:example.com"),
+            Some(&crate::domain::web_links::group_key("example.com")),
             None,
             10000,
         )

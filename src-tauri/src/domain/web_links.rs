@@ -3,11 +3,35 @@ use std::collections::{BTreeMap, BTreeSet};
 
 // Preserve stored keys when renaming the association implementation.
 pub const SETTING_PREFIX: &str = "__web_site::";
-pub const LINK_GROUP_PREFIX: &str = "site:";
+pub const MAX_AUTOMATIC_RULE_BYTES: usize = 1024 * 1024;
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GroupIdentity {
+    kind: String,
+    domain: String,
+}
+
+pub fn group_key(domain: &str) -> String {
+    serde_json::to_string(&GroupIdentity {
+        kind: "group".into(),
+        domain: domain.into(),
+    })
+    .expect("string identity serializes")
+}
+
+pub fn group_domain(key: &str) -> Option<String> {
+    let identity: GroupIdentity = serde_json::from_str(key).ok()?;
+    (identity.kind == "group"
+        && registrable_domain(&identity.domain).as_deref() == Some(&identity.domain))
+    .then_some(identity.domain)
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WebLinkRule {
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub version: u8,
     /// Read only when converting the earlier automatic-grouping format.
     #[serde(default, skip_serializing_if = "is_false")]
     pub enabled: bool,
@@ -17,7 +41,7 @@ pub struct WebLinkRule {
         skip_serializing_if = "BTreeSet::is_empty"
     )]
     pub exceptions: BTreeSet<String>,
-    /// Presence selects explicit links; absence preserves the previous root-grouping format.
+    /// Explicit members in legacy configuration; never written by version 2.
     #[serde(
         default,
         deserialize_with = "deserialize_members",
@@ -38,6 +62,10 @@ pub type WebLinkRules = BTreeMap<String, WebLinkRule>;
 
 fn is_false(value: &bool) -> bool {
     !value
+}
+
+fn is_zero(value: &u8) -> bool {
+    *value == 0
 }
 
 fn deserialize_members<'de, D: serde::Deserializer<'de>>(
@@ -62,7 +90,7 @@ fn deserialize_exceptions<'de, D: serde::Deserializer<'de>>(
     Ok(unique)
 }
 
-fn legacy_registrable_domain(value: &str) -> Option<String> {
+pub fn registrable_domain(value: &str) -> Option<String> {
     let value = value.trim().trim_end_matches('.');
     let url::Host::Domain(host) = url::Host::parse(value).ok()? else {
         return None;
@@ -88,6 +116,21 @@ fn legacy_registrable_domain(value: &str) -> Option<String> {
 }
 
 pub fn validate_rule(root: &str, rule: &WebLinkRule) -> Result<(), String> {
+    if rule.version != 0 && rule.version != 2 {
+        return Err("unsupported website grouping version".into());
+    }
+    if rule.version == 2
+        && (registrable_domain(root).as_deref() != Some(root)
+            || rule.enabled
+            || rule.members.is_some()
+            || rule.auto_root.is_some()
+            || rule
+                .exceptions
+                .iter()
+                .any(|member| registrable_domain(member).as_deref() != Some(root)))
+    {
+        return Err("invalid automatic website grouping".into());
+    }
     let canonical = match url::Host::parse(root) {
         Ok(url::Host::Domain(host))
             if host.split('.').all(|label| {
@@ -153,7 +196,11 @@ pub fn validate_rule(root: &str, rule: &WebLinkRule) -> Result<(), String> {
     }) || serde_json::to_vec(rule)
         .map_err(|error| error.to_string())?
         .len()
-        > 4096
+        > if rule.version == 2 {
+            MAX_AUTOMATIC_RULE_BYTES
+        } else {
+            4096
+        }
     {
         return Err("invalid website display settings or too many exceptions".into());
     }
@@ -161,43 +208,16 @@ pub fn validate_rule(root: &str, rule: &WebLinkRule) -> Result<(), String> {
 }
 
 pub fn resolve_owner(domain: &str, rules: &WebLinkRules) -> String {
-    for (parent, rule) in rules {
-        if let Some(members) = &rule.members {
-            if domain == parent || members.contains(domain) {
-                return format!("{LINK_GROUP_PREFIX}{parent}");
-            }
-        }
-    }
-    domain.to_string()
-}
-
-/// Only the one-time legacy conversion uses automatic domain matching.
-pub fn resolve_legacy_owner(domain: &str, rules: &WebLinkRules) -> String {
-    let explicit = resolve_owner(domain, rules);
-    if explicit != domain {
-        return explicit;
-    }
-    let Some(root) = legacy_registrable_domain(domain) else {
+    let Some(root) = registrable_domain(domain) else {
         return domain.to_string();
     };
-    for (parent, rule) in rules {
-        if rule.members.is_some()
-            && rule.enabled
-            && !rule.exceptions.contains(domain)
-            && rule.auto_root.as_deref() == Some(&root)
-            && legacy_registrable_domain(parent).as_deref() == Some(&root)
-        {
-            return format!("{LINK_GROUP_PREFIX}{parent}");
-        }
+    if rules
+        .get(&root)
+        .is_some_and(|rule| rule.version == 2 && rule.exceptions.contains(domain))
+    {
+        return domain.to_string();
     }
-    match rules.get(&root) {
-        Some(rule)
-            if rule.members.is_none() && rule.enabled && !rule.exceptions.contains(domain) =>
-        {
-            format!("{LINK_GROUP_PREFIX}{root}")
-        }
-        _ => domain.to_string(),
-    }
+    group_key(&root)
 }
 
 pub fn validate_rules(rules: &WebLinkRules) -> Result<(), String> {
@@ -216,10 +236,9 @@ pub fn validate_rules(rules: &WebLinkRules) -> Result<(), String> {
                 }
             }
         }
-        if rule.enabled
-            && (rule.members.is_none() || rule.auto_root == legacy_registrable_domain(parent))
+        if rule.enabled && (rule.members.is_none() || rule.auto_root == registrable_domain(parent))
         {
-            if let Some(root) = legacy_registrable_domain(parent) {
+            if let Some(root) = registrable_domain(parent) {
                 if !automatic_roots.insert(root) {
                     return Err("conflicting automatic website rules".into());
                 }
@@ -232,6 +251,35 @@ pub fn validate_rules(rules: &WebLinkRules) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn automatic_groups_without_configuration_and_respects_exact_exceptions() {
+        let rules = BTreeMap::new();
+        assert_eq!(
+            resolve_owner("chat.deepseek.com", &rules),
+            r#"{"kind":"group","domain":"deepseek.com"}"#
+        );
+        assert_eq!(resolve_owner("127.0.0.1", &rules), "127.0.0.1");
+        let rules = BTreeMap::from([(
+            "deepseek.com".into(),
+            serde_json::from_str::<WebLinkRule>(
+                r#"{"version":2,"exceptions":["chat.deepseek.com"]}"#,
+            )
+            .unwrap(),
+        )]);
+        assert_eq!(
+            resolve_owner("chat.deepseek.com", &rules),
+            "chat.deepseek.com"
+        );
+        assert_eq!(
+            resolve_owner("new.deepseek.com", &rules),
+            r#"{"kind":"group","domain":"deepseek.com"}"#
+        );
+        assert_eq!(
+            resolve_owner("a.chat.deepseek.com", &rules),
+            r#"{"kind":"group","domain":"deepseek.com"}"#
+        );
+    }
 
     #[test]
     fn public_private_unknown_and_exception_boundaries() {
@@ -251,105 +299,35 @@ mod tests {
             ("a.invalid", None),
             ("a..com", None),
         ] {
-            assert_eq!(
-                legacy_registrable_domain(host).as_deref(),
-                expected,
-                "{host}"
-            );
+            assert_eq!(registrable_domain(host).as_deref(), expected, "{host}");
         }
     }
 
     #[test]
-    fn legacy_reader_preserves_explicit_members_and_exceptions() {
-        let rule: WebLinkRule = serde_json::from_str(
-            r#"{"enabled":true,"autoRoot":"example.com","members":["other.org"],"exceptions":["mail.example.com"]}"#,
-        )
-        .unwrap();
-        validate_rule("chat.example.com", &rule).unwrap();
-        let mut rules = BTreeMap::from([("chat.example.com".into(), rule.clone())]);
-        for domain in ["chat.example.com", "other.org", "future.example.com"] {
-            assert_eq!(
-                resolve_legacy_owner(domain, &rules),
-                "site:chat.example.com"
-            );
+    fn automatic_rules_reject_cross_site_exceptions_and_future_formats() {
+        for json in [
+            r#"{"version":2,"exceptions":["other.com"]}"#,
+            r#"{"version":2,"members":["www.example.com"]}"#,
+            r#"{"version":3}"#,
+        ] {
+            let rule = serde_json::from_str(json).unwrap();
+            assert!(validate_rule("example.com", &rule).is_err());
         }
-        assert_eq!(
-            resolve_legacy_owner("mail.example.com", &rules),
-            "mail.example.com"
-        );
-        rules.get_mut("chat.example.com").unwrap().enabled = false;
-        assert_eq!(
-            resolve_legacy_owner("other.org", &rules),
-            "site:chat.example.com"
-        );
-        assert_eq!(
-            resolve_legacy_owner("future.example.com", &rules),
-            "future.example.com"
-        );
-        rules.insert("other.org".into(), rule.clone());
-        assert!(validate_rules(&rules).is_err());
         assert!(serde_json::from_str::<WebLinkRule>(
-            r#"{"enabled":false,"members":["a.com","a.com"],"exceptions":[]}"#
-        )
-        .is_err());
-        let mut invalid = rule;
-        invalid.members = Some(BTreeSet::from(["mail.example.com".into()]));
-        assert!(validate_rule("chat.example.com", &invalid).is_err());
-    }
-
-    #[test]
-    fn legacy_exceptions_and_disabled_rules_preserve_identity() {
-        let rule = WebLinkRule {
-            enabled: true,
-            members: None,
-            auto_root: None,
-            exceptions: BTreeSet::from(["mail.example.com".into(), "example.com".into()]),
-            display_name: None,
-            category: None,
-            color: None,
-        };
-        let mut rules = BTreeMap::from([("example.com".into(), rule)]);
-        assert_eq!(
-            resolve_legacy_owner("mail.example.com", &rules),
-            "mail.example.com"
-        );
-        assert_eq!(resolve_legacy_owner("example.com", &rules), "example.com");
-        assert_eq!(
-            resolve_legacy_owner("a.mail.example.com", &rules),
-            "site:example.com"
-        );
-        assert_eq!(
-            resolve_legacy_owner("notexample.com", &rules),
-            "notexample.com"
-        );
-        assert_eq!(
-            resolve_legacy_owner("example.com.evil.com", &rules),
-            "example.com.evil.com"
-        );
-        rules.get_mut("example.com").unwrap().enabled = false;
-        assert_eq!(
-            resolve_legacy_owner("www.example.com", &rules),
-            "www.example.com"
-        );
-    }
-
-    #[test]
-    fn obsolete_roots_remain_inert_and_can_be_disabled() {
-        let mut rule: WebLinkRule =
-            serde_json::from_str(r#"{"enabled":true,"exceptions":[]}"#).unwrap();
-        assert!(validate_rule("github.io", &rule).is_ok());
-        let rules = BTreeMap::from([("github.io".into(), rule.clone())]);
-        assert_eq!(resolve_legacy_owner("a.github.io", &rules), "a.github.io");
-        rule.enabled = false;
-        assert!(validate_rule("github.io", &rule).is_ok());
-        assert!(validate_rule("127.0.0.1", &rule).is_err());
-        assert!(serde_json::from_str::<WebLinkRule>(
-            r#"{"enabled":true,"exceptions":["a.example.com","a.example.com"]}"#
+            r#"{"version":2,"exceptions":["example.com","example.com"]}"#
         )
         .is_err());
         assert_eq!(
-            legacy_registrable_domain("www.食狮.com.cn"),
-            legacy_registrable_domain("www.xn--85x722f.com.cn")
+            registrable_domain("www.食狮.com.cn"),
+            registrable_domain("www.xn--85x722f.com.cn")
         );
+        let rule = serde_json::from_str(r#"{"version":2,"exceptions":["example.com"]}"#).unwrap();
+        validate_rule("example.com", &rule).unwrap();
+        assert_ne!(group_key("example.com"), "example.com");
+        assert_eq!(
+            group_domain(&group_key("example.com")).as_deref(),
+            Some("example.com")
+        );
+        assert!(group_domain(r#"{"kind":"other","domain":"example.com"}"#).is_none());
     }
 }

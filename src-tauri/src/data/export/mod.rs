@@ -496,8 +496,8 @@ mod tests {
         sqlx::query("INSERT INTO settings (key, value) VALUES (?, ?), (?, ?)")
             .bind("__app_override::inside.exe")
             .bind(r#"{"category":"development","enabled":true}"#)
-            .bind("__web_domain_override::example.com")
-            .bind(r#"{"category":"office","enabled":true}"#)
+            .bind("__web_site::example.com")
+            .bind(r#"{"version":2,"category":"office"}"#)
             .execute(&pool)
             .await
             .expect("classification settings should be inserted");

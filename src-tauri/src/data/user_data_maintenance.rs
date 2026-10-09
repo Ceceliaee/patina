@@ -87,6 +87,59 @@ async fn delete_web_activity_by_domain_in_pool(
     pool: &Pool<Sqlite>,
     normalized_domain: &str,
 ) -> Result<(), SqliteOperationError> {
+    if normalized_domain.starts_with('{') {
+        #[derive(serde::Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct GroupDeletion {
+            kind: String,
+            domain: String,
+            members: Vec<String>,
+        }
+        let target: GroupDeletion = serde_json::from_str(normalized_domain).map_err(|_| {
+            SqliteOperationError::invalid_input("delete website group", "invalid group target")
+        })?;
+        if target.kind != "group"
+            || crate::domain::web_links::registrable_domain(&target.domain).as_deref()
+                != Some(&target.domain)
+            || target.members.len() > 10000
+        {
+            return Err(SqliteOperationError::invalid_input(
+                "delete website group",
+                "invalid group selection",
+            ));
+        }
+        let mut tx = pool
+            .begin()
+            .await
+            .map_err(|e| SqliteOperationError::from_sqlx("delete website group", e))?;
+        let rules = crate::data::repositories::web_links::load_in_tx(&mut tx)
+            .await
+            .map_err(|e| SqliteOperationError::invalid_input("delete website group", e))?;
+        let domains: Vec<String> =
+            sqlx::query_scalar("SELECT DISTINCT normalized_domain FROM web_activity_segments")
+                .fetch_all(&mut *tx)
+                .await
+                .map_err(|e| SqliteOperationError::from_sqlx("delete website group", e))?;
+        let key = crate::domain::web_links::group_key(&target.domain);
+        let current: std::collections::BTreeSet<_> = domains
+            .into_iter()
+            .filter(|domain| crate::domain::web_links::resolve_owner(domain, &rules) == key)
+            .collect();
+        let expected: std::collections::BTreeSet<_> = target.members.iter().cloned().collect();
+        if current != expected || expected.len() != target.members.len() {
+            return Err(SqliteOperationError::invalid_input(
+                "delete website group",
+                "group changed; save and refresh before deleting",
+            ));
+        }
+        sqlx::query("DELETE FROM web_activity_segments WHERE normalized_domain IN (SELECT value FROM json_each(?))")
+            .bind(serde_json::to_string(&target.members).map_err(|e| SqliteOperationError::invalid_input("delete website group", e.to_string()))?)
+            .execute(&mut *tx).await.map_err(|e| SqliteOperationError::from_sqlx("delete website group", e))?;
+        return tx
+            .commit()
+            .await
+            .map_err(|e| SqliteOperationError::from_sqlx("delete website group", e));
+    }
     sqlx::query("DELETE FROM web_activity_segments WHERE normalized_domain = ?")
         .bind(normalized_domain)
         .execute(pool)
@@ -354,6 +407,73 @@ mod tests {
     use super::*;
     use crate::data::schema as db_schema;
     use sqlx::{Executor, Row, SqlitePool};
+
+    #[tokio::test]
+    async fn group_deletion_rejects_stale_members_and_preserves_independent_root() {
+        let pool = setup_test_db().await;
+        for domain in [
+            "example.com",
+            "chat.example.com",
+            "new.example.com",
+            "other.com",
+        ] {
+            sqlx::query("INSERT INTO web_activity_segments(browser_client_id,browser_kind,browser_exe_name,domain,normalized_domain,start_time,end_time,duration,created_at,updated_at) VALUES('test','chrome','chrome.exe',?,?,1000,2000,1000,1000,2000)")
+                .bind(domain).bind(domain).execute(&pool).await.unwrap();
+        }
+        sqlx::query("INSERT INTO settings(key,value) VALUES('__web_site::example.com',?)")
+            .bind(r#"{"version":2,"exceptions":["example.com"]}"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let selection = |members: &[&str]| {
+            serde_json::json!({"kind":"group","domain":"example.com","members":members}).to_string()
+        };
+        for members in [
+            vec!["chat.example.com"],
+            vec!["chat.example.com", "new.example.com", "example.com"],
+            vec!["chat.example.com", "new.example.com", "new.example.com"],
+        ] {
+            assert!(
+                delete_web_activity_by_domain_in_pool(&pool, &selection(&members))
+                    .await
+                    .is_err()
+            );
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM web_activity_segments")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap(),
+                4
+            );
+        }
+        delete_web_activity_by_domain_in_pool(
+            &pool,
+            &selection(&["chat.example.com", "new.example.com"]),
+        )
+        .await
+        .unwrap();
+        let remaining: Vec<String> = sqlx::query_scalar(
+            "SELECT normalized_domain FROM web_activity_segments ORDER BY normalized_domain",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(remaining, ["example.com", "other.com"]);
+        delete_web_activity_by_domain_in_pool(&pool, &selection(&[]))
+            .await
+            .unwrap();
+        delete_web_activity_by_domain_in_pool(&pool, "example.com")
+            .await
+            .unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("SELECT normalized_domain FROM web_activity_segments")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            "other.com"
+        );
+        pool.close().await;
+    }
 
     #[tokio::test]
     async fn deleted_web_domains_keep_preferences_without_recreating_history() {

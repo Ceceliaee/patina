@@ -216,17 +216,16 @@ impl ClassificationSnapshot {
             return None;
         }
         let owner = crate::domain::web_links::resolve_owner(&domain, &self.web_sites);
-        let raw_category =
-            if let Some(root) = owner.strip_prefix(crate::domain::web_links::LINK_GROUP_PREFIX) {
-                self.web_sites
-                    .get(root)
-                    .and_then(|rule| rule.category.clone())
-            } else {
-                self.web_overrides
-                    .get(&domain)
-                    .and_then(|value| value.category.clone())
-            }
-            .unwrap_or_else(|| "other".to_string());
+        let raw_category = if let Some(root) = crate::domain::web_links::group_domain(&owner) {
+            self.web_sites
+                .get(&root)
+                .and_then(|rule| rule.category.clone())
+        } else {
+            self.web_overrides
+                .get(&domain)
+                .and_then(|value| value.category.clone())
+        }
+        .unwrap_or_else(|| "other".to_string());
         Some(self.resolve_category(raw_category))
     }
 
