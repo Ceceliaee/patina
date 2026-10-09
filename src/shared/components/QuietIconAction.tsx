@@ -12,7 +12,7 @@ interface Props {
   className?: string;
   showTooltip?: boolean;
   tooltipPlacement?: QuietTooltipPlacement;
-  pressed?: boolean;
+  pressed?: boolean | "mixed";
   showPressedStyle?: boolean;
   onClick?: MouseEventHandler<HTMLButtonElement>;
   buttonRef?: Ref<HTMLButtonElement>;

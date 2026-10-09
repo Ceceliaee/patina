@@ -11,7 +11,6 @@ import CategorySearchField from "./CategorySearchField.tsx";
 import AppMappingCandidateCard from "./AppMappingCandidateCard";
 import LinkedAppMenu from "./LinkedAppMenu.tsx";
 import WebDomainMappingCard from "./WebDomainMappingCard";
-import { webDisplayDomain } from "../../../shared/classification/webLinks.ts";
 import { useAppMappingState } from "../hooks/useAppMappingState";
 import type { CandidateFilter } from "../types";
 import {
@@ -77,9 +76,9 @@ export default function AppMapping(props: Props) {
     appCatalogRefreshError,
     appCatalogRetry,
     filteredWebDomainCandidates,
-    webDomainCandidates,
     draftWebDomainOverrides,
     updateWebDomainOverride,
+    updateWebDomainMembers,
     showCategoryDialog,
     setShowCategoryDialog,
     colorFormat,
@@ -99,8 +98,6 @@ export default function AppMapping(props: Props) {
     resolveWebDomainDisplayName,
     resolveWebDomainColor,
     resolveWebDomainCategory,
-    resolveWebDomainEnabled,
-    resolveWebDomainTitleCaptureEnabled,
     deletingSessionsExe,
     editingNameExe,
     nameDrafts,
@@ -118,8 +115,6 @@ export default function AppMapping(props: Props) {
     handleCategoryAssign,
     handleWebDomainColorAssign,
     handleWebDomainCategoryAssign,
-    handleWebDomainTrackingToggle,
-    handleWebDomainTitleCaptureToggle,
     handleTitleCaptureToggle,
     handleTrackingToggle,
     handleDeleteAllSessions,
@@ -316,22 +311,19 @@ export default function AppMapping(props: Props) {
                     const displayName = resolveWebDomainDisplayName(candidate);
                     const displayColor = resolveWebDomainColor(candidate);
                     const assignedCategory = resolveWebDomainCategory(candidate);
-                    const recordingEnabled = resolveWebDomainEnabled(candidate);
-                    const titleCaptureEnabled = resolveWebDomainTitleCaptureEnabled(candidate);
                     const isBusy = saving || deletingSessionsExe !== null;
                     const isEditingName = editingWebDomain === candidate.normalizedDomain;
                     const inputValue = webNameDrafts[candidate.normalizedDomain] ?? displayName;
 
                     return (
                       <WebDomainMappingCard
-                        grouping={{ openIdentity: webLinksIdentity, onOpenIdentity: setWebLinksIdentity, candidates: webDomainCandidates, overrides: draftWebDomainOverrides, onChange: updateWebDomainOverride, onDelete: candidate => { void handleDeleteWebDomainHistory(candidate); } }}
-                          key={webDisplayDomain(candidate.normalizedDomain)}
+                        onSetMembers={updateWebDomainMembers}
+                        grouping={{ openIdentity: webLinksIdentity, onOpenIdentity: setWebLinksIdentity, overrides: draftWebDomainOverrides, onChange: updateWebDomainOverride }}
+                        key={candidate.normalizedDomain}
                         candidate={candidate}
                         displayName={displayName}
                         displayColor={displayColor}
                         assignedCategory={assignedCategory}
-                        recordingEnabled={recordingEnabled}
-                        titleCaptureEnabled={titleCaptureEnabled}
                         globalTitleEnabled={titleRecordingEnabled}
                         isBusy={isBusy}
                         isEditingName={isEditingName}
@@ -351,8 +343,6 @@ export default function AppMapping(props: Props) {
                         onColorAssign={(nextColor) => handleWebDomainColorAssign(candidate, nextColor)}
                         onColorFormatChange={setColorFormat}
                         onCategoryAssign={(value) => handleWebDomainCategoryAssign(candidate, value)}
-                        onToggleRecording={() => handleWebDomainTrackingToggle(candidate, !recordingEnabled)}
-                        onToggleTitleCapture={() => handleWebDomainTitleCaptureToggle(candidate, !titleCaptureEnabled)}
                         onDeleteHistory={() => {
                           void handleDeleteWebDomainHistory(candidate);
                         }}
@@ -386,6 +376,7 @@ export default function AppMapping(props: Props) {
 
                 return (
                   <AppMappingCandidateCard
+                    titleCaptureEnabled={titleCaptureEnabled}
                     key={candidate.exeName}
                     candidate={candidate}
                     icon={icons[candidate.exeName]}
@@ -398,7 +389,6 @@ export default function AppMapping(props: Props) {
                     displayColor={displayColor}
                     assignedCategory={assignedCategory}
                     trackingEnabled={trackingEnabled}
-                    titleCaptureEnabled={titleCaptureEnabled}
                     globalTitleEnabled={titleRecordingEnabled}
                     isBusy={isBusy}
                     isEditingName={isEditingName}

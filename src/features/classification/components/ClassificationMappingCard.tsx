@@ -1,5 +1,5 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
-import { Captions, CaptionsOff, ListPlus, ListX, PencilLine, Trash2 } from "lucide-react";
+import { Captions, CaptionsOff, ListPlus, ListX, Minus, PencilLine, Trash2 } from "lucide-react";
 import type { UserAssignableAppCategory } from "../../../shared/classification/categoryTokens";
 import type { ColorDisplayFormat } from "../../../shared/lib/colorFormatting";
 import QuietSelect from "../../../shared/components/QuietSelect";
@@ -11,6 +11,9 @@ import QuietBadge from "../../../shared/components/QuietBadge";
 
 
 interface ClassificationMappingCardProps {
+  additionalAction?: ReactNode;
+  titleMixed?: boolean;
+  trackingMixed?: boolean;
   hideRecordControls?: boolean;
   identityContent?: ReactNode;
   identity: string;
@@ -62,6 +65,9 @@ export function IdentityText({ text, className }: { text: string; className: str
 }
 
 export default function ClassificationMappingCard({
+  additionalAction,
+  titleMixed = false,
+  trackingMixed = false,
   identity,
   kind,
   fallbackIcon,
@@ -158,7 +164,7 @@ export default function ClassificationMappingCard({
               disabled={isBusy}
               onClick={onStartNameEdit}
             />
-            {!trackingEnabled && <QuietBadge tone="warning">{UI_TEXT.mapping.noStats}</QuietBadge>}
+            {!trackingEnabled && !trackingMixed && <QuietBadge tone="warning">{UI_TEXT.mapping.noStats}</QuietBadge>}
           </div>
           <div className="qp-app-mapping-exe-line">
             {identityContent ?? <IdentityText text={identity} className="qp-app-mapping-exe" />}
@@ -186,24 +192,25 @@ export default function ClassificationMappingCard({
           resetAction={{ label: UI_TEXT.mapping.restoreDefaultColor, onReset: () => onColorAssign(null) }}
         />
           {!hideRecordControls && <><QuietIconAction
-            icon={titleCaptureEnabled ? <Captions size={16} /> : <CaptionsOff size={16} />}
+            icon={titleMixed ? <Minus size={16} /> : titleCaptureEnabled ? <Captions size={16} /> : <CaptionsOff size={16} />}
             ariaLabel={UI_TEXT.mapping.titleRecorded}
             title={!globalTitleEnabled ? UI_TEXT.mapping.globalTitleDisabled : titleCaptureEnabled ? UI_TEXT.mapping.titleCaptureOnHint : UI_TEXT.mapping.titleCaptureOffHint}
             describedBy={!globalTitleEnabled ? "classification-global-title-disabled" : undefined}
-            pressed={titleCaptureEnabled}
+            pressed={titleMixed ? "mixed" : titleCaptureEnabled}
             showPressedStyle={false}
             disabled={isBusy || !globalTitleEnabled}
             onClick={onToggleTitleCapture}
           />
           <QuietIconAction
-            icon={trackingEnabled ? <ListX size={16} /> : <ListPlus size={16} />}
+            icon={trackingMixed ? <Minus size={16} /> : trackingEnabled ? <ListX size={16} /> : <ListPlus size={16} />}
             ariaLabel={UI_TEXT.mapping.excludeStats}
-            title={trackingEnabled ? UI_TEXT.mapping.trackingOnHint : UI_TEXT.mapping.trackingOffHint}
-            pressed={!trackingEnabled}
+            title={trackingEnabled || trackingMixed ? UI_TEXT.mapping.trackingOnHint : UI_TEXT.mapping.trackingOffHint}
+            pressed={trackingMixed ? "mixed" : !trackingEnabled}
             showPressedStyle={false}
             disabled={isBusy}
             onClick={onToggleTracking}
           />
+          {additionalAction}
           <QuietIconAction
             icon={<Trash2 size={16} />}
             title={deleteRecordsLabel}
