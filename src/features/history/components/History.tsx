@@ -43,6 +43,7 @@ import {
   type DayDistributionMode,
 } from "../services/historyLayoutPreferenceStorage.ts";
 import {
+  buildWebDomainIconMap,
   buildWebDomainDistribution,
   buildWebTimelineItems,
 } from "../services/historyWebActivityViewModel.ts";
@@ -294,19 +295,8 @@ export default function History({
   const iconThemeColors = useIconThemeColors(historyIcons);
   const webDomainIcons = useMemo(() => {
     if (!webActivityEnabled) return {};
-
-    const next: Record<string, string> = { ...webDomainFavicons };
-    for (const segment of visibleDayWebSegments) {
-      const faviconUrl = segment.faviconUrl?.trim();
-      if (!faviconUrl) continue;
-
-      const current = next[segment.normalizedDomain];
-      if (!current || faviconUrl.startsWith("data:")) {
-        next[segment.normalizedDomain] = faviconUrl;
-      }
-    }
-    return next;
-  }, [visibleDayWebSegments, webActivityEnabled, webDomainFavicons]);
+    return buildWebDomainIconMap(visibleDayWebSegments, webDomainOverrides, webDomainFavicons);
+  }, [visibleDayWebSegments, webActivityEnabled, webDomainFavicons, webDomainOverrides]);
   const webDomainIconThemeColors = useIconThemeColors(webDomainIcons);
   const webSnapshotReady = visibleDayWebSegments.length > 0
     || contentState === "ready"

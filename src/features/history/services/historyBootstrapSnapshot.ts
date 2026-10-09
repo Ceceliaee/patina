@@ -16,7 +16,7 @@ import {
 import { createSerializedJobRunner } from "../../../platform/persistence/sqliteTransactions.ts";
 import type { HistorySnapshot } from "./historyReadModel.ts";
 
-const HISTORY_BOOTSTRAP_SNAPSHOT_VERSION = 2;
+const HISTORY_BOOTSTRAP_SNAPSHOT_VERSION = 3;
 const HISTORY_BOOTSTRAP_SNAPSHOT_MAX_BYTES = 256 * 1024;
 
 export interface HistoryBootstrapIdentity {
@@ -130,9 +130,12 @@ function isWebDomainOverride(value: unknown): value is WebDomainOverride {
     && (value.captureTitle === undefined || typeof value.captureTitle === "boolean")
     && (value.updatedAt === undefined || isFiniteNumber(value.updatedAt))
     && (value.knownDomain === undefined || typeof value.knownDomain === "boolean")
+    && (value.groupingRoot === undefined || typeof value.groupingRoot === "string")
+    && (value.lifetimeDuration === undefined || isFiniteNumber(value.lifetimeDuration))
     && (value.siteRule === undefined || (isRecord(value.siteRule)
-      && Array.isArray(value.siteRule.members)
-      && value.siteRule.members.every(member => typeof member === "string")))
+      && value.siteRule.version === 2
+      && Array.isArray(value.siteRule.exceptions)
+      && value.siteRule.exceptions.every(member => typeof member === "string")))
   );
 }
 
@@ -209,7 +212,9 @@ function sanitizeWebActivitySegment(segment: WebActivitySegment): WebActivitySeg
 function sanitizeWebDomainOverride(override: WebDomainOverride): WebDomainOverride {
   return {
     ...(override.knownDomain === undefined ? {} : { knownDomain: override.knownDomain }),
-    ...(override.siteRule === undefined ? {} : { siteRule: { ...override.siteRule, members: [...override.siteRule.members] } }),
+    ...(override.siteRule === undefined ? {} : { siteRule: { ...override.siteRule, exceptions: [...override.siteRule.exceptions] } }),
+    ...(override.groupingRoot === undefined ? {} : { groupingRoot: override.groupingRoot }),
+    ...(override.lifetimeDuration === undefined ? {} : { lifetimeDuration: override.lifetimeDuration }),
     ...(override.category === undefined ? {} : { category: override.category }),
     ...(override.displayName === undefined ? {} : { displayName: override.displayName }),
     ...(override.color === undefined ? {} : { color: override.color }),

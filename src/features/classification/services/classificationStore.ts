@@ -420,8 +420,8 @@ export async function saveWebDomainOverride(
   const root = webLinkParent(normalizedDomain);
   if (root) {
     const previous = siteRuleFromOverride((await loadWebDomainOverrides())[normalizedDomain]);
-    if (!previous || !override?.siteRule) throw new Error("Website grouping changed; reload before saving");
-    if (JSON.stringify(previous.members) !== JSON.stringify([...override.siteRule.members].sort())) {
+    if (!override?.siteRule) throw new Error("Website grouping changed; reload before saving");
+    if (JSON.stringify(previous?.exceptions ?? []) !== JSON.stringify([...override.siteRule.exceptions].sort())) {
       throw new Error("Website grouping changed; reload before saving");
     }
     await commitClassificationSettingMutations([{ key: `${WEB_LINK_SETTING_PREFIX}${root}`, value: JSON.stringify({ previous, next: siteRuleFromOverride(override) }) }]);
@@ -699,7 +699,13 @@ export async function loadObservedWebDomainCandidates(
   return loadObservedWebDomainStats(days, limit);
 }
 
-export async function deleteObservedWebDomainHistory(normalizedDomain: string): Promise<void> {
+export async function deleteObservedWebDomainHistory(normalizedDomain: string, members?: string[]): Promise<void> {
+  const root = webLinkParent(normalizedDomain);
+  if (root) {
+    if (!members) throw new Error("Website group has no selected members");
+    await deleteWebActivitySegmentsByDomain(JSON.stringify({ kind: "group", domain: root, members: [...new Set(members)].sort() }));
+    return;
+  }
   const domainKey = normalizeWebDomainKey(normalizedDomain);
   if (!domainKey) {
     return;

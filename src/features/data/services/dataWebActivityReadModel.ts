@@ -1,6 +1,6 @@
 import { webLinksOverrides } from "../../../platform/persistence/webLinksGateway.ts";
 import { isAnonymousActivity } from "../../../shared/classification/anonymousActivity.ts";
-import { resolveWebOwner, webDisplayDomain } from "../../../shared/classification/webLinks.ts";
+import { resolveWebOwner, webDisplayDomain, webGroupIcon, webLinkParent } from "../../../shared/classification/webLinks.ts";
 import type { Locale, UiText } from "../../../shared/i18n/index.ts";
 import { formatDuration } from "../../../shared/lib/durationFormatting.ts";
 import {
@@ -192,7 +192,8 @@ async function loadRangeSnapshot({
     const favicons: Record<string, string> = await deps.loadFavicons(domains).catch(() => ({}));
     for (const domain of [...domains].sort()) {
       const owner = resolveWebOwner(domain, overrides);
-      if (!favicons[owner] && favicons[domain]) favicons[owner] = favicons[domain];
+      if (webLinkParent(owner)) favicons[owner] = webGroupIcon(owner, overrides) ?? "";
+      else if (!favicons[owner] && favicons[domain]) favicons[owner] = favicons[domain];
     }
     const coverage = new Map<string, number>();
     for (const item of aggregate.domainCoverage) {

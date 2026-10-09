@@ -159,6 +159,9 @@ export function deleteCategoryFromDraftState(
     });
     if (nextOverride || override.siteRule || override.knownDomain !== undefined) {
       nextWebDomainOverrides[normalizedDomain] = {
+        groupingRoot: override.groupingRoot,
+        lifetimeDuration: override.lifetimeDuration,
+        faviconUrl: override.faviconUrl,
         knownDomain: override.knownDomain,
         ...(override.siteRule ? { siteRule: override.siteRule } : {}),
         ...nextOverride,
@@ -294,7 +297,7 @@ export function updateWebDomainOverrideInDraftState(
   const nextOverrides = { ...current.webDomainOverrides };
   const knownDomain = current.webDomainOverrides[normalizedDomain]?.knownDomain;
   if (!nextOverride && (webLinkParent(normalizedDomain) || knownDomain === undefined)) delete nextOverrides[normalizedDomain];
-  else nextOverrides[normalizedDomain] = { knownDomain, ...(current.webDomainOverrides[normalizedDomain]?.siteRule ? { siteRule: current.webDomainOverrides[normalizedDomain].siteRule } : {}), ...nextOverride };
+  else nextOverrides[normalizedDomain] = { groupingRoot: current.webDomainOverrides[normalizedDomain]?.groupingRoot, lifetimeDuration: current.webDomainOverrides[normalizedDomain]?.lifetimeDuration, faviconUrl: current.webDomainOverrides[normalizedDomain]?.faviconUrl, knownDomain, ...(current.webDomainOverrides[normalizedDomain]?.siteRule ? { siteRule: current.webDomainOverrides[normalizedDomain].siteRule } : {}), ...nextOverride };
   return { ...current, webDomainOverrides: nextOverrides };
 }
 

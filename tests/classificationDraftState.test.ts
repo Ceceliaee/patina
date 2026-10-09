@@ -1570,6 +1570,11 @@ await runTest("saved web override updates only its normalized bootstrap key", ()
     displayName: "Existing",
     category: "office",
   });
+  const metadata = { knownDomain: true, groupingRoot: "example.com", lifetimeDuration: 1000, faviconUrl: "https://chat.example.com/icon.png" };
+  const observed = { ...baseline, loadedWebDomainOverrides: { "chat.example.com": { ...metadata, displayName: "Chat" } } };
+  const renamed = applySavedWebDomainOverrideToBootstrap(observed, "chat.example.com", { displayName: "Renamed" });
+  assert.deepEqual(renamed.loadedWebDomainOverrides["chat.example.com"], { ...metadata, displayName: "Renamed" });
+  assert.deepEqual(applySavedWebDomainOverrideToBootstrap(renamed, "chat.example.com", null).loadedWebDomainOverrides["chat.example.com"], metadata);
 });
 
 await runTest("commitDraftChangesWithDeps does not sync process mapper state when persistence fails", async () => {

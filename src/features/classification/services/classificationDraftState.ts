@@ -52,7 +52,7 @@ export function cloneClassificationDraftState(state: ClassificationDraftState): 
   }
   const webDomainOverrides: Record<string, WebDomainOverride> = {};
   for (const [normalizedDomain, override] of Object.entries(state.webDomainOverrides ?? {})) {
-    webDomainOverrides[normalizedDomain] = { ...override, ...(override.siteRule ? { siteRule: { ...override.siteRule, members: [...override.siteRule.members] } } : {}) };
+    webDomainOverrides[normalizedDomain] = { ...override, ...(override.siteRule ? { siteRule: { ...override.siteRule, exceptions: [...override.siteRule.exceptions] } } : {}) };
   }
 
   return {
@@ -103,7 +103,7 @@ export function normalizeWebDomainOverride(
   if (!override) return null;
   const next: WebDomainOverride = {};
   if (override.knownDomain !== undefined) next.knownDomain = override.knownDomain;
-  if (override.siteRule) next.siteRule = { ...override.siteRule, members: [...override.siteRule.members] };
+  if (override.siteRule) next.siteRule = { ...override.siteRule, exceptions: [...override.siteRule.exceptions] };
   if (override.category) next.category = override.category;
   if (override.displayName?.trim()) next.displayName = override.displayName.trim();
   if (override.color) next.color = override.color;

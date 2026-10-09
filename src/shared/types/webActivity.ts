@@ -18,7 +18,11 @@ export interface WebActivitySegment {
 export interface WebDomainOverride {
   /** Stored activity exists for this domain; supplied by Rust, never persisted as a preference. */
   knownDomain?: boolean;
-  /** Present only on a site: identity. Recording controls remain on raw domains. */
+    /** Read-only catalog metadata; never saved as a preference. */
+    groupingRoot?: string;
+    lifetimeDuration?: number;
+    faviconUrl?: string;
+    /** Present only on a typed group identity. Recording controls remain on raw domains. */
   siteRule?: import("../classification/webLinks.ts").WebLinkRule;
   category?: UserAssignableAppCategory;
   displayName?: string;

@@ -1,3 +1,6 @@
+import { webGroupKey } from "../src/shared/classification/webLinks.ts";
+import { AppClassification } from "../src/shared/classification/appClassification.ts";
+import { ProcessMapper } from "../src/shared/classification/processMapper.ts";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
@@ -81,6 +84,22 @@ function makeWebSegment(overrides: Partial<WebActivitySegment>): WebActivitySegm
     ...overrides,
   };
 }
+
+await runTest("linked detail keeps the child's name even without a title", async () => {
+  AppClassification.setAppLinks({ "wechatappex.exe": "weixin.exe" });
+  ProcessMapper.setUserOverrides({ "weixin.exe": { displayName: "微信" }, "wechatappex.exe": { displayName: "微信公众号" } });
+  try {
+    const sessions = [makeSession({ exeName: "WeChatAppEx.exe", appName: "WeChatAppEx", windowTitle: "微信" })];
+    const load = () => loadDestinationDetailDay({ ...appTarget(["weixin.exe"]), key: "weixin.exe", displayName: "微信" }, "2026-05-20", at(12), 60,
+      { getAppSessions: async () => sessions, getWebSegments: async () => [] });
+    const day = await load();
+    assert.equal(day.activities[0].sourceAppName, "微信公众号");
+    assert.equal(getDestinationDetailTitleRecords(day.activities[0]).length, 0);
+    assert.equal(day.totalDuration, 3600000);
+    ProcessMapper.setUserOverride("wechatappex.exe", null);
+    assert.equal((await load()).activities[0].sourceAppName, "WeChatAppEx");
+  } finally { AppClassification.setAppLinks({}); ProcessMapper.clearUserOverrides(); }
+});
 
 await runTest("app detail uses canonical source identities and exact title samples", async () => {
   const sessions = [
@@ -673,9 +692,9 @@ await runTest("website detail selects future members from the atomic snapshot an
   const domains = ["www.example.com", "mail.example.com", "new.example.com", "hidden.example.com"];
   const segments = domains.map((domain, i) => makeWebSegment({ id: i + 1, domain, normalizedDomain: domain,
     startTime: at(9, i * 2), endTime: at(9, i * 2 + 1), duration: 60000, url: `https://${domain}/page` }));
-  const overrides = Object.fromEntries(domains.map(domain => [domain, { knownDomain: true, enabled: domain !== "hidden.example.com" }]));
-  const grouped = { ...overrides, "site:example.com": { siteRule: { members: ["www.example.com", "new.example.com", "hidden.example.com"] } } };
-  const target = { ...webTarget(), key: "site:example.com", identityKeys: ["www.example.com"] };
+  const overrides = Object.fromEntries(domains.map(domain => [domain, { knownDomain: true, groupingRoot: "example.com", enabled: domain !== "hidden.example.com" }]));
+  const grouped = { ...overrides, [webGroupKey("example.com")]: { siteRule: { version: 2 as const, exceptions: ["mail.example.com"] } } };
+  const target = { ...webTarget(), key: webGroupKey("example.com"), identityKeys: ["www.example.com"] };
   const detail = await loadDestinationDetailDay(target, "2026-05-20", at(12), 0, {
     getAppSessions: async () => [], getWebSegments: async () => { throw new Error("Separate facts must not be read"); },
     getWebSnapshot: async () => ({ segments, overrides: grouped }),

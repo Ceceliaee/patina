@@ -1,6 +1,6 @@
 import { invokeWithCommandError } from "./commandError.ts";
 import type { WebActivitySegment, WebDomainOverride } from "../../shared/types/webActivity.ts";
-import type { WebLinkRule } from "../../shared/classification/webLinks.ts";
+import { webGroupKey, type WebLinkRule } from "../../shared/classification/webLinks.ts";
 import { isPlainRecord } from "../../shared/lib/runtimeTypeGuards.ts";
 import { isAppCategory } from "../../shared/classification/categoryTokens.ts";
 import { ANONYMOUS_ACTIVITY_KEY } from "../../shared/classification/anonymousActivity.ts";
@@ -20,6 +20,9 @@ export interface WebLinksSnapshot {
   domains: string[];
   rules: Record<string, WebLinkRule>;
   overrides: Record<string, WebDomainOverride>;
+  roots: Record<string, string>;
+  totals: Record<string, number>;
+  favicons: Record<string, string>;
 }
 
 export function parseWebLinksSnapshot(value: unknown): WebLinksSnapshot {
@@ -31,11 +34,14 @@ export function parseWebLinksSnapshot(value: unknown): WebLinksSnapshot {
   if (!isPlainRecord(value) || !Array.isArray(value.domains) || !value.domains.every(domain => typeof domain === "string")
     || !isPlainRecord(value.rules) || !isPlainRecord(value.overrides)) throw new Error("Invalid website links snapshot");
   for (const rule of Object.values(value.rules)) {
-    if (!isPlainRecord(rule) || !Array.isArray(rule.members) || !rule.members.every(member => typeof member === "string")
+    if (!isPlainRecord(rule) || rule.version !== 2 || (rule.exceptions !== undefined && (!Array.isArray(rule.exceptions) || !rule.exceptions.every(member => typeof member === "string")))
       || (rule.displayName !== undefined && typeof rule.displayName !== "string")
       || (rule.category !== undefined && typeof rule.category !== "string")
       || (rule.color !== undefined && typeof rule.color !== "string")) throw new Error("Invalid website rule");
   }
+  if (!isPlainRecord(value.roots) || !Object.values(value.roots).every(root => typeof root === "string")
+    || !isPlainRecord(value.totals) || !Object.values(value.totals).every(total => Number.isSafeInteger(total) && Number(total) >= 0)
+    || !isPlainRecord(value.favicons) || !Object.values(value.favicons).every(icon => typeof icon === "string")) throw new Error("Invalid website catalog metadata");
   for (const override of Object.values(value.overrides)) if (!isPlainRecord(override)) throw new Error("Invalid website override");
   return value as unknown as WebLinksSnapshot;
 }
@@ -55,10 +61,15 @@ export function webLinksOverrides(snapshot: WebLinksSnapshot): Record<string, We
     return [domain.trim().replace(/\.$/, "").toLowerCase(), normalized];
   }));
   for (const domain of snapshot.domains) {
-    overrides[domain] = { ...overrides[domain], knownDomain: true };
+    overrides[domain] = { ...overrides[domain], knownDomain: true,
+      lifetimeDuration: snapshot.totals[domain] ?? 0, faviconUrl: snapshot.favicons[domain] };
+  }
+  for (const [domain, root] of Object.entries(snapshot.roots)) {
+    overrides[domain] = { ...overrides[domain], groupingRoot: root };
+    overrides[webGroupKey(root)] ??= { siteRule: { version: 2, exceptions: [] } };
   }
   for (const [root, rule] of Object.entries(snapshot.rules)) {
-    overrides[`site:${root}`] = { displayName: rule.displayName, category: rule.category, color: rule.color, siteRule: rule };
+    overrides[webGroupKey(root)] = { displayName: rule.displayName, category: rule.category, color: rule.color, siteRule: { ...rule, exceptions: rule.exceptions ?? [] } };
   }
   return overrides;
 }

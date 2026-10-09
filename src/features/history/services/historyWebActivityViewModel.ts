@@ -1,4 +1,4 @@
-import { resolveWebOwner, webDisplayDomain } from "../../../shared/classification/webLinks.ts";
+import { resolveWebOwner, webDisplayDomain, webGroupIcon, webLinkParent } from "../../../shared/classification/webLinks.ts";
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import { isAnonymousActivity } from "../../../shared/classification/anonymousActivity.ts";
 import { resolveStableDomainColor } from "../../../shared/classification/domainColor.ts";
@@ -104,12 +104,13 @@ function resolveWebColor(
   overrides: Record<string, WebDomainOverride>,
   iconThemeColors: Record<string, string>,
 ): string {
-  const overrideColor = overrides[resolveWebOwner(normalizedDomain, overrides)]?.color;
+  const owner = resolveWebOwner(normalizedDomain, overrides);
+  const overrideColor = overrides[owner]?.color;
   if (overrideColor) return overrideColor;
-  const iconColor = iconThemeColors[normalizedDomain];
+  const iconColor = iconThemeColors[owner];
   if (iconColor) return iconColor;
   if (category !== "other") return AppClassification.getCategoryColor(category);
-  return resolveStableDomainColor(normalizedDomain);
+  return resolveStableDomainColor(owner);
 }
 
 function preferFaviconUrl(current: string | null, candidate: string | null): string | null {
@@ -127,6 +128,22 @@ function resolveWebFaviconUrl(
     webDomainFavicons[segment.normalizedDomain] ?? null,
     segment.faviconUrl,
   );
+}
+
+export function buildWebDomainIconMap(
+  segments: readonly WebActivitySegment[],
+  overrides: Record<string, WebDomainOverride>,
+  favicons: Record<string, string>,
+): Record<string, string> {
+  const next = { ...favicons };
+  for (const segment of segments) {
+    const icon = segment.faviconUrl?.trim();
+    if (icon && (!next[segment.normalizedDomain] || icon.startsWith("data:"))) next[segment.normalizedDomain] = icon;
+    const owner = resolveWebOwner(segment.normalizedDomain, overrides);
+    const representative = webLinkParent(owner) ? webGroupIcon(owner, overrides) : null;
+    if (representative) next[owner] = representative;
+  }
+  return next;
 }
 
 export function buildHistoryWebTimelineViewModel({
@@ -341,7 +358,7 @@ export function buildWebDomainDistribution(
 
     if (current) {
       current.duration += clipped.duration;
-      current.faviconUrl = preferFaviconUrl(
+      current.faviconUrl = webLinkParent(key) ? webGroupIcon(key, overrides) : preferFaviconUrl(
         current.faviconUrl,
         resolveWebFaviconUrl(segment, webDomainFavicons),
       );
@@ -350,7 +367,7 @@ export function buildWebDomainDistribution(
 
     const category = resolveWebCategory(key, overrides);
     const label = resolveWebLabel(segment, overrides);
-    const faviconUrl = resolveWebFaviconUrl(segment, webDomainFavicons);
+    const faviconUrl = webLinkParent(key) ? webGroupIcon(key, overrides) : resolveWebFaviconUrl(segment, webDomainFavicons);
     groups.set(key, {
       key,
       domain: webDisplayDomain(key),
@@ -394,7 +411,9 @@ export function buildWebTimelineItems(
         domain: segment.domain || segment.normalizedDomain,
         normalizedDomain: segment.normalizedDomain,
         label: resolveWebLabel(segment, overrides),
-        faviconUrl: resolveWebFaviconUrl(segment, webDomainFavicons),
+        faviconUrl: webLinkParent(resolveWebOwner(segment.normalizedDomain, overrides))
+          ? webGroupIcon(resolveWebOwner(segment.normalizedDomain, overrides), overrides)
+          : resolveWebFaviconUrl(segment, webDomainFavicons),
         startTime: clipped.startTime,
         endTime: clipped.endTime,
         duration: clipped.duration,

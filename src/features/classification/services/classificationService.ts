@@ -67,8 +67,11 @@ export function applySavedWebDomainOverrideToBootstrap(
 ): ClassificationBootstrapData {
   const loadedWebDomainOverrides = { ...bootstrap.loadedWebDomainOverrides };
   const normalizedOverride = normalizeWebDomainOverride(override);
-  if (normalizedOverride) {
-    loadedWebDomainOverrides[normalizedDomain] = normalizedOverride;
+  const previous = loadedWebDomainOverrides[normalizedDomain];
+  const metadata = Object.fromEntries((["knownDomain", "groupingRoot", "lifetimeDuration", "faviconUrl"] as const)
+    .filter(key => previous?.[key] !== undefined).map(key => [key, previous[key]]));
+  if (normalizedOverride || Object.keys(metadata).length) {
+    loadedWebDomainOverrides[normalizedDomain] = { ...metadata, ...normalizedOverride };
   } else {
     delete loadedWebDomainOverrides[normalizedDomain];
   }
@@ -371,8 +374,8 @@ export class ClassificationService {
     }
   }
 
-  static async deleteObservedWebDomainHistory(normalizedDomain: string) {
-    await classificationStore.deleteObservedWebDomainHistory(normalizedDomain);
+  static async deleteObservedWebDomainHistory(normalizedDomain: string, members?: string[]) {
+    await classificationStore.deleteObservedWebDomainHistory(normalizedDomain, members);
     this.invalidateBootstrapCache();
   }
 

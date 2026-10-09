@@ -1,3 +1,4 @@
+import { webGroupKey } from "../src/shared/classification/webLinks.ts";
 import assert from "node:assert/strict";
 import {
   buildDataWebActivityHeatmap as buildDataWebActivityHeatmapRaw,
@@ -1378,19 +1379,19 @@ await runTest("website snapshot binds rules to aggregates and heatmap selection"
   const snapshot = await loadDataWebActivitySnapshot({ selection: { kind: "rolling", days: 7 }, nowMs, deps: {
     loadAggregateRange: async () => ({ records: domains.map(normalizedDomain => ({ normalizedDomain, bucketStartMs: dayStart, durationMs: 1000 })),
       domainCoverage: domains.map(normalizedDomain => ({ normalizedDomain, earliestRecordedStartMs: dayStart })),
-      webLinks: { domains,
-        rules: { "example.com": { members: ["www.example.com", "new.example.com", "hidden.example.com"], displayName: "Website" } },
+      webLinks: { domains, roots: Object.fromEntries(domains.map(domain => [domain, "example.com"])), totals: {}, favicons: {},
+        rules: { "example.com": { version: 2, exceptions: ["mail.example.com"], displayName: "Website" } },
         overrides: { "hidden.example.com": { enabled: false } } } }),
     loadOverrides: async () => { throw new Error("Separate settings read would mix snapshots"); },
     loadFavicons: async () => ({}),
   } });
   assert.equal(snapshot.records.reduce((sum, row) => sum + row.durationMs, 0), 3000);
-  assert.equal(snapshot.records.filter(row => row.normalizedDomain === "site:example.com").reduce((sum, row) => sum + row.durationMs, 0), 2000);
-  const trend = buildDataWebTrendViewModel({ ...snapshot, selectedDomains: ["site:example.com"] });
+  assert.equal(snapshot.records.filter(row => row.normalizedDomain === webGroupKey("example.com")).reduce((sum, row) => sum + row.durationMs, 0), 2000);
+  const trend = buildDataWebTrendViewModel({ ...snapshot, selectedDomains: [webGroupKey("example.com")] });
   assert.ok(JSON.stringify(trend).includes('Website'));
-  const heatmap = buildDataWebActivityHeatmap({ selection: 2026, nowMs, normalizedDomains: ["site:example.com"], records: snapshot.records, earliestRecordedStartMs: dayStart });
+  const heatmap = buildDataWebActivityHeatmap({ selection: 2026, nowMs, normalizedDomains: [webGroupKey("example.com")], records: snapshot.records, earliestRecordedStartMs: dayStart });
   assert.equal(heatmap.flatMap(week => week.cells).reduce((sum, day) => sum + day.duration, 0), 2000);
-  assert.deepEqual(snapshot.domainCoverage.find(row => row.normalizedDomain === "site:example.com"), { normalizedDomain: "site:example.com", earliestRecordedStartMs: dayStart });
+  assert.deepEqual(snapshot.domainCoverage.find(row => row.normalizedDomain === webGroupKey("example.com")), { normalizedDomain: webGroupKey("example.com"), earliestRecordedStartMs: dayStart });
 });
 
 console.log(`Completed ${passed} data web activity read-model tests`);
