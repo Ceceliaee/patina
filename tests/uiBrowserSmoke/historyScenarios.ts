@@ -187,7 +187,7 @@ export async function runHistoryReadFailureScenarios(context: BrowserSmokeContex
         const startTime = new Date(2026, 8, 12, 9).getTime(), endTime = startTime + 60 * 60_000;
         const sessions = ${withFacts} ? [{ id: 9800, appName: 'Cursor', exeName: 'cursor.exe', windowTitle: '', startTime, endTime,
           duration: endTime - startTime, continuityGroupStartTime: startTime, titleSampleDetails: [] }] : [];
-        const payload = JSON.stringify({ version: 2, createdAtMs: Date.now(),
+        const payload = JSON.stringify({ version: 3, createdAtMs: Date.now(),
           identity: { dateKey: '2026-09-12', mappingVersion: 0, webActivityEnabled: false },
           snapshot: { fetchedAtMs: Date.now(), icons: {}, daySessions: sessions, weeklySessions: [],
             dayAggregateSessions: [{ appName: 'Cursor', exeName: 'cursor.exe', startTime, endTime }], weeklyAggregateSessions: [],

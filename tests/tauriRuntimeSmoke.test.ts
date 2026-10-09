@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { verifyAnonymousActivityRuntime } from "./tauriAnonymousActivityRuntime.ts";
 import { verifyWebDavRuntime } from "./tauriWebDavRuntime.ts";
 import { verifyAppIconRuntime } from "./tauriAppIconRuntime.ts";
-import { verifyLinkedApplicationsRuntime } from "./tauriLinkedApplicationsRuntime.ts";
-import { deleteWebHistoryRuntime, verifyWebLinksRuntime } from "./tauriWebLinksRuntime.ts";
+import { installLinkedRankingClock, seedLinkedApplicationRanking, verifyLinkedApplicationDetailAndTrend, verifyLinkedApplicationRanking, verifyLinkedApplicationsRuntime } from "./tauriLinkedApplicationsRuntime.ts";
+import { deleteWebHistoryRuntime, verifyWebLinksRuntime, verifyAutomaticGroupingBackupRuntime } from "./tauriWebLinksRuntime.ts";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -828,6 +828,7 @@ try {
   );
 
   await verifyWebLinksRuntime((expression) => evaluate(client!, expression));
+  await verifyAutomaticGroupingBackupRuntime((expression) => evaluate(client!, expression), root);
   bridgePortBlocker = await occupyPort();
   const bridgeBlockerAddress = bridgePortBlocker.address();
   assert.ok(bridgeBlockerAddress && typeof bridgeBlockerAddress === "object");
@@ -1242,6 +1243,7 @@ try {
   );
 
   await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_minimize_main_window")`);
+  let coldWidgetObservation = "";
   await waitFor(
     "cold widget creation after transient retry",
     async () => {
@@ -1255,6 +1257,11 @@ try {
           `window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", { label: "widget" })`,
         ),
       ]);
+      const observation = JSON.stringify({ mainVisible, widgetVisible });
+      if (observation !== coldWidgetObservation) {
+        console.log("PATINA_COLD_WIDGET_VISIBILITY", observation);
+        coldWidgetObservation = observation;
+      }
       return mainVisible === false && widgetVisible === true ? true : null;
     },
     10_000,
@@ -1280,6 +1287,7 @@ try {
   );
 
   await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_minimize_main_window")`);
+  let warmWidgetObservation = "";
   await waitFor(
     "warm widget reuse",
     async () => {
@@ -1293,6 +1301,11 @@ try {
           `window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", { label: "widget" })`,
         ),
       ]);
+      const observation = JSON.stringify({ mainVisible, widgetVisible });
+      if (observation !== warmWidgetObservation) {
+        console.log("PATINA_WARM_WIDGET_VISIBILITY", observation);
+        warmWidgetObservation = observation;
+      }
       return mainVisible === false && widgetVisible === true ? true : null;
     },
     10_000,
@@ -2201,6 +2214,11 @@ try {
   await verifyWebDavRuntime((expression) => evaluate(client!, expression));
   await deleteWebHistoryRuntime((expression) => evaluate(client!, expression));
 
+  await evaluate(client, installLinkedRankingClock(frontendDistDir));
+  await seedLinkedApplicationRanking((expression) => evaluate(client!, expression), runtimeDatabasePath);
+  await client.command("Page.reload");
+  await verifyLinkedApplicationRanking((expression) => evaluate(client!, expression), true);
+
   await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", { mutations: [
     { key: "theme_mode", value: "dark" },
     { key: "color_scheme_dark", value: "catppuccin" },
@@ -2254,6 +2272,8 @@ try {
   console.log("PATINA_THEME_COLD_RESTART_REPORT", JSON.stringify({ processRestart: true, presetContrast: 60, savedScheme: "catppuccin" }));
 
   console.log("PASS real Tauri runtime command/event/SQLite/capability smoke");
+  await verifyLinkedApplicationRanking((expression) => evaluate(client!, expression), true);
+  await verifyLinkedApplicationDetailAndTrend((expression) => evaluate(client!, expression));
   await verifyLinkedApplicationsRuntime((expression) => evaluate(client!, expression), true);
   await verifyWebLinksRuntime((expression) => evaluate(client!, expression), true);
   await evaluate(client!, `localStorage.setItem("patina-storage-migration-proof", "persistent-profile")`);
@@ -2337,6 +2357,7 @@ try {
   };
   const selectedData = join(root, "relocated-data");
   let selected = await storageRestart("cmd_restart_and_apply_storage_migration", { targetDataRoot: selectedData });
+  await verifyLinkedApplicationRanking((expression) => evaluate(client!, expression), false);
   assert.equal(selected.paths.isCustomDataRoot, true);
   assert.ok(selected.paths.databasePath.toLowerCase().startsWith(selectedData.toLowerCase()));
   selected = await storageRestart("cmd_restart_and_apply_webview_cache_migration", { targetWebviewRoot: join(root, "relocated-cache") });

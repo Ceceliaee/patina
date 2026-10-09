@@ -469,7 +469,7 @@ function tauriStubFor(path: string) {
           const iconFixtureEnabled = globalThis.__TIME_TRACKER_ENABLE_CLASSIFICATION_ICON_FIXTURE
             || localStorage.getItem("__time_tracker_enable_classification_icon_fixture") === "1";
           const baseRows = fixtureEnabled
-            ? Array.from({ length: 130 }, (_, index) => ({
+            ? Array.from({ length: Number(localStorage.getItem("__patina_catalog_size") || 130) }, (_, index) => ({
                 rawExeName: "catalog-" + String(index).padStart(3, "0") + ".exe",
                 appName: index === 129 ? "一年以前的应用" : "Catalog App " + index,
                 lastSeenMs: 1767229200000 - index * 24 * 60 * 60 * 1000,
@@ -816,7 +816,10 @@ function tauriStubFor(path: string) {
           const domains = [...new Set(rows.map(row => row.normalized_domain))];
           const overrides = Object.fromEntries(Object.entries(settings).filter(([key]) => key.startsWith("__web_domain_override::")).map(([key,value]) => [key.slice(23),JSON.parse(value)]));
           const segments = rows.map(row => ({ id: row.id, browserClientId: row.browser_client_id, browserKind: row.browser_kind, browserExeName: row.browser_exe_name, domain: row.domain, normalizedDomain: row.normalized_domain, url: row.url, title: row.title, faviconUrl: row.favicon_url ?? null, startTime: row.start_time, endTime: row.end_time, duration: row.duration }));
-          return { domains, rules, overrides, ...(payload.startMs === undefined ? {} : { segments }) };
+          const roots = globalThis.__PATINA_WEB_ROOTS ?? Object.fromEntries(domains.filter(domain => /(?:example|deepseek|other)\\.com$/.test(domain)).map(domain => [domain, domain.split('.').slice(-2).join('.')]));
+          const totals = Object.fromEntries(domains.map(domain => [domain, rows.filter(row => row.normalized_domain === domain).reduce((sum,row) => sum + row.duration, 0)]));
+          const favicons = Object.fromEntries(rows.filter(row => row.favicon_url).map(row => [row.normalized_domain,row.favicon_url]));
+          return { domains, rules, overrides, roots, totals, favicons, ...(payload.startMs === undefined ? {} : { segments }) };
         }
         if (command === "cmd_get_legacy_classification_apps") return [];
         if (command === "cmd_commit_classification_settings") {
@@ -858,7 +861,8 @@ function tauriStubFor(path: string) {
             await new Promise(resolve => { globalThis.__PATINA_RELEASE_WEB_DELETE = resolve; });
           }
           if (Array.isArray(globalThis.__PATINA_CLASSIFICATION_WEB_ROWS)) {
-            globalThis.__PATINA_CLASSIFICATION_WEB_ROWS = globalThis.__PATINA_CLASSIFICATION_WEB_ROWS.filter(row => row.normalized_domain !== payload.normalizedDomain);
+            const members = payload.normalizedDomain.startsWith('{') ? JSON.parse(payload.normalizedDomain).members : [payload.normalizedDomain];
+            globalThis.__PATINA_CLASSIFICATION_WEB_ROWS = globalThis.__PATINA_CLASSIFICATION_WEB_ROWS.filter(row => !members.includes(row.normalized_domain));
           }
           return null;
         }
@@ -1085,7 +1089,7 @@ function tauriStubFor(path: string) {
           || localStorage.getItem("__time_tracker_enable_classification_catalog_fixture") === "1";
         const timing = smokeSessionTiming();
         const baseRows = enabled
-          ? Array.from({ length: 130 }, (_, index) => ({
+          ? Array.from({ length: Number(localStorage.getItem("__patina_catalog_size") || 130) }, (_, index) => ({
               exe_name: "catalog-" + String(index).padStart(3, "0") + ".exe",
               app_name: index === 129 ? "一年以前的应用" : "Catalog App " + index,
               last_seen_ms: timing.end - index * 24 * 60 * 60 * 1000,
