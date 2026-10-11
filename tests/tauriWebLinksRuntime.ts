@@ -1,17 +1,24 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 
 export async function verifyAutomaticGroupingBackupRuntime(evaluate: (expression: string) => Promise<unknown>, root: string) {
   const invoke = (command: string, args: unknown = {}) => evaluate(`window.__TAURI_INTERNALS__.invoke(${JSON.stringify(command)},${JSON.stringify(args)})`);
-  const seed = spawnSync('python', ['-c', `import sqlite3,sys,json
-db=sqlite3.connect(sys.argv[1])
-db.execute("INSERT INTO settings(key,value) VALUES(?,?)",('__web_site::chat.deepseek.com',json.dumps({'members':['other.com'],'displayName':'Legacy group'})))
-db.execute("INSERT INTO settings(key,value) VALUES(?,?)",('__web_domain_override::chat.deepseek.com',json.dumps({'displayName':'Raw title','captureTitle':False})))
-for i,domain in enumerate(['chat.deepseek.com','platform.deepseek.com','www.deepseek.com','deepseek.com']):
- db.execute("INSERT INTO web_activity_segments(browser_client_id,browser_kind,browser_exe_name,domain,normalized_domain,start_time,end_time,duration,created_at,updated_at) VALUES('grouping','chrome','chrome.exe',?,?,1000,?,?,1000,?)",(domain,domain,1000+(i+1)*1000,(i+1)*1000,1000+(i+1)*1000))
-db.commit();db.close()`, join(root, 'data', 'patina.db')], { encoding: 'utf8', windowsHide: true, timeout: 10000 });
-  assert.equal(seed.status, 0, seed.stderr);
+  const seed = new DatabaseSync(join(root, 'data', 'patina.db'));
+  try {
+    seed.exec('PRAGMA busy_timeout = 5000; BEGIN IMMEDIATE');
+    const setting = seed.prepare('INSERT INTO settings(key,value) VALUES(?,?)');
+    setting.run('__web_site::chat.deepseek.com', JSON.stringify({ members: ['other.com'], displayName: 'Legacy group' }));
+    setting.run('__web_domain_override::chat.deepseek.com', JSON.stringify({ displayName: 'Raw title', captureTitle: false }));
+    const segment = seed.prepare("INSERT INTO web_activity_segments(browser_client_id,browser_kind,browser_exe_name,domain,normalized_domain,start_time,end_time,duration,created_at,updated_at) VALUES('grouping','chrome','chrome.exe',?,?,1000,?,?,1000,?)");
+    ['chat.deepseek.com', 'platform.deepseek.com', 'www.deepseek.com', 'deepseek.com'].forEach((domain, index) => {
+      const duration = (index + 1) * 1000;
+      segment.run(domain, domain, 1000 + duration, duration, 1000 + duration);
+    });
+    seed.exec('COMMIT');
+  } finally {
+    seed.close();
+  }
   const backupPath = join(root, 'legacy-web-grouping.zip');
   await invoke('cmd_export_backup', { backupPath });
   const preview = await invoke('cmd_preview_backup', { backupPath }) as { hash: string };
