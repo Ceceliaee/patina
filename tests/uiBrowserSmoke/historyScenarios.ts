@@ -416,8 +416,8 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
       await waitForExpression(client, sessionId, `Boolean(document.querySelector('.history-timeline-lane-track .qp-timeline-segment'))`);
       assert.equal(await evaluate(client, sessionId, `(() => {
         const lane = [...document.querySelectorAll('.history-timeline-lane-row')].find(row => row.getAttribute('aria-label')?.startsWith('匿名'));
-        return !!lane?.querySelector('.history-timeline-lane-identity svg.lucide-eye-off') && !lane?.querySelector('.history-timeline-lane-dot');
-      })()`), true, 'anonymous application lane uses EyeOff in its application icon slot');
+        return !!lane?.querySelector('.history-timeline-lane-identity svg.anonymous-activity-icon') && !lane?.querySelector('.history-timeline-lane-dot');
+      })()`), true, 'anonymous application lane uses abstract tiles in its application icon slot');
       for (const theme of ["light", "dark"] as const) {
         await client.command("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: theme }] }, sessionId);
         await waitForExpression(client, sessionId, `document.documentElement.dataset.theme === '${theme}'`);
@@ -2420,7 +2420,14 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
           return Boolean(
             list
             && list.children.length === ${HISTORY_TITLE_DETAIL_COUNT}
-            && popover.scrollHeight > popover.clientHeight
+            && list.scrollHeight > list.clientHeight
+            && getComputedStyle(list, '::-webkit-scrollbar').width === getComputedStyle(list).getPropertyValue('--qp-scrollbar-size').trim()
+            && getComputedStyle(list, '::-webkit-scrollbar-thumb').backgroundClip === 'content-box'
+            && getComputedStyle(popover).overflowY === 'hidden'
+            && list.getBoundingClientRect().right <= popoverRect.right - 4
+            && list.getBoundingClientRect().bottom <= popoverRect.bottom - 10
+            && list.firstElementChild.getBoundingClientRect().right <= list.getBoundingClientRect().left + list.clientWidth - 4
+            && popoverRect.right - list.firstElementChild.getBoundingClientRect().right <= 16
             && Math.abs(popoverRect.width - 426) < 1
             && Math.abs(leftSpan - 142) < 1
             && Math.abs(leftShare - 1 / 3) < 0.02
@@ -2432,6 +2439,14 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
       `),
       true,
     );
+    await evaluate(client!, sessionId, `document.querySelector('.history-activity-popover-list').scrollTop = 100000`);
+    await waitForExpression(client!, sessionId, `(() => {
+      const list = document.querySelector('.history-activity-popover-list');
+      const last = list?.lastElementChild;
+      return list && last && list.scrollTop > 0
+        && Math.abs(list.scrollHeight - list.clientHeight - list.scrollTop) <= 1
+        && last.getBoundingClientRect().bottom <= list.getBoundingClientRect().bottom + 1;
+    })()`);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {

@@ -1,5 +1,6 @@
+import AnonymousActivityIcon from "../../../shared/components/AnonymousActivityIcon.tsx";
+import AnonymousActivityName from "../../../shared/components/AnonymousActivityName.tsx";
 import { formatDuration } from "../services/historyFormatting.ts";
-import { EyeOff } from "lucide-react";
 import { ANONYMOUS_ACTIVITY_STYLE } from "../../../shared/charts/AnonymousActivityPattern.tsx";
 import type {
   HistoryTimelineDisplayMode,
@@ -66,7 +67,7 @@ export default function HistoryTimelineLaneList({
                 >
                   <div className="history-timeline-lane-identity">
                     {anonymous && mode !== "category" ? (
-                      <EyeOff className="history-timeline-lane-icon text-[var(--qp-text-secondary)]" aria-hidden="true" />
+                      <AnonymousActivityIcon size={16} />
                     ) : iconSrc ? (
                       <img src={iconSrc} className="history-timeline-lane-icon" alt="" />
                     ) : (
@@ -76,7 +77,9 @@ export default function HistoryTimelineLaneList({
                         aria-hidden="true"
                       />
                     )}
-                    <span className="history-timeline-lane-label">{lane.label}</span>
+                    <span className="history-timeline-lane-label">
+                      {anonymous && mode !== "category" ? <AnonymousActivityName /> : lane.label}
+                    </span>
                   </div>
                   <div className="history-timeline-lane-track">
                     <HistoryHorizontalTimeline

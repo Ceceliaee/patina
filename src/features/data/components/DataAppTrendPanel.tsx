@@ -1,5 +1,6 @@
+import AnonymousActivityName from "../../../shared/components/AnonymousActivityName.tsx";
+import AnonymousActivityIcon, { AnonymousActivityIndicator } from "../../../shared/components/AnonymousActivityIcon.tsx";
 import { useLocaleText } from "../../../shared/i18n/index.ts";
-import { EyeOff } from "lucide-react";
 import { isAnonymousActivity } from "../../../shared/classification/anonymousActivity.ts";
 import { memo, useLayoutEffect, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode, type Ref, type RefObject, } from "react";
 import { useDataPresentation } from "../hooks/useDataPresentation.ts";
@@ -168,6 +169,24 @@ function DataAppTrendPanel(props: DataAppTrendPanelProps) {
     );
     return true;
   };
+  const handleClassificationContextMenu = (option: DataDestinationTrendOption, event: MouseEvent<HTMLButtonElement>) => {
+    if (!(event.target as HTMLElement).closest("[data-destination-detail-trigger]")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onQuickClassificationOpen?.(option, { clientX: event.clientX, clientY: event.clientY }, event.currentTarget);
+  };
+  const isDetailTrigger = (option: DataDestinationTrendOption, event: MouseEvent<HTMLButtonElement>) =>
+    supportsDestinationDetails && !isAnonymousActivity(option.key)
+    && (event.target as HTMLElement).closest("[data-destination-detail-trigger]");
+  const handleDetailIntent = (option: DataDestinationTrendOption, event: MouseEvent<HTMLButtonElement>) => {
+    if (event.button === 0 && event.detail === 1 && isDetailTrigger(option, event)) onOptionIntentStart(option, event.currentTarget);
+  };
+  const handleDetailOpen = (option: DataDestinationTrendOption, event: MouseEvent<HTMLButtonElement>) => {
+    if (!isDetailTrigger(option, event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onOptionOpenDetails(option);
+  };
   const detailCopy = UI_TEXT.destinationDetail;
   const modeLabels: Record<DataDestinationMode, string> = {
     app: UI_TEXT.data.destinationApp,
@@ -205,7 +224,9 @@ function DataAppTrendPanel(props: DataAppTrendPanelProps) {
               aria-label={UI_TEXT.data.selectedObjectCount(selectedOptions.length)}
             >
               {selectedOptions.map((option) => (
-                supportsDestinationDetails ? (
+                isAnonymousActivity(option.key) ? (
+                  <AnonymousActivityIndicator key={option.key} label={UI_TEXT.common.anonymousActivity} className="data-app-selected-icon" selectionKey={option.key} size={16} />
+                ) : supportsDestinationDetails ? (
                   <button
                     type="button"
                     className="data-app-selected-icon"
@@ -222,25 +243,9 @@ function DataAppTrendPanel(props: DataAppTrendPanelProps) {
                       : undefined}
                     onPointerEnter={canClassify(option) ? onQuickClassificationPreload : undefined}
                     onFocus={canClassify(option) ? onQuickClassificationPreload : undefined}
-                    onMouseDown={(event) => {
-                      if (event.button === 0 && event.detail === 1) {
-                        onOptionIntentStart(option, event.currentTarget);
-                      }
-                    }}
-                    onDoubleClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      onOptionOpenDetails(option);
-                    }}
-                    onContextMenu={canClassify(option) ? (event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      onQuickClassificationOpen?.(
-                        option,
-                        { clientX: event.clientX, clientY: event.clientY },
-                        event.currentTarget,
-                      );
-                    } : undefined}
+                    onMouseDown={(event) => handleDetailIntent(option, event)}
+                    onDoubleClick={(event) => handleDetailOpen(option, event)}
+                    onContextMenu={canClassify(option) ? (event) => handleClassificationContextMenu(option, event) : undefined}
                     onKeyDown={(event) => {
                       if (event.key === "Enter") {
                         event.preventDefault();
@@ -251,7 +256,7 @@ function DataAppTrendPanel(props: DataAppTrendPanelProps) {
                       handleQuickClassificationKeyDown(option, event);
                     }}
                   >
-                    {isAnonymousActivity(option.key) ? <EyeOff size={16} aria-hidden="true" /> : option.iconUrl ? (
+                    {option.iconUrl ? (
                       <img
                         src={option.iconUrl}
                         alt=""
@@ -372,6 +377,8 @@ function DataAppTrendPanel(props: DataAppTrendPanelProps) {
                   {noMatchLabel}
                 </div>
               ) : filteredOptions.map((option) => {
+                const anonymous = isAnonymousActivity(option.key);
+                const canOpenDetails = supportsDestinationDetails && !anonymous;
                 const selectedIndex = selectedOptions.findIndex((selected) => selected.key === option.key);
                 const isSelected = selectedIndex >= 0;
                 const series = selectedIndex >= 0 ? trendSeries[selectedIndex] : null;
@@ -379,13 +386,11 @@ function DataAppTrendPanel(props: DataAppTrendPanelProps) {
                   if (handleQuickClassificationKeyDown(option, event)) return;
                   if (event.key !== "Enter" && event.key !== " ") return;
                   event.preventDefault();
-                  if (event.ctrlKey) {
-                    onOptionSelect(option.key, true);
-                  } else if (event.key === "Enter" && supportsDestinationDetails) {
+                  if (!event.ctrlKey && event.key === "Enter" && canOpenDetails) {
                     onOptionIntentStart(option, event.currentTarget);
                     onOptionOpenDetails(option);
                   } else {
-                    onOptionSelect(option.key, false);
+                    onOptionSelect(option.key, event.ctrlKey);
                   }
                 };
                 return (
@@ -397,38 +402,10 @@ function DataAppTrendPanel(props: DataAppTrendPanelProps) {
                     style={series ? {
                       "--data-series-color": series.color,
                     } as CSSProperties : undefined}
-                    onMouseDown={(event) => {
-                      const target = event.target as HTMLElement;
-                      if (
-                        supportsDestinationDetails
-                        &&
-                        event.button === 0
-                        &&
-                        event.detail === 1
-                        && target.closest("[data-destination-detail-trigger]")
-                      ) {
-                        onOptionIntentStart(option, event.currentTarget);
-                      }
-                    }}
+                    onMouseDown={(event) => handleDetailIntent(option, event)}
                     onClick={(event) => onOptionSelect(option.key, event.ctrlKey)}
-                    onDoubleClick={(event) => {
-                      const target = event.target as HTMLElement;
-                      if (!supportsDestinationDetails || !target.closest("[data-destination-detail-trigger]")) return;
-                      event.preventDefault();
-                      event.stopPropagation();
-                      onOptionOpenDetails(option);
-                    }}
-                    onContextMenu={canClassify(option) ? (event) => {
-                      const target = event.target as HTMLElement;
-                      if (!target.closest("[data-destination-detail-trigger]")) return;
-                      event.preventDefault();
-                      event.stopPropagation();
-                      onQuickClassificationOpen?.(
-                        option,
-                        { clientX: event.clientX, clientY: event.clientY },
-                        event.currentTarget,
-                      );
-                    } : undefined}
+                    onDoubleClick={(event) => handleDetailOpen(option, event)}
+                    onContextMenu={canClassify(option) ? (event) => handleClassificationContextMenu(option, event) : undefined}
                     onPointerEnter={canClassify(option) ? onQuickClassificationPreload : undefined}
                     onFocus={canClassify(option) ? onQuickClassificationPreload : undefined}
                     onKeyDown={handleOptionKeyDown}
@@ -442,18 +419,19 @@ function DataAppTrendPanel(props: DataAppTrendPanelProps) {
                         ? `app:${option.exeName}`
                         : `web:${option.normalizedDomain}`)
                       : undefined}
-                    aria-description={interactionHint}
+                    aria-description={anonymous ? undefined : interactionHint}
+                    aria-label={anonymous ? UI_TEXT.common.anonymousActivity : undefined}
                   >
                     <span
                       className="data-app-option-icon"
-                      data-destination-detail-trigger={supportsDestinationDetails ? "" : undefined}
+                      data-destination-detail-trigger={canOpenDetails ? "" : undefined}
                       data-category-marker={option.accentColor ? "" : undefined}
                       style={option.accentColor ? {
                         "--data-category-color": option.accentColor,
                       } as CSSProperties : undefined}
                       aria-hidden
                     >
-                      {isAnonymousActivity(option.key) ? <EyeOff size={16} aria-hidden="true" /> : option.accentColor ? (
+                      {isAnonymousActivity(option.key) ? <AnonymousActivityIcon size={16} /> : option.accentColor ? (
                         <span className="data-category-color-marker" />
                       ) : option.iconUrl ? (
                         <img src={option.iconUrl} alt="" draggable={false} />
@@ -462,15 +440,15 @@ function DataAppTrendPanel(props: DataAppTrendPanelProps) {
                       )}
                     </span>
                     <span className="data-app-option-main">
-                      <span className="data-app-option-name-row">
+                      {anonymous ? <span className="data-app-option-name"><AnonymousActivityName /></span> : <span className="data-app-option-name-row">
                         <span className="data-app-option-name">{option.displayName}</span>
                         <QuickClassificationStatus
                           density="dense"
                           unclassified={Boolean(supportsQuickClassification && option.unclassified)}
                         />
-                      </span>
+                      </span>}
                       <span className="data-app-option-meta">
-                        {Math.round(option.percentage)}% · {option.secondaryText}
+                        {Math.round(option.percentage)}%{option.secondaryText ? ` · ${option.secondaryText}` : ""}
                       </span>
                     </span>
                     <span className="data-app-option-duration">

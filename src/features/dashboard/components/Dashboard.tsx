@@ -1,7 +1,9 @@
+import AnonymousActivityName from "../../../shared/components/AnonymousActivityName.tsx";
+import { AnonymousActivityIndicator } from "../../../shared/components/AnonymousActivityIcon.tsx";
 import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { getCategoryToken } from "../../../shared/classification/categoryTokens.ts";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, } from "react";
-import { EyeOff, Layers3, Monitor, Minus, TrendingDown, TrendingUp } from "lucide-react";
+import { Layers3, Monitor, Minus, TrendingDown, TrendingUp } from "lucide-react";
 import { isAnonymousActivity } from "../../../shared/classification/anonymousActivity.ts";
 import AnonymousActivityPattern, { ANONYMOUS_ACTIVITY_STYLE } from "../../../shared/charts/AnonymousActivityPattern.tsx";
 
@@ -391,7 +393,14 @@ export default function Dashboard({
                     className="flex items-center justify-between px-3.5 py-3 border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-elevated)] rounded-[10px] hover:border-[var(--qp-border-strong)] hover:bg-[var(--qp-bg-panel)] transition-colors cursor-default"
                   >
                     <div className="flex items-center gap-4 flex-1 min-w-0">
-                      <button
+                      {anonymous ? (
+                        <AnonymousActivityIndicator
+                          label={displayName}
+                          size={24}
+                          className="dashboard-anonymous-icon w-10 h-10 flex items-center justify-center border border-[var(--qp-border-subtle)] bg-[var(--qp-bg-panel)]"
+                          style={{ boxShadow: `0 0 0 2px ${accentColor}22` }}
+                        />
+                      ) : <button
                         type="button"
                         className="dashboard-top-app-detail-trigger w-10 h-10 bg-[var(--qp-bg-panel)] rounded-[8px] flex items-center justify-center border border-[var(--qp-border-subtle)] overflow-hidden p-2"
                         style={{
@@ -433,18 +442,18 @@ export default function Dashboard({
                           }
                         }}
                       >
-                        {anonymous ? <EyeOff size={20} className="text-[var(--qp-text-secondary)]" aria-hidden="true" /> : icons[app.exeName] ? (
+                        {icons[app.exeName] ? (
                           <img src={icons[app.exeName]} className="w-full h-full object-contain" alt="" />
                         ) : (
                           <div className="qp-text-caption qp-weight-emphasis opacity-40 text-[var(--qp-text-secondary)]">{app.categoryInitial}</div>
                         )}
-                      </button>
-                      <div className="min-w-0">
+                      </button>}
+                      {anonymous ? <div className="min-w-0 truncate qp-text-body qp-weight-medium text-[var(--qp-text-primary)]"><AnonymousActivityName /></div> : <div className="min-w-0">
                         <div className="dashboard-top-app-name-row qp-weight-medium text-[var(--qp-text-primary)] qp-text-body">
                           <span className="truncate">{displayName}</span>
                           <QuickClassificationStatus unclassified={isUnclassified} />
                         </div>
-                      </div>
+                      </div>}
                     </div>
 
                     <div className="text-right ml-4 flex-shrink-0">

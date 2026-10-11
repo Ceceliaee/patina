@@ -1,7 +1,7 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  BrushCleaning, Database, FolderPen, FileArchive, FileDown, FileUp, FolderOpen, CircleAlert, CircleHelp, RefreshCw, RotateCcw, Trash2, X, } from "lucide-react";
+  BrushCleaning, Database, FolderPen, FolderOpen, CircleAlert, CircleHelp, RefreshCw, RotateCcw, Trash2, X, } from "lucide-react";
 
 import QuietSubpanel from "../../../shared/components/QuietSubpanel";
 import QuietActionRow from "../../../shared/components/QuietActionRow";
@@ -327,7 +327,6 @@ export default function SettingsDataSafetyPanel({
               <QuietActionRow>
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0 flex items-center gap-1.5">
-                    <FileUp size={14} className="text-[var(--qp-text-tertiary)]" />
                     <p className="qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">{UI_TEXT.settings.dataExportAction}</p>
                   </div>
                   <QuietButton size="regular" onClick={onOpenDataExport} disabled={busy}>
@@ -338,7 +337,6 @@ export default function SettingsDataSafetyPanel({
               <QuietActionRow>
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0 flex items-center gap-1.5">
-                    <FileDown size={14} className="text-[var(--qp-text-tertiary)]" />
                     <p className="qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">{UI_TEXT.settings.dataImportAction}</p>
                   </div>
                   <QuietButton size="regular" onClick={onOpenDataImport} disabled={busy}>
@@ -358,7 +356,6 @@ export default function SettingsDataSafetyPanel({
               <QuietActionRow>
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0 flex items-center gap-1.5">
-                    <FileArchive size={14} className="text-[var(--qp-text-tertiary)]" />
                     <p className="qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">
                       {UI_TEXT.settings.backupExportTitle}
                     </p>
@@ -379,7 +376,6 @@ export default function SettingsDataSafetyPanel({
               <QuietActionRow>
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0 flex items-center gap-1.5">
-                    <RotateCcw size={14} className="text-[var(--qp-text-tertiary)]" />
                     <p className="qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">
                       {UI_TEXT.settings.backupRestoreActionTitle}
                     </p>

@@ -1,5 +1,7 @@
+import AnonymousActivityName from "../../../shared/components/AnonymousActivityName.tsx";
+import { AnonymousActivityIndicator } from "../../../shared/components/AnonymousActivityIcon.tsx";
 import { useLocaleText } from "../../../shared/i18n/index.ts";
-import { EyeOff, Globe2, Monitor } from "lucide-react";
+import { Globe2, Monitor } from "lucide-react";
 import { isAnonymousActivity } from "../../../shared/classification/anonymousActivity.ts";
 import { ANONYMOUS_ACTIVITY_STYLE } from "../../../shared/charts/AnonymousActivityPattern.tsx";
 
@@ -129,13 +131,17 @@ export default function HistoryDayDistributionPanel({
         ) : (
           <div className="space-y-4">
             {items.map((item) => {
-              const detailTarget = createDistributionDetailTarget(item);
+              const anonymous = isAnonymousActivity(item.key) || item.category === "anonymous";
+              const anonymousIdentity = anonymous && mode !== "category";
+              const detailTarget = anonymous ? null : createDistributionDetailTarget(item);
 
               return (
                 <div key={item.key} className="space-y-1.5">
                 <div className="mb-1 flex items-center justify-between gap-3">
                   <span className="flex min-w-0 items-center gap-1.5 qp-text-body qp-weight-medium leading-[var(--qp-line-height-body)] text-[var(--qp-text-secondary)]">
-                    {detailTarget ? (
+                    {anonymousIdentity ? (
+                      <AnonymousActivityIndicator label={UI_TEXT.common.anonymousActivity} size={16} />
+                    ) : detailTarget ? (
                       <button
                         type="button"
                         className="history-day-distribution-detail-trigger"
@@ -203,7 +209,7 @@ export default function HistoryDayDistributionPanel({
                           }
                         }}
                       >
-                        {isAnonymousActivity(item.key) ? <EyeOff size={14} className="text-[var(--qp-text-secondary)]" aria-hidden="true" /> : item.iconSrc ? (
+                        {item.iconSrc ? (
                           <img src={item.iconSrc} className="h-3.5 w-3.5 object-contain" alt="" />
                         ) : item.kind === "web" ? (
                           <Globe2 size={14} className="text-[var(--qp-text-tertiary)]" aria-hidden="true" />
@@ -218,7 +224,7 @@ export default function HistoryDayDistributionPanel({
                         aria-hidden="true"
                       />
                     )}
-                    <span className="min-w-0 leading-[1.2]">
+                    {anonymousIdentity ? <span className="min-w-0 truncate qp-text-caption qp-weight-medium"><AnonymousActivityName /></span> : <span className="min-w-0 leading-[1.2]">
                       <span className="history-day-distribution-name-row">
                         <span className="truncate qp-text-caption qp-weight-medium leading-[var(--qp-line-height-caption)]">{item.label}</span>
                         <QuickClassificationStatus
@@ -231,7 +237,7 @@ export default function HistoryDayDistributionPanel({
                           {item.subtitle}
                         </span>
                       )}
-                    </span>
+                    </span>}
                   </span>
                   <span className="shrink-0 qp-text-caption qp-weight-medium leading-[1.2] text-[var(--qp-text-tertiary)] tabular-nums">
                     <span>{formatDuration(item.duration)}</span>

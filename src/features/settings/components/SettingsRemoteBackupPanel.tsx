@@ -1,5 +1,5 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
-import { Cloud, Eye, EyeOff, X } from "lucide-react";
+import { Eye, EyeOff, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import QuietActionRow from "../../../shared/components/QuietActionRow";
 import QuietDialog from "../../../shared/components/QuietDialog";
@@ -163,7 +163,6 @@ export default function SettingsRemoteBackupPanel({
       <QuietActionRow className="mt-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0 flex items-center gap-1.5">
-            <Cloud size={14} className="text-[var(--qp-text-tertiary)]" />
             <p className="qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">
               {UI_TEXT.settings.remoteBackupTitle}
             </p>

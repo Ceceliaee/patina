@@ -1,6 +1,6 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
 import type { UiText } from "../../../shared/i18n/index.ts";
-import { Dices, EthernetPort, Eye, EyeOff, Fingerprint, KeyRound, Link2, Server, X } from "lucide-react";
+import { Dices, Eye, EyeOff, Server, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import QuietActionRow from "../../../shared/components/QuietActionRow";
@@ -72,7 +72,6 @@ type RevealableTextFieldProps = {
 
 type InterfaceInlineFieldProps = {
   htmlFor: string;
-  icon: ReactNode;
   title: string;
   children: ReactNode;
   className?: string;
@@ -232,7 +231,6 @@ function RevealableTextField({
 
 function InterfaceInlineField({
   htmlFor,
-  icon,
   title,
   children,
   className,
@@ -248,7 +246,6 @@ function InterfaceInlineField({
         htmlFor={htmlFor}
         className="flex shrink-0 items-center gap-1.5 whitespace-nowrap qp-text-body qp-weight-emphasis text-[var(--qp-text-primary)]"
       >
-        {icon}
         <span>{title}</span>
       </label>
       {children}
@@ -433,7 +430,6 @@ export default function SettingsInterfacePanel({
               <div className={INTERFACE_FIELD_GRID_CLASS}>
                 <InterfaceInlineField
                   htmlFor="settings-web-activity-address"
-                  icon={<EthernetPort size={14} className="text-[var(--qp-text-tertiary)]" />}
                   title={UI_TEXT.settings.webActivityAddressLabel}
                 >
                   <PortField
@@ -449,7 +445,6 @@ export default function SettingsInterfacePanel({
 
                 <InterfaceInlineField
                   htmlFor="settings-web-activity-token"
-                  icon={<KeyRound size={14} className="text-[var(--qp-text-tertiary)]" />}
                   title={UI_TEXT.settings.webActivityTokenLabel}
                 >
                   <TokenField
@@ -489,7 +484,6 @@ export default function SettingsInterfacePanel({
               <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,4fr)_minmax(0,6fr)]">
                 <InterfaceInlineField
                   htmlFor="settings-remote-status-bridge-url"
-                  icon={<Link2 size={14} className="text-[var(--qp-text-tertiary)]" />}
                   title={UI_TEXT.settings.remoteStatusBridgeUrlLabel}
                   className="lg:col-span-2"
                 >
@@ -504,7 +498,6 @@ export default function SettingsInterfacePanel({
 
                 <InterfaceInlineField
                   htmlFor="settings-remote-status-bridge-machine-id"
-                  icon={<Fingerprint size={14} className="text-[var(--qp-text-tertiary)]" />}
                   title={UI_TEXT.settings.remoteStatusBridgeMachineIdLabel}
                 >
                   <RevealableTextField
@@ -521,7 +514,6 @@ export default function SettingsInterfacePanel({
 
                 <InterfaceInlineField
                   htmlFor="settings-remote-status-bridge-token"
-                  icon={<KeyRound size={14} className="text-[var(--qp-text-tertiary)]" />}
                   title={UI_TEXT.settings.remoteStatusBridgeTokenLabel}
                 >
                   <TokenField

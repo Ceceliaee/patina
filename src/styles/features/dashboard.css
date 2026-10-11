@@ -187,3 +187,7 @@
   outline: 2px solid color-mix(in srgb, var(--qp-accent-default) 42%, transparent);
   outline-offset: 2px;
 }
+
+.dashboard-anonymous-icon {
+  border-radius: var(--qp-radius-control);
+}

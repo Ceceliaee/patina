@@ -725,6 +725,8 @@
 }
 
 .history-activity-popover {
+  display: flex;
+  flex-direction: column;
   position: fixed;
   z-index: 110;
   width: 426px;
@@ -736,8 +738,8 @@
   border-radius: var(--qp-radius-panel);
   background: var(--qp-bg-canvas);
   box-shadow: var(--qp-shadow-overlay);
-  overflow-y: auto;
-  padding: 10px;
+  overflow: hidden;
+  padding: 10px 4px 10px 10px;
 }
 
 .history-activity-popover-top {
@@ -745,6 +747,7 @@
 }
 
 .history-activity-popover-title {
+  flex-shrink: 0;
   margin-bottom: 7px;
   color: var(--qp-text-primary);
   font-size: var(--qp-font-size-caption);
@@ -754,6 +757,9 @@
 
 .history-activity-popover-list {
   display: grid;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
   gap: 6px;
 }
 

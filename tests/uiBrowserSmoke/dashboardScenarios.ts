@@ -183,7 +183,7 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
     await writeFile(resolve(captureDir, fileName), Buffer.from(result.data, "base64"));
   };
 
-  await runTest("anonymous activity ranks once with EyeOff and unique chart patterns without a classification menu", async () => {
+  await runTest("anonymous activity ranks once with abstract tiles and unique chart patterns without a classification menu", async () => {
     const navigate = async () => {
       await client.command("Page.navigate", { url: appUrl }, sessionId);
       await waitForExpression(client, sessionId, `Boolean(document.querySelector('[aria-label="今天"]'))`);
@@ -195,14 +195,19 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
       await navigate();
       const result = await evaluate(client, sessionId, `(() => {
         const root = document.querySelector('.dashboard-workspace');
-        const icon = root.querySelector('svg.lucide-eye-off');
-        const trigger = icon?.closest('button');
+        const icon = root.querySelector('svg.anonymous-activity-icon');
+        const trigger = icon?.closest('[role="img"]');
         const patterns = [...root.querySelectorAll('pattern')].map(node => node.id);
-        return { icons: root.querySelectorAll('svg.lucide-eye-off').length, menu: trigger?.getAttribute('aria-haspopup'),
+        return { icons: root.querySelectorAll('svg.anonymous-activity-icon').length, menu: trigger?.getAttribute('aria-haspopup'),
           total: root.querySelector('.dashboard-focus-total-center span')?.textContent?.trim(),
           patterns, hasPattern: !!root.querySelector('[stroke^="url(#"]'), text: root.innerText };
       })()` ) as { icons: number; menu: string | null; total: string; patterns: string[]; hasPattern: boolean; text: string };
       assert.equal(result.icons, 1);
+      assert.equal(await evaluate(client, sessionId, `(() => {
+        const symbols = [...document.querySelectorAll('.dashboard-workspace .anonymous-activity-name circle, .dashboard-workspace .anonymous-activity-name rect')];
+        const centers = symbols.map(node => { const box = node.getBoundingClientRect(); return box.top + box.height / 2; });
+        return symbols.length === 9 && Math.max(...centers) - Math.min(...centers) < 0.1;
+      })()`), true, 'Morse dots and dashes share one horizontal center line');
       assert.equal(result.menu, null);
       assert.equal(result.total, '1h 0m');
       assert.equal(new Set(result.patterns).size, result.patterns.length);
@@ -217,7 +222,21 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
         await waitForExpression(client, sessionId, `Boolean(document.querySelector('.data-app-option[data-destination-key="activity:anonymous"]'))`);
         const anonymousOption = `.data-app-option[data-destination-key="activity:anonymous"]`;
         assert.equal(await evaluate(client, sessionId, `document.querySelector(${jsonString(anonymousOption)}).getAttribute('aria-haspopup')`), null);
-        assert.equal(await evaluate(client, sessionId, `document.querySelector(${jsonString(anonymousOption)}).querySelectorAll('svg.lucide-eye-off').length`), 1);
+        assert.equal(await evaluate(client, sessionId, `document.querySelector(${jsonString(anonymousOption)}).querySelectorAll('svg.anonymous-activity-icon').length`), 1);
+        assert.equal(await evaluate(client, sessionId, `document.querySelector(${jsonString(anonymousOption)}).innerText.includes('匿名')`), false);
+        await evaluate(client, sessionId, `(() => {
+          const option = document.querySelector(${jsonString(anonymousOption)});
+          option.focus();
+        })()`);
+        await waitForAnimationFrames(client, sessionId, 2);
+        assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('[role="tooltip"]'))`), false);
+        await evaluate(client, sessionId, `(() => {
+          const option = document.querySelector(${jsonString(anonymousOption)});
+          option.querySelector('svg').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+          option.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        })()`);
+        await waitForAnimationFrames(client, sessionId, 2);
+        assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('.destination-detail-dialog'))`), false);
         await evaluate(client, sessionId, `document.querySelector(${jsonString(anonymousOption)}).click()`);
         await waitForExpression(client, sessionId, `Boolean(document.querySelector('.data-app-selected-icon[data-selection-key="activity:anonymous"]'))`);
         assert.equal(await evaluate(client, sessionId, `document.querySelector('.data-app-selected-icon[data-selection-key="activity:anonymous"]').getAttribute('aria-haspopup')`), null);
@@ -226,9 +245,25 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
         assert.equal(await evaluate(client, sessionId, `document.querySelector('.data-app-panel .qp-native-trend-line').getAttribute('stroke')`), '#8F98A8');
         await evaluate(client, sessionId, `document.querySelector('.data-app-panel').scrollIntoView({ block: 'start' })`);
         await captureDashboardScreenshot('anonymous-data.png');
+        await evaluate(client, sessionId, `document.querySelector('[aria-label="历史"]').click()`);
+        await waitForExpression(client, sessionId, `Boolean(document.querySelector('.history-day-distribution-mode-switch')) && Boolean(document.querySelector('svg.anonymous-activity-icon'))`);
+        assert.equal(await evaluate(client, sessionId, `(() => {
+          const icon = document.querySelector('svg.anonymous-activity-icon');
+          return !icon.closest('button') && icon.closest('[role="img"]').getAttribute('aria-label').includes('匿名');
+        })()`), true);
+
+        await evaluate(client, sessionId, `[...document.querySelectorAll('.history-day-distribution-mode-switch button')].find(n => n.textContent.trim() === '分类').click()`);
+        await waitForExpression(client, sessionId, `(() => {
+          const panel = document.querySelector('.history-app-distribution-card');
+          return panel?.innerText.includes('匿名') && !panel.querySelector('.anonymous-activity-icon')
+            && [...panel.querySelectorAll('.history-day-distribution-name-row')].some(n => n.textContent.trim() === '匿名');
+        })()`);
+        await evaluate(client, sessionId, `[...document.querySelectorAll('.history-day-distribution-mode-switch button')].find(n => n.textContent.trim() === '应用').click()`);
+        await waitForExpression(client, sessionId, `Boolean(document.querySelector('.history-app-distribution-card .anonymous-activity-icon'))`);
+
         await evaluate(client, sessionId, `localStorage.setItem('__patina_anonymous_activity','all')`);
         await navigate();
-        assert.equal(await evaluate(client, sessionId, `document.querySelectorAll('.dashboard-workspace svg.lucide-eye-off').length`), 1);
+        assert.equal(await evaluate(client, sessionId, `document.querySelectorAll('.dashboard-workspace svg.anonymous-activity-icon').length`), 1);
         assert.equal(await evaluate(client, sessionId, `document.querySelector('.dashboard-focus-total-center span')?.textContent?.trim()`), '1h 0m');
         assert.equal(await evaluate(client, sessionId, `document.querySelector('.dashboard-workspace').innerText.includes('Cursor')`), false);
     } finally {
