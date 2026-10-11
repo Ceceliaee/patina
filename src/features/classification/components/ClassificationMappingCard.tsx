@@ -11,6 +11,7 @@ import QuietBadge from "../../../shared/components/QuietBadge";
 
 
 interface ClassificationMappingCardProps {
+  inactive?: boolean;
   additionalAction?: ReactNode;
   titleMixed?: boolean;
   trackingMixed?: boolean;
@@ -65,6 +66,7 @@ export function IdentityText({ text, className }: { text: string; className: str
 }
 
 export default function ClassificationMappingCard({
+  inactive = false,
   additionalAction,
   titleMixed = false,
   trackingMixed = false,
@@ -124,7 +126,7 @@ export default function ClassificationMappingCard({
     };
   }, []);
   return (
-    <div ref={rowRef} data-classification-app={kind === "app" ? identity : undefined} data-classification-web={kind === "web" ? identity : undefined} className="qp-app-mapping-row" role="group" aria-label={displayName}>
+    <div ref={rowRef} inert={inactive} aria-hidden={inactive || undefined} data-classification-app={!inactive && kind === "app" ? identity : undefined} data-classification-web={!inactive && kind === "web" ? identity : undefined} className="qp-app-mapping-row" role="group" aria-label={displayName}>
       <div className="qp-app-mapping-identity">
         <div className="qp-app-mapping-icon" style={{ boxShadow: `0 0 0 2px ${displayColor}22` }}>
           {icon ? <img src={icon} alt="" /> : fallbackIcon ?? <span>{(displayName || identity).slice(0, 1).toUpperCase()}</span>}

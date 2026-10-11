@@ -56,14 +56,15 @@ if (!SOURCE_LOCALE) throw new Error("Bundle budget check requires one source loc
 
 const LAZY_PAGE_CHUNK_BUDGETS = [
   { label: "Settings", pattern: /^Settings-.*\.js$/, gzipKiB: 24 },
-  { label: "AppMapping", pattern: /^AppMapping-.*\.js$/, gzipKiB: 18.5 },
-  { label: "History", pattern: /^History-.*\.js$/, gzipKiB: 19.05 },
+  // Scoped cost review: docs/archive/classification-link-layout-bundle-decision.md.
+  { label: "AppMapping", pattern: /^AppMapping-.*\.js$/, gzipKiB: 19.7 },
+  { label: "History", pattern: /^History-.*\.js$/, gzipKiB: 19.1 },
   { label: "Tools", pattern: /^Tools-.*\.js$/, gzipKiB: 18 },
   // The destination analysis panel and its range control are both part of
   // Data's first render; the private detail chunk owns day analysis only. The
   // third application-category mode remains synchronous and feature-owned here;
   // splitting it would duplicate the read-model graph into unowned support chunks.
-  { label: "Data", pattern: /^Data-.*\.js$/, gzipKiB: 22.45 },
+  { label: "Data", pattern: /^Data-.*\.js$/, gzipKiB: 22.55 },
   { label: "About", pattern: /^About-.*\.js$/, gzipKiB: 18 },
 ] as const;
 

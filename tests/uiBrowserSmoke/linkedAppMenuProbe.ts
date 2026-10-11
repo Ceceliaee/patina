@@ -1,4 +1,4 @@
-import { createElement } from 'react';
+import { createElement, useState, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import LinkedAppMenu from '../../src/features/classification/components/LinkedAppMenu.tsx';
 import type { AppLinks } from '../../src/shared/classification/appLinks.ts';
@@ -7,6 +7,10 @@ import { LocaleProvider } from '../../src/shared/i18n/index.ts';
 let root: Root | undefined;
 let host: HTMLDivElement | undefined;
 let currentCounts = { names: 0, candidates: 0 };
+function Menu(props: Omit<ComponentProps<typeof LinkedAppMenu>, 'open' | 'onOpenChange'>) {
+  const [open, setOpen] = useState(false);
+  return createElement(LinkedAppMenu, { ...props, open, onOpenChange: setOpen });
+}
 export function mount(links: AppLinks = {}, suffix = '', disabled = false) {
   if (!host) {
     host = document.createElement('div');
@@ -21,7 +25,7 @@ export function mount(links: AppLinks = {}, suffix = '', disabled = false) {
     get exeName() { if (index > 0) counts.candidates++; return `probe-${index}.exe`; },
     appName: `Probe ${index}${suffix}`, totalDuration: 0, lastSeenMs: 0,
   }));
-  root!.render(createElement(LocaleProvider, { locale: 'zh-CN', children: createElement(LinkedAppMenu, {
+  root!.render(createElement(LocaleProvider, { locale: 'zh-CN', children: createElement(Menu, {
     parent: candidates[0], candidates, links, icons: {}, disabled, globalTitleEnabled: true,
     name: candidate => { counts.names++; return candidate.appName; }, tracking: () => true, titleCapture: () => true,
     onLink: () => undefined, onTracking: () => undefined, onTitle: () => undefined,

@@ -1,6 +1,6 @@
-import { useId, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, Plus, Check, X, ArrowLeft, House, Captions, CaptionsOff, ListX, ListPlus } from "lucide-react";
-import QuietAnchoredPopover from "../../../shared/components/QuietAnchoredPopover.tsx";
+import QuietAnchoredPopover, { type QuietPopoverCloseReason } from "../../../shared/components/QuietAnchoredPopover.tsx";
 import QuietIconAction from "../../../shared/components/QuietIconAction.tsx";
 import QuietSearchField from "../../../shared/components/QuietSearchField.tsx";
 import { useLocaleText } from "../../../shared/i18n/index.ts";
@@ -8,6 +8,8 @@ import type { AppLinks } from "../../../shared/classification/appLinks.ts";
 import type { ObservedAppCandidate } from "../types.ts";
 
 interface Props {
+  open: boolean;
+  onOpenChange: (open: boolean, reason?: QuietPopoverCloseReason) => void;
   parent: ObservedAppCandidate;
   candidates: readonly ObservedAppCandidate[];
   links: AppLinks;
@@ -22,13 +24,21 @@ interface Props {
   onTitle: (candidate: ObservedAppCandidate, enabled: boolean) => void;
 }
 
+function LinkedAppList({ children }: { children: ReactNode }) {
+  const list = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (list.current) list.current.style.height = `${list.current.getBoundingClientRect().height}px`;
+  }, []);
+  return <div ref={list} className="qp-app-link-list qp-scroll-region">{children}</div>;
+}
+
 export default function LinkedAppMenu(props: Props) {
   const text = useLocaleText();
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
   const search = useRef<HTMLInputElement>(null);
   const add = useRef<HTMLButtonElement>(null);
-  const [open, setOpen] = useState(false);
+  const { open } = props;
   const [adding, setAdding] = useState(false);
   const [query, setQuery] = useState("");
   const members = Object.keys(props.links).filter((key) => props.links[key] === props.parent.exeName);
@@ -42,12 +52,15 @@ export default function LinkedAppMenu(props: Props) {
     && !roots.has(candidate.exeName)
     && (!props.links[candidate.exeName] || props.links[candidate.exeName] === props.parent.exeName)
     && `${props.name(candidate)} ${candidate.exeName}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
-  const close = () => { setOpen(false); trigger.current?.focus({ preventScroll: true }); };
+  const close = (reason: QuietPopoverCloseReason) => {
+    props.onOpenChange(false, reason);
+    if (reason === "escape") trigger.current?.focus({ preventScroll: true });
+  };
   return <>
     <button ref={trigger} type="button" className="qp-app-link-trigger qp-app-mapping-exe"
       aria-label={`${text.mapping.linkedApps}: ${props.parent.exeName}`} aria-expanded={open}
       aria-controls={open ? id : undefined} disabled={props.disabled}
-      onClick={() => { setAdding(false); setQuery(""); setOpen(!open); }}>
+      onClick={() => { setAdding(false); setQuery(""); props.onOpenChange(!open); }}>
       <span>{props.parent.exeName}</span>{members.length > 0 && <ChevronDown size={12} aria-hidden />}
     </button>
     <QuietAnchoredPopover open={open && !props.disabled} anchor={trigger.current} id={id}
@@ -59,21 +72,21 @@ export default function LinkedAppMenu(props: Props) {
           onClick={() => setAdding(false)}><ArrowLeft size={14} aria-hidden />{text.mapping.addLinkedApp}</button>
         <QuietSearchField ref={search} value={query} aria-label={text.mapping.addLinkedApp}
           onChange={(event) => setQuery(event.target.value)} />
-        <div className="qp-app-link-list qp-scroll-region">
+        <LinkedAppList key="adding">
           {available.length === 0 && <p>{text.mapping.searchNoResults}</p>}
           {available.map((candidate) => <button type="button" className="qp-app-link-option" key={candidate.exeName}
             disabled={Boolean(props.links[candidate.exeName])} onClick={() => {
               props.onLink(candidate.exeName, props.parent);
-              search.current?.focus();
+              search.current?.focus({ preventScroll: true });
             }}>
             {props.icons[candidate.exeName] && <img src={props.icons[candidate.exeName]} alt="" />}
             <span>{candidate.exeName}</span>
             {props.links[candidate.exeName] ? <Check size={14} aria-hidden /> : <Plus size={14} aria-hidden />}
           </button>)}
-        </div>
+        </LinkedAppList>
       </> : <>
         <strong>{text.mapping.linkedApps}</strong>
-        <div className="qp-app-link-list qp-scroll-region">
+        <LinkedAppList key="members">
           <div className="qp-app-link-option"><span>{props.parent.exeName}</span><div className="qp-app-link-main-icon"><House size={12} role="img" aria-label={text.mapping.mainApp} /></div></div>
           {memberRows.map((candidate) => <div key={candidate.exeName} className="qp-app-link-option qp-app-link-member">
             <span>{candidate.exeName}</span>
@@ -88,10 +101,10 @@ export default function LinkedAppMenu(props: Props) {
                 onClick={() => props.onTracking(candidate, !props.tracking(candidate))} />
               <QuietIconAction icon={<X size={12} />} title={`${text.mapping.unlinkApp}: ${candidate.exeName}`}
                 showTooltip={false} disabled={props.disabled}
-                onClick={() => { props.onLink(candidate.exeName, null); add.current?.focus(); }} />
+                onClick={() => { props.onLink(candidate.exeName, null); add.current?.focus({ preventScroll: true }); }} />
             </div>
           </div>)}
-        </div>
+        </LinkedAppList>
         <button ref={add} type="button" className="qp-app-link-action" onClick={() => setAdding(true)}>
           <Plus size={14} aria-hidden />{text.mapping.addLinkedApp}
         </button>

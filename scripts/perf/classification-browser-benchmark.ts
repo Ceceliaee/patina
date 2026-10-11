@@ -24,6 +24,7 @@ const metadata = {
   harnessHash: hash(readFileSync(import.meta.filename)),
   mode: 'production; Tauri/SQL stubs; no real database writes', viewport: '1280x820@1',
   browser: '', warmups: 2, samples: 20, coldProfiles: 5,
+  linkMeasurement: 'draft feedback while the menu is open; list settlement follows Escape',
 };
 await build({ configFile: 'vite.config.ts', logLevel: 'error', plugins: [tauriBrowserSmokeStubPlugin()],
   build: { outDir, emptyOutDir: true } });
@@ -82,12 +83,13 @@ try {
       await measure('search-clear', input(''), cards(count), run);
       await measure('menu', menu, `!!document.querySelector('.qp-app-link-popover')`, run);
       await measure('add-menu', `document.querySelector('.qp-app-link-action').click()`, `document.querySelectorAll('button.qp-app-link-option').length===${count - 1}`, run);
-      await measure('link', `[...document.querySelectorAll('button.qp-app-link-option')].find(n=>n.textContent.includes('catalog-001.exe')).click()`, cards(count - 1), run);
+      await measure('link-draft', `[...document.querySelectorAll('button.qp-app-link-option')].find(n=>n.textContent.includes('catalog-001.exe')).click()`, cards(count - 1), run);
       await close();
       await measure('save-stub', `[...document.querySelectorAll('button')].find(n=>n.textContent.trim()==='保存'&&!n.disabled).click()`, `[...document.querySelectorAll('button')].find(n=>n.textContent.trim()==='保存')?.disabled && JSON.parse(localStorage.getItem('__time_tracker_smoke_settings')||'{}')['__app_link::catalog-001.exe']==='catalog-000.exe'`, run);
       await measure('member-menu', menu, `!!document.querySelector('[aria-label="解除关联: catalog-001.exe"]')`, run);
-      await measure('unlink', `document.querySelector('[aria-label="解除关联: catalog-001.exe"]').click()`, cards(count), run);
+      await measure('unlink-draft', `document.querySelector('[aria-label="解除关联: catalog-001.exe"]').click()`, `!document.querySelector('[aria-label="解除关联: catalog-001.exe"]')`, run);
       await close();
+      await waitForExpression(client, sessionId, cards(count));
       await measure('save-unlink-stub', `[...document.querySelectorAll('button')].find(n=>n.textContent.trim()==='保存'&&!n.disabled).click()`, `[...document.querySelectorAll('button')].find(n=>n.textContent.trim()==='保存')?.disabled && !JSON.parse(localStorage.getItem('__time_tracker_smoke_settings')||'{}')['__app_link::catalog-001.exe']`, run);
       console.error(`[classification-perf] ${label} ${count} run ${run + 1}/20`);
     }

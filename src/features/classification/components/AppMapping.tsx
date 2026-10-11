@@ -12,6 +12,7 @@ import AppMappingCandidateCard from "./AppMappingCandidateCard";
 import LinkedAppMenu from "./LinkedAppMenu.tsx";
 import WebDomainMappingCard from "./WebDomainMappingCard";
 import { useAppMappingState } from "../hooks/useAppMappingState";
+import { useMappingLinkLayout } from "../hooks/useMappingLinkLayout.ts";
 import type { CandidateFilter } from "../types";
 import {
   readClassificationObjectMode,
@@ -31,7 +32,6 @@ interface Props {
 
 export default function AppMapping(props: Props) {
   const UI_TEXT = useLocaleText();
-  const [webLinksIdentity, setWebLinksIdentity] = useState<string | null>(null);
   const mappingRoot = useRef<HTMLDivElement>(null);
   const { webActivityEnabled = false, titleRecordingEnabled = true } = props;
   const [objectMode, setObjectMode] = useState<MappingObjectMode>(readClassificationObjectMode);
@@ -149,16 +149,19 @@ export default function AppMapping(props: Props) {
     rememberClassificationObjectMode(mode);
   };
   const contentPaneKey = `${effectiveObjectMode}:${filter}`;
+  const layoutView = `${contentPaneKey}:${searchQuery}:${deletingSessionsExe}`;
+  const appLayout = useMappingLinkLayout(filteredCandidates, candidate => candidate.exeName, mappingRoot, "app", layoutView, saving);
+  const webLayout = useMappingLinkLayout(filteredWebDomainCandidates, candidate => candidate.normalizedDomain, mappingRoot, "web", layoutView, saving);
+  const webLinksIdentity = webLayout.openIdentity;
+  const setWebLinksIdentity = webLayout.open;
   const previousDeletion = useRef(deletingSessionsExe);
   useEffect(() => {
     const deletionFinished = previousDeletion.current !== null && deletingSessionsExe === null;
     previousDeletion.current = deletingSessionsExe;
-    const closedLink = webLinksIdentity && !filteredWebDomainCandidates.some(candidate => candidate.normalizedDomain === webLinksIdentity);
-    if (closedLink) setWebLinksIdentity(null);
-    if ((closedLink || (deletionFinished && effectiveObjectMode === "web")) && document.activeElement === document.body) {
-      mappingRoot.current?.querySelector<HTMLInputElement>(".qp-category-search input")?.focus();
+    if (deletionFinished && effectiveObjectMode === "web" && document.activeElement === document.body) {
+      mappingRoot.current?.querySelector<HTMLInputElement>(".qp-category-search input")?.focus({ preventScroll: true });
     }
-  }, [filteredWebDomainCandidates, webLinksIdentity, deletingSessionsExe, effectiveObjectMode]);
+  }, [deletingSessionsExe, effectiveObjectMode]);
   return (
     <div
       ref={mappingRoot}
@@ -197,7 +200,7 @@ export default function AppMapping(props: Props) {
             </div>
             <QuietButton
               size="large"
-              onClick={handleCancel}
+              onClick={() => { appLayout.reset(); webLayout.reset(); handleCancel(); }}
               disabled={!bootstrapReady || !hasUnsavedChanges || saving}
               className="rounded-[8px]"
             >
@@ -307,7 +310,8 @@ export default function AppMapping(props: Props) {
             ) : (
               <div className="h-full overflow-y-auto qp-scroll-region pr-1">
                 <div className="qp-app-mapping-list">
-                  {filteredWebDomainCandidates.map((candidate) => {
+                  {webLayout.slots.map(({ identity, height, candidate }) => {
+                    if (!candidate) return <div key={identity} aria-hidden="true" style={{ height }} />;
                     const displayName = resolveWebDomainDisplayName(candidate);
                     const displayColor = resolveWebDomainColor(candidate);
                     const assignedCategory = resolveWebDomainCategory(candidate);
@@ -318,7 +322,8 @@ export default function AppMapping(props: Props) {
                     return (
                       <WebDomainMappingCard
                         onSetMembers={updateWebDomainMembers}
-                        grouping={{ openIdentity: webLinksIdentity, onOpenIdentity: setWebLinksIdentity, overrides: draftWebDomainOverrides, onChange: updateWebDomainOverride }}
+                        grouping={{ openIdentity: webLinksIdentity, onOpenIdentity: setWebLinksIdentity, overrides: draftWebDomainOverrides,
+                          onBeforeRegroup: webLayout.beforeRegroup, onChange: updateWebDomainOverride }}
                         key={candidate.normalizedDomain}
                         candidate={candidate}
                         displayName={displayName}
@@ -364,23 +369,29 @@ export default function AppMapping(props: Props) {
         ) : (
           <div key={contentPaneKey} className="qp-classification-object-pane h-full overflow-y-auto qp-scroll-region pr-1">
             <div className="qp-app-mapping-list">
-              {filteredCandidates.map((candidate) => {
+              {appLayout.slots.map(({ identity, height, candidate: liveCandidate, preview }) => {
+                const candidate = liveCandidate ?? preview;
+                const inactive = !liveCandidate;
+                if (!candidate) return <div key={identity} aria-hidden="true" style={{ height }} />;
                 const displayName = resolveEffectiveDisplayName(candidate);
                 const displayColor = resolveCandidateColor(candidate);
                 const assignedCategory = resolveMappedCategory(candidate);
                 const trackingEnabled = resolveTrackingEnabled(candidate);
                 const titleCaptureEnabled = resolveTitleCaptureEnabled(candidate);
-                const isBusy = saving || deletingSessionsExe === candidate.exeName;
-                const isEditingName = editingNameExe === candidate.exeName;
+                const isBusy = inactive || saving || deletingSessionsExe === candidate.exeName;
+                const isEditingName = !inactive && editingNameExe === candidate.exeName;
                 const inputValue = nameDrafts[candidate.exeName] ?? displayName;
 
                 return (
                   <AppMappingCandidateCard
+                    inactive={inactive}
                     titleCaptureEnabled={titleCaptureEnabled}
                     key={candidate.exeName}
                     candidate={candidate}
                     icon={icons[candidate.exeName]}
-                    identityContent={<LinkedAppMenu parent={candidate} candidates={allAppCandidates}
+                    identityContent={inactive ? undefined : <LinkedAppMenu parent={candidate} candidates={allAppCandidates}
+                      open={appLayout.openIdentity === candidate.exeName}
+                      onOpenChange={(open, reason) => appLayout.open(open ? candidate.exeName : null, reason)}
                       links={draftState?.appLinks ?? {}} icons={icons} disabled={isBusy}
                       globalTitleEnabled={titleRecordingEnabled} name={resolveEffectiveDisplayName}
                       tracking={resolveTrackingEnabled} titleCapture={resolveTitleCaptureEnabled}

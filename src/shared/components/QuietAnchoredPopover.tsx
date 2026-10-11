@@ -11,6 +11,7 @@ import {
 import { createPortal } from "react-dom";
 
 type QuietAnchoredPopoverPlacement = "top" | "bottom";
+export type QuietPopoverCloseReason = "outside" | "escape" | "scroll";
 
 interface QuietAnchoredPopoverPosition {
   left: number;
@@ -23,7 +24,7 @@ interface QuietAnchoredPopoverProps {
   anchor: HTMLElement | null;
   id: string;
   ariaLabel: string;
-  onClose: () => void;
+  onClose: (reason: QuietPopoverCloseReason) => void;
   children: ReactNode;
   className?: string;
   horizontalAnchorRatio?: number;
@@ -160,20 +161,20 @@ export default function QuietAnchoredPopover({
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (anchor.contains(target) || popoverRef.current?.contains(target)) return;
-      onCloseRef.current();
+      onCloseRef.current("outside");
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();
-      onCloseRef.current();
+      onCloseRef.current("escape");
     };
     const handleScroll = (event: Event) => {
       const target = event.target;
       if (target instanceof Node && popoverRef.current?.contains(target)) {
         return;
       }
-      onCloseRef.current();
+      onCloseRef.current("scroll");
     };
 
     document.addEventListener("pointerdown", handlePointerDown, true);

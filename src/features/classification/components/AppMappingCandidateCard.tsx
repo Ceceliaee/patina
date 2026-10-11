@@ -6,6 +6,7 @@ import type { ColorDisplayFormat } from "../../../shared/lib/colorFormatting";
 import ClassificationMappingCard from "./ClassificationMappingCard";
 
 interface AppMappingCandidateCardProps {
+  inactive?: boolean;
   identityContent?: ReactNode;
   candidate: ObservedAppCandidate;
   icon?: string;

@@ -129,8 +129,8 @@ export async function runLinkedApplicationScenarios({ client, sessionId, runTest
       await click(`${root} .qp-app-link-trigger`);
       await waitForExpression(client!, sessionId, "Boolean(document.querySelector('.qp-app-link-popover'))");
       await click('[aria-label="解除关联: catalog-001.exe"]');
-      await waitForExpression(client!, sessionId, `Boolean(document.querySelector(${jsonString(child)}))`);
       await escape();
+      await waitForExpression(client!, sessionId, `Boolean(document.querySelector(${jsonString(child)}))`);
       await waitForExpression(client!, sessionId, `document.querySelector(${jsonString(`${child} img`)})?.getAttribute('src')?.includes('blue')===true`);
       await evaluate(client!, sessionId, "[...document.querySelectorAll('button')].find(n=>n.textContent.trim()==='保存'&&!n.disabled).click()");
       await waitForExpression(client!, sessionId, "!JSON.parse(localStorage.getItem('__time_tracker_smoke_settings')||'{}')['__app_link::catalog-001.exe']");

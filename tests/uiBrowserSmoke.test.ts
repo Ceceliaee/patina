@@ -51,6 +51,7 @@ const scrollRegionOnly = process.argv.includes("--scroll-region-only");
 const widgetOnly = process.argv.includes("--widget-only");
 const classificationOnly = process.argv.includes("--classification-only");
 const historyWebTimelineTests = new Set([
+  "history title details stay readable at narrow and default widths",
   "anonymous timeline dots fill the visible bar instead of the hit area",
   "history excludes hidden domains from rows and favicon requests, then restores retained history",
   "history timeline cycles app category and web while zoom stays synchronized",
@@ -153,7 +154,11 @@ try {
 
   await runStartupScenarios(smokeContext);
 
-  if (process.argv.includes("--typography-only")) {
+  if (process.argv.includes("--anonymous-only")) {
+    await runDashboardScenarios({ ...smokeContext, runTest: async (name, fn) => {
+      if (name.startsWith("anonymous activity ranks once")) await runTest(name, fn);
+    } });
+  } else if (process.argv.includes("--typography-only")) {
     await runTypographyScenarios(smokeContext);
   } else if (process.argv.includes("--locale-only")) {
     await runLocaleScenarios(smokeContext);

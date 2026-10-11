@@ -4,7 +4,7 @@ import type { ObservedWebDomainCandidate } from "../../../shared/types/webActivi
 import type { UserAssignableAppCategory } from "../../../shared/classification/categoryTokens.ts";
 import type { ColorDisplayFormat } from "../../../shared/lib/colorFormatting.ts";
 import ClassificationMappingCard from "./ClassificationMappingCard";
-import LinkedWebMenu, { focusWebCard, type LinkedWebMenuProps } from "./LinkedWebMenu.tsx";
+import LinkedWebMenu, { type LinkedWebMenuProps } from "./LinkedWebMenu.tsx";
 import { setWebDomainIndependent, webLinkParent } from "../../../shared/classification/webLinks.ts";
 import QuietIconAction from "../../../shared/components/QuietIconAction.tsx";
 
@@ -61,7 +61,7 @@ export default function WebDomainMappingCard({ candidate, grouping, onSetMembers
       onToggleTracking={() => setMembers("enabled", recordings === 0)}
       onDeleteAllSessions={onDeleteHistory}
       additionalAction={!parent && root ? <QuietIconAction icon={<Plus size={16} />} title={UI_TEXT.mapping.mergeWebDomain(root)} disabled={props.isBusy}
-        onClick={() => { const change = setWebDomainIndependent(candidate.normalizedDomain, false, grouping.overrides); if (change) { grouping.onChange(change.key, change.override); grouping.onOpenIdentity(null); focusWebCard(change.key); } }} /> : undefined}
+        onClick={() => { const change = setWebDomainIndependent(candidate.normalizedDomain, false, grouping.overrides); if (change) { grouping.onBeforeRegroup(candidate.normalizedDomain, change.key); grouping.onChange(change.key, change.override); grouping.onOpenIdentity(null); } }} /> : undefined}
     />
   );
 }

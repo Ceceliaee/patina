@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { runClassificationLinkLayoutScenarios } from "./classificationLinkLayoutScenarios.ts";
+import { runClassificationLinkLayoutMatrix } from "./classificationLinkLayoutMatrix.ts";
+import { runWebLinkLayoutScenario } from "./webLinkLayoutScenario.ts";
 import { runLinkedAppMenuPerformanceScenario } from "./linkedAppMenuPerformanceScenario.ts";
 import { runLinkedApplicationScenarios } from "./linkedApplicationScenarios.ts";
 import { runClassificationWebLayoutScenarios } from "./classificationWebLayoutScenarios.ts";
@@ -8,6 +11,9 @@ import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import { delay, evaluate, jsonString, waitForExpression, waitForStableExpression } from "./browserHarness.ts";
 
 export async function runClassificationScenarios(context: BrowserSmokeContext) {
+  await runClassificationLinkLayoutScenarios(context);
+  await runClassificationLinkLayoutMatrix(context);
+  await runWebLinkLayoutScenario(context);
   await runLinkedAppMenuPerformanceScenario(context);
   await runLinkedApplicationScenarios(context);
   await runClassificationAppLayoutScenarios(context);

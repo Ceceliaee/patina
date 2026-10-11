@@ -1,6 +1,6 @@
 import { useId, useRef } from "react";
 import { Captions, CaptionsOff, ChevronDown, House, ListPlus, ListX, X } from "lucide-react";
-import QuietAnchoredPopover from "../../../shared/components/QuietAnchoredPopover.tsx";
+import QuietAnchoredPopover, { type QuietPopoverCloseReason } from "../../../shared/components/QuietAnchoredPopover.tsx";
 import QuietIconAction from "../../../shared/components/QuietIconAction.tsx";
 import { IdentityText } from "./ClassificationMappingCard.tsx";
 import { useLocaleText } from "../../../shared/i18n/index.ts";
@@ -9,26 +9,20 @@ import type { ObservedWebDomainCandidate, WebDomainOverride } from "../../../sha
 
 export interface LinkedWebMenuProps {
   openIdentity: string | null;
-  onOpenIdentity: (identity: string | null) => void;
+  onOpenIdentity: (identity: string | null, reason?: QuietPopoverCloseReason) => void;
+  onBeforeRegroup: (source: string, target: string) => void;
   candidate: ObservedWebDomainCandidate;
   overrides: Record<string, WebDomainOverride>;
   disabled: boolean;
   globalTitleEnabled: boolean;
   onChange: (identity: string, override: WebDomainOverride | null) => void;
 }
-export function focusWebCard(identity: string) {
-  requestAnimationFrame(() => {
-    const card = [...document.querySelectorAll<HTMLElement>('[data-classification-web]')]
-      .find(node => node.dataset.classificationWeb === identity);
-    (card?.querySelector<HTMLButtonElement>('.qp-app-link-trigger') ?? card?.querySelector<HTMLButtonElement>('button'))?.focus({ preventScroll: true });
-  });
-}
-export default function LinkedWebMenu({ openIdentity, onOpenIdentity, candidate, overrides, disabled, globalTitleEnabled, onChange }: LinkedWebMenuProps) {
+export default function LinkedWebMenu({ openIdentity, onOpenIdentity, onBeforeRegroup, candidate, overrides, disabled, globalTitleEnabled, onChange }: LinkedWebMenuProps) {
   const text = useLocaleText(), id = useId(), trigger = useRef<HTMLButtonElement>(null);
   const identity = candidate.normalizedDomain, parent = webDisplayDomain(identity);
   if (!webLinkParent(identity)) return <IdentityText text={parent} className="qp-app-mapping-exe" />;
   const open = openIdentity === identity;
-  const close = () => { onOpenIdentity(null); trigger.current?.focus({ preventScroll: true }); };
+  const close = (reason: QuietPopoverCloseReason) => { onOpenIdentity(null, reason); if (reason === "escape") trigger.current?.focus({ preventScroll: true }); };
   return <>
     <button ref={trigger} type="button" className="qp-app-link-trigger qp-app-mapping-exe"
       aria-label={`${text.mapping.webLinks}: ${parent}`} aria-expanded={open} aria-controls={open ? id : undefined}
@@ -53,7 +47,7 @@ export default function LinkedWebMenu({ openIdentity, onOpenIdentity, candidate,
                 title={`${text.mapping.excludeStats}: ${domain}`} showTooltip={false} pressed={override.enabled === false} showPressedStyle={false}
                 disabled={disabled} onClick={() => onChange(domain, { ...override, enabled: override.enabled === false })} />
               <QuietIconAction icon={<X size={12} />} title={`${text.mapping.webIndependent}: ${domain}`} disabled={disabled}
-                onClick={() => { const change = setWebDomainIndependent(domain, true, overrides); if (change) { onChange(change.key, change.override); onOpenIdentity(null); focusWebCard(domain); } }} />
+                onClick={() => { const change = setWebDomainIndependent(domain, true, overrides); if (change) { onBeforeRegroup(identity, domain); onChange(change.key, change.override); onOpenIdentity(null); } }} />
             </div>
           </div>;
         })}
