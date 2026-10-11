@@ -28,7 +28,7 @@ export async function runThemeContrastScenarios({ client, sessionId, runTest }: 
     await client.command("Page.reload", {}, sessionId);
     await waitFor("reloaded theme view", async () => {
       try {
-        const ready = await read(`performance.timeOrigin !== ${previousOrigin} && (${expression})`);
+        const ready = await read(`performance.timeOrigin !== ${previousOrigin} && Boolean(document.documentElement) && (${expression})`);
         return ready ? true : null;
       } catch (error) {
         if (String(error).includes("Inspected target navigated or closed")) return null;
