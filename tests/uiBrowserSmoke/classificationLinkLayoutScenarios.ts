@@ -14,7 +14,14 @@ export async function runClassificationLinkLayoutScenarios({ client, sessionId, 
     await waitForExpression(client, sessionId, `!document.querySelector('.qp-app-link-popover')`);
   };
   const bounds = (selector: string) => evaluate(client, sessionId, `(() => {const r=document.querySelector(${jsonString(selector)}).getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};})()`) as Promise<{x:number;y:number;width:number;height:number}>;
-  const stablePanel = () => waitForStableExpression(client, sessionId, `(() => { const p=document.querySelector('.qp-app-link-popover');if(!p)return false;const r=p.getBoundingClientRect();return r.top>=12 && r.bottom<=innerHeight-12; })()`);
+  const stablePanel = () => waitForStableExpression(client, sessionId, `(() => {
+    const p=document.querySelector('.qp-app-link-popover');
+    const trigger=document.querySelector('.qp-app-link-trigger[aria-expanded="true"]');
+    if(!p || !trigger)return false;
+    const r=p.getBoundingClientRect(), a=trigger.getBoundingClientRect();
+    return r.top>=12 && r.bottom<=innerHeight-12
+      && (Math.abs(r.top-a.bottom-8)<1 || Math.abs(a.top-r.bottom-8)<1);
+  })()`);
   const choose = async (exe: string) => {
     assert.equal(await evaluate(client, sessionId, `(() => {const n=[...document.querySelectorAll('button.qp-app-link-option')].find(n=>n.textContent.trim()===${jsonString(exe)});if(!n||n.disabled)return false;n.click();return true;})()`), true, exe);
     await waitForExpression(client, sessionId, `[...document.querySelectorAll('button.qp-app-link-option')].find(n=>n.textContent.trim()===${jsonString(exe)})?.disabled===true`);
@@ -42,7 +49,7 @@ export async function runClassificationLinkLayoutScenarios({ client, sessionId, 
       await waitForExpression(client, sessionId, `!!document.querySelector('.qp-app-link-popover')`);
       await click('.qp-app-link-action');
       await waitForExpression(client, sessionId, `document.activeElement===document.querySelector('.qp-app-link-popover input')`);
-      await waitForStableExpression(client, sessionId, `(() => { const p=document.querySelector('.qp-app-link-popover');const r=p.getBoundingClientRect();return r.top>=12 && r.bottom<=innerHeight-12; })()`);
+      await stablePanel();
       const result = await evaluate(client, sessionId, `new Promise(resolve=>{
         const parent=document.querySelector(${jsonString(card)});
         const search=document.querySelector('.qp-app-link-popover input');
