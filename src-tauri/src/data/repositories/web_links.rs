@@ -37,6 +37,75 @@ mod tests {
         }
     }
     #[tokio::test]
+    async fn category_upgrade_uses_lifetime_winner_and_runs_once_atomically() {
+        use sqlx::Executor;
+        let pool = database().await;
+        pool.execute(crate::data::schema::WEB_ACTIVITY_SCHEMA_SQL)
+            .await
+            .unwrap();
+        for (domain, category, duration) in [
+            ("chat.example.com", Some("development"), 1000),
+            ("www.example.com", Some("work"), 2000),
+            ("a.tie.org", Some("work"), 500),
+            ("b.tie.org", Some("development"), 500),
+            ("a.empty.net", None, 2000),
+            ("b.empty.net", Some("work"), 1000),
+            ("a.saved.com", Some("development"), 1000),
+        ] {
+            if let Some(category) = category {
+                sqlx::query("INSERT INTO settings VALUES(?,?)")
+                    .bind(format!("__web_domain_override::{domain}"))
+                    .bind(json!({"category":category}).to_string())
+                    .execute(&pool)
+                    .await
+                    .unwrap();
+            }
+            sqlx::query("INSERT INTO web_activity_segments(browser_client_id,browser_kind,browser_exe_name,domain,normalized_domain,start_time,end_time,duration,created_at,updated_at) VALUES('a','chrome','chrome.exe',?,?,0,?,?,0,?)")
+                .bind(domain).bind(domain).bind(duration).bind(duration).bind(duration).execute(&pool).await.unwrap();
+        }
+        sqlx::query("INSERT INTO settings VALUES('__web_site::saved.com',?)")
+            .bind(json!({"version":2,"category":"other","exceptions":["a.saved.com"]}).to_string())
+            .execute(&pool)
+            .await
+            .unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        migrate_legacy_web_grouping(&mut tx).await.unwrap();
+        let rules = load_in_tx(&mut tx).await.unwrap();
+        assert_eq!(rules["example.com"].category.as_deref(), Some("work"));
+        assert_eq!(rules["tie.org"].category.as_deref(), Some("work"));
+        assert!(!rules.contains_key("empty.net"));
+        assert_eq!(rules["saved.com"].category.as_deref(), Some("other"));
+        assert!(rules["saved.com"].exceptions.contains("a.saved.com"));
+        tx.rollback().await.unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        assert!(!load_in_tx(&mut tx)
+            .await
+            .unwrap()
+            .contains_key("example.com"));
+        migrate_legacy_web_grouping(&mut tx).await.unwrap();
+        tx.commit().await.unwrap();
+        sqlx::query("DELETE FROM settings WHERE key='__web_site::example.com'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        migrate_legacy_web_grouping(&mut tx).await.unwrap();
+        assert!(!load_in_tx(&mut tx)
+            .await
+            .unwrap()
+            .contains_key("example.com"));
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM settings WHERE key LIKE '__web_domain_override::%'",
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+        assert_eq!(count, 6);
+        tx.commit().await.unwrap();
+        pool.close().await;
+    }
+
+    #[tokio::test]
     async fn automatic_rules_replay_conflict_and_atomic_rejection() {
         let pool = database().await;
         let rule = json!({"version":2,"exceptions":["mail.example.com"]});
@@ -83,7 +152,11 @@ mod tests {
     }
     #[tokio::test]
     async fn migration_discards_manual_links_preserves_raw_settings_and_is_idempotent() {
+        use sqlx::Executor;
         let pool = database().await;
+        pool.execute(crate::data::schema::WEB_ACTIVITY_SCHEMA_SQL)
+            .await
+            .unwrap();
         for (key, value) in [
             (
                 "__web_site::chat.example.com",
@@ -95,7 +168,7 @@ mod tests {
             ),
             (
                 "__web_domain_override::chat.example.com",
-                json!({"displayName":"Original","captureTitle":false}),
+                json!({"displayName":"Original","captureTitle":false,"category":"work"}),
             ),
         ] {
             sqlx::query("INSERT INTO settings VALUES(?,?)")
@@ -119,6 +192,7 @@ mod tests {
         migrate_legacy_web_grouping(&mut tx).await.unwrap();
         let rules = load_in_tx(&mut tx).await.unwrap();
         assert!(!rules.contains_key("chat.example.com"));
+        assert_eq!(rules["example.com"].category.as_deref(), Some("work"));
         assert_eq!(
             rules["legacy.org"].exceptions,
             std::collections::BTreeSet::from(["mail.legacy.org".into()])
@@ -327,8 +401,116 @@ pub async fn load_in_tx(tx: &mut Transaction<'_, Sqlite>) -> Result<WebLinkRules
     Ok(rules)
 }
 
+async fn lifetime_domain_totals(
+    tx: &mut Transaction<'_, Sqlite>,
+) -> Result<BTreeMap<String, i64>, String> {
+    let totals: Vec<(String, i64)> = sqlx::query_as(
+        "WITH ordered AS (SELECT normalized_domain, browser_client_id, browser_kind, browser_exe_name, start_time, COALESCE(end_time, updated_at) finish, MAX(COALESCE(end_time, updated_at)) OVER (PARTITION BY normalized_domain,browser_client_id,browser_kind,browser_exe_name ORDER BY start_time,id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) previous_end FROM web_activity_segments) SELECT normalized_domain,SUM(MAX(0,finish-MAX(start_time,COALESCE(previous_end,start_time)))) FROM ordered GROUP BY normalized_domain")
+        .fetch_all(&mut **tx).await.map_err(|e| e.to_string())?;
+    Ok(totals.into_iter().collect())
+}
+
+async fn migrate_domain_categories(
+    tx: &mut Transaction<'_, Sqlite>,
+    protected: &std::collections::BTreeSet<String>,
+) -> Result<(), String> {
+    const MARKER: &str = "__web_group_category_migrated_v2";
+    let done: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM settings WHERE key=?)")
+        .bind(MARKER)
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    if done {
+        return Ok(());
+    }
+    let rows: Vec<(String, String)> = sqlx::query_as("SELECT substr(key,24),value FROM settings WHERE substr(key,1,23)='__web_domain_override::'")
+        .fetch_all(&mut **tx).await.map_err(|e| e.to_string())?;
+    let overrides: BTreeMap<String, serde_json::Value> = rows
+        .into_iter()
+        .map(|(domain, value)| {
+            let value: serde_json::Value =
+                serde_json::from_str(&value).map_err(|e| e.to_string())?;
+            if !value.is_object() {
+                return Err("invalid website override object".into());
+            }
+            Ok((domain, value))
+        })
+        .collect::<Result<_, String>>()?;
+    if overrides
+        .values()
+        .any(|value| value.get("category").is_some())
+    {
+        let totals = lifetime_domain_totals(tx).await?;
+        let mut rules = load_in_tx(tx).await?;
+        let mut winners: BTreeMap<String, (String, i64)> = BTreeMap::new();
+        for domain in totals.keys().chain(overrides.keys()) {
+            let Some(root) = crate::domain::web_links::registrable_domain(domain) else {
+                continue;
+            };
+            if protected.contains(&root)
+                || rules
+                    .get(&root)
+                    .is_some_and(|rule| rule.exceptions.contains(domain))
+            {
+                continue;
+            }
+            let duration = totals.get(domain).copied().unwrap_or(0);
+            let winner = winners
+                .entry(root)
+                .or_insert_with(|| (domain.clone(), duration));
+            if duration > winner.1 || (duration == winner.1 && domain < &winner.0) {
+                *winner = (domain.clone(), duration);
+            }
+        }
+        for (root, (domain, _)) in winners {
+            let Some(category) = overrides
+                .get(&domain)
+                .and_then(|v| v.get("category"))
+                .and_then(|v| v.as_str())
+            else {
+                continue;
+            };
+            let rule = rules.entry(root.clone()).or_insert_with(|| WebLinkRule {
+                version: 2,
+                enabled: false,
+                exceptions: Default::default(),
+                members: None,
+                auto_root: None,
+                display_name: None,
+                category: None,
+                color: None,
+            });
+            rule.category = Some(category.to_owned());
+            validate_rule(&root, rule)?;
+            sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)")
+                .bind(format!("{SETTING_PREFIX}{root}"))
+                .bind(serde_json::to_string(rule).map_err(|e| e.to_string())?)
+                .execute(&mut **tx)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    sqlx::query("INSERT INTO settings(key,value) VALUES(?, 'true')")
+        .bind(MARKER)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// Convert supported older relationships atomically without touching activity facts.
 pub async fn migrate_legacy_web_grouping(tx: &mut Transaction<'_, Sqlite>) -> Result<(), String> {
+    let protected: std::collections::BTreeSet<String> = load_in_tx(tx)
+        .await?
+        .into_iter()
+        .filter(|(_, rule)| rule.version == 2)
+        .map(|(root, _)| root)
+        .collect();
+    migrate_legacy_rules(tx).await?;
+    migrate_domain_categories(tx, &protected).await
+}
+
+async fn migrate_legacy_rules(tx: &mut Transaction<'_, Sqlite>) -> Result<(), String> {
     let previous = load_in_tx(tx).await?;
     if previous.values().all(|rule| rule.version == 2) {
         return Ok(());
@@ -438,9 +620,7 @@ pub async fn snapshot_in_tx(tx: &mut Transaction<'_, Sqlite>) -> Result<WebLinks
             crate::domain::web_links::registrable_domain(domain).map(|root| (domain.clone(), root))
         })
         .collect();
-    let totals: Vec<(String, i64)> = sqlx::query_as(
-        "WITH ordered AS (SELECT normalized_domain, browser_client_id, browser_kind, browser_exe_name, start_time, COALESCE(end_time, updated_at) finish, MAX(COALESCE(end_time, updated_at)) OVER (PARTITION BY normalized_domain,browser_client_id,browser_kind,browser_exe_name ORDER BY start_time,id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) previous_end FROM web_activity_segments) SELECT normalized_domain,SUM(MAX(0,finish-MAX(start_time,COALESCE(previous_end,start_time)))) FROM ordered GROUP BY normalized_domain")
-        .fetch_all(&mut **tx).await.map_err(|e| e.to_string())?;
+    let totals = lifetime_domain_totals(tx).await?;
     let favicons: Vec<(String, String)> = sqlx::query_as(
         "SELECT normalized_domain,favicon_url FROM web_favicon_cache WHERE trim(favicon_url) <> ''",
     )
@@ -454,7 +634,7 @@ pub async fn snapshot_in_tx(tx: &mut Transaction<'_, Sqlite>) -> Result<WebLinks
         overrides,
         domains,
         roots,
-        totals: totals.into_iter().collect(),
+        totals,
         favicons: favicons.into_iter().collect(),
     })
 }
