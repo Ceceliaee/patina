@@ -246,9 +246,9 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
         await evaluate(client, sessionId, `document.querySelector('.data-app-panel').scrollIntoView({ block: 'start' })`);
         await captureDashboardScreenshot('anonymous-data.png');
         await evaluate(client, sessionId, `document.querySelector('[aria-label="历史"]').click()`);
-        await waitForExpression(client, sessionId, `Boolean(document.querySelector('.history-day-distribution-mode-switch')) && Boolean(document.querySelector('svg.anonymous-activity-icon'))`);
+        await waitForExpression(client, sessionId, `Boolean(document.querySelector('.history-app-distribution-card svg.anonymous-activity-icon'))`);
         assert.equal(await evaluate(client, sessionId, `(() => {
-          const icon = document.querySelector('svg.anonymous-activity-icon');
+          const icon = document.querySelector('.history-app-distribution-card svg.anonymous-activity-icon');
           return !icon.closest('button') && icon.closest('[role="img"]').getAttribute('aria-label').includes('匿名');
         })()`), true);
 
