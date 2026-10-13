@@ -438,7 +438,7 @@ fn promote_staging_root(staging: &Path, target: &Path) -> Result<(), String> {
 
 fn clean_old_data_payload(data_root: &Path, remove_container: bool) -> Result<(), String> {
     let mut errors = Vec::new();
-    for suffix in ["", "-wal", "-shm"] {
+    for suffix in ["", "-wal", "-shm", "-journal"] {
         let file_name = format!("{}{}", storage_paths::SQLITE_DB_FILE_NAME, suffix);
         if let Err(error) = remove_path_if_exists(&data_root.join(file_name)) {
             errors.push(error);
@@ -484,7 +484,9 @@ fn clean_pre_migration_backup(data_root: &Path, migration_id: &str) -> Result<()
 }
 
 fn copy_sqlite_files(source: &Path, target: &Path) -> Result<(), String> {
-    for suffix in ["", "-wal", "-shm"] {
+    // Startup may follow a killed writer; SQLite needs its rollback journal to
+    // discard uncommitted pages before the copied database can be validated.
+    for suffix in ["", "-wal", "-shm", "-journal"] {
         let file_name = format!("{}{}", storage_paths::SQLITE_DB_FILE_NAME, suffix);
         let source_path = source.join(&file_name);
         if source_path.exists() {
@@ -981,6 +983,66 @@ fn pre_migration_backup_file_name(migration_id: &str) -> String {
 mod tests {
     use super::*;
 
+    #[test]
+    fn interrupted_sqlite_writer() {
+        let Ok(root) = std::env::var("PATINA_TEST_INTERRUPTED_MIGRATION_SOURCE") else {
+            return;
+        };
+        tauri::async_runtime::block_on(async {
+            let db = Path::new(&root).join(storage_paths::SQLITE_DB_FILE_NAME);
+            let pool = sqlite_pool::open_single_connection_sqlite_pool(&db, true)
+                .await
+                .unwrap();
+            let mut connection = pool.acquire().await.unwrap();
+            sqlx::raw_sql("PRAGMA journal_mode=DELETE; PRAGMA cache_size=1; CREATE TABLE proof (value TEXT); WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<100) INSERT INTO proof SELECT 'committed' || hex(zeroblob(4096)) FROM n; BEGIN IMMEDIATE; UPDATE proof SET value = 'dirty-row' || hex(zeroblob(4096));")
+                .execute(&mut *connection).await.unwrap();
+            // Exit without dropping the live transaction, leaving a hot rollback journal.
+            std::process::exit(0);
+        });
+    }
+
+    #[test]
+    fn migration_copy_recovers_an_interrupted_rollback_transaction() {
+        let root = std::env::temp_dir().join(format!(
+            "patina-migration-hot-journal-{}",
+            std::process::id()
+        ));
+        let source = root.join("source");
+        let target = root.join("target");
+        fs::create_dir_all(&source).unwrap();
+        fs::create_dir_all(&target).unwrap();
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "data::storage_migration::tests::interrupted_sqlite_writer",
+                "--nocapture",
+            ])
+            .env("PATINA_TEST_INTERRUPTED_MIGRATION_SOURCE", &source)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        assert!(source.join("patina.db-journal").exists());
+        copy_sqlite_files(&source, &target).unwrap();
+        tauri::async_runtime::block_on(async {
+            for directory in [&target, &source] {
+                let pool = sqlite_pool::open_single_connection_sqlite_pool(
+                    &directory.join(storage_paths::SQLITE_DB_FILE_NAME),
+                    false,
+                )
+                .await
+                .unwrap();
+                let values: Vec<String> =
+                    sqlx::query_scalar("SELECT DISTINCT substr(value, 1, 9) FROM proof")
+                        .fetch_all(&pool)
+                        .await
+                        .unwrap();
+                pool.close().await;
+                assert_eq!(values, vec!["committed"]);
+            }
+        });
+        fs::remove_dir_all(root).unwrap();
+    }
+
     fn test_storage_paths(
         data_root: PathBuf,
         webview_root: PathBuf,
@@ -1358,6 +1420,7 @@ mod tests {
         fs::write(root.join("backups").join("backup.zip"), b"backup").unwrap();
         fs::write(root.join("remote-backup-temp").join("temp.zip"), b"temp").unwrap();
         fs::write(root.join("data-anchor.json"), b"anchor").unwrap();
+        fs::write(root.join("patina.db-journal"), b"journal").unwrap();
 
         clean_old_data_payload(&root, false).unwrap();
 
@@ -1366,6 +1429,7 @@ mod tests {
             .join(format!("{}-wal", storage_paths::SQLITE_DB_FILE_NAME))
             .exists());
         assert!(!root.join("backups").exists());
+        assert!(!root.join("patina.db-journal").exists());
         assert!(!root.join("remote-backup-temp").exists());
         assert!(root.join("data-anchor.json").exists());
         assert!(root.join("webview").join("EBWebView").exists());
