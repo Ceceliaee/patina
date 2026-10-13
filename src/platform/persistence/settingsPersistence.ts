@@ -1,5 +1,5 @@
 import { deleteSessionsBefore as deleteSessionsBeforeViaCommand } from "./persistenceWriteRuntimeGateway.ts";
-import { getDB } from "./sqlite.ts";
+import { invokeWithCommandError } from "./commandError.ts";
 
 interface SettingRow {
   key: string;
@@ -7,11 +7,7 @@ interface SettingRow {
 }
 
 export async function loadSettingTimestamp(key: string): Promise<number | null> {
-  const db = await getDB();
-  const rows = await db.select<{ value: string }[]>(
-    "SELECT value FROM settings WHERE key = ? LIMIT 1",
-    [key],
-  );
+  const rows = await loadSettingRows({ key });
 
   if (rows.length === 0) {
     return null;
@@ -22,8 +18,18 @@ export async function loadSettingTimestamp(key: string): Promise<number | null> 
 }
 
 export async function loadAllSettingRows(): Promise<SettingRow[]> {
-  const db = await getDB();
-  return db.select<SettingRow[]>("SELECT key, value FROM settings");
+  return loadSettingRows();
+}
+
+export async function loadSettingRows(filter: { key?: string; keyPrefix?: string } = {}): Promise<SettingRow[]> {
+  return invokeWithCommandError("cmd_get_setting_rows", {
+    key: filter.key ?? null,
+    keyPrefix: filter.keyPrefix ?? null,
+  });
+}
+
+export async function loadSettingValue(key: string): Promise<string | null> {
+  return (await loadSettingRows({ key }))[0]?.value ?? null;
 }
 
 export async function deleteSessionsBefore(cutoffTime: number): Promise<void> {

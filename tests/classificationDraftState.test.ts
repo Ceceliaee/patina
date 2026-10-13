@@ -594,18 +594,14 @@ await runTest("legacy migration reads bounded identities and preserves failure a
       }
       return;
     }
-    assert.equal(command, "plugin:sql|select");
-    const query = String(args.query);
-    const values = args.values as string[];
-    if (query.includes("SELECT record_id")) throw new Error("Raw migration fact transfer is forbidden");
-    if (query.includes("SELECT DISTINCT exe_name")) {
+    if (command === "cmd_get_recorded_executable_names") {
       distinctReads += 1;
       if (distinctFailure) throw new Error("controlled distinct read");
-      return recordedNames.map(exe_name => ({ exe_name }));
+      return recordedNames;
     }
-    if (query.includes("WHERE key = ?")) return settings.has(values[0]) ? [{ value: settings.get(values[0]) }] : [];
-    assert.ok(query.includes("WHERE key LIKE ?"), query);
-    const prefix = values[0].slice(0, -1);
+    assert.equal(command, "cmd_get_setting_rows", "raw migration fact transfer is forbidden");
+    if (typeof args.key === "string") return settings.has(args.key) ? [{ key: args.key, value: settings.get(args.key) }] : [];
+    const prefix = String(args.keyPrefix ?? "");
     return Array.from(settings, ([key, value]) => ({ key, value })).filter(row => row.key.startsWith(prefix));
   } } };
   try {
@@ -624,7 +620,7 @@ await runTest("legacy migration reads bounded identities and preserves failure a
     assert.deepEqual(commits[0].map(row => row.key), [marker]);
 
     settings.set("__app_override::Douyin_tray.exe", JSON.stringify({ category: "video", enabled: true }));
-    await assert.rejects(loadAppOverrides(), /controlled distinct read/);
+    await assert.rejects(loadAppOverrides(), { message: "controlled distinct read" });
     assert.equal(commits.length, 1, "failed presence reads must not commit transition or orphan cleanup");
     distinctFailure = false;
     const retained = await loadAppOverrides();

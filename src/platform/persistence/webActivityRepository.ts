@@ -1,5 +1,5 @@
 import { deleteWebActivitySegmentsByDomain as deleteWebActivitySegmentsByDomainViaCommand } from "./persistenceWriteRuntimeGateway.ts";
-import { getDB } from "./sqlite.ts";
+import { invokeWithCommandError } from "./commandError.ts";
 import { isAnonymousActivity } from "../../shared/classification/anonymousActivity.ts";
 import { loadWebLinksOverrides } from "./webLinksGateway.ts";
 import type {
@@ -65,28 +65,9 @@ export async function getWebActivitySegmentsInRange(
   startMs: number,
   endMs: number,
 ): Promise<WebActivitySegment[]> {
-  const db = await getDB();
-  const now = Date.now();
-  const rows = await db.select<RawWebActivitySegmentRow[]>(
-    `SELECT id,
-            browser_client_id,
-            browser_kind,
-            browser_exe_name,
-            domain,
-            normalized_domain,
-            url,
-            title,
-            NULL AS favicon_url,
-            start_time,
-            COALESCE(end_time, MAX(start_time, MIN(?, updated_at + 45000))) AS end_time,
-            COALESCE(duration, MAX(0, MIN(?, updated_at + 45000) - start_time)) AS duration
-     FROM web_activity_segments
-     WHERE start_time < ?
-       AND COALESCE(end_time, MIN(?, updated_at + 45000)) > ?
-     ORDER BY start_time ASC, id ASC`,
-    [now, now, endMs, now, startMs],
+  const rows = await invokeWithCommandError<RawWebActivitySegmentRow[]>(
+    "cmd_get_web_activity_segment_rows", { startMs, endMs, nowMs: Date.now() },
   );
-
   return rows.map(mapRawWebActivitySegment);
 }
 
@@ -98,24 +79,10 @@ export async function loadObservedWebDomainStats(
   days: number = 30,
   limit: number = 120,
 ): Promise<ObservedWebDomainCandidate[]> {
-  const db = await getDB();
   const sinceMs = Date.now() - (Math.max(1, days) * 24 * 60 * 60 * 1000);
   const nowMs = Date.now();
-  const rows = await db.select<RawObservedWebDomainStatRow[]>(
-    `SELECT segment.normalized_domain AS normalized_domain,
-            MAX(COALESCE(segment.domain, segment.normalized_domain)) AS domain,
-            SUM(COALESCE(segment.duration, MAX(0, MIN(?, segment.updated_at + 45000) - segment.start_time))) AS total_duration,
-            MAX(segment.start_time) AS last_seen_ms,
-            MAX(favicon_cache.favicon_url) AS favicon_url,
-            MAX(segment.title) AS title
-     FROM web_activity_segments AS segment
-     LEFT JOIN web_favicon_cache AS favicon_cache
-       ON favicon_cache.normalized_domain = segment.normalized_domain
-     WHERE segment.start_time >= ?
-     GROUP BY segment.normalized_domain
-     ORDER BY last_seen_ms DESC, total_duration DESC
-     LIMIT ?`,
-    [nowMs, sinceMs, Math.max(1, limit)],
+  const rows = await invokeWithCommandError<RawObservedWebDomainStatRow[]>(
+    "cmd_get_observed_web_domain_rows", { sinceMs, nowMs, limit: Math.max(1, Math.trunc(limit)) },
   );
 
   return rows.map((row) => ({
@@ -140,15 +107,10 @@ export async function getWebFaviconsForDomains(domains: string[]): Promise<Recor
     return faviconMap;
   }
 
-  const db = await getDB();
   for (let index = 0; index < normalizedDomains.length; index += WEB_FAVICON_QUERY_BATCH_SIZE) {
     const batch = normalizedDomains.slice(index, index + WEB_FAVICON_QUERY_BATCH_SIZE);
-    const placeholders = batch.map(() => "?").join(", ");
-    const rows = await db.select<RawWebFaviconRow[]>(
-      `SELECT normalized_domain, favicon_url
-       FROM web_favicon_cache
-       WHERE normalized_domain IN (${placeholders})`,
-      batch,
+    const rows = await invokeWithCommandError<RawWebFaviconRow[]>(
+      "cmd_get_web_favicon_rows", { domains: batch },
     );
 
     for (const row of rows) {

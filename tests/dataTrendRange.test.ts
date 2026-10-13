@@ -142,13 +142,8 @@ await runTest("all-time snapshots preserve active days and peak day while charti
     const startTime = new Date(2026, month, day).getTime();
     return { exeName: "metric-fixture.exe", appName: "Metric Fixture", startTime, endTime: startTime + hours * hour };
   });
-  const monthlyRows = [[3, 1], [4, 5]].map(([month, hours]) => {
-    const startTime = new Date(2026, month, 1).getTime();
-    return { exeName: "metric-fixture.exe", appName: "Metric Fixture", startTime, endTime: startTime + hours * hour };
-  });
   const deps = {
     getSessionSummariesInRange: async () => dailyRows,
-    getSessionSummariesInRangeByLocalMonth: async () => monthlyRows,
   };
   const snapshot = await loadDataTrendSnapshot({
     kind: "all", startDateKey: "2026-04-10", endDateKey: "2026-05-03",

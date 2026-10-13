@@ -19,7 +19,7 @@ export async function verifyProcessMapperRuntime() {
     endTime: day + index * 3600000 + (index ? 1 : 13) * 60000,
   }));
   const originalRecords = structuredClone(records);
-  const dashboard = () => buildDashboardReadModel([], resolveTrackerHealth(now, now, 8000), now, [], records, [], true);
+  const dashboard = () => buildDashboardReadModel(records, resolveTrackerHealth(now, now, 8000), now, []);
   const expectRows = (keys: string[]) => {
     const result = dashboard();
     assert.deepEqual(result.topApplications.map(row => row.exeName), keys);
@@ -41,12 +41,10 @@ export async function verifyProcessMapperRuntime() {
       }
       return;
     }
-    assert.equal(command, "plugin:sql|select");
-    const query = String(args.query);
-    const values = args.values as string[];
-    if (query.includes("SELECT DISTINCT exe_name")) return records.map(row => ({ exe_name: row.exeName }));
-    if (query.includes("WHERE key = ?")) return settings.has(values[0]) ? [{ value: settings.get(values[0]) }] : [];
-    const prefix = values[0].slice(0, -1);
+    if (command === "cmd_get_recorded_executable_names") return records.map(row => row.exeName);
+    assert.equal(command, "cmd_get_setting_rows");
+    if (typeof args.key === "string") return settings.has(args.key) ? [{ key: args.key, value: settings.get(args.key) }] : [];
+    const prefix = String(args.keyPrefix ?? "");
     const rows = Array.from(settings, ([key, value]) => ({ key, value })).filter(row => row.key.startsWith(prefix));
     if (prefix === "__app_link::" && failLinks) throw new Error("controlled link read failure");
     if (prefix === "__app_link::" && holdRead) {
@@ -74,12 +72,12 @@ export async function verifyProcessMapperRuntime() {
     expectRows(["weixin.exe"]);
 
     failLinks = true;
-    await assert.rejects(ensureProcessMapperRuntimeReady(), /controlled link read failure/);
+    await assert.rejects(ensureProcessMapperRuntimeReady(), { message: "controlled link read failure" });
     await assert.rejects(loadDashboardRuntimeSnapshotWithDeps(new Date(now), {
       ensureProcessMapperRuntimeReady,
       loadDashboardSnapshot: async () => { throw new Error("must not read dashboard after failed classification"); },
       setDashboardSnapshotCache: () => assert.fail("must not publish a failed classification snapshot"),
-    }), /controlled link read failure/);
+    }), { message: "controlled link read failure" });
     expectRows(["weixin.exe"]);
     failLinks = false;
     settings.set("__app_link::weixin.exe", "wechatappex.exe");

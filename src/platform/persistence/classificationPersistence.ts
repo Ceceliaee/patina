@@ -3,7 +3,8 @@ import {
   deleteSessionsByExeNames as deleteSessionsByExeNamesViaCommand,
   deleteSessionsByExeNamesBetween as deleteSessionsByExeNamesBetweenViaCommand,
 } from "./persistenceWriteRuntimeGateway.ts";
-import { getDB } from "./sqlite.ts";
+import { loadSettingRows } from "./settingsPersistence.ts";
+export { loadSettingValue } from "./settingsPersistence.ts";
 import { invokeWithCommandError } from "./commandError.ts";
 import { isPlainRecord } from "../../shared/lib/runtimeTypeGuards.ts";
 import {
@@ -18,10 +19,6 @@ interface SettingKeyValueRow {
 
 interface SettingKeyRow {
   key: string;
-}
-
-interface RawSessionExeNameRow {
-  exe_name: string;
 }
 
 interface SessionExeNameRow {
@@ -63,46 +60,17 @@ export async function deleteSettingValue(key: string): Promise<void> {
   await commitClassificationSettingMutations([{ key, value: null }]);
 }
 
-export async function loadSettingValue(key: string): Promise<string | null> {
-  const db = await getDB();
-  const rows = await db.select<{ value: string }[]>(
-    "SELECT value FROM settings WHERE key = ? LIMIT 1",
-    [key],
-  );
-  return rows[0]?.value ?? null;
-}
-
 export async function loadSettingRowsByKeyPrefix(keyPrefix: string): Promise<SettingKeyValueRow[]> {
-  const db = await getDB();
-  return db.select<SettingKeyValueRow[]>(
-    "SELECT key, value FROM settings WHERE key LIKE ?",
-    [`${keyPrefix}%`],
-  );
+  return loadSettingRows({ keyPrefix });
 }
 
 export async function loadSettingKeysByKeyPrefix(keyPrefix: string): Promise<SettingKeyRow[]> {
-  const db = await getDB();
-  return db.select<SettingKeyRow[]>(
-    "SELECT key FROM settings WHERE key LIKE ?",
-    [`${keyPrefix}%`],
-  );
+  return (await loadSettingRows({ keyPrefix })).map(({ key }) => ({ key }));
 }
 
 export async function loadDistinctSessionExeNames(): Promise<SessionExeNameRow[]> {
-  const db = await getDB();
-  const rows = await db.select<RawSessionExeNameRow[]>(
-    `SELECT DISTINCT exe_name
-     FROM (
-       SELECT exe_name FROM sessions
-       UNION ALL
-       SELECT exe_name FROM import_exact_sessions
-       UNION ALL
-       SELECT exe_name FROM import_time_buckets
-     )`,
-  );
-  return rows.map((row) => ({
-    exeName: row.exe_name,
-  }));
+  const rows = await invokeWithCommandError<string[]>("cmd_get_recorded_executable_names");
+  return rows.map((exeName) => ({ exeName }));
 }
 
 export async function loadLegacyClassificationApps(nowMs: number): Promise<Array<{ exeName: string; appName: string }>> {

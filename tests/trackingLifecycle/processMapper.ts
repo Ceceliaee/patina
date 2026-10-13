@@ -1,3 +1,4 @@
+import { aggregateFixtureRecords } from "../helpers/aggregateFixtures.ts";
 import {
   assert,
   buildNormalizedAppStats,
@@ -315,7 +316,7 @@ export function runProcessMapperTests() {
 
     const trackerHealth = resolveTrackerHealth(120_000, 120_000, 8_000);
     const historyView = buildHistoryReadModel({
-      daySessions: [
+    daySessions: [
         makeSession({
           id: 1,
           exeName: "vscodium.exe",
@@ -325,13 +326,23 @@ export function runProcessMapperTests() {
           duration: 60_000,
         }),
       ],
-      weeklySessions: [],
-      selectedDate: new Date(0),
-      trackerHealth,
-      nowMs: 120_000,
-      minSessionSecs: 0,
-      mergeThresholdSecs: 180,
-    });
+    selectedDate: new Date(0),
+    trackerHealth,
+    nowMs: 120_000,
+    minSessionSecs: 0,
+    mergeThresholdSecs: 180,
+    dayAggregateSessions: aggregateFixtureRecords([
+        makeSession({
+          id: 1,
+          exeName: "vscodium.exe",
+          appName: "VSCodium",
+          startTime: 0,
+          endTime: 60_000,
+          duration: 60_000,
+        }),
+      ], trackerHealth, 120_000),
+    weeklyAggregateSessions: []
+  });
 
     assert.equal(historyView.appSummary.length, 1);
     assert.equal(historyView.appSummary[0].appName, "CodeLab");
@@ -350,7 +361,7 @@ export function runProcessMapperTests() {
 
     const trackerHealth = resolveTrackerHealth(120_000, 120_000, 8_000);
     const historyView = buildHistoryReadModel({
-      daySessions: [
+    daySessions: [
         makeSession({
           id: 1,
           exeName: "QQ.exe",
@@ -368,13 +379,31 @@ export function runProcessMapperTests() {
           duration: 60_000,
         }),
       ],
-      weeklySessions: [],
-      selectedDate: new Date(0),
-      trackerHealth,
-      nowMs: 120_000,
-      minSessionSecs: 0,
-      mergeThresholdSecs: 180,
-    });
+    selectedDate: new Date(0),
+    trackerHealth,
+    nowMs: 120_000,
+    minSessionSecs: 0,
+    mergeThresholdSecs: 180,
+    dayAggregateSessions: aggregateFixtureRecords([
+        makeSession({
+          id: 1,
+          exeName: "QQ.exe",
+          appName: "QQ",
+          startTime: 0,
+          endTime: 60_000,
+          duration: 60_000,
+        }),
+        makeSession({
+          id: 2,
+          exeName: "chrome.exe",
+          appName: "Google Chrome",
+          startTime: 65_000,
+          endTime: 125_000,
+          duration: 60_000,
+        }),
+      ], trackerHealth, 120_000),
+    weeklyAggregateSessions: []
+  });
 
     assert.equal(historyView.appSummary.length, 1);
     assert.equal(historyView.appSummary[0].exeName.toLowerCase(), "chrome.exe");
@@ -396,8 +425,7 @@ export function runProcessMapperTests() {
       const todayStart = new Date(2026, 4, 8, 0, 0, 0).getTime();
       const yesterdayStart = new Date(2026, 4, 7, 0, 0, 0).getTime();
       const trackerHealth = resolveTrackerHealth(nowMs, nowMs, 8_000);
-      const dashboard = buildDashboardReadModel(
-        [
+      const dashboard = buildDashboardReadModel(aggregateFixtureRecords([
           makeSession({
             id: 1,
             exeName: "QQ.exe",
@@ -414,10 +442,7 @@ export function runProcessMapperTests() {
             endTime: todayStart + 10.5 * 60 * 60_000,
             duration: 30 * 60_000,
           }),
-        ],
-        trackerHealth,
-        nowMs,
-        [
+        ], trackerHealth, nowMs), trackerHealth, nowMs, aggregateFixtureRecords([
           makeSession({
             id: 3,
             exeName: "QQ.exe",
@@ -434,8 +459,7 @@ export function runProcessMapperTests() {
             endTime: yesterdayStart + 10.25 * 60 * 60_000,
             duration: 15 * 60_000,
           }),
-        ],
-      );
+        ], trackerHealth, nowMs));
 
       assert.equal(dashboard.totalTrackedTime, 30 * 60_000);
       assert.equal(dashboard.yesterdayTrackedTime, 15 * 60_000);

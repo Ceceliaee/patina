@@ -31,10 +31,10 @@ await (async () => {
   const blocked = new Promise<void>(resolve => { release = resolve; });
   let reads = 0;
   AppClassification.setAppLinks({});
-  host.window = { __TAURI_INTERNALS__: { invoke: async (command: string, args: { values: string[] }) => {
-    assert.equal(command, "plugin:sql|select");
+  host.window = { __TAURI_INTERNALS__: { invoke: async (command: string, args: { exeNames: string[] }) => {
+    assert.equal(command, "cmd_get_executable_icon_rows");
     const rows = [{ exe_name: "weixin.exe", icon_base64: "PARENT" }, { exe_name: "wechatappex.exe", icon_base64: "CHILD" }]
-      .filter(row => args.values.includes(row.exe_name));
+      .filter(row => args.exeNames.includes(row.exe_name));
     if (++reads === 1) { entered(); await blocked; }
     return rows;
   } } };
@@ -46,7 +46,7 @@ await (async () => {
     assert.equal((await pending)["weixin.exe"], "PARENT", "a late child row must not overwrite its new parent's icon");
     const own = await getIconsForExecutables(["wechatappex.exe"], "executable");
     assert.deepEqual(own, { "wechatappex.exe": "CHILD" });
-    console.log("PASS real icon repository keeps parent identity when association changes during SQL read");
+    console.log("PASS real icon repository keeps parent identity when association changes during typed read");
   } finally {
     release?.();
     host.window = originalWindow;

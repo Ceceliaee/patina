@@ -1,5 +1,4 @@
-import { getDB } from "./sqlite.ts";
-import { ANONYMOUS_ACTIVITY_KEY } from "../../shared/classification/anonymousActivity.ts";
+import { invokeWithCommandError } from "./commandError.ts";
 import { AppClassification } from "../../shared/classification/appClassification.ts";
 import { resolveAppIconKeys, resolveExecutableIconKeys } from "../../shared/classification/appIconIdentity.ts";
 import type { HistorySession, TitleSampleDetail } from "../../shared/types/sessions.ts";
@@ -102,14 +101,10 @@ export async function getIconsForExecutables(exeNames: string[], identity: "stat
     return map;
   }
 
-  const db = await getDB();
   for (let index = 0; index < lookupKeys.length; index += ICON_QUERY_BATCH_SIZE) {
     const batchKeys = lookupKeys.slice(index, index + ICON_QUERY_BATCH_SIZE);
-    const caseInsensitiveBatchKeys = batchKeys.map((key) => key.toLowerCase());
-    const placeholders = batchKeys.map(() => "?").join(", ");
-    const rows = await db.select<RawIconCacheRow[]>(
-      `SELECT exe_name, icon_base64 FROM icon_cache WHERE LOWER(exe_name) IN (${placeholders})`,
-      caseInsensitiveBatchKeys,
+    const rows = await invokeWithCommandError<RawIconCacheRow[]>(
+      "cmd_get_executable_icon_rows", { exeNames: batchKeys },
     );
 
     // Rows were selected for the previous identities. Mapping them through a
@@ -134,93 +129,27 @@ export async function getIconsForExecutables(exeNames: string[], identity: "stat
 }
 
 export async function getSessionsInRange(startMs: number, endMs: number): Promise<HistorySession[]> {
-  const db = await getDB();
-  const now = Date.now();
-  const rows = await db.select<RawHistorySessionRow[]>(
-    `SELECT id, origin, app_name, exe_name, window_title, start_time, end_time,
-            duration, continuity_group_start_time
-     FROM (
-       SELECT id, 'native' AS origin, app_name, exe_name, window_title, start_time, end_time,
-              COALESCE(duration, MAX(0, ? - start_time)) AS duration,
-              continuity_group_start_time
-       FROM sessions
-       WHERE start_time < ? AND (end_time > ? OR (end_time IS NULL AND ? > ?))
-       UNION ALL
-       SELECT -7000000000000000 - rowid, 'native', '', ?, '', start_time,
-              COALESCE(end_time, observed_until), COALESCE(end_time, observed_until) - start_time, start_time
-       FROM anonymous_activity
-       WHERE start_time < ? AND COALESCE(end_time, observed_until) > ?
-       UNION ALL
-       SELECT id, 'import_exact' AS origin, app_name, exe_name, window_title, start_time, end_time,
-              duration, start_time AS continuity_group_start_time
-       FROM import_exact_sessions
-       WHERE start_time < ? AND end_time > ?
-     )
-     ORDER BY start_time ASC`,
-    [now, endMs, startMs, now, startMs, ANONYMOUS_ACTIVITY_KEY, endMs, startMs, endMs, startMs],
-  );
-
-  const effectiveRows = resolveEffectiveHistoryRows(rows, now);
-  if (effectiveRows.length === 0) {
-    return [];
-  }
-
-  const samplesBySessionId = new Map<number, TitleSampleDetail[]>();
-  const sessionIds = Array.from(new Set(
-    effectiveRows.filter((row) => row.origin === "native" && row.id > 0).map((row) => row.id),
-  ));
-  const batchSize = 900;
-  for (let index = 0; index < sessionIds.length; index += batchSize) {
-    const batchIds = sessionIds.slice(index, index + batchSize);
-    const placeholders = batchIds.map(() => "?").join(", ");
-    const sampleRows = await db.select<RawTitleSampleRow[]>(
-      `SELECT session_id, title, start_time, end_time
-       FROM session_title_samples
-       WHERE session_id IN (${placeholders})
-         AND start_time < ?
-         AND COALESCE(end_time, ?) > ?
-       ORDER BY session_id ASC, start_time ASC, id ASC`,
-      [...batchIds, endMs, now, startMs],
-    );
-
-    for (const sampleRow of sampleRows) {
-      const samples = samplesBySessionId.get(sampleRow.session_id) ?? [];
-      samples.push(mapRawTitleSample(sampleRow));
-      samplesBySessionId.set(sampleRow.session_id, samples);
-    }
-  }
-
-  return effectiveRows.map((row) => mapRawHistorySession(row, samplesBySessionId.get(row.id) ?? []));
+  return loadHistoryRange(startMs, endMs, true);
 }
 
 export async function getSessionsInRangeWithoutTitleSamples(startMs: number, endMs: number): Promise<HistorySession[]> {
-  const db = await getDB();
-  const now = Date.now();
-  const rows = await db.select<RawHistorySessionRow[]>(
-    `SELECT id, origin, app_name, exe_name, window_title, start_time, end_time,
-            duration, continuity_group_start_time
-     FROM (
-       SELECT id, 'native' AS origin, app_name, exe_name, window_title, start_time, end_time,
-              COALESCE(duration, MAX(0, ? - start_time)) AS duration,
-              continuity_group_start_time
-       FROM sessions
-       WHERE start_time < ? AND (end_time > ? OR (end_time IS NULL AND ? > ?))
-       UNION ALL
-       SELECT -7000000000000000 - rowid, 'native', '', ?, '', start_time,
-              COALESCE(end_time, observed_until), COALESCE(end_time, observed_until) - start_time, start_time
-       FROM anonymous_activity
-       WHERE start_time < ? AND COALESCE(end_time, observed_until) > ?
-       UNION ALL
-       SELECT id, 'import_exact' AS origin, app_name, exe_name, window_title, start_time, end_time,
-              duration, start_time AS continuity_group_start_time
-       FROM import_exact_sessions
-       WHERE start_time < ? AND end_time > ?
-     )
-     ORDER BY start_time ASC`,
-    [now, endMs, startMs, now, startMs, ANONYMOUS_ACTIVITY_KEY, endMs, startMs, endMs, startMs],
-  );
+  return loadHistoryRange(startMs, endMs, false);
+}
 
-  return resolveEffectiveHistoryRows(rows, now).map((row) => mapRawHistorySession(row));
+async function loadHistoryRange(startMs: number, endMs: number, includeTitleSamples: boolean): Promise<HistorySession[]> {
+  const now = Date.now();
+  const result = await invokeWithCommandError<{
+    sessions: RawHistorySessionRow[];
+    titleSamples: RawTitleSampleRow[];
+  }>("cmd_get_history_range_rows", { startMs, endMs, nowMs: now, includeTitleSamples });
+  const samplesBySessionId = new Map<number, TitleSampleDetail[]>();
+  for (const sample of result.titleSamples) {
+    const samples = samplesBySessionId.get(sample.session_id) ?? [];
+    samples.push(mapRawTitleSample(sample));
+    samplesBySessionId.set(sample.session_id, samples);
+  }
+  return resolveEffectiveHistoryRows(result.sessions, now).map((row) =>
+    mapRawHistorySession(row, samplesBySessionId.get(row.id) ?? []));
 }
 
 function resolveEffectiveHistoryRows(
@@ -270,40 +199,8 @@ export async function getSessionSummariesInRangeByLocalDay(
   }));
 }
 
-export async function getSessionSummariesInRangeByLocalMonth(
-  startMs: number,
-  endMs: number,
-): Promise<AggregateSessionRecord[]> {
-  if (endMs <= startMs) return [];
-  const boundaries = [startMs];
-  const start = new Date(startMs);
-  let cursor = new Date(start.getFullYear(), start.getMonth() + 1, 1);
-  while (cursor.getTime() < endMs) {
-    boundaries.push(cursor.getTime());
-    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
-  }
-  boundaries.push(endMs);
-  const response = await loadActivityAggregateRange(startMs, endMs, boundaries);
-  return response.records.filter((row) => AppClassification.shouldTrackProcess(row.exeName, {
-    appName: row.appName,
-  }));
-}
-
 export async function getEarliestSessionStartTime(): Promise<number | null> {
-  const db = await getDB();
-  const rows = await db.select<{ earliest_start_time: number | null }[]>(
-    `SELECT MIN(start_time) AS earliest_start_time
-     FROM (
-       SELECT start_time FROM sessions
-       UNION ALL
-       SELECT start_time FROM anonymous_activity
-       UNION ALL
-       SELECT start_time FROM import_exact_sessions
-       UNION ALL
-       SELECT bucket_start_time AS start_time FROM import_time_buckets
-     )`,
-  );
-  return rows[0]?.earliest_start_time ?? null;
+  return invokeWithCommandError("cmd_get_earliest_activity_start_time");
 }
 
 export async function getHistoryByDate(date: Date): Promise<HistorySession[]> {
