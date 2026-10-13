@@ -13,6 +13,7 @@ pub struct CurrentTrackingSnapshot {
     pub window: WindowInfo,
     pub status: TrackingStatusSnapshot,
     pub sampled_at_ms: i64,
+    pub tracking_paused: bool,
     pub probe_status: TrackingRuntimeProbeStatus,
     pub degraded_reason: Option<String>,
     pub probe_diagnostics: TrackingRuntimeProbeDiagnostics,
@@ -44,11 +45,14 @@ pub fn get_current_active_window(app: tauri::AppHandle) -> Result<WindowInfo, St
 }
 
 #[tauri::command]
-pub fn get_current_tracking_snapshot(
+pub async fn get_current_tracking_snapshot(
     app: tauri::AppHandle,
 ) -> Result<CurrentTrackingSnapshot, String> {
-    let snapshot = app
-        .state::<TrackingRuntimeSnapshotState>()
+    let state = app.state::<TrackingRuntimeSnapshotState>();
+    let _transition = state.transition.lock().await;
+    let tracking_paused =
+        crate::data::tracking_pause_service::load_tracking_pause_setting(&app).await?;
+    let snapshot = state
         .snapshot()
         .ok_or_else(|| "tracking runtime snapshot is not ready".to_string())?;
 
@@ -56,6 +60,7 @@ pub fn get_current_tracking_snapshot(
         window: snapshot.window,
         status: snapshot.status,
         sampled_at_ms: snapshot.sampled_at_ms,
+        tracking_paused,
         probe_status: snapshot.probe_status,
         degraded_reason: snapshot.degraded_reason,
         probe_diagnostics: snapshot.probe_diagnostics,

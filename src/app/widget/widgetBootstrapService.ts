@@ -4,7 +4,6 @@ import { APP_LINK_KEY_PREFIX } from "../../shared/classification/appLinks.ts";
 import { ProcessMapper, type AppOverride } from "../../shared/classification/processMapper.ts";
 import { normalizeWidgetBootstrapSettings } from "../../shared/settings/appSettingsNormalization.ts";
 import {
-  getWidgetBootstrapSnapshot,
   type WidgetBootstrapSnapshot,
 } from "../../platform/desktop/widgetRuntimeGateway.ts";
 
@@ -38,8 +37,4 @@ export function applyWidgetBootstrapSnapshot(
     settings: normalizeWidgetBootstrapSettings(snapshot.settings),
     pinned: snapshot.pinned,
   };
-}
-
-export async function loadWidgetRuntimeBootstrapSnapshot(): Promise<WidgetRuntimeBootstrapSnapshot> {
-  return applyWidgetBootstrapSnapshot(await getWidgetBootstrapSnapshot());
 }

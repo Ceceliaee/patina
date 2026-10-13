@@ -1,18 +1,13 @@
 import type {
   TrackerHealthRuntimeSnapshot,
   TrackerHealthSnapshot,
-  TrackingRuntimeProbeStatus,
-  TrackingStatusSnapshot,
-  TrackingWindowSnapshot,
 } from "../../shared/types/tracking.ts";
 import {
-  DEFAULT_TRACKING_STATUS,
   resolveTrackerHealth,
   TRACKER_HEARTBEAT_STALE_AFTER_MS,
 } from "../../shared/types/tracking.ts";
 import type { AppSettings } from "./appSettingsRuntimeService.ts";
 import {
-  getCurrentTrackingSnapshot,
   getTrackerHealthRuntimeSnapshot,
   setAfkThreshold,
 } from "../../platform/runtime/trackingRuntimeGateway.ts";
@@ -24,9 +19,6 @@ import { initializeProcessMapperRuntime } from "./processMapperRuntimeService.ts
 
 interface AppRuntimeBootstrapSnapshot {
   settings: AppSettings;
-  activeWindow: TrackingWindowSnapshot | null;
-  trackingStatus: TrackingStatusSnapshot;
-  trackingRuntimeProbeStatus: TrackingRuntimeProbeStatus | null;
   trackerHealth: TrackerHealthSnapshot;
 }
 
@@ -34,7 +26,6 @@ interface AppRuntimeBootstrapDeps {
   loadCurrentAppSettings: () => Promise<AppSettings>;
   setAfkThreshold: (seconds: number) => Promise<void>;
   initializeProcessMapperRuntime: () => Promise<void>;
-  getCurrentTrackingSnapshot: typeof getCurrentTrackingSnapshot;
   loadTrackerHealthSnapshot: (nowMs?: number) => Promise<TrackerHealthSnapshot>;
   reportWarning?: (message: string, error: unknown) => void;
 }
@@ -49,7 +40,6 @@ const appRuntimeBootstrapDeps: AppRuntimeBootstrapDeps = {
   loadCurrentAppSettings,
   setAfkThreshold,
   initializeProcessMapperRuntime,
-  getCurrentTrackingSnapshot,
   loadTrackerHealthSnapshot,
 };
 
@@ -107,16 +97,10 @@ export async function loadAppRuntimeBootstrapSnapshotWithDeps(
     reportWarning("Failed to initialize process mapper during app bootstrap", error);
   });
 
-  const [trackingSnapshot, trackerHealth] = await Promise.all([
-    deps.getCurrentTrackingSnapshot(),
-    deps.loadTrackerHealthSnapshot(),
-  ]);
+  const trackerHealth = await deps.loadTrackerHealthSnapshot();
 
   return {
     settings,
-    activeWindow: trackingSnapshot?.window ?? null,
-    trackingStatus: trackingSnapshot?.status ?? DEFAULT_TRACKING_STATUS,
-    trackingRuntimeProbeStatus: trackingSnapshot?.probeStatus ?? null,
     trackerHealth,
   };
 }

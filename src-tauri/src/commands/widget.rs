@@ -46,10 +46,10 @@ pub async fn cmd_set_widget_expanded(
 }
 
 #[tauri::command]
-pub fn cmd_get_widget_status_snapshot(
+pub async fn cmd_get_widget_status_snapshot(
     app: AppHandle,
 ) -> Result<widget::WidgetPresentationSnapshot, String> {
-    widget::get_widget_presentation_snapshot(&app)
+    widget::get_widget_presentation_snapshot(&app).await
 }
 
 #[tauri::command]

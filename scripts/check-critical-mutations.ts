@@ -7,6 +7,7 @@ import ts from "typescript";
 const TEMP_ROOT = resolve(".tmp/critical-mutations");
 const SQLITE_SOURCE = "src/platform/persistence/sqliteTransactions.ts";
 const ERROR_SOURCE = "src/platform/persistence/commandError.ts";
+const SNAPSHOT_SOURCE = "src/app/services/latestSnapshotRefresh.ts";
 const WEB_AGGREGATE_SOURCE = "src/platform/persistence/webActivityAnalysisGateway.ts";
 const WINDOW_PERMISSIONS_SOURCE = "src-tauri/permissions/window-commands.toml";
 const WIDGET_CAPABILITY_SOURCE = "src-tauri/capabilities/widget.json";
@@ -32,12 +33,24 @@ function readSource(sourcePath: string) {
 
 interface Mutant {
   name: string;
-  source: typeof SQLITE_SOURCE | typeof ERROR_SOURCE;
+  source: typeof SQLITE_SOURCE | typeof ERROR_SOURCE | typeof SNAPSHOT_SOURCE;
   search: string;
   replacement: string;
 }
 
 const MUTANTS: Mutant[] = [
+  {
+    name: "late snapshot success overwrites the accepted generation",
+    source: SNAPSHOT_SOURCE,
+    search: "if (!disposed && request === sequence) deps.accept(snapshot);",
+    replacement: "deps.accept(snapshot);",
+  },
+  {
+    name: "late snapshot failure overwrites the current error",
+    source: SNAPSHOT_SOURCE,
+    search: "if (!disposed && request === sequence) deps.failed(error);",
+    replacement: "deps.failed(error);",
+  },
   {
     name: "serialized runner skips predecessor",
     source: SQLITE_SOURCE,
@@ -236,7 +249,8 @@ function verifyWindowPermissionContract(source: string) {
   const widgetCommands = widgetCommandPermissions(source);
   for (const sensitive of [
     "cmd_restore_backup",
-    "cmd_save_webdav_backup_secret",
+    "cmd_save_remote_backup_settings",
+    "cmd_clear_remote_backup_settings",
     "cmd_reveal_webdav_backup_secret",
     "cmd_delete_sessions_before",
     "cmd_install_update",
@@ -406,7 +420,7 @@ function transpile(sourcePath: string, mutation?: Mutant) {
 
 async function importMutant(sourcePath: string, mutation?: Mutant) {
   const suffix = mutation ? MUTANTS.indexOf(mutation).toString() : "baseline";
-  const outputPath = resolve(TEMP_ROOT, `${sourcePath.includes("sqlite") ? "sqlite" : "error"}-${suffix}.mjs`);
+  const outputPath = resolve(TEMP_ROOT, `${sourcePath === SNAPSHOT_SOURCE ? "snapshot" : sourcePath.includes("sqlite") ? "sqlite" : "error"}-${suffix}.mjs`);
   writeFileSync(outputPath, transpile(sourcePath, mutation), "utf8");
   return import(`${pathToFileURL(outputPath).href}?run=${Date.now()}`);
 }
@@ -557,7 +571,28 @@ async function verifyError(module: Record<string, unknown>) {
 
 async function verify(module: Record<string, unknown>, source: Mutant["source"]) {
   if (source === SQLITE_SOURCE) await verifySqlite(module);
+  else if (source === SNAPSHOT_SOURCE) await verifySnapshotOrder(module);
   else await verifyError(module);
+}
+
+async function verifySnapshotOrder(module: Record<string, unknown>) {
+  const create = module.createLatestSnapshotRefresh as typeof import("../src/app/services/latestSnapshotRefresh.ts").createLatestSnapshotRefresh;
+  const waiting: Array<{ resolve: (value: number) => void; reject: (error: unknown) => void }> = [];
+  const accepted: number[] = [];
+  const failed: unknown[] = [];
+  const owner = create({ load: () => new Promise<number>((resolve, reject) => waiting.push({ resolve, reject })),
+    accept: value => accepted.push(value), failed: error => failed.push(error) });
+  const old = owner.refresh(); const latest = owner.refresh();
+  waiting[1].resolve(2); await latest;
+  waiting[0].resolve(1); await old;
+  assert.deepEqual(accepted, [2]);
+  const staleFailure = owner.refresh(); const newRead = owner.refresh();
+  waiting[3].resolve(3); await newRead;
+  waiting[2].reject("stale"); await staleFailure;
+  assert.deepEqual(failed, []);
+  const disposed = owner.refresh(); owner.dispose();
+  waiting[4].resolve(4); await disposed;
+  assert.deepEqual(accepted, [2, 3]);
 }
 
 async function verifyMutant(mutant: Mutant) {
@@ -586,6 +621,7 @@ mkdirSync(TEMP_ROOT, { recursive: true });
 try {
   await verify(await importMutant(SQLITE_SOURCE), SQLITE_SOURCE);
   await verify(await importMutant(ERROR_SOURCE), ERROR_SOURCE);
+  await verify(await importMutant(SNAPSHOT_SOURCE), SNAPSHOT_SOURCE);
   await verifyWebAggregateRevision(await importWebAggregateMutation(false));
   for (const mutant of SOURCE_CONTRACT_MUTANTS) {
     const source = readSource(mutant.source);

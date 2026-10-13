@@ -16,15 +16,17 @@ import {
   type TrackingWindowSnapshot,
 } from "../../shared/types/tracking.ts";
 import { startTrackerHealthPolling } from "../services/trackerHealthPollingService.ts";
-import { resolveTrackingDataChangedEffects } from "../hooks/trackingDataChangedPolicy.ts";
-import { loadWidgetRuntimeBootstrapSnapshot } from "./widgetBootstrapService.ts";
+import { createLatestSnapshotRefresh } from "../services/latestSnapshotRefresh.ts";
+import { applyWidgetBootstrapSnapshot } from "./widgetBootstrapService.ts";
 import {
   getWidgetPresentationSnapshot,
+  getWidgetBootstrapSnapshot,
   onWidgetToolsChanged,
   type WidgetStatusSnapshot,
 } from "../../platform/desktop/widgetRuntimeGateway.ts";
 
 interface WidgetTrackingSnapshot {
+  trackingPaused: boolean | null;
   activeWindow: TrackingWindowSnapshot | null;
   trackingStatus: TrackingStatusSnapshot;
   trackingRuntimeProbeStatus: TrackingRuntimeProbeStatus | null;
@@ -32,6 +34,7 @@ interface WidgetTrackingSnapshot {
 }
 
 const EMPTY_TRACKING_SNAPSHOT: WidgetTrackingSnapshot = {
+  trackingPaused: null,
   activeWindow: null,
   trackingStatus: DEFAULT_TRACKING_STATUS,
   trackingRuntimeProbeStatus: null,
@@ -46,6 +49,7 @@ async function loadWidgetTrackingSnapshot(): Promise<WidgetTrackingSnapshot> {
   const snapshot = await getWidgetPresentationSnapshot();
 
   return {
+    trackingPaused: snapshot.trackingPaused,
     activeWindow: snapshot.activeWindow,
     trackingStatus: snapshot.trackingStatus,
     trackingRuntimeProbeStatus: snapshot.trackingProbeStatus,
@@ -75,98 +79,49 @@ export function useWidgetTracking() {
 
   useEffect(() => {
     let cancelled = false;
-    let latestTrackingRequest = 0;
     const unlisteners: Array<() => void> = [];
 
-    const applyTrackingSnapshot = (snapshot: WidgetTrackingSnapshot) => {
-      if (cancelled) return;
-      setTrackingSnapshot(snapshot);
-    };
-
-    const refreshBootstrap = async () => {
-      const bootstrap = await loadWidgetRuntimeBootstrapSnapshot();
-      if (cancelled) return;
-      setAppSettings(bootstrap.settings);
-      setPinned(bootstrap.pinned);
-      setClassificationReady(true);
-    };
-
-    const refreshTracking = async () => {
-      const request = ++latestTrackingRequest;
-      const snapshot = await loadWidgetTrackingSnapshot();
-      if (request === latestTrackingRequest) {
-        applyTrackingSnapshot(snapshot);
-      }
-    };
-
-    const guardRefresh = (request: Promise<unknown>) => request.catch((error) => {
-      if (!cancelled) warnWidgetRefresh(error);
+    const tracking = createLatestSnapshotRefresh({
+      load: loadWidgetTrackingSnapshot, accept: setTrackingSnapshot, failed: warnWidgetRefresh,
     });
+    const bootstrap = createLatestSnapshotRefresh({
+      load: getWidgetBootstrapSnapshot,
+      accept: (raw) => {
+        const snapshot = applyWidgetBootstrapSnapshot(raw);
+        setAppSettings(snapshot.settings); setPinned(snapshot.pinned); setClassificationReady(true);
+      },
+      failed: warnWidgetRefresh,
+    });
+    const refreshBootstrap = () => bootstrap.refresh();
+    const refreshTracking = () => tracking.refresh();
 
+    const listen = async (subscription: Promise<() => void>) => {
+      const off = await subscription;
+      if (cancelled) off(); else unlisteners.push(off);
+    };
     const init = async () => {
-      try {
-        const [
-          activeWindowUnlisten,
-          trackingDataUnlisten,
-          appSettingsUnlisten,
-          toolsUnlisten,
-        ] =
-          await Promise.all([
-            onActiveWindowChanged(async () => {
-              if (cancelled) return;
-              await guardRefresh(refreshTracking());
-            }),
-            onTrackingDataChanged(async (payload) => {
-              const effects = resolveTrackingDataChangedEffects(payload.reason);
-              const refreshes: Promise<unknown>[] = [];
-              if (effects.shouldRefresh) {
-                refreshes.push(refreshTracking());
-              }
-              if (effects.shouldSyncPauseSetting) {
-                refreshes.push(refreshBootstrap());
-              }
-              await guardRefresh(Promise.all(refreshes));
-            }),
-            onAppSettingsChanged(async () => {
-              await guardRefresh(refreshBootstrap());
-            }),
-            onWidgetToolsChanged(() => {
-              void guardRefresh(refreshTracking());
-            }),
-          ]);
-        if (cancelled) {
-          activeWindowUnlisten();
-          trackingDataUnlisten();
-          appSettingsUnlisten();
-          toolsUnlisten();
-          return;
-        }
-        unlisteners.push(
-          activeWindowUnlisten,
-          trackingDataUnlisten,
-          appSettingsUnlisten,
-          toolsUnlisten,
-        );
-
-        const [bootstrap] = await Promise.all([
-          loadWidgetRuntimeBootstrapSnapshot(),
-          refreshTracking(),
-        ]);
-        if (cancelled) return;
-        setAppSettings(bootstrap.settings);
-        setPinned(bootstrap.pinned);
-        setClassificationReady(true);
-      } catch (error) {
-        if (cancelled) return;
-        console.error("widget:init", error);
-        setClassificationReady(true);
+      const subscriptions = await Promise.allSettled([
+        listen(onActiveWindowChanged(refreshTracking)),
+        listen(onTrackingDataChanged(refreshTracking)),
+        listen(onAppSettingsChanged(async () => {
+          await Promise.all([refreshBootstrap(), refreshTracking()]);
+        })),
+        listen(onWidgetToolsChanged(() => { void refreshTracking(); })),
+      ]);
+      for (const result of subscriptions) {
+        if (result.status === "rejected") warnWidgetRefresh(result.reason);
       }
+      if (cancelled) return;
+      await Promise.all([refreshBootstrap(), refreshTracking()]);
+      if (!cancelled) setClassificationReady(true);
     };
 
     void init();
 
     return () => {
       cancelled = true;
+      tracking.dispose();
+      bootstrap.dispose();
       for (const unlisten of unlisteners) {
         unlisten();
       }
@@ -182,7 +137,7 @@ export function useWidgetTracking() {
   return {
     activeWindow: trackingSnapshot.activeWindow,
     trackingStatus: trackingSnapshot.trackingStatus,
-    appSettings,
+    appSettings: { ...appSettings, trackingPaused: trackingSnapshot.trackingPaused ?? appSettings.trackingPaused },
     classificationReady,
     trackerHealth,
     trackingRuntimeProbeStatus: trackingSnapshot.trackingRuntimeProbeStatus,

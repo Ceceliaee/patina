@@ -67,6 +67,7 @@ interface RawTrackingStatusSnapshot {
 }
 
 interface RawCurrentTrackingSnapshot {
+  tracking_paused: boolean;
   window: RawTrackingWindowSnapshot;
   status: RawTrackingStatusSnapshot;
   sampled_at_ms?: number;
@@ -250,6 +251,7 @@ function isRawSustainedParticipationDiagnosticsSnapshot(
 
 export function isRawCurrentTrackingSnapshot(value: unknown): value is RawCurrentTrackingSnapshot {
   return isRecord(value)
+    && typeof value.tracking_paused === "boolean"
     && isRawTrackingWindowSnapshot(value.window)
     && isRawTrackingStatusSnapshot(value.status)
     && (
@@ -418,6 +420,7 @@ function mapRawCurrentTrackingSnapshot(
 ): CurrentTrackingSnapshot {
   return {
     window: mapRawTrackingWindowSnapshot(raw.window),
+    trackingPaused: raw.tracking_paused,
     status: mapRawTrackingStatusSnapshot(raw.status),
     sampledAtMs: raw.sampled_at_ms,
     probeStatus: raw.probe_status,

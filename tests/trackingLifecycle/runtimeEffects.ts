@@ -1,5 +1,4 @@
 import {
-  applyTrackingDataChangedPayload,
   assert,
   clearSessionsByRangeWithDeps,
   buildReadModelDiagnostics,
@@ -8,12 +7,10 @@ import {
   isRawTrackingDataChangedPayload,
   isRawTrackingWindowSnapshot,
   makeSession,
-  makeWindow,
   materializeLiveSessions,
   resolveLiveCutoffMs,
   resolveSessionStartCleanupCutoffTime,
   resolveTrackerHealth,
-  resolveTrackingDataChangedEffects,
   shouldInvalidateDataCaches,
   runTest,
   shouldDeleteSessionByStartTime,
@@ -24,31 +21,42 @@ import {
   makeStaleTrackerHealth,
 } from "../helpers/trackingReadModelFixtures.ts";
 import { loadAppRuntimeBootstrapSnapshotWithDeps } from "../../src/app/services/appRuntimeBootstrapService.ts";
+import { createLatestSnapshotRefresh } from "../../src/app/services/latestSnapshotRefresh.ts";
 import { DEFAULT_SETTINGS } from "../../src/shared/settings/appSettings.ts";
 
 export function runRuntimeEffectsTests() {
-  runTest("tracking snapshot read failures preserve visible state and still invalidate data", async () => {
-    for (const fullSnapshot of [false, true]) {
-      const readFailure = new Error("snapshot unavailable during database replacement");
-      const events: string[] = [];
-      const failRead = async () => { throw readFailure; };
-      await applyTrackingDataChangedPayload({ reason: "session-transition", changedAtMs: 1000 }, {
-        loadLatestTrackingPauseSetting: async () => false,
-        loadCurrentWindowSnapshot: failRead,
-        ...(fullSnapshot ? { loadCurrentTrackingSnapshot: failRead } : {}),
-        setAppSettings: () => assert.fail("session transition must not change pause settings"),
-        setActiveWindow: () => assert.fail("a failed read must preserve the visible window"),
-        setTrackingStatus: () => assert.fail("a failed read must preserve the visible status"),
-        setTrackingRuntimeProbeStatus: () => assert.fail("a failed read must preserve the probe status"),
-        warn: (message, error) => {
-          assert.equal(error, readFailure);
-          assert.equal(message, fullSnapshot ? "Failed to sync tracking snapshot" : "Failed to sync active window snapshot");
-          events.push("warn");
-        },
-        bumpSyncTick: () => events.push("refresh"),
-      });
-      assert.deepEqual(events, ["warn", "refresh"]);
-    }
+  runTest("one snapshot owner rejects old success, old failure, disposed work and cross-event races", async () => {
+    type Snapshot = { paused: boolean; window: string; probe: string };
+    const pending: Array<{ resolve: (value: Snapshot) => void; reject: (error: unknown) => void }> = [];
+    let accepted: Snapshot | null = null;
+    const errors: unknown[] = [];
+    const owner = createLatestSnapshotRefresh({
+      load: () => new Promise<Snapshot>((resolve, reject) => pending.push({ resolve, reject })),
+      accept: snapshot => { accepted = snapshot; }, failed: error => errors.push(error),
+    });
+    const paused = { paused: true, window: "old.exe", probe: "inactive" };
+    const resumed = { paused: false, window: "new.exe", probe: "ok" };
+    const oldBootstrap = owner.refresh();
+    const newerSettingsEvent = owner.refresh();
+    pending[1].resolve(resumed); await newerSettingsEvent;
+    pending[0].resolve(paused); await oldBootstrap;
+    assert.deepEqual(accepted, resumed);
+    const oldActiveWindow = owner.refresh();
+    const newerPauseEvent = owner.refresh();
+    pending[3].resolve(paused); await newerPauseEvent;
+    pending[2].reject("old failure"); await oldActiveWindow;
+    assert.deepEqual(accepted, paused); assert.deepEqual(errors, []);
+    const oldRead = owner.refresh(); const newFailedRead = owner.refresh();
+    pending[5].reject("current failure"); await newFailedRead;
+    pending[4].resolve(resumed); await oldRead;
+    assert.deepEqual(accepted, paused); assert.deepEqual(errors, ["current failure"]);
+    const unmounted = owner.refresh(); owner.dispose();
+    pending[6].resolve(resumed); await unmounted;
+    assert.deepEqual(accepted, paused);
+    await owner.refresh(); assert.equal(pending.length, 7);
+    const remounted = createLatestSnapshotRefresh({ load: async () => resumed,
+      accept: snapshot => { accepted = snapshot; }, failed: () => assert.fail("fresh owner failed") });
+    await remounted.refresh(); assert.deepEqual(accepted, resumed); remounted.dispose();
   });
 
   runTest("app bootstrap preserves loaded settings when process mapper initialization fails", async () => {
@@ -66,14 +74,12 @@ export function runRuntimeEffectsTests() {
       initializeProcessMapperRuntime: async () => {
         throw mapperError;
       },
-      getCurrentTrackingSnapshot: async () => null,
       loadTrackerHealthSnapshot: async () => trackerHealth,
       reportWarning: (message, error) => warnings.push({ message, error }),
     });
 
     assert.equal(snapshot.settings.themeMode, "system");
     assert.equal(snapshot.settings, settings);
-    assert.equal(snapshot.trackingRuntimeProbeStatus, null);
     assert.equal(snapshot.trackerHealth, trackerHealth);
     assert.equal(warnings.length, 1);
     assert.equal(warnings[0].error, mapperError);
@@ -123,6 +129,7 @@ export function runRuntimeEffectsTests() {
     }), false);
 
     const validCurrentTrackingSnapshot = {
+      tracking_paused: false,
       window: {
         hwnd: "0x100",
         root_owner_hwnd: "0x100",
@@ -176,6 +183,7 @@ export function runRuntimeEffectsTests() {
     };
     assert.equal(isRawCurrentTrackingSnapshot(validCurrentTrackingSnapshot), true);
     assert.equal(isRawCurrentTrackingSnapshot({
+      tracking_paused: false,
       ...validCurrentTrackingSnapshot,
       sampled_at_ms: 123,
       probe_status: "hard-degraded-fallback",
@@ -195,37 +203,6 @@ export function runRuntimeEffectsTests() {
     }), false);
   });
 
-  runTest("tracking data changed sealed reasons force refresh without pause setting sync", () => {
-    const sealedReasons = [
-      "watchdog-sealed",
-      "startup-sealed",
-      "tracking-paused-sealed",
-      "app-excluded-sealed",
-      "web-domain-excluded-sealed",
-      "passive-participation-sealed",
-    ];
-
-    for (const reason of sealedReasons) {
-      const effects = resolveTrackingDataChangedEffects(reason);
-      assert.equal(effects.shouldRefresh, true);
-      assert.equal(effects.shouldSyncPauseSetting, false);
-    }
-  });
-
-  runTest("tracking pause toggle reasons force refresh and sync pause setting", () => {
-    for (const reason of ["tracking-paused", "tracking-resumed"]) {
-      const effects = resolveTrackingDataChangedEffects(reason);
-      assert.equal(effects.shouldRefresh, true);
-      assert.equal(effects.shouldSyncPauseSetting, true);
-    }
-  });
-
-  runTest("backup restored event keeps refresh=true and pause sync=false", () => {
-    const effects = resolveTrackingDataChangedEffects("backup-restored");
-    assert.equal(effects.shouldRefresh, true);
-    assert.equal(effects.shouldSyncPauseSetting, false);
-  });
-
   runTest("external imports and deletion invalidate every data cache", () => {
     for (const reason of [
       "backup-restored",
@@ -235,220 +212,6 @@ export function runRuntimeEffectsTests() {
       assert.equal(shouldInvalidateDataCaches(reason), true);
     }
     assert.equal(shouldInvalidateDataCaches("tracking-status-changed"), false);
-  });
-
-  runTest("tracking status changed event refreshes without pause sync", () => {
-    const effects = resolveTrackingDataChangedEffects("tracking-status-changed");
-    assert.equal(effects.shouldRefresh, true);
-    assert.equal(effects.shouldSyncPauseSetting, false);
-  });
-
-  runTest("power lifecycle end reasons keep refresh=true and pause sync=false", () => {
-    for (const reason of ["session-ended-lock", "session-ended-suspend"]) {
-      const effects = resolveTrackingDataChangedEffects(reason);
-      assert.equal(effects.shouldRefresh, true);
-      assert.equal(effects.shouldSyncPauseSetting, false);
-    }
-  });
-
-  runTest("tracking data changed runtime syncs pause setting and refreshes on pause toggle", async () => {
-    let syncTickCount = 0;
-    let trackedPausedValue: boolean | null = null;
-    let loadCalls = 0;
-
-    await applyTrackingDataChangedPayload({
-      reason: "tracking-paused",
-      changedAtMs: 123,
-    }, {
-      loadLatestTrackingPauseSetting: async () => {
-        loadCalls += 1;
-        return true;
-      },
-      setAppSettings: (updater) => {
-        trackedPausedValue = updater({
-          ...DEFAULT_SETTINGS,
-          refreshIntervalSecs: 5,
-          minSessionSecs: 30,
-          timelineMergeGapSecs: 180,
-          trackingPaused: false,
-        }).trackingPaused;
-      },
-      bumpSyncTick: () => {
-        syncTickCount += 1;
-      },
-      warn: () => {
-        throw new Error("pause toggle sync should not warn");
-      },
-    });
-
-    assert.equal(loadCalls, 1);
-    assert.equal(trackedPausedValue, true);
-    assert.equal(syncTickCount, 1);
-  });
-
-  runTest("tracking data changed runtime refreshes without pause sync for sealed reasons", async () => {
-    let syncTickCount = 0;
-    let loadCalls = 0;
-    let setCalls = 0;
-
-    await applyTrackingDataChangedPayload({
-      reason: "tracking-paused-sealed",
-      changedAtMs: 456,
-    }, {
-      loadLatestTrackingPauseSetting: async () => {
-        loadCalls += 1;
-        return false;
-      },
-      setAppSettings: () => {
-        setCalls += 1;
-      },
-      bumpSyncTick: () => {
-        syncTickCount += 1;
-      },
-      warn: () => {
-        throw new Error("sealed refresh should not warn");
-      },
-    });
-
-    assert.equal(loadCalls, 0);
-    assert.equal(setCalls, 0);
-    assert.equal(syncTickCount, 1);
-  });
-
-  runTest("tracking data changed runtime syncs active window snapshot before refresh", async () => {
-    let syncedWindowExeName: string | null = null;
-    let syncTickCount = 0;
-
-    await applyTrackingDataChangedPayload({
-      reason: "continuity-window-sealed",
-      changedAtMs: 900,
-    }, {
-      loadLatestTrackingPauseSetting: async () => false,
-      loadCurrentWindowSnapshot: async () => makeWindow({
-        exeName: "Cursor.exe",
-        processPath: "C:\\Cursor\\Cursor.exe",
-        idleTimeMs: 181_000,
-      }),
-      setAppSettings: () => {},
-      setActiveWindow: (nextWindow) => {
-        syncedWindowExeName = nextWindow?.exeName ?? null;
-      },
-      bumpSyncTick: () => {
-        syncTickCount += 1;
-      },
-      warn: () => {
-        throw new Error("active window sync should not warn");
-      },
-    });
-
-    assert.equal(syncedWindowExeName, "Cursor.exe");
-    assert.equal(syncTickCount, 1);
-  });
-
-  runTest("tracking data changed runtime prefers full tracking snapshot when available", async () => {
-    let syncedWindowExeName: string | null = null;
-    let syncedTrackingActive: boolean | null = null;
-    let syncedProbeStatus: string | null = null;
-
-    await applyTrackingDataChangedPayload({
-      reason: "passive-participation-sealed",
-      changedAtMs: 901,
-    }, {
-      loadLatestTrackingPauseSetting: async () => false,
-      loadCurrentTrackingSnapshot: async () => ({
-        window: makeWindow({
-          exeName: "chrome.exe",
-          processPath: "C:\\Chrome\\chrome.exe",
-          idleTimeMs: 200_000,
-        }),
-        status: {
-          isTrackingActive: false,
-          sustainedParticipationEligible: true,
-          sustainedParticipationActive: false,
-          sustainedParticipationKind: "audio",
-          sustainedParticipationState: "expired",
-          sustainedParticipationSignalSource: "audio-session",
-          sustainedParticipationReason: "sustained-window-expired",
-          sustainedParticipationDiagnostics: {
-            state: "expired",
-            reason: "sustained-window-expired",
-            windowIdentity: "chrome",
-            effectiveSignalSource: "audio-session",
-            lastMatchAtMs: 800,
-            graceDeadlineMs: null,
-            systemMedia: {
-              signal: {
-                isAvailable: true,
-                isActive: false,
-                signalSource: "system-media",
-                sourceAppId: "chrome",
-                sourceAppIdentity: "chrome",
-                playbackType: "video",
-              },
-              matchResult: "inactive",
-            },
-            audioSession: {
-              signal: {
-                isAvailable: true,
-                isActive: true,
-                signalSource: "audio-session",
-                sourceAppId: "chrome.exe",
-                sourceAppIdentity: "chrome",
-                playbackType: null,
-              },
-              matchResult: "matched",
-            },
-          },
-        },
-        probeStatus: "hard-degraded-fallback",
-      }),
-      setAppSettings: () => {},
-      setActiveWindow: (nextWindow) => {
-        syncedWindowExeName = nextWindow?.exeName ?? null;
-      },
-      setTrackingStatus: (nextStatus) => {
-        syncedTrackingActive = nextStatus.isTrackingActive;
-      },
-      setTrackingRuntimeProbeStatus: (nextStatus) => {
-        syncedProbeStatus = nextStatus;
-      },
-      bumpSyncTick: () => {},
-      warn: () => {
-        throw new Error("tracking snapshot sync should not warn");
-      },
-    });
-
-    assert.equal(syncedWindowExeName, "chrome.exe");
-    assert.equal(syncedTrackingActive, false);
-    assert.equal(syncedProbeStatus, "hard-degraded-fallback");
-  });
-
-  runTest("tracking data changed runtime warns but still refreshes when pause sync fails", async () => {
-    let syncTickCount = 0;
-    let warned = false;
-
-    await applyTrackingDataChangedPayload({
-      reason: "tracking-resumed",
-      changedAtMs: 789,
-    }, {
-      loadLatestTrackingPauseSetting: async () => {
-        throw new Error("boom");
-      },
-      setAppSettings: () => {
-        throw new Error("failed sync should not set app settings");
-      },
-      bumpSyncTick: () => {
-        syncTickCount += 1;
-      },
-      warn: (message, error) => {
-        warned = true;
-        assert.equal(message, "Failed to sync tracking pause setting");
-        assert.equal(error instanceof Error, true);
-      },
-    });
-
-    assert.equal(warned, true);
-    assert.equal(syncTickCount, 1);
   });
 
   runTest("cleanup uses session start time cutoff and deletes active sessions started before cutoff", () => {

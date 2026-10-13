@@ -24,6 +24,10 @@ interface CoverageThreshold {
 const COVERAGE_SUMMARY_PATH = "artifacts/coverage/coverage-summary.json";
 const HIGH_RISK_THRESHOLDS: CoverageThreshold[] = [
   {
+    path: "src/app/services/latestSnapshotRefresh.ts",
+    minimum: { statements: 90, branches: 85, functions: 90, lines: 90 },
+  },
+  {
     path: "src/app/services/startupWarmupService.ts",
     minimum: { statements: 90, branches: 85, functions: 90, lines: 90 },
   },

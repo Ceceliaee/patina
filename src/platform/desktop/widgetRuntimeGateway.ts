@@ -71,6 +71,7 @@ interface RawWidgetStatusSnapshot {
 }
 
 interface RawWidgetPresentationSnapshot {
+  tracking_paused: boolean;
   window: unknown;
   tracking_status: unknown;
   tracking_sampled_at_ms: number;
@@ -155,6 +156,7 @@ export interface WidgetStatusSnapshot {
 }
 
 interface WidgetPresentationSnapshot {
+  trackingPaused: boolean;
   activeWindow: TrackingWindowSnapshot;
   trackingStatus: TrackingStatusSnapshot;
   trackingSampledAtMs: number;
@@ -374,6 +376,7 @@ function parseWidgetPresentationSnapshot(
     || !trackingStatus
     || !status
     || !isFiniteNumber(raw.tracking_sampled_at_ms)
+    || typeof raw.tracking_paused !== "boolean"
     || !TRACKING_PROBE_STATUSES.has(raw.tracking_probe_status)
   ) {
     return null;
@@ -382,6 +385,7 @@ function parseWidgetPresentationSnapshot(
   return {
     activeWindow,
     trackingStatus,
+    trackingPaused: raw.tracking_paused,
     trackingSampledAtMs: raw.tracking_sampled_at_ms,
     trackingProbeStatus: raw.tracking_probe_status,
     status,

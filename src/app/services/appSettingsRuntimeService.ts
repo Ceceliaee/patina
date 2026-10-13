@@ -22,11 +22,6 @@ export async function subscribeAppSettingsChanged(
   return onAppSettingsChanged(handler);
 }
 
-export async function loadLatestTrackingPauseSetting(): Promise<boolean> {
-  const settings = await loadCurrentAppSettings();
-  return settings.trackingPaused;
-}
-
 export async function loadTrackerHealthTimestampMs(): Promise<number | null> {
   return loadTrackerHealthTimestamp();
 }

@@ -40,6 +40,7 @@ static E2E_WIDGET_SHOW_FAILURE_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct WidgetPresentationSnapshot {
+    pub tracking_paused: bool,
     pub window: WindowInfo,
     pub tracking_status: TrackingStatusSnapshot,
     pub tracking_sampled_at_ms: i64,
@@ -87,11 +88,14 @@ pub(crate) fn get_widget_status_snapshot<R: Runtime>(app: &AppHandle<R>) -> Widg
     widget_engine::build_widget_status_snapshot(active_session, tools, now_ms)
 }
 
-pub(crate) fn get_widget_presentation_snapshot<R: Runtime>(
+pub(crate) async fn get_widget_presentation_snapshot<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<WidgetPresentationSnapshot, String> {
-    let tracking = app
-        .state::<TrackingRuntimeSnapshotState>()
+    let state = app.state::<TrackingRuntimeSnapshotState>();
+    let _transition = state.transition.lock().await;
+    let tracking_paused =
+        crate::data::tracking_pause_service::load_tracking_pause_setting(app).await?;
+    let tracking = state
         .snapshot()
         .ok_or_else(|| "tracking runtime snapshot is not ready".to_string())?;
     if !widget_tracking_identity_is_consistent(&tracking.window, tracking.active_session.as_ref()) {
@@ -105,6 +109,7 @@ pub(crate) fn get_widget_presentation_snapshot<R: Runtime>(
     );
 
     Ok(WidgetPresentationSnapshot {
+        tracking_paused,
         window: tracking.window,
         tracking_status: tracking.status,
         tracking_sampled_at_ms: tracking.sampled_at_ms,

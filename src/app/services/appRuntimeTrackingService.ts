@@ -5,14 +5,9 @@ import type {
 } from "../../shared/types/tracking";
 import {
   getCurrentTrackingSnapshot,
-  getCurrentWindow,
   onActiveWindowChanged,
   onTrackingDataChanged,
 } from "../../platform/runtime/trackingRuntimeGateway";
-
-export async function loadCurrentWindowSnapshot(): Promise<TrackingWindowSnapshot | null> {
-  return getCurrentWindow();
-}
 
 export async function loadCurrentTrackingSnapshot(): Promise<CurrentTrackingSnapshot | null> {
   return getCurrentTrackingSnapshot();

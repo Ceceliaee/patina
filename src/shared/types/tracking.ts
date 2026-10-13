@@ -107,6 +107,7 @@ export interface TrackingRuntimeProbeDiagnostics {
 }
 
 export interface CurrentTrackingSnapshot {
+  trackingPaused: boolean;
   window: TrackingWindowSnapshot;
   status: TrackingStatusSnapshot;
   sampledAtMs?: number;
