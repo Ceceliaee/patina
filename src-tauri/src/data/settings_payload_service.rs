@@ -3,69 +3,13 @@ use crate::data::sqlite_pool::run_recoverable_sqlite_write;
 use sqlx::{Pool, Sqlite};
 use tauri::{AppHandle, Runtime};
 
-use crate::data::repositories::remote_backup_settings::{
-    normalize_config, WEBDAV_BACKUP_LAST_BACKUP_AT_MS_KEY, WEBDAV_BACKUP_REMOTE_DIR_KEY,
-    WEBDAV_BACKUP_URL_KEY, WEBDAV_BACKUP_USERNAME_KEY,
-};
+use crate::data::repositories::remote_backup_settings::WEBDAV_BACKUP_LAST_BACKUP_AT_MS_KEY;
+#[cfg(test)]
 use crate::platform::webdav::normalize_remote_dir;
 const DATA_BOOTSTRAP_SNAPSHOT_KEY: &str = "data.bootstrap_snapshot";
 const HISTORY_BOOTSTRAP_SNAPSHOT_KEY: &str = "history.bootstrap_snapshot.v1";
 const MAX_SETTINGS_PAYLOAD_LEN: usize = 10 * 1024 * 1024;
 const MAX_HISTORY_BOOTSTRAP_SNAPSHOT_LEN: usize = 256 * 1024;
-
-pub struct RemoteBackupSettingsPatch {
-    pub url: String,
-    pub username: String,
-    pub remote_dir: Option<String>,
-    pub last_backup_at_ms: Option<i64>,
-}
-
-pub async fn save_remote_backup_settings<R: Runtime>(
-    app: &AppHandle<R>,
-    patch: RemoteBackupSettingsPatch,
-) -> Result<(), SqliteOperationError> {
-    let normalized = normalize_config(
-        &patch.url,
-        &patch.username,
-        patch.remote_dir.as_deref().unwrap_or(""),
-    )
-    .map_err(|error| SqliteOperationError::invalid_input("save remote backup settings", error))?;
-    let url = normalized.url;
-    let username = normalized.username;
-    let remote_dir = normalized.remote_dir;
-    let last_backup_at_ms = patch.last_backup_at_ms.filter(|timestamp| *timestamp > 0);
-
-    run_recoverable_sqlite_write(app, "failed to save remote backup settings", move |pool| {
-        let url = url.clone();
-        let username = username.clone();
-        let remote_dir = remote_dir.clone();
-        async move {
-            let mut mutations = vec![
-                SettingMutation::upsert(WEBDAV_BACKUP_URL_KEY, url),
-                SettingMutation::upsert(WEBDAV_BACKUP_USERNAME_KEY, username),
-                SettingMutation::upsert(WEBDAV_BACKUP_REMOTE_DIR_KEY, remote_dir),
-            ];
-            if let Some(timestamp) = last_backup_at_ms {
-                mutations.push(SettingMutation::upsert(
-                    WEBDAV_BACKUP_LAST_BACKUP_AT_MS_KEY,
-                    timestamp.to_string(),
-                ));
-            }
-            commit_settings_in_pool(&pool, &mutations).await
-        }
-    })
-    .await
-}
-
-pub async fn save_remote_backup_remote_dir<R: Runtime>(
-    app: &AppHandle<R>,
-    remote_dir: String,
-) -> Result<(), SqliteOperationError> {
-    let remote_dir = normalize_remote_dir(&remote_dir).map_err(|error| {
-        SqliteOperationError::invalid_input("save remote backup directory", error)
-    })?;
-    upsert_single_setting(app, WEBDAV_BACKUP_REMOTE_DIR_KEY, remote_dir).await
-}
 
 pub async fn save_remote_backup_last_backup_at<R: Runtime>(
     app: &AppHandle<R>,
@@ -81,28 +25,6 @@ pub async fn save_remote_backup_last_backup_at<R: Runtime>(
         app,
         WEBDAV_BACKUP_LAST_BACKUP_AT_MS_KEY,
         timestamp_ms.to_string(),
-    )
-    .await
-}
-
-pub async fn clear_remote_backup_settings<R: Runtime>(
-    app: &AppHandle<R>,
-) -> Result<(), SqliteOperationError> {
-    run_recoverable_sqlite_write(
-        app,
-        "failed to clear remote backup settings",
-        |pool| async move {
-            commit_settings_in_pool(
-                &pool,
-                &[
-                    SettingMutation::delete(WEBDAV_BACKUP_URL_KEY),
-                    SettingMutation::delete(WEBDAV_BACKUP_USERNAME_KEY),
-                    SettingMutation::delete(WEBDAV_BACKUP_REMOTE_DIR_KEY),
-                    SettingMutation::delete(WEBDAV_BACKUP_LAST_BACKUP_AT_MS_KEY),
-                ],
-            )
-            .await
-        },
     )
     .await
 }
@@ -254,6 +176,7 @@ async fn commit_settings_in_pool(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::repositories::remote_backup_settings::WEBDAV_BACKUP_URL_KEY;
     use crate::data::schema as db_schema;
     use sqlx::{Executor, Row, SqlitePool};
 

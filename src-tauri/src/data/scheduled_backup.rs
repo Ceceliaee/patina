@@ -7,7 +7,6 @@ use crate::domain::backup_schedule::{
     ScheduledBackupTargetInput, DEFAULT_LOCAL_TIME_MINUTES, SCHEDULED_BACKUP_KEEP_COUNT,
 };
 use crate::engine::backup_scheduler::{decide_action, SchedulerAction};
-use crate::platform::app_paths::{self, AppProfile};
 use chrono::{Local, LocalResult, NaiveDate, NaiveDateTime, TimeZone};
 use sqlx::{Pool, Sqlite};
 use std::fs;
@@ -38,9 +37,7 @@ pub async fn save_config(
             }
         }
         ScheduledBackupTargetInput::WebDav => {
-            let target =
-                remote_backup::load_scheduled_webdav_target(app_paths::app_profile(app), &pool)
-                    .await?;
+            let target = remote_backup::load_scheduled_webdav_target(app, &pool).await?;
             ScheduledBackupTarget::WebDav {
                 target_identity: remote_backup::scheduled_target_identity(&target),
             }
@@ -139,15 +136,9 @@ pub async fn tick(app: &AppHandle) -> Result<bool, String> {
             if repository::load_run(&pool, &run.run_key)
                 .await?
                 .is_some_and(|reconciled| reconciled.status == "succeeded")
-                && apply_retention(
-                    app_paths::app_profile(app),
-                    &pool,
-                    &config,
-                    &run.run_key,
-                    now_ms,
-                )
-                .await
-                .is_err()
+                && apply_retention(app, &pool, &config, &run.run_key, now_ms)
+                    .await
+                    .is_err()
             {
                 repository::set_cleanup_warning(
                     &pool,
@@ -490,9 +481,7 @@ async fn cleanup_owned_webdav_failure(
     let Ok(Some(run)) = repository::load_run(pool, run_key).await else {
         return;
     };
-    let Ok(target) =
-        remote_backup::load_scheduled_webdav_target(app_paths::app_profile(app), pool).await
-    else {
+    let Ok(target) = remote_backup::load_scheduled_webdav_target(app, pool).await else {
         return;
     };
     if remote_backup::scheduled_target_identity(&target) != *target_identity {
@@ -633,7 +622,7 @@ async fn execute_webdav_run(
     now_ms: i64,
 ) -> Result<ScheduledBackupRun, RunExecutionFailure> {
     let _transfer_guard = remote_backup::lock_remote_transfer().await;
-    let target = remote_backup::load_scheduled_webdav_target(app_paths::app_profile(app), pool)
+    let target = remote_backup::load_scheduled_webdav_target(app, pool)
         .await
         .map_err(RunExecutionFailure::BeforePublication)?;
     let expected_identity = match &config.target {
@@ -862,7 +851,7 @@ async fn finish_success_maintenance(
     run_key: &str,
     now_ms: i64,
 ) {
-    if apply_retention(app_paths::app_profile(app), pool, config, run_key, now_ms)
+    if apply_retention(app, pool, config, run_key, now_ms)
         .await
         .is_err()
     {
@@ -922,7 +911,7 @@ pub async fn reconcile_running_run(
 }
 
 pub async fn apply_retention(
-    profile: AppProfile,
+    app: &AppHandle,
     pool: &Pool<Sqlite>,
     config: &ScheduledBackupConfig,
     newest_run_key: &str,
@@ -933,15 +922,7 @@ pub async fn apply_retention(
             apply_local_retention(pool, config, target_dir, newest_run_key, now_ms).await
         }
         ScheduledBackupTarget::WebDav { target_identity } => {
-            apply_webdav_retention(
-                profile,
-                pool,
-                config,
-                target_identity,
-                newest_run_key,
-                now_ms,
-            )
-            .await
+            apply_webdav_retention(app, pool, config, target_identity, newest_run_key, now_ms).await
         }
     }
 }
@@ -985,14 +966,14 @@ async fn apply_local_retention(
 }
 
 async fn apply_webdav_retention(
-    profile: AppProfile,
+    app: &AppHandle,
     pool: &Pool<Sqlite>,
     config: &ScheduledBackupConfig,
     target_identity: &str,
     newest_run_key: &str,
     now_ms: i64,
 ) -> Result<(), String> {
-    let target = remote_backup::load_scheduled_webdav_target(profile, pool).await?;
+    let target = remote_backup::load_scheduled_webdav_target(app, pool).await?;
     if remote_backup::scheduled_target_identity(&target) != target_identity {
         return Err("configuration_changed".to_string());
     }

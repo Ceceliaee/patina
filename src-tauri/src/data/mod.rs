@@ -6,6 +6,7 @@ pub mod export;
 pub mod icon_cache_service;
 pub mod import;
 pub mod remote_backup;
+pub mod remote_backup_config;
 pub mod remote_status_store;
 pub mod repositories;
 pub mod scheduled_backup;

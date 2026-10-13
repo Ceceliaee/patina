@@ -171,6 +171,7 @@ pub(super) async fn restore_backup_payload_in_tx(
 pub(super) async fn reset_scheduled_tasks_for_replace_in_tx(
     tx: &mut Transaction<'_, Sqlite>,
 ) -> Result<(), String> {
+    repositories::remote_backup_settings::detach_for_restore(tx).await?;
     let now_ms = crate::platform::clock::unix_timestamp_millis_i64();
     repositories::scheduled_backup::reset_after_replace_restore(
         tx,

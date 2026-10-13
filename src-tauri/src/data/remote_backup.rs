@@ -2,8 +2,6 @@ use crate::data::backup;
 use crate::data::repositories::remote_backup_settings;
 use crate::domain::backup::BackupPreview;
 use crate::domain::backup_schedule::ScheduledBackupRun;
-use crate::platform::app_paths::{self, AppProfile};
-use crate::platform::credentials;
 use crate::platform::storage_paths;
 use crate::platform::webdav::{WebDavClient, WebDavConfig};
 use serde::{Deserialize, Serialize};
@@ -356,65 +354,40 @@ fn build_entry(
     }
 }
 
-fn webdav_client(
-    profile: AppProfile,
+async fn webdav_client(
+    app: &AppHandle,
     config: WebDavBackupConfigDto,
 ) -> Result<(WebDavConfig, WebDavClient), String> {
-    let config = config_to_webdav(config)?;
-    let password = credentials::read_webdav_backup_password(profile)?
-        .ok_or_else(|| "WebDAV password is missing".to_string())?;
-    let client = WebDavClient::new(&config, password)?;
-    Ok((config, client))
+    let requested = config_to_webdav(config)?;
+    let pool = crate::data::sqlite_pool::wait_for_sqlite_pool(app).await?;
+    let (saved, password) = crate::data::remote_backup_config::network_snapshot(app, &pool).await?;
+    if saved != requested {
+        return Err("WebDAV configuration changed; reload before retrying".into());
+    }
+    let client = WebDavClient::new(&saved, password)?;
+    Ok((saved, client))
 }
 
-fn webdav_client_with_password(
-    profile: AppProfile,
+async fn webdav_client_with_password(
+    app: &AppHandle,
     config: WebDavBackupConfigDto,
     password: Option<String>,
 ) -> Result<(WebDavConfig, WebDavClient), String> {
-    let config = config_to_webdav(config)?;
-    let password = match password {
-        Some(password) if !password.is_empty() => password,
-        _ => credentials::read_webdav_backup_password(profile)?
-            .ok_or_else(|| "WebDAV password is missing".to_string())?,
-    };
-    let client = WebDavClient::new(&config, password)?;
-    Ok((config, client))
-}
-
-pub fn save_webdav_backup_secret(
-    profile: AppProfile,
-    username: String,
-    password: String,
-) -> Result<(), String> {
-    let username = username.trim();
-    if username.is_empty() {
-        return Err("WebDAV username cannot be empty".to_string());
+    if let Some(password) = password.filter(|value| !value.is_empty()) {
+        let config = config_to_webdav(config)?;
+        let client = WebDavClient::new(&config, password)?;
+        Ok((config, client))
+    } else {
+        webdav_client(app, config).await
     }
-    if password.is_empty() {
-        return Err("WebDAV password cannot be empty".to_string());
-    }
-    credentials::save_webdav_backup_password(profile, username, &password)
-}
-
-pub fn delete_webdav_backup_secret(profile: AppProfile) -> Result<(), String> {
-    credentials::delete_webdav_backup_password(profile)
-}
-
-pub fn has_webdav_backup_secret(profile: AppProfile) -> Result<bool, String> {
-    credentials::has_webdav_backup_password(profile)
-}
-
-pub fn reveal_webdav_backup_secret(profile: AppProfile) -> Result<Option<String>, String> {
-    credentials::read_webdav_backup_password(profile)
 }
 
 pub async fn test_webdav_backup_target(
-    profile: AppProfile,
+    app: &AppHandle,
     config: WebDavBackupConfigDto,
     password: Option<String>,
 ) -> Result<WebDavTestResult, String> {
-    let (config, client) = webdav_client_with_password(profile, config, password)?;
+    let (config, client) = webdav_client_with_password(app, config, password).await?;
     client.ping(&config.remote_dir).await?;
     Ok(WebDavTestResult { ok: true })
 }
@@ -426,8 +399,7 @@ pub async fn upload_webdav_backup(
 ) -> Result<RemoteBackupUploadResult, String> {
     validate_upload_file_name(&file_name)?;
     let _transfer_guard = REMOTE_TRANSFER_LOCK.lock().await;
-    let profile = app_paths::app_profile(&app);
-    let (config, client) = webdav_client(profile, config)?;
+    let (config, client) = webdav_client(&app, config).await?;
     client.ensure_dir(&config.remote_dir).await?;
 
     let base_id = remote_backup_id();
@@ -489,10 +461,10 @@ pub async fn upload_webdav_backup(
 }
 
 pub async fn list_webdav_backups(
-    profile: AppProfile,
+    app: &AppHandle,
     config: WebDavBackupConfigDto,
 ) -> Result<Vec<RemoteBackupEntry>, String> {
-    let (config, client) = webdav_client(profile, config)?;
+    let (config, client) = webdav_client(app, config).await?;
     let mut index = load_index(&client, &config.remote_dir).await?;
     index
         .backups
@@ -512,8 +484,7 @@ pub async fn download_webdav_backup(
         return Err("remote backup id cannot be empty".to_string());
     }
 
-    let profile = app_paths::app_profile(&app);
-    let (config, client) = webdav_client(profile, config)?;
+    let (config, client) = webdav_client(&app, config).await?;
     let index = load_index(&client, &config.remote_dir).await?;
     let entry = index
         .backups
@@ -593,14 +564,10 @@ pub(crate) struct ScheduledRemoteUploadOutcome {
 }
 
 pub(crate) async fn load_scheduled_webdav_target(
-    profile: AppProfile,
+    app: &AppHandle,
     pool: &Pool<Sqlite>,
 ) -> Result<ScheduledWebDavTarget, String> {
-    let config = remote_backup_settings::load_config(pool)
-        .await?
-        .ok_or_else(|| "webdav_not_configured".to_string())?;
-    let password = credentials::read_webdav_backup_password(profile)?
-        .ok_or_else(|| "credential_missing".to_string())?;
+    let (config, password) = crate::data::remote_backup_config::network_snapshot(app, pool).await?;
     let client = WebDavClient::new(&config, password)?;
     Ok(ScheduledWebDavTarget { config, client })
 }

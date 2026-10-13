@@ -12,6 +12,7 @@ pub(crate) async fn restore_backup_and_refresh(
 ) -> Result<(), String> {
     let scheduled_backup_guard = crate::app::scheduled_backup::lock_for_restore(&app).await;
     let scheduled_export_guard = crate::app::scheduled_export::lock_for_restore(&app).await;
+    let webdav_guard = crate::data::remote_backup_config::CONFIG_LOCK.lock().await;
     let title_state =
         app.state::<crate::engine::tracking::title_state::TitleRecordingRuntimeState>();
     let _title_guard = title_state.lock_update().await;
@@ -46,6 +47,7 @@ pub(crate) async fn restore_backup_and_refresh(
         crate::app::scheduled_backup::notify_replace_restore_while_locked(&app);
         crate::app::scheduled_export::notify_replace_restore_while_locked(&app);
     }
+    drop(webdav_guard);
     drop(scheduled_export_guard);
     drop(scheduled_backup_guard);
     if let Err(error) = remote_backup::cleanup_remote_backup_temp_if_owned(&app, &backup_path) {

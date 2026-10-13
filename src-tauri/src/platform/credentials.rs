@@ -1,5 +1,8 @@
 use crate::platform::app_paths::AppProfile;
 
+mod store;
+pub use store::{CredentialStore, WebDavCredentialStore};
+
 const WEBDAV_BACKUP_LEGACY_CREDENTIAL_TARGET: &str = "com.ceceliaee.patina.backup.webdav.default";
 const WEBDAV_BACKUP_CREDENTIAL_TARGET_PREFIX: &str = "com.ceceliaee.patina.backup.webdav";
 
@@ -191,54 +194,6 @@ mod windows_credentials {
     pub fn delete_webdav_password(_credential_target: &str) -> Result<(), String> {
         Ok(())
     }
-}
-
-pub fn save_webdav_backup_password(
-    profile: AppProfile,
-    username: &str,
-    password: &str,
-) -> Result<(), String> {
-    let target = webdav_backup_credential_target(profile);
-    windows_credentials::save_webdav_password(&target, username, password)?;
-    let verified = windows_credentials::read_webdav_password(&target)?;
-    if verified.as_deref() != Some(password) {
-        return Err("failed to verify the saved WebDAV credential".to_string());
-    }
-    if profile == AppProfile::Production {
-        windows_credentials::delete_webdav_password(WEBDAV_BACKUP_LEGACY_CREDENTIAL_TARGET)?;
-    }
-    Ok(())
-}
-
-pub fn read_webdav_backup_password(profile: AppProfile) -> Result<Option<String>, String> {
-    let targets = credential_lookup_targets(profile);
-    for (index, target) in targets.iter().enumerate() {
-        let Some(password) = windows_credentials::read_webdav_password(target)? else {
-            continue;
-        };
-        if index > 0 {
-            let scoped_target = &targets[0];
-            windows_credentials::save_webdav_password(scoped_target, "Patina", &password)?;
-            let verified = windows_credentials::read_webdav_password(scoped_target)?;
-            if verified.as_deref() != Some(password.as_str()) {
-                return Err("failed to verify migrated WebDAV credential".to_string());
-            }
-            windows_credentials::delete_webdav_password(target)?;
-        }
-        return Ok(Some(password));
-    }
-    Ok(None)
-}
-
-pub fn has_webdav_backup_password(profile: AppProfile) -> Result<bool, String> {
-    Ok(read_webdav_backup_password(profile)?.is_some())
-}
-
-pub fn delete_webdav_backup_password(profile: AppProfile) -> Result<(), String> {
-    for target in credential_lookup_targets(profile) {
-        windows_credentials::delete_webdav_password(&target)?;
-    }
-    Ok(())
 }
 
 #[cfg(test)]
