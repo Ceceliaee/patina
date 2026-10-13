@@ -1,11 +1,8 @@
 export {
-  deleteWebDavBackupSecret,
   deleteRemoteBackupTemp,
   downloadWebDavBackup,
-  hasWebDavBackupSecret,
   listWebDavBackups,
   revealWebDavBackupSecret,
-  saveWebDavBackupSecret,
   testWebDavBackupTarget,
   uploadWebDavBackup,
   type RemoteBackupEntry,
@@ -14,7 +11,7 @@ export {
 export {
   clearRemoteBackupConfig,
   DEFAULT_WEBDAV_REMOTE_DIR,
-  loadRemoteBackupConfig,
+  loadRemoteBackupConfigSnapshot,
   saveRemoteBackupConfig,
   saveRemoteBackupLastBackupAt,
   type PersistedRemoteBackupConfig,

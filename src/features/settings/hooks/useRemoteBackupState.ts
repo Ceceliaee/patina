@@ -6,16 +6,13 @@ import type { QuietToastTone } from "../../../shared/types/toast";
 import {
   clearRemoteBackupConfig,
   DEFAULT_WEBDAV_REMOTE_DIR,
-  deleteWebDavBackupSecret,
   deleteRemoteBackupTemp,
   downloadWebDavBackup,
-  hasWebDavBackupSecret,
   listWebDavBackups,
-  loadRemoteBackupConfig,
+  loadRemoteBackupConfigSnapshot,
   revealWebDavBackupSecret,
   saveRemoteBackupConfig,
   saveRemoteBackupLastBackupAt,
-  saveWebDavBackupSecret,
   testWebDavBackupTarget,
   uploadWebDavBackup,
   type PersistedRemoteBackupConfig,
@@ -108,8 +105,9 @@ export function useRemoteBackupState({
 }: UseRemoteBackupStateOptions): RemoteBackupState {
   const UI_TEXT = useLocaleText();
   const locale = useLocale();
-  const [config, setConfig] = useState<PersistedRemoteBackupConfig | null>(null);
-  const [hasSecret, setHasSecret] = useState(false);
+  const [{ config, hasSecret }, setSavedConfig] = useState<{ config: PersistedRemoteBackupConfig | null; hasSecret: boolean }>({ config: null, hasSecret: false });
+  const configRevision = useRef(0);
+  const configWriteLock = useRef(false);
   const [loading, setLoading] = useState(true);
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
@@ -125,15 +123,12 @@ export function useRemoteBackupState({
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
+      const revision = ++configRevision.current;
       setLoading(true);
       try {
-        const [nextConfig, nextHasSecret] = await Promise.all([
-          loadRemoteBackupConfig(),
-          hasWebDavBackupSecret(),
-        ]);
-        if (cancelled) return;
-        setConfig(nextConfig);
-        setHasSecret(nextHasSecret);
+        const snapshot = await loadRemoteBackupConfigSnapshot();
+        if (cancelled || revision !== configRevision.current) return;
+        setSavedConfig(snapshot);
       } catch (error) {
         console.error("load remote backup settings failed", error);
       } finally {
@@ -149,60 +144,39 @@ export function useRemoteBackupState({
   }, []);
 
   const saveConfig = useCallback(async (draft: RemoteBackupFormDraft) => {
-    if (isSaving) return false;
-    let savedNewSecretForUnsavedConfig = false;
+    if (configWriteLock.current) return false;
+    configWriteLock.current = true;
+    configRevision.current += 1;
     setIsSaving(true);
     try {
       const runtimeConfig = draftToRuntimeConfig(draft);
-      const password = draft.password.trim();
-      if (password) {
-        await saveWebDavBackupSecret(runtimeConfig.username, password);
-        savedNewSecretForUnsavedConfig = !config;
-        setHasSecret(true);
-      } else if (!config || !hasSecret) {
+      const password = draft.password;
+      if (!password && (!config || !hasSecret)) {
         notify(UI_TEXT.toast.webDavMissingPassword, "warning");
         return false;
       }
       const saved = await saveRemoteBackupConfig({
-        url: runtimeConfig.url,
-        username: runtimeConfig.username,
-        remoteDir: runtimeConfig.remoteDir,
-        lastBackupAtMs: config?.lastBackupAtMs ?? null,
+        ...runtimeConfig,
+        passwordUpdate: password ? { kind: "replace", password } : { kind: "keep" },
       });
-      setConfig(saved);
+      setSavedConfig(saved);
       setConnectionStatus("unknown");
       setConfigDialogOpen(false);
       notify(UI_TEXT.toast.webDavConfigSaved, "success");
       return true;
     } catch (error) {
       console.error("save WebDAV backup config failed", error);
-      if (savedNewSecretForUnsavedConfig) {
-        try {
-          await deleteWebDavBackupSecret();
-          setHasSecret(false);
-        } catch (deleteError) {
-          console.error("rollback unsaved WebDAV secret failed", deleteError);
-        }
-      }
       notify(UI_TEXT.toast.webDavConfigSaveFailed, "error");
       return false;
     } finally {
+      configWriteLock.current = false;
       setIsSaving(false);
     }
-  }, [config, hasSecret, isSaving, notify, UI_TEXT]);
+  }, [config, hasSecret, notify, UI_TEXT]);
 
   const closeConfigDialog = useCallback(() => {
     setConfigDialogOpen(false);
-    if (!config && hasSecret) {
-      void deleteWebDavBackupSecret()
-        .then(() => {
-          setHasSecret(false);
-        })
-        .catch((error) => {
-          console.error("delete orphan WebDAV backup secret failed", error);
-        });
-    }
-  }, [config, hasSecret]);
+  }, []);
 
   const revealSavedPassword = useCallback(async () => {
     try {
@@ -221,7 +195,7 @@ export function useRemoteBackupState({
       setConfigDialogOpen(true);
       return false;
     }
-    const password = draft?.password.trim();
+    const password = draft?.password;
     if (draft && !password && !config) {
       notify(UI_TEXT.toast.webDavMissingPassword, "warning");
       return false;
@@ -251,17 +225,19 @@ export function useRemoteBackupState({
       danger: true,
     });
     if (!accepted) return;
+    if (configWriteLock.current) return;
+    configWriteLock.current = true;
+    configRevision.current += 1;
     try {
-      await clearRemoteBackupConfig();
-      await deleteWebDavBackupSecret();
-      setConfig(null);
-      setHasSecret(false);
+      setSavedConfig(await clearRemoteBackupConfig());
       setConnectionStatus("unknown");
       setEntries([]);
       notify(UI_TEXT.toast.webDavConfigDeleted, "success");
     } catch (error) {
       console.error("delete WebDAV backup config failed", error);
       notify(UI_TEXT.toast.webDavConfigDeleteFailed, "error");
+    } finally {
+      configWriteLock.current = false;
     }
   }, [confirm, notify, UI_TEXT]);
 
@@ -280,8 +256,8 @@ export function useRemoteBackupState({
       const result = await uploadWebDavBackup(target, fileName);
       try {
         await saveRemoteBackupLastBackupAt(result.entry.createdAtMs);
-        setConfig((current) => current && sameRemoteBackupTarget(current, target)
-          ? { ...current, lastBackupAtMs: result.entry.createdAtMs } : current);
+        setSavedConfig((current) => current.config && sameRemoteBackupTarget(current.config, target)
+          ? { ...current, config: { ...current.config, lastBackupAtMs: result.entry.createdAtMs } } : current);
       } catch (error) {
         console.error("save remote backup success time failed", error);
       }

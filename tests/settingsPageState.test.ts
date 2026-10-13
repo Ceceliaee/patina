@@ -26,7 +26,7 @@ import {
   normalizeSettingsRecord,
 } from "../src/platform/persistence/appSettingsStore.ts";
 import {
-  remoteBackupSettingsInternals,
+  saveRemoteBackupConfig,
 } from "../src/platform/persistence/remoteBackupSettingsStore.ts";
 import {
   createSettingsToken,
@@ -566,16 +566,28 @@ await runTest("normalizeSettingsRecord accepts current minimize behavior values"
   assert.equal(fallbackSettings.minimizeBehavior, "widget");
 });
 
-await runTest("remote backup settings normalize WebDAV directory and timestamps", () => {
-  assert.equal(remoteBackupSettingsInternals.normalizeRemoteDir(""), "/Patina");
-  assert.equal(remoteBackupSettingsInternals.normalizeRemoteDir("/TimeTracker"), "/TimeTracker");
-  assert.equal(remoteBackupSettingsInternals.normalizeRemoteDir("TimeTracker"), "/TimeTracker");
-  assert.equal(remoteBackupSettingsInternals.normalizeRemoteDir("Patina/backups/"), "/Patina/backups");
-  assert.equal(remoteBackupSettingsInternals.normalizeRemoteDir("/Custom/backups"), "/Custom/backups");
-  assert.equal(remoteBackupSettingsInternals.parseTimestamp(undefined), null);
-  assert.equal(remoteBackupSettingsInternals.parseTimestamp(""), null);
-  assert.equal(remoteBackupSettingsInternals.parseTimestamp("0"), null);
-  assert.equal(remoteBackupSettingsInternals.parseTimestamp("1780493400000"), 1780493400000);
+await runTest("remote backup save recovers a committed response loss without rolling back the secret", async () => {
+  const host = globalThis as unknown as { window?: unknown };
+  const previous = host.window;
+  const commands: string[] = [];
+  let snapshot: Record<string, unknown> | null = null;
+  host.window = { __TAURI_INTERNALS__: { invoke: async (command: string, args: { patch?: Record<string, unknown> }) => {
+    commands.push(command);
+    if (command === "cmd_save_remote_backup_settings") {
+      assert.deepEqual(args.patch?.passwordUpdate, { kind: "replace", password: "  exact secret  " });
+      snapshot = { config: { url: "https://example.invalid/", username: "alice", remoteDir: "/Patina", lastBackupAtMs: null },
+        hasSecret: true, operationId: args.patch?.operationId, cleanupPending: false, runtimeRefreshPending: false };
+      throw new Error("response lost after commit");
+    }
+    if (command === "cmd_get_remote_backup_config_snapshot") return snapshot;
+    throw new Error("unexpected command");
+  } } };
+  try {
+    const result = await saveRemoteBackupConfig({ url: "https://example.invalid/", username: "alice", remoteDir: "/Patina",
+      passwordUpdate: { kind: "replace", password: "  exact secret  " } });
+    assert.equal(result.hasSecret, true);
+    assert.deepEqual(commands, ["cmd_save_remote_backup_settings", "cmd_get_remote_backup_config_snapshot"]);
+  } finally { host.window = previous; }
 });
 
 await runTest("normalizeSettingsRecord accepts theme modes and falls back to light", () => {

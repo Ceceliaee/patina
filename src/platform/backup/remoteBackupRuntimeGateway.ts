@@ -139,18 +139,6 @@ function parseDownloadResult(value: unknown): RemoteBackupDownloadResult {
   };
 }
 
-export async function saveWebDavBackupSecret(username: string, password: string): Promise<void> {
-  await invoke("cmd_save_webdav_backup_secret", { username, password });
-}
-
-export async function deleteWebDavBackupSecret(): Promise<void> {
-  await invoke("cmd_delete_webdav_backup_secret");
-}
-
-export async function hasWebDavBackupSecret(): Promise<boolean> {
-  return invoke<boolean>("cmd_has_webdav_backup_secret");
-}
-
 export async function revealWebDavBackupSecret(): Promise<string | null> {
   const result = await invoke<unknown>("cmd_reveal_webdav_backup_secret");
   if (result === null) return null;

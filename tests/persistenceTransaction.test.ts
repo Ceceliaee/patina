@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { DatabaseSync, type SQLInputValue } from "node:sqlite";
-import Database from "@tauri-apps/plugin-sql";
 import {
   getSessionsInRange,
   getSessionsInRangeWithoutTitleSamples,
@@ -26,65 +24,48 @@ async function runTest(name: string, fn: () => Promise<void> | void) {
   console.log(`PASS ${name}`);
 }
 
-await runTest("History SQL preserves open and half-open boundaries with native import precedence", async () => {
-  const db = new DatabaseSync(":memory:");
-  const originalSelect = Database.prototype.select;
+await runTest("History typed reads preserve native precedence, titles and anonymous identities", async () => {
+  const host = globalThis as unknown as { window?: unknown };
+  const originalWindow = host.window;
   const originalNow = Date.now;
-  try {
-    db.exec(`
-      CREATE TABLE sessions(id INTEGER PRIMARY KEY, app_name TEXT, exe_name TEXT, window_title TEXT,
-        start_time INTEGER, end_time INTEGER, duration INTEGER, continuity_group_start_time INTEGER);
-      CREATE TABLE import_exact_sessions(id INTEGER PRIMARY KEY, app_name TEXT, exe_name TEXT,
-        window_title TEXT, start_time INTEGER, end_time INTEGER, duration INTEGER);
-      CREATE TABLE session_title_samples(id INTEGER PRIMARY KEY,session_id INTEGER,title TEXT,start_time INTEGER,end_time INTEGER);
-      CREATE TABLE anonymous_activity(id TEXT PRIMARY KEY,start_time INTEGER,end_time INTEGER,observed_until INTEGER,is_web INTEGER);
-      CREATE INDEX idx_sessions_date ON sessions(start_time);
-      CREATE INDEX idx_sessions_end_start ON sessions(end_time,start_time);
-      INSERT INTO sessions VALUES
-        (1,'Editor','editor.exe','before',-1000,0,1000,-1000),
-        (2,'Editor','editor.exe','closed',0,1000,1000,0),
-        (3,'Editor','editor.exe','at end',3000,4000,1000,3000),
-        (4,'Editor','editor.exe','open',8000,NULL,NULL,8000);
-      INSERT INTO import_exact_sessions VALUES(1,'Imported','imported.exe','imported',500,3500,3000);
-      INSERT INTO session_title_samples VALUES(1,2,'closed title',0,1000);
-    `);
-    Date.now = () => 10_000;
-    Database.prototype.select = async function <T>(query: string, values?: unknown[]): Promise<T> {
-      return db.prepare(query).all(...(values ?? []) as SQLInputValue[]) as T;
+  const native = { id: 2, origin: "native", app_name: "Editor", exe_name: "editor.exe",
+    window_title: "closed", start_time: 0, end_time: 1000, duration: 1000, continuity_group_start_time: 0 };
+  const imported = { ...native, id: 1, origin: "import_exact", app_name: "Imported", exe_name: "imported.exe",
+    start_time: 500, end_time: 3500, duration: 3000, continuity_group_start_time: 500 };
+  const anonymous = { ...native, id: -7000000000000001, app_name: "", exe_name: "activity:anonymous",
+    window_title: "", start_time: 1000, end_time: 2000, duration: 1000, continuity_group_start_time: 1000 };
+  let rows = [native, imported];
+  host.window = { __TAURI_INTERNALS__: { invoke: async (command: string, args: Record<string, unknown>) => {
+    assert.equal(command, "cmd_get_history_range_rows");
+    assert.deepEqual(args, { startMs: 0, endMs: 3000, nowMs: 10000, includeTitleSamples: args.includeTitleSamples });
+    return {
+      sessions: rows,
+      titleSamples: args.includeTitleSamples ? [{ session_id: 2, title: "closed title", start_time: 0, end_time: 1000 }] : [],
     };
+  } } };
+  try {
+    Date.now = () => 10000;
     for (const load of [getSessionsInRangeWithoutTitleSamples, getSessionsInRange]) {
-      const rows = await load(0, 3000);
-      assert.deepEqual(rows.map(row => [row.exeName, row.startTime, row.endTime, row.duration]), [
-        ["editor.exe", 0, 1000, 1000],
-        ["imported.exe", 1000, 3500, 2500],
+      const result = await load(0, 3000);
+      assert.deepEqual(result.map(row => [row.exeName, row.startTime, row.endTime, row.duration]), [
+        ["editor.exe", 0, 1000, 1000], ["imported.exe", 1000, 3500, 2500],
       ]);
-      assert.deepEqual((await load(8000, 9000)).map(row => [row.startTime, row.endTime, row.duration]), [[8000, null, 2000]]);
-      assert.deepEqual(await load(10_000, 11_000), []);
-      assert.deepEqual((await load(-1000, 0)).map(row => row.id), [1]);
     }
-    assert.deepEqual((await getSessionsInRange(0, 3000))[0]?.titleSampleDetails, [
-      { title: "closed title", startTime: 0, endTime: 1000 },
-    ]);
-    db.exec("INSERT INTO anonymous_activity VALUES('opaque',1000,2000,2000,1)");
-    const anonymous = (await getSessionsInRange(0,3000)).filter(row => row.exeName === "activity:anonymous");
-    assert.equal(anonymous.length,1);
-    assert.deepEqual([anonymous[0].startTime,anonymous[0].endTime,anonymous[0].duration],[1000,2000,1000]);
-    assert.equal(anonymous[0].windowTitle,"");
-    assert.deepEqual(anonymous[0].titleSampleDetails,[]);
-    db.exec("INSERT INTO anonymous_activity VALUES('open',6000,NULL,7000,0)");
-    for (const [start, end] of [[0, 9000], [2000, 6000], [6000, 7000], [7000, 8000]]) {
-      const core = await getSessionsInRangeWithoutTitleSamples(start, end);
-      const detailed = await getSessionsInRange(start, end);
-      assert.deepEqual(
-        core,
-        detailed.map(row => ({ ...row, titleSampleDetails: [] })),
-        "Core refresh and title enrichment must preserve the same activity facts, including anonymous ranges",
-      );
-    }
+    assert.deepEqual((await getSessionsInRange(0, 3000))[0].titleSampleDetails,
+      [{ title: "closed title", startTime: 0, endTime: 1000 }]);
+    rows = [native, imported, anonymous];
+    const core = await getSessionsInRangeWithoutTitleSamples(0, 3000);
+    const detailed = await getSessionsInRange(0, 3000);
+    assert.deepEqual(core, detailed.map(row => ({ ...row, titleSampleDetails: [] })));
+    const privateRow = detailed.find(row => row.exeName === "activity:anonymous")!;
+    assert.equal(privateRow.windowTitle, "");
+    assert.deepEqual(privateRow.titleSampleDetails, []);
+    assert.deepEqual([privateRow.startTime, privateRow.endTime, privateRow.duration], [1000, 2000, 1000]);
+    assert.deepEqual(detailed.filter(row => row.exeName === "imported.exe").map(row => [row.startTime, row.endTime]),
+      [[2000, 3500]], "anonymous native occupancy also takes precedence over imports");
   } finally {
-    Database.prototype.select = originalSelect;
+    host.window = originalWindow;
     Date.now = originalNow;
-    db.close();
   }
 });
 
