@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { readRuntimeDatabaseRows } from "./runtimeDatabase.ts";
+import { assertSqlCommandsDenied, verifySqlBoundaryRuntime } from "./tauriSqlBoundaryRuntime.ts";
 import { verifyAnonymousActivityRuntime } from "./tauriAnonymousActivityRuntime.ts";
 import { verifyWebDavRuntime } from "./tauriWebDavRuntime.ts";
+import { verifyDesktopResourceLifecycle } from "./tauriResourceLifecycle.ts";
 import { verifyAppIconRuntime } from "./tauriAppIconRuntime.ts";
 import { installLinkedRankingClock, seedLinkedApplicationRanking, verifyLinkedApplicationDetailAndTrend, verifyLinkedApplicationRanking, verifyLinkedApplicationsRuntime } from "./tauriLinkedApplicationsRuntime.ts";
 import { deleteWebHistoryRuntime, verifyWebLinksRuntime, verifyAutomaticGroupingBackupRuntime } from "./tauriWebLinksRuntime.ts";
@@ -21,7 +24,7 @@ import {
 // runner cannot consume the runtime readiness budget before Patina launches.
 const COLD_BUILD_TIMEOUT_MS = 480_000;
 const WEBVIEW_STARTUP_TIMEOUT_MS = 30_000;
-const RUNTIME_TARGET_DIR = join(process.cwd(), "src-tauri", "target", "runtime-smoke");
+const RUNTIME_TARGET_DIR = process.env.PATINA_COVERAGE_TARGET_DIR ?? join(process.cwd(), "src-tauri", "target", "runtime-smoke");
 const RUNTIME_BINARY_PATH = join(RUNTIME_TARGET_DIR, "debug", "patina.exe");
 async function reservePort() {
   return new Promise<number>((resolve, reject) => {
@@ -193,6 +196,7 @@ type RuntimeProcessMeasurement = {
   processCount: number;
   workingSetBytes: number;
   privateUsageBytes: number;
+  cpuTimeMs: number;
   coverage: "root_only" | "root_and_descendants";
 };
 
@@ -229,12 +233,14 @@ function measureRuntimeProcessTree(
     }` : ""}
     $workingSet = 0L
     $privateUsage = 0L
+    $cpuTime = 0.0
     $measured = 0
     foreach ($id in $ids) {
       try {
         $process = Get-Process -Id $id -ErrorAction Stop
         $workingSet += [long]$process.WorkingSet64
         $privateUsage += [long]$process.PrivateMemorySize64
+        $cpuTime += $process.TotalProcessorTime.TotalMilliseconds
         $measured += 1
       } catch {}
     }
@@ -243,6 +249,7 @@ function measureRuntimeProcessTree(
       processCount = $measured
       workingSetBytes = $workingSet
       privateUsageBytes = $privateUsage
+      cpuTimeMs = $cpuTime
       coverage = $coverage
     } | ConvertTo-Json -Compress
     `);
@@ -519,10 +526,7 @@ async function verifyBackupReplaceRuntime(client: CdpConnection, root: string) {
     await waitForMutationRefresh();
     assert.equal(mutationCommands.has("cmd_commit_classification_settings"), true);
     await waitForHistoryFixture(["Runtime Restore Original"]);
-    const overrideRows = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
-      db: "sqlite:patina.db", query: "SELECT value FROM settings WHERE key = ?",
-      values: ["__app_override::runtime-restore-original.exe"],
-    })`) as Array<{ value: string }>;
+    const overrideRows = await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT value FROM settings WHERE key = ?", ["__app_override::runtime-restore-original.exe"]) as Array<{ value: string }>;
     assert.equal(overrideRows.length, 1);
     assert.equal(JSON.parse(overrideRows[0].value).category, "ai");
     const afterClassification = await readSettledStatus();
@@ -579,9 +583,7 @@ async function verifyBackupReplaceRuntime(client: CdpConnection, root: string) {
     assert.equal(mergedAggregate.sourceRevision, afterMerge.sourceRevision);
     assert.deepEqual(mergedAggregate.records.filter(row => row.exeName === "runtime-restore-original.exe")
       .map(row => row.endTime - row.startTime), [120_000]);
-    assert.deepEqual(await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
-      db: "sqlite:patina.db", query: "SELECT value FROM settings WHERE key = ?", values: ["refresh_interval_secs"],
-    })`), [{ value: "88" }]);
+    assert.deepEqual(await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT value FROM settings WHERE key = ?", ["refresh_interval_secs"]), [{ value: "88" }]);
     console.log("PATINA_MUTATION_RUNTIME_REPORT", JSON.stringify({
       environment: "isolated debug Tauri/WebView2 with real SQLite", importRecords: 2,
       importedDurationsMs: [360_000, 600_000], deletedImportBatch: true,
@@ -595,30 +597,17 @@ async function verifyBackupReplaceRuntime(client: CdpConnection, root: string) {
     await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
       mutations: [{ key: "tracking_paused", value: "0" }],
     })`);
-    assert.deepEqual(await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
-      db: "sqlite:patina.db", query: "SELECT value FROM settings WHERE key = ?", values: ["tracking_paused"],
-    })`), [{ value: "0" }]);
+    assert.deepEqual(await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT value FROM settings WHERE key = ?", ["tracking_paused"]), [{ value: "0" }]);
     await resetMutationObservation();
     await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_restore_backup", {
       backupPath: ${JSON.stringify(backupPath)}, hash: ${JSON.stringify(preview.hash)}, restoreStrategy: "replace",
     })`);
     const replaceCompletedAtMs = Date.now();
-    const restored = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
-      db: "sqlite:patina.db",
-      query: "SELECT exe_name, duration FROM sessions WHERE exe_name IN (?, ?) ORDER BY exe_name",
-      values: ["runtime-restore-original.exe", "runtime-restore-added.exe"],
-    })`);
+    const restored = await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT exe_name, duration FROM sessions WHERE exe_name IN (?, ?) ORDER BY exe_name", ["runtime-restore-original.exe", "runtime-restore-added.exe"]);
     assert.deepEqual(restored, [{ exe_name: "runtime-restore-original.exe", duration: 120_000 }]);
-    assert.deepEqual(await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
-      db: "sqlite:patina.db", query: "SELECT value FROM settings WHERE key = ?",
-      values: ["__app_override::runtime-restore-original.exe"],
-    })`), []);
-    assert.deepEqual(await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
-      db: "sqlite:patina.db", query: "SELECT value FROM settings WHERE key = ?", values: ["refresh_interval_secs"],
-    })`), [{ value: "77" }]);
-    assert.deepEqual(await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
-      db: "sqlite:patina.db", query: "SELECT value FROM settings WHERE key = ?", values: ["tracking_paused"],
-    })`), [{ value: "1" }]);
+    assert.deepEqual(await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT value FROM settings WHERE key = ?", ["__app_override::runtime-restore-original.exe"]), []);
+    assert.deepEqual(await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT value FROM settings WHERE key = ?", ["refresh_interval_secs"]), [{ value: "77" }]);
+    assert.deepEqual(await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT value FROM settings WHERE key = ?", ["tracking_paused"]), [{ value: "1" }]);
     await waitFor("restore events and frontend cache invalidation", async () => {
       const events = await evaluate(client, `window.__patinaRestoreReasons.includes('backup-restored')
         && window.__patinaE2eEvents.includes('app-settings-changed')`);
@@ -643,10 +632,7 @@ async function verifyBackupReplaceRuntime(client: CdpConnection, root: string) {
       .map(row => ({ exe: row.exeName, duration: row.endTime - row.startTime })),
     [{ exe: "runtime-restore-original.exe", duration: 120_000 }]);
     const readHeartbeat = async () => {
-      const rows = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
-        db: "sqlite:patina.db", query: "SELECT value FROM settings WHERE key = ?",
-        values: ["__tracker_last_heartbeat_ms"],
-      })`) as Array<{ value: string }>;
+      const rows = await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT value FROM settings WHERE key = ?", ["__tracker_last_heartbeat_ms"]) as Array<{ value: string }>;
       return Number(rows[0]?.value ?? 0);
     };
     await waitFor("paused tracker writes to the restored database", async () => (
@@ -663,7 +649,7 @@ async function verifyBackupReplaceRuntime(client: CdpConnection, root: string) {
     console.log("PATINA_BACKUP_REPLACE_RUNTIME_REPORT", JSON.stringify({
       environment: "isolated debug Tauri/WebView2 with real SQLite",
       format: preview.format_kind, strategy: "replace", previewHashVerified: true,
-      pluginPoolReadAfterReplace: true, originalDurationMs: 120_000, postBackupFactRemoved: true,
+      typedReadAfterReplace: true, originalDurationMs: 120_000, postBackupFactRemoved: true,
       frontendCacheClearCommands: [...cacheClearCommands].sort(), historyWarmSnapshotRefreshed: true,
       projectionRebuilt: true, recoveryFilesCleaned: true,
       restoredPauseSettingReplacedDifferentLiveValue: true,
@@ -682,7 +668,8 @@ async function verifyBackupReplaceRuntime(client: CdpConnection, root: string) {
   }
 }
 
-assert.equal(process.argv.length, 2, "Tauri runtime smoke does not accept arguments");
+const resourceCycles = process.argv.length === 3 && process.argv[2] === "--resource-cycles";
+assert.ok(process.argv.length === 2 || resourceCycles, "Tauri runtime smoke only accepts --resource-cycles");
 const frontendPort = await reservePort();
 const devtoolsPort = await reservePort();
 const root = mkdtempSync(join(tmpdir(), "patina-tauri-e2e-"));
@@ -1738,16 +1725,17 @@ try {
   assert.ok(Array.isArray(widgetPresentation.status?.tools));
   assert.equal(typeof widgetPresentation.status?.sampled_at_ms, "number");
 
+  await assertSqlCommandsDenied(expression => evaluate(widgetClient!, expression));
   for (const deniedExpression of [
-    `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
-      db: "sqlite:patina.db",
-      query: "SELECT key FROM settings",
-      values: [],
-    })`,
-    `window.__TAURI_INTERNALS__.invoke("plugin:sql|load", {
-      db: "sqlite:patina.db",
-    })`,
     `window.__TAURI_INTERNALS__.invoke("cmd_get_storage_snapshot")`,
+    `window.__TAURI_INTERNALS__.invoke("cmd_get_setting_rows", { key: null, keyPrefix: null })`,
+    `window.__TAURI_INTERNALS__.invoke("cmd_get_history_range_rows", { startMs: 0, endMs: 1000, nowMs: 1000, includeTitleSamples: true })`,
+    `window.__TAURI_INTERNALS__.invoke("cmd_get_executable_icon_rows", { exeNames: [] })`,
+    `window.__TAURI_INTERNALS__.invoke("cmd_get_earliest_activity_start_time")`,
+    `window.__TAURI_INTERNALS__.invoke("cmd_get_recorded_executable_names")`,
+    `window.__TAURI_INTERNALS__.invoke("cmd_get_web_activity_segment_rows", { startMs: 0, endMs: 1000, nowMs: 1000 })`,
+    `window.__TAURI_INTERNALS__.invoke("cmd_get_observed_web_domain_rows", { sinceMs: 0, nowMs: 1000, limit: 1 })`,
+    `window.__TAURI_INTERNALS__.invoke("cmd_get_web_favicon_rows", { domains: [] })`,
     `window.__TAURI_INTERNALS__.invoke("cmd_get_legacy_classification_apps", { nowMs: 0 })`,
     `window.__TAURI_INTERNALS__.invoke("cmd_get_web_links")`,
     `window.__TAURI_INTERNALS__.invoke("cmd_restore_backup", {
@@ -1756,6 +1744,13 @@ try {
       restoreStrategy: "replace",
     })`,
     `window.__TAURI_INTERNALS__.invoke("cmd_reveal_webdav_backup_secret")`,
+    `window.__TAURI_INTERNALS__.invoke("cmd_get_remote_backup_config_snapshot")`,
+    `window.__TAURI_INTERNALS__.invoke("cmd_clear_remote_backup_settings")`,
+    `window.__TAURI_INTERNALS__.invoke("cmd_save_remote_backup_settings", { patch: {
+      url: "http://127.0.0.1:1/dav", username: "permission-probe", remoteDir: "/Patina",
+      passwordUpdate: { kind: "replace", password: "permission-probe" },
+      operationId: "00000000-0000-4000-8000-000000000001",
+    } })`,
     `window.__TAURI_INTERNALS__.invoke("cmd_upload_webdav_backup", {
       config: { url: "http://127.0.0.1:1/dav", username: "permission-probe", remoteDir: "/Patina" },
       fileName: "permission-probe.zip",
@@ -1769,7 +1764,7 @@ try {
       widgetClient,
       `${deniedExpression}.then(() => null, (error) => String(error))`,
     );
-    assert.match(String(denied), /not allowed|permission|denied/i);
+    assert.match(String(denied), /not allowed|permission|denied|not found/i);
   }
   widgetClient.close();
   widgetClient = null;
@@ -2083,6 +2078,10 @@ try {
     ...processTreeMemory,
     comparison: "absolute diagnostic only; before/after payload retention is measured by perf:activity-read-model",
   }));
+  if (resourceCycles) {
+    assert.ok(!process.env.PATINA_COVERAGE_TARGET_DIR, "Performance must run without coverage instrumentation");
+    await verifyDesktopResourceLifecycle(client, expression => evaluate(client!, expression), measureRuntimeProcessTree);
+  }
 
   await evaluate(client, `
     (async () => {
@@ -2107,11 +2106,7 @@ try {
     10_000,
   );
 
-  const rows = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
-    db: "sqlite:patina.db",
-    query: "SELECT value FROM settings WHERE key = ?",
-    values: ["refresh_interval_secs"],
-  })`);
+  const rows = await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT value FROM settings WHERE key = ?", ["refresh_interval_secs"]);
   assert.deepEqual(rows, [{ value: "77" }]);
 
   await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
@@ -2122,11 +2117,7 @@ try {
       { key: "language", value: "en-US" },
     ],
   })`);
-  const englishTraySettingRows = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
-    db: "sqlite:patina.db",
-    query: "SELECT key, value FROM settings WHERE key IN (?, ?, ?) ORDER BY key",
-    values: ["language", "tracking_paused", "title_recording_enabled"],
-  })`);
+  const englishTraySettingRows = await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT key, value FROM settings WHERE key IN (?, ?, ?) ORDER BY key", ["language", "tracking_paused", "title_recording_enabled"]);
   assert.deepEqual(englishTraySettingRows, [
     { key: "language", value: "en-US" },
     { key: "title_recording_enabled", value: "0" },
@@ -2135,11 +2126,7 @@ try {
   await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
     mutations: [{ key: "language", value: "es" }],
   })`);
-  const spanishSettingRows = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
-    db: "sqlite:patina.db",
-    query: "SELECT key, value FROM settings WHERE key IN (?, ?, ?) ORDER BY key",
-    values: ["language", "tracking_paused", "title_recording_enabled"],
-  })`);
+  const spanishSettingRows = await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT key, value FROM settings WHERE key IN (?, ?, ?) ORDER BY key", ["language", "tracking_paused", "title_recording_enabled"]);
   assert.deepEqual(spanishSettingRows, [
     { key: "language", value: "es" },
     { key: "title_recording_enabled", value: "0" },
@@ -2152,21 +2139,13 @@ try {
       { key: "title_recording_enabled", value: "1" },
     ],
   })`);
-  const restoredTraySettingRows = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
-    db: "sqlite:patina.db",
-    query: "SELECT key, value FROM settings WHERE key IN (?, ?, ?) ORDER BY key",
-    values: ["language", "tracking_paused", "title_recording_enabled"],
-  })`);
+  const restoredTraySettingRows = await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT key, value FROM settings WHERE key IN (?, ?, ?) ORDER BY key", ["language", "tracking_paused", "title_recording_enabled"]);
   assert.deepEqual(restoredTraySettingRows, [
     { key: "language", value: "zh-CN" },
     { key: "title_recording_enabled", value: "1" },
     { key: "tracking_paused", value: "0" },
   ]);
-  const widgetPlacementRows = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
-    db: "sqlite:patina.db",
-    query: "SELECT key, value FROM settings WHERE key IN (?, ?, ?) ORDER BY key",
-    values: ["widget_placement", "widget_side", "widget_anchor_y"],
-  })`) as Array<{ key?: string; value?: string }>;
+  const widgetPlacementRows = await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT key, value FROM settings WHERE key IN (?, ?, ?) ORDER BY key", ["widget_placement", "widget_side", "widget_anchor_y"]) as Array<{ key?: string; value?: string }>;
   assert.equal(widgetPlacementRows.length, 1);
   assert.equal(widgetPlacementRows[0]?.key, "widget_placement");
   assert.deepEqual(
@@ -2178,18 +2157,10 @@ try {
   await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_save_history_bootstrap_snapshot_payload", {
     payload: ${JSON.stringify(historyBootstrapPayload)},
   })`);
-  const historyBootstrapRows = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
-    db: "sqlite:patina.db",
-    query: "SELECT value FROM settings WHERE key = ?",
-    values: ["history.bootstrap_snapshot.v1"],
-  })`);
+  const historyBootstrapRows = await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT value FROM settings WHERE key = ?", ["history.bootstrap_snapshot.v1"]);
   assert.deepEqual(historyBootstrapRows, [{ value: historyBootstrapPayload }]);
   await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_clear_history_bootstrap_snapshot_payload")`);
-  const clearedHistoryBootstrapRows = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
-    db: "sqlite:patina.db",
-    query: "SELECT value FROM settings WHERE key = ?",
-    values: ["history.bootstrap_snapshot.v1"],
-  })`);
+  const clearedHistoryBootstrapRows = await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT value FROM settings WHERE key = ?", ["history.bootstrap_snapshot.v1"]);
   assert.deepEqual(clearedHistoryBootstrapRows, []);
   databaseMutationCompleted = true;
 
@@ -2200,7 +2171,7 @@ try {
       values: [],
     }).then(() => null, (error) => String(error))
   `);
-  assert.match(String(deniedWrite), /not allowed|permission|denied/i);
+  assert.match(String(deniedWrite), /not allowed|permission|denied|not found/i);
 
   const structuredError = await evaluate(client, `
     window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
@@ -2211,6 +2182,7 @@ try {
   assert.equal(structuredError.retryable, false);
 
   await verifyBackupReplaceRuntime(client, root);
+  await verifySqlBoundaryRuntime(expression => evaluate(client!, expression), root);
   await verifyWebDavRuntime((expression) => evaluate(client!, expression));
   await deleteWebHistoryRuntime((expression) => evaluate(client!, expression));
 
@@ -2224,6 +2196,9 @@ try {
     { key: "color_scheme_dark", value: "catppuccin" },
     { key: "show_tray_icon", value: "0" }
   ] })`);
+  if (process.env.PATINA_COVERAGE_TARGET_DIR) {
+    await evaluate(client, 'window.__TAURI_INTERNALS__.invoke("cmd_get_resource_diagnostics")');
+  }
   client.close();
   client = null;
   stopProcessTree(appProcess);
@@ -2259,9 +2234,7 @@ try {
   await waitFor("cold restart suppresses tray creation", () => logs.join("").slice(restartLogStart)
     .includes("visibility-applied visible=false created=false"), 10_000);
   assert.doesNotMatch(logs.join("").slice(restartLogStart), /visibility-applied visible=true/);
-  const hiddenPreference = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
-    db: "sqlite:patina.db", query: "SELECT value FROM settings WHERE key = ?", values: ["show_tray_icon"],
-  })`);
+  const hiddenPreference = await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT value FROM settings WHERE key = ?", ["show_tray_icon"]);
   assert.deepEqual(hiddenPreference, [{ value: "0" }]);
   await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
     mutations: [{ key: "show_tray_icon", value: "1" }, { key: "close_behavior", value: "tray" }],
@@ -2343,13 +2316,9 @@ try {
       try { return await evaluate(client!, `Boolean(window.__TAURI_INTERNALS__)`); } catch { return false; }
     }, 10_000);
     const snapshot = await evaluate(client!, `window.__TAURI_INTERNALS__.invoke("cmd_get_storage_snapshot")`) as StorageSnapshot;
-    const rows = await evaluate(client!, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
-      db: "sqlite:patina.db", query: "SELECT value FROM settings WHERE key = ?", values: ["color_scheme_dark"]
-    })`);
+    const rows = await readRuntimeDatabaseRows(expression => evaluate(client!, expression), "SELECT value FROM settings WHERE key = ?", ["color_scheme_dark"]);
     assert.deepEqual(rows, [{ value: "catppuccin" }]);
-    assert.deepEqual(await evaluate(client!, `window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
-      db: "sqlite:patina.db", query: "PRAGMA quick_check", values: []
-    })`), [{ quick_check: "ok" }]);
+    assert.deepEqual(await readRuntimeDatabaseRows(expression => evaluate(client!, expression), "PRAGMA quick_check", []), [{ quick_check: "ok" }]);
     assert.equal(storageState().pending, null);
     assert.equal(await evaluate(client!, `localStorage.getItem("patina-storage-migration-proof")`), "persistent-profile");
     assert.ok(existsSync(join(snapshot.paths.webviewRoot, "EBWebView")));
@@ -2399,6 +2368,10 @@ try {
   primaryError = error;
 } finally {
   console.log("PATINA_RUNTIME_PHASE cleanup");
+  if (process.env.PATINA_COVERAGE_TARGET_DIR && client) {
+    try { await evaluate(client, 'window.__TAURI_INTERNALS__.invoke("cmd_get_resource_diagnostics")'); }
+    catch (error) { cleanupErrors.push(error); }
+  }
   try {
     await closeNetServer(bridgePortBlocker);
     bridgePortBlocker = null;

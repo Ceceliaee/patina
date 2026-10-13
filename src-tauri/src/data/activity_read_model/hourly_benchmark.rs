@@ -202,7 +202,12 @@ async fn hourly_maintenance_capacity_report() {
         .unwrap_or_else(|_| "native".to_string());
     assert_eq!(dataset, "native", "unknown capacity dataset: {dataset}");
     let mut measurements = Vec::new();
-    for (name, days) in [("native-R1", 365_i64), ("native-R3", 1095_i64)] {
+    for (name, days) in [
+        ("native-10k", 10_i64),
+        ("native-100k", 100_i64),
+        ("native-R1", 365_i64),
+        ("native-R3", 1095_i64),
+    ] {
         let pool = super::contract_tests::setup_pool().await;
         let seed_started = Instant::now();
         seed_native_days(&pool, days, 0).await;
@@ -235,7 +240,7 @@ async fn hourly_maintenance_capacity_report() {
             "build": if cfg!(debug_assertions) { "debug" } else { "release" },
             "measurements": measurements,
             "limitations": [
-                "Synthetic in-memory native-only R1/R3; not a file-backed mixed-source workload.",
+                "Synthetic in-memory native-only 10k/100k/R1/R3; not a file-backed mixed-source workload.",
                 "Logical page bytes are not process memory or on-disk DB/WAL sizes.",
                 "Warm backend query, shaping and JSON encoding; no IPC transport, browser rendering or OS cold cache.",
             "Maintenance excludes polling sleeps; CPU time is whole test process CPU and null when unavailable."

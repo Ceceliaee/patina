@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { randomUUID } from "node:crypto";
 
 export async function verifyWebDavRuntime(evaluate: (expression: string) => Promise<unknown>) {
   const directories = new Set(["/dav/"]);
   const files = new Map<string, Buffer>();
   const calls: string[] = [];
+  const credentials = new Set(["runtime-fixture:fixture-only", "race-a:secret-a", "race-b:secret-b"]
+    .map(value => "Basic " + Buffer.from(value).toString("base64")));
   const server = createServer(async (request, response) => {
     const path = decodeURI(request.url ?? "/");
     const method = request.method ?? "";
@@ -13,6 +16,7 @@ export async function verifyWebDavRuntime(evaluate: (expression: string) => Prom
       response.writeHead(status, { "Content-Length": Buffer.byteLength(body), ETag: '"fixture-etag"' });
       response.end(body);
     };
+    if (!credentials.has(request.headers.authorization ?? "")) return finish(401);
     if (method === "PROPFIND") {
       if (!directories.has(path)) return finish(404);
       return finish(207, `<d:multistatus xmlns:d="DAV:"><d:response><d:href>${request.url}</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>`);
@@ -42,7 +46,15 @@ export async function verifyWebDavRuntime(evaluate: (expression: string) => Prom
   const config = { url: `http://127.0.0.1:${address.port}/dav/runtime/new`, username: "runtime-fixture", remoteDir: "/Patina" };
   const invoke = (command: string, payload: unknown) => evaluate(`window.__TAURI_INTERNALS__.invoke(${JSON.stringify(command)}, ${JSON.stringify(payload)})`);
   try {
-    await invoke("cmd_save_webdav_backup_secret", { username: config.username, password: "fixture-only" });
+    await invoke("cmd_save_remote_backup_settings", { patch: { ...config, passwordUpdate: { kind: "replace", password: "fixture-only" }, operationId: randomUUID() } });
+    // Complete validation must precede any Credential Manager write.
+    await assert.rejects(invoke("cmd_save_remote_backup_settings", { patch: {
+      ...config, url: "http://untrusted.invalid", passwordUpdate: { kind: "replace", password: "wrong-secret" }, operationId: randomUUID(),
+    } }));
+    const state = await invoke("cmd_get_remote_backup_config_snapshot", {}) as { config: typeof config; hasSecret: boolean };
+    assert.equal(state.hasSecret, true);
+    assert.equal(state.config.url.replace(/\/$/, ""), config.url);
+    await assert.rejects(invoke("cmd_test_webdav_backup_target", { config: { ...config, username: "other-user" } }), /configuration changed/);
     const first = await invoke("cmd_upload_webdav_backup", { config, fileName: "工作备份.zip" }) as { entry: { id: string; fileName: string }; indexUpdated: boolean };
     assert.equal(first.entry.fileName, "工作备份.zip");
     assert.equal(first.indexUpdated, true);
@@ -65,9 +77,35 @@ export async function verifyWebDavRuntime(evaluate: (expression: string) => Prom
     const priorCalls = calls.length;
     await assert.rejects(invoke("cmd_upload_webdav_backup", { config, fileName: "../outside.zip" }), /webdav_invalid_file_name/);
     assert.equal(calls.length, priorCalls);
+    const save = (username: string, password: string) => invoke("cmd_save_remote_backup_settings", {
+      patch: { ...config, username, passwordUpdate: { kind: "replace", password }, operationId: randomUUID() },
+    });
+    const assertPair = async () => {
+      const current = await invoke("cmd_get_remote_backup_config_snapshot", {}) as { config: typeof config | null; hasSecret: boolean };
+      const secret = await invoke("cmd_reveal_webdav_backup_secret", {});
+      if (!current.config) { assert.equal(secret, null); assert.equal(current.hasSecret, false); return; }
+      const expected = current.config.username === "race-a" ? "secret-a" : "secret-b";
+      assert.equal(secret, expected);
+      assert.deepEqual(await invoke("cmd_test_webdav_backup_target", { config: current.config }), { ok: true });
+    };
+    for (let round = 0; round < 3; round += 1) {
+      await Promise.all([save("race-a", "secret-a"), save("race-b", "secret-b")]);
+      await assertPair();
+      await Promise.all([save("race-a", "secret-a"), invoke("cmd_clear_remote_backup_settings", {}), save("race-b", "secret-b")]);
+      await assertPair();
+    }
+    await save("runtime-fixture", "fixture-only");
+    const [upload, saved] = await Promise.allSettled([
+      invoke("cmd_upload_webdav_backup", { config, fileName: "concurrent.zip" }),
+      save("race-a", "secret-a"),
+    ]);
+    assert.equal(saved.status, "fulfilled", "Concurrent save must commit successfully");
+    if (upload.status === "rejected") assert.match(String(upload.reason), /configuration changed/);
+    await assertPair();
+    console.log("PASS concurrent WebDAV saves, delete and upload observe complete credential generations");
     console.log("PASS real WebDAV IPC creates parents, preserves custom names, rejects overwrite, and restores indexed ZIP");
   } finally {
-    try { await invoke("cmd_delete_webdav_backup_secret", {}); }
+    try { await invoke("cmd_clear_remote_backup_settings", {}); }
     finally { await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
   }
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
+import { readRuntimeDatabaseRows } from "./runtimeDatabase.ts";
 
 export async function verifyAutomaticGroupingBackupRuntime(evaluate: (expression: string) => Promise<unknown>, root: string) {
   const invoke = (command: string, args: unknown = {}) => evaluate(`window.__TAURI_INTERNALS__.invoke(${JSON.stringify(command)},${JSON.stringify(args)})`);
@@ -29,7 +30,7 @@ export async function verifyAutomaticGroupingBackupRuntime(evaluate: (expression
   assert.deepEqual(migrated.overrides['chat.deepseek.com'], { displayName: 'Raw title', captureTitle: false });
   assert.equal(migrated.roots['platform.deepseek.com'], 'deepseek.com');
   assert.equal(migrated.totals['chat.deepseek.com'], 1000);
-  const backupRows = await invoke('plugin:sql|select', { db:'sqlite:patina.db', query:"SELECT value FROM settings WHERE key='__web_grouping_backup_v2'", values:[] }) as { value:string }[];
+  const backupRows = await readRuntimeDatabaseRows(evaluate, "SELECT value FROM settings WHERE key='__web_grouping_backup_v2'") as { value:string }[];
   assert.ok(backupRows[0].value.includes('Legacy group'));
   const rule = { version:2, exceptions:['deepseek.com'] };
   const commit = (next: unknown, previous: unknown) => invoke('cmd_commit_classification_settings', { mutations:[{key:'__web_site::deepseek.com',value:JSON.stringify({next,previous})}] });
@@ -51,9 +52,8 @@ export async function deleteWebHistoryRuntime(evaluate: (expression: string) => 
   await evaluate(`window.__TAURI_INTERNALS__.invoke("cmd_commit_classification_settings", {mutations:[{
     key:"__web_domain_override::example.com",value:JSON.stringify({displayName:"Retained deletion preference",captureTitle:false})
   }]})`);
-  const count = async (domain: string) => evaluate(`window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
-    db:"sqlite:patina.db", query:"SELECT COUNT(*) AS count FROM web_activity_segments WHERE normalized_domain = ?",values:[${JSON.stringify(domain)}]
-  })`) as Promise<Array<{ count: number }>>;
+  const count = (domain: string) => readRuntimeDatabaseRows(evaluate,
+    "SELECT COUNT(*) AS count FROM web_activity_segments WHERE normalized_domain = ?", [domain]) as Promise<Array<{ count: number }>>;
   assert.ok((await count("example.com"))[0].count > 0);
   const otherBefore = await count("docs.example");
   await evaluate('window.__TAURI_INTERNALS__.invoke("cmd_delete_web_activity_segments_by_domain", {normalizedDomain:"example.com"})');

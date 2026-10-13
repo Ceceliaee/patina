@@ -87,8 +87,8 @@ export async function verifyLinkedApplicationDetailAndTrend(evaluate: Evaluate) 
 
 export async function verifyLinkedApplicationsRuntime(evaluate: (expression: string) => Promise<unknown>, restart = false) {
   const commitTimings: unknown[] = [];
-  const read = () => evaluate(`window.__TAURI_INTERNALS__.invoke("plugin:sql|select", {
-    db: "sqlite:patina.db", query: "SELECT key,value FROM settings WHERE key LIKE '__app_link::%' ORDER BY key", values: []
+  const read = () => evaluate(`window.__TAURI_INTERNALS__.invoke("cmd_get_setting_rows", {
+    key: null, keyPrefix: "__app_link::"
   })`);
   const commit = async (member: string, parent: string | null, previous: string | null) => {
     const duration = await evaluate(
