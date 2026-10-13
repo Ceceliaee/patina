@@ -147,9 +147,9 @@ Tauri application command 采用显式、默认拒绝的窗口授权模型：
 - 页面组件不能直接写 SQL
 - feature 不能直接跳过边界访问底层 DB
 - SQLite 访问应通过 `platform/persistence/*` 暴露的明确出口
-- `src/platform/persistence/sqlite.ts` 只暴露读连接；前端生产代码不应再调用 `execute` / `executeWrite` / `executeWriteBatch`
+- 前端 persistence gateway 只调用按数据域定义的 typed Rust command，SQL 与参数绑定留在 Rust repository；History 会话与标题在同一读取事务中取得
 - settings、classification、backup settings、数据清理与类似写侧操作默认通过 typed Rust command 完成
-- main window capability 不应包含 `sql:allow-execute`
+- main 和 Widget 均无 SQL plugin 权限；连接池由 `AppSqlitePool` 持有，数据库替换后 command 解析到当前连接池，不能通过 WebView 加载或操作任意 SQL 连接
 - settings 原始读取、tracker health 时间戳与类似本地持久化适配，默认归 `platform/persistence/*`
 - `app/services/*` 只保留应用启动、运行时同步或全局偏好写入所需的薄协调，不从 `features/settings/*` 借基础能力
 - `features/settings/*` 只保留 settings 页面的保存、cleanup、backup、restore 与外链打开等 feature 私有流程
@@ -167,6 +167,8 @@ Tauri application command 采用显式、默认拒绝的窗口授权模型：
 - 自动备份的时间声明、重试与调和决策归备份专用 `engine/backup_scheduler.rs`；目标执行、运行账本和保留策略分别归 `data/scheduled_backup.rs` 与其 repository，不为未来定时导出提前建立通用任务框架
 - WebDAV 自动备份只有在本地快照校验、不可覆盖上传、远端全量回读校验和索引发布全部完成后才可记为成功；旧自动对象必须在新备份成立后，凭精确路径、来源、目标身份与 ETag 等所有权证据清理，证据不足时保留对象并记录警告
 - WebDAV 地址、用户名和远端目录可作为非秘密配置持久化；密码不得进入 SQLite、事件载荷、远端索引或日志。唯一允许返回密码的 IPC 是 main window 用户明确点击“显示密码”触发的 `cmd_reveal_webdav_backup_secret`：handler 必须执行真实窗口 caller guard，前端不得在打开弹窗时预取，隐藏或关闭弹窗后必须清除已读取的明文预览；Widget 和其他窗口不得获得该命令
+- WebDAV 配置保存由 `data/remote_backup_config.rs` 协调。完整校验后先创建不可变候选凭据，SQLite 事务原子提交配置、凭据引用和保存标识，再清理旧凭据。`platform/credentials/store.rs` 在 profile 私有目录记录不含秘密的归属凭证；凭据只按本机归属和配置身份读取。保存、删除和网络快照取得共用锁，网络请求持有已取得的完整配对；清理失败不改变已提交结果，可在后续读取中重试。备份不授予本机凭据访问权：覆盖恢复解绑，合并保留已有配对或将新增配置标为待配置。旧凭据只为无引用的现存配置读取，首次保存转换后退役；回退到不支持引用协议的旧程序需要重新配置密码
+- main 和 Widget 的 tracking 快照同时携带暂停标志、窗口与运行状态，读取与暂停 / 恢复共用 transition 锁。前端每个快照 owner 的所有事件共用请求序号，只接受最新请求；失败保留最后有效值。订阅先于首次读取，卸载使未完成请求失效；其他设置更新不能覆盖已接受的暂停状态
 - 自动导出的日历周期、到期槽位、补跑与重试决策归导出专用 `engine/export_scheduler.rs`；配置与运行账本归 `data/repositories/scheduled_export.rs`，文件生成、格式校验、不可覆盖发布和崩溃对账归 `data/scheduled_export.rs`，不得与自动备份合并成通用任务框架
 - `app/scheduled_task_runtime.rs` 只共享目录选择、唤醒/轮询和状态事件发送这些无业务语义的运行机制；备份与导出的 state 类型、锁边界、错误分类、调度策略和数据动作必须继续分离
 
