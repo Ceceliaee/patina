@@ -25,6 +25,7 @@ interface UseDataTrendSnapshotParams {
 }
 
 interface TrendReadState {
+  nowMs: number;
   queryKey: string;
   snapshot: DataTrendSnapshot | null;
   status: "loading" | "ready" | "error";
@@ -38,17 +39,19 @@ export function useDataTrendSnapshot({
 }: UseDataTrendSnapshotParams) {
   const UI_TEXT = useLocaleText();
   const currentDateKey = formatLocalDateKey(new Date());
-  const [nowMs, setNowMs] = useState(() => Date.now());
   const [retryKey, setRetryKey] = useState(0);
   const retry = useCallback(() => setRetryKey((value) => value + 1), []);
+  const [state, setState] = useState<TrendReadState>(() => {
+    const nowMs = Date.now();
+    const range = resolveDataTrendRange(selection, nowMs, UI_TEXT);
+    const snapshot = getCachedDataTrendSnapshot(range);
+    return { nowMs, queryKey: range.cacheKey, snapshot, status: snapshot ? "ready" : "loading" };
+  });
+  const nowMs = state.nowMs;
   const resolvedRange = useMemo(
     () => resolveDataTrendRange(selection, nowMs, UI_TEXT),
     [selection, nowMs, UI_TEXT],
   );
-  const [state, setState] = useState<TrendReadState>(() => {
-    const snapshot = getCachedDataTrendSnapshot(resolvedRange);
-    return { queryKey: resolvedRange.cacheKey, snapshot, status: snapshot ? "ready" : "loading" };
-  });
 
   useEffect(() => {
     let cancelled = false;
@@ -56,8 +59,8 @@ export function useDataTrendSnapshot({
     const nextNowMs = Date.now();
     const nextRange = resolveDataTrendRange(selection, nextNowMs, UI_TEXT);
     const nextCached = getCachedDataTrendSnapshot(nextRange);
-    setNowMs(nextNowMs);
     setState((current) => ({
+      nowMs: nextNowMs,
       queryKey: nextRange.cacheKey,
       snapshot: current.queryKey === nextRange.cacheKey ? current.snapshot ?? nextCached : nextCached,
       status: "loading",
@@ -67,7 +70,7 @@ export function useDataTrendSnapshot({
       try {
         const nextSnapshot = await loadSnapshot(selection, nextNowMs, UI_TEXT);
         if (cancelled) return;
-        setState({ queryKey: nextRange.cacheKey, snapshot: nextSnapshot, status: "ready" });
+        setState({ nowMs: nextNowMs, queryKey: nextRange.cacheKey, snapshot: nextSnapshot, status: "ready" });
       } catch (error) {
         if (cancelled) return;
         console.warn("Failed to read data trend:", error);

@@ -113,7 +113,7 @@ export function useAppMappingState({
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [actionError, setActionError] = useState<"save" | "delete" | "refresh" | null>(null);
   const deletingAppRecordsRef = useRef(false);
-  const [saving, setSaving] = useState(false);
+  const saving = saveStatus === "saving";
   const [deletingSessionsExe, setDeletingSessionsExe] = useState<string | null>(null);
   const [showCategoryDialog, setShowCategoryDialog] = useState(false);
   const [colorFormat, setColorFormat] = useState<ColorDisplayFormat>("hex");
@@ -208,7 +208,7 @@ export function useAppMappingState({
       seedLinkedAppName(next, current, savedState, parent, appCatalog.candidates);
       return next;
     });
-    setSaveStatus("idle");
+    setSaveStatus(current => current === "saving" ? current : "idle");
   }, [savedState, appCatalog.candidates]);
   const candidateIconExeNames = useMemo(
     () => [...new Set([...appCatalog.candidates, ...groupedCandidates].map((candidate) => candidate.exeName))],
@@ -232,16 +232,11 @@ export function useAppMappingState({
   });
   const iconThemeColors = useIconThemeColors(mappingIcons);
 
-  const hasUnsavedChanges = (() => {
-    if (!savedState || !draftState) return false;
-    return ClassificationService.hasDraftChanges(savedState, draftState);
-  })();
+  const hasUnsavedChanges = Boolean(savedState && draftState
+    && ClassificationService.hasDraftChanges(savedState, draftState));
 
   useEffect(() => {
     hasUnsavedChangesRef.current = hasUnsavedChanges;
-  }, [hasUnsavedChanges]);
-
-  useEffect(() => {
     onDirtyChange?.(hasUnsavedChanges);
   }, [hasUnsavedChanges, onDirtyChange]);
 
@@ -268,8 +263,6 @@ export function useAppMappingState({
     resolveWebDomainDisplayName,
     resolveWebDomainColor,
     resolveWebDomainCategory,
-    resolveWebDomainEnabled,
-    resolveWebDomainTitleCaptureEnabled,
     resolveAutoDisplayName,
     resolveDisplayNameFromOverride,
     resolveWebDomainAutoDisplayName,
@@ -751,7 +744,6 @@ export function useAppMappingState({
     if (!hasUnsavedChanges) return true;
     if (saving) return false;
     setActionError(null);
-    setSaving(true);
     setSaveStatus("saving");
     try {
       const result = await saveAppMappingStateWithDeps({
@@ -782,9 +774,6 @@ export function useAppMappingState({
         onOverridesChanged?.();
       }
       setSaveStatus(result.nextSaveStatus);
-      if (result.nextSaveStatus === "saved") {
-        window.setTimeout(() => setSaveStatus("idle"), 1800);
-      }
       if (!result.accepted && !result.skippedReason) {
         setActionError("save");
         if (result.error) {
@@ -797,10 +786,14 @@ export function useAppMappingState({
       setActionError("save");
       setSaveStatus("idle");
       return false;
-    } finally {
-      setSaving(false);
     }
   }, [draftState, hasUnsavedChanges, onOverridesChanged, savedState, saving, webDomainCandidates]);
+
+  useEffect(() => {
+    if (saveStatus !== "saved") return;
+    const timer = window.setTimeout(() => setSaveStatus("idle"), 1800);
+    return () => window.clearTimeout(timer);
+  }, [saveStatus]);
 
   useEffect(() => {
     onRegisterSaveHandler?.(handleSave);
@@ -872,7 +865,6 @@ export function useAppMappingState({
     appCatalogRefreshError: appCatalog.refreshError,
     appCatalogRetry: appCatalog.retry,
     filteredWebDomainCandidates,
-    webDomainCandidates,
     draftWebDomainOverrides,
     updateWebDomainOverride,
     updateWebDomainMembers,
@@ -895,14 +887,11 @@ export function useAppMappingState({
     resolveWebDomainDisplayName,
     resolveWebDomainColor,
     resolveWebDomainCategory,
-    resolveWebDomainEnabled,
-    resolveWebDomainTitleCaptureEnabled,
     deletingSessionsExe,
     editingNameExe,
     nameDrafts,
     editingWebDomain,
     webNameDrafts,
-    draftOverrides,
     syncNameDraftToPageDraft,
     handleNameBlur,
     handleNameEditCancel,
