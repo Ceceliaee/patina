@@ -101,7 +101,7 @@ fn register_managed_state_and_plugins(
                 .args(vec![runtime::AUTOSTART_ARG.to_string()])
                 .build(),
         )
-        .plugin(tauri_plugin_sql::Builder::default().build())
+        .manage(crate::data::sqlite_pool::AppSqlitePool::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -109,6 +109,14 @@ fn register_managed_state_and_plugins(
 
 fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
     builder.invoke_handler(tauri::generate_handler![
+        commands::persistence_read::cmd_get_setting_rows,
+        commands::persistence_read::cmd_get_history_range_rows,
+        commands::persistence_read::cmd_get_executable_icon_rows,
+        commands::persistence_read::cmd_get_earliest_activity_start_time,
+        commands::persistence_read::cmd_get_recorded_executable_names,
+        commands::persistence_read::cmd_get_web_activity_segment_rows,
+        commands::persistence_read::cmd_get_observed_web_domain_rows,
+        commands::persistence_read::cmd_get_web_favicon_rows,
         commands::activity_read_model::cmd_get_recorded_app_catalog_page,
         commands::activity_read_model::cmd_get_activity_aggregate_range,
         commands::activity_read_model::cmd_get_activity_read_model_status,
@@ -180,10 +188,8 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::backup::cmd_preview_backup,
         commands::backup::cmd_export_backup,
         commands::backup::cmd_restore_backup,
-        commands::backup::cmd_save_webdav_backup_secret,
-        commands::backup::cmd_delete_webdav_backup_secret,
-        commands::backup::cmd_has_webdav_backup_secret,
         commands::backup::cmd_reveal_webdav_backup_secret,
+        commands::backup::cmd_get_remote_backup_config_snapshot,
         commands::backup::cmd_test_webdav_backup_target,
         commands::backup::cmd_upload_webdav_backup,
         commands::backup::cmd_list_webdav_backups,
@@ -206,7 +212,6 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::persistence::cmd_delete_sessions_by_exe_names_between,
         commands::persistence::cmd_delete_web_activity_segments_by_domain,
         commands::persistence::cmd_save_remote_backup_settings,
-        commands::persistence::cmd_save_remote_backup_remote_dir,
         commands::persistence::cmd_save_remote_backup_last_backup_at,
         commands::persistence::cmd_clear_remote_backup_settings,
         commands::persistence::cmd_save_data_bootstrap_snapshot_payload,
@@ -235,6 +240,10 @@ fn register_runtime_hooks(
             crate::platform::storage_paths::resolve_storage_paths(app.handle()).map_err(storage_startup_error)?;
             tauri::async_runtime::block_on(data::sqlite_pool::initialize_app_sqlite(app.handle()))
                 .map_err(std::io::Error::other)?;
+            // Resolve interrupted credential saves before backup schedulers start.
+            if let Err(error) = tauri::async_runtime::block_on(data::remote_backup_config::snapshot(app.handle())) {
+                eprintln!("[backup] credential recovery unavailable: {error}");
+            }
             tauri::async_runtime::block_on(data::app_settings_service::migrate_legacy_web_links(app.handle()))
                 .map_err(std::io::Error::other)?;
             let mut should_clear_update_reopen_intent = false;
@@ -309,7 +318,11 @@ pub(crate) fn handle_run_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
                 api.prevent_exit();
             }
         }
-        tauri::RunEvent::Exit => tray::stop_taskbar_theme_watcher(app),
+        tauri::RunEvent::Exit => {
+            tray::stop_taskbar_theme_watcher(app);
+            #[cfg(patina_coverage)]
+            crate::flush_coverage();
+        }
         _ => {}
     }
 }

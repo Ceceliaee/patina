@@ -1,28 +1,9 @@
 use crate::commands::error::CommandErrorDto;
 use crate::commands::window_guard::require_main_window;
-use crate::data::settings_payload_service::{self, RemoteBackupSettingsPatch};
+use crate::data::remote_backup_config::{self, ConfigSnapshot, SaveConfigInput};
+use crate::data::settings_payload_service;
 use crate::data::user_data_maintenance;
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
-
-#[derive(Clone, Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RemoteBackupSettingsPatchDto {
-    url: String,
-    username: String,
-    remote_dir: Option<String>,
-    last_backup_at_ms: Option<i64>,
-}
-
-impl From<RemoteBackupSettingsPatchDto> for RemoteBackupSettingsPatch {
-    fn from(value: RemoteBackupSettingsPatchDto) -> Self {
-        Self {
-            url: value.url,
-            username: value.username,
-            remote_dir: value.remote_dir,
-            last_backup_at_ms: value.last_backup_at_ms,
-        }
-    }
-}
 
 #[tauri::command]
 pub async fn cmd_delete_sessions_before<R: Runtime>(
@@ -85,30 +66,20 @@ pub async fn cmd_delete_web_activity_segments_by_domain<R: Runtime>(
 
 #[tauri::command]
 pub async fn cmd_save_remote_backup_settings(
-    patch: RemoteBackupSettingsPatchDto,
+    patch: SaveConfigInput,
     app: AppHandle,
-) -> Result<(), CommandErrorDto> {
+    window: WebviewWindow,
+) -> Result<ConfigSnapshot, String> {
+    crate::commands::window_guard::require_main_window_string(&window)?;
     let _guard = crate::app::scheduled_backup::lock_for_configuration(&app).await;
-    settings_payload_service::save_remote_backup_settings(&app, patch.into())
+    let mut saved = remote_backup_config::save(&app, patch).await?;
+    if crate::app::scheduled_backup::refresh_webdav_target_while_locked(&app)
         .await
-        .map_err(CommandErrorDto::from)?;
-    crate::app::scheduled_backup::refresh_webdav_target_while_locked(&app)
-        .await
-        .map_err(|error| CommandErrorDto::new("SCHEDULED_BACKUP_UPDATE_FAILED", error, true))
-}
-
-#[tauri::command]
-pub async fn cmd_save_remote_backup_remote_dir(
-    remote_dir: String,
-    app: AppHandle,
-) -> Result<(), CommandErrorDto> {
-    let _guard = crate::app::scheduled_backup::lock_for_configuration(&app).await;
-    settings_payload_service::save_remote_backup_remote_dir(&app, remote_dir)
-        .await
-        .map_err(CommandErrorDto::from)?;
-    crate::app::scheduled_backup::refresh_webdav_target_while_locked(&app)
-        .await
-        .map_err(|error| CommandErrorDto::new("SCHEDULED_BACKUP_UPDATE_FAILED", error, true))
+        .is_err()
+    {
+        saved.runtime_refresh_pending = true;
+    }
+    Ok(saved)
 }
 
 #[tauri::command]
@@ -122,14 +93,20 @@ pub async fn cmd_save_remote_backup_last_backup_at<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn cmd_clear_remote_backup_settings(app: AppHandle) -> Result<(), CommandErrorDto> {
+pub async fn cmd_clear_remote_backup_settings(
+    app: AppHandle,
+    window: WebviewWindow,
+) -> Result<ConfigSnapshot, String> {
+    crate::commands::window_guard::require_main_window_string(&window)?;
     let _guard = crate::app::scheduled_backup::lock_for_configuration(&app).await;
-    settings_payload_service::clear_remote_backup_settings(&app)
+    let mut saved = remote_backup_config::clear(&app).await?;
+    if crate::app::scheduled_backup::refresh_webdav_target_while_locked(&app)
         .await
-        .map_err(CommandErrorDto::from)?;
-    crate::app::scheduled_backup::refresh_webdav_target_while_locked(&app)
-        .await
-        .map_err(|error| CommandErrorDto::new("SCHEDULED_BACKUP_UPDATE_FAILED", error, true))
+        .is_err()
+    {
+        saved.runtime_refresh_pending = true;
+    }
+    Ok(saved)
 }
 
 #[tauri::command]

@@ -18,18 +18,6 @@
     "core:window:allow-toggle-maximize",
     "core:app:default",
     "updater:default",
-    "main-window-commands",
-    {
-      "identifier": "sql:allow-load",
-      "args": {
-        "db": "sqlite:patina.db"
-      }
-    },
-    {
-      "identifier": "sql:allow-select",
-      "args": {
-        "db": "sqlite:patina.db"
-      }
-    }
+    "main-window-commands"
   ]
 }

@@ -50,8 +50,9 @@ const WIDGET_COMMAND_ALLOWLIST = new Set([
 
 const SENSITIVE_CALLER_GUARD_COMMANDS = new Set([
   "cmd_restore_backup",
-  "cmd_save_webdav_backup_secret",
-  "cmd_delete_webdav_backup_secret",
+  "cmd_save_remote_backup_settings",
+  "cmd_clear_remote_backup_settings",
+  "cmd_get_remote_backup_config_snapshot",
   "cmd_reveal_webdav_backup_secret",
   "cmd_delete_sessions_before",
   "cmd_delete_sessions_by_exe_names",
@@ -300,9 +301,13 @@ function validate(result: IpcInventory) {
   if (!result.widgetCapabilityPermissions.has("widget-window-commands")) {
     failures.push("widget capability does not include widget-window-commands");
   }
-  for (const permission of result.widgetCapabilityPermissions) {
-    if (permission.startsWith("sql:")) {
-      failures.push(`widget capability must not expose raw SQL permission: ${permission}`);
+  for (const [window, permissions] of [
+    ["main", result.mainCapabilityPermissions], ["widget", result.widgetCapabilityPermissions],
+  ] as const) {
+    for (const permission of permissions) {
+      if (permission.startsWith("sql:")) {
+        failures.push(`${window} capability must not expose raw SQL permission: ${permission}`);
+      }
     }
   }
   for (const command of difference(SENSITIVE_CALLER_GUARD_COMMANDS, result.callerGuarded)) {
@@ -360,12 +365,17 @@ function runSelfTest() {
     appManifest: commandSet,
     mainPermission: commandSet,
     widgetPermission: new Set(WIDGET_COMMAND_ALLOWLIST),
-    mainCapabilityPermissions: new Set(["main-window-commands"]),
-    widgetCapabilityPermissions: new Set(["widget-window-commands"]),
+    mainCapabilityPermissions: new Set(["main-window-commands", "sql:allow-select"]),
+    widgetCapabilityPermissions: new Set(["widget-window-commands", "sql:allow-load"]),
     callerGuarded: new Set(),
   });
   if (!missingGuard.some((failure) => failure.includes("caller guard"))) {
     throw new Error("IPC contract self-test did not catch a missing sensitive caller guard");
+  }
+  for (const window of ["main", "widget"]) {
+    if (!missingGuard.some(failure => failure.includes(`${window} capability must not expose raw SQL`))) {
+      throw new Error(`IPC contract self-test did not reject ${window} raw SQL`);
+    }
   }
 }
 

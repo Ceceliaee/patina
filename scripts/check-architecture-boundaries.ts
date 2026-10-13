@@ -164,6 +164,9 @@ function findArchitectureViolations(files: SourceFile[]): ArchitectureViolation[
       }
 
       const importedPath = normalizeImportPath(file.path, reference.specifier);
+      if (reference.specifier === "@tauri-apps/plugin-sql") {
+        addViolation(violations, file, sourceFile, reference.node, "frontend-no-raw-sql");
+      }
       if (/^src\/shared\/copy(?:\/|$)/.test(importedPath)) {
         addViolation(violations, file, sourceFile, reference.node, "frontend-no-legacy-copy-import");
       }
@@ -206,6 +209,9 @@ function findArchitectureViolations(files: SourceFile[]): ArchitectureViolation[
     }
 
     function visit(node: ts.Node) {
+      if (ts.isStringLiteralLike(node) && node.text.startsWith("plugin:sql|")) {
+        addViolation(violations, file, sourceFile, node, "frontend-no-raw-sql");
+      }
       if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
         if (isFeatureComponentOrHook(file.path) && node.expression.text === "invoke") {
           addViolation(violations, file, sourceFile, node, "feature-ui-no-direct-invoke");
@@ -214,8 +220,7 @@ function findArchitectureViolations(files: SourceFile[]): ArchitectureViolation[
 
       if (
         ts.isIdentifier(node) &&
-        (node.text === "executeWrite" || node.text === "executeWriteBatch") &&
-        !file.path.endsWith("src/platform/persistence/sqlite.ts")
+        (node.text === "executeWrite" || node.text === "executeWriteBatch")
       ) {
         addViolation(violations, file, sourceFile, node, "frontend-no-sql-execute-write");
       }
@@ -249,12 +254,12 @@ function assertRuntimeBoundaryGuards() {
       "Widget capability must include core:event:allow-unlisten for listener cleanup",
     );
   }
-  if (widgetPermissionText.includes("sql:allow-execute")) {
-    throw new Error("Widget capability must not include sql:allow-execute");
+  if (widgetPermissionText.includes('"sql:')) {
+    throw new Error("Widget capability must not expose raw SQL");
   }
   const defaultPermissionText = JSON.stringify(defaultCapability.permissions ?? []);
-  if (defaultPermissionText.includes("sql:allow-execute")) {
-    throw new Error("Default capability must not include sql:allow-execute");
+  if (defaultPermissionText.includes('"sql:')) {
+    throw new Error("Default capability must not expose raw SQL");
   }
 
   const appShell = readFileSync("src/app/AppShell.tsx", "utf8");
@@ -325,6 +330,10 @@ function runSelfTest() {
       content: "import { executeWrite } from './sqlite.ts';",
     },
     {
+      path: "src/platform/persistence/unsafeQuery.ts",
+      content: "import Database from '@tauri-apps/plugin-sql'; invoke('plugin:sql|select', {});",
+    },
+    {
       path: "src/features/data/services/lazy.ts",
       content: "const path = './dynamic'; import(path);",
     },
@@ -346,6 +355,8 @@ function runSelfTest() {
     "platform-no-feature-import",
     "app-no-tauri-api",
     "frontend-no-sql-execute-write",
+    "frontend-no-raw-sql",
+    "frontend-no-raw-sql",
     "restricted-no-nonliteral-dynamic-import",
     "frontend-no-legacy-copy-import",
   ].sort();
