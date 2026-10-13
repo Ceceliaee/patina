@@ -447,12 +447,6 @@
           "markdownDescription": "Enables the cmd_delete_web_activity_segments_by_domain command without any pre-configured scope."
         },
         {
-          "description": "Enables the cmd_delete_webdav_backup_secret command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-delete-webdav-backup-secret",
-          "markdownDescription": "Enables the cmd_delete_webdav_backup_secret command without any pre-configured scope."
-        },
-        {
           "description": "Enables the cmd_destructure_external_data command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-destructure-external-data",
@@ -519,6 +513,24 @@
           "markdownDescription": "Enables the cmd_get_activity_read_model_status command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_get_earliest_activity_start_time command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-earliest-activity-start-time",
+          "markdownDescription": "Enables the cmd_get_earliest_activity_start_time command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_executable_icon_rows command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-executable-icon-rows",
+          "markdownDescription": "Enables the cmd_get_executable_icon_rows command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_history_range_rows command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-history-range-rows",
+          "markdownDescription": "Enables the cmd_get_history_range_rows command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_get_legacy_classification_apps command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-get-legacy-classification-apps",
@@ -531,10 +543,28 @@
           "markdownDescription": "Enables the cmd_get_main_window_render_token command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_get_observed_web_domain_rows command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-observed-web-domain-rows",
+          "markdownDescription": "Enables the cmd_get_observed_web_domain_rows command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_get_recorded_app_catalog_page command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-get-recorded-app-catalog-page",
           "markdownDescription": "Enables the cmd_get_recorded_app_catalog_page command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_recorded_executable_names command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-recorded-executable-names",
+          "markdownDescription": "Enables the cmd_get_recorded_executable_names command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_remote_backup_config_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-remote-backup-config-snapshot",
+          "markdownDescription": "Enables the cmd_get_remote_backup_config_snapshot command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_get_resource_diagnostics command without any pre-configured scope.",
@@ -553,6 +583,12 @@
           "type": "string",
           "const": "allow-cmd-get-scheduled-export-snapshot",
           "markdownDescription": "Enables the cmd_get_scheduled_export_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_setting_rows command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-setting-rows",
+          "markdownDescription": "Enables the cmd_get_setting_rows command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_get_storage_snapshot command without any pre-configured scope.",
@@ -597,6 +633,18 @@
           "markdownDescription": "Enables the cmd_get_web_activity_bridge_snapshot command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_get_web_activity_segment_rows command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-web-activity-segment-rows",
+          "markdownDescription": "Enables the cmd_get_web_activity_segment_rows command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_web_favicon_rows command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-web-favicon-rows",
+          "markdownDescription": "Enables the cmd_get_web_favicon_rows command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_get_web_links command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-get-web-links",
@@ -625,12 +673,6 @@
           "type": "string",
           "const": "allow-cmd-get-widget-status-snapshot",
           "markdownDescription": "Enables the cmd_get_widget_status_snapshot command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the cmd_has_webdav_backup_secret command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-has-webdav-backup-secret",
-          "markdownDescription": "Enables the cmd_has_webdav_backup_secret command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_hide_widget_window command without any pre-configured scope.",
@@ -861,12 +903,6 @@
           "markdownDescription": "Enables the cmd_save_remote_backup_last_backup_at command without any pre-configured scope."
         },
         {
-          "description": "Enables the cmd_save_remote_backup_remote_dir command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-save-remote-backup-remote-dir",
-          "markdownDescription": "Enables the cmd_save_remote_backup_remote_dir command without any pre-configured scope."
-        },
-        {
           "description": "Enables the cmd_save_remote_backup_settings command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-save-remote-backup-settings",
@@ -883,12 +919,6 @@
           "type": "string",
           "const": "allow-cmd-save-scheduled-export-config",
           "markdownDescription": "Enables the cmd_save_scheduled_export_config command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the cmd_save_webdav_backup_secret command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-save-webdav-backup-secret",
-          "markdownDescription": "Enables the cmd_save_webdav_backup_secret command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_set_afk_threshold command without any pre-configured scope.",
@@ -1077,12 +1107,6 @@
           "markdownDescription": "Denies the cmd_delete_web_activity_segments_by_domain command without any pre-configured scope."
         },
         {
-          "description": "Denies the cmd_delete_webdav_backup_secret command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-delete-webdav-backup-secret",
-          "markdownDescription": "Denies the cmd_delete_webdav_backup_secret command without any pre-configured scope."
-        },
-        {
           "description": "Denies the cmd_destructure_external_data command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-destructure-external-data",
@@ -1149,6 +1173,24 @@
           "markdownDescription": "Denies the cmd_get_activity_read_model_status command without any pre-configured scope."
         },
         {
+          "description": "Denies the cmd_get_earliest_activity_start_time command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-earliest-activity-start-time",
+          "markdownDescription": "Denies the cmd_get_earliest_activity_start_time command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_executable_icon_rows command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-executable-icon-rows",
+          "markdownDescription": "Denies the cmd_get_executable_icon_rows command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_history_range_rows command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-history-range-rows",
+          "markdownDescription": "Denies the cmd_get_history_range_rows command without any pre-configured scope."
+        },
+        {
           "description": "Denies the cmd_get_legacy_classification_apps command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-get-legacy-classification-apps",
@@ -1161,10 +1203,28 @@
           "markdownDescription": "Denies the cmd_get_main_window_render_token command without any pre-configured scope."
         },
         {
+          "description": "Denies the cmd_get_observed_web_domain_rows command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-observed-web-domain-rows",
+          "markdownDescription": "Denies the cmd_get_observed_web_domain_rows command without any pre-configured scope."
+        },
+        {
           "description": "Denies the cmd_get_recorded_app_catalog_page command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-get-recorded-app-catalog-page",
           "markdownDescription": "Denies the cmd_get_recorded_app_catalog_page command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_recorded_executable_names command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-recorded-executable-names",
+          "markdownDescription": "Denies the cmd_get_recorded_executable_names command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_remote_backup_config_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-remote-backup-config-snapshot",
+          "markdownDescription": "Denies the cmd_get_remote_backup_config_snapshot command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_get_resource_diagnostics command without any pre-configured scope.",
@@ -1183,6 +1243,12 @@
           "type": "string",
           "const": "deny-cmd-get-scheduled-export-snapshot",
           "markdownDescription": "Denies the cmd_get_scheduled_export_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_setting_rows command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-setting-rows",
+          "markdownDescription": "Denies the cmd_get_setting_rows command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_get_storage_snapshot command without any pre-configured scope.",
@@ -1227,6 +1293,18 @@
           "markdownDescription": "Denies the cmd_get_web_activity_bridge_snapshot command without any pre-configured scope."
         },
         {
+          "description": "Denies the cmd_get_web_activity_segment_rows command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-web-activity-segment-rows",
+          "markdownDescription": "Denies the cmd_get_web_activity_segment_rows command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_web_favicon_rows command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-web-favicon-rows",
+          "markdownDescription": "Denies the cmd_get_web_favicon_rows command without any pre-configured scope."
+        },
+        {
           "description": "Denies the cmd_get_web_links command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-get-web-links",
@@ -1255,12 +1333,6 @@
           "type": "string",
           "const": "deny-cmd-get-widget-status-snapshot",
           "markdownDescription": "Denies the cmd_get_widget_status_snapshot command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the cmd_has_webdav_backup_secret command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-has-webdav-backup-secret",
-          "markdownDescription": "Denies the cmd_has_webdav_backup_secret command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_hide_widget_window command without any pre-configured scope.",
@@ -1491,12 +1563,6 @@
           "markdownDescription": "Denies the cmd_save_remote_backup_last_backup_at command without any pre-configured scope."
         },
         {
-          "description": "Denies the cmd_save_remote_backup_remote_dir command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-save-remote-backup-remote-dir",
-          "markdownDescription": "Denies the cmd_save_remote_backup_remote_dir command without any pre-configured scope."
-        },
-        {
           "description": "Denies the cmd_save_remote_backup_settings command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-save-remote-backup-settings",
@@ -1513,12 +1579,6 @@
           "type": "string",
           "const": "deny-cmd-save-scheduled-export-config",
           "markdownDescription": "Denies the cmd_save_scheduled_export_config command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the cmd_save_webdav_backup_secret command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-save-webdav-backup-secret",
-          "markdownDescription": "Denies the cmd_save_webdav_backup_secret command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_set_afk_threshold command without any pre-configured scope.",
@@ -3919,60 +3979,6 @@
           "type": "string",
           "const": "opener:deny-reveal-item-in-dir",
           "markdownDescription": "Denies the reveal_item_in_dir command without any pre-configured scope."
-        },
-        {
-          "description": "### Default Permissions\n\nThis permission set configures what kind of\ndatabase operations are available from the sql plugin.\n\n### Granted Permissions\n\nAll reading related operations are enabled.\nAlso allows to load or close a connection.\n\n\n#### This default permission set includes:\n\n- `allow-close`\n- `allow-load`\n- `allow-select`",
-          "type": "string",
-          "const": "sql:default",
-          "markdownDescription": "### Default Permissions\n\nThis permission set configures what kind of\ndatabase operations are available from the sql plugin.\n\n### Granted Permissions\n\nAll reading related operations are enabled.\nAlso allows to load or close a connection.\n\n\n#### This default permission set includes:\n\n- `allow-close`\n- `allow-load`\n- `allow-select`"
-        },
-        {
-          "description": "Enables the close command without any pre-configured scope.",
-          "type": "string",
-          "const": "sql:allow-close",
-          "markdownDescription": "Enables the close command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the execute command without any pre-configured scope.",
-          "type": "string",
-          "const": "sql:allow-execute",
-          "markdownDescription": "Enables the execute command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the load command without any pre-configured scope.",
-          "type": "string",
-          "const": "sql:allow-load",
-          "markdownDescription": "Enables the load command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the select command without any pre-configured scope.",
-          "type": "string",
-          "const": "sql:allow-select",
-          "markdownDescription": "Enables the select command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the close command without any pre-configured scope.",
-          "type": "string",
-          "const": "sql:deny-close",
-          "markdownDescription": "Denies the close command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the execute command without any pre-configured scope.",
-          "type": "string",
-          "const": "sql:deny-execute",
-          "markdownDescription": "Denies the execute command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the load command without any pre-configured scope.",
-          "type": "string",
-          "const": "sql:deny-load",
-          "markdownDescription": "Denies the load command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the select command without any pre-configured scope.",
-          "type": "string",
-          "const": "sql:deny-select",
-          "markdownDescription": "Denies the select command without any pre-configured scope."
         },
         {
           "description": "This permission set configures which kind of\nupdater functions are exposed to the frontend.\n\n#### Granted Permissions\n\nThe full workflow from checking for updates to installing them\nis enabled.\n\n\n#### This default permission set includes:\n\n- `allow-check`\n- `allow-download`\n- `allow-install`\n- `allow-download-and-install`",
