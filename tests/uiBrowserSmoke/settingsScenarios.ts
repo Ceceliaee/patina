@@ -153,7 +153,8 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       await evaluate(client!, sessionId, `
         (() => {
           localStorage.setItem("patina:last-active-view", "dashboard");
-          localStorage.setItem("__time_tracker_settings_query_delay_ms", "900");
+          localStorage.removeItem("__time_tracker_settings_query_delay_ms");
+          document.documentElement.dataset.patinaSmokeReload = "settings-cold";
           location.reload();
           return true;
         })()
@@ -163,8 +164,17 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("设置"))} + ']'))`,
+      `document.documentElement.dataset.patinaSmokeReload !== "settings-cold"
+        && Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("设置"))} + ']'))
+        && document.querySelector('[data-dashboard-read-state]')?.getAttribute('data-dashboard-read-state') === 'ready'`,
     );
+    await evaluate(client!, sessionId, `(async () => {
+      const bootstrap = await import('/src/features/settings/services/settingsBootstrapService.ts');
+      await bootstrap.prewarmSettingsBootstrapCache();
+      const cache = await import('/src/features/settings/services/settingsBootstrapCache.ts');
+      cache.setSettingsBootstrapCache(null);
+      localStorage.setItem('__patina_navigation_held_commands', JSON.stringify(['cmd_get_setting_rows']));
+    })()`);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
@@ -175,13 +185,16 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       `),
       true,
     );
-    await delay(150);
+    await waitForExpression(client!, sessionId, `globalThis.__PATINA_NAVIGATION_PENDING?.length > 0`);
     const pendingState = JSON.parse(String(await evaluate(client!, sessionId, `JSON.stringify({
       presentedView: document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") ?? null,
       settingsMounted: Boolean(document.querySelector(".settings-button-preview")),
     })`))) as { presentedView: string | null; settingsMounted: boolean };
     assert.equal(pendingState.presentedView, "dashboard");
     assert.equal(pendingState.settingsMounted, false);
+
+    await evaluate(client!, sessionId, `localStorage.removeItem('__patina_navigation_held_commands');
+      for (const release of globalThis.__PATINA_NAVIGATION_PENDING.splice(0)) release();`);
 
     await waitForExpression(
       client!,
@@ -1447,6 +1460,21 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       true,
     );
     await waitForAnimationFrames(client!, sessionId);
+    // A rejected atomic save keeps both the dialog draft and persisted settings.
+    const beforeSave = await evaluate(client!, sessionId, "localStorage.getItem('__time_tracker_smoke_settings')");
+    await evaluate(client!, sessionId, `(() => {
+      window.__PATINA_REJECT_WEBDAV_SAVE = true;
+      window.__savedRemoteBackupConsoleError = console.error;
+      console.error = (...args) => {
+        if (args[0] !== 'save WebDAV backup config failed') window.__savedRemoteBackupConsoleError(...args);
+      };
+      Array.from(document.querySelectorAll('[role="dialog"] button')).find(node => node.textContent?.trim() === '保存')?.click();
+    })()`);
+    await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString(getLocaleText("zh-CN").toast.webDavConfigSaveFailed)})`);
+    assert.deepEqual(await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('[role="dialog"] input')).map(input => input.value)`),
+      ["https://dav.jianguoyun.com/dav/", "patina-smoke", "app-password"]);
+    assert.equal(await evaluate(client!, sessionId, "localStorage.getItem('__time_tracker_smoke_settings')"), beforeSave);
+    await evaluate(client!, sessionId, `delete window.__PATINA_REJECT_WEBDAV_SAVE; console.error = window.__savedRemoteBackupConsoleError; delete window.__savedRemoteBackupConsoleError;`);
     await evaluate(client!, sessionId, `
       Array.from(document.querySelectorAll('[role="dialog"] button'))
         .find((node) => node.textContent?.trim() === "保存")?.click()

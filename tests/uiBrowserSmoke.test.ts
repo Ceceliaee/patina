@@ -28,11 +28,14 @@ import { runLocaleScenarios } from "./uiBrowserSmoke/localeScenarios.ts";
 import { runWidgetScenarios } from "./uiBrowserSmoke/widgetScenarios.ts";
 import { runScrollRegionScenarios } from "./uiBrowserSmoke/scrollRegionScenarios.ts";
 import { runTypographyScenarios } from "./uiBrowserSmoke/typographyScenarios.ts";
+import { startBrowserCoverage } from "../scripts/coverage/browser-coverage.ts";
 
 let passed = 0;
+let coverage: Awaited<ReturnType<typeof startBrowserCoverage>> | null = null;
 
 async function runTest(name: string, fn: () => Promise<void> | void) {
   await fn();
+  await coverage?.flush();
   passed += 1;
   console.log(`PASS ${name}`);
 }
@@ -92,6 +95,9 @@ try {
     flatten: true,
   }) as { sessionId: string };
   sessionId = attachedTarget.sessionId;
+  if (process.env.PATINA_BROWSER_COVERAGE_DIR) {
+    coverage = await startBrowserCoverage(client, sessionId, process.env.PATINA_BROWSER_COVERAGE_DIR);
+  }
 
   client.onMessage((message) => {
     if (message.sessionId !== sessionId) {
@@ -261,6 +267,11 @@ try {
   }
   primaryError = new AggregateError(diagnostics, "Browser scenario failed");
 } finally {
+  try {
+    await coverage?.finish(passed, primaryError !== null);
+  } catch (error) {
+    cleanupErrors.push(error);
+  }
   try {
     client?.close();
   } catch (error) {

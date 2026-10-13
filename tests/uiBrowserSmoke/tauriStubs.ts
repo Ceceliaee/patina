@@ -111,6 +111,18 @@ function tauriStubFor(path: string) {
 
       export async function invoke(command, payload = {}) {
         globalThis.__PATINA_INVOKED_COMMANDS.push({ command, payload });
+        if (JSON.parse(localStorage.getItem('__patina_navigation_held_commands') ?? '[]').includes(command)) {
+          await new Promise(resolve => (globalThis.__PATINA_NAVIGATION_PENDING ??= []).push(resolve));
+        }
+        if ([
+          "cmd_get_setting_rows", "cmd_get_history_range_rows", "cmd_get_executable_icon_rows",
+          "cmd_get_earliest_activity_start_time", "cmd_get_recorded_executable_names",
+          "cmd_get_web_activity_segment_rows", "cmd_get_observed_web_domain_rows", "cmd_get_web_favicon_rows",
+        ].includes(command)) {
+          const { readRows } = await import("@patina-test/persistence-read");
+          return readRows(command, payload);
+        }
+
         const widgetParams = new URL(globalThis.location.href).searchParams;
         const isWidgetSmoke = widgetParams.get("__patinaWindow") === "widget";
         if (isWidgetSmoke && command === "cmd_get_widget_bootstrap_snapshot") {
@@ -187,7 +199,7 @@ function tauriStubFor(path: string) {
               idle_time_ms: 0,
             },
             status: {
-              is_tracking_active: true,
+              is_tracking_active: isWidgetSmoke && loadStoredSettings().tracking_paused !== "1",
               sustained_participation_eligible: false,
               sustained_participation_active: false,
               sustained_participation_kind: null,
@@ -225,12 +237,14 @@ function tauriStubFor(path: string) {
                 },
               },
             },
+            tracking_paused: loadStoredSettings().tracking_paused === "1",
             sampled_at_ms: Date.now(),
             probe_status: "ok",
           };
           const presentation = {
             window: tracking.window,
             tracking_status: tracking.status,
+            tracking_paused: loadStoredSettings().tracking_paused === "1",
             tracking_sampled_at_ms: tracking.sampled_at_ms ?? Date.now(),
             tracking_probe_status: tracking.probe_status ?? "ok",
             status,
@@ -260,7 +274,9 @@ function tauriStubFor(path: string) {
             last_watchdog_seal_sample_ms: null,
           };
         }
-        if (isWidgetSmoke && command === "get_current_tracking_snapshot") {
+        if (command === "get_current_tracking_snapshot") {
+          const override = await globalThis.__PATINA_TRACKING_SNAPSHOT_HOOK?.();
+          if (override !== undefined) return override;
           if (globalThis.__PATINA_WIDGET_TRACKING_OVERRIDE) {
             return globalThis.__PATINA_WIDGET_TRACKING_OVERRIDE.currentTrackingSnapshot;
           }
@@ -333,17 +349,30 @@ function tauriStubFor(path: string) {
             loadEpoch: Number(payload.loadEpoch),
           };
         }
-        if (command === "cmd_save_webdav_backup_secret") {
-          globalThis.__PATINA_WEBDAV_SECRET = String(payload.password ?? "");
-          return null;
-        }
-        if (command === "cmd_delete_webdav_backup_secret") {
-          globalThis.__PATINA_WEBDAV_SECRET = null;
-          return null;
-        }
-        if (command === "cmd_has_webdav_backup_secret") {
-          return typeof globalThis.__PATINA_WEBDAV_SECRET === "string"
-            && globalThis.__PATINA_WEBDAV_SECRET.length > 0;
+        if (["cmd_get_remote_backup_config_snapshot", "cmd_save_remote_backup_settings", "cmd_clear_remote_backup_settings"].includes(command)) {
+          const settings = loadStoredSettings();
+          if (command === "cmd_save_remote_backup_settings") {
+            if (globalThis.__PATINA_REJECT_WEBDAV_SAVE) throw new Error("injected WebDAV save failure");
+            const patch = payload.patch;
+            if (!patch.url.trim() || !patch.username.trim()) throw new Error("invalid WebDAV configuration");
+            settings.webdav_backup_url = patch.url.trim();
+            settings.webdav_backup_username = patch.username.trim();
+            settings.webdav_backup_remote_dir = patch.remoteDir || "/Patina";
+            settings.webdav_backup_save_id = patch.operationId;
+            if (patch.passwordUpdate.kind === "replace") globalThis.__PATINA_WEBDAV_SECRET = patch.passwordUpdate.password;
+            storeSettings(settings);
+          }
+          if (command === "cmd_clear_remote_backup_settings") {
+            for (const key of Object.keys(settings)) if (key.startsWith("webdav_backup_")) delete settings[key];
+            globalThis.__PATINA_WEBDAV_SECRET = null;
+            storeSettings(settings);
+          }
+          return { config: settings.webdav_backup_url ? {
+            url: settings.webdav_backup_url, username: settings.webdav_backup_username,
+            remoteDir: settings.webdav_backup_remote_dir || "/Patina",
+            lastBackupAtMs: Number(settings.webdav_backup_last_backup_at_ms) || null,
+          } : null, hasSecret: Boolean(globalThis.__PATINA_WEBDAV_SECRET),
+            operationId: settings.webdav_backup_save_id || null, cleanupPending: false, runtimeRefreshPending: false };
         }
         if (command === "cmd_reveal_webdav_backup_secret") {
           return globalThis.__PATINA_WEBDAV_SECRET;
@@ -811,8 +840,8 @@ function tauriStubFor(path: string) {
           if (globalThis.__PATINA_REJECT_WEB_LINKS_READ) throw new Error("Web snapshot rejected by fixture");
           const settings = loadStoredSettings();
           const rules = Object.fromEntries(Object.entries(settings).filter(([key]) => key.startsWith('__web_site::')).map(([key, value]) => [key.slice(12), JSON.parse(value)]));
-          const { default: Database } = await import("@tauri-apps/plugin-sql");
-          const rows = await (await Database.load("sqlite:patina.db")).select("SELECT * FROM web_activity_segments", []);
+          const { readRows } = await import("@patina-test/persistence-read");
+          const rows = await readRows("cmd_get_web_activity_segment_rows", {});
           const domains = [...new Set(rows.map(row => row.normalized_domain))];
           const overrides = Object.fromEntries(Object.entries(settings).filter(([key]) => key.startsWith("__web_domain_override::")).map(([key,value]) => [key.slice(23),JSON.parse(value)]));
           const segments = rows.map(row => ({ id: row.id, browserClientId: row.browser_client_id, browserKind: row.browser_kind, browserExeName: row.browser_exe_name, domain: row.domain, normalizedDomain: row.normalized_domain, url: row.url, title: row.title, faviconUrl: row.favicon_url ?? null, startTime: row.start_time, endTime: row.end_time, duration: row.duration }));
@@ -926,7 +955,7 @@ function tauriStubFor(path: string) {
     `;
   }
 
-  if (path === "@tauri-apps/plugin-sql") {
+  if (path === "@patina-test/persistence-read") {
     return `
       ${settingsFixtureSource}
 
@@ -1120,93 +1149,31 @@ function tauriStubFor(path: string) {
           .slice(0, limit);
       }
 
-      export default class Database {
-        static get() {
-          return new Database();
+      export async function readRows(command, payload) {
+        const override = await globalThis.__PATINA_READ_HOOK?.(command, payload);
+        if (override !== undefined) return override;
+        if (command === "cmd_get_setting_rows") {
+          if (payload.key == null && payload.keyPrefix == null
+            && Number(globalThis.__TIME_TRACKER_REJECT_SETTINGS_QUERY_COUNT ?? 0) > 0) {
+            globalThis.__TIME_TRACKER_REJECT_SETTINGS_QUERY_COUNT -= 1;
+            throw new Error("settings query rejected by browser smoke fixture");
+          }
+          const delay = Number(globalThis.__TIME_TRACKER_SETTINGS_QUERY_DELAY_MS
+            ?? localStorage.getItem("__time_tracker_settings_query_delay_ms") ?? 0);
+          if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay));
+          const settings = loadStoredSettings();
+          const language = globalThis.__TIME_TRACKER_SMOKE_LANGUAGE;
+          if (language) settings.language = language;
+          return Object.entries(settings)
+            .filter(([key]) => (payload.key == null || key === payload.key)
+              && (payload.keyPrefix == null || key.startsWith(payload.keyPrefix)))
+            .map(([key, value]) => ({ key, value: String(value) }));
         }
-
-        static async load() {
-          return new Database();
-        }
-
-        async select(query, params = []) {
-          const normalizedQuery = String(query ?? "").toLowerCase();
-          const override = await globalThis.__PATINA_SQL_SELECT_HOOK?.(normalizedQuery, params);
-          if (override !== undefined) return override;
-          const classificationQueryDelayMs = Number(
-            globalThis.__TIME_TRACKER_CLASSIFICATION_QUERY_DELAY_MS
-              ?? localStorage.getItem("__time_tracker_classification_query_delay_ms")
-              ?? 0
-          );
-          const isObservedClassificationQuery = (
-            normalizedQuery.includes("max(coalesce(app_name")
-            && normalizedQuery.includes("group by exe_name")
-          ) || (
-            normalizedQuery.includes("select record_id, origin")
-            && normalizedQuery.includes("from import_exact_sessions")
-            && !normalizedQuery.includes("window_title")
-          );
-          const isRecordedCatalogQuery = normalizedQuery.includes("raw_observed_apps as")
-            && normalizedQuery.includes("grouped_apps");
-          const classificationCatalogQueryDelayMs = Number(
-            globalThis.__TIME_TRACKER_CLASSIFICATION_CATALOG_QUERY_DELAY_MS
-              ?? localStorage.getItem("__time_tracker_classification_catalog_query_delay_ms")
-              ?? 0
-          );
-          if (
-            classificationQueryDelayMs > 0
-            && (isObservedClassificationQuery || isRecordedCatalogQuery)
-          ) {
-            await new Promise((resolve) => setTimeout(resolve, classificationQueryDelayMs));
-          }
-          if (classificationCatalogQueryDelayMs > 0 && isRecordedCatalogQuery) {
-            await new Promise((resolve) => setTimeout(resolve, classificationCatalogQueryDelayMs));
-          }
-          if (
-            localStorage.getItem("__time_tracker_reject_classification_query") === "1"
-            && (isObservedClassificationQuery || isRecordedCatalogQuery)
-          ) {
-            throw new Error("classification query rejected by browser smoke fixture");
-          }
-          if (normalizedQuery.includes("from settings")) {
-            if (
-              normalizedQuery.trim() === "select key, value from settings"
-              && Number(globalThis.__TIME_TRACKER_REJECT_SETTINGS_QUERY_COUNT ?? 0) > 0
-            ) {
-              globalThis.__TIME_TRACKER_REJECT_SETTINGS_QUERY_COUNT -= 1;
-              throw new Error("settings query rejected by browser smoke fixture");
-            }
-            const settingsQueryDelayMs = Number(
-              globalThis.__TIME_TRACKER_SETTINGS_QUERY_DELAY_MS
-                ?? localStorage.getItem("__time_tracker_settings_query_delay_ms")
-                ?? 0
-            );
-            if (settingsQueryDelayMs > 0) {
-              await new Promise((resolve) => setTimeout(resolve, settingsQueryDelayMs));
-            }
-            const settings = loadStoredSettings();
-            const language = globalThis.__TIME_TRACKER_SMOKE_LANGUAGE;
-            if (language) settings.language = language;
-            const keyPrefix = normalizedQuery.includes("key like")
-              ? String(params[0] ?? "").replace(/%$/, "")
-              : "";
-            const exactKey = normalizedQuery.includes("where key = ?")
-              ? String(params[0] ?? "")
-              : "";
-            return Object.entries(settings)
-              .filter(([key]) => (!keyPrefix || key.startsWith(keyPrefix)) && (!exactKey || key === exactKey))
-              .map(([key, value]) => ({ key, value: String(value) }));
-          }
-          if (normalizedQuery.includes("from icon_cache")) {
-            const iconQueryDelayMs = Number(
-              globalThis.__TIME_TRACKER_APP_ICON_QUERY_DELAY_MS
-                ?? localStorage.getItem("__time_tracker_app_icon_query_delay_ms")
-                ?? 0
-            );
-            if (iconQueryDelayMs > 0) {
-              await new Promise((resolve) => setTimeout(resolve, iconQueryDelayMs));
-            }
-            const requestedExecutables = new Set(params.map((value) => String(value).toLowerCase()));
+        if (command === "cmd_get_executable_icon_rows") {
+          const delay = Number(globalThis.__TIME_TRACKER_APP_ICON_QUERY_DELAY_MS
+            ?? localStorage.getItem("__time_tracker_app_icon_query_delay_ms") ?? 0);
+          if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay));
+          const requestedExecutables = new Set(payload.exeNames.map(value => String(value).toLowerCase()));
             return [
               ...[0, 1].map((index) => ({
                 exe_name: "catalog-00" + index + ".exe",
@@ -1227,75 +1194,48 @@ function tauriStubFor(path: string) {
             ].filter((row) => (
               requestedExecutables.size === 0 || requestedExecutables.has(row.exe_name)
             ));
-          }
-          if (isRecordedCatalogQuery) {
-            return classificationCatalogRows(params);
-          }
-          const historyQueryDelayMs = Number(
-            globalThis.__TIME_TRACKER_HISTORY_QUERY_DELAY_MS
-              ?? localStorage.getItem("__time_tracker_history_query_delay_ms")
-              ?? 0
-          );
-          if (
-            historyQueryDelayMs > 0
-            && (
-              normalizedQuery.includes("from sessions")
-              || normalizedQuery.includes("from session_title_samples")
-              || normalizedQuery.includes("from web_activity_segments")
-            )
-          ) {
-            await new Promise((resolve) => setTimeout(resolve, historyQueryDelayMs));
-          }
-          if (normalizedQuery.includes("from web_favicon_cache")) {
-            globalThis.__TIME_TRACKER_WEB_FAVICON_QUERY_COUNT =
-              (globalThis.__TIME_TRACKER_WEB_FAVICON_QUERY_COUNT ?? 0) + 1;
-            globalThis.__TIME_TRACKER_WEB_FAVICON_QUERY_DOMAINS = params.map((value) => String(value));
-            const faviconDelayMs = Number(globalThis.__TIME_TRACKER_WEB_FAVICON_QUERY_DELAY_MS ?? 0);
-            if (faviconDelayMs > 0) {
-              await new Promise((resolve) => setTimeout(resolve, faviconDelayMs));
-            }
-            return historyWebFaviconRows(params);
-          }
-          if (normalizedQuery.includes("from web_activity_segments")) {
-            return historyWebActivityRows();
-          }
-          if (normalizedQuery.includes("min(start_time)")) {
-            return [{ earliest_start_time: historySessionRows()[0].start_time }];
-          }
-          if (normalizedQuery.includes("from session_title_samples")) {
-            return historyTitleSampleRows();
-          }
-          if (normalizedQuery.includes("from sessions")) {
-            if (normalizedQuery.startsWith("select distinct exe_name")) {
-              return classificationCatalogRows([0, "", 0, 0, 0, 0, "", 1000])
-                .map((row) => ({ exe_name: row.exe_name }));
-            }
-            if (globalThis.__PATINA_DETAIL_READ_BARRIER) {
-              const barrier = globalThis.__PATINA_DETAIL_READ_BARRIER;
-              globalThis.__PATINA_DETAIL_READ_BARRIER = null;
-              barrier.entered = true;
-              await barrier.promise;
-              barrier.finished = true;
-            }
-            if (normalizedQuery.includes("effective_end_time")) {
-              return historySessionRows().map((row) => ({
-                record_id: row.id,
-                origin: "native",
-                app_name: row.app_name,
-                exe_name: row.exe_name,
-                window_title: row.window_title,
-                start_time: row.start_time,
-                effective_end_time: row.end_time,
-                capacity_end_time: null,
-              }));
-            }
-            return historySessionRows().map((row) => ({ ...row, origin: "native" }));
-          }
-          return [];
-        }
 
-        async execute() {}
-        async close() {}
+        }
+        if (command === "cmd_get_recorded_executable_names") {
+          return classificationCatalogRows([0, "", 0, 0, 0, 0, "", 1000]).map(row => row.exe_name);
+        }
+        if (command === "cmd_get_earliest_activity_start_time") return historySessionRows()[0].start_time;
+        if (command === "cmd_get_web_favicon_rows") {
+          const params = payload.domains;
+          globalThis.__TIME_TRACKER_WEB_FAVICON_QUERY_COUNT = (globalThis.__TIME_TRACKER_WEB_FAVICON_QUERY_COUNT ?? 0) + 1;
+          globalThis.__TIME_TRACKER_WEB_FAVICON_QUERY_DOMAINS = params;
+          const delay = Number(globalThis.__TIME_TRACKER_WEB_FAVICON_QUERY_DELAY_MS ?? 0);
+          if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay));
+          return historyWebFaviconRows(params);
+        }
+        const delay = Number(globalThis.__TIME_TRACKER_HISTORY_QUERY_DELAY_MS
+          ?? localStorage.getItem("__time_tracker_history_query_delay_ms") ?? 0);
+        if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay));
+        if (command === "cmd_get_web_activity_segment_rows") return historyWebActivityRows();
+        if (command === "cmd_get_observed_web_domain_rows") {
+          const rows = historyWebActivityRows();
+          return [...new Set(rows.map(row => row.normalized_domain))].map(domain => {
+            const matching = rows.filter(row => row.normalized_domain === domain);
+            return { normalized_domain: domain, domain: matching[0].domain,
+              total_duration: matching.reduce((sum, row) => sum + row.duration, 0),
+              last_seen_ms: Math.max(...matching.map(row => row.start_time)),
+              favicon_url: matching.find(row => row.favicon_url)?.favicon_url ?? null };
+          });
+        }
+        if (command === "cmd_get_history_range_rows") {
+          if (globalThis.__PATINA_DETAIL_READ_BARRIER) {
+            const barrier = globalThis.__PATINA_DETAIL_READ_BARRIER;
+            globalThis.__PATINA_DETAIL_READ_BARRIER = null;
+            barrier.entered = true;
+            await barrier.promise;
+            barrier.finished = true;
+          }
+          return {
+            sessions: historySessionRows().map(row => ({ ...row, origin: "native" })),
+            titleSamples: payload.includeTitleSamples ? historyTitleSampleRows() : [],
+          };
+        }
+        throw new Error("Unexpected persistence fixture command: " + command);
       }
     `;
   }
@@ -1308,7 +1248,7 @@ export function tauriBrowserSmokeStubPlugin(): Plugin {
     name: "tauri-browser-smoke-stubs",
     enforce: "pre",
     resolveId(source) {
-      if (source.startsWith("@tauri-apps/")) {
+      if (source.startsWith("@tauri-apps/") || source === "@patina-test/persistence-read") {
         return `\0tauri-browser-smoke:${source}`;
       }
       return null;

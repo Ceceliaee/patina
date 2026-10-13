@@ -95,7 +95,7 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
       await evaluate(client!, sessionId, `
         (() => {
           localStorage.setItem("patina:last-active-view", "dashboard");
-          localStorage.setItem("__time_tracker_classification_query_delay_ms", "900");
+          localStorage.setItem("__patina_navigation_held_commands", JSON.stringify(["cmd_get_recorded_app_catalog_page"]));
           location.reload();
           return true;
         })()
@@ -107,6 +107,12 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
       sessionId,
       `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("分类"))} + ']'))`,
     );
+
+    // This scenario measures navigation from an already usable page. The shell
+    // button can appear before the initial Dashboard snapshot has arrived.
+    await waitForExpression(client!, sessionId,
+      `document.querySelector('[data-dashboard-read-state]')?.getAttribute('data-dashboard-read-state') === 'ready'`,
+      15_000, "Dashboard must be ready before sampling classification navigation");
 
     assert.equal(
       await evaluate(client!, sessionId, `
@@ -139,7 +145,7 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
       `),
       true,
     );
-    await delay(150);
+    await waitForExpression(client!, sessionId, `globalThis.__PATINA_NAVIGATION_PENDING?.length > 0`);
 
     const pendingState = JSON.parse(String(await evaluate(client!, sessionId, `JSON.stringify({
       presentedView: document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") ?? null,
@@ -154,6 +160,9 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
     assert.equal(pendingState.presentedView, "dashboard");
     assert.equal(pendingState.classificationState, null);
     assert.equal(pendingState.showsLoadingCopy, false);
+
+    await evaluate(client!, sessionId, `localStorage.removeItem('__patina_navigation_held_commands');
+      for (const release of globalThis.__PATINA_NAVIGATION_PENDING.splice(0)) release();`);
 
     await waitForExpression(
       client!,
