@@ -7,6 +7,18 @@ mod platform;
 
 use std::sync::Arc;
 
+// Only the dedicated coverage compiler wrapper enables this. Desktop tests
+// checkpoint native counters before deliberately terminating a process.
+#[cfg(patina_coverage)]
+pub(crate) fn flush_coverage() {
+    unsafe extern "C" {
+        fn __llvm_profile_write_file() -> i32;
+    }
+    if unsafe { __llvm_profile_write_file() } != 0 {
+        eprintln!("native coverage checkpoint failed");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(debug_assertions)]
