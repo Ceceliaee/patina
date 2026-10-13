@@ -1,11 +1,11 @@
 use super::{
     checkpoint_sqlite_pool, open_single_connection_sqlite_pool, prepare_pool_schema,
-    register_sqlite_pool, resolve_product_db_path, wait_for_sqlite_pool,
+    register_sqlite_pool, resolve_product_db_path, wait_for_sqlite_pool, AppSqlitePool,
 };
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 
 const RESTORE_MARKER_NAME: &str = ".patina-restore-pending";
 
@@ -108,6 +108,9 @@ pub(crate) async fn replace_product_db_from_candidate<R: Runtime>(
     app: &AppHandle<R>,
     candidate_path: &Path,
 ) -> Result<(), String> {
+    let state = app
+        .try_state::<AppSqlitePool>()
+        .ok_or_else(|| "application sqlite state is not available".to_string())?;
     let db_path = resolve_product_db_path(app)?;
     let parent = db_path
         .parent()
@@ -138,7 +141,7 @@ pub(crate) async fn replace_product_db_from_candidate<R: Runtime>(
         let _ = fs::remove_file(&marker_path);
         let reopened = open_single_connection_sqlite_pool(&db_path, false).await?;
         prepare_pool_schema(&reopened, &db_path).await?;
-        register_sqlite_pool(app, reopened).await?;
+        register_sqlite_pool(&state, reopened).await;
         return Err(error);
     }
 
@@ -152,7 +155,7 @@ pub(crate) async fn replace_product_db_from_candidate<R: Runtime>(
         let _ = fs::remove_file(&marker_path);
         let reopened = open_single_connection_sqlite_pool(&db_path, false).await?;
         prepare_pool_schema(&reopened, &db_path).await?;
-        register_sqlite_pool(app, reopened).await?;
+        register_sqlite_pool(&state, reopened).await;
         return Err(format!(
             "failed to preserve current sqlite database: {error}"
         ));
@@ -164,7 +167,7 @@ pub(crate) async fn replace_product_db_from_candidate<R: Runtime>(
                 let _ = fs::remove_file(&marker_path);
                 let reopened = open_single_connection_sqlite_pool(&db_path, false).await?;
                 prepare_pool_schema(&reopened, &db_path).await?;
-                register_sqlite_pool(app, reopened).await?;
+                register_sqlite_pool(&state, reopened).await;
                 return Err(format!(
                     "failed to install restored sqlite database; the original database was restored: {install_error}"
                 ));
@@ -179,16 +182,13 @@ pub(crate) async fn replace_product_db_from_candidate<R: Runtime>(
 
     let open_result = async {
         let next_pool = prepare_replacement_pool(&db_path).await?;
-        if let Err(error) = register_sqlite_pool(app, next_pool.clone()).await {
-            next_pool.close().await;
-            return Err(error);
-        }
-        Ok(())
+        register_sqlite_pool(&state, next_pool).await;
+        Ok::<(), String>(())
     }
     .await;
 
     if let Err(error) = open_result {
-        // Registration can fail after disk commit; retain restart recovery before undoing it.
+        // Candidate activation can fail after disk commit; retain restart recovery before undoing it.
         if !marker_path.exists() {
             persist_restore_marker(&db_path, &rollback_path).map_err(|marker_error| {
                 format!("restored sqlite database activation failed: {error}; failed to preserve rollback recovery: {marker_error}")
@@ -207,7 +207,7 @@ pub(crate) async fn replace_product_db_from_candidate<R: Runtime>(
         })?;
         let original_pool = open_single_connection_sqlite_pool(&db_path, false).await?;
         prepare_pool_schema(&original_pool, &db_path).await?;
-        register_sqlite_pool(app, original_pool).await?;
+        register_sqlite_pool(&state, original_pool).await;
         let _ = fs::remove_file(&marker_path);
         return Err(format!(
             "restored sqlite database failed validation and the original database was restored: {error}"

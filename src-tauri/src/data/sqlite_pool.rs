@@ -11,10 +11,18 @@ use std::fs::create_dir_all;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, Runtime};
-use tauri_plugin_sql::{DbInstances, DbPool, MigrationKind};
+use tokio::sync::RwLock;
 use tokio::time::{sleep, Duration};
 
-pub const SQLITE_DB_NAME: &str = "sqlite:patina.db";
+#[derive(Default)]
+pub struct AppSqlitePool(pub(crate) RwLock<Option<Pool<Sqlite>>>);
+
+pub(crate) async fn register_sqlite_pool(state: &AppSqlitePool, pool: Pool<Sqlite>) {
+    let previous = state.0.write().await.replace(pool);
+    if let Some(previous) = previous {
+        previous.close().await;
+    }
+}
 const VALIDATED_SCHEMA_MIGRATION_HEAD: i64 = schema::ANONYMOUS_ACTIVITY_MIGRATION_VERSION;
 mod activity_read_model_schema;
 pub(super) mod import_schema;
@@ -30,22 +38,20 @@ pub(crate) use maintenance::{
 pub(crate) use restore::replace_product_db_from_candidate;
 
 #[derive(Debug)]
-struct InlineMigrationList(Vec<tauri_plugin_sql::Migration>);
+struct InlineMigrationList(Vec<schema::Migration>);
 
 impl MigrationSource<'static> for InlineMigrationList {
     fn resolve(self) -> BoxFuture<'static, Result<Vec<SqlxMigration>, BoxDynError>> {
         Box::pin(async move {
             let mut migrations = Vec::new();
             for migration in self.0 {
-                if matches!(migration.kind, MigrationKind::Up) {
-                    migrations.push(SqlxMigration::new(
-                        migration.version,
-                        migration.description.into(),
-                        MigrationType::ReversibleUp,
-                        migration.sql.into(),
-                        false,
-                    ));
-                }
+                migrations.push(SqlxMigration::new(
+                    migration.version,
+                    migration.description.into(),
+                    MigrationType::ReversibleUp,
+                    migration.sql.into(),
+                    false,
+                ));
             }
             Ok(migrations)
         })
@@ -111,7 +117,10 @@ async fn reopen_sqlite_pool_unlocked<R: Runtime>(
     let db_path = resolve_product_db_path(app)?;
     let next_pool = open_single_connection_sqlite_pool(&db_path, true).await?;
 
-    register_sqlite_pool(app, next_pool.clone()).await?;
+    let state = app
+        .try_state::<AppSqlitePool>()
+        .ok_or_else(|| "application sqlite state is not available".to_string())?;
+    register_sqlite_pool(&state, next_pool.clone()).await;
 
     Ok(next_pool)
 }
@@ -141,32 +150,6 @@ where
     }
 }
 
-async fn register_sqlite_pool<R: Runtime>(
-    app: &AppHandle<R>,
-    next_pool: Pool<Sqlite>,
-) -> Result<(), String> {
-    let instances = app
-        .try_state::<DbInstances>()
-        .ok_or_else(|| "sqlite db instances state is not available".to_string())?;
-
-    let previous_pool = {
-        let mut instances = instances.0.write().await;
-        match instances.insert(
-            SQLITE_DB_NAME.to_string(),
-            DbPool::Sqlite(next_pool.clone()),
-        ) {
-            Some(DbPool::Sqlite(pool)) => Some(pool),
-            _ => None,
-        }
-    };
-
-    if let Some(pool) = previous_pool {
-        pool.close().await;
-    }
-
-    Ok(())
-}
-
 pub async fn initialize_app_sqlite<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let db_path = resolve_product_db_path(app)?;
     restore::recover_interrupted_db_restore(&db_path)?;
@@ -174,7 +157,10 @@ pub async fn initialize_app_sqlite<R: Runtime>(app: &AppHandle<R>) -> Result<(),
 
     prepare_pool_schema(&pool, &db_path).await?;
 
-    register_sqlite_pool(app, pool).await?;
+    let state = app
+        .try_state::<AppSqlitePool>()
+        .ok_or_else(|| "application sqlite state is not available".to_string())?;
+    register_sqlite_pool(&state, pool).await;
 
     Ok(())
 }
@@ -907,9 +893,8 @@ pub async fn wait_for_sqlite_pool<R: Runtime>(app: &AppHandle<R>) -> Result<Pool
     let mut wait_cycles: u64 = 0;
 
     loop {
-        if let Some(instances) = app.try_state::<DbInstances>() {
-            let instances = instances.0.read().await;
-            if let Some(DbPool::Sqlite(pool)) = instances.get(SQLITE_DB_NAME) {
+        if let Some(state) = app.try_state::<AppSqlitePool>() {
+            if let Some(pool) = state.0.read().await.as_ref() {
                 return Ok(pool.clone());
             }
         }

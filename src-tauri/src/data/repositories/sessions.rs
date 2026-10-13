@@ -3,6 +3,7 @@ use crate::domain::backup::BackupSession;
 use crate::domain::tracking::{resolve_app_override_executable, ActiveSessionSnapshot};
 use sqlx::{Pool, Row, Sqlite, Transaction};
 use std::collections::HashMap;
+pub mod read;
 
 pub async fn fetch_all_for_backup(pool: &Pool<Sqlite>) -> Result<Vec<BackupSession>, String> {
     let rows = sqlx::query(

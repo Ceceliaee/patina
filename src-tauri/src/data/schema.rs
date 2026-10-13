@@ -1,4 +1,9 @@
-use tauri_plugin_sql::{Migration, MigrationKind};
+#[derive(Debug)]
+pub struct Migration {
+    pub version: i64,
+    pub description: &'static str,
+    pub sql: &'static str,
+}
 
 pub const CURRENT_BASELINE_MIGRATION_VERSION: i64 = 1;
 pub const CURRENT_BASELINE_MIGRATION_DESCRIPTION: &str = "create_current_baseline_schema";
@@ -1097,97 +1102,81 @@ pub fn tracker_migrations() -> Vec<Migration> {
             version: CURRENT_BASELINE_MIGRATION_VERSION,
             description: CURRENT_BASELINE_MIGRATION_DESCRIPTION,
             sql: CURRENT_BASELINE_SCHEMA_SQL,
-            kind: MigrationKind::Up,
         },
         Migration {
             version: TOOLS_TABLES_MIGRATION_VERSION,
             description: TOOLS_TABLES_MIGRATION_DESCRIPTION,
             sql: TOOLS_TABLES_SCHEMA_SQL,
-            kind: MigrationKind::Up,
         },
         Migration {
             version: SOFTWARE_REMINDER_RULES_MIGRATION_VERSION,
             description: SOFTWARE_REMINDER_RULES_MIGRATION_DESCRIPTION,
             sql: SOFTWARE_REMINDER_RULES_SCHEMA_SQL,
-            kind: MigrationKind::Up,
         },
         Migration {
             version: WEB_ACTIVITY_MIGRATION_VERSION,
             description: WEB_ACTIVITY_MIGRATION_DESCRIPTION,
             sql: WEB_ACTIVITY_SCHEMA_SQL,
-            kind: MigrationKind::Up,
         },
         Migration {
             version: WEB_FAVICON_CACHE_MIGRATION_VERSION,
             description: WEB_FAVICON_CACHE_MIGRATION_DESCRIPTION,
             sql: WEB_FAVICON_CACHE_SCHEMA_SQL,
-            kind: MigrationKind::Up,
         },
         Migration {
             version: IMPORT_DATA_MIGRATION_VERSION,
             description: IMPORT_DATA_MIGRATION_DESCRIPTION,
             sql: IMPORT_DATA_SCHEMA_SQL,
-            kind: MigrationKind::Up,
         },
         Migration {
             version: IMPORT_DATA_ISOLATION_MIGRATION_VERSION,
             description: IMPORT_DATA_ISOLATION_MIGRATION_DESCRIPTION,
             sql: IMPORT_DATA_ISOLATION_SCHEMA_SQL,
-            kind: MigrationKind::Up,
         },
         Migration {
             version: ACTIVITY_READ_MODELS_MIGRATION_VERSION,
             description: ACTIVITY_READ_MODELS_MIGRATION_DESCRIPTION,
             sql: ACTIVITY_READ_MODELS_SCHEMA_SQL,
-            kind: MigrationKind::Up,
         },
         Migration {
             version: WEB_ACTIVITY_REVISION_MIGRATION_VERSION,
             description: WEB_ACTIVITY_REVISION_MIGRATION_DESCRIPTION,
             sql: WEB_ACTIVITY_REVISION_SCHEMA_SQL,
-            kind: MigrationKind::Up,
         },
         Migration {
             version: SCHEDULED_BACKUP_MIGRATION_VERSION,
             description: SCHEDULED_BACKUP_MIGRATION_DESCRIPTION,
             sql: SCHEDULED_BACKUP_SCHEMA_SQL,
-            kind: MigrationKind::Up,
         },
         Migration {
             version: SCHEDULED_BACKUP_TARGETS_MIGRATION_VERSION,
             description: SCHEDULED_BACKUP_TARGETS_MIGRATION_DESCRIPTION,
             sql: SCHEDULED_BACKUP_TARGETS_SCHEMA_SQL,
-            kind: MigrationKind::Up,
         },
         Migration {
             version: SCHEDULED_EXPORT_MIGRATION_VERSION,
             description: SCHEDULED_EXPORT_MIGRATION_DESCRIPTION,
             sql: SCHEDULED_EXPORT_SCHEMA_SQL,
-            kind: MigrationKind::Up,
         },
         Migration {
             version: ACTIVITY_REMINDER_RULES_MIGRATION_VERSION,
             description: ACTIVITY_REMINDER_RULES_MIGRATION_DESCRIPTION,
             sql: ACTIVITY_REMINDER_RULES_SCHEMA_SQL,
-            kind: MigrationKind::Up,
         },
         Migration {
             version: WEB_ACTIVITY_SESSION_MIGRATION_VERSION,
             description: WEB_ACTIVITY_SESSION_MIGRATION_DESCRIPTION,
             sql: WEB_ACTIVITY_SESSION_SCHEMA_SQL,
-            kind: MigrationKind::Up,
         },
         Migration {
             version: SESSION_RANGE_INDEX_MIGRATION_VERSION,
             description: SESSION_RANGE_INDEX_MIGRATION_DESCRIPTION,
             sql: SESSION_RANGE_INDEX_SCHEMA_SQL,
-            kind: MigrationKind::Up,
         },
         Migration {
             version: ANONYMOUS_ACTIVITY_MIGRATION_VERSION,
             description: "create_anonymous_activity",
             sql: crate::data::repositories::anonymous_activity::SCHEMA_SQL,
-            kind: MigrationKind::Up,
         },
     ]
 }

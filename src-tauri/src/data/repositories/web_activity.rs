@@ -6,6 +6,7 @@ use crate::domain::web_activity::{
 };
 use sqlx::{Pool, Row, Sqlite, Transaction};
 use std::collections::HashMap;
+pub mod read;
 
 #[derive(Clone, Debug)]
 struct ActiveWebActivitySegment {

@@ -1,31 +1,23 @@
 use super::*;
-use crate::data::sqlite_pool::{prepare_pool_schema, SQLITE_DB_NAME};
+use crate::data::sqlite_pool::{prepare_pool_schema, register_sqlite_pool, AppSqlitePool};
 use crate::engine::tracking::ports::{
     TRACKER_LAST_HEARTBEAT_KEY, TRACKER_LAST_SUCCESSFUL_SAMPLE_KEY,
 };
 use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::SqlitePool;
 use std::path::Path;
-use tauri_plugin_sql::{DbInstances, DbPool};
 
-async fn replace_fixture_pool(instances: &DbInstances, pool: SqlitePool) {
-    let previous = instances
-        .0
-        .write()
-        .await
-        .insert(SQLITE_DB_NAME.into(), DbPool::Sqlite(pool));
-    if let Some(DbPool::Sqlite(previous)) = previous {
-        previous.close().await;
-    }
+async fn replace_fixture_pool(instances: &AppSqlitePool, pool: SqlitePool) {
+    register_sqlite_pool(instances, pool).await;
 }
 
-async fn shared_from_instances(instances: Arc<DbInstances>) -> SharedTrackingDataStore {
+async fn shared_from_instances(instances: Arc<AppSqlitePool>) -> SharedTrackingDataStore {
     shared_from_pool_source(Arc::new(move || {
         let instances = instances.clone();
         Box::pin(async move {
             let instances = instances.0.read().await;
-            match instances.get(SQLITE_DB_NAME) {
-                Some(DbPool::Sqlite(pool)) => Ok(pool.clone()),
+            match instances.as_ref() {
+                Some(pool) => Ok(pool.clone()),
                 _ => Err(sqlx::Error::PoolClosed),
             }
         })
@@ -91,7 +83,7 @@ fn session_creation_does_not_wait_for_icon_cache_work() {
 #[test]
 fn tracking_runtime_store_and_watchdog_clone_follow_registered_pool_replacement() {
     tauri::async_runtime::block_on(async {
-        let instances = Arc::new(DbInstances::default());
+        let instances = Arc::new(AppSqlitePool::default());
         let original = tracking_pool().await;
         replace_fixture_pool(&instances, original.clone()).await;
         let tracker = shared_from_instances(instances.clone()).await;
@@ -210,7 +202,7 @@ fn tracking_runtime_store_and_watchdog_clone_follow_registered_pool_replacement(
 #[test]
 fn tracking_runtime_store_recovers_after_closed_pool_gap_and_another_registration() {
     tauri::async_runtime::block_on(async {
-        let instances = Arc::new(DbInstances::default());
+        let instances = Arc::new(AppSqlitePool::default());
         let original = tracking_pool().await;
         replace_fixture_pool(&instances, original.clone()).await;
         let tracker = shared_from_instances(instances.clone()).await;

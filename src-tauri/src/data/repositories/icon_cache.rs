@@ -4,6 +4,35 @@ use std::sync::Arc;
 mod lifecycle;
 pub(crate) use lifecycle::acquire_icon_cache_maintenance;
 
+#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+pub struct ExecutableIconRow {
+    pub exe_name: String,
+    pub icon_base64: String,
+}
+
+pub async fn load_executable_icons(
+    pool: &Pool<Sqlite>,
+    exe_names: &[String],
+) -> Result<Vec<ExecutableIconRow>, sqlx::Error> {
+    if exe_names.len() > 900 {
+        return Err(sqlx::Error::Protocol(
+            "icon batch exceeds 900 executables".into(),
+        ));
+    }
+    if exe_names.is_empty() {
+        return Ok(vec![]);
+    }
+    let mut query = sqlx::QueryBuilder::<Sqlite>::new(
+        "SELECT exe_name, icon_base64 FROM icon_cache WHERE LOWER(exe_name) IN (",
+    );
+    let mut values = query.separated(", ");
+    for name in exe_names {
+        values.push_bind(name.to_lowercase());
+    }
+    query.push(")");
+    query.build_query_as().fetch_all(pool).await
+}
+
 // The case-sensitive primary key can cover name matching, then locate just one data row.
 const ICON_CACHE_STATE_QUERY: &str = "SELECT last_updated FROM icon_cache WHERE exe_name = (
     SELECT exe_name FROM icon_cache WHERE exe_name = ? COLLATE NOCASE LIMIT 1
