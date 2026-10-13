@@ -235,13 +235,7 @@ test("import gateway rejects malformed backend payloads", () => {
 });
 
 test("hourly imports contribute to dashboard ranking without becoming history sessions", () => {
-  const dashboard = buildDashboardReadModel(
-    [],
-    resolveTrackerHealth(200_000, 200_000, 8_000),
-    200_000,
-    [],
-    [{ appName: "Music", exeName: "music.exe", startTime: 0, endTime: 60_000 }],
-  );
+  const dashboard = buildDashboardReadModel([{ appName: "Music", exeName: "music.exe", startTime: 0, endTime: 60_000 }], resolveTrackerHealth(200_000, 200_000, 8_000), 200_000, []);
   assert.equal(dashboard.totalTrackedTime, 60_000);
   assert.equal(dashboard.topApplications[0]?.exeName, "music.exe");
 });

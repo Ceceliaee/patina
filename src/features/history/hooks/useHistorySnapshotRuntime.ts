@@ -1,9 +1,4 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { HistorySession } from "../../../shared/types/sessions.ts";
-import type {
-  WebActivitySegment,
-  WebDomainOverride,
-} from "../../../shared/types/webActivity.ts";
 import { formatLocalDateKey, startOfLocalDay } from "../../../shared/lib/localDate.ts";
 import {
   getCachedHistoryBootstrapSnapshot,
@@ -16,7 +11,6 @@ import {
   getCachedHistoryWebFaviconsForSegments,
   loadHistoryDaySessionDetails,
   loadHistoryWebFaviconsForSegments,
-  type AggregateSessionRecord,
   type HistorySnapshot,
   type HistorySnapshotLoadOptions,
 } from "../services/historyReadModel.ts";
@@ -116,35 +110,12 @@ export function useHistorySnapshotRuntime({
     } as const;
   });
   const initialVisibleSnapshot = initialSnapshotState.snapshot;
-  const [rawDaySessions, setRawDaySessions] = useState<HistorySession[]>(
-    () => initialVisibleSnapshot?.daySessions ?? [],
-  );
-  const [rawWeeklySessions, setRawWeeklySessions] = useState<HistorySession[]>(
-    () => initialVisibleSnapshot?.weeklySessions ?? [],
-  );
-  const [rawDayAggregateSessions, setRawDayAggregateSessions] = useState<AggregateSessionRecord[]>(
-    () => initialVisibleSnapshot?.dayAggregateSessions ?? [],
-  );
-  const [rawWeeklyAggregateSessions, setRawWeeklyAggregateSessions] = useState<AggregateSessionRecord[]>(
-    () => initialVisibleSnapshot?.weeklyAggregateSessions ?? [],
-  );
-  const [aggregateIncludesExactFacts, setAggregateIncludesExactFacts] = useState(
-    () => initialVisibleSnapshot?.aggregateIncludesExactFacts ?? false,
-  );
-  const [snapshotIcons, setSnapshotIcons] = useState<Record<string, string>>(
-    () => initialVisibleSnapshot?.icons ?? {},
-  );
-  const [rawDayWebSegments, setRawDayWebSegments] = useState<WebActivitySegment[]>(
-    () => initialVisibleSnapshot?.dayWebSegments ?? [],
-  );
-  const [webDomainFavicons, setWebDomainFavicons] = useState<Record<string, string>>(
-    () => resolveSnapshotWebFavicons(initialVisibleSnapshot),
-  );
+  const [visibleSnapshot, setVisibleSnapshot] = useState<HistorySnapshot>(() => initialVisibleSnapshot ?? emptyHistorySnapshot());
+  const { daySessions: rawDaySessions, dayAggregateSessions: rawDayAggregateSessions,
+    weeklyAggregateSessions: rawWeeklyAggregateSessions, icons: snapshotIcons,
+    dayWebSegments: rawDayWebSegments, webDomainFavicons, webDomainOverrides } = visibleSnapshot;
   const [webFaviconsReady, setWebFaviconsReady] = useState(
     () => !webActivityEnabled || hasResolvedSnapshotWebFavicons(initialVisibleSnapshot),
-  );
-  const [webDomainOverrides, setWebDomainOverrides] = useState<Record<string, WebDomainOverride>>(
-    () => initialVisibleSnapshot?.webDomainOverrides ?? {},
   );
   const [nowMs, setNowMs] = useState(() => initialVisibleSnapshot?.fetchedAtMs ?? Date.now());
   const [contentState, setContentState] = useState<HistoryContentState>(() => {
@@ -175,16 +146,8 @@ export function useHistorySnapshotRuntime({
     const nextWebFaviconsReady = !webActivityEnabled
       || hasResolvedSnapshotWebFavicons(snapshot);
     const apply = () => {
-      setRawDaySessions(snapshot.daySessions);
-      setRawWeeklySessions(snapshot.weeklySessions);
-      setRawDayAggregateSessions(snapshot.dayAggregateSessions ?? []);
-      setRawWeeklyAggregateSessions(snapshot.weeklyAggregateSessions ?? []);
-      setAggregateIncludesExactFacts(snapshot.aggregateIncludesExactFacts ?? false);
-      setSnapshotIcons(snapshot.icons);
-      setRawDayWebSegments(snapshot.dayWebSegments);
-      setWebDomainFavicons(nextWebDomainFavicons);
+      setVisibleSnapshot({ ...snapshot, webDomainFavicons: nextWebDomainFavicons });
       setWebFaviconsReady(nextWebFaviconsReady);
-      setWebDomainOverrides(snapshot.webDomainOverrides);
       setNowMs(snapshot.fetchedAtMs);
       visibleDateKeyRef.current = dateKey;
       visibleMappingVersionRef.current = mappingVersion;
@@ -199,16 +162,8 @@ export function useHistorySnapshotRuntime({
   }, [mappingVersion, webActivityEnabled]);
 
   const clearVisibleSnapshot = useCallback(() => {
-    setRawDaySessions([]);
-    setRawWeeklySessions([]);
-    setRawDayAggregateSessions([]);
-    setRawWeeklyAggregateSessions([]);
-    setAggregateIncludesExactFacts(false);
-    setSnapshotIcons({});
-    setRawDayWebSegments([]);
-    setWebDomainFavicons({});
+    setVisibleSnapshot(emptyHistorySnapshot());
     setWebFaviconsReady(true);
-    setWebDomainOverrides({});
     visibleDateKeyRef.current = null;
     visibleMappingVersionRef.current = null;
   }, []);
@@ -299,7 +254,7 @@ export function useHistorySnapshotRuntime({
               daySessions,
             }, requestDate, 7, webActivityEnabled);
           }
-          startTransition(() => setRawDaySessions(daySessions));
+          startTransition(() => setVisibleSnapshot(current => ({ ...current, daySessions })));
         }).catch((error) => {
           console.warn("History title detail enrichment failed", error);
         });
@@ -334,7 +289,7 @@ export function useHistorySnapshotRuntime({
 
   useEffect(() => {
     if (!webActivityEnabled || visibleDayWebSegments.length === 0) {
-      setWebDomainFavicons({});
+      setVisibleSnapshot(current => Object.keys(current.webDomainFavicons).length ? { ...current, webDomainFavicons: {} } : current);
       setWebFaviconsReady(true);
       return undefined;
     }
@@ -343,7 +298,7 @@ export function useHistorySnapshotRuntime({
     void loadHistoryWebFaviconsForSegments(visibleDayWebSegments).then((favicons) => {
       if (cancelled) return;
       startTransition(() => {
-        setWebDomainFavicons((current) => recordsMatch(current, favicons) ? current : favicons);
+        setVisibleSnapshot(current => recordsMatch(current.webDomainFavicons, favicons) ? current : { ...current, webDomainFavicons: favicons });
         setWebFaviconsReady(true);
       });
     });
@@ -361,10 +316,8 @@ export function useHistorySnapshotRuntime({
     rawDayAggregateSessions,
     rawDayWebSegments,
     visibleDayWebSegments,
-    rawWeeklySessions,
     rawWeeklyAggregateSessions,
-    aggregateIncludesExactFacts,
-    setNowMs,
+    hasActiveSession: visibleSnapshot.hasActiveSession,
     snapshotIcons,
     requestedDateKey: requestDateKey,
     visibleDateKey: visibleDateKeyRef.current,
@@ -373,4 +326,9 @@ export function useHistorySnapshotRuntime({
     webFaviconsReady,
     webDomainOverrides,
   };
+}
+
+function emptyHistorySnapshot(): HistorySnapshot {
+  return { fetchedAtMs: Date.now(), icons: {}, daySessions: [], dayAggregateSessions: [], weeklyAggregateSessions: [], hasActiveSession: false,
+    dayWebSegments: [], webDomainFavicons: {}, webDomainOverrides: {} };
 }

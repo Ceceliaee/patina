@@ -1,3 +1,4 @@
+import { aggregateFixtureRecords } from "./helpers/aggregateFixtures.ts";
 import assert from "node:assert/strict";
 import {
   areHistoryWebFaviconsResolvedForSegments,
@@ -126,7 +127,6 @@ await runTest("history snapshot keeps app sessions when optional web reads fail"
     });
 
     assert.deepEqual(snapshot.daySessions, [daySession]);
-    assert.deepEqual(snapshot.weeklySessions, []);
     assert.deepEqual(snapshot.weeklyAggregateSessions, [aggregate]);
     assert.deepEqual(snapshot.dayWebSegments, []);
     assert.deepEqual(snapshot.webDomainFavicons, {});
@@ -184,15 +184,13 @@ await runTest("hour buckets feed History summaries without becoming timeline ses
   }, { includeWebActivity: false });
   const readModel = buildHistoryReadModel({
     daySessions: snapshot.daySessions,
-    weeklySessions: snapshot.weeklySessions,
     dayAggregateSessions: snapshot.dayAggregateSessions,
     weeklyAggregateSessions: snapshot.weeklyAggregateSessions,
-    aggregateIncludesExactFacts: snapshot.aggregateIncludesExactFacts,
     trackerHealth: resolveTrackerHealth(bucketStart + 3_600_000, bucketStart + 3_600_000, 8_000),
     selectedDate,
     nowMs: bucketStart + 3_600_000,
     minSessionSecs: 0,
-    mergeThresholdSecs: 0,
+    mergeThresholdSecs: 0
   });
 
   assert.equal(snapshot.dayAggregateSessions?.length, 1);
@@ -261,7 +259,7 @@ await runTest("history forwards fractional-offset day bounds and preserves canon
       });
       assert.equal(model.summaryActiveDurationMs, fixture.importedMinutes * 60_000, fixture.timezone);
       assert.equal(model.timelineSessions.length, 0);
-      assert.deepEqual(snapshot.weeklySessions, []);
+      assert.deepEqual(snapshot.weeklyAggregateSessions, []);
     }
   } finally {
     if (originalTimezone === undefined) delete process.env.TZ;
@@ -306,15 +304,13 @@ await runTest("persistent aggregate summaries do not double count exact timeline
   };
   const readModel = buildHistoryReadModel({
     daySessions: [exact],
-    weeklySessions: [],
     dayAggregateSessions: [aggregate],
     weeklyAggregateSessions: [aggregate],
-    aggregateIncludesExactFacts: true,
     trackerHealth: resolveTrackerHealth(startTime + 3_600_000, startTime + 3_600_000, 8_000),
     selectedDate,
     nowMs: startTime + 3_600_000,
     minSessionSecs: 0,
-    mergeThresholdSecs: 0,
+    mergeThresholdSecs: 0
   });
   assert.equal(readModel.timelineSessions.length, 1);
   assert.equal(readModel.summaryActiveDurationMs, 30 * 60_000);
@@ -372,6 +368,7 @@ await runTest("history bootstrap snapshot strips privacy-heavy details and match
     webActivityEnabled: true,
   };
   const source = {
+    hasActiveSession: false,
     fetchedAtMs: new Date(2026, 0, 2, 12, 0, 0, 0).getTime(),
     icons: { "vscodium.exe": "data:image/png;base64,icon-secret" },
     daySessions: [makeSession({
@@ -382,7 +379,6 @@ await runTest("history bootstrap snapshot strips privacy-heavy details and match
         endTime: new Date(2026, 0, 2, 10, 0, 0, 0).getTime(),
       }],
     })],
-    weeklySessions: [makeSession({ id: 2, windowTitle: "weekly-private-title" })],
     dayWebSegments: [makeWebSegment({
       url: "https://github.com/private",
       title: "private-web-title",
@@ -395,6 +391,15 @@ await runTest("history bootstrap snapshot strips privacy-heavy details and match
         secretUrl: "https://github.com/override-secret",
       },
     },
+    dayAggregateSessions: aggregateFixtureRecords([makeSession({
+      windowTitle: "private-window-title",
+      titleSampleDetails: [{
+        title: "private-title-sample",
+        startTime: new Date(2026, 0, 2, 9, 0, 0, 0).getTime(),
+        endTime: new Date(2026, 0, 2, 10, 0, 0, 0).getTime(),
+      }],
+    })], undefined, new Date(2026, 0, 2, 12, 0, 0, 0).getTime()),
+    weeklyAggregateSessions: aggregateFixtureRecords([makeSession({ id: 2, windowTitle: "weekly-private-title" })], undefined, new Date(2026, 0, 2, 12, 0, 0, 0).getTime())
   };
   let savedPayload = "";
 
@@ -423,7 +428,7 @@ await runTest("history bootstrap snapshot strips privacy-heavy details and match
   assert.ok(cached);
   assert.equal(cached.snapshot.daySessions[0].windowTitle, "");
   assert.deepEqual(cached.snapshot.daySessions[0].titleSampleDetails, []);
-  assert.deepEqual(cached.snapshot.weeklySessions, []);
+  assert.deepEqual(cached.snapshot.weeklyAggregateSessions, []);
   assert.equal(cached.snapshot.dayWebSegments[0].url, null);
   assert.equal(cached.snapshot.dayWebSegments[0].title, null);
   assert.equal(cached.snapshot.dayWebSegments[0].faviconUrl, null);
@@ -442,13 +447,15 @@ await runTest("history bootstrap snapshot loads a valid persisted payload and re
   };
   let persistedPayload = "";
   await saveHistoryBootstrapSnapshot({
+    hasActiveSession: false,
     fetchedAtMs: Date.now(),
     icons: {},
     daySessions: [makeSession()],
-    weeklySessions: [],
     dayWebSegments: [],
     webDomainFavicons: {},
     webDomainOverrides: {},
+    dayAggregateSessions: aggregateFixtureRecords([makeSession()], undefined, Date.now()),
+    weeklyAggregateSessions: []
   }, identity, {}, {
     loadPayload: async () => null,
     savePayload: async (payload) => {
@@ -492,13 +499,15 @@ await runTest("history bootstrap snapshot refuses payloads above the frontend si
   const warnings: string[] = [];
 
   const result = await saveHistoryBootstrapSnapshot({
+    hasActiveSession: false,
     fetchedAtMs: Date.now(),
     icons: {},
     daySessions: hugeSessions,
-    weeklySessions: hugeSessions,
     dayWebSegments: [],
     webDomainFavicons: {},
     webDomainOverrides: {},
+    dayAggregateSessions: aggregateFixtureRecords(hugeSessions, undefined, Date.now()),
+    weeklyAggregateSessions: aggregateFixtureRecords(hugeSessions, undefined, Date.now())
   }, {
     dateKey: "2026-01-02",
     mappingVersion: 1,
@@ -521,13 +530,15 @@ await runTest("history bootstrap size budget counts UTF-8 bytes", async () => {
   let saved = false;
   const warnings: string[] = [];
   const result = await saveHistoryBootstrapSnapshot({
+    hasActiveSession: false,
     fetchedAtMs: Date.now(),
     icons: {},
     daySessions: [makeSession({ appName: "史".repeat(90_000) })],
-    weeklySessions: [],
     dayWebSegments: [],
     webDomainFavicons: {},
     webDomainOverrides: {},
+    dayAggregateSessions: aggregateFixtureRecords([makeSession({ appName: "史".repeat(90_000) })], undefined, Date.now()),
+    weeklyAggregateSessions: []
   }, {
     dateKey: "2026-01-02",
     mappingVersion: 1,
@@ -557,13 +568,15 @@ await runTest("history bootstrap persists a changed identity despite write throt
     warn: () => {},
   };
   const snapshot = {
+    hasActiveSession: false,
     fetchedAtMs: Date.now(),
     icons: {},
     daySessions: [makeSession()],
-    weeklySessions: [],
     dayWebSegments: [],
     webDomainFavicons: {},
     webDomainOverrides: {},
+    dayAggregateSessions: aggregateFixtureRecords([makeSession()], undefined, Date.now()),
+    weeklyAggregateSessions: []
   };
 
   assert.equal(await saveHistoryBootstrapSnapshot(snapshot, {
@@ -590,13 +603,15 @@ await runTest("late persisted bootstrap reads cannot overwrite a newer in-memory
     dateKey: "2026-01-02",
   };
   const snapshot = {
+    hasActiveSession: false,
     fetchedAtMs: Date.now(),
     icons: {},
     daySessions: [makeSession()],
-    weeklySessions: [],
     dayWebSegments: [],
     webDomainFavicons: {},
     webDomainOverrides: {},
+    dayAggregateSessions: aggregateFixtureRecords([makeSession()], undefined, Date.now()),
+    weeklyAggregateSessions: []
   };
   let oldPayload = "";
   await saveHistoryBootstrapSnapshot(snapshot, oldIdentity, {}, {
@@ -639,13 +654,15 @@ await runTest("history bootstrap writes stay ordered across save and clear", asy
     releaseFirstWrite = resolve;
   });
   const snapshot = {
+    hasActiveSession: false,
     fetchedAtMs: Date.now(),
     icons: {},
     daySessions: [makeSession()],
-    weeklySessions: [],
     dayWebSegments: [],
     webDomainFavicons: {},
     webDomainOverrides: {},
+    dayAggregateSessions: aggregateFixtureRecords([makeSession()], undefined, Date.now()),
+    weeklyAggregateSessions: []
   };
   const deps = {
     loadPayload: async () => null,
@@ -699,13 +716,15 @@ await runTest("history heavy cache release retains the one-slot bootstrap snapsh
     webActivityEnabled: false,
   };
   const snapshot = {
+    hasActiveSession: false,
     fetchedAtMs: Date.now(),
     icons: {},
     daySessions: [makeSession()],
-    weeklySessions: [],
     dayWebSegments: [],
     webDomainFavicons: {},
     webDomainOverrides: {},
+    dayAggregateSessions: aggregateFixtureRecords([makeSession()], undefined, Date.now()),
+    weeklyAggregateSessions: []
   };
   await saveHistoryBootstrapSnapshot(snapshot, identity, {}, {
     loadPayload: async () => null,
@@ -728,13 +747,15 @@ await runTest("history bootstrap invalidation clears memory and persisted payloa
   };
   let clearCount = 0;
   await saveHistoryBootstrapSnapshot({
+    hasActiveSession: false,
     fetchedAtMs: Date.now(),
     icons: {},
     daySessions: [makeSession()],
-    weeklySessions: [],
     dayWebSegments: [],
     webDomainFavicons: {},
     webDomainOverrides: {},
+    dayAggregateSessions: aggregateFixtureRecords([makeSession()], undefined, Date.now()),
+    weeklyAggregateSessions: []
   }, identity, {}, {
     loadPayload: async () => null,
     savePayload: async () => {},
@@ -899,9 +920,8 @@ await runTest("history snapshot uses canonical aggregates without loading weekly
 
   assert.equal(aggregateLoadCount, 2);
   assert.equal(snapshot.daySessions[0].titleSampleDetails?.length, 1);
-  assert.deepEqual(snapshot.weeklySessions, []);
   assert.deepEqual(snapshot.weeklyAggregateSessions, [aggregate]);
-  assert.equal(snapshot.aggregateIncludesExactFacts, true);
+  assert.ok(Array.isArray(snapshot.dayAggregateSessions));
 });
 
 await runTest("history snapshot cache dedupes matching in-flight loads", async () => {
@@ -938,7 +958,6 @@ await runTest("history snapshot cache dedupes matching in-flight loads", async (
 
   assert.equal(firstSnapshot, secondSnapshot);
   assert.deepEqual(firstSnapshot.daySessions, [daySession]);
-  assert.deepEqual(firstSnapshot.weeklySessions, []);
   assert.deepEqual(firstSnapshot.weeklyAggregateSessions, [aggregate]);
   assert.equal(dayLoadCount, 1);
   assert.equal(aggregateLoadCount, 2);

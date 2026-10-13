@@ -32,12 +32,13 @@ function buildSyntheticSessions(): HistorySession[] {
 }
 
 const sessions = buildSyntheticSessions();
+const activityRecords = sessions.map(({ appName, exeName, startTime, endTime }) => ({ appName, exeName, startTime, endTime: endTime! }));
 const nowMs = new Date(2026, 3, 18, 20, 0, 0, 0).getTime();
 const trackerHealth = resolveTrackerHealth(nowMs, nowMs, 8_000);
 const iterations = 400;
 
 const measurement = measureBenchmark("dashboard-read-model", iterations, 25, () => {
-  buildDashboardReadModel(sessions, trackerHealth, nowMs);
+  buildDashboardReadModel(activityRecords, trackerHealth, nowMs, []);
 });
 
 printBenchmarkReport({
@@ -45,7 +46,8 @@ printBenchmarkReport({
   measuredAt: new Date().toISOString(),
   measurements: [measurement],
   metadata: {
-    sessionCount: sessions.length,
+    aggregateRecordCount: activityRecords.length,
+    layer: "Frontend builder only; SQLite cost is measured by activity-maintenance and native runtime.",
     nowMs,
   },
 });

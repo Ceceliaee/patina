@@ -42,10 +42,8 @@ import {
   loadHistoryRuntimeSnapshotWithDeps,
 } from "../../src/app/services/readModelRuntimeService.ts";
 import {
-  resolveTrackingDataChangedEffects,
   shouldInvalidateDataCaches,
 } from "../../src/app/hooks/trackingDataChangedPolicy.ts";
-import { applyTrackingDataChangedPayload } from "../../src/app/hooks/trackingDataChangedRuntime.ts";
 import {
   clearSessionsByRangeWithDeps,
   resolveSessionStartCleanupCutoffTime,
@@ -86,9 +84,7 @@ export {
   resolveSessionStartCleanupCutoffTime,
   resolveStartupSealTime,
   resolveTrackerHealth,
-  resolveTrackingDataChangedEffects,
   shouldInvalidateDataCaches,
-  applyTrackingDataChangedPayload,
   shouldDeleteSessionByStartTime,
   getDayRange,
   getRollingDayRanges,

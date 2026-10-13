@@ -54,10 +54,9 @@ export interface HistorySnapshot {
   fetchedAtMs: number;
   icons: Record<string, string>;
   daySessions: HistorySession[];
-  weeklySessions: HistorySession[];
-  dayAggregateSessions?: AggregateSessionRecord[];
-  weeklyAggregateSessions?: AggregateSessionRecord[];
-  aggregateIncludesExactFacts?: boolean;
+  dayAggregateSessions: AggregateSessionRecord[];
+  weeklyAggregateSessions: AggregateSessionRecord[];
+  hasActiveSession: boolean;
   dayWebSegments: WebActivitySegment[];
   webDomainFavicons: Record<string, string>;
   webDomainOverrides: Record<string, WebDomainOverride>;
@@ -356,18 +355,15 @@ export async function loadHistorySnapshot(
       selectedDayRange.startMs,
       selectedDayRange.endMs,
     );
-  const loadAggregateSessions = async (startMs: number, endMs: number) => (
-    await deps.getActivityAggregateRange(startMs, endMs)
-  ).records;
   const [
     daySessions,
-    dayAggregateSessions,
-    weeklyAggregateSessions,
+    dayAggregate,
+    weeklyAggregate,
     webSnapshotPart,
   ] = await Promise.all([
     loadDaySessions(),
-    loadAggregateSessions(selectedDayRange.startMs, selectedDayRange.endMs),
-    loadAggregateSessions(weeklyRangeStart, weeklyRangeEnd),
+    deps.getActivityAggregateRange(selectedDayRange.startMs, selectedDayRange.endMs),
+    deps.getActivityAggregateRange(weeklyRangeStart, weeklyRangeEnd),
     includeWebActivity
       ? loadOptionalWebSnapshotPart(deps, selectedDayRange)
       : Promise.resolve({
@@ -376,6 +372,8 @@ export async function loadHistorySnapshot(
         webDomainOverrides: {},
       }),
   ]);
+  const dayAggregateSessions = dayAggregate.records;
+  const weeklyAggregateSessions = weeklyAggregate.records;
   const icons = getCachedHistoryIconMap(
     daySessions,
     dayAggregateSessions,
@@ -386,10 +384,9 @@ export async function loadHistorySnapshot(
     fetchedAtMs: Date.now(),
     icons,
     daySessions,
-    weeklySessions: [],
     dayAggregateSessions,
     weeklyAggregateSessions,
-    aggregateIncludesExactFacts: true,
+    hasActiveSession: dayAggregate.hasActiveSession || weeklyAggregate.hasActiveSession,
     dayWebSegments: webSnapshotPart.dayWebSegments,
     webDomainFavicons: webSnapshotPart.webDomainFavicons,
     webDomainOverrides: webSnapshotPart.webDomainOverrides,
@@ -398,10 +395,8 @@ export async function loadHistorySnapshot(
 
 export function buildHistoryReadModel(params: {
   daySessions: HistorySession[];
-  weeklySessions: HistorySession[];
-  dayAggregateSessions?: AggregateSessionRecord[];
-  weeklyAggregateSessions?: AggregateSessionRecord[];
-  aggregateIncludesExactFacts?: boolean;
+  dayAggregateSessions: AggregateSessionRecord[];
+  weeklyAggregateSessions: AggregateSessionRecord[];
   trackerHealth: TrackerHealthSnapshot;
   selectedDate: Date;
   nowMs: number;
@@ -410,10 +405,8 @@ export function buildHistoryReadModel(params: {
 }): HistoryReadModel {
   const {
     daySessions,
-    weeklySessions,
-    dayAggregateSessions = [],
-    weeklyAggregateSessions = [],
-    aggregateIncludesExactFacts = false,
+    dayAggregateSessions,
+    weeklyAggregateSessions,
     trackerHealth,
     selectedDate,
     nowMs,
@@ -423,13 +416,9 @@ export function buildHistoryReadModel(params: {
   const selectedDayRange = getDayRange(selectedDate, nowMs);
   const rollingRanges = getRollingDayRanges(7, nowMs);
   const liveDaySessions = materializeLiveSessions(daySessions, trackerHealth, nowMs);
-  const liveWeeklySessions = materializeLiveSessions(weeklySessions, trackerHealth, nowMs);
   const compiledSessions = compileForRange(liveDaySessions, selectedDayRange, 0);
   const summaryCompiledSessions = compileForRange(
-    [
-      ...(aggregateIncludesExactFacts ? [] : liveDaySessions),
-      ...mapAggregateSessionsForSummary(dayAggregateSessions),
-    ],
+    mapAggregateSessionsForSummary(dayAggregateSessions),
     selectedDayRange,
     0,
   );
@@ -446,10 +435,7 @@ export function buildHistoryReadModel(params: {
   const hourlyActivity = buildHourlyActivity(summaryCompiledSessions);
   const hourlyCategoryActivity = buildHourlyCategoryActivity(summaryCompiledSessions);
   const weekly = buildDailySummaries(
-    [
-      ...(aggregateIncludesExactFacts ? [] : liveWeeklySessions),
-      ...mapAggregateSessionsForSummary(weeklyAggregateSessions),
-    ],
+    mapAggregateSessionsForSummary(weeklyAggregateSessions),
     rollingRanges,
     0,
   );
@@ -460,8 +446,6 @@ export function buildHistoryReadModel(params: {
     resolveLiveCutoffMs(trackerHealth, nowMs),
   );
 
-  // Keep read-model shaping in memory only for now. The hot paths get lighter
-  // without introducing persistent summary tables or premature caching.
   return {
     compiledSessions,
     timelineSessions,

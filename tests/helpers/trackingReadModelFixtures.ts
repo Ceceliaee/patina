@@ -1,3 +1,4 @@
+import { aggregateFixtureRecords } from "./aggregateFixtures.ts";
 import { buildDashboardReadModel } from "../../src/features/dashboard/services/dashboardReadModel.ts";
 import { buildHistoryReadModel } from "../../src/features/history/services/historyReadModel.ts";
 import { resolveTrackerHealth } from "../../src/shared/types/tracking.ts";
@@ -48,12 +49,13 @@ export function buildHistoryView(params: {
 
   return buildHistoryReadModel({
     daySessions,
-    weeklySessions,
     selectedDate,
     trackerHealth,
     nowMs,
     minSessionSecs,
     mergeThresholdSecs,
+    dayAggregateSessions: aggregateFixtureRecords(daySessions, trackerHealth, nowMs),
+    weeklyAggregateSessions: aggregateFixtureRecords(weeklySessions, trackerHealth, nowMs)
   });
 }
 
@@ -62,5 +64,5 @@ export function buildDashboardView(
   trackerHealth: ReturnType<typeof resolveTrackerHealth> = makeHealthyTrackerHealth(),
   nowMs: number = 200_000,
 ) {
-  return buildDashboardReadModel(sessions, trackerHealth, nowMs);
+  return buildDashboardReadModel(aggregateFixtureRecords(sessions, trackerHealth, nowMs), trackerHealth, nowMs, []);
 }

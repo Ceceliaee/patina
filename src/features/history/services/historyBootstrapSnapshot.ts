@@ -16,7 +16,7 @@ import {
 import { createSerializedJobRunner } from "../../../platform/persistence/sqliteTransactions.ts";
 import type { HistorySnapshot } from "./historyReadModel.ts";
 
-const HISTORY_BOOTSTRAP_SNAPSHOT_VERSION = 3;
+const HISTORY_BOOTSTRAP_SNAPSHOT_VERSION = 4;
 const HISTORY_BOOTSTRAP_SNAPSHOT_MAX_BYTES = 256 * 1024;
 
 export interface HistoryBootstrapIdentity {
@@ -143,22 +143,15 @@ function isHistorySnapshot(value: unknown): value is HistorySnapshot {
   if (!isRecord(value)) return false;
   return (
     isFiniteNumber(value.fetchedAtMs)
+    && typeof value.hasActiveSession === "boolean"
     && isRecord(value.icons)
     && Object.keys(value.icons).length === 0
     && Array.isArray(value.daySessions)
     && value.daySessions.every(isHistorySession)
-    && Array.isArray(value.weeklySessions)
-    && value.weeklySessions.every(isHistorySession)
-    && (value.dayAggregateSessions === undefined || (
-      Array.isArray(value.dayAggregateSessions)
-      && value.dayAggregateSessions.every(isAggregateSessionRecord)
-    ))
-    && (value.weeklyAggregateSessions === undefined || (
-      Array.isArray(value.weeklyAggregateSessions)
-      && value.weeklyAggregateSessions.every(isAggregateSessionRecord)
-    ))
-    && (value.aggregateIncludesExactFacts === undefined
-      || typeof value.aggregateIncludesExactFacts === "boolean")
+    && Array.isArray(value.dayAggregateSessions)
+    && value.dayAggregateSessions.every(isAggregateSessionRecord)
+    && Array.isArray(value.weeklyAggregateSessions)
+    && value.weeklyAggregateSessions.every(isAggregateSessionRecord)
     && Array.isArray(value.dayWebSegments)
     && value.dayWebSegments.every(isWebActivitySegment)
     && isRecord(value.webDomainFavicons)
@@ -237,10 +230,9 @@ function buildHistoryBootstrapSnapshot(
       fetchedAtMs: snapshot.fetchedAtMs,
       icons: {},
       daySessions: snapshot.daySessions.map(sanitizeHistorySession),
-      weeklySessions: [],
-      dayAggregateSessions: (snapshot.dayAggregateSessions ?? []).map((record) => ({ ...record })),
+      dayAggregateSessions: snapshot.dayAggregateSessions.map((record) => ({ ...record })),
       weeklyAggregateSessions: [],
-      aggregateIncludesExactFacts: snapshot.aggregateIncludesExactFacts ?? false,
+      hasActiveSession: snapshot.hasActiveSession,
       dayWebSegments: identity.webActivityEnabled
         ? snapshot.dayWebSegments.map(sanitizeWebActivitySegment)
         : [],

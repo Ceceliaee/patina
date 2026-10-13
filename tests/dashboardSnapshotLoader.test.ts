@@ -48,15 +48,12 @@ const snapshot = await loadDashboardSnapshotWithDeps(selectedDate, {
 assert.deepEqual(requestedRanges, [[dayStart, nextDayStart], [yesterdayStart, dayStart]]);
 assert.deepEqual(iconRequests, [["alpha.exe", "imported.exe"]]);
 assert.deepEqual(snapshot, {
-  fetchedAtMs: 1234,
-  icons: { "alpha.exe": "icon" },
-  sessions: [],
-  yesterdaySessions: [],
-  importedBuckets: todayRecords,
-  yesterdayImportedBuckets: yesterdayRecords,
-  aggregateIncludesExactFacts: true,
-  hasActiveSession: true,
-});
+    fetchedAtMs: 1234,
+    icons: { "alpha.exe": "icon" },
+    hasActiveSession: true,
+    activityRecords: todayRecords,
+    yesterdayActivityRecords: yesterdayRecords
+  });
 
 const loadedIcons = await loadIconSnapshotWithDeps(["alpha.exe"], {
   now: () => 2000,
@@ -95,7 +92,7 @@ try {
     loadIcons: async () => { throw iconFailure; },
     getCachedIcons: () => ({ "alpha.exe": "cached-icon" }),
   });
-  assert.deepEqual(degradedSnapshot.importedBuckets, todayRecords);
+  assert.deepEqual(degradedSnapshot.activityRecords, todayRecords);
   assert.equal(degradedSnapshot.hasActiveSession, true);
   assert.deepEqual(degradedSnapshot.icons, { "alpha.exe": "cached-icon" });
   assert.deepEqual(warnings, [["Failed to refresh dashboard icons:", iconFailure]]);
@@ -109,8 +106,8 @@ const emptySnapshot = await loadDashboardSnapshotWithDeps(selectedDate, {
   loadIcons: async () => ({}),
   getCachedIcons: () => ({}),
 });
-assert.deepEqual(emptySnapshot.importedBuckets, []);
-assert.deepEqual(emptySnapshot.yesterdayImportedBuckets, []);
+assert.deepEqual(emptySnapshot.activityRecords, []);
+assert.deepEqual(emptySnapshot.yesterdayActivityRecords, []);
 assert.equal(emptySnapshot.hasActiveSession, false);
 
 setDashboardSnapshotCache(snapshot, selectedDate);
@@ -118,7 +115,7 @@ try {
   const historySeed = getHistoryRuntimeSeedSnapshot(selectedDate);
   assert.deepEqual(historySeed?.daySessions, []);
   assert.deepEqual(historySeed?.dayAggregateSessions, todayRecords);
-  assert.equal(historySeed?.aggregateIncludesExactFacts, true);
+  assert.deepEqual(historySeed?.dayAggregateSessions, todayRecords);
 } finally {
   clearDashboardSnapshotCache();
 }

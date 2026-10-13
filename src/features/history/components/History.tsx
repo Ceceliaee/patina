@@ -237,10 +237,8 @@ export default function History({
     rawDaySessions,
     rawDayAggregateSessions,
     visibleDayWebSegments,
-    rawWeeklySessions,
     rawWeeklyAggregateSessions,
-    aggregateIncludesExactFacts,
-    setNowMs,
+    hasActiveSession,
     snapshotIcons,
     requestedDateKey,
     visibleDateKey,
@@ -267,7 +265,6 @@ export default function History({
 
     for (const session of [
       ...rawDaySessions,
-      ...rawWeeklySessions,
       ...rawDayAggregateSessions,
       ...rawWeeklyAggregateSessions,
     ]) {
@@ -279,7 +276,7 @@ export default function History({
     }
 
     return result;
-  }, [rawDayAggregateSessions, rawDaySessions, rawWeeklyAggregateSessions, rawWeeklySessions]);
+  }, [rawDayAggregateSessions, rawDaySessions, rawWeeklyAggregateSessions]);
   const baseHistoryIcons = useMemo(() => ({
     ...icons,
     ...snapshotIcons,
@@ -471,24 +468,23 @@ export default function History({
   useEffect(() => {
     const hasLiveWebSegment = webActivityEnabled
       && visibleDayWebSegments.some((segment) => segment.endTime === null);
-    const hasLiveSession = rawDaySessions.some((session) => session.endTime === null)
-      || rawWeeklySessions.some((session) => session.endTime === null)
+    const hasLiveSession = hasActiveSession
       || hasLiveWebSegment;
 
     if (!refreshEnabled || !hasLiveSession || trackerHealth.status !== "healthy") {
       return;
     }
 
-    // Keep live durations moving locally so the UI stays fresh without
-    // refetching the selected day and weekly range on every timer tick.
+    // Rust owns aggregate time bounds, including the current week when a past
+    // day is selected. Refresh that snapshot instead of extrapolating totals.
     const timer = window.setInterval(() => {
-      setNowMs(Date.now());
+      retry();
     }, refreshIntervalSecs * 1000);
 
     return () => {
       window.clearInterval(timer);
     };
-  }, [rawDaySessions, rawWeeklySessions, refreshEnabled, refreshIntervalSecs, setNowMs, trackerHealth.status, visibleDayWebSegments, webActivityEnabled]);
+  }, [hasActiveSession, refreshEnabled, refreshIntervalSecs, retry, trackerHealth.status, visibleDayWebSegments, webActivityEnabled]);
 
   const changeDate = (delta: number) => {
     const nextDate = addLocalDays(selectedDate, delta);
@@ -599,17 +595,15 @@ export default function History({
   const historyView = useMemo(
     () => (void mappingVersion, buildHistoryReadModel({
       daySessions: rawDaySessions,
-      weeklySessions: rawWeeklySessions,
       dayAggregateSessions: rawDayAggregateSessions,
       weeklyAggregateSessions: rawWeeklyAggregateSessions,
-      aggregateIncludesExactFacts,
       selectedDate: presentedDate,
       nowMs,
       trackerHealth,
       minSessionSecs,
       mergeThresholdSecs,
     })),
-    [aggregateIncludesExactFacts, mappingVersion, mergeThresholdSecs, minSessionSecs, nowMs, presentedDate, rawDayAggregateSessions, rawDaySessions, rawWeeklyAggregateSessions, rawWeeklySessions, trackerHealth],
+    [mappingVersion, mergeThresholdSecs, minSessionSecs, nowMs, presentedDate, rawDayAggregateSessions, rawDaySessions, rawWeeklyAggregateSessions, trackerHealth],
   );
   const {
     compiledSessions,

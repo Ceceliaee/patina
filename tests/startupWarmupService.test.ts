@@ -151,20 +151,23 @@ function makeDashboardSnapshot(fetchedAtMs: number) {
   return {
     fetchedAtMs,
     icons: {},
-    sessions: [],
-    yesterdaySessions: [],
+    activityRecords: [],
+    yesterdayActivityRecords: [],
+    hasActiveSession: false
   };
 }
 
 function makeHistorySnapshot(fetchedAtMs: number) {
   return {
+    hasActiveSession: false,
     daySessions: [],
     fetchedAtMs,
-    weeklySessions: [],
     dayWebSegments: [],
     icons: {},
     webDomainFavicons: {},
     webDomainOverrides: {},
+    dayAggregateSessions: [],
+    weeklyAggregateSessions: []
   };
 }
 

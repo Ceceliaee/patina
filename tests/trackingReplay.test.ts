@@ -1,3 +1,4 @@
+import { aggregateFixtureRecords } from "./helpers/aggregateFixtures.ts";
 import assert from "node:assert/strict";
 import { buildDashboardReadModel } from "../src/features/dashboard/services/dashboardReadModel.ts";
 import { buildHistoryReadModel } from "../src/features/history/services/historyReadModel.ts";
@@ -68,12 +69,13 @@ runTest("history replay filters pickerhost and keeps alias aggregation stable", 
 
   const readModel = buildHistoryReadModel({
     daySessions,
-    weeklySessions: daySessions,
     selectedDate: new Date(0),
     trackerHealth,
     nowMs: 400_000,
     minSessionSecs: 0,
     mergeThresholdSecs: 180,
+    dayAggregateSessions: aggregateFixtureRecords(daySessions, trackerHealth, 400_000),
+    weeklyAggregateSessions: aggregateFixtureRecords(daySessions, trackerHealth, 400_000)
   });
 
   assert.equal(
@@ -134,7 +136,7 @@ runTest("dashboard replay keeps alias aggregation stable and filters pickerhost"
     }),
   ];
 
-  const dashboard = buildDashboardReadModel(sessions, trackerHealth, 400_000);
+  const dashboard = buildDashboardReadModel(aggregateFixtureRecords(sessions, trackerHealth, 400_000), trackerHealth, 400_000, []);
   assert.equal(
     dashboard.topApplications.some((item) => item.exeName.toLowerCase().includes("pickerhost")),
     false,
@@ -165,18 +167,15 @@ runTest("replay keeps stale live session growth capped in history and dashboard"
 
   const history = buildHistoryReadModel({
     daySessions: sessions,
-    weeklySessions: sessions,
     selectedDate: new Date(0),
     trackerHealth: staleTrackerHealth,
     nowMs: 30_000,
     minSessionSecs: 0,
     mergeThresholdSecs: 180,
+    dayAggregateSessions: aggregateFixtureRecords(sessions, staleTrackerHealth, 30_000),
+    weeklyAggregateSessions: aggregateFixtureRecords(sessions, staleTrackerHealth, 30_000)
   });
-  const dashboard = buildDashboardReadModel(
-    sessions,
-    staleTrackerHealth,
-    30_000,
-  );
+  const dashboard = buildDashboardReadModel(aggregateFixtureRecords(sessions, staleTrackerHealth, 30_000), staleTrackerHealth, 30_000, []);
 
   assert.equal(history.timelineSessions[0]?.duration, 8_000);
   assert.equal(history.diagnostics.trackerStatus, "stale");
@@ -200,18 +199,15 @@ runTest("replay keeps startup-sealed sessions closed under stale tracker", () =>
 
   const history = buildHistoryReadModel({
     daySessions: sessions,
-    weeklySessions: sessions,
     selectedDate: new Date(0),
     trackerHealth: staleTrackerHealth,
     nowMs: 30_000,
     minSessionSecs: 0,
     mergeThresholdSecs: 180,
+    dayAggregateSessions: aggregateFixtureRecords(sessions, staleTrackerHealth, 30_000),
+    weeklyAggregateSessions: aggregateFixtureRecords(sessions, staleTrackerHealth, 30_000)
   });
-  const dashboard = buildDashboardReadModel(
-    sessions,
-    staleTrackerHealth,
-    30_000,
-  );
+  const dashboard = buildDashboardReadModel(aggregateFixtureRecords(sessions, staleTrackerHealth, 30_000), staleTrackerHealth, 30_000, []);
 
   assert.equal(history.timelineSessions[0]?.duration, 8_000);
   assert.equal(history.diagnostics.suspiciousSessionCount, 0);
@@ -248,18 +244,15 @@ runTest("replay keeps startup-sealed sessions stable after cleanup on stale trac
 
   const history = buildHistoryReadModel({
     daySessions: sessions,
-    weeklySessions: sessions,
     selectedDate: new Date(0),
     trackerHealth: staleTrackerHealth,
     nowMs: 30_000,
     minSessionSecs: 0,
     mergeThresholdSecs: 180,
+    dayAggregateSessions: aggregateFixtureRecords(sessions, staleTrackerHealth, 30_000),
+    weeklyAggregateSessions: aggregateFixtureRecords(sessions, staleTrackerHealth, 30_000)
   });
-  const dashboard = buildDashboardReadModel(
-    sessions,
-    staleTrackerHealth,
-    30_000,
-  );
+  const dashboard = buildDashboardReadModel(aggregateFixtureRecords(sessions, staleTrackerHealth, 30_000), staleTrackerHealth, 30_000, []);
 
   assert.equal(history.timelineSessions.length, 1);
   assert.equal(history.timelineSessions[0]?.duration, 3_000);
@@ -298,18 +291,15 @@ runTest("replay keeps sessions starting at cleanup cutoff in stale tracker views
 
   const history = buildHistoryReadModel({
     daySessions: sessions,
-    weeklySessions: sessions,
     selectedDate: new Date(0),
     trackerHealth: staleTrackerHealth,
     nowMs: 35_000,
     minSessionSecs: 0,
     mergeThresholdSecs: 180,
+    dayAggregateSessions: aggregateFixtureRecords(sessions, staleTrackerHealth, 35_000),
+    weeklyAggregateSessions: aggregateFixtureRecords(sessions, staleTrackerHealth, 35_000)
   });
-  const dashboard = buildDashboardReadModel(
-    sessions,
-    staleTrackerHealth,
-    35_000,
-  );
+  const dashboard = buildDashboardReadModel(aggregateFixtureRecords(sessions, staleTrackerHealth, 35_000), staleTrackerHealth, 35_000, []);
 
   assert.equal(history.timelineSessions.length, 1);
   assert.equal(history.timelineSessions[0]?.exeName, "at-cutoff.exe");
@@ -350,18 +340,15 @@ runTest("replay keeps active sessions starting at cleanup cutoff and caps them f
 
   const history = buildHistoryReadModel({
     daySessions: sessions,
-    weeklySessions: sessions,
     selectedDate: new Date(0),
     trackerHealth: staleTrackerHealth,
     nowMs: 35_000,
     minSessionSecs: 0,
     mergeThresholdSecs: 180,
+    dayAggregateSessions: aggregateFixtureRecords(sessions, staleTrackerHealth, 35_000),
+    weeklyAggregateSessions: aggregateFixtureRecords(sessions, staleTrackerHealth, 35_000)
   });
-  const dashboard = buildDashboardReadModel(
-    sessions,
-    staleTrackerHealth,
-    35_000,
-  );
+  const dashboard = buildDashboardReadModel(aggregateFixtureRecords(sessions, staleTrackerHealth, 35_000), staleTrackerHealth, 35_000, []);
 
   assert.equal(history.timelineSessions.length, 1);
   assert.equal(history.timelineSessions[0]?.exeName, "boundary-active.exe");
@@ -370,7 +357,9 @@ runTest("replay keeps active sessions starting at cleanup cutoff and caps them f
   assert.equal(dashboard.compiledSessions.length, 1);
   assert.equal(dashboard.compiledSessions[0]?.exeName, "boundary-active.exe");
   assert.equal(dashboard.compiledSessions[0]?.duration, 6_000);
-  assert.equal(dashboard.diagnostics.suspiciousSessionCount, 1);
+  assert.equal(dashboard.diagnostics.trackerStatus, "stale");
+  assert.equal(dashboard.diagnostics.liveCutoffMs, 26_000);
+  assert.equal(dashboard.diagnostics.hasWarnings, true);
 });
 
 runTest("dashboard formatting replay honors display name overrides", () => {
@@ -665,15 +654,16 @@ runTest("dashboard and history replay produce matching hourly category activity"
     }),
   ];
 
-  const dashboard = buildDashboardReadModel(sessions, currentTrackerHealth, nowMs);
+  const dashboard = buildDashboardReadModel(aggregateFixtureRecords(sessions, currentTrackerHealth, nowMs), currentTrackerHealth, nowMs, []);
   const history = buildHistoryReadModel({
     daySessions: sessions,
-    weeklySessions: sessions,
     selectedDate: new Date(nowMs),
     trackerHealth: currentTrackerHealth,
     nowMs,
     minSessionSecs: 0,
     mergeThresholdSecs: 180,
+    dayAggregateSessions: aggregateFixtureRecords(sessions, currentTrackerHealth, nowMs),
+    weeklyAggregateSessions: aggregateFixtureRecords(sessions, currentTrackerHealth, nowMs)
   });
 
   assert.deepEqual(history.hourlyCategoryActivity, dashboard.hourlyCategoryActivity);

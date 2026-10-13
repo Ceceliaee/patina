@@ -50,12 +50,16 @@ function buildSyntheticSessions(): HistorySession[] {
 }
 
 const sessions = buildSyntheticSessions();
-const trackerHealth = resolveTrackerHealth(Date.now(), Date.now(), 8_000);
+
 const selectedDate = new Date(2026, 3, 18, 12, 0, 0, 0);
 const nowMs = selectedDate.getTime();
+const trackerHealth = resolveTrackerHealth(nowMs, nowMs, 8_000);
 const rangeStart = new Date(2026, 3, 18, 0, 0, 0, 0).getTime();
 const rangeEnd = new Date(2026, 3, 19, 0, 0, 0, 0).getTime();
 const iterations = 250;
+const daySessions = sessions.filter(row => row.startTime >= rangeStart && row.startTime < rangeEnd);
+const weeklyRecords = sessions.map(({ appName, exeName, startTime, endTime }) => ({ appName, exeName, startTime, endTime: endTime! }));
+const dayRecords = weeklyRecords.filter(row => row.startTime >= rangeStart && row.startTime < rangeEnd);
 
 const liveSessions = materializeLiveSessions(sessions, trackerHealth, nowMs);
 
@@ -68,13 +72,14 @@ const reference = measureBenchmark("compile-and-timeline-reference", iterations,
 
 const optimized = measureBenchmark("current-history-read-model", iterations, 170, () => {
   buildHistoryReadModel({
-    daySessions: sessions,
-    weeklySessions: sessions,
+    daySessions,
     selectedDate,
     trackerHealth,
     nowMs,
     minSessionSecs: 0,
     mergeThresholdSecs: 180,
+    dayAggregateSessions: dayRecords,
+    weeklyAggregateSessions: weeklyRecords
   });
 });
 
@@ -83,7 +88,9 @@ printBenchmarkReport({
   measuredAt: new Date().toISOString(),
   measurements: [reference, optimized],
   metadata: {
-    sessionCount: sessions.length,
+    exactDayRows: daySessions.length,
+    weeklyAggregateRows: weeklyRecords.length,
+    layer: "Frontend builder; canonical closed aggregate DTOs and selected-day exact detail. Backend capacity is measured separately.",
     selectedDate: selectedDate.toISOString(),
     comparisonNotes: [
       "compile-and-timeline-reference measures only the old hot subpath shape.",

@@ -45,15 +45,11 @@ export function useDashboardStats(
   const [nowMs, setNowMs] = useState(() => state.snapshot?.fetchedAtMs ?? Date.now());
   const currentDateKey = formatLocalDateKey(new Date());
   const snapshot = state.dateKey === currentDateKey ? state.snapshot : null;
-  const rawSessions = snapshot?.sessions ?? EMPTY_SESSIONS;
-  const rawYesterdaySessions = snapshot?.yesterdaySessions ?? EMPTY_SESSIONS;
-  const importedBuckets = snapshot?.importedBuckets ?? EMPTY_BUCKETS;
-  const yesterdayImportedBuckets = snapshot?.yesterdayImportedBuckets ?? EMPTY_BUCKETS;
-  const aggregateIncludesExactFacts = snapshot?.aggregateIncludesExactFacts ?? false;
+  const activityRecords = snapshot?.activityRecords ?? EMPTY_RECORDS;
+  const yesterdayActivityRecords = snapshot?.yesterdayActivityRecords ?? EMPTY_RECORDS;
   const hasActiveSession = snapshot?.hasActiveSession ?? false;
-  const iconNames = useMemo(() => [...rawSessions, ...importedBuckets].map((item) => item.exeName), [rawSessions, importedBuckets]);
+  const iconNames = useMemo(() => activityRecords.map(item => item.exeName), [activityRecords]);
   const icons = snapshot?.icons ?? EMPTY_ICONS;
-
 
   const loadSnapshot = useCallback(async () => {
     const requestId = ++requestIdRef.current;
@@ -98,29 +94,26 @@ export function useDashboardStats(
     const stop = subscribeAppIconChanges((exe) => {
       if (appIconChangeAffects(exe, iconNames)) refreshIcons(iconNames);
     });
-    const hasLiveSession = hasActiveSession || rawSessions.some((session) => session.endTime === null);
+    const hasLiveSession = hasActiveSession;
     const timer = foregroundRefreshEnabled && hasLiveSession && trackerHealth.status === "healthy"
       ? window.setInterval(() => {
         setNowMs(Date.now());
-        if (aggregateIncludesExactFacts) void loadSnapshot();
+        void loadSnapshot();
         refreshIcons(getRetryableMissingDashboardIconExecutables(iconNames, icons));
       }, refreshIntervalSecs * 1000) : undefined;
     return () => { cancelled = true; stop(); window.clearInterval(timer); };
-  }, [aggregateIncludesExactFacts, classificationReady, foregroundRefreshEnabled, hasActiveSession, icons, iconNames, loadSnapshot, rawSessions, refreshIntervalSecs, trackerHealth.status]);
+  }, [classificationReady, foregroundRefreshEnabled, hasActiveSession, icons, iconNames, loadSnapshot, refreshIntervalSecs, trackerHealth.status]);
 
   const dashboard = useMemo(
     () => buildDashboardReadModel(
-      classificationReady ? rawSessions : [],
+      classificationReady ? activityRecords : [],
       trackerHealth,
       nowMs,
-      classificationReady ? rawYesterdaySessions : [],
-      classificationReady ? importedBuckets : [],
-      classificationReady ? yesterdayImportedBuckets : [],
-      aggregateIncludesExactFacts,
+      classificationReady ? yesterdayActivityRecords : [],
     ),
     // The read model reads module-level classification mappings; this token is its explicit invalidation signal.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [aggregateIncludesExactFacts, classificationReady, importedBuckets, mappingVersion, nowMs, rawSessions, rawYesterdaySessions, trackerHealth, yesterdayImportedBuckets],
+    [activityRecords, classificationReady, mappingVersion, nowMs, trackerHealth, yesterdayActivityRecords],
   );
 
   return {
@@ -134,6 +127,5 @@ export function useDashboardStats(
   };
 }
 
-const EMPTY_SESSIONS: DashboardSnapshot["sessions"] = [];
-const EMPTY_BUCKETS: NonNullable<DashboardSnapshot["importedBuckets"]> = [];
+const EMPTY_RECORDS: DashboardSnapshot["activityRecords"] = [];
 const EMPTY_ICONS: Record<string, string> = {};

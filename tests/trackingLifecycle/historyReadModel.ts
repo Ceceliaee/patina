@@ -13,7 +13,7 @@ import {
 } from "../helpers/trackingReadModelFixtures.ts";
 
 export function runHistoryReadModelTests() {
-  runTest("dashboard read model caps live session growth at the last successful sample when tracker is stale", () => {
+  runTest("dashboard preserves the backend live cutoff and exposes stale tracker health", () => {
     const trackerHealth = resolveTrackerHealth(10_000, 19_000, 8_000);
     const dashboard = buildDashboardView([
       makeSession({
@@ -26,9 +26,10 @@ export function runHistoryReadModelTests() {
     ], trackerHealth, 19_000);
 
     assert.equal(dashboard.totalTrackedTime, 9_000);
-    assert.equal(dashboard.diagnostics.suspiciousSessionCount, 1);
-    assert.equal(dashboard.diagnostics.suspiciousDuration, 9_000);
-    assert.equal(dashboard.topApplications[0].suspiciousDuration, 9_000);
+    // Aggregate DTOs carry bounded time, not exact-session diagnostic metadata.
+    assert.equal(dashboard.diagnostics.trackerStatus, "stale");
+    assert.equal(dashboard.diagnostics.liveCutoffMs, 10_000);
+    assert.equal(dashboard.diagnostics.hasWarnings, true);
   });
 
   runTest("history app summary stays on real active duration even when timeline merges interruptions for display", () => {

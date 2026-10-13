@@ -27,7 +27,6 @@ import {
 import {
   buildReadModelDiagnostics,
   compileForRange,
-  materializeLiveSessions,
   resolveLiveCutoffMs,
   type ReadModelDiagnostics,
 } from "../../../shared/lib/readModelCore.ts";
@@ -36,12 +35,9 @@ import { loadActivityAggregateRange } from "../../../platform/persistence/activi
 export interface DashboardSnapshot {
   fetchedAtMs: number;
   icons: Record<string, string>;
-  sessions: HistorySession[];
-  yesterdaySessions?: HistorySession[];
-  importedBuckets?: AggregateSessionRecord[];
-  yesterdayImportedBuckets?: AggregateSessionRecord[];
-  aggregateIncludesExactFacts?: boolean;
-  hasActiveSession?: boolean;
+  activityRecords: AggregateSessionRecord[];
+  yesterdayActivityRecords: AggregateSessionRecord[];
+  hasActiveSession: boolean;
 }
 
 interface IconSnapshot {
@@ -117,11 +113,8 @@ export async function loadDashboardSnapshotWithDeps(
   return {
     fetchedAtMs: deps.now(),
     icons,
-    sessions: [],
-    yesterdaySessions: [],
-    importedBuckets: dayResponse.records,
-    yesterdayImportedBuckets: yesterdayResponse.records,
-    aggregateIncludesExactFacts: true,
+    activityRecords: dayResponse.records,
+    yesterdayActivityRecords: yesterdayResponse.records,
     hasActiveSession: dayResponse.hasActiveSession,
   };
 }
@@ -149,34 +142,17 @@ export async function loadIconSnapshot(exeNames: string[] = []): Promise<IconSna
 }
 
 export function buildDashboardReadModel(
-  sessions: HistorySession[],
+  activityRecords: AggregateSessionRecord[],
   trackerHealth: TrackerHealthSnapshot,
   nowMs: number,
-  yesterdaySessions: HistorySession[] = [],
-  importedBuckets: AggregateSessionRecord[] = [],
-  yesterdayImportedBuckets: AggregateSessionRecord[] = [],
-  aggregateIncludesExactFacts: boolean = false,
+  yesterdayActivityRecords: AggregateSessionRecord[] = [],
 ): DashboardReadModel {
   const dayRange = getDayRange(new Date(nowMs), nowMs);
   const yesterday = new Date(nowMs);
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayRange = getDayRange(yesterday);
-  const liveSessions = aggregateIncludesExactFacts
-    ? []
-    : materializeLiveSessions(sessions, trackerHealth, nowMs);
-  const compiledSessions = compileForRange(
-    [...liveSessions, ...materializeImportedBuckets(importedBuckets)],
-    dayRange,
-    0,
-  );
-  const compiledYesterdaySessions = compileForRange(
-    [
-      ...(aggregateIncludesExactFacts ? [] : yesterdaySessions),
-      ...materializeImportedBuckets(yesterdayImportedBuckets),
-    ],
-    yesterdayRange,
-    0,
-  );
+  const compiledSessions = compileForRange(materializeActivityRecords(activityRecords), dayRange, 0);
+  const compiledYesterdaySessions = compileForRange(materializeActivityRecords(yesterdayActivityRecords), yesterdayRange, 0);
   const stats = buildNormalizedAppStats(compiledSessions);
   const yesterdayStats = buildNormalizedAppStats(compiledYesterdaySessions);
   const totalTrackedTime = getTotalTrackedTime(stats);
@@ -206,7 +182,7 @@ export function buildDashboardReadModel(
   };
 }
 
-function materializeImportedBuckets(buckets: AggregateSessionRecord[]): HistorySession[] {
+function materializeActivityRecords(buckets: AggregateSessionRecord[]): HistorySession[] {
   return buckets.map((bucket, index) => ({
     id: -(index + 1),
     appName: bucket.appName,
