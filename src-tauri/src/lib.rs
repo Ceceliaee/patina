@@ -7,6 +7,14 @@ mod platform;
 
 use std::sync::Arc;
 
+#[cfg(debug_assertions)]
+#[doc(hidden)]
+pub fn verify_native_probe_lifecycle(executable: &std::path::Path) -> Result<(), String> {
+    platform::windows::native_probe::acceptance::verify(executable)?;
+    data::tracking_runtime::native_icon_acceptance::verify(executable);
+    Ok(())
+}
+
 // Only the dedicated coverage compiler wrapper enables this. Desktop tests
 // checkpoint native counters before deliberately terminating a process.
 #[cfg(patina_coverage)]

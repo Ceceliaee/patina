@@ -25,6 +25,10 @@ mod pool_lifecycle_tests;
 #[path = "tracking_runtime/icon_refresh_tests.rs"]
 mod icon_refresh_tests;
 
+#[cfg(debug_assertions)]
+#[path = "tracking_runtime/native_icon_acceptance.rs"]
+pub(crate) mod native_icon_acceptance;
+
 #[cfg(test)]
 #[path = "tracking_runtime/app_name_tests.rs"]
 mod app_name_tests;

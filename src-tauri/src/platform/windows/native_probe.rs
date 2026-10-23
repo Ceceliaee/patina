@@ -1,3 +1,5 @@
+#[cfg(debug_assertions)]
+pub(crate) mod acceptance;
 mod fault;
 #[cfg(debug_assertions)]
 mod fixture;
