@@ -786,10 +786,17 @@ function testVerifyRunsAfterSuccessfulIntake() {
     assert.match(section, /needs: candidate/);
     assert.match(section, /ref: \$\{\{ needs\.candidate\.outputs\.head_sha \}\}/);
     assert.match(section, /persist-credentials: false/);
+    assert.match(section, /allow-unsafe-pr-checkout: \$\{\{ github\.event_name == 'workflow_run' && needs\.candidate\.result == 'success' \}\}/);
     assert.match(section, /package-manager-cache: false/);
     assert.match(section, /\$actual -cne \$env:VERIFIED_HEAD_SHA/);
     assert.ok(section.indexOf("Assert verified candidate") < section.indexOf("Install pinned pnpm"));
     assert.doesNotMatch(section, /permissions:|actions: write|contents: write/);
+  }
+  assert.equal(workflow.match(/allow-unsafe-pr-checkout:/g)?.length, 3);
+  const trusted = workflow.split('  candidate:')[1].split('  frontend:')[0];
+  assert.doesNotMatch(trusted, /allow-unsafe-pr-checkout/);
+  for (const file of ['.github/workflows/pr-intake.yml', '.github/workflows/prepare-release.yml']) {
+    assert.doesNotMatch(readFileSync(file, 'utf8'), /allow-unsafe-pr-checkout/);
   }
   assert.match(workflow, /workflow_dispatch:/);
 }

@@ -767,7 +767,10 @@ pub(super) async fn extract_snapshot_archive(
             let entry = archive
                 .by_index(index)
                 .map_err(|error| format!("failed to inspect snapshot archive: {error}"))?;
-            let name = entry.name().to_string();
+            let name = entry
+                .name()
+                .map_err(|error| format!("snapshot archive has an invalid path: {error}"))?
+                .into_owned();
             if entry.enclosed_name().is_none() || !names.insert(name) {
                 return Err("snapshot archive contains an unsafe or duplicate path".to_string());
             }

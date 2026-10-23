@@ -444,11 +444,11 @@ function testWorkflowsUseReviewedNode24ActionRevisions() {
   const reviewedActions = [
     {
       action: "actions/checkout",
-      reference: "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6",
+      reference: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7",
     },
     {
       action: "actions/setup-node",
-      reference: "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6",
+      reference: "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7",
     },
     {
       action: "actions/upload-artifact",

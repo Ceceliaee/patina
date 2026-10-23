@@ -19,7 +19,7 @@ fn recompress_backup_archive(
 
     for index in 0..source.len() {
         let mut source_entry = source.by_index(index).expect("source backup entry");
-        let entry_name = source_entry.name().to_string();
+        let entry_name = source_entry.name().unwrap().into_owned();
         let mut content = Vec::new();
         source_entry
             .read_to_end(&mut content)
