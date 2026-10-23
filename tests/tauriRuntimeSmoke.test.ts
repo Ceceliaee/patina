@@ -3,6 +3,7 @@ import { readRuntimeDatabaseRows } from "./runtimeDatabase.ts";
 import { assertSqlCommandsDenied, verifySqlBoundaryRuntime } from "./tauriSqlBoundaryRuntime.ts";
 import { verifyAnonymousActivityRuntime } from "./tauriAnonymousActivityRuntime.ts";
 import { verifyWebDavRuntime } from "./tauriWebDavRuntime.ts";
+import { verifyBackupRetirementRuntime } from "./tauriBackupRetirementRuntime.ts";
 import { installDesktopResourceIntervalProbe, verifyDesktopResourceLifecycle } from "./tauriResourceLifecycle.ts";
 import { verifyAppIconRuntime } from "./tauriAppIconRuntime.ts";
 import { verifyWebviewRecovery, verifyWebviewRecoveryLimit } from "./tauriWebviewRecovery.ts";
@@ -348,6 +349,7 @@ async function verifyBackupReplaceRuntime(client: CdpConnection, root: string) {
     const day = new Date(); day.setDate(day.getDate() - 1); day.setHours(12, 0, 0, 0);
     return day.getTime();
   })()`) as number;
+  await verifyBackupRetirementRuntime(expression => evaluate(client, expression), root);
   const seed = (name: string, exe: string, start: number, duration: number) => {
     const result = spawnSync("python", ["-c", [
       "import sqlite3, sys",

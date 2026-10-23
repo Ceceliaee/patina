@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 
 export async function verifyWebDavRuntime(evaluate: (expression: string) => Promise<unknown>) {
   const directories = new Set(["/dav/"]);
@@ -44,6 +45,11 @@ export async function verifyWebDavRuntime(evaluate: (expression: string) => Prom
   const address = server.address();
   assert.ok(address && typeof address === "object");
   const config = { url: `http://127.0.0.1:${address.port}/dav/runtime/new`, username: "runtime-fixture", remoteDir: "/Patina" };
+  const indexPath = "/dav/runtime/new/Patina/backup-index.json";
+  const opaqueEntries = Array.from({ length: 55 }, (_, i) => ({ id: `unknown-${i}`, formatKind: i % 2 ? "future" : undefined,
+    fileName: "untouched.zip", vendorData: { nested: [i, null, "preserved"] } }));
+  files.set(indexPath, Buffer.from(JSON.stringify({ version: 1, product: "Patina", updatedAtMs: 1,
+    backups: opaqueEntries, vendorIndexData: { keep: true } })));
   const invoke = (command: string, payload: unknown) => evaluate(`window.__TAURI_INTERNALS__.invoke(${JSON.stringify(command)}, ${JSON.stringify(payload)})`);
   try {
     await invoke("cmd_save_remote_backup_settings", { patch: { ...config, passwordUpdate: { kind: "replace", password: "fixture-only" }, operationId: randomUUID() } });
@@ -67,6 +73,12 @@ export async function verifyWebDavRuntime(evaluate: (expression: string) => Prom
     assert.notEqual(first.entry.id, second.entry.id);
     const entries = await invoke("cmd_list_webdav_backups", { config }) as Array<{ id: string }>;
     assert.equal(entries.length, 2);
+    const updatedIndex = JSON.parse(files.get(indexPath)!.toString()) as { backups: Array<{ formatKind?: string }>; vendorIndexData: unknown };
+    assert.deepEqual(updatedIndex.backups.filter(entry => entry.formatKind !== "sqlite_snapshot"), JSON.parse(JSON.stringify(opaqueEntries)));
+    assert.deepEqual(updatedIndex.vendorIndexData, { keep: true });
+    const beforeUnknownDownload = calls.length;
+    await assert.rejects(invoke("cmd_download_webdav_backup", { config, id: "unknown-0" }));
+    assert.equal(calls.length, beforeUnknownDownload + 1, "unknown ID may read index but must not fetch an archive");
     const downloaded = await invoke("cmd_download_webdav_backup", { config, id: first.entry.id }) as {
       path: string; preview: { hash: string; restore_supported: boolean };
     };
@@ -74,6 +86,13 @@ export async function verifyWebDavRuntime(evaluate: (expression: string) => Prom
       assert.equal(downloaded.preview.restore_supported, true);
       await invoke("cmd_restore_backup", { backupPath: downloaded.path, hash: downloaded.preview.hash, restoreStrategy: "merge" });
     } finally { await invoke("cmd_delete_remote_backup_temp", { path: downloaded.path }); }
+    const originalFile = files.get("/dav/runtime/new/Patina/工作备份.zip")!;
+    files.set("/dav/runtime/new/Patina/工作备份.zip", Buffer.from("unsupported file"));
+    const rejected = await evaluate(`window.__TAURI_INTERNALS__.invoke("cmd_download_webdav_backup", ${JSON.stringify({ config, id: first.entry.id })}).then(() => null, error => error)`) as { code: string };
+    assert.equal(rejected.code, "BACKUP_FORMAT_UNSUPPORTED");
+    assert.equal(existsSync(downloaded.path), false, "unsupported download must clean its local temporary file");
+    assert.deepEqual(files.get("/dav/runtime/new/Patina/工作备份.zip"), Buffer.from("unsupported file"), "rejection must preserve remote bytes");
+    files.set("/dav/runtime/new/Patina/工作备份.zip", originalFile);
     const priorCalls = calls.length;
     await assert.rejects(invoke("cmd_upload_webdav_backup", { config, fileName: "../outside.zip" }), /webdav_invalid_file_name/);
     assert.equal(calls.length, priorCalls);
