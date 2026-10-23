@@ -34,6 +34,8 @@ App note en: Improve long-run stability and window recovery; fix tracking state,
 
 ### Removed
 
+- 结束旧结构化备份的兼容窗口，恢复仅接受 SQLite 数据快照，并移除设置页“恢复”旁的兼容提示问号。已有文件和 WebDAV 未支持格式的索引记录保留；旧备份可通过 [v1.9.10 隔离转换步骤](docs/versioning-and-release-policy.md#71-旧备份读取器的丢弃窗口) 迁移。
+
 ### Internal
 
 - 将前端剩余的数据库读取迁至 Rust，统一连接池管理并移除通用 SQL 通道，通过限定命令收紧主界面与悬浮窗的数据库和凭据访问边界。历史会话与标题在同一读取事务中取得，统计与历史摘要统一消费活动聚合结果。
