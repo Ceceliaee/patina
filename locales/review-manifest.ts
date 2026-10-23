@@ -997,7 +997,8 @@ export const LOCALE_SOURCE_REVIEWS = {
     "native.storage.startupFailure": "80c0df8f469b2c0e",
     "mapping.webIndependent": "545c7dabf30b40aa",
     "mapping.mergeWebDomain": "c06947bb6009d0d8",
-    "mapping.deleteWebGroupDetail": "67ecda17e088eecc"
+    "mapping.deleteWebGroupDetail": "67ecda17e088eecc",
+    "native.webview.recoveryFailed": "ab2053e9cb94a341"
   },
   "es": {
     "about.description": "f16fb3f9d1381864",
@@ -1996,7 +1997,8 @@ export const LOCALE_SOURCE_REVIEWS = {
     "native.storage.startupFailure": "80c0df8f469b2c0e",
     "mapping.webIndependent": "545c7dabf30b40aa",
     "mapping.mergeWebDomain": "c06947bb6009d0d8",
-    "mapping.deleteWebGroupDetail": "67ecda17e088eecc"
+    "mapping.deleteWebGroupDetail": "67ecda17e088eecc",
+    "native.webview.recoveryFailed": "ab2053e9cb94a341"
   },
   "ru-RU": {
     "about.description": "f16fb3f9d1381864",
@@ -2995,6 +2997,7 @@ export const LOCALE_SOURCE_REVIEWS = {
     "native.storage.startupFailure": "80c0df8f469b2c0e",
     "mapping.webIndependent": "545c7dabf30b40aa",
     "mapping.mergeWebDomain": "c06947bb6009d0d8",
-    "mapping.deleteWebGroupDetail": "67ecda17e088eecc"
+    "mapping.deleteWebGroupDetail": "67ecda17e088eecc",
+    "native.webview.recoveryFailed": "ab2053e9cb94a341"
   }
 } as const;

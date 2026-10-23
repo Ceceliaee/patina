@@ -435,7 +435,6 @@ pub(crate) fn handle_window_event<R: Runtime>(window: &Window<R>, event: &Window
     let app = window.app_handle();
 
     if matches!(event, WindowEvent::Destroyed) {
-        main_window::handle_unexpected_main_window_destroyed(app);
         return;
     }
 

@@ -132,6 +132,7 @@ pub(super) fn lookup(locale: Locale, key: &str) -> Option<NativeExpr> {
         (Locale::ZhCn, "native.tray.quit") => Some(NativeExpr::Literal("退出应用")),
         (Locale::ZhCn, "native.tray.resume") => Some(NativeExpr::Literal("恢复追踪")),
         (Locale::ZhCn, "native.tray.showMain") => Some(NativeExpr::Literal("打开主界面")),
+        (Locale::ZhCn, "native.webview.recoveryFailed") => Some(NativeExpr::Literal("窗口多次恢复失败，已停止自动重试。请重新启动 Patina 后检查记录状态。")),
         (Locale::EnUs, "native.category.ai") => Some(NativeExpr::Literal("AI")),
         (Locale::EnUs, "native.category.browser") => Some(NativeExpr::Literal("Browser")),
         (Locale::EnUs, "native.category.communication") => Some(NativeExpr::Literal("Communication")),
@@ -207,6 +208,7 @@ pub(super) fn lookup(locale: Locale, key: &str) -> Option<NativeExpr> {
         (Locale::EnUs, "native.tray.quit") => Some(NativeExpr::Literal("Exit Patina")),
         (Locale::EnUs, "native.tray.resume") => Some(NativeExpr::Literal("Resume tracking")),
         (Locale::EnUs, "native.tray.showMain") => Some(NativeExpr::Literal("Open main window")),
+        (Locale::EnUs, "native.webview.recoveryFailed") => Some(NativeExpr::Literal("The window could not be recovered after repeated attempts. Automatic retries have stopped. Restart Patina, then check the recording status.")),
         (Locale::RuRu, "native.category.ai") => Some(NativeExpr::Literal("ИИ")),
         (Locale::RuRu, "native.category.browser") => Some(NativeExpr::Literal("Браузер")),
         (Locale::RuRu, "native.category.communication") => Some(NativeExpr::Literal("Общение")),
@@ -282,6 +284,7 @@ pub(super) fn lookup(locale: Locale, key: &str) -> Option<NativeExpr> {
         (Locale::RuRu, "native.tray.quit") => Some(NativeExpr::Literal("Выйти из Patina")),
         (Locale::RuRu, "native.tray.resume") => Some(NativeExpr::Literal("Возобновить учёт")),
         (Locale::RuRu, "native.tray.showMain") => Some(NativeExpr::Literal("Открыть главное окно")),
+        (Locale::RuRu, "native.webview.recoveryFailed") => Some(NativeExpr::Literal("Не удалось восстановить окно после нескольких попыток. Автоматические повторы остановлены. Перезапустите Patina и проверьте состояние записи.")),
         (Locale::Es, "native.category.ai") => Some(NativeExpr::Literal("IA")),
         (Locale::Es, "native.category.browser") => Some(NativeExpr::Literal("Navegador")),
         (Locale::Es, "native.category.communication") => Some(NativeExpr::Literal("Comunicación")),
@@ -357,6 +360,7 @@ pub(super) fn lookup(locale: Locale, key: &str) -> Option<NativeExpr> {
         (Locale::Es, "native.tray.quit") => Some(NativeExpr::Literal("Salir de Patina")),
         (Locale::Es, "native.tray.resume") => Some(NativeExpr::Literal("Reanudar registro")),
         (Locale::Es, "native.tray.showMain") => Some(NativeExpr::Literal("Abrir ventana principal")),
+        (Locale::Es, "native.webview.recoveryFailed") => Some(NativeExpr::Literal("No se pudo recuperar la ventana tras varios intentos. Se han detenido los reintentos automáticos. Reinicia Patina y comprueba el estado del registro.")),
         _ => None,
     }
 }

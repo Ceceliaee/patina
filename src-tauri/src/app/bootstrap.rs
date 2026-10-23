@@ -80,6 +80,7 @@ fn register_managed_state_and_plugins(
         .manage(BackgroundEntryState::default())
         .manage(AppRestartState::default())
         .manage(MainWindowLifecycleState::default())
+        .manage(crate::app::webview_recovery::WebviewRecoveryState::default())
         .manage(WidgetWindowLifecycleState::default())
         .manage(TrackingRuntimeSnapshotState::default())
         .manage(TrackingPauseRuntimeState::default())
@@ -96,15 +97,30 @@ fn register_managed_state_and_plugins(
         .manage(UpdaterRuntimeState::new(app_version.to_string()))
         .manage(crate::app::scheduled_backup::ScheduledBackupRuntimeState::default())
         .manage(crate::app::scheduled_export::ScheduledExportRuntimeState::default())
-        .plugin(
-            tauri_plugin_autostart::Builder::new()
-                .args(vec![runtime::AUTOSTART_ARG.to_string()])
-                .build(),
-        )
+        .plugin(autostart_plugin())
         .manage(crate::data::sqlite_pool::AppSqlitePool::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+}
+
+fn autostart_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
+    let builder =
+        tauri_plugin_autostart::Builder::new().args(vec![runtime::AUTOSTART_ARG.to_string()]);
+    let builder = match isolated_autostart_name(
+        cfg!(debug_assertions),
+        std::env::var("PATINA_E2E").ok().as_deref(),
+    ) {
+        Some(name) => builder.app_name(name),
+        None => builder,
+    };
+    builder.build()
+}
+
+fn isolated_autostart_name(debug: bool, isolated: Option<&str>) -> Option<&'static str> {
+    // The plugin uses this name for both enabling and disabling the OS entry.
+    // Isolating only the database and identifier does not isolate that entry.
+    (debug && isolated == Some("1")).then_some("Patina isolated E2E")
 }
 
 fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
@@ -345,6 +361,21 @@ fn should_keep_app_running_without_windows(
 mod tests {
     use super::{resolve_startup_source, should_keep_app_running_without_windows};
     use crate::domain::settings::StartupSource;
+
+    #[test]
+    fn isolated_debug_autostart_does_not_use_the_installed_entry_name() {
+        for debug in [false, true] {
+            for isolated in [None, Some("0"), Some("1"), Some("true")] {
+                let name = super::isolated_autostart_name(debug, isolated);
+                if debug && isolated == Some("1") {
+                    assert_eq!(name, Some("Patina isolated E2E"));
+                    assert_ne!(name, Some("Patina"));
+                } else {
+                    assert_eq!(name, None, "ordinary profiles retain the plugin default");
+                }
+            }
+        }
+    }
 
     #[test]
     fn ordinary_launch_sources_are_distinguished() {

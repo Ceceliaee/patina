@@ -348,7 +348,7 @@ impl MainWindowLifecycleState {
 
     pub(crate) fn begin_unavailable_window_recovery(&self) -> bool {
         self.with_inner(|inner| {
-            if !inner.desired_visible || inner.create_in_progress || inner.destroy_in_progress {
+            if inner.create_in_progress || inner.destroy_in_progress {
                 return false;
             }
 
@@ -371,9 +371,12 @@ impl MainWindowLifecycleState {
         });
     }
 
-    pub(crate) fn handle_unexpected_window_destroyed(&self) -> bool {
+    pub(crate) fn handle_unexpected_window_destroyed(&self, generation: u64) -> bool {
         self.with_inner(|inner| {
-            if inner.destroy_in_progress {
+            if inner.window_generation != generation
+                || inner.destroy_in_progress
+                || inner.render_state == MainWindowRenderState::Absent
+            {
                 return false;
             }
 
@@ -1269,7 +1272,7 @@ mod tests {
         let generation = begin_window_creation(&visible_state);
         visible_state.finish_window_creation(generation, true);
         let _ = visible_state.request_show();
-        assert!(visible_state.handle_unexpected_window_destroyed());
+        assert!(visible_state.handle_unexpected_window_destroyed(generation));
         assert_eq!(
             visible_state.snapshot().render_state,
             MainWindowRenderState::Absent
@@ -1278,7 +1281,26 @@ mod tests {
         let hidden_state = MainWindowLifecycleState::default();
         let generation = begin_window_creation(&hidden_state);
         hidden_state.finish_window_creation(generation, true);
-        assert!(!hidden_state.handle_unexpected_window_destroyed());
+        assert!(!hidden_state.handle_unexpected_window_destroyed(generation));
+    }
+
+    #[test]
+    fn late_destroyed_event_cannot_discard_a_replacement_or_repeat_recovery() {
+        let state = MainWindowLifecycleState::default();
+        let old = begin_window_creation(&state);
+        state.finish_window_creation(old, true);
+        assert!(state.begin_unavailable_window_recovery());
+        state.finish_unavailable_window_recovery();
+        assert!(!state.handle_unexpected_window_destroyed(old));
+        let new = begin_window_creation(&state);
+        state.finish_window_creation(new, true);
+        assert!(!state.handle_unexpected_window_destroyed(old));
+        assert_eq!(state.snapshot().generation, new);
+        assert_eq!(
+            state.snapshot().render_state,
+            MainWindowRenderState::Waiting
+        );
+        assert!(!state.snapshot().desired_visible);
     }
 
     #[test]

@@ -17,4 +17,5 @@ pub mod tray;
 pub mod updater;
 pub mod web_activity;
 pub mod web_activity_bridge;
+pub(crate) mod webview_recovery;
 pub mod widget;

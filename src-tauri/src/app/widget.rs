@@ -411,6 +411,60 @@ pub(crate) fn close_widget_window<R: Runtime + 'static>(app: &AppHandle<R>) {
     }
 }
 
+pub(crate) async fn stop_failed_webview<R: Runtime + 'static>(
+    app: &AppHandle<R>,
+    registration: u64,
+) -> Result<(), String> {
+    if !app
+        .state::<super::webview_recovery::WebviewRecoveryState>()
+        .accepts_recovery(super::webview_recovery::WindowKind::Widget, registration)
+    {
+        return Ok(());
+    }
+    app.state::<WidgetWindowLifecycleState>().hide();
+    if let Some(window) = app.get_webview_window(WIDGET_WINDOW_LABEL) {
+        super::webview_recovery::destroy_and_wait(&window).await?;
+    }
+    Ok(())
+}
+
+pub(crate) async fn recover_failed_webview<R: Runtime + 'static>(
+    app: &AppHandle<R>,
+    registration: u64,
+) -> Result<(), String> {
+    let original_window = app.get_webview_window(WIDGET_WINDOW_LABEL);
+    let lifecycle = app.state::<WidgetWindowLifecycleState>();
+    let was_visible = lifecycle.is_visible_desired();
+    let placement = load_widget_placement(app).await?;
+    let pinned = load_widget_expansion_preference(app).await?.is_pinned();
+    let tool_slot_count = get_widget_status_snapshot(app).tools.len() as u8;
+    if !app
+        .state::<super::webview_recovery::WebviewRecoveryState>()
+        .accepts_recovery(super::webview_recovery::WindowKind::Widget, registration)
+    {
+        return Ok(());
+    }
+    if let Some(window) = original_window {
+        super::webview_recovery::destroy_and_wait(&window).await?;
+    }
+    if !app
+        .state::<super::webview_recovery::WebviewRecoveryState>()
+        .accepts_recovery(super::webview_recovery::WindowKind::Widget, registration)
+    {
+        return Ok(());
+    }
+    if was_visible
+        && lifecycle.is_visible_desired()
+        && !app
+            .state::<crate::app::state::AppExitState>()
+            .is_exit_requested()
+    {
+        apply_widget_layout_internal(app, None, placement, pinned, false, tool_slot_count, false)
+            .await?;
+    }
+    Ok(())
+}
+
 fn schedule_widget_destroy_after_idle<R: Runtime + 'static>(
     app: AppHandle<R>,
     hide_generation: u64,
@@ -600,6 +654,7 @@ async fn apply_widget_layout_internal<R: Runtime + 'static>(
         let _ = lifecycle.finish_show();
         format!("failed to create widget window: {error}")
     })?;
+    super::webview_recovery::observe(&window, super::webview_recovery::WindowKind::Widget, 0);
 
     if !lifecycle.finish_show() {
         park_widget_window(&window);

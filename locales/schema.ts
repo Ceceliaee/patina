@@ -1,5 +1,6 @@
 // Canonical language-neutral message contract. Do not derive this file from a locale at build time.
 export const MESSAGE_SCHEMA = {
+  "native.webview.recoveryFailed": {"kind": "string", "params": [], "surface": "native", "description": "Native error after repeated window recovery failures. Do not promise recording health; backend status is independent."},
 
   "mapping.webIndependent": {"kind": "string", "params": [], "surface": "frontend", "description": "Keep this exact domain outside its automatic website group"},
   "mapping.mergeWebDomain": {"kind": "message", "params": [{"name": "domain", "type": "string", "optional": false}], "surface": "frontend", "description": "Merge an independent domain into its automatic root group"},

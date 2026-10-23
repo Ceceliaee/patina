@@ -13,6 +13,8 @@ use tauri::{
     WebviewWindowBuilder, Window,
 };
 
+mod recovery;
+
 pub(crate) const MAIN_WINDOW_LABEL: &str = "main";
 
 const MAIN_WINDOW_TITLE: &str = "Patina";
@@ -521,7 +523,8 @@ fn ensure_main_window_once<R: Runtime + 'static>(
         }
 
         eprintln!("[main-window] stale Tauri window found without a live native HWND; recreating");
-        recreate_existing_main_window(app, &window, "stale-native-window")?;
+        recreate_main_window(app, "stale-native-window")?;
+        return Ok(MainWindowEnsureResult::Creating);
     }
 
     let webview_root = storage_paths::resolve_storage_paths(app)?.webview_root;
@@ -600,6 +603,11 @@ fn ensure_main_window_once<R: Runtime + 'static>(
     match builder.build() {
         Ok(window) => {
             let reveal_token = lifecycle.finish_window_creation(generation, true);
+            super::webview_recovery::observe(
+                &window,
+                super::webview_recovery::WindowKind::Main,
+                generation,
+            );
             log_main_window_event("created", lifecycle.snapshot(), "builder", "hidden");
             if let Some(token) = lifecycle.current_render_token() {
                 schedule_main_window_ready_timeout(app.clone(), token);
@@ -617,58 +625,50 @@ fn ensure_main_window_once<R: Runtime + 'static>(
     }
 }
 
+pub(crate) async fn stop_failed_webview<R: Runtime + 'static>(
+    app: &AppHandle<R>,
+    generation: u64,
+) -> Result<(), String> {
+    recovery::remove(app, generation, "webview-recovery-exhausted")
+        .await
+        .map(|_| ())
+}
+
+pub(crate) async fn recover_failed_webview<R: Runtime + 'static>(
+    app: &AppHandle<R>,
+    generation: u64,
+) -> Result<(), String> {
+    let snapshot = app.state::<MainWindowLifecycleState>().snapshot();
+    if snapshot.generation != generation || app.state::<AppExitState>().is_exit_requested() {
+        return Ok(());
+    }
+    recovery::rebuild(app, generation, "webview-process-failed").await
+}
+
 fn recreate_main_window<R: Runtime + 'static>(
     app: &AppHandle<R>,
     reason: &str,
 ) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-        recreate_existing_main_window(app, &window, reason)?;
-    } else {
-        let lifecycle = app.state::<MainWindowLifecycleState>();
-        if lifecycle.begin_unavailable_window_recovery() {
-            lifecycle.finish_unavailable_window_recovery();
+    let generation = app
+        .state::<MainWindowLifecycleState>()
+        .snapshot()
+        .generation;
+    let app = app.clone();
+    let reason = reason.to_owned();
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = recovery::rebuild(&app, generation, &reason).await {
+            eprintln!("[main-window] recovery failed: {error}");
         }
-    }
-
-    match ensure_main_window_once(app)? {
-        MainWindowEnsureResult::Existing(_) | MainWindowEnsureResult::Created(_) => Ok(()),
-        MainWindowEnsureResult::Creating => Ok(()),
-    }
-}
-
-fn recreate_existing_main_window<R: Runtime + 'static>(
-    app: &AppHandle<R>,
-    window: &WebviewWindow<R>,
-    reason: &str,
-) -> Result<(), String> {
-    let lifecycle = app.state::<MainWindowLifecycleState>();
-    if !lifecycle.begin_unavailable_window_recovery() {
-        return Ok(());
-    }
-
-    let destroy_result = window.destroy();
-    lifecycle.finish_unavailable_window_recovery();
-    log_main_window_event(
-        "native-window-recovery",
-        lifecycle.snapshot(),
-        reason,
-        if destroy_result.is_ok() {
-            "destroyed-stale-window"
-        } else {
-            "discarded-stale-window"
-        },
-    );
-
-    if let Err(error) = destroy_result {
-        eprintln!("[main-window] stale window destroy returned an error: {error}");
-    }
-
+    });
     Ok(())
 }
 
-pub(crate) fn handle_unexpected_main_window_destroyed<R: Runtime + 'static>(app: &AppHandle<R>) {
+pub(crate) fn handle_unexpected_main_window_destroyed<R: Runtime + 'static>(
+    app: &AppHandle<R>,
+    generation: u64,
+) {
     let lifecycle = app.state::<MainWindowLifecycleState>();
-    if !lifecycle.handle_unexpected_window_destroyed()
+    if !lifecycle.handle_unexpected_window_destroyed(generation)
         || app.state::<AppExitState>().is_exit_requested()
     {
         return;
