@@ -160,7 +160,9 @@ try {
 
   await runStartupScenarios(smokeContext);
 
-  if (process.argv.includes("--anonymous-only")) {
+  if (process.argv.includes("--startup-only")) {
+    // Startup scenarios above include the real hook subscription lifecycle.
+  } else if (process.argv.includes("--anonymous-only")) {
     await runDashboardScenarios({ ...smokeContext, runTest: async (name, fn) => {
       if (name.startsWith("anonymous activity ranks once")) await runTest(name, fn);
     } });

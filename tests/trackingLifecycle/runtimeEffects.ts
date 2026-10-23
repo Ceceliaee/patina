@@ -203,11 +203,12 @@ export function runRuntimeEffectsTests() {
     }), false);
   });
 
-  runTest("external imports and deletion invalidate every data cache", () => {
+  runTest("imports, deletion and resolved session names invalidate every data cache", () => {
     for (const reason of [
       "backup-restored",
       "external-data-imported",
       "external-import-deleted",
+      "session-name-resolved",
     ]) {
       assert.equal(shouldInvalidateDataCaches(reason), true);
     }

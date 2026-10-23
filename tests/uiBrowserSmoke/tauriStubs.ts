@@ -917,19 +917,28 @@ function tauriStubFor(path: string) {
   if (path === "@tauri-apps/api/event") {
     return `
       const listenersByEvent = new Map();
+      globalThis.__PATINA_EVENT_LISTENER_COUNTS = () => Object.fromEntries(
+        [...listenersByEvent].map(([event, listeners]) => [event, listeners.size]).sort(),
+      );
       globalThis.__PATINA_EMIT_TAURI_EVENT = (eventName, payload) => {
         for (const listener of listenersByEvent.get(eventName) ?? []) {
           listener({ event: eventName, id: 0, payload });
         }
       };
       export async function listen(eventName, listener) {
+        if (globalThis.__PATINA_REJECT_EVENT_LISTEN === eventName) {
+          throw new Error('controlled subscription failure');
+        }
         const listeners = listenersByEvent.get(eventName) ?? new Set();
         listeners.add(listener);
         listenersByEvent.set(eventName, listeners);
-        return () => {
+        const stop = () => {
           listeners.delete(listener);
           if (listeners.size === 0) listenersByEvent.delete(eventName);
         };
+        return globalThis.__PATINA_DELAY_EVENT_LISTEN
+          ? globalThis.__PATINA_DELAY_EVENT_LISTEN(eventName, stop)
+          : stop;
       }
       export async function emit() {}
     `;

@@ -2,6 +2,7 @@ const DATA_CACHE_INVALIDATION_REASONS = new Set([
   "backup-restored",
   "external-data-imported",
   "external-import-deleted",
+  "session-name-resolved",
 ]);
 
 export function shouldInvalidateDataCaches(reason: string): boolean {

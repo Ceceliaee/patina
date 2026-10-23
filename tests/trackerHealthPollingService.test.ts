@@ -48,6 +48,78 @@ function createScheduler() {
   };
 }
 
+await runTest("a stalled health request expires locally without accumulating IPC calls", async () => {
+  const scheduler = createScheduler();
+  const snapshots: TrackerHealthSnapshot[] = [];
+  let nowMs = 1_000;
+  let calls = 0;
+  let finish: ((snapshot: TrackerHealthSnapshot) => void) | undefined;
+  const stop = startTrackerHealthPolling((snapshot) => snapshots.push(snapshot), {
+    deps: {
+      clearInterval: scheduler.clearInterval,
+      setInterval: scheduler.setInterval,
+      now: () => nowMs,
+      warn: () => {},
+      loadSnapshot: () => {
+        calls += 1;
+        if (calls === 1) return Promise.resolve(trackerHealth(nowMs));
+        return new Promise<TrackerHealthSnapshot>((resolve) => { finish = resolve; });
+      },
+    },
+  });
+  await Promise.resolve();
+  nowMs = 2_000;
+  scheduler.callbacks.get(1)?.();
+  nowMs = 10_001;
+  for (let tick = 0; tick < 1_000; tick += 1) scheduler.callbacks.get(1)?.();
+  assert.equal(calls, 2);
+  assert.equal(snapshots.at(-1)?.status, "stale");
+  assert.equal(snapshots.at(-1)?.lastHeartbeatMs, 1_000);
+  finish?.(trackerHealth(2_000));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(snapshots.at(-1)?.status, "stale", "late responses must be aged at receipt");
+  nowMs = 11_000;
+  scheduler.callbacks.get(1)?.();
+  finish?.(trackerHealth(nowMs));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(snapshots.at(-1)?.status, "healthy");
+  stop();
+});
+
+await runTest("an initial hung request becomes stale after startup grace and stops publishing after disposal", () => {
+  const scheduler = createScheduler();
+  const snapshots: TrackerHealthSnapshot[] = [];
+  let nowMs = 1_000;
+  let calls = 0;
+  const stop = startTrackerHealthPolling((snapshot) => snapshots.push(snapshot), {
+    deps: {
+      clearInterval: scheduler.clearInterval,
+      setInterval: scheduler.setInterval,
+      now: () => nowMs,
+      loadSnapshot: () => {
+        calls += 1;
+        return new Promise<TrackerHealthSnapshot>(() => {});
+      },
+    },
+  });
+  const tick = scheduler.callbacks.get(1)!;
+  nowMs = 9_000;
+  tick();
+  assert.deepEqual(snapshots, []);
+  nowMs = 9_001;
+  tick();
+  assert.equal(snapshots.length, 1);
+  assert.equal(snapshots[0].status, "stale");
+  assert.equal(snapshots[0].lastHeartbeatMs, null);
+  stop();
+  nowMs = 20_000;
+  tick();
+  assert.equal(snapshots.length, 1);
+  assert.equal(calls, 1);
+});
+
 await runTest("tracker health polling refreshes immediately and on interval", async () => {
   const scheduler = createScheduler();
   const snapshots: TrackerHealthSnapshot[] = [];
@@ -149,7 +221,7 @@ await runTest("tracker health polling skips interval ticks while a refresh is pe
 
   resolveLoad?.(trackerHealth(5_000));
   await Promise.resolve();
-  assert.deepEqual(snapshots.map((snapshot) => snapshot.checkedAtMs), [5_000]);
+  assert.deepEqual(snapshots.map((snapshot) => snapshot.checkedAtMs), [6_000]);
 
   nowMs = 7_000;
   scheduler.callbacks.get(1)?.();

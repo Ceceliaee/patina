@@ -6,6 +6,86 @@ import { DASHBOARD_MARKERS, EXPECTED_NAV_LABELS, FIRST_RENDER_TIMEOUT_MS } from 
 export async function runStartupScenarios(context: BrowserSmokeContext) {
   const { client, sessionId, runTest } = context;
 
+  await runTest("data changes invalidate a warmed catalog and refresh its mounted consumer", async () => {
+    await waitForExpression(client, sessionId, "Boolean(globalThis.__PATINA_EMIT_TAURI_EVENT && globalThis.__PATINA_MAIN_WINDOW_READY_EVIDENCE)");
+    await evaluate(client, sessionId, `(async () => {
+      const { ClassificationService } = await import('/src/features/classification/services/classificationService.ts');
+      globalThis.__PATINA_CATALOG_OWNER = ClassificationService;
+      await ClassificationService.ensureAppCatalogLoaded();
+      globalThis.__TIME_TRACKER_ENABLE_CLASSIFICATION_CATALOG_FIXTURE = true;
+    })()`);
+    try {
+      for (const [index, reason] of ["session-transition", "session-recovered", "external-data-imported", "session-name-resolved", "external-import-deleted", "backup-restored"].entries()) {
+        await evaluate(client, sessionId, `(() => {
+          localStorage.setItem('__patina_catalog_size', '${index + 2}');
+          globalThis.__PATINA_EMIT_TAURI_EVENT('tracking-data-changed', {reason:${jsonString(reason)}, changed_at_ms:${index + 1}});
+        })()`);
+        if (index === 0) {
+          await waitForExpression(client, sessionId, "globalThis.__PATINA_CATALOG_OWNER.getAppCatalogSnapshot().status === 'cold'", 5_000,
+            "data event must invalidate the warmed inactive catalog");
+          await evaluate(client, sessionId, `(async () => {
+            const host = document.createElement('div'); host.id = 'catalog-probe-host'; host.hidden = true; document.body.append(host);
+            const { mountCatalogStateProbe } = await import('/tests/uiBrowserSmoke/trackingStateProbe.tsx');
+            globalThis.__PATINA_UNMOUNT_CATALOG_PROBE = mountCatalogStateProbe(host);
+          })()`);
+        }
+        await waitForExpression(client, sessionId, `(() => {
+          const state = JSON.parse(document.querySelector('[data-catalog-probe]')?.textContent || '{}');
+          return !state.loading && state.apps?.length === ${index + 2} && state.apps.every(exe => exe.startsWith('catalog-'));
+        })()`, 5_000, "mounted catalog must reread facts after invalidation");
+      }
+    } finally {
+      await evaluate(client, sessionId, `(async () => {
+        globalThis.__PATINA_UNMOUNT_CATALOG_PROBE?.(); document.getElementById('catalog-probe-host')?.remove();
+        delete globalThis.__TIME_TRACKER_ENABLE_CLASSIFICATION_CATALOG_FIXTURE;
+        localStorage.removeItem('__patina_catalog_size');
+        globalThis.__PATINA_CATALOG_OWNER.invalidateAppCatalog();
+        await globalThis.__PATINA_CATALOG_OWNER.ensureAppCatalogLoaded();
+        delete globalThis.__PATINA_CATALOG_OWNER;
+      })()`);
+    }
+  });
+
+  await runTest("StrictMode and repeated mounts release subscriptions delivered after unmount or partial failure", async () => {
+    await waitForExpression(client, sessionId, "Boolean(globalThis.__PATINA_EVENT_LISTENER_COUNTS && globalThis.__PATINA_MAIN_WINDOW_READY_EVIDENCE)");
+    for (const kind of ["main", "widget", "icons"] as const) {
+      const baseline = await evaluate(client, sessionId, "globalThis.__PATINA_EVENT_LISTENER_COUNTS()");
+      try {
+        for (let cycle = 0; cycle < 3; cycle += 1) {
+          await evaluate(client, sessionId, `(async () => {
+            globalThis.__PATINA_PENDING_LISTEN = [];
+            globalThis.__PATINA_REJECT_EVENT_LISTEN = ${cycle === 0 ? "'app-settings-changed'" : "null"};
+            globalThis.__PATINA_DELAY_EVENT_LISTEN = (event, stop) => new Promise(resolve => {
+              globalThis.__PATINA_PENDING_LISTEN.push(() => resolve(stop));
+            });
+            const host = document.createElement('div'); host.id = 'subscription-probe'; host.hidden = true;
+            document.body.append(host);
+            const { mountSubscriptionProbe } = await import('/tests/uiBrowserSmoke/subscriptionLifecycleProbe.tsx');
+            globalThis.__PATINA_UNMOUNT_SUBSCRIPTION = mountSubscriptionProbe(host, ${jsonString(kind)});
+          })()`);
+          // StrictMode creates and disposes one effect before mounting another.
+          const subscriptions = kind === "icons" ? 1 : (kind === "main" ? 3 : 4) - (cycle === 0 ? 1 : 0);
+          await waitForExpression(client, sessionId, `globalThis.__PATINA_PENDING_LISTEN.length === ${subscriptions * 2}`);
+          await evaluate(client, sessionId, "globalThis.__PATINA_UNMOUNT_SUBSCRIPTION(); document.getElementById('subscription-probe').remove()");
+          const held = await evaluate(client, sessionId, "globalThis.__PATINA_EVENT_LISTENER_COUNTS()");
+          assert.notDeepEqual(held, baseline, "the delayed native subscriptions must actually exist before release");
+          await evaluate(client, sessionId, "globalThis.__PATINA_PENDING_LISTEN.splice(0).forEach(release => release())");
+          await waitForExpression(client, sessionId,
+            `JSON.stringify(globalThis.__PATINA_EVENT_LISTENER_COUNTS()) === ${jsonString(JSON.stringify(baseline))}`,
+            5_000, `${kind} late unlisten must restore the original listener count`);
+        }
+      } finally {
+        await evaluate(client, sessionId, `(() => {
+          globalThis.__PATINA_UNMOUNT_SUBSCRIPTION?.();
+          document.getElementById('subscription-probe')?.remove();
+          globalThis.__PATINA_PENDING_LISTEN?.splice(0).forEach(release => release());
+          delete globalThis.__PATINA_DELAY_EVENT_LISTEN;
+          delete globalThis.__PATINA_REJECT_EVENT_LISTEN;
+        })()`);
+      }
+    }
+  });
+
   await runTest("tracking hook rejects stale pause snapshots across real event subscriptions", async () => {
     await waitForExpression(client, sessionId, "Boolean(globalThis.__PATINA_EMIT_TAURI_EVENT)");
     await evaluate(client, sessionId, `(async () => {

@@ -349,6 +349,10 @@ export class CdpConnection {
   close() {
     this.ws.close();
   }
+
+  get url() {
+    return this.ws.url;
+  }
 }
 
 export async function getBrowserWebSocketUrl(port: number) {

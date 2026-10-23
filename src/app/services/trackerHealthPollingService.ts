@@ -1,4 +1,5 @@
 import type { TrackerHealthSnapshot } from "../../shared/types/tracking";
+import { resolveTrackerHealth, TRACKER_HEARTBEAT_STALE_AFTER_MS } from "../../shared/types/tracking.ts";
 
 const TRACKER_HEARTBEAT_POLL_MS = 1_000;
 
@@ -34,10 +35,26 @@ export function startTrackerHealthPolling(
 ) {
   let disposed = false;
   let refreshInFlight = false;
+  let lastSnapshot: TrackerHealthSnapshot | null = null;
   const deps = resolveTrackerHealthPollingDeps(options.deps);
   const intervalMs = options.intervalMs ?? TRACKER_HEARTBEAT_POLL_MS;
+  const startedAtMs = deps.now();
+
+  const publishStaleHealth = () => {
+    const nowMs = deps.now();
+    const staleAfterMs = lastSnapshot?.staleAfterMs ?? TRACKER_HEARTBEAT_STALE_AFTER_MS;
+    if (!lastSnapshot && nowMs - startedAtMs <= staleAfterMs) return;
+    const snapshot = resolveTrackerHealth(lastSnapshot?.lastHeartbeatMs ?? null, nowMs, staleAfterMs);
+    if (snapshot.status === "stale" && lastSnapshot?.status !== "stale") {
+      lastSnapshot = snapshot;
+      onSnapshot(snapshot);
+    }
+  };
 
   const refreshTrackerHealth = async () => {
+    if (disposed) return;
+    // A pending IPC request must not keep an old healthy result alive forever.
+    publishStaleHealth();
     if (refreshInFlight) {
       return;
     }
@@ -46,7 +63,8 @@ export function startTrackerHealthPolling(
     try {
       const snapshot = await deps.loadSnapshot(deps.now());
       if (!disposed) {
-        onSnapshot(snapshot);
+        lastSnapshot = resolveTrackerHealth(snapshot.lastHeartbeatMs, deps.now(), snapshot.staleAfterMs);
+        onSnapshot(lastSnapshot);
       }
     } catch (error) {
       if (!disposed) {

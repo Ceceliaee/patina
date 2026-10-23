@@ -28,6 +28,7 @@ import {
   clearDataHeavyCaches,
 } from "../../features/data/services/dataCacheLifecycle.ts";
 import { clearHistoryCachesAfterDataChange } from "../../features/history/services/historyCacheLifecycle.ts";
+import { ClassificationService } from "../../features/classification/services/classificationService.ts";
 import { startTrackerHealthPolling } from "../services/trackerHealthPollingService";
 import { shouldInvalidateDataCaches } from "./trackingDataChangedPolicy.ts";
 import { createLatestSnapshotRefresh } from "../services/latestSnapshotRefresh.ts";
@@ -85,7 +86,11 @@ export function useWindowTracking(options: UseWindowTrackingOptions = {}) {
     const refreshTracking = () => tracking.refresh();
     const refreshAfterDataChange = async (payload: { reason: string }) => {
       if (cancelled) return;
-      if (shouldInvalidateDataCaches(payload.reason)) {
+      const invalidateCaches = shouldInvalidateDataCaches(payload.reason);
+      if (invalidateCaches || payload.reason === "session-transition" || payload.reason === "session-recovered") {
+        ClassificationService.invalidateAppCatalog();
+      }
+      if (invalidateCaches) {
         clearDashboardSnapshotCache();
         void clearHistoryCachesAfterDataChange();
         clearDataHeavyCaches();
