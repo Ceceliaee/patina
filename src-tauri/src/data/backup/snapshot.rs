@@ -596,6 +596,9 @@ async fn write_snapshot_archive_internal(
     app_version: &str,
     replace_existing: bool,
 ) -> Result<(PathBuf, BackupPreview), String> {
+    let _timing = crate::data::sqlite_pool::diagnostics::start(
+        crate::data::sqlite_pool::diagnostics::Phase::Backup,
+    );
     let target = targets
         .first()
         .ok_or_else(|| "backup requires a target path".to_string())?;

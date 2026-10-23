@@ -43,6 +43,10 @@ pub(super) async fn seal_stale_sample<R: tauri::Runtime>(
             last_sample as u64,
         );
     }
+    if now_ms < last_sample {
+        health.reset_sealed_clock_epoch(last_sample);
+        log_tracker_error("wall clock moved backwards; sealed prior sample epoch");
+    }
     Ok(Some(now_ms < last_sample))
 }
 const TRACKING_SETTINGS_CACHE_TTL_MS: i64 = 5_000;
@@ -109,10 +113,13 @@ pub(super) async fn persist_tracker_runtime_timestamps(
     now_ms: i64,
     did_successfully_sample_window: bool,
     state: &mut TrackerTimestampPersistState,
-) {
+) -> bool {
+    let mut committed = false;
     if !state
         .last_heartbeat_persisted_at_ms
-        .map(|last| now_ms.saturating_sub(last) < TRACKER_TIMESTAMP_PERSIST_INTERVAL_MS)
+        .map(|last| {
+            now_ms >= last && now_ms.saturating_sub(last) < TRACKER_TIMESTAMP_PERSIST_INTERVAL_MS
+        })
         .unwrap_or(false)
     {
         if let Err(error) = data
@@ -128,7 +135,10 @@ pub(super) async fn persist_tracker_runtime_timestamps(
     if did_successfully_sample_window
         && !state
             .last_successful_sample_persisted_at_ms
-            .map(|last| now_ms.saturating_sub(last) < TRACKER_TIMESTAMP_PERSIST_INTERVAL_MS)
+            .map(|last| {
+                now_ms >= last
+                    && now_ms.saturating_sub(last) < TRACKER_TIMESTAMP_PERSIST_INTERVAL_MS
+            })
             .unwrap_or(false)
     {
         if let Err(error) = data
@@ -138,8 +148,10 @@ pub(super) async fn persist_tracker_runtime_timestamps(
             log_tracker_error(format!("failed to save tracker sample timestamp: {error}"));
         } else {
             state.last_successful_sample_persisted_at_ms = Some(now_ms);
+            committed = true;
         }
     }
+    committed
 }
 
 pub(super) async fn load_tracking_loop_state(
@@ -437,6 +449,30 @@ async fn load_tracking_paused(
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn timestamp_persistence_recovers_from_reversed_wall_clock_and_reports_write_failure() {
+        let pool = setup_test_db().await;
+        let data = TrackingRuntimeDataStore::new(pool.clone());
+        let mut state = super::TrackerTimestampPersistState::default();
+        assert!(super::persist_tracker_runtime_timestamps(&data, 10_000, true, &mut state).await);
+        assert!(!super::persist_tracker_runtime_timestamps(&data, 10_001, true, &mut state).await);
+        assert!(
+            !super::persist_tracker_runtime_timestamps(&data, 14_000, false, &mut state).await,
+            "a written heartbeat cannot count as recording progress"
+        );
+        assert!(super::persist_tracker_runtime_timestamps(&data, 9_000, true, &mut state).await);
+        assert_eq!(
+            data.load_tracker_timestamp(super::TRACKER_LAST_SUCCESSFUL_SAMPLE_KEY)
+                .await
+                .unwrap(),
+            Some(9_000)
+        );
+        pool.execute("DROP TABLE settings").await.unwrap();
+        assert!(!super::persist_tracker_runtime_timestamps(&data, 20_000, true, &mut state).await);
+        assert_eq!(state.last_successful_sample_persisted_at_ms, Some(9_000));
+        pool.close().await;
+    }
+
     use super::*;
     use crate::data::repositories::tracker_settings;
     use crate::data::schema as db_schema;
@@ -1186,7 +1222,15 @@ pub(super) async fn record_committed_sample(
 ) {
     if successful {
         health.note_successful_sample(now_ms);
-        persist_tracker_runtime_timestamps(data, now_ms, true, persisted).await;
+        health
+            .progress
+            .enter(super::super::watchdog::TrackingStage::Persisting);
+        if persist_tracker_runtime_timestamps(data, now_ms, true, persisted).await {
+            health.progress.committed();
+        }
+        health
+            .progress
+            .enter(super::super::watchdog::TrackingStage::Waiting);
     }
 }
 

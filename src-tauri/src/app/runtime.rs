@@ -63,6 +63,32 @@ pub fn setup(
     ))
     .map_err(std::io::Error::other)?;
     crate::app::tracking::register_power_lifecycle_handler(app);
+    use tauri::Manager;
+    if let (true, Ok(paths)) = (
+        crate::platform::runtime_diagnostics::enabled_for_process(),
+        crate::platform::storage_paths::resolve_storage_paths(app.handle()),
+    ) {
+        let health = runtime_health.clone();
+        if let Ok(observer) = crate::platform::runtime_diagnostics::RuntimeDiagnostics::start(
+            paths.data_root.join("diagnostics"),
+            move || {
+                let progress = health.progress.snapshot();
+                let stalled = progress.stalled;
+                (
+                    stalled,
+                    serde_json::json!({
+                        "utc_ms": crate::platform::clock::unix_timestamp_millis_i64(),
+                        "pid": std::process::id(), "tracking": progress,
+                        "probes": crate::platform::windows::native_probe::diagnostics(),
+                        "names": crate::engine::tracking::app_names::diagnostics(),
+                        "database": crate::data::sqlite_pool::diagnostics::snapshot(),
+                    }),
+                )
+            },
+        ) {
+            app.manage(observer);
+        }
+    }
     crate::app::tools::register_alert_handler(app);
     power::start(app.handle().clone());
     audio::start_signal_source();
@@ -75,7 +101,6 @@ pub fn setup(
 
     let app_handle = app.handle().clone();
     main_window::ensure_main_window(&app_handle).map_err(std::io::Error::other)?;
-    use tauri::Manager;
     app_handle
         .state::<crate::app::state::DesktopBehaviorState>()
         .replace(startup.settings);

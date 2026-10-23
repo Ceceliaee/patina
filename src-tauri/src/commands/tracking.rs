@@ -21,6 +21,7 @@ pub struct CurrentTrackingSnapshot {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct TrackerHealthRuntimeSnapshot {
+    pub(crate) progress: crate::engine::tracking::watchdog::progress::TrackingProgressSnapshot,
     pub last_heartbeat_ms: Option<i64>,
     pub last_successful_sample_ms: Option<i64>,
     pub last_watchdog_seal_sample_ms: Option<i64>,
@@ -29,6 +30,7 @@ pub struct TrackerHealthRuntimeSnapshot {
 impl From<RuntimeHealthSnapshot> for TrackerHealthRuntimeSnapshot {
     fn from(snapshot: RuntimeHealthSnapshot) -> Self {
         Self {
+            progress: snapshot.progress,
             last_heartbeat_ms: snapshot.last_heartbeat_ms,
             last_successful_sample_ms: snapshot.last_successful_sample_ms,
             last_watchdog_seal_sample_ms: snapshot.last_watchdog_seal_sample_ms,

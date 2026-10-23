@@ -54,6 +54,8 @@ pub async fn run<R: Runtime>(
     health_state: Arc<watchdog::RuntimeHealthState>,
     data: SharedTrackingDataStore,
 ) -> Result<(), String> {
+    let progress = &health_state.progress;
+    progress.enter(watchdog::TrackingStage::Starting);
     let pause_state = app.state::<TrackingPauseRuntimeState>();
     let title_state = app.state::<TitleRecordingRuntimeState>();
     let snapshot_state = app.state::<TrackingRuntimeSnapshotState>();
@@ -70,8 +72,14 @@ pub async fn run<R: Runtime>(
     let mut settings_cache = TrackingSettingsCache::default();
     loop {
         let generation = snapshot_state.lifecycle_generation();
+        progress.enter(watchdog::TrackingStage::Foreground);
         let poll_outcome = poll_active_window_with_timeout().await;
+        if poll_outcome.is_successful_sample() {
+            health_state.progress.observed();
+        }
+        progress.enter(watchdog::TrackingStage::TransitionLock);
         let transition_guard = snapshot_state.transition.lock().await;
+        progress.enter(watchdog::TrackingStage::Persisting);
         if let Err(error) = power_lifecycle::flush_pending_power_stop_and_publish(
             &app,
             data.as_ref(),
@@ -132,6 +140,7 @@ pub async fn run<R: Runtime>(
             &mut timestamp_persist_state,
         )
         .await;
+        health_state.progress.enter(watchdog::TrackingStage::Policy);
         let (tracking_state, next_sustained_participation_state) = load_tracking_loop_state(
             data.as_ref(),
             &pause_state,
@@ -143,6 +152,7 @@ pub async fn run<R: Runtime>(
         )
         .await;
         sustained_participation_state = next_sustained_participation_state;
+        progress.enter(watchdog::TrackingStage::Transition);
         if should_preserve_tracking_projection(&window_info) && !tracking_state.tracking_paused {
             record_committed_sample(
                 data.as_ref(),
@@ -176,7 +186,9 @@ pub async fn run<R: Runtime>(
             .await
             .map_err(|error| error.to_string())?;
         }
+        progress.enter(watchdog::TrackingStage::Snapshot);
         update_runtime_snapshot_state(&app, &tracking_state, now_ms, &poll_outcome, generation);
+        progress.enter(watchdog::TrackingStage::Transition);
         let stopped = match tracking_state
             .seal_stop(
                 data.as_ref(),
@@ -315,6 +327,7 @@ pub async fn run<R: Runtime>(
             &tracked_window,
             now_ms,
         );
+        progress.enter(watchdog::TrackingStage::Snapshot);
         refresh_active_session_snapshot_if_changed(&app, data.as_ref(), did_change_tracking_data)
             .await;
         if did_change_active_window {

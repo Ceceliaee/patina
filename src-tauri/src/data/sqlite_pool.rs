@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::RwLock;
 use tokio::time::{sleep, Duration};
+pub(crate) mod diagnostics;
 
 #[derive(Default)]
 pub struct AppSqlitePool(pub(crate) RwLock<Option<Pool<Sqlite>>>);

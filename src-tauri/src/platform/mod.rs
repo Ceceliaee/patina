@@ -1,6 +1,7 @@
 pub mod app_paths;
 pub mod clock;
 pub mod credentials;
+pub(crate) mod runtime_diagnostics;
 pub mod storage_control;
 pub mod storage_paths;
 pub mod storage_usage;

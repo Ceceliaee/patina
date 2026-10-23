@@ -320,6 +320,12 @@ pub(crate) fn handle_run_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
         }
         tauri::RunEvent::Exit => {
             tray::stop_taskbar_theme_watcher(app);
+            if let Some(observer) =
+                app.try_state::<crate::platform::runtime_diagnostics::RuntimeDiagnostics>()
+            {
+                observer.stop();
+            }
+            crate::platform::windows::native_probe::shutdown();
             #[cfg(patina_coverage)]
             crate::flush_coverage();
         }

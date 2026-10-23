@@ -7,6 +7,10 @@ use tauri::Manager;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct ResourceDiagnosticsSnapshot {
+    pub process_id: u32,
+    pub database_timings: Vec<crate::data::sqlite_pool::diagnostics::Snapshot>,
+    pub tracking_progress: crate::engine::tracking::watchdog::progress::TrackingProgressSnapshot,
+    pub name_resolution: crate::engine::tracking::app_names::NameResolutionDiagnostics,
     pub webview_window_count: usize,
     pub webview_window_labels: Vec<String>,
     pub process_resources: resource::WindowsProcessResourceSnapshot,
@@ -16,6 +20,9 @@ pub struct ResourceDiagnosticsSnapshot {
     pub tool_alerts: tools::ToolAlertQueueStats,
     pub updater_retained_package: crate::engine::updater::UpdaterRetainedPackageStats,
     pub web_activity_bridge: web_activity_bridge::WebActivityBridgeConnectionStats,
+    pub native_probes: Vec<crate::platform::windows::native_probe::NativeProbeDiagnostics>,
+    pub diagnostic_output_counts: Option<(u64, u64)>,
+    pub webview_recovery: Vec<crate::app::webview_recovery::WebviewRecoverySnapshot>,
 }
 
 #[tauri::command]
@@ -29,6 +36,20 @@ pub fn cmd_get_resource_diagnostics(app: tauri::AppHandle) -> ResourceDiagnostic
         .collect::<Vec<String>>();
 
     ResourceDiagnosticsSnapshot {
+        process_id: std::process::id(),
+        database_timings: crate::data::sqlite_pool::diagnostics::snapshot(),
+        tracking_progress: app
+            .state::<std::sync::Arc<crate::engine::tracking::watchdog::RuntimeHealthState>>()
+            .progress
+            .snapshot(),
+        name_resolution: crate::engine::tracking::app_names::diagnostics(),
+        webview_recovery: app
+            .state::<crate::app::webview_recovery::WebviewRecoveryState>()
+            .snapshot(),
+        diagnostic_output_counts: app
+            .try_state::<crate::platform::runtime_diagnostics::RuntimeDiagnostics>()
+            .map(|state| state.output_counts()),
+        native_probes: crate::platform::windows::native_probe::diagnostics(),
         webview_window_count: webview_window_labels.len(),
         webview_window_labels,
         process_resources: resource::current_process_resource_snapshot(),

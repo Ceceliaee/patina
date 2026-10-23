@@ -2,6 +2,8 @@ mod catalog;
 mod hourly;
 
 #[cfg(test)]
+mod contention_tests;
+#[cfg(test)]
 mod name_enrichment_tests;
 
 use crate::data::sqlite_pool::{optimize_query_statistics, wait_for_sqlite_pool};
@@ -282,6 +284,9 @@ async fn record_maintenance_failure(pool: &Pool<Sqlite>) -> Result<(), String> {
 }
 
 pub(crate) async fn maintain_once(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let _timing = crate::data::sqlite_pool::diagnostics::start(
+        crate::data::sqlite_pool::diagnostics::Phase::ReadModel,
+    );
     if catalog::maintain_once(pool).await? {
         return Ok(true);
     }

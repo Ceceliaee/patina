@@ -8,12 +8,15 @@ use tauri::{AppHandle, Manager, Runtime};
 use tokio::time::{sleep, Duration};
 
 use super::runtime;
+pub(crate) mod progress;
+pub(crate) use progress::TrackingStage;
 
 const TRACKER_WATCHDOG_POLL_MS: u64 = 1_000;
 const TRACKER_STALL_SEAL_AFTER_MS: i64 = 8_000;
 
 #[derive(Debug, Default)]
 pub struct RuntimeHealthState {
+    pub(crate) progress: progress::TrackingProgress,
     last_heartbeat_ms: AtomicI64,
     last_successful_sample_ms: AtomicI64,
     last_watchdog_seal_sample_ms: AtomicI64,
@@ -21,6 +24,7 @@ pub struct RuntimeHealthState {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RuntimeHealthSnapshot {
+    pub(crate) progress: progress::TrackingProgressSnapshot,
     pub last_heartbeat_ms: Option<i64>,
     pub last_successful_sample_ms: Option<i64>,
     pub last_watchdog_seal_sample_ms: Option<i64>,
@@ -35,6 +39,18 @@ impl RuntimeHealthState {
     pub fn note_successful_sample(&self, timestamp_ms: i64) {
         self.last_successful_sample_ms
             .store(timestamp_ms, Ordering::Relaxed);
+    }
+
+    // Called only after the tracking owner seals the old wall-clock interval.
+    pub(crate) fn reset_sealed_clock_epoch(&self, sealed_sample_ms: i64) {
+        if self
+            .last_successful_sample_ms
+            .compare_exchange(sealed_sample_ms, 0, Ordering::Relaxed, Ordering::Relaxed)
+            .is_ok()
+        {
+            self.last_watchdog_seal_sample_ms
+                .store(0, Ordering::Relaxed);
+        }
     }
 
     fn last_successful_sample_ms(&self) -> Option<i64> {
@@ -54,6 +70,7 @@ impl RuntimeHealthState {
 
     pub fn snapshot(&self) -> RuntimeHealthSnapshot {
         RuntimeHealthSnapshot {
+            progress: self.progress.snapshot(),
             last_heartbeat_ms: self.last_heartbeat_ms(),
             last_successful_sample_ms: self.last_successful_sample_ms(),
             last_watchdog_seal_sample_ms: self.last_watchdog_seal_sample_ms(),
@@ -161,6 +178,18 @@ fn log_watchdog_error(message: impl AsRef<str>) {
 mod tests {
     use super::{reconcile_stale_session, RuntimeHealthState};
     use std::sync::Arc;
+
+    #[test]
+    fn clock_epoch_reset_cannot_discard_a_newer_sample() {
+        let state = RuntimeHealthState::default();
+        state.note_successful_sample(20_000);
+        state.reset_sealed_clock_epoch(19_000);
+        assert_eq!(state.snapshot().last_successful_sample_ms, Some(20_000));
+        state.reset_sealed_clock_epoch(20_000);
+        assert_eq!(state.snapshot().last_successful_sample_ms, None);
+        state.note_successful_sample(9_000);
+        assert_eq!(state.snapshot().last_successful_sample_ms, Some(9_000));
+    }
 
     #[test]
     fn runtime_health_snapshot_starts_empty() {
