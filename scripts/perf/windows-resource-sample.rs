@@ -32,6 +32,7 @@ use windows::Win32::{
 };
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
+const MAX_DURATION_SECONDS: u64 = 72 * 60 * 60;
 struct OwnedHandle(HANDLE);
 impl Drop for OwnedHandle {
     fn drop(&mut self) {
@@ -240,7 +241,7 @@ fn main() -> Result<()> {
         return Err("Usage: windows-resource-sample <PID> <new-output.jsonl> [seconds=600] [interval=5] [scenario]".into());
     }
     let root = number(args.first(), 0, i32::MAX as u64)? as u32;
-    let duration = Duration::from_secs(number(args.get(2), 600, 28800)?);
+    let duration = Duration::from_secs(number(args.get(2), 600, MAX_DURATION_SECONDS)?);
     let interval = Duration::from_secs(number(args.get(3), 5, 60)?);
     let created = identity(root)?;
     let mut output = OpenOptions::new()
@@ -261,16 +262,24 @@ fn main() -> Result<()> {
     )?;
     let mut known = HashMap::new();
     let mut previous = HashMap::new();
+    let mut sample_count = 0_u64;
+    let mut unavailable_samples = 0_u64;
     let reason = loop {
         let start = clock.elapsed();
-        let rows = processes()?;
+        let rows = match processes() {
+            Ok(rows) => rows,
+            Err(error) => {
+                eprintln!("process enumeration failed: {error}");
+                break "enumeration-failed";
+            }
+        };
         let Some(root_row) = rows.iter().find(|r| r.pid == root) else {
             break "root-exited";
         };
         match root_row.created {
             Some(time) if time == created => (),
             Some(_) => break "root-identity-changed",
-            None => return Err("root identity unavailable; measurement incomplete".into()),
+            None => break "root-identity-unavailable",
         }
         known = owned_processes(&rows, root, created, &known);
         let mut next = HashMap::new();
@@ -297,29 +306,98 @@ fn main() -> Result<()> {
             }
         }
         previous = next;
-        writeln!(
+        sample_count += 1;
+        if samples
+            .iter()
+            .any(|sample| sample.get("unavailable") == Some(&Value::Bool(true)))
+        {
+            unavailable_samples += 1;
+        }
+        if let Err(error) = writeln!(
             output,
             "{}",
             json!({"kind":"sample", "utc":Utc::now().to_rfc3339(),
             "elapsedSeconds":clock.elapsed().as_secs_f64(), "collectionSeconds":(clock.elapsed()-start).as_secs_f64(), "processes":samples})
-        )?;
+        ) {
+            eprintln!("resource sample output failed: {error}");
+            break "output-write-failed";
+        }
         if clock.elapsed() >= duration {
             break "duration";
         }
         // Cadence only; this delay does not assert application readiness.
         std::thread::sleep(interval.min(duration.saturating_sub(clock.elapsed())));
     };
-    writeln!(
-        output,
-        "{}",
-        json!({"kind":"completed", "stopReason":reason,"elapsedSeconds":clock.elapsed().as_secs_f64()})
-    )?;
+    let summary = json!({"kind":"completed", "stopReason":reason,"elapsedSeconds":clock.elapsed().as_secs_f64(),
+            "sampleCount":sample_count, "unavailableSamples":unavailable_samples,
+            "complete":reason == "duration" && unavailable_samples == 0});
+    write_summary(&mut output, &summary)?;
+    if reason != "duration" || unavailable_samples > 0 {
+        return Err(format!(
+            "measurement incomplete: {reason}; unavailable samples: {unavailable_samples}"
+        )
+        .into());
+    }
+    Ok(())
+}
+
+fn write_summary(output: &mut impl Write, summary: &Value) -> Result<()> {
+    if let Err(error) = writeln!(output, "{summary}").and_then(|_| output.flush()) {
+        // A full disk cannot hold its own failure row. Preserve the incomplete
+        // summary on stderr and exit nonzero instead of claiming a full run.
+        eprintln!("{summary}");
+        return Err(format!("measurement summary write failed: {error}").into());
+    }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn completion_preserves_incomplete_status_and_output_failure_is_fatal() {
+        let summary = json!({"kind":"completed", "stopReason":"root-exited", "complete":false});
+        let mut bytes = Vec::new();
+        write_summary(&mut bytes, &summary).unwrap();
+        assert_eq!(serde_json::from_slice::<Value>(&bytes).unwrap(), summary);
+        struct FullDisk;
+        impl Write for FullDisk {
+            fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::from(std::io::ErrorKind::StorageFull))
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        assert!(write_summary(&mut FullDisk, &summary)
+            .unwrap_err()
+            .to_string()
+            .contains("summary write failed"));
+    }
+
+    #[test]
+    fn sampler_output_never_overwrites_an_existing_file() {
+        let path = std::env::temp_dir().join(format!("patina-sampler-{}", uuid::Uuid::new_v4()));
+        std::fs::write(&path, b"existing evidence").unwrap();
+        assert!(OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), b"existing evidence");
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn long_run_duration_is_bounded_and_accepts_seventy_two_hours() {
+        assert_eq!(
+            number(Some(&"259200".to_string()), 600, MAX_DURATION_SECONDS).unwrap(),
+            259_200
+        );
+        assert!(number(Some(&"259201".to_string()), 600, MAX_DURATION_SECONDS).is_err());
+        assert!(number(Some(&"0".to_string()), 600, MAX_DURATION_SECONDS).is_err());
+    }
 
     fn row(pid: u32, parent: u32, created: Option<u64>) -> Row {
         Row {

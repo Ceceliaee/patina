@@ -3,14 +3,16 @@ import { readRuntimeDatabaseRows } from "./runtimeDatabase.ts";
 import { assertSqlCommandsDenied, verifySqlBoundaryRuntime } from "./tauriSqlBoundaryRuntime.ts";
 import { verifyAnonymousActivityRuntime } from "./tauriAnonymousActivityRuntime.ts";
 import { verifyWebDavRuntime } from "./tauriWebDavRuntime.ts";
-import { verifyDesktopResourceLifecycle } from "./tauriResourceLifecycle.ts";
+import { installDesktopResourceIntervalProbe, verifyDesktopResourceLifecycle } from "./tauriResourceLifecycle.ts";
 import { verifyAppIconRuntime } from "./tauriAppIconRuntime.ts";
+import { verifyWebviewRecovery, verifyWebviewRecoveryLimit } from "./tauriWebviewRecovery.ts";
 import { installLinkedRankingClock, seedLinkedApplicationRanking, verifyLinkedApplicationDetailAndTrend, verifyLinkedApplicationRanking, verifyLinkedApplicationsRuntime } from "./tauriLinkedApplicationsRuntime.ts";
 import { deleteWebHistoryRuntime, verifyWebLinksRuntime, verifyAutomaticGroupingBackupRuntime } from "./tauriWebLinksRuntime.ts";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join, sep } from "node:path";
+import { basename, join, relative, sep } from "node:path";
 import { createServer as createNetServer, type Server as NetServer } from "node:net";
 import { build as buildVite, preview as previewVite, type PreviewServer } from "vite";
 import type { StorageSnapshot } from "../src/platform/storage/storageRuntimeGateway.ts";
@@ -193,34 +195,41 @@ function isResidualRuntimeBinaryRunning() {
 
 type RuntimeProcessMeasurement = {
   rootPid: number;
+  rootStartTicks: string;
   processCount: number;
   workingSetBytes: number;
   privateUsageBytes: number;
   cpuTimeMs: number;
-  coverage: "root_only" | "root_and_descendants";
+  coverage: "root_only" | "root_and_descendants" | "incomplete_tree";
 };
 
+const measuredRootStarts = new Map<number, string>();
+
 function measureRuntimeProcessTree(
+  rootPid: number,
   runCommand = runRuntimeBinaryProcessCommand,
   includeDescendants = true,
 ): RuntimeProcessMeasurement {
+  assert.ok(Number.isSafeInteger(rootPid) && rootPid > 0, "main-process identity must come from the application");
   let result;
   try {
     result = runCommand(`
     $target = [IO.Path]::GetFullPath($env:PATINA_RUNTIME_SMOKE_BINARY)
-    $rootProcess = @(Get-Process patina -ErrorAction SilentlyContinue) | Where-Object {
-      try { $_.Path -and [IO.Path]::GetFullPath($_.Path) -ieq $target } catch { $false }
-    } | Select-Object -First 1
-    if (-not $rootProcess) { throw 'runtime smoke root process not found' }
+    $rootProcess = Get-Process -Id ${rootPid} -ErrorAction Stop
+    if (-not $rootProcess.Path -or [IO.Path]::GetFullPath($rootProcess.Path) -ine $target) {
+      throw 'runtime smoke root process identity mismatch'
+    }
     $ids = [Collections.Generic.HashSet[int]]::new()
     [void]$ids.Add([int]$rootProcess.Id)
     $coverage = 'root_only'
     ${includeDescendants ? `try {
-      $processRows = @(Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId -ErrorAction Stop)
+      $processRows = @(Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId,CreationDate -ErrorAction Stop)
+      $created = @{}
+      foreach ($row in $processRows) { $created[[int]$row.ProcessId] = $row.CreationDate }
       do {
         $added = $false
         foreach ($row in $processRows) {
-          if ($ids.Contains([int]$row.ParentProcessId) -and $ids.Add([int]$row.ProcessId)) {
+          if ($ids.Contains([int]$row.ParentProcessId) -and $row.CreationDate -ge $created[[int]$row.ParentProcessId] -and $ids.Add([int]$row.ProcessId)) {
             $added = $true
           }
         }
@@ -238,14 +247,17 @@ function measureRuntimeProcessTree(
     foreach ($id in $ids) {
       try {
         $process = Get-Process -Id $id -ErrorAction Stop
+        if ($id -ne $rootProcess.Id -and $created -and [Math]::Abs($process.StartTime.ToUniversalTime().Ticks - $created[$id].ToUniversalTime().Ticks) -gt 10) { continue }
         $workingSet += [long]$process.WorkingSet64
         $privateUsage += [long]$process.PrivateMemorySize64
         $cpuTime += $process.TotalProcessorTime.TotalMilliseconds
         $measured += 1
       } catch {}
     }
+    if ($coverage -eq 'root_and_descendants' -and $measured -ne $ids.Count) { $coverage = 'incomplete_tree' }
     [pscustomobject]@{
       rootPid = [int]$rootProcess.Id
+      rootStartTicks = $rootProcess.StartTime.ToUniversalTime().Ticks.ToString()
       processCount = $measured
       workingSetBytes = $workingSet
       privateUsageBytes = $privateUsage
@@ -259,12 +271,18 @@ function measureRuntimeProcessTree(
       // A hung CIM query cannot reach the PowerShell catch above. Retry only
       // the root measurement, without enumerating descendants; keep failures
       // of that measurement fatal and report its reduced coverage explicitly.
-      return measureRuntimeProcessTree(runCommand, false);
+      return measureRuntimeProcessTree(rootPid, runCommand, false);
     }
     throw error;
   }
   assert.ok(result, "runtime process measurement requires Windows");
-  return JSON.parse(result.stdout.trim()) as RuntimeProcessMeasurement;
+  const measurement = JSON.parse(result.stdout.trim()) as RuntimeProcessMeasurement;
+  assert.equal(measurement.rootPid, rootPid);
+  assert.match(measurement.rootStartTicks, /^\d+$/);
+  const previous = measuredRootStarts.get(rootPid);
+  if (previous) assert.equal(measurement.rootStartTicks, previous, "root PID was reused during measurement");
+  measuredRootStarts.set(rootPid, measurement.rootStartTicks);
+  return measurement;
 }
 
 function verifyDatabase(dbPath: string) {
@@ -545,8 +563,24 @@ async function verifyBackupReplaceRuntime(client: CdpConnection, root: string) {
       const nav = document.querySelector('[data-sidebar-nav-item="mapping"]');
       if (!nav) return false; nav.click(); return true;
     })()`), true);
-    await waitFor("classification fixture delete control", async () => evaluate(client,
-      `Boolean(document.querySelector('[data-classification-app="runtime-restore-original.exe"] .qp-app-mapping-delete:not(:disabled)'))`), 10_000);
+    try {
+      await waitFor("classification fixture delete control", async () => evaluate(client,
+        `Boolean(document.querySelector('[data-classification-app="runtime-restore-original.exe"] .qp-app-mapping-delete:not(:disabled)'))`), 10_000);
+    } catch (error) {
+      console.error("PATINA_CLASSIFICATION_FAILURE", await evaluate(client, `(() => {
+        const page = document.querySelector('[data-classification-content-state]');
+        return {
+          view: document.querySelector('main.qp-canvas')?.getAttribute('data-presented-view'),
+          state: page?.getAttribute('data-classification-content-state'),
+          text: page?.textContent?.slice(0, 4000),
+          apps: Array.from(document.querySelectorAll('[data-classification-app]')).map(row => row.getAttribute('data-classification-app')),
+          search: page?.querySelector('input')?.value,
+          mode: localStorage.getItem('patina:classification-object-mode'),
+          dialogs: Array.from(document.querySelectorAll('[role="dialog"]')).map(dialog => dialog.textContent?.slice(0, 200)),
+        };
+      })()`));
+      throw error;
+    }
     await evaluate(client, `document.querySelector('[data-classification-app="runtime-restore-original.exe"] .qp-app-mapping-delete').click()`);
     await waitFor("isolated fixture deletion confirmation", async () => evaluate(client,
       `Boolean(Array.from(document.querySelectorAll('[role="dialog"]')).find(dialog =>
@@ -687,6 +721,7 @@ let widgetClient: CdpConnection | null = null;
 let bridgePortBlocker: NetServer | null = null;
 let webActivityBridgePort: number | null = null;
 let primaryError: unknown = null;
+const assertionFailures: unknown[] = [];
 const cleanupErrors: unknown[] = [];
 let databaseMutationCompleted = false;
 
@@ -724,6 +759,14 @@ try {
   console.log("PATINA_FRONTEND_SERVE_REPORT", JSON.stringify({
     mode: "production-static-preview",
     output: "isolated",
+    files: readdirSync(frontendDistDir, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => {
+        const path = join(entry.parentPath, entry.name);
+        return [relative(frontendDistDir, path).split(sep).join("/"),
+          createHash("sha256").update(readFileSync(path)).digest("hex")];
+      })
+      .sort(([left], [right]) => left.localeCompare(right)),
   }));
 
   const tauriConfigOverride = {
@@ -760,7 +803,7 @@ try {
   });
   const captureAppLog = (chunk: unknown) => {
     const text = String(chunk);
-    process.stdout.write(text);
+    process.stdout.write(`${new Date().toISOString()} ${text}`);
     logs.push(text);
     appLogTail = `${appLogTail}${text}`.slice(-4_096);
     if (/Running[\s\S]*patina\.exe/i.test(appLogTail)) {
@@ -1156,6 +1199,7 @@ try {
     `localStorage.setItem("patina:last-active-view", "data")`,
   );
   const logsBeforeReload = logs.join("");
+  const resourceIntervalScript = resourceCycles ? await installDesktopResourceIntervalProbe(client) : null;
   await client.command("Page.reload", { ignoreCache: true });
   await waitFor(
     "main window reload readiness recovery",
@@ -1198,6 +1242,9 @@ try {
   assert.equal(reloadAppearance.frameConnected, true);
   assert.equal(reloadAppearance.presentedView, "data");
   assert.equal(reloadAppearance.transitionState, "settled");
+  if (resourceIntervalScript) {
+    await client.command("Page.removeScriptToEvaluateOnNewDocument", { identifier: resourceIntervalScript });
+  }
   for (const background of [
     reloadAppearance.htmlBackground,
     reloadAppearance.bodyBackground,
@@ -1572,11 +1619,30 @@ try {
   };
   // Reproduce the focus loss that can collapse an unpinned widget during native drag.
   await widgetClient.command("Page.bringToFront");
-  await waitFor("widget has native focus before focus-loss control", async () => evaluate(widgetClient!,
-    `window.__TAURI_INTERNALS__.invoke("plugin:window|is_focused", { label: "widget" })`), 10_000);
-  await evaluate(widgetClient, `window.__TAURI_INTERNALS__.invoke("cmd_show_main_window")`);
-  await waitFor("unpinned widget collapses after losing focus", async () => evaluate(widgetClient!,
-    `document.querySelector('.widget-pill-pin-action')?.disabled === true`), 10_000);
+  // CDP activates the page target, not the hosting HWND. Expansion uses the
+  // production native focus path before asserting a real focus-loss event.
+  await evaluate(widgetClient, `window.__TAURI_INTERNALS__.invoke("cmd_set_widget_expanded", {
+    expanded: true, toolSlotCount: 0
+  })`);
+  try {
+    await waitFor("widget has native focus before focus-loss control", async () => evaluate(widgetClient!,
+      `window.__TAURI_INTERNALS__.invoke("plugin:window|is_focused", { label: "widget" })`), 10_000);
+    await evaluate(widgetClient, `window.__TAURI_INTERNALS__.invoke("cmd_show_main_window")`);
+    await waitFor("unpinned widget collapses after losing focus", async () => evaluate(widgetClient!,
+      `document.querySelector('.widget-pill-pin-action')?.disabled === true`), 10_000);
+  } catch (error) {
+    // Preserve the failed gate while collecting independent resource/IPC
+    // evidence. Desktop foreground restrictions must never become a pass.
+    assertionFailures.push(error);
+    console.error("PATINA_NATIVE_FOCUS_CONTROL_FAILED", error);
+    console.error("PATINA_NATIVE_FOCUS_STATE", await evaluate(widgetClient, `(async () => ({
+      mainVisible: await window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", { label: "main" }),
+      widgetVisible: await window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", { label: "widget" }),
+      widgetFocused: await window.__TAURI_INTERNALS__.invoke("plugin:window|is_focused", { label: "widget" }),
+      documentFocused: document.hasFocus(),
+      expanded: document.querySelector('.widget-shell')?.classList.contains('widget-shell-expanded'),
+    }))()`));
+  }
   await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_minimize_main_window")`);
   await clickWidgetPin();
   await waitFor(
@@ -2028,6 +2094,7 @@ try {
     client,
     `window.__TAURI_INTERNALS__.invoke("cmd_get_resource_diagnostics")`,
   ) as {
+    process_id: number;
     process_resources?: {
       working_set_bytes?: number | null;
       private_usage_bytes?: number | null;
@@ -2044,7 +2111,7 @@ try {
     cause: Object.assign(new Error("spawnSync powershell.exe ETIMEDOUT"), { code: "ETIMEDOUT" }),
   });
   let processQueryAttempts = 0;
-  const rootOnlyMemory = measureRuntimeProcessTree((command) => {
+  const rootOnlyMemory = measureRuntimeProcessTree(resourceDiagnostics.process_id, (command) => {
     if (++processQueryAttempts === 1) throw processQueryTimeout;
     return runRuntimeBinaryProcessCommand(command);
   });
@@ -2054,20 +2121,20 @@ try {
   assert.ok(rootOnlyMemory.workingSetBytes > 0);
   assert.ok(rootOnlyMemory.privateUsageBytes > 0);
   processQueryAttempts = 0;
-  assert.throws(() => measureRuntimeProcessTree(() => {
+  assert.throws(() => measureRuntimeProcessTree(resourceDiagnostics.process_id, () => {
     processQueryAttempts += 1;
     throw processQueryTimeout;
   }), (error) => error === processQueryTimeout);
   assert.equal(processQueryAttempts, 2, "a failed root measurement must remain fatal");
   processQueryAttempts = 0;
   const processQueryFailure = new Error("runtime smoke root process not found");
-  assert.throws(() => measureRuntimeProcessTree(() => {
+  assert.throws(() => measureRuntimeProcessTree(resourceDiagnostics.process_id, () => {
     processQueryAttempts += 1;
     throw processQueryFailure;
   }), (error) => error === processQueryFailure);
   assert.equal(processQueryAttempts, 1, "non-timeout failures must not be retried");
   console.log("PASS runtime process measurement timeout fallback and failure propagation");
-  const processTreeMemory = measureRuntimeProcessTree();
+  const processTreeMemory = measureRuntimeProcessTree(resourceDiagnostics.process_id);
   assert.ok(processTreeMemory.processCount >= 1);
   assert.ok(processTreeMemory.workingSetBytes > 0);
   assert.ok(processTreeMemory.privateUsageBytes > 0);
@@ -2080,8 +2147,16 @@ try {
   }));
   if (resourceCycles) {
     assert.ok(!process.env.PATINA_COVERAGE_TARGET_DIR, "Performance must run without coverage instrumentation");
-    await verifyDesktopResourceLifecycle(client, expression => evaluate(client!, expression), measureRuntimeProcessTree);
+    try {
+      for (const collectionMode of ["forced", "natural"] as const) {
+        await verifyDesktopResourceLifecycle(client, expression => evaluate(client!, expression), () => measureRuntimeProcessTree(resourceDiagnostics.process_id), collectionMode);
+      }
+    } finally {
+      await evaluate(client, "window.__resourceIntervalProbe.restore(); delete window.__resourceIntervalProbe;");
+    }
   }
+
+  client = await verifyWebviewRecovery(client, devtoolsPort);
 
   await evaluate(client, `
     (async () => {
@@ -2132,6 +2207,47 @@ try {
     { key: "title_recording_enabled", value: "0" },
     { key: "tracking_paused", value: "1" },
   ]);
+  const widgetPlacementRows = await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT key, value FROM settings WHERE key IN (?, ?, ?) ORDER BY key", ["widget_placement", "widget_side", "widget_anchor_y"]) as Array<{ key?: string; value?: string }>;
+  assert.equal(widgetPlacementRows.length, 1);
+  assert.equal(widgetPlacementRows[0]?.key, "widget_placement");
+  assert.deepEqual(
+    JSON.parse(widgetPlacementRows[0]?.value ?? "null"),
+    leftWidgetPlacement,
+  );
+
+  // Keep the earlier pause until this command round trip finishes. Resuming
+  // tracking can resolve a new session name and legitimately clear this cache.
+  await waitFor("optional names drain before bootstrap persistence fixture", async () => {
+    const diagnostics = await evaluate(client!, 'window.__TAURI_INTERNALS__.invoke("cmd_get_resource_diagnostics")') as {
+      name_resolution: { pending: number; running: number };
+    };
+    return diagnostics.name_resolution.pending === 0 && diagnostics.name_resolution.running === 0;
+  }, 10_000);
+  const bootstrapCommands: Array<{ command: string; observedAt: number }> = [];
+  const stopBootstrapObservation = client.onMessage(message => {
+    if (message.method !== "Network.requestWillBeSent") return;
+    const request = (message.params as { request?: { url?: string } } | undefined)?.request;
+    if (!request?.url) return;
+    const command = new URL(request.url).pathname.slice(1);
+    if (["cmd_save_history_bootstrap_snapshot_payload", "cmd_clear_history_bootstrap_snapshot_payload"].includes(command)) {
+      bootstrapCommands.push({ command, observedAt: Date.now() });
+    }
+  });
+  await client.command("Network.enable");
+  try {
+    const historyBootstrapPayload = JSON.stringify({ version: 1, smoke: true });
+    await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_save_history_bootstrap_snapshot_payload", {
+      payload: ${JSON.stringify(historyBootstrapPayload)},
+    })`);
+    const historyBootstrapRows = await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT value FROM settings WHERE key = ?", ["history.bootstrap_snapshot.v1"]);
+    assert.deepEqual(historyBootstrapRows, [{ value: historyBootstrapPayload }]);
+    await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_clear_history_bootstrap_snapshot_payload")`);
+    const clearedHistoryBootstrapRows = await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT value FROM settings WHERE key = ?", ["history.bootstrap_snapshot.v1"]);
+    assert.deepEqual(clearedHistoryBootstrapRows, []);
+  } finally {
+    stopBootstrapObservation();
+    console.log("PATINA_BOOTSTRAP_PERSISTENCE_COMMANDS", JSON.stringify(bootstrapCommands));
+  }
   await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
     mutations: [
       { key: "language", value: "zh-CN" },
@@ -2145,23 +2261,6 @@ try {
     { key: "title_recording_enabled", value: "1" },
     { key: "tracking_paused", value: "0" },
   ]);
-  const widgetPlacementRows = await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT key, value FROM settings WHERE key IN (?, ?, ?) ORDER BY key", ["widget_placement", "widget_side", "widget_anchor_y"]) as Array<{ key?: string; value?: string }>;
-  assert.equal(widgetPlacementRows.length, 1);
-  assert.equal(widgetPlacementRows[0]?.key, "widget_placement");
-  assert.deepEqual(
-    JSON.parse(widgetPlacementRows[0]?.value ?? "null"),
-    leftWidgetPlacement,
-  );
-
-  const historyBootstrapPayload = JSON.stringify({ version: 1, smoke: true });
-  await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_save_history_bootstrap_snapshot_payload", {
-    payload: ${JSON.stringify(historyBootstrapPayload)},
-  })`);
-  const historyBootstrapRows = await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT value FROM settings WHERE key = ?", ["history.bootstrap_snapshot.v1"]);
-  assert.deepEqual(historyBootstrapRows, [{ value: historyBootstrapPayload }]);
-  await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_clear_history_bootstrap_snapshot_payload")`);
-  const clearedHistoryBootstrapRows = await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT value FROM settings WHERE key = ?", ["history.bootstrap_snapshot.v1"]);
-  assert.deepEqual(clearedHistoryBootstrapRows, []);
   databaseMutationCompleted = true;
 
   const deniedWrite = await evaluate(client, `
@@ -2199,6 +2298,7 @@ try {
   if (process.env.PATINA_COVERAGE_TARGET_DIR) {
     await evaluate(client, 'window.__TAURI_INTERNALS__.invoke("cmd_get_resource_diagnostics")');
   }
+  await verifyWebviewRecoveryLimit(client, devtoolsPort, () => logs.join(""));
   client.close();
   client = null;
   stopProcessTree(appProcess);
@@ -2472,7 +2572,7 @@ try {
   }
 }
 
-const failures = [...(primaryError ? [primaryError] : []), ...cleanupErrors];
+const failures = [...(primaryError ? [primaryError] : []), ...assertionFailures, ...cleanupErrors];
 if (failures.length > 0) {
   throw new AggregateError(failures, "Tauri runtime smoke failed");
 }

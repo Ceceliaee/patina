@@ -98,7 +98,9 @@
     "perf:activity-maintenance": "cargo test --manifest-path src-tauri/Cargo.toml --locked hourly_maintenance_capacity_report -- --ignored --nocapture",
     "perf:tracking-policy": "cargo test --manifest-path src-tauri/Cargo.toml --locked recording_policy_cache_capacity_report -- --ignored --nocapture",
     "perf:stable": "node --experimental-strip-types scripts/perf/stable-benchmark-suite.ts",
+    "perf:runtime-db": "cargo test --manifest-path src-tauri/Cargo.toml file_database_mixed_workload_capacity -- --ignored --nocapture",
     "perf:resources": "cargo run --manifest-path src-tauri/Cargo.toml --example windows-resource-sample --",
+    "perf:helper-resources": "node --experimental-strip-types scripts/perf/helper-resources.ts",
     "release:sync-version": "node --experimental-strip-types scripts/release.ts sync-version",
     "release:validate-version-files": "node --experimental-strip-types scripts/release.ts validate-version-files",
     "release:validate-changelog": "node --experimental-strip-types scripts/release.ts validate-changelog",
@@ -115,6 +117,7 @@
     "test:coverage:full:frontend": "node --experimental-strip-types scripts/coverage/full-frontend.ts",
     "test:coverage:full:rust": "node --experimental-strip-types scripts/coverage/full-rust.ts",
     "test:mutation:native": "node --experimental-strip-types scripts/check-native-critical-mutations.ts",
+    "test:mutation:runtime": "node --experimental-strip-types scripts/check-runtime-reliability-mutations.ts",
     "perf:desktop-lifecycle": "pnpm run test:tauri-runtime-smoke --resource-cycles"
   },
   "dependencies": {

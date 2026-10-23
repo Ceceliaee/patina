@@ -46,6 +46,20 @@ export async function seedLinkedApplicationRanking(evaluate: Evaluate, dbPath: s
 }
 
 export async function verifyLinkedApplicationRanking(evaluate: Evaluate, linked: boolean) {
+  await waitFor("linked ranking window IPC", async () => evaluate(
+    `Boolean(window.__TAURI_INTERNALS__)`,
+  ).catch(() => false), 10000);
+  // Cold restarts preserve start-in-tray. A visible ranking assertion must first
+  // exercise the normal reveal path; a sidebar click cannot reveal a native window.
+  const visibleBefore = await evaluate(
+    `window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", { label: "main" })`,
+  );
+  await evaluate(`window.__TAURI_INTERNALS__.invoke("cmd_show_main_window")`);
+  await waitFor("linked ranking window visible", async () => evaluate(`(async () =>
+    document.visibilityState === "visible"
+      && await window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", { label: "main" })
+  )()`), 10000);
+  console.log("PATINA_LINKED_RANKING_VISIBILITY", JSON.stringify({ visibleBefore, revealed: true }));
   await waitFor("linked ranking dashboard navigation", async () => evaluate(`(() => {
     const nav = document.querySelector('[data-sidebar-nav-item="dashboard"]');
     if (!nav) return false; nav.click(); return true;
@@ -62,7 +76,16 @@ export async function verifyLinkedApplicationRanking(evaluate: Evaluate, linked:
         : [{ name: "Runtime Linked Parent", duration: "13m" }, { name: "Runtime Linked Child", duration: "1m" }]);
       return true;
     } catch { return false; }
-  }, 15000).catch(error => { throw new Error(`${String(error)}; ranking=${JSON.stringify(lastRows)}`); });
+  }, 15000).catch(async error => {
+    const context = await evaluate(`({
+      now: Date.now(), date: new Date().toString(),
+      visibility: document.visibilityState,
+      scripts: Array.from(document.scripts).map(script => script.src),
+      rows: Array.from(document.querySelectorAll('.dashboard-top-app-name-row')).map(node => node.textContent),
+      visibleText: document.body.innerText.slice(0, 2000)
+    })`).catch(String);
+    throw new Error(`${String(error)}; ranking=${JSON.stringify(lastRows)}; context=${JSON.stringify(context)}`);
+  });
   console.log(`PASS real startup linked ranking: ${JSON.stringify(lastRows)}`);
 }
 

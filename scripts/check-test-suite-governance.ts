@@ -40,6 +40,22 @@ const REQUIRED_SCRIPTS = [
 ] as const;
 const ALLOWED_IGNORED_TESTS = new Map([
   [
+    "src-tauri/src/platform/windows/app_metadata/resource_tests.rs::shell_icon_resource_boundaries",
+    "real installed Shell resource experiment",
+  ],
+  [
+    "src-tauri/src/platform/windows/icon/resource_tests.rs::file_icon_resource_boundaries",
+    "real installed executable icon resource experiment",
+  ],
+  [
+    "src-tauri/src/platform/windows/audio/resource_tests.rs::audio_resource_boundaries",
+    "real WASAPI allocation attribution experiment",
+  ],
+  [
+    "src-tauri/src/data/activity_read_model/contention_tests.rs::file_database_mixed_workload_capacity",
+    "file-backed mixed-workload performance acceptance; run perf:runtime-db",
+  ],
+  [
     "src-tauri/src/data/activity_read_model/catalog.rs::catalog_capacity_report",
     "performance fixture; run with pnpm run perf:classification-app-catalog",
   ],
