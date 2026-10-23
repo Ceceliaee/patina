@@ -420,9 +420,6 @@ impl TrackingDataStore for TrackingRuntimeDataStore {
     ) -> TrackingDataFuture<'a, Option<SessionNameWrite>> {
         Box::pin(async move {
             let pool = self.pool().await.map_err(tracking_data_error)?;
-            let lifecycle = sessions::name_epoch::state(&pool);
-            let guard = lifecycle.lock().await;
-            let epoch = *guard;
             let Some(session_id) = sessions::start_session(
                 &pool,
                 "",
@@ -436,17 +433,12 @@ impl TrackingDataStore for TrackingRuntimeDataStore {
             else {
                 return Ok(None);
             };
-            drop(guard);
             let exe_name = exe_name.to_owned();
             let changed = self.session_name_changed.clone();
             // Capture the insertion pool, not the replaceable pool source. Late
             // metadata from before restore must never write into the new database.
             let confirm: SessionNameWrite = Box::new(move |name| {
                 Box::pin(async move {
-                    let guard = lifecycle.lock().await;
-                    if *guard != epoch {
-                        return Ok(false);
-                    }
                     let updated = sessions::fill_session_name(
                         &pool, session_id, &exe_name, start_time, &name,
                     )

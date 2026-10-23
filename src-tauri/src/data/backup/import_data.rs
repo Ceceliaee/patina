@@ -121,16 +121,6 @@ pub(super) async fn load_external_import_backup_from_pool(
     Ok(ExternalImportBackup { batches })
 }
 
-pub(super) async fn clear_external_imports_in_tx(
-    tx: &mut Transaction<'_, Sqlite>,
-) -> Result<(), String> {
-    sqlx::query("DELETE FROM import_batches")
-        .execute(&mut **tx)
-        .await
-        .map_err(|error| format!("failed to clear external imports for restore: {error}"))?;
-    Ok(())
-}
-
 pub(super) async fn merge_external_import_backup_in_tx(
     tx: &mut Transaction<'_, Sqlite>,
     backup: &ExternalImportBackup,
@@ -255,22 +245,15 @@ fn available_batch_id(batch: &ExternalImportBatch, known: &HashSet<String>) -> S
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        clear_external_imports_in_tx, load_external_import_backup_from_pool,
-        merge_external_import_backup_in_tx,
-    };
-    use crate::data::backup::payload::RestoreStrategy;
-    use crate::data::backup::restore_payload::restore_backup_payload_in_tx;
+    use super::{load_external_import_backup_from_pool, merge_external_import_backup_in_tx};
+    use crate::data::backup::merge::merge_backup_records_in_tx;
     use crate::data::schema::{
         ACTIVITY_REMINDER_RULES_SCHEMA_SQL, CURRENT_BASELINE_SCHEMA_SQL,
         IMPORT_DATA_ISOLATION_SCHEMA_SQL, IMPORT_DATA_SCHEMA_SQL,
         SOFTWARE_REMINDER_RULES_SCHEMA_SQL, TOOLS_TABLES_SCHEMA_SQL, WEB_ACTIVITY_SCHEMA_SQL,
         WEB_FAVICON_CACHE_SCHEMA_SQL,
     };
-    use crate::domain::backup::{
-        BackupMeta, BackupPayload, BackupSession, CURRENT_BACKUP_SCHEMA_VERSION,
-        CURRENT_BACKUP_VERSION,
-    };
+    use crate::domain::backup::{BackupRecords, BackupSession};
     use sqlx::{Executor, Pool, Row, Sqlite};
 
     async fn setup_pool() -> Pool<Sqlite> {
@@ -341,14 +324,8 @@ mod tests {
         .unwrap();
     }
 
-    fn payload_with_native_session(exe_name: &str) -> BackupPayload {
-        BackupPayload {
-            version: CURRENT_BACKUP_VERSION,
-            meta: BackupMeta {
-                exported_at_ms: 1,
-                schema_version: CURRENT_BACKUP_SCHEMA_VERSION,
-                app_version: "test".to_string(),
-            },
+    fn payload_with_native_session(exe_name: &str) -> BackupRecords {
+        BackupRecords {
             sessions: vec![BackupSession {
                 id: 100,
                 app_name: "Backup Native".to_string(),
@@ -369,7 +346,6 @@ mod tests {
             tool_timer_laps: Vec::new(),
             tool_pomodoro_runs: Vec::new(),
             tool_daily_stats: Vec::new(),
-            tool_software_reminder_rules: Vec::new(),
         }
     }
 
@@ -485,81 +461,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn clearing_external_imports_never_changes_native_sessions() {
-        let pool = setup_pool().await;
-        insert_batch(&pool, "batch", "one", "exact", "bucket").await;
-        sqlx::query(
-            "INSERT INTO sessions (
-                app_name, exe_name, window_title, start_time, end_time, duration,
-                continuity_group_start_time
-             ) VALUES ('Native', 'native.exe', 'Native', 10, 20, 10, 10)",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
-
-        let mut tx = pool.begin().await.unwrap();
-        clear_external_imports_in_tx(&mut tx).await.unwrap();
-        tx.commit().await.unwrap();
-
-        let native_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        let batch_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM import_batches")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        assert_eq!(native_count, 1);
-        assert_eq!(batch_count, 0);
-    }
-
-    #[tokio::test]
-    async fn legacy_replace_restore_clears_current_external_data() {
-        let pool = setup_pool().await;
-        insert_batch(
-            &pool,
-            "current",
-            "current",
-            "exact-current",
-            "bucket-current",
-        )
-        .await;
-        sqlx::query(
-            "INSERT INTO sessions (
-                app_name, exe_name, window_title, start_time, end_time, duration,
-                continuity_group_start_time
-             ) VALUES ('Current Native', 'current.exe', 'Current', 10, 20, 10, 10)",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
-
-        let mut tx = pool.begin().await.unwrap();
-        restore_backup_payload_in_tx(
-            &mut tx,
-            &payload_with_native_session("backup.exe"),
-            RestoreStrategy::Replace,
-        )
-        .await
-        .unwrap();
-        tx.commit().await.unwrap();
-
-        let native_exes: Vec<String> =
-            sqlx::query_scalar("SELECT exe_name FROM sessions ORDER BY exe_name")
-                .fetch_all(&pool)
-                .await
-                .unwrap();
-        let external_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM import_batches")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        assert_eq!(native_exes, vec!["backup.exe"]);
-        assert_eq!(external_count, 0);
-    }
-
-    #[tokio::test]
-    async fn legacy_merge_restore_preserves_current_external_data() {
+    async fn native_merge_preserves_current_external_data() {
         let pool = setup_pool().await;
         insert_batch(
             &pool,
@@ -571,13 +473,9 @@ mod tests {
         .await;
 
         let mut tx = pool.begin().await.unwrap();
-        restore_backup_payload_in_tx(
-            &mut tx,
-            &payload_with_native_session("backup.exe"),
-            RestoreStrategy::Merge,
-        )
-        .await
-        .unwrap();
+        merge_backup_records_in_tx(&mut tx, &payload_with_native_session("backup.exe"))
+            .await
+            .unwrap();
         tx.commit().await.unwrap();
 
         let native_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
@@ -609,13 +507,9 @@ mod tests {
 
         let target = setup_pool().await;
         let mut tx = target.begin().await.unwrap();
-        restore_backup_payload_in_tx(
-            &mut tx,
-            &payload_with_native_session("rolled-back.exe"),
-            RestoreStrategy::Merge,
-        )
-        .await
-        .unwrap();
+        merge_backup_records_in_tx(&mut tx, &payload_with_native_session("rolled-back.exe"))
+            .await
+            .unwrap();
         let error = merge_external_import_backup_in_tx(&mut tx, &backup)
             .await
             .unwrap_err();

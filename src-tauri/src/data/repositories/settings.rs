@@ -62,37 +62,6 @@ pub async fn fetch_all_for_backup(pool: &Pool<Sqlite>) -> Result<Vec<BackupSetti
         .collect())
 }
 
-pub async fn clear_for_restore(tx: &mut Transaction<'_, Sqlite>) -> Result<(), String> {
-    sqlx::query("DELETE FROM settings")
-        .execute(&mut **tx)
-        .await
-        .map_err(|error| format!("failed to clear settings before restore: {error}"))?;
-    Ok(())
-}
-
-pub async fn insert_for_restore(
-    tx: &mut Transaction<'_, Sqlite>,
-    settings: &[BackupSetting],
-) -> Result<(), String> {
-    for setting in settings {
-        if setting.key == super::remote_backup_settings::WEBDAV_CREDENTIAL_REF_KEY
-            || setting.key == super::remote_backup_settings::WEBDAV_SAVE_ID_KEY
-        {
-            continue;
-        }
-        sqlx::query("INSERT INTO settings (key, value) VALUES (?, ?)")
-            .bind(&setting.key)
-            .bind(&setting.value)
-            .execute(&mut **tx)
-            .await
-            .map_err(|error| format!("failed to restore settings: {error}"))?;
-    }
-
-    super::app_links::validate_in_tx(tx).await?;
-    super::web_links::load_in_tx(tx).await?;
-    Ok(())
-}
-
 pub async fn insert_missing_for_restore(
     tx: &mut Transaction<'_, Sqlite>,
     settings: &[BackupSetting],

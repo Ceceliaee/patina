@@ -328,7 +328,7 @@ pub async fn fetch_all_for_backup(
         .into_iter()
         .map(|row| BackupWebActivitySegment {
             native_session_id: row.get("native_session_id"),
-            id: row.get("id"),
+
             browser_client_id: row.get("browser_client_id"),
             browser_kind: row.get("browser_kind"),
             browser_exe_name: row.get("browser_exe_name"),
@@ -366,23 +366,6 @@ pub async fn fetch_all_favicon_cache_for_backup(
         .collect())
 }
 
-pub async fn insert_favicon_cache_for_restore(
-    tx: &mut Transaction<'_, Sqlite>,
-    entries: &[BackupWebFaviconCache],
-) -> Result<(), String> {
-    for entry in entries {
-        upsert_favicon_cache_tx(
-            tx,
-            &entry.normalized_domain,
-            Some(&entry.favicon_url),
-            entry.updated_at,
-        )
-        .await
-        .map_err(|error| format!("failed to restore web favicon cache: {error}"))?;
-    }
-    Ok(())
-}
-
 pub async fn insert_missing_favicon_cache_for_restore(
     tx: &mut Transaction<'_, Sqlite>,
     entries: &[BackupWebFaviconCache],
@@ -397,73 +380,6 @@ pub async fn insert_missing_favicon_cache_for_restore(
         .await
         .map_err(|error| format!("failed to merge web favicon cache: {error}"))?;
     }
-    Ok(())
-}
-
-pub async fn clear_for_restore(tx: &mut Transaction<'_, Sqlite>) -> Result<(), String> {
-    sqlx::query("DELETE FROM web_favicon_cache")
-        .execute(&mut **tx)
-        .await
-        .map_err(|error| format!("failed to clear web favicon cache before restore: {error}"))?;
-    sqlx::query("DELETE FROM web_activity_segments")
-        .execute(&mut **tx)
-        .await
-        .map_err(|error| format!("failed to clear web activity before restore: {error}"))?;
-    Ok(())
-}
-
-pub async fn insert_for_restore(
-    tx: &mut Transaction<'_, Sqlite>,
-    segments: &[BackupWebActivitySegment],
-    session_id_map: &HashMap<i64, i64>,
-) -> Result<(), String> {
-    for segment in segments {
-        let inserted = sqlx::query(
-            "INSERT INTO web_activity_segments (
-                id, browser_client_id, browser_kind, browser_exe_name, domain,
-                normalized_domain, url, title, favicon_url, start_time, end_time,
-                duration, source, created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(segment.id)
-        .bind(&segment.browser_client_id)
-        .bind(&segment.browser_kind)
-        .bind(&segment.browser_exe_name)
-        .bind(&segment.domain)
-        .bind(&segment.normalized_domain)
-        .bind(&segment.url)
-        .bind(&segment.title)
-        .bind(&segment.favicon_url)
-        .bind(segment.start_time)
-        .bind(segment.end_time)
-        .bind(segment.duration)
-        .bind(&segment.source)
-        .bind(segment.created_at)
-        .bind(segment.updated_at)
-        .execute(&mut **tx)
-        .await
-        .map_err(|error| format!("failed to restore web activity: {error}"))?;
-        if inserted.rows_affected() > 0 {
-            bind_native_session_tx(
-                tx,
-                inserted.last_insert_rowid(),
-                segment
-                    .native_session_id
-                    .and_then(|id| session_id_map.get(&id).copied()),
-            )
-            .await
-            .map_err(|error| format!("failed to restore native web relation: {error}"))?;
-        }
-        upsert_favicon_cache_tx(
-            tx,
-            &segment.normalized_domain,
-            segment.favicon_url.as_deref(),
-            segment.updated_at,
-        )
-        .await
-        .map_err(|error| format!("failed to restore web favicon cache: {error}"))?;
-    }
-
     Ok(())
 }
 
@@ -1041,7 +957,7 @@ mod tests {
             let backup = vec![
                 BackupWebActivitySegment {
                     native_session_id: None,
-                    id: 10,
+
                     browser_client_id: "a".into(),
                     browser_kind: "chromium".into(),
                     browser_exe_name: "a.exe".into(),
@@ -1059,7 +975,7 @@ mod tests {
                 },
                 BackupWebActivitySegment {
                     native_session_id: None,
-                    id: 11,
+
                     browser_client_id: "other".into(),
                     browser_kind: "chromium".into(),
                     browser_exe_name: "other.exe".into(),

@@ -3,7 +3,6 @@ use crate::domain::backup::BackupSession;
 use crate::domain::tracking::{resolve_app_override_executable, ActiveSessionSnapshot};
 use sqlx::{Pool, Row, Sqlite, Transaction};
 use std::collections::HashMap;
-pub(crate) mod name_epoch;
 pub mod read;
 
 pub async fn fetch_all_for_backup(pool: &Pool<Sqlite>) -> Result<Vec<BackupSession>, String> {
@@ -30,45 +29,6 @@ pub async fn fetch_all_for_backup(pool: &Pool<Sqlite>) -> Result<Vec<BackupSessi
             continuity_group_start_time: row.get("continuity_group_start_time"),
         })
         .collect())
-}
-
-pub async fn clear_for_restore(tx: &mut Transaction<'_, Sqlite>) -> Result<(), String> {
-    sqlx::query("DELETE FROM sessions")
-        .execute(&mut **tx)
-        .await
-        .map_err(|error| format!("failed to clear sessions before restore: {error}"))?;
-    Ok(())
-}
-
-pub async fn insert_for_restore(
-    tx: &mut Transaction<'_, Sqlite>,
-    sessions: &[BackupSession],
-) -> Result<(), String> {
-    for session in sessions {
-        sqlx::query(
-            "INSERT INTO sessions (
-               id, app_name, exe_name, window_title, start_time, end_time, duration,
-               continuity_group_start_time
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(session.id)
-        .bind(&session.app_name)
-        .bind(&session.exe_name)
-        .bind(&session.window_title)
-        .bind(session.start_time)
-        .bind(session.end_time)
-        .bind(session.duration)
-        .bind(
-            session
-                .continuity_group_start_time
-                .unwrap_or(session.start_time),
-        )
-        .execute(&mut **tx)
-        .await
-        .map_err(|error| format!("failed to restore sessions: {error}"))?;
-    }
-
-    Ok(())
 }
 
 pub async fn insert_missing_for_restore(

@@ -1,6 +1,7 @@
 use crate::app::{desktop_behavior, tray};
 use crate::data::backup::{self, RestoreStrategy};
 use crate::data::remote_backup;
+use crate::domain::backup::BackupError;
 use crate::engine::tracking::runtime as tracking_runtime;
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -9,7 +10,8 @@ pub(crate) async fn restore_backup_and_refresh(
     backup_path: String,
     hash: String,
     strategy: RestoreStrategy,
-) -> Result<(), String> {
+) -> Result<(), BackupError> {
+    let prepared = backup::prepare_backup_restore(&backup_path, &hash, strategy).await?;
     let scheduled_backup_guard = crate::app::scheduled_backup::lock_for_restore(&app).await;
     let scheduled_export_guard = crate::app::scheduled_export::lock_for_restore(&app).await;
     let webdav_guard = crate::data::remote_backup_config::CONFIG_LOCK.lock().await;
@@ -29,7 +31,7 @@ pub(crate) async fn restore_backup_and_refresh(
         .end_active_sessions(now_ms() as i64)
         .await
         .map_err(|error| format!("failed to stop tracking before restore: {error}"))?;
-    backup::restore_backup(backup_path.clone(), hash, app.clone(), strategy).await?;
+    backup::restore_prepared_backup(prepared, &app).await?;
     // Restored privacy settings must take effect before tracking resumes.
     title_state.set_enabled(false);
     title_state.invalidate_app_overrides();

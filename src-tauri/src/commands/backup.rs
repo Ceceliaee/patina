@@ -1,5 +1,6 @@
 use crate::app;
-use crate::commands::window_guard::require_main_window_string;
+use crate::commands::error::CommandErrorDto;
+use crate::commands::window_guard::{require_main_window, require_main_window_string};
 use crate::data::backup::{self, RestoreStrategy};
 use crate::data::remote_backup::{
     self, RemoteBackupDownloadResult, RemoteBackupEntry, RemoteBackupUploadResult,
@@ -56,14 +57,18 @@ pub async fn cmd_restore_backup(
     restore_strategy: RestoreStrategy,
     app: AppHandle,
     window: WebviewWindow,
-) -> Result<(), String> {
-    require_main_window_string(&window)?;
-    app::backup::restore_backup_and_refresh(app, backup_path, hash, restore_strategy).await
+) -> Result<(), CommandErrorDto> {
+    require_main_window(&window)?;
+    app::backup::restore_backup_and_refresh(app, backup_path, hash, restore_strategy)
+        .await
+        .map_err(Into::into)
 }
 
 #[tauri::command]
-pub async fn cmd_preview_backup(backup_path: String) -> Result<BackupPreview, String> {
-    backup::preview_backup(backup_path).await
+pub async fn cmd_preview_backup(backup_path: String) -> Result<BackupPreview, CommandErrorDto> {
+    backup::preview_backup(backup_path)
+        .await
+        .map_err(Into::into)
 }
 
 #[tauri::command]
@@ -115,8 +120,10 @@ pub async fn cmd_download_webdav_backup(
     config: WebDavBackupConfigDto,
     id: String,
     app: AppHandle,
-) -> Result<RemoteBackupDownloadResult, String> {
-    remote_backup::download_webdav_backup(app, config, id).await
+) -> Result<RemoteBackupDownloadResult, CommandErrorDto> {
+    remote_backup::download_webdav_backup(app, config, id)
+        .await
+        .map_err(Into::into)
 }
 
 #[tauri::command]

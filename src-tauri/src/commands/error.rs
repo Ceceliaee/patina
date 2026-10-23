@@ -29,6 +29,16 @@ impl From<SqliteOperationError> for CommandErrorDto {
     }
 }
 
+impl From<crate::domain::backup::BackupError> for CommandErrorDto {
+    fn from(error: crate::domain::backup::BackupError) -> Self {
+        let code = match &error {
+            crate::domain::backup::BackupError::UnsupportedFormat => "BACKUP_FORMAT_UNSUPPORTED",
+            crate::domain::backup::BackupError::Invalid(_) => "BACKUP_FAILED",
+        };
+        Self::new(code, error.to_string(), false)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

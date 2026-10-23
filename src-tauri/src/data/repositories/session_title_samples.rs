@@ -15,52 +15,12 @@ pub async fn fetch_all_for_backup(pool: &Pool<Sqlite>) -> Result<Vec<BackupTitle
     Ok(rows
         .into_iter()
         .map(|row| BackupTitleSample {
-            id: row.get("id"),
             session_id: row.get("session_id"),
             title: row.get("title"),
             start_time: row.get("start_time"),
             end_time: row.get("end_time"),
         })
         .collect())
-}
-
-pub async fn clear_for_restore(tx: &mut Transaction<'_, Sqlite>) -> Result<(), String> {
-    sqlx::query("DELETE FROM session_title_samples")
-        .execute(&mut **tx)
-        .await
-        .map_err(|error| format!("failed to clear title samples before restore: {error}"))?;
-    Ok(())
-}
-
-pub async fn insert_for_restore(
-    tx: &mut Transaction<'_, Sqlite>,
-    title_samples: &[BackupTitleSample],
-    session_id_map: &HashMap<i64, i64>,
-) -> Result<(), String> {
-    for sample in title_samples {
-        let title = sample.title.trim();
-        if title.is_empty() {
-            continue;
-        }
-        let Some(restored_session_id) = session_id_map.get(&sample.session_id).copied() else {
-            continue;
-        };
-
-        sqlx::query(
-            "INSERT INTO session_title_samples (id, session_id, title, start_time, end_time)
-             VALUES (?, ?, ?, ?, ?)",
-        )
-        .bind(sample.id)
-        .bind(restored_session_id)
-        .bind(title)
-        .bind(sample.start_time)
-        .bind(sample.end_time)
-        .execute(&mut **tx)
-        .await
-        .map_err(|error| format!("failed to restore title samples: {error}"))?;
-    }
-
-    Ok(())
 }
 
 pub async fn insert_missing_for_restore(

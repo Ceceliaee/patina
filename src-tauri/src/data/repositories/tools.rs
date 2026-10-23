@@ -17,9 +17,8 @@ pub(crate) use read::fetch_all_activity_reminder_rules;
 pub use read::fetch_tools_snapshot;
 
 pub use backup_restore::{
-    clear_for_restore, fetch_all_daily_stats_for_backup, fetch_all_pomodoro_runs_for_backup,
-    fetch_all_reminders_for_backup, fetch_all_software_reminder_rules_for_backup,
-    fetch_all_timer_laps_for_backup, fetch_all_timers_for_backup, insert_for_restore,
+    fetch_all_daily_stats_for_backup, fetch_all_pomodoro_runs_for_backup,
+    fetch_all_reminders_for_backup, fetch_all_timer_laps_for_backup, fetch_all_timers_for_backup,
     insert_missing_for_restore,
 };
 

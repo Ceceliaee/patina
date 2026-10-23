@@ -16,9 +16,11 @@ use tauri::AppHandle;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
+#[cfg(test)]
+mod merge_tests;
 mod restore;
 
-pub(super) use restore::restore_snapshot_backup;
+pub(super) use restore::{prepare_snapshot_backup, restore_snapshot_backup};
 
 pub(super) const SNAPSHOT_FORMAT: &str = "PatinaSQLiteSnapshot-1";
 const MANIFEST_ENTRY: &str = "manifest.json";
@@ -862,10 +864,10 @@ mod tests {
     use sqlx::Executor;
     use std::panic::AssertUnwindSafe;
 
-    struct SnapshotTestDirectory(PathBuf);
+    pub(super) struct SnapshotTestDirectory(pub(super) PathBuf);
 
     impl SnapshotTestDirectory {
-        fn new(label: &str) -> Self {
+        pub(super) fn new(label: &str) -> Self {
             let parent = std::env::temp_dir()
                 .canonicalize()
                 .expect("resolve temporary directory");
