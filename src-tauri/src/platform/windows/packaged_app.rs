@@ -69,6 +69,7 @@ struct HostedAppCandidate {
 
 #[derive(Clone, Debug)]
 struct ProcessIdentityCacheEntry {
+    created_at: u64,
     process_path: String,
     identity: ProcessAppIdentity,
     cached_at_ms: u64,
@@ -229,17 +230,6 @@ unsafe extern "system" fn collect_descendant_window(hwnd: HWND, lparam: LPARAM) 
 }
 
 fn resolve_process_app_identity(process_id: u32, process_path: &str) -> ProcessAppIdentity {
-    let now_ms = now_ms();
-    if let Some(identity) = read_cached_process_identity(process_id, process_path, now_ms) {
-        return identity;
-    }
-
-    let identity = query_process_app_identity(process_id);
-    write_cached_process_identity(process_id, process_path, identity.clone(), now_ms);
-    identity
-}
-
-fn query_process_app_identity(process_id: u32) -> ProcessAppIdentity {
     let Some(process) = (unsafe {
         OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process_id)
             .ok()
@@ -247,7 +237,29 @@ fn query_process_app_identity(process_id: u32) -> ProcessAppIdentity {
     }) else {
         return ProcessAppIdentity::Unavailable;
     };
+    let now_ms = now_ms();
+    let created_at = foreground::process_creation_time(process.raw());
+    if let Some(created_at) = created_at {
+        if let Some(identity) =
+            read_cached_process_identity(process_id, process_path, now_ms, created_at)
+        {
+            return identity;
+        }
+    }
+    let identity = query_process_app_identity(&process);
+    if let Some(created_at) = created_at {
+        write_cached_process_identity(
+            process_id,
+            process_path,
+            identity.clone(),
+            now_ms,
+            created_at,
+        );
+    }
+    identity
+}
 
+fn query_process_app_identity(process: &OwnedHandle) -> ProcessAppIdentity {
     let mut length = 0u32;
     let initial_status = unsafe { GetApplicationUserModelId(process.raw(), &mut length, None) };
     let initial_query = classify_initial_identity_query(initial_status, length);
@@ -299,7 +311,7 @@ fn classify_initial_identity_query(
 ) -> InitialIdentityQuery {
     if status == APPMODEL_ERROR_NO_APPLICATION {
         InitialIdentityQuery::NoApplication
-    } else if status == ERROR_INSUFFICIENT_BUFFER && required_length >= 2 {
+    } else if status == ERROR_INSUFFICIENT_BUFFER && (2..=32_768).contains(&required_length) {
         InitialIdentityQuery::Read(required_length as usize)
     } else {
         InitialIdentityQuery::Unavailable
@@ -315,7 +327,10 @@ fn classify_buffered_identity_query(
         BufferedIdentityQuery::Success
     } else if status == APPMODEL_ERROR_NO_APPLICATION {
         BufferedIdentityQuery::NoApplication
-    } else if status == ERROR_INSUFFICIENT_BUFFER && required_length as usize > buffer_length {
+    } else if status == ERROR_INSUFFICIENT_BUFFER
+        && required_length as usize > buffer_length
+        && required_length <= 32_768
+    {
         BufferedIdentityQuery::Resize(required_length as usize)
     } else {
         BufferedIdentityQuery::Unavailable
@@ -326,10 +341,12 @@ fn read_cached_process_identity(
     process_id: u32,
     process_path: &str,
     now_ms: u64,
+    created_at: u64,
 ) -> Option<ProcessAppIdentity> {
     let mut cache = process_identity_cache().lock().ok()?;
     let entry = cache.get(&process_id)?;
-    if entry.process_path.eq_ignore_ascii_case(process_path)
+    if entry.created_at == created_at
+        && entry.process_path.eq_ignore_ascii_case(process_path)
         && is_process_identity_cache_entry_fresh(entry, now_ms)
     {
         Some(entry.identity.clone())
@@ -344,6 +361,7 @@ fn write_cached_process_identity(
     process_path: &str,
     identity: ProcessAppIdentity,
     now_ms: u64,
+    created_at: u64,
 ) {
     if let Ok(mut cache) = process_identity_cache().lock() {
         prune_process_identity_cache(&mut cache, now_ms);
@@ -359,6 +377,7 @@ fn write_cached_process_identity(
         cache.insert(
             process_id,
             ProcessIdentityCacheEntry {
+                created_at,
                 process_path: process_path.to_string(),
                 identity,
                 cached_at_ms: now_ms,
@@ -373,7 +392,7 @@ fn is_process_identity_cache_entry_fresh(entry: &ProcessIdentityCacheEntry, now_
     } else {
         IDENTITY_NEGATIVE_CACHE_TTL_MS
     };
-    now_ms.saturating_sub(entry.cached_at_ms) <= ttl_ms
+    now_ms >= entry.cached_at_ms && now_ms.saturating_sub(entry.cached_at_ms) <= ttl_ms
 }
 
 fn prune_process_identity_cache(cache: &mut HashMap<u32, ProcessIdentityCacheEntry>, now_ms: u64) {
@@ -383,6 +402,27 @@ fn prune_process_identity_cache(cache: &mut HashMap<u32, ProcessIdentityCacheEnt
 fn process_identity_cache() -> &'static Mutex<HashMap<u32, ProcessIdentityCacheEntry>> {
     static CACHE: OnceLock<Mutex<HashMap<u32, ProcessIdentityCacheEntry>>> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+pub(super) fn process_identity_cache_stats() -> (usize, usize) {
+    process_identity_cache()
+        .lock()
+        .map(|mut cache| {
+            prune_process_identity_cache(&mut cache, now_ms());
+            let bytes = cache
+                .values()
+                .map(|entry| {
+                    size_of::<ProcessIdentityCacheEntry>()
+                        + entry.process_path.capacity()
+                        + match &entry.identity {
+                            ProcessAppIdentity::Resolved(value) => value.capacity(),
+                            _ => 0,
+                        }
+                })
+                .sum();
+            (cache.len(), bytes)
+        })
+        .unwrap_or_default()
 }
 
 fn now_ms() -> u64 {
@@ -396,6 +436,26 @@ mod tests {
     fn cache_test_guard() -> std::sync::MutexGuard<'static, ()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+    }
+
+    #[test]
+    fn cache_clock_rollback_invalidates_packaged_identity() {
+        let _guard = cache_test_guard();
+        process_identity_cache().lock().unwrap().clear();
+        for identity in [
+            ProcessAppIdentity::Resolved("Publisher.App!Main".into()),
+            ProcessAppIdentity::NoApplication,
+            ProcessAppIdentity::Unavailable,
+        ] {
+            write_cached_process_identity(42, "app.exe", identity.clone(), 1_000_000, 100);
+            assert!(read_cached_process_identity(42, "app.exe", 1_000_001, 100).is_some());
+            assert!(read_cached_process_identity(42, "app.exe", 100_000, 100).is_none());
+            assert!(read_cached_process_identity(42, "app.exe", 1_000_001, 100).is_none());
+            write_cached_process_identity(42, "app.exe", identity.clone(), 1_000_000, 100);
+            write_cached_process_identity(43, "app.exe", identity, 100_000, 200);
+            assert!(!process_identity_cache().lock().unwrap().contains_key(&42));
+            assert!(read_cached_process_identity(43, "app.exe", 100_001, 200).is_some());
+        }
     }
 
     fn candidate(
@@ -506,6 +566,7 @@ mod tests {
         cache.insert(
             42,
             ProcessIdentityCacheEntry {
+                created_at: 1,
                 process_path: r"C:\Apps\App.exe".to_string(),
                 identity: ProcessAppIdentity::Resolved("Publisher.App!Main".to_string()),
                 cached_at_ms: 1_000,
@@ -523,6 +584,7 @@ mod tests {
     #[test]
     fn negative_identity_cache_expires_quickly() {
         let entry = ProcessIdentityCacheEntry {
+            created_at: 1,
             process_path: r"C:\Apps\App.exe".to_string(),
             identity: ProcessAppIdentity::NoApplication,
             cached_at_ms: 1_000,
@@ -574,6 +636,7 @@ mod tests {
                 &format!(r"C:\Apps\App{index}.exe"),
                 ProcessAppIdentity::Resolved(format!("Publisher.App{index}!Main")),
                 20_000 + index as u64,
+                1,
             );
         }
 
@@ -586,10 +649,25 @@ mod tests {
             newest_pid,
             &format!(r"C:\Apps\App{}.exe", IDENTITY_CACHE_MAX_ENTRIES + 7),
             30_000,
+            1,
         )
         .is_some());
         assert!(
-            read_cached_process_identity(newest_pid, r"C:\Apps\Different.exe", 30_000,).is_none()
+            read_cached_process_identity(newest_pid, r"C:\Apps\Different.exe", 30_000, 1).is_none()
         );
+    }
+
+    #[test]
+    fn same_path_and_pid_with_new_creation_time_never_reuses_identity() {
+        let _guard = cache_test_guard();
+        write_cached_process_identity(
+            12345,
+            "same.exe",
+            ProcessAppIdentity::Resolved("Old!Main".into()),
+            1_000,
+            10,
+        );
+        assert!(read_cached_process_identity(12345, "same.exe", 1_001, 10).is_some());
+        assert!(read_cached_process_identity(12345, "same.exe", 1_001, 11).is_none());
     }
 }

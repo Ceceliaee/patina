@@ -45,7 +45,9 @@ impl OwnedIcon {
 impl Drop for OwnedIcon {
     fn drop(&mut self) {
         unsafe {
-            let _ = DestroyIcon(self.0);
+            let _released = DestroyIcon(self.0).is_ok();
+            #[cfg(test)]
+            release_checks::record(0, _released);
         }
     }
 }
@@ -69,7 +71,9 @@ impl OwnedBitmap {
 impl Drop for OwnedBitmap {
     fn drop(&mut self) {
         unsafe {
-            let _ = DeleteObject(self.0.into());
+            let _released = DeleteObject(self.0.into()).as_bool();
+            #[cfg(test)]
+            release_checks::record(1, _released);
         }
     }
 }
@@ -96,7 +100,9 @@ impl ScreenDcGuard {
 impl Drop for ScreenDcGuard {
     fn drop(&mut self) {
         unsafe {
-            let _ = windows::Win32::Graphics::Gdi::ReleaseDC(self.hwnd, self.hdc);
+            let _released = windows::Win32::Graphics::Gdi::ReleaseDC(self.hwnd, self.hdc) != 0;
+            #[cfg(test)]
+            release_checks::record(2, _released);
         }
     }
 }
@@ -120,7 +126,28 @@ impl MemoryDcGuard {
 impl Drop for MemoryDcGuard {
     fn drop(&mut self) {
         unsafe {
-            let _ = DeleteDC(self.0);
+            let _released = DeleteDC(self.0).as_bool();
+            #[cfg(test)]
+            release_checks::record(3, _released);
         }
+    }
+}
+
+#[cfg(test)]
+pub(super) mod release_checks {
+    use std::cell::Cell;
+    thread_local! {
+        static COUNTS: Cell<[[u64; 2]; 4]> = const { Cell::new([[0; 2]; 4]) };
+    }
+    pub(super) fn record(kind: usize, released: bool) {
+        COUNTS.with(|counts| {
+            let mut values = counts.get();
+            values[kind][0] += 1;
+            values[kind][1] += u64::from(!released);
+            counts.set(values);
+        });
+    }
+    pub(crate) fn counts() -> [[u64; 2]; 4] {
+        COUNTS.with(Cell::get)
     }
 }

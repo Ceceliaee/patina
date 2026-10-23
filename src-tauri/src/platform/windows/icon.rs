@@ -1,4 +1,6 @@
 use base64::{engine::general_purpose::STANDARD, Engine as _};
+#[cfg(test)]
+mod resource_tests;
 use image::{ImageBuffer, Rgba};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -20,6 +22,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use crate::platform::windows::handles::{MemoryDcGuard, OwnedBitmap, OwnedIcon, ScreenDcGuard};
 
 const ICON_RESULT_CACHE_MAX_ENTRIES: usize = 128;
+const ICON_RESULT_CACHE_MAX_BYTES: usize = 16 * 1024 * 1024;
 const ICON_RESULT_CACHE_TTL_MS: u64 = 10 * 60 * 1000;
 const ICON_RESULT_NEGATIVE_CACHE_TTL_MS: u64 = 60 * 1000;
 
@@ -31,6 +34,8 @@ struct IconResultCacheEntry {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub struct IconResultCacheStats {
+    pub estimated_bytes: usize,
+    pub max_bytes: usize,
     pub entries: usize,
     pub positive_entries: usize,
     pub negative_entries: usize,
@@ -40,14 +45,29 @@ pub struct IconResultCacheStats {
 }
 
 pub fn get_icon_base64(exe_path: &str) -> Option<String> {
-    let cache_key = format!("file:{}", exe_path.trim().to_ascii_lowercase());
-    if let Some(cached) = read_icon_result_cache(&cache_key, now_ms()) {
+    let cache_key = file_cache_key(exe_path);
+    if let Some(cached) = cache_key
+        .as_ref()
+        .and_then(|key| read_icon_result_cache(key, now_ms()))
+    {
         return cached;
     }
 
     let result = get_icon_base64_uncached(exe_path);
-    write_icon_result_cache(cache_key, result.clone(), now_ms());
+    if let Some(cache_key) = cache_key {
+        write_icon_result_cache(cache_key, result.clone(), now_ms());
+    }
     result
+}
+
+fn file_cache_key(path: &str) -> Option<String> {
+    let metadata = std::fs::metadata(path).ok()?;
+    Some(format!(
+        "file:{}:{}:{:?}",
+        path.trim().to_ascii_lowercase(),
+        metadata.len(),
+        metadata.modified().ok()?
+    ))
 }
 
 fn get_icon_base64_uncached(exe_path: &str) -> Option<String> {
@@ -80,11 +100,6 @@ fn get_icon_base64_uncached(exe_path: &str) -> Option<String> {
 
         hicon_to_base64(hicon)
     }
-}
-
-pub fn get_window_icon_base64(hwnd_text: &str) -> Option<String> {
-    let hwnd = parse_hwnd(hwnd_text)?;
-    get_window_icon_base64_from_hwnd(hwnd)
 }
 
 pub(crate) fn get_window_icon_base64_from_hwnd(hwnd: HWND) -> Option<String> {
@@ -177,7 +192,7 @@ unsafe fn bitmap_to_base64(bitmap: HBITMAP) -> Option<String> {
 
     let width = bm.bmWidth as u32;
     let height = bm.bmHeight.unsigned_abs();
-    if width == 0 || height == 0 {
+    if width == 0 || height == 0 || width > 512 || height > 512 {
         return None;
     }
 
@@ -239,7 +254,14 @@ fn read_icon_result_cache(cache_key: &str, now_ms: u64) -> Option<Option<String>
 fn write_icon_result_cache(cache_key: String, value: Option<String>, now_ms: u64) {
     if let Ok(mut cache) = icon_result_cache().lock() {
         prune_expired_icon_result_cache(&mut cache, now_ms);
-        if cache.len() >= ICON_RESULT_CACHE_MAX_ENTRIES && !cache.contains_key(&cache_key) {
+        cache.remove(&cache_key);
+        let bytes = cache_key.len() + value.as_ref().map_or(0, String::len);
+        if bytes > ICON_RESULT_CACHE_MAX_BYTES {
+            return;
+        }
+        while cache.len() >= ICON_RESULT_CACHE_MAX_ENTRIES
+            || icon_cache_bytes(&cache) + bytes > ICON_RESULT_CACHE_MAX_BYTES
+        {
             if let Some(oldest_key) = cache
                 .iter()
                 .min_by_key(|(_, entry)| entry.cached_at_ms)
@@ -259,6 +281,13 @@ fn write_icon_result_cache(cache_key: String, value: Option<String>, now_ms: u64
     }
 }
 
+fn icon_cache_bytes(cache: &HashMap<String, IconResultCacheEntry>) -> usize {
+    cache
+        .iter()
+        .map(|(key, entry)| key.len() + entry.value.as_ref().map_or(0, String::len))
+        .sum()
+}
+
 fn is_icon_result_cache_entry_fresh(entry: &IconResultCacheEntry, now_ms: u64) -> bool {
     let ttl_ms = if entry.value.is_some() {
         ICON_RESULT_CACHE_TTL_MS
@@ -266,7 +295,7 @@ fn is_icon_result_cache_entry_fresh(entry: &IconResultCacheEntry, now_ms: u64) -
         ICON_RESULT_NEGATIVE_CACHE_TTL_MS
     };
 
-    now_ms.saturating_sub(entry.cached_at_ms) <= ttl_ms
+    now_ms >= entry.cached_at_ms && now_ms.saturating_sub(entry.cached_at_ms) <= ttl_ms
 }
 
 fn prune_expired_icon_result_cache(cache: &mut HashMap<String, IconResultCacheEntry>, now_ms: u64) {
@@ -280,7 +309,7 @@ fn icon_result_cache() -> &'static Mutex<HashMap<String, IconResultCacheEntry>> 
 }
 
 pub fn icon_result_cache_stats() -> IconResultCacheStats {
-    let (entries, positive_entries, negative_entries) = icon_result_cache()
+    let (entries, positive_entries, negative_entries, estimated_bytes) = icon_result_cache()
         .lock()
         .map(|mut cache| {
             prune_expired_icon_result_cache(&mut cache, now_ms());
@@ -290,11 +319,14 @@ pub fn icon_result_cache_stats() -> IconResultCacheStats {
                 entries,
                 positive_entries,
                 entries.saturating_sub(positive_entries),
+                icon_cache_bytes(&cache),
             )
         })
-        .unwrap_or((0, 0, 0));
+        .unwrap_or((0, 0, 0, 0));
 
     IconResultCacheStats {
+        estimated_bytes,
+        max_bytes: ICON_RESULT_CACHE_MAX_BYTES,
         entries,
         positive_entries,
         negative_entries,
@@ -375,6 +407,22 @@ mod tests {
     }
 
     #[test]
+    fn cache_clock_rollback_invalidates_icon_results() {
+        let _guard = cache_test_guard();
+        clear_icon_result_cache_for_tests();
+        for value in [Some("icon".into()), None] {
+            write_icon_result_cache("old".into(), value.clone(), 1_000_000);
+            assert!(read_icon_result_cache("old", 1_000_001).is_some());
+            assert!(read_icon_result_cache("old", 100_000).is_none());
+            assert!(read_icon_result_cache("old", 1_000_001).is_none());
+            write_icon_result_cache("old".into(), value.clone(), 1_000_000);
+            write_icon_result_cache("fresh".into(), value, 100_000);
+            assert!(!icon_result_cache().lock().unwrap().contains_key("old"));
+            assert!(read_icon_result_cache("fresh", 100_001).is_some());
+        }
+    }
+
+    #[test]
     fn parse_hwnd_accepts_hex_and_decimal() {
         let hex = parse_hwnd("0x100").unwrap();
         let dec = parse_hwnd("256").unwrap();
@@ -400,6 +448,30 @@ mod tests {
             Some(Some("icon".to_string()))
         );
         assert_eq!(read_icon_result_cache("file:test.exe", 601_001), None);
+    }
+
+    #[test]
+    fn icon_cache_bytes_are_bounded_and_file_replacement_invalidates_keys() {
+        let _guard = cache_test_guard();
+        clear_icon_result_cache_for_tests();
+        for index in 0..20 {
+            write_icon_result_cache(
+                format!("large-{index}"),
+                Some("x".repeat(1024 * 1024)),
+                index,
+            );
+        }
+        let cache = icon_result_cache().lock().unwrap();
+        assert!(icon_cache_bytes(&cache) <= ICON_RESULT_CACHE_MAX_BYTES);
+        assert!(cache.len() < 20);
+        drop(cache);
+        let path = std::env::temp_dir().join(format!("patina-icon-key-{}", uuid::Uuid::new_v4()));
+        std::fs::write(&path, b"a").unwrap();
+        let before = file_cache_key(path.to_str().unwrap()).unwrap();
+        std::fs::write(&path, b"bb").unwrap();
+        assert_ne!(file_cache_key(path.to_str().unwrap()).unwrap(), before);
+        std::fs::remove_file(&path).unwrap();
+        assert!(file_cache_key(path.to_str().unwrap()).is_none());
     }
 
     #[test]
