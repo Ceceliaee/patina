@@ -580,6 +580,11 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
         && document.activeElement?.matches('.history-date-label')`);
       assert.equal(await evaluate(client, sessionId, `document.querySelector('.history-date-label')?.getAttribute('aria-expanded')`), "false");
     };
+    const waitForPresentedDate = async (date: string) => {
+      await waitForExpression(client, sessionId,
+        `document.querySelector('[data-history-content-date="${date}"]')?.matches('[data-history-content-state="ready"], [data-history-content-state="empty"]')`,
+        undefined, "calendar selection must finish loading before checking the presented date");
+    };
     const showMonth = async (target: string) => {
       const visibleMonth = `document.querySelector('.history-calendar-popover [data-calendar-date]:not([data-muted])')?.getAttribute('data-calendar-date')?.slice(0, 7)`;
       for (let step = 0; step < 24; step += 1) {
@@ -710,6 +715,7 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
       undefined, "ArrowLeft must move actual calendar focus to the previous date");
     await pressKey("Enter");
     await waitForClosedCalendar();
+    await waitForPresentedDate(dates.yesterday);
     assert.equal(await evaluate(client, sessionId, `document.querySelector('.history-date-label')?.textContent`), DATE_TEXT.yesterday);
 
     for (const boundary of [
@@ -725,6 +731,7 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
         undefined, "calendar focus and visible month must cross the date boundary together");
       await pressKey("Enter");
       await waitForClosedCalendar();
+      await waitForPresentedDate(boundary.to);
       await openCalendar();
       assert.equal(await evaluate(client, sessionId, `document.querySelector('.history-calendar-popover [data-selected="true"]')?.getAttribute('data-calendar-date')`), boundary.to);
       await pressKey("Escape");
@@ -735,6 +742,7 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
     await evaluate(client, sessionId, `document.querySelector('[data-calendar-date="${dates.today}"]').focus()`);
     await pressKey("Enter");
     await waitForClosedCalendar();
+    await waitForPresentedDate(dates.today);
     assert.equal(await evaluate(client, sessionId, `document.querySelector('.history-date-label')?.textContent`), DATE_TEXT.today);
     assert.equal(await evaluate(client, sessionId, `document.querySelector('.history-date-label').parentElement.nextElementSibling.disabled`), true);
   });
@@ -2634,7 +2642,9 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
       true,
       "history web icons must expose the shared menu without native tooltips",
     );
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-classification-menu[role="menu"]'))`);
+    await waitForExpression(client!, sessionId, `Array.from(document.querySelectorAll(
+      '.quick-classification-menu[role="menu"] > button',
+    )).some((item) => item.textContent?.trim() === "更改名称" && !item.disabled)`);
     assert.deepEqual(
       await evaluate(client!, sessionId, `
         ({
@@ -2720,7 +2730,9 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
         return true;
       })()
     `);
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.quick-classification-menu[role="menu"]'))`);
+    await waitForExpression(client!, sessionId, `Array.from(document.querySelectorAll(
+      '.quick-classification-menu[role="menu"] > button',
+    )).some((item) => item.textContent?.trim() === "更改名称" && !item.disabled)`);
     await evaluate(client!, sessionId, `
       Array.from(document.querySelectorAll(
         '.quick-classification-menu[role="menu"] > .quick-classification-menu-item',
