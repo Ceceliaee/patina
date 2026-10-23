@@ -167,10 +167,9 @@ export interface UiText {
   "backup": {
     "appVersion": (version: string) => string;
     "exportedAt": (value: string) => string;
-    "formatLabel": (kind: "sqlite_snapshot" | "legacy_structured") => string;
+    "formatLabel": string;
     "importItemCounts": (batchCount: number, exactCount: number, bucketCount: number) => string;
     "itemCounts": (sessionCount: number, settingCount: number, iconCacheCount: number) => string;
-    "legacyExternalDataNotice": string;
     "restoreMessage": (key: string | null, args: string[], fallback: string) => string;
     "restoreSafety": (message: string) => string;
   };
@@ -698,7 +697,6 @@ export interface UiText {
     "backupExporting": string;
     "backupExportTitle": string;
     "backupRestoreAction": string;
-    "backupRestoreActionHelp": string;
     "backupRestoreActionTitle": string;
     "backupRestoreTitle": string;
     "backupRestoring": string;
@@ -903,6 +901,7 @@ export interface UiText {
   "toast": {
     "backupExportFailed": string;
     "backupExportSuccess": (path: string) => string;
+    "backupFormatUnsupported": string;
     "backupIncompatible": (reason?: string | null | undefined) => string;
     "backupPreviewFailed": string;
     "backupRestoreFailed": string;
@@ -910,7 +909,6 @@ export interface UiText {
     "cleanupFailed": string;
     "cleanupSuccess": string;
     "feedbackOpenFailed": string;
-    "legacyBackupRestoreSuccess": string;
     "releaseNotesOpenFailed": string;
     "repositoryOpenFailed": string;
     "settingsRuntimeSyncPartial": string;
