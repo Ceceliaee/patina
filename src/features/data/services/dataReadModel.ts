@@ -20,8 +20,9 @@ import {
 } from "../../../shared/lib/localDate.ts";
 import { pickPreferredAppName } from "../../../shared/lib/displayNameScoring.ts";
 import {
-  resolveStatisticalDataAppKey,
-} from "./dataHeatmapReadModel.ts";
+  createDataSessionIdentityResolver,
+  type DataSessionIdentity,
+} from "./dataSessionIdentity.ts";
 import type { DataDestinationTrendSummary, DataDestinationTrendOption } from "./dataDestinationState.ts";
 
 export function toAppPanelOption(
@@ -145,10 +146,7 @@ export interface DataAppTrendViewModel {
   activeDateKeys: string[];
 }
 
-interface CompiledDataSession extends AggregateSessionRecord {
-  appKey: string;
-  displayName: string; displayNameRank: number;
-}
+interface CompiledDataSession extends AggregateSessionRecord, DataSessionIdentity {}
 
 interface DataTrendAggregateContextOptions {
   includeAppBuckets?: boolean;
@@ -238,49 +236,6 @@ function formatAppDayLabel(dateKey: string, locale: Locale) {
     if (oldestKey) dataAppDayLabelCache.delete(oldestKey);
   }
   return label;
-}
-
-function resolveDataDisplayName(session: AggregateSessionRecord, appKey: string) {
-  const overrideDisplayName = AppClassification.getUserOverride(appKey)?.displayName?.trim();
-  if (overrideDisplayName) return overrideDisplayName;
-  if (appKey !== AppClassification.normalizeExecutable(session.exeName)) {
-    return AppClassification.mapApp(appKey).name;
-  }
-  return session.appName.trim() || AppClassification.mapApp(appKey).name;
-}
-function resolveDataDisplayNameRank(session: AggregateSessionRecord, appKey: string) {
-  const isCanonicalExecutable = AppClassification.normalizeExecutable(session.exeName) === appKey;
-  return AppClassification.getUserOverride(appKey)?.displayName?.trim()
-    ? 3 : (isCanonicalExecutable ? (session.appName.trim() ? 2 : 1) : 0);
-}
-
-function compileDataSessions(
-  sessions: AggregateSessionRecord[],
-  range: SessionRange,
-): CompiledDataSession[] {
-  const compiledSessions: CompiledDataSession[] = [];
-
-  for (const session of sessions) {
-    const appKey = resolveStatisticalDataAppKey(session);
-    if (!appKey) continue;
-
-    const startTime = Math.max(session.startTime, range.startMs);
-    const endTime = Math.min(session.endTime, range.endMs);
-    if (endTime <= startTime) {
-      continue;
-    }
-
-    compiledSessions.push({
-      ...session,
-      appKey,
-      displayName: resolveDataDisplayName(session, appKey),
-      displayNameRank: resolveDataDisplayNameRank(session, appKey),
-      startTime,
-      endTime,
-    });
-  }
-
-  return compiledSessions;
 }
 
 function addDurationToBucket(buckets: Map<string, number>, key: string, duration: number) {
@@ -435,12 +390,26 @@ function buildDataDurationAggregate(
     monthDurations: createMonthDurationBuckets(monthRanges),
     appBuckets: new Map(),
   };
-  const compiledSessions = compileDataSessions(sessions, range);
   const includeAppBuckets = options.includeAppBuckets ?? true;
   const displayNameRanks = new Map<string, number>();
+  const resolveIdentity = createDataSessionIdentityResolver(includeAppBuckets);
 
-  for (const session of compiledSessions) {
-    addSessionToDurationAggregate(aggregate, displayNameRanks, session, range, includeAppBuckets);
+  for (const session of sessions) {
+    const startTime = Math.max(session.startTime, range.startMs);
+    const endTime = Math.min(session.endTime, range.endMs);
+    if (endTime <= startTime) continue;
+    const identity = resolveIdentity(session);
+    if (!identity) continue;
+
+    addSessionToDurationAggregate(aggregate, displayNameRanks, {
+      appName: session.appName,
+      exeName: session.exeName,
+      appKey: identity.appKey,
+      displayName: identity.displayName,
+      displayNameRank: identity.displayNameRank,
+      startTime,
+      endTime,
+    }, range, includeAppBuckets);
   }
 
   return aggregate;

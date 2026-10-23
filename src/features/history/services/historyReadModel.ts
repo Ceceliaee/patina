@@ -107,6 +107,12 @@ const DEFAULT_HISTORY_SNAPSHOT_DEPS: HistorySnapshotDeps = {
 
 let warnedWebHistoryFallback = false;
 let warnedWebFaviconFallback = false;
+const HISTORY_PENDING_READ_LIMIT = 4;
+let pendingHistoryReadGroups = 0;
+
+export function getHistoryNativeReadStats() {
+  return { inFlightReadGroups: pendingHistoryReadGroups, readGroupLimit: HISTORY_PENDING_READ_LIMIT };
+}
 
 const HISTORY_WEB_FAVICON_RUNTIME_CACHE_LIMIT = 64;
 const HISTORY_WEB_FAVICON_REFRESH_INTERVAL_MS = 30_000;
@@ -294,15 +300,17 @@ export async function loadHistoryDaySessionDetails(
 async function loadOptionalWebSnapshotPart(
   deps: HistorySnapshotDeps,
   selectedDayRange: { startMs: number; endMs: number },
+  trackRead: <T>(read: () => Promise<T>) => Promise<T>,
 ): Promise<Pick<HistorySnapshot, "dayWebSegments" | "webDomainFavicons" | "webDomainOverrides">> {
   if (deps.loadWebSnapshot) {
-    const snapshot = await deps.loadWebSnapshot(selectedDayRange.startMs, selectedDayRange.endMs);
+    const load = deps.loadWebSnapshot;
+    const snapshot = await trackRead(() => load(selectedDayRange.startMs, selectedDayRange.endMs));
     return { dayWebSegments: snapshot.segments, webDomainOverrides: snapshot.overrides, webDomainFavicons: {} };
   }
   try {
     const [dayWebSegments, webDomainOverrides] = await Promise.all([
-      deps.getWebActivitySegmentsInRange(selectedDayRange.startMs, selectedDayRange.endMs),
-      deps.loadWebDomainOverrides(),
+      trackRead(() => deps.getWebActivitySegmentsInRange(selectedDayRange.startMs, selectedDayRange.endMs)),
+      trackRead(() => deps.loadWebDomainOverrides()),
     ]);
     return {
       dayWebSegments,
@@ -342,55 +350,70 @@ export async function loadHistorySnapshot(
   deps: HistorySnapshotDeps = DEFAULT_HISTORY_SNAPSHOT_DEPS,
   options: HistorySnapshotLoadOptions = {},
 ): Promise<HistorySnapshot> {
-  const selectedDayRange = getDayRange(date);
-  const rollingRanges = getRollingDayRanges(rollingDayCount);
-  const weeklyRangeStart = rollingRanges[0]?.startMs ?? selectedDayRange.startMs;
-  const weeklyRangeEnd = rollingRanges[rollingRanges.length - 1]?.endMs ?? selectedDayRange.endMs;
-
-  const includeWebActivity = options.includeWebActivity ?? true;
-  const includeTitleDetails = options.includeTitleDetails ?? true;
-  const loadDaySessions = includeTitleDetails
-    ? () => deps.getHistoryByDate(date)
-    : () => (deps.getDaySessionsInRange ?? deps.getSessionsInRange)(
-      selectedDayRange.startMs,
-      selectedDayRange.endMs,
-    );
-  const [
-    daySessions,
-    dayAggregate,
-    weeklyAggregate,
-    webSnapshotPart,
-  ] = await Promise.all([
-    loadDaySessions(),
-    deps.getActivityAggregateRange(selectedDayRange.startMs, selectedDayRange.endMs),
-    deps.getActivityAggregateRange(weeklyRangeStart, weeklyRangeEnd),
-    includeWebActivity
-      ? loadOptionalWebSnapshotPart(deps, selectedDayRange)
-      : Promise.resolve({
-        dayWebSegments: [],
-        webDomainFavicons: {},
-        webDomainOverrides: {},
-      }),
-  ]);
-  const dayAggregateSessions = dayAggregate.records;
-  const weeklyAggregateSessions = weeklyAggregate.records;
-  const icons = getCachedHistoryIconMap(
-    daySessions,
-    dayAggregateSessions,
-    weeklyAggregateSessions,
-  );
-
-  return {
-    fetchedAtMs: Date.now(),
-    icons,
-    daySessions,
-    dayAggregateSessions,
-    weeklyAggregateSessions,
-    hasActiveSession: dayAggregate.hasActiveSession || weeklyAggregate.hasActiveSession,
-    dayWebSegments: webSnapshotPart.dayWebSegments,
-    webDomainFavicons: webSnapshotPart.webDomainFavicons,
-    webDomainOverrides: webSnapshotPart.webDomainOverrides,
+  if (pendingHistoryReadGroups >= HISTORY_PENDING_READ_LIMIT) {
+    throw new Error("History reads are still in progress");
+  }
+  pendingHistoryReadGroups += 1;
+  const nativeReads: Promise<unknown>[] = [];
+  const trackRead = <T,>(read: () => Promise<T>): Promise<T> => {
+    const pending = (async () => read())();
+    nativeReads.push(pending);
+    return pending;
   };
+  try {
+    const selectedDayRange = getDayRange(date);
+    const rollingRanges = getRollingDayRanges(rollingDayCount);
+    const weeklyRangeStart = rollingRanges[0]?.startMs ?? selectedDayRange.startMs;
+    const weeklyRangeEnd = rollingRanges[rollingRanges.length - 1]?.endMs ?? selectedDayRange.endMs;
+
+    const includeWebActivity = options.includeWebActivity ?? true;
+    const includeTitleDetails = options.includeTitleDetails ?? true;
+    const loadDaySessions = includeTitleDetails
+      ? () => deps.getHistoryByDate(date)
+      : () => (deps.getDaySessionsInRange ?? deps.getSessionsInRange)(
+        selectedDayRange.startMs,
+        selectedDayRange.endMs,
+      );
+    const [
+      daySessions,
+      dayAggregate,
+      weeklyAggregate,
+      webSnapshotPart,
+    ] = await Promise.all([
+      trackRead(loadDaySessions),
+      trackRead(() => deps.getActivityAggregateRange(selectedDayRange.startMs, selectedDayRange.endMs)),
+      trackRead(() => deps.getActivityAggregateRange(weeklyRangeStart, weeklyRangeEnd)),
+      includeWebActivity
+        ? loadOptionalWebSnapshotPart(deps, selectedDayRange, trackRead)
+        : Promise.resolve({
+          dayWebSegments: [],
+          webDomainFavicons: {},
+          webDomainOverrides: {},
+        }),
+    ]);
+    const dayAggregateSessions = dayAggregate.records;
+    const weeklyAggregateSessions = weeklyAggregate.records;
+    const icons = getCachedHistoryIconMap(
+      daySessions,
+      dayAggregateSessions,
+      weeklyAggregateSessions,
+    );
+
+    return {
+      fetchedAtMs: Date.now(),
+      icons,
+      daySessions,
+      dayAggregateSessions,
+      weeklyAggregateSessions,
+      hasActiveSession: dayAggregate.hasActiveSession || weeklyAggregate.hasActiveSession,
+      dayWebSegments: webSnapshotPart.dayWebSegments,
+      webDomainFavicons: webSnapshotPart.webDomainFavicons,
+      webDomainOverrides: webSnapshotPart.webDomainOverrides,
+    };
+  } finally {
+    // Cache eviction and an early sibling failure do not cancel dispatched IPC.
+    void Promise.allSettled(nativeReads).then(() => { pendingHistoryReadGroups -= 1; });
+  }
 }
 
 export function buildHistoryReadModel(params: {

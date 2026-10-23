@@ -273,66 +273,43 @@ async function openHistory(client: CdpConnection, sessionId: string) {
   assert.equal(await evaluate(client, sessionId, `document.body.innerText.includes(${jsonString(HISTORY_LOADING_VIEW)})`), false);
 }
 
-async function resetOverviewRangeToSevenDays(client: CdpConnection, sessionId: string) {
-  for (let index = 0; index < 3; index += 1) {
-    const isSevenDays = await evaluate(
-      client,
-      sessionId,
-      `document.querySelectorAll(".data-trend-range-trigger")[0]?.textContent?.trim() === "近 7 天"`,
-    );
-    if (isSevenDays) return;
-
-    await evaluate(client, sessionId, `
-      (() => {
-        const control = document.querySelectorAll(".data-trend-range-control")[0];
-        const button = control?.querySelector("button:first-of-type");
-        if (button && !button.disabled) button.click();
-        return true;
-      })()
-    `);
-    await waitForPaint(client, sessionId);
-  }
-}
-
-async function setOverviewRangeToYear(client: CdpConnection, sessionId: string) {
-  await resetOverviewRangeToSevenDays(client, sessionId);
-  for (let index = 0; index < 2; index += 1) {
-    await evaluate(client, sessionId, `
-      (() => {
-        const control = document.querySelectorAll(".data-trend-range-control")[0];
-        const button = control?.querySelector("button:last-of-type");
-        if (button && !button.disabled) button.click();
-        return true;
-      })()
-    `);
-    await waitForPaint(client, sessionId);
-  }
+async function waitForOverviewRange(client: CdpConnection, sessionId: string, label?: string) {
   await waitForExpression(
     client,
     sessionId,
-    `document.querySelectorAll(".data-trend-range-trigger")[0]?.textContent?.includes("年")`,
+    `(() => {
+      const panel = document.querySelector('.data-overview .data-trend-panel');
+      const actual = panel?.querySelector('.data-trend-range-trigger')?.textContent?.trim();
+      return Boolean(actual && panel?.getAttribute('aria-busy') === 'false'
+        && !panel.querySelector('[data-trend-read-error]')
+        && (${jsonString(label ?? "")} === '' || actual === ${jsonString(label ?? "")}));
+    })()`,
     45_000,
+    `settled overview range ${label ?? "before interaction"}`,
   );
 }
 
-async function setOverviewRangeToSevenDays(client: CdpConnection, sessionId: string) {
-  for (let index = 0; index < 2; index += 1) {
-    await evaluate(client, sessionId, `
-      (() => {
-        const control = document.querySelectorAll(".data-trend-range-control")[0];
-        const button = control?.querySelector("button:first-of-type");
-        if (button && !button.disabled) button.click();
-        return true;
-      })()
-    `);
+async function setOverviewRange(client: CdpConnection, sessionId: string, target: "近 7 天" | "近一年") {
+  const labels = ["累计", "近 7 天", "近 30 天", "近一年"];
+  await waitForOverviewRange(client, sessionId);
+  for (let step = 0; step < labels.length; step += 1) {
+    const current = await evaluate(client, sessionId,
+      `document.querySelector('.data-overview .data-trend-range-trigger')?.textContent?.trim()`);
+    if (current === target) return;
+    const index = labels.indexOf(String(current));
+    assert.ok(index >= 0, `Unexpected overview range: ${String(current)}`);
+    const direction = index < labels.indexOf(target) ? 1 : -1;
+    assert.equal(await evaluate(client, sessionId, `(() => {
+      const button = document.querySelector('.data-overview .data-trend-range-control button:${direction === 1 ? "last" : "first"}-of-type');
+      if (!button || button.disabled) return false;
+      button.click();
+      return true;
+    })()`), true, `Cannot step overview range from ${String(current)} to ${target}`);
+    // The displayed label can lag requested selection while the query is running.
+    await waitForOverviewRange(client, sessionId, labels[index + direction]);
     await waitForPaint(client, sessionId);
   }
-  await waitForExpression(
-    client,
-    sessionId,
-    `document.querySelectorAll(".data-trend-range-trigger")[0]?.textContent?.trim() === "近 7 天"`,
-    45_000,
-  );
+  assert.fail(`Overview range did not reach ${target}`);
 }
 
 let browserProcess: ChildProcess | null = null;
@@ -405,6 +382,17 @@ try {
   await waitForExpression(client, sessionId, navActiveExpression(DASHBOARD_LABEL), 45_000);
   await waitForPaint(client, sessionId);
 
+  if (process.argv.includes("--range-controls-self-test")) {
+    await openData(client, sessionId);
+    await evaluate(client, sessionId, "globalThis.__TIME_TRACKER_HISTORY_QUERY_DELAY_MS = 300");
+    for (let iteration = 0; iteration < 4; iteration += 1) {
+      await setOverviewRange(client, sessionId, "近 7 天");
+      await setOverviewRange(client, sessionId, "近一年");
+    }
+    await setOverviewRange(client, sessionId, "近 7 天");
+    assert.deepEqual(consoleErrors, []);
+    console.log("PASS range controls settle every step across four delayed annual round trips");
+  } else {
   const coldHistoryMeaningfulContentDurationMs = await clickNavConditionDurationMs(
     client,
     sessionId,
@@ -461,7 +449,8 @@ try {
     ),
     await measureAsyncBenchmark("browser-data-7d-to-365d", 8, 1_000, async () => {
       await openData(client!, sessionId);
-      await setOverviewRangeToYear(client!, sessionId);
+      await setOverviewRange(client!, sessionId, "近 7 天");
+      await setOverviewRange(client!, sessionId, "近一年");
       await waitForExpression(
         client!,
         sessionId,
@@ -471,8 +460,9 @@ try {
     }),
     await measureAsyncBenchmark("browser-data-365d-to-7d", 8, 1_000, async () => {
       await openData(client!, sessionId);
-      await setOverviewRangeToYear(client!, sessionId);
-      await setOverviewRangeToSevenDays(client!, sessionId);
+      await setOverviewRange(client!, sessionId, "近 7 天");
+      await setOverviewRange(client!, sessionId, "近一年");
+      await setOverviewRange(client!, sessionId, "近 7 天");
     }),
     await measureAsyncBenchmark("browser-dashboard-to-history", 8, 350, async () => {
       await openDashboard(client!, sessionId);
@@ -516,6 +506,7 @@ try {
 
   if (consoleErrors.length > 0) {
     process.exitCode = 1;
+  }
   }
 } finally {
   client?.close();

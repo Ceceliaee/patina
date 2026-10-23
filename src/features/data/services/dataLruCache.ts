@@ -1,3 +1,10 @@
+import type { AggregateSessionRecord } from "../../../platform/persistence/sessionReadRepository.ts";
+
+// UTF-16 text plus two numeric timestamps; excludes JS object/Map overhead.
+export function estimateDataSessionPayloadBytes(sessions: AggregateSessionRecord[]): number {
+  return sessions.reduce((bytes, session) => bytes + 16 + 2 * (session.appName.length + session.exeName.length), 0);
+}
+
 export function touchBoundedDataCacheEntry<Key, Value>(
   cache: Map<Key, Value>,
   key: Key,

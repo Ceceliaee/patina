@@ -10,7 +10,7 @@ import {
 } from "./dataTrendRange.ts";
 import { getCachedDataIconsForExecutables } from "./dataIconService.ts";
 import { registerDataHeavyCacheClearer } from "./dataCacheLifecycle.ts";
-import { touchBoundedDataCacheEntry } from "./dataLruCache.ts";
+import { estimateDataSessionPayloadBytes, touchBoundedDataCacheEntry } from "./dataLruCache.ts";
 
 export interface DataTrendSnapshot {
   fetchedAtMs: number;
@@ -23,9 +23,11 @@ export interface DataTrendSnapshotDependencies {
   getSessionSummariesInRange: (startMs: number, endMs: number) => Promise<AggregateSessionRecord[]>;
 }
 
-const snapshotCache = new Map<string, DataTrendSnapshot>();
+const snapshotCache = new Map<string, { snapshot: DataTrendSnapshot; payloadBytes: number }>();
 const sessionPromises = new Map<string, Promise<AggregateSessionRecord[]>>();
 const DATA_TREND_SNAPSHOT_CACHE_LIMIT = 2;
+const DATA_TREND_PENDING_LIMIT = 4;
+const DATA_TREND_CACHE_PAYLOAD_LIMIT = 16 * 1024 * 1024;
 let dataTrendSnapshotCacheEpoch = 0;
 
 function collectDataIconExecutables(sessions: AggregateSessionRecord[]): string[] {
@@ -51,26 +53,29 @@ function getCachedDataIconMap(
   );
 }
 
-function touchSnapshotCacheEntry(key: string, snapshot: DataTrendSnapshot): void {
-  touchBoundedDataCacheEntry(snapshotCache, key, snapshot, DATA_TREND_SNAPSHOT_CACHE_LIMIT);
-}
-
 export function getCachedDataTrendSnapshot(range: ResolvedDataTrendRange): DataTrendSnapshot | null {
-  const snapshot = snapshotCache.get(range.cacheKey);
-  if (!snapshot) return null;
+  const entry = snapshotCache.get(range.cacheKey);
+  if (!entry) return null;
 
-  touchSnapshotCacheEntry(range.cacheKey, snapshot);
-  return { ...snapshot, range };
+  touchBoundedDataCacheEntry(snapshotCache, range.cacheKey, entry, DATA_TREND_SNAPSHOT_CACHE_LIMIT);
+  return { ...entry.snapshot, range };
 }
 
 function setDataTrendSnapshotCache(snapshot: DataTrendSnapshot): void {
-  touchSnapshotCacheEntry(snapshot.range.cacheKey, snapshot);
+  const payloadBytes = estimateDataSessionPayloadBytes(snapshot.sessions);
+  snapshotCache.delete(snapshot.range.cacheKey);
+  // Return complete query results to the page even when they are too large to retain.
+  if (payloadBytes > DATA_TREND_CACHE_PAYLOAD_LIMIT) return;
+  touchBoundedDataCacheEntry(snapshotCache, snapshot.range.cacheKey, { snapshot, payloadBytes }, DATA_TREND_SNAPSHOT_CACHE_LIMIT);
+  while ([...snapshotCache.values()].reduce((bytes, entry) => bytes + entry.payloadBytes, 0) > DATA_TREND_CACHE_PAYLOAD_LIMIT) {
+    snapshotCache.delete(snapshotCache.keys().next().value!);
+  }
 }
 
 export function clearDataTrendSnapshotCache(): void {
   dataTrendSnapshotCacheEpoch += 1;
   snapshotCache.clear();
-  sessionPromises.clear();
+  // Invalidating cached results does not cancel native reads already in flight.
 }
 
 registerDataHeavyCacheClearer("trend-snapshot", clearDataTrendSnapshotCache);
@@ -84,15 +89,19 @@ export async function loadDataTrendSnapshot(
   },
 ): Promise<DataTrendSnapshot> {
   const range = resolveDataTrendRange(selection, nowMs, uiText);
-  const pending = sessionPromises.get(range.cacheKey);
   const loadStartedAtEpoch = dataTrendSnapshotCacheEpoch;
+  const pendingKey = `${loadStartedAtEpoch}:${range.cacheKey}`;
+  const pending = sessionPromises.get(pendingKey);
+  if (!pending && sessionPromises.size >= DATA_TREND_PENDING_LIMIT) {
+    throw new Error("Data trend reads are still in progress");
+  }
   const sessionPromise = pending ?? (() => {
     const nextPromise = deps.getSessionSummariesInRange(range.startMs, range.endMs).finally(() => {
-      if (sessionPromises.get(range.cacheKey) === nextPromise) {
-        sessionPromises.delete(range.cacheKey);
+      if (sessionPromises.get(pendingKey) === nextPromise) {
+        sessionPromises.delete(pendingKey);
       }
     });
-    sessionPromises.set(range.cacheKey, nextPromise);
+    sessionPromises.set(pendingKey, nextPromise);
     return nextPromise;
   })();
   return sessionPromise.then((sessions) => {
@@ -114,5 +123,8 @@ export function getDataTrendSnapshotCacheStats() {
     entries: snapshotCache.size,
     limit: DATA_TREND_SNAPSHOT_CACHE_LIMIT,
     pendingEntries: sessionPromises.size,
+    pendingLimit: DATA_TREND_PENDING_LIMIT,
+    estimatedSessionPayloadBytes: [...snapshotCache.values()].reduce((bytes, entry) => bytes + entry.payloadBytes, 0),
+    maxSessionPayloadBytes: DATA_TREND_CACHE_PAYLOAD_LIMIT,
   };
 }

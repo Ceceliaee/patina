@@ -13,6 +13,7 @@ import {
 } from "../../../shared/classification/categoryTokens";
 import type { CandidateFilter, ObservedAppCandidate } from "../types";
 import { collectCandidateCategories } from "../services/classificationCandidateFiltering.ts";
+import { isRecordedCandidateTrackingEnabled } from "../services/classificationAppCatalog.ts";
 import type {
   ObservedWebDomainCandidate,
   WebDomainOverride,
@@ -139,8 +140,7 @@ export function useAppMappingDerivedState({
   }, [draftOverrides, editingNameExe, nameEditSnapshots, resolveDisplayNameFromOverride, resolveEffectiveDisplayName]);
 
   const resolveTrackingEnabled = useCallback((candidate: ObservedAppCandidate) => {
-    return AppClassification.shouldTrackProcess(candidate.exeName, { appName: candidate.appName })
-      && draftOverrides[candidate.exeName]?.track !== false;
+    return isRecordedCandidateTrackingEnabled(candidate, draftOverrides[candidate.exeName]);
   }, [draftOverrides]);
 
   const resolveTitleCaptureEnabled = useCallback((candidate: ObservedAppCandidate) => (

@@ -9,6 +9,7 @@ import {
   ClassificationAppCatalogSnapshotStore,
   ClassificationAppCatalogRevisionChangedError,
   loadClassificationAppCatalogBatch,
+  isRecordedCandidateTrackingEnabled,
 } from "../src/features/classification/services/classificationAppCatalog.ts";
 import { ProcessMapper } from "../src/shared/classification/processMapper.ts";
 import type { ObservedAppCandidate } from "../src/features/classification/services/classificationStore.ts";
@@ -44,6 +45,25 @@ await runTest("catalog formats executable names only after missing runtime facts
     }),
   });
   assert.equal(result.candidates[0].appName, "New Editor");
+});
+
+await runTest("pending names stay trackable without using generated labels as installer evidence", async () => {
+  const load = (appName: string) => loadClassificationAppCatalogBatch({
+    cursor: null, searchQuery: "", seenExeNames: [],
+  }, {
+    loadRecordedPage: async () => catalogPage({
+      rows: [{ rawExeName: "readerinstaller.exe", appName, lastSeenMs: 1000, hasNativeRecords: true }],
+      nextCursor: null, hasMore: false,
+    }),
+  });
+  const pending = await load("");
+  assert.equal(pending.candidates.length, 1);
+  assert.equal(isRecordedCandidateTrackingEnabled(pending.candidates[0], undefined), true);
+  assert.equal(isRecordedCandidateTrackingEnabled(pending.candidates[0], { track: false }), false);
+  const reader = await load("Document Reader");
+  assert.equal(reader.candidates.length, 1);
+  assert.equal(isRecordedCandidateTrackingEnabled(reader.candidates[0], undefined), true);
+  assert.equal((await load("Reader Installer")).candidates.length, 0);
 });
 
 await runTest("catalog batch canonicalizes duplicates across raw pages", async () => {
@@ -526,12 +546,48 @@ await runTest("snapshot store ignores an invalidated refresh that finishes late"
 
   const obsolete = store.ensureLoaded();
   store.invalidate();
-  const current = await store.refresh();
+  const pendingCurrent = store.refresh();
+  for (let change = 0; change < 20; change += 1) {
+    store.invalidate();
+    assert.equal(store.ensureLoaded(), pendingCurrent, "invalidations must share one trailing refresh");
+  }
+  assert.equal(load, 1, "catalog invalidation released unfinished native query capacity");
+  const publishedNames: string[] = [];
+  store.subscribe(() => {
+    publishedNames.push(...(store.getSnapshot().committed?.candidates.map((app) => app.exeName) ?? []));
+  });
   releaseOld();
   await obsolete;
+  const current = await pendingCurrent;
 
+  assert.equal(load, 2);
+  assert.ok(!publishedNames.includes("old.exe"), "obsolete catalog must never be published");
   assert.equal(current?.candidates[0]?.exeName, "new.exe");
   assert.equal(store.getSnapshot().committed?.candidates[0]?.exeName, "new.exe");
+  assert.equal(store.getSnapshot().status, "ready");
+});
+
+await runTest("snapshot store performs its coalesced refresh after an obsolete query fails", async () => {
+  let rejectOld!: (error: Error) => void;
+  const oldGate = new Promise<never>((_, reject) => { rejectOld = reject; });
+  let loads = 0;
+  const store = new ClassificationAppCatalogSnapshotStore({
+    createController: () => ({
+      loadAll: async () => {
+        loads += 1;
+        if (loads === 1) return oldGate;
+        return { candidates: [], sourceRevision: 2 };
+      },
+    }),
+  });
+  const obsolete = store.ensureLoaded();
+  const rejection = assert.rejects(obsolete, /obsolete failure/);
+  store.invalidate();
+  const current = store.ensureLoaded();
+  rejectOld(new Error("obsolete failure"));
+  await rejection;
+  assert.equal((await current)?.sourceRevision, 2);
+  assert.equal(loads, 2);
   assert.equal(store.getSnapshot().status, "ready");
 });
 

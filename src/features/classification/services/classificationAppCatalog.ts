@@ -1,4 +1,4 @@
-import { ProcessMapper } from "../../../shared/classification/processMapper.ts";
+import { ProcessMapper, type AppOverride } from "../../../shared/classification/processMapper.ts";
 import {
   normalizeExecutable,
   resolveCanonicalExecutable,
@@ -14,6 +14,15 @@ import type { ObservedAppCandidate } from "./classificationStore.ts";
 import type { UserAssignableAppCategory } from "../../../shared/classification/categoryTokens.ts";
 
 export const CLASSIFICATION_APP_CATALOG_CARD_LIMIT = 60;
+
+export function isRecordedCandidateTrackingEnabled(
+  candidate: ObservedAppCandidate,
+  override: AppOverride | undefined,
+): boolean {
+  // The catalog has filtered original metadata. Its display label can be an
+  // executable fallback and must not become new evidence for process filtering.
+  return shouldTrackProcess(candidate.exeName) && override?.track !== false;
+}
 const CLASSIFICATION_APP_CATALOG_RAW_PAGE_LIMIT = 120;
 export const CLASSIFICATION_APP_CATALOG_MAX_RAW_PAGES = 4;
 
@@ -323,6 +332,7 @@ export class ClassificationAppCatalogSnapshotStore {
     generation: number;
     promise: Promise<CompleteAppCatalogSnapshot | null>;
   } | null = null;
+  private refreshAfterFlight: Promise<CompleteAppCatalogSnapshot | null> | null = null;
   private stale = true;
 
   constructor(input: {
@@ -375,11 +385,20 @@ export class ClassificationAppCatalogSnapshotStore {
   }
 
   refresh(): Promise<CompleteAppCatalogSnapshot | null> {
-    const generation = this.state.requestGeneration + 1;
-    if (this.inFlight?.generation === this.state.requestGeneration) {
-      return this.inFlight.promise;
+    if (this.inFlight) {
+      if (this.inFlight.generation === this.state.requestGeneration) {
+        return this.inFlight.promise;
+      }
+      // Invalidation cannot cancel an issued IPC query. Coalesce changes until
+      // that query settles, then read the latest facts with one fresh loader.
+      this.refreshAfterFlight ??= this.inFlight.promise.catch(() => null).then(() => {
+        this.refreshAfterFlight = null;
+        return this.ensureLoaded();
+      });
+      return this.refreshAfterFlight;
     }
 
+    const generation = this.state.requestGeneration + 1;
     const committedAtStart = this.state.committed;
     this.publish({
       status: committedAtStart ? "refreshing" : "cold",

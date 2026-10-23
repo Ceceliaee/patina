@@ -15,9 +15,9 @@ export function useClassificationAppCatalog({
   );
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || snapshot.status !== "cold") return;
     void ClassificationService.ensureAppCatalogLoaded().catch(() => undefined);
-  }, [enabled]);
+  }, [enabled, snapshot.status, snapshot.requestGeneration]);
 
   const retry = useCallback(
     () => ClassificationService.retryAppCatalog(),

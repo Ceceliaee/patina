@@ -7,6 +7,7 @@ import {
   buildHistoryReadModel,
   loadHistoryDaySessionDetails,
   loadHistorySnapshot,
+  getHistoryNativeReadStats,
   loadHistoryWebFaviconsForSegments,
   resetHistoryWebFaviconRuntimeCacheForTests,
   type AggregateSessionRecord,
@@ -1054,8 +1055,11 @@ await runTest("History bounds cache storage and blocks both late detail modes af
   for (let day = 3; day < 1003; day += 1) {
     setHistorySnapshotCache(snapshot, new Date(2026, 0, day), 7, false);
   }
+  await new Promise<void>(resolve => setImmediate(resolve));
   assert.deepEqual(getHistorySnapshotCacheStats(), {
-    entries: 7, limit: 7, pendingEntries: 2,
+    entries: 7, limit: 7, pendingEntries: 2, inFlightReadGroups: 2, readGroupLimit: 4,
+    estimatedSessionPayloadBytes: 616,
+    maxSessionPayloadBytes: 16 * 1024 * 1024,
   });
   releases[0]([makeSession({ id: 1 })]);
   assert.equal(await deduped, await pending[0]);
@@ -1065,7 +1069,9 @@ await runTest("History bounds cache storage and blocks both late detail modes af
   await pending[1];
   assert.equal(getHistorySnapshotCache(date, 7, false), null);
   assert.deepEqual(getHistorySnapshotCacheStats(), {
-    entries: 7, limit: 7, pendingEntries: 0,
+    entries: 7, limit: 7, pendingEntries: 0, inFlightReadGroups: 0, readGroupLimit: 4,
+    estimatedSessionPayloadBytes: 616,
+    maxSessionPayloadBytes: 16 * 1024 * 1024,
   });
 });
 
@@ -1123,6 +1129,64 @@ await runTest("History reinsertion prevents an evicted request from overwriting 
   await pending;
   assert.equal(getHistorySnapshotCache(date, 7, false)?.daySessions[0]?.id, 2);
   assert.equal(getHistorySnapshotCacheStats().entries, 7);
+});
+
+await runTest("History retains native capacity across partial failures and cache invalidation", async () => {
+  for (const mode of ["application", "web"] as const) {
+    const releases: Array<() => void> = [];
+    const held = () => new Promise<[]>((resolve) => releases.push(() => resolve([])));
+    const deps = {
+      getHistoryByDate: async () => mode === "application" ? held() : [],
+      getActivityAggregateRange: async () => {
+        if (mode === "application") throw new Error("aggregate failed");
+        return makeAggregateRange();
+      },
+      getSessionsInRange: async () => [],
+      getWebActivitySegmentsInRange: async () => mode === "web" ? held() : [],
+      getWebFaviconsForDomains: async () => ({}),
+      loadWebDomainOverrides: async () => { throw new Error("optional override failed"); },
+    };
+    try {
+      const reads = Array.from({ length: 4 }, (_, day) => loadHistorySnapshotWithCache(new Date(2026, 0, day + 1), 7, deps));
+      if (mode === "application") {
+        await Promise.all(reads.map(read => assert.rejects(read, /aggregate failed/)));
+      } else {
+        await Promise.all(reads);
+      }
+      assert.equal(getHistoryNativeReadStats().inFlightReadGroups, 4, "History partial failure released unfinished native query capacity");
+      for (let cycle = 0; cycle < 20; cycle++) {
+        clearHistorySnapshotCache();
+        await assert.rejects(loadHistorySnapshotWithCache(new Date(2026, 1, 1), 7, deps), /still in progress/);
+      }
+      assert.equal(releases.length, 4, "clearing History caches must not multiply native reads");
+    } finally {
+      releases.forEach(release => release());
+      await new Promise<void>(resolve => setImmediate(resolve));
+    }
+    assert.equal(getHistoryNativeReadStats().inFlightReadGroups, 0);
+  }
+});
+
+await runTest("History payload budget evicts old snapshots without truncating large results", async () => {
+  const medium = [makeSession({ windowTitle: "m".repeat(5 * 1024 * 1024) })];
+  const oversized = [makeSession({ windowTitle: "x".repeat(9 * 1024 * 1024) })];
+  const deps = {
+    getHistoryByDate: async () => medium,
+    getActivityAggregateRange: async () => makeAggregateRange(),
+    getSessionsInRange: async () => [],
+    getWebActivitySegmentsInRange: async () => [],
+    getWebFaviconsForDomains: async () => ({}),
+    loadWebDomainOverrides: async () => ({}),
+  };
+  await loadHistorySnapshotWithCache(new Date(2026, 0, 1), 7, deps, { includeWebActivity: false });
+  await loadHistorySnapshotWithCache(new Date(2026, 0, 2), 7, deps, { includeWebActivity: false });
+  assert.equal(getHistorySnapshotCache(new Date(2026, 0, 1), 7, false), null, "History byte budget must evict the older entry");
+  assert.equal(getHistorySnapshotCache(new Date(2026, 0, 2), 7, false)?.daySessions, medium);
+  const large = await loadHistorySnapshotWithCache(new Date(2026, 0, 3), 7, { ...deps, getHistoryByDate: async () => oversized }, { includeWebActivity: false });
+  assert.equal(large.daySessions, oversized, "cache admission must preserve the complete history result");
+  assert.equal(getHistorySnapshotCache(new Date(2026, 0, 3), 7, false), null);
+  assert.ok(getHistorySnapshotCacheStats().estimatedSessionPayloadBytes <= 16 * 1024 * 1024);
+  clearHistorySnapshotCache();
 });
 
 console.log(`Passed ${passed} history read model tests`);

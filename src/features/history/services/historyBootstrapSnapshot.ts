@@ -382,6 +382,7 @@ export function getHistoryBootstrapSnapshotStats() {
     entries: cachedSnapshot ? 1 : 0,
     limit: 1,
     maxBytes: HISTORY_BOOTSTRAP_SNAPSHOT_MAX_BYTES,
+    payloadBytes: cachedSnapshot ? getPayloadByteLength(JSON.stringify(cachedSnapshot)) : 0,
   };
 }
 

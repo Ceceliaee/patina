@@ -10,6 +10,7 @@ import {
   type HeatmapSelection,
 } from "./dataHeatmapReadModel.ts";
 import { registerDataHeavyCacheClearer } from "./dataCacheLifecycle.ts";
+import { estimateDataSessionPayloadBytes } from "./dataLruCache.ts";
 
 export interface DataHeatmapSnapshot {
   earliestStartTime: number | null;
@@ -24,7 +25,9 @@ export interface DataHeatmapDependencies {
 }
 
 const HEATMAP_SESSION_CACHE_LIMIT = 2;
-const heatmapSessionCache = new Map<string, AggregateSessionRecord[]>();
+const HEATMAP_PENDING_LIMIT = 4;
+const HEATMAP_CACHE_PAYLOAD_LIMIT = 16 * 1024 * 1024;
+const heatmapSessionCache = new Map<string, { sessions: AggregateSessionRecord[]; payloadBytes: number }>();
 const heatmapSnapshotPromises = new Map<string, Promise<DataHeatmapSnapshot>>();
 let earliestSessionStartTimeCache: number | null | undefined;
 let dataReadModelCacheEpoch = 0;
@@ -41,7 +44,7 @@ export function resetDataReadModelCacheForTests() {
 export function clearDataReadModelCache() {
   dataReadModelCacheEpoch += 1;
   heatmapSessionCache.clear();
-  heatmapSnapshotPromises.clear();
+  // The old epoch still owns its native reads until both queries finish.
   earliestSessionStartTimeCache = undefined;
 }
 
@@ -52,10 +55,13 @@ export function getCachedEarliestSessionStartTime() {
 }
 
 function setHeatmapSessionCache(cacheKey: string, sessions: AggregateSessionRecord[]) {
+  const payloadBytes = estimateDataSessionPayloadBytes(sessions);
   heatmapSessionCache.delete(cacheKey);
-  heatmapSessionCache.set(cacheKey, sessions);
+  if (payloadBytes > HEATMAP_CACHE_PAYLOAD_LIMIT) return;
+  heatmapSessionCache.set(cacheKey, { sessions, payloadBytes });
 
-  while (heatmapSessionCache.size > HEATMAP_SESSION_CACHE_LIMIT) {
+  while (heatmapSessionCache.size > HEATMAP_SESSION_CACHE_LIMIT
+    || [...heatmapSessionCache.values()].reduce((bytes, entry) => bytes + entry.payloadBytes, 0) > HEATMAP_CACHE_PAYLOAD_LIMIT) {
     const oldestKey = heatmapSessionCache.keys().next().value;
     if (!oldestKey) break;
     heatmapSessionCache.delete(oldestKey);
@@ -64,11 +70,12 @@ function setHeatmapSessionCache(cacheKey: string, sessions: AggregateSessionReco
 
 export function getCachedDataHeatmapSessions(selection: HeatmapSelection, nowMs: number) {
   const cacheKey = getHeatmapSelectionKey(selection, nowMs);
-  const sessions = heatmapSessionCache.get(cacheKey);
-  if (!sessions) return undefined;
+  const entry = heatmapSessionCache.get(cacheKey);
+  if (!entry) return undefined;
 
-  setHeatmapSessionCache(cacheKey, sessions);
-  return sessions;
+  heatmapSessionCache.delete(cacheKey);
+  heatmapSessionCache.set(cacheKey, entry);
+  return entry.sessions;
 }
 
 export async function loadDataHeatmapSnapshot(
@@ -78,18 +85,22 @@ export async function loadDataHeatmapSnapshot(
 ): Promise<DataHeatmapSnapshot> {
   const range = getHeatmapRange(selection, nowMs);
   const cacheKey = getHeatmapSelectionKey(selection, nowMs);
-  const pending = heatmapSnapshotPromises.get(cacheKey);
-  if (pending) return pending;
   const loadStartedAtEpoch = dataReadModelCacheEpoch;
+  const pendingKey = `${loadStartedAtEpoch}:${cacheKey}`;
+  const pending = heatmapSnapshotPromises.get(pendingKey);
+  if (pending) return pending;
+  if (heatmapSnapshotPromises.size >= HEATMAP_PENDING_LIMIT) {
+    throw new Error("Data heatmap reads are still in progress");
+  }
+  const earliestStartTimePromise = (async () => earliestSessionStartTimeCache === undefined
+    ? deps.getEarliestSessionStartTime()
+    : earliestSessionStartTimeCache)();
+  const sessionsPromise = (async () => deps.getSessionsInRange(range.start.getTime(), range.end.getTime()))();
 
   const snapshotPromise = (async () => {
-    const earliestStartTimePromise = earliestSessionStartTimeCache === undefined
-      ? deps.getEarliestSessionStartTime()
-      : Promise.resolve(earliestSessionStartTimeCache);
-
     const [earliestStartTime, sessions] = await Promise.all([
       earliestStartTimePromise,
-      deps.getSessionsInRange(range.start.getTime(), range.end.getTime()),
+      sessionsPromise,
     ]);
 
     if (dataReadModelCacheEpoch === loadStartedAtEpoch) {
@@ -103,13 +114,16 @@ export async function loadDataHeatmapSnapshot(
       range,
       cacheKey,
     };
-  })().finally(() => {
-    if (heatmapSnapshotPromises.get(cacheKey) === snapshotPromise) {
-      heatmapSnapshotPromises.delete(cacheKey);
+  })();
+  // A failed earliest-date read must not release capacity while the sessions
+  // query is still running (and vice versa). Callers can see the error promptly.
+  void Promise.allSettled([earliestStartTimePromise, sessionsPromise]).then(() => {
+    if (heatmapSnapshotPromises.get(pendingKey) === snapshotPromise) {
+      heatmapSnapshotPromises.delete(pendingKey);
     }
   });
 
-  heatmapSnapshotPromises.set(cacheKey, snapshotPromise);
+  heatmapSnapshotPromises.set(pendingKey, snapshotPromise);
   return snapshotPromise;
 }
 
@@ -122,6 +136,9 @@ export function getDataHeatmapSessionCacheStats() {
     entries: heatmapSessionCache.size,
     limit: HEATMAP_SESSION_CACHE_LIMIT,
     pendingEntries: heatmapSnapshotPromises.size,
+    pendingLimit: HEATMAP_PENDING_LIMIT,
+    estimatedSessionPayloadBytes: [...heatmapSessionCache.values()].reduce((bytes, entry) => bytes + entry.payloadBytes, 0),
+    maxSessionPayloadBytes: HEATMAP_CACHE_PAYLOAD_LIMIT,
     earliestSessionStartTimeCached: earliestSessionStartTimeCache !== undefined,
   };
 }

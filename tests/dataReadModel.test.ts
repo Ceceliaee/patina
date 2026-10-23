@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { ProcessMapper } from "../src/shared/classification/processMapper.ts";
+import { AppClassification } from "../src/shared/classification/appClassification.ts";
 import {
   buildActivityHeatmap as buildActivityHeatmapRaw,
   buildDataAppTrendViewModelFromAggregate,
@@ -28,6 +29,8 @@ import {
 import {
   clearDataTrendSnapshotCache,
   getDataTrendSnapshotCacheSizeForTests,
+  getDataTrendSnapshotCacheStats,
+  getCachedDataTrendSnapshot,
   loadDataTrendSnapshot as loadDataTrendSnapshotRaw,
   type DataTrendSnapshotDependencies,
   type DataTrendSnapshot,
@@ -543,6 +546,99 @@ await runTest("shared trend aggregate matches standalone overview and app read m
   );
 });
 
+await runTest("trend aggregation preserves DST duration and immutable input with and without app buckets", () => {
+  const originalTimezone = process.env.TZ;
+  try {
+    process.env.TZ = "America/New_York";
+    for (const fixture of [
+      { date: "2026-03-08", start: "2026-03-08T05:00:00Z", end: "2026-03-09T04:00:00Z", hours: 23 },
+      { date: "2026-11-01", start: "2026-11-01T04:00:00Z", end: "2026-11-02T05:00:00Z", hours: 25 },
+    ]) {
+      const startTime = Date.parse(fixture.start);
+      const endTime = Date.parse(fixture.end);
+      const sessions = [Object.freeze(makeSession({
+        appName: "", exeName: "cursor.exe", startTime: startTime - 3_600_000, endTime: endTime + 3_600_000,
+      }))];
+      const original = structuredClone(sessions);
+      const selection = { kind: "custom" as const, startDateKey: fixture.date, endDateKey: fixture.date };
+      const nowMs = endTime + 86_400_000;
+      const range = resolveDataTrendRange(selection, nowMs, ZH_TEXT);
+      for (const includeAppBuckets of [true, false]) {
+        const context = buildDataTrendAggregateContext(sessions, range, nowMs, { includeAppBuckets });
+        const overview = buildDataTrendViewModelFromAggregate(context);
+        assert.equal(overview.totalDuration, fixture.hours * 3_600_000, fixture.date);
+        assert.deepEqual(overview.chartData.map(day => day.hours), [fixture.hours]);
+        if (includeAppBuckets) {
+          const app = buildDataAppTrendViewModelFromAggregate(context, "cursor.exe");
+          assert.equal(app.summary.totalDuration, fixture.hours * 3_600_000);
+          assert.equal(app.selectedApps[0]?.exeName, "cursor.exe");
+        }
+      }
+      assert.deepEqual(sessions, original, "range clipping and display fallback must not rewrite facts");
+    }
+  } finally {
+    if (originalTimezone === undefined) delete process.env.TZ;
+    else process.env.TZ = originalTimezone;
+  }
+});
+
+await runTest("trend identity reuse preserves name-dependent filters and refreshes classification between queries", () => {
+  const nowMs = new Date(2026, 4, 8, 12).getTime();
+  const make = (exeName: string, appName: string) => makeSession({
+    exeName, appName, startTime: nowMs - 60_000, endTime: nowMs,
+  });
+  const sessions = [
+    make("launcher.exe", "Wallpaper Engine Launcher"),
+    make("launcher.exe", "Game Launcher"),
+    make("cursor.exe", "Cursor"),
+    make("cursor.exe", "编辑器"),
+  ];
+  const original = structuredClone(sessions);
+  const read = () => buildDataTrendAggregateContext([...sessions, ...sessions], 7, nowMs);
+  try {
+    const first = read();
+    assert.equal(first.aggregate.totalDuration, 6 * 60_000, "identity reuse must preserve name-dependent filtering");
+    assert.equal(first.aggregate.appBuckets.get("launcher.exe")?.appName, "Game Launcher");
+    assert.equal(first.aggregate.appBuckets.get("cursor.exe")?.appName, "编辑器");
+    ProcessMapper.setUserOverride("cursor.exe", { track: false });
+    assert.equal(read().aggregate.totalDuration, 2 * 60_000);
+    ProcessMapper.clearUserOverrides();
+    ProcessMapper.setUserOverride("cursor.exe", { displayName: "My Editor" });
+    assert.equal(read().aggregate.appBuckets.get("cursor.exe")?.appName, "My Editor");
+    AppClassification.setAppLinks({ "cursor.exe": "code.exe" });
+    const linked = read();
+    assert.equal(linked.aggregate.appBuckets.has("cursor.exe"), false);
+    assert.equal(linked.aggregate.appBuckets.get("code.exe")?.totalDuration, 4 * 60_000);
+    assert.deepEqual(sessions, original);
+  } finally {
+    ProcessMapper.clearUserOverrides();
+    AppClassification.setAppLinks({});
+  }
+});
+
+await runTest("trend identity reuse bounds retained entries and oversized keys without dropping records", () => {
+  const nowMs = new Date(2026, 4, 8, 12).getTime();
+  const sessions = Array.from({ length: 130 }, (_, index) => makeSession({
+    exeName: `app${index}.exe`, appName: `App ${index}`,
+    startTime: nowMs - 60_000, endTime: nowMs,
+  }));
+  const oversized = makeSession({ ...sessions[0], appName: "X".repeat(2048) });
+  const original = AppClassification.shouldTrackProcess;
+  let resolutions = 0;
+  AppClassification.shouldTrackProcess = (...args) => { resolutions += 1; return original(...args); };
+  try {
+    const context = buildDataTrendAggregateContext([
+      oversized, oversized, ...sessions, sessions[0], sessions[129],
+    ], 7, nowMs);
+    assert.equal(resolutions, 133, "reuse common identities but retain at most 128 short keys");
+    assert.equal(context.aggregate.totalDuration, 134 * 60_000);
+    assert.equal(context.aggregate.appBuckets.size, 130);
+    assert.equal(context.aggregate.appBuckets.get("app129.exe")?.totalDuration, 2 * 60_000);
+  } finally {
+    AppClassification.shouldTrackProcess = original;
+  }
+});
+
 await runTest("selected app derivation from shared aggregate does not mutate overview trend", () => {
   const nowMs = new Date(2026, 4, 8, 12, 0, 0).getTime();
   const sessions = [
@@ -739,6 +835,9 @@ await runTest("failed heatmap snapshots release pending state and remain retryab
     entries: 0,
     limit: 2,
     pendingEntries: 0,
+    pendingLimit: 4,
+    estimatedSessionPayloadBytes: 0,
+    maxSessionPayloadBytes: 16 * 1024 * 1024,
     earliestSessionStartTimeCached: false,
   });
 
@@ -1356,6 +1455,94 @@ await runTest("data heavy cache cleanup prevents late in-flight snapshots from r
   assert.equal(getDataHeatmapSessionCacheSizeForTests(), 0);
   assert.equal(getCachedEarliestSessionStartTime(), undefined);
   assert.equal(getDataTrendSnapshotCacheSizeForTests(), 0);
+});
+
+await runTest("trend and heatmap payload limits evict caches without truncating query results", async () => {
+  clearDataHeavyCaches();
+  const nowMs = new Date(2026, 0, 3).getTime();
+  const medium = [makeSession({ appName: "m".repeat(5 * 1024 * 1024) })];
+  const oversized = [makeSession({ appName: "x".repeat(9 * 1024 * 1024) })];
+  const first = await loadDataTrendSnapshot({ kind: "year", anchorDateKey: "2020-01-01" }, nowMs, { getSessionSummariesInRange: async () => medium });
+  const second = await loadDataTrendSnapshot({ kind: "year", anchorDateKey: "2021-01-01" }, nowMs, { getSessionSummariesInRange: async () => medium });
+  assert.equal(getCachedDataTrendSnapshot(first.range), null, "trend byte budget must evict the older entry");
+  assert.equal(getCachedDataTrendSnapshot(second.range)?.sessions, medium);
+  const large = await loadDataTrendSnapshot({ kind: "year", anchorDateKey: "2022-01-01" }, nowMs, { getSessionSummariesInRange: async () => oversized });
+  assert.equal(large.sessions, oversized, "cache admission must not truncate the page's query result");
+  assert.equal(getCachedDataTrendSnapshot(large.range), null);
+  assert.ok(getDataTrendSnapshotCacheStats().estimatedSessionPayloadBytes <= 16 * 1024 * 1024);
+
+  const deps = { getEarliestSessionStartTime: async () => 0, getSessionsInRange: async () => medium };
+  await loadDataHeatmapSnapshot(2020, nowMs, deps);
+  await loadDataHeatmapSnapshot(2021, nowMs, deps);
+  assert.equal(getCachedDataHeatmapSessions(2020, nowMs), undefined, "heatmap byte budget must evict the older entry");
+  assert.equal(getCachedDataHeatmapSessions(2021, nowMs), medium);
+  const heatmap = await loadDataHeatmapSnapshot(2022, nowMs, { ...deps, getSessionsInRange: async () => oversized });
+  assert.equal(heatmap.sessions, oversized);
+  assert.equal(getCachedDataHeatmapSessions(2022, nowMs), undefined);
+  assert.ok(getDataHeatmapSessionCacheStats().estimatedSessionPayloadBytes <= 16 * 1024 * 1024);
+  clearDataHeavyCaches();
+});
+
+await runTest("trend invalidation retains bounded native reads and separates old epochs", async () => {
+  const nowMs = new Date(2026, 0, 3).getTime();
+  const gates = Array.from({ length: 4 }, () => deferred<AggregateSessionRecord[]>());
+  let calls = 0;
+  const deps = { getSessionSummariesInRange: () => gates[calls++]?.promise ?? Promise.resolve([]) };
+  const selection = (year: number) => ({ kind: "year" as const, anchorDateKey: `${year}-01-01` });
+  const requests = gates.map((_, index) => loadDataTrendSnapshot(selection(2020 + index), nowMs, deps));
+  const duplicate = loadDataTrendSnapshot(selection(2020), nowMs, deps);
+  try {
+    assert.equal(calls, 4, "same-epoch matching reads share their native query");
+    for (let cycle = 0; cycle < 20; cycle++) {
+      clearDataTrendSnapshotCache();
+      await assert.rejects(loadDataTrendSnapshot(selection(2020), nowMs, deps), /still in progress/, "trend invalidation released unfinished native query capacity");
+    }
+    assert.equal(calls, 4, "invalidation must not admit replacement native work");
+    assert.equal(getDataTrendSnapshotCacheStats().pendingEntries, 4);
+    gates[0].resolve([]);
+    await Promise.all([requests[0], duplicate]);
+    assert.equal(getDataTrendSnapshotCacheSizeForTests(), 0, "old result must not populate a new epoch");
+    const fresh = [makeSession({ appName: "Fresh", startTime: nowMs - 60_000, endTime: nowMs })];
+    const current = await loadDataTrendSnapshot(selection(2020), nowMs, {
+      getSessionSummariesInRange: async () => fresh,
+    });
+    assert.deepEqual(current.sessions, fresh);
+    assert.equal(getDataTrendSnapshotCacheSizeForTests(), 1);
+  } finally {
+    gates.forEach(gate => gate.resolve([]));
+    await Promise.allSettled([...requests, duplicate]);
+  }
+  assert.equal(getDataTrendSnapshotCacheStats().pendingEntries, 0);
+});
+
+await runTest("heatmap partial failure retains capacity until every native query ends", async () => {
+  resetDataReadModelCacheForTests();
+  const nowMs = new Date(2026, 0, 3).getTime();
+  const gates = Array.from({ length: 4 }, () => deferred<AggregateSessionRecord[]>());
+  let calls = 0;
+  const deps = {
+    getEarliestSessionStartTime: async () => { throw new Error("earliest failed"); },
+    getSessionsInRange: () => gates[calls++]?.promise ?? Promise.resolve([]),
+  };
+  try {
+    const requests = gates.map((_, index) => loadDataHeatmapSnapshot(2020 + index, nowMs, deps));
+    await Promise.all(requests.map(request => assert.rejects(request, /earliest failed/)));
+    assert.equal(getDataHeatmapSessionCacheStats().pendingEntries, 4, "partial heatmap failure released unfinished native query capacity");
+    for (let cycle = 0; cycle < 20; cycle++) {
+      clearDataHeavyCaches();
+      await assert.rejects(loadDataHeatmapSnapshot("recent", nowMs, deps), /still in progress/, "heatmap invalidation released unfinished native query capacity");
+    }
+    assert.equal(calls, 4, "a rejected sibling query must not free the unfinished sessions query");
+  } finally {
+    gates.forEach(gate => gate.resolve([]));
+    await new Promise<void>(resolve => setImmediate(resolve));
+  }
+  assert.equal(getDataHeatmapSessionCacheStats().pendingEntries, 0);
+  const recovered = await loadDataHeatmapSnapshot("recent", nowMs, {
+    getEarliestSessionStartTime: async () => null,
+    getSessionsInRange: async () => [],
+  });
+  assert.deepEqual(recovered.sessions, []);
 });
 
 console.log(`Passed ${passed} data read model tests`);
