@@ -650,14 +650,8 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "backup.formatLabel": {
-    "kind": "message",
-    "params": [
-      {
-        "name": "kind",
-        "type": "\"sqlite_snapshot\" | \"legacy_structured\"",
-        "optional": false
-      }
-    ],
+    "kind": "string",
+    "params": [],
     "surface": "frontend"
   },
   "backup.importItemCounts": {
@@ -700,11 +694,6 @@ export const MESSAGE_SCHEMA = {
         "optional": false
       }
     ],
-    "surface": "frontend"
-  },
-  "backup.legacyExternalDataNotice": {
-    "kind": "string",
-    "params": [],
     "surface": "frontend"
   },
   "backup.restoreMessage": {
@@ -3517,11 +3506,6 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "settings.backupRestoreActionHelp": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "settings.backupRestoreActionTitle": {
     "kind": "string",
     "params": [],
@@ -4540,6 +4524,7 @@ export const MESSAGE_SCHEMA = {
     ],
     "surface": "frontend"
   },
+  "toast.backupFormatUnsupported": { "kind": "string", "params": [], "surface": "frontend", "description": "The selected file is not a supported SQLite snapshot backup. Preserve the source file." },
   "toast.backupPreviewFailed": {
     "kind": "string",
     "params": [],
@@ -4566,11 +4551,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "toast.feedbackOpenFailed": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "toast.legacyBackupRestoreSuccess": {
     "kind": "string",
     "params": [],
     "surface": "frontend"

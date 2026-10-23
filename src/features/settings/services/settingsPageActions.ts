@@ -1,4 +1,4 @@
-
+import { parseCommandError } from "../../../platform/persistence/commandError.ts";
 import type { QuietToastTone } from "../../../shared/types/toast";
 import type { UiText } from "../../../shared/i18n/index.ts";
 import type { CleanupRange } from "../types.ts";
@@ -141,7 +141,8 @@ export async function prepareBackupRestoreFlow(
     return preparation;
   } catch (error) {
     options.reportError?.("prepare backup restore failed", error);
-    options.notify(UI_TEXT.toast.backupPreviewFailed, "error");
+    options.notify(parseCommandError(error).code === "BACKUP_FORMAT_UNSUPPORTED"
+      ? UI_TEXT.toast.backupFormatUnsupported : UI_TEXT.toast.backupPreviewFailed, "error");
     return null;
   } finally {
     options.onExecutionEnd?.();
@@ -172,16 +173,15 @@ export async function commitPreparedBackupRestoreFlow(options: BackupRestoreComm
       options.preparation.preview.hash,
     );
     options.notify(
-      options.preparation.preview.formatKind === "legacy_structured"
-        ? UI_TEXT.toast.legacyBackupRestoreSuccess
-        : UI_TEXT.toast.backupRestoreSuccess,
+      UI_TEXT.toast.backupRestoreSuccess,
       "success",
     );
     options.reload();
     return true;
   } catch (error) {
     options.reportError?.("restore backup failed", error);
-    options.notify(UI_TEXT.toast.backupRestoreFailed, "error");
+    options.notify(parseCommandError(error).code === "BACKUP_FORMAT_UNSUPPORTED"
+      ? UI_TEXT.toast.backupFormatUnsupported : UI_TEXT.toast.backupRestoreFailed, "error");
     return false;
   } finally {
     options.onExecutionEnd?.();

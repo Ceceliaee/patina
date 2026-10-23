@@ -23,6 +23,7 @@ import type { BackupRestoreStrategy } from "../services/settingsRuntimeAdapterSe
 import {
   buildBackupPreviewSummary,
   localizeBackupRestoreMessage,
+  isUnsupportedBackupFormatError,
 } from "../services/settingsRuntimeAdapterService.ts";
 
 type ConfirmFn = (options: {
@@ -331,12 +332,12 @@ export function useRemoteBackupState({
       });
       if (!accepted) return;
       await restoreBackup(download.path, restoreStrategy, download.preview.hash);
-      successMessage = download.preview.formatKind === "legacy_structured"
-        ? UI_TEXT.toast.legacyBackupRestoreSuccess
-        : UI_TEXT.toast.backupRestoreSuccess;
+      successMessage = UI_TEXT.toast.backupRestoreSuccess;
     } catch (error) {
       console.error("restore WebDAV backup failed", error);
-      notify(downloadedPath ? UI_TEXT.toast.backupRestoreFailed : UI_TEXT.toast.webDavDownloadFailed, "error");
+      notify(isUnsupportedBackupFormatError(error)
+        ? UI_TEXT.toast.backupFormatUnsupported
+        : downloadedPath ? UI_TEXT.toast.backupRestoreFailed : UI_TEXT.toast.webDavDownloadFailed, "error");
     } finally {
       if (downloadedPath) {
         try {

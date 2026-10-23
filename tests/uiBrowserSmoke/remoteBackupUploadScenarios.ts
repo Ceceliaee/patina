@@ -88,7 +88,7 @@ export async function runRemoteBackupUploadScenarios({ client, sessionId, runTes
     await evaluate(client, sessionId, `globalThis.__PATINA_REMOTE_UPLOAD_CASE.sample = globalThis.__PATINA_REMOTE_UPLOAD_CASE.entries[0]; globalThis.__PATINA_REMOTE_UPLOAD_CASE.entries = []`);
     await clickText("恢复");
     await clickText("WebDAV 恢复", '[role="dialog"] button');
-    await waitForExpression(client, sessionId, `document.body.innerText.includes('远端暂无可用备份')`);
+    await waitForExpression(client, sessionId, `document.body.innerText.includes('没有可恢复的 SQLite 数据快照备份')`);
     await client.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, sessionId);
     await waitForExpression(client, sessionId, `!document.querySelector('[role="dialog"]')`);
     await evaluate(client, sessionId, `globalThis.__PATINA_REMOTE_UPLOAD_CASE.entries = Array.from({ length: 30 }, (_, index) => ({ ...globalThis.__PATINA_REMOTE_UPLOAD_CASE.sample, id: 'long-' + index, fileName: '备份-' + index + '.zip' }))`);

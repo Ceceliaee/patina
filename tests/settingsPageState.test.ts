@@ -881,7 +881,7 @@ await runTest("prepareBackupRestoreWithDeps separates native and external backup
   assert.ok(preparation?.previewSummary.includes("小时汇总：4"));
 });
 
-await runTest("backup preview gateway maps external counts and defaults old payloads to zero", () => {
+await runTest("backup preview gateway requires SQLite format and maps optional counts", () => {
   const raw = {
     hash: "sha256",
     format_kind: "sqlite_snapshot" as const,
@@ -897,10 +897,13 @@ await runTest("backup preview gateway maps external counts and defaults old payl
     icon_cache_count: 4,
   };
 
-  const oldPreview = parseBackupPreview(raw);
-  assert.equal(oldPreview.importBatchCount, 0);
-  assert.equal(oldPreview.importExactSessionCount, 0);
-  assert.equal(oldPreview.importTimeBucketCount, 0);
+  for (const format_kind of [undefined, "legacy_structured", "future_snapshot"]) {
+    assert.throws(() => parseBackupPreview({ ...raw, format_kind }));
+  }
+  const minimalPreview = parseBackupPreview(raw);
+  assert.equal(minimalPreview.importBatchCount, 0);
+  assert.equal(minimalPreview.importExactSessionCount, 0);
+  assert.equal(minimalPreview.importTimeBucketCount, 0);
 
   const currentPreview = parseBackupPreview({
     ...raw,
@@ -1033,7 +1036,7 @@ await runTest("runBackupExportFlow normalizes the initial path and stores the ex
 });
 
 await runTest("restore preparation handles cancellation, incompatibility and preview failure", async () => {
-  for (const outcome of ["cancel", "incompatible", "error"] as const) {
+  for (const outcome of ["cancel", "incompatible", "error", "unsupported"] as const) {
     const events: string[] = [];
     const result = await prepareBackupRestoreFlow({
       uiText: ZH_TEXT,
@@ -1042,17 +1045,21 @@ await runTest("restore preparation handles cancellation, incompatibility and pre
         assert.equal(path, "restore.db");
         if (outcome === "cancel") return null;
         if (outcome === "error") throw new Error("preview failed");
+        if (outcome === "unsupported") throw { code: "BACKUP_FORMAT_UNSUPPORTED", message: "unsupported", retryable: false };
         return { path: "incompatible.db", preview: buildPreview({ restoreSupported: false }),
           previewSummary: "", compatible: false, incompatibilityMessage: "schema mismatch" };
       },
       setRestorePath: (path) => events.push(path),
-      notify: (_message, tone) => events.push(tone ?? "info"),
+      notify: (message, tone) => {
+        if (outcome === "unsupported") assert.equal(message, ZH_TEXT.toast.backupFormatUnsupported);
+        events.push(tone ?? "info");
+      },
       onExecutionStart: () => events.push("start"),
       onExecutionEnd: () => events.push("end"),
     });
     assert.equal(result, null);
     assert.deepEqual(events, outcome === "cancel" ? ["start", "end"]
-      : outcome === "error" ? ["start", "error", "end"]
+      : outcome === "error" || outcome === "unsupported" ? ["start", "error", "end"]
         : ["start", "incompatible.db", "warning", "end"]);
   }
 });

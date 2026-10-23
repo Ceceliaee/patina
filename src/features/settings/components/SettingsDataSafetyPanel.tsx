@@ -1,7 +1,7 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  BrushCleaning, Database, FolderPen, FolderOpen, CircleAlert, CircleHelp, RefreshCw, RotateCcw, Trash2, X, } from "lucide-react";
+  BrushCleaning, Database, FolderPen, FolderOpen, CircleAlert, RefreshCw, RotateCcw, Trash2, X, } from "lucide-react";
 
 import QuietSubpanel from "../../../shared/components/QuietSubpanel";
 import QuietActionRow from "../../../shared/components/QuietActionRow";
@@ -379,19 +379,6 @@ export default function SettingsDataSafetyPanel({
                     <p className="qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">
                       {UI_TEXT.settings.backupRestoreActionTitle}
                     </p>
-                    <QuietTooltip
-                      label={UI_TEXT.settings.backupRestoreActionHelp}
-                      placement="top"
-                      tooltipClassName="settings-help-tooltip"
-                    >
-                      <button
-                        type="button"
-                        className="settings-help-icon"
-                        aria-label={UI_TEXT.settings.backupRestoreActionHelp}
-                      >
-                        <CircleHelp size={13} aria-hidden="true" />
-                      </button>
-                    </QuietTooltip>
                   </div>
                   <QuietButton
                     ref={restoreButtonRef}

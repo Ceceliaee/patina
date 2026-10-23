@@ -28,22 +28,7 @@ export const MESSAGES = {
       ]
     }
   },
-  "backup.formatLabel": {
-    "$type": "message",
-    "body": {
-      "$op": "if",
-      "when": {
-        "$op": "eq",
-        "left": {
-          "$op": "arg",
-          "name": "kind"
-        },
-        "right": "sqlite_snapshot"
-      },
-      "then": "Тип копии: снимок данных SQLite",
-      "else": "Тип копии: копия прежнего формата для переноса"
-    }
-  },
+  "backup.formatLabel": "Тип копии: снимок данных SQLite",
   "backup.importItemCounts": {
     "$type": "message",
     "body": {
@@ -92,7 +77,6 @@ export const MESSAGES = {
       ]
     }
   },
-  "backup.legacyExternalDataNotice": "Эта копия прежнего формата не содержит импортированных данных.",
   "backup.restoreMessage": {
     "$type": "message",
     "body": {
@@ -118,50 +102,8 @@ export const MESSAGES = {
         },
         "then": "Эта копия использует более новую структуру базы данных. Сначала обновите приложение.",
         "else": {
-          "$op": "if",
-          "when": {
-            "$op": "eq",
-            "left": {
-              "$op": "arg",
-              "name": "key"
-            },
-            "right": "backup.restore.versionTooNew"
-          },
-          "then": {
-            "$op": "concat",
-            "parts": [
-              "Эта копия имеет более новый формат (",
-              {
-                "$op": "coalesce",
-                "left": {
-                  "$op": "element",
-                  "target": {
-                    "$op": "arg",
-                    "name": "args"
-                  },
-                  "index": 0
-                },
-                "right": "?"
-              },
-              "). Сначала обновите приложение."
-            ]
-          },
-          "else": {
-            "$op": "if",
-            "when": {
-              "$op": "eq",
-              "left": {
-                "$op": "arg",
-                "name": "key"
-              },
-              "right": "backup.restore.versionTooOld"
-            },
-            "then": "Срок поддержки переноса данных из этой старой копии истёк.",
-            "else": {
-              "$op": "arg",
-              "name": "fallback"
-            }
-          }
+          "$op": "arg",
+          "name": "fallback"
         }
       }
     }

@@ -11,7 +11,7 @@ import {
 } from "./browserHarness.ts";
 import { SETTINGS_MARKER } from "./constants.ts";
 import { LOCALE_METADATA, SUPPORTED_LOCALES } from "../../src/shared/i18n/generated/contract.ts";
-import { getLocaleText } from "../../src/shared/i18n/runtime.ts";
+import { getLocaleText, loadLocaleText } from "../../src/shared/i18n/runtime.ts";
 
 export async function runRemoteBackupRecoveryScenarios({ client, sessionId, runTest }: BrowserSmokeContext) {
   await runTest("remote backup recovery preserves committed success when temporary cleanup fails", async () => {
@@ -23,7 +23,7 @@ export async function runRemoteBackupRecoveryScenarios({ client, sessionId, runT
           webdav_backup_username: 'fixture', webdav_backup_remote_dir: '/Patina' });
         localStorage.setItem('__time_tracker_smoke_settings', JSON.stringify(settings));
       })()`);
-      for (const mode of ["cleanup-failure", "success", "legacy", "cancel", "incompatible", "restore-failure", "download-failure"]) {
+      for (const mode of ["cleanup-failure", "success", "unsupported", "cancel", "incompatible", "restore-failure", "download-failure"]) {
         await evaluate(client, sessionId, `import('/tests/uiBrowserSmoke/remoteBackupFixture.ts').then(({ mountRemoteBackupProbe }) => {
           window.__PATINA_REMOTE_BACKUP_RECOVERY_CASE = { mode: ${jsonString(mode)}, downloads: 0, cleanups: 0, restores: [] };
           window.__remoteBackupProbe = mountRemoteBackupProbe(${mode !== "cancel"});
@@ -34,7 +34,7 @@ export async function runRemoteBackupRecoveryScenarios({ client, sessionId, runT
           await waitForExpression(client, sessionId, `(() => {
             const probe = window.__remoteBackupProbe.read();
             const fixture = window.__PATINA_REMOTE_BACKUP_RECOVERY_CASE;
-            return fixture.downloads === 1 && !probe.busy && (fixture.cleanups > 0 || fixture.mode === 'download-failure');
+            return fixture.downloads === 1 && !probe.busy && (fixture.cleanups > 0 || ['download-failure', 'unsupported'].includes(fixture.mode));
           })()`);
           const result = await evaluate(client, sessionId, `({
             ...window.__remoteBackupProbe.read(), ...window.__PATINA_REMOTE_BACKUP_RECOVERY_CASE
@@ -42,12 +42,12 @@ export async function runRemoteBackupRecoveryScenarios({ client, sessionId, runT
             downloads: number; cleanups: number; restores: Array<{ backupPath: string; restoreStrategy: string; hash: string }>;
             events: Array<{ kind: string; message?: string; tone?: string }>; errors: string[];
           };
-          const committed = ["cleanup-failure", "success", "legacy"].includes(mode);
+          const committed = ["cleanup-failure", "success"].includes(mode);
           assert.equal(result.events.filter(event => event.kind === "reload").length, committed ? 1 : 0, mode);
           assert.equal(result.restores.length, committed || mode === "restore-failure" ? 1 : 0, mode);
-          assert.equal(result.cleanups, mode === "download-failure" ? 0 : 1, mode);
+          assert.equal(result.cleanups, ["download-failure", "unsupported"].includes(mode) ? 0 : 1, mode);
           assert.equal(result.events.filter(event => event.kind === "confirm").length,
-            ["download-failure", "incompatible"].includes(mode) ? 0 : 1, mode);
+            ["download-failure", "unsupported", "incompatible"].includes(mode) ? 0 : 1, mode);
           if (result.restores.length) assert.deepEqual(result.restores[0], {
             backupPath: "fixture-only/remote-backup.zip", restoreStrategy: "replace", hash: "fixture-hash",
           });
@@ -55,14 +55,16 @@ export async function runRemoteBackupRecoveryScenarios({ client, sessionId, runT
           const copy = getLocaleText("zh-CN").toast;
           if (committed) {
             assert.deepEqual(notifications, [{ kind: "notify", tone: "success",
-              message: mode === "legacy" ? copy.legacyBackupRestoreSuccess : copy.backupRestoreSuccess }], mode);
+              message: copy.backupRestoreSuccess }], mode);
             assert.ok(result.events.findIndex(event => event.kind === "reload") > result.events.findIndex(event => event.kind === "notify"));
+          } else if (mode === "unsupported") {
+            assert.deepEqual(notifications, [{ kind: "notify", tone: "error", message: copy.backupFormatUnsupported }]);
           } else if (mode === "restore-failure" || mode === "download-failure") {
             assert.deepEqual(notifications, [{ kind: "notify", tone: "error",
               message: mode === "restore-failure" ? copy.backupRestoreFailed : copy.webDavDownloadFailed }], mode);
           } else assert.equal(notifications.length, mode === "cancel" ? 0 : 1, mode);
           assert.deepEqual(result.errors, mode === "cleanup-failure" ? ["cleanup WebDAV backup temp failed"]
-            : mode.endsWith("failure") ? ["restore WebDAV backup failed"] : [], mode);
+            : (mode.endsWith("failure") || mode === "unsupported") ? ["restore WebDAV backup failed"] : [], mode);
         } finally {
           await evaluate(client, sessionId, `window.__remoteBackupProbe?.dispose(); delete window.__remoteBackupProbe; delete window.__PATINA_REMOTE_BACKUP_RECOVERY_CASE;`);
         }
@@ -463,6 +465,23 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     };
 
     let languageTriggerWidth: number | null = null;
+    const assertRestoreRow = async (locale: typeof SUPPORTED_LOCALES[number]) => {
+      const label = (await loadLocaleText(locale)).settings.backupRestoreActionTitle;
+      await waitForExpression(client, sessionId, `document.documentElement.lang === ${jsonString(locale)}
+        && [...document.querySelectorAll('.qp-action-row p')].some(node => node.textContent.trim() === ${jsonString(label)})`);
+      const result = await evaluate(client, sessionId, `(() => {
+        const title = [...document.querySelectorAll('.qp-action-row p')].find(node => node.textContent.trim() === ${jsonString(label)});
+        const row = title?.closest('.qp-action-row');
+        const buttons = [...(row?.querySelectorAll('button') ?? [])];
+        const titleRect = title?.getBoundingClientRect();
+        const buttonRect = buttons[0]?.getBoundingClientRect();
+        return { bounds: { viewport: innerWidth, title: titleRect?.toJSON(), button: buttonRect?.toJSON() }, buttons: buttons.length, help: row?.querySelectorAll('svg,[aria-describedby],[data-tooltip]').length,
+          aligned: Boolean(titleRect && buttonRect && titleRect.right < buttonRect.left && Math.abs((titleRect.top + titleRect.bottom - buttonRect.top - buttonRect.bottom) / 2) < 2),
+          overflow: Boolean(row && row.scrollWidth > row.clientWidth + 1) };
+      })()`) as { bounds: unknown; buttons: number; help: number; aligned: boolean; overflow: boolean };
+      const { bounds, ...state } = result;
+      assert.deepEqual(state, { buttons: 1, help: 0, aligned: true, overflow: false }, `${locale}: ${JSON.stringify(bounds)}`);
+    };
     const chooseLanguage = async (currentAriaLabel: string, targetLabel: string) => {
       assert.equal(
         await evaluate(client!, sessionId, `
@@ -644,6 +663,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     };
 
     await openSettings("设置");
+    await assertRestoreRow("zh-CN");
     await chooseLanguage("语言: 简体中文", "English");
     await waitForExpression(
       client!,
@@ -669,6 +689,9 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
           ?.scrollIntoView({ block: "center" })
       `);
       await waitForAnimationFrames(client!, sessionId);
+      // Desktop backup controls follow main_window.rs's 900 px minimum;
+      // the compact language menu below also exercises mobile-sized viewports.
+      if (viewport.width >= 900) await assertRestoreRow("en-US");
       const layoutState = JSON.parse(String(await evaluate(client!, sessionId, `
         JSON.stringify((() => {
           const trigger = document.querySelector('.qp-select-trigger[aria-label=' + ${jsonString(JSON.stringify("Language: English"))} + ']');
@@ -1020,6 +1043,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     );
     await chooseLanguage("语言: 简体中文", "Español");
     await waitForExpression(client!, sessionId, "document.documentElement.lang === 'es'");
+    await assertRestoreRow("es");
     assert.equal(await evaluate(client!, sessionId, "JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') ?? '{}').language"), "zh-CN", "Spanish preview must not persist before Save");
     await evaluate(client!, sessionId, "Array.from(document.querySelectorAll('button')).find(n => n.textContent?.trim() === 'Guardar')?.click()");
     await waitForExpression(client!, sessionId, "JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') ?? '{}').language === 'es'");
@@ -1027,6 +1051,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     await waitForExpression(client!, sessionId, "document.documentElement?.lang === 'es' && Boolean(document.querySelector('.qp-select-trigger[aria-label=\"Idioma: Español\"]'))");
     await chooseLanguage("Idioma: Español", "Русский");
     await waitForExpression(client!, sessionId, "document.documentElement.lang === 'ru-RU'");
+    await assertRestoreRow("ru-RU");
     assert.equal(await evaluate(client!, sessionId, "JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') ?? '{}').language"), "es", "Russian preview must not persist before Save");
     await evaluate(client!, sessionId, "Array.from(document.querySelectorAll('button')).find(n => n.textContent?.trim() === 'Отмена')?.click()");
     await waitForExpression(client!, sessionId, "document.documentElement.lang === 'es'");

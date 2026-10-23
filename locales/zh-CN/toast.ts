@@ -33,13 +33,13 @@ export const MESSAGES = {
       ]
     }
   },
+  "toast.backupFormatUnsupported": "当前版本只支持 SQLite 数据快照备份。请保留原文件。",
   "toast.backupPreviewFailed": "未能预览备份文件，请确认文件后重试。",
   "toast.backupRestoreFailed": "备份恢复未完成。应用已尽力保持或恢复原数据；若应用提示重启或无法继续写入，请先保留日志。",
   "toast.backupRestoreSuccess": "备份已恢复，正在刷新。",
   "toast.cleanupFailed": "历史记录清理失败，可稍后重试。",
   "toast.cleanupSuccess": "历史记录已清理。",
   "toast.feedbackOpenFailed": "未能打开反馈链接。",
-  "toast.legacyBackupRestoreSuccess": "旧版备份已恢复。请立即创建一份新的 SQLite 数据快照备份。",
   "toast.releaseNotesOpenFailed": "未能打开更新说明链接。",
   "toast.repositoryOpenFailed": "未能打开 GitHub 链接。",
   "toast.settingsRuntimeSyncPartial": "设置已保存，部分更改未能生效，请重启应用。",

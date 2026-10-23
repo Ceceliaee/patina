@@ -400,8 +400,9 @@ function tauriStubFor(path: string) {
           if (command === "cmd_download_webdav_backup") {
             fixture.downloads += 1;
             if (fixture.mode === "download-failure") throw new Error("fixture download failed");
+            if (fixture.mode === "unsupported") throw { code: "BACKUP_FORMAT_UNSUPPORTED", message: "unsupported", retryable: false };
             return { path: "fixture-only/remote-backup.zip", preview: {
-              hash: "fixture-hash", format_kind: fixture.mode === "legacy" ? "legacy_structured" : "sqlite_snapshot",
+              hash: "fixture-hash", format_kind: "sqlite_snapshot",
               version: 1, exported_at_ms: 1, schema_version: 1, app_version: "test",
               restore_supported: fixture.mode !== "incompatible", restore_message: "fixture preview",
               session_count: 1, title_sample_count: 0, setting_count: 0, icon_cache_count: 0,

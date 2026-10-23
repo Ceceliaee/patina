@@ -33,13 +33,13 @@ export const MESSAGES = {
       ]
     }
   },
+  "toast.backupFormatUnsupported": "This version only supports SQLite snapshot backups. Keep the original file.",
   "toast.backupPreviewFailed": "Could not preview this backup file. Check the file and try again.",
   "toast.backupRestoreFailed": "Backup restore did not complete. The app preserved or restored the original data where possible; keep the logs if restart is requested or writes are unavailable.",
   "toast.backupRestoreSuccess": "Backup restored. Refreshing.",
   "toast.cleanupFailed": "Could not clear history records. Try again later.",
   "toast.cleanupSuccess": "History records cleared.",
   "toast.feedbackOpenFailed": "Could not open feedback link.",
-  "toast.legacyBackupRestoreSuccess": "Legacy backup restored. Create a new SQLite data snapshot backup now.",
   "toast.releaseNotesOpenFailed": "Could not open release notes.",
   "toast.repositoryOpenFailed": "Could not open GitHub link.",
   "toast.settingsRuntimeSyncPartial": "Settings were saved, but some changes could not be applied. Restart the app.",

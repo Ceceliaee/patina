@@ -28,22 +28,7 @@ export const MESSAGES = {
       ]
     }
   },
-  "backup.formatLabel": {
-    "$type": "message",
-    "body": {
-      "$op": "if",
-      "when": {
-        "$op": "eq",
-        "left": {
-          "$op": "arg",
-          "name": "kind"
-        },
-        "right": "sqlite_snapshot"
-      },
-      "then": "Backup type: SQLite data snapshot",
-      "else": "Backup type: legacy migration backup"
-    }
-  },
+  "backup.formatLabel": "Backup type: SQLite data snapshot",
   "backup.importItemCounts": {
     "$type": "message",
     "body": {
@@ -92,7 +77,6 @@ export const MESSAGES = {
       ]
     }
   },
-  "backup.legacyExternalDataNotice": "This legacy backup does not contain external import data.",
   "backup.restoreMessage": {
     "$type": "message",
     "body": {

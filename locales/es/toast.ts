@@ -33,13 +33,13 @@ export const MESSAGES = {
       ]
     }
   },
+  "toast.backupFormatUnsupported": "Esta versión solo admite copias de seguridad de instantáneas de SQLite. Conserva el archivo original.",
   "toast.backupPreviewFailed": "No se pudo mostrar la vista previa de la copia. Comprueba el archivo e inténtalo de nuevo.",
   "toast.backupRestoreFailed": "La restauración no se completó. La app conservó o restauró los datos originales cuando fue posible; conserva los registros de diagnóstico si se solicita reiniciar o no se puede escribir.",
   "toast.backupRestoreSuccess": "Copia restaurada. Actualizando.",
   "toast.cleanupFailed": "No se pudieron eliminar los registros del historial. Inténtalo más tarde.",
   "toast.cleanupSuccess": "Registros del historial eliminados.",
   "toast.feedbackOpenFailed": "No se pudo abrir el enlace de comentarios.",
-  "toast.legacyBackupRestoreSuccess": "Copia del formato anterior restaurada. Crea ahora una nueva copia de instantánea SQLite.",
   "toast.releaseNotesOpenFailed": "No se pudieron abrir las notas de la versión.",
   "toast.repositoryOpenFailed": "No se pudo abrir el enlace de GitHub.",
   "toast.settingsRuntimeSyncPartial": "La configuración se ha guardado, pero algunos cambios no se han podido aplicar. Reinicia la aplicación.",

@@ -48,6 +48,10 @@ import {
   clearSessionsByRangeWithDeps,
 } from "./sessionCleanupPolicy.ts";
 
+export function isUnsupportedBackupFormatError(error: unknown): boolean {
+  return parseCommandError(error).code === "BACKUP_FORMAT_UNSUPPORTED";
+}
+
 export type { BackupPreview, BackupRestoreStrategy } from "../../../platform/backup/backupRuntimeGateway.ts";
 export type { StorageMigrationPreview, StorageSnapshot } from "../../../platform/storage/storageRuntimeGateway.ts";
 export type { WebActivityBridgeSnapshot } from "../../../platform/runtime/webActivityBridgeGateway.ts";
@@ -91,7 +95,7 @@ export function buildBackupPreviewSummary(preview: BackupPreview, uiText: UiText
   const exportedAt = new Date(preview.exportedAtMs).toLocaleString(locale);
   const restoreMessage = localizeBackupRestoreMessage(preview, uiText);
   const lines = [
-    UI_TEXT.backup.formatLabel(preview.formatKind),
+    UI_TEXT.backup.formatLabel,
     UI_TEXT.backup.exportedAt(exportedAt),
     UI_TEXT.backup.appVersion(preview.appVersion),
     UI_TEXT.backup.restoreSafety(restoreMessage),
@@ -105,8 +109,7 @@ export function buildBackupPreviewSummary(preview: BackupPreview, uiText: UiText
       preview.importExactSessionCount,
       preview.importTimeBucketCount,
     ));
-  } else if (preview.formatKind === "legacy_structured") {
-    lines.push(UI_TEXT.backup.legacyExternalDataNotice);
+
   }
   return lines.join("\n");
 }

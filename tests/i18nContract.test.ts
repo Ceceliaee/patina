@@ -59,8 +59,6 @@ assert.equal(formatDate("ru-RU", Date.UTC(2026, 8, 9), { day: "numeric", month: 
 for (const [key, args, expected] of [
   ["backup.restore.supported", [], "Текущая версия может безопасно восстановить эту копию."],
   ["backup.restore.schemaTooNew", [], "Эта копия использует более новую структуру базы данных. Сначала обновите приложение."],
-  ["backup.restore.versionTooNew", ["9"], "Эта копия имеет более новый формат (9). Сначала обновите приложение."],
-  ["backup.restore.versionTooOld", [], "Срок поддержки переноса данных из этой старой копии истёк."],
   ["unknown", [], "Future reason"],
 ] as const) assert.equal(russianText.backup.restoreMessage(key, [...args], "Future reason"), expected);
 assert.equal(spanishText.dashboard.tracking("Code"), "Registrando: Code");
@@ -72,8 +70,6 @@ assert.equal(formatNumber("es", 12345.67), "12.345,67");
 assert.equal(spanishText.date.yearMonthLabel(2026, 8), "agosto 2026");
 assert.equal(spanishText.backup.restoreMessage("backup.restore.supported", [], "English fallback"), "Esta versión puede restaurar esta copia de forma segura.");
 assert.equal(spanishText.backup.restoreMessage("backup.restore.schemaTooNew", [], "English fallback"), "Esta copia usa una estructura de base de datos más reciente. Actualiza primero la aplicación.");
-assert.equal(spanishText.backup.restoreMessage("backup.restore.versionTooNew", ["9"], "English fallback"), "El formato de esta copia es más reciente (9). Actualiza primero la aplicación.");
-assert.equal(spanishText.backup.restoreMessage("backup.restore.versionTooOld", [], "English fallback"), "Esta copia antigua está fuera del período de compatibilidad para la migración.");
 assert.equal(spanishText.backup.restoreMessage("unknown", [], "Future reason"), "Future reason");
 assert.equal(spanishText.export.exportDone(1), "Exportado: 1 registro");
 assert.equal(spanishText.history.sessionCount(1), "1 registro");

@@ -15,7 +15,7 @@ interface RawRemoteBackupEntry {
   createdAtMs: number;
   sizeBytes: number;
   appVersion: string;
-  formatKind?: "sqlite_snapshot" | "legacy_structured";
+  formatKind: "sqlite_snapshot";
   backupVersion: number;
   schemaVersion: number;
   sessionCount: number;
@@ -45,7 +45,7 @@ export interface RemoteBackupEntry {
   createdAtMs: number;
   sizeBytes: number;
   appVersion: string;
-  formatKind: "sqlite_snapshot" | "legacy_structured";
+  formatKind: "sqlite_snapshot";
   backupVersion: number;
   schemaVersion: number;
   sessionCount: number;
@@ -76,7 +76,7 @@ function isRawRemoteBackupEntry(value: unknown): value is RawRemoteBackupEntry {
     && typeof value.createdAtMs === "number"
     && typeof value.sizeBytes === "number"
     && typeof value.appVersion === "string"
-    && (value.formatKind === undefined || value.formatKind === "sqlite_snapshot" || value.formatKind === "legacy_structured")
+    && value.formatKind === "sqlite_snapshot"
     && typeof value.backupVersion === "number"
     && typeof value.schemaVersion === "number"
     && typeof value.sessionCount === "number"
@@ -96,7 +96,7 @@ function mapRemoteBackupEntry(raw: RawRemoteBackupEntry): RemoteBackupEntry {
     createdAtMs: raw.createdAtMs,
     sizeBytes: raw.sizeBytes,
     appVersion: raw.appVersion,
-    formatKind: raw.formatKind ?? "legacy_structured",
+    formatKind: raw.formatKind,
     backupVersion: raw.backupVersion,
     schemaVersion: raw.schemaVersion,
     sessionCount: raw.sessionCount,

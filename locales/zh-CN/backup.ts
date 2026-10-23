@@ -28,22 +28,7 @@ export const MESSAGES = {
       ]
     }
   },
-  "backup.formatLabel": {
-    "$type": "message",
-    "body": {
-      "$op": "if",
-      "when": {
-        "$op": "eq",
-        "left": {
-          "$op": "arg",
-          "name": "kind"
-        },
-        "right": "sqlite_snapshot"
-      },
-      "then": "备份类型：SQLite 数据快照",
-      "else": "备份类型：旧版迁移备份"
-    }
-  },
+  "backup.formatLabel": "备份类型：SQLite 数据快照",
   "backup.importItemCounts": {
     "$type": "message",
     "body": {
@@ -92,7 +77,6 @@ export const MESSAGES = {
       ]
     }
   },
-  "backup.legacyExternalDataNotice": "此旧版备份不包含外部导入数据。",
   "backup.restoreMessage": {
     "$type": "message",
     "body": {
@@ -118,50 +102,8 @@ export const MESSAGES = {
         },
         "then": "此备份来自更新的数据库结构，请先升级应用。",
         "else": {
-          "$op": "if",
-          "when": {
-            "$op": "eq",
-            "left": {
-              "$op": "arg",
-              "name": "key"
-            },
-            "right": "backup.restore.versionTooNew"
-          },
-          "then": {
-            "$op": "concat",
-            "parts": [
-              "此备份格式较新（",
-              {
-                "$op": "coalesce",
-                "left": {
-                  "$op": "element",
-                  "target": {
-                    "$op": "arg",
-                    "name": "args"
-                  },
-                  "index": 0
-                },
-                "right": "?"
-              },
-              "），请先升级应用。"
-            ]
-          },
-          "else": {
-            "$op": "if",
-            "when": {
-              "$op": "eq",
-              "left": {
-                "$op": "arg",
-                "name": "key"
-              },
-              "right": "backup.restore.versionTooOld"
-            },
-            "then": "此旧版备份已超出迁移支持窗口。",
-            "else": {
-              "$op": "arg",
-              "name": "fallback"
-            }
-          }
+          "$op": "arg",
+          "name": "fallback"
         }
       }
     }
