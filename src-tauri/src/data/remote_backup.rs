@@ -1,12 +1,13 @@
 use crate::data::backup;
 use crate::data::repositories::remote_backup_settings;
-use crate::domain::backup::BackupPreview;
+use crate::domain::backup::{BackupError, BackupPreview};
 use crate::domain::backup_schedule::ScheduledBackupRun;
 use crate::platform::storage_paths;
 use crate::platform::webdav::{WebDavClient, WebDavConfig};
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};
 use std::cmp::Reverse;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::AppHandle;
@@ -45,7 +46,6 @@ pub struct RemoteBackupEntry {
     pub created_at_ms: u64,
     pub size_bytes: u64,
     pub app_version: String,
-    #[serde(default = "legacy_format_kind")]
     pub format_kind: String,
     pub backup_version: u32,
     pub schema_version: u32,
@@ -67,10 +67,8 @@ pub struct RemoteBackupEntry {
     pub run_key: Option<String>,
     #[serde(default)]
     pub archive_sha256: Option<String>,
-}
-
-fn legacy_format_kind() -> String {
-    "legacy_structured".to_string()
+    #[serde(flatten)]
+    extra: BTreeMap<String, serde_json::Value>,
 }
 
 fn manual_origin() -> String {
@@ -78,12 +76,98 @@ fn manual_origin() -> String {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(try_from = "RawRemoteBackupIndex", into = "RawRemoteBackupIndex")]
 struct RemoteBackupIndex {
     version: u32,
     product: String,
     updated_at_ms: u64,
     backups: Vec<RemoteBackupEntry>,
+    opaque_entries: Vec<serde_json::Value>,
+    extra: BTreeMap<String, serde_json::Value>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RawRemoteBackupIndex {
+    version: u32,
+    product: String,
+    updated_at_ms: u64,
+    backups: Vec<serde_json::Value>,
+    #[serde(flatten)]
+    extra: BTreeMap<String, serde_json::Value>,
+}
+
+impl TryFrom<RawRemoteBackupIndex> for RemoteBackupIndex {
+    type Error = String;
+
+    fn try_from(raw: RawRemoteBackupIndex) -> Result<Self, String> {
+        if raw.backups.len() > MAX_INDEX_BACKUP_ITEMS {
+            return Err("WebDAV backup index contains too many entries".into());
+        }
+        let mut backups = Vec::new();
+        let mut opaque_entries = Vec::new();
+        for value in raw.backups {
+            if value.get("formatKind").and_then(serde_json::Value::as_str)
+                == Some("sqlite_snapshot")
+            {
+                backups.push(
+                    serde_json::from_value(value)
+                        .map_err(|error| format!("invalid SQLite backup index entry: {error}"))?,
+                );
+            } else {
+                opaque_entries.push(value);
+            }
+        }
+        Ok(Self {
+            version: raw.version,
+            product: raw.product,
+            updated_at_ms: raw.updated_at_ms,
+            backups,
+            opaque_entries,
+            extra: raw.extra,
+        })
+    }
+}
+
+impl From<RemoteBackupIndex> for RawRemoteBackupIndex {
+    fn from(index: RemoteBackupIndex) -> Self {
+        let mut backups = index
+            .backups
+            .into_iter()
+            .map(|entry| {
+                serde_json::to_value(entry).expect("backup entry contains JSON-compatible fields")
+            })
+            .collect::<Vec<_>>();
+        backups.extend(index.opaque_entries);
+        Self {
+            version: index.version,
+            product: index.product,
+            updated_at_ms: index.updated_at_ms,
+            backups,
+            extra: index.extra,
+        }
+    }
+}
+
+impl RemoteBackupIndex {
+    fn has_other_reference(&self, entry: &RemoteBackupEntry) -> bool {
+        self.backups.iter().any(|other| {
+            other != entry
+                && (other.id == entry.id
+                    || other.file_name == entry.file_name
+                    || other.remote_path == entry.remote_path)
+        }) || self.opaque_entries.iter().any(|value| {
+            [
+                ("id", &entry.id),
+                ("fileName", &entry.file_name),
+                ("remotePath", &entry.remote_path),
+            ]
+            .iter()
+            .any(|(key, expected)| {
+                value.get(key).and_then(serde_json::Value::as_str) == Some(expected.as_str())
+            })
+        })
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -152,6 +236,8 @@ fn empty_index() -> RemoteBackupIndex {
         product: INDEX_PRODUCT.to_string(),
         updated_at_ms: now_ms(),
         backups: Vec::new(),
+        opaque_entries: Vec::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -211,7 +297,12 @@ where
     for _ in 0..MAX_INDEX_WRITE_ATTEMPTS {
         let mut loaded = load_index_snapshot(client, remote_dir).await?;
         let original_entries = loaded.index.backups.clone();
+        let opaque_entries = loaded.index.opaque_entries.clone();
+        let extra = loaded.index.extra.clone();
         mutate(&mut loaded.index);
+        if loaded.index.backups.len() + loaded.index.opaque_entries.len() > MAX_INDEX_BACKUP_ITEMS {
+            return Err("WebDAV backup index contains too many entries".into());
+        }
         let preserved_entries = original_entries
             .into_iter()
             .filter(|entry| loaded.index.backups.iter().any(|current| current == entry))
@@ -229,6 +320,10 @@ where
             Ok(()) => {
                 let confirmed = load_index(client, remote_dir).await?;
                 if verify(&confirmed)
+                    && confirmed.opaque_entries == opaque_entries
+                    && extra
+                        .iter()
+                        .all(|(key, value)| confirmed.extra.get(key) == Some(value))
                     && preserved_entries
                         .iter()
                         .all(|entry| confirmed.backups.iter().any(|current| current == entry))
@@ -351,6 +446,7 @@ fn build_entry(
         target_generation: None,
         run_key: None,
         archive_sha256: None,
+        extra: BTreeMap::new(),
     }
 }
 
@@ -412,7 +508,9 @@ pub async fn upload_webdav_backup(
     let local_path_string = local_path.to_string_lossy().to_string();
     let upload_result = async {
         backup::export_backup(Some(local_path_string.clone()), app).await?;
-        let preview = backup::preview_backup(local_path_string).await?;
+        let preview = backup::preview_backup(local_path_string)
+            .await
+            .map_err(|error| error.to_string())?;
         let size_bytes = fs::metadata(&local_path)
             .map_err(|error| format!("failed to read local backup metadata: {error}"))?
             .len();
@@ -477,11 +575,11 @@ pub async fn download_webdav_backup(
     app: AppHandle,
     config: WebDavBackupConfigDto,
     id: String,
-) -> Result<RemoteBackupDownloadResult, String> {
+) -> Result<RemoteBackupDownloadResult, BackupError> {
     let _transfer_guard = REMOTE_TRANSFER_LOCK.lock().await;
     let trimmed_id = id.trim();
     if trimmed_id.is_empty() {
-        return Err("remote backup id cannot be empty".to_string());
+        return Err("remote backup id cannot be empty".to_string().into());
     }
 
     let (config, client) = webdav_client(&app, config).await?;
@@ -503,7 +601,7 @@ pub async fn download_webdav_backup(
         .await
     {
         let _ = remove_temp_backup_file(&local_path, &temp_dir);
-        return Err(error);
+        return Err(error.into());
     }
     let local_path_string = local_path.to_string_lossy().to_string();
     let preview = match backup::preview_backup(local_path_string.clone()).await {
@@ -748,7 +846,9 @@ pub(crate) async fn publish_scheduled_snapshot(
     run: &ScheduledBackupRun,
     staging_path: &Path,
 ) -> Result<RemoteBackupEntry, String> {
-    let preview = backup::preview_backup(staging_path.to_string_lossy().to_string()).await?;
+    let preview = backup::preview_backup(staging_path.to_string_lossy().to_string())
+        .await
+        .map_err(|error| error.to_string())?;
     let hash = run
         .archive_sha256
         .clone()
@@ -834,7 +934,7 @@ pub(crate) async fn prune_scheduled_snapshot(
     else {
         return Ok(ScheduledRemotePruneOutcome::Conflict);
     };
-    if !scheduled_entry_matches_run(&entry, run) {
+    if !scheduled_entry_matches_run(&entry, run) || index.has_other_reference(&entry) {
         return Ok(ScheduledRemotePruneOutcome::Conflict);
     }
     let metadata = target.client.object_metadata(&run.target_path).await?;
@@ -861,8 +961,15 @@ pub(crate) async fn prune_scheduled_snapshot(
     update_index(
         &target.client,
         &target.config.remote_dir,
-        |index| index.backups.retain(|item| item.id != entry_id),
-        |index| index.backups.iter().all(|item| item.id != entry_id),
+        |index| {
+            if !index.has_other_reference(&entry) {
+                index.backups.retain(|item| item != &entry);
+            }
+        },
+        |index| {
+            !index.has_other_reference(&entry)
+                && index.backups.iter().all(|item| item.id != entry_id)
+        },
     )
     .await?;
 
@@ -1095,14 +1202,11 @@ mod tests {
         }"#;
 
         let index = parse_index(raw).unwrap();
-        let entry = &index.backups[0];
-        assert_eq!(entry.import_batch_count, 0);
-        assert_eq!(entry.import_exact_session_count, 0);
-        assert_eq!(entry.import_time_bucket_count, 0);
-        assert_eq!(entry.origin, "manual");
-        assert_eq!(entry.target_generation, None);
-        assert_eq!(entry.run_key, None);
-        assert_eq!(entry.archive_sha256, None);
+        assert!(index.backups.is_empty());
+        assert_eq!(index.opaque_entries.len(), 1);
+        let before: serde_json::Value = serde_json::from_str(raw).unwrap();
+        let after = serde_json::to_value(index).unwrap();
+        assert_eq!(before, after);
     }
 
     #[test]
@@ -1110,6 +1214,26 @@ mod tests {
         assert!(validate_backup_file_name("../outside.zip").is_err());
         assert!(validate_backup_file_name("C:\\outside.zip").is_err());
         assert!(validate_backup_file_name("safe.zip").is_ok());
+    }
+
+    #[test]
+    fn mixed_index_preserves_unknown_values_and_rejects_broken_current_entries() {
+        let mut current = serde_json::to_value(scheduled_entry(&scheduled_run())).unwrap();
+        current["vendorData"] = serde_json::json!({"nested": [true, null, 3]});
+        let opaque = serde_json::json!({"formatKind":"future", "unknown": [1, {"two":2}]});
+        let raw = serde_json::json!({"version":1,"product":"Patina","updatedAtMs":1,
+            "backups":[current.clone(),opaque.clone(),{"id":"no-format"}], "extra":{"keep":true}});
+        let index = parse_index(&raw.to_string()).unwrap();
+        assert_eq!(index.backups.len(), 1);
+        assert_eq!(serde_json::to_value(index).unwrap(), raw);
+        current["fileName"] = serde_json::json!("../outside.zip");
+        let mut broken = raw.clone();
+        broken["backups"][0] = current;
+        assert!(parse_index(&broken.to_string()).is_err());
+        broken["backups"][0] = serde_json::json!({"formatKind":"sqlite_snapshot"});
+        assert!(parse_index(&broken.to_string()).is_err());
+        broken["backups"] = serde_json::Value::Array(vec![opaque; MAX_INDEX_BACKUP_ITEMS + 1]);
+        assert!(parse_index(&broken.to_string()).is_err());
     }
 
     fn scheduled_run() -> ScheduledBackupRun {
@@ -1160,6 +1284,7 @@ mod tests {
             target_generation: Some(run.target_generation.clone()),
             run_key: Some(run.run_key.clone()),
             archive_sha256: run.archive_sha256.clone(),
+            extra: BTreeMap::new(),
         }
     }
 
@@ -1296,12 +1421,18 @@ mod tests {
             product: INDEX_PRODUCT.to_string(),
             updated_at_ms: 1,
             backups: vec![owned, manual.clone()],
+            opaque_entries: vec![
+                serde_json::json!({"id":"unknown-keep","formatKind":"future","nested":[1,2]}),
+            ],
+            ..empty_index()
         };
         let confirmed = RemoteBackupIndex {
             version: INDEX_VERSION,
             product: INDEX_PRODUCT.to_string(),
             updated_at_ms: 2,
             backups: vec![manual],
+            opaque_entries: initial.opaque_entries.clone(),
+            ..empty_index()
         };
         let (url, captured) = spawn_canned_server(vec![
             json_response(&initial, "\"index-v1\""),
@@ -1328,6 +1459,11 @@ mod tests {
         let published_index = requests[3].split("\r\n\r\n").nth(1).unwrap();
         assert!(!published_index.contains("scheduled-owned"));
         assert!(published_index.contains("manual-backup"));
+        let published: serde_json::Value = serde_json::from_str(published_index).unwrap();
+        assert!(published["backups"]
+            .as_array()
+            .unwrap()
+            .contains(&initial.opaque_entries[0]));
         let delete = requests[5].to_ascii_lowercase();
         assert!(delete.starts_with("delete /dav/patina/owned.zip "));
         assert!(delete.contains("\r\nif-match: \"object-v1\"\r\n"));
@@ -1343,6 +1479,7 @@ mod tests {
             product: INDEX_PRODUCT.to_string(),
             updated_at_ms: 1,
             backups: vec![manual],
+            ..empty_index()
         };
         let (url, captured) =
             spawn_canned_server(vec![json_response(&index, "\"index-v1\"")]).await;
@@ -1356,6 +1493,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn unknown_reference_to_owned_file_blocks_automatic_deletion() {
+        let run = scheduled_run();
+        let index = RemoteBackupIndex {
+            backups: vec![scheduled_entry(&run)],
+            opaque_entries: vec![
+                serde_json::json!({"id":"another-identity", "fileName":"owned.zip"}),
+            ],
+            ..empty_index()
+        };
+        let (url, captured) = spawn_canned_server(vec![json_response(&index, "\"v1\"")]).await;
+        assert_eq!(
+            prune_scheduled_snapshot(&scheduled_target(url), &run)
+                .await
+                .unwrap(),
+            ScheduledRemotePruneOutcome::Conflict
+        );
+        assert_eq!(captured.await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
     async fn index_merge_reloads_and_retries_after_an_etag_conflict() {
         let run = scheduled_run();
         let entry = scheduled_entry(&run);
@@ -1364,18 +1521,27 @@ mod tests {
             product: INDEX_PRODUCT.to_string(),
             updated_at_ms: 1,
             backups: Vec::new(),
+            ..empty_index()
         };
+        let mut reloaded = initial.clone();
+        reloaded.opaque_entries.push(serde_json::json!({
+            "id": "concurrently-added", "formatKind": "future", "nested": [null, {"keep": true}]
+        }));
+        reloaded
+            .extra
+            .insert("vendorState".into(), serde_json::json!({"generation": 2}));
         let confirmed = RemoteBackupIndex {
             version: INDEX_VERSION,
             product: INDEX_PRODUCT.to_string(),
             updated_at_ms: 2,
             backups: vec![entry.clone()],
+            ..reloaded.clone()
         };
         let (url, captured) = spawn_canned_server(vec![
             json_response(&initial, "\"index-v1\""),
             "HTTP/1.1 412 Precondition Failed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
                 .to_string(),
-            json_response(&initial, "\"index-v2\""),
+            json_response(&reloaded, "\"index-v2\""),
             "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string(),
             json_response(&confirmed, "\"index-v3\""),
         ])
@@ -1406,6 +1572,9 @@ mod tests {
         assert!(requests[3]
             .to_ascii_lowercase()
             .contains("\r\nif-match: \"index-v2\"\r\n"));
+        let retried = parse_index(requests[3].split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        assert_eq!(retried.opaque_entries, reloaded.opaque_entries);
+        assert_eq!(retried.extra, reloaded.extra);
     }
 
     #[tokio::test]
@@ -1425,12 +1594,14 @@ mod tests {
             product: INDEX_PRODUCT.to_string(),
             updated_at_ms: 1,
             backups: vec![manual],
+            ..empty_index()
         };
         let lossy_confirmation = RemoteBackupIndex {
             version: INDEX_VERSION,
             product: INDEX_PRODUCT.to_string(),
             updated_at_ms: 2,
             backups: vec![scheduled.clone()],
+            ..empty_index()
         };
         let mut responses = Vec::new();
         for _ in 0..MAX_INDEX_WRITE_ATTEMPTS {
