@@ -395,7 +395,8 @@ fn verify_executable_paths(executable: &std::path::Path) -> Result<(), String> {
     let root = std::env::temp_dir().join(format!("patina probe paths {}", uuid::Uuid::new_v4()));
     std::fs::create_dir(&root).map_err(|error| error.to_string())?;
     let path = root.join("Patina probe fixture.exe");
-    std::fs::hard_link(executable, &path).map_err(|error| error.to_string())?;
+    // CI may place the executable and temporary directory on different volumes.
+    std::fs::copy(executable, &path).map_err(|error| error.to_string())?;
     let mut lane = Lane::default();
     let result: Result<u64, _> = lane.call(
         &path,
