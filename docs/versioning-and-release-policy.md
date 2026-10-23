@@ -333,6 +333,8 @@ GitHub Release 中的 Windows 安装包附件统一使用无空格文件名，�
 - `Patina_<version>_x64-setup.exe`
 - `Patina_<version>_arm64-setup.exe`
 
+应用内更新直接验证并安装签名 NSIS `.exe`，不使用旧 ZIP 安装包格式；更新器仅启用该发行路径需要的功能。备份 ZIP 由独立的备份格式契约处理，与更新安装格式无关。
+
 每次正式发布还必须携带根级 `SHA256SUMS.txt`：
 
 - 校验文件按 x64、ARM64 顺序恰好记录两个最终公开安装包，不记录 Tauri bundle 中间路径或 `latest.json`。
