@@ -1,6 +1,6 @@
 use crate::data::{schema, tracking_runtime::TrackingRuntimeDataStore};
 use crate::engine::tracking::metadata::{
-    ensure_icon_cache, ensure_icon_cache_with, IconMetadataSource, ICON_REFRESH_INTERVAL_MS,
+    ensure_icon_cache_with, IconMetadataSource, ICON_REFRESH_INTERVAL_MS,
 };
 use crate::engine::tracking::ports::{TrackingDataError, TrackingDataStore};
 use sqlx::{Executor, SqlitePool};
@@ -178,7 +178,17 @@ where
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = Option<String>>,
 {
-    ensure_icon_cache_with(data, source, clock, &Arc::new(Semaphore::new(2)), extract).await
+    ensure_icon_cache_with(
+        data,
+        source,
+        clock,
+        &Arc::new(Semaphore::new(2)),
+        |permit| async move {
+            let _permit = permit;
+            extract().await
+        },
+    )
+    .await
 }
 
 #[test]
@@ -193,7 +203,7 @@ fn exhausted_capacity_does_not_mark_confirmation_and_can_retry() {
             source(exe),
             || 100,
             &semaphore,
-            || async { panic!("capacity exhausted") },
+            |_permit| async { panic!("capacity exhausted") },
         )
         .await
         .unwrap();
@@ -207,7 +217,7 @@ fn exhausted_capacity_does_not_mark_confirmation_and_can_retry() {
             source(exe),
             || 100,
             &semaphore,
-            || async { Some("old".into()) },
+            |_permit| async { Some("old".into()) },
         )
         .await
         .unwrap();
@@ -288,44 +298,84 @@ fn refresh_query_cost_and_observable_work_counts() {
 }
 
 #[test]
-fn windows_extraction_refreshes_an_expired_icon_in_an_isolated_database() {
+fn cancelled_icon_waiter_keeps_native_capacity_until_worker_finishes() {
     tauri::async_runtime::block_on(async {
-        let exe = "refresh-native-fixture.exe";
-        let (pool, store) = fixture(exe, Some(1)).await;
-        let package = std::env::var("PATINA_ICON_REFRESH_TEST_APP_ID").unwrap_or_default();
-        let path = if package.is_empty() {
-            format!("{}\\explorer.exe", std::env::var("WINDIR").unwrap())
-        } else {
-            String::new()
-        };
-        let mut identity = source(exe);
-        identity.process_path = &path;
-        identity.app_user_model_id = &package;
-        let start = std::time::Instant::now();
-        ensure_icon_cache(&store, identity).await.unwrap();
-        let (icon, time): (String, i64) =
-            sqlx::query_as("SELECT icon_base64, last_updated FROM icon_cache")
-                .fetch_one(&pool)
-                .await
-                .unwrap();
-        assert_ne!(icon, "old");
-        assert!(time > 1);
-        use base64::Engine;
-        let bytes = base64::engine::general_purpose::STANDARD
-            .decode(icon.strip_prefix("data:image/png;base64,").unwrap())
+        let (pool, store) = fixture("cancelled-native-icon.exe", None).await;
+        let semaphore = Arc::new(Semaphore::new(1));
+        let (started, ready) = tokio::sync::oneshot::channel();
+        let (release, blocked) = std::sync::mpsc::sync_channel(1);
+        let task_store = store.clone();
+        let task_semaphore = semaphore.clone();
+        let task = tauri::async_runtime::spawn(async move {
+            ensure_icon_cache_with(
+                &task_store,
+                source("cancelled-native-icon.exe"),
+                || 100,
+                &task_semaphore,
+                |permit| async move {
+                    crate::engine::tracking::metadata::run_icon_extraction(permit, move || {
+                        let _ = started.send(());
+                        let _ = blocked.recv_timeout(std::time::Duration::from_secs(5));
+                        Some("late-result".into())
+                    })
+                    .await
+                },
+            )
+            .await
+        });
+        ready.await.unwrap();
+        task.abort();
+        let _ = task.await;
+        assert_eq!(
+            semaphore.available_permits(),
+            0,
+            "cancellation freed a still-running native slot"
+        );
+        for _ in 0..32 {
+            ensure_icon_cache_with(
+                &store,
+                source("new-native-icon.exe"),
+                || 101,
+                &semaphore,
+                |_permit| async { panic!("cancelled native work allowed replacement work") },
+            )
+            .await
             .unwrap();
-        let decoded = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png).unwrap();
-        assert!(decoded.width() > 0 && decoded.height() > 0);
-        println!(
-            "ICON_REFRESH_NATIVE source={} elapsed_us={} dimensions={}x{}",
-            if package.is_empty() {
-                "win32"
-            } else {
-                "packaged-shell"
-            },
-            start.elapsed().as_micros(),
-            decoded.width(),
-            decoded.height()
+        }
+        release.send(()).unwrap();
+        let permit = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            semaphore.clone().acquire_owned(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            store
+                .read_icon_cache("cancelled-native-icon.exe")
+                .await
+                .unwrap()
+                .last_updated,
+            Some(None),
+            "cancelled caller must not confirm the late icon"
+        );
+        drop(permit);
+        ensure_icon_cache_with(
+            &store,
+            source("cancelled-native-icon.exe"),
+            || 102,
+            &semaphore,
+            |_permit| async { Some("recovered".into()) },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            store
+                .read_icon_cache("cancelled-native-icon.exe")
+                .await
+                .unwrap()
+                .last_updated,
+            Some(Some(102))
         );
         pool.close().await;
     });

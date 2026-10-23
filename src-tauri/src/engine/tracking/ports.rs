@@ -10,6 +10,7 @@ pub const TRACKER_LAST_SUCCESSFUL_SAMPLE_KEY: &str = "__tracker_last_successful_
 pub type TrackingDataFuture<'a, T> =
     Pin<Box<dyn Future<Output = Result<T, TrackingDataError>> + Send + 'a>>;
 pub type SharedTrackingDataStore = Arc<dyn TrackingDataStore>;
+pub type SessionNameWrite = Box<dyn FnOnce(String) -> TrackingDataFuture<'static, bool> + Send>;
 
 pub struct IconCacheRead {
     /// Outer None means absent; inner None is an existing icon with unknown age.
@@ -79,11 +80,11 @@ pub trait TrackingDataStore: Send + Sync {
     ) -> TrackingDataFuture<'a, bool>;
     fn start_session<'a>(
         &'a self,
-        app_name: &'a str,
         exe_name: &'a str,
         window_title: &'a str,
         start_time: i64,
         continuity_group_start_time: i64,
-    ) -> TrackingDataFuture<'a, bool>;
+    ) -> TrackingDataFuture<'a, Option<SessionNameWrite>>;
+    fn take_session_name_changed(&self) -> bool;
     fn read_icon_cache<'a>(&'a self, exe_name: &'a str) -> TrackingDataFuture<'a, IconCacheRead>;
 }

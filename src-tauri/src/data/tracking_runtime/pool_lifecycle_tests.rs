@@ -167,9 +167,10 @@ fn tracking_runtime_store_and_watchdog_clone_follow_registered_pool_replacement(
             Some(Some(5_000))
         );
         assert!(tracker
-            .start_session("Editor", "editor.exe", "after restore", 6_000, 6_000)
+            .start_session("editor.exe", "after restore", 6_000, 6_000)
             .await
-            .unwrap());
+            .unwrap()
+            .is_some());
         assert_eq!(
             watchdog
                 .load_active_session()
@@ -212,7 +213,7 @@ fn tracking_runtime_store_recovers_after_closed_pool_gap_and_another_registratio
             .await
             .is_err());
         assert!(tracker
-            .start_session("Editor", "editor.exe", "failed", 9_000, 9_000)
+            .start_session("editor.exe", "failed", 9_000, 9_000)
             .await
             .is_err());
 

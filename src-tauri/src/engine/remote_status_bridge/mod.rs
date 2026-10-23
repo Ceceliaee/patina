@@ -1,5 +1,4 @@
 use crate::domain::settings::RemoteStatusBridgeSettings;
-use crate::engine::tracking::metadata;
 use crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshotState;
 use crc32fast::Hasher as Crc32Hasher;
 use futures_util::{SinkExt, StreamExt};
@@ -368,12 +367,18 @@ async fn build_snapshot_payload<R: Runtime>(
         .and_then(|state| state.snapshot())
         .ok_or_else(|| "tracking runtime snapshot is not ready".to_string())?;
 
-    let app_name = metadata::map_app_name(
-        &runtime_snapshot.window.exe_name,
-        &runtime_snapshot.window.process_path,
-        &runtime_snapshot.window.app_user_model_id,
-    )
-    .await;
+    let app_name = runtime_snapshot
+        .active_session
+        .as_ref()
+        .filter(|session| {
+            session
+                .exe_name
+                .eq_ignore_ascii_case(&runtime_snapshot.window.exe_name)
+        })
+        .map(|session| session.app_name.trim())
+        .filter(|name| !name.is_empty())
+        .unwrap_or(&runtime_snapshot.window.exe_name)
+        .to_owned();
     let icon_data = load_icon_for_exe(store, &runtime_snapshot.window.exe_name).await;
     let icon_hash = compute_icon_hash(icon_data.as_deref());
 

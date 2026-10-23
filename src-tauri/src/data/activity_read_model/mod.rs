@@ -1,6 +1,9 @@
 mod catalog;
 mod hourly;
 
+#[cfg(test)]
+mod name_enrichment_tests;
+
 use crate::data::sqlite_pool::{optimize_query_statistics, wait_for_sqlite_pool};
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Row, Sqlite};

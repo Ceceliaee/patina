@@ -3,6 +3,7 @@ use crate::domain::backup::BackupSession;
 use crate::domain::tracking::{resolve_app_override_executable, ActiveSessionSnapshot};
 use sqlx::{Pool, Row, Sqlite, Transaction};
 use std::collections::HashMap;
+pub(crate) mod name_epoch;
 pub mod read;
 
 pub async fn fetch_all_for_backup(pool: &Pool<Sqlite>) -> Result<Vec<BackupSession>, String> {
@@ -432,8 +433,12 @@ pub async fn start_session(
     window_title: &str,
     start_time: i64,
     continuity_group_start_time: i64,
-) -> Result<bool, sqlx::Error> {
-    let mut tx = pool.begin().await?;
+) -> Result<Option<i64>, sqlx::Error> {
+    use crate::data::sqlite_pool::diagnostics::{measure, start, Phase};
+    use sqlx::Acquire;
+    let mut connection = measure(Phase::Acquire, pool.acquire()).await?;
+    let statements = start(Phase::Statement);
+    let mut tx = connection.begin().await?;
     let active_session: Option<(String, String)> = sqlx::query_as(
         "SELECT exe_name, COALESCE(window_title, '')
          FROM sessions
@@ -447,7 +452,7 @@ pub async fn start_session(
     if let Some((active_exe_name, active_window_title)) = active_session {
         if active_exe_name.eq_ignore_ascii_case(exe_name) && active_window_title == window_title {
             tx.rollback().await?;
-            return Ok(false);
+            return Ok(None);
         }
 
         end_active_sessions_tx(&mut tx, start_time).await?;
@@ -474,8 +479,35 @@ pub async fn start_session(
     session_title_samples::start_title_sample_tx(&mut tx, session_id, window_title, start_time)
         .await?;
 
-    tx.commit().await?;
-    Ok(true)
+    drop(statements);
+    measure(Phase::Commit, tx.commit()).await?;
+    Ok(Some(session_id))
+}
+
+pub async fn fill_session_name(
+    pool: &Pool<Sqlite>,
+    session_id: i64,
+    exe_name: &str,
+    start_time: i64,
+    app_name: &str,
+) -> Result<bool, sqlx::Error> {
+    if app_name.trim().is_empty() || pool.is_closed() {
+        return Ok(false);
+    }
+    // Enrichment may finish after this session closes. Never retarget the active
+    // session, overwrite a resolved name, or recreate a deleted fact.
+    Ok(sqlx::query(
+        "UPDATE sessions SET app_name = ?
+         WHERE id = ? AND exe_name = ? AND start_time = ? AND app_name = ''",
+    )
+    .bind(app_name)
+    .bind(session_id)
+    .bind(exe_name)
+    .bind(start_time)
+    .execute(pool)
+    .await?
+    .rows_affected()
+        > 0)
 }
 
 #[cfg(test)]
@@ -620,7 +652,8 @@ mod exclusion_tests {
             let pool = setup_test_db().await;
             assert!(start_session(&pool, "QQ", "QQ.exe", "Chat", 1_000, 1_000)
                 .await
-                .unwrap());
+                .unwrap()
+                .is_some());
 
             assert!(!end_active_session_for_exe(&pool, "code.exe", 2_000)
                 .await

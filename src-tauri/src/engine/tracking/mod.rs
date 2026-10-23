@@ -1,4 +1,5 @@
 pub mod active_session;
+pub(crate) mod app_names;
 pub mod continuity;
 pub mod metadata;
 pub mod pause_state;

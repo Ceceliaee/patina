@@ -66,6 +66,7 @@ pub(super) async fn restore_backup_payload(
     payload: &BackupPayload,
     strategy: RestoreStrategy,
 ) -> Result<(), String> {
+    let _name_epoch = repositories::sessions::name_epoch::invalidate(pool).await;
     let _icon_maintenance = repositories::icon_cache::acquire_icon_cache_maintenance(pool).await;
     let mut tx = pool
         .begin()
@@ -191,6 +192,44 @@ pub(super) async fn reset_scheduled_tasks_for_replace_in_tx(
 mod tests {
     use super::*;
     use sqlx::Executor;
+
+    #[tokio::test]
+    async fn app_name_from_before_legacy_restore_cannot_fill_reused_session_id() {
+        use crate::engine::tracking::ports::TrackingDataStore;
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+        for migration in crate::data::schema::tracker_migrations() {
+            pool.execute(migration.sql).await.unwrap();
+        }
+        let store = crate::data::tracking_runtime::TrackingRuntimeDataStore::new(pool.clone());
+        let old_name = store
+            .start_session("a.exe", "", 100, 100)
+            .await
+            .unwrap()
+            .unwrap();
+        let id: i64 = sqlx::query_scalar("SELECT id FROM sessions")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let payload: BackupPayload = serde_json::from_value(serde_json::json!({
+            "version":1,"meta":{"exported_at_ms":10000,"schema_version":8,"app_version":"synthetic"},
+            "sessions":[{"id":id,"app_name":"","exe_name":"a.exe","start_time":100,"end_time":200,"duration":100}],
+            "settings":[],"icon_cache":[]
+        })).unwrap();
+        restore_backup_payload(&pool, &payload, RestoreStrategy::Replace)
+            .await
+            .unwrap();
+        assert!(!old_name("Name from removed installation".into())
+            .await
+            .unwrap());
+        assert!(!store.take_session_name_changed());
+        let row: (String, i64, i64) =
+            sqlx::query_as("SELECT app_name, start_time, duration FROM sessions")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(row, ("".into(), 100, 100));
+        pool.close().await;
+    }
 
     #[tokio::test]
     async fn scheduled_reset_failure_keeps_legacy_replace_facts_and_configuration() {

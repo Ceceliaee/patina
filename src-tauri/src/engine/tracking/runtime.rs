@@ -10,12 +10,9 @@ use super::{active_session, continuity, startup, transition, watchdog};
 use crate::data::repositories::{sessions, tracker_settings};
 #[cfg(test)]
 use crate::domain::tracking::TrackingDataChangedPayload;
+use crate::domain::tracking::TrackingStatusSnapshot;
 #[cfg(test)]
 use crate::domain::tracking::TRACKING_REASON_TRACKING_PAUSED_SEALED;
-use crate::domain::tracking::{
-    is_tracking_control_surface_window, TrackingStatusSnapshot, WindowTrackingCandidate,
-    TRACKING_REASON_STATUS_CHANGED,
-};
 use crate::platform::windows::foreground as tracker;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
@@ -41,35 +38,13 @@ use loop_state::{
 #[cfg(test)]
 use power_lifecycle::apply_power_lifecycle_event;
 use snapshot_projection::{
-    clear_active_session_snapshot, refresh_active_session_snapshot_if_changed,
-    should_emit_tracking_status_changed, update_runtime_snapshot_state,
+    clear_active_session_snapshot, emit_tracking_loop_change,
+    refresh_active_session_snapshot_if_changed, should_emit_tracking_status_changed,
+    should_preserve_tracking_projection, update_runtime_snapshot_state,
 };
 pub use support::emit_tracking_data_changed;
 use support::{log_tracker_error, now_ms};
 use window_polling::poll_active_window_with_timeout;
-
-fn should_preserve_tracking_projection(window: &tracker::WindowInfo) -> bool {
-    !window.is_afk
-        && is_tracking_control_surface_window(WindowTrackingCandidate::from_window_fields(
-            &window.exe_name,
-            &window.title,
-            &window.window_class,
-            window.is_afk,
-        ))
-}
-
-fn emit_tracking_loop_change<R: Runtime>(
-    app: &AppHandle<R>,
-    tracking_data_change_reason: Option<&'static str>,
-    did_change_tracking_status: bool,
-    changed_at_ms: i64,
-) {
-    let reason = tracking_data_change_reason
-        .or_else(|| did_change_tracking_status.then_some(TRACKING_REASON_STATUS_CHANGED));
-    if let Some(reason) = reason {
-        let _ = emit_tracking_data_changed(app, reason, changed_at_ms as u64);
-    }
-}
 
 // Owner ledger: run() owns runtime loop orchestration only. Polling,
 // loop-state loading, power lifecycle handling, and event support stay in the
@@ -135,6 +110,7 @@ pub async fn run<R: Runtime>(
         }
         let window_info = poll_outcome.window.clone();
         let now_ms = now_ms();
+        snapshot_projection::publish_resolved_names(&app, data.as_ref(), now_ms).await;
         if let Some(clock_reversed) =
             loop_state::seal_stale_sample(&app, data.as_ref(), &health_state, now_ms).await?
         {

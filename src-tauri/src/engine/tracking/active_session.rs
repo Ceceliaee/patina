@@ -1,5 +1,5 @@
-use super::metadata;
-use super::ports::{TrackingDataError, TrackingDataStore};
+use super::ports::{SessionNameWrite, TrackingDataError, TrackingDataStore};
+use super::{app_names, metadata};
 use crate::platform::windows::foreground as tracker;
 use std::future::Future;
 use std::pin::Pin;
@@ -10,25 +10,38 @@ pub(crate) async fn start_session_with_continuity_group_start_time(
     start_time: i64,
     continuity_group_start_time: i64,
 ) -> Result<bool, TrackingDataError> {
-    let continuity_group_start_time = continuity_group_start_time.min(start_time);
-    let app_name = metadata::map_app_name(
-        &window.exe_name,
-        &window.process_path,
-        &window.app_user_model_id,
+    start_session_with_name_scheduler(
+        data,
+        window,
+        start_time,
+        continuity_group_start_time,
+        |confirm, window| {
+            app_names::schedule(confirm, &window.process_path, &window.app_user_model_id)
+        },
     )
-    .await;
-    let did_start = data
+    .await
+}
+
+pub(crate) async fn start_session_with_name_scheduler(
+    data: &dyn TrackingDataStore,
+    window: &tracker::WindowInfo,
+    start_time: i64,
+    continuity_group_start_time: i64,
+    schedule_name: impl FnOnce(SessionNameWrite, &tracker::WindowInfo),
+) -> Result<bool, TrackingDataError> {
+    let continuity_group_start_time = continuity_group_start_time.min(start_time);
+    let Some(confirm_name) = data
         .start_session(
-            &app_name,
             &window.exe_name,
             &window.title,
             start_time,
             continuity_group_start_time,
         )
-        .await?;
-    if !did_start {
+        .await?
+    else {
         return Ok(false);
-    }
+    };
+    schedule_name(confirm_name, window);
 
     if !window.exe_name.is_empty() {
         let data = data.clone_store();
@@ -60,7 +73,7 @@ pub(crate) async fn start_session_with_continuity_group_start_time(
         });
     }
 
-    Ok(did_start)
+    Ok(true)
 }
 
 #[cfg(test)]

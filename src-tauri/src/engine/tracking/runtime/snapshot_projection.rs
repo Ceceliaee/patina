@@ -2,8 +2,47 @@ use super::super::ports::TrackingDataStore;
 use super::super::runtime_snapshot::{TrackingRuntimeSnapshot, TrackingRuntimeSnapshotState};
 use super::support::log_tracker_error;
 use super::window_polling::WindowPollOutcome;
-use crate::domain::tracking::TrackingStatusSnapshot;
+use crate::domain::tracking::{
+    is_tracking_control_surface_window, TrackingStatusSnapshot, WindowTrackingCandidate,
+    TRACKING_REASON_STATUS_CHANGED,
+};
+use crate::platform::windows::foreground::WindowInfo;
 use tauri::{AppHandle, Manager, Runtime};
+
+pub(super) fn should_preserve_tracking_projection(window: &WindowInfo) -> bool {
+    !window.is_afk
+        && is_tracking_control_surface_window(WindowTrackingCandidate::from_window_fields(
+            &window.exe_name,
+            &window.title,
+            &window.window_class,
+            window.is_afk,
+        ))
+}
+
+pub(super) fn emit_tracking_loop_change<R: Runtime>(
+    app: &AppHandle<R>,
+    tracking_data_change_reason: Option<&'static str>,
+    did_change_tracking_status: bool,
+    changed_at_ms: i64,
+) {
+    let reason = tracking_data_change_reason
+        .or_else(|| did_change_tracking_status.then_some(TRACKING_REASON_STATUS_CHANGED));
+    if let Some(reason) = reason {
+        let _ = super::support::emit_tracking_data_changed(app, reason, changed_at_ms as u64);
+    }
+}
+
+pub(super) async fn publish_resolved_names<R: Runtime>(
+    app: &AppHandle<R>,
+    data: &dyn TrackingDataStore,
+    now_ms: i64,
+) {
+    if data.take_session_name_changed() {
+        refresh_active_session_snapshot_if_changed(app, data, true).await;
+        let _ =
+            super::support::emit_tracking_data_changed(app, "session-name-resolved", now_ms as u64);
+    }
+}
 
 pub(super) fn clear_active_session_snapshot<R: Runtime>(app: &AppHandle<R>) {
     if let Some(state) = app.try_state::<TrackingRuntimeSnapshotState>() {

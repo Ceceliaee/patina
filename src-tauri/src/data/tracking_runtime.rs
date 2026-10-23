@@ -2,11 +2,12 @@ use crate::data::repositories::{icon_cache, sessions, tracker_settings};
 use crate::data::sqlite_pool::wait_for_sqlite_pool;
 use crate::domain::tracking::ActiveSessionSnapshot;
 use crate::engine::tracking::ports::{
-    IconCacheRead, SharedTrackingDataStore, TrackingDataError, TrackingDataFuture,
-    TrackingDataStore,
+    IconCacheRead, SessionNameWrite, SharedTrackingDataStore, TrackingDataError,
+    TrackingDataFuture, TrackingDataStore,
 };
 use futures_util::future::BoxFuture;
 use sqlx::{Pool, Sqlite};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Runtime};
 
@@ -24,16 +25,22 @@ mod pool_lifecycle_tests;
 #[path = "tracking_runtime/icon_refresh_tests.rs"]
 mod icon_refresh_tests;
 
+#[cfg(test)]
+#[path = "tracking_runtime/app_name_tests.rs"]
+mod app_name_tests;
+
 #[derive(Clone)]
 pub struct TrackingRuntimeDataStore {
     source: TrackingPoolSource,
     icon_changed: Arc<dyn Fn(&str) + Send + Sync>,
+    session_name_changed: Arc<AtomicBool>,
 }
 
 impl TrackingRuntimeDataStore {
-    #[cfg(test)]
+    #[cfg(any(test, debug_assertions))]
     pub fn new(pool: Pool<Sqlite>) -> Self {
         Self {
+            session_name_changed: Arc::new(AtomicBool::new(false)),
             icon_changed: Arc::new(|_| {}),
             source: Arc::new(move || {
                 let pool = pool.clone();
@@ -178,25 +185,6 @@ impl TrackingRuntimeDataStore {
         )
         .await
     }
-
-    pub async fn start_session(
-        &self,
-        app_name: &str,
-        exe_name: &str,
-        window_title: &str,
-        start_time: i64,
-        continuity_group_start_time: i64,
-    ) -> Result<bool, TrackingRuntimeDataError> {
-        sessions::start_session(
-            &self.pool().await?,
-            app_name,
-            exe_name,
-            window_title,
-            start_time,
-            continuity_group_start_time,
-        )
-        .await
-    }
 }
 
 pub async fn shared_from_app<R: Runtime>(
@@ -214,6 +202,7 @@ pub async fn shared_from_app<R: Runtime>(
     });
     source().await.map_err(|error| error.to_string())?;
     Ok(Arc::new(TrackingRuntimeDataStore {
+        session_name_changed: Arc::new(AtomicBool::new(false)),
         source,
         icon_changed: Arc::new(move |exe| {
             let _ = event_app.emit("app-icon-changed", exe);
@@ -227,6 +216,7 @@ async fn shared_from_pool_source(
 ) -> Result<SharedTrackingDataStore, TrackingRuntimeDataError> {
     source().await?;
     Ok(Arc::new(TrackingRuntimeDataStore {
+        session_name_changed: Arc::new(AtomicBool::new(false)),
         source,
         icon_changed: Arc::new(|_| {}),
     }))
@@ -419,24 +409,57 @@ impl TrackingDataStore for TrackingRuntimeDataStore {
 
     fn start_session<'a>(
         &'a self,
-        app_name: &'a str,
         exe_name: &'a str,
         window_title: &'a str,
         start_time: i64,
         continuity_group_start_time: i64,
-    ) -> TrackingDataFuture<'a, bool> {
+    ) -> TrackingDataFuture<'a, Option<SessionNameWrite>> {
         Box::pin(async move {
-            TrackingRuntimeDataStore::start_session(
-                self,
-                app_name,
+            let pool = self.pool().await.map_err(tracking_data_error)?;
+            let lifecycle = sessions::name_epoch::state(&pool);
+            let guard = lifecycle.lock().await;
+            let epoch = *guard;
+            let Some(session_id) = sessions::start_session(
+                &pool,
+                "",
                 exe_name,
                 window_title,
                 start_time,
                 continuity_group_start_time,
             )
             .await
-            .map_err(tracking_data_error)
+            .map_err(tracking_data_error)?
+            else {
+                return Ok(None);
+            };
+            drop(guard);
+            let exe_name = exe_name.to_owned();
+            let changed = self.session_name_changed.clone();
+            // Capture the insertion pool, not the replaceable pool source. Late
+            // metadata from before restore must never write into the new database.
+            let confirm: SessionNameWrite = Box::new(move |name| {
+                Box::pin(async move {
+                    let guard = lifecycle.lock().await;
+                    if *guard != epoch {
+                        return Ok(false);
+                    }
+                    let updated = sessions::fill_session_name(
+                        &pool, session_id, &exe_name, start_time, &name,
+                    )
+                    .await
+                    .map_err(tracking_data_error)?;
+                    if updated {
+                        changed.store(true, Ordering::Release);
+                    }
+                    Ok(updated)
+                })
+            });
+            Ok(Some(confirm))
         })
+    }
+
+    fn take_session_name_changed(&self) -> bool {
+        self.session_name_changed.swap(false, Ordering::AcqRel)
     }
 
     fn read_icon_cache<'a>(&'a self, exe_name: &'a str) -> TrackingDataFuture<'a, IconCacheRead> {

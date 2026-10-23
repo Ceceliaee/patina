@@ -3,7 +3,7 @@ use crate::platform::windows::app_metadata;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, OnceLock};
-use tokio::sync::Semaphore;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 pub(crate) const ICON_REFRESH_INTERVAL_MS: i64 = 30 * 24 * 60 * 60 * 1000;
 const ICON_NEGATIVE_CACHE_TTL_MS: i64 = 60 * 60 * 1000;
 const PACKAGED_ICON_NEGATIVE_CACHE_TTL_MS: i64 = 30 * 1000;
@@ -23,29 +23,6 @@ pub struct IconNegativeCacheStats {
     pub limit: usize,
     pub ttl_ms: i64,
     pub oldest_age_ms: Option<i64>,
-}
-
-pub async fn map_app_name(exe_name: &str, process_path: &str, app_user_model_id: &str) -> String {
-    let display_name = if app_user_model_id.trim().is_empty() {
-        app_metadata::resolve_process_display_name(process_path)
-    } else {
-        let process_path_owned = process_path.to_string();
-        let app_user_model_id_owned = app_user_model_id.to_string();
-        tauri::async_runtime::spawn_blocking(move || {
-            app_metadata::resolve_app_display_name(&process_path_owned, &app_user_model_id_owned)
-        })
-        .await
-        .ok()
-        .flatten()
-    };
-    if let Some(display_name) = display_name {
-        let normalized = normalize_display_name(&display_name);
-        if !normalized.is_empty() {
-            return normalized;
-        }
-    }
-
-    fallback_app_name(exe_name)
 }
 
 #[derive(Clone, Copy)]
@@ -68,14 +45,14 @@ pub(crate) async fn ensure_icon_cache(
         source,
         now_ms,
         icon_cache_semaphore(),
-        || async move {
+        |permit| async move {
             let process_path = source.process_path.to_owned();
             let exe_name = source.exe_name.to_owned();
             let app_user_model_id = source.app_user_model_id.to_owned();
             let window_class = source.window_class.to_owned();
             let root_owner_hwnd = source.root_owner_hwnd.to_owned();
             let hwnd = source.hwnd.to_owned();
-            tauri::async_runtime::spawn_blocking(move || {
+            run_icon_extraction(permit, move || {
                 app_metadata::resolve_icon_base64(
                     source.process_id,
                     &process_path,
@@ -87,11 +64,23 @@ pub(crate) async fn ensure_icon_cache(
                 )
             })
             .await
-            .ok()
-            .flatten()
         },
     )
     .await
+}
+
+pub(crate) async fn run_icon_extraction(
+    permit: OwnedSemaphorePermit,
+    extract: impl FnOnce() -> Option<String> + Send + 'static,
+) -> Option<String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        // Cancelling the async waiter cannot stop native work or free its slot.
+        let _permit = permit;
+        extract()
+    })
+    .await
+    .ok()
+    .flatten()
 }
 
 fn icon_needs_refresh(last_updated: Option<Option<i64>>, now: i64) -> bool {
@@ -111,7 +100,7 @@ pub(crate) async fn ensure_icon_cache_with<F, Fut>(
     extract: F,
 ) -> Result<(), TrackingDataError>
 where
-    F: FnOnce() -> Fut,
+    F: FnOnce(OwnedSemaphorePermit) -> Fut,
     Fut: std::future::Future<Output = Option<String>>,
 {
     let IconMetadataSource {
@@ -133,7 +122,7 @@ where
     let Some(_in_flight) = IconCacheInFlightGuard::try_start(exe_name) else {
         return Ok(());
     };
-    let Ok(_permit) = semaphore.clone().try_acquire_owned() else {
+    let Ok(permit) = semaphore.clone().try_acquire_owned() else {
         return Ok(());
     };
     let snapshot = match data.read_icon_cache(exe_name).await {
@@ -154,7 +143,7 @@ where
         return Ok(());
     }
     let refreshing = snapshot.last_updated.is_some();
-    let result = match extract().await {
+    let result = match extract(permit).await {
         Some(icon) if !icon.trim().is_empty() => (snapshot.confirm)(icon, clock()).await,
         _ => {
             remember_icon_failure(
@@ -280,7 +269,10 @@ fn icon_negative_cache_key(
 }
 
 fn cleanup_icon_negative_cache(cache: &mut HashMap<String, IconNegativeCacheEntry>, now_ms: i64) {
-    cache.retain(|_, entry| now_ms.saturating_sub(entry.last_failed_at_ms) < entry.ttl_ms);
+    cache.retain(|_, entry| {
+        now_ms >= entry.last_failed_at_ms
+            && now_ms.saturating_sub(entry.last_failed_at_ms) < entry.ttl_ms
+    });
 
     while cache.len() > ICON_NEGATIVE_CACHE_LIMIT {
         let Some(oldest_key) = cache
@@ -358,52 +350,6 @@ fn icon_negative_cache() -> &'static Mutex<HashMap<String, IconNegativeCacheEntr
     ICON_NEGATIVE_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn normalize_display_name(name: &str) -> String {
-    name.trim().trim_end_matches(".exe").trim().to_string()
-}
-
-fn fallback_app_name(exe_name: &str) -> String {
-    let raw = exe_name
-        .trim()
-        .trim_matches('"')
-        .trim_end_matches(".exe")
-        .trim();
-    if raw.is_empty() {
-        return String::new();
-    }
-
-    let mut normalized = String::with_capacity(raw.len());
-    let mut previous_was_separator = false;
-    for ch in raw.chars() {
-        let is_separator = matches!(ch, '_' | '-' | '.');
-        if is_separator {
-            if !normalized.is_empty() && !previous_was_separator {
-                normalized.push(' ');
-            }
-            previous_was_separator = true;
-            continue;
-        }
-
-        normalized.push(ch);
-        previous_was_separator = false;
-    }
-
-    let normalized = normalized.trim();
-    if normalized.is_empty() {
-        return String::new();
-    }
-
-    let mut chars = normalized.chars();
-    match chars.next() {
-        Some(first) => {
-            let mut result = first.to_uppercase().collect::<String>();
-            result.push_str(chars.as_str());
-            result
-        }
-        None => String::new(),
-    }
-}
-
 fn now_ms() -> i64 {
     crate::platform::clock::unix_timestamp_millis_i64()
 }
@@ -411,6 +357,7 @@ fn now_ms() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::{icon_needs_refresh, ICON_REFRESH_INTERVAL_MS};
+
     #[test]
     fn freshness_boundaries_and_invalid_times() {
         let now = ICON_REFRESH_INTERVAL_MS + 10;
@@ -436,6 +383,32 @@ mod tests {
         PACKAGED_ICON_NEGATIVE_CACHE_TTL_MS,
     };
     use std::collections::HashMap;
+
+    #[test]
+    fn cache_clock_rollback_releases_icon_failure_backoff() {
+        for ttl in [
+            ICON_NEGATIVE_CACHE_TTL_MS,
+            PACKAGED_ICON_NEGATIVE_CACHE_TTL_MS,
+        ] {
+            let mut cache = HashMap::new();
+            remember_icon_failure_in_cache(&mut cache, "old".into(), ttl, 1_000_000);
+            assert!(should_skip_icon_attempt_in_cache(
+                &mut cache, "old", 1_000_001
+            ));
+            assert!(!should_skip_icon_attempt_in_cache(
+                &mut cache, "old", 100_000
+            ));
+            assert!(!should_skip_icon_attempt_in_cache(
+                &mut cache, "old", 1_000_001
+            ));
+            remember_icon_failure_in_cache(&mut cache, "old".into(), ttl, 1_000_000);
+            remember_icon_failure_in_cache(&mut cache, "fresh".into(), ttl, 100_000);
+            assert!(!cache.contains_key("old"));
+            assert!(should_skip_icon_attempt_in_cache(
+                &mut cache, "fresh", 100_001
+            ));
+        }
+    }
 
     #[test]
     fn icon_negative_cache_uses_normalized_identity() {
