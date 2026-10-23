@@ -21,6 +21,9 @@ pub(crate) fn flush_coverage() {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    if let Some(exit_code) = platform::windows::native_probe::run_if_requested() {
+        std::process::exit(exit_code);
+    }
     #[cfg(debug_assertions)]
     let context = tauri::generate_context!("tauri.dev.conf.json");
     #[cfg(all(not(debug_assertions), patina_local_build))]

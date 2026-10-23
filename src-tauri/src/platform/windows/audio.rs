@@ -4,7 +4,11 @@ use crate::domain::tracking::{
     SustainedParticipationSignalMatchResult, SustainedParticipationSignalSnapshot,
     SustainedParticipationSignalSource,
 };
+mod native;
+#[cfg(test)]
+mod resource_tests;
 use crate::platform::windows::foreground::{self, WindowInfo};
+pub(super) use native::AudioSessionProbe;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex, OnceLock,
@@ -13,15 +17,8 @@ use tokio::{
     task::spawn_blocking,
     time::{sleep, timeout, Duration},
 };
-use windows::core::Interface;
-use windows::Win32::Foundation::RPC_E_CHANGED_MODE;
-use windows::Win32::Media::Audio::{
-    eMultimedia, eRender, AudioSessionStateActive, IAudioSessionControl2, IAudioSessionManager2,
-    IMMDeviceEnumerator, MMDeviceEnumerator,
-};
-use windows::Win32::System::Com::{
-    CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_MULTITHREADED,
-};
+use windows::Win32::Media::Audio::{AudioSessionStateActive, IAudioSessionControl2};
+use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED};
 
 const AUDIO_SESSION_QUERY_TIMEOUT_SECS: u64 = 2;
 const AUDIO_SNAPSHOT_TTL_MS: i64 = 15_000;
@@ -183,43 +180,27 @@ impl Drop for AudioProbeInFlightGuard {
 }
 
 fn query_audio_snapshot(now_ms: i64) -> Result<AudioSnapshot, String> {
-    let _com = ComGuard::initialize()?;
+    super::native_probe::audio(now_ms)
+}
+
+fn snapshot_from_sessions(
+    now_ms: i64,
+    controls: impl IntoIterator<Item = IAudioSessionControl2>,
+) -> Result<AudioSnapshot, String> {
     let mut sessions = Vec::new();
 
     unsafe {
-        let enumerator: IMMDeviceEnumerator =
-            CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)
-                .map_err(|error| format!("creating audio device enumerator failed: {error}"))?;
-        let device = enumerator
-            .GetDefaultAudioEndpoint(eRender, eMultimedia)
-            .map_err(|error| format!("loading default audio endpoint failed: {error}"))?;
-        let manager = device
-            .Activate::<IAudioSessionManager2>(CLSCTX_ALL, None)
-            .map_err(|error| format!("activating audio session manager failed: {error}"))?;
-        let session_enumerator = manager
-            .GetSessionEnumerator()
-            .map_err(|error| format!("loading audio sessions failed: {error}"))?;
-        let session_count = session_enumerator
-            .GetCount()
-            .map_err(|error| format!("reading audio session count failed: {error}"))?;
-
-        for index in 0..session_count {
-            let session = session_enumerator
-                .GetSession(index)
-                .map_err(|error| format!("reading audio session at {index} failed: {error}"))?;
-            let session = session
-                .cast::<IAudioSessionControl2>()
-                .map_err(|error| format!("casting audio session at {index} failed: {error}"))?;
-            let state = session.GetState().map_err(|error| {
-                format!("reading audio session state at {index} failed: {error}")
-            })?;
+        for session in controls {
+            let state = session
+                .GetState()
+                .map_err(|error| format!("reading audio session state failed: {error}"))?;
             if state != AudioSessionStateActive {
                 continue;
             }
 
-            let process_id = session.GetProcessId().map_err(|error| {
-                format!("reading audio session process at {index} failed: {error}")
-            })?;
+            let process_id = session
+                .GetProcessId()
+                .map_err(|error| format!("reading audio session process failed: {error}"))?;
             let process_exe_name = foreground::get_process_exe_name(process_id);
             let process_path = foreground::get_process_path(process_id);
             let source_identity =
@@ -245,7 +226,6 @@ fn query_audio_snapshot(now_ms: i64) -> Result<AudioSnapshot, String> {
             }
         }
     }
-
     if sessions.is_empty() {
         return Ok(AudioSnapshot::empty_success(now_ms, AUDIO_SNAPSHOT_TTL_MS));
     }
@@ -291,23 +271,13 @@ fn now_ms() -> i64 {
     crate::platform::clock::unix_timestamp_millis_i64()
 }
 
-struct ComGuard {
-    should_uninitialize: bool,
-}
+pub(super) struct ComGuard;
 
 impl ComGuard {
-    fn initialize() -> Result<Self, String> {
+    pub(super) fn initialize() -> Result<Self, String> {
         let result = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
         if result.is_ok() {
-            return Ok(Self {
-                should_uninitialize: true,
-            });
-        }
-
-        if result == RPC_E_CHANGED_MODE {
-            return Ok(Self {
-                should_uninitialize: false,
-            });
+            return Ok(Self);
         }
 
         Err(format!("initializing COM failed: {result}"))
@@ -316,8 +286,6 @@ impl ComGuard {
 
 impl Drop for ComGuard {
     fn drop(&mut self) {
-        if self.should_uninitialize {
-            unsafe { CoUninitialize() };
-        }
+        unsafe { CoUninitialize() };
     }
 }

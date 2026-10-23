@@ -1,13 +1,11 @@
 use super::{icon, packaged_app};
+#[cfg(test)]
+mod resource_tests;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
-use std::sync::{
-    mpsc::{sync_channel, RecvTimeoutError, SyncSender, TrySendError},
-    Arc, Mutex, OnceLock,
-};
-use std::time::Duration;
+use std::sync::{Mutex, OnceLock};
 use windows::core::{Interface, PCWSTR};
 use windows::Win32::Foundation::{RPC_E_CHANGED_MODE, SIZE};
 use windows::Win32::Storage::FileSystem::{
@@ -24,10 +22,10 @@ use windows::Win32::UI::Shell::{
 const VERSION_INFO_NAME_KEYS: [&str; 3] = ["FileDescription", "ProductName", "CompanyName"];
 const SHELL_ICON_SIZE: i32 = 64;
 const SHELL_PRESENTATION_CACHE_MAX_ENTRIES: usize = 128;
+const SHELL_PRESENTATION_CACHE_MAX_BYTES: usize = 16 * 1024 * 1024;
 const SHELL_PRESENTATION_CACHE_TTL_MS: u64 = 10 * 60 * 1000;
 const SHELL_PRESENTATION_PARTIAL_CACHE_TTL_MS: u64 = 30 * 1000;
-const SHELL_PRESENTATION_QUEUE_CAPACITY: usize = 8;
-const SHELL_PRESENTATION_TIMEOUT: Duration = Duration::from_secs(2);
+const VERSION_INFO_MAX_BYTES: u32 = 4 * 1024 * 1024;
 
 #[derive(Clone)]
 struct ShellValueCacheEntry {
@@ -70,71 +68,6 @@ impl Drop for ComApartmentGuard {
     }
 }
 
-struct ShellPresentationRequest {
-    app_user_model_id: String,
-    kind: ShellPresentationKind,
-    response: SyncSender<Option<String>>,
-}
-
-struct ShellPresentationWorker {
-    requests: SyncSender<ShellPresentationRequest>,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-enum ShellWorkerOutcome {
-    Completed(Option<String>),
-    Busy,
-    TimedOut,
-    Disconnected,
-}
-
-impl ShellPresentationWorker {
-    fn start() -> Option<Self> {
-        let (requests, receiver) =
-            sync_channel::<ShellPresentationRequest>(SHELL_PRESENTATION_QUEUE_CAPACITY);
-        let (ready, readiness) = sync_channel(1);
-        std::thread::Builder::new()
-            .name("patina-shell-presentation".into())
-            .spawn(move || {
-                let apartment = ComApartmentGuard::initialize();
-                let _ = ready.send(apartment.is_some());
-                let Some(_apartment) = apartment else {
-                    return;
-                };
-                while let Ok(request) = receiver.recv() {
-                    let presentation = resolve_shell_value_on_current_thread(
-                        &request.app_user_model_id,
-                        request.kind,
-                    );
-                    let _ = request.response.send(presentation);
-                }
-            })
-            .ok()?;
-        match readiness.recv_timeout(SHELL_PRESENTATION_TIMEOUT) {
-            Ok(true) => Some(Self { requests }),
-            Ok(false) | Err(_) => None,
-        }
-    }
-
-    fn resolve(&self, app_user_model_id: &str, kind: ShellPresentationKind) -> ShellWorkerOutcome {
-        let (response, receiver) = sync_channel(1);
-        let request = ShellPresentationRequest {
-            app_user_model_id: app_user_model_id.to_string(),
-            kind,
-            response,
-        };
-        match self.requests.try_send(request) {
-            Ok(()) => match receiver.recv_timeout(SHELL_PRESENTATION_TIMEOUT) {
-                Ok(value) => ShellWorkerOutcome::Completed(value),
-                Err(RecvTimeoutError::Timeout) => ShellWorkerOutcome::TimedOut,
-                Err(RecvTimeoutError::Disconnected) => ShellWorkerOutcome::Disconnected,
-            },
-            Err(TrySendError::Full(_)) => ShellWorkerOutcome::Busy,
-            Err(TrySendError::Disconnected(_)) => ShellWorkerOutcome::Disconnected,
-        }
-    }
-}
-
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct LangAndCodePage {
@@ -143,6 +76,10 @@ struct LangAndCodePage {
 }
 
 pub fn resolve_process_display_name(process_path: &str) -> Option<String> {
+    super::native_probe::name(process_path, "")
+}
+
+fn resolve_process_display_name_native(process_path: &str) -> Option<String> {
     if process_path.trim().is_empty() {
         return None;
     }
@@ -154,7 +91,7 @@ pub fn resolve_process_display_name(process_path: &str) -> Option<String> {
 
     let mut handle = 0u32;
     let size = unsafe { GetFileVersionInfoSizeW(PCWSTR(path_wide.as_ptr()), Some(&mut handle)) };
-    if size == 0 {
+    if size == 0 || size > VERSION_INFO_MAX_BYTES {
         return None;
     }
 
@@ -183,13 +120,39 @@ pub fn resolve_process_display_name(process_path: &str) -> Option<String> {
 }
 
 pub fn resolve_app_display_name(process_path: &str, app_user_model_id: &str) -> Option<String> {
-    select_display_name(
-        resolve_shell_app_display_name(app_user_model_id),
-        resolve_process_display_name(process_path),
-    )
+    super::native_probe::name(process_path, app_user_model_id)
+}
+
+pub(super) fn resolve_app_display_name_native(
+    process_path: &str,
+    app_user_model_id: &str,
+) -> Option<String> {
+    select_display_name(resolve_shell_app_display_name(app_user_model_id), || {
+        resolve_process_display_name_native(process_path)
+    })
 }
 
 pub fn resolve_icon_base64(
+    process_id: u32,
+    process_path: &str,
+    exe_name: &str,
+    app_user_model_id: &str,
+    window_class: &str,
+    root_owner_hwnd: &str,
+    hwnd: &str,
+) -> Option<String> {
+    super::native_probe::icon(super::native_probe::IconRequest {
+        process_id,
+        process_path: process_path.to_owned(),
+        exe_name: exe_name.to_owned(),
+        app_user_model_id: app_user_model_id.to_owned(),
+        window_class: window_class.to_owned(),
+        root_owner_hwnd: root_owner_hwnd.to_owned(),
+        hwnd: hwnd.to_owned(),
+    })
+}
+
+pub(super) fn resolve_icon_base64_native(
     process_id: u32,
     process_path: &str,
     exe_name: &str,
@@ -213,7 +176,7 @@ pub fn resolve_icon_base64(
                             process_id,
                         )
                     })
-                    .and_then(icon::get_window_icon_base64_from_hwnd)
+                    .and_then(|window| verified_window_icon(window, process_id, process_path))
             },
         );
     }
@@ -224,16 +187,53 @@ pub fn resolve_icon_base64(
         return file_icon;
     }
 
-    icon::get_window_icon_base64(root_owner_hwnd).or_else(|| icon::get_window_icon_base64(hwnd))
+    [root_owner_hwnd, hwnd].into_iter().find_map(|value| {
+        icon::parse_hwnd(value)
+            .and_then(|window| verified_window_icon(window, process_id, process_path))
+    })
+}
+
+fn verified_window_icon(
+    window: windows::Win32::Foundation::HWND,
+    process_id: u32,
+    process_path: &str,
+) -> Option<String> {
+    if process_id == 0 || process_path.trim().is_empty() {
+        return None;
+    }
+    let identity = || {
+        let mut owner = 0;
+        unsafe {
+            windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(
+                window,
+                Some(&mut owner),
+            );
+        }
+        if owner != process_id {
+            return None;
+        }
+        super::foreground::process_identity(owner)
+            .filter(|(_, path)| path.eq_ignore_ascii_case(process_path))
+    };
+    verified_icon_read(identity, || icon::get_window_icon_base64_from_hwnd(window))
+}
+
+fn verified_icon_read(
+    mut identity: impl FnMut() -> Option<(u64, String)>,
+    read: impl FnOnce() -> Option<String>,
+) -> Option<String> {
+    let before = identity()?;
+    let icon = read()?;
+    (identity().as_ref() == Some(&before)).then_some(icon)
 }
 
 fn select_display_name(
     shell_display_name: Option<String>,
-    file_display_name: Option<String>,
+    file_display_name: impl FnOnce() -> Option<String>,
 ) -> Option<String> {
     shell_display_name
         .filter(|name| !name.trim().is_empty())
-        .or_else(|| file_display_name.filter(|name| !name.trim().is_empty()))
+        .or_else(|| file_display_name().filter(|name| !name.trim().is_empty()))
 }
 
 fn select_packaged_icon(
@@ -274,40 +274,40 @@ fn resolve_shell_value(
         return cached;
     }
 
-    let value = request_shell_value(app_user_model_id, kind);
+    let value = super::native_probe::shell(
+        app_user_model_id,
+        matches!(kind, ShellPresentationKind::Icon),
+    );
     write_shell_value_cache(cache, cache_key, value.clone(), now_ms);
     value
 }
 
 fn request_shell_value(app_user_model_id: &str, kind: ShellPresentationKind) -> Option<String> {
-    let worker = {
-        let mut current = shell_presentation_worker().lock().ok()?;
-        if current.is_none() {
-            *current = ShellPresentationWorker::start().map(Arc::new);
-        }
-        current.as_ref()?.clone()
-    };
-
-    match worker.resolve(app_user_model_id, kind) {
-        ShellWorkerOutcome::Completed(value) => value,
-        ShellWorkerOutcome::Disconnected => {
-            if let Ok(mut current) = shell_presentation_worker().lock() {
-                if current
-                    .as_ref()
-                    .is_some_and(|candidate| Arc::ptr_eq(candidate, &worker))
-                {
-                    *current = None;
-                }
-            }
-            None
-        }
-        ShellWorkerOutcome::Busy | ShellWorkerOutcome::TimedOut => None,
-    }
+    // This runs inside the one-shot Shell helper. Keep the COM call on this STA so
+    // the parent's deadline kills the actual work, not merely its waiter.
+    #[cfg(test)]
+    resource_tests::mark("before-com");
+    let apartment = ComApartmentGuard::initialize()?;
+    #[cfg(test)]
+    resource_tests::mark("after-com");
+    let value = resolve_shell_value_on_current_thread(app_user_model_id, kind);
+    #[cfg(test)]
+    resource_tests::mark("after-interfaces-drop");
+    drop(apartment);
+    #[cfg(test)]
+    resource_tests::mark("after-com-uninitialize");
+    value
 }
 
-fn shell_presentation_worker() -> &'static Mutex<Option<Arc<ShellPresentationWorker>>> {
-    static WORKER: OnceLock<Mutex<Option<Arc<ShellPresentationWorker>>>> = OnceLock::new();
-    WORKER.get_or_init(|| Mutex::new(None))
+pub(super) fn request_shell_value_native(app_user_model_id: &str, icon: bool) -> Option<String> {
+    request_shell_value(
+        app_user_model_id,
+        if icon {
+            ShellPresentationKind::Icon
+        } else {
+            ShellPresentationKind::DisplayName
+        },
+    )
 }
 
 fn resolve_shell_value_on_current_thread(
@@ -326,7 +326,12 @@ fn resolve_shell_value_on_current_thread(
         )
         .ok()?
     };
+    #[cfg(test)]
+    resource_tests::mark("after-shell-item");
+    resolve_shell_item_value(shell_item, kind)
+}
 
+fn resolve_shell_item_value(shell_item: IShellItem, kind: ShellPresentationKind) -> Option<String> {
     match kind {
         ShellPresentationKind::DisplayName => {
             let value = unsafe { shell_item.GetDisplayName(SIGDN_NORMALDISPLAY) }.ok()?;
@@ -334,10 +339,11 @@ fn resolve_shell_value_on_current_thread(
             unsafe { CoTaskMemFree(Some(value.0.cast())) };
             display_name.filter(|name| !name.trim().is_empty())
         }
-        ShellPresentationKind::Icon => shell_item
-            .cast::<IShellItemImageFactory>()
-            .ok()
-            .and_then(|factory| unsafe {
+        ShellPresentationKind::Icon => {
+            let factory = shell_item.cast::<IShellItemImageFactory>().ok()?;
+            #[cfg(test)]
+            resource_tests::mark("after-factory");
+            let bitmap = unsafe {
                 factory
                     .GetImage(
                         SIZE {
@@ -347,8 +353,17 @@ fn resolve_shell_value_on_current_thread(
                         SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK,
                     )
                     .ok()
-            })
-            .and_then(icon::owned_hbitmap_to_base64),
+            };
+            #[cfg(test)]
+            resource_tests::mark("after-image");
+            drop(factory);
+            #[cfg(test)]
+            resource_tests::mark("after-factory-drop");
+            let result = bitmap.and_then(icon::owned_hbitmap_to_base64);
+            #[cfg(test)]
+            resource_tests::mark("after-bitmap-dc-drop");
+            result
+        }
     }
 }
 
@@ -375,7 +390,14 @@ fn write_shell_value_cache(
 ) {
     if let Ok(mut cache) = cache.lock() {
         prune_shell_value_cache(&mut cache, now_ms);
-        if cache.len() >= SHELL_PRESENTATION_CACHE_MAX_ENTRIES && !cache.contains_key(&cache_key) {
+        cache.remove(&cache_key);
+        let bytes = cache_key.len() + value.as_ref().map_or(0, String::len);
+        if bytes > SHELL_PRESENTATION_CACHE_MAX_BYTES {
+            return;
+        }
+        while cache.len() >= SHELL_PRESENTATION_CACHE_MAX_ENTRIES
+            || shell_cache_bytes(&cache) + bytes > SHELL_PRESENTATION_CACHE_MAX_BYTES
+        {
             if let Some(oldest_key) = cache
                 .iter()
                 .min_by_key(|(_, entry)| entry.cached_at_ms)
@@ -394,13 +416,29 @@ fn write_shell_value_cache(
     }
 }
 
+fn shell_cache_bytes(cache: &HashMap<String, ShellValueCacheEntry>) -> usize {
+    cache
+        .iter()
+        .map(|(key, entry)| key.len() + entry.value.as_ref().map_or(0, String::len))
+        .sum()
+}
+
+pub(super) fn shell_cache_stats() -> (usize, usize) {
+    [shell_display_name_cache(), shell_icon_cache()]
+        .into_iter()
+        .filter_map(|cache| cache.try_lock().ok())
+        .fold((0, 0), |(entries, bytes), cache| {
+            (entries + cache.len(), bytes + shell_cache_bytes(&cache))
+        })
+}
+
 fn is_shell_value_cache_entry_fresh(entry: &ShellValueCacheEntry, now_ms: u64) -> bool {
     let ttl_ms = if entry.value.is_some() {
         SHELL_PRESENTATION_CACHE_TTL_MS
     } else {
         SHELL_PRESENTATION_PARTIAL_CACHE_TTL_MS
     };
-    now_ms.saturating_sub(entry.cached_at_ms) <= ttl_ms
+    now_ms >= entry.cached_at_ms && now_ms.saturating_sub(entry.cached_at_ms) <= ttl_ms
 }
 
 fn prune_shell_value_cache(cache: &mut HashMap<String, ShellValueCacheEntry>, now_ms: u64) {
@@ -552,8 +590,7 @@ mod tests {
     use super::{
         is_shell_value_cache_entry_fresh, read_shell_value_cache, select_display_name,
         select_packaged_icon, shell_display_name_cache, shell_icon_cache,
-        should_skip_window_icon_fallback, write_shell_value_cache, ShellPresentationKind,
-        ShellPresentationWorker, ShellValueCacheEntry, ShellWorkerOutcome,
+        should_skip_window_icon_fallback, write_shell_value_cache, ShellValueCacheEntry,
         SHELL_PRESENTATION_CACHE_MAX_ENTRIES,
     };
 
@@ -562,6 +599,21 @@ mod tests {
         LOCK.get_or_init(|| std::sync::Mutex::new(()))
             .lock()
             .unwrap()
+    }
+
+    #[test]
+    fn cache_clock_rollback_invalidates_shell_presentation() {
+        let cache = std::sync::Mutex::new(std::collections::HashMap::new());
+        for value in [Some("presentation".into()), None] {
+            write_shell_value_cache(&cache, "old".into(), value.clone(), 1_000_000);
+            assert!(read_shell_value_cache(&cache, "old", 1_000_001).is_some());
+            assert!(read_shell_value_cache(&cache, "old", 100_000).is_none());
+            assert!(read_shell_value_cache(&cache, "old", 1_000_001).is_none());
+            write_shell_value_cache(&cache, "old".into(), value.clone(), 1_000_000);
+            write_shell_value_cache(&cache, "fresh".into(), value, 100_000);
+            assert!(!cache.lock().unwrap().contains_key("old"));
+            assert!(read_shell_value_cache(&cache, "fresh", 100_001).is_some());
+        }
     }
 
     #[test]
@@ -578,12 +630,33 @@ mod tests {
     #[test]
     fn packaged_display_name_prefers_shell_then_file_metadata() {
         assert_eq!(
-            select_display_name(Some("Microsoft Store".into()), Some("WinStore".into())),
+            select_display_name(Some("Microsoft Store".into()), || panic!(
+                "unused file lookup"
+            )),
             Some("Microsoft Store".into())
         );
         assert_eq!(
-            select_display_name(Some("  ".into()), Some("WinStore".into())),
+            select_display_name(Some("  ".into()), || Some("WinStore".into())),
             Some("WinStore".into())
+        );
+    }
+
+    #[test]
+    fn delayed_window_icon_rejects_missing_changed_and_reused_processes() {
+        for after in [None, Some((2, "a.exe".into())), Some((1, "b.exe".into()))] {
+            let mut identities = [Some((1, "a.exe".into())), after].into_iter();
+            assert_eq!(
+                super::verified_icon_read(|| identities.next().flatten(), || Some("icon".into())),
+                None
+            );
+        }
+        assert_eq!(
+            super::verified_icon_read(|| None, || panic!("unknown window must not be read")),
+            None
+        );
+        assert_eq!(
+            super::verified_icon_read(|| Some((1, "a.exe".into())), || Some("icon".into())),
+            Some("icon".into())
         );
     }
 
@@ -642,18 +715,6 @@ mod tests {
     }
 
     #[test]
-    fn disconnected_shell_worker_is_distinguishable_for_restart() {
-        let (requests, receiver) = std::sync::mpsc::sync_channel(1);
-        drop(receiver);
-        let worker = ShellPresentationWorker { requests };
-
-        assert_eq!(
-            worker.resolve("Publisher.App!Main", ShellPresentationKind::Icon),
-            ShellWorkerOutcome::Disconnected
-        );
-    }
-
-    #[test]
     fn missing_shell_value_retries_quickly() {
         let entry = ShellValueCacheEntry {
             value: None,
@@ -705,6 +766,31 @@ mod tests {
             .flatten(),
             Some(format!("App {}", SHELL_PRESENTATION_CACHE_MAX_ENTRIES + 7))
         );
+    }
+
+    #[test]
+    fn shell_cache_rejects_oversized_values_and_evicts_by_bytes() {
+        let cache = std::sync::Mutex::new(std::collections::HashMap::new());
+        for index in 0..20 {
+            write_shell_value_cache(
+                &cache,
+                format!("app-{index}"),
+                Some("x".repeat(1024 * 1024)),
+                index,
+            );
+        }
+        assert!(
+            super::shell_cache_bytes(&cache.lock().unwrap())
+                <= super::SHELL_PRESENTATION_CACHE_MAX_BYTES
+        );
+        assert!(cache.lock().unwrap().len() < 20);
+        write_shell_value_cache(
+            &cache,
+            "oversized".into(),
+            Some("x".repeat(super::SHELL_PRESENTATION_CACHE_MAX_BYTES)),
+            30,
+        );
+        assert!(!cache.lock().unwrap().contains_key("oversized"));
     }
 
     #[test]

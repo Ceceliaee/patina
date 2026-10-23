@@ -14,6 +14,7 @@ use windows::Media::Control::{
     GlobalSystemMediaTransportControlsSessionPlaybackStatus,
 };
 use windows::Media::MediaPlaybackType;
+use windows::Win32::System::WinRT::{RoInitialize, RoUninitialize, RO_INIT_MULTITHREADED};
 
 const MEDIA_SESSION_QUERY_TIMEOUT_SECS: u64 = 2;
 const MEDIA_SNAPSHOT_TTL_MS: i64 = 15_000;
@@ -83,6 +84,19 @@ impl MediaSignalSourceState {
     }
 
     async fn reconcile_once(&self) {
+        self.reconcile_with_probe(
+            Duration::from_secs(MEDIA_SESSION_QUERY_TIMEOUT_SECS),
+            query_media_session_signal,
+        )
+        .await;
+    }
+
+    async fn reconcile_with_probe<F>(&self, query_timeout: Duration, probe: F)
+    where
+        F: FnOnce() -> Result<Option<SustainedParticipationSignalSnapshot>, String>
+            + Send
+            + 'static,
+    {
         let now_ms = now_ms();
         if self.probe_in_flight.swap(true, Ordering::AcqRel) {
             self.replace_snapshot(MediaSnapshot {
@@ -94,14 +108,14 @@ impl MediaSignalSourceState {
         }
 
         let probe_in_flight = self.probe_in_flight.clone();
-        let query = tauri::async_runtime::spawn(async move {
+        // COM calls can block without yielding, even when RequestAsync is used.
+        // Keep them off the executor that owns tracking, timers and IPC.
+        let query = tokio::task::spawn_blocking(move || {
             let _guard = MediaProbeInFlightGuard { probe_in_flight };
-            query_media_session_signal().await
+            probe()
         });
 
-        let signal = match timeout(Duration::from_secs(MEDIA_SESSION_QUERY_TIMEOUT_SECS), query)
-            .await
-        {
+        let signal = match timeout(query_timeout, query).await {
             Ok(Ok(Ok(Some(signal)))) => signal,
             Ok(Ok(Ok(None))) => SustainedParticipationSignalSnapshot::default(),
             Ok(Ok(Err(error))) => {
@@ -174,12 +188,39 @@ impl Drop for MediaProbeInFlightGuard {
     }
 }
 
-async fn query_media_session_signal() -> Result<Option<SustainedParticipationSignalSnapshot>, String>
-{
-    let manager = GlobalSystemMediaTransportControlsSessionManager::RequestAsync()
-        .map_err(|error| format!("requesting media session manager failed: {error}"))?
-        .await
-        .map_err(|error| format!("awaiting media session manager failed: {error}"))?;
+fn query_media_session_signal() -> Result<Option<SustainedParticipationSignalSnapshot>, String> {
+    super::native_probe::media()
+}
+
+pub(super) struct MediaSessionProbe {
+    // Fields drop in declaration order: release the manager before its apartment.
+    manager: GlobalSystemMediaTransportControlsSessionManager,
+    _apartment: MediaApartment,
+}
+
+impl MediaSessionProbe {
+    pub(super) fn new() -> Result<Self, String> {
+        let apartment = MediaApartment::initialize()?;
+        let manager = GlobalSystemMediaTransportControlsSessionManager::RequestAsync()
+            .map_err(|error| format!("requesting media session manager failed: {error}"))?
+            .join()
+            .map_err(|error| format!("awaiting media session manager failed: {error}"))?;
+        Ok(Self {
+            manager,
+            _apartment: apartment,
+        })
+    }
+
+    pub(super) fn query(&self) -> Result<Option<SustainedParticipationSignalSnapshot>, String> {
+        // RequestAsync activation grows native allocations when repeated. Retain
+        // one manager per helper, but fetch current sessions and playback each time.
+        query_media_session_signal_native(&self.manager)
+    }
+}
+
+fn query_media_session_signal_native(
+    manager: &GlobalSystemMediaTransportControlsSessionManager,
+) -> Result<Option<SustainedParticipationSignalSnapshot>, String> {
     let sessions = manager
         .GetSessions()
         .map_err(|error| format!("loading media sessions failed: {error}"))?;
@@ -205,6 +246,22 @@ async fn query_media_session_signal() -> Result<Option<SustainedParticipationSig
     }
 
     Ok(fallback_active.or(fallback_available))
+}
+
+struct MediaApartment(std::marker::PhantomData<std::rc::Rc<()>>);
+
+impl MediaApartment {
+    fn initialize() -> Result<Self, String> {
+        unsafe { RoInitialize(RO_INIT_MULTITHREADED) }
+            .map_err(|error| format!("initializing media WinRT apartment failed: {error}"))?;
+        Ok(Self(std::marker::PhantomData))
+    }
+}
+
+impl Drop for MediaApartment {
+    fn drop(&mut self) {
+        unsafe { RoUninitialize() };
+    }
 }
 
 fn build_signal_snapshot(
@@ -281,6 +338,116 @@ mod tests {
     use super::map_playback_type;
     use crate::domain::tracking::SystemMediaPlaybackType;
     use windows::Media::MediaPlaybackType;
+
+    #[test]
+    fn busy_media_probe_cannot_starve_timeout_or_accumulate_retries() {
+        use super::*;
+        use std::time::Instant;
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let released = Arc::new(AtomicBool::new(false));
+        let completed = Arc::new(AtomicBool::new(false));
+        let release_probe = released.clone();
+        let probe_completed = completed.clone();
+        let state = MediaSignalSourceState::new();
+        runtime.block_on(async {
+            state
+                .reconcile_with_probe(Duration::from_millis(20), move || {
+                    // Deliberately consume a worker without yielding; the deadline bounds
+                    // the failing implementation as well as the test's cleanup.
+                    let deadline = Instant::now() + Duration::from_secs(2);
+                    while !release_probe.load(Ordering::Acquire) && Instant::now() < deadline {
+                        std::hint::spin_loop();
+                    }
+                    probe_completed.store(true, Ordering::Release);
+                    Ok(None)
+                })
+                .await;
+            let timed_out_before_completion = !completed.load(Ordering::Acquire);
+            let in_flight_after_timeout = state.probe_in_flight.load(Ordering::Acquire);
+            let retries = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            for _ in 0..100 {
+                let retries = retries.clone();
+                state
+                    .reconcile_with_probe(Duration::from_millis(20), move || {
+                        retries.fetch_add(1, Ordering::Relaxed);
+                        Ok(None)
+                    })
+                    .await;
+            }
+            released.store(true, Ordering::Release);
+            assert!(
+                timed_out_before_completion,
+                "native busy loop starved the async timeout"
+            );
+            assert!(in_flight_after_timeout);
+            assert_eq!(retries.load(Ordering::Relaxed), 0);
+            timeout(Duration::from_secs(3), async {
+                while state.probe_in_flight.load(Ordering::Acquire) {
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await
+            .expect("probe failed to release its in-flight guard");
+            state
+                .reconcile_with_probe(Duration::from_secs(1), || Ok(None))
+                .await;
+            assert!(!state.probe_in_flight.load(Ordering::Acquire));
+        });
+    }
+
+    #[test]
+    fn busy_media_probe_does_not_stop_multi_worker_timers() {
+        use super::*;
+        use std::sync::mpsc;
+        use std::time::Instant;
+
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(4)
+            .enable_all()
+            .build()
+            .unwrap();
+        let release = Arc::new(AtomicBool::new(false));
+        let probe_release = release.clone();
+        let (started_tx, started_rx) = mpsc::channel();
+        let (timer_tx, timer_rx) = mpsc::channel();
+        let probe = runtime.spawn(async move {
+            // Let the workers park before a timer wakes the native probe. A busy
+            // driver-owning worker must not strand the other timers while idle.
+            sleep(Duration::from_millis(50)).await;
+            MediaSignalSourceState::new()
+                .reconcile_with_probe(Duration::from_millis(20), move || {
+                    started_tx.send(()).unwrap();
+                    let deadline = Instant::now() + Duration::from_secs(3);
+                    while !probe_release.load(Ordering::Acquire) && Instant::now() < deadline {
+                        std::hint::spin_loop();
+                    }
+                    Ok(None)
+                })
+                .await;
+        });
+        let timer = runtime.spawn(async move {
+            sleep(Duration::from_millis(150)).await;
+            let _ = timer_tx.send(());
+        });
+        let started = started_rx.recv_timeout(Duration::from_secs(2));
+        // This deadline runs outside Tokio so a frozen timer driver cannot also
+        // freeze the test's failure detection or leave its busy probe running.
+        let timer_result = timer_rx.recv_timeout(Duration::from_secs(1));
+        release.store(true, Ordering::Release);
+        runtime.block_on(async {
+            probe.await.unwrap();
+            timer.await.unwrap();
+        });
+        assert!(started.is_ok(), "probe did not start");
+        assert!(
+            timer_result.is_ok(),
+            "one busy probe stalled all runtime timers"
+        );
+    }
 
     #[test]
     fn media_playback_type_mapping_preserves_expected_categories() {

@@ -85,7 +85,11 @@ pub fn cmd_set_afk_threshold(threshold_secs: u64) {
     AFK_THRESHOLD_SECS.store(threshold_secs, Ordering::Relaxed);
 }
 
-pub fn get_active_window() -> WindowInfo {
+pub fn get_active_window() -> Result<WindowInfo, String> {
+    super::native_probe::foreground(AFK_THRESHOLD_SECS.load(Ordering::Relaxed))
+}
+
+pub(super) fn get_active_window_native() -> WindowInfo {
     unsafe {
         // AFK detection uses the configured threshold from the tracking runtime.
         let mut last_input = LASTINPUTINFO {

@@ -65,7 +65,7 @@ struct ForegroundProbeInFlightGuard {
 }
 
 pub(super) async fn poll_active_window_with_timeout() -> WindowPollOutcome {
-    poll_active_window_with_state(
+    poll_active_window_result_with_state(
         foreground_probe_state().clone(),
         Duration::from_secs(WINDOW_POLL_TIMEOUT_SECS),
         now_ms(),
@@ -74,6 +74,7 @@ pub(super) async fn poll_active_window_with_timeout() -> WindowPollOutcome {
     .await
 }
 
+#[cfg(test)]
 async fn poll_active_window_with_state<F>(
     state: Arc<ForegroundProbeState>,
     timeout_duration: Duration,
@@ -82,6 +83,19 @@ async fn poll_active_window_with_state<F>(
 ) -> WindowPollOutcome
 where
     F: FnOnce() -> tracker::WindowInfo + Send + 'static,
+{
+    poll_active_window_result_with_state(state, timeout_duration, sampled_at_ms, || Ok(probe()))
+        .await
+}
+
+async fn poll_active_window_result_with_state<F>(
+    state: Arc<ForegroundProbeState>,
+    timeout_duration: Duration,
+    sampled_at_ms: i64,
+    probe: F,
+) -> WindowPollOutcome
+where
+    F: FnOnce() -> Result<tracker::WindowInfo, String> + Send + 'static,
 {
     let probe_start = match prepare_probe_decision(&state, sampled_at_ms) {
         ProbeDecision::Start(probe_start) => probe_start,
@@ -110,7 +124,7 @@ where
     });
 
     match timeout(timeout_duration, query).await {
-        Ok(Ok(window)) => {
+        Ok(Ok(Ok(window))) => {
             let probe_diagnostics =
                 remember_successful_window(&state, probe_start.generation, &window, sampled_at_ms);
             WindowPollOutcome {
@@ -120,6 +134,13 @@ where
                 probe_diagnostics,
             }
         }
+        Ok(Ok(Err(error))) => fallback_outcome(
+            &state,
+            TrackingRuntimeProbeStatus::TaskFailedFallback,
+            TrackingRuntimeProbeStatus::TaskFailedInactive,
+            &format!("active window probe failed: {error}"),
+            sampled_at_ms,
+        ),
         Ok(Err(error)) => fallback_outcome(
             &state,
             TrackingRuntimeProbeStatus::TaskFailedFallback,
@@ -476,6 +497,47 @@ mod tests {
                 TrackingRuntimeProbeStatus::TimeoutFallback
             );
             assert_eq!(calls.load(Ordering::SeqCst), 1);
+        });
+    }
+
+    #[test]
+    fn native_failure_never_counts_as_a_successful_observation() {
+        tauri::async_runtime::block_on(async {
+            let state = Arc::new(ForegroundProbeState::default());
+            let first =
+                poll_active_window_with_state(state.clone(), Duration::from_secs(1), 1_000, || {
+                    make_window("A.exe")
+                })
+                .await;
+            assert!(first.is_successful_sample());
+            let failed = poll_active_window_result_with_state(
+                state.clone(),
+                Duration::from_secs(1),
+                2_000,
+                || Err("probe deadline exceeded".into()),
+            )
+            .await;
+            assert!(!failed.is_successful_sample());
+            assert_eq!(
+                failed.probe_diagnostics.last_successful_sample_at_ms,
+                Some(1_000)
+            );
+            assert_eq!(
+                lock_inner(&state)
+                    .last_successful_window
+                    .as_ref()
+                    .unwrap()
+                    .exe_name,
+                "A.exe"
+            );
+            assert!(lock_inner(&state).active_generation.is_none());
+            let recovered =
+                poll_active_window_with_state(state, Duration::from_secs(1), 3_000, || {
+                    make_window("B.exe")
+                })
+                .await;
+            assert!(recovered.is_successful_sample());
+            assert_eq!(recovered.window.exe_name, "B.exe");
         });
     }
 
