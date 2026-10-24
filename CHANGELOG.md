@@ -12,9 +12,25 @@
 
 ## [Unreleased]
 
-Release: 改善长时间运行与界面恢复，修复跟踪状态、WebDAV 配置和数据目录迁移问题。
-App note: 改善长时间运行与界面恢复，修复跟踪状态、WebDAV 配置和数据目录迁移问题。
-App note en: Improve long-run stability and window recovery; fix tracking state, WebDAV settings, and data migration.
+Release: 待定。
+App note: 待定。
+App note en: TBD.
+
+### Added
+
+### Changed
+
+### Fixed
+
+### Removed
+
+### Internal
+
+## [1.9.11] - 2026-10-24
+
+Release: 改善运行稳定性与窗口恢复，修复跟踪、WebDAV 和目录迁移问题；备份恢复仅支持 SQLite 快照。
+App note: 改善运行稳定性与窗口恢复，修复跟踪、WebDAV 和目录迁移问题；备份恢复仅支持 SQLite 快照。
+App note en: Improve stability and window recovery; fix tracking, WebDAV and data migration; restore SQLite snapshots only.
 
 ### Added
 
@@ -22,25 +38,24 @@ App note en: Improve long-run stability and window recovery; fix tracking state,
 
 ### Changed
 
-- 将 Windows 前台窗口、名称、图标、媒体和音频探测隔离到可终止的独立进程，超时或异常时停止并回收；复用媒体和音频查询对象，减少反复创建带来的资源增长。应用名称改为在记录提交后补全，避免名称查询阻塞记录。Refs [#84](https://github.com/Ceceliaee/patina/issues/84)
 - 限制数据页与历史页未完成的读取请求及缓存数据量，分类页合并连续刷新，避免快速切页和反复刷新时堆积查询；减少趋势计算的重复处理，并补齐订阅失败和页面卸载时的监听器清理。
 
 ### Fixed
 
 - 修复暂停、恢复和设置变化期间，迟到的读取结果覆盖新跟踪状态的问题，使主界面和悬浮窗保持一致；跟踪快照读取失败时保留最后有效值。健康状态读取持续无响应时不再一直显示正常，系统时间回拨后恢复健康时间戳更新，避免旧时间段影响新的停顿判断。
-- 修复 Windows 复用进程或窗口标识时误用旧应用身份或其他窗口图标的问题，并在再次提取图标时识别可执行文件变化；系统时间回拨后使名称、图标和进程缓存失效，避免旧结果或失败退避持续生效。
+- 改善 Windows 应用与媒体信息读取异常时的恢复，避免名称查询阻塞记录。修复进程或窗口标识复用、应用更新及系统时间回拨后误用旧名称、图标或进程信息的问题，减少反复查询媒体和音频信息带来的资源增长。Refs [#84](https://github.com/Ceceliaee/patina/issues/84)
 - 修复 WebDAV 保存中断或与删除、读取交错时配置和密码不一致的问题，保存和测试连接时保留密码首尾空格。旧配置首次保存时转换为新的凭据引用；覆盖恢复备份或合并得到新配置后须重新配置密码，合并保留的已有配对不受影响。降级到不支持新凭据引用的旧版本也需重新配置密码。
 - 修复应用异常退出后迁移数据目录时遗漏 SQLite 回滚日志的问题，确保迁移副本能够撤销尚未提交的写入。
 
 ### Removed
 
-- 结束旧结构化备份的兼容窗口，恢复仅接受 SQLite 数据快照，并移除设置页“恢复”旁的兼容提示问号。已有文件和 WebDAV 未支持格式的索引记录保留；旧备份可通过 [v1.9.10 隔离转换步骤](docs/versioning-and-release-policy.md#71-旧备份读取器的丢弃窗口) 迁移。
+- 结束旧结构化备份的兼容窗口，恢复仅接受 SQLite 数据快照，并移除设置页“恢复”旁的兼容提示问号。已有文件和 WebDAV 未支持格式的索引记录保留；旧备份可通过 [v1.9.10 隔离转换步骤](https://github.com/Ceceliaee/patina/blob/v1.9.11/docs/versioning-and-release-policy.md#71-旧备份读取器的丢弃窗口) 迁移。
 
 ### Internal
 
 - 将前端剩余的数据库读取迁至 Rust，统一连接池管理并移除通用 SQL 通道，通过限定命令收紧主界面与悬浮窗的数据库和凭据访问边界。历史会话与标题在同一读取事务中取得，统计与历史摘要统一消费活动聚合结果。
-- 补充原生进程超时与崩溃回收、数据库锁冲突、窗口故障恢复、资源循环和全源码覆盖率验证，隔离桌面测试的开机启动项；运行诊断区分采样与提交进度，并限制输出容量和日志轮转。
-- 更新 Node 至 24.22.1、pnpm 至 12.15.0、Tauri CLI 至 2.12.4、Vite 至 8.2.4，并更新相关 JavaScript、归档与 TLS 依赖及 CI Actions；更新器按现有签名 NSIS 安装包路径收窄依赖。
+- 将 Windows 前台窗口、名称、图标、媒体和音频探测隔离到可终止的独立进程，超时或异常时停止并回收。补充原生进程、数据库锁冲突、窗口故障恢复、资源循环和全源码覆盖率验证，隔离桌面测试的开机启动项；运行诊断区分采样与提交进度，并限制输出容量和日志轮转。
+- 更新 Node 至 24.22.1、pnpm 至 12.15.0、Tauri CLI 至 2.12.4、Vite 至 8.2.4、Tokio 至 1.53.3，将开发依赖 Zod 更新至 4.6.7 以修复安全公告，并更新相关 JavaScript、归档与 TLS 依赖及 CI Actions；更新器按现有签名 NSIS 安装包路径收窄依赖。
 
 ## [1.9.10] - 2026-10-11
 
