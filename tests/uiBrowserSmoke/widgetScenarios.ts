@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import { delay, evaluate, waitForExpression } from "./browserHarness.ts";
+import { DEFAULT_TIMEOUT_MS, FIRST_RENDER_TIMEOUT_MS } from "./constants.ts";
 
 const WIDGET_RESOLUTIONS = [
   { name: "720p", width: 1280, height: 720 },
@@ -84,6 +85,7 @@ async function waitForWidgetState(
   state: WidgetState,
   side: WidgetSide,
   toolSlotCount: number,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
 ) {
   const stateClass = state === "collapsed" ? "widget-shell-collapsed" : "widget-shell-expanded";
   await waitForExpression(
@@ -93,7 +95,7 @@ async function waitForWidgetState(
       && document.querySelector(".widget-shell")?.classList.contains(${JSON.stringify(stateClass)})
       && document.querySelector(".widget-shell")?.classList.contains(${JSON.stringify(`widget-shell-${side}`)})
       && document.querySelectorAll(".widget-pill-tool-slot").length === ${toolSlotCount}`,
-    15_000,
+    timeoutMs,
     `${state} widget on ${side} with ${toolSlotCount} tools`,
   );
   await waitForExpression(
@@ -102,7 +104,7 @@ async function waitForWidgetState(
     `Array.from(document.querySelector(".widget-shell")?.getAnimations({ subtree: true }) ?? [])
       .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
       .every((animation) => animation.playState === "finished" || animation.playState === "idle")`,
-    15_000,
+    DEFAULT_TIMEOUT_MS,
     `${state} widget animations`,
   );
 }
@@ -223,7 +225,7 @@ async function navigateToWidget(
   await context.client.command("Page.navigate", {
     url: widgetUrl(context.appUrl, side, toolSlotCount, pinned),
   }, context.sessionId);
-  await waitForWidgetState(context, pinned ? "expanded" : "collapsed", side, toolSlotCount);
+  await waitForWidgetState(context, pinned ? "expanded" : "collapsed", side, toolSlotCount, FIRST_RENDER_TIMEOUT_MS);
 }
 
 async function expandWidget(context: BrowserSmokeContext, side: WidgetSide, toolSlotCount: number) {
@@ -591,7 +593,7 @@ export async function runWidgetScenarios(context: BrowserSmokeContext) {
     const url = new URL(widgetUrl(context.appUrl, "right", 0));
     url.searchParams.set("widgetPinDelayMs", "120");
     await client.command("Page.navigate", { url: url.href }, sessionId);
-    await waitForWidgetState(context, "collapsed", "right", 0);
+    await waitForWidgetState(context, "collapsed", "right", 0, FIRST_RENDER_TIMEOUT_MS);
     await expandWidget(context, "right", 0);
 
     assert.equal(await evaluate(client, sessionId, `
@@ -625,7 +627,7 @@ export async function runWidgetScenarios(context: BrowserSmokeContext) {
     const url = new URL(widgetUrl(context.appUrl, "right", 0));
     url.searchParams.set("widgetPinFailure", "1");
     await client.command("Page.navigate", { url: url.href }, sessionId);
-    await waitForWidgetState(context, "collapsed", "right", 0);
+    await waitForWidgetState(context, "collapsed", "right", 0, FIRST_RENDER_TIMEOUT_MS);
     await expandWidget(context, "right", 0);
     await evaluate(client, sessionId, `document.querySelector(".widget-pill-pin-action")?.click()`);
     await waitForExpression(client, sessionId, `
