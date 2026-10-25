@@ -146,7 +146,7 @@
     flex-direction: column;
   }
 
-  .data-dashboard-grid > .data-app-panel > .data-app-grid {
+  .data-dashboard-grid > .data-app-panel .data-app-grid {
     min-height: 0;
     flex: 1 1 auto;
   }

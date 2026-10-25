@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { getLocaleText, loadLocaleText } from "../../src/shared/i18n/runtime.ts";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
+import { runDataLoadingLayoutScenario } from "./dataLoadingLayoutScenario.ts";
 import {
   delay,
   evaluate,
@@ -13,6 +14,7 @@ import {
 const COPY = { "zh-CN": getLocaleText("zh-CN") } as const;
 
 export async function runDataReadFailureScenarios(context: BrowserSmokeContext) {
+  await runDataLoadingLayoutScenario(context);
   const { appUrl, client, sessionId, runTest } = context;
   const metric = `document.querySelector('.data-trend-inline-metric strong')?.textContent?.trim()`;
   const openData = async () => {

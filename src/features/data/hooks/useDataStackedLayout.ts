@@ -9,6 +9,7 @@ export function useDataStackedLayout(dataRootRef: RefObject<HTMLDivElement | nul
     const syncHeight = () => root.style.setProperty(
       "--data-stacked-panel-height", `${overview.offsetHeight}px`,
     );
+    syncHeight();
     const observer = new ResizeObserver(syncHeight);
     observer.observe(overview);
     return () => observer.disconnect();

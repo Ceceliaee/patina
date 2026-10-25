@@ -24,6 +24,7 @@ import { runClassificationScenarios } from "./uiBrowserSmoke/classificationScena
 import { runDashboardReadFailureScenarios, runDashboardScenarios } from "./uiBrowserSmoke/dashboardScenarios.ts";
 import { runHistoryReadFailureScenarios, runHistoryScenarios } from "./uiBrowserSmoke/historyScenarios.ts";
 import { runDataReadFailureScenarios, runDataScenarios } from "./uiBrowserSmoke/dataScenarios.ts";
+import { runDataLoadingLayoutScenario } from "./uiBrowserSmoke/dataLoadingLayoutScenario.ts";
 import { runLocaleScenarios } from "./uiBrowserSmoke/localeScenarios.ts";
 import { runWidgetScenarios } from "./uiBrowserSmoke/widgetScenarios.ts";
 import { runScrollRegionScenarios } from "./uiBrowserSmoke/scrollRegionScenarios.ts";
@@ -198,6 +199,8 @@ try {
     await runWidgetScenarios(smokeContext);
   } else if (dataOnly) {
     await runDataScenarios(smokeContext, { continuityOnly: true });
+  } else if (process.argv.includes("--data-loading-layout-only")) {
+    await runDataLoadingLayoutScenario(smokeContext);
   } else if (historyWebTimelineOnly) {
     await waitForExpression(
       client!,

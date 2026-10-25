@@ -318,7 +318,7 @@ function DataAppTrendPanel(props: DataAppTrendPanelProps) {
           </button>
         </div>
       ) : !ready ? (
-        <div className="relative" aria-busy>
+        <div className="relative flex min-h-0 flex-1 flex-col" aria-busy>
           <div role="status" className="absolute qp-text-caption text-[var(--qp-text-tertiary)]">{UI_TEXT.common.loading}</div>
           <div
             className="data-app-grid pointer-events-none invisible"

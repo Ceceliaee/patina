@@ -90,10 +90,13 @@ function DataTrendPanel({
             {UI_TEXT.common.retry}
           </button>
         </div>
-      ) : !viewModel ? (
-        <div className="mt-3 qp-text-caption text-[var(--qp-text-tertiary)]" role="status">{UI_TEXT.common.loading}</div>
       ) : null}
-      <div className="pt-4">
+      <div className="relative pt-4">
+        {!viewModel && !error ? (
+          <div className="absolute inset-x-0 top-4 bottom-0 flex items-center justify-center qp-text-caption text-[var(--qp-text-tertiary)]" role="status">
+            {UI_TEXT.common.loading}
+          </div>
+        ) : null}
         <div
           ref={chartRef}
           className={`data-trend-chart ${
