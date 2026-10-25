@@ -347,8 +347,8 @@
 
 建议测试点：
 
-- [x] 完整路径 `C:\Windows\explorer.exe` 能解析出 `explorer.exe`。
-- [x] 完整路径 `C:\Program Files\App\App.exe` 能解析出 `App.exe`。
+- [x] 完整路径 `%SystemRoot%\explorer.exe` 能解析出 `explorer.exe`。
+- [x] 完整路径 `%ProgramFiles%\App\App.exe` 能解析出 `App.exe`。
 - [x] 主路径没有路径时，fallback exe name 能作为 exe name 返回。
 - [x] 主路径成功时，不需要 fallback exe name 才能返回 exe name。
 

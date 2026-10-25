@@ -240,7 +240,7 @@
 
 新增余量约 3.3%–3.5%，低于共享 owner 的 5% 上限。审查修正后初始图约 195.27 KiB、总产物 378.33 KiB、Settings 23.11 KiB；对应总量和页面预算保持原值。当前全图也包含原有分类任务改动，不能把全部差值归于本任务。预算调整仅限上述五个消息 owner，生产构建与 bundle 检查通过。
 
-包体对照临时目录 `C:/Users/SYBao/AppData/Local/Temp/patina-webdav-budget-6622cdd327b34060bb4b8b111719f468` 的递归清理被自动策略拒绝，目录留给维护者清理。两个 node_modules 是指向工作区依赖的 junction，清理时只移除链接本身，不遍历依赖目标。
+包体对照临时目录 `%TEMP%/patina-webdav-budget-6622cdd327b34060bb4b8b111719f468` 的递归清理被自动策略拒绝，目录留给维护者清理。两个 node_modules 是指向工作区依赖的 junction，清理时只移除链接本身，不遍历依赖目标。
 
 ### 9.4 完成与归档
 

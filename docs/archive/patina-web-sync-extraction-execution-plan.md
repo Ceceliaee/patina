@@ -35,12 +35,12 @@
 
 ### 1.3 先定义拆分边界
 
-本次拆分采用两个本地项目、两个 GitHub 仓库的边界：
+本次拆分采用两个本地项目、两个 GitHub 仓库的边界。以下路径均相对 Patina 仓库根目录：
 
 ```text
-C:\Users\SYBao\Documents\Code\
-  Patina\
-  Patina-Web-Sync\
+../
+  Patina/
+  Patina-Web-Sync/
 ```
 
 - [x] `Patina` 保留桌面主应用、Tauri runtime、SQLite 数据、Settings 指引和本机 HTTP 接收端。
@@ -150,7 +150,7 @@ C:\Users\SYBao\Documents\Code\
 
 ### 4.1 创建同级目录
 
-- [x] 确认目标路径为 `C:\Users\SYBao\Documents\Code\Patina-Web-Sync`。
+- [x] 确认目标路径为 `../Patina-Web-Sync`。
 - [x] 若目标路径已存在，先检查其内容，不覆盖未知文件。
 - [x] 若目标路径不存在，创建该目录。
 - [x] 在 `Patina-Web-Sync` 中创建下面的目标结构：
@@ -528,7 +528,7 @@ Patina-Web-Sync/
 
 本执行单完成需要同时满足：
 
-- [x] 本地存在 `C:\Users\SYBao\Documents\Code\Patina` 和 `C:\Users\SYBao\Documents\Code\Patina-Web-Sync` 两个同级项目。
+- [x] 本地存在 `.` 和 `../Patina-Web-Sync` 两个同级项目。
 - [x] `Patina-Web-Sync` 能独立运行 Chromium extension check。
 - [x] `Patina-Web-Sync` 能独立运行 Firefox extension check。
 - [x] `Patina-Web-Sync` 能独立生成 Chromium zip。

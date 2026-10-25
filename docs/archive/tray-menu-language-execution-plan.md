@@ -970,9 +970,9 @@ Tauri runtime smoke。除此之外未发现范围扩张、owner 回流或未解�
 - [x] `npm run test:tauri-runtime-smoke`：对抗式审查修复后再次通过，
   `PASS real Tauri runtime command/event/SQLite/capability smoke`。
 - [x] 中文托盘截图：
-  `C:\Users\SYBao\.codex\visualizations\2026\07\30\019fb141-bedc-7400-841e-494c081799af\tray-menu-zh-cn-tracking-title-on.png`。
+  `%USERPROFILE%\.codex\visualizations\2026\07\30\019fb141-bedc-7400-841e-494c081799af\tray-menu-zh-cn-tracking-title-on.png`。
 - [x] 英文托盘截图：
-  `C:\Users\SYBao\.codex\visualizations\2026\07\30\019fb141-bedc-7400-841e-494c081799af\tray-menu-en-us-paused-title-off.png`。
+  `%USERPROFILE%\.codex\visualizations\2026\07\30\019fb141-bedc-7400-841e-494c081799af\tray-menu-en-us-paused-title-off.png`。
 - [x] 混合动态状态截图：英文截图同时验证
   `en-US + tracking_paused=true + title_recording_enabled=false`，
   菜单显示 `Resume tracking` 与 `Record titles`。

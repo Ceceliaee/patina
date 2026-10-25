@@ -98,12 +98,14 @@ Goal: 在不损害现有数据可信链路的前提下，支持自定义主数�
 
 推荐 schema：
 
+以下 JSON 中的 `%APPDATA%` 和 `<dataRoot>` 仅表示目录位置。实际配置由程序写入解析后的绝对路径，不支持直接填写这些占位符。
+
 ```json
 {
   "format": "patina.storage-anchor.v1",
   "profile": "production",
-  "dataRoot": "D:\\Patina Data",
-  "webviewRoot": "D:\\Patina Data\\webview",
+  "dataRoot": "<dataRoot>",
+  "webviewRoot": "<dataRoot>\\webview",
   "updatedAtMs": 1780000000000
 }
 ```
@@ -134,9 +136,9 @@ Goal: 在不损害现有数据可信链路的前提下，支持自定义主数�
 {
   "format": "patina.storage-migration-pending.v1",
   "id": "20260622-150000",
-  "sourceDataRoot": "C:\\Users\\SYBao\\AppData\\Roaming\\Patina",
-  "targetDataRoot": "D:\\Patina Data",
-  "targetWebviewRoot": "D:\\Patina Data\\webview",
+  "sourceDataRoot": "%APPDATA%\\Patina",
+  "targetDataRoot": "<dataRoot>",
+  "targetWebviewRoot": "<dataRoot>\\webview",
   "createdAtMs": 1780000000000,
   "state": "pending-restart"
 }
@@ -497,10 +499,10 @@ Goal: 在不损害现有数据可信链路的前提下，支持自定义主数�
 
 ### 8.5 自定义数据目录后的 WebView root
 
-用户选择 `D:\Patina Data` 后：
+用户选择数据目录后，以下文件均相对该目录：
 
 ```text
-D:\Patina Data\
+.\
   patina.db
   backups\
   remote-backup-temp\

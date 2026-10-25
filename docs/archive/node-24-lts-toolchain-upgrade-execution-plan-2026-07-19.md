@@ -197,7 +197,7 @@ Get-FileHash -Algorithm SHA256 -LiteralPath '.\node-v24.18.0-x64.msi'
 
 - [x] 完全退出可能使用系统 Node 的桌面开发工具，避免 MSI 替换文件时影响正在运行的宿主。
 - [x] 双击经过校验的 `node-v24.18.0-x64.msi`。
-- [x] 保持默认安装目录 `C:\Program Files\nodejs`。
+- [x] 保持默认安装目录 `%ProgramFiles%\nodejs`。
 - [x] 完成 UAC 提权和 MSI 安装。
 - [x] 重新打开终端，避免旧进程保留安装前环境状态。
 - [x] 验证生效 Node 版本：
@@ -211,7 +211,7 @@ Get-FileHash -Algorithm SHA256 -LiteralPath '.\node-v24.18.0-x64.msi'
 
   ```powershell
   where.exe node
-  # 期望包含：C:\Program Files\nodejs\node.exe
+  # 期望包含：%ProgramFiles%\nodejs\node.exe
   ```
 
 - [x] 验证 Windows 卸载注册表中的 Node.js 版本为 `24.18.0`。
@@ -226,7 +226,7 @@ npm install --global npm@11.16.0
 
 - [x] 执行 npm 精确版本安装。
 - [x] 验证 `npm --version` 输出 `11.16.0`。
-- [x] 验证 `where.exe npm` 指向 `C:\Program Files\nodejs` 下的 npm 启动文件。
+- [x] 验证 `where.exe npm` 指向 `%ProgramFiles%\nodejs` 下的 npm 启动文件。
 - [x] 最终记录本机版本：Node `24.18.0` / npm `11.16.0` / Rust `1.94.1`。
 
 验收条件：终端实际版本、可执行文件路径和系统安装注册信息一致，不存在旧 Node 抢占 PATH。
@@ -530,7 +530,7 @@ npm run perf:stable
 - [x] 发现 esbuild 安装脚本未进入 allowlist；审查脚本入口后仅允许精确的 `esbuild@0.28.1`。
 - [x] 在干净 `npm ci` 前后运行待审查脚本查询，均返回 `No packages with unreviewed install scripts`。
 - [x] 发现本机 Program Files 与 AppData 存在两个 npm 副本；移除 AppData 重复副本，仅保留 Node MSI 自带 npm。
-- [x] 验证最终 `where.exe npm` 只命中 `C:\Program Files\nodejs`，实际 npm 仍为 `11.16.0`。
+- [x] 验证最终 `where.exe npm` 只命中 `%ProgramFiles%\nodejs`，实际 npm 仍为 `11.16.0`。
 - [x] 校验绝对路径后删除本任务创建的临时 MSI、SHA-256 清单和安装日志目录；如需重装可从 Node 官方归档重新下载。
 - [x] 增加 release policy 测试，自动比对 `.node-version`、`engines`、`devEngines`、锁文件、Node 类型主版本与 esbuild 精确许可。
 - [x] 增加 workflow 门禁，要求每个 `actions/setup-node` 都使用 `.node-version`，并拒绝硬编码 `node-version:`。

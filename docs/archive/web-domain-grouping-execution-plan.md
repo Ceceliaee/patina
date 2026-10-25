@@ -329,6 +329,6 @@ QuietSelect 仍然位于 lazy 图中，但构建器将包含它与开关的公�
 - SQLite 网站筛选改用单个 JSON 数组参数，由 `json_each` 展开；33,000 条成员及总量完全保留，EXPLAIN 确认仍使用域名索引。普通精确域名和网站选择仍走同一个查询 owner。
 - 最终审查还核对了恢复的完整配置边界、输入上限、原始删除条件、空成员管理入口、快照修订和权限；复核未发现其他可操作问题。当前实现以 §9.2 的通过证据完成归档。
 
-- 临时资源处置：browser/runtime 隔离进程和 profile 已由各自测试在 finally 中清理。比较用临时基线目录 `C:/Users/SYBao/AppData/Local/Temp/patina-web-grouping-baseline-6fa6e99b588345029f7c5c1fb41c96b1` 的删除被自动审批以 “blocked by policy” 拒绝，保留该目录并报告；没有再次尝试绕过。该目录包含指向现有依赖的 junction，没有运行中的服务。
+- 临时资源处置：browser/runtime 隔离进程和 profile 已由各自测试在 finally 中清理。比较用临时基线目录 `%TEMP%/patina-web-grouping-baseline-6fa6e99b588345029f7c5c1fb41c96b1` 的删除被自动审批以 “blocked by policy” 拒绝，保留该目录并报告；没有再次尝试绕过。该目录包含指向现有依赖的 junction，没有运行中的服务。
 
 归档时没有提交、推送、发布或修改 live Project；本地实现及执行单交付范围已完成。

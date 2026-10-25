@@ -29,7 +29,7 @@
 
 ### 2.1 Issue #13 AppControl CSV
 
-- [x] CSV 来源：`C:\Users\SYBao\Downloads\time_tracker_appcontrol.csv`。
+- [x] CSV 来源：`%USERPROFILE%\Downloads\time_tracker_appcontrol.csv`。
 - [x] CSV 只有工作集内存，没有私有内存列的有效数据。
 - [x] 采样区间：`2026-06-02 16:50` 到 `2026-06-04 06:05`。
 - [x] 工作集从约 `23.59 MB` 增长到最高约 `2084.33 MB`。
@@ -39,7 +39,7 @@
 
 ### 2.2 本机短测结果
 
-- [x] 本机采样 CSV：`C:\Users\SYBao\Downloads\time_tracker_process_tree_local_20260604_111841.csv`。
+- [x] 本机采样 CSV：`%USERPROFILE%\Downloads\time_tracker_process_tree_local_20260604_111841.csv`。
 - [x] 采样方式：按 Time Tracker 进程树记录 `time_tracker.exe` 与子 `msedgewebview2.exe`。
 - [x] 约 58 分钟内总工作集：`743.25 MB` 到 `752.12 MB`。
 - [x] 约 58 分钟内总私有内存：`493.79 MB` 到 `498.64 MB`。

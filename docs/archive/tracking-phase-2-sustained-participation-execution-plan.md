@@ -167,8 +167,8 @@
 
 建议落点：
 
-- [x] 新增 [`src-tauri/src/platform/windows/media.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/platform/windows/media.rs)
-- [x] 结构体契约优先放入了 [`src-tauri/src/domain/tracking.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/domain/tracking.rs)
+- [x] 新增 [`src-tauri/src/platform/windows/media.rs`](../../src-tauri/src/platform/windows/media.rs)
+- [x] 结构体契约优先放入了 [`src-tauri/src/domain/tracking.rs`](../../src-tauri/src/domain/tracking.rs)
 
 执行项：
 

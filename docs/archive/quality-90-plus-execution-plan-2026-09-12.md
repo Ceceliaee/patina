@@ -504,4 +504,4 @@ R1 全年先前同夹具暖 p95 为 916.4 ms，本轮有效记录降为 352.4 ms
 - [x] **C5** 已交付五维及子项、加权 91.15、实际比较、验证与本地剩余限制，明确没有每维 90 保底。
 - [x] **C6** 按用户要求结束本轮执行，迁入 docs/archive 并修复三份文档互链。归档保留未执行项，不代表正式或长期验收通过。
 
-清理例外：自动审批拒绝删除自有临时诊断目录 `C:\Users\SYBao\AppData\Local\Temp\patina-read-path-probe-LLmwn1`，工具只返回 `blocked by policy`。已经停止重试，目录保留；没有宣称所有临时文件已删除。
+清理例外：自动审批拒绝删除自有临时诊断目录 `%TEMP%\patina-read-path-probe-LLmwn1`，工具只返回 `blocked by policy`。已经停止重试，目录保留；没有宣称所有临时文件已删除。

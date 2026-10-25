@@ -1,16 +1,16 @@
 # 长测结束后的工具链升级执行方案
 
-> 状态：2026-10-23 原升级及跨仓共同工具对齐均已完成、勾选归档，并完成对抗式审查。Node、pnpm、Tauri CLI 和共同依赖 / Actions 已采用；Rust 独立验证完成并暂缓采用。未运行的远端 CI、ARM64 和发布验收已转交 SYBao。
+> 状态：2026-10-23 原升级及跨仓共同工具对齐均已完成、勾选归档，并完成对抗式审查。Node、pnpm、Tauri CLI 和共同依赖 / Actions 已采用；Rust 独立验证完成并暂缓采用。未运行的远端 CI、ARM64 和发布验收已转交 Ceceliaee。
 > 创建：2026-10-22；更新：2026-10-23
-> 执行 owner：后续工具链维护任务的执行者；范围与最终取舍由维护者 SYBao 确认。
-> 启动条件：现有长测结束、结果已审阅，且 SYBao 再次明确要求执行。时间到达、监测完成通知或本计划存在都不触发执行。
+> 执行 owner：后续工具链维护任务的执行者；范围与最终取舍由维护者 Ceceliaee 确认。
+> 启动条件：现有长测结束、结果已审阅，且 Ceceliaee 再次明确要求执行。时间到达、监测完成通知或本计划存在都不触发执行。
 > 关联：[长期后台运行可靠性整改执行方案](../working/2026-10-17-background-runtime-reliability-plan.md)。该计划拥有长测状态、时长、候选身份与验收结论；本文不复制其运行记录。
 
 ## 1. 目标和范围
 
 在保留长测修复及其证据的前提下，升级 Node、pnpm 和 Tauri CLI，使本机与 CI 使用可复现、经过验证的版本组合。Rust 编译器另设对照验证阶段，结果单独签收。Vite 和 TypeScript 保持当前版本。
 
-2026-10-22 仅登记方案；2026-10-23 长测结束后，SYBao 已授权执行升级、独立验证、勾选归档及完成后的对抗式审查。本次工具链工作不替换正式应用，不包含提交、推送或发布授权，也不启动新的自动跟进。
+2026-10-22 仅登记方案；2026-10-23 长测结束后，Ceceliaee 已授权执行升级、独立验证、勾选归档及完成后的对抗式审查。本次工具链工作不替换正式应用，不包含提交、推送或发布授权，也不启动新的自动跟进。
 
 第 1 至 13 节记录原升级阶段；随后授权的共同依赖与 Actions 对齐由第 14 节单独持有，原阶段的锁图和验证结论不追溯扩大到追加候选。
 
@@ -75,11 +75,11 @@
 
 - [x] **G0-01** 从关联长测计划和实际结果确认长测已经结束；审阅有效时长、候选身份、退出原因和验收结论。预计结束时间或单个 `measurementComplete` 字段不等于完整验收通过。
 - [x] **G0-02** 确认原任务是否仍需取证、修复、复测或保留特定运行环境。如果仍有依赖原工具链的工作，先由维护者决定先后顺序，不借本计划抢占环境。
-- [x] **G0-03** 记录 SYBao 在长测结束后明确启动工具链工作的指令、时间和范围。只有“长测结束”通知而没有执行指令时，保持待启动。
+- [x] **G0-03** 记录 Ceceliaee 在长测结束后明确启动工具链工作的指令、时间和范围。只有“长测结束”通知而没有执行指令时，保持待启动。
 - [x] **G0-04** 确认本次执行者、工作目录和证据目录；检查仍运行的开发服务、测试控制器及应用，保留其路径、PID 和创建时间。不要按进程名批量终止，也不要为了升级重启正式应用。
 - [x] **G0-05** 重新核实第 3 节候选的版本、发布时间、撤回情况、平台支持和发行说明。若需要跨主版本或同时修改冻结项，先记录范围变化，由维护者决定；没有变化则按已授权范围继续。
 
-**启动记录（2026-10-23）：** SYBao 明确要求开始执行至完成并归档，随后开启对抗式审查。第五轮完整测量与资源尾差风险接受决定由关联计划保留，当前无正式长测运行。已保存 1,264 个源文件的原始字节和摘要，独立 detached 工作区包含全部未提交修复；旧桌面验证的 953 项输入逐项一致。上游复核仍选用表中精确候选，pnpm 与 CLI 均已超过 24 小时等待期且未撤回。证据目录为 `artifacts/toolchain-upgrade/20261023-172642/`，不包含用户数据或凭据。
+**启动记录（2026-10-23）：** Ceceliaee 明确要求开始执行至完成并归档，随后开启对抗式审查。第五轮完整测量与资源尾差风险接受决定由关联计划保留，当前无正式长测运行。已保存 1,264 个源文件的原始字节和摘要，独立 detached 工作区包含全部未提交修复；旧桌面验证的 953 项输入逐项一致。上游复核仍选用表中精确候选，pnpm 与 CLI 均已超过 24 小时等待期且未撤回。证据目录为 `artifacts/toolchain-upgrade/20261023-172642/`，不包含用户数据或凭据。
 
 ## 5. G1：保存基线和安排隔离验证
 
@@ -132,7 +132,7 @@ Get-FileHash -Algorithm SHA256 .node-version,rust-toolchain.toml,package.json,pn
 
 **控制变量：** pnpm、CLI、Rust 和两个锁文件保持基线版本。暂定目标为 `24.22.1`，以 G0 复核结果为准。
 
-- [x] **N-01** 从目标版本的 Node 官方发布目录取得宿主架构对应的 Windows ZIP，例如 `node-v24.22.1-win-x64.zip`；ARM64 使用对应包。以该版本官方 `SHASUMS256.txt` 核对 SHA-256，记录下载来源与校验结果，再解压到本次工具目录。不要覆盖现有 `C:\Program Files\nodejs`。
+- [x] **N-01** 从目标版本的 Node 官方发布目录取得宿主架构对应的 Windows ZIP，例如 `node-v24.22.1-win-x64.zip`；ARM64 使用对应包。以该版本官方 `SHASUMS256.txt` 核对 SHA-256，记录下载来源与校验结果，再解压到本次工具目录。不要覆盖现有 `%ProgramFiles%\nodejs`。
 - [x] **N-02** 在隔离验证目录用正常 UTF-8 文件编辑同步修改 `.node-version` 和 `package.json#engines.node`。保留文件中的其他改动，不修改 `engines.pnpm`、`packageManager` 或依赖版本。
 - [x] **N-03** 将候选 Node 所在目录置于本次进程 PATH 前端，检查 `Get-Command node -All`、`node --version`、`node -p "process.execPath"`。继续使用旧 pnpm，运行 `pnpm run check:toolchain`，确认子命令实际使用候选 Node。
 - [x] **N-04** 执行冻结安装并核对两个锁文件摘要。随后执行 `pnpm run check`，观察仓库现有的去类型脚本、测试、构建与 bundle 门槛是否正常；不改 TypeScript、Vite 或脚本开关来掩盖失败。
@@ -221,7 +221,7 @@ Rust 阶段从已经固定的主线候选出发，保持源码、Node、pnpm、C
 - [x] **R-06** 重点审查现有真实 native helper、超时回收、退出 / 崩溃、Shell / COM、音频与句柄资源验证的覆盖情况。新增编译器告警、格式差异或行为回归逐项定位；不直接执行全仓格式化、不新增宽泛 lint 豁免，也不删除旧测试。
 - [x] **R-07** 在 x64 与 ARM64 原生环境分别记录编译、测试和 Clippy 结果。交叉编译不能冒充 ARM64 执行；缺少环境时保留未完成项及责任人，不借本计划擅自推送以触发 CI。
 - [x] **R-08** 汇总采用 / 暂缓建议，包括真实收益、兼容性代价、测试结果、资源差异及缺失证据。恢复旧 Rust 的进程选择；在采用结论单独签收前，仓库默认 `rust-toolchain.toml` 继续保持旧版本。
-- **R-09（本次不适用，转交 SYBao）** 当前未采用候选；后续处理 13.2 的问题并明确采用后，再仅修改 `rust-toolchain.toml#channel`，保留组件和 profile。清除实验 override 后，以仓库配置驱动的实际工具重新核实版本，并按 `pnpm run check:full` 和真实桌面风险要求完成最终验收；相关输入未变的有效证据按工程质量规则复用，注明来源。需要源码兼容修复时独立列出差异、owner 和追加验证。承接条目为关联计划 T-02。
+- **R-09（本次不适用，转交 Ceceliaee）** 当前未采用候选；后续处理 13.2 的问题并明确采用后，再仅修改 `rust-toolchain.toml#channel`，保留组件和 profile。清除实验 override 后，以仓库配置驱动的实际工具重新核实版本，并按 `pnpm run check:full` 和真实桌面风险要求完成最终验收；相关输入未变的有效证据按工程质量规则复用，注明来源。需要源码兼容修复时独立列出差异、owner 和追加验证。承接条目为关联计划 T-02。
 
 候选安装入口：
 
@@ -306,15 +306,15 @@ Rust 1.99.1 暂缓采用，`rust-toolchain.toml` 保持 1.94.1。新编译器通
 | `src-tauri/src/platform/windows/icon.rs:230` | `chunks_exact_to_as_chunks` | 像素分组、通道变换及尾部处理 |
 | `src-tauri/src/engine/tools/mod.rs:769` | 测试代码 `fetch_update` 弃用警告 | 原子计数更新与并发测试语义；旧 Rust 兼容性需另核实 |
 
-独立桌面运行 `rust-runtime-1792751085289` 完成 WebView 故障恢复、重启、存储恢复与清理，但在 `tests/tauriRuntimeSmoke.test.ts:1628` 的 `widget has native focus before focus-loss control` 前置断言超时，因此整体退出 1。82 个前端产物摘要仍与对照一致。该次运行期间 Node 安装的 Windows 授权提示一直未处理；运行后观察到另一个程序占有前台焦点，但这不是失败瞬间的证据，不能据此确定原因或归因于编译器。未增加重试、放宽焦点断言或自动重跑；由 SYBao 的后续 Rust 任务在可控桌面环境中区分环境干扰和真实回归。
+独立桌面运行 `rust-runtime-1792751085289` 完成 WebView 故障恢复、重启、存储恢复与清理，但在 `tests/tauriRuntimeSmoke.test.ts:1628` 的 `widget has native focus before focus-loss control` 前置断言超时，因此整体退出 1。82 个前端产物摘要仍与对照一致。该次运行期间 Node 安装的 Windows 授权提示一直未处理；运行后观察到另一个程序占有前台焦点，但这不是失败瞬间的证据，不能据此确定原因或归因于编译器。未增加重试、放宽焦点断言或自动重跑；由 Ceceliaee 的后续 Rust 任务在可控桌面环境中区分环境干扰和真实回归。
 
 依据[官方 Rust 发布记录](https://doc.rust-lang.org/releases.html)，跨越版本涉及 Windows 线程局部析构、FFI 和 LLVM 变化，因此单独保留 native helper、Shell / COM、音频、超时回收与崩溃恢复的运行证据。新版修复清单不代表旧版必然存在对应缺陷。
 
-后续由关联计划 T-02 至 T-04 具名承接：SYBao 安排 Rust 兼容性修复、桌面焦点失败的受控对照及采用签收；获准推送后对实际候选读取 x64 / ARM64 原生 CI；下一次发布任务补齐双架构 NSIS、非管理员安装、数据路径保留、updater 签名及资产验收。Rust 1.99.1 的 ARM64 对照需另选该编译器执行，不能复用仍读取 1.94.1 配置的 CI 结果。当前没有这些远端或安装证据，没有为取证自行推送或发布。
+后续由关联计划 T-02 至 T-04 具名承接：Ceceliaee 安排 Rust 兼容性修复、桌面焦点失败的受控对照及采用签收；获准推送后对实际候选读取 x64 / ARM64 原生 CI；下一次发布任务补齐双架构 NSIS、非管理员安装、数据路径保留、updater 签名及资产验收。Rust 1.99.1 的 ARM64 对照需另选该编译器执行，不能复用仍读取 1.94.1 配置的 CI 结果。当前没有这些远端或安装证据，没有为取证自行推送或发布。
 
 ### 13.3 本机采用与收口
 
-2026-10-23 18:44（UTC+8），SYBao 处理 Windows 管理员提示后，官方 Node MSI 退出 0，保留原七项安装功能。普通、非管理员 PowerShell 从注册表中的常规 PATH 解析到 `C:\Program Files\nodejs\node.exe` 24.22.1 和 `C:\Users\SYBao\AppData\Local\pnpm\pnpm.exe` 12.15.0；没有依赖实验路径或 Rust 环境覆盖。`check:toolchain`、冻结安装和 CLI 2.12.4 入口检查通过，锁文件摘要未变。
+2026-10-23 18:44（UTC+8），Ceceliaee 处理 Windows 管理员提示后，官方 Node MSI 退出 0，保留原七项安装功能。普通、非管理员 PowerShell 从注册表中的常规 PATH 解析到 `%ProgramFiles%\nodejs\node.exe` 24.22.1 和 `%LOCALAPPDATA%\pnpm\pnpm.exe` 12.15.0；没有依赖实验路径或 Rust 环境覆盖。`check:toolchain`、冻结安装和 CLI 2.12.4 入口检查通过，锁文件摘要未变。
 
 已安装 Node 的 SHA-256 为 `d702daa815eabbff763c7d3808e235cf031cf2ca70211b56847bc72f51e240e5`，pnpm 为 `6052300915b4d839772595dc15dd6539333bf2af440839d1f8c1ffe34c86b4fd`，均与完整验证使用的二进制一致。因此复用 F 阶段的有效完整门槛和桌面证据，没有把默认工具切换后的入口核验冒充再次执行全套测试。现有旧 Node 目录和 npm shim 未抢先解析，也未修改为实验路径。
 
@@ -336,7 +336,7 @@ Rust 1.99.1 暂缓采用，`rust-toolchain.toml` 保持 1.94.1。新编译器通
 
 ## 14. 跨仓共同工具对齐追加阶段
 
-SYBao 在“检查 Eureka 工具链版本”聊天中要求相同工具链使用相同版本，并明确允许协调两个聊天。Patina 接收共同工具的精确对齐目标；两仓分别实施、验证、采用，最后由 Eureka 只读核对实际消费者图。本阶段不改变 Vite 8.2.4、TypeScript 6.0.3、Node 24.22.1、pnpm 12.15.0、Tauri CLI 2.12.4 和 Rust 1.94.1 的选择，也不扩展 Git 外部动作授权。
+Ceceliaee 在“检查 Eureka 工具链版本”聊天中要求相同工具链使用相同版本，并明确允许协调两个聊天。Patina 接收共同工具的精确对齐目标；两仓分别实施、验证、采用，最后由 Eureka 只读核对实际消费者图。本阶段不改变 Vite 8.2.4、TypeScript 6.0.3、Node 24.22.1、pnpm 12.15.0、Tauri CLI 2.12.4 和 Rust 1.94.1 的选择，也不扩展 Git 外部动作授权。
 
 依赖版本由真实消费者及其 semver 约束决定。目标是共同工具的实际解析一致，不把不同可选 peer 上下文强行变成同一图。只在隔离候选中临时选择目标，随后恢复 `pnpm-workspace.yaml` 的原始字节，再标准化锁文件和冻结安装；不新增直接依赖、永久 override 或构建许可。
 
@@ -379,8 +379,8 @@ Actions tag 通过官方仓库 `ls-remote` 核实；[checkout 变更记录](http
 
 Eureka 于 19:20（UTC+8）完成原目录只读签收：12 个共同直接依赖一致；186 对递归节点中的 185 个共同包版本及完整性一致，唯一差异是不同宿主上下文中的 debug 可选 supports-color 8.1.1 / 7.2.0；20 条已安装消费者路径全部一致；checkout 与 setup-node 精确 SHA 一致。最终报告副本保存在 `alignment/eureka-final/`，包括 `review-patina-acceptance.json`、`shared-graph-1792754416250.json` 和 `installed-consumers-1792754416384.json`。
 
-Eureka 归档后的 19:22 复核结果保持一致，其执行记录位于本机 `C:/Users/SYBao/Documents/Code/Eureka/docs/archive/2026-10-22-toolchain-alignment-upgrade-plan.md`；对应收尾报告副本为 `alignment/eureka-final/review-closing-after-archive.json`。
+Eureka 归档后的 19:22 复核结果保持一致，其执行记录位于兄弟仓库的 `../Eureka/docs/archive/2026-10-22-toolchain-alignment-upgrade-plan.md`（相对本仓库根目录）；对应收尾报告副本为 `alignment/eureka-final/review-closing-after-archive.json`。
 
 采用后进行单独的对抗式审查轮次，复核完整源文件基线、实际采用字节、锁图闭包、工具版本、工作流权限与正反例，未发现可操作问题。证据为 `alignment/final-adversarial-review.json`、`alignment/workflow-review.json` 和 `alignment/final-environment.json`。原有长测修复及其他未提交文件保持原始字节，HEAD 与暂存区不变，没有提交或推送。正式 Patina 仍为 10 月 22 日启动的 PID 10888，未替换安装程序或用户数据，隔离测试进程已全部退出。
 
-隔离工作区已归档，所需原始日志、源文件基线、安装回退材料与测试产物保留在忽略目录。普通文档检查及包含归档的检查完成后收口。Rust 1.99.1 的失败、真实 GitHub Actions / ARM64 运行及发布安装验收仍按第 13.2 节转交 SYBao，不能据本地通过结果宣称这些门槛已通过。
+隔离工作区已归档，所需原始日志、源文件基线、安装回退材料与测试产物保留在忽略目录。普通文档检查及包含归档的检查完成后收口。Rust 1.99.1 的失败、真实 GitHub Actions / ARM64 运行及发布安装验收仍按第 13.2 节转交 Ceceliaee，不能据本地通过结果宣称这些门槛已通过。

@@ -42,7 +42,7 @@ Refs: PR #35 `feat: add data export (CSV/SQLite/Parquet) with Settings panel`
 ### 后置记录
 
 - [ ] 远端推送未执行，等待用户确认。
-- [ ] 之前误创建的 sibling worktree `C:\Users\SYBao\Documents\Code\Patina-pr35-export-hardening` 仍保留，等待用户决定是否删除。
+- [ ] 之前误创建的 sibling worktree `../Patina-pr35-export-hardening` 仍保留，等待用户决定是否删除。
 - [ ] Tauri 桌面应用手动导出冒烟未单独执行；本轮用浏览器 smoke、构建验证、Rust exporter 级测试和完整 Rust 检查替代。
 - [ ] 更深的 Quiet Pro dialog primitive 收敛、Parquet timestamp logical type、大数据流式导出仍作为后置事项。
 

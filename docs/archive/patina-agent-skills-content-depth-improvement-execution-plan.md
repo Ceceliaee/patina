@@ -848,7 +848,7 @@ Skill 的价值不取决于目录数量或正文长度，而取决于四个连�
 ### 23.0 执行偏差与不适用说明
 
 - 系统 `skill-creator` 可用，但当前任务规则不允许委派独立执行者。评测按其无子代理文本模式执行；三次重复是同一模型的顺序自检，不作为统计独立样本或量化性能基准。
-- HTML viewer、图片、截图、GIF 和视频均按计划禁用；评测输入、文本结果、DSH 固定来源记录和哈希保存在仓库外 `C:\Users\SYBao\AppData\Local\Temp\patina-skill-depth-01a05085`。
+- HTML viewer、图片、截图、GIF 和视频均按计划禁用；评测输入、文本结果、DSH 固定来源记录和哈希保存在仓库外 `%TEMP%\patina-skill-depth-01a05085`。
 - DSH 网络读取成功，因此“网络不可用”分支不适用；固定 revision 为 `cd5ef8148158c3a752a658978873241fdf8e2bbc`，9 个候选 `SKILL.md`、MIT LICENSE 及 22 个直接资源条目已在临时目录记录哈希或 Git blob ID。
 - `references/operational-fact-checking.md` 具有独立按需加载价值，已新增；“不独立创建”分支不适用。
 - Quiet Pro 初始内容通过媒体边界，但固定 sleep 场景暴露状态等待缺口，因此“完全不改”分支不适用；只补状态等待规则和对应 eval，没有扩张视觉规范。

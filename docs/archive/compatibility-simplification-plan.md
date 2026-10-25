@@ -59,9 +59,9 @@
 
 这些备份是回滚保险，不是正常升级步骤。
 
-- [x] 结构化备份：`C:\Users\SYBao\Downloads\TimeTracker-backup-20260515-205401.zip`
-- [x] `0.6.6` 结构化临时回滚备份：`C:\Users\SYBao\Downloads\TimeTracker-backup-20260515.zip`
-- [x] 原始 SQLite 文件组：`C:\Users\SYBao\Downloads\TimeTracker-raw-db-20260515-205417\`
+- [x] 结构化备份：`%USERPROFILE%\Downloads\TimeTracker-backup-20260515-205401.zip`
+- [x] `0.6.6` 结构化临时回滚备份：`%USERPROFILE%\Downloads\TimeTracker-backup-20260515.zip`
+- [x] 原始 SQLite 文件组：`%USERPROFILE%\Downloads\TimeTracker-raw-db-20260515-205417\`
 - [x] 原始 SQLite 文件组包含：
   - [x] `timetracker.db`
   - [x] `timetracker.db-wal`
@@ -174,7 +174,7 @@
 - [x] 检查 Today / History / Data / App Mapping / Settings 能正常打开。
 - [x] 检查历史数据、应用分类、设置项没有明显丢失。
 - [x] 可选：在 Settings 内导出一份新的结构化 `.zip` 备份，作为之后完全简并前的临时回滚点。
-- [x] 如果导出了新备份，记录新备份路径：`C:\Users\SYBao\Downloads\TimeTracker-backup-20260515.zip`。
+- [x] 如果导出了新备份，记录新备份路径：`%USERPROFILE%\Downloads\TimeTracker-backup-20260515.zip`。
 
 另一台电脑验证：
 

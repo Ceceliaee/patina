@@ -403,13 +403,13 @@ git ls-remote --heads origin
 - [ ] 在父目录执行：
 
 ```powershell
-Rename-Item -LiteralPath "C:\Users\SYBao\Documents\Code\Time Tracking" -NewName "Patina"
+Rename-Item -LiteralPath ".\Time Tracking" -NewName "Patina"
 ```
 
 - [ ] 重新打开：
 
 ```text
-C:\Users\SYBao\Documents\Code\Patina
+.\Patina
 ```
 
 - [ ] 重新检查 remote：
@@ -418,10 +418,10 @@ C:\Users\SYBao\Documents\Code\Patina
 git remote -v
 ```
 
-- [ ] 搜索旧绝对路径：
+- [ ] 在改名后的仓库根目录搜索旧目录名：
 
 ```powershell
-rg -n --hidden --glob '!node_modules/**' --glob '!dist/**' --glob '!src-tauri/target/**' "C:\\Users\\SYBao\\Documents\\Code\\Time Tracking|Time Tracking" .
+rg -n --hidden --glob '!node_modules/**' --glob '!dist/**' --glob '!src-tauri/target/**' "Time Tracking" .
 ```
 
 - [ ] 只保留测试 fixture 或历史归档中必要的旧路径。
@@ -601,7 +601,7 @@ git push origin vX.Y.Z
 - [ ] 不新增底层身份迁移模块或数据目录迁移。
 - [ ] README、贡献指南、issue 模板和 active docs 已同步。
 - [ ] GitHub 仓库已改为 `Ceceliaee/patina`。
-- [ ] 本地目录已改为 `C:\Users\SYBao\Documents\Code\Patina`。
+- [ ] 本地目录已改为 `Patina`（相对项目父目录）。
 - [ ] 发布标题和安装包命名使用 `Patina`。
 - [ ] WebDAV 默认目录为 `/Patina`，旧默认 `/TimeTracker` 保存值会自动迁移到 `/Patina`。
 - [ ] 旧远端 `/TimeTracker` 备份有迁移或合并路径，升级后不会从 WebDAV 恢复列表中消失。

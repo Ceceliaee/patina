@@ -326,7 +326,7 @@
 
 ### 7.6 跨仓文档 owner
 
-独立扩展仓库：`C:\Users\SYBao\Documents\Code\Patina-Web-Sync`
+独立扩展仓库：`../Patina-Web-Sync`
 
 - 小型执行单建议路径：`docs/archive/zh-tw-localization-execution-plan-2026-08-11.md`。
 - 该路径遵守扩展仓库的文档规则：一次性执行单不进入顶层长期 `docs/`。
