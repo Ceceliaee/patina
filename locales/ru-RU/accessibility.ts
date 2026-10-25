@@ -119,7 +119,6 @@ export const MESSAGES = {
   "accessibility.settings.openWebActivityHelp": "Открыть руководство по синхронизации сайтов",
   "accessibility.settings.showRemoteMachineId": "Показать ID устройства",
   "accessibility.settings.showServiceToken": "Показать токен",
-  "accessibility.settings.toggleBackgroundOptimization": "Переключить экономию памяти в фоне",
   "accessibility.settings.toggleCloseToTray": "Переключить скрытие при закрытии",
   "accessibility.settings.toggleGlobalTitle": "Переключить глобальную запись заголовков",
   "accessibility.settings.toggleLaunchAtLogin": "Переключить запуск приложения при входе в Windows",

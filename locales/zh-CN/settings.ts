@@ -17,8 +17,6 @@ export const MESSAGES = {
 "settings.webDavDirectoryFailed": "无法准备远端目录，请检查服务器地址、目录权限和网络后重试。",
 "settings.webDavUploadUncertain": "备份未能确认上传成功，请检查远端目录和网络。同名文件不会被覆盖，本地数据未受影响。",
   "settings.appearanceTitle": "外观",
-  "settings.backgroundOptimizationHint": "后台闲置时释放主界面内存；再次打开可能略有延迟。",
-  "settings.backgroundOptimizationLabel": "低耗后台",
   "settings.backupExportAction": "备份",
   "settings.backupExporting": "备份中...",
   "settings.backupExportTitle": "备份",

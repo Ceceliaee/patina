@@ -17,8 +17,6 @@ export const MESSAGES = {
 "settings.webDavDirectoryFailed": "Не удалось подготовить удалённую папку. Проверьте адрес сервера, права доступа и сеть.",
 "settings.webDavUploadUncertain": "Не удалось подтвердить загрузку. Проверьте удалённую папку и сеть. Существующие файлы не будут перезаписаны, локальные данные не изменены.",
   "settings.appearanceTitle": "Внешний вид",
-  "settings.backgroundOptimizationHint": "Освобождать память интерфейса при простое в фоне. Окно может открываться немного дольше.",
-  "settings.backgroundOptimizationLabel": "Экономия памяти в фоне",
   "settings.backupExportAction": "Создать копию",
   "settings.backupExporting": "Создание копии…",
   "settings.backupExportTitle": "Создать копию",

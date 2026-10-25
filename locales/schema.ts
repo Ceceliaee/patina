@@ -393,11 +393,6 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "accessibility.settings.toggleBackgroundOptimization": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "accessibility.settings.toggleCloseToTray": {
     "kind": "string",
     "params": [],
@@ -3472,16 +3467,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "native"
   },
   "settings.appearanceTitle": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "settings.backgroundOptimizationHint": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "settings.backgroundOptimizationLabel": {
     "kind": "string",
     "params": [],
     "surface": "frontend"

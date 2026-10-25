@@ -17,8 +17,6 @@ export const MESSAGES = {
 "settings.webDavDirectoryFailed": "No se pudo preparar la carpeta remota. Comprueba la dirección, los permisos y la red.",
 "settings.webDavUploadUncertain": "No se pudo confirmar la subida. Comprueba la carpeta remota y la red. No se sobrescribirán archivos; los datos locales no han cambiado.",
   "settings.appearanceTitle": "Apariencia",
-  "settings.backgroundOptimizationHint": "Libera memoria de la interfaz cuando está inactiva en segundo plano. Reabrirla puede tardar más.",
-  "settings.backgroundOptimizationLabel": "Ahorrar memoria",
   "settings.backupExportAction": "Crear copia",
   "settings.backupExporting": "Creando copia...",
   "settings.backupExportTitle": "Copia de seguridad",

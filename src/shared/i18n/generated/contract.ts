@@ -109,7 +109,6 @@ export interface UiText {
       "openWebActivityHelp": string;
       "showRemoteMachineId": string;
       "showServiceToken": string;
-      "toggleBackgroundOptimization": string;
       "toggleCloseToTray": string;
       "toggleGlobalTitle": string;
       "toggleLaunchAtLogin": string;
@@ -691,8 +690,6 @@ export interface UiText {
   };
   "settings": {
     "appearanceTitle": string;
-    "backgroundOptimizationHint": string;
-    "backgroundOptimizationLabel": string;
     "backupExportAction": string;
     "backupExporting": string;
     "backupExportTitle": string;

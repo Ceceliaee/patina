@@ -119,7 +119,6 @@ export const MESSAGES = {
   "accessibility.settings.openWebActivityHelp": "打开网页同步使用说明",
   "accessibility.settings.showRemoteMachineId": "显示本机标识",
   "accessibility.settings.showServiceToken": "显示 Token",
-  "accessibility.settings.toggleBackgroundOptimization": "切换低耗后台",
   "accessibility.settings.toggleCloseToTray": "切换关闭到后台",
   "accessibility.settings.toggleGlobalTitle": "切换全局标题",
   "accessibility.settings.toggleLaunchAtLogin": "切换开机自启动",

@@ -119,7 +119,6 @@ export const MESSAGES = {
   "accessibility.settings.openWebActivityHelp": "Open web sync guide",
   "accessibility.settings.showRemoteMachineId": "Show device ID",
   "accessibility.settings.showServiceToken": "Show token",
-  "accessibility.settings.toggleBackgroundOptimization": "Toggle low-footprint background",
   "accessibility.settings.toggleCloseToTray": "Toggle hide on close",
   "accessibility.settings.toggleGlobalTitle": "Toggle global titles",
   "accessibility.settings.toggleLaunchAtLogin": "Toggle launch at login",

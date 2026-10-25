@@ -17,8 +17,6 @@ export const MESSAGES = {
 "settings.webDavDirectoryFailed": "Could not prepare the remote folder. Check the server address, folder permissions, and network.",
 "settings.webDavUploadUncertain": "Upload success could not be confirmed. Check the remote folder and network. Existing files will not be overwritten; local data is unchanged.",
   "settings.appearanceTitle": "Appearance",
-  "settings.backgroundOptimizationHint": "Release main UI memory while idle in the background. Reopening may feel slightly slower.",
-  "settings.backgroundOptimizationLabel": "Low-footprint background",
   "settings.backupExportAction": "Back up",
   "settings.backupExporting": "Backing up...",
   "settings.backupExportTitle": "Back up",

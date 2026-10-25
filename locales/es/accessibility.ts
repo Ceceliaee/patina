@@ -119,7 +119,6 @@ export const MESSAGES = {
   "accessibility.settings.openWebActivityHelp": "Abrir guía de sincronización web",
   "accessibility.settings.showRemoteMachineId": "Mostrar ID del dispositivo",
   "accessibility.settings.showServiceToken": "Mostrar Token",
-  "accessibility.settings.toggleBackgroundOptimization": "Activar o desactivar el ahorro de memoria en segundo plano",
   "accessibility.settings.toggleCloseToTray": "Activar o desactivar ocultar al cerrar",
   "accessibility.settings.toggleGlobalTitle": "Activar o desactivar el registro global de títulos",
   "accessibility.settings.toggleLaunchAtLogin": "Activar o desactivar el inicio de la aplicación con Windows",
