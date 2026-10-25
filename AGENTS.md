@@ -26,6 +26,10 @@ Apply this file in every repository task. Read the following owners when the tas
 - Pause only the dependent action when evidence, input, or authority is missing; continue independent authorized work and report the limitation. Answer status or side questions and incorporate follow-up requirements while continuing unfinished work, unless the user pauses, cancels, or changes the objective.
 - Git, Issue, Project, release, and other external actions retain their specific authorization rules below. A workflow or successful check cannot grant that authority.
 
+## Public Identity
+
+Use `Ceceliaee` for maintainer attribution in repository content and public GitHub text. Keep the maintainer's real name and personal account name out of source, test fixtures, documentation, commit messages, and published diagnostics. Repository links use paths relative to the referring document; command examples use paths relative to the stated working directory. Use environment variables for user or system directories outside the repository. Actual absolute paths may be used for local operations, and neutral synthetic absolute paths may be used when required to test path handling.
+
 ## Optional Local Agent Skills
 
 - `.agents/` and `skills-lock.json` are optional, ignored local state. Their presence, inventory, routing, and updates must not become repository instructions, long-lived documentation, or build/CI requirements.

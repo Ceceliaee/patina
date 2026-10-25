@@ -140,21 +140,21 @@ mod tests {
     #[test]
     fn detects_workspace_target_binary_on_windows_path() {
         assert!(is_workspace_target_binary(Path::new(
-            r"C:\Users\SYBao\Documents\Code\Patina\src-tauri\target\release\patina.exe"
+            r"src-tauri\target\release\patina.exe"
         )));
     }
 
     #[test]
     fn detects_workspace_target_binary_on_unix_path() {
         assert!(is_workspace_target_binary(Path::new(
-            "/home/user/project/src-tauri/target/debug/patina"
+            "src-tauri/target/debug/patina"
         )));
     }
 
     #[test]
     fn ignores_installed_binary_path() {
         assert!(!is_workspace_target_binary(Path::new(
-            r"C:\Users\SYBao\AppData\Local\Patina\patina.exe"
+            r"AppData\Local\Patina\patina.exe"
         )));
     }
 }
