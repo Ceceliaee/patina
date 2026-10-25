@@ -4,7 +4,7 @@ Document Type: One-off Review Fix Plan
 
 ## 1. 背景
 
-上一轮 [`docs/archive/rust-data-domain-foundation-execution-plan.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/archive/rust-data-domain-foundation-execution-plan.md) 的结构性目标基本成立：
+上一轮 [`docs/archive/rust-data-domain-foundation-execution-plan.md`](rust-data-domain-foundation-execution-plan.md) 的结构性目标基本成立：
 
 - `domain/backup.rs` 已建立
 - `data/repositories/*` 已建立
@@ -12,7 +12,7 @@ Document Type: One-off Review Fix Plan
 
 但验收时发现一个阻塞问题：
 
-- [`src-tauri/src/data/backup.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/data/backup.rs) 中备份兼容性提示文案出现乱码
+- [`src-tauri/src/data/backup.rs`](../../src-tauri/src/data/backup.rs) 中备份兼容性提示文案出现乱码
 
 这会直接影响用户看到的备份预览与恢复失败提示，因此必须修掉后才能判定本轮完全通过。
 
@@ -40,10 +40,10 @@ Document Type: One-off Review Fix Plan
 
 现象位置：
 
-- [`src-tauri/src/data/backup.rs:136`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/data/backup.rs#L136)
-- [`src-tauri/src/data/backup.rs:147`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/data/backup.rs#L147)
-- [`src-tauri/src/data/backup.rs:158`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/data/backup.rs#L158)
-- [`src-tauri/src/data/backup.rs:167`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/data/backup.rs#L167)
+- `src-tauri/src/data/backup.rs:136`（归档时行号）
+- `src-tauri/src/data/backup.rs:147`（归档时行号）
+- `src-tauri/src/data/backup.rs:158`（归档时行号）
+- `src-tauri/src/data/backup.rs:167`（归档时行号）
 
 执行要求：
 

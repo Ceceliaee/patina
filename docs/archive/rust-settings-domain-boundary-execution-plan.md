@@ -4,7 +4,7 @@ Document Type: One-off Execution Plan
 
 ## 1. 目标
 
-本轮目标是继续推进 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 的阶段 4，把 Rust 侧“桌面行为 / 启动行为 / 设置存储”相关能力从当前的 `app/state + app/runtime + commands/settings` 混合状态，收口成更清楚的 `domain + data + app` 边界。
+本轮目标是继续推进 [`docs/architecture-target.md`](architecture-target.md) 的阶段 4，把 Rust 侧“桌面行为 / 启动行为 / 设置存储”相关能力从当前的 `app/state + app/runtime + commands/settings` 混合状态，收口成更清楚的 `domain + data + app` 边界。
 
 本轮完成后，理想状态应更接近：
 
@@ -22,14 +22,14 @@ Rust 侧目前已经完成了：
 
 但“设置/桌面行为”这一块仍然偏混：
 
-- [`src-tauri/src/app/state.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/app/state.rs) 同时定义了：
+- [`src-tauri/src/app/state.rs`](../../src-tauri/src/app/state.rs) 同时定义了：
   - `CloseBehavior`
   - `MinimizeBehavior`
   - `DesktopBehaviorSettings`
   - `DesktopBehaviorState`
   - 若干 parse 辅助函数
-- [`src-tauri/src/app/runtime.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/app/runtime.rs) 还在直接处理这些设置的读取与同步
-- [`src-tauri/src/commands/settings.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/commands/settings.rs) 虽然已经不厚，但仍是围绕 app state 的直接入口
+- [`src-tauri/src/app/runtime.rs`](../../src-tauri/src/app/runtime.rs) 还在直接处理这些设置的读取与同步
+- [`src-tauri/src/commands/settings.rs`](../../src-tauri/src/commands/settings.rs) 虽然已经不厚，但仍是围绕 app state 的直接入口
 
 这意味着：
 
@@ -149,7 +149,7 @@ Rust 侧目前已经完成了：
 执行项：
 
 - [x] 更新本执行单勾选状态
-- [x] 根据实际结果更新 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 中阶段 4 的状态描述
+- [x] 根据实际结果更新 [`docs/architecture-target.md`](architecture-target.md) 中阶段 4 的状态描述
 - [x] 任务完成并验收通过后，将本文件移入 `docs/archive/`
 
 ## 6. 完成定义

@@ -4,7 +4,7 @@ Document Type: One-off Execution Plan
 
 ## 1. 目标
 
-本轮目标是继续推进 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 中“阶段 4：数据与领域边界深化”的前端部分。
+本轮目标是继续推进 [`docs/architecture-target.md`](architecture-target.md) 中“阶段 4：数据与领域边界深化”的前端部分。
 
 重点不是 UI，也不是目录表演，而是把 `src/lib/*` 中目前最模糊、最容易继续膨胀的两块遗留基础设施拆清：
 
@@ -21,9 +21,9 @@ Document Type: One-off Execution Plan
 
 当前前端页面层边界已经基本收口完成，但 `architecture-target.md` 里点名的这几处遗留还在：
 
-- [`src/lib/settings.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/lib/settings.ts)
-- [`src/lib/db.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/lib/db.ts)
-- [`src/lib/services/sessionCompiler.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/lib/services/sessionCompiler.ts)
+- `src/lib/settings.ts`
+- `src/lib/db.ts`
+- `src/lib/services/sessionCompiler.ts`
 
 这几处的问题不是“还能不能用”，而是：
 
@@ -119,8 +119,8 @@ Document Type: One-off Execution Plan
 
 当前问题：
 
-- [`src/shared/lib/historyReadModelService.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/shared/lib/historyReadModelService.ts) 还依赖旧路径 [`src/lib/services/sessionCompiler.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/lib/services/sessionCompiler.ts)
-- [`src/lib/db.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/lib/db.ts) 仍混着查询与 feature 语义判断
+- `src/shared/lib/historyReadModelService.ts` 还依赖旧路径 `src/lib/services/sessionCompiler.ts`
+- `src/lib/db.ts` 仍混着查询与 feature 语义判断
 
 建议落点：
 
@@ -170,7 +170,7 @@ Document Type: One-off Execution Plan
 执行项：
 
 - [x] 更新本执行单勾选状态
-- [x] 根据实际结果更新 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 中“阶段 4”的状态描述
+- [x] 根据实际结果更新 [`docs/architecture-target.md`](architecture-target.md) 中“阶段 4”的状态描述
 - [x] 任务完成并验收通过后，将本文件移入 `docs/archive/`
 
 ## 6. 完成定义

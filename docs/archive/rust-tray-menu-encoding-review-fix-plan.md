@@ -12,13 +12,13 @@ Document Type: One-off Review Fix Plan
 
 但验收时发现一个阻塞问题：
 
-- [`src-tauri/src/app/tray.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/app/tray.rs) 中 3 条托盘菜单文案仍是实际 mojibake，而不是终端显示假象
+- [`src-tauri/src/app/tray.rs`](../../src-tauri/src/app/tray.rs) 中 3 条托盘菜单文案仍是实际 mojibake，而不是终端显示假象
 
 因此这轮只处理编码修复，不扩展新的架构收口。
 
 ## 2. 本轮目标
 
-把 [`src-tauri/src/app/tray.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/app/tray.rs) 中 3 条托盘菜单文案修回可读的 UTF-8 中文，并确保文件在修改后仍保持正常 UTF-8 编码。
+把 [`src-tauri/src/app/tray.rs`](../../src-tauri/src/app/tray.rs) 中 3 条托盘菜单文案修回可读的 UTF-8 中文，并确保文件在修改后仍保持正常 UTF-8 编码。
 
 建议修正为：
 
@@ -59,7 +59,7 @@ Document Type: One-off Review Fix Plan
 
 验收门槛：
 
-- [x] [`src-tauri/src/app/tray.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/app/tray.rs) 中不再出现 `鎵撳紑` / `鏆傚仠` / `閫€鍑` 这类损坏字符串
+- [x] [`src-tauri/src/app/tray.rs`](../../src-tauri/src/app/tray.rs) 中不再出现 `鎵撳紑` / `鏆傚仠` / `閫€鍑` 这类损坏字符串
 - [x] 菜单文案恢复为可读中文
 
 ### 阶段 B：最小校验
@@ -96,4 +96,4 @@ Document Type: One-off Review Fix Plan
 - 不顺手修改其他中文文本
 - 保持文件为 UTF-8；若终端显示乱码，以文件实际字节和内容为准判断
 - 完成后更新文档勾选状态，并在验收通过后归档到 `docs/archive/`
-- 同时遵循 [`AGENTS.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/AGENTS.md) 与 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md)
+- 同时遵循 [`AGENTS.md`](../../AGENTS.md) 与 [`docs/architecture-target.md`](architecture-target.md)

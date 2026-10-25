@@ -4,7 +4,7 @@ Document Type: One-off Review Fix Plan
 
 ## 1. 背景
 
-上一轮 [`docs/archive/frontend-legacy-service-retirement-execution-plan.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/archive/frontend-legacy-service-retirement-execution-plan.md) 已完成主要迁移：
+上一轮 [`docs/archive/frontend-legacy-service-retirement-execution-plan.md`](frontend-legacy-service-retirement-execution-plan.md) 已完成主要迁移：
 
 - `SettingsService.ts`
 - `TrackingService.ts`
@@ -14,9 +14,9 @@ Document Type: One-off Review Fix Plan
 
 这些 legacy 壳与错位 helper 已基本退场，新的 helper 落点也已建立：
 
-- [`src/shared/lib/windowTitleCleaner.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/shared/lib/windowTitleCleaner.ts)
-- [`src/shared/lib/trackingWindowLifecycle.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/shared/lib/trackingWindowLifecycle.ts)
-- [`src/types/tracking.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/types/tracking.ts)
+- [`src/shared/lib/windowTitleCleaner.ts`](../../src/shared/lib/windowTitleCleaner.ts)
+- `src/shared/lib/trackingWindowLifecycle.ts`
+- `src/types/tracking.ts`
 
 但验收时发现 3 个未闭环问题，因此本轮只做补漏，不扩展新的架构重构。
 
@@ -41,11 +41,11 @@ Document Type: One-off Review Fix Plan
 
 优先涉及：
 
-- [`tests/trackingLifecycle.test.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/tests/trackingLifecycle.test.ts)
-- [`tests/trackingReplay.test.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/tests/trackingReplay.test.ts)
-- [`src/shared/lib/windowTitleCleaner.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/shared/lib/windowTitleCleaner.ts)
-- [`src/lib/categoryColorRegistry.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/lib/categoryColorRegistry.ts)
-- [`src/shared/lib/historyReadModelService.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/shared/lib/historyReadModelService.ts)
+- [`tests/trackingLifecycle.test.ts`](../../tests/trackingLifecycle.test.ts)
+- [`tests/trackingReplay.test.ts`](../../tests/trackingReplay.test.ts)
+- [`src/shared/lib/windowTitleCleaner.ts`](../../src/shared/lib/windowTitleCleaner.ts)
+- `src/lib/categoryColorRegistry.ts`
+- `src/shared/lib/historyReadModelService.ts`
 
 必要时允许补改与测试链路直接相关的 import 文件，但不要扩大到新的目录迁移或功能重构。
 
@@ -64,8 +64,8 @@ Document Type: One-off Review Fix Plan
 
 现状：
 
-- [`tests/trackingLifecycle.test.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/tests/trackingLifecycle.test.ts) 仍在引用已不存在的 `src/lib/services/HistoryService.ts`
-- [`tests/trackingReplay.test.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/tests/trackingReplay.test.ts) 也仍在引用同一路径
+- [`tests/trackingLifecycle.test.ts`](../../tests/trackingLifecycle.test.ts) 仍在引用已不存在的 `src/lib/services/HistoryService.ts`
+- [`tests/trackingReplay.test.ts`](../../tests/trackingReplay.test.ts) 也仍在引用同一路径
 
 目标：
 
@@ -86,7 +86,7 @@ Document Type: One-off Review Fix Plan
 
 现状：
 
-- `npm test` 当前会在 [`src/lib/categoryColorRegistry.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/lib/categoryColorRegistry.ts) 处触发 `ERR_MODULE_NOT_FOUND`
+- `npm test` 当前会在 `src/lib/categoryColorRegistry.ts` 处触发 `ERR_MODULE_NOT_FOUND`
 - 根因是当前测试运行方式对 extensionless ESM import 更敏感，至少本次失败链路中的 `categoryTokens` 引用未正确解析
 
 目标：
@@ -110,7 +110,7 @@ Document Type: One-off Review Fix Plan
 
 现状：
 
-- [`src/shared/lib/windowTitleCleaner.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/shared/lib/windowTitleCleaner.ts) 中仍有明显乱码正则
+- [`src/shared/lib/windowTitleCleaner.ts`](../../src/shared/lib/windowTitleCleaner.ts) 中仍有明显乱码正则
 - 这与上一轮“先修编码问题再迁移”的目标不一致
 
 目标：
@@ -143,7 +143,7 @@ Document Type: One-off Review Fix Plan
 ## 7. 文档处理
 
 - [x] 更新本修正单勾选状态
-- [x] 本轮若只是在补验收问题，默认不改 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md)，除非现有状态描述已被事实证伪
+- [x] 本轮若只是在补验收问题，默认不改 [`docs/architecture-target.md`](architecture-target.md)，除非现有状态描述已被事实证伪
 - [x] 修正完成并验收通过后，将本文件移入 `docs/archive/`
 
 ## 8. 给 GPT-5.3-Codex 的执行要求
@@ -157,4 +157,4 @@ Document Type: One-off Review Fix Plan
   - `npm test`
   - `npm run test:replay`
 - 若改动意外影响到 Tauri 联动，再补跑 `cargo check`
-- 同时遵循 [`AGENTS.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/AGENTS.md) 与 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md)
+- 同时遵循 [`AGENTS.md`](../../AGENTS.md) 与 [`docs/architecture-target.md`](architecture-target.md)

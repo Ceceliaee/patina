@@ -4,7 +4,7 @@ Document Type: One-off Execution Plan
 
 ## 1. 目标
 
-本轮目标是继续推进 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 中“阶段 2（前端状态与服务边界收口）”，把前端主路径上仍然直接依赖根层基础设施的部分进一步收口。
+本轮目标是继续推进 [`docs/architecture-target.md`](architecture-target.md) 中“阶段 2（前端状态与服务边界收口）”，把前端主路径上仍然直接依赖根层基础设施的部分进一步收口。
 
 本轮完成后，前端新增代码应更接近以下边界：
 
@@ -149,7 +149,7 @@ Facade 至少应承接这些只读能力：
 执行项：
 
 - [x] 更新本执行单勾选状态
-- [x] 根据实际结果更新 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 中“阶段 2”的状态描述
+- [x] 根据实际结果更新 [`docs/architecture-target.md`](architecture-target.md) 中“阶段 2”的状态描述
 - [x] 若本轮完成后执行单不再需要，任务完成后归档到 `docs/archive/`
 
 ## 6. 完成定义

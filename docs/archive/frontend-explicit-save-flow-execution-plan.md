@@ -8,8 +8,8 @@ Document Type: One-off Execution Plan
 
 本轮覆盖以下两个高价值页面：
 
-- [`src/features/settings/components/Settings.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/settings/components/Settings.tsx)
-- [`src/features/classification/components/AppMapping.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/classification/components/AppMapping.tsx)
+- [`src/features/settings/components/Settings.tsx`](../../src/features/settings/components/Settings.tsx)
+- [`src/features/classification/components/AppMapping.tsx`](../../src/features/classification/components/AppMapping.tsx)
 
 本轮完成后，理想状态应变为：
 
@@ -25,9 +25,9 @@ Document Type: One-off Execution Plan
 
 当前主路径是明显的“即时写入”：
 
-- [`Settings.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/settings/components/Settings.tsx) 里 `handleChange(...)` 会在字段变化后立刻调用 `SettingsRuntimeAdapterService.updateSetting(...)`
-- [`AppMapping.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/classification/components/AppMapping.tsx) 里的分类、颜色、名称、统计开关、标题记录开关都会即时调用 `ClassificationService.save*`
-- [`CategoryColorControls.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/classification/components/CategoryColorControls.tsx) 里的颜色修改也直接落库
+- [`Settings.tsx`](../../src/features/settings/components/Settings.tsx) 里 `handleChange(...)` 会在字段变化后立刻调用 `SettingsRuntimeAdapterService.updateSetting(...)`
+- [`AppMapping.tsx`](../../src/features/classification/components/AppMapping.tsx) 里的分类、颜色、名称、统计开关、标题记录开关都会即时调用 `ClassificationService.save*`
+- [`CategoryColorControls.tsx`](../../src/features/classification/components/CategoryColorControls.tsx) 里的颜色修改也直接落库
 
 这带来的问题不是“代码错了”，而是交互模式已经不适合当前稳定期：
 
@@ -260,7 +260,7 @@ Document Type: One-off Execution Plan
 - 先保证 owner 边界正确，再实现交互
 - 每完成一个阶段，更新文档勾选状态并运行 `npm run build`
 - 如果本轮改动触发已有测试链路，再补跑 `npm test`
-- 同时遵循 [`AGENTS.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/AGENTS.md)、[`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/quiet-pro-component-guidelines.md)
+- 同时遵循 [`AGENTS.md`](../../AGENTS.md)、[`docs/architecture-target.md`](architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)
 
 ## 9. 任务完成后的处理
 

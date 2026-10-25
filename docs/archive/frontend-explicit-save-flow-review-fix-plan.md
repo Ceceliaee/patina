@@ -6,9 +6,9 @@ Document Type: One-off Review Fix Plan
 
 上一轮“前端显式保存 / 取消编辑收口”主路径已经完成，但验收时发现一个剩余漏口：
 
-- [`src/features/classification/components/AppMapping.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/classification/components/AppMapping.tsx) 中“应用名称编辑”仍先暂存在 `nameDrafts`
+- [`src/features/classification/components/AppMapping.tsx`](../../src/features/classification/components/AppMapping.tsx) 中“应用名称编辑”仍先暂存在 `nameDrafts`
 - 名称只有在 `blur / Enter` 时才真正写入页面主 `draftState`
-- [`src/app/AppShell.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/app/AppShell.tsx) 的切页拦截只依赖页面上报的 `dirty`
+- [`src/app/AppShell.tsx`](../../src/app/AppShell.tsx) 的切页拦截只依赖页面上报的 `dirty`
 
 这会导致一个边界漏洞：
 
@@ -115,7 +115,7 @@ Document Type: One-off Review Fix Plan
 - 不新增 shared 通用 dirty-form / unsaved guard 基础设施
 - 完成后更新文档勾选状态并运行 `npm run build`
 - 如果本轮改动影响现有测试链路，再补跑 `npm test`
-- 同时遵循 [`AGENTS.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/AGENTS.md)、[`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/quiet-pro-component-guidelines.md)
+- 同时遵循 [`AGENTS.md`](../../AGENTS.md)、[`docs/architecture-target.md`](architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)
 
 ## 9. 完成后处理
 

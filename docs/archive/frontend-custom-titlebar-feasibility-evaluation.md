@@ -26,8 +26,8 @@ Document Type: One-off Evaluation / Explanation
 
 根据当前仓库配置，主窗口仍使用系统原生窗口装饰：
 
-- [`src-tauri/tauri.conf.json`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/tauri.conf.json) 中主窗口只有尺寸、标题、居中、可缩放等基础配置，没有自定义 titlebar / decorations 配置
-- [`src-tauri/src/lib.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/lib.rs) 中也没有自定义窗口栏装配逻辑
+- [`src-tauri/tauri.conf.json`](../../src-tauri/tauri.conf.json) 中主窗口只有尺寸、标题、居中、可缩放等基础配置，没有自定义 titlebar / decorations 配置
+- [`src-tauri/src/lib.rs`](../../src-tauri/src/lib.rs) 中也没有自定义窗口栏装配逻辑
 
 因此当前状态应理解为：
 

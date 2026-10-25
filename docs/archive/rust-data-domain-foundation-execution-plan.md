@@ -4,7 +4,7 @@ Document Type: One-off Execution Plan
 
 ## 1. 目标
 
-本轮目标是推进 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 中的“阶段 4：数据与领域边界深化”。
+本轮目标是推进 [`docs/architecture-target.md`](architecture-target.md) 中的“阶段 4：数据与领域边界深化”。
 
 重点不是再做一轮目录美化，而是让 Rust 侧真正开始具备：
 
@@ -16,7 +16,7 @@ Document Type: One-off Execution Plan
 
 当前 Rust 结构虽然已经完成了入口、命令、运行时的大收口，但还存在一个典型问题：
 
-- [`src-tauri/src/data/backup.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/data/backup.rs) 同时承担了：
+- [`src-tauri/src/data/backup.rs`](../../src-tauri/src/data/backup.rs) 同时承担了：
   - 备份 payload 结构定义
   - 兼容性判断
   - 文件路径/文件 IO
@@ -168,7 +168,7 @@ Document Type: One-off Execution Plan
 执行项：
 
 - [x] 更新本执行单勾选状态
-- [x] 在 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 中把“阶段 4”更新为更准确的当前状态
+- [x] 在 [`docs/architecture-target.md`](architecture-target.md) 中把“阶段 4”更新为更准确的当前状态
 - [x] 如果本轮完成后该执行单已无后续用途，归档到 `docs/archive/`
 
 ## 6. 完成定义

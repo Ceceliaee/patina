@@ -4,7 +4,7 @@ Document Type: One-off Review Fix Plan
 
 ## 1. 背景
 
-上一轮 [`docs/archive/frontend-legacy-lib-extraction-execution-plan.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/archive/frontend-legacy-lib-extraction-execution-plan.md) 已经完成了主要迁移：
+上一轮 [`docs/archive/frontend-legacy-lib-extraction-execution-plan.md`](frontend-legacy-lib-extraction-execution-plan.md) 已经完成了主要迁移：
 
 - `classificationPersistence` 已建立
 - `sessionReadRepository` / `sessionReadCompiler` 已建立
@@ -38,8 +38,8 @@ Document Type: One-off Review Fix Plan
 
 现状：
 
-- [`src/shared/lib/sessionReadRepository.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/shared/lib/sessionReadRepository.ts) 读取 sessions 后已经按 `ProcessMapper.shouldTrack(...)` 做过滤
-- [`src/shared/lib/sessionReadCompiler.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/shared/lib/sessionReadCompiler.ts) 又再次执行相同的 tracking 判定
+- `src/shared/lib/sessionReadRepository.ts` 读取 sessions 后已经按 `ProcessMapper.shouldTrack(...)` 做过滤
+- [`src/shared/lib/sessionReadCompiler.ts`](../../src/shared/lib/sessionReadCompiler.ts) 又再次执行相同的 tracking 判定
 
 目标：
 
@@ -61,7 +61,7 @@ Document Type: One-off Review Fix Plan
 
 现状：
 
-- [`src/features/classification/services/classificationService.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/classification/services/classificationService.ts) 仍直接从 [`src/lib/settings.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/lib/settings.ts) 引 `ObservedAppCandidate`
+- [`src/features/classification/services/classificationService.ts`](../../src/features/classification/services/classificationService.ts) 仍直接从 `src/lib/settings.ts` 引 `ObservedAppCandidate`
 
 目标：
 
@@ -70,7 +70,7 @@ Document Type: One-off Review Fix Plan
 
 执行要求：
 
-- [x] 在 [`src/shared/lib/classificationPersistence.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/shared/lib/classificationPersistence.ts) 导出 `ObservedAppCandidate`
+- [x] 在 `src/shared/lib/classificationPersistence.ts` 导出 `ObservedAppCandidate`
 - [x] `classificationService.ts` 改为从新边界导入该类型
 - [x] 不改变现有 feature API 语义
 

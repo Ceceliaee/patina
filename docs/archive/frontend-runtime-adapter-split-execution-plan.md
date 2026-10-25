@@ -4,16 +4,16 @@ Document Type: One-off Execution Plan
 
 ## 1. 目标
 
-本轮目标是继续推进 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 的阶段 4，把前端剩余最模糊的“万能 service”边界继续拆清。
+本轮目标是继续推进 [`docs/architecture-target.md`](architecture-target.md) 的阶段 4，把前端剩余最模糊的“万能 service”边界继续拆清。
 
 本轮重点针对：
 
-- [`src/lib/services/SettingsService.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/lib/services/SettingsService.ts)
-- [`src/lib/services/TrackingService.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/lib/services/TrackingService.ts)
-- [`src/app/services/appRuntimeBootstrapService.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/app/services/appRuntimeBootstrapService.ts)
-- [`src/app/services/appSettingsRuntimeService.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/app/services/appSettingsRuntimeService.ts)
-- [`src/features/settings/services/settingsPageService.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/settings/services/settingsPageService.ts)
-- [`src/app/hooks/useWindowTracking.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/app/hooks/useWindowTracking.ts)
+- `src/lib/services/SettingsService.ts`
+- `src/lib/services/TrackingService.ts`
+- [`src/app/services/appRuntimeBootstrapService.ts`](../../src/app/services/appRuntimeBootstrapService.ts)
+- [`src/app/services/appSettingsRuntimeService.ts`](../../src/app/services/appSettingsRuntimeService.ts)
+- `src/features/settings/services/settingsPageService.ts`
+- [`src/app/hooks/useWindowTracking.ts`](../../src/app/hooks/useWindowTracking.ts)
 
 目标状态：
 
@@ -176,7 +176,7 @@ Document Type: One-off Execution Plan
 执行项：
 
 - [x] 更新本执行单勾选状态
-- [x] 根据实际完成情况更新 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 中阶段 4 的状态描述
+- [x] 根据实际完成情况更新 [`docs/architecture-target.md`](architecture-target.md) 中阶段 4 的状态描述
 - [x] 任务完成并验收通过后，将本文件移入 `docs/archive/`
 
 ## 6. 完成定义

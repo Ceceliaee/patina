@@ -4,9 +4,9 @@ Document Type: One-off Execution Plan
 
 ## 1. 目标
 
-本轮目标是继续推进 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 的阶段 4，把 Rust 侧目前最厚、最混杂的一条核心链路真正压回清晰边界：
+本轮目标是继续推进 [`docs/architecture-target.md`](architecture-target.md) 的阶段 4，把 Rust 侧目前最厚、最混杂的一条核心链路真正压回清晰边界：
 
-- [`src-tauri/src/engine/tracking_runtime.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/engine/tracking_runtime.rs)
+- `src-tauri/src/engine/tracking_runtime.rs`
 
 本轮完成后，希望达成：
 
@@ -24,7 +24,7 @@ Document Type: One-off Execution Plan
 - `settings / desktop behavior` 的 `domain + repository` 收口
 - 前端阶段 4 的多轮基础设施去耦
 
-当前最明显的 Rust 遗留，已经不在 `commands/*`，而是在 [`tracking_runtime.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/engine/tracking_runtime.rs)：
+当前最明显的 Rust 遗留，已经不在 `commands/*`，而是在 `src-tauri/src/engine/tracking_runtime.rs`：
 
 - 文件同时定义 runtime health、事件 payload、窗口切换决策、部分存储结构
 - 文件里仍有大段 `sqlx` 查询与更新
@@ -165,7 +165,7 @@ Document Type: One-off Execution Plan
 执行项：
 
 - [x] 更新本执行单勾选状态
-- [x] 根据实际结果更新 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 中阶段 4 的状态描述
+- [x] 根据实际结果更新 [`docs/architecture-target.md`](architecture-target.md) 中阶段 4 的状态描述
 - [x] 任务完成并验收通过后，将本文件移入 `docs/archive/`
 
 ## 6. 完成定义
@@ -188,7 +188,7 @@ Document Type: One-off Execution Plan
 - 每完成一个阶段，更新文档勾选状态并运行 `cargo check`
 - 若改动影响到 tracking runtime 相关单元测试，补跑对应 `cargo test`
 - 全部完成后再运行一次 `npm run build`
-- 同时遵循 [`AGENTS.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/AGENTS.md) 与 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md)
+- 同时遵循 [`AGENTS.md`](../../AGENTS.md) 与 [`docs/architecture-target.md`](architecture-target.md)
 
 ## 8. 任务完成后的处理
 

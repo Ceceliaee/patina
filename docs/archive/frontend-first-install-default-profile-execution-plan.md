@@ -149,7 +149,7 @@ Document Type: One-off Execution Plan
 - [x] 默认档案来源明确
 - [x] 不是凭感觉重新选择默认值
 
-本轮提取基线（来源：`C:\Users\SYBao\AppData\Roaming\com.timetracker\timetracker.db`，`settings` 表）：
+本轮提取基线（来源：`%APPDATA%\com.timetracker\timetracker.db`，`settings` 表）：
 
 - `settings`：
   - `afk_timeout_secs=180`
@@ -240,7 +240,7 @@ Document Type: One-off Execution Plan
 - 优先使用集中默认档案配置，不要散落多个硬编码默认值
 - 每完成一个阶段，更新文档勾选状态并运行 `npm run build`
 - 如本轮改动影响现有测试链路，再补跑 `npm test`
-- 同时遵循 [`AGENTS.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/AGENTS.md)、[`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/quiet-pro-component-guidelines.md)
+- 同时遵循 [`AGENTS.md`](../../AGENTS.md)、[`docs/architecture-target.md`](architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)
 
 ## 10. 任务完成后的处理
 

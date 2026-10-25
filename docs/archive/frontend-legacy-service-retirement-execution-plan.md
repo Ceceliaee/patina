@@ -4,17 +4,17 @@ Document Type: One-off Execution Plan
 
 ## 1. 目标
 
-本轮目标是继续推进 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 的阶段 4，在前端已完成 facade / runtime adapter / core store / DB 边界收口之后，把 `src/lib/services/*` 中剩余的 legacy 兼容壳与错位 helper 再收一轮。
+本轮目标是继续推进 [`docs/architecture-target.md`](architecture-target.md) 的阶段 4，在前端已完成 facade / runtime adapter / core store / DB 边界收口之后，把 `src/lib/services/*` 中剩余的 legacy 兼容壳与错位 helper 再收一轮。
 
 重点文件：
 
-- [`src/lib/services/SettingsService.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/lib/services/SettingsService.ts)
-- [`src/lib/services/TrackingService.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/lib/services/TrackingService.ts)
-- [`src/lib/services/sessionCompiler.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/lib/services/sessionCompiler.ts)
-- [`src/lib/services/TitleCleaner.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/lib/services/TitleCleaner.ts)
-- [`src/lib/services/trackingLifecycle.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/lib/services/trackingLifecycle.ts)
-- [`src/shared/lib/sessionReadCompiler.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/shared/lib/sessionReadCompiler.ts)
-- [`src/types/tracking.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/types/tracking.ts)
+- `src/lib/services/SettingsService.ts`
+- `src/lib/services/TrackingService.ts`
+- `src/lib/services/sessionCompiler.ts`
+- `src/lib/services/TitleCleaner.ts`
+- `src/lib/services/trackingLifecycle.ts`
+- [`src/shared/lib/sessionReadCompiler.ts`](../../src/shared/lib/sessionReadCompiler.ts)
+- `src/types/tracking.ts`
 
 本轮完成后，希望达到：
 
@@ -107,16 +107,16 @@ Document Type: One-off Execution Plan
 执行项：
 
 - [x] 先检查 `TitleCleaner.ts` 是否存在 mojibake；若存在，先修复编码后再继续编辑
-- [x] 将 `cleanWindowTitle` 迁到更清楚的 helper 文件，并更新 [`src/shared/lib/sessionReadCompiler.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/shared/lib/sessionReadCompiler.ts) 的引用
+- [x] 将 `cleanWindowTitle` 迁到更清楚的 helper 文件，并更新 [`src/shared/lib/sessionReadCompiler.ts`](../../src/shared/lib/sessionReadCompiler.ts) 的引用
 - [x] 评估 `trackingLifecycle.ts` 的纯函数是否仍有有效调用者
-- [x] 若 `trackingLifecycle.ts` 仅剩类型用途，则把 `TrackedWindow` 类型收口到 [`src/types/tracking.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/types/tracking.ts) 并删除原文件
+- [x] 若 `trackingLifecycle.ts` 仅剩类型用途，则把 `TrackedWindow` 类型收口到 `src/types/tracking.ts` 并删除原文件
 - [x] 若 `trackingLifecycle.ts` 中部分纯函数仍需保留，则迁到更清楚的 low-level/runtime helper 文件，并让类型定义不再从 `src/lib/services/*` 反向导出
 - [x] 阶段 B 完成后运行 `npm run build`
 
 验收门槛：
 
-- [x] [`src/shared/lib/sessionReadCompiler.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/shared/lib/sessionReadCompiler.ts) 不再从 `src/lib/services/*` import `TitleCleaner`
-- [x] [`src/types/tracking.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/types/tracking.ts) 不再依赖 `src/lib/services/trackingLifecycle.ts`
+- [x] [`src/shared/lib/sessionReadCompiler.ts`](../../src/shared/lib/sessionReadCompiler.ts) 不再从 `src/lib/services/*` import `TitleCleaner`
+- [x] `src/types/tracking.ts` 不再依赖 `src/lib/services/trackingLifecycle.ts`
 - [x] 本轮触及的 `.ts` 文件中不再引入新的 mojibake
 
 ### 阶段 C：收紧 `src/lib/services/*` 的长期角色
@@ -130,7 +130,7 @@ Document Type: One-off Execution Plan
 - [x] 复查 `Get-ChildItem src/lib/services` 结果
 - [x] 删除阶段 A/B 后产生的低价值空文件或仅剩单行转发的遗留文件
 - [x] 若某个文件必须临时保留，在文件头增加简短注释，说明其仅为 low-level / legacy compatibility，不作为新逻辑默认入口
-- [x] 根据实际结果更新 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 中阶段 4 的状态描述
+- [x] 根据实际结果更新 [`docs/architecture-target.md`](architecture-target.md) 中阶段 4 的状态描述
 - [x] 阶段 C 完成后运行 `npm run build`
 
 验收门槛：
@@ -166,7 +166,7 @@ Document Type: One-off Execution Plan
 - 每完成一个阶段，更新文档勾选状态并运行 `npm run build`
 - 如果改动影响到 Tauri 联动，再补跑 `cargo check`
 - 工作区当前可能已有未提交改动；不要回退无关修改，只处理本轮触及文件
-- 同时遵循 [`AGENTS.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/AGENTS.md) 与 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md)
+- 同时遵循 [`AGENTS.md`](../../AGENTS.md) 与 [`docs/architecture-target.md`](architecture-target.md)
 
 ## 8. 任务完成后的处理
 

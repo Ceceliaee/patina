@@ -4,9 +4,9 @@ Document Type: One-off Execution Plan
 
 ## 1. 目标
 
-本轮目标是继续推进 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 的阶段 4，但范围只收 Rust 运行时里还挂在 `app` 层的一段底层数据库能力：
+本轮目标是继续推进 [`docs/architecture-target.md`](architecture-target.md) 的阶段 4，但范围只收 Rust 运行时里还挂在 `app` 层的一段底层数据库能力：
 
-- [`src-tauri/src/app/runtime.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/app/runtime.rs) 中的 sqlite pool 获取逻辑
+- [`src-tauri/src/app/runtime.rs`](../../src-tauri/src/app/runtime.rs) 中的 sqlite pool 获取逻辑
 - `sqlite:timetracker.db` 这类 DB 入口常量
 
 本轮完成后，希望达到：
@@ -26,8 +26,8 @@ Document Type: One-off Execution Plan
 
 但当前仍有一个明显的基础设施职责错位：
 
-- [`app/runtime.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/app/runtime.rs) 仍然拥有 `wait_for_sqlite_pool(...)`
-- [`data/backup.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/data/backup.rs) 和 [`engine/tracking_runtime.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/engine/tracking_runtime.rs) 还要反向依赖 `app/runtime.rs`
+- [`app/runtime.rs`](../../src-tauri/src/app/runtime.rs) 仍然拥有 `wait_for_sqlite_pool(...)`
+- [`data/backup.rs`](../../src-tauri/src/data/backup.rs) 和 `src-tauri/src/engine/tracking_runtime.rs` 还要反向依赖 `app/runtime.rs`
 - `sqlite:timetracker.db` 这个 DB 入口字符串同时影响 `lib.rs` plugin 装配和运行时 pool 查找，但目前没有清晰的单一来源
 
 这意味着：
@@ -59,7 +59,7 @@ Document Type: One-off Execution Plan
 
 - `src-tauri/src/commands/backup.rs`
 - 受本轮影响的 Rust 单元测试
-- [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md)
+- [`docs/architecture-target.md`](architecture-target.md)
 
 ## 4. 非目标
 
@@ -109,10 +109,10 @@ Document Type: One-off Execution Plan
 
 重点调用方：
 
-- [`src-tauri/src/data/backup.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/data/backup.rs)
-- [`src-tauri/src/engine/tracking_runtime.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/engine/tracking_runtime.rs)
-- [`src-tauri/src/app/tray.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/app/tray.rs)
-- [`src-tauri/src/app/runtime.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/app/runtime.rs)
+- [`src-tauri/src/data/backup.rs`](../../src-tauri/src/data/backup.rs)
+- `src-tauri/src/engine/tracking_runtime.rs`
+- [`src-tauri/src/app/tray.rs`](../../src-tauri/src/app/tray.rs)
+- [`src-tauri/src/app/runtime.rs`](../../src-tauri/src/app/runtime.rs)
 
 执行项：
 
@@ -154,7 +154,7 @@ Document Type: One-off Execution Plan
 执行项：
 
 - [x] 更新本执行单勾选状态
-- [x] 根据实际结果同步更新 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 中阶段 4 的状态描述
+- [x] 根据实际结果同步更新 [`docs/architecture-target.md`](architecture-target.md) 中阶段 4 的状态描述
 - [x] 任务完成并验收通过后，将本文件移入 `docs/archive/`
 
 ## 6. 完成定义
@@ -178,7 +178,7 @@ Document Type: One-off Execution Plan
 - 每完成一个阶段，更新文档勾选状态并运行 `cargo check`
 - 如果本轮改动影响 tracking runtime 相关测试，再补跑 `cargo test tracking_runtime --lib`
 - 全部完成后再运行一次 `npm run build`
-- 同时遵循 [`AGENTS.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/AGENTS.md) 与 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md)
+- 同时遵循 [`AGENTS.md`](../../AGENTS.md) 与 [`docs/architecture-target.md`](architecture-target.md)
 
 ## 8. 任务完成后的处理
 

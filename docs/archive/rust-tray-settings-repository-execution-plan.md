@@ -4,14 +4,14 @@ Document Type: One-off Execution Plan
 
 ## 1. 目标
 
-本轮目标是继续推进 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 的阶段 4，但范围只收 Rust `app` 层里残留的一处 settings 直连：
+本轮目标是继续推进 [`docs/architecture-target.md`](architecture-target.md) 的阶段 4，但范围只收 Rust `app` 层里残留的一处 settings 直连：
 
-- [`src-tauri/src/app/tray.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/app/tray.rs)
+- [`src-tauri/src/app/tray.rs`](../../src-tauri/src/app/tray.rs)
 
 本轮完成后，期望达到：
 
 - `app/tray.rs` 不再直接执行 `settings` 表 SQL
-- `tracking_paused` 的读取与写入统一收口到 [`src-tauri/src/data/repositories/tracker_settings.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/data/repositories/tracker_settings.rs)
+- `tracking_paused` 的读取与写入统一收口到 [`src-tauri/src/data/repositories/tracker_settings.rs`](../../src-tauri/src/data/repositories/tracker_settings.rs)
 - `app` 层只保留 tray 交互、运行时编排、事件触发
 - Rust 阶段 4 再向“app / engine / data / domain` 职责更清楚”推进一小步，而不是继续把 settings 细节留在壳层
 
@@ -24,8 +24,8 @@ Document Type: One-off Execution Plan
 
 但当前仍有一个明显残余：
 
-- [`src-tauri/src/app/tray.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/app/tray.rs) 里还保留了 `tracking_paused` 的本地 SQL 读写 helper
-- 同时 [`src-tauri/src/data/repositories/tracker_settings.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/data/repositories/tracker_settings.rs) 已经承接了同一张 `settings` 表中与 tracker runtime 相关的其他 key
+- [`src-tauri/src/app/tray.rs`](../../src-tauri/src/app/tray.rs) 里还保留了 `tracking_paused` 的本地 SQL 读写 helper
+- 同时 [`src-tauri/src/data/repositories/tracker_settings.rs`](../../src-tauri/src/data/repositories/tracker_settings.rs) 已经承接了同一张 `settings` 表中与 tracker runtime 相关的其他 key
 
 这意味着当前存在：
 
@@ -49,7 +49,7 @@ Document Type: One-off Execution Plan
 
 - `src-tauri/src/app/runtime.rs`
 - 与本轮相关的 Rust 单元测试
-- [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md)
+- [`docs/architecture-target.md`](architecture-target.md)
 
 ## 4. 非目标
 
@@ -69,7 +69,7 @@ Document Type: One-off Execution Plan
 
 建议做法：
 
-- 在 [`tracker_settings.rs`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src-tauri/src/data/repositories/tracker_settings.rs) 中补齐 `save_tracking_paused_setting(...)`
+- 在 [`tracker_settings.rs`](../../src-tauri/src/data/repositories/tracker_settings.rs) 中补齐 `save_tracking_paused_setting(...)`
 - 复用现有 `save_setting_value(...)`，不要在 `app/tray.rs` 再保留重复 SQL
 
 执行项：
@@ -129,7 +129,7 @@ Document Type: One-off Execution Plan
 执行项：
 
 - [x] 更新本执行单勾选状态
-- [x] 根据实际结果同步更新 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 中阶段 4 的状态描述
+- [x] 根据实际结果同步更新 [`docs/architecture-target.md`](architecture-target.md) 中阶段 4 的状态描述
 - [x] 任务完成并验收通过后，将本文件移入 `docs/archive/`
 
 ## 6. 完成定义
@@ -152,7 +152,7 @@ Document Type: One-off Execution Plan
 - 每完成一个阶段，更新文档勾选状态并运行 `cargo check`
 - 如果本轮改动影响到 `tracker_settings.rs` 的共享接口或相关测试，再补跑 `cargo test tracking_runtime --lib`
 - 全部完成后再运行一次 `npm run build`
-- 同时遵循 [`AGENTS.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/AGENTS.md) 与 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md)
+- 同时遵循 [`AGENTS.md`](../../AGENTS.md) 与 [`docs/architecture-target.md`](architecture-target.md)
 
 ## 8. 任务完成后的处理
 

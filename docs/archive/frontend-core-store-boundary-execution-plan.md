@@ -4,10 +4,10 @@ Document Type: One-off Execution Plan
 
 ## 1. 目标
 
-本轮目标是继续推进 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 的阶段 4，把前端遗留根层里最核心的两块底层存储能力真正压回“基础设施层”角色：
+本轮目标是继续推进 [`docs/architecture-target.md`](architecture-target.md) 的阶段 4，把前端遗留根层里最核心的两块底层存储能力真正压回“基础设施层”角色：
 
-- [`src/lib/settings.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/lib/settings.ts)
-- [`src/lib/db.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/lib/db.ts)
+- `src/lib/settings.ts`
+- `src/lib/db.ts`
 
 本轮完成后，希望达成：
 
@@ -106,7 +106,7 @@ Document Type: One-off Execution Plan
 
 当前问题：
 
-- [`src/lib/db.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/lib/db.ts) 里仍有 read-model 过滤语义和 `ProcessMapper` 相关判断
+- `src/lib/db.ts` 里仍有 read-model 过滤语义和 `ProcessMapper` 相关判断
 
 建议方向：
 
@@ -146,7 +146,7 @@ Document Type: One-off Execution Plan
 执行项：
 
 - [x] 更新本执行单勾选状态
-- [x] 根据实际结果更新 [`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 中阶段 4 的状态描述
+- [x] 根据实际结果更新 [`docs/architecture-target.md`](architecture-target.md) 中阶段 4 的状态描述
 - [x] 任务完成并验收通过后，将本文件移入 `docs/archive/`
 
 ## 6. 完成定义

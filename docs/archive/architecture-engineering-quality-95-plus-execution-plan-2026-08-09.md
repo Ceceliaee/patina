@@ -682,7 +682,7 @@ Basic Auth 的安全性完全依赖 TLS。允许任意远端 HTTP 等同于允�
 - 基线和收口时分支均为 `main...origin/main [ahead 29]`；本任务没有创建分支、暂存、提交、推送、PR 或 tag。
 - 已核对 live GitHub Project：没有与本计划直接映射的现有 item，因此没有需要维护者拖动的 Board 状态，也没有改变 `Next` 窗口。
 - 提交前检查和拆分规则属于本轮 N/A：用户明确要求保留未提交工作区；仍执行了 `git diff --stat`、`git diff --numstat`、`git diff --check` 供人工审阅，其中 `git diff --check` 通过。
-- RustSec 本地 advisory cache 曾包含 7 个非索引残留路径并导致同一 advisory 重复解析；它们没有被删除，而是可恢复地移至 `C:\Users\SYBao\.cargo\advisory-db-untracked-backup-20260810`，随后依赖审计通过。
+- RustSec 本地 advisory cache 曾包含 7 个非索引残留路径并导致同一 advisory 重复解析；它们没有被删除，而是可恢复地移至 `%USERPROFILE%\.cargo\advisory-db-untracked-backup-20260810`，随后依赖审计通过。
 
 #### P1：数据安全与传输安全
 
