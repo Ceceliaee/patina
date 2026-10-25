@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -90,6 +91,52 @@ function testUpdaterNotesFallsBackToAppNote() {
   });
 
   assert.equal(notes, "Fixed release notes.");
+}
+
+async function testChangelogSummaryLengthDoesNotBlockPublication() {
+  const testRoot = await mkdtemp(path.join(os.tmpdir(), "patina-release-summary-"));
+  const fields = {
+    Release: "Readable release summary. ".repeat(6).trim(),
+    "App note": "说明必要的变化及使用注意事项。".repeat(8),
+    "App note en": "Explain the changes and relevant usage notes. ".repeat(4).trim(),
+  };
+  const writeChangelog = (values: typeof fields) => writeFile(path.join(testRoot, "CHANGELOG.md"), [
+    "# Changelog", "", "## [1.0.0] - 2026-10-24", "",
+    ...Object.entries(values).filter(([, value]) => value).map(([field, value]) => `${field}: ${value}`),
+    "", "### Fixed", "", "- Keep the data page layout stable while loading.", "",
+  ].join("\n"), "utf8");
+  const runReleaseCommand = (command: string) => {
+    const result = spawnSync(process.execPath, [
+      "--experimental-strip-types", path.resolve("scripts/release.ts"), command, "1.0.0",
+    ], { cwd: testRoot, encoding: "utf8", windowsHide: true, timeout: 10_000 });
+    assert.ifError(result.error);
+    return result;
+  };
+
+  try {
+    await writeChangelog(fields);
+    const validation = runReleaseCommand("validate-changelog");
+    assert.equal(validation.status, 0, validation.stderr);
+    const rendered = runReleaseCommand("print-release-notes");
+    assert.equal(rendered.status, 0, rendered.stderr);
+    assert.ok(rendered.stdout.includes(fields.Release), "release rendering must preserve the full summary");
+    assert.equal(renderUpdaterNotes({ appNote: fields["App note"], appNoteEn: fields["App note en"] }),
+      `zh-CN: ${fields["App note"]}\nen-US: ${fields["App note en"]}`);
+
+    for (const field of ["Release", "App note"] as const) {
+      for (const value of ["", "TBD"]) {
+        await writeChangelog({ ...fields, [field]: value });
+        const rejected = runReleaseCommand("validate-changelog");
+        assert.notEqual(rejected.status, 0, `${field} must still be complete`);
+        assert.ok(rejected.stderr.includes(value ? "unfinished" : "missing"), rejected.stderr);
+      }
+    }
+  } finally {
+    const root = path.resolve(testRoot);
+    assert.ok(root.startsWith(`${path.resolve(os.tmpdir())}${path.sep}`));
+    assert.ok(path.basename(root).startsWith("patina-release-summary-"));
+    await rm(root, { recursive: true, force: true });
+  }
 }
 
 function testUpdaterEndpointsKeepGithubFirstAndPreserveMirrors() {
@@ -671,6 +718,7 @@ async function testPrepareAndVerifyReleaseAssetsDetectTampering() {
 testArchitectureAndMirrorContracts();
 testUpdaterNotesKeepLocalizedVariants();
 testUpdaterNotesFallsBackToAppNote();
+await testChangelogSummaryLengthDoesNotBlockPublication();
 testUpdaterEndpointsKeepGithubFirstAndPreserveMirrors();
 testReleaseInstallerNamesStayStable();
 testSha256SumsRoundTripUsesCanonicalFormat();

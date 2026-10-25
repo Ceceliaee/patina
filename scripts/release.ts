@@ -20,9 +20,6 @@ const GITHUB_UPDATER_ENDPOINT =
   "https://github.com/Ceceliaee/patina/releases/latest/download/latest.json";
 const SHA256_SUMS_FILE_NAME = "SHA256SUMS.txt";
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
-const MAX_RELEASE_NOTE_LENGTH = 100;
-const MAX_APP_NOTE_LENGTH = 60;
-const MAX_APP_NOTE_EN_LENGTH = 120;
 const MAX_VISIBLE_RELEASE_CHANGE_COUNT = 7;
 const RELEASE_NOTE_SECTION_TITLES = {
   Added: "新增",
@@ -509,17 +506,6 @@ async function validateChangelog(version) {
   const parsed = await parseChangelog(version);
   assertFinalField("Release", parsed.release, parsed.version);
   assertFinalField("App note", parsed.appNote, parsed.version);
-  if (parsed.release.length > MAX_RELEASE_NOTE_LENGTH) {
-    fail(`CHANGELOG.md ${parsed.version} Release is too long; keep it short`);
-  }
-
-  if (parsed.appNote.length > MAX_APP_NOTE_LENGTH) {
-    fail(`CHANGELOG.md ${parsed.version} App note is too long; keep it lighter`);
-  }
-
-  if (parsed.appNoteEn && parsed.appNoteEn.length > MAX_APP_NOTE_EN_LENGTH) {
-    fail(`CHANGELOG.md ${parsed.version} App note en is too long; keep it lighter`);
-  }
 
   const visibleChangeCountError = validateReleaseNoteVisibleChangeCount(parsed);
   if (visibleChangeCountError) {
