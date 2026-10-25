@@ -28,9 +28,9 @@ Document Type: One-off Execution Plan
 
 当前问题集中在：
 
-- [`src/app/AppShell.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/app/AppShell.tsx) 的未保存切页提示仍走 `window.confirm(...)`
-- [`src/features/settings/components/Settings.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/settings/components/Settings.tsx) 的清理/恢复确认仍走 `window.confirm(...)`
-- [`src/features/classification/components/AppMapping.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/classification/components/AppMapping.tsx) 的新建分类仍走 `window.prompt(...)`，删除确认仍走 `window.confirm(...)`
+- [`src/app/AppShell.tsx`](../../src/app/AppShell.tsx) 的未保存切页提示仍走 `window.confirm(...)`
+- [`src/features/settings/components/Settings.tsx`](../../src/features/settings/components/Settings.tsx) 的清理/恢复确认仍走 `window.confirm(...)`
+- [`src/features/classification/components/AppMapping.tsx`](../../src/features/classification/components/AppMapping.tsx) 的新建分类仍走 `window.prompt(...)`，删除确认仍走 `window.confirm(...)`
 - Settings / App Mapping / History 页面中的多个 `<select>` 虽然闭合态套了 `qp-control`，但展开后的选项列表仍是浏览器默认菜单
 
 这不是某个页面单独“长得丑”，而是底层交互原语还没进入 Quiet Pro 体系。
@@ -132,12 +132,12 @@ Document Type: One-off Execution Plan
 
 本轮至少替换以下位置：
 
-- [`src/app/AppShell.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/app/AppShell.tsx) 的未保存切页确认
-- [`src/features/settings/components/Settings.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/settings/components/Settings.tsx) 的清理历史确认
-- [`src/features/settings/components/Settings.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/settings/components/Settings.tsx) 的恢复备份确认
-- [`src/features/classification/components/AppMapping.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/classification/components/AppMapping.tsx) 的新建分类输入
-- [`src/features/classification/components/AppMapping.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/classification/components/AppMapping.tsx) 的删除分类确认
-- [`src/features/classification/components/AppMapping.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/classification/components/AppMapping.tsx) 的删除应用记录确认
+- [`src/app/AppShell.tsx`](../../src/app/AppShell.tsx) 的未保存切页确认
+- [`src/features/settings/components/Settings.tsx`](../../src/features/settings/components/Settings.tsx) 的清理历史确认
+- [`src/features/settings/components/Settings.tsx`](../../src/features/settings/components/Settings.tsx) 的恢复备份确认
+- [`src/features/classification/components/AppMapping.tsx`](../../src/features/classification/components/AppMapping.tsx) 的新建分类输入
+- [`src/features/classification/components/AppMapping.tsx`](../../src/features/classification/components/AppMapping.tsx) 的删除分类确认
+- [`src/features/classification/components/AppMapping.tsx`](../../src/features/classification/components/AppMapping.tsx) 的删除应用记录确认
 
 执行项：
 
@@ -192,9 +192,9 @@ Document Type: One-off Execution Plan
 
 本轮至少替换：
 
-- [`src/features/settings/components/Settings.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/settings/components/Settings.tsx) 中当前所有设置项下拉
-- [`src/features/classification/components/AppMapping.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/classification/components/AppMapping.tsx) 中应用分类选择
-- [`src/features/history/components/History.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/history/components/History.tsx) 中时间流最少时长下拉
+- [`src/features/settings/components/Settings.tsx`](../../src/features/settings/components/Settings.tsx) 中当前所有设置项下拉
+- [`src/features/classification/components/AppMapping.tsx`](../../src/features/classification/components/AppMapping.tsx) 中应用分类选择
+- [`src/features/history/components/History.tsx`](../../src/features/history/components/History.tsx) 中时间流最少时长下拉
 
 执行项：
 
@@ -267,7 +267,7 @@ Document Type: One-off Execution Plan
 - 如触及中文文案，必须保持 UTF-8，先修编码问题再继续
 - 每完成一个阶段，更新文档勾选状态并运行 `npm run build`
 - 如果本轮改动影响现有测试链路，再补跑 `npm test`
-- 同时遵循 [`AGENTS.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/AGENTS.md)、[`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/quiet-pro-component-guidelines.md)
+- 同时遵循 [`AGENTS.md`](../../AGENTS.md)、[`docs/architecture-target.md`](architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)
 
 ## 9. 任务完成后的处理
 

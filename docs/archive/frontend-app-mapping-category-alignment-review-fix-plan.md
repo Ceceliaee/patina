@@ -18,8 +18,8 @@ Document Type: One-off Review Fix Plan
 
 当前主路径在：
 
-- [`src/features/classification/components/AppMapping.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/classification/components/AppMapping.tsx)
-- [`src/shared/components/QuietSelect.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/shared/components/QuietSelect.tsx)
+- [`src/features/classification/components/AppMapping.tsx`](../../src/features/classification/components/AppMapping.tsx)
+- [`src/shared/components/QuietSelect.tsx`](../../src/shared/components/QuietSelect.tsx)
 
 现状里 `AppMapping` 给分类选择传的是类似 `min-w-[132px]` 的下限宽度，而不是稳定列宽。
 
@@ -123,7 +123,7 @@ Document Type: One-off Review Fix Plan
 - 不扩展颜色选择器、不重做整页布局、不改 Rust / Tauri
 - 每完成一个阶段，更新文档勾选状态并运行 `npm run build`
 - 如本轮改动影响现有测试链路，再补跑 `npm test`
-- 同时遵循 [`AGENTS.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/AGENTS.md)、[`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/quiet-pro-component-guidelines.md)
+- 同时遵循 [`AGENTS.md`](../../AGENTS.md)、[`docs/architecture-target.md`](architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)
 
 ## 11. 任务完成后的处理
 

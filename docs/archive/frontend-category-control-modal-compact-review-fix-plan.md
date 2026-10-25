@@ -23,15 +23,15 @@ Document Type: One-off Review Fix Plan
 当前观感不对，主要来自这几个点：
 
 1. 分类控制弹层使用了 `size="wide"`：
-   - [`src/features/classification/components/AppMapping.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/classification/components/AppMapping.tsx)
+   - [`src/features/classification/components/AppMapping.tsx`](../../src/features/classification/components/AppMapping.tsx)
    - 这让弹层的视觉角色从“紧凑操作弹层”变成了“内容型大面板”
 
 2. `QuietDialog` 新增的宽尺寸角色把这类弹层拉向“大屏专用宽布局”：
-   - [`src/shared/components/QuietDialog.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/shared/components/QuietDialog.tsx)
-   - [`src/App.css`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/App.css)
+   - [`src/shared/components/QuietDialog.tsx`](../../src/shared/components/QuietDialog.tsx)
+   - [`src/App.css`](../../src/App.css)
 
 3. 分类卡片改成了 `auto-fit/minmax` 自适应网格：
-   - [`src/features/classification/components/CategoryColorControls.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/classification/components/CategoryColorControls.tsx)
+   - [`src/features/classification/components/CategoryColorControls.tsx`](../../src/features/classification/components/CategoryColorControls.tsx)
    - 这在大屏下不一定更好看，反而破坏了之前更稳定的“固定密度、固定节奏”
 
 4. 卡片内部两段式结构把原本利落的一行信息拆得过散：
@@ -149,7 +149,7 @@ Document Type: One-off Review Fix Plan
 - 不扩展 Rust / Tauri
 - 每完成一个阶段，更新文档勾选状态并运行 `npm run build`
 - 如果本轮改动影响现有测试链路，再补跑 `npm test`
-- 同时遵循 [`AGENTS.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/AGENTS.md)、[`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/quiet-pro-component-guidelines.md)
+- 同时遵循 [`AGENTS.md`](../../AGENTS.md)、[`docs/architecture-target.md`](architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)
 
 ## 10. 任务完成后的处理
 

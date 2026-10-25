@@ -20,14 +20,14 @@ Document Type: One-off Execution Plan
 
 当前可疑主链已经比较明确：
 
-1. [`src/app/hooks/useWindowTracking.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/app/hooks/useWindowTracking.ts)
+1. [`src/app/hooks/useWindowTracking.ts`](../../src/app/hooks/useWindowTracking.ts)
    - `onTrackingDataChanged(...)` 每次收到 tracking 侧更新时，会执行 `setSyncTick((tick) => tick + 1)`
 
-2. [`src/app/AppShell.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/app/AppShell.tsx)
+2. [`src/app/AppShell.tsx`](../../src/app/AppShell.tsx)
    - `refreshSignal = syncTick + dataRefreshTick`
    - 这个 `refreshSignal` 同时被传给 `History` 和 `AppMapping`
 
-3. [`src/features/classification/components/AppMapping.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/classification/components/AppMapping.tsx)
+3. [`src/features/classification/components/AppMapping.tsx`](../../src/features/classification/components/AppMapping.tsx)
    - `useEffect(..., [refreshKey])` 中会重新 `loadClassificationBootstrap()`
    - 也就是只要 `refreshKey` 变了，`App Mapping` 就整页重新加载
 
@@ -148,7 +148,7 @@ Document Type: One-off Execution Plan
 - 不顺手改应用排序、布局、保存流程
 - 每完成一个阶段，更新文档勾选状态并运行 `npm run build`
 - 如果本轮改动影响现有测试链路，再补跑 `npm test`
-- 同时遵循 [`AGENTS.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/AGENTS.md)、[`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/quiet-pro-component-guidelines.md)
+- 同时遵循 [`AGENTS.md`](../../AGENTS.md)、[`docs/architecture-target.md`](architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)
 
 ## 9. 任务完成后的处理
 

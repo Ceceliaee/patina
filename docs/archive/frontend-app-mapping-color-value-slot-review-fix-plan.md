@@ -21,13 +21,13 @@ Document Type: One-off Review Fix Plan
 
 当前主路径在：
 
-- [`src/shared/components/QuietColorField.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/shared/components/QuietColorField.tsx)
-- [`src/App.css`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/App.css)
+- [`src/shared/components/QuietColorField.tsx`](../../src/shared/components/QuietColorField.tsx)
+- [`src/App.css`](../../src/App.css)
 
 关键点：
 
-- 外侧 trigger 里当前直接渲染 `#HEX` 值：[QuietColorField.tsx](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/shared/components/QuietColorField.tsx#L249)
-- 对应样式 `.qp-color-trigger-value` 目前是内容自适应，只有 `min-width: 0`，没有稳定槽位宽度：[App.css](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/App.css#L437)
+- 外侧 trigger 里当前直接渲染 `#HEX` 值：[QuietColorField.tsx](../../src/shared/components/QuietColorField.tsx#L249)
+- 对应样式 `.qp-color-trigger-value` 目前是内容自适应，只有 `min-width: 0`，没有稳定槽位宽度：`src/App.css:437`（归档时行号）
 
 结果就是：
 
@@ -137,7 +137,7 @@ Document Type: One-off Review Fix Plan
 - 不扩展颜色弹层、不重做整页布局、不改 Rust / Tauri
 - 每完成一个阶段，更新文档勾选状态并运行 `npm run build`
 - 如本轮改动影响现有测试链路，再补跑 `npm test`
-- 同时遵循 [`AGENTS.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/AGENTS.md)、[`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/quiet-pro-component-guidelines.md)
+- 同时遵循 [`AGENTS.md`](../../AGENTS.md)、[`docs/architecture-target.md`](architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)
 
 ## 11. 任务完成后的处理
 

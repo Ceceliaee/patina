@@ -24,11 +24,11 @@ Document Type: One-off Execution Plan
 当前观感发散主要来自 3 个点叠加：
 
 1. 共享 `QuietDialog` 的默认 surface 宽度过窄：
-   - [`src/App.css`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/App.css) 中 `.qp-dialog-surface` 当前是固定 `width: min(560px, 100%)`
-   - [`src/features/classification/components/AppMapping.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/classification/components/AppMapping.tsx) 虽然传了 `surfaceClassName="max-w-5xl"`，但这只限制最大宽度，不会真正把弹层拉宽
+   - [`src/App.css`](../../src/App.css) 中 `.qp-dialog-surface` 当前是固定 `width: min(560px, 100%)`
+   - [`src/features/classification/components/AppMapping.tsx`](../../src/features/classification/components/AppMapping.tsx) 虽然传了 `surfaceClassName="max-w-5xl"`，但这只限制最大宽度，不会真正把弹层拉宽
 
 2. 分类卡片网格是“固定断点列数”，不是“按可读宽度自适应”：
-   - [`src/features/classification/components/CategoryColorControls.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/classification/components/CategoryColorControls.tsx) 当前是 `grid-cols-1 md:grid-cols-2 xl:grid-cols-3`
+   - [`src/features/classification/components/CategoryColorControls.tsx`](../../src/features/classification/components/CategoryColorControls.tsx) 当前是 `grid-cols-1 md:grid-cols-2 xl:grid-cols-3`
    - 在弹层本体偏窄时，三列会把每张卡片压得太小；在大屏时，弹层又没有顺势扩展，结果就是中间一小块内容悬着
 
 3. 卡片内部信息与操作混在一行，导致横向空间一紧张就显得很碎：
@@ -158,7 +158,7 @@ Document Type: One-off Execution Plan
 - 不引入大型第三方 UI 框架
 - 每完成一个阶段，更新文档勾选状态并运行 `npm run build`
 - 如果本轮改动影响现有测试链路，再补跑 `npm test`
-- 同时遵循 [`AGENTS.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/AGENTS.md)、[`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/quiet-pro-component-guidelines.md)
+- 同时遵循 [`AGENTS.md`](../../AGENTS.md)、[`docs/architecture-target.md`](architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)
 
 ## 9. 任务完成后的处理
 

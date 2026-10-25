@@ -22,11 +22,11 @@ Document Type: One-off Execution Plan
 
 当前颜色编辑主路径主要在两处：
 
-1. [`src/features/classification/components/AppMapping.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/classification/components/AppMapping.tsx)
+1. [`src/features/classification/components/AppMapping.tsx`](../../src/features/classification/components/AppMapping.tsx)
    - 应用行内颜色区域当前只直接展示颜色值文本与原生 `<input type="color">`
    - 页面上默认只显式露出 `HEX` 结果，没有任何格式切换 affordance
 
-2. [`src/features/classification/components/CategoryColorControls.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/classification/components/CategoryColorControls.tsx)
+2. [`src/features/classification/components/CategoryColorControls.tsx`](../../src/features/classification/components/CategoryColorControls.tsx)
    - 分类控制弹层中同样只直接显示颜色字符串与原生 `<input type="color">`
    - 同样没有可理解的“格式可切换”入口
 
@@ -193,7 +193,7 @@ Document Type: One-off Execution Plan
 - 不扩展到 Rust / Tauri / 后端
 - 每完成一个阶段，更新文档勾选状态并运行 `npm run build`
 - 如本轮改动影响现有测试链路，再补跑 `npm test`
-- 同时遵循 [`AGENTS.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/AGENTS.md)、[`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/quiet-pro-component-guidelines.md)
+- 同时遵循 [`AGENTS.md`](../../AGENTS.md)、[`docs/architecture-target.md`](architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)
 
 ## 10. 任务完成后的处理
 

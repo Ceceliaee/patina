@@ -53,16 +53,16 @@ Document Type: One-off Review Fix Plan
 
 ### 3.1 点击前样式偏差
 
-[`src/shared/components/QuietColorField.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/shared/components/QuietColorField.tsx)
-[`src/App.css`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/App.css)
+[`src/shared/components/QuietColorField.tsx`](../../src/shared/components/QuietColorField.tsx)
+[`src/App.css`](../../src/App.css)
 
 - 当前收口后的 trigger 外观与用户前面认可的版本不同
 - 颜色入口看起来更像实验性工具控件，而不是之前更自然的行内 Quiet Pro control
 
 ### 3.2 点击后功能缺失
 
-[`src/shared/components/QuietColorField.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/shared/components/QuietColorField.tsx)
-[`src/shared/lib/colorFormatting.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/shared/lib/colorFormatting.ts)
+[`src/shared/components/QuietColorField.tsx`](../../src/shared/components/QuietColorField.tsx)
+[`src/shared/lib/colorFormatting.ts`](../../src/shared/lib/colorFormatting.ts)
 
 - 当前虽然有自有 popover，但功能只覆盖了预设色与 `Hue / Sat / Light` 滑条
 - 取色器缺失
@@ -71,8 +71,8 @@ Document Type: One-off Review Fix Plan
 
 ### 3.3 弹层被遮挡
 
-[`src/features/classification/components/AppMapping.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/classification/components/AppMapping.tsx)
-[`src/App.css`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/App.css)
+[`src/features/classification/components/AppMapping.tsx`](../../src/features/classification/components/AppMapping.tsx)
+[`src/App.css`](../../src/App.css)
 
 - 当前颜色弹层挂在行内容器内
 - 映射列表与分类控制弹层都处在滚动/裁切容器里
@@ -254,7 +254,7 @@ Document Type: One-off Review Fix Plan
 - 不扩展到 Rust / Tauri / 后端
 - 每完成一个阶段，更新文档勾选状态并运行 `npm run build`
 - 如本轮改动影响现有测试链路，再补跑 `npm test`
-- 同时遵循 [`AGENTS.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/AGENTS.md)、[`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/quiet-pro-component-guidelines.md)
+- 同时遵循 [`AGENTS.md`](../../AGENTS.md)、[`docs/architecture-target.md`](architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)
 
 ## 11. 任务完成后的处理
 

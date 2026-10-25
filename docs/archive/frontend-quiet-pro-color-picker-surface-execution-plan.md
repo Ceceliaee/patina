@@ -20,11 +20,11 @@ Document Type: One-off Execution Plan
 
 当前问题的根因不是入口按钮样式，而是：
 
-1. [`src/features/classification/components/AppMapping.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/classification/components/AppMapping.tsx)
+1. [`src/features/classification/components/AppMapping.tsx`](../../src/features/classification/components/AppMapping.tsx)
    - 点击颜色块后会走原生 `<input type="color">`
    - 用户真正看到的是浏览器/系统自带颜色面板
 
-2. [`src/features/classification/components/CategoryColorControls.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/classification/components/CategoryColorControls.tsx)
+2. [`src/features/classification/components/CategoryColorControls.tsx`](../../src/features/classification/components/CategoryColorControls.tsx)
    - 分类控制里同样复用了原生 `<input type="color">`
    - 所以同样会出现原生本地弹层
 
@@ -175,7 +175,7 @@ Document Type: One-off Execution Plan
 - 不做大型复杂颜色工作台
 - 每完成一个阶段，更新文档勾选状态并运行 `npm run build`
 - 如本轮改动影响现有测试链路，再补跑 `npm test`
-- 同时遵循 [`AGENTS.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/AGENTS.md)、[`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/quiet-pro-component-guidelines.md)
+- 同时遵循 [`AGENTS.md`](../../AGENTS.md)、[`docs/architecture-target.md`](architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)
 
 ## 10. 任务完成后的处理
 

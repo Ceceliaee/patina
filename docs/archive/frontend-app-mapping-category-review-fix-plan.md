@@ -18,7 +18,7 @@ Document Type: One-off Review Fix Plan
 
 当前分类控制弹层的数据来自：
 
-- [`src/features/classification/components/AppMapping.tsx`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/features/classification/components/AppMapping.tsx)
+- [`src/features/classification/components/AppMapping.tsx`](../../src/features/classification/components/AppMapping.tsx)
 
 其中：
 
@@ -50,7 +50,7 @@ Document Type: One-off Review Fix Plan
 
 当前候选源头在：
 
-- [`src/lib/classification-store.ts`](C:/Users/SYBao/Documents/Code/Time%20Tracking/src/lib/classification-store.ts)
+- `src/lib/classification-store.ts`
 
 这里会：
 
@@ -193,7 +193,7 @@ Document Type: One-off Review Fix Plan
 - “可分配分类”和“可管理分类”必须明确分开
 - 每完成一个阶段，更新文档勾选状态并运行 `npm run build`
 - 如果本轮改动影响现有测试链路，再补跑 `npm test`
-- 同时遵循 [`AGENTS.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/AGENTS.md)、[`docs/architecture-target.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](C:/Users/SYBao/Documents/Code/Time%20Tracking/docs/quiet-pro-component-guidelines.md)
+- 同时遵循 [`AGENTS.md`](../../AGENTS.md)、[`docs/architecture-target.md`](architecture-target.md) 与 [`docs/quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)
 
 ## 10. 任务完成后的处理
 
