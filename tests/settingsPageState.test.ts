@@ -117,7 +117,6 @@ interface AppSettings {
     | "xcode";
   launchAtLogin: boolean;
   startMinimized: boolean;
-  backgroundOptimization: boolean;
   onboardingCompleted: boolean;
   webActivityEnabled: boolean;
   webActivityPort: number;
@@ -148,7 +147,6 @@ const BASE_SETTINGS: AppSettings = {
   colorSchemeDark: "default",
   launchAtLogin: false,
   startMinimized: false,
-  backgroundOptimization: false,
   onboardingCompleted: false,
   webActivityEnabled: false,
   webActivityPort: 12345,
@@ -216,7 +214,6 @@ await runTest("buildSettingsPatch only keeps changed keys", () => {
     webActivityEnabled: true,
     webActivityPort: 18080,
     webActivityToken: "secret",
-    backgroundOptimization: true,
   });
 
   assert.deepEqual(SettingsRuntimeAdapterService.buildSettingsPatch(saved, draft), {
@@ -230,7 +227,6 @@ await runTest("buildSettingsPatch only keeps changed keys", () => {
     webActivityEnabled: true,
     webActivityPort: 18080,
     webActivityToken: "secret",
-    backgroundOptimization: true,
   });
 });
 
@@ -476,7 +472,7 @@ await runTest("normalizeSettingsRecord accepts current minimize behavior values"
   assert.equal(defaultSettings.titleRecordingEnabled, true);
   assert.equal(defaultSettings.minimizeBehavior, "widget");
   assert.equal(defaultSettings.closeBehavior, "tray");
-  assert.equal(defaultSettings.backgroundOptimization, true);
+  assert.equal(Object.hasOwn(defaultSettings, "backgroundOptimization"), false);
   assert.equal(defaultSettings.themeMode, "light");
   assert.equal(defaultSettings.language, "zh-CN");
   assert.equal(defaultSettings.dynamicEffects, false);
@@ -548,12 +544,12 @@ await runTest("normalizeSettingsRecord accepts current minimize behavior values"
   });
   assert.equal(widgetSettings.minimizeBehavior, "widget");
   assert.equal(widgetSettings.closeBehavior, "tray");
-  assert.equal(widgetSettings.backgroundOptimization, true);
+  assert.equal(Object.hasOwn(widgetSettings, "backgroundOptimization"), false);
 
   const existingSpeedFirstSettings = normalizeSettingsRecord({
     background_optimization: "0",
   });
-  assert.equal(existingSpeedFirstSettings.backgroundOptimization, false);
+  assert.deepEqual(existingSpeedFirstSettings, defaultSettings);
 
   const retiredTraySettings = normalizeSettingsRecord({
     minimize_behavior: "tray",

@@ -40,7 +40,6 @@ type RawAppSettingsKey =
   | "color_scheme_dark"
   | "launch_at_login"
   | "start_minimized"
-  | "background_optimization"
   | "onboarding_completed"
   | "web_activity_enabled"
   | "web_activity_port"
@@ -68,7 +67,6 @@ const APP_SETTINGS_RAW_KEYS: Record<keyof AppSettings, RawAppSettingsKey> = {
   colorSchemeDark: "color_scheme_dark",
   launchAtLogin: "launch_at_login",
   startMinimized: "start_minimized",
-  backgroundOptimization: "background_optimization",
   onboardingCompleted: "onboarding_completed",
   webActivityEnabled: "web_activity_enabled",
   webActivityPort: "web_activity_port",

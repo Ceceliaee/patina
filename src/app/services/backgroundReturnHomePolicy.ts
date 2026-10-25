@@ -1,1 +1,1 @@
-export const LONG_BACKGROUND_DELAY_MS = 3 * 60 * 1000;
+export const LONG_BACKGROUND_DELAY_MS = 30_000;

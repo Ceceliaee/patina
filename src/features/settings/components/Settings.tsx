@@ -270,10 +270,6 @@ export default function Settings({
                 nextChecked ? "tray" : "exit",
               );
             }}
-            backgroundOptimizationChecked={draftSettings.backgroundOptimization}
-            onBackgroundOptimizationChange={(nextChecked) => {
-              handleChange("backgroundOptimization", nextChecked);
-            }}
             launchAtLoginChecked={draftSettings.launchAtLogin}
             onLaunchAtLoginChange={(nextChecked) => handleChange("launchAtLogin", nextChecked)}
             startMinimizedChecked={draftSettings.startMinimized}

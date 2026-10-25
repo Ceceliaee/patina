@@ -243,10 +243,6 @@ export function normalizeSettingsRecord(
     ),
     launchAtLogin: parseBooleanSetting(record.launch_at_login, DEFAULT_SETTINGS.launchAtLogin),
     startMinimized: parseBooleanSetting(record.start_minimized, DEFAULT_SETTINGS.startMinimized),
-    backgroundOptimization: parseBooleanSetting(
-      record.background_optimization,
-      DEFAULT_SETTINGS.backgroundOptimization,
-    ),
     onboardingCompleted: parseBooleanSetting(
       record.onboarding_completed,
       DEFAULT_SETTINGS.onboardingCompleted,

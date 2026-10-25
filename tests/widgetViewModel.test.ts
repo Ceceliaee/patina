@@ -59,7 +59,6 @@ const BASE_SETTINGS: AppSettings = {
   colorSchemeDark: "default",
   launchAtLogin: true,
   startMinimized: true,
-  backgroundOptimization: false,
   onboardingCompleted: true,
   webActivityEnabled: false,
   webActivityPort: 12345,

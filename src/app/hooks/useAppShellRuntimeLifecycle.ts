@@ -15,7 +15,6 @@ const DATA_FOREGROUND_PREWARM_DELAY_MS = 1_200;
 const BACKGROUND_CACHE_RELEASE_DELAY_MS = LONG_BACKGROUND_DELAY_MS;
 
 interface AppShellRuntimeLifecycleOptions {
-  backgroundOptimization: boolean;
   classificationReady: boolean;
   isDataRefreshEnabled: boolean;
   isDashboardRefreshEnabled: boolean;
@@ -29,7 +28,6 @@ interface AppShellRuntimeLifecycleOptions {
 }
 
 export function useAppShellRuntimeLifecycle({
-  backgroundOptimization,
   classificationReady,
   isDataRefreshEnabled,
   isDashboardRefreshEnabled,
@@ -137,7 +135,7 @@ export function useAppShellRuntimeLifecycle({
   }, [classificationReady, isForegroundReady, mappingVersion, uiTextLanguage]);
 
   useEffect(() => {
-    if (isForegroundReady || !backgroundOptimization) return undefined;
+    if (isForegroundReady) return undefined;
 
     const timer = window.setTimeout(() => {
       if (document.visibilityState !== "hidden" && isWindowForegroundLike) return;
@@ -154,5 +152,5 @@ export function useAppShellRuntimeLifecycle({
     return () => {
       window.clearTimeout(timer);
     };
-  }, [backgroundOptimization, isForegroundReady, isWindowForegroundLike]);
+  }, [isForegroundReady, isWindowForegroundLike]);
 }

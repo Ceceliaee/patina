@@ -13,8 +13,6 @@ type SettingsResidentPanelProps = {
   onShowTrayIconChange: (nextChecked: boolean) => void;
   closeToTrayChecked: boolean;
   onCloseToTrayChange: (nextChecked: boolean) => void;
-  backgroundOptimizationChecked: boolean;
-  onBackgroundOptimizationChange: (nextChecked: boolean) => void;
   launchAtLoginChecked: boolean;
   onLaunchAtLoginChange: (nextChecked: boolean) => void;
   startMinimizedChecked: boolean;
@@ -28,8 +26,6 @@ export default function SettingsResidentPanel({
   onShowTrayIconChange,
   closeToTrayChecked,
   onCloseToTrayChange,
-  backgroundOptimizationChecked,
-  onBackgroundOptimizationChange,
   launchAtLoginChecked,
   onLaunchAtLoginChange,
   startMinimizedChecked,
@@ -83,13 +79,6 @@ export default function SettingsResidentPanel({
                 checked={startMinimizedChecked}
                 onChange={onStartMinimizedChange}
                 ariaLabel={UI_TEXT.accessibility.settings.toggleStartMinimized}
-              />
-            </SettingsPreferenceRow>
-            <SettingsPreferenceRow title={UI_TEXT.settings.backgroundOptimizationLabel} hint={UI_TEXT.settings.backgroundOptimizationHint}>
-              <QuietSwitch
-                checked={backgroundOptimizationChecked}
-                onChange={onBackgroundOptimizationChange}
-                ariaLabel={UI_TEXT.accessibility.settings.toggleBackgroundOptimization}
               />
             </SettingsPreferenceRow>
           </QuietActionRow>

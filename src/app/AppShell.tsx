@@ -153,7 +153,6 @@ export default function AppShellContent({
     isDashboardRefreshEnabled,
   );
   useAppShellRuntimeLifecycle({
-    backgroundOptimization: appSettings.backgroundOptimization,
     classificationReady,
     isDataRefreshEnabled,
     isDashboardRefreshEnabled,

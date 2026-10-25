@@ -61,7 +61,6 @@ interface ReleaseDefaultSettingsProfile {
     | "xcode";
   launchAtLogin: boolean;
   startMinimized: boolean;
-  backgroundOptimization: boolean;
   onboardingCompleted: boolean;
   webActivityEnabled: boolean;
   webActivityPort: number;
@@ -90,7 +89,6 @@ export const RELEASE_DEFAULT_SETTINGS: ReleaseDefaultSettingsProfile = {
   colorSchemeDark: "default",
   launchAtLogin: true,
   startMinimized: true,
-  backgroundOptimization: true,
   onboardingCompleted: true,
   webActivityEnabled: false,
   webActivityPort: 12345,

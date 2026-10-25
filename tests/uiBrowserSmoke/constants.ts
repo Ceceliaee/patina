@@ -9,6 +9,6 @@ export const SETTINGS_MARKER = "主题模式";
 export const APP_LOADING_VIEW = COPY["zh-CN"].app.loadingView;
 export const HISTORY_LOADING_VIEW = COPY["zh-CN"].common.loading;
 export const HISTORY_TITLE_DETAIL_COUNT = 10;
-export const LONG_BACKGROUND_DELAY_MS = 3 * 60 * 1000;
+export const LONG_BACKGROUND_DELAY_MS = 30_000;
 export const DEFAULT_TIMEOUT_MS = 15_000;
 export const FIRST_RENDER_TIMEOUT_MS = process.env.CI ? 45_000 : DEFAULT_TIMEOUT_MS;

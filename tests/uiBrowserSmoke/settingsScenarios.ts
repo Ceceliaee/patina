@@ -112,6 +112,17 @@ async function dispatchSelectKey(
 
 export async function runSettingsScenarios(context: BrowserSmokeContext) {
   const { appUrl, client, sessionId, runTest } = context;
+  await runTest("runtime settings expose only startup preferences", async () => {
+    await evaluate(client, sessionId, `document.querySelector('[data-sidebar-nav-item="settings"]')?.click()`);
+    await waitForExpression(client, sessionId, `document.querySelector('.settings-preference-group') !== null`);
+    const text = getLocaleText("zh-CN");
+    const preferences = await evaluate(client, sessionId, `(() => {
+      const group = [...document.querySelectorAll('.settings-preference-group')]
+        .find(group => group.querySelector('h3')?.textContent === ${jsonString(text.settings.runtimeBehaviorTitle)});
+      return [...(group?.querySelectorAll('[role="switch"]') ?? [])].map(control => control.getAttribute('aria-label'));
+    })()`);
+    assert.deepEqual(preferences, [text.accessibility.settings.toggleLaunchAtLogin, text.accessibility.settings.toggleStartMinimized]);
+  });
   const assertDialogHeaderCentered = async (selector: string) => {
     assert.equal(await evaluate(client, sessionId, `(() => {
       const header = document.querySelector(${jsonString(selector)} + ' .qp-dialog-header');
@@ -308,7 +319,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
 
   await runTest("settings preference help is available on focus and dismisses with Escape", async () => {
     const selector = '.settings-preference-row .settings-help-icon';
-    await waitForExpression(client, sessionId, `document.querySelectorAll('${selector}').length === 4`);
+    await waitForExpression(client, sessionId, `document.querySelectorAll('${selector}').length === 3`);
     try {
       await evaluate(client, sessionId, `document.querySelector('${selector}').focus()`);
       await waitForExpression(client, sessionId, `(() => {
@@ -466,9 +477,16 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
 
     let languageTriggerWidth: number | null = null;
     const assertRestoreRow = async (locale: typeof SUPPORTED_LOCALES[number]) => {
-      const label = (await loadLocaleText(locale)).settings.backupRestoreActionTitle;
+      const copy = await loadLocaleText(locale);
+      const label = copy.settings.backupRestoreActionTitle;
       await waitForExpression(client, sessionId, `document.documentElement.lang === ${jsonString(locale)}
         && [...document.querySelectorAll('.qp-action-row p')].some(node => node.textContent.trim() === ${jsonString(label)})`);
+      assert.deepEqual(await evaluate(client, sessionId, `(() => {
+        const group = [...document.querySelectorAll('.settings-preference-group')]
+          .find(group => group.querySelector('h3')?.textContent === ${jsonString(copy.settings.runtimeBehaviorTitle)});
+        return { labels: [...(group?.querySelectorAll('[role="switch"]') ?? [])].map(control => control.getAttribute('aria-label')),
+          help: group?.querySelectorAll('.settings-help-icon').length, rows: group?.querySelectorAll('.settings-preference-row').length };
+      })()`), { labels: [copy.accessibility.settings.toggleLaunchAtLogin, copy.accessibility.settings.toggleStartMinimized], help: 0, rows: 2 }, locale);
       const result = await evaluate(client, sessionId, `(() => {
         const title = [...document.querySelectorAll('.qp-action-row p')].find(node => node.textContent.trim() === ${jsonString(label)});
         const row = title?.closest('.qp-action-row');

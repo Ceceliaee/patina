@@ -6,6 +6,30 @@ import { DASHBOARD_MARKERS, EXPECTED_NAV_LABELS, FIRST_RENDER_TIMEOUT_MS } from 
 export async function runStartupScenarios(context: BrowserSmokeContext) {
   const { client, sessionId, runTest } = context;
 
+  await runTest("background cache releases at 30 seconds and cancels on foreground and unmount", async () => {
+    await waitForExpression(client, sessionId, "Boolean(globalThis.__PATINA_MAIN_WINDOW_READY_EVIDENCE)");
+    await evaluate(client, sessionId, `import('/tests/uiBrowserSmoke/backgroundCacheProbe.tsx').then(({mountBackgroundCacheProbe}) => { window.__backgroundCacheProbe = mountBackgroundCacheProbe(); })`);
+    try {
+      for (let cycle = 0; cycle < 3; cycle++) {
+        await evaluate(client, sessionId, `window.__backgroundCacheProbe.seed(); window.__backgroundCacheProbe.render(false)`);
+        await waitForExpression(client, sessionId, "window.__backgroundCacheProbe.read().timers === 1");
+        assert.deepEqual(await evaluate(client, sessionId, "window.__backgroundCacheProbe.advance(29_999); window.__backgroundCacheProbe.read()"), {timers: 1, cached: true});
+        await evaluate(client, sessionId, "window.__backgroundCacheProbe.render(true)");
+        await waitForExpression(client, sessionId, "window.__backgroundCacheProbe.read().timers === 0");
+        assert.deepEqual(await evaluate(client, sessionId, "window.__backgroundCacheProbe.advance(1); window.__backgroundCacheProbe.read()"), {timers: 0, cached: true});
+      }
+      await evaluate(client, sessionId, "window.__backgroundCacheProbe.render(false)");
+      await waitForExpression(client, sessionId, "window.__backgroundCacheProbe.read().timers === 1");
+      assert.deepEqual(await evaluate(client, sessionId, "window.__backgroundCacheProbe.advance(29_999); window.__backgroundCacheProbe.read()"), {timers: 1, cached: true});
+      assert.deepEqual(await evaluate(client, sessionId, "window.__backgroundCacheProbe.advance(1); window.__backgroundCacheProbe.read()"), {timers: 0, cached: false});
+      await evaluate(client, sessionId, "window.__backgroundCacheProbe.render(true); window.__backgroundCacheProbe.render(false)");
+      await waitForExpression(client, sessionId, "window.__backgroundCacheProbe.read().timers === 1");
+    } finally {
+      assert.equal(await evaluate(client, sessionId, "window.__backgroundCacheProbe.dispose()"), 0);
+      await evaluate(client, sessionId, "delete window.__backgroundCacheProbe");
+    }
+  });
+
   await runTest("data changes invalidate a warmed catalog and refresh its mounted consumer", async () => {
     await waitForExpression(client, sessionId, "Boolean(globalThis.__PATINA_EMIT_TAURI_EVENT && globalThis.__PATINA_MAIN_WINDOW_READY_EVIDENCE)");
     await evaluate(client, sessionId, `(async () => {
