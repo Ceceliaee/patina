@@ -7,6 +7,63 @@ use sqlx::Executor;
 use std::panic::AssertUnwindSafe;
 
 #[tokio::test]
+async fn snapshot_restore_tolerates_retired_background_preferences() {
+    use crate::data::repositories::app_settings::load_desktop_behavior_settings;
+    use crate::domain::settings::{StartupSource, StartupUiStrategy};
+    let dir = tests::SnapshotTestDirectory::new("snapshot-retired-background");
+    let mut pools = Vec::new();
+    let mut prepared_sources = Vec::new();
+    let outcome = AssertUnwindSafe(async {
+        let source_path = dir.0.join("source.db");
+        let source = crate::data::sqlite_pool::open_single_connection_sqlite_pool(&source_path, true).await.unwrap();
+        pools.push(source.clone());
+        crate::data::sqlite_pool::prepare_pool_schema(&source, &source_path).await.unwrap();
+        source.execute("INSERT INTO settings(key,value) VALUES('language','en-US'),('background_optimization','0'); INSERT INTO sessions(app_name,exe_name,start_time,end_time,duration) VALUES('Source','source.exe',1000,2000,1000);").await.unwrap();
+        let archive = dir.0.join("source.zip");
+        for source_value in ["0", "1"] {
+            sqlx::query("UPDATE settings SET value=? WHERE key='background_optimization'").bind(source_value).execute(&source).await.unwrap();
+            write_snapshot_archive(&source, &archive, "test").await.unwrap();
+            for strategy in [RestoreStrategy::Replace, RestoreStrategy::Merge] {
+                prepared_sources.push(prepare_snapshot_backup(&archive, strategy).await.unwrap());
+                let prepared_path = &prepared_sources.last().unwrap().db_path;
+                let restored = open_snapshot_pool(prepared_path, false).await.unwrap();
+                pools.push(restored.clone());
+                assert_eq!(load_desktop_behavior_settings(&restored).await.unwrap().startup_ui_strategy(StartupSource::Manual), StartupUiStrategy::OptimizeHidden);
+                assert_eq!(count_table(&restored,"sessions").await.unwrap(),1);
+                if strategy == RestoreStrategy::Merge {
+                    for target_value in [None, Some("0"), Some("1")] {
+                        let target_path = dir.0.join(format!("target-{source_value}-{}.db", target_value.unwrap_or("missing")));
+                        let target = crate::data::sqlite_pool::open_single_connection_sqlite_pool(&target_path, true).await.unwrap();
+                        pools.push(target.clone());
+                        crate::data::sqlite_pool::prepare_pool_schema(&target, &target_path).await.unwrap();
+                        target.execute("INSERT INTO settings(key,value) VALUES('language','zh-CN')").await.unwrap();
+                        if let Some(value) = target_value {
+                            sqlx::query("INSERT INTO settings(key,value) VALUES('background_optimization',?)").bind(value).execute(&target).await.unwrap();
+                        }
+                        for _ in 0..2 {
+                            let candidate = open_snapshot_pool(prepared_path, false).await.unwrap();
+                            pools.push(candidate.clone());
+                            restore::merge_snapshot_backup(candidate,&target).await.unwrap();
+                            assert_eq!(load_desktop_behavior_settings(&target).await.unwrap().startup_ui_strategy(StartupSource::Manual), StartupUiStrategy::OptimizeHidden);
+                            let values: Vec<(String,String)> = sqlx::query_as("SELECT key,value FROM settings WHERE key IN ('language','background_optimization') ORDER BY key").fetch_all(&target).await.unwrap();
+                            assert_eq!(values,vec![("background_optimization".into(),target_value.unwrap_or(source_value).into()),("language".into(),"zh-CN".into())]);
+                            assert_eq!(count_table(&target,"sessions").await.unwrap(),1);
+                        }
+                    }
+                }
+            }
+        }
+    }).catch_unwind().await;
+    for pool in pools {
+        pool.close().await;
+    }
+    drop(prepared_sources);
+    if let Err(panic) = outcome {
+        std::panic::resume_unwind(panic);
+    }
+}
+
+#[tokio::test]
 async fn snapshot_preparation_seals_open_activity_using_source_evidence() {
     for strategy in [RestoreStrategy::Replace, RestoreStrategy::Merge] {
         let source = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();

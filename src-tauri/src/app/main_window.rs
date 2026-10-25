@@ -22,7 +22,7 @@ const MAIN_WINDOW_WIDTH: f64 = 1100.0;
 const MAIN_WINDOW_HEIGHT: f64 = 736.0;
 const MAIN_WINDOW_MIN_WIDTH: f64 = 900.0;
 const MAIN_WINDOW_MIN_HEIGHT: f64 = 636.0;
-const MAIN_WINDOW_DESTROY_AFTER_BACKGROUND_SECS: u64 = 3 * 60;
+const MAIN_WINDOW_DESTROY_AFTER_BACKGROUND_SECS: u64 = 30;
 const MAIN_WINDOW_READY_TIMEOUT_SECS: u64 = 8;
 const MAIN_WINDOW_LIVENESS_TIMEOUT_MILLIS: u64 = 1_500;
 const MAIN_WINDOW_GENERATION_PROPERTY: &str = "__PATINA_MAIN_WINDOW_GENERATION__";
@@ -405,6 +405,7 @@ async fn minimize_main_window_to_widget<R: Runtime + 'static>(
         ));
     }
 
+    schedule_main_window_destroy_after_background(app.clone(), hide_generation);
     Ok(())
 }
 
@@ -460,18 +461,11 @@ pub(crate) fn hide_main_window_for_background<R: Runtime + 'static>(
     let hide_generation = app.state::<MainWindowLifecycleState>().hide();
     let _ = window.hide();
 
-    if app
-        .state::<DesktopBehaviorState>()
-        .snapshot()
-        .should_optimize_background_resources()
-    {
-        schedule_main_window_destroy_after_background(app.clone(), hide_generation);
-    }
+    schedule_main_window_destroy_after_background(app.clone(), hide_generation);
 }
 
 pub(crate) fn register_hidden_main_window_startup<R: Runtime + 'static>(
     app: &AppHandle<R>,
-    optimize_background_resources: bool,
 ) -> bool {
     let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
         return false;
@@ -488,9 +482,7 @@ pub(crate) fn register_hidden_main_window_startup<R: Runtime + 'static>(
         return false;
     };
 
-    if optimize_background_resources {
-        schedule_main_window_destroy_after_background(app.clone(), hide_generation);
-    }
+    schedule_main_window_destroy_after_background(app.clone(), hide_generation);
 
     true
 }
@@ -730,14 +722,6 @@ fn schedule_main_window_destroy_after_background<R: Runtime + 'static>(
             MAIN_WINDOW_DESTROY_AFTER_BACKGROUND_SECS,
         ))
         .await;
-
-        if !app
-            .state::<DesktopBehaviorState>()
-            .snapshot()
-            .should_optimize_background_resources()
-        {
-            return;
-        }
 
         let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
             return;

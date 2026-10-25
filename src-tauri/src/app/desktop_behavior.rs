@@ -57,13 +57,6 @@ pub(crate) fn set_launch_behavior<R: Runtime>(
     Ok(())
 }
 
-pub(crate) fn set_background_optimization(
-    state: &DesktopBehaviorState,
-    background_optimization: bool,
-) {
-    let _ = state.update_background_optimization(background_optimization);
-}
-
 fn replace_desktop_behavior_settings<R: Runtime>(
     app: &AppHandle<R>,
     settings: DesktopBehaviorSettings,
@@ -94,8 +87,7 @@ pub(crate) fn apply_startup_desktop_behavior<R: Runtime + 'static>(
         StartupUiStrategy::Show => {
             show_main_window(app, main_window::MainWindowShowReason::Startup(source))
         }
-        StartupUiStrategy::KeepHidden => start_in_tray(app, false),
-        StartupUiStrategy::OptimizeHidden => start_in_tray(app, true),
+        StartupUiStrategy::OptimizeHidden => start_in_tray(app),
     }
 }
 
@@ -103,17 +95,14 @@ fn should_sync_autostart(source: StartupSource) -> bool {
     source != StartupSource::SettingsRecovery
 }
 
-fn start_in_tray<R: Runtime + 'static>(
-    app: &AppHandle<R>,
-    optimize_background_resources: bool,
-) -> bool {
+fn start_in_tray<R: Runtime + 'static>(app: &AppHandle<R>) -> bool {
     app.state::<BackgroundEntryState>().begin_startup();
     if let Err(error) = apply_tray_visibility(app) {
         eprintln!("[startup] failed to apply tray visibility: {error}");
         return show_main_window(app, main_window::MainWindowShowReason::StartupRecovery);
     }
 
-    if !main_window::register_hidden_main_window_startup(app, optimize_background_resources) {
+    if !main_window::register_hidden_main_window_startup(app) {
         eprintln!("[startup] hidden main window registration was rejected; showing main window");
         return show_main_window(app, main_window::MainWindowShowReason::StartupRecovery);
     }

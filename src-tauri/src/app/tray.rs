@@ -367,9 +367,21 @@ pub(crate) fn apply_language_setting_change<R: Runtime>(
     Ok(())
 }
 
+fn show_main_window_from_event<R: Runtime>(
+    app: &AppHandle<R>,
+    reason: main_window::MainWindowShowReason,
+) {
+    let app = app.clone();
+    // Return to native event dispatch before rebuilding a released WebView.
+    tauri::async_runtime::spawn(async move {
+        tokio::task::yield_now().await;
+        show_main_window(&app, reason);
+    });
+}
+
 pub(crate) fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
     if event.id() == TRAY_MENU_SHOW_ID {
-        show_main_window(app, main_window::MainWindowShowReason::TrayMenu);
+        show_main_window_from_event(app, main_window::MainWindowShowReason::TrayMenu);
         return;
     }
 
@@ -410,7 +422,7 @@ pub(crate) fn handle_tray_icon_event<R: Runtime>(app: &AppHandle<R>, event: Tray
             button: MouseButton::Left,
             ..
         } => {
-            show_main_window(app, main_window::MainWindowShowReason::TrayIcon);
+            show_main_window_from_event(app, main_window::MainWindowShowReason::TrayIcon);
         }
         _ => {}
     }
@@ -420,7 +432,7 @@ pub(crate) fn handle_window_event<R: Runtime>(window: &Window<R>, event: &Window
     if window.label() == widget::WIDGET_WINDOW_LABEL {
         if let WindowEvent::CloseRequested { api, .. } = event {
             api.prevent_close();
-            show_main_window(
+            show_main_window_from_event(
                 window.app_handle(),
                 main_window::MainWindowShowReason::Widget,
             );
@@ -452,6 +464,12 @@ pub(crate) fn handle_window_event<R: Runtime>(window: &Window<R>, event: &Window
             api.prevent_close();
             widget::close_widget_window(app);
             main_window::hide_main_window_for_background(app, window);
+        } else if !exit_requested {
+            // An intentional exit must win over visible-window recovery and
+            // any parked Widget that would otherwise keep the app alive.
+            api.prevent_close();
+            app.state::<AppExitState>().request_exit();
+            app.exit(0);
         }
     }
 }
@@ -1000,24 +1018,20 @@ mod tests {
                         visible && close == "tray"
                     );
                     for minimized in [false, true] {
-                        for optimized in [false, true] {
-                            let settings = settings
-                                .with_launch_behavior(false, minimized)
-                                .with_background_optimization(optimized);
-                            let mut reference = settings;
-                            reference.show_tray_icon = !visible;
-                            for source in [
-                                crate::domain::settings::StartupSource::Manual,
-                                crate::domain::settings::StartupSource::Autostart,
-                                crate::domain::settings::StartupSource::UpdateRestart,
-                                crate::domain::settings::StartupSource::StorageRestart,
-                                crate::domain::settings::StartupSource::SettingsRecovery,
-                            ] {
-                                assert_eq!(
-                                    settings.startup_ui_strategy(source),
-                                    reference.startup_ui_strategy(source)
-                                );
-                            }
+                        let settings = settings.with_launch_behavior(false, minimized);
+                        let mut reference = settings;
+                        reference.show_tray_icon = !visible;
+                        for source in [
+                            crate::domain::settings::StartupSource::Manual,
+                            crate::domain::settings::StartupSource::Autostart,
+                            crate::domain::settings::StartupSource::UpdateRestart,
+                            crate::domain::settings::StartupSource::StorageRestart,
+                            crate::domain::settings::StartupSource::SettingsRecovery,
+                        ] {
+                            assert_eq!(
+                                settings.startup_ui_strategy(source),
+                                reference.startup_ui_strategy(source)
+                            );
                         }
                     }
                 }

@@ -18,7 +18,6 @@ const APP_COMMANDS: &[&str] = &[
     "cmd_set_afk_threshold",
     "cmd_set_desktop_behavior",
     "cmd_set_launch_behavior",
-    "cmd_set_background_optimization",
     "cmd_commit_app_settings",
     "cmd_commit_classification_settings",
     "cmd_get_web_links",

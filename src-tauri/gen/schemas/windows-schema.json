@@ -927,12 +927,6 @@
           "markdownDescription": "Enables the cmd_set_afk_threshold command without any pre-configured scope."
         },
         {
-          "description": "Enables the cmd_set_background_optimization command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-set-background-optimization",
-          "markdownDescription": "Enables the cmd_set_background_optimization command without any pre-configured scope."
-        },
-        {
           "description": "Enables the cmd_set_desktop_behavior command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-set-desktop-behavior",
@@ -1585,12 +1579,6 @@
           "type": "string",
           "const": "deny-cmd-set-afk-threshold",
           "markdownDescription": "Denies the cmd_set_afk_threshold command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the cmd_set_background_optimization command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-set-background-optimization",
-          "markdownDescription": "Denies the cmd_set_background_optimization command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_set_desktop_behavior command without any pre-configured scope.",

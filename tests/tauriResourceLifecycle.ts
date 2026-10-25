@@ -59,6 +59,10 @@ export async function verifyDesktopResourceLifecycle(
   });
   await client.command("Network.enable");
   const sample = async (cycle: number | "idle") => {
+    // Another desktop window can occlude the WebView during the quiet interval.
+    // Restore the real foreground before comparing visible-page resources.
+    await evaluate('window.__TAURI_INTERNALS__.invoke("cmd_show_main_window")');
+    await client.command("Page.bringToFront");
     // Native visibility can precede React's visibility effects. Sample only
     // after the visible page has resumed its ordinary health polling.
     const before = healthRequests;

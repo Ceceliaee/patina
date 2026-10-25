@@ -54,23 +54,6 @@ impl DesktopBehaviorState {
         }
     }
 
-    pub(crate) fn update_background_optimization(
-        &self,
-        background_optimization: bool,
-    ) -> DesktopBehaviorSettings {
-        match self.inner.lock() {
-            Ok(mut guard) => {
-                *guard = guard.with_background_optimization(background_optimization);
-                *guard
-            }
-            Err(poisoned) => {
-                let mut guard = poisoned.into_inner();
-                *guard = guard.with_background_optimization(background_optimization);
-                *guard
-            }
-        }
-    }
-
     pub(crate) fn replace(&self, next: DesktopBehaviorSettings) -> DesktopBehaviorSettings {
         match self.inner.lock() {
             Ok(mut guard) => {

@@ -208,7 +208,7 @@ Bundle 治理的目标不是让构建产物永远不增长，而是让代码只�
 - 高频平台查询应优先考虑短 TTL 缓存、negative cache、in-flight 合并和退避，避免后台采样对同一资源重复开销
 - widget WebView 生命周期、启动暖机收缩、透明窗口策略和 foreground event hook 属于体验敏感实验项；未证明收益明显且手感无损前，不应默认启用
 - widget 隐藏路径如果启用资源回收，应先保持即时 park 以保护收起手感，再通过 generation/token 防护做延迟销毁，避免旧 timer 销毁新唤出的 widget
-- 后台优化的既有默认值由 `src-tauri/src/domain/settings.rs` 持有，已有用户选择保持不变。新增资源策略或改变默认值前，需比较后台资源、重开延迟与状态恢复；用户可见文案不暴露具体等待阈值，内部实现用统一阈值和 generation/token 防护，确保短时间重复打开关闭仍走快速复用路径
+- 主窗口后台资源回收固定启用，旧 `background_optimization` 配置不再参与运行策略。窗口销毁条件和等待阈值由 `src-tauri/src/app/main_window.rs` 持有，前端页面缓存清理由其生命周期 owner 管理，两者均等待 30 秒，并分别复核适用的后台状态。主窗口销毁会同时释放所属页面内存，不依赖前端 timer 先执行；用户可见文案不暴露具体等待阈值。改变资源策略或等待时间前，需比较后台资源、重开延迟与状态恢复；保留原生可见性复核与 generation/token 防护，确保等待期内重开仍能快速复用，旧任务不能销毁新唤出的窗口
 
 性能入口与场景清单由 `package.json` 和 benchmark 脚本拥有。长期口径是固定场景后比较 average、p50、p95 与 max，以子进程失败、预算超限或不允许的 SQLite table scan 为失败；不得并发运行制造虚假吞吐，也不得把 stub browser 路径描述成真实 SQLite I/O。生命周期测量必须等待可信 read model 与实际内容提交，不能通过删除加载工作或轮询过早 DOM 节点改善数字。
 

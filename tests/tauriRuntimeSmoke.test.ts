@@ -7,6 +7,7 @@ import { verifyBackupRetirementRuntime } from "./tauriBackupRetirementRuntime.ts
 import { installDesktopResourceIntervalProbe, verifyDesktopResourceLifecycle } from "./tauriResourceLifecycle.ts";
 import { verifyAppIconRuntime } from "./tauriAppIconRuntime.ts";
 import { verifyWebviewRecovery, verifyWebviewRecoveryLimit } from "./tauriWebviewRecovery.ts";
+import { readTrackerProgress, verifyRestoredBackgroundPolicy } from "./tauriBackgroundPolicyRuntime.ts";
 import { installLinkedRankingClock, seedLinkedApplicationRanking, verifyLinkedApplicationDetailAndTrend, verifyLinkedApplicationRanking, verifyLinkedApplicationsRuntime } from "./tauriLinkedApplicationsRuntime.ts";
 import { deleteWebHistoryRuntime, verifyWebLinksRuntime, verifyAutomaticGroupingBackupRuntime } from "./tauriWebLinksRuntime.ts";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
@@ -356,6 +357,7 @@ async function verifyBackupReplaceRuntime(client: CdpConnection, root: string) {
       "db = sqlite3.connect(sys.argv[1])",
       "start, duration = int(sys.argv[4]), int(sys.argv[5])",
       "db.execute('INSERT INTO sessions (app_name, exe_name, window_title, start_time, end_time, duration, continuity_group_start_time) VALUES (?, ?, ?, ?, ?, ?, ?)', (sys.argv[2], sys.argv[3], '', start, start + duration, duration, start))",
+      "db.execute(\"INSERT OR REPLACE INTO settings(key,value) VALUES('background_optimization','0')\")",
       "db.commit()",
       "db.close()",
     ].join("; "), dbPath, name, exe, String(start), String(duration)], { encoding: "utf8", timeout: 10_000 });
@@ -681,6 +683,9 @@ async function verifyBackupReplaceRuntime(client: CdpConnection, root: string) {
     await waitFor("resumed tracker continues writing to the restored database", async () => (
       await readHeartbeat() > firstRestoredHeartbeat
     ), 10_000);
+    assert.deepEqual(await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT value FROM settings WHERE key = ?", ["background_optimization"]), [{ value: "0" }]);
+    await assert.rejects(() => evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_set_background_optimization", {backgroundOptimization:false})`));
+    await assert.rejects(() => evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {mutations:[{key:"language",value:"en-US"},{key:"background_optimization",value:"0"}]})`));
     assert.deepEqual(readdirSync(join(root, "data")).filter(name => name.startsWith(".patina-restore-")), []);
     console.log("PATINA_BACKUP_REPLACE_RUNTIME_REPORT", JSON.stringify({
       environment: "isolated debug Tauri/WebView2 with real SQLite",
@@ -716,6 +721,8 @@ const logs: string[] = [];
 const webviewDiagnostics: string[] = [];
 let appLaunchObserved = false;
 let appLogTail = "";
+let hiddenStartupObservedAt: number | null = null;
+let hiddenStartupDestroyedAt: number | null = null;
 let appProcess: ChildProcess | null = null;
 let viteServer: PreviewServer | null = null;
 let client: CdpConnection | null = null;
@@ -760,6 +767,7 @@ try {
   }, 30_000);
   console.log("PATINA_FRONTEND_SERVE_REPORT", JSON.stringify({
     mode: "production-static-preview",
+    url: frontendUrl,
     output: "isolated",
     files: readdirSync(frontendDistDir, { recursive: true, withFileTypes: true })
       .filter((entry) => entry.isFile())
@@ -808,6 +816,12 @@ try {
     process.stdout.write(`${new Date().toISOString()} ${text}`);
     logs.push(text);
     appLogTail = `${appLogTail}${text}`.slice(-4_096);
+    if (hiddenStartupObservedAt === null && /\[startup\] source=manual strategy=start-in-tray-optimized/.test(appLogTail)) {
+      hiddenStartupObservedAt = Date.now();
+    }
+    if (hiddenStartupDestroyedAt === null && /event=destroyed generation=1[^\r\n]*reason=background-idle/.test(appLogTail)) {
+      hiddenStartupDestroyedAt = Date.now();
+    }
     if (/Running[\s\S]*patina\.exe/i.test(appLogTail)) {
       appLaunchObserved = true;
     }
@@ -857,94 +871,6 @@ try {
     "real Tauri runtime",
     async () => evaluate(client!, "Boolean(window.__TAURI_INTERNALS__ && document.querySelector('#root')?.children.length)"),
     30_000,
-  );
-
-  await verifyWebLinksRuntime((expression) => evaluate(client!, expression));
-  await verifyAutomaticGroupingBackupRuntime((expression) => evaluate(client!, expression), root);
-  bridgePortBlocker = await occupyPort();
-  const bridgeBlockerAddress = bridgePortBlocker.address();
-  assert.ok(bridgeBlockerAddress && typeof bridgeBlockerAddress === "object");
-  webActivityBridgePort = bridgeBlockerAddress.port;
-  await evaluate(client, `
-    window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
-      mutations: [
-        {
-          key: "web_activity_enabled",
-          value: "1",
-        },
-        {
-          key: "web_activity_port",
-          value: "${webActivityBridgePort}",
-        },
-        {
-          key: "web_activity_token",
-          value: "runtime-smoke-bridge-secret",
-        },
-      ],
-    })
-  `);
-  const retryingBridgeDiagnostics = await waitFor(
-    "web activity bridge retry wait",
-    async () => {
-      const diagnostics = await evaluate(
-        client!,
-        `window.__TAURI_INTERNALS__.invoke("cmd_get_resource_diagnostics")`,
-      ) as {
-        web_activity_bridge?: {
-          runtime?: {
-            status?: string;
-            port?: number | null;
-            last_error_category?: string | null;
-            retry_count?: number;
-          };
-        };
-      };
-      return diagnostics.web_activity_bridge?.runtime?.status === "retry-wait"
-        ? diagnostics
-        : null;
-    },
-    10_000,
-  );
-  assert.equal(
-    retryingBridgeDiagnostics.web_activity_bridge?.runtime?.port,
-    webActivityBridgePort,
-  );
-  assert.equal(
-    retryingBridgeDiagnostics.web_activity_bridge?.runtime?.last_error_category,
-    "address-in-use",
-  );
-  assert.ok(
-    Number(retryingBridgeDiagnostics.web_activity_bridge?.runtime?.retry_count) >= 1,
-  );
-  assert.doesNotMatch(JSON.stringify(retryingBridgeDiagnostics), /token/i);
-
-  await closeNetServer(bridgePortBlocker);
-  bridgePortBlocker = null;
-  const listeningBridgeDiagnostics = await waitFor(
-    "web activity bridge automatic port recovery",
-    async () => {
-      const diagnostics = await evaluate(
-        client!,
-        `window.__TAURI_INTERNALS__.invoke("cmd_get_resource_diagnostics")`,
-      ) as {
-        web_activity_bridge?: {
-          runtime?: {
-            status?: string;
-            retry_count?: number;
-            last_error_category?: string | null;
-          };
-        };
-      };
-      return diagnostics.web_activity_bridge?.runtime?.status === "listening"
-        ? diagnostics
-        : null;
-    },
-    35_000,
-  );
-  assert.equal(listeningBridgeDiagnostics.web_activity_bridge?.runtime?.retry_count, 0);
-  assert.equal(
-    listeningBridgeDiagnostics.web_activity_bridge?.runtime?.last_error_category,
-    null,
   );
 
   let mainWindowReadinessObservation: unknown = null;
@@ -1045,33 +971,26 @@ try {
     /\[tray\] visibility-applied visible=false created=true/.test(logs.join("")), 10_000);
   const hiddenTrayLogStart = logs.join("").length;
 
-  let destroyCommandError: string | null = null;
-  try {
-    await evaluate(
-      client,
-      `window.__TAURI_INTERNALS__.invoke("cmd_e2e_destroy_hidden_main_window")`,
-    );
-  } catch (error) {
-    // Destroying the WebView can close CDP before the command response arrives.
-    destroyCommandError = String(error);
-  }
   client.close();
   client = null;
-  try {
-    await waitFor(
-      "destroyed main WebView target to disappear",
-      async () => (await findMainTarget(devtoolsPort)) ? null : true,
-      10_000,
-    );
-  } catch (error) {
-    throw new AggregateError([
-      error,
-      new Error(`E2E destroy command error: ${destroyCommandError ?? "none"}`),
-      new Error(`main-window log tail: ${logs.join("").slice(-4_096)}`),
-    ], "hidden main WebView destruction was not observed");
-  }
+  await waitFor("natural 30-second hidden startup destruction", async () => (
+    /event=destroyed[^\r\n]*reason=background-idle/.test(logs.join(""))
+      && !(await findMainTarget(devtoolsPort))
+  ), 45_000);
+  // Lifecycle elapsed_ms restarts on each page load; observe native startup
+  // and destruction independently of the renderer and its load epochs.
+  assert.ok(hiddenStartupObservedAt !== null && hiddenStartupDestroyedAt !== null,
+    "native startup and natural destruction observations are required");
+  const naturalDestroyElapsedMs = hiddenStartupDestroyedAt - hiddenStartupObservedAt;
+  assert.ok(naturalDestroyElapsedMs >= 30_000 && naturalDestroyElapsedMs < 45_000,
+    `hidden startup must release at 30 seconds, observed ${naturalDestroyElapsedMs}ms`);
+  const destroyedAt = Date.now();
+  await waitFor("tracker persists after the last WebView is released", () =>
+    readTrackerProgress(join(root, "data", "patina.db")) > destroyedAt, 10_000);
+  console.log("PATINA_BACKGROUND_POLICY_REPORT", JSON.stringify({ naturalDestroyElapsedMs, trackerPersistedAfterDestruction: true }));
 
-  const secondaryInstance = spawnSync(RUNTIME_BINARY_PATH, [], {
+  const reopenFromSecondaryInstance = () => {
+    const secondaryInstance = spawnSync(RUNTIME_BINARY_PATH, [], {
     cwd: process.cwd(),
     encoding: "utf8",
     timeout: 10_000,
@@ -1086,12 +1005,11 @@ try {
       CARGO_TARGET_DIR: RUNTIME_TARGET_DIR,
       TAURI_CONFIG: tauriConfigOverrideJson,
     },
-  });
-  assert.equal(
-    secondaryInstance.status,
-    0,
-    `secondary instance failed: ${secondaryInstance.stderr || secondaryInstance.stdout}`,
-  );
+    });
+    assert.equal(secondaryInstance.status, 0,
+      `secondary instance failed: ${secondaryInstance.stderr || secondaryInstance.stdout}`);
+  };
+  reopenFromSecondaryInstance();
 
   const recoveredTarget = await waitFor(
     "single-instance main WebView recreation",
@@ -1158,6 +1076,94 @@ try {
     /event=ready-timeout/,
     "normal startup and tray reveal must not depend on the readiness watchdog",
   );
+  await verifyWebLinksRuntime((expression) => evaluate(client!, expression));
+  await verifyAutomaticGroupingBackupRuntime((expression) => evaluate(client!, expression), root);
+  bridgePortBlocker = await occupyPort();
+  const bridgeBlockerAddress = bridgePortBlocker.address();
+  assert.ok(bridgeBlockerAddress && typeof bridgeBlockerAddress === "object");
+  webActivityBridgePort = bridgeBlockerAddress.port;
+  await evaluate(client, `
+    window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
+      mutations: [
+        {
+          key: "web_activity_enabled",
+          value: "1",
+        },
+        {
+          key: "web_activity_port",
+          value: "${webActivityBridgePort}",
+        },
+        {
+          key: "web_activity_token",
+          value: "runtime-smoke-bridge-secret",
+        },
+      ],
+    })
+  `);
+  const retryingBridgeDiagnostics = await waitFor(
+    "web activity bridge retry wait",
+    async () => {
+      const diagnostics = await evaluate(
+        client!,
+        `window.__TAURI_INTERNALS__.invoke("cmd_get_resource_diagnostics")`,
+      ) as {
+        web_activity_bridge?: {
+          runtime?: {
+            status?: string;
+            port?: number | null;
+            last_error_category?: string | null;
+            retry_count?: number;
+          };
+        };
+      };
+      return diagnostics.web_activity_bridge?.runtime?.status === "retry-wait"
+        ? diagnostics
+        : null;
+    },
+    10_000,
+  );
+  assert.equal(
+    retryingBridgeDiagnostics.web_activity_bridge?.runtime?.port,
+    webActivityBridgePort,
+  );
+  assert.equal(
+    retryingBridgeDiagnostics.web_activity_bridge?.runtime?.last_error_category,
+    "address-in-use",
+  );
+  assert.ok(
+    Number(retryingBridgeDiagnostics.web_activity_bridge?.runtime?.retry_count) >= 1,
+  );
+  assert.doesNotMatch(JSON.stringify(retryingBridgeDiagnostics), /token/i);
+
+  await closeNetServer(bridgePortBlocker);
+  bridgePortBlocker = null;
+  const listeningBridgeDiagnostics = await waitFor(
+    "web activity bridge automatic port recovery",
+    async () => {
+      const diagnostics = await evaluate(
+        client!,
+        `window.__TAURI_INTERNALS__.invoke("cmd_get_resource_diagnostics")`,
+      ) as {
+        web_activity_bridge?: {
+          runtime?: {
+            status?: string;
+            retry_count?: number;
+            last_error_category?: string | null;
+          };
+        };
+      };
+      return diagnostics.web_activity_bridge?.runtime?.status === "listening"
+        ? diagnostics
+        : null;
+    },
+    35_000,
+  );
+  assert.equal(listeningBridgeDiagnostics.web_activity_bridge?.runtime?.retry_count, 0);
+  assert.equal(
+    listeningBridgeDiagnostics.web_activity_bridge?.runtime?.last_error_category,
+    null,
+  );
+
   const firstVisibleAppearance = await evaluate(client, `({
     frameConnected: Boolean(document.querySelector(".qp-app-frame")?.isConnected),
     frameWidth: document.querySelector(".qp-app-frame")?.getBoundingClientRect().width ?? 0,
@@ -2283,6 +2289,8 @@ try {
   assert.equal(structuredError.retryable, false);
 
   await verifyBackupReplaceRuntime(client, root);
+  client = await verifyRestoredBackgroundPolicy(client, devtoolsPort, runtimeDatabasePath,
+    () => logs.join(""));
   await verifySqlBoundaryRuntime(expression => evaluate(client!, expression), root);
   await verifyWebDavRuntime((expression) => evaluate(client!, expression));
   await deleteWebHistoryRuntime((expression) => evaluate(client!, expression));
@@ -2465,6 +2473,28 @@ try {
   }
   selected = await storageRestart("cmd_restart_and_apply_restore_default_storage_migration");
   assert.equal(selected.paths.isCustomDataRoot, false);
+
+  // Leave a stale background task pending, then take the ordinary close-to-exit
+  // route. Exit must win over delayed window work and unexpected-destroy recovery.
+  await evaluate(client, 'window.__TAURI_INTERNALS__.invoke("cmd_minimize_main_window")');
+  await evaluate(client, 'window.__TAURI_INTERNALS__.invoke("cmd_show_main_window")');
+  await waitFor("main is visible before exit", () => evaluate(client!,
+    'window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", { label: "main" })'), 10_000);
+  await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
+    mutations: [{ key: "close_behavior", value: "exit" }],
+  })`);
+  const closeToExitLogStart = logs.join("").length;
+  const lastCommitBeforeExit = readTrackerProgress(selected.paths.databasePath);
+  assert.ok(lastCommitBeforeExit > 0, "exit fixture must contain a committed tracking checkpoint");
+  try { await evaluate(client, 'window.__TAURI_INTERNALS__.invoke("plugin:window|close", { label: "main" })'); }
+  catch (error) { if (!/CDP WebSocket|closed|disconnect/i.test(String(error))) throw error; }
+  client.close();
+  client = null;
+  await waitFor("close-to-exit leaves no runtime process", () => !isResidualRuntimeBinaryRunning(), 10_000);
+  assert.doesNotMatch(logs.join("").slice(closeToExitLogStart), /recreating-visible-window|reason=unexpected-destroy/);
+  assert.ok(readTrackerProgress(selected.paths.databasePath) >= lastCommitBeforeExit,
+    "ordinary exit must retain the last committed tracking checkpoint");
+  console.log("PASS close-to-exit wins over pending background destruction");
 
 } catch (error) {
   primaryError = error;

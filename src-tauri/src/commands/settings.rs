@@ -104,15 +104,6 @@ pub fn cmd_set_launch_behavior(
 }
 
 #[tauri::command]
-pub fn cmd_set_background_optimization(
-    background_optimization: bool,
-    desktop_behavior_state: State<DesktopBehaviorState>,
-) -> Result<(), String> {
-    desktop_behavior::set_background_optimization(&desktop_behavior_state, background_optimization);
-    Ok(())
-}
-
-#[tauri::command]
 pub async fn cmd_commit_app_settings(
     mutations: Vec<AppSettingMutationDto>,
     app: AppHandle,

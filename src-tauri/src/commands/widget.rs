@@ -62,7 +62,8 @@ pub async fn cmd_set_widget_pinned(
 }
 
 #[tauri::command]
-pub fn cmd_show_main_window(app: AppHandle) {
+pub async fn cmd_show_main_window(app: AppHandle) {
+    // Rebuilding a released WebView must run outside the synchronous IPC handler.
     tray::show_main_window(&app, crate::app::main_window::MainWindowShowReason::Widget);
 }
 
