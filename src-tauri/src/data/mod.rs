@@ -5,6 +5,7 @@ pub mod classification_service;
 pub mod export;
 pub mod icon_cache_service;
 pub mod import;
+pub mod mini_window_store;
 pub mod remote_backup;
 pub mod remote_backup_config;
 pub mod remote_status_store;
@@ -27,7 +28,6 @@ pub mod update_store;
 pub mod user_data_maintenance;
 pub mod web_activity_analysis;
 pub mod web_activity_store;
-pub mod widget_store;
 
 #[cfg(test)]
 mod sqlite_pool_upgrade_tests;

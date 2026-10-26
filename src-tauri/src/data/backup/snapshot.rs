@@ -19,6 +19,8 @@ use zip::{CompressionMethod, ZipArchive, ZipWriter};
 #[cfg(test)]
 mod merge_tests;
 mod restore;
+#[cfg(test)]
+mod widget_retirement_tests;
 
 pub(super) use restore::{prepare_snapshot_backup, restore_snapshot_backup};
 

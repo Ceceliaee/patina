@@ -7,7 +7,6 @@ use sqlx::{Pool, Row, Sqlite};
 
 const SHOW_TRAY_ICON_KEY: &str = "show_tray_icon";
 const CLOSE_BEHAVIOR_KEY: &str = "close_behavior";
-const MINIMIZE_BEHAVIOR_KEY: &str = "minimize_behavior";
 const LAUNCH_AT_LOGIN_KEY: &str = "launch_at_login";
 const START_MINIMIZED_KEY: &str = "start_minimized";
 const LANGUAGE_KEY: &str = "language";
@@ -29,10 +28,9 @@ pub struct AppSettingMutation {
 pub async fn load_desktop_behavior_settings(
     pool: &Pool<Sqlite>,
 ) -> Result<DesktopBehaviorSettings, sqlx::Error> {
-    let rows = sqlx::query("SELECT key, value FROM settings WHERE key IN (?, ?, ?, ?, ?)")
+    let rows = sqlx::query("SELECT key, value FROM settings WHERE key IN (?, ?, ?, ?)")
         .bind(SHOW_TRAY_ICON_KEY)
         .bind(CLOSE_BEHAVIOR_KEY)
-        .bind(MINIMIZE_BEHAVIOR_KEY)
         .bind(LAUNCH_AT_LOGIN_KEY)
         .bind(START_MINIMIZED_KEY)
         .fetch_all(pool)
@@ -40,7 +38,6 @@ pub async fn load_desktop_behavior_settings(
 
     let mut show_tray_icon = true;
     let mut close_behavior_raw: Option<String> = None;
-    let mut minimize_behavior_raw: Option<String> = None;
     let mut launch_at_login_raw: Option<String> = None;
     let mut start_minimized_raw: Option<String> = None;
 
@@ -51,9 +48,6 @@ pub async fn load_desktop_behavior_settings(
         match key.as_str() {
             SHOW_TRAY_ICON_KEY => show_tray_icon = parse_boolean_setting(&value, true),
             CLOSE_BEHAVIOR_KEY => close_behavior_raw = Some(value),
-            MINIMIZE_BEHAVIOR_KEY => {
-                minimize_behavior_raw = Some(value);
-            }
             LAUNCH_AT_LOGIN_KEY => {
                 launch_at_login_raw = Some(value);
             }
@@ -66,7 +60,6 @@ pub async fn load_desktop_behavior_settings(
 
     let mut settings = DesktopBehaviorSettings::from_storage_values(
         close_behavior_raw.as_deref(),
-        minimize_behavior_raw.as_deref(),
         launch_at_login_raw.as_deref(),
         start_minimized_raw.as_deref(),
     );
@@ -193,7 +186,6 @@ fn is_allowed_app_setting_key(key: &str) -> bool {
             | "title_recording_enabled"
             | "show_tray_icon"
             | "close_behavior"
-            | "minimize_behavior"
             | "theme_mode"
             | "language"
             | "hourly_activity_chart_mode"

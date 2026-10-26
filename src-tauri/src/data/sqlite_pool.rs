@@ -14,6 +14,8 @@ use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::RwLock;
 use tokio::time::{sleep, Duration};
 pub(crate) mod diagnostics;
+#[cfg(test)]
+mod widget_retirement_tests;
 
 #[derive(Default)]
 pub struct AppSqlitePool(pub(crate) RwLock<Option<Pool<Sqlite>>>);
@@ -24,7 +26,7 @@ pub(crate) async fn register_sqlite_pool(state: &AppSqlitePool, pool: Pool<Sqlit
         previous.close().await;
     }
 }
-const VALIDATED_SCHEMA_MIGRATION_HEAD: i64 = schema::ANONYMOUS_ACTIVITY_MIGRATION_VERSION;
+const VALIDATED_SCHEMA_MIGRATION_HEAD: i64 = schema::WIDGET_RETIREMENT_MIGRATION_VERSION;
 mod activity_read_model_schema;
 pub(super) mod import_schema;
 mod maintenance;
@@ -777,6 +779,7 @@ pub(super) async fn has_web_favicon_cache_schema(pool: &Pool<Sqlite>) -> Result<
 
 async fn has_current_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
     let checks = [
+        schema_contracts::has_retired_widget_preferences(pool).await?,
         schema_contracts::has_anonymous_activity_schema(pool).await?,
         schema_contracts::has_session_range_index(pool).await?,
         schema_contracts::has_web_activity_session_schema(pool).await?,
@@ -841,6 +844,13 @@ async fn normalize_current_baseline_migration_history_for_pool(
         + usize::from(schema_contracts::has_web_activity_session_schema(pool).await?)
         + usize::from(schema_contracts::has_session_range_index(pool).await?)
         + usize::from(schema_contracts::has_anonymous_activity_schema(pool).await?);
+    // A data migration cannot be inferred from table layout. Never mark it applied
+    // while its removed preferences remain in the database.
+    let revision_limit = revision_limit
+        + usize::from(
+            revision_limit == schema::ANONYMOUS_ACTIVITY_MIGRATION_VERSION as usize
+                && schema_contracts::has_retired_widget_preferences(pool).await?,
+        );
     expected.truncate(expected.len().min(revision_limit));
     if expected.is_empty() {
         return Ok(false);
@@ -1279,7 +1289,7 @@ mod tests {
                     .unwrap();
             assert_eq!(
                 final_versions,
-                vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+                vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
             );
         });
     }

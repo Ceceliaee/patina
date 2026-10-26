@@ -1,7 +1,65 @@
+use crate::domain::mini_window::Preferences;
+use sqlx::{Pool, Sqlite};
+
+const KEY: &str = "mini_window_preferences";
+
+pub async fn load(pool: &Pool<Sqlite>) -> Result<Preferences, sqlx::Error> {
+    let value: Option<String> = sqlx::query_scalar("SELECT value FROM settings WHERE key = ?")
+        .bind(KEY)
+        .fetch_optional(pool)
+        .await?;
+    Ok(value
+        .and_then(|value| serde_json::from_str(&value).ok())
+        .unwrap_or_default())
+}
+
+pub async fn save(pool: &Pool<Sqlite>, preferences: &Preferences) -> Result<(), sqlx::Error> {
+    let value = serde_json::to_string(preferences)
+        .map_err(|error| sqlx::Error::Protocol(error.to_string()))?;
+    sqlx::query("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+        .bind(KEY).bind(value).execute(pool).await?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[tokio::test]
+    async fn preferences_are_independent_and_bad_json_defaults_safely() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::query("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO settings VALUES ('language', 'en-US'), ('mini_window_preferences', 'broken')").execute(&pool).await.unwrap();
+        assert!(!load(&pool).await.unwrap().held);
+        save(
+            &pool,
+            &Preferences {
+                held: true,
+                ..Preferences::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert!(load(&pool).await.unwrap().held);
+        let language: String =
+            sqlx::query_scalar("SELECT value FROM settings WHERE key='language'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(language, "en-US");
+    }
+}
+
 use std::collections::HashMap;
 
 use serde::Serialize;
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::Row;
 
 use super::classification_settings::APP_OVERRIDE_KEY_PREFIX;
 
@@ -10,10 +68,9 @@ const THEME_MODE_KEY: &str = "theme_mode";
 const LANGUAGE_KEY: &str = "language";
 const COLOR_SCHEME_LIGHT_KEY: &str = "color_scheme_light";
 const COLOR_SCHEME_DARK_KEY: &str = "color_scheme_dark";
-const WIDGET_EXPANSION_PREFERENCE_KEY: &str = "widget_expansion_preference";
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
-pub struct WidgetBootstrapSettings {
+pub struct MiniBootstrapSettings {
     pub tracking_paused: Option<String>,
     pub theme_mode: Option<String>,
     pub language: Option<String>,
@@ -22,27 +79,26 @@ pub struct WidgetBootstrapSettings {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub struct WidgetAppOverrideRow {
+pub struct MiniAppOverrideRow {
     pub key: String,
     pub value: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
-pub struct WidgetBootstrapSnapshot {
-    pub settings: WidgetBootstrapSettings,
-    pub pinned: bool,
-    pub app_overrides: Vec<WidgetAppOverrideRow>,
-    pub app_links: Vec<WidgetAppOverrideRow>,
+pub struct MiniBootstrapSnapshot {
+    pub settings: MiniBootstrapSettings,
+    pub app_overrides: Vec<MiniAppOverrideRow>,
+    pub app_links: Vec<MiniAppOverrideRow>,
 }
 
-pub async fn load_widget_bootstrap_snapshot(
+pub async fn load_mini_bootstrap_snapshot(
     pool: &Pool<Sqlite>,
-) -> Result<WidgetBootstrapSnapshot, sqlx::Error> {
+) -> Result<MiniBootstrapSnapshot, sqlx::Error> {
     let mut transaction = pool.begin().await?;
     let setting_rows = sqlx::query(
         "SELECT key, value
          FROM settings
-         WHERE key IN (?, ?, ?, ?, ?, ?)
+         WHERE key IN (?, ?, ?, ?, ?)
          ORDER BY key ASC",
     )
     .bind(TRACKING_PAUSED_KEY)
@@ -50,7 +106,6 @@ pub async fn load_widget_bootstrap_snapshot(
     .bind(LANGUAGE_KEY)
     .bind(COLOR_SCHEME_LIGHT_KEY)
     .bind(COLOR_SCHEME_DARK_KEY)
-    .bind(WIDGET_EXPANSION_PREFERENCE_KEY)
     .fetch_all(&mut *transaction)
     .await?;
     let app_override_rows = sqlx::query(
@@ -69,7 +124,7 @@ pub async fn load_widget_bootstrap_snapshot(
     .fetch_all(&mut *transaction)
     .await?
     .into_iter()
-    .map(|row| WidgetAppOverrideRow {
+    .map(|row| MiniAppOverrideRow {
         key: row.get("key"),
         value: row.get("value"),
     })
@@ -81,22 +136,18 @@ pub async fn load_widget_bootstrap_snapshot(
         .map(|row| (row.get::<String, _>("key"), row.get::<String, _>("value")))
         .collect::<HashMap<_, _>>();
 
-    Ok(WidgetBootstrapSnapshot {
+    Ok(MiniBootstrapSnapshot {
         app_links,
-        settings: WidgetBootstrapSettings {
+        settings: MiniBootstrapSettings {
             tracking_paused: settings_by_key.remove(TRACKING_PAUSED_KEY),
             theme_mode: settings_by_key.remove(THEME_MODE_KEY),
             language: settings_by_key.remove(LANGUAGE_KEY),
             color_scheme_light: settings_by_key.remove(COLOR_SCHEME_LIGHT_KEY),
             color_scheme_dark: settings_by_key.remove(COLOR_SCHEME_DARK_KEY),
         },
-        pinned: settings_by_key
-            .remove(WIDGET_EXPANSION_PREFERENCE_KEY)
-            .as_deref()
-            .is_some_and(|value| value == "pinned"),
         app_overrides: app_override_rows
             .into_iter()
-            .map(|row| WidgetAppOverrideRow {
+            .map(|row| MiniAppOverrideRow {
                 key: row.get("key"),
                 value: row.get("value"),
             })
@@ -105,7 +156,7 @@ pub async fn load_widget_bootstrap_snapshot(
 }
 
 #[cfg(test)]
-mod tests {
+mod bootstrap_tests {
     use super::*;
     use crate::data::schema;
     use sqlx::{Executor, SqlitePool};
@@ -119,7 +170,7 @@ mod tests {
     }
 
     #[test]
-    fn widget_bootstrap_exposes_only_required_settings_and_app_overrides() {
+    fn mini_bootstrap_exposes_only_required_settings_and_app_overrides() {
         tauri::async_runtime::block_on(async {
             let pool = setup_test_db().await;
             pool.execute(
@@ -129,7 +180,6 @@ mod tests {
                  ('language', 'en-US'),
                  ('color_scheme_light', 'notion'),
                  ('color_scheme_dark', 'nord'),
-                 ('widget_expansion_preference', 'pinned'),
                  ('web_activity_token', 'must-not-leak'),
                  ('remote_status_bridge_token', 'must-not-leak'),
                  ('__app_override::editor.exe', '{\"displayName\":\"Editor\"}'),
@@ -138,7 +188,7 @@ mod tests {
             .await
             .unwrap();
 
-            let snapshot = load_widget_bootstrap_snapshot(&pool).await.unwrap();
+            let snapshot = load_mini_bootstrap_snapshot(&pool).await.unwrap();
 
             assert_eq!(snapshot.settings.tracking_paused.as_deref(), Some("1"));
             assert_eq!(snapshot.settings.theme_mode.as_deref(), Some("dark"));
@@ -148,10 +198,9 @@ mod tests {
                 Some("notion")
             );
             assert_eq!(snapshot.settings.color_scheme_dark.as_deref(), Some("nord"));
-            assert!(snapshot.pinned);
             assert_eq!(
                 snapshot.app_overrides,
-                vec![WidgetAppOverrideRow {
+                vec![MiniAppOverrideRow {
                     key: "__app_override::editor.exe".to_string(),
                     value: "{\"displayName\":\"Editor\"}".to_string(),
                 }]
@@ -160,14 +209,13 @@ mod tests {
     }
 
     #[test]
-    fn widget_bootstrap_defaults_missing_settings_without_failing() {
+    fn mini_bootstrap_defaults_missing_settings_without_failing() {
         tauri::async_runtime::block_on(async {
             let pool = setup_test_db().await;
 
-            let snapshot = load_widget_bootstrap_snapshot(&pool).await.unwrap();
+            let snapshot = load_mini_bootstrap_snapshot(&pool).await.unwrap();
 
-            assert_eq!(snapshot.settings, WidgetBootstrapSettings::default());
-            assert!(!snapshot.pinned);
+            assert_eq!(snapshot.settings, MiniBootstrapSettings::default());
             assert!(snapshot.app_overrides.is_empty());
         });
     }

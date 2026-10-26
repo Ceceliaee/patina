@@ -1,6 +1,17 @@
 use sqlx::{Pool, Row, Sqlite};
 use std::collections::BTreeSet;
 
+pub async fn has_retired_widget_preferences(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    // Reuse the migration predicate so history repair and execution share the same data contract.
+    let query =
+        crate::data::schema::WIDGET_RETIREMENT_SQL.replace("DELETE FROM", "SELECT COUNT(*) FROM");
+    let count: i64 = sqlx::query_scalar(&query)
+        .fetch_one(pool)
+        .await
+        .map_err(|error| format!("failed to inspect retired window preferences: {error}"))?;
+    Ok(count == 0)
+}
+
 pub async fn has_anonymous_activity_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
     let columns = table_columns(pool, "anonymous_activity").await?;
     let indexes = table_indexes(pool, "anonymous_activity").await?;

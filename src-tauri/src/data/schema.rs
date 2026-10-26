@@ -37,6 +37,8 @@ pub const WEB_ACTIVITY_SESSION_MIGRATION_DESCRIPTION: &str = "bind_web_activity_
 pub const SESSION_RANGE_INDEX_MIGRATION_VERSION: i64 = 15;
 pub const SESSION_RANGE_INDEX_MIGRATION_DESCRIPTION: &str = "index_session_range_ends";
 pub const ANONYMOUS_ACTIVITY_MIGRATION_VERSION: i64 = 16;
+pub const WIDGET_RETIREMENT_MIGRATION_VERSION: i64 = 17;
+pub const WIDGET_RETIREMENT_SQL: &str = "DELETE FROM settings WHERE key IN ('minimize_behavior', 'widget_placement', 'widget_expansion_preference', 'widget_side', 'widget_anchor_y');";
 
 pub const SESSION_RANGE_INDEX_SCHEMA_SQL: &str = "
     CREATE INDEX IF NOT EXISTS idx_sessions_end_start ON sessions(end_time, start_time);
@@ -1177,6 +1179,11 @@ pub fn tracker_migrations() -> Vec<Migration> {
             version: ANONYMOUS_ACTIVITY_MIGRATION_VERSION,
             description: "create_anonymous_activity",
             sql: crate::data::repositories::anonymous_activity::SCHEMA_SQL,
+        },
+        Migration {
+            version: WIDGET_RETIREMENT_MIGRATION_VERSION,
+            description: "retire_widget_preferences",
+            sql: WIDGET_RETIREMENT_SQL,
         },
     ]
 }
