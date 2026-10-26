@@ -99,6 +99,9 @@ export interface UiText {
       "previousMonth": string;
       "toggleActivityDetails": (expanded: boolean, appName: string) => string;
     };
+    "miniWindow": {
+      "openMainWindow": string;
+    };
     "settings": {
       "colorScheme": string;
       "copyWebActivityPort": string;
@@ -112,7 +115,6 @@ export interface UiText {
       "toggleCloseToTray": string;
       "toggleGlobalTitle": string;
       "toggleLaunchAtLogin": string;
-      "toggleMinimizeToWidget": string;
       "toggleRemoteStatusBridge": string;
       "toggleShowTrayIcon": string;
       "toggleStartMinimized": string;
@@ -145,14 +147,6 @@ export interface UiText {
       "skipPomodoroPhase": string;
       "startPomodoro": string;
       "startTimer": string;
-    };
-    "widget": {
-      "collapse": string;
-      "currentApp": (appName: string) => string;
-      "expand": string;
-      "openMainWindow": string;
-      "pin": string;
-      "toggle": (expanded: boolean, statusTitle: string) => string;
     };
   };
   "app": {
@@ -688,6 +682,24 @@ export interface UiText {
     "webLinks": string;
     "webSearchPlaceholder": string;
   };
+  "miniWindow": {
+    "currentApp": string;
+    "currentAppNotTracked": string;
+    "currentlyIdle": string;
+    "error": string;
+    "failed": string;
+    "hold": string;
+    "idle": string;
+    "loadingHelper": string;
+    "open": string;
+    "paused": string;
+    "sustainedTracking": string;
+    "title": string;
+    "tracking": string;
+    "trackingNotSynced": string;
+    "trackingPaused": string;
+    "trackingService": string;
+  };
   "settings": {
     "appearanceTitle": string;
     "backupExportAction": string;
@@ -774,7 +786,6 @@ export interface UiText {
     "launchAtLoginLabel": string;
     "loadFailed": string;
     "loading": string;
-    "minimizeToWidgetLabel": string;
     "minuteValue": (minutes: number) => string;
     "recordingOptionsTitle": string;
     "remoteBackupTitle": string;
@@ -1089,25 +1100,5 @@ export interface UiText {
     "updateProcessFailed": string;
     "updateReadyDetail": string;
     "upToDate": string;
-  };
-  "widget": {
-    "currentActivityRecording": string;
-    "currentApp": string;
-    "currentAppNotTracked": string;
-    "currentlyIdle": string;
-    "currentSustainedRecording": string;
-    "error": string;
-    "idle": string;
-    "loadingAppName": string;
-    "loadingHelper": string;
-    "loadingStatus": string;
-    "noTrackableActivity": string;
-    "paused": string;
-    "sustainedTracking": string;
-    "tracking": string;
-    "trackingNotSynced": string;
-    "trackingPaused": string;
-    "trackingService": string;
-    "windowExcluded": string;
   };
 }

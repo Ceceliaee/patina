@@ -495,12 +495,6 @@
           "markdownDescription": "Enables the cmd_export_data command without any pre-configured scope."
         },
         {
-          "description": "Enables the cmd_finalize_widget_drag command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-finalize-widget-drag",
-          "markdownDescription": "Enables the cmd_finalize_widget_drag command without any pre-configured scope."
-        },
-        {
           "description": "Enables the cmd_get_activity_aggregate_range command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-get-activity-aggregate-range",
@@ -541,6 +535,30 @@
           "type": "string",
           "const": "allow-cmd-get-main-window-render-token",
           "markdownDescription": "Enables the cmd_get_main_window_render_token command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_mini_bootstrap_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-mini-bootstrap-snapshot",
+          "markdownDescription": "Enables the cmd_get_mini_bootstrap_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_mini_icon command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-mini-icon",
+          "markdownDescription": "Enables the cmd_get_mini_icon command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_mini_presentation_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-mini-presentation-snapshot",
+          "markdownDescription": "Enables the cmd_get_mini_presentation_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_get_mini_window_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-mini-window-snapshot",
+          "markdownDescription": "Enables the cmd_get_mini_window_snapshot command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_get_observed_web_domain_rows command without any pre-configured scope.",
@@ -651,46 +669,10 @@
           "markdownDescription": "Enables the cmd_get_web_links command without any pre-configured scope."
         },
         {
-          "description": "Enables the cmd_get_widget_bootstrap_snapshot command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-get-widget-bootstrap-snapshot",
-          "markdownDescription": "Enables the cmd_get_widget_bootstrap_snapshot command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the cmd_get_widget_icon command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-get-widget-icon",
-          "markdownDescription": "Enables the cmd_get_widget_icon command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the cmd_get_widget_placement command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-get-widget-placement",
-          "markdownDescription": "Enables the cmd_get_widget_placement command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the cmd_get_widget_status_snapshot command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-get-widget-status-snapshot",
-          "markdownDescription": "Enables the cmd_get_widget_status_snapshot command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the cmd_hide_widget_window command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-hide-widget-window",
-          "markdownDescription": "Enables the cmd_hide_widget_window command without any pre-configured scope."
-        },
-        {
           "description": "Enables the cmd_install_update command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-install-update",
           "markdownDescription": "Enables the cmd_install_update command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the cmd_is_primary_mouse_button_down command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-is-primary-mouse-button-down",
-          "markdownDescription": "Enables the cmd_is_primary_mouse_button_down command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_list_import_batches command without any pre-configured scope.",
@@ -711,10 +693,22 @@
           "markdownDescription": "Enables the cmd_mark_main_window_ready command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_mini_window_action command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-mini-window-action",
+          "markdownDescription": "Enables the cmd_mini_window_action command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_minimize_main_window command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-minimize-main-window",
           "markdownDescription": "Enables the cmd_minimize_main_window command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_open_mini_window command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-open-mini-window",
+          "markdownDescription": "Enables the cmd_open_mini_window command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_open_storage_directory command without any pre-configured scope.",
@@ -939,18 +933,6 @@
           "markdownDescription": "Enables the cmd_set_launch_behavior command without any pre-configured scope."
         },
         {
-          "description": "Enables the cmd_set_widget_expanded command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-set-widget-expanded",
-          "markdownDescription": "Enables the cmd_set_widget_expanded command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the cmd_set_widget_pinned command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-set-widget-pinned",
-          "markdownDescription": "Enables the cmd_set_widget_pinned command without any pre-configured scope."
-        },
-        {
           "description": "Enables the cmd_show_main_window command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-show-main-window",
@@ -1149,12 +1131,6 @@
           "markdownDescription": "Denies the cmd_export_data command without any pre-configured scope."
         },
         {
-          "description": "Denies the cmd_finalize_widget_drag command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-finalize-widget-drag",
-          "markdownDescription": "Denies the cmd_finalize_widget_drag command without any pre-configured scope."
-        },
-        {
           "description": "Denies the cmd_get_activity_aggregate_range command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-get-activity-aggregate-range",
@@ -1195,6 +1171,30 @@
           "type": "string",
           "const": "deny-cmd-get-main-window-render-token",
           "markdownDescription": "Denies the cmd_get_main_window_render_token command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_mini_bootstrap_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-mini-bootstrap-snapshot",
+          "markdownDescription": "Denies the cmd_get_mini_bootstrap_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_mini_icon command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-mini-icon",
+          "markdownDescription": "Denies the cmd_get_mini_icon command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_mini_presentation_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-mini-presentation-snapshot",
+          "markdownDescription": "Denies the cmd_get_mini_presentation_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_mini_window_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-mini-window-snapshot",
+          "markdownDescription": "Denies the cmd_get_mini_window_snapshot command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_get_observed_web_domain_rows command without any pre-configured scope.",
@@ -1305,46 +1305,10 @@
           "markdownDescription": "Denies the cmd_get_web_links command without any pre-configured scope."
         },
         {
-          "description": "Denies the cmd_get_widget_bootstrap_snapshot command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-get-widget-bootstrap-snapshot",
-          "markdownDescription": "Denies the cmd_get_widget_bootstrap_snapshot command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the cmd_get_widget_icon command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-get-widget-icon",
-          "markdownDescription": "Denies the cmd_get_widget_icon command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the cmd_get_widget_placement command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-get-widget-placement",
-          "markdownDescription": "Denies the cmd_get_widget_placement command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the cmd_get_widget_status_snapshot command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-get-widget-status-snapshot",
-          "markdownDescription": "Denies the cmd_get_widget_status_snapshot command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the cmd_hide_widget_window command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-hide-widget-window",
-          "markdownDescription": "Denies the cmd_hide_widget_window command without any pre-configured scope."
-        },
-        {
           "description": "Denies the cmd_install_update command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-install-update",
           "markdownDescription": "Denies the cmd_install_update command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the cmd_is_primary_mouse_button_down command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-is-primary-mouse-button-down",
-          "markdownDescription": "Denies the cmd_is_primary_mouse_button_down command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_list_import_batches command without any pre-configured scope.",
@@ -1365,10 +1329,22 @@
           "markdownDescription": "Denies the cmd_mark_main_window_ready command without any pre-configured scope."
         },
         {
+          "description": "Denies the cmd_mini_window_action command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-mini-window-action",
+          "markdownDescription": "Denies the cmd_mini_window_action command without any pre-configured scope."
+        },
+        {
           "description": "Denies the cmd_minimize_main_window command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-minimize-main-window",
           "markdownDescription": "Denies the cmd_minimize_main_window command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_open_mini_window command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-open-mini-window",
+          "markdownDescription": "Denies the cmd_open_mini_window command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_open_storage_directory command without any pre-configured scope.",
@@ -1593,18 +1569,6 @@
           "markdownDescription": "Denies the cmd_set_launch_behavior command without any pre-configured scope."
         },
         {
-          "description": "Denies the cmd_set_widget_expanded command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-set-widget-expanded",
-          "markdownDescription": "Denies the cmd_set_widget_expanded command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the cmd_set_widget_pinned command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-set-widget-pinned",
-          "markdownDescription": "Denies the cmd_set_widget_pinned command without any pre-configured scope."
-        },
-        {
           "description": "Denies the cmd_show_main_window command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-show-main-window",
@@ -1659,10 +1623,10 @@
           "markdownDescription": "Allows the main application window to invoke the complete Patina application command surface."
         },
         {
-          "description": "Allows the compact widget window to read tracking state and use widget-only controls.",
+          "description": "Read compact status and control only the independent mini window.",
           "type": "string",
-          "const": "widget-window-commands",
-          "markdownDescription": "Allows the compact widget window to read tracking state and use widget-only controls."
+          "const": "mini-window-commands",
+          "markdownDescription": "Read compact status and control only the independent mini window."
         },
         {
           "description": "This permission set configures if your\napplication can enable or disable auto\nstarting the application on boot.\n\n#### Granted Permissions\n\nIt allows all to check, enable and\ndisable the automatic start on boot.\n\n\n#### This default permission set includes:\n\n- `allow-enable`\n- `allow-disable`\n- `allow-is-enabled`",
