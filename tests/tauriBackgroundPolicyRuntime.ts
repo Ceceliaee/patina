@@ -27,9 +27,10 @@ export async function verifyRestoredBackgroundPolicy(
 ) {
   let client = initialClient;
   const generation = Number(await evaluate(client, "window.__PATINA_MAIN_WINDOW_GENERATION__"));
-  const minimize = () => evaluate(client, 'window.__TAURI_INTERNALS__.invoke("cmd_minimize_main_window")');
+  await evaluate(client, 'window.__TAURI_INTERNALS__.invoke("cmd_open_mini_window")');
+  const hide = () => evaluate(client, 'window.__TAURI_INTERNALS__.invoke("plugin:window|close", {label:"main"})');
   const visible = () => evaluate(client, 'window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", { label: "main" })');
-  await minimize();
+  await hide();
   assert.equal(await visible(), false);
   const firstHide = Date.now();
   // These real waits are the boundary workload: the old task must lose its
@@ -53,7 +54,7 @@ export async function verifyRestoredBackgroundPolicy(
 
   const secondHide = Date.now();
   const logStart = readLogs().length;
-  await minimize();
+  await hide();
   await delay(29_000);
   assert.equal(await visible(), false);
   assert.equal(Number(await evaluate(client, "window.__PATINA_MAIN_WINDOW_GENERATION__")), generation,
@@ -66,14 +67,14 @@ export async function verifyRestoredBackgroundPolicy(
   const destroyedAt = Date.now();
   await waitFor("tracker commits after restored main is released", () => readTrackerProgress(databasePath) > destroyedAt, 10_000);
 
-  const widget = await waitFor("surviving widget can reopen main", async () => {
+  const mini = await waitFor("surviving mini can reopen main", async () => {
     const response = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(1_000) });
     const targets = await response.json() as Array<{ type?: string; webSocketDebuggerUrl?: string }>;
     for (const target of targets) {
       if (target.type !== "page" || !target.webSocketDebuggerUrl) continue;
       const candidate = await CdpConnection.connect(target.webSocketDebuggerUrl);
       try {
-        if (await evaluate(candidate, "Boolean(document.querySelector('.widget-shell'))")) return candidate;
+        if (await evaluate(candidate, "Boolean(document.querySelector('.mini-shell'))")) return candidate;
       } catch { /* A disappearing main target can still be listed briefly. */ }
       candidate.close();
     }
@@ -82,12 +83,12 @@ export async function verifyRestoredBackgroundPolicy(
   const openAction = 'document.querySelector(\'button[aria-label="打开主窗口"]\')';
   let reopenStarted: number;
   try {
-    await evaluate(widget, `(() => { if (${openAction}?.disabled) document.querySelector('.widget-pill-anchor')?.click(); })()`);
-    await waitFor("widget main-window action is enabled", () => evaluate(widget,
+    await evaluate(mini, `window.__TAURI_INTERNALS__.invoke('cmd_get_mini_window_snapshot').then(s => window.__TAURI_INTERNALS__.invoke('cmd_mini_window_action',{epoch:s.epoch,action:{kind:'hold',held:true}}))`);
+    await waitFor("mini main-window action is enabled", () => evaluate(mini,
       `Boolean(${openAction} && !${openAction}.disabled)`), 5_000);
     reopenStarted = Date.now();
-    await evaluate(widget, `(() => { ${openAction}.click(); ${openAction}.click(); })()`);
-  } finally { widget.close(); }
+    await evaluate(mini, `(() => { ${openAction}.click(); ${openAction}.click(); })()`);
+  } finally { mini.close(); }
   client = await waitFor("restored main rebuilds with a new generation", async () => {
     let targets: Array<{ type?: string; webSocketDebuggerUrl?: string }>;
     try {
@@ -109,7 +110,7 @@ export async function verifyRestoredBackgroundPolicy(
     await waitFor("restored main is interactive after ready", () => evaluate(client,
       'window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", { label: "main" })'), 10_000);
     assert.equal(Number(await evaluate(client, "window.__PATINA_MAIN_WINDOW_GENERATION__")), generation + 1,
-      "repeated Widget requests must share one new main-window generation");
+      "repeated Mini requests must share one new main-window generation");
     const snapshot = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_get_history_range_rows", {
       startMs: 0, endMs: ${Date.now()}, nowMs: ${Date.now()}, includeTitleSamples: false,
     })`) as { sessions: Array<{ exe_name: string; duration: number | null }> };
@@ -123,7 +124,7 @@ export async function verifyRestoredBackgroundPolicy(
       oldGeneration: generation,
       newGeneration: await evaluate(client, "window.__PATINA_MAIN_WINDOW_GENERATION__"),
       cancellationAt29Seconds: true, survivedOldDeadlineAt31Seconds: true, taskbarMinimizedAt31SecondsPreserved: true,
-      repeatedWidgetReopen: true,
+      repeatedMiniReopen: true,
       destroyElapsedMs, readyElapsedMs, trackerPersistedAfterDestruction: true,
     }));
     return client;
