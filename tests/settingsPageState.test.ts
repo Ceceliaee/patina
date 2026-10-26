@@ -52,7 +52,6 @@ interface AppSettings {
   titleRecordingEnabled: boolean;
   showTrayIcon: boolean;
   closeBehavior: "exit" | "tray";
-  minimizeBehavior: "taskbar" | "widget";
   themeMode: "light" | "dark" | "system";
   language: AppLanguage;
   hourlyActivityChartMode: "total" | "category";
@@ -138,7 +137,6 @@ const BASE_SETTINGS: AppSettings = {
   titleRecordingEnabled: true,
   showTrayIcon: true,
   closeBehavior: "tray",
-  minimizeBehavior: "taskbar",
   themeMode: "light",
   language: "zh-CN",
   hourlyActivityChartMode: "total",
@@ -467,10 +465,9 @@ await runTest("saveSettingsPageStateWithDeps preserves remote push switch while 
   });
 });
 
-await runTest("normalizeSettingsRecord accepts current minimize behavior values", () => {
+await runTest("normalizeSettingsRecord applies defaults and validates current settings", () => {
   const defaultSettings = normalizeSettingsRecord({});
   assert.equal(defaultSettings.titleRecordingEnabled, true);
-  assert.equal(defaultSettings.minimizeBehavior, "widget");
   assert.equal(defaultSettings.closeBehavior, "tray");
   assert.equal(Object.hasOwn(defaultSettings, "backgroundOptimization"), false);
   assert.equal(defaultSettings.themeMode, "light");
@@ -537,29 +534,19 @@ await runTest("normalizeSettingsRecord accepts current minimize behavior values"
   });
   assert.equal(remoteBridgeMissingUrl.remoteStatusBridgeEnabled, true);
 
-  const widgetSettings = normalizeSettingsRecord({
-    minimize_behavior: "widget",
+  const closeSettings = normalizeSettingsRecord({
     close_behavior: "tray",
     background_optimization: "yes",
   });
-  assert.equal(widgetSettings.minimizeBehavior, "widget");
-  assert.equal(widgetSettings.closeBehavior, "tray");
-  assert.equal(Object.hasOwn(widgetSettings, "backgroundOptimization"), false);
+  assert.equal(closeSettings.closeBehavior, "tray");
+  assert.equal(Object.hasOwn(closeSettings, "backgroundOptimization"), false);
 
   const existingSpeedFirstSettings = normalizeSettingsRecord({
     background_optimization: "0",
   });
   assert.deepEqual(existingSpeedFirstSettings, defaultSettings);
 
-  const retiredTraySettings = normalizeSettingsRecord({
-    minimize_behavior: "tray",
-  });
-  assert.equal(retiredTraySettings.minimizeBehavior, "widget");
 
-  const fallbackSettings = normalizeSettingsRecord({
-    minimize_behavior: "floating-sidebar",
-  });
-  assert.equal(fallbackSettings.minimizeBehavior, "widget");
 });
 
 await runTest("remote backup save recovers a committed response loss without rolling back the secret", async () => {

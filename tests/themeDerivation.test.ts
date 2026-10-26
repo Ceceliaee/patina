@@ -5,7 +5,8 @@ import { effectiveThemeContrast, getThemePreset, normalizeThemeContrast, type Th
 import { COLOR_SCHEME_OPTIONS } from "../src/shared/settings/colorSchemeOptions.ts";
 import type { ColorScheme } from "../src/shared/settings/appSettings.ts";
 import { normalizeSettingsRecord, buildAppSettingMutations, buildRawAppSettingsPatch } from "../src/platform/persistence/appSettingsStore.ts";
-import { normalizeWidgetBootstrapSettings } from "../src/shared/settings/appSettingsNormalization.ts";
+import { applyMiniBootstrapSnapshot } from "../src/app/mini/miniBootstrapService.ts";
+import { parseMiniBootstrapSnapshot } from "../src/platform/desktop/miniContentRuntimeGateway.ts";
 
 // Expected values come from the original installed Codex functions, not deriveTheme.
 const fixtures = JSON.parse(readFileSync(new URL("./fixtures/theme/codex-colors.json", import.meta.url), "utf8")) as Array<{
@@ -39,8 +40,10 @@ const main = normalizeSettingsRecord({ theme_mode: "dark", color_scheme_dark: "c
 assert.equal("themeContrastLight" in main, false);
 assert.equal("themeContrastDark" in main, false);
 assert.deepEqual(buildAppSettingMutations(buildRawAppSettingsPatch({ colorSchemeLight: "vercel" })), [{ key: "color_scheme_light", value: "vercel" }]);
-const widget = normalizeWidgetBootstrapSettings({ trackingPaused: null, themeMode: "dark", language: null, colorSchemeLight: "vercel", colorSchemeDark: "catppuccin" });
-assert.deepEqual(deriveTheme("dark", widget.colorSchemeDark, null), deriveTheme("dark", main.colorSchemeDark, null));
+const parsedMini = parseMiniBootstrapSnapshot({ settings: { tracking_paused: null, theme_mode: "dark", language: null, color_scheme_light: "vercel", color_scheme_dark: "catppuccin" }, app_overrides: [], app_links: [] });
+assert.ok(parsedMini);
+const mini = applyMiniBootstrapSnapshot(parsedMini).settings;
+assert.deepEqual(deriveTheme("dark", mini.colorSchemeDark, null), deriveTheme("dark", main.colorSchemeDark, null));
 
 // Nested cards need a distinct surface at each preset's normal contrast.
 const channels = (color: string) => color.startsWith("#")
@@ -100,7 +103,7 @@ for (const scheme of ["default", "absolutely", "catppuccin", "vercel"] as const)
   }
 }
 
-console.log(`Theme derivation passed: ${fixtures.length} independent Codex fixtures, all presets, persistence and widget normalization`);
+console.log(`Theme derivation passed: ${fixtures.length} independent Codex fixtures, all presets, persistence and mini normalization`);
 
 const borders = JSON.parse(readFileSync(new URL("./fixtures/theme/patina-borders.json", import.meta.url), "utf8")) as Array<{variant: ThemeVariant; scheme: ColorScheme; subtle: string; strong: string}>;
 for (const fixture of borders) {

@@ -254,13 +254,6 @@ export default function Settings({
           />
 
           <SettingsResidentPanel
-            minimizeToWidgetChecked={draftSettings.minimizeBehavior === "widget"}
-            onMinimizeToWidgetChange={(nextChecked) => {
-              handleChange(
-                "minimizeBehavior",
-                nextChecked ? "widget" : "taskbar",
-              );
-            }}
             showTrayIconChecked={draftSettings.showTrayIcon}
             onShowTrayIconChange={(nextChecked) => handleChange("showTrayIcon", nextChecked)}
             closeToTrayChecked={draftSettings.closeBehavior === "tray"}

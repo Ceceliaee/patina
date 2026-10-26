@@ -5,7 +5,6 @@ import {
   type CloseBehavior,
   type ColorScheme,
   type HourlyActivityChartMode,
-  type MinimizeBehavior,
   type ThemeMode,
 } from "./appSettings.ts";
 import { SUPPORTED_LOCALES } from "../i18n/generated/contract.ts";
@@ -125,13 +124,6 @@ function normalizeCloseBehavior(value: string | undefined): CloseBehavior {
   return value.trim().toLowerCase() === "tray" ? "tray" : "exit";
 }
 
-function normalizeMinimizeBehavior(value: string | undefined): MinimizeBehavior {
-  if (value === undefined) return DEFAULT_SETTINGS.minimizeBehavior;
-  const normalized = value.trim().toLowerCase();
-  if (normalized === "widget" || normalized === "taskbar") return normalized;
-  return DEFAULT_SETTINGS.minimizeBehavior;
-}
-
 function normalizeThemeMode(value: string | undefined): ThemeMode {
   if (value === undefined) return DEFAULT_SETTINGS.themeMode;
   const normalized = value.trim().toLowerCase();
@@ -154,36 +146,6 @@ function normalizeColorScheme(value: string | undefined, allowedSchemes: Readonl
   const normalized = value.trim().toLowerCase();
   if (allowedSchemes.has(normalized)) return normalized as ColorScheme;
   return "default";
-}
-
-interface WidgetBootstrapSettingsInput {
-  trackingPaused: string | null;
-  themeMode: string | null;
-  language: string | null;
-  colorSchemeLight: string | null;
-  colorSchemeDark: string | null;
-}
-
-export function normalizeWidgetBootstrapSettings(
-  settings: WidgetBootstrapSettingsInput,
-): AppSettings {
-  return {
-    ...DEFAULT_SETTINGS,
-    trackingPaused: parseBooleanSetting(
-      settings.trackingPaused ?? undefined,
-      DEFAULT_SETTINGS.trackingPaused,
-    ),
-    themeMode: normalizeThemeMode(settings.themeMode ?? undefined),
-    language: normalizeLanguage(settings.language ?? undefined),
-    colorSchemeLight: normalizeColorScheme(
-      settings.colorSchemeLight ?? undefined,
-      LIGHT_COLOR_SCHEMES,
-    ),
-    colorSchemeDark: normalizeColorScheme(
-      settings.colorSchemeDark ?? undefined,
-      DARK_COLOR_SCHEMES,
-    ),
-  };
 }
 
 export function normalizeSettingsRecord(
@@ -228,7 +190,6 @@ export function normalizeSettingsRecord(
     ),
     showTrayIcon: parseBooleanSetting(record.show_tray_icon, DEFAULT_SETTINGS.showTrayIcon),
     closeBehavior: normalizeCloseBehavior(record.close_behavior),
-    minimizeBehavior: normalizeMinimizeBehavior(record.minimize_behavior),
     themeMode: normalizeThemeMode(record.theme_mode),
     language: normalizeLanguage(record.language),
     hourlyActivityChartMode: normalizeHourlyActivityChartMode(record.hourly_activity_chart_mode),

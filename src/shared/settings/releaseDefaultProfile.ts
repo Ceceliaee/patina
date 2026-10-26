@@ -9,7 +9,6 @@ interface ReleaseDefaultSettingsProfile {
   titleRecordingEnabled: boolean;
   showTrayIcon: boolean;
   closeBehavior: "exit" | "tray";
-  minimizeBehavior: "taskbar" | "widget";
   themeMode: "light" | "dark" | "system";
   language: Locale;
   hourlyActivityChartMode: "total" | "category";
@@ -80,7 +79,6 @@ export const RELEASE_DEFAULT_SETTINGS: ReleaseDefaultSettingsProfile = {
   titleRecordingEnabled: true,
   showTrayIcon: true,
   closeBehavior: "tray",
-  minimizeBehavior: "widget",
   themeMode: "light",
   language: "zh-CN",
   hourlyActivityChartMode: "total",

@@ -2,16 +2,12 @@ import { lazy, Suspense, useEffect } from "react";
 import "./App.css";
 import AppShell from "./app/AppShellLocaleRoot";
 import { installAppIconEvents } from "./platform/runtime/appIconEventGateway.ts";
-import {
-  hideWidgetWindow,
-  isCurrentWindowVisibleAndFocused,
-  resolveCurrentAppWindowLabel,
-} from "./platform/desktop/widgetRuntimeGateway";
+import { resolveCurrentAppWindowLabel } from "./platform/desktop/windowControlGateway";
 
 const CURRENT_WINDOW_LABEL = resolveCurrentAppWindowLabel();
-const WidgetShell = lazy(() => import("./app/widget/WidgetShell"));
+const MiniShell = lazy(() => import("./app/mini/MiniShell"));
 
-if (import.meta.env.DEV) {
+if (import.meta.env.DEV && CURRENT_WINDOW_LABEL === "main") {
   void import("./app/services/resourceDiagnosticsService.ts")
     .then(({ installAppDevelopmentResourceDiagnostics }) => {
       installAppDevelopmentResourceDiagnostics();
@@ -29,59 +25,7 @@ if (typeof document !== "undefined") {
 
 export default function App() {
   useEffect(installAppIconEvents, []);
-  useEffect(() => {
-    if (CURRENT_WINDOW_LABEL !== "main") {
-      return;
-    }
-
-    let active = true;
-
-    const requestHideWidget = () => {
-      void hideWidgetWindow().catch((error) => {
-        if (active) {
-          console.warn("hide widget window failed", error);
-        }
-      });
-    };
-
-    const syncWidgetVisibility = () => {
-      void isCurrentWindowVisibleAndFocused()
-        .then((focused) => {
-          if (active && focused) {
-            requestHideWidget();
-          }
-        })
-        .catch((error) => {
-          if (active) {
-            console.warn("sync widget visibility failed", error);
-          }
-        });
-    };
-
-    const handleFocus = () => {
-      syncWidgetVisibility();
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        syncWidgetVisibility();
-      }
-    };
-
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    syncWidgetVisibility();
-
-    return () => {
-      active = false;
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, []);
-
-  return CURRENT_WINDOW_LABEL === "widget" ? (
-    <Suspense fallback={null}>
-      <WidgetShell />
-    </Suspense>
-  ) : <AppShell />;
+  return <Suspense fallback={null}>
+    {CURRENT_WINDOW_LABEL === "mini" ? <MiniShell /> : <AppShell />}
+  </Suspense>;
 }

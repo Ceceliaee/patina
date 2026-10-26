@@ -3,7 +3,6 @@ import type { Locale } from "../i18n/index.ts";
 export type { Locale as AppLanguage } from "../i18n/index.ts";
 
 export type CloseBehavior = "exit" | "tray";
-export type MinimizeBehavior = "taskbar" | "widget";
 export type ThemeMode = "light" | "dark" | "system";
 export type HourlyActivityChartMode = "total" | "category";
 export type ColorScheme =
@@ -45,7 +44,6 @@ export interface AppSettings {
   titleRecordingEnabled: boolean;
   showTrayIcon: boolean;
   closeBehavior: CloseBehavior;
-  minimizeBehavior: MinimizeBehavior;
   themeMode: ThemeMode;
   language: Locale;
   hourlyActivityChartMode: HourlyActivityChartMode;

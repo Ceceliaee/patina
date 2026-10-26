@@ -31,7 +31,6 @@ type RawAppSettingsKey =
   | "title_recording_enabled"
   | "show_tray_icon"
   | "close_behavior"
-  | "minimize_behavior"
   | "theme_mode"
   | "language"
   | "hourly_activity_chart_mode"
@@ -58,7 +57,6 @@ const APP_SETTINGS_RAW_KEYS: Record<keyof AppSettings, RawAppSettingsKey> = {
   titleRecordingEnabled: "title_recording_enabled",
   showTrayIcon: "show_tray_icon",
   closeBehavior: "close_behavior",
-  minimizeBehavior: "minimize_behavior",
   themeMode: "theme_mode",
   language: "language",
   hourlyActivityChartMode: "hourly_activity_chart_mode",

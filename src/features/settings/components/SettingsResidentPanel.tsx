@@ -7,8 +7,6 @@ import { SettingsPreferenceGroup, SettingsPreferenceRow } from "./SettingsPrefer
 
 
 type SettingsResidentPanelProps = {
-  minimizeToWidgetChecked: boolean;
-  onMinimizeToWidgetChange: (nextChecked: boolean) => void;
   showTrayIconChecked: boolean;
   onShowTrayIconChange: (nextChecked: boolean) => void;
   closeToTrayChecked: boolean;
@@ -20,8 +18,6 @@ type SettingsResidentPanelProps = {
 };
 
 export default function SettingsResidentPanel({
-  minimizeToWidgetChecked,
-  onMinimizeToWidgetChange,
   showTrayIconChecked,
   onShowTrayIconChange,
   closeToTrayChecked,
@@ -42,13 +38,6 @@ export default function SettingsResidentPanel({
       <div className="mt-5 space-y-5">
         <SettingsPreferenceGroup title={UI_TEXT.settings.windowBehaviorTitle}>
           <QuietActionRow className="settings-preference-list">
-            <SettingsPreferenceRow title={UI_TEXT.settings.minimizeToWidgetLabel}>
-              <QuietSwitch
-                checked={minimizeToWidgetChecked}
-                onChange={onMinimizeToWidgetChange}
-                ariaLabel={UI_TEXT.accessibility.settings.toggleMinimizeToWidget}
-              />
-            </SettingsPreferenceRow>
             <SettingsPreferenceRow title={UI_TEXT.settings.closeToTrayLabel}>
               <QuietSwitch
                 checked={closeToTrayChecked}
