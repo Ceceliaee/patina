@@ -134,53 +134,6 @@ Patina 目前专注于个人本地时间记录：
 
 它目前不面向团队协作、账号体系、云同步、多平台同步或重型 AI 洞察。
 
-## 从源码运行
-
-### 环境要求
-
-- [Rust](https://www.rust-lang.org/tools/install)
-- [Node.js](https://nodejs.org/)，版本以 [`.node-version`](.node-version) 为准
-- pnpm，版本以 [`package.json#packageManager`](package.json) 为准；安装方式见[贡献指南](CONTRIBUTING.md#zh-cn)
-
-### 安装依赖
-
-```bash
-git clone https://github.com/Ceceliaee/patina.git
-cd patina
-pnpm install --frozen-lockfile
-```
-
-### 开发运行
-
-```bash
-pnpm run tauri dev
-```
-
-### 构建安装包
-
-```bash
-pnpm run tauri build
-```
-
-安装包会生成在：
-
-```text
-src-tauri/target/release/bundle/
-```
-
-## 技术栈
-
-- 桌面壳：Tauri v2
-- 后端：Rust
-- 前端：React + Vite + TypeScript
-- 样式：Tailwind CSS
-- 数据库：SQLite，通过 `@tauri-apps/plugin-sql`
-- Windows 集成：`windows` crate
-
-## 贡献
-
-如果你要参与贡献、了解产品方向或审查架构边界，建议先阅读 [`CONTRIBUTING.md`](CONTRIBUTING.md#zh-cn)。
-
 ## 反馈
 
 需要持续跟进的问题请使用 GitHub Issues；日常交流可扫码加入 QQ 频道：
@@ -198,6 +151,28 @@ src-tauri/target/release/bundle/
     <img src=".github/assets/feedback/qq-channel-light.jpg" width="200" alt="Patina QQ 频道二维码">
   </picture>
 </div>
+
+## 从源码运行
+
+<a id="环境要求"></a>
+<a id="安装依赖"></a>
+<a id="开发运行"></a>
+<a id="构建安装包"></a>
+
+开发环境、依赖安装、启动和故障定位统一见[贡献指南：安装依赖与首次运行](CONTRIBUTING.md#34-安装依赖)。开发版使用独立身份和数据目录；构建正式安装包须遵循[发布规范](docs/versioning-and-release-policy.md#10-发布前的最低验证门槛)。
+
+## 技术栈
+
+- 桌面壳：Tauri v2
+- 后端：Rust
+- 前端：React + Vite + TypeScript
+- 样式：Tailwind CSS
+- 数据库：SQLite，通过 `@tauri-apps/plugin-sql`
+- Windows 集成：`windows` crate
+
+## 贡献
+
+如果你要参与贡献、了解产品方向或审查架构边界，建议先阅读 [`CONTRIBUTING.md`](CONTRIBUTING.md#zh-cn)。
 
 ## 支持项目
 

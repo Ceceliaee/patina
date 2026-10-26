@@ -134,53 +134,6 @@ Patina currently focuses on personal local time records:
 
 It is not currently aimed at team collaboration, account systems, cloud sync, multi-platform sync, or heavy AI insights.
 
-## Build From Source
-
-### Requirements
-
-- [Rust](https://www.rust-lang.org/tools/install)
-- [Node.js](https://nodejs.org/) at the version in [`.node-version`](.node-version)
-- pnpm at the version in [`package.json#packageManager`](package.json); see [dependency setup](CONTRIBUTING.md#34-install-dependencies)
-
-### Install Dependencies
-
-```bash
-git clone https://github.com/Ceceliaee/patina.git
-cd patina
-pnpm install --frozen-lockfile
-```
-
-### Run In Development
-
-```bash
-pnpm run tauri dev
-```
-
-### Build Installer
-
-```bash
-pnpm run tauri build
-```
-
-Installers are generated under:
-
-```text
-src-tauri/target/release/bundle/
-```
-
-## Tech Stack
-
-- Desktop shell: Tauri v2
-- Backend: Rust
-- Frontend: React + Vite + TypeScript
-- Styling: Tailwind CSS
-- Database: SQLite via `@tauri-apps/plugin-sql`
-- Windows integration: `windows` crate
-
-## Contributing
-
-If you want to contribute, understand the product direction, or review architecture boundaries, start with [`CONTRIBUTING.md`](CONTRIBUTING.md#english).
-
 ## Feedback
 
 Use GitHub Issues for bugs and feedback that needs follow-up, or scan the QR code to join the QQ channel for everyday conversation:
@@ -198,6 +151,28 @@ Use GitHub Issues for bugs and feedback that needs follow-up, or scan the QR cod
     <img src=".github/assets/feedback/qq-channel-light.jpg" width="200" alt="Patina QQ channel QR code">
   </picture>
 </div>
+
+## Build From Source
+
+<a id="requirements"></a>
+<a id="install-dependencies"></a>
+<a id="run-in-development"></a>
+<a id="build-installer"></a>
+
+Follow [dependency setup and first run](CONTRIBUTING.md#34-install-dependencies) for the development environment, installation, startup, and troubleshooting. Development uses a separate identity and data directory. Formal installers follow the [release policy](docs/versioning-and-release-policy.md#10-发布前的最低验证门槛).
+
+## Tech Stack
+
+- Desktop shell: Tauri v2
+- Backend: Rust
+- Frontend: React + Vite + TypeScript
+- Styling: Tailwind CSS
+- Database: SQLite via `@tauri-apps/plugin-sql`
+- Windows integration: `windows` crate
+
+## Contributing
+
+If you want to contribute, understand the product direction, or review architecture boundaries, start with [`CONTRIBUTING.md`](CONTRIBUTING.md#english).
 
 ## Support
 

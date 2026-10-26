@@ -2,17 +2,16 @@
 
 ## 1. 文档定位
 
-本文是 `Patina` 的长期工程质量母文档。
+本文帮助开发者选择质量要求和验证范围，帮助审查者判断证据是否覆盖真实风险。架构 owner 由[架构文档](./architecture.md)决定；临时执行单不得降低这两份文档的要求。
 
-它回答的是长期稳定规则，而不是某一轮专项执行计划：
-
-- 工程质量默认包含哪些维度
-- 这些维度之间如何排序、取舍与协作
-- 哪些优化是鼓励的，哪些“优化”其实会伤害仓库
-- 默认验证门槛与风险追加验证是什么
-- 哪些层和边界需要长期高警惕
-
-如果临时执行单、阶段专项文档或局部实现习惯与本文冲突，以本文与 [`architecture.md`](./architecture.md) 为准。
+| 要作出的判断 | 直接入口 |
+| --- | --- |
+| 本次改动最终要跑什么 | [默认门槛](#5-默认验证门槛) |
+| 编辑和模块完成时怎样快速反馈 | [测试分层](#51-测试分层与稳定性治理) |
+| 测试如何避免竞争、泄漏和假通过 | [测试稳定性](#测试稳定性与执行图) |
+| 原生、资源和 CI 证据何时需要 | [风险追加与桌面验收](#风险追加与桌面验收) |
+| 性能预算能否调整 | [Bundle](#52-bundle-长期治理与预算变更)、[性能测量](#53-性能测量与资源生命周期) |
+| 文档或外部 PR 如何审查 | [prose](#46-prose-质量)、[风险模型](#45-外部-pr-准入门禁) |
 
 ---
 
@@ -28,23 +27,21 @@
 
 [架构文档](./architecture.md) 拥有层级、薄入口、兼容壳和唯一实现规则。结构优化应降低回归风险、修复成本和边界回流。
 
-普通函数、类型、模块、service、command 按领域语义命名，不用 `V2/V3`、`New/Next/Latest` 表示改过一次。迁移调用方并收口旧实现；`Legacy/Compat` 仅用于有真实理由和退出条件的薄兼容边界。SemVer、tag、协议、备份格式、schema 和 migration 编号仍是合法版本事实。
+实现命名与真实兼容例外遵循[架构第 3.7 节](./architecture.md#37-例外必须显式且尽量变薄)。版本、协议、schema 和 migration 的真实版本事实不属于普通实现命名限制。
 
 ## 4.5 外部 PR 准入门禁
 
 外部 PR 先判断是否降低维护者安全落地一个已接受问题的成本，再进入逐行 review。完整贡献者政策由 [`../CONTRIBUTING.md`](../CONTRIBUTING.md) 拥有，PR 模板负责采集，`scripts/pr-intake-policy.ts` 与 `scripts/check-pr-intake.ts` 负责执行，`tests/prIntakeGate.test.ts` 负责门禁反例；本文只拥有风险模型。
 
-可进入人工 review 的最小范围是“一个已接受问题 + 必需改动 + 风险匹配验证”，并同时满足：
+范围、体量、owner、UI 与表单门禁按[CONTRIBUTING 的准入要求](../CONTRIBUTING.md#33-pull-request-intake-gate)判断。任一门禁失败即停止完整 review；可信 base 的自动判定不能被作者声明或 label 绕过。本文要求验证匹配真实风险，不能只看 diff 大小：
 
-- 已接受的 Issue、Project item 或维护者明确接受的 scope 可审计；
-- Scope Boundary、Owner Check、Risk Review 和 Validation 完整；
-- 文件和用户可见行为都属于已声明范围，代码位于真实 owner；
-- UI 符合 Quiet Pro，通过 GitHub user-attachments 或其他仓库外 HTTPS 地址提供截图，并有可重复测试；
-- tracking、SQLite、备份、恢复、清理、导出、migration、持久化、截屏采集和本机/网络接口等风险有对应专项测试。
+| 风险域 | 需要保护的事实 |
+| --- | --- |
+| tracking、SQLite、持久化、导出、备份/恢复、清理与 migration | 正确性、数据保留、失败及恢复路径 |
+| 截屏采集、本机或网络接口 | 隐私、权限、鉴权、撤销和关闭行为 |
+| UI | Quiet Pro、实际交互与可重复证据；截图按[贡献要求](../CONTRIBUTING.md#74-include-external-screenshots-for-ui-changes)提供 |
 
-以下门禁失败时停止逐行 review：无接受范围、无关改动、错误 owner、主要 UI 需重做、样式或用户文案绕过 owner、风险无测试、功能 PR 修改或削弱质量门禁、编码污染、仓库内审查截图/GIF/视频/evidence-media、手工维护内容超过 1000 行或 25 个文件而未按 owner/行为拆分，或维护者需要重写主要实现。结果分类为 `Mergeable`、`Needs Author Changes`、`Not Accepted` 或 `Declined`。
-
-门禁是自动、label-free 且不可由 PR 正文或作者声明绕过。它使用可信 base 与 PR head 的三点 diff，不执行贡献者修改后的门禁脚本或 package scripts；普通本地 `pnpm run check` 不能代替 PR intake。Draft PR 可暂不运行，ready for review 后必须全部满足。平台要求的首次 Actions 批准只允许 workflow 启动，不表示 scope 获批。
+审查结果分为 `Mergeable`、`Needs Author Changes`、`Not Accepted` 或 `Declined`，由实际准入和审查结果决定。
 
 测试必须真正覆盖命中的风险域并能被默认测试图或 Cargo module tree 到达。未注册测试、无关 smoke、只删除断言或只写“已测试”都不是正向证据。capability、permission set 或 application command manifest 变化还必须提供已登记的真实 Tauri main/Mini denial matrix。
 
@@ -67,7 +64,15 @@
 
 ## 5. 默认验证门槛
 
-本地验证按实际改动选择：纯文档运行 `pnpm run check:docs`，并核对修改部分的事实、UTF-8、链接和义务；文档治理或验证政策变化追加 `pnpm run check:docs:self-test` 及受影响规则的正反场景。检查器、模板或操作说明变化还需验证其真实使用路径，不能仅因文件是 Markdown 就免除对应风险。纯文档不默认运行应用构建、browser 或 Rust 全套验证。前端行为改动仍以 `pnpm run check` 为默认入口；Rust、架构实现边界、依赖或发布级复核使用 `pnpm run check:full`；改变 tracking 正确性、SQLite 数据行为或桌面 runtime 契约也使用该完整门槛。纯展示的前端修改仍按前端行为路由，不能仅因页面展示追踪数据就推定改变 tracking 契约。`package.json` 是当前命令组合、顺序与叶子测试的唯一 owner，长期 prose 不复制其执行图。门禁不得从顶层入口静默移除既有检查、测试、coverage include 或阈值。
+本地验证按实际改动选择，先确定候选最终需要的证据，再用第 5.1 节安排编辑和模块反馈：
+
+| 实际改动 | 稳定候选的默认入口与边界 |
+| --- | --- |
+| 纯文档 | `pnpm run check:docs`，核对事实、UTF-8、链接和义务；治理或验证政策变化追加 `pnpm run check:docs:self-test` 及受影响规则的正反场景 |
+| 前端行为 | `pnpm run check`；纯展示也在此列，不因页面展示 tracking 数据就推定改变 tracking 契约 |
+| Rust、架构实现边界、依赖、发布级复核，或 tracking 正确性、SQLite 数据行为、桌面 runtime 契约 | `pnpm run check:full`，并按下文追加命中风险的专项 |
+
+检查器、模板或操作说明变化还须验证真实使用路径，扩展名不能豁免风险。纯文档不默认运行应用构建、browser 或 Rust 全套。`package.json` 是命令组合、顺序与叶子测试的唯一 owner；长期 prose 不复制执行图。顶层门禁不得静默移除既有检查、测试、coverage include 或阈值。
 
 `check:full` 必须在默认门槛之外验证 Rust 边界、格式、编译、测试、clippy 与依赖安全。依赖审计只允许经 Windows target 依赖树证明不可达的精确 advisory；受控离线模式仍须运行本地快照和例外可达性校验，但不能替代发布 CI 的联网新鲜度。
 
@@ -90,7 +95,7 @@ JS 离线审计只接受最近 24 小时内成功联网审计生成、且 SHA-25
 | 改动 | 编辑与模块反馈 | 扩大范围的条件 |
 | --- | --- | --- |
 | TS/model、SSR、共享组件 | 使用 `package.json` 中对应叶子；单文件可直接 `node --experimental-strip-types tests/<file>.test.ts` | 公共 helper/组件覆盖实际消费者；候选回到默认门槛 |
-| 文档、i18n、结构检查器 | 命中 checker 与其 self-test；消息资源再按第 7 节验证 | 政策或命令变化验证真实使用路径；扩展名不决定风险 |
+| 文档、i18n、结构检查器 | 文档按第 5 节选择检查及 self-test；i18n 和结构检查器运行命中 checker 与其 self-test，消息资源再按第 7 节验证 | 政策或命令变化验证真实使用路径；扩展名不决定风险 |
 | Browser | `pnpm run test:ui-browser-smoke --group <name>`；可选组由[参数 owner](../tests/uiBrowserSmoke/options.ts)持有 | stub IPC 只证明 DOM/交互；权限、落盘与原生行为进入 runtime |
 | Rust、SQLite、权限模型 | `pnpm run test:rust:focused --filter <module-or-name>`；集成测试加 `--test <target>`，精确名称加 `--exact` | 共享类型、并发和恢复覆盖消费者；真实数据/权限边界补对应 runtime 组 |
 | 原生窗口、进程、恢复、输入 | `pnpm run test:tauri-runtime-smoke --group <name> --feedback --prepared <manifest>` | feedback 不证明完整 acceptance；时间边界与资源风险仍运行原组或资源入口 |
@@ -102,6 +107,8 @@ JS 离线审计只接受最近 24 小时内成功联网审计生成、且 SHA-25
 
 短反馈的 Mini 路径减少重复展开和重开采样，报告明确标为 feedback；完整入口保留展开/重开循环、分布阈值和资源断言。Mini 收起后使用 1 秒功能观察检查停止轮询，不再运行 10 分钟静置；主窗口资源循环及其静置独立保留。其他原生组复用已有独立路径，真实 29/31 秒边界不压缩。准备构建与执行分别计时，合法 prepared 可人工复用；同 HEAD 的脏输入变化、旧产物、过期审计、环境或 instrumentation 变化都可能使旧证据失效。样本不足时仅报告观察，不宣称稳定百分位或全项目提速比例。
 
+#### 各层证据与覆盖范围
+
 测试长期按六层管理：unit/model、integration/contract、structural/SSR、browser、desktop runtime、performance/release。同一功能可以出现在多层，但每层必须保护不同事实：低层覆盖状态组合和不变量，browser 覆盖真实 DOM 与交互，desktop runtime 覆盖 Tauri、WebView2、IPC、plugin、进程和落盘边界，performance/release 负责预算与产物，不互相冒充。
 
 `pnpm test` 是全部快速确定性 TypeScript 测试的稳定入口。coverage 风险域和其余快速测试是互斥分区，并集必须等于全部快速入口。真实浏览器 smoke 进入默认 `check`，Tauri runtime smoke 保持独立 CI job 和风险追加入口。普通确定性顶层测试在一次默认门禁中只能执行一次；coverage、mutation 和 runtime 的特殊语义不能作为宽泛重复豁免。
@@ -109,6 +116,8 @@ JS 离线审计只接受最近 24 小时内成功联网审计生成、且 SHA-25
 默认 browser smoke 使用 headless 模式。Tauri runtime smoke 保留真实应用、窗口生命周期、IPC、权限和数据库验证，可在本机或 CI 按风险需要运行，无需额外的桌面操作确认或启动开关。计时专项不引入反复切换真实应用与浏览器前台、播放媒体或依赖真实活动会话的退出重启自动化测试；计时逻辑、数据边界和恢复规则由确定性测试覆盖，实际 Windows 交互由人工验收补充。
 
 风险域 coverage 门禁只代表其 include 清单。全仓审查使用 `package.json` 中的 `test:coverage:full:frontend` 和 `test:coverage:full:rust` 专项入口，报告保存在忽略目录 `artifacts/coverage-full/`。前者复用快速测试与浏览器场景，按原始源码行合并观察结果，未执行运行模块保留零覆盖；后者使用锁定 Rust 工具链的 `llvm-tools-preview`，合并库测试与真实桌面进程的 instrumentation 计数。报告绑定基线提交及源码字节摘要，列明生成、类型、测试、无映射和采样失败项。前端与 Rust 不合成一个覆盖率，x64 执行不代表 ARM64；工具和测试基础设施以独立行为验证说明。全仓采集不替代风险域阈值，也不使用受 instrumentation 影响的耗时作性能证据。
+
+#### 测试稳定性与执行图
 
 新增测试必须能说明真实 owner、所属层级和独有失败模式。顶层 `tests/*.test.ts` 必须有且只有一个叶子脚本 owner，并能从快速、browser、runtime 或明确专项入口到达。删除测试前必须证明已有更稳定的替代保护，或证明它没有独有失败模式；测试数量和 coverage 百分比本身都不能作为删除理由。
 
@@ -126,6 +135,8 @@ JS 离线审计只接受最近 24 小时内成功联网审计生成、且 SHA-25
 
 `check:test-governance` 自动发现顶层测试和 package script 递归执行图，阻止孤儿入口、重复 owner、缺失路径、默认门禁重复执行、focused/skipped 测试和未登记 ignored。其 `--self-test` 必须覆盖这些失败模式以及合法 coverage、mutation 和 performance ignored 场景；治理脚本不能维护第二份手写测试文件清单。
 
+#### 风险追加与桌面验收
+
 命中风险时追加验证：
 
 - 改动 Rust tracking 主链、数据边界或恢复路径：追加 `pnpm run check:rust`
@@ -141,6 +152,8 @@ JS 离线审计只接受最近 24 小时内成功联网审计生成、且 SHA-25
 默认 CI gate 与 release workflow 必须覆盖 `pnpm run check:full` 的全部检查；工作流可拆分为独立 job 执行，具体编排由 `.github/workflows/` 拥有。
 
 Rust 质量构建默认使用独立的 `src-tauri/target/quality`，避免覆盖正在运行的开发版；显式 `CARGO_TARGET_DIR` 仍由调用环境负责。不得通过停止用户开发实例来解决验证产物锁定。
+
+#### 机器门禁与升级保护
 
 机器 gate 按失败类型分工，具体扫描路径、allowlist、预算和执行顺序由 `scripts/*`、测试与 `package.json` 拥有：
 
@@ -224,7 +237,9 @@ Bundle 治理的目标不是让构建产物永远不增长，而是让代码只�
 
 > Bundle 预算变更是性能边界决策，不是修复构建失败的手段。
 
-性能优化的额外规则：
+### 5.3 性能测量与资源生命周期
+
+性能优化须提供可比较的场景与证据：
 
 - 必须说明场景
 - 必须给出前后可比依据

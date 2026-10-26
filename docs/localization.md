@@ -4,7 +4,13 @@
 
 它回答消息 schema、资源、生成、runtime、复核和贡献流程，不决定产品功能、具体措辞语义或发布优先级。
 
-## 1. 方案结论
+按任务进入：[修改文案](#4-修改或新增文案)、[直接增加语言](#51-开发者直接编辑资源)、[交接 XLSX](#52-向非开发者交接-xlsx-翻译包)。完成操作后可查[消息模型](#3-消息模型)、[资源激活](#53-前端资源装载与-locale-激活)、[原生回退](#6-rust-原生表面)和[验证](#8-验证入口)。下文按操作、参考排列。
+
+<a id="1-方案结论"></a>
+
+<a id="1-消息与实现-owner"></a>
+
+## 消息与实现 owner
 
 Patina 使用仓库级、语言无关的消息契约，而不是让某个前端对象成为规范源：
 
@@ -22,7 +28,9 @@ schema 条目可增加语言无关的 `description` 和 `translatorNote`。翻�
 
 这不是 Fluent，也没有引入新的前端语言或运行时框架。前端使用浏览器内建的 `Intl`，Rust 仅为 CLDR 基数复数使用 ICU4X。
 
-## 2. 不变量
+<a id="2-不变量"></a>
+
+## 不变量
 
 - locale 是显式运行时输入；React 通过 `LocaleProvider` 和 hook 获取，纯函数显式接收 locale 或 `UiText`。
 - 语言相关缓存必须包含 locale；优先缓存语言无关数据。
@@ -32,46 +40,9 @@ schema 条目可增加语言无关的 `description` 和 `translatorNote`。翻�
 - 协议字段、数据库字段、导入标识、程序名、URL、HEX/RGB/HSL 等数据不得机械本地化。
 - 未登记硬编码会失败；例外必须精确到文件和值，并写明 owner 与原因。
 
-## 3. 消息模型
+<a id="4-修改或新增文案"></a>
 
-### 3.1 静态文案
-
-schema 的 `kind` 为 `string`，locale 资源直接提供字符串。
-
-### 3.2 参数插值
-
-schema 声明参数名和类型，资源使用 `arg` 与 `concat`：
-
-```ts
-"example.greeting": {
-  "$type": "message",
-  "body": {
-    "$op": "concat",
-    "parts": ["Hello, ", { "$op": "arg", "name": "name" }]
-  }
-}
-```
-
-参数名必须与 schema 完全一致。缺失、多余或类型语义错误由检查器拒绝。
-
-### 3.3 业务选择
-
-布尔或枚举语义使用 `if`、`eq`、`notEq` 等受控表达式。选择条件属于消息契约，不允许重新写成 locale 文件里的函数。
-
-### 3.4 CLDR 基数复数
-
-复数消息使用 `plural`，计数参数在 schema 中标记为整数语义。每个 locale 必须提供该语言由 CLDR 定义的全部类别。
-
-俄语通常使用：
-
-- `one`：`1`、`21`；
-- `few`：`2`、`22`；
-- `many`：`0`、`5`、`11`、`25`；
-- `other`：主要覆盖非整数等其他形式。
-
-不得根据尾数手写俄语公式。前端由 `Intl.PluralRules` 选择类别，Rust 由 ICU4X 选择类别。`locales/fixtures/ru-RU/plurals.ts` 是不进入生产注册表的共享夹具，并生成 Rust 测试数据，以代表值证明两端一致。
-
-## 4. 修改或新增文案
+## 修改或新增文案
 
 1. 在 `locales/schema.ts` 新增或调整语言无关定义，明确 `frontend` 或 `native` 表面。
 2. 在每个生产 locale 的相应资源 bundle 中添加相同 key。
@@ -82,9 +53,13 @@ schema 声明参数名和类型，资源使用 `arg` 与 `concat`：
 
 不要通过修改 generated 文件、复制中英文分支或扩大硬编码例外来让检查通过。
 
-## 5. 新增内置语言
+<a id="5-新增内置语言"></a>
 
-### 5.1 开发者直接编辑资源
+## 新增内置语言
+
+<a id="51-开发者直接编辑资源"></a>
+
+### 开发者直接编辑资源
 
 以俄语为例：
 
@@ -125,7 +100,9 @@ pnpm run check:rust
 
 新增语言不等于自动解决布局问题。正式发布前仍需检查长文本、字体覆盖、输入法，以及 RTL 语言的镜像布局。它们是界面兼容性验收，不是复数算法。
 
-### 5.2 向非开发者交接 XLSX 翻译包
+<a id="52-向非开发者交接-xlsx-翻译包"></a>
+
+### 向非开发者交接 XLSX 翻译包
 
 外部翻译者不需要安装开发环境，也不应接触 TypeScript 资源或消息 DSL。维护者可从任意已注册参考语言生成任意规范 BCP 47 目标语言的工作簿：
 
@@ -169,7 +146,58 @@ pnpm run check:full
 
 导入命令要求维护者在命令行再次明确目标 locale、原生名称、方向和参考 locale；导入器逐项对照工作簿，不能让回传文件自行决定将注册哪个语言。`--apply` 使用与 `i18n:new` 相同的原子事务，首次创建资源目录、注册 locale，并把 review 状态保留为 `PENDING`。它拒绝覆盖已注册或已存在的 locale。XLSX 与 `exceljs` 都只属于开发工具链，不进入 Patina 前端、Rust 二进制或安装包。
 
-### 5.3 前端资源装载与 locale 激活
+<a id="3-消息模型"></a>
+
+## 消息模型
+
+<a id="31-静态文案"></a>
+
+### 静态文案
+
+schema 的 `kind` 为 `string`，locale 资源直接提供字符串。
+
+<a id="32-参数插值"></a>
+
+### 参数插值
+
+schema 声明参数名和类型，资源使用 `arg` 与 `concat`：
+
+```ts
+"example.greeting": {
+  "$type": "message",
+  "body": {
+    "$op": "concat",
+    "parts": ["Hello, ", { "$op": "arg", "name": "name" }]
+  }
+}
+```
+
+参数名必须与 schema 完全一致。缺失、多余或类型语义错误由检查器拒绝。
+
+<a id="33-业务选择"></a>
+
+### 业务选择
+
+布尔或枚举语义使用 `if`、`eq`、`notEq` 等受控表达式。选择条件属于消息契约，不允许重新写成 locale 文件里的函数。
+
+<a id="34-cldr-基数复数"></a>
+
+### CLDR 基数复数
+
+复数消息使用 `plural`，计数参数在 schema 中标记为整数语义。每个 locale 必须提供该语言由 CLDR 定义的全部类别。
+
+俄语通常使用：
+
+- `one`：`1`、`21`；
+- `few`：`2`、`22`；
+- `many`：`0`、`5`、`11`、`25`；
+- `other`：主要覆盖非整数等其他形式。
+
+不得根据尾数手写俄语公式。前端由 `Intl.PluralRules` 选择类别，Rust 由 ICU4X 选择类别。`locales/fixtures/ru-RU/plurals.ts` 是不进入生产注册表的共享夹具，并生成 Rust 测试数据，以代表值证明两端一致。
+
+<a id="53-前端资源装载与-locale-激活"></a>
+
+## 前端资源装载与 locale 激活
 
 生成器为每个生产 locale 输出独立资源模块，并生成只包含明确动态 import 的 loader manifest。标准原文 `zh-CN` 作为同步可用的初始资源进入默认启动图；其他语言只在已保存设置、预览选择或窗口恢复实际需要时加载。每个 locale chunk 都应有稳定 owner、独立 bundle 预算和构建图断言，不能落入无 owner support aggregate，也不能让新增语言继续线性抬高初始 localization runtime。
 
@@ -184,7 +212,9 @@ pnpm run check:full
 
 修改生成器、loader、缓存或激活顺序时，至少验证 manifest 与注册表一致、同 locale 请求合并、快速连续切换、当前请求失败、Mini/主窗口契约以及 locale chunk 的构建图归属。
 
-## 6. Rust 原生表面
+<a id="6-rust-原生表面"></a>
+
+## Rust 原生表面
 
 托盘、Tools 到期提醒、Markdown 导出标题/摘要/字段标签和内置分类名通过 `domain/localization` 获取文案。调用方传 key 和命名参数，不得重新维护 `match language` 中英文表。生成的 Rust 消息 AST 原生支持 `literal`、`arg`、`concat` 与 `plural`；每个 `plural` 都调用 ICU4X，因此俄语的记录、小时、分钟等词形无需修改 Rust 业务调用方。
 
@@ -192,7 +222,9 @@ pnpm run check:full
 
 CSV、SQLite 和 Parquet 的稳定字段名是数据契约，不随 UI locale 改变；只有 Markdown 的用户展示标签本地化。
 
-## 7. 硬编码例外
+<a id="7-硬编码例外"></a>
+
+## 硬编码例外
 
 检查器使用 TypeScript AST 检查 `.ts`/`.tsx` 中的 JSX 文本与字符串表达式、可见属性、常见 view-model 展示字段和受控通知调用；它按词法作用域跟踪常量和 `let` 的直线/条件赋值，并把同一 sink 的全部可能文本分别送入例外检查，避免已批准值遮蔽未批准值。Rust 门禁检查已声明 native 文案是否在托盘、提醒和 Markdown owner 中重新出现。
 
@@ -207,7 +239,9 @@ DSL validator 会同时检查操作数类型和值域。例如数值必须有限
 
 检查器会同时拒绝未登记硬编码和已经不再命中的陈旧例外。不接受目录、前缀、glob 或正则豁免。
 
-## 8. 验证入口
+<a id="8-验证入口"></a>
+
+## 验证入口
 
 - `pnpm run test:i18n`：前端格式化、CLDR 夹具、通用翻译包往返、篡改和占位符反例。
 - `pnpm run check:i18n:self-test`：validator、硬编码门禁和新语言命令的反例。

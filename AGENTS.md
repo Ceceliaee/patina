@@ -38,11 +38,11 @@ Use `Ceceliaee` for maintainer attribution in repository content and public GitH
 
 ## Quiet Pro Standing Orders
 
-Follow [Quiet Pro](docs/quiet-pro-component-guidelines.md) for tokens, components, interaction states and accessibility. Reuse the existing system and preserve behavior within the task; a new visual direction requires an explicit user decision.
+Reuse [Quiet Pro](docs/quiet-pro-component-guidelines.md) and preserve behavior within the task; a new visual direction requires an explicit user decision.
 
 ## Architecture Direction
 
-Decide the real owner before implementation and follow [architecture](docs/architecture.md). Keep entry points thin, use one canonical implementation, and retain compatibility only for a documented supported boundary and exit condition. Archives are historical context.
+Decide the real owner before implementation using the [architecture placement map](docs/architecture.md#7-新增代码-owner-与落点); its boundary and compatibility rules apply to the change.
 
 ## Product And Priority Direction
 
@@ -70,12 +70,13 @@ Select validation through [engineering quality](docs/engineering-quality.md#5-�
 
 ## External Pull Request Intake
 
-Apply the [contributor intake gate](CONTRIBUTING.md) and [risk model](docs/engineering-quality.md#45-外部-pr-准入门禁) before full review. Failed scope, owner, size, UI, risk or validation gates block full review; labels and author claims cannot bypass them. Visible UI evidence belongs on an external HTTPS host, never in repository media directories. Do not merge a contribution whose main implementation needs a maintainer rewrite.
+Apply the [contributor intake gate](CONTRIBUTING.md#33-pull-request-intake-gate) and [risk model](docs/engineering-quality.md#45-外部-pr-准入门禁) before full review. Failed intake blocks full review; labels and author claims cannot bypass it. The [UI evidence requirements](CONTRIBUTING.md#74-include-external-screenshots-for-ui-changes) govern screenshots and repeatable interaction evidence.
 
 ## Documentation Hygiene
 
 - Top-level `docs/` owns active long-lived rules. Keep task steps, experiments and verification records in `docs/working/`; archive when no longer active and applicable items are completed, rejected or transferred to a named owner. Repair moved links; archives are history, not current authority.
 - Update durable prose for a changed fact or promise, an error, a missing contract, or a structural/wording defect. Satisfying an existing contract does not require a mother-document edit.
+- Organize each document or substantial section around its reader's task: a learning path, an operation, a lookup, or an explanation. Put prerequisites before actions and keep detailed reference out of the common path. Split only for an independently useful reader task, and repair inbound links together.
 - Give each fact one owner. Correct or merge the owning passage before adding another rule; link rather than repeat detail owned elsewhere. Source, schema, configuration and package scripts own machine inventories.
 - Preserve necessary behavior, failure guarantees, exceptions and rationale. Review the affected section and related owners for consistent meaning and detail; [engineering quality](docs/engineering-quality.md#46-prose-质量) owns prose coverage.
 - Remove constraints that add no necessary protection. Prefer an outcome and relevant context over a mandatory sequence or report template; investigate recurring mistakes at their owner rather than stacking prohibitions. Model-specific preferences stay in optional local configuration.

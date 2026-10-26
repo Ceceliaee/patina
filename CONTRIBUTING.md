@@ -15,6 +15,16 @@ changes that remain easy to maintain over time.
 This guide explains how to prepare a change, open a pull request, respond to
 review feedback, and decide whether a change is ready to merge.
 
+Choose the path for your task:
+
+| Task | Start here |
+| --- | --- |
+| Run the app locally for the first time | [Environment and first run](#34-install-dependencies) |
+| Prepare a fix or feature | [Scope and coordination](#3-before-you-start-a-change), then [implementation owners](#5-implementation-boundaries) |
+| Choose checks, including a prose-only edit | [Validation](#6-validation-requirements) |
+| Commit or request review | [Commit preparation](#43-write-clear-commits), then [PR submission](#7-open-a-pull-request) |
+| Review or merge a contribution | [Intake](#33-pull-request-intake-gate), then [review](#9-review-process) and [merge](#10-merge-rules) |
+
 ## 1. Start Here
 
 Start with the product scope. Read the other owners when your change involves
@@ -34,18 +44,7 @@ default implementation basis.
 
 ## 2. Project Priorities
 
-When several implementation options are possible, use this order of priority:
-
-1. Protect tracking correctness and local data safety.
-2. Preserve clear ownership boundaries.
-3. Keep high-frequency desktop workflows readable and reliable.
-4. Prefer the smallest change that fully solves the problem.
-5. Add new surface area only when it fits the current product scope.
-
-Patina is intentionally focused on personal, local-first Windows desktop
-use. Team SaaS features, account systems, cloud-first workflows, mobile-first
-features, and decorative complexity are not current priorities unless the
-project direction is explicitly changed first.
+[Product scope](docs/product-principles-and-scope.md#9-新功能准入标准) decides whether a proposal belongs in Patina; [prioritization](docs/roadmap-and-prioritization.md#6-默认优先级顺序) decides its order. Protect tracking and data first, preserve ownership, and choose the smallest change that fully solves the accepted problem. A different product direction needs an explicit decision.
 
 ## 3. Before You Start A Change
 
@@ -153,6 +152,11 @@ request. Wrong owner placement, retired directories, unowned shared styles,
 hardcoded Quiet Pro escapes, and incomplete contributor checklist items remain
 hard failures.
 
+External PRs may contain at most 1,000 changed lines and 25 changed files of
+manually maintained content. The documentation/new-file exception in the
+commit rules does not waive these PR limits. Encoding damage and changes that
+weaken required gates also block intake.
+
 The intake gate runs in its own `PR Intake` workflow because it needs pull
 request-only context: the three-dot base/head PR diff and PR body. The workflow
 checks out the trusted base revision and inspects the pull request head without
@@ -177,22 +181,36 @@ scope approval before marking the pull request ready for review.
 
 ### 3.4 Install Dependencies
 
+Work from a local clone of this repository on Windows. Install the [Tauri Windows prerequisites](https://v2.tauri.app/start/prerequisites/#windows): Microsoft C++ Build Tools with Desktop development with C++, WebView2, and Rust using an MSVC host. The repository pins Rust in [rust-toolchain.toml](rust-toolchain.toml).
+
+If you do not have a checkout yet:
+
+```bash
+git clone https://github.com/Ceceliaee/patina.git
+cd patina
+```
+
+Run the following commands from the repository root.
+
 Use Node from `.node-version` and the exact pnpm version in `package.json#packageManager`. Install that pnpm version with `npm install --global pnpm@<version>` if needed. Use the committed lockfile when preparing a contribution:
 
 ```bash
 pnpm install --frozen-lockfile
 ```
 
-Useful development commands:
+Start the development app:
 
 ```bash
 pnpm run tauri dev
-pnpm run build
 ```
 
 `pnpm run tauri dev` automatically uses `src-tauri/tauri.dev.conf.json`. Do not
 start a debug build with the production identifier: development and installed
 editions are designed to coexist with separate data and single-instance scopes.
+
+The startup outcome is a development window with usable navigation. If startup fails, inspect the first terminal error, check the pinned toolchains and Windows prerequisites, and leave the installed app's data untouched. `pnpm run build` builds the frontend only; installer preparation follows the [release policy](docs/versioning-and-release-policy.md#10-发布前的最低验证门槛).
+
+#### Test Single-Instance Recovery
 
 Debug builds disable single-instance recovery by default. To test reopening with
 the tray icon hidden, stop the existing development process and run the following
@@ -316,70 +334,19 @@ Refs #4
 
 ### 5.1 Use Owner-First Placement
 
-Choose the real owner before choosing the easiest file to edit.
-
-Frontend long-term structure:
-
-```text
-src/
-  app/
-  features/
-  shared/
-  platform/
-```
-
-Rust long-term structure:
-
-```text
-src-tauri/src/
-  lib.rs
-  app/
-  commands/
-  platform/
-  engine/
-  data/
-  domain/
-```
+Choose the owner before choosing a file. Use the [placement map](docs/architecture.md#7-新增代码-owner-与落点); an unclear owner calls for [boundary triage](docs/issue-fix-boundary-guardrails.md#5-边界判断流程).
 
 ### 5.2 Frontend Rules
 
-- Put feature-specific behavior under `src/features/<feature>/`.
-- Put external environment boundaries under `src/platform/`.
-- Keep `src/shared/` for stable, low-context capabilities reused across
-  features.
-- Keep `src/app/` focused on application shell and cross-feature coordination.
-- Do not access SQLite, Tauri APIs, or platform gateways directly from feature
-  components or hooks.
-- Do not reintroduce retired root layers such as `src/lib/` or `src/types/`.
+Follow the [frontend structure](docs/architecture.md#5-前端长期结构): feature work stays with its feature, shared code needs real shared semantics, and platform access goes through the explicit boundary. Components and hooks must not bypass that boundary to reach SQLite, Tauri, or platform gateways.
 
 ### 5.3 Rust Rules
 
-- Keep `lib.rs` focused on application assembly.
-- Keep `commands/*` thin: receive parameters, map DTOs, and delegate.
-- Keep platform-specific behavior under `platform/*`.
-- Keep tracking rules and runtime behavior under `engine/*`.
-- Keep SQLite pools, SQL, repositories, backup, and restore data access under
-  `data/*`.
-- Keep stable domain concepts and invariants under `domain/*`.
-
-Do not move business logic into `commands/*`, `app/*`, or `lib.rs` for
-convenience.
+Follow the [Rust structure](docs/architecture.md#6-rust-长期结构). Keep assembly and command handlers thin; put domain decisions, runtime behavior, platform details, and data access in their actual owners.
 
 ### 5.4 UI Rules
 
-UI work must follow the Quiet Pro baseline:
-
-- calm, professional, restrained desktop-product UI;
-- typography, spacing, alignment, and hierarchy before decoration;
-- semantic tokens before hardcoded colors, radii, borders, or shadows;
-- existing `panel`, `control`, `chip`, and `status` archetypes before one-off
-  treatments;
-- complete interaction states where relevant: default, hover, active, focus,
-  disabled, loading, and empty.
-
-Do not introduce glassmorphism, blur-heavy panels, neon glow, large gradient
-backgrounds, or page-local visual styles that do not belong to the design
-system.
+Follow [Quiet Pro](docs/quiet-pro-component-guidelines.md) for tokens, reusable components, interaction states, keyboard and focus behavior. Place user-visible copy under [localization](docs/localization.md#4-修改或新增文案). Design-system escapes and incomplete interaction evidence block intake; a new visual direction needs agreement before implementation.
 
 ### 5.5 External Interface Rules
 
@@ -399,6 +366,8 @@ An interface bound to `127.0.0.1` is available only on the same computer. LAN
 or remote access is a separate product and security decision.
 
 ## 6. Validation Requirements
+
+For prose-only work, go directly to [documentation checks](#64-documentation-only-changes).
 
 Run focused checks while implementing, then run the required validation before
 requesting review. Validation requirements are owned by
@@ -712,41 +681,11 @@ work unless there is a clear collaboration reason.
 
 ## 11. Quick Contributor Checklist
 
-Before requesting review:
-
-- [ ] I read the relevant active project documents.
-- [ ] I searched existing issues and pull requests for related or overlapping work.
-- [ ] My branch started from a recent `main`.
-- [ ] The pull request is linked to an accepted issue, Project item, or explicit maintainer-approved scope.
-- [ ] The pull request solves one coherent problem.
-- [ ] Every changed file is necessary for that accepted problem.
-- [ ] The commits are reviewable; oversized changes were split coherently.
-- [ ] I removed unrelated refactors and formatting churn.
-- [ ] I placed new behavior under the correct owner.
-- [ ] I did not add standalone CSS or hardcoded visual styles outside the design system.
-- [ ] I did not change quality gate scripts, CI workflows, bundle budgets, or hotspot budgets unless the maintainer explicitly requested that maintenance work.
-- [ ] User-facing copy is owned by the relevant copy domain, not hardcoded inline in JSX.
-- [ ] I added focused tests for the risk-bearing behavior.
-- [ ] I ran the validation required for this change under [§6](#6-validation-requirements).
-- [ ] I attached screenshots externally for visible UI changes and did not commit review media.
-- [ ] I documented security behavior for any local or network interface.
-- [ ] I used `Refs #N` instead of an issue-closing keyword.
-- [ ] I rebased if `main` changed or GitHub reports conflicts.
+Complete the [PR template's Contributor Checklist](.github/pull_request_template.md#contributor-checklist). The [intake requirements](#33-pull-request-intake-gate), [commit rules](#43-write-clear-commits), and [validation](#6-validation-requirements) explain its obligations. Confirm that related work was checked and unrelated cleanup removed before requesting review.
 
 ## 12. Quick Maintainer Review Checklist
 
-Before merging:
-
-- [ ] The change fits current product scope.
-- [ ] The diff has a clear owner and no unrelated changes.
-- [ ] Tracking, data safety, privacy, and security risks were checked first.
-- [ ] Failure states are visible and recoverable.
-- [ ] New risk has focused test coverage.
-- [ ] Required validation passed.
-- [ ] The branch is compatible with the latest `main`.
-- [ ] Blocking findings are fixed before merge.
-- [ ] Follow-up work contains only non-blocking improvements.
-- [ ] Issue state changes remain explicit.
+Apply [intake](#33-pull-request-intake-gate) before full review, then follow [blocking findings and follow-ups](#9-review-process) and the [merge conditions](#10-merge-rules). Required correctness, safety, privacy, security, and boundary work cannot be deferred as optional polish.
 
 ---
 
@@ -760,6 +699,16 @@ Patina 是一个面向个人使用、本地优先的 Windows 桌面时间追踪�
 项目重视可信的记录、清晰的职责边界、可读的界面，以及能够长期维护的改动。
 
 本文说明如何准备改动、提交 Pull Request、响应 review 意见，以及判断一项改动是否可以合并。
+
+按当前任务选择入口：
+
+| 任务 | 入口 |
+| --- | --- |
+| 首次在本地运行 | [环境与首次运行](#34-安装依赖) |
+| 准备修复或功能 | [范围与协调](#3-开始一项改动之前)，再查[实现 owner](#5-实现边界) |
+| 选择检查，包括纯文案修改 | [验证要求](#6-验证要求) |
+| 提交 commit 或请求 review | [提交准备](#43-编写清晰的-commit)，再查[PR 提交](#7-提交-pull-request) |
+| 审查或合并贡献 | [准入](#33-pull-request-准入门禁)，再查[review](#9-review-流程)与[合并](#10-合并规则) |
 
 ### 1. 开始之前
 
@@ -778,16 +727,7 @@ Patina 是一个面向个人使用、本地优先的 Windows 桌面时间追踪�
 
 ### 2. 项目优先级
 
-当存在多种实现方式时，请按以下顺序判断：
-
-1. 保护追踪正确性和本地数据安全。
-2. 保持清晰的职责边界。
-3. 保证高频桌面工作流清楚、可靠。
-4. 优先采用能够完整解决问题的最小改动。
-5. 只有符合当前产品范围时，才增加新的功能表面。
-
-Patina 有意聚焦个人、本地优先的 Windows 桌面使用场景。除非先明确调整项目方向，
-否则团队 SaaS、账号体系、云优先工作流、移动端优先功能和装饰性复杂度都不是当前重点。
+[产品范围](docs/product-principles-and-scope.md#9-新功能准入标准)决定提案是否属于 Patina，[优先级](docs/roadmap-and-prioritization.md#6-默认优先级顺序)决定先后。优先保护追踪与数据，保持 owner 清晰，采用完整解决已接受问题的最小改动。改变产品方向需要明确决策。
 
 ### 3. 开始一项改动之前
 
@@ -875,6 +815,9 @@ Project item，或维护者明确确认的 scope。PR 正文、评论、关联 i
 owner 错误、退休目录回流、未归属 shared styles、Quiet Pro 硬编码逃逸、未完成
 contributor checklist 等仍然是硬失败。
 
+外部 PR 的手工维护内容最多变更 1000 行、涉及最多 25 个文件。commit 规则中的
+文档/新文件例外不豁免 PR 限制。编码损坏和削弱必需门禁的改动也会阻断准入。
+
 准入门禁运行在独立的 `PR Intake` workflow 中，因为它需要 Pull Request 专属上下文：
 三点 base/head PR diff 和 PR 正文。workflow checkout 可信的 base revision，只读取 PR
 head，不执行贡献者修改过的门禁代码或 package scripts。普通 `Verify` workflow 只在
@@ -892,22 +835,36 @@ Draft PR 不运行准入 job。请先完成模板并获得范围批准，再将 
 
 #### 3.4 安装依赖
 
+在 Windows 上使用本仓库的本地 clone。先按 [Tauri Windows 前置条件](https://v2.tauri.app/start/prerequisites/#windows)准备包含“使用 C++ 的桌面开发”的 Microsoft C++ Build Tools、WebView2 和 MSVC host 的 Rust。仓库通过 [rust-toolchain.toml](rust-toolchain.toml)固定 Rust 工具链。
+
+尚无本地 checkout 时：
+
+```bash
+git clone https://github.com/Ceceliaee/patina.git
+cd patina
+```
+
+以下命令均在仓库根目录执行。
+
 使用 `.node-version` 指定的 Node 和 `package.json#packageManager` 固定的 pnpm 版本。需要安装 pnpm 时，执行 `npm install --global pnpm@<版本>`。准备贡献时，使用已提交的锁文件安装依赖：
 
 ```bash
 pnpm install --frozen-lockfile
 ```
 
-常用开发命令：
+启动开发版：
 
 ```bash
 pnpm run tauri dev
-pnpm run build
 ```
 
 `pnpm run tauri dev` 会自动加载 `src-tauri/tauri.dev.conf.json`。请勿让 debug
 构建使用正式版 identifier；开发版与安装版应使用彼此隔离的数据目录和单实例作用域，
 并可同时运行。
+
+首次运行的完成信号是开发窗口打开且导航可用。启动失败时先查终端首个错误、固定工具链和 Windows 前置条件，不修改安装版数据。`pnpm run build` 只构建前端；安装包准备遵循[发布规范](docs/versioning-and-release-policy.md#10-发布前的最低验证门槛)。
+
+##### 验证单实例唤回
 
 Debug 构建默认关闭单实例唤回。验证隐藏托盘后的重新打开时，先停止已有开发进程，
 再从仓库根目录的 PowerShell 启动：
@@ -1018,63 +975,19 @@ Refs #4
 
 #### 5.1 owner 优先
 
-先选择真实 owner，再选择最方便修改的文件。
-
-前端长期结构：
-
-```text
-src/
-  app/
-  features/
-  shared/
-  platform/
-```
-
-Rust 长期结构：
-
-```text
-src-tauri/src/
-  lib.rs
-  app/
-  commands/
-  platform/
-  engine/
-  data/
-  domain/
-```
+先选 owner，再选文件。使用[落点表](docs/architecture.md#7-新增代码-owner-与落点)；owner 不清时先做[边界判断](docs/issue-fix-boundary-guardrails.md#5-边界判断流程)。
 
 #### 5.2 前端规则
 
-- feature 私有行为放在 `src/features/<feature>/`。
-- 外部环境边界放在 `src/platform/`。
-- `src/shared/` 只放跨 feature 稳定复用、低上下文依赖的能力。
-- `src/app/` 聚焦应用壳层和跨 feature 协调。
-- feature 的 component 和 hook 不应直接访问 SQLite、Tauri API 或 platform gateway。
-- 不要重新引入已经退出的根层目录，例如 `src/lib/` 或 `src/types/`。
+遵循[前端结构](docs/architecture.md#5-前端长期结构)：feature 私有行为留在所属 feature，共享代码需要真实共享语义，平台访问经过显式边界。组件和 hook 不得跳过该边界直达 SQLite、Tauri 或 platform gateway。
 
 #### 5.3 Rust 规则
 
-- `lib.rs` 聚焦应用装配。
-- `commands/*` 保持薄：接收参数、映射 DTO、转发调用。
-- 平台相关行为放在 `platform/*`。
-- tracking 规则和运行时行为放在 `engine/*`。
-- SQLite pool、SQL、repository、备份和恢复数据访问放在 `data/*`。
-- 稳定的领域概念和不变量放在 `domain/*`。
-
-不要因为修改方便，就把业务逻辑塞进 `commands/*`、`app/*` 或 `lib.rs`。
+遵循 [Rust 结构](docs/architecture.md#6-rust-长期结构)。装配与 command handler 保持薄；领域判断、运行时行为、平台细节与数据访问分别留在真实 owner。
 
 #### 5.4 UI 规则
 
-UI 改动必须遵守 Quiet Pro 基线：
-
-- 安静、专业、克制的桌面产品界面；
-- 优先使用排版、间距、对齐和层级，而不是装饰；
-- 优先使用语义 token，而不是硬编码颜色、圆角、边框或阴影；
-- 优先复用现有 `panel`、`control`、`chip` 和 `status` 原型，而不是新增一次性样式；
-- 在适用时补齐交互状态：default、hover、active、focus、disabled、loading 和 empty。
-
-不要引入玻璃拟态、重模糊面板、霓虹发光、大面积渐变背景，
-或不属于设计系统的页面局部视觉样式。
+[Quiet Pro](docs/quiet-pro-component-guidelines.md)拥有 token、共享组件、交互状态、键盘和焦点规则；用户文案按[本地化](docs/localization.md#4-修改或新增文案)维护。绕过设计系统或交互证据不完整会阻断准入；新视觉方向须在实现前确认。
 
 #### 5.5 外部接口规则
 
@@ -1092,6 +1005,8 @@ UI 改动必须遵守 Quiet Pro 基线：
 绑定 `127.0.0.1` 的接口只能被同一台电脑访问。局域网或远程访问属于独立的产品和安全决策。
 
 ### 6. 验证要求
+
+纯文案工作可直接进入[文档检查](#64-仅文档改动)。
 
 实现过程中先运行专项检查，请求 review 前再运行所需的完整验证。验证要求由
 [`docs/engineering-quality.md`](docs/engineering-quality.md#5-默认验证门槛) 拥有；
@@ -1376,38 +1291,8 @@ Review 时应按以下顺序检查：
 
 ### 11. 贡献者快速检查清单
 
-请求 review 前：
-
-- [ ] 我阅读了相关的有效项目文档。
-- [ ] 我搜索了现有 issue 和 Pull Request，确认没有相关或范围重叠的工作。
-- [ ] 我的分支从近期 `main` 创建。
-- [ ] Pull Request 关联了已接受的 issue、Project item，或维护者明确确认的 scope。
-- [ ] Pull Request 只解决一个完整、连贯的问题。
-- [ ] 每个改动文件都是解决该已接受问题所必需。
-- [ ] commit 保持可审查；超大变更已经按逻辑拆分。
-- [ ] 我删除了无关重构和格式化噪音。
-- [ ] 我把新增行为放在正确的 owner 下。
-- [ ] 我没有在设计系统之外新增独立 CSS 或硬编码视觉样式。
-- [ ] 除非维护者明确要求，我没有修改质量门禁脚本、CI workflow、bundle budget 或 hotspot budget。
-- [ ] 用户可见文案由对应 copy domain 管理，没有写成 JSX 内联字面量。
-- [ ] 我为承担风险的行为补充了匹配风险域的专项测试。
-- [ ] 我已按[第 6 节](#6-验证要求) 运行本次改动所需的验证。
-- [ ] 对于可见 UI 改动，我在仓库外提供了截图，且没有提交审查媒体。
-- [ ] 对于本机或网络接口，我说明了安全行为。
-- [ ] 我使用 `Refs #N`，没有使用 issue 自动关闭关键词。
-- [ ] 如果 `main` 已变化或 GitHub 提示冲突，我执行了 rebase。
+填写[PR 模板中的 Contributor Checklist](.github/pull_request_template.md#contributor-checklist)。[准入要求](#33-pull-request-准入门禁)、[提交规则](#43-编写清晰的-commit)和[验证要求](#6-验证要求)解释对应义务。请求 review 前确认已检查相关工作，并移除无关清理。
 
 ### 12. 维护者 Review 快速检查清单
 
-合并前：
-
-- [ ] 改动符合当前产品范围。
-- [ ] diff 有清楚的 owner，不包含无关修改。
-- [ ] 优先检查了 tracking、数据安全、隐私和安全风险。
-- [ ] 失败状态可见、可恢复。
-- [ ] 新增风险有专项测试覆盖。
-- [ ] 必需验证已通过。
-- [ ] 分支与最新 `main` 兼容。
-- [ ] 阻塞性问题已经在合并前修复。
-- [ ] 后续工作只包含非阻塞改进。
-- [ ] issue 状态变化仍然是显式操作。
+完整 review 前先做[准入判断](#33-pull-request-准入门禁)，再按[阻塞问题与后续工作](#9-review-流程)和[合并条件](#10-合并规则)检查。必需的正确性、数据安全、隐私、安全与边界修复不能当作可选润色延后。
