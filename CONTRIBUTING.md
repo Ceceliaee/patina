@@ -405,6 +405,15 @@ requesting review. Validation requirements are owned by
 [`docs/engineering-quality.md`](docs/engineering-quality.md#5-默认验证门槛);
 [`package.json`](package.json) defines each command's checks and execution order.
 
+Use owner-focused feedback while editing, cover the module and its real consumers
+when a behavior is complete, and run the default gates on a stable candidate.
+The [layered entry guide](docs/engineering-quality.md#51-测试分层与稳定性治理)
+explains explicit browser/Rust selection, native feedback, preparation reuse and
+when to expand validation. Focused results do not replace complete acceptance.
+CI has not taken over the current local candidate obligations; only a complete
+successful run for the same candidate can support a documented handoff. Keep
+failed, cancelled, stale and unrun evidence distinct from passing results.
+
 ### 6.1 Default Code Validation
 
 For frontend, UI, settings, read-model, or general code changes:
@@ -1087,6 +1096,11 @@ UI 改动必须遵守 Quiet Pro 基线：
 实现过程中先运行专项检查，请求 review 前再运行所需的完整验证。验证要求由
 [`docs/engineering-quality.md`](docs/engineering-quality.md#5-默认验证门槛) 拥有；
 各命令的检查组成和执行顺序以 [`package.json`](package.json) 为准。
+
+编辑时先验证命中 owner，行为完成后覆盖模块及真实消费者，候选稳定后集中运行默认门槛。
+[分层入口指引](docs/engineering-quality.md#51-测试分层与稳定性治理)说明浏览器/Rust 显式选测、
+原生短反馈、构建准备复用与升级条件；定向结果不替代完整验收。当前本地候选义务尚未转交 CI；
+只有同一候选的完整成功运行才能支持有记录的职责切换。失败、取消、陈旧和未运行证据须与通过分开。
 
 #### 6.1 默认代码验证
 

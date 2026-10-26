@@ -179,10 +179,10 @@ pnpm run check:full
 - `LocaleProvider` 只对当前仍有效的请求结果提交状态，较早请求即使较晚完成也不得覆盖新选择；
 - `text`、有效 locale、`document.lang` 与 `document.dir` 在目标资源可用后一起切换；等待期间继续呈现最后一个可用 locale，不显示空白或混合状态；
 - 目标资源加载失败时保留最后一个可用 locale，记录可诊断错误，并阻止 Settings 保存一个未实际展示的目标语言；
-- 主窗口和 Widget 通过同一 Provider/runtime 契约装载资源，feature 与业务代码不得直接读取 generated locale 模块；
+- 主窗口和 Mini 通过同一 Provider/runtime 契约装载资源，feature 与业务代码不得直接读取 generated locale 模块；
 - 缺失消息仍按标准原文回退，但“整个目标 locale 资源无法加载”属于激活失败，不能伪装成一次成功切换。
 
-修改生成器、loader、缓存或激活顺序时，至少验证 manifest 与注册表一致、同 locale 请求合并、快速连续切换、当前请求失败、Widget/主窗口契约以及 locale chunk 的构建图归属。
+修改生成器、loader、缓存或激活顺序时，至少验证 manifest 与注册表一致、同 locale 请求合并、快速连续切换、当前请求失败、Mini/主窗口契约以及 locale chunk 的构建图归属。
 
 ## 6. Rust 原生表面
 

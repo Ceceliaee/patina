@@ -87,12 +87,12 @@ IPC 契约应保持稳定、可解析、可测试。
 
 Tauri application command 采用显式、默认拒绝的窗口授权模型：
 
-- `src-tauri/build.rs` 中的 application command manifest 是命令分类入口；新增 custom command 必须先归入 main-only 或 Widget allowlist，未分类即构建门失败。
-- `src-tauri/permissions/window-commands.toml` 和 `src-tauri/capabilities/{default,widget}.json` 只授予精确命令，不使用 application command 通配符或 default allow-all。
-- main window 与 Widget 分别使用独立 permission set；Widget 只读取专用 bootstrap/icon/placement/tracker 快照并执行必要窗口操作，不获得 plugin SQL load/select/execute。
+- `src-tauri/build.rs` 中的 application command manifest 是命令分类入口；新增 custom command 必须先归入 main-only 或对应小窗的精确 allowlist，未分类即构建门失败。
+- `src-tauri/permissions/window-commands.toml` 和 `src-tauri/capabilities/{default,mini}.json` 只授予精确命令，不使用 application command 通配符或 default allow-all。
+- main、mini 使用独立 permission set。mini 通过专用命令读取 bootstrap、图标、内容与窗口快照，仅能操作自身窗口或打开主窗口，不能修改追踪或工具状态。两个窗口均不获得 plugin SQL load/select/execute。
 - 删除、恢复、密钥、存储迁移和更新安装等敏感 command 即使 capability 配错，也必须在 Rust handler 内根据真实 `WebviewWindow` label 做 caller guard；前端按钮不是安全边界。
 - 存储迁移编排归 `data/storage_migration.rs`，真实路径身份与无破坏写探针归 `data/storage_path_safety.rs`，staging/替换/旧数据清理的 reparse-safe 删除策略归 `data/storage_migration_cleanup.rs`；三者均默认拒绝无法确认的路径，破坏性清理前必须重新比较数据根和 WebView 根的交叉真实身份。
-- manifest、permission sets、capabilities、前端调用和 Rust `invoke_handler` 注册必须由静态 checker 保持一致，并由真实 main/Widget runtime denial matrix 证明边界没有只停留在配置文本。
+- manifest、permission sets、capabilities、前端调用和 Rust `invoke_handler` 注册必须由静态 checker 保持一致，并由真实 main / mini runtime denial matrix 证明边界没有只停留在配置文本。
 
 ### 4.3 本地数据读取通道
 
@@ -149,7 +149,7 @@ Tauri application command 采用显式、默认拒绝的窗口授权模型：
 - SQLite 访问应通过 `platform/persistence/*` 暴露的明确出口
 - 前端 persistence gateway 只调用按数据域定义的 typed Rust command，SQL 与参数绑定留在 Rust repository；History 会话与标题在同一读取事务中取得
 - settings、classification、backup settings、数据清理与类似写侧操作默认通过 typed Rust command 完成
-- main 和 Widget 均无 SQL plugin 权限；连接池由 `AppSqlitePool` 持有，数据库替换后 command 解析到当前连接池，不能通过 WebView 加载或操作任意 SQL 连接
+- main、mini 均无 SQL plugin 权限；连接池由 `AppSqlitePool` 持有，数据库替换后 command 解析到当前连接池，不能通过 WebView 加载或操作任意 SQL 连接
 - settings 原始读取、tracker health 时间戳与类似本地持久化适配，默认归 `platform/persistence/*`
 - `app/services/*` 只保留应用启动、运行时同步或全局偏好写入所需的薄协调，不从 `features/settings/*` 借基础能力
 - `features/settings/*` 只保留 settings 页面的保存、cleanup、backup、restore 与外链打开等 feature 私有流程
@@ -167,9 +167,9 @@ Tauri application command 采用显式、默认拒绝的窗口授权模型：
 - WebDAV 仅将明确声明当前格式的有效索引条目提供给恢复操作；未知条目及额外字段原样保留。上传与轮换不能用过滤后的列表覆盖完整索引，也不能删除被其他条目引用的对象
 - 自动备份的时间声明、重试与调和决策归备份专用 `engine/backup_scheduler.rs`；目标执行、运行账本和保留策略分别归 `data/scheduled_backup.rs` 与其 repository，不为未来定时导出提前建立通用任务框架
 - WebDAV 自动备份只有在本地快照校验、不可覆盖上传、远端全量回读校验和索引发布全部完成后才可记为成功；旧自动对象必须在新备份成立后，凭精确路径、来源、目标身份与 ETag 等所有权证据清理，证据不足时保留对象并记录警告
-- WebDAV 地址、用户名和远端目录可作为非秘密配置持久化；密码不得进入 SQLite、事件载荷、远端索引或日志。唯一允许返回密码的 IPC 是 main window 用户明确点击“显示密码”触发的 `cmd_reveal_webdav_backup_secret`：handler 必须执行真实窗口 caller guard，前端不得在打开弹窗时预取，隐藏或关闭弹窗后必须清除已读取的明文预览；Widget 和其他窗口不得获得该命令
+- WebDAV 地址、用户名和远端目录可作为非秘密配置持久化；密码不得进入 SQLite、事件载荷、远端索引或日志。唯一允许返回密码的 IPC 是 main window 用户明确点击“显示密码”触发的 `cmd_reveal_webdav_backup_secret`：handler 必须执行真实窗口 caller guard，前端不得在打开弹窗时预取，隐藏或关闭弹窗后必须清除已读取的明文预览；mini 和其他窗口不得获得该命令
 - WebDAV 配置保存由 `data/remote_backup_config.rs` 协调。完整校验后先创建不可变候选凭据，SQLite 事务原子提交配置、凭据引用和保存标识，再清理旧凭据。`platform/credentials/store.rs` 在 profile 私有目录记录不含秘密的归属凭证；凭据只按本机归属和配置身份读取。保存、删除和网络快照取得共用锁，网络请求持有已取得的完整配对；清理失败不改变已提交结果，可在后续读取中重试。备份不授予本机凭据访问权：覆盖恢复解绑，合并保留已有配对或将新增配置标为待配置。旧凭据只为无引用的现存配置读取，首次保存转换后退役；回退到不支持引用协议的旧程序需要重新配置密码
-- main 和 Widget 的 tracking 快照同时携带暂停标志、窗口与运行状态，读取与暂停 / 恢复共用 transition 锁。前端每个快照 owner 的所有事件共用请求序号，只接受最新请求；失败保留最后有效值。订阅先于首次读取，卸载使未完成请求失效；其他设置更新不能覆盖已接受的暂停状态
+- main、mini 的 tracking 快照同时携带暂停标志、窗口与运行状态，读取与暂停 / 恢复共用 transition 锁。前端每个快照 owner 的所有事件共用请求序号，只接受最新请求；失败保留最后有效值。订阅先于首次读取，卸载使未完成请求失效；其他设置更新不能覆盖已接受的暂停状态
 - 自动导出的日历周期、到期槽位、补跑与重试决策归导出专用 `engine/export_scheduler.rs`；配置与运行账本归 `data/repositories/scheduled_export.rs`，文件生成、格式校验、不可覆盖发布和崩溃对账归 `data/scheduled_export.rs`，不得与自动备份合并成通用任务框架
 - `app/scheduled_task_runtime.rs` 只共享目录选择、唤醒/轮询和状态事件发送这些无业务语义的运行机制；备份与导出的 state 类型、锁边界、错误分类、调度策略和数据动作必须继续分离
 
@@ -267,6 +267,10 @@ src/
 - 全局 provider
 - 页面切换与全局对话框
 - 跨 feature 运行时编排
+
+迷你窗由主标题栏独立打开，使用 `mini` label 和独立 WebView；主窗口最小化统一进入任务栏。`domain/mini_window` 拥有几何、收起规则与内容投影，`domain/window_geometry` 保存 Windows 全屏检测也需要的物理坐标值类型。`app/mini_window` 串行应用窗口动作并编排生命周期，内容快照沿用追踪 transition 锁；`data/mini_window_store` 保存独立偏好并读取 bootstrap。前端 `app/mini` 拥有内容模型、订阅与图标组合，只发送窗口意图并接受带会话代次与修订号的状态；主窗聚焦不关闭 mini，悬停展开不激活窗口，关闭 mini 释放它自己的检测任务和 WebView。mini 不挂载主界面页面树、不延长主窗口后台寿命，主窗口释放后仍能更新内容。
+
+贴边展开与收起保持原生画布及 WebView 视口的位置、尺寸稳定；展开前放开原生裁剪，面板与横条的当前视觉过渡都完成后，将显示和鼠标命中区域裁回横条，避免缩窗重排造成闪帧。前端确认携带会话代次与过渡编号，迟到确认不能结束新的过渡。视觉插值归前端，原生目标与裁剪归 mini owner；前端失联时有界收回面板命中区域，环境改变、拖动和重建不继续旧过渡。
 
 `app/*` 不负责：
 

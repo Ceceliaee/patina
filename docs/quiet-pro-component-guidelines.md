@@ -14,7 +14,7 @@ Quiet Pro 是新增组件、扩展页面和修复界面时默认遵循的长期 
 
 ## 4. 当前产品语境
 
-Patina 是 Tauri 时间追踪与工作陪伴工具。Dashboard、History、Data、Classification、Tools、Settings、About 是核心工作面；更新、备份恢复和桌面挂件是低噪音支持面。界面默认服务持续使用，避免营销、娱乐或视觉实验式呈现。
+Patina 是 Tauri 时间追踪与工作陪伴工具。Dashboard、History、Data、Classification、Tools、Settings、About 是核心工作面；更新、备份恢复和迷你窗是低噪音支持面。界面默认服务持续使用，避免营销、娱乐或视觉实验式呈现。
 
 ## 5. 核心设计原则
 
@@ -120,14 +120,14 @@ Quiet Pro 不鼓励“这个页面再发明一个更顺眼的新档位”。
 
 角色的字号和行高由 [tokens.css](../src/styles/tokens.css) 中配对的 `--qp-font-size-*` 与 `--qp-line-height-*` 持有，使用 `rem` 并保留用户根字号。组件消费角色，不另建逐页字号或响应式字号变体；窄空间先调整布局、换行或刻度密度。字重独立使用 `tokens.css` 的 `--qp-font-weight-regular`、`--qp-font-weight-medium`、`--qp-font-weight-emphasis` 三个角色：正文与说明使用 regular；名称、设置项、输入内容和普通时长使用 medium；时间轴图例、时间轴与小时图刻度、摘要指标标签也使用 medium，保持小字号下的识别度；各级标题、按钮、分段选项、重点数值与 badge 使用 emphasis。控件尺寸不另设字重，hover、focus 和禁用状态不改变字重；选中状态沿用背景与颜色表达，确需字重强调时复用 emphasis。名称可以省略，状态与重要数值不能被挤截。
 
-基础 `h1/h2/h3` 字号放在 CSS 基础层，允许组件明确的视觉角色覆盖；保留语义标题结构，不依赖标签级别强制视觉大小。SVG 图表使用相同字号 token，并按实际容器尺寸建立坐标。紧凑信息统一使用 `compact` 角色，包括数量标记、时间轴图例、紧凑分段切换、工具侧栏标签和热力图日历标签。数据窄列选择器使用 `caption` 名称与时长、`compact` 元信息；输入框（含提示文字、日期、时间和颜色值）、搜索框、紧凑按钮和紧凑下拉使用 `caption`。数据汇总数值与趋势内联数值使用 `section-title` 尺度，区别于 `metric` 核心读数。相同阅读任务复用角色，不保留逐页局部字号。桌面挂件与窗口壳层保留各自几何约束，由其样式 owner 持有；共享控件改动仍须覆盖这些消费者的回归检查。
+基础 `h1/h2/h3` 字号放在 CSS 基础层，允许组件明确的视觉角色覆盖；保留语义标题结构，不依赖标签级别强制视觉大小。SVG 图表使用相同字号 token，并按实际容器尺寸建立坐标。紧凑信息统一使用 `compact` 角色，包括数量标记、时间轴图例、紧凑分段切换、工具侧栏标签和热力图日历标签。数据窄列选择器使用 `caption` 名称与时长、`compact` 元信息；输入框（含提示文字、日期、时间和颜色值）、搜索框、紧凑按钮和紧凑下拉使用 `caption`。数据汇总数值与趋势内联数值使用 `section-title` 尺度，区别于 `metric` 核心读数。相同阅读任务复用角色，不保留逐页局部字号。迷你窗与窗口壳层保留各自几何约束，由其样式 owner 持有；共享控件改动仍须覆盖这些消费者的回归检查。
 
 ### 7.5 样式事实要有清楚 owner
 
 `src/App.css` 长期只作为样式入口，汇总导入 `src/styles/` 下的 CSS-only 文件。当前样式 owner 口径为：
 
 - `src/styles/tokens.css`：Quiet Pro 几何、字体、动效 token 与 Tailwind 颜色别名
-- `src/shared/theme/`：主题预设、默认对比度与颜色派生；`useAppThemeMode` 将结果应用到主窗口及 Widget 的 `--qp-*`
+- `src/shared/theme/`：主题预设、默认对比度与颜色派生；`useAppThemeMode` 将结果应用到主窗口及 Mini 的 `--qp-*`
 - `src/styles/quiet-pro.css`：可复用组件原型
 - `src/styles/app-shell.css`：应用壳层、通用页面与响应式规则
 - `src/styles/features/*`：对应 feature 的局部样式
@@ -144,7 +144,7 @@ Codex 参考用于校正命名主题的基础调色板和背景派生，不替�
 
 内层卡片底色在浅色和深色下均略暗于所在面板，以表达嵌入关系；浅色保留柔和色差，避免与面板同色。具体混色由颜色派生 owner 维护。
 
-预览只影响当前窗口草稿；取消、Escape 或遮罩关闭恢复打开弹窗时的配色。确认保存当前模式的配色，并通过现有设置事件同步 Widget，不提交其他设置草稿。保存期间锁定编辑与关闭；写入失败保留草稿供重试或取消。
+预览只影响当前窗口草稿；取消、Escape 或遮罩关闭恢复打开弹窗时的配色。确认保存当前模式的配色，并通过现有设置事件同步 Mini，不提交其他设置草稿。保存期间锁定编辑与关闭；写入失败保留草稿供重试或取消。
 
 ---
 
@@ -236,7 +236,7 @@ Codex 参考用于校正命名主题的基础调色板和背景派生，不替�
 - 替代标题
 - 没有语义必要的“彩色点缀”
 
-Feature 私有表面也必须使用同一状态语义，但其布局和交互细节由最近的代码与测试 owner 维护。例如桌面挂件由 `src/app/widget/*`、对应样式和 `tests/uiBrowserSmoke/widgetScenarios.ts` 负责，本文不保存第二份行为清单。
+Feature 私有表面也必须使用同一状态语义，但其布局和交互细节由最近的代码与测试 owner 维护。例如迷你窗由 `src/app/mini/*`、对应样式和 `tests/uiBrowserSmoke/miniScenarios.ts` 负责，本文不保存第二份行为清单。
 
 ### 9.6 共享组件准入与 owner
 
@@ -250,7 +250,7 @@ Feature 私有表面也必须使用同一状态语义，但其布局和交互细
 - 多数消费者预期在未来一起改变；
 - 能明确写出状态、键盘、焦点和测试责任。
 
-只服务一个 feature 的业务组合默认留在该 feature。标题栏、侧栏和 widget 控件留在 `app/*`。两个组件只是外观相近，但操作目标、状态机或未来变化方向不同，不构成共享理由。
+只服务一个 feature 的业务组合默认留在该 feature。标题栏、侧栏和 mini 控件留在 `app/*`。两个组件只是外观相近，但操作目标、状态机或未来变化方向不同，不构成共享理由。
 
 原生 `button / input / select / textarea` 不是视觉债务。语义正确、行为专用且没有重复状态机时，可以继续使用原生元素；不要建立“原生标签清零”目标。
 
@@ -268,7 +268,7 @@ Feature 私有表面也必须使用同一状态语义，但其布局和交互细
 
 - 语义上应是链接的外部导航；
 - 时间线、日期格、格式选项等复合控件内部元素；
-- 标题栏、侧栏或 widget 的专用按钮；
+- 标题栏、侧栏或 mini 的专用按钮；
 - 尺寸和交互契约明确不同的 feature-owned 图标操作。
 
 不要为按钮增加没有真实消费者的多态渲染、`asChild` 或大量布尔变体。
@@ -340,7 +340,7 @@ Select、Tooltip、日期、时间、颜色等复合控件至少应保证：
 
 滚动区域的唯一视觉 owner 是 `src/styles/components/quiet-scroll-region.css` 中的 `.qp-scroll-region`。feature 拥有尺寸、padding、`overflow-*` 和 overscroll，不得复制 scrollbar pseudo、创建 JavaScript 自绘滚动条或使用已退出的 `.custom-scrollbar`。`.qp-scroll-region-stable` 只适用于 overflow 前后宽度变化会破坏真实信息几何且有 browser geometry test 的消费者；forced-colors、原生键盘/指针路径和系统 overlay scrollbar 必须保持可用。
 
-单个 feature 的卡片布局、挂件状态、具体日期入口、详情弹窗内容和消费者选择规则归最近的 feature 源码与测试。只有跨页面契约发生变化时才更新本文。
+单个 feature 的卡片布局、迷你窗状态、具体日期入口、详情弹窗内容和消费者选择规则归最近的 feature 源码与测试。只有跨页面契约发生变化时才更新本文。
 
 ## 10. 排版、密度与数据展示
 

@@ -46,7 +46,7 @@
 
 门禁是自动、label-free 且不可由 PR 正文或作者声明绕过。它使用可信 base 与 PR head 的三点 diff，不执行贡献者修改后的门禁脚本或 package scripts；普通本地 `pnpm run check` 不能代替 PR intake。Draft PR 可暂不运行，ready for review 后必须全部满足。平台要求的首次 Actions 批准只允许 workflow 启动，不表示 scope 获批。
 
-测试必须真正覆盖命中的风险域并能被默认测试图或 Cargo module tree 到达。未注册测试、无关 smoke、只删除断言或只写“已测试”都不是正向证据。capability、permission set 或 application command manifest 变化还必须提供已登记的真实 Tauri main/Widget denial matrix。
+测试必须真正覆盖命中的风险域并能被默认测试图或 Cargo module tree 到达。未注册测试、无关 smoke、只删除断言或只写“已测试”都不是正向证据。capability、permission set 或 application command manifest 变化还必须提供已登记的真实 Tauri main/Mini denial matrix。
 
 ## 4.6 Prose 质量
 
@@ -81,6 +81,27 @@ JS 离线审计只接受最近 24 小时内成功联网审计生成、且 SHA-25
 
 ### 5.1 测试分层与稳定性治理
 
+验证分为编辑反馈、模块验证和稳定候选验收。编辑时运行命中 owner 的最小有效检查；一个行为单元完成后覆盖共享 helper、实际消费者及故障路径；候选稳定后集中运行本节的默认门槛和适用专项。每次保存、小修或提交都不是重新跑全套的触发条件。修复失败后重验失效范围；共享状态、执行顺序或聚合编排改变时重验对应组合。数据安全、权限和跨进程风险可提前升级，不能等待最终收尾才发现。
+
+本地负责上述早反馈、可重现失败及当前默认候选门槛；CI 负责可信候选的完整集合、双架构与独立 runtime，发布另按[发布政策](versioning-and-release-policy.md)验收。本地义务只有在对应范围取得同一候选 CI 必需 job 的完整成功证据、参数/环境/失败传播等价且本节明确切换后才能转交；当前尚未切换。旧候选、失败、取消、跳过或未运行均不算接管。仅交接开发进度时应说明已验范围与未完成验收，不声称候选通过。
+
+开发入口按层选择，不另建代码影响图：
+
+| 改动 | 编辑与模块反馈 | 扩大范围的条件 |
+| --- | --- | --- |
+| TS/model、SSR、共享组件 | 使用 `package.json` 中对应叶子；单文件可直接 `node --experimental-strip-types tests/<file>.test.ts` | 公共 helper/组件覆盖实际消费者；候选回到默认门槛 |
+| 文档、i18n、结构检查器 | 命中 checker 与其 self-test；消息资源再按第 7 节验证 | 政策或命令变化验证真实使用路径；扩展名不决定风险 |
+| Browser | `pnpm run test:ui-browser-smoke --group <name>`；可选组由[参数 owner](../tests/uiBrowserSmoke/options.ts)持有 | stub IPC 只证明 DOM/交互；权限、落盘与原生行为进入 runtime |
+| Rust、SQLite、权限模型 | `pnpm run test:rust:focused --filter <module-or-name>`；集成测试加 `--test <target>`，精确名称加 `--exact` | 共享类型、并发和恢复覆盖消费者；真实数据/权限边界补对应 runtime 组 |
+| 原生窗口、进程、恢复、输入 | `pnpm run test:tauri-runtime-smoke --group <name> --feedback --prepared <manifest>` | feedback 不证明完整 acceptance；时间边界与资源风险仍运行原组或资源入口 |
+| 性能、coverage、mutation、发布 | 使用所属专项的现有入口，先做命中低层行为/契约验证 | 样本、阈值、真实设备及发布完整责任仍按各自 owner 验收 |
+
+定向参数必须拒绝未知、重复、冲突和零匹配。Rust focused 使用独立质量 target 和缓存依赖，只有实际非零测试通过才成功；依赖缺失时先准备环境。Browser 的启动检查不计入所选业务组的非零结果。测试过滤与 coverage 源码范围是两件事：上述叶子反馈不隐式采集 coverage；需要 coverage 时使用原风险域或全仓入口，保留全部 include 和逐文件阈值。局部行为通过不能当成缩小 coverage 范围的理由，也不能合并同一测试在不同包装/环境中的独有证据。
+
+新增功能沿用所属层入口、fixture 和报告，只补独有失败模式与特殊前提；新增 browser 组或原生组在参数/运行器 owner 注册并保留完整聚合归属。普通单测不必填写桌面环境字段。运行器负责公共环境、预算、取消与清理；组负责其真实资源前提。优先真实实现与独立的文件/状态/进程观察，仅在昂贵或不确定边界使用替身。资源原子分配或验证独占，等待状态就绪；清理等待所创建工作停止，恢复修改过的全局状态，不能靠无条件重试或延长 sleep 掩盖竞争。
+
+短反馈的 Mini 路径减少重复展开和重开采样，报告明确标为 feedback；完整入口保留展开/重开循环、分布阈值和资源断言。Mini 收起后使用 1 秒功能观察检查停止轮询，不再运行 10 分钟静置；主窗口资源循环及其静置独立保留。其他原生组复用已有独立路径，真实 29/31 秒边界不压缩。准备构建与执行分别计时，合法 prepared 可人工复用；同 HEAD 的脏输入变化、旧产物、过期审计、环境或 instrumentation 变化都可能使旧证据失效。样本不足时仅报告观察，不宣称稳定百分位或全项目提速比例。
+
 测试长期按六层管理：unit/model、integration/contract、structural/SSR、browser、desktop runtime、performance/release。同一功能可以出现在多层，但每层必须保护不同事实：低层覆盖状态组合和不变量，browser 覆盖真实 DOM 与交互，desktop runtime 覆盖 Tauri、WebView2、IPC、plugin、进程和落盘边界，performance/release 负责预算与产物，不互相冒充。
 
 `pnpm test` 是全部快速确定性 TypeScript 测试的稳定入口。coverage 风险域和其余快速测试是互斥分区，并集必须等于全部快速入口。真实浏览器 smoke 进入默认 `check`，Tauri runtime smoke 保持独立 CI job 和风险追加入口。普通确定性顶层测试在一次默认门禁中只能执行一次；coverage、mutation 和 runtime 的特殊语义不能作为宽泛重复豁免。
@@ -113,7 +134,13 @@ JS 离线审计只接受最近 24 小时内成功联网审计生成、且 SHA-25
 - 改动 release / changelog / updater：追加 `pnpm run release:validate-changelog`
 - 准备正式发布：本地执行 `pnpm run release:check`，安装包构建与 updater 产物生成默认交给 GitHub Actions
 
+桌面 runtime 的完整入口仍覆盖所有原有功能、拒绝、故障、时间边界及普通 mini 循环。排障时可用 `test:tauri-runtime-smoke --group <name>` 从空 profile 独立执行一组；组名由[参数定义](../tests/tauriRuntimeOptions.ts)持有，单组通过不替代完整验收。`test:tauri-runtime-prepare` 只构建，输出 manifest；随后以 `--prepared <manifest>` 复用同候选的产物。源码、配置、产物摘要或 instrumentation 不一致时必须重新准备，不能继续执行旧 exe。准备使用已缓存的锁定 Cargo 依赖；缺少缓存时先按环境代理配置执行 `cargo fetch --manifest-path src-tauri/Cargo.toml --locked`。
+
+`perf:desktop-resources` 独立运行 mini 与主窗口资源采样，`perf:desktop-lifecycle` 保留完整 runtime 与资源并集。窗口、输入、订阅或原生资源生命周期变化需提供资源证据；带 coverage 的产物或不完整进程树不能证明性能预算。资源组串行执行，保留既有样本数、静置时长与预算。准备、无主动输入的原生组和系统输入阶段分别计时；原生组仍可能显示窗口或对话框。本机验收应集中安排输入阶段，取消或发现外部鼠标/前台变化时停止注入，不反复抢回焦点。进程清理只关闭本轮 Windows Job；强制终止无法保证应用自行刷新未提交状态，测试成功仍要求正常退出与数据断言。
+
 默认 CI gate 与 release workflow 必须覆盖 `pnpm run check:full` 的全部检查；工作流可拆分为独立 job 执行，具体编排由 `.github/workflows/` 拥有。
+
+Rust 质量构建默认使用独立的 `src-tauri/target/quality`，避免覆盖正在运行的开发版；显式 `CARGO_TARGET_DIR` 仍由调用环境负责。不得通过停止用户开发实例来解决验证产物锁定。
 
 机器 gate 按失败类型分工，具体扫描路径、allowlist、预算和执行顺序由 `scripts/*`、测试与 `package.json` 拥有：
 
@@ -125,7 +152,7 @@ JS 离线审计只接受最近 24 小时内成功联网审计生成、且 SHA-25
 
 升级可信链路是受保护边界：当前 schema migration、legacy schema repair、基线归一化和已安装数据库直升保护不能因名称含 `legacy` 或 `migration` 被当作普通兼容代码清理。移除前必须证明不再承担已发布版本升级职责，并通过独立执行单、风险说明和自动化测试。旧产品身份、旧路径、旧 localStorage key 或旧备份格式等迁移窗口兼容，只有在承诺窗口结束、用户提醒和退出验证完成后才能删除。
 
-WebDAV 密码返回须按 [`architecture.md`](./architecture.md#43-本地数据读取通道) 的窄安全例外验证 caller guard、用户主动显示、禁止预取/记录/持久化、隐藏后清除及 Widget 拒绝，并覆盖跨 profile 隔离。
+WebDAV 密码返回须按 [`architecture.md`](./architecture.md#43-本地数据读取通道) 的窄安全例外验证 caller guard、用户主动显示、禁止预取/记录/持久化、隐藏后清除及 Mini 拒绝，并覆盖跨 profile 隔离。
 
 ### 5.2 Bundle 长期治理与预算变更
 
@@ -203,11 +230,10 @@ Bundle 治理的目标不是让构建产物永远不增长，而是让代码只�
 - 必须给出前后可比依据
 - 高频路径除平均值外，应尽量记录 `p50`、`p95`、`max`，避免平均值掩盖体感尖刺
 - 必须证明收益大于复杂度
-- 默认先做无感优化，再做体验取舍；不得为了降低任务管理器数字牺牲启动、切页、widget 唤出与 tracking 可信度
+- 默认先做无感优化，再做体验取舍；不得为了降低任务管理器数字牺牲启动、切页、mini 唤出与 tracking 可信度
 - Windows 平台 owned resource 应优先使用 RAII guard 表达释放责任，包括 process handle、snapshot handle、GDI bitmap/DC、owned icon、COM 初始化和未来可能引入的 WinEvent hook
 - 高频平台查询应优先考虑短 TTL 缓存、negative cache、in-flight 合并和退避，避免后台采样对同一资源重复开销
-- widget WebView 生命周期、启动暖机收缩、透明窗口策略和 foreground event hook 属于体验敏感实验项；未证明收益明显且手感无损前，不应默认启用
-- widget 隐藏路径如果启用资源回收，应先保持即时 park 以保护收起手感，再通过 generation/token 防护做延迟销毁，避免旧 timer 销毁新唤出的 widget
+- 窗口 WebView 生命周期、启动暖机收缩、透明窗口策略和 foreground event hook 的调整属于体验敏感实验项；未证明收益明显且手感无损前，不应默认启用
 - 主窗口后台资源回收固定启用，旧 `background_optimization` 配置不再参与运行策略。窗口销毁条件和等待阈值由 `src-tauri/src/app/main_window.rs` 持有，前端页面缓存清理由其生命周期 owner 管理，两者均等待 30 秒，并分别复核适用的后台状态。主窗口销毁会同时释放所属页面内存，不依赖前端 timer 先执行；用户可见文案不暴露具体等待阈值。改变资源策略或等待时间前，需比较后台资源、重开延迟与状态恢复；保留原生可见性复核与 generation/token 防护，确保等待期内重开仍能快速复用，旧任务不能销毁新唤出的窗口
 
 性能入口与场景清单由 `package.json` 和 benchmark 脚本拥有。长期口径是固定场景后比较 average、p50、p95 与 max，以子进程失败、预算超限或不允许的 SQLite table scan 为失败；不得并发运行制造虚假吞吐，也不得把 stub browser 路径描述成真实 SQLite I/O。生命周期测量必须等待可信 read model 与实际内容提交，不能通过删除加载工作或轮询过早 DOM 节点改善数字。
