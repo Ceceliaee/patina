@@ -1,73 +1,55 @@
 use crate::domain::tools::{PomodoroStatus, TimerMode, TimerStatus, ToolsRuntimeSnapshot};
 use crate::domain::tracking::ActiveSessionSnapshot;
-use crate::domain::widget::{
-    WidgetExpansionPreference, WidgetPlacement, WidgetStatusSnapshot, WidgetToolKind,
-    WidgetToolProjection, WidgetToolState, WidgetTrackingProjection,
-};
-use std::future::Future;
-use std::pin::Pin;
+use serde::Serialize;
 
-pub type WidgetStoreFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, String>> + Send + 'a>>;
-
-pub trait WidgetPlacementStore: Send + Sync {
-    fn load_placement(&self) -> WidgetStoreFuture<'_, WidgetPlacement>;
-    fn save_placement(&self, placement: WidgetPlacement) -> WidgetStoreFuture<'_, ()>;
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MiniToolKind {
+    Stopwatch,
+    Countdown,
+    Pomodoro,
 }
 
-pub trait WidgetExpansionPreferenceStore: Send + Sync {
-    fn load_expansion_preference(&self) -> WidgetStoreFuture<'_, WidgetExpansionPreference>;
-    fn save_expansion_preference(
-        &self,
-        preference: WidgetExpansionPreference,
-    ) -> WidgetStoreFuture<'_, ()>;
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MiniToolState {
+    Running,
+    Paused,
+    Completed,
 }
 
-pub async fn load_widget_placement(
-    store: &impl WidgetPlacementStore,
-) -> Result<WidgetPlacement, String> {
-    store
-        .load_placement()
-        .await
-        .map_err(|error| format!("failed to load widget placement: {error}"))
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct MiniTrackingProjection {
+    pub app_name: String,
+    pub exe_name: String,
+    pub elapsed_ms: i64,
+    pub running: bool,
 }
 
-pub async fn save_widget_placement(
-    store: &impl WidgetPlacementStore,
-    placement: WidgetPlacement,
-) -> Result<(), String> {
-    store
-        .save_placement(placement)
-        .await
-        .map_err(|error| format!("failed to save widget placement: {error}"))
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct MiniToolProjection {
+    pub kind: MiniToolKind,
+    pub state: MiniToolState,
+    pub value_ms: i64,
+    pub counts_down: bool,
+    pub visible_until_ms: Option<i64>,
 }
 
-pub async fn load_widget_expansion_preference(
-    store: &impl WidgetExpansionPreferenceStore,
-) -> Result<WidgetExpansionPreference, String> {
-    store
-        .load_expansion_preference()
-        .await
-        .map_err(|error| format!("failed to load widget expansion preference: {error}"))
-}
-
-pub async fn save_widget_expansion_preference(
-    store: &impl WidgetExpansionPreferenceStore,
-    preference: WidgetExpansionPreference,
-) -> Result<(), String> {
-    store
-        .save_expansion_preference(preference)
-        .await
-        .map_err(|error| format!("failed to save widget expansion preference: {error}"))
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct MiniStatusSnapshot {
+    pub tracking: Option<MiniTrackingProjection>,
+    pub tools: Vec<MiniToolProjection>,
+    pub sampled_at_ms: i64,
 }
 
 const COMPLETED_TOOL_VISIBLE_MS: i64 = 5_000;
 
-pub fn build_widget_status_snapshot(
+pub fn build_mini_status_snapshot(
     active_session: Option<ActiveSessionSnapshot>,
     tools: ToolsRuntimeSnapshot,
     sampled_at_ms: i64,
-) -> WidgetStatusSnapshot {
-    let tracking = active_session.map(|session| WidgetTrackingProjection {
+) -> MiniStatusSnapshot {
+    let tracking = active_session.map(|session| MiniTrackingProjection {
         app_name: session.app_name,
         exe_name: session.exe_name,
         elapsed_ms: session
@@ -80,13 +62,13 @@ pub fn build_widget_status_snapshot(
 
     if let Some(timer) = tools.current_timer {
         let state = match timer.status {
-            TimerStatus::Running => Some(WidgetToolState::Running),
-            TimerStatus::Paused => Some(WidgetToolState::Paused),
+            TimerStatus::Running => Some(MiniToolState::Running),
+            TimerStatus::Paused => Some(MiniToolState::Paused),
             TimerStatus::Completed
                 if sampled_at_ms.saturating_sub(timer.completed_at.unwrap_or(timer.updated_at))
                     <= COMPLETED_TOOL_VISIBLE_MS =>
             {
-                Some(WidgetToolState::Completed)
+                Some(MiniToolState::Completed)
             }
             TimerStatus::Idle | TimerStatus::Completed => None,
         };
@@ -97,16 +79,16 @@ pub fn build_widget_status_snapshot(
             } else {
                 timer.elapsed_ms_at(sampled_at_ms)
             };
-            tool_slots.push(WidgetToolProjection {
+            tool_slots.push(MiniToolProjection {
                 kind: if counts_down {
-                    WidgetToolKind::Countdown
+                    MiniToolKind::Countdown
                 } else {
-                    WidgetToolKind::Stopwatch
+                    MiniToolKind::Stopwatch
                 },
                 state,
                 value_ms,
                 counts_down,
-                visible_until_ms: (state == WidgetToolState::Completed).then(|| {
+                visible_until_ms: (state == MiniToolState::Completed).then(|| {
                     timer
                         .completed_at
                         .unwrap_or(timer.updated_at)
@@ -118,23 +100,23 @@ pub fn build_widget_status_snapshot(
 
     if let Some(pomodoro) = tools.current_pomodoro {
         let state = match pomodoro.status {
-            PomodoroStatus::Running => Some(WidgetToolState::Running),
-            PomodoroStatus::Paused => Some(WidgetToolState::Paused),
+            PomodoroStatus::Running => Some(MiniToolState::Running),
+            PomodoroStatus::Paused => Some(MiniToolState::Paused),
             PomodoroStatus::Completed
                 if sampled_at_ms.saturating_sub(pomodoro.updated_at)
                     <= COMPLETED_TOOL_VISIBLE_MS =>
             {
-                Some(WidgetToolState::Completed)
+                Some(MiniToolState::Completed)
             }
             PomodoroStatus::Idle | PomodoroStatus::Completed => None,
         };
         if let Some(state) = state {
-            tool_slots.push(WidgetToolProjection {
-                kind: WidgetToolKind::Pomodoro,
+            tool_slots.push(MiniToolProjection {
+                kind: MiniToolKind::Pomodoro,
                 state,
                 value_ms: pomodoro.remaining_ms_at(sampled_at_ms),
                 counts_down: true,
-                visible_until_ms: (state == WidgetToolState::Completed).then(|| {
+                visible_until_ms: (state == MiniToolState::Completed).then(|| {
                     pomodoro
                         .updated_at
                         .saturating_add(COMPLETED_TOOL_VISIBLE_MS)
@@ -143,7 +125,7 @@ pub fn build_widget_status_snapshot(
         }
     }
 
-    WidgetStatusSnapshot {
+    MiniStatusSnapshot {
         tracking,
         tools: tool_slots,
         sampled_at_ms,
@@ -153,47 +135,7 @@ pub fn build_widget_status_snapshot(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::tools::{
-        PomodoroPhase, PomodoroStatus, TimerMode, TimerStatus, ToolPomodoroRun, ToolTimer,
-        ToolsRuntimeSnapshot,
-    };
-    use crate::domain::tracking::ActiveSessionSnapshot;
-    use crate::domain::widget::WidgetSide;
-    use crate::domain::widget::{WidgetToolKind, WidgetToolState};
-    use std::sync::Mutex;
-
-    struct MemoryWidgetStore {
-        placement: Mutex<WidgetPlacement>,
-    }
-
-    impl WidgetPlacementStore for MemoryWidgetStore {
-        fn load_placement(&self) -> WidgetStoreFuture<'_, WidgetPlacement> {
-            Box::pin(async move { Ok(self.placement.lock().unwrap().clone()) })
-        }
-
-        fn save_placement(&self, placement: WidgetPlacement) -> WidgetStoreFuture<'_, ()> {
-            Box::pin(async move {
-                *self.placement.lock().unwrap() = placement;
-                Ok(())
-            })
-        }
-    }
-
-    #[test]
-    fn widget_engine_uses_store_contract_without_storage_details() {
-        tauri::async_runtime::block_on(async {
-            let initial = WidgetPlacement::new(WidgetSide::Left, 0.2);
-            let next = WidgetPlacement::new(WidgetSide::Right, 0.8);
-            let store = MemoryWidgetStore {
-                placement: Mutex::new(initial.clone()),
-            };
-
-            assert_eq!(load_widget_placement(&store).await.unwrap(), initial);
-            save_widget_placement(&store, next.clone()).await.unwrap();
-            assert_eq!(load_widget_placement(&store).await.unwrap(), next);
-        });
-    }
-
+    use crate::domain::tools::{PomodoroPhase, ToolPomodoroRun, ToolTimer};
     fn timer(mode: TimerMode, status: TimerStatus, now_ms: i64) -> ToolTimer {
         ToolTimer {
             id: 1,
@@ -230,7 +172,7 @@ mod tests {
     }
 
     #[test]
-    fn widget_projection_keeps_tracking_and_fixed_tool_slots_together() {
+    fn mini_projection_keeps_tracking_and_fixed_tool_slots_together() {
         let now_ms = 100_000;
         let active_session = ActiveSessionSnapshot {
             id: 1,
@@ -246,31 +188,31 @@ mod tests {
             ..ToolsRuntimeSnapshot::default()
         };
 
-        let snapshot = build_widget_status_snapshot(Some(active_session), tools, now_ms);
+        let snapshot = build_mini_status_snapshot(Some(active_session), tools, now_ms);
 
         assert_eq!(snapshot.tracking.unwrap().elapsed_ms, 60_000);
         assert_eq!(snapshot.tools.len(), 2);
-        assert_eq!(snapshot.tools[0].kind, WidgetToolKind::Stopwatch);
-        assert_eq!(snapshot.tools[0].state, WidgetToolState::Running);
+        assert_eq!(snapshot.tools[0].kind, MiniToolKind::Stopwatch);
+        assert_eq!(snapshot.tools[0].state, MiniToolState::Running);
         assert_eq!(snapshot.tools[0].value_ms, 15_000);
-        assert_eq!(snapshot.tools[1].kind, WidgetToolKind::Pomodoro);
-        assert_eq!(snapshot.tools[1].state, WidgetToolState::Paused);
+        assert_eq!(snapshot.tools[1].kind, MiniToolKind::Pomodoro);
+        assert_eq!(snapshot.tools[1].state, MiniToolState::Paused);
         assert_eq!(snapshot.tools[1].value_ms, 20 * 60_000);
     }
 
     #[test]
-    fn widget_projection_has_one_timer_domain_slot_and_excludes_reminders() {
+    fn mini_projection_has_one_timer_domain_slot_and_excludes_reminders() {
         let now_ms = 100_000;
         let tools = ToolsRuntimeSnapshot {
             current_timer: Some(timer(TimerMode::Countdown, TimerStatus::Paused, now_ms)),
             ..ToolsRuntimeSnapshot::default()
         };
 
-        let snapshot = build_widget_status_snapshot(None, tools, now_ms);
+        let snapshot = build_mini_status_snapshot(None, tools, now_ms);
 
         assert!(snapshot.tracking.is_none());
         assert_eq!(snapshot.tools.len(), 1);
-        assert_eq!(snapshot.tools[0].kind, WidgetToolKind::Countdown);
+        assert_eq!(snapshot.tools[0].kind, MiniToolKind::Countdown);
         assert!(snapshot.tools[0].counts_down);
         assert_eq!(snapshot.tools[0].value_ms, 48_000);
     }
@@ -286,9 +228,9 @@ mod tests {
             )),
             ..ToolsRuntimeSnapshot::default()
         };
-        let visible = build_widget_status_snapshot(None, visible_tools, completed_at + 2_000);
+        let visible = build_mini_status_snapshot(None, visible_tools, completed_at + 2_000);
         assert_eq!(visible.tools.len(), 1);
-        assert_eq!(visible.tools[0].state, WidgetToolState::Completed);
+        assert_eq!(visible.tools[0].state, MiniToolState::Completed);
         assert_eq!(
             visible.tools[0].visible_until_ms,
             Some(completed_at + 5_000)
@@ -302,7 +244,7 @@ mod tests {
             )),
             ..ToolsRuntimeSnapshot::default()
         };
-        let expired = build_widget_status_snapshot(None, expired_tools, completed_at + 6_001);
+        let expired = build_mini_status_snapshot(None, expired_tools, completed_at + 6_001);
         assert!(expired.tools.is_empty());
     }
 }
