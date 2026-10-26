@@ -181,7 +181,7 @@ Patina 的必要工作是观察活动、可信地保存时间、按需展示数�
 
 ## 6. 阶段 C：停止隐藏 Widget 的展示工作
 
-入口：[useWidgetTracking](../../src/app/widget/useWidgetTracking.ts)、[健康轮询](../../src/app/services/trackerHealthPollingService.ts)、[Widget 生命周期](../../src-tauri/src/app/widget.rs)。展示订阅归 Widget，窗口真实生命周期归 Rust app owner。
+历史入口：`src/app/widget/useWidgetTracking.ts`（已移除）、[健康轮询](../../src/app/services/trackerHealthPollingService.ts)、`src-tauri/src/app/widget.rs`（旧 Widget 生命周期，已移除）。当时展示订阅归 Widget，窗口真实生命周期归 Rust app owner。
 
 **处置：实验已否决并撤回，不进入本轮交付。** 原生隐藏后 `document.visibilityState` 仍可能是 `visible`，已在隔离 WebView2 复现。实验版通过 30 轮窗口开关、隐藏 3.2 秒零展示调用、重开补齐和迟到 bootstrap 丢弃验证，冻结旧版在“重开后 bootstrap 刷新”负对照中失败。但没有发布模式 CPU 净收益证据，完整实现增加了生命周期状态与 bundle 成本，未满足既有包体积余量。没有提高预算，也没有把实现移入公共 chunk。以下未勾选实施步骤随该候选否决，不表示已经验收通过；未来重新推进需先补成本证据。
 

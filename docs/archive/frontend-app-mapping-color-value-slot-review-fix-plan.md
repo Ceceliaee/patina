@@ -26,7 +26,7 @@ Document Type: One-off Review Fix Plan
 
 关键点：
 
-- 外侧 trigger 里当前直接渲染 `#HEX` 值：[QuietColorField.tsx](../../src/shared/components/QuietColorField.tsx#L249)
+- 外侧 trigger 里当时直接渲染 `#HEX` 值：`src/shared/components/QuietColorField.tsx:249`（归档时行号）
 - 对应样式 `.qp-color-trigger-value` 目前是内容自适应，只有 `min-width: 0`，没有稳定槽位宽度：`src/App.css:437`（归档时行号）
 
 结果就是：

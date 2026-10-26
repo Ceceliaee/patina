@@ -71,7 +71,7 @@
 | [data/storage_path_safety.rs](../../src-tauri/src/data/storage_path_safety.rs) | 真实路径身份与写探针；复用现有保护 |
 | [data/storage_migration_cleanup.rs](../../src-tauri/src/data/storage_migration_cleanup.rs) | staging、替换和旧数据清理；复用 reparse-safe 边界 |
 | [app/bootstrap.rs](../../src-tauri/src/app/bootstrap.rs) | 目前先处理 pending，再初始化 SQLite；插入配置准备调用，保持薄编排 |
-| [app/main_window.rs](../../src-tauri/src/app/main_window.rs)、[app/widget.rs](../../src-tauri/src/app/widget.rs) | WebView 数据根消费者；不得在准备完成前创建 WebView |
+| [app/main_window.rs](../../src-tauri/src/app/main_window.rs)、`src-tauri/src/app/widget.rs`（历史路径，已移除） | WebView 数据根消费者；不得在准备完成前创建 WebView |
 | [commands/storage.rs](../../src-tauri/src/commands/storage.rs) | IPC、预览、重启入口与快照；不放注册表或迁移实现 |
 
 基线中的 `storage_anchor.rs` 还保存 `storage-migration-pending.json` 和 `storage-maintenance-state.json`，旧 JSON 写入另有 `.previous` 和 `.tmp` 中间文件。只搬两个路径而保留这些依赖，会使后续存储操作继续依赖旧目录。

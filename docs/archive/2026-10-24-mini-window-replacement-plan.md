@@ -6,6 +6,8 @@
 > 本阶段：新增标题栏入口与独立 mini 窗，完成三个核心窗口交互，展示现有挂件内容
 > 后续方向：mini 窗完善并验收后，再单独安排挂件替换和拆除
 
+本文的三窗口并行、原生缩窗与保留挂件要求属于骨架阶段。旧挂件已在后续变更中退役，当前窗口契约以[架构第 5.1 节](../architecture.md#51-app)为准；历史人工验收项不因此变为已通过。
+
 本阶段完成 mini 窗骨架。主窗口标题栏在最小化按钮左侧新增“打开迷你窗”按钮，位置对应用户截图中的红色虚线框。用户可以单独打开和体验 mini 窗；现有挂件继续提供原来的内容、功能、入口和设置。2026-10-25 完成实现、适用自动化验证与阶段归档，实际证据和人工验收边界见第 8 节。
 
 本轮只包含三组核心改造：顶部 / 左右贴边收成小条、鼠标靠近展开并在离开后延迟收起、拖离边缘后自由浮动并可重新吸附。mini 窗内沿用现有挂件的信息和能力，不增加记录暂停 / 恢复、工具暂停 / 恢复或今日统计。现有计时器和番茄钟仍显示状态，操作继续在原有工具页完成。
@@ -186,13 +188,13 @@ mini 使用独立 JSON 设置键 `mini_window_preferences`，将位置与保持�
 | owner | 本阶段动作 |
 | --- | --- |
 | [AppTitleBar](../../src/app/components/AppTitleBar.tsx)、[AppShell](../../src/app/AppShell.tsx)、[窗口 gateway](../../src/platform/desktop/windowControlGateway.ts) | 新增一个打开 mini 的窗口动作、busy / 失败反馈；原最小化 / 最大化 / 关闭调用不变 |
-| [App 入口](../../src/App.tsx)、[窗口身份识别](../../src/platform/desktop/widgetRuntimeGateway.ts) | 显式识别 main / widget / mini；mini 使用独立惰性入口，不能落入现有“不是 widget 就是 main”的默认分支 |
+| [App 入口](../../src/App.tsx)、`src/platform/desktop/widgetRuntimeGateway.ts`（当时的窗口身份识别入口，现已移除） | 显式识别 main / widget / mini；mini 使用独立惰性入口，不能落入现有“不是 widget 就是 main”的默认分支 |
 | `src/app/mini/` | mini 壳、视图状态和输入控制；不挂载完整 AppShell，不复制 WidgetShell 的控制器 |
 | [app-shell 样式](../../src/styles/app-shell.css)及 mini 样式 owner | 标题栏按钮复用现有样式；mini 专属类隔离，保留所有仍被 widget 消费的 CSS |
 | Rust `domain/mini_window.rs`、`app/mini_window.rs` | 前者负责纯几何与转换规则，后者及其 native / watcher 子模块负责原生窗口编排，不让 command 承担流程 |
 | [bootstrap](../../src-tauri/src/app/bootstrap.rs)、[运行入口](../../src-tauri/src/app/runtime.rs)、[生命周期状态](../../src-tauri/src/app/state.rs) | 注册 mini 独立生命周期、命令和检测任务；不复用 WidgetWindowLifecycleState 实例 |
 | [主窗口](../../src-tauri/src/app/main_window.rs)、[原生窗口事件](../../src-tauri/src/app/tray.rs)及恢复 owner | 仅接入新 label 所需的关闭、恢复、退出处理；保留既有 main / widget 互斥，不将其泛化到 mini |
-| 现有 [widget engine 投影](../../src-tauri/src/engine/widget.rs)、[只读 gateway](../../src/platform/desktop/widgetRuntimeGateway.ts)、[状态 view model](../../src/app/widget/widgetStatusViewModel.ts) | 优先复用其业务事实和纯格式化；mini 不读取 widget 布局作为自身状态，不整包复用会操作 widget 的 hook |
+| 当时的 widget engine 投影 `src-tauri/src/engine/widget.rs`、只读 gateway `src/platform/desktop/widgetRuntimeGateway.ts`、状态 view model `src/app/widget/widgetStatusViewModel.ts`（旧挂件路径，现已移除） | 优先复用其业务事实和纯格式化；mini 不读取 widget 布局作为自身状态，不整包复用会操作 widget 的 hook |
 | `data/mini_window_store.rs`、`data/repositories/mini_window.rs` | 通过当前存储服务读写 mini 自有位置 / 展开偏好，不迁移已有 widget key |
 | [命令清单](../../src-tauri/build.rs)、[权限集](../../src-tauri/permissions/window-commands.toml)、capabilities | 新增 mini 精确允许集；原 widget 集保持原义；注册、调用和 checker 同步覆盖第三窗口 |
 | [本地化资源定义](../../locales/schema.ts)和各生产 locale | 仅增加 mini 按钮与小窗必要文案；保留原挂件文案；按流程复核并生成 |

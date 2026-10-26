@@ -70,7 +70,7 @@
 | 弹窗 | [SettingsAppearancePanel.tsx](../../src/features/settings/components/SettingsAppearancePanel.tsx) 记录打开时配色，取消时恢复，确认成功才关闭 |
 | 保存 | [useSettingsPageState.ts](../../src/features/settings/hooks/useSettingsPageState.ts) 的配色确认只提交当前配色字段，不保存其余设置草稿 |
 | 设置类型与读取 | [appSettings.ts](../../src/shared/settings/appSettings.ts)、[appSettingsNormalization.ts](../../src/shared/settings/appSettingsNormalization.ts)、[appSettingsStore.ts](../../src/platform/persistence/appSettingsStore.ts) |
-| 写侧与挂件快照 | [app_settings.rs](../../src-tauri/src/data/repositories/app_settings.rs)、[widget_runtime.rs](../../src-tauri/src/data/repositories/widget_runtime.rs)、[widgetRuntimeGateway.ts](../../src/platform/desktop/widgetRuntimeGateway.ts) |
+| 写侧与挂件快照 | [app_settings.rs](../../src-tauri/src/data/repositories/app_settings.rs)、`src-tauri/src/data/repositories/widget_runtime.rs`、`src/platform/desktop/widgetRuntimeGateway.ts`（后两项为已移除的旧挂件路径） |
 | 弹窗扩展位置 | [QuietDialog.tsx](../../src/shared/components/QuietDialog.tsx) 已提供 `headerAside`，可用于放置对比度控件 |
 | 滑条复用判断 | [QuietRangeControl.tsx](../../src/shared/components/QuietRangeControl.tsx) 是前后范围导航，不是数值滑条，不能因名称相似就强行复用 |
 

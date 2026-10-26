@@ -322,9 +322,9 @@ rg -n "postcss" package.json package-lock.json src tests scripts vite.config.ts
 
 | 文件 | 改为模块私有的符号 |
 |---|---|
-| [`widgetStatusViewModel.ts`](../../src/app/widget/widgetStatusViewModel.ts) | `WidgetToolSlotViewModel`、`WidgetStatusViewModel` |
+| `src/app/widget/widgetStatusViewModel.ts`（历史路径，已移除） | `WidgetToolSlotViewModel`、`WidgetStatusViewModel` |
 | [`settingsLanguagePreview.ts`](../../src/features/settings/services/settingsLanguagePreview.ts) | `SettingsLanguagePreviewResult` |
-| [`widgetRuntimeGateway.ts`](../../src/platform/desktop/widgetRuntimeGateway.ts) | `WidgetTrackingProjection`、`WidgetPresentationSnapshot`、`parseWidgetPresentationSnapshot` |
+| `src/platform/desktop/widgetRuntimeGateway.ts`（历史路径，已移除） | `WidgetTrackingProjection`、`WidgetPresentationSnapshot`、`parseWidgetPresentationSnapshot` |
 | [`activityReminderCatalogGateway.ts`](../../src/platform/persistence/activityReminderCatalogGateway.ts) | `ACTIVITY_REMINDER_WEB_CANDIDATE_LOOKBACK_DAYS`、`ACTIVITY_REMINDER_WEB_CANDIDATE_LIMIT`、`ActivityReminderCatalogSnapshot` |
 | [`runtime.ts`](../../src/shared/i18n/runtime.ts) | `LocaleActivationResult` |
 | [`tools.ts`](../../src/shared/types/tools.ts) | `ActivityReminderSuspensionReason` |
