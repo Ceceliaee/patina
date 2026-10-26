@@ -1,4 +1,4 @@
-use crate::domain::widget::WidgetPhysicalRect;
+use crate::domain::window_geometry::PhysicalRect;
 use std::mem::size_of;
 use windows::Win32::Foundation::RECT;
 use windows::Win32::Graphics::Gdi::{
@@ -18,7 +18,7 @@ const DESKTOP_WINDOW_CLASSES: [&str; 4] = [
 
 pub(crate) fn foreground_fullscreen_monitor(
     excluded_window_handle: Option<usize>,
-) -> Option<WidgetPhysicalRect> {
+) -> Option<PhysicalRect> {
     unsafe {
         let window = GetForegroundWindow();
         if window.0.is_null()
@@ -82,17 +82,17 @@ fn is_true_fullscreen(window: RECT, monitor: RECT, is_zoomed: bool, tolerance: i
         && window.bottom >= monitor.bottom.saturating_sub(tolerance)
 }
 
-fn physical_rect(rect: RECT) -> Option<WidgetPhysicalRect> {
+fn physical_rect(rect: RECT) -> Option<PhysicalRect> {
     let width = rect.right.checked_sub(rect.left)?;
     let height = rect.bottom.checked_sub(rect.top)?;
     (width > 0 && height > 0)
-        .then(|| WidgetPhysicalRect::new(rect.left, rect.top, width as u32, height as u32))
+        .then(|| PhysicalRect::new(rect.left, rect.top, width as u32, height as u32))
 }
 
 #[cfg(test)]
 mod tests {
     use super::{is_true_fullscreen, physical_rect};
-    use crate::domain::widget::WidgetPhysicalRect;
+    use crate::domain::window_geometry::PhysicalRect;
     use windows::Win32::Foundation::RECT;
 
     #[test]
@@ -150,7 +150,7 @@ mod tests {
                 right: 0,
                 bottom: 1080,
             }),
-            Some(WidgetPhysicalRect::new(-1920, 0, 1920, 1080))
+            Some(PhysicalRect::new(-1920, 0, 1920, 1080))
         );
         assert_eq!(physical_rect(RECT::default()), None);
     }
