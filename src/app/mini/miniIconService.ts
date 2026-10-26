@@ -1,13 +1,13 @@
 import { appIconChangeAffects, subscribeAppIconChanges } from "../../shared/hooks/appIconChanges.ts";
-import { getWidgetIcon } from "../../platform/desktop/widgetRuntimeGateway.ts";
+import { getMiniIcon } from "../../platform/desktop/miniContentRuntimeGateway.ts";
 import { AppClassification } from "../../shared/classification/appClassification.ts";
 
-interface WidgetIconServiceDeps {
+interface MiniIconServiceDeps {
   getIcon: (exeName: string) => Promise<string | null>;
 }
 
-const widgetIconServiceDeps: WidgetIconServiceDeps = {
-  getIcon: getWidgetIcon,
+const miniIconServiceDeps: MiniIconServiceDeps = {
+  getIcon: getMiniIcon,
 };
 
 const MAX_WIDGET_ICON_CACHE_ENTRIES = 16;
@@ -31,9 +31,9 @@ function rememberIcon(key: string, icon: string | null) {
   }
 }
 
-export async function loadWidgetObjectIcon(
+export async function loadMiniObjectIcon(
   objectIconKey: string | null,
-  deps: WidgetIconServiceDeps = widgetIconServiceDeps,
+  deps: MiniIconServiceDeps = miniIconServiceDeps,
 ): Promise<string | null> {
   const key = AppClassification.resolveCanonicalExecutable(objectIconKey?.trim() ?? "");
   if (!key) return null;
@@ -49,7 +49,7 @@ export async function loadWidgetObjectIcon(
   const promise: Promise<string | null> = deps.getIcon(key)
     .then((icon) => {
       if (iconPromises.get(key) === promise) iconPromises.delete(key);
-      if (requestGeneration !== generation) return loadWidgetObjectIcon(key, deps);
+      if (requestGeneration !== generation) return loadMiniObjectIcon(key, deps);
       rememberIcon(key, icon);
       return icon;
     })
@@ -61,12 +61,12 @@ export async function loadWidgetObjectIcon(
   return promise;
 }
 
-export function resetWidgetIconCacheForTests() {
+export function resetMiniIconCacheForTests() {
   generation += 1;
   iconCache.clear();
   iconPromises.clear();
 }
 
-export function getWidgetIconCacheSizeForTests() {
+export function getMiniIconCacheSizeForTests() {
   return iconCache.size;
 }

@@ -9,16 +9,16 @@ import type {
   TrackingWindowSnapshot,
 } from "../../shared/types/tracking.ts";
 
-type WidgetStatusTone = "tracking" | "tracking-sustained" | "paused" | "idle" | "error";
+type MiniStatusTone = "tracking" | "tracking-sustained" | "paused" | "idle" | "error";
 
-interface WidgetViewModel {
-  statusTone: WidgetStatusTone;
+interface MiniViewModel {
+  statusTone: MiniStatusTone;
   statusLabel: string;
   appName: string;
   objectIconKey: string | null;
 }
 
-export function isWidgetSelfWindow(activeWindow: TrackingWindowSnapshot | null): boolean {
+export function isMiniSelfWindow(activeWindow: TrackingWindowSnapshot | null): boolean {
   return activeWindow?.exeName.trim().toLowerCase() === "patina.exe";
 }
 
@@ -46,11 +46,11 @@ function buildActiveTrackingViewModel(
   activeWindow: TrackingWindowSnapshot | null,
   trackableAppName: string | null,
   options: {
-    statusTone: WidgetStatusTone;
+    statusTone: MiniStatusTone;
     statusLabel: string;
-    text: UiText["widget"];
+    text: UiText["miniWindow"];
   },
-): WidgetViewModel {
+): MiniViewModel {
   const text = options.text;
   return {
     statusTone: options.statusTone,
@@ -60,15 +60,15 @@ function buildActiveTrackingViewModel(
   };
 }
 
-export function buildWidgetViewModel(
+export function buildMiniViewModel(
   activeWindow: TrackingWindowSnapshot | null,
   trackingStatus: TrackingStatusSnapshot,
   appSettings: AppSettings,
   trackerHealth: TrackerHealthSnapshot,
   trackingRuntimeProbeStatus: TrackingRuntimeProbeStatus | null = null,
   uiText: UiText,
-): WidgetViewModel {
-  const text = uiText.widget;
+): MiniViewModel {
+  const text = uiText.miniWindow;
   const trackableAppName = resolveTrackableAppName(activeWindow);
   const hasTrackableForegroundApp = trackableAppName !== null;
   const isSustainedParticipationActive = trackingStatus.sustainedParticipationActive;

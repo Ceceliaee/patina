@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { onToolsRuntimeChanged } from "../../platform/runtime/toolsRuntimeGateway.ts";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { onAppSettingsChanged } from "../../platform/runtime/appSettingsEventGateway.ts";
 import {
   getTrackerHealthRuntimeSnapshot,
@@ -17,47 +18,49 @@ import {
 } from "../../shared/types/tracking.ts";
 import { startTrackerHealthPolling } from "../services/trackerHealthPollingService.ts";
 import { createLatestSnapshotRefresh } from "../services/latestSnapshotRefresh.ts";
-import { applyWidgetBootstrapSnapshot } from "./widgetBootstrapService.ts";
+import { applyMiniBootstrapSnapshot } from "./miniBootstrapService.ts";
 import {
-  getWidgetPresentationSnapshot,
-  getWidgetBootstrapSnapshot,
-  onWidgetToolsChanged,
-  type WidgetStatusSnapshot,
-} from "../../platform/desktop/widgetRuntimeGateway.ts";
+  getMiniPresentationSnapshot,
+  getMiniBootstrapSnapshot,
+  type MiniStatusSnapshot,
+} from "../../platform/desktop/miniContentRuntimeGateway.ts";
 
-interface WidgetTrackingSnapshot {
+interface MiniTrackingSnapshot {
   trackingPaused: boolean | null;
   activeWindow: TrackingWindowSnapshot | null;
   trackingStatus: TrackingStatusSnapshot;
   trackingRuntimeProbeStatus: TrackingRuntimeProbeStatus | null;
-  widgetStatus: WidgetStatusSnapshot | null;
+  miniStatus: MiniStatusSnapshot | null;
+  trackingSampleAgeMs: number;
 }
 
-const EMPTY_TRACKING_SNAPSHOT: WidgetTrackingSnapshot = {
+const EMPTY_TRACKING_SNAPSHOT: MiniTrackingSnapshot = {
   trackingPaused: null,
   activeWindow: null,
   trackingStatus: DEFAULT_TRACKING_STATUS,
   trackingRuntimeProbeStatus: null,
-  widgetStatus: null,
+  miniStatus: null,
+  trackingSampleAgeMs: 0,
 };
 
-function warnWidgetRefresh(error: unknown) {
-  console.warn("widget:refresh", error);
+function warnMiniRefresh(error: unknown) {
+  console.warn("mini:refresh", error);
 }
 
-async function loadWidgetTrackingSnapshot(): Promise<WidgetTrackingSnapshot> {
-  const snapshot = await getWidgetPresentationSnapshot();
+async function loadMiniTrackingSnapshot(): Promise<MiniTrackingSnapshot> {
+  const snapshot = await getMiniPresentationSnapshot();
 
   return {
     trackingPaused: snapshot.trackingPaused,
     activeWindow: snapshot.activeWindow,
     trackingStatus: snapshot.trackingStatus,
     trackingRuntimeProbeStatus: snapshot.trackingProbeStatus,
-    widgetStatus: snapshot.status,
+    miniStatus: snapshot.status,
+    trackingSampleAgeMs: Math.max(0, Date.now() - snapshot.trackingSampledAtMs),
   };
 }
 
-async function loadWidgetTrackerHealth(nowMs: number): Promise<TrackerHealthSnapshot> {
+async function loadMiniTrackerHealth(nowMs: number): Promise<TrackerHealthSnapshot> {
   const runtimeSnapshot = await getTrackerHealthRuntimeSnapshot();
   return resolveTrackerHealth(
     runtimeSnapshot?.lastHeartbeatMs ?? null,
@@ -66,13 +69,14 @@ async function loadWidgetTrackerHealth(nowMs: number): Promise<TrackerHealthSnap
   );
 }
 
-export function useWidgetTracking() {
-  const [trackingSnapshot, setTrackingSnapshot] = useState<WidgetTrackingSnapshot>(
+export function useMiniTracking(active = true) {
+  const [presentationReady, setPresentationReady] = useState(false);
+  const [presentationFailed, setPresentationFailed] = useState(false);
+  useLayoutEffect(() => { setPresentationReady(false); setPresentationFailed(false); }, [active]);
+  const [trackingSnapshot, setTrackingSnapshot] = useState<MiniTrackingSnapshot>(
     EMPTY_TRACKING_SNAPSHOT,
   );
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
-  const [classificationReady, setClassificationReady] = useState(false);
-  const [pinned, setPinned] = useState(false);
   const [trackerHealth, setTrackerHealth] = useState<TrackerHealthSnapshot>(() => (
     resolveTrackerHealth(null, Date.now(), TRACKER_HEARTBEAT_STALE_AFTER_MS)
   ));
@@ -80,20 +84,32 @@ export function useWidgetTracking() {
   useEffect(() => {
     let cancelled = false;
     const unlisteners: Array<() => void> = [];
+    let bootstrapAccepted = false;
+    let trackingAccepted = false;
+    let bootstrapFailed = false;
+    let trackingFailed = false;
+    const acceptReady = () => {
+      if (!active || cancelled) return;
+      setPresentationFailed(bootstrapFailed || trackingFailed);
+      if (bootstrapAccepted && trackingAccepted) setPresentationReady(true);
+    };
 
     const tracking = createLatestSnapshotRefresh({
-      load: loadWidgetTrackingSnapshot, accept: setTrackingSnapshot, failed: warnWidgetRefresh,
+      load: loadMiniTrackingSnapshot,
+      accept: (snapshot) => { setTrackingSnapshot(snapshot); trackingAccepted = true; trackingFailed = false; acceptReady(); },
+      failed: (error) => { trackingFailed = true; acceptReady(); warnMiniRefresh(error); },
     });
     const bootstrap = createLatestSnapshotRefresh({
-      load: getWidgetBootstrapSnapshot,
+      load: getMiniBootstrapSnapshot,
       accept: (raw) => {
-        const snapshot = applyWidgetBootstrapSnapshot(raw);
-        setAppSettings(snapshot.settings); setPinned(snapshot.pinned); setClassificationReady(true);
+        const snapshot = applyMiniBootstrapSnapshot(raw);
+        setAppSettings(snapshot.settings);
+        bootstrapAccepted = true; bootstrapFailed = false; acceptReady();
       },
-      failed: warnWidgetRefresh,
+      failed: (error) => { bootstrapFailed = true; acceptReady(); warnMiniRefresh(error); },
     });
     const refreshBootstrap = () => bootstrap.refresh();
-    const refreshTracking = () => tracking.refresh();
+    const refreshTracking = () => active ? tracking.refresh() : Promise.resolve();
 
     const listen = async (subscription: Promise<() => void>) => {
       const off = await subscription;
@@ -101,19 +117,17 @@ export function useWidgetTracking() {
     };
     const init = async () => {
       const subscriptions = await Promise.allSettled([
-        listen(onActiveWindowChanged(refreshTracking)),
-        listen(onTrackingDataChanged(refreshTracking)),
+        ...(active ? [listen(onActiveWindowChanged(refreshTracking)), listen(onTrackingDataChanged(refreshTracking))] : []),
         listen(onAppSettingsChanged(async () => {
           await Promise.all([refreshBootstrap(), refreshTracking()]);
         })),
-        listen(onWidgetToolsChanged(() => { void refreshTracking(); })),
+        ...(active ? [listen(onToolsRuntimeChanged(() => { void refreshTracking(); }))] : []),
       ]);
       for (const result of subscriptions) {
-        if (result.status === "rejected") warnWidgetRefresh(result.reason);
+        if (result.status === "rejected") warnMiniRefresh(result.reason);
       }
       if (cancelled) return;
       await Promise.all([refreshBootstrap(), refreshTracking()]);
-      if (!cancelled) setClassificationReady(true);
     };
 
     void init();
@@ -126,22 +140,23 @@ export function useWidgetTracking() {
         unlisten();
       }
     };
-  }, []);
+  }, [active]);
 
-  useEffect(() => startTrackerHealthPolling(setTrackerHealth, {
+  useEffect(() => active ? startTrackerHealthPolling(setTrackerHealth, {
     deps: {
-      loadSnapshot: loadWidgetTrackerHealth,
+      loadSnapshot: loadMiniTrackerHealth,
     },
-  }), []);
+  }) : undefined, [active]);
 
   return {
     activeWindow: trackingSnapshot.activeWindow,
     trackingStatus: trackingSnapshot.trackingStatus,
     appSettings: { ...appSettings, trackingPaused: trackingSnapshot.trackingPaused ?? appSettings.trackingPaused },
-    classificationReady,
+    presentationReady,
+    presentationFailed,
     trackerHealth,
     trackingRuntimeProbeStatus: trackingSnapshot.trackingRuntimeProbeStatus,
-    pinned,
-    widgetStatus: trackingSnapshot.widgetStatus,
+    miniStatus: trackingSnapshot.miniStatus,
+    trackingSampleAgeMs: trackingSnapshot.trackingSampleAgeMs,
   };
 }

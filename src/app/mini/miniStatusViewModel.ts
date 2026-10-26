@@ -1,17 +1,17 @@
 import type {
-  WidgetStatusSnapshot,
-  WidgetToolProjection,
-} from "../../platform/desktop/widgetRuntimeGateway.ts";
+  MiniStatusSnapshot,
+  MiniToolProjection,
+} from "../../platform/desktop/miniContentRuntimeGateway.ts";
 
-interface WidgetToolSlotViewModel {
-  kind: WidgetToolProjection["kind"];
-  state: WidgetToolProjection["state"];
+interface MiniToolSlotViewModel {
+  kind: MiniToolProjection["kind"];
+  state: MiniToolProjection["state"];
   timeText: string;
 }
 
-interface WidgetStatusViewModel {
+interface MiniStatusViewModel {
   trackingTimeText: string;
-  tools: WidgetToolSlotViewModel[];
+  tools: MiniToolSlotViewModel[];
 }
 
 function safeWholeSeconds(valueMs: number) {
@@ -22,12 +22,12 @@ function pad2(value: number) {
   return String(value).padStart(2, "0");
 }
 
-export function formatWidgetTrackingDuration(valueMs: number) {
+export function formatMiniTrackingDuration(valueMs: number) {
   const totalMinutes = Math.min(99 * 60 + 59, Math.floor(safeWholeSeconds(valueMs) / 60));
   return `${pad2(Math.floor(totalMinutes / 60))}:${pad2(totalMinutes % 60)}`;
 }
 
-export function formatWidgetToolDuration(valueMs: number) {
+export function formatMiniToolDuration(valueMs: number) {
   const totalSeconds = safeWholeSeconds(valueMs);
   const hours = Math.floor(totalSeconds / 3_600);
   const minutes = Math.floor((totalSeconds % 3_600) / 60);
@@ -50,10 +50,10 @@ function resolveLiveValue(
     : Math.max(0, valueMs + delta);
 }
 
-export function buildWidgetStatusViewModel(
-  snapshot: WidgetStatusSnapshot | null,
+export function buildMiniStatusViewModel(
+  snapshot: MiniStatusSnapshot | null,
   elapsedSinceSnapshotMs: number,
-): WidgetStatusViewModel {
+): MiniStatusViewModel {
   if (!snapshot) {
     return { trackingTimeText: "—", tools: [] };
   }
@@ -68,7 +68,7 @@ export function buildWidgetStatusViewModel(
     : null;
 
   return {
-    trackingTimeText: trackingValue === null ? "—" : formatWidgetTrackingDuration(trackingValue),
+    trackingTimeText: trackingValue === null ? "—" : formatMiniTrackingDuration(trackingValue),
     tools: snapshot.tools
       .filter((tool) => (
         tool.visibleUntilMs === null
@@ -78,7 +78,7 @@ export function buildWidgetStatusViewModel(
       .map((tool) => ({
         kind: tool.kind,
         state: tool.state,
-        timeText: formatWidgetToolDuration(resolveLiveValue(
+        timeText: formatMiniToolDuration(resolveLiveValue(
           tool.valueMs,
           elapsedSinceSnapshotMs,
           tool.state === "running",
