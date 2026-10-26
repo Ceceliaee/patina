@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 interface CurrentWindowForegroundState {
@@ -206,4 +207,16 @@ export async function watchCurrentWindowForegroundState(
       unlisten();
     }
   };
+}
+
+export function resolveCurrentAppWindowLabel(): "main" | "mini" {
+  try {
+    return getCurrentWindow().label === "mini" || getCurrentWebviewWindow().label === "mini" ? "mini" : "main";
+  } catch {
+    return "main";
+  }
+}
+
+export async function showMainWindow(): Promise<void> {
+  await invoke("cmd_show_main_window");
 }
