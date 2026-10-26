@@ -383,7 +383,6 @@ export const MESSAGES = {
   "settings.launchAtLoginLabel": "Запускать с Windows",
   "settings.loadFailed": "Не удалось загрузить настройки.",
   "settings.loading": "Загрузка настроек…",
-  "settings.minimizeToWidgetLabel": "Сворачивать в виджет",
   "settings.minuteValue": {
     "$type": "message",
     "body": {

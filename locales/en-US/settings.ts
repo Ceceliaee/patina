@@ -230,7 +230,6 @@ export const MESSAGES = {
   "settings.launchAtLoginLabel": "Launch at login",
   "settings.loadFailed": "Could not load settings.",
   "settings.loading": "Loading settings...",
-  "settings.minimizeToWidgetLabel": "Minimize to widget",
   "settings.minuteValue": {
     "$type": "message",
     "body": {

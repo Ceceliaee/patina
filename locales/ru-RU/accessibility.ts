@@ -122,7 +122,6 @@ export const MESSAGES = {
   "accessibility.settings.toggleCloseToTray": "Переключить скрытие при закрытии",
   "accessibility.settings.toggleGlobalTitle": "Переключить глобальную запись заголовков",
   "accessibility.settings.toggleLaunchAtLogin": "Переключить запуск приложения при входе в Windows",
-  "accessibility.settings.toggleMinimizeToWidget": "Переключить сворачивание в виджет",
   "accessibility.settings.toggleRemoteStatusBridge": "Переключить удалённую отправку статуса",
   "accessibility.settings.toggleStartMinimized": "Переключить запуск в фоне",
   "accessibility.settings.toggleTrackingPaused": "Приостановить или возобновить учёт времени",
@@ -173,46 +172,5 @@ export const MESSAGES = {
   "accessibility.tools.skipPomodoroPhase": "Пропустить этап помодоро",
   "accessibility.tools.startPomodoro": "Запустить помодоро",
   "accessibility.tools.startTimer": "Запустить отсчёт",
-  "accessibility.widget.collapse": "Свернуть виджет",
-  "accessibility.widget.currentApp": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "Текущее приложение: ",
-        {
-          "$op": "arg",
-          "name": "appName"
-        },
-        ""
-      ]
-    }
-  },
-  "accessibility.widget.expand": "Развернуть виджет",
-  "accessibility.widget.openMainWindow": "Открыть главное окно",
-  "accessibility.widget.pin": "Закрепить развёрнутый виджет",
-  "accessibility.widget.toggle": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "",
-        {
-          "$op": "if",
-          "when": {
-            "$op": "arg",
-            "name": "expanded"
-          },
-          "then": "Свернуть виджет",
-          "else": "Развернуть виджет"
-        },
-        ", ",
-        {
-          "$op": "arg",
-          "name": "statusTitle"
-        },
-        ""
-      ]
-    }
-  }
+  "accessibility.miniWindow.openMainWindow": "Открыть главное окно",
 } as const;

@@ -367,7 +367,6 @@ export const MESSAGES = {
   "settings.launchAtLoginLabel": "Iniciar con Windows",
   "settings.loadFailed": "No se pudo cargar la configuración.",
   "settings.loading": "Cargando configuración...",
-  "settings.minimizeToWidgetLabel": "Minimizar al widget",
   "settings.minuteValue": {
     "$type": "message",
     "body": {

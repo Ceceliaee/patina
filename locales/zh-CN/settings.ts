@@ -221,7 +221,6 @@ export const MESSAGES = {
   "settings.launchAtLoginLabel": "开机自启动",
   "settings.loadFailed": "设置加载失败。",
   "settings.loading": "正在获取配置...",
-  "settings.minimizeToWidgetLabel": "最小化到挂件",
   "settings.minuteValue": {
     "$type": "message",
     "body": {

@@ -122,7 +122,6 @@ export const MESSAGES = {
   "accessibility.settings.toggleCloseToTray": "Activar o desactivar ocultar al cerrar",
   "accessibility.settings.toggleGlobalTitle": "Activar o desactivar el registro global de títulos",
   "accessibility.settings.toggleLaunchAtLogin": "Activar o desactivar el inicio de la aplicación con Windows",
-  "accessibility.settings.toggleMinimizeToWidget": "Activar o desactivar minimizar al widget",
   "accessibility.settings.toggleRemoteStatusBridge": "Activar o desactivar el envío remoto",
   "accessibility.settings.toggleStartMinimized": "Activar o desactivar el inicio en segundo plano",
   "accessibility.settings.toggleTrackingPaused": "Pausar o reanudar el registro",
@@ -173,46 +172,5 @@ export const MESSAGES = {
   "accessibility.tools.skipPomodoroPhase": "Omitir fase del pomodoro",
   "accessibility.tools.startPomodoro": "Iniciar pomodoro",
   "accessibility.tools.startTimer": "Iniciar temporización",
-  "accessibility.widget.collapse": "Contraer widget",
-  "accessibility.widget.currentApp": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "App actual: ",
-        {
-          "$op": "arg",
-          "name": "appName"
-        },
-        ""
-      ]
-    }
-  },
-  "accessibility.widget.expand": "Expandir widget",
-  "accessibility.widget.openMainWindow": "Abrir ventana principal",
-  "accessibility.widget.pin": "Mantener widget expandido",
-  "accessibility.widget.toggle": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "",
-        {
-          "$op": "if",
-          "when": {
-            "$op": "arg",
-            "name": "expanded"
-          },
-          "then": "Contraer widget",
-          "else": "Expandir widget"
-        },
-        ", ",
-        {
-          "$op": "arg",
-          "name": "statusTitle"
-        },
-        ""
-      ]
-    }
-  }
+  "accessibility.miniWindow.openMainWindow": "Abrir ventana principal",
 } as const;

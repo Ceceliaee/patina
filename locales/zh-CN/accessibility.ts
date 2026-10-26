@@ -122,7 +122,6 @@ export const MESSAGES = {
   "accessibility.settings.toggleCloseToTray": "切换关闭到后台",
   "accessibility.settings.toggleGlobalTitle": "切换全局标题",
   "accessibility.settings.toggleLaunchAtLogin": "切换开机自启动",
-  "accessibility.settings.toggleMinimizeToWidget": "切换最小化到挂件",
   "accessibility.settings.toggleRemoteStatusBridge": "切换远程推送",
   "accessibility.settings.toggleStartMinimized": "切换静默启动",
   "accessibility.settings.toggleTrackingPaused": "切换暂停追踪",
@@ -173,46 +172,5 @@ export const MESSAGES = {
   "accessibility.tools.skipPomodoroPhase": "跳过番茄钟阶段",
   "accessibility.tools.startPomodoro": "开始番茄钟",
   "accessibility.tools.startTimer": "开始计时",
-  "accessibility.widget.collapse": "收起挂件",
-  "accessibility.widget.currentApp": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "当前应用：",
-        {
-          "$op": "arg",
-          "name": "appName"
-        },
-        ""
-      ]
-    }
-  },
-  "accessibility.widget.expand": "展开挂件",
-  "accessibility.widget.openMainWindow": "打开主窗口",
-  "accessibility.widget.pin": "固定展开挂件",
-  "accessibility.widget.toggle": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "",
-        {
-          "$op": "if",
-          "when": {
-            "$op": "arg",
-            "name": "expanded"
-          },
-          "then": "收起挂件",
-          "else": "展开挂件"
-        },
-        "，",
-        {
-          "$op": "arg",
-          "name": "statusTitle"
-        },
-        ""
-      ]
-    }
-  }
+  "accessibility.miniWindow.openMainWindow": "打开主窗口",
 } as const;

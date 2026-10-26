@@ -408,11 +408,6 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "accessibility.settings.toggleMinimizeToWidget": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "accessibility.settings.toggleRemoteStatusBridge": {
     "kind": "string",
     "params": [],
@@ -433,6 +428,10 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
+  "miniWindow.title": { "kind": "string", "params": [], "surface": "frontend", "description": "Independent desktop mini window: title." },
+  "miniWindow.open": { "kind": "string", "params": [], "surface": "frontend", "description": "Independent desktop mini window: open." },
+  "miniWindow.failed": { "kind": "string", "params": [], "surface": "frontend", "description": "Independent desktop mini window: failed." },
+  "miniWindow.hold": { "kind": "string", "params": [], "surface": "frontend", "description": "Independent desktop mini window: hold." },
   "accessibility.titleBar.close": {
     "kind": "string",
     "params": [],
@@ -545,51 +544,9 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "accessibility.widget.collapse": {
+  "accessibility.miniWindow.openMainWindow": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
-  },
-  "accessibility.widget.currentApp": {
-    "kind": "message",
-    "params": [
-      {
-        "name": "appName",
-        "type": "string",
-        "optional": false
-      }
-    ],
-    "surface": "frontend"
-  },
-  "accessibility.widget.expand": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "accessibility.widget.openMainWindow": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "accessibility.widget.pin": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "accessibility.widget.toggle": {
-    "kind": "message",
-    "params": [
-      {
-        "name": "expanded",
-        "type": "boolean",
-        "optional": false
-      },
-      {
-        "name": "statusTitle",
-        "type": "string",
-        "optional": false
-      }
-    ],
     "surface": "frontend"
   },
   "app.historyDeleted": {
@@ -3940,11 +3897,6 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "settings.minimizeToWidgetLabel": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "settings.minuteValue": {
     "kind": "message",
     "params": [
@@ -5475,92 +5427,62 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "widget.currentActivityRecording": {
+  "miniWindow.currentApp": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "widget.currentApp": {
+  "miniWindow.currentAppNotTracked": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "widget.currentAppNotTracked": {
+  "miniWindow.currentlyIdle": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "widget.currentlyIdle": {
+  "miniWindow.error": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "widget.currentSustainedRecording": {
+  "miniWindow.idle": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "widget.error": {
+  "miniWindow.loadingHelper": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "widget.idle": {
+  "miniWindow.paused": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "widget.loadingAppName": {
+  "miniWindow.sustainedTracking": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "widget.loadingHelper": {
+  "miniWindow.tracking": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "widget.loadingStatus": {
+  "miniWindow.trackingNotSynced": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "widget.noTrackableActivity": {
+  "miniWindow.trackingPaused": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "widget.paused": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "widget.sustainedTracking": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "widget.tracking": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "widget.trackingNotSynced": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "widget.trackingPaused": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "widget.trackingService": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "widget.windowExcluded": {
+  "miniWindow.trackingService": {
     "kind": "string",
     "params": [],
     "surface": "frontend"

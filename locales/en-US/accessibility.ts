@@ -122,7 +122,6 @@ export const MESSAGES = {
   "accessibility.settings.toggleCloseToTray": "Toggle hide on close",
   "accessibility.settings.toggleGlobalTitle": "Toggle global titles",
   "accessibility.settings.toggleLaunchAtLogin": "Toggle launch at login",
-  "accessibility.settings.toggleMinimizeToWidget": "Toggle minimize to widget",
   "accessibility.settings.toggleRemoteStatusBridge": "Toggle remote push",
   "accessibility.settings.toggleStartMinimized": "Toggle silent launch",
   "accessibility.settings.toggleTrackingPaused": "Toggle pause tracking",
@@ -173,46 +172,5 @@ export const MESSAGES = {
   "accessibility.tools.skipPomodoroPhase": "Skip pomodoro phase",
   "accessibility.tools.startPomodoro": "Start pomodoro",
   "accessibility.tools.startTimer": "Start timing",
-  "accessibility.widget.collapse": "Collapse widget",
-  "accessibility.widget.currentApp": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "Current app: ",
-        {
-          "$op": "arg",
-          "name": "appName"
-        },
-        ""
-      ]
-    }
-  },
-  "accessibility.widget.expand": "Expand widget",
-  "accessibility.widget.openMainWindow": "Open main window",
-  "accessibility.widget.pin": "Pin widget open",
-  "accessibility.widget.toggle": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "",
-        {
-          "$op": "if",
-          "when": {
-            "$op": "arg",
-            "name": "expanded"
-          },
-          "then": "Collapse widget",
-          "else": "Expand widget"
-        },
-        ", ",
-        {
-          "$op": "arg",
-          "name": "statusTitle"
-        },
-        ""
-      ]
-    }
-  }
+  "accessibility.miniWindow.openMainWindow": "Open main window",
 } as const;
