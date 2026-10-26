@@ -40,7 +40,7 @@ use power_lifecycle::apply_power_lifecycle_event;
 use snapshot_projection::{
     clear_active_session_snapshot, emit_tracking_loop_change,
     refresh_active_session_snapshot_if_changed, should_emit_tracking_status_changed,
-    should_preserve_tracking_projection, update_runtime_snapshot_state,
+    update_runtime_snapshot_state,
 };
 pub use support::emit_tracking_data_changed;
 use support::{log_tracker_error, now_ms};
@@ -153,19 +153,7 @@ pub async fn run<R: Runtime>(
         .await;
         sustained_participation_state = next_sustained_participation_state;
         progress.enter(watchdog::TrackingStage::Transition);
-        if should_preserve_tracking_projection(&window_info) && !tracking_state.tracking_paused {
-            record_committed_sample(
-                data.as_ref(),
-                &health_state,
-                now_ms,
-                poll_outcome.is_successful_sample(),
-                &mut timestamp_persist_state,
-            )
-            .await;
-            drop(transition_guard);
-            sleep(Duration::from_secs(1)).await;
-            continue;
-        }
+
         let anonymous_cutoff = poll_outcome
             .is_successful_sample()
             .then(|| title_state.take_invalid_anonymous_web_cutoff(&window_info, now_ms))
@@ -483,70 +471,6 @@ mod tests {
         assert!(!transition::is_trackable_window(Some(&wallpaper_shell)));
         assert!(!transition::is_trackable_window(Some(&wallpaper_host)));
         assert!(transition::is_trackable_window(Some(&wallpaper_app)));
-    }
-
-    #[test]
-    fn patina_widget_interaction_preserves_the_previous_tracking_session() {
-        tauri::async_runtime::block_on(async {
-            let pool = setup_test_db().await;
-            let data = data_store(&pool);
-            let pixpin = make_window(&[
-                ("exe_name", "PixPin.exe"),
-                ("title", "PixPin"),
-                ("process_path", r"C:\Program Files\PixPin\PixPin.exe"),
-            ]);
-            let widget = make_window(&[
-                ("exe_name", "Patina.exe"),
-                ("title", crate::domain::widget::WIDGET_WINDOW_TITLE),
-                ("process_path", r"C:\Program Files\Patina\Patina.exe"),
-            ]);
-            let codex = make_window(&[
-                ("exe_name", "ChatGPT.exe"),
-                ("title", "ChatGPT"),
-                (
-                    "process_path",
-                    r"C:\Program Files\WindowsApps\OpenAI.Codex\ChatGPT.exe",
-                ),
-            ]);
-
-            assert!(active_session::start_session(&pool, &pixpin, 1_000)
-                .await
-                .unwrap());
-            assert!(should_preserve_tracking_projection(&widget));
-            let afk_widget = tracker::WindowInfo {
-                is_afk: true,
-                idle_time_ms: 60_000,
-                ..widget.clone()
-            };
-            assert!(!should_preserve_tracking_projection(&afk_widget));
-            assert_eq!(
-                transition::apply_window_transition(
-                    &data,
-                    Some(&pixpin),
-                    &codex,
-                    3_000,
-                    3_000,
-                    active_session::start_session_for_transition,
-                )
-                .await
-                .unwrap(),
-                Some("session-transition")
-            );
-
-            let sessions: Vec<(String, i64, Option<i64>)> = sqlx::query_as(
-                "SELECT exe_name, start_time, end_time FROM sessions ORDER BY start_time ASC",
-            )
-            .fetch_all(&pool)
-            .await
-            .unwrap();
-            assert_eq!(
-                sessions,
-                vec![
-                    ("PixPin.exe".into(), 1_000, Some(3_000)),
-                    ("ChatGPT.exe".into(), 3_000, None),
-                ]
-            );
-        });
     }
 
     #[test]

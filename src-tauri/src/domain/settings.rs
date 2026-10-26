@@ -19,19 +19,10 @@ pub enum CloseBehavior {
     Tray,
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum MinimizeBehavior {
-    Taskbar,
-    #[default]
-    Widget,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DesktopBehaviorSettings {
     pub show_tray_icon: bool,
     pub close_behavior: CloseBehavior,
-    pub minimize_behavior: MinimizeBehavior,
     pub launch_at_login: bool,
     pub start_minimized: bool,
 }
@@ -209,7 +200,6 @@ impl Default for DesktopBehaviorSettings {
         Self {
             show_tray_icon: true,
             close_behavior: CloseBehavior::Tray,
-            minimize_behavior: MinimizeBehavior::Widget,
             launch_at_login: DEFAULT_LAUNCH_AT_LOGIN,
             start_minimized: DEFAULT_START_MINIMIZED,
         }
@@ -217,24 +207,16 @@ impl Default for DesktopBehaviorSettings {
 }
 
 impl DesktopBehaviorSettings {
-    pub fn with_desktop_behavior(
-        self,
-        close_behavior: CloseBehavior,
-        minimize_behavior: MinimizeBehavior,
-    ) -> Self {
+    pub fn with_close_behavior(self, close_behavior: CloseBehavior) -> Self {
         Self {
             close_behavior,
-            minimize_behavior,
             ..self
         }
     }
 
     #[cfg(test)]
-    pub fn with_raw_desktop_behavior(self, close_behavior: &str, minimize_behavior: &str) -> Self {
-        self.with_desktop_behavior(
-            parse_close_behavior(close_behavior),
-            parse_minimize_behavior(minimize_behavior),
-        )
+    pub fn with_raw_close_behavior(self, close_behavior: &str) -> Self {
+        self.with_close_behavior(parse_close_behavior(close_behavior))
     }
 
     pub fn with_launch_behavior(self, launch_at_login: bool, start_minimized: bool) -> Self {
@@ -247,14 +229,10 @@ impl DesktopBehaviorSettings {
 
     pub fn from_storage_values(
         close_behavior: Option<&str>,
-        minimize_behavior: Option<&str>,
         launch_at_login: Option<&str>,
         start_minimized: Option<&str>,
     ) -> Self {
         let close_behavior = close_behavior.map(parse_close_behavior).unwrap_or_default();
-        let minimize_behavior = minimize_behavior
-            .map(parse_minimize_behavior)
-            .unwrap_or_default();
         let launch_at_login = launch_at_login
             .map(|raw| parse_boolean_setting(raw, DEFAULT_LAUNCH_AT_LOGIN))
             .unwrap_or(DEFAULT_LAUNCH_AT_LOGIN);
@@ -263,7 +241,7 @@ impl DesktopBehaviorSettings {
             .unwrap_or(DEFAULT_START_MINIMIZED);
 
         Self::default()
-            .with_desktop_behavior(close_behavior, minimize_behavior)
+            .with_close_behavior(close_behavior)
             .with_launch_behavior(launch_at_login, start_minimized)
     }
 
@@ -292,14 +270,6 @@ pub fn parse_close_behavior(raw: &str) -> CloseBehavior {
     }
 }
 
-pub fn parse_minimize_behavior(raw: &str) -> MinimizeBehavior {
-    match raw.trim().to_ascii_lowercase().as_str() {
-        "widget" => MinimizeBehavior::Widget,
-        "taskbar" => MinimizeBehavior::Taskbar,
-        _ => MinimizeBehavior::default(),
-    }
-}
-
 pub fn parse_boolean_setting(raw: &str, fallback: bool) -> bool {
     match raw.trim().to_ascii_lowercase().as_str() {
         "1" | "true" | "yes" | "on" => true,
@@ -318,26 +288,16 @@ pub fn parse_web_activity_port(raw: &str) -> Option<u16> {
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_boolean_setting, parse_close_behavior, parse_minimize_behavior,
-        parse_web_activity_port, CloseBehavior, DesktopBehaviorSettings, MinimizeBehavior,
-        RemoteStatusBridgeSettings, StartupSource, StartupUiStrategy, WebActivityBridgeSettings,
-        WebActivitySettings, DEFAULT_LAUNCH_AT_LOGIN, DEFAULT_START_MINIMIZED,
-        DEFAULT_WEB_ACTIVITY_PORT,
+        parse_boolean_setting, parse_close_behavior, parse_web_activity_port, CloseBehavior,
+        DesktopBehaviorSettings, RemoteStatusBridgeSettings, StartupSource, StartupUiStrategy,
+        WebActivityBridgeSettings, WebActivitySettings, DEFAULT_LAUNCH_AT_LOGIN,
+        DEFAULT_START_MINIMIZED, DEFAULT_WEB_ACTIVITY_PORT,
     };
 
     #[test]
     fn parse_desktop_behavior_keeps_invalid_values_conservative() {
         assert_eq!(parse_close_behavior("tray"), CloseBehavior::Tray);
         assert_eq!(parse_close_behavior("unknown"), CloseBehavior::Exit);
-        assert_eq!(parse_minimize_behavior("widget"), MinimizeBehavior::Widget);
-        assert_eq!(
-            parse_minimize_behavior("taskbar"),
-            MinimizeBehavior::Taskbar
-        );
-        assert_eq!(
-            parse_minimize_behavior("anything-else"),
-            MinimizeBehavior::Widget
-        );
     }
 
     #[test]
@@ -438,11 +398,10 @@ mod tests {
     fn with_methods_keep_settings_updates_explicit() {
         let defaults = DesktopBehaviorSettings::default();
         let updated = defaults
-            .with_desktop_behavior(CloseBehavior::Tray, MinimizeBehavior::Taskbar)
+            .with_close_behavior(CloseBehavior::Tray)
             .with_launch_behavior(false, true);
 
         assert_eq!(updated.close_behavior, CloseBehavior::Tray);
-        assert_eq!(updated.minimize_behavior, MinimizeBehavior::Taskbar);
         assert!(!updated.launch_at_login);
         assert!(updated.start_minimized);
         assert_eq!(defaults.launch_at_login, DEFAULT_LAUNCH_AT_LOGIN);
@@ -450,17 +409,12 @@ mod tests {
 
     #[test]
     fn from_storage_values_applies_defaults_and_domain_parsing() {
-        let defaults = DesktopBehaviorSettings::from_storage_values(None, None, None, None);
+        let defaults = DesktopBehaviorSettings::from_storage_values(None, None, None);
         assert_eq!(defaults, DesktopBehaviorSettings::default());
 
-        let merged = DesktopBehaviorSettings::from_storage_values(
-            Some("tray"),
-            Some("widget"),
-            Some("no"),
-            Some("invalid"),
-        );
+        let merged =
+            DesktopBehaviorSettings::from_storage_values(Some("tray"), Some("no"), Some("invalid"));
         assert_eq!(merged.close_behavior, CloseBehavior::Tray);
-        assert_eq!(merged.minimize_behavior, MinimizeBehavior::Widget);
         assert!(!merged.launch_at_login);
         assert_eq!(merged.start_minimized, DEFAULT_START_MINIMIZED);
     }
@@ -469,16 +423,10 @@ mod tests {
     fn tray_visibility_and_launch_rules_follow_settings_semantics() {
         let defaults = DesktopBehaviorSettings::default();
         assert!(defaults.should_keep_tray_visible());
-        assert_eq!(defaults.minimize_behavior, MinimizeBehavior::Widget);
         assert!(defaults.start_minimized);
 
-        let close_to_exit =
-            defaults.with_desktop_behavior(CloseBehavior::Exit, MinimizeBehavior::Widget);
+        let close_to_exit = defaults.with_close_behavior(CloseBehavior::Exit);
         assert!(!close_to_exit.should_keep_tray_visible());
-
-        let minimize_to_widget =
-            defaults.with_desktop_behavior(CloseBehavior::Exit, MinimizeBehavior::Widget);
-        assert!(!minimize_to_widget.should_keep_tray_visible());
 
         let no_autostart_minimize = defaults.with_launch_behavior(false, true);
         assert!(no_autostart_minimize.start_minimized);
@@ -486,16 +434,13 @@ mod tests {
 
     #[test]
     fn raw_desktop_behavior_update_stays_inside_domain() {
-        let updated =
-            DesktopBehaviorSettings::default().with_raw_desktop_behavior("tray", "taskbar");
+        let updated = DesktopBehaviorSettings::default().with_raw_close_behavior("tray");
         assert_eq!(updated.close_behavior, CloseBehavior::Tray);
-        assert_eq!(updated.minimize_behavior, MinimizeBehavior::Taskbar);
     }
 
     #[test]
     fn manual_and_autostart_launches_share_the_start_minimized_preference() {
-        let settings = DesktopBehaviorSettings::default()
-            .with_desktop_behavior(CloseBehavior::Tray, MinimizeBehavior::Taskbar);
+        let settings = DesktopBehaviorSettings::default().with_close_behavior(CloseBehavior::Tray);
 
         assert_eq!(
             settings.startup_ui_strategy(StartupSource::Manual),
@@ -531,22 +476,6 @@ mod tests {
                 StartupUiStrategy::Show
             );
         }
-    }
-
-    #[test]
-    fn minimize_destination_does_not_change_startup_destination() {
-        let taskbar = DesktopBehaviorSettings::default()
-            .with_desktop_behavior(CloseBehavior::Tray, MinimizeBehavior::Taskbar);
-        let widget = taskbar.with_desktop_behavior(CloseBehavior::Tray, MinimizeBehavior::Widget);
-
-        assert_eq!(
-            taskbar.startup_ui_strategy(StartupSource::Manual),
-            widget.startup_ui_strategy(StartupSource::Manual)
-        );
-        assert_eq!(
-            taskbar.startup_ui_strategy(StartupSource::Autostart),
-            widget.startup_ui_strategy(StartupSource::Autostart)
-        );
     }
 
     #[test]

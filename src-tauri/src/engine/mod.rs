@@ -5,4 +5,3 @@ pub mod tools;
 pub mod tracking;
 pub mod updater;
 pub mod web_activity;
-pub mod widget;

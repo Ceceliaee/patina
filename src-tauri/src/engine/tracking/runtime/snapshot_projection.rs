@@ -2,22 +2,8 @@ use super::super::ports::TrackingDataStore;
 use super::super::runtime_snapshot::{TrackingRuntimeSnapshot, TrackingRuntimeSnapshotState};
 use super::support::log_tracker_error;
 use super::window_polling::WindowPollOutcome;
-use crate::domain::tracking::{
-    is_tracking_control_surface_window, TrackingStatusSnapshot, WindowTrackingCandidate,
-    TRACKING_REASON_STATUS_CHANGED,
-};
-use crate::platform::windows::foreground::WindowInfo;
+use crate::domain::tracking::{TrackingStatusSnapshot, TRACKING_REASON_STATUS_CHANGED};
 use tauri::{AppHandle, Manager, Runtime};
-
-pub(super) fn should_preserve_tracking_projection(window: &WindowInfo) -> bool {
-    !window.is_afk
-        && is_tracking_control_surface_window(WindowTrackingCandidate::from_window_fields(
-            &window.exe_name,
-            &window.title,
-            &window.window_class,
-            window.is_afk,
-        ))
-}
 
 pub(super) fn emit_tracking_loop_change<R: Runtime>(
     app: &AppHandle<R>,

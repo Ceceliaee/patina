@@ -1172,7 +1172,7 @@ mod tests {
     }
 
     #[test]
-    fn patina_widget_is_inactive_without_disabling_patina_app_tracking() {
+    fn patina_mini_tracks_under_the_application_policy() {
         tauri::async_runtime::block_on(async {
             let pool = setup_test_db().await;
             let data = TrackingRuntimeDataStore::new(pool);
@@ -1184,7 +1184,7 @@ mod tests {
                 root_owner_hwnd: "0x200".into(),
                 process_id: 456,
                 window_class: "Chrome_WidgetWin_1".into(),
-                title: crate::domain::widget::WIDGET_WINDOW_TITLE.into(),
+                title: "Patina Mini".into(),
                 exe_name: "Patina.exe".into(),
                 process_path: r"C:\Program Files\Patina\Patina.exe".into(),
                 app_user_model_id: String::new(),
@@ -1204,11 +1204,8 @@ mod tests {
             .await;
 
             assert!(state.app_tracking_enabled);
-            assert!(!state.tracking_status.is_tracking_active);
-            assert_eq!(
-                state.tracked_window.title,
-                crate::domain::widget::WIDGET_WINDOW_TITLE
-            );
+            assert!(state.tracking_status.is_tracking_active);
+            assert_eq!(state.tracked_window.title, "Patina Mini");
         });
     }
 }
