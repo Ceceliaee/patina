@@ -11,7 +11,6 @@ const SETTINGS: AppSettings = {
   minSessionSecs: 60,
   trackingPaused: false,
   closeBehavior: "tray",
-  minimizeBehavior: "widget",
   launchAtLogin: true,
   startMinimized: true,
   onboardingCompleted: true,

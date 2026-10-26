@@ -180,7 +180,7 @@ jobs:
     needs: candidate
     runs-on: windows-latest
     # Include runner setup and dependency installation before the runtime step.
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     steps:
       - name: Checkout verified candidate
@@ -219,8 +219,21 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Fetch locked runtime build dependencies
+        run: cargo fetch --manifest-path src-tauri/Cargo.toml --locked
+
       - name: Run isolated runtime smoke
-        # The test reserves eight minutes for a cold Rust build; leave time for
-        # WebView startup, assertions and cleanup without sharing the setup budget.
-        timeout-minutes: 15
+        # Allow the eight-minute cold build plus the measured ordinary runtime
+        # union (~eight minutes), startup and cleanup. Resource cycles stay separate.
+        timeout-minutes: 20
         run: pnpm run test:tauri-runtime-smoke
+
+      - name: Upload runtime phase results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: runtime-results-${{ needs.candidate.outputs.head_sha }}
+          path: |
+            artifacts/runtime-smoke/**/result.json
+            artifacts/runtime-smoke/**/*.log
+          if-no-files-found: warn

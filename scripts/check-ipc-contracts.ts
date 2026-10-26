@@ -9,9 +9,9 @@ interface IpcInventory {
   registered: Set<string>;
   appManifest: Set<string>;
   mainPermission: Set<string>;
-  widgetPermission: Set<string>;
+  miniPermission: Set<string>;
   mainCapabilityPermissions: Set<string>;
-  widgetCapabilityPermissions: Set<string>;
+  miniCapabilityPermissions: Set<string>;
   callerGuarded: Set<string>;
 }
 
@@ -33,22 +33,8 @@ const RUNTIME_ONLY_COMMANDS = new Map<string, string>([
   ],
 ]);
 
-const WIDGET_COMMAND_ALLOWLIST = new Set([
-  "get_current_tracking_snapshot",
-  "cmd_get_tracker_health_snapshot",
-  "cmd_get_widget_bootstrap_snapshot",
-  "cmd_get_widget_icon",
-  "cmd_get_widget_placement",
-  "cmd_finalize_widget_drag",
-  "cmd_set_widget_expanded",
-  "cmd_get_widget_status_snapshot",
-  "cmd_set_widget_pinned",
-  "cmd_show_main_window",
-  "cmd_hide_widget_window",
-  "cmd_is_primary_mouse_button_down",
-]);
-
 const SENSITIVE_CALLER_GUARD_COMMANDS = new Set([
+  "cmd_open_mini_window",
   "cmd_restore_backup",
   "cmd_save_remote_backup_settings",
   "cmd_clear_remote_backup_settings",
@@ -65,6 +51,12 @@ const SENSITIVE_CALLER_GUARD_COMMANDS = new Set([
   "cmd_restart_and_clear_webview_cache",
   "cmd_install_update",
 ]);
+
+const MINI_COMMAND_ALLOWLIST = new Set([
+  "cmd_get_mini_window_snapshot", "cmd_mini_window_action", "cmd_get_tracker_health_snapshot",
+  "cmd_get_mini_bootstrap_snapshot", "cmd_get_mini_icon", "cmd_get_mini_presentation_snapshot", "cmd_show_main_window",
+]);
+const MINI_CAPABILITY_ALLOWLIST = new Set(["core:event:allow-listen", "core:event:allow-unlisten", "mini-window-commands"]);
 
 function normalizePath(path: string) {
   return path.split(sep).join("/");
@@ -246,12 +238,10 @@ function inventory(): IpcInventory {
     registered,
     appManifest: collectAppManifestCommands(readFileSync("src-tauri/build.rs", "utf8")),
     mainPermission: windowPermissions.get("main-window-commands") ?? new Set(),
-    widgetPermission: windowPermissions.get("widget-window-commands") ?? new Set(),
+    miniPermission: windowPermissions.get("mini-window-commands") ?? new Set(),
+    miniCapabilityPermissions: collectCapabilityPermissionIds(readFileSync("src-tauri/capabilities/mini.json", "utf8")),
     mainCapabilityPermissions: collectCapabilityPermissionIds(
       readFileSync("src-tauri/capabilities/default.json", "utf8"),
-    ),
-    widgetCapabilityPermissions: collectCapabilityPermissionIds(
-      readFileSync("src-tauri/capabilities/widget.json", "utf8"),
     ),
     callerGuarded,
   };
@@ -289,20 +279,15 @@ function validate(result: IpcInventory) {
   for (const command of difference(result.mainPermission, result.registered)) {
     failures.push(`main-window permission references an unregistered command: ${command}`);
   }
-  for (const command of difference(result.widgetPermission, WIDGET_COMMAND_ALLOWLIST)) {
-    failures.push(`widget-window permission exceeds the reviewed allowlist: ${command}`);
-  }
-  for (const command of difference(WIDGET_COMMAND_ALLOWLIST, result.widgetPermission)) {
-    failures.push(`widget-window permission is missing a reviewed command: ${command}`);
-  }
+  for (const command of difference(result.miniPermission, MINI_COMMAND_ALLOWLIST)) failures.push(`mini-window permission exceeds the reviewed allowlist: ${command}`);
+  for (const command of difference(MINI_COMMAND_ALLOWLIST, result.miniPermission)) failures.push(`mini-window permission is missing a reviewed command: ${command}`);
+  for (const permission of difference(result.miniCapabilityPermissions, MINI_CAPABILITY_ALLOWLIST)) failures.push(`mini capability exceeds the reviewed allowlist: ${permission}`);
+  for (const permission of difference(MINI_CAPABILITY_ALLOWLIST, result.miniCapabilityPermissions)) failures.push(`mini capability is missing a reviewed permission: ${permission}`);
   if (!result.mainCapabilityPermissions.has("main-window-commands")) {
     failures.push("main capability does not include main-window-commands");
   }
-  if (!result.widgetCapabilityPermissions.has("widget-window-commands")) {
-    failures.push("widget capability does not include widget-window-commands");
-  }
   for (const [window, permissions] of [
-    ["main", result.mainCapabilityPermissions], ["widget", result.widgetCapabilityPermissions],
+    ["main", result.mainCapabilityPermissions], ["mini", result.miniCapabilityPermissions],
   ] as const) {
     for (const permission of permissions) {
       if (permission.startsWith("sql:")) {
@@ -332,9 +317,9 @@ function runSelfTest() {
     registered: rust.registered,
     appManifest: commandSet,
     mainPermission: commandSet,
-    widgetPermission: new Set(WIDGET_COMMAND_ALLOWLIST),
+    miniPermission: new Set(MINI_COMMAND_ALLOWLIST),
+    miniCapabilityPermissions: new Set(MINI_CAPABILITY_ALLOWLIST),
     mainCapabilityPermissions: new Set(["main-window-commands"]),
-    widgetCapabilityPermissions: new Set(["widget-window-commands"]),
     callerGuarded: new Set(SENSITIVE_CALLER_GUARD_COMMANDS),
   });
   if (failures.length > 0 || frontend.dynamicCalls[0] !== "src/platform/demo.ts:proxy") {
@@ -348,9 +333,9 @@ function runSelfTest() {
     registered: new Set(["cmd_known"]),
     appManifest: new Set(["cmd_known"]),
     mainPermission: new Set(["cmd_known"]),
-    widgetPermission: new Set(WIDGET_COMMAND_ALLOWLIST),
+    miniPermission: new Set(MINI_COMMAND_ALLOWLIST),
+    miniCapabilityPermissions: new Set(MINI_CAPABILITY_ALLOWLIST),
     mainCapabilityPermissions: new Set(["main-window-commands"]),
-    widgetCapabilityPermissions: new Set(["widget-window-commands"]),
     callerGuarded: new Set(SENSITIVE_CALLER_GUARD_COMMANDS),
   });
   if (!missing.some((failure) => failure.includes("cmd_typo"))) {
@@ -364,15 +349,16 @@ function runSelfTest() {
     registered: commandSet,
     appManifest: commandSet,
     mainPermission: commandSet,
-    widgetPermission: new Set(WIDGET_COMMAND_ALLOWLIST),
+    miniPermission: new Set([...MINI_COMMAND_ALLOWLIST, "cmd_pause_timer"]),
+    miniCapabilityPermissions: new Set([...MINI_CAPABILITY_ALLOWLIST, "sql:allow-load"]),
     mainCapabilityPermissions: new Set(["main-window-commands", "sql:allow-select"]),
-    widgetCapabilityPermissions: new Set(["widget-window-commands", "sql:allow-load"]),
     callerGuarded: new Set(),
   });
   if (!missingGuard.some((failure) => failure.includes("caller guard"))) {
     throw new Error("IPC contract self-test did not catch a missing sensitive caller guard");
   }
-  for (const window of ["main", "widget"]) {
+  if (!missingGuard.some((failure) => failure.includes("mini-window permission exceeds"))) throw new Error("IPC self-test did not reject mini tool mutation");
+  for (const window of ["main", "mini"]) {
     if (!missingGuard.some(failure => failure.includes(`${window} capability must not expose raw SQL`))) {
       throw new Error(`IPC contract self-test did not reject ${window} raw SQL`);
     }
@@ -394,7 +380,7 @@ if (process.argv.includes("--report")) {
     registered: [...result.registered].sort(),
     appManifest: [...result.appManifest].sort(),
     mainPermission: [...result.mainPermission].sort(),
-    widgetPermission: [...result.widgetPermission].sort(),
+    miniPermission: [...result.miniPermission].sort(),
     callerGuarded: [...result.callerGuarded].sort(),
     dynamicCalls: result.dynamicCalls.sort(),
     failures,

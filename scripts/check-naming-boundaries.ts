@@ -75,7 +75,6 @@ const RAW_FIELD_NAMES = [
   "min_session_secs",
   "tracking_paused",
   "close_behavior",
-  "minimize_behavior",
   "launch_at_login",
   "start_minimized",
   "onboarding_completed",

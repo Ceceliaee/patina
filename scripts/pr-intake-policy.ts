@@ -42,7 +42,7 @@ export const RISK_AREAS = [
     tests: [
       /^tests\/tauriRuntimeSmoke\.test\.ts$/i,
     ],
-    testExamples: "tests/tauriRuntimeSmoke.test.ts with an explicit main/widget denial matrix",
+    testExamples: "tests/tauriRuntimeSmoke.test.ts with an explicit main/mini denial matrix",
   },
   {
     id: "tracking",

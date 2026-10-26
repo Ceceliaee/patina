@@ -34,7 +34,7 @@ const GLOSSARY = [
   ["Tracking", "Translate consistently", "Recording active desktop application time."],
   ["Session", "Translate consistently", "One continuous recorded activity interval."],
   ["Timeline", "Translate consistently", "Chronological activity visualization."],
-  ["Widget", "Translate consistently", "Patina's compact side widget, not a mobile widget."],
+  ["Mini window", "Translate consistently", "Patina's compact desktop window."],
 ] as const;
 
 const MAX_XLSX_BYTES = 8 * 1024 * 1024;

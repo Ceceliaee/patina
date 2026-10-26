@@ -10,7 +10,7 @@ const ERROR_SOURCE = "src/platform/persistence/commandError.ts";
 const SNAPSHOT_SOURCE = "src/app/services/latestSnapshotRefresh.ts";
 const WEB_AGGREGATE_SOURCE = "src/platform/persistence/webActivityAnalysisGateway.ts";
 const WINDOW_PERMISSIONS_SOURCE = "src-tauri/permissions/window-commands.toml";
-const WIDGET_CAPABILITY_SOURCE = "src-tauri/capabilities/widget.json";
+const MINI_CAPABILITY_SOURCE = "src-tauri/capabilities/mini.json";
 const WINDOW_GUARD_SOURCE = "src-tauri/src/commands/window_guard.rs";
 const WEB_HEATMAP_RUNTIME_SOURCE = "src/features/data/hooks/useDataWebActivityRuntime.ts";
 const WEB_BRIDGE_SOURCE = "src-tauri/src/platform/web_activity_bridge.rs";
@@ -190,18 +190,18 @@ const SOURCE_CONTRACT_MUTANTS: SourceContractMutant[] = [
     verify: verifyDataHeatmapCompletionContract,
   },
   {
-    name: "main-only command is reclassified as widget-shared",
+    name: "main-only command is reclassified as mini-shared",
     source: WINDOW_PERMISSIONS_SOURCE,
-    search: '  "cmd_hide_widget_window",\n  "cmd_is_primary_mouse_button_down",\n]',
-    replacement: '  "cmd_hide_widget_window",\n  "cmd_is_primary_mouse_button_down",\n  "cmd_restore_backup",\n]',
+    search: '  "cmd_get_mini_presentation_snapshot",\n  "cmd_show_main_window",\n]',
+    replacement: '  "cmd_get_mini_presentation_snapshot",\n  "cmd_show_main_window",\n  "cmd_restore_backup",\n]',
     verify: verifyWindowPermissionContract,
   },
   {
-    name: "widget regains raw SQL select permission",
-    source: WIDGET_CAPABILITY_SOURCE,
-    search: '    "widget-window-commands"\n  ]',
-    replacement: '    "widget-window-commands",\n    "sql:allow-select"\n  ]',
-    verify: verifyWidgetCapabilityContract,
+    name: "mini regains raw SQL select permission",
+    source: MINI_CAPABILITY_SOURCE,
+    search: '"mini-window-commands"]',
+    replacement: '"mini-window-commands", "sql:allow-select"]',
+    verify: verifyMiniCapabilityContract,
   },
   {
     name: "main-window caller guard comparison is inverted",
@@ -234,11 +234,11 @@ const SOURCE_CONTRACT_MUTANTS: SourceContractMutant[] = [
   },
 ];
 
-function widgetCommandPermissions(source: string) {
+function miniCommandPermissions(source: string) {
   const block = source.match(
-    /\[\[permission\]\]\s*identifier\s*=\s*"widget-window-commands"(?<body>[\s\S]*?)commands\.allow\s*=\s*\[(?<commands>[\s\S]*?)\]/,
+    /\[\[permission\]\]\s*identifier\s*=\s*"mini-window-commands"(?<body>[\s\S]*?)commands\.allow\s*=\s*\[(?<commands>[\s\S]*?)\]/,
   );
-  assert.ok(block?.groups?.commands, "widget-window permission block must remain parseable");
+  assert.ok(block?.groups?.commands, "mini-window permission block must remain parseable");
   return new Set(
     [...block.groups.commands.matchAll(/"([A-Za-z_][A-Za-z0-9_]*)"/g)]
       .map((match) => match[1]),
@@ -246,7 +246,7 @@ function widgetCommandPermissions(source: string) {
 }
 
 function verifyWindowPermissionContract(source: string) {
-  const widgetCommands = widgetCommandPermissions(source);
+  const miniCommands = miniCommandPermissions(source);
   for (const sensitive of [
     "cmd_restore_backup",
     "cmd_save_remote_backup_settings",
@@ -255,23 +255,23 @@ function verifyWindowPermissionContract(source: string) {
     "cmd_delete_sessions_before",
     "cmd_install_update",
   ]) {
-    assert.ok(!widgetCommands.has(sensitive), `widget permission exposed main-only command ${sensitive}`);
+    assert.ok(!miniCommands.has(sensitive), `mini permission exposed main-only command ${sensitive}`);
   }
 }
 
-function verifyWidgetCapabilityContract(source: string) {
+function verifyMiniCapabilityContract(source: string) {
   const capability = JSON.parse(source) as {
     windows?: string[];
     permissions?: Array<string | { identifier?: string }>;
   };
-  assert.deepEqual(capability.windows, ["widget"]);
+  assert.deepEqual(capability.windows, ["mini"]);
   const permissionIds = (capability.permissions ?? []).map((permission) => (
     typeof permission === "string" ? permission : permission.identifier ?? ""
   ));
-  assert.ok(permissionIds.includes("widget-window-commands"));
+  assert.ok(permissionIds.includes("mini-window-commands"));
   assert.ok(
     permissionIds.every((permission) => !permission.startsWith("sql:")),
-    "widget capability exposed raw SQL",
+    "mini capability exposed raw SQL",
   );
 }
 

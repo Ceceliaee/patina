@@ -675,7 +675,7 @@ function testQualityGateFilesAreMaintainerOwned() {
 
 function testWindowAuthorityChangesRequireRuntimeMatrixEvidence() {
   const capability = changedFile({
-    path: "src-tauri/capabilities/widget.json",
+    path: "src-tauri/capabilities/mini.json",
     additions: 1,
     deletions: 1,
   });

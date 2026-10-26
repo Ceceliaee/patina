@@ -4,7 +4,7 @@ import ts from "typescript";
 
 const SCAN_ROOTS = ["src/app", "src/features", "src/shared", "src/platform"] as const;
 const DEFAULT_CAPABILITY_PATH = "src-tauri/capabilities/default.json";
-const WIDGET_CAPABILITY_PATH = "src-tauri/capabilities/widget.json";
+const MINI_CAPABILITY_PATH = "src-tauri/capabilities/mini.json";
 
 interface SourceFile {
   path: string;
@@ -237,25 +237,25 @@ function assertRuntimeBoundaryGuards() {
     windows?: string[];
     permissions?: unknown[];
   };
-  const widgetCapability = JSON.parse(readFileSync(WIDGET_CAPABILITY_PATH, "utf8")) as {
+  const miniCapability = JSON.parse(readFileSync(MINI_CAPABILITY_PATH, "utf8")) as {
     windows?: string[];
     permissions?: unknown[];
   };
 
-  if (defaultCapability.windows?.includes("widget")) {
-    throw new Error("Default capability must not include the widget window");
+  if (defaultCapability.windows?.includes("mini")) {
+    throw new Error("Default capability must not include the mini window");
   }
-  if (!widgetCapability.windows?.includes("widget")) {
-    throw new Error("Widget capability must explicitly include the widget window");
+  if (!miniCapability.windows?.includes("mini")) {
+    throw new Error("Mini capability must explicitly include the mini window");
   }
-  const widgetPermissionText = JSON.stringify(widgetCapability.permissions ?? []);
-  if (!widgetPermissionText.includes("core:event:allow-unlisten")) {
+  const miniPermissionText = JSON.stringify(miniCapability.permissions ?? []);
+  if (!miniPermissionText.includes("core:event:allow-unlisten")) {
     throw new Error(
-      "Widget capability must include core:event:allow-unlisten for listener cleanup",
+      "Mini capability must include core:event:allow-unlisten for listener cleanup",
     );
   }
-  if (widgetPermissionText.includes('"sql:')) {
-    throw new Error("Widget capability must not expose raw SQL");
+  if (miniPermissionText.includes('"sql:')) {
+    throw new Error("Mini capability must not expose raw SQL");
   }
   const defaultPermissionText = JSON.stringify(defaultCapability.permissions ?? []);
   if (defaultPermissionText.includes('"sql:')) {
@@ -263,19 +263,19 @@ function assertRuntimeBoundaryGuards() {
   }
 
   const appShell = readFileSync("src/app/AppShell.tsx", "utf8");
-  const widgetShell = readFileSync("src/app/widget/WidgetShell.tsx", "utf8");
+  const miniShell = readFileSync("src/app/mini/MiniShell.tsx", "utf8");
   for (const [path, content] of [
     ["src/app/AppShell.tsx", appShell],
-    ["src/app/widget/WidgetShell.tsx", widgetShell],
+    ["src/app/mini/MiniShell.tsx", miniShell],
   ] as const) {
     if (content.includes("setUiTextLanguage(")) {
       throw new Error(`${path} must not call the retired setUiTextLanguage API`);
     }
   }
 
-  const widgetIconService = readFileSync("src/app/widget/widgetIconService.ts", "utf8");
-  if (widgetIconService.includes("platform/persistence/sessionReadRepository")) {
-    throw new Error("Widget icon service must not import the session read repository directly");
+  const miniIconService = readFileSync("src/app/mini/miniIconService.ts", "utf8");
+  if (miniIconService.includes("platform/persistence/sessionReadRepository")) {
+    throw new Error("Mini icon service must not import the session read repository directly");
   }
 }
 
@@ -322,7 +322,7 @@ function runSelfTest() {
       content: "import { invoke } from '@tauri-apps/api/core';",
     },
     {
-      path: "src/app/widget/badGateway.ts",
+      path: "src/app/mini/badGateway.ts",
       content: "import { invoke } from '@tauri-apps/api/core';",
     },
     {

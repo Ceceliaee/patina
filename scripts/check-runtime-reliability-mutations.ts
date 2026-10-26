@@ -107,7 +107,7 @@ assert.equal(subscriptionBaseline.status, 0, subscriptionBaseline.log);
 for (const mutation of [
   { name: "leaked-main-listener", file: "src/app/hooks/useWindowTracking.ts",
     search: "if (cancelled) off(); else unlisteners.push(off);", replacement: "if (!cancelled) unlisteners.push(off);" },
-  { name: "leaked-widget-listener", file: "src/app/widget/useWidgetTracking.ts",
+  { name: "leaked-mini-listener", file: "src/app/mini/useMiniTracking.ts",
     search: "if (cancelled) off(); else unlisteners.push(off);", replacement: "if (!cancelled) unlisteners.push(off);" },
   { name: "leaked-icon-listener", file: "src/platform/runtime/appIconEventGateway.ts",
     search: "if (disposed) { stop(); return; }", replacement: "if (disposed) { return; }" },

@@ -21,9 +21,10 @@ const INITIAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 310;
 // Data used to be part of the initial graph. It now has its own route and runtime
 // budgets, so this unchanged aggregate tracks the remaining primary lazy routes.
 const NON_DATA_PRIMARY_LAZY_ROUTES_GZIP_BUDGET_KI_B = 86.5;
-// Anonymous activity adds 1.46 KiB over the same-toolchain 386.05 KiB baseline.
-// Its scoped budget decision retains 3% headroom without a future-feature reserve.
-const TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 400;
+// Independent mini-window surface and shared compact projections: scoped cost
+// decision: docs/archive/2026-10-24-mini-window-replacement-plan.md, section 8.2.
+// Retain the 3% headroom rule.
+const TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 402;
 
 const INITIAL_CHUNK_BUDGETS = [
   { label: "index", pattern: /^index-.*\.js$/, gzipKiB: 65 },
@@ -73,7 +74,9 @@ const NON_DATA_PRIMARY_LAZY_ROUTE_BUDGETS = LAZY_PAGE_CHUNK_BUDGETS.filter(
 );
 
 const LAZY_SECONDARY_CHUNK_BUDGETS = [
-  { label: "WidgetShell", pattern: /^WidgetShell-.*\.js$/, gzipKiB: 6 },
+  // One lazy owner now includes content plus bootstrap/IPC previously in index.
+  // Measured: 5.78 KiB; the retirement decision records the reduced total graph.
+  { label: "MiniShell", pattern: /^MiniShell-.*\.js$/, gzipKiB: 6.2 },
   { label: "Settings import dialog", pattern: /^SettingsDataImportDialog-.*\.js$/, gzipKiB: 3 },
   { label: "Settings export dialog", pattern: /^SettingsDataExportDialog-.*\.js$/, gzipKiB: 6.5 },
   { label: "Settings scheduled export dialog", pattern: /^SettingsScheduledExportDialog-.*\.js$/, gzipKiB: 3.6 },

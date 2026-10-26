@@ -397,6 +397,12 @@ function runSelfTest() {
 
   const valid = audit(base);
   if (valid.failures.length > 0) throw new Error(`valid governance fixture failed:\n${valid.failures.join("\n")}`);
+  const runtimeSelection = audit({ ...base, scripts: { ...base.scripts,
+    "test:contracts": "pnpm run test:tauri-runtime-smoke --group contracts",
+    "runtime:prepare": "pnpm run test:tauri-runtime-smoke --prepare-only",
+    "perf:runtime": "pnpm run test:tauri-runtime-smoke --group resources",
+  } });
+  if (runtimeSelection.failures.length > 0) throw new Error(runtimeSelection.failures.join("\n"));
   const windows = audit({ ...base, scripts: Object.fromEntries(Object.entries(base.scripts).map(([name, command]) => [name, command.replaceAll("pnpm run", "pnpm.exe run")])) });
   if (windows.failures.length > 0) throw new Error(windows.failures.join("\n"));
   expectFailure(audit({ ...base, scripts: { ...base.scripts, check: "pnpm.cmd run missing -- argument" } }), "script does not exist");
