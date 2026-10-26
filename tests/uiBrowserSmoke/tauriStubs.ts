@@ -30,9 +30,7 @@ function tauriStubFor(path: string) {
       const foregroundListeners = new Set();
       const resizeListeners = new Set();
       const scaleListeners = new Set();
-      const currentWindowLabel = new URL(globalThis.location.href).searchParams.get("__patinaWindow") === "widget"
-        ? "widget"
-        : "main";
+      const currentWindowLabel = new URL(globalThis.location.href).searchParams.get("__patinaWindow") ?? "main";
       let foregroundState = { visible: true, focused: false };
       globalThis.__TIME_TRACKER_SET_FOREGROUND_STATE = (nextState) => {
         foregroundState = { ...foregroundState, ...nextState };
@@ -86,9 +84,7 @@ function tauriStubFor(path: string) {
 
   if (path === "@tauri-apps/api/webviewWindow") {
     return `
-      const currentWindowLabel = new URL(globalThis.location.href).searchParams.get("__patinaWindow") === "widget"
-        ? "widget"
-        : "main";
+      const currentWindowLabel = new URL(globalThis.location.href).searchParams.get("__patinaWindow") ?? "main";
       export function getCurrentWebviewWindow() {
         return { label: currentWindowLabel };
       }
@@ -123,9 +119,18 @@ function tauriStubFor(path: string) {
           return readRows(command, payload);
         }
 
-        const widgetParams = new URL(globalThis.location.href).searchParams;
-        const isWidgetSmoke = widgetParams.get("__patinaWindow") === "widget";
-        if (isWidgetSmoke && command === "cmd_get_widget_bootstrap_snapshot") {
+        const miniParams = new URL(globalThis.location.href).searchParams;
+        const isMiniSmoke = miniParams.get("__patinaWindow") === "mini";
+        if (isMiniSmoke && ["cmd_get_mini_bootstrap_snapshot", "cmd_get_mini_presentation_snapshot"].includes(command)
+          && globalThis.__PATINA_COMPACT_FAILURES?.includes(command)) throw new Error("forced compact snapshot failure");
+        if (command === "cmd_open_mini_window" && globalThis.__PATINA_MINI_OPEN_HOOK) {
+          return globalThis.__PATINA_MINI_OPEN_HOOK();
+        }
+        if (command === "cmd_get_mini_window_snapshot" || command === "cmd_mini_window_action" || command === "cmd_open_mini_window") {
+          const { miniCommand } = await import("/tests/uiBrowserSmoke/miniFixture.ts");
+          return miniCommand(command, payload);
+        }
+        if (isMiniSmoke && command === "cmd_get_mini_bootstrap_snapshot") {
           const settings = loadStoredSettings();
           return {
             settings: {
@@ -135,7 +140,6 @@ function tauriStubFor(path: string) {
               color_scheme_light: settings.color_scheme_light ?? null,
               color_scheme_dark: settings.color_scheme_dark ?? null,
             },
-            pinned: widgetParams.get("widgetPinned") === "1",
             app_links: Object.entries(settings).filter(([key]) => key.startsWith("__app_link::"))
               .map(([key, value]) => ({ key, value })),
             app_overrides: Object.entries(settings)
@@ -144,20 +148,14 @@ function tauriStubFor(path: string) {
               .map(([key, value]) => ({ key, value: String(value) })),
           };
         }
-        if (isWidgetSmoke && command === "cmd_get_widget_placement") {
-          return {
-            monitor: null,
-            side: widgetParams.get("widgetSide") === "left" ? "left" : "right",
-            anchor_y: 0.28,
-          };
-        }
-        if (isWidgetSmoke && command === "cmd_get_widget_icon") {
-          return widgetParams.get("widgetTracking") !== "0"
+
+        if (isMiniSmoke && command === "cmd_get_mini_icon") {
+          return miniParams.get("miniTracking") !== "0"
             ? "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
             : null;
         }
-        if (isWidgetSmoke && command === "cmd_get_widget_status_snapshot") {
-          const toolCount = Math.max(0, Math.min(2, Number(widgetParams.get("widgetTools") ?? 0)));
+        if (isMiniSmoke && command === "cmd_get_mini_presentation_snapshot") {
+          const toolCount = Math.max(0, Math.min(2, Number(miniParams.get("miniTools") ?? 0)));
           const tools = [
             {
               kind: "stopwatch",
@@ -174,10 +172,10 @@ function tauriStubFor(path: string) {
               visible_until_ms: null,
             },
           ].slice(0, toolCount);
-          const override = globalThis.__PATINA_WIDGET_TRACKING_OVERRIDE;
+          const override = globalThis.__PATINA_MINI_TRACKING_OVERRIDE;
           const responseDelayMs = Number(override?.responseDelayMs ?? 0);
-          const status = override?.widgetStatus ?? {
-            tracking: widgetParams.get("widgetTracking") === "0" ? null : {
+          const status = override?.miniStatus ?? {
+            tracking: miniParams.get("miniTracking") === "0" ? null : {
               app_name: "Chrome",
               exe_name: "chrome.exe",
               elapsed_ms: 6_120_000,
@@ -199,7 +197,7 @@ function tauriStubFor(path: string) {
               idle_time_ms: 0,
             },
             status: {
-              is_tracking_active: isWidgetSmoke && loadStoredSettings().tracking_paused !== "1",
+              is_tracking_active: isMiniSmoke && loadStoredSettings().tracking_paused !== "1",
               sustained_participation_eligible: false,
               sustained_participation_active: false,
               sustained_participation_kind: null,
@@ -252,21 +250,10 @@ function tauriStubFor(path: string) {
           if (Number.isFinite(responseDelayMs) && responseDelayMs > 0) {
             await new Promise((resolve) => setTimeout(resolve, responseDelayMs));
           }
-          return presentation;
+          return globalThis.__PATINA_COMPACT_PRESENTATION_HOOK?.(presentation) ?? presentation;
         }
-        if (
-          isWidgetSmoke
-          && command === "cmd_set_widget_pinned"
-        ) {
-          const delayMs = Number(widgetParams.get("widgetPinDelayMs") ?? 0);
-          if (Number.isFinite(delayMs) && delayMs > 0) {
-            await new Promise((resolve) => setTimeout(resolve, delayMs));
-          }
-          if (widgetParams.get("widgetPinFailure") === "1") {
-            throw new Error("forced widget pin persistence failure");
-          }
-        }
-        if (isWidgetSmoke && command === "cmd_get_tracker_health_snapshot") {
+
+        if (isMiniSmoke && command === "cmd_get_tracker_health_snapshot") {
           const now = Date.now();
           return {
             last_heartbeat_ms: now,
@@ -277,8 +264,8 @@ function tauriStubFor(path: string) {
         if (command === "get_current_tracking_snapshot") {
           const override = await globalThis.__PATINA_TRACKING_SNAPSHOT_HOOK?.();
           if (override !== undefined) return override;
-          if (globalThis.__PATINA_WIDGET_TRACKING_OVERRIDE) {
-            return globalThis.__PATINA_WIDGET_TRACKING_OVERRIDE.currentTrackingSnapshot;
+          if (globalThis.__PATINA_MINI_TRACKING_OVERRIDE) {
+            return globalThis.__PATINA_MINI_TRACKING_OVERRIDE.currentTrackingSnapshot;
           }
           const unavailableSignal = {
             signal: {

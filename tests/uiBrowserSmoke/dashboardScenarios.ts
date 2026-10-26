@@ -903,6 +903,20 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
   await runTest("dashboard app icon supports quick rename and category context actions", async () => {
     const settingsBefore = await evaluate(client!, sessionId, `localStorage.getItem('__time_tracker_smoke_settings')`);
     try {
+      // Own the classified item and overflow fixture instead of inheriting
+      // mutations from the Classification group in the full-suite order.
+      const origin = await evaluate(client!, sessionId, "performance.timeOrigin");
+      await evaluate(client!, sessionId, `(() => {
+        const settings = JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') ?? '{}');
+        settings['__app_override::cursor.exe'] = JSON.stringify({ category: 'development', enabled: true });
+        for (let index = 0; index < 18; index++) {
+          settings['__category_label_override::custom:quick_' + index] = 'Quick category ' + index;
+        }
+        localStorage.setItem('__time_tracker_smoke_settings', JSON.stringify(settings));
+        location.reload();
+      })()`);
+      await waitForExpression(client!, sessionId, `performance.timeOrigin !== ${origin}
+        && document.querySelector('[data-dashboard-read-state]')?.dataset.dashboardReadState === 'ready'`);
       await waitForExpression(
         client!,
         sessionId,

@@ -26,10 +26,13 @@ import { runHistoryReadFailureScenarios, runHistoryScenarios } from "./uiBrowser
 import { runDataReadFailureScenarios, runDataScenarios } from "./uiBrowserSmoke/dataScenarios.ts";
 import { runDataLoadingLayoutScenario } from "./uiBrowserSmoke/dataLoadingLayoutScenario.ts";
 import { runLocaleScenarios } from "./uiBrowserSmoke/localeScenarios.ts";
-import { runWidgetScenarios } from "./uiBrowserSmoke/widgetScenarios.ts";
+import { runMiniScenarios } from "./uiBrowserSmoke/miniScenarios.ts";
 import { runScrollRegionScenarios } from "./uiBrowserSmoke/scrollRegionScenarios.ts";
 import { runTypographyScenarios } from "./uiBrowserSmoke/typographyScenarios.ts";
 import { startBrowserCoverage } from "../scripts/coverage/browser-coverage.ts";
+import { assertBrowserSelection, parseBrowserGroup } from "./uiBrowserSmoke/options.ts";
+
+const group = parseBrowserGroup(process.argv.slice(2));
 
 let passed = 0;
 let coverage: Awaited<ReturnType<typeof startBrowserCoverage>> | null = null;
@@ -49,11 +52,7 @@ const consoleErrors: string[] = [];
 const networkErrors: string[] = [];
 let primaryError: unknown = null;
 const cleanupErrors: unknown[] = [];
-const dataOnly = process.argv.includes("--data-only");
-const historyWebTimelineOnly = process.argv.includes("--history-web-timeline-only");
-const scrollRegionOnly = process.argv.includes("--scroll-region-only");
-const widgetOnly = process.argv.includes("--widget-only");
-const classificationOnly = process.argv.includes("--classification-only");
+const historyWebTimelineOnly = group === "history-web-timeline";
 const historyWebTimelineTests = new Set([
   "history title details stay readable at narrow and default widths",
   "anonymous timeline dots fill the visible bar instead of the hit area",
@@ -160,46 +159,48 @@ try {
   };
 
   await runStartupScenarios(smokeContext);
+  const startupPassed = passed;
 
-  if (process.argv.includes("--startup-only")) {
+  if (group === "startup") {
     // Startup scenarios above include the real hook subscription lifecycle.
-  } else if (process.argv.includes("--anonymous-only")) {
+  } else if (group === "anonymous") {
     await runDashboardScenarios({ ...smokeContext, runTest: async (name, fn) => {
       if (name.startsWith("anonymous activity ranks once")) await runTest(name, fn);
     } });
-  } else if (process.argv.includes("--typography-only")) {
+  } else if (group === "typography") {
     await runTypographyScenarios(smokeContext);
-  } else if (process.argv.includes("--locale-only")) {
+  } else if (group === "locale") {
     await runLocaleScenarios(smokeContext);
-  } else if (process.argv.includes("--content-only")) {
+  } else if (group === "content") {
     await runClassificationScenarios(smokeContext);
     await runDashboardScenarios(smokeContext);
     await runHistoryScenarios(smokeContext);
     await runDataScenarios(smokeContext);
-  } else if (process.argv.includes("--read-failure-only")) {
+  } else if (group === "read-failure") {
     await runRemoteBackupRecoveryScenarios(smokeContext);
     await runDashboardReadFailureScenarios(smokeContext);
     await runDataReadFailureScenarios(smokeContext);
     await runHistoryReadFailureScenarios(smokeContext);
-  } else if (process.argv.includes("--settings-only")) {
+  } else if (group === "settings") {
     await runSettingsScenarios(smokeContext);
-  } else if (process.argv.includes("--theme-only")) {
+  } else if (group === "theme") {
     const { runThemeContrastScenarios } = await import("./uiBrowserSmoke/themeContrastScenarios.ts");
     await evaluate(client!, sessionId, `document.querySelector('[aria-label="设置"]')?.click()`);
     await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.settings-theme-entry'))`);
     await runThemeContrastScenarios(smokeContext);
-  } else if (process.argv.includes("--category-filter-only")) {
+  } else if (group === "category-filter") {
     const { runClassificationCategoryFilterScenarios } = await import("./uiBrowserSmoke/classificationCategoryFilterScenarios.ts");
     await runClassificationCategoryFilterScenarios(smokeContext);
-  } else if (classificationOnly) {
+  } else if (group === "classification") {
     await runClassificationScenarios(smokeContext);
-  } else if (scrollRegionOnly) {
+  } else if (group === "scroll-region") {
     await runScrollRegionScenarios(smokeContext);
-  } else if (widgetOnly) {
-    await runWidgetScenarios(smokeContext);
-  } else if (dataOnly) {
+  } else if (group === "mini") {
+    await runMiniScenarios(smokeContext);
+
+  } else if (group === "data") {
     await runDataScenarios(smokeContext, { continuityOnly: true });
-  } else if (process.argv.includes("--data-loading-layout-only")) {
+  } else if (group === "data-loading-layout") {
     await runDataLoadingLayoutScenario(smokeContext);
   } else if (historyWebTimelineOnly) {
     await waitForExpression(
@@ -210,6 +211,18 @@ try {
       "History web timeline focused smoke app readiness",
     );
     await runHistoryScenarios(smokeContext);
+  } else if (group === "about") {
+    await runAboutScenarios(smokeContext);
+  } else if (group === "tools") {
+    await runToolsScenarios(smokeContext);
+  } else if (group === "navigation") {
+    await runNavigationScenarios(smokeContext);
+  } else if (group === "dashboard") {
+    await runDashboardScenarios(smokeContext);
+  } else if (group === "history") {
+    await runHistoryScenarios(smokeContext);
+  } else if (group === "data-full") {
+    await runDataScenarios(smokeContext);
   } else {
     await runTypographyScenarios(smokeContext);
     await runScrollRegionScenarios(smokeContext);
@@ -237,9 +250,10 @@ try {
 
     await runLocaleScenarios(smokeContext);
 
-    await runWidgetScenarios(smokeContext);
+    await runMiniScenarios(smokeContext);
   }
 
+  assertBrowserSelection(group, passed, startupPassed);
   assert.deepEqual(consoleErrors, []);
 } catch (error) {
   const diagnostics: unknown[] = [error];
@@ -318,4 +332,4 @@ if (failures.length > 0) {
   throw new AggregateError(failures, "Browser UI smoke failed");
 }
 
-console.log(`Passed ${passed} browser UI smoke tests`);
+console.log(`Passed ${passed} browser UI smoke tests (group: ${group ?? "full"})`);

@@ -11,6 +11,7 @@ import {
 } from "./browserHarness.ts";
 import { DATE_TEXT, HISTORY_TITLE_DETAIL_COUNT } from "./constants.ts";
 import { getLocaleText } from "../../src/shared/i18n/runtime.ts";
+import { withClassifiedApps } from "./classifiedAppsFixture.ts";
 
 export async function runHistoryReadFailureScenarios(context: BrowserSmokeContext) {
   const { appUrl, client, sessionId, runTest } = context;
@@ -375,6 +376,10 @@ export async function runHistoryReadFailureScenarios(context: BrowserSmokeContex
 }
 
 export async function runHistoryScenarios(context: BrowserSmokeContext) {
+  await withClassifiedApps(context, () => runHistoryScenarioSet(context));
+}
+
+async function runHistoryScenarioSet(context: BrowserSmokeContext) {
   const { appUrl, client, sessionId, runTest } = context;
   const captureHistoryScreenshot = async (fileName: string, theme?: "light" | "dark") => {
     const captureDir = process.env.PATINA_HISTORY_SCREENSHOT_DIR?.trim();
@@ -865,6 +870,12 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
       `),
       true,
     );
+    // Establish the category state here; Dashboard may not have run before us.
+    await evaluate(client!, sessionId, `(() => {
+      const toggle = document.querySelector('.history-pulse-mode-toggle');
+      if (toggle?.getAttribute('aria-pressed') === 'false') toggle.click();
+    })()`);
+    await waitForExpression(client!, sessionId, `document.querySelector('.history-pulse-mode-toggle')?.getAttribute('aria-pressed') === 'true'`);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
@@ -2056,6 +2067,11 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
       await waitForAnimationFrames(client!, sessionId, 2);
       const repeatedDragState = JSON.parse(String(await evaluate(client!, sessionId, `
         (() => {
+          const interaction = document.querySelector('.history-timeline-zoom-dialog-timeline');
+          delete interaction.dataset.smokePointerId;
+          interaction.addEventListener('pointerdown', event => {
+            interaction.dataset.smokePointerId = String(event.pointerId);
+          }, { once: true });
           const timeline = document.querySelector(".history-timeline-zoom-dialog-timeline .history-horizontal-timeline");
           const track = document.querySelector(
             ".history-timeline-zoom-dialog-timeline .history-horizontal-timeline-track"
@@ -2086,6 +2102,11 @@ export async function runHistoryScenarios(context: BrowserSmokeContext) {
         buttons: 1,
         clickCount: 1,
       }, sessionId);
+      await waitForExpression(client!, sessionId, `(() => {
+        const interaction = document.querySelector('.history-timeline-zoom-dialog-timeline');
+        return interaction?.dataset.smokePointerId !== undefined
+          && interaction.hasPointerCapture(Number(interaction.dataset.smokePointerId));
+      })()`, 15_000, "timeline owns pointer capture before the next drag movement");
       await client!.command("Input.dispatchMouseEvent", {
         type: "mouseMoved",
         x: repeatedDragState.x + Math.sign(dragDeltaX) * 8,

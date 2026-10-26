@@ -123,6 +123,15 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     })()`);
     assert.deepEqual(preferences, [text.accessibility.settings.toggleLaunchAtLogin, text.accessibility.settings.toggleStartMinimized]);
   });
+  await runTest("window settings expose only close and tray preferences", async () => {
+    const text = getLocaleText("zh-CN");
+    const preferences = await evaluate(client, sessionId, `(() => {
+      const group = [...document.querySelectorAll('.settings-preference-group')]
+        .find(group => group.querySelector('h3')?.textContent === ${jsonString(text.settings.windowBehaviorTitle)});
+      return [...(group?.querySelectorAll('[role="switch"]') ?? [])].map(control => control.getAttribute('aria-label'));
+    })()`);
+    assert.deepEqual(preferences, [text.accessibility.settings.toggleCloseToTray, text.accessibility.settings.toggleShowTrayIcon]);
+  });
   const assertDialogHeaderCentered = async (selector: string) => {
     assert.equal(await evaluate(client, sessionId, `(() => {
       const header = document.querySelector(${jsonString(selector)} + ' .qp-dialog-header');

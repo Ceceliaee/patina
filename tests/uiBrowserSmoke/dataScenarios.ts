@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { getLocaleText, loadLocaleText } from "../../src/shared/i18n/runtime.ts";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import { runDataLoadingLayoutScenario } from "./dataLoadingLayoutScenario.ts";
+import { withClassifiedApps } from "./classifiedAppsFixture.ts";
 import {
   delay,
   evaluate,
@@ -401,6 +402,13 @@ const VISIBLE_DESTINATION_DETAIL_POPOVER = `(() => {
 export async function runDataScenarios(
   context: BrowserSmokeContext,
   options: { continuityOnly?: boolean } = {},
+) {
+  await withClassifiedApps(context, () => runDataScenarioSet(context, options));
+}
+
+async function runDataScenarioSet(
+  context: BrowserSmokeContext,
+  options: { continuityOnly?: boolean },
 ) {
   const { appUrl, client, sessionId, runTest } = context;
   const assertQuickClassificationKeyboard = async (listSelector: string, supported = true) => {

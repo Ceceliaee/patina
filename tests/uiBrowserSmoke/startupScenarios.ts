@@ -72,7 +72,7 @@ export async function runStartupScenarios(context: BrowserSmokeContext) {
 
   await runTest("StrictMode and repeated mounts release subscriptions delivered after unmount or partial failure", async () => {
     await waitForExpression(client, sessionId, "Boolean(globalThis.__PATINA_EVENT_LISTENER_COUNTS && globalThis.__PATINA_MAIN_WINDOW_READY_EVIDENCE)");
-    for (const kind of ["main", "widget", "icons"] as const) {
+    for (const kind of ["main", "mini", "icons"] as const) {
       const baseline = await evaluate(client, sessionId, "globalThis.__PATINA_EVENT_LISTENER_COUNTS()");
       try {
         for (let cycle = 0; cycle < 3; cycle += 1) {
@@ -283,6 +283,10 @@ export async function runStartupScenarios(context: BrowserSmokeContext) {
   });
 
   await runTest("main window ready frame stays stable across supported DPI scales", async () => {
+    const viewport = await evaluate(client!, sessionId, `({ width: innerWidth, height: innerHeight, deviceScaleFactor: devicePixelRatio })`) as {
+      width: number; height: number; deviceScaleFactor: number;
+    };
+    try {
     for (const deviceScaleFactor of [1, 1.25, 1.5, 2]) {
       await client!.command("Emulation.setDeviceMetricsOverride", {
         width: 1100,
@@ -307,12 +311,9 @@ export async function runStartupScenarios(context: BrowserSmokeContext) {
       });
     }
 
-    await client!.command("Emulation.setDeviceMetricsOverride", {
-      width: 1100,
-      height: 736,
-      deviceScaleFactor: 1,
-      mobile: false,
-    }, sessionId);
+    } finally {
+      await client!.command("Emulation.setDeviceMetricsOverride", { ...viewport, mobile: false }, sessionId);
+    }
   });
 
   await runTest("primary navigation switches views in a real browser", async () => {
