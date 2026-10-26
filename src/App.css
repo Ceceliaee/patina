@@ -10,6 +10,7 @@
 @import "./styles/components/quiet-timeline.css";
 @import "./styles/components/quiet-anchored-popover.css";
 @import "./styles/app-shell.css";
+@import "./styles/mini-window.css";
 @import "./styles/features/settings.css";
 @import "./styles/features/dashboard.css";
 @import "./styles/features/classification.css";
