@@ -159,12 +159,10 @@ pub async fn cmd_commit_app_settings(
         tray::apply_language_setting_change(&app, &language)
             .map_err(|error| CommandErrorDto::new("SETTINGS_APPLY_FAILED", error, false))?;
     }
-    if mutations.iter().any(|mutation| {
-        matches!(
-            mutation.key.as_str(),
-            "show_tray_icon" | "close_behavior" | "minimize_behavior"
-        )
-    }) {
+    if mutations
+        .iter()
+        .any(|mutation| matches!(mutation.key.as_str(), "show_tray_icon" | "close_behavior"))
+    {
         desktop_behavior::apply_saved_desktop_behavior(&app)
             .await
             .map_err(|error| CommandErrorDto::new("SETTINGS_APPLY_FAILED", error, false))?;

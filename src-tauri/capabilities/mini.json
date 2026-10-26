@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "mini",
+  "description": "Independent mini window with read-only tracking and tool projections.",
+  "windows": ["mini"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten", "mini-window-commands"]
+}

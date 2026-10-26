@@ -12,6 +12,7 @@ pub struct ResourceDiagnosticsSnapshot {
     pub tracking_progress: crate::engine::tracking::watchdog::progress::TrackingProgressSnapshot,
     pub name_resolution: crate::engine::tracking::app_names::NameResolutionDiagnostics,
     pub webview_window_count: usize,
+    pub mini_window: crate::app::mini_window::Diagnostics,
     pub webview_window_labels: Vec<String>,
     pub process_resources: resource::WindowsProcessResourceSnapshot,
     pub process_details_cache: foreground::ProcessDetailsCacheStats,
@@ -37,6 +38,9 @@ pub fn cmd_get_resource_diagnostics(app: tauri::AppHandle) -> ResourceDiagnostic
 
     ResourceDiagnosticsSnapshot {
         process_id: std::process::id(),
+        mini_window: app
+            .state::<crate::app::mini_window::MiniWindowState>()
+            .diagnostics(),
         database_timings: crate::data::sqlite_pool::diagnostics::snapshot(),
         tracking_progress: app
             .state::<std::sync::Arc<crate::engine::tracking::watchdog::RuntimeHealthState>>()

@@ -1,7 +1,6 @@
 use crate::app::main_window;
 use crate::app::runtime::now_ms;
 use crate::app::state::{AppExitState, BackgroundEntryState, DesktopBehaviorState};
-use crate::app::widget;
 use crate::data::app_settings_service::{self, AppSettingMutation};
 use crate::data::tracking_pause_service;
 use crate::domain::localization::{Locale, LocalizationState};
@@ -429,17 +428,6 @@ pub(crate) fn handle_tray_icon_event<R: Runtime>(app: &AppHandle<R>, event: Tray
 }
 
 pub(crate) fn handle_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
-    if window.label() == widget::WIDGET_WINDOW_LABEL {
-        if let WindowEvent::CloseRequested { api, .. } = event {
-            api.prevent_close();
-            show_main_window_from_event(
-                window.app_handle(),
-                main_window::MainWindowShowReason::Widget,
-            );
-        }
-        return;
-    }
-
     if window.label() != MAIN_WINDOW_LABEL {
         return;
     }
@@ -450,11 +438,6 @@ pub(crate) fn handle_window_event<R: Runtime>(window: &Window<R>, event: &Window
         return;
     }
 
-    if matches!(event, WindowEvent::Focused(true)) && window.is_visible().unwrap_or(false) {
-        widget::close_widget_window(app);
-        return;
-    }
-
     let state = app.state::<DesktopBehaviorState>();
     let settings = state.snapshot();
     let exit_requested = app.state::<AppExitState>().is_exit_requested();
@@ -462,11 +445,10 @@ pub(crate) fn handle_window_event<R: Runtime>(window: &Window<R>, event: &Window
     if let WindowEvent::CloseRequested { api, .. } = event {
         if should_redirect_close_to_tray(settings, exit_requested) {
             api.prevent_close();
-            widget::close_widget_window(app);
             main_window::hide_main_window_for_background(app, window);
         } else if !exit_requested {
             // An intentional exit must win over visible-window recovery and
-            // any parked Widget that would otherwise keep the app alive.
+            // any auxiliary window that would otherwise keep the app alive.
             api.prevent_close();
             app.state::<AppExitState>().request_exit();
             app.exit(0);
@@ -1003,36 +985,34 @@ mod tests {
     #[test]
     fn hidden_tray_does_not_change_close_or_launch_policy() {
         for close in ["tray", "exit"] {
-            for minimize in ["widget", "taskbar"] {
-                for visible in [false, true] {
-                    let mut settings = DesktopBehaviorSettings::default()
-                        .with_raw_desktop_behavior(close, minimize);
-                    settings.show_tray_icon = visible;
-                    assert_eq!(
-                        should_redirect_close_to_tray(settings, false),
-                        close == "tray"
-                    );
-                    assert!(!should_redirect_close_to_tray(settings, true));
-                    assert_eq!(
-                        settings.should_keep_tray_visible(),
-                        visible && close == "tray"
-                    );
-                    for minimized in [false, true] {
-                        let settings = settings.with_launch_behavior(false, minimized);
-                        let mut reference = settings;
-                        reference.show_tray_icon = !visible;
-                        for source in [
-                            crate::domain::settings::StartupSource::Manual,
-                            crate::domain::settings::StartupSource::Autostart,
-                            crate::domain::settings::StartupSource::UpdateRestart,
-                            crate::domain::settings::StartupSource::StorageRestart,
-                            crate::domain::settings::StartupSource::SettingsRecovery,
-                        ] {
-                            assert_eq!(
-                                settings.startup_ui_strategy(source),
-                                reference.startup_ui_strategy(source)
-                            );
-                        }
+            for visible in [false, true] {
+                let mut settings =
+                    DesktopBehaviorSettings::default().with_raw_close_behavior(close);
+                settings.show_tray_icon = visible;
+                assert_eq!(
+                    should_redirect_close_to_tray(settings, false),
+                    close == "tray"
+                );
+                assert!(!should_redirect_close_to_tray(settings, true));
+                assert_eq!(
+                    settings.should_keep_tray_visible(),
+                    visible && close == "tray"
+                );
+                for minimized in [false, true] {
+                    let settings = settings.with_launch_behavior(false, minimized);
+                    let mut reference = settings;
+                    reference.show_tray_icon = !visible;
+                    for source in [
+                        crate::domain::settings::StartupSource::Manual,
+                        crate::domain::settings::StartupSource::Autostart,
+                        crate::domain::settings::StartupSource::UpdateRestart,
+                        crate::domain::settings::StartupSource::StorageRestart,
+                        crate::domain::settings::StartupSource::SettingsRecovery,
+                    ] {
+                        assert_eq!(
+                            settings.startup_ui_strategy(source),
+                            reference.startup_ui_strategy(source)
+                        );
                     }
                 }
             }
@@ -1041,8 +1021,7 @@ mod tests {
 
     #[test]
     fn explicit_exit_bypasses_close_to_tray_redirect() {
-        let settings =
-            DesktopBehaviorSettings::default().with_raw_desktop_behavior("tray", "taskbar");
+        let settings = DesktopBehaviorSettings::default().with_raw_close_behavior("tray");
 
         assert!(should_redirect_close_to_tray(settings, false));
         assert!(!should_redirect_close_to_tray(settings, true));

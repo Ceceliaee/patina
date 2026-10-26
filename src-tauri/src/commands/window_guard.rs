@@ -39,8 +39,8 @@ mod tests {
     }
 
     #[test]
-    fn widget_and_unknown_windows_are_denied_without_leaking_context() {
-        for label in ["widget", "unknown", "main-copy"] {
+    fn mini_and_unknown_windows_are_denied_without_leaking_context() {
+        for label in ["mini", "unknown", "main-copy"] {
             let error = require_main_window_label(label).unwrap_err();
             assert_eq!(error.code, MAIN_WINDOW_ACCESS_DENIED_CODE);
             assert_eq!(error.message, MAIN_WINDOW_ACCESS_DENIED_MESSAGE);

@@ -1,10 +1,8 @@
 use crate::app::state::{
-    AppExitState, DesktopBehaviorState, MainWindowLifecycleSnapshot, MainWindowLifecycleState,
-    MainWindowReadyDecision, MainWindowRenderToken, MainWindowShowDecision,
-    MainWindowTimeoutDecision,
+    AppExitState, MainWindowLifecycleSnapshot, MainWindowLifecycleState, MainWindowReadyDecision,
+    MainWindowRenderToken, MainWindowShowDecision, MainWindowTimeoutDecision,
 };
-use crate::app::widget;
-use crate::domain::settings::{MinimizeBehavior, StartupSource};
+use crate::domain::settings::StartupSource;
 use crate::platform::storage_paths;
 use crate::platform::windows::window_activation;
 use std::time::{Duration, Instant};
@@ -27,7 +25,6 @@ const MAIN_WINDOW_READY_TIMEOUT_SECS: u64 = 8;
 const MAIN_WINDOW_LIVENESS_TIMEOUT_MILLIS: u64 = 1_500;
 const MAIN_WINDOW_GENERATION_PROPERTY: &str = "__PATINA_MAIN_WINDOW_GENERATION__";
 const MAIN_WINDOW_LIVENESS_CALLBACK: &str = "__PATINA_MAIN_WINDOW_LIVENESS_REQUEST__";
-const WIDGET_SHOW_MAX_ATTEMPTS: usize = 2;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum MainWindowShowReason {
@@ -35,8 +32,7 @@ pub(crate) enum MainWindowShowReason {
     StartupRecovery,
     TrayMenu,
     TrayIcon,
-    Widget,
-    MinimizeRollback,
+    Mini,
     #[cfg(desktop)]
     SingleInstance,
     ToolAlert,
@@ -50,8 +46,7 @@ impl MainWindowShowReason {
             Self::StartupRecovery => "startup-recovery",
             Self::TrayMenu => "tray-menu",
             Self::TrayIcon => "tray-icon",
-            Self::Widget => "widget",
-            Self::MinimizeRollback => "minimize-rollback",
+            Self::Mini => "mini",
             #[cfg(desktop)]
             Self::SingleInstance => "single-instance",
             Self::ToolAlert => "tool-alert",
@@ -318,7 +313,6 @@ fn reveal_main_window<R: Runtime + 'static>(
         return Ok(false);
     }
 
-    widget::close_widget_window(app);
     crate::app::tray::on_main_window_revealed(app);
     log_main_window_event("show-succeeded", lifecycle.snapshot(), reason, "visible");
     Ok(true)
@@ -331,127 +325,9 @@ pub(crate) async fn minimize_main_window<R: Runtime + 'static>(
         return Err("main window is unavailable".to_string());
     };
 
-    let settings = app.state::<DesktopBehaviorState>().snapshot();
-    if settings.minimize_behavior == MinimizeBehavior::Widget {
-        return minimize_main_window_to_widget(app, &window).await;
-    }
-
     window
         .minimize()
         .map_err(|error| format!("failed to minimize main window: {error}"))
-}
-
-pub(crate) fn close_widget_for_main_activity<R: Runtime + 'static>(app: &AppHandle<R>) {
-    if app
-        .state::<MainWindowLifecycleState>()
-        .should_close_widget_for_main_activity()
-    {
-        widget::close_widget_window(app);
-    }
-}
-
-async fn minimize_main_window_to_widget<R: Runtime + 'static>(
-    app: &AppHandle<R>,
-    window: &WebviewWindow<R>,
-) -> Result<(), String> {
-    let lifecycle = app.state::<MainWindowLifecycleState>();
-    let Some(intent_generation) = lifecycle.begin_minimize_to_widget() else {
-        return Ok(());
-    };
-    let preferred_monitor = window.current_monitor().ok().flatten();
-    if let Err(error) = show_widget_for_minimize_with_retry(app, preferred_monitor.clone()).await {
-        lifecycle.cancel_minimize_to_widget(intent_generation);
-        return Err(error);
-    }
-
-    let Some(hide_generation) = lifecycle.commit_minimize_to_widget(intent_generation) else {
-        widget::close_widget_window(app);
-        return Ok(());
-    };
-
-    if let Err(error) = window.hide() {
-        let rollback_error = rollback_widget_minimize(app, window).err();
-        return Err(format!(
-            "widget was shown but the main window could not be hidden: {error}{}",
-            rollback_error
-                .map(|rollback| format!("; main-window rollback also failed: {rollback}"))
-                .unwrap_or_default()
-        ));
-    }
-
-    if !lifecycle.is_current_hide(hide_generation) {
-        return rollback_widget_minimize(app, window);
-    }
-
-    if !widget::is_widget_window_visible(app) {
-        if let Err(error) = show_widget_for_minimize_with_retry(app, preferred_monitor).await {
-            let rollback_error = rollback_widget_minimize(app, window).err();
-            return Err(format!(
-                "main window was hidden but widget recovery failed: {error}{}",
-                rollback_error
-                    .map(|rollback| format!("; main-window rollback also failed: {rollback}"))
-                    .unwrap_or_default()
-            ));
-        }
-    }
-
-    if !widget::is_widget_window_visible(app) {
-        let rollback_error = rollback_widget_minimize(app, window).err();
-        return Err(format!(
-            "widget window was not visible after minimizing the main window{}",
-            rollback_error
-                .map(|rollback| format!("; main-window rollback also failed: {rollback}"))
-                .unwrap_or_default()
-        ));
-    }
-
-    schedule_main_window_destroy_after_background(app.clone(), hide_generation);
-    Ok(())
-}
-
-fn rollback_widget_minimize<R: Runtime + 'static>(
-    app: &AppHandle<R>,
-    window: &WebviewWindow<R>,
-) -> Result<(), String> {
-    widget::close_widget_window(app);
-    let _ = show_main_window(app, MainWindowShowReason::MinimizeRollback);
-    if window.is_visible().ok() == Some(true) {
-        return Ok(());
-    }
-
-    window
-        .show()
-        .map_err(|error| format!("failed to restore the main window: {error}"))?;
-    let _ = window.unminimize();
-    let _ = window.set_focus();
-    crate::app::tray::on_main_window_revealed(app);
-    Ok(())
-}
-
-async fn show_widget_for_minimize_with_retry<R: Runtime + 'static>(
-    app: &AppHandle<R>,
-    preferred_monitor: Option<tauri::Monitor>,
-) -> Result<(), String> {
-    let mut last_error = None;
-    for attempt in 1..=WIDGET_SHOW_MAX_ATTEMPTS {
-        match widget::show_widget_window_for_minimize(app, preferred_monitor.clone()).await {
-            Ok(()) => return Ok(()),
-            Err(error) => {
-                eprintln!(
-                    "[widget] minimize show attempt {attempt}/{WIDGET_SHOW_MAX_ATTEMPTS} failed: {error}"
-                );
-                last_error = Some(error);
-                if attempt < WIDGET_SHOW_MAX_ATTEMPTS {
-                    tokio::task::yield_now().await;
-                }
-            }
-        }
-    }
-
-    Err(format!(
-        "failed to show widget after {WIDGET_SHOW_MAX_ATTEMPTS} attempts: {}",
-        last_error.unwrap_or_else(|| "unknown widget show failure".to_string())
-    ))
 }
 
 pub(crate) fn hide_main_window_for_background<R: Runtime + 'static>(

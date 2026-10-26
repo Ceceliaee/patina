@@ -63,6 +63,7 @@ pub fn setup(
     ))
     .map_err(std::io::Error::other)?;
     crate::app::tracking::register_power_lifecycle_handler(app);
+    crate::app::mini_window::register_power_handler(app);
     use tauri::Manager;
     if let (true, Ok(paths)) = (
         crate::platform::runtime_diagnostics::enabled_for_process(),
@@ -97,7 +98,6 @@ pub fn setup(
     crate::app::remote_status_bridge::start(app.handle().clone());
     crate::app::web_activity::spawn_observation_expiry(app.handle().clone());
     crate::data::activity_read_model::spawn_background_worker(app.handle().clone());
-    crate::app::widget::start_widget_fullscreen_watcher(app.handle().clone());
 
     let app_handle = app.handle().clone();
     main_window::ensure_main_window(&app_handle).map_err(std::io::Error::other)?;

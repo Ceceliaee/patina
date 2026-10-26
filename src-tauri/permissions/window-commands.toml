@@ -4,6 +4,9 @@
 identifier = "main-window-commands"
 description = "Allows the main application window to invoke the complete Patina application command surface."
 commands.allow = [
+  "cmd_open_mini_window",
+  "cmd_get_mini_window_snapshot",
+  "cmd_mini_window_action",
   "cmd_get_setting_rows",
   "cmd_get_history_range_rows",
   "cmd_get_executable_icon_rows",
@@ -54,16 +57,10 @@ commands.allow = [
   "cmd_resume_pomodoro",
   "cmd_skip_pomodoro_phase",
   "cmd_reset_pomodoro",
-  "cmd_get_widget_icon",
-  "cmd_get_widget_bootstrap_snapshot",
-  "cmd_get_widget_placement",
-  "cmd_finalize_widget_drag",
-  "cmd_set_widget_expanded",
-  "cmd_get_widget_status_snapshot",
-  "cmd_set_widget_pinned",
+  "cmd_get_mini_icon",
+  "cmd_get_mini_bootstrap_snapshot",
+  "cmd_get_mini_presentation_snapshot",
   "cmd_show_main_window",
-  "cmd_hide_widget_window",
-  "cmd_is_primary_mouse_button_down",
   "cmd_minimize_main_window",
   "cmd_get_main_window_render_token",
   "cmd_mark_main_window_ready",
@@ -116,19 +113,14 @@ commands.allow = [
 ]
 
 [[permission]]
-identifier = "widget-window-commands"
-description = "Allows the compact widget window to read tracking state and use widget-only controls."
+identifier = "mini-window-commands"
+description = "Read compact status and control only the independent mini window."
 commands.allow = [
-  "get_current_tracking_snapshot",
+  "cmd_get_mini_window_snapshot",
+  "cmd_mini_window_action",
   "cmd_get_tracker_health_snapshot",
-  "cmd_get_widget_bootstrap_snapshot",
-  "cmd_get_widget_icon",
-  "cmd_get_widget_placement",
-  "cmd_finalize_widget_drag",
-  "cmd_set_widget_expanded",
-  "cmd_get_widget_status_snapshot",
-  "cmd_set_widget_pinned",
+  "cmd_get_mini_bootstrap_snapshot",
+  "cmd_get_mini_icon",
+  "cmd_get_mini_presentation_snapshot",
   "cmd_show_main_window",
-  "cmd_hide_widget_window",
-  "cmd_is_primary_mouse_button_down",
 ]

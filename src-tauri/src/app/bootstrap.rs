@@ -4,7 +4,7 @@ use crate::app::{
     runtime,
     state::{
         AppExitState, AppSettingsCommitState, BackgroundEntryState, DesktopBehaviorState,
-        MainWindowLifecycleState, WidgetWindowLifecycleState,
+        MainWindowLifecycleState,
     },
     tray,
 };
@@ -81,7 +81,7 @@ fn register_managed_state_and_plugins(
         .manage(AppRestartState::default())
         .manage(MainWindowLifecycleState::default())
         .manage(crate::app::webview_recovery::WebviewRecoveryState::default())
-        .manage(WidgetWindowLifecycleState::default())
+        .manage(crate::app::mini_window::MiniWindowState::default())
         .manage(TrackingRuntimeSnapshotState::default())
         .manage(TrackingPauseRuntimeState::default())
         .manage(TitleRecordingRuntimeState::default())
@@ -125,6 +125,9 @@ fn isolated_autostart_name(debug: bool, isolated: Option<&str>) -> Option<&'stat
 
 fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
     builder.invoke_handler(tauri::generate_handler![
+        commands::mini_window::cmd_open_mini_window,
+        commands::mini_window::cmd_get_mini_window_snapshot,
+        commands::mini_window::cmd_mini_window_action,
         commands::persistence_read::cmd_get_setting_rows,
         commands::persistence_read::cmd_get_history_range_rows,
         commands::persistence_read::cmd_get_executable_icon_rows,
@@ -175,16 +178,10 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::tools::cmd_resume_pomodoro,
         commands::tools::cmd_skip_pomodoro_phase,
         commands::tools::cmd_reset_pomodoro,
-        commands::widget::cmd_get_widget_icon,
-        commands::widget::cmd_get_widget_bootstrap_snapshot,
-        commands::widget::cmd_get_widget_placement,
-        commands::widget::cmd_finalize_widget_drag,
-        commands::widget::cmd_set_widget_expanded,
-        commands::widget::cmd_get_widget_status_snapshot,
-        commands::widget::cmd_set_widget_pinned,
-        commands::widget::cmd_show_main_window,
-        commands::widget::cmd_hide_widget_window,
-        commands::widget::cmd_is_primary_mouse_button_down,
+        commands::mini_window::cmd_get_mini_icon,
+        commands::mini_window::cmd_get_mini_bootstrap_snapshot,
+        commands::mini_window::cmd_get_mini_presentation_snapshot,
+        commands::window::cmd_show_main_window,
         commands::window::cmd_minimize_main_window,
         commands::window::cmd_e2e_destroy_hidden_main_window,
         commands::window::cmd_get_main_window_render_token,

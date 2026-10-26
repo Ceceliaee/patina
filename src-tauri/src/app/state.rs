@@ -25,7 +25,6 @@ impl DesktopBehaviorState {
     pub(crate) fn update_desktop(&self, saved: DesktopBehaviorSettings) {
         let mut current = self.inner.lock().unwrap_or_else(|error| error.into_inner());
         current.close_behavior = saved.close_behavior;
-        current.minimize_behavior = saved.minimize_behavior;
         current.show_tray_icon = saved.show_tray_icon;
     }
 
@@ -193,7 +192,6 @@ pub(crate) struct MainWindowLifecycleSnapshot {
 struct MainWindowLifecycle {
     desired_visible: bool,
     hide_generation: u64,
-    minimize_to_widget_in_progress: bool,
     destroy_in_progress: bool,
     window_generation: u64,
     load_epoch: u64,
@@ -295,7 +293,6 @@ impl MainWindowLifecycleState {
             let was_revealed = inner.reveal_satisfied;
             inner.desired_visible = true;
             inner.hide_generation = inner.hide_generation.wrapping_add(1);
-            inner.minimize_to_widget_in_progress = false;
             inner.reveal_satisfied = false;
 
             if inner.destroy_in_progress {
@@ -470,51 +467,6 @@ impl MainWindowLifecycleState {
         })
     }
 
-    pub(crate) fn begin_minimize_to_widget(&self) -> Option<u64> {
-        self.with_inner(|inner| {
-            if !inner.desired_visible || inner.minimize_to_widget_in_progress {
-                return None;
-            }
-
-            inner.minimize_to_widget_in_progress = true;
-            Some(inner.hide_generation)
-        })
-    }
-
-    pub(crate) fn should_close_widget_for_main_activity(&self) -> bool {
-        self.with_inner(|inner| inner.desired_visible && !inner.minimize_to_widget_in_progress)
-    }
-
-    pub(crate) fn cancel_minimize_to_widget(&self, intent_generation: u64) {
-        self.with_inner(|inner| {
-            if inner.minimize_to_widget_in_progress && inner.hide_generation == intent_generation {
-                inner.minimize_to_widget_in_progress = false;
-            }
-        });
-    }
-
-    pub(crate) fn commit_minimize_to_widget(&self, intent_generation: u64) -> Option<u64> {
-        self.with_inner(|inner| {
-            if !inner.minimize_to_widget_in_progress
-                || !inner.desired_visible
-                || inner.hide_generation != intent_generation
-            {
-                inner.minimize_to_widget_in_progress = false;
-                return None;
-            }
-
-            inner.minimize_to_widget_in_progress = false;
-            inner.desired_visible = false;
-            inner.reveal_satisfied = false;
-            inner.hide_generation = inner.hide_generation.wrapping_add(1);
-            Some(inner.hide_generation)
-        })
-    }
-
-    pub(crate) fn is_current_hide(&self, hide_generation: u64) -> bool {
-        self.with_inner(|inner| !inner.desired_visible && inner.hide_generation == hide_generation)
-    }
-
     pub(crate) fn try_hide_for_startup(&self) -> Option<u64> {
         self.with_inner(|inner| {
             if inner.desired_visible {
@@ -563,119 +515,12 @@ impl MainWindowLifecycleState {
     }
 }
 
-#[derive(Debug, Default)]
-pub(crate) struct WidgetWindowLifecycleState {
-    inner: Mutex<WidgetWindowLifecycle>,
-}
-
-#[derive(Debug, Default)]
-struct WidgetWindowLifecycle {
-    create_in_progress: bool,
-    desired_visible: bool,
-    hide_generation: u64,
-}
-
-impl WidgetWindowLifecycleState {
-    pub(crate) fn is_visible_desired(&self) -> bool {
-        match self.inner.lock() {
-            Ok(guard) => guard.desired_visible,
-            Err(poisoned) => poisoned.into_inner().desired_visible,
-        }
-    }
-
-    pub(crate) fn show_existing(&self) {
-        match self.inner.lock() {
-            Ok(mut guard) => {
-                guard.desired_visible = true;
-                guard.hide_generation = guard.hide_generation.wrapping_add(1);
-            }
-            Err(poisoned) => {
-                let mut guard = poisoned.into_inner();
-                guard.desired_visible = true;
-                guard.hide_generation = guard.hide_generation.wrapping_add(1);
-            }
-        }
-    }
-
-    pub(crate) fn begin_show(&self) -> bool {
-        match self.inner.lock() {
-            Ok(mut guard) => {
-                guard.desired_visible = true;
-                guard.hide_generation = guard.hide_generation.wrapping_add(1);
-                if guard.create_in_progress {
-                    return false;
-                }
-
-                guard.create_in_progress = true;
-                true
-            }
-            Err(poisoned) => {
-                let mut guard = poisoned.into_inner();
-                guard.desired_visible = true;
-                guard.hide_generation = guard.hide_generation.wrapping_add(1);
-                if guard.create_in_progress {
-                    return false;
-                }
-
-                guard.create_in_progress = true;
-                true
-            }
-        }
-    }
-
-    pub(crate) fn finish_show(&self) -> bool {
-        match self.inner.lock() {
-            Ok(mut guard) => {
-                guard.create_in_progress = false;
-                guard.desired_visible
-            }
-            Err(poisoned) => {
-                let mut guard = poisoned.into_inner();
-                guard.create_in_progress = false;
-                guard.desired_visible
-            }
-        }
-    }
-
-    pub(crate) fn hide(&self) -> u64 {
-        match self.inner.lock() {
-            Ok(mut guard) => {
-                guard.desired_visible = false;
-                guard.hide_generation = guard.hide_generation.wrapping_add(1);
-                guard.hide_generation
-            }
-            Err(poisoned) => {
-                let mut guard = poisoned.into_inner();
-                guard.desired_visible = false;
-                guard.hide_generation = guard.hide_generation.wrapping_add(1);
-                guard.hide_generation
-            }
-        }
-    }
-
-    pub(crate) fn should_destroy_hidden_window(&self, hide_generation: u64) -> bool {
-        match self.inner.lock() {
-            Ok(guard) => {
-                !guard.desired_visible
-                    && !guard.create_in_progress
-                    && guard.hide_generation == hide_generation
-            }
-            Err(poisoned) => {
-                let guard = poisoned.into_inner();
-                !guard.desired_visible
-                    && !guard.create_in_progress
-                    && guard.hide_generation == hide_generation
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
         AppSettingsCommitState, BackgroundEntryState, MainWindowLifecycleState,
         MainWindowReadyDecision, MainWindowRenderState, MainWindowRenderToken,
-        MainWindowShowDecision, MainWindowTimeoutDecision, WidgetWindowLifecycleState,
+        MainWindowShowDecision, MainWindowTimeoutDecision,
     };
 
     fn begin_window_creation(state: &MainWindowLifecycleState) -> u64 {
@@ -725,69 +570,6 @@ mod tests {
         let _ = state.request_show();
 
         assert!(!state.begin_destroy_hidden_window(hide_generation));
-    }
-
-    #[test]
-    fn main_window_lifecycle_commits_widget_minimize_only_for_current_show_intent() {
-        let state = MainWindowLifecycleState::default();
-        let _ = state.request_show();
-
-        let intent_generation = state
-            .begin_minimize_to_widget()
-            .expect("visible main window should begin widget minimize");
-        assert_eq!(state.begin_minimize_to_widget(), None);
-
-        let hide_generation = state
-            .commit_minimize_to_widget(intent_generation)
-            .expect("unchanged show intent should commit widget minimize");
-        assert!(state.is_current_hide(hide_generation));
-
-        let _ = state.request_show();
-        assert!(!state.is_current_hide(hide_generation));
-    }
-
-    #[test]
-    fn main_window_lifecycle_rejects_widget_minimize_after_new_show_request() {
-        let state = MainWindowLifecycleState::default();
-        let _ = state.request_show();
-        let intent_generation = state
-            .begin_minimize_to_widget()
-            .expect("visible main window should begin widget minimize");
-
-        let _ = state.request_show();
-
-        assert_eq!(state.commit_minimize_to_widget(intent_generation), None);
-        assert!(state.snapshot().desired_visible);
-        assert!(state.begin_minimize_to_widget().is_some());
-    }
-
-    #[test]
-    fn main_window_lifecycle_can_retry_widget_minimize_after_cancel() {
-        let state = MainWindowLifecycleState::default();
-        let _ = state.request_show();
-        let intent_generation = state
-            .begin_minimize_to_widget()
-            .expect("visible main window should begin widget minimize");
-
-        state.cancel_minimize_to_widget(intent_generation);
-
-        assert!(state.begin_minimize_to_widget().is_some());
-        assert!(state.snapshot().desired_visible);
-    }
-
-    #[test]
-    fn main_window_lifecycle_rejects_stale_widget_close_during_minimize_handoff() {
-        let state = MainWindowLifecycleState::default();
-        let _ = state.request_show();
-        assert!(state.should_close_widget_for_main_activity());
-
-        let intent_generation = state
-            .begin_minimize_to_widget()
-            .expect("visible main window should begin widget minimize");
-        assert!(!state.should_close_widget_for_main_activity());
-
-        let _ = state.commit_minimize_to_widget(intent_generation);
-        assert!(!state.should_close_widget_for_main_activity());
     }
 
     #[test]
@@ -1370,40 +1152,6 @@ mod tests {
         assert!(state.finish_window_creation(generation, false).is_none());
         assert_eq!(state.snapshot().render_state, MainWindowRenderState::Absent);
         assert_eq!(state.mark_ready(token), MainWindowReadyDecision::Stale);
-    }
-
-    #[test]
-    fn widget_lifecycle_coalesces_concurrent_show_requests() {
-        let state = WidgetWindowLifecycleState::default();
-
-        assert!(state.begin_show());
-        assert!(!state.begin_show());
-        assert!(state.finish_show());
-        assert!(state.begin_show());
-    }
-
-    #[test]
-    fn widget_lifecycle_cancels_pending_show_after_hide() {
-        let state = WidgetWindowLifecycleState::default();
-
-        assert!(state.begin_show());
-        let hide_generation = state.hide();
-        assert!(!state.finish_show());
-        assert!(state.should_destroy_hidden_window(hide_generation));
-        assert!(state.begin_show());
-        assert!(state.finish_show());
-    }
-
-    #[test]
-    fn widget_lifecycle_cancels_stale_destroy_after_show() {
-        let state = WidgetWindowLifecycleState::default();
-
-        assert!(state.begin_show());
-        assert!(state.finish_show());
-        let hide_generation = state.hide();
-        state.show_existing();
-
-        assert!(!state.should_destroy_hidden_window(hide_generation));
     }
 
     #[tokio::test]

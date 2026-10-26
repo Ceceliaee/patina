@@ -17,7 +17,7 @@ const LIVENESS_INTERVAL: Duration = Duration::from_secs(15);
 #[derive(Clone, Copy)]
 pub(crate) enum WindowKind {
     Main,
-    Widget,
+    Mini,
 }
 
 #[derive(Default)]
@@ -165,7 +165,7 @@ impl WebviewRecoveryState {
             .iter()
             .enumerate()
             .map(|(index, state)| WebviewRecoverySnapshot {
-                label: if index == 0 { "main" } else { "widget" },
+                label: ["main", "mini"][index],
                 registration: state.registration,
                 engine_version: state.engine_version.clone(),
                 last_failure: state.last_failure,
@@ -221,7 +221,7 @@ pub(crate) fn observe<R: Runtime + 'static>(
                     _ = responses.changed() => Signal::Responsive,
                     _ = ticks.tick() => {
                         if app.state::<AppExitState>().is_exit_requested() { break; }
-                        let label = match kind { WindowKind::Main => "main", WindowKind::Widget => "widget" };
+                        let label = match kind { WindowKind::Main => "main", WindowKind::Mini => "mini" };
                         let Some(window) = app.get_webview_window(label) else { continue; };
                         let visible = window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(true);
                         let action = app.state::<WebviewRecoveryState>().update(kind, |state| {
@@ -309,8 +309,9 @@ pub(crate) fn observe<R: Runtime + 'static>(
                                         )
                                         .await
                                     }
-                                    WindowKind::Widget => {
-                                        super::widget::stop_failed_webview(&app, registration).await
+                                    WindowKind::Mini => {
+                                        super::mini_window::stop_failed_webview(&app, registration)
+                                            .await
                                     }
                                 };
                                 eprintln!("[webview] registration={registration} automatic-recovery-exhausted stopped={}", result.is_ok());
@@ -363,8 +364,8 @@ pub(crate) fn observe<R: Runtime + 'static>(
                                 super::main_window::recover_failed_webview(&app, main_generation)
                                     .await
                             }
-                            WindowKind::Widget => {
-                                super::widget::recover_failed_webview(&app, registration).await
+                            WindowKind::Mini => {
+                                super::mini_window::recover_failed_webview(&app, registration).await
                             }
                         };
                         app.state::<WebviewRecoveryState>().update(kind, |state| {

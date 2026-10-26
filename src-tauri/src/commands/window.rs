@@ -86,3 +86,8 @@ pub fn cmd_mark_main_window_ready(
         load_epoch,
     })
 }
+
+#[tauri::command]
+pub async fn cmd_show_main_window(app: tauri::AppHandle) {
+    crate::app::tray::show_main_window(&app, main_window::MainWindowShowReason::Mini);
+}
