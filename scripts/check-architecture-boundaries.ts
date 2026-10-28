@@ -273,10 +273,6 @@ function assertRuntimeBoundaryGuards() {
     }
   }
 
-  const miniIconService = readFileSync("src/app/mini/miniIconService.ts", "utf8");
-  if (miniIconService.includes("platform/persistence/sessionReadRepository")) {
-    throw new Error("Mini icon service must not import the session read repository directly");
-  }
 }
 
 function runSelfTest() {

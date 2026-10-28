@@ -10,7 +10,7 @@ export function useMiniTransition(snapshot: MiniSnapshot | null, panel: RefObjec
     let cancelled = false;
     // Reading animations flushes the committed target styles. CSS reverses an
     // interrupted transition from its current value, including reduced motion.
-    const animations = [...panel.current.getAnimations(), ...handle.current.getAnimations()];
+    const animations = [...panel.current.getAnimations({ subtree: true }), ...handle.current.getAnimations()];
     void Promise.allSettled(animations.map(animation => animation.finished)).then(() => {
       if (!cancelled) void act({ kind: "transition_complete", transition_id: id });
     });

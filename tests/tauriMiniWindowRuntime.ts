@@ -62,7 +62,7 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
     await waitFor("main mini entry ready", () => mainRead(`Boolean(document.querySelector('[data-titlebar-mini-entry]:not(:disabled)'))`), 15_000);
     await mainRead(`document.querySelector('[data-titlebar-mini-entry]').click()`);
     mini = await waitFor("mini WebView target", () => connectMini(port), 20_000);
-    await waitFor("mini content ready", () => evaluate(mini!, `Boolean(document.querySelector('.mini-time'))`), 15_000);
+    await waitFor("mini content ready", () => evaluate(mini!, `Boolean(document.querySelector('.mini-tools'))`), 15_000);
   };
   const state = async () => parseMiniSnapshot(await evaluate(mini!, `window.__TAURI_INTERNALS__.invoke('cmd_get_mini_window_snapshot')`));
   const isCollapsed = async () => { const value = await state(); return !value.expanded && !value.transitioning; };
@@ -148,7 +148,7 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
         const duringExit = await probe.request("sample");
         assert.deepEqual(duringExit.canvas, full.canvas);
         assert.equal(duringExit.width, full.width, "exit must retain the expanded native width");
-        assert.equal(duringExit.height, full.height, "exit must not clip the sliding panel early");
+        assert.equal(duringExit.height, full.height, "exit must not clip the morphing surface early");
         await action({ kind: "transition_complete", transition_id: closing.transitionId - 1 });
         assert.equal((await state()).transitioning, true, "stale completion must not clip the panel");
         await probe.request("move", full.x + Math.floor(full.width / 2), full.y + Math.floor(full.height / 2));
@@ -178,14 +178,13 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
     } finally {
       await evaluate(mini!, `document.querySelector('.mini-shell').style.removeProperty('--qp-motion-base')`);
     }
-    console.log("PASS native slide keeps a fixed canvas in both directions, clips hit testing after exit, reverses and rejects stale completions on all three edges");
-    // Moving labels legitimately cross a fixed desktop pixel. Keep the panel's
-    // real background and transitions, but isolate the handle fade from glyphs.
+    console.log("PASS native morph keeps a fixed canvas in both directions, clips hit testing after exit, reverses and rejects stale completions on all three edges");
+    // Isolate surface opacity and the handle fade from text and status hues.
     // Geometry, content retention and native clipping are asserted separately.
     await evaluate(mini!, `(() => {
       const style = document.createElement('style');
       style.id = 'mini-compositor-fixture';
-      style.textContent = '.mini-panel > * { visibility: hidden !important; }';
+      style.textContent = '.mini-panel-body { visibility: hidden !important; } .mini-shell { --mini-status-color: #777 !important; }';
       document.head.append(style);
     })()`);
     try {
@@ -199,8 +198,7 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
           `document.querySelector('.mini-shell').dataset.edge === ${JSON.stringify(edge)} && document.querySelector('.mini-shell').dataset.expanded === 'true' && document.querySelector('.mini-shell').dataset.transitioning === 'false'`);
       }, 3_000);
       await evaluate(mini!, `new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
-      // The sliding panel exposes the desktop. A controlled white backdrop
-      // keeps unrelated desktop colors out of the handle-fade measurement.
+      // A blue backdrop exposes transparent gaps that a white desktop masks.
       await probe.request("backdrop");
       const canvas = (await probe.request("sample")).canvas;
       const point = await evaluate(mini!, `(() => {
@@ -219,7 +217,9 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
         const colors = sample.pixels.map(color => [color & 255, (color >> 8) & 255, (color >> 16) & 255]);
         const start = colors[0], end = colors.at(-1)!;
         assert.ok((kind === "collapse" ? start : end).every(channel => channel >= 245),
-          `white backdrop must isolate the expanded endpoint: ${JSON.stringify({ edge, kind, start, end })}`);
+          `the expanded surface must remain opaque: ${JSON.stringify({ edge, kind, start, end })}`);
+        assert.ok(colors.every(color => Math.max(...color) - Math.min(...color) < 8),
+          `the neutral surface exposed a colored flash during ${edge} ${kind}: ${JSON.stringify(colors)}`);
         const delta = end.map((value, channel) => value - start[channel]);
         const length = delta.reduce((sum, value) => sum + value * value, 0);
         assert.ok(length > 400, `pixel must observe the handle fading: ${JSON.stringify({ edge, kind, start, end })}`);
@@ -238,7 +238,7 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
       await probe.request("restore-backdrop");
     }
     await probe.request("focus");
-    console.log("PASS composed handle pixels fade without reversal against a controlled backdrop on all three edges in both directions");
+    console.log("PASS shared surface remains opaque and handle pixels fade without flashes over a blue backdrop on all three edges in both directions");
     await action({ kind: "place", edge: "top" });
     await evaluate(mini!, `(() => {
       const panel = document.querySelector('.mini-panel');
@@ -411,7 +411,7 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
       if (!candidate) return null;
       try {
         const value = parseMiniSnapshot(await evaluate(candidate, `window.__TAURI_INTERNALS__.invoke('cmd_get_mini_window_snapshot')`));
-        if (value.epoch > oldEpoch && await evaluate(candidate, `Boolean(document.querySelector('.mini-time'))`)) return candidate;
+        if (value.epoch > oldEpoch && await evaluate(candidate, `Boolean(document.querySelector('.mini-tools'))`)) return candidate;
       } catch { /* Native recovery may be between renderers. */ }
       candidate.close(); return null;
     }, 20_000);
@@ -430,7 +430,7 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
       const started = performance.now();
       await probe.request("move", handle.x + Math.floor(handle.width / 2), handle.y + 1);
       try {
-        await waitFor("warm content frame", () => evaluate(mini!, `Boolean(document.querySelector('.mini-content .mini-time'))`), 2_000);
+        await waitFor("warm content frame", () => evaluate(mini!, `Boolean(document.querySelector('.mini-content .mini-tools'))`), 2_000);
       } catch (error) {
         throw new Error(`Mini reveal observation ${JSON.stringify({ cycle: i, handle, native: await probe.request("sample"), snapshot: await state(), dom: await evaluate(mini!, "document.body.innerText") })}`, { cause: error });
       }
@@ -466,9 +466,13 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
     });
     await sampleResources("handle-before");
     const idleBefore = await diagnostics();
+    const uncollectedDomBefore = await mini!.command("Memory.getDOMCounters");
+    // Event-driven status IPC creates temporary event targets. Compare retained
+    // listeners after collection, as the main-window resource check does.
+    await mini!.command("HeapProfiler.collectGarbage");
     const domBefore = await mini!.command("Memory.getDOMCounters") as { jsEventListeners: number };
     const idleStarted = performance.now();
-    // A short functional observation verifies that collapse stops polling.
+    // Status events may read snapshots; the content contract checks timer cleanup.
     await delay(1_000);
     const idleAfter = await diagnostics();
     await sampleResources("handle-after");
@@ -476,9 +480,11 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
     const idleReveals = await evaluate(mini!, `globalThis.__miniIdleObserver.disconnect();globalThis.__miniIdleReveals`);
     console.log("PATINA_MINI_IDLE_OBSERVATION", JSON.stringify({ reads: idleReads, reveals: idleReveals, requests: idleRequests, native: await probe.request("sample"), state: await state() }));
     assert.equal(idleReveals, 0, "idle resource sample was interrupted by a mini reveal");
-    assert.equal(idleReads, 0, "collapsed mini must stop content and health IPC reads; inspect idle observation for pointer or explicit-open interference");
+    const uncollectedDomAfter = await mini!.command("Memory.getDOMCounters");
+    await mini!.command("HeapProfiler.collectGarbage");
     const domAfter = await mini!.command("Memory.getDOMCounters") as { jsEventListeners: number };
-    assert.ok(domAfter.jsEventListeners <= domBefore.jsEventListeners, "idle mini must not accumulate listeners; natural GC may release earlier detached content");
+    console.log("PATINA_MINI_LISTENER_RETENTION", JSON.stringify({ uncollectedDomBefore, uncollectedDomAfter, retainedBefore: domBefore, retainedAfter: domAfter }));
+    assert.ok(domAfter.jsEventListeners <= domBefore.jsEventListeners, "idle mini must not retain additional listeners after collection");
     const idleMs = performance.now() - idleStarted;
     assert.ok(idleAfter.mini_window.detector_ticks - idleBefore.mini_window.detector_ticks <= Math.ceil(idleMs / 70) + 3);
     assert.equal(await evaluate(mini!, `Boolean(document.querySelector('.mini-content'))`), false);
@@ -518,8 +524,8 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
     const survivingTargets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json() as Array<{ type: string }>;
     assert.equal(survivingTargets.filter(target => target.type === "page").length, 1, "only the mini WebView may remain");
     assert.equal((await state()).epoch, miniEpochBeforeRelease);
-    assert.equal(await evaluate(mini!, `Boolean(document.querySelector('.mini-time')) && !document.querySelector('.qp-app-frame')`), true);
-    assert.ok(await evaluate(mini!, `window.__TAURI_INTERNALS__.invoke('cmd_get_mini_presentation_snapshot')`), "mini must read fresh tracking without main");
+    assert.equal(await evaluate(mini!, `Boolean(document.querySelector('.mini-tools')) && !document.querySelector('.qp-app-frame')`), true);
+    assert.ok(await evaluate(mini!, `window.__TAURI_INTERNALS__.invoke('cmd_get_mini_presentation_snapshot')`), "mini must read current status and tools without main");
     const miniOnlyTree = resourceCycles ? processTree(baseline.process_id) : null;
     await evaluate(mini!, `document.querySelector('button[aria-label="打开主窗口"]').click()`);
     main = await waitFor("mini recreates main on explicit request", () => connectMini(port, "main"), 15_000);

@@ -7,6 +7,7 @@ import { useMiniTracking } from "./useMiniTracking.ts";
 import { useMiniWindow } from "./useMiniWindow.ts";
 import MiniContent from "./MiniContent.tsx";
 import { useMiniTransition } from "./useMiniTransition.ts";
+import { buildMiniViewModel } from "./miniViewModel.ts";
 
 export default function MiniShell() {
   const runtime = useMiniWindow();
@@ -22,6 +23,8 @@ function MiniView({ runtime, tracking }: {
   tracking: ReturnType<typeof useMiniTracking>;
 }) {
   const text = useLocaleText();
+  const view = buildMiniViewModel(tracking.activeWindow, tracking.trackingStatus, tracking.appSettings,
+    tracking.trackerHealth, tracking.trackingRuntimeProbeStatus, text);
   const { snapshot, act, failed } = runtime;
   const [mainFailed, setMainFailed] = useState(false);
   const windowContainer = useRef<HTMLElement>(null);
@@ -55,6 +58,7 @@ function MiniView({ runtime, tracking }: {
     window.addEventListener("blur", blur);
     return () => window.removeEventListener("blur", blur);
   }, []);
+  if (!snapshot) return failed ? <div className="mini-error" role="alert">{text.miniWindow.failed}</div> : null;
   const startPointer = (event: PointerEvent<HTMLElement>) => {
     if (event.button !== 0) return;
     drag.current = { x: event.screenX, y: event.screenY, id: event.pointerId };
@@ -71,6 +75,7 @@ function MiniView({ runtime, tracking }: {
   const endPointer = () => { drag.current = null; };
   const dragProps = { onPointerDown: startPointer, onPointerMove: movePointer, onPointerUp: endPointer, onPointerCancel: endPointer };
   return <section ref={windowContainer} tabIndex={-1} className="mini-shell" data-expanded={snapshot?.expanded ?? false} data-edge={snapshot?.edge ?? "floating"}
+    data-tone={tracking.miniStatus ? view.statusTone : "idle"}
     data-transitioning={snapshot?.transitioning ?? false}
     style={snapshot ? { "--mini-panel-width": `${snapshot.visual.width}px`, "--mini-panel-height": `${snapshot.visual.height}px`, "--mini-handle-anchor": snapshot.visual.anchor } as CSSProperties : undefined}
     aria-label={text.miniWindow.title}
@@ -84,19 +89,21 @@ function MiniView({ runtime, tracking }: {
     onPointerDownCapture={(event) => protect({ keyboard: false, touch: event.pointerType === "touch" })}
     onPointerMoveCapture={(event) => { if (event.pointerType === "mouse" && protection.current.keyboard) protect({ keyboard: false }); }}
     onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) protect({ keyboard: false }); }}>
+    <span className="mini-status sr-only" role="status">{tracking.miniStatus ? view.statusLabel : ""}</span>
     <div ref={panel} className="mini-panel" inert={!snapshot?.expanded || snapshot.suppressed} aria-hidden={!snapshot?.expanded || snapshot.suppressed}>
+      <div className="mini-panel-body">
       <header className="mini-header">
-        <div className="mini-drag-region" {...dragProps}><AppWindow size={15} aria-hidden="true" /><span>{text.miniWindow.title}</span></div>
+        <div className="mini-drag-region" {...dragProps}><AppWindow size={15} aria-hidden="true" /></div>
         <button type="button" className="qp-icon-action qp-icon-action-neutral" aria-label={text.accessibility.miniWindow.openMainWindow}
           onClick={() => { void showMainWindow().then(() => setMainFailed(false)).catch(() => setMainFailed(true)); }}><SquareArrowOutUpRight size={14} /></button>
         <button type="button" className="qp-icon-action qp-icon-action-neutral" aria-label={text.miniWindow.hold} aria-pressed={snapshot?.held ?? false}
           onClick={() => { void act({ kind: "hold", held: !snapshot?.held }); }}><Pin size={14} /></button>
-        <button type="button" className="qp-icon-action qp-icon-action-neutral" data-mini-close aria-label={text.accessibility.titleBar.close}
+        <button type="button" className="qp-icon-action app-titlebar-close" data-mini-close aria-label={text.accessibility.titleBar.close}
           onClick={() => { void act({ kind: "close" }); }}><X size={15} /></button>
       </header>
-      {snapshot && (snapshot.expanded || snapshot.transitioning) && !snapshot.suppressed && (tracking.presentationReady
-        ? <MiniContent tracking={tracking} />
-        : <div className="mini-content" role="status">{tracking.presentationFailed ? text.miniWindow.trackingNotSynced : text.miniWindow.loadingHelper}</div>)}
+      {snapshot && (snapshot.expanded || snapshot.transitioning) && !snapshot.suppressed && tracking.presentationReady
+        && <MiniContent tracking={tracking} />}
+      </div>
     </div>
     <button ref={handle} type="button" className="mini-handle" inert={snapshot?.expanded ?? false} aria-hidden={snapshot?.expanded ?? false} aria-label={text.miniWindow.open} {...dragProps}
       onClick={() => { if (!dragged.current) void act({ kind: "reveal" }); }}><span aria-hidden="true" /></button>

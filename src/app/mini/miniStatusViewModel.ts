@@ -10,7 +10,6 @@ interface MiniToolSlotViewModel {
 }
 
 interface MiniStatusViewModel {
-  trackingTimeText: string;
   tools: MiniToolSlotViewModel[];
 }
 
@@ -20,11 +19,6 @@ function safeWholeSeconds(valueMs: number) {
 
 function pad2(value: number) {
   return String(value).padStart(2, "0");
-}
-
-export function formatMiniTrackingDuration(valueMs: number) {
-  const totalMinutes = Math.min(99 * 60 + 59, Math.floor(safeWholeSeconds(valueMs) / 60));
-  return `${pad2(Math.floor(totalMinutes / 60))}:${pad2(totalMinutes % 60)}`;
 }
 
 export function formatMiniToolDuration(valueMs: number) {
@@ -55,20 +49,10 @@ export function buildMiniStatusViewModel(
   elapsedSinceSnapshotMs: number,
 ): MiniStatusViewModel {
   if (!snapshot) {
-    return { trackingTimeText: "—", tools: [] };
+    return { tools: [] };
   }
 
-  const trackingValue = snapshot.tracking
-    ? resolveLiveValue(
-        snapshot.tracking.elapsedMs,
-        elapsedSinceSnapshotMs,
-        snapshot.tracking.running,
-        false,
-      )
-    : null;
-
   return {
-    trackingTimeText: trackingValue === null ? "—" : formatMiniTrackingDuration(trackingValue),
     tools: snapshot.tools
       .filter((tool) => (
         tool.visibleUntilMs === null

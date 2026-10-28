@@ -51,7 +51,6 @@ const APP_COMMANDS: &[&str] = &[
     "cmd_resume_pomodoro",
     "cmd_skip_pomodoro_phase",
     "cmd_reset_pomodoro",
-    "cmd_get_mini_icon",
     "cmd_get_mini_bootstrap_snapshot",
     "cmd_get_mini_presentation_snapshot",
     "cmd_show_main_window",

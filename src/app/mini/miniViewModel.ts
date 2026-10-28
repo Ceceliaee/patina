@@ -14,21 +14,6 @@ type MiniStatusTone = "tracking" | "tracking-sustained" | "paused" | "idle" | "e
 interface MiniViewModel {
   statusTone: MiniStatusTone;
   statusLabel: string;
-  appName: string;
-  objectIconKey: string | null;
-}
-
-export function isMiniSelfWindow(activeWindow: TrackingWindowSnapshot | null): boolean {
-  return activeWindow?.exeName.trim().toLowerCase() === "patina.exe";
-}
-
-function resolveTrackableAppName(activeWindow: TrackingWindowSnapshot | null): string | null {
-  const exeName = activeWindow?.exeName?.trim();
-  if (!exeName || !AppClassification.shouldTrackApp(exeName)) {
-    return null;
-  }
-
-  return AppClassification.mapApp(exeName).name;
 }
 
 function isSustainedParticipationTracking(
@@ -42,24 +27,6 @@ function isHardDegradedProbeStatus(status: TrackingRuntimeProbeStatus | null | u
   return status === "hard-degraded-fallback" || status === "hard-degraded-inactive";
 }
 
-function buildActiveTrackingViewModel(
-  activeWindow: TrackingWindowSnapshot | null,
-  trackableAppName: string | null,
-  options: {
-    statusTone: MiniStatusTone;
-    statusLabel: string;
-    text: UiText["miniWindow"];
-  },
-): MiniViewModel {
-  const text = options.text;
-  return {
-    statusTone: options.statusTone,
-    statusLabel: options.statusLabel,
-    appName: trackableAppName ?? text.currentApp,
-    objectIconKey: activeWindow ? AppClassification.resolveStatisticalApp(activeWindow.exeName) : null,
-  };
-}
-
 export function buildMiniViewModel(
   activeWindow: TrackingWindowSnapshot | null,
   trackingStatus: TrackingStatusSnapshot,
@@ -69,8 +36,8 @@ export function buildMiniViewModel(
   uiText: UiText,
 ): MiniViewModel {
   const text = uiText.miniWindow;
-  const trackableAppName = resolveTrackableAppName(activeWindow);
-  const hasTrackableForegroundApp = trackableAppName !== null;
+  const exeName = activeWindow?.exeName.trim();
+  const hasTrackableForegroundApp = Boolean(exeName && AppClassification.shouldTrackApp(exeName));
   const isSustainedParticipationActive = trackingStatus.sustainedParticipationActive;
   const isTrackingForegroundApp = Boolean(
     activeWindow
@@ -83,8 +50,6 @@ export function buildMiniViewModel(
     return {
       statusTone: "error",
       statusLabel: text.error,
-      appName: hasTrackableForegroundApp ? trackableAppName : text.trackingService,
-      objectIconKey: null,
     };
   }
 
@@ -92,8 +57,6 @@ export function buildMiniViewModel(
     return {
       statusTone: "paused",
       statusLabel: text.paused,
-      appName: hasTrackableForegroundApp ? trackableAppName : text.trackingPaused,
-      objectIconKey: null,
     };
   }
 
@@ -101,26 +64,18 @@ export function buildMiniViewModel(
     return {
       statusTone: "idle",
       statusLabel: text.idle,
-      appName: activeWindow?.isAfk
-        ? text.currentlyIdle
-        : hasTrackableForegroundApp
-          ? trackableAppName
-          : text.currentAppNotTracked,
-      objectIconKey: null,
     };
   }
 
   if (isSustainedParticipationTracking(trackingStatus, isTrackingForegroundApp)) {
-    return buildActiveTrackingViewModel(activeWindow, trackableAppName, {
+    return {
       statusTone: "tracking-sustained",
       statusLabel: text.sustainedTracking,
-      text,
-    });
+    };
   }
 
-  return buildActiveTrackingViewModel(activeWindow, trackableAppName, {
+  return {
     statusTone: "tracking",
     statusLabel: text.tracking,
-    text,
-  });
+  };
 }

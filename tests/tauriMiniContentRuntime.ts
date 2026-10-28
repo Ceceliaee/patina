@@ -1,11 +1,47 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { CdpConnection, waitFor } from "./uiBrowserSmoke/browserHarness.ts";
 import { assertSqlCommandsDenied } from "./tauriSqlBoundaryRuntime.ts";
+import { installDesktopResourceIntervalProbe } from "./tauriResourceLifecycle.ts";
 
 async function evaluate(client: CdpConnection, expression: string) {
   const response = await client.command("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
   if (response.exceptionDetails) throw new Error(JSON.stringify(response.exceptionDetails));
   return (response.result as { value?: unknown })?.value;
+}
+
+export function assertMiniHasNoNativeCaption(processId: number) {
+  assert.ok(Number.isSafeInteger(processId) && processId > 0);
+  const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `
+    $ErrorActionPreference = 'Stop'
+    Add-Type -TypeDefinition @'
+using System; using System.Text; using System.Runtime.InteropServices;
+public static class MiniFrameRead {
+  delegate bool Visit(IntPtr window, IntPtr state);
+  [DllImport("user32.dll")] static extern bool EnumWindows(Visit visit, IntPtr state);
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr window, out uint pid);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr window, StringBuilder text, int count);
+  [DllImport("user32.dll", EntryPoint="GetWindowLongW")] static extern uint GetWindowStyle(IntPtr window, int index);
+  public static uint Read(uint owner) {
+    uint style = 0; int count = 0;
+    EnumWindows((window, state) => {
+      uint pid; GetWindowThreadProcessId(window, out pid);
+      if (pid != owner) return true;
+      var title = new StringBuilder(128); GetWindowText(window, title, title.Capacity);
+      if (title.ToString() == "Patina Mini") { style = GetWindowStyle(window, -16); count++; }
+      return true;
+    }, IntPtr.Zero);
+    if (count != 1) throw new Exception("Expected exactly one isolated Mini window");
+    return style;
+  }
+}
+'@
+    [MiniFrameRead]::Read(${processId})
+  `], { encoding: "utf8", windowsHide: true, timeout: 10_000 });
+  assert.equal(result.status, 0, result.stderr || String(result.error));
+  const style = Number(result.stdout.trim());
+  assert.ok(Number.isSafeInteger(style) && style > 0, "native Mini style must be readable");
+  assert.equal(style & 0x00c00000, 0, "framework visibility updates must not restore WS_CAPTION");
 }
 
 export async function verifyMiniContentRuntime(client: CdpConnection, miniClient: CdpConnection) {
@@ -60,19 +96,15 @@ export async function verifyMiniContentRuntime(client: CdpConnection, miniClient
   ) as {
     window?: { exe_name?: string };
     tracking_status?: { is_tracking_active?: boolean };
-    tracking_sampled_at_ms?: number;
-    status?: { tracking?: unknown; tools?: unknown[]; sampled_at_ms?: number };
+    status?: { tools?: unknown[]; sampled_at_ms?: number };
   };
   assert.equal(typeof miniPresentation.window?.exe_name, "string");
   assert.equal(
     typeof miniPresentation.tracking_status?.is_tracking_active,
     "boolean",
   );
-  assert.equal(typeof miniPresentation.tracking_sampled_at_ms, "number");
-  assert.ok(
-    miniPresentation.status?.tracking === null
-      || typeof miniPresentation.status?.tracking === "object",
-  );
+  assert.equal(Object.hasOwn(miniPresentation, "tracking_sampled_at_ms"), false);
+  assert.equal(Object.hasOwn(miniPresentation.status ?? {}, "tracking"), false);
   assert.ok(Array.isArray(miniPresentation.status?.tools));
   assert.equal(typeof miniPresentation.status?.sampled_at_ms, "number");
 
@@ -117,5 +149,67 @@ export async function verifyMiniContentRuntime(client: CdpConnection, miniClient
       `${deniedExpression}.then(() => null, (error) => String(error))`,
     );
     assert.match(String(denied), /not allowed|permission|denied|not found/i);
+  }
+  await verifyCollapsedMiniStatus(client, miniClient);
+  const { process_id: processId } = await evaluate(client,
+    `window.__TAURI_INTERNALS__.invoke('cmd_get_resource_diagnostics')`) as { process_id: number };
+  assertMiniHasNoNativeCaption(processId);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await evaluate(client, `window.__TAURI_INTERNALS__.invoke('cmd_open_mini_window')`);
+    await waitFor("explicit mini open settles with keyboard focus", () => evaluate(miniClient, `(() => {
+      const shell = document.querySelector('.mini-shell');
+      return shell?.dataset.expanded === 'true' && shell.dataset.transitioning === 'false'
+        && document.activeElement === shell && Boolean(document.querySelector('.mini-tools'));
+    })()`), 5_000);
+    assert.equal(await evaluate(client, `window.__TAURI_INTERNALS__.invoke('plugin:window|is_focused',{label:'mini'})`), true);
+    assertMiniHasNoNativeCaption(processId);
+    await miniClient.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape" });
+    await miniClient.command("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape" });
+    await waitFor("mini still collapses after explicit activation", () => evaluate(miniClient,
+      `document.querySelector('.mini-shell')?.dataset.expanded === 'false' && document.querySelector('.mini-shell').dataset.transitioning === 'false'`), 5_000);
+  }
+  console.log("PASS repeated main-window Mini opens stay captionless and retain native focus and keyboard collapse");
+}
+
+async function verifyCollapsedMiniStatus(main: CdpConnection, mini: CdpConnection) {
+  await evaluate(mini, `(async () => {
+    const invoke = window.__TAURI_INTERNALS__.invoke;
+    const snapshot = await invoke('cmd_get_mini_window_snapshot');
+    for (const action of [{kind:'hold',held:false},{kind:'place',edge:'top'},{kind:'collapse'}]) {
+      await invoke('cmd_mini_window_action',{epoch:snapshot.epoch,action});
+    }
+  })()`);
+  await waitFor("mini collapses before status verification", () => evaluate(mini, `document.querySelector('.mini-shell').dataset.expanded === 'false'
+    && document.querySelector('.mini-shell').dataset.transitioning === 'false' && !document.querySelector('.mini-content')`), 5_000);
+  await mini.command("Page.enable");
+  const intervalScript = await installDesktopResourceIntervalProbe(mini);
+  const previousDocument = await evaluate(mini, "performance.timeOrigin");
+  const wasPaused = await evaluate(mini, `window.__TAURI_INTERNALS__.invoke('cmd_get_mini_presentation_snapshot').then(snapshot => snapshot.tracking_paused)`);
+  assert.equal(typeof wasPaused, "boolean");
+  try {
+    await mini.command("Page.reload");
+    await waitFor("collapsed status initializes without mounting content", () => evaluate(mini, `performance.timeOrigin !== ${previousDocument}
+      && document.querySelector('.mini-shell')?.dataset.expanded === 'false'
+      && Boolean(document.querySelector('.mini-status')?.textContent) && window.__resourceIntervalProbe?.live instanceof Map`), 10_000).catch(async error => {
+        const state = await evaluate(mini, `({origin:performance.timeOrigin,shell:document.querySelector('.mini-shell')?.dataset,
+          status:document.querySelector('.mini-status')?.textContent,intervalProbe:typeof window.__resourceIntervalProbe})`);
+        throw new Error(`${String(error)}; renderer=${JSON.stringify(state)}`);
+      });
+    for (const paused of [!wasPaused, wasPaused]) {
+      await evaluate(main, `window.__TAURI_INTERNALS__.invoke('cmd_commit_app_settings',{mutations:[{key:'tracking_paused',value:${JSON.stringify(paused ? "1" : "0")}}]})`);
+      await waitFor("collapsed status follows native pause changes without hover", () => evaluate(mini, `(() => {
+        const shell = document.querySelector('.mini-shell');
+        return shell.dataset.expanded === 'false' && !document.querySelector('.mini-content')
+          && ${paused ? "shell.dataset.tone === 'paused'" : "['tracking','tracking-sustained','idle'].includes(shell.dataset.tone)"};
+      })()`), 5_000);
+    }
+    await evaluate(mini, "new Promise(resolve => setTimeout(resolve, 1100))");
+    assert.equal(await evaluate(mini, "window.__resourceIntervalProbe.live.size"), 0, "collapsed mini must not retain content or health polling timers");
+    assert.equal(await evaluate(mini, "Boolean(document.querySelector('.mini-content'))"), false);
+    console.log("PASS collapsed status follows native events without hover, restores after reload and keeps zero polling timers");
+  } finally {
+    await evaluate(main, `window.__TAURI_INTERNALS__.invoke('cmd_commit_app_settings',{mutations:[{key:'tracking_paused',value:${JSON.stringify(wasPaused ? "1" : "0")}}]})`);
+    await mini.command("Page.removeScriptToEvaluateOnNewDocument", { identifier: intervalScript });
+    await evaluate(mini, "window.__resourceIntervalProbe?.restore()");
   }
 }

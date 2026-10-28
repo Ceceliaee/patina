@@ -149,11 +149,6 @@ function tauriStubFor(path: string) {
           };
         }
 
-        if (isMiniSmoke && command === "cmd_get_mini_icon") {
-          return miniParams.get("miniTracking") !== "0"
-            ? "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
-            : null;
-        }
         if (isMiniSmoke && command === "cmd_get_mini_presentation_snapshot") {
           const toolCount = Math.max(0, Math.min(2, Number(miniParams.get("miniTools") ?? 0)));
           const tools = [
@@ -175,12 +170,6 @@ function tauriStubFor(path: string) {
           const override = globalThis.__PATINA_MINI_TRACKING_OVERRIDE;
           const responseDelayMs = Number(override?.responseDelayMs ?? 0);
           const status = override?.miniStatus ?? {
-            tracking: miniParams.get("miniTracking") === "0" ? null : {
-              app_name: "Chrome",
-              exe_name: "chrome.exe",
-              elapsed_ms: 6_120_000,
-              running: true,
-            },
             tools,
             sampled_at_ms: Date.now(),
           };
@@ -243,7 +232,6 @@ function tauriStubFor(path: string) {
             window: tracking.window,
             tracking_status: tracking.status,
             tracking_paused: loadStoredSettings().tracking_paused === "1",
-            tracking_sampled_at_ms: tracking.sampled_at_ms ?? Date.now(),
             tracking_probe_status: tracking.probe_status ?? "ok",
             status,
           };

@@ -1,5 +1,4 @@
 use crate::domain::tools::{PomodoroStatus, TimerMode, TimerStatus, ToolsRuntimeSnapshot};
-use crate::domain::tracking::ActiveSessionSnapshot;
 use serde::Serialize;
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
@@ -19,14 +18,6 @@ pub enum MiniToolState {
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-pub struct MiniTrackingProjection {
-    pub app_name: String,
-    pub exe_name: String,
-    pub elapsed_ms: i64,
-    pub running: bool,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub struct MiniToolProjection {
     pub kind: MiniToolKind,
     pub state: MiniToolState,
@@ -37,7 +28,6 @@ pub struct MiniToolProjection {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub struct MiniStatusSnapshot {
-    pub tracking: Option<MiniTrackingProjection>,
     pub tools: Vec<MiniToolProjection>,
     pub sampled_at_ms: i64,
 }
@@ -45,19 +35,9 @@ pub struct MiniStatusSnapshot {
 const COMPLETED_TOOL_VISIBLE_MS: i64 = 5_000;
 
 pub fn build_mini_status_snapshot(
-    active_session: Option<ActiveSessionSnapshot>,
     tools: ToolsRuntimeSnapshot,
     sampled_at_ms: i64,
 ) -> MiniStatusSnapshot {
-    let tracking = active_session.map(|session| MiniTrackingProjection {
-        app_name: session.app_name,
-        exe_name: session.exe_name,
-        elapsed_ms: session
-            .closed_duration_ms
-            .saturating_add(sampled_at_ms.saturating_sub(session.start_time))
-            .max(0),
-        running: true,
-    });
     let mut tool_slots = Vec::with_capacity(2);
 
     if let Some(timer) = tools.current_timer {
@@ -126,7 +106,6 @@ pub fn build_mini_status_snapshot(
     }
 
     MiniStatusSnapshot {
-        tracking,
         tools: tool_slots,
         sampled_at_ms,
     }
@@ -172,25 +151,15 @@ mod tests {
     }
 
     #[test]
-    fn mini_projection_keeps_tracking_and_fixed_tool_slots_together() {
+    fn mini_projection_keeps_fixed_tool_slots_together() {
         let now_ms = 100_000;
-        let active_session = ActiveSessionSnapshot {
-            id: 1,
-            app_name: "Visual Studio Code".to_string(),
-            exe_name: "Code.exe".to_string(),
-            start_time: 90_000,
-            continuity_group_start_time: 40_000,
-            closed_duration_ms: 50_000,
-        };
         let tools = ToolsRuntimeSnapshot {
             current_timer: Some(timer(TimerMode::Stopwatch, TimerStatus::Running, now_ms)),
             current_pomodoro: Some(pomodoro(PomodoroStatus::Paused, now_ms)),
             ..ToolsRuntimeSnapshot::default()
         };
 
-        let snapshot = build_mini_status_snapshot(Some(active_session), tools, now_ms);
-
-        assert_eq!(snapshot.tracking.unwrap().elapsed_ms, 60_000);
+        let snapshot = build_mini_status_snapshot(tools, now_ms);
         assert_eq!(snapshot.tools.len(), 2);
         assert_eq!(snapshot.tools[0].kind, MiniToolKind::Stopwatch);
         assert_eq!(snapshot.tools[0].state, MiniToolState::Running);
@@ -208,9 +177,8 @@ mod tests {
             ..ToolsRuntimeSnapshot::default()
         };
 
-        let snapshot = build_mini_status_snapshot(None, tools, now_ms);
+        let snapshot = build_mini_status_snapshot(tools, now_ms);
 
-        assert!(snapshot.tracking.is_none());
         assert_eq!(snapshot.tools.len(), 1);
         assert_eq!(snapshot.tools[0].kind, MiniToolKind::Countdown);
         assert!(snapshot.tools[0].counts_down);
@@ -228,7 +196,7 @@ mod tests {
             )),
             ..ToolsRuntimeSnapshot::default()
         };
-        let visible = build_mini_status_snapshot(None, visible_tools, completed_at + 2_000);
+        let visible = build_mini_status_snapshot(visible_tools, completed_at + 2_000);
         assert_eq!(visible.tools.len(), 1);
         assert_eq!(visible.tools[0].state, MiniToolState::Completed);
         assert_eq!(
@@ -244,7 +212,7 @@ mod tests {
             )),
             ..ToolsRuntimeSnapshot::default()
         };
-        let expired = build_mini_status_snapshot(None, expired_tools, completed_at + 6_001);
+        let expired = build_mini_status_snapshot(expired_tools, completed_at + 6_001);
         assert!(expired.tools.is_empty());
     }
 }

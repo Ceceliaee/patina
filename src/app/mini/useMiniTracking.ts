@@ -31,7 +31,6 @@ interface MiniTrackingSnapshot {
   trackingStatus: TrackingStatusSnapshot;
   trackingRuntimeProbeStatus: TrackingRuntimeProbeStatus | null;
   miniStatus: MiniStatusSnapshot | null;
-  trackingSampleAgeMs: number;
 }
 
 const EMPTY_TRACKING_SNAPSHOT: MiniTrackingSnapshot = {
@@ -40,7 +39,6 @@ const EMPTY_TRACKING_SNAPSHOT: MiniTrackingSnapshot = {
   trackingStatus: DEFAULT_TRACKING_STATUS,
   trackingRuntimeProbeStatus: null,
   miniStatus: null,
-  trackingSampleAgeMs: 0,
 };
 
 function warnMiniRefresh(error: unknown) {
@@ -56,7 +54,6 @@ async function loadMiniTrackingSnapshot(): Promise<MiniTrackingSnapshot> {
     trackingStatus: snapshot.trackingStatus,
     trackingRuntimeProbeStatus: snapshot.trackingProbeStatus,
     miniStatus: snapshot.status,
-    trackingSampleAgeMs: Math.max(0, Date.now() - snapshot.trackingSampledAtMs),
   };
 }
 
@@ -69,10 +66,10 @@ async function loadMiniTrackerHealth(nowMs: number): Promise<TrackerHealthSnapsh
   );
 }
 
-export function useMiniTracking(active = true) {
+export function useMiniTracking(contentActive = true) {
   const [presentationReady, setPresentationReady] = useState(false);
   const [presentationFailed, setPresentationFailed] = useState(false);
-  useLayoutEffect(() => { setPresentationReady(false); setPresentationFailed(false); }, [active]);
+  useLayoutEffect(() => { setPresentationReady(false); setPresentationFailed(false); }, [contentActive]);
   const [trackingSnapshot, setTrackingSnapshot] = useState<MiniTrackingSnapshot>(
     EMPTY_TRACKING_SNAPSHOT,
   );
@@ -89,7 +86,7 @@ export function useMiniTracking(active = true) {
     let bootstrapFailed = false;
     let trackingFailed = false;
     const acceptReady = () => {
-      if (!active || cancelled) return;
+      if (!contentActive || cancelled) return;
       setPresentationFailed(bootstrapFailed || trackingFailed);
       if (bootstrapAccepted && trackingAccepted) setPresentationReady(true);
     };
@@ -108,8 +105,15 @@ export function useMiniTracking(active = true) {
       },
       failed: (error) => { bootstrapFailed = true; acceptReady(); warnMiniRefresh(error); },
     });
+    const health = createLatestSnapshotRefresh({
+      load: () => loadMiniTrackerHealth(Date.now()),
+      accept: setTrackerHealth,
+      failed: warnMiniRefresh,
+    });
     const refreshBootstrap = () => bootstrap.refresh();
-    const refreshTracking = () => active ? tracking.refresh() : Promise.resolve();
+    const refreshTracking = async () => {
+      await Promise.all([tracking.refresh(), ...(!contentActive ? [health.refresh()] : [])]);
+    };
 
     const listen = async (subscription: Promise<() => void>) => {
       const off = await subscription;
@@ -117,11 +121,12 @@ export function useMiniTracking(active = true) {
     };
     const init = async () => {
       const subscriptions = await Promise.allSettled([
-        ...(active ? [listen(onActiveWindowChanged(refreshTracking)), listen(onTrackingDataChanged(refreshTracking))] : []),
+        listen(onActiveWindowChanged(refreshTracking)),
+        listen(onTrackingDataChanged(refreshTracking)),
         listen(onAppSettingsChanged(async () => {
           await Promise.all([refreshBootstrap(), refreshTracking()]);
         })),
-        ...(active ? [listen(onToolsRuntimeChanged(() => { void refreshTracking(); }))] : []),
+        ...(contentActive ? [listen(onToolsRuntimeChanged(() => { void refreshTracking(); }))] : []),
       ]);
       for (const result of subscriptions) {
         if (result.status === "rejected") warnMiniRefresh(result.reason);
@@ -136,17 +141,18 @@ export function useMiniTracking(active = true) {
       cancelled = true;
       tracking.dispose();
       bootstrap.dispose();
+      health.dispose();
       for (const unlisten of unlisteners) {
         unlisten();
       }
     };
-  }, [active]);
+  }, [contentActive]);
 
-  useEffect(() => active ? startTrackerHealthPolling(setTrackerHealth, {
+  useEffect(() => contentActive ? startTrackerHealthPolling(setTrackerHealth, {
     deps: {
       loadSnapshot: loadMiniTrackerHealth,
     },
-  }) : undefined, [active]);
+  }) : undefined, [contentActive]);
 
   return {
     activeWindow: trackingSnapshot.activeWindow,
@@ -157,6 +163,5 @@ export function useMiniTracking(active = true) {
     trackerHealth,
     trackingRuntimeProbeStatus: trackingSnapshot.trackingRuntimeProbeStatus,
     miniStatus: trackingSnapshot.miniStatus,
-    trackingSampleAgeMs: trackingSnapshot.trackingSampleAgeMs,
   };
 }

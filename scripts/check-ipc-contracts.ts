@@ -54,7 +54,7 @@ const SENSITIVE_CALLER_GUARD_COMMANDS = new Set([
 
 const MINI_COMMAND_ALLOWLIST = new Set([
   "cmd_get_mini_window_snapshot", "cmd_mini_window_action", "cmd_get_tracker_health_snapshot",
-  "cmd_get_mini_bootstrap_snapshot", "cmd_get_mini_icon", "cmd_get_mini_presentation_snapshot", "cmd_show_main_window",
+  "cmd_get_mini_bootstrap_snapshot", "cmd_get_mini_presentation_snapshot", "cmd_show_main_window",
 ]);
 const MINI_CAPABILITY_ALLOWLIST = new Set(["core:event:allow-listen", "core:event:allow-unlisten", "mini-window-commands"]);
 

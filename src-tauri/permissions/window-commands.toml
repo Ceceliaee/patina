@@ -57,7 +57,6 @@ commands.allow = [
   "cmd_resume_pomodoro",
   "cmd_skip_pomodoro_phase",
   "cmd_reset_pomodoro",
-  "cmd_get_mini_icon",
   "cmd_get_mini_bootstrap_snapshot",
   "cmd_get_mini_presentation_snapshot",
   "cmd_show_main_window",
@@ -120,7 +119,6 @@ commands.allow = [
   "cmd_mini_window_action",
   "cmd_get_tracker_health_snapshot",
   "cmd_get_mini_bootstrap_snapshot",
-  "cmd_get_mini_icon",
   "cmd_get_mini_presentation_snapshot",
   "cmd_show_main_window",
 ]

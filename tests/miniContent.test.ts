@@ -1,13 +1,7 @@
-import { publishAppIconChange } from "../src/shared/hooks/appIconChanges.ts";
 import assert from "node:assert/strict";
 import { AppClassification } from "../src/shared/classification/appClassification.ts";
-import {
-  getMiniIconCacheSizeForTests,
-  loadMiniObjectIcon,
-  resetMiniIconCacheForTests,
-} from "../src/app/mini/miniIconService.ts";
 import { applyMiniBootstrapSnapshot } from "../src/app/mini/miniBootstrapService.ts";
-import { buildMiniViewModel as buildMiniViewModelRaw, isMiniSelfWindow } from "../src/app/mini/miniViewModel.ts";
+import { buildMiniViewModel as buildMiniViewModelRaw } from "../src/app/mini/miniViewModel.ts";
 import { getLocaleText } from "../src/shared/i18n/runtime.ts";
 import {
   parseMiniBootstrapSnapshot,
@@ -16,7 +10,6 @@ import {
 import {
   buildMiniStatusViewModel,
   formatMiniToolDuration,
-  formatMiniTrackingDuration,
 } from "../src/app/mini/miniStatusViewModel.ts";
 import { ProcessMapper } from "../src/shared/classification/processMapper.ts";
 import type { AppSettings } from "../src/shared/settings/appSettings.ts";
@@ -133,20 +126,6 @@ const UNTRACKED_WINDOW: TrackingWindowSnapshot = {
   processPath: "C:/Windows/System32/PickerHost.exe",
 };
 
-const MINI_WINDOW: TrackingWindowSnapshot = {
-  ...ACTIVE_WINDOW,
-  title: "Patina Mini",
-  exeName: "patina.exe",
-  processPath: "C:/Program Files/Patina/patina.exe",
-};
-
-const PATINA_MAIN_WINDOW: TrackingWindowSnapshot = {
-  ...ACTIVE_WINDOW,
-  title: "Patina",
-  exeName: "patina.exe",
-  processPath: "C:/Program Files/Patina/patina.exe",
-};
-
 let passed = 0;
 
 async function runTest(name: string, fn: () => Promise<void> | void) {
@@ -165,8 +144,6 @@ await runTest("buildMiniViewModel maps healthy active tracking to tracking state
 
   assert.equal(viewModel.statusTone, "tracking");
   assert.equal(viewModel.statusLabel, "\u8ffd\u8e2a\u4e2d");
-  assert.equal(viewModel.appName, "Chrome");
-  assert.equal(viewModel.objectIconKey, "chrome.exe");
 });
 
 await runTest("buildMiniViewModel distinguishes sustained participation tracking", () => {
@@ -187,7 +164,6 @@ await runTest("buildMiniViewModel distinguishes sustained participation tracking
 
   assert.equal(viewModel.statusTone, "tracking-sustained");
   assert.equal(viewModel.statusLabel, "\u6301\u7eed\u8bb0\u5f55");
-  assert.equal(viewModel.objectIconKey, "chrome.exe");
 });
 
 await runTest("buildMiniViewModel keeps sustained participation active after generic AFK", () => {
@@ -208,7 +184,6 @@ await runTest("buildMiniViewModel keeps sustained participation active after gen
 
   assert.equal(viewModel.statusTone, "tracking-sustained");
   assert.equal(viewModel.statusLabel, "\u6301\u7eed\u8bb0\u5f55");
-  assert.equal(viewModel.objectIconKey, "chrome.exe");
 });
 
 await runTest("buildMiniViewModel prioritizes paused state", () => {
@@ -221,7 +196,6 @@ await runTest("buildMiniViewModel prioritizes paused state", () => {
 
   assert.equal(viewModel.statusTone, "paused");
   assert.equal(viewModel.statusLabel, "\u5df2\u6682\u505c");
-  assert.equal(viewModel.objectIconKey, null);
 });
 
 await runTest("buildMiniViewModel treats afk or inactive tracking as idle", () => {
@@ -243,7 +217,7 @@ await runTest("buildMiniViewModel treats afk or inactive tracking as idle", () =
   assert.equal(inactiveViewModel.statusTone, "idle");
 });
 
-await runTest("buildMiniViewModel hides untracked foreground apps behind idle copy", () => {
+await runTest("buildMiniViewModel identifies untracked foreground apps as idle", () => {
   const viewModel = buildMiniViewModel(
     UNTRACKED_WINDOW,
     BASE_TRACKING_STATUS,
@@ -253,7 +227,6 @@ await runTest("buildMiniViewModel hides untracked foreground apps behind idle co
 
   assert.equal(viewModel.statusTone, "idle");
   assert.equal(viewModel.statusLabel, "\u7a7a\u95f2");
-  assert.equal(viewModel.appName, "\u5f53\u524d\u5e94\u7528\u672a\u8ffd\u8e2a");
 });
 
 await runTest("buildMiniViewModel prioritizes stale tracker health as error", () => {
@@ -292,77 +265,6 @@ await runTest("buildMiniViewModel maps hard degraded probe to existing error lam
 
   assert.equal(viewModel.statusTone, "error");
   assert.equal(viewModel.statusLabel, "\u5f02\u5e38");
-});
-
-await runTest("isMiniSelfWindow detects Patina chrome without matching similarly titled apps", () => {
-  assert.equal(isMiniSelfWindow(MINI_WINDOW), true);
-  assert.equal(isMiniSelfWindow(PATINA_MAIN_WINDOW), true);
-  assert.equal(isMiniSelfWindow({ ...MINI_WINDOW, title: "工具 - Patina" }), true);
-  assert.equal(isMiniSelfWindow({ ...MINI_WINDOW, title: "" }), true);
-  assert.equal(isMiniSelfWindow({ ...MINI_WINDOW, exeName: "chrome.exe" }), false);
-  assert.equal(isMiniSelfWindow(ACTIVE_WINDOW), false);
-});
-
-await runTest("loadMiniObjectIcon returns null for missing icon keys", async () => {
-  resetMiniIconCacheForTests();
-  const icon = await loadMiniObjectIcon("missing.exe", {
-    getIcon: async () => null,
-  });
-
-  assert.equal(icon, null);
-});
-
-await runTest("loadMiniObjectIcon reuses cached icons per executable", async () => {
-  resetMiniIconCacheForTests();
-  let loadCount = 0;
-  const deps = {
-    getIcon: async (exeName: string) => {
-      loadCount += 1;
-      return `${exeName}-icon`;
-    },
-  };
-
-  assert.equal(await loadMiniObjectIcon("chrome.exe", deps), "chrome.exe-icon");
-  assert.equal(await loadMiniObjectIcon("Chrome.EXE", deps), "chrome.exe-icon");
-  assert.equal(await loadMiniObjectIcon("cursor.exe", deps), "cursor.exe-icon");
-  assert.equal(loadCount, 2);
-});
-
-await runTest("loadMiniObjectIcon retries after failed icon load", async () => {
-  resetMiniIconCacheForTests();
-  let loadCount = 0;
-  const deps = {
-    getIcon: async () => {
-      loadCount += 1;
-      if (loadCount === 1) {
-        throw new Error("db busy");
-      }
-      return "chrome-icon";
-    },
-  };
-
-  await assert.rejects(
-    () => loadMiniObjectIcon("chrome.exe", deps),
-    /db busy/,
-  );
-  assert.equal(await loadMiniObjectIcon("chrome.exe", deps), "chrome-icon");
-  assert.equal(loadCount, 2);
-});
-
-await runTest("loadMiniObjectIcon caps the mini icon cache", async () => {
-  resetMiniIconCacheForTests();
-  const deps = {
-    getIcon: async (exeName: string) => `${exeName}-icon`,
-  };
-
-  for (let index = 0; index < 20; index += 1) {
-    assert.equal(
-      await loadMiniObjectIcon(`app-${index}.exe`, deps),
-      `app-${index}.exe-icon`,
-    );
-  }
-
-  assert.equal(getMiniIconCacheSizeForTests(), 16);
 });
 
 await runTest("parseMiniBootstrapSnapshot rejects incomplete native payloads", () => {
@@ -418,14 +320,11 @@ await runTest("applyMiniBootstrapSnapshot restores only mini settings and app ov
   ProcessMapper.clearUserOverrides();
 });
 
-await runTest("mini clocks keep tracking minute-only and tools second-accurate", () => {
-  assert.equal(formatMiniTrackingDuration(6_138_999), "01:42");
-  assert.equal(formatMiniTrackingDuration(500_000_000), "99:59");
+await runTest("mini tool clocks remain second-accurate", () => {
   assert.equal(formatMiniToolDuration(1_104_000), "18:24");
   assert.equal(formatMiniToolDuration(3_661_000), "01:01:01");
 
   const viewModel = buildMiniStatusViewModel({
-    tracking: { appName: "Code", exeName: "code.exe", elapsedMs: 6_120_000, running: true },
     tools: [
       {
         kind: "stopwatch",
@@ -444,20 +343,17 @@ await runTest("mini clocks keep tracking minute-only and tools second-accurate",
     ],
     sampledAtMs: 10_000,
   }, 4_000);
-  assert.equal(viewModel.trackingTimeText, "01:42");
   assert.deepEqual(viewModel.tools.map((tool) => tool.timeText), ["18:24", "04:31"]);
 
-  assert.equal(buildMiniStatusViewModel(null, 10_000).trackingTimeText, "—");
-  assert.equal(buildMiniStatusViewModel({
-    tracking: null,
+  assert.deepEqual(buildMiniStatusViewModel(null, 10_000), { tools: [] });
+  assert.deepEqual(buildMiniStatusViewModel({
     tools: [],
     sampledAtMs: 500_000_000,
-  }, 10_000).trackingTimeText, "—");
+  }, 10_000), { tools: [] });
 });
 
 await runTest("mini status parser enforces the two semantic tool slots", () => {
   const base = {
-    tracking: null,
     sampled_at_ms: 10_000,
   };
   const timer = {
@@ -479,26 +375,6 @@ await runTest("mini status parser enforces the two semantic tool slots", () => {
   assert.equal(parseMiniStatusSnapshot({ ...base, tools: [pomodoro, timer] }), null);
   assert.equal(parseMiniStatusSnapshot({ ...base, tools: [timer, timer] }), null);
   assert.equal(parseMiniStatusSnapshot({ ...base, tools: [timer, pomodoro, pomodoro] }), null);
-});
-
-await runTest("mini icon change reloads pending stale requests without clearing unrelated entries", async () => {
-  await loadMiniObjectIcon("unrelated-mini.exe", { getIcon: async () => "unrelated-icon" });
-  let release!: (icon: string) => void;
-  let calls = 0;
-  const pending = loadMiniObjectIcon("refresh-mini.exe", { getIcon: async () => {
-    calls += 1;
-    if (calls === 1) return new Promise<string>((resolve) => { release = resolve; });
-    return "new-icon";
-  } });
-  publishAppIconChange("refresh-mini.exe");
-  release("old-icon");
-  assert.equal(await pending, "new-icon");
-  assert.equal(calls, 2);
-  assert.equal(await loadMiniObjectIcon("unrelated-mini.exe", { getIcon: async () => {
-    throw new Error("unrelated cached entry must be retained");
-  } }), "unrelated-icon");
-  publishAppIconChange("refresh-mini.exe");
-  assert.equal(await loadMiniObjectIcon("refresh-mini.exe", { getIcon: async () => "next-icon" }), "next-icon");
 });
 
 console.log(`Passed ${passed} mini view model tests`);

@@ -42,11 +42,6 @@ pub async fn cmd_get_mini_bootstrap_snapshot(
 }
 
 #[tauri::command]
-pub async fn cmd_get_mini_icon(exe_name: String, app: AppHandle) -> Result<Option<String>, String> {
-    crate::data::icon_cache_service::load_icon_for_exe(&app, &exe_name).await
-}
-
-#[tauri::command]
 pub async fn cmd_get_mini_presentation_snapshot(
     app: AppHandle,
 ) -> Result<mini_window::content::MiniPresentationSnapshot, String> {

@@ -30,13 +30,6 @@ interface RawMiniBootstrapSnapshot {
   app_links: RawMiniAppOverrideRow[];
 }
 
-interface RawMiniTrackingProjection {
-  app_name: string;
-  exe_name: string;
-  elapsed_ms: number;
-  running: boolean;
-}
-
 interface RawMiniToolProjection {
   kind: "stopwatch" | "countdown" | "pomodoro";
   state: "running" | "paused" | "completed";
@@ -46,7 +39,6 @@ interface RawMiniToolProjection {
 }
 
 interface RawMiniStatusSnapshot {
-  tracking: RawMiniTrackingProjection | null;
   tools: RawMiniToolProjection[];
   sampled_at_ms: number;
 }
@@ -55,7 +47,6 @@ interface RawMiniPresentationSnapshot {
   tracking_paused: boolean;
   window: unknown;
   tracking_status: unknown;
-  tracking_sampled_at_ms: number;
   tracking_probe_status: TrackingRuntimeProbeStatus;
   status: unknown;
 }
@@ -71,13 +62,6 @@ export interface MiniBootstrapSnapshot {
   appLinks: MiniAppOverrideRow[];
 }
 
-interface MiniTrackingProjection {
-  appName: string;
-  exeName: string;
-  elapsedMs: number;
-  running: boolean;
-}
-
 export interface MiniToolProjection {
   kind: "stopwatch" | "countdown" | "pomodoro";
   state: "running" | "paused" | "completed";
@@ -87,7 +71,6 @@ export interface MiniToolProjection {
 }
 
 export interface MiniStatusSnapshot {
-  tracking: MiniTrackingProjection | null;
   tools: MiniToolProjection[];
   sampledAtMs: number;
 }
@@ -96,7 +79,6 @@ interface MiniPresentationSnapshot {
   trackingPaused: boolean;
   activeWindow: TrackingWindowSnapshot;
   trackingStatus: TrackingStatusSnapshot;
-  trackingSampledAtMs: number;
   trackingProbeStatus: TrackingRuntimeProbeStatus;
   status: MiniStatusSnapshot;
 }
@@ -161,16 +143,6 @@ export function parseMiniBootstrapSnapshot(value: unknown): MiniBootstrapSnapsho
   };
 }
 
-function isRawMiniTrackingProjection(value: unknown): value is RawMiniTrackingProjection {
-  return Boolean(value)
-    && typeof value === "object"
-    && typeof (value as RawMiniTrackingProjection).app_name === "string"
-    && typeof (value as RawMiniTrackingProjection).exe_name === "string"
-    && isFiniteNumber((value as RawMiniTrackingProjection).elapsed_ms)
-    && (value as RawMiniTrackingProjection).elapsed_ms >= 0
-    && typeof (value as RawMiniTrackingProjection).running === "boolean";
-}
-
 function isRawMiniToolProjection(value: unknown): value is RawMiniToolProjection {
   if (!value || typeof value !== "object") return false;
   const raw = value as RawMiniToolProjection;
@@ -186,8 +158,7 @@ export function parseMiniStatusSnapshot(value: unknown): MiniStatusSnapshot | nu
   if (!value || typeof value !== "object") return null;
   const raw = value as RawMiniStatusSnapshot;
   if (
-    !(raw.tracking === null || isRawMiniTrackingProjection(raw.tracking))
-    || !Array.isArray(raw.tools)
+    !Array.isArray(raw.tools)
     || raw.tools.length > 2
     || !raw.tools.every(isRawMiniToolProjection)
     || !isFiniteNumber(raw.sampled_at_ms)
@@ -204,14 +175,6 @@ export function parseMiniStatusSnapshot(value: unknown): MiniStatusSnapshot | nu
     return null;
   }
   return {
-    tracking: raw.tracking
-      ? {
-          appName: raw.tracking.app_name,
-          exeName: raw.tracking.exe_name,
-          elapsedMs: raw.tracking.elapsed_ms,
-          running: raw.tracking.running,
-        }
-      : null,
     tools: raw.tools.map((tool) => ({
       kind: tool.kind,
       state: tool.state,
@@ -249,7 +212,6 @@ function parseMiniPresentationSnapshot(
     !activeWindow
     || !trackingStatus
     || !status
-    || !isFiniteNumber(raw.tracking_sampled_at_ms)
     || typeof raw.tracking_paused !== "boolean"
     || !TRACKING_PROBE_STATUSES.has(raw.tracking_probe_status)
   ) {
@@ -260,7 +222,6 @@ function parseMiniPresentationSnapshot(
     activeWindow,
     trackingStatus,
     trackingPaused: raw.tracking_paused,
-    trackingSampledAtMs: raw.tracking_sampled_at_ms,
     trackingProbeStatus: raw.tracking_probe_status,
     status,
   };
@@ -281,8 +242,4 @@ export async function getMiniBootstrapSnapshot(): Promise<MiniBootstrapSnapshot>
     throw new Error("invalid mini bootstrap snapshot");
   }
   return snapshot;
-}
-
-export async function getMiniIcon(exeName: string): Promise<string | null> {
-  return invoke<string | null>("cmd_get_mini_icon", { exeName });
 }

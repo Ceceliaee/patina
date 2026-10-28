@@ -147,7 +147,7 @@ try {
       $bounds=New-Object MiniProbe+Rect
       [void][MiniProbe]::GetWindowRect($miniHandle,[ref]$bounds)
       $form.FormBorderStyle=[System.Windows.Forms.FormBorderStyle]::None
-      $form.BackColor=[System.Drawing.Color]::White
+      $form.BackColor=[System.Drawing.Color]::Blue
       $form.Bounds=[System.Drawing.Rectangle]::new($bounds.Left-32,$bounds.Top-32,$bounds.Right-$bounds.Left+64,$bounds.Bottom-$bounds.Top+64)
       $form.Show(); $form.BringToFront()
     }
