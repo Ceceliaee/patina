@@ -124,7 +124,10 @@ pub(super) fn create<R: Runtime + 'static>(
             });
         }
     });
-    if let Err(error) = apply_bounds(&window, rect) {
+    if let Err(error) =
+        crate::platform::windows::window_activation::install_captionless_frame(&window)
+            .and_then(|()| apply_bounds(&window, rect))
+    {
         let _ = window.destroy();
         return Err(error);
     }
