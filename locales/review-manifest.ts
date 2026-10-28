@@ -973,18 +973,11 @@ export const LOCALE_SOURCE_REVIEWS = {
     "miniWindow.failed": "a94e81a2200f1ba7",
     "miniWindow.hold": "27149673fbabaa25",
     "accessibility.miniWindow.openMainWindow": "52c7ecbea979f685",
-    "miniWindow.currentApp": "d290e7440725a6c1",
-    "miniWindow.currentAppNotTracked": "3b3653ca39e0cc74",
-    "miniWindow.currentlyIdle": "b975078027903b81",
     "miniWindow.error": "69047031e8037f73",
     "miniWindow.idle": "47a68e8081d33e6f",
-    "miniWindow.loadingHelper": "07537d46bef8c5d0",
     "miniWindow.paused": "563ea3a387e4cd9b",
     "miniWindow.sustainedTracking": "d0de9a1f8f09fe6c",
-    "miniWindow.tracking": "4e9b95bd3b0d2369",
-    "miniWindow.trackingNotSynced": "4c286c5a364a8ad5",
-    "miniWindow.trackingPaused": "3f1c661b6b8b95df",
-    "miniWindow.trackingService": "23203fcb5c59568f"
+    "miniWindow.tracking": "4e9b95bd3b0d2369"
   },
   "es": {
     "about.description": "f16fb3f9d1381864",
@@ -1959,18 +1952,11 @@ export const LOCALE_SOURCE_REVIEWS = {
     "miniWindow.failed": "a94e81a2200f1ba7",
     "miniWindow.hold": "27149673fbabaa25",
     "accessibility.miniWindow.openMainWindow": "52c7ecbea979f685",
-    "miniWindow.currentApp": "d290e7440725a6c1",
-    "miniWindow.currentAppNotTracked": "3b3653ca39e0cc74",
-    "miniWindow.currentlyIdle": "b975078027903b81",
     "miniWindow.error": "69047031e8037f73",
     "miniWindow.idle": "47a68e8081d33e6f",
-    "miniWindow.loadingHelper": "07537d46bef8c5d0",
     "miniWindow.paused": "563ea3a387e4cd9b",
     "miniWindow.sustainedTracking": "d0de9a1f8f09fe6c",
-    "miniWindow.tracking": "4e9b95bd3b0d2369",
-    "miniWindow.trackingNotSynced": "4c286c5a364a8ad5",
-    "miniWindow.trackingPaused": "3f1c661b6b8b95df",
-    "miniWindow.trackingService": "23203fcb5c59568f"
+    "miniWindow.tracking": "4e9b95bd3b0d2369"
   },
   "ru-RU": {
     "about.description": "f16fb3f9d1381864",
@@ -2945,17 +2931,10 @@ export const LOCALE_SOURCE_REVIEWS = {
     "miniWindow.failed": "a94e81a2200f1ba7",
     "miniWindow.hold": "27149673fbabaa25",
     "accessibility.miniWindow.openMainWindow": "52c7ecbea979f685",
-    "miniWindow.currentApp": "d290e7440725a6c1",
-    "miniWindow.currentAppNotTracked": "3b3653ca39e0cc74",
-    "miniWindow.currentlyIdle": "b975078027903b81",
     "miniWindow.error": "69047031e8037f73",
     "miniWindow.idle": "47a68e8081d33e6f",
-    "miniWindow.loadingHelper": "07537d46bef8c5d0",
     "miniWindow.paused": "563ea3a387e4cd9b",
     "miniWindow.sustainedTracking": "d0de9a1f8f09fe6c",
-    "miniWindow.tracking": "4e9b95bd3b0d2369",
-    "miniWindow.trackingNotSynced": "4c286c5a364a8ad5",
-    "miniWindow.trackingPaused": "3f1c661b6b8b95df",
-    "miniWindow.trackingService": "23203fcb5c59568f"
+    "miniWindow.tracking": "4e9b95bd3b0d2369"
   }
 } as const;

@@ -5427,32 +5427,12 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "miniWindow.currentApp": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "miniWindow.currentAppNotTracked": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "miniWindow.currentlyIdle": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "miniWindow.error": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "miniWindow.idle": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "miniWindow.loadingHelper": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5468,21 +5448,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "miniWindow.tracking": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "miniWindow.trackingNotSynced": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "miniWindow.trackingPaused": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "miniWindow.trackingService": {
     "kind": "string",
     "params": [],
     "surface": "frontend"

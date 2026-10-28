@@ -683,22 +683,15 @@ export interface UiText {
     "webSearchPlaceholder": string;
   };
   "miniWindow": {
-    "currentApp": string;
-    "currentAppNotTracked": string;
-    "currentlyIdle": string;
     "error": string;
     "failed": string;
     "hold": string;
     "idle": string;
-    "loadingHelper": string;
     "open": string;
     "paused": string;
     "sustainedTracking": string;
     "title": string;
     "tracking": string;
-    "trackingNotSynced": string;
-    "trackingPaused": string;
-    "trackingService": string;
   };
   "settings": {
     "appearanceTitle": string;

@@ -543,12 +543,6 @@
           "markdownDescription": "Enables the cmd_get_mini_bootstrap_snapshot command without any pre-configured scope."
         },
         {
-          "description": "Enables the cmd_get_mini_icon command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-get-mini-icon",
-          "markdownDescription": "Enables the cmd_get_mini_icon command without any pre-configured scope."
-        },
-        {
           "description": "Enables the cmd_get_mini_presentation_snapshot command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-get-mini-presentation-snapshot",
@@ -1177,12 +1171,6 @@
           "type": "string",
           "const": "deny-cmd-get-mini-bootstrap-snapshot",
           "markdownDescription": "Denies the cmd_get_mini_bootstrap_snapshot command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the cmd_get_mini_icon command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-get-mini-icon",
-          "markdownDescription": "Denies the cmd_get_mini_icon command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_get_mini_presentation_snapshot command without any pre-configured scope.",
