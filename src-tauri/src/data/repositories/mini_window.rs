@@ -76,6 +76,12 @@ pub struct MiniBootstrapSettings {
     pub language: Option<String>,
     pub color_scheme_light: Option<String>,
     pub color_scheme_dark: Option<String>,
+    pub hourly_activity_chart_mode: Option<String>,
+    pub history_timeline_mode: Option<String>,
+    pub refresh_interval_secs: Option<String>,
+    pub timeline_merge_gap_secs: Option<String>,
+    pub dynamic_effects: Option<String>,
+    pub web_activity_available: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -89,16 +95,25 @@ pub struct MiniBootstrapSnapshot {
     pub settings: MiniBootstrapSettings,
     pub app_overrides: Vec<MiniAppOverrideRow>,
     pub app_links: Vec<MiniAppOverrideRow>,
+    pub category_settings: Vec<MiniAppOverrideRow>,
 }
 
 pub async fn load_mini_bootstrap_snapshot(
     pool: &Pool<Sqlite>,
 ) -> Result<MiniBootstrapSnapshot, sqlx::Error> {
     let mut transaction = pool.begin().await?;
+    let result = load_mini_bootstrap_in_tx(&mut transaction).await?;
+    transaction.commit().await?;
+    Ok(result)
+}
+
+pub(crate) async fn load_mini_bootstrap_in_tx(
+    transaction: &mut sqlx::Transaction<'_, Sqlite>,
+) -> Result<MiniBootstrapSnapshot, sqlx::Error> {
     let setting_rows = sqlx::query(
         "SELECT key, value
          FROM settings
-         WHERE key IN (?, ?, ?, ?, ?)
+         WHERE key IN (?, ?, ?, ?, ?, 'hourly_activity_chart_mode', 'history_timeline_mode', 'refresh_interval_secs', 'timeline_merge_gap_secs', 'dynamic_effects', 'web_activity_enabled')
          ORDER BY key ASC",
     )
     .bind(TRACKING_PAUSED_KEY)
@@ -106,7 +121,7 @@ pub async fn load_mini_bootstrap_snapshot(
     .bind(LANGUAGE_KEY)
     .bind(COLOR_SCHEME_LIGHT_KEY)
     .bind(COLOR_SCHEME_DARK_KEY)
-    .fetch_all(&mut *transaction)
+    .fetch_all(&mut **transaction)
     .await?;
     let app_override_rows = sqlx::query(
         "SELECT key, value
@@ -116,12 +131,12 @@ pub async fn load_mini_bootstrap_snapshot(
     )
     .bind(APP_OVERRIDE_KEY_PREFIX.len() as i64)
     .bind(APP_OVERRIDE_KEY_PREFIX)
-    .fetch_all(&mut *transaction)
+    .fetch_all(&mut **transaction)
     .await?;
     let app_links = sqlx::query(
         "SELECT key,value FROM settings WHERE substr(key,1,12)='__app_link::' ORDER BY key",
     )
-    .fetch_all(&mut *transaction)
+    .fetch_all(&mut **transaction)
     .await?
     .into_iter()
     .map(|row| MiniAppOverrideRow {
@@ -129,7 +144,13 @@ pub async fn load_mini_bootstrap_snapshot(
         value: row.get("value"),
     })
     .collect();
-    transaction.commit().await?;
+    let token_available: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM settings WHERE key='web_activity_token' AND trim(value) <> '')")
+        .fetch_one(&mut **transaction).await?;
+    let category_settings: Vec<(String, String)> = sqlx::query_as(
+        "SELECT key,value FROM settings WHERE key GLOB '__category_label_override::*'
+         OR key GLOB '__category_color_override::*' OR key GLOB '__category_default_color_assignment::*'
+         OR key GLOB '__deleted_category::*' OR key GLOB '__custom_category::*' ORDER BY key",
+    ).fetch_all(&mut **transaction).await?;
 
     let mut settings_by_key = setting_rows
         .into_iter()
@@ -138,12 +159,27 @@ pub async fn load_mini_bootstrap_snapshot(
 
     Ok(MiniBootstrapSnapshot {
         app_links,
+        category_settings: category_settings
+            .into_iter()
+            .map(|(key, value)| MiniAppOverrideRow { key, value })
+            .collect(),
         settings: MiniBootstrapSettings {
             tracking_paused: settings_by_key.remove(TRACKING_PAUSED_KEY),
             theme_mode: settings_by_key.remove(THEME_MODE_KEY),
             language: settings_by_key.remove(LANGUAGE_KEY),
             color_scheme_light: settings_by_key.remove(COLOR_SCHEME_LIGHT_KEY),
             color_scheme_dark: settings_by_key.remove(COLOR_SCHEME_DARK_KEY),
+            hourly_activity_chart_mode: settings_by_key.remove("hourly_activity_chart_mode"),
+            history_timeline_mode: settings_by_key.remove("history_timeline_mode"),
+            refresh_interval_secs: settings_by_key.remove("refresh_interval_secs"),
+            timeline_merge_gap_secs: settings_by_key.remove("timeline_merge_gap_secs"),
+            dynamic_effects: settings_by_key.remove("dynamic_effects"),
+            web_activity_available: token_available
+                && settings_by_key
+                    .get("web_activity_enabled")
+                    .is_some_and(|value| {
+                        crate::domain::settings::parse_boolean_setting(value, false)
+                    }),
         },
         app_overrides: app_override_rows
             .into_iter()

@@ -1,5 +1,5 @@
 use serde::Serialize;
-use sqlx::{FromRow, Pool, QueryBuilder, Sqlite};
+use sqlx::{FromRow, Pool, QueryBuilder, Sqlite, Transaction};
 
 #[derive(Debug, Serialize, FromRow)]
 pub struct HistorySessionRow {
@@ -44,6 +44,19 @@ pub async fn load_history_range(
     }
     // Facts and their titles must belong to the same database snapshot.
     let mut tx = pool.begin().await?;
+    let result =
+        load_history_range_in_tx(&mut tx, start_ms, end_ms, now_ms, include_title_samples).await?;
+    tx.commit().await?;
+    Ok(result)
+}
+
+pub(crate) async fn load_history_range_in_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    start_ms: i64,
+    end_ms: i64,
+    now_ms: i64,
+    include_title_samples: bool,
+) -> Result<HistoryRangeRows, sqlx::Error> {
     let sessions: Vec<HistorySessionRow> = sqlx::query_as(
         "SELECT id, origin, app_name, exe_name, window_title, start_time, end_time,
                 duration, continuity_group_start_time
@@ -63,7 +76,7 @@ pub async fn load_history_range(
     )
     .bind(now_ms).bind(end_ms).bind(start_ms).bind(now_ms).bind(start_ms)
     .bind(end_ms).bind(start_ms).bind(end_ms).bind(start_ms)
-    .fetch_all(&mut *tx).await?;
+    .fetch_all(&mut **tx).await?;
     let mut title_samples = Vec::new();
     if include_title_samples {
         let ids: Vec<i64> = sessions
@@ -90,12 +103,11 @@ pub async fn load_history_range(
             title_samples.extend(
                 query
                     .build_query_as::<TitleSampleRow>()
-                    .fetch_all(&mut *tx)
+                    .fetch_all(&mut **tx)
                     .await?,
             );
         }
     }
-    tx.commit().await?;
     Ok(HistoryRangeRows {
         sessions,
         title_samples,

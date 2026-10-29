@@ -2,6 +2,16 @@ use crate::data::sqlite_pool::wait_for_sqlite_pool;
 use crate::domain::mini_window::Preferences;
 use tauri::{AppHandle, Runtime};
 
+pub async fn load_activity<R: Runtime>(
+    app: &AppHandle<R>,
+    kind: super::repositories::mini_activity::MiniActivityKind,
+) -> Result<super::repositories::mini_activity::MiniActivitySnapshot, String> {
+    let pool = wait_for_sqlite_pool(app).await?;
+    let now = crate::platform::clock::unix_timestamp_millis_i64();
+    let day = crate::platform::clock::local_day_range_at(now)?;
+    super::repositories::mini_activity::load(&pool, kind, now, day).await
+}
+
 pub async fn load<R: Runtime>(app: &AppHandle<R>) -> Result<Preferences, String> {
     let pool = wait_for_sqlite_pool(app).await?;
     super::repositories::mini_window::load(&pool)

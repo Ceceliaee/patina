@@ -1,7 +1,7 @@
 use crate::domain::mini_window::geometry::{
     match_monitor, select_monitor, select_monitor_for_release, MonitorAffinity,
 };
-use crate::domain::mini_window::{bounds, Placement, Rect};
+use crate::domain::mini_window::{bounds, Placement, Rect, PANEL_HEIGHT, PANEL_WIDTH};
 use crate::domain::window_geometry::PhysicalPoint;
 use tauri::{
     AppHandle, Manager, Monitor, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
@@ -90,7 +90,7 @@ pub(super) fn create<R: Runtime + 'static>(
     let root = crate::platform::storage_paths::resolve_storage_paths(app)?.webview_root;
     let builder = WebviewWindowBuilder::new(app, "mini", WebviewUrl::App("index.html".into()))
         .title("Patina Mini")
-        .inner_size(304.0, 240.0)
+        .inner_size(PANEL_WIDTH, PANEL_HEIGHT)
         .resizable(false)
         .maximizable(false)
         .minimizable(false)

@@ -4,6 +4,7 @@
 identifier = "main-window-commands"
 description = "Allows the main application window to invoke the complete Patina application command surface."
 commands.allow = [
+  "cmd_get_mini_activity_snapshot",
   "cmd_open_mini_window",
   "cmd_get_mini_window_snapshot",
   "cmd_mini_window_action",
@@ -25,6 +26,7 @@ commands.allow = [
   "cmd_set_desktop_behavior",
   "cmd_set_launch_behavior",
   "cmd_commit_app_settings",
+  "cmd_migrate_history_timeline_mode",
   "cmd_commit_classification_settings",
   "cmd_get_web_links",
   "cmd_get_legacy_classification_apps",
@@ -120,5 +122,6 @@ commands.allow = [
   "cmd_get_tracker_health_snapshot",
   "cmd_get_mini_bootstrap_snapshot",
   "cmd_get_mini_presentation_snapshot",
+  "cmd_get_mini_activity_snapshot",
   "cmd_show_main_window",
 ]

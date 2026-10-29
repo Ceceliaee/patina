@@ -13,6 +13,14 @@ pub struct DesktopBehaviorStartupState {
     pub should_reopen_main_window: bool,
 }
 
+pub async fn migrate_history_timeline_mode(
+    app: &AppHandle,
+    legacy: &str,
+) -> Result<String, String> {
+    let pool = wait_for_sqlite_pool(app).await?;
+    app_settings::migrate_history_timeline_mode(&pool, legacy).await
+}
+
 pub async fn commit_app_setting_mutations_with_recovery<R: Runtime>(
     app: &AppHandle<R>,
     mutations: &[AppSettingMutation],

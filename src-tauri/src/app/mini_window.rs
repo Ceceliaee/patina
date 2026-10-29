@@ -4,7 +4,7 @@ mod watcher;
 
 use crate::data::mini_window_store;
 use crate::domain::mini_window::transition::{visual_geometry, Transition, VisualGeometry};
-use crate::domain::mini_window::{bounds, Edge, Interaction, Preferences};
+use crate::domain::mini_window::{bounds, Edge, Interaction, Page, Preferences};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
 use std::time::Instant;
@@ -62,6 +62,7 @@ pub struct Snapshot {
     suppressed: bool,
     edge: Option<Edge>,
     held: bool,
+    page: Page,
     focus_request: u64,
     failed: bool,
     transition_id: u64,
@@ -78,6 +79,7 @@ impl Session {
             suppressed: self.suppressed,
             edge: self.preferences.placement.edge,
             held: self.preferences.held,
+            page: self.preferences.page,
             focus_request: self.focus_request,
             failed: self.failed,
             transition_id: self.transition.id,
@@ -101,6 +103,9 @@ impl Session {
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Action {
+    CyclePage {
+        forward: bool,
+    },
     Reveal,
     Collapse,
     Hold {
@@ -267,6 +272,10 @@ pub async fn action<R: Runtime + 'static>(
     let mut persist = false;
     let mut focus = false;
     match action {
+        Action::CyclePage { forward } => {
+            state.preferences.page = state.preferences.page.cycle(forward);
+            persist = true;
+        }
         Action::TransitionComplete { transition_id } => {
             if !state.transition.complete(transition_id) {
                 return Ok(state.snapshot());

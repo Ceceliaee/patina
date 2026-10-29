@@ -179,6 +179,21 @@ pub async fn cmd_commit_app_settings(
 }
 
 #[tauri::command]
+pub async fn cmd_migrate_history_timeline_mode(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    legacy_mode: String,
+) -> Result<String, String> {
+    super::window_guard::require_main_window_string(&window)?;
+    let state = app.state::<AppSettingsCommitState>();
+    let _guard = state.lock().await;
+    let mode = crate::data::app_settings_service::migrate_history_timeline_mode(&app, &legacy_mode)
+        .await?;
+    let _ = app.emit("app-settings-changed", json!({}));
+    Ok(mode)
+}
+
+#[tauri::command]
 pub async fn cmd_commit_classification_settings(
     mutations: Vec<ClassificationSettingMutationDto>,
     app: AppHandle,

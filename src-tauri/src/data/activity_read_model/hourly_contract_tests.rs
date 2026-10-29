@@ -172,7 +172,7 @@ async fn native_range_candidates_preserve_boundaries_and_choose_selective_indexe
             .await
             .unwrap();
             let mut tx = pool.begin().await.unwrap();
-            let actual = load_fact_candidates(&mut tx, start, end, closed_only)
+            let actual = load_fact_candidates(&mut tx, start, end, closed_only, current)
                 .await
                 .unwrap();
             tx.commit().await.unwrap();

@@ -25,6 +25,29 @@ pub struct AppSettingMutation {
     pub value: String,
 }
 
+pub async fn migrate_history_timeline_mode(
+    pool: &Pool<Sqlite>,
+    legacy: &str,
+) -> Result<String, String> {
+    if !matches!(legacy, "app" | "category" | "web") {
+        return Err("Invalid history timeline mode".into());
+    }
+    let mut tx = pool.begin().await.map_err(|error| error.to_string())?;
+    sqlx::query("INSERT INTO settings(key,value) VALUES('history_timeline_mode',?) ON CONFLICT(key) DO NOTHING")
+        .bind(legacy).execute(&mut *tx).await.map_err(|error| error.to_string())?;
+    let value: String =
+        sqlx::query_scalar("SELECT value FROM settings WHERE key='history_timeline_mode'")
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|error| error.to_string())?;
+    tx.commit().await.map_err(|error| error.to_string())?;
+    Ok(if matches!(value.as_str(), "app" | "category" | "web") {
+        value
+    } else {
+        "app".into()
+    })
+}
+
 pub async fn load_desktop_behavior_settings(
     pool: &Pool<Sqlite>,
 ) -> Result<DesktopBehaviorSettings, sqlx::Error> {
@@ -189,6 +212,7 @@ fn is_allowed_app_setting_key(key: &str) -> bool {
             | "theme_mode"
             | "language"
             | "hourly_activity_chart_mode"
+            | "history_timeline_mode"
             | "dynamic_effects"
             | "color_scheme_light"
             | "color_scheme_dark"

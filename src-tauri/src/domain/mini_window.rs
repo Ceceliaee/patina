@@ -7,6 +7,33 @@ use serde::{Deserialize, Serialize};
 
 pub use super::window_geometry::{PhysicalPoint as Point, PhysicalRect as Rect};
 
+pub const PANEL_WIDTH: f64 = 320.0;
+pub const PANEL_HEIGHT: f64 = 240.0;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Page {
+    #[default]
+    Today,
+    Activity,
+    Tools,
+}
+
+impl Page {
+    pub fn cycle(self, forward: bool) -> Self {
+        match (self, forward) {
+            (Self::Today, true) | (Self::Tools, false) => Self::Activity,
+            (Self::Activity, true) | (Self::Today, false) => Self::Tools,
+            (Self::Tools, true) | (Self::Activity, false) => Self::Today,
+        }
+    }
+}
+
+fn read_saved_page<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Page, D::Error> {
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(serde_json::from_value(value).unwrap_or_default())
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Edge {
@@ -43,6 +70,8 @@ impl Default for Placement {
 pub struct Preferences {
     pub placement: Placement,
     pub held: bool,
+    #[serde(default, deserialize_with = "read_saved_page")]
+    pub page: Page,
 }
 
 pub fn scale(value: f64, dpi: f64) -> i32 {
@@ -76,7 +105,7 @@ pub fn clamp_rect(rect: Rect, work: Rect) -> Rect {
 
 pub fn bounds(placement: &Placement, expanded: bool, work: Rect, dpi: f64) -> Rect {
     let (width, height) = if expanded || placement.edge.is_none() {
-        (304.0, 240.0)
+        (PANEL_WIDTH, PANEL_HEIGHT)
     } else if placement.edge == Some(Edge::Top) {
         (112.0, 24.0)
     } else {
@@ -285,7 +314,7 @@ mod tests {
             Rect::new(-2560, -200, 2560, 1400),
         ] {
             for dpi in [1.0, 1.25, 1.5, 2.0] {
-                let width = scale(304.0, dpi) as u32;
+                let width = scale(PANEL_WIDTH, dpi) as u32;
                 let height = scale(240.0, dpi) as u32;
                 let overshoot = scale(100.0, dpi);
                 for (edge, rect) in [
@@ -361,8 +390,28 @@ mod tests {
         };
         assert_eq!(
             bounds(&placement, true, Rect::new(0, -1440, 2560, 1400), 1.5),
-            Rect::new(1052, -920, 456, 360)
+            Rect::new(1040, -920, 480, 360)
         );
+    }
+    #[test]
+    fn page_migration_preserves_placement_and_hold_and_cycles_both_directions() {
+        for page in ["null", "7", "\"future\""] {
+            let preferences: Preferences = serde_json::from_str(&format!(
+                "{{\"held\":true,\"placement\":{{\"edge\":\"left\",\"anchor\":0.25}},\"page\":{page}}}"
+            )).unwrap();
+            assert!(preferences.held);
+            assert_eq!(preferences.placement.edge, Some(Edge::Left));
+            assert_eq!(preferences.placement.anchor, 0.25);
+            assert_eq!(preferences.page, Page::Today);
+        }
+        let old: Preferences = serde_json::from_str("{\"held\":true}").unwrap();
+        assert_eq!(old.page, Page::Today);
+        assert_eq!(Page::Today.cycle(true), Page::Activity);
+        assert_eq!(Page::Activity.cycle(true), Page::Tools);
+        assert_eq!(Page::Tools.cycle(true), Page::Today);
+        for page in [Page::Today, Page::Activity, Page::Tools] {
+            assert_eq!(page.cycle(false).cycle(true), page);
+        }
     }
     #[test]
     fn damaged_saved_floating_rect_cannot_overflow_the_available_work_area() {
@@ -374,7 +423,7 @@ mod tests {
             ..Placement::default()
         };
         let rect = bounds(&placement, true, work, 1.0);
-        assert_eq!(rect, Rect::new(4176, 0, 304, 240));
+        assert_eq!(rect, Rect::new(4160, 0, 320, 240));
     }
     #[test]
     fn leave_delay_reentry_and_protection_cancel_collapse() {

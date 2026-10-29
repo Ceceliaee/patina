@@ -1,5 +1,6 @@
 mod catalog;
 mod hourly;
+pub(crate) use hourly::load_range_in_tx;
 
 #[cfg(test)]
 mod contention_tests;

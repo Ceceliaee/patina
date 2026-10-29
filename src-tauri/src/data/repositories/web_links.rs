@@ -1,3 +1,6 @@
+mod compact;
+pub(crate) use compact::recent_snapshot_in_tx;
+
 use crate::data::sqlite_error::SqliteOperationError;
 use crate::domain::web_links::{validate_rule, WebLinkRule, WebLinkRules, SETTING_PREFIX};
 use serde::{Deserialize, Serialize};
@@ -594,19 +597,7 @@ pub async fn snapshot(pool: &sqlx::Pool<Sqlite>) -> Result<WebLinksSnapshot, Str
 
 pub async fn snapshot_in_tx(tx: &mut Transaction<'_, Sqlite>) -> Result<WebLinksSnapshot, String> {
     let rules = load_in_tx(tx).await?;
-    let rows: Vec<(String, String)> = sqlx::query_as("SELECT substr(key,24),value FROM settings WHERE substr(key,1,23)='__web_domain_override::'")
-        .fetch_all(&mut **tx).await.map_err(|error| error.to_string())?;
-    let overrides: BTreeMap<String, serde_json::Value> = rows
-        .into_iter()
-        .map(|(key, value)| {
-            let value: serde_json::Value = serde_json::from_str(&value)
-                .map_err(|error| format!("invalid website override: {error}"))?;
-            if !value.is_object() {
-                return Err("invalid website override object".to_string());
-            }
-            Ok((key, value))
-        })
-        .collect::<Result<_, String>>()?;
+    let overrides = read_overrides_in_tx(tx).await?;
     let domains: Vec<String> = sqlx::query_scalar(
         "SELECT DISTINCT normalized_domain FROM web_activity_segments ORDER BY normalized_domain",
     )
@@ -675,7 +666,35 @@ pub async fn snapshot_range(
             .filter(|row| row.is_web)
             .collect(),
     );
-    snapshot.segments = Some(sqlx::query_as("SELECT id,browser_client_id,browser_kind,browser_exe_name,domain,normalized_domain,url,title,NULL AS favicon_url,start_time,COALESCE(end_time, MAX(start_time, MIN(?, updated_at+45000))) AS end_time,COALESCE(duration, MAX(0, MIN(?, updated_at+45000)-start_time)) AS duration FROM web_activity_segments WHERE start_time < ? AND COALESCE(end_time, MIN(?,updated_at+45000)) > ? ORDER BY start_time,id")
-        .bind(now).bind(now).bind(end).bind(now).bind(start).fetch_all(&mut *tx).await.map_err(|error| error.to_string())?);
+    snapshot.segments = Some(read_segments_in_tx(&mut tx, start, end, now).await?);
     Ok(snapshot)
+}
+
+async fn read_overrides_in_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+) -> Result<BTreeMap<String, serde_json::Value>, String> {
+    let rows: Vec<(String, String)> = sqlx::query_as("SELECT substr(key,24),value FROM settings WHERE substr(key,1,23)='__web_domain_override::'")
+        .fetch_all(&mut **tx).await.map_err(|error| error.to_string())?;
+    let overrides: BTreeMap<String, serde_json::Value> = rows
+        .into_iter()
+        .map(|(key, value)| {
+            let value: serde_json::Value = serde_json::from_str(&value)
+                .map_err(|error| format!("invalid website override: {error}"))?;
+            if !value.is_object() {
+                return Err("invalid website override object".to_string());
+            }
+            Ok((key, value))
+        })
+        .collect::<Result<_, String>>()?;
+    Ok(overrides)
+}
+
+async fn read_segments_in_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    start: i64,
+    end: i64,
+    now: i64,
+) -> Result<Vec<WebActivityDetailSegment>, String> {
+    sqlx::query_as("SELECT id,browser_client_id,browser_kind,browser_exe_name,domain,normalized_domain,url,title,NULL AS favicon_url,start_time,COALESCE(end_time, MAX(start_time, MIN(?, updated_at+45000))) AS end_time,COALESCE(duration, MAX(0, MIN(?, updated_at+45000)-start_time)) AS duration FROM web_activity_segments WHERE start_time < ? AND COALESCE(end_time, MIN(?,updated_at+45000)) > ? ORDER BY start_time,id")
+        .bind(now).bind(now).bind(end).bind(now).bind(start).fetch_all(&mut **tx).await.map_err(|error| error.to_string())
 }

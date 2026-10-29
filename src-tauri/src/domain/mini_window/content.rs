@@ -1,4 +1,6 @@
-use crate::domain::tools::{PomodoroStatus, TimerMode, TimerStatus, ToolsRuntimeSnapshot};
+use crate::domain::tools::{
+    PomodoroPhase, PomodoroStatus, TimerMode, TimerStatus, ToolsRuntimeSnapshot,
+};
 use serde::Serialize;
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
@@ -24,6 +26,8 @@ pub struct MiniToolProjection {
     pub value_ms: i64,
     pub counts_down: bool,
     pub visible_until_ms: Option<i64>,
+    pub total_ms: Option<i64>,
+    pub phase: Option<PomodoroPhase>,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -68,6 +72,8 @@ pub fn build_mini_status_snapshot(
                 state,
                 value_ms,
                 counts_down,
+                total_ms: timer.duration_ms,
+                phase: None,
                 visible_until_ms: (state == MiniToolState::Completed).then(|| {
                     timer
                         .completed_at
@@ -96,6 +102,8 @@ pub fn build_mini_status_snapshot(
                 state,
                 value_ms: pomodoro.remaining_ms_at(sampled_at_ms),
                 counts_down: true,
+                total_ms: Some(pomodoro.phase_duration_ms()),
+                phase: Some(pomodoro.phase),
                 visible_until_ms: (state == MiniToolState::Completed).then(|| {
                     pomodoro
                         .updated_at

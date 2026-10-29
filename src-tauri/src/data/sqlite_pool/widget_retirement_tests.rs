@@ -74,14 +74,13 @@ async fn widget_retirement_upgrade_repairs_history_without_skipping_data_cleanup
         let mini = crate::data::repositories::mini_window::load(&pool)
             .await
             .unwrap();
-        assert_eq!(
-            serde_json::to_value(&mini).unwrap(),
-            serde_json::from_str::<serde_json::Value>(MINI_PREFERENCES).unwrap()
-        );
+        let mut expected = serde_json::from_str::<serde_json::Value>(MINI_PREFERENCES).unwrap();
+        expected["page"] = serde_json::json!("today");
+        assert_eq!(serde_json::to_value(&mini).unwrap(), expected);
         let work = mini.placement.monitor.as_ref().unwrap().work_area;
         assert_eq!(
             crate::domain::mini_window::bounds(&mini.placement, true, work, 1.0),
-            mini.placement.floating.unwrap()
+            crate::domain::mini_window::Rect::new(-1504, 200, 320, 240)
         );
         let sessions: Vec<(String, String, i64, i64, i64)> =
             sqlx::query_as("SELECT app_name,exe_name,start_time,end_time,duration FROM sessions")

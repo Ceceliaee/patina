@@ -375,7 +375,7 @@ async fn replace_projection_range(
     end_ms: i64,
     source_revision: i64,
 ) -> Result<(), String> {
-    let candidates = load_fact_candidates(tx, start_ms, end_ms, true).await?;
+    let candidates = load_fact_candidates(tx, start_ms, end_ms, true, now_ms()).await?;
     let resolved = resolve_activity_precedence(&candidates);
     let mut rows: BTreeMap<(i64, String, ActivityOrigin, String), HourlyAccumulator> =
         BTreeMap::new();
@@ -488,13 +488,28 @@ pub(super) async fn load_range(
         .begin()
         .await
         .map_err(|error| format!("failed to begin activity aggregate read: {error}"))?;
+    let result =
+        load_range_in_tx(&mut tx, start_ms, end_ms, bucket_boundaries_ms, now_ms()).await?;
+    tx.commit()
+        .await
+        .map_err(|error| format!("failed to finish activity aggregate read: {error}"))?;
+    Ok(result)
+}
+
+pub(crate) async fn load_range_in_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    start_ms: i64,
+    end_ms: i64,
+    bucket_boundaries_ms: &[i64],
+    sampled_at_ms: i64,
+) -> Result<ActivityAggregateRangeDto, String> {
     let state_result = sqlx::query(
         "SELECT state, schema_version, algorithm_version, timezone_fingerprint,
                 coverage_start_ms, coverage_end_ms,
                 (SELECT source_revision FROM read_model_revision WHERE id = 1) source_revision
          FROM read_model_state WHERE model_name = 'activity_hourly'",
     )
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await;
     let (ready, coverage_start, coverage_end, source_revision) = match state_result {
         Ok(Some(state)) => (
@@ -509,14 +524,14 @@ pub(super) async fn load_range(
         Ok(None) | Err(_) => (false, None, None, 0),
     };
     let active_start = sqlx::query_scalar::<_, i64>(ACTIVE_SESSION_START_SQL)
-        .fetch_optional(&mut *tx)
+        .fetch_optional(&mut **tx)
         .await
         .map_err(|error| format!("failed to inspect active session overlay: {error}"))?
         .filter(|active_start| *active_start < end_ms);
     let anonymous_start = sqlx::query_scalar::<_, i64>(
         "SELECT start_time FROM anonymous_activity INDEXED BY idx_anonymous_activity_active WHERE end_time IS NULL LIMIT 1",
     )
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await
     .map_err(|error| format!("failed to inspect anonymous overlay: {error}"))?
     .filter(|start| *start < end_ms);
@@ -575,7 +590,7 @@ pub(super) async fn load_range(
         )
         .bind(end_ms)
         .bind(start_ms)
-        .fetch_all(&mut *tx)
+        .fetch_all(&mut **tx)
         .await
         .map_err(|error| format!("failed to inspect dirty activity overlaps: {error}"))?;
         for dirty in dirty_rows {
@@ -585,7 +600,7 @@ pub(super) async fn load_range(
             });
         }
         if let Some(active_start) = active_start {
-            let active_end = now_ms().min(end_ms);
+            let active_end = sampled_at_ms.min(end_ms);
             if active_end > start_ms.max(active_start) {
                 fact_intervals.push(Interval {
                     start_ms: start_ms.max(floor_to_hour(active_start)),
@@ -602,7 +617,7 @@ pub(super) async fn load_range(
             .bind(floor_to_hour(start_ms))
             .bind(end_ms)
             .bind(start_ms)
-            .fetch_all(&mut *tx)
+            .fetch_all(&mut **tx)
             .await
         {
             Ok(rows) => rows,
@@ -615,8 +630,8 @@ pub(super) async fn load_range(
                          updated_at_ms = ?
                      WHERE model_name = 'activity_hourly'",
                 )
-                .bind(now_ms())
-                .execute(&mut *tx)
+                .bind(sampled_at_ms)
+                .execute(&mut **tx)
                 .await;
                 eprintln!("[read-model] hourly projection unavailable; using facts: {error}");
                 Vec::new()
@@ -651,7 +666,8 @@ pub(super) async fn load_range(
     let mut fact_row_count = 0;
     for interval in &fact_intervals {
         let candidates =
-            load_fact_candidates(&mut tx, interval.start_ms, interval.end_ms, false).await?;
+            load_fact_candidates(tx, interval.start_ms, interval.end_ms, false, sampled_at_ms)
+                .await?;
         for range in resolve_activity_precedence(&candidates) {
             let clipped_start = range.start_ms.max(interval.start_ms);
             let clipped_end = range.end_ms.min(interval.end_ms);
@@ -674,9 +690,6 @@ pub(super) async fn load_range(
             .then_with(|| left.exe_name.cmp(&right.exe_name))
             .then_with(|| left.end_time.cmp(&right.end_time))
     });
-    tx.commit()
-        .await
-        .map_err(|error| format!("failed to finish activity aggregate read: {error}"))?;
 
     let fallback_reason = if fact_intervals.is_empty() {
         None
@@ -711,12 +724,12 @@ async fn load_fact_candidates(
     start_ms: i64,
     end_ms: i64,
     closed_only: bool,
+    current_ms: i64,
 ) -> Result<Vec<OwnedActivityRange<CandidateValue>>, String> {
     // Import buckets allocate the hour's remaining capacity. A partial query must include
     // native/exact facts elsewhere in that hour before clipping the resolved geometry.
     let start_ms = floor_to_hour(start_ms);
     let end_ms = ceil_to_hour(end_ms);
-    let current_ms = now_ms();
     let rows = sqlx::query(FACT_CANDIDATES_SQL)
         .bind(current_ms)
         .bind(end_ms)
