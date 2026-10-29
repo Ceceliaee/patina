@@ -429,6 +429,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "miniWindow.title": { "kind": "string", "params": [], "surface": "frontend", "description": "Independent desktop mini window: title." },
+  "miniWindow.today": { "kind": "string", "params": [], "surface": "frontend" },
+  "miniWindow.activity": { "kind": "string", "params": [], "surface": "frontend" },
+  "miniWindow.tools": { "kind": "string", "params": [], "surface": "frontend" },
+  "miniWindow.previousPage": { "kind": "string", "params": [], "surface": "frontend" },
+  "miniWindow.nextPage": { "kind": "string", "params": [], "surface": "frontend" },
+  "miniWindow.recentHour": { "kind": "string", "params": [], "surface": "frontend" },
+  "miniWindow.emptyTools": { "kind": "string", "params": [], "surface": "frontend" },
   "miniWindow.open": { "kind": "string", "params": [], "surface": "frontend", "description": "Independent desktop mini window: open." },
   "miniWindow.failed": { "kind": "string", "params": [], "surface": "frontend", "description": "Independent desktop mini window: failed." },
   "miniWindow.hold": { "kind": "string", "params": [], "surface": "frontend", "description": "Independent desktop mini window: hold." },

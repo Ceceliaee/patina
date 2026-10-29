@@ -537,6 +537,12 @@
           "markdownDescription": "Enables the cmd_get_main_window_render_token command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_get_mini_activity_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-mini-activity-snapshot",
+          "markdownDescription": "Enables the cmd_get_mini_activity_snapshot command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_get_mini_bootstrap_snapshot command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-get-mini-bootstrap-snapshot",
@@ -685,6 +691,12 @@
           "type": "string",
           "const": "allow-cmd-mark-main-window-ready",
           "markdownDescription": "Enables the cmd_mark_main_window_ready command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_migrate_history_timeline_mode command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-migrate-history-timeline-mode",
+          "markdownDescription": "Enables the cmd_migrate_history_timeline_mode command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_mini_window_action command without any pre-configured scope.",
@@ -1167,6 +1179,12 @@
           "markdownDescription": "Denies the cmd_get_main_window_render_token command without any pre-configured scope."
         },
         {
+          "description": "Denies the cmd_get_mini_activity_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-mini-activity-snapshot",
+          "markdownDescription": "Denies the cmd_get_mini_activity_snapshot command without any pre-configured scope."
+        },
+        {
           "description": "Denies the cmd_get_mini_bootstrap_snapshot command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-get-mini-bootstrap-snapshot",
@@ -1315,6 +1333,12 @@
           "type": "string",
           "const": "deny-cmd-mark-main-window-ready",
           "markdownDescription": "Denies the cmd_mark_main_window_ready command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_migrate_history_timeline_mode command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-migrate-history-timeline-mode",
+          "markdownDescription": "Denies the cmd_migrate_history_timeline_mode command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_mini_window_action command without any pre-configured scope.",

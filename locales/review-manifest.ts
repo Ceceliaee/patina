@@ -977,7 +977,14 @@ export const LOCALE_SOURCE_REVIEWS = {
     "miniWindow.idle": "47a68e8081d33e6f",
     "miniWindow.paused": "563ea3a387e4cd9b",
     "miniWindow.sustainedTracking": "d0de9a1f8f09fe6c",
-    "miniWindow.tracking": "4e9b95bd3b0d2369"
+    "miniWindow.tracking": "4e9b95bd3b0d2369",
+    "miniWindow.today": "f0739b467a3ad99c",
+    "miniWindow.activity": "364a3765b4c8e5ae",
+    "miniWindow.tools": "7fcf83d79fe9aa64",
+    "miniWindow.previousPage": "4c878afc9f09a404",
+    "miniWindow.nextPage": "1bcb0ae2a77ea870",
+    "miniWindow.recentHour": "79af95f3708b6fc8",
+    "miniWindow.emptyTools": "b1fcfc28fb3ca354"
   },
   "es": {
     "about.description": "f16fb3f9d1381864",
@@ -1956,7 +1963,14 @@ export const LOCALE_SOURCE_REVIEWS = {
     "miniWindow.idle": "47a68e8081d33e6f",
     "miniWindow.paused": "563ea3a387e4cd9b",
     "miniWindow.sustainedTracking": "d0de9a1f8f09fe6c",
-    "miniWindow.tracking": "4e9b95bd3b0d2369"
+    "miniWindow.tracking": "4e9b95bd3b0d2369",
+    "miniWindow.today": "f0739b467a3ad99c",
+    "miniWindow.activity": "364a3765b4c8e5ae",
+    "miniWindow.tools": "7fcf83d79fe9aa64",
+    "miniWindow.previousPage": "4c878afc9f09a404",
+    "miniWindow.nextPage": "1bcb0ae2a77ea870",
+    "miniWindow.recentHour": "79af95f3708b6fc8",
+    "miniWindow.emptyTools": "b1fcfc28fb3ca354"
   },
   "ru-RU": {
     "about.description": "f16fb3f9d1381864",
@@ -2935,6 +2949,13 @@ export const LOCALE_SOURCE_REVIEWS = {
     "miniWindow.idle": "47a68e8081d33e6f",
     "miniWindow.paused": "563ea3a387e4cd9b",
     "miniWindow.sustainedTracking": "d0de9a1f8f09fe6c",
-    "miniWindow.tracking": "4e9b95bd3b0d2369"
+    "miniWindow.tracking": "4e9b95bd3b0d2369",
+    "miniWindow.today": "f0739b467a3ad99c",
+    "miniWindow.activity": "364a3765b4c8e5ae",
+    "miniWindow.tools": "7fcf83d79fe9aa64",
+    "miniWindow.previousPage": "4c878afc9f09a404",
+    "miniWindow.nextPage": "1bcb0ae2a77ea870",
+    "miniWindow.recentHour": "79af95f3708b6fc8",
+    "miniWindow.emptyTools": "b1fcfc28fb3ca354"
   }
 } as const;

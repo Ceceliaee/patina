@@ -683,14 +683,21 @@ export interface UiText {
     "webSearchPlaceholder": string;
   };
   "miniWindow": {
+    "activity": string;
+    "emptyTools": string;
     "error": string;
     "failed": string;
     "hold": string;
     "idle": string;
+    "nextPage": string;
     "open": string;
     "paused": string;
+    "previousPage": string;
+    "recentHour": string;
     "sustainedTracking": string;
     "title": string;
+    "today": string;
+    "tools": string;
     "tracking": string;
   };
   "settings": {

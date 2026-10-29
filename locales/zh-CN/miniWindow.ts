@@ -1,5 +1,12 @@
 // zh-CN mini window locale resource. Pure data only.
 export const MESSAGES = {
+  "miniWindow.today": "今日",
+  "miniWindow.activity": "活动",
+  "miniWindow.tools": "工具",
+  "miniWindow.previousPage": "上一页",
+  "miniWindow.nextPage": "下一页",
+  "miniWindow.recentHour": "最近一小时",
+  "miniWindow.emptyTools": "暂无运行中的工具",
   "miniWindow.title": "迷你窗",
   "miniWindow.open": "打开迷你窗",
   "miniWindow.failed": "操作失败，请重试",
