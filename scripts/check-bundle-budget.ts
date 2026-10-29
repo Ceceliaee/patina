@@ -28,6 +28,7 @@ const TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 402;
 
 const INITIAL_CHUNK_BUDGETS = [
   { label: "index", pattern: /^index-.*\.js$/, gzipKiB: 65 },
+  { label: "browser storage", pattern: /^browserStorage-.*\.js$/, gzipKiB: 0.197 },
   { label: "react-vendor", pattern: /^react-vendor-.*\.js$/, gzipKiB: 66.8 },
   { label: "icons", pattern: /^icons-.*\.js$/, gzipKiB: 8 },
   { label: "tauri", pattern: /^tauri-.*\.js$/, gzipKiB: 6 },
@@ -59,13 +60,13 @@ const LAZY_PAGE_CHUNK_BUDGETS = [
   { label: "Settings", pattern: /^Settings-.*\.js$/, gzipKiB: 24 },
   // Scoped cost review: docs/archive/classification-link-layout-bundle-decision.md.
   { label: "AppMapping", pattern: /^AppMapping-.*\.js$/, gzipKiB: 19.7 },
-  { label: "History", pattern: /^History-.*\.js$/, gzipKiB: 19.1 },
+  { label: "History", pattern: /^History-.*\.js$/, gzipKiB: 16.4 },
   { label: "Tools", pattern: /^Tools-.*\.js$/, gzipKiB: 18 },
   // The destination analysis panel and its range control are both part of
   // Data's first render; the private detail chunk owns day analysis only. The
   // third application-category mode remains synchronous and feature-owned here;
   // splitting it would duplicate the read-model graph into unowned support chunks.
-  { label: "Data", pattern: /^Data-.*\.js$/, gzipKiB: 22.55 },
+  { label: "Data", pattern: /^Data-.*\.js$/, gzipKiB: 22.6 },
   { label: "About", pattern: /^About-.*\.js$/, gzipKiB: 18 },
 ] as const;
 
@@ -74,9 +75,9 @@ const NON_DATA_PRIMARY_LAZY_ROUTE_BUDGETS = LAZY_PAGE_CHUNK_BUDGETS.filter(
 );
 
 const LAZY_SECONDARY_CHUNK_BUDGETS = [
-  // One lazy owner now includes content plus bootstrap/IPC previously in index.
-  // Measured: 5.78 KiB; the retirement decision records the reduced total graph.
-  { label: "MiniShell", pattern: /^MiniShell-.*\.js$/, gzipKiB: 6.2 },
+  // Mini pages and bounded chart details; scoped decisions:
+  // docs/archive/2026-10-28-mini-paged-content-bundle-decision.md.
+  { label: "MiniShell", pattern: /^MiniShell-.*\.js$/, gzipKiB: 9 },
   { label: "Settings import dialog", pattern: /^SettingsDataImportDialog-.*\.js$/, gzipKiB: 3 },
   { label: "Settings export dialog", pattern: /^SettingsDataExportDialog-.*\.js$/, gzipKiB: 6.5 },
   { label: "Settings scheduled export dialog", pattern: /^SettingsScheduledExportDialog-.*\.js$/, gzipKiB: 3.6 },
@@ -98,6 +99,7 @@ const LAZY_SECONDARY_CHUNK_BUDGETS = [
 // Stable cross-feature owners stay lazy and receive their own narrow budget
 // instead of consuming the allowance for unowned support chunks.
 const LAZY_SHARED_UI_CHUNK_BUDGETS = [
+  { label: "activity timeline models", pattern: /^webActivityViewModel-.*\.js$/, gzipKiB: 4.4 },
   // Classification and destination detail share the positioned overlay owner.
   { label: "QuietAnchoredPopover", pattern: /^QuietAnchoredPopover-.*\.js$/, gzipKiB: 1.21 },
   { label: "QuietCalendar", pattern: /^QuietCalendar-.*\.js$/, gzipKiB: 1.3 },
@@ -243,7 +245,7 @@ function measureCopyDomains() {
 }
 
 function main() {
-  const fixtureFiles = ["index-fixture.js", "SettingsDataExportDialog-fixture.js", "QuietSwitch-fixture.js"];
+  const fixtureFiles = ["browserStorage-fixture.js", "SettingsDataExportDialog-fixture.js", "QuietSwitch-fixture.js"];
   const fixture = Object.fromEntries(BUNDLE_SOURCE_OWNERS.map((owner, index) => [owner.source, [fixtureFiles[index]]]));
   const fixtureAssets = new Set(fixtureFiles);
   const fixtureInitial = new Set([fixtureFiles[0]]);

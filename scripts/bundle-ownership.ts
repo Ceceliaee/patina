@@ -1,7 +1,7 @@
 export const BUNDLE_OWNERSHIP_FILE = ".vite/bundle-ownership.json";
 
 export const BUNDLE_SOURCE_OWNERS: Array<{ source: string; chunk?: string; initial: boolean }> = [
-  { source: "src/platform/browser/browserStorageGateway.ts", chunk: "index", initial: true },
+  { source: "src/platform/browser/browserStorageGateway.ts", chunk: "browserStorage", initial: true },
   { source: "src/platform/persistence/dataExportGateway.ts", chunk: "SettingsDataExportDialog", initial: false },
   { source: "src/shared/components/QuietSelect.tsx", initial: false },
 ] as const;
