@@ -137,23 +137,11 @@ export class CategoryColorRegistry {
       }
     }
 
-    const usedColors = new Set<string>();
-    for (const [assignedCategory, color] of Object.entries(this.categoryDefaultColorAssignments)) {
-      if (!isAppCategory(assignedCategory)) {
-        continue;
-      }
-      if (assignedCategory === "system" || assignedCategory === "other") {
-        continue;
-      }
-      if (this.deletedCategories.has(assignedCategory)) {
-        continue;
-      }
-      usedColors.add(color);
-    }
-
-    const availableColors = QUIET_PRO_CATEGORY_PALETTE_37.filter((color) => !usedColors.has(color));
-    const palette = availableColors.length > 0 ? availableColors : [...QUIET_PRO_CATEGORY_PALETTE_37];
-    const nextColor = palette[Math.floor(Math.random() * palette.length)];
+    // Independent windows can read an unassigned category in different orders.
+    // Its fallback must agree before the main window persists the assignment.
+    let hash = 2166136261;
+    for (const character of category) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
+    const nextColor = QUIET_PRO_CATEGORY_PALETTE_37[(hash >>> 0) % QUIET_PRO_CATEGORY_PALETTE_37.length];
 
     this.categoryDefaultColorAssignments[category] = nextColor;
     if (this.persistCategoryDefaultColorAssignment) {
