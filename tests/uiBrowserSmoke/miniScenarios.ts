@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import { evaluate, waitForExpression } from "./browserHarness.ts";
+import { runMiniPagedScenarios } from "./miniPagedScenarios.ts";
 
 export async function runMiniScenarios(context: BrowserSmokeContext) {
+  await runMiniPagedScenarios(context);
   const { client, sessionId, appUrl, runTest } = context;
   const toolsEvent = JSON.stringify({
     settings: { default_countdown_minutes: 25, pomodoro_focus_minutes: 25, pomodoro_short_break_minutes: 5, pomodoro_long_break_minutes: 15, pomodoro_long_break_every: 4 },
@@ -18,7 +20,7 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
   await runTest("mini titlebar entry uses AppWindow immediately before minimize", async () => {
     assert.equal(await read(`Boolean(document.querySelector('[data-titlebar-mini-entry] .lucide-app-window'))`), true);
     assert.equal(await read(`Boolean(document.querySelector('.app-titlebar-controls > button .lucide-minus'))`), true);
-    await read(`{ const key='__time_tracker_smoke_settings';const value=JSON.parse(localStorage.getItem(key)||'{}');value.language='zh-CN';localStorage.setItem(key,JSON.stringify(value)); }`);
+    await read(`{ const key='__time_tracker_smoke_settings';const value=JSON.parse(localStorage.getItem(key)||'{}');value.language='zh-CN';value.dynamic_effects='0';localStorage.setItem(key,JSON.stringify(value)); }`);
   });
   await runTest("mini titlebar matches neighboring hit areas without hover or focus tooltips", async () => {
     const bounds = await read(`(() => {
@@ -76,7 +78,7 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
     const stored = await read(`localStorage.getItem(${JSON.stringify(heldKey)})`) as string | null;
     try {
       await read(`localStorage.setItem(${JSON.stringify(heldKey)}, JSON.stringify(['cmd_get_mini_window_snapshot']))`);
-      const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini");
+      const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniPage", "tools");
       await client.command("Page.navigate", { url: url.href }, sessionId);
       await wait(`globalThis.__PATINA_NAVIGATION_PENDING?.length > 0`);
       await read(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
@@ -91,7 +93,7 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
           width: panel.getBoundingClientRect().width, height: panel.getBoundingClientRect().height,
           handle: getComputedStyle(document.querySelector('.mini-handle')).visibility,
           animations: panel.getAnimations({subtree:true}).length };
-      })()`), { expanded: "true", transitioning: "false", width: 304, height: 240, handle: "hidden", animations: 0 });
+      })()`), { expanded: "true", transitioning: "false", width: 320, height: 240, handle: "hidden", animations: 0 });
     } finally {
       await read(stored === null ? `localStorage.removeItem(${JSON.stringify(heldKey)})`
         : `localStorage.setItem(${JSON.stringify(heldKey)}, ${JSON.stringify(stored)})`);
@@ -101,7 +103,7 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
     }
   });
   await runTest("collapsed mini updates its status color from events without hover, content or polling", async () => {
-    const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniTools", "2");
+    const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniPage", "tools"); url.searchParams.set("miniTools", "2");
     await client.command("Page.navigate", { url: url.href }, sessionId);
     await wait(`Boolean(document.querySelector('.mini-tools'))`);
     try {
@@ -187,7 +189,7 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
           close: await readActionFeedback('.app-titlebar-close'),
         });
       }
-      const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini");
+      const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniPage", "tools");
       await client.command("Page.navigate", { url: url.href }, sessionId);
       await wait(`Boolean(document.querySelector('.mini-tools'))`);
       for (const [index, sample] of samples.entries()) {
@@ -200,9 +202,9 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
         assert.equal(await read(`getComputedStyle(document.querySelector('.mini-content')).backgroundColor`), "rgba(0, 0, 0, 0)", "content must retain the panel background");
         assert.equal(await read(`Boolean(document.querySelector('.mini-content .mini-status'))`), false, "the redundant visible status row must be absent");
         assert.equal(await read(`document.querySelector('.mini-status').getBoundingClientRect().height <= 1`), true, "the status label remains available to screen readers without a visible row");
-        const neutralFeedback = await readActionFeedback('.mini-header button:first-of-type');
+        const neutralFeedback = await readActionFeedback('.mini-window-actions button:first-of-type');
         const neutral = await read(`(() => {
-          const style = getComputedStyle(document.querySelector('.mini-header button:first-of-type'));
+          const style = getComputedStyle(document.querySelector('.mini-window-actions button:first-of-type'));
           return { color: style.color, background: style.backgroundColor };
         })()`) as { color: string; background: string };
         for (const held of [true, false]) {
@@ -258,8 +260,8 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
     }
   });
   await runTest("mini explicit open focuses its container before Tab enters the buttons", async () => {
-    await client.command("Emulation.setDeviceMetricsOverride", { width: 304, height: 240, deviceScaleFactor: 1, mobile: false }, sessionId);
-    const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini");
+    await client.command("Emulation.setDeviceMetricsOverride", { width: 320, height: 240, deviceScaleFactor: 1, mobile: false }, sessionId);
+    const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniPage", "tools");
     await client.command("Page.navigate", { url: url.href }, sessionId);
     await wait(`Boolean(document.querySelector('.mini-tools'))`);
     await read(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
@@ -271,10 +273,10 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
     await wait(`document.activeElement === document.querySelector('.mini-header button')`);
     assert.equal(await read(`document.activeElement.matches(':focus-visible')`), true);
     assert.equal(await read(`Boolean(document.querySelector('.qp-tooltip-anchor,.qp-tooltip,[role="tooltip"]'))`), false);
-    await read(`globalThis.__PATINA_EMIT_TAURI_EVENT('mini-window-state', {epoch:1,revision:100,expanded:true,suppressed:false,edge:'top',held:false,failed:false,transition_id:0,transitioning:false,visual:{width:304,height:240,anchor:0.5},focus_request:1})`);
+    await read(`globalThis.__PATINA_EMIT_TAURI_EVENT('mini-window-state', {epoch:1,revision:100,page:"tools",expanded:true,suppressed:false,edge:'top',held:false,failed:false,transition_id:0,transitioning:false,visual:{width:320,height:240,anchor:0.5},focus_request:1})`);
     await read(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
     assert.equal(await read(`document.activeElement === document.querySelector('.mini-header button')`), true, "ordinary revisions must preserve the selected control");
-    await read(`globalThis.__PATINA_EMIT_TAURI_EVENT('mini-window-state', {epoch:1,revision:101,expanded:true,suppressed:false,edge:'top',held:false,failed:false,transition_id:0,transitioning:false,visual:{width:304,height:240,anchor:0.5},focus_request:2})`);
+    await read(`globalThis.__PATINA_EMIT_TAURI_EVENT('mini-window-state', {epoch:1,revision:101,page:"tools",expanded:true,suppressed:false,edge:'top',held:false,failed:false,transition_id:0,transitioning:false,visual:{width:320,height:240,anchor:0.5},focus_request:2})`);
     await wait(`document.activeElement === document.querySelector('.mini-shell') && !document.querySelector('[role="tooltip"]')`);
     await key("Tab");
     await wait(`document.activeElement === document.querySelector('.mini-header button')`);
@@ -282,14 +284,14 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
     await wait(`document.activeElement === document.querySelectorAll('.mini-header button')[1]`);
   });
   await runTest("mini passive edge reveal leaves existing DOM focus untouched", async () => {
-    const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini");
+    const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniPage", "tools");
     await client.command("Page.navigate", { url: url.href }, sessionId);
     await wait(`Boolean(document.querySelector('.mini-tools'))`);
     try {
       await read(`document.body.tabIndex = -1; document.body.focus();
-        globalThis.__PATINA_EMIT_TAURI_EVENT('mini-window-state', {epoch:1,revision:100,expanded:false,suppressed:false,edge:'top',held:false,failed:false,transition_id:0,transitioning:false,visual:{width:304,height:240,anchor:0.5},focus_request:1})`);
+        globalThis.__PATINA_EMIT_TAURI_EVENT('mini-window-state', {epoch:1,revision:100,page:"tools",expanded:false,suppressed:false,edge:'top',held:false,failed:false,transition_id:0,transitioning:false,visual:{width:320,height:240,anchor:0.5},focus_request:1})`);
       await wait(`Boolean(document.querySelector('.mini-handle'))`);
-      await read(`globalThis.__PATINA_EMIT_TAURI_EVENT('mini-window-state', {epoch:1,revision:101,expanded:true,suppressed:false,edge:'top',held:false,failed:false,transition_id:0,transitioning:false,visual:{width:304,height:240,anchor:0.5},focus_request:1})`);
+      await read(`globalThis.__PATINA_EMIT_TAURI_EVENT('mini-window-state', {epoch:1,revision:101,page:"tools",expanded:true,suppressed:false,edge:'top',held:false,failed:false,transition_id:0,transitioning:false,visual:{width:320,height:240,anchor:0.5},focus_request:1})`);
       await wait(`Boolean(document.querySelector('.mini-header'))`);
       await read(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
       assert.equal(await read(`document.activeElement === document.body`), true, "passive reveal must not move DOM focus");
@@ -300,7 +302,7 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
   });
   for (const edge of ["top", "left", "right"]) {
     await runTest(`mini ${edge} morph reverses continuously with one opaque surface and stable content`, async () => {
-      const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniEdge", edge);
+      const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniPage", "tools"); url.searchParams.set("miniEdge", edge);
       await client.command("Page.navigate", { url: url.href }, sessionId);
       await wait(`Boolean(document.querySelector('.mini-tools'))`);
       const result = await read(`(async () => {
@@ -326,6 +328,9 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
         for (let turn = 0; turn < 9; turn++) {
           const animations = [...panel.getAnimations({subtree:true}), ...handle.getAnimations()];
           if (!animations.length) throw new Error('missing shape transition');
+          if (turn === 0 && !panel.getAnimations().some(animation => Number(animation.effect.getTiming().duration) === 180)) {
+            throw new Error('Mini must preserve its 180ms shape transition with app dynamic effects disabled');
+          }
           for (const animation of animations) { animation.pause(); animation.currentTime = Number(animation.effect.getTiming().duration) * 0.35; }
           const before = value();
           const opacity = Number(getComputedStyle(panel).opacity);
@@ -359,7 +364,7 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
     });
   }
   await runTest("mini completes only after the shape, content and handle transitions finish", async () => {
-    const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini");
+    const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniPage", "tools");
     await client.command("Page.navigate", { url: url.href }, sessionId);
     await wait(`Boolean(document.querySelector('.mini-tools'))`);
     const pending = await read(`(async () => {
@@ -393,27 +398,27 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
   });
   for (const tools of [0, 1, 2]) for (const scale of [1, 1.25, 1.5, 2]) {
     await runTest(`mini panel retains content with ${tools} tools at ${scale} scale`, async () => {
-      await client.command("Emulation.setDeviceMetricsOverride", { width: 304, height: 240, deviceScaleFactor: scale, mobile: false }, sessionId);
-      const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniTools", String(tools));
+      await client.command("Emulation.setDeviceMetricsOverride", { width: 320, height: 240, deviceScaleFactor: scale, mobile: false }, sessionId);
+      const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniPage", "tools"); url.searchParams.set("miniTools", String(tools));
       await client.command("Page.navigate", { url: url.href }, sessionId);
       await wait(`document.querySelectorAll('.mini-tool').length === ${tools} && Boolean(document.querySelector('.mini-tools'))`);
       assert.equal(await read(`document.documentElement.dataset.windowLabel`), "mini");
       assert.equal(await read(`Boolean(document.querySelector('.qp-app-frame'))`), false);
       assert.equal(await read(`Array.from(document.querySelectorAll('.mini-header button,.mini-tool')).every(node=>{const r=node.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.bottom<=innerHeight;})`), true);
-      assert.equal(await read(`Array.from(document.querySelectorAll('.mini-shell button')).filter(button => !button.closest('[inert]')).length`), 3);
+      assert.equal(await read(`Array.from(document.querySelectorAll('.mini-shell button')).filter(button => !button.closest('[inert]')).length`), 4);
       assert.equal(await read(`Boolean(document.querySelector('.mini-shell footer'))`), false);
       assert.equal(await read(`Boolean(document.querySelector('.mini-activity,.mini-time,.mini-content img'))`), false, "Mini must not render current-app identity or duration");
-      if (tools === 0) assert.equal(await read(`document.querySelector('.mini-content').textContent.trim()`), "");
+      if (tools === 0) assert.equal(await read(`document.querySelector('.mini-content').textContent.trim()`), "暂无运行中的工具");
       await wait(`document.querySelector('.mini-content').getAnimations().every(animation => animation.playState !== 'running')`);
       const geometry = await read(`({ content:document.querySelector('.mini-content').getBoundingClientRect().toJSON(), shell:document.querySelector('.mini-shell').getBoundingClientRect().toJSON() })`) as { content: DOMRect; shell: DOMRect };
       assert.ok(Math.abs(geometry.content.bottom - geometry.shell.bottom) <= 1, JSON.stringify(geometry));
     });
   }
   await runTest("mini header buttons have no tooltip containers and retain keyboard order and Escape", async () => {
-    assert.deepEqual(await read(`Array.from(document.querySelectorAll('.mini-header button'), button => button.getAttribute('aria-label'))`), ["打开主窗口", "保持展开", "关闭窗口"]);
+    assert.deepEqual(await read(`Array.from(document.querySelectorAll('.mini-header button'), button => button.getAttribute('aria-label'))`), ["工具 · 下一页", "保持展开", "打开主窗口", "关闭窗口"]);
     assert.equal(await read(`Boolean(document.querySelector('[aria-haspopup="menu"],[role="menu"]'))`), false);
     await read(`document.querySelector('.mini-shell').focus()`);
-    for (const label of ["打开主窗口", "保持展开", "关闭窗口"]) {
+    for (const label of ["工具 · 下一页", "保持展开", "打开主窗口", "关闭窗口"]) {
       await key("Tab");
       await wait(`document.activeElement?.getAttribute('aria-label') === ${JSON.stringify(label)}`);
       assert.equal(await read(`document.activeElement.matches(':focus-visible')`), true);
@@ -433,18 +438,18 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
     await wait(`document.querySelector('[aria-label="保持展开"]').getAttribute('aria-pressed') === 'true'`);
     await key("Escape");
     assert.equal(await read(`document.querySelector('.mini-shell').dataset.expanded`), "true");
-    const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniEdge", "floating");
+    const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniPage", "tools"); url.searchParams.set("miniEdge", "floating");
     await client.command("Page.navigate", { url: url.href }, sessionId);
     await wait(`Boolean(document.querySelector('.mini-tools')) && document.querySelector('.mini-shell').dataset.edge === 'floating'`);
     await key("Escape");
     assert.equal(await read(`document.querySelector('.mini-shell').dataset.expanded`), "true");
-    assert.equal(await read(`Array.from(document.querySelectorAll('.mini-shell button')).filter(button => !button.closest('[inert]')).length`), 3);
+    assert.equal(await read(`Array.from(document.querySelectorAll('.mini-shell button')).filter(button => !button.closest('[inert]')).length`), 4);
     assert.equal(await read(`globalThis.__PATINA_INVOKED_COMMANDS.some(({command})=>command.startsWith('cmd_')&&!command.startsWith('cmd_get_')&&command!=='cmd_mini_window_action')`), false);
   });
   await runTest("mini accepts current native revisions and ignores late old window events", async () => {
-    await read(`globalThis.__PATINA_EMIT_TAURI_EVENT('mini-window-state', {epoch:2,revision:200,expanded:true,suppressed:false,edge:'left',held:false,failed:false,transition_id:0,transitioning:false,visual:{width:304,height:240,anchor:0.5},focus_request:0})`);
+    await read(`globalThis.__PATINA_EMIT_TAURI_EVENT('mini-window-state', {epoch:2,revision:200,page:"tools",expanded:true,suppressed:false,edge:'left',held:false,failed:false,transition_id:0,transitioning:false,visual:{width:320,height:240,anchor:0.5},focus_request:0})`);
     await wait(`document.querySelector('.mini-shell').dataset.edge === 'left'`);
-    await read(`globalThis.__PATINA_EMIT_TAURI_EVENT('mini-window-state', {epoch:1,revision:999,expanded:false,suppressed:false,edge:'top',held:false,failed:false,transition_id:0,transitioning:false,visual:{width:304,height:240,anchor:0.5},focus_request:0})`);
+    await read(`globalThis.__PATINA_EMIT_TAURI_EVENT('mini-window-state', {epoch:1,revision:999,page:"tools",expanded:false,suppressed:false,edge:'top',held:false,failed:false,transition_id:0,transitioning:false,visual:{width:320,height:240,anchor:0.5},focus_request:0})`);
     await read(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
     assert.equal(await read(`document.querySelector('.mini-shell').dataset.edge`), "left");
     assert.equal(await read(`document.querySelector('.mini-shell').dataset.expanded`), "true");
@@ -452,14 +457,14 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
   for (const locale of ["zh-CN", "en-US", "es", "ru-RU"]) for (const theme of ["light", "dark"]) {
     await runTest(`mini tools remain usable in ${locale} ${theme}`, async () => {
       await read(`{const key='__time_tracker_smoke_settings';const value=JSON.parse(localStorage.getItem(key)||'{}');value.language=${JSON.stringify(locale)};value.theme_mode=${JSON.stringify(theme)};localStorage.setItem(key,JSON.stringify(value));}`);
-      const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniTools", "2");
+      const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniPage", "tools"); url.searchParams.set("miniTools", "2");
       await client.command("Page.navigate", { url: url.href }, sessionId);
       await wait(`Boolean(document.querySelector('.mini-tools')) && document.documentElement.dataset.theme === ${JSON.stringify(theme)}`);
       assert.equal(await read(`document.querySelectorAll('.mini-tool').length`), 2);
       assert.equal(await read(`Array.from(document.querySelectorAll('.mini-header button,.mini-tool')).every(node=>{const r=node.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.bottom<=innerHeight;})`), true);
     });
   }
-  await runTest("mini reveal stays blank until content is ready", async () => {
+  await runTest("mini reveal shows loading until content is ready", async () => {
     await key("Escape");
     await wait(`document.querySelector('.mini-shell').dataset.transitioning === 'false' && !document.querySelector('.mini-content')`);
     try {
@@ -468,8 +473,8 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
       }); document.querySelector('.mini-handle').click()`);
       await wait(`typeof globalThis.__miniResolvePresentation === 'function' && document.querySelector('.mini-shell').dataset.expanded === 'true'
         && document.querySelector('.mini-shell').dataset.transitioning === 'false'`);
-      assert.equal(await read(`document.querySelector('.mini-panel-body').innerText.trim()`), "");
-      assert.equal(await read(`Boolean(document.querySelector('.mini-content'))`), false);
+      assert.equal(await read(`Boolean(document.querySelector('.mini-content[role="status"]'))`), true);
+      assert.equal(await read(`Boolean(document.querySelector('.mini-tools'))`), false);
       await read(`globalThis.__miniResolvePresentation()`);
       await wait(`document.querySelectorAll('.mini-tool').length === 2`);
     } finally {
@@ -477,7 +482,7 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
     }
   });
   for (const command of ["cmd_get_mini_bootstrap_snapshot", "cmd_get_mini_presentation_snapshot"]) {
-    await runTest(`mini initial ${command} failure stays blank and recovers`, async () => {
+    await runTest(`mini initial ${command} failure offers retry and recovers`, async () => {
       const script = await client.command("Page.addScriptToEvaluateOnNewDocument", { source: `
         globalThis.__PATINA_COMPACT_FAILURES = [${JSON.stringify(command)}];
         const key = '__time_tracker_smoke_settings';
@@ -486,12 +491,11 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
         localStorage.setItem(key, JSON.stringify(settings));
       ` }, sessionId) as { identifier: string };
       try {
-        const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniTools", "2");
+        const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniPage", "tools"); url.searchParams.set("miniTools", "2");
         await client.command("Page.navigate", { url: url.href }, sessionId);
         await wait(`Boolean(document.querySelector('.mini-panel-body')) && globalThis.__PATINA_INVOKED_COMMANDS.some(entry => entry.command === ${JSON.stringify(command)})`);
         await read(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
-        assert.equal(await read(`document.querySelector('.mini-panel-body').innerText.trim()`), "");
-        assert.equal(await read(`Boolean(document.querySelector('.mini-content'))`), false);
+        assert.equal(await read(`Boolean(document.querySelector('.mini-content[role="alert"] button'))`), true);
         assert.equal(await read(`document.querySelector('.mini-tools')`), null, "tool content must wait for the first confirmed snapshot");
         await read(`globalThis.__PATINA_COMPACT_FAILURES=[];globalThis.__PATINA_EMIT_TAURI_EVENT('app-settings-changed',{})`);
         await wait(`Boolean(document.querySelector('.mini-tools')) && document.querySelector('.mini-shell')?.dataset.tone === 'tracking'`);
@@ -509,6 +513,9 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
     const settleRefresh = () => read(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
     await read(`globalThis.__PATINA_COMPACT_FAILURES=['cmd_get_mini_presentation_snapshot'];globalThis.__PATINA_EMIT_TAURI_EVENT('app-settings-changed',{})`);
     await settleRefresh();
+    const frozenTime = await read(`document.querySelector('.mini-tool-time').textContent`);
+    await read(`new Promise(resolve => setTimeout(resolve, 1150))`);
+    assert.equal(await read(`document.querySelector('.mini-tool-time').textContent`), frozenTime, "unavailable tool snapshots must freeze the last displayed reading");
     assert.deepEqual(await content(), before);
     assert.equal(await read(`Boolean(document.querySelector('.mini-tools'))`), true);
     await read(`globalThis.__PATINA_COMPACT_FAILURES=['cmd_get_mini_bootstrap_snapshot'];globalThis.__PATINA_EMIT_TAURI_EVENT('app-settings-changed',{})`);

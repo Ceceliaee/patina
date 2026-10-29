@@ -45,6 +45,47 @@ public static class MiniFrameRead {
 }
 
 export async function verifyMiniContentRuntime(client: CdpConnection, miniClient: CdpConnection) {
+  const invokeMini = (command: string, payload = {}) => evaluate(miniClient,
+    `window.__TAURI_INTERNALS__.invoke(${JSON.stringify(command)},${JSON.stringify(payload)})`);
+  const pageState = () => invokeMini("cmd_get_mini_window_snapshot") as Promise<{ epoch: number; page: string; held: boolean }>;
+  const original = await pageState();
+  const originalPage = original.page;
+  // Cross-window reads must not depend on where the real desktop pointer happens to be.
+  await invokeMini("cmd_mini_window_action", { epoch: original.epoch, action: { kind: "hold", held: true } });
+  const selectPage = async (page: string) => {
+    for (let index = 0; index < 3; index++) {
+      const state = await pageState();
+      if (state.page === page) return;
+      await invokeMini("cmd_mini_window_action", { epoch: state.epoch, action: { kind: "cycle_page", forward: true } });
+    }
+    assert.equal((await pageState()).page, page);
+  };
+  await selectPage("today");
+  for (const mode of ["total", "category"]) {
+    await evaluate(client, `window.__TAURI_INTERNALS__.invoke('cmd_commit_app_settings', {mutations:[{key:'hourly_activity_chart_mode',value:'${mode}'}]})`);
+    await waitFor("Mini follows the saved hourly chart mode", () => evaluate(miniClient,
+      `Boolean(document.querySelector('[data-mini-page="today"][data-display-mode="${mode}"]'))`), 10_000);
+  }
+  await selectPage("activity");
+  for (const mode of ["category", "app"]) {
+    await evaluate(client, `window.__TAURI_INTERNALS__.invoke('cmd_commit_app_settings', {mutations:[{key:'history_timeline_mode',value:'${mode}'}]})`);
+    await waitFor("Mini follows the saved timeline mode", () => evaluate(miniClient,
+      `Boolean(document.querySelector('[data-mini-page="activity"][data-display-mode="${mode}"]'))`), 10_000);
+  }
+  await miniClient.command("Page.reload", { ignoreCache: true });
+  await waitFor("Mini page survives WebView restart", () => evaluate(miniClient,
+    `Boolean(document.querySelector('[data-mini-page="activity"]'))`), 10_000);
+  for (const kind of ["today", "activity"]) {
+    const snapshot = await invokeMini("cmd_get_mini_activity_snapshot", { kind }) as { kind: string; sampled_at_ms: number; bootstrap: unknown };
+    assert.equal(snapshot.kind, kind);
+    assert.ok(Number.isSafeInteger(snapshot.sampled_at_ms));
+    assert.ok(snapshot.bootstrap);
+  }
+  await assert.rejects(() => evaluate(client, `window.__TAURI_INTERNALS__.invoke('cmd_get_mini_activity_snapshot',{kind:'today'})`));
+  await assert.rejects(() => invokeMini("cmd_commit_app_settings", { mutations: [{ key: "history_timeline_mode", value: "app" }] }));
+  await assert.rejects(() => invokeMini("cmd_migrate_history_timeline_mode", { legacyMode: "app" }));
+  await selectPage(originalPage);
+  console.log("PATINA_MINI_PAGES_RUNTIME_REPORT", JSON.stringify({ modesSync: true, restoredPage: true, readOnlyBoundary: true }));
   const appearanceRead = `({
     contrast: document.documentElement.dataset.themeContrast,
     scheme: document.documentElement.dataset.colorScheme,
@@ -155,13 +196,18 @@ export async function verifyMiniContentRuntime(client: CdpConnection, miniClient
     `window.__TAURI_INTERNALS__.invoke('cmd_get_resource_diagnostics')`) as { process_id: number };
   assertMiniHasNoNativeCaption(processId);
   for (let attempt = 0; attempt < 2; attempt++) {
+    await evaluate(client, `window.__TAURI_INTERNALS__.invoke('cmd_show_main_window')`);
+    await client.command("Page.bringToFront");
+    await waitFor("main window owns the explicit Mini request", () => evaluate(client,
+      `window.__TAURI_INTERNALS__.invoke('plugin:window|is_focused',{label:'main'})`), 5_000);
     await evaluate(client, `window.__TAURI_INTERNALS__.invoke('cmd_open_mini_window')`);
     await waitFor("explicit mini open settles with keyboard focus", () => evaluate(miniClient, `(() => {
       const shell = document.querySelector('.mini-shell');
       return shell?.dataset.expanded === 'true' && shell.dataset.transitioning === 'false'
-        && document.activeElement === shell && Boolean(document.querySelector('.mini-tools'));
+        && document.activeElement === shell && Boolean(document.querySelector('.mini-content'));
     })()`), 5_000);
-    assert.equal(await evaluate(client, `window.__TAURI_INTERNALS__.invoke('plugin:window|is_focused',{label:'mini'})`), true);
+    await waitFor("native Mini activation follows the explicit open", () => evaluate(client,
+      `window.__TAURI_INTERNALS__.invoke('plugin:window|is_focused',{label:'mini'})`), 5_000);
     assertMiniHasNoNativeCaption(processId);
     await miniClient.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape" });
     await miniClient.command("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape" });

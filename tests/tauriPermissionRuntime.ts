@@ -33,7 +33,7 @@ export async function run(session: RuntimeSession) {
     await evaluate(client, 'window.__TAURI_INTERNALS__.invoke("cmd_open_mini_window")');
     let mini = await waitFor("permission mini WebView", () => connectMini(devtoolsPort), 20_000);
     try {
-      await waitFor("permission mini ready", () => evaluate(mini, "Boolean(document.querySelector('.mini-tools'))"));
+      await waitFor("permission mini ready", () => evaluate(mini, "Boolean(document.querySelector('[data-mini-page],.mini-tools'))"));
       await verifyMiniContentRuntime(client, mini);
       for (const command of ["cmd_commit_app_settings", "cmd_get_setting_rows", "cmd_install_update", "cmd_restore_backup", "cmd_open_mini_window"]) {
         const denied = await evaluate(mini, `window.__TAURI_INTERNALS__.invoke(${JSON.stringify(command)},{}).then(()=>null,e=>String(e))`);
@@ -45,7 +45,7 @@ export async function run(session: RuntimeSession) {
         `window.__TAURI_INTERNALS__.invoke('cmd_get_resource_diagnostics').then(value => !value.webview_window_labels.includes('mini') && value.mini_window.workers === 0)`));
       await evaluate(client, 'window.__TAURI_INTERNALS__.invoke("cmd_open_mini_window")');
       mini = await waitFor("recreated Mini WebView", () => connectMini(devtoolsPort), 20_000);
-      await waitFor("recreated Mini content ready", () => evaluate(mini, "Boolean(document.querySelector('.mini-tools'))"));
+      await waitFor("recreated Mini content ready", () => evaluate(mini, "Boolean(document.querySelector('[data-mini-page],.mini-tools'))"));
       const { process_id: processId } = await evaluate(client,
         `window.__TAURI_INTERNALS__.invoke('cmd_get_resource_diagnostics')`) as { process_id: number };
       assertMiniHasNoNativeCaption(processId);

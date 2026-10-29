@@ -121,7 +121,7 @@ function tauriStubFor(path: string) {
 
         const miniParams = new URL(globalThis.location.href).searchParams;
         const isMiniSmoke = miniParams.get("__patinaWindow") === "mini";
-        if (isMiniSmoke && ["cmd_get_mini_bootstrap_snapshot", "cmd_get_mini_presentation_snapshot"].includes(command)
+        if (isMiniSmoke && ["cmd_get_mini_bootstrap_snapshot", "cmd_get_mini_presentation_snapshot", "cmd_get_mini_activity_snapshot"].includes(command)
           && globalThis.__PATINA_COMPACT_FAILURES?.includes(command)) throw new Error("forced compact snapshot failure");
         if (command === "cmd_open_mini_window" && globalThis.__PATINA_MINI_OPEN_HOOK) {
           return globalThis.__PATINA_MINI_OPEN_HOOK();
@@ -139,7 +139,15 @@ function tauriStubFor(path: string) {
               language: settings.language ?? null,
               color_scheme_light: settings.color_scheme_light ?? null,
               color_scheme_dark: settings.color_scheme_dark ?? null,
+              hourly_activity_chart_mode: settings.hourly_activity_chart_mode ?? null,
+              history_timeline_mode: settings.history_timeline_mode ?? null,
+              refresh_interval_secs: settings.refresh_interval_secs ?? null,
+              timeline_merge_gap_secs: settings.timeline_merge_gap_secs ?? null,
+              dynamic_effects: settings.dynamic_effects ?? null,
+              web_activity_available: settings.web_activity_enabled === "1" && Boolean(settings.web_activity_token),
             },
+            category_settings: Object.entries(settings).filter(([key]) => key.startsWith("__category_") || key.startsWith("__deleted_category::"))
+              .map(([key, value]) => ({ key, value: String(value) })),
             app_links: Object.entries(settings).filter(([key]) => key.startsWith("__app_link::"))
               .map(([key, value]) => ({ key, value })),
             app_overrides: Object.entries(settings)
@@ -149,6 +157,12 @@ function tauriStubFor(path: string) {
           };
         }
 
+        if (isMiniSmoke && command === "cmd_get_mini_activity_snapshot") {
+          const { miniActivityFixture } = await import("/tests/uiBrowserSmoke/miniActivityFixture.ts");
+          const bootstrap = await invoke("cmd_get_mini_bootstrap_snapshot");
+          const snapshot = miniActivityFixture(payload.kind, bootstrap);
+          return await globalThis.__PATINA_MINI_ACTIVITY_HOOK?.(snapshot) ?? snapshot;
+        }
         if (isMiniSmoke && command === "cmd_get_mini_presentation_snapshot") {
           const toolCount = Math.max(0, Math.min(2, Number(miniParams.get("miniTools") ?? 0)));
           const tools = [
@@ -158,6 +172,7 @@ function tauriStubFor(path: string) {
               value_ms: 1_104_000,
               counts_down: false,
               visible_until_ms: null,
+              total_ms: null, phase: null,
             },
             {
               kind: "pomodoro",
@@ -165,6 +180,7 @@ function tauriStubFor(path: string) {
               value_ms: 271_000,
               counts_down: true,
               visible_until_ms: null,
+              total_ms: 1_500_000, phase: "focus",
             },
           ].slice(0, toolCount);
           const override = globalThis.__PATINA_MINI_TRACKING_OVERRIDE;
@@ -794,6 +810,12 @@ function tauriStubFor(path: string) {
               lastError: null,
             },
           };
+        }
+        if (command === "cmd_migrate_history_timeline_mode") {
+          const settings = loadStoredSettings();
+          settings.history_timeline_mode ??= payload.legacyMode;
+          storeSettings(settings);
+          return settings.history_timeline_mode;
         }
         if (command === "cmd_commit_app_settings") {
           if (globalThis.__PATINA_REJECT_TRAY_SAVE && (payload.mutations ?? []).some(m => m.key === 'show_tray_icon')) {

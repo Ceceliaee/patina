@@ -188,12 +188,19 @@ public static class PatinaDialogRead {
   }, 15_000);
   assert.match(dialog, /Patina/);
   assert.match(dialog, /窗口多次恢复失败，已停止自动重试/);
-  const targets = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(1_000) })
-    .then(response => response.json() as Promise<Array<{ webSocketDebuggerUrl?: string }>>)
-    .catch((error: unknown) => {
+  const targets = await waitFor("exhausted recovery removes its CDP target", async () => {
+    // Browser teardown may briefly leave an endpoint that accepts but cannot answer.
+    // Retry that observation; only a real empty listing or refused connection proves removal.
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(1_000) });
+      const listed = await response.json() as Array<{ webSocketDebuggerUrl?: string }>;
+      return listed.some(target => target.webSocketDebuggerUrl === client.url) ? null : listed;
+    } catch (error) {
       if (error instanceof TypeError && (error.cause as { code?: string })?.code === "ECONNREFUSED") return [];
+      if (error instanceof DOMException && error.name === "TimeoutError") return null;
       throw error;
-    });
+    }
+  }, 10_000);
   assert.ok(!targets.some(target => target.webSocketDebuggerUrl === client.url), "broken renderer must be removed");
   assert.doesNotMatch(readLogs().slice(logStart), /event=creation-started/, "exhausted recovery must not rebuild again");
   console.log("PATINA_WEBVIEW_RECOVERY_LIMIT_REPORT", JSON.stringify({ nativeDialog: true, dialogCount: 1, committedBefore: before, committedAfter: progressed }));

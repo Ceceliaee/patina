@@ -62,7 +62,7 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
     await waitFor("main mini entry ready", () => mainRead(`Boolean(document.querySelector('[data-titlebar-mini-entry]:not(:disabled)'))`), 15_000);
     await mainRead(`document.querySelector('[data-titlebar-mini-entry]').click()`);
     mini = await waitFor("mini WebView target", () => connectMini(port), 20_000);
-    await waitFor("mini content ready", () => evaluate(mini!, `Boolean(document.querySelector('.mini-tools'))`), 15_000);
+    await waitFor("mini content ready", () => evaluate(mini!, `Boolean(document.querySelector('[data-mini-page],.mini-tools'))`), 15_000);
   };
   const state = async () => parseMiniSnapshot(await evaluate(mini!, `window.__TAURI_INTERNALS__.invoke('cmd_get_mini_window_snapshot')`));
   const isCollapsed = async () => { const value = await state(); return !value.expanded && !value.transitioning; };
@@ -100,8 +100,12 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
       const stableSettings = "SELECT key,value FROM settings WHERE key IN ('language','theme_mode','close_behavior','show_tray_icon') ORDER BY key";
       const settingsBefore = database.prepare(stableSettings).all();
       database.exec("CREATE TRIGGER mini_preferences_failure BEFORE UPDATE ON settings WHEN NEW.key='mini_window_preferences' BEGIN SELECT RAISE(ABORT,'mini save failure'); END");
-      try { await assert.rejects(() => action({ kind: "hold", held: true }), /mini save failure/); }
-      finally { database.exec("DROP TRIGGER mini_preferences_failure"); }
+      try {
+        await assert.rejects(() => action({ kind: "hold", held: true }), /mini save failure/);
+        const savedPage = (await state()).page;
+        await assert.rejects(() => action({ kind: "cycle_page", forward: true }), /mini save failure/);
+        assert.equal((await state()).page, savedPage, "failed page persistence must restore the last confirmed page");
+      } finally { database.exec("DROP TRIGGER mini_preferences_failure"); }
       assert.equal((await state()).held, false, "failed persistence must restore applied preference");
       assert.equal((await state()).failed, true, "save failure must be visible to the mini UI");
       assert.deepEqual(database.prepare(stableSettings).all(), settingsBefore);
@@ -113,7 +117,7 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
     assert.notEqual(original.foreground, original.mini, "native input target must really be foreground");
     await probe.request("move", original.x + 400, original.y + 400);
     await waitFor("native leave collapse", isCollapsed, 3_000);
-    const handle = await probe.request("sample");
+    let handle = await probe.request("sample");
     assert.deepEqual(handle.canvas, original.canvas, "hover collapse must preserve the WebView canvas position and size");
     assert.ok(handle.width < original.width && handle.height < original.height, "collapsed input region must shrink");
     assert.equal((await probe.request("sample", original.x + 50, original.y + 100)).hitMini, false, "former panel area must pass input to the desktop");
@@ -411,7 +415,7 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
       if (!candidate) return null;
       try {
         const value = parseMiniSnapshot(await evaluate(candidate, `window.__TAURI_INTERNALS__.invoke('cmd_get_mini_window_snapshot')`));
-        if (value.epoch > oldEpoch && await evaluate(candidate, `Boolean(document.querySelector('.mini-tools'))`)) return candidate;
+        if (value.epoch > oldEpoch && await evaluate(candidate, `Boolean(document.querySelector('.mini-content'))`)) return candidate;
       } catch { /* Native recovery may be between renderers. */ }
       candidate.close(); return null;
     }, 20_000);
@@ -420,6 +424,11 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
     await probe.request("focus");
     await probe.request("move", handle.x + 400, handle.y + 400);
     await waitFor("recovered mini returns to its handle", isCollapsed, 3_000);
+    // The drag workload changed placement and recovery replaced the HWND.
+    // Measure hover against its current input region, not the initial position.
+    handle = await probe.request("sample");
+    assert.equal((await probe.request("sample", handle.x + Math.floor(handle.width / 2), handle.y + 1)).hitMini,
+      true, "warm hover must target the recovered native handle");
     console.log("PASS real mini renderer crash recovery preserves preference");
     const hoverForeground = (await probe.request("sample")).foreground;
     const hoverResourcesBefore = await diagnostics();
@@ -430,7 +439,7 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
       const started = performance.now();
       await probe.request("move", handle.x + Math.floor(handle.width / 2), handle.y + 1);
       try {
-        await waitFor("warm content frame", () => evaluate(mini!, `Boolean(document.querySelector('.mini-content .mini-tools'))`), 2_000);
+        await waitFor("warm content frame", () => evaluate(mini!, `Boolean(document.querySelector('[data-mini-page],.mini-content .mini-tools'))`), 2_000);
       } catch (error) {
         throw new Error(`Mini reveal observation ${JSON.stringify({ cycle: i, handle, native: await probe.request("sample"), snapshot: await state(), dom: await evaluate(mini!, "document.body.innerText") })}`, { cause: error });
       }
@@ -495,7 +504,13 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
     const heldTicks = warmBaseline.mini_window.detector_ticks;
     await delay(500);
     assert.equal((await diagnostics()).mini_window.detector_ticks, heldTicks, "held mini must stop proximity detection");
-    for (let i = 0; i < counts.reopen; i++) { await close(); await open(); assert.equal((await state()).held, true, "mini hold preference must survive complete window destruction"); }
+    for (let i = 0; i < counts.reopen; i++) {
+      await action({ kind: "cycle_page", forward: true });
+      const expectedPage = (await state()).page;
+      await close(); await open();
+      assert.equal((await state()).held, true, "mini hold preference must survive complete window destruction");
+      assert.equal((await state()).page, expectedPage, "mini page must survive complete window destruction");
+    }
     const finalOpen = await diagnostics();
     assert.equal(finalOpen.webview_window_labels.length, warmBaseline.webview_window_labels.length);
     assert.equal(finalOpen.mini_window.workers, 1);
@@ -524,8 +539,11 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
     const survivingTargets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json() as Array<{ type: string }>;
     assert.equal(survivingTargets.filter(target => target.type === "page").length, 1, "only the mini WebView may remain");
     assert.equal((await state()).epoch, miniEpochBeforeRelease);
-    assert.equal(await evaluate(mini!, `Boolean(document.querySelector('.mini-tools')) && !document.querySelector('.qp-app-frame')`), true);
+    assert.equal(await evaluate(mini!, `Boolean(document.querySelector('.mini-content')) && !document.querySelector('.qp-app-frame')`), true);
     assert.ok(await evaluate(mini!, `window.__TAURI_INTERNALS__.invoke('cmd_get_mini_presentation_snapshot')`), "mini must read current status and tools without main");
+    for (const kind of ["today", "activity"]) {
+      assert.ok(await evaluate(mini!, `window.__TAURI_INTERNALS__.invoke('cmd_get_mini_activity_snapshot',{kind:'${kind}'})`), "Mini statistics must remain readable without main");
+    }
     const miniOnlyTree = resourceCycles ? processTree(baseline.process_id) : null;
     await evaluate(mini!, `document.querySelector('button[aria-label="打开主窗口"]').click()`);
     main = await waitFor("mini recreates main on explicit request", () => connectMini(port, "main"), 15_000);
