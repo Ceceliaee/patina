@@ -54,7 +54,7 @@ html[data-window-label="mini"] #root {
 .mini-shell[data-expanded="true"] .mini-panel {
   top: 0;
   left: 0;
-  width: var(--mini-panel-width, 304px);
+  width: var(--mini-panel-width, 320px);
   height: var(--mini-panel-height, 240px);
   background: var(--qp-bg-canvas);
 }
@@ -66,7 +66,7 @@ html[data-window-label="mini"] #root {
 .mini-panel-body {
   display: flex;
   flex-direction: column;
-  width: calc(var(--mini-panel-width, 304px) - 2px);
+  width: calc(var(--mini-panel-width, 320px) - 2px);
   height: calc(var(--mini-panel-height, 240px) - 2px);
   opacity: 0;
 }
@@ -75,25 +75,63 @@ html[data-window-label="mini"] #root {
 .mini-shell[data-expanded="false"][data-transitioning="false"] .mini-panel-body { visibility: hidden; }
 
 .mini-header {
-  display: flex;
-  flex: 0 0 34px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  box-sizing: border-box;
+  flex: 0 0 32px;
   align-items: center;
-  gap: 2px;
-  padding: 0 6px 0 10px;
+  padding: 0 8px;
   border-bottom: 1px solid var(--qp-border-subtle);
   background: var(--qp-bg-app);
 }
 
-.mini-header .qp-icon-action { width: 26px; height: 26px; }
+.mini-header .qp-icon-action { width: 24px; height: 24px; flex: 0 0 24px; min-width: 24px; }
+.mini-window-actions { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .mini-header [aria-pressed="true"] .lucide-pin { fill: currentColor; }
 .mini-drag-region { display: flex; flex: 1; align-items: center; align-self: stretch; min-width: 0; user-select: none; cursor: grab; touch-action: none; }
 .mini-drag-region > svg { color: var(--mini-status-color); }
-.mini-content { flex: 1; min-height: 0; overflow: auto; padding: 10px 14px 4px; }
-.mini-tools { display: flex; flex-direction: column; gap: 5px; }
-.mini-tool { display: flex; align-items: center; gap: 6px; min-height: 22px; color: var(--qp-text-secondary); }
-.mini-tool-time { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--qp-text-primary); }
-.mini-tool-state { font-size: 10px; }
-.mini-shell button:focus-visible { outline: 2px solid var(--qp-accent-default); outline-offset: -2px; }
+.mini-content { position: relative; flex: 1; min-height: 0; overflow: hidden; padding: 10px 12px; }
+.mini-tools { display: flex; flex-direction: column; gap: 12px; }
+.mini-tool { display: flex; flex-direction: column; gap: 4px; color: var(--qp-text-secondary); }
+.mini-tool-heading { display: flex; align-items: center; gap: 6px; }
+.mini-tool-time { font-size: 24px; line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--qp-text-primary); }
+.mini-tool-state { margin-left: auto; }
+.mini-tool progress { display: block; width: 100%; height: 4px; border: 0; border-radius: var(--qp-radius-control); overflow: hidden; accent-color: var(--qp-accent-default); }
+.mini-tool progress::-webkit-progress-bar { background: var(--qp-bg-panel); }
+.mini-tool progress::-webkit-progress-value { background: var(--qp-accent-default); }
+.mini-empty { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: var(--qp-text-tertiary); }
+.mini-summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 20px; }
+.mini-duration { flex-shrink: 0; color: var(--qp-text-secondary); font-variant-numeric: tabular-nums; }
+.mini-activity-content { display: flex; flex-direction: column; }
+.mini-activity-content .mini-summary,
+.mini-activity-content .mini-category-bar,
+.mini-timeline { flex-shrink: 0; }
+.mini-hourly-chart { flex: 1; min-height: 0; margin: 8px 0; }
+.mini-category-bar { position: relative; display: flex; height: 24px; align-items: center; }
+.mini-category-track { position: absolute; inset: 7px 0; display: flex; overflow: hidden; border-radius: var(--qp-radius-control); pointer-events: none; }
+.mini-category-segment { height: 24px; border: 0; padding: 0; background: transparent; cursor: default; }
+.mini-category-track > :last-child, .mini-category-segment:last-child { flex-grow: 1; }
+.mini-detail { position: absolute; width: max-content; max-width: min(220px, calc(100% - 24px)); max-height: 130px; overflow-y: auto; z-index: 20; border-radius: var(--qp-radius-control); }
+.mini-detail .qp-chart-tooltip { min-width: 0; max-width: 100%; pointer-events: auto; }
+.mini-content .qp-chart-tooltip { padding: 6px 8px; }
+.mini-content .qp-chart-tooltip-list { gap: 2px; }
+.mini-content .qp-chart-tooltip-label { margin-bottom: 4px; }
+.mini-content .qp-chart-tooltip-name, .mini-content .qp-chart-tooltip-label { white-space: normal; overflow-wrap: anywhere; }
+.mini-empty-inline { position: absolute; top: 75px; width: calc(100% - 24px); text-align: center; color: var(--qp-text-tertiary); }
+.mini-timeline { margin-top: 8px; }
+.mini-timeline .qp-timeline-track { height: 24px; border: 0; border-radius: 0; background: transparent; }
+.mini-timeline .qp-timeline-track::before { content: none; }
+.mini-timeline-paint { position: absolute; inset: 6px 0; overflow: hidden; border-radius: var(--qp-radius-timeline-segment); background: var(--qp-chart-track); pointer-events: none; }
+.mini-timeline-paint > span { position: absolute; top: 0; height: 100%; }
+.mini-timeline-segment { position: absolute; top: 0; height: 100%; border: 0; padding: 0; background: transparent; cursor: default; }
+.mini-timeline .qp-timeline-axis { height: 18px; font-size: inherit; line-height: 18px; }
+.mini-timeline .qp-timeline-axis span { top: 0; }
+.mini-leaders { --qp-scrollbar-thumb-inset: 1px; flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; list-style: none; margin: 8px 0 0; padding: 0 8px 0 0; }
+.mini-leader { display: flex; align-items: center; gap: 6px; width: 100%; height: 32px; color: var(--qp-text-primary); }
+.mini-leader-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini-category-dot { flex: 0 0 5px; height: 5px; border-radius: 50%; }
+.mini-shell button:focus-visible,
+.mini-leaders:focus-visible { outline: 2px solid var(--qp-accent-default); outline-offset: -2px; }
 .mini-shell [inert]:focus-visible,
 .mini-shell [inert] :focus-visible { outline: none; }
 .mini-handle {
@@ -121,6 +159,10 @@ html[data-window-label="mini"] #root {
 .mini-shell[data-edge="right"] .mini-handle > span { width: 4px; height: 32px; }
 .mini-error { position: absolute; bottom: 5px; left: 5px; right: 5px; padding: 5px 8px; background: var(--qp-bg-panel); color: var(--qp-danger); font-size: 11px; }
 .app-titlebar-mini-error { position: absolute; top: 40px; right: 12px; z-index: 10; padding: 8px 12px; color: var(--qp-danger); background: var(--qp-bg-panel); border: 1px solid var(--qp-border-subtle); border-radius: var(--qp-radius-control); }
+
+@media (forced-colors: active) {
+  .mini-category-track, .mini-timeline-paint, .mini-category-dot { forced-color-adjust: none; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .mini-shell[data-transitioning="true"] .mini-panel,

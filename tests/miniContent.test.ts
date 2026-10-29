@@ -276,6 +276,7 @@ await runTest("parseMiniBootstrapSnapshot rejects incomplete native payloads", (
       language: "zh-CN",
       color_scheme_light: "default",
       color_scheme_dark: "default",
+      hourly_activity_chart_mode: "category", history_timeline_mode: "category", refresh_interval_secs: "5", timeline_merge_gap_secs: "0", dynamic_effects: "1", web_activity_available: false,
     },
     app_overrides: [{ key: "__app_override::editor.exe", value: 42 }],
   }), null);
@@ -289,7 +290,9 @@ await runTest("applyMiniBootstrapSnapshot restores only mini settings and app ov
       language: "en-US",
       color_scheme_light: "notion",
       color_scheme_dark: "nord",
+      hourly_activity_chart_mode: "category", history_timeline_mode: "category", refresh_interval_secs: "5", timeline_merge_gap_secs: "0", dynamic_effects: "1", web_activity_available: false,
     },
+    category_settings: [],
     app_links: [{ key: "__app_link::child.exe", value: "editor.exe" }],
     app_overrides: [
       {
@@ -332,6 +335,7 @@ await runTest("mini tool clocks remain second-accurate", () => {
         valueMs: 1_100_000,
         countsDown: false,
         visibleUntilMs: null,
+        totalMs: null, phase: null,
       },
       {
         kind: "pomodoro",
@@ -339,6 +343,7 @@ await runTest("mini tool clocks remain second-accurate", () => {
         valueMs: 275_000,
         countsDown: true,
         visibleUntilMs: null,
+        totalMs: null, phase: null,
       },
     ],
     sampledAtMs: 10_000,
@@ -362,6 +367,7 @@ await runTest("mini status parser enforces the two semantic tool slots", () => {
     value_ms: 1_000,
     counts_down: false,
     visible_until_ms: null,
+    total_ms: null, phase: null,
   };
   const pomodoro = {
     kind: "pomodoro",
@@ -369,6 +375,7 @@ await runTest("mini status parser enforces the two semantic tool slots", () => {
     value_ms: 2_000,
     counts_down: true,
     visible_until_ms: null,
+    total_ms: null, phase: null,
   };
   assert.ok(parseMiniStatusSnapshot({ ...base, tools: [timer, pomodoro] }));
   assert.ok(parseMiniStatusSnapshot({ ...base, tools: [pomodoro] }));

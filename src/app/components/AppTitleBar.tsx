@@ -101,7 +101,7 @@ export default function AppTitleBar({
           aria-label={UI_TEXT.accessibility.titleBar.minimize}
           onClick={() => runWindowAction(minimizeCurrentWindow, "minimize current window")}
         >
-          <Minus size={13} strokeWidth={2.1} />
+          <Minus size={14} strokeWidth={2.1} />
         </button>
         <button
           type="button"
@@ -110,9 +110,9 @@ export default function AppTitleBar({
           onClick={() => runWindowAction(toggleCurrentWindowMaximized, "toggle window maximize")}
         >
           {isMaximized ? (
-            <Minimize2 size={12} strokeWidth={2} />
+            <Minimize2 size={14} strokeWidth={2} />
           ) : (
-            <Maximize2 size={12} strokeWidth={2} />
+            <Maximize2 size={14} strokeWidth={2} />
           )}
         </button>
         <button
@@ -121,7 +121,7 @@ export default function AppTitleBar({
           aria-label={UI_TEXT.accessibility.titleBar.close}
           onClick={() => runWindowAction(closeCurrentWindow, "close current window")}
         >
-          <X size={13} strokeWidth={2.1} />
+          <X size={14} strokeWidth={2.1} />
         </button>
       </div>
     </header>

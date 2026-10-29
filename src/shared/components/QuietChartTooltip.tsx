@@ -8,6 +8,7 @@ export interface QuietChartTooltipItem {
 }
 
 interface Props {
+  className?: string;
   fixedBottom?: boolean;
   items: readonly QuietChartTooltipItem[];
   label?: ReactNode;
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export default function QuietChartTooltip({
+  className = "",
   fixedBottom = false,
   items,
   label,
@@ -26,7 +28,7 @@ export default function QuietChartTooltip({
 
   return (
     <div
-      className={`qp-chart-tooltip${fixedBottom ? " qp-chart-tooltip-fixed-bottom" : ""}`}
+      className={`qp-chart-tooltip${fixedBottom ? " qp-chart-tooltip-fixed-bottom" : ""} ${className}`}
       role="tooltip"
       style={style}
     >

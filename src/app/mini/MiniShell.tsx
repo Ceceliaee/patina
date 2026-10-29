@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
-import { AppWindow, Pin, SquareArrowOutUpRight, X } from "lucide-react";
+import { AppWindow, ArrowRightLeft, Pin, SquareArrowOutUpRight, X } from "lucide-react";
 import { LocaleProvider, useLocaleText } from "../../shared/i18n/index.ts";
 import { showMainWindow } from "../../platform/desktop/windowControlGateway.ts";
 import { useAppThemeMode } from "../hooks/useAppThemeMode.ts";
@@ -11,7 +11,8 @@ import { buildMiniViewModel } from "./miniViewModel.ts";
 
 export default function MiniShell() {
   const runtime = useMiniWindow();
-  const tracking = useMiniTracking(Boolean(runtime.snapshot && (runtime.snapshot.expanded || runtime.snapshot.transitioning) && !runtime.snapshot.suppressed));
+  const contentActive = Boolean(runtime.snapshot && (runtime.snapshot.expanded || runtime.snapshot.transitioning) && !runtime.snapshot.suppressed);
+  const tracking = useMiniTracking(contentActive, contentActive && runtime.snapshot?.page === "tools");
   useAppThemeMode(tracking.appSettings.themeMode, tracking.appSettings.colorSchemeLight, tracking.appSettings.colorSchemeDark);
   return <LocaleProvider locale={tracking.appSettings.language}>
     <MiniView runtime={runtime} tracking={tracking} />
@@ -79,30 +80,44 @@ function MiniView({ runtime, tracking }: {
     data-transitioning={snapshot?.transitioning ?? false}
     style={snapshot ? { "--mini-panel-width": `${snapshot.visual.width}px`, "--mini-panel-height": `${snapshot.visual.height}px`, "--mini-handle-anchor": snapshot.visual.anchor } as CSSProperties : undefined}
     aria-label={text.miniWindow.title}
-    onKeyDownCapture={(event) => {
+    onKeyDownCapture={() => {
       protect({ keyboard: true });
-      if (event.key === "Escape") {
+    }}
+    onKeyDown={(event) => {
+      if (event.key === "Escape" && !event.defaultPrevented) {
         event.preventDefault();
         void act({ kind: "collapse" });
       }
     }}
     onPointerDownCapture={(event) => protect({ keyboard: false, touch: event.pointerType === "touch" })}
+    onPointerUpCapture={(event) => {
+      if (event.pointerType === "touch") protect({ touch: false, keyboard: event.currentTarget.contains(document.activeElement) });
+    }}
+    onPointerCancelCapture={() => protect({ touch: false })}
     onPointerMoveCapture={(event) => { if (event.pointerType === "mouse" && protection.current.keyboard) protect({ keyboard: false }); }}
     onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) protect({ keyboard: false }); }}>
     <span className="mini-status sr-only" role="status">{tracking.miniStatus ? view.statusLabel : ""}</span>
     <div ref={panel} className="mini-panel" inert={!snapshot?.expanded || snapshot.suppressed} aria-hidden={!snapshot?.expanded || snapshot.suppressed}>
       <div className="mini-panel-body">
       <header className="mini-header">
-        <div className="mini-drag-region" {...dragProps}><AppWindow size={15} aria-hidden="true" /></div>
-        <button type="button" className="qp-icon-action qp-icon-action-neutral" aria-label={text.accessibility.miniWindow.openMainWindow}
-          onClick={() => { void showMainWindow().then(() => setMainFailed(false)).catch(() => setMainFailed(true)); }}><SquareArrowOutUpRight size={14} /></button>
+        <div className="mini-drag-region" {...dragProps}><AppWindow size={14} aria-hidden="true" /></div>
+        <div className="mini-window-actions">
+        <button type="button" className="mini-navigation qp-icon-action qp-icon-action-neutral"
+          aria-label={`${text.miniWindow[snapshot.page]} · ${text.miniWindow.nextPage}`}
+          onClick={() => { void act({ kind: "cycle_page", forward: true }); }}>
+          <ArrowRightLeft size={14} aria-hidden="true" />
+          <span className="mini-page-title sr-only" aria-live="polite">{text.miniWindow[snapshot.page]}</span>
+        </button>
         <button type="button" className="qp-icon-action qp-icon-action-neutral" aria-label={text.miniWindow.hold} aria-pressed={snapshot?.held ?? false}
           onClick={() => { void act({ kind: "hold", held: !snapshot?.held }); }}><Pin size={14} /></button>
+        <button type="button" className="qp-icon-action qp-icon-action-neutral" aria-label={text.accessibility.miniWindow.openMainWindow}
+          onClick={() => { void showMainWindow().then(() => setMainFailed(false)).catch(() => setMainFailed(true)); }}><SquareArrowOutUpRight size={14} /></button>
         <button type="button" className="qp-icon-action app-titlebar-close" data-mini-close aria-label={text.accessibility.titleBar.close}
-          onClick={() => { void act({ kind: "close" }); }}><X size={15} /></button>
+          onClick={() => { void act({ kind: "close" }); }}><X size={14} /></button>
+        </div>
       </header>
-      {snapshot && (snapshot.expanded || snapshot.transitioning) && !snapshot.suppressed && tracking.presentationReady
-        && <MiniContent tracking={tracking} />}
+      {snapshot && (snapshot.expanded || snapshot.transitioning) && !snapshot.suppressed
+        && <MiniContent key={snapshot.page} page={snapshot.page} tracking={tracking} />}
       </div>
     </div>
     <button ref={handle} type="button" className="mini-handle" inert={snapshot?.expanded ?? false} aria-hidden={snapshot?.expanded ?? false} aria-label={text.miniWindow.open} {...dragProps}

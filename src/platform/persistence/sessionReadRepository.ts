@@ -148,8 +148,24 @@ async function loadHistoryRange(startMs: number, endMs: number, includeTitleSamp
     samples.push(mapRawTitleSample(sample));
     samplesBySessionId.set(sample.session_id, samples);
   }
-  return resolveEffectiveHistoryRows(result.sessions, now).map((row) =>
-    mapRawHistorySession(row, samplesBySessionId.get(row.id) ?? []));
+  return parseHistoryRangeRows(result.sessions, now).map((row) => ({ ...row,
+    titleSampleDetails: samplesBySessionId.get(row.id) ?? [],
+  }));
+}
+
+export function parseHistoryRangeRows(value: unknown, now: number): HistorySession[] {
+  if (!Array.isArray(value) || !value.every((row: unknown) => {
+    if (!row || typeof row !== "object") return false;
+    const record = row as Record<string, unknown>;
+      return Number.isSafeInteger(record.id) && typeof record.origin === "string" && ["native", "import_exact"].includes(record.origin)
+      && typeof record.app_name === "string" && typeof record.exe_name === "string"
+      && typeof record.window_title === "string" && Number.isSafeInteger(record.start_time)
+        && (record.end_time === null || (Number.isSafeInteger(record.end_time) && Number(record.end_time) >= Number(record.start_time)))
+        && (record.duration === null || (typeof record.duration === "number" && Number.isFinite(record.duration) && record.duration >= 0))
+      && (record.continuity_group_start_time === null || Number.isSafeInteger(record.continuity_group_start_time));
+  })) throw new Error("Invalid history range rows");
+  return resolveEffectiveHistoryRows(value as RawHistorySessionRow[], now).map((row) =>
+    mapRawHistorySession(row));
 }
 
 function resolveEffectiveHistoryRows(

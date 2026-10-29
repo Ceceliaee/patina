@@ -85,7 +85,11 @@ export async function loadWebLinksOverrides(): Promise<Record<string, WebDomainO
 }
 
 export async function loadWebGroupedRange(startMs: number, endMs: number, nowMs = Date.now()): Promise<{ segments: WebActivitySegment[]; overrides: Record<string, WebDomainOverride> }> {
-  const snapshot = parseWebLinksSnapshot(await invokeWithCommandError("cmd_get_web_links", { startMs, endMs, nowMs }));
+  return parseWebGroupedRange(await invokeWithCommandError("cmd_get_web_links", { startMs, endMs, nowMs }), nowMs);
+}
+
+export function parseWebGroupedRange(value: unknown, nowMs: number): { segments: WebActivitySegment[]; overrides: Record<string, WebDomainOverride> } {
+  const snapshot = parseWebLinksSnapshot(value);
   if (!Array.isArray(snapshot.segments) || !snapshot.segments.every(segment => isPlainRecord(segment)
     && Number.isSafeInteger(segment.id) && typeof segment.normalizedDomain === "string"
     && typeof segment.domain === "string" && typeof segment.browserClientId === "string"

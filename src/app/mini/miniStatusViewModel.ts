@@ -7,6 +7,8 @@ interface MiniToolSlotViewModel {
   kind: MiniToolProjection["kind"];
   state: MiniToolProjection["state"];
   timeText: string;
+  phase: MiniToolProjection["phase"];
+  progress: number | null;
 }
 
 interface MiniStatusViewModel {
@@ -62,6 +64,10 @@ export function buildMiniStatusViewModel(
       .map((tool) => ({
         kind: tool.kind,
         state: tool.state,
+        phase: tool.phase,
+        progress: tool.countsDown && tool.totalMs ? Math.min(1, Math.max(0, 1 - resolveLiveValue(
+          tool.valueMs, elapsedSinceSnapshotMs, tool.state === "running", true,
+        ) / tool.totalMs)) : null,
         timeText: formatMiniToolDuration(resolveLiveValue(
           tool.valueMs,
           elapsedSinceSnapshotMs,

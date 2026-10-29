@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AppSettings } from "../../shared/settings/appSettings.ts";
 import { normalizeSettingsRecord } from "../../shared/settings/appSettingsNormalization.ts";
 import { isFiniteNumber } from "../../shared/lib/runtimeTypeGuards.ts";
+import { effectiveActivityTimelineMode, parseActivityTimelineMode, type ActivityTimelineMode } from "../../shared/settings/activityDisplaySettings.ts";
 import {
   parseTrackingStatusSnapshot,
   parseTrackingWindowSnapshot,
@@ -17,6 +18,12 @@ interface RawMiniBootstrapSettings {
   language: string | null;
   color_scheme_light: string | null;
   color_scheme_dark: string | null;
+  hourly_activity_chart_mode: string | null;
+  history_timeline_mode: string | null;
+  refresh_interval_secs: string | null;
+  timeline_merge_gap_secs: string | null;
+  dynamic_effects: string | null;
+  web_activity_available: boolean;
 }
 
 interface RawMiniAppOverrideRow {
@@ -28,6 +35,7 @@ interface RawMiniBootstrapSnapshot {
   settings: RawMiniBootstrapSettings;
   app_overrides: RawMiniAppOverrideRow[];
   app_links: RawMiniAppOverrideRow[];
+  category_settings: RawMiniAppOverrideRow[];
 }
 
 interface RawMiniToolProjection {
@@ -36,6 +44,8 @@ interface RawMiniToolProjection {
   value_ms: number;
   counts_down: boolean;
   visible_until_ms: number | null;
+  total_ms: number | null;
+  phase: "focus" | "short_break" | "long_break" | null;
 }
 
 interface RawMiniStatusSnapshot {
@@ -60,6 +70,8 @@ export interface MiniBootstrapSnapshot {
   settings: AppSettings;
   appOverrides: MiniAppOverrideRow[];
   appLinks: MiniAppOverrideRow[];
+  categorySettings: MiniAppOverrideRow[];
+  timelineMode: ActivityTimelineMode;
 }
 
 export interface MiniToolProjection {
@@ -68,6 +80,8 @@ export interface MiniToolProjection {
   valueMs: number;
   countsDown: boolean;
   visibleUntilMs: number | null;
+  totalMs: number | null;
+  phase: "focus" | "short_break" | "long_break" | null;
 }
 
 export interface MiniStatusSnapshot {
@@ -97,7 +111,10 @@ function isRawMiniBootstrapSettings(value: unknown): value is RawMiniBootstrapSe
     && isOptionalString(record.theme_mode)
     && isOptionalString(record.language)
     && isOptionalString(record.color_scheme_light)
-    && isOptionalString(record.color_scheme_dark);
+    && isOptionalString(record.color_scheme_dark)
+    && [record.hourly_activity_chart_mode, record.history_timeline_mode, record.refresh_interval_secs,
+      record.timeline_merge_gap_secs, record.dynamic_effects].every(isOptionalString)
+    && typeof record.web_activity_available === "boolean";
 }
 
 function isRawMiniAppOverrideRow(value: unknown): value is RawMiniAppOverrideRow {
@@ -119,7 +136,9 @@ function isRawMiniBootstrapSnapshot(value: unknown): value is RawMiniBootstrapSn
     && Array.isArray(record.app_overrides)
     && record.app_overrides.every(isRawMiniAppOverrideRow)
     && Array.isArray(record.app_links)
-    && record.app_links.every(isRawMiniAppOverrideRow);
+    && record.app_links.every(isRawMiniAppOverrideRow)
+    && Array.isArray(record.category_settings)
+    && record.category_settings.every(isRawMiniAppOverrideRow);
 }
 
 export function parseMiniBootstrapSnapshot(value: unknown): MiniBootstrapSnapshot | null {
@@ -134,7 +153,13 @@ export function parseMiniBootstrapSnapshot(value: unknown): MiniBootstrapSnapsho
       language: value.settings.language ?? undefined,
       color_scheme_light: value.settings.color_scheme_light ?? undefined,
       color_scheme_dark: value.settings.color_scheme_dark ?? undefined,
+      hourly_activity_chart_mode: value.settings.hourly_activity_chart_mode ?? undefined,
+      refresh_interval_secs: value.settings.refresh_interval_secs ?? undefined,
+      timeline_merge_gap_secs: value.settings.timeline_merge_gap_secs ?? undefined,
+      dynamic_effects: value.settings.dynamic_effects ?? undefined,
     }),
+    timelineMode: effectiveActivityTimelineMode(parseActivityTimelineMode(value.settings.history_timeline_mode), value.settings.web_activity_available),
+    categorySettings: value.category_settings.map(row => ({ ...row })),
     appLinks: value.app_links.map((row) => ({ key: row.key, value: row.value })),
     appOverrides: value.app_overrides.map((row) => ({
       key: row.key,
@@ -151,6 +176,8 @@ function isRawMiniToolProjection(value: unknown): value is RawMiniToolProjection
     && isFiniteNumber(raw.value_ms)
     && raw.value_ms >= 0
     && typeof raw.counts_down === "boolean"
+    && (raw.total_ms === null || (isFiniteNumber(raw.total_ms) && raw.total_ms > 0))
+    && (raw.phase === null || ["focus", "short_break", "long_break"].includes(raw.phase))
     && (raw.visible_until_ms === null || isFiniteNumber(raw.visible_until_ms));
 }
 
@@ -181,6 +208,8 @@ export function parseMiniStatusSnapshot(value: unknown): MiniStatusSnapshot | nu
       valueMs: tool.value_ms,
       countsDown: tool.counts_down,
       visibleUntilMs: tool.visible_until_ms,
+      totalMs: tool.total_ms,
+      phase: tool.phase,
     })),
     sampledAtMs: raw.sampled_at_ms,
   };

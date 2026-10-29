@@ -17,7 +17,7 @@
     "test:update": "node --experimental-strip-types --experimental-specifier-resolution=node tests/updateViewModel.test.ts",
     "test:settings": "node --experimental-strip-types --experimental-specifier-resolution=node tests/settingsPageState.test.ts && node --experimental-strip-types tests/themeDerivation.test.ts",
     "test:import": "node --experimental-strip-types --experimental-specifier-resolution=node tests/importDataContract.test.ts && node --experimental-strip-types --experimental-specifier-resolution=node tests/nativeSessionPrecedence.test.ts",
-    "test:mini": "node --experimental-strip-types --experimental-specifier-resolution=node tests/miniContent.test.ts && node --experimental-strip-types tests/miniWindow.test.ts",
+    "test:mini": "node --experimental-strip-types --experimental-specifier-resolution=node tests/miniContent.test.ts && node --experimental-strip-types tests/miniWindow.test.ts && node --experimental-strip-types tests/miniActivity.test.ts",
     "test:classification": "node --experimental-strip-types --experimental-specifier-resolution=node tests/classificationDraftState.test.ts && node --experimental-strip-types --experimental-specifier-resolution=node tests/classificationAppCatalog.test.ts && node --experimental-strip-types --experimental-specifier-resolution=node tests/linkedApplications.test.ts && node --experimental-strip-types tests/webLinks.test.ts",
     "test:icon-colors": "node --experimental-strip-types --experimental-specifier-resolution=node tests/iconThemeColors.test.ts",
     "test:dashboard-icons": "node --experimental-strip-types --experimental-specifier-resolution=node tests/dashboardIconRuntimeCache.test.ts",

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 export type MiniEdge = "top" | "left" | "right";
+export type MiniPage = "today" | "activity" | "tools";
 export interface MiniSnapshot {
   epoch: number;
   revision: number;
@@ -9,6 +10,7 @@ export interface MiniSnapshot {
   suppressed: boolean;
   edge: MiniEdge | null;
   held: boolean;
+  page: MiniPage;
   failed: boolean;
   focusRequest: number;
   transitionId: number;
@@ -16,6 +18,7 @@ export interface MiniSnapshot {
   visual: { width: number; height: number; anchor: number };
 }
 export type MiniAction =
+  | { kind: "cycle_page"; forward: boolean }
   | { kind: "reveal" | "collapse" | "dock" | "begin_drag" | "close" }
   | { kind: "hold"; held: boolean }
   | { kind: "place"; edge: MiniEdge | null }
@@ -28,12 +31,13 @@ export function parseMiniSnapshot(value: unknown): MiniSnapshot {
   if (![raw.epoch, raw.revision, raw.focus_request, raw.transition_id].every((n) => Number.isSafeInteger(n) && n >= 0)
       || typeof raw.expanded !== "boolean" || typeof raw.suppressed !== "boolean" || typeof raw.held !== "boolean"
       || typeof raw.failed !== "boolean"
+      || !["today", "activity", "tools"].includes(raw.page)
       || typeof raw.transitioning !== "boolean"
       || !raw.visual || ![raw.visual.width, raw.visual.height].every(n => Number.isFinite(n) && n > 0)
       || !Number.isFinite(raw.visual.anchor) || raw.visual.anchor < 0 || raw.visual.anchor > 1
       || ![null, "top", "left", "right"].includes(raw.edge)) throw new Error("Invalid mini window state");
   return { epoch: raw.epoch, revision: raw.revision, expanded: raw.expanded, suppressed: raw.suppressed,
-    edge: raw.edge, held: raw.held, failed: raw.failed, focusRequest: raw.focus_request,
+    edge: raw.edge, held: raw.held, page: raw.page, failed: raw.failed, focusRequest: raw.focus_request,
     transitionId: raw.transition_id, transitioning: raw.transitioning, visual: raw.visual };
 }
 

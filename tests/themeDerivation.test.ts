@@ -40,7 +40,10 @@ const main = normalizeSettingsRecord({ theme_mode: "dark", color_scheme_dark: "c
 assert.equal("themeContrastLight" in main, false);
 assert.equal("themeContrastDark" in main, false);
 assert.deepEqual(buildAppSettingMutations(buildRawAppSettingsPatch({ colorSchemeLight: "vercel" })), [{ key: "color_scheme_light", value: "vercel" }]);
-const parsedMini = parseMiniBootstrapSnapshot({ settings: { tracking_paused: null, theme_mode: "dark", language: null, color_scheme_light: "vercel", color_scheme_dark: "catppuccin" }, app_overrides: [], app_links: [] });
+const parsedMini = parseMiniBootstrapSnapshot({ settings: { tracking_paused: null, theme_mode: "dark", language: null,
+  color_scheme_light: "vercel", color_scheme_dark: "catppuccin", hourly_activity_chart_mode: null,
+  history_timeline_mode: null, refresh_interval_secs: null, timeline_merge_gap_secs: null, dynamic_effects: null,
+  web_activity_available: false }, app_overrides: [], app_links: [], category_settings: [] });
 assert.ok(parsedMini);
 const mini = applyMiniBootstrapSnapshot(parsedMini).settings;
 assert.deepEqual(deriveTheme("dark", mini.colorSchemeDark, null), deriveTheme("dark", main.colorSchemeDark, null));

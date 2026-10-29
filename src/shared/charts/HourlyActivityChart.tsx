@@ -15,6 +15,8 @@ import {
 import type { HourlyActivityChartMode } from "../settings/appSettings.ts";
 
 interface Props {
+  compactTooltip?: boolean;
+  showXAxis?: boolean;
   mode: HourlyActivityChartMode;
   hourlyActivity: HourlyActivityPoint[];
   hourlyCategoryActivity: HourlyCategoryActivity;
@@ -100,6 +102,8 @@ function formatHourlyChartAriaLabel(
 }
 
 export default function HourlyActivityChart({
+  compactTooltip = false,
+  showXAxis = true,
   mode,
   hourlyActivity,
   hourlyCategoryActivity,
@@ -121,7 +125,7 @@ export default function HourlyActivityChart({
   );
   const chartData = categoryMode ? visibleHourlyCategoryActivity.points : hourlyActivity;
   const chartTop = margin.top;
-  const chartBottom = Math.max(chartTop, size.height - X_AXIS_HEIGHT - margin.bottom);
+  const chartBottom = Math.max(chartTop, size.height - (showXAxis ? X_AXIS_HEIGHT : 0) - margin.bottom);
   const chartHeight = Math.max(0, chartBottom - chartTop);
   const chartLeft = margin.left + padding.left;
   const chartRight = Math.max(chartLeft, size.width - margin.right - padding.right);
@@ -164,16 +168,35 @@ export default function HourlyActivityChart({
     Math.max(TOOLTIP_EDGE_INSET, size.width - TOOLTIP_EDGE_INSET),
   );
 
+  useLayoutEffect(() => {
+    const chart = chartRef.current;
+    const tooltip = chart?.querySelector<HTMLElement>('[role="tooltip"]');
+    if (!compactTooltip || !chart || !tooltip) return;
+    tooltip.style.maxHeight = `${Math.max(0, window.innerHeight - chart.getBoundingClientRect().top - TOOLTIP_EDGE_INSET)}px`;
+    tooltip.style.left = `${Math.max(TOOLTIP_EDGE_INSET, Math.min(
+      tooltipLeft - (tooltipOnRight ? 0 : tooltip.offsetWidth), size.width - tooltip.offsetWidth - TOOLTIP_EDGE_INSET,
+    ))}px`;
+  }, [compactTooltip, tooltipLeft, tooltipOnRight, activePoint, size]);
+
   return (
     <div
       ref={chartRef}
       className="relative h-full w-full"
       data-hourly-activity-chart-mode={mode}
       onMouseLeave={() => setActiveIndex(null)}
+      onKeyDown={(event) => {
+        if (compactTooltip && activeIndex !== null && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+          chartRef.current?.querySelector('[role="tooltip"]')?.scrollBy({ top: event.key === "ArrowDown" ? 32 : -32 });
+          event.preventDefault(); event.stopPropagation();
+        }
+        if (event.key === "Escape" && activeIndex !== null) {
+          setActiveIndex(null); event.preventDefault(); event.stopPropagation();
+        }
+      }}
     >
       {size.width > 0 && size.height > 0 ? (
         <svg
-          aria-hidden="true"
+          aria-label={UI_TEXT.hourlyActivityChart.activeMinutes}
           className="block h-full w-full overflow-visible"
           viewBox={`0 0 ${size.width} ${size.height}`}
         >
@@ -264,15 +287,16 @@ export default function HourlyActivityChart({
                 onBlur={() => setActiveIndex((current) => current === index ? null : current)}
                 onFocus={() => setActiveIndex(index)}
                 onMouseEnter={() => setActiveIndex(index)}
+                onPointerDown={() => setActiveIndex(index)}
                 role="img"
-                tabIndex={0}
+                tabIndex={point.minutes > 0 ? 0 : -1}
                 width={slotWidth}
                 x={x}
                 y={chartTop}
               />
             );
           })}
-          {chartData.map((point, index) => {
+          {showXAxis && chartData.map((point, index) => {
             if (index % 6 !== 0) return null;
             return (
               <text
@@ -292,6 +316,7 @@ export default function HourlyActivityChart({
       ) : null}
       {activePoint && activePoint.minutes > 0 ? (
         <QuietChartTooltip
+          className={compactTooltip ? "qp-scroll-region" : undefined}
           items={categoryMode
             ? getPointSegments(activePoint as HourlyCategoryActivityPoint)
               .slice()
@@ -310,7 +335,10 @@ export default function HourlyActivityChart({
           label={categoryMode
             ? `${activePoint.hour} · ${UI_TEXT.hourlyActivityChart.activeMinutes} ${Math.round(activePoint.minutes)}m`
             : activePoint.hour}
-          style={{
+          style={compactTooltip ? {
+            position: "absolute", top: 0, width: "max-content",
+            minWidth: 0, maxWidth: "min(220px, calc(100% - 16px))", overflowY: "auto", zIndex: 10, pointerEvents: "auto",
+          } : {
             bottom: `${size.height - chartBottom}px`,
             left: `${tooltipLeft}px`,
             position: "absolute",

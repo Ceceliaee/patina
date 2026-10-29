@@ -66,10 +66,11 @@ async function loadMiniTrackerHealth(nowMs: number): Promise<TrackerHealthSnapsh
   );
 }
 
-export function useMiniTracking(contentActive = true) {
+export function useMiniTracking(contentActive = true, toolsActive = contentActive) {
+  const [retryVersion, setRetryVersion] = useState(0);
   const [presentationReady, setPresentationReady] = useState(false);
   const [presentationFailed, setPresentationFailed] = useState(false);
-  useLayoutEffect(() => { setPresentationReady(false); setPresentationFailed(false); }, [contentActive]);
+  useLayoutEffect(() => { setPresentationReady(false); setPresentationFailed(false); }, [contentActive, toolsActive, retryVersion]);
   const [trackingSnapshot, setTrackingSnapshot] = useState<MiniTrackingSnapshot>(
     EMPTY_TRACKING_SNAPSHOT,
   );
@@ -126,7 +127,7 @@ export function useMiniTracking(contentActive = true) {
         listen(onAppSettingsChanged(async () => {
           await Promise.all([refreshBootstrap(), refreshTracking()]);
         })),
-        ...(contentActive ? [listen(onToolsRuntimeChanged(() => { void refreshTracking(); }))] : []),
+        ...(toolsActive ? [listen(onToolsRuntimeChanged(() => { void refreshTracking(); }))] : []),
       ]);
       for (const result of subscriptions) {
         if (result.status === "rejected") warnMiniRefresh(result.reason);
@@ -146,7 +147,7 @@ export function useMiniTracking(contentActive = true) {
         unlisten();
       }
     };
-  }, [contentActive]);
+  }, [contentActive, toolsActive, retryVersion]);
 
   useEffect(() => contentActive ? startTrackerHealthPolling(setTrackerHealth, {
     deps: {
@@ -163,5 +164,6 @@ export function useMiniTracking(contentActive = true) {
     trackerHealth,
     trackingRuntimeProbeStatus: trackingSnapshot.trackingRuntimeProbeStatus,
     miniStatus: trackingSnapshot.miniStatus,
+    retry: () => setRetryVersion(version => version + 1),
   };
 }
