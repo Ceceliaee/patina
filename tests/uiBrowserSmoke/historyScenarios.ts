@@ -470,7 +470,7 @@ async function runHistoryScenarioSet(context: BrowserSmokeContext) {
           });
           localStorage.clear();
           localStorage.setItem('__time_tracker_smoke_settings', JSON.stringify({ language: 'zh-CN', web_activity_enabled: '1' }));
-          localStorage.setItem('patina:history-timeline-mode', 'app');
+          {const timelineSettings = JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') || '{}'); timelineSettings.history_timeline_mode = 'app'; localStorage.setItem('__time_tracker_smoke_settings', JSON.stringify(timelineSettings));}
           localStorage.setItem('patina:history-day-distribution-mode', 'app');
           localStorage.setItem('patina:history-timeline-zoom-hours', '4');
           const startTime = dayEnd - 30 * 60_000;
@@ -2853,7 +2853,7 @@ async function runHistoryScenarioSet(context: BrowserSmokeContext) {
         settings[${jsonString(webOverrideKey)}] = JSON.stringify({ enabled: false, updatedAt: Date.now() });
         localStorage.setItem("__time_tracker_smoke_settings", JSON.stringify(settings));
         localStorage.setItem("patina:history-day-distribution-mode", "web");
-        localStorage.setItem("patina:history-timeline-mode", "web");
+        {const timelineSettings = JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') || '{}'); timelineSettings.history_timeline_mode = 'web'; localStorage.setItem('__time_tracker_smoke_settings', JSON.stringify(timelineSettings));}
         location.reload();
       })()
     `);
@@ -2988,7 +2988,7 @@ async function runHistoryScenarioSet(context: BrowserSmokeContext) {
     await evaluate(client!, sessionId, `
       (() => {
         globalThis.__TIME_TRACKER_ENABLE_WEB_FIXTURE = true;
-        localStorage.setItem("patina:history-timeline-mode", "app");
+        {const timelineSettings = JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') || '{}'); timelineSettings.history_timeline_mode = 'app'; localStorage.setItem('__time_tracker_smoke_settings', JSON.stringify(timelineSettings));}
       })()
     `);
     await navigateTo("历史");
@@ -3094,7 +3094,7 @@ async function runHistoryScenarioSet(context: BrowserSmokeContext) {
       await evaluate(
         client!,
         sessionId,
-        `localStorage.getItem("patina:history-timeline-mode")`,
+        `JSON.parse(localStorage.getItem("__time_tracker_smoke_settings") || "{}").history_timeline_mode`,
       ),
       "web",
     );
@@ -3496,7 +3496,7 @@ async function runHistoryScenarioSet(context: BrowserSmokeContext) {
         const settings = JSON.parse(localStorage.getItem("__time_tracker_smoke_settings") ?? "{}");
         settings.web_activity_enabled = "0";
         localStorage.setItem("__time_tracker_smoke_settings", JSON.stringify(settings));
-        localStorage.setItem("patina:history-timeline-mode", "web");
+        {const timelineSettings = JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') || '{}'); timelineSettings.history_timeline_mode = 'web'; localStorage.setItem('__time_tracker_smoke_settings', JSON.stringify(timelineSettings));}
         location.reload();
       })()
     `);
@@ -3516,7 +3516,7 @@ async function runHistoryScenarioSet(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `localStorage.getItem("patina:history-timeline-mode") === "app"`,
+      `JSON.parse(localStorage.getItem("__time_tracker_smoke_settings") || "{}").history_timeline_mode === "app"`,
     );
     await waitForExpression(
       client!,
@@ -3563,7 +3563,7 @@ async function runHistoryScenarioSet(context: BrowserSmokeContext) {
         const settings = JSON.parse(localStorage.getItem("__time_tracker_smoke_settings") ?? "{}");
         settings.web_activity_enabled = "1";
         localStorage.setItem("__time_tracker_smoke_settings", JSON.stringify(settings));
-        localStorage.setItem("patina:history-timeline-mode", "app");
+        {const timelineSettings = JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') || '{}'); timelineSettings.history_timeline_mode = 'app'; localStorage.setItem('__time_tracker_smoke_settings', JSON.stringify(timelineSettings));}
         location.reload();
       })()
     `);
@@ -3579,7 +3579,7 @@ async function runHistoryScenarioSet(context: BrowserSmokeContext) {
     await evaluate(client!, sessionId, `
       (() => {
         delete globalThis.__TIME_TRACKER_ENABLE_WEB_FIXTURE;
-        localStorage.setItem("patina:history-timeline-mode", "web");
+        {const timelineSettings = JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') || '{}'); timelineSettings.history_timeline_mode = 'web'; localStorage.setItem('__time_tracker_smoke_settings', JSON.stringify(timelineSettings));}
         location.reload();
       })()
     `);

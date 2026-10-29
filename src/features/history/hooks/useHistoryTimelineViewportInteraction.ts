@@ -13,7 +13,7 @@ import {
   panHistoryTimelineViewportForKey,
   zoomHistoryTimelineViewportAroundAnchor,
   type HistoryTimelineViewport,
-} from "../services/historyTimelineViewModel.ts";
+} from "../../../shared/lib/activityTimelineCompiler.ts";
 
 const DRAG_THRESHOLD_PX = 5;
 const HORIZONTAL_WHEEL_DOMINANCE = 1.1;

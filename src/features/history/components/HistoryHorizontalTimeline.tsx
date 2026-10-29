@@ -9,7 +9,7 @@ import { formatDuration, formatTime } from "../services/historyFormatting.ts";
 import type {
   HistoryTimelineDisplayMode,
   HistoryTimelineViewModel,
-} from "../services/historyTimelineViewModel.ts";
+} from "../../../shared/lib/activityTimelineCompiler.ts";
 
 const MAX_LEGEND_ITEMS = 7;
 

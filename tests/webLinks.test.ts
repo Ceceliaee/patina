@@ -3,7 +3,7 @@ import { groupWebCandidates, refreshKnownWebDomains, resolveWebOwner, setWebDoma
 import { buildClassificationDraftChangePlan, cloneClassificationDraftState, hasClassificationDraftChanges } from "../src/features/classification/services/classificationDraftState.ts";
 import { buildCommitDraftChangePlanSettingMutations } from "../src/features/classification/services/classificationStore.ts";
 import { deleteCategoryFromDraftState, updateWebDomainOverrideInDraftState } from "../src/features/classification/hooks/appMappingStateHelpers.ts";
-import { buildWebDomainDistribution, buildWebDomainIconMap } from "../src/features/history/services/historyWebActivityViewModel.ts";
+import { buildWebDomainDistribution, buildWebDomainIconMap } from "../src/shared/lib/webActivityViewModel.ts";
 import { webLinksOverrides, parseWebLinksSnapshot } from "../src/platform/persistence/webLinksGateway.ts";
 import type { WebActivitySegment } from "../src/shared/types/webActivity.ts";
 

@@ -28,7 +28,7 @@ import {
   normalizeHistoryTimelineViewportAroundFocus,
   snapHistoryTimelineFocusToNearestHalfHour,
   type HistoryTimelineViewport,
-} from "../services/historyTimelineViewModel.ts";
+} from "../../../shared/lib/activityTimelineCompiler.ts";
 import {
   useHistoryTimelineViewportInteraction,
   type HistoryTimelineViewportChangeReason,
@@ -46,7 +46,7 @@ import {
   buildWebDomainIconMap,
   buildWebDomainDistribution,
   buildWebTimelineItems,
-} from "../services/historyWebActivityViewModel.ts";
+} from "../../../shared/lib/webActivityViewModel.ts";
 import { useHistoryTimelineMode } from "../hooks/useHistoryTimelineMode.ts";
 import {
   hasMeaningfulHistoryContent,
@@ -335,7 +335,7 @@ export default function History({
     actionLabel: historyTimelineModeActionLabel,
     ariaLabel: historyTimelineModeAriaLabel,
     toggleMode: toggleHistoryTimelineMode,
-  } = useHistoryTimelineMode(webActivityEnabled);
+  } = useHistoryTimelineMode(webActivityEnabled, onQuickActionError);
   const timelineSourceIcons = effectiveHistoryTimelineMode === "web"
     ? webDomainIcons
     : historyIcons;

@@ -1,14 +1,11 @@
+import { parseActivityTimelineMode, nextActivityTimelineMode as getNextHistoryTimelineMode, effectiveActivityTimelineMode as resolveEffectiveHistoryTimelineMode } from "../src/shared/settings/activityDisplaySettings.ts";
 import assert from "node:assert/strict";
 import {
-  getNextHistoryTimelineMode,
   readHistoryDayDistributionMode,
-  readHistoryTimelineMode,
   readHistoryTimelineZoomHours,
   rememberHistoryDayDistributionMode,
-  rememberHistoryTimelineMode,
   rememberHistoryTimelineZoomHours,
   resolveEffectiveDayDistributionMode,
-  resolveEffectiveHistoryTimelineMode,
 } from "../src/features/history/services/historyLayoutPreferenceStorage.ts";
 import {
   buildHistoryTimelineViewModel as buildHistoryTimelineViewModelRaw,
@@ -22,7 +19,7 @@ import {
   panHistoryTimelineViewportForKey,
   snapHistoryTimelineFocusToNearestHalfHour,
   zoomHistoryTimelineViewportAroundAnchor,
-} from "../src/features/history/services/historyTimelineViewModel.ts";
+} from "../src/shared/lib/activityTimelineCompiler.ts";
 import { hasMeaningfulHistoryContent, shouldHideTimelineContent } from "../src/features/history/hooks/useHistoryTimelineViews.ts";
 import { ProcessMapper } from "../src/shared/classification/processMapper.ts";
 import { getLocaleText } from "../src/shared/i18n/runtime.ts";
@@ -206,23 +203,9 @@ runTest("day distribution keeps category available when web sync is disabled", (
   assert.equal(resolveEffectiveDayDistributionMode("web", true), "web");
 });
 
-runTest("timeline display mode persists locally", () => {
-  assert.equal(readHistoryTimelineMode(), "app");
-
-  withWindowStorage(new MemoryStorage(), () => {
-    assert.equal(readHistoryTimelineMode(), "app");
-
-    rememberHistoryTimelineMode("category");
-    assert.equal(readHistoryTimelineMode(), "category");
-    assert.equal(window.localStorage.getItem("patina:history-timeline-mode"), "category");
-
-    rememberHistoryTimelineMode("web");
-    assert.equal(readHistoryTimelineMode(), "web");
-    assert.equal(window.localStorage.getItem("patina:history-timeline-mode"), "web");
-
-    window.localStorage.setItem("patina:history-timeline-mode", "timeline");
-    assert.equal(readHistoryTimelineMode(), "app");
-  });
+runTest("timeline mode validates persisted identities", () => {
+  for (const mode of ["app", "category", "web"] as const) assert.equal(parseActivityTimelineMode(mode), mode);
+  for (const invalid of [null, undefined, "timeline", 2, {}]) assert.equal(parseActivityTimelineMode(invalid), "app");
 });
 
 runTest("timeline display mode cycles through web only while web activity is available", () => {
@@ -278,8 +261,6 @@ runTest("timeline preferences remain best-effort when localStorage access throws
   });
 
   withWindowValue(inaccessibleWindow, () => {
-    assert.equal(readHistoryTimelineMode(), "app");
-    assert.doesNotThrow(() => rememberHistoryTimelineMode("web"));
     assert.equal(readHistoryTimelineZoomHours(), 4);
     assert.doesNotThrow(() => rememberHistoryTimelineZoomHours(4));
   });

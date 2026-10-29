@@ -6,7 +6,7 @@ import type {
   HistoryTimelineDisplayMode,
   HistoryTimelineLane,
   HistoryTimelineViewModel,
-} from "../services/historyTimelineViewModel.ts";
+} from "../../../shared/lib/activityTimelineCompiler.ts";
 import HistoryHorizontalTimeline from "./HistoryHorizontalTimeline.tsx";
 
 interface Props {

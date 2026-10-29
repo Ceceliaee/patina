@@ -11,8 +11,8 @@ import {
   type HistoryTimelineDisplayMode,
   type HistoryTimelineSourceItem,
   type HistoryTimelineViewport,
-} from "../services/historyTimelineViewModel.ts";
-import { buildHistoryWebTimelineSources } from "../services/historyWebActivityViewModel.ts";
+} from "../../../shared/lib/activityTimelineCompiler.ts";
+import { buildHistoryWebTimelineSources } from "../../../shared/lib/webActivityViewModel.ts";
 import type { HistoryContentState } from "./useHistorySnapshotRuntime.ts";
 
 const EMPTY_TIMELINE_SOURCES: HistoryTimelineSourceItem[] = [];

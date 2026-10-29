@@ -16,6 +16,7 @@ import {
   loadTrackerHealthTimestampMs,
 } from "./appSettingsRuntimeService.ts";
 import { initializeProcessMapperRuntime } from "./processMapperRuntimeService.ts";
+import { migrateActivityTimelineMode } from "../../platform/persistence/activityDisplaySettingsStore.ts";
 
 interface AppRuntimeBootstrapSnapshot {
   settings: AppSettings;
@@ -81,6 +82,7 @@ export async function loadTrackerHealthSnapshotWithDeps(
 }
 
 export async function loadAppRuntimeBootstrapSnapshot(): Promise<AppRuntimeBootstrapSnapshot> {
+  await migrateActivityTimelineMode();
   return loadAppRuntimeBootstrapSnapshotWithDeps(appRuntimeBootstrapDeps);
 }
 

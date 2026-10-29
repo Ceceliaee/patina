@@ -7,7 +7,7 @@ import QuietStepperSlider from "../../../shared/components/QuietStepperSlider.ts
 import type {
   HistoryTimelineDisplayMode,
   HistoryTimelineViewModel,
-} from "../services/historyTimelineViewModel.ts";
+} from "../../../shared/lib/activityTimelineCompiler.ts";
 import HistoryHorizontalTimeline from "./HistoryHorizontalTimeline.tsx";
 import HistoryTimelineLaneList from "./HistoryTimelineLaneList.tsx";
 

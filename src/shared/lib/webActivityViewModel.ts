@@ -1,24 +1,24 @@
-import { resolveWebOwner, webDisplayDomain, webGroupIcon, webLinkParent } from "../../../shared/classification/webLinks.ts";
-import { AppClassification } from "../../../shared/classification/appClassification.ts";
-import { isAnonymousActivity } from "../../../shared/classification/anonymousActivity.ts";
-import { resolveStableDomainColor } from "../../../shared/classification/domainColor.ts";
-import type { AppCategory } from "../../../shared/classification/categoryTokens.ts";
-import type { UiText } from "../../../shared/i18n/index.ts";
+import { resolveWebOwner, webDisplayDomain, webGroupIcon, webLinkParent } from "../classification/webLinks.ts";
+import { AppClassification } from "../classification/appClassification.ts";
+import { isAnonymousActivity } from "../classification/anonymousActivity.ts";
+import { resolveStableDomainColor } from "../classification/domainColor.ts";
+import type { AppCategory } from "../classification/categoryTokens.ts";
+import type { UiText } from "../i18n/index.ts";
 import type {
   WebActivitySegment,
   WebDomainOverride,
-} from "../../../shared/types/webActivity.ts";
+} from "../types/webActivity.ts";
 import {
   compileWebActivitySegments,
   getWebActivityTimelineItemEndTime,
   mergeWebActivityTimelineItemsByDomain,
-} from "../../../shared/lib/webActivityTimelineCompiler.ts";
+} from "./webActivityTimelineCompiler.ts";
 import {
   buildHistoryTimelineViewModelFromSources,
   type HistoryTimelineSourceItem,
   type HistoryTimelineViewport,
   type HistoryTimelineViewModel,
-} from "./historyTimelineViewModel.ts";
+} from "./activityTimelineCompiler.ts";
 
 interface WebDomainDistributionItem {
   key: string;

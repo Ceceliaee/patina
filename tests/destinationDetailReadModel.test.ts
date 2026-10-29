@@ -12,7 +12,7 @@ import type {
 } from "../src/features/destination/types.ts";
 import type { HistorySession } from "../src/shared/types/sessions.ts";
 import type { WebActivitySegment } from "../src/shared/types/webActivity.ts";
-import { buildWebDomainDistribution, buildWebTimelineItems } from "../src/features/history/services/historyWebActivityViewModel.ts";
+import { buildWebDomainDistribution, buildWebTimelineItems } from "../src/shared/lib/webActivityViewModel.ts";
 import { buildTimelineSessions, compileSessions } from "../src/shared/lib/sessionReadCompiler.ts";
 import { clipDestinationDetailActivitiesToViewport } from "../src/features/destination/services/destinationDetailTimelineViewport.ts";
 

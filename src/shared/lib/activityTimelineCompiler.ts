@@ -1,16 +1,16 @@
-import { AppClassification } from "../../../shared/classification/appClassification.ts";
-import { isAnonymousActivity } from "../../../shared/classification/anonymousActivity.ts";
-import { resolveAppIconKeys } from "../../../shared/classification/appIconIdentity.ts";
-import type { AppCategory } from "../../../shared/classification/categoryTokens.ts";
-import type { UiText } from "../../../shared/i18n/index.ts";
-import type { CompiledSession } from "../../../shared/lib/sessionReadCompiler.ts";
-import { addLocalDays, startOfLocalDay } from "../../../shared/lib/localDate.ts";
+import { AppClassification } from "../classification/appClassification.ts";
+import { isAnonymousActivity } from "../classification/anonymousActivity.ts";
+import { resolveAppIconKeys } from "../classification/appIconIdentity.ts";
+import type { AppCategory } from "../classification/categoryTokens.ts";
+import type { UiText } from "../i18n/index.ts";
+import type { CompiledSession } from "./sessionReadCompiler.ts";
+import { addLocalDays, startOfLocalDay } from "./localDate.ts";
 import {
   buildTimelineAxisTicks,
   snapTimelineFocusToNearestInterval,
   type TimelineAxisTick,
-} from "../../../shared/lib/timelineAxis.ts";
-import { mergeContiguousTimelineSegments } from "../../../shared/lib/timelineSegmentMerge.ts";
+} from "./timelineAxis.ts";
+import { mergeContiguousTimelineSegments } from "./timelineSegmentMerge.ts";
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -134,6 +134,7 @@ interface BuildHistoryTimelineViewModelFromSourcesParams {
   mode: HistoryTimelineDisplayMode;
   mergeThresholdSecs?: number;
   viewport?: HistoryTimelineViewport;
+  range?: { startMs: number; endMs: number };
 }
 
 function getFullDayRange(date: Date) {
@@ -855,13 +856,16 @@ export function buildHistoryTimelineViewModelFromSources({
   mode,
   mergeThresholdSecs = 0,
   viewport: requestedViewport,
+  range,
 }: BuildHistoryTimelineViewModelFromSourcesParams): HistoryTimelineViewModel {
-  const { dayStartMs, dayEndMs } = getFullDayRange(selectedDate);
+  const { dayStartMs, dayEndMs } = range
+    ? { dayStartMs: range.startMs, dayEndMs: range.endMs }
+    : getFullDayRange(selectedDate);
   const viewport = requestedViewport ?? normalizeHistoryTimelineViewport({
     selectedDate,
     requestedStartMs: dayStartMs,
   });
-  const visibleEndMs = resolveVisibleEndMs(selectedDate, nowMs, dayStartMs, dayEndMs);
+  const visibleEndMs = range ? Math.min(nowMs, dayEndMs) : resolveVisibleEndMs(selectedDate, nowMs, dayStartMs, dayEndMs);
   const mergeThresholdMs = Math.max(0, mergeThresholdSecs) * 1000;
   const rawSegments = sources
     .map((source) => buildSegment(source, dayStartMs, dayEndMs, visibleEndMs, viewport))
@@ -869,7 +873,7 @@ export function buildHistoryTimelineViewModelFromSources({
     .sort((a, b) => a.startTime - b.startTime || a.endTime - b.endTime);
   const segments = buildDominantMinuteSegments(
     rawSegments,
-    dayStartMs,
+    range ? Math.floor(dayStartMs / MINUTE_MS) * MINUTE_MS : dayStartMs,
     visibleEndMs,
     viewport,
     mode,

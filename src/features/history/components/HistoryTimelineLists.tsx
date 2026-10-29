@@ -6,7 +6,7 @@ import { ChevronDown, ChevronRight, ChevronUp, Globe2 } from "lucide-react";
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import { formatDuration, formatTime } from "../services/historyFormatting.ts";
 import type { TimelineSession } from "../../../shared/lib/sessionReadCompiler.ts";
-import type { WebTimelineItem } from "../services/historyWebActivityViewModel.ts";
+import type { WebTimelineItem } from "../../../shared/lib/webActivityViewModel.ts";
 import type {
   HistoryTimelineDetailsPopoverState,
   TimelineDetailTitle,

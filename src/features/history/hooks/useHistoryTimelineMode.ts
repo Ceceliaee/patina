@@ -1,60 +1,44 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocaleText, type UiText } from "../../../shared/i18n/index.ts";
+import { effectiveActivityTimelineMode, nextActivityTimelineMode, type ActivityTimelineMode } from "../../../shared/settings/activityDisplaySettings.ts";
+import { startHistoryTimelinePreference } from "../services/historyTimelinePreferenceService.ts";
 
-import {
-  getNextHistoryTimelineMode,
-  readHistoryTimelineMode,
-  rememberHistoryTimelineMode,
-  resolveEffectiveHistoryTimelineMode,
-} from "../services/historyLayoutPreferenceStorage.ts";
-import type { HistoryTimelineDisplayMode } from "../services/historyTimelineViewModel.ts";
-
-function getModeLabel(mode: HistoryTimelineDisplayMode, text: UiText["history"]) {
+function getModeLabel(mode: ActivityTimelineMode, text: UiText["history"]) {
   if (mode === "app") return text.distributionByApp;
   if (mode === "category") return text.distributionByCategory;
   return text.distributionByWeb;
 }
 
-function getModeActionLabel(mode: HistoryTimelineDisplayMode, text: UiText["history"]) {
+function getModeActionLabel(mode: ActivityTimelineMode, text: UiText["history"]) {
   if (mode === "app") return text.showTimelineByApp;
   if (mode === "category") return text.showTimelineByCategory;
   return text.showTimelineByWeb;
 }
 
-export function useHistoryTimelineMode(webActivityEnabled: boolean) {
+export function useHistoryTimelineMode(webActivityEnabled: boolean, onError: (message: string) => void) {
   const UI_TEXT = useLocaleText();
-  const [storedMode, setStoredMode] = useState<HistoryTimelineDisplayMode>(
-    readHistoryTimelineMode,
-  );
-  const mode = resolveEffectiveHistoryTimelineMode(storedMode, webActivityEnabled);
-  const nextMode = getNextHistoryTimelineMode(mode, webActivityEnabled);
+  const [storedMode, setStoredMode] = useState<ActivityTimelineMode>("app");
+  const toggle = useRef<() => void>(() => {});
+  const failure = useRef(onError);
+  failure.current = onError;
+  const mode = effectiveActivityTimelineMode(storedMode, webActivityEnabled);
+  const nextMode = nextActivityTimelineMode(mode, webActivityEnabled);
 
   useEffect(() => {
-    if (webActivityEnabled || storedMode !== "web") return;
-
-    setStoredMode("app");
-    rememberHistoryTimelineMode("app");
-  }, [storedMode, webActivityEnabled]);
-
-  const toggleMode = () => {
-    setStoredMode((currentMode) => {
-      const effectiveMode = resolveEffectiveHistoryTimelineMode(
-        currentMode,
-        webActivityEnabled,
-      );
-      const next = getNextHistoryTimelineMode(effectiveMode, webActivityEnabled);
-      rememberHistoryTimelineMode(next);
-      return next;
+    const runtime = startHistoryTimelinePreference({ webEnabled: webActivityEnabled, accept: setStoredMode,
+      failed: (error, writing) => {
+        failure.current(writing ? UI_TEXT.settings.saveFailed : UI_TEXT.settings.loadFailed);
+        console.warn("history:timeline-mode", error);
+      },
     });
-  };
+    toggle.current = () => { void runtime.toggle(); };
+    return runtime.dispose;
+  }, [webActivityEnabled, UI_TEXT.settings.loadFailed, UI_TEXT.settings.saveFailed]);
 
   return {
     mode,
     actionLabel: getModeActionLabel(nextMode, UI_TEXT.history),
-    ariaLabel: UI_TEXT.history.timelineModeSwitch(
-      getModeLabel(mode, UI_TEXT.history),
-      getModeLabel(nextMode, UI_TEXT.history),
-    ),
-    toggleMode,
+    ariaLabel: UI_TEXT.history.timelineModeSwitch(getModeLabel(mode, UI_TEXT.history), getModeLabel(nextMode, UI_TEXT.history)),
+    toggleMode: () => toggle.current(),
   };
 }

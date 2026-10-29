@@ -18,7 +18,7 @@ import {
   getHistorySnapshotCache,
   setHistorySnapshotCache,
 } from "../services/historySnapshotCache.ts";
-import { filterWebActivitySegmentsForStatistics } from "../services/historyWebActivityViewModel.ts";
+import { filterWebActivitySegmentsForStatistics } from "../../../shared/lib/webActivityViewModel.ts";
 
 export type HistoryContentState =
   | "bootstrap"
