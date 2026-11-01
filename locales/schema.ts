@@ -1,5 +1,34 @@
 // Canonical language-neutral message contract. Do not derive this file from a locale at build time.
 export const MESSAGE_SCHEMA = {
+  "tools.reminderTimeLabel": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderTimeLabel."},
+  "tools.reminderRepeatLabel": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderRepeatLabel."},
+  "tools.reminderRepeatNone": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderRepeatNone."},
+  "tools.reminderRepeatInterval": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderRepeatInterval."},
+  "tools.reminderRepeatDaily": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderRepeatDaily."},
+  "tools.reminderRepeatMonthly": {"kind": "string", "params": [], "surface": "frontend", "description": "Repeat on the same day of each month; skip months without that day."},
+  "tools.reminderRepeatYearly": {"kind": "string", "params": [], "surface": "frontend", "description": "Repeat on the same month and day each year; skip years without that date."},
+  "tools.reminderRepeatWeekly": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderRepeatWeekly."},
+  "tools.reminderIntervalLabel": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderIntervalLabel."},
+  "tools.reminderMinutesUnit": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderMinutesUnit."},
+  "tools.reminderHoursUnit": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderHoursUnit."},
+  "tools.reminderRepeatInvalid": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderRepeatInvalid."},
+
+  "tools.reminderSnooze": {"kind": "string", "params": [], "surface": "frontend", "description": "Defer a timed reminder and choose when to be reminded again."},
+  "tools.reminderConfirmComplete": {"kind": "string", "params": [], "surface": "frontend", "description": "Acknowledge a timed reminder as completed while keeping its list entry."},
+  "tools.reminderCompleted": {"kind": "string", "params": [], "surface": "frontend", "description": "Completed state of a retained timed reminder."},
+  "tools.reminderPendingConfirmation": {"kind": "string", "params": [], "surface": "frontend", "description": "A timed reminder has fired and is awaiting the user's response."},
+  "tools.reminderSnoozeDelay": {"kind": "message", "params": [{"name": "value", "type": "string", "optional": false}], "surface": "frontend", "description": "Remind again after the localized duration, such as 5 minutes."},
+  "tools.reminderOccurredAt": {"kind": "message", "params": [{"name": "value", "type": "string", "optional": false}], "surface": "frontend", "description": "The localized time when a timed reminder was triggered."},
+  "tools.reminderEditTitle": {"kind": "string", "params": [], "surface": "frontend", "description": "Title of the dialog for editing a scheduled reminder."},
+  "tools.usageLimitReached": {"kind": "string", "params": [], "surface": "frontend", "description": "Usage limit alert dialog: usageLimitReached"},
+  "tools.usageExtend": {"kind": "string", "params": [], "surface": "frontend", "description": "Usage limit alert dialog: usageExtend"},
+  "tools.usageReturnDesktop": {"kind": "string", "params": [], "surface": "frontend", "description": "Explicitly minimize desktop windows. This action does not stop or block applications."},
+  "tools.usageExtendFifteen": {"kind": "string", "params": [], "surface": "frontend", "description": "Usage limit alert dialog: usageExtendFifteen"},
+  "tools.usageExtendHour": {"kind": "string", "params": [], "surface": "frontend", "description": "Usage limit alert dialog: usageExtendHour"},
+  "tools.usageExtendToday": {"kind": "string", "params": [], "surface": "frontend", "description": "Usage limit alert dialog: usageExtendToday"},
+  "tools.usageExtensionDuration": {"kind": "string", "params": [], "surface": "frontend", "description": "Usage limit alert dialog: usageExtensionDuration"},
+  "tools.usageExtendTitle": {"kind": "message", "params": [{"name": "value", "type": "string", "optional": false}], "surface": "frontend", "description": "Title of the second step for extending an app, category, or website. The parameter is the target display name."},
+  "tools.usageLimitSummary": {"kind": "message", "params": [{"name": "value", "type": "string", "optional": false}], "surface": "frontend", "description": "Actual usage followed by the notice that the usage limit has been reached. The parameter is a localized duration."},
   "native.webview.recoveryFailed": {"kind": "string", "params": [], "surface": "native", "description": "Native error after repeated window recovery failures. Do not promise recording health; backend status is independent."},
 
   "mapping.webIndependent": {"kind": "string", "params": [], "surface": "frontend", "description": "Keep this exact domain outside its automatic website group"},
@@ -460,11 +489,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "accessibility.tools.addTimerLap": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "accessibility.tools.cancelReminder": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4611,22 +4635,27 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "tools.activityReminderAppPlaceholder": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "tools.activityReminderCandidatesLoadFailed": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "tools.activityReminderCategoryPlaceholder": {
+  "tools.activityReminderDisable": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "tools.activityReminderDisable": {
+  "tools.activityReminderEdit": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "tools.activityReminderDelete": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "tools.activityReminderEditTitle": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4661,12 +4690,13 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "tools.activityReminderTargetRequired": {
+  "tools.activityReminderTargetPlaceholder": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "description": "Search field for choosing one app, category, or website as a usage reminder target."
   },
-  "tools.activityReminderWebPlaceholder": {
+  "tools.activityReminderTargetRequired": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4728,16 +4758,6 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "tools.dueNow": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.durationPresets": {
-    "kind": "string-record",
-    "params": [],
-    "surface": "frontend"
-  },
   "tools.focusDuration": {
     "kind": "string",
     "params": [],
@@ -4782,17 +4802,6 @@ export const MESSAGE_SCHEMA = {
   "tools.longBreakEvery": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
-  },
-  "tools.longBreakEveryValue": {
-    "kind": "message",
-    "params": [
-      {
-        "name": "count",
-        "type": "number",
-        "optional": false
-      }
-    ],
     "surface": "frontend"
   },
   "tools.minuteValue": {
@@ -4915,7 +4924,14 @@ export const MESSAGE_SCHEMA = {
   "tools.reminderModeEvent": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "description": "Reminder tab for a relative delay or a specific date and time."
+  },
+  "tools.reminderModeUsage": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend",
+    "description": "Unified usage limits tab for app, category, and website daily usage rules."
   },
   "tools.reminderModeApp": {
     "kind": "string",
@@ -4933,21 +4949,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "tools.reminderModeWeb": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.reminderStatus.cancelled": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.reminderStatus.fired": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.reminderStatus.scheduled": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4997,33 +4998,12 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "tools.activityReminderDailyLimit": {
-    "kind": "message",
-    "params": [
-      {
-        "name": "minutes",
-        "type": "number",
-        "optional": false
-      }
-    ],
-    "surface": "frontend"
-  },
   "tools.activityReminderDurationInvalid": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "tools.activityReminderDurationLabel": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.activityReminderMessageLabel": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.activityReminderMessagePlaceholder": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5059,11 +5039,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "tools.statusChip.stopwatch": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.timerHint": {
     "kind": "string",
     "params": [],
     "surface": "frontend"

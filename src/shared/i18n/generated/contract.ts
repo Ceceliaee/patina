@@ -132,7 +132,6 @@ export interface UiText {
     };
     "tools": {
       "addTimerLap": string;
-      "cancelReminder": string;
       "createReminder": string;
       "decreaseDuration": (label: string) => string;
       "increaseDuration": (label: string) => string;
@@ -940,16 +939,14 @@ export interface UiText {
     "absoluteTimeLabel": string;
     "actionFailed": string;
     "activityReminderActive": string;
-    "activityReminderAppPlaceholder": string;
     "activityReminderCandidatesLoadFailed": string;
-    "activityReminderCategoryPlaceholder": string;
-    "activityReminderDailyLimit": (minutes: number) => string;
+    "activityReminderDelete": string;
     "activityReminderDisable": string;
     "activityReminderDurationInvalid": string;
     "activityReminderDurationLabel": string;
+    "activityReminderEdit": string;
+    "activityReminderEditTitle": string;
     "activityReminderEmpty": string;
-    "activityReminderMessageLabel": string;
-    "activityReminderMessagePlaceholder": string;
     "activityReminderRulesTitle": string;
     "activityReminderSuspension": {
       "source_disabled": string;
@@ -957,8 +954,8 @@ export interface UiText {
       "target_excluded": string;
     };
     "activityReminderTargetLabel": string;
+    "activityReminderTargetPlaceholder": string;
     "activityReminderTargetRequired": string;
-    "activityReminderWebPlaceholder": string;
     "alertDismiss": string;
     "alertOccurredAt": (value: string) => string;
     "alertPausePomodoro": string;
@@ -968,8 +965,6 @@ export interface UiText {
     "countdownDuration": string;
     "createReminder": string;
     "defaultReminderLabel": string;
-    "dueNow": string;
-    "durationPresets": Record<string | number, string>;
     "focusDuration": string;
     "lap": string;
     "lapIndex": (index: number) => string;
@@ -978,7 +973,6 @@ export interface UiText {
     "loadFailed": string;
     "longBreakDuration": string;
     "longBreakEvery": string;
-    "longBreakEveryValue": (count: number) => string;
     "minuteValue": (minutes: number) => string;
     "newReminder": string;
     "notificationStatus": string;
@@ -999,22 +993,37 @@ export interface UiText {
     };
     "pomodoroTitle": string;
     "relativeMinutesLabel": string;
+    "reminderCompleted": string;
+    "reminderConfirmComplete": string;
+    "reminderEditTitle": string;
     "reminderEmpty": string;
+    "reminderHoursUnit": string;
+    "reminderIntervalLabel": string;
     "reminderLabel": string;
     "reminderLabelPlaceholder": string;
+    "reminderMinutesUnit": string;
     "reminderModeAbsolute": string;
     "reminderModeApp": string;
     "reminderModeCategory": string;
     "reminderModeEvent": string;
     "reminderModeRelative": string;
+    "reminderModeUsage": string;
     "reminderModeWeb": string;
-    "reminderStatus": {
-      "cancelled": string;
-      "fired": string;
-      "scheduled": string;
-    };
+    "reminderOccurredAt": (value: string) => string;
+    "reminderPendingConfirmation": string;
+    "reminderRepeatDaily": string;
+    "reminderRepeatInterval": string;
+    "reminderRepeatInvalid": string;
+    "reminderRepeatLabel": string;
+    "reminderRepeatMonthly": string;
+    "reminderRepeatNone": string;
+    "reminderRepeatWeekly": string;
+    "reminderRepeatYearly": string;
+    "reminderSnooze": string;
+    "reminderSnoozeDelay": (value: string) => string;
     "remindersTitle": string;
     "reminderTimeInvalid": string;
+    "reminderTimeLabel": string;
     "reset": string;
     "resume": string;
     "settingsEmpty": string;
@@ -1030,7 +1039,6 @@ export interface UiText {
       "reminder": string;
       "stopwatch": string;
     };
-    "timerHint": string;
     "timerLabel": string;
     "timerLabelPlaceholder": string;
     "timerModeCountdown": string;
@@ -1043,6 +1051,15 @@ export interface UiText {
     };
     "timerTitle": string;
     "title": string;
+    "usageExtend": string;
+    "usageExtendFifteen": string;
+    "usageExtendHour": string;
+    "usageExtendTitle": (value: string) => string;
+    "usageExtendToday": string;
+    "usageExtensionDuration": string;
+    "usageLimitReached": string;
+    "usageLimitSummary": (value: string) => string;
+    "usageReturnDesktop": string;
   };
   "update": {
     "appUpdate": string;

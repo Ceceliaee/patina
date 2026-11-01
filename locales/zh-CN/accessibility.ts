@@ -131,7 +131,6 @@ export const MESSAGES = {
   "accessibility.titleBar.minimize": "最小化窗口",
   "accessibility.titleBar.restore": "还原窗口",
   "accessibility.tools.addTimerLap": "添加分段",
-  "accessibility.tools.cancelReminder": "取消提醒",
   "accessibility.tools.createReminder": "创建提醒",
   "accessibility.tools.decreaseDuration": {
     "$type": "message",

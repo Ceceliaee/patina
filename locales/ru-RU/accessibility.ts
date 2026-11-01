@@ -131,7 +131,6 @@ export const MESSAGES = {
   "accessibility.titleBar.minimize": "Свернуть окно",
   "accessibility.titleBar.restore": "Восстановить размер окна",
   "accessibility.tools.addTimerLap": "Добавить круг",
-  "accessibility.tools.cancelReminder": "Отменить напоминание",
   "accessibility.tools.createReminder": "Создать напоминание",
   "accessibility.tools.decreaseDuration": {
     "$type": "message",

@@ -1,20 +1,50 @@
 // es locale resource. Pure data only.
 export const MESSAGES = {
+  "tools.reminderTimeLabel": "Recordar a las",
+  "tools.reminderRepeatLabel": "Repetir",
+  "tools.reminderRepeatNone": "Nunca",
+  "tools.reminderRepeatInterval": "Por intervalo",
+  "tools.reminderRepeatDaily": "Cada día",
+  "tools.reminderRepeatWeekly": "Cada semana",
+  "tools.reminderRepeatMonthly": "Cada mes",
+  "tools.reminderRepeatYearly": "Cada año",
+  "tools.reminderIntervalLabel": "Intervalo",
+  "tools.reminderMinutesUnit": "Minutos",
+  "tools.reminderHoursUnit": "Horas",
+  "tools.reminderRepeatInvalid": "Selecciona al menos un día de la semana.",
+
+  "tools.reminderSnooze": "Recordar más tarde",
+  "tools.reminderConfirmComplete": "Marcar como completado",
+  "tools.reminderCompleted": "Completado",
+  "tools.reminderPendingConfirmation": "Pendiente de confirmación",
+  "tools.reminderSnoozeDelay": {"$type": "message", "body": {"$op": "concat", "parts": ["Dentro de ", {"$op": "arg", "name": "value"}]}},
+  "tools.reminderOccurredAt": {"$type": "message", "body": {"$op": "concat", "parts": ["Hora del recordatorio: ", {"$op": "arg", "name": "value"}]}},
+  "tools.reminderEditTitle": "Editar recordatorio",
+  "tools.usageLimitReached": "Se agotó el tiempo disponible de hoy",
+  "tools.usageExtend": "Ampliar tiempo",
+  "tools.usageReturnDesktop": "Volver al escritorio",
+  "tools.usageExtendFifteen": "Usar 15 minutos más",
+  "tools.usageExtendHour": "Usar 1 hora más",
+  "tools.usageExtendToday": "Sin límite por hoy",
+  "tools.usageExtensionDuration": "Tiempo adicional de uso",
+  "tools.usageExtendTitle": {"$type": "message", "body": {"$op": "concat", "parts": ["Ampliar tiempo de «", {"$op": "arg", "name": "value"}, "»"]}},
+  "tools.usageLimitSummary": {"$type": "message", "body": {"$op": "concat", "parts": ["Has usado ", {"$op": "arg", "name": "value"}, ". Se alcanzó el límite de uso."]}},
   "tools.absoluteDateLabel": "Fecha",
   "tools.absoluteTimeLabel": "Hora",
   "tools.actionFailed": "La acción falló. Inténtalo más tarde.",
-  "tools.activityReminderAppPlaceholder": "Seleccionar app",
   "tools.activityReminderCandidatesLoadFailed": "Destinos no disponibles.",
-  "tools.activityReminderCategoryPlaceholder": "Seleccionar categoría",
   "tools.activityReminderDisable": "Desactivar",
+  "tools.activityReminderEdit": "Editar",
+  "tools.activityReminderDelete": "Eliminar",
+  "tools.activityReminderEditTitle": "Editar límite de uso",
   "tools.activityReminderEmpty": "Sin reglas",
   "tools.activityReminderRulesTitle": "Reglas",
   "tools.activityReminderSuspension.source_disabled": "Origen desactivado",
   "tools.activityReminderSuspension.target_deleted": "Destino eliminado",
   "tools.activityReminderSuspension.target_excluded": "Excluido",
   "tools.activityReminderTargetLabel": "Destino",
+  "tools.activityReminderTargetPlaceholder": "Elige una app, categoría o sitio web",
   "tools.activityReminderTargetRequired": "Selecciona un destino.",
-  "tools.activityReminderWebPlaceholder": "Seleccionar sitio web",
   "tools.alertDismiss": "Entendido",
   "tools.alertOccurredAt": {
     "$type": "message",
@@ -70,14 +100,6 @@ export const MESSAGES = {
   "tools.countdownDuration": "Duración de la cuenta atrás",
   "tools.createReminder": "Crear",
   "tools.defaultReminderLabel": "Se acabó el tiempo",
-  "tools.dueNow": "Ahora",
-  "tools.durationPresets": {
-    "5": "5 min",
-    "10": "10 min",
-    "25": "25 min",
-    "30": "30 min",
-    "60": "60 min"
-  },
   "tools.focusDuration": "Duración de concentración",
   "tools.lap": "Vuelta",
   "tools.lapIndex": {
@@ -99,42 +121,6 @@ export const MESSAGES = {
   "tools.loadFailed": "No se pudo cargar el estado de las herramientas.",
   "tools.longBreakDuration": "Descanso largo",
   "tools.longBreakEvery": "Intervalo de descanso largo",
-  "tools.longBreakEveryValue": {
-    "$type": "message",
-    "body": {
-      "$op": "if",
-      "when": {
-        "$op": "eq",
-        "left": {
-          "$op": "arg",
-          "name": "count"
-        },
-        "right": 1
-      },
-      "then": {
-        "$op": "concat",
-        "parts": [
-          "Cada ",
-          {
-            "$op": "arg",
-            "name": "count"
-          },
-          " pomodoro"
-        ]
-      },
-      "else": {
-        "$op": "concat",
-        "parts": [
-          "Cada ",
-          {
-            "$op": "arg",
-            "name": "count"
-          },
-          " pomodoros"
-        ]
-      }
-    }
-  },
   "tools.minuteValue": {
     "$type": "message",
     "body": {
@@ -182,18 +168,16 @@ export const MESSAGES = {
   "tools.pomodoroStatus.running": "En marcha",
   "tools.pomodoroTitle": "Pomodoro",
   "tools.relativeMinutesLabel": "Minutos a partir de ahora",
-  "tools.reminderEmpty": "No hay recordatorios pendientes",
+  "tools.reminderEmpty": "No hay recordatorios",
   "tools.reminderLabel": "Recordatorio",
   "tools.reminderLabelPlaceholder": "Ejemplo: tomar un descanso",
   "tools.reminderModeAbsolute": "Hora exacta",
-  "tools.reminderModeEvent": "Evento",
+  "tools.reminderModeEvent": "Recordatorios programados",
+  "tools.reminderModeUsage": "Límites de uso",
   "tools.reminderModeApp": "App",
   "tools.reminderModeCategory": "Categoría",
   "tools.reminderModeRelative": "Tiempo relativo",
   "tools.reminderModeWeb": "Web",
-  "tools.reminderStatus.cancelled": "Cancelado",
-  "tools.reminderStatus.fired": "Activado",
-  "tools.reminderStatus.scheduled": "Programado",
   "tools.remindersTitle": "Recordatorio",
   "tools.reminderTimeInvalid": "La hora del recordatorio debe ser futura.",
   "tools.reset": "Restablecer",
@@ -203,24 +187,8 @@ export const MESSAGES = {
   "tools.shortBreakDuration": "Descanso corto",
   "tools.skipPhase": "Omitir",
   "tools.activityReminderActive": "Activo",
-  "tools.activityReminderDailyLimit": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "",
-        {
-          "$op": "arg",
-          "name": "minutes"
-        },
-        " min al día"
-      ]
-    }
-  },
   "tools.activityReminderDurationInvalid": "Usa entre 1 y 1440 min.",
   "tools.activityReminderDurationLabel": "Límite diario (min)",
-  "tools.activityReminderMessageLabel": "Mensaje",
-  "tools.activityReminderMessagePlaceholder": "Ejemplo: tomar un descanso",
   "tools.start": "Iniciar",
   "tools.stateRefreshPending": "Se está recuperando el estado. No repitas la acción.",
   "tools.statusChip.break": "Descanso",
@@ -228,7 +196,6 @@ export const MESSAGES = {
   "tools.statusChip.focus": "Concentración",
   "tools.statusChip.reminder": "Recordatorio",
   "tools.statusChip.stopwatch": "Temporizador",
-  "tools.timerHint": "Los resultados del temporizador no se guardan en los registros de actividad.",
   "tools.timerLabel": "Nombre",
   "tools.timerLabelPlaceholder": "Opcional",
   "tools.timerModeCountdown": "Cuenta atrás",

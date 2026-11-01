@@ -1,20 +1,50 @@
 // ru-RU locale resource. Pure data only.
 export const MESSAGES = {
+  "tools.reminderTimeLabel": "Время напоминания",
+  "tools.reminderRepeatLabel": "Повтор",
+  "tools.reminderRepeatNone": "Не повторять",
+  "tools.reminderRepeatInterval": "С интервалом",
+  "tools.reminderRepeatDaily": "Ежедневно",
+  "tools.reminderRepeatWeekly": "Еженедельно",
+  "tools.reminderRepeatMonthly": "Ежемесячно",
+  "tools.reminderRepeatYearly": "Ежегодно",
+  "tools.reminderIntervalLabel": "Интервал",
+  "tools.reminderMinutesUnit": "Минуты",
+  "tools.reminderHoursUnit": "Часы",
+  "tools.reminderRepeatInvalid": "Выберите хотя бы один день недели.",
+
+  "tools.reminderSnooze": "Напомнить позже",
+  "tools.reminderConfirmComplete": "Отметить выполненным",
+  "tools.reminderCompleted": "Выполнено",
+  "tools.reminderPendingConfirmation": "Ожидает подтверждения",
+  "tools.reminderSnoozeDelay": {"$type": "message", "body": {"$op": "concat", "parts": ["Через ", {"$op": "arg", "name": "value"}]}},
+  "tools.reminderOccurredAt": {"$type": "message", "body": {"$op": "concat", "parts": ["Время напоминания: ", {"$op": "arg", "name": "value"}]}},
+  "tools.reminderEditTitle": "Изменить напоминание",
+  "tools.usageLimitReached": "Доступное время на сегодня исчерпано",
+  "tools.usageExtend": "Продлить использование",
+  "tools.usageReturnDesktop": "Вернуться на рабочий стол",
+  "tools.usageExtendFifteen": "Ещё 15 минут",
+  "tools.usageExtendHour": "Ещё 1 час",
+  "tools.usageExtendToday": "Без ограничений сегодня",
+  "tools.usageExtensionDuration": "Дополнительное время",
+  "tools.usageExtendTitle": {"$type": "message", "body": {"$op": "concat", "parts": ["Продлить использование «", {"$op": "arg", "name": "value"}, "»"]}},
+  "tools.usageLimitSummary": {"$type": "message", "body": {"$op": "concat", "parts": ["Использовано ", {"$op": "arg", "name": "value"}, ". Достигнут лимит времени."]}},
   "tools.absoluteDateLabel": "Дата",
   "tools.absoluteTimeLabel": "Время",
   "tools.actionFailed": "Действие не выполнено. Повторите позже.",
-  "tools.activityReminderAppPlaceholder": "Выберите прил.",
   "tools.activityReminderCandidatesLoadFailed": "Объекты недоступны.",
-  "tools.activityReminderCategoryPlaceholder": "Выберите категорию",
   "tools.activityReminderDisable": "Отключить",
+  "tools.activityReminderEdit": "Изменить",
+  "tools.activityReminderDelete": "Удалить",
+  "tools.activityReminderEditTitle": "Изменить лимит использования",
   "tools.activityReminderEmpty": "Нет правил",
   "tools.activityReminderRulesTitle": "Правила",
   "tools.activityReminderSuspension.source_disabled": "Источник отключён",
   "tools.activityReminderSuspension.target_deleted": "Объект удалён",
   "tools.activityReminderSuspension.target_excluded": "Исключено",
   "tools.activityReminderTargetLabel": "Объект",
+  "tools.activityReminderTargetPlaceholder": "Выберите приложение, категорию или сайт",
   "tools.activityReminderTargetRequired": "Выберите объект.",
-  "tools.activityReminderWebPlaceholder": "Выберите сайт",
   "tools.alertDismiss": "Понятно",
   "tools.alertOccurredAt": {
     "$type": "message",
@@ -49,14 +79,6 @@ export const MESSAGES = {
   "tools.countdownDuration": "Длительность обратного отсчёта",
   "tools.createReminder": "Создать",
   "tools.defaultReminderLabel": "Время вышло",
-  "tools.dueNow": "Сейчас",
-  "tools.durationPresets": {
-    "5": "5 мин",
-    "10": "10 мин",
-    "25": "25 мин",
-    "30": "30 мин",
-    "60": "60 мин"
-  },
   "tools.focusDuration": "Длительность работы",
   "tools.lap": "Круг",
   "tools.lapIndex": {
@@ -78,20 +100,6 @@ export const MESSAGES = {
   "tools.loadFailed": "Не удалось загрузить состояние инструментов.",
   "tools.longBreakDuration": "Длинный перерыв",
   "tools.longBreakEvery": "Интервал длинного перерыва",
-  "tools.longBreakEveryValue": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "Интервал (помодоро): ",
-        {
-          "$op": "arg",
-          "name": "count"
-        },
-        ""
-      ]
-    }
-  },
   "tools.minuteValue": {
     "$type": "message",
     "body": {
@@ -139,18 +147,16 @@ export const MESSAGES = {
   "tools.pomodoroStatus.running": "Выполняется",
   "tools.pomodoroTitle": "Помодоро",
   "tools.relativeMinutesLabel": "Минут от текущего момента",
-  "tools.reminderEmpty": "Нет ожидающих напоминаний",
+  "tools.reminderEmpty": "Нет напоминаний",
   "tools.reminderLabel": "Напоминание",
   "tools.reminderLabelPlaceholder": "Например: сделать перерыв",
   "tools.reminderModeAbsolute": "Точное время",
-  "tools.reminderModeEvent": "Событие",
+  "tools.reminderModeEvent": "Напоминания по времени",
+  "tools.reminderModeUsage": "Лимиты использования",
   "tools.reminderModeApp": "Прил.",
   "tools.reminderModeCategory": "Категория",
   "tools.reminderModeRelative": "Через интервал",
   "tools.reminderModeWeb": "Сайты",
-  "tools.reminderStatus.cancelled": "Отменено",
-  "tools.reminderStatus.fired": "Сработало",
-  "tools.reminderStatus.scheduled": "Запланировано",
   "tools.remindersTitle": "Напоминание",
   "tools.reminderTimeInvalid": "Время напоминания должно быть в будущем.",
   "tools.reset": "Сбросить",
@@ -160,24 +166,8 @@ export const MESSAGES = {
   "tools.shortBreakDuration": "Короткий перерыв",
   "tools.skipPhase": "Пропустить",
   "tools.activityReminderActive": "Активно",
-  "tools.activityReminderDailyLimit": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "",
-        {
-          "$op": "arg",
-          "name": "minutes"
-        },
-        " мин в день"
-      ]
-    }
-  },
   "tools.activityReminderDurationInvalid": "Укажите от 1 до 1440 мин.",
   "tools.activityReminderDurationLabel": "Дневной лимит (мин)",
-  "tools.activityReminderMessageLabel": "Сообщение",
-  "tools.activityReminderMessagePlaceholder": "Например: сделать перерыв",
   "tools.start": "Запустить",
   "tools.stateRefreshPending": "Состояние восстанавливается. Не повторяйте действие.",
   "tools.statusChip.break": "Перерыв",
@@ -185,7 +175,6 @@ export const MESSAGES = {
   "tools.statusChip.focus": "Работа",
   "tools.statusChip.reminder": "Напоминание",
   "tools.statusChip.stopwatch": "Таймер",
-  "tools.timerHint": "Результаты таймера не сохраняются в записях активности.",
   "tools.timerLabel": "Название",
   "tools.timerLabelPlaceholder": "Необязательно",
   "tools.timerModeCountdown": "Обратный отсчёт",

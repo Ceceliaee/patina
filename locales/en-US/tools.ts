@@ -1,20 +1,50 @@
 // en-US tools locale resource. Pure data only.
 export const MESSAGES = {
+  "tools.reminderTimeLabel": "Remind at",
+  "tools.reminderRepeatLabel": "Repeat",
+  "tools.reminderRepeatNone": "Never",
+  "tools.reminderRepeatInterval": "At intervals",
+  "tools.reminderRepeatDaily": "Daily",
+  "tools.reminderRepeatWeekly": "Weekly",
+  "tools.reminderRepeatMonthly": "Monthly",
+  "tools.reminderRepeatYearly": "Yearly",
+  "tools.reminderIntervalLabel": "Interval",
+  "tools.reminderMinutesUnit": "Minutes",
+  "tools.reminderHoursUnit": "Hours",
+  "tools.reminderRepeatInvalid": "Select at least one weekday.",
+
+  "tools.reminderSnooze": "Remind me later",
+  "tools.reminderConfirmComplete": "Mark complete",
+  "tools.reminderCompleted": "Completed",
+  "tools.reminderPendingConfirmation": "Awaiting confirmation",
+  "tools.reminderSnoozeDelay": {"$type": "message", "body": {"$op": "concat", "parts": ["In ", {"$op": "arg", "name": "value"}]}},
+  "tools.reminderOccurredAt": {"$type": "message", "body": {"$op": "concat", "parts": ["Reminder time: ", {"$op": "arg", "name": "value"}]}},
+  "tools.reminderEditTitle": "Edit reminder",
+  "tools.usageLimitReached": "Today’s time allowance is used up",
+  "tools.usageExtend": "Extend usage",
+  "tools.usageReturnDesktop": "Return to desktop",
+  "tools.usageExtendFifteen": "Use for 15 more minutes",
+  "tools.usageExtendHour": "Use for 1 more hour",
+  "tools.usageExtendToday": "No limit for today",
+  "tools.usageExtensionDuration": "Additional usage time",
+  "tools.usageExtendTitle": {"$type": "message", "body": {"$op": "concat", "parts": ["Extend usage for “", {"$op": "arg", "name": "value"}, "”"]}},
+  "tools.usageLimitSummary": {"$type": "message", "body": {"$op": "concat", "parts": ["You’ve used ", {"$op": "arg", "name": "value"}, ". The usage limit has been reached."]}},
   "tools.absoluteDateLabel": "Date",
   "tools.absoluteTimeLabel": "Time",
   "tools.actionFailed": "Action failed. Try again later.",
-  "tools.activityReminderAppPlaceholder": "Select app",
   "tools.activityReminderCandidatesLoadFailed": "Targets unavailable.",
-  "tools.activityReminderCategoryPlaceholder": "Select category",
   "tools.activityReminderDisable": "Disable",
+  "tools.activityReminderEdit": "Edit",
+  "tools.activityReminderDelete": "Delete",
+  "tools.activityReminderEditTitle": "Edit usage limit",
   "tools.activityReminderEmpty": "No rules",
   "tools.activityReminderRulesTitle": "Rules",
   "tools.activityReminderSuspension.source_disabled": "Source off",
   "tools.activityReminderSuspension.target_deleted": "Target deleted",
   "tools.activityReminderSuspension.target_excluded": "Excluded",
   "tools.activityReminderTargetLabel": "Target",
+  "tools.activityReminderTargetPlaceholder": "Choose an app, category, or website",
   "tools.activityReminderTargetRequired": "Select a target.",
-  "tools.activityReminderWebPlaceholder": "Select website",
   "tools.alertDismiss": "Got it",
   "tools.alertOccurredAt": {
     "$type": "message",
@@ -50,14 +80,6 @@ export const MESSAGES = {
   "tools.countdownDuration": "Countdown duration",
   "tools.createReminder": "Create",
   "tools.defaultReminderLabel": "Time is up",
-  "tools.dueNow": "Now",
-  "tools.durationPresets": {
-    "5": "5 min",
-    "10": "10 min",
-    "25": "25 min",
-    "30": "30 min",
-    "60": "60 min"
-  },
   "tools.focusDuration": "Focus duration",
   "tools.lap": "Lap",
   "tools.lapIndex": {
@@ -79,20 +101,6 @@ export const MESSAGES = {
   "tools.loadFailed": "Could not load tools status.",
   "tools.longBreakDuration": "Long break",
   "tools.longBreakEvery": "Long break interval",
-  "tools.longBreakEveryValue": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "Every ",
-        {
-          "$op": "arg",
-          "name": "count"
-        },
-        " pomodoros"
-      ]
-    }
-  },
   "tools.minuteValue": {
     "$type": "message",
     "body": {
@@ -140,18 +148,16 @@ export const MESSAGES = {
   "tools.pomodoroStatus.running": "Running",
   "tools.pomodoroTitle": "Pomodoro",
   "tools.relativeMinutesLabel": "Minutes from now",
-  "tools.reminderEmpty": "No pending reminders",
+  "tools.reminderEmpty": "No reminders",
   "tools.reminderLabel": "Reminder",
   "tools.reminderLabelPlaceholder": "Example: take a break",
   "tools.reminderModeAbsolute": "Exact time",
-  "tools.reminderModeEvent": "Event",
+  "tools.reminderModeEvent": "Timed reminders",
+  "tools.reminderModeUsage": "Usage limits",
   "tools.reminderModeApp": "App",
   "tools.reminderModeCategory": "Category",
   "tools.reminderModeRelative": "Relative time",
   "tools.reminderModeWeb": "Web",
-  "tools.reminderStatus.cancelled": "Cancelled",
-  "tools.reminderStatus.fired": "Fired",
-  "tools.reminderStatus.scheduled": "Scheduled",
   "tools.remindersTitle": "Reminder",
   "tools.reminderTimeInvalid": "Reminder time needs to be in the future.",
   "tools.reset": "Reset",
@@ -161,24 +167,8 @@ export const MESSAGES = {
   "tools.shortBreakDuration": "Short break",
   "tools.skipPhase": "Skip",
   "tools.activityReminderActive": "Active",
-  "tools.activityReminderDailyLimit": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "",
-        {
-          "$op": "arg",
-          "name": "minutes"
-        },
-        " min daily"
-      ]
-    }
-  },
   "tools.activityReminderDurationInvalid": "Use 1–1440 min.",
   "tools.activityReminderDurationLabel": "Daily limit (min)",
-  "tools.activityReminderMessageLabel": "Message",
-  "tools.activityReminderMessagePlaceholder": "Example: take a break",
   "tools.start": "Start",
   "tools.stateRefreshPending": "State is recovering. Do not repeat this action.",
   "tools.statusChip.break": "Break",
@@ -186,7 +176,6 @@ export const MESSAGES = {
   "tools.statusChip.focus": "Focus",
   "tools.statusChip.reminder": "Reminder",
   "tools.statusChip.stopwatch": "Timer",
-  "tools.timerHint": "Timer results are not written to activity records.",
   "tools.timerLabel": "Name",
   "tools.timerLabelPlaceholder": "Optional",
   "tools.timerModeCountdown": "Countdown",
