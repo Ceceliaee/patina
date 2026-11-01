@@ -1,3 +1,6 @@
+mod extensions;
+pub use extensions::extend_activity_reminder;
+
 use super::read::{
     fetch_active_activity_reminder_rules_tx, fetch_activity_reminder_rule_by_id,
     fetch_session_usage_facts_tx, fetch_web_usage_facts_tx,
@@ -106,6 +109,53 @@ pub async fn disable_activity_reminder_rule(
     Ok(())
 }
 
+pub async fn set_activity_reminder_enabled(
+    pool: &Pool<Sqlite>,
+    rule_id: i64,
+    enabled: bool,
+    now_ms: i64,
+) -> Result<(), String> {
+    let mut tx = pool.begin().await.map_err(|error| error.to_string())?;
+    let result = sqlx::query("UPDATE tool_activity_reminder_rules SET updated_at = ? WHERE id = ? AND disabled_at IS NULL")
+        .bind(now_ms).bind(rule_id).execute(&mut *tx).await.map_err(|error| error.to_string())?;
+    if result.rows_affected() == 0 {
+        return Err("activity reminder is unavailable".into());
+    }
+    sqlx::query("INSERT INTO tool_activity_reminder_states(rule_id, enabled) VALUES (?, ?) ON CONFLICT(rule_id) DO UPDATE SET enabled = excluded.enabled")
+        .bind(rule_id).bind(enabled).execute(&mut *tx).await.map_err(|error| error.to_string())?;
+    tx.commit().await.map_err(|error| error.to_string())
+}
+
+pub async fn update_activity_reminder_limit(
+    pool: &Pool<Sqlite>,
+    rule_id: i64,
+    limit_ms: i64,
+    now_ms: i64,
+) -> Result<(), String> {
+    if !(60_000..=86_400_000).contains(&limit_ms) {
+        return Err("activity reminder limit must be between 1 and 1440 minutes".into());
+    }
+    let mut tx = pool.begin().await.map_err(|error| error.to_string())?;
+    let previous: i64 = sqlx::query_scalar(
+        "SELECT limit_ms FROM tool_activity_reminder_rules WHERE id = ? AND disabled_at IS NULL",
+    )
+    .bind(rule_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|error| error.to_string())?
+    .ok_or("activity reminder is unavailable")?;
+    if previous != limit_ms {
+        sqlx::query("UPDATE tool_activity_reminder_rules SET limit_ms = ?, updated_at = ?, last_fired_date_key = NULL WHERE id = ?")
+            .bind(limit_ms).bind(now_ms).bind(rule_id).execute(&mut *tx).await.map_err(|error| error.to_string())?;
+        sqlx::query("DELETE FROM tool_activity_reminder_extensions WHERE rule_id = ?")
+            .bind(rule_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|error| error.to_string())?;
+    }
+    tx.commit().await.map_err(|error| error.to_string())
+}
+
 struct NormalizedActivityTarget {
     kind: &'static str,
     app_name: Option<String>,
@@ -168,13 +218,12 @@ fn normalize_activity_target(
     }
 }
 
-pub async fn fire_due_activity_reminders(
+pub(super) async fn load_activity_reminder_usage(
     tx: &mut Transaction<'_, Sqlite>,
-    date_key: &str,
+    rules: Vec<ToolActivityReminderRule>,
     day_start_ms: i64,
     now_ms: i64,
-) -> Result<Vec<ActivityReminderNotification>, String> {
-    let rules = fetch_active_activity_reminder_rules_tx(tx).await?;
+) -> Result<Vec<(ToolActivityReminderRule, i64, String)>, String> {
     let classification =
         crate::data::repositories::classification_settings::load_classification_snapshot_in_tx(tx)
             .await?;
@@ -186,17 +235,15 @@ pub async fn fire_due_activity_reminders(
     .map_err(|error| format!("failed to read web activity setting: {error}"))?
     .is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true"));
     let needs_session_facts = rules.iter().any(|rule| {
-        rule.last_fired_date_key.as_deref() != Some(date_key)
-            && matches!(
-                rule.target,
-                ActivityReminderTarget::App { .. } | ActivityReminderTarget::Category { .. }
-            )
+        matches!(
+            rule.target,
+            ActivityReminderTarget::App { .. } | ActivityReminderTarget::Category { .. }
+        )
     });
     let needs_web_facts = web_activity_enabled
-        && rules.iter().any(|rule| {
-            rule.last_fired_date_key.as_deref() != Some(date_key)
-                && matches!(rule.target, ActivityReminderTarget::Web { .. })
-        });
+        && rules
+            .iter()
+            .any(|rule| matches!(rule.target, ActivityReminderTarget::Web { .. }));
     let session_facts = if needs_session_facts {
         fetch_session_usage_facts_tx(tx, day_start_ms, now_ms).await?
     } else {
@@ -213,13 +260,9 @@ pub async fn fire_due_activity_reminders(
             *category_usage.entry(category.id).or_default() += fact.usage_ms;
         }
     }
-    let mut notifications = Vec::new();
+    let mut result = Vec::new();
 
     for rule in rules {
-        if rule.last_fired_date_key.as_deref() == Some(date_key) {
-            continue;
-        }
-
         let (usage_ms, target_label) = match &rule.target {
             ActivityReminderTarget::App { app_name, exe_name } => {
                 if exe_name
@@ -265,14 +308,40 @@ pub async fn fire_due_activity_reminders(
                 (usage, rule.label_snapshot.clone())
             }
         };
-        if usage_ms < rule.limit_ms {
+        result.push((rule, usage_ms, target_label));
+    }
+    Ok(result)
+}
+
+pub async fn fire_due_activity_reminders(
+    tx: &mut Transaction<'_, Sqlite>,
+    date_key: &str,
+    day_start_ms: i64,
+    now_ms: i64,
+) -> Result<Vec<ActivityReminderNotification>, String> {
+    let rules = fetch_active_activity_reminder_rules_tx(tx).await?;
+    let pending = rules
+        .into_iter()
+        .filter(|rule| {
+            rule.last_fired_date_key.as_deref() != Some(date_key)
+                && rule.limit_for_date(date_key).is_some()
+        })
+        .collect();
+    let mut notifications = Vec::new();
+    for (rule, usage_ms, target_label) in
+        load_activity_reminder_usage(tx, pending, day_start_ms, now_ms).await?
+    {
+        let Some(limit_ms) = rule.limit_for_date(date_key) else {
+            continue;
+        };
+        if usage_ms < limit_ms {
             continue;
         }
 
         let update = sqlx::query(
             "UPDATE tool_activity_reminder_rules
              SET last_fired_date_key = ?, updated_at = ?
-             WHERE id = ? AND disabled_at IS NULL
+             WHERE id = ? AND disabled_at IS NULL AND NOT EXISTS (SELECT 1 FROM tool_activity_reminder_states WHERE rule_id = tool_activity_reminder_rules.id AND enabled = 0)
                AND (last_fired_date_key IS NULL OR last_fired_date_key <> ?)",
         )
         .bind(date_key)
@@ -286,11 +355,20 @@ pub async fn fire_due_activity_reminders(
             continue;
         }
 
+        sqlx::query(
+            "INSERT INTO tool_activity_reminder_extensions(rule_id,last_fired_at) VALUES(?,?)
+            ON CONFLICT(rule_id) DO UPDATE SET last_fired_at=excluded.last_fired_at",
+        )
+        .bind(rule.id)
+        .bind(now_ms)
+        .execute(&mut **tx)
+        .await
+        .map_err(|error| error.to_string())?;
         notifications.push(ActivityReminderNotification {
             rule_id: rule.id,
             target: rule.target,
             target_label,
-            limit_ms: rule.limit_ms,
+            limit_ms,
             usage_ms,
             message: rule.message,
         });
@@ -324,7 +402,7 @@ pub async fn merge_activity_reminder_rules(
         if existing_id.is_some() {
             continue;
         }
-        sqlx::query(
+        let inserted = sqlx::query(
             "INSERT INTO tool_activity_reminder_rules (
                 target_kind, app_name, exe_name, category_id, normalized_domain,
                 label_snapshot, limit_ms, message, created_at, updated_at,
@@ -346,6 +424,17 @@ pub async fn merge_activity_reminder_rules(
         .execute(&mut **tx)
         .await
         .map_err(|error| format!("failed to merge activity reminder snapshot rules: {error}"))?;
+        sqlx::query("INSERT INTO tool_activity_reminder_states(rule_id,enabled) VALUES(?,?)")
+            .bind(inserted.last_insert_rowid())
+            .bind(rule.enabled)
+            .execute(&mut **tx)
+            .await
+            .map_err(|error| error.to_string())?;
+        sqlx::query("INSERT INTO tool_activity_reminder_extensions
+            (rule_id,last_fired_at,extension_date_key,extension_limit_ms,last_extended_alert_at) VALUES(?,?,?,?,?)")
+            .bind(inserted.last_insert_rowid()).bind(rule.last_fired_at).bind(&rule.extension_date_key)
+            .bind(rule.extension_limit_ms).bind(rule.last_extended_alert_at)
+            .execute(&mut **tx).await.map_err(|error| error.to_string())?;
     }
     Ok(())
 }

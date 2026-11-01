@@ -5,7 +5,9 @@ use crate::domain::tools::{
 };
 use sqlx::{Pool, Row, Sqlite, Transaction};
 
-const RECENT_REMINDER_LIMIT: i64 = 16;
+pub(super) const REMINDER_RECURRENCE_COLUMNS: &str =
+    "(SELECT recurrence FROM tool_reminder_recurrences WHERE reminder_id = tool_reminders.id) AS recurrence,
+     (SELECT recurrence_anchor_at FROM tool_reminder_recurrences WHERE reminder_id = tool_reminders.id) AS recurrence_anchor_at";
 
 pub async fn fetch_tools_snapshot(
     pool: &Pool<Sqlite>,
@@ -49,21 +51,26 @@ pub(super) async fn fetch_reminder_by_id(
     pool: &Pool<Sqlite>,
     id: i64,
 ) -> Result<ToolReminder, String> {
-    sqlx::query(
-        "SELECT id, label, scheduled_at, created_at, status, fired_at, cancelled_at
+    sqlx::query(&format!(
+        "SELECT id, label, scheduled_at, created_at, status, fired_at, cancelled_at, {REMINDER_RECURRENCE_COLUMNS}
          FROM tool_reminders
-         WHERE id = ?",
-    )
+         WHERE id = ?"
+    ))
     .bind(id)
     .fetch_one(pool)
     .await
     .map_err(|error| format!("failed to read reminder: {error}"))
-    .map(map_reminder_row)
+    .and_then(map_reminder_row)
 }
 
 pub(super) const ACTIVITY_RULE_COLUMNS: &str = "id, target_kind, app_name, exe_name, category_id,
     normalized_domain, label_snapshot, limit_ms, message, created_at, updated_at,
-    disabled_at, last_fired_date_key";
+    disabled_at, last_fired_date_key,
+    COALESCE((SELECT enabled FROM tool_activity_reminder_states WHERE rule_id = tool_activity_reminder_rules.id), 1) AS enabled,
+    (SELECT last_fired_at FROM tool_activity_reminder_extensions WHERE rule_id = tool_activity_reminder_rules.id) AS last_fired_at,
+    (SELECT extension_date_key FROM tool_activity_reminder_extensions WHERE rule_id = tool_activity_reminder_rules.id) AS extension_date_key,
+    (SELECT extension_limit_ms FROM tool_activity_reminder_extensions WHERE rule_id = tool_activity_reminder_rules.id) AS extension_limit_ms,
+    (SELECT last_extended_alert_at FROM tool_activity_reminder_extensions WHERE rule_id = tool_activity_reminder_rules.id) AS last_extended_alert_at";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct SessionUsageFact {
@@ -105,7 +112,7 @@ pub(super) async fn fetch_active_activity_reminder_rules_tx(
 ) -> Result<Vec<ToolActivityReminderRule>, String> {
     let query = format!(
         "SELECT {ACTIVITY_RULE_COLUMNS} FROM tool_activity_reminder_rules
-         WHERE disabled_at IS NULL ORDER BY created_at ASC, id ASC"
+         WHERE disabled_at IS NULL AND NOT EXISTS (SELECT 1 FROM tool_activity_reminder_states WHERE rule_id = tool_activity_reminder_rules.id AND enabled = 0) ORDER BY created_at ASC, id ASC"
     );
     let rows = sqlx::query(&query)
         .fetch_all(&mut **tx)
@@ -223,32 +230,22 @@ pub(super) async fn fetch_web_usage_facts_tx(
 }
 
 async fn fetch_visible_reminders(pool: &Pool<Sqlite>) -> Result<Vec<ToolReminder>, String> {
-    let rows = sqlx::query(
-        "SELECT id, label, scheduled_at, created_at, status, fired_at, cancelled_at
+    let rows = sqlx::query(&format!(
+        "SELECT id, label, scheduled_at, created_at, status, fired_at, cancelled_at, {REMINDER_RECURRENCE_COLUMNS}
          FROM tool_reminders
-         WHERE status = ?
-            OR id IN (
-                SELECT id
-                FROM tool_reminders
-                WHERE status <> ?
-                ORDER BY COALESCE(fired_at, cancelled_at, created_at) DESC, id DESC
-                LIMIT ?
-            )
+         WHERE status != 'cancelled'
          ORDER BY
-            CASE WHEN status = ? THEN 0 ELSE 1 END ASC,
-            CASE WHEN status = ? THEN scheduled_at ELSE -COALESCE(fired_at, cancelled_at, created_at) END ASC,
-            id ASC",
-    )
-    .bind(ReminderStatus::Scheduled.as_str())
-    .bind(ReminderStatus::Scheduled.as_str())
-    .bind(RECENT_REMINDER_LIMIT)
+            CASE WHEN status IN (?, 'paused') THEN 0 ELSE 1 END ASC,
+            CASE WHEN status IN (?, 'paused') THEN scheduled_at ELSE -COALESCE(fired_at, cancelled_at, created_at) END ASC,
+            id ASC"
+    ))
     .bind(ReminderStatus::Scheduled.as_str())
     .bind(ReminderStatus::Scheduled.as_str())
     .fetch_all(pool)
     .await
     .map_err(|error| format!("failed to load reminders: {error}"))?;
 
-    Ok(rows.into_iter().map(map_reminder_row).collect())
+    rows.into_iter().map(map_reminder_row).collect()
 }
 
 pub(super) async fn fetch_timer_by_id(pool: &Pool<Sqlite>, id: i64) -> Result<ToolTimer, String> {
@@ -348,9 +345,26 @@ async fn fetch_daily_pomodoro_count(pool: &Pool<Sqlite>, date_key: &str) -> Resu
     .map(|value| value.unwrap_or(0))
 }
 
-pub(super) fn map_reminder_row(row: sqlx::sqlite::SqliteRow) -> ToolReminder {
+pub(super) fn map_reminder_row(row: sqlx::sqlite::SqliteRow) -> Result<ToolReminder, String> {
     let status: String = row.get("status");
-    ToolReminder {
+    let recurrence = row
+        .get::<Option<String>, _>("recurrence")
+        .map(|value| {
+            serde_json::from_str::<crate::domain::reminder_schedule::ReminderRecurrence>(&value)
+        })
+        .transpose()
+        .map_err(|error| format!("invalid stored reminder recurrence: {error}"))?;
+    if let Some(rule) = &recurrence {
+        rule.validate()?;
+    }
+    let recurrence_anchor_at: Option<i64> = row.get("recurrence_anchor_at");
+    if recurrence.is_some() != recurrence_anchor_at.is_some()
+        || recurrence_anchor_at
+            .is_some_and(|value| chrono::DateTime::from_timestamp_millis(value).is_none())
+    {
+        return Err("invalid stored reminder recurrence anchor".into());
+    }
+    Ok(ToolReminder {
         id: row.get("id"),
         label: row.get("label"),
         scheduled_at: row.get("scheduled_at"),
@@ -358,7 +372,9 @@ pub(super) fn map_reminder_row(row: sqlx::sqlite::SqliteRow) -> ToolReminder {
         status: ReminderStatus::from_storage(&status),
         fired_at: row.get("fired_at"),
         cancelled_at: row.get("cancelled_at"),
-    }
+        recurrence,
+        recurrence_anchor_at,
+    })
 }
 
 pub(super) fn map_activity_reminder_rule_row(
@@ -391,6 +407,7 @@ pub(super) fn map_activity_reminder_rule_row(
         }
     };
     Ok(ToolActivityReminderRule {
+        enabled: row.get("enabled"),
         id: row.get("id"),
         target,
         label_snapshot: row.get("label_snapshot"),
@@ -400,6 +417,10 @@ pub(super) fn map_activity_reminder_rule_row(
         updated_at: row.get("updated_at"),
         disabled_at: row.get("disabled_at"),
         last_fired_date_key: row.get("last_fired_date_key"),
+        last_fired_at: row.get("last_fired_at"),
+        extension_date_key: row.get("extension_date_key"),
+        extension_limit_ms: row.get("extension_limit_ms"),
+        last_extended_alert_at: row.get("last_extended_alert_at"),
         suspension_reason: None,
     })
 }

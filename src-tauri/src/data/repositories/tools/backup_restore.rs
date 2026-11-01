@@ -8,26 +8,36 @@ use std::collections::HashMap;
 pub async fn fetch_all_reminders_for_backup(
     pool: &Pool<Sqlite>,
 ) -> Result<Vec<BackupToolReminder>, String> {
-    let rows = sqlx::query(
-        "SELECT id, label, scheduled_at, created_at, status, fired_at, cancelled_at
+    let recurrence_columns =
+        if crate::data::schema_contracts::has_reminder_recurrence_schema(pool).await? {
+            super::read::REMINDER_RECURRENCE_COLUMNS
+        } else {
+            "NULL AS recurrence, NULL AS recurrence_anchor_at"
+        };
+    let rows = sqlx::query(&format!(
+        "SELECT id, label, scheduled_at, created_at, status, fired_at, cancelled_at, {recurrence_columns}
          FROM tool_reminders
-         ORDER BY id ASC",
-    )
+         ORDER BY id ASC"
+    ))
     .fetch_all(pool)
     .await
     .map_err(|error| format!("failed to read tool reminders for backup: {error}"))?;
 
-    Ok(rows
-        .into_iter()
-        .map(|row| BackupToolReminder {
-            label: row.get("label"),
-            scheduled_at: row.get("scheduled_at"),
-            created_at: row.get("created_at"),
-            status: row.get("status"),
-            fired_at: row.get("fired_at"),
-            cancelled_at: row.get("cancelled_at"),
+    rows.into_iter()
+        .map(|row| {
+            let reminder = super::read::map_reminder_row(row)?;
+            Ok(BackupToolReminder {
+                label: reminder.label,
+                scheduled_at: reminder.scheduled_at,
+                created_at: reminder.created_at,
+                status: reminder.status.as_str().into(),
+                fired_at: reminder.fired_at,
+                cancelled_at: reminder.cancelled_at,
+                recurrence: reminder.recurrence,
+                recurrence_anchor_at: reminder.recurrence_anchor_at,
+            })
         })
-        .collect())
+        .collect()
 }
 
 pub async fn fetch_all_timers_for_backup(
@@ -151,6 +161,9 @@ pub async fn insert_missing_for_restore(
     daily_stats: &[BackupToolDailyStats],
 ) -> Result<(), String> {
     for reminder in reminders {
+        if let Some(rule) = &reminder.recurrence {
+            rule.validate()?;
+        }
         let exists: Option<i64> = sqlx::query_scalar(
             "SELECT id FROM tool_reminders
              WHERE label = ? AND scheduled_at = ? AND created_at = ?
@@ -163,7 +176,7 @@ pub async fn insert_missing_for_restore(
         .await
         .map_err(|error| format!("failed to inspect tool reminder merge: {error}"))?;
         if exists.is_none() {
-            sqlx::query(
+            let inserted = sqlx::query(
                 "INSERT INTO tool_reminders (label, scheduled_at, created_at, status, fired_at, cancelled_at)
                  VALUES (?, ?, ?, ?, ?, ?)",
             )
@@ -176,6 +189,13 @@ pub async fn insert_missing_for_restore(
             .execute(&mut **tx)
             .await
             .map_err(|error| format!("failed to merge restore tool reminders: {error}"))?;
+            super::timed_reminders::save_recurrence(
+                tx,
+                inserted.last_insert_rowid(),
+                reminder.recurrence.as_ref(),
+                reminder.recurrence_anchor_at,
+            )
+            .await?;
         }
     }
 
@@ -325,6 +345,15 @@ mod tests {
             .await
             .unwrap();
         pool.execute(schema::ACTIVITY_REMINDER_RULES_SCHEMA_SQL)
+            .await
+            .unwrap();
+        pool.execute(crate::data::schema::ACTIVITY_REMINDER_EXTENSION_SQL)
+            .await
+            .unwrap();
+        pool.execute(crate::data::schema::ACTIVITY_REMINDER_ENABLED_SQL)
+            .await
+            .unwrap();
+        pool.execute(crate::data::schema::REMINDER_RECURRENCE_SQL)
             .await
             .unwrap();
         pool

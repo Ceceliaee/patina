@@ -33,7 +33,7 @@ async fn tick_tools_with_pool(
         .begin()
         .await
         .map_err(|error| format!("failed to start tools tick transaction: {error}"))?;
-    let reminders = tools::fire_due_reminders(&mut tx, now_ms).await?;
+    let reminders = tools::timed_reminders::fire_due_reminders(&mut tx, now_ms).await?;
     let activity_reminders =
         tools::fire_due_activity_reminders(&mut tx, date_key, day_start_ms, now_ms).await?;
     let completed_timer = tools::complete_due_countdown(&mut tx, now_ms).await?;
@@ -68,11 +68,51 @@ impl<R: Runtime> ToolsStore for SqliteToolsStore<R> {
                 ToolsMutation::CreateReminder {
                     label,
                     scheduled_at,
+                    recurrence,
                 } => {
-                    tools::create_reminder(&pool, &label, scheduled_at, now_ms).await?;
+                    tools::timed_reminders::create_reminder(
+                        &pool,
+                        &label,
+                        scheduled_at,
+                        recurrence,
+                        now_ms,
+                    )
+                    .await?;
                 }
                 ToolsMutation::CancelReminder { reminder_id } => {
-                    tools::cancel_reminder(&pool, reminder_id, now_ms).await?;
+                    tools::timed_reminders::cancel_reminder(&pool, reminder_id, now_ms).await?;
+                }
+                ToolsMutation::ResolveReminderAlert {
+                    reminder_id,
+                    fired_at,
+                    delay_minutes,
+                } => {
+                    tools::timed_reminders::resolve_reminder_alert(
+                        &pool,
+                        reminder_id,
+                        fired_at,
+                        delay_minutes,
+                        now_ms,
+                    )
+                    .await?;
+                }
+                ToolsMutation::UpdateReminder {
+                    reminder_id,
+                    label,
+                    scheduled_at,
+                    enabled,
+                    recurrence,
+                } => {
+                    tools::timed_reminders::update_reminder(
+                        &pool,
+                        reminder_id,
+                        &label,
+                        scheduled_at,
+                        enabled,
+                        recurrence,
+                        now_ms,
+                    )
+                    .await?;
                 }
                 ToolsMutation::CreateActivityReminderRule(request) => {
                     tools::create_activity_reminder_rule(
@@ -87,6 +127,29 @@ impl<R: Runtime> ToolsStore for SqliteToolsStore<R> {
                 }
                 ToolsMutation::DisableActivityReminderRule { rule_id } => {
                     tools::disable_activity_reminder_rule(&pool, rule_id, now_ms).await?;
+                }
+                ToolsMutation::SetActivityReminderEnabled { rule_id, enabled } => {
+                    tools::set_activity_reminder_enabled(&pool, rule_id, enabled, now_ms).await?;
+                }
+                ToolsMutation::UpdateActivityReminderLimit { rule_id, limit_ms } => {
+                    tools::update_activity_reminder_limit(&pool, rule_id, limit_ms, now_ms).await?;
+                }
+                ToolsMutation::ExtendActivityReminder {
+                    rule_id,
+                    alert_at,
+                    extension,
+                    day_start_ms,
+                } => {
+                    tools::extend_activity_reminder(
+                        &pool,
+                        rule_id,
+                        alert_at,
+                        extension,
+                        &date_key,
+                        day_start_ms,
+                        now_ms,
+                    )
+                    .await?;
                 }
                 ToolsMutation::StartTimer(request) => {
                     tools::start_timer(
@@ -135,8 +198,9 @@ impl<R: Runtime> ToolsStore for SqliteToolsStore<R> {
         Box::pin(async move {
             let pool = wait_for_sqlite_pool(&self.app).await?;
             tools::pause_running_stopwatch_after_restart(&pool, now_ms).await?;
-            drop(pool);
-            self.tick_with_pool(now_ms, &date_key, day_start_ms).await
+            let mut events = tick_tools_with_pool(&pool, now_ms, &date_key, day_start_ms).await?;
+            events.reminders = tools::timed_reminders::pending_reminder_alerts(&pool).await?;
+            Ok(events)
         })
     }
 
@@ -175,13 +239,14 @@ mod tests {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         let outcome = AssertUnwindSafe(async {
             for sql in [schema::CURRENT_BASELINE_SCHEMA_SQL, schema::TOOLS_TABLES_SCHEMA_SQL,
-                schema::SOFTWARE_REMINDER_RULES_SCHEMA_SQL, schema::ACTIVITY_REMINDER_RULES_SCHEMA_SQL,
+                schema::SOFTWARE_REMINDER_RULES_SCHEMA_SQL, schema::ACTIVITY_REMINDER_RULES_SCHEMA_SQL, schema::ACTIVITY_REMINDER_EXTENSION_SQL, schema::ACTIVITY_REMINDER_ENABLED_SQL,
+            schema::REMINDER_RECURRENCE_SQL,
                 schema::WEB_ACTIVITY_SCHEMA_SQL] {
                 pool.execute(sql).await.unwrap();
             }
             pool.execute("INSERT INTO sessions(app_name, exe_name, window_title, start_time, end_time, duration, continuity_group_start_time)
                 VALUES ('Editor', 'editor.exe', 'Doc', 0, 60000, 60000, 0);").await.unwrap();
-            tools::create_reminder(&pool, "Due reminder", 115_000, 110_000).await.unwrap();
+            tools::timed_reminders::create_reminder(&pool, "Due reminder", 115_000, None, 110_000).await.unwrap();
             tools::create_activity_reminder_rule(&pool, &ActivityReminderTarget::App {
                 app_name: "Editor".into(), exe_name: Some("editor.exe".into()),
             }, "Editor", 60_000, "Take a break", 110_000).await.unwrap();

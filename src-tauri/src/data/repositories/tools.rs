@@ -1,17 +1,20 @@
 use crate::domain::tools::{
     CompletedPomodoroNotification, CompletedTimerNotification, PomodoroPhase, PomodoroStatus,
-    ReminderStatus, TimerMode, TimerStatus, ToolPomodoroRun, ToolReminder, ToolRuntimeSettings,
-    ToolTimer, ToolTimerLap,
+    TimerMode, TimerStatus, ToolPomodoroRun, ToolRuntimeSettings, ToolTimer, ToolTimerLap,
 };
 use sqlx::{Pool, Sqlite, Transaction};
 
+#[cfg(test)]
+mod activity_extensions_tests;
 mod activity_reminders;
 mod backup_restore;
 mod read;
+pub(crate) mod timed_reminders;
 
 pub use activity_reminders::{
-    create_activity_reminder_rule, disable_activity_reminder_rule, fire_due_activity_reminders,
-    merge_activity_reminder_rules,
+    create_activity_reminder_rule, disable_activity_reminder_rule, extend_activity_reminder,
+    fire_due_activity_reminders, merge_activity_reminder_rules, set_activity_reminder_enabled,
+    update_activity_reminder_limit,
 };
 pub(crate) use read::fetch_all_activity_reminder_rules;
 pub use read::fetch_tools_snapshot;
@@ -23,104 +26,14 @@ pub use backup_restore::{
 };
 
 use read::{
-    fetch_latest_pomodoro, fetch_latest_timer, fetch_pomodoro_by_id, fetch_reminder_by_id,
-    fetch_timer_by_id, map_reminder_row, map_timer_lap_row,
+    fetch_latest_pomodoro, fetch_latest_timer, fetch_pomodoro_by_id, fetch_timer_by_id,
+    map_timer_lap_row,
 };
 
 pub async fn load_tool_runtime_settings(
     _pool: &Pool<Sqlite>,
 ) -> Result<ToolRuntimeSettings, sqlx::Error> {
     Ok(ToolRuntimeSettings::default())
-}
-
-pub async fn create_reminder(
-    pool: &Pool<Sqlite>,
-    label: &str,
-    scheduled_at: i64,
-    now_ms: i64,
-) -> Result<ToolReminder, String> {
-    let label = label.trim();
-    let safe_label = if label.is_empty() {
-        "时间到了"
-    } else {
-        label
-    };
-
-    let result = sqlx::query(
-        "INSERT INTO tool_reminders (label, scheduled_at, created_at, status)
-         VALUES (?, ?, ?, ?)",
-    )
-    .bind(safe_label)
-    .bind(scheduled_at)
-    .bind(now_ms)
-    .bind(ReminderStatus::Scheduled.as_str())
-    .execute(pool)
-    .await
-    .map_err(|error| format!("failed to create reminder: {error}"))?;
-
-    fetch_reminder_by_id(pool, result.last_insert_rowid()).await
-}
-
-pub async fn cancel_reminder(
-    pool: &Pool<Sqlite>,
-    reminder_id: i64,
-    now_ms: i64,
-) -> Result<(), String> {
-    sqlx::query(
-        "UPDATE tool_reminders
-         SET status = ?, cancelled_at = ?
-         WHERE id = ? AND status = ?",
-    )
-    .bind(ReminderStatus::Cancelled.as_str())
-    .bind(now_ms)
-    .bind(reminder_id)
-    .bind(ReminderStatus::Scheduled.as_str())
-    .execute(pool)
-    .await
-    .map_err(|error| format!("failed to cancel reminder: {error}"))?;
-    Ok(())
-}
-
-pub async fn fire_due_reminders(
-    tx: &mut Transaction<'_, Sqlite>,
-    now_ms: i64,
-) -> Result<Vec<ToolReminder>, String> {
-    let rows = sqlx::query(
-        "SELECT id, label, scheduled_at, created_at, status, fired_at, cancelled_at
-         FROM tool_reminders
-         WHERE status = ? AND scheduled_at <= ?
-         ORDER BY scheduled_at ASC, id ASC",
-    )
-    .bind(ReminderStatus::Scheduled.as_str())
-    .bind(now_ms)
-    .fetch_all(&mut **tx)
-    .await
-    .map_err(|error| format!("failed to load due reminders: {error}"))?;
-
-    let reminders = rows.into_iter().map(map_reminder_row).collect::<Vec<_>>();
-    for reminder in &reminders {
-        sqlx::query(
-            "UPDATE tool_reminders
-             SET status = ?, fired_at = ?
-             WHERE id = ? AND status = ?",
-        )
-        .bind(ReminderStatus::Fired.as_str())
-        .bind(now_ms)
-        .bind(reminder.id)
-        .bind(ReminderStatus::Scheduled.as_str())
-        .execute(&mut **tx)
-        .await
-        .map_err(|error| format!("failed to mark reminder fired: {error}"))?;
-    }
-
-    Ok(reminders
-        .into_iter()
-        .map(|mut reminder| {
-            reminder.status = ReminderStatus::Fired;
-            reminder.fired_at = Some(now_ms);
-            reminder
-        })
-        .collect())
 }
 
 pub async fn start_timer(
@@ -611,9 +524,12 @@ async fn increment_daily_pomodoro_stat_tx(
 
 #[cfg(test)]
 mod tests {
+    use super::timed_reminders::*;
     use super::*;
     use crate::data::schema as db_schema;
-    use crate::domain::tools::{ActivityReminderSuspensionReason, ActivityReminderTarget};
+    use crate::domain::tools::{
+        ActivityReminderSuspensionReason, ActivityReminderTarget, ReminderStatus, ToolReminder,
+    };
     use sqlx::{Executor, SqlitePool};
 
     async fn fire_due_reminders(
@@ -621,7 +537,7 @@ mod tests {
         now_ms: i64,
     ) -> Result<Vec<ToolReminder>, String> {
         let mut tx = pool.begin().await.map_err(|error| error.to_string())?;
-        let result = super::fire_due_reminders(&mut tx, now_ms).await?;
+        let result = super::timed_reminders::fire_due_reminders(&mut tx, now_ms).await?;
         tx.commit().await.map_err(|error| error.to_string())?;
         Ok(result)
     }
@@ -674,6 +590,15 @@ mod tests {
         pool.execute(db_schema::ACTIVITY_REMINDER_RULES_SCHEMA_SQL)
             .await
             .unwrap();
+        pool.execute(db_schema::ACTIVITY_REMINDER_EXTENSION_SQL)
+            .await
+            .unwrap();
+        pool.execute(db_schema::ACTIVITY_REMINDER_ENABLED_SQL)
+            .await
+            .unwrap();
+        pool.execute(db_schema::REMINDER_RECURRENCE_SQL)
+            .await
+            .unwrap();
         pool.execute(db_schema::WEB_ACTIVITY_SCHEMA_SQL)
             .await
             .unwrap();
@@ -685,9 +610,15 @@ mod tests {
         tauri::async_runtime::block_on(async {
             let pool = setup_test_db().await;
 
-            create_reminder(&pool, "'; DROP TABLE tool_reminders; --", 2_000, 1_000)
-                .await
-                .unwrap();
+            create_reminder(
+                &pool,
+                "'; DROP TABLE tool_reminders; --",
+                2_000,
+                None,
+                1_000,
+            )
+            .await
+            .unwrap();
             let snapshot = fetch_tools_snapshot(&pool, 1_000, "2026-06-07")
                 .await
                 .unwrap();
@@ -702,10 +633,118 @@ mod tests {
     }
 
     #[test]
+    fn reminder_controls_preserve_identity_and_never_fire_paused_or_deleted_rows() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            let reminder = create_reminder(&pool, "Break", 2_000, None, 1_000)
+                .await
+                .unwrap();
+            update_reminder(&pool, reminder.id, "Break", 2_000, false, None, 1_500)
+                .await
+                .unwrap();
+            let snapshot = fetch_tools_snapshot(&pool, 3_000, "2026-10-31")
+                .await
+                .unwrap();
+            assert_eq!(snapshot.reminders[0].status, ReminderStatus::Paused);
+            assert_eq!(snapshot.next_reminder_at, None);
+            assert!(fire_due_reminders(&pool, 3_000).await.unwrap().is_empty());
+            assert!(
+                update_reminder(&pool, reminder.id, "Break", 2_000, true, None, 3_000)
+                    .await
+                    .is_err()
+            );
+            assert!(
+                update_reminder(&pool, reminder.id, " ", 4_000, true, None, 3_000)
+                    .await
+                    .is_err()
+            );
+            update_reminder(&pool, reminder.id, "Revised", 4_000, false, None, 3_000)
+                .await
+                .unwrap();
+            let backup = fetch_all_reminders_for_backup(&pool).await.unwrap();
+            assert_eq!(backup[0].status, "paused");
+            let restored = setup_test_db().await;
+            let mut tx = restored.begin().await.unwrap();
+            insert_missing_for_restore(&mut tx, &backup, &[], &[], &[], &[])
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+            assert!(fire_due_reminders(&restored, 5_000)
+                .await
+                .unwrap()
+                .is_empty());
+            assert_eq!(
+                fetch_tools_snapshot(&restored, 5_000, "2026-10-31")
+                    .await
+                    .unwrap()
+                    .reminders[0]
+                    .status,
+                ReminderStatus::Paused
+            );
+            update_reminder(&pool, reminder.id, "Revised", 4_000, true, None, 3_000)
+                .await
+                .unwrap();
+            let fired = fire_due_reminders(&pool, 4_001).await.unwrap();
+            assert_eq!(fired[0].id, reminder.id);
+            assert_eq!(fired[0].label, "Revised");
+            assert!(
+                update_reminder(&pool, reminder.id, "Again", 6_000, true, None, 5_000)
+                    .await
+                    .is_err()
+            );
+            let deleted = create_reminder(&pool, "Delete", 8_000, None, 5_000)
+                .await
+                .unwrap();
+            update_reminder(&pool, deleted.id, "Delete", 8_000, false, None, 5_000)
+                .await
+                .unwrap();
+            cancel_reminder(&pool, deleted.id, 5_000).await.unwrap();
+            assert!(
+                update_reminder(&pool, deleted.id, "Delete", 8_000, true, None, 5_000)
+                    .await
+                    .is_err()
+            );
+            assert!(fire_due_reminders(&pool, 9_000).await.unwrap().is_empty());
+        });
+    }
+
+    #[test]
+    fn paused_reminders_are_not_truncated_to_recent_history() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            for index in 0..30 {
+                let reminder =
+                    create_reminder(&pool, &format!("Reminder {index}"), 2_000, None, 1_000)
+                        .await
+                        .unwrap();
+                update_reminder(
+                    &pool,
+                    reminder.id,
+                    &reminder.label,
+                    2_000,
+                    false,
+                    None,
+                    1_000,
+                )
+                .await
+                .unwrap();
+            }
+            assert_eq!(
+                fetch_tools_snapshot(&pool, 3_000, "2026-10-31")
+                    .await
+                    .unwrap()
+                    .reminders
+                    .len(),
+                30
+            );
+        });
+    }
+
+    #[test]
     fn due_reminder_fires_only_once() {
         tauri::async_runtime::block_on(async {
             let pool = setup_test_db().await;
-            create_reminder(&pool, "Stand up", 1_000, 900)
+            create_reminder(&pool, "Stand up", 1_000, None, 900)
                 .await
                 .unwrap();
 
@@ -713,8 +752,136 @@ mod tests {
             let second = fire_due_reminders(&pool, 1_200).await.unwrap();
 
             assert_eq!(first.len(), 1);
-            assert_eq!(first[0].status, ReminderStatus::Fired);
+            assert_eq!(first[0].status, ReminderStatus::PendingConfirmation);
             assert!(second.is_empty());
+        });
+    }
+
+    #[test]
+    fn timed_reminder_completion_retains_history_and_backup_states() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            for index in 0..20 {
+                create_reminder(&pool, &format!("History {index}"), 1_000, None, 900)
+                    .await
+                    .unwrap();
+            }
+            let due = fire_due_reminders(&pool, 1_100).await.unwrap();
+            for row in due.iter().take(19) {
+                resolve_reminder_alert(&pool, row.id, 1_100, None, 1_200)
+                    .await
+                    .unwrap();
+                resolve_reminder_alert(&pool, row.id, 1_100, None, 1_300)
+                    .await
+                    .unwrap();
+            }
+            assert!(fire_due_reminders(&pool, 10_000).await.unwrap().is_empty());
+            assert_eq!(pending_reminder_alerts(&pool).await.unwrap().len(), 1);
+            let backup = fetch_all_reminders_for_backup(&pool).await.unwrap();
+            let restored = setup_test_db().await;
+            let mut tx = restored.begin().await.unwrap();
+            insert_missing_for_restore(&mut tx, &backup, &[], &[], &[], &[])
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+            let snapshot = fetch_tools_snapshot(&restored, 10_000, "2026-11-01")
+                .await
+                .unwrap();
+            assert_eq!(
+                snapshot.reminders.len(),
+                20,
+                "completed items must not fall out of a recent-history cap"
+            );
+            assert_eq!(
+                snapshot
+                    .reminders
+                    .iter()
+                    .filter(|row| row.status == ReminderStatus::Fired)
+                    .count(),
+                19
+            );
+            assert!(snapshot.next_reminder_at.is_none());
+            assert_eq!(pending_reminder_alerts(&restored).await.unwrap().len(), 1);
+            assert!(fire_due_reminders(&restored, 20_000)
+                .await
+                .unwrap()
+                .is_empty());
+            cancel_reminder(&pool, due[0].id, 2_000).await.unwrap();
+            assert_eq!(
+                fetch_tools_snapshot(&pool, 2_000, "2026-11-01")
+                    .await
+                    .unwrap()
+                    .reminders
+                    .len(),
+                19
+            );
+            update_reminder(&pool, due[1].id, "Again", 30_000, true, None, 2_000)
+                .await
+                .unwrap();
+            let again = fire_due_reminders(&pool, 30_000).await.unwrap();
+            assert_eq!(again.len(), 1);
+            assert_eq!(again[0].id, due[1].id);
+        });
+    }
+
+    #[test]
+    fn timed_reminder_snooze_preserves_identity_and_rejects_stale_confirmations() {
+        tauri::async_runtime::block_on(async {
+            for minutes in [5, 15, 30] {
+                let pool = setup_test_db().await;
+                let row = create_reminder(&pool, "Break", 1_000, None, 900)
+                    .await
+                    .unwrap();
+                assert!(resolve_reminder_alert(&pool, row.id, 1_100, None, 1_000)
+                    .await
+                    .is_err());
+                fire_due_reminders(&pool, 1_100).await.unwrap();
+                for invalid in [0, 1, 60, u32::MAX] {
+                    assert!(
+                        resolve_reminder_alert(&pool, row.id, 1_100, Some(invalid), 2_000)
+                            .await
+                            .is_err()
+                    );
+                }
+                assert!(resolve_reminder_alert(&pool, row.id, 1_099, None, 2_000)
+                    .await
+                    .is_err());
+                resolve_reminder_alert(&pool, row.id, 1_100, Some(minutes), 2_000)
+                    .await
+                    .unwrap();
+                // Retrying after a committed write must keep the original deadline.
+                resolve_reminder_alert(&pool, row.id, 1_100, Some(minutes), 5_000)
+                    .await
+                    .unwrap();
+                let deadline = 2_000 + i64::from(minutes) * 60_000;
+                let snapshot = fetch_tools_snapshot(&pool, 5_000, "2026-11-01")
+                    .await
+                    .unwrap();
+                assert_eq!(snapshot.reminders.len(), 1);
+                assert_eq!(snapshot.reminders[0].id, row.id);
+                assert_eq!(snapshot.next_reminder_at, Some(deadline));
+                assert!(pending_reminder_alerts(&pool).await.unwrap().is_empty());
+                assert!(fire_due_reminders(&pool, deadline - 1)
+                    .await
+                    .unwrap()
+                    .is_empty());
+                let again = fire_due_reminders(&pool, deadline).await.unwrap();
+                assert_eq!(again.len(), 1);
+                assert_eq!(again[0].id, row.id);
+                assert!(resolve_reminder_alert(&pool, row.id, 1_100, None, deadline)
+                    .await
+                    .is_err());
+                assert!(fire_due_reminders(&pool, deadline + 1)
+                    .await
+                    .unwrap()
+                    .is_empty());
+                cancel_reminder(&pool, row.id, deadline).await.unwrap();
+                assert!(
+                    resolve_reminder_alert(&pool, row.id, deadline, None, deadline)
+                        .await
+                        .is_err()
+                );
+            }
         });
     }
 
