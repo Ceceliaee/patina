@@ -205,7 +205,11 @@ export async function verifyMiniContentRuntime(client: CdpConnection, miniClient
       const shell = document.querySelector('.mini-shell');
       return shell?.dataset.expanded === 'true' && shell.dataset.transitioning === 'false'
         && document.activeElement === shell && Boolean(document.querySelector('.mini-content'));
-    })()`), 5_000);
+    })()`), 5_000).catch(async error => {
+      const state = await evaluate(miniClient, `({shell:document.querySelector('.mini-shell')?.dataset,
+        active:document.activeElement?.className,content:!!document.querySelector('.mini-content'),focused:document.hasFocus()})`);
+      throw new Error(`${String(error)}; renderer=${JSON.stringify(state)}`);
+    });
     await waitFor("native Mini activation follows the explicit open", () => evaluate(client,
       `window.__TAURI_INTERNALS__.invoke('plugin:window|is_focused',{label:'mini'})`), 5_000);
     assertMiniHasNoNativeCaption(processId);

@@ -1,5 +1,5 @@
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
-import { evaluate, waitForExpression } from "./browserHarness.ts";
+import { evaluate, waitFor } from "./browserHarness.ts";
 
 // Module entry points must not inherit classifications created by an earlier
 // page's interaction tests. Preserve every setting outside this fixture.
@@ -9,7 +9,16 @@ export async function withClassifiedApps(context: BrowserSmokeContext, scenario:
   const reload = async () => {
     const origin = await evaluate(client, sessionId, "performance.timeOrigin");
     await client.command("Page.reload", {}, sessionId);
-    await waitForExpression(client, sessionId, `performance.timeOrigin !== ${origin} && Boolean(globalThis.__PATINA_MAIN_WINDOW_READY_EVIDENCE)`);
+    await waitFor("classified app fixture reload", async () => {
+      try {
+        return await evaluate(client, sessionId, `performance.timeOrigin !== ${origin} && Boolean(globalThis.__PATINA_MAIN_WINDOW_READY_EVIDENCE)`) || null;
+      } catch (error) {
+        // Page.reload can destroy the old execution context during the readiness probe.
+        if (error instanceof Error && error.message.includes('"code":-32000')
+          && error.message.includes('Inspected target navigated or closed')) return null;
+        throw error;
+      }
+    });
   };
   const failures: unknown[] = [];
   try {

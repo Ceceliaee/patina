@@ -94,14 +94,32 @@ $backdropBounds=$form.Bounds; $backdropBorder=$form.FormBorderStyle; $backdropCo
 function Focus-MiniProbeInput {
   $form.Show()
   $form.TopMost=$true
-  $form.BringToFront()
-  [System.Windows.Forms.Application]::DoEvents()
-  [void][MiniProbe]::SetCursorPos([int]($form.Left+$form.Width/2),[int]($form.Top+$form.Height/2))
-  [MiniProbe]::mouse_event(2,0,0,0,[UIntPtr]::Zero)
-  [MiniProbe]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
-  [System.Windows.Forms.Application]::DoEvents()
-  $form.TopMost=$false
-  [void][MiniProbe]::SetForegroundWindow($form.Handle)
+  try {
+    $form.BringToFront()
+    [System.Windows.Forms.Application]::DoEvents()
+    $bounds=New-Object MiniProbe+Rect
+    if (-not [MiniProbe]::GetWindowRect($form.Handle,[ref]$bounds)) { throw 'Cannot locate owned input target' }
+    $point=New-Object MiniProbe+Point
+    $point.X=[int](($bounds.Left+$bounds.Right)/2); $point.Y=[int](($bounds.Top+$bounds.Bottom)/2)
+    $hit=[MiniProbe]::WindowFromPoint($point)
+    if ($hit -ne $form.Handle -and -not [MiniProbe]::IsChild($form.Handle,$hit)) { throw 'Input environment unavailable: owned focus target is covered' }
+    $previousForeground=[MiniProbe]::GetForegroundWindow()
+    if (-not [MiniProbe]::SetPhysicalCursorPos($point.X,$point.Y)) { throw 'Cannot move to owned input target' }
+    [MiniProbe]::mouse_event(2,0,0,0,[UIntPtr]::Zero)
+    [MiniProbe]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
+    # Mouse activation is queued; observe its completion without injecting another click.
+    $deadline=[DateTime]::UtcNow.AddSeconds(2)
+    do {
+      [System.Windows.Forms.Application]::DoEvents()
+      $current=New-Object MiniProbe+Point; [void][MiniProbe]::GetPhysicalCursorPos([ref]$current)
+      if ($current.X -ne $point.X -or $current.Y -ne $point.Y) { throw 'Input precondition changed: cursor moved while acquiring focus; stopping injection' }
+      $foreground=[MiniProbe]::GetForegroundWindow()
+      if ($foreground -eq $form.Handle) { return }
+      if ($foreground -ne $previousForeground -and $foreground -ne [IntPtr]::Zero) { throw 'Input precondition changed: foreground changed while acquiring focus; stopping injection' }
+      [System.Threading.Thread]::Sleep(10)
+    } while ([DateTime]::UtcNow -lt $deadline)
+    throw "Owned input target activation timed out: expected $($form.Handle), observed $foreground"
+  } finally { $form.TopMost=$false }
 }
 try {
   while ($true) {

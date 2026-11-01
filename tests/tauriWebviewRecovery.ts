@@ -145,6 +145,9 @@ export async function verifyWebviewRecoveryLimit(client: CdpConnection, port: nu
     const sample = committedSample(storage.paths.databasePath);
     return sample > before ? sample : null;
   }, 10_000);
+  // Release the test's debugger before observing controller/browser teardown,
+  // just as the preceding recovery scenarios do after injecting a fault.
+  client.close();
   const dialog = await waitFor("one native recovery failure dialog from the isolated app", () => {
     const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `
       [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
@@ -188,19 +191,22 @@ public static class PatinaDialogRead {
   }, 15_000);
   assert.match(dialog, /Patina/);
   assert.match(dialog, /窗口多次恢复失败，已停止自动重试/);
+  let lastTargetObservation = "not sampled";
   const targets = await waitFor("exhausted recovery removes its CDP target", async () => {
     // Browser teardown may briefly leave an endpoint that accepts but cannot answer.
     // Retry that observation; only a real empty listing or refused connection proves removal.
     try {
       const response = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(1_000) });
+      assert.ok(response.ok, `CDP target listing failed: HTTP ${response.status}`);
       const listed = await response.json() as Array<{ webSocketDebuggerUrl?: string }>;
+      lastTargetObservation = JSON.stringify(listed);
       return listed.some(target => target.webSocketDebuggerUrl === client.url) ? null : listed;
     } catch (error) {
       if (error instanceof TypeError && (error.cause as { code?: string })?.code === "ECONNREFUSED") return [];
-      if (error instanceof DOMException && error.name === "TimeoutError") return null;
+      if (error instanceof DOMException && error.name === "TimeoutError") { lastTargetObservation = "CDP endpoint did not answer within 1000 ms"; return null; }
       throw error;
     }
-  }, 10_000);
+  }, 10_000).catch(error => { throw new Error(`WebView teardown unconfirmed: ${lastTargetObservation}`, { cause: error }); });
   assert.ok(!targets.some(target => target.webSocketDebuggerUrl === client.url), "broken renderer must be removed");
   assert.doesNotMatch(readLogs().slice(logStart), /event=creation-started/, "exhausted recovery must not rebuild again");
   console.log("PATINA_WEBVIEW_RECOVERY_LIMIT_REPORT", JSON.stringify({ nativeDialog: true, dialogCount: 1, committedBefore: before, committedAfter: progressed }));
