@@ -1,3 +1,5 @@
+import type { Locale } from "../../../shared/i18n/index.ts";
+import { formatUsageDuration } from "./toolsLabels.ts";
 import type {
   PomodoroPhase,
   ToolPomodoroRun,
@@ -83,29 +85,23 @@ function formatReminderClock(timestampMs: number) {
   });
 }
 
-export function buildReminderRows(
-  snapshot: ToolsRuntimeSnapshot,
-  nowMs: number,
-  labels: Pick<ToolsViewModelLabels, "dueNow">,
-): ReminderRowViewModel[] {
-  return snapshot.reminders.filter((reminder) => reminder.status === "scheduled").map((reminder) => {
-    const remainingMs = reminder.scheduledAt - nowMs;
-    return {
-      id: reminder.id,
-      label: reminder.label,
-      dueLabel: formatReminderDueLabel(reminder.scheduledAt),
-      remainingLabel: remainingMs <= 0 ? labels.dueNow : formatCompactDuration(remainingMs),
-      status: reminder.status,
-      canCancel: reminder.status === "scheduled",
-    };
-  });
+export function buildReminderRows(snapshot: ToolsRuntimeSnapshot): ReminderRowViewModel[] {
+  return snapshot.reminders.filter((reminder) => reminder.status !== "cancelled").map((reminder) => ({
+    id: reminder.id,
+    label: reminder.label,
+    scheduledAt: reminder.scheduledAt,
+    dueLabel: formatReminderDueLabel(reminder.scheduledAt),
+    recurrence: reminder.recurrence,
+    status: reminder.status,
+  }));
 }
 
 export function buildActivityReminderRuleRows(
   snapshot: ToolsRuntimeSnapshot,
-  labels: Pick<ToolsViewModelLabels, "activityReminderActive" | "activityReminderDailyLimit">,
+  locale: Locale,
 ): ActivityReminderRuleRowViewModel[] {
   return snapshot.activityReminderRules.map((rule) => {
+    const limitMinutes = Math.max(1, Math.round(rule.limitMs / MS_PER_MINUTE));
     const targetLabel = rule.labelSnapshot
       || (rule.target.kind === "app"
         ? rule.target.appName
@@ -114,6 +110,8 @@ export function buildActivityReminderRuleRows(
           : rule.target.normalizedDomain);
     return {
       id: rule.id,
+      enabled: rule.enabled,
+      limitMinutes,
       kind: rule.target.kind,
       targetKey: rule.target.kind === "app"
         ? (rule.target.exeName ?? rule.target.appName)
@@ -122,10 +120,8 @@ export function buildActivityReminderRuleRows(
           : rule.target.normalizedDomain,
       targetLabel,
       exeName: rule.target.kind === "app" ? rule.target.exeName : null,
-      faviconUrl: null,
-      limitLabel: labels.activityReminderDailyLimit(Math.max(1, Math.round(rule.limitMs / MS_PER_MINUTE))),
+      limitLabel: formatUsageDuration(limitMinutes, locale),
       message: rule.message,
-      statusLabel: labels.activityReminderActive,
       suspensionReason: rule.suspensionReason,
     };
   });

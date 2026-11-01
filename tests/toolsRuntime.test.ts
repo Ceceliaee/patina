@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { formatUsageDuration } from "../src/features/tools/services/toolsLabels.ts";
 import {
   buildActivityReminderRuleRows,
   buildPomodoroViewModel,
@@ -41,9 +42,6 @@ const labels: ToolsViewModelLabels = {
   chipCountdown: "Countdown",
   chipStopwatch: "Timer",
   chipReminder: "Reminder",
-  activityReminderActive: "Active",
-  activityReminderDailyLimit: (minutes) => `${minutes} min daily`,
-  dueNow: "Now",
   completedToday: (count) => `${count} completed today`,
   cycle: (index, every) => `${index}/${every}`,
 };
@@ -81,6 +79,7 @@ function rawActivityRule(target: Record<string, unknown>, overrides: Record<stri
   return {
     id: 7,
     target,
+    enabled: true,
     label_snapshot: "Target",
     limit_ms: 30 * 60_000,
     message: "Break",
@@ -173,12 +172,22 @@ await runTest("activity reminder rows retain target kind, key, limit, and suspen
       { label_snapshot: "Example", suspension_reason: "target_excluded" },
     )],
   }));
-  const rows = buildActivityReminderRuleRows(parsed, labels);
+  const rows = buildActivityReminderRuleRows(parsed, "en-US");
   assert.equal(rows[0].kind, "web");
   assert.equal(rows[0].targetKey, "example.com");
   assert.equal(rows[0].targetLabel, "Example");
-  assert.equal(rows[0].limitLabel, "30 min daily");
+  assert.equal(rows[0].limitLabel, "30 minutes");
   assert.equal(rows[0].suspensionReason, "target_excluded");
+});
+
+await runTest("usage durations show exact hours and remaining minutes in each locale", () => {
+  for (const [minutes, expected] of [[0, "0 分钟"], [30, "30 分钟"], [59, "59 分钟"], [60, "1 小时"], [90, "1 小时 30 分钟"], [120, "2 小时"], [1440, "24 小时"]] as const) {
+    assert.equal(formatUsageDuration(minutes, "zh-CN"), expected);
+  }
+  assert.equal(formatUsageDuration(60, "en-US"), "1 hour");
+  assert.equal(formatUsageDuration(120, "en-US"), "2 hours");
+  assert.equal(formatUsageDuration(90, "es"), "1 hora 30 minutos");
+  assert.equal(formatUsageDuration(120, "ru-RU"), "2 часа");
 });
 
 await runTest("raw tool alerts accept canonical activity kind", () => {
@@ -189,16 +198,46 @@ await runTest("raw tool alerts accept canonical activity kind", () => {
   assert.throws(() => parseToolAlert(rawAlert({ kind: "software_reminder" })), /invalid tool alert/);
 });
 
-await runTest("reminder rows include only scheduled reminders", () => {
+await runTest("usage alert metadata validates duration and target before entering the extension flow", () => {
+  const details = { rule_id: 7, date_key: "2026-10-30", target: { kind: "web", normalized_domain: "example.com" }, target_label: "Example", usage_ms: 9_780_000, limit_ms: 1_800_000, message: "Break" };
+  const parse = (overrides: Record<string, unknown> = {}) => parseToolAlert(rawAlert({ kind: "activity_reminder", activity_reminder: { ...details, ...overrides } }));
+  assert.deepEqual(parse().activityReminder, { ruleId: 7, dateKey: "2026-10-30", target: { kind: "web", normalizedDomain: "example.com" }, targetLabel: "Example", usageMs: 9_780_000, limitMs: 1_800_000, message: "Break" });
+  for (const malformed of [{ usage_ms: -1 }, { limit_ms: 0 }, { date_key: "invalid" }, { target: { kind: "unknown" } }]) {
+    assert.throws(() => parse(malformed));
+  }
+});
+
+await runTest("reminder recurrence crosses the IPC boundary and malformed rules fail explicitly", () => {
+  for (const recurrence of [null, {kind: "interval", minutes: 30}, {kind: "daily"}, {kind: "weekly", weekdays: [1, 5]}, {kind: "monthly"}, {kind: "yearly"}]) {
+    const raw = rawSnapshot();
+    const parsed = parseToolsRuntimeSnapshot({...raw, reminders: [{...raw.reminders[0], recurrence}]});
+    assert.deepEqual(parsed.reminders[0].recurrence, recurrence);
+    assert.deepEqual(buildReminderRows(parsed)[0].recurrence, recurrence);
+  }
+  for (const recurrence of [{kind: "unknown"}, {kind: "interval", minutes: 0}, {kind: "interval", minutes: 1.5},
+    {kind: "weekly", weekdays: []}, {kind: "weekly", weekdays: [1,1]}, {kind: "weekly", weekdays: [8]}]) {
+    const raw = rawSnapshot();
+    assert.throws(() => parseToolsRuntimeSnapshot({...raw, reminders: [{...raw.reminders[0], recurrence}]}), /invalid/);
+  }
+});
+
+await runTest("reminder rows retain paused, pending and completed reminders without a countdown", () => {
   const rows = buildReminderRows(snapshot({
     reminders: [
-      { id: 1, label: "Keep", scheduledAt: 2_000_000, createdAt: 1_000_000, status: "scheduled", firedAt: null, cancelledAt: null },
-      { id: 2, label: "Done", scheduledAt: 1_000_000, createdAt: 900_000, status: "fired", firedAt: 1_000_000, cancelledAt: null },
+      { id: 1, label: "Keep", scheduledAt: 2_000_000, createdAt: 1_000_000, status: "scheduled", firedAt: null, cancelledAt: null, recurrence: null },
+      { id: 3, label: "Paused", scheduledAt: 3_000_000, createdAt: 1_000_000, status: "paused", firedAt: null, cancelledAt: null, recurrence: null },
+      { id: 2, label: "Done", scheduledAt: 1_000_000, createdAt: 900_000, status: "fired", firedAt: 1_000_000, cancelledAt: null, recurrence: null },
+      { id: 4, label: "Confirm", scheduledAt: 1_000_000, createdAt: 900_000, status: "pending_confirmation", firedAt: 1_000_000, cancelledAt: null, recurrence: null },
+      { id: 5, label: "Deleted", scheduledAt: 1_000_000, createdAt: 900_000, status: "cancelled", firedAt: null, cancelledAt: 1_000_000, recurrence: null },
     ],
-  }), 1_940_000, labels);
-  assert.equal(rows.length, 1);
+  }));
+  assert.equal(rows.length, 4);
   assert.equal(rows[0].label, "Keep");
-  assert.equal(rows[0].remainingLabel, "01:00");
+  assert.equal(rows[0].scheduledAt, 2_000_000);
+  assert.equal(rows[1].status, "paused");
+  assert.equal(rows[2].status, "fired");
+  assert.equal(rows[3].status, "pending_confirmation");
+  assert.equal("remainingLabel" in rows[0], false);
 });
 
 await runTest("timer and pomodoro view models format runtime state", () => {
@@ -225,7 +264,7 @@ await runTest("timer and pomodoro view models format runtime state", () => {
 
 await runTest("tools status chips preserve arrival order", () => {
   const chips = buildToolsStatusChipViewModels(snapshot({
-    reminders: [{ id: 9, label: "Check", scheduledAt: 2_000_000, createdAt: 900_000, status: "scheduled", firedAt: null, cancelledAt: null }],
+    reminders: [{ id: 9, label: "Check", scheduledAt: 2_000_000, createdAt: 900_000, status: "scheduled", firedAt: null, cancelledAt: null, recurrence: null }],
     currentTimer: {
       id: 1, mode: "stopwatch", label: null, durationMs: null, accumulatedMs: 0,
       startedAt: 1_000_000, pausedAt: null, completedAt: null, status: "running",
@@ -242,21 +281,23 @@ await runTest("tools status chips preserve arrival order", () => {
   assert.deepEqual(chips.map((chip) => chip.targetSection), ["reminders", "timer", "pomodoro"]);
 });
 
-await runTest("tools preferences migrate legacy software mode once", () => {
+await runTest("tools preferences merge previous activity tabs into usage mode", () => {
   withWindowStorage(new MemoryStorage(), () => {
     assert.equal(readToolsSection(), "reminders");
     assert.equal(readToolsReminderMode(), "event");
     rememberToolsSection("pomodoro");
-    rememberToolsReminderMode("category");
+    rememberToolsReminderMode("usage");
     rememberToolsTimerMode("countdown");
     rememberToolsReminderFormMode("absolute");
     assert.equal(readToolsSection(), "pomodoro");
-    assert.equal(readToolsReminderMode(), "category");
+    assert.equal(readToolsReminderMode(), "usage");
     assert.equal(readToolsTimerMode(), "countdown");
     assert.equal(readToolsReminderFormMode(), "absolute");
-    window.localStorage.setItem("patina:tools-reminder-mode", "software");
-    assert.equal(readToolsReminderMode(), "app");
-    assert.equal(window.localStorage.getItem("patina:tools-reminder-mode"), "app");
+    for (const mode of ["software", "app", "category", "web"]) {
+      window.localStorage.setItem("patina:tools-reminder-mode", mode);
+      assert.equal(readToolsReminderMode(), "usage");
+      assert.equal(window.localStorage.getItem("patina:tools-reminder-mode"), "usage");
+    }
   });
 });
 
@@ -303,6 +344,9 @@ await runTest("gateway uses canonical activity reminder commands and payload", a
     message: "Break",
   });
   await gateway.disableActivityReminderRule(7);
+  for (const extension of ["fifteen_minutes", "one_hour", "today"] as const) {
+    assert.equal((await gateway.extendActivityReminder("activity:7:100", extension)).sampledAtMs, 1_000_000);
+  }
   assert.deepEqual(calls[0], {
     command: "cmd_create_activity_reminder_rule",
     payload: {
@@ -318,6 +362,19 @@ await runTest("gateway uses canonical activity reminder commands and payload", a
     command: "cmd_disable_activity_reminder_rule",
     payload: { ruleId: 7 },
   });
+  assert.deepEqual(calls.slice(2), ["fifteen_minutes", "one_hour", "today"].map(extension => ({ command: "cmd_extend_activity_reminder", payload: { alertId: "activity:7:100", extension } })));
+  await gateway.updateReminder(3, "Revised", 2_000_000, false);
+  assert.deepEqual(calls.at(-1), { command: "cmd_update_reminder", payload: { reminderId: 3, label: "Revised", scheduledAt: 2_000_000, enabled: false, recurrence: null } });
+  for (const delayMinutes of [null, 5, 15, 30] as const) {
+    await gateway.resolveReminderAlert("reminder:3:100", delayMinutes);
+    assert.deepEqual(calls.at(-1), { command: "cmd_resolve_reminder_alert", payload: { alertId: "reminder:3:100", delayMinutes } });
+  }
+  await gateway.setActivityReminderEnabled(7, false);
+  await gateway.updateActivityReminderLimit(7, 2_700_000);
+  assert.deepEqual(calls.slice(-2), [
+    { command: "cmd_set_activity_reminder_enabled", payload: { ruleId: 7, enabled: false } },
+    { command: "cmd_update_activity_reminder_limit", payload: { ruleId: 7, limitMs: 2_700_000 } },
+  ]);
 });
 
 await runTest("gateway identifies only the exact Tools refresh-pending marker as a non-retryable command error", async () => {

@@ -27,38 +27,33 @@ test("seeded activity reminder categories resolve distinct registry defaults", (
 });
 
 test("activity reminder target options keep readable labels and stable values", () => {
-  const appOptions = buildActivityReminderTargetOptions(
-    "app",
+  const options = buildActivityReminderTargetOptions(
     apps,
     categories,
     webDomains,
     { "patina.exe": "data:image/png;base64,icon" },
   );
-  const categoryOptions = buildActivityReminderTargetOptions("category", apps, categories, webDomains, {});
-  const webOptions = buildActivityReminderTargetOptions("web", apps, categories, webDomains, {});
-
-  assert.deepEqual(appOptions[0], {
+  assert.deepEqual(options[0], {
     key: "app:Patina.exe",
-    value: "Patina.exe",
+    value: "app:Patina.exe",
     label: "Patina",
     meta: "Patina.exe",
     iconUrl: "data:image/png;base64,icon",
     accentColor: null,
+    target: { kind: "app", appName: "Patina", exeName: "Patina.exe" },
   });
-  assert.equal(categoryOptions[0]?.value, "development");
-  assert.equal(categoryOptions[0]?.label, "开发");
-  assert.equal(categoryOptions[0]?.accentColor, "#2563eb");
-  assert.equal(webOptions[0]?.value, "github.com");
-  assert.equal(webOptions[0]?.label, "GitHub");
-  assert.equal(webOptions[0]?.meta, "github.com");
+  assert.equal(options[1]?.value, "category:development");
+  assert.equal(options[1]?.label, "开发");
+  assert.equal(options[1]?.accentColor, "#2563eb");
+  assert.deepEqual(options[1]?.target, { kind: "category", categoryId: "development" });
+  assert.equal(options[2]?.value, "web:github.com");
+  assert.equal(options[2]?.label, "GitHub");
+  assert.equal(options[2]?.meta, "github.com");
+  assert.deepEqual(options[2]?.target, { kind: "web", normalizedDomain: "github.com" });
 });
 
 test("all activity reminder target modes are searchable by label or stable identity", () => {
-  const allOptions = [
-    ...buildActivityReminderTargetOptions("app", apps, categories, webDomains, {}),
-    ...buildActivityReminderTargetOptions("category", apps, categories, webDomains, {}),
-    ...buildActivityReminderTargetOptions("web", apps, categories, webDomains, {}),
-  ];
+  const allOptions = buildActivityReminderTargetOptions(apps, categories, webDomains, {});
 
   assert.deepEqual(filterActivityReminderTargetOptions("patina.exe", allOptions).map((item) => item.key), [
     "app:Patina.exe",
@@ -70,4 +65,20 @@ test("all activity reminder target modes are searchable by label or stable ident
     "web:github.com",
   ]);
   assert.equal(findActivityReminderTargetOption(" PATINA.EXE ", allOptions)?.label, "Patina");
+  assert.equal(findActivityReminderTargetOption("Patina (Patina.exe)", allOptions)?.target.kind, "app");
+  assert.equal(findActivityReminderTargetOption("GITHUB.COM.", allOptions)?.target.kind, "web");
+});
+
+test("merged activity targets require an explicit selection when identities overlap", () => {
+  const options = buildActivityReminderTargetOptions(
+    [{ appName: "Shared", exeName: "shared", lastSeenAt: 1 }],
+    [{ categoryId: "shared", label: "Shared", color: "#2563eb" }],
+    [{ normalizedDomain: "shared", label: "Shared", faviconUrl: null, lastSeenAt: 1 }],
+    {},
+  );
+  assert.equal(filterActivityReminderTargetOptions("Shared", options).length, 3);
+  assert.equal(findActivityReminderTargetOption("shared", options), null);
+  for (const kind of ["app", "category", "web"]) {
+    assert.equal(findActivityReminderTargetOption(`${kind}:shared`, options)?.target.kind, kind);
+  }
 });

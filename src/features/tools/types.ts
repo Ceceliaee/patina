@@ -1,10 +1,10 @@
-import type { PomodoroPhase, ReminderStatus, TimerMode, TimerStatus } from "../../shared/types/tools.ts";
+import type { ReminderRecurrence, ActivityReminderTarget, PomodoroPhase, ReminderStatus, TimerMode, TimerStatus } from "../../shared/types/tools.ts";
 
 export type ToolsSection = "reminders" | "timer" | "pomodoro";
 type LegacyToolsSection = "timing";
 type TimingMode = "reminder" | "timer";
 type ToolsOpenTimingMode = TimingMode | TimerMode;
-export type ReminderMode = "event" | "app" | "category" | "web";
+export type ReminderMode = "event" | "usage";
 export type ReminderFormMode = "relative" | "absolute";
 
 export interface ToolsOpenTarget {
@@ -23,21 +23,21 @@ export interface ReminderRowViewModel {
   id: number;
   label: string;
   dueLabel: string;
-  remainingLabel: string;
+  scheduledAt: number;
   status: ReminderStatus;
-  canCancel: boolean;
+  recurrence: ReminderRecurrence | null;
 }
 
 export interface ActivityReminderRuleRowViewModel {
   id: number;
-  kind: Exclude<ReminderMode, "event">;
+  enabled: boolean;
+  limitMinutes: number;
+  kind: ActivityReminderTarget["kind"];
   targetKey: string;
   targetLabel: string;
   exeName: string | null;
-  faviconUrl: string | null;
   limitLabel: string;
   message: string;
-  statusLabel: string;
   suspensionReason: "source_disabled" | "target_excluded" | "target_deleted" | null;
 }
 
@@ -69,9 +69,6 @@ export interface ToolsViewModelLabels {
   chipCountdown: string;
   chipStopwatch: string;
   chipReminder: string;
-  activityReminderActive: string;
-  activityReminderDailyLimit: (minutes: number) => string;
-  dueNow: string;
   completedToday: (count: number) => string;
   cycle: (index: number, every: number) => string;
 }

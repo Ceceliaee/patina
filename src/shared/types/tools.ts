@@ -1,4 +1,11 @@
-export type ReminderStatus = "scheduled" | "fired" | "cancelled";
+export type ReminderRecurrence =
+  | { kind: "interval"; minutes: number }
+  | { kind: "daily" }
+  | { kind: "monthly" }
+  | { kind: "yearly" }
+  | { kind: "weekly"; weekdays: number[] };
+export type ReminderStatus = "scheduled" | "paused" | "pending_confirmation" | "fired" | "cancelled";
+export type ReminderDelayMinutes = 5 | 15 | 30;
 export type TimerMode = "stopwatch" | "countdown";
 export type TimerStatus = "idle" | "running" | "paused" | "completed";
 export type PomodoroPhase = "focus" | "short_break" | "long_break";
@@ -20,6 +27,7 @@ export interface ToolReminder {
   status: ReminderStatus;
   firedAt: number | null;
   cancelledAt: number | null;
+  recurrence: ReminderRecurrence | null;
 }
 
 export type ActivityReminderTarget =
@@ -34,6 +42,7 @@ type ActivityReminderSuspensionReason =
 
 export interface ToolActivityReminderRule {
   id: number;
+  enabled: boolean;
   target: ActivityReminderTarget;
   labelSnapshot: string;
   limitMs: number;
@@ -122,9 +131,23 @@ export interface ToolAlert {
   title: string;
   body: string;
   occurredAt: number;
+  activityReminder?: ActivityReminderAlert | null;
+}
+
+export type ActivityReminderExtension = "fifteen_minutes" | "one_hour" | "today";
+
+export interface ActivityReminderAlert {
+  ruleId: number;
+  dateKey: string;
+  target: ActivityReminderTarget;
+  targetLabel: string;
+  usageMs: number;
+  limitMs: number;
+  message: string;
 }
 
 export interface CreateReminderInput {
+  recurrence?: ReminderRecurrence | null;
   label: string;
   scheduledAt: number;
 }

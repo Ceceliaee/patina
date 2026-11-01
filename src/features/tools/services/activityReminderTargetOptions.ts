@@ -5,8 +5,6 @@ import type {
   ActivityReminderWebCandidate,
 } from "../../../shared/types/tools.ts";
 
-export type ActivityReminderTargetMode = ActivityReminderTarget["kind"];
-
 export interface ActivityReminderTargetOption {
   key: string;
   value: string;
@@ -14,6 +12,7 @@ export interface ActivityReminderTargetOption {
   meta: string | null;
   iconUrl: string | null;
   accentColor: string | null;
+  target: ActivityReminderTarget;
 }
 
 function resolveAppIcon(icons: Record<string, string>, exeName: string) {
@@ -21,42 +20,42 @@ function resolveAppIcon(icons: Record<string, string>, exeName: string) {
 }
 
 export function buildActivityReminderTargetOptions(
-  mode: ActivityReminderTargetMode,
   appCandidates: readonly ActivityReminderAppCandidate[],
   categoryCandidates: readonly ActivityReminderCategoryCandidate[],
   webCandidates: readonly ActivityReminderWebCandidate[],
   icons: Record<string, string>,
 ): ActivityReminderTargetOption[] {
-  if (mode === "app") {
-    return appCandidates.map((candidate) => ({
+  return [
+    ...appCandidates.map((candidate): ActivityReminderTargetOption => ({
       key: `app:${candidate.exeName}`,
-      value: candidate.exeName,
+      value: `app:${candidate.exeName}`,
       label: candidate.appName,
       meta: candidate.exeName,
       iconUrl: resolveAppIcon(icons, candidate.exeName),
       accentColor: null,
-    }));
-  }
-  if (mode === "category") {
-    return categoryCandidates.map((candidate) => ({
+      target: { kind: "app", appName: candidate.appName, exeName: candidate.exeName },
+    })),
+    ...categoryCandidates.map((candidate): ActivityReminderTargetOption => ({
       key: `category:${candidate.categoryId}`,
-      value: candidate.categoryId,
+      value: `category:${candidate.categoryId}`,
       label: candidate.label,
       meta: null,
       iconUrl: null,
       accentColor: candidate.color,
-    }));
-  }
-  return webCandidates.map((candidate) => ({
-    key: `web:${candidate.normalizedDomain}`,
-    value: candidate.normalizedDomain,
-    label: candidate.label,
-    meta: candidate.label.toLocaleLowerCase() === candidate.normalizedDomain
-      ? null
-      : candidate.normalizedDomain,
-    iconUrl: candidate.faviconUrl,
-    accentColor: null,
-  }));
+      target: { kind: "category", categoryId: candidate.categoryId },
+    })),
+    ...webCandidates.map((candidate): ActivityReminderTargetOption => ({
+      key: `web:${candidate.normalizedDomain}`,
+      value: `web:${candidate.normalizedDomain}`,
+      label: candidate.label,
+      meta: candidate.label.toLocaleLowerCase() === candidate.normalizedDomain
+        ? null
+        : candidate.normalizedDomain,
+      iconUrl: candidate.faviconUrl,
+      accentColor: null,
+      target: { kind: "web", normalizedDomain: candidate.normalizedDomain },
+    })),
+  ];
 }
 
 export function findActivityReminderTargetOption(
@@ -65,7 +64,20 @@ export function findActivityReminderTargetOption(
 ) {
   const normalized = value.trim().toLocaleLowerCase();
   if (!normalized) return null;
-  return options.find((option) => option.value.toLocaleLowerCase() === normalized) ?? null;
+  const selected = options.find((option) => option.value.toLocaleLowerCase() === normalized);
+  if (selected) return selected;
+  const matches = options.filter((option) => {
+    const target = option.target;
+    if (target.kind === "app") {
+      return target.exeName?.toLocaleLowerCase() === normalized
+        || target.appName.toLocaleLowerCase() === normalized
+        || `${target.appName} (${target.exeName})`.toLocaleLowerCase() === normalized;
+    }
+    if (target.kind === "category") return target.categoryId.toLocaleLowerCase() === normalized;
+    return target.normalizedDomain === normalized.replace(/\.$/, "")
+      || option.label.toLocaleLowerCase() === normalized;
+  });
+  return matches.length === 1 ? matches[0] : null;
 }
 
 export function filterActivityReminderTargetOptions(

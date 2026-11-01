@@ -128,6 +128,10 @@ export async function minimizeCurrentWindow(): Promise<void> {
   await invoke("cmd_minimize_main_window");
 }
 
+export async function showDesktop(): Promise<void> {
+  await invoke("cmd_show_desktop");
+}
+
 export async function toggleCurrentWindowMaximized(): Promise<void> {
   await getCurrentWindow().toggleMaximize();
 }

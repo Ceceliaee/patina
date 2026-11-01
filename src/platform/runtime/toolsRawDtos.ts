@@ -2,6 +2,7 @@ import type {
   PomodoroPhase,
   PomodoroStatus,
   ReminderStatus,
+  ReminderRecurrence,
   TimerMode,
   TimerStatus,
   ToolPomodoroRun,
@@ -36,6 +37,7 @@ interface RawToolReminder {
   status: ReminderStatus;
   fired_at: number | null;
   cancelled_at: number | null;
+  recurrence?: ReminderRecurrence | null;
 }
 
 type RawActivityReminderTarget =
@@ -45,6 +47,7 @@ type RawActivityReminderTarget =
 
 interface RawToolActivityReminderRule {
   id: number;
+  enabled: boolean;
   target: RawActivityReminderTarget;
   label_snapshot: string;
   limit_ms: number;
@@ -102,6 +105,15 @@ interface RawToolAlert {
   title: string;
   body: string;
   occurred_at: number;
+  activity_reminder?: {
+    rule_id: number;
+    date_key: string;
+    target: RawActivityReminderTarget;
+    target_label: string;
+    usage_ms: number;
+    limit_ms: number;
+    message: string;
+  } | null;
 }
 
 interface RawToolsRuntimeSnapshot {
@@ -116,7 +128,7 @@ interface RawToolsRuntimeSnapshot {
   sampled_at_ms: number;
 }
 
-const REMINDER_STATUSES = new Set(["scheduled", "fired", "cancelled"]);
+const REMINDER_STATUSES = new Set(["scheduled", "paused", "pending_confirmation", "fired", "cancelled"]);
 const TIMER_MODES = new Set(["stopwatch", "countdown"]);
 const TIMER_STATUSES = new Set(["idle", "running", "paused", "completed"]);
 const POMODORO_PHASES = new Set(["focus", "short_break", "long_break"]);
@@ -149,10 +161,23 @@ function isRawToolRuntimeSettings(value: unknown): value is RawToolRuntimeSettin
     && isNumber(value.pomodoro_long_break_every);
 }
 
+function isReminderRecurrence(value: unknown): value is ReminderRecurrence | null | undefined {
+  if (value === null || value === undefined) return true;
+  if (!isRecord(value)) return false;
+  if (value.kind === "daily" || value.kind === "monthly" || value.kind === "yearly") return true;
+  if (value.kind === "interval") return typeof value.minutes === "number"
+    && Number.isInteger(value.minutes) && value.minutes >= 1 && value.minutes <= 86_400;
+  if (value.kind === "weekly") return Array.isArray(value.weekdays) && value.weekdays.length > 0
+    && value.weekdays.every((day) => Number.isInteger(day) && day >= 1 && day <= 7)
+    && new Set(value.weekdays).size === value.weekdays.length;
+  return false;
+}
+
 function isRawToolReminder(value: unknown): value is RawToolReminder {
   if (!isRecord(value)) return false;
   return isNumber(value.id)
     && typeof value.label === "string"
+    && isReminderRecurrence(value.recurrence)
     && isNumber(value.scheduled_at)
     && isNumber(value.created_at)
     && isStringEnum<ReminderStatus>(value.status, REMINDER_STATUSES)
@@ -177,6 +202,7 @@ function isRawActivityReminderTarget(value: unknown): value is RawActivityRemind
 function isRawToolActivityReminderRule(value: unknown): value is RawToolActivityReminderRule {
   if (!isRecord(value)) return false;
   return isNumber(value.id)
+    && typeof value.enabled === "boolean"
     && isRawActivityReminderTarget(value.target)
     && typeof value.label_snapshot === "string"
     && isNumber(value.limit_ms)
@@ -250,6 +276,14 @@ function isRawToolsRuntimeSnapshot(value: unknown): value is RawToolsRuntimeSnap
 
 function isRawToolAlert(value: unknown): value is RawToolAlert {
   if (!isRecord(value)) return false;
+  const details = value.activity_reminder;
+  if (details != null && (!isRecord(details)
+    || !isNumber(details.rule_id) || !Number.isSafeInteger(details.rule_id) || details.rule_id <= 0
+    || typeof details.date_key !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(details.date_key)
+    || !isRawActivityReminderTarget(details.target)
+    || typeof details.target_label !== "string" || typeof details.message !== "string"
+    || !isNumber(details.usage_ms) || details.usage_ms < 0
+    || !isNumber(details.limit_ms) || details.limit_ms <= 0)) return false;
   return typeof value.id === "string"
     && isStringEnum<ToolAlertKind>(value.kind, TOOL_ALERT_KINDS)
     && typeof value.title === "string"
@@ -276,6 +310,7 @@ function mapToolReminder(raw: RawToolReminder): ToolReminder {
     status: raw.status,
     firedAt: raw.fired_at,
     cancelledAt: raw.cancelled_at,
+    recurrence: raw.recurrence ?? null,
   };
 }
 
@@ -292,6 +327,7 @@ function mapActivityReminderTarget(raw: RawActivityReminderTarget): ActivityRemi
 function mapToolActivityReminderRule(raw: RawToolActivityReminderRule): ToolActivityReminderRule {
   return {
     id: raw.id,
+    enabled: raw.enabled,
     target: mapActivityReminderTarget(raw.target),
     labelSnapshot: raw.label_snapshot,
     limitMs: raw.limit_ms,
@@ -351,12 +387,22 @@ function mapToolPomodoroRun(raw: RawToolPomodoroRun): ToolPomodoroRun {
 }
 
 function mapToolAlert(raw: RawToolAlert): ToolAlert {
+  const details = raw.activity_reminder;
   return {
     id: raw.id,
     kind: raw.kind,
     title: raw.title,
     body: raw.body,
     occurredAt: raw.occurred_at,
+    ...(details ? { activityReminder: {
+      ruleId: details.rule_id,
+      dateKey: details.date_key,
+      target: mapActivityReminderTarget(details.target),
+      targetLabel: details.target_label,
+      usageMs: details.usage_ms,
+      limitMs: details.limit_ms,
+      message: details.message,
+    } } : {}),
   };
 }
 

@@ -1,3 +1,4 @@
+import type { ReminderRecurrence } from "../../../shared/types/tools.ts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, type UiText } from "../../../shared/i18n/index.ts";
 import type {
@@ -73,6 +74,7 @@ export function useToolsPageState({
   const [loadError, setLoadError] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const actionInFlightRef = useRef(false);
   const [activityReminderAppCandidates, setActivityReminderAppCandidates] = useState<ActivityReminderAppCandidate[]>([]);
   const [activityReminderCategoryCandidates, setActivityReminderCategoryCandidates] = useState<ActivityReminderCategoryCandidate[]>([]);
   const [activityReminderWebCandidates, setActivityReminderWebCandidates] = useState<ActivityReminderWebCandidate[]>([]);
@@ -80,7 +82,7 @@ export function useToolsPageState({
   const [activityReminderCandidateLoadState, setActivityReminderCandidateLoadState] = useState<
     Record<ActivityCandidateMode, CandidateLoadState>
   >({ app: "idle", category: "idle", web: "idle" });
-  const loadedCandidateModesRef = useRef(new Set<ActivityCandidateMode>());
+  const loadedCandidateModesRef = useRef(new Map<ActivityCandidateMode, UiText>());
   const candidateRequestIdsRef = useRef({ app: 0, category: 0, web: 0 });
   const mountedRef = useRef(true);
   const refreshRequestRef = useRef(0);
@@ -131,12 +133,6 @@ export function useToolsPageState({
     };
   }, [refreshSnapshot]);
 
-  useEffect(() => {
-    loadedCandidateModesRef.current.delete("category");
-    candidateRequestIdsRef.current.category += 1;
-    setActivityReminderCandidateLoadState((current) => ({ ...current, category: "idle" }));
-  }, [locale, uiText]);
-
   useEffect(() => subscribeActivityReminderTargetCandidateInvalidation(() => {
     loadedCandidateModesRef.current.clear();
     candidateRequestIdsRef.current.app += 1;
@@ -147,7 +143,8 @@ export function useToolsPageState({
   }), []);
 
   const activateActivityReminderMode = useCallback(async (mode: ActivityCandidateMode) => {
-    if (loadedCandidateModesRef.current.has(mode)) return;
+    if (loadedCandidateModesRef.current.has(mode)
+      && (mode !== "category" || loadedCandidateModesRef.current.get(mode) === uiText)) return;
     const requestId = candidateRequestIdsRef.current[mode] + 1;
     candidateRequestIdsRef.current[mode] = requestId;
     setActivityReminderCandidateLoadState((current) => ({ ...current, [mode]: "loading" }));
@@ -165,7 +162,7 @@ export function useToolsPageState({
         if (candidateRequestIdsRef.current.web !== requestId || !mountedRef.current) return;
         setActivityReminderWebCandidates(candidates);
       }
-      loadedCandidateModesRef.current.add(mode);
+      loadedCandidateModesRef.current.set(mode, uiText);
       setActivityReminderCandidateLoadState((current) => ({ ...current, [mode]: "ready" }));
     } catch (error) {
       console.warn(`load ${mode} activity reminder candidates failed`, error);
@@ -190,14 +187,14 @@ export function useToolsPageState({
     [labels],
   );
   const reminderRows = useMemo(
-    () => activeSection === "reminders" ? buildReminderRows(snapshot, nowMs, labels) : EMPTY_REMINDER_ROWS,
-    [activeSection, labels, nowMs, snapshot],
+    () => activeSection === "reminders" ? buildReminderRows(snapshot) : EMPTY_REMINDER_ROWS,
+    [activeSection, snapshot],
   );
   const activityReminderRuleRows = useMemo(
     () => activeSection === "reminders"
-      ? buildActivityReminderRuleRows(snapshot, labels)
+      ? buildActivityReminderRuleRows(snapshot, locale)
       : EMPTY_ACTIVITY_REMINDER_RULE_ROWS,
-    [activeSection, labels, snapshot],
+    [activeSection, locale, snapshot],
   );
   const timerViewModel = useMemo(
     () => activeSection === "timer"
@@ -216,7 +213,8 @@ export function useToolsPageState({
     actionKey: string,
     action: () => Promise<ToolsRuntimeSnapshot>,
   ) => {
-    if (busyAction) return false;
+    if (actionInFlightRef.current) return false;
+    actionInFlightRef.current = true;
     setBusyAction(actionKey);
     try {
       const nextSnapshot = await action();
@@ -229,9 +227,10 @@ export function useToolsPageState({
         : uiText.tools.actionFailed);
       return false;
     } finally {
+      actionInFlightRef.current = false;
       setBusyAction(null);
     }
-  }, [busyAction, onError, uiText]);
+  }, [onError, uiText]);
 
   const runAction = useCallback(async (
     actionKey: string,
@@ -240,9 +239,14 @@ export function useToolsPageState({
     await executeAction(actionKey, action);
   }, [executeAction]);
 
-  const createReminder = useCallback((label: string, scheduledAt: number) => executeAction(
+  const createReminder = useCallback((label: string, scheduledAt: number, recurrence: ReminderRecurrence | null) => executeAction(
     "create-reminder",
-    () => ToolsRuntimeService.createReminder({ label, scheduledAt }),
+    () => ToolsRuntimeService.createReminder({ label, scheduledAt, recurrence }),
+  ), [executeAction]);
+
+  const updateReminder = useCallback((id: number, label: string, scheduledAt: number, enabled: boolean, recurrence: ReminderRecurrence | null) => executeAction(
+    `update-reminder:${id}`,
+    () => ToolsRuntimeService.updateReminder(id, label, scheduledAt, enabled, recurrence),
   ), [executeAction]);
 
   const cancelReminder = useCallback((id: number) => runAction(
@@ -263,6 +267,16 @@ export function useToolsPageState({
       limitMs: Math.max(1, limitMinutes) * 60_000,
       message,
     }),
+  ), [executeAction]);
+
+  const setActivityReminderEnabled = useCallback((id: number, enabled: boolean) => runAction(
+    `toggle-activity-reminder:${id}`,
+    () => ToolsRuntimeService.setActivityReminderEnabled(id, enabled),
+  ), [runAction]);
+
+  const updateActivityReminderLimit = useCallback((id: number, limitMinutes: number) => executeAction(
+    `update-activity-reminder:${id}`,
+    () => ToolsRuntimeService.updateActivityReminderLimit(id, limitMinutes * 60_000),
   ), [executeAction]);
 
   const disableActivityReminderRule = useCallback((id: number) => runAction(
@@ -320,8 +334,11 @@ export function useToolsPageState({
     pomodoroViewModel,
     createReminder,
     cancelReminder,
+    updateReminder,
     createActivityReminderRule,
     disableActivityReminderRule,
+    setActivityReminderEnabled,
+    updateActivityReminderLimit,
     startTimer,
     pauseTimer,
     resumeTimer,

@@ -3,6 +3,9 @@ import { listen as tauriListen, type Event } from "@tauri-apps/api/event";
 import type {
   CreateReminderInput,
   CreateActivityReminderRuleInput,
+  ActivityReminderExtension,
+  ReminderDelayMinutes,
+  ReminderRecurrence,
   StartPomodoroInput,
   StartTimerInput,
   ToolAlert,
@@ -58,6 +61,14 @@ export function createToolsRuntimeGateway(deps: ToolsRuntimeGatewayDeps) {
       return deps.invoke<void>("cmd_dismiss_tool_alert", { alertId });
     },
 
+    resolveReminderAlert(alertId: string, delayMinutes: ReminderDelayMinutes | null): Promise<ToolsRuntimeSnapshot> {
+      return invokeToolsSnapshot("cmd_resolve_reminder_alert", { alertId, delayMinutes });
+    },
+
+    extendActivityReminder(alertId: string, extension: ActivityReminderExtension): Promise<ToolsRuntimeSnapshot> {
+      return invokeToolsSnapshot("cmd_extend_activity_reminder", { alertId, extension });
+    },
+
     onToolAlert(
       handler: (alert: ToolAlert) => void,
     ): Promise<() => void> {
@@ -79,8 +90,13 @@ export function createToolsRuntimeGateway(deps: ToolsRuntimeGatewayDeps) {
         input: {
           label: input.label,
           scheduledAt: input.scheduledAt,
+          recurrence: input.recurrence ?? null,
         },
       });
+    },
+
+    updateReminder(reminderId: number, label: string, scheduledAt: number, enabled: boolean, recurrence: ReminderRecurrence | null = null): Promise<ToolsRuntimeSnapshot> {
+      return invokeToolsSnapshot("cmd_update_reminder", { reminderId, label, scheduledAt, enabled, recurrence });
     },
 
     cancelReminder(reminderId: number): Promise<ToolsRuntimeSnapshot> {
@@ -100,6 +116,14 @@ export function createToolsRuntimeGateway(deps: ToolsRuntimeGatewayDeps) {
 
     disableActivityReminderRule(ruleId: number): Promise<ToolsRuntimeSnapshot> {
       return invokeToolsSnapshot("cmd_disable_activity_reminder_rule", { ruleId });
+    },
+
+    setActivityReminderEnabled(ruleId: number, enabled: boolean): Promise<ToolsRuntimeSnapshot> {
+      return invokeToolsSnapshot("cmd_set_activity_reminder_enabled", { ruleId, enabled });
+    },
+
+    updateActivityReminderLimit(ruleId: number, limitMs: number): Promise<ToolsRuntimeSnapshot> {
+      return invokeToolsSnapshot("cmd_update_activity_reminder_limit", { ruleId, limitMs });
     },
 
     startTimer(input: StartTimerInput): Promise<ToolsRuntimeSnapshot> {
@@ -165,12 +189,17 @@ const defaultToolsRuntimeGateway = createToolsRuntimeGateway({
 export const getToolsSnapshot = defaultToolsRuntimeGateway.getToolsSnapshot;
 export const getToolAlerts = defaultToolsRuntimeGateway.getToolAlerts;
 export const dismissToolAlert = defaultToolsRuntimeGateway.dismissToolAlert;
+export const resolveReminderAlert = defaultToolsRuntimeGateway.resolveReminderAlert;
+export const extendActivityReminder = defaultToolsRuntimeGateway.extendActivityReminder;
 export const onToolAlert = defaultToolsRuntimeGateway.onToolAlert;
 export const onToolsRuntimeChanged = defaultToolsRuntimeGateway.onToolsRuntimeChanged;
 export const createReminder = defaultToolsRuntimeGateway.createReminder;
+export const updateReminder = defaultToolsRuntimeGateway.updateReminder;
 export const cancelReminder = defaultToolsRuntimeGateway.cancelReminder;
 export const createActivityReminderRule = defaultToolsRuntimeGateway.createActivityReminderRule;
 export const disableActivityReminderRule = defaultToolsRuntimeGateway.disableActivityReminderRule;
+export const setActivityReminderEnabled = defaultToolsRuntimeGateway.setActivityReminderEnabled;
+export const updateActivityReminderLimit = defaultToolsRuntimeGateway.updateActivityReminderLimit;
 export const startTimer = defaultToolsRuntimeGateway.startTimer;
 export const pauseTimer = defaultToolsRuntimeGateway.pauseTimer;
 export const resumeTimer = defaultToolsRuntimeGateway.resumeTimer;
