@@ -21,10 +21,11 @@ const INITIAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 310;
 // Data used to be part of the initial graph. It now has its own route and runtime
 // budgets, so this unchanged aggregate tracks the remaining primary lazy routes.
 const NON_DATA_PRIMARY_LAZY_ROUTES_GZIP_BUDGET_KI_B = 86.5;
-// Independent mini-window surface and shared compact projections: scoped cost
-// decision: docs/archive/2026-10-24-mini-window-replacement-plan.md, section 8.2.
-// Retain the 3% headroom rule.
-const TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 402;
+// Usage reminder flow: docs/archive/2026-10-30-usage-reminder-bundle-decision.md.
+// Preserve the existing aggregate buffer and the 3% headroom rule.
+// Timed reminder flow: docs/archive/2026-11-01-timed-reminder-bundle-decision.md.
+// Recurring reminder controls: docs/archive/2026-11-01-recurring-reminders-bundle-decision.md.
+const TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 410;
 
 const INITIAL_CHUNK_BUDGETS = [
   { label: "index", pattern: /^index-.*\.js$/, gzipKiB: 65 },
@@ -75,6 +76,8 @@ const NON_DATA_PRIMARY_LAZY_ROUTE_BUDGETS = LAZY_PAGE_CHUNK_BUDGETS.filter(
 );
 
 const LAZY_SECONDARY_CHUNK_BUDGETS = [
+  { label: "Usage reminder dialog", pattern: /^ActivityReminderAlertDialog-.*\.js$/, gzipKiB: 2 },
+  { label: "Timed reminder dialog", pattern: /^TimedReminderAlertDialog-.*\.js$/, gzipKiB: 1.18 },
   // Mini pages and bounded chart details; scoped decisions:
   // docs/archive/2026-10-28-mini-paged-content-bundle-decision.md.
   { label: "MiniShell", pattern: /^MiniShell-.*\.js$/, gzipKiB: 9 },
@@ -87,10 +90,10 @@ const LAZY_SECONDARY_CHUNK_BUDGETS = [
   { label: "Data bootstrap snapshot", pattern: /^dataBootstrapSnapshot-.*\.js$/, gzipKiB: 1.8 },
   // The shared destination-detail entry preloads one cross-feature dialog while
   // retaining a separate chunk so ordinary Dashboard, History, and Data views
-  // do not pay for single-object analysis in their first-render graphs. The
-  // narrow 0.05 KiB adjustment covers shared History semantics after reducing
-  // the chunk itself, while the global 3% headroom rule remains enforced.
-  { label: "Destination detail", pattern: /^DestinationDetailDialog-.*\.js$/, gzipKiB: 8.1 },
+  // do not pay for single-object analysis in their first-render graphs.
+  // Single-date controller returns to its sole consumer:
+  // docs/archive/2026-11-01-reminder-direct-picker-bundle-decision.md.
+  { label: "Destination detail", pattern: /^DestinationDetailDialog-.*\.js$/, gzipKiB: 9.25 },
   // Dashboard preloads this classification-owned editor on icon hover/focus and
   // keeps it out of the initial graph until the user opens the context menu.
   { label: "Quick classification", pattern: /^QuickClassificationSurface-.*\.js$/, gzipKiB: 3.4 },
@@ -100,27 +103,27 @@ const LAZY_SECONDARY_CHUNK_BUDGETS = [
 // instead of consuming the allowance for unowned support chunks.
 const LAZY_SHARED_UI_CHUNK_BUDGETS = [
   { label: "activity timeline models", pattern: /^webActivityViewModel-.*\.js$/, gzipKiB: 4.4 },
-  // Classification and destination detail share the positioned overlay owner.
-  { label: "QuietAnchoredPopover", pattern: /^QuietAnchoredPopover-.*\.js$/, gzipKiB: 1.21 },
+  // Nested reminder controls: docs/archive/2026-11-01-reminder-standard-controls-bundle-decision.md.
+  { label: "QuietAnchoredPopover", pattern: /^QuietAnchoredPopover-.*\.js$/, gzipKiB: 1.53 },
   { label: "QuietCalendar", pattern: /^QuietCalendar-.*\.js$/, gzipKiB: 1.3 },
   { label: "QuietSegmentedFilter", pattern: /^QuietSegmentedFilter-.*\.js$/, gzipKiB: 0.8 },
   { label: "QuietSearchField", pattern: /^QuietSearchField-.*\.js$/, gzipKiB: 0.5 },
   { label: "QuietStepperSlider", pattern: /^QuietStepperSlider-.*\.js$/, gzipKiB: 1.1 },
   { label: "QuietDateRangePicker", pattern: /^QuietDateRangePicker-.*\.js$/, gzipKiB: 2.1 },
   { label: "QuietSelect", pattern: sourceChunkPattern("src/shared/components/QuietSelect.tsx"), gzipKiB: 2.8 },
-  { label: "QuietTimePicker", pattern: /^QuietTimePicker-.*\.js$/, gzipKiB: 2.1 },
+  { label: "QuietTimePicker", pattern: /^QuietTimePicker-.*\.js$/, gzipKiB: 2.04 },
+  { label: "scheduled task presentation", pattern: /^scheduledTaskPresentation-.*\.js$/, gzipKiB: 0.48 },
   { label: "requested app icons", pattern: /^useRequestedAppIcons-.*\.js$/, gzipKiB: 0.55 },
   { label: "settings runtime adapter", pattern: /^settingsRuntimeAdapterService-.*\.js$/, gzipKiB: 3 },
   { label: "duration formatting", pattern: /^durationFormatting-.*\.js$/, gzipKiB: 0.2 },
   { label: "domain color", pattern: /^domainColor-.*\.js$/, gzipKiB: 0.43 },
-  { label: "scheduled task presentation", pattern: /^scheduledTaskPresentation-.*\.js$/, gzipKiB: 0.48 },
 ] as const;
 
 // Unowned fragments remain tightly bounded after route, secondary-runtime, and
 // stable shared owners are attributed above.
 // The scheduled-export entry adds two direct icon modules. Keep them in the
 // unowned support aggregate while preserving the global and per-owner limits.
-const LAZY_SUPPORT_CHUNKS_GZIP_BUDGET_KI_B = 6.55;
+const LAZY_SUPPORT_CHUNKS_GZIP_BUDGET_KI_B = 4.36;
 const SETTINGS_COPY_GZIP_BUDGET_KI_B = 12;
 // Import preview, destructuring, and batch deletion require matching locale resources.
 // Destination detail contributes shared bilingual resources used by
