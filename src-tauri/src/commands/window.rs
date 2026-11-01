@@ -27,6 +27,20 @@ pub async fn cmd_minimize_main_window(app: AppHandle) -> Result<(), CommandError
 }
 
 #[tauri::command]
+pub async fn cmd_show_desktop(window: WebviewWindow) -> Result<(), CommandErrorDto> {
+    if window.label() != main_window::MAIN_WINDOW_LABEL {
+        return Err(CommandErrorDto::new(
+            "SHOW_DESKTOP_INVALID_CALLER",
+            "only the main window can show the desktop",
+            false,
+        ));
+    }
+    crate::app::main_window::show_desktop()
+        .await
+        .map_err(|error| CommandErrorDto::new("SHOW_DESKTOP_FAILED", error, true))
+}
+
+#[tauri::command]
 pub fn cmd_e2e_destroy_hidden_main_window(app: AppHandle) -> Result<(), CommandErrorDto> {
     main_window::destroy_hidden_main_window_for_e2e(&app)
         .map_err(|error| CommandErrorDto::new("E2E_MAIN_WINDOW_DESTROY_FAILED", error, false))

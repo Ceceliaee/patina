@@ -1,3 +1,4 @@
+pub(crate) mod timed_reminders;
 use crate::domain::localization::{self, LocalizationState};
 use crate::domain::tools::{
     ActivityReminderNotification, ActivityReminderTarget, CompletedPomodoroNotification,
@@ -14,6 +15,10 @@ use tokio::sync::Notify;
 use tokio::time::{sleep, Duration};
 
 mod activity_notifications;
+pub use activity_notifications::{
+    create_activity_reminder_rule, disable_activity_reminder_rule, extend_activity_reminder,
+    set_activity_reminder_enabled, update_activity_reminder_limit,
+};
 
 pub const TOOLS_RUNTIME_CHANGED_EVENT: &str = "tools-runtime-changed";
 pub const TOOLS_ALERT_EVENT: &str = "tools-alert";
@@ -145,10 +150,44 @@ pub struct CreateActivityReminderRuleRequest {
 
 #[derive(Clone, Debug)]
 pub enum ToolsMutation {
-    CreateReminder { label: String, scheduled_at: i64 },
-    CancelReminder { reminder_id: i64 },
+    CreateReminder {
+        label: String,
+        scheduled_at: i64,
+        recurrence: Option<crate::domain::reminder_schedule::ReminderRecurrence>,
+    },
+    CancelReminder {
+        reminder_id: i64,
+    },
+    UpdateReminder {
+        reminder_id: i64,
+        label: String,
+        scheduled_at: i64,
+        enabled: bool,
+        recurrence: Option<crate::domain::reminder_schedule::ReminderRecurrence>,
+    },
+    ResolveReminderAlert {
+        reminder_id: i64,
+        fired_at: i64,
+        delay_minutes: Option<u32>,
+    },
     CreateActivityReminderRule(CreateActivityReminderRuleRequest),
-    DisableActivityReminderRule { rule_id: i64 },
+    DisableActivityReminderRule {
+        rule_id: i64,
+    },
+    SetActivityReminderEnabled {
+        rule_id: i64,
+        enabled: bool,
+    },
+    UpdateActivityReminderLimit {
+        rule_id: i64,
+        limit_ms: i64,
+    },
+    ExtendActivityReminder {
+        rule_id: i64,
+        alert_at: i64,
+        extension: crate::domain::tools::ActivityReminderExtension,
+        day_start_ms: i64,
+    },
     StartTimer(StartTimerRequest),
     PauseTimer,
     ResumeTimer,
@@ -238,7 +277,9 @@ pub async fn get_snapshot<R: Runtime>(
 
 pub fn get_alerts<R: Runtime>(app: &AppHandle<R>) -> Vec<ToolAlert> {
     app.try_state::<ToolsRuntimeState>()
-        .map(|state| state.alerts())
+        .map(|state| {
+            timed_reminders::include_pending_alerts(state.alerts(), state.snapshot().reminders)
+        })
         .unwrap_or_default()
 }
 
@@ -261,70 +302,6 @@ pub fn notify_tools_runtime<R: Runtime>(app: &AppHandle<R>) {
     if let Some(state) = app.try_state::<ToolsRuntimeWakeState>() {
         state.notify();
     }
-}
-
-pub async fn create_reminder<R: Runtime>(
-    app: &AppHandle<R>,
-    store: &impl ToolsStore,
-    label: String,
-    scheduled_at: i64,
-) -> Result<ToolsRuntimeSnapshot, String> {
-    let now_ms = now_ms();
-    if scheduled_at <= now_ms {
-        return Err("reminder time must be in the future".to_string());
-    }
-    apply_mutation_and_refresh(
-        app,
-        store,
-        ToolsMutation::CreateReminder {
-            label,
-            scheduled_at,
-        },
-        now_ms,
-    )
-    .await
-}
-
-pub async fn cancel_reminder<R: Runtime>(
-    app: &AppHandle<R>,
-    store: &impl ToolsStore,
-    reminder_id: i64,
-) -> Result<ToolsRuntimeSnapshot, String> {
-    apply_mutation_and_refresh(
-        app,
-        store,
-        ToolsMutation::CancelReminder { reminder_id },
-        now_ms(),
-    )
-    .await
-}
-
-pub async fn create_activity_reminder_rule<R: Runtime>(
-    app: &AppHandle<R>,
-    store: &impl ToolsStore,
-    request: CreateActivityReminderRuleRequest,
-) -> Result<ToolsRuntimeSnapshot, String> {
-    apply_mutation_and_refresh(
-        app,
-        store,
-        ToolsMutation::CreateActivityReminderRule(request),
-        now_ms(),
-    )
-    .await
-}
-
-pub async fn disable_activity_reminder_rule<R: Runtime>(
-    app: &AppHandle<R>,
-    store: &impl ToolsStore,
-    rule_id: i64,
-) -> Result<ToolsRuntimeSnapshot, String> {
-    apply_mutation_and_refresh(
-        app,
-        store,
-        ToolsMutation::DisableActivityReminderRule { rule_id },
-        now_ms(),
-    )
-    .await
 }
 
 pub async fn start_timer<R: Runtime>(
@@ -478,7 +455,11 @@ fn notify_tick_events<R: Runtime + 'static>(app: &AppHandle<R>, events: ToolsTic
         send_tool_alert(
             app,
             ToolAlert {
-                id: format!("reminder:{}", reminder.id),
+                id: format!(
+                    "reminder:{}:{}",
+                    reminder.id,
+                    reminder.fired_at.unwrap_or(now)
+                ),
                 kind: ToolAlertKind::Reminder,
                 title: localization::text(locale, "native.tools.reminderTitle"),
                 body: if reminder.label.trim().is_empty() {
@@ -487,6 +468,7 @@ fn notify_tick_events<R: Runtime + 'static>(app: &AppHandle<R>, events: ToolsTic
                     reminder.label
                 },
                 occurred_at: reminder.fired_at.unwrap_or(now),
+                activity_reminder: None,
             },
         );
     }
@@ -512,6 +494,7 @@ fn notify_tick_events<R: Runtime + 'static>(app: &AppHandle<R>, events: ToolsTic
                     localization::text(locale, "native.tools.countdownDefaultBody")
                 }),
                 occurred_at: now,
+                activity_reminder: None,
             },
         );
     }
@@ -539,6 +522,7 @@ fn notify_tick_events<R: Runtime + 'static>(app: &AppHandle<R>, events: ToolsTic
                 title: localization::text(locale, title_key),
                 body: localization::text(locale, body_key),
                 occurred_at: now,
+                activity_reminder: None,
             },
         );
     }
@@ -642,7 +626,7 @@ fn compute_next_tools_wake(
     let has_pending_activity_reminder = snapshot
         .activity_reminder_rules
         .iter()
-        .any(|rule| rule.last_fired_date_key.as_deref() != Some(current_date_key));
+        .any(|rule| rule.enabled && rule.last_fired_date_key.as_deref() != Some(current_date_key));
     let max_delay_ms = if has_pending_activity_reminder {
         TOOLS_RUNTIME_ACTIVITY_REMINDER_WAKE_MS
     } else {
@@ -785,6 +769,7 @@ mod tests {
         ToolsMutation::CreateReminder {
             label: "fixture".into(),
             scheduled_at: 10_000,
+            recurrence: None,
         }
     }
 
@@ -1023,6 +1008,8 @@ mod tests {
             status: crate::domain::tools::ReminderStatus::Scheduled,
             fired_at: None,
             cancelled_at: None,
+            recurrence: None,
+            recurrence_anchor_at: None,
         };
     }
 
@@ -1035,6 +1022,7 @@ mod tests {
             title: "提醒".to_string(),
             body: "时间到了".to_string(),
             occurred_at: 1_000,
+            activity_reminder: None,
         };
 
         state.push_alert(alert.clone());
@@ -1056,6 +1044,7 @@ mod tests {
                 title: "提醒".to_string(),
                 body: "时间到了".to_string(),
                 occurred_at: index as i64,
+                activity_reminder: None,
             });
         }
 
@@ -1157,6 +1146,7 @@ mod tests {
     fn tools_wake_keeps_activity_reminder_on_slow_poll() {
         let snapshot = ToolsRuntimeSnapshot {
             activity_reminder_rules: vec![ToolActivityReminderRule {
+                enabled: true,
                 id: 1,
                 target: ActivityReminderTarget::App {
                     app_name: "Editor".to_string(),
@@ -1169,6 +1159,10 @@ mod tests {
                 updated_at: 1_000,
                 disabled_at: None,
                 last_fired_date_key: None,
+                last_fired_at: None,
+                extension_date_key: None,
+                extension_limit_ms: None,
+                last_extended_alert_at: None,
                 suspension_reason: None,
             }],
             ..ToolsRuntimeSnapshot::default()
@@ -1185,6 +1179,7 @@ mod tests {
     fn tools_wake_ignores_activity_reminders_already_fired_today() {
         let snapshot = ToolsRuntimeSnapshot {
             activity_reminder_rules: vec![ToolActivityReminderRule {
+                enabled: true,
                 id: 1,
                 target: ActivityReminderTarget::App {
                     app_name: "Editor".to_string(),
@@ -1197,6 +1192,10 @@ mod tests {
                 updated_at: 1_000,
                 disabled_at: None,
                 last_fired_date_key: Some("2026-06-29".to_string()),
+                last_fired_at: None,
+                extension_date_key: None,
+                extension_limit_ms: None,
+                last_extended_alert_at: None,
                 suspension_reason: None,
             }],
             ..ToolsRuntimeSnapshot::default()

@@ -12,6 +12,7 @@ use tauri::AppHandle;
 pub struct CreateReminderDto {
     label: String,
     scheduled_at: i64,
+    recurrence: Option<crate::domain::reminder_schedule::ReminderRecurrence>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -138,11 +139,49 @@ pub fn cmd_dismiss_tool_alert(alert_id: String, app: AppHandle) {
 }
 
 #[tauri::command]
+pub async fn cmd_extend_activity_reminder(
+    alert_id: String,
+    extension: crate::domain::tools::ActivityReminderExtension,
+    window: tauri::WebviewWindow,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    use tauri::Manager;
+    if window.label() != "main" {
+        return Err("only the main window can extend reminders".into());
+    }
+    tools::extend_activity_reminder(window.app_handle(), &alert_id, extension).await
+}
+
+#[tauri::command]
+pub async fn cmd_resolve_reminder_alert(
+    alert_id: String,
+    delay_minutes: Option<u32>,
+    window: tauri::WebviewWindow,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    use tauri::Manager;
+    if window.label() != "main" {
+        return Err("only the main window can resolve reminders".into());
+    }
+    tools::resolve_reminder_alert(window.app_handle(), &alert_id, delay_minutes).await
+}
+
+#[tauri::command]
 pub async fn cmd_create_reminder(
     input: CreateReminderDto,
     app: AppHandle,
 ) -> Result<ToolsRuntimeSnapshot, String> {
-    tools::create_reminder(&app, input.label, input.scheduled_at).await
+    tools::create_reminder(&app, input.label, input.scheduled_at, input.recurrence).await
+}
+
+#[tauri::command]
+pub async fn cmd_update_reminder(
+    reminder_id: i64,
+    label: String,
+    scheduled_at: i64,
+    enabled: bool,
+    recurrence: Option<crate::domain::reminder_schedule::ReminderRecurrence>,
+    app: AppHandle,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    tools::update_reminder(&app, reminder_id, label, scheduled_at, enabled, recurrence).await
 }
 
 #[tauri::command]
@@ -167,6 +206,24 @@ pub async fn cmd_disable_activity_reminder_rule(
     app: AppHandle,
 ) -> Result<ToolsRuntimeSnapshot, String> {
     tools::disable_activity_reminder_rule(&app, rule_id).await
+}
+
+#[tauri::command]
+pub async fn cmd_set_activity_reminder_enabled(
+    rule_id: i64,
+    enabled: bool,
+    app: AppHandle,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    tools::set_activity_reminder_enabled(&app, rule_id, enabled).await
+}
+
+#[tauri::command]
+pub async fn cmd_update_activity_reminder_limit(
+    rule_id: i64,
+    limit_ms: i64,
+    app: AppHandle,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    tools::update_activity_reminder_limit(&app, rule_id, limit_ms).await
 }
 
 #[tauri::command]

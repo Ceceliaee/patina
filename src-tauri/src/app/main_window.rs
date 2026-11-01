@@ -15,6 +15,12 @@ mod recovery;
 
 pub(crate) const MAIN_WINDOW_LABEL: &str = "main";
 
+pub(crate) async fn show_desktop() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(crate::platform::windows::desktop::show_desktop)
+        .await
+        .map_err(|error| error.to_string())?
+}
+
 const MAIN_WINDOW_TITLE: &str = "Patina";
 const MAIN_WINDOW_WIDTH: f64 = 1100.0;
 const MAIN_WINDOW_HEIGHT: f64 = 736.0;

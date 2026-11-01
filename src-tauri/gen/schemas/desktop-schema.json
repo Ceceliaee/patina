@@ -495,6 +495,12 @@
           "markdownDescription": "Enables the cmd_export_data command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_extend_activity_reminder command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-extend-activity-reminder",
+          "markdownDescription": "Enables the cmd_extend_activity_reminder command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_get_activity_aggregate_range command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-get-activity-aggregate-range",
@@ -831,6 +837,12 @@
           "markdownDescription": "Enables the cmd_reset_timer command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_resolve_reminder_alert command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-resolve-reminder-alert",
+          "markdownDescription": "Enables the cmd_resolve_reminder_alert command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_restart_and_apply_restore_default_storage_migration command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-restart-and-apply-restore-default-storage-migration",
@@ -921,6 +933,12 @@
           "markdownDescription": "Enables the cmd_save_scheduled_export_config command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_set_activity_reminder_enabled command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-set-activity-reminder-enabled",
+          "markdownDescription": "Enables the cmd_set_activity_reminder_enabled command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_set_afk_threshold command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-set-afk-threshold",
@@ -937,6 +955,12 @@
           "type": "string",
           "const": "allow-cmd-set-launch-behavior",
           "markdownDescription": "Enables the cmd_set_launch_behavior command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_show_desktop command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-show-desktop",
+          "markdownDescription": "Enables the cmd_show_desktop command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_show_main_window command without any pre-configured scope.",
@@ -967,6 +991,18 @@
           "type": "string",
           "const": "allow-cmd-test-webdav-backup-target",
           "markdownDescription": "Enables the cmd_test_webdav_backup_target command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_update_activity_reminder_limit command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-update-activity-reminder-limit",
+          "markdownDescription": "Enables the cmd_update_activity_reminder_limit command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_update_reminder command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-update-reminder",
+          "markdownDescription": "Enables the cmd_update_reminder command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_upload_webdav_backup command without any pre-configured scope.",
@@ -1135,6 +1171,12 @@
           "type": "string",
           "const": "deny-cmd-export-data",
           "markdownDescription": "Denies the cmd_export_data command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_extend_activity_reminder command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-extend-activity-reminder",
+          "markdownDescription": "Denies the cmd_extend_activity_reminder command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_get_activity_aggregate_range command without any pre-configured scope.",
@@ -1473,6 +1515,12 @@
           "markdownDescription": "Denies the cmd_reset_timer command without any pre-configured scope."
         },
         {
+          "description": "Denies the cmd_resolve_reminder_alert command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-resolve-reminder-alert",
+          "markdownDescription": "Denies the cmd_resolve_reminder_alert command without any pre-configured scope."
+        },
+        {
           "description": "Denies the cmd_restart_and_apply_restore_default_storage_migration command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-restart-and-apply-restore-default-storage-migration",
@@ -1563,6 +1611,12 @@
           "markdownDescription": "Denies the cmd_save_scheduled_export_config command without any pre-configured scope."
         },
         {
+          "description": "Denies the cmd_set_activity_reminder_enabled command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-set-activity-reminder-enabled",
+          "markdownDescription": "Denies the cmd_set_activity_reminder_enabled command without any pre-configured scope."
+        },
+        {
           "description": "Denies the cmd_set_afk_threshold command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-set-afk-threshold",
@@ -1579,6 +1633,12 @@
           "type": "string",
           "const": "deny-cmd-set-launch-behavior",
           "markdownDescription": "Denies the cmd_set_launch_behavior command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_show_desktop command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-show-desktop",
+          "markdownDescription": "Denies the cmd_show_desktop command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_show_main_window command without any pre-configured scope.",
@@ -1609,6 +1669,18 @@
           "type": "string",
           "const": "deny-cmd-test-webdav-backup-target",
           "markdownDescription": "Denies the cmd_test_webdav_backup_target command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_update_activity_reminder_limit command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-update-activity-reminder-limit",
+          "markdownDescription": "Denies the cmd_update_activity_reminder_limit command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_update_reminder command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-update-reminder",
+          "markdownDescription": "Denies the cmd_update_reminder command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_upload_webdav_backup command without any pre-configured scope.",
