@@ -14,7 +14,8 @@ async fn widget_retirement_snapshot_replace_merge_and_reexport_preserve_data() {
         let source = crate::data::sqlite_pool::open_single_connection_sqlite_pool(&source_path,true).await.unwrap();
         pools.push(source.clone());
         crate::data::sqlite_pool::prepare_pool_schema(&source,&source_path).await.unwrap();
-        source.execute("DELETE FROM _sqlx_migrations WHERE version=17;
+        source.execute("DELETE FROM _sqlx_migrations WHERE version>=17;
+            DROP TABLE tool_activity_reminder_extensions;
             INSERT INTO settings(key,value) VALUES ('minimize_behavior','widget'),('widget_placement','broken'),('widget_expansion_preference','pinned'),('widget_side','right'),('widget_anchor_y','0.7'),('mini_window_preferences','{\"held\":true}'),('language','es');
             INSERT INTO sessions(id,app_name,exe_name,start_time,end_time,duration) VALUES(1,'Editor','editor.exe',1000,2000,1000);
             INSERT INTO session_title_samples(session_id,title,start_time,end_time) VALUES(1,'Document',1000,2000);

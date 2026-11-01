@@ -38,6 +38,26 @@ pub const SESSION_RANGE_INDEX_MIGRATION_VERSION: i64 = 15;
 pub const SESSION_RANGE_INDEX_MIGRATION_DESCRIPTION: &str = "index_session_range_ends";
 pub const ANONYMOUS_ACTIVITY_MIGRATION_VERSION: i64 = 16;
 pub const WIDGET_RETIREMENT_MIGRATION_VERSION: i64 = 17;
+pub const ACTIVITY_REMINDER_ENABLED_MIGRATION_VERSION: i64 = 19;
+pub const REMINDER_RECURRENCE_MIGRATION_VERSION: i64 = 20;
+pub const REMINDER_RECURRENCE_SQL: &str = "
+    CREATE TABLE IF NOT EXISTS tool_reminder_recurrences (
+        reminder_id INTEGER PRIMARY KEY REFERENCES tool_reminders(id) ON DELETE CASCADE,
+        recurrence TEXT NOT NULL,
+        recurrence_anchor_at INTEGER NOT NULL
+    );
+";
+pub const ACTIVITY_REMINDER_ENABLED_SQL: &str = "CREATE TABLE IF NOT EXISTS tool_activity_reminder_states (rule_id INTEGER PRIMARY KEY REFERENCES tool_activity_reminder_rules(id) ON DELETE CASCADE, enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)));";
+pub const ACTIVITY_REMINDER_EXTENSION_MIGRATION_VERSION: i64 = 18;
+pub const ACTIVITY_REMINDER_EXTENSION_SQL: &str = "
+    CREATE TABLE IF NOT EXISTS tool_activity_reminder_extensions (
+        rule_id INTEGER PRIMARY KEY REFERENCES tool_activity_reminder_rules(id) ON DELETE CASCADE,
+        last_fired_at INTEGER,
+        extension_date_key TEXT,
+        extension_limit_ms INTEGER CHECK(extension_limit_ms IS NULL OR extension_limit_ms > 0),
+        last_extended_alert_at INTEGER
+    );
+";
 pub const WIDGET_RETIREMENT_SQL: &str = "DELETE FROM settings WHERE key IN ('minimize_behavior', 'widget_placement', 'widget_expansion_preference', 'widget_side', 'widget_anchor_y');";
 
 pub const SESSION_RANGE_INDEX_SCHEMA_SQL: &str = "
@@ -1184,6 +1204,21 @@ pub fn tracker_migrations() -> Vec<Migration> {
             version: WIDGET_RETIREMENT_MIGRATION_VERSION,
             description: "retire_widget_preferences",
             sql: WIDGET_RETIREMENT_SQL,
+        },
+        Migration {
+            version: ACTIVITY_REMINDER_EXTENSION_MIGRATION_VERSION,
+            description: "extend_activity_reminders_for_today",
+            sql: ACTIVITY_REMINDER_EXTENSION_SQL,
+        },
+        Migration {
+            version: ACTIVITY_REMINDER_ENABLED_MIGRATION_VERSION,
+            description: "persist_activity_reminder_enabled_state",
+            sql: ACTIVITY_REMINDER_ENABLED_SQL,
+        },
+        Migration {
+            version: REMINDER_RECURRENCE_MIGRATION_VERSION,
+            description: "persist_reminder_recurrence",
+            sql: REMINDER_RECURRENCE_SQL,
         },
     ]
 }

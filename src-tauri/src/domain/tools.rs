@@ -10,6 +10,9 @@ pub const DEFAULT_POMODORO_LONG_BREAK_EVERY: i64 = 4;
 #[serde(rename_all = "snake_case")]
 pub enum ReminderStatus {
     Scheduled,
+    Paused,
+    PendingConfirmation,
+    // The legacy fired status is a finished reminder; new alerts wait for confirmation first.
     Fired,
     Cancelled,
 }
@@ -18,6 +21,8 @@ impl ReminderStatus {
     pub fn as_str(self) -> &'static str {
         match self {
             ReminderStatus::Scheduled => "scheduled",
+            ReminderStatus::Paused => "paused",
+            ReminderStatus::PendingConfirmation => "pending_confirmation",
             ReminderStatus::Fired => "fired",
             ReminderStatus::Cancelled => "cancelled",
         }
@@ -25,6 +30,8 @@ impl ReminderStatus {
 
     pub fn from_storage(value: &str) -> Self {
         match value.trim().to_ascii_lowercase().as_str() {
+            "paused" => ReminderStatus::Paused,
+            "pending_confirmation" => ReminderStatus::PendingConfirmation,
             "fired" => ReminderStatus::Fired,
             "cancelled" => ReminderStatus::Cancelled,
             _ => ReminderStatus::Scheduled,
@@ -178,6 +185,8 @@ pub struct ToolReminder {
     pub status: ReminderStatus,
     pub fired_at: Option<i64>,
     pub cancelled_at: Option<i64>,
+    pub recurrence: Option<crate::domain::reminder_schedule::ReminderRecurrence>,
+    pub recurrence_anchor_at: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -206,6 +215,7 @@ pub enum ActivityReminderSuspensionReason {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ToolActivityReminderRule {
     pub id: i64,
+    pub enabled: bool,
     pub target: ActivityReminderTarget,
     pub label_snapshot: String,
     pub limit_ms: i64,
@@ -214,7 +224,39 @@ pub struct ToolActivityReminderRule {
     pub updated_at: i64,
     pub disabled_at: Option<i64>,
     pub last_fired_date_key: Option<String>,
+    pub last_fired_at: Option<i64>,
+    pub extension_date_key: Option<String>,
+    pub extension_limit_ms: Option<i64>,
+    pub last_extended_alert_at: Option<i64>,
     pub suspension_reason: Option<ActivityReminderSuspensionReason>,
+}
+
+impl ToolActivityReminderRule {
+    pub fn limit_for_date(&self, date_key: &str) -> Option<i64> {
+        if self.extension_date_key.as_deref() == Some(date_key) {
+            self.extension_limit_ms
+        } else {
+            Some(self.limit_ms)
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ActivityReminderExtension {
+    FifteenMinutes,
+    OneHour,
+    Today,
+}
+
+impl ActivityReminderExtension {
+    pub fn additional_ms(self) -> Option<i64> {
+        match self {
+            Self::FifteenMinutes => Some(15 * 60_000),
+            Self::OneHour => Some(60 * 60_000),
+            Self::Today => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -383,6 +425,18 @@ pub struct ToolAlert {
     pub title: String,
     pub body: String,
     pub occurred_at: i64,
+    pub activity_reminder: Option<ActivityReminderAlert>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ActivityReminderAlert {
+    pub rule_id: i64,
+    pub date_key: String,
+    pub target: ActivityReminderTarget,
+    pub target_label: String,
+    pub usage_ms: i64,
+    pub limit_ms: i64,
+    pub message: String,
 }
 
 #[cfg(test)]

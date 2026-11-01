@@ -24,6 +24,15 @@ async fn setup_test_db() -> SqlitePool {
     pool.execute(db_schema::ACTIVITY_REMINDER_RULES_SCHEMA_SQL)
         .await
         .unwrap();
+    pool.execute(crate::data::schema::ACTIVITY_REMINDER_EXTENSION_SQL)
+        .await
+        .unwrap();
+    pool.execute(crate::data::schema::ACTIVITY_REMINDER_ENABLED_SQL)
+        .await
+        .unwrap();
+    pool.execute(crate::data::schema::REMINDER_RECURRENCE_SQL)
+        .await
+        .unwrap();
     pool.execute(db_schema::WEB_ACTIVITY_SCHEMA_SQL)
         .await
         .unwrap();

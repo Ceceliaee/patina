@@ -121,7 +121,7 @@ async fn snapshot_merge_preserves_all_record_domains_and_rolls_back_late_failure
         INSERT INTO import_exact_sessions(batch_id,fingerprint,app_name,exe_name,window_title,start_time,end_time,duration) VALUES('batch','exact','External','external.exe','',10,20,10);
         INSERT INTO web_activity_segments(id,browser_client_id,browser_kind,browser_exe_name,domain,normalized_domain,start_time,end_time,duration,created_at,updated_at) VALUES(1,'client','chromium','chrome.exe','Example.com','example.com',1000,2000,1000,1000,2000);
         INSERT INTO web_activity_native_sessions(segment_id,session_id) VALUES(1,1);").await.unwrap();
-    tools::create_reminder(&source, "Check", 2000, 1000)
+    tools::timed_reminders::create_reminder(&source, "Check", 2000, Some(crate::domain::reminder_schedule::ReminderRecurrence::Interval { minutes: 30 }), 1000)
         .await
         .unwrap();
     tools::start_timer(&source, TimerMode::Stopwatch, None, Some("Source"), 1000)
@@ -208,6 +208,12 @@ async fn snapshot_merge_preserves_all_record_domains_and_rolls_back_late_failure
     }
     assert_eq!(count_table(&target, "sessions").await.unwrap(), 2);
     assert_eq!(count_table(&target, "tool_timers").await.unwrap(), 2);
+    let recurrence: String = sqlx::query_scalar("SELECT recurrence FROM tool_reminders JOIN tool_reminder_recurrences ON reminder_id=id WHERE label='Check'")
+        .fetch_one(&target).await.unwrap();
+    assert_eq!(serde_json::from_str::<serde_json::Value>(&recurrence).unwrap(), serde_json::json!({"kind":"interval","minutes":30}));
+    let anchor: i64 = sqlx::query_scalar("SELECT recurrence_anchor_at FROM tool_reminders JOIN tool_reminder_recurrences ON reminder_id=id WHERE label='Check'")
+        .fetch_one(&target).await.unwrap();
+    assert_eq!(anchor, 2000);
     for table in [
         "session_title_samples",
         "tool_reminders",

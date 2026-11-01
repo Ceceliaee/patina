@@ -109,6 +109,9 @@ struct SnapshotCounts {
     tool_daily_stats: usize,
     #[serde(alias = "toolSoftwareReminderRules")]
     tool_activity_reminder_rules: usize,
+    tool_activity_reminder_extensions: usize,
+    #[serde(default)]
+    tool_activity_reminder_states: usize,
     scheduled_backup_config: usize,
     scheduled_backup_runs: usize,
     scheduled_export_config: usize,
@@ -305,6 +308,10 @@ async fn count_table(pool: &Pool<Sqlite>, table: &str) -> Result<usize, String> 
         "tool_pomodoro_runs" => "SELECT COUNT(*) FROM tool_pomodoro_runs",
         "tool_daily_stats" => "SELECT COUNT(*) FROM tool_daily_stats",
         "tool_activity_reminder_rules" => "SELECT COUNT(*) FROM tool_activity_reminder_rules",
+        "tool_activity_reminder_states" => "SELECT COUNT(*) FROM tool_activity_reminder_states",
+        "tool_activity_reminder_extensions" => {
+            "SELECT COUNT(*) FROM tool_activity_reminder_extensions"
+        }
         "scheduled_backup_config" => "SELECT COUNT(*) FROM scheduled_backup_config",
         "scheduled_backup_runs" => "SELECT COUNT(*) FROM scheduled_backup_runs",
         "scheduled_export_config" => "SELECT COUNT(*) FROM scheduled_export_config",
@@ -343,6 +350,18 @@ async fn read_counts(pool: &Pool<Sqlite>) -> Result<SnapshotCounts, String> {
         tool_pomodoro_runs: count_table(pool, "tool_pomodoro_runs").await?,
         tool_daily_stats: count_table(pool, "tool_daily_stats").await?,
         tool_activity_reminder_rules: count_table(pool, "tool_activity_reminder_rules").await?,
+        tool_activity_reminder_states:
+            if crate::data::schema_contracts::has_activity_reminder_enabled_schema(pool).await? {
+                count_table(pool, "tool_activity_reminder_states").await?
+            } else {
+                0
+            },
+        tool_activity_reminder_extensions:
+            if crate::data::schema_contracts::has_activity_reminder_extensions_schema(pool).await? {
+                count_table(pool, "tool_activity_reminder_extensions").await?
+            } else {
+                0
+            },
         scheduled_backup_config: count_table(pool, "scheduled_backup_config").await?,
         scheduled_backup_runs: count_table(pool, "scheduled_backup_runs").await?,
         scheduled_export_config: count_table(pool, "scheduled_export_config").await?,
@@ -355,6 +374,9 @@ pub(super) async fn validate_current_schema(pool: &Pool<Sqlite>) -> Result<(), S
     if head != current_migration_head()
         || expected_migration_fingerprint(head).as_deref() != Some(fingerprint.as_str())
         || !crate::data::schema_contracts::has_web_activity_session_schema(pool).await?
+        || !crate::data::schema_contracts::has_activity_reminder_enabled_schema(pool).await?
+        || !crate::data::schema_contracts::has_reminder_recurrence_schema(pool).await?
+        || !crate::data::schema_contracts::has_activity_reminder_extensions_schema(pool).await?
     {
         return Err("restored sqlite snapshot did not reach the current schema".to_string());
     }

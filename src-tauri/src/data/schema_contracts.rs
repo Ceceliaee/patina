@@ -1,6 +1,13 @@
 use sqlx::{Pool, Row, Sqlite};
 use std::collections::BTreeSet;
 
+pub async fn has_reminder_recurrence_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let columns = table_columns(pool, "tool_reminder_recurrences").await?;
+    Ok(columns.contains("reminder_id")
+        && columns.contains("recurrence")
+        && columns.contains("recurrence_anchor_at"))
+}
+
 pub async fn has_retired_widget_preferences(pool: &Pool<Sqlite>) -> Result<bool, String> {
     // Reuse the migration predicate so history repair and execution share the same data contract.
     let query =
@@ -125,6 +132,24 @@ pub async fn has_activity_reminder_rules_schema(pool: &Pool<Sqlite>) -> Result<b
         && legacy_columns.is_empty())
 }
 
+pub async fn has_activity_reminder_enabled_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let columns = table_columns(pool, "tool_activity_reminder_states").await?;
+    Ok(columns.contains("rule_id") && columns.contains("enabled"))
+}
+
+pub async fn has_activity_reminder_extensions_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let columns = table_columns(pool, "tool_activity_reminder_extensions").await?;
+    Ok([
+        "rule_id",
+        "last_fired_at",
+        "extension_date_key",
+        "extension_limit_ms",
+        "last_extended_alert_at",
+    ]
+    .iter()
+    .all(|column| columns.contains(*column)))
+}
+
 pub async fn has_scheduled_backup_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
     let config_columns = table_columns(pool, "scheduled_backup_config").await?;
     let run_columns = table_columns(pool, "scheduled_backup_runs").await?;
@@ -237,6 +262,49 @@ pub async fn has_local_only_scheduled_backup_schema(pool: &Pool<Sqlite>) -> Resu
         && !run_columns.contains("target_kind")
         && run_indexes.contains("idx_scheduled_backup_runs_retention")
         && run_indexes.contains("idx_scheduled_backup_runs_status_retry"))
+}
+
+pub(super) async fn schema_revision_limit(pool: &Pool<Sqlite>) -> Result<usize, String> {
+    let scheduled_backup_migration_count = if has_scheduled_backup_schema(pool).await? {
+        2
+    } else if has_local_only_scheduled_backup_schema(pool).await? {
+        1
+    } else {
+        0
+    };
+    let revision_limit = crate::data::schema::ACTIVITY_READ_MODELS_MIGRATION_VERSION as usize
+        + usize::from(has_web_activity_revision_schema(pool).await?)
+        + scheduled_backup_migration_count
+        + usize::from(has_scheduled_export_schema(pool).await?)
+        + usize::from(has_activity_reminder_rules_schema(pool).await?)
+        + usize::from(has_web_activity_session_schema(pool).await?)
+        + usize::from(has_session_range_index(pool).await?)
+        + usize::from(has_anonymous_activity_schema(pool).await?);
+    // A data migration cannot be inferred from table layout. Never mark it applied
+    // while its removed preferences remain in the database.
+    let revision_limit = revision_limit
+        + usize::from(
+            revision_limit == crate::data::schema::ANONYMOUS_ACTIVITY_MIGRATION_VERSION as usize
+                && has_retired_widget_preferences(pool).await?,
+        );
+    let revision_limit = revision_limit
+        + usize::from(
+            revision_limit == crate::data::schema::WIDGET_RETIREMENT_MIGRATION_VERSION as usize
+                && has_activity_reminder_extensions_schema(pool).await?,
+        );
+    let revision_limit = revision_limit
+        + usize::from(
+            revision_limit
+                == crate::data::schema::ACTIVITY_REMINDER_EXTENSION_MIGRATION_VERSION as usize
+                && has_activity_reminder_enabled_schema(pool).await?,
+        );
+    let revision_limit = revision_limit
+        + usize::from(
+            revision_limit
+                == crate::data::schema::ACTIVITY_REMINDER_ENABLED_MIGRATION_VERSION as usize
+                && has_reminder_recurrence_schema(pool).await?,
+        );
+    Ok(revision_limit)
 }
 
 #[cfg(test)]

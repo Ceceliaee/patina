@@ -26,7 +26,7 @@ pub(crate) async fn register_sqlite_pool(state: &AppSqlitePool, pool: Pool<Sqlit
         previous.close().await;
     }
 }
-const VALIDATED_SCHEMA_MIGRATION_HEAD: i64 = schema::WIDGET_RETIREMENT_MIGRATION_VERSION;
+const VALIDATED_SCHEMA_MIGRATION_HEAD: i64 = schema::REMINDER_RECURRENCE_MIGRATION_VERSION;
 mod activity_read_model_schema;
 pub(super) mod import_schema;
 mod maintenance;
@@ -779,6 +779,9 @@ pub(super) async fn has_web_favicon_cache_schema(pool: &Pool<Sqlite>) -> Result<
 
 async fn has_current_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
     let checks = [
+        schema_contracts::has_reminder_recurrence_schema(pool).await?,
+        schema_contracts::has_activity_reminder_enabled_schema(pool).await?,
+        schema_contracts::has_activity_reminder_extensions_schema(pool).await?,
         schema_contracts::has_retired_widget_preferences(pool).await?,
         schema_contracts::has_anonymous_activity_schema(pool).await?,
         schema_contracts::has_session_range_index(pool).await?,
@@ -828,29 +831,7 @@ async fn normalize_current_baseline_migration_history_for_pool(
     } else if !has_activity_read_models_schema(pool).await? {
         expected.truncate(schema::IMPORT_DATA_ISOLATION_MIGRATION_VERSION as usize);
     }
-    let scheduled_backup_migration_count =
-        if schema_contracts::has_scheduled_backup_schema(pool).await? {
-            2
-        } else if schema_contracts::has_local_only_scheduled_backup_schema(pool).await? {
-            1
-        } else {
-            0
-        };
-    let revision_limit = schema::ACTIVITY_READ_MODELS_MIGRATION_VERSION as usize
-        + usize::from(schema_contracts::has_web_activity_revision_schema(pool).await?)
-        + scheduled_backup_migration_count
-        + usize::from(schema_contracts::has_scheduled_export_schema(pool).await?)
-        + usize::from(schema_contracts::has_activity_reminder_rules_schema(pool).await?)
-        + usize::from(schema_contracts::has_web_activity_session_schema(pool).await?)
-        + usize::from(schema_contracts::has_session_range_index(pool).await?)
-        + usize::from(schema_contracts::has_anonymous_activity_schema(pool).await?);
-    // A data migration cannot be inferred from table layout. Never mark it applied
-    // while its removed preferences remain in the database.
-    let revision_limit = revision_limit
-        + usize::from(
-            revision_limit == schema::ANONYMOUS_ACTIVITY_MIGRATION_VERSION as usize
-                && schema_contracts::has_retired_widget_preferences(pool).await?,
-        );
+    let revision_limit = schema_contracts::schema_revision_limit(pool).await?;
     expected.truncate(expected.len().min(revision_limit));
     if expected.is_empty() {
         return Ok(false);
@@ -1289,7 +1270,7 @@ mod tests {
                     .unwrap();
             assert_eq!(
                 final_versions,
-                vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+                vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
             );
         });
     }

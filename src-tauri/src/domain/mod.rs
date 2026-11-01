@@ -7,6 +7,7 @@ pub mod export_schedule;
 pub mod lifecycle;
 pub mod localization;
 pub mod mini_window;
+pub mod reminder_schedule;
 pub mod settings;
 pub mod storage;
 pub mod tools;

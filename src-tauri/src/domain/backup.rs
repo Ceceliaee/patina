@@ -70,6 +70,8 @@ pub struct BackupToolReminder {
     pub status: String,
     pub fired_at: Option<i64>,
     pub cancelled_at: Option<i64>,
+    pub recurrence: Option<crate::domain::reminder_schedule::ReminderRecurrence>,
+    pub recurrence_anchor_at: Option<i64>,
 }
 
 #[derive(Clone, Debug)]
