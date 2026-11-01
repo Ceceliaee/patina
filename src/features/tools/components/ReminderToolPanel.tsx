@@ -1,26 +1,31 @@
-import { BellRing, Plus, X } from "lucide-react";
+import { BellRing, Repeat, ClipboardCheck, PencilLine, ToggleLeft, ToggleRight, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import QuietIconAction from "../../../shared/components/QuietIconAction.tsx";
+import QuietTooltip from "../../../shared/components/QuietTooltip.tsx";
+import ReminderScheduleFields, { recurrenceLabel, validRecurrence } from "./ReminderScheduleFields.tsx";
+import TimedReminderEditor from "./TimedReminderEditor.tsx";
+import { toDateInputValue, toTimeInputValue, parseLocalDateTime } from "../services/reminderTimeInput.ts";
+import ActivityReminderRuleEditor from "./ActivityReminderRuleEditor.tsx";
 import QuietButton from "../../../shared/components/QuietButton.tsx";
-import QuietDatePicker from "../../../shared/components/QuietDatePicker.tsx";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter.tsx";
-import QuietTimePicker from "../../../shared/components/QuietTimePicker.tsx";
-import { useLocaleText } from "../../../shared/i18n/index.ts";
+import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
 import type {
+  ReminderRecurrence,
   ActivityReminderAppCandidate,
   ActivityReminderCategoryCandidate,
   ActivityReminderTarget,
   ActivityReminderWebCandidate,
 } from "../../../shared/types/tools.ts";
 import {
-  readToolsReminderFormMode,
   readToolsReminderMode,
-  rememberToolsReminderFormMode,
   rememberToolsReminderMode,
 } from "../services/toolsLayoutPreferenceStorage.ts";
-import { formatMinuteInput, parseBoundedMinuteInput } from "../services/toolsNumberInput.ts";
+import {
+  buildActivityReminderTargetOptions,
+  findActivityReminderTargetOption,
+} from "../services/activityReminderTargetOptions.ts";
 import type {
   ActivityReminderRuleRowViewModel,
-  ReminderFormMode,
   ReminderMode,
   ReminderRowViewModel,
 } from "../types.ts";
@@ -34,8 +39,9 @@ interface ReminderToolPanelProps {
   activityReminderWebCandidates: ActivityReminderWebCandidate[];
   icons: Record<string, string>;
   busyAction: string | null;
-  onCreateReminder: (label: string, scheduledAt: number) => Promise<boolean>;
+  onCreateReminder: (label: string, scheduledAt: number, recurrence: ReminderRecurrence | null) => Promise<boolean>;
   onCancelReminder: (id: number) => Promise<void>;
+  onUpdateReminder: (id: number, label: string, scheduledAt: number, enabled: boolean, recurrence: ReminderRecurrence | null) => Promise<boolean>;
   onCreateActivityReminderRule: (
     target: ActivityReminderTarget,
     labelSnapshot: string,
@@ -43,14 +49,15 @@ interface ReminderToolPanelProps {
     message: string,
   ) => Promise<boolean>;
   onDisableActivityReminderRule: (id: number) => Promise<void>;
-  onActivityModeActivated: (mode: Exclude<ReminderMode, "event">) => Promise<void>;
+  onSetActivityReminderEnabled: (id: number, enabled: boolean) => Promise<void>;
+  onUpdateActivityReminderLimit: (id: number, limitMinutes: number) => Promise<boolean>;
+  onActivityModeActivated: (mode: ActivityReminderTarget["kind"]) => Promise<void>;
   activityReminderCandidateRevision: number;
-  activityReminderCandidateLoadState: Record<Exclude<ReminderMode, "event">, "idle" | "loading" | "ready" | "error">;
-  onRetryActivityReminderCandidates: (mode: Exclude<ReminderMode, "event">) => void;
+  activityReminderCandidateLoadState: Record<ActivityReminderTarget["kind"], "idle" | "loading" | "ready" | "error">;
+  onRetryActivityReminderCandidates: (mode: ActivityReminderTarget["kind"]) => void;
 }
 
 interface ActivityReminderPanelProps {
-  mode: Exclude<ReminderMode, "event">;
   ruleRows: ActivityReminderRuleRowViewModel[];
   appCandidates: ActivityReminderAppCandidate[];
   categoryCandidates: ActivityReminderCategoryCandidate[];
@@ -59,52 +66,27 @@ interface ActivityReminderPanelProps {
   busyAction: string | null;
   onCreateRule: ReminderToolPanelProps["onCreateActivityReminderRule"];
   onDisableRule: ReminderToolPanelProps["onDisableActivityReminderRule"];
+  onSetEnabled: ReminderToolPanelProps["onSetActivityReminderEnabled"];
+  onUpdateLimit: ReminderToolPanelProps["onUpdateActivityReminderLimit"];
   draft: ActivityReminderDraft;
   onDraftChange: (patch: Partial<ActivityReminderDraft>) => void;
-  candidateLoadState: "idle" | "loading" | "ready" | "error";
-  onRetryCandidates: () => void;
+  candidateLoadState: ReminderToolPanelProps["activityReminderCandidateLoadState"];
+  onRetryCandidates: ReminderToolPanelProps["onRetryActivityReminderCandidates"];
 }
 
 interface ActivityReminderDraft {
   targetValue: string;
   durationMinutes: string;
-  message: string;
   validationMessage: string | null;
 }
 
 const EMPTY_ACTIVITY_DRAFT: ActivityReminderDraft = {
   targetValue: "",
   durationMinutes: "30",
-  message: "",
   validationMessage: null,
 };
 
-function pad2(value: number) {
-  return String(value).padStart(2, "0");
-}
-
-function toDateInputValue(date: Date) {
-  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
-}
-
-function toTimeInputValue(date: Date) {
-  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
-}
-
-function parseLocalDateTime(dateValue: string, timeValue: string) {
-  const [year, month, day] = dateValue.split("-").map(Number);
-  const [hour, minute] = timeValue.split(":").map(Number);
-  if (![year, month, day, hour, minute].every(Number.isFinite)) return null;
-  const date = new Date(year, month - 1, day, hour, minute, 0, 0);
-  if (
-    date.getFullYear() !== year
-    || date.getMonth() !== month - 1
-    || date.getDate() !== day
-    || date.getHours() !== hour
-    || date.getMinutes() !== minute
-  ) return null;
-  return date.getTime();
-}
+const ACTIVITY_TARGET_KINDS = ["app", "category", "web"] as const;
 
 function appInitial(label: string) {
   return label.trim().slice(0, 1).toUpperCase() || "?";
@@ -115,8 +97,24 @@ function resolveAppIcon(icons: Record<string, string>, exeName: string | null) {
   return icons[exeName] ?? icons[exeName.toLocaleLowerCase()] ?? null;
 }
 
+function ReminderRowActions({ label, enabled, busy, onToggle, onEdit, onDelete }: {
+  label: string; enabled: boolean; busy: boolean;
+  onToggle: () => void; onEdit: () => void; onDelete: () => void;
+}) {
+  const text = useLocaleText();
+  return <div className="tools-reminder-row-actions">
+    <QuietIconAction icon={enabled ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+      title={enabled ? text.tools.activityReminderDisable : text.tools.activityReminderActive}
+      ariaLabel={`${text.tools.activityReminderActive}: ${label}`} pressed={enabled}
+      showPressedStyle={false} busy={busy} onClick={onToggle} />
+    <QuietIconAction icon={<PencilLine size={16} />} title={text.tools.activityReminderEdit}
+      ariaLabel={`${text.tools.activityReminderEdit}: ${label}`} busy={busy} onClick={onEdit} />
+    <QuietIconAction icon={<Trash2 size={16} />} title={text.tools.activityReminderDelete} tone="danger"
+      ariaLabel={`${text.tools.activityReminderDelete}: ${label}`} busy={busy} onClick={onDelete} />
+  </div>;
+}
+
 function ActivityReminderPanel({
-  mode,
   ruleRows,
   appCandidates,
   categoryCandidates,
@@ -125,48 +123,39 @@ function ActivityReminderPanel({
   busyAction,
   onCreateRule,
   onDisableRule,
+  onSetEnabled,
+  onUpdateLimit,
   draft,
   onDraftChange,
   candidateLoadState,
   onRetryCandidates,
 }: ActivityReminderPanelProps) {
+  const [editingRule, setEditingRule] = useState<ActivityReminderRuleRowViewModel | null>(null);
   const UI_TEXT = useLocaleText();
-  const { targetValue, durationMinutes, message, validationMessage } = draft;
+  const { targetValue, durationMinutes, validationMessage } = draft;
   const updateDraft = (patch: Partial<ActivityReminderDraft>) => {
     onDraftChange(patch);
   };
   const creating = busyAction === "create-activity-reminder";
-  const activeRows = ruleRows.filter((row) => row.kind === mode);
-
-  const selectedTarget = useMemo((): { target: ActivityReminderTarget; label: string } | null => {
-    if (mode === "app") {
-      const normalized = targetValue.trim().toLocaleLowerCase();
-      const candidate = appCandidates.find((item) => (
-        item.exeName.toLocaleLowerCase() === normalized
-        || item.appName.toLocaleLowerCase() === normalized
-        || `${item.appName} (${item.exeName})`.toLocaleLowerCase() === normalized
-      ));
-      return candidate ? {
-        target: { kind: "app", appName: candidate.appName, exeName: candidate.exeName },
-        label: candidate.appName,
-      } : null;
-    }
-    if (mode === "category") {
-      const candidate = categoryCandidates.find((item) => item.categoryId === targetValue);
-      return candidate ? {
-        target: { kind: "category", categoryId: candidate.categoryId },
-        label: candidate.label,
-      } : null;
-    }
-    const normalized = targetValue.trim().replace(/\.$/, "").toLocaleLowerCase();
-    const candidate = webCandidates.find((item) => (
-      item.normalizedDomain === normalized || item.label.toLocaleLowerCase() === normalized
-    ));
-    return candidate ? {
-      target: { kind: "web", normalizedDomain: candidate.normalizedDomain },
-      label: candidate.label,
-    } : null;
-  }, [appCandidates, categoryCandidates, mode, targetValue, webCandidates]);
+  const targetOptions = useMemo(
+    () => buildActivityReminderTargetOptions(appCandidates, categoryCandidates, webCandidates, icons),
+    [appCandidates, categoryCandidates, icons, webCandidates],
+  );
+  const selectedTarget = findActivityReminderTargetOption(targetValue, targetOptions);
+  const renderRuleIcon = (row: ActivityReminderRuleRowViewModel, label = row.targetLabel) => {
+    const option = findActivityReminderTargetOption(`${row.kind}:${row.targetKey}`, targetOptions);
+    const icon = row.kind === "app" ? resolveAppIcon(icons, row.exeName) : option?.iconUrl;
+    return <span className="data-app-option-icon" aria-hidden
+      style={option?.accentColor ? { "--activity-category-color": option.accentColor } as CSSProperties : undefined}>
+      {row.kind === "category" ? <span className="tools-activity-category-dot" />
+        : icon ? <img src={icon} alt="" draggable={false} /> : appInitial(label)}
+    </span>;
+  };
+  const typeLabels = {
+    app: UI_TEXT.tools.reminderModeApp,
+    category: UI_TEXT.tools.reminderModeCategory,
+    web: UI_TEXT.tools.reminderModeWeb,
+  };
 
   const handleCreate = async () => {
     const limitMinutes = Number(durationMinutes);
@@ -183,23 +172,12 @@ function ActivityReminderPanel({
       selectedTarget.target,
       selectedTarget.label,
       Math.round(limitMinutes),
-      message.trim(),
+      "",
     );
     if (created) {
-      updateDraft({ targetValue: "", message: "", validationMessage: null });
+      updateDraft({ targetValue: "", validationMessage: null });
     }
   };
-
-  const targetPlaceholder = mode === "app"
-    ? UI_TEXT.tools.activityReminderAppPlaceholder
-    : mode === "category"
-      ? UI_TEXT.tools.activityReminderCategoryPlaceholder
-      : UI_TEXT.tools.activityReminderWebPlaceholder;
-  const targetLabel = mode === "app"
-    ? UI_TEXT.tools.reminderModeApp
-    : mode === "category"
-      ? UI_TEXT.tools.reminderModeCategory
-      : UI_TEXT.tools.reminderModeWeb;
 
   return (
     <>
@@ -209,29 +187,28 @@ function ActivityReminderPanel({
         </div>
         <div className="tools-reminder-form tools-software-reminder-form">
           <div className="tools-form-field">
-            <span>{targetLabel}</span>
+            <span>{UI_TEXT.tools.activityReminderTargetLabel}</span>
             <ActivityReminderTargetPicker
-              mode={mode}
               value={targetValue}
               appCandidates={appCandidates}
               categoryCandidates={categoryCandidates}
               webCandidates={webCandidates}
               icons={icons}
-              placeholder={targetPlaceholder}
-              ariaLabel={targetPlaceholder}
+              placeholder={UI_TEXT.tools.activityReminderTargetPlaceholder}
+              ariaLabel={UI_TEXT.tools.activityReminderTargetPlaceholder}
               onChange={(value) => {
                 updateDraft({ targetValue: value, validationMessage: null });
               }}
             />
           </div>
-          {candidateLoadState === "error" ? (
-            <div className="tools-candidate-load-error" role="status">
-              <span>{UI_TEXT.tools.activityReminderCandidatesLoadFailed}</span>
-              <QuietButton size="compact" onClick={onRetryCandidates}>
+          {ACTIVITY_TARGET_KINDS.filter((kind) => candidateLoadState[kind] === "error").map((kind) => (
+            <div key={kind} className="tools-candidate-load-error" role="status">
+              <span>{typeLabels[kind]} · {UI_TEXT.tools.activityReminderCandidatesLoadFailed}</span>
+              <QuietButton size="compact" onClick={() => onRetryCandidates(kind)}>
                 {UI_TEXT.common.retry}
               </QuietButton>
             </div>
-          ) : null}
+          ))}
           <label className="tools-form-field">
             <span>{UI_TEXT.tools.activityReminderDurationLabel}</span>
             <input
@@ -241,16 +218,6 @@ function ActivityReminderPanel({
               value={durationMinutes}
               onChange={(event) => updateDraft({ durationMinutes: event.target.value })}
               className="qp-input tools-small-number-input"
-            />
-          </label>
-          <label className="tools-form-field">
-            <span>{UI_TEXT.tools.activityReminderMessageLabel}</span>
-            <input
-              type="text"
-              value={message}
-              onChange={(event) => updateDraft({ message: event.target.value })}
-              placeholder={UI_TEXT.tools.activityReminderMessagePlaceholder}
-              className="qp-input"
             />
           </label>
           <div className="tools-form-actions tools-software-form-actions">
@@ -263,7 +230,6 @@ function ActivityReminderPanel({
               busy={creating}
               className="tools-action-button"
             >
-              <Plus size={14} />
               {UI_TEXT.tools.createReminder}
             </QuietButton>
           </div>
@@ -273,70 +239,53 @@ function ActivityReminderPanel({
 
       <div className="tools-list-section tools-reminder-list-section">
         <h3>{UI_TEXT.tools.activityReminderRulesTitle}</h3>
-        {activeRows.length === 0 ? (
+        {ruleRows.length === 0 ? (
           <div className="tools-empty-state">{UI_TEXT.tools.activityReminderEmpty}</div>
         ) : (
-          <div className="tools-reminder-list tools-software-rule-list qp-scroll-region">
-            {activeRows.map((row) => {
-              const disabling = busyAction === `disable-activity-reminder:${row.id}`;
-              const icon = row.kind === "app" ? resolveAppIcon(icons, row.exeName) : null;
-              const webCandidate = row.kind === "web"
-                ? webCandidates.find((candidate) => candidate.normalizedDomain === row.targetKey)
-                : null;
-              const category = row.kind === "category"
-                ? categoryCandidates.find((candidate) => candidate.categoryId === row.targetKey)
-                : null;
-              const appCandidate = row.kind === "app"
-                ? appCandidates.find((candidate) => candidate.exeName === row.targetKey)
-                : null;
-              const currentLabel = appCandidate?.appName
-                ?? category?.label
-                ?? webCandidate?.label
-                ?? row.targetLabel;
-              const suspensionLabel = row.suspensionReason
-                ? UI_TEXT.tools.activityReminderSuspension[row.suspensionReason]
-                : row.statusLabel;
-              return (
-                <div key={row.id} className="tools-reminder-row">
-                  <div className="tools-reminder-row-main tools-software-rule-main">
-                    <span
-                      className="data-app-option-icon"
-                      data-activity-category-marker={category ? "" : undefined}
-                      aria-hidden
-                      style={category ? {
-                        "--activity-category-color": category.color,
-                      } as CSSProperties : undefined}
-                    >
-                      {category ? (
-                        <span className="tools-activity-category-dot" />
-                      ) : icon || webCandidate?.faviconUrl ? (
-                        <img src={icon ?? webCandidate?.faviconUrl ?? undefined} alt="" draggable={false} />
-                      ) : appInitial(currentLabel)}
-                    </span>
-                    <div className="tools-software-rule-copy">
-                      <strong>{currentLabel}</strong>
-                      <span>{row.message}</span>
+          <div className="tools-reminder-list-frame">
+            <div className="tools-reminder-list tools-software-rule-list qp-scroll-region qp-scroll-region-stable">
+              {ruleRows.map((row) => {
+                const busy = busyAction !== null;
+                const webCandidate = row.kind === "web"
+                  ? webCandidates.find((candidate) => candidate.normalizedDomain === row.targetKey)
+                  : null;
+                const category = row.kind === "category"
+                  ? categoryCandidates.find((candidate) => candidate.categoryId === row.targetKey)
+                  : null;
+                const appCandidate = row.kind === "app"
+                  ? appCandidates.find((candidate) => candidate.exeName === row.targetKey)
+                  : null;
+                const currentLabel = appCandidate?.appName
+                  ?? category?.label
+                  ?? webCandidate?.label
+                  ?? row.targetLabel;
+                return (
+                  <div key={row.id} className="tools-reminder-row" data-activity-rule-kind={row.kind} data-activity-rule-enabled={row.enabled}>
+                    <div className="tools-reminder-row-main tools-software-rule-main">
+                      {renderRuleIcon(row, currentLabel)}
+                      <div className="tools-software-rule-copy">
+                        <div className="tools-software-rule-heading">
+                          <strong>{currentLabel}</strong>
+                          <span className="tools-tabular">{row.limitLabel}</span>
+                        </div>
+                        {row.suspensionReason ? <span>{UI_TEXT.tools.activityReminderSuspension[row.suspensionReason]}</span>
+                          : row.message ? <span>{row.message}</span> : null}
+                      </div>
                     </div>
+                    <ReminderRowActions label={currentLabel} enabled={row.enabled} busy={busy}
+                      onToggle={() => void onSetEnabled(row.id, !row.enabled)}
+                      onEdit={() => setEditingRule({ ...row, targetLabel: currentLabel })}
+                      onDelete={() => void onDisableRule(row.id)} />
                   </div>
-                  <div className="tools-reminder-row-meta">
-                    <span className="tools-status-pill tools-status-scheduled">{suspensionLabel}</span>
-                    <span className="tools-tabular">{row.limitLabel}</span>
-                    <button
-                      type="button"
-                      disabled={disabling}
-                      aria-label={`${UI_TEXT.tools.activityReminderDisable}: ${currentLabel}`}
-                      onClick={() => void onDisableRule(row.id)}
-                      className="qp-button-secondary tools-icon-button"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
+      {editingRule ? <ActivityReminderRuleEditor rule={editingRule}
+        targetIcon={renderRuleIcon(editingRule)}
+        busy={busyAction !== null} onSave={onUpdateLimit} onClose={() => setEditingRule(null)} /> : null}
     </>
   );
 }
@@ -351,8 +300,11 @@ export default function ReminderToolPanel({
   busyAction,
   onCreateReminder,
   onCancelReminder,
+  onUpdateReminder,
   onCreateActivityReminderRule,
   onDisableActivityReminderRule,
+  onSetActivityReminderEnabled,
+  onUpdateActivityReminderLimit,
   onActivityModeActivated,
   activityReminderCandidateRevision,
   activityReminderCandidateLoadState,
@@ -360,32 +312,23 @@ export default function ReminderToolPanel({
 }: ReminderToolPanelProps) {
   const UI_TEXT = useLocaleText();
   const [reminderMode, setReminderMode] = useState<ReminderMode>(readToolsReminderMode);
-  const [mode, setMode] = useState<ReminderFormMode>(readToolsReminderFormMode);
+  const locale = useLocale();
+  const [recurrence, setRecurrence] = useState<ReminderRecurrence | null>(null);
   const [label, setLabel] = useState("");
-  const [relativeMinutes, setRelativeMinutes] = useState(() => formatMinuteInput(15));
-  const [absoluteDate, setAbsoluteDate] = useState(() => toDateInputValue(new Date()));
-  const [absoluteTime, setAbsoluteTime] = useState(() => toTimeInputValue(new Date()));
+  const [absoluteDate, setAbsoluteDate] = useState(() => toDateInputValue(new Date(Date.now() + 15 * 60_000)));
+  const [absoluteTime, setAbsoluteTime] = useState(() => toTimeInputValue(new Date(Date.now() + 15 * 60_000)));
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const [activityDrafts, setActivityDrafts] = useState<Record<Exclude<ReminderMode, "event">, ActivityReminderDraft>>({
-    app: { ...EMPTY_ACTIVITY_DRAFT },
-    category: { ...EMPTY_ACTIVITY_DRAFT },
-    web: { ...EMPTY_ACTIVITY_DRAFT },
-  });
-  const scheduledRows = reminderRows.filter((row) => row.status === "scheduled");
+  const [activityDraft, setActivityDraft] = useState<ActivityReminderDraft>({ ...EMPTY_ACTIVITY_DRAFT });
+  const [editingReminder, setEditingReminder] = useState<{ row: ReminderRowViewModel; enable: boolean } | null>(null);
   const creating = busyAction === "create-reminder";
   const reminderModes = [
     { value: "event" as const, label: UI_TEXT.tools.reminderModeEvent },
-    { value: "app" as const, label: UI_TEXT.tools.reminderModeApp },
-    { value: "category" as const, label: UI_TEXT.tools.reminderModeCategory },
-    { value: "web" as const, label: UI_TEXT.tools.reminderModeWeb },
-  ];
-  const formModes = [
-    { value: "relative" as const, label: UI_TEXT.tools.reminderModeRelative },
-    { value: "absolute" as const, label: UI_TEXT.tools.reminderModeAbsolute },
+    { value: "usage" as const, label: UI_TEXT.tools.reminderModeUsage },
   ];
 
+
   useEffect(() => {
-    if (reminderMode !== "event" || mode !== "absolute") return undefined;
+    if (reminderMode !== "event") return undefined;
     let refreshTimeout: number | null = null;
     const refreshNow = () => {
       const nextNowMs = Date.now();
@@ -396,11 +339,11 @@ export default function ReminderToolPanel({
     return () => {
       if (refreshTimeout !== null) window.clearTimeout(refreshTimeout);
     };
-  }, [mode, reminderMode]);
+  }, [reminderMode]);
 
   useEffect(() => {
     if (reminderMode !== "event") {
-      void onActivityModeActivated(reminderMode);
+      for (const kind of ACTIVITY_TARGET_KINDS) void onActivityModeActivated(kind);
     }
   }, [activityReminderCandidateRevision, onActivityModeActivated, reminderMode]);
 
@@ -408,31 +351,16 @@ export default function ReminderToolPanel({
     setReminderMode(nextMode);
     rememberToolsReminderMode(nextMode);
   };
-  const handleModeChange = (nextMode: ReminderFormMode) => {
-    if (nextMode === "absolute" && mode !== "absolute") {
-      const now = new Date();
-      setAbsoluteDate(toDateInputValue(now));
-      setAbsoluteTime(toTimeInputValue(now));
-    }
-    setNowMs(Date.now());
-    setMode(nextMode);
-    rememberToolsReminderFormMode(nextMode);
-  };
-  const resolveScheduledAt = () => {
-    if (mode === "relative") {
-      const minutes = parseBoundedMinuteInput(relativeMinutes, 1, 1440);
-      return minutes === null ? null : Date.now() + minutes * 60_000;
-    }
-    return parseLocalDateTime(absoluteDate, absoluteTime);
-  };
+  const resolveScheduledAt = () => parseLocalDateTime(absoluteDate, absoluteTime);
   const scheduledAt = resolveScheduledAt();
-  const canCreateReminder = scheduledAt !== null && scheduledAt > nowMs;
+  const canCreateReminder = scheduledAt !== null && scheduledAt > nowMs && validRecurrence(recurrence);
   const handleCreate = async () => {
     const nextScheduledAt = resolveScheduledAt();
-    if (nextScheduledAt === null || nextScheduledAt <= Date.now()) return;
+    if (nextScheduledAt === null || nextScheduledAt <= Date.now() || !validRecurrence(recurrence)) return;
     const created = await onCreateReminder(
       label.trim() || UI_TEXT.tools.defaultReminderLabel,
       nextScheduledAt,
+      recurrence,
     );
     if (created) setLabel("");
   };
@@ -469,14 +397,9 @@ export default function ReminderToolPanel({
               <div className="tools-subpanel">
                 <div className="tools-subpanel-header tools-reminder-subpanel-header">
                   <h3>{UI_TEXT.tools.newReminder}</h3>
-                  <QuietSegmentedFilter
-                    value={mode}
-                    options={formModes}
-                    onChange={handleModeChange}
-                    className="tools-reminder-time-filter"
-                  />
+
                 </div>
-                <div className="tools-reminder-form">
+                <div className="tools-reminder-form tools-event-reminder-form">
                   <label className="tools-form-field">
                     <span>{UI_TEXT.tools.reminderLabel}</span>
                     <input
@@ -487,30 +410,8 @@ export default function ReminderToolPanel({
                       className="qp-input"
                     />
                   </label>
-                  {mode === "relative" ? (
-                    <div className="tools-form-field">
-                      <span>{UI_TEXT.tools.relativeMinutesLabel}</span>
-                      <input
-                        type="number"
-                        min={1}
-                        max={1440}
-                        value={relativeMinutes}
-                        onChange={(event) => setRelativeMinutes(event.target.value)}
-                        className="qp-input tools-small-number-input"
-                      />
-                    </div>
-                  ) : (
-                    <div className="tools-absolute-time-grid">
-                      <div className="tools-form-field">
-                        <span>{UI_TEXT.tools.absoluteDateLabel}</span>
-                        <QuietDatePicker value={absoluteDate} onChange={setAbsoluteDate} ariaLabel={UI_TEXT.date.pickDate} />
-                      </div>
-                      <div className="tools-form-field">
-                        <span>{UI_TEXT.tools.absoluteTimeLabel}</span>
-                        <QuietTimePicker value={absoluteTime} onChange={setAbsoluteTime} ariaLabel={UI_TEXT.time.pickTime} />
-                      </div>
-                    </div>
-                  )}
+                  <ReminderScheduleFields date={absoluteDate} time={absoluteTime} recurrence={recurrence} disabled={creating}
+                    onDateChange={setAbsoluteDate} onTimeChange={setAbsoluteTime} onRecurrenceChange={setRecurrence} />
                   <div className="tools-form-actions">
                     <QuietButton
                       tone="primary"
@@ -521,7 +422,6 @@ export default function ReminderToolPanel({
                       busy={creating}
                       className="tools-action-button"
                     >
-                      <Plus size={14} />
                       {UI_TEXT.tools.createReminder}
                     </QuietButton>
                   </div>
@@ -529,45 +429,47 @@ export default function ReminderToolPanel({
               </div>
               <div className="tools-list-section tools-reminder-list-section">
                 <h3>{UI_TEXT.tools.pendingReminders}</h3>
-                {scheduledRows.length === 0 ? (
+                {reminderRows.length === 0 ? (
                   <div className="tools-empty-state">{UI_TEXT.tools.reminderEmpty}</div>
                 ) : (
-                  <div className="tools-reminder-list qp-scroll-region">
-                    {scheduledRows.map((row) => {
-                      const cancelling = busyAction === `cancel-reminder:${row.id}`;
-                      return (
-                        <div key={row.id} className="tools-reminder-row">
-                          <div className="tools-reminder-row-main">
-                            <strong>{row.label}</strong>
-                            <span>{row.dueLabel}</span>
+                  <div className="tools-reminder-list-frame">
+                    <div className="tools-reminder-list qp-scroll-region qp-scroll-region-stable">
+                      {reminderRows.map((row) => {
+                        const enabled = row.status === "scheduled" || row.status === "pending_confirmation";
+                        const busy = busyAction !== null;
+                        return (
+                          <div key={row.id} className="tools-reminder-row" data-timed-reminder-id={row.id}>
+                            <div className="tools-reminder-row-main tools-event-reminder-main">
+                              <strong>{row.label}</strong>
+                              <span>{row.dueLabel}</span>
+                              {row.recurrence || row.status === "fired" || row.status === "pending_confirmation" ?
+                                <QuietTooltip label={row.recurrence ? recurrenceLabel(row.recurrence, UI_TEXT, locale)
+                                  : row.status === "fired" ? UI_TEXT.tools.reminderCompleted : UI_TEXT.tools.reminderPendingConfirmation}>
+                                  <span className="tools-reminder-status-icon" tabIndex={0} role="img"
+                                    aria-label={row.recurrence ? recurrenceLabel(row.recurrence, UI_TEXT, locale)
+                                      : row.status === "fired" ? UI_TEXT.tools.reminderCompleted : UI_TEXT.tools.reminderPendingConfirmation}>
+                                    {row.recurrence ? <Repeat size={18} aria-hidden="true" />
+                                      : row.status === "fired" ? <ClipboardCheck size={18} aria-hidden="true" /> : <BellRing size={18} aria-hidden="true" />}
+                                  </span>
+                                </QuietTooltip> : null}
+                            </div>
+                            <ReminderRowActions label={row.label} enabled={enabled} busy={busy}
+                              onToggle={() => {
+                                if (!enabled && !row.recurrence && row.scheduledAt <= Date.now()) setEditingReminder({ row, enable: true });
+                                else void onUpdateReminder(row.id, row.label, row.scheduledAt, !enabled, row.recurrence);
+                              }}
+                              onEdit={() => setEditingReminder({ row, enable: enabled || row.status === "fired" })}
+                              onDelete={() => void onCancelReminder(row.id)} />
                           </div>
-                          <div className="tools-reminder-row-meta">
-                            <span className={`tools-status-pill tools-status-${row.status}`}>
-                              {UI_TEXT.tools.reminderStatus[row.status]}
-                            </span>
-                            <span className="tools-tabular">{row.remainingLabel}</span>
-                            {row.canCancel ? (
-                              <button
-                                type="button"
-                                disabled={cancelling}
-                                aria-label={UI_TEXT.accessibility.tools.cancelReminder}
-                                onClick={() => void onCancelReminder(row.id)}
-                                className="qp-button-secondary tools-icon-button"
-                              >
-                                <X size={12} />
-                              </button>
-                            ) : null}
-                          </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
             </>
           ) : (
             <ActivityReminderPanel
-              mode={reminderMode}
               ruleRows={activityReminderRuleRows}
               appCandidates={activityReminderAppCandidates}
               categoryCandidates={activityReminderCategoryCandidates}
@@ -576,19 +478,20 @@ export default function ReminderToolPanel({
               busyAction={busyAction}
               onCreateRule={onCreateActivityReminderRule}
               onDisableRule={onDisableActivityReminderRule}
-              draft={activityDrafts[reminderMode]}
+              onSetEnabled={onSetActivityReminderEnabled}
+              onUpdateLimit={onUpdateActivityReminderLimit}
+              draft={activityDraft}
               onDraftChange={(patch) => {
-                setActivityDrafts((current) => ({
-                  ...current,
-                  [reminderMode]: { ...current[reminderMode], ...patch },
-                }));
+                setActivityDraft((current) => ({ ...current, ...patch }));
               }}
-              candidateLoadState={activityReminderCandidateLoadState[reminderMode]}
-              onRetryCandidates={() => onRetryActivityReminderCandidates(reminderMode)}
+              candidateLoadState={activityReminderCandidateLoadState}
+              onRetryCandidates={onRetryActivityReminderCandidates}
             />
           )}
         </div>
       </div>
+      {editingReminder ? <TimedReminderEditor row={editingReminder.row} enabled={editingReminder.enable}
+        busy={busyAction !== null} onSave={onUpdateReminder} onClose={() => setEditingReminder(null)} /> : null}
     </section>
   );
 }

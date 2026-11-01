@@ -1,12 +1,15 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { AlarmClock, BellRing, TimerReset } from "lucide-react";
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useRef, useState, type ReactNode } from "react";
 import QuietDialog from "../../../shared/components/QuietDialog.tsx";
 import QuietButton from "../../../shared/components/QuietButton.tsx";
 
 import type { ToolAlert } from "../../../shared/types/tools.ts";
 import { useToolAlerts } from "../hooks/useToolAlerts.ts";
 import { ToolsRuntimeService } from "../services/toolsRuntimeService.ts";
+
+const ActivityReminderAlertDialog = lazy(() => import("./ActivityReminderAlertDialog.tsx"));
+const TimedReminderAlertDialog = lazy(() => import("./TimedReminderAlertDialog.tsx"));
 
 function formatAlertTime(timestampMs: number) {
   return new Date(timestampMs).toLocaleString(undefined, {
@@ -48,6 +51,13 @@ export default function ToolAlertDialog() {
       setPausingPomodoro(false);
     }
   }, [activeAlert?.kind, dismissActiveAlert, pausingPomodoro]);
+
+  if (activeAlert?.kind === "activity_reminder" && activeAlert.activityReminder) {
+    return <Suspense fallback={null}><ActivityReminderAlertDialog key={activeAlert.id} alert={activeAlert} details={activeAlert.activityReminder} onDismiss={dismissActiveAlert} /></Suspense>;
+  }
+  if (activeAlert?.kind === "reminder") {
+    return <Suspense fallback={null}><TimedReminderAlertDialog key={activeAlert.id} alert={activeAlert} onDismiss={dismissActiveAlert} /></Suspense>;
+  }
 
   return (
     <QuietDialog

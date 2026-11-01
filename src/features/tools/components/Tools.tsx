@@ -237,8 +237,11 @@ export default function Tools({
                   busyAction={state.busyAction}
                   onCreateReminder={state.createReminder}
                   onCancelReminder={state.cancelReminder}
+                  onUpdateReminder={state.updateReminder}
                   onCreateActivityReminderRule={state.createActivityReminderRule}
                   onDisableActivityReminderRule={state.disableActivityReminderRule}
+                  onSetActivityReminderEnabled={state.setActivityReminderEnabled}
+                  onUpdateActivityReminderLimit={state.updateActivityReminderLimit}
                   onActivityModeActivated={state.activateActivityReminderMode}
                   activityReminderCandidateRevision={state.activityReminderCandidateRevision}
                   activityReminderCandidateLoadState={state.activityReminderCandidateLoadState}

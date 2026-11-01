@@ -9,6 +9,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import QuietSearchField from "../../../shared/components/QuietSearchField.tsx";
+import { useLocaleText } from "../../../shared/i18n/index.ts";
 import type {
   ActivityReminderAppCandidate,
   ActivityReminderCategoryCandidate,
@@ -18,12 +19,10 @@ import {
   buildActivityReminderTargetOptions,
   filterActivityReminderTargetOptions,
   findActivityReminderTargetOption,
-  type ActivityReminderTargetMode,
   type ActivityReminderTargetOption,
 } from "../services/activityReminderTargetOptions.ts";
 
 interface ActivityReminderTargetPickerProps {
-  mode: ActivityReminderTargetMode;
   value: string;
   appCandidates: readonly ActivityReminderAppCandidate[];
   categoryCandidates: readonly ActivityReminderCategoryCandidate[];
@@ -41,7 +40,6 @@ function optionInitial(label: string) {
 }
 
 export default function ActivityReminderTargetPicker({
-  mode,
   value,
   appCandidates,
   categoryCandidates,
@@ -51,6 +49,12 @@ export default function ActivityReminderTargetPicker({
   ariaLabel,
   onChange,
 }: ActivityReminderTargetPickerProps) {
+  const UI_TEXT = useLocaleText();
+  const typeLabels = {
+    app: UI_TEXT.tools.reminderModeApp,
+    category: UI_TEXT.tools.reminderModeCategory,
+    web: UI_TEXT.tools.reminderModeWeb,
+  };
   const fieldRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listId = `activity-reminder-target-${useId()}`;
@@ -59,13 +63,12 @@ export default function ActivityReminderTargetPicker({
   const [candidateListStyle, setCandidateListStyle] = useState<CSSProperties | null>(null);
   const options = useMemo(
     () => buildActivityReminderTargetOptions(
-      mode,
       appCandidates,
       categoryCandidates,
       webCandidates,
       icons,
     ),
-    [appCandidates, categoryCandidates, icons, mode, webCandidates],
+    [appCandidates, categoryCandidates, icons, webCandidates],
   );
   const selectedOption = useMemo(
     () => findActivityReminderTargetOption(value, options),
@@ -212,6 +215,7 @@ export default function ActivityReminderTargetPicker({
                 key={option.key}
                 type="button"
                 role="option"
+                data-activity-target-kind={option.target.kind}
                 aria-selected={isSelected}
                 tabIndex={-1}
                 className={`data-app-option ${isActive ? "tools-activity-target-option-active" : ""}`.trim()}
@@ -235,7 +239,9 @@ export default function ActivityReminderTargetPicker({
                 </span>
                 <span className="data-app-option-main">
                   <span className="data-app-option-name">{option.label}</span>
-                  {option.meta ? <span className="data-app-option-meta">{option.meta}</span> : null}
+                  <span className="data-app-option-meta">
+                    {[typeLabels[option.target.kind], option.meta].filter(Boolean).join(" · ")}
+                  </span>
                 </span>
               </button>
             );
