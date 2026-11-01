@@ -455,7 +455,7 @@
 
 .qp-calendar-popover {
   position: fixed;
-  z-index: 90;
+  z-index: 140;
   width: 236px;
   translate: -50% 0;
   border: 1px solid var(--qp-border-subtle);
@@ -606,7 +606,7 @@
 
 .qp-time-picker-popover {
   position: fixed;
-  z-index: 90;
+  z-index: 140;
   width: 176px;
   translate: -50% 0;
   border: 1px solid var(--qp-border-subtle);

@@ -25,7 +25,9 @@ interface QuietSelectProps<T extends string | number> {
   ariaLabel: string;
   disabled?: boolean;
   density?: "regular" | "compact";
+  textStyle?: "body" | "input";
   className?: string;
+  displayLabel?: string;
 }
 
 interface SelectMenuPosition {
@@ -74,7 +76,9 @@ export default function QuietSelect<T extends string | number>({
   ariaLabel,
   disabled = false,
   density = "regular",
+  textStyle = "body",
   className,
+  displayLabel,
 }: QuietSelectProps<T>) {
   const [open, setOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
@@ -92,7 +96,7 @@ export default function QuietSelect<T extends string | number>({
   );
   const menuReady = open && menuPosition !== null;
 
-  const closeMenu = (restoreFocus = false) => {
+  const closeMenu = useCallback((restoreFocus = false) => {
     setOpen(false);
     setMenuPosition(null);
     typeaheadBufferRef.current = "";
@@ -105,7 +109,7 @@ export default function QuietSelect<T extends string | number>({
         triggerRef.current?.focus();
       });
     }
-  };
+  }, [triggerRef]);
 
   const resolveMenuPosition = useCallback((measuredHeight?: number): SelectMenuPosition | null => {
     const trigger = triggerRef.current;
@@ -138,7 +142,7 @@ export default function QuietSelect<T extends string | number>({
       maxHeight,
       placement: shouldFlip ? "top" : "bottom",
     };
-  }, [density]);
+  }, [density, triggerRef]);
 
   const updateMenuPosition = useCallback((measuredHeight?: number) => {
     const nextPosition = resolveMenuPosition(measuredHeight);
@@ -174,7 +178,7 @@ export default function QuietSelect<T extends string | number>({
     };
     document.addEventListener("pointerdown", handleOutside);
     return () => document.removeEventListener("pointerdown", handleOutside);
-  }, [open]);
+  }, [open, closeMenu]);
 
   useLayoutEffect(() => {
     if (!open) return undefined;
@@ -205,7 +209,7 @@ export default function QuietSelect<T extends string | number>({
     if (disabled && open) {
       closeMenu();
     }
-  }, [disabled, open]);
+  }, [disabled, open, closeMenu]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -218,7 +222,7 @@ export default function QuietSelect<T extends string | number>({
     };
     document.addEventListener("keydown", handleDocumentKeyDown);
     return () => document.removeEventListener("keydown", handleDocumentKeyDown);
-  }, [open]);
+  }, [open, closeMenu]);
 
   const selectedEnabledIndex = options.findIndex((option) => option.value === value && !option.disabled);
   const initialHighlightedIndex = selectedEnabledIndex >= 0
@@ -365,6 +369,7 @@ export default function QuietSelect<T extends string | number>({
       ref={listRef}
       id={listboxId}
       role="listbox"
+      data-text-style={textStyle}
       tabIndex={-1}
       aria-labelledby={`${listboxId}-trigger`}
       aria-activedescendant={highlightedIndex >= 0 ? `${listboxId}-option-${highlightedIndex}` : undefined}
@@ -410,10 +415,11 @@ export default function QuietSelect<T extends string | number>({
         ref={triggerRef}
         type="button"
         id={`${listboxId}-trigger`}
+        data-text-style={textStyle}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
-        aria-label={selectedOption ? `${ariaLabel}: ${selectedOption.label}` : ariaLabel}
+        aria-label={displayLabel || selectedOption ? `${ariaLabel}: ${displayLabel ?? selectedOption?.label}` : ariaLabel}
         disabled={disabled}
         onClick={() => {
           if (open) {
@@ -425,7 +431,7 @@ export default function QuietSelect<T extends string | number>({
         onKeyDown={handleKeyDown}
         className={`qp-control qp-select-trigger qp-select-trigger-${density}`}
       >
-        <span className="qp-select-label-stack" aria-hidden="true">
+        {displayLabel ? <span className="qp-select-label-stack" aria-hidden="true"><span className="qp-select-label qp-select-label-current">{displayLabel}</span></span> : <span className="qp-select-label-stack" aria-hidden="true">
           {options.map((option) => (
             <span
               key={String(option.value)}
@@ -434,7 +440,7 @@ export default function QuietSelect<T extends string | number>({
               {option.label}
             </span>
           ))}
-        </span>
+        </span>}
         <ChevronDown size={14} className={`qp-select-caret ${open ? "qp-select-caret-open" : ""}`} />
       </button>
       {menu ? createPortal(menu, document.body) : null}

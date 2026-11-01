@@ -19,6 +19,7 @@ interface QuietTimePickerProps {
   ariaLabel?: string;
   className?: string;
   disabled?: boolean;
+  showClockIcon?: boolean;
 }
 
 interface TimeParts {
@@ -63,12 +64,74 @@ function formatTimeValue(hour: number, minute: number) {
   return `${pad2(hour)}:${pad2(minute)}`;
 }
 
+export function QuietTimeColumns({ value, onChange, onCommit, autoFocus = false }: {
+  value: string;
+  onChange: (value: string) => void;
+  onCommit?: () => void;
+  autoFocus?: boolean;
+}) {
+  const text = useLocaleText();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const selected = parseTimeValue(value) ?? { hour: 0, minute: 0 };
+  const select = (part: "hour" | "minute", next: number) => {
+    onChange(formatTimeValue(part === "hour" ? next : selected.hour, part === "minute" ? next : selected.minute));
+  };
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, part: "hour" | "minute", current: number) => {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const count = part === "hour" ? HOURS.length : MINUTES.length;
+    const next = event.key === "Home" ? 0 : event.key === "End" ? count - 1
+      : (current + (event.key === "ArrowDown" ? 1 : count - 1)) % count;
+    select(part, next);
+    rootRef.current?.querySelector<HTMLElement>(`[data-time-picker-part="${part}"][data-time-picker-value="${next}"]`)
+      ?.focus({ preventScroll: true });
+  };
+  useLayoutEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      for (const part of ["hour", "minute"]) {
+        const option = rootRef.current?.querySelector<HTMLElement>(`[data-selected-time-part="${part}"]`);
+        const list = option?.closest<HTMLElement>(".qp-time-picker-list");
+        if (option && list) {
+          list.scrollTop += option.getBoundingClientRect().top - list.getBoundingClientRect().top
+            - (list.clientHeight - option.offsetHeight) / 2;
+        }
+      }
+      if (autoFocus && !rootRef.current?.contains(document.activeElement)) {
+        rootRef.current?.querySelector<HTMLElement>('[data-selected-time-part="hour"]')?.focus();
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [autoFocus, selected.hour, selected.minute]);
+  return <div ref={rootRef} className="qp-time-picker-content">
+    <div className="qp-time-picker-column-headings" aria-hidden="true">
+      <div className="qp-time-picker-column-title">{text.time.hours}</div>
+      <div className="qp-time-picker-column-title">{text.time.minutes}</div>
+    </div>
+    <div className="qp-time-picker-columns">
+      {(["hour", "minute"] as const).map(part => <div key={part} className="qp-time-picker-column">
+        <div className="qp-time-picker-list qp-scroll-region" role="listbox" aria-label={part === "hour" ? text.time.hours : text.time.minutes}>
+          {(part === "hour" ? HOURS : MINUTES).map(option => <button key={option} type="button" role="option"
+            aria-selected={option === selected[part]} tabIndex={option === selected[part] ? 0 : -1}
+            data-selected-time-part={option === selected[part] ? part : undefined}
+            data-time-picker-part={part} data-time-picker-value={option}
+            onKeyDown={event => handleKeyDown(event, part, option)}
+            onClick={() => { select(part, option); if (part === "minute") onCommit?.(); }}
+            className={`qp-time-picker-option ${option === selected[part] ? "qp-time-picker-option-selected" : ""}`.trim()}>
+            {pad2(option)}
+          </button>)}
+        </div>
+      </div>)}
+    </div>
+  </div>;
+}
+
 export default function QuietTimePicker({
   value,
   onChange,
   ariaLabel,
   className,
   disabled = false,
+  showClockIcon = true,
 }: QuietTimePickerProps) {
   const UI_TEXT = useLocaleText();
   const resolvedAriaLabel = ariaLabel ?? UI_TEXT.time.pickTime;
@@ -126,55 +189,6 @@ export default function QuietTimePicker({
     setOpen(true);
   };
 
-  const selectHour = (hour: number) => {
-    onChange(formatTimeValue(hour, selectedTime.minute));
-  };
-
-  const selectMinute = (minute: number) => {
-    onChange(formatTimeValue(selectedTime.hour, minute));
-    closeTimePicker(true);
-  };
-
-  const focusTimeOption = (part: "hour" | "minute", value: number) => {
-    requestAnimationFrame(() => {
-      popoverRef.current
-        ?.querySelector<HTMLElement>(`[data-time-picker-part="${part}"][data-time-picker-value="${value}"]`)
-        ?.focus();
-    });
-  };
-
-  const handleOptionKeyDown = (
-    event: ReactKeyboardEvent<HTMLButtonElement>,
-    part: "hour" | "minute",
-    value: number,
-  ) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      closeTimePicker(true);
-      return;
-    }
-    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-
-    event.preventDefault();
-    const values = part === "hour" ? HOURS : MINUTES;
-    const currentIndex = values.indexOf(value);
-    const nextIndex = event.key === "Home"
-      ? 0
-      : event.key === "End"
-        ? values.length - 1
-        : event.key === "ArrowDown"
-          ? (currentIndex + 1) % values.length
-          : (currentIndex - 1 + values.length) % values.length;
-    const nextValue = values[nextIndex];
-    if (part === "hour") {
-      onChange(formatTimeValue(nextValue, selectedTime.minute));
-    } else {
-      onChange(formatTimeValue(selectedTime.hour, nextValue));
-    }
-    focusTimeOption(part, nextValue);
-  };
-
   useEffect(() => {
     if (!open) return undefined;
 
@@ -206,25 +220,6 @@ export default function QuietTimePicker({
     };
   }, [open, updatePosition]);
 
-  useLayoutEffect(() => {
-    if (!open) return;
-    requestAnimationFrame(() => {
-      const hourOption = popoverRef.current?.querySelector<HTMLElement>("[data-selected-time-part=\"hour\"]");
-      const minuteOption = popoverRef.current?.querySelector<HTMLElement>("[data-selected-time-part=\"minute\"]");
-      const hourList = hourOption?.closest<HTMLElement>(".qp-time-picker-list");
-      const minuteList = minuteOption?.closest<HTMLElement>(".qp-time-picker-list");
-      if (hourOption && hourList) {
-        hourList.scrollTop = hourOption.offsetTop - (hourList.clientHeight - hourOption.offsetHeight) / 2;
-      }
-      if (minuteOption && minuteList) {
-        minuteList.scrollTop = minuteOption.offsetTop - (minuteList.clientHeight - minuteOption.offsetHeight) / 2;
-      }
-      if (!popoverRef.current?.contains(document.activeElement)) {
-        hourOption?.focus();
-      }
-    });
-  }, [open, selectedTime.hour, selectedTime.minute]);
-
   const popoverStyle: CSSProperties | undefined = position
     ? {
       left: `${position.left}px`,
@@ -240,61 +235,14 @@ export default function QuietTimePicker({
       aria-label={resolvedAriaLabel}
       className={`qp-time-picker-popover qp-time-picker-popover-${position.placement}`}
       style={popoverStyle}
+      onKeyDown={event => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        event.stopPropagation();
+        closeTimePicker(true);
+      }}
     >
-      <div className="qp-time-picker-column-headings" aria-hidden="true">
-        <div className="qp-time-picker-column-title">{UI_TEXT.time.hours}</div>
-        <div className="qp-time-picker-column-title">{UI_TEXT.time.minutes}</div>
-      </div>
-      <div className="qp-time-picker-columns">
-        <div className="qp-time-picker-column">
-          <div className="qp-time-picker-list qp-scroll-region" role="listbox" aria-label={UI_TEXT.time.hours}>
-            {HOURS.map((hour) => {
-              const selected = hour === selectedTime.hour;
-              return (
-                <button
-                  key={hour}
-                  type="button"
-                  role="option"
-                  aria-selected={selected}
-                  tabIndex={selected ? 0 : -1}
-                  data-selected-time-part={selected ? "hour" : undefined}
-                  data-time-picker-part="hour"
-                  data-time-picker-value={hour}
-                  onKeyDown={(event) => handleOptionKeyDown(event, "hour", hour)}
-                  onClick={() => selectHour(hour)}
-                  className={`qp-time-picker-option ${selected ? "qp-time-picker-option-selected" : ""}`.trim()}
-                >
-                  {pad2(hour)}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <div className="qp-time-picker-column">
-          <div className="qp-time-picker-list qp-scroll-region" role="listbox" aria-label={UI_TEXT.time.minutes}>
-            {MINUTES.map((minute) => {
-              const selected = minute === selectedTime.minute;
-              return (
-                <button
-                  key={minute}
-                  type="button"
-                  role="option"
-                  aria-selected={selected}
-                  tabIndex={selected ? 0 : -1}
-                  data-selected-time-part={selected ? "minute" : undefined}
-                  data-time-picker-part="minute"
-                  data-time-picker-value={minute}
-                  onKeyDown={(event) => handleOptionKeyDown(event, "minute", minute)}
-                  onClick={() => selectMinute(minute)}
-                  className={`qp-time-picker-option ${selected ? "qp-time-picker-option-selected" : ""}`.trim()}
-                >
-                  {pad2(minute)}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+      <QuietTimeColumns value={value} onChange={onChange} onCommit={() => closeTimePicker(true)} autoFocus />
     </div>
   ) : null;
 
@@ -314,7 +262,7 @@ export default function QuietTimePicker({
         }`.trim()}
       >
         <span>{formatTimeValue(selectedTime.hour, selectedTime.minute)}</span>
-        <Clock3 size={14} aria-hidden="true" />
+        {showClockIcon ? <Clock3 size={14} aria-hidden="true" /> : null}
       </button>
       {popover ? createPortal(popover, document.body) : null}
     </div>

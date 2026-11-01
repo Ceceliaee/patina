@@ -8,6 +8,7 @@ interface Props {
   title: string;
   tone?: QuietIconActionTone;
   disabled?: boolean;
+  busy?: boolean;
   ariaLabel?: string;
   className?: string;
   showTooltip?: boolean;
@@ -26,6 +27,7 @@ export default function QuietIconAction({
   title,
   tone = "neutral",
   disabled = false,
+  busy = false,
   ariaLabel,
   className,
   showTooltip = true,
@@ -47,8 +49,10 @@ export default function QuietIconAction({
       aria-describedby={describedBy}
       aria-label={ariaLabel ?? title}
       aria-pressed={pressed}
+      aria-busy={busy || undefined}
+      aria-disabled={busy || undefined}
       disabled={disabled}
-      onClick={onClick}
+      onClick={busy ? undefined : onClick}
       className={`qp-icon-action qp-icon-action-${tone} ${pressed && showPressedStyle ? "qp-icon-action-pressed" : ""} ${className ?? ""}`.trim()}
     >
       {icon}

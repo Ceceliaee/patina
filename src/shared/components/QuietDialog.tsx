@@ -36,6 +36,7 @@ function getFocusableElements(container: HTMLElement) {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter((element) => {
     const style = window.getComputedStyle(element);
     return !element.hidden
+      && element.tabIndex >= 0
       && element.getAttribute("aria-disabled") !== "true"
       && style.display !== "none"
       && style.visibility !== "hidden"
@@ -103,6 +104,7 @@ export default function QuietDialog({
     });
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       if (openDialogStack[openDialogStack.length - 1] !== dialogToken) return;
       if (event.key === "Escape") {
         event.preventDefault();
@@ -113,7 +115,10 @@ export default function QuietDialog({
 
       const surface = surfaceRef.current;
       if (!surface) return;
-      const focusable = getFocusableElements(surface);
+      const popup = Array.from(surface.querySelectorAll('[aria-expanded="true"][aria-controls]'))
+        .map(trigger => document.getElementById(trigger.getAttribute("aria-controls") ?? ""))
+        .find(element => element?.contains(document.activeElement));
+      const focusable = getFocusableElements(popup ?? surface);
       if (focusable.length === 0) {
         event.preventDefault();
         (headingRef.current ?? surface).focus();

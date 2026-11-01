@@ -30,6 +30,7 @@ interface QuietAnchoredPopoverProps {
   horizontalAnchorRatio?: number;
   horizontalAlign?: "start" | "center";
   initialFocusRef?: RefObject<HTMLElement | null>;
+  containFocus?: boolean;
 }
 
 const POPOVER_GAP = 8;
@@ -100,6 +101,7 @@ export default function QuietAnchoredPopover({
   horizontalAnchorRatio = 0.5,
   horizontalAlign = "center",
   initialFocusRef,
+  containFocus = false,
 }: QuietAnchoredPopoverProps) {
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const onCloseRef = useRef(onClose);
@@ -109,10 +111,11 @@ export default function QuietAnchoredPopover({
   onCloseRef.current = onClose;
   const ready = open && position !== null;
   useEffect(() => {
-    if (!ready || !initialFocusRef) return;
+    if (!ready || (!initialFocusRef && !containFocus)) return;
     let frame = 0;
     const focusVisibleTarget = () => {
-      const target = initialFocusRef.current;
+      const target = initialFocusRef?.current
+        ?? popoverRef.current?.querySelector<HTMLElement>('button:not([disabled]), input:not([disabled]), [tabindex="0"]');
       if (!target?.isConnected) return;
       if (getComputedStyle(target).visibility === "hidden") {
         frame = requestAnimationFrame(focusVisibleTarget);
@@ -122,7 +125,7 @@ export default function QuietAnchoredPopover({
     };
     frame = requestAnimationFrame(focusVisibleTarget);
     return () => cancelAnimationFrame(frame);
-  }, [ready, initialFocusRef]);
+  }, [ready, initialFocusRef, containFocus]);
 
   const updatePosition = useCallback(() => {
     const popover = popoverRef.current;
@@ -157,21 +160,43 @@ export default function QuietAnchoredPopover({
   useEffect(() => {
     if (!open || !anchor) return undefined;
 
+    const childPopovers = () => Array.from(
+      popoverRef.current?.querySelectorAll('[aria-expanded="true"][aria-controls]') ?? [],
+    ).map(trigger => document.getElementById(trigger.getAttribute("aria-controls") ?? ""))
+      .filter((element): element is HTMLElement => element !== null);
+    const containsTarget = (target: Node) => popoverRef.current?.contains(target)
+      || childPopovers().some(popover => popover.contains(target));
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
-      if (anchor.contains(target) || popoverRef.current?.contains(target)) return;
+      if (anchor.contains(target) || containsTarget(target)) return;
       onCloseRef.current("outside");
     };
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      const children = childPopovers();
+      if (containFocus && event.key === "Tab") {
+        const activePopover = children.find(popover => popover.contains(document.activeElement)) ?? popoverRef.current;
+        const targets = Array.from(activePopover?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex="0"]',
+        ) ?? []).filter(element => element.tabIndex >= 0 && element.getClientRects().length > 0);
+        if (targets.length) {
+          event.preventDefault();
+          event.stopPropagation();
+          const index = targets.indexOf(document.activeElement as HTMLElement);
+          targets[(index + (event.shiftKey ? targets.length - 1 : 1)) % targets.length].focus();
+        }
+        return;
+      }
       if (event.key !== "Escape") return;
+      if (children.length) return;
       event.preventDefault();
       event.stopPropagation();
       onCloseRef.current("escape");
     };
     const handleScroll = (event: Event) => {
       const target = event.target;
-      if (target instanceof Node && popoverRef.current?.contains(target)) {
+      if (target instanceof Node && containsTarget(target)) {
         return;
       }
       onCloseRef.current("scroll");
@@ -185,7 +210,7 @@ export default function QuietAnchoredPopover({
       document.removeEventListener("keydown", handleKeyDown, true);
       window.removeEventListener("scroll", handleScroll, true);
     };
-  }, [anchor, open]);
+  }, [anchor, containFocus, open]);
 
   if (!open || !anchor || typeof document === "undefined") return null;
 

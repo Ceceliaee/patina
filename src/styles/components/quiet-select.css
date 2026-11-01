@@ -156,3 +156,10 @@
 .qp-select-menu-density-compact .qp-select-option[aria-disabled="true"] {
   color: var(--qp-text-disabled);
 }
+
+.qp-select-trigger[data-text-style="input"],
+.qp-select-menu[data-text-style="input"] .qp-select-option {
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
+  font-weight: var(--qp-font-weight-medium);
+}
