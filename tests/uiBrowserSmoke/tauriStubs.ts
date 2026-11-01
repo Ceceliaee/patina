@@ -433,6 +433,7 @@ function tauriStubFor(path: string) {
           throw fixture.error;
         }
         if (command === "cmd_get_tools_snapshot") {
+          if (globalThis.__PATINA_ACTIVITY_REMINDER_CASE) return globalThis.__PATINA_ACTIVITY_REMINDER_CASE;
           const toolsSnapshotDelayMs = Number(
             globalThis.__TIME_TRACKER_TOOLS_SNAPSHOT_DELAY_MS
               ?? localStorage.getItem("__time_tracker_tools_snapshot_delay_ms")
@@ -465,6 +466,66 @@ function tauriStubFor(path: string) {
             next_reminder_at: null,
             sampled_at_ms: Date.now(),
           };
+        }
+        if (globalThis.__PATINA_TIMED_REMINDER_CASE && ["cmd_create_reminder", "cmd_update_reminder", "cmd_cancel_reminder", "cmd_resolve_reminder_alert"].includes(command)) {
+          const snapshot = globalThis.__PATINA_TIMED_REMINDER_CASE;
+          const action = globalThis.__PATINA_TIMED_REMINDER_ACTION_CASE;
+          if (action?.hold) await new Promise(resolve => { action.release = resolve; });
+          if (action?.error) throw new Error(action.error);
+          if (command === "cmd_create_reminder") {
+            snapshot.reminders.push({id: Math.max(0,...snapshot.reminders.map(row=>row.id))+1, label: payload.input.label,
+              scheduled_at: payload.input.scheduledAt, recurrence: payload.input.recurrence, created_at: Date.now(),
+              status: "scheduled", fired_at: null, cancelled_at: null});
+          }
+          const row = snapshot.reminders.find(item => item.id === (command === "cmd_resolve_reminder_alert" ? Number(payload.alertId.split(':')[1]) : payload.reminderId));
+          if (command === "cmd_cancel_reminder") row.status = "cancelled";
+          else if (command === "cmd_resolve_reminder_alert") {
+            row.status = payload.delayMinutes === null ? "fired" : "scheduled";
+            if (payload.delayMinutes !== null) row.scheduled_at = Date.now() + payload.delayMinutes * 60000;
+          }
+          else if (command === "cmd_update_reminder") Object.assign(row, { label: payload.label, scheduled_at: payload.scheduledAt, recurrence: payload.recurrence, status: payload.enabled ? "scheduled" : "paused" });
+          snapshot.next_reminder_at = Math.min(...snapshot.reminders.filter(item => item.status === "scheduled").map(item => item.scheduled_at)) || null;
+          if (!Number.isFinite(snapshot.next_reminder_at)) snapshot.next_reminder_at = null;
+          snapshot.sampled_at_ms = Date.now();
+          localStorage.setItem("__time_tracker_tools_snapshot_override", JSON.stringify(snapshot));
+          return snapshot;
+        }
+        if (globalThis.__PATINA_USAGE_ALERT_CASE && (command === "cmd_extend_activity_reminder" || command === "cmd_show_desktop")) {
+          const fixture = globalThis.__PATINA_USAGE_ALERT_CASE;
+          fixture.calls.push({ command, payload });
+          if (fixture.hold) await new Promise(resolve => { fixture.release = resolve; });
+          if (fixture.error) throw new Error(fixture.error);
+          return command === "cmd_extend_activity_reminder" ? fixture.snapshot : null;
+        }
+        if (globalThis.__PATINA_ACTIVITY_REMINDER_CASE
+          && ["cmd_create_activity_reminder_rule", "cmd_disable_activity_reminder_rule", "cmd_set_activity_reminder_enabled", "cmd_update_activity_reminder_limit"].includes(command)) {
+          const snapshot = globalThis.__PATINA_ACTIVITY_REMINDER_CASE;
+          const action = globalThis.__PATINA_ACTIVITY_REMINDER_ACTION_CASE;
+          if (action?.hold) await new Promise(resolve => { action.release = resolve; });
+          if (action?.error) throw new Error(action.error);
+          if (command === "cmd_create_activity_reminder_rule") {
+            const input = payload.input;
+            const target = input.target.kind === 'app'
+              ? { kind: 'app', app_name: input.target.appName, exe_name: input.target.exeName }
+              : input.target.kind === 'category'
+                ? { kind: 'category', category_id: input.target.categoryId }
+                : { kind: 'web', normalized_domain: input.target.normalizedDomain };
+            snapshot.activity_reminder_rules.push({
+              id: snapshot.activity_reminder_rules.length + 1, target,
+              enabled: true,
+              label_snapshot: input.labelSnapshot, limit_ms: input.limitMs, message: input.message,
+              created_at: Date.now(), updated_at: Date.now(), disabled_at: null,
+              last_fired_date_key: null, suspension_reason: null,
+            });
+          } else if (command === "cmd_set_activity_reminder_enabled") {
+            snapshot.activity_reminder_rules.find(rule => rule.id === payload.ruleId).enabled = payload.enabled;
+          } else if (command === "cmd_update_activity_reminder_limit") {
+            snapshot.activity_reminder_rules.find(rule => rule.id === payload.ruleId).limit_ms = payload.limitMs;
+          } else {
+            snapshot.activity_reminder_rules = snapshot.activity_reminder_rules.filter(rule => rule.id !== payload.ruleId);
+          }
+          snapshot.sampled_at_ms = Date.now();
+          return snapshot;
         }
         if (command === "cmd_get_recorded_app_catalog_page") {
           const queryDelayMs = Math.max(

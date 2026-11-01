@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer as createNetServer, type Server as NetServer } from "node:net";
 import { verifySqlBoundaryRuntime } from "./tauriSqlBoundaryRuntime.ts";
+import { verifyUsageReminderRuntime } from "./tauriUsageReminderRuntime.ts";
 import {
   waitFor
 } from "./uiBrowserSmoke/browserHarness.ts";
@@ -30,12 +31,13 @@ export async function run(session: RuntimeSession) {
   try {
     await session.show();
     await verifySqlBoundaryRuntime(expression => evaluate(client, expression), root);
+    await verifyUsageReminderRuntime(expression => evaluate(client, expression), root);
     await evaluate(client, 'window.__TAURI_INTERNALS__.invoke("cmd_open_mini_window")');
     let mini = await waitFor("permission mini WebView", () => connectMini(devtoolsPort), 20_000);
     try {
       await waitFor("permission mini ready", () => evaluate(mini, "Boolean(document.querySelector('[data-mini-page],.mini-tools'))"));
       await verifyMiniContentRuntime(client, mini);
-      for (const command of ["cmd_commit_app_settings", "cmd_get_setting_rows", "cmd_install_update", "cmd_restore_backup", "cmd_open_mini_window"]) {
+      for (const command of ["cmd_commit_app_settings", "cmd_get_setting_rows", "cmd_install_update", "cmd_restore_backup", "cmd_extend_activity_reminder", "cmd_set_activity_reminder_enabled", "cmd_update_reminder", "cmd_resolve_reminder_alert", "cmd_update_activity_reminder_limit", "cmd_show_desktop", "cmd_open_mini_window"]) {
         const denied = await evaluate(mini, `window.__TAURI_INTERNALS__.invoke(${JSON.stringify(command)},{}).then(()=>null,e=>String(e))`);
         assert.match(String(denied), /not allowed|permission|denied/i, `${command} must be rejected before argument parsing`);
       }

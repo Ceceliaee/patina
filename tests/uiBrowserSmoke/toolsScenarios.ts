@@ -1,13 +1,19 @@
 import assert from "node:assert/strict";
-import { getLocaleText } from "../../src/shared/i18n/runtime.ts";
+import { getLocaleText, loadLocaleText } from "../../src/shared/i18n/runtime.ts";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import { delay, evaluate, jsonString, waitForExpression } from "./browserHarness.ts";
 import { TOOLS_TEXT } from "./constants.ts";
+import { runTimedReminderScenarios } from "./timedReminderScenarios.ts";
+import { runUsageAlertScenarios } from "./usageAlertScenarios.ts";
+import { runRecurringReminderScenarios } from "./recurringReminderScenarios.ts";
 
 const COPY = { "zh-CN": getLocaleText("zh-CN") } as const;
 
 export async function runToolsScenarios(context: BrowserSmokeContext) {
   const { client, sessionId, runTest } = context;
+  await runUsageAlertScenarios(context);
+  await runTimedReminderScenarios(context);
+  await runRecurringReminderScenarios(context);
 
   await runTest("Tools pending mutation discourages repeated writes and recovers from a runtime event", async () => {
     const originalStorage = String(await evaluate(client!, sessionId, `JSON.stringify({ ...localStorage })`));
@@ -500,9 +506,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
     for (const marker of [
       TOOLS_TEXT.remindersTitle,
       TOOLS_TEXT.reminderModeEvent,
-      TOOLS_TEXT.reminderModeApp,
-      TOOLS_TEXT.reminderModeCategory,
-      TOOLS_TEXT.reminderModeWeb,
+      TOOLS_TEXT.reminderModeUsage,
     ] as const) {
       assert.equal(
         await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString(marker)})`),
@@ -510,143 +514,25 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
         `missing visible Tools panel marker ${marker}`,
       );
     }
+    assert.equal(await evaluate(client!, sessionId,
+      `document.querySelectorAll('.tools-reminder-kind-filter [role="tab"]').length`), 2);
 
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (async () => {
-          const input = document.querySelector('.tools-reminder-form input[type="number"][max="1440"]');
-          if (!input) return false;
-          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-          setter?.call(input, '');
-          input.dispatchEvent(new Event('input', { bubbles: true }));
-          await new Promise((resolve) => requestAnimationFrame(resolve));
-          return input.value === '';
-        })()
-      `),
-      true,
-      "relative reminder minutes should be clearable while editing",
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (async () => {
-          const input = document.querySelector('.tools-reminder-form input[type="number"][max="1440"]');
-          const create = document.querySelector('.tools-reminder-form .tools-action-button');
-          if (!input || !create) return false;
-          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-          setter?.call(input, '0');
-          input.dispatchEvent(new Event('input', { bubbles: true }));
-          await new Promise((resolve) => requestAnimationFrame(resolve));
-          return Boolean(create.disabled)
-            && !document.body.innerText.includes(${jsonString(TOOLS_TEXT.reminderTimeInvalid)});
-        })()
-      `),
-      true,
-      "relative reminder should disable create for zero minutes",
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (async () => {
-          const absolute = Array.from(document.querySelectorAll('button'))
-            .find((node) => node.textContent?.trim() === ${jsonString(TOOLS_TEXT.reminderModeAbsolute)});
-          if (!absolute) return false;
-          absolute.click();
-          await new Promise((resolve) => requestAnimationFrame(resolve));
-          await new Promise((resolve) => requestAnimationFrame(resolve));
-          const create = document.querySelector('.tools-reminder-form .tools-action-button');
-          return Boolean(create?.disabled)
-            && !document.body.innerText.includes(${jsonString(TOOLS_TEXT.reminderTimeInvalid)});
-        })()
-      `),
-      true,
-      "absolute reminder should disable create for the current minute",
-    );
-
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (() => {
-          const trigger = document.querySelector('.qp-date-picker-trigger');
-          if (!trigger) return false;
-          trigger.focus();
-          trigger.click();
-          return true;
-        })()
-      `),
-      true,
-      "missing date picker trigger",
-    );
-    await waitForExpression(client!, sessionId, `document.activeElement?.classList.contains('qp-calendar-day')`);
-    const initialFocusedDate = await evaluate(client!, sessionId, `document.activeElement?.getAttribute('data-calendar-date')`);
-    await evaluate(client!, sessionId, `
-      document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
-    `);
-    await waitForExpression(
-      client!,
-      sessionId,
-      `document.activeElement?.classList.contains('qp-calendar-day') && document.activeElement?.getAttribute('data-calendar-date') !== ${jsonString(String(initialFocusedDate))}`,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `document.querySelectorAll('.qp-calendar-day[tabindex="0"]').length`),
-      1,
-      "date picker should expose one roving tab stop",
-    );
-    await evaluate(client!, sessionId, `
-      document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
-    `);
-    await waitForExpression(client!, sessionId, `!document.querySelector('.qp-calendar-popover')`);
-    await waitForExpression(
-      client!,
-      sessionId,
-      `document.activeElement?.classList.contains('qp-date-picker-trigger')`,
-      undefined,
-      "date picker trigger focus restoration",
-    );
-
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (() => {
-          const trigger = document.querySelector('.qp-time-picker-trigger');
-          if (!trigger) return false;
-          trigger.focus();
-          trigger.click();
-          return true;
-        })()
-      `),
-      true,
-      "missing time picker trigger",
-    );
-    await waitForExpression(client!, sessionId, `document.activeElement?.getAttribute('data-time-picker-part') === 'hour'`);
-    const initialFocusedHour = await evaluate(client!, sessionId, `document.activeElement?.getAttribute('data-time-picker-value')`);
-    await evaluate(client!, sessionId, `
-      document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
-    `);
-    await waitForExpression(
-      client!,
-      sessionId,
-      `document.activeElement?.getAttribute('data-time-picker-part') === 'hour' && document.activeElement?.getAttribute('data-time-picker-value') !== ${jsonString(String(initialFocusedHour))}`,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `document.querySelectorAll('.qp-time-picker-option[tabindex="0"]').length`),
-      2,
-      "time picker should expose one roving tab stop per listbox",
-    );
-    await evaluate(client!, sessionId, `
-      document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
-    `);
-    await waitForExpression(client!, sessionId, `!document.querySelector('.qp-time-picker-popover')`);
-    await waitForExpression(
-      client!,
-      sessionId,
-      `document.activeElement?.classList.contains('qp-time-picker-trigger')`,
-      undefined,
-      "time picker trigger focus restoration",
-    );
+    await evaluate(client!, sessionId, `document.querySelector('.tools-event-reminder-form .tools-reminder-time-trigger').click()`);
+    await waitForExpression(client!, sessionId, `document.activeElement?.matches('.qp-calendar-day')`);
+    assert.equal(await evaluate(client!, sessionId, `document.querySelectorAll('.tools-event-reminder-form input[type="date"], .tools-event-reminder-form input[type="time"]').length`), 0);
+    await evaluate(client!, sessionId, `document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true,cancelable:true}))`);
+    await waitForExpression(client!, sessionId, `document.activeElement?.matches('.qp-calendar-day:not([data-selected])')`);
+    await evaluate(client!, sessionId, `document.activeElement.click()`);
+    await waitForExpression(client!, sessionId, `document.querySelector('.tools-event-reminder-form .tools-action-button').disabled && !document.querySelector('.qp-calendar-popover')`);
 
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
           const appMode = Array.from(document.querySelectorAll('button'))
-            .find((node) => node.textContent?.trim() === ${jsonString(TOOLS_TEXT.reminderModeApp)});
+            .find((node) => node.textContent?.trim() === ${jsonString(TOOLS_TEXT.reminderModeUsage)});
           if (!appMode) return false;
+          globalThis.__PATINA_TOOLS_PREVIOUS_WEB_FIXTURE = globalThis.__TIME_TRACKER_ENABLE_WEB_FIXTURE;
+          globalThis.__TIME_TRACKER_ENABLE_WEB_FIXTURE = true;
           appMode.click();
           return true;
         })()
@@ -661,19 +547,19 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `Boolean(document.querySelector('input[aria-label=' + ${jsonString(JSON.stringify(TOOLS_TEXT.activityReminderAppPlaceholder))} + ']'))`,
+      `Boolean(document.querySelector('input[aria-label=' + ${jsonString(JSON.stringify(TOOLS_TEXT.activityReminderTargetPlaceholder))} + ']'))`,
     );
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const input = document.querySelector('input[aria-label=' + ${jsonString(JSON.stringify(TOOLS_TEXT.activityReminderAppPlaceholder))} + ']');
+          const input = document.querySelector('input[aria-label=' + ${jsonString(JSON.stringify(TOOLS_TEXT.activityReminderTargetPlaceholder))} + ']');
           if (!(input instanceof HTMLInputElement)) return false;
           input.focus();
           return true;
         })()
       `),
       true,
-      "missing the activity reminder app search field",
+      "missing the unified activity reminder search field",
     );
     await waitForExpression(
       client!,
@@ -728,68 +614,148 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
     `);
     await waitForExpression(client!, sessionId, `!document.querySelector('.tools-activity-target-candidate-list')`);
 
-    for (const [modeLabel, placeholder] of [
-      [TOOLS_TEXT.reminderModeCategory, TOOLS_TEXT.activityReminderCategoryPlaceholder],
-      [TOOLS_TEXT.reminderModeWeb, TOOLS_TEXT.activityReminderWebPlaceholder],
-    ] as const) {
-      assert.equal(
-        await evaluate(client!, sessionId, `
-          (() => {
-            const mode = Array.from(document.querySelectorAll('button'))
-              .find((node) => node.textContent?.trim() === ${jsonString(modeLabel)});
-            if (!mode) return false;
-            mode.click();
-            return true;
-          })()
-        `),
-        true,
-      );
-      await waitForExpression(
-        client!,
-        sessionId,
-        `Boolean(document.querySelector('input[aria-label=' + ${jsonString(JSON.stringify(placeholder))} + ']'))`,
-      );
-      assert.equal(
-        await evaluate(
-          client!,
-          sessionId,
-          `Boolean(document.querySelector('input[aria-label=' + ${jsonString(JSON.stringify(placeholder))} + ']')?.closest('.tools-activity-target-search'))`,
-        ),
-        true,
-        `${modeLabel} should reuse the activity reminder search picker shell`,
-      );
-      if (modeLabel === TOOLS_TEXT.reminderModeCategory) {
-        await evaluate(client!, sessionId, `
-          document.querySelector('input[aria-label=' + ${jsonString(JSON.stringify(placeholder))} + ']')?.focus()
-        `);
+    await evaluate(client!, sessionId, `document.querySelector('.tools-activity-target-search input')?.focus()`);
+    await waitForExpression(client!, sessionId, `
+      ['app', 'category', 'web'].every(kind => document.querySelector('[data-activity-target-kind="' + kind + '"]'))
+    `);
+    assert.equal(
+      await evaluate(client!, sessionId, `
+        (() => {
+          const markers = Array.from(document.querySelectorAll('[data-activity-category-marker]'));
+          const colors = markers.map(marker => getComputedStyle(marker.querySelector('.tools-activity-category-dot')).backgroundColor);
+          return markers.length >= 2
+            && markers.every(marker => {
+              const style = getComputedStyle(marker);
+              return style.borderTopStyle !== 'none'
+                && style.borderTopColor !== 'rgba(0, 0, 0, 0)'
+                && style.backgroundColor !== 'rgba(0, 0, 0, 0)';
+            })
+            && colors.every(color => color !== 'rgba(0, 0, 0, 0)')
+            && new Set(colors).size >= 2;
+        })()
+      `), true, "merged targets retain the category icon tiles and semantic colors",
+    );
+    await evaluate(client!, sessionId, `
+      globalThis.__PATINA_ACTIVITY_REMINDER_CASE = {
+        settings: { default_countdown_minutes: 25, pomodoro_focus_minutes: 25,
+          pomodoro_short_break_minutes: 5, pomodoro_long_break_minutes: 15, pomodoro_long_break_every: 4 },
+        reminders: [], activity_reminder_rules: [], current_timer: null, timer_laps: [], current_pomodoro: null,
+        today_completed_pomodoros: 0, next_reminder_at: null, sampled_at_ms: Date.now(),
+      };
+    `);
+    try {
+      for (const kind of ["app", "category", "web"] as const) {
+        await evaluate(client!, sessionId, `document.querySelector('.tools-activity-target-search input')?.focus()`);
         await waitForExpression(
-          client!,
-          sessionId,
-          `Boolean(document.querySelector('.tools-activity-target-candidate-list .tools-activity-category-dot'))`,
+          client!, sessionId,
+          `Boolean(document.querySelector('[data-activity-target-kind="${kind}"]'))`,
         );
-        assert.equal(
-          await evaluate(client!, sessionId, `
-            (() => {
-              const markers = Array.from(document.querySelectorAll('[data-activity-category-marker]'));
-              const colors = markers
-                .map((marker) => marker.querySelector('.tools-activity-category-dot'))
-                .filter(Boolean)
-                .map((dot) => getComputedStyle(dot).backgroundColor);
-              return markers.length >= 2
-                && markers.every((marker) => {
-                  const style = getComputedStyle(marker);
-                  return style.borderTopStyle !== 'none'
-                    && style.borderTopColor !== 'rgba(0, 0, 0, 0)'
-                    && style.backgroundColor !== 'rgba(0, 0, 0, 0)';
-                })
-                && colors.every((color) => color !== 'rgba(0, 0, 0, 0)')
-                && new Set(colors).size >= 2;
-            })()
-          `),
-          true,
-          "category targets should keep the Quiet Pro icon tile and use distinct semantic colors",
-        );
+        await evaluate(client!, sessionId, `document.querySelector('[data-activity-target-kind="${kind}"]').click()`);
+        await waitForExpression(client!, sessionId, `!document.querySelector('.tools-activity-target-candidate-list')`);
+        await evaluate(client!, sessionId, `document.querySelector('.tools-software-reminder-form .tools-action-button').click()`);
+        await waitForExpression(client!, sessionId, `Boolean(document.querySelector('[data-activity-rule-kind="${kind}"]'))`);
+        assert.deepEqual(await evaluate(client!, sessionId, `(() => {
+          const call = globalThis.__PATINA_INVOKED_COMMANDS.filter(item => item.command === 'cmd_create_activity_reminder_rule').at(-1);
+          return { kind: call.payload.input.target.kind, limitMs: call.payload.input.limitMs, message: call.payload.input.message };
+        })()`), { kind, limitMs: 30 * 60_000, message: "" });
       }
+      assert.deepEqual(await evaluate(client!, sessionId,
+        `Array.from(document.querySelectorAll('[data-activity-rule-kind]')).map(row => row.dataset.activityRuleKind)`),
+      ["app", "category", "web"], "all rule types remain visible in the merged list");
+      await evaluate(client!, sessionId, `
+        (() => {
+          const toggle = document.querySelector('[data-activity-rule-kind="app"] [aria-pressed]');
+          toggle.focus();
+          globalThis.__PATINA_ACTIVITY_REMINDER_ACTION_CASE = { hold: true };
+          globalThis.__PATINA_TOGGLE_CALL_COUNT = globalThis.__PATINA_INVOKED_COMMANDS.filter(item => item.command === 'cmd_set_activity_reminder_enabled').length;
+          toggle.click();
+        })()
+      `);
+      await waitForExpression(client!, sessionId, `Boolean(globalThis.__PATINA_ACTIVITY_REMINDER_ACTION_CASE.release) && document.querySelector('[data-activity-rule-kind="app"] [aria-pressed]').getAttribute('aria-busy') === 'true'`);
+      assert.equal(await evaluate(client!, sessionId, `(() => {
+        const toggle = document.querySelector('[data-activity-rule-kind="app"] [aria-pressed]');
+        return document.activeElement === toggle && !toggle.disabled
+          && toggle.getAttribute('aria-disabled') === 'true'
+          && Boolean(toggle.querySelector('.lucide-toggle-right'))
+          && [...document.querySelectorAll('.tools-reminder-row-actions button')].every(button => getComputedStyle(button).opacity === '1');
+      })()`), true, "pending toggles preserve focus, icon and opacity across the list");
+      await evaluate(client!, sessionId, `
+        document.querySelector('[data-activity-rule-kind="app"] [aria-pressed]').click();
+        document.querySelector('[data-activity-rule-kind="app"] [aria-pressed]').click();
+      `);
+      assert.equal(await evaluate(client!, sessionId, `globalThis.__PATINA_INVOKED_COMMANDS.filter(item => item.command === 'cmd_set_activity_reminder_enabled').length - globalThis.__PATINA_TOGGLE_CALL_COUNT`), 1, "pending toggles must not submit duplicate writes");
+      await evaluate(client!, sessionId, `globalThis.__PATINA_ACTIVITY_REMINDER_ACTION_CASE.release()`);
+      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('[data-activity-rule-kind="app"] .lucide-toggle-left')) && !document.querySelector('[data-activity-rule-kind="app"] [aria-pressed]').hasAttribute('aria-busy')`);
+      await evaluate(client!, sessionId, `
+        delete globalThis.__PATINA_ACTIVITY_REMINDER_ACTION_CASE;
+        delete globalThis.__PATINA_TOGGLE_CALL_COUNT;
+        document.querySelector('[data-activity-rule-kind="app"] [aria-pressed]').click();
+      `);
+      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('[data-activity-rule-kind="app"] .lucide-toggle-right')) && !document.querySelector('[data-activity-rule-kind="app"] [aria-pressed]').hasAttribute('aria-busy')`);
+      for (const kind of ["app", "category", "web"]) {
+        await evaluate(client!, sessionId, `document.querySelector('[data-activity-rule-kind="${kind}"] button[aria-label^="${COPY["zh-CN"].tools.activityReminderEdit}:"]').click()`);
+        await waitForExpression(client!, sessionId, `document.activeElement === document.querySelector('.tools-reminder-editor input')`);
+        assert.equal(await evaluate(client!, sessionId, `(() => {
+          const row = document.querySelector('[data-activity-rule-kind="${kind}"]');
+          const target = document.querySelector('.tools-reminder-editor-target');
+          return target.querySelector('strong').textContent === row.querySelector('strong').textContent
+            && getComputedStyle(target.querySelector('strong')).fontSize === getComputedStyle(row.querySelector('strong')).fontSize
+            && target.querySelector('.data-app-option-icon').outerHTML === row.querySelector('.data-app-option-icon').outerHTML;
+        })()`), true, `${kind} editor uses the same target identity as its rule`);
+        await client!.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, sessionId);
+        await waitForExpression(client!, sessionId, `!document.querySelector('.tools-reminder-editor')`);
+        await evaluate(client!, sessionId, `document.querySelector('[data-activity-rule-kind="${kind}"] [aria-pressed]').click()`);
+        await waitForExpression(client!, sessionId, `document.querySelector('[data-activity-rule-kind="${kind}"] [aria-pressed]')?.getAttribute('aria-pressed') === 'false' && !document.querySelector('[data-activity-rule-kind="${kind}"] [aria-pressed]').hasAttribute('aria-busy')`);
+        await evaluate(client!, sessionId, `document.querySelector('[data-activity-rule-kind="${kind}"] [aria-pressed]').focus()`);
+        await client!.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", text: "\r", unmodifiedText: "\r", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 }, sessionId);
+        await client!.command("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, sessionId);
+        await waitForExpression(client!, sessionId, `document.querySelector('[data-activity-rule-kind="${kind}"] [aria-pressed]')?.getAttribute('aria-pressed') === 'true'`);
+      }
+      const editSelector = `[data-activity-rule-kind="app"] button[aria-label^="${COPY["zh-CN"].tools.activityReminderEdit}:"]`;
+      await evaluate(client!, sessionId, `document.querySelector(${jsonString(editSelector)}).focus(); document.querySelector(${jsonString(editSelector)}).click()`);
+      await waitForExpression(client!, sessionId, `document.activeElement === document.querySelector('[role="dialog"] input')`);
+      const setEditMinutes = async (value: string) => evaluate(client!, sessionId, `
+        (() => {
+          const input = document.querySelector('[role="dialog"] input');
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${jsonString(value)});
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        })()
+      `);
+      await setEditMinutes("0");
+      await evaluate(client!, sessionId, `document.querySelector('[role="dialog"] button[type="submit"]').click()`);
+      await waitForExpression(client!, sessionId, `document.querySelector('[role="dialog"] input')?.getAttribute('aria-invalid') === 'true'`);
+      await setEditMinutes("45");
+      await evaluate(client!, sessionId, `
+        globalThis.__PATINA_ACTIVITY_REMINDER_ACTION_CASE = { error: 'fixture write failed' };
+        document.querySelector('[role="dialog"] button[type="submit"]').click();
+      `);
+      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-toast[role="alert"]')) && !document.querySelector('[role="dialog"] input')?.disabled`);
+      assert.equal(await evaluate(client!, sessionId, `document.querySelector('[role="dialog"] input').value`), "45", "failed save preserves the draft");
+      assert.equal(await evaluate(client!, sessionId, `globalThis.__PATINA_ACTIVITY_REMINDER_CASE.activity_reminder_rules[0].limit_ms`), 1_800_000);
+      await evaluate(client!, sessionId, `
+        globalThis.__PATINA_ACTIVITY_REMINDER_ACTION_CASE = { hold: true };
+        document.querySelector('[role="dialog"] button[type="submit"]').click();
+      `);
+      await waitForExpression(client!, sessionId, `Boolean(globalThis.__PATINA_ACTIVITY_REMINDER_ACTION_CASE.release) && document.querySelector('[role="dialog"] input').disabled`);
+      await client!.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 }, sessionId);
+      assert.equal(await evaluate(client!, sessionId, `Boolean(document.querySelector('[role="dialog"]'))`), true, "a pending save cannot be dismissed");
+      await evaluate(client!, sessionId, `globalThis.__PATINA_ACTIVITY_REMINDER_ACTION_CASE.release()`);
+      await waitForExpression(client!, sessionId, `!document.querySelector('[role="dialog"]') && globalThis.__PATINA_ACTIVITY_REMINDER_CASE.activity_reminder_rules[0].limit_ms === 2700000`);
+      await waitForExpression(client!, sessionId, `document.activeElement === document.querySelector(${jsonString(editSelector)})`);
+      assert.equal(await evaluate(client!, sessionId, `document.querySelector('[data-activity-rule-kind="app"] .tools-software-rule-heading .tools-tabular').textContent`), "45 分钟");
+      await evaluate(client!, sessionId, `delete globalThis.__PATINA_ACTIVITY_REMINDER_ACTION_CASE`);
+      await evaluate(client!, sessionId, `document.querySelector('[data-activity-rule-kind="category"] button[aria-label^="${COPY["zh-CN"].tools.activityReminderDelete}:"]').click()`);
+      await waitForExpression(client!, sessionId, `!document.querySelector('[data-activity-rule-kind="category"]')`);
+      assert.deepEqual(await evaluate(client!, sessionId,
+        `Array.from(document.querySelectorAll('[data-activity-rule-kind]')).map(row => row.dataset.activityRuleKind)`),
+      ["app", "web"], "deleting a category leaves the other rule types intact");
+    } finally {
+      await evaluate(client!, sessionId, `
+        delete globalThis.__PATINA_ACTIVITY_REMINDER_CASE;
+        delete globalThis.__PATINA_ACTIVITY_REMINDER_ACTION_CASE;
+        globalThis.__TIME_TRACKER_ENABLE_WEB_FIXTURE = globalThis.__PATINA_TOOLS_PREVIOUS_WEB_FIXTURE;
+        delete globalThis.__PATINA_TOOLS_PREVIOUS_WEB_FIXTURE;
+      `);
     }
 
     assert.equal(
@@ -1014,5 +980,191 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
     await waitForExpression(client!, sessionId, `!document.querySelector('[role="dialog"]')`);
     await waitForExpression(client!, sessionId, `document.activeElement?.getAttribute('aria-label') === ${jsonString(triggerLabel)}`,
       15_000, "Tools settings focus restoration");
+  });
+
+  await runTest("Reminder lists keep compact rows and stable widths with inset scrollbars", async () => {
+    const originalStorage = String(await evaluate(client, sessionId, `JSON.stringify({ ...localStorage })`));
+    try {
+      await evaluate(client, sessionId, `
+        (() => {
+          const now = Date.now();
+          localStorage.clear();
+          localStorage.setItem("__time_tracker_smoke_settings", JSON.stringify({
+            language: "zh-CN", "__category_color_override::game": "#123456",
+          }));
+          localStorage.setItem("patina:last-active-view", "tools");
+          localStorage.setItem("patina:tools-section", "reminders");
+          localStorage.setItem("patina:tools-reminder-mode", "usage");
+          localStorage.setItem("__time_tracker_tools_snapshot_override", JSON.stringify({
+            settings: {
+              default_countdown_minutes: 25, pomodoro_focus_minutes: 25,
+              pomodoro_short_break_minutes: 5, pomodoro_long_break_minutes: 15, pomodoro_long_break_every: 4,
+            },
+            reminders: Array.from({ length: 8 }, (_, index) => ({
+              id: index + 1, label: "Reminder " + (index + 1), created_at: now,
+              scheduled_at: now + (index + 1) * 3600000, status: "scheduled",
+              fired_at: null, cancelled_at: null,
+            })),
+            activity_reminder_rules: Array.from({ length: 8 }, (_, index) => ({
+              id: index + 1, target: index >= 6
+                ? { kind: "category", category_id: index === 6 ? "game" : "custom:unlisted" }
+                : { kind: "app", app_name: "App " + (index + 1), exe_name: index === 0 ? "cursor.exe" : "app-" + index + ".exe" },
+              enabled: true,
+              label_snapshot: "App " + (index + 1), limit_ms: 900000, message: "",
+              created_at: now, updated_at: now, disabled_at: null,
+              last_fired_date_key: null, suspension_reason: null,
+            })),
+            current_timer: null, timer_laps: [], current_pomodoro: null,
+            today_completed_pomodoros: 0, next_reminder_at: now + 3600000, sampled_at_ms: now,
+          }));
+          document.documentElement.dataset.patinaSmokeReload = "reminder-overflow";
+          location.reload();
+        })()
+      `);
+      await waitForExpression(client, sessionId, `
+        document.documentElement.dataset.patinaSmokeReload !== "reminder-overflow"
+          && document.querySelectorAll('.tools-reminder-row').length === 8
+      `);
+      await waitForExpression(client, sessionId, `(() => {
+        const dot = document.querySelector('[data-activity-rule-kind="category"] .tools-activity-category-dot');
+        return Boolean(dot && getComputedStyle(dot).backgroundColor === 'rgb(18, 52, 86)');
+      })()`, 10_000, "cold usage navigation loads category colors without opening the target picker");
+      for (const locale of ["en-US", "zh-CN"] as const) {
+        const copy = await loadLocaleText(locale);
+        await evaluate(client, sessionId, `(() => {
+          const settings = JSON.parse(localStorage.getItem('__time_tracker_smoke_settings'));
+          settings.language = '${locale}';
+          localStorage.setItem('__time_tracker_smoke_settings', JSON.stringify(settings));
+          globalThis.__PATINA_EMIT_TAURI_EVENT('app-settings-changed', { language: '${locale}' });
+        })()`);
+        await waitForExpression(client, sessionId, `(() => {
+          const row = document.querySelector('[data-activity-rule-kind="category"]');
+          return row?.querySelector('strong').textContent === ${jsonString(copy.categories.game)}
+            && getComputedStyle(row.querySelector('.tools-activity-category-dot')).backgroundColor === 'rgb(18, 52, 86)';
+        })()`, 10_000, "category labels refresh after language changes without losing their colors");
+      }
+      for (const viewport of [
+        { width: 1377, height: 876, deviceScaleFactor: 1 },
+        { width: 1024, height: 720, deviceScaleFactor: 1.25 },
+        { width: 900, height: 650, deviceScaleFactor: 1.5 },
+      ]) {
+        await client.command("Emulation.setDeviceMetricsOverride", { ...viewport, mobile: false }, sessionId);
+        let eventRowHeight = 0;
+        for (const mode of ["event", "usage"]) {
+          await evaluate(client, sessionId, `document.getElementById('tools-reminder-mode-tab-${mode}').click()`);
+          await waitForExpression(client, sessionId, `
+            document.querySelector('.tools-mode-pane')?.dataset.toolsReminderMode === ${jsonString(mode)}
+              && document.querySelectorAll('.tools-reminder-row').length === 8
+          `);
+          const geometry = await evaluate(client, sessionId, `
+            (() => {
+              const list = document.querySelector('.tools-reminder-list.qp-scroll-region');
+              list.scrollTop = 0;
+              const rect = list.getBoundingClientRect();
+              const row = list.firstElementChild.getBoundingClientRect();
+              const frame = document.querySelector('.tools-reminder-list-section').lastElementChild.getBoundingClientRect();
+              return {
+                rowHeight: row.height, rowWidth: row.width,
+                inset: { top: rect.top - frame.top, right: frame.right - rect.right, bottom: frame.bottom - rect.bottom },
+                rowToScrollbarGap: Math.min(...[...list.children].map((row) =>
+                  rect.left + list.clientLeft + list.clientWidth - row.getBoundingClientRect().right)),
+                overflows: list.scrollHeight > list.clientHeight,
+                horizontalOverflow: list.scrollWidth > list.clientWidth,
+                fitsViewport: frame.right <= innerWidth && frame.bottom <= innerHeight,
+                x: rect.left + rect.width / 2, y: rect.top + rect.height / 2,
+              };
+            })()
+          `) as {
+            rowHeight: number; rowWidth: number;
+            inset: { top: number; right: number; bottom: number };
+            rowToScrollbarGap: number;
+            overflows: boolean; horizontalOverflow: boolean; fitsViewport: boolean; x: number; y: number;
+          };
+          const label = `${mode} at ${viewport.width}x${viewport.height}, DPI ${viewport.deviceScaleFactor}`;
+          if (mode === "usage") {
+            await waitForExpression(client, sessionId, `Boolean(document.querySelector('[data-activity-rule-kind="app"] img'))`);
+            assert.deepEqual(await evaluate(client, sessionId, `(() => {
+              const rect = document.querySelector('[data-activity-rule-kind="app"] img').getBoundingClientRect();
+              return [rect.width, rect.height];
+            })()`), [20, 20], `${label}: application images use the larger size`);
+            assert.deepEqual(await evaluate(client, sessionId, `(() => {
+              const categories = [...document.querySelectorAll('[data-activity-rule-kind="category"]')];
+              return categories.map(row => {
+                const icon = row.querySelector('.data-app-option-icon');
+                const dot = icon.querySelector('.tools-activity-category-dot');
+                const rect = dot?.getBoundingClientRect();
+                const outer = icon.getBoundingClientRect();
+                return { text: icon.textContent, width: rect?.width, height: rect?.height,
+                  centered: Boolean(rect && Math.abs(rect.y + rect.height / 2 - outer.y - outer.height / 2) < 0.5),
+                  border: getComputedStyle(icon).borderWidth };
+              });
+            })()`), [
+              { text: "", width: 16, height: 16, centered: true, border: "0px" },
+              { text: "", width: 16, height: 16, centered: true, border: "0px" },
+            ], `${label}: known and unavailable categories keep centered dots instead of initials`);
+          }
+          assert.ok(geometry.rowHeight <= 48.5, `${label}: rows must keep the compact 48px height`);
+          if (mode === "event") eventRowHeight = geometry.rowHeight;
+          else assert.ok(Math.abs(geometry.rowHeight - eventRowHeight) <= 0.5, `${label}: both lists must have the same row height`);
+          assert.ok(geometry.inset.top >= 8 && geometry.inset.bottom >= 8, `${label}: scrollbar must clear the rounded corners`);
+          assert.ok(geometry.inset.right >= 4.5 && geometry.inset.right <= 5.5, `${label}: scrollbar must keep a compact inset from the outer border`);
+          assert.ok(geometry.rowToScrollbarGap >= 3.5 && geometry.rowToScrollbarGap <= 4.5, `${label}: cards must leave a compact 4px gap before the scrollbar`);
+          assert.equal(geometry.overflows, true, `${label}: fixture must require vertical scrolling`);
+          assert.equal(geometry.horizontalOverflow, false, `${label}: rows must fit the scrollport`);
+          assert.equal(geometry.fitsViewport, true, `${label}: frame must fit the window`);
+          await client.command("Input.dispatchMouseEvent", {
+            type: "mouseWheel", x: geometry.x, y: geometry.y, deltaX: 0, deltaY: 2000,
+          }, sessionId);
+          await waitForExpression(client, sessionId, `
+            (() => {
+              const list = document.querySelector('.tools-reminder-list');
+              const rect = list.getBoundingClientRect();
+              const last = list.lastElementChild.getBoundingClientRect();
+              return list.scrollTop > 0 && last.top >= rect.top && last.bottom <= rect.bottom + 1;
+            })()
+          `, 10_000, `${label}: wheel scrolling must expose the complete last row`);
+          await evaluate(client, sessionId, `
+            (() => {
+              const snapshot = JSON.parse(localStorage.getItem("__time_tracker_tools_snapshot_override"));
+              globalThis.__PATINA_EMIT_TAURI_EVENT("tools-runtime-changed", {
+                ...snapshot, reminders: snapshot.reminders.slice(0, 1),
+                activity_reminder_rules: snapshot.activity_reminder_rules.slice(0, 1), sampled_at_ms: Date.now(),
+              });
+            })()
+          `);
+          await waitForExpression(client, sessionId, `document.querySelectorAll('.tools-reminder-row').length === 1`);
+          const singleRow = await evaluate(client, sessionId, `
+            (() => {
+              const list = document.querySelector('.tools-reminder-list');
+              const row = list.firstElementChild.getBoundingClientRect();
+              return { width: row.width, height: row.height, overflows: list.scrollHeight > list.clientHeight };
+            })()
+          `) as { width: number; height: number; overflows: boolean };
+          assert.equal(singleRow.overflows, false, `${label}: one row must not require a scrollbar`);
+          assert.ok(Math.abs(singleRow.width - geometry.rowWidth) <= 0.5, `${label}: scrollbar visibility must not change card width`);
+          assert.ok(Math.abs(singleRow.height - geometry.rowHeight) <= 0.5, `${label}: removing rows must not stretch the remaining card`);
+          await evaluate(client, sessionId, `
+            globalThis.__PATINA_EMIT_TAURI_EVENT("tools-runtime-changed", {
+              ...JSON.parse(localStorage.getItem("__time_tracker_tools_snapshot_override")), sampled_at_ms: Date.now(),
+            })
+          `);
+          await waitForExpression(client, sessionId, `document.querySelectorAll('.tools-reminder-row').length === 8`);
+        }
+      }
+    } finally {
+      await client.command("Emulation.setDeviceMetricsOverride", {
+        width: 1280, height: 820, deviceScaleFactor: 1, mobile: false,
+      }, sessionId);
+      await evaluate(client, sessionId, `
+        localStorage.clear();
+        for (const [key, value] of Object.entries(${originalStorage})) localStorage.setItem(key, value);
+        document.documentElement.dataset.patinaSmokeReload = "reminder-overflow-restored";
+        location.reload();
+      `);
+      await waitForExpression(client, sessionId, `
+        document.documentElement.dataset.patinaSmokeReload !== "reminder-overflow-restored"
+          && Boolean(document.querySelector('main.qp-canvas'))
+      `);
+    }
   });
 }

@@ -31,7 +31,7 @@ export function verifyDatabase(dbPath: string) {
     "db.close()",
     "assert integrity == 'ok', integrity",
     "assert value == ('77',), value",
-    "assert migration == (17,), migration",
+    "assert migration == (20,), migration",
     "assert states == {'app_catalog': 'ready', 'activity_hourly': 'ready'}, states",
     "assert scheduled == (0, 'weekly', 5, 1260, 1), scheduled",
     "assert {'target_kind', 'target_identity'} <= scheduled_columns, scheduled_columns",
@@ -43,7 +43,7 @@ export function verifyDatabase(dbPath: string) {
     "assert scheduled_export_target == expected_export_target, (scheduled_export_target, expected_export_target)",
     "assert {'format', 'selected_fields_json', 'plan_generation', 'schedule_anchor_at_ms'} <= scheduled_export_columns, scheduled_export_columns",
     "assert {'logical_start_date', 'logical_end_date', 'phase', 'status', 'sha256'} <= scheduled_export_run_columns, scheduled_export_run_columns",
-    "assert {'recorded_app_catalog', 'activity_hourly_effective', 'activity_summary_dirty_ranges', 'app_catalog_dirty_keys', 'web_activity_revision', 'scheduled_backup_config', 'scheduled_backup_runs', 'scheduled_export_config', 'scheduled_export_runs'} <= tables, tables",
+    "assert {'recorded_app_catalog', 'activity_hourly_effective', 'activity_summary_dirty_ranges', 'app_catalog_dirty_keys', 'web_activity_revision', 'scheduled_backup_config', 'scheduled_backup_runs', 'scheduled_export_config', 'scheduled_export_runs', 'tool_activity_reminder_states', 'tool_reminder_recurrences'} <= tables, tables",
   ].join("; ");
   const result = spawnSync("python", ["-c", script, dbPath], { encoding: "utf8", windowsHide: true, timeout: 30_000 });
   assert.equal(result.status, 0, `database verification failed: ${result.error?.message || result.stderr || result.stdout}`);
