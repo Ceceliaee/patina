@@ -38,6 +38,7 @@ public static class MiniProbe {
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool AllowSetForegroundWindow(uint pid);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x,int y);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
   [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int key);
@@ -133,7 +134,7 @@ try {
       $current=New-Object MiniProbe+Point; [void][MiniProbe]::GetPhysicalCursorPos([ref]$current)
       if ($current.X -ne $lastCursor.X -or $current.Y -ne $lastCursor.Y) { throw "Input precondition changed: cursor moved outside this test; expected ($($lastCursor.X),$($lastCursor.Y)), observed ($($current.X),$($current.Y)); stopping injection" }
     }
-    if ($inputStarted -and $request.op -in @('move','down','focus','fullscreen')) {
+    if ($inputStarted -and $request.op -in @('move','down','focus','fullscreen','allow-main-focus')) {
       $foreground=[MiniProbe]::GetForegroundWindow(); [uint32]$foregroundPid=0
       [void][MiniProbe]::GetWindowThreadProcessId($foreground,[ref]$foregroundPid)
       if ($foregroundPid -ne ${processId} -and $foreground -ne $form.Handle) { throw 'Input precondition changed: foreground belongs to another application; stopping injection' }
@@ -154,6 +155,10 @@ try {
     if ($request.op -eq 'down') { $buttonDown=$true; [MiniProbe]::mouse_event(2,0,0,0,[UIntPtr]::Zero) }
     if ($request.op -eq 'up') { [MiniProbe]::mouse_event(4,0,0,0,[UIntPtr]::Zero); $buttonDown=$false }
     if ($request.op -eq 'focus') { Focus-MiniProbeInput; $inputStarted=$true }
+    if ($request.op -eq 'allow-main-focus') {
+      Focus-MiniProbeInput; $inputStarted=$true
+      if (-not [MiniProbe]::AllowSetForegroundWindow(${processId})) { throw 'Cannot grant foreground activation to the isolated app' }
+    }
     if ($request.op -eq 'hide') { $form.Hide() }
     if ($request.op -eq 'fullscreen') {
       $form.FormBorderStyle=[System.Windows.Forms.FormBorderStyle]::None

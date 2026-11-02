@@ -330,25 +330,16 @@ await runTest("mini tool clocks remain second-accurate", () => {
   const viewModel = buildMiniStatusViewModel({
     tools: [
       {
-        kind: "stopwatch",
-        state: "running",
-        valueMs: 1_100_000,
-        countsDown: false,
-        visibleUntilMs: null,
-        totalMs: null, phase: null,
-      },
-      {
         kind: "pomodoro",
         state: "running",
         valueMs: 275_000,
-        countsDown: true,
         visibleUntilMs: null,
         totalMs: null, phase: null,
       },
     ],
     sampledAtMs: 10_000,
   }, 4_000);
-  assert.deepEqual(viewModel.tools.map((tool) => tool.timeText), ["18:24", "04:31"]);
+  assert.deepEqual(viewModel.tools.map((tool) => tool.timeText), ["04:31"]);
 
   assert.deepEqual(buildMiniStatusViewModel(null, 10_000), { tools: [] });
   assert.deepEqual(buildMiniStatusViewModel({
@@ -357,31 +348,21 @@ await runTest("mini tool clocks remain second-accurate", () => {
   }, 10_000), { tools: [] });
 });
 
-await runTest("mini status parser enforces the two semantic tool slots", () => {
+await runTest("mini status parser allows one Pomodoro slot", () => {
   const base = {
     sampled_at_ms: 10_000,
-  };
-  const timer = {
-    kind: "stopwatch",
-    state: "running",
-    value_ms: 1_000,
-    counts_down: false,
-    visible_until_ms: null,
-    total_ms: null, phase: null,
   };
   const pomodoro = {
     kind: "pomodoro",
     state: "paused",
     value_ms: 2_000,
-    counts_down: true,
     visible_until_ms: null,
     total_ms: null, phase: null,
   };
-  assert.ok(parseMiniStatusSnapshot({ ...base, tools: [timer, pomodoro] }));
   assert.ok(parseMiniStatusSnapshot({ ...base, tools: [pomodoro] }));
-  assert.equal(parseMiniStatusSnapshot({ ...base, tools: [pomodoro, timer] }), null);
-  assert.equal(parseMiniStatusSnapshot({ ...base, tools: [timer, timer] }), null);
-  assert.equal(parseMiniStatusSnapshot({ ...base, tools: [timer, pomodoro, pomodoro] }), null);
+  assert.equal(parseMiniStatusSnapshot({ ...base, tools: [pomodoro, pomodoro] }), null);
+  assert.equal(parseMiniStatusSnapshot({ ...base, tools: [{ ...pomodoro, kind: "unknown" }] }), null);
+  assert.equal(parseMiniStatusSnapshot({ ...base, tools: [pomodoro, pomodoro, pomodoro] }), null);
 });
 
 console.log(`Passed ${passed} mini view model tests`);

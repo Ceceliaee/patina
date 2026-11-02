@@ -7,8 +7,8 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
   await runMiniPagedScenarios(context);
   const { client, sessionId, appUrl, runTest } = context;
   const toolsEvent = JSON.stringify({
-    settings: { default_countdown_minutes: 25, pomodoro_focus_minutes: 25, pomodoro_short_break_minutes: 5, pomodoro_long_break_minutes: 15, pomodoro_long_break_every: 4 },
-    reminders: [], activity_reminder_rules: [], current_timer: null, timer_laps: [], current_pomodoro: null,
+    settings: { pomodoro_focus_minutes: 25, pomodoro_short_break_minutes: 5, pomodoro_long_break_minutes: 15, pomodoro_long_break_every: 4 },
+    reminders: [], activity_reminder_rules: [], current_pomodoro: null,
     today_completed_pomodoros: 0, next_reminder_at: null, sampled_at_ms: Date.now(),
   });
   const read = (expression: string) => evaluate(client, sessionId, expression);
@@ -103,7 +103,7 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
     }
   });
   await runTest("collapsed mini updates its status color from events without hover, content or polling", async () => {
-    const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniPage", "tools"); url.searchParams.set("miniTools", "2");
+    const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniPage", "tools"); url.searchParams.set("miniTools", "1");
     await client.command("Page.navigate", { url: url.href }, sessionId);
     await wait(`Boolean(document.querySelector('.mini-tools'))`);
     try {
@@ -396,7 +396,7 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
     await read(`document.querySelector('.mini-panel-body').getAnimations().forEach(animation => animation.finish())`);
     await wait(`document.querySelector('.mini-shell').dataset.transitioning === 'false' && !document.querySelector('.mini-content')`);
   });
-  for (const tools of [0, 1, 2]) for (const scale of [1, 1.25, 1.5, 2]) {
+  for (const tools of [0, 1]) for (const scale of [1, 1.25, 1.5, 2]) {
     await runTest(`mini panel retains content with ${tools} tools at ${scale} scale`, async () => {
       await client.command("Emulation.setDeviceMetricsOverride", { width: 320, height: 240, deviceScaleFactor: scale, mobile: false }, sessionId);
       const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniPage", "tools"); url.searchParams.set("miniTools", String(tools));
@@ -457,10 +457,10 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
   for (const locale of ["zh-CN", "en-US", "es", "ru-RU"]) for (const theme of ["light", "dark"]) {
     await runTest(`mini tools remain usable in ${locale} ${theme}`, async () => {
       await read(`{const key='__time_tracker_smoke_settings';const value=JSON.parse(localStorage.getItem(key)||'{}');value.language=${JSON.stringify(locale)};value.theme_mode=${JSON.stringify(theme)};localStorage.setItem(key,JSON.stringify(value));}`);
-      const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniPage", "tools"); url.searchParams.set("miniTools", "2");
+      const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniPage", "tools"); url.searchParams.set("miniTools", "1");
       await client.command("Page.navigate", { url: url.href }, sessionId);
       await wait(`Boolean(document.querySelector('.mini-tools')) && document.documentElement.dataset.theme === ${JSON.stringify(theme)}`);
-      assert.equal(await read(`document.querySelectorAll('.mini-tool').length`), 2);
+      assert.equal(await read(`document.querySelectorAll('.mini-tool').length`), 1);
       assert.equal(await read(`Array.from(document.querySelectorAll('.mini-header button,.mini-tool')).every(node=>{const r=node.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.bottom<=innerHeight;})`), true);
     });
   }
@@ -476,7 +476,7 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
       assert.equal(await read(`Boolean(document.querySelector('.mini-content[role="status"]'))`), true);
       assert.equal(await read(`Boolean(document.querySelector('.mini-tools'))`), false);
       await read(`globalThis.__miniResolvePresentation()`);
-      await wait(`document.querySelectorAll('.mini-tool').length === 2`);
+      await wait(`document.querySelectorAll('.mini-tool').length === 1`);
     } finally {
       await read(`globalThis.__miniResolvePresentation?.();delete globalThis.__miniResolvePresentation;delete globalThis.__PATINA_COMPACT_PRESENTATION_HOOK`);
     }
@@ -491,7 +491,7 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
         localStorage.setItem(key, JSON.stringify(settings));
       ` }, sessionId) as { identifier: string };
       try {
-        const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniPage", "tools"); url.searchParams.set("miniTools", "2");
+        const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniPage", "tools"); url.searchParams.set("miniTools", "1");
         await client.command("Page.navigate", { url: url.href }, sessionId);
         await wait(`Boolean(document.querySelector('.mini-panel-body')) && globalThis.__PATINA_INVOKED_COMMANDS.some(entry => entry.command === ${JSON.stringify(command)})`);
         await read(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
@@ -533,7 +533,7 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
       await read(`globalThis.__PATINA_COMPACT_PRESENTATION_HOOK=snapshot=>({...snapshot,window:{...snapshot.window,exe_name:${JSON.stringify(exeName)},title:'Foreground window'}});globalThis.__PATINA_EMIT_TAURI_EVENT('tools-runtime-changed', ${toolsEvent})`);
       await read(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
       assert.equal(await read(`Boolean(document.querySelector('.mini-activity,.mini-time,.mini-content img'))`), false);
-      assert.equal(await read(`document.querySelectorAll('.mini-tool').length`), 2);
+      assert.equal(await read(`document.querySelectorAll('.mini-tool').length`), 1);
       const before = await read(`document.querySelector('.mini-tool-time').textContent`);
       await wait(`document.querySelector('.mini-tool-time').textContent !== ${JSON.stringify(before)}`);
     }

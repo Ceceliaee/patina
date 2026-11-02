@@ -4,18 +4,15 @@ import {
   buildActivityReminderRuleRows,
   buildPomodoroViewModel,
   buildReminderRows,
-  buildTimerViewModel,
   buildToolsStatusChipViewModels,
 } from "../src/features/tools/services/toolsViewModel.ts";
 import {
   readToolsReminderFormMode,
   readToolsReminderMode,
   readToolsSection,
-  readToolsTimerMode,
   rememberToolsReminderFormMode,
   rememberToolsReminderMode,
   rememberToolsSection,
-  rememberToolsTimerMode,
 } from "../src/features/tools/services/toolsLayoutPreferenceStorage.ts";
 import { createToolsRuntimeSnapshotStore } from "../src/features/tools/services/toolsRuntimeSnapshotStore.ts";
 import { ToolsRuntimeService } from "../src/features/tools/services/toolsRuntimeService.ts";
@@ -30,17 +27,11 @@ import type { ToolsRuntimeSnapshot } from "../src/shared/types/tools.ts";
 import { MemoryStorage, withWindowStorage } from "./helpers/browserTestGlobals.ts";
 
 const labels: ToolsViewModelLabels = {
-  timerIdle: "Not started",
-  timerRunning: "Running",
-  timerPaused: "Paused",
-  timerCompleted: "Completed",
   pomodoroFocus: "Focus",
   pomodoroShortBreak: "Short break",
   pomodoroLongBreak: "Long break",
   chipFocus: "Focus",
   chipBreak: "Break",
-  chipCountdown: "Countdown",
-  chipStopwatch: "Timer",
   chipReminder: "Reminder",
   completedToday: (count) => `${count} completed today`,
   cycle: (index, every) => `${index}/${every}`,
@@ -49,7 +40,6 @@ const labels: ToolsViewModelLabels = {
 function rawSnapshot(overrides: Record<string, unknown> = {}) {
   return {
     settings: {
-      default_countdown_minutes: 25,
       pomodoro_focus_minutes: 25,
       pomodoro_short_break_minutes: 5,
       pomodoro_long_break_minutes: 15,
@@ -65,8 +55,6 @@ function rawSnapshot(overrides: Record<string, unknown> = {}) {
       cancelled_at: null,
     }],
     activity_reminder_rules: [],
-    current_timer: null,
-    timer_laps: [],
     current_pomodoro: null,
     today_completed_pomodoros: 0,
     next_reminder_at: 2_000_000,
@@ -106,7 +94,6 @@ function rawAlert(overrides: Record<string, unknown> = {}) {
 function snapshot(overrides: Partial<ToolsRuntimeSnapshot> = {}): ToolsRuntimeSnapshot {
   return {
     settings: {
-      defaultCountdownMinutes: 25,
       pomodoroFocusMinutes: 25,
       pomodoroShortBreakMinutes: 5,
       pomodoroLongBreakMinutes: 15,
@@ -114,8 +101,6 @@ function snapshot(overrides: Partial<ToolsRuntimeSnapshot> = {}): ToolsRuntimeSn
     },
     reminders: [],
     activityReminderRules: [],
-    currentTimer: null,
-    timerLaps: [],
     currentPomodoro: null,
     todayCompletedPomodoros: 0,
     nextReminderAt: null,
@@ -133,7 +118,7 @@ async function runTest(name: string, fn: () => Promise<void> | void) {
 
 await runTest("raw tools snapshot maps snake_case fields", () => {
   const parsed = parseToolsRuntimeSnapshot(rawSnapshot());
-  assert.equal(parsed.settings.defaultCountdownMinutes, 25);
+  assert.equal(parsed.settings.pomodoroFocusMinutes, 25);
   assert.equal(parsed.reminders[0].scheduledAt, 2_000_000);
   assert.equal(parsed.nextReminderAt, 2_000_000);
 });
@@ -240,14 +225,7 @@ await runTest("reminder rows retain paused, pending and completed reminders with
   assert.equal("remainingLabel" in rows[0], false);
 });
 
-await runTest("timer and pomodoro view models format runtime state", () => {
-  const timer = buildTimerViewModel(snapshot({
-    currentTimer: {
-      id: 1, mode: "stopwatch", label: null, durationMs: null, accumulatedMs: 5_000,
-      startedAt: 10_000, pausedAt: null, completedAt: null, status: "running",
-      createdAt: 9_000, updatedAt: 10_000,
-    },
-  }), 18_000, labels);
+await runTest("pomodoro view models format runtime state", () => {
   const pomodoro = buildPomodoroViewModel(snapshot({
     currentPomodoro: {
       id: 2, phase: "short_break", status: "paused", cycleIndex: 2,
@@ -257,7 +235,6 @@ await runTest("timer and pomodoro view models format runtime state", () => {
     },
     todayCompletedPomodoros: 3,
   }), 3_000, labels);
-  assert.equal(timer.displayTime, "00:00:13");
   assert.equal(pomodoro.phaseLabel, "Short break");
   assert.equal(pomodoro.remainingLabel, "00:04:00");
 });
@@ -265,11 +242,6 @@ await runTest("timer and pomodoro view models format runtime state", () => {
 await runTest("tools status chips preserve arrival order", () => {
   const chips = buildToolsStatusChipViewModels(snapshot({
     reminders: [{ id: 9, label: "Check", scheduledAt: 2_000_000, createdAt: 900_000, status: "scheduled", firedAt: null, cancelledAt: null, recurrence: null }],
-    currentTimer: {
-      id: 1, mode: "stopwatch", label: null, durationMs: null, accumulatedMs: 0,
-      startedAt: 1_000_000, pausedAt: null, completedAt: null, status: "running",
-      createdAt: 1_000_000, updatedAt: 1_000_000,
-    },
     currentPomodoro: {
       id: 2, phase: "focus", status: "running", cycleIndex: 1,
       focusMs: 1_500_000, shortBreakMs: 300_000, longBreakMs: 900_000,
@@ -278,7 +250,7 @@ await runTest("tools status chips preserve arrival order", () => {
     },
     nextReminderAt: 2_000_000,
   }), 1_010_000, labels);
-  assert.deepEqual(chips.map((chip) => chip.targetSection), ["reminders", "timer", "pomodoro"]);
+  assert.deepEqual(chips.map((chip) => chip.targetSection), ["reminders", "pomodoro"]);
 });
 
 await runTest("tools preferences merge previous activity tabs into usage mode", () => {
@@ -287,11 +259,9 @@ await runTest("tools preferences merge previous activity tabs into usage mode", 
     assert.equal(readToolsReminderMode(), "event");
     rememberToolsSection("pomodoro");
     rememberToolsReminderMode("usage");
-    rememberToolsTimerMode("countdown");
     rememberToolsReminderFormMode("absolute");
     assert.equal(readToolsSection(), "pomodoro");
     assert.equal(readToolsReminderMode(), "usage");
-    assert.equal(readToolsTimerMode(), "countdown");
     assert.equal(readToolsReminderFormMode(), "absolute");
     for (const mode of ["software", "app", "category", "web"]) {
       window.localStorage.setItem("patina:tools-reminder-mode", mode);
@@ -383,7 +353,7 @@ await runTest("gateway identifies only the exact Tools refresh-pending marker as
     async invoke() { throw rejection; },
     async listen() { return () => {}; },
   });
-  await assert.rejects(gateway.startTimer({ mode: "stopwatch" }), (error) => {
+  await assert.rejects(gateway.pausePomodoro(), (error) => {
     assert.deepEqual(error, {
       code: "TOOLS_STATE_REFRESH_PENDING",
       message: rejection,
@@ -401,7 +371,7 @@ await runTest("gateway identifies only the exact Tools refresh-pending marker as
     { code: "WRITE_FAILED", message: "Ordinary failure", retryable: true },
   ]) {
     rejection = ordinaryError;
-    await assert.rejects(gateway.startTimer({ mode: "stopwatch" }), (error) => {
+    await assert.rejects(gateway.pausePomodoro(), (error) => {
       assert.equal(error, ordinaryError);
       assert.equal(ToolsRuntimeService.isStateRefreshPendingError(error), false);
       return true;

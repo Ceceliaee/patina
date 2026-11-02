@@ -24,12 +24,12 @@ export async function runRecurringReminderScenarios({ client, sessionId, runTest
           localStorage.clear(); localStorage.setItem('__time_tracker_smoke_settings',JSON.stringify({language:${JSON.stringify(locale)}}));
           localStorage.setItem('patina:last-active-view','tools'); localStorage.setItem('patina:tools-section','reminders');
           localStorage.setItem('__time_tracker_tools_snapshot_override',JSON.stringify({
-            settings:{default_countdown_minutes:25,pomodoro_focus_minutes:25,pomodoro_short_break_minutes:5,pomodoro_long_break_minutes:15,pomodoro_long_break_every:4},
+            settings:{pomodoro_focus_minutes:25,pomodoro_short_break_minutes:5,pomodoro_long_break_minutes:15,pomodoro_long_break_every:4},
             reminders:[{id:1,label:'Completed',scheduled_at:Date.now()-60000,created_at:Date.now()-120000,status:'fired',fired_at:Date.now()-30000,cancelled_at:null}],
-            activity_reminder_rules:[],current_timer:null,timer_laps:[],current_pomodoro:null,today_completed_pomodoros:0,next_reminder_at:null,sampled_at_ms:Date.now()}));
+            activity_reminder_rules:[],current_pomodoro:null,today_completed_pomodoros:0,next_reminder_at:null,sampled_at_ms:Date.now()}));
           document.documentElement.dataset.recurringReload='pending';location.reload();
         })()`);
-        await waitForExpression(client, sessionId, `document.documentElement.dataset.recurringReload!=='pending' && !!document.querySelector('.tools-event-reminder-form') && document.documentElement.lang===${JSON.stringify(locale)}`);
+        await waitForExpression(client, sessionId, `document.documentElement?.dataset.recurringReload!=='pending' && !!document.querySelector('.tools-event-reminder-form') && document.documentElement.lang===${JSON.stringify(locale)}`);
         await evaluate(client, sessionId, `globalThis.__PATINA_TIMED_REMINDER_CASE=JSON.parse(localStorage.getItem('__time_tracker_tools_snapshot_override'))`);
         assert.equal(await evaluate(client, sessionId, `document.querySelector('[data-timed-reminder-id="1"] .tools-reminder-status-icon').getAttribute('aria-label')`), text.tools.reminderCompleted);
         assert.equal(await evaluate(client, sessionId, `document.querySelectorAll('.tools-reminder-time-filter, .tools-event-reminder-main .qp-badge').length`), 0);

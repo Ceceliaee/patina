@@ -128,7 +128,7 @@ export async function runLocaleScenarios(context: BrowserSmokeContext) {
       client!,
       sessionId,
       `document.querySelector('[data-tools-navigation-mode="labeled"]')
-        && document.querySelectorAll('[data-tools-section-label]').length === 3`,
+        && document.querySelectorAll('[data-tools-section-label]').length === 2`,
       15_000,
       "English Tools labels should follow the global navigation mode",
     );
@@ -145,7 +145,7 @@ export async function runLocaleScenarios(context: BrowserSmokeContext) {
         })()
       `),
       {
-        values: ["Reminder", "Timer", "Pomodoro"],
+        values: ["Reminder", "Focus"],
         fit: true,
         railWidth: 72,
         settingsHasLabel: false,

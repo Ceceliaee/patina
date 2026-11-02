@@ -414,7 +414,6 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
         localStorage.setItem("patina:sidebar-navigation-mode", "labeled");
         localStorage.setItem("__time_tracker_tools_snapshot_override", JSON.stringify({
           settings: {
-            default_countdown_minutes: 25,
             pomodoro_focus_minutes: 25,
             pomodoro_short_break_minutes: 5,
             pomodoro_long_break_minutes: 15,
@@ -430,20 +429,6 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
             cancelled_at: null,
           }],
           activity_reminder_rules: [],
-          current_timer: {
-            id: 1,
-            mode: "stopwatch",
-            label: null,
-            duration_ms: null,
-            accumulated_ms: 0,
-            started_at: now - 5_000,
-            paused_at: null,
-            completed_at: null,
-            status: "running",
-            created_at: now - 5_000,
-            updated_at: now - 5_000,
-          },
-          timer_laps: [],
           current_pomodoro: {
             id: 1,
             phase: "focus",
@@ -484,7 +469,7 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
       client!,
       sessionId,
       `document.querySelector("[data-sidebar-footer]")?.children.length === 1
-        && document.querySelectorAll("[data-titlebar-tools-status] .tools-status-entry-titlebar-item").length === 3
+        && document.querySelectorAll("[data-titlebar-tools-status] .tools-status-entry-titlebar-item").length === 2
         && Boolean(document.querySelector("[data-titlebar-update-entry]"))`,
       undefined,
       "Title bar entries should render while the sidebar footer stays Menu-only",
@@ -566,7 +551,7 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
     assert.equal(shellEntryState.titlebarOrder, true);
     assert.equal(shellEntryState.entriesInsideTitlebar, true);
     assert.ok(shellEntryState.dragWidth >= 24);
-    assert.equal(shellEntryState.toolButtonCount, 3);
+    assert.equal(shellEntryState.toolButtonCount, 2);
     assert.equal(shellEntryState.toolButtonsUndecorated, true);
     shellEntryState.toolButtonSizes.forEach((buttonRect) => {
       assert.ok(buttonRect);

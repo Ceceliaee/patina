@@ -4,6 +4,7 @@ import {
   buildActivityReminderTargetOptions,
   filterActivityReminderTargetOptions,
   findActivityReminderTargetOption,
+  findActivityReminderRuleForTarget,
 } from "../src/features/tools/services/activityReminderTargetOptions.ts";
 import { ProcessMapper } from "../src/shared/classification/processMapper.ts";
 
@@ -15,6 +16,23 @@ const webDomains = [{
   faviconUrl: "https://github.com/favicon.ico",
   lastSeenAt: 2,
 }];
+
+test("existing usage limits match target identity including switched-off rules", () => {
+  const rules = [
+    { kind: "app" as const, targetKey: "editor.exe", exeName: "editor.exe", enabled: false },
+    { kind: "app" as const, targetKey: "Legacy", exeName: null, enabled: true },
+    { kind: "category" as const, targetKey: "development", exeName: null, enabled: false },
+    { kind: "web" as const, targetKey: "example.com", exeName: null, enabled: false },
+  ];
+  assert.equal(findActivityReminderRuleForTarget({ kind: "app", appName: "Renamed", exeName: " EDITOR.EXE " }, rules), rules[0]);
+  assert.equal(findActivityReminderRuleForTarget({ kind: "app", appName: "Renamed", exeName: "other.exe" }, rules), undefined);
+  assert.equal(findActivityReminderRuleForTarget({ kind: "app", appName: " legacy ", exeName: null }, rules), rules[1]);
+  assert.equal(findActivityReminderRuleForTarget({ kind: "app", appName: "Legacy", exeName: "legacy.exe" }, rules), undefined);
+  assert.equal(findActivityReminderRuleForTarget({ kind: "category", categoryId: " development " }, rules), rules[2]);
+  assert.equal(findActivityReminderRuleForTarget({ kind: "category", categoryId: "Development" }, rules), undefined);
+  assert.equal(findActivityReminderRuleForTarget({ kind: "web", normalizedDomain: " EXAMPLE.COM. " }, rules), rules[3]);
+  assert.equal(findActivityReminderRuleForTarget({ kind: "web", normalizedDomain: "editor.exe" }, rules), undefined);
+});
 
 test("seeded activity reminder categories resolve distinct registry defaults", () => {
   ProcessMapper.clearCategoryColorOverrides();

@@ -21,8 +21,8 @@ export async function runUsageAlertScenarios({ client, sessionId, runTest }: Bro
       await evaluate(client!, sessionId, `
         (async () => {
         globalThis.__PATINA_USAGE_ALERT_CASE = { calls: [], snapshot: {
-          settings: { default_countdown_minutes:25, pomodoro_focus_minutes:25, pomodoro_short_break_minutes:5, pomodoro_long_break_minutes:15, pomodoro_long_break_every:4 },
-          reminders:[], activity_reminder_rules:[], current_timer:null, timer_laps:[], current_pomodoro:null,
+          settings: { pomodoro_focus_minutes:25, pomodoro_short_break_minutes:5, pomodoro_long_break_minutes:15, pomodoro_long_break_every:4 },
+          reminders:[], activity_reminder_rules:[], current_pomodoro:null,
           today_completed_pomodoros:0, next_reminder_at:null, sampled_at_ms:Date.now()
         } };
         globalThis.__PATINA_EMIT_TAURI_EVENT('tools-alert', {
@@ -82,7 +82,7 @@ export async function runUsageAlertScenarios({ client, sessionId, runTest }: Bro
         await waitForExpression(client!, sessionId, `!document.querySelector('.tools-usage-alert-surface')`);
       }
       assert.equal(await evaluate(client!, sessionId, `globalThis.__PATINA_USAGE_ALERT_CASE.calls.filter(c=>c.command==='cmd_show_desktop').length`), 2);
-      await evaluate(client!, sessionId, `globalThis.__PATINA_EMIT_TAURI_EVENT('tools-alert', { id: 'plain-reminder', kind:'countdown', title:'Reminder', body:'Plain reminder', occurred_at:300 });`);
+      await evaluate(client!, sessionId, `globalThis.__PATINA_EMIT_TAURI_EVENT('tools-alert', { id: 'plain-reminder', kind:'pomodoro', title:'Reminder', body:'Plain reminder', occurred_at:300 });`);
       await waitForExpression(client!, sessionId, `document.querySelector('.tools-alert-dialog-message')?.textContent === 'Plain reminder'`);
       assert.equal(await evaluate(client!, sessionId, `getComputedStyle(document.querySelector('.tools-alert-dialog-surface')).backgroundColor`), usageBackground);
       await waitForExpression(client!, sessionId, `document.activeElement === document.querySelector('.tools-alert-dialog-surface .qp-dialog-actions button')`);

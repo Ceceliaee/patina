@@ -164,21 +164,12 @@ function tauriStubFor(path: string) {
           return await globalThis.__PATINA_MINI_ACTIVITY_HOOK?.(snapshot) ?? snapshot;
         }
         if (isMiniSmoke && command === "cmd_get_mini_presentation_snapshot") {
-          const toolCount = Math.max(0, Math.min(2, Number(miniParams.get("miniTools") ?? 0)));
+          const toolCount = Math.max(0, Math.min(1, Number(miniParams.get("miniTools") ?? 0)));
           const tools = [
-            {
-              kind: "stopwatch",
-              state: "running",
-              value_ms: 1_104_000,
-              counts_down: false,
-              visible_until_ms: null,
-              total_ms: null, phase: null,
-            },
             {
               kind: "pomodoro",
               state: "running",
               value_ms: 271_000,
-              counts_down: true,
               visible_until_ms: null,
               total_ms: 1_500_000, phase: "focus",
             },
@@ -427,7 +418,7 @@ function tauriStubFor(path: string) {
           };
         }
         if (globalThis.__PATINA_TOOLS_ACTION_CASE
-          && (command === "cmd_start_timer" || command === "cmd_pause_timer")) {
+          && (command === "cmd_start_pomodoro" || command === "cmd_pause_pomodoro")) {
           const fixture = globalThis.__PATINA_TOOLS_ACTION_CASE;
           fixture.calls.push(command);
           throw fixture.error;
@@ -451,7 +442,6 @@ function tauriStubFor(path: string) {
           }
           return {
             settings: {
-              default_countdown_minutes: 25,
               pomodoro_focus_minutes: 25,
               pomodoro_short_break_minutes: 5,
               pomodoro_long_break_minutes: 15,
@@ -459,8 +449,6 @@ function tauriStubFor(path: string) {
             },
             reminders: [],
             activity_reminder_rules: [],
-            current_timer: null,
-            timer_laps: [],
             current_pomodoro: null,
             today_completed_pomodoros: 0,
             next_reminder_at: null,

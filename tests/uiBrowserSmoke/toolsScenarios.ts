@@ -22,13 +22,12 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
         localStorage.clear();
         localStorage.setItem("__time_tracker_smoke_settings", JSON.stringify({ language: "zh-CN" }));
         localStorage.setItem("patina:last-active-view", "tools");
-        localStorage.setItem("patina:tools-section", "timer");
-        localStorage.setItem("patina:tools-timer-mode", "stopwatch");
+        localStorage.setItem("patina:tools-section", "pomodoro");
         document.documentElement.dataset.patinaSmokeReload = "tools-action-recovery";
         location.reload();
       `);
-      const startSelector = `[aria-label=${JSON.stringify(COPY["zh-CN"].accessibility.tools.startTimer)}]`;
-      const pauseSelector = `[aria-label=${JSON.stringify(COPY["zh-CN"].accessibility.tools.pauseTimer)}]`;
+      const startSelector = `[aria-label=${JSON.stringify(COPY["zh-CN"].accessibility.tools.startPomodoro)}]`;
+      const pauseSelector = `[aria-label=${JSON.stringify(COPY["zh-CN"].accessibility.tools.pausePomodoro)}]`;
       await waitForExpression(client!, sessionId, `
         document.documentElement.dataset.patinaSmokeReload !== "tools-action-recovery"
           && Boolean(document.querySelector(${jsonString(startSelector)}))
@@ -62,22 +61,22 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
         diagnostic: document.body.innerText.includes("private database reconciliation detail"),
         hasStart: Boolean(document.querySelector(${jsonString(startSelector)})),
         hasPause: Boolean(document.querySelector(${jsonString(pauseSelector)})),
-      })`), { calls: ["cmd_start_timer"], retryAdvice: false, diagnostic: false, hasStart: true, hasPause: false });
+      })`), { calls: ["cmd_start_pomodoro"], retryAdvice: false, diagnostic: false, hasStart: true, hasPause: false });
       await evaluate(client!, sessionId, `
         (() => {
           const now = Date.now();
           const snapshot = {
             settings: {
-              default_countdown_minutes: 25, pomodoro_focus_minutes: 25,
+              pomodoro_focus_minutes: 25,
               pomodoro_short_break_minutes: 5, pomodoro_long_break_minutes: 15, pomodoro_long_break_every: 4,
             },
-            reminders: [], activity_reminder_rules: [], timer_laps: [], current_pomodoro: null,
-            today_completed_pomodoros: 0, next_reminder_at: null, sampled_at_ms: now + 1000,
-            current_timer: {
-              id: 42, mode: "stopwatch", label: "Recovered timer", duration_ms: null,
-              accumulated_ms: 0, started_at: now - 5000, paused_at: null, completed_at: null,
-              status: "running", created_at: now - 5000, updated_at: now,
+            reminders: [], activity_reminder_rules: [], current_pomodoro: {
+              id: 42, phase: "focus", status: "running", cycle_index: 1,
+              focus_ms: 1500000, short_break_ms: 300000, long_break_ms: 900000,
+              long_break_every: 4, phase_started_at: now, phase_paused_at: null,
+              phase_remaining_ms: null, completed_focus_count: 0, created_at: now, updated_at: now,
             },
+            today_completed_pomodoros: 0, next_reminder_at: null, sampled_at_ms: now + 1000,
           };
           globalThis.__PATINA_EMIT_TAURI_EVENT("tools-runtime-changed", snapshot);
         })()
@@ -85,8 +84,8 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       await waitForExpression(client!, sessionId, `
         Boolean(document.querySelector(${jsonString(pauseSelector)}))
           && !document.querySelector(${jsonString(startSelector)})
-          && document.querySelector('.tools-time-display span')?.textContent === ${jsonString(COPY["zh-CN"].tools.timerStatus.running)}
-      `, 10_000, "the backend reconciliation event must restore the actual running timer");
+          && document.querySelector('.tools-pomodoro-phase')?.textContent === ${jsonString(COPY["zh-CN"].tools.pomodoroPhase.focus)}
+      `, 10_000, "the backend reconciliation event must restore the actual running Pomodoro");
       await evaluate(client!, sessionId, `
         globalThis.__PATINA_TOOLS_ACTION_CASE.error = "ordinary database write failed";
         document.querySelector(${jsonString(pauseSelector)}).click();
@@ -97,9 +96,9 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       `, 10_000, "ordinary Tools write failure must retain the existing retry advice");
       assert.deepEqual(await evaluate(client!, sessionId, `({
         calls: globalThis.__PATINA_TOOLS_ACTION_CASE.calls,
-        running: document.querySelector('.tools-time-display span')?.textContent,
+        running: document.querySelector('.tools-pomodoro-phase')?.textContent,
         diagnostic: document.body.innerText.includes("ordinary database write failed"),
-      })`), { calls: ["cmd_start_timer", "cmd_pause_timer"], running: COPY["zh-CN"].tools.timerStatus.running, diagnostic: false });
+      })`), { calls: ["cmd_start_pomodoro", "cmd_pause_pomodoro"], running: COPY["zh-CN"].tools.pomodoroPhase.focus, diagnostic: false });
     } finally {
       await evaluate(client!, sessionId, `
         localStorage.clear();
@@ -293,7 +292,6 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
 
     for (const marker of [
       TOOLS_TEXT.remindersTitle,
-      TOOLS_TEXT.timerTitle,
       TOOLS_TEXT.pomodoroTitle,
     ] as const) {
       assert.equal(
@@ -443,9 +441,9 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       client!,
       sessionId,
       `document.querySelector('[data-tools-navigation-mode="labeled"]')
-        && document.querySelectorAll('[data-tools-section-label]').length === 3`,
+        && document.querySelectorAll('[data-tools-section-label]').length === 2`,
       undefined,
-      "Menu should reveal all three Tools section labels",
+      "Menu should reveal both Tools section labels",
     );
     const labeledModeState = await evaluate(client!, sessionId, `
       (() => {
@@ -455,7 +453,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
         };
         const rail = document.querySelector('[data-tools-navigation-mode="labeled"]');
         const tabs = Array.from(document.querySelectorAll('.tools-section-tab'));
-        const sectionTabs = tabs.slice(0, 3);
+        const sectionTabs = tabs.slice(0, 2);
         const labels = Array.from(document.querySelectorAll('[data-tools-section-label]'));
         const settingsTab = tabs.at(-1);
         return {
@@ -484,11 +482,10 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
     assert.deepEqual(labeledModeState.geometry, iconModeGeometry);
     assert.deepEqual(labeledModeState.labels, [
       TOOLS_TEXT.remindersTitle,
-      TOOLS_TEXT.timerTitle,
       TOOLS_TEXT.pomodoroTitle,
     ]);
     assert.equal(labeledModeState.labelsFit, true);
-    assert.deepEqual(labeledModeState.iconSizes, ["15", "15", "15"]);
+    assert.deepEqual(labeledModeState.iconSizes, ["15", "15"]);
     assert.equal(labeledModeState.settingsIconSize, "17");
     assert.equal(labeledModeState.settingsHasLabel, false);
     assert.equal(labeledModeState.activeSection, TOOLS_TEXT.remindersTitle);
@@ -637,9 +634,9 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
     );
     await evaluate(client!, sessionId, `
       globalThis.__PATINA_ACTIVITY_REMINDER_CASE = {
-        settings: { default_countdown_minutes: 25, pomodoro_focus_minutes: 25,
+        settings: { pomodoro_focus_minutes: 25,
           pomodoro_short_break_minutes: 5, pomodoro_long_break_minutes: 15, pomodoro_long_break_every: 4 },
-        reminders: [], activity_reminder_rules: [], current_timer: null, timer_laps: [], current_pomodoro: null,
+        reminders: [], activity_reminder_rules: [], current_pomodoro: null,
         today_completed_pomodoros: 0, next_reminder_at: null, sampled_at_ms: Date.now(),
       };
     `);
@@ -652,12 +649,19 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
         );
         await evaluate(client!, sessionId, `document.querySelector('[data-activity-target-kind="${kind}"]').click()`);
         await waitForExpression(client!, sessionId, `!document.querySelector('.tools-activity-target-candidate-list')`);
+        const limitMinutes = kind === "app" ? 30 : kind === "category" ? 125 : 1440;
+        await evaluate(client!, sessionId, `document.querySelector('.tools-software-reminder-form .tools-usage-duration-trigger').click()`);
+        await waitForExpression(client!, sessionId, `document.activeElement?.matches('.tools-usage-duration-popover [data-selected-time-part="hour"]')`);
+        await evaluate(client!, sessionId, `document.querySelector('.tools-usage-duration-popover [data-time-picker-part="hour"][data-time-picker-value="${Math.floor(limitMinutes / 60)}"]').click()`);
+        await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.tools-usage-duration-popover [data-selected-time-part="hour"][data-time-picker-value="${Math.floor(limitMinutes / 60)}"]'))`);
+        await evaluate(client!, sessionId, `document.querySelector('.tools-usage-duration-popover [data-time-picker-part="minute"][data-time-picker-value="${limitMinutes % 60}"]').click()`);
+        await waitForExpression(client!, sessionId, `!document.querySelector('.tools-usage-duration-popover') && document.activeElement?.matches('.tools-software-reminder-form .tools-usage-duration-trigger')`);
         await evaluate(client!, sessionId, `document.querySelector('.tools-software-reminder-form .tools-action-button').click()`);
         await waitForExpression(client!, sessionId, `Boolean(document.querySelector('[data-activity-rule-kind="${kind}"]'))`);
         assert.deepEqual(await evaluate(client!, sessionId, `(() => {
           const call = globalThis.__PATINA_INVOKED_COMMANDS.filter(item => item.command === 'cmd_create_activity_reminder_rule').at(-1);
           return { kind: call.payload.input.target.kind, limitMs: call.payload.input.limitMs, message: call.payload.input.message };
-        })()`), { kind, limitMs: 30 * 60_000, message: "" });
+        })()`), { kind, limitMs: limitMinutes * 60_000, message: "" });
       }
       assert.deepEqual(await evaluate(client!, sessionId,
         `Array.from(document.querySelectorAll('[data-activity-rule-kind]')).map(row => row.dataset.activityRuleKind)`),
@@ -694,7 +698,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       await waitForExpression(client!, sessionId, `Boolean(document.querySelector('[data-activity-rule-kind="app"] .lucide-toggle-right')) && !document.querySelector('[data-activity-rule-kind="app"] [aria-pressed]').hasAttribute('aria-busy')`);
       for (const kind of ["app", "category", "web"]) {
         await evaluate(client!, sessionId, `document.querySelector('[data-activity-rule-kind="${kind}"] button[aria-label^="${COPY["zh-CN"].tools.activityReminderEdit}:"]').click()`);
-        await waitForExpression(client!, sessionId, `document.activeElement === document.querySelector('.tools-reminder-editor input')`);
+        await waitForExpression(client!, sessionId, `document.activeElement === document.querySelector('.tools-reminder-editor .tools-usage-duration-trigger')`);
         assert.equal(await evaluate(client!, sessionId, `(() => {
           const row = document.querySelector('[data-activity-rule-kind="${kind}"]');
           const target = document.querySelector('.tools-reminder-editor-target');
@@ -706,6 +710,25 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
         await waitForExpression(client!, sessionId, `!document.querySelector('.tools-reminder-editor')`);
         await evaluate(client!, sessionId, `document.querySelector('[data-activity-rule-kind="${kind}"] [aria-pressed]').click()`);
         await waitForExpression(client!, sessionId, `document.querySelector('[data-activity-rule-kind="${kind}"] [aria-pressed]')?.getAttribute('aria-pressed') === 'false' && !document.querySelector('[data-activity-rule-kind="${kind}"] [aria-pressed]').hasAttribute('aria-busy')`);
+        const createsBefore = await evaluate(client!, sessionId, `globalThis.__PATINA_INVOKED_COMMANDS.filter(item => item.command === 'cmd_create_activity_reminder_rule').length`);
+        await evaluate(client!, sessionId, `(() => {
+          const input = document.querySelector('.tools-activity-target-search input');
+          input.focus();
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '');
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        })()`);
+        await waitForExpression(client!, sessionId, `Boolean(document.querySelector('[data-activity-target-kind="${kind}"]'))`);
+        await evaluate(client!, sessionId, `document.querySelector('[data-activity-target-kind="${kind}"]').click()`);
+        await waitForExpression(client!, sessionId, `document.querySelector('.tools-software-reminder-form .tools-action-button').textContent === ${jsonString(TOOLS_TEXT.activityReminderEdit)}`);
+        assert.equal(await evaluate(client!, sessionId, `document.querySelector('.tools-software-reminder-form .tools-usage-duration-trigger').disabled`), true);
+        await evaluate(client!, sessionId, `document.querySelector('.tools-software-reminder-form .tools-action-button').focus(); document.querySelector('.tools-software-reminder-form .tools-action-button').click()`);
+        await waitForExpression(client!, sessionId, `document.activeElement === document.querySelector('.tools-reminder-editor .tools-usage-duration-trigger')`);
+        assert.equal(await evaluate(client!, sessionId, `document.querySelector('.tools-reminder-editor .tools-usage-duration-trigger').textContent === document.querySelector('[data-activity-rule-kind="${kind}"] .tools-tabular').textContent`), true, "duplicate target opens the original rule including its saved limit");
+        await evaluate(client!, sessionId, `document.querySelector('[role="dialog"] button[type="submit"]').click()`);
+        await waitForExpression(client!, sessionId, `!document.querySelector('.tools-reminder-editor')`);
+        assert.equal(await evaluate(client!, sessionId, `globalThis.__PATINA_INVOKED_COMMANDS.filter(item => item.command === 'cmd_create_activity_reminder_rule').length`), createsBefore, "existing targets must not submit another create command");
+        assert.equal(await evaluate(client!, sessionId, `document.querySelectorAll('[data-activity-rule-kind="${kind}"]').length`), 1);
+        assert.equal(await evaluate(client!, sessionId, `document.querySelector('[data-activity-rule-kind="${kind}"] [aria-pressed]').getAttribute('aria-pressed')`), "false", "editing does not re-enable a disabled rule");
         await evaluate(client!, sessionId, `document.querySelector('[data-activity-rule-kind="${kind}"] [aria-pressed]').focus()`);
         await client!.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", text: "\r", unmodifiedText: "\r", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 }, sessionId);
         await client!.command("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, sessionId);
@@ -713,30 +736,42 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       }
       const editSelector = `[data-activity-rule-kind="app"] button[aria-label^="${COPY["zh-CN"].tools.activityReminderEdit}:"]`;
       await evaluate(client!, sessionId, `document.querySelector(${jsonString(editSelector)}).focus(); document.querySelector(${jsonString(editSelector)}).click()`);
-      await waitForExpression(client!, sessionId, `document.activeElement === document.querySelector('[role="dialog"] input')`);
-      const setEditMinutes = async (value: string) => evaluate(client!, sessionId, `
-        (() => {
-          const input = document.querySelector('[role="dialog"] input');
-          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${jsonString(value)});
-          input.dispatchEvent(new Event('input', { bubbles: true }));
-        })()
-      `);
-      await setEditMinutes("0");
-      await evaluate(client!, sessionId, `document.querySelector('[role="dialog"] button[type="submit"]').click()`);
-      await waitForExpression(client!, sessionId, `document.querySelector('[role="dialog"] input')?.getAttribute('aria-invalid') === 'true'`);
-      await setEditMinutes("45");
+      await waitForExpression(client!, sessionId, `document.activeElement === document.querySelector('.tools-reminder-editor .tools-usage-duration-trigger')`);
+      await client!.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", text: "\r", windowsVirtualKeyCode: 13 }, sessionId);
+      await client!.command("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, sessionId);
+      await waitForExpression(client!, sessionId, `document.activeElement?.matches('.tools-usage-duration-popover [data-selected-time-part="hour"]')`);
+      await client!.command("Input.dispatchKeyEvent", { type: "keyDown", key: "End", code: "End", windowsVirtualKeyCode: 35 }, sessionId);
+      await client!.command("Input.dispatchKeyEvent", { type: "keyUp", key: "End", code: "End", windowsVirtualKeyCode: 35 }, sessionId);
+      await waitForExpression(client!, sessionId, `document.querySelector('.tools-reminder-editor .tools-usage-duration-trigger')?.textContent === '24 小时'`);
+      assert.deepEqual(await evaluate(client!, sessionId, `(() => {
+        const popover = document.querySelector('.tools-usage-duration-popover');
+        const lists = [...popover.querySelectorAll('.qp-time-picker-list')];
+        return { minutes: [...popover.querySelectorAll('[data-time-picker-part="minute"]')].map(node => node.textContent),
+          equalHeight: lists[0].clientHeight === lists[1].clientHeight,
+          noOverflow: popover.getBoundingClientRect().bottom <= innerHeight && popover.getBoundingClientRect().right <= innerWidth };
+      })()`), { minutes: ["00"], equalHeight: true, noOverflow: true });
+      await client!.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Home", code: "Home", windowsVirtualKeyCode: 36 }, sessionId);
+      await client!.command("Input.dispatchKeyEvent", { type: "keyUp", key: "Home", code: "Home", windowsVirtualKeyCode: 36 }, sessionId);
+      await waitForExpression(client!, sessionId, `document.querySelector('.tools-reminder-editor .tools-usage-duration-trigger')?.textContent === '1 分钟'`);
+      assert.equal(await evaluate(client!, sessionId, `Boolean(document.querySelector('.tools-usage-duration-popover [data-time-picker-part="minute"][data-time-picker-value="0"]'))`), false, "zero duration is not selectable");
+      await client!.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, sessionId);
+      await waitForExpression(client!, sessionId, `!document.querySelector('.tools-usage-duration-popover') && document.activeElement?.matches('.tools-reminder-editor .tools-usage-duration-trigger')`);
+      await evaluate(client!, sessionId, `document.querySelector('.tools-reminder-editor .tools-usage-duration-trigger').click()`);
+      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.tools-usage-duration-popover'))`);
+      await evaluate(client!, sessionId, `document.querySelector('.tools-usage-duration-popover [data-time-picker-part="minute"][data-time-picker-value="45"]').click()`);
+      await waitForExpression(client!, sessionId, `!document.querySelector('.tools-usage-duration-popover')`);
       await evaluate(client!, sessionId, `
         globalThis.__PATINA_ACTIVITY_REMINDER_ACTION_CASE = { error: 'fixture write failed' };
         document.querySelector('[role="dialog"] button[type="submit"]').click();
       `);
-      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-toast[role="alert"]')) && !document.querySelector('[role="dialog"] input')?.disabled`);
-      assert.equal(await evaluate(client!, sessionId, `document.querySelector('[role="dialog"] input').value`), "45", "failed save preserves the draft");
+      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-toast[role="alert"]')) && !document.querySelector('.tools-reminder-editor .tools-usage-duration-trigger')?.disabled`);
+      assert.equal(await evaluate(client!, sessionId, `document.querySelector('.tools-reminder-editor .tools-usage-duration-trigger').textContent`), "45 分钟", "failed save preserves the draft");
       assert.equal(await evaluate(client!, sessionId, `globalThis.__PATINA_ACTIVITY_REMINDER_CASE.activity_reminder_rules[0].limit_ms`), 1_800_000);
       await evaluate(client!, sessionId, `
         globalThis.__PATINA_ACTIVITY_REMINDER_ACTION_CASE = { hold: true };
         document.querySelector('[role="dialog"] button[type="submit"]').click();
       `);
-      await waitForExpression(client!, sessionId, `Boolean(globalThis.__PATINA_ACTIVITY_REMINDER_ACTION_CASE.release) && document.querySelector('[role="dialog"] input').disabled`);
+      await waitForExpression(client!, sessionId, `Boolean(globalThis.__PATINA_ACTIVITY_REMINDER_ACTION_CASE.release) && document.querySelector('.tools-reminder-editor .tools-usage-duration-trigger').disabled`);
       await client!.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 }, sessionId);
       assert.equal(await evaluate(client!, sessionId, `Boolean(document.querySelector('[role="dialog"]'))`), true, "a pending save cannot be dismissed");
       await evaluate(client!, sessionId, `globalThis.__PATINA_ACTIVITY_REMINDER_ACTION_CASE.release()`);
@@ -757,59 +792,6 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
         delete globalThis.__PATINA_TOOLS_PREVIOUS_WEB_FIXTURE;
       `);
     }
-
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (() => {
-          const timer = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(TOOLS_TEXT.timerTitle))} + ']');
-          if (!timer) return false;
-          timer.click();
-          return true;
-        })()
-      `),
-      true,
-    );
-    await waitForExpression(
-      client!,
-      sessionId,
-      `document.body.innerText.includes(${jsonString(TOOLS_TEXT.timerModeStopwatch)})`,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (async () => {
-          const countdown = Array.from(document.querySelectorAll('button'))
-            .find((node) => node.textContent?.trim() === ${jsonString(TOOLS_TEXT.timerModeCountdown)});
-          if (!countdown) return false;
-          countdown.click();
-          await new Promise((resolve) => requestAnimationFrame(resolve));
-          const input = document.querySelector('#tools-countdown-duration');
-          if (!input) return false;
-          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-          setter?.call(input, '');
-          input.dispatchEvent(new Event('input', { bubbles: true }));
-          await new Promise((resolve) => requestAnimationFrame(resolve));
-          return input.value === '';
-        })()
-      `),
-      true,
-      "countdown duration should be clearable while editing",
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (async () => {
-          const input = document.querySelector('#tools-countdown-duration');
-          if (!input) return false;
-          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-          setter?.call(input, '0');
-          input.dispatchEvent(new Event('input', { bubbles: true }));
-          await new Promise((resolve) => requestAnimationFrame(resolve));
-          const start = document.querySelector('[data-tools-section="timer"] .tools-action-row .qp-button-primary');
-          return Boolean(start?.disabled);
-        })()
-      `),
-      true,
-      "countdown duration should reject zero minutes",
-    );
 
     assert.equal(
       await evaluate(client!, sessionId, `
@@ -997,7 +979,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
           localStorage.setItem("patina:tools-reminder-mode", "usage");
           localStorage.setItem("__time_tracker_tools_snapshot_override", JSON.stringify({
             settings: {
-              default_countdown_minutes: 25, pomodoro_focus_minutes: 25,
+              pomodoro_focus_minutes: 25,
               pomodoro_short_break_minutes: 5, pomodoro_long_break_minutes: 15, pomodoro_long_break_every: 4,
             },
             reminders: Array.from({ length: 8 }, (_, index) => ({
@@ -1014,7 +996,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
               created_at: now, updated_at: now, disabled_at: null,
               last_fired_date_key: null, suspension_reason: null,
             })),
-            current_timer: null, timer_laps: [], current_pomodoro: null,
+            current_pomodoro: null,
             today_completed_pomodoros: 0, next_reminder_at: now + 3600000, sampled_at_ms: now,
           }));
           document.documentElement.dataset.patinaSmokeReload = "reminder-overflow";

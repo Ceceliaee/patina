@@ -30,9 +30,9 @@ export async function runTimedReminderScenarios({ client, sessionId, runTest }: 
         localStorage.setItem('__time_tracker_smoke_settings', JSON.stringify({ language: 'zh-CN' }));
         localStorage.setItem('patina:last-active-view', 'tools'); localStorage.setItem('patina:tools-section', 'reminders');
         localStorage.setItem('__time_tracker_tools_snapshot_override', JSON.stringify({
-          settings: { default_countdown_minutes: 25, pomodoro_focus_minutes: 25, pomodoro_short_break_minutes: 5, pomodoro_long_break_minutes: 15, pomodoro_long_break_every: 4 },
+          settings: { pomodoro_focus_minutes: 25, pomodoro_short_break_minutes: 5, pomodoro_long_break_minutes: 15, pomodoro_long_break_every: 4 },
           reminders: [{ id: 1, label: '起来活动一下', scheduled_at: Date.now()-1000, created_at: Date.now()-10000, status: 'pending_confirmation', fired_at: Date.now(), cancelled_at: null }],
-          activity_reminder_rules: [], current_timer: null, timer_laps: [], current_pomodoro: null, today_completed_pomodoros: 0, next_reminder_at: null, sampled_at_ms: Date.now()
+          activity_reminder_rules: [], current_pomodoro: null, today_completed_pomodoros: 0, next_reminder_at: null, sampled_at_ms: Date.now()
         }));
       })()`);
       await reload(); await fire();
@@ -96,12 +96,12 @@ export async function runTimedReminderScenarios({ client, sessionId, runTest }: 
         localStorage.setItem("patina:last-active-view", "tools");
         localStorage.setItem("patina:tools-section", "reminders");
         localStorage.setItem("__time_tracker_tools_snapshot_override", JSON.stringify({
-          settings: { default_countdown_minutes: 25, pomodoro_focus_minutes: 25,
+          settings: { pomodoro_focus_minutes: 25,
             pomodoro_short_break_minutes: 5, pomodoro_long_break_minutes: 15, pomodoro_long_break_every: 4 },
           reminders: [
             { id: 1, label: "Review", scheduled_at: now + 172800000, created_at: now, status: "scheduled", fired_at: null, cancelled_at: null },
             { id: 2, label: "Expired", scheduled_at: now - 60000, created_at: now - 120000, status: "paused", fired_at: null, cancelled_at: null },
-          ], activity_reminder_rules: [], current_timer: null, timer_laps: [], current_pomodoro: null,
+          ], activity_reminder_rules: [], current_pomodoro: null,
           today_completed_pomodoros: 0, next_reminder_at: now + 172800000, sampled_at_ms: now,
         }));
         document.documentElement.dataset.patinaSmokeReload = "timed-controls";

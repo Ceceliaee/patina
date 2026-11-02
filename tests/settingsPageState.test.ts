@@ -182,8 +182,6 @@ function buildPreview(overrides: Partial<BackupPreview> = {}): BackupPreview {
     settingCount: 10,
     iconCacheCount: 5,
     toolReminderCount: 0,
-    toolTimerCount: 0,
-    toolTimerLapCount: 0,
     toolPomodoroRunCount: 0,
     toolDailyStatsCount: 0,
     toolActivityReminderRuleCount: 0,
