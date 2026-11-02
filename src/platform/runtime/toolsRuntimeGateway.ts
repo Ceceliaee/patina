@@ -7,7 +7,6 @@ import type {
   ReminderDelayMinutes,
   ReminderRecurrence,
   StartPomodoroInput,
-  StartTimerInput,
   ToolAlert,
   ToolsRuntimeSnapshot,
 } from "../../shared/types/tools.ts";
@@ -126,32 +125,6 @@ export function createToolsRuntimeGateway(deps: ToolsRuntimeGatewayDeps) {
       return invokeToolsSnapshot("cmd_update_activity_reminder_limit", { ruleId, limitMs });
     },
 
-    startTimer(input: StartTimerInput): Promise<ToolsRuntimeSnapshot> {
-      return invokeToolsSnapshot("cmd_start_timer", {
-        input: {
-          mode: input.mode,
-          durationMs: input.durationMs ?? null,
-          label: input.label ?? null,
-        },
-      });
-    },
-
-    pauseTimer(): Promise<ToolsRuntimeSnapshot> {
-      return invokeToolsSnapshot("cmd_pause_timer");
-    },
-
-    resumeTimer(): Promise<ToolsRuntimeSnapshot> {
-      return invokeToolsSnapshot("cmd_resume_timer");
-    },
-
-    resetTimer(): Promise<ToolsRuntimeSnapshot> {
-      return invokeToolsSnapshot("cmd_reset_timer");
-    },
-
-    addTimerLap(): Promise<ToolsRuntimeSnapshot> {
-      return invokeToolsSnapshot("cmd_add_timer_lap");
-    },
-
     startPomodoro(input: StartPomodoroInput): Promise<ToolsRuntimeSnapshot> {
       return invokeToolsSnapshot("cmd_start_pomodoro", {
         input: {
@@ -200,11 +173,6 @@ export const createActivityReminderRule = defaultToolsRuntimeGateway.createActiv
 export const disableActivityReminderRule = defaultToolsRuntimeGateway.disableActivityReminderRule;
 export const setActivityReminderEnabled = defaultToolsRuntimeGateway.setActivityReminderEnabled;
 export const updateActivityReminderLimit = defaultToolsRuntimeGateway.updateActivityReminderLimit;
-export const startTimer = defaultToolsRuntimeGateway.startTimer;
-export const pauseTimer = defaultToolsRuntimeGateway.pauseTimer;
-export const resumeTimer = defaultToolsRuntimeGateway.resumeTimer;
-export const resetTimer = defaultToolsRuntimeGateway.resetTimer;
-export const addTimerLap = defaultToolsRuntimeGateway.addTimerLap;
 export const startPomodoro = defaultToolsRuntimeGateway.startPomodoro;
 export const pausePomodoro = defaultToolsRuntimeGateway.pausePomodoro;
 export const resumePomodoro = defaultToolsRuntimeGateway.resumePomodoro;

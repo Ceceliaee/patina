@@ -6,13 +6,10 @@ export type ReminderRecurrence =
   | { kind: "weekly"; weekdays: number[] };
 export type ReminderStatus = "scheduled" | "paused" | "pending_confirmation" | "fired" | "cancelled";
 export type ReminderDelayMinutes = 5 | 15 | 30;
-export type TimerMode = "stopwatch" | "countdown";
-export type TimerStatus = "idle" | "running" | "paused" | "completed";
 export type PomodoroPhase = "focus" | "short_break" | "long_break";
 export type PomodoroStatus = "idle" | "running" | "paused" | "completed";
-export type ToolAlertKind = "reminder" | "countdown" | "pomodoro" | "activity_reminder";
+export type ToolAlertKind = "reminder" | "pomodoro" | "activity_reminder";
 export interface ToolRuntimeSettings {
-  defaultCountdownMinutes: number;
   pomodoroFocusMinutes: number;
   pomodoroShortBreakMinutes: number;
   pomodoroLongBreakMinutes: number;
@@ -73,28 +70,7 @@ export interface ActivityReminderWebCandidate {
   lastSeenAt: number;
 }
 
-export interface ToolTimer {
-  id: number;
-  mode: TimerMode;
-  label: string | null;
-  durationMs: number | null;
-  accumulatedMs: number;
-  startedAt: number | null;
-  pausedAt: number | null;
-  completedAt: number | null;
-  status: TimerStatus;
-  createdAt: number;
-  updatedAt: number;
-}
 
-export interface ToolTimerLap {
-  id: number;
-  timerId: number;
-  lapIndex: number;
-  startedAt: number;
-  endedAt: number;
-  durationMs: number;
-}
 
 export interface ToolPomodoroRun {
   id: number;
@@ -117,8 +93,6 @@ export interface ToolsRuntimeSnapshot {
   settings: ToolRuntimeSettings;
   reminders: ToolReminder[];
   activityReminderRules: ToolActivityReminderRule[];
-  currentTimer: ToolTimer | null;
-  timerLaps: ToolTimerLap[];
   currentPomodoro: ToolPomodoroRun | null;
   todayCompletedPomodoros: number;
   nextReminderAt: number | null;
@@ -159,11 +133,6 @@ export interface CreateActivityReminderRuleInput {
   message: string;
 }
 
-export interface StartTimerInput {
-  mode: TimerMode;
-  durationMs?: number | null;
-  label?: string | null;
-}
 
 export interface StartPomodoroInput {
   focusMs: number;

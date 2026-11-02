@@ -1,7 +1,6 @@
 import { parseCommandError } from "../../../platform/persistence/commandError.ts";
 import { showDesktop } from "../../../platform/desktop/windowControlGateway.ts";
 import {
-  addTimerLap,
   cancelReminder,
   updateReminder,
   createActivityReminderRule,
@@ -17,14 +16,10 @@ import {
   onToolAlert,
   onToolsRuntimeChanged,
   pausePomodoro,
-  pauseTimer,
   resetPomodoro,
-  resetTimer,
   resumePomodoro,
-  resumeTimer,
   skipPomodoroPhase,
   startPomodoro,
-  startTimer,
 } from "../../../platform/runtime/toolsRuntimeGateway.ts";
 
 export const ToolsRuntimeService = {
@@ -32,7 +27,6 @@ export const ToolsRuntimeService = {
   isStateRefreshPendingError(error: unknown): boolean {
     return parseCommandError(error).code === "TOOLS_STATE_REFRESH_PENDING";
   },
-  addTimerLap,
   cancelReminder,
   updateReminder,
   createActivityReminderRule,
@@ -48,12 +42,8 @@ export const ToolsRuntimeService = {
   onToolAlert,
   onToolsRuntimeChanged,
   pausePomodoro,
-  pauseTimer,
   resetPomodoro,
-  resetTimer,
   resumePomodoro,
-  resumeTimer,
   skipPomodoroPhase,
   startPomodoro,
-  startTimer,
 };

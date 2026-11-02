@@ -39,10 +39,9 @@ interface RawMiniBootstrapSnapshot {
 }
 
 interface RawMiniToolProjection {
-  kind: "stopwatch" | "countdown" | "pomodoro";
+  kind: "pomodoro";
   state: "running" | "paused" | "completed";
   value_ms: number;
-  counts_down: boolean;
   visible_until_ms: number | null;
   total_ms: number | null;
   phase: "focus" | "short_break" | "long_break" | null;
@@ -75,10 +74,9 @@ export interface MiniBootstrapSnapshot {
 }
 
 export interface MiniToolProjection {
-  kind: "stopwatch" | "countdown" | "pomodoro";
+  kind: "pomodoro";
   state: "running" | "paused" | "completed";
   valueMs: number;
-  countsDown: boolean;
   visibleUntilMs: number | null;
   totalMs: number | null;
   phase: "focus" | "short_break" | "long_break" | null;
@@ -171,11 +169,10 @@ export function parseMiniBootstrapSnapshot(value: unknown): MiniBootstrapSnapsho
 function isRawMiniToolProjection(value: unknown): value is RawMiniToolProjection {
   if (!value || typeof value !== "object") return false;
   const raw = value as RawMiniToolProjection;
-  return ["stopwatch", "countdown", "pomodoro"].includes(raw.kind)
+  return raw.kind === "pomodoro"
     && ["running", "paused", "completed"].includes(raw.state)
     && isFiniteNumber(raw.value_ms)
     && raw.value_ms >= 0
-    && typeof raw.counts_down === "boolean"
     && (raw.total_ms === null || (isFiniteNumber(raw.total_ms) && raw.total_ms > 0))
     && (raw.phase === null || ["focus", "short_break", "long_break"].includes(raw.phase))
     && (raw.visible_until_ms === null || isFiniteNumber(raw.visible_until_ms));
@@ -186,18 +183,9 @@ export function parseMiniStatusSnapshot(value: unknown): MiniStatusSnapshot | nu
   const raw = value as RawMiniStatusSnapshot;
   if (
     !Array.isArray(raw.tools)
-    || raw.tools.length > 2
+    || raw.tools.length > 1
     || !raw.tools.every(isRawMiniToolProjection)
     || !isFiniteNumber(raw.sampled_at_ms)
-  ) {
-    return null;
-  }
-  const timerTools = raw.tools.filter((tool) => tool.kind !== "pomodoro");
-  const pomodoroTools = raw.tools.filter((tool) => tool.kind === "pomodoro");
-  if (
-    timerTools.length > 1
-    || pomodoroTools.length > 1
-    || (raw.tools.length === 2 && raw.tools[1]?.kind !== "pomodoro")
   ) {
     return null;
   }
@@ -206,7 +194,6 @@ export function parseMiniStatusSnapshot(value: unknown): MiniStatusSnapshot | nu
       kind: tool.kind,
       state: tool.state,
       valueMs: tool.value_ms,
-      countsDown: tool.counts_down,
       visibleUntilMs: tool.visible_until_ms,
       totalMs: tool.total_ms,
       phase: tool.phase,

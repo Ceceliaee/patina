@@ -1,22 +1,16 @@
-import type { ReminderRecurrence, ActivityReminderTarget, PomodoroPhase, ReminderStatus, TimerMode, TimerStatus } from "../../shared/types/tools.ts";
+import type { ReminderRecurrence, ActivityReminderTarget, PomodoroPhase, ReminderStatus } from "../../shared/types/tools.ts";
 
-export type ToolsSection = "reminders" | "timer" | "pomodoro";
-type LegacyToolsSection = "timing";
-type TimingMode = "reminder" | "timer";
-type ToolsOpenTimingMode = TimingMode | TimerMode;
+export type ToolsSection = "reminders" | "pomodoro";
 export type ReminderMode = "event" | "usage";
 export type ReminderFormMode = "relative" | "absolute";
 
 export interface ToolsOpenTarget {
-  section: ToolsSection | LegacyToolsSection;
-  timingMode?: ToolsOpenTimingMode;
-  timerMode?: TimerMode;
+  section: ToolsSection;
 }
 
 export interface ToolStatusChipViewModel {
   label: string;
   targetSection: ToolsSection;
-  targetTimerMode?: TimerMode;
 }
 
 export interface ReminderRowViewModel {
@@ -41,12 +35,6 @@ export interface ActivityReminderRuleRowViewModel {
   suspensionReason: "source_disabled" | "target_excluded" | "target_deleted" | null;
 }
 
-export interface TimerViewModel {
-  mode: TimerMode;
-  status: TimerStatus;
-  displayTime: string;
-  helperLabel: string;
-}
 
 export interface PomodoroViewModel {
   phase: PomodoroPhase;
@@ -57,17 +45,11 @@ export interface PomodoroViewModel {
 }
 
 export interface ToolsViewModelLabels {
-  timerIdle: string;
-  timerRunning: string;
-  timerPaused: string;
-  timerCompleted: string;
   pomodoroFocus: string;
   pomodoroShortBreak: string;
   pomodoroLongBreak: string;
   chipFocus: string;
   chipBreak: string;
-  chipCountdown: string;
-  chipStopwatch: string;
   chipReminder: string;
   completedToday: (count: number) => string;
   cycle: (index: number, every: number) => string;

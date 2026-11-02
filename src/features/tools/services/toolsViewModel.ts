@@ -5,13 +5,11 @@ import type {
   ToolPomodoroRun,
   ToolReminder,
   ToolsRuntimeSnapshot,
-  ToolTimer,
 } from "../../../shared/types/tools.ts";
 import type {
   PomodoroViewModel,
   ReminderRowViewModel,
   ActivityReminderRuleRowViewModel,
-  TimerViewModel,
   ToolStatusChipViewModel,
   ToolsViewModelLabels,
 } from "../types.ts";
@@ -42,17 +40,7 @@ function formatCompactDuration(ms: number): string {
   return `${pad2(minutes)}:${pad2(seconds)}`;
 }
 
-function getTimerElapsedMs(timer: ToolTimer, nowMs: number): number {
-  const runningDelta = timer.status === "running" && timer.startedAt !== null
-    ? Math.max(0, nowMs - timer.startedAt)
-    : 0;
-  return Math.max(0, timer.accumulatedMs + runningDelta);
-}
 
-function getTimerRemainingMs(timer: ToolTimer, nowMs: number): number {
-  const durationMs = timer.durationMs ?? 0;
-  return Math.max(0, durationMs - getTimerElapsedMs(timer, nowMs));
-}
 
 function getPomodoroRemainingMs(run: ToolPomodoroRun, nowMs: number): number {
   const phaseDuration = getPomodoroPhaseDurationMs(run);
@@ -127,34 +115,6 @@ export function buildActivityReminderRuleRows(
   });
 }
 
-export function buildTimerViewModel(
-  snapshot: ToolsRuntimeSnapshot,
-  nowMs: number,
-  labels: Pick<ToolsViewModelLabels, "timerIdle" | "timerRunning" | "timerPaused" | "timerCompleted">,
-): TimerViewModel {
-  const timer = snapshot.currentTimer;
-  const mode = timer?.mode ?? "stopwatch";
-  const status = timer?.status ?? "idle";
-  const displayTime = !timer
-    ? formatHms(0)
-    : timer.mode === "countdown"
-      ? formatHms(getTimerRemainingMs(timer, nowMs))
-      : formatHms(getTimerElapsedMs(timer, nowMs));
-  const helperLabel = status === "running"
-    ? labels.timerRunning
-    : status === "paused"
-      ? labels.timerPaused
-      : status === "completed"
-        ? labels.timerCompleted
-        : labels.timerIdle;
-
-  return {
-    mode,
-    status,
-    displayTime,
-    helperLabel,
-  };
-}
 
 function pomodoroPhaseLabel(phase: PomodoroPhase, labels: ToolsViewModelLabels): string {
   if (phase === "short_break") return labels.pomodoroShortBreak;
@@ -234,27 +194,6 @@ export function buildToolsStatusChipViewModels(
       sortIndex: sortIndex++,
       sortStartedAtMs: pomodoro.phaseStartedAt ?? pomodoro.createdAt,
     });
-  }
-
-  const timer = snapshot.currentTimer;
-  if (timer?.status === "running") {
-    if (timer.mode === "countdown") {
-      chips.push({
-        label: `${labels.chipCountdown} ${formatCompactDuration(getTimerRemainingMs(timer, nowMs))}`,
-        targetSection: "timer",
-        targetTimerMode: "countdown",
-        sortIndex: sortIndex++,
-        sortStartedAtMs: timer.startedAt ?? timer.createdAt,
-      });
-    } else {
-      chips.push({
-        label: `${labels.chipStopwatch} ${formatCompactDuration(getTimerElapsedMs(timer, nowMs))}`,
-        targetSection: "timer",
-        targetTimerMode: "stopwatch",
-        sortIndex: sortIndex++,
-        sortStartedAtMs: timer.startedAt ?? timer.createdAt,
-      });
-    }
   }
 
   if (snapshot.nextReminderAt !== null) {

@@ -3,8 +3,6 @@ import type {
   PomodoroStatus,
   ReminderStatus,
   ReminderRecurrence,
-  TimerMode,
-  TimerStatus,
   ToolPomodoroRun,
   ToolAlert,
   ToolAlertKind,
@@ -13,8 +11,6 @@ import type {
   ToolRuntimeSettings,
   ToolActivityReminderRule,
   ToolsRuntimeSnapshot,
-  ToolTimer,
-  ToolTimerLap,
 } from "../../shared/types/tools.ts";
 import {
   isNullableString,
@@ -22,7 +18,6 @@ import {
 } from "../../shared/lib/runtimeTypeGuards.ts";
 
 interface RawToolRuntimeSettings {
-  default_countdown_minutes: number;
   pomodoro_focus_minutes: number;
   pomodoro_short_break_minutes: number;
   pomodoro_long_break_minutes: number;
@@ -59,28 +54,7 @@ interface RawToolActivityReminderRule {
   suspension_reason: "source_disabled" | "target_excluded" | "target_deleted" | null;
 }
 
-interface RawToolTimer {
-  id: number;
-  mode: TimerMode;
-  label: string | null;
-  duration_ms: number | null;
-  accumulated_ms: number;
-  started_at: number | null;
-  paused_at: number | null;
-  completed_at: number | null;
-  status: TimerStatus;
-  created_at: number;
-  updated_at: number;
-}
 
-interface RawToolTimerLap {
-  id: number;
-  timer_id: number;
-  lap_index: number;
-  started_at: number;
-  ended_at: number;
-  duration_ms: number;
-}
 
 interface RawToolPomodoroRun {
   id: number;
@@ -120,8 +94,6 @@ interface RawToolsRuntimeSnapshot {
   settings: RawToolRuntimeSettings;
   reminders: RawToolReminder[];
   activity_reminder_rules: RawToolActivityReminderRule[];
-  current_timer: RawToolTimer | null;
-  timer_laps: RawToolTimerLap[];
   current_pomodoro: RawToolPomodoroRun | null;
   today_completed_pomodoros: number;
   next_reminder_at: number | null;
@@ -129,11 +101,9 @@ interface RawToolsRuntimeSnapshot {
 }
 
 const REMINDER_STATUSES = new Set(["scheduled", "paused", "pending_confirmation", "fired", "cancelled"]);
-const TIMER_MODES = new Set(["stopwatch", "countdown"]);
-const TIMER_STATUSES = new Set(["idle", "running", "paused", "completed"]);
 const POMODORO_PHASES = new Set(["focus", "short_break", "long_break"]);
 const POMODORO_STATUSES = new Set(["idle", "running", "paused", "completed"]);
-const TOOL_ALERT_KINDS = new Set(["reminder", "countdown", "pomodoro", "activity_reminder"]);
+const TOOL_ALERT_KINDS = new Set(["reminder", "pomodoro", "activity_reminder"]);
 const ACTIVITY_REMINDER_SUSPENSION_REASONS = new Set([
   "source_disabled",
   "target_excluded",
@@ -154,8 +124,7 @@ function isStringEnum<T extends string>(value: unknown, allowed: ReadonlySet<str
 
 function isRawToolRuntimeSettings(value: unknown): value is RawToolRuntimeSettings {
   if (!isRecord(value)) return false;
-  return isNumber(value.default_countdown_minutes)
-    && isNumber(value.pomodoro_focus_minutes)
+  return isNumber(value.pomodoro_focus_minutes)
     && isNumber(value.pomodoro_short_break_minutes)
     && isNumber(value.pomodoro_long_break_minutes)
     && isNumber(value.pomodoro_long_break_every);
@@ -215,30 +184,7 @@ function isRawToolActivityReminderRule(value: unknown): value is RawToolActivity
       || isStringEnum(value.suspension_reason, ACTIVITY_REMINDER_SUSPENSION_REASONS));
 }
 
-function isRawToolTimer(value: unknown): value is RawToolTimer {
-  if (!isRecord(value)) return false;
-  return isNumber(value.id)
-    && isStringEnum<TimerMode>(value.mode, TIMER_MODES)
-    && isNullableString(value.label)
-    && isNullableNumber(value.duration_ms)
-    && isNumber(value.accumulated_ms)
-    && isNullableNumber(value.started_at)
-    && isNullableNumber(value.paused_at)
-    && isNullableNumber(value.completed_at)
-    && isStringEnum<TimerStatus>(value.status, TIMER_STATUSES)
-    && isNumber(value.created_at)
-    && isNumber(value.updated_at);
-}
 
-function isRawToolTimerLap(value: unknown): value is RawToolTimerLap {
-  if (!isRecord(value)) return false;
-  return isNumber(value.id)
-    && isNumber(value.timer_id)
-    && isNumber(value.lap_index)
-    && isNumber(value.started_at)
-    && isNumber(value.ended_at)
-    && isNumber(value.duration_ms);
-}
 
 function isRawToolPomodoroRun(value: unknown): value is RawToolPomodoroRun {
   if (!isRecord(value)) return false;
@@ -265,9 +211,6 @@ function isRawToolsRuntimeSnapshot(value: unknown): value is RawToolsRuntimeSnap
     && value.reminders.every(isRawToolReminder)
     && Array.isArray(value.activity_reminder_rules)
     && value.activity_reminder_rules.every(isRawToolActivityReminderRule)
-    && (value.current_timer === null || isRawToolTimer(value.current_timer))
-    && Array.isArray(value.timer_laps)
-    && value.timer_laps.every(isRawToolTimerLap)
     && (value.current_pomodoro === null || isRawToolPomodoroRun(value.current_pomodoro))
     && isNumber(value.today_completed_pomodoros)
     && isNullableNumber(value.next_reminder_at)
@@ -293,7 +236,6 @@ function isRawToolAlert(value: unknown): value is RawToolAlert {
 
 function mapToolRuntimeSettings(raw: RawToolRuntimeSettings): ToolRuntimeSettings {
   return {
-    defaultCountdownMinutes: raw.default_countdown_minutes,
     pomodoroFocusMinutes: raw.pomodoro_focus_minutes,
     pomodoroShortBreakMinutes: raw.pomodoro_short_break_minutes,
     pomodoroLongBreakMinutes: raw.pomodoro_long_break_minutes,
@@ -340,32 +282,7 @@ function mapToolActivityReminderRule(raw: RawToolActivityReminderRule): ToolActi
   };
 }
 
-function mapToolTimer(raw: RawToolTimer): ToolTimer {
-  return {
-    id: raw.id,
-    mode: raw.mode,
-    label: raw.label,
-    durationMs: raw.duration_ms,
-    accumulatedMs: raw.accumulated_ms,
-    startedAt: raw.started_at,
-    pausedAt: raw.paused_at,
-    completedAt: raw.completed_at,
-    status: raw.status,
-    createdAt: raw.created_at,
-    updatedAt: raw.updated_at,
-  };
-}
 
-function mapToolTimerLap(raw: RawToolTimerLap): ToolTimerLap {
-  return {
-    id: raw.id,
-    timerId: raw.timer_id,
-    lapIndex: raw.lap_index,
-    startedAt: raw.started_at,
-    endedAt: raw.ended_at,
-    durationMs: raw.duration_ms,
-  };
-}
 
 function mapToolPomodoroRun(raw: RawToolPomodoroRun): ToolPomodoroRun {
   return {
@@ -415,8 +332,6 @@ export function parseToolsRuntimeSnapshot(value: unknown): ToolsRuntimeSnapshot 
     settings: mapToolRuntimeSettings(value.settings),
     reminders: value.reminders.map(mapToolReminder),
     activityReminderRules: value.activity_reminder_rules.map(mapToolActivityReminderRule),
-    currentTimer: value.current_timer ? mapToolTimer(value.current_timer) : null,
-    timerLaps: value.timer_laps.map(mapToolTimerLap),
     currentPomodoro: value.current_pomodoro ? mapToolPomodoroRun(value.current_pomodoro) : null,
     todayCompletedPomodoros: value.today_completed_pomodoros,
     nextReminderAt: value.next_reminder_at,

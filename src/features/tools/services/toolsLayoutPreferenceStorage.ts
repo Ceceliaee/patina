@@ -1,9 +1,7 @@
-import type { TimerMode } from "../../../shared/types/tools.ts";
 import type { ReminderFormMode, ReminderMode, ToolsSection } from "../types.ts";
 import { getBrowserLocalStorage } from "../../../platform/browser/browserStorageGateway.ts";
 
 const TOOLS_SECTION_KEY = "patina:tools-section";
-const TOOLS_TIMER_MODE_KEY = "patina:tools-timer-mode";
 const TOOLS_REMINDER_MODE_KEY = "patina:tools-reminder-mode";
 const TOOLS_REMINDER_FORM_MODE_KEY = "patina:tools-reminder-form-mode";
 
@@ -33,13 +31,8 @@ function rememberStoredValue(key: string, value: string) {
     // Tool UI preferences are best-effort; never block the interaction.
   }
 }
-
-function isTimerMode(value: string | null): value is TimerMode {
-  return value === "stopwatch" || value === "countdown";
-}
-
 function isToolsSection(value: string | null): value is ToolsSection {
-  return value === "reminders" || value === "timer" || value === "pomodoro";
+  return value === "reminders" || value === "pomodoro";
 }
 
 function isReminderMode(value: string | null): value is ReminderMode {
@@ -57,15 +50,6 @@ export function readToolsSection(): ToolsSection {
 export function rememberToolsSection(section: ToolsSection) {
   rememberStoredValue(TOOLS_SECTION_KEY, section);
 }
-
-export function readToolsTimerMode(): TimerMode {
-  return readStoredValue(TOOLS_TIMER_MODE_KEY, "stopwatch", isTimerMode);
-}
-
-export function rememberToolsTimerMode(mode: TimerMode) {
-  rememberStoredValue(TOOLS_TIMER_MODE_KEY, mode);
-}
-
 export function readToolsReminderMode(): ReminderMode {
   const storage = getBrowserLocalStorage();
   if (!storage) return "event";
