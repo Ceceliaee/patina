@@ -131,21 +131,16 @@ export interface UiText {
       "restore": string;
     };
     "tools": {
-      "addTimerLap": string;
       "createReminder": string;
       "decreaseDuration": (label: string) => string;
       "increaseDuration": (label: string) => string;
       "openStatusChip": string;
       "pausePomodoro": string;
-      "pauseTimer": string;
       "resetPomodoro": string;
-      "resetTimer": string;
       "restorePomodoroDefaults": string;
       "resumePomodoro": string;
-      "resumeTimer": string;
       "skipPomodoroPhase": string;
       "startPomodoro": string;
-      "startTimer": string;
     };
   };
   "app": {
@@ -942,7 +937,6 @@ export interface UiText {
     "activityReminderCandidatesLoadFailed": string;
     "activityReminderDelete": string;
     "activityReminderDisable": string;
-    "activityReminderDurationInvalid": string;
     "activityReminderDurationLabel": string;
     "activityReminderEdit": string;
     "activityReminderEditTitle": string;
@@ -962,14 +956,11 @@ export interface UiText {
     "alertPausingPomodoro": string;
     "beta": string;
     "completedToday": (count: number) => string;
-    "countdownDuration": string;
     "createReminder": string;
     "defaultReminderLabel": string;
     "focusDuration": string;
-    "lap": string;
-    "lapIndex": (index: number) => string;
-    "lapsEmpty": string;
-    "lapsTitle": string;
+    "focusModeFree": string;
+    "focusModePomodoro": string;
     "loadFailed": string;
     "longBreakDuration": string;
     "longBreakEvery": string;
@@ -1034,22 +1025,9 @@ export interface UiText {
     "stateRefreshPending": string;
     "statusChip": {
       "break": string;
-      "countdown": string;
       "focus": string;
       "reminder": string;
-      "stopwatch": string;
     };
-    "timerLabel": string;
-    "timerLabelPlaceholder": string;
-    "timerModeCountdown": string;
-    "timerModeStopwatch": string;
-    "timerStatus": {
-      "completed": string;
-      "idle": string;
-      "paused": string;
-      "running": string;
-    };
-    "timerTitle": string;
     "title": string;
     "usageExtend": string;
     "usageExtendFifteen": string;

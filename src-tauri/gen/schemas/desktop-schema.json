@@ -345,12 +345,6 @@
       "description": "Permission identifier",
       "oneOf": [
         {
-          "description": "Enables the cmd_add_timer_lap command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-add-timer-lap",
-          "markdownDescription": "Enables the cmd_add_timer_lap command without any pre-configured scope."
-        },
-        {
           "description": "Enables the cmd_cancel_reminder command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-cancel-reminder",
@@ -735,12 +729,6 @@
           "markdownDescription": "Enables the cmd_pause_pomodoro command without any pre-configured scope."
         },
         {
-          "description": "Enables the cmd_pause_timer command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-pause-timer",
-          "markdownDescription": "Enables the cmd_pause_timer command without any pre-configured scope."
-        },
-        {
           "description": "Enables the cmd_pick_backup_file command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-pick-backup-file",
@@ -831,12 +819,6 @@
           "markdownDescription": "Enables the cmd_reset_pomodoro command without any pre-configured scope."
         },
         {
-          "description": "Enables the cmd_reset_timer command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-reset-timer",
-          "markdownDescription": "Enables the cmd_reset_timer command without any pre-configured scope."
-        },
-        {
           "description": "Enables the cmd_resolve_reminder_alert command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-resolve-reminder-alert",
@@ -883,12 +865,6 @@
           "type": "string",
           "const": "allow-cmd-resume-pomodoro",
           "markdownDescription": "Enables the cmd_resume_pomodoro command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the cmd_resume_timer command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-resume-timer",
-          "markdownDescription": "Enables the cmd_resume_timer command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_reveal_webdav_backup_secret command without any pre-configured scope.",
@@ -981,12 +957,6 @@
           "markdownDescription": "Enables the cmd_start_pomodoro command without any pre-configured scope."
         },
         {
-          "description": "Enables the cmd_start_timer command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-start-timer",
-          "markdownDescription": "Enables the cmd_start_timer command without any pre-configured scope."
-        },
-        {
           "description": "Enables the cmd_test_webdav_backup_target command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-test-webdav-backup-target",
@@ -1021,12 +991,6 @@
           "type": "string",
           "const": "allow-get-current-tracking-snapshot",
           "markdownDescription": "Enables the get_current_tracking_snapshot command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the cmd_add_timer_lap command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-add-timer-lap",
-          "markdownDescription": "Denies the cmd_add_timer_lap command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_cancel_reminder command without any pre-configured scope.",
@@ -1413,12 +1377,6 @@
           "markdownDescription": "Denies the cmd_pause_pomodoro command without any pre-configured scope."
         },
         {
-          "description": "Denies the cmd_pause_timer command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-pause-timer",
-          "markdownDescription": "Denies the cmd_pause_timer command without any pre-configured scope."
-        },
-        {
           "description": "Denies the cmd_pick_backup_file command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-pick-backup-file",
@@ -1509,12 +1467,6 @@
           "markdownDescription": "Denies the cmd_reset_pomodoro command without any pre-configured scope."
         },
         {
-          "description": "Denies the cmd_reset_timer command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-reset-timer",
-          "markdownDescription": "Denies the cmd_reset_timer command without any pre-configured scope."
-        },
-        {
           "description": "Denies the cmd_resolve_reminder_alert command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-resolve-reminder-alert",
@@ -1561,12 +1513,6 @@
           "type": "string",
           "const": "deny-cmd-resume-pomodoro",
           "markdownDescription": "Denies the cmd_resume_pomodoro command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the cmd_resume_timer command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-resume-timer",
-          "markdownDescription": "Denies the cmd_resume_timer command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_reveal_webdav_backup_secret command without any pre-configured scope.",
@@ -1657,12 +1603,6 @@
           "type": "string",
           "const": "deny-cmd-start-pomodoro",
           "markdownDescription": "Denies the cmd_start_pomodoro command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the cmd_start_timer command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-start-timer",
-          "markdownDescription": "Denies the cmd_start_timer command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_test_webdav_backup_target command without any pre-configured scope.",
