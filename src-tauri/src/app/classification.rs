@@ -27,6 +27,7 @@ pub async fn apply_recording_policy_changes<R: Runtime>(
         }
     }
     let applied = apply_recording_policy_changes_in_data(app, outcome, changed_at_ms).await?;
+    crate::engine::tools::notify_activity_reminder_change(app);
     if applied.app_sealed {
         let data = crate::data::tracking_runtime::shared_from_app(app).await?;
         let active = data

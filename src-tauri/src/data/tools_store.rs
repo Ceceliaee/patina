@@ -1,5 +1,6 @@
 use crate::data::repositories::tools;
 use crate::data::sqlite_pool::wait_for_sqlite_pool;
+use crate::domain::tools::ActivityReminderCheck;
 use crate::engine::tools::{ToolsMutation, ToolsStore, ToolsStoreFuture, ToolsTickEvents};
 use tauri::{AppHandle, Runtime};
 
@@ -17,9 +18,19 @@ impl<R: Runtime> SqliteToolsStore<R> {
         now_ms: i64,
         date_key: &str,
         day_start_ms: i64,
+        pending_activity_rule_ids: &[i64],
+        activity_check: Option<&ActivityReminderCheck>,
     ) -> Result<ToolsTickEvents, String> {
         let pool = wait_for_sqlite_pool(&self.app).await?;
-        tick_tools_with_pool(&pool, now_ms, date_key, day_start_ms).await
+        tick_tools_with_pool(
+            &pool,
+            now_ms,
+            date_key,
+            day_start_ms,
+            pending_activity_rule_ids,
+            activity_check,
+        )
+        .await
     }
 }
 
@@ -28,28 +39,38 @@ async fn tick_tools_with_pool(
     now_ms: i64,
     date_key: &str,
     day_start_ms: i64,
+    pending_activity_rule_ids: &[i64],
+    activity_check: Option<&ActivityReminderCheck>,
 ) -> Result<ToolsTickEvents, String> {
     let mut tx = pool
         .begin()
         .await
         .map_err(|error| format!("failed to start tools tick transaction: {error}"))?;
     let reminders = tools::timed_reminders::fire_due_reminders(&mut tx, now_ms).await?;
-    let activity_reminders =
-        tools::fire_due_activity_reminders(&mut tx, date_key, day_start_ms, now_ms).await?;
-    let completed_timer = tools::complete_due_countdown(&mut tx, now_ms).await?;
+    let activity = if let Some(check) = activity_check {
+        tools::fire_due_activity_reminders(
+            &mut tx,
+            date_key,
+            day_start_ms,
+            now_ms,
+            pending_activity_rule_ids,
+            check,
+        )
+        .await?
+    } else {
+        Default::default()
+    };
     let completed_pomodoro = tools::complete_due_pomodoro_phase(&mut tx, date_key, now_ms).await?;
-    let state_changed = !reminders.is_empty()
-        || !activity_reminders.is_empty()
-        || completed_timer.is_some()
-        || completed_pomodoro.is_some();
+    let state_changed =
+        !reminders.is_empty() || !activity.notifications.is_empty() || completed_pomodoro.is_some();
     tx.commit()
         .await
         .map_err(|error| format!("failed to commit tools tick transaction: {error}"))?;
 
     Ok(ToolsTickEvents {
         reminders,
-        activity_reminders,
-        completed_timer,
+        activity_reminders: activity.notifications,
+        activity_watch: activity.watch,
         completed_pomodoro,
         state_changed,
     })
@@ -151,22 +172,6 @@ impl<R: Runtime> ToolsStore for SqliteToolsStore<R> {
                     )
                     .await?;
                 }
-                ToolsMutation::StartTimer(request) => {
-                    tools::start_timer(
-                        &pool,
-                        request.mode,
-                        request.duration_ms,
-                        request.label.as_deref(),
-                        now_ms,
-                    )
-                    .await?;
-                }
-                ToolsMutation::PauseTimer => tools::pause_timer(&pool, now_ms).await?,
-                ToolsMutation::ResumeTimer => tools::resume_timer(&pool, now_ms).await?,
-                ToolsMutation::ResetTimer => tools::reset_timer(&pool, now_ms).await?,
-                ToolsMutation::AddTimerLap => {
-                    tools::add_timer_lap(&pool, now_ms).await?;
-                }
                 ToolsMutation::StartPomodoro(request) => {
                     tools::start_pomodoro(
                         &pool,
@@ -197,8 +202,15 @@ impl<R: Runtime> ToolsStore for SqliteToolsStore<R> {
     ) -> ToolsStoreFuture<'_, ToolsTickEvents> {
         Box::pin(async move {
             let pool = wait_for_sqlite_pool(&self.app).await?;
-            tools::pause_running_stopwatch_after_restart(&pool, now_ms).await?;
-            let mut events = tick_tools_with_pool(&pool, now_ms, &date_key, day_start_ms).await?;
+            let mut events = tick_tools_with_pool(
+                &pool,
+                now_ms,
+                &date_key,
+                day_start_ms,
+                &[],
+                Some(&ActivityReminderCheck::All),
+            )
+            .await?;
             events.reminders = tools::timed_reminders::pending_reminder_alerts(&pool).await?;
             Ok(events)
         })
@@ -209,8 +221,19 @@ impl<R: Runtime> ToolsStore for SqliteToolsStore<R> {
         now_ms: i64,
         date_key: String,
         day_start_ms: i64,
+        pending_activity_rule_ids: Vec<i64>,
+        activity_check: Option<ActivityReminderCheck>,
     ) -> ToolsStoreFuture<'_, ToolsTickEvents> {
-        Box::pin(async move { self.tick_with_pool(now_ms, &date_key, day_start_ms).await })
+        Box::pin(async move {
+            self.tick_with_pool(
+                now_ms,
+                &date_key,
+                day_start_ms,
+                &pending_activity_rule_ids,
+                activity_check.as_ref(),
+            )
+            .await
+        })
     }
 
     fn fetch_snapshot(
@@ -229,10 +252,40 @@ impl<R: Runtime> ToolsStore for SqliteToolsStore<R> {
 mod tests {
     use super::*;
     use crate::data::schema;
-    use crate::domain::tools::{ActivityReminderTarget, TimerMode};
+    use crate::domain::tools::ActivityReminderTarget;
     use futures_util::FutureExt;
     use sqlx::{Executor, SqlitePool};
     use std::panic::AssertUnwindSafe;
+
+    #[tokio::test]
+    async fn tools_tick_skips_activity_tables_when_no_check_is_due() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        for migration in schema::tracker_migrations() {
+            pool.execute(migration.sql).await.unwrap();
+        }
+        pool.execute(
+            "ALTER TABLE tool_activity_reminder_rules RENAME TO unavailable_activity_rules",
+        )
+        .await
+        .unwrap();
+        let events = tick_tools_with_pool(&pool, 120_000, "2026-06-07", 0, &[], None)
+            .await
+            .unwrap();
+        assert!(events.activity_reminders.is_empty());
+        assert_eq!(events.activity_watch.next_check_at(), None);
+        assert!(!events.state_changed);
+        assert!(tick_tools_with_pool(
+            &pool,
+            120_000,
+            "2026-06-07",
+            0,
+            &[],
+            Some(&ActivityReminderCheck::All)
+        )
+        .await
+        .is_err());
+        pool.close().await;
+    }
 
     #[tokio::test]
     async fn tools_tick_late_sql_failure_preserves_all_due_events_for_retry() {
@@ -250,34 +303,30 @@ mod tests {
             tools::create_activity_reminder_rule(&pool, &ActivityReminderTarget::App {
                 app_name: "Editor".into(), exe_name: Some("editor.exe".into()),
             }, "Editor", 60_000, "Take a break", 110_000).await.unwrap();
-            tools::start_timer(&pool, TimerMode::Countdown, Some(5_000), Some("Due timer"), 110_000).await.unwrap();
             tools::start_pomodoro(&pool, 5_000, 5_000, 10_000, 4, 110_000).await.unwrap();
             pool.execute("CREATE TRIGGER reject_tick_daily_stat BEFORE INSERT ON tool_daily_stats
                 BEGIN SELECT RAISE(ABORT, 'controlled late tick failure'); END;").await.unwrap();
 
-            let error = tick_tools_with_pool(&pool, 120_000, "2026-06-07", 0).await.unwrap_err();
+            let error = tick_tools_with_pool(&pool, 120_000, "2026-06-07", 0, &[], Some(&ActivityReminderCheck::All)).await.unwrap_err();
             assert!(error.contains("controlled late tick failure"), "{error}");
-            let persisted: (String, Option<String>, String, String, i64, i64) = sqlx::query_as(
+            let persisted: (String, Option<String>, String, i64, i64) = sqlx::query_as(
                 "SELECT (SELECT status FROM tool_reminders LIMIT 1),
                     (SELECT last_fired_date_key FROM tool_activity_reminder_rules LIMIT 1),
-                    (SELECT status FROM tool_timers LIMIT 1),
                     (SELECT phase FROM tool_pomodoro_runs LIMIT 1),
                     (SELECT completed_focus_count FROM tool_pomodoro_runs LIMIT 1),
                     (SELECT COUNT(*) FROM tool_daily_stats)").fetch_one(&pool).await.unwrap();
-            assert_eq!(persisted, ("scheduled".into(), None, "running".into(), "focus".into(), 0, 0),
+            assert_eq!(persisted, ("scheduled".into(), None, "focus".into(), 0, 0),
                 "a failed tick must not consume notifications before their event batch exists");
 
             pool.execute("DROP TRIGGER reject_tick_daily_stat").await.unwrap();
-            let recovered = tick_tools_with_pool(&pool, 120_000, "2026-06-07", 0).await.unwrap();
+            let recovered = tick_tools_with_pool(&pool, 120_000, "2026-06-07", 0, &[], Some(&ActivityReminderCheck::All)).await.unwrap();
             assert_eq!(recovered.reminders.len(), 1);
             assert_eq!(recovered.activity_reminders.len(), 1);
-            assert!(recovered.completed_timer.is_some());
             assert!(recovered.completed_pomodoro.is_some());
             assert!(recovered.state_changed);
-            let repeated = tick_tools_with_pool(&pool, 120_000, "2026-06-07", 0).await.unwrap();
+            let repeated = tick_tools_with_pool(&pool, 120_000, "2026-06-07", 0, &[], Some(&ActivityReminderCheck::All)).await.unwrap();
             assert!(repeated.reminders.is_empty());
             assert!(repeated.activity_reminders.is_empty());
-            assert!(repeated.completed_timer.is_none());
             assert!(repeated.completed_pomodoro.is_none());
             assert!(!repeated.state_changed);
         }).catch_unwind().await;

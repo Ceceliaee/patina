@@ -1,6 +1,6 @@
 use crate::data::repositories::web_activity;
 use crate::data::sqlite_pool::wait_for_sqlite_pool;
-use crate::domain::web_activity::WebActivitySegmentInput;
+use crate::domain::web_activity::{WebActivityChange, WebActivitySegmentInput};
 use crate::engine::web_activity::{WebActivityStore, WebActivityStoreFuture};
 use sqlx::{Pool, Sqlite};
 use tauri::{AppHandle, Runtime};
@@ -98,7 +98,7 @@ impl WebActivityStore for SqliteWebActivityStore {
         &'a self,
         input: &'a WebActivitySegmentInput,
         now_ms: i64,
-    ) -> WebActivityStoreFuture<'a, bool> {
+    ) -> WebActivityStoreFuture<'a, WebActivityChange> {
         Box::pin(async move {
             web_activity::upsert_active_segment(&self.pool, input, now_ms)
                 .await

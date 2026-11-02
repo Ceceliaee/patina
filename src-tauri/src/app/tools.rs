@@ -1,9 +1,7 @@
 use crate::data::tools_store::SqliteToolsStore;
 use crate::domain::tools::{ToolAlert, ToolsRuntimeSnapshot};
-use crate::engine::tools::{
-    self, CreateActivityReminderRuleRequest, StartPomodoroRequest, StartTimerRequest,
-};
-use tauri::{App, AppHandle, Listener, Runtime};
+use crate::engine::tools::{self, CreateActivityReminderRuleRequest, StartPomodoroRequest};
+use tauri::{App, AppHandle, Listener, Manager, Runtime};
 
 pub(crate) fn register_alert_handler<R: Runtime>(app: &App<R>) {
     let app_handle = app.handle().clone();
@@ -13,6 +11,35 @@ pub(crate) fn register_alert_handler<R: Runtime>(app: &App<R>) {
             crate::app::main_window::MainWindowShowReason::ToolAlert,
         );
     });
+    let app_handle = app.handle().clone();
+    app.listen("tracking-data-changed", move |event| {
+        let payload = serde_json::from_str::<crate::domain::tracking::TrackingDataChangedPayload>(
+            event.payload(),
+        )
+        .ok();
+        let reason = payload.as_ref().map(|payload| payload.reason.as_str());
+        if !matches!(
+            reason,
+            Some(
+                "session-metadata-refreshed"
+                    | crate::domain::web_activity::WEB_ACTIVITY_CHANGED_REASON
+            )
+        ) {
+            notify_tracking_transition(&app_handle);
+        }
+    });
+    let app_handle = app.handle().clone();
+    app.listen("app-settings-changed", move |_| {
+        tools::notify_activity_reminder_change(&app_handle);
+    });
+}
+
+pub(crate) fn notify_tracking_transition<R: Runtime>(app: &AppHandle<R>) {
+    let session = app
+        .try_state::<crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshotState>()
+        .and_then(|state| state.snapshot())
+        .and_then(|snapshot| snapshot.active_session);
+    tools::notify_activity_reminder_app_transition(app, session.as_ref());
 }
 
 fn store<R: Runtime>(app: &AppHandle<R>) -> SqliteToolsStore<R> {
@@ -118,37 +145,6 @@ pub(crate) async fn update_activity_reminder_limit<R: Runtime>(
     limit_ms: i64,
 ) -> Result<ToolsRuntimeSnapshot, String> {
     tools::update_activity_reminder_limit(app, &store(app), rule_id, limit_ms).await
-}
-
-pub(crate) async fn start_timer<R: Runtime>(
-    app: &AppHandle<R>,
-    request: StartTimerRequest,
-) -> Result<ToolsRuntimeSnapshot, String> {
-    tools::start_timer(app, &store(app), request).await
-}
-
-pub(crate) async fn pause_timer<R: Runtime>(
-    app: &AppHandle<R>,
-) -> Result<ToolsRuntimeSnapshot, String> {
-    tools::pause_timer(app, &store(app)).await
-}
-
-pub(crate) async fn resume_timer<R: Runtime>(
-    app: &AppHandle<R>,
-) -> Result<ToolsRuntimeSnapshot, String> {
-    tools::resume_timer(app, &store(app)).await
-}
-
-pub(crate) async fn reset_timer<R: Runtime>(
-    app: &AppHandle<R>,
-) -> Result<ToolsRuntimeSnapshot, String> {
-    tools::reset_timer(app, &store(app)).await
-}
-
-pub(crate) async fn add_timer_lap<R: Runtime>(
-    app: &AppHandle<R>,
-) -> Result<ToolsRuntimeSnapshot, String> {
-    tools::add_timer_lap(app, &store(app)).await
 }
 
 pub(crate) async fn start_pomodoro<R: Runtime>(

@@ -2,7 +2,9 @@ use crate::data::app_settings_service;
 use crate::data::web_activity_store::SqliteWebActivityStore;
 use crate::domain::settings::WebActivitySettings;
 use crate::domain::tracking::TrackingDataChangedPayload;
-use crate::domain::web_activity::{BrowserActiveTabPayload, WEB_ACTIVITY_CHANGED_REASON};
+use crate::domain::web_activity::{
+    BrowserActiveTabPayload, WebActivityChange, WEB_ACTIVITY_CHANGED_REASON,
+};
 use crate::engine::web_activity::{self as web_activity_engine, WebActivityRuntimeState};
 use crate::platform::web_activity_bridge::{
     WebActivityBridgeHttpRequest, WebActivityBridgeHttpResponse, WebActivityBridgeRuntimeState,
@@ -22,7 +24,7 @@ async fn record_active_tab_for_app<R: Runtime>(
     payload: BrowserActiveTabPayload,
     now_ms: i64,
     generation: u64,
-) -> Result<bool, String> {
+) -> Result<WebActivityChange, String> {
     let store = SqliteWebActivityStore::from_app(app).await?;
     web_activity_engine::record_active_tab(app, &store, settings, payload, now_ms, generation).await
 }
@@ -116,9 +118,20 @@ pub async fn handle_http_request<R: Runtime>(
     };
 
     match record_active_tab_for_app(&app, &settings, payload, now_ms, generation).await {
-        Ok(changed) => {
+        Ok(change) => {
+            let changed = change.changed();
             if changed {
                 emit_web_activity_changed(&app, now_ms);
+            }
+            if let WebActivityChange::TargetChanged { normalized_domain } = change {
+                crate::engine::tools::notify_activity_reminder_web_transition(
+                    &app,
+                    normalized_domain.as_deref(),
+                );
+                if normalized_domain.is_none() {
+                    // Anonymous web recording can also end the named browser session.
+                    crate::app::tools::notify_tracking_transition(&app);
+                }
             }
             WebActivityBridgeHttpResponse::json(
                 200,
@@ -167,6 +180,7 @@ pub async fn sync_foreground_state<R: Runtime>(app: AppHandle<R>) -> Result<(), 
     let now_ms = crate::app::runtime::now_ms() as i64;
     if expire_observation_for_app(&app, now_ms).await? {
         emit_web_activity_changed(&app, now_ms);
+        crate::engine::tools::notify_activity_reminder_web_transition(&app, None);
     }
     Ok(())
 }

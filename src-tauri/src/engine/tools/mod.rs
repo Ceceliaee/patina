@@ -1,9 +1,9 @@
 pub(crate) mod timed_reminders;
 use crate::domain::localization::{self, LocalizationState};
 use crate::domain::tools::{
-    ActivityReminderNotification, ActivityReminderTarget, CompletedPomodoroNotification,
-    CompletedTimerNotification, PomodoroPhase, PomodoroStatus, TimerMode, TimerStatus, ToolAlert,
-    ToolAlertKind, ToolReminder, ToolsRuntimeSnapshot,
+    ActivityReminderCheck, ActivityReminderNotification, ActivityReminderTarget,
+    CompletedPomodoroNotification, PomodoroPhase, PomodoroStatus, ToolAlert, ToolAlertKind,
+    ToolReminder, ToolsRuntimeSnapshot,
 };
 use chrono::{Local, Utc};
 use serde::Serialize;
@@ -15,16 +15,19 @@ use tokio::sync::Notify;
 use tokio::time::{sleep, Duration};
 
 mod activity_notifications;
+mod activity_schedule;
 pub use activity_notifications::{
     create_activity_reminder_rule, disable_activity_reminder_rule, extend_activity_reminder,
     set_activity_reminder_enabled, update_activity_reminder_limit,
+};
+pub use activity_schedule::{
+    notify_activity_reminder_app_transition, notify_activity_reminder_web_transition,
 };
 
 pub const TOOLS_RUNTIME_CHANGED_EVENT: &str = "tools-runtime-changed";
 pub const TOOLS_ALERT_EVENT: &str = "tools-alert";
 const TOOLS_RUNTIME_MIN_WAKE_MS: i64 = 250;
 const TOOLS_RUNTIME_IDLE_WAKE_MS: i64 = 60_000;
-const TOOLS_RUNTIME_ACTIVITY_REMINDER_WAKE_MS: i64 = 10_000;
 const TOOLS_RUNTIME_ERROR_WAKE_MS: u64 = 5_000;
 const TOOLS_ALERT_LIMIT: usize = 32;
 
@@ -38,6 +41,8 @@ pub struct ToolAlertQueueStats {
 pub struct ToolsRuntimeState {
     inner: Mutex<ToolsRuntimeSnapshot>,
     alerts: Mutex<Vec<ToolAlert>>,
+    activity_schedule: activity_schedule::ActivityReminderSchedule,
+    mutation_in_flight: tokio::sync::Mutex<()>,
     // Serialize store operations so a late read cannot acknowledge a newer write.
     refresh_pending: tokio::sync::Mutex<bool>,
 }
@@ -126,13 +131,6 @@ fn push_unique_alert(alerts: &mut Vec<ToolAlert>, alert: ToolAlert) {
 }
 
 #[derive(Clone, Debug)]
-pub struct StartTimerRequest {
-    pub mode: TimerMode,
-    pub duration_ms: Option<i64>,
-    pub label: Option<String>,
-}
-
-#[derive(Clone, Debug)]
 pub struct StartPomodoroRequest {
     pub focus_ms: i64,
     pub short_break_ms: i64,
@@ -188,11 +186,6 @@ pub enum ToolsMutation {
         extension: crate::domain::tools::ActivityReminderExtension,
         day_start_ms: i64,
     },
-    StartTimer(StartTimerRequest),
-    PauseTimer,
-    ResumeTimer,
-    ResetTimer,
-    AddTimerLap,
     StartPomodoro(StartPomodoroRequest),
     PausePomodoro,
     ResumePomodoro,
@@ -204,9 +197,9 @@ pub enum ToolsMutation {
 pub struct ToolsTickEvents {
     pub reminders: Vec<ToolReminder>,
     pub activity_reminders: Vec<ActivityReminderNotification>,
-    pub completed_timer: Option<CompletedTimerNotification>,
     pub completed_pomodoro: Option<CompletedPomodoroNotification>,
     pub state_changed: bool,
+    pub activity_watch: crate::domain::tools::ActivityReminderWatch,
 }
 
 pub type ToolsStoreFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, String>> + Send + 'a>>;
@@ -229,6 +222,8 @@ pub trait ToolsStore: Send + Sync {
         now_ms: i64,
         date_key: String,
         day_start_ms: i64,
+        pending_activity_rule_ids: Vec<i64>,
+        activity_check: Option<ActivityReminderCheck>,
     ) -> ToolsStoreFuture<'_, ToolsTickEvents>;
     fn fetch_snapshot(
         &self,
@@ -242,8 +237,14 @@ pub async fn run<R: Runtime + 'static>(
     store: impl ToolsStore,
 ) -> Result<(), String> {
     recover_after_startup(&app, &store).await?;
+    let mut current_day = date_key();
 
     loop {
+        let day = date_key();
+        if day != current_day {
+            notify_activity_reminder_change(&app);
+            current_day = day;
+        }
         if let Err(error) = tick_and_refresh_if_changed(&app, &store).await {
             eprintln!("[tools] runtime tick failed: {error}");
             wait_for_next_tools_wake(&app, Duration::from_millis(TOOLS_RUNTIME_ERROR_WAKE_MS))
@@ -255,8 +256,12 @@ pub async fn run<R: Runtime + 'static>(
             .try_state::<ToolsRuntimeState>()
             .map(|state| state.snapshot())
             .unwrap_or_default();
+        let next_activity_at = app
+            .state::<ToolsRuntimeState>()
+            .activity_schedule
+            .next_check_at();
         let next_wake =
-            compute_next_tools_wake(&snapshot, now_ms(), next_day_start_ms(), &date_key());
+            compute_next_tools_wake(&snapshot, now_ms(), next_day_start_ms(), next_activity_at);
         wait_for_next_tools_wake(&app, next_wake).await;
     }
 }
@@ -285,7 +290,23 @@ pub fn get_alerts<R: Runtime>(app: &AppHandle<R>) -> Vec<ToolAlert> {
 
 pub fn dismiss_alert<R: Runtime>(app: &AppHandle<R>, alert_id: &str) {
     if let Some(state) = app.try_state::<ToolsRuntimeState>() {
+        let activity_rule_id = state
+            .alerts
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .find(|alert| alert.id == alert_id)
+            .and_then(|alert| {
+                alert
+                    .activity_reminder
+                    .as_ref()
+                    .map(|details| details.rule_id)
+            });
         state.dismiss_alert(alert_id);
+        if let Some(rule_id) = activity_rule_id {
+            state.activity_schedule.request_rule(rule_id);
+            notify_tools_runtime(app);
+        }
     }
 }
 
@@ -304,40 +325,11 @@ pub fn notify_tools_runtime<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-pub async fn start_timer<R: Runtime>(
-    app: &AppHandle<R>,
-    store: &impl ToolsStore,
-    request: StartTimerRequest,
-) -> Result<ToolsRuntimeSnapshot, String> {
-    apply_mutation_and_refresh(app, store, ToolsMutation::StartTimer(request), now_ms()).await
-}
-
-pub async fn pause_timer<R: Runtime>(
-    app: &AppHandle<R>,
-    store: &impl ToolsStore,
-) -> Result<ToolsRuntimeSnapshot, String> {
-    apply_mutation_and_refresh(app, store, ToolsMutation::PauseTimer, now_ms()).await
-}
-
-pub async fn resume_timer<R: Runtime>(
-    app: &AppHandle<R>,
-    store: &impl ToolsStore,
-) -> Result<ToolsRuntimeSnapshot, String> {
-    apply_mutation_and_refresh(app, store, ToolsMutation::ResumeTimer, now_ms()).await
-}
-
-pub async fn reset_timer<R: Runtime>(
-    app: &AppHandle<R>,
-    store: &impl ToolsStore,
-) -> Result<ToolsRuntimeSnapshot, String> {
-    apply_mutation_and_refresh(app, store, ToolsMutation::ResetTimer, now_ms()).await
-}
-
-pub async fn add_timer_lap<R: Runtime>(
-    app: &AppHandle<R>,
-    store: &impl ToolsStore,
-) -> Result<ToolsRuntimeSnapshot, String> {
-    apply_mutation_and_refresh(app, store, ToolsMutation::AddTimerLap, now_ms()).await
+pub fn notify_activity_reminder_change<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(state) = app.try_state::<ToolsRuntimeState>() {
+        state.activity_schedule.invalidate();
+    }
+    notify_tools_runtime(app);
 }
 
 pub async fn start_pomodoro<R: Runtime>(
@@ -395,9 +387,14 @@ async fn recover_after_startup<R: Runtime + 'static>(
     let mut pending = state.refresh_pending.lock().await;
     *pending = true;
     let now = now_ms();
-    let events = store
+    state.activity_schedule.take_due(now);
+    let mut events = store
         .recover_after_startup(now, date_key(), day_start_ms())
         .await?;
+    state.activity_schedule.complete(
+        &ActivityReminderCheck::All,
+        std::mem::take(&mut events.activity_watch),
+    );
     notify_tick_events(app, events, now);
     emit_tools_snapshot(app, &state.fetch_snapshot(store).await?);
     *pending = false;
@@ -428,7 +425,46 @@ async fn tick_and_refresh_state(
     let retry_refresh = *pending;
     *pending = true;
     let now = now_ms();
-    let events = store.tick(now, date_key(), day_start_ms()).await?;
+    let activity_check = state.activity_schedule.take_due(now);
+    let pending_activity_rule_ids = if activity_check.is_some() {
+        state
+            .alerts
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .filter_map(|alert| {
+                alert
+                    .activity_reminder
+                    .as_ref()
+                    .map(|details| details.rule_id)
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let mut events = match store
+        .tick(
+            now,
+            date_key(),
+            day_start_ms(),
+            pending_activity_rule_ids,
+            activity_check.clone(),
+        )
+        .await
+    {
+        Ok(events) => events,
+        Err(error) => {
+            if let Some(check) = &activity_check {
+                state.activity_schedule.retry(check);
+            }
+            return Err(error);
+        }
+    };
+    if let Some(check) = &activity_check {
+        state
+            .activity_schedule
+            .complete(check, std::mem::take(&mut events.activity_watch));
+    }
     *pending = retry_refresh || events.state_changed;
     emit_events(events, now);
     if *pending {
@@ -446,7 +482,6 @@ fn notify_tick_events<R: Runtime + 'static>(app: &AppHandle<R>, events: ToolsTic
     let ToolsTickEvents {
         reminders: fired_reminders,
         activity_reminders: fired_activity_reminders,
-        completed_timer,
         completed_pomodoro,
         ..
     } = events;
@@ -481,22 +516,6 @@ fn notify_tick_events<R: Runtime + 'static>(app: &AppHandle<R>, events: ToolsTic
         now,
     ) {
         send_tool_alert(app, alert);
-    }
-
-    if let Some(completed_timer) = completed_timer {
-        send_tool_alert(
-            app,
-            ToolAlert {
-                id: format!("countdown:{}", completed_timer.timer_id),
-                kind: ToolAlertKind::Countdown,
-                title: localization::text(locale, "native.tools.countdownTitle"),
-                body: completed_timer.label.unwrap_or_else(|| {
-                    localization::text(locale, "native.tools.countdownDefaultBody")
-                }),
-                occurred_at: now,
-                activity_reminder: None,
-            },
-        );
     }
 
     if let Some(completed_phase) = completed_pomodoro {
@@ -560,10 +579,11 @@ async fn apply_mutation_and_refresh_state(
     emit_snapshot: impl FnOnce(&ToolsRuntimeSnapshot),
     wake: impl FnOnce(),
 ) -> Result<ToolsRuntimeSnapshot, String> {
-    let mut pending = state
-        .refresh_pending
+    let _mutation = state
+        .mutation_in_flight
         .try_lock()
         .map_err(|_| "a tools operation is already in progress".to_string())?;
+    let mut pending = state.refresh_pending.lock().await;
     if *pending {
         wake();
         return Err(
@@ -573,7 +593,18 @@ async fn apply_mutation_and_refresh_state(
     }
     // Repository errors can occur after a write, so every outcome needs reconciliation.
     *pending = true;
+    let activity_changed = matches!(
+        &mutation,
+        ToolsMutation::CreateActivityReminderRule(_)
+            | ToolsMutation::DisableActivityReminderRule { .. }
+            | ToolsMutation::SetActivityReminderEnabled { .. }
+            | ToolsMutation::UpdateActivityReminderLimit { .. }
+            | ToolsMutation::ExtendActivityReminder { .. }
+    );
     let mutation_result = store.apply_mutation(mutation, now, date_key()).await;
+    if activity_changed {
+        state.activity_schedule.invalidate();
+    }
     wake();
     let snapshot = state.fetch_snapshot(store).await.map_err(|read_error| {
         let outcome = match &mutation_result {
@@ -605,15 +636,10 @@ fn send_tool_alert<R: Runtime + 'static>(app: &AppHandle<R>, alert: ToolAlert) {
 #[cfg(test)]
 fn snapshot_has_active_work(snapshot: &ToolsRuntimeSnapshot) -> bool {
     snapshot
-        .current_timer
+        .current_pomodoro
         .as_ref()
-        .map(|timer| timer.status == TimerStatus::Running)
+        .map(|pomodoro| pomodoro.status == PomodoroStatus::Running)
         .unwrap_or(false)
-        || snapshot
-            .current_pomodoro
-            .as_ref()
-            .map(|pomodoro| pomodoro.status == PomodoroStatus::Running)
-            .unwrap_or(false)
         || snapshot.next_reminder_at.is_some()
 }
 
@@ -621,27 +647,15 @@ fn compute_next_tools_wake(
     snapshot: &ToolsRuntimeSnapshot,
     now_ms: i64,
     date_boundary_ms: i64,
-    current_date_key: &str,
+    next_activity_reminder_at: Option<i64>,
 ) -> Duration {
-    let has_pending_activity_reminder = snapshot
-        .activity_reminder_rules
-        .iter()
-        .any(|rule| rule.enabled && rule.last_fired_date_key.as_deref() != Some(current_date_key));
-    let max_delay_ms = if has_pending_activity_reminder {
-        TOOLS_RUNTIME_ACTIVITY_REMINDER_WAKE_MS
-    } else {
-        TOOLS_RUNTIME_IDLE_WAKE_MS
-    };
+    let max_delay_ms = TOOLS_RUNTIME_IDLE_WAKE_MS;
     let mut delay_ms = max_delay_ms;
+    if let Some(at) = next_activity_reminder_at {
+        delay_ms = delay_ms.min(at.saturating_sub(now_ms));
+    }
     if let Some(next_reminder_at) = snapshot.next_reminder_at {
         delay_ms = delay_ms.min(next_reminder_at.saturating_sub(now_ms));
-    }
-    if let Some(timer) = snapshot.current_timer.as_ref() {
-        if timer.mode == TimerMode::Countdown && timer.status == TimerStatus::Running {
-            if let Some(remaining_ms) = timer.remaining_ms_at(now_ms) {
-                delay_ms = delay_ms.min(remaining_ms);
-            }
-        }
     }
     if let Some(pomodoro) = snapshot.current_pomodoro.as_ref() {
         if pomodoro.status == PomodoroStatus::Running {
@@ -701,9 +715,7 @@ fn next_day_start_ms() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::tools::{
-        ActivityReminderTarget, ToolActivityReminderRule, ToolPomodoroRun, ToolReminder, ToolTimer,
-    };
+    use crate::domain::tools::{ActivityReminderTarget, ToolPomodoroRun, ToolReminder};
     use std::cell::Cell;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -712,6 +724,9 @@ mod tests {
         mutations: AtomicUsize,
         commits: AtomicUsize,
         failed_reads: AtomicUsize,
+        activity_checks: AtomicUsize,
+        last_activity_check: Mutex<Option<ActivityReminderCheck>>,
+        pending_activity_rule_ids: Mutex<Vec<i64>>,
         mutation_error: bool,
         hold_first_mutation: bool,
         release_mutation: Notify,
@@ -739,11 +754,31 @@ mod tests {
             day: String,
             start: i64,
         ) -> ToolsStoreFuture<'_, ToolsTickEvents> {
-            self.tick(now, day, start)
+            self.tick(
+                now,
+                day,
+                start,
+                Vec::new(),
+                Some(ActivityReminderCheck::All),
+            )
         }
 
-        fn tick(&self, _: i64, _: String, _: i64) -> ToolsStoreFuture<'_, ToolsTickEvents> {
-            Box::pin(async { Ok(ToolsTickEvents::default()) })
+        fn tick(
+            &self,
+            _: i64,
+            _: String,
+            _: i64,
+            pending_activity_rule_ids: Vec<i64>,
+            activity_check: Option<ActivityReminderCheck>,
+        ) -> ToolsStoreFuture<'_, ToolsTickEvents> {
+            Box::pin(async move {
+                if activity_check.is_some() {
+                    self.activity_checks.fetch_add(1, Ordering::SeqCst);
+                    *self.last_activity_check.lock().unwrap() = activity_check;
+                    *self.pending_activity_rule_ids.lock().unwrap() = pending_activity_rule_ids;
+                }
+                Ok(ToolsTickEvents::default())
+            })
         }
 
         fn fetch_snapshot(&self, _: i64, _: String) -> ToolsStoreFuture<'_, ToolsRuntimeSnapshot> {
@@ -807,6 +842,41 @@ mod tests {
         assert_eq!(store.mutations.load(Ordering::SeqCst), 1);
         store.release_mutation.notify_one();
         first.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn user_mutation_waits_for_background_refresh_without_queueing_duplicates() {
+        let state = ToolsRuntimeState::default();
+        let store = ControlledToolsStore::default();
+        let background = state.refresh_pending.lock().await;
+        let mutation = apply_mutation_and_refresh_state(
+            &state,
+            &store,
+            reminder_mutation(),
+            1_000,
+            |_| {},
+            || {},
+        );
+        tokio::pin!(mutation);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(1), &mut mutation)
+                .await
+                .is_err()
+        );
+        assert_eq!(store.mutations.load(Ordering::SeqCst), 0);
+        let duplicate = apply_mutation_and_refresh_state(
+            &state,
+            &store,
+            reminder_mutation(),
+            1_001,
+            |_| {},
+            || {},
+        )
+        .await;
+        assert!(duplicate.unwrap_err().contains("already in progress"));
+        drop(background);
+        mutation.await.unwrap();
+        assert_eq!(store.mutations.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]
@@ -958,7 +1028,7 @@ mod tests {
     }
 
     #[test]
-    fn active_snapshot_detects_running_timer_and_pending_reminder() {
+    fn active_snapshot_detects_pomodoro_and_pending_reminder() {
         let mut snapshot = ToolsRuntimeSnapshot::default();
         assert!(!snapshot_has_active_work(&snapshot));
 
@@ -966,22 +1036,6 @@ mod tests {
         assert!(snapshot_has_active_work(&snapshot));
 
         snapshot.next_reminder_at = None;
-        snapshot.current_timer = Some(ToolTimer {
-            id: 1,
-            mode: TimerMode::Stopwatch,
-            label: None,
-            duration_ms: None,
-            accumulated_ms: 0,
-            started_at: Some(1_000),
-            paused_at: None,
-            completed_at: None,
-            status: TimerStatus::Running,
-            created_at: 1_000,
-            updated_at: 1_000,
-        });
-        assert!(snapshot_has_active_work(&snapshot));
-
-        snapshot.current_timer = None;
         snapshot.current_pomodoro = Some(ToolPomodoroRun {
             id: 1,
             phase: PomodoroPhase::Focus,
@@ -1033,6 +1087,42 @@ mod tests {
         assert!(state.alerts().is_empty());
     }
 
+    #[tokio::test]
+    async fn pending_activity_alert_blocks_reentry_until_dismissed() {
+        let state = ToolsRuntimeState::default();
+        let store = ControlledToolsStore::default();
+        let alert = activity_notifications::build_activity_reminder_alerts(
+            vec![crate::domain::tools::ActivityReminderNotification {
+                rule_id: 7,
+                target: ActivityReminderTarget::App {
+                    app_name: "Editor".into(),
+                    exe_name: Some("editor.exe".into()),
+                },
+                target_label: "Editor".into(),
+                usage_ms: 120_000,
+                limit_ms: 60_000,
+                message: String::new(),
+            }],
+            crate::domain::localization::Locale::ZhCn,
+            "2026-10-30",
+            1_000,
+        )
+        .pop()
+        .unwrap();
+        state.push_alert(alert.clone());
+        tick_and_refresh_state(&state, &store, |_, _| {}, |_| {})
+            .await
+            .unwrap();
+        assert_eq!(*store.pending_activity_rule_ids.lock().unwrap(), vec![7]);
+
+        state.dismiss_alert(&alert.id);
+        state.activity_schedule.invalidate();
+        tick_and_refresh_state(&state, &store, |_, _| {}, |_| {})
+            .await
+            .unwrap();
+        assert!(store.pending_activity_rule_ids.lock().unwrap().is_empty());
+    }
+
     #[test]
     fn tool_alerts_keep_a_hard_queue_limit() {
         let state = ToolsRuntimeState::default();
@@ -1066,7 +1156,7 @@ mod tests {
     #[test]
     fn tools_wake_uses_idle_delay_without_active_work() {
         let snapshot = ToolsRuntimeSnapshot::default();
-        let delay = compute_next_tools_wake(&snapshot, 1_000, 120_000, "2026-06-29");
+        let delay = compute_next_tools_wake(&snapshot, 1_000, 120_000, None);
 
         assert_eq!(duration_ms(delay), TOOLS_RUNTIME_IDLE_WAKE_MS as u64);
     }
@@ -1077,7 +1167,7 @@ mod tests {
             next_reminder_at: Some(11_000),
             ..ToolsRuntimeSnapshot::default()
         };
-        let delay = compute_next_tools_wake(&snapshot, 1_000, 120_000, "2026-06-29");
+        let delay = compute_next_tools_wake(&snapshot, 1_000, 120_000, None);
 
         assert_eq!(duration_ms(delay), 10_000);
     }
@@ -1088,32 +1178,9 @@ mod tests {
             next_reminder_at: Some(1_000),
             ..ToolsRuntimeSnapshot::default()
         };
-        let delay = compute_next_tools_wake(&snapshot, 1_000, 120_000, "2026-06-29");
+        let delay = compute_next_tools_wake(&snapshot, 1_000, 120_000, None);
 
         assert_eq!(duration_ms(delay), TOOLS_RUNTIME_MIN_WAKE_MS as u64);
-    }
-
-    #[test]
-    fn tools_wake_uses_countdown_remaining_time() {
-        let snapshot = ToolsRuntimeSnapshot {
-            current_timer: Some(ToolTimer {
-                id: 1,
-                mode: TimerMode::Countdown,
-                label: None,
-                duration_ms: Some(10_000),
-                accumulated_ms: 2_000,
-                started_at: Some(1_000),
-                paused_at: None,
-                completed_at: None,
-                status: TimerStatus::Running,
-                created_at: 1_000,
-                updated_at: 1_000,
-            }),
-            ..ToolsRuntimeSnapshot::default()
-        };
-        let delay = compute_next_tools_wake(&snapshot, 4_000, 120_000, "2026-06-29");
-
-        assert_eq!(duration_ms(delay), 5_000);
     }
 
     #[test]
@@ -1137,78 +1204,94 @@ mod tests {
             }),
             ..ToolsRuntimeSnapshot::default()
         };
-        let delay = compute_next_tools_wake(&snapshot, 6_000, 120_000, "2026-06-29");
+        let delay = compute_next_tools_wake(&snapshot, 6_000, 120_000, None);
 
         assert_eq!(duration_ms(delay), 5_000);
     }
 
     #[test]
-    fn tools_wake_keeps_activity_reminder_on_slow_poll() {
-        let snapshot = ToolsRuntimeSnapshot {
-            activity_reminder_rules: vec![ToolActivityReminderRule {
-                enabled: true,
-                id: 1,
-                target: ActivityReminderTarget::App {
-                    app_name: "Editor".to_string(),
-                    exe_name: Some("editor.exe".to_string()),
-                },
-                label_snapshot: "Editor".to_string(),
-                limit_ms: 60_000,
-                message: "Break".to_string(),
-                created_at: 1_000,
-                updated_at: 1_000,
-                disabled_at: None,
-                last_fired_date_key: None,
-                last_fired_at: None,
-                extension_date_key: None,
-                extension_limit_ms: None,
-                last_extended_alert_at: None,
-                suspension_reason: None,
-            }],
-            ..ToolsRuntimeSnapshot::default()
-        };
-        let delay = compute_next_tools_wake(&snapshot, 1_000, 120_000, "2026-06-29");
-
+    fn tools_wake_uses_activity_deadline() {
+        let snapshot = ToolsRuntimeSnapshot::default();
         assert_eq!(
-            duration_ms(delay),
-            TOOLS_RUNTIME_ACTIVITY_REMINDER_WAKE_MS as u64
+            duration_ms(compute_next_tools_wake(
+                &snapshot,
+                1_000,
+                120_000,
+                Some(42_000)
+            )),
+            41_000
+        );
+        assert_eq!(
+            duration_ms(compute_next_tools_wake(&snapshot, 1_000, 120_000, Some(0))),
+            TOOLS_RUNTIME_MIN_WAKE_MS as u64
         );
     }
 
-    #[test]
-    fn tools_wake_ignores_activity_reminders_already_fired_today() {
-        let snapshot = ToolsRuntimeSnapshot {
-            activity_reminder_rules: vec![ToolActivityReminderRule {
-                enabled: true,
-                id: 1,
-                target: ActivityReminderTarget::App {
-                    app_name: "Editor".to_string(),
-                    exe_name: Some("editor.exe".to_string()),
-                },
-                label_snapshot: "Editor".to_string(),
-                limit_ms: 60_000,
-                message: "Break".to_string(),
-                created_at: 1_000,
-                updated_at: 1_000,
-                disabled_at: None,
-                last_fired_date_key: Some("2026-06-29".to_string()),
-                last_fired_at: None,
-                extension_date_key: None,
-                extension_limit_ms: None,
-                last_extended_alert_at: None,
-                suspension_reason: None,
-            }],
-            ..ToolsRuntimeSnapshot::default()
+    #[tokio::test]
+    async fn ordinary_tools_ticks_do_not_repeat_activity_queries() {
+        let state = ToolsRuntimeState::default();
+        let store = ControlledToolsStore::default();
+        for _ in 0..60 {
+            tick_and_refresh_state(&state, &store, |_, _| {}, |_| {})
+                .await
+                .unwrap();
+        }
+        assert_eq!(store.activity_checks.load(Ordering::SeqCst), 1);
+        state.activity_schedule.complete(
+            &ActivityReminderCheck::All,
+            crate::domain::tools::ActivityReminderWatch {
+                rules: vec![crate::domain::tools::ActivityReminderWatchedRule {
+                    id: 1,
+                    target: ActivityReminderTarget::Web {
+                        normalized_domain: "limited.test".into(),
+                    },
+                    active: false,
+                    next_check_at: None,
+                }],
+                ..Default::default()
+            },
+        );
+        let unrelated = crate::domain::tracking::ActiveSessionSnapshot {
+            id: 1,
+            app_name: "Unrelated".into(),
+            exe_name: "unrelated.exe".into(),
+            start_time: 1,
+            continuity_group_start_time: 1,
+            closed_duration_ms: 0,
         };
-        let delay = compute_next_tools_wake(&snapshot, 1_000, 120_000, "2026-06-29");
-
-        assert_eq!(duration_ms(delay), TOOLS_RUNTIME_IDLE_WAKE_MS as u64);
+        for _ in 0..100 {
+            assert!(!state
+                .activity_schedule
+                .web_transition(Some("unrelated.test")));
+            assert!(!state.activity_schedule.app_transition(Some(&unrelated)));
+            tick_and_refresh_state(&state, &store, |_, _| {}, |_| {})
+                .await
+                .unwrap();
+        }
+        assert_eq!(
+            store.activity_checks.load(Ordering::SeqCst),
+            1,
+            "unrelated switches never query usage"
+        );
+        assert!(state.activity_schedule.web_transition(Some("limited.test")));
+        tick_and_refresh_state(&state, &store, |_, _| {}, |_| {})
+            .await
+            .unwrap();
+        assert_eq!(store.activity_checks.load(Ordering::SeqCst), 2);
+        assert_eq!(
+            *store.last_activity_check.lock().unwrap(),
+            Some(ActivityReminderCheck::Rules(vec![1]))
+        );
+        assert!(
+            !state.activity_schedule.web_transition(Some("limited.test")),
+            "all rules off skips matching"
+        );
     }
 
     #[test]
     fn tools_wake_respects_date_boundary() {
         let snapshot = ToolsRuntimeSnapshot::default();
-        let delay = compute_next_tools_wake(&snapshot, 1_000, 21_000, "2026-06-29");
+        let delay = compute_next_tools_wake(&snapshot, 1_000, 21_000, None);
 
         assert_eq!(duration_ms(delay), 20_000);
     }

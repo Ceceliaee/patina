@@ -1,8 +1,8 @@
 use crate::domain::backup::{BackupWebActivitySegment, BackupWebFaviconCache};
 use crate::domain::web_activity::{
-    parse_domain_override_capture_title, parse_domain_override_enabled, WebActivitySegmentInput,
-    WEB_ACTIVITY_OBSERVATION_TTL_MS, WEB_ACTIVITY_SOURCE_BROWSER_EXTENSION,
-    WEB_DOMAIN_OVERRIDE_KEY_PREFIX,
+    parse_domain_override_capture_title, parse_domain_override_enabled, WebActivityChange,
+    WebActivitySegmentInput, WEB_ACTIVITY_OBSERVATION_TTL_MS,
+    WEB_ACTIVITY_SOURCE_BROWSER_EXTENSION, WEB_DOMAIN_OVERRIDE_KEY_PREFIX,
 };
 use sqlx::{Pool, Row, Sqlite, Transaction};
 use std::collections::HashMap;
@@ -58,7 +58,7 @@ pub async fn upsert_active_segment(
     pool: &Pool<Sqlite>,
     input: &WebActivitySegmentInput,
     timestamp_ms: i64,
-) -> Result<bool, sqlx::Error> {
+) -> Result<WebActivityChange, sqlx::Error> {
     let mut tx = pool.begin().await?;
     let mut persisted_input = input.clone();
     let settings: Vec<(String, String)> = sqlx::query_as("SELECT key, value FROM settings WHERE key IN ('tracking_paused', 'web_activity_enabled', 'title_recording_enabled', ?, ?)")
@@ -91,7 +91,7 @@ pub async fn upsert_active_segment(
             }
         };
         if denied {
-            return Ok(false);
+            return Ok(WebActivityChange::None);
         }
     }
     let input = &persisted_input;
@@ -100,13 +100,23 @@ pub async fn upsert_active_segment(
     ).bind(input.native_session_id).bind(&input.browser_exe_name).bind(timestamp_ms)
         .fetch_one(&mut *tx).await?;
     if !matching_session {
-        return Ok(false);
+        return Ok(WebActivityChange::None);
     }
     let active = load_active_segment_tx(&mut tx).await?;
+    let target_changed = active.as_ref().is_none_or(|active| {
+        active.browser_client_id != input.browser_client_id
+            || active.browser_exe_name != input.browser_exe_name
+            || active.normalized_domain != input.normalized_domain
+            || active.native_session_id != Some(input.native_session_id)
+            || timestamp_ms
+                > active
+                    .updated_at
+                    .saturating_add(WEB_ACTIVITY_OBSERVATION_TTL_MS)
+    });
 
     if let Some(active) = active {
         if timestamp_ms < active.updated_at {
-            return Ok(false);
+            return Ok(WebActivityChange::None);
         }
         let expires_at = active
             .updated_at
@@ -135,7 +145,11 @@ pub async fn upsert_active_segment(
             )
             .await?;
             tx.commit().await?;
-            return Ok(timestamp_ms != active.updated_at);
+            return Ok(if timestamp_ms != active.updated_at {
+                WebActivityChange::Updated
+            } else {
+                WebActivityChange::None
+            });
         }
 
         finish_segment_tx(
@@ -193,7 +207,13 @@ pub async fn upsert_active_segment(
     .await?;
 
     tx.commit().await?;
-    Ok(true)
+    Ok(if target_changed {
+        WebActivityChange::TargetChanged {
+            normalized_domain: Some(input.normalized_domain.clone()),
+        }
+    } else {
+        WebActivityChange::Updated
+    })
 }
 
 pub async fn end_active_segment(
@@ -649,16 +669,73 @@ mod tests {
     }
 
     #[test]
+    fn only_target_changes_invalidate_usage_reminder_deadlines() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            let mut page = input("example.test", "Page");
+            assert_eq!(
+                upsert_active_segment(&pool, &page, 2_000).await.unwrap(),
+                WebActivityChange::TargetChanged {
+                    normalized_domain: Some("example.test".into())
+                }
+            );
+            assert_eq!(
+                upsert_active_segment(&pool, &page, 7_000).await.unwrap(),
+                WebActivityChange::Updated
+            );
+            page.title = Some("New title".into());
+            page.url = Some("https://example.test/next".into());
+            assert_eq!(
+                upsert_active_segment(&pool, &page, 8_000).await.unwrap(),
+                WebActivityChange::Updated
+            );
+            assert_eq!(
+                upsert_active_segment(&pool, &input("other.test", "Other"), 9_000)
+                    .await
+                    .unwrap(),
+                WebActivityChange::TargetChanged {
+                    normalized_domain: Some("other.test".into())
+                }
+            );
+            assert_eq!(
+                upsert_active_segment(&pool, &page, 10_000).await.unwrap(),
+                WebActivityChange::TargetChanged {
+                    normalized_domain: Some("example.test".into())
+                }
+            );
+            assert_eq!(
+                upsert_active_segment(&pool, &page, 60_000).await.unwrap(),
+                WebActivityChange::TargetChanged {
+                    normalized_domain: Some("example.test".into())
+                }
+            );
+            assert_eq!(
+                upsert_active_segment(&pool, &page, 60_000).await.unwrap(),
+                WebActivityChange::None
+            );
+        });
+    }
+
+    #[test]
     fn observations_expire_without_bridging_a_gap_and_duplicate_requests_are_idempotent() {
         tauri::async_runtime::block_on(async {
             let pool = setup_test_db().await;
             let page = input("example.test", "Page");
-            assert!(upsert_active_segment(&pool, &page, 2_000).await.unwrap());
-            assert!(!upsert_active_segment(&pool, &page, 2_000).await.unwrap());
+            assert!(upsert_active_segment(&pool, &page, 2_000)
+                .await
+                .unwrap()
+                .changed());
+            assert!(!upsert_active_segment(&pool, &page, 2_000)
+                .await
+                .unwrap()
+                .changed());
             assert!(!expire_active_segment(&pool, 47_000).await.unwrap());
             assert!(expire_active_segment(&pool, 47_001).await.unwrap());
             assert!(!expire_active_segment(&pool, 48_000).await.unwrap());
-            assert!(upsert_active_segment(&pool, &page, 602_000).await.unwrap());
+            assert!(upsert_active_segment(&pool, &page, 602_000)
+                .await
+                .unwrap()
+                .changed());
             super::super::sessions::end_active_sessions(&pool, 603_000)
                 .await
                 .unwrap();
@@ -697,7 +774,10 @@ mod tests {
                 .await
                 .unwrap();
             assert_eq!(ended, 8_000);
-            assert!(!upsert_active_segment(&pool, &page, 9_000).await.unwrap());
+            assert!(!upsert_active_segment(&pool, &page, 9_000)
+                .await
+                .unwrap()
+                .changed());
             super::super::sessions::start_session(
                 &pool,
                 "Chrome",
@@ -708,17 +788,22 @@ mod tests {
             )
             .await
             .unwrap();
-            assert!(!upsert_active_segment(&pool, &page, 19_000).await.unwrap());
+            assert!(!upsert_active_segment(&pool, &page, 19_000)
+                .await
+                .unwrap()
+                .changed());
             let resumed = WebActivitySegmentInput {
                 native_session_id: 3,
                 ..page
             };
             assert!(!upsert_active_segment(&pool, &resumed, 17_000)
                 .await
-                .unwrap());
+                .unwrap()
+                .changed());
             assert!(upsert_active_segment(&pool, &resumed, 19_000)
                 .await
-                .unwrap());
+                .unwrap()
+                .changed());
             assert!(!end_active_segment_for_source(&pool, "client", 1, 20_000)
                 .await
                 .unwrap());
@@ -892,6 +977,7 @@ mod tests {
                 !upsert_active_segment(&pool, &timing_input("example.test"), 2_000)
                     .await
                     .unwrap()
+                    .changed()
             );
             super::super::sessions::start_session(&pool, "Chrome", "chrome.exe", "", 1_000, 1_000)
                 .await
@@ -900,6 +986,7 @@ mod tests {
                 !upsert_active_segment(&pool, &timing_input("example.test"), 2_000)
                     .await
                     .unwrap()
+                    .changed()
             );
         });
     }
@@ -1080,16 +1167,19 @@ mod tests {
                 upsert_active_segment(&pool, &input("github.com", "Issue"), 1_000)
                     .await
                     .unwrap()
+                    .changed()
             );
             assert!(
                 upsert_active_segment(&pool, &input("github.com", "Issue"), 2_000)
                     .await
                     .unwrap()
+                    .changed()
             );
             assert!(
                 upsert_active_segment(&pool, &input("docs.rs", "Docs"), 3_000)
                     .await
                     .unwrap()
+                    .changed()
             );
 
             let rows = sqlx::query(

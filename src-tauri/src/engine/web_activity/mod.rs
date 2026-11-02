@@ -2,7 +2,7 @@ use crate::domain::settings::WebActivitySettings;
 use crate::domain::web_activity::{
     sanitize_active_tab_payload, sanitize_browser_client_id, sanitize_browser_kind,
     sanitize_extension_version, BrowserActiveTabPayload, WebActivityBridgeSnapshot,
-    WebActivitySegmentInput,
+    WebActivityChange, WebActivitySegmentInput,
 };
 use crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshotState;
 use crate::engine::tracking::title_state::TitleRecordingRuntimeState;
@@ -42,7 +42,7 @@ pub trait WebActivityStore: Send + Sync {
         &'a self,
         input: &'a WebActivitySegmentInput,
         now_ms: i64,
-    ) -> WebActivityStoreFuture<'a, bool>;
+    ) -> WebActivityStoreFuture<'a, WebActivityChange>;
     fn seal_active_segment(&self, now_ms: i64) -> WebActivityStoreFuture<'_, bool>;
 }
 
@@ -136,7 +136,7 @@ pub async fn record_active_tab<R: Runtime>(
     payload: BrowserActiveTabPayload,
     now_ms: i64,
     generation: u64,
-) -> Result<bool, String> {
+) -> Result<WebActivityChange, String> {
     let runtime = app.state::<WebActivityRuntimeState>();
     let tracking = app.state::<TrackingRuntimeSnapshotState>();
     let entry = tracking.snapshot();
@@ -144,13 +144,13 @@ pub async fn record_active_tab<R: Runtime>(
     let _transition = tracking.transition.lock().await;
     let processed_at = crate::platform::clock::unix_timestamp_millis_i64();
     if now_ms > processed_at || processed_at.saturating_sub(now_ms) > 5_000 {
-        return Ok(false);
+        return Ok(WebActivityChange::None);
     }
     if !tracking.accepts_sample(generation) {
-        return Ok(false);
+        return Ok(WebActivityChange::None);
     }
     let Some(snapshot) = tracking.snapshot() else {
-        return Ok(false);
+        return Ok(WebActivityChange::None);
     };
     let native = snapshot.active_session.as_ref();
     if entry
@@ -160,7 +160,7 @@ pub async fn record_active_tab<R: Runtime>(
         || !accepts_browser_observation(&snapshot, payload.browser_kind.as_deref(), processed_at)
         || !settings.enabled
     {
-        return Ok(false);
+        return Ok(WebActivityChange::None);
     }
     let observed_at = payload.captured_at_ms.unwrap_or(now_ms);
     if observed_at
@@ -170,7 +170,7 @@ pub async fn record_active_tab<R: Runtime>(
         || observed_at > now_ms
         || now_ms.saturating_sub(observed_at) > 5_000
     {
-        return Ok(false);
+        return Ok(WebActivityChange::None);
     }
     let client = sanitize_browser_client_id(payload.browser_client_id.as_deref());
     runtime.observe_active_tab(&payload, now_ms);
@@ -182,7 +182,8 @@ pub async fn record_active_tab<R: Runtime>(
         return match native {
             Some(native) => store.seal_source(&client, native.id, observed_at).await,
             None => store.seal_anonymous(observed_at).await,
-        };
+        }
+        .map(WebActivityChange::from_transition);
     };
     if !store
         .load_domain_recording_enabled(&sanitized.normalized_domain)
@@ -192,14 +193,14 @@ pub async fn record_active_tab<R: Runtime>(
             .await?
     {
         if !tracking.accepts_sample(generation) {
-            return Ok(false);
+            return Ok(WebActivityChange::None);
         }
         let changed = store.record_anonymous(observed_at).await?;
         if let Some(titles) = app.try_state::<TitleRecordingRuntimeState>() {
             titles.confirm_anonymous_web(snapshot.source_window(), observed_at);
         }
         tracking.anonymize_activity();
-        return Ok(changed);
+        return Ok(WebActivityChange::from_transition(changed));
     }
     let confirmed_page_title = sanitized.title.clone();
     let global_title_enabled = app
@@ -216,7 +217,7 @@ pub async fn record_active_tab<R: Runtime>(
     // Power notifications invalidate eligibility synchronously, including while
     // domain policy reads were awaiting SQLite.
     if !tracking.accepts_sample(generation) {
-        return Ok(false);
+        return Ok(WebActivityChange::None);
     }
     if let Some(titles) = app.try_state::<TitleRecordingRuntimeState>() {
         match confirmed_page_title.as_deref() {
@@ -230,7 +231,7 @@ pub async fn record_active_tab<R: Runtime>(
         }
     }
     let Some(native) = native else {
-        return Ok(false);
+        return Ok(WebActivityChange::None);
     };
     let input = WebActivitySegmentInput::from_sanitized(
         sanitized,
