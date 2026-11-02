@@ -1,7 +1,7 @@
 use super::*;
 use crate::data::backup::RestoreStrategy;
 use crate::data::repositories::{anonymous_activity, tools};
-use crate::domain::tools::{ActivityReminderTarget, TimerMode};
+use crate::domain::tools::ActivityReminderTarget;
 use futures_util::FutureExt;
 use sqlx::Executor;
 use std::panic::AssertUnwindSafe;
@@ -124,10 +124,6 @@ async fn snapshot_merge_preserves_all_record_domains_and_rolls_back_late_failure
     tools::timed_reminders::create_reminder(&source, "Check", 2000, Some(crate::domain::reminder_schedule::ReminderRecurrence::Interval { minutes: 30 }), 1000)
         .await
         .unwrap();
-    tools::start_timer(&source, TimerMode::Stopwatch, None, Some("Source"), 1000)
-        .await
-        .unwrap();
-    tools::add_timer_lap(&source, 1500).await.unwrap();
     tools::start_pomodoro(&source, 1000, 500, 700, 4, 1000)
         .await
         .unwrap();
@@ -171,9 +167,6 @@ async fn snapshot_merge_preserves_all_record_domains_and_rolls_back_late_failure
     target.execute("INSERT INTO sessions(id,app_name,exe_name,start_time,end_time,duration) VALUES(1,'Target','target.exe',10,20,10);
         INSERT INTO settings(key,value) VALUES('language','zh-CN');
         CREATE TRIGGER reject_anonymous BEFORE INSERT ON anonymous_activity BEGIN SELECT RAISE(ABORT,'late merge failure'); END;").await.unwrap();
-    tools::start_timer(&target, TimerMode::Stopwatch, None, Some("Target"), 5000)
-        .await
-        .unwrap();
     let prepared = prepare_snapshot_backup(&archive, RestoreStrategy::Merge)
         .await
         .unwrap();
@@ -207,7 +200,6 @@ async fn snapshot_merge_preserves_all_record_domains_and_rolls_back_late_failure
             .unwrap();
     }
     assert_eq!(count_table(&target, "sessions").await.unwrap(), 2);
-    assert_eq!(count_table(&target, "tool_timers").await.unwrap(), 2);
     let recurrence: String = sqlx::query_scalar("SELECT recurrence FROM tool_reminders JOIN tool_reminder_recurrences ON reminder_id=id WHERE label='Check'")
         .fetch_one(&target).await.unwrap();
     assert_eq!(serde_json::from_str::<serde_json::Value>(&recurrence).unwrap(), serde_json::json!({"kind":"interval","minutes":30}));
@@ -217,7 +209,6 @@ async fn snapshot_merge_preserves_all_record_domains_and_rolls_back_late_failure
     for table in [
         "session_title_samples",
         "tool_reminders",
-        "tool_timer_laps",
         "tool_pomodoro_runs",
         "tool_daily_stats",
         "import_batches",
@@ -235,13 +226,6 @@ async fn snapshot_merge_preserves_all_record_domains_and_rolls_back_late_failure
     assert_eq!(title_owner, "source.exe");
     let web_owner: String = sqlx::query_scalar("SELECT exe_name FROM sessions JOIN web_activity_native_sessions w ON sessions.id=w.session_id").fetch_one(&target).await.unwrap();
     assert_eq!(web_owner, "source.exe");
-    let lap_owner: String = sqlx::query_scalar(
-        "SELECT label FROM tool_timers JOIN tool_timer_laps l ON tool_timers.id=l.timer_id",
-    )
-    .fetch_one(&target)
-    .await
-    .unwrap();
-    assert_eq!(lap_owner, "Source");
     let language: String = sqlx::query_scalar("SELECT value FROM settings WHERE key='language'")
         .fetch_one(&target)
         .await

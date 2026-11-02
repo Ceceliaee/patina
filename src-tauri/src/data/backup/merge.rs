@@ -31,8 +31,6 @@ pub(super) async fn merge_backup_records_in_tx(
     repositories::tools::insert_missing_for_restore(
         tx,
         &records.tool_reminders,
-        &records.tool_timers,
-        &records.tool_timer_laps,
         &records.tool_pomodoro_runs,
         &records.tool_daily_stats,
     )

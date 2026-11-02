@@ -103,8 +103,6 @@ struct SnapshotCounts {
     web_favicon_cache: usize,
     web_activity_segments: usize,
     tool_reminders: usize,
-    tool_timers: usize,
-    tool_timer_laps: usize,
     tool_pomodoro_runs: usize,
     tool_daily_stats: usize,
     #[serde(alias = "toolSoftwareReminderRules")]
@@ -303,8 +301,6 @@ async fn count_table(pool: &Pool<Sqlite>, table: &str) -> Result<usize, String> 
         "web_activity_segments" => "SELECT COUNT(*) FROM web_activity_segments",
         "web_favicon_cache" => "SELECT COUNT(*) FROM web_favicon_cache",
         "tool_reminders" => "SELECT COUNT(*) FROM tool_reminders",
-        "tool_timers" => "SELECT COUNT(*) FROM tool_timers",
-        "tool_timer_laps" => "SELECT COUNT(*) FROM tool_timer_laps",
         "tool_pomodoro_runs" => "SELECT COUNT(*) FROM tool_pomodoro_runs",
         "tool_daily_stats" => "SELECT COUNT(*) FROM tool_daily_stats",
         "tool_activity_reminder_rules" => "SELECT COUNT(*) FROM tool_activity_reminder_rules",
@@ -345,8 +341,6 @@ async fn read_counts(pool: &Pool<Sqlite>) -> Result<SnapshotCounts, String> {
         web_activity_segments: count_table(pool, "web_activity_segments").await?,
         web_favicon_cache: count_table(pool, "web_favicon_cache").await?,
         tool_reminders: count_table(pool, "tool_reminders").await?,
-        tool_timers: count_table(pool, "tool_timers").await?,
-        tool_timer_laps: count_table(pool, "tool_timer_laps").await?,
         tool_pomodoro_runs: count_table(pool, "tool_pomodoro_runs").await?,
         tool_daily_stats: count_table(pool, "tool_daily_stats").await?,
         tool_activity_reminder_rules: count_table(pool, "tool_activity_reminder_rules").await?,
@@ -424,8 +418,6 @@ fn preview_from_manifest(manifest: &SnapshotManifest, supported: bool) -> Backup
         icon_cache_count: manifest.counts.icon_cache + manifest.counts.web_favicon_cache,
         web_activity_segment_count: manifest.counts.web_activity_segments,
         tool_reminder_count: manifest.counts.tool_reminders,
-        tool_timer_count: manifest.counts.tool_timers,
-        tool_timer_lap_count: manifest.counts.tool_timer_laps,
         tool_pomodoro_run_count: manifest.counts.tool_pomodoro_runs,
         tool_daily_stats_count: manifest.counts.tool_daily_stats,
         tool_activity_reminder_rule_count: manifest.counts.tool_activity_reminder_rules,
@@ -1133,6 +1125,14 @@ mod tests {
                     .await
                     .expect("old schema omits the later range index")
             );
+            pool.execute(
+                "INSERT INTO tool_timers(mode, accumulated_ms, status, created_at, updated_at)
+                VALUES('stopwatch', 0, 'running', 1000, 1000);
+                INSERT INTO tool_timer_laps(timer_id, lap_index, started_at, ended_at, duration_ms)
+                VALUES(1, 1, 1000, 2000, 1000);",
+            )
+            .await
+            .unwrap();
             pool.close().await;
 
             let manifest = SnapshotManifest {
@@ -1169,6 +1169,11 @@ mod tests {
             validate_current_schema(&migration_pool)
                 .await
                 .expect("migrated schema should expose all current tables");
+            assert!(
+                crate::data::schema_contracts::has_retired_timer(&migration_pool)
+                    .await
+                    .unwrap()
+            );
         })
         .catch_unwind()
         .await;

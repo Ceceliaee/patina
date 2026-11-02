@@ -19,8 +19,6 @@ interface RawBackupPreview {
   setting_count: number;
   icon_cache_count: number;
   tool_reminder_count?: number;
-  tool_timer_count?: number;
-  tool_timer_lap_count?: number;
   tool_pomodoro_run_count?: number;
   tool_daily_stats_count?: number;
   tool_activity_reminder_rule_count?: number;
@@ -45,8 +43,6 @@ export interface BackupPreview {
   settingCount: number;
   iconCacheCount: number;
   toolReminderCount: number;
-  toolTimerCount: number;
-  toolTimerLapCount: number;
   toolPomodoroRunCount: number;
   toolDailyStatsCount: number;
   toolActivityReminderRuleCount: number;
@@ -75,8 +71,6 @@ function isRawBackupPreview(value: unknown): value is RawBackupPreview {
     && typeof record.setting_count === "number"
     && typeof record.icon_cache_count === "number"
     && (record.tool_reminder_count === undefined || typeof record.tool_reminder_count === "number")
-    && (record.tool_timer_count === undefined || typeof record.tool_timer_count === "number")
-    && (record.tool_timer_lap_count === undefined || typeof record.tool_timer_lap_count === "number")
     && (record.tool_pomodoro_run_count === undefined || typeof record.tool_pomodoro_run_count === "number")
     && (record.tool_daily_stats_count === undefined || typeof record.tool_daily_stats_count === "number")
     && (record.tool_activity_reminder_rule_count === undefined || typeof record.tool_activity_reminder_rule_count === "number");
@@ -102,8 +96,6 @@ function mapRawBackupPreview(raw: RawBackupPreview): BackupPreview {
     settingCount: raw.setting_count,
     iconCacheCount: raw.icon_cache_count,
     toolReminderCount: raw.tool_reminder_count ?? 0,
-    toolTimerCount: raw.tool_timer_count ?? 0,
-    toolTimerLapCount: raw.tool_timer_lap_count ?? 0,
     toolPomodoroRunCount: raw.tool_pomodoro_run_count ?? 0,
     toolDailyStatsCount: raw.tool_daily_stats_count ?? 0,
     toolActivityReminderRuleCount:

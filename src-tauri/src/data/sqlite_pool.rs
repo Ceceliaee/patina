@@ -26,7 +26,7 @@ pub(crate) async fn register_sqlite_pool(state: &AppSqlitePool, pool: Pool<Sqlit
         previous.close().await;
     }
 }
-const VALIDATED_SCHEMA_MIGRATION_HEAD: i64 = schema::REMINDER_RECURRENCE_MIGRATION_VERSION;
+const VALIDATED_SCHEMA_MIGRATION_HEAD: i64 = schema::TIMER_RETIREMENT_MIGRATION_VERSION;
 mod activity_read_model_schema;
 pub(super) mod import_schema;
 mod maintenance;
@@ -239,8 +239,6 @@ async fn table_has_columns(
         "settings" => "PRAGMA table_info(settings)",
         "icon_cache" => "PRAGMA table_info(icon_cache)",
         "tool_reminders" => "PRAGMA table_info(tool_reminders)",
-        "tool_timers" => "PRAGMA table_info(tool_timers)",
-        "tool_timer_laps" => "PRAGMA table_info(tool_timer_laps)",
         "tool_pomodoro_runs" => "PRAGMA table_info(tool_pomodoro_runs)",
         "tool_daily_stats" => "PRAGMA table_info(tool_daily_stats)",
         "tool_software_reminder_rules" => "PRAGMA table_info(tool_software_reminder_rules)",
@@ -289,8 +287,6 @@ async fn table_has_index(
         "sessions" => "PRAGMA index_list(sessions)",
         "session_title_samples" => "PRAGMA index_list(session_title_samples)",
         "tool_reminders" => "PRAGMA index_list(tool_reminders)",
-        "tool_timers" => "PRAGMA index_list(tool_timers)",
-        "tool_timer_laps" => "PRAGMA index_list(tool_timer_laps)",
         "tool_pomodoro_runs" => "PRAGMA index_list(tool_pomodoro_runs)",
         "tool_daily_stats" => "PRAGMA index_list(tool_daily_stats)",
         "tool_software_reminder_rules" => "PRAGMA index_list(tool_software_reminder_rules)",
@@ -569,8 +565,6 @@ pub(super) async fn has_current_baseline_schema(pool: &Pool<Sqlite>) -> Result<b
 
 pub(super) async fn has_base_tools_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
     if !table_exists(pool, "tool_reminders").await?
-        || !table_exists(pool, "tool_timers").await?
-        || !table_exists(pool, "tool_timer_laps").await?
         || !table_exists(pool, "tool_pomodoro_runs").await?
         || !table_exists(pool, "tool_daily_stats").await?
     {
@@ -588,37 +582,6 @@ pub(super) async fn has_base_tools_schema(pool: &Pool<Sqlite>) -> Result<bool, S
             "status",
             "fired_at",
             "cancelled_at",
-        ],
-    )
-    .await?;
-    let timers_ready = table_has_columns(
-        pool,
-        "tool_timers",
-        &[
-            "id",
-            "mode",
-            "label",
-            "duration_ms",
-            "accumulated_ms",
-            "started_at",
-            "paused_at",
-            "completed_at",
-            "status",
-            "created_at",
-            "updated_at",
-        ],
-    )
-    .await?;
-    let laps_ready = table_has_columns(
-        pool,
-        "tool_timer_laps",
-        &[
-            "id",
-            "timer_id",
-            "lap_index",
-            "started_at",
-            "ended_at",
-            "duration_ms",
         ],
     )
     .await?;
@@ -651,10 +614,6 @@ pub(super) async fn has_base_tools_schema(pool: &Pool<Sqlite>) -> Result<bool, S
     .await?;
     let reminder_index_ready =
         table_has_index(pool, "tool_reminders", "idx_tool_reminders_schedule_status").await?;
-    let timer_index_ready =
-        table_has_index(pool, "tool_timers", "idx_tool_timers_status_updated").await?;
-    let lap_index_ready =
-        table_has_index(pool, "tool_timer_laps", "idx_tool_timer_laps_timer_id").await?;
     let pomodoro_index_ready = table_has_index(
         pool,
         "tool_pomodoro_runs",
@@ -665,13 +624,9 @@ pub(super) async fn has_base_tools_schema(pool: &Pool<Sqlite>) -> Result<bool, S
         table_has_index(pool, "tool_daily_stats", "idx_tool_daily_stats_updated").await?;
 
     Ok(reminders_ready
-        && timers_ready
-        && laps_ready
         && pomodoros_ready
         && daily_ready
         && reminder_index_ready
-        && timer_index_ready
-        && lap_index_ready
         && pomodoro_index_ready
         && daily_index_ready)
 }
@@ -779,6 +734,8 @@ pub(super) async fn has_web_favicon_cache_schema(pool: &Pool<Sqlite>) -> Result<
 
 async fn has_current_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
     let checks = [
+        schema_contracts::has_retired_timer(pool).await?,
+        schema_contracts::has_unique_activity_reminder_targets(pool).await?,
         schema_contracts::has_reminder_recurrence_schema(pool).await?,
         schema_contracts::has_activity_reminder_enabled_schema(pool).await?,
         schema_contracts::has_activity_reminder_extensions_schema(pool).await?,
@@ -1270,7 +1227,10 @@ mod tests {
                     .unwrap();
             assert_eq!(
                 final_versions,
-                vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+                schema::tracker_migrations()
+                    .into_iter()
+                    .map(|migration| migration.version)
+                    .collect::<Vec<_>>()
             );
         });
     }

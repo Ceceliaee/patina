@@ -1,12 +1,14 @@
 use crate::domain::tools::{
-    CompletedPomodoroNotification, CompletedTimerNotification, PomodoroPhase, PomodoroStatus,
-    TimerMode, TimerStatus, ToolPomodoroRun, ToolRuntimeSettings, ToolTimer, ToolTimerLap,
+    CompletedPomodoroNotification, PomodoroPhase, PomodoroStatus, ToolPomodoroRun,
+    ToolRuntimeSettings,
 };
 use sqlx::{Pool, Sqlite, Transaction};
 
 #[cfg(test)]
 mod activity_extensions_tests;
 mod activity_reminders;
+#[cfg(test)]
+mod activity_unique_target_tests;
 mod backup_restore;
 mod read;
 pub(crate) mod timed_reminders;
@@ -21,243 +23,15 @@ pub use read::fetch_tools_snapshot;
 
 pub use backup_restore::{
     fetch_all_daily_stats_for_backup, fetch_all_pomodoro_runs_for_backup,
-    fetch_all_reminders_for_backup, fetch_all_timer_laps_for_backup, fetch_all_timers_for_backup,
-    insert_missing_for_restore,
+    fetch_all_reminders_for_backup, insert_missing_for_restore,
 };
 
-use read::{
-    fetch_latest_pomodoro, fetch_latest_timer, fetch_pomodoro_by_id, fetch_timer_by_id,
-    map_timer_lap_row,
-};
+use read::{fetch_latest_pomodoro, fetch_pomodoro_by_id};
 
 pub async fn load_tool_runtime_settings(
     _pool: &Pool<Sqlite>,
 ) -> Result<ToolRuntimeSettings, sqlx::Error> {
     Ok(ToolRuntimeSettings::default())
-}
-
-pub async fn start_timer(
-    pool: &Pool<Sqlite>,
-    mode: TimerMode,
-    duration_ms: Option<i64>,
-    label: Option<&str>,
-    now_ms: i64,
-) -> Result<ToolTimer, String> {
-    let duration_ms = match mode {
-        TimerMode::Stopwatch => None,
-        TimerMode::Countdown => Some(duration_ms.unwrap_or(0).max(1_000)),
-    };
-    let label = label.map(str::trim).filter(|value| !value.is_empty());
-
-    let result = sqlx::query(
-        "INSERT INTO tool_timers (
-            mode, label, duration_ms, accumulated_ms, started_at, paused_at,
-            completed_at, status, created_at, updated_at
-         ) VALUES (?, ?, ?, 0, ?, NULL, NULL, ?, ?, ?)",
-    )
-    .bind(mode.as_str())
-    .bind(label)
-    .bind(duration_ms)
-    .bind(now_ms)
-    .bind(TimerStatus::Running.as_str())
-    .bind(now_ms)
-    .bind(now_ms)
-    .execute(pool)
-    .await
-    .map_err(|error| format!("failed to start timer: {error}"))?;
-
-    fetch_timer_by_id(pool, result.last_insert_rowid()).await
-}
-
-pub async fn pause_timer(pool: &Pool<Sqlite>, now_ms: i64) -> Result<(), String> {
-    let Some(timer) = fetch_latest_timer(pool).await? else {
-        return Ok(());
-    };
-    if timer.status != TimerStatus::Running {
-        return Ok(());
-    }
-
-    let elapsed = timer.elapsed_ms_at(now_ms);
-    sqlx::query(
-        "UPDATE tool_timers
-         SET accumulated_ms = ?, status = ?, started_at = NULL, paused_at = ?, updated_at = ?
-         WHERE id = ?",
-    )
-    .bind(elapsed)
-    .bind(TimerStatus::Paused.as_str())
-    .bind(now_ms)
-    .bind(now_ms)
-    .bind(timer.id)
-    .execute(pool)
-    .await
-    .map_err(|error| format!("failed to pause timer: {error}"))?;
-    Ok(())
-}
-
-pub async fn resume_timer(pool: &Pool<Sqlite>, now_ms: i64) -> Result<(), String> {
-    let Some(timer) = fetch_latest_timer(pool).await? else {
-        return Ok(());
-    };
-    if timer.status != TimerStatus::Paused {
-        return Ok(());
-    }
-
-    sqlx::query(
-        "UPDATE tool_timers
-         SET status = ?, started_at = ?, paused_at = NULL, updated_at = ?
-         WHERE id = ?",
-    )
-    .bind(TimerStatus::Running.as_str())
-    .bind(now_ms)
-    .bind(now_ms)
-    .bind(timer.id)
-    .execute(pool)
-    .await
-    .map_err(|error| format!("failed to resume timer: {error}"))?;
-    Ok(())
-}
-
-pub async fn reset_timer(pool: &Pool<Sqlite>, now_ms: i64) -> Result<(), String> {
-    let Some(timer) = fetch_latest_timer(pool).await? else {
-        return Ok(());
-    };
-
-    sqlx::query(
-        "UPDATE tool_timers
-         SET accumulated_ms = 0,
-             started_at = NULL,
-             paused_at = NULL,
-             completed_at = NULL,
-             status = ?,
-             updated_at = ?
-         WHERE id = ?",
-    )
-    .bind(TimerStatus::Idle.as_str())
-    .bind(now_ms)
-    .bind(timer.id)
-    .execute(pool)
-    .await
-    .map_err(|error| format!("failed to reset timer: {error}"))?;
-    clear_laps_for_timer(pool, timer.id).await?;
-    Ok(())
-}
-
-pub async fn add_timer_lap(
-    pool: &Pool<Sqlite>,
-    now_ms: i64,
-) -> Result<Option<ToolTimerLap>, String> {
-    let Some(timer) = fetch_latest_timer(pool).await? else {
-        return Ok(None);
-    };
-    if timer.status != TimerStatus::Running {
-        return Ok(None);
-    }
-
-    let last_lap = sqlx::query(
-        "SELECT id, timer_id, lap_index, started_at, ended_at, duration_ms
-         FROM tool_timer_laps
-         WHERE timer_id = ?
-         ORDER BY lap_index DESC, id DESC
-         LIMIT 1",
-    )
-    .bind(timer.id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|error| format!("failed to load previous timer lap: {error}"))?
-    .map(map_timer_lap_row);
-
-    let lap_index = last_lap
-        .as_ref()
-        .map(|lap| lap.lap_index.saturating_add(1))
-        .unwrap_or(1);
-    let started_at = last_lap
-        .map(|lap| lap.ended_at)
-        .or(timer.started_at)
-        .unwrap_or(now_ms);
-    let ended_at = now_ms.max(started_at);
-    let duration_ms = ended_at.saturating_sub(started_at);
-
-    let result = sqlx::query(
-        "INSERT INTO tool_timer_laps (timer_id, lap_index, started_at, ended_at, duration_ms)
-         VALUES (?, ?, ?, ?, ?)",
-    )
-    .bind(timer.id)
-    .bind(lap_index)
-    .bind(started_at)
-    .bind(ended_at)
-    .bind(duration_ms)
-    .execute(pool)
-    .await
-    .map_err(|error| format!("failed to add timer lap: {error}"))?;
-
-    let lap_id = result.last_insert_rowid();
-    let lap = sqlx::query(
-        "SELECT id, timer_id, lap_index, started_at, ended_at, duration_ms
-         FROM tool_timer_laps
-         WHERE id = ?",
-    )
-    .bind(lap_id)
-    .fetch_one(pool)
-    .await
-    .map_err(|error| format!("failed to read timer lap: {error}"))
-    .map(map_timer_lap_row)?;
-
-    Ok(Some(lap))
-}
-
-pub async fn complete_due_countdown(
-    tx: &mut Transaction<'_, Sqlite>,
-    now_ms: i64,
-) -> Result<Option<CompletedTimerNotification>, String> {
-    let Some(timer) = fetch_latest_timer(&mut **tx).await? else {
-        return Ok(None);
-    };
-    if !timer.is_countdown_due(now_ms) {
-        return Ok(None);
-    }
-
-    let duration_ms = timer
-        .duration_ms
-        .unwrap_or_else(|| timer.elapsed_ms_at(now_ms));
-    sqlx::query(
-        "UPDATE tool_timers
-         SET accumulated_ms = ?,
-             started_at = NULL,
-             paused_at = NULL,
-             completed_at = ?,
-             status = ?,
-             updated_at = ?
-         WHERE id = ? AND status = ?",
-    )
-    .bind(duration_ms.max(0))
-    .bind(now_ms)
-    .bind(TimerStatus::Completed.as_str())
-    .bind(now_ms)
-    .bind(timer.id)
-    .bind(TimerStatus::Running.as_str())
-    .execute(&mut **tx)
-    .await
-    .map_err(|error| format!("failed to complete countdown: {error}"))?;
-
-    Ok(Some(CompletedTimerNotification {
-        timer_id: timer.id,
-        label: timer.label,
-    }))
-}
-
-pub async fn pause_running_stopwatch_after_restart(
-    pool: &Pool<Sqlite>,
-    now_ms: i64,
-) -> Result<bool, String> {
-    let Some(timer) = fetch_latest_timer(pool).await? else {
-        return Ok(false);
-    };
-    if timer.mode != TimerMode::Stopwatch || timer.status != TimerStatus::Running {
-        return Ok(false);
-    }
-
-    pause_timer(pool, now_ms).await?;
-    Ok(true)
 }
 
 pub async fn start_pomodoro(
@@ -493,15 +267,6 @@ pub async fn reset_pomodoro(pool: &Pool<Sqlite>, now_ms: i64) -> Result<(), Stri
     Ok(())
 }
 
-async fn clear_laps_for_timer(pool: &Pool<Sqlite>, timer_id: i64) -> Result<(), String> {
-    sqlx::query("DELETE FROM tool_timer_laps WHERE timer_id = ?")
-        .bind(timer_id)
-        .execute(pool)
-        .await
-        .map_err(|error| format!("failed to clear timer laps: {error}"))?;
-    Ok(())
-}
-
 async fn increment_daily_pomodoro_stat_tx(
     tx: &mut Transaction<'_, Sqlite>,
     date_key: &str,
@@ -549,20 +314,17 @@ mod tests {
         now_ms: i64,
     ) -> Result<Vec<crate::domain::tools::ActivityReminderNotification>, String> {
         let mut tx = pool.begin().await.map_err(|error| error.to_string())?;
-        let result =
-            super::fire_due_activity_reminders(&mut tx, date_key, day_start_ms, now_ms).await?;
+        let result = super::fire_due_activity_reminders(
+            &mut tx,
+            date_key,
+            day_start_ms,
+            now_ms,
+            &[],
+            &crate::domain::tools::ActivityReminderCheck::All,
+        )
+        .await?;
         tx.commit().await.map_err(|error| error.to_string())?;
-        Ok(result)
-    }
-
-    async fn complete_due_countdown(
-        pool: &Pool<Sqlite>,
-        now_ms: i64,
-    ) -> Result<Option<CompletedTimerNotification>, String> {
-        let mut tx = pool.begin().await.map_err(|error| error.to_string())?;
-        let result = super::complete_due_countdown(&mut tx, now_ms).await?;
-        tx.commit().await.map_err(|error| error.to_string())?;
-        Ok(result)
+        Ok(result.notifications)
     }
 
     async fn complete_due_pomodoro_phase(
@@ -597,6 +359,9 @@ mod tests {
             .await
             .unwrap();
         pool.execute(db_schema::REMINDER_RECURRENCE_SQL)
+            .await
+            .unwrap();
+        pool.execute(db_schema::ACTIVITY_REMINDER_UNIQUE_TARGET_SQL)
             .await
             .unwrap();
         pool.execute(db_schema::WEB_ACTIVITY_SCHEMA_SQL)
@@ -665,7 +430,7 @@ mod tests {
             assert_eq!(backup[0].status, "paused");
             let restored = setup_test_db().await;
             let mut tx = restored.begin().await.unwrap();
-            insert_missing_for_restore(&mut tx, &backup, &[], &[], &[], &[])
+            insert_missing_for_restore(&mut tx, &backup, &[], &[])
                 .await
                 .unwrap();
             tx.commit().await.unwrap();
@@ -780,7 +545,7 @@ mod tests {
             let backup = fetch_all_reminders_for_backup(&pool).await.unwrap();
             let restored = setup_test_db().await;
             let mut tx = restored.begin().await.unwrap();
-            insert_missing_for_restore(&mut tx, &backup, &[], &[], &[], &[])
+            insert_missing_for_restore(&mut tx, &backup, &[], &[])
                 .await
                 .unwrap();
             tx.commit().await.unwrap();
@@ -1289,17 +1054,22 @@ mod tests {
             .unwrap();
 
             for index in 0..100 {
-                let target = match index % 3 {
-                    0 => ActivityReminderTarget::App {
-                        app_name: "Editor".to_string(),
-                        exe_name: Some("editor.exe".to_string()),
-                    },
-                    1 => ActivityReminderTarget::Category {
+                let target = match index {
+                    98 => ActivityReminderTarget::Category {
                         category_id: "development".to_string(),
                     },
-                    _ => ActivityReminderTarget::Web {
+                    99 => ActivityReminderTarget::Web {
                         normalized_domain: "example.com".to_string(),
                     },
+                    _ => {
+                        let exe = format!("editor-{index}.exe");
+                        sqlx::query("INSERT INTO sessions(app_name,exe_name,start_time,end_time,duration) VALUES('Editor',?,0,70000,70000)")
+                            .bind(&exe).execute(&pool).await.unwrap();
+                        ActivityReminderTarget::App {
+                            app_name: "Editor".to_string(),
+                            exe_name: Some(exe),
+                        }
+                    }
                 };
                 create_activity_reminder_rule(&pool, &target, "Target", 60_000, "", index)
                     .await
@@ -1405,90 +1175,6 @@ mod tests {
                 .iter()
                 .any(|row| row.0 == "category" && row.2 == Some(1_100)));
             assert!(rows.iter().any(|row| row.0 == "web" && row.1 == "Example"));
-        });
-    }
-
-    #[test]
-    fn timer_laps_are_committed_in_order() {
-        tauri::async_runtime::block_on(async {
-            let pool = setup_test_db().await;
-            start_timer(&pool, TimerMode::Stopwatch, None, None, 1_000)
-                .await
-                .unwrap();
-
-            add_timer_lap(&pool, 1_500).await.unwrap();
-            add_timer_lap(&pool, 2_000).await.unwrap();
-            let snapshot = fetch_tools_snapshot(&pool, 2_000, "2026-06-07")
-                .await
-                .unwrap();
-
-            assert_eq!(snapshot.timer_laps.len(), 2);
-            assert_eq!(snapshot.timer_laps[0].duration_ms, 500);
-            assert_eq!(
-                snapshot.timer_laps[1].started_at,
-                snapshot.timer_laps[0].ended_at
-            );
-        });
-    }
-
-    #[test]
-    fn countdown_completion_updates_current_timer_once() {
-        tauri::async_runtime::block_on(async {
-            let pool = setup_test_db().await;
-            start_timer(&pool, TimerMode::Countdown, Some(1_000), None, 1_000)
-                .await
-                .unwrap();
-
-            let completed = complete_due_countdown(&pool, 2_100).await.unwrap();
-            let second = complete_due_countdown(&pool, 2_200).await.unwrap();
-            let snapshot = fetch_tools_snapshot(&pool, 2_200, "2026-06-07")
-                .await
-                .unwrap();
-
-            assert!(completed.is_some());
-            assert!(second.is_none());
-            assert_eq!(
-                snapshot.current_timer.unwrap().status,
-                TimerStatus::Completed
-            );
-        });
-    }
-
-    #[test]
-    fn pausing_running_timer_sets_paused_status() {
-        tauri::async_runtime::block_on(async {
-            let pool = setup_test_db().await;
-            start_timer(&pool, TimerMode::Stopwatch, None, None, 1_000)
-                .await
-                .unwrap();
-
-            pause_timer(&pool, 1_500).await.unwrap();
-            let snapshot = fetch_tools_snapshot(&pool, 3_000, "2026-06-07")
-                .await
-                .unwrap();
-            let timer = snapshot.current_timer.unwrap();
-
-            assert_eq!(timer.status, TimerStatus::Paused);
-            assert_eq!(timer.elapsed_ms_at(3_000), 500);
-        });
-    }
-
-    #[test]
-    fn reset_timer_clears_current_timer_from_snapshot() {
-        tauri::async_runtime::block_on(async {
-            let pool = setup_test_db().await;
-            start_timer(&pool, TimerMode::Stopwatch, None, None, 1_000)
-                .await
-                .unwrap();
-            add_timer_lap(&pool, 1_500).await.unwrap();
-
-            reset_timer(&pool, 2_000).await.unwrap();
-            let snapshot = fetch_tools_snapshot(&pool, 2_000, "2026-06-07")
-                .await
-                .unwrap();
-
-            assert!(snapshot.current_timer.is_none());
-            assert!(snapshot.timer_laps.is_empty());
         });
     }
 

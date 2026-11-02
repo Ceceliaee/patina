@@ -33,6 +33,9 @@ async fn setup_test_db() -> SqlitePool {
     pool.execute(crate::data::schema::REMINDER_RECURRENCE_SQL)
         .await
         .unwrap();
+    pool.execute(db_schema::ACTIVITY_REMINDER_UNIQUE_TARGET_SQL)
+        .await
+        .unwrap();
     pool.execute(db_schema::WEB_ACTIVITY_SCHEMA_SQL)
         .await
         .unwrap();
@@ -132,8 +135,6 @@ fn merge_restore_payload_preserves_existing_data_and_imports_missing_data() {
             web_activity_segments: Vec::new(),
             web_favicon_cache: Vec::new(),
             tool_reminders: Vec::new(),
-            tool_timers: Vec::new(),
-            tool_timer_laps: Vec::new(),
             tool_pomodoro_runs: Vec::new(),
             tool_daily_stats: Vec::new(),
         };
@@ -225,8 +226,6 @@ fn merge_restore_maps_title_samples_to_inserted_session_ids() {
             web_activity_segments: Vec::new(),
             web_favicon_cache: Vec::new(),
             tool_reminders: Vec::new(),
-            tool_timers: Vec::new(),
-            tool_timer_laps: Vec::new(),
             tool_pomodoro_runs: Vec::new(),
             tool_daily_stats: Vec::new(),
         };

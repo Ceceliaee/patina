@@ -9,6 +9,87 @@ use sqlx::{Executor, Row, SqlitePool};
 use std::path::Path;
 
 #[tokio::test]
+async fn timer_retirement_preserves_reminders_pomodoro_and_migration_history() {
+    use sqlx::migrate::{Migrate, Migration, MigrationType};
+
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    let mut connection = pool.acquire().await.unwrap();
+    connection.ensure_migrations_table().await.unwrap();
+    for migration in schema::tracker_migrations()
+        .into_iter()
+        .filter(|migration| migration.version < schema::TIMER_RETIREMENT_MIGRATION_VERSION)
+    {
+        connection
+            .apply(&Migration::new(
+                migration.version,
+                migration.description.into(),
+                MigrationType::ReversibleUp,
+                migration.sql.into(),
+                false,
+            ))
+            .await
+            .unwrap();
+    }
+    drop(connection);
+    pool.execute(
+        "INSERT INTO tool_timers(mode, accumulated_ms, status, created_at, updated_at)
+        VALUES('stopwatch', 12000, 'running', 1000, 1000);
+        INSERT INTO tool_timer_laps(timer_id, lap_index, started_at, ended_at, duration_ms)
+        VALUES(1, 1, 1000, 2000, 1000);
+        INSERT INTO tool_timers(mode, duration_ms, accumulated_ms, status, created_at, updated_at)
+        VALUES('countdown', 60000, 0, 'paused', 2000, 2000);
+        INSERT INTO tool_reminders(label, scheduled_at, created_at, status)
+        VALUES('Keep reminder', 5000, 1000, 'scheduled');",
+    )
+    .await
+    .unwrap();
+    super::repositories::tools::start_pomodoro(&pool, 60000, 10000, 20000, 4, 1000)
+        .await
+        .unwrap();
+    let prior: Vec<(i64, Vec<u8>)> =
+        sqlx::query_as("SELECT version, checksum FROM _sqlx_migrations ORDER BY version")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert!(!super::schema_contracts::has_retired_timer(&pool)
+        .await
+        .unwrap());
+
+    for _ in 0..2 {
+        prepare_pool_schema(&pool, Path::new("timer-retirement-synthetic.db"))
+            .await
+            .unwrap();
+        assert!(super::schema_contracts::has_retired_timer(&pool)
+            .await
+            .unwrap());
+        let after: Vec<(i64, Vec<u8>)> = sqlx::query_as(
+            "SELECT version, checksum FROM _sqlx_migrations WHERE version < ? ORDER BY version",
+        )
+        .bind(schema::TIMER_RETIREMENT_MIGRATION_VERSION)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(prior, after);
+        let snapshot = super::repositories::tools::fetch_tools_snapshot(&pool, 2000, "2026-11-02")
+            .await
+            .unwrap();
+        assert_eq!(snapshot.reminders[0].label, "Keep reminder");
+        assert_eq!(snapshot.next_reminder_at, Some(5000));
+        assert_eq!(snapshot.current_pomodoro.unwrap().focus_ms, 60000);
+        let violations = sqlx::query("PRAGMA foreign_key_check")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+        assert!(violations.is_empty());
+    }
+    pool.close().await;
+}
+
+#[tokio::test]
 async fn version_14_upgrade_adds_range_statistics_without_rewriting_existing_migrations() {
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(1)
@@ -68,7 +149,7 @@ async fn version_14_upgrade_adds_range_statistics_without_rewriting_existing_mig
                 .fetch_one(&pool)
                 .await
                 .unwrap(),
-            schema::REMINDER_RECURRENCE_MIGRATION_VERSION
+            schema::TIMER_RETIREMENT_MIGRATION_VERSION
         );
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT SUM(duration) FROM sessions")
@@ -470,7 +551,10 @@ fn version_eight_draft_triggers_are_reinstalled_without_touching_facts() {
                 .unwrap();
         assert_eq!(
             versions,
-            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+            schema::tracker_migrations()
+                .into_iter()
+                .map(|migration| migration.version)
+                .collect::<Vec<_>>()
         );
     });
 }

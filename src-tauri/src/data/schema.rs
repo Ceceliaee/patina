@@ -40,6 +40,38 @@ pub const ANONYMOUS_ACTIVITY_MIGRATION_VERSION: i64 = 16;
 pub const WIDGET_RETIREMENT_MIGRATION_VERSION: i64 = 17;
 pub const ACTIVITY_REMINDER_ENABLED_MIGRATION_VERSION: i64 = 19;
 pub const REMINDER_RECURRENCE_MIGRATION_VERSION: i64 = 20;
+pub const TIMER_RETIREMENT_MIGRATION_VERSION: i64 = 22;
+pub const TIMER_RETIREMENT_SQL: &str = "
+DROP TABLE IF EXISTS tool_timer_laps;
+DROP TABLE IF EXISTS tool_timers;
+";
+pub const ACTIVITY_REMINDER_UNIQUE_TARGET_MIGRATION_VERSION: i64 = 21;
+pub const ACTIVITY_REMINDER_UNIQUE_TARGET_SQL: &str = "
+    WITH ranked AS (
+        SELECT id, ROW_NUMBER() OVER (
+            PARTITION BY target_kind, CASE target_kind
+                WHEN 'app' THEN CASE WHEN NULLIF(TRIM(TRIM(exe_name), CHAR(34)), '') IS NOT NULL
+                    THEN 'exe:' || LOWER(TRIM(TRIM(exe_name), CHAR(34))) ELSE 'name:' || LOWER(TRIM(app_name)) END
+                WHEN 'category' THEN TRIM(category_id)
+                WHEN 'web' THEN LOWER(RTRIM(TRIM(normalized_domain), '.'))
+            END
+            ORDER BY created_at, id
+        ) AS position
+        FROM tool_activity_reminder_rules WHERE disabled_at IS NULL
+    )
+    UPDATE tool_activity_reminder_rules
+    SET disabled_at = MAX(updated_at, CAST(strftime('%s', 'now') AS INTEGER) * 1000),
+        updated_at = MAX(updated_at, CAST(strftime('%s', 'now') AS INTEGER) * 1000)
+    WHERE id IN (SELECT id FROM ranked WHERE position > 1);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_tool_activity_reminder_rules_unique_target
+    ON tool_activity_reminder_rules(target_kind, CASE target_kind
+        WHEN 'app' THEN CASE WHEN NULLIF(TRIM(TRIM(exe_name), CHAR(34)), '') IS NOT NULL
+            THEN 'exe:' || LOWER(TRIM(TRIM(exe_name), CHAR(34))) ELSE 'name:' || LOWER(TRIM(app_name)) END
+        WHEN 'category' THEN TRIM(category_id)
+        WHEN 'web' THEN LOWER(RTRIM(TRIM(normalized_domain), '.'))
+    END) WHERE disabled_at IS NULL;
+";
 pub const REMINDER_RECURRENCE_SQL: &str = "
     CREATE TABLE IF NOT EXISTS tool_reminder_recurrences (
         reminder_id INTEGER PRIMARY KEY REFERENCES tool_reminders(id) ON DELETE CASCADE,
@@ -1219,6 +1251,16 @@ pub fn tracker_migrations() -> Vec<Migration> {
             version: REMINDER_RECURRENCE_MIGRATION_VERSION,
             description: "persist_reminder_recurrence",
             sql: REMINDER_RECURRENCE_SQL,
+        },
+        Migration {
+            version: ACTIVITY_REMINDER_UNIQUE_TARGET_MIGRATION_VERSION,
+            description: "unique_activity_reminder_targets",
+            sql: ACTIVITY_REMINDER_UNIQUE_TARGET_SQL,
+        },
+        Migration {
+            version: TIMER_RETIREMENT_MIGRATION_VERSION,
+            description: "retire_tools_timer",
+            sql: TIMER_RETIREMENT_SQL,
         },
     ]
 }

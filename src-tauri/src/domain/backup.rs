@@ -75,31 +75,6 @@ pub struct BackupToolReminder {
 }
 
 #[derive(Clone, Debug)]
-pub struct BackupToolTimer {
-    pub id: i64,
-    pub mode: String,
-    pub label: Option<String>,
-    pub duration_ms: Option<i64>,
-    pub accumulated_ms: i64,
-    pub started_at: Option<i64>,
-    pub paused_at: Option<i64>,
-    pub completed_at: Option<i64>,
-    pub status: String,
-    pub created_at: i64,
-    pub updated_at: i64,
-}
-
-#[derive(Clone, Debug)]
-pub struct BackupToolTimerLap {
-    pub id: i64,
-    pub timer_id: i64,
-    pub lap_index: i64,
-    pub started_at: i64,
-    pub ended_at: i64,
-    pub duration_ms: i64,
-}
-
-#[derive(Clone, Debug)]
 pub struct BackupToolPomodoroRun {
     pub phase: String,
     pub status: String,
@@ -132,8 +107,6 @@ pub struct BackupRecords {
     pub web_activity_segments: Vec<BackupWebActivitySegment>,
     pub web_favicon_cache: Vec<BackupWebFaviconCache>,
     pub tool_reminders: Vec<BackupToolReminder>,
-    pub tool_timers: Vec<BackupToolTimer>,
-    pub tool_timer_laps: Vec<BackupToolTimerLap>,
     pub tool_pomodoro_runs: Vec<BackupToolPomodoroRun>,
     pub tool_daily_stats: Vec<BackupToolDailyStats>,
 }
@@ -159,8 +132,6 @@ pub struct BackupPreview {
     pub icon_cache_count: usize,
     pub web_activity_segment_count: usize,
     pub tool_reminder_count: usize,
-    pub tool_timer_count: usize,
-    pub tool_timer_lap_count: usize,
     pub tool_pomodoro_run_count: usize,
     pub tool_daily_stats_count: usize,
     pub tool_activity_reminder_rule_count: usize,

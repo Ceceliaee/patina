@@ -20,8 +20,6 @@ pub(super) async fn load_backup_records(pool: &Pool<Sqlite>) -> Result<BackupRec
     let web_favicon_cache =
         repositories::web_activity::fetch_all_favicon_cache_for_backup(pool).await?;
     let tool_reminders = repositories::tools::fetch_all_reminders_for_backup(pool).await?;
-    let tool_timers = repositories::tools::fetch_all_timers_for_backup(pool).await?;
-    let tool_timer_laps = repositories::tools::fetch_all_timer_laps_for_backup(pool).await?;
     let tool_pomodoro_runs = repositories::tools::fetch_all_pomodoro_runs_for_backup(pool).await?;
     let tool_daily_stats = repositories::tools::fetch_all_daily_stats_for_backup(pool).await?;
 
@@ -33,8 +31,6 @@ pub(super) async fn load_backup_records(pool: &Pool<Sqlite>) -> Result<BackupRec
         web_activity_segments,
         web_favicon_cache,
         tool_reminders,
-        tool_timers,
-        tool_timer_laps,
         tool_pomodoro_runs,
         tool_daily_stats,
     })
