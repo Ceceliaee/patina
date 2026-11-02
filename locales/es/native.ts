@@ -309,8 +309,6 @@ export const MESSAGES = {
   },
   "native.tools.activityReminderWebTitle": "Recordatorio web",
   "native.tools.breakEnded": "Descanso terminado",
-  "native.tools.countdownDefaultBody": "La cuenta atrás ha terminado",
-  "native.tools.countdownTitle": "Cuenta atrás terminada",
   "native.tools.focusEnded": "Concentración terminada",
   "native.tools.nextFocus": "Siguiente: concentración",
   "native.tools.nextLongBreak": "Siguiente: descanso largo",

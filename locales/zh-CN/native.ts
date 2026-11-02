@@ -161,8 +161,6 @@ export const MESSAGES = {
   },
   "native.tools.activityReminderWebTitle": "网页提醒",
   "native.tools.breakEnded": "休息结束",
-  "native.tools.countdownDefaultBody": "倒计时已完成",
-  "native.tools.countdownTitle": "倒计时结束",
   "native.tools.focusEnded": "专注结束",
   "native.tools.nextFocus": "下一阶段：专注",
   "native.tools.nextLongBreak": "下一阶段：长休息",

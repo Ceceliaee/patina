@@ -130,7 +130,6 @@ export const MESSAGES = {
   "accessibility.titleBar.maximize": "Развернуть окно",
   "accessibility.titleBar.minimize": "Свернуть окно",
   "accessibility.titleBar.restore": "Восстановить размер окна",
-  "accessibility.tools.addTimerLap": "Добавить круг",
   "accessibility.tools.createReminder": "Создать напоминание",
   "accessibility.tools.decreaseDuration": {
     "$type": "message",
@@ -162,14 +161,10 @@ export const MESSAGES = {
   },
   "accessibility.tools.openStatusChip": "Открыть состояние инструмента",
   "accessibility.tools.pausePomodoro": "Приостановить помодоро",
-  "accessibility.tools.pauseTimer": "Приостановить отсчёт",
   "accessibility.tools.resetPomodoro": "Сбросить помодоро",
-  "accessibility.tools.resetTimer": "Сбросить отсчёт",
   "accessibility.tools.restorePomodoroDefaults": "Восстановить стандартную длительность помодоро",
   "accessibility.tools.resumePomodoro": "Продолжить помодоро",
-  "accessibility.tools.resumeTimer": "Продолжить отсчёт",
   "accessibility.tools.skipPomodoroPhase": "Пропустить этап помодоро",
   "accessibility.tools.startPomodoro": "Запустить помодоро",
-  "accessibility.tools.startTimer": "Запустить отсчёт",
   "accessibility.miniWindow.openMainWindow": "Открыть главное окно",
 } as const;

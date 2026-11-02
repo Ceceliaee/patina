@@ -76,27 +76,9 @@ export const MESSAGES = {
       ]
     }
   },
-  "tools.countdownDuration": "Длительность обратного отсчёта",
   "tools.createReminder": "Создать",
   "tools.defaultReminderLabel": "Время вышло",
   "tools.focusDuration": "Длительность работы",
-  "tools.lap": "Круг",
-  "tools.lapIndex": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "Круг ",
-        {
-          "$op": "arg",
-          "name": "index"
-        },
-        ""
-      ]
-    }
-  },
-  "tools.lapsEmpty": "Нет кругов",
-  "tools.lapsTitle": "Круги",
   "tools.loadFailed": "Не удалось загрузить состояние инструментов.",
   "tools.longBreakDuration": "Длинный перерыв",
   "tools.longBreakEvery": "Интервал длинного перерыва",
@@ -145,7 +127,9 @@ export const MESSAGES = {
   "tools.pomodoroStatus.idle": "Не запущено",
   "tools.pomodoroStatus.paused": "Приостановлено",
   "tools.pomodoroStatus.running": "Выполняется",
-  "tools.pomodoroTitle": "Помодоро",
+  "tools.pomodoroTitle": "Концентрация",
+  "tools.focusModePomodoro": "Помодоро",
+  "tools.focusModeFree": "Свободная концентрация",
   "tools.relativeMinutesLabel": "Минут от текущего момента",
   "tools.reminderEmpty": "Нет напоминаний",
   "tools.reminderLabel": "Напоминание",
@@ -166,23 +150,11 @@ export const MESSAGES = {
   "tools.shortBreakDuration": "Короткий перерыв",
   "tools.skipPhase": "Пропустить",
   "tools.activityReminderActive": "Активно",
-  "tools.activityReminderDurationInvalid": "Укажите от 1 до 1440 мин.",
-  "tools.activityReminderDurationLabel": "Дневной лимит (мин)",
+  "tools.activityReminderDurationLabel": "Дневной лимит",
   "tools.start": "Запустить",
   "tools.stateRefreshPending": "Состояние восстанавливается. Не повторяйте действие.",
   "tools.statusChip.break": "Перерыв",
-  "tools.statusChip.countdown": "Обратный отсчёт",
   "tools.statusChip.focus": "Работа",
   "tools.statusChip.reminder": "Напоминание",
-  "tools.statusChip.stopwatch": "Таймер",
-  "tools.timerLabel": "Название",
-  "tools.timerLabelPlaceholder": "Необязательно",
-  "tools.timerModeCountdown": "Обратный отсчёт",
-  "tools.timerModeStopwatch": "Секундомер",
-  "tools.timerStatus.completed": "Завершено",
-  "tools.timerStatus.idle": "Не запущено",
-  "tools.timerStatus.paused": "Приостановлено",
-  "tools.timerStatus.running": "Выполняется",
-  "tools.timerTitle": "Таймер",
   "tools.title": "Инструменты"
 } as const;

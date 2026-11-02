@@ -77,27 +77,9 @@ export const MESSAGES = {
       ]
     }
   },
-  "tools.countdownDuration": "Countdown duration",
   "tools.createReminder": "Create",
   "tools.defaultReminderLabel": "Time is up",
   "tools.focusDuration": "Focus duration",
-  "tools.lap": "Lap",
-  "tools.lapIndex": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "Lap ",
-        {
-          "$op": "arg",
-          "name": "index"
-        },
-        ""
-      ]
-    }
-  },
-  "tools.lapsEmpty": "No laps",
-  "tools.lapsTitle": "Laps",
   "tools.loadFailed": "Could not load tools status.",
   "tools.longBreakDuration": "Long break",
   "tools.longBreakEvery": "Long break interval",
@@ -146,7 +128,9 @@ export const MESSAGES = {
   "tools.pomodoroStatus.idle": "Not started",
   "tools.pomodoroStatus.paused": "Paused",
   "tools.pomodoroStatus.running": "Running",
-  "tools.pomodoroTitle": "Pomodoro",
+  "tools.pomodoroTitle": "Focus",
+  "tools.focusModePomodoro": "Pomodoro",
+  "tools.focusModeFree": "Free focus",
   "tools.relativeMinutesLabel": "Minutes from now",
   "tools.reminderEmpty": "No reminders",
   "tools.reminderLabel": "Reminder",
@@ -167,23 +151,11 @@ export const MESSAGES = {
   "tools.shortBreakDuration": "Short break",
   "tools.skipPhase": "Skip",
   "tools.activityReminderActive": "Active",
-  "tools.activityReminderDurationInvalid": "Use 1–1440 min.",
-  "tools.activityReminderDurationLabel": "Daily limit (min)",
+  "tools.activityReminderDurationLabel": "Daily limit",
   "tools.start": "Start",
   "tools.stateRefreshPending": "State is recovering. Do not repeat this action.",
   "tools.statusChip.break": "Break",
-  "tools.statusChip.countdown": "Countdown",
   "tools.statusChip.focus": "Focus",
   "tools.statusChip.reminder": "Reminder",
-  "tools.statusChip.stopwatch": "Timer",
-  "tools.timerLabel": "Name",
-  "tools.timerLabelPlaceholder": "Optional",
-  "tools.timerModeCountdown": "Countdown",
-  "tools.timerModeStopwatch": "Count up",
-  "tools.timerStatus.completed": "Completed",
-  "tools.timerStatus.idle": "Not started",
-  "tools.timerStatus.paused": "Paused",
-  "tools.timerStatus.running": "Running",
-  "tools.timerTitle": "Timer",
   "tools.title": "Tools"
 } as const;

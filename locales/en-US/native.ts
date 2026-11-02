@@ -166,8 +166,6 @@ export const MESSAGES = {
   },
   "native.tools.activityReminderWebTitle": "Web reminder",
   "native.tools.breakEnded": "Break complete",
-  "native.tools.countdownDefaultBody": "The countdown is complete",
-  "native.tools.countdownTitle": "Countdown finished",
   "native.tools.focusEnded": "Focus complete",
   "native.tools.nextFocus": "Next: focus",
   "native.tools.nextLongBreak": "Next: long break",

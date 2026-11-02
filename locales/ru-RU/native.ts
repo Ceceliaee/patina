@@ -361,8 +361,6 @@ export const MESSAGES = {
   },
   "native.tools.activityReminderWebTitle": "Напоминание об активности сайта",
   "native.tools.breakEnded": "Перерыв завершён",
-  "native.tools.countdownDefaultBody": "Обратный отсчёт завершён",
-  "native.tools.countdownTitle": "Обратный отсчёт завершён",
   "native.tools.focusEnded": "Рабочий интервал завершён",
   "native.tools.nextFocus": "Далее: работа",
   "native.tools.nextLongBreak": "Далее: длинный перерыв",

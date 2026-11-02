@@ -130,7 +130,6 @@ export const MESSAGES = {
   "accessibility.titleBar.maximize": "Maximizar ventana",
   "accessibility.titleBar.minimize": "Minimizar ventana",
   "accessibility.titleBar.restore": "Restaurar ventana",
-  "accessibility.tools.addTimerLap": "Añadir vuelta",
   "accessibility.tools.createReminder": "Crear recordatorio",
   "accessibility.tools.decreaseDuration": {
     "$type": "message",
@@ -162,14 +161,10 @@ export const MESSAGES = {
   },
   "accessibility.tools.openStatusChip": "Abrir estado de la herramienta",
   "accessibility.tools.pausePomodoro": "Pausar pomodoro",
-  "accessibility.tools.pauseTimer": "Pausar temporización",
   "accessibility.tools.resetPomodoro": "Restablecer pomodoro",
-  "accessibility.tools.resetTimer": "Restablecer temporización",
   "accessibility.tools.restorePomodoroDefaults": "Restaurar duraciones predeterminadas del pomodoro",
   "accessibility.tools.resumePomodoro": "Reanudar pomodoro",
-  "accessibility.tools.resumeTimer": "Reanudar temporización",
   "accessibility.tools.skipPomodoroPhase": "Omitir fase del pomodoro",
   "accessibility.tools.startPomodoro": "Iniciar pomodoro",
-  "accessibility.tools.startTimer": "Iniciar temporización",
   "accessibility.miniWindow.openMainWindow": "Abrir ventana principal",
 } as const;

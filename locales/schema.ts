@@ -488,11 +488,6 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "accessibility.tools.addTimerLap": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "accessibility.tools.createReminder": {
     "kind": "string",
     "params": [],
@@ -530,17 +525,7 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "accessibility.tools.pauseTimer": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "accessibility.tools.resetPomodoro": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "accessibility.tools.resetTimer": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -555,22 +540,12 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "accessibility.tools.resumeTimer": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "accessibility.tools.skipPomodoroPhase": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "accessibility.tools.startPomodoro": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "accessibility.tools.startTimer": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3384,16 +3359,6 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "native"
   },
-  "native.tools.countdownDefaultBody": {
-    "kind": "string",
-    "params": [],
-    "surface": "native"
-  },
-  "native.tools.countdownTitle": {
-    "kind": "string",
-    "params": [],
-    "surface": "native"
-  },
   "native.tools.focusEnded": {
     "kind": "string",
     "params": [],
@@ -4743,11 +4708,6 @@ export const MESSAGE_SCHEMA = {
     ],
     "surface": "frontend"
   },
-  "tools.countdownDuration": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "tools.createReminder": {
     "kind": "string",
     "params": [],
@@ -4759,32 +4719,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "tools.focusDuration": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.lap": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.lapIndex": {
-    "kind": "message",
-    "params": [
-      {
-        "name": "index",
-        "type": "number",
-        "optional": false
-      }
-    ],
-    "surface": "frontend"
-  },
-  "tools.lapsEmpty": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.lapsTitle": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4891,10 +4825,23 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
+  "tools.focusModePomodoro": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend",
+    "description": "Focus mode with timed work sessions and breaks."
+  },
+  "tools.focusModeFree": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend",
+    "description": "Open-ended focus mode that counts elapsed time without a preset duration."
+  },
   "tools.pomodoroTitle": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "description": "Title of the Focus module containing Pomodoro and free focus modes."
   },
   "tools.relativeMinutesLabel": {
     "kind": "string",
@@ -4998,11 +4945,6 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "tools.activityReminderDurationInvalid": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "tools.activityReminderDurationLabel": {
     "kind": "string",
     "params": [],
@@ -5023,67 +4965,12 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "tools.statusChip.countdown": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "tools.statusChip.focus": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "tools.statusChip.reminder": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.statusChip.stopwatch": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.timerLabel": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.timerLabelPlaceholder": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.timerModeCountdown": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.timerModeStopwatch": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.timerStatus.completed": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.timerStatus.idle": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.timerStatus.paused": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.timerStatus.running": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.timerTitle": {
     "kind": "string",
     "params": [],
     "surface": "frontend"

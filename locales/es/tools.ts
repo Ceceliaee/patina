@@ -97,27 +97,9 @@ export const MESSAGES = {
       }
     }
   },
-  "tools.countdownDuration": "Duración de la cuenta atrás",
   "tools.createReminder": "Crear",
   "tools.defaultReminderLabel": "Se acabó el tiempo",
   "tools.focusDuration": "Duración de concentración",
-  "tools.lap": "Vuelta",
-  "tools.lapIndex": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "Vuelta ",
-        {
-          "$op": "arg",
-          "name": "index"
-        },
-        ""
-      ]
-    }
-  },
-  "tools.lapsEmpty": "Sin vueltas",
-  "tools.lapsTitle": "Vueltas",
   "tools.loadFailed": "No se pudo cargar el estado de las herramientas.",
   "tools.longBreakDuration": "Descanso largo",
   "tools.longBreakEvery": "Intervalo de descanso largo",
@@ -166,7 +148,9 @@ export const MESSAGES = {
   "tools.pomodoroStatus.idle": "Sin iniciar",
   "tools.pomodoroStatus.paused": "En pausa",
   "tools.pomodoroStatus.running": "En marcha",
-  "tools.pomodoroTitle": "Pomodoro",
+  "tools.pomodoroTitle": "Concentración",
+  "tools.focusModePomodoro": "Pomodoro",
+  "tools.focusModeFree": "Concentración libre",
   "tools.relativeMinutesLabel": "Minutos a partir de ahora",
   "tools.reminderEmpty": "No hay recordatorios",
   "tools.reminderLabel": "Recordatorio",
@@ -187,23 +171,11 @@ export const MESSAGES = {
   "tools.shortBreakDuration": "Descanso corto",
   "tools.skipPhase": "Omitir",
   "tools.activityReminderActive": "Activo",
-  "tools.activityReminderDurationInvalid": "Usa entre 1 y 1440 min.",
-  "tools.activityReminderDurationLabel": "Límite diario (min)",
+  "tools.activityReminderDurationLabel": "Límite diario",
   "tools.start": "Iniciar",
   "tools.stateRefreshPending": "Se está recuperando el estado. No repitas la acción.",
   "tools.statusChip.break": "Descanso",
-  "tools.statusChip.countdown": "Cuenta atrás",
   "tools.statusChip.focus": "Concentración",
   "tools.statusChip.reminder": "Recordatorio",
-  "tools.statusChip.stopwatch": "Temporizador",
-  "tools.timerLabel": "Nombre",
-  "tools.timerLabelPlaceholder": "Opcional",
-  "tools.timerModeCountdown": "Cuenta atrás",
-  "tools.timerModeStopwatch": "Cronómetro",
-  "tools.timerStatus.completed": "Completado",
-  "tools.timerStatus.idle": "Sin iniciar",
-  "tools.timerStatus.paused": "En pausa",
-  "tools.timerStatus.running": "En marcha",
-  "tools.timerTitle": "Temporizador",
   "tools.title": "Herramientas"
 } as const;

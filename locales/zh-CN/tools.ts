@@ -77,27 +77,9 @@ export const MESSAGES = {
       ]
     }
   },
-  "tools.countdownDuration": "倒计时时长",
   "tools.createReminder": "创建",
   "tools.defaultReminderLabel": "时间到了",
   "tools.focusDuration": "专注时长",
-  "tools.lap": "分段",
-  "tools.lapIndex": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "第 ",
-        {
-          "$op": "arg",
-          "name": "index"
-        },
-        " 段"
-      ]
-    }
-  },
-  "tools.lapsEmpty": "暂无分段",
-  "tools.lapsTitle": "分段",
   "tools.loadFailed": "工具状态加载失败。",
   "tools.longBreakDuration": "长休息时长",
   "tools.longBreakEvery": "长休息间隔",
@@ -146,7 +128,9 @@ export const MESSAGES = {
   "tools.pomodoroStatus.idle": "未开始",
   "tools.pomodoroStatus.paused": "已暂停",
   "tools.pomodoroStatus.running": "运行中",
-  "tools.pomodoroTitle": "番茄钟",
+  "tools.pomodoroTitle": "专注",
+  "tools.focusModePomodoro": "番茄计时",
+  "tools.focusModeFree": "自由专注",
   "tools.relativeMinutesLabel": "分钟后",
   "tools.reminderEmpty": "暂无提醒",
   "tools.reminderLabel": "提醒内容",
@@ -158,7 +142,7 @@ export const MESSAGES = {
   "tools.reminderModeCategory": "分类",
   "tools.reminderModeRelative": "相对时间",
   "tools.reminderModeWeb": "网页",
-  "tools.remindersTitle": "提醒器",
+  "tools.remindersTitle": "提醒",
   "tools.reminderTimeInvalid": "提醒时间需要晚于当前时间。",
   "tools.reset": "重置",
   "tools.resume": "继续",
@@ -167,23 +151,11 @@ export const MESSAGES = {
   "tools.shortBreakDuration": "短休息时长",
   "tools.skipPhase": "跳过",
   "tools.activityReminderActive": "启用",
-  "tools.activityReminderDurationInvalid": "请输入 1–1440 分钟。",
-  "tools.activityReminderDurationLabel": "每日上限（分钟）",
+  "tools.activityReminderDurationLabel": "每日上限",
   "tools.start": "开始",
   "tools.stateRefreshPending": "状态正在恢复，请勿重复操作。",
   "tools.statusChip.break": "休息",
-  "tools.statusChip.countdown": "倒计时",
   "tools.statusChip.focus": "专注",
   "tools.statusChip.reminder": "提醒",
-  "tools.statusChip.stopwatch": "计时",
-  "tools.timerLabel": "名称",
-  "tools.timerLabelPlaceholder": "可选",
-  "tools.timerModeCountdown": "倒计时",
-  "tools.timerModeStopwatch": "正计时",
-  "tools.timerStatus.completed": "已完成",
-  "tools.timerStatus.idle": "未开始",
-  "tools.timerStatus.paused": "已暂停",
-  "tools.timerStatus.running": "运行中",
-  "tools.timerTitle": "计时器",
   "tools.title": "工具"
 } as const;

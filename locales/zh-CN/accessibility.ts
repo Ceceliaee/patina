@@ -130,7 +130,6 @@ export const MESSAGES = {
   "accessibility.titleBar.maximize": "最大化窗口",
   "accessibility.titleBar.minimize": "最小化窗口",
   "accessibility.titleBar.restore": "还原窗口",
-  "accessibility.tools.addTimerLap": "添加分段",
   "accessibility.tools.createReminder": "创建提醒",
   "accessibility.tools.decreaseDuration": {
     "$type": "message",
@@ -162,14 +161,10 @@ export const MESSAGES = {
   },
   "accessibility.tools.openStatusChip": "打开工具状态",
   "accessibility.tools.pausePomodoro": "暂停番茄钟",
-  "accessibility.tools.pauseTimer": "暂停计时",
   "accessibility.tools.resetPomodoro": "重置番茄钟",
-  "accessibility.tools.resetTimer": "重置计时",
   "accessibility.tools.restorePomodoroDefaults": "恢复番茄钟默认时长",
   "accessibility.tools.resumePomodoro": "继续番茄钟",
-  "accessibility.tools.resumeTimer": "继续计时",
   "accessibility.tools.skipPomodoroPhase": "跳过番茄钟阶段",
   "accessibility.tools.startPomodoro": "开始番茄钟",
-  "accessibility.tools.startTimer": "开始计时",
   "accessibility.miniWindow.openMainWindow": "打开主窗口",
 } as const;
