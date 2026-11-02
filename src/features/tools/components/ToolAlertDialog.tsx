@@ -1,5 +1,5 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
-import { AlarmClock, BellRing, TimerReset } from "lucide-react";
+import { AlarmClock, BellRing } from "lucide-react";
 import { lazy, Suspense, useCallback, useRef, useState, type ReactNode } from "react";
 import QuietDialog from "../../../shared/components/QuietDialog.tsx";
 import QuietButton from "../../../shared/components/QuietButton.tsx";
@@ -21,7 +21,6 @@ function formatAlertTime(timestampMs: number) {
 }
 
 function alertIcon(alert: ToolAlert): ReactNode {
-  if (alert.kind === "countdown") return <TimerReset size={17} />;
   if (alert.kind === "pomodoro") return <AlarmClock size={17} />;
   return <BellRing size={17} />;
 }

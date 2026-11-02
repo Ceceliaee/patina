@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlarmClock, BellRing, Timer } from "lucide-react";
+import { AlarmClock, BellRing } from "lucide-react";
 import { useLocaleText } from "../../../shared/i18n/index.ts";
 import type { ToolsRuntimeSnapshot } from "../../../shared/types/tools.ts";
 import { buildToolsViewModelLabels } from "../services/toolsLabels.ts";
@@ -14,7 +14,6 @@ interface ToolsStatusEntryProps {
 
 function resolveStatusIcon(statusChip: ToolStatusChipViewModel) {
   if (statusChip.targetSection === "pomodoro") return AlarmClock;
-  if (statusChip.targetSection === "timer") return Timer;
   return BellRing;
 }
 
@@ -23,7 +22,6 @@ function hasToolsStatusChip(snapshot: ToolsRuntimeSnapshot | null) {
     snapshot
     && (
       snapshot.currentPomodoro?.status === "running"
-      || snapshot.currentTimer?.status === "running"
       || snapshot.nextReminderAt !== null
     ),
   );
@@ -85,12 +83,11 @@ export default function ToolsStatusEntry({
     >
       {statusChips.map((statusChip) => (
         <ToolsStatusChip
-          key={`${statusChip.targetSection}:${statusChip.targetTimerMode ?? "default"}`}
+          key={statusChip.targetSection}
           label={statusChip.label}
           icon={resolveStatusIcon(statusChip)}
           onClick={() => onOpenSection({
             section: statusChip.targetSection,
-            timerMode: statusChip.targetTimerMode,
           })}
           className="tools-status-entry-titlebar-item"
           iconOnly

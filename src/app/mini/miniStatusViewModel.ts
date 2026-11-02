@@ -37,13 +37,10 @@ function resolveLiveValue(
   valueMs: number,
   elapsedSinceSnapshotMs: number,
   running: boolean,
-  countsDown: boolean,
 ) {
   if (!running) return Math.max(0, valueMs);
   const delta = Math.max(0, elapsedSinceSnapshotMs);
-  return countsDown
-    ? Math.max(0, valueMs - delta)
-    : Math.max(0, valueMs + delta);
+  return Math.max(0, valueMs - delta);
 }
 
 export function buildMiniStatusViewModel(
@@ -60,19 +57,17 @@ export function buildMiniStatusViewModel(
         tool.visibleUntilMs === null
         || elapsedSinceSnapshotMs < tool.visibleUntilMs - snapshot.sampledAtMs
       ))
-      .slice(0, 2)
       .map((tool) => ({
         kind: tool.kind,
         state: tool.state,
         phase: tool.phase,
-        progress: tool.countsDown && tool.totalMs ? Math.min(1, Math.max(0, 1 - resolveLiveValue(
-          tool.valueMs, elapsedSinceSnapshotMs, tool.state === "running", true,
+        progress: tool.totalMs ? Math.min(1, Math.max(0, 1 - resolveLiveValue(
+          tool.valueMs, elapsedSinceSnapshotMs, tool.state === "running",
         ) / tool.totalMs)) : null,
         timeText: formatMiniToolDuration(resolveLiveValue(
           tool.valueMs,
           elapsedSinceSnapshotMs,
           tool.state === "running",
-          tool.countsDown,
         )),
       })),
   };

@@ -4,6 +4,28 @@ import type {
   ActivityReminderTarget,
   ActivityReminderWebCandidate,
 } from "../../../shared/types/tools.ts";
+import type { ActivityReminderRuleRowViewModel } from "../types.ts";
+
+export function findActivityReminderRuleForTarget<T extends Pick<ActivityReminderRuleRowViewModel, "kind" | "targetKey" | "exeName">>(
+  target: ActivityReminderTarget,
+  rules: readonly T[],
+): T | undefined {
+  const canonicalText = (value: string) => value.trim().replace(/[A-Z]/g, char => char.toLowerCase());
+  const canonicalExe = (value: string) => canonicalText(value).replace(/^"+|"+$/g, "");
+  const canonicalDomain = (value: string) => canonicalText(value).replace(/\.+$/g, "");
+  return rules.find(rule => {
+    if (rule.kind !== target.kind) return false;
+    if (target.kind === "app") {
+      const exe = canonicalExe(target.exeName ?? "");
+      const ruleExe = canonicalExe(rule.exeName ?? "");
+      return exe || ruleExe ? Boolean(exe && exe === ruleExe)
+        : canonicalText(target.appName) === canonicalText(rule.targetKey);
+    }
+    return target.kind === "category"
+      ? target.categoryId.trim() === rule.targetKey.trim()
+      : canonicalDomain(target.normalizedDomain) === canonicalDomain(rule.targetKey);
+  });
+}
 
 export interface ActivityReminderTargetOption {
   key: string;

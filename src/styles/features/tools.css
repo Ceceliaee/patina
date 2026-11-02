@@ -254,6 +254,14 @@
   color: var(--qp-accent-default);
 }
 
+.tools-panel-header.tools-reminder-header,
+.tools-panel-header.tools-focus-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: var(--qp-line-height-section-title);
+  align-items: center;
+}
+
 .tools-panel-title svg {
   flex: 0 0 auto;
 }
@@ -284,36 +292,15 @@
   gap: 12px;
 }
 
-.tools-mode-switch-row {
-  display: flex;
-  min-height: 30px;
-  min-width: 0;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 12px;
+.tools-usage-duration-popover {
+  width: 176px;
+  padding: 8px;
 }
 
-.tools-timer-kind-filter {
-  flex: 0 0 auto;
-}
-
-.tools-timer-controls {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: end;
-  gap: 12px;
-  border-radius: var(--qp-radius-control);
-  background: color-mix(in srgb, var(--qp-bg-elevated) 58%, var(--qp-bg-panel));
-  padding: 10px 12px;
-}
-
-.tools-timer-controls .tools-timer-config {
-  margin-top: 0;
-}
-
-.tools-timer-action-row {
-  align-self: end;
+.tools-usage-duration-popover .qp-time-picker-list {
+  height: 170px;
+  grid-auto-rows: 24px;
+  align-content: start;
 }
 
 .tools-field-copy label,
@@ -401,7 +388,6 @@
   opacity: 0.38;
 }
 
-.tools-timer-config,
 .tools-pomodoro-settings-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -437,14 +423,6 @@
 
 .tools-reminder-form .tools-form-actions {
   align-self: end;
-}
-
-.tools-timer-action-row {
-  min-width: 88px;
-}
-
-.tools-timer-action-row .tools-action-button:first-child {
-  min-width: 88px;
 }
 
 .tools-form-field {
@@ -507,10 +485,6 @@
   background: var(--activity-category-color, var(--qp-text-tertiary));
 }
 
-.tools-small-number-input {
-  width: 108px;
-}
-
 .tools-absolute-time-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -548,8 +522,7 @@
 }
 
 .tools-mode-pane[data-tools-reminder-mode="event"] .tools-list-section,
-.tools-mode-pane[data-tools-reminder-mode="usage"] .tools-list-section,
-.tools-timer-mode-pane .tools-list-section {
+.tools-mode-pane[data-tools-reminder-mode="usage"] .tools-list-section {
   flex: 1 1 0;
 }
 
@@ -571,8 +544,7 @@
   font-weight: var(--qp-font-weight-regular);
 }
 
-.tools-reminder-list-frame,
-.tools-timer-mode-pane .tools-lap-list {
+.tools-reminder-list-frame {
   flex: 1 1 0;
   min-height: 0;
   border: 1px dashed var(--qp-border-subtle);
@@ -587,8 +559,7 @@
   padding-inline-end: 4px;
 }
 
-.tools-reminder-list-frame > .tools-reminder-list,
-.tools-timer-mode-pane .tools-lap-list {
+.tools-reminder-list-frame > .tools-reminder-list {
   flex: 1 1 0;
   min-height: 0;
   align-content: start;
@@ -601,8 +572,7 @@
 }
 
 .tools-mode-pane[data-tools-reminder-mode="event"] .tools-empty-state,
-.tools-mode-pane[data-tools-reminder-mode="usage"] .tools-empty-state,
-.tools-timer-mode-pane .tools-empty-state {
+.tools-mode-pane[data-tools-reminder-mode="usage"] .tools-empty-state {
   flex: 1 1 0;
   min-height: 0;
 }
@@ -611,15 +581,13 @@
   align-self: end;
 }
 
-.tools-reminder-list,
-.tools-lap-list {
+.tools-reminder-list {
   display: grid;
   min-width: 0;
   gap: 8px;
 }
 
-.tools-reminder-row,
-.tools-lap-row {
+.tools-reminder-row {
   display: grid;
   min-width: 0;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -631,8 +599,7 @@
   padding: 9px 10px;
 }
 
-.tools-reminder-row-main,
-.tools-lap-row div {
+.tools-reminder-row-main {
   min-width: 0;
 }
 
@@ -647,8 +614,7 @@
   min-width: 0;
 }
 
-.tools-reminder-row-main strong,
-.tools-lap-row strong {
+.tools-reminder-row-main strong {
   display: block;
   overflow: hidden;
   color: var(--qp-text-primary);
@@ -659,8 +625,7 @@
   white-space: nowrap;
 }
 
-.tools-reminder-row-main span:where(:not(.qp-badge)),
-.tools-lap-row span {
+.tools-reminder-row-main span:where(:not(.qp-badge)) {
   display: block;
   margin-top: 3px;
   color: var(--qp-text-tertiary);
@@ -806,7 +771,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.tools-time-display,
 .tools-pomodoro-display {
   display: grid;
   align-items: center;
@@ -815,11 +779,6 @@
   border-radius: var(--qp-radius-panel);
   background: var(--qp-bg-elevated);
   text-align: center;
-}
-
-.tools-time-display {
-  min-height: 64px;
-  padding: 8px 14px;
 }
 
 .tools-pomodoro-workbench {
@@ -835,7 +794,6 @@
   padding: 10px 16px;
 }
 
-.tools-time-display span,
 .tools-pomodoro-display span {
   color: var(--qp-text-tertiary);
   font-size: var(--qp-font-size-caption);
@@ -843,7 +801,6 @@
   font-weight: var(--qp-font-weight-medium);
 }
 
-.tools-time-display strong,
 .tools-pomodoro-display strong {
   display: block;
   margin-top: 6px;
@@ -854,7 +811,6 @@
   letter-spacing: 0;
   line-height: var(--qp-line-height-metric);
 }
-
 
 .tools-pomodoro-primary {
   display: grid;
@@ -1180,11 +1136,6 @@
     padding: 24px;
   }
 
-  .tools-timer-controls {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .tools-timer-config,
   .tools-pomodoro-settings-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1215,7 +1166,6 @@
   .tools-panel {
     gap: 18px;
   }
-
 
   .tools-pomodoro-settings-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1248,9 +1198,7 @@
   }
 
   .tools-absolute-time-grid,
-  .tools-reminder-row,
-  .tools-lap-row,
-  .tools-timer-controls {
+  .tools-reminder-row {
     grid-template-columns: 1fr;
   }
 
@@ -1258,7 +1206,6 @@
     justify-content: flex-start;
     flex-wrap: wrap;
   }
-
 
 }
 

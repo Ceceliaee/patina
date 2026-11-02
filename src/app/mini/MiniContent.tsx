@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Timer } from "lucide-react";
+import { AlarmClock } from "lucide-react";
 import type { useMiniTracking } from "./useMiniTracking.ts";
 import { buildMiniStatusViewModel } from "./miniStatusViewModel.ts";
 import { useLocaleText } from "../../shared/i18n/index.ts";
@@ -40,8 +40,8 @@ function MiniTools({ tracking }: {
       {status.tools.length === 0 && <p className="mini-empty">{text.miniWindow.emptyTools}</p>}
       {status.tools.map((tool) => <div className="mini-tool" key={tool.kind}>
         <div className="mini-tool-heading">
-        <Timer size={14} aria-hidden="true" />
-        <span>{tool.kind === "pomodoro" && tool.phase ? text.tools.pomodoroPhase[tool.phase === "short_break" ? "shortBreak" : tool.phase === "long_break" ? "longBreak" : "focus"] : tool.kind === "countdown" ? text.tools.timerModeCountdown : text.tools.timerModeStopwatch}</span>
+        <AlarmClock size={14} aria-hidden="true" />
+        <span>{tool.phase ? text.tools.pomodoroPhase[tool.phase === "short_break" ? "shortBreak" : tool.phase === "long_break" ? "longBreak" : "focus"] : text.tools.pomodoroTitle}</span>
         {tool.state !== "running" && <span className="mini-tool-state">{text.tools.pomodoroStatus[tool.state]}</span>}
         </div>
         <span className="mini-tool-time">{tool.timeText}</span>

@@ -2,6 +2,7 @@ import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { AlarmClock, FastForward, Pause, Play, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import QuietButton from "../../../shared/components/QuietButton.tsx";
+import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter.tsx";
 
 import type { StartPomodoroInput, ToolsRuntimeSnapshot } from "../../../shared/types/tools.ts";
 import type { PomodoroViewModel } from "../types.ts";
@@ -92,13 +93,20 @@ export default function PomodoroToolPanel({
 
   return (
     <section className="tools-panel qp-panel">
-      <div className="tools-panel-header">
-        <div>
-          <div className="tools-panel-title">
-            <AlarmClock size={16} />
-            <h2>{UI_TEXT.tools.pomodoroTitle}</h2>
-          </div>
+      <div className="tools-panel-header tools-focus-header">
+        <div className="tools-panel-title">
+          <AlarmClock size={16} />
+          <h2>{UI_TEXT.tools.pomodoroTitle}</h2>
         </div>
+        <QuietSegmentedFilter
+          value="pomodoro"
+          options={[
+            { value: "pomodoro", label: UI_TEXT.tools.focusModePomodoro },
+            { value: "free", label: UI_TEXT.tools.focusModeFree, disabled: true },
+          ]}
+          onChange={() => undefined}
+          ariaLabel={UI_TEXT.tools.pomodoroTitle}
+        />
       </div>
 
       <div className="tools-pomodoro-workbench">

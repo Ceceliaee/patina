@@ -37,8 +37,6 @@ const TIME_PICKER_WIDTH = 176;
 const TIME_PICKER_HEIGHT = 212;
 const TIME_PICKER_GAP = 6;
 const VIEWPORT_PADDING = 8;
-const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
-const MINUTES = Array.from({ length: 60 }, (_, minute) => minute);
 
 function pad2(value: number) {
   return String(value).padStart(2, "0");
@@ -48,13 +46,13 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
-function parseTimeValue(value: string): TimeParts | null {
+function parseTimeValue(value: string, maxHour = 23): TimeParts | null {
   const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
   if (!match) return null;
 
   const hour = Number(match[1]);
   const minute = Number(match[2]);
-  if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour > 23 || minute > 59) {
+  if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour > maxHour || minute > 59) {
     return null;
   }
   return { hour, minute };
@@ -64,24 +62,34 @@ function formatTimeValue(hour: number, minute: number) {
   return `${pad2(hour)}:${pad2(minute)}`;
 }
 
-export function QuietTimeColumns({ value, onChange, onCommit, autoFocus = false }: {
+export function QuietTimeColumns({ value, onChange, onCommit, autoFocus = false,
+  maxHour = 23, minMinute = 0, maxMinute = 59 }: {
   value: string;
   onChange: (value: string) => void;
   onCommit?: () => void;
   autoFocus?: boolean;
+  maxHour?: number;
+  minMinute?: number;
+  maxMinute?: number;
 }) {
   const text = useLocaleText();
   const rootRef = useRef<HTMLDivElement>(null);
-  const selected = parseTimeValue(value) ?? { hour: 0, minute: 0 };
+  const selected = parseTimeValue(value, maxHour) ?? { hour: 0, minute: minMinute };
+  const options = {
+    hour: Array.from({ length: maxHour + 1 }, (_, hour) => hour),
+    minute: Array.from({ length: maxMinute - minMinute + 1 }, (_, minute) => minute + minMinute),
+  };
   const select = (part: "hour" | "minute", next: number) => {
     onChange(formatTimeValue(part === "hour" ? next : selected.hour, part === "minute" ? next : selected.minute));
   };
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, part: "hour" | "minute", current: number) => {
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
-    const count = part === "hour" ? HOURS.length : MINUTES.length;
-    const next = event.key === "Home" ? 0 : event.key === "End" ? count - 1
-      : (current + (event.key === "ArrowDown" ? 1 : count - 1)) % count;
+    const values = options[part];
+    const count = values.length;
+    const index = values.indexOf(current);
+    const next = values[event.key === "Home" ? 0 : event.key === "End" ? count - 1
+      : (index + (event.key === "ArrowDown" ? 1 : count - 1)) % count];
     select(part, next);
     rootRef.current?.querySelector<HTMLElement>(`[data-time-picker-part="${part}"][data-time-picker-value="${next}"]`)
       ?.focus({ preventScroll: true });
@@ -110,7 +118,7 @@ export function QuietTimeColumns({ value, onChange, onCommit, autoFocus = false 
     <div className="qp-time-picker-columns">
       {(["hour", "minute"] as const).map(part => <div key={part} className="qp-time-picker-column">
         <div className="qp-time-picker-list qp-scroll-region" role="listbox" aria-label={part === "hour" ? text.time.hours : text.time.minutes}>
-          {(part === "hour" ? HOURS : MINUTES).map(option => <button key={option} type="button" role="option"
+          {options[part].map(option => <button key={option} type="button" role="option"
             aria-selected={option === selected[part]} tabIndex={option === selected[part] ? 0 : -1}
             data-selected-time-part={option === selected[part] ? part : undefined}
             data-time-picker-part={part} data-time-picker-value={option}

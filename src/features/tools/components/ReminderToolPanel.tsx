@@ -6,6 +6,7 @@ import ReminderScheduleFields, { recurrenceLabel, validRecurrence } from "./Remi
 import TimedReminderEditor from "./TimedReminderEditor.tsx";
 import { toDateInputValue, toTimeInputValue, parseLocalDateTime } from "../services/reminderTimeInput.ts";
 import ActivityReminderRuleEditor from "./ActivityReminderRuleEditor.tsx";
+import ActivityReminderDurationPicker from "./ActivityReminderDurationPicker.tsx";
 import QuietButton from "../../../shared/components/QuietButton.tsx";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter.tsx";
 import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
@@ -22,6 +23,7 @@ import {
 } from "../services/toolsLayoutPreferenceStorage.ts";
 import {
   buildActivityReminderTargetOptions,
+  findActivityReminderRuleForTarget,
   findActivityReminderTargetOption,
 } from "../services/activityReminderTargetOptions.ts";
 import type {
@@ -76,13 +78,13 @@ interface ActivityReminderPanelProps {
 
 interface ActivityReminderDraft {
   targetValue: string;
-  durationMinutes: string;
+  durationMinutes: number;
   validationMessage: string | null;
 }
 
 const EMPTY_ACTIVITY_DRAFT: ActivityReminderDraft = {
   targetValue: "",
-  durationMinutes: "30",
+  durationMinutes: 30,
   validationMessage: null,
 };
 
@@ -142,6 +144,8 @@ function ActivityReminderPanel({
     [appCandidates, categoryCandidates, icons, webCandidates],
   );
   const selectedTarget = findActivityReminderTargetOption(targetValue, targetOptions);
+  const existingRule = selectedTarget
+    ? findActivityReminderRuleForTarget(selectedTarget.target, ruleRows) : undefined;
   const renderRuleIcon = (row: ActivityReminderRuleRowViewModel, label = row.targetLabel) => {
     const option = findActivityReminderTargetOption(`${row.kind}:${row.targetKey}`, targetOptions);
     const icon = row.kind === "app" ? resolveAppIcon(icons, row.exeName) : option?.iconUrl;
@@ -158,20 +162,19 @@ function ActivityReminderPanel({
   };
 
   const handleCreate = async () => {
-    const limitMinutes = Number(durationMinutes);
     if (!selectedTarget) {
       updateDraft({ validationMessage: UI_TEXT.tools.activityReminderTargetRequired });
       return;
     }
-    if (!Number.isFinite(limitMinutes) || limitMinutes < 1 || limitMinutes > 1440) {
-      updateDraft({ validationMessage: UI_TEXT.tools.activityReminderDurationInvalid });
+    updateDraft({ validationMessage: null });
+    if (existingRule) {
+      setEditingRule({ ...existingRule, targetLabel: selectedTarget.label });
       return;
     }
-    updateDraft({ validationMessage: null });
     const created = await onCreateRule(
       selectedTarget.target,
       selectedTarget.label,
-      Math.round(limitMinutes),
+      durationMinutes,
       "",
     );
     if (created) {
@@ -209,28 +212,22 @@ function ActivityReminderPanel({
               </QuietButton>
             </div>
           ))}
-          <label className="tools-form-field">
+          <div className="tools-form-field">
             <span>{UI_TEXT.tools.activityReminderDurationLabel}</span>
-            <input
-              type="number"
-              min={1}
-              max={1440}
-              value={durationMinutes}
-              onChange={(event) => updateDraft({ durationMinutes: event.target.value })}
-              className="qp-input tools-small-number-input"
-            />
-          </label>
+            <ActivityReminderDurationPicker minutes={existingRule?.limitMinutes ?? durationMinutes} disabled={creating || Boolean(existingRule)}
+              onChange={minutes => updateDraft({ durationMinutes: minutes, validationMessage: null })} />
+          </div>
           <div className="tools-form-actions tools-software-form-actions">
             <QuietButton
               tone="primary"
               size="large"
-              disabled={creating}
+              disabled={busyAction !== null}
               onClick={() => void handleCreate()}
-              aria-label={UI_TEXT.accessibility.tools.createReminder}
+              aria-label={existingRule ? `${UI_TEXT.tools.activityReminderEdit}: ${selectedTarget?.label}` : UI_TEXT.accessibility.tools.createReminder}
               busy={creating}
               className="tools-action-button"
             >
-              {UI_TEXT.tools.createReminder}
+              {existingRule ? UI_TEXT.tools.activityReminderEdit : UI_TEXT.tools.createReminder}
             </QuietButton>
           </div>
           {validationMessage ? <p className="tools-validation-message">{validationMessage}</p> : null}
@@ -367,25 +364,23 @@ export default function ReminderToolPanel({
 
   return (
     <section className="tools-panel qp-panel">
-      <div className="tools-panel-header">
+      <div className="tools-panel-header tools-reminder-header">
         <div className="tools-panel-title">
           <BellRing size={16} />
           <h2>{UI_TEXT.tools.remindersTitle}</h2>
         </div>
+        <QuietSegmentedFilter
+          value={reminderMode}
+          options={reminderModes}
+          onChange={handleReminderModeChange}
+          className="tools-reminder-kind-filter"
+          semantics="tabs"
+          ariaLabel={UI_TEXT.tools.remindersTitle}
+          tabIdPrefix="tools-reminder-mode-tab"
+          tabPanelId="tools-reminder-mode-panel"
+        />
       </div>
       <div className="tools-mode-pane" data-tools-reminder-mode={reminderMode}>
-        <div className="tools-mode-switch-row">
-          <QuietSegmentedFilter
-            value={reminderMode}
-            options={reminderModes}
-            onChange={handleReminderModeChange}
-            className="tools-reminder-kind-filter"
-            semantics="tabs"
-            ariaLabel={UI_TEXT.tools.remindersTitle}
-            tabIdPrefix="tools-reminder-mode-tab"
-            tabPanelId="tools-reminder-mode-panel"
-          />
-        </div>
         <div
           id="tools-reminder-mode-panel"
           role="tabpanel"
