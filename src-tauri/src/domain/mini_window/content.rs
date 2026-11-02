@@ -1,13 +1,9 @@
-use crate::domain::tools::{
-    PomodoroPhase, PomodoroStatus, TimerMode, TimerStatus, ToolsRuntimeSnapshot,
-};
+use crate::domain::tools::{PomodoroPhase, PomodoroStatus, ToolsRuntimeSnapshot};
 use serde::Serialize;
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum MiniToolKind {
-    Stopwatch,
-    Countdown,
     Pomodoro,
 }
 
@@ -24,7 +20,6 @@ pub struct MiniToolProjection {
     pub kind: MiniToolKind,
     pub state: MiniToolState,
     pub value_ms: i64,
-    pub counts_down: bool,
     pub visible_until_ms: Option<i64>,
     pub total_ms: Option<i64>,
     pub phase: Option<PomodoroPhase>,
@@ -42,47 +37,7 @@ pub fn build_mini_status_snapshot(
     tools: ToolsRuntimeSnapshot,
     sampled_at_ms: i64,
 ) -> MiniStatusSnapshot {
-    let mut tool_slots = Vec::with_capacity(2);
-
-    if let Some(timer) = tools.current_timer {
-        let state = match timer.status {
-            TimerStatus::Running => Some(MiniToolState::Running),
-            TimerStatus::Paused => Some(MiniToolState::Paused),
-            TimerStatus::Completed
-                if sampled_at_ms.saturating_sub(timer.completed_at.unwrap_or(timer.updated_at))
-                    <= COMPLETED_TOOL_VISIBLE_MS =>
-            {
-                Some(MiniToolState::Completed)
-            }
-            TimerStatus::Idle | TimerStatus::Completed => None,
-        };
-        if let Some(state) = state {
-            let counts_down = timer.mode == TimerMode::Countdown;
-            let value_ms = if counts_down {
-                timer.remaining_ms_at(sampled_at_ms).unwrap_or(0)
-            } else {
-                timer.elapsed_ms_at(sampled_at_ms)
-            };
-            tool_slots.push(MiniToolProjection {
-                kind: if counts_down {
-                    MiniToolKind::Countdown
-                } else {
-                    MiniToolKind::Stopwatch
-                },
-                state,
-                value_ms,
-                counts_down,
-                total_ms: timer.duration_ms,
-                phase: None,
-                visible_until_ms: (state == MiniToolState::Completed).then(|| {
-                    timer
-                        .completed_at
-                        .unwrap_or(timer.updated_at)
-                        .saturating_add(COMPLETED_TOOL_VISIBLE_MS)
-                }),
-            });
-        }
-    }
+    let mut tool_slots = Vec::with_capacity(1);
 
     if let Some(pomodoro) = tools.current_pomodoro {
         let state = match pomodoro.status {
@@ -101,7 +56,6 @@ pub fn build_mini_status_snapshot(
                 kind: MiniToolKind::Pomodoro,
                 state,
                 value_ms: pomodoro.remaining_ms_at(sampled_at_ms),
-                counts_down: true,
                 total_ms: Some(pomodoro.phase_duration_ms()),
                 phase: Some(pomodoro.phase),
                 visible_until_ms: (state == MiniToolState::Completed).then(|| {
@@ -122,22 +76,7 @@ pub fn build_mini_status_snapshot(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::tools::{PomodoroPhase, ToolPomodoroRun, ToolTimer};
-    fn timer(mode: TimerMode, status: TimerStatus, now_ms: i64) -> ToolTimer {
-        ToolTimer {
-            id: 1,
-            mode,
-            label: None,
-            duration_ms: (mode == TimerMode::Countdown).then_some(60_000),
-            accumulated_ms: 12_000,
-            started_at: (status == TimerStatus::Running).then_some(now_ms - 3_000),
-            paused_at: (status == TimerStatus::Paused).then_some(now_ms),
-            completed_at: (status == TimerStatus::Completed).then_some(now_ms - 2_000),
-            status,
-            created_at: now_ms - 20_000,
-            updated_at: now_ms - 2_000,
-        }
-    }
+    use crate::domain::tools::{PomodoroPhase, ToolPomodoroRun};
 
     fn pomodoro(status: PomodoroStatus, now_ms: i64) -> ToolPomodoroRun {
         ToolPomodoroRun {
@@ -159,49 +98,25 @@ mod tests {
     }
 
     #[test]
-    fn mini_projection_keeps_fixed_tool_slots_together() {
+    fn mini_projection_preserves_paused_pomodoro() {
         let now_ms = 100_000;
         let tools = ToolsRuntimeSnapshot {
-            current_timer: Some(timer(TimerMode::Stopwatch, TimerStatus::Running, now_ms)),
             current_pomodoro: Some(pomodoro(PomodoroStatus::Paused, now_ms)),
             ..ToolsRuntimeSnapshot::default()
         };
 
         let snapshot = build_mini_status_snapshot(tools, now_ms);
-        assert_eq!(snapshot.tools.len(), 2);
-        assert_eq!(snapshot.tools[0].kind, MiniToolKind::Stopwatch);
-        assert_eq!(snapshot.tools[0].state, MiniToolState::Running);
-        assert_eq!(snapshot.tools[0].value_ms, 15_000);
-        assert_eq!(snapshot.tools[1].kind, MiniToolKind::Pomodoro);
-        assert_eq!(snapshot.tools[1].state, MiniToolState::Paused);
-        assert_eq!(snapshot.tools[1].value_ms, 20 * 60_000);
-    }
-
-    #[test]
-    fn mini_projection_has_one_timer_domain_slot_and_excludes_reminders() {
-        let now_ms = 100_000;
-        let tools = ToolsRuntimeSnapshot {
-            current_timer: Some(timer(TimerMode::Countdown, TimerStatus::Paused, now_ms)),
-            ..ToolsRuntimeSnapshot::default()
-        };
-
-        let snapshot = build_mini_status_snapshot(tools, now_ms);
-
         assert_eq!(snapshot.tools.len(), 1);
-        assert_eq!(snapshot.tools[0].kind, MiniToolKind::Countdown);
-        assert!(snapshot.tools[0].counts_down);
-        assert_eq!(snapshot.tools[0].value_ms, 48_000);
+        assert_eq!(snapshot.tools[0].kind, MiniToolKind::Pomodoro);
+        assert_eq!(snapshot.tools[0].state, MiniToolState::Paused);
+        assert_eq!(snapshot.tools[0].value_ms, 20 * 60_000);
     }
 
     #[test]
     fn completed_tool_slot_expires_after_five_seconds() {
         let completed_at = 100_000;
         let visible_tools = ToolsRuntimeSnapshot {
-            current_timer: Some(timer(
-                TimerMode::Countdown,
-                TimerStatus::Completed,
-                completed_at + 2_000,
-            )),
+            current_pomodoro: Some(pomodoro(PomodoroStatus::Completed, completed_at + 2_000)),
             ..ToolsRuntimeSnapshot::default()
         };
         let visible = build_mini_status_snapshot(visible_tools, completed_at + 2_000);
@@ -213,11 +128,7 @@ mod tests {
         );
 
         let expired_tools = ToolsRuntimeSnapshot {
-            current_timer: Some(timer(
-                TimerMode::Countdown,
-                TimerStatus::Completed,
-                completed_at + 2_000,
-            )),
+            current_pomodoro: Some(pomodoro(PomodoroStatus::Completed, completed_at + 2_000)),
             ..ToolsRuntimeSnapshot::default()
         };
         let expired = build_mini_status_snapshot(expired_tools, completed_at + 6_001);

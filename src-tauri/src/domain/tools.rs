@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-pub const DEFAULT_COUNTDOWN_MINUTES: i64 = 25;
 pub const DEFAULT_POMODORO_FOCUS_MINUTES: i64 = 25;
 pub const DEFAULT_POMODORO_SHORT_BREAK_MINUTES: i64 = 5;
 pub const DEFAULT_POMODORO_LONG_BREAK_MINUTES: i64 = 15;
@@ -35,58 +34,6 @@ impl ReminderStatus {
             "fired" => ReminderStatus::Fired,
             "cancelled" => ReminderStatus::Cancelled,
             _ => ReminderStatus::Scheduled,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TimerMode {
-    Stopwatch,
-    Countdown,
-}
-
-impl TimerMode {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            TimerMode::Stopwatch => "stopwatch",
-            TimerMode::Countdown => "countdown",
-        }
-    }
-
-    pub fn from_storage(value: &str) -> Self {
-        match value.trim().to_ascii_lowercase().as_str() {
-            "countdown" => TimerMode::Countdown,
-            _ => TimerMode::Stopwatch,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TimerStatus {
-    Idle,
-    Running,
-    Paused,
-    Completed,
-}
-
-impl TimerStatus {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            TimerStatus::Idle => "idle",
-            TimerStatus::Running => "running",
-            TimerStatus::Paused => "paused",
-            TimerStatus::Completed => "completed",
-        }
-    }
-
-    pub fn from_storage(value: &str) -> Self {
-        match value.trim().to_ascii_lowercase().as_str() {
-            "running" => TimerStatus::Running,
-            "paused" => TimerStatus::Paused,
-            "completed" => TimerStatus::Completed,
-            _ => TimerStatus::Idle,
         }
     }
 }
@@ -150,14 +97,12 @@ impl PomodoroStatus {
 #[serde(rename_all = "snake_case")]
 pub enum ToolAlertKind {
     Reminder,
-    Countdown,
     Pomodoro,
     ActivityReminder,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ToolRuntimeSettings {
-    pub default_countdown_minutes: i64,
     pub pomodoro_focus_minutes: i64,
     pub pomodoro_short_break_minutes: i64,
     pub pomodoro_long_break_minutes: i64,
@@ -167,7 +112,6 @@ pub struct ToolRuntimeSettings {
 impl Default for ToolRuntimeSettings {
     fn default() -> Self {
         Self {
-            default_countdown_minutes: DEFAULT_COUNTDOWN_MINUTES,
             pomodoro_focus_minutes: DEFAULT_POMODORO_FOCUS_MINUTES,
             pomodoro_short_break_minutes: DEFAULT_POMODORO_SHORT_BREAK_MINUTES,
             pomodoro_long_break_minutes: DEFAULT_POMODORO_LONG_BREAK_MINUTES,
@@ -202,6 +146,35 @@ pub enum ActivityReminderTarget {
     Web {
         normalized_domain: String,
     },
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct ActivityReminderWatch {
+    pub rules: Vec<ActivityReminderWatchedRule>,
+    pub classification: crate::domain::classification::ClassificationSnapshot,
+}
+
+impl ActivityReminderWatch {
+    pub fn next_check_at(&self) -> Option<i64> {
+        self.rules
+            .iter()
+            .filter_map(|rule| rule.next_check_at)
+            .min()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ActivityReminderWatchedRule {
+    pub id: i64,
+    pub target: ActivityReminderTarget,
+    pub active: bool,
+    pub next_check_at: Option<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ActivityReminderCheck {
+    All,
+    Rules(Vec<i64>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -260,59 +233,6 @@ impl ActivityReminderExtension {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub struct ToolTimer {
-    pub id: i64,
-    pub mode: TimerMode,
-    pub label: Option<String>,
-    pub duration_ms: Option<i64>,
-    pub accumulated_ms: i64,
-    pub started_at: Option<i64>,
-    pub paused_at: Option<i64>,
-    pub completed_at: Option<i64>,
-    pub status: TimerStatus,
-    pub created_at: i64,
-    pub updated_at: i64,
-}
-
-impl ToolTimer {
-    pub fn elapsed_ms_at(&self, now_ms: i64) -> i64 {
-        let running_delta = match (self.status, self.started_at) {
-            (TimerStatus::Running, Some(started_at)) => now_ms.saturating_sub(started_at),
-            _ => 0,
-        };
-        self.accumulated_ms.saturating_add(running_delta).max(0)
-    }
-
-    pub fn remaining_ms_at(&self, now_ms: i64) -> Option<i64> {
-        let duration_ms = self.duration_ms?;
-        Some(
-            duration_ms
-                .saturating_sub(self.elapsed_ms_at(now_ms))
-                .max(0),
-        )
-    }
-
-    pub fn is_countdown_due(&self, now_ms: i64) -> bool {
-        self.mode == TimerMode::Countdown
-            && self.status == TimerStatus::Running
-            && self
-                .remaining_ms_at(now_ms)
-                .map(|remaining| remaining <= 0)
-                .unwrap_or(false)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub struct ToolTimerLap {
-    pub id: i64,
-    pub timer_id: i64,
-    pub lap_index: i64,
-    pub started_at: i64,
-    pub ended_at: i64,
-    pub duration_ms: i64,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ToolPomodoroRun {
     pub id: i64,
     pub phase: PomodoroPhase,
@@ -328,12 +248,6 @@ pub struct ToolPomodoroRun {
     pub completed_focus_count: i64,
     pub created_at: i64,
     pub updated_at: i64,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CompletedTimerNotification {
-    pub timer_id: i64,
-    pub label: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -410,8 +324,6 @@ pub struct ToolsRuntimeSnapshot {
     pub settings: ToolRuntimeSettings,
     pub reminders: Vec<ToolReminder>,
     pub activity_reminder_rules: Vec<ToolActivityReminderRule>,
-    pub current_timer: Option<ToolTimer>,
-    pub timer_laps: Vec<ToolTimerLap>,
     pub current_pomodoro: Option<ToolPomodoroRun>,
     pub today_completed_pomodoros: i64,
     pub next_reminder_at: Option<i64>,
@@ -442,45 +354,6 @@ pub struct ActivityReminderAlert {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn countdown_timer_detects_due_time() {
-        let timer = ToolTimer {
-            id: 1,
-            mode: TimerMode::Countdown,
-            label: None,
-            duration_ms: Some(1_000),
-            accumulated_ms: 300,
-            started_at: Some(10_000),
-            paused_at: None,
-            completed_at: None,
-            status: TimerStatus::Running,
-            created_at: 9_000,
-            updated_at: 10_000,
-        };
-
-        assert_eq!(timer.remaining_ms_at(10_200), Some(500));
-        assert!(timer.is_countdown_due(10_800));
-    }
-
-    #[test]
-    fn paused_stopwatch_elapsed_does_not_grow() {
-        let timer = ToolTimer {
-            id: 1,
-            mode: TimerMode::Stopwatch,
-            label: None,
-            duration_ms: None,
-            accumulated_ms: 2_000,
-            started_at: None,
-            paused_at: Some(12_000),
-            completed_at: None,
-            status: TimerStatus::Paused,
-            created_at: 9_000,
-            updated_at: 12_000,
-        };
-
-        assert_eq!(timer.elapsed_ms_at(20_000), 2_000);
-    }
 
     #[test]
     fn pomodoro_fourth_focus_moves_to_long_break() {

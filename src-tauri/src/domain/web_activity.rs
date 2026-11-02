@@ -7,6 +7,29 @@ pub const WEB_DOMAIN_OVERRIDE_KEY_PREFIX: &str = "__web_domain_override::";
 // The extension alarm runs every 30 seconds; allow 15 seconds of scheduling jitter.
 pub const WEB_ACTIVITY_OBSERVATION_TTL_MS: i64 = 45_000;
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum WebActivityChange {
+    None,
+    Updated,
+    TargetChanged { normalized_domain: Option<String> },
+}
+
+impl WebActivityChange {
+    pub fn changed(&self) -> bool {
+        *self != Self::None
+    }
+
+    pub fn from_transition(changed: bool) -> Self {
+        if changed {
+            Self::TargetChanged {
+                normalized_domain: None,
+            }
+        } else {
+            Self::None
+        }
+    }
+}
+
 const MAX_BROWSER_CLIENT_ID_CHARS: usize = 128;
 const MAX_BROWSER_KIND_CHARS: usize = 32;
 const MAX_EXTENSION_VERSION_CHARS: usize = 64;

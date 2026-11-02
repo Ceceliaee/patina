@@ -350,7 +350,7 @@ function runSelfTest() {
     registered: commandSet,
     appManifest: commandSet,
     mainPermission: commandSet,
-    miniPermission: new Set([...MINI_COMMAND_ALLOWLIST, "cmd_pause_timer"]),
+    miniPermission: new Set([...MINI_COMMAND_ALLOWLIST, "cmd_pause_pomodoro"]),
     miniCapabilityPermissions: new Set([...MINI_CAPABILITY_ALLOWLIST, "sql:allow-load"]),
     mainCapabilityPermissions: new Set(["main-window-commands", "sql:allow-select"]),
     callerGuarded: new Set(),

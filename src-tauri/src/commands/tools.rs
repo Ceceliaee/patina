@@ -1,9 +1,7 @@
 use crate::app::tools;
 use crate::domain::classification::{canonical_exe, normalize_domain_key};
-use crate::domain::tools::{ActivityReminderTarget, TimerMode, ToolAlert, ToolsRuntimeSnapshot};
-use crate::engine::tools::{
-    CreateActivityReminderRuleRequest, StartPomodoroRequest, StartTimerRequest,
-};
+use crate::domain::tools::{ActivityReminderTarget, ToolAlert, ToolsRuntimeSnapshot};
+use crate::engine::tools::{CreateActivityReminderRuleRequest, StartPomodoroRequest};
 use serde::Deserialize;
 use tauri::AppHandle;
 
@@ -104,14 +102,6 @@ fn bounded_required_text(value: String, max_len: usize, field: &str) -> Result<S
         return Err(format!("{field} is required"));
     }
     Ok(value)
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StartTimerDto {
-    mode: TimerMode,
-    duration_ms: Option<i64>,
-    label: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -224,42 +214,6 @@ pub async fn cmd_update_activity_reminder_limit(
     app: AppHandle,
 ) -> Result<ToolsRuntimeSnapshot, String> {
     tools::update_activity_reminder_limit(&app, rule_id, limit_ms).await
-}
-
-#[tauri::command]
-pub async fn cmd_start_timer(
-    input: StartTimerDto,
-    app: AppHandle,
-) -> Result<ToolsRuntimeSnapshot, String> {
-    tools::start_timer(
-        &app,
-        StartTimerRequest {
-            mode: input.mode,
-            duration_ms: input.duration_ms,
-            label: input.label,
-        },
-    )
-    .await
-}
-
-#[tauri::command]
-pub async fn cmd_pause_timer(app: AppHandle) -> Result<ToolsRuntimeSnapshot, String> {
-    tools::pause_timer(&app).await
-}
-
-#[tauri::command]
-pub async fn cmd_resume_timer(app: AppHandle) -> Result<ToolsRuntimeSnapshot, String> {
-    tools::resume_timer(&app).await
-}
-
-#[tauri::command]
-pub async fn cmd_reset_timer(app: AppHandle) -> Result<ToolsRuntimeSnapshot, String> {
-    tools::reset_timer(&app).await
-}
-
-#[tauri::command]
-pub async fn cmd_add_timer_lap(app: AppHandle) -> Result<ToolsRuntimeSnapshot, String> {
-    tools::add_timer_lap(&app).await
 }
 
 #[tauri::command]
