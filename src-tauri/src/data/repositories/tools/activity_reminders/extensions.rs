@@ -31,7 +31,8 @@ pub async fn extend_activity_reminder(
         return Err("activity reminder alert has expired".into());
     }
     let usage = load_activity_reminder_usage(&mut tx, vec![rule], day_start_ms, now_ms).await?;
-    let (_, usage_ms, _) = usage
+    let (_, usage_ms, _, _) = usage
+        .entries
         .first()
         .ok_or("activity reminder target is unavailable")?;
     let limit = extension

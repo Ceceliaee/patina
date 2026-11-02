@@ -1,6 +1,8 @@
 use super::*;
 use crate::data::schema;
-use crate::domain::tools::{ActivityReminderExtension, ActivityReminderTarget};
+use crate::domain::tools::{
+    ActivityReminderCheck, ActivityReminderExtension, ActivityReminderTarget,
+};
 use sqlx::{Executor, SqlitePool};
 
 async fn database() -> SqlitePool {
@@ -26,11 +28,12 @@ async fn fire(
     now: i64,
 ) -> Vec<crate::domain::tools::ActivityReminderNotification> {
     let mut tx = pool.begin().await.unwrap();
-    let events = fire_due_activity_reminders(&mut tx, day, start, now)
-        .await
-        .unwrap();
+    let events =
+        fire_due_activity_reminders(&mut tx, day, start, now, &[], &ActivityReminderCheck::All)
+            .await
+            .unwrap();
     tx.commit().await.unwrap();
-    events
+    events.notifications
 }
 
 fn targets() -> [ActivityReminderTarget; 3] {
@@ -46,6 +49,475 @@ fn targets() -> [ActivityReminderTarget; 3] {
             normalized_domain: "example.com".into(),
         },
     ]
+}
+
+#[tokio::test]
+async fn selected_activity_rules_skip_unrelated_rules_and_usage_sources() {
+    for selected_index in 0..3 {
+        let pool = database().await;
+        let mut ids = Vec::new();
+        for target in targets() {
+            ids.push(
+                create_activity_reminder_rule(&pool, &target, "Target", 60_000, "", 1)
+                    .await
+                    .unwrap()
+                    .id,
+            );
+        }
+        let selected_id = ids[selected_index];
+        let mut tx = pool.begin().await.unwrap();
+        // If the selected query decodes unrelated rules, this invalid target makes it fail.
+        sqlx::query("PRAGMA ignore_check_constraints = ON")
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        sqlx::query(
+            "UPDATE tool_activity_reminder_rules SET target_kind = 'invalid' WHERE id != ?",
+        )
+        .bind(selected_id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+        sqlx::query("PRAGMA ignore_check_constraints = OFF")
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        let unused_source = if selected_index == 2 {
+            "sessions"
+        } else {
+            "web_activity_segments"
+        };
+        sqlx::query(&format!(
+            "ALTER TABLE {unused_source} RENAME TO unused_usage"
+        ))
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+        let events = fire_due_activity_reminders(
+            &mut tx,
+            "2026-10-30",
+            0,
+            9_780_000,
+            &[],
+            &ActivityReminderCheck::Rules(vec![selected_id]),
+        )
+        .await
+        .unwrap();
+        assert_eq!(events.notifications.len(), 1);
+        assert_eq!(events.notifications[0].rule_id, selected_id);
+        assert_eq!(events.watch.rules.len(), 1);
+        let untouched: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tool_activity_reminder_rules WHERE id != ? AND last_fired_date_key IS NULL")
+            .bind(selected_id).fetch_one(&mut *tx).await.unwrap();
+        assert_eq!(untouched, 2);
+        tx.rollback().await.unwrap();
+        set_activity_reminder_enabled(&pool, selected_id, false, 2)
+            .await
+            .unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        sqlx::query("ALTER TABLE settings RENAME TO unused_settings")
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        let events = fire_due_activity_reminders(
+            &mut tx,
+            "2026-10-30",
+            0,
+            9_780_000,
+            &[],
+            &ActivityReminderCheck::Rules(vec![selected_id]),
+        )
+        .await
+        .unwrap();
+        assert!(events.watch.rules.is_empty());
+        assert!(events.notifications.is_empty());
+        tx.rollback().await.unwrap();
+        pool.close().await;
+    }
+}
+
+#[tokio::test]
+async fn selected_usage_facts_retain_only_matching_apps_category_members_or_domains() {
+    let pool = database().await;
+    pool.execute("INSERT INTO settings(key,value) VALUES ('__app_link::helper.exe','editor.exe');
+        INSERT INTO sessions(app_name,exe_name,window_title,start_time,end_time,duration,continuity_group_start_time)
+        VALUES('Helper','helper.exe','',0,100000,100000,0), ('Other','other.exe','',0,200000,200000,0);
+        INSERT INTO web_activity_segments(browser_client_id,browser_kind,browser_exe_name,domain,normalized_domain,start_time,end_time,duration,source,created_at,updated_at)
+        VALUES('client','chromium','chrome.exe','other.test','other.test',0,200000,200000,'browser-extension',0,200000);")
+        .await.unwrap();
+    for (index, target) in targets().into_iter().enumerate() {
+        let rule = create_activity_reminder_rule(&pool, &target, "Target", 60_000, "", 1)
+            .await
+            .unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        let classification =
+            crate::data::repositories::classification_settings::load_classification_snapshot_in_tx(
+                &mut tx,
+            )
+            .await
+            .unwrap();
+        if index == 2 {
+            let facts = super::read::fetch_web_usage_facts_tx(&mut tx, 0, 9_780_000, &[rule])
+                .await
+                .unwrap();
+            assert_eq!(facts.len(), 1);
+            assert_eq!(facts[0].normalized_domain, "example.com");
+        } else {
+            let facts = super::read::fetch_session_usage_facts_tx(
+                &mut tx,
+                0,
+                9_780_000,
+                &[rule],
+                &classification,
+            )
+            .await
+            .unwrap();
+            assert_eq!(facts.len(), index + 1);
+            assert!(facts.iter().all(|fact| fact.exe_name != "other.exe"));
+        }
+        tx.rollback().await.unwrap();
+    }
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn activity_watch_only_contains_enabled_and_limited_rules() {
+    for target in targets() {
+        let pool = database().await;
+        let rule = create_activity_reminder_rule(&pool, &target, "Target", 1_800_000, "", 1)
+            .await
+            .unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        let enabled = fire_due_activity_reminders(
+            &mut tx,
+            "2026-10-30",
+            0,
+            9_780_000,
+            &[],
+            &ActivityReminderCheck::All,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            enabled
+                .watch
+                .rules
+                .iter()
+                .map(|rule| rule.target.clone())
+                .collect::<Vec<_>>(),
+            vec![target.clone()]
+        );
+        tx.commit().await.unwrap();
+        set_activity_reminder_enabled(&pool, rule.id, false, 9_780_001)
+            .await
+            .unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        // Disabled reminders must not even load the usage facts or classification settings.
+        sqlx::query("ALTER TABLE sessions RENAME TO unused_sessions")
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        sqlx::query("ALTER TABLE settings RENAME TO unused_settings")
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        let disabled = fire_due_activity_reminders(
+            &mut tx,
+            "2026-10-30",
+            0,
+            9_780_002,
+            &[],
+            &ActivityReminderCheck::All,
+        )
+        .await
+        .unwrap();
+        assert!(disabled.watch.rules.is_empty());
+        assert_eq!(disabled.watch.next_check_at(), None);
+        tx.rollback().await.unwrap();
+        set_activity_reminder_enabled(&pool, rule.id, true, 9_780_003)
+            .await
+            .unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        let pending = fire_due_activity_reminders(
+            &mut tx,
+            "2026-10-30",
+            0,
+            9_780_004,
+            &[rule.id],
+            &ActivityReminderCheck::All,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            pending
+                .watch
+                .rules
+                .iter()
+                .map(|rule| rule.target.clone())
+                .collect::<Vec<_>>(),
+            vec![target.clone()],
+            "pending alerts still track departures"
+        );
+        assert!(pending.notifications.is_empty());
+        tx.commit().await.unwrap();
+        extend_activity_reminder(
+            &pool,
+            rule.id,
+            9_780_000,
+            ActivityReminderExtension::Today,
+            "2026-10-30",
+            0,
+            9_780_005,
+        )
+        .await
+        .unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        assert!(fire_due_activity_reminders(
+            &mut tx,
+            "2026-10-30",
+            0,
+            9_780_006,
+            &[],
+            &ActivityReminderCheck::All
+        )
+        .await
+        .unwrap()
+        .watch
+        .rules
+        .is_empty());
+        assert_eq!(
+            fire_due_activity_reminders(
+                &mut tx,
+                "2026-10-31",
+                9_780_007,
+                9_780_008,
+                &[],
+                &ActivityReminderCheck::All
+            )
+            .await
+            .unwrap()
+            .watch
+            .rules
+            .iter()
+            .map(|rule| rule.target.clone())
+            .collect::<Vec<_>>(),
+            vec![target]
+        );
+        tx.rollback().await.unwrap();
+        pool.close().await;
+    }
+}
+
+#[tokio::test]
+async fn activity_deadlines_follow_active_usage_and_extensions() {
+    for target in targets() {
+        let pool = database().await;
+        let rule = create_activity_reminder_rule(&pool, &target, "Target", 9_840_000, "", 1)
+            .await
+            .unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        let idle = fire_due_activity_reminders(
+            &mut tx,
+            "2026-10-30",
+            0,
+            9_800_000,
+            &[],
+            &ActivityReminderCheck::All,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            idle.watch.next_check_at(),
+            None,
+            "inactive targets must not poll"
+        );
+        tx.commit().await.unwrap();
+        pool.execute("INSERT INTO sessions(app_name,exe_name,window_title,start_time,continuity_group_start_time)
+            VALUES('Editor','editor.exe','',9800000,9800000);
+            INSERT INTO web_activity_segments(browser_client_id,browser_kind,browser_exe_name,domain,normalized_domain,start_time,source,created_at,updated_at)
+            VALUES('client','chromium','chrome.exe','example.com','example.com',9800000,'browser-extension',9800000,9800000);")
+            .await.unwrap();
+        for now in [9_800_000, 9_830_000, 9_859_999] {
+            let mut tx = pool.begin().await.unwrap();
+            let active = fire_due_activity_reminders(
+                &mut tx,
+                "2026-10-30",
+                0,
+                now,
+                &[],
+                &ActivityReminderCheck::All,
+            )
+            .await
+            .unwrap();
+            assert!(active.notifications.is_empty());
+            assert_eq!(active.watch.next_check_at(), Some(9_860_000), "{target:?}");
+            tx.commit().await.unwrap();
+        }
+        let mut tx = pool.begin().await.unwrap();
+        let due = fire_due_activity_reminders(
+            &mut tx,
+            "2026-10-30",
+            0,
+            9_860_000,
+            &[],
+            &ActivityReminderCheck::All,
+        )
+        .await
+        .unwrap();
+        assert_eq!(due.notifications.len(), 1);
+        assert_eq!(due.watch.next_check_at(), None);
+        tx.commit().await.unwrap();
+        extend_activity_reminder(
+            &pool,
+            rule.id,
+            9_860_000,
+            ActivityReminderExtension::FifteenMinutes,
+            "2026-10-30",
+            0,
+            9_870_000,
+        )
+        .await
+        .unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        let pending = fire_due_activity_reminders(
+            &mut tx,
+            "2026-10-30",
+            0,
+            9_870_000,
+            &[rule.id],
+            &ActivityReminderCheck::All,
+        )
+        .await
+        .unwrap();
+        assert_eq!(pending.watch.next_check_at(), None);
+        let extended = fire_due_activity_reminders(
+            &mut tx,
+            "2026-10-30",
+            0,
+            9_870_000,
+            &[],
+            &ActivityReminderCheck::All,
+        )
+        .await
+        .unwrap();
+        assert_eq!(extended.watch.next_check_at(), Some(10_770_000));
+        tx.commit().await.unwrap();
+        pool.execute(
+            "UPDATE sessions SET end_time=9870000 WHERE end_time IS NULL;
+            UPDATE web_activity_segments SET end_time=9870000 WHERE end_time IS NULL;",
+        )
+        .await
+        .unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        let stopped = fire_due_activity_reminders(
+            &mut tx,
+            "2026-10-30",
+            0,
+            9_880_000,
+            &[],
+            &ActivityReminderCheck::All,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            stopped.watch.next_check_at(),
+            None,
+            "stopping must cancel the deadline"
+        );
+        tx.commit().await.unwrap();
+        pool.close().await;
+    }
+}
+
+#[tokio::test]
+async fn activity_reminder_reentry_alerts_once_per_new_use() {
+    for target in targets() {
+        let pool = database().await;
+        let rule = create_activity_reminder_rule(&pool, &target, "Target", 1_800_000, "", 1)
+            .await
+            .unwrap();
+        assert_eq!(fire(&pool, "2026-10-30", 0, 9_780_000).await.len(), 1);
+        assert!(
+            fire(&pool, "2026-10-30", 0, 9_790_000).await.is_empty(),
+            "closed usage must not repeat while the user stays on the desktop"
+        );
+
+        pool.execute("INSERT INTO sessions(app_name,exe_name,window_title,start_time,continuity_group_start_time)
+            VALUES('Editor','editor.exe','',9800000,0);
+            INSERT INTO web_activity_segments(browser_client_id,browser_kind,browser_exe_name,domain,normalized_domain,start_time,source,created_at,updated_at)
+            VALUES('client','chromium','chrome.exe','example.com','example.com',9800000,'browser-extension',9800000,9800000);")
+            .await.unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        assert!(
+            fire_due_activity_reminders(
+                &mut tx,
+                "2026-10-30",
+                0,
+                9_800_001,
+                &[rule.id],
+                &ActivityReminderCheck::All
+            )
+            .await
+            .unwrap()
+            .notifications
+            .is_empty(),
+            "an unanswered alert must not be replaced by a later visit"
+        );
+        tx.commit().await.unwrap();
+        assert_eq!(
+            fetch_all_activity_reminder_rules(&pool).await.unwrap()[0].last_fired_at,
+            Some(9_780_000)
+        );
+        let reopened = fire(&pool, "2026-10-30", 0, 9_800_001).await;
+        assert_eq!(
+            reopened.len(),
+            1,
+            "returning to an over-limit target must alert again: {target:?}"
+        );
+        assert_eq!(reopened[0].rule_id, rule.id);
+        assert!(
+            fire(&pool, "2026-10-30", 0, 9_810_000).await.is_empty(),
+            "continued use must not produce another alert on each tick"
+        );
+
+        pool.execute("UPDATE sessions SET window_title='New title' WHERE end_time IS NULL;
+            UPDATE web_activity_segments SET end_time=9810000,duration=10000 WHERE end_time IS NULL;
+            INSERT INTO web_activity_segments(browser_client_id,browser_kind,browser_exe_name,domain,normalized_domain,title,start_time,source,created_at,updated_at)
+            VALUES('client','chromium','chrome.exe','example.com','example.com','New title',9810000,'browser-extension',9810000,9810000);")
+            .await.unwrap();
+        assert!(fire(&pool, "2026-10-30", 0, 9_820_000).await.is_empty());
+        assert!(
+            extend_activity_reminder(
+                &pool,
+                rule.id,
+                9_780_000,
+                ActivityReminderExtension::Today,
+                "2026-10-30",
+                0,
+                9_820_001
+            )
+            .await
+            .is_err(),
+            "the earlier alert must not extend a new visit"
+        );
+        extend_activity_reminder(
+            &pool,
+            rule.id,
+            9_800_001,
+            ActivityReminderExtension::Today,
+            "2026-10-30",
+            0,
+            9_820_001,
+        )
+        .await
+        .unwrap();
+        pool.execute("UPDATE sessions SET start_time=9830000 WHERE end_time IS NULL;
+            UPDATE web_activity_segments SET start_time=9830000,updated_at=9830000 WHERE end_time IS NULL;")
+            .await.unwrap();
+        assert!(
+            fire(&pool, "2026-10-30", 0, 9_840_000).await.is_empty(),
+            "today's unlimited extension must survive another activation"
+        );
+    }
 }
 
 #[tokio::test]

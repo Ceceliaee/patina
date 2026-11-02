@@ -77,7 +77,7 @@ async fn calendar_rules_survive_confirmation_pause_and_backup_without_losing_the
             .unwrap();
         let target = database().await;
         let mut tx = target.begin().await.unwrap();
-        backup_restore::insert_missing_for_restore(&mut tx, &rows, &[], &[], &[], &[])
+        backup_restore::insert_missing_for_restore(&mut tx, &rows, &[], &[])
             .await
             .unwrap();
         tx.commit().await.unwrap();
@@ -193,7 +193,7 @@ async fn recurring_reminder_pause_resume_edit_and_backup_preserve_rule_identity(
     let restored = database().await;
     let mut tx = restored.begin().await.unwrap();
     for _ in 0..2 {
-        backup_restore::insert_missing_for_restore(&mut tx, &backup, &[], &[], &[], &[])
+        backup_restore::insert_missing_for_restore(&mut tx, &backup, &[], &[])
             .await
             .unwrap();
     }
@@ -277,7 +277,7 @@ async fn recurring_reminder_reopen_recovers_pending_confirmation_and_backup_keep
     .await
     .unwrap();
     let mut tx = pool.begin().await.unwrap();
-    backup_restore::insert_missing_for_restore(&mut tx, &backup, &[], &[], &[], &[])
+    backup_restore::insert_missing_for_restore(&mut tx, &backup, &[], &[])
         .await
         .unwrap();
     tx.commit().await.unwrap();

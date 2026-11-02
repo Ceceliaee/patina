@@ -1,8 +1,8 @@
 use crate::domain::tools::{
     ActivityReminderSuspensionReason, ActivityReminderTarget, PomodoroPhase, PomodoroStatus,
-    ReminderStatus, TimerMode, TimerStatus, ToolActivityReminderRule, ToolPomodoroRun,
-    ToolReminder, ToolTimer, ToolTimerLap, ToolsRuntimeSnapshot,
+    ReminderStatus, ToolActivityReminderRule, ToolPomodoroRun, ToolReminder, ToolsRuntimeSnapshot,
 };
+use futures_util::TryStreamExt;
 use sqlx::{Pool, Row, Sqlite, Transaction};
 
 pub(super) const REMINDER_RECURRENCE_COLUMNS: &str =
@@ -19,13 +19,6 @@ pub async fn fetch_tools_snapshot(
         .map_err(|error| format!("failed to load tools settings: {error}"))?;
     let reminders = fetch_visible_reminders(pool).await?;
     let activity_reminder_rules = fetch_active_activity_reminder_rules(pool).await?;
-    let current_timer = fetch_latest_timer(pool)
-        .await?
-        .filter(|timer| timer.status != TimerStatus::Idle);
-    let timer_laps = match &current_timer {
-        Some(timer) => fetch_timer_laps(pool, timer.id).await?,
-        None => Vec::new(),
-    };
     let current_pomodoro = fetch_latest_pomodoro(pool).await?;
     let today_completed_pomodoros = fetch_daily_pomodoro_count(pool, date_key).await?;
     let next_reminder_at = reminders
@@ -38,8 +31,6 @@ pub async fn fetch_tools_snapshot(
         settings,
         reminders,
         activity_reminder_rules,
-        current_timer,
-        timer_laps,
         current_pomodoro,
         today_completed_pomodoros,
         next_reminder_at,
@@ -77,12 +68,14 @@ pub(super) struct SessionUsageFact {
     pub exe_name: String,
     pub app_name: String,
     pub usage_ms: i64,
+    pub active_since: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct WebUsageFact {
     pub normalized_domain: String,
     pub usage_ms: i64,
+    pub active_since: Option<i64>,
 }
 
 pub(super) async fn fetch_activity_reminder_rule_by_id(
@@ -109,12 +102,26 @@ pub(super) async fn fetch_activity_reminder_rule_by_id(
 
 pub(super) async fn fetch_active_activity_reminder_rules_tx(
     tx: &mut Transaction<'_, Sqlite>,
+    check: &crate::domain::tools::ActivityReminderCheck,
 ) -> Result<Vec<ToolActivityReminderRule>, String> {
-    let query = format!(
+    let mut query = sqlx::QueryBuilder::<Sqlite>::new(format!(
         "SELECT {ACTIVITY_RULE_COLUMNS} FROM tool_activity_reminder_rules
-         WHERE disabled_at IS NULL AND NOT EXISTS (SELECT 1 FROM tool_activity_reminder_states WHERE rule_id = tool_activity_reminder_rules.id AND enabled = 0) ORDER BY created_at ASC, id ASC"
-    );
-    let rows = sqlx::query(&query)
+         WHERE disabled_at IS NULL AND NOT EXISTS (SELECT 1 FROM tool_activity_reminder_states WHERE rule_id = tool_activity_reminder_rules.id AND enabled = 0)"
+    ));
+    if let crate::domain::tools::ActivityReminderCheck::Rules(ids) = check {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        query.push(" AND id IN (");
+        let mut separated = query.separated(",");
+        for &id in ids {
+            separated.push_bind(id);
+        }
+        query.push(")");
+    }
+    query.push(" ORDER BY created_at ASC, id ASC");
+    let rows = query
+        .build()
         .fetch_all(&mut **tx)
         .await
         .map_err(|error| format!("failed to load active activity reminder rules: {error}"))?;
@@ -169,62 +176,128 @@ pub(super) async fn fetch_session_usage_facts_tx(
     tx: &mut Transaction<'_, Sqlite>,
     day_start_ms: i64,
     now_ms: i64,
+    rules: &[ToolActivityReminderRule],
+    classification: &crate::domain::classification::ClassificationSnapshot,
 ) -> Result<Vec<SessionUsageFact>, String> {
-    let rows = sqlx::query(
-        "SELECT LOWER(TRIM(exe_name)) AS exe_name,
-                LOWER(TRIM(app_name)) AS app_name,
-                COALESCE(SUM(MAX(0, MIN(COALESCE(end_time, ?), ?) - MAX(start_time, ?))), 0)
-                    AS usage_ms
-         FROM sessions
-         WHERE start_time < ? AND COALESCE(end_time, ?) > ?
-         GROUP BY LOWER(TRIM(exe_name)), LOWER(TRIM(app_name))",
-    )
-    .bind(now_ms)
-    .bind(now_ms)
-    .bind(day_start_ms)
-    .bind(now_ms)
-    .bind(now_ms)
-    .bind(day_start_ms)
-    .fetch_all(&mut **tx)
-    .await
-    .map_err(|error| format!("failed to read activity reminder app usage: {error}"))?;
-    Ok(rows
-        .into_iter()
-        .map(|row| SessionUsageFact {
+    let has_category = rules
+        .iter()
+        .any(|rule| matches!(rule.target, ActivityReminderTarget::Category { .. }));
+    let mut query = sqlx::QueryBuilder::<Sqlite>::new(
+        "SELECT LOWER(TRIM(exe_name)) AS exe_name, LOWER(TRIM(app_name)) AS app_name,
+         COALESCE(SUM(MAX(0, MIN(COALESCE(end_time, ",
+    );
+    query.push_bind(now_ms).push("), ").push_bind(now_ms)
+        .push(") - MAX(start_time, ").push_bind(day_start_ms)
+        .push("))), 0) AS usage_ms, MAX(CASE WHEN end_time IS NULL THEN start_time END) AS active_since
+               FROM sessions WHERE start_time <= ").push_bind(now_ms)
+        .push(" AND COALESCE(end_time, ").push_bind(now_ms).push(") >= ").push_bind(day_start_ms);
+    if !has_category {
+        query.push(" AND (0");
+        for rule in rules {
+            if let ActivityReminderTarget::App { app_name, exe_name } = &rule.target {
+                if let Some(exe) = exe_name {
+                    query.push(" OR LOWER(TRIM(exe_name)) = ").push_bind(exe);
+                } else {
+                    query
+                        .push(" OR LOWER(TRIM(app_name)) = ")
+                        .push_bind(app_name);
+                }
+                query.push(" COLLATE NOCASE");
+            }
+        }
+        query.push(")");
+    }
+    query.push(" GROUP BY LOWER(TRIM(exe_name)), LOWER(TRIM(app_name))");
+    let mut rows = query.build().fetch(&mut **tx);
+    let mut facts = Vec::new();
+    while let Some(row) = rows
+        .try_next()
+        .await
+        .map_err(|error| format!("failed to read activity reminder app usage: {error}"))?
+    {
+        let fact = SessionUsageFact {
             exe_name: row.get("exe_name"),
             app_name: row.get("app_name"),
             usage_ms: row.get("usage_ms"),
-        })
-        .collect())
+            active_since: row.get("active_since"),
+        };
+        // Category membership includes linked executables; retain only requested targets.
+        let category = has_category
+            .then(|| classification.resolve_tracked_session_category(&fact.exe_name))
+            .flatten();
+        if rules.iter().any(|rule| match &rule.target {
+            ActivityReminderTarget::App { app_name, exe_name } => exe_name.as_deref().map_or_else(
+                || fact.app_name.eq_ignore_ascii_case(app_name),
+                |exe| fact.exe_name.eq_ignore_ascii_case(exe),
+            ),
+            ActivityReminderTarget::Category { category_id } => category
+                .as_ref()
+                .is_some_and(|category| category.id == *category_id),
+            ActivityReminderTarget::Web { .. } => false,
+        }) {
+            facts.push(fact);
+        }
+    }
+    Ok(facts)
 }
 
 pub(super) async fn fetch_web_usage_facts_tx(
     tx: &mut Transaction<'_, Sqlite>,
     day_start_ms: i64,
     now_ms: i64,
+    rules: &[ToolActivityReminderRule],
 ) -> Result<Vec<WebUsageFact>, String> {
-    let rows = sqlx::query(
-        "SELECT LOWER(TRIM(normalized_domain, '.')) AS normalized_domain,
-                COALESCE(SUM(MAX(0, MIN(COALESCE(end_time, ?), ?) - MAX(start_time, ?))), 0)
-                    AS usage_ms
-         FROM web_activity_segments
-         WHERE start_time < ? AND COALESCE(end_time, ?) > ?
-         GROUP BY LOWER(TRIM(normalized_domain, '.'))",
-    )
-    .bind(now_ms)
-    .bind(now_ms)
-    .bind(day_start_ms)
-    .bind(now_ms)
-    .bind(now_ms)
-    .bind(day_start_ms)
-    .fetch_all(&mut **tx)
-    .await
-    .map_err(|error| format!("failed to read activity reminder web usage: {error}"))?;
+    let mut query = sqlx::QueryBuilder::<Sqlite>::new(
+        "WITH ordered AS (
+            SELECT start_time, end_time, id, LOWER(TRIM(normalized_domain, '.')) AS domain,
+                   LAG(end_time) OVER (ORDER BY start_time, id) AS previous_end,
+                   LAG(LOWER(TRIM(normalized_domain, '.'))) OVER (ORDER BY start_time, id) AS previous_domain
+            FROM web_activity_segments
+            WHERE start_time <= ");
+    query
+        .push_bind(now_ms)
+        .push(" AND COALESCE(end_time, ")
+        .push_bind(now_ms)
+        .push(") >= ")
+        .push_bind(day_start_ms)
+        .push(
+            "), visits AS (
+            SELECT *, MAX(CASE WHEN previous_end = start_time AND previous_domain = domain
+                               THEN NULL ELSE start_time END)
+                      OVER (ORDER BY start_time, id ROWS UNBOUNDED PRECEDING) AS visit_start
+            FROM ordered
+         )
+         SELECT domain AS normalized_domain,
+                COALESCE(SUM(MAX(0, MIN(COALESCE(end_time, ",
+        )
+        .push_bind(now_ms)
+        .push("), ")
+        .push_bind(now_ms)
+        .push(") - MAX(start_time, ")
+        .push_bind(day_start_ms)
+        .push(
+            "))), 0) AS usage_ms,
+                MAX(CASE WHEN end_time IS NULL THEN visit_start END) AS active_since
+         FROM visits WHERE domain IN (",
+        );
+    let mut domains = query.separated(",");
+    for rule in rules {
+        if let ActivityReminderTarget::Web { normalized_domain } = &rule.target {
+            domains.push_bind(normalized_domain);
+        }
+    }
+    query.push(") GROUP BY domain");
+    let rows = query
+        .build()
+        .fetch_all(&mut **tx)
+        .await
+        .map_err(|error| format!("failed to read activity reminder web usage: {error}"))?;
     Ok(rows
         .into_iter()
         .map(|row| WebUsageFact {
             normalized_domain: row.get("normalized_domain"),
             usage_ms: row.get("usage_ms"),
+            active_since: row.get("active_since"),
         })
         .collect())
 }
@@ -246,54 +319,6 @@ async fn fetch_visible_reminders(pool: &Pool<Sqlite>) -> Result<Vec<ToolReminder
     .map_err(|error| format!("failed to load reminders: {error}"))?;
 
     rows.into_iter().map(map_reminder_row).collect()
-}
-
-pub(super) async fn fetch_timer_by_id(pool: &Pool<Sqlite>, id: i64) -> Result<ToolTimer, String> {
-    sqlx::query(
-        "SELECT id, mode, label, duration_ms, accumulated_ms, started_at, paused_at,
-                completed_at, status, created_at, updated_at
-         FROM tool_timers
-         WHERE id = ?",
-    )
-    .bind(id)
-    .fetch_one(pool)
-    .await
-    .map_err(|error| format!("failed to read timer: {error}"))
-    .map(map_timer_row)
-}
-
-pub(super) async fn fetch_latest_timer<'e>(
-    executor: impl sqlx::Executor<'e, Database = Sqlite>,
-) -> Result<Option<ToolTimer>, String> {
-    sqlx::query(
-        "SELECT id, mode, label, duration_ms, accumulated_ms, started_at, paused_at,
-                completed_at, status, created_at, updated_at
-         FROM tool_timers
-         ORDER BY updated_at DESC, id DESC
-         LIMIT 1",
-    )
-    .fetch_optional(executor)
-    .await
-    .map_err(|error| format!("failed to read current timer: {error}"))
-    .map(|row| row.map(map_timer_row))
-}
-
-pub(super) async fn fetch_timer_laps(
-    pool: &Pool<Sqlite>,
-    timer_id: i64,
-) -> Result<Vec<ToolTimerLap>, String> {
-    let rows = sqlx::query(
-        "SELECT id, timer_id, lap_index, started_at, ended_at, duration_ms
-         FROM tool_timer_laps
-         WHERE timer_id = ?
-         ORDER BY lap_index ASC, id ASC",
-    )
-    .bind(timer_id)
-    .fetch_all(pool)
-    .await
-    .map_err(|error| format!("failed to read timer laps: {error}"))?;
-
-    Ok(rows.into_iter().map(map_timer_lap_row).collect())
 }
 
 pub(super) async fn fetch_pomodoro_by_id(
@@ -458,35 +483,6 @@ async fn load_web_activity_enabled(pool: &Pool<Sqlite>) -> Result<bool, String> 
     .await
     .map_err(|error| format!("failed to read web activity setting: {error}"))?;
     Ok(value.is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true")))
-}
-
-fn map_timer_row(row: sqlx::sqlite::SqliteRow) -> ToolTimer {
-    let mode: String = row.get("mode");
-    let status: String = row.get("status");
-    ToolTimer {
-        id: row.get("id"),
-        mode: TimerMode::from_storage(&mode),
-        label: row.get("label"),
-        duration_ms: row.get("duration_ms"),
-        accumulated_ms: row.get("accumulated_ms"),
-        started_at: row.get("started_at"),
-        paused_at: row.get("paused_at"),
-        completed_at: row.get("completed_at"),
-        status: TimerStatus::from_storage(&status),
-        created_at: row.get("created_at"),
-        updated_at: row.get("updated_at"),
-    }
-}
-
-pub(super) fn map_timer_lap_row(row: sqlx::sqlite::SqliteRow) -> ToolTimerLap {
-    ToolTimerLap {
-        id: row.get("id"),
-        timer_id: row.get("timer_id"),
-        lap_index: row.get("lap_index"),
-        started_at: row.get("started_at"),
-        ended_at: row.get("ended_at"),
-        duration_ms: row.get("duration_ms"),
-    }
 }
 
 fn map_pomodoro_row(row: sqlx::sqlite::SqliteRow) -> ToolPomodoroRun {
