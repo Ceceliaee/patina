@@ -8,7 +8,7 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
   const { client, sessionId, appUrl, runTest } = context;
   const toolsEvent = JSON.stringify({
     settings: { pomodoro_focus_minutes: 25, pomodoro_short_break_minutes: 5, pomodoro_long_break_minutes: 15, pomodoro_long_break_every: 4 },
-    reminders: [], activity_reminder_rules: [], current_pomodoro: null,
+    reminders: [], activity_reminder_rules: [], free_focus_tasks: [], pomodoro_tasks: [], current_pomodoro: null,
     today_completed_pomodoros: 0, next_reminder_at: null, sampled_at_ms: Date.now(),
   });
   const read = (expression: string) => evaluate(client, sessionId, expression);

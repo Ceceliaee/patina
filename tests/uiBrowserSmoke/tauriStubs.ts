@@ -418,12 +418,14 @@ function tauriStubFor(path: string) {
           };
         }
         if (globalThis.__PATINA_TOOLS_ACTION_CASE
-          && (command === "cmd_start_pomodoro" || command === "cmd_pause_pomodoro")) {
+          && (command === "cmd_pomodoro_task" || command === "cmd_start_pomodoro" || command === "cmd_pause_pomodoro")) {
           const fixture = globalThis.__PATINA_TOOLS_ACTION_CASE;
           fixture.calls.push(command);
           throw fixture.error;
         }
         if (command === "cmd_get_tools_snapshot") {
+          if (globalThis.__PATINA_FREE_FOCUS_CASE) return globalThis.__PATINA_FREE_FOCUS_CASE.snapshot;
+          if (globalThis.__PATINA_POMODORO_CASE) return globalThis.__PATINA_POMODORO_CASE;
           if (globalThis.__PATINA_ACTIVITY_REMINDER_CASE) return globalThis.__PATINA_ACTIVITY_REMINDER_CASE;
           const toolsSnapshotDelayMs = Number(
             globalThis.__TIME_TRACKER_TOOLS_SNAPSHOT_DELAY_MS
@@ -449,11 +451,57 @@ function tauriStubFor(path: string) {
             },
             reminders: [],
             activity_reminder_rules: [],
-            current_pomodoro: null,
+            free_focus_tasks: [],
+            pomodoro_tasks: [], current_pomodoro: null,
             today_completed_pomodoros: 0,
             next_reminder_at: null,
             sampled_at_ms: Date.now(),
           };
+        }
+        if (command === "cmd_free_focus" && globalThis.__PATINA_FREE_FOCUS_CASE) {
+          const fixture = globalThis.__PATINA_FREE_FOCUS_CASE;
+          fixture.calls.push(payload.action);
+          if (fixture.error) throw new Error(fixture.error);
+          return structuredClone(fixture.snapshot);
+        }
+        if (command === "cmd_pomodoro_task" && globalThis.__PATINA_POMODORO_CASE) {
+          const snapshot = globalThis.__PATINA_POMODORO_CASE;
+          const action = payload.action;
+          globalThis.__PATINA_POMODORO_CALLS.push(action);
+          if (globalThis.__PATINA_POMODORO_HOLD) await new Promise(resolve => { globalThis.__PATINA_POMODORO_RELEASE = resolve; });
+          if (globalThis.__PATINA_POMODORO_FAILURE) throw new Error("synthetic task failure");
+          let task = snapshot.pomodoro_tasks.find((task) => task.run.id === action.id);
+          const now = Date.now();
+          if (action.kind === "save") {
+            if (!task) {
+              task = { label: "", completed_groups: 0, run: { id: Math.max(0, ...snapshot.pomodoro_tasks.map((task) => task.run.id)) + 1, created_at: now } };
+              snapshot.pomodoro_tasks.push(task);
+            }
+            task.label = action.label;
+            if (task.run.focus_ms !== action.focusMs || task.run.short_break_ms !== action.shortBreakMs
+                || task.run.long_break_ms !== action.longBreakMs || task.run.long_break_every !== action.longBreakEvery) {
+              Object.assign(task.run, { phase: "focus", status: "idle", cycle_index: 1, focus_ms: action.focusMs,
+              short_break_ms: action.shortBreakMs, long_break_ms: action.longBreakMs, long_break_every: action.longBreakEvery,
+                phase_started_at: null, phase_paused_at: null, phase_remaining_ms: action.focusMs, completed_focus_count: 0, updated_at: now });
+            }
+          } else if (action.kind === "resume" || action.kind === "start_next") {
+            if (action.kind === "start_next" && (task.run.updated_at !== action.expectedUpdatedAt || !["paused", "completed"].includes(task.run.status))) throw new Error("stale notification");
+            for (const other of snapshot.pomodoro_tasks) if (other.run.status === "running") {
+              other.run.phase_remaining_ms = Math.max(0, other.run.phase_remaining_ms - (now - other.run.phase_started_at));
+              other.run.status = "paused"; other.run.phase_started_at = null; other.run.phase_paused_at = now;
+            }
+            if (task.run.status === "completed") Object.assign(task.run, {phase:"focus",cycle_index:1,phase_remaining_ms:task.run.focus_ms});
+            task.run.status = "running"; task.run.phase_started_at = now;
+          } else if (action.kind === "pause") {
+            task.run.phase_remaining_ms = Math.max(0, task.run.phase_remaining_ms - (now - task.run.phase_started_at));
+            task.run.status = "paused"; task.run.phase_started_at = null; task.run.phase_paused_at = now;
+          } else if (action.kind === "delete") {
+            snapshot.pomodoro_tasks = snapshot.pomodoro_tasks.filter((candidate) => candidate !== task);
+          }
+          snapshot.current_pomodoro = snapshot.pomodoro_tasks.find((task) => task.run.status === "running")?.run
+            ?? snapshot.pomodoro_tasks[0]?.run ?? null;
+          snapshot.sampled_at_ms = now;
+          return structuredClone(snapshot);
         }
         if (globalThis.__PATINA_TIMED_REMINDER_CASE && ["cmd_create_reminder", "cmd_update_reminder", "cmd_cancel_reminder", "cmd_resolve_reminder_alert"].includes(command)) {
           const snapshot = globalThis.__PATINA_TIMED_REMINDER_CASE;

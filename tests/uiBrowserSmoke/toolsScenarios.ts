@@ -6,6 +6,9 @@ import { TOOLS_TEXT } from "./constants.ts";
 import { runTimedReminderScenarios } from "./timedReminderScenarios.ts";
 import { runUsageAlertScenarios } from "./usageAlertScenarios.ts";
 import { runRecurringReminderScenarios } from "./recurringReminderScenarios.ts";
+import { pomodoroFixture, runPomodoroScenarios } from "./pomodoroScenarios.ts";
+import { runPomodoroAlertScenarios } from "./pomodoroAlertScenarios.ts";
+import { runFreeFocusScenarios } from "./freeFocusScenarios.ts";
 
 const COPY = { "zh-CN": getLocaleText("zh-CN") } as const;
 
@@ -14,6 +17,9 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
   await runUsageAlertScenarios(context);
   await runTimedReminderScenarios(context);
   await runRecurringReminderScenarios(context);
+  await runPomodoroScenarios(context);
+  await runPomodoroAlertScenarios(context);
+  await runFreeFocusScenarios(context);
 
   await runTest("Tools pending mutation discourages repeated writes and recovers from a runtime event", async () => {
     const originalStorage = String(await evaluate(client!, sessionId, `JSON.stringify({ ...localStorage })`));
@@ -23,6 +29,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
         localStorage.setItem("__time_tracker_smoke_settings", JSON.stringify({ language: "zh-CN" }));
         localStorage.setItem("patina:last-active-view", "tools");
         localStorage.setItem("patina:tools-section", "pomodoro");
+        localStorage.setItem("__time_tracker_tools_snapshot_override", JSON.stringify(${JSON.stringify(pomodoroFixture())}));
         document.documentElement.dataset.patinaSmokeReload = "tools-action-recovery";
         location.reload();
       `);
@@ -61,7 +68,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
         diagnostic: document.body.innerText.includes("private database reconciliation detail"),
         hasStart: Boolean(document.querySelector(${jsonString(startSelector)})),
         hasPause: Boolean(document.querySelector(${jsonString(pauseSelector)})),
-      })`), { calls: ["cmd_start_pomodoro"], retryAdvice: false, diagnostic: false, hasStart: true, hasPause: false });
+      })`), { calls: ["cmd_pomodoro_task"], retryAdvice: false, diagnostic: false, hasStart: true, hasPause: false });
       await evaluate(client!, sessionId, `
         (() => {
           const now = Date.now();
@@ -70,7 +77,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
               pomodoro_focus_minutes: 25,
               pomodoro_short_break_minutes: 5, pomodoro_long_break_minutes: 15, pomodoro_long_break_every: 4,
             },
-            reminders: [], activity_reminder_rules: [], current_pomodoro: {
+            reminders: [], activity_reminder_rules: [], free_focus_tasks: [], pomodoro_tasks: [], current_pomodoro: {
               id: 42, phase: "focus", status: "running", cycle_index: 1,
               focus_ms: 1500000, short_break_ms: 300000, long_break_ms: 900000,
               long_break_every: 4, phase_started_at: now, phase_paused_at: null,
@@ -78,13 +85,14 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
             },
             today_completed_pomodoros: 0, next_reminder_at: null, sampled_at_ms: now + 1000,
           };
+          snapshot.pomodoro_tasks = [{ label: "Reading", completed_groups: 0, run: snapshot.current_pomodoro }];
           globalThis.__PATINA_EMIT_TAURI_EVENT("tools-runtime-changed", snapshot);
         })()
       `);
       await waitForExpression(client!, sessionId, `
         Boolean(document.querySelector(${jsonString(pauseSelector)}))
           && !document.querySelector(${jsonString(startSelector)})
-          && document.querySelector('.tools-pomodoro-phase')?.textContent === ${jsonString(COPY["zh-CN"].tools.pomodoroPhase.focus)}
+          && document.querySelector('.tools-pomodoro-task-time > span')?.textContent === ${jsonString(COPY["zh-CN"].tools.pomodoroPhase.focus)}
       `, 10_000, "the backend reconciliation event must restore the actual running Pomodoro");
       await evaluate(client!, sessionId, `
         globalThis.__PATINA_TOOLS_ACTION_CASE.error = "ordinary database write failed";
@@ -96,9 +104,9 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       `, 10_000, "ordinary Tools write failure must retain the existing retry advice");
       assert.deepEqual(await evaluate(client!, sessionId, `({
         calls: globalThis.__PATINA_TOOLS_ACTION_CASE.calls,
-        running: document.querySelector('.tools-pomodoro-phase')?.textContent,
+        running: document.querySelector('.tools-pomodoro-task-time > span')?.textContent,
         diagnostic: document.body.innerText.includes("ordinary database write failed"),
-      })`), { calls: ["cmd_start_pomodoro", "cmd_pause_pomodoro"], running: COPY["zh-CN"].tools.pomodoroPhase.focus, diagnostic: false });
+      })`), { calls: ["cmd_pomodoro_task", "cmd_pomodoro_task"], running: COPY["zh-CN"].tools.pomodoroPhase.focus, diagnostic: false });
     } finally {
       await evaluate(client!, sessionId, `
         localStorage.clear();
@@ -636,7 +644,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       globalThis.__PATINA_ACTIVITY_REMINDER_CASE = {
         settings: { pomodoro_focus_minutes: 25,
           pomodoro_short_break_minutes: 5, pomodoro_long_break_minutes: 15, pomodoro_long_break_every: 4 },
-        reminders: [], activity_reminder_rules: [], current_pomodoro: null,
+        reminders: [], activity_reminder_rules: [], free_focus_tasks: [], pomodoro_tasks: [], current_pomodoro: null,
         today_completed_pomodoros: 0, next_reminder_at: null, sampled_at_ms: Date.now(),
       };
     `);
@@ -809,6 +817,8 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       sessionId,
       `document.body.innerText.includes(${jsonString(TOOLS_TEXT.pomodoroTitle)})`,
     );
+    await evaluate(client!, sessionId, `document.querySelector('.tools-pomodoro-settings-trigger').click()`);
+    await waitForExpression(client!, sessionId, `document.activeElement?.id === 'tools-pomodoro-focus'`);
     assert.equal(
       await evaluate(client!, sessionId, `
         (async () => {
@@ -833,8 +843,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
           setter?.call(input, '0');
           input.dispatchEvent(new Event('input', { bubbles: true }));
           await new Promise((resolve) => requestAnimationFrame(resolve));
-          const start = document.querySelector('[data-tools-section="pomodoro"] .tools-action-row .qp-button-primary');
-          return Boolean(start?.disabled);
+          return input.validity.rangeUnderflow;
         })()
       `),
       true,
@@ -843,40 +852,22 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         (async () => {
-          const fields = [
-            ['#tools-pomodoro-focus', '25'],
-            ['#tools-pomodoro-short-break', '5'],
-            ['#tools-pomodoro-long-break', '15'],
-            ['#tools-pomodoro-long-break-every', '4'],
-          ];
+          const input = document.querySelector('#tools-pomodoro-focus');
           const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-          for (const [selector, value] of fields) {
-            const input = document.querySelector(selector);
-            if (!input) return false;
-            setter?.call(input, value === '25' ? '0' : '');
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-          }
+          setter?.call(input, '35');
+          input.dispatchEvent(new Event('input', { bubbles: true }));
           await new Promise((resolve) => requestAnimationFrame(resolve));
-          const restore = document.querySelector(
-            '[aria-label=' + ${jsonString(JSON.stringify(COPY["zh-CN"].accessibility.tools.restorePomodoroDefaults))} + ']'
-          );
-          if (!restore || restore.textContent?.trim() || restore.hasAttribute('title')) return false;
-          const titleGroup = restore.closest('.tools-subpanel-title-action');
-          const title = titleGroup?.querySelector('h3');
-          if (!title || title.textContent?.trim() !== ${jsonString(TOOLS_TEXT.pomodoroSettings)}) return false;
-          const titleRect = title.getBoundingClientRect();
-          const restoreRect = restore.getBoundingClientRect();
-          if (restoreRect.left < titleRect.right || restoreRect.left - titleRect.right > 12) return false;
-          restore.click();
-          await new Promise((resolve) => requestAnimationFrame(resolve));
-          const start = document.querySelector('[data-tools-section="pomodoro"] .tools-action-row .qp-button-primary');
-          return fields.every(([selector, value]) => document.querySelector(selector)?.value === value)
-            && !start?.disabled;
+          const popover = document.querySelector('.tools-pomodoro-settings-popover');
+          return document.querySelector('.tools-pomodoro-settings-trigger').textContent.includes('35')
+            && popover.querySelectorAll('input').length === 4
+            && !popover.querySelector('h3, button');
         })()
       `),
       true,
-      "pomodoro default icon restores editable durations",
+      "pomodoro settings apply immediately without header or action buttons",
     );
+    await client!.command('Input.dispatchKeyEvent', {type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27}, sessionId);
+    await waitForExpression(client!, sessionId, `!document.querySelector('.tools-pomodoro-settings-popover')`);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
@@ -996,7 +987,8 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
               created_at: now, updated_at: now, disabled_at: null,
               last_fired_date_key: null, suspension_reason: null,
             })),
-            current_pomodoro: null,
+            free_focus_tasks: [],
+            pomodoro_tasks: [], current_pomodoro: null,
             today_completed_pomodoros: 0, next_reminder_at: now + 3600000, sampled_at_ms: now,
           }));
           document.documentElement.dataset.patinaSmokeReload = "reminder-overflow";

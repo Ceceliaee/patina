@@ -26,7 +26,7 @@ export async function runRecurringReminderScenarios({ client, sessionId, runTest
           localStorage.setItem('__time_tracker_tools_snapshot_override',JSON.stringify({
             settings:{pomodoro_focus_minutes:25,pomodoro_short_break_minutes:5,pomodoro_long_break_minutes:15,pomodoro_long_break_every:4},
             reminders:[{id:1,label:'Completed',scheduled_at:Date.now()-60000,created_at:Date.now()-120000,status:'fired',fired_at:Date.now()-30000,cancelled_at:null}],
-            activity_reminder_rules:[],current_pomodoro:null,today_completed_pomodoros:0,next_reminder_at:null,sampled_at_ms:Date.now()}));
+            activity_reminder_rules: [], free_focus_tasks: [], pomodoro_tasks: [], current_pomodoro:null,today_completed_pomodoros:0,next_reminder_at:null,sampled_at_ms:Date.now()}));
           document.documentElement.dataset.recurringReload='pending';location.reload();
         })()`);
         await waitForExpression(client, sessionId, `document.documentElement?.dataset.recurringReload!=='pending' && !!document.querySelector('.tools-event-reminder-form') && document.documentElement.lang===${JSON.stringify(locale)}`);
@@ -52,7 +52,7 @@ export async function runRecurringReminderScenarios({ client, sessionId, runTest
         await waitForExpression(client, sessionId, `!document.querySelector('.qp-select-menu') && document.activeElement?.matches('.qp-select-trigger')`);
         assert.equal(await evaluate(client, sessionId, `document.querySelectorAll('.tools-repeat-weekdays, .tools-repeat-weekday-popover').length`), 0);
         assert.equal(await evaluate(client, sessionId, `document.querySelectorAll('.tools-event-reminder-form .tools-action-button svg').length`), 0);
-        assert.equal(await evaluate(client, sessionId, `(() => {const form=document.querySelector('.tools-event-reminder-form');const widths=[form.querySelector('input'),form.querySelector('.tools-reminder-time-trigger'),form.querySelector('.qp-select-trigger')].map(el=>el.getBoundingClientRect().width);return Math.abs(widths[0]*3/5-widths[1])<1&&Math.abs(widths[1]*2/3-widths[2])<1;})()`), true);
+        assert.equal(await evaluate(client, sessionId, `(() => {const form=document.querySelector('.tools-event-reminder-form');const widths=[form.querySelector('input'),form.querySelector('.tools-reminder-time-trigger'),form.querySelector('.qp-select-trigger')].map(el=>el.getBoundingClientRect().width);return widths[0]>widths[1]&&Math.abs(widths[1]-widths[2])<1;})()`), true);
         await evaluate(client, sessionId, `globalThis.__PATINA_TIMED_REMINDER_ACTION_CASE={error:'injected create failure'}`);
         await click('.tools-event-reminder-form .tools-action-button');
         await waitForExpression(client, sessionId, `!document.querySelector('.tools-event-reminder-form .tools-action-button').disabled`);

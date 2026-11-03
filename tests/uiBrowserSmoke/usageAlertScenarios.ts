@@ -22,7 +22,7 @@ export async function runUsageAlertScenarios({ client, sessionId, runTest }: Bro
         (async () => {
         globalThis.__PATINA_USAGE_ALERT_CASE = { calls: [], snapshot: {
           settings: { pomodoro_focus_minutes:25, pomodoro_short_break_minutes:5, pomodoro_long_break_minutes:15, pomodoro_long_break_every:4 },
-          reminders:[], activity_reminder_rules:[], current_pomodoro:null,
+          reminders:[], activity_reminder_rules:[], free_focus_tasks: [], pomodoro_tasks: [], current_pomodoro:null,
           today_completed_pomodoros:0, next_reminder_at:null, sampled_at_ms:Date.now()
         } };
         globalThis.__PATINA_EMIT_TAURI_EVENT('tools-alert', {
@@ -83,11 +83,11 @@ export async function runUsageAlertScenarios({ client, sessionId, runTest }: Bro
       }
       assert.equal(await evaluate(client!, sessionId, `globalThis.__PATINA_USAGE_ALERT_CASE.calls.filter(c=>c.command==='cmd_show_desktop').length`), 2);
       await evaluate(client!, sessionId, `globalThis.__PATINA_EMIT_TAURI_EVENT('tools-alert', { id: 'plain-reminder', kind:'pomodoro', title:'Reminder', body:'Plain reminder', occurred_at:300 });`);
-      await waitForExpression(client!, sessionId, `document.querySelector('.tools-alert-dialog-message')?.textContent === 'Plain reminder'`);
-      assert.equal(await evaluate(client!, sessionId, `getComputedStyle(document.querySelector('.tools-alert-dialog-surface')).backgroundColor`), usageBackground);
-      await waitForExpression(client!, sessionId, `document.activeElement === document.querySelector('.tools-alert-dialog-surface .qp-dialog-actions button')`);
+      await waitForExpression(client!, sessionId, `document.querySelector('.tools-pomodoro-alert-surface .tools-usage-alert-summary')?.textContent === 'Plain reminder'`);
+      assert.equal(await evaluate(client!, sessionId, `getComputedStyle(document.querySelector('.tools-pomodoro-alert-surface')).backgroundColor`), usageBackground);
+      await waitForExpression(client!, sessionId, `document.activeElement === document.querySelector('.tools-pomodoro-alert-surface .qp-dialog-actions button')`);
       await key("Escape",27);
-      await waitForExpression(client!,sessionId,`!document.querySelector('.tools-alert-dialog-surface')`);
+      await waitForExpression(client!,sessionId,`!document.querySelector('.tools-pomodoro-alert-surface')`);
     } finally {
       await evaluate(client!, sessionId, `localStorage.clear(); for(const [key,value] of Object.entries(${storage})) localStorage.setItem(key,value); document.documentElement.dataset.usageReload='pending'; location.reload();`);
       await waitForExpression(client!,sessionId,`document.documentElement.dataset.usageReload !== 'pending' && !!document.querySelector('main.qp-canvas')`);

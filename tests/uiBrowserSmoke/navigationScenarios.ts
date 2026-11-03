@@ -429,7 +429,8 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
             cancelled_at: null,
           }],
           activity_reminder_rules: [],
-          current_pomodoro: {
+          free_focus_tasks: [],
+          pomodoro_tasks: [], current_pomodoro: {
             id: 1,
             phase: "focus",
             status: "running",
