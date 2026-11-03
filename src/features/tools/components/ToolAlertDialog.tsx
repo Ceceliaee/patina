@@ -1,107 +1,18 @@
-import { useLocaleText } from "../../../shared/i18n/index.ts";
-import { AlarmClock, BellRing } from "lucide-react";
-import { lazy, Suspense, useCallback, useRef, useState, type ReactNode } from "react";
-import QuietDialog from "../../../shared/components/QuietDialog.tsx";
-import QuietButton from "../../../shared/components/QuietButton.tsx";
-
-import type { ToolAlert } from "../../../shared/types/tools.ts";
+import { lazy, Suspense } from "react";
 import { useToolAlerts } from "../hooks/useToolAlerts.ts";
-import { ToolsRuntimeService } from "../services/toolsRuntimeService.ts";
+import FocusAlertDialog from "./FocusAlertDialog.tsx";
 
 const ActivityReminderAlertDialog = lazy(() => import("./ActivityReminderAlertDialog.tsx"));
 const TimedReminderAlertDialog = lazy(() => import("./TimedReminderAlertDialog.tsx"));
 
-function formatAlertTime(timestampMs: number) {
-  return new Date(timestampMs).toLocaleString(undefined, {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function alertIcon(alert: ToolAlert): ReactNode {
-  if (alert.kind === "pomodoro") return <AlarmClock size={17} />;
-  return <BellRing size={17} />;
-}
-
 export default function ToolAlertDialog() {
-  const UI_TEXT = useLocaleText();
-  const pauseButtonRef = useRef<HTMLButtonElement>(null);
-  const dismissButtonRef = useRef<HTMLButtonElement>(null);
   const { activeAlert, dismissActiveAlert } = useToolAlerts();
-  const [pausingPomodoro, setPausingPomodoro] = useState(false);
-  const title = activeAlert?.title.trim() || UI_TEXT.tools.notificationStatus;
-  const message = activeAlert?.body.trim() || UI_TEXT.tools.defaultReminderLabel;
-  const occurredAtLabel = activeAlert
-    ? UI_TEXT.tools.alertOccurredAt(formatAlertTime(activeAlert.occurredAt))
-    : "";
-  const canPausePomodoro = activeAlert?.kind === "pomodoro";
-  const handlePausePomodoro = useCallback(async () => {
-    if (activeAlert?.kind !== "pomodoro" || pausingPomodoro) return;
-
-    setPausingPomodoro(true);
-    try {
-      await ToolsRuntimeService.pausePomodoro();
-      dismissActiveAlert();
-    } catch (error) {
-      console.warn("pause pomodoro from alert failed", error);
-    } finally {
-      setPausingPomodoro(false);
-    }
-  }, [activeAlert?.kind, dismissActiveAlert, pausingPomodoro]);
-
-  if (activeAlert?.kind === "activity_reminder" && activeAlert.activityReminder) {
+  if (!activeAlert) return null;
+  if (activeAlert.kind === "activity_reminder" && activeAlert.activityReminder) {
     return <Suspense fallback={null}><ActivityReminderAlertDialog key={activeAlert.id} alert={activeAlert} details={activeAlert.activityReminder} onDismiss={dismissActiveAlert} /></Suspense>;
   }
-  if (activeAlert?.kind === "reminder") {
+  if (activeAlert.kind === "reminder") {
     return <Suspense fallback={null}><TimedReminderAlertDialog key={activeAlert.id} alert={activeAlert} onDismiss={dismissActiveAlert} /></Suspense>;
   }
-
-  return (
-    <QuietDialog
-      open={Boolean(activeAlert)}
-      title={title}
-      closeOnBackdrop={false}
-      onClose={dismissActiveAlert}
-      initialFocusRef={canPausePomodoro ? pauseButtonRef : dismissButtonRef}
-      surfaceClassName="tools-alert-dialog-surface"
-      actions={(
-        <>
-          {canPausePomodoro && (
-            <QuietButton
-              ref={pauseButtonRef}
-              size="large"
-              className="qp-dialog-action"
-              onClick={() => void handlePausePomodoro()}
-              busy={pausingPomodoro}
-            >
-              {pausingPomodoro ? UI_TEXT.tools.alertPausingPomodoro : UI_TEXT.tools.alertPausePomodoro}
-            </QuietButton>
-          )}
-          <QuietButton
-            ref={dismissButtonRef}
-            tone="primary"
-            size="large"
-            className="qp-dialog-action"
-            onClick={dismissActiveAlert}
-          >
-            {UI_TEXT.tools.alertDismiss}
-          </QuietButton>
-        </>
-      )}
-    >
-      {activeAlert && (
-        <div className="tools-alert-dialog-body">
-          <div className="tools-alert-dialog-icon" aria-hidden="true">
-            {alertIcon(activeAlert)}
-          </div>
-          <div className="tools-alert-dialog-copy">
-            <p className="tools-alert-dialog-message">{message}</p>
-            <p className="tools-alert-dialog-time">{occurredAtLabel}</p>
-          </div>
-        </div>
-      )}
-    </QuietDialog>
-  );
+  return <FocusAlertDialog key={activeAlert.id} alert={activeAlert} onDismiss={dismissActiveAlert} />;
 }

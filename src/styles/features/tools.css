@@ -205,7 +205,8 @@
   gap: 16px;
 }
 
-.tools-mode-pane[data-tools-reminder-mode] .tools-mode-content-pane {
+.tools-mode-pane[data-tools-reminder-mode] .tools-mode-content-pane,
+.tools-pomodoro-content {
   gap: 12px;
 }
 
@@ -318,7 +319,8 @@
   padding-top: 14px;
 }
 
-.tools-mode-pane[data-tools-reminder-mode] .tools-subpanel {
+.tools-mode-pane[data-tools-reminder-mode] .tools-subpanel,
+.tools-pomodoro-create {
   border-top: 0;
   border-radius: var(--qp-radius-control);
   background: color-mix(in srgb, var(--qp-bg-elevated) 58%, var(--qp-bg-panel));
@@ -338,9 +340,6 @@
   align-items: center;
 }
 
-.tools-reminder-time-filter {
-  transform: translateY(4px);
-}
 
 .tools-subpanel-header h3,
 .tools-list-section h3 {
@@ -358,49 +357,17 @@
   gap: 6px;
 }
 
-.tools-ghost-icon-button {
-  display: inline-flex;
-  width: 22px;
-  height: 22px;
-  min-height: 0;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: var(--qp-radius-control);
-  background: transparent;
-  padding: 0;
-  color: color-mix(in srgb, var(--qp-text-tertiary) 78%, var(--qp-bg-panel));
-  cursor: pointer;
-  transition: color var(--qp-motion-fast) var(--qp-motion-ease), opacity var(--qp-motion-fast) var(--qp-motion-ease);
-}
 
-.tools-ghost-icon-button:hover {
-  color: var(--qp-text-primary);
-}
 
-.tools-ghost-icon-button:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--qp-accent-default) 42%, transparent);
-  outline-offset: 2px;
-}
 
-.tools-ghost-icon-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.38;
-}
 
 .tools-pomodoro-settings-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 14px;
-  margin-top: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
-.tools-pomodoro-settings-grid {
-  gap: 10px 18px;
-  margin-top: 10px;
-}
-
-.qp-dialog-surface:has(.tools-reminder-editor) {
+.qp-dialog-surface:has(.tools-reminder-editor, .tools-pomodoro-editor) {
   max-width: 400px;
 }
 
@@ -409,7 +376,8 @@
   overflow-wrap: anywhere;
 }
 
-.tools-reminder-editor {
+.tools-reminder-editor,
+.tools-pomodoro-editor {
   display: grid;
   gap: 14px;
 }
@@ -528,7 +496,6 @@
 
 .tools-reminder-list-section {
   border-top: 0;
-  padding-top: 4px;
 }
 
 .tools-empty-state {
@@ -702,6 +669,11 @@
   gap: 8px;
 }
 
+.tools-event-reminder-form .tools-reminder-schedule-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .tools-reminder-time-trigger { text-align: left; }
 .tools-reminder-time-popover {
   width: min(428px, calc(100vw - 24px));
@@ -761,7 +733,8 @@
   gap: 0;
 }
 
-.tools-reminder-row-actions .qp-icon-action {
+.tools-reminder-row-actions .qp-icon-action,
+.tools-pomodoro-task-actions .qp-icon-action {
   width: 28px;
   height: 28px;
   min-height: 28px;
@@ -769,68 +742,6 @@
 
 .tools-tabular {
   font-variant-numeric: tabular-nums;
-}
-
-.tools-pomodoro-display {
-  display: grid;
-  align-items: center;
-  justify-items: center;
-  border: 1px solid var(--qp-border-subtle);
-  border-radius: var(--qp-radius-panel);
-  background: var(--qp-bg-elevated);
-  text-align: center;
-}
-
-.tools-pomodoro-workbench {
-  display: grid;
-  min-width: 0;
-  gap: 10px;
-}
-
-.tools-pomodoro-display {
-  min-height: 92px;
-  align-content: center;
-  gap: 6px;
-  padding: 10px 16px;
-}
-
-.tools-pomodoro-display span {
-  color: var(--qp-text-tertiary);
-  font-size: var(--qp-font-size-caption);
-  line-height: var(--qp-line-height-caption);
-  font-weight: var(--qp-font-weight-medium);
-}
-
-.tools-pomodoro-display strong {
-  display: block;
-  margin-top: 6px;
-  color: var(--qp-text-primary);
-  font-size: var(--qp-font-size-metric);
-  font-variant-numeric: tabular-nums;
-  font-weight: var(--qp-font-weight-emphasis);
-  letter-spacing: 0;
-  line-height: var(--qp-line-height-metric);
-}
-
-.tools-pomodoro-primary {
-  display: grid;
-  min-width: 0;
-  justify-items: center;
-}
-
-.tools-pomodoro-display .tools-pomodoro-phase {
-  color: var(--qp-text-secondary);
-}
-
-.tools-pomodoro-actions {
-  justify-content: center;
-  margin-top: 0;
-}
-
-.tools-duration-field {
-  display: grid;
-  min-width: 0;
-  gap: 10px;
 }
 
 .tools-field-copy {
@@ -854,60 +765,97 @@
   width: 100%;
 }
 
-.tools-pomodoro-metrics {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
-  margin-top: 0;
+.tools-pomodoro-create {
+  flex: 0 0 auto;
 }
 
-.tools-pomodoro-metrics span {
-  display: inline-flex;
-  min-height: 24px;
-  align-items: center;
-  border: 1px solid var(--qp-border-subtle);
-  border-radius: var(--qp-radius-chip);
-  background: var(--qp-bg-panel);
-  padding: 0 8px;
+.tools-pomodoro-name-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.tools-pomodoro-settings-popover { width: min(300px, calc(100vw - 24px)); padding: 14px; }
+.tools-free-rest-popover { width: min(260px, calc(100vw - 24px)); padding: 6px; }
+.tools-free-rest-options { display: grid; min-width: 0; margin: 0; padding: 0; border: 0; }
+.tools-free-rest-options .tools-free-rest-option { display: grid; grid-template-columns: minmax(0, 1fr) 96px; align-items: center; gap: 8px; padding-block: 4px; font-size: var(--qp-font-size-caption); line-height: var(--qp-line-height-caption); font-weight: var(--qp-font-weight-regular); }
+.tools-free-rest-choice { position: relative; display: flex; align-items: center; gap: 8px; min-height: 34px; cursor: pointer; }
+.tools-free-rest-choice input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; }
+.tools-free-rest-choice:has(input:focus-visible) { outline: 2px solid var(--qp-accent-default); outline-offset: 2px; }
+.tools-free-rest-value { min-width: 0; padding-inline: 8px; }
+.tools-pomodoro-settings-popover .tools-field-copy label {
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
+  font-weight: var(--qp-font-weight-regular);
+}
+.tools-pomodoro-settings-trigger { justify-content: space-between; gap: 8px; }
+.tools-pomodoro-settings-trigger > span { white-space: normal; overflow-wrap: anywhere; }
+.tools-pomodoro-settings-popover .tools-duration-control { position: relative; }
+.tools-pomodoro-settings-popover .tools-duration-input { padding-inline-end: 52px; }
+.tools-duration-unit {
+  position: absolute;
+  inset-inline-end: 12px;
+  top: 50%;
+  transform: translateY(-50%);
   color: var(--qp-text-secondary);
   font-size: var(--qp-font-size-caption);
   line-height: var(--qp-line-height-caption);
-  font-weight: var(--qp-font-weight-medium);
+  pointer-events: none;
 }
 
-.tools-pomodoro-cycle-track {
+.tools-pomodoro-task-section { flex: 1 1 0; }
+.tools-pomodoro-task-section > .tools-empty-state { flex: 1 1 0; }
+.tools-pomodoro-task-details {
   display: flex;
-  width: min(180px, 100%);
-  min-width: 0;
-  justify-content: center;
-  gap: 5px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
 }
-
-.tools-pomodoro-cycle-dot {
-  width: 18px;
-  height: 3px;
-  border-radius: var(--qp-radius-chip);
-  background: var(--qp-border-subtle);
+.tools-pomodoro-task-details > strong { min-width: 0; }
+.tools-pomodoro-task-details .tools-pomodoro-completed-badge {
+  display: inline-grid;
+  place-items: center;
+  position: relative;
+  flex-shrink: 0;
+  min-width: 24px;
+  height: 24px;
+  padding-inline: 7px;
+  margin-top: 0;
 }
-
-.tools-pomodoro-cycle-dot-complete,
-.tools-pomodoro-cycle-dot-active {
-  background: color-mix(in srgb, var(--qp-accent-default) 72%, var(--qp-border-subtle));
+.tools-pomodoro-completed-badge > svg { position: absolute; inset: 0; width: 100%; height: 100%; stroke-width: 1.5; }
+.tools-pomodoro-completed-badge > span {
+  margin-top: 0;
+  font-size: var(--qp-font-size-compact);
+  line-height: var(--qp-line-height-compact);
+  font-weight: var(--qp-font-weight-emphasis);
 }
-
-.tools-pomodoro-cycle-dot-active {
-  width: 24px;
+.tools-pomodoro-task-time > span {
+  margin-top: 0;
+  color: var(--qp-text-secondary);
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
 }
+.tools-pomodoro-task-time { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; white-space: nowrap; }
+.tools-pomodoro-task-time > strong {
+  font-size: var(--qp-font-size-body);
+  line-height: var(--qp-line-height-body);
+  font-weight: var(--qp-font-weight-emphasis);
+  font-variant-numeric: tabular-nums;
+}
+.tools-pomodoro-task-actions { flex-wrap: nowrap; gap: 4px; }
+.tools-pomodoro-task-panel { overflow-y: auto; }
 
-.tools-pomodoro-rules {
-  min-height: 0;
-  overflow-y: auto;
-  border-top: 0;
-  border-radius: var(--qp-radius-control);
-  background: color-mix(in srgb, var(--qp-bg-elevated) 58%, var(--qp-bg-panel));
-  padding: 10px 14px 14px;
+@media (max-width: 1000px) {
+  .tools-pomodoro-name-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .tools-pomodoro-name-row > label { grid-column: 1 / -1; }
+  .tools-pomodoro-task-actions { grid-column: 1 / -1; justify-content: flex-end; }
+}
+@media (max-width: 720px) {
+  .tools-pomodoro-name-row { grid-template-columns: minmax(0, 1fr); }
+  .tools-pomodoro-task-section { flex: 1 1 auto; }
+  .tools-pomodoro-task-section .tools-reminder-list-frame { min-height: 180px; }
 }
 
 .tools-status-chip {
@@ -1136,21 +1084,9 @@
     padding: 24px;
   }
 
-  .tools-pomodoro-settings-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .tools-reminder-form {
-    grid-template-columns: minmax(0, 1fr) minmax(260px, 0.9fr) auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
     align-items: end;
-  }
-
-  .tools-event-reminder-form {
-    grid-template-columns: minmax(0, 5fr) minmax(0, 3fr) minmax(0, 2fr) auto;
-  }
-
-  .tools-event-reminder-form .tools-reminder-schedule-fields {
-    display: contents;
   }
 
   .tools-reminder-form .tools-validation-message {
@@ -1165,10 +1101,6 @@
 
   .tools-panel {
     gap: 18px;
-  }
-
-  .tools-pomodoro-settings-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 

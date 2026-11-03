@@ -11,7 +11,7 @@ import {
   readToolsSection,
   rememberToolsSection,
 } from "../services/toolsLayoutPreferenceStorage.ts";
-import { loadToolsIconsForExecutables } from "../services/toolsIconService.ts";
+import { loadToolsIconsForExecutables } from "../services/toolsRuntimeService.ts";
 import type { ToolsOpenTarget, ToolsSection } from "../types.ts";
 import PomodoroToolPanel from "./PomodoroToolPanel.tsx";
 import ReminderToolPanel from "./ReminderToolPanel.tsx";
@@ -210,13 +210,10 @@ export default function Tools({
               <div className={activeSection === "pomodoro" ? "tools-section-pane" : "tools-section-pane tools-section-pane-hidden"} data-tools-section="pomodoro">
                 <PomodoroToolPanel
                   snapshot={state.snapshot}
-                  viewModel={state.pomodoroViewModel}
+                  nowMs={state.nowMs}
                   busyAction={state.busyAction}
-                  onStartPomodoro={state.startPomodoro}
-                  onPausePomodoro={state.pausePomodoro}
-                  onResumePomodoro={state.resumePomodoro}
-                  onSkipPomodoroPhase={state.skipPomodoroPhase}
-                  onResetPomodoro={state.resetPomodoro}
+                  onAction={state.pomodoroTask}
+                  onFreeFocus={state.freeFocus}
                 />
               </div>
             ) : null}

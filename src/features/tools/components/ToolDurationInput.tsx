@@ -7,6 +7,7 @@ interface ToolDurationInputProps {
   onMinutesChange: (nextMinutes: string) => void;
   disabled?: boolean;
   hint?: string;
+  unit?: string;
 }
 
 export default function ToolDurationInput({
@@ -18,9 +19,10 @@ export default function ToolDurationInput({
   onMinutesChange,
   disabled = false,
   hint,
+  unit,
 }: ToolDurationInputProps) {
   return (
-    <div className="tools-duration-field">
+    <div className="tools-form-field">
       <div className="tools-field-copy">
         <label htmlFor={id}>{label}</label>
         {hint ? <p>{hint}</p> : null}
@@ -38,6 +40,7 @@ export default function ToolDurationInput({
           onChange={(event) => onMinutesChange(event.target.value)}
           className="qp-input tools-duration-input"
         />
+        {unit ? <span className="tools-duration-unit">{unit}</span> : null}
       </div>
     </div>
   );

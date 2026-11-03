@@ -5,7 +5,7 @@ import QuietDialog from "../../../shared/components/QuietDialog.tsx";
 import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
 import { useRequestedAppIcons } from "../../../shared/hooks/useRequestedAppIcons.ts";
 import type { ActivityReminderAlert, ActivityReminderExtension, ToolAlert } from "../../../shared/types/tools.ts";
-import { loadToolsIconsForExecutables } from "../services/toolsIconService.ts";
+import { loadToolsIconsForExecutables } from "../services/toolsRuntimeService.ts";
 import { loadActivityReminderWebCandidates } from "../services/activityReminderTargetCandidates.ts";
 import { ToolsRuntimeService } from "../services/toolsRuntimeService.ts";
 import { toolsRuntimeSnapshotStore } from "../services/toolsRuntimeSnapshotStore.ts";

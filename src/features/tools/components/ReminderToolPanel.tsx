@@ -235,7 +235,6 @@ function ActivityReminderPanel({
       </div>
 
       <div className="tools-list-section tools-reminder-list-section">
-        <h3>{UI_TEXT.tools.activityReminderRulesTitle}</h3>
         {ruleRows.length === 0 ? (
           <div className="tools-empty-state">{UI_TEXT.tools.activityReminderEmpty}</div>
         ) : (
@@ -423,7 +422,6 @@ export default function ReminderToolPanel({
                 </div>
               </div>
               <div className="tools-list-section tools-reminder-list-section">
-                <h3>{UI_TEXT.tools.pendingReminders}</h3>
                 {reminderRows.length === 0 ? (
                   <div className="tools-empty-state">{UI_TEXT.tools.reminderEmpty}</div>
                 ) : (

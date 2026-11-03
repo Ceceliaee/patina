@@ -1,11 +1,9 @@
 import { useLocaleText } from "../i18n/index.ts";
 import {
-  type CSSProperties,
   useCallback,
   useEffect,
   useId,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -52,7 +50,7 @@ function parseTimeValue(value: string, maxHour = 23): TimeParts | null {
 
   const hour = Number(match[1]);
   const minute = Number(match[2]);
-  if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour > maxHour || minute > 59) {
+  if (hour > maxHour || minute > 59) {
     return null;
   }
   return { hour, minute };
@@ -147,13 +145,13 @@ export default function QuietTimePicker({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const dialogId = useId();
-  const selectedTime = useMemo<TimeParts>(() => parseTimeValue(value) ?? { hour: 0, minute: 0 }, [value]);
+  const selectedTime = parseTimeValue(value) ?? { hour: 0, minute: 0 };
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<TimePickerPosition | null>(null);
 
-  const resolvePosition = useCallback((): TimePickerPosition | null => {
+  const updatePosition = useCallback(() => {
     const trigger = triggerRef.current;
-    if (!trigger) return null;
+    if (!trigger) return;
 
     const rect = trigger.getBoundingClientRect();
     const minLeft = VIEWPORT_PADDING + TIME_PICKER_WIDTH / 2;
@@ -165,19 +163,12 @@ export default function QuietTimePicker({
     const placement = spaceBelow < TIME_PICKER_HEIGHT && spaceAbove > spaceBelow ? "top" : "bottom";
     const maxTop = Math.max(VIEWPORT_PADDING, window.innerHeight - TIME_PICKER_HEIGHT - VIEWPORT_PADDING);
 
-    return {
+    setPosition({
       left: clamp(rect.left + rect.width / 2, minLeft, maxLeft),
       top: placement === "top" ? clamp(aboveTop, VIEWPORT_PADDING, maxTop) : clamp(belowTop, VIEWPORT_PADDING, maxTop),
       placement,
-    };
+    });
   }, []);
-
-  const updatePosition = useCallback(() => {
-    const nextPosition = resolvePosition();
-    if (nextPosition) {
-      setPosition(nextPosition);
-    }
-  }, [resolvePosition]);
 
   const closeTimePicker = (restoreFocus = false) => {
     setOpen(false);
@@ -214,26 +205,18 @@ export default function QuietTimePicker({
         closeTimePicker(true);
       }
     };
-    const handleViewportChange = () => updatePosition();
 
     document.addEventListener("pointerdown", handleOutside);
     document.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("resize", handleViewportChange);
-    window.addEventListener("scroll", handleViewportChange, true);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
     return () => {
       document.removeEventListener("pointerdown", handleOutside);
       document.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("resize", handleViewportChange);
-      window.removeEventListener("scroll", handleViewportChange, true);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
     };
   }, [open, updatePosition]);
-
-  const popoverStyle: CSSProperties | undefined = position
-    ? {
-      left: `${position.left}px`,
-      top: `${position.top}px`,
-    }
-    : undefined;
 
   const popover = open && position ? (
     <div
@@ -242,7 +225,7 @@ export default function QuietTimePicker({
       role="dialog"
       aria-label={resolvedAriaLabel}
       className={`qp-time-picker-popover qp-time-picker-popover-${position.placement}`}
-      style={popoverStyle}
+      style={{ left: position.left, top: position.top }}
       onKeyDown={event => {
         if (event.key !== "Escape") return;
         event.preventDefault();

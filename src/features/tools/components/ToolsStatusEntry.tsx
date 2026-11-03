@@ -22,6 +22,7 @@ function hasToolsStatusChip(snapshot: ToolsRuntimeSnapshot | null) {
     snapshot
     && (
       snapshot.currentPomodoro?.status === "running"
+      || snapshot.freeFocusTasks.some(task => task.status === "running")
       || snapshot.nextReminderAt !== null
     ),
   );

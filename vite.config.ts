@@ -50,6 +50,12 @@ export default defineConfig({
             return undefined;
           }
 
+          // Shared actions on lazy Tools, classification and export surfaces stay
+          // lazy together, avoiding a separate module header for each tiny icon.
+          if (/\/node_modules\/lucide-react\/dist\/esm\/icons\/(square|pencil-line)\.mjs$/.test(normalizedId)) {
+            return "lazy-action-icons";
+          }
+
           if (
             normalizedId.includes("/node_modules/lucide-react/dist/esm/")
             && (
