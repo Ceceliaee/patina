@@ -4,6 +4,7 @@ pub mod backup_schedule;
 pub mod browser_title_privacy;
 pub mod classification;
 pub mod export_schedule;
+pub mod free_focus;
 pub mod lifecycle;
 pub mod localization;
 pub mod mini_window;

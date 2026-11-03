@@ -8,6 +8,165 @@ use super::sqlite_pool::{
 use sqlx::{Executor, Row, SqlitePool};
 use std::path::Path;
 
+const LEGACY_ACTIVITY_TARGET_INDEX: &str =
+    "CREATE UNIQUE INDEX idx_tool_activity_reminder_rules_unique_target
+    ON tool_activity_reminder_rules(target_kind, CASE target_kind
+        WHEN 'app' THEN CASE WHEN NULLIF(TRIM(exe_name), '') IS NOT NULL
+            THEN 'exe:' || LOWER(TRIM(exe_name)) ELSE 'name:' || LOWER(TRIM(app_name)) END
+        WHEN 'category' THEN TRIM(category_id)
+        WHEN 'web' THEN LOWER(TRIM(TRIM(normalized_domain), '.'))
+    END) WHERE disabled_at IS NULL";
+
+async fn legacy_activity_target_database() -> SqlitePool {
+    use sqlx::migrate::{Migrate, Migration, MigrationType};
+
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    let mut connection = pool.acquire().await.unwrap();
+    connection.ensure_migrations_table().await.unwrap();
+    for migration in schema::tracker_migrations()
+        .into_iter()
+        .filter(|migration| migration.version <= schema::REMINDER_RECURRENCE_MIGRATION_VERSION)
+    {
+        connection
+            .apply(&Migration::new(
+                migration.version,
+                migration.description.into(),
+                MigrationType::ReversibleUp,
+                migration.sql.into(),
+                false,
+            ))
+            .await
+            .unwrap();
+    }
+    drop(connection);
+    pool.execute(LEGACY_ACTIVITY_TARGET_INDEX).await.unwrap();
+    pool.execute("INSERT INTO tool_activity_reminder_rules(id,target_kind,app_name,exe_name,label_snapshot,limit_ms,message,created_at,updated_at) VALUES
+        (1,'app','Editor','editor.exe','Keep',120000,'Original message',1,2),
+        (2,'app','Renamed','\"EDITOR.EXE\"','Duplicate',60000,'Duplicate message',3,4);
+        INSERT INTO tool_activity_reminder_states(rule_id,enabled) VALUES(1,0),(2,1);
+        INSERT INTO tool_activity_reminder_extensions(rule_id,last_fired_at,extension_date_key,extension_limit_ms,last_extended_alert_at)
+        VALUES(1,10,'2026-11-03',300000,10),(2,20,'2026-11-03',180000,20);
+        INSERT INTO tool_reminders(label,scheduled_at,created_at,status) VALUES('Keep reminder',5000,1000,'scheduled');")
+        .await.unwrap();
+    pool
+}
+
+#[tokio::test]
+async fn legacy_activity_reminder_index_upgrade_preserves_data_and_is_repeatable() {
+    let pool = legacy_activity_target_database().await;
+    let previous: Vec<(i64, Vec<u8>)> =
+        sqlx::query_as("SELECT version, checksum FROM _sqlx_migrations ORDER BY version")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    let mut repaired_rows = None;
+    for _ in 0..2 {
+        prepare_pool_schema(&pool, Path::new("legacy-activity-targets.db"))
+            .await
+            .unwrap();
+        assert!(
+            super::schema_contracts::has_unique_activity_reminder_targets(&pool)
+                .await
+                .unwrap()
+        );
+        let rows: Vec<(i64, String, i64, String, i64, Option<i64>, i64, i64)> = sqlx::query_as(
+            "SELECT r.id,r.label_snapshot,r.limit_ms,r.message,r.updated_at,r.disabled_at,s.enabled,e.extension_limit_ms
+             FROM tool_activity_reminder_rules r JOIN tool_activity_reminder_states s ON s.rule_id=r.id
+             JOIN tool_activity_reminder_extensions e ON e.rule_id=r.id ORDER BY r.id",
+        ).fetch_all(&pool).await.unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(
+            rows[0],
+            (
+                1,
+                "Keep".into(),
+                120000,
+                "Original message".into(),
+                2,
+                None,
+                0,
+                300000
+            )
+        );
+        assert_eq!(rows[1].1, "Duplicate");
+        assert_eq!(rows[1].2, 60000);
+        assert_eq!(rows[1].3, "Duplicate message");
+        assert!(rows[1].5.is_some());
+        assert_eq!((rows[1].6, rows[1].7), (1, 180000));
+        if let Some(ref expected) = repaired_rows {
+            assert_eq!(&rows, expected);
+        }
+        repaired_rows = Some(rows);
+        let after: Vec<(i64, Vec<u8>)> = sqlx::query_as(
+            "SELECT version, checksum FROM _sqlx_migrations WHERE version<=20 ORDER BY version",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(after, previous);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT MAX(version) FROM _sqlx_migrations")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            schema::FREE_FOCUS_MIGRATION_VERSION
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("SELECT label FROM tool_reminders")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            "Keep reminder"
+        );
+    }
+    assert!(
+        sqlx::query("UPDATE tool_activity_reminder_rules SET disabled_at=NULL WHERE id=2")
+            .execute(&pool)
+            .await
+            .is_err()
+    );
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn legacy_activity_reminder_index_repair_rolls_back_on_failure() {
+    let pool = legacy_activity_target_database().await;
+    pool.execute("CREATE TRIGGER reject_activity_index_upgrade BEFORE UPDATE OF disabled_at ON tool_activity_reminder_rules BEGIN SELECT RAISE(ABORT,'synthetic upgrade failure'); END;")
+        .await.unwrap();
+    let error = prepare_pool_schema(&pool, Path::new("legacy-activity-targets-failure.db"))
+        .await
+        .unwrap_err();
+    assert!(error.contains("synthetic upgrade failure"), "{error}");
+    assert_eq!(sqlx::query_scalar::<_,String>("SELECT sql FROM sqlite_master WHERE name='idx_tool_activity_reminder_rules_unique_target'").fetch_one(&pool).await.unwrap(), LEGACY_ACTIVITY_TARGET_INDEX);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM tool_activity_reminder_rules WHERE disabled_at IS NULL"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        2
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT MAX(version) FROM _sqlx_migrations")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        schema::REMINDER_RECURRENCE_MIGRATION_VERSION
+    );
+    pool.execute("DROP TRIGGER reject_activity_index_upgrade")
+        .await
+        .unwrap();
+    prepare_pool_schema(&pool, Path::new("legacy-activity-targets-retry.db"))
+        .await
+        .unwrap();
+    pool.close().await;
+}
+
 #[tokio::test]
 async fn timer_retirement_preserves_reminders_pomodoro_and_migration_history() {
     use sqlx::migrate::{Migrate, Migration, MigrationType};
@@ -47,7 +206,8 @@ async fn timer_retirement_preserves_reminders_pomodoro_and_migration_history() {
     )
     .await
     .unwrap();
-    super::repositories::tools::start_pomodoro(&pool, 60000, 10000, 20000, 4, 1000)
+    pool.execute("INSERT INTO tool_pomodoro_runs(phase,status,cycle_index,focus_ms,short_break_ms,long_break_ms,long_break_every,phase_started_at,phase_remaining_ms,completed_focus_count,created_at,updated_at)
+        VALUES('focus','running',1,60000,10000,20000,4,1000,60000,0,1000,1000)")
         .await
         .unwrap();
     let prior: Vec<(i64, Vec<u8>)> =
@@ -149,7 +309,7 @@ async fn version_14_upgrade_adds_range_statistics_without_rewriting_existing_mig
                 .fetch_one(&pool)
                 .await
                 .unwrap(),
-            schema::TIMER_RETIREMENT_MIGRATION_VERSION
+            schema::FREE_FOCUS_MIGRATION_VERSION
         );
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT SUM(duration) FROM sessions")

@@ -96,6 +96,7 @@ impl PomodoroStatus {
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolAlertKind {
+    FreeFocus,
     Reminder,
     Pomodoro,
     ActivityReminder,
@@ -208,6 +209,7 @@ impl ToolActivityReminderRule {
     pub fn limit_for_date(&self, date_key: &str) -> Option<i64> {
         if self.extension_date_key.as_deref() == Some(date_key) {
             self.extension_limit_ms
+                .map(|limit| limit.max(self.limit_ms))
         } else {
             Some(self.limit_ms)
         }
@@ -250,8 +252,53 @@ pub struct ToolPomodoroRun {
     pub updated_at: i64,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ToolPomodoroTask {
+    pub label: String,
+    pub completed_groups: i64,
+    pub run: ToolPomodoroRun,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum PomodoroTaskAction {
+    Save {
+        id: Option<i64>,
+        label: String,
+        focus_ms: i64,
+        short_break_ms: i64,
+        long_break_ms: i64,
+        long_break_every: i64,
+    },
+    Resume {
+        id: i64,
+    },
+    StartNext {
+        id: i64,
+        expected_updated_at: i64,
+    },
+    Pause {
+        id: i64,
+    },
+    Skip {
+        id: i64,
+    },
+    Reset {
+        id: i64,
+    },
+    Delete {
+        id: i64,
+    },
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CompletedPomodoroNotification {
+    pub task: ToolPomodoroTask,
     pub run_id: i64,
     pub completed_phase: PomodoroPhase,
     pub next_phase: PomodoroPhase,
@@ -321,10 +368,12 @@ impl ToolPomodoroRun {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct ToolsRuntimeSnapshot {
+    pub free_focus_tasks: Vec<crate::domain::free_focus::FreeFocusTask>,
     pub settings: ToolRuntimeSettings,
     pub reminders: Vec<ToolReminder>,
     pub activity_reminder_rules: Vec<ToolActivityReminderRule>,
     pub current_pomodoro: Option<ToolPomodoroRun>,
+    pub pomodoro_tasks: Vec<ToolPomodoroTask>,
     pub today_completed_pomodoros: i64,
     pub next_reminder_at: Option<i64>,
     pub sampled_at_ms: i64,
@@ -332,6 +381,8 @@ pub struct ToolsRuntimeSnapshot {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ToolAlert {
+    pub free_focus: Option<crate::domain::free_focus::FreeFocusTask>,
+    pub pomodoro: Option<ToolPomodoroTask>,
     pub id: String,
     pub kind: ToolAlertKind,
     pub title: String,

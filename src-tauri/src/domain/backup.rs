@@ -76,6 +76,9 @@ pub struct BackupToolReminder {
 
 #[derive(Clone, Debug)]
 pub struct BackupToolPomodoroRun {
+    pub completed_groups: i64,
+    pub task_label: Option<String>,
+    pub task_deleted_at: Option<i64>,
     pub phase: String,
     pub status: String,
     pub cycle_index: i64,
@@ -100,6 +103,7 @@ pub struct BackupToolDailyStats {
 
 #[derive(Clone, Debug, Default)]
 pub struct BackupRecords {
+    pub free_focus_tasks: Vec<crate::domain::free_focus::FreeFocusTask>,
     pub sessions: Vec<BackupSession>,
     pub title_samples: Vec<BackupTitleSample>,
     pub settings: Vec<BackupSetting>,

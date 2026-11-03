@@ -26,7 +26,7 @@ pub(crate) async fn register_sqlite_pool(state: &AppSqlitePool, pool: Pool<Sqlit
         previous.close().await;
     }
 }
-const VALIDATED_SCHEMA_MIGRATION_HEAD: i64 = schema::TIMER_RETIREMENT_MIGRATION_VERSION;
+const VALIDATED_SCHEMA_MIGRATION_HEAD: i64 = schema::FREE_FOCUS_MIGRATION_VERSION;
 mod activity_read_model_schema;
 pub(super) mod import_schema;
 mod maintenance;
@@ -474,6 +474,32 @@ async fn repair_legacy_schema_before_baseline_normalization(
 
     let mut changed = ensure_sessions_continuity_group_start_time(pool).await?;
     changed = ensure_session_title_samples_schema(pool).await? || changed;
+    // Only the known earlier definition is repairable; unknown indexes still fail validation.
+    const LEGACY_TARGET_INDEX: &str =
+        "CREATE UNIQUE INDEX idx_tool_activity_reminder_rules_unique_target
+        ON tool_activity_reminder_rules(target_kind, CASE target_kind
+            WHEN 'app' THEN CASE WHEN NULLIF(TRIM(exe_name), '') IS NOT NULL
+                THEN 'exe:' || LOWER(TRIM(exe_name)) ELSE 'name:' || LOWER(TRIM(app_name)) END
+            WHEN 'category' THEN TRIM(category_id)
+            WHEN 'web' THEN LOWER(TRIM(TRIM(normalized_domain), '.'))
+        END) WHERE disabled_at IS NULL";
+    if schema_contracts::activity_target_index_matches(pool, LEGACY_TARGET_INDEX).await? {
+        let mut tx = pool.begin().await.map_err(|error| {
+            format!("failed to start legacy activity reminder index repair: {error}")
+        })?;
+        sqlx::query("DROP INDEX idx_tool_activity_reminder_rules_unique_target")
+            .execute(&mut *tx)
+            .await
+            .map_err(|error| format!("failed to remove legacy activity reminder index: {error}"))?;
+        // Deduplication and replacement are atomic; an error restores the legacy index and rows.
+        sqlx::Executor::execute(&mut *tx, schema::ACTIVITY_REMINDER_UNIQUE_TARGET_SQL)
+            .await
+            .map_err(|error| format!("failed to rebuild activity reminder index: {error}"))?;
+        tx.commit()
+            .await
+            .map_err(|error| format!("failed to commit activity reminder index repair: {error}"))?;
+        changed = true;
+    }
 
     if has_current_baseline_schema(pool).await? {
         return Ok(changed);
@@ -734,6 +760,9 @@ pub(super) async fn has_web_favicon_cache_schema(pool: &Pool<Sqlite>) -> Result<
 
 async fn has_current_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
     let checks = [
+        schema_contracts::has_pomodoro_tasks_schema(pool).await?,
+        schema_contracts::has_free_focus_schema(pool).await?,
+        schema_contracts::has_pomodoro_completions_schema(pool).await?,
         schema_contracts::has_retired_timer(pool).await?,
         schema_contracts::has_unique_activity_reminder_targets(pool).await?,
         schema_contracts::has_reminder_recurrence_schema(pool).await?,

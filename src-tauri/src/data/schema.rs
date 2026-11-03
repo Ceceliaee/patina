@@ -41,6 +41,38 @@ pub const WIDGET_RETIREMENT_MIGRATION_VERSION: i64 = 17;
 pub const ACTIVITY_REMINDER_ENABLED_MIGRATION_VERSION: i64 = 19;
 pub const REMINDER_RECURRENCE_MIGRATION_VERSION: i64 = 20;
 pub const TIMER_RETIREMENT_MIGRATION_VERSION: i64 = 22;
+pub const POMODORO_TASKS_MIGRATION_VERSION: i64 = 23;
+pub const POMODORO_COMPLETIONS_MIGRATION_VERSION: i64 = 24;
+pub const FREE_FOCUS_MIGRATION_VERSION: i64 = 25;
+pub const FREE_FOCUS_SQL: &str = "
+CREATE TABLE IF NOT EXISTS tool_free_focus (
+ id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT NOT NULL DEFAULT '',
+ rest_mode TEXT NOT NULL CHECK(rest_mode IN ('fixed','ratio')),
+ rest_minutes INTEGER NOT NULL CHECK(rest_minutes BETWEEN 1 AND 120),
+ rest_ratio INTEGER NOT NULL CHECK(rest_ratio BETWEEN 1 AND 20),
+ phase TEXT NOT NULL DEFAULT 'focus' CHECK(phase IN ('focus','break')),
+ status TEXT NOT NULL DEFAULT 'idle' CHECK(status IN ('idle','running','paused','completed')),
+ elapsed_ms INTEGER NOT NULL DEFAULT 0 CHECK(elapsed_ms>=0),
+ rest_remaining_ms INTEGER NOT NULL DEFAULT 0 CHECK(rest_remaining_ms>=0),
+ started_at INTEGER, created_at INTEGER NOT NULL UNIQUE, updated_at INTEGER NOT NULL, deleted_at INTEGER
+);
+";
+pub const POMODORO_COMPLETIONS_SQL: &str = "
+    CREATE TABLE IF NOT EXISTS tool_pomodoro_task_completions (
+        run_id INTEGER PRIMARY KEY REFERENCES tool_pomodoro_runs(id) ON DELETE CASCADE,
+        completed_groups INTEGER NOT NULL DEFAULT 0 CHECK(completed_groups >= 0)
+    );
+";
+pub const POMODORO_TASKS_SQL: &str = "
+    CREATE TABLE IF NOT EXISTS tool_pomodoro_tasks (
+        run_id INTEGER PRIMARY KEY REFERENCES tool_pomodoro_runs(id) ON DELETE CASCADE,
+        label TEXT NOT NULL DEFAULT '',
+        deleted_at INTEGER
+    );
+    INSERT OR IGNORE INTO tool_pomodoro_tasks(run_id, label, deleted_at)
+    SELECT id, '', CASE WHEN id = (SELECT id FROM tool_pomodoro_runs ORDER BY updated_at DESC, id DESC LIMIT 1)
+        THEN NULL ELSE updated_at END FROM tool_pomodoro_runs;
+";
 pub const TIMER_RETIREMENT_SQL: &str = "
 DROP TABLE IF EXISTS tool_timer_laps;
 DROP TABLE IF EXISTS tool_timers;
@@ -1261,6 +1293,21 @@ pub fn tracker_migrations() -> Vec<Migration> {
             version: TIMER_RETIREMENT_MIGRATION_VERSION,
             description: "retire_tools_timer",
             sql: TIMER_RETIREMENT_SQL,
+        },
+        Migration {
+            version: POMODORO_TASKS_MIGRATION_VERSION,
+            description: "named pomodoro tasks",
+            sql: POMODORO_TASKS_SQL,
+        },
+        Migration {
+            version: POMODORO_COMPLETIONS_MIGRATION_VERSION,
+            description: "count completed pomodoro groups",
+            sql: POMODORO_COMPLETIONS_SQL,
+        },
+        Migration {
+            version: FREE_FOCUS_MIGRATION_VERSION,
+            description: "free focus with configurable breaks",
+            sql: FREE_FOCUS_SQL,
         },
     ]
 }

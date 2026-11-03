@@ -2,6 +2,17 @@ use sqlx::{Pool, Row, Sqlite};
 use std::collections::BTreeSet;
 
 pub async fn has_unique_activity_reminder_targets(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let expected = crate::data::schema::ACTIVITY_REMINDER_UNIQUE_TARGET_SQL
+        .split_once("CREATE UNIQUE INDEX IF NOT EXISTS")
+        .expect("unique target index migration")
+        .1;
+    activity_target_index_matches(pool, &format!("CREATE UNIQUE INDEX{expected}")).await
+}
+
+pub(super) async fn activity_target_index_matches(
+    pool: &Pool<Sqlite>,
+    expected: &str,
+) -> Result<bool, String> {
     let sql: Option<String> = sqlx::query_scalar(
         "SELECT sql FROM sqlite_master WHERE type = 'index'
          AND name = 'idx_tool_activity_reminder_rules_unique_target'",
@@ -9,10 +20,6 @@ pub async fn has_unique_activity_reminder_targets(pool: &Pool<Sqlite>) -> Result
     .fetch_optional(pool)
     .await
     .map_err(|error| error.to_string())?;
-    let expected = crate::data::schema::ACTIVITY_REMINDER_UNIQUE_TARGET_SQL
-        .split_once("CREATE UNIQUE INDEX IF NOT EXISTS")
-        .expect("unique target index migration")
-        .1;
     let normalize = |value: &str| {
         value
             .split_whitespace()
@@ -20,8 +27,7 @@ pub async fn has_unique_activity_reminder_targets(pool: &Pool<Sqlite>) -> Result
             .trim_end_matches(';')
             .to_ascii_lowercase()
     };
-    Ok(sql
-        .is_some_and(|sql| normalize(&sql) == normalize(&format!("CREATE UNIQUE INDEX{expected}"))))
+    Ok(sql.is_some_and(|sql| normalize(&sql) == normalize(expected)))
 }
 
 pub async fn has_reminder_recurrence_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
@@ -29,6 +35,39 @@ pub async fn has_reminder_recurrence_schema(pool: &Pool<Sqlite>) -> Result<bool,
     Ok(columns.contains("reminder_id")
         && columns.contains("recurrence")
         && columns.contains("recurrence_anchor_at"))
+}
+
+pub async fn has_free_focus_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let columns = table_columns(pool, "tool_free_focus").await?;
+    Ok([
+        "id",
+        "label",
+        "rest_mode",
+        "rest_minutes",
+        "rest_ratio",
+        "phase",
+        "status",
+        "elapsed_ms",
+        "rest_remaining_ms",
+        "started_at",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+    ]
+    .iter()
+    .all(|column| columns.contains(*column)))
+}
+
+pub async fn has_pomodoro_tasks_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let columns = table_columns(pool, "tool_pomodoro_tasks").await?;
+    Ok(["run_id", "label", "deleted_at"]
+        .iter()
+        .all(|column| columns.contains(*column)))
+}
+
+pub async fn has_pomodoro_completions_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let columns = table_columns(pool, "tool_pomodoro_task_completions").await?;
+    Ok(columns.contains("run_id") && columns.contains("completed_groups"))
 }
 
 pub async fn has_retired_widget_preferences(pool: &Pool<Sqlite>) -> Result<bool, String> {
@@ -349,7 +388,21 @@ pub(super) async fn schema_revision_limit(pool: &Pool<Sqlite>) -> Result<usize, 
                 == crate::data::schema::ACTIVITY_REMINDER_UNIQUE_TARGET_MIGRATION_VERSION as usize
                 && has_retired_timer(pool).await?,
         );
-    Ok(revision_limit)
+    let revision_limit = revision_limit
+        + usize::from(
+            revision_limit == crate::data::schema::TIMER_RETIREMENT_MIGRATION_VERSION as usize
+                && has_pomodoro_tasks_schema(pool).await?,
+        );
+    let revision_limit = revision_limit
+        + usize::from(
+            revision_limit == crate::data::schema::POMODORO_TASKS_MIGRATION_VERSION as usize
+                && has_pomodoro_completions_schema(pool).await?,
+        );
+    Ok(revision_limit
+        + usize::from(
+            revision_limit == crate::data::schema::POMODORO_COMPLETIONS_MIGRATION_VERSION as usize
+                && has_free_focus_schema(pool).await?,
+        ))
 }
 
 #[cfg(test)]
