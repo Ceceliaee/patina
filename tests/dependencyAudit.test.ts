@@ -8,6 +8,45 @@ import { toolchainErrors } from "../scripts/check-toolchain.ts";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
+import { createRequire } from "node:module";
+import { PassThrough } from "node:stream";
+
+const require = createRequire(import.meta.url);
+const excelRequire = createRequire(require.resolve("exceljs"));
+const archiverRequire = createRequire(excelRequire.resolve("archiver"));
+const archiveUtilsRequire = createRequire(archiverRequire.resolve("archiver-utils"));
+const coverageRequire = createRequire(require.resolve("c8"));
+const excludeRequire = createRequire(coverageRequire.resolve("test-exclude"));
+const globFixture = mkdtempSync(path.join(os.tmpdir(), "patina-glob-compat-"));
+try {
+  mkdirSync(path.join(globFixture, "nested"));
+  for (const name of ["a.ts", "nested/b.tsx", "nested/c.txt"]) writeFileSync(path.join(globFixture, name), "fixture");
+  const options = { cwd: globFixture, nodir: true, ignore: ["**/*.txt"] };
+  const expected = ["a.ts", "nested/b.tsx"];
+  const normalizedMatches = (matches: string[]) => matches.map(name => name.replaceAll("\\", "/")).sort();
+  const archiveGlob = archiveUtilsRequire("glob");
+  assert.deepEqual(normalizedMatches(archiveGlob.globSync("**/*.{ts,tsx,txt}", options)), expected);
+  const modernGlob = excludeRequire("glob");
+  assert.deepEqual(normalizedMatches(await modernGlob.glob("**/*.{ts,tsx,txt}", options)), expected);
+  await assert.rejects(modernGlob.glob("**/*", { ...options, signal: AbortSignal.abort() }));
+  const ExcelJS = require("exceljs");
+  const workbook = new ExcelJS.Workbook();
+  workbook.addWorksheet("Compatibility").addRow(["Focus", 25]);
+  const restored = new ExcelJS.Workbook();
+  await restored.xlsx.load(await workbook.xlsx.writeBuffer());
+  assert.equal(restored.getWorksheet("Compatibility").getCell("B1").value, 25);
+  const stream = new PassThrough();
+  const chunks: Buffer[] = [];
+  stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+  const streamingWorkbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream });
+  streamingWorkbook.addWorksheet("Streaming").addRow(["Rest", 5]).commit();
+  await streamingWorkbook.commit();
+  await restored.xlsx.load(Buffer.concat(chunks));
+  assert.equal(restored.getWorksheet("Streaming").getCell("B1").value, 5);
+  console.log("PASS patched glob dependencies preserve archive matching, coverage traversal, cancellation and XLSX round trips");
+} finally {
+  rmSync(globFixture, { recursive: true, force: true });
+}
 
 const cleanRustReport = { vulnerabilities: { list: [] }, warnings: {} };
 const crateLock = (name: string, version: string) => `[[package]]\nname = "${name}"\nversion = "${version}"\n`;

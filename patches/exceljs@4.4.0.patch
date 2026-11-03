@@ -1,0 +1,11 @@
+diff --git a/lib/utils/stream-buf.js b/lib/utils/stream-buf.js
+--- a/lib/utils/stream-buf.js
++++ b/lib/utils/stream-buf.js
+@@ -343,6 +343,7 @@ utils.inherits(StreamBuf, Stream.Duplex, {
+     if (!this.paused && this.buffers.length) {
+       this.end();
+     }
++    return destination;
+   },
+   unpipe(destination) {
+     // remove destination from pipe list

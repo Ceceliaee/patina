@@ -7,3 +7,11 @@ allowBuilds:
   esbuild: true
 overrides:
   'exceljs>uuid': ^11.1.1
+  # Remove the legacy glob 7 chain before upgrading minimatch's parser.
+  'exceljs>archiver': 7.0.1
+  'exceljs>unzipper': 0.12.3
+  minimatch@<11.0.1: 11.0.1
+  glob@>=9.0.0 <14.0.2: 14.0.2
+patchedDependencies:
+  # Archiver 7 expects Stream.pipe() to return its destination.
+  exceljs@4.4.0: patches/exceljs@4.4.0.patch
