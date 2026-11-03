@@ -1,7 +1,9 @@
 use crate::app::tools as tools_runtime;
 use crate::app::updater;
 use crate::engine::tracking::watchdog::TrackingStage;
-use crate::engine::tracking::{runtime as tracking_runtime, watchdog as tracking_watchdog};
+use crate::engine::tracking::{
+    runtime as tracking_runtime, startup as tracking_startup, watchdog as tracking_watchdog,
+};
 use crate::engine::updater::UpdaterRuntimeState;
 use futures_util::FutureExt;
 use std::sync::Arc;
@@ -27,6 +29,7 @@ pub(crate) fn spawn_tracking_runtime_restart_loop<R: Runtime + 'static>(
 ) {
     tauri::async_runtime::spawn(async move {
         let mut retry_delay = RestartBackoff::new();
+        let mut tools_started = false;
         loop {
             let data = match crate::data::tracking_runtime::shared_from_app(&app).await {
                 Ok(data) => data,
@@ -36,11 +39,19 @@ pub(crate) fn spawn_tracking_runtime_restart_loop<R: Runtime + 'static>(
                     continue;
                 }
             };
-            let outcome = observe_tracking_exit(
-                &runtime_health,
-                &mut retry_delay,
-                tracking_runtime::run(app.clone(), runtime_health.clone(), data),
-            )
+            let outcome = observe_tracking_exit(&runtime_health, &mut retry_delay, async {
+                runtime_health.progress.enter(TrackingStage::Starting);
+                tracking_startup::initialize_tracker(&app, data.as_ref())
+                    .await
+                    .map_err(|error| format!("tracker initialization failed: {error}"))?;
+                // Usage checks must see recovered native and web sessions,
+                // otherwise unclosed records include time spent offline.
+                if !tools_started {
+                    spawn_tools_runtime_restart_loop(app.clone());
+                    tools_started = true;
+                }
+                tracking_runtime::run(app.clone(), runtime_health.clone(), data).await
+            })
             .await;
             let result = match outcome {
                 Ok(result) => result,
@@ -116,7 +127,7 @@ pub(crate) fn spawn_tracking_watchdog_restart_loop<R: Runtime + 'static>(
     });
 }
 
-pub(crate) fn spawn_tools_runtime_restart_loop<R: Runtime + 'static>(app: AppHandle<R>) {
+fn spawn_tools_runtime_restart_loop<R: Runtime + 'static>(app: AppHandle<R>) {
     tauri::async_runtime::spawn(async move {
         let mut retry_delay = RestartBackoff::new();
         loop {

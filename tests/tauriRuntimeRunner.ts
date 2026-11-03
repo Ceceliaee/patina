@@ -9,10 +9,11 @@ import { RuntimeReport } from "./tauriRuntimeReport.ts";
 import { sourceFingerprint } from "../scripts/coverage/source-fingerprint.ts";
 import { run as storageRestart } from "./tauriStorageRestartRuntime.ts";
 import { run as windowLifecycle } from "./tauriWindowLifecycleRuntime.ts";
+import { run as toolsStartup } from "./tauriToolsStartupRuntime.ts";
 
 const options = parseRuntimeOptions(process.argv.slice(2));
 const scenarios: Record<RuntimeGroup, (session: RuntimeSession) => Promise<void>> = {
-  contracts, "data-recovery": dataRecovery, "storage-restart": storageRestart,
+  contracts, "data-recovery": dataRecovery, "storage-restart": storageRestart, "tools-startup": toolsStartup,
   "webview-recovery": webviewRecovery, "window-lifecycle": windowLifecycle,
   "mini-input": session => input(session, false, options.feedback), resources: session => input(session, true),
 };

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-export const runtimeGroups = ["contracts", "data-recovery", "storage-restart", "webview-recovery", "window-lifecycle", "mini-input", "resources"] as const;
+export const runtimeGroups = ["contracts", "data-recovery", "storage-restart", "tools-startup", "webview-recovery", "window-lifecycle", "mini-input", "resources"] as const;
 export type RuntimeGroup = typeof runtimeGroups[number];
 
 export function parseRuntimeOptions(args: string[]) {

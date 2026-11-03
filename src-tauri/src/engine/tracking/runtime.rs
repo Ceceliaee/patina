@@ -3,9 +3,11 @@ use super::ports::{SharedTrackingDataStore, TrackingDataStore};
 use super::runtime_snapshot::TrackingRuntimeSnapshotState;
 #[cfg(test)]
 use super::session_timeout::seal_active_sessions_for_tracking_pause;
+#[cfg(test)]
+use super::startup;
 use super::sustained_participation::SustainedParticipationRuntimeState;
 use super::title_state::TitleRecordingRuntimeState;
-use super::{active_session, continuity, startup, transition, watchdog};
+use super::{active_session, continuity, transition, watchdog};
 #[cfg(test)]
 use crate::data::repositories::{sessions, tracker_settings};
 #[cfg(test)]
@@ -55,13 +57,9 @@ pub async fn run<R: Runtime>(
     data: SharedTrackingDataStore,
 ) -> Result<(), String> {
     let progress = &health_state.progress;
-    progress.enter(watchdog::TrackingStage::Starting);
     let pause_state = app.state::<TrackingPauseRuntimeState>();
     let title_state = app.state::<TitleRecordingRuntimeState>();
     let snapshot_state = app.state::<TrackingRuntimeSnapshotState>();
-    startup::initialize_tracker(&app, data.as_ref())
-        .await
-        .map_err(|error| format!("tracker initialization failed: {error}"))?;
 
     let mut last_window: Option<tracker::WindowInfo> = None;
     let mut last_tracking_status: Option<TrackingStatusSnapshot> = None;

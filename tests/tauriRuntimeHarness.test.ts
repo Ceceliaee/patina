@@ -13,8 +13,8 @@ import { assertIsolatedTempPath, waitFor, type CdpConnection } from "./uiBrowser
 import { verifyDesktopResourceLifecycle } from "./tauriResourceLifecycle.ts";
 
 assert.equal(parseRuntimeOptions([]).group, null);
-assert.deepEqual(selectRuntimeGroups(parseRuntimeOptions([])), ["contracts", "data-recovery", "storage-restart", "webview-recovery", "window-lifecycle", "mini-input"]);
-assert.deepEqual(selectRuntimeGroups(parseRuntimeOptions(["--resource-cycles"])), ["contracts", "data-recovery", "storage-restart", "webview-recovery", "window-lifecycle", "resources"]);
+assert.deepEqual(selectRuntimeGroups(parseRuntimeOptions([])), ["contracts", "data-recovery", "storage-restart", "tools-startup", "webview-recovery", "window-lifecycle", "mini-input"]);
+assert.deepEqual(selectRuntimeGroups(parseRuntimeOptions(["--resource-cycles"])), ["contracts", "data-recovery", "storage-restart", "tools-startup", "webview-recovery", "window-lifecycle", "resources"]);
 assert.deepEqual(selectRuntimeGroups(parseRuntimeOptions(["--group", "contracts"])), ["contracts"]);
 assert.throws(() => assertRuntimeResults([], []), /at least one/);
 assertResourceEnvironment({});
