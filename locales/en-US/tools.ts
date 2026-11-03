@@ -1,5 +1,38 @@
 // en-US tools locale resource. Pure data only.
 export const MESSAGES = {
+  "tools.freeRestMode": "Break mode",
+  "tools.freeRestFixed": "Fixed duration",
+  "tools.freeRestRatio": "Proportional",
+  "tools.freeRestDuration": "Break duration",
+  "tools.freeRestProportion": "Focus-to-break ratio",
+  "tools.freeFocusEmpty": "No focus sessions",
+  "tools.freeFocusEdit": "Edit focus session",
+  "tools.freeFocusFinish": "Finish focus session",
+  "tools.freeFocusRestart": "Start next focus session",
+  "tools.freeFocusRest": "Break",
+  "tools.freeFocusStart": "Start focus",
+  "tools.freeFocusPause": "Pause focus",
+  "tools.freeFocusResume": "Resume focus",
+  "tools.freeFocusReset": "Reset focus",
+
+  "tools.pomodoroStartLater": "Start later",
+  "tools.pomodoroStartBreak": "Start break",
+  "tools.pomodoroStartFocus": "Start focus",
+  "tools.pomodoroStartNextGroup": "Start next set",
+  "tools.pomodoroNextPhase": {"$type": "message", "body": {"$op": "concat", "parts": ["Next: ", {"$op": "arg", "name": "phase"}, " · ", {"$op": "arg", "name": "duration"}]}},
+  "tools.pomodoroGroupSummary": {"$type": "message", "body": {"$op": "concat", "parts": ["Pomodoros: ", {"$op": "arg", "name": "rounds"}, " · Completed sets: ", {"$op": "arg", "name": "groups"}]}},
+  "tools.pomodoroCompletedGroups": {"$type": "message", "body": {"$op": "concat", "parts": ["Completed sets: ", {"$op": "arg", "name": "count"}, ""]}},
+
+  "tools.pomodoroTimingSettings": "Timer settings",
+  "tools.pomodoroTimingSummary": {"$type": "message", "body": {"$op": "concat", "parts": ["", {"$op": "arg", "name": "minutes"}, " min focus · ", {"$op": "arg", "name": "rounds"}, " rounds"]}},
+
+  "tools.pomodoroTaskCreate": "New focus session",
+  "tools.pomodoroTaskEdit": "Edit Pomodoro task",
+  "tools.pomodoroTaskName": "Name",
+  "tools.pomodoroTaskPlaceholder": "For example: Read papers",
+  "tools.pomodoroTaskEmpty": "No Pomodoro tasks",
+  "tools.pomodoroTaskDefault": "Pomodoro task",
+  "tools.pomodoroRoundUnit": "rounds",
   "tools.reminderTimeLabel": "Remind at",
   "tools.reminderRepeatLabel": "Repeat",
   "tools.reminderRepeatNone": "Never",
@@ -8,10 +41,7 @@ export const MESSAGES = {
   "tools.reminderRepeatWeekly": "Weekly",
   "tools.reminderRepeatMonthly": "Monthly",
   "tools.reminderRepeatYearly": "Yearly",
-  "tools.reminderIntervalLabel": "Interval",
   "tools.reminderMinutesUnit": "Minutes",
-  "tools.reminderHoursUnit": "Hours",
-  "tools.reminderRepeatInvalid": "Select at least one weekday.",
 
   "tools.reminderSnooze": "Remind me later",
   "tools.reminderConfirmComplete": "Mark complete",
@@ -29,8 +59,6 @@ export const MESSAGES = {
   "tools.usageExtensionDuration": "Additional usage time",
   "tools.usageExtendTitle": {"$type": "message", "body": {"$op": "concat", "parts": ["Extend usage for “", {"$op": "arg", "name": "value"}, "”"]}},
   "tools.usageLimitSummary": {"$type": "message", "body": {"$op": "concat", "parts": ["You’ve used ", {"$op": "arg", "name": "value"}, ". The usage limit has been reached."]}},
-  "tools.absoluteDateLabel": "Date",
-  "tools.absoluteTimeLabel": "Time",
   "tools.actionFailed": "Action failed. Try again later.",
   "tools.activityReminderCandidatesLoadFailed": "Targets unavailable.",
   "tools.activityReminderDisable": "Disable",
@@ -38,7 +66,6 @@ export const MESSAGES = {
   "tools.activityReminderDelete": "Delete",
   "tools.activityReminderEditTitle": "Edit usage limit",
   "tools.activityReminderEmpty": "No rules",
-  "tools.activityReminderRulesTitle": "Rules",
   "tools.activityReminderSuspension.source_disabled": "Source off",
   "tools.activityReminderSuspension.target_deleted": "Target deleted",
   "tools.activityReminderSuspension.target_excluded": "Excluded",
@@ -46,22 +73,6 @@ export const MESSAGES = {
   "tools.activityReminderTargetPlaceholder": "Choose an app, category, or website",
   "tools.activityReminderTargetRequired": "Select a target.",
   "tools.alertDismiss": "Got it",
-  "tools.alertOccurredAt": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "Due at ",
-        {
-          "$op": "arg",
-          "name": "value"
-        },
-        ""
-      ]
-    }
-  },
-  "tools.alertPausePomodoro": "Pause",
-  "tools.alertPausingPomodoro": "Pausing...",
   "tools.beta": "Beta",
   "tools.completedToday": {
     "$type": "message",
@@ -98,9 +109,7 @@ export const MESSAGES = {
     }
   },
   "tools.newReminder": "New reminder",
-  "tools.notificationStatus": "Due notifications",
   "tools.pause": "Pause",
-  "tools.pendingReminders": "Reminder list",
   "tools.pomodoroCycle": {
     "$type": "message",
     "body": {
@@ -123,7 +132,6 @@ export const MESSAGES = {
   "tools.pomodoroPhase.focus": "Focus",
   "tools.pomodoroPhase.longBreak": "Long break",
   "tools.pomodoroPhase.shortBreak": "Short break",
-  "tools.pomodoroSettings": "Default durations",
   "tools.pomodoroStatus.completed": "Completed",
   "tools.pomodoroStatus.idle": "Not started",
   "tools.pomodoroStatus.paused": "Paused",
@@ -131,16 +139,13 @@ export const MESSAGES = {
   "tools.pomodoroTitle": "Focus",
   "tools.focusModePomodoro": "Pomodoro",
   "tools.focusModeFree": "Free focus",
-  "tools.relativeMinutesLabel": "Minutes from now",
   "tools.reminderEmpty": "No reminders",
   "tools.reminderLabel": "Reminder",
   "tools.reminderLabelPlaceholder": "Example: take a break",
-  "tools.reminderModeAbsolute": "Exact time",
   "tools.reminderModeEvent": "Timed reminders",
   "tools.reminderModeUsage": "Usage limits",
   "tools.reminderModeApp": "App",
   "tools.reminderModeCategory": "Category",
-  "tools.reminderModeRelative": "Relative time",
   "tools.reminderModeWeb": "Web",
   "tools.remindersTitle": "Reminder",
   "tools.reminderTimeInvalid": "Reminder time needs to be in the future.",
@@ -149,7 +154,6 @@ export const MESSAGES = {
   "tools.settingsEmpty": "No configurable items.",
   "tools.settingsTitle": "Tools settings",
   "tools.shortBreakDuration": "Short break",
-  "tools.skipPhase": "Skip",
   "tools.activityReminderActive": "Active",
   "tools.activityReminderDurationLabel": "Daily limit",
   "tools.start": "Start",

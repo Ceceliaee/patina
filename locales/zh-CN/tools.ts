@@ -1,5 +1,38 @@
 // zh-CN tools locale resource. Pure data only.
 export const MESSAGES = {
+  "tools.freeRestMode": "休息模式",
+  "tools.freeRestFixed": "固定时长",
+  "tools.freeRestRatio": "比例时长",
+  "tools.freeRestDuration": "休息时长",
+  "tools.freeRestProportion": "专注与休息比例",
+  "tools.freeFocusEmpty": "暂无专注",
+  "tools.freeFocusEdit": "编辑专注",
+  "tools.freeFocusFinish": "结束本段专注",
+  "tools.freeFocusRestart": "开始下一次专注",
+  "tools.freeFocusRest": "休息",
+  "tools.freeFocusStart": "开始专注",
+  "tools.freeFocusPause": "暂停专注",
+  "tools.freeFocusResume": "继续专注",
+  "tools.freeFocusReset": "重置专注",
+
+  "tools.pomodoroStartLater": "稍后开始",
+  "tools.pomodoroStartBreak": "开始休息",
+  "tools.pomodoroStartFocus": "开始专注",
+  "tools.pomodoroStartNextGroup": "开始下一组",
+  "tools.pomodoroNextPhase": {"$type": "message", "body": {"$op": "concat", "parts": ["下一阶段：", {"$op": "arg", "name": "phase"}, " · ", {"$op": "arg", "name": "duration"}]}},
+  "tools.pomodoroGroupSummary": {"$type": "message", "body": {"$op": "concat", "parts": [{"$op": "arg", "name": "rounds"}, " 个番茄 · 累计完成 ", {"$op": "arg", "name": "groups"}, " 组"]}},
+  "tools.pomodoroCompletedGroups": {"$type": "message", "body": {"$op": "concat", "parts": ["已完成 ", {"$op": "arg", "name": "count"}, " 组"]}},
+
+  "tools.pomodoroTimingSettings": "计时设置",
+  "tools.pomodoroTimingSummary": {"$type": "message", "body": {"$op": "concat", "parts": ["", {"$op": "arg", "name": "minutes"}, " 分钟专注 · ", {"$op": "arg", "name": "rounds"}, " 轮"]}},
+
+  "tools.pomodoroTaskCreate": "新建专注",
+  "tools.pomodoroTaskEdit": "编辑番茄任务",
+  "tools.pomodoroTaskName": "名称",
+  "tools.pomodoroTaskPlaceholder": "例如：阅读文献",
+  "tools.pomodoroTaskEmpty": "暂无番茄任务",
+  "tools.pomodoroTaskDefault": "番茄任务",
+  "tools.pomodoroRoundUnit": "轮",
   "tools.reminderTimeLabel": "提醒时间",
   "tools.reminderRepeatLabel": "重复",
   "tools.reminderRepeatNone": "不重复",
@@ -8,10 +41,7 @@ export const MESSAGES = {
   "tools.reminderRepeatWeekly": "每周",
   "tools.reminderRepeatMonthly": "每月",
   "tools.reminderRepeatYearly": "每年",
-  "tools.reminderIntervalLabel": "间隔",
   "tools.reminderMinutesUnit": "分钟",
-  "tools.reminderHoursUnit": "小时",
-  "tools.reminderRepeatInvalid": "请选择至少一个星期。",
 
   "tools.reminderSnooze": "稍后提醒",
   "tools.reminderConfirmComplete": "确认完成",
@@ -29,8 +59,6 @@ export const MESSAGES = {
   "tools.usageExtensionDuration": "延时时长",
   "tools.usageExtendTitle": {"$type": "message", "body": {"$op": "concat", "parts": ["延时使用「", {"$op": "arg", "name": "value"}, "」"]}},
   "tools.usageLimitSummary": {"$type": "message", "body": {"$op": "concat", "parts": ["已使用 ", {"$op": "arg", "name": "value"}, "，可用时长到达限制"]}},
-  "tools.absoluteDateLabel": "日期",
-  "tools.absoluteTimeLabel": "时间",
   "tools.actionFailed": "操作失败，可稍后重试。",
   "tools.activityReminderCandidatesLoadFailed": "目标不可用。",
   "tools.activityReminderDisable": "停用",
@@ -38,7 +66,6 @@ export const MESSAGES = {
   "tools.activityReminderDelete": "删除",
   "tools.activityReminderEditTitle": "编辑使用限制",
   "tools.activityReminderEmpty": "暂无规则",
-  "tools.activityReminderRulesTitle": "规则",
   "tools.activityReminderSuspension.source_disabled": "数据源已关闭",
   "tools.activityReminderSuspension.target_deleted": "目标已删除",
   "tools.activityReminderSuspension.target_excluded": "已排除",
@@ -46,22 +73,6 @@ export const MESSAGES = {
   "tools.activityReminderTargetPlaceholder": "选择应用、分类或网页",
   "tools.activityReminderTargetRequired": "请选择目标。",
   "tools.alertDismiss": "知道了",
-  "tools.alertOccurredAt": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "到点时间：",
-        {
-          "$op": "arg",
-          "name": "value"
-        },
-        ""
-      ]
-    }
-  },
-  "tools.alertPausePomodoro": "暂停",
-  "tools.alertPausingPomodoro": "暂停中...",
   "tools.beta": "Beta",
   "tools.completedToday": {
     "$type": "message",
@@ -98,9 +109,7 @@ export const MESSAGES = {
     }
   },
   "tools.newReminder": "新建提醒",
-  "tools.notificationStatus": "到期通知",
   "tools.pause": "暂停",
-  "tools.pendingReminders": "提醒列表",
   "tools.pomodoroCycle": {
     "$type": "message",
     "body": {
@@ -123,7 +132,6 @@ export const MESSAGES = {
   "tools.pomodoroPhase.focus": "专注",
   "tools.pomodoroPhase.longBreak": "长休息",
   "tools.pomodoroPhase.shortBreak": "短休息",
-  "tools.pomodoroSettings": "默认时长",
   "tools.pomodoroStatus.completed": "已完成",
   "tools.pomodoroStatus.idle": "未开始",
   "tools.pomodoroStatus.paused": "已暂停",
@@ -131,16 +139,13 @@ export const MESSAGES = {
   "tools.pomodoroTitle": "专注",
   "tools.focusModePomodoro": "番茄计时",
   "tools.focusModeFree": "自由专注",
-  "tools.relativeMinutesLabel": "分钟后",
   "tools.reminderEmpty": "暂无提醒",
   "tools.reminderLabel": "提醒内容",
   "tools.reminderLabelPlaceholder": "例如：休息一下",
-  "tools.reminderModeAbsolute": "绝对时间",
   "tools.reminderModeEvent": "定时提醒",
   "tools.reminderModeUsage": "使用限制",
   "tools.reminderModeApp": "应用",
   "tools.reminderModeCategory": "分类",
-  "tools.reminderModeRelative": "相对时间",
   "tools.reminderModeWeb": "网页",
   "tools.remindersTitle": "提醒",
   "tools.reminderTimeInvalid": "提醒时间需要晚于当前时间。",
@@ -149,7 +154,6 @@ export const MESSAGES = {
   "tools.settingsEmpty": "暂无可配置项。",
   "tools.settingsTitle": "工具设置",
   "tools.shortBreakDuration": "短休息时长",
-  "tools.skipPhase": "跳过",
   "tools.activityReminderActive": "启用",
   "tools.activityReminderDurationLabel": "每日上限",
   "tools.start": "开始",

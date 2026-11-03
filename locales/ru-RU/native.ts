@@ -1,5 +1,10 @@
 // ru-RU locale resource. Pure data only.
 export const MESSAGES = {
+  "native.tools.freeFocusTitle": "Свободная концентрация",
+
+  "native.tools.pomodoroGroupCompleted": "Цикл помодоро завершён",
+  "native.tools.pomodoroGroupRestart": "Начните следующий цикл, когда будете готовы.",
+
   "native.webview.recoveryFailed": "Не удалось восстановить окно после нескольких попыток. Автоматические повторы остановлены. Перезапустите Patina и проверьте состояние записи.",
   "native.storage.startupFailure": {"$type": "message", "body": {"$op": "concat", "parts": ["Не удалось открыть выбранное расположение данных. Проверьте подключение диска и права доступа к папке, затем перезапустите Patina. Запуск остановлен для защиты существующих данных. Подробности: ", {"$op": "arg", "name": "details"}]}},
   "native.export.anonymousActivity": "Анонимно",

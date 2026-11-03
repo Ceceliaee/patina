@@ -1,5 +1,38 @@
 // es locale resource. Pure data only.
 export const MESSAGES = {
+  "tools.freeRestMode": "Modo de descanso",
+  "tools.freeRestFixed": "Duración fija",
+  "tools.freeRestRatio": "Proporcional",
+  "tools.freeRestDuration": "Duración del descanso",
+  "tools.freeRestProportion": "Proporción de concentración y descanso",
+  "tools.freeFocusEmpty": "No hay sesiones",
+  "tools.freeFocusEdit": "Editar sesión",
+  "tools.freeFocusFinish": "Terminar la sesión",
+  "tools.freeFocusRestart": "Iniciar la siguiente sesión",
+  "tools.freeFocusRest": "Descanso",
+  "tools.freeFocusStart": "Iniciar concentración",
+  "tools.freeFocusPause": "Pausar concentración",
+  "tools.freeFocusResume": "Reanudar concentración",
+  "tools.freeFocusReset": "Reiniciar concentración",
+
+  "tools.pomodoroStartLater": "Empezar después",
+  "tools.pomodoroStartBreak": "Iniciar descanso",
+  "tools.pomodoroStartFocus": "Iniciar concentración",
+  "tools.pomodoroStartNextGroup": "Iniciar otro ciclo",
+  "tools.pomodoroNextPhase": {"$type": "message", "body": {"$op": "concat", "parts": ["Siguiente: ", {"$op": "arg", "name": "phase"}, " · ", {"$op": "arg", "name": "duration"}]}},
+  "tools.pomodoroGroupSummary": {"$type": "message", "body": {"$op": "concat", "parts": ["Pomodoros: ", {"$op": "arg", "name": "rounds"}, " · Ciclos completados: ", {"$op": "arg", "name": "groups"}]}},
+  "tools.pomodoroCompletedGroups": {"$type": "message", "body": {"$op": "concat", "parts": ["Ciclos completados: ", {"$op": "arg", "name": "count"}, ""]}},
+
+  "tools.pomodoroTimingSettings": "Configuración del temporizador",
+  "tools.pomodoroTimingSummary": {"$type": "message", "body": {"$op": "concat", "parts": ["", {"$op": "arg", "name": "minutes"}, " min de concentración · ", {"$op": "arg", "name": "rounds"}, " ciclos"]}},
+
+  "tools.pomodoroTaskCreate": "Nueva sesión de concentración",
+  "tools.pomodoroTaskEdit": "Editar tarea Pomodoro",
+  "tools.pomodoroTaskName": "Nombre",
+  "tools.pomodoroTaskPlaceholder": "Por ejemplo: leer artículos",
+  "tools.pomodoroTaskEmpty": "No hay tareas Pomodoro",
+  "tools.pomodoroTaskDefault": "Tarea Pomodoro",
+  "tools.pomodoroRoundUnit": "rondas",
   "tools.reminderTimeLabel": "Recordar a las",
   "tools.reminderRepeatLabel": "Repetir",
   "tools.reminderRepeatNone": "Nunca",
@@ -8,10 +41,7 @@ export const MESSAGES = {
   "tools.reminderRepeatWeekly": "Cada semana",
   "tools.reminderRepeatMonthly": "Cada mes",
   "tools.reminderRepeatYearly": "Cada año",
-  "tools.reminderIntervalLabel": "Intervalo",
   "tools.reminderMinutesUnit": "Minutos",
-  "tools.reminderHoursUnit": "Horas",
-  "tools.reminderRepeatInvalid": "Selecciona al menos un día de la semana.",
 
   "tools.reminderSnooze": "Recordar más tarde",
   "tools.reminderConfirmComplete": "Marcar como completado",
@@ -29,8 +59,6 @@ export const MESSAGES = {
   "tools.usageExtensionDuration": "Tiempo adicional de uso",
   "tools.usageExtendTitle": {"$type": "message", "body": {"$op": "concat", "parts": ["Ampliar tiempo de «", {"$op": "arg", "name": "value"}, "»"]}},
   "tools.usageLimitSummary": {"$type": "message", "body": {"$op": "concat", "parts": ["Has usado ", {"$op": "arg", "name": "value"}, ". Se alcanzó el límite de uso."]}},
-  "tools.absoluteDateLabel": "Fecha",
-  "tools.absoluteTimeLabel": "Hora",
   "tools.actionFailed": "La acción falló. Inténtalo más tarde.",
   "tools.activityReminderCandidatesLoadFailed": "Destinos no disponibles.",
   "tools.activityReminderDisable": "Desactivar",
@@ -38,7 +66,6 @@ export const MESSAGES = {
   "tools.activityReminderDelete": "Eliminar",
   "tools.activityReminderEditTitle": "Editar límite de uso",
   "tools.activityReminderEmpty": "Sin reglas",
-  "tools.activityReminderRulesTitle": "Reglas",
   "tools.activityReminderSuspension.source_disabled": "Origen desactivado",
   "tools.activityReminderSuspension.target_deleted": "Destino eliminado",
   "tools.activityReminderSuspension.target_excluded": "Excluido",
@@ -46,22 +73,6 @@ export const MESSAGES = {
   "tools.activityReminderTargetPlaceholder": "Elige una app, categoría o sitio web",
   "tools.activityReminderTargetRequired": "Selecciona un destino.",
   "tools.alertDismiss": "Entendido",
-  "tools.alertOccurredAt": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "Vence a las ",
-        {
-          "$op": "arg",
-          "name": "value"
-        },
-        ""
-      ]
-    }
-  },
-  "tools.alertPausePomodoro": "Pausar",
-  "tools.alertPausingPomodoro": "Pausando...",
   "tools.beta": "Beta",
   "tools.completedToday": {
     "$type": "message",
@@ -118,9 +129,7 @@ export const MESSAGES = {
     }
   },
   "tools.newReminder": "Nuevo recordatorio",
-  "tools.notificationStatus": "Avisos al finalizar",
   "tools.pause": "Pausar",
-  "tools.pendingReminders": "Lista de recordatorios",
   "tools.pomodoroCycle": {
     "$type": "message",
     "body": {
@@ -143,7 +152,6 @@ export const MESSAGES = {
   "tools.pomodoroPhase.focus": "Concentración",
   "tools.pomodoroPhase.longBreak": "Descanso largo",
   "tools.pomodoroPhase.shortBreak": "Descanso corto",
-  "tools.pomodoroSettings": "Duraciones predeterminadas",
   "tools.pomodoroStatus.completed": "Completado",
   "tools.pomodoroStatus.idle": "Sin iniciar",
   "tools.pomodoroStatus.paused": "En pausa",
@@ -151,16 +159,13 @@ export const MESSAGES = {
   "tools.pomodoroTitle": "Concentración",
   "tools.focusModePomodoro": "Pomodoro",
   "tools.focusModeFree": "Concentración libre",
-  "tools.relativeMinutesLabel": "Minutos a partir de ahora",
   "tools.reminderEmpty": "No hay recordatorios",
   "tools.reminderLabel": "Recordatorio",
   "tools.reminderLabelPlaceholder": "Ejemplo: tomar un descanso",
-  "tools.reminderModeAbsolute": "Hora exacta",
   "tools.reminderModeEvent": "Recordatorios programados",
   "tools.reminderModeUsage": "Límites de uso",
   "tools.reminderModeApp": "App",
   "tools.reminderModeCategory": "Categoría",
-  "tools.reminderModeRelative": "Tiempo relativo",
   "tools.reminderModeWeb": "Web",
   "tools.remindersTitle": "Recordatorio",
   "tools.reminderTimeInvalid": "La hora del recordatorio debe ser futura.",
@@ -169,7 +174,6 @@ export const MESSAGES = {
   "tools.settingsEmpty": "No hay opciones configurables.",
   "tools.settingsTitle": "Configuración de herramientas",
   "tools.shortBreakDuration": "Descanso corto",
-  "tools.skipPhase": "Omitir",
   "tools.activityReminderActive": "Activo",
   "tools.activityReminderDurationLabel": "Límite diario",
   "tools.start": "Iniciar",

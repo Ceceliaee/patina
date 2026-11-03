@@ -1,5 +1,38 @@
 // ru-RU locale resource. Pure data only.
 export const MESSAGES = {
+  "tools.freeRestMode": "Режим отдыха",
+  "tools.freeRestFixed": "Фиксированная длительность",
+  "tools.freeRestRatio": "Пропорционально",
+  "tools.freeRestDuration": "Длительность отдыха",
+  "tools.freeRestProportion": "Соотношение работы и отдыха",
+  "tools.freeFocusEmpty": "Нет сеансов",
+  "tools.freeFocusEdit": "Изменить сеанс",
+  "tools.freeFocusFinish": "Завершить сеанс",
+  "tools.freeFocusRestart": "Начать следующий сеанс",
+  "tools.freeFocusRest": "Отдых",
+  "tools.freeFocusStart": "Начать работу",
+  "tools.freeFocusPause": "Приостановить работу",
+  "tools.freeFocusResume": "Продолжить работу",
+  "tools.freeFocusReset": "Сбросить сеанс",
+
+  "tools.pomodoroStartLater": "Начать позже",
+  "tools.pomodoroStartBreak": "Начать перерыв",
+  "tools.pomodoroStartFocus": "Начать концентрацию",
+  "tools.pomodoroStartNextGroup": "Начать следующий цикл",
+  "tools.pomodoroNextPhase": {"$type": "message", "body": {"$op": "concat", "parts": ["Далее: ", {"$op": "arg", "name": "phase"}, " · ", {"$op": "arg", "name": "duration"}]}},
+  "tools.pomodoroGroupSummary": {"$type": "message", "body": {"$op": "concat", "parts": ["Помодоро: ", {"$op": "arg", "name": "rounds"}, " · Завершено циклов: ", {"$op": "arg", "name": "groups"}]}},
+  "tools.pomodoroCompletedGroups": {"$type": "message", "body": {"$op": "concat", "parts": ["Завершено циклов: ", {"$op": "arg", "name": "count"}, ""]}},
+
+  "tools.pomodoroTimingSettings": "Настройки таймера",
+  "tools.pomodoroTimingSummary": {"$type": "message", "body": {"$op": "concat", "parts": ["Фокус: ", {"$op": "arg", "name": "minutes"}, " мин · ", {"$op": "plural", "arg": "rounds", "cases": {"one": {"$op": "concat", "parts": [{"$op": "arg", "name": "rounds"}, " цикл"]}, "few": {"$op": "concat", "parts": [{"$op": "arg", "name": "rounds"}, " цикла"]}, "many": {"$op": "concat", "parts": [{"$op": "arg", "name": "rounds"}, " циклов"]}, "other": {"$op": "concat", "parts": [{"$op": "arg", "name": "rounds"}, " цикла"]}}}, ""]}},
+
+  "tools.pomodoroTaskCreate": "Новый сеанс концентрации",
+  "tools.pomodoroTaskEdit": "Изменить задачу Pomodoro",
+  "tools.pomodoroTaskName": "Название",
+  "tools.pomodoroTaskPlaceholder": "Например: чтение статей",
+  "tools.pomodoroTaskEmpty": "Нет задач Pomodoro",
+  "tools.pomodoroTaskDefault": "Задача Pomodoro",
+  "tools.pomodoroRoundUnit": "раундов",
   "tools.reminderTimeLabel": "Время напоминания",
   "tools.reminderRepeatLabel": "Повтор",
   "tools.reminderRepeatNone": "Не повторять",
@@ -8,10 +41,7 @@ export const MESSAGES = {
   "tools.reminderRepeatWeekly": "Еженедельно",
   "tools.reminderRepeatMonthly": "Ежемесячно",
   "tools.reminderRepeatYearly": "Ежегодно",
-  "tools.reminderIntervalLabel": "Интервал",
   "tools.reminderMinutesUnit": "Минуты",
-  "tools.reminderHoursUnit": "Часы",
-  "tools.reminderRepeatInvalid": "Выберите хотя бы один день недели.",
 
   "tools.reminderSnooze": "Напомнить позже",
   "tools.reminderConfirmComplete": "Отметить выполненным",
@@ -29,8 +59,6 @@ export const MESSAGES = {
   "tools.usageExtensionDuration": "Дополнительное время",
   "tools.usageExtendTitle": {"$type": "message", "body": {"$op": "concat", "parts": ["Продлить использование «", {"$op": "arg", "name": "value"}, "»"]}},
   "tools.usageLimitSummary": {"$type": "message", "body": {"$op": "concat", "parts": ["Использовано ", {"$op": "arg", "name": "value"}, ". Достигнут лимит времени."]}},
-  "tools.absoluteDateLabel": "Дата",
-  "tools.absoluteTimeLabel": "Время",
   "tools.actionFailed": "Действие не выполнено. Повторите позже.",
   "tools.activityReminderCandidatesLoadFailed": "Объекты недоступны.",
   "tools.activityReminderDisable": "Отключить",
@@ -38,7 +66,6 @@ export const MESSAGES = {
   "tools.activityReminderDelete": "Удалить",
   "tools.activityReminderEditTitle": "Изменить лимит использования",
   "tools.activityReminderEmpty": "Нет правил",
-  "tools.activityReminderRulesTitle": "Правила",
   "tools.activityReminderSuspension.source_disabled": "Источник отключён",
   "tools.activityReminderSuspension.target_deleted": "Объект удалён",
   "tools.activityReminderSuspension.target_excluded": "Исключено",
@@ -46,22 +73,6 @@ export const MESSAGES = {
   "tools.activityReminderTargetPlaceholder": "Выберите приложение, категорию или сайт",
   "tools.activityReminderTargetRequired": "Выберите объект.",
   "tools.alertDismiss": "Понятно",
-  "tools.alertOccurredAt": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "Срок: ",
-        {
-          "$op": "arg",
-          "name": "value"
-        },
-        ""
-      ]
-    }
-  },
-  "tools.alertPausePomodoro": "Приостановить",
-  "tools.alertPausingPomodoro": "Приостановка…",
   "tools.beta": "Бета",
   "tools.completedToday": {
     "$type": "message",
@@ -97,9 +108,7 @@ export const MESSAGES = {
     }
   },
   "tools.newReminder": "Новое напоминание",
-  "tools.notificationStatus": "Уведомления по завершении",
   "tools.pause": "Приостановить",
-  "tools.pendingReminders": "Список напоминаний",
   "tools.pomodoroCycle": {
     "$type": "message",
     "body": {
@@ -122,7 +131,6 @@ export const MESSAGES = {
   "tools.pomodoroPhase.focus": "Работа",
   "tools.pomodoroPhase.longBreak": "Длинный перерыв",
   "tools.pomodoroPhase.shortBreak": "Короткий перерыв",
-  "tools.pomodoroSettings": "Длительность по умолчанию",
   "tools.pomodoroStatus.completed": "Завершено",
   "tools.pomodoroStatus.idle": "Не запущено",
   "tools.pomodoroStatus.paused": "Приостановлено",
@@ -130,16 +138,13 @@ export const MESSAGES = {
   "tools.pomodoroTitle": "Концентрация",
   "tools.focusModePomodoro": "Помодоро",
   "tools.focusModeFree": "Свободная концентрация",
-  "tools.relativeMinutesLabel": "Минут от текущего момента",
   "tools.reminderEmpty": "Нет напоминаний",
   "tools.reminderLabel": "Напоминание",
   "tools.reminderLabelPlaceholder": "Например: сделать перерыв",
-  "tools.reminderModeAbsolute": "Точное время",
   "tools.reminderModeEvent": "Напоминания по времени",
   "tools.reminderModeUsage": "Лимиты использования",
   "tools.reminderModeApp": "Прил.",
   "tools.reminderModeCategory": "Категория",
-  "tools.reminderModeRelative": "Через интервал",
   "tools.reminderModeWeb": "Сайты",
   "tools.remindersTitle": "Напоминание",
   "tools.reminderTimeInvalid": "Время напоминания должно быть в будущем.",
@@ -148,7 +153,6 @@ export const MESSAGES = {
   "tools.settingsEmpty": "Нет доступных настроек.",
   "tools.settingsTitle": "Настройки инструментов",
   "tools.shortBreakDuration": "Короткий перерыв",
-  "tools.skipPhase": "Пропустить",
   "tools.activityReminderActive": "Активно",
   "tools.activityReminderDurationLabel": "Дневной лимит",
   "tools.start": "Запустить",

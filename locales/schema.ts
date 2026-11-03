@@ -1,5 +1,41 @@
 // Canonical language-neutral message contract. Do not derive this file from a locale at build time.
 export const MESSAGE_SCHEMA = {
+  "tools.freeRestMode": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
+  "tools.freeRestFixed": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
+  "tools.freeRestRatio": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
+  "tools.freeRestDuration": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
+  "tools.freeRestProportion": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
+  "tools.freeFocusEmpty": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
+  "tools.freeFocusEdit": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
+  "tools.freeFocusFinish": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
+  "tools.freeFocusRestart": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
+  "tools.freeFocusRest": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
+  "tools.freeFocusStart": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
+  "tools.freeFocusPause": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
+  "tools.freeFocusResume": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
+  "tools.freeFocusReset": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
+  "native.tools.freeFocusTitle": {"kind": "string", "params": [], "surface": "native", "description": "Fallback name for a free focus task notification."},
+
+  "tools.pomodoroStartLater": {"kind": "string", "params": [], "surface": "frontend", "description": "Focus notification: manual next-phase start and completed set summary."},
+  "tools.pomodoroStartBreak": {"kind": "string", "params": [], "surface": "frontend", "description": "Focus notification: manual next-phase start and completed set summary."},
+  "tools.pomodoroStartFocus": {"kind": "string", "params": [], "surface": "frontend", "description": "Focus notification: manual next-phase start and completed set summary."},
+  "tools.pomodoroStartNextGroup": {"kind": "string", "params": [], "surface": "frontend", "description": "Focus notification: manual next-phase start and completed set summary."},
+  "tools.pomodoroNextPhase": {"kind": "message", "params": [{"name": "phase", "type": "string", "optional": false}, {"name": "duration", "type": "string", "optional": false}], "surface": "frontend", "description": "Focus notification: manual next-phase start and completed set summary."},
+  "tools.pomodoroGroupSummary": {"kind": "message", "params": [{"name": "rounds", "type": "integer", "optional": false}, {"name": "groups", "type": "integer", "optional": false}], "surface": "frontend", "description": "Focus notification: manual next-phase start and completed set summary."},
+  "tools.pomodoroCompletedGroups": {"kind": "message", "params": [{"name": "count", "type": "integer", "optional": false}], "surface": "frontend", "description": "Lifetime fully completed groups for this task; each includes all focus periods and the final long break."},
+  "native.tools.pomodoroGroupCompleted": {"kind": "string", "params": [], "surface": "native", "description": "Title when the final long break ends and the task stops."},
+  "native.tools.pomodoroGroupRestart": {"kind": "string", "params": [], "surface": "native", "description": "The task waits for an explicit start of the next group."},
+
+  "tools.pomodoroTimingSettings": {"kind": "string", "params": [], "surface": "frontend", "description": "Popover for per-task focus and break durations."},
+  "tools.pomodoroTimingSummary": {"kind": "message", "params": [{"name": "minutes", "type": "number", "optional": false}, {"name": "rounds", "type": "integer", "optional": false}], "surface": "frontend", "description": "Compact focus duration and number of rounds before a long break."},
+
+  "tools.pomodoroTaskCreate": {"kind": "string", "params": [], "surface": "frontend", "description": "Pomodoro task list: pomodoroTaskCreate."},
+  "tools.pomodoroTaskEdit": {"kind": "string", "params": [], "surface": "frontend", "description": "Pomodoro task list: pomodoroTaskEdit."},
+  "tools.pomodoroTaskName": {"kind": "string", "params": [], "surface": "frontend", "description": "Pomodoro task list: pomodoroTaskName."},
+  "tools.pomodoroTaskPlaceholder": {"kind": "string", "params": [], "surface": "frontend", "description": "Pomodoro task list: pomodoroTaskPlaceholder."},
+  "tools.pomodoroTaskEmpty": {"kind": "string", "params": [], "surface": "frontend", "description": "Pomodoro task list: pomodoroTaskEmpty."},
+  "tools.pomodoroTaskDefault": {"kind": "string", "params": [], "surface": "frontend", "description": "Pomodoro task list: pomodoroTaskDefault."},
+  "tools.pomodoroRoundUnit": {"kind": "string", "params": [], "surface": "frontend", "description": "Pomodoro task list: pomodoroRoundUnit."},
   "tools.reminderTimeLabel": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderTimeLabel."},
   "tools.reminderRepeatLabel": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderRepeatLabel."},
   "tools.reminderRepeatNone": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderRepeatNone."},
@@ -8,10 +44,7 @@ export const MESSAGE_SCHEMA = {
   "tools.reminderRepeatMonthly": {"kind": "string", "params": [], "surface": "frontend", "description": "Repeat on the same day of each month; skip months without that day."},
   "tools.reminderRepeatYearly": {"kind": "string", "params": [], "surface": "frontend", "description": "Repeat on the same month and day each year; skip years without that date."},
   "tools.reminderRepeatWeekly": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderRepeatWeekly."},
-  "tools.reminderIntervalLabel": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderIntervalLabel."},
   "tools.reminderMinutesUnit": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderMinutesUnit."},
-  "tools.reminderHoursUnit": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderHoursUnit."},
-  "tools.reminderRepeatInvalid": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderRepeatInvalid."},
 
   "tools.reminderSnooze": {"kind": "string", "params": [], "surface": "frontend", "description": "Defer a timed reminder and choose when to be reminded again."},
   "tools.reminderConfirmComplete": {"kind": "string", "params": [], "surface": "frontend", "description": "Acknowledge a timed reminder as completed while keeping its list entry."},
@@ -4585,16 +4618,6 @@ export const MESSAGE_SCHEMA = {
     ],
     "surface": "frontend"
   },
-  "tools.absoluteDateLabel": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.absoluteTimeLabel": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "tools.actionFailed": {
     "kind": "string",
     "params": [],
@@ -4626,11 +4649,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "tools.activityReminderEmpty": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.activityReminderRulesTitle": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4667,27 +4685,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "tools.alertDismiss": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.alertOccurredAt": {
-    "kind": "message",
-    "params": [
-      {
-        "name": "value",
-        "type": "string",
-        "optional": false
-      }
-    ],
-    "surface": "frontend"
-  },
-  "tools.alertPausePomodoro": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.alertPausingPomodoro": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4754,17 +4751,7 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "tools.notificationStatus": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "tools.pause": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.pendingReminders": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4796,11 +4783,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "tools.pomodoroPhase.shortBreak": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.pomodoroSettings": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4843,11 +4825,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend",
     "description": "Title of the Focus module containing Pomodoro and free focus modes."
   },
-  "tools.relativeMinutesLabel": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "tools.reminderEmpty": {
     "kind": "string",
     "params": [],
@@ -4859,11 +4836,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "tools.reminderLabelPlaceholder": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.reminderModeAbsolute": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4886,11 +4858,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "tools.reminderModeCategory": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.reminderModeRelative": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4931,11 +4898,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "tools.shortBreakDuration": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "tools.skipPhase": {
     "kind": "string",
     "params": [],
     "surface": "frontend"

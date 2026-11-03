@@ -1,5 +1,10 @@
 // es locale resource. Pure data only.
 export const MESSAGES = {
+  "native.tools.freeFocusTitle": "Concentración libre",
+
+  "native.tools.pomodoroGroupCompleted": "Ciclo de pomodoro completado",
+  "native.tools.pomodoroGroupRestart": "Inicia el siguiente ciclo cuando quieras.",
+
   "native.webview.recoveryFailed": "No se pudo recuperar la ventana tras varios intentos. Se han detenido los reintentos automáticos. Reinicia Patina y comprueba el estado del registro.",
   "native.storage.startupFailure": {"$type": "message", "body": {"$op": "concat", "parts": ["No se pudo abrir la ubicación de almacenamiento configurada. Comprueba la conexión del disco y los permisos de la carpeta y reinicia Patina. El inicio se ha detenido para proteger los datos existentes. Detalles: ", {"$op": "arg", "name": "details"}]}},
   "native.export.anonymousActivity": "Anónimo",
