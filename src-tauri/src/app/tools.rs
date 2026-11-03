@@ -46,6 +46,20 @@ fn store<R: Runtime>(app: &AppHandle<R>) -> SqliteToolsStore<R> {
     SqliteToolsStore::new(app.clone())
 }
 
+pub(crate) async fn free_focus<R: Runtime>(
+    app: &AppHandle<R>,
+    action: crate::domain::free_focus::FreeFocusAction,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    tools::free_focus::action(app, &store(app), action).await
+}
+
+pub(crate) async fn pomodoro_task<R: Runtime>(
+    app: &AppHandle<R>,
+    action: crate::domain::tools::PomodoroTaskAction,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    tools::pomodoro::pomodoro_task(app, &store(app), action).await
+}
+
 pub(crate) fn get_alerts<R: Runtime>(app: &AppHandle<R>) -> Vec<ToolAlert> {
     tools::get_alerts(app)
 }
@@ -151,29 +165,29 @@ pub(crate) async fn start_pomodoro<R: Runtime>(
     app: &AppHandle<R>,
     request: StartPomodoroRequest,
 ) -> Result<ToolsRuntimeSnapshot, String> {
-    tools::start_pomodoro(app, &store(app), request).await
+    tools::pomodoro::start_pomodoro(app, &store(app), request).await
 }
 
 pub(crate) async fn pause_pomodoro<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<ToolsRuntimeSnapshot, String> {
-    tools::pause_pomodoro(app, &store(app)).await
+    tools::pomodoro::pause_pomodoro(app, &store(app)).await
 }
 
 pub(crate) async fn resume_pomodoro<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<ToolsRuntimeSnapshot, String> {
-    tools::resume_pomodoro(app, &store(app)).await
+    tools::pomodoro::resume_pomodoro(app, &store(app)).await
 }
 
 pub(crate) async fn skip_pomodoro_phase<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<ToolsRuntimeSnapshot, String> {
-    tools::skip_pomodoro_phase(app, &store(app)).await
+    tools::pomodoro::skip_pomodoro_phase(app, &store(app)).await
 }
 
 pub(crate) async fn reset_pomodoro<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<ToolsRuntimeSnapshot, String> {
-    tools::reset_pomodoro(app, &store(app)).await
+    tools::pomodoro::reset_pomodoro(app, &store(app)).await
 }

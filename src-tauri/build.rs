@@ -49,6 +49,8 @@ const APP_COMMANDS: &[&str] = &[
     "cmd_set_activity_reminder_enabled",
     "cmd_update_activity_reminder_limit",
     "cmd_start_pomodoro",
+    "cmd_pomodoro_task",
+    "cmd_free_focus",
     "cmd_pause_pomodoro",
     "cmd_resume_pomodoro",
     "cmd_skip_pomodoro_phase",

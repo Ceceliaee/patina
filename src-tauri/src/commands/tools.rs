@@ -234,6 +234,22 @@ pub async fn cmd_start_pomodoro(
 }
 
 #[tauri::command]
+pub async fn cmd_pomodoro_task(
+    action: crate::domain::tools::PomodoroTaskAction,
+    app: AppHandle,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    tools::pomodoro_task(&app, action).await
+}
+
+#[tauri::command]
+pub async fn cmd_free_focus(
+    action: crate::domain::free_focus::FreeFocusAction,
+    app: AppHandle,
+) -> Result<ToolsRuntimeSnapshot, String> {
+    tools::free_focus(&app, action).await
+}
+
+#[tauri::command]
 pub async fn cmd_pause_pomodoro(app: AppHandle) -> Result<ToolsRuntimeSnapshot, String> {
     tools::pause_pomodoro(&app).await
 }

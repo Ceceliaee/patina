@@ -27,6 +27,8 @@ pub(super) fn include_pending_alerts(
                 title: String::new(),
                 body: reminder.label,
                 occurred_at,
+                free_focus: None,
+                pomodoro: None,
                 activity_reminder: None,
             });
         }

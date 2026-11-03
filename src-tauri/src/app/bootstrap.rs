@@ -176,6 +176,8 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::tools::cmd_set_activity_reminder_enabled,
         commands::tools::cmd_update_activity_reminder_limit,
         commands::tools::cmd_start_pomodoro,
+        commands::tools::cmd_pomodoro_task,
+        commands::tools::cmd_free_focus,
         commands::tools::cmd_pause_pomodoro,
         commands::tools::cmd_resume_pomodoro,
         commands::tools::cmd_skip_pomodoro_phase,

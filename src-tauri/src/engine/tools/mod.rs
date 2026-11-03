@@ -2,8 +2,8 @@ pub(crate) mod timed_reminders;
 use crate::domain::localization::{self, LocalizationState};
 use crate::domain::tools::{
     ActivityReminderCheck, ActivityReminderNotification, ActivityReminderTarget,
-    CompletedPomodoroNotification, PomodoroPhase, PomodoroStatus, ToolAlert, ToolAlertKind,
-    ToolReminder, ToolsRuntimeSnapshot,
+    CompletedPomodoroNotification, PomodoroStatus, ToolAlert, ToolAlertKind, ToolReminder,
+    ToolsRuntimeSnapshot,
 };
 use chrono::{Local, Utc};
 use serde::Serialize;
@@ -14,13 +14,14 @@ use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::Notify;
 use tokio::time::{sleep, Duration};
 
-mod activity_notifications;
-mod activity_schedule;
-pub use activity_notifications::{
+mod activity_reminders;
+pub(crate) mod free_focus;
+pub(crate) mod pomodoro;
+pub use activity_reminders::{
     create_activity_reminder_rule, disable_activity_reminder_rule, extend_activity_reminder,
     set_activity_reminder_enabled, update_activity_reminder_limit,
 };
-pub use activity_schedule::{
+pub use activity_reminders::{
     notify_activity_reminder_app_transition, notify_activity_reminder_web_transition,
 };
 
@@ -41,7 +42,7 @@ pub struct ToolAlertQueueStats {
 pub struct ToolsRuntimeState {
     inner: Mutex<ToolsRuntimeSnapshot>,
     alerts: Mutex<Vec<ToolAlert>>,
-    activity_schedule: activity_schedule::ActivityReminderSchedule,
+    activity_schedule: activity_reminders::ActivityReminderSchedule,
     mutation_in_flight: tokio::sync::Mutex<()>,
     // Serialize store operations so a late read cannot acknowledge a newer write.
     refresh_pending: tokio::sync::Mutex<bool>,
@@ -148,6 +149,8 @@ pub struct CreateActivityReminderRuleRequest {
 
 #[derive(Clone, Debug)]
 pub enum ToolsMutation {
+    FreeFocus(crate::domain::free_focus::FreeFocusAction),
+    PomodoroTask(crate::domain::tools::PomodoroTaskAction),
     CreateReminder {
         label: String,
         scheduled_at: i64,
@@ -195,6 +198,7 @@ pub enum ToolsMutation {
 
 #[derive(Clone, Debug, Default)]
 pub struct ToolsTickEvents {
+    pub completed_free_focus: Vec<crate::domain::free_focus::FreeFocusTask>,
     pub reminders: Vec<ToolReminder>,
     pub activity_reminders: Vec<ActivityReminderNotification>,
     pub completed_pomodoro: Option<CompletedPomodoroNotification>,
@@ -332,42 +336,6 @@ pub fn notify_activity_reminder_change<R: Runtime>(app: &AppHandle<R>) {
     notify_tools_runtime(app);
 }
 
-pub async fn start_pomodoro<R: Runtime>(
-    app: &AppHandle<R>,
-    store: &impl ToolsStore,
-    request: StartPomodoroRequest,
-) -> Result<ToolsRuntimeSnapshot, String> {
-    apply_mutation_and_refresh(app, store, ToolsMutation::StartPomodoro(request), now_ms()).await
-}
-
-pub async fn pause_pomodoro<R: Runtime>(
-    app: &AppHandle<R>,
-    store: &impl ToolsStore,
-) -> Result<ToolsRuntimeSnapshot, String> {
-    apply_mutation_and_refresh(app, store, ToolsMutation::PausePomodoro, now_ms()).await
-}
-
-pub async fn resume_pomodoro<R: Runtime>(
-    app: &AppHandle<R>,
-    store: &impl ToolsStore,
-) -> Result<ToolsRuntimeSnapshot, String> {
-    apply_mutation_and_refresh(app, store, ToolsMutation::ResumePomodoro, now_ms()).await
-}
-
-pub async fn skip_pomodoro_phase<R: Runtime>(
-    app: &AppHandle<R>,
-    store: &impl ToolsStore,
-) -> Result<ToolsRuntimeSnapshot, String> {
-    apply_mutation_and_refresh(app, store, ToolsMutation::SkipPomodoroPhase, now_ms()).await
-}
-
-pub async fn reset_pomodoro<R: Runtime>(
-    app: &AppHandle<R>,
-    store: &impl ToolsStore,
-) -> Result<ToolsRuntimeSnapshot, String> {
-    apply_mutation_and_refresh(app, store, ToolsMutation::ResetPomodoro, now_ms()).await
-}
-
 async fn wait_for_next_tools_wake<R: Runtime>(app: &AppHandle<R>, delay: Duration) {
     if let Some(state) = app.try_state::<ToolsRuntimeWakeState>() {
         tokio::select! {
@@ -483,6 +451,7 @@ fn notify_tick_events<R: Runtime + 'static>(app: &AppHandle<R>, events: ToolsTic
         reminders: fired_reminders,
         activity_reminders: fired_activity_reminders,
         completed_pomodoro,
+        completed_free_focus,
         ..
     } = events;
 
@@ -503,13 +472,15 @@ fn notify_tick_events<R: Runtime + 'static>(app: &AppHandle<R>, events: ToolsTic
                     reminder.label
                 },
                 occurred_at: reminder.fired_at.unwrap_or(now),
+                free_focus: None,
+                pomodoro: None,
                 activity_reminder: None,
             },
         );
     }
 
     let current_date_key = date_key();
-    for alert in activity_notifications::build_activity_reminder_alerts(
+    for alert in activity_reminders::build_activity_reminder_alerts(
         fired_activity_reminders,
         locale,
         &current_date_key,
@@ -518,31 +489,13 @@ fn notify_tick_events<R: Runtime + 'static>(app: &AppHandle<R>, events: ToolsTic
         send_tool_alert(app, alert);
     }
 
+    for task in completed_free_focus {
+        send_tool_alert(app, free_focus::completion_alert(task, locale, now));
+    }
     if let Some(completed_phase) = completed_pomodoro {
-        let title_key = match completed_phase.completed_phase {
-            PomodoroPhase::Focus => "native.tools.focusEnded",
-            PomodoroPhase::ShortBreak | PomodoroPhase::LongBreak => "native.tools.breakEnded",
-        };
-        let body_key = match completed_phase.next_phase {
-            PomodoroPhase::Focus => "native.tools.nextFocus",
-            PomodoroPhase::ShortBreak => "native.tools.nextShortBreak",
-            PomodoroPhase::LongBreak => "native.tools.nextLongBreak",
-        };
         send_tool_alert(
             app,
-            ToolAlert {
-                id: format!(
-                    "pomodoro:{}:{}:{}",
-                    completed_phase.run_id,
-                    completed_phase.completed_focus_count,
-                    completed_phase.completed_phase.as_str()
-                ),
-                kind: ToolAlertKind::Pomodoro,
-                title: localization::text(locale, title_key),
-                body: localization::text(locale, body_key),
-                occurred_at: now,
-                activity_reminder: None,
-            },
+            pomodoro::completion_alert(completed_phase, locale, now),
         );
     }
 }
@@ -651,6 +604,11 @@ fn compute_next_tools_wake(
 ) -> Duration {
     let max_delay_ms = TOOLS_RUNTIME_IDLE_WAKE_MS;
     let mut delay_ms = max_delay_ms;
+    for task in &snapshot.free_focus_tasks {
+        if task.status == "running" && task.phase == "break" {
+            delay_ms = delay_ms.min(task.remaining_at(now_ms));
+        }
+    }
     if let Some(at) = next_activity_reminder_at {
         delay_ms = delay_ms.min(at.saturating_sub(now_ms));
     }
@@ -715,7 +673,9 @@ fn next_day_start_ms() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::tools::{ActivityReminderTarget, ToolPomodoroRun, ToolReminder};
+    use crate::domain::tools::{
+        ActivityReminderTarget, PomodoroPhase, ToolPomodoroRun, ToolReminder,
+    };
     use std::cell::Cell;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -1073,9 +1033,11 @@ mod tests {
         let alert = ToolAlert {
             id: "reminder:1".to_string(),
             kind: ToolAlertKind::Reminder,
-            title: "提醒".to_string(),
-            body: "时间到了".to_string(),
+            title: "鎻愰啋".to_string(),
+            body: "鏃堕棿鍒颁簡".to_string(),
             occurred_at: 1_000,
+            free_focus: None,
+            pomodoro: None,
             activity_reminder: None,
         };
 
@@ -1091,7 +1053,7 @@ mod tests {
     async fn pending_activity_alert_blocks_reentry_until_dismissed() {
         let state = ToolsRuntimeState::default();
         let store = ControlledToolsStore::default();
-        let alert = activity_notifications::build_activity_reminder_alerts(
+        let alert = activity_reminders::build_activity_reminder_alerts(
             vec![crate::domain::tools::ActivityReminderNotification {
                 rule_id: 7,
                 target: ActivityReminderTarget::App {
@@ -1131,9 +1093,11 @@ mod tests {
             state.push_alert(ToolAlert {
                 id: format!("reminder:{index}"),
                 kind: ToolAlertKind::Reminder,
-                title: "提醒".to_string(),
-                body: "时间到了".to_string(),
+                title: "鎻愰啋".to_string(),
+                body: "鏃堕棿鍒颁簡".to_string(),
                 occurred_at: index as i64,
+                free_focus: None,
+                pomodoro: None,
                 activity_reminder: None,
             });
         }
