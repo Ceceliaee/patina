@@ -82,6 +82,7 @@ fn merge_restore_payload_preserves_existing_data_and_imports_missing_data() {
         .unwrap();
 
         let payload = BackupRecords {
+            free_focus_tasks: vec![],
             sessions: vec![
                 BackupSession {
                     id: 1,
@@ -205,6 +206,7 @@ fn merge_restore_maps_title_samples_to_inserted_session_ids() {
             .unwrap();
 
         let payload = BackupRecords {
+            free_focus_tasks: vec![],
             sessions: vec![BackupSession {
                 id: 2,
                 app_name: "Imported App".to_string(),

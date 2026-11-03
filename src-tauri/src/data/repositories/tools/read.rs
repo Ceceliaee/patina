@@ -20,6 +20,7 @@ pub async fn fetch_tools_snapshot(
     let reminders = fetch_visible_reminders(pool).await?;
     let activity_reminder_rules = fetch_active_activity_reminder_rules(pool).await?;
     let current_pomodoro = fetch_latest_pomodoro(pool).await?;
+    let pomodoro_tasks = super::pomodoro_tasks::fetch_tasks(pool).await?;
     let today_completed_pomodoros = fetch_daily_pomodoro_count(pool, date_key).await?;
     let next_reminder_at = reminders
         .iter()
@@ -28,10 +29,16 @@ pub async fn fetch_tools_snapshot(
         .min();
 
     Ok(ToolsRuntimeSnapshot {
+        free_focus_tasks: super::free_focus::fetch(pool)
+            .await?
+            .into_iter()
+            .filter(|task| task.deleted_at.is_none())
+            .collect(),
         settings,
         reminders,
         activity_reminder_rules,
         current_pomodoro,
+        pomodoro_tasks,
         today_completed_pomodoros,
         next_reminder_at,
         sampled_at_ms: now_ms,
@@ -347,7 +354,8 @@ pub(super) async fn fetch_latest_pomodoro<'e>(
                 long_break_every, phase_started_at, phase_paused_at, phase_remaining_ms,
                 completed_focus_count, created_at, updated_at
          FROM tool_pomodoro_runs
-         ORDER BY updated_at DESC, id DESC
+         WHERE NOT EXISTS (SELECT 1 FROM tool_pomodoro_tasks WHERE run_id = tool_pomodoro_runs.id AND deleted_at IS NOT NULL)
+         ORDER BY (status = 'running') DESC, (status = 'paused') DESC, updated_at DESC, id DESC
          LIMIT 1",
     )
     .fetch_optional(executor)
@@ -485,7 +493,7 @@ async fn load_web_activity_enabled(pool: &Pool<Sqlite>) -> Result<bool, String> 
     Ok(value.is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true")))
 }
 
-fn map_pomodoro_row(row: sqlx::sqlite::SqliteRow) -> ToolPomodoroRun {
+pub(super) fn map_pomodoro_row(row: sqlx::sqlite::SqliteRow) -> ToolPomodoroRun {
     let phase: String = row.get("phase");
     let status: String = row.get("status");
     ToolPomodoroRun {

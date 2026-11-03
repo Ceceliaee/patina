@@ -7,6 +7,7 @@ pub(super) async fn merge_backup_records_in_tx(
     records: &BackupRecords,
 ) -> Result<(), String> {
     repositories::sessions::insert_missing_for_restore(tx, &records.sessions).await?;
+    repositories::tools::free_focus::restore(tx, &records.free_focus_tasks).await?;
     let session_id_map =
         repositories::sessions::resolve_restore_session_id_map(tx, &records.sessions).await?;
     repositories::session_title_samples::insert_missing_for_restore(

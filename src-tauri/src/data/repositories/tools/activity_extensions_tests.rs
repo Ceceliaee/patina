@@ -614,6 +614,98 @@ async fn extensions_use_confirmation_usage_and_rearm_all_target_types_once() {
 }
 
 #[tokio::test]
+async fn extension_after_usage_recovery_never_shortens_limit() {
+    for target in targets() {
+        for previous_extension in [None, Some(3_600_000)] {
+            let pool = database().await;
+            let rule = create_activity_reminder_rule(&pool, &target, "Target", 1_800_000, "", 1)
+                .await
+                .unwrap();
+            if let Some(limit) = previous_extension {
+                sqlx::query("INSERT INTO tool_activity_reminder_extensions(rule_id, extension_date_key, extension_limit_ms) VALUES(?, '2026-11-03', ?)")
+                    .bind(rule.id).bind(limit).execute(&pool).await.unwrap();
+            }
+            assert_eq!(fire(&pool, "2026-11-03", 0, 9_780_000).await.len(), 1);
+            // Recovery corrects the usage while the earlier alert is still open.
+            pool.execute(
+                "UPDATE sessions SET end_time=1000,duration=1000;
+                UPDATE web_activity_segments SET end_time=1000,duration=1000;",
+            )
+            .await
+            .unwrap();
+            extend_activity_reminder(
+                &pool,
+                rule.id,
+                9_780_000,
+                ActivityReminderExtension::FifteenMinutes,
+                "2026-11-03",
+                0,
+                9_780_001,
+            )
+            .await
+            .unwrap();
+            let saved = fetch_all_activity_reminder_rules(&pool)
+                .await
+                .unwrap()
+                .remove(0);
+            let expected = previous_extension.unwrap_or(1_800_000);
+            assert_eq!(saved.limit_ms, 1_800_000);
+            assert_eq!(
+                saved.extension_limit_ms,
+                Some(expected),
+                "extension shortened {target:?}"
+            );
+            pool.execute(
+                "UPDATE sessions SET end_time=901000,duration=901000;
+                UPDATE web_activity_segments SET end_time=901000,duration=901000;",
+            )
+            .await
+            .unwrap();
+            assert!(fire(&pool, "2026-11-03", 0, 10_000_000).await.is_empty());
+            pool.close().await;
+        }
+    }
+}
+
+#[tokio::test]
+async fn persisted_extension_below_daily_limit_cannot_fire_early() {
+    for target in targets() {
+        let pool = database().await;
+        let rule = create_activity_reminder_rule(&pool, &target, "Target", 1_800_000, "", 1)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO tool_activity_reminder_extensions(rule_id, extension_date_key, extension_limit_ms) VALUES(?, '2026-11-03', 900000)")
+            .bind(rule.id).execute(&pool).await.unwrap();
+        for usage in [900_000_i64, 1_799_999, 1_800_000] {
+            sqlx::query("UPDATE sessions SET end_time=?,duration=?")
+                .bind(usage)
+                .bind(usage)
+                .execute(&pool)
+                .await
+                .unwrap();
+            sqlx::query("UPDATE web_activity_segments SET end_time=?,duration=?")
+                .bind(usage)
+                .bind(usage)
+                .execute(&pool)
+                .await
+                .unwrap();
+            let events = fire(&pool, "2026-11-03", 0, 9_780_000).await;
+            if usage < 1_800_000 {
+                assert!(
+                    events.is_empty(),
+                    "a 30-minute rule fired after {usage} ms for {target:?}"
+                );
+            } else {
+                assert_eq!(events.len(), 1);
+                assert_eq!(events[0].usage_ms, usage);
+                assert_eq!(events[0].limit_ms, 1_800_000);
+            }
+        }
+        pool.close().await;
+    }
+}
+
+#[tokio::test]
 async fn unlimited_is_date_scoped_and_stale_or_disabled_rules_cannot_extend() {
     let pool = database().await;
     let rule = create_activity_reminder_rule(&pool, &targets()[0], "Target", 1_800_000, "", 1)

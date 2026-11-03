@@ -10,6 +10,8 @@ mod activity_reminders;
 #[cfg(test)]
 mod activity_unique_target_tests;
 mod backup_restore;
+pub(crate) mod free_focus;
+pub(crate) mod pomodoro_tasks;
 mod read;
 pub(crate) mod timed_reminders;
 
@@ -46,7 +48,12 @@ pub async fn start_pomodoro(
     let short_break_ms = short_break_ms.max(1_000);
     let long_break_ms = long_break_ms.max(1_000);
     let long_break_every = long_break_every.clamp(2, 12);
-
+    let mut tx = pool.begin().await.map_err(|error| error.to_string())?;
+    free_focus::pause_active(&mut tx, now_ms).await?;
+    sqlx::query("UPDATE tool_pomodoro_runs SET status='paused', phase_remaining_ms=MAX(0,
+        COALESCE(phase_remaining_ms, CASE phase WHEN 'focus' THEN focus_ms WHEN 'short_break' THEN short_break_ms ELSE long_break_ms END)
+        - MAX(0, ? - COALESCE(phase_started_at, ?))), phase_started_at=NULL, phase_paused_at=?, updated_at=? WHERE status='running'")
+        .bind(now_ms).bind(now_ms).bind(now_ms).bind(now_ms).execute(&mut *tx).await.map_err(|error|error.to_string())?;
     let result = sqlx::query(
         "INSERT INTO tool_pomodoro_runs (
             phase, status, cycle_index, focus_ms, short_break_ms, long_break_ms,
@@ -64,10 +71,15 @@ pub async fn start_pomodoro(
     .bind(focus_ms)
     .bind(now_ms)
     .bind(now_ms)
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .map_err(|error| format!("failed to start pomodoro: {error}"))?;
-
+    sqlx::query("INSERT INTO tool_pomodoro_tasks(run_id,label) VALUES(?,'')")
+        .bind(result.last_insert_rowid())
+        .execute(&mut *tx)
+        .await
+        .map_err(|error| error.to_string())?;
+    tx.commit().await.map_err(|error| error.to_string())?;
     fetch_pomodoro_by_id(pool, result.last_insert_rowid()).await
 }
 
@@ -104,26 +116,19 @@ pub async fn resume_pomodoro(pool: &Pool<Sqlite>, now_ms: i64) -> Result<(), Str
     let Some(run) = fetch_latest_pomodoro(pool).await? else {
         return Ok(());
     };
-    if run.status != PomodoroStatus::Paused {
+    if !matches!(
+        run.status,
+        PomodoroStatus::Paused | PomodoroStatus::Completed
+    ) {
         return Ok(());
     }
-
-    sqlx::query(
-        "UPDATE tool_pomodoro_runs
-         SET status = ?,
-             phase_started_at = ?,
-             phase_paused_at = NULL,
-             updated_at = ?
-         WHERE id = ?",
+    pomodoro_tasks::apply(
+        pool,
+        crate::domain::tools::PomodoroTaskAction::Resume { id: run.id },
+        now_ms,
+        "",
     )
-    .bind(PomodoroStatus::Running.as_str())
-    .bind(now_ms)
-    .bind(now_ms)
-    .bind(run.id)
-    .execute(pool)
     .await
-    .map_err(|error| format!("failed to resume pomodoro: {error}"))?;
-    Ok(())
 }
 
 pub async fn skip_pomodoro_phase(
@@ -157,7 +162,12 @@ pub async fn complete_due_pomodoro_phase(
         return Ok(None);
     }
 
-    advance_pomodoro_phase(tx, run, date_key, now_ms, true, true).await
+    if run.phase == PomodoroPhase::LongBreak {
+        return pomodoro_tasks::complete_group(tx, &run, now_ms)
+            .await
+            .map(Some);
+    }
+    advance_pomodoro_phase(tx, run, date_key, now_ms, true, false).await
 }
 
 async fn advance_pomodoro_phase(
@@ -193,14 +203,13 @@ async fn advance_pomodoro_phase(
         PomodoroPhase::ShortBreak => run.short_break_ms,
         PomodoroPhase::LongBreak => run.long_break_ms,
     };
-
     let next_status = if start_next_phase {
         PomodoroStatus::Running
     } else {
         PomodoroStatus::Paused
     };
-    let next_started_at = start_next_phase.then_some(now_ms);
-    let next_paused_at = (!start_next_phase).then_some(now_ms);
+    let next_started_at = (next_status == PomodoroStatus::Running).then_some(now_ms);
+    let next_paused_at = (next_status == PomodoroStatus::Paused).then_some(now_ms);
 
     sqlx::query(
         "UPDATE tool_pomodoro_runs
@@ -233,6 +242,7 @@ async fn advance_pomodoro_phase(
     }
 
     Ok(Some(CompletedPomodoroNotification {
+        task: pomodoro_tasks::notification_task(tx, run.id).await?,
         run_id: run.id,
         completed_phase: run.phase,
         next_phase,
@@ -344,6 +354,11 @@ mod tests {
             .await
             .unwrap();
         pool.execute(db_schema::TOOLS_TABLES_SCHEMA_SQL)
+            .await
+            .unwrap();
+        pool.execute(db_schema::POMODORO_TASKS_SQL).await.unwrap();
+        pool.execute(db_schema::FREE_FOCUS_SQL).await.unwrap();
+        pool.execute(db_schema::POMODORO_COMPLETIONS_SQL)
             .await
             .unwrap();
         pool.execute(db_schema::SOFTWARE_REMINDER_RULES_SCHEMA_SQL)
@@ -1197,9 +1212,10 @@ mod tests {
             assert_eq!(snapshot.today_completed_pomodoros, 1);
             let run = snapshot.current_pomodoro.unwrap();
             assert_eq!(run.phase, PomodoroPhase::ShortBreak);
-            assert_eq!(run.status, PomodoroStatus::Running);
-            assert_eq!(run.phase_started_at, Some(2_100));
-            assert_eq!(run.phase_paused_at, None);
+            assert_eq!(run.status, PomodoroStatus::Paused);
+            assert_eq!(run.phase_started_at, None);
+            assert_eq!(run.phase_paused_at, Some(2_100));
+            assert_eq!(run.remaining_ms_at(99_999), run.short_break_ms);
         });
     }
 

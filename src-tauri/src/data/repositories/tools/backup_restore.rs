@@ -39,13 +39,26 @@ pub async fn fetch_all_reminders_for_backup(
 pub async fn fetch_all_pomodoro_runs_for_backup(
     pool: &Pool<Sqlite>,
 ) -> Result<Vec<BackupToolPomodoroRun>, String> {
-    let rows = sqlx::query(
-        "SELECT id, phase, status, cycle_index, focus_ms, short_break_ms, long_break_ms,
+    let completed_groups = if crate::data::schema_contracts::has_pomodoro_completions_schema(pool)
+        .await?
+    {
+        "COALESCE((SELECT completed_groups FROM tool_pomodoro_task_completions WHERE run_id=tool_pomodoro_runs.id),0)"
+    } else {
+        "0"
+    };
+    let task_columns = if crate::data::schema_contracts::has_pomodoro_tasks_schema(pool).await? {
+        "(SELECT label FROM tool_pomodoro_tasks WHERE run_id=tool_pomodoro_runs.id) AS task_label,
+         (SELECT deleted_at FROM tool_pomodoro_tasks WHERE run_id=tool_pomodoro_runs.id) AS task_deleted_at"
+    } else {
+        "NULL AS task_label, NULL AS task_deleted_at"
+    };
+    let rows = sqlx::query(&format!(
+        "SELECT {completed_groups} AS completed_groups, {task_columns}, id, phase, status, cycle_index, focus_ms, short_break_ms, long_break_ms,
                 long_break_every, phase_started_at, phase_paused_at, phase_remaining_ms,
                 completed_focus_count, created_at, updated_at
          FROM tool_pomodoro_runs
-         ORDER BY id ASC",
-    )
+         ORDER BY id ASC"
+    ))
     .fetch_all(pool)
     .await
     .map_err(|error| format!("failed to read tool pomodoro runs for backup: {error}"))?;
@@ -53,6 +66,9 @@ pub async fn fetch_all_pomodoro_runs_for_backup(
     Ok(rows
         .into_iter()
         .map(|row| BackupToolPomodoroRun {
+            completed_groups: row.get("completed_groups"),
+            task_label: row.get("task_label"),
+            task_deleted_at: row.get("task_deleted_at"),
             phase: row.get("phase"),
             status: row.get("status"),
             cycle_index: row.get("cycle_index"),
@@ -137,7 +153,13 @@ pub async fn insert_missing_for_restore(
         }
     }
 
-    for run in pomodoro_runs {
+    let latest_legacy = pomodoro_runs
+        .iter()
+        .enumerate()
+        .filter(|(_, run)| run.task_label.is_none())
+        .max_by_key(|(index, run)| (run.updated_at, *index))
+        .map(|(index, _)| index);
+    for (index, run) in pomodoro_runs.iter().enumerate() {
         let exists: Option<i64> = sqlx::query_scalar(
             "SELECT id FROM tool_pomodoro_runs
              WHERE created_at = ?
@@ -148,7 +170,9 @@ pub async fn insert_missing_for_restore(
         .await
         .map_err(|error| format!("failed to inspect tool pomodoro merge: {error}"))?;
         if exists.is_none() {
-            sqlx::query(
+            // Imported tasks resume explicitly; merging cannot take over the destination's active task.
+            let was_running = run.status == "running";
+            let inserted = sqlx::query(
                 "INSERT INTO tool_pomodoro_runs (
                     phase, status, cycle_index, focus_ms, short_break_ms, long_break_ms,
                     long_break_every, phase_started_at, phase_paused_at, phase_remaining_ms,
@@ -156,14 +180,22 @@ pub async fn insert_missing_for_restore(
                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .bind(&run.phase)
-            .bind(&run.status)
+            .bind(if was_running { "paused" } else { &run.status })
             .bind(run.cycle_index)
             .bind(run.focus_ms)
             .bind(run.short_break_ms)
             .bind(run.long_break_ms)
             .bind(run.long_break_every)
-            .bind(run.phase_started_at)
-            .bind(run.phase_paused_at)
+            .bind(if was_running {
+                None
+            } else {
+                run.phase_started_at
+            })
+            .bind(if was_running {
+                Some(run.updated_at)
+            } else {
+                run.phase_paused_at
+            })
             .bind(run.phase_remaining_ms)
             .bind(run.completed_focus_count)
             .bind(run.created_at)
@@ -171,6 +203,26 @@ pub async fn insert_missing_for_restore(
             .execute(&mut **tx)
             .await
             .map_err(|error| format!("failed to merge restore tool pomodoro runs: {error}"))?;
+            let deleted_at = if run.task_label.is_none() && Some(index) != latest_legacy {
+                Some(run.updated_at)
+            } else {
+                run.task_deleted_at
+            };
+            sqlx::query(
+                "INSERT INTO tool_pomodoro_task_completions(run_id,completed_groups) VALUES(?,?)",
+            )
+            .bind(inserted.last_insert_rowid())
+            .bind(run.completed_groups)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| e.to_string())?;
+            sqlx::query("INSERT INTO tool_pomodoro_tasks(run_id,label,deleted_at) VALUES(?,?,?)")
+                .bind(inserted.last_insert_rowid())
+                .bind(run.task_label.as_deref().unwrap_or_default())
+                .bind(deleted_at)
+                .execute(&mut **tx)
+                .await
+                .map_err(|error| format!("failed to merge pomodoro task: {error}"))?;
         }
     }
 

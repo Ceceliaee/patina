@@ -338,6 +338,7 @@ mod tests {
 
     fn payload_with_native_session(exe_name: &str) -> BackupRecords {
         BackupRecords {
+            free_focus_tasks: vec![],
             sessions: vec![BackupSession {
                 id: 100,
                 app_name: "Backup Native".to_string(),

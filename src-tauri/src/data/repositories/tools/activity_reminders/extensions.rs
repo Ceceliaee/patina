@@ -31,13 +31,15 @@ pub async fn extend_activity_reminder(
         return Err("activity reminder alert has expired".into());
     }
     let usage = load_activity_reminder_usage(&mut tx, vec![rule], day_start_ms, now_ms).await?;
-    let (_, usage_ms, _, _) = usage
+    let (rule, usage_ms, _, _) = usage
         .entries
         .first()
         .ok_or("activity reminder target is unavailable")?;
-    let limit = extension
-        .additional_ms()
-        .map(|extra| usage_ms.saturating_add(extra));
+    // Corrected usage must not turn an extension into a shorter allowance.
+    let limit = extension.additional_ms().and_then(|extra| {
+        rule.limit_for_date(date_key)
+            .map(|current| current.max(usage_ms.saturating_add(extra)))
+    });
     sqlx::query(
         "UPDATE tool_activity_reminder_extensions
         SET extension_date_key = ?, extension_limit_ms = ?, last_extended_alert_at = ? WHERE rule_id = ?",
