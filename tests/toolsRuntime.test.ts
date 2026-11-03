@@ -55,7 +55,8 @@ function rawSnapshot(overrides: Record<string, unknown> = {}) {
       cancelled_at: null,
     }],
     activity_reminder_rules: [],
-    current_pomodoro: null,
+    free_focus_tasks: [],
+    pomodoro_tasks: [], current_pomodoro: null,
     today_completed_pomodoros: 0,
     next_reminder_at: 2_000_000,
     sampled_at_ms: 1_000_000,
@@ -101,6 +102,7 @@ function snapshot(overrides: Partial<ToolsRuntimeSnapshot> = {}): ToolsRuntimeSn
     },
     reminders: [],
     activityReminderRules: [],
+    freeFocusTasks: [],    pomodoroTasks: [],
     currentPomodoro: null,
     todayCompletedPomodoros: 0,
     nextReminderAt: null,
@@ -236,7 +238,7 @@ await runTest("pomodoro view models format runtime state", () => {
     todayCompletedPomodoros: 3,
   }), 3_000, labels);
   assert.equal(pomodoro.phaseLabel, "Short break");
-  assert.equal(pomodoro.remainingLabel, "00:04:00");
+  assert.equal(pomodoro.remainingLabel, "04:00");
 });
 
 await runTest("tools status chips preserve arrival order", () => {

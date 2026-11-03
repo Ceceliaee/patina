@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, type UiText } from "../../../shared/i18n/index.ts";
 import type {
   StartPomodoroInput,
+  PomodoroTaskAction,
+  FreeFocusAction,
   ActivityReminderTarget,
   ActivityReminderAppCandidate,
   ActivityReminderCategoryCandidate,
@@ -31,6 +33,8 @@ import {
 } from "../services/toolsViewModel.ts";
 
 const DEFAULT_SNAPSHOT: ToolsRuntimeSnapshot = {
+  pomodoroTasks: [],
+  freeFocusTasks: [],
   settings: {
     pomodoroFocusMinutes: 25,
     pomodoroShortBreakMinutes: 5,
@@ -82,11 +86,11 @@ export function useToolsPageState({
   const refreshRequestRef = useRef(0);
 
   useEffect(() => {
-    if (activeSection !== "pomodoro" || snapshot.currentPomodoro?.status !== "running") return;
+    if (activeSection !== "pomodoro" || (snapshot.currentPomodoro?.status !== "running" && !snapshot.freeFocusTasks.some(task => task.status === "running"))) return;
     setNowMs(Date.now());
     const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
     return () => window.clearInterval(timer);
-  }, [activeSection, snapshot.currentPomodoro]);
+  }, [activeSection, snapshot.currentPomodoro, snapshot.freeFocusTasks]);
 
   const refreshSnapshot = useCallback(async () => {
     const requestId = ++refreshRequestRef.current;
@@ -288,6 +292,8 @@ export function useToolsPageState({
   const resetPomodoro = useCallback(() => runAction("reset-pomodoro", ToolsRuntimeService.resetPomodoro), [runAction]);
 
   return {
+    freeFocus: (action: FreeFocusAction) => executeAction(`free-focus:${action.kind}:${action.id ?? "new"}`, () => ToolsRuntimeService.freeFocus(action)),
+    pomodoroTask: (action: PomodoroTaskAction) => executeAction(`pomodoro-task:${action.kind}:${action.id ?? "new"}`, () => ToolsRuntimeService.pomodoroTask(action)),
     hasSnapshot,
     loadError,
     snapshot,

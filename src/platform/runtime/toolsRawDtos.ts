@@ -17,6 +17,8 @@ import {
   isPlainRecord as isRecord,
 } from "../../shared/lib/runtimeTypeGuards.ts";
 
+import { isRawFreeFocusTask, mapFreeFocusTask, type RawFreeFocusTask } from "./freeFocusRawDto.ts";
+
 interface RawToolRuntimeSettings {
   pomodoro_focus_minutes: number;
   pomodoro_short_break_minutes: number;
@@ -73,7 +75,25 @@ interface RawToolPomodoroRun {
   updated_at: number;
 }
 
+interface RawToolPomodoroTask {
+  label: string;
+  completed_groups: number;
+  run: RawToolPomodoroRun;
+}
+
+function isRawToolPomodoroTask(value: unknown): value is RawToolPomodoroTask {
+  return isRecord(value) && typeof value.label === "string"
+    && typeof value.completed_groups === "number" && Number.isSafeInteger(value.completed_groups) && value.completed_groups >= 0
+    && isRawToolPomodoroRun(value.run);
+}
+
+function mapToolPomodoroTask(task: RawToolPomodoroTask) {
+  return { label: task.label, completedGroups: task.completed_groups, run: mapToolPomodoroRun(task.run) };
+}
+
 interface RawToolAlert {
+  free_focus?: RawFreeFocusTask | null;
+  pomodoro?: RawToolPomodoroTask | null;
   id: string;
   kind: ToolAlertKind;
   title: string;
@@ -91,6 +111,8 @@ interface RawToolAlert {
 }
 
 interface RawToolsRuntimeSnapshot {
+  free_focus_tasks: RawFreeFocusTask[];
+  pomodoro_tasks: RawToolPomodoroTask[];
   settings: RawToolRuntimeSettings;
   reminders: RawToolReminder[];
   activity_reminder_rules: RawToolActivityReminderRule[];
@@ -103,7 +125,7 @@ interface RawToolsRuntimeSnapshot {
 const REMINDER_STATUSES = new Set(["scheduled", "paused", "pending_confirmation", "fired", "cancelled"]);
 const POMODORO_PHASES = new Set(["focus", "short_break", "long_break"]);
 const POMODORO_STATUSES = new Set(["idle", "running", "paused", "completed"]);
-const TOOL_ALERT_KINDS = new Set(["reminder", "pomodoro", "activity_reminder"]);
+const TOOL_ALERT_KINDS = new Set(["reminder", "pomodoro", "activity_reminder", "free_focus"]);
 const ACTIVITY_REMINDER_SUSPENSION_REASONS = new Set([
   "source_disabled",
   "target_excluded",
@@ -206,7 +228,10 @@ function isRawToolPomodoroRun(value: unknown): value is RawToolPomodoroRun {
 
 function isRawToolsRuntimeSnapshot(value: unknown): value is RawToolsRuntimeSnapshot {
   if (!isRecord(value)) return false;
-  return isRawToolRuntimeSettings(value.settings)
+  return Array.isArray(value.free_focus_tasks) && value.free_focus_tasks.every(isRawFreeFocusTask)
+    && isRawToolRuntimeSettings(value.settings)
+    && Array.isArray(value.pomodoro_tasks)
+    && value.pomodoro_tasks.every(isRawToolPomodoroTask)
     && Array.isArray(value.reminders)
     && value.reminders.every(isRawToolReminder)
     && Array.isArray(value.activity_reminder_rules)
@@ -219,6 +244,8 @@ function isRawToolsRuntimeSnapshot(value: unknown): value is RawToolsRuntimeSnap
 
 function isRawToolAlert(value: unknown): value is RawToolAlert {
   if (!isRecord(value)) return false;
+  if (value.free_focus != null && (!isRawFreeFocusTask(value.free_focus) || value.kind !== "free_focus")) return false;
+  if (value.pomodoro != null && (!isRawToolPomodoroTask(value.pomodoro) || value.kind !== "pomodoro")) return false;
   const details = value.activity_reminder;
   if (details != null && (!isRecord(details)
     || !isNumber(details.rule_id) || !Number.isSafeInteger(details.rule_id) || details.rule_id <= 0
@@ -306,11 +333,13 @@ function mapToolPomodoroRun(raw: RawToolPomodoroRun): ToolPomodoroRun {
 function mapToolAlert(raw: RawToolAlert): ToolAlert {
   const details = raw.activity_reminder;
   return {
+    freeFocus: raw.free_focus ? mapFreeFocusTask(raw.free_focus) : null,
     id: raw.id,
     kind: raw.kind,
     title: raw.title,
     body: raw.body,
     occurredAt: raw.occurred_at,
+    ...(raw.pomodoro ? { pomodoro: mapToolPomodoroTask(raw.pomodoro) } : {}),
     ...(details ? { activityReminder: {
       ruleId: details.rule_id,
       dateKey: details.date_key,
@@ -329,10 +358,12 @@ export function parseToolsRuntimeSnapshot(value: unknown): ToolsRuntimeSnapshot 
   }
 
   return {
+    freeFocusTasks: value.free_focus_tasks.map(mapFreeFocusTask),
     settings: mapToolRuntimeSettings(value.settings),
     reminders: value.reminders.map(mapToolReminder),
     activityReminderRules: value.activity_reminder_rules.map(mapToolActivityReminderRule),
     currentPomodoro: value.current_pomodoro ? mapToolPomodoroRun(value.current_pomodoro) : null,
+    pomodoroTasks: value.pomodoro_tasks.map(mapToolPomodoroTask),
     todayCompletedPomodoros: value.today_completed_pomodoros,
     nextReminderAt: value.next_reminder_at,
     sampledAtMs: value.sampled_at_ms,

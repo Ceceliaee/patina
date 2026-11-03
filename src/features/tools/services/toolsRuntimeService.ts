@@ -20,6 +20,8 @@ import {
   resumePomodoro,
   skipPomodoroPhase,
   startPomodoro,
+  pomodoroTask,
+  freeFocus,
 } from "../../../platform/runtime/toolsRuntimeGateway.ts";
 
 export const ToolsRuntimeService = {
@@ -46,4 +48,7 @@ export const ToolsRuntimeService = {
   resumePomodoro,
   skipPomodoroPhase,
   startPomodoro,
+  pomodoroTask,
+  freeFocus,
 };
+export { loadAppIconsForExecutables as loadToolsIconsForExecutables } from "../../../platform/persistence/appIconRuntimeCache.ts";

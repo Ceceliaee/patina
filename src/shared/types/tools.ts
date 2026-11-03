@@ -8,7 +8,7 @@ export type ReminderStatus = "scheduled" | "paused" | "pending_confirmation" | "
 export type ReminderDelayMinutes = 5 | 15 | 30;
 export type PomodoroPhase = "focus" | "short_break" | "long_break";
 export type PomodoroStatus = "idle" | "running" | "paused" | "completed";
-export type ToolAlertKind = "reminder" | "pomodoro" | "activity_reminder";
+export type ToolAlertKind = "reminder" | "pomodoro" | "activity_reminder" | "free_focus";
 export interface ToolRuntimeSettings {
   pomodoroFocusMinutes: number;
   pomodoroShortBreakMinutes: number;
@@ -90,6 +90,8 @@ export interface ToolPomodoroRun {
 }
 
 export interface ToolsRuntimeSnapshot {
+  freeFocusTasks: FreeFocusTask[];
+  pomodoroTasks: ToolPomodoroTask[];
   settings: ToolRuntimeSettings;
   reminders: ToolReminder[];
   activityReminderRules: ToolActivityReminderRule[];
@@ -100,12 +102,14 @@ export interface ToolsRuntimeSnapshot {
 }
 
 export interface ToolAlert {
+  freeFocus?: FreeFocusTask | null;
   id: string;
   kind: ToolAlertKind;
   title: string;
   body: string;
   occurredAt: number;
   activityReminder?: ActivityReminderAlert | null;
+  pomodoro?: ToolPomodoroTask | null;
 }
 
 export type ActivityReminderExtension = "fifteen_minutes" | "one_hour" | "today";
@@ -140,3 +144,35 @@ export interface StartPomodoroInput {
   longBreakMs: number;
   longBreakEvery: number;
 }
+
+export interface ToolPomodoroTask {
+  label: string;
+  completedGroups: number;
+  run: ToolPomodoroRun;
+}
+
+export type PomodoroTaskAction =
+  | ({ kind: "save"; id: number | null; label: string } & StartPomodoroInput)
+  | { kind: "start_next"; id: number; expectedUpdatedAt: number }
+  | { kind: "resume" | "pause" | "skip" | "reset" | "delete"; id: number };
+
+export interface FreeFocusSettings {
+  restMode: "fixed" | "ratio";
+  restMinutes: number;
+  restRatio: number;
+}
+export interface FreeFocusTask extends FreeFocusSettings {
+  id: number;
+  label: string;
+  phase: "focus" | "break";
+  status: PomodoroStatus;
+  elapsedMs: number;
+  restRemainingMs: number;
+  startedAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+export type FreeFocusAction =
+  | ({ kind: "save"; id: number | null; label: string } & FreeFocusSettings)
+  | { kind: "start_next"; id: number; expectedUpdatedAt: number }
+  | { kind: "resume" | "pause" | "finish" | "reset" | "delete"; id: number };

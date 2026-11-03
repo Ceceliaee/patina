@@ -30,7 +30,7 @@ export function formatHms(ms: number): string {
   return `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`;
 }
 
-function formatCompactDuration(ms: number): string {
+export function formatCompactDuration(ms: number): string {
   const safeMs = Math.max(0, ms);
   if (safeMs >= MS_PER_HOUR) {
     return formatHms(safeMs);
@@ -133,7 +133,7 @@ export function buildPomodoroViewModel(
   return {
     phase,
     phaseLabel: pomodoroPhaseLabel(phase, labels),
-    remainingLabel: formatHms(run ? getPomodoroRemainingMs(run, nowMs) : snapshot.settings.pomodoroFocusMinutes * MS_PER_MINUTE),
+    remainingLabel: formatCompactDuration(run ? getPomodoroRemainingMs(run, nowMs) : snapshot.settings.pomodoroFocusMinutes * MS_PER_MINUTE),
     cycleLabel: labels.cycle(run?.cycleIndex ?? 1, run?.longBreakEvery ?? snapshot.settings.pomodoroLongBreakEvery),
     todayCompletedLabel: labels.completedToday(snapshot.todayCompletedPomodoros),
   };
@@ -186,6 +186,13 @@ export function buildToolsStatusChipViewModels(
   const chips: SortableToolStatusChipViewModel[] = [];
   let sortIndex = 0;
   const pomodoro = snapshot.currentPomodoro;
+  const free = snapshot.freeFocusTasks.find(task => task.status === "running");
+  if (free) {
+    const delta = Math.max(0, nowMs - (free.startedAt ?? nowMs));
+    const time = free.phase === "focus" ? free.elapsedMs + delta : Math.max(0, free.restRemainingMs - delta);
+    chips.push({ label: `${free.phase === "focus" ? labels.chipFocus : labels.chipBreak} ${formatCompactDuration(time)}`,
+      targetSection: "pomodoro", sortIndex: sortIndex++, sortStartedAtMs: free.startedAt ?? free.createdAt });
+  }
   if (pomodoro?.status === "running") {
     const phaseLabel = pomodoro.phase === "focus" ? labels.chipFocus : labels.chipBreak;
     chips.push({

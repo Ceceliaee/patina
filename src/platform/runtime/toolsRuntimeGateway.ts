@@ -7,6 +7,8 @@ import type {
   ReminderDelayMinutes,
   ReminderRecurrence,
   StartPomodoroInput,
+  PomodoroTaskAction,
+  FreeFocusAction,
   ToolAlert,
   ToolsRuntimeSnapshot,
 } from "../../shared/types/tools.ts";
@@ -47,6 +49,10 @@ export function createToolsRuntimeGateway(deps: ToolsRuntimeGatewayDeps) {
   }
 
   return {
+    freeFocus(action: FreeFocusAction): Promise<ToolsRuntimeSnapshot> { return invokeToolsSnapshot("cmd_free_focus", { action }); },
+    pomodoroTask(action: PomodoroTaskAction): Promise<ToolsRuntimeSnapshot> {
+      return invokeToolsSnapshot("cmd_pomodoro_task", { action });
+    },
     getToolsSnapshot(): Promise<ToolsRuntimeSnapshot> {
       return invokeToolsSnapshot("cmd_get_tools_snapshot");
     },
@@ -174,6 +180,8 @@ export const disableActivityReminderRule = defaultToolsRuntimeGateway.disableAct
 export const setActivityReminderEnabled = defaultToolsRuntimeGateway.setActivityReminderEnabled;
 export const updateActivityReminderLimit = defaultToolsRuntimeGateway.updateActivityReminderLimit;
 export const startPomodoro = defaultToolsRuntimeGateway.startPomodoro;
+export const freeFocus = defaultToolsRuntimeGateway.freeFocus;
+export const pomodoroTask = defaultToolsRuntimeGateway.pomodoroTask;
 export const pausePomodoro = defaultToolsRuntimeGateway.pausePomodoro;
 export const resumePomodoro = defaultToolsRuntimeGateway.resumePomodoro;
 export const skipPomodoroPhase = defaultToolsRuntimeGateway.skipPomodoroPhase;
