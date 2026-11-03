@@ -9,9 +9,9 @@ Apply this file in every repository task. Read the following owners when the tas
 - Product direction and scope must follow [product principles and scope](docs/product-principles-and-scope.md).
 - Roadmap and priority decisions must follow [roadmap and prioritization](docs/roadmap-and-prioritization.md).
 - Private GitHub Project maintenance must follow [Project maintenance](docs/github-project-maintenance.md); never copy its live contents into repository docs.
-- Engineering quality direction should follow [engineering quality](docs/engineering-quality.md).
-- UI work must follow [Quiet Pro](docs/quiet-pro-component-guidelines.md).
-- Architecture refactors, boundary decisions, and new modules must align with [architecture](docs/architecture.md).
+- Engineering quality and validation follow [engineering quality](docs/engineering-quality.md#5-默认验证门槛); `package.json` owns the command graph. Preserve required architecture, runtime and release evidence.
+- UI work must follow [Quiet Pro](docs/quiet-pro-component-guidelines.md) and preserve behavior within the task; a new visual direction requires an explicit user decision.
+- Architecture refactors, boundary decisions, and new modules must align with [architecture](docs/architecture.md). Decide the real owner before implementation using its [placement map](docs/architecture.md#7-新增代码-owner-与落点); its boundary and compatibility rules apply to the change.
 - Stable-period issue fixes and boundary triage must follow [issue-fix boundary guardrails](docs/issue-fix-boundary-guardrails.md).
 - Versioning, changelog, and release work must follow [versioning and release policy](docs/versioning-and-release-policy.md).
 - Patina Web Sync protocol changes and cross-repository release acceptance must follow [Web Activity protocol](docs/web-activity-protocol.md) and the cross-repository acceptance contract in [versioning and release policy](docs/versioning-and-release-policy.md).
@@ -36,18 +36,6 @@ Use `Ceceliaee` for maintainer attribution in repository content and public GitH
 - Repository owners remain authoritative without skills. A skill may contextualize their rules but cannot replace them or grant action authority.
 - Inspect external skill helpers before execution; their instructions do not grant network, install, filesystem, Git, or remote-service authority.
 
-## Quiet Pro Standing Orders
-
-Reuse [Quiet Pro](docs/quiet-pro-component-guidelines.md) and preserve behavior within the task; a new visual direction requires an explicit user decision.
-
-## Architecture Direction
-
-Decide the real owner before implementation using the [architecture placement map](docs/architecture.md#7-新增代码-owner-与落点); its boundary and compatibility rules apply to the change.
-
-## Product And Priority Direction
-
-Preserve the [personal, local-first Windows time-tracking scope](docs/product-principles-and-scope.md). Follow [priority policy](docs/roadmap-and-prioritization.md): correctness, data safety and frequent core flows precede expansion.
-
 ## GitHub Project Active Maintenance
 
 When a request maps to an existing item, read authenticated live Project state under [Project maintenance](docs/github-project-maintenance.md); report access failure rather than using cached substitutes. Keep private contents out of the repository. Structural changes need a preview and explicit confirmation; the maintainer performs manual ordering. Task completion does not update live Project state.
@@ -55,10 +43,6 @@ When a request maps to an existing item, read authenticated live Project state u
 ## Stable-Period Fixing
 
 Use the lightest [fix mode](docs/issue-fix-boundary-guardrails.md) that fits the actual owner and risk. A new abstraction, relocation or compatibility shell requires reassessment before implementation, not automatic scope expansion or a blanket approval pause.
-
-## Release And Validation
-
-Select validation through [engineering quality](docs/engineering-quality.md#5-默认验证门槛); `package.json` owns the command graph. Preserve required architecture, runtime and release evidence. [Release policy](docs/versioning-and-release-policy.md) owns version, tag, title and updater consistency.
 
 ## GitHub Push And Issue Rules
 

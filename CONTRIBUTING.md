@@ -374,14 +374,8 @@ requesting review. Validation requirements are owned by
 [`docs/engineering-quality.md`](docs/engineering-quality.md#5-默认验证门槛);
 [`package.json`](package.json) defines each command's checks and execution order.
 
-Use owner-focused feedback while editing, cover the module and its real consumers
-when a behavior is complete, and run the default gates on a stable candidate.
-The [layered entry guide](docs/engineering-quality.md#51-测试分层与稳定性治理)
-explains explicit browser/Rust selection, native feedback, preparation reuse and
-when to expand validation. Focused results do not replace complete acceptance.
-CI has not taken over the current local candidate obligations; only a complete
-successful run for the same candidate can support a documented handoff. Keep
-failed, cancelled, stale and unrun evidence distinct from passing results.
+For validation stages, evidence reuse and local/CI responsibilities, follow the
+[layered entry guide](docs/engineering-quality.md#51-测试分层与稳定性治理).
 
 ### 6.1 Default Code Validation
 
@@ -400,9 +394,8 @@ requires full validation for the actual change, run:
 pnpm run check:full
 ```
 
-For IPC registration, capability, plugin SQL, or real desktop-runtime changes,
-also run `pnpm run test:tauri-runtime-smoke` on Windows. For performance-sensitive
-read-model, SQLite-query, or navigation work, also run `pnpm run perf:stable`.
+Select additional native and performance checks through
+[risk-based desktop validation](docs/engineering-quality.md#风险追加与桌面验收).
 
 ### 6.3 Release Validation
 
@@ -420,13 +413,8 @@ When preparing a formal release, run:
 pnpm run release:check
 ```
 
-[Release policy](docs/versioning-and-release-policy.md) owns version, tag,
-updater, and packaging contracts. Its
-[release validation requirements](docs/versioning-and-release-policy.md#10-发布前的最低验证门槛)
-also cover version consistency, independent artifact checks, workflow
-responsibilities, and the local-build exception for release-pipeline diagnosis.
-Changes to code, runtime behavior, or workflows retain their applicable
-validation requirements.
+Follow the [release policy](docs/versioning-and-release-policy.md) and its
+[release validation requirements](docs/versioning-and-release-policy.md#10-发布前的最低验证门槛).
 
 ### 6.4 Documentation-Only Changes
 
@@ -606,19 +594,17 @@ backup or restore behavior, or a boundary you do not fully understand.
 Review is not only a style pass. The main purpose is to protect trustworthy
 tracking behavior, local data, clear ownership, and long-term maintainability.
 
-### 9.1 Review Order
+### 9.1 Review Considerations
 
-Reviewers should check in this order:
-
-1. Does the change solve the stated problem?
-2. Does it fit the current product scope?
-3. Does the diff contain unrelated changes?
-4. Is the code placed under the correct owner?
-5. Could it affect tracking correctness, local data, privacy, or security?
-6. Are failure states visible and recoverable?
-7. Do tests cover the new risk?
-8. Does the branch conflict with the latest `main`?
-9. Are remaining style or naming improvements worth blocking the merge?
+- Does the change solve the stated problem?
+- Does it fit the current product scope?
+- Does the diff contain unrelated changes?
+- Is the code placed under the correct owner?
+- Could it affect tracking correctness, local data, privacy, or security?
+- Are failure states visible and recoverable?
+- Do tests cover the new risk?
+- Does the branch conflict with the latest `main`?
+- Are remaining style or naming improvements worth blocking the merge?
 
 ### 9.2 Blocking Issues
 
@@ -1012,10 +998,8 @@ Refs #4
 [`docs/engineering-quality.md`](docs/engineering-quality.md#5-默认验证门槛) 拥有；
 各命令的检查组成和执行顺序以 [`package.json`](package.json) 为准。
 
-编辑时先验证命中 owner，行为完成后覆盖模块及真实消费者，候选稳定后集中运行默认门槛。
-[分层入口指引](docs/engineering-quality.md#51-测试分层与稳定性治理)说明浏览器/Rust 显式选测、
-原生短反馈、构建准备复用与升级条件；定向结果不替代完整验收。当前本地候选义务尚未转交 CI；
-只有同一候选的完整成功运行才能支持有记录的职责切换。失败、取消、陈旧和未运行证据须与通过分开。
+验证阶段、证据复用和本地/CI 职责遵循
+[分层入口指引](docs/engineering-quality.md#51-测试分层与稳定性治理)。
 
 #### 6.1 默认代码验证
 
@@ -1034,9 +1018,7 @@ pnpm run check
 pnpm run check:full
 ```
 
-如果改动 IPC 注册、capability、plugin SQL 或真实桌面 runtime，还应在 Windows
-运行 `pnpm run test:tauri-runtime-smoke`。如果改动性能敏感的 read model、SQLite
-查询或导航路径，还应运行 `pnpm run perf:stable`。
+原生与性能追加检查按[风险追加与桌面验收](docs/engineering-quality.md#风险追加与桌面验收)选择。
 
 #### 6.3 发布验证
 
@@ -1053,10 +1035,8 @@ pnpm run release:validate-changelog
 pnpm run release:check
 ```
 
-[发布规范](docs/versioning-and-release-policy.md) 拥有版本、tag、updater 与打包契约。
-其中的[发布验证要求](docs/versioning-and-release-policy.md#10-发布前的最低验证门槛)
-还规定版本一致性、独立产物检查、工作流职责，以及排查发布流水线时的本地构建例外。
-代码、runtime 行为或工作流变化仍需满足各自适用的验证要求。
+遵循[发布规范](docs/versioning-and-release-policy.md)及其
+[发布验证要求](docs/versioning-and-release-policy.md#10-发布前的最低验证门槛)。
 
 #### 6.4 仅文档改动
 
@@ -1224,19 +1204,17 @@ git rebase --abort
 Review 不只是样式检查。它的主要目的是保护可信的 tracking 行为、本地数据、
 清晰职责和长期可维护性。
 
-#### 9.1 Review 顺序
+#### 9.1 Review 要点
 
-Review 时应按以下顺序检查：
-
-1. 改动是否解决了所描述的问题？
-2. 改动是否符合当前产品范围？
-3. diff 中是否包含无关修改？
-4. 代码是否放在正确的 owner 下？
-5. 是否可能影响 tracking 正确性、本地数据、隐私或安全？
-6. 失败状态是否可见、可恢复？
-7. 测试是否覆盖了新增风险？
-8. 分支是否与最新 `main` 冲突？
-9. 剩余样式或命名改进是否值得阻塞合并？
+- 改动是否解决了所描述的问题？
+- 改动是否符合当前产品范围？
+- diff 中是否包含无关修改？
+- 代码是否放在正确的 owner 下？
+- 是否可能影响 tracking 正确性、本地数据、隐私或安全？
+- 失败状态是否可见、可恢复？
+- 测试是否覆盖了新增风险？
+- 分支是否与最新 `main` 冲突？
+- 剩余样式或命名改进是否值得阻塞合并？
 
 #### 9.2 必须在合并前解决的问题
 

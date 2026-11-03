@@ -10,8 +10,6 @@
 ![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%20v2-4f7f8f)
 ![Local first](https://img.shields.io/badge/data-local--first-5f7f68)
 [![License](https://img.shields.io/badge/license-MIT-6f647a)](LICENSE)
-[![Downloads](https://img.shields.io/github/downloads/Ceceliaee/patina/total?label=downloads&color=b07a3a)](https://github.com/Ceceliaee/patina/releases)
-[![Latest downloads](https://img.shields.io/github/downloads/Ceceliaee/patina/latest/total?label=latest&color=8f6f4f)](https://github.com/Ceceliaee/patina/releases/latest)
 [![GitHub stars](https://img.shields.io/github/stars/Ceceliaee/patina?style=social)](https://github.com/Ceceliaee/patina/stargazers)
 
 </div>
