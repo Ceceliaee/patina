@@ -99,7 +99,8 @@ export const RISK_AREAS = [
     id: "tools-alerts",
     label: "tools alert behavior",
     paths: [
-      /^src\/features\/tools\/hooks\/useToolAlerts\.ts$/,
+      /^src\/features\/tools\/(hooks\/useToolPresentation|services\/toolPresentationStore)\.ts$/,
+      /^src\/platform\/runtime\/toolNotificationGateway\.ts$/,
       /^src\/features\/tools\/components\/(?:NotificationToastStack|ToolAlertDialog)\.tsx$/,
     ],
     tests: [
@@ -264,6 +265,15 @@ function hasCheckedItem(section: string, label: string) {
   return new RegExp(`^-\\s*\\[[xX]\\]\\s*${escaped}(?:\\s|$)`, "im").test(section);
 }
 
+function hasCheckedTestCommand(section: string) {
+  return [...section.matchAll(/^-\s*\[[xX]\]\s*`([^`\r\n]+)`(?:\s|$)/gm)].some(([, command]) =>
+    /^pnpm (?:run )?test(?::[\w:-]+)?(?:\s|$)/.test(command)
+    || /^pnpm run check:rust(?:\s|$)/.test(command)
+    || /^node\s+(?:--[\w=-]+\s+)*tests\/[\w./-]+\.test\.ts(?:\s|$)/.test(command)
+    || /^cargo test(?:\s|$)/.test(command),
+  );
+}
+
 function hasRepeatableUiValidation(section: string) {
   const match = stripComments(section).match(/^-\s*Repeatable test or existing owner test:\s*(\S.*)$/im);
   if (!match) return false;
@@ -344,9 +354,11 @@ export function evaluatePullRequestBody(
     if (!hasLabeledValue(risk, label)) incomplete.push(`Risk Review must complete ${label} (use N/A when unaffected)`);
   }
   const validation = stripComments(getBodySection(body, "Validation"));
-  if (!hasCheckedItem(validation, "`pnpm run check`")) {
+  if (!hasCheckedItem(validation, "`pnpm run check`") && !hasCheckedItem(validation, "`pnpm run check:full`")) {
     if (!isDocumentationOnlyDiff(changedFiles)) {
-      incomplete.push("Validation must confirm pnpm run check was run; check:docs is only accepted for a known, nonempty repository-documentation diff");
+      if (changedFiles.length === 0 || !hasCheckedTestCommand(validation)) {
+        incomplete.push("Validation must confirm related test commands were run for the changed behavior; documentation or static checks alone do not cover code changes");
+      }
     } else {
       if (!hasCheckedItem(validation, "`pnpm run check:docs`")) incomplete.push("Validation must confirm pnpm run check:docs or pnpm run check was run");
       const changesGovernance = changedFiles.some((file) =>

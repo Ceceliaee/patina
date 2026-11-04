@@ -87,6 +87,40 @@ function testAcceptedScopeDoesNotRequireMaintainerLabel() {
   }), []);
 }
 
+function testRelatedValidationCanReplaceLocalAggregate() {
+  for (const command of [
+    "pnpm run test:settings",
+    "pnpm run test:ui-browser-smoke --group tools",
+    "node --experimental-strip-types tests/settingsPageState.test.ts",
+    "pnpm run test:rust:focused --filter settings",
+    "cargo test --manifest-path src-tauri/Cargo.toml settings",
+    "pnpm run check:full",
+  ]) {
+    assert.deepEqual(ruleNames({
+      pullRequestBody: VALID_BODY.replace("`pnpm run check`", `\`${command}\``),
+      requirePullRequestBody: true,
+      changedFiles: [changedFile({}), changedFile({ path: "tests/settingsPageState.test.ts", additions: 20, deletions: 0 })],
+      registeredTypeScriptTests: ["tests/settingsPageState.test.ts"],
+    }), [], command);
+  }
+}
+
+function testRelatedValidationRequiresCheckedTestEvidence() {
+  for (const evidence of [
+    "- [ ] `pnpm run test:settings`",
+    "<!-- - [x] `pnpm run test:settings` -->",
+    "- [x] Added or updated focused tests for the changed behavior",
+    "- [x] `pnpm run check:types`",
+    "- [x] `pnpm run check:docs`",
+  ]) {
+    assert.ok(ruleNames({
+      pullRequestBody: VALID_BODY.replace("- [x] `pnpm run check`", evidence),
+      requirePullRequestBody: true,
+      changedFiles: [changedFile({})],
+    }).includes("incomplete-pr-sections"), evidence);
+  }
+}
+
 function testMissingAcceptedScopeFails() {
   const body = VALID_BODY.replace("- Refs #123", "- Linked issue / Project item / maintainer approval:");
   assert.ok(ruleNames({
@@ -445,7 +479,7 @@ function testToolsAlertRiskRequiresToolsTests() {
     requirePullRequestBody: true,
     changedFiles: [
       changedFile({
-        path: "src/features/tools/hooks/useToolAlerts.ts",
+        path: "src/features/tools/hooks/useToolPresentation.ts",
         additions: 20,
         deletions: 5,
       }),
@@ -462,7 +496,7 @@ function testToolsAlertRiskRequiresToolsTests() {
     requirePullRequestBody: true,
     changedFiles: [
       changedFile({
-        path: "src/features/tools/hooks/useToolAlerts.ts",
+        path: "src/features/tools/hooks/useToolPresentation.ts",
         additions: 20,
         deletions: 5,
       }),
@@ -1273,6 +1307,8 @@ function testLegacyPrTemplateCanBeSkipped() {
 }
 
 testValidFocusedPrPasses();
+testRelatedValidationCanReplaceLocalAggregate();
+testRelatedValidationRequiresCheckedTestEvidence();
 testAcceptedScopeDoesNotRequireMaintainerLabel();
 testMissingAcceptedScopeFails();
 testUncheckedContributorChecklistFails();
@@ -1319,4 +1355,4 @@ testValidationChainCanGrowButCannotBeWeakened();
 testIntakeCliRejectsSuccessfulShellShortCircuit();
 testLegacyPrTemplateCanBeSkipped();
 
-console.log("Passed 46 PR intake and immutable candidate gate tests");
+console.log("Passed 48 PR intake and immutable candidate gate tests");

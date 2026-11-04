@@ -379,7 +379,9 @@ For validation stages, evidence reuse and local/CI responsibilities, follow the
 
 ### 6.1 Default Code Validation
 
-For frontend, UI, settings, read-model, or general code changes:
+For local changes, run the related tests and static checks selected under
+[engineering quality §5](docs/engineering-quality.md#5-默认验证门槛).
+For cross-module frontend behavior:
 
 ```bash
 pnpm run check
@@ -994,7 +996,7 @@ Refs #4
 
 纯文案工作可直接进入[文档检查](#64-仅文档改动)。
 
-实现过程中先运行专项检查，请求 review 前再运行所需的完整验证。验证要求由
+实现和请求 review 时，按实际影响范围运行相关验证。验证要求由
 [`docs/engineering-quality.md`](docs/engineering-quality.md#5-默认验证门槛) 拥有；
 各命令的检查组成和执行顺序以 [`package.json`](package.json) 为准。
 
@@ -1003,7 +1005,8 @@ Refs #4
 
 #### 6.1 默认代码验证
 
-对于前端、UI、设置、读模型或一般代码改动：
+局部改动按[工程质量第 5 节](docs/engineering-quality.md#5-默认验证门槛)运行相关测试和静态检查。
+前端跨模块行为改动运行：
 
 ```bash
 pnpm run check

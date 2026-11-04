@@ -49,7 +49,7 @@ schema 条目可增加语言无关的 `description` 和 `translatorNote`。翻�
 3. 若标准原文 `zh-CN` 的语义发生变化，重新人工复核其他语言，再运行 `pnpm run i18n:review <locale> --key <message-key>` 明确确认该条翻译；不得直接手改 hash。
 4. 运行 `pnpm run i18n:generate`。
 5. 业务调用方只使用生成的 `UiText` 或 Rust localizer API。
-6. 运行 `pnpm run check:i18n:self-test`、`pnpm run check:i18n` 和命中的功能测试。
+6. 运行 `pnpm run check:i18n`、相关类型检查和命中的功能测试。仅修改现有文案或译文不默认运行工具自测；修改消息契约、格式化、生成或校验工具及其相关依赖时，按[工程质量](./engineering-quality.md#7-本地化质量路由)追加对应行为测试和自测。
 
 不要通过修改 generated 文件、复制中英文分支或扩大硬编码例外来让检查通过。
 
@@ -248,6 +248,6 @@ DSL validator 会同时检查操作数类型和值域。例如数值必须有限
 - `pnpm run check:i18n`：资源完整性、参数、CLDR 类别、source-review hash、generated stale 和硬编码。
 - `pnpm run check:types`：生成类型与调用方一致性。
 - `pnpm run check:rust`：Rust 格式化、测试、边界和 clippy。
-- `pnpm run check:full`：结构性本地化修改的最终门槛。
+- `pnpm run check:full`：涉及跨模块、Rust 或公共生成链路的本地化修改；局部修改按[工程质量](./engineering-quality.md#5-默认验证门槛)选择相关验证。
 
 任何检查失败都应修复 owner 或契约，不应直接修改生成产物。

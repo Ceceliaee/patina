@@ -18,6 +18,7 @@ import { tauriBrowserSmokeStubPlugin } from "./uiBrowserSmoke/tauriStubs.ts";
 import { runStartupScenarios } from "./uiBrowserSmoke/startupScenarios.ts";
 import { runAboutScenarios } from "./uiBrowserSmoke/aboutScenarios.ts";
 import { runToolsScenarios } from "./uiBrowserSmoke/toolsScenarios.ts";
+import { runFreeFocusScenarios } from "./uiBrowserSmoke/freeFocusScenarios.ts";
 import { runNavigationScenarios } from "./uiBrowserSmoke/navigationScenarios.ts";
 import { runRemoteBackupRecoveryScenarios, runSettingsScenarios } from "./uiBrowserSmoke/settingsScenarios.ts";
 import { runClassificationScenarios } from "./uiBrowserSmoke/classificationScenarios.ts";
@@ -215,6 +216,8 @@ try {
     await runAboutScenarios(smokeContext);
   } else if (group === "tools") {
     await runToolsScenarios(smokeContext);
+  } else if (group === "free-focus") {
+    await runFreeFocusScenarios(smokeContext);
   } else if (group === "navigation") {
     await runNavigationScenarios(smokeContext);
   } else if (group === "dashboard") {

@@ -9,7 +9,8 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && pnpm run build:assets",
+    "build:assets": "vite build",
     "test": "pnpm run test:fast:covered && pnpm run test:fast:remaining",
     "test:tracking": "node --experimental-strip-types --experimental-specifier-resolution=node tests/trackingLifecycle.test.ts",
     "test:replay": "node --experimental-strip-types --experimental-specifier-resolution=node tests/trackingReplay.test.ts",
@@ -85,7 +86,7 @@
     "check:rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check",
     "check:rust": "pnpm run check:rust-boundaries:self-test && pnpm run check:rust-boundaries && pnpm run check:rust:fmt && node --experimental-strip-types scripts/run-cargo-quality.ts check --manifest-path src-tauri/Cargo.toml --locked --quiet && node --experimental-strip-types scripts/run-cargo-quality.ts test --manifest-path src-tauri/Cargo.toml --locked --quiet && pnpm run check:rust:clippy",
     "check:full": "pnpm run check && pnpm run check:rust && pnpm run check:dependencies",
-    "check": "pnpm run check:toolchain && pnpm run check:i18n:self-test && pnpm run check:i18n && pnpm run check:docs:self-test && pnpm run check:docs && pnpm run check:types && pnpm run check:lint && pnpm run check:coverage-thresholds:self-test && pnpm run check:naming && pnpm run check:architecture:self-test && pnpm run check:architecture && pnpm run check:ipc-contracts:self-test && pnpm run check:ipc-contracts && pnpm run check:hotspots:self-test && pnpm run check:hotspots && pnpm run check:quiet-pro-style-debt:self-test && pnpm run check:quiet-pro-style-debt && pnpm run check:test-governance:self-test && pnpm run check:test-governance && pnpm run check:tests && pnpm run check:frontend",
+    "check": "pnpm run check:toolchain && pnpm run check:i18n:self-test && pnpm run check:i18n && pnpm run check:docs:self-test && pnpm run check:docs && pnpm run check:types && pnpm run check:lint && pnpm run check:coverage-thresholds:self-test && pnpm run check:naming && pnpm run check:architecture:self-test && pnpm run check:architecture && pnpm run check:ipc-contracts:self-test && pnpm run check:ipc-contracts && pnpm run check:hotspots:self-test && pnpm run check:hotspots && pnpm run check:quiet-pro-style-debt:self-test && pnpm run check:quiet-pro-style-debt && pnpm run check:test-governance:self-test && pnpm run check:test-governance && pnpm run check:tests && pnpm run build:assets && pnpm run check:bundle",
     "perf:history-read-model": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/perf/history-read-model-benchmark.ts",
     "perf:dashboard-read-model": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/perf/dashboard-read-model-benchmark.ts",
     "perf:data-read-model": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/perf/data-read-model-benchmark.ts",

@@ -64,17 +64,21 @@
 
 ## 5. 默认验证门槛
 
-本地验证按实际改动选择，先确定候选最终需要的证据，再用第 5.1 节安排编辑和模块反馈：
+局部改动以覆盖实际行为、消费者和失败路径的相关验证作为本地完成条件；不因任务收尾、提交或推送而升级为全量测试。全量验证用于 CI、正式发布和跨模块改动。现有定向入口见第 5.1 节：
 
-| 实际改动 | 稳定候选的默认入口与边界 |
+| 实际改动 | 本地验收范围 |
 | --- | --- |
 | 纯文档 | `pnpm run check:docs`，核对事实、UTF-8、链接和义务；治理或验证政策变化追加 `pnpm run check:docs:self-test` 及受影响规则的正反场景 |
-| 前端行为 | `pnpm run check`；纯展示也在此列，不因页面展示 tracking 数据就推定改变 tracking 契约 |
-| Rust、架构实现边界、依赖、发布级复核，或 tracking 正确性、SQLite 数据行为、桌面 runtime 契约 | `pnpm run check:full`，并按下文追加命中风险的专项 |
+| 局部前端行为、展示或选项持久化 | 相关单元/契约测试、受影响交互的 browser 组，以及相关类型、Lint、架构或本地化检查；不运行无关页面回归 |
+| 局部 Rust、tracking、SQLite 或桌面 runtime 行为 | 受影响模块及真实消费者的测试、相关 Rust 静态检查和命中风险的原生/数据专项；不因涉及 Rust 或持久化就运行全仓测试 |
+| 跨模块改动 | 前端跨模块行为运行 `pnpm run check`；涉及 Rust、跨进程契约、公共依赖或构建/测试基础设施时运行 `pnpm run check:full`，并补命中风险的专项 |
+| 正式发布 | `pnpm run release:check`，并遵循[发布验收](versioning-and-release-policy.md#10-发布前的最低验证门槛) |
+
+按行为影响判断跨模块，不按文件数量判断：一个功能的组件、存储 helper 和测试可以属于局部改动；公共 API、共享状态、全局样式、schema、权限或依赖变化若影响多个消费者，则覆盖这些消费者并使用跨模块门槛。影响范围不明时先追踪调用与数据流，再扩大到能覆盖影响的范围。
 
 检查器、模板或操作说明变化还须验证真实使用路径，扩展名不能豁免风险。纯文档不默认运行应用构建、browser 或 Rust 全套。`package.json` 是命令组合、顺序与叶子测试的唯一 owner；长期 prose 不复制执行图。顶层门禁不得静默移除既有检查、测试、coverage include 或阈值。
 
-`check:full` 必须在默认门槛之外验证 Rust 边界、格式、编译、测试、clippy 与依赖安全。依赖审计只允许经 Windows target 依赖树证明不可达的精确 advisory；受控离线模式仍须运行本地快照和例外可达性校验，但不能替代发布 CI 的联网新鲜度。
+`check:full` 覆盖前端完整检查、Rust 边界、格式、编译、测试、clippy 与依赖安全。依赖审计只允许经 Windows target 依赖树证明不可达的精确 advisory；受控离线模式仍须运行本地快照和例外可达性校验，但不能替代发布 CI 的联网新鲜度。
 
 Node 与 Rust 工具链版本分别由根 `.node-version` 与 `rust-toolchain.toml` 拥有；pnpm 版本由 `package.json#packageManager` 拥有。CI 读取这些来源，`engines` 保持受测试的精确镜像。安装布局、依赖构建脚本许可和 override 由 `pnpm-workspace.yaml` 拥有；冻结安装消费唯一 JS 锁文件 `pnpm-lock.yaml`，仓库仍使用 npm registry。第三方 GitHub Actions 固定到完整 commit SHA，并保留对应主版本注释；可移动 tag 不能成为长期执行引用。
 
@@ -82,20 +86,20 @@ JS 离线审计只接受最近 24 小时内成功联网审计生成、且 SHA-25
 
 风险追加验证、当前命令名与其组合关系由下面的风险路由和 `package.json` 共同决定，不能用文档中的旧叶子清单覆盖机器事实。
 
-验证证据绑定受影响的输入、环境和风险。同一任务中相关输入未变化、证据仍有效时，不因接下来提交、推送或补写执行记录而重复检查；代码、配置、依赖、base 或验证规则变化后重新判断受影响范围，只重跑失效的证据。风险匹配不能用来跳过本节要求的默认门槛。无法运行的检查应明确原因、残余风险和验证责任，不得记为通过。
+验证证据绑定受影响的输入、环境和风险。同一任务中相关输入未变化、证据仍有效时，不因接下来提交、推送或补写执行记录而重复检查；代码、配置、依赖、base 或验证规则变化后重新判断受影响范围，只重跑失效的证据。无法运行的相关检查应明确原因和残余风险，不得记为通过。
 
 ### 5.1 测试分层与稳定性治理
 
-验证分为编辑反馈、模块验证和稳定候选验收。编辑时运行命中 owner 的最小有效检查；一个行为单元完成后覆盖共享 helper、实际消费者及故障路径；候选稳定后集中运行本节的默认门槛和适用专项。每次保存、小修或提交都不是重新跑全套的触发条件。修复失败后重验失效范围；共享状态、执行顺序或聚合编排改变时重验对应组合。数据安全、权限和跨进程风险可提前升级，不能等待最终收尾才发现。
+编辑时运行命中 owner 的最小有效检查；完成时确认相关检查覆盖实际消费者及故障路径，局部改动即可结束本地验证。跨模块改动和正式发布按第 5 节运行全量入口。修复失败后只重验失效范围；共享状态、执行顺序或聚合编排改变时重验对应组合。数据安全、权限和跨进程风险应在实现过程中验证。
 
-本地负责上述早反馈、可重现失败及当前默认候选门槛；CI 负责可信候选的完整集合、双架构与独立 runtime，发布另按[发布政策](versioning-and-release-policy.md)验收。本地义务只有在对应范围取得同一候选 CI 必需 job 的完整成功证据、参数/环境/失败传播等价且本节明确切换后才能转交；当前尚未切换。旧候选、失败、取消、跳过或未运行均不算接管。仅交接开发进度时应说明已验范围与未完成验收，不声称候选通过。
+本地按实际影响范围验收；CI 负责可信候选的完整集合、双架构与独立 runtime，发布另按[发布政策](versioning-and-release-policy.md)验收。局部任务完成不以本地全量或等待 CI 为前提；合并仍需同一候选的必需 CI 检查成功。报告已验证的范围，不能把局部通过表述为全量或 CI 通过。
 
 开发入口按层选择，不另建代码影响图：
 
 | 改动 | 编辑与模块反馈 | 扩大范围的条件 |
 | --- | --- | --- |
-| TS/model、SSR、共享组件 | 使用 `package.json` 中对应叶子；单文件可直接 `node --experimental-strip-types tests/<file>.test.ts` | 公共 helper/组件覆盖实际消费者；候选回到默认门槛 |
-| 文档、i18n、结构检查器 | 文档按第 5 节选择检查及 self-test；i18n 和结构检查器运行命中 checker 与其 self-test，消息资源再按第 7 节验证 | 政策或命令变化验证真实使用路径；扩展名不决定风险 |
+| TS/model、SSR、共享组件 | 使用 `package.json` 中对应叶子；单文件可直接 `node --experimental-strip-types tests/<file>.test.ts` | 公共 helper/组件覆盖实际消费者；影响跨模块时运行全量 |
+| 文档、i18n、结构检查器 | 文档按第 5 节选择检查及 self-test；资源变化运行对应 checker；检查器、生成器及相关契约或依赖变化追加相应自测，消息资源按第 7 节验证 | 政策或命令变化验证真实使用路径；扩展名不决定风险 |
 | Browser | `pnpm run test:ui-browser-smoke --group <name>`；可选组由[参数 owner](../tests/uiBrowserSmoke/options.ts)持有 | stub IPC 只证明 DOM/交互；权限、落盘与原生行为进入 runtime |
 | Rust、SQLite、权限模型 | `pnpm run test:rust:focused --filter <module-or-name>`；集成测试加 `--test <target>`，精确名称加 `--exact` | 共享类型、并发和恢复覆盖消费者；真实数据/权限边界补对应 runtime 组 |
 | 原生窗口、进程、恢复、输入 | `pnpm run test:tauri-runtime-smoke --group <name> --feedback --prepared <manifest>` | feedback 不证明完整 acceptance；时间边界与资源风险仍运行原组或资源入口 |
@@ -139,13 +143,13 @@ JS 离线审计只接受最近 24 小时内成功联网审计生成、且 SHA-25
 
 命中风险时追加验证：
 
-- 改动 Rust tracking 主链、数据边界或恢复路径：追加 `pnpm run check:rust`
-- 改动 IPC 注册、capability、SQLite plugin 或真实桌面运行时：追加 `pnpm run test:tauri-runtime-smoke`
-- 性能敏感的 read model、SQLite 查询或导航路径：追加 `pnpm run perf:stable`
+- 改动 Rust tracking 主链、数据边界或恢复路径：运行受影响的 Rust 模块测试与相关静态检查，跨模块时使用完整门槛
+- 改动 IPC 注册、capability、SQLite plugin 或真实桌面运行时：运行受影响的 `pnpm run test:tauri-runtime-smoke --group <name>`；跨模块、CI 或发布验收使用完整入口
+- 性能敏感的 read model、SQLite 查询或导航路径：运行受影响行为的现有性能专项；整体性能变化或正式整体性能验收使用 `pnpm run perf:stable`。保持可比环境、原预算和判断波动所需的重复采样；只输出报告的专项还须核对预算和不允许的 table scan，不能仅凭退出码判断通过。局部通过不代表整套基准通过
 - 改动 release / changelog / updater：追加 `pnpm run release:validate-changelog`
 - 准备正式发布：本地执行 `pnpm run release:check`，安装包构建与 updater 产物生成默认交给 GitHub Actions
 
-桌面 runtime 的完整入口仍覆盖所有原有功能、拒绝、故障、时间边界及普通 mini 循环。排障时可用 `test:tauri-runtime-smoke --group <name>` 从空 profile 独立执行一组；组名由[参数定义](../tests/tauriRuntimeOptions.ts)持有，单组通过不替代完整验收。`test:tauri-runtime-prepare` 只构建，输出 manifest；随后以 `--prepared <manifest>` 复用同候选的产物。源码、配置、产物摘要或 instrumentation 不一致时必须重新准备，不能继续执行旧 exe。准备使用已缓存的锁定 Cargo 依赖；缺少缓存时先按环境代理配置执行 `cargo fetch --manifest-path src-tauri/Cargo.toml --locked`。
+桌面 runtime 的完整入口仍覆盖所有原有功能、拒绝、故障、时间边界及普通 mini 循环。局部验收或排障可用 `test:tauri-runtime-smoke --group <name>` 从空 profile 独立执行受影响组；组名由[参数定义](../tests/tauriRuntimeOptions.ts)持有，单组通过只证明该组覆盖的行为。`test:tauri-runtime-prepare` 只构建，输出 manifest；随后以 `--prepared <manifest>` 复用同候选的产物。源码、配置、产物摘要或 instrumentation 不一致时必须重新准备，不能继续执行旧 exe。准备使用已缓存的锁定 Cargo 依赖；缺少缓存时先按环境代理配置执行 `cargo fetch --manifest-path src-tauri/Cargo.toml --locked`。
 
 `perf:desktop-resources` 独立运行 mini 与主窗口资源采样，`perf:desktop-lifecycle` 保留完整 runtime 与资源并集。窗口、输入、订阅或原生资源生命周期变化需提供资源证据；带 coverage 的产物或不完整进程树不能证明性能预算。资源组串行执行，保留既有样本数、静置时长与预算。准备、无主动输入的原生组和系统输入阶段分别计时；原生组仍可能显示窗口或对话框。本机验收应集中安排输入阶段，取消或发现外部鼠标/前台变化时停止注入，不反复抢回焦点。进程清理只关闭本轮 Windows Job；强制终止无法保证应用自行刷新未提交状态，测试成功仍要求正常退出与数据断言。
 
@@ -268,13 +272,13 @@ Bundle 治理的目标不是让构建产物永远不增长，而是让代码只�
 
 当这些区域发生变化时，默认要先补验证或测量，再谈整理和优化。
 
-备份与恢复链路的最低风险证据包括：快照一致性与摘要校验、危险 ZIP 路径和资源上限拒绝、覆盖恢复中断回滚、合并事务回滚与重复导入幂等、父子 ID 重映射、当前数据冲突优先，以及 WebDAV 下载后重新走正式 preview。涉及文件切换或格式分派时，默认运行 `pnpm run check:full`，不能只用成功路径证明安全。
+备份与恢复链路按受影响行为覆盖：快照一致性与摘要校验、危险 ZIP 路径和资源上限拒绝、覆盖恢复中断回滚、合并事务回滚与重复导入幂等、父子 ID 重映射、当前数据冲突优先，以及 WebDAV 下载后重新走正式 preview。涉及文件切换或格式分派时必须验证受影响的失败与恢复路径；跨模块影响按第 5 节运行全量，不能只用成功路径证明安全。
 
 ---
 
 ## 7. 本地化质量路由
 
-本地化契约、界面消息文案或原生表面变更必须通过 i18n self-test 与真实仓库检查，覆盖 key、参数、CLDR 复数类别、source-review hash、generated stale 和硬编码。结构性变更使用 `pnpm run check:full`；只改消息资源翻译时至少运行 i18n、类型与命中的界面测试。完整 schema、XLSX 不可信输入、生成和贡献流程由 [`localization.md`](./localization.md) 拥有；发布说明正文与其界面消息的边界由[发布规范](./versioning-and-release-policy.md#83-release-与-app-note) 拥有。
+本地化资源变更必须通过真实仓库 i18n 检查，覆盖 key、参数、CLDR 复数类别、source-review hash、generated stale 和硬编码，并运行相关类型与界面测试。仅修改现有文案或译文不默认运行工具 self-test；修改 formatter、schema、生成器、validator、新增语言工具或其相关依赖时，运行对应行为测试和自测。新增语言仍验证注册、生成、原生表面和消费者；影响跨模块的本地化结构变更按第 5 节运行全量。完整 CI 保留 i18n 自测。完整 schema、XLSX 不可信输入、生成和贡献流程由 [`localization.md`](./localization.md) 拥有；发布说明正文与其界面消息的边界由[发布规范](./versioning-and-release-policy.md#83-release-与-app-note) 拥有。
 
 ## 8. 文档质量边界
 
