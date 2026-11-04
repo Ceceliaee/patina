@@ -974,6 +974,17 @@ export interface UiText {
     "longBreakEvery": string;
     "minuteValue": (minutes: number) => string;
     "newReminder": string;
+    "notificationDelivery": string;
+    "notificationDialog": string;
+    "notificationDisplayFailed": string;
+    "notificationGroup": string;
+    "notificationSaveFailed": string;
+    "notificationSoftware": string;
+    "notificationSound": string;
+    "notificationSoundBell": string;
+    "notificationSoundClear": string;
+    "notificationSoundDefault": string;
+    "notificationSoundNone": string;
     "pause": string;
     "pomodoroCompletedGroups": (count: number) => string;
     "pomodoroCycle": (index: number, every: number) => string;
