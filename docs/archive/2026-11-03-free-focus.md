@@ -23,3 +23,13 @@ Tools engine 的使用提醒调度与通知合并到同一业务 owner，依赖 
 完整桌面入口的 contracts、data-recovery、storage-restart、tools-startup、webview-recovery、window-lifecycle 六组通过；mini-input 在 `SetPhysicalCursorPos` 返回失败后报 `Cannot move to owned input target`，未取得鼠标交互验收证据。保留该失败，不放宽断言或反复注入输入。后续由桌面验收 owner 在可用输入环境重跑 mini-input；当前不宣称完整桌面验收通过。对应隔离记录保存在忽略目录 `artifacts/runtime-smoke/1793716194795-967ee95f-e0c4-4c80-a67b-1eddecd1bc79/result.json`。
 
 此次交付包含全部已授权的工作区更改，按功能、依赖修复、测试和文档分组提交。不操作用户数据库，不代表安装包、ARM64 或正式发布验收。
+
+## 2026-11-04 Dependabot 复核
+
+直接读取 GitHub 告警后确认，先前本地门禁通过不能代表 Dependabot 的两条 Rust 告警已修复。`zip 9.0.4` 命中 [GHSA-m665-v7pm-7grj](https://github.com/advisories/GHSA-m665-v7pm-7grj)，此前审计器漏掉了这条 GitHub-only 公告。依赖最低版本与锁文件升到 9.0.5，备份元数据读取和解压前检查显式启用文件头一致性验证；审计器补充对应版本范围，回归测试覆盖旧版本漏报和三个备份条目的双重文件头名称不一致。
+
+`glib 0.18.5` 命中 [GHSA-wrw7-89jp-8q8g](https://github.com/advisories/GHSA-wrw7-89jp-8q8g)。它由 Tauri/GTK 0.18 依赖链引入，不能单独替换为修复版 0.20。最终锁文件在 Windows x64 和 ARM64 的反向依赖树均为空；保留精确的 Windows 不可达例外，并将 GitHub 告警视为未修复，等待上游兼容升级。
+
+依赖修复后 `check:full` 通过，包括 230 项浏览器测试和 924 项 Rust 单元测试。原生 data-recovery 复核暴露了窗口重复创建竞争：第二个调用在第一个构建完成后取得创建权，错误递增 generation，使已创建窗口的 ready 事件失效。窗口生命周期 owner 现在只在 Absent 状态授予创建权；回归测试先在旧实现失败，再验证等待和就绪状态都拒绝迟到创建，销毁完成后仍可创建下一代窗口。修复后 33 项状态测试、完整 Rust 门禁、架构、复杂度和测试登记检查通过。
+
+最终候选的原生六组功能检查再次通过；恢复后的重复重开只生成一个新窗口，恢复数据读取在 383ms 内完成。资源入口中的完整 Mini 交互、50 次展开采样、10 次重开循环和强制 GC 资源检查通过，补齐了此前缺失的 Mini 交互证据。自然 GC 资源检查失败：主进程线程数从第 3 轮的 47 增至静置后的 50，超过原有 +2 门槛；同期进程数维持 18、窗口数维持 1、定时器维持 2，进程树私有内存从 428.91 MiB 降至 364.96 MiB。保留失败，不调整预算或重跑掩盖结果；桌面资源 owner 仍需定位线程来源，当前不宣称完整资源验收通过。原生记录为 `artifacts/runtime-smoke/1793760045891-de96ae05-7334-48cd-b1ce-6b68b32b187c/result.json`，资源明细为 `artifacts/quality-9plus/desktop-lifecycle-natural-1793760631106.json`。

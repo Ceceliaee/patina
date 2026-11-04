@@ -213,7 +213,10 @@ impl MainWindowLifecycleState {
 
     pub(crate) fn begin_window_creation(&self) -> Option<u64> {
         self.with_inner(|inner| {
-            if inner.create_in_progress || inner.destroy_in_progress {
+            if inner.create_in_progress
+                || inner.destroy_in_progress
+                || inner.render_state != MainWindowRenderState::Absent
+            {
                 return None;
             }
 
@@ -772,6 +775,8 @@ mod tests {
         let stale_generation = begin_window_creation(&state);
         let stale_token = current_render_token(&state);
         state.finish_window_creation(stale_generation, true);
+        assert!(state.begin_unavailable_window_recovery());
+        state.finish_unavailable_window_recovery();
         let current_generation = begin_window_creation(&state);
 
         assert_eq!(
@@ -870,6 +875,8 @@ mod tests {
             MainWindowShowDecision::Probe { .. }
         ));
 
+        assert!(state.begin_unavailable_window_recovery());
+        state.finish_unavailable_window_recovery();
         let new_generation = begin_window_creation(&state);
         let new_token = current_render_token(&state);
 
@@ -1124,6 +1131,17 @@ mod tests {
         state.finish_window_creation(generation, true);
         assert!(!state.snapshot().create_in_progress);
 
+        // A caller that observed a missing window before the first build may
+        // reach the claim after that build has already completed.
+        assert_eq!(state.begin_window_creation(), None);
+        let token = current_render_token(&state);
+        assert_eq!(state.mark_ready(token), MainWindowReadyDecision::Hidden);
+        assert_eq!(state.begin_window_creation(), None);
+        assert_eq!(state.snapshot().generation, generation);
+
+        let hide_generation = state.hide();
+        assert!(state.begin_destroy_hidden_window(hide_generation));
+        assert!(!state.finish_destroy_hidden_window(true));
         let next_generation = begin_window_creation(&state);
         assert_ne!(next_generation, generation);
     }
