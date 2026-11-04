@@ -627,6 +627,12 @@
           "markdownDescription": "Enables the cmd_get_tool_alerts command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_get_tool_presentation command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-tool-presentation",
+          "markdownDescription": "Enables the cmd_get_tool_presentation command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_get_tools_snapshot command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-get-tools-snapshot",
@@ -921,6 +927,12 @@
           "markdownDescription": "Enables the cmd_save_scheduled_export_config command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_save_tool_notification_preferences command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-save-tool-notification-preferences",
+          "markdownDescription": "Enables the cmd_save_tool_notification_preferences command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_set_activity_reminder_enabled command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-set-activity-reminder-enabled",
@@ -973,6 +985,18 @@
           "type": "string",
           "const": "allow-cmd-test-webdav-backup-target",
           "markdownDescription": "Enables the cmd_test_webdav_backup_target command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_tool_presentation_action command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-tool-presentation-action",
+          "markdownDescription": "Enables the cmd_tool_presentation_action command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_tool_presentation_ready command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-tool-presentation-ready",
+          "markdownDescription": "Enables the cmd_tool_presentation_ready command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_update_activity_reminder_limit command without any pre-configured scope.",
@@ -1287,6 +1311,12 @@
           "markdownDescription": "Denies the cmd_get_tool_alerts command without any pre-configured scope."
         },
         {
+          "description": "Denies the cmd_get_tool_presentation command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-tool-presentation",
+          "markdownDescription": "Denies the cmd_get_tool_presentation command without any pre-configured scope."
+        },
+        {
           "description": "Denies the cmd_get_tools_snapshot command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-get-tools-snapshot",
@@ -1581,6 +1611,12 @@
           "markdownDescription": "Denies the cmd_save_scheduled_export_config command without any pre-configured scope."
         },
         {
+          "description": "Denies the cmd_save_tool_notification_preferences command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-save-tool-notification-preferences",
+          "markdownDescription": "Denies the cmd_save_tool_notification_preferences command without any pre-configured scope."
+        },
+        {
           "description": "Denies the cmd_set_activity_reminder_enabled command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-set-activity-reminder-enabled",
@@ -1635,6 +1671,18 @@
           "markdownDescription": "Denies the cmd_test_webdav_backup_target command without any pre-configured scope."
         },
         {
+          "description": "Denies the cmd_tool_presentation_action command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-tool-presentation-action",
+          "markdownDescription": "Denies the cmd_tool_presentation_action command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_tool_presentation_ready command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-tool-presentation-ready",
+          "markdownDescription": "Denies the cmd_tool_presentation_ready command without any pre-configured scope."
+        },
+        {
           "description": "Denies the cmd_update_activity_reminder_limit command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-update-activity-reminder-limit",
@@ -1675,6 +1723,12 @@
           "type": "string",
           "const": "mini-window-commands",
           "markdownDescription": "Read compact status and control only the independent mini window."
+        },
+        {
+          "description": "Read and act only on the alert assigned to the notification window.",
+          "type": "string",
+          "const": "tool-notification-commands",
+          "markdownDescription": "Read and act only on the alert assigned to the notification window."
         },
         {
           "description": "This permission set configures if your\napplication can enable or disable auto\nstarting the application on boot.\n\n#### Granted Permissions\n\nIt allows all to check, enable and\ndisable the automatic start on boot.\n\n\n#### This default permission set includes:\n\n- `allow-enable`\n- `allow-disable`\n- `allow-is-enabled`",
