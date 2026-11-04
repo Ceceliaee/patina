@@ -112,6 +112,19 @@ async function dispatchSelectKey(
 
 export async function runSettingsScenarios(context: BrowserSmokeContext) {
   const { appUrl, client, sessionId, runTest } = context;
+  const assertTextRole = async (selector: string, role: string, weight: string) => {
+    assert.equal(await evaluate(client, sessionId, `(() => {
+      const elements = [...document.querySelectorAll(${jsonString(selector)})];
+      const root = getComputedStyle(document.documentElement);
+      const pixels = name => parseFloat(root.getPropertyValue(name)) * parseFloat(root.fontSize);
+      return elements.length > 0 && elements.every(element => {
+        const style = getComputedStyle(element);
+        return Math.abs(parseFloat(style.fontSize) - pixels('--qp-font-size-' + ${jsonString(role)})) < 0.1
+          && Math.abs(parseFloat(style.lineHeight) - pixels('--qp-line-height-' + ${jsonString(role)})) < 0.1
+          && style.fontWeight === root.getPropertyValue('--qp-font-weight-' + ${jsonString(weight)}).trim();
+      });
+    })()`), true, `${selector} uses ${role}/${weight} typography`);
+  };
   await runTest("runtime settings expose only startup preferences", async () => {
     await evaluate(client, sessionId, `document.querySelector('[data-sidebar-nav-item="settings"]')?.click()`);
     await waitForExpression(client, sessionId, `document.querySelector('.settings-preference-group') !== null`);
@@ -131,6 +144,130 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       return [...(group?.querySelectorAll('[role="switch"]') ?? [])].map(control => control.getAttribute('aria-label'));
     })()`);
     assert.deepEqual(preferences, [text.accessibility.settings.toggleCloseToTray, text.accessibility.settings.toggleShowTrayIcon]);
+  });
+  await runTest("settings keep one card layer per group with headings outside", async () => {
+    const remoteLabel = getLocaleText("zh-CN").accessibility.settings.toggleRemoteStatusBridge;
+    const remoteSwitch = `[role="switch"][aria-label=${JSON.stringify(remoteLabel)}]`;
+    const remoteEnabled = await evaluate(client, sessionId,
+      `document.querySelector(${jsonString(remoteSwitch)}).getAttribute('aria-checked') === 'true'`);
+    try {
+      if (!remoteEnabled) {
+        await evaluate(client, sessionId, `document.querySelector(${jsonString(remoteSwitch)}).click()`);
+        await waitForExpression(client, sessionId, `Boolean(document.querySelector('#settings-remote-status-bridge-url'))`);
+      }
+      await assertTextRole('.settings-preference-title, .settings-data-action-row p, .settings-storage-path-heading p', 'body', 'medium');
+      await assertTextRole('.settings-preference-group-title', 'group-title', 'emphasis');
+      await assertTextRole('.settings-interface-field input, .settings-preference-control .qp-select-trigger', 'caption', 'medium');
+      await assertTextRole('.settings-preference-group .qp-button-regular', 'body', 'emphasis');
+      for (const width of [1280, 1024, 1023, 900, 768, 767, 390]) {
+        await client.command("Emulation.setDeviceMetricsOverride", {
+          width, height: 900, deviceScaleFactor: 1, mobile: false,
+        }, sessionId);
+        await waitForAnimationFrames(client, sessionId);
+        const layout = await evaluate(client, sessionId, `(() => {
+          const groups = [...document.querySelectorAll('.settings-preference-group')];
+          const box = element => element.getBoundingClientRect();
+          const fieldLeft = id => box(document.getElementById(id)).left;
+          const typography = element => {
+            const style = getComputedStyle(element);
+            return [style.fontSize, style.fontWeight, style.lineHeight];
+          };
+          return {
+            themeControlTypographyMatches: [...document.querySelectorAll('.settings-preference-control .qp-segmented-filter-item')]
+              .every(item => JSON.stringify(typography(item)) === JSON.stringify(typography(document.querySelector('.settings-theme-entry-title')))),
+            serviceFieldsAligned: Math.abs(fieldLeft('settings-web-activity-address') - fieldLeft('settings-remote-status-bridge-url')) < 1
+              && Math.abs(fieldLeft('settings-remote-status-bridge-url') - fieldLeft('settings-remote-status-bridge-machine-id')) < 1
+              && Math.abs(fieldLeft('settings-web-activity-token') - fieldLeft('settings-remote-status-bridge-token')) < 1,
+            serviceHorizontalDividers: [...document.querySelectorAll('.settings-interface-field')]
+              .reduce((count, field) => {
+                const style = getComputedStyle(field);
+                return count + Number(style.borderTopWidth !== '0px') + Number(style.borderBottomWidth !== '0px');
+              }, 0),
+            preferencePairs: [...document.querySelectorAll('.settings-preference-pair')].map(pair => {
+              const [first, second] = [...pair.children].map(box);
+              return { sameRow: Math.abs(first.top - second.top) < 1, stacked: second.top >= first.bottom };
+            }),
+            dividers: [...document.querySelectorAll('.settings-preference-pair > :last-child, .settings-interface-fields > :last-child, .settings-data-actions-grid > .settings-data-action-row + .settings-data-action-row, .settings-storage-path-row + .settings-storage-path-row')]
+              .map(row => ({ row: getComputedStyle(row), line: getComputedStyle(row, '::before'),
+                gap: getComputedStyle(row.parentElement).columnGap, color: getComputedStyle(row.closest('.qp-action-row')).borderTopColor }))
+              .filter(({ line }) => line.display !== 'none')
+              .map(({ row, line, gap, color }) => ({ border: row.borderLeftWidth, top: line.top, bottom: line.bottom,
+                left: line.left, padding: row.paddingLeft, gap, width: line.borderLeftWidth,
+                themed: line.borderLeftColor === color })),
+            groups: groups.map(group => {
+              const panel = group.closest('section.qp-panel');
+              const heading = group.querySelector('h3');
+              const card = group.querySelector(':scope > .qp-action-row');
+              if (!card) return { disabledService: Boolean(group.querySelector('[role="switch"][aria-checked="false"]')) };
+              const bounds = box(card);
+              const header = group.querySelector('.settings-preference-group-header');
+              const previous = group.previousElementSibling;
+              const sectionHeader = panel.querySelector('h2').parentElement;
+              return {
+                headerGap: Math.round(bounds.top - box(header).bottom),
+                groupGap: Math.round(box(group).top - box(previous ?? sectionHeader).bottom),
+                cardPadding: [getComputedStyle(card).paddingLeft, getComputedStyle(card).paddingRight],
+                rowPadding: [...card.querySelectorAll('.settings-preference-row, .settings-interface-field, .settings-data-action-row, .settings-storage-path-row')]
+                  .every(row => getComputedStyle(row).paddingTop === '12px' && getComputedStyle(row).paddingBottom === '12px'),
+                groupBorder: getComputedStyle(group).borderTopWidth,
+                outerBorder: getComputedStyle(panel).borderTopWidth,
+                cardBorder: getComputedStyle(card).borderTopWidth,
+                nestedCards: card.querySelectorAll('.qp-action-row, .qp-subpanel').length,
+                titleOutside: box(heading).bottom < bounds.top && !card.contains(heading),
+                aligned: Math.abs(box(heading).left - bounds.left) < 1,
+                background: getComputedStyle(card).backgroundColor,
+                panelBackground: getComputedStyle(panel).backgroundColor,
+                controlsFit: [...card.querySelectorAll('input, button')].every(control => {
+                  const rect = box(control);
+                  return rect.left >= bounds.left && rect.right <= bounds.right
+                    && rect.top >= bounds.top && rect.bottom <= bounds.bottom;
+                }),
+              };
+            }),
+          };
+        })()`) as {
+          serviceFieldsAligned: boolean;
+          themeControlTypographyMatches: boolean;
+          serviceHorizontalDividers: number;
+          preferencePairs: { sameRow: boolean; stacked: boolean }[];
+          dividers: { border: string; top: string; bottom: string; left: string; padding: string;
+            gap: string; width: string; themed: boolean }[];
+          groups: { disabledService?: boolean; outerBorder: string; nestedCards: number;
+            headerGap: number; groupGap: number; cardPadding: string[]; rowPadding: boolean;
+            groupBorder: string; cardBorder: string; titleOutside: boolean; aligned: boolean;
+            background: string; panelBackground: string; controlsFit: boolean }[];
+        };
+        assert.equal(layout.groups.length, 11);
+        assert.equal(layout.themeControlTypographyMatches, true, `theme control text matches theme buttons at ${width}px`);
+        assert.equal(layout.serviceFieldsAligned, true, `service label and input columns align at ${width}px`);
+        assert.equal(layout.serviceHorizontalDividers, width >= 1024 ? 1 : 3, `service row dividers at ${width}px`);
+        assert.deepEqual(layout.preferencePairs, Array.from({ length: 3 },
+          () => ({ sameRow: width >= 768, stacked: width < 768 })), `paired preferences at ${width}px`);
+        assert.deepEqual(layout.dividers, Array.from({ length: width >= 1024 ? 9 : width >= 768 ? 5 : 0 },
+          () => ({ border: "0px", top: "12px", bottom: "12px", left: "-12px", padding: "0px",
+            gap: "24px", width: "1px", themed: true })), `inset dividers at ${width}px`);
+        for (const group of layout.groups) {
+          if (group.disabledService) continue;
+          assert.equal(group.headerGap, 12, `group heading spacing at ${width}px`);
+          assert.equal(group.groupGap, 20, `group spacing at ${width}px`);
+          assert.deepEqual(group.cardPadding, ["16px", "16px"], `card inset at ${width}px`);
+          assert.equal(group.rowPadding, true, `row padding at ${width}px`);
+          assert.equal(group.outerBorder, "1px");
+          assert.equal(group.nestedCards, 0);
+          assert.equal(group.groupBorder, "0px", `no nested group frame at ${width}px`);
+          assert.equal(group.cardBorder, "1px");
+          assert.equal(group.titleOutside && group.aligned, true, `heading above its card at ${width}px`);
+          assert.notEqual(group.background, group.panelBackground);
+          assert.equal(group.controlsFit, true, `controls stay inside their card at ${width}px`);
+        }
+      }
+    } finally {
+      if (!remoteEnabled) {
+        await evaluate(client, sessionId, `document.querySelector('.settings-header-button.qp-button-secondary').click()`);
+        await waitForExpression(client, sessionId, `!document.querySelector('#settings-remote-status-bridge-url')`);
+      }
+      await client.command("Emulation.clearDeviceMetricsOverride", {}, sessionId);
+    }
   });
   const assertDialogHeaderCentered = async (selector: string) => {
     assert.equal(await evaluate(client, sessionId, `(() => {
@@ -350,18 +487,18 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     const titles = [text.dataExportTitle, text.backupRestoreTitle, text.storage.storageDirectoryTitle];
     const geometry = await evaluate(client, sessionId, `
       ${JSON.stringify(titles)}.map(title => {
-        const label = [...document.querySelectorAll('.qp-subpanel p')]
+        const label = [...document.querySelectorAll('.settings-preference-group h3')]
           .find(node => node.textContent.trim() === title);
-        const panel = label?.closest('.qp-subpanel');
+        const panel = label?.closest('.settings-preference-group');
         if (!panel) return null;
         const header = panel.children[0].getBoundingClientRect();
         const content = panel.children[1].getBoundingClientRect();
         const copy = label.getBoundingClientRect();
-        return { height: header.height, gap: content.top - header.bottom,
+        return { gap: content.top - header.bottom,
           centered: Math.abs(copy.top + copy.height / 2 - header.top - header.height / 2) < 0.5 };
       })
     `);
-    assert.deepEqual(geometry, titles.map(() => ({ height: 28, gap: 12, centered: true })));
+    assert.deepEqual(geometry, titles.map(() => ({ gap: 12, centered: true })));
   });
 
   await runTest("storage icon hover stays distinct from its card", async () => {
@@ -438,6 +575,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       true,
     );
     await waitForExpression(client!, sessionId, "Boolean(document.querySelector('.settings-color-scheme-list'))");
+    await assertTextRole('.settings-color-scheme-option', 'body', 'emphasis');
     await waitForExpression(
       client!,
       sessionId,
@@ -498,7 +636,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       })()`), { labels: [copy.accessibility.settings.toggleLaunchAtLogin, copy.accessibility.settings.toggleStartMinimized], help: 0, rows: 2 }, locale);
       const result = await evaluate(client, sessionId, `(() => {
         const title = [...document.querySelectorAll('.qp-action-row p')].find(node => node.textContent.trim() === ${jsonString(label)});
-        const row = title?.closest('.qp-action-row');
+        const row = title?.closest('.settings-data-action-row');
         const buttons = [...(row?.querySelectorAll('button') ?? [])];
         const titleRect = title?.getBoundingClientRect();
         const buttonRect = buttons[0]?.getBoundingClientRect();
@@ -1673,6 +1811,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       await evaluate(client!, sessionId, "document.querySelectorAll('[role=\"dialog\"]').length === 2"),
       true,
     );
+    await assertTextRole('.settings-scheduled-backup-setting-label', 'caption', 'medium');
     const scheduledBadgeMetrics = await evaluate(client!, sessionId, `
         (() => {
           const dialogs = document.querySelectorAll('[role="dialog"]');
@@ -2259,15 +2398,26 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     const collapsedFieldGeometry = await evaluate(client!, sessionId, `(() => {
       const body = document.querySelector('.settings-data-export-field-dialog .qp-dialog-body');
       return { height: body.clientHeight, scrollHeight: body.scrollHeight,
+        contentHeight: body.firstElementChild.getBoundingClientRect().height,
         groups: [...body.querySelectorAll('.settings-data-export-field-group')].map(n=>n.getBoundingClientRect().height) };
-    })()`) as { height: number; scrollHeight: number; groups: number[] };
+    })()`) as { height: number; scrollHeight: number; contentHeight: number; groups: number[] };
     assert.ok(collapsedFieldGeometry.scrollHeight <= collapsedFieldGeometry.height,
       `Collapsed field groups should not require scrolling: ${JSON.stringify(collapsedFieldGeometry)}`);
+    assert.ok(Math.abs(collapsedFieldGeometry.height - collapsedFieldGeometry.contentHeight) < 1,
+      "Collapsed field groups should not leave an empty fixed-height area");
     const collapsedDialogHeight = Number(await evaluate(client!, sessionId, `document.querySelector('.settings-data-export-field-dialog')?.getBoundingClientRect().height ?? 0`));
     await evaluate(client!, sessionId, `document.querySelector('.settings-data-export-field-group-action[aria-label="展开"]')?.click()`);
     await waitForExpression(client!, sessionId, `document.querySelectorAll('.settings-data-export-field-row').length === 8`);
     const expandedDialogHeight = Number(await evaluate(client!, sessionId, `document.querySelector('.settings-data-export-field-dialog')?.getBoundingClientRect().height ?? 0`));
-    assert.ok(Math.abs(expandedDialogHeight - collapsedDialogHeight) < 1, "Field group expansion changed dialog height");
+    assert.ok(Math.abs(expandedDialogHeight - collapsedDialogHeight) < 1,
+      "Field group expansion should preserve the compact dialog height");
+    assert.equal(await evaluate(client!, sessionId, `(() => {
+      const dialog = document.querySelector('.settings-data-export-field-dialog');
+      const body = dialog.querySelector('.qp-dialog-body');
+      const actions = dialog.querySelector('.qp-dialog-actions').getBoundingClientRect();
+      return body.scrollHeight > body.clientHeight && getComputedStyle(body).overflowY === 'auto'
+        && actions.bottom <= window.innerHeight && dialog.getBoundingClientRect().top >= 0;
+    })()`), true, "Expanded fields scroll while dialog actions remain visible");
     assert.equal(
       await evaluate(client!, sessionId, `document.querySelectorAll('.settings-data-export-field-order-index').length`),
       0,
@@ -2389,6 +2539,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       true,
       "Scheduled export BETA badge did not adapt to the dialog title",
     );
+    await assertTextRole('.settings-scheduled-export-control > span, .settings-scheduled-export-directory-label', 'caption', 'medium');
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {

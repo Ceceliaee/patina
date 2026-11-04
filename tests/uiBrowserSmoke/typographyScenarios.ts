@@ -30,7 +30,8 @@ export async function runTypographyScenarios({ client, sessionId, appUrl, runTes
             const sections = [...main.querySelectorAll('.dashboard-card-header h3,.data-trend-header h3,.tools-panel-title h2')];
             const rows = [...main.querySelectorAll('.settings-preference-title,.qp-app-mapping-name')];
             const badges = [...main.querySelectorAll('.qp-badge')];
-            const compact = [...main.querySelectorAll('.dashboard-top-app-count,.history-horizontal-timeline-legend-item,.qp-segmented-filter-compact .qp-segmented-filter-item')];
+            const compact = [...main.querySelectorAll('.dashboard-top-app-count,.history-horizontal-timeline-legend-item,.qp-segmented-filter-compact:not(.qp-segmented-filter-control) .qp-segmented-filter-item')];
+            const controls = [...main.querySelectorAll('.qp-segmented-filter-control .qp-segmented-filter-item')];
             const rect = main.getBoundingClientRect();
             return {
               weights: [...new Set([...main.querySelectorAll('*')].filter(n=>[...n.childNodes].some(c=>c.nodeType===3 && c.textContent.trim())).map(n=>getComputedStyle(n).fontWeight))],
@@ -44,13 +45,14 @@ export async function runTypographyScenarios({ client, sessionId, appUrl, runTes
               sections: sections.map(n=>getComputedStyle(n).fontSize),
               rows: rows.map(n=>getComputedStyle(n).fontSize),
               compact: compact.map(n=>getComputedStyle(n).fontSize),
+              controls: controls.map(n=>({ size: getComputedStyle(n).fontSize, lineHeight: getComputedStyle(n).lineHeight })),
               headerMetrics: { lineHeight: getComputedStyle(header).lineHeight, weight: getComputedStyle(header).fontWeight, family: getComputedStyle(header).fontFamily, width: header.getBoundingClientRect().width, height: header.getBoundingClientRect().height },
               badgeClipped: badges.some(n=>n.scrollWidth>n.clientWidth),
               horizontalOverflow: main.scrollWidth>main.clientWidth+1,
               headerContained: header.getBoundingClientRect().right<=rect.right+1,
               textSizes: [...new Set([...main.querySelectorAll('*')].filter(n=>[...n.childNodes].some(c=>c.nodeType===3 && c.textContent.trim())).map(n=>getComputedStyle(n).fontSize))],
             };
-          })()` ) as { weights: string[]; roleWeights: { badges: string[]; buttons: string[]; rows: string[]; meta: string[] }; header: string; sections: string[]; rows: string[]; compact: string[]; headerMetrics: { lineHeight: string; weight: string }; badgeClipped: boolean; horizontalOverflow: boolean; headerContained: boolean; textSizes: string[] };
+          })()` ) as { weights: string[]; roleWeights: { badges: string[]; buttons: string[]; rows: string[]; meta: string[] }; header: string; sections: string[]; rows: string[]; compact: string[]; controls: Array<{ size: string; lineHeight: string }>; headerMetrics: { lineHeight: string; weight: string }; badgeClipped: boolean; horizontalOverflow: boolean; headerContained: boolean; textSizes: string[] };
           const report = { locale, width, theme, scale, page: page.id, ...state };
           assert.ok(state.weights.every(weight => ["450", "550", "650"].includes(weight)), JSON.stringify(report));
           for (const [role, weights] of Object.entries(state.roleWeights)) {
@@ -62,6 +64,8 @@ export async function runTypographyScenarios({ client, sessionId, appUrl, runTes
           assert.ok(state.sections.every(size => size === "16px"), JSON.stringify(report));
           assert.ok(state.rows.every(size => size === "14px"), JSON.stringify(report));
           assert.ok(state.compact.every(size => size === "10px"), JSON.stringify(report));
+          if (page.id === "settings") assert.ok(state.controls.length > 0, JSON.stringify(report));
+          assert.ok(state.controls.every(control => control.size === "12px" && control.lineHeight === "18px"), JSON.stringify(report));
           assert.equal(state.headerMetrics.lineHeight, "24px");
           assert.equal(state.headerMetrics.weight, "650");
           assert.equal(state.badgeClipped, false, JSON.stringify(report));

@@ -22,16 +22,15 @@ interface Props {
   onConfirm: (fields: string[]) => void;
 }
 
-const GROUP_COPY_KEYS: Record<SettingsDataExportFieldGroupId, {
-  titleKey: "groupActivity" | "groupApps" | "groupWeb" | "groupClassification" | "groupAnalysis" | "groupAudit";
-  hint: "groupActivityHint" | "groupAppsHint" | "groupWebHint" | "groupClassificationHint" | "groupAnalysisHint" | "groupAuditHint";
-}> = {
-  activity: { titleKey: "groupActivity", hint: "groupActivityHint" },
-  apps: { titleKey: "groupApps", hint: "groupAppsHint" },
-  web: { titleKey: "groupWeb", hint: "groupWebHint" },
-  classification: { titleKey: "groupClassification", hint: "groupClassificationHint" },
-  analysis: { titleKey: "groupAnalysis", hint: "groupAnalysisHint" },
-  audit: { titleKey: "groupAudit", hint: "groupAuditHint" },
+const GROUP_TITLE_KEYS: Record<SettingsDataExportFieldGroupId,
+  "groupActivity" | "groupApps" | "groupWeb" | "groupClassification" | "groupAnalysis" | "groupAudit"
+> = {
+  activity: "groupActivity",
+  apps: "groupApps",
+  web: "groupWeb",
+  classification: "groupClassification",
+  analysis: "groupAnalysis",
+  audit: "groupAudit",
 };
 
 const DEFAULT_COLLAPSED_GROUPS: SettingsDataExportFieldGroupId[] = SETTINGS_DATA_EXPORT_FIELD_GROUPS.map((group) => group.id);
@@ -157,7 +156,7 @@ export default function SettingsDataExportFieldConfigDialog({ open, selectedFiel
         <div className="settings-data-export-field-dialog-body">
           {selectedCount === 0 ? <div className="settings-data-export-field-empty-warning">{t.configFieldsEmpty}</div> : null}
           {SETTINGS_DATA_EXPORT_FIELD_GROUPS.map((group) => {
-            const copyKeys = GROUP_COPY_KEYS[group.id];
+            const titleKey = GROUP_TITLE_KEYS[group.id];
             const defaultGroupFields = group.fields as readonly SettingsDataExportFieldKey[];
             const selectedGroupCount = defaultGroupFields.filter((field) => selected.has(field)).length;
             const isCollapsed = collapsedGroups.has(group.id);
@@ -167,8 +166,7 @@ export default function SettingsDataExportFieldConfigDialog({ open, selectedFiel
               <section key={group.id} className={`settings-data-export-field-group ${isCollapsed ? "settings-data-export-field-group-collapsed" : ""}`}>
                 <header className="settings-data-export-field-group-header">
                   <div className="min-w-0">
-                    <p>{t[copyKeys.titleKey]}</p>
-                    <span>{t[copyKeys.hint]}</span>
+                    <p>{t[titleKey]}</p>
                   </div>
                   <div className="settings-data-export-field-group-actions">
                     <span className="settings-data-export-field-group-count">

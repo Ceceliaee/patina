@@ -13,7 +13,7 @@ interface Props<T extends string> {
   value: T;
   options: QuietSegmentedFilterOption<T>[];
   onChange: (nextValue: T) => void;
-  variant?: "compact" | "separate";
+  variant?: "compact" | "control" | "separate";
   className?: string;
   semantics?: "buttons" | "tabs";
   ariaLabel?: string;
@@ -34,9 +34,9 @@ export default function QuietSegmentedFilter<T extends string>({
   tabPanelId,
   selectedOptionRef,
 }: Props<T>) {
-  const variantClassName = variant === "compact"
-    ? "qp-segmented-filter-compact"
-    : "qp-segmented-filter-separate";
+  const variantClassName = variant === "separate"
+    ? "qp-segmented-filter-separate"
+    : `qp-segmented-filter-compact${variant === "control" ? " qp-segmented-filter-control" : ""}`;
   const tabs = semantics === "tabs";
 
   const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, currentValue: T) => {

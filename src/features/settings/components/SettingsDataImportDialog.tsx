@@ -106,7 +106,7 @@ export default function SettingsDataImportDialog({
                   onClick={onChooseCanonicalCsv}
                 />
                 <div className="settings-dialog-action-copy settings-import-action-heading">
-                  <p className="settings-import-action-title qp-text-body qp-weight-emphasis text-[var(--qp-text-primary)]">{importText.csvTitle}</p>
+                  <p className="settings-import-action-title qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">{importText.csvTitle}</p>
                   <QuietTooltip label={importText.csvHint} placement="top" tooltipClassName="settings-help-tooltip" hideOnPointerDown={false}>
                     <button type="button" className="settings-help-icon" aria-label={importText.csvHint}>
                       <CircleAlert size={13} aria-hidden="true" />
@@ -129,7 +129,7 @@ export default function SettingsDataImportDialog({
                 />
                 <div className="settings-dialog-action-copy">
                   <div className="settings-import-action-heading">
-                    <p className="settings-import-action-title qp-text-body qp-weight-emphasis text-[var(--qp-text-primary)]">{importText.destructureTitle}</p>
+                    <p className="settings-import-action-title qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">{importText.destructureTitle}</p>
                     <QuietTooltip label={importText.destructureHint} placement="top" tooltipClassName="settings-help-tooltip" hideOnPointerDown={false}>
                       <button type="button" className="settings-help-icon" aria-label={importText.destructureHint}>
                         <CircleAlert size={13} aria-hidden="true" />

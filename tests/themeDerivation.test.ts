@@ -95,14 +95,14 @@ for (const variant of ["light", "dark"] as const) {
 assert.ok(adjustedPrimaryCount > 0 && unchangedPrimaryCount > 0);
 console.log(`Primary button contrast passed: ${adjustedPrimaryCount} minimally darkened, ${unchangedPrimaryCount} preserved exactly; all normal and interaction states >= 4.5:1`);
 
-for (const scheme of ["default", "absolutely", "catppuccin", "vercel"] as const) {
-  for (const variant of ["light", "dark"] as const) {
+for (const variant of ["light", "dark"] as const) {
+  for (const { value: scheme } of COLOR_SCHEME_OPTIONS[variant]) {
     const colors = deriveTheme(variant, scheme, null);
     const panel = channels(colors["--qp-bg-panel"]);
     const card = channels(colors["--qp-bg-elevated"]);
     const separation = panel.reduce((sum, value, index) => sum + Math.abs(value - card[index]), 0) / 3;
     assert.ok(card.reduce((sum, value) => sum + value, 0) < panel.reduce((sum, value) => sum + value, 0), `${variant}/${scheme}: nested card must be darker than its panel`);
-    assert.ok(separation >= 5, `${variant}/${scheme}: nested cards must remain distinct from their panel (${separation})`);
+    assert.ok(separation >= 2, `${variant}/${scheme}: softened cards must retain a visible surface difference (${separation})`);
   }
 }
 
@@ -115,7 +115,8 @@ for (const fixture of borders) {
   assert.equal(actual["--qp-border-strong"], fixture.strong);
 }
 
-assert.equal(deriveTheme("light", "default", null)["--qp-bg-elevated"], "#f5f5f5");
+assert.equal(deriveTheme("light", "default", null)["--qp-bg-elevated"], "#f8f8f8");
+assert.equal(deriveTheme("dark", "default", null)["--qp-bg-elevated"], "#2a2a2a");
 
 const controls = JSON.parse(readFileSync(new URL("./fixtures/theme/patina-controls.json", import.meta.url), "utf8")) as Array<{variant: ThemeVariant; scheme: ColorScheme; expected: Record<string, string>}>;
 for (const fixture of controls) {

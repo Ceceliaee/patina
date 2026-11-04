@@ -37,7 +37,7 @@ export default function SettingsResidentPanel({
 
       <div className="mt-5 space-y-5">
         <SettingsPreferenceGroup title={UI_TEXT.settings.windowBehaviorTitle}>
-          <QuietActionRow className="settings-preference-list">
+          <QuietActionRow className="settings-preference-list settings-preference-pair">
             <SettingsPreferenceRow title={UI_TEXT.settings.closeToTrayLabel}>
               <QuietSwitch
                 checked={closeToTrayChecked}
@@ -55,7 +55,7 @@ export default function SettingsResidentPanel({
           </QuietActionRow>
         </SettingsPreferenceGroup>
         <SettingsPreferenceGroup title={UI_TEXT.settings.runtimeBehaviorTitle}>
-          <QuietActionRow className="settings-preference-list">
+          <QuietActionRow className="settings-preference-list settings-preference-pair">
             <SettingsPreferenceRow title={UI_TEXT.settings.launchAtLoginLabel}>
               <QuietSwitch
                 checked={launchAtLoginChecked}

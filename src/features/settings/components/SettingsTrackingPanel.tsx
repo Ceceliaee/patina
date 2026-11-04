@@ -103,7 +103,7 @@ export default function SettingsTrackingPanel({
           </QuietActionRow>
         </SettingsPreferenceGroup>
         <SettingsPreferenceGroup title={UI_TEXT.settings.recordingOptionsTitle}>
-          <QuietActionRow className="settings-preference-list settings-recording-options">
+          <QuietActionRow className="settings-preference-list settings-preference-pair">
             <SettingsPreferenceRow title={UI_TEXT.settings.trackingPausedLabel}>
               <QuietSwitch
                 checked={trackingPaused}

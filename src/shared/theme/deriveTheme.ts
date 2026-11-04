@@ -44,7 +44,7 @@ const DEFAULT_CONTROLS: Record<ThemeVariant, Record<string, string>> = {
     "--qp-bg-app": "#f4f4f4",
     "--qp-bg-canvas": "#fbfbfb",
     "--qp-bg-panel": "#ffffff",
-    "--qp-bg-elevated": "#f5f5f5",
+    "--qp-bg-elevated": "#f8f8f8",
     "--qp-text-primary": "#171717",
     "--qp-text-secondary": "#434343",
     "--qp-text-tertiary": "#707070",
@@ -68,7 +68,7 @@ const DEFAULT_CONTROLS: Record<ThemeVariant, Record<string, string>> = {
     "--qp-bg-app": "#212121",
     "--qp-bg-canvas": "#262626",
     "--qp-bg-panel": "#2d2d2d",
-    "--qp-bg-elevated": "#282828",
+    "--qp-bg-elevated": "#2a2a2a",
     "--qp-text-primary": "#d1d5dc",
     "--qp-text-secondary": "#adb3bd",
     "--qp-text-tertiary": "#7f8791",
@@ -148,8 +148,8 @@ export function deriveTheme(variant: ThemeVariant, scheme: ColorScheme, override
     "--qp-bg-app": under,
     "--qp-bg-canvas": p.surface,
     "--qp-bg-panel": panel,
-    // Nested cards sit below their panel; a small blend softens the separation.
-    "--qp-bg-elevated": hex(mix(dark ? surface : parse(under), parse(panel), dark ? 0.25 : 0.3)),
+    // Nested cards stay slightly darker than their panel with a softened separation.
+    "--qp-bg-elevated": hex(mix(dark ? surface : parse(under), parse(panel), dark ? 0.45 : 0.5)),
     "--qp-border-subtle": p.borderSubtle,
     "--qp-border-strong": p.borderStrong,
     "--qp-text-on-accent": solid(WHITE),

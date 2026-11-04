@@ -1920,6 +1920,11 @@
   color: var(--qp-text-tertiary);
 }
 
+.qp-segmented-filter-control .qp-segmented-filter-item {
+  font-size: var(--qp-font-size-caption);
+  line-height: var(--qp-line-height-caption);
+}
+
 .qp-segmented-filter-compact .qp-segmented-filter-item:hover:not(:disabled) {
   background: color-mix(in srgb, var(--qp-bg-panel) 72%, transparent);
   color: var(--qp-text-secondary);

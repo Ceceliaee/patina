@@ -121,6 +121,7 @@ export default function SettingsAppearancePanel({
           <QuietActionRow className="settings-preference-list">
             <SettingsPreferenceRow title={UI_TEXT.settings.themeModeLabel} stacked>
               <QuietSegmentedFilter
+                variant="control"
                 value={themeMode}
                 options={themeModeOptions}
                 onChange={onThemeModeChange}

@@ -5,9 +5,9 @@ import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import QuietActionRow from "../../../shared/components/QuietActionRow";
 import QuietDialog from "../../../shared/components/QuietDialog";
-import QuietSubpanel from "../../../shared/components/QuietSubpanel";
 import QuietSwitch from "../../../shared/components/QuietSwitch";
 import SettingsPanelHeader from "./SettingsPanelHeader";
+import { SettingsPreferenceGroup } from "./SettingsPreferenceLayout";
 
 import { SettingsRuntimeAdapterService } from "../services/settingsRuntimeAdapterService.ts";
 import { createSettingsToken } from "../services/settingsTokenService.ts";
@@ -87,7 +87,7 @@ type WebActivityHelpCopiedField = "port" | "token";
 const WEB_ACTIVITY_PORT_MIN = 1024;
 const WEB_ACTIVITY_PORT_MAX = 65535;
 const PORT_DRAFT_PATTERN = /^\d{0,5}$/;
-const INTERFACE_FIELD_GRID_CLASS = "mt-4 grid grid-cols-1 gap-x-4 gap-y-3 lg:grid-cols-[minmax(0,4fr)_minmax(0,6fr)]";
+const INTERFACE_FIELD_GRID_CLASS = "settings-interface-fields grid grid-cols-1 lg:grid-cols-[minmax(0,4fr)_minmax(0,6fr)]";
 const WEB_ACTIVITY_STORE_LINKS = [
   ["chrome", "Chrome Web Store", "https://chromewebstore.google.com/detail/patina-web-sync/gimdckblhckibmeklhemgccabmbnoemd"],
   ["firefox", "Firefox Add-ons", "https://addons.mozilla.org/firefox/addon/patina-web-sync/"],
@@ -236,20 +236,20 @@ function InterfaceInlineField({
   className,
 }: InterfaceInlineFieldProps) {
   const rowClassName = [
-    "settings-interface-field grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2.5 gap-y-2",
+    "settings-interface-field grid items-center gap-x-2.5 gap-y-2",
     className,
   ].filter(Boolean).join(" ");
 
   return (
-    <QuietActionRow className={rowClassName}>
+    <div className={rowClassName}>
       <label
         htmlFor={htmlFor}
-        className="flex shrink-0 items-center gap-1.5 whitespace-nowrap qp-text-body qp-weight-emphasis text-[var(--qp-text-primary)]"
+        className="settings-preference-title min-w-0"
       >
         <span>{title}</span>
       </label>
       {children}
-    </QuietActionRow>
+    </div>
   );
 }
 
@@ -400,34 +400,34 @@ export default function SettingsInterfacePanel({
         />
 
         <div className="space-y-5">
-          <QuietSubpanel className="settings-web-activity-subpanel">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <div className="settings-web-activity-title-row flex min-w-0 flex-wrap items-center gap-2">
-                  <p className="qp-text-body qp-weight-emphasis text-[var(--qp-text-primary)]">
-                    {UI_TEXT.settings.webActivityTitle}
-                  </p>
-                  {showWebActivityHelp && (
-                    <button
-                      type="button"
-                      className="settings-inline-help-button"
-                      aria-label={UI_TEXT.accessibility.settings.openWebActivityHelp}
-                      onClick={() => setWebActivityHelpOpen(true)}
-                    >
-                      <span>{UI_TEXT.settings.webActivityHelpAction}</span>
-                    </button>
-                  )}
-                </div>
-              </div>
+          <SettingsPreferenceGroup
+            className="settings-web-activity-subpanel"
+            title={(
+              <span className="settings-web-activity-title-row flex min-w-0 flex-wrap items-center gap-2">
+                <span>{UI_TEXT.settings.webActivityTitle}</span>
+                {showWebActivityHelp && (
+                  <button
+                    type="button"
+                    className="settings-inline-help-button"
+                    aria-label={UI_TEXT.accessibility.settings.openWebActivityHelp}
+                    onClick={() => setWebActivityHelpOpen(true)}
+                  >
+                    <span>{UI_TEXT.settings.webActivityHelpAction}</span>
+                  </button>
+                )}
+              </span>
+            )}
+            headerAside={(
               <QuietSwitch
                 checked={webActivityEnabled}
                 onChange={handleWebActivityEnabledChange}
                 ariaLabel={UI_TEXT.accessibility.settings.toggleWebActivity}
               />
-            </div>
+            )}
+          >
 
             {webActivityEnabled ? (
-              <div className={INTERFACE_FIELD_GRID_CLASS}>
+              <QuietActionRow className={INTERFACE_FIELD_GRID_CLASS}>
                 <InterfaceInlineField
                   htmlFor="settings-web-activity-address"
                   title={UI_TEXT.settings.webActivityAddressLabel}
@@ -462,30 +462,24 @@ export default function SettingsInterfacePanel({
                     hideLabel={UI_TEXT.accessibility.settings.hideServiceToken}
                   />
                 </InterfaceInlineField>
-              </div>
+              </QuietActionRow>
             ) : null}
-          </QuietSubpanel>
+          </SettingsPreferenceGroup>
 
-          <QuietSubpanel>
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="qp-text-body qp-weight-emphasis text-[var(--qp-text-primary)]">
-                  {UI_TEXT.settings.remoteStatusBridgeTitle}
-                </p>
-              </div>
+          <SettingsPreferenceGroup title={UI_TEXT.settings.remoteStatusBridgeTitle} headerAside={(
               <QuietSwitch
                 checked={remoteStatusBridgeEnabled}
                 onChange={handleRemoteStatusBridgeEnabledChange}
                 ariaLabel={UI_TEXT.accessibility.settings.toggleRemoteStatusBridge}
               />
-            </div>
+          )}>
 
             {remoteStatusBridgeEnabled ? (
-              <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,4fr)_minmax(0,6fr)]">
+              <QuietActionRow className={INTERFACE_FIELD_GRID_CLASS}>
                 <InterfaceInlineField
                   htmlFor="settings-remote-status-bridge-url"
                   title={UI_TEXT.settings.remoteStatusBridgeUrlLabel}
-                  className="lg:col-span-2"
+                  className="settings-interface-field-wide lg:col-span-2"
                 >
                   <TextField
                     id="settings-remote-status-bridge-url"
@@ -531,9 +525,9 @@ export default function SettingsInterfacePanel({
                     hideLabel={UI_TEXT.accessibility.settings.hideServiceToken}
                   />
                 </InterfaceInlineField>
-              </div>
+              </QuietActionRow>
             ) : null}
-          </QuietSubpanel>
+          </SettingsPreferenceGroup>
         </div>
       </section>
 

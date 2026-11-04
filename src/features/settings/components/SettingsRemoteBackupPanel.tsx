@@ -160,7 +160,7 @@ export default function SettingsRemoteBackupPanel({
 
   return (
     <>
-      <QuietActionRow className="mt-3">
+      <div className="settings-data-action-row settings-remote-backup-row">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0 flex items-center gap-1.5">
             <p className="qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">
@@ -200,7 +200,7 @@ export default function SettingsRemoteBackupPanel({
             )}
           </div>
         </div>
-      </QuietActionRow>
+      </div>
 
       <QuietDialog
         open={remoteBackup.configDialogOpen}
@@ -241,7 +241,7 @@ export default function SettingsRemoteBackupPanel({
         )}
       >
         <div className="grid gap-4">
-          <label className="grid gap-1.5 qp-text-caption qp-weight-emphasis text-[var(--qp-text-secondary)]">
+          <label className="settings-form-label grid gap-1.5">
             {UI_TEXT.settings.webDavServerUrl}
             <div className="settings-webdav-server-input h-9">
               <input
@@ -257,7 +257,7 @@ export default function SettingsRemoteBackupPanel({
               <span>{draft.remoteDir}</span>
             </div>
           </label>
-          <label className="grid gap-1.5 qp-text-caption qp-weight-emphasis text-[var(--qp-text-secondary)]">
+          <label className="settings-form-label grid gap-1.5">
             {UI_TEXT.settings.webDavUsername}
             <input
               value={draft.username}
@@ -267,7 +267,7 @@ export default function SettingsRemoteBackupPanel({
               autoComplete="username"
             />
           </label>
-          <label className="grid gap-1.5 qp-text-caption qp-weight-emphasis text-[var(--qp-text-secondary)]">
+          <label className="settings-form-label grid gap-1.5">
             {UI_TEXT.settings.webDavPassword}
             <div className="relative w-full">
               <input
@@ -299,7 +299,6 @@ export default function SettingsRemoteBackupPanel({
       <QuietDialog
         open={remoteBackup.restoreDialogOpen}
         title={UI_TEXT.settings.webDavRemoteBackupsTitle}
-        description={UI_TEXT.settings.webDavRemoteBackupsDescription}
         onClose={remoteBackup.closeRestoreDialog}
         closeOnBackdrop={!remoteBackup.isDownloading}
         headerAside={(

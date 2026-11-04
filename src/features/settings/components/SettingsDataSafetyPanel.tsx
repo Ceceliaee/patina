@@ -3,7 +3,6 @@ import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "rea
 import {
   BrushCleaning, Database, FolderPen, FolderOpen, CircleAlert, RefreshCw, RotateCcw, Trash2, X, } from "lucide-react";
 
-import QuietSubpanel from "../../../shared/components/QuietSubpanel";
 import QuietActionRow from "../../../shared/components/QuietActionRow";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
 import QuietDialog from "../../../shared/components/QuietDialog";
@@ -18,6 +17,7 @@ import SettingsRemoteBackupPanel from "./SettingsRemoteBackupPanel";
 import SettingsRemoteUploadDialog from "./SettingsRemoteUploadDialog";
 import QuietStepperSlider from "../../../shared/components/QuietStepperSlider.tsx";
 import SettingsPanelHeader from "./SettingsPanelHeader";
+import { SettingsPreferenceGroup } from "./SettingsPreferenceLayout";
 import { toEbwebviewCachePath } from "../services/storagePathDisplay.ts";
 import { formatRemoteBackupTargetSummary } from "../services/remoteBackupTargetSummary.ts";
 
@@ -317,14 +317,9 @@ export default function SettingsDataSafetyPanel({
         />
 
         <div className="space-y-5">
-          <QuietSubpanel>
-            <div className="flex min-h-7 items-center">
-              <p className="flex items-center gap-1.5 qp-text-group-title qp-weight-emphasis text-[var(--qp-text-primary)]">
-                <span>{UI_TEXT.settings.dataExportTitle}</span>
-              </p>
-            </div>
-            <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
-              <QuietActionRow>
+          <SettingsPreferenceGroup title={UI_TEXT.settings.dataExportTitle}>
+            <QuietActionRow className="settings-data-actions-grid">
+              <div className="settings-data-action-row">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0 flex items-center gap-1.5">
                     <p className="qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">{UI_TEXT.settings.dataExportAction}</p>
@@ -333,8 +328,8 @@ export default function SettingsDataSafetyPanel({
                     {UI_TEXT.settings.dataExportAction}
                   </QuietButton>
                 </div>
-              </QuietActionRow>
-              <QuietActionRow>
+              </div>
+              <div className="settings-data-action-row">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0 flex items-center gap-1.5">
                     <p className="qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">{UI_TEXT.settings.dataImportAction}</p>
@@ -343,153 +338,146 @@ export default function SettingsDataSafetyPanel({
                     {UI_TEXT.settings.dataImportAction}
                   </QuietButton>
                 </div>
-              </QuietActionRow>
-            </div>
-          </QuietSubpanel>
-
-          <QuietSubpanel>
-            <div className="flex min-h-7 items-center">
-              <p className="qp-text-group-title qp-weight-emphasis text-[var(--qp-text-primary)]">{UI_TEXT.settings.backupRestoreTitle}</p>
-            </div>
-
-            <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
-              <QuietActionRow>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0 flex items-center gap-1.5">
-                    <p className="qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">
-                      {UI_TEXT.settings.backupExportTitle}
-                    </p>
-                  </div>
-                  <QuietButton
-                    ref={backupButtonRef}
-                    size="regular"
-                    onClick={handleBackupAction}
-                    disabled={busy}
-                    busy={isExportingBackup || remoteBackup.isUploading}
-                    className="shrink-0 rounded-[8px] text-[var(--qp-text-secondary)]"
-                  >
-                    {isExportingBackup || remoteBackup.isUploading ? UI_TEXT.settings.backupExporting : UI_TEXT.settings.backupExportAction}
-                  </QuietButton>
-                </div>
-              </QuietActionRow>
-
-              <QuietActionRow>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0 flex items-center gap-1.5">
-                    <p className="qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">
-                      {UI_TEXT.settings.backupRestoreActionTitle}
-                    </p>
-                  </div>
-                  <QuietButton
-                    ref={restoreButtonRef}
-                    size="regular"
-                    onClick={handleRestoreAction}
-                    disabled={busy}
-                    busy={isRestoringBackup || remoteBackup.isListing || remoteBackup.isDownloading}
-                    className="shrink-0 rounded-[8px] text-[var(--qp-text-secondary)]"
-                  >
-                    {isRestoringBackup || remoteBackup.isListing || remoteBackup.isDownloading ? UI_TEXT.settings.backupRestoring : UI_TEXT.settings.backupRestoreAction}
-                  </QuietButton>
-                </div>
-              </QuietActionRow>
-            </div>
-
-            <SettingsRemoteBackupPanel
-              remoteBackup={remoteBackup}
-              onRestoreEntrySelected={handleRemoteRestoreEntrySelected}
-            />
-          </QuietSubpanel>
-
-          <QuietSubpanel className="settings-local-paths-panel">
-            <div className="settings-local-paths-header">
-              <div className="settings-local-paths-copy">
-                <p className="settings-local-paths-title">
-                  <span>{storageText.storageDirectoryTitle}</span>
-                </p>
               </div>
-              <div className="settings-local-paths-actions">
+            </QuietActionRow>
+          </SettingsPreferenceGroup>
+
+          <SettingsPreferenceGroup title={UI_TEXT.settings.backupRestoreTitle}>
+            <QuietActionRow className="settings-data-actions-list">
+              <div className="settings-data-actions-grid">
+                <div className="settings-data-action-row">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex items-center gap-1.5">
+                      <p className="qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">
+                        {UI_TEXT.settings.backupExportTitle}
+                      </p>
+                    </div>
+                    <QuietButton
+                      ref={backupButtonRef}
+                      size="regular"
+                      onClick={handleBackupAction}
+                      disabled={busy}
+                      busy={isExportingBackup || remoteBackup.isUploading}
+                      className="shrink-0 rounded-[8px] text-[var(--qp-text-secondary)]"
+                    >
+                      {isExportingBackup || remoteBackup.isUploading ? UI_TEXT.settings.backupExporting : UI_TEXT.settings.backupExportAction}
+                    </QuietButton>
+                  </div>
+                </div>
+
+                <div className="settings-data-action-row">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex items-center gap-1.5">
+                      <p className="qp-text-body qp-weight-medium text-[var(--qp-text-primary)]">
+                        {UI_TEXT.settings.backupRestoreActionTitle}
+                      </p>
+                    </div>
+                    <QuietButton
+                      ref={restoreButtonRef}
+                      size="regular"
+                      onClick={handleRestoreAction}
+                      disabled={busy}
+                      busy={isRestoringBackup || remoteBackup.isListing || remoteBackup.isDownloading}
+                      className="shrink-0 rounded-[8px] text-[var(--qp-text-secondary)]"
+                    >
+                      {isRestoringBackup || remoteBackup.isListing || remoteBackup.isDownloading ? UI_TEXT.settings.backupRestoring : UI_TEXT.settings.backupRestoreAction}
+                    </QuietButton>
+                  </div>
+                </div>
+              </div>
+
+              <SettingsRemoteBackupPanel
+                remoteBackup={remoteBackup}
+                onRestoreEntrySelected={handleRemoteRestoreEntrySelected}
+              />
+            </QuietActionRow>
+          </SettingsPreferenceGroup>
+
+          <SettingsPreferenceGroup className="settings-local-paths-panel"
+            title={storageText.storageDirectoryTitle}
+            headerAside={(
                 <QuietIconAction
                   icon={<RefreshCw size={14} className={isStorageBusy ? "animate-spin" : undefined} />}
                   title={storageText.storageSnapshotRefreshAction}
                   disabled={busy}
                   onClick={() => void onRefreshStorageSnapshot()}
                 />
+            )}>
+
+            <QuietActionRow className="settings-storage-path-card">
+              <div className="settings-storage-path-list" aria-busy={isStorageBusy}>
+                {storageSnapshot ? (
+                  <>
+                    <StoragePathRow
+                      title={storageText.installDirectoryLabel}
+                      meta={installRootSizeText}
+                      onOpen={() => void onOpenStorageDirectory(storageSnapshot.paths.installDir)}
+                    />
+                    <StoragePathRow
+                      title={storageText.webviewCacheDirectoryLabel}
+                      meta={cacheRootSizeText}
+                      extraActions={(
+                        <QuietIconAction
+                          icon={<BrushCleaning size={14} />}
+                          title={storageText.webviewCacheClearTitle}
+                          disabled={busy}
+                          onClick={() => setCacheClearDialogOpen(true)}
+                        />
+                      )}
+                      onChangePath={!isCustomWebviewRoot ? () => void onChooseCacheDirectory() : undefined}
+                      onRestoreDefault={isCustomWebviewRoot ? () => void onRestoreDefaultCacheDirectory() : undefined}
+                      changeDisabled={busy}
+                      restoreDisabled={busy}
+                      onOpen={() => void onOpenStorageDirectory(webviewCachePath)}
+                    />
+                    <StoragePathRow
+                      title={storageText.dataDirectoryLabel}
+                      meta={dataRootSizeText}
+                      extraActions={(
+                        <QuietIconAction
+                          icon={<Trash2 size={14} />}
+                          title={UI_TEXT.settings.cleanupTitle}
+                          tone="danger"
+                          disabled={busy || isCleaning}
+                          onClick={() => setHistoryCleanupDialogOpen(true)}
+                        />
+                      )}
+                      onChangePath={!isCustomDataRoot ? () => void onChooseDataDirectory() : undefined}
+                      onRestoreDefault={isCustomDataRoot ? () => void onRestoreDefaultDataDirectory() : undefined}
+                      changeDisabled={busy}
+                      restoreDisabled={busy}
+                      onOpen={() => void onOpenStorageDirectory(storageSnapshot.paths.dataRoot)}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <StoragePathPlaceholderRow
+                      title={storageText.installDirectoryLabel}
+                      actions={[
+                        { icon: <FolderOpen size={14} />, title: storageText.openDirectoryAction },
+                      ]}
+                    />
+                    <StoragePathPlaceholderRow
+                      title={storageText.webviewCacheDirectoryLabel}
+                      actions={[
+                        { icon: <BrushCleaning size={14} />, title: storageText.webviewCacheClearTitle },
+                        { icon: <FolderOpen size={14} />, title: storageText.openDirectoryAction },
+                        { icon: <FolderPen size={14} />, title: storageText.changePathAction },
+                      ]}
+                    />
+                    <StoragePathPlaceholderRow
+                      title={storageText.dataDirectoryLabel}
+                      actions={[
+                        { icon: <Trash2 size={14} />, title: UI_TEXT.settings.cleanupTitle },
+                        { icon: <FolderOpen size={14} />, title: storageText.openDirectoryAction },
+                        { icon: <FolderPen size={14} />, title: storageText.changePathAction },
+                      ]}
+                    />
+                  </>
+                )}
               </div>
-            </div>
-
-            <div className="settings-storage-path-list" aria-busy={isStorageBusy}>
-              {storageSnapshot ? (
-                <>
-                  <StoragePathRow
-                    title={storageText.installDirectoryLabel}
-                    meta={installRootSizeText}
-                    onOpen={() => void onOpenStorageDirectory(storageSnapshot.paths.installDir)}
-                  />
-                  <StoragePathRow
-                    title={storageText.webviewCacheDirectoryLabel}
-                    meta={cacheRootSizeText}
-                    extraActions={(
-                      <QuietIconAction
-                        icon={<BrushCleaning size={14} />}
-                        title={storageText.webviewCacheClearTitle}
-                        disabled={busy}
-                        onClick={() => setCacheClearDialogOpen(true)}
-                      />
-                    )}
-                    onChangePath={!isCustomWebviewRoot ? () => void onChooseCacheDirectory() : undefined}
-                    onRestoreDefault={isCustomWebviewRoot ? () => void onRestoreDefaultCacheDirectory() : undefined}
-                    changeDisabled={busy}
-                    restoreDisabled={busy}
-                    onOpen={() => void onOpenStorageDirectory(webviewCachePath)}
-                  />
-                  <StoragePathRow
-                    title={storageText.dataDirectoryLabel}
-                    meta={dataRootSizeText}
-                    extraActions={(
-                      <QuietIconAction
-                        icon={<Trash2 size={14} />}
-                        title={UI_TEXT.settings.cleanupTitle}
-                        tone="danger"
-                        disabled={busy || isCleaning}
-                        onClick={() => setHistoryCleanupDialogOpen(true)}
-                      />
-                    )}
-                    onChangePath={!isCustomDataRoot ? () => void onChooseDataDirectory() : undefined}
-                    onRestoreDefault={isCustomDataRoot ? () => void onRestoreDefaultDataDirectory() : undefined}
-                    changeDisabled={busy}
-                    restoreDisabled={busy}
-                    onOpen={() => void onOpenStorageDirectory(storageSnapshot.paths.dataRoot)}
-                  />
-                </>
-              ) : (
-                <>
-                  <StoragePathPlaceholderRow
-                    title={storageText.installDirectoryLabel}
-                    actions={[
-                      { icon: <FolderOpen size={14} />, title: storageText.openDirectoryAction },
-                    ]}
-                  />
-                  <StoragePathPlaceholderRow
-                    title={storageText.webviewCacheDirectoryLabel}
-                    actions={[
-                      { icon: <BrushCleaning size={14} />, title: storageText.webviewCacheClearTitle },
-                      { icon: <FolderOpen size={14} />, title: storageText.openDirectoryAction },
-                      { icon: <FolderPen size={14} />, title: storageText.changePathAction },
-                    ]}
-                  />
-                  <StoragePathPlaceholderRow
-                    title={storageText.dataDirectoryLabel}
-                    actions={[
-                      { icon: <Trash2 size={14} />, title: UI_TEXT.settings.cleanupTitle },
-                      { icon: <FolderOpen size={14} />, title: storageText.openDirectoryAction },
-                      { icon: <FolderPen size={14} />, title: storageText.changePathAction },
-                    ]}
-                  />
-                </>
-              )}
-            </div>
-
-          </QuietSubpanel>
+            </QuietActionRow>
+          </SettingsPreferenceGroup>
         </div>
       </section>
 
@@ -663,7 +651,6 @@ export default function SettingsDataSafetyPanel({
       <QuietDialog
         open={strategyDialogOpen}
         title={UI_TEXT.settings.restoreStrategyLabel}
-        description={UI_TEXT.settings.restoreStrategyHint}
         onClose={closeStrategyDialog}
         closeOnBackdrop={!isRestoringBackup}
         initialFocusRef={selectedRestoreStrategyRef}
@@ -694,6 +681,7 @@ export default function SettingsDataSafetyPanel({
       >
         <div className="flex flex-col gap-3">
           <QuietSegmentedFilter
+            variant="control"
             value={restoreStrategy}
             options={restoreStrategyOptions}
             onChange={onRestoreStrategyChange}

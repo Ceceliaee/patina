@@ -1,14 +1,21 @@
 import type { ReactNode } from "react";
 import { CircleAlert } from "lucide-react";
-import QuietSubpanel from "../../../shared/components/QuietSubpanel";
 import QuietTooltip from "../../../shared/components/QuietTooltip";
 
-export function SettingsPreferenceGroup({ title, children }: { title: string; children: ReactNode }) {
+export function SettingsPreferenceGroup({ title, children, headerAside, className = "" }: {
+  title: ReactNode;
+  children?: ReactNode;
+  headerAside?: ReactNode;
+  className?: string;
+}) {
   return (
-    <QuietSubpanel className="settings-preference-group">
-      <h3 className="settings-preference-group-title">{title}</h3>
+    <div className={`settings-preference-group ${className}`.trim()}>
+      <div className="settings-preference-group-header">
+        <h3 className="settings-preference-group-title">{title}</h3>
+        {headerAside}
+      </div>
       {children}
-    </QuietSubpanel>
+    </div>
   );
 }
 

@@ -148,7 +148,7 @@ export async function runThemeContrastScenarios({ client, sessionId, runTest }: 
             const rowColor = channels(row), panelColor = channels(row.closest('.qp-panel'));
             return rowColor.reduce((sum, value, index) => sum + panelColor[index] - value, 0) / 3;
           })()`);
-          assert.ok(Number(separation) >= 5, "rendered application rows must be distinct from the panel");
+          assert.ok(Number(separation) >= 2, "softened application rows must retain a surface difference from the panel");
         }
         assert.equal(await read(`(() => {
           const track = document.querySelector('.dashboard-top-app-progress').parentElement;

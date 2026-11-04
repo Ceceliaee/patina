@@ -32,7 +32,7 @@ export default function SettingsRemoteUploadDialog({ target, remoteBackup, onClo
   };
   return (
     <QuietDialog open title={text.settings.webDavUploadTitle}
-      description={text.settings.webDavUploadDescription} onClose={close}
+      onClose={close}
       closeOnBackdrop={!remoteBackup.isUploading} initialFocusRef={inputRef}
       actions={<>
         <QuietButton size="large" disabled={remoteBackup.isUploading} onClick={close}>{text.common.cancel}</QuietButton>
@@ -42,7 +42,7 @@ export default function SettingsRemoteUploadDialog({ target, remoteBackup, onClo
     >
       <div className="grid gap-4">
         <p className="break-all qp-text-body">{formatRemoteBackupTargetSummary(target)}</p>
-        <label className="grid gap-1.5 qp-text-body">
+        <label className="settings-form-label grid gap-1.5">
           {text.settings.webDavFileName}
           <input ref={inputRef} className="qp-input h-9 w-full" value={fileName}
             disabled={remoteBackup.isUploading} aria-invalid={invalid}
