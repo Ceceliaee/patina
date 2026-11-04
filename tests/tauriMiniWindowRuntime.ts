@@ -23,10 +23,14 @@ async function evaluate(client: CdpConnection, expression: string) {
 }
 
 export async function connectMini(port: number, label = "mini"): Promise<CdpConnection | null> {
-  const response = await fetch(`http://127.0.0.1:${port}/json/list`);
+  let response: Response;
+  try { response = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(1000) }); }
+  catch { return null; } // The debug server disappears while the last WebView is released.
   const targets = await response.json() as Array<{ type: string; webSocketDebuggerUrl?: string }>;
   for (const target of targets.filter((target) => target.type === "page" && target.webSocketDebuggerUrl)) {
-    const client = await CdpConnection.connect(target.webSocketDebuggerUrl!);
+    let client: CdpConnection;
+    try { client = await CdpConnection.connect(target.webSocketDebuggerUrl!); }
+    catch { continue; } // A listed target can close before its socket opens.
     try {
       if (await evaluate(client, `window.__TAURI_INTERNALS__?.metadata?.currentWindow?.label === ${JSON.stringify(label)}`) === true) return client;
     } catch { /* A target may be closing while enumerated. */ }

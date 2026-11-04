@@ -149,7 +149,8 @@ mod tests {
                     assert_eq!(panel.height, super::super::scale(height, dpi) as u32);
                     assert_eq!(visual.height, f64::from(panel.height) / dpi);
                     if edge.is_none() {
-                        assert_eq!((panel.x, panel.y), (-1600, 10));
+                        let base = bounds(&placement, true, work, dpi);
+                        assert_eq!((panel.x, panel.y), (base.x, 10));
                     } else {
                         let handle = bounds_with_tools(&placement, false, work, dpi, rows);
                         assert_eq!(handle, bounds(&placement, false, work, dpi));

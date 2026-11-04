@@ -14,7 +14,7 @@ export interface MiniNativeSample {
 }
 
 // A separate input target lets the test distinguish a passive reveal from activation.
-export function startMiniNativeProbe(processId: number, signal?: AbortSignal) {
+export function startMiniNativeProbe(processId: number, signal?: AbortSignal, windowTitle: "Patina Mini" | "Patina Notification" = "Patina Mini") {
   signal?.throwIfAborted();
   const script = `
 Add-Type -AssemblyName System.Windows.Forms
@@ -140,7 +140,7 @@ try {
       if ($foregroundPid -ne ${processId} -and $foreground -ne $form.Handle) { throw 'Input precondition changed: foreground belongs to another application; stopping injection' }
     }
     [void][MiniProbe]::SetThreadDpiAwarenessContext([IntPtr](-4))
-    $miniHandle=[MiniProbe]::Find(${processId},'Patina Mini')
+    $miniHandle=[MiniProbe]::Find(${processId},'${windowTitle}')
     if ($request.op -in @('lock','unlock','suspend','resume')) {
       $powerHandle=[MiniProbe]::Find(${processId},'PatinaPowerWatcherWindow')
       if ($powerHandle -eq [IntPtr]::Zero) { throw 'Missing isolated power observer' }

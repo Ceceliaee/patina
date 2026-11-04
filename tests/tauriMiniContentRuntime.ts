@@ -60,12 +60,6 @@ export async function verifyMiniContentRuntime(client: CdpConnection, miniClient
     }
     assert.equal((await pageState()).page, page);
   };
-  await selectPage("today");
-  for (const mode of ["total", "category"]) {
-    await evaluate(client, `window.__TAURI_INTERNALS__.invoke('cmd_commit_app_settings', {mutations:[{key:'hourly_activity_chart_mode',value:'${mode}'}]})`);
-    await waitFor("Mini follows the saved hourly chart mode", () => evaluate(miniClient,
-      `Boolean(document.querySelector('[data-mini-page="today"][data-display-mode="${mode}"]'))`), 10_000);
-  }
   await selectPage("activity");
   for (const mode of ["category", "app"]) {
     await evaluate(client, `window.__TAURI_INTERNALS__.invoke('cmd_commit_app_settings', {mutations:[{key:'history_timeline_mode',value:'${mode}'}]})`);

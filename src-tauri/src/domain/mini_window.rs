@@ -152,9 +152,6 @@ pub fn bounds_with_tools(
                 .as_ref()
                 .map(|m| m.work_area)
                 .unwrap_or(work);
-            if previous_work == work {
-                return clamp_rect(Rect::new(saved.x, saved.y, width, height), work);
-            }
             let fraction = |position: i32, origin: i32, extent: u32, size: u32| {
                 ((f64::from(position) - f64::from(origin))
                     / f64::from(extent.saturating_sub(size).max(1)))
@@ -165,10 +162,14 @@ pub fn bounds_with_tools(
                     + (fraction(saved.x, previous_work.x, previous_work.width, saved.width)
                         * f64::from(work.width.saturating_sub(width)))
                     .round() as i32,
-                work.y
-                    + (fraction(saved.y, previous_work.y, previous_work.height, saved.height)
-                        * f64::from(work.height.saturating_sub(height)))
-                    .round() as i32,
+                if previous_work == work {
+                    saved.y
+                } else {
+                    work.y
+                        + (fraction(saved.y, previous_work.y, previous_work.height, saved.height)
+                            * f64::from(work.height.saturating_sub(height)))
+                        .round() as i32
+                },
                 width,
                 height,
             )

@@ -1,7 +1,7 @@
 import type { MiniAction, MiniSnapshot } from "../../src/platform/desktop/miniWindowRuntimeGateway.ts";
 
 const edge = new URLSearchParams(location.search).get("miniEdge");
-let snapshot: Omit<MiniSnapshot, "focusRequest" | "transitionId"> & { focus_request: number; transition_id: number } = { epoch: 1, revision: 1, page: new URLSearchParams(location.search).get("miniPage") === "tools" ? "tools" : "today", expanded: true, suppressed: false,
+let snapshot: Omit<MiniSnapshot, "focusRequest" | "transitionId"> & { focus_request: number; transition_id: number } = { epoch: 1, revision: 1, page: new URLSearchParams(location.search).get("miniPage") === "tools" ? "tools" : "activity", expanded: true, suppressed: false,
   edge: edge === "floating" ? null : edge === "left" || edge === "right" ? edge : "top", held: false, failed: false, focus_request: 1,
   transition_id: 1, transitioning: false, visual: { width: 320, height: 240, anchor: 0.5 } };
 export function miniCommand(command: string, payload: { action?: MiniAction; epoch?: number }) {
@@ -11,8 +11,8 @@ export function miniCommand(command: string, payload: { action?: MiniAction; epo
   if (payload.epoch !== snapshot.epoch) throw new Error("Session expired");
   const expanded = snapshot.expanded;
   if (action?.kind === "cycle_page") {
-    const pages = ["today", "activity", "tools"] as const;
-    snapshot.page = pages[(pages.indexOf(snapshot.page) + (action.forward ? 1 : 2)) % 3];
+    const pages = ["activity", "tools"] as const;
+    snapshot.page = pages[(pages.indexOf(snapshot.page) + 1) % pages.length];
   }
   if (action?.kind === "collapse" && snapshot.edge && !snapshot.held) snapshot.expanded = false;
   if (action?.kind === "reveal") { snapshot.expanded = true; snapshot.focus_request += 1; }
@@ -20,5 +20,12 @@ export function miniCommand(command: string, payload: { action?: MiniAction; epo
   if (snapshot.expanded !== expanded) { snapshot.transition_id += 1; snapshot.transitioning = true; }
   if (action?.kind === "transition_complete" && action.transition_id === snapshot.transition_id) snapshot.transitioning = false;
   snapshot = { ...snapshot, revision: snapshot.revision + 1 };
+  return { ...snapshot };
+}
+
+export function miniToolRows(rows: number) {
+  const height = 240 + (rows ? 6 + 36 * rows : 0);
+  if (snapshot.visual.height === height) return null;
+  snapshot = { ...snapshot, revision: snapshot.revision + 1, visual: { ...snapshot.visual, height } };
   return { ...snapshot };
 }
