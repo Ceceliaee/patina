@@ -25,7 +25,8 @@ const NON_DATA_PRIMARY_LAZY_ROUTES_GZIP_BUDGET_KI_B = 86.5;
 // Preserve the existing aggregate buffer and the 3% headroom rule.
 // Timed reminder flow: docs/archive/2026-11-01-timed-reminder-bundle-decision.md.
 // Recurring reminder controls: docs/archive/2026-11-01-recurring-reminders-bundle-decision.md.
-const TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 410;
+// Software notification delivery: docs/archive/2026-11-04-tools-notification-bundle-decision.md.
+const TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 413;
 
 const INITIAL_CHUNK_BUDGETS = [
   { label: "index", pattern: /^index-.*\.js$/, gzipKiB: 65 },
@@ -67,7 +68,8 @@ const LAZY_PAGE_CHUNK_BUDGETS = [
   // Data's first render; the private detail chunk owns day analysis only. The
   // third application-category mode remains synchronous and feature-owned here;
   // splitting it would duplicate the read-model graph into unowned support chunks.
-  { label: "Data", pattern: /^Data-.*\.js$/, gzipKiB: 22.6 },
+  // Chart handoff readiness: docs/archive/2026-11-04-data-navigation-bundle-decision.md.
+  { label: "Data", pattern: /^Data-.*\.js$/, gzipKiB: 22.8 },
   { label: "About", pattern: /^About-.*\.js$/, gzipKiB: 18 },
 ] as const;
 
@@ -76,6 +78,7 @@ const NON_DATA_PRIMARY_LAZY_ROUTE_BUDGETS = LAZY_PAGE_CHUNK_BUDGETS.filter(
 );
 
 const LAZY_SECONDARY_CHUNK_BUDGETS = [
+  { label: "Tool notification shell", pattern: /^ToolNotificationShell-.*\.js$/, gzipKiB: 0.31 },
   { label: "Usage reminder dialog", pattern: /^ActivityReminderAlertDialog-.*\.js$/, gzipKiB: 2 },
   { label: "Timed reminder dialog", pattern: /^TimedReminderAlertDialog-.*\.js$/, gzipKiB: 1.18 },
   // Mini pages and bounded chart details; scoped decisions:
