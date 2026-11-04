@@ -1,6 +1,10 @@
 use std::{fs, io::ErrorKind, path::Path};
 
 const APP_COMMANDS: &[&str] = &[
+    "cmd_get_tool_presentation",
+    "cmd_save_tool_notification_preferences",
+    "cmd_tool_presentation_action",
+    "cmd_tool_presentation_ready",
     "cmd_open_mini_window",
     "cmd_get_mini_window_snapshot",
     "cmd_mini_window_action",

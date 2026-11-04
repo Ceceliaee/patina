@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "tool-notification",
+  "description": "Independent Patina tool notification with scoped alert actions.",
+  "windows": ["tool-notification"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten", "tool-notification-commands"]
+}

@@ -4,6 +4,10 @@
 identifier = "main-window-commands"
 description = "Allows the main application window to invoke the complete Patina application command surface."
 commands.allow = [
+  "cmd_get_tool_presentation",
+  "cmd_save_tool_notification_preferences",
+  "cmd_tool_presentation_action",
+  "cmd_tool_presentation_ready",
   "cmd_get_mini_activity_snapshot",
   "cmd_open_mini_window",
   "cmd_get_mini_window_snapshot",
@@ -128,3 +132,7 @@ commands.allow = [
   "cmd_get_mini_activity_snapshot",
   "cmd_show_main_window",
 ]
+[[permission]]
+identifier = "tool-notification-commands"
+description = "Read and act only on the alert assigned to the notification window."
+commands.allow = ["cmd_get_tool_presentation", "cmd_tool_presentation_action", "cmd_tool_presentation_ready"]

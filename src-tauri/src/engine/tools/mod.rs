@@ -30,7 +30,6 @@ pub const TOOLS_ALERT_EVENT: &str = "tools-alert";
 const TOOLS_RUNTIME_MIN_WAKE_MS: i64 = 250;
 const TOOLS_RUNTIME_IDLE_WAKE_MS: i64 = 60_000;
 const TOOLS_RUNTIME_ERROR_WAKE_MS: u64 = 5_000;
-const TOOLS_ALERT_LIMIT: usize = 32;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ToolAlertQueueStats {
@@ -66,6 +65,10 @@ impl ToolsRuntimeState {
     }
 
     fn replace(&self, snapshot: ToolsRuntimeSnapshot) {
+        self.alerts
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .retain(|alert| crate::domain::tool_notifications::is_current(alert, &snapshot));
         *self.inner.lock().unwrap_or_else(PoisonError::into_inner) = snapshot;
     }
 
@@ -92,7 +95,13 @@ impl ToolsRuntimeState {
 
         ToolAlertQueueStats {
             entries,
-            limit: TOOLS_ALERT_LIMIT,
+            limit: {
+                let snapshot = self.snapshot();
+                snapshot.reminders.len()
+                    + snapshot.activity_reminder_rules.len()
+                    + snapshot.pomodoro_tasks.len()
+                    + snapshot.free_focus_tasks.len()
+            },
         }
     }
 
@@ -124,11 +133,9 @@ fn push_unique_alert(alerts: &mut Vec<ToolAlert>, alert: ToolAlert) {
         return;
     }
 
+    // At most one pending event per source; unrelated pending work is never evicted.
+    alerts.retain(|old| !crate::domain::tool_notifications::same_source(old, &alert));
     alerts.push(alert);
-    if alerts.len() > TOOLS_ALERT_LIMIT {
-        let overflow = alerts.len().saturating_sub(TOOLS_ALERT_LIMIT);
-        alerts.drain(0..overflow);
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -319,7 +326,7 @@ pub fn alert_queue_stats<R: Runtime>(app: &AppHandle<R>) -> ToolAlertQueueStats 
         .map(|state| state.alert_stats())
         .unwrap_or(ToolAlertQueueStats {
             entries: 0,
-            limit: TOOLS_ALERT_LIMIT,
+            limit: 0,
         })
 }
 
@@ -1086,16 +1093,31 @@ mod tests {
     }
 
     #[test]
-    fn tool_alerts_keep_a_hard_queue_limit() {
+    fn tool_alerts_do_not_evict_unrelated_pending_sources() {
         let state = ToolsRuntimeState::default();
+        let mut snapshot = ToolsRuntimeSnapshot::default();
+        for id in 0..40 {
+            snapshot.reminders.push(crate::domain::tools::ToolReminder {
+                id,
+                label: String::new(),
+                scheduled_at: 1000,
+                created_at: 0,
+                status: crate::domain::tools::ReminderStatus::PendingConfirmation,
+                fired_at: Some(1000),
+                cancelled_at: None,
+                recurrence: None,
+                recurrence_anchor_at: None,
+            });
+        }
+        state.replace(snapshot.clone());
 
-        for index in 0..(TOOLS_ALERT_LIMIT + 1) {
+        for index in 0..40 {
             state.push_alert(ToolAlert {
-                id: format!("reminder:{index}"),
+                id: format!("reminder:{index}:1000"),
                 kind: ToolAlertKind::Reminder,
                 title: "鎻愰啋".to_string(),
                 body: "鏃堕棿鍒颁簡".to_string(),
-                occurred_at: index as i64,
+                occurred_at: 1000,
                 free_focus: None,
                 pomodoro: None,
                 activity_reminder: None,
@@ -1103,17 +1125,31 @@ mod tests {
         }
 
         let alerts = state.alerts();
-        assert_eq!(alerts.len(), TOOLS_ALERT_LIMIT);
+        assert_eq!(alerts.len(), 40);
         assert_eq!(
             alerts.first().map(|alert| alert.id.as_str()),
-            Some("reminder:1")
+            Some("reminder:0:1000")
         );
         assert_eq!(
             state.alert_stats(),
             ToolAlertQueueStats {
-                entries: TOOLS_ALERT_LIMIT,
-                limit: TOOLS_ALERT_LIMIT,
+                entries: 40,
+                limit: 40,
             }
+        );
+        let mut replacement = alerts[0].clone();
+        replacement.id = "reminder:0:2000".into();
+        replacement.occurred_at = 2000;
+        state.push_alert(replacement);
+        assert_eq!(state.alerts().len(), 40);
+        assert!(!state.alerts().iter().any(|a| a.id == "reminder:0:1000"));
+        snapshot.reminders.remove(0);
+        snapshot.reminders[0].status = crate::domain::tools::ReminderStatus::Fired;
+        state.replace(snapshot);
+        assert_eq!(
+            state.alerts().len(),
+            38,
+            "removed and completed sources withdraw their alerts"
         );
     }
 

@@ -9,6 +9,7 @@ pub mod persistence;
 pub mod persistence_read;
 pub mod settings;
 pub mod storage;
+pub mod tool_notifications;
 pub mod tools;
 pub mod tracking;
 pub mod update;

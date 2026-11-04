@@ -11,6 +11,7 @@ mod activity_reminders;
 mod activity_unique_target_tests;
 mod backup_restore;
 pub(crate) mod free_focus;
+pub(crate) mod notification_preferences;
 pub(crate) mod pomodoro_tasks;
 mod read;
 pub(crate) mod timed_reminders;

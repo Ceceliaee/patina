@@ -15,4 +15,6 @@ pub mod tray_icon_theme;
 pub(crate) mod webview_health;
 pub mod window_activation;
 
+pub mod notification_sound;
+pub mod notification_window;
 pub mod storage_registry;

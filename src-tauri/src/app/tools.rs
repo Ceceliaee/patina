@@ -4,13 +4,21 @@ use crate::engine::tools::{self, CreateActivityReminderRuleRequest, StartPomodor
 use tauri::{App, AppHandle, Listener, Manager, Runtime};
 
 pub(crate) fn register_alert_handler<R: Runtime>(app: &App<R>) {
-    let app_handle = app.handle().clone();
-    app.listen(crate::engine::tools::TOOLS_ALERT_EVENT, move |_| {
-        let _ = crate::app::tray::show_main_window(
-            &app_handle,
-            crate::app::main_window::MainWindowShowReason::ToolAlert,
-        );
-    });
+    for event in [
+        tools::TOOLS_ALERT_EVENT,
+        tools::TOOLS_RUNTIME_CHANGED_EVENT,
+        "app-settings-changed",
+    ] {
+        let owner = app.handle().clone();
+        app.listen(event, move |_| {
+            let owner = owner.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = super::tool_notifications::refresh(&owner).await {
+                    eprintln!("[tool-notification] presentation refresh failed: {error}");
+                }
+            });
+        });
+    }
     let app_handle = app.handle().clone();
     app.listen("tracking-data-changed", move |event| {
         let payload = serde_json::from_str::<crate::domain::tracking::TrackingDataChangedPayload>(

@@ -11,6 +11,7 @@ pub mod mini_window;
 pub mod reminder_schedule;
 pub mod settings;
 pub mod storage;
+pub mod tool_notifications;
 pub mod tools;
 pub mod tracking;
 pub mod update;

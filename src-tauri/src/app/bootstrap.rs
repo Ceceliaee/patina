@@ -90,6 +90,7 @@ fn register_managed_state_and_plugins(
         .manage(tray::TrayIconRuntimeState::default())
         .manage(runtime_health)
         .manage(ToolsRuntimeState::default())
+        .manage(crate::app::tool_notifications::State::default())
         .manage(ToolsRuntimeWakeState::default())
         .manage(crate::platform::web_activity_bridge::WebActivityBridgeRuntimeState::default())
         .manage(crate::engine::remote_status_bridge::RemoteStatusBridgeRuntimeState::default())
@@ -125,6 +126,10 @@ fn isolated_autostart_name(debug: bool, isolated: Option<&str>) -> Option<&'stat
 
 fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
     builder.invoke_handler(tauri::generate_handler![
+        commands::tool_notifications::cmd_get_tool_presentation,
+        commands::tool_notifications::cmd_save_tool_notification_preferences,
+        commands::tool_notifications::cmd_tool_presentation_action,
+        commands::tool_notifications::cmd_tool_presentation_ready,
         commands::mini_window::cmd_open_mini_window,
         commands::mini_window::cmd_get_mini_window_snapshot,
         commands::mini_window::cmd_mini_window_action,
