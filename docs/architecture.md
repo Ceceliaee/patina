@@ -99,11 +99,11 @@ IPC 契约应保持稳定、可解析、可测试。
 Tauri application command 采用显式、默认拒绝的窗口授权模型：
 
 - `src-tauri/build.rs` 中的 application command manifest 是命令分类入口；新增 custom command 必须先归入 main-only 或对应小窗的精确 allowlist，未分类即构建门失败。
-- `src-tauri/permissions/window-commands.toml` 和 `src-tauri/capabilities/{default,mini}.json` 只授予精确命令，不使用 application command 通配符或 default allow-all。
-- main、mini 使用独立 permission set。mini 通过专用命令读取 bootstrap、内容与窗口快照，仅能操作自身窗口或打开主窗口，不能修改追踪或工具状态。两个窗口均不获得 plugin SQL load/select/execute。
+- `src-tauri/permissions/window-commands.toml` 和 `src-tauri/capabilities/` 的窗口配置只授予精确命令，不使用 application command 通配符或 default allow-all。
+- main、mini、tool-notification 使用独立 permission set。mini 通过专用命令读取 bootstrap、内容与窗口快照，可操作自身窗口、打开主窗口，以及通过带会话代次的 Mini 动作暂停或继续当前投影的计时任务。原生端校验任务类型、ID 与预期状态；mini 不能调用通用工具写入或追踪设置命令。通知窗只读取分配给自己的呈现快照、报告尺寸并执行绑定当前提醒 ID 的动作，不能调用通用任务写入或全局设置命令。三个窗口均不获得 plugin SQL load/select/execute。
 - 删除、恢复、密钥、存储迁移和更新安装等敏感 command 即使 capability 配错，也必须在 Rust handler 内根据真实 `WebviewWindow` label 做 caller guard；前端按钮不是安全边界。
 - 存储迁移编排归 `data/storage_migration.rs`，真实路径身份与无破坏写探针归 `data/storage_path_safety.rs`，staging/替换/旧数据清理的 reparse-safe 删除策略归 `data/storage_migration_cleanup.rs`；三者均默认拒绝无法确认的路径，破坏性清理前必须重新比较数据根和 WebView 根的交叉真实身份。
-- manifest、permission sets、capabilities、前端调用和 Rust `invoke_handler` 注册必须由静态 checker 保持一致，并由真实 main / mini runtime denial matrix 证明边界没有只停留在配置文本。
+- manifest、permission sets、capabilities、前端调用和 Rust `invoke_handler` 注册必须由静态 checker 保持一致，并由真实 main / mini / tool-notification runtime denial matrix 证明边界没有只停留在配置文本。
 
 ### 4.3 本地数据读取通道
 
@@ -283,15 +283,21 @@ src/
 - 页面切换与全局对话框
 - 跨 feature 运行时编排
 
+#### 工具通知生命周期
+
+`app/tool_notifications` 是工具到期事件的唯一呈现协调器；`domain/tool_notifications` 拥有偏好合法值与提醒有效性规则，`data/repositories/tools/notification_preferences` 在 settings 表内事务合并偏好。通知方式只影响之后首次呈现的事件，当前事件不迁移载体。主窗与通知窗读取带修订号的定向快照；动作校验真实窗口、当前提醒 ID 和工具状态后，复用 engine 的业务操作。
+
+`tool-notification` 按需创建独立 WebView，只装配主题、语言、当前提醒及其目标图标。内容就绪后在前台窗口所在屏幕工作区非激活显示，复用现有提醒组件，首次成功呈现只播放一次本地合成音。窗口销毁不确认业务；创建或加载失败有界重试并在工具页提供失败状态及重试入口，不降级为抢焦点弹窗。队列清空释放窗口，明确退出后不重建。定时提醒仍从持久化的待确认状态恢复；其他类型保留原有业务恢复边界，不构成持久化通知历史。
+
 #### Mini 生命周期
 
-迷你窗由主标题栏独立打开，使用 `mini` label 和独立 WebView；主窗口最小化统一进入任务栏。`domain/mini_window` 拥有几何、收起规则、页面身份与工具投影，`domain/window_geometry` 保存 Windows 全屏检测也需要的物理坐标值类型。`app/mini_window` 串行应用窗口动作并编排生命周期；页面偏好通过同一动作链路保存，失败回滚已应用状态。`data/mini_window_store` 保存独立偏好并读取 bootstrap。前端 `app/mini` 拥有状态指示、分页与订阅，只发送窗口意图并接受带会话代次与修订号的状态；主窗聚焦不关闭 mini，悬停展开不激活窗口，关闭 mini 释放它自己的检测任务和 WebView。
+迷你窗由主标题栏独立打开，使用 `mini` label 和独立 WebView；主窗口最小化统一进入任务栏。`domain/mini_window` 拥有几何、收起规则与工具投影，`domain/window_geometry` 保存 Windows 全屏检测也需要的物理坐标值类型。`app/mini_window` 串行应用窗口及当前计时动作并编排生命周期；窗口偏好保存失败时回滚已应用状态。`data/mini_window_store` 保存独立偏好并读取 bootstrap。前端 `app/mini` 拥有活动区、工具分片、状态指示与订阅，接受带会话代次与修订号的窗口状态；活动区不再由旧页面偏好切换。主窗聚焦不关闭 mini，悬停展开不激活窗口，关闭 mini 释放它自己的检测任务和 WebView。
 
-追踪与工具展示快照沿用 tracking transition 锁。今日与最近一小时通过 Mini 专用只读命令，在同一 SQLite 事务和时间截点读取活动事实、分类与显示元数据，不占用 tracking transition 锁。今日沿用小时读模型的 projection / fallback，最近一小时沿用精确会话与网站归并规则；时间线纯规则由 `shared/lib` 供 History 与 Mini 消费。内容只刷新当前展开页，折叠和切页清理内容任务并丢弃迟到请求；失败与空数据分别呈现。mini 不挂载主界面页面树、不延长主窗口后台寿命，主窗口释放后仍能更新内容。收起后停止内容刷新和健康轮询，状态颜色继续通过追踪与设置事件更新。
+追踪与工具展示快照沿用 tracking transition 锁。今日与最近一小时通过 Mini 专用只读命令，在同一 SQLite 事务和时间截点读取活动事实、分类与显示元数据，不占用 tracking transition 锁。今日沿用小时读模型的 projection / fallback，最近一小时沿用精确会话与网站归并规则；时间线纯规则由 `shared/lib` 供 History 与 Mini 消费。内容只在展开时刷新，折叠清理内容任务并丢弃迟到请求；失败与空数据分别呈现。工具分片消费原生投影的当前计时和最早 scheduled 提醒，无工具时隐藏；窗口几何按相同投影的行数加高，悬停过渡本身不改变视口尺寸。mini 不挂载主界面页面树、不延长主窗口后台寿命，主窗口释放后仍能更新内容。收起后停止内容刷新和健康轮询，状态颜色继续通过追踪与设置事件更新。
 
 小时图消费已有 `hourly_activity_chart_mode`；时间线模式由 `activityDisplaySettings` 定义，规范值存入 `history_timeline_mode`。主窗口启动时迁移旧本地偏好，事务插入不覆盖已存在的规范值，成功后清理旧值；History 写入并广播设置变化，Mini 只读跟随。两个窗口使用相同的模式解析和网站不可用回退，不共享历史日期、缩放或详情筛选状态。
 
-贴边展开与收起保持原生画布及 WebView 视口的位置、尺寸稳定。横条与面板共用不透明背景，前端连续改变表面的位置和尺寸，内容保持原有布局并淡入淡出。展开前放开原生裁剪；收起时，等待外壳、内容与横条标记的当前视觉过渡都完成后，再将显示和鼠标命中区域裁回横条，避免缩窗重排造成闪帧。前端确认携带会话代次与过渡编号，迟到确认不能结束新的过渡。视觉插值归前端，原生目标与裁剪归 mini owner；收起确认缺失时仍有界收回面板命中区域，环境改变、拖动和重建不继续旧过渡。
+贴边展开与收起保持原生画布及 WebView 视口的位置、尺寸稳定。横条、活动区与工具片使用不透明背景，分片间隙透明；前端连续改变外壳的位置和尺寸，内容保持原有布局并淡入淡出。展开前放开原生裁剪；收起时，等待外壳、内容与横条标记的当前视觉过渡都完成后，再将显示和鼠标命中区域裁回横条，避免缩窗重排造成闪帧。前端确认携带会话代次与过渡编号，迟到确认不能结束新的过渡。视觉插值归前端，原生目标与裁剪归 mini owner；收起确认缺失时仍有界收回面板命中区域，环境改变、拖动和重建不继续旧过渡。
 
 #### app 的职责限制
 
