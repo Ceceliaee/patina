@@ -12,6 +12,7 @@ interface QuietDialogProps {
   closeOnBackdrop?: boolean;
   surfaceClassName?: string;
   initialFocusRef?: RefObject<HTMLElement | null>;
+  autoFocus?: boolean;
 }
 
 const FOCUSABLE_SELECTOR = [
@@ -69,6 +70,7 @@ export default function QuietDialog({
   closeOnBackdrop = true,
   surfaceClassName,
   initialFocusRef,
+  autoFocus = true,
 }: QuietDialogProps) {
   const surfaceRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -94,6 +96,7 @@ export default function QuietDialog({
     removeDialogFromStack(dialogToken);
     openDialogStack.push(dialogToken);
     const frame = window.requestAnimationFrame(() => {
+      if (!autoFocus) return;
       const surface = surfaceRef.current;
       if (!surface) return;
       const requestedTarget = initialFocusRefRef.current?.current ?? null;
@@ -142,6 +145,7 @@ export default function QuietDialog({
       removeDialogFromStack(dialogToken);
       window.cancelAnimationFrame(frame);
       window.removeEventListener("keydown", handleKeyDown);
+      if (!autoFocus) return;
       if (wasTopmost && previouslyFocused?.isConnected) {
         previouslyFocused.focus();
       } else if (wasTopmost) {
@@ -155,7 +159,7 @@ export default function QuietDialog({
         }
       }
     };
-  }, [open]);
+  }, [open, autoFocus]);
 
   const dialog = open ? (
         <div
@@ -169,8 +173,8 @@ export default function QuietDialog({
         >
           <div
             ref={surfaceRef}
-            role="dialog"
-            aria-modal="true"
+            role={autoFocus ? "dialog" : "region"}
+            aria-modal={autoFocus ? true : undefined}
             aria-labelledby={titleId}
             tabIndex={-1}
             className={`qp-dialog-surface qp-motion-overlay-enter ${surfaceClassName ?? ""}`}

@@ -213,9 +213,10 @@ export async function watchCurrentWindowForegroundState(
   };
 }
 
-export function resolveCurrentAppWindowLabel(): "main" | "mini" {
+export function resolveCurrentAppWindowLabel(): "main" | "mini" | "tool-notification" {
   try {
-    return getCurrentWindow().label === "mini" || getCurrentWebviewWindow().label === "mini" ? "mini" : "main";
+    const label = getCurrentWindow().label || getCurrentWebviewWindow().label;
+    return label === "mini" || label === "tool-notification" ? label : "main";
   } catch {
     return "main";
   }

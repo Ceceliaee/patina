@@ -1,7 +1,6 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
 import { AlarmClock, BellRing, Settings, ToolCase } from "lucide-react";
 import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
-import QuietBadge from "../../../shared/components/QuietBadge.tsx";
 import QuietButton from "../../../shared/components/QuietButton.tsx";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader.tsx";
 import type { QuietToastTone } from "../../../shared/types/toast.ts";
@@ -16,6 +15,8 @@ import type { ToolsOpenTarget, ToolsSection } from "../types.ts";
 import PomodoroToolPanel from "./PomodoroToolPanel.tsx";
 import ReminderToolPanel from "./ReminderToolPanel.tsx";
 import ToolsSettingsDialog from "./ToolsSettingsDialog.tsx";
+import { useToolPresentation } from "../hooks/useToolPresentation.ts";
+import { toolPresentationStore } from "../services/toolPresentationStore.ts";
 
 interface ToolsProps {
   initialTarget?: ToolsOpenTarget | null;
@@ -45,6 +46,7 @@ export default function Tools({
   onToast,
 }: ToolsProps) {
   const UI_TEXT = useLocaleText();
+  const presentation = useToolPresentation();
   const [activeSection, setActiveSection] = useState<ToolsSection>(() => (
     initialTarget ? initialTarget.section : readToolsSection()
   ));
@@ -112,8 +114,11 @@ export default function Tools({
       <QuietPageHeader
         icon={<ToolCase size={18} />}
         title={UI_TEXT.tools.title}
-        titleSuffix={<QuietBadge variant="beta">{UI_TEXT.tools.beta}</QuietBadge>}
       />
+      {presentation.snapshot?.error ? <div role="alert" className="tools-loading qp-panel">
+        <span>{UI_TEXT.tools.notificationDisplayFailed}</span>
+        <QuietButton onClick={() => { void toolPresentationStore.refresh(true); }}>{UI_TEXT.common.retry}</QuietButton>
+      </div> : null}
 
       {!state.hasSnapshot ? (
         <div className="tools-loading qp-panel">

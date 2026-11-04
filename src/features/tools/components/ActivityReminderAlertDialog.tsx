@@ -8,16 +8,17 @@ import type { ActivityReminderAlert, ActivityReminderExtension, ToolAlert } from
 import { loadToolsIconsForExecutables } from "../services/toolsRuntimeService.ts";
 import { loadActivityReminderWebCandidates } from "../services/activityReminderTargetCandidates.ts";
 import { ToolsRuntimeService } from "../services/toolsRuntimeService.ts";
-import { toolsRuntimeSnapshotStore } from "../services/toolsRuntimeSnapshotStore.ts";
+import type { ToolAlertActions } from "../../../shared/types/toolNotifications.ts";
 import { formatUsageDuration } from "../services/toolsLabels.ts";
 
 const EMPTY_ICONS: Record<string, string> = {};
 
-export default function ActivityReminderAlertDialog({ alert, details, onDismiss }: {
+export default function ActivityReminderAlertDialog({ details, onAction, notification = false, targetIcon: assignedIcon }: {
   alert: ToolAlert;
   details: ActivityReminderAlert;
-  onDismiss: () => void;
-}) {
+  notification?: boolean;
+  targetIcon?: string | null;
+} & ToolAlertActions) {
   const text = useLocaleText();
   const locale = useLocale();
   const [step, setStep] = useState<"limit" | "extend">("limit");
@@ -29,10 +30,10 @@ export default function ActivityReminderAlertDialog({ alert, details, onDismiss 
   const desktopRef = useRef<HTMLButtonElement>(null);
   const selectedRef = useRef<HTMLInputElement>(null);
   const [favicon, setFavicon] = useState<string | null>(null);
-  const exe = details.target.kind === "app" ? details.target.exeName : null;
+  const exe = !notification && details.target.kind === "app" ? details.target.exeName : null;
   const exeNames = useMemo(() => [exe], [exe]);
   const icons = useRequestedAppIcons({ baseIcons: EMPTY_ICONS, exeNames, loadIcons: loadToolsIconsForExecutables });
-  const domain = details.target.kind === "web" ? details.target.normalizedDomain : null;
+  const domain = !notification && details.target.kind === "web" ? details.target.normalizedDomain : null;
   useEffect(() => {
     if (!domain) return;
     let disposed = false;
@@ -46,7 +47,7 @@ export default function ActivityReminderAlertDialog({ alert, details, onDismiss 
   }, [step]);
 
   const duration = (ms: number) => formatUsageDuration(ms / 60_000, locale);
-  const icon = (exe && (icons[exe] ?? icons[exe.toLowerCase()])) || favicon;
+  const icon = assignedIcon || (exe && (icons[exe] ?? icons[exe.toLowerCase()])) || favicon;
   const targetIcon = icon ? <img src={icon} alt="" draggable={false} />
     : details.target.kind === "category" ? <Layers size={28} />
       : details.target.kind === "web" ? <Globe size={28} /> : <AppWindow size={28} />;
@@ -55,17 +56,11 @@ export default function ActivityReminderAlertDialog({ alert, details, onDismiss 
     setStep("limit"); setError(null);
     requestAnimationFrame(() => extendRef.current?.focus());
   };
-  const act = async (action: "extend" | "desktop") => {
+  const act = async (action: "extend" | "desktop" | "dismiss") => {
     if (busyRef.current) return;
     busyRef.current = true; setBusy(true); setError(null);
     try {
-      if (action === "extend") {
-        const snapshot = await ToolsRuntimeService.extendActivityReminder(alert.id, extension);
-        toolsRuntimeSnapshotStore.publishSnapshot(snapshot);
-      } else {
-        await ToolsRuntimeService.showDesktop();
-      }
-      onDismiss();
+      await onAction(action === "extend" ? { kind: "extend", extension } : { kind: action });
     } catch (cause) {
       setError(ToolsRuntimeService.isStateRefreshPendingError(cause) ? text.tools.stateRefreshPending : text.tools.actionFailed);
     } finally {
@@ -80,6 +75,7 @@ export default function ActivityReminderAlertDialog({ alert, details, onDismiss 
 
   return <QuietDialog
     open
+    autoFocus={!notification}
     title={step === "extend" ? text.tools.usageExtendTitle(details.targetLabel) : <>
       <span className="tools-usage-alert-identity"><span className="tools-usage-alert-icon" aria-hidden>{targetIcon}</span>
         <span className="tools-usage-alert-name">{details.targetLabel}</span></span>
@@ -88,7 +84,7 @@ export default function ActivityReminderAlertDialog({ alert, details, onDismiss 
     surfaceClassName={`tools-usage-alert-surface tools-usage-alert-${step}`}
     closeOnBackdrop={false}
     initialFocusRef={desktopRef}
-    onClose={() => { if (!busyRef.current) { if (step === "extend") cancelExtension(); else onDismiss(); } }}
+    onClose={() => { if (!busyRef.current) { if (step === "extend") cancelExtension(); else void act("dismiss"); } }}
     actions={step === "limit" ? <>
       <QuietButton ref={extendRef} size="large" disabled={busy} onClick={() => { setExtension("fifteen_minutes"); setStep("extend"); setError(null); }}>{text.tools.usageExtend}</QuietButton>
       <QuietButton ref={desktopRef} tone="primary" size="large" busy={busy} onClick={() => void act("desktop")}>{text.tools.usageReturnDesktop}</QuietButton>

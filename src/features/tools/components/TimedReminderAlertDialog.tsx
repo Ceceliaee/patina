@@ -5,10 +5,10 @@ import QuietDialog from "../../../shared/components/QuietDialog.tsx";
 import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
 import type { ReminderDelayMinutes, ToolAlert } from "../../../shared/types/tools.ts";
 import { ToolsRuntimeService } from "../services/toolsRuntimeService.ts";
-import { toolsRuntimeSnapshotStore } from "../services/toolsRuntimeSnapshotStore.ts";
+import type { ToolAlertActions } from "../../../shared/types/toolNotifications.ts";
 import { formatUsageDuration } from "../services/toolsLabels.ts";
 
-export default function TimedReminderAlertDialog({ alert, onDismiss }: { alert: ToolAlert; onDismiss: () => void }) {
+export default function TimedReminderAlertDialog({ alert, onAction, notification = false }: { alert: ToolAlert } & ToolAlertActions) {
   const text = useLocaleText();
   const locale = useLocale();
   const [snoozing, setSnoozing] = useState(false);
@@ -29,16 +29,14 @@ export default function TimedReminderAlertDialog({ alert, onDismiss }: { alert: 
     if (pending.current) return;
     pending.current = true; setBusy(true); setError(null);
     try {
-      const snapshot = await ToolsRuntimeService.resolveReminderAlert(alert.id, delay);
-      toolsRuntimeSnapshotStore.publishSnapshot(snapshot);
-      onDismiss();
+      await onAction({ kind: "resolve", delay });
     } catch (cause) {
       setError(ToolsRuntimeService.isStateRefreshPendingError(cause) ? text.tools.stateRefreshPending : text.tools.actionFailed);
     } finally { pending.current = false; setBusy(false); }
   };
   const occurredAt = new Intl.DateTimeFormat(locale, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(alert.occurredAt);
 
-  return <QuietDialog open
+  return <QuietDialog open autoFocus={!notification}
     title={snoozing ? text.tools.reminderSnooze : alert.body.trim() || text.tools.defaultReminderLabel}
     surfaceClassName={`tools-usage-alert-surface tools-timed-alert-surface${snoozing ? "" : " tools-usage-alert-limit"}`}
     closeOnBackdrop={false} initialFocusRef={completeRef}

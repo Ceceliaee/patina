@@ -780,11 +780,11 @@
 .tools-pomodoro-settings-popover { width: min(300px, calc(100vw - 24px)); padding: 14px; }
 .tools-free-rest-popover { width: min(260px, calc(100vw - 24px)); padding: 6px; }
 .tools-free-rest-options { display: grid; min-width: 0; margin: 0; padding: 0; border: 0; }
-.tools-free-rest-options .tools-free-rest-option { display: grid; grid-template-columns: minmax(0, 1fr) 96px; align-items: center; gap: 8px; padding-block: 4px; font-size: var(--qp-font-size-caption); line-height: var(--qp-line-height-caption); font-weight: var(--qp-font-weight-regular); }
-.tools-free-rest-choice { position: relative; display: flex; align-items: center; gap: 8px; min-height: 34px; cursor: pointer; }
+.tools-free-rest-options .tools-free-rest-option { display: grid; grid-template-columns: minmax(0, 1fr) 96px; align-items: center; gap: 8px; padding-block: 2px; font-size: var(--qp-font-size-caption); line-height: var(--qp-line-height-caption); font-weight: var(--qp-font-weight-regular); }
+.tools-free-rest-choice { position: relative; display: flex; align-items: center; gap: 8px; min-height: 26px; cursor: pointer; }
 .tools-free-rest-choice input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; }
 .tools-free-rest-choice:has(input:focus-visible) { outline: 2px solid var(--qp-accent-default); outline-offset: 2px; }
-.tools-free-rest-value { min-width: 0; padding-inline: 8px; }
+.tools-free-rest-value { min-width: 0; min-height: 26px; height: 26px; padding-inline: 8px; }
 .tools-pomodoro-settings-popover .tools-field-copy label {
   font-size: var(--qp-font-size-caption);
   line-height: var(--qp-line-height-caption);
@@ -844,7 +844,7 @@
   font-weight: var(--qp-font-weight-emphasis);
   font-variant-numeric: tabular-nums;
 }
-.tools-pomodoro-task-actions { flex-wrap: nowrap; gap: 4px; }
+.tools-pomodoro-task-actions { flex-wrap: nowrap; gap: 0; }
 .tools-pomodoro-task-panel { overflow-y: auto; }
 
 @media (max-width: 1000px) {
@@ -895,26 +895,27 @@
 .tools-status-entry-titlebar {
   display: flex;
   flex: 0 0 auto;
-  height: 28px;
+  align-self: stretch;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 0;
   border: 0;
   background: transparent;
-  margin-right: 8px;
 }
 
 .tools-status-entry-titlebar-item {
-  width: 28px;
-  min-width: 28px;
-  max-width: 28px;
-  height: 28px;
+  width: 38px;
+  min-width: 38px;
+  max-width: 38px;
+  height: 100%;
   min-height: 0;
-  border-color: transparent;
-  border-radius: var(--qp-radius-button);
+  border: 0;
+  border-left: 1px solid transparent;
+  border-radius: 0;
   background: transparent;
   padding: 0;
   color: var(--qp-text-tertiary);
+  cursor: default;
 }
 
 .tools-status-entry-titlebar-item svg {
@@ -925,20 +926,22 @@
 .tools-status-entry-titlebar > .qp-tooltip-anchor {
   display: inline-flex;
   flex: 0 0 auto;
-  height: 28px;
+  height: 100%;
 }
 
 .tools-status-entry-titlebar-item:hover {
   border-color: transparent;
-  background: var(--qp-bg-elevated);
-  color: var(--qp-text-secondary);
+  background: color-mix(in srgb, var(--qp-bg-panel) 70%, var(--qp-bg-elevated) 30%);
+  color: var(--qp-text-primary);
 }
 
 .tools-status-entry-titlebar-item:active {
   border-color: transparent;
-  background: var(--qp-bg-panel);
+  background: var(--qp-bg-elevated);
   color: var(--qp-text-primary);
 }
+
+.tools-status-entry-titlebar-item:focus-visible { outline-offset: -2px; }
 
 .tools-alert-dialog-surface {
   width: min(420px, calc(100vw - 32px));
@@ -987,12 +990,14 @@
 }
 
 .tools-usage-alert-surface {
-  width: min(486px, calc(100vw - 32px));
+  --tools-alert-width: 486px;
+  width: min(var(--tools-alert-width), calc(100vw - 32px));
 }
 
 .tools-usage-alert-extend,
 .tools-timed-alert-surface {
-  width: min(400px, calc(100vw - 32px));
+  --tools-alert-width: 400px;
+  width: min(var(--tools-alert-width), calc(100vw - 32px));
 }
 
 .tools-timed-alert-surface .qp-dialog-title {
@@ -1145,17 +1150,21 @@
   width: min(600px, calc(100vw - 40px));
 }
 
-.tools-settings-empty {
-  display: flex;
-  min-height: 144px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--qp-border-subtle);
-  border-radius: var(--qp-radius-control);
-  background: var(--qp-bg-canvas);
-  padding: 24px;
-  font-size: var(--qp-font-size-caption);
-  line-height: var(--qp-line-height-caption);
-  text-align: center;
-  color: var(--qp-text-tertiary);
+.tools-notification-settings { display: grid; gap: 12px; }
+.tools-notification-settings h4 { margin: 0; color: var(--qp-text-primary); font-size: var(--qp-font-size-group-title); font-weight: var(--qp-font-weight-emphasis); line-height: var(--qp-line-height-group-title); }
+.tools-notification-settings-rows.qp-action-row { padding: 0 16px; background: var(--qp-bg-elevated); }
+.tools-notification-setting-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 12px 0; }
+.tools-notification-setting-row + .tools-notification-setting-row { border-top: 1px solid var(--qp-border-subtle); }
+.tools-notification-setting-row > span { min-width: 0; color: var(--qp-text-primary); font-size: var(--qp-font-size-body); font-weight: var(--qp-font-weight-medium); line-height: var(--qp-line-height-body); }
+.tools-notification-setting-row .qp-segmented-filter { max-width: 100%; }
+.tools-notification-setting-row .qp-select-root { flex-shrink: 0; width: 140px; max-width: 100%; }
+.tools-notification-setting-row .qp-select-trigger { width: 100%; }
+.tools-notification-settings[aria-busy="true"] .qp-segmented-filter-item:disabled,
+.tools-notification-settings[aria-busy="true"] .qp-select-trigger:disabled { opacity: 1; cursor: progress; }
+html[data-window-label="tool-notification"], body[data-window-label="tool-notification"], #root[data-window-label="tool-notification"] { background: transparent; min-width: 0; overflow: hidden; }
+body[data-window-label="tool-notification"] .qp-dialog-backdrop { background: transparent; padding: 2px; align-items: flex-start; animation: none; }
+body[data-window-label="tool-notification"] .qp-dialog-surface { width: min(var(--tools-alert-width), calc(100vw - 4px)); margin: 0; max-height: calc(100vh - 4px); overflow-y: auto; animation: none; }
+@media (max-width: 440px) {
+  .tools-notification-setting-row { align-items: stretch; flex-direction: column; gap: 12px; }
+  .tools-notification-setting-row > :last-child { align-self: flex-end; }
 }

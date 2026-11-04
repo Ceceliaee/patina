@@ -6,9 +6,9 @@ import type { ToolAlert } from "../../../shared/types/tools.ts";
 import { formatUsageDuration } from "../services/toolsLabels.ts";
 import { formatCompactDuration } from "../services/toolsViewModel.ts";
 import { ToolsRuntimeService } from "../services/toolsRuntimeService.ts";
-import { toolsRuntimeSnapshotStore } from "../services/toolsRuntimeSnapshotStore.ts";
+import type { ToolAlertActions } from "../../../shared/types/toolNotifications.ts";
 
-export default function FocusAlertDialog({ alert, onDismiss }: { alert: ToolAlert; onDismiss: () => void }) {
+export default function FocusAlertDialog({ alert, onAction, notification = false }: { alert: ToolAlert } & ToolAlertActions) {
   const text = useLocaleText();
   const locale = useLocale();
   const [busy, setBusy] = useState(false);
@@ -34,27 +34,28 @@ export default function FocusAlertDialog({ alert, onDismiss }: { alert: ToolAler
     ? text.tools.pomodoroGroupSummary(run.longBreakEvery, task.completedGroups)
     : text.tools.pomodoroNextPhase(phase, formatUsageDuration((duration ?? 0) / 60_000, locale))
     : alert.body;
-  const dismiss = () => { if (!pending.current) onDismiss(); };
+  const dismiss = () => {
+    if (pending.current) return;
+    pending.current = true; setBusy(true); setError(null);
+    void onAction({ kind: "dismiss" }).catch(() => setError(text.tools.actionFailed))
+      .finally(() => { pending.current = false; setBusy(false); });
+  };
   const start = async () => {
     if (!canStart || pending.current) return;
     pending.current = true; setBusy(true); setError(null);
     try {
-      const next = free ?? run!;
-      const action = { kind: "start_next" as const, id: next.id, expectedUpdatedAt: next.updatedAt };
-      const snapshot = await (free ? ToolsRuntimeService.freeFocus(action) : ToolsRuntimeService.pomodoroTask(action));
-      toolsRuntimeSnapshotStore.publishSnapshot(snapshot);
-      onDismiss();
+      await onAction({ kind: "start_next" });
     } catch (cause) {
       setError(ToolsRuntimeService.isStateRefreshPendingError(cause) ? text.tools.stateRefreshPending : text.tools.actionFailed);
     } finally { pending.current = false; setBusy(false); }
   };
 
-  return <QuietDialog open title={free ? free.label || text.tools.focusModeFree : task?.label.trim() || text.tools.pomodoroTaskDefault}
+  return <QuietDialog open autoFocus={!notification} title={free ? free.label || text.tools.focusModeFree : task?.label.trim() || text.tools.pomodoroTaskDefault}
     surfaceClassName={`tools-usage-alert-surface tools-timed-alert-surface tools-usage-alert-limit ${free ? "tools-free-focus-alert" : "tools-pomodoro-alert-surface"}`}
     closeOnBackdrop={false} initialFocusRef={canStart ? startRef : dismissRef} onClose={dismiss}
     actions={<>
       <QuietButton ref={dismissRef} size="large" disabled={busy} onClick={dismiss}>
-        {completed || !canStart ? text.tools.alertDismiss : text.tools.pomodoroStartLater}
+        {completed ? text.tools.reminderConfirmComplete : !canStart ? text.tools.alertDismiss : text.tools.pomodoroStartLater}
       </QuietButton>
       {canStart ? <QuietButton ref={startRef} size="large" tone="primary" busy={busy} onClick={() => void start()}>{startLabel}</QuietButton> : null}
     </>}

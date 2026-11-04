@@ -6,6 +6,7 @@ import { resolveCurrentAppWindowLabel } from "./platform/desktop/windowControlGa
 
 const CURRENT_WINDOW_LABEL = resolveCurrentAppWindowLabel();
 const MiniShell = lazy(() => import("./app/mini/MiniShell"));
+const ToolNotificationShell = lazy(() => import("./app/tool-notification/ToolNotificationShell"));
 
 if (import.meta.env.DEV && CURRENT_WINDOW_LABEL === "main") {
   void import("./app/services/resourceDiagnosticsService.ts")
@@ -26,6 +27,6 @@ if (typeof document !== "undefined") {
 export default function App() {
   useEffect(installAppIconEvents, []);
   return <Suspense fallback={null}>
-    {CURRENT_WINDOW_LABEL === "mini" ? <MiniShell /> : <AppShell />}
+    {CURRENT_WINDOW_LABEL === "mini" ? <MiniShell /> : CURRENT_WINDOW_LABEL === "tool-notification" ? <ToolNotificationShell /> : <AppShell />}
   </Suspense>;
 }
