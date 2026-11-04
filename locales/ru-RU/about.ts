@@ -1,6 +1,6 @@
 // ru-RU locale resource. Pure data only.
 export const MESSAGES = {
-  "about.description": "Персональный учёт времени на компьютере с локальным хранением данных",
+  "about.description": "Учёт времени с локальным хранением данных",
   "about.feedbackDialog.githubAction": "GitHub Issues",
   "about.feedbackDialog.githubOpening": "Открытие…",
   "about.feedbackDialog.githubTitle": "GitHub Issues",

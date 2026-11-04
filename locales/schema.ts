@@ -4887,6 +4887,17 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
+  "tools.notificationGroup": { "kind": "string", "params": [], "surface": "frontend" },
+  "tools.notificationDelivery": { "kind": "string", "params": [], "surface": "frontend" },
+  "tools.notificationSoftware": { "kind": "string", "params": [], "surface": "frontend" },
+  "tools.notificationDialog": { "kind": "string", "params": [], "surface": "frontend" },
+  "tools.notificationSound": { "kind": "string", "params": [], "surface": "frontend" },
+  "tools.notificationSoundDefault": { "kind": "string", "params": [], "surface": "frontend" },
+  "tools.notificationSoundBell": { "kind": "string", "params": [], "surface": "frontend" },
+  "tools.notificationSoundClear": { "kind": "string", "params": [], "surface": "frontend" },
+  "tools.notificationSoundNone": { "kind": "string", "params": [], "surface": "frontend" },
+  "tools.notificationSaveFailed": { "kind": "string", "params": [], "surface": "frontend" },
+  "tools.notificationDisplayFailed": { "kind": "string", "params": [], "surface": "frontend" },
   "tools.settingsEmpty": {
     "kind": "string",
     "params": [],

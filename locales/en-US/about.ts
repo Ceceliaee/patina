@@ -1,6 +1,6 @@
 // en-US about locale resource. Pure data only.
 export const MESSAGES = {
-  "about.description": "A local-first personal desktop time tracker",
+  "about.description": "A local-first time tracker",
   "about.feedbackDialog.githubAction": "GitHub Issues",
   "about.feedbackDialog.githubOpening": "Opening…",
   "about.feedbackDialog.githubTitle": "GitHub Issues",

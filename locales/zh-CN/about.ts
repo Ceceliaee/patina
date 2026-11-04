@@ -1,6 +1,6 @@
 // zh-CN about locale resource. Pure data only.
 export const MESSAGES = {
-  "about.description": "本地优先的个人桌面时间追踪工具",
+  "about.description": "本地优先的时间追踪工具",
   "about.feedbackDialog.githubAction": "GitHub Issues",
   "about.feedbackDialog.githubOpening": "正在打开…",
   "about.feedbackDialog.githubTitle": "GitHub Issues",
