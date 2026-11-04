@@ -133,9 +133,15 @@ export async function runTimedReminderScenarios({ client, sessionId, runTest }: 
       await evaluate(client, sessionId, `const input = document.querySelector('.tools-reminder-editor input');
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'Revised');
         input.dispatchEvent(new Event('input',{bubbles:true}));
-        globalThis.__PATINA_TIMED_REMINDER_ACTION_CASE = { error: 'save failed' };`);
+        globalThis.__PATINA_TIMED_REMINDER_ACTION_CASE = { hold: true, error: 'save failed' };`);
+      const updatesBeforeFailure = await evaluate(client, sessionId, `globalThis.__PATINA_INVOKED_COMMANDS.filter(item=>item.command==='cmd_update_reminder').length`);
+      const failedSaveSettled = `globalThis.__PATINA_INVOKED_COMMANDS.filter(item=>item.command==='cmd_update_reminder').length===${updatesBeforeFailure}+1 && document.querySelector('.tools-reminder-editor input:not(:disabled)')?.value==='Revised'`;
+      assert.equal(await evaluate(client, sessionId, failedSaveSettled), false, 'the unchanged draft must not count as a completed save');
       await evaluate(client, sessionId, `document.querySelector('[role="dialog"] button[type="submit"]').click()`);
-      await waitForExpression(client, sessionId, `Boolean(document.querySelector('.tools-reminder-editor input')?.value === 'Revised' && !document.querySelector('.tools-reminder-editor input').disabled)`);
+      await waitForExpression(client, sessionId, `Boolean(globalThis.__PATINA_TIMED_REMINDER_ACTION_CASE.release) && document.querySelector('.tools-reminder-editor input').disabled`);
+      assert.equal(await evaluate(client, sessionId, failedSaveSettled), false, 'a held save must not satisfy the retry gate');
+      await evaluate(client, sessionId, `globalThis.__PATINA_TIMED_REMINDER_ACTION_CASE.release()`);
+      await waitForExpression(client, sessionId, failedSaveSettled, undefined, 'failed reminder edit settles before retry');
       assert.equal(await evaluate(client, sessionId, `globalThis.__PATINA_TIMED_REMINDER_CASE.reminders[0].label`), "Review");
       await evaluate(client, sessionId, `globalThis.__PATINA_TIMED_REMINDER_ACTION_CASE = {hold:true}; document.querySelector('[role="dialog"] button[type="submit"]').click()`);
       await waitForExpression(client, sessionId, `Boolean(Boolean(globalThis.__PATINA_TIMED_REMINDER_ACTION_CASE.release))`);

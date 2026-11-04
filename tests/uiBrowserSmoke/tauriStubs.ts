@@ -107,6 +107,46 @@ function tauriStubFor(path: string) {
 
       export async function invoke(command, payload = {}) {
         globalThis.__PATINA_INVOKED_COMMANDS.push({ command, payload });
+        if (command === "cmd_get_tool_presentation") {
+          // Existing modal scenarios explicitly exercise dialog delivery; notification scenarios override it.
+          const preferences = JSON.parse(localStorage.getItem('__patina_notification_preferences') ?? '{"delivery":"dialog","sound":"none"}');
+          const label = new URL(location.href).searchParams.get('__patinaWindow') ?? 'main';
+          const target = globalThis.__PATINA_PRESENTATION_TARGET ?? (preferences.delivery === 'notification' ? 'tool-notification' : 'main');
+          return { revision: globalThis.__PATINA_PRESENTATION_REVISION ?? 0,
+            alert: target === label ? (globalThis.__PATINA_PRESENTATION_ALERTS?.[0] ?? null) : null,
+            preferences, appearance: loadStoredSettings(), error: null };
+        }
+        if (command === "cmd_save_tool_notification_preferences") {
+          const control = globalThis.__PATINA_NOTIFICATION_SAVE;
+          if (control?.hold) await new Promise(resolve => { control.release = resolve; });
+          if (control?.error) throw new Error(control.error);
+          const old = JSON.parse(localStorage.getItem('__patina_notification_preferences') ?? '{"delivery":"dialog","sound":"none"}');
+          const next = { ...old, ...payload.patch };
+          localStorage.setItem('__patina_notification_preferences', JSON.stringify(next));
+          globalThis.__PATINA_PRESENTATION_REVISION = (globalThis.__PATINA_PRESENTATION_REVISION ?? 0) + 1;
+          globalThis.__PATINA_EMIT_TAURI_EVENT?.('tool-presentation-changed', null);
+          return next;
+        }
+        if (command === "cmd_tool_presentation_ready") return null;
+        if (command === "cmd_tool_presentation_action") {
+          const alert = globalThis.__PATINA_PRESENTATION_ALERTS?.[0];
+          if (!alert || alert.id !== payload.alertId) throw new Error('stale presentation');
+          const action = payload.action;
+          let snapshot;
+          if (action.kind === 'resolve') snapshot = await invoke('cmd_resolve_reminder_alert', { alertId: alert.id, delayMinutes: action.delay });
+          else if (action.kind === 'extend') snapshot = await invoke('cmd_extend_activity_reminder', { alertId: alert.id, extension: action.extension });
+          else if (action.kind === 'desktop') await invoke('cmd_show_desktop');
+          else if (action.kind === 'start_next') {
+            const task = alert.free_focus ?? alert.pomodoro?.run;
+            snapshot = await invoke(alert.kind === 'free_focus' ? 'cmd_free_focus' : 'cmd_pomodoro_task',
+              { action: { kind: 'start_next', id: task.id, expectedUpdatedAt: task.updated_at } });
+          }
+          globalThis.__PATINA_PRESENTATION_ALERTS.shift();
+          globalThis.__PATINA_PRESENTATION_REVISION = (globalThis.__PATINA_PRESENTATION_REVISION ?? 0) + 1;
+          if (snapshot) globalThis.__PATINA_EMIT_TAURI_EVENT?.('tools-runtime-changed', snapshot);
+          globalThis.__PATINA_EMIT_TAURI_EVENT?.('tool-presentation-changed', null);
+          return null;
+        }
         if (JSON.parse(localStorage.getItem('__patina_navigation_held_commands') ?? '[]').includes(command)) {
           await new Promise(resolve => (globalThis.__PATINA_NAVIGATION_PENDING ??= []).push(resolve));
         }
@@ -127,6 +167,15 @@ function tauriStubFor(path: string) {
           return globalThis.__PATINA_MINI_OPEN_HOOK();
         }
         if (command === "cmd_get_mini_window_snapshot" || command === "cmd_mini_window_action" || command === "cmd_open_mini_window") {
+          if (payload?.action?.kind === "tool_control") {
+            await globalThis.__PATINA_MINI_TOOL_CONTROL_HOOK?.(payload.action);
+            const status = structuredClone(globalThis.__PATINA_MINI_LAST_STATUS);
+            const tool = status.tools.find(tool => tool.id === payload.action.id && tool.kind === payload.action.tool);
+            if (!tool || tool.state !== (payload.action.resume ? "paused" : "running")) throw new Error("Mini tool state changed");
+            tool.state = payload.action.resume ? "running" : "paused";
+            globalThis.__PATINA_MINI_TRACKING_OVERRIDE = { ...globalThis.__PATINA_MINI_TRACKING_OVERRIDE, miniStatus: status };
+            globalThis.__PATINA_EMIT_TAURI_EVENT("tracking-data-changed", { reason: "tracking-status-changed", changed_at_ms: Date.now() });
+          }
           const { miniCommand } = await import("/tests/uiBrowserSmoke/miniFixture.ts");
           return miniCommand(command, payload);
         }
@@ -167,6 +216,7 @@ function tauriStubFor(path: string) {
           const toolCount = Math.max(0, Math.min(1, Number(miniParams.get("miniTools") ?? 0)));
           const tools = [
             {
+              id: 1, label: "", counting_up: false,
               kind: "pomodoro",
               state: "running",
               value_ms: 271_000,
@@ -178,8 +228,15 @@ function tauriStubFor(path: string) {
           const responseDelayMs = Number(override?.responseDelayMs ?? 0);
           const status = override?.miniStatus ?? {
             tools,
+            reminder: null,
             sampled_at_ms: Date.now(),
           };
+          status.reminder ??= null;
+          status.tools = status.tools.map(tool => ({ id: 1, label: "", counting_up: false, ...tool }));
+          globalThis.__PATINA_MINI_LAST_STATUS = status;
+          const { miniToolRows } = await import("/tests/uiBrowserSmoke/miniFixture.ts");
+          const resized = miniToolRows(status.tools.length + Number(Boolean(status.reminder)));
+          if (resized) globalThis.__PATINA_EMIT_TAURI_EVENT("mini-window-state", resized);
           const tracking = override?.currentTrackingSnapshot ?? {
             window: {
               hwnd: "1",
@@ -461,6 +518,7 @@ function tauriStubFor(path: string) {
         if (command === "cmd_free_focus" && globalThis.__PATINA_FREE_FOCUS_CASE) {
           const fixture = globalThis.__PATINA_FREE_FOCUS_CASE;
           fixture.calls.push(payload.action);
+          if (fixture.hold) await new Promise(resolve => { fixture.release = resolve; });
           if (fixture.error) throw new Error(fixture.error);
           return structuredClone(fixture.snapshot);
         }
@@ -1016,6 +1074,14 @@ function tauriStubFor(path: string) {
         [...listenersByEvent].map(([event, listeners]) => [event, listeners.size]).sort(),
       );
       globalThis.__PATINA_EMIT_TAURI_EVENT = (eventName, payload) => {
+        if (eventName === 'tools-alert') {
+          const alerts = globalThis.__PATINA_PRESENTATION_ALERTS ??= [];
+          if (!alerts.some(alert => alert.id === payload.id)) alerts.push(payload);
+          const preferences = JSON.parse(localStorage.getItem('__patina_notification_preferences') ?? '{"delivery":"dialog","sound":"none"}');
+          if (alerts.length === 1) globalThis.__PATINA_PRESENTATION_TARGET = preferences.delivery === 'notification' ? 'tool-notification' : 'main';
+          globalThis.__PATINA_PRESENTATION_REVISION = (globalThis.__PATINA_PRESENTATION_REVISION ?? 0) + 1;
+          globalThis.__PATINA_EMIT_TAURI_EVENT('tool-presentation-changed', null);
+        }
         for (const listener of listenersByEvent.get(eventName) ?? []) {
           listener({ event: eventName, id: 0, payload });
         }

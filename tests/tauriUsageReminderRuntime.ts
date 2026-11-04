@@ -8,6 +8,8 @@ import { waitFor, assertIsolatedTempPath } from "./uiBrowserSmoke/browserHarness
 export async function verifyUsageReminderRuntime(evaluate: (expression: string) => Promise<unknown>, root: string) {
   assertIsolatedTempPath(root, "patina-tauri-e2e-");
   const invoke = (command: string, payload: Record<string, unknown> = {}) => evaluate(`window.__TAURI_INTERNALS__.invoke(${JSON.stringify(command)},${JSON.stringify(payload)})`);
+  // This suite exercises the existing main-window modal and its native desktop action.
+  await invoke("cmd_save_tool_notification_preferences", { patch: { delivery: "dialog", sound: "none" } });
   const scheduledAt = Date.now() + 120_000;
   const timed = await invoke("cmd_create_reminder", { input: { label: "Timed fixture", scheduledAt } }) as {
     reminders: Array<{ id: number; label: string; status: string }>;

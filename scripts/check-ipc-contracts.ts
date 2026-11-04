@@ -12,6 +12,8 @@ interface IpcInventory {
   miniPermission: Set<string>;
   mainCapabilityPermissions: Set<string>;
   miniCapabilityPermissions: Set<string>;
+  notificationPermission: Set<string>;
+  notificationCapabilityPermissions: Set<string>;
   callerGuarded: Set<string>;
 }
 
@@ -34,6 +36,7 @@ const RUNTIME_ONLY_COMMANDS = new Map<string, string>([
 ]);
 
 const SENSITIVE_CALLER_GUARD_COMMANDS = new Set([
+  "cmd_save_tool_notification_preferences",
   "cmd_migrate_history_timeline_mode",
   "cmd_open_mini_window",
   "cmd_restore_backup",
@@ -58,6 +61,8 @@ const MINI_COMMAND_ALLOWLIST = new Set([
   "cmd_get_mini_bootstrap_snapshot", "cmd_get_mini_presentation_snapshot", "cmd_get_mini_activity_snapshot", "cmd_show_main_window",
 ]);
 const MINI_CAPABILITY_ALLOWLIST = new Set(["core:event:allow-listen", "core:event:allow-unlisten", "mini-window-commands"]);
+const NOTIFICATION_COMMAND_ALLOWLIST = new Set(["cmd_get_tool_presentation", "cmd_tool_presentation_action", "cmd_tool_presentation_ready"]);
+const NOTIFICATION_CAPABILITY_ALLOWLIST = new Set(["core:event:allow-listen", "core:event:allow-unlisten", "tool-notification-commands"]);
 
 function normalizePath(path: string) {
   return path.split(sep).join("/");
@@ -240,6 +245,8 @@ function inventory(): IpcInventory {
     appManifest: collectAppManifestCommands(readFileSync("src-tauri/build.rs", "utf8")),
     mainPermission: windowPermissions.get("main-window-commands") ?? new Set(),
     miniPermission: windowPermissions.get("mini-window-commands") ?? new Set(),
+    notificationPermission: windowPermissions.get("tool-notification-commands") ?? new Set(),
+    notificationCapabilityPermissions: collectCapabilityPermissionIds(readFileSync("src-tauri/capabilities/tool-notification.json", "utf8")),
     miniCapabilityPermissions: collectCapabilityPermissionIds(readFileSync("src-tauri/capabilities/mini.json", "utf8")),
     mainCapabilityPermissions: collectCapabilityPermissionIds(
       readFileSync("src-tauri/capabilities/default.json", "utf8"),
@@ -284,11 +291,16 @@ function validate(result: IpcInventory) {
   for (const command of difference(MINI_COMMAND_ALLOWLIST, result.miniPermission)) failures.push(`mini-window permission is missing a reviewed command: ${command}`);
   for (const permission of difference(result.miniCapabilityPermissions, MINI_CAPABILITY_ALLOWLIST)) failures.push(`mini capability exceeds the reviewed allowlist: ${permission}`);
   for (const permission of difference(MINI_CAPABILITY_ALLOWLIST, result.miniCapabilityPermissions)) failures.push(`mini capability is missing a reviewed permission: ${permission}`);
+  for (const command of difference(result.notificationPermission, NOTIFICATION_COMMAND_ALLOWLIST)) failures.push(`notification permission exceeds the reviewed allowlist: ${command}`);
+  for (const command of difference(NOTIFICATION_COMMAND_ALLOWLIST, result.notificationPermission)) failures.push(`notification permission is missing a reviewed command: ${command}`);
+  for (const permission of difference(result.notificationCapabilityPermissions, NOTIFICATION_CAPABILITY_ALLOWLIST)) failures.push(`notification capability exceeds the reviewed allowlist: ${permission}`);
+  for (const permission of difference(NOTIFICATION_CAPABILITY_ALLOWLIST, result.notificationCapabilityPermissions)) failures.push(`notification capability is missing a reviewed permission: ${permission}`);
   if (!result.mainCapabilityPermissions.has("main-window-commands")) {
     failures.push("main capability does not include main-window-commands");
   }
   for (const [window, permissions] of [
     ["main", result.mainCapabilityPermissions], ["mini", result.miniCapabilityPermissions],
+    ["notification", result.notificationCapabilityPermissions],
   ] as const) {
     for (const permission of permissions) {
       if (permission.startsWith("sql:")) {
@@ -319,6 +331,8 @@ function runSelfTest() {
     appManifest: commandSet,
     mainPermission: commandSet,
     miniPermission: new Set(MINI_COMMAND_ALLOWLIST),
+    notificationPermission: new Set(NOTIFICATION_COMMAND_ALLOWLIST),
+    notificationCapabilityPermissions: new Set(NOTIFICATION_CAPABILITY_ALLOWLIST),
     miniCapabilityPermissions: new Set(MINI_CAPABILITY_ALLOWLIST),
     mainCapabilityPermissions: new Set(["main-window-commands"]),
     callerGuarded: new Set(SENSITIVE_CALLER_GUARD_COMMANDS),
@@ -335,6 +349,8 @@ function runSelfTest() {
     appManifest: new Set(["cmd_known"]),
     mainPermission: new Set(["cmd_known"]),
     miniPermission: new Set(MINI_COMMAND_ALLOWLIST),
+    notificationPermission: new Set(NOTIFICATION_COMMAND_ALLOWLIST),
+    notificationCapabilityPermissions: new Set(NOTIFICATION_CAPABILITY_ALLOWLIST),
     miniCapabilityPermissions: new Set(MINI_CAPABILITY_ALLOWLIST),
     mainCapabilityPermissions: new Set(["main-window-commands"]),
     callerGuarded: new Set(SENSITIVE_CALLER_GUARD_COMMANDS),
@@ -351,6 +367,8 @@ function runSelfTest() {
     appManifest: commandSet,
     mainPermission: commandSet,
     miniPermission: new Set([...MINI_COMMAND_ALLOWLIST, "cmd_pause_pomodoro"]),
+    notificationPermission: new Set([...NOTIFICATION_COMMAND_ALLOWLIST, "cmd_save_tool_notification_preferences"]),
+    notificationCapabilityPermissions: new Set([...NOTIFICATION_CAPABILITY_ALLOWLIST, "sql:allow-select"]),
     miniCapabilityPermissions: new Set([...MINI_CAPABILITY_ALLOWLIST, "sql:allow-load"]),
     mainCapabilityPermissions: new Set(["main-window-commands", "sql:allow-select"]),
     callerGuarded: new Set(),
@@ -359,7 +377,8 @@ function runSelfTest() {
     throw new Error("IPC contract self-test did not catch a missing sensitive caller guard");
   }
   if (!missingGuard.some((failure) => failure.includes("mini-window permission exceeds"))) throw new Error("IPC self-test did not reject mini tool mutation");
-  for (const window of ["main", "mini"]) {
+  if (!missingGuard.some(failure => failure.includes("notification permission exceeds"))) throw new Error("IPC self-test did not reject notification settings mutation");
+  for (const window of ["main", "mini", "notification"]) {
     if (!missingGuard.some(failure => failure.includes(`${window} capability must not expose raw SQL`))) {
       throw new Error(`IPC contract self-test did not reject ${window} raw SQL`);
     }

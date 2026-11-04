@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { RuntimeSession, evaluate } from "./tauriRuntimeHarness.ts";
 import { assertIsolatedTempPath, waitFor } from "./uiBrowserSmoke/browserHarness.ts";
+import { verifyToolNotificationRuntime } from "./tauriToolNotificationRuntime.ts";
 
 interface Alert {
   kind: string;
@@ -95,4 +96,5 @@ export async function run(session: RuntimeSession) {
     assert.equal(verify.prepare("SELECT last_fired_date_key FROM tool_activity_reminder_rules WHERE exe_name = 'under-limit.exe'").get()!.last_fired_date_key, null);
   } finally { verify.close(); }
   console.log("PASS tools startup waits for recovery; overnight downtime and shortened extensions cannot trigger early alerts; due reminders still fire");
+  await verifyToolNotificationRuntime(session);
 }

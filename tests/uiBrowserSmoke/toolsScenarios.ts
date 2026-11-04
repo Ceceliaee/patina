@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { getLocaleText, loadLocaleText } from "../../src/shared/i18n/runtime.ts";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import { delay, evaluate, jsonString, waitForExpression } from "./browserHarness.ts";
@@ -9,11 +12,13 @@ import { runRecurringReminderScenarios } from "./recurringReminderScenarios.ts";
 import { pomodoroFixture, runPomodoroScenarios } from "./pomodoroScenarios.ts";
 import { runPomodoroAlertScenarios } from "./pomodoroAlertScenarios.ts";
 import { runFreeFocusScenarios } from "./freeFocusScenarios.ts";
+import { runToolNotificationScenarios } from "./toolNotificationScenarios.ts";
 
 const COPY = { "zh-CN": getLocaleText("zh-CN") } as const;
 
 export async function runToolsScenarios(context: BrowserSmokeContext) {
   const { client, sessionId, runTest } = context;
+  await runToolNotificationScenarios(context);
   await runUsageAlertScenarios(context);
   await runTimedReminderScenarios(context);
   await runRecurringReminderScenarios(context);
@@ -740,7 +745,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
         await evaluate(client!, sessionId, `document.querySelector('[data-activity-rule-kind="${kind}"] [aria-pressed]').focus()`);
         await client!.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", text: "\r", unmodifiedText: "\r", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 }, sessionId);
         await client!.command("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, sessionId);
-        await waitForExpression(client!, sessionId, `document.querySelector('[data-activity-rule-kind="${kind}"] [aria-pressed]')?.getAttribute('aria-pressed') === 'true'`);
+        await waitForExpression(client!, sessionId, `Boolean(document.querySelector('[data-activity-rule-kind="${kind}"] [aria-pressed="true"]:not([aria-busy="true"])'))`);
       }
       const editSelector = `[data-activity-rule-kind="app"] button[aria-label^="${COPY["zh-CN"].tools.activityReminderEdit}:"]`;
       await evaluate(client!, sessionId, `document.querySelector(${jsonString(editSelector)}).focus(); document.querySelector(${jsonString(editSelector)}).click()`);
@@ -768,11 +773,18 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.tools-usage-duration-popover'))`);
       await evaluate(client!, sessionId, `document.querySelector('.tools-usage-duration-popover [data-time-picker-part="minute"][data-time-picker-value="45"]').click()`);
       await waitForExpression(client!, sessionId, `!document.querySelector('.tools-usage-duration-popover')`);
+      const updatesBeforeFailure = await evaluate(client!, sessionId, `globalThis.__PATINA_INVOKED_COMMANDS.filter(item=>item.command==='cmd_update_activity_reminder_limit').length`);
+      const failedSaveSettled = `globalThis.__PATINA_INVOKED_COMMANDS.filter(item=>item.command==='cmd_update_activity_reminder_limit').length===${updatesBeforeFailure}+1 && Boolean(document.querySelector('.tools-reminder-editor .tools-usage-duration-trigger:not(:disabled)'))`;
+      assert.equal(await evaluate(client!, sessionId, failedSaveSettled), false, 'an enabled editor must not count as a completed save');
       await evaluate(client!, sessionId, `
-        globalThis.__PATINA_ACTIVITY_REMINDER_ACTION_CASE = { error: 'fixture write failed' };
+        globalThis.__PATINA_ACTIVITY_REMINDER_ACTION_CASE = { hold: true, error: 'fixture write failed' };
         document.querySelector('[role="dialog"] button[type="submit"]').click();
       `);
-      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-toast[role="alert"]')) && !document.querySelector('.tools-reminder-editor .tools-usage-duration-trigger')?.disabled`);
+      await waitForExpression(client!, sessionId, `Boolean(globalThis.__PATINA_ACTIVITY_REMINDER_ACTION_CASE.release) && document.querySelector('.tools-reminder-editor .tools-usage-duration-trigger').disabled`);
+      assert.equal(await evaluate(client!, sessionId, failedSaveSettled), false, 'a held save must not satisfy the retry gate');
+      await evaluate(client!, sessionId, `globalThis.__PATINA_ACTIVITY_REMINDER_ACTION_CASE.release()`);
+      await waitForExpression(client!, sessionId, failedSaveSettled, undefined, 'failed usage limit edit settles before retry');
+      assert.equal(await evaluate(client!, sessionId, `Boolean(document.querySelector('.qp-toast[role="alert"]'))`), true);
       assert.equal(await evaluate(client!, sessionId, `document.querySelector('.tools-reminder-editor .tools-usage-duration-trigger').textContent`), "45 分钟", "failed save preserves the draft");
       assert.equal(await evaluate(client!, sessionId, `globalThis.__PATINA_ACTIVITY_REMINDER_CASE.activity_reminder_rules[0].limit_ms`), 1_800_000);
       await evaluate(client!, sessionId, `
@@ -917,7 +929,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
     );
   });
 
-  await runTest("Tools settings remains an accessible localized empty dialog", async () => {
+  await runTest("Tools settings saves immediately, retains committed values on failure and completes after closing", async () => {
     const triggerLabel = COPY["zh-CN"].tools.settingsTitle;
     assert.equal(await evaluate(client!, sessionId, `
       (() => {
@@ -936,16 +948,51 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
 
     const dialog = await evaluate(client!, sessionId, `
       (() => ({
-        empty: document.querySelector('.tools-settings-empty')?.textContent?.trim() ?? null,
-        hasSwitch: Boolean(document.querySelector('[role="dialog"] [role="switch"]')),
-        hasTaskbarCopy: document.querySelector('[role="dialog"]')?.textContent?.includes('任务栏') ?? false,
+        group: document.querySelector('.tools-notification-settings h4')?.textContent,
+        labels: [...document.querySelectorAll('.tools-notification-setting-row > span')].map(node => node.textContent),
+        footer: !!document.querySelector('.tools-settings-dialog .qp-dialog-footer'),
       }))()
-    `) as { empty: string | null; hasSwitch: boolean; hasTaskbarCopy: boolean };
+    `);
     assert.deepEqual(dialog, {
-      empty: COPY["zh-CN"].tools.settingsEmpty,
-      hasSwitch: false,
-      hasTaskbarCopy: false,
+      group: COPY["zh-CN"].tools.notificationGroup,
+      labels: [COPY["zh-CN"].tools.notificationDelivery, COPY["zh-CN"].tools.notificationSound],
+      footer: false,
     });
+
+    const geometry = await evaluate(client, sessionId, `(() => {
+      const controls = [...document.querySelectorAll('.tools-notification-setting-row')].map(row=>row.lastElementChild.getBoundingClientRect());
+      return {widths:controls.map(r=>r.width),rights:controls.map(r=>r.right)};
+    })()`) as { widths: number[]; rights: number[] };
+    assert.ok(Math.abs(geometry.rights[0] - geometry.rights[1]) < 1, "settings controls should share their right edge");
+    const capture = await client.command("Page.captureScreenshot", { format: "png" }, sessionId);
+    const screenshot = join(tmpdir(), "patina-tools-notification-settings.png");
+    writeFileSync(screenshot, Buffer.from(String(capture.data), "base64"));
+    console.log(`Tools settings visual review: ${screenshot}`);
+    const key = async (key: string, code: number) => {
+      await client.command('Input.dispatchKeyEvent', {type:'keyDown',key,windowsVirtualKeyCode:code}, sessionId);
+      await client.command('Input.dispatchKeyEvent', {type:'keyUp',key,windowsVirtualKeyCode:code}, sessionId);
+    };
+    await evaluate(client, sessionId, `document.querySelector('.tools-notification-setting-row [aria-haspopup="listbox"]').click()`);
+    await waitForExpression(client, sessionId, `!!document.querySelector('[role="listbox"]')`);
+    await key('Home',36); await key('Enter',13);
+    await waitForExpression(client, sessionId, `JSON.parse(localStorage.getItem('__patina_notification_preferences')).sound === 'default'`);
+    await evaluate(client, sessionId, `document.querySelector('.tools-notification-setting-row [aria-haspopup="listbox"]').click()`);
+    await waitForExpression(client, sessionId, `!!document.querySelector('[role="listbox"]')`);
+    await key('End',35); await key('Enter',13);
+    await waitForExpression(client, sessionId, `JSON.parse(localStorage.getItem('__patina_notification_preferences')).sound === 'none'`);
+
+    const clickDelivery = (text: string) => evaluate(client, sessionId, `[...document.querySelectorAll('.tools-notification-setting-row button')].find(b => b.textContent.trim() === ${jsonString(text)}).click()`);
+    await evaluate(client, sessionId, `globalThis.__PATINA_NOTIFICATION_SAVE = { error: 'injected' }`);
+    await clickDelivery(COPY["zh-CN"].tools.notificationSoftware);
+    await waitForExpression(client, sessionId, `document.querySelector('.tools-notification-settings [role="alert"]')?.textContent.includes(${jsonString(COPY["zh-CN"].tools.notificationSaveFailed)})`);
+    assert.equal(await evaluate(client, sessionId, `document.querySelector('.tools-notification-setting-row [aria-pressed="true"]')?.textContent.trim()`), COPY["zh-CN"].tools.notificationDialog);
+    const controlAppearance = () => evaluate(client, sessionId, `[...document.querySelectorAll('.tools-notification-setting-row button')].map(button=>({opacity:getComputedStyle(button).opacity,width:button.getBoundingClientRect().width,height:button.getBoundingClientRect().height}))`);
+    const beforeSaveAppearance = await controlAppearance();
+    await evaluate(client, sessionId, `globalThis.__PATINA_NOTIFICATION_SAVE = { hold: true }`);
+    await clickDelivery(COPY["zh-CN"].tools.notificationSoftware);
+    await waitForExpression(client, sessionId, `typeof globalThis.__PATINA_NOTIFICATION_SAVE.release === 'function' && [...document.querySelectorAll('.tools-notification-setting-row button')].every(b=>b.disabled)`);
+    assert.deepEqual(await controlAppearance(), beforeSaveAppearance, "saving must prevent duplicate writes without dimming or resizing the controls");
+    assert.equal(await evaluate(client, sessionId, `document.querySelector('.tools-notification-settings').getAttribute('aria-busy')`), "true");
 
     await evaluate(client!, sessionId, `
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
@@ -953,6 +1000,14 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
     await waitForExpression(client!, sessionId, `!document.querySelector('[role="dialog"]')`);
     await waitForExpression(client!, sessionId, `document.activeElement?.getAttribute('aria-label') === ${jsonString(triggerLabel)}`,
       15_000, "Tools settings focus restoration");
+    await evaluate(client, sessionId, `globalThis.__PATINA_NOTIFICATION_SAVE.release()`);
+    await waitForExpression(client, sessionId, `JSON.parse(localStorage.getItem('__patina_notification_preferences')).delivery === 'notification'`);
+    await evaluate(client, sessionId, `document.querySelector('.tools-section-settings-tab').click()`);
+    await waitForExpression(client, sessionId, `document.querySelector('.tools-notification-setting-row [aria-pressed="true"]')?.textContent.trim() === ${jsonString(COPY["zh-CN"].tools.notificationSoftware)}`);
+    await evaluate(client, sessionId, `globalThis.__PATINA_NOTIFICATION_SAVE = null`);
+    await clickDelivery(COPY["zh-CN"].tools.notificationDialog);
+    await waitForExpression(client, sessionId, `JSON.parse(localStorage.getItem('__patina_notification_preferences')).delivery === 'dialog'`);
+    await evaluate(client, sessionId, `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
   });
 
   await runTest("Reminder lists keep compact rows and stable widths with inset scrollbars", async () => {

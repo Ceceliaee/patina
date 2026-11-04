@@ -1,4 +1,9 @@
 import assert from "node:assert/strict";
+import { setImmediate } from "node:timers/promises";
+import { mockIPC, clearMocks } from "@tauri-apps/api/mocks";
+import { emit } from "@tauri-apps/api/event";
+import { parseNotificationPreferences, parseToolPresentation } from "../src/platform/runtime/toolNotificationGateway.ts";
+import { toolPresentationStore } from "../src/features/tools/services/toolPresentationStore.ts";
 import { formatUsageDuration } from "../src/features/tools/services/toolsLabels.ts";
 import {
   buildActivityReminderRuleRows,
@@ -15,6 +20,7 @@ import {
   rememberToolsSection,
 } from "../src/features/tools/services/toolsLayoutPreferenceStorage.ts";
 import { createToolsRuntimeSnapshotStore } from "../src/features/tools/services/toolsRuntimeSnapshotStore.ts";
+import { readFreeFocusRestSettings, rememberFreeFocusRestSettings } from "../src/features/tools/services/freeFocusPreferenceStorage.ts";
 import { ToolsRuntimeService } from "../src/features/tools/services/toolsRuntimeService.ts";
 import type { ToolsViewModelLabels } from "../src/features/tools/types.ts";
 import {
@@ -273,6 +279,32 @@ await runTest("tools preferences merge previous activity tabs into usage mode", 
   });
 });
 
+await runTest("free focus creation preferences retain both values and reject corrupt storage", () => {
+  const defaults = { restMode: "fixed", restMinutes: 5, restRatio: 5 };
+  const settings = { restMode: "ratio" as const, restMinutes: 12, restRatio: 7 };
+  const storage = new MemoryStorage();
+  withWindowStorage(storage, () => {
+    assert.deepEqual(readFreeFocusRestSettings(), defaults);
+    rememberFreeFocusRestSettings(settings);
+    assert.deepEqual(readFreeFocusRestSettings(), settings);
+    rememberFreeFocusRestSettings({ ...settings, restMode: "fixed" });
+    assert.deepEqual(readFreeFocusRestSettings(), { ...settings, restMode: "fixed" });
+    for (const raw of ['{', 'null', '[]', JSON.stringify({ ...settings, restMode: 'unknown' }),
+      JSON.stringify({ ...settings, restMinutes: 0 }), JSON.stringify({ ...settings, restRatio: 21 }),
+      JSON.stringify({ ...settings, restMinutes: 1.5 }), JSON.stringify({ ...settings, restRatio: '7' })]) {
+      storage.setItem('patina:free-focus-rest-settings', raw);
+      assert.deepEqual(readFreeFocusRestSettings(), defaults);
+    }
+  });
+  const blocked = new MemoryStorage();
+  blocked.getItem = () => { throw new Error('storage unavailable'); };
+  blocked.setItem = () => { throw new Error('storage unavailable'); };
+  withWindowStorage(blocked, () => {
+    assert.deepEqual(readFreeFocusRestSettings(), defaults);
+    assert.doesNotThrow(() => rememberFreeFocusRestSettings(settings));
+  });
+});
+
 await runTest("tools runtime snapshot store shares one listener", async () => {
   let listenCount = 0;
   let disposeCount = 0;
@@ -378,6 +410,61 @@ await runTest("gateway identifies only the exact Tools refresh-pending marker as
       assert.equal(ToolsRuntimeService.isStateRefreshPendingError(error), false);
       return true;
     });
+  }
+});
+
+await runTest("notification wire values reject invalid preferences and malformed presentation", () => {
+  const snapshot = { revision: 1, alert: rawAlert(), preferences: { delivery: "notification", sound: "default" }, appearance: { language: "zh-CN" }, error: null };
+  assert.equal(parseToolPresentation(snapshot).alert?.id, rawAlert().id);
+  for (const value of [null, {}, { delivery: "system", sound: "default" }, { delivery: "dialog", sound: "path.wav" }]) {
+    assert.throws(() => parseNotificationPreferences(value));
+  }
+  for (const patch of [{revision:-1}, {revision:1.5}, {appearance:{language:1}}, {error:12}, {alert:{id:"forged"}}]) {
+    assert.throws(() => parseToolPresentation({ ...snapshot, ...patch }));
+  }
+});
+
+await runTest("presentation store rejects stale reads and keeps committed preferences when resync fails", async () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { crypto: globalThis.crypto } });
+  const reads: Array<(value: unknown) => void> = [];
+  let failRead = false;
+  let failSave = false;
+  const snapshot = (revision: number) => ({ revision, alert: null, preferences: { delivery: "notification", sound: "default" }, appearance: {}, error: null });
+  let unsubscribe: (() => void) | undefined;
+  try {
+    mockIPC((command) => {
+      if (command === "cmd_get_tool_presentation") {
+        if (failRead) throw new Error("injected resync failure");
+        return new Promise(resolve => reads.push(resolve));
+      }
+      if (command === "cmd_save_tool_notification_preferences") {
+        if (failSave) throw new Error("injected write failure");
+        return { delivery: "dialog", sound: "bell" };
+      }
+      throw new Error(`Unexpected command ${command}`);
+    }, { shouldMockEvents: true });
+    unsubscribe = toolPresentationStore.subscribe(() => {});
+    await setImmediate();
+    assert.equal(reads.length, 1);
+    await emit("tool-presentation-changed");
+    assert.equal(reads.length, 2);
+    reads[1](snapshot(2)); await setImmediate();
+    reads[0](snapshot(1)); await setImmediate();
+    assert.equal(toolPresentationStore.getSnapshot().snapshot?.revision, 2);
+    failSave = true;
+    await toolPresentationStore.save({ delivery: "dialog" });
+    assert.deepEqual(toolPresentationStore.getSnapshot().snapshot?.preferences, snapshot(2).preferences);
+    assert.equal(toolPresentationStore.getSnapshot().failed, true);
+    failSave = false; failRead = true;
+    await toolPresentationStore.save({ delivery: "dialog", sound: "bell" });
+    assert.deepEqual(toolPresentationStore.getSnapshot().snapshot?.preferences, { delivery: "dialog", sound: "bell" });
+    assert.equal(toolPresentationStore.getSnapshot().failed, true);
+    assert.equal(toolPresentationStore.getSnapshot().busy, false);
+  } finally {
+    unsubscribe?.(); clearMocks();
+    if (descriptor) Object.defineProperty(globalThis, "window", descriptor);
+    else Reflect.deleteProperty(globalThis, "window");
   }
 });
 

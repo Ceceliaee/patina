@@ -53,9 +53,15 @@ export async function runRecurringReminderScenarios({ client, sessionId, runTest
         assert.equal(await evaluate(client, sessionId, `document.querySelectorAll('.tools-repeat-weekdays, .tools-repeat-weekday-popover').length`), 0);
         assert.equal(await evaluate(client, sessionId, `document.querySelectorAll('.tools-event-reminder-form .tools-action-button svg').length`), 0);
         assert.equal(await evaluate(client, sessionId, `(() => {const form=document.querySelector('.tools-event-reminder-form');const widths=[form.querySelector('input'),form.querySelector('.tools-reminder-time-trigger'),form.querySelector('.qp-select-trigger')].map(el=>el.getBoundingClientRect().width);return widths[0]>widths[1]&&Math.abs(widths[1]-widths[2])<1;})()`), true);
-        await evaluate(client, sessionId, `globalThis.__PATINA_TIMED_REMINDER_ACTION_CASE={error:'injected create failure'}`);
+        const createsBeforeFailure = await evaluate(client, sessionId, `globalThis.__PATINA_INVOKED_COMMANDS.filter(item=>item.command==='cmd_create_reminder').length`);
+        const failedCreateSettled = `globalThis.__PATINA_INVOKED_COMMANDS.filter(item=>item.command==='cmd_create_reminder').length===${createsBeforeFailure}+1 && Boolean(document.querySelector('.tools-event-reminder-form .tools-action-button:not(:disabled):not([aria-busy="true"])'))`;
+        assert.equal(await evaluate(client, sessionId, failedCreateSettled), false, 'an enabled form must not count as a completed create');
+        await evaluate(client, sessionId, `globalThis.__PATINA_TIMED_REMINDER_ACTION_CASE={hold:true,error:'injected create failure'}`);
         await click('.tools-event-reminder-form .tools-action-button');
-        await waitForExpression(client, sessionId, `!document.querySelector('.tools-event-reminder-form .tools-action-button').disabled`);
+        await waitForExpression(client, sessionId, `Boolean(globalThis.__PATINA_TIMED_REMINDER_ACTION_CASE.release) && document.querySelector('.tools-event-reminder-form .tools-action-button').disabled`);
+        assert.equal(await evaluate(client, sessionId, failedCreateSettled), false, 'a held create must not satisfy the retry gate');
+        await evaluate(client, sessionId, `globalThis.__PATINA_TIMED_REMINDER_ACTION_CASE.release()`);
+        await waitForExpression(client, sessionId, failedCreateSettled, undefined, 'failed recurring reminder creation settles before retry');
         assert.equal(await evaluate(client, sessionId, `globalThis.__PATINA_TIMED_REMINDER_CASE.reminders.length`), 1);
         await evaluate(client, sessionId, `globalThis.__PATINA_TIMED_REMINDER_ACTION_CASE={}`);
         await click('.tools-event-reminder-form .tools-action-button');

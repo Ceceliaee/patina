@@ -37,7 +37,7 @@ export async function run(session: RuntimeSession) {
     try {
       await waitFor("permission mini ready", () => evaluate(mini, "Boolean(document.querySelector('[data-mini-page],.mini-tools'))"));
       await verifyMiniContentRuntime(client, mini);
-      for (const command of ["cmd_commit_app_settings", "cmd_get_setting_rows", "cmd_install_update", "cmd_restore_backup", "cmd_extend_activity_reminder", "cmd_set_activity_reminder_enabled", "cmd_update_reminder", "cmd_resolve_reminder_alert", "cmd_update_activity_reminder_limit", "cmd_show_desktop", "cmd_open_mini_window"]) {
+      for (const command of ["cmd_get_tool_presentation", "cmd_save_tool_notification_preferences", "cmd_tool_presentation_action", "cmd_tool_presentation_ready", "cmd_commit_app_settings", "cmd_get_setting_rows", "cmd_install_update", "cmd_restore_backup", "cmd_extend_activity_reminder", "cmd_set_activity_reminder_enabled", "cmd_update_reminder", "cmd_resolve_reminder_alert", "cmd_update_activity_reminder_limit", "cmd_show_desktop", "cmd_open_mini_window"]) {
         const denied = await evaluate(mini, `window.__TAURI_INTERNALS__.invoke(${JSON.stringify(command)},{}).then(()=>null,e=>String(e))`);
         assert.match(String(denied), /not allowed|permission|denied/i, `${command} must be rejected before argument parsing`);
       }
