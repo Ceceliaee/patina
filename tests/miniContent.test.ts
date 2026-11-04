@@ -330,6 +330,7 @@ await runTest("mini tool clocks remain second-accurate", () => {
   const viewModel = buildMiniStatusViewModel({
     tools: [
       {
+        id: 1, label: "", countingUp: false,
         kind: "pomodoro",
         state: "running",
         valueMs: 275_000,
@@ -337,22 +338,24 @@ await runTest("mini tool clocks remain second-accurate", () => {
         totalMs: null, phase: null,
       },
     ],
-    sampledAtMs: 10_000,
+    sampledAtMs: 10_000, reminder: null,
   }, 4_000);
   assert.deepEqual(viewModel.tools.map((tool) => tool.timeText), ["04:31"]);
 
-  assert.deepEqual(buildMiniStatusViewModel(null, 10_000), { tools: [] });
+  assert.deepEqual(buildMiniStatusViewModel(null, 10_000), { tools: [], reminder: null });
   assert.deepEqual(buildMiniStatusViewModel({
     tools: [],
-    sampledAtMs: 500_000_000,
-  }, 10_000), { tools: [] });
+    sampledAtMs: 500_000_000, reminder: null,
+  }, 10_000), { tools: [], reminder: null });
 });
 
 await runTest("mini status parser allows one Pomodoro slot", () => {
   const base = {
+    reminder: null,
     sampled_at_ms: 10_000,
   };
   const pomodoro = {
+    id: 1, label: "", counting_up: false,
     kind: "pomodoro",
     state: "paused",
     value_ms: 2_000,
@@ -363,6 +366,29 @@ await runTest("mini status parser allows one Pomodoro slot", () => {
   assert.equal(parseMiniStatusSnapshot({ ...base, tools: [pomodoro, pomodoro] }), null);
   assert.equal(parseMiniStatusSnapshot({ ...base, tools: [{ ...pomodoro, kind: "unknown" }] }), null);
   assert.equal(parseMiniStatusSnapshot({ ...base, tools: [pomodoro, pomodoro, pomodoro] }), null);
+});
+
+await runTest("free focus counts up only while running and retains the reminder", () => {
+  const raw = {
+    sampled_at_ms: 10_000,
+    tools: [{ id: 7, label: "Reading", counting_up: true, kind: "free_focus", state: "running",
+      value_ms: 30_000, visible_until_ms: null, total_ms: null, phase: "focus" }],
+    reminder: { id: 8, label: "Water", scheduled_at: 60_000 },
+  };
+  const snapshot = parseMiniStatusSnapshot(raw);
+  assert.ok(snapshot);
+  assert.equal(buildMiniStatusViewModel(snapshot, 4_000).tools[0].timeText, "00:34");
+  assert.deepEqual(buildMiniStatusViewModel(snapshot, 4_000).reminder,
+    { id: 8, label: "Water", scheduledAt: 60_000 });
+  snapshot.tools[0].state = "paused";
+  assert.equal(buildMiniStatusViewModel(snapshot, 4_000).tools[0].timeText, "00:30");
+  snapshot.tools[0].state = "running";
+  snapshot.tools[0].countingUp = false;
+  assert.equal(buildMiniStatusViewModel(snapshot, 40_000).tools[0].timeText, "00:00");
+  for (const reminder of [undefined, { ...raw.reminder, id: 0 },
+    { ...raw.reminder, label: null }, { ...raw.reminder, scheduled_at: Number.NaN }]) {
+    assert.equal(parseMiniStatusSnapshot({ ...raw, reminder }), null);
+  }
 });
 
 console.log(`Passed ${passed} mini view model tests`);

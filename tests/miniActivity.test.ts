@@ -44,7 +44,20 @@ assert.equal(todayView.total, 206 * 60_000);
 if (todayView.kind !== "today") throw new Error("Unexpected page");
 assert.deepEqual(todayView.categories.map(item => item.duration / 60_000), [118, 46, 28, 14]);
 assert.equal(todayView.hourly.points.reduce((sum, point) => sum + point.minutes, 0), 206);
+assert.deepEqual(todayView.period, { startMs: today.sampledAtMs - 206 * 60_000, endMs: today.sampledAtMs });
 assert.equal(buildMiniActivityViewModel({ ...today, records: [] }, health, text).total, 0);
+const emptyToday = buildMiniActivityViewModel({ ...today, records: [] }, health, text);
+assert.equal(emptyToday.kind === "today" && emptyToday.period, null);
+const dayStart = today.startMs;
+const clippedToday = buildMiniActivityViewModel({ ...today, records: [
+  { ...today.records[0], startTime: dayStart - 60_000, endTime: dayStart + 60_000 },
+  { ...today.records[1], startTime: dayStart + 120_000, endTime: dayStart + 180_000 },
+  { ...today.records[2], exeName: "excluded.exe", startTime: dayStart + 240_000, endTime: dayStart + 300_000 },
+], bootstrap: { ...today.bootstrap, appOverrides: [...today.bootstrap.appOverrides,
+  { key: "__app_override::excluded.exe", value: JSON.stringify({ track: false }) }] } }, health, text);
+if (clippedToday.kind !== "today") throw new Error("Unexpected page");
+assert.equal(clippedToday.total, 120_000, "today excludes previous-day time, gaps and hidden activity");
+assert.deepEqual(clippedToday.period, { startMs: dayStart, endMs: dayStart + 180_000 });
 for (const invalid of [null, {}, { ...miniActivityFixture("today", bootstrap), sampled_at_ms: NaN },
   { ...miniActivityFixture("today", bootstrap), kind: "activity" },
   { ...miniActivityFixture("today", bootstrap), aggregate: null }]) {

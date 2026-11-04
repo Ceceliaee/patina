@@ -4,6 +4,8 @@ import type {
 } from "../../platform/desktop/miniContentRuntimeGateway.ts";
 
 interface MiniToolSlotViewModel {
+  id: number;
+  label: string;
   kind: MiniToolProjection["kind"];
   state: MiniToolProjection["state"];
   timeText: string;
@@ -13,6 +15,7 @@ interface MiniToolSlotViewModel {
 
 interface MiniStatusViewModel {
   tools: MiniToolSlotViewModel[];
+  reminder: MiniStatusSnapshot["reminder"];
 }
 
 function safeWholeSeconds(valueMs: number) {
@@ -37,10 +40,11 @@ function resolveLiveValue(
   valueMs: number,
   elapsedSinceSnapshotMs: number,
   running: boolean,
+  countingUp = false,
 ) {
   if (!running) return Math.max(0, valueMs);
   const delta = Math.max(0, elapsedSinceSnapshotMs);
-  return Math.max(0, valueMs - delta);
+  return Math.max(0, valueMs + (countingUp ? delta : -delta));
 }
 
 export function buildMiniStatusViewModel(
@@ -48,16 +52,19 @@ export function buildMiniStatusViewModel(
   elapsedSinceSnapshotMs: number,
 ): MiniStatusViewModel {
   if (!snapshot) {
-    return { tools: [] };
+    return { tools: [], reminder: null };
   }
 
   return {
+    reminder: snapshot.reminder,
     tools: snapshot.tools
       .filter((tool) => (
         tool.visibleUntilMs === null
         || elapsedSinceSnapshotMs < tool.visibleUntilMs - snapshot.sampledAtMs
       ))
       .map((tool) => ({
+        id: tool.id,
+        label: tool.label,
         kind: tool.kind,
         state: tool.state,
         phase: tool.phase,
@@ -68,6 +75,7 @@ export function buildMiniStatusViewModel(
           tool.valueMs,
           elapsedSinceSnapshotMs,
           tool.state === "running",
+          tool.countingUp,
         )),
       })),
   };

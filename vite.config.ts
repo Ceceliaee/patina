@@ -50,9 +50,9 @@ export default defineConfig({
             return undefined;
           }
 
-          // Shared editing actions stay lazy together instead of paying a module
+          // Shared actions stay lazy together instead of paying a module
           // header and request for each tiny icon on settings and tool surfaces.
-          if (/\/node_modules\/lucide-react\/dist\/esm\/icons\/(square|pencil-line|save|refresh-cw|play)\.mjs$/.test(normalizedId)) {
+          if (/\/node_modules\/lucide-react\/dist\/esm\/icons\/(square|pencil-line|save|refresh-cw|play|pause)\.mjs$/.test(normalizedId)) {
             return "lazy-action-icons";
           }
 

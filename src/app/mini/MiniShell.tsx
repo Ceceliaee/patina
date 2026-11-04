@@ -1,18 +1,19 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
-import { AppWindow, ArrowRightLeft, Pin, SquareArrowOutUpRight, X } from "lucide-react";
+import { AppWindow, Pin, SquareArrowOutUpRight, X } from "lucide-react";
 import { LocaleProvider, useLocaleText } from "../../shared/i18n/index.ts";
 import { showMainWindow } from "../../platform/desktop/windowControlGateway.ts";
 import { useAppThemeMode } from "../hooks/useAppThemeMode.ts";
 import { useMiniTracking } from "./useMiniTracking.ts";
 import { useMiniWindow } from "./useMiniWindow.ts";
 import MiniContent from "./MiniContent.tsx";
+import MiniToolsSlice from "./MiniToolsSlice.tsx";
 import { useMiniTransition } from "./useMiniTransition.ts";
 import { buildMiniViewModel } from "./miniViewModel.ts";
 
 export default function MiniShell() {
   const runtime = useMiniWindow();
   const contentActive = Boolean(runtime.snapshot && (runtime.snapshot.expanded || runtime.snapshot.transitioning) && !runtime.snapshot.suppressed);
-  const tracking = useMiniTracking(contentActive, contentActive && runtime.snapshot?.page === "tools");
+  const tracking = useMiniTracking(contentActive);
   useAppThemeMode(tracking.appSettings.themeMode, tracking.appSettings.colorSchemeLight, tracking.appSettings.colorSchemeDark);
   return <LocaleProvider locale={tracking.appSettings.language}>
     <MiniView runtime={runtime} tracking={tracking} />
@@ -99,15 +100,10 @@ function MiniView({ runtime, tracking }: {
     <span className="mini-status sr-only" role="status">{tracking.miniStatus ? view.statusLabel : ""}</span>
     <div ref={panel} className="mini-panel" inert={!snapshot?.expanded || snapshot.suppressed} aria-hidden={!snapshot?.expanded || snapshot.suppressed}>
       <div className="mini-panel-body">
+      <div className="mini-main">
       <header className="mini-header">
         <div className="mini-drag-region" {...dragProps}><AppWindow size={14} aria-hidden="true" /></div>
         <div className="mini-window-actions">
-        <button type="button" className="mini-navigation qp-icon-action qp-icon-action-neutral"
-          aria-label={`${text.miniWindow[snapshot.page]} · ${text.miniWindow.nextPage}`}
-          onClick={() => { void act({ kind: "cycle_page", forward: true }); }}>
-          <ArrowRightLeft size={14} aria-hidden="true" />
-          <span className="mini-page-title sr-only" aria-live="polite">{text.miniWindow[snapshot.page]}</span>
-        </button>
         <button type="button" className="qp-icon-action qp-icon-action-neutral" aria-label={text.miniWindow.hold} aria-pressed={snapshot?.held ?? false}
           onClick={() => { void act({ kind: "hold", held: !snapshot?.held }); }}><Pin size={14} /></button>
         <button type="button" className="qp-icon-action qp-icon-action-neutral" aria-label={text.accessibility.miniWindow.openMainWindow}
@@ -117,7 +113,10 @@ function MiniView({ runtime, tracking }: {
         </div>
       </header>
       {snapshot && (snapshot.expanded || snapshot.transitioning) && !snapshot.suppressed
-        && <MiniContent key={snapshot.page} page={snapshot.page} tracking={tracking} />}
+        && <MiniContent tracking={tracking} />}
+      </div>
+      {snapshot && (snapshot.expanded || snapshot.transitioning) && !snapshot.suppressed
+        && <MiniToolsSlice tracking={tracking} act={act} />}
       </div>
     </div>
     <button ref={handle} type="button" className="mini-handle" inert={snapshot?.expanded ?? false} aria-hidden={snapshot?.expanded ?? false} aria-label={text.miniWindow.open} {...dragProps}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getMiniActivitySnapshot, type MiniActivityPage } from "../../platform/desktop/miniActivityRuntimeGateway.ts";
+import { getMiniActivitySnapshot } from "../../platform/desktop/miniActivityRuntimeGateway.ts";
 import { onAppSettingsChanged } from "../../platform/runtime/appSettingsEventGateway.ts";
 import { onTrackingDataChanged } from "../../platform/runtime/trackingRuntimeGateway.ts";
 import { prewarmIconThemeColors } from "../../shared/hooks/useIconThemeColors.ts";
@@ -7,9 +7,12 @@ import { useLocaleText } from "../../shared/i18n/index.ts";
 import type { TrackerHealthSnapshot } from "../../shared/types/tracking.ts";
 import { buildMiniActivityViewModel, miniActivityIcons, type MiniActivityViewModel } from "./miniActivityViewModel.ts";
 
-export function useMiniActivity(page: MiniActivityPage, health: TrackerHealthSnapshot) {
+export function useMiniActivity(page: "activity", health: TrackerHealthSnapshot) {
   const text = useLocaleText();
-  const [view, setView] = useState<MiniActivityViewModel | null>(null);
+  const [content, setContent] = useState<{
+    view: MiniActivityViewModel;
+    today: Extract<MiniActivityViewModel, { kind: "today" }>;
+  } | null>(null);
   const [failed, setFailed] = useState(false);
   const [retryVersion, setRetryVersion] = useState(0);
   const healthRef = useRef(health);
@@ -22,14 +25,14 @@ export function useMiniActivity(page: MiniActivityPage, health: TrackerHealthSna
     let intervalMs = 5_000;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const unlisteners: Array<() => void> = [];
-    setView(null);
+    setContent(null);
     setFailed(false);
     const request = async (invalidate = false) => {
       if (!active) return;
       clearTimeout(timer);
       generation += 1;
       dirty = true;
-      if (invalidate) setView(null);
+      if (invalidate) setContent(null);
       if (pending) return;
       pending = true;
       while (active && dirty) {
@@ -40,25 +43,31 @@ export function useMiniActivity(page: MiniActivityPage, health: TrackerHealthSna
           const startedTick = performance.now();
           const startedDay = new Date(startedAt).toDateString();
           const startedOffset = new Date(startedAt).getTimezoneOffset();
-          const snapshot = await getMiniActivitySnapshot(page);
+          const [snapshot, dailySnapshot] = await Promise.all([
+            getMiniActivitySnapshot(page),
+            getMiniActivitySnapshot("today"),
+          ]);
           const colors = await prewarmIconThemeColors(miniActivityIcons(snapshot));
           if (!active || version !== generation) continue;
           const finishedAt = Date.now();
           if (new Date(finishedAt).toDateString() !== startedDay
             || new Date(finishedAt).getTimezoneOffset() !== startedOffset
-            || Math.abs(finishedAt - startedAt - (performance.now() - startedTick)) > 2_000) {
-            setView(null);
+            || Math.abs(finishedAt - startedAt - (performance.now() - startedTick)) > 2_000
+            || (snapshot.sampledAtMs < dailySnapshot.startMs || snapshot.sampledAtMs >= dailySnapshot.endMs)) {
+            setContent(null);
             dirty = true;
             continue;
           }
+          const today = buildMiniActivityViewModel(dailySnapshot, healthRef.current, text);
+          if (today.kind !== "today") throw new Error("Missing Mini daily summary");
           const next = buildMiniActivityViewModel(snapshot, healthRef.current, text, colors);
-          setView(next);
+          setContent({ view: next, today });
           setFailed(false);
           intervalMs = Math.max(1_000, snapshot.bootstrap.settings.refreshIntervalSecs * 1_000);
         } catch (error) {
           if (active && version === generation) {
             // The old range must never acquire a fresh date or mode after a failed read.
-            setView(null);
+            setContent(null);
             setFailed(true);
             console.warn("mini:activity", error);
           }
@@ -84,5 +93,5 @@ export function useMiniActivity(page: MiniActivityPage, health: TrackerHealthSna
     });
     return () => { active = false; generation += 1; clearTimeout(timer); unlisteners.forEach(off => off()); };
   }, [page, text, retryVersion]);
-  return { view, failed, retry: () => setRetryVersion(value => value + 1) };
+  return { view: content?.view ?? null, today: content?.today ?? null, failed, retry: () => setRetryVersion(value => value + 1) };
 }

@@ -36,6 +36,10 @@ export function buildMiniActivityViewModel(snapshot: MiniActivitySnapshot, healt
       .sort((a, b) => b.duration - a.duration || a.key.localeCompare(b.key));
     return { kind: "today" as const, sampledAtMs: snapshot.sampledAtMs,
       total: categories.reduce((total, item) => total + item.duration, 0),
+      period: compiled.reduce<{ startMs: number; endMs: number } | null>((period, item) => ({
+        startMs: Math.min(period?.startMs ?? item.startTime, item.startTime),
+        endMs: Math.max(period?.endMs ?? item.startTime, item.endTime ?? snapshot.sampledAtMs),
+      }), null),
       mode: snapshot.bootstrap.settings.hourlyActivityChartMode, hourly, categories };
   }
   const icons = miniActivityIcons(snapshot);
